@@ -1348,6 +1348,14 @@
     "context-menu",
     "menu-separator",
     "menu-group",
+    "menu-empty",
+    "menu-head",
+    "menu-head-name",
+    "menu-clipboard",
+    "menu-quick",
+    "menu-foot",
+    "menu-foot-query",
+    "menu-path",
     "context-submenu",
     "menu-more",
     "context-strip",
@@ -2940,6 +2948,14 @@
     "context-menu": "cornice",
     "menu-separator": "cornice",
     "menu-group": "cornice",
+    "menu-empty": "cornice",
+    "menu-head": "cornice",
+    "menu-head-name": "cornice",
+    "menu-clipboard": "cornice",
+    "menu-quick": "cornice",
+    "menu-foot": "cornice",
+    "menu-foot-query": "cornice",
+    "menu-path": "cornice",
     "context-submenu": "cornice",
     "menu-more": "cornice",
     "context-strip": "cornice",
@@ -6377,7 +6393,44 @@
       "hooks": [
         "context-menu",
         "menu-separator",
-        "menu-group"
+        "menu-group",
+        "menu-empty"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "menu-head",
+      "part": "menus",
+      "hooks": [
+        "menu-head",
+        "menu-head-name"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "menu-clipboard",
+      "part": "menus",
+      "hooks": [
+        "menu-clipboard",
+        "menu-quick"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "menu-foot",
+      "part": "menus",
+      "hooks": [
+        "menu-foot",
+        "menu-foot-query",
+        "menu-path"
       ],
       "states": [
         "rest"
@@ -8654,10 +8707,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1590,
+    "hooks": 1598,
     "state_names": 7,
-    "assigned_states": 722,
-    "components": 214,
+    "assigned_states": 727,
+    "components": 217,
     "preference_tokens": 186
   }
 }

@@ -5,7 +5,10 @@ export const MENUS: PartAnatomy = {
   part: "menus",
   layer: "cornice",
   components: [
-    { name: "context-menu", states: [S("rest")], hooks: ["context-menu", "menu-separator", "menu-group"] },
+    { name: "context-menu", states: [S("rest")], hooks: ["context-menu", "menu-separator", "menu-group", "menu-empty"] },
+    { name: "menu-head", states: [S("rest")], hooks: ["menu-head", "menu-head-name"] },
+    { name: "menu-clipboard", states: [S("rest"), S("hover"), S("focused")], hooks: ["menu-clipboard", "menu-quick"] },
+    { name: "menu-foot", states: [S("rest")], hooks: ["menu-foot", "menu-foot-query", "menu-path"] },
     { name: "context-submenu", states: [S("rest")], hooks: ["context-submenu", "menu-more"] },
     { name: "context-strip", states: [S("rest")], hooks: ["context-strip", "format-bar"] },
     {

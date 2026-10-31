@@ -814,15 +814,22 @@ export class TableFrame {
   #paste(event: ClipboardEvent): void {
     if (this.#editing || !event.clipboardData) return;
     event.preventDefault();
-    if (this.#host.readOnly()) return;
-    const rows = clipboardRows(event.clipboardData.getData("text/plain"), event.clipboardData.getData("text/html"));
-    if (rows.length === 0) return;
+    this.pasteData(event.clipboardData.getData("text/plain"), event.clipboardData.getData("text/html"));
+  }
+
+  /// Incolla il testo (e l'HTML, se c'è) degli appunti sulla selezione, come
+  /// Mod-v: dal menu, dove gli appunti si leggono dopo il gesto. `false` se
+  /// non c'era niente da scrivere.
+  pasteData(text: string, html: string): boolean {
+    if (this.#editing || this.#host.readOnly()) return false;
+    const rows = clipboardRows(text, html);
+    if (rows.length === 0) return false;
     const block = { rows: rows.length, columns: Math.max(...rows.map((row) => row.length)) };
     const targets = pasteTargets(this.range, block);
-    if (targets.length === 0) return;
+    if (targets.length === 0) return false;
     const first = targets[0]!;
     const end = targets[targets.length - 1]!;
-    this.apply(
+    return this.apply(
       { kind: "set", blocks: targets.map((range) => ({ row: range.r0, column: range.c0, rows })) },
       { anchor: { row: first.r0, column: first.c0 }, focus: { row: end.r1, column: end.c1 } },
     );

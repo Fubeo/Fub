@@ -64,6 +64,9 @@ export interface Signals {
   /// apre e la porta in vista. Il verso è questo perché la testata è della
   /// vista del documento e l'albero dell'esplora, che non si conoscono.
   "reveal-folder": [folder: string];
+  /// Un file da mostrare nell'albero («Mostra nell'esploratore» del menu di
+  /// un'immagine): l'esplora apre le cartelle che lo contengono.
+  "reveal-path": [path: string];
   /// Le icone delle pagine (`icon:` nel frontmatter) sono cambiate: chi le
   /// mostra fuori dalla nota — esplora, schede, wikilink — le rilegge da
   /// `state/page-icons.ts`.

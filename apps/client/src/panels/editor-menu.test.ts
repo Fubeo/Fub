@@ -1,17 +1,17 @@
 // @vitest-environment happy-dom
 //
 // Il menu dell'editor: la superficie dice cosa offre, il compositore lo mette
-// nelle sezioni di tutti i menu dell'editor. Qui si guarda la regola — ordine,
-// nomi, voci spente e assenti, il tetto del primo livello — senza un editor
+// nelle parti di tutti i menu dell'editor. Qui si guarda la regola — ordine,
+// gruppi, nomi, voci spente e assenti, ciò che si trova scrivendo — senza un editor
 // vero: una superficie finta che conosce qualche azione basta.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CommandSpec } from "../host/contract";
 import type { EditorSurface } from "../editors/core/registry";
-import type { SurfaceMenu } from "../editors/core/editor-menu";
+import { MENU_RULE, type SurfaceMenu } from "../editors/core/editor-menu";
 import type { EditorActionState } from "../editors/core/editor-actions";
 import type { CommandEntry } from "../ui/commands";
 import { closeContextMenu, type MenuItem } from "../ui/menu";
-import { composeEditorMenu, fromKeyboard, MAX_TOP, openEditorMenu, type EditorMenuHost } from "./editor-menu";
+import { composeEditorMenu, fromKeyboard, openEditorMenu, type EditorMenuHost } from "./editor-menu";
 
 // Le voci dei plugin passano dall'host vero: qui nessuna view ne offre.
 vi.mock("../ui/context-views", () => ({ contextMenuItems: async () => [], hasContextMenuViews: () => false }));
@@ -69,82 +69,135 @@ function hostFor(surface: EditorSurface, specs: CommandSpec[], commands: Command
 
 const labels = (items: readonly MenuItem[]): string[] => items.map((item) => item.label);
 
+const search: CommandEntry = { id: "shell.doc.search", title: "Cerca nel documento", description: "", layer: "document", binding: "Mod-f", declared: null, spec: null, run: null };
+
+/// I gruppi del primo livello, come li vede chi guarda: i nomi delle voci,
+/// spezzati dove una voce apre un gruppo.
+function groupsOf(items: readonly MenuItem[]): string[][] {
+  const groups: string[][] = [];
+  for (const item of items) {
+    if (item.separator || groups.length === 0) groups.push([]);
+    groups[groups.length - 1]!.push(item.label);
+  }
+  return groups;
+}
+
 describe("il compositore del menu dell'editor", () => {
-  it("mette le sezioni nell'ordine di sempre, ognuna col suo gruppo", () => {
+  it("mette testata, appunti, voci del posto nei loro gruppi; il resto si trova scrivendo", () => {
     const surface = surfaceWith({ "markdown.bold": { enabled: true, active: false } });
-    const host = hostFor(surface, [spec("markdown.bold", "Grassetto"), spec("note.daily", "Nota del giorno", ["slash"])], [
-      { id: "shell.doc.search", title: "Cerca nel documento", description: "", layer: "document", binding: "Mod-f", declared: null, spec: null, run: null },
-    ]);
-    const items = composeEditorMenu({
-      target: { kind: "text" },
-      context: [{ id: "x.here", label: "Qui sotto", run: () => {} }],
-      clipboard: { offers: { copy: true, cut: false, "select-all": true }, run: () => {} },
+    const host = hostFor(surface, [spec("markdown.bold", "Grassetto"), spec("note.daily", "Nota del giorno", ["slash"])], [search]);
+    const menu = composeEditorMenu({
+      target: { kind: "heading", label: "Titolo 2", name: "Formula" },
+      context: [{ id: "x.here", label: "Qui sotto", run: () => {} }, MENU_RULE, { id: "x.there", label: "Là", run: () => {} }],
+      clipboard: { offers: { copy: true, cut: true, paste: true, "paste-plain": true, "select-all": true }, run: () => {} },
       format: ["markdown.bold"],
+      miniBar: true,
       commands: true,
     }, host);
-    expect(labels(items)).toEqual([
-      "Qui sotto",
-      "Taglia",
-      "Copia",
-      "Formato",
-      "Comandi",
-      "Cerca nel documento",
-      "Seleziona tutto",
-    ]);
-    expect(items.find((item) => item.label === "Taglia")?.disabled).toBe(true);
-    expect(new Set(items.map((item) => item.group)).size).toBe(5);
+    expect(menu.header).toEqual({ icon: "fmt-h2", kind: "Titolo 2", name: "Formula" });
+    expect(labels(menu.clipboard)).toEqual(["Taglia", "Copia", "Incolla"]);
+    expect(groupsOf(menu.items)).toEqual([["Qui sotto"], ["Là"]]);
+    expect(labels(menu.searchable)).toEqual(["Incolla senza formattazione", "Grassetto", "Nota del giorno", "Cerca nel documento", "Seleziona tutto"]);
   });
 
-  it("«Cerca nel documento» c'è solo dove la superficie ha la sua ricerca", () => {
-    const search: CommandEntry = { id: "shell.doc.search", title: "Cerca nel documento", description: "", layer: "document", binding: "Mod-f", declared: null, spec: null, run: null };
+  it("un gesto degli appunti che non si può fare non c'è; uno solo è una voce, coi suoi compagni, prima o dopo", () => {
+    const host = hostFor(surfaceWith({}), []);
+    const first = composeEditorMenu({
+      target: { kind: "text" },
+      context: [{ id: "x", label: "Inserisci un blocco…", run: () => {} }],
+      clipboard: { offers: { cut: false, copy: false, paste: true, "paste-plain": true }, run: () => {} },
+    }, host);
+    expect(first.clipboard).toEqual([]);
+    expect(groupsOf(first.items)).toEqual([["Incolla", "Incolla senza formattazione"], ["Inserisci un blocco…"]]);
+    expect(first.header?.kind).toBe("Paragrafo");
+    // Le icone stanno nella testata e nella riga degli appunti, non sulle voci.
+    expect(first.items.filter((item) => item.icon !== undefined)).toEqual([]);
+  });
+
+  it("la testata prende l'icona che la superficie dà, o quella del tipo", () => {
+    const host = hostFor(surfaceWith({}), []);
+    expect(composeEditorMenu({ target: { kind: "heading", label: "Titolo 1", icon: "fmt-h1" } }, host).header?.icon).toBe("fmt-h1");
+    expect(composeEditorMenu({ target: { kind: "tag" } }, host).header?.icon).toBe("tag");
+  });
+
+  it("ciò che cancella va in fondo, da solo, qualunque posto la superficie gli dia", () => {
+    const menu = composeEditorMenu({
+      target: { kind: "properties" },
+      context: [
+        { id: "a", label: "Aggiungi una proprietà", run: () => {} },
+        { id: "z", label: "Svuota le proprietà", danger: true, run: () => {} },
+        { id: "c", label: "Copia le proprietà", run: () => {} },
+      ],
+    }, hostFor(surfaceWith({}), []));
+    expect(groupsOf(menu.items)).toEqual([["Aggiungi una proprietà", "Copia le proprietà"], ["Svuota le proprietà"]]);
+  });
+
+  it("«Cerca nel documento» si trova solo dove la superficie ha la sua ricerca", () => {
     const menu: SurfaceMenu = { target: { kind: "media" } };
-    expect(labels(composeEditorMenu(menu, hostFor(surfaceWith({}, null, true), [], [search])))).toEqual(["Cerca nel documento"]);
-    expect(composeEditorMenu(menu, hostFor(surfaceWith({}, null, false), [], [search])), "un PDF, un'immagine, un foglio, una lavagna").toEqual([]);
+    expect(labels(composeEditorMenu(menu, hostFor(surfaceWith({}, null, true), [], [search])).searchable)).toEqual(["Cerca nel documento"]);
+    expect(composeEditorMenu(menu, hostFor(surfaceWith({}, null, false), [], [search])).searchable, "un PDF, un'immagine, un foglio, una lavagna").toEqual([]);
   });
 
-  it("un'azione prende nome dal comando che la dichiara, icona, stato e accordo; senza comando non c'è", () => {
+  it("un'azione prende nome dal comando che la dichiara, icona, stato e accordo; spenta o senza comando non c'è", () => {
     const surface = surfaceWith({
       "markdown.bold": { enabled: true, active: true },
       "markdown.italic": { enabled: false, active: false },
-      "markdown.code": { enabled: true, active: null },
+      "markdown.underline": { enabled: true, active: false },
     });
     const host = hostFor(surface, [spec("markdown.bold", "Grassetto"), spec("markdown.italic", "Corsivo")]);
-    const [format] = composeEditorMenu({ target: { kind: "text" }, format: ["markdown.bold", "markdown.italic", "markdown.code"] }, host);
+    const [format] = composeEditorMenu({ target: { kind: "text" }, format: ["markdown.bold", "markdown.italic", "markdown.underline"] }, host).items;
     const items = format!.items as MenuItem[];
-    expect(labels(items)).toEqual(["Grassetto", "Corsivo"]);
-    expect(items[0]).toMatchObject({ icon: "fmt-bold", choice: "checkbox", checked: true, disabled: false });
+    expect(format!.label, "senza mini-barra il formato è un sottomenu").toBe("Formato");
+    expect(labels(items)).toEqual(["Grassetto"]);
+    expect(items[0]).toMatchObject({ icon: "fmt-bold", choice: "checkbox", checked: true });
     expect(items[0]!.hint).toBeTruthy();
-    expect(items[1]!.disabled).toBe(true);
     items[0]!.run!();
     expect(surface.editorActions!.run).toHaveBeenCalledWith("markdown.bold");
   });
 
-  it("un sottomenu senza voci risolte sparisce, e «Comandi» esegue per la via del «/»", () => {
+  it("una voce con un'azione ha il suo nome e lo stato dell'azione; una voce grigia senza motivo non c'è", () => {
+    const surface = surfaceWith({ "markdown.heading.2": { enabled: true, active: true }, "markdown.heading.3": { enabled: true, active: false } });
+    const host = hostFor(surface, []);
+    const { items } = composeEditorMenu({
+      target: { kind: "heading" },
+      context: [
+        { id: "level", label: "Livello", items: [
+          { id: "h2", label: "Titolo 2", action: "markdown.heading.2", radio: true },
+          { id: "h3", label: "Titolo 3", action: "markdown.heading.3", radio: true },
+          { id: "h9", label: "Titolo 9", action: "markdown.heading.9", radio: true },
+        ] },
+        { id: "grey", label: "Grigia", enabled: false, run: () => {} },
+        { id: "why", label: "Grigia con motivo", enabled: false, description: "Serve una selezione", run: () => {} },
+      ],
+    }, host);
+    expect(labels(items)).toEqual(["Livello", "Grigia con motivo"]);
+    const level = items[0]!.items as MenuItem[];
+    expect(level.map((item) => [item.label, item.choice, item.checked])).toEqual([["Titolo 2", "radio", true], ["Titolo 3", "radio", false]]);
+    level[1]!.run!();
+    expect(surface.editorActions!.run).toHaveBeenCalledWith("markdown.heading.3");
+  });
+
+  it("un sottomenu senza voci risolte sparisce, e i comandi del vault si eseguono per la via del «/»", () => {
     const surface = surfaceWith({});
-    const host = hostFor(surface, [spec("note.daily", "Nota del giorno", ["slash"])]);
-    const items = composeEditorMenu({ target: { kind: "text" }, insert: ["markdown.table"], commands: true }, host);
-    expect(labels(items)).toEqual(["Comandi"]);
-    (items[0]!.items as MenuItem[])[0]!.run!();
+    const host = hostFor(surface, [spec("note.daily", "Nota del giorno", ["slash"]), spec("note.extract", "Estrai")]);
+    const menu = composeEditorMenu({
+      target: { kind: "text" },
+      insert: ["markdown.table"],
+      commands: true,
+      context: [{ id: "x", label: "Estrai la sezione", slash: "note.extract", run: () => {} }, { id: "y", label: "Manca", slash: "note.nope" }],
+    }, host);
+    expect(labels(menu.items)).toEqual(["Estrai la sezione"]);
+    menu.items[0]!.run!();
+    expect(host.runSlash).toHaveBeenCalledWith("note.extract");
+    menu.searchable[0]!.run!();
     expect(host.runSlash).toHaveBeenCalledWith("note.daily");
   });
 
-  it("oltre il tetto le utilità scendono in «Altro»", () => {
-    const surface = surfaceWith({});
+  it("nessun tetto taglia il menu: niente più «Altro»", () => {
     const context = Array.from({ length: 10 }, (_, i) => ({ id: `c${i}`, label: `Voce ${i}`, run: () => {} }));
-    const items = composeEditorMenu({
-      target: { kind: "text" },
-      context,
-      clipboard: { offers: { cut: true, copy: true, paste: true, "select-all": true }, run: () => {} },
-    }, hostFor(surface, []));
-    expect(items.length).toBeLessThanOrEqual(MAX_TOP);
-    const more = items[items.length - 1]!;
-    expect(more.label).toBe("Altro");
-    expect(labels(more.items as MenuItem[])).toContain("Seleziona tutto");
-    expect(labels(more.items as MenuItem[])).toContain("Voce 9");
-    const inside = more.items as MenuItem[];
-    const firstUtility = inside.findIndex((item) => item.label === "Seleziona tutto");
-    expect(inside[firstUtility]!.separator, "le utilità si staccano dalla coda della prima sezione").toBe(true);
-    expect(inside.filter((item) => item.separator)).toHaveLength(1);
+    const { items } = composeEditorMenu({ target: { kind: "text" }, context }, hostFor(surfaceWith({}), []));
+    expect(items).toHaveLength(10);
+    expect(labels(items)).not.toContain("Altro");
   });
 
   it("una voce con un comando lo esegue dopo il suo gesto", () => {
@@ -153,8 +206,8 @@ describe("il compositore del menu dell'editor", () => {
     vi.mocked(host.runCommand).mockImplementation((id) => void order.push(id));
     const [item] = composeEditorMenu({
       target: { kind: "page" },
-      context: [{ id: "here", label: "Modifica da qui", run: () => void order.push("cursore"), command: "shell.mode.reading" }],
-    }, host);
+      context: [{ id: "here", label: "Modifica qui", run: () => void order.push("cursore"), command: "shell.mode.reading" }],
+    }, host).items;
     item!.run!();
     expect(order).toEqual(["cursore", "shell.mode.reading"]);
   });
@@ -173,7 +226,7 @@ describe("l'apertura dal riquadro", () => {
   it("con un menu lo apre e ferma quello del sistema; dalla tastiera la superficie riceve null", () => {
     const pane = document.createElement("div");
     document.body.append(pane);
-    const surface = surfaceWith({}, { target: { kind: "text" }, clipboard: { offers: { "select-all": true }, run: () => {} } });
+    const surface = surfaceWith({}, { target: { kind: "text" }, clipboard: { offers: { paste: true, "select-all": true }, run: () => {} } });
     const asked = vi.spyOn(surface, "contextMenu");
     const mouse = new MouseEvent("contextmenu", { button: 2, clientX: 40, clientY: 50, cancelable: true });
     expect(openEditorMenu(mouse, pane, hostFor(surface, []))).toBe(true);

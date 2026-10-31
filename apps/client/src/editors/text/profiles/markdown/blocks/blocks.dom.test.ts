@@ -16,6 +16,7 @@ import { blockSelection } from "./selection";
 import { addBelow, colorRanges, gripLabel, handlesView } from "./handles";
 import { setContentColor } from "../color";
 import { blockModel } from "./model";
+import { closeContextMenu } from "../../../../../ui/menu";
 import { openSlashMenu, slashMenuExtension, type SlashMenuSource } from "../slash";
 
 // I Blocchi nell'editor vero: maniglie, menu, selezione di blocchi, tasti.
@@ -225,13 +226,18 @@ describe("Vim e composizione (H15)", () => {
 });
 
 describe("il menu della maniglia", () => {
-  const rows = () => [...document.querySelectorAll<HTMLElement>(".cm-fub-block-menu [role^=menuitem]")];
+  const labels = () => [...document.querySelectorAll<HTMLElement>("#context-menu [role^=menuitem] .menu-label")].map((label) => label.textContent);
+  const open = (doc: string, at = 0) => {
+    const view = mount(doc, 1);
+    const handles = view.plugin(handlesView)!;
+    const block = view.state.field(blockModel).blocks[at]!;
+    handles.shown = { from: block.from, depth: block.depth };
+    return { view, handles };
+  };
+  afterEach(() => closeContextMenu());
 
   it("col tasto destro è il menu del blocco, senza anello su una voce, e parla coi nomi dei comandi", () => {
-    const view = mount("Uno\n\nDue", 1);
-    const handles = view.plugin(handlesView)!;
-    const block = view.state.field(blockModel).blocks[0]!;
-    handles.shown = { from: block.from, depth: block.depth };
+    const { view } = open("Uno\n\nDue");
     let textMenus = 0;
     const count = () => textMenus++;
     document.body.addEventListener("contextmenu", count);
@@ -241,28 +247,34 @@ describe("il menu della maniglia", () => {
     expect(right.defaultPrevented).toBe(true);
     document.body.removeEventListener("contextmenu", count);
     expect(textMenus, "il menu del testo non si apre").toBe(0);
-    const menu = document.querySelector<HTMLElement>(".cm-fub-block-menu")!;
-    expect(document.activeElement, "il fuoco è nella lista, su nessuna voce").toBe(menu);
-    expect(rows().map((row) => row.textContent)).toEqual(expect.arrayContaining(["Colonne", "Elimina il blocco"]));
-    menu.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-    expect(document.activeElement).toBe(rows().find((row) => row.getAttribute("aria-disabled") !== "true"));
+    const menu = document.querySelector<HTMLElement>("#context-menu")!;
+    expect(menu.querySelector(".menu-head")?.textContent).toContain("Uno");
+    expect(document.activeElement?.getAttribute("role"), "il fuoco non è su una voce").not.toBe("menuitem");
+    expect(labels()).toEqual(expect.arrayContaining(["Affianca in colonne", "Duplica", "Elimina il blocco"]));
+    expect(labels(), "il primo blocco non sale").not.toContain("Sposta su");
+    expect(labels()[labels().length - 1], "ciò che elimina sta in fondo").toBe("Elimina il blocco");
+    expect(grip.getAttribute("aria-expanded")).toBe("true");
+    closeContextMenu();
+    expect(grip.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("aperto da Invio ha già la prima voce", () => {
-    const view = mount("Uno\n\nDue", 1);
-    const handles = view.plugin(handlesView)!;
-    const block = view.state.field(blockModel).blocks[0]!;
-    handles.shown = { from: block.from, depth: block.depth };
+    const { view } = open("Uno\n\nDue");
     view.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 }));
-    expect(rows()).toContain(document.activeElement);
+    expect(document.activeElement?.getAttribute("role")).toBe("menuitem");
   });
 
-  it("«Trasforma in» dice Riquadro, Elenco di attività e Blocco di codice", () => {
-    const view = mount("Uno\n\nDue", 1);
-    const handles = view.plugin(handlesView)!;
-    const block = view.state.field(blockModel).blocks[0]!;
-    handles.shown = { from: block.from, depth: block.depth };
-    handles.openMenu("transform", false);
-    expect(rows().map((row) => row.textContent)).toEqual(expect.arrayContaining(["Riquadro", "Elenco di attività", "Blocco di codice"]));
+  it("«Trasforma in ▸» dice Riquadro, Elenco di attività e Blocco di codice, e Duplica dice Mod-d", () => {
+    const { handles, view } = open("Uno\n\nDue");
+    const items = handles.mainItems(handles.shown!, (run) => run);
+    const transform = items.find((item) => item.label === "Trasforma in")!;
+    expect((transform.items as { label: string }[]).map((item) => item.label)).toEqual(expect.arrayContaining(["Riquadro", "Elenco di attività", "Blocco di codice"]));
+    expect(items.find((item) => item.label === "Duplica")?.hint).toBeTruthy();
+    const colors = items.find((item) => item.label === "Colore")!.items as { label: string; items: { label: string; checked?: boolean }[] }[];
+    expect(colors.map((item) => item.label)).toEqual(["Testo", "Fondo"]);
+    expect(colors[1]!.items[0]).toMatchObject({ label: "Nessuno", checked: true });
+    expect(colors[0]!.items.map((item) => item.label)).toContain("Arancione");
+    items.find((item) => item.label === "Duplica")!.run!();
+    expect(view.state.doc.toString()).toBe("Uno\n\nUno\n\nDue");
   });
 });
