@@ -1,0 +1,15 @@
+{
+  "worktree": { "baseRef": "head" },
+  "permissions": {
+    "allow": [
+      "Bash(scripts/check.sh:*)",
+      "Bash(cargo fmt:*)", "Bash(cargo clippy:*)", "Bash(cargo check:*)",
+      "Bash(cargo build:*)", "Bash(cargo test:*)", "Bash(cargo nextest run:*)",
+      "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)",
+      "Bash(git show:*)", "Bash(git rev-parse:*)", "Bash(git add:*)",
+      "Bash(git commit:*)", "Bash(git reset --keep:*)",
+      "Bash(npm run typecheck:*)", "Bash(npm run theme:generate:*)",
+      "Bash(npm run theme:verify:*)", "Bash(npm test:*)", "Bash(npx vitest run:*)"
+    ]
+  }
+}

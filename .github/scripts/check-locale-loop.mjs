@@ -40,6 +40,22 @@ for (const command of commands) {
   }
 }
 
+// `scripts/check.sh` è il ciclo locale che usano gli agenti: deve fare almeno
+// quello che la CI pretende. Un banco compare nella lista dei banchi senza il
+// suo `npm run`, che lo script aggiunge davanti a ciascuno.
+const checkScript = path.join(root, "scripts", "check.sh");
+if (fs.existsSync(checkScript)) {
+  const script = fs.readFileSync(checkScript, "utf8");
+  for (const command of commands) {
+    const bare = command.replace(/^npm run /, "");
+    if (!script.includes(command) && !script.includes(`"${bare}"`)) {
+      errors.push(`comando dichiarato ma assente da scripts/check.sh: ${command}`);
+    }
+  }
+} else {
+  errors.push("manca scripts/check.sh, il ciclo locale degli agenti");
+}
+
 const cargo = fs.readFileSync(path.join(root, "Cargo.toml"), "utf8");
 if (!/rust-version\s*=\s*"1\.95"/.test(cargo)) {
   errors.push("Cargo.toml non dichiara rust-version 1.95");

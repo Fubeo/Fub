@@ -18,7 +18,13 @@ Usa `npm ci`, non sostituire npm con un altro package manager.
 
 ## Ciclo locale
 
-Dalla radice:
+Lo stesso ciclo sta in un comando solo, `scripts/check.sh`: fa quello che la
+CI fa su Linux, banchi esclusi, e stampa una riga per passo. Con `--rapido`
+controlla soltanto ciò che il diff tocca e i crate che lo usano; con `--banchi`
+aggiunge i banchi del client. `check-locale-loop.mjs` verifica che contenga
+ogni comando del blocco `ci-required` qui sotto.
+
+I comandi uno per uno, dalla radice:
 
 ```bash
 cargo fmt --all --check
