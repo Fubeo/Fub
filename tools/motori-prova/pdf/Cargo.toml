@@ -1,0 +1,39 @@
+# PdfCraft collegato a Fub da solo (K0 del piano dei componenti, con P0).
+# Vedi `../README.md`.
+[package]
+name = "prova-pdf"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+[workspace]
+
+[dependencies]
+motori-prova-comune = { path = "../comune" }
+fub-abi = { path = "../../../crates/fub-abi" }
+serde_json = "1"
+# PdfCraft alla revisione che il piano fissa (c735fb7).
+pdfcraft-engine = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+pdfcraft-render = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+
+[profile.release]
+strip = false
+
+[profile.spoglio]
+inherits = "release"
+strip = true
+
+# Le `[patch.crates-io]` di PdfCraft (c735fb7), tolte quelle dell'interfaccia.
+# Da lui sono copie in `vendor/`: qui le stesse copie, prese dal suo
+# repository alla stessa revisione (Cargo cerca il pacchetto per nome).
+[patch.crates-io]
+hayro-interpret = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+hayro = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+hayro-syntax = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+hayro-cmap = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+hayro-postscript = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+hayro-jbig2 = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+lopdf = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+vello_common = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+vello_cpu = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
