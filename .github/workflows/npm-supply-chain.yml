@@ -1,15 +1,20 @@
 name: NPM supply chain
 
+# Come la CI: il push conta solo su `main`, gli altri rami passano dalla PR.
 on:
   workflow_dispatch:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
   schedule:
     - cron: "20 6 * * 1"
 
 permissions:
   contents: read
+
+concurrency:
+  group: npm-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   npm-supply-chain:
