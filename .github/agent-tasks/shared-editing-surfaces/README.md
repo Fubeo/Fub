@@ -8,7 +8,7 @@ Non è documentazione architetturale canonica. È un pacchetto di esecuzione: i 
 
 L'agente orchestratore deve leggere, nell'ordine:
 
-1. `AGENTS.md`;
+1. `CLAUDE.md`;
 2. `CONTRIBUTING.md`;
 3. issue #11 e le pagine canoniche collegate;
 4. `GLOBAL-RULES.md`;
@@ -32,7 +32,7 @@ Non deve leggere tutti i file `tasks/SURF-*.md` all'avvio. Deve aprire soltanto 
 In caso di conflitto valgono, in ordine:
 
 1. istruzioni esplicite più recenti dell'utente;
-2. `AGENTS.md` e `CONTRIBUTING.md`;
+2. `CLAUDE.md` e `CONTRIBUTING.md`;
 3. il TODO canonico;
 4. `GLOBAL-RULES.md`;
 5. il file del singolo SURF;

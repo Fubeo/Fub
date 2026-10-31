@@ -14,7 +14,7 @@ CANDIDATE_SHA: <sha esatto da verificare>
 ## Preparazione
 
 1. verifica repository e SHA;
-2. leggi `AGENTS.md` e `CONTRIBUTING.md`;
+2. leggi `CLAUDE.md` e `CONTRIBUTING.md`;
 3. leggi le sezioni pertinenti del TODO;
 4. leggi `GLOBAL-RULES.md`;
 5. leggi `TASK_FILE`;

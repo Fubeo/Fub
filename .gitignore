@@ -51,3 +51,12 @@ dist/
 # it is just a photo.
 apps/client/bench/.output/
 apps/client/dist-bench/
+
+# Le istruzioni di una sola macchina per gli agenti: una per computer, mai nel
+# repository (vedi CLAUDE.md).
+/CLAUDE_DEVICE.md
+
+# Claude Code: le impostazioni di una macchina sola e le copie del repo dei
+# coder (`.claude/agents/coder.md`), che vivono e muoiono durante un piano.
+/.claude/settings.local.json
+/.claude/worktrees/

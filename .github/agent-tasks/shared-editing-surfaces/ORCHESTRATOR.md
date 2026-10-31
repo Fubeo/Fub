@@ -13,7 +13,7 @@ Il tuo compito non è implementare personalmente i SURF. Devi coordinare subagen
 Prima di creare qualunque subagent:
 
 1. verifica di essere nel repository corretto e registra `ROOT_BASE_SHA = HEAD` della branch di partenza;
-2. leggi integralmente `AGENTS.md` e `CONTRIBUTING.md`;
+2. leggi integralmente `CLAUDE.md` e `CONTRIBUTING.md`;
 3. leggi integralmente il TODO canonico;
 4. leggi issue #11 senza modificarla;
 5. leggi `.github/agent-tasks/shared-editing-surfaces/GLOBAL-RULES.md`;
