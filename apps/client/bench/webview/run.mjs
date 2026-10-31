@@ -58,6 +58,8 @@ const MEMORY_QUIET_MS = 3_000;
 /// quando si rilegge per vedere se la memoria torna col tempo.
 const R1_SETTLE_MS = 10_000;
 const R1_LATE_MS = 60_000;
+/// I giri di apri tutto e chiudi tutto dopo la prima chiusura.
+const R1_ROUNDS = 10;
 
 /// Un file per modalità, nell'ordine in cui R1 li apre: il nome che si cerca
 /// col selettore rapido e la modalità che il referto nomina.
@@ -303,12 +305,18 @@ const SCENARIOS = {
   /// 2. **aperte**: un file per modalità, uno dopo l'altro, senza chiudere i
   ///    precedenti; una lettura dopo ognuno;
   /// 3. **chiuse**: chiuse tutte le schede, una lettura dopo `R1_SETTLE_MS` e
-  ///    una dopo `R1_LATE_MS`, per vedere se la memoria torna col tempo.
+  ///    una dopo `R1_LATE_MS`, per vedere se la memoria torna col tempo;
+  /// 4. **giri**: `R1_ROUNDS` volte tutti i file aperti e poi chiusi, una
+  ///    lettura `R1_SETTLE_MS` dopo ogni chiusura, e alla fine una dopo
+  ///    `R1_LATE_MS`.
   ///
   /// Ogni lettura è PSS in MiB, per processo: l'app (l'host Rust e la
   /// finestra), i processi della WebView, la rete, la GPU se c'è.
   /// Il **residuo** è quanto le schede chiuse tengono ancora: «chiuse», dopo
   /// l'attesa lunga, meno «vuota», per processo e in tutto.
+  /// La **pendenza** dei giri è la retta dei minimi quadrati sui residui dei
+  /// giri, in MiB per giro: vicina a zero se la memoria torna, positiva se
+  /// ogni giro ne lascia un po'.
   async R1(session) {
     if (process.platform !== "linux") return { skipped: "la memoria si legge da /proc: soltanto Linux" };
     await pause(MEMORY_QUIET_MS);
@@ -334,21 +342,59 @@ const SCENARIOS = {
     const closed = await settled(driverPid, pause);
     await pause(Math.max(0, R1_LATE_MS - (Date.now() - closedAt)));
     const late = await settled(driverPid, pause);
+    const rounds = [];
+    for (let round = 1; round <= R1_ROUNDS; round++) {
+      for (const [name] of MODES) {
+        await openByName(session, name, "");
+        await session.waitFor("return [...document.querySelectorAll('.pane.focus .tab[aria-selected=true] .tab-name')].some((el) => el.textContent.includes(arguments[0]))", [name], 60_000);
+      }
+      await pause(MEMORY_QUIET_MS);
+      const open = await settled(driverPid, pause);
+      const remained = await closeAll(session);
+      await pause(R1_SETTLE_MS);
+      rounds.push({ round, open, left: remained, closed: await settled(driverPid, pause) });
+    }
+    await pause(R1_LATE_MS);
+    const roundsLate = rounds.length > 0 ? await settled(driverPid, pause) : null;
     const opened = steps.at(-1)?.memory ?? null;
     const values = {};
+    // Tutti i gruppi che la partenza o una lettura dopo hanno visto: la
+    // partenza divisa per processo quanto il residuo.
+    const groups = [...new Set([empty, opened, closed, late, ...rounds.map((r) => r.closed)].flatMap((mem) => Object.keys(mem?.groups ?? {})))].sort();
     const put = (key, mem) => {
       values[`R1.${key}.MiB`] = mem?.pss ?? null;
-      for (const group of ["app", "webview"]) values[`R1.${key}.${group}.MiB`] = mem?.groups[group]?.pss ?? null;
+      for (const group of groups) values[`R1.${key}.${group}.MiB`] = mem?.groups[group]?.pss ?? null;
     };
     put("vuota", empty);
     put("aperte", opened);
     put("chiuse", closed);
     put("chiuse.tardi", late);
     const minus = (a, b) => (a === null || b === null ? null : Math.round((a - b) * 10) / 10);
-    values["R1.residuo.MiB"] = minus(values["R1.chiuse.tardi.MiB"], values["R1.vuota.MiB"]);
-    for (const group of ["app", "webview"]) values[`R1.residuo.${group}.MiB`] = minus(values[`R1.chiuse.tardi.${group}.MiB`], values[`R1.vuota.${group}.MiB`]);
+    const residue = (mem, group) => minus(group ? mem?.groups[group]?.pss ?? null : mem?.pss ?? null, group ? empty?.groups[group]?.pss ?? null : empty?.pss ?? null);
+    values["R1.residuo.MiB"] = residue(late);
+    for (const group of groups) values[`R1.residuo.${group}.MiB`] = residue(late, group);
+    // I residui dei giri, e la loro pendenza in MiB per giro.
+    const slope = (ys) => {
+      const points = ys.map((y, x) => [x + 1, y]).filter(([, y]) => y !== null);
+      if (points.length < 2) return null;
+      const mx = points.reduce((a, [x]) => a + x, 0) / points.length;
+      const my = points.reduce((a, [, y]) => a + y, 0) / points.length;
+      const num = points.reduce((a, [x, y]) => a + (x - mx) * (y - my), 0);
+      const den = points.reduce((a, [x]) => a + (x - mx) ** 2, 0);
+      return Math.round((num / den) * 100) / 100;
+    };
+    const trend = {};
+    for (const group of [null, ...groups]) {
+      const ys = rounds.map((r) => residue(r.closed, group));
+      const key = group ? `R1.giri.${group}` : "R1.giri";
+      trend[key] = ys;
+      values[`${key}.primo.MiB`] = ys[0] ?? null;
+      values[`${key}.ultimo.MiB`] = ys.at(-1) ?? null;
+      values[`${key}.pendenza.MiB`] = slope(ys);
+      values[`${key}.tardi.MiB`] = residue(roundsLate, group);
+    }
     return {
-      procedure: { settleMs: R1_SETTLE_MS, lateMs: R1_LATE_MS, quietMs: MEMORY_QUIET_MS },
+      procedure: { settleMs: R1_SETTLE_MS, lateMs: R1_LATE_MS, quietMs: MEMORY_QUIET_MS, rounds: R1_ROUNDS },
       restored,
       empty,
       steps,
@@ -356,6 +402,9 @@ const SCENARIOS = {
       left,
       closed,
       late,
+      rounds,
+      roundsLate,
+      trend,
       values,
       samples: 3,
     };
@@ -389,7 +438,7 @@ const SCENARIOS = {
   /// tessera letta dopo l'altra, finché l'indice non è pronto
   /// (`indexing.mjs`).
   async I1(session) {
-    const report = await session.executeAsync(INDEXING_SCRIPT, ["T1/Tessere.png", 120_000]);
+    const report = await session.executeAsync(INDEXING_SCRIPT, ["T1/Tessere.png", 90_000]);
     if (report.errors.run) throw new Error(report.errors.run);
     // Un avvio che trova l'indice già pronto non misura niente: lo dice, e
     // la soglia non passa con zero campioni.

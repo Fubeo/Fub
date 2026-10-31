@@ -43,7 +43,7 @@ function group(comm) {
   return "altro";
 }
 
-/// Una lettura: i discendenti di `root`, raggruppati, in MiB.
+/// Una lettura: i discendenti di `root`, uno per uno e raggruppati, in MiB.
 export function sample(root) {
   if (process.platform !== "linux") return null;
   const all = readdirSync("/proc").filter((name) => /^\d+$/.test(name)).map(Number).map(stat).filter(Boolean);
@@ -78,6 +78,7 @@ export function sample(root) {
     pss: mib(seen.reduce((sum, proc) => sum + proc.pss, 0)),
     rss: mib(seen.reduce((sum, proc) => sum + proc.rss, 0)),
     groups,
+    processes: seen.map((proc) => ({ pid: proc.pid, comm: proc.comm, group: group(proc.comm), pss: mib(proc.pss), rss: mib(proc.rss) })),
   };
 }
 

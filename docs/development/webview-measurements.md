@@ -57,16 +57,26 @@ La procedura è fissa:
 2. **aperte**: un file per modalità, senza chiudere i precedenti, una lettura
    3 s dopo ognuno;
 3. **chiuse**: chiuse tutte le schede, una lettura dopo 10 s e una dopo 60 s
-   (**chiuse.tardi**).
+   (**chiuse.tardi**);
+4. **giri**: dieci volte tutti i file aperti e poi tutto chiuso, una lettura
+   10 s dopo ogni chiusura, e alla fine una dopo 60 s.
+
+Ogni momento si legge in tutto e per gruppo di processi
+(`R1.vuota.app.MiB`, `R1.vuota.webview.MiB` e così via), e il referto tiene
+anche ogni processo con la sua PSS e la sua RSS.
 
 Il **residuo dopo la chiusura** (`R1.residuo.MiB`, e `R1.residuo.app.MiB`,
 `R1.residuo.webview.MiB` per processo) è «chiuse.tardi» meno «vuota»: la
 memoria che le schede chiuse tengono ancora un minuto dopo. Lo fanno le cache
-(caratteri, immagini decodificate, tessere), i motori rimasti caldi, la
-memoria di JavaScript che la WebView non ha ancora raccolto e le pagine che
-l'allocatore ha liberato ma non ha restituito al sistema. Un residuo che
-cresce da una misura all'altra è memoria che non si libera; uno che oscilla è
-la raccolta della WebView. La tolleranza è il cancello di K3.
+(caratteri, immagini decodificate, tessere), la memoria di JavaScript che la
+WebView non ha ancora raccolto e le pagine che l'allocatore ha liberato ma non
+ha restituito al sistema. I giri dicono se cresce: `R1.giri.primo.MiB` e
+`R1.giri.ultimo.MiB` sono il residuo dopo il primo e dopo il decimo giro,
+`R1.giri.pendenza.MiB` la retta dei minimi quadrati sui dieci residui, in MiB
+per giro, e `R1.giri.tardi.MiB` il residuo un minuto dopo l'ultimo giro; gli
+stessi valori ci sono per ogni gruppo. Una pendenza vicina a zero è memoria
+che torna o si riusa; una pendenza positiva è memoria che ogni giro lascia.
+La tolleranza è il cancello di K3.
 
 T1 è la prima delle tre vie del piano dei componenti per la tela dei motori
 (tessere verso la WebView, superficie wgpu nativa, egui): misura il trasporto

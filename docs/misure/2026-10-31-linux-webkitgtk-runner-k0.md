@@ -81,7 +81,6 @@ con una lettura dopo 10 s e una dopo 60 s.
 - In un minuto non torna niente: la lettura a 60 s è uguale a quella a 10 s.
 - Il residuo è memoria che le schede chiuse tengono ancora. Vengono da qui:
   - le cache: caratteri, immagini decodificate, tessere;
-  - i motori rimasti caldi;
   - la memoria di JavaScript che la WebView non ha ancora raccolto;
   - le pagine che l'allocatore ha liberato ma non ha reso al sistema.
 - Un residuo che cresce di misura in misura è memoria che non si libera. Uno
