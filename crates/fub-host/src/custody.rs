@@ -172,6 +172,25 @@ struct Inner<T> {
     /// lentezza è un fatto e ne può capitare un altro. Vedi
     /// [`Custody::slow_count`].
     slow_count: AtomicU32,
+    /// Quanti thread aspettano adesso un prestito condiviso o il turno di
+    /// scrittura. Lo guarda [`Custody::make_way`].
+    waiting: AtomicU32,
+}
+
+/// Un thread in fila su una custodia, finché questa guardia vive.
+struct Queued<'a>(&'a AtomicU32);
+
+impl<'a> Queued<'a> {
+    fn enter(waiting: &'a AtomicU32) -> Self {
+        waiting.fetch_add(1, Ordering::AcqRel);
+        Queued(waiting)
+    }
+}
+
+impl Drop for Queued<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
 }
 
 impl<T> Clone for Custody<T> {
@@ -217,6 +236,7 @@ impl<T> Custody<T> {
                 reports: AtomicU32::new(0),
                 threshold,
                 slow_count: AtomicU32::new(0),
+                waiting: AtomicU32::new(0),
             }),
         }
     }
@@ -224,7 +244,10 @@ impl<T> Custody<T> {
     /// Il prestito **condiviso**. Chi legge non avvelena niente: se questa
     /// risponde di no è perché qualcun altro, prima, è morto scrivendo.
     pub fn read(&self) -> Result<RwLockReadGuard<'_, T>, PluginError> {
-        match self.inside.lock.read() {
+        let queued = Queued::enter(&self.inside.waiting);
+        let guard = self.inside.lock.read();
+        drop(queued);
+        match guard {
             Ok(g) => Ok(g),
             Err(_) => Err(self.report()),
         }
@@ -273,6 +296,22 @@ impl<T> Custody<T> {
         self.acquire_turn(Some(stopped))
     }
 
+    /// **Lascia passare chi aspetta**: torna quando nessuno è più in fila per
+    /// un prestito condiviso o per il turno, o dopo `at_most`.
+    ///
+    /// È per chi scrive a prese brevi, una dopo l'altra (le fette
+    /// dell'indicizzazione). Rilasciare il lucchetto non basta: il thread che
+    /// l'ha appena lasciato lo riprende prima che chi aspettava sia sveglio, e
+    /// chi apre una nota resta fermo come se la presa fosse una sola. Va
+    /// chiamata senza tenere né il prestito né il turno, o chi aspetta il
+    /// turno non lo può prendere.
+    pub fn make_way(&self, at_most: Duration) {
+        let since = Instant::now();
+        while self.inside.waiting.load(Ordering::Acquire) > 0 && since.elapsed() < at_most {
+            std::thread::yield_now();
+        }
+    }
+
     /// Il turno, con o senza la facoltà di rinunciare.
     fn acquire_turn(
         &self,
@@ -285,6 +324,7 @@ impl<T> Custody<T> {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let mut waiting: Option<waits::TurnWait> = None;
+        let mut queued: Option<Queued<'_>> = None;
         loop {
             match state.owner {
                 None => {
@@ -297,6 +337,9 @@ impl<T> Custody<T> {
                     return Ok(WriteTurn::new(&self.inside));
                 }
                 Some(owner) => {
+                    if queued.is_none() {
+                        queued = Some(Queued::enter(&self.inside.waiting));
+                    }
                     let Some(stopped) = stopped else {
                         state = self
                             .inside
@@ -897,5 +940,45 @@ mod tests {
         // cedere: nemmeno se la sua bandiera è già alzata.
         let inner = c.write_turn_yielding(&|| Err(PluginError::Cancelled("annullato".into())));
         assert!(inner.is_ok(), "il turno rientra senza chiedere permesso");
+    }
+
+    /// **Chi scrive a prese brevi lascia entrare chi legge.** Senza
+    /// [`Custody::make_way`] il writer riprende il lucchetto appena lasciato
+    /// prima che il lettore sia sveglio, e una fila di prese brevi ferma chi
+    /// legge quanto una presa sola.
+    #[test]
+    fn making_way_lets_a_waiting_reader_in_before_the_next_hold() {
+        let c = Custody::new("the test vault", 1_u32);
+        let read = std::sync::atomic::AtomicBool::new(false);
+        std::thread::scope(|s| {
+            let hold = c.write().expect("la prima presa");
+            let reader = s.spawn(|| {
+                let _guard = c.read().expect("il lettore entra");
+                read.store(true, Ordering::Release);
+            });
+            while c.inside.waiting.load(Ordering::Acquire) == 0 {
+                std::thread::yield_now();
+            }
+            drop(hold);
+            c.make_way(Duration::from_secs(5));
+            let _next = c.write().expect("la presa dopo");
+            assert!(
+                read.load(Ordering::Acquire),
+                "la presa dopo è arrivata prima del lettore che aspettava"
+            );
+            drop(_next);
+            reader.join().expect("il lettore");
+        });
+    }
+
+    #[test]
+    fn making_way_with_nobody_waiting_returns_at_once() {
+        let c = Custody::new("the test vault", 1_u32);
+        let since = Instant::now();
+        c.make_way(Duration::from_secs(5));
+        assert!(
+            since.elapsed() < Duration::from_secs(1),
+            "non aspettava nessuno"
+        );
     }
 }

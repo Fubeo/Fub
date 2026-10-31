@@ -130,10 +130,10 @@ pub use vault::{data_root, PreparedIgnoreCheck, TrashEntry, Vault, FUB_DIR, TRAS
 pub use viewstate::ViewStates;
 pub use workspace::{
     new_doc_id, valid_doc_id, CatchUpSnapshot, CompletedExternalAssetRename, CompletedSyncChange,
-    ExternalRenamePlan, GraphUpdate, Indexing, Opening, ParsedBatch, ParsedChange,
+    ExternalRenamePlan, GraphUpdate, IndexBatchStep, Indexing, Opening, ParsedBatch, ParsedChange,
     ParsedExplicitRename, ParsedExternalAssetRename, ParsedExternalRename,
     PendingExternalAssetRename, PendingSyncChange, PreparedCatchUp, PreparedDocumentBytesWrite,
     PreparedExplicitRename, PreparedExternalAssetRename, PreparedResourceOpen,
     PreparedResourceRead, PreparedTimerCursors, Rejected, SyncPlan, Trust, Workspace, INDEX_JOB,
-    MAIN_PANE,
+    INDEX_WRITE_BUDGET, MAIN_PANE,
 };
