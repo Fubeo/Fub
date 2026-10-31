@@ -161,7 +161,7 @@ describe("i suggerimenti nell'editor", () => {
     expect(showing()).toBeNull();
     stroke(SCRIBBLE, FINGER);
     expect(showing()).toBe("two-fingers");
-    expect(text()).toBe("Con due dita sposti il foglio; allargandole o stringendole lo avvicini o lo allontani.");
+    expect(text()).toBe("Con due dita sposti il foglio; allargandole o stringendole lo avvicini o lo allontani. Un tocco di due dita annulla, uno di tre ripete.");
     expect(said()).toBe(`Suggerimento: ${text()}`);
     expect(row().getAttribute("role")).toBe("group");
     expect(row().getAttribute("aria-label")).toBe("Suggerimento");
@@ -171,8 +171,8 @@ describe("i suggerimenti nell'editor", () => {
     expect(changes).toHaveLength(2);
   });
 
-  it("dal livello Standard, coi gesti, dice anche dei tocchi che annullano e ripetono", () => {
-    mount({ level: "standard" });
+  it("coi gesti dice anche dei tocchi che annullano e ripetono", () => {
+    mount();
     stroke(SCRIBBLE, FINGER);
     expect(text()).toBe("Con due dita sposti il foglio; allargandole o stringendole lo avvicini o lo allontani. Un tocco di due dita annulla, uno di tre ripete.");
     editor.setGrid({ ...editor.grid, taps: false });
@@ -207,7 +207,7 @@ describe("i suggerimenti nell'editor", () => {
   });
 
   it("uno alla volta: un altro che arriva mentre uno è a schermo aspetta la sua occasione dopo", () => {
-    mount({ level: "standard" });
+    mount();
     stroke(SCRIBBLE, FINGER);
     expect(showing()).toBe("two-fingers");
     // Un rettangolo a mano non tenuto: la forma pulita aspetta.
@@ -222,11 +222,11 @@ describe("i suggerimenti nell'editor", () => {
   });
 
   it("il tratto tenuto fermo dice della forma pulita soltanto dove si riconosce, e dopo un tratto che somiglia a una forma", () => {
-    mount();
-    // All'Essenziale le forme dal tratto non ci sono.
+    mount({ workspace: "simple" });
+    // Nel Semplice le forme dal tratto non ci sono.
     stroke(RECT, MOUSE);
     expect(showing()).toBeNull();
-    editor.setLevel("standard");
+    editor.setWorkspace("full");
     stroke(SCRIBBLE, MOUSE);
     expect(showing()).toBeNull();
     stroke(RECT, MOUSE);
@@ -234,7 +234,7 @@ describe("i suggerimenti nell'editor", () => {
   });
 
   it("chi tiene fermo un tratto e ne fa una forma non lo vede più", () => {
-    mount({ level: "standard" }, EMPTY);
+    mount({}, EMPTY);
     stroke(RECT, MOUSE, 500);
     expect(editor.engine.text).toMatch(/<rect id="o[a-z0-9]{8}" x="100" y="100" width="200" height="120"/);
     expect(seen[0]).toEqual(["hold-shape"]);
@@ -243,7 +243,7 @@ describe("i suggerimenti nell'editor", () => {
   });
 
   it("dopo due forme non dice più come si scrive dentro una forma: il testo non si scrive sul posto (ADR 0231)", () => {
-    mount({ level: "standard", suggestions: { on: true, seen: ["two-fingers", "hold-shape"] } }, EMPTY);
+    mount({ suggestions: { on: true, seen: ["two-fingers", "hold-shape"] } }, EMPTY);
     editor.setTool("rect");
     stroke([[100, 100], [200, 160]]);
     stroke([[300, 100], [400, 160]]);
@@ -282,7 +282,7 @@ describe("i suggerimenti nell'editor", () => {
   });
 
   it("la casella li spegne tutti e lo scrive; tolto il segno, tornano", () => {
-    mount({ level: "standard" });
+    mount();
     stroke(SCRIBBLE, FINGER);
     expect(box().checked).toBe(false);
     expect(box().closest("label")!.textContent).toBe("Non mostrare più suggerimenti");

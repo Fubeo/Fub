@@ -66,7 +66,6 @@ export const SETTINGS: PartAnatomy = {
         "setting-block",
         "setting-features",
         "setting-features-group",
-        "setting-features-level",
         "setting-feature",
         "setting-text",
         "setting-label",

@@ -677,29 +677,7 @@ describe("montare e smontare", () => {
   });
 });
 
-/// Il livello dichiarato da `fub.draw`, col valore `value`.
-const level = (value: string): SettingEntry => ({
-  spec: {
-    key: "draw.level",
-    label: "Livello d'interfaccia",
-    description: "",
-    group: "Disegni",
-    scope: "vault",
-    kind: {
-      kind: "choice",
-      default: "essential",
-      options: [
-        { value: "essential", label: "Essenziale" },
-        { value: "standard", label: "Standard" },
-      ],
-    },
-    program_writable: false,
-  },
-  value,
-  source: "vault",
-});
-
-/// Una chiave di `fub.draw` delle nuove, di serie finché non si sceglie.
+/// Una chiave di `fub.draw`, di serie finché non si sceglie.
 const drawSetting = (key: "draw.workspace" | "draw.toolbar", value: string | string[] = key === "draw.workspace" ? "full" : []): SettingEntry =>
   ({
     spec: {
@@ -714,21 +692,6 @@ const drawSetting = (key: "draw.workspace" | "draw.toolbar", value: string | str
     value,
     source: "default",
   }) as SettingEntry;
-
-/// Le parti del Personalizzato, col valore `value`.
-const custom = (value: string[]): SettingEntry => ({
-  spec: {
-    key: "draw.custom",
-    label: "Parti del Personalizzato",
-    description: "",
-    group: "Disegni",
-    scope: "vault",
-    kind: { kind: "list", default: ["pen", "eraser", "rect", "ellipse", "line", "arrow"] },
-    program_writable: false,
-  },
-  value,
-  source: "vault",
-});
 
 /// Moduli nuovi, perché il livello e la griglia letti restano in memoria,
 /// e il router del kernel acceso: è lui che porta `setting_changed`.
@@ -759,8 +722,9 @@ describe("lo spazio di lavoro e la griglia", () => {
     host.atGate("queryIndex").filter((call) => (call.args[0] as { kind: string }).kind === "settings").length;
 
   it("una superficie nuova parte dall'ultimo spazio e dall'ultima griglia, senza aspettare la lettura", async () => {
-    // L'Essenziale scelto nelle versioni precedenti vale «Semplice».
-    const mountFresh = await fresh(createFakeHost({ settings: [level("essential")] }));
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
+    await host.module.api.setSetting("draw.workspace", "simple");
+    const mountFresh = await fresh(host);
     mountFresh(parent);
     expect(simple(parent), "prima della lettura, Completo").toBe(false);
     await settle();
@@ -777,7 +741,7 @@ describe("lo spazio di lavoro e la griglia", () => {
     }
 
     // La griglia, in Completo.
-    const full = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const full = await fresh(createFakeHost({ settings: [drawSetting("draw.workspace")] }));
     const second = document.createElement("div");
     const third = document.createElement("div");
     document.body.append(second, third);
@@ -839,7 +803,7 @@ describe("lo spazio di lavoro e la griglia", () => {
         at.querySelector<HTMLButtonElement>(".draw-toolbar .kit-color-well-button")!.click();
       }
     };
-    const host = createFakeHost({ settings: [level("standard")] });
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     await host.module.api.setViewState("draw.colors", { colors: ["#123456"] });
     const mountFresh = await fresh(host);
     mountFresh(parent);
@@ -861,19 +825,13 @@ describe("lo spazio di lavoro e la griglia", () => {
     }
   });
 
-  it("la colonna scelta vale, anche su una superficie nuova; non scelta, la danno le parti del Personalizzato", async () => {
-    const host = createFakeHost({ settings: [level("custom"), custom(["rect", "text", "layers"]), drawSetting("draw.toolbar")] });
+  it("la colonna scelta vale, anche su una superficie nuova", async () => {
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace"), drawSetting("draw.toolbar")] });
     const mountFresh = await fresh(host);
     mountFresh(parent);
     await settle();
-    // Il Testo se n'è andato (ADR 0231): il suo nome resta e non conta.
-    expect(tools(parent)).toEqual(["select", "rect"]);
+    expect(tools(parent)).toContain("rect");
 
-    await host.module.api.setSetting("draw.custom", ["ellipse", "highlighter"]);
-    await settle();
-    expect(tools(parent)).toEqual(["select", "ellipse", "highlighter"]);
-
-    // La colonna scelta vince sulle parti.
     await host.module.api.setSetting("draw.toolbar", ["pen", "select", "line"]);
     await settle();
     expect(tools(parent)).toEqual(["pen", "select", "line"]);
@@ -895,7 +853,7 @@ describe("le schede dell'ispettore (C1)", () => {
   const tab = (surface: EditorSurface, id: string) => surface.panels!.list().find((each) => each.id === id)!;
 
   it("il disegno porta Design, Livelli, Cronologia e Accessibilità, non Risorse (ADR 0231) né il dock, e lascia fuori i titoli, le note e le proprietà", async () => {
-    const host = createFakeHost({ settings: [level("expert")] });
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const surface = (await fresh(host))(parent);
     await settle();
     expect(ids(surface)).toEqual(["draw.design", "draw.layers", "draw.history", "draw.accessibility"]);
@@ -905,20 +863,20 @@ describe("le schede dell'ispettore (C1)", () => {
     expect(parent.querySelector(".draw-properties")).toBeNull();
   });
 
-  it("le schede seguono lo spazio, e il Semplice (dall'Essenziale) non ne porta che quelle che ha", async () => {
-    const host = createFakeHost({ settings: [level("expert")] });
+  it("le schede seguono lo spazio, e il Semplice non ne porta che quelle che ha", async () => {
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const surface = (await fresh(host))(parent);
     await settle();
     let told = 0;
     surface.panels!.subscribe(() => (told += 1));
-    await host.module.api.setSetting("draw.level", "essential");
+    await host.module.api.setSetting("draw.workspace", "simple");
     await settle();
     expect(told).toBeGreaterThan(0);
     expect(ids(surface)).toEqual(["draw.design", "draw.layers"]);
   });
 
   it("montata, una scheda mostra i suoi pannelli; smontata, li chiude e li riprende", async () => {
-    const host = createFakeHost({ settings: [level("expert")] });
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const surface = (await fresh(host))(parent);
     await settle();
     const sheet = document.createElement("div");
@@ -939,7 +897,7 @@ describe("le schede dell'ispettore (C1)", () => {
   });
 
   it("la banda di stato dice zoom, oggetti, misure della selezione e puntatore, al posto delle parole", async () => {
-    const host = createFakeHost({ settings: [level("standard")] });
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const surface = (await fresh(host))(parent);
     await settle();
     const status = surface.status!;
@@ -969,7 +927,7 @@ describe("le schede dell'ispettore (C1)", () => {
   });
 
   it("«Proprietà» e «Cronologia» nella barra chiedono la loro scheda, e la chiedono sempre", async () => {
-    const host = createFakeHost({ settings: [level("expert")] });
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const surface = (await fresh(host))(parent);
     await settle();
     const asked: string[] = [];
@@ -991,7 +949,7 @@ describe("le schede dell'ispettore (C1)", () => {
   });
 
   it("in Lettura non ci sono schede, e tornano nel Disegno", async () => {
-    const host = createFakeHost({ settings: [level("expert")] });
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const surface = (await fresh(host))(parent);
     await settle();
     let told = 0;
@@ -1004,7 +962,7 @@ describe("le schede dell'ispettore (C1)", () => {
   });
 
   it("una superficie distrutta con una scheda montata chiude i pannelli e non ne offre più", async () => {
-    const host = createFakeHost({ settings: [level("expert")] });
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const surface = (await fresh(host))(parent);
     await settle();
     const sheet = document.createElement("div");
@@ -1179,7 +1137,7 @@ describe("le immagini del vault", () => {
 
   it("Ctrl+I sceglie con la shell, e l'immagine si scrive relativa al disegno", async () => {
     measure();
-    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const mountFresh = await fresh(createFakeHost({ settings: [drawSetting("draw.workspace")] }));
     const images = shell({ "foto/a%20b.png": new Blob([PNG], { type: "image/png" }) });
     const surface = mountFresh(parent, { images: { ...images, pick: async () => "disegni/foto/a b.png" } });
     await settle();
@@ -1192,7 +1150,7 @@ describe("le immagini del vault", () => {
 
   it("una scelta che fallisce lo dice, e non aggiunge niente", async () => {
     measure();
-    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const mountFresh = await fresh(createFakeHost({ settings: [drawSetting("draw.workspace")] }));
     // Gli avvisi di questa superficie sono quelli dei moduli nuovi.
     const notices = await import("../../ui/notify");
     notices.clearHistory();
@@ -1243,7 +1201,7 @@ describe("la finestra «Esporta»", () => {
   });
 
   it("apre la finestra sul disegno, torna la richiesta, e le scelte si ricordano", async () => {
-    const host = createFakeHost({ settings: [level("standard")] });
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const mountFresh = await fresh(host);
     const surface = mountFresh(parent);
     await settle();
@@ -1269,7 +1227,7 @@ describe("la finestra «Esporta»", () => {
   });
 
   it("gli oggetti scelti senza id lo ricevono quando si esporta la selezione, in un passo che si annulla", async () => {
-    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const mountFresh = await fresh(createFakeHost({ settings: [drawSetting("draw.workspace")] }));
     const surface = mountFresh(parent);
     surface.buffer!.setDoc(UNNAMED);
     await settle();
@@ -1301,7 +1259,7 @@ describe("la finestra «Esporta»", () => {
   });
 
   it("se il disegno cambia mentre si sceglie, la selezione non si esporta e lo dice", async () => {
-    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const mountFresh = await fresh(createFakeHost({ settings: [drawSetting("draw.workspace")] }));
     const notices = await import("../../ui/notify");
     notices.clearHistory();
     const surface = mountFresh(parent);
@@ -1324,7 +1282,7 @@ describe("la finestra «Esporta»", () => {
 
   it("«Esporta la selezione» dell'ispettore apre la finestra già sulla selezione, per quella volta", async () => {
     let asked = 0;
-    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const mountFresh = await fresh(createFakeHost({ settings: [drawSetting("draw.workspace")] }));
     const surface = mountFresh(parent, { onExport: () => (asked += 1) });
     await settle();
     key(parent, { key: "a", ctrlKey: true });
@@ -1353,7 +1311,7 @@ describe("la finestra «Esporta»", () => {
   });
 
   it("in Lettura la selezione non si vede, e non si offre", async () => {
-    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const mountFresh = await fresh(createFakeHost({ settings: [drawSetting("draw.workspace")] }));
     const surface = mountFresh(parent);
     await settle();
     key(parent, { key: "a", ctrlKey: true });
@@ -1408,7 +1366,7 @@ describe("F6 fra le zone del disegno (H3)", () => {
   const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
   it("va dalla tela alla colonna e alla barra in alto, poi lascia il giro alla shell; Maiusc+F6 torna indietro", async () => {
-    const host = createFakeHost({ settings: [level("expert")] });
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const surface = (await fresh(host))(parent);
     await settle();
     const canvas = parent.querySelector<HTMLElement>(".draw-surface")!;

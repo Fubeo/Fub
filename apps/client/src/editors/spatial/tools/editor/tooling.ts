@@ -14,7 +14,7 @@ import { snapPoint } from "../grid";
 import { turnTo } from "../../view";
 import { SceneIndex, type Unit } from "../hit";
 import { COVER_COLOR, customColor, DEFAULT_COLOR, HIGHLIGHTER_COLOR, RECENT_COLORS, swatchOf } from "../palette";
-import { featuresFor, toolAfter, toolsOf, type Feature, type Level, type ToolId } from "../registry";
+import { toolAfter, toolsOf, type Feature, type ToolId } from "../registry";
 import type { EditorContext } from "./context";
 import { layerRefusal, layerTitle } from "./helpers";
 import type { DrawStyle } from "./types";
@@ -24,7 +24,8 @@ const RECENT_MAX = 6;
 
 /// Ciò che gli strumenti, la pipeline della penna e le guide intelligenti dà agli altri pezzi dell'editor.
 export interface ToolingContext {
-  setLevel: (next: Level, custom?: readonly string[]) => void;
+  /// Le parti `next` al posto di quelle di adesso, dal vivo.
+  offer: (next: ReadonlySet<Feature>) => void;
   setTool: (id: ToolId) => void;
   rememberColors: (...codes: string[]) => void;
   setColor: (value: string) => void;
@@ -52,12 +53,9 @@ export function installTooling(ctx: EditorContext): void {
   } = ctx;
   // --- Strumenti --------------------------------------------------------------
 
-  function setLevel(next: Level, custom: readonly string[] = ctx.picked): void {
-    ctx.picked = custom;
-    const offered = featuresFor(next, ctx.picked, profile);
-    if (next === ctx.level && offered.size === ctx.features.size && [...offered].every((feature) => ctx.features.has(feature))) return;
+  function offer(offered: ReadonlySet<Feature>): void {
+    if (offered.size === ctx.features.size && [...offered].every((feature) => ctx.features.has(feature))) return;
     const hadPanel = has("properties");
-    ctx.level = next;
     ctx.features = offered;
     // Senza la vista girata, il foglio torna dritto.
     if (!has("gestures") && ctx.camera.angle !== 0) setCamera(turnTo(ctx.camera, 0, viewCenter()));
@@ -81,10 +79,9 @@ export function installTooling(ctx: EditorContext): void {
     suggestions.relabel();
     // Il pannello arriva come lo vuole chi disegna.
     if (!hadPanel && has("properties")) showPanelByDefault();
-    // I righelli vanno e vengono col livello, e la cornice con loro.
     showHandles();
   }
-  ctx.setLevel = setLevel;
+  ctx.offer = offer;
 
   function setTool(id: ToolId): void {
     if (!ctx.tools.some((spec) => spec.id === id)) return;

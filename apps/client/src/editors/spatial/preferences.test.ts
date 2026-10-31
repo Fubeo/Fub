@@ -30,47 +30,6 @@ vi.mock("../../host/ipc", () => {
 
 const { createFakeHost } = await import("../../host/fake");
 
-/// La riga del livello come la dichiara `fub.draw`, col valore `value`.
-function levelEntry(value: string): SettingEntry {
-  return {
-    spec: {
-      key: "draw.level",
-      label: "Livello d'interfaccia",
-      description: "",
-      group: "Disegni",
-      scope: "vault",
-      kind: {
-        kind: "choice",
-        default: "essential",
-        options: [
-          { value: "essential", label: "Essenziale" },
-          { value: "standard", label: "Standard" },
-        ],
-      },
-      program_writable: false,
-    },
-    value,
-    source: value === "essential" ? "default" : "vault",
-  };
-}
-
-/// La riga delle parti del Personalizzato, col valore `value`.
-function customEntry(value: unknown): SettingEntry {
-  return {
-    spec: {
-      key: "draw.custom",
-      label: "Parti del Personalizzato",
-      description: "",
-      group: "Disegni",
-      scope: "vault",
-      kind: { kind: "list", default: ["pen", "eraser", "rect", "ellipse", "line", "arrow"] },
-      program_writable: false,
-    },
-    value,
-    source: "vault",
-  } as SettingEntry;
-}
-
 /// Un'altra impostazione, che il disegno non guarda.
 const OTHER: SettingEntry = {
   spec: {
@@ -113,124 +72,6 @@ function settingsReads(host: FakeHost): unknown[] {
 
 beforeEach(() => {
   box.host = null;
-});
-
-describe("il livello del disegno", () => {
-  it("si legge dalle impostazioni del bundle fub.draw, e un valore sconosciuto vale l'Essenziale", async () => {
-    const host = createFakeHost({ settings: [levelEntry("standard")] });
-    const { currentLevel, watchLevel } = await boot(host);
-    expect(currentLevel(), "prima di leggere").toBe("essential");
-
-    const applied: string[] = [];
-    const stop = watchLevel((level) => applied.push(level));
-    await settle();
-    expect(applied).toEqual(["standard"]);
-    expect(currentLevel()).toBe("standard");
-    expect(settingsReads(host)).toEqual([{ kind: "settings", plugin: "fub.draw" }]);
-    stop();
-
-    for (const settings of [[levelEntry("beginner")], [OTHER]]) {
-      const other = createFakeHost({ settings });
-      const fresh = await boot(other);
-      const seen: string[] = [];
-      fresh.watchLevel((level) => seen.push(level));
-      await settle();
-      expect(seen, JSON.stringify(settings.map((e) => e.value))).toEqual(["essential"]);
-    }
-  });
-
-  it("segue i cambi del livello, e solo quelli, finché non si smette", async () => {
-    const host = createFakeHost({ settings: [levelEntry("essential"), OTHER] });
-    const { watchLevel } = await boot(host);
-    const applied: string[] = [];
-    const stop = watchLevel((level) => applied.push(level));
-    await settle();
-    expect(applied).toEqual(["essential"]);
-
-    await host.module.api.setSetting("editor.line_numbers", false);
-    await settle();
-    expect(settingsReads(host), "un'altra impostazione non fa rileggere").toHaveLength(1);
-
-    await host.module.api.setSetting("draw.level", "standard");
-    await settle();
-    expect(applied).toEqual(["essential", "standard"]);
-
-    stop();
-    await host.module.api.setSetting("draw.level", "essential");
-    await settle();
-    expect(applied, "dopo stop").toEqual(["essential", "standard"]);
-    expect(settingsReads(host)).toHaveLength(2);
-  });
-
-  it("una lettura superata da una più recente non arriva, né all'editor né alla memoria", async () => {
-    const host = createFakeHost({ settings: [levelEntry("essential")] });
-    const { currentLevel, watchLevel } = await boot(host);
-    const applied: string[] = [];
-    watchLevel((level) => applied.push(level));
-    await settle();
-
-    // Due cambi, e le risposte tornano al contrario: prima la seconda.
-    const first = host.throttle("queryIndex");
-    await host.module.api.setSetting("draw.level", "standard");
-    const second = host.throttle("queryIndex");
-    await host.module.api.setSetting("draw.level", "essential");
-    second();
-    await settle();
-    first();
-    await settle();
-
-    expect(settingsReads(host)).toHaveLength(3);
-    expect(applied).toEqual(["essential", "essential"]);
-    expect(currentLevel()).toBe("essential");
-  });
-
-  it("le parti del Personalizzato si leggono col livello, e un loro cambio fa rileggere", async () => {
-    const host = createFakeHost({ settings: [levelEntry("custom"), customEntry(["pen", "layers", 7, "domani"])] });
-    const { currentCustom, currentLevel, watchLevel } = await boot(host);
-    expect(currentCustom(), "prima di leggere").toEqual(["pen", "eraser", "rect", "ellipse", "line", "arrow"]);
-
-    const applied: [string, readonly string[]][] = [];
-    const stop = watchLevel((level, custom) => applied.push([level, custom]));
-    await settle();
-    // Ciò che non è un nome cade; un nome sconosciuto resta, per chi lo conosce.
-    expect(applied).toEqual([["custom", ["pen", "layers", "domani"]]]);
-    expect(currentLevel()).toBe("custom");
-    expect(currentCustom()).toEqual(["pen", "layers", "domani"]);
-    expect(settingsReads(host), "una lettura per le due impostazioni").toHaveLength(1);
-
-    await host.module.api.setSetting("draw.custom", ["text"]);
-    await settle();
-    expect(applied[applied.length - 1]).toEqual(["custom", ["text"]]);
-    expect(currentCustom()).toEqual(["text"]);
-    expect(settingsReads(host)).toHaveLength(2);
-
-    // Senza la riga, o con un valore che non è un elenco, valgono le parti dell'Essenziale.
-    for (const settings of [[levelEntry("custom")], [levelEntry("custom"), customEntry("pen")]]) {
-      const other = createFakeHost({ settings });
-      const fresh = await boot(other);
-      const seen: (readonly string[])[] = [];
-      fresh.watchLevel((_level, custom) => seen.push(custom));
-      await settle();
-      expect(seen, JSON.stringify(settings.map((e) => e.value))).toEqual([["pen", "eraser", "rect", "ellipse", "line", "arrow"]]);
-    }
-    stop();
-  });
-
-  it("se le impostazioni non si leggono, vale l'ultimo livello letto", async () => {
-    const host = createFakeHost({ settings: [levelEntry("standard")] });
-    const { currentLevel, watchLevel } = await boot(host);
-    const stop = watchLevel(() => {});
-    await settle();
-    stop();
-
-    const heal = host.fault("queryIndex", "vault chiuso");
-    const applied: [string, readonly string[]][] = [];
-    watchLevel((level, custom) => applied.push([level, custom]));
-    await settle();
-    heal();
-    expect(applied).toEqual([["standard", ["pen", "eraser", "rect", "ellipse", "line", "arrow"]]]);
-    expect(currentLevel()).toBe("standard");
-  });
 });
 
 describe("le mie penne", () => {
@@ -704,37 +545,60 @@ function drawEntry(key: string, value: unknown, chosen = true): SettingEntry {
 }
 
 describe("lo spazio di lavoro del disegno", () => {
-  it("una chiave nuova scelta vale; non scelta, la deduce la vecchia, che resta", async () => {
+  it("la chiave scelta vale; il livello di prima non si legge più", async () => {
     const { workspaceOf } = await boot(createFakeHost({ settings: [] }));
-    // Niente scelto: Completo, colonna di serie, anche col livello di serie.
+    // Niente scelto: Completo, colonna di serie.
     expect(workspaceOf([])).toEqual({ workspace: "full", toolbar: [] });
-    expect(workspaceOf([drawEntry("draw.level", "essential", false)])).toEqual({ workspace: "full", toolbar: [] });
-    // Il livello scelto: l'Essenziale è Semplice, gli altri Completo.
-    expect(workspaceOf([drawEntry("draw.level", "essential")])).toEqual({ workspace: "simple", toolbar: [] });
-    expect(workspaceOf([drawEntry("draw.level", "expert")])).toEqual({ workspace: "full", toolbar: [] });
-    // Il Personalizzato dà la colonna coi suoi strumenti; le parti che non
-    // sono strumenti non contano.
-    expect(workspaceOf([drawEntry("draw.level", "custom"), drawEntry("draw.custom", ["pen", "layers", "rect", "pen", 7])])).toEqual({
-      workspace: "full",
-      toolbar: ["pen", "rect"],
-    });
-    // Le chiavi nuove scelte vincono sulle vecchie; uno strumento che non
-    // c'è, o non c'è più come il Testo, non conta.
-    expect(
-      workspaceOf([
-        drawEntry("draw.level", "essential"),
-        drawEntry("draw.custom", ["pen"]),
-        drawEntry("draw.workspace", "full"),
-        drawEntry("draw.toolbar", ["select", "text", "domani"]),
-      ]),
-    ).toEqual({ workspace: "full", toolbar: ["select"] });
-    // Uno spazio sconosciuto ricade sul vecchio livello.
-    expect(workspaceOf([drawEntry("draw.level", "essential"), drawEntry("draw.workspace", "tablet")]).workspace).toBe("simple");
+    // `draw.level` e `draw.custom` restano nel file, ma non contano più.
+    expect(workspaceOf([drawEntry("draw.level", "essential"), drawEntry("draw.custom", ["pen"])])).toEqual({ workspace: "full", toolbar: [] });
+    expect(workspaceOf([drawEntry("draw.workspace", "simple")])).toEqual({ workspace: "simple", toolbar: [] });
+    // Uno strumento che non c'è, o non c'è più come il Testo, non conta.
+    expect(workspaceOf([drawEntry("draw.workspace", "full"), drawEntry("draw.toolbar", ["select", "text", "domani"])])).toEqual({ workspace: "full", toolbar: ["select"] });
+    // Uno spazio sconosciuto vale Completo.
+    expect(workspaceOf([drawEntry("draw.workspace", "tablet")]).workspace).toBe("full");
   });
 
-  it("segue le quattro chiavi, e scrive le scelte dell'editor senza cancellare le vecchie", async () => {
+  it("una lettura superata da una più recente non arriva, né all'editor né alla memoria", async () => {
+    const host = createFakeHost({ settings: [drawEntry("draw.workspace", "full", false)] });
+    const { currentWorkspace, watchWorkspace } = await boot(host);
+    const applied: string[] = [];
+    watchWorkspace((choice) => applied.push(choice.workspace));
+    await settle();
+
+    // Due cambi, e le risposte tornano al contrario: prima la seconda.
+    const first = host.throttle("queryIndex");
+    await host.module.api.setSetting("draw.workspace", "simple");
+    const second = host.throttle("queryIndex");
+    await host.module.api.setSetting("draw.workspace", "full");
+    second();
+    await settle();
+    first();
+    await settle();
+
+    expect(settingsReads(host)).toHaveLength(3);
+    expect(applied).toEqual(["full", "full"]);
+    expect(currentWorkspace().workspace).toBe("full");
+  });
+
+  it("se le impostazioni non si leggono, vale l'ultimo spazio letto", async () => {
+    const host = createFakeHost({ settings: [drawEntry("draw.workspace", "simple")] });
+    const { currentWorkspace, watchWorkspace } = await boot(host);
+    const stop = watchWorkspace(() => {});
+    await settle();
+    stop();
+
+    const heal = host.fault("queryIndex", "vault chiuso");
+    const applied: string[] = [];
+    watchWorkspace((choice) => applied.push(choice.workspace));
+    await settle();
+    heal();
+    expect(applied).toEqual(["simple"]);
+    expect(currentWorkspace().workspace).toBe("simple");
+  });
+
+  it("segue le due chiavi, e scrive le scelte dell'editor", async () => {
     const host = createFakeHost({
-      settings: [drawEntry("draw.level", "essential"), drawEntry("draw.custom", ["pen"]), drawEntry("draw.workspace", "full", false), drawEntry("draw.toolbar", [], false), OTHER],
+      settings: [drawEntry("draw.workspace", "simple"), drawEntry("draw.toolbar", [], false), OTHER],
     });
     const { currentWorkspace, saveToolbar, saveWorkspace, watchWorkspace } = await boot(host);
     const applied: unknown[] = [];
@@ -756,7 +620,7 @@ describe("lo spazio di lavoro del disegno", () => {
       ["draw.toolbar", ["select", "pen"]],
     ]);
     expect(applied[applied.length - 1]).toEqual({ workspace: "full", toolbar: ["select", "pen"] });
-    expect(host.atGate("resetSetting"), "le vecchie restano").toEqual([]);
+    expect(host.atGate("resetSetting")).toEqual([]);
 
     stop();
     await host.module.api.setSetting("draw.workspace", "simple");

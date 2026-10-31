@@ -127,7 +127,7 @@ import type { Suggested } from "./suggestions";
 import { exportBox, type ExportScene } from "./export-plan";
 import type { ImageCodec } from "./images";
 import { RECENT_COLORS } from "./palette";
-import type { Feature, Level, ToolId, ToolProfile, Workspace } from "./registry";
+import type { Feature, ToolId, ToolProfile, Workspace } from "./registry";
 import { checkedGrid } from "./editor/helpers";
 import type { EditorContext } from "./editor/context";
 import type { DrawChrome } from "./editor/chrome/hosts";
@@ -272,14 +272,8 @@ export interface DrawSheet {
 }
 
 export interface DrawEditorOptions {
-  /// Il livello degli strumenti (default `essential`); cambia con
-  /// `setLevel`.
-  readonly level?: Level;
-  /// Le parti del livello Personalizzato, per nome (default quelle
-  /// dell'Essenziale): un nome che l'editor non conosce non conta.
-  readonly custom?: readonly string[];
-  /// Lo spazio di lavoro: se c'è, sceglie lui il livello e le parti; cambia
-  /// con `setWorkspace`.
+  /// Lo spazio di lavoro, che sceglie le parti (default `full`); cambia con
+  /// `setWorkspace`.
   readonly workspace?: Workspace;
   /// Gli strumenti della colonna, in ordine (default vuoto: quelli di serie).
   readonly toolbar?: readonly ToolId[];
@@ -355,8 +349,8 @@ export interface DrawExport {
 export interface DrawEditor {
   readonly element: HTMLElement;
   readonly engine: SceneEngine;
-  readonly level: Level;
-  /// Le parti che il livello di adesso offre.
+  readonly workspace: Workspace;
+  /// Le parti che lo spazio di adesso offre.
   readonly features: ReadonlySet<Feature>;
   readonly tool: ToolId;
   /// Il colore e lo spessore dello strumento di adesso.
@@ -387,12 +381,10 @@ export interface DrawEditor {
   /// di annulla. `false` se il documento non è estraneo o la scrittura è
   /// tolta.
   adopt(): boolean;
-  /// Un altro livello, dal vivo, e le parti del Personalizzato (default
-  /// quelle di prima): la barra e i tasti cambiano, il documento e la
-  /// cronologia restano. Uno strumento che il livello non ha più torna alla
-  /// penna, o al primo che c'è, e un colore personalizzato al nero.
-  setLevel(level: Level, custom?: readonly string[]): void;
-  /// Un altro spazio di lavoro, dal vivo, e con `toolbar` un'altra colonna.
+  /// Un altro spazio di lavoro, dal vivo, e con `toolbar` un'altra colonna:
+  /// la barra e i tasti cambiano, il documento e la cronologia restano. Uno
+  /// strumento che lo spazio non ha più torna alla penna, o al primo che
+  /// c'è, e un colore personalizzato al nero.
   setWorkspace(workspace: Workspace, toolbar?: readonly ToolId[]): void;
   setTool(id: ToolId): void;
   /// Il colore dello strumento di adesso: uno della tavolozza o, dal livello
@@ -489,7 +481,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const {
     has, following, style, history, root, surface, labelSurface, suggestions, panel, cursorMark, boardsNow, editable, newIds, showGrid,
     fit, selectedUnits, showHandles, closeDescriptions, showPanel, syncProperties, refresh, commit, undo, redo, deleteSelection, select,
-    reveal, adopt, setReadOnly, setLevel, setTool, setColor, setWidth, cancelGesture, undoable, redoable,
+    reveal, adopt, setReadOnly, setTool, setColor, setWidth, cancelGesture, undoable, redoable,
     visibleBoundsOf, dispose
   } = ctx;
   const stage: DrawStage = {
@@ -519,8 +511,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     get engine() {
       return ctx.engine;
     },
-    get level() {
-      return ctx.level;
+    get workspace() {
+      return ctx.workspace;
     },
     get features() {
       return ctx.features;
@@ -604,7 +596,6 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     setReadOnly,
     reveal,
     adopt,
-    setLevel,
     setWorkspace: (workspace, toolbar) => ctx.setWorkspace(workspace, toolbar),
     setTool,
     setColor: (color) => setColor(color),

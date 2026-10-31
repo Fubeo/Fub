@@ -27,6 +27,14 @@ const LIKENESSES: ReadonlyArray<{ readonly by: Likeness; readonly label: DrawKey
   { by: "layer", label: "draw.select.same_layer" },
 ];
 
+/// Il menu del clic destro sul foglio: le voci, la riga degli appunti in
+/// cima e le voci che si trovano scrivendo.
+export interface PointMenu {
+  readonly items: MenuItem[];
+  readonly clipboard: MenuItem[];
+  readonly searchable: MenuItem[];
+}
+
 /// Ciò che la selezione avanzata dà agli altri pezzi dell'editor.
 export interface SelectionCommandsContext {
   /// Quando il menu della selezione si è aperto dalla tastiera.
@@ -35,6 +43,7 @@ export interface SelectionCommandsContext {
   flagSelection: (flag: Flag) => void;
   toggleRow: (key: string, flag: Flag) => void;
   selectionItems: () => MenuItem[];
+  pointMenu: () => PointMenu;
   /// Ripenna i tratti a penna scelti con `change`, in un passo di Annulla
   /// (P10). Falso, e non dice niente, se fra gli scelti non ce n'è uno.
   repenSelection: (change: Repen) => boolean;
@@ -154,10 +163,11 @@ export function installSelectionCommands(ctx: EditorContext): void {
   };
   ctx.toggleRow = toggleRow;
 
-  /// Le voci della selezione avanzata: gli appunti e lo stile, scegliere
-  /// tutto e il resto, i simili, bloccare e nascondere, sbloccare e mostrare
-  /// tutto, isolare. Una voce che adesso non serve è spenta e dice perché.
-  const selectionItems = (): MenuItem[] => {
+  /// Le voci della selezione avanzata, a gruppi: gli appunti e lo stile,
+  /// scegliere tutto e il resto, i simili, rinominare, bloccare e nascondere,
+  /// sbloccare e mostrare tutto, isolare. Una voce che adesso non serve è
+  /// spenta e dice perché.
+  const selectionParts = () => {
     const model = ctx.engine.model;
     const index = currentIndex();
     const units = selectedUnits();
@@ -165,35 +175,35 @@ export function installSelectionCommands(ctx: EditorContext): void {
     const none = units.length === 0;
     const empty = index.units.length === 0;
     const unselected = none ? { description: t("draw.selection.empty") } : {};
-    const items: MenuItem[] = [
+    const clipboard: MenuItem[] = [
       { label: t("draw.cut"), hint: displayBinding("Mod-x"), disabled: !canEdit || none, ...(canEdit ? unselected : {}), run: () => ctx.clipboardCommand("cut") },
       { label: t("draw.copy"), hint: displayBinding("Mod-c"), disabled: none, ...unselected, run: () => ctx.clipboardCommand("copy") },
       { label: t("draw.paste"), hint: displayBinding("Mod-v"), disabled: !canEdit, run: () => void ctx.pasteFromMenu(false) },
       { label: t("draw.paste.in_place"), hint: displayBinding("Mod-Shift-v"), disabled: !canEdit, run: () => void ctx.pasteFromMenu(true) },
     ];
+    const styles: MenuItem[] = [];
     if (has("style")) {
       const pastable = canEdit && !none && copiedStyle !== null;
       const why = copiedStyle === null ? t("draw.style.empty", { key: displayBinding(COPY_STYLE_BINDING) }) : t("draw.selection.empty");
-      items.push(
+      styles.push(
         { label: t("draw.style.copy"), separator: true, hint: displayBinding(COPY_STYLE_BINDING), disabled: none, ...unselected, run: () => ctx.copyStyle() },
         { label: t("draw.style.paste"), hint: displayBinding(PASTE_STYLE_BINDING), disabled: !pastable, ...(canEdit && !pastable ? { description: why } : {}), run: () => ctx.pasteStyle() },
       );
     }
-    items.push(
-      { label: t("draw.select.all"), separator: true, hint: displayBinding("Mod-a"), disabled: empty, run: () => selectAll() },
-      { label: t("draw.select.invert"), disabled: empty, run: () => invertSelection() },
-    );
+    const selectAllItem: MenuItem = { label: t("draw.select.all"), separator: true, hint: displayBinding("Mod-a"), disabled: empty, run: () => selectAll() };
+    const invert: MenuItem = { label: t("draw.select.invert"), disabled: empty, run: () => invertSelection() };
     const likenesses = LIKENESSES.filter(({ by }) => by !== "layer" || has("layers"));
-    likenesses.forEach(({ by, label }, at) => {
+    const similar = likenesses.map(({ by, label }, at): MenuItem => {
       const usable = model !== null && !none && hasLikeness(model, index, units, by);
       const why: DrawKey = none ? "draw.selection.empty" : by === "tool" ? "draw.select.same_tool.none" : "draw.select.same.missing";
-      items.push({ label: t(label), separator: at === 0, disabled: !usable, ...(usable ? {} : { description: t(why) }), run: () => selectSimilar(by) });
+      return { label: t(label), separator: at === 0, disabled: !usable, ...(usable ? {} : { description: t(why) }), run: () => selectSimilar(by) };
     });
+    const rename: MenuItem[] = [];
     if (has("layers")) {
       // F2 sul foglio scrive un testo, o l'etichetta di una forma chiusa: per
       // loro il tasto non vale.
       const lone = units.length === 1;
-      items.push({
+      rename.push({
         label: t("draw.rename"),
         separator: true,
         ...(lone ? { hint: displayBinding("F2") } : {}),
@@ -204,7 +214,7 @@ export function installSelectionCommands(ctx: EditorContext): void {
     }
     const unlockable = canEdit && model !== null && flagged(model, isolatedNode(), "locked").length > 0;
     const showable = canEdit && model !== null && flagged(model, isolatedNode(), "hidden").length > 0;
-    items.push(
+    const flags: MenuItem[] = [
       {
         label: t("draw.lock"),
         separator: true,
@@ -220,25 +230,78 @@ export function installSelectionCommands(ctx: EditorContext): void {
         ...(canEdit && none ? { description: t("draw.selection.empty") } : {}),
         run: () => flagSelection("hidden"),
       },
+    ];
+    const unflags: MenuItem[] = [
       { label: t("draw.unlock_all"), disabled: !unlockable, ...(canEdit && !unlockable ? { description: t("draw.unlocked.none") } : {}), run: () => unflagAll("locked") },
       { label: t("draw.show_all"), disabled: !showable, ...(canEdit && !showable ? { description: t("draw.shown.none") } : {}), run: () => unflagAll("hidden") },
-    );
+    ];
     // Un'istanza scelta da sola apre il suo simbolo.
     const lone = units.length === 1 ? units[0]! : null;
     const single = lone !== null && isolable(lone);
-    items.push({
+    const isolate: MenuItem[] = [{
       label: t(lone?.role === "instance" ? "draw.symbol.edit" : "draw.isolate"),
       separator: true,
       hint: displayBinding("Mod-Enter"),
       disabled: !single,
       ...(single ? {} : { description: t("draw.isolate.none") }),
       run: () => isolateSelection(),
-    });
+    }];
     const isolated = isolatedNode();
-    if (isolated !== null) items.push({ label: t(isolated.details?.role === "symbol" ? "draw.isolate.exit.symbol" : "draw.isolate.exit"), hint: "Esc", run: () => leaveIsolation(false) });
-    return items;
+    if (isolated !== null) isolate.push({ label: t(isolated.details?.role === "symbol" ? "draw.isolate.exit.symbol" : "draw.isolate.exit"), hint: "Esc", run: () => leaveIsolation(false) });
+    return { none, canEdit, clipboard, styles, selectAllItem, invert, similar, rename, flags, unflags, isolate };
+  };
+
+  /// Le voci della selezione avanzata tutte in fila, per il menu della barra.
+  const selectionItems = (): MenuItem[] => {
+    const parts = selectionParts();
+    return [
+      ...parts.clipboard,
+      ...parts.styles,
+      parts.selectAllItem,
+      parts.invert,
+      ...parts.similar,
+      ...parts.rename,
+      ...parts.flags,
+      ...parts.unflags,
+      ...parts.isolate,
+    ];
   };
   ctx.selectionItems = selectionItems;
+
+  /// Il menu del clic destro sul foglio. Senza niente di scelto le sole voci
+  /// che adesso fanno qualcosa: incollare, scegliere tutto, vedere tutto il
+  /// disegno.
+  /// Con una selezione Taglia, Copia e Incolla stanno nella riga in cima, poi
+  /// le sue voci:
+  /// lo stile, i simili in un sottomenu, bloccare, nascondere, isolare. Il
+  /// resto si trova scrivendo.
+  const pointMenu = (): PointMenu => {
+    const parts = selectionParts();
+    const searchable = [parts.invert, ...parts.rename, ...parts.unflags].map((item) => ({ ...item, separator: false }));
+    if (parts.none) {
+      const [, , paste, inPlace] = parts.clipboard;
+      return {
+        items: [paste!, inPlace!, { ...parts.selectAllItem, separator: false }, { label: t("draw.fit"), hint: displayBinding("Shift-1"), run: () => ctx.fit() }].filter((item) => !item.disabled),
+        clipboard: [],
+        searchable,
+      };
+    }
+    const items: MenuItem[] = [
+      ...parts.styles.map((item, at) => (at === 0 ? { ...item, separator: false } : item)),
+      { label: t("draw.select.same"), separator: parts.styles.length > 0, submenu: true, items: parts.similar.map((item) => ({ ...item, separator: false })) },
+      ...parts.flags,
+      ...parts.isolate,
+    ];
+    // La riga in cima non dice perché una voce è spenta: ci stanno quelle che
+    // valgono, e Incolla nello stesso punto, che non ci sta, si trova scrivendo.
+    const [cut, copy, paste, inPlace] = parts.clipboard;
+    return {
+      items,
+      clipboard: [cut!, copy!, paste!].filter((item) => !item.disabled),
+      searchable: [inPlace!, { ...parts.selectAllItem, separator: false }, ...searchable],
+    };
+  };
+  ctx.pointMenu = pointMenu;
 
 
 

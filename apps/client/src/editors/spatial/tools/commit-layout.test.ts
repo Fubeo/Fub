@@ -34,7 +34,7 @@ afterEach(() => {
 /// sua misura si contano, e si conta quante cadono dopo una scrittura al
 /// disegno, di quelle che un browser paga con una rimisura.
 function mount(source: string, options: DrawEditorOptions = {}) {
-  editor = createDrawEditor(host, SceneEngine.open(source), owner, { level: "standard", ...options });
+  editor = createDrawEditor(host, SceneEngine.open(source), owner, options);
   const surface = host.querySelector<HTMLElement>(".draw-surface")!;
   const bar = host.querySelector<HTMLElement>(".draw-arrange")!;
   const written = new MutationObserver(() => {});

@@ -1409,12 +1409,8 @@ interface OwnListField {
 /// scarica.
 const OWN_LIST_FIELDS = new Map<string, () => Promise<OwnListField>>([
   [
-    "draw.custom",
-    () => import("../editors/spatial/custom-field").then(({ customField, describeCustom }) => ({ field: customField, describe: describeCustom })),
-  ],
-  [
     "draw.toolbar",
-    () => import("../editors/spatial/custom-field").then(({ toolbarField, describeToolbar }) => ({ field: toolbarField, describe: describeToolbar })),
+    () => import("../editors/spatial/toolbar-field").then(({ toolbarField, describeToolbar }) => ({ field: toolbarField, describe: describeToolbar })),
   ],
   [
     "uri.allowed",

@@ -5,12 +5,12 @@
 import { promptForm, showKeys, type FormField, type KeyGroup, type MoreKeys } from "../../../../ui/form-dialog";
 import { formatNumber } from "../../number";
 import type { Op } from "../../scene/ops";
-import { t, type DrawKey } from "../../strings";
+import { t } from "../../strings";
 import { gesture as asGesture } from "../edit";
 import { GRID_MAJOR } from "../grid";
 import { sceneArrow } from "../../view";
 import type { Unit } from "../hit";
-import { featuresFor, levelsAbove, toolKeys, toolsOf, type Feature, type Level } from "../registry";
+import { featuresFor, toolKeys, toolsOf, type Feature } from "../registry";
 import {
   BAR_FEATURES,
   COPY_STYLE_BINDING,
@@ -39,14 +39,6 @@ const ARROWS: Readonly<Record<string, readonly [number, number]>> = {
 
 /// Le frecce come si leggono nell'elenco dei tasti.
 const ARROW_KEYS = "←↑→↓";
-
-/// Il nome di ogni livello, come lo dice l'elenco dei tasti.
-const LEVEL_NAMES: Readonly<Record<Level, DrawKey>> = {
-  essential: "draw.level.essential",
-  standard: "draw.level.standard",
-  expert: "draw.level.expert",
-  custom: "draw.level.custom",
-};
 
 /// Ciò che le frecce, le finestre e l'elenco dei tasti dà agli altri pezzi dell'editor.
 export interface KeysContext {
@@ -457,10 +449,9 @@ export function installKeys(ctx: EditorContext): void {
     ...accessKeys(at),
   ];
 
-  /// I tasti che i livelli sopra quello di adesso aggiungono, col livello da
-  /// cui valgono: una riga è nuova se il suo gruppo non aveva i suoi tasti.
-  /// Per il Personalizzato sono quelli delle parti che non ha, col livello
-  /// pronto da cui valgono; con uno spazio di lavoro, quelli di Completo.
+  /// I tasti che lo spazio Completo aggiunge a quello di adesso: una riga è
+  /// nuova se il suo gruppo non aveva i suoi tasti. Nel Completo non ce ne
+  /// sono.
   const moreKeys = (): MoreKeys => {
     const seen = new Set<string>();
     const remember = (group: KeyGroup, keys: string): boolean => {
@@ -471,21 +462,11 @@ export function installKeys(ctx: EditorContext): void {
     };
     for (const group of keyGroups(ctx.features)) for (const [keys] of group.rows) remember(group, keys);
     const groups: KeyGroup[] = [];
-    // Con uno spazio di lavoro, i tasti che mancano sono quelli di Completo.
-    if (ctx.byWorkspace) {
-      for (const group of keyGroups(featuresFor("expert"))) {
-        const rows = group.rows.filter(([keys]) => remember(group, keys));
-        if (rows.length > 0) groups.push({ title: group.title, rows });
-      }
-      return { groups, note: t("draw.keys.more.workspace") };
+    for (const group of keyGroups(featuresFor("full", ctx.profile))) {
+      const rows = group.rows.filter(([keys]) => remember(group, keys));
+      if (rows.length > 0) groups.push({ title: group.title, rows });
     }
-    for (const above of levelsAbove(ctx.level)) {
-      for (const group of keyGroups(featuresFor(above))) {
-        const rows = group.rows.filter(([keys]) => remember(group, keys));
-        if (rows.length > 0) groups.push({ title: t("draw.keys.from_level", { group: group.title, level: t(LEVEL_NAMES[above]) }), rows });
-      }
-    }
-    return { groups, note: ctx.level === "custom" ? t("draw.keys.more.custom") : t("draw.keys.more", { level: t(LEVEL_NAMES[ctx.level]) }) };
+    return { groups, note: t("draw.keys.more.workspace") };
   };
 
   /// I tasti che fanno altro rispetto a prima, per chi li ha in mano: quelli

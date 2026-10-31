@@ -169,10 +169,10 @@ tastierino numerico: `8` in alto, `9` in alto a destra, `6` a destra, fino a
 `7` in alto a sinistra; `5` chiude. Il lettore di schermo legge un menu con le
 sue voci e le loro scorciatoie.
 
-Il clic destro del mouse apre con ogni strumento il menu della selezione
-([Disegni, selezione](drawing-selection.md)): con la Selezione sceglie prima
-l'oggetto sotto il puntatore, con gli altri strumenti resta sulla selezione
-che c'è. Dove il
+Il clic destro del mouse apre con ogni strumento il menu del foglio
+([Disegni, selezione](drawing-selection.md#il-menu-della-selezione)), che
+finisce con «Menu radiale»: con la Selezione sceglie prima l'oggetto sotto il
+puntatore, con gli altri strumenti resta sulla selezione che c'è. Dove il
 menu della selezione non c'è, `Maiusc+F10` apre il menu radiale. In sola
 lettura il menu radiale non c'è.
 
@@ -211,7 +211,7 @@ curva, vale su questo dispositivo in tutti i disegni.
 In fondo, **I tasti della penna**. La penna girata cancella con qualunque
 strumento, come la gomma scelta, e lo strumento in mano resta. Il **Tasto
 laterale** apre il menu radiale (di partenza), cancella o non fa niente. Il clic destro che il sistema manda dopo il tasto non apre il
-menu della selezione.
+menu del foglio.
 
 Le scelte valgono con **OK**: «Penna e dita aggiornate.».
 

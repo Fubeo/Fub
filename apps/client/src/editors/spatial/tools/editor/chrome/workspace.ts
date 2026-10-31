@@ -9,7 +9,7 @@
 import { textButton } from "../../../../../kit";
 import type { MenuItem } from "../../../../../ui/menu";
 import { t } from "../../../strings";
-import { workspaceLevel, type ToolId, type Workspace } from "../../registry";
+import { featuresFor, type ToolId, type Workspace } from "../../registry";
 import { openToolbarDialog } from "../../toolbar-dialog";
 import type { EditorContext } from "../context";
 import { railLayout } from "./rail";
@@ -23,8 +23,6 @@ const NARROW_PANE = 480;
 
 export interface WorkspaceContext {
   workspace: Workspace;
-  /// Vero se lo spazio, e non un livello, sceglie che cosa si offre.
-  byWorkspace: boolean;
   /// Gli strumenti della colonna, in ordine; vuoto, quelli di serie.
   column: readonly ToolId[];
   /// Un altro spazio, dal vivo; con `toolbar`, anche la colonna.
@@ -80,17 +78,12 @@ export function installWorkspace(ctx: EditorContext): void {
 
   ctx.setWorkspace = (next, toolbar) => {
     if (ctx.disposed) return;
-    const changed = next !== ctx.workspace || !ctx.byWorkspace;
     ctx.workspace = next;
-    ctx.byWorkspace = true;
     if (toolbar !== undefined) ctx.column = toolbar;
     ctx.root.dataset.workspace = next;
     ctx.rail.element.dataset.size = next === "simple" ? "large" : "normal";
     full.hidden = next !== "simple";
-    // Il livello con cui l'editor offre lo spazio: se è lo stesso, la colonna
-    // si rifà per la sua firma.
-    const { level, custom } = workspaceLevel(next, ctx.profile);
-    if (changed || level !== ctx.level) ctx.setLevel(level, custom);
+    ctx.offer(featuresFor(next, ctx.profile));
     ctx.syncRail(ctx.editable());
     ctx.syncPenOptions();
   };

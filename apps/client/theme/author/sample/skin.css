@@ -16595,8 +16595,8 @@ h6.ui-heading {
   text-align: right;
 }
 
-/* Le parti che si scelgono una per una: per ogni livello da cui vengono, il
- * suo nome e le caselle come pastiglie, che la scelta accende. */
+/* Gli strumenti che si scelgono uno per uno: le caselle come pastiglie, che
+ * la scelta accende. */
 .setting-features {
   display: flex;
   flex-direction: column;
@@ -16614,16 +16614,6 @@ h6.ui-heading {
   margin: 0;
   padding: 0;
   border: 0;
-}
-
-.setting-features-level {
-  width: 100%;
-  margin-bottom: var(--space-2);
-  padding: 0;
-  color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  text-align: right;
 }
 
 .setting-feature {

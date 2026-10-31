@@ -300,7 +300,8 @@ export function installVaultImages(ctx: EditorContext): void {
       event.preventDefault();
       ctx.keyedMenu = event.timeStamp;
       const at = menuPoint();
-      showContextMenu(at, ctx.canvasMenu(at), { labelledBy: selectionButton.id });
+      const menu = ctx.canvasMenu(at);
+      showContextMenu(at, menu.items, { labelledBy: selectionButton.id, clipboard: menu.clipboard, searchable: menu.searchable });
       return;
     }
     if (onSurface && event.key === "Tab") {

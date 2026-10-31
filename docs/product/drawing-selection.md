@@ -60,12 +60,26 @@ da soli.
 ## Il menu della selezione
 
 «Selezione avanzata», nella barra dopo «Elimina», apre il menu della
-selezione. Lo stesso menu si apre col tasto destro del mouse sul foglio, con
-ogni strumento, col tocco lungo con la freccia in mano, e dalla
-tastiera con `Maiusc+F10` o col tasto del menu, sotto la selezione. Con la
-freccia il tasto destro su un oggetto che non è scelto prima lo
-sceglie; con gli strumenti che disegnano il menu finisce con «Menu radiale»
-([Disegni, vista, gesti e menu radiale](drawing-view.md#il-menu-radiale)).
+selezione, con tutte le voci che seguono.
+
+Il tasto destro del mouse sul foglio, con ogni strumento, il tocco lungo con
+la freccia in mano e, dalla tastiera, `Maiusc+F10` o il tasto del menu, sotto
+la selezione, aprono invece un menu più corto. Con la freccia il tasto
+destro su un oggetto che non è scelto prima lo sceglie.
+
+- Senza niente di scelto restano le sole voci che adesso fanno qualcosa:
+  **Incolla** (`Ctrl+V`), **Incolla nello stesso punto** (`Ctrl+Maiusc+V`),
+  **Seleziona tutto** (`Ctrl+A`), **Mostra tutto il disegno** (`Maiusc+1`) e
+  **Menu radiale** ([Disegni, vista, gesti e menu
+  radiale](drawing-view.md#il-menu-radiale)). A chi legge soltanto restano
+  Seleziona tutto e Mostra tutto il disegno.
+- Con una selezione, Taglia, Copia e Incolla stanno nella riga dei pulsanti
+  in cima; sotto, lo stile, **Seleziona
+  simili** in un sottomenu, Blocca, Nascondi, Isola il gruppo, Esci dal
+  gruppo dentro un gruppo isolato, e Menu radiale: sempre meno di nove voci.
+
+Il resto, Incolla nello stesso punto con una selezione, Inverti la
+selezione, Rinomina, Sblocca tutto e Mostra tutto, si trova scrivendo, come dice il piede «Scrivi per cercare».
 
 - **Seleziona tutto** (`Ctrl+A`) e **Inverti la selezione**, che sceglie
   tutto il resto: di un gruppo con dentro un oggetto scelto, gli altri oggetti

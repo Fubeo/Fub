@@ -18,7 +18,7 @@ import type { Frame } from "./frame";
 import { DEFAULT_GRID } from "./grid";
 import type { Look } from "./look";
 import type { ChoiceState, MenuChoiceState, NumberState, SegmentState, TogglesState } from "./properties";
-import { featuresFor, type Level } from "./registry";
+import { featuresFor, type Feature, type Workspace } from "./registry";
 import { fieldMin, fromUnit } from "./rulers";
 import type { EndLook, TipsLook } from "./tips";
 
@@ -66,10 +66,10 @@ const selection = (parts: Partial<SelectionFacts> = {}): SelectionFacts => ({
   ...parts,
 });
 
-const input = (parts: Partial<FieldsInput> & { readonly level?: Level } = {}): FieldsInput => {
-  const { level = "standard", ...rest } = parts;
+const input = (parts: Partial<FieldsInput> & { readonly workspace?: Workspace } = {}): FieldsInput => {
+  const { workspace = "full", ...rest } = parts;
   return {
-    features: featuresFor(level),
+    features: featuresFor(workspace),
     unit: "px",
     editable: true,
     selection: null,
@@ -108,7 +108,7 @@ describe("senza selezione, il disegno", () => {
   });
 
   it("senza pagina non ha i suoi lati, e la vista ha solo ciò che il livello offre", () => {
-    const view = propertiesView(input({ level: "essential", bar: false, document: { page: null, boards: false, desc: "" } }));
+    const view = propertiesView(input({ workspace: "simple", bar: false, document: { page: null, boards: false, desc: "" } }));
     expect(view.fields.pageWidth).toBeUndefined();
     expect(view.fields.pagePreset).toBeUndefined();
     expect(view.fields.unit).toBeDefined();
@@ -182,11 +182,13 @@ describe("l'aspetto", () => {
     const standard = propertiesView(input({ selection: selection({ look: painted }) }));
     expect(standard.fields.fill).toMatchObject({ kind: "paint", value: "#0072b2" });
     expect(standard.fields.stroke).toMatchObject({ kind: "paint", value: null });
-    const essential = propertiesView(input({ level: "essential", selection: selection({ look: painted }) }));
-    expect(essential.fields.fill).toBeUndefined();
-    expect(essential.fields.stroke).toBeUndefined();
-    expect(essential.fields.strokeWidth).toBeDefined();
-    expect(essential.fields.opacity).toMatchObject({ value: 50, unit: "%", places: 0, min: 0, max: 100 });
+    // Senza i colori a piacere (chi monta passa le sue parti) restano lo
+    // spessore e l'opacità.
+    const plain = propertiesView(input({ features: new Set<Feature>(["pen"]), selection: selection({ look: painted }) }));
+    expect(plain.fields.fill).toBeUndefined();
+    expect(plain.fields.stroke).toBeUndefined();
+    expect(plain.fields.strokeWidth).toBeDefined();
+    expect(plain.fields.opacity).toMatchObject({ value: 50, unit: "%", places: 0, min: 0, max: 100 });
   });
 
   it("lo spessore è in pixel in un documento in pixel, e in punti negli altri", () => {
@@ -216,8 +218,8 @@ describe("l'aspetto", () => {
 describe("il contorno", () => {
   it("ha il tratteggio, e non gli estremi né gli angoli (ADR 0231)", () => {
     const outline = { dashable: true, dash: "dashed" as const, custom: null, cap: "round" as const, join: null };
-    for (const level of ["standard", "expert"] as const) {
-      const view = propertiesView(input({ level, selection: selection({ outline }) }));
+    for (const workspace of ["full"] as const) {
+      const view = propertiesView(input({ workspace, selection: selection({ outline }) }));
       expect(view.fields.dash).toMatchObject({ kind: "choice", value: "dashed" });
       expect(Object.keys(view.fields)).not.toContain("cap");
       expect(Object.keys(view.fields)).not.toContain("join");
@@ -226,7 +228,7 @@ describe("il contorno", () => {
 
   it("non offre il tratteggio alle sole linee a spessore variabile", () => {
     const outline = { dashable: false, dash: null, custom: null, cap: "round" as const, join: "bevel" as const };
-    expect(propertiesView(input({ level: "expert", selection: selection({ outline }) })).fields.dash).toBeUndefined();
+    expect(propertiesView(input({ selection: selection({ outline }) })).fields.dash).toBeUndefined();
   });
 
   it("un tratteggio che non è del menu c'è, col suo valore", () => {
@@ -256,11 +258,11 @@ describe("le punte delle linee", () => {
 
   it("non ci sono senza la parte, senza linee che ne abbiano, o senza niente da dire", () => {
     const tips = tipsLook({ end: end("vee", "small") });
-    for (const level of ["essential", "standard", "expert"] as const) {
-      const view = propertiesView(input({ level, selection: selection({ tips }) }));
-      expect(["tipStart", "tipEnd"].map((id) => id in view.fields), level).toEqual(level === "essential" ? [false, false] : [true, true]);
+    for (const workspace of ["simple", "full"] as const) {
+      const view = propertiesView(input({ workspace, selection: selection({ tips }) }));
+      expect(["tipStart", "tipEnd"].map((id) => id in view.fields), workspace).toEqual(workspace === "simple" ? [false, false] : [true, true]);
     }
-    const custom = propertiesView(input({ features: featuresFor("custom", ["pen", "colors"]), selection: selection({ tips }) }));
+    const custom = propertiesView(input({ features: new Set<Feature>(["pen", "colors"]), selection: selection({ tips }) }));
     expect(["tipStart", "tipEnd"].some((id) => id in custom.fields)).toBe(false);
     const without = (facts: SelectionFacts): string[] => Object.keys(propertiesView(input({ selection: facts })).fields).filter((id) => id.startsWith("tip"));
     expect(without(selection({ tips: tipsLook({ count: 0 }) }))).toEqual([]);
@@ -403,13 +405,11 @@ describe("il testo", () => {
       notes: { missing: [], unreadable: [], over: [], failed: [] },
       shown: () => "Inter",
     };
-    const families = (level: Level, value: string): ChoiceState["options"] => options(propertiesView(input({ level, fonts, selection: selection({ look: look({ family: { count: 1, value } }) }) })).fields.family);
-    // Senza i caratteri del vault (ADR 0231) nessun livello le offre, ma
-    // un testo che ne usa una la mostra col suo nome.
-    expect(families("expert", "Inter, sans-serif")).toHaveLength(3);
-    expect(families("standard", "Inter, sans-serif")).toHaveLength(3);
-    expect(families("standard", '"Noto Sans JP", sans-serif').slice(3)).toEqual([{ value: '"Noto Sans JP", sans-serif', label: "Noto Sans JP" }]);
-    expect(families("expert", '"Noto Sans JP", sans-serif')).toEqual(families("standard", '"Noto Sans JP", sans-serif'));
+    const families = (value: string): ChoiceState["options"] => options(propertiesView(input({ fonts, selection: selection({ look: look({ family: { count: 1, value } }) }) })).fields.family);
+    // Senza i caratteri del vault (ADR 0231) l'editor non le offre, ma un
+    // testo che ne usa una la mostra col suo nome.
+    expect(families("Inter, sans-serif")).toHaveLength(3);
+    expect(families('"Noto Sans JP", sans-serif').slice(3)).toEqual([{ value: '"Noto Sans JP", sans-serif', label: "Noto Sans JP" }]);
   });
 
   it("dice sotto il carattere la famiglia che manca, è oltre il tetto o non si carica, e con quale si vede", () => {
@@ -444,7 +444,7 @@ describe("il testo", () => {
     // Senza gli stili del documento: con loro, gli stili di serie stanno
     // nel menu dello stile di testo.
     const preset = (size: number | null, weight: number | null): ChoiceState =>
-      propertiesView(input({ level: "essential", selection: selection({ look: look({ size: { count: 1, value: size }, weight: { count: 1, value: weight } }) }) })).fields.preset as ChoiceState;
+      propertiesView(input({ workspace: "simple", selection: selection({ look: look({ size: { count: 1, value: size }, weight: { count: 1, value: weight } }) }) })).fields.preset as ChoiceState;
     expect(preset(64, 700)).toMatchObject({ label: "Stile", value: "title" });
     expect(preset(64, 700).options.map((option) => option.label)).toEqual(["Titolo", "Sottotitolo", "Titoletto", "Testo", "Didascalia"]);
     expect(preset(32, 400).value).toBe("body");
@@ -492,7 +492,7 @@ describe("il testo", () => {
 
 describe("«Disponi»", () => {
   it("c'è col suo livello: un oggetto solo si allinea alla pagina, e si distribuisce da tre", () => {
-    expect(propertiesView(input({ level: "essential", selection: selection() })).actions).toEqual({});
+    expect(propertiesView(input({ workspace: "simple", selection: selection() })).actions).toEqual({});
     const one = propertiesView(input({ selection: selection({ orders: new Set(["back", "backward"]) }) }));
     expect(one.actions["align-left"]).toEqual({ label: "Allinea a sinistra, rispetto alla pagina" });
     expect(one.actions["distribute-x"]).toEqual({ label: expect.any(String), disabled: true, note: "Servono almeno tre oggetti." });

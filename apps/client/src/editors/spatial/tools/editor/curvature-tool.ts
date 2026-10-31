@@ -2,7 +2,7 @@
 // createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
 // condividono.
 
-import { showContextMenu, type MenuItem } from "../../../../ui/menu";
+import { showContextMenu } from "../../../../ui/menu";
 import type { InkSample } from "../../../../ink/sample";
 import type { InkPointerType } from "../../../../ink/input/pointer";
 import { attachInkInput, type InkInputOptions, type InkInput } from "../../../../ink/dom/pointer-adapter";
@@ -21,6 +21,7 @@ import type { EditorContext } from "./context";
 import { toLocal } from "../../../../ink/geometry";
 import { holdsPath } from "./helpers";
 import type { EraseGesture } from "./types";
+import type { PointMenu } from "./selection-commands";
 
 /// Quanto dopo il tasto laterale della penna lasciato arriva il menu
 /// contestuale che il sistema gli manda dietro, in millisecondi.
@@ -38,7 +39,7 @@ export interface CurvatureToolContext {
   radialHere: () => boolean;
   /// Il menu del clic destro e di Maiusc+F10 aperto in `at`: quello della
   /// selezione e, con gli strumenti che disegnano, il menu radiale in fondo.
-  canvasMenu: (at: { readonly clientX: number; readonly clientY: number }) => MenuItem[];
+  canvasMenu: (at: { readonly clientX: number; readonly clientY: number }) => PointMenu;
   handlers: InkInputOptions;
   pen: InkInput;
 }
@@ -171,16 +172,17 @@ export function installCurvatureTool(ctx: EditorContext): void {
   /// Vero se lo strumento di adesso ha il menu della selezione.
   const selectingTool = (): boolean => has("selection") && (ctx.tool === "select");
 
-  /// Vero se il clic destro apre il menu radiale: dal livello che lo offre,
+  /// Vero se il clic destro apre il menu radiale: con i gesti,
   /// a chi può modificare, con gli strumenti che non hanno il menu della
   /// selezione.
   const radialHere = (): boolean => has("gestures") && editable() && !selectingTool();
   ctx.radialHere = radialHere;
 
-  const canvasMenu = (at: { readonly clientX: number; readonly clientY: number }): MenuItem[] => {
-    const items = ctx.selectionItems();
-    if (radialHere()) items.push({ label: t("draw.radial"), separator: true, run: () => ctx.showRadial(at.clientX, at.clientY, null, true) });
-    return items;
+  const canvasMenu = (at: { readonly clientX: number; readonly clientY: number }): PointMenu => {
+    const menu = ctx.pointMenu();
+    // Il menu radiale in fondo, con ogni strumento, a chi può modificare.
+    if (!has("gestures") || !editable()) return menu;
+    return { ...menu, items: [...menu.items, { label: t("draw.radial"), separator: true, run: () => ctx.showRadial(at.clientX, at.clientY, null, true) }] };
   };
   ctx.canvasMenu = canvasMenu;
 
@@ -234,7 +236,8 @@ export function installCurvatureTool(ctx: EditorContext): void {
     const tolerance = HIT_PX[touch ? "touch" : "mouse"] / ctx.camera.scale;
     const hit = currentIndex().at(scenePoint, tolerance);
     if (picking && hit !== null && !selectedUnits().some((unit) => unit.key === hit.key || holdsPath(hit.path, unit.path))) select([hit.key]);
-    showContextMenu(event, canvasMenu(event), { labelledBy: selectionButton.id });
+    const menu = canvasMenu(event);
+    showContextMenu(event, menu.items, { labelledBy: selectionButton.id, clipboard: menu.clipboard, searchable: menu.searchable });
   });
   // Il tasto laterale della penna apre il menu radiale dove la penna è, e la
   // penna lo guida finché il tasto è giù. Con gli strumenti che scelgono

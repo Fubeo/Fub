@@ -1,15 +1,14 @@
-// Il livello e la griglia con cui la superficie apre l'editor del disegno.
+// Lo spazio di lavoro e la griglia con cui la superficie apre l'editor del
+// disegno.
 //
 // - **Lo spazio di lavoro** è l'impostazione del vault `draw.workspace`
 //   («Completo» o «Semplice»), che dichiara il bundle `fub.draw`, e gli
 //   strumenti della colonna sono `draw.toolbar`: si leggono dal canale dati e
 //   si seguono con `setting_changed`, così un cambio nelle Impostazioni vale
 //   subito anche nei disegni aperti. L'editor le scrive dal menu «Disegno» e
-//   da «Personalizza la barra…». Finché nessuno le ha scelte, valgono il
-//   livello `draw.level` e le parti `draw.custom` delle versioni precedenti:
-//   l'Essenziale è «Semplice», gli altri «Completo», e il Personalizzato dà
-//   alla colonna i suoi strumenti. Quelle due non si scrivono né si
-//   cancellano più: un'app di prima che apre il vault le ritrova.
+//   da «Personalizza la barra…». Il livello `draw.level` e le parti
+//   `draw.custom` delle versioni precedenti non si leggono più (ADR 0231):
+//   un vault che le ha le tiene nel file, com'erano.
 // - **La griglia**, con le guide intelligenti, è uno stato della vista, della
 //   macchina e non del vault: l'ultima scelta, con cui si apre ogni disegno
 //   dopo. Non entra né nel file del disegno né in quello delle impostazioni
@@ -40,18 +39,12 @@ import { exportMemoryOf, type ExportMemory } from "./tools/export-plan";
 import { isPenId, savedPensOf, type SavedPen } from "../../ink/pens";
 import { DEFAULT_GRID, isBarrelAction, isEraseMode, isFidelity, isPenOutput, validClosed, validStep, validSteady, validSteps, type Grid } from "./tools/grid";
 import { RECENT_COLORS } from "./tools/palette";
-import { CUSTOM_DEFAULT, isLevel, isWorkspace, TOOLS, type Level, type ToolId, type Workspace } from "./tools/registry";
+import { isWorkspace, TOOLS, type ToolId, type Workspace } from "./tools/registry";
 import type { SettingEntry } from "../../host/contract";
 import type { Suggested } from "./tools/suggestions";
 
-/// Il bundle che dichiara il livello.
+/// Il bundle che dichiara lo spazio di lavoro.
 const DRAW_BUNDLE = "fub.draw";
-
-/// L'impostazione del livello.
-export const LEVEL_KEY = "draw.level";
-
-/// L'impostazione delle parti del Personalizzato.
-export const CUSTOM_KEY = "draw.custom";
 
 /// L'impostazione dello spazio di lavoro.
 export const WORKSPACE_KEY = "draw.workspace";
@@ -82,20 +75,6 @@ export const SUGGESTIONS_KEY = "draw.suggestions";
 /// che non servono più.
 export const SUGGESTED_KEY = "draw.suggested";
 
-/// Il livello di partenza, quando l'impostazione non dice niente.
-const DEFAULT_LEVEL: Level = "essential";
-
-/// Il livello e le parti del Personalizzato, come li dicono le impostazioni.
-interface LevelChoice {
-  readonly level: Level;
-  readonly custom: readonly string[];
-}
-
-let lastLevel: Level = DEFAULT_LEVEL;
-let lastCustom: readonly string[] = CUSTOM_DEFAULT;
-/// Quante letture del livello sono partite, e quale ha dato l'ultimo letto.
-let levelReads = 0;
-let levelRead = 0;
 let lastGrid: Grid = DEFAULT_GRID;
 /// Le scritture della griglia in fila, e quante ne sono partite.
 let saving: Promise<void> = Promise.resolve();
@@ -135,22 +114,17 @@ function toolbarOf(value: unknown): ToolId[] {
   return [...new Set(value.filter((item): item is ToolId => typeof item === "string" && known.has(item)))];
 }
 
-/// Lo spazio e la colonna dalle impostazioni `entries` del bundle. Una
-/// chiave nuova scelta vale; non scelta, la deduce la vecchia: il livello
-/// Essenziale è «Semplice», gli altri «Completo», e il Personalizzato dà la
-/// colonna con i suoi strumenti. Nessuna scelta: «Completo», colonna di serie.
+/// Lo spazio e la colonna dalle impostazioni `entries` del bundle. Nessuna
+/// scelta: «Completo», colonna di serie.
 export function workspaceOf(entries: readonly SettingEntry[]): WorkspaceChoice {
   const entry = (key: string): SettingEntry | undefined => entries.find((one) => one.spec.key === key);
   const chosen = (key: string): unknown => {
     const one = entry(key);
     return one === undefined || one.source === "default" ? undefined : one.value;
   };
-  const level = chosen(LEVEL_KEY);
   const workspaceValue = chosen(WORKSPACE_KEY);
-  const workspace: Workspace = isWorkspace(workspaceValue) ? workspaceValue : level === "essential" ? "simple" : "full";
-  const toolbarValue = chosen(TOOLBAR_KEY);
-  const toolbar = toolbarValue !== undefined ? toolbarOf(toolbarValue) : level === "custom" ? toolbarOf(chosen(CUSTOM_KEY)) : [];
-  return { workspace, toolbar };
+  const workspace: Workspace = isWorkspace(workspaceValue) ? workspaceValue : "full";
+  return { workspace, toolbar: toolbarOf(chosen(TOOLBAR_KEY)) };
 }
 
 /// Lo spazio e la colonna dell'ultima lettura.
@@ -158,7 +132,7 @@ export function currentWorkspace(): WorkspaceChoice {
   return lastWorkspace;
 }
 
-/// Legge lo spazio e la colonna adesso e a ogni cambio delle quattro chiavi,
+/// Legge lo spazio e la colonna adesso e a ogni cambio delle due chiavi,
 /// e li dà a `apply`; una lettura superata da una più recente non arriva, e
 /// una che non riesce lascia gli ultimi letti. Torna la funzione che smette.
 export function watchWorkspace(apply: (choice: WorkspaceChoice) => void): () => void {
@@ -182,7 +156,7 @@ export function watchWorkspace(apply: (choice: WorkspaceChoice) => void): () => 
       });
   };
   const stop = onEvent("setting_changed", (event) => {
-    if (event.key === WORKSPACE_KEY || event.key === TOOLBAR_KEY || event.key === LEVEL_KEY || event.key === CUSTOM_KEY) read();
+    if (event.key === WORKSPACE_KEY || event.key === TOOLBAR_KEY) read();
   });
   read();
   return () => {
@@ -210,70 +184,9 @@ export function saveToolbar(toolbar: readonly ToolId[]): void {
     .catch((error: unknown) => notify(t("vector.workspace.save_failed", { reason: errorText(error) }), "guasto"));
 }
 
-/// Il livello dell'ultima lettura.
-export function currentLevel(): Level {
-  return lastLevel;
-}
-
-/// Le parti del Personalizzato dell'ultima lettura.
-export function currentCustom(): readonly string[] {
-  return lastCustom;
-}
-
-/// `value` come parti del Personalizzato: i nomi di un elenco, senza ciò che
-/// non è un nome. Un nome che l'editor non conosce resta: non conta, e una
-/// versione più nuova lo conosce.
-function customOf(value: unknown): readonly string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : CUSTOM_DEFAULT;
-}
-
 /// La griglia dell'ultima lettura o dell'ultima scelta.
 export function currentGrid(): Grid {
   return lastGrid;
-}
-
-/// Legge il livello e le parti del Personalizzato. Se la lettura non
-/// riesce, valgono gli ultimi letti.
-async function readLevel(): Promise<LevelChoice> {
-  const ticket = ++levelReads;
-  try {
-    const entries = await settings(DRAW_BUNDLE);
-    const value = (key: string): unknown => entries.find((entry) => entry.spec.key === key)?.value;
-    const level = value(LEVEL_KEY);
-    const choice: LevelChoice = { level: isLevel(level) ? level : DEFAULT_LEVEL, custom: customOf(value(CUSTOM_KEY)) };
-    // Una lettura partita prima di quella che ha già risposto è più vecchia.
-    if (ticket > levelRead) {
-      levelRead = ticket;
-      lastLevel = choice.level;
-      lastCustom = choice.custom;
-    }
-    return choice;
-  } catch {
-    // Senza vault, o con le impostazioni guaste.
-    return { level: lastLevel, custom: lastCustom };
-  }
-}
-
-/// Legge il livello e le parti del Personalizzato adesso e a ogni loro
-/// cambio, e li dà a `apply`; una lettura superata da una più recente non
-/// arriva. Torna la funzione che smette di ascoltare.
-export function watchLevel(apply: (level: Level, custom: readonly string[]) => void): () => void {
-  let generation = 0;
-  let stopped = false;
-  const read = (): void => {
-    const ticket = ++generation;
-    void readLevel().then(({ level, custom }) => {
-      if (!stopped && ticket === generation) apply(level, custom);
-    });
-  };
-  const stop = onEvent("setting_changed", (event) => {
-    if (event.key === LEVEL_KEY || event.key === CUSTOM_KEY) read();
-  });
-  read();
-  return () => {
-    stopped = true;
-    stop();
-  };
 }
 
 /// `value` come griglia, se lo è. Ciò che una griglia ricordata prima non
