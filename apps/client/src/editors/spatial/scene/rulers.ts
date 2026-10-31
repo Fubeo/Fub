@@ -7,7 +7,6 @@
 // `__fixtures__/scene-rulers/cases.json` valgono per tutte e due le letture.
 // Un valore fuori grammatica non si usa e resta nel file com'è (S011).
 
-import { formatNumber } from "../number";
 import { number as svgNumber } from "./values";
 
 /// Le unità del documento. Il file resta in unità utente: l'unità cambia
@@ -64,12 +63,4 @@ export function parseGuides(value: string): readonly RulerGuide[] | null {
     guides.push({ axis, at: position + 0, locked: flag === "locked" });
   }
   return guides;
-}
-
-/// Le guide come le scrive FubDraw, nell'ordine dato e coi numeri della
-/// geometria: `x 120; y 340.5 locked`. `null` se non ce n'è nessuna, perché
-/// allora l'attributo si toglie.
-export function writeGuides(guides: readonly RulerGuide[]): string | null {
-  if (guides.length === 0) return null;
-  return guides.map((guide) => `${guide.axis} ${formatNumber(guide.at, 2)}${guide.locked ? " locked" : ""}`).join("; ");
 }

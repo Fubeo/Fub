@@ -34,14 +34,6 @@ export const DRAW_DIALOGS: PartAnatomy = {
       hooks: ["draw-toolbar-dialog", "draw-toolbar-custom", "draw-toolbar-list", "draw-toolbar-row", "draw-toolbar-move", "draw-toolbar-reset"],
     },
     {
-      name: "draw-guides-dialog",
-      states: INTERACTIVE,
-      hooks: [
-        "draw-guides-message", "draw-guides-scroll", "draw-guides-table", "draw-guides-check", "draw-guides-remove",
-        "draw-guides-tools", "draw-guides-clear",
-      ],
-    },
-    {
       name: "draw-touch-dialog",
       states: INTERACTIVE,
       hooks: [

@@ -9109,17 +9109,6 @@ kbd,
   font-weight: var(--weight-bold);
   line-height: 1;
 }
-/* Il correttore nel testo che si scrive: l'ondulata dei documenti, rossa
-   per l'ortografia e ambra per la grammatica. La carta è bianca in tutti e
-   due i lumi, e così i colori. */
-.draw-text-proof-spelling {
-  text-decoration: underline wavy #c60817 1px;
-  text-underline-offset: 3px;
-}
-.draw-text-proof-grammar {
-  text-decoration: underline wavy #9a5b00 1px;
-  text-underline-offset: 3px;
-}
 .draw-title {
   gap: var(--space-1) var(--space-3);
   color: var(--muted);
@@ -9186,42 +9175,6 @@ kbd,
 }
 .draw-grid [data-major] {
   stroke: rgb(128 128 128 / 0.5);
-}
-
-/* Le guide del documento: un azzurro che non è quello della selezione né
-   quello delle guide intelligenti, e che si legge, almeno tre a uno, sulla
-   carta bianca come sul tavolo scuro. */
-.draw-guides path {
-  stroke: rgb(11 132 216);
-}
-
-/* I righelli: il fondo della barra, tacche e numeri attenuati, un filo verso
-   il foglio. Una fascia grigia dice dove sta la pagina, una d'accento dove
-   sta la selezione; una linea segue il puntatore. Sul foglio girato una
-   freccia nell'angolo dice dov'è il suo alto. */
-.draw-rulers [data-part="bg"],
-.draw-rulers [data-part="corner"] {
-  fill: var(--bg-elev);
-}
-.draw-rulers [data-part="ticks"] {
-  stroke: var(--muted);
-}
-.draw-rulers text {
-  fill: var(--muted);
-}
-.draw-rulers [data-part="edge"] {
-  stroke: var(--border);
-}
-.draw-rulers [data-part="page"] {
-  fill: rgb(128 128 128 / 0.18);
-}
-.draw-rulers [data-part="selection"] {
-  fill: var(--accent);
-  opacity: 0.35;
-}
-.draw-rulers [data-part="pointer"],
-.draw-rulers [data-part="north"] {
-  stroke: var(--text);
 }
 
 /* Il menu radiale galleggia come un menu: il disco col fondo, il filo e
@@ -9393,41 +9346,6 @@ button.draw-isolation-crumb:hover {
   font-size: var(--text-sm);
 }
 
-/* Lo scostamento e la semplificazione, come la descrizione delle immagini:
-   i campi come il suo, ciò che succederà più tenue. */
-.draw-paths {
-  gap: var(--space-2) var(--space-3);
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  font-size: var(--text-sm);
-}
-.draw-paths-title {
-  color: var(--text);
-  font-weight: 600;
-}
-.draw-paths-field {
-  gap: var(--space-2);
-  color: var(--text);
-}
-.draw-paths-field input[type="number"],
-.draw-paths-field select {
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-}
-.draw-paths-status {
-  color: var(--muted);
-}
-.draw-paths-action {
-  padding: 0 var(--space-3);
-  border: 1px solid var(--border);
-  color: var(--text);
-  font-size: var(--text-sm);
-}
-
 /* Il segno di un collegamento: un tondo col fondo della barra, che si vede
    sulla carta e sul tavolo di ogni tema, e che col puntatore sopra prende il
    fondo attivo quando si può toccare. */
@@ -9490,9 +9408,6 @@ button.draw-isolation-crumb:hover {
 .draw-objects,
 .draw-properties,
 .draw-history,
-.draw-boards,
-.draw-library,
-.draw-symbols,
 .draw-access {
   gap: var(--space-2);
   padding: var(--space-2) 0;
@@ -9696,190 +9611,6 @@ button.draw-isolation-crumb:hover {
   font-size: var(--text-sm);
 }
 
-/* Le tavole, come la cronologia. La tavola di adesso ha il fondo attivo, il
-   grassetto e il triangolo; la riga attiva, dove sono le frecce, ha l'anello
-   del fuoco quando l'elenco ce l'ha. Il numero e la misura sono in grigio,
-   e nel colore del testo sulla tavola di adesso, che ha il suo fondo. */
-.draw-boards-header,
-.draw-boards-empty {
-  padding: 0 var(--space-4);
-}
-.draw-boards-header {
-  gap: var(--space-1) var(--space-3);
-}
-.draw-boards-title {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-}
-.draw-boards-count,
-.draw-boards-empty {
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-.draw-boards-add {
-  gap: var(--space-2);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--border);
-  color: var(--text);
-  font-size: var(--text-sm);
-}
-.draw-boards-list:focus-visible {
-  outline: none;
-}
-.draw-board-row {
-  padding: 0 var(--space-3);
-  color: var(--text);
-  font-size: var(--text-sm);
-}
-.draw-board-row:hover {
-  background: var(--overlay-hover);
-}
-.draw-board-row[aria-current="true"] {
-  background: var(--bg-active);
-  font-weight: var(--weight-bold);
-}
-.draw-boards-list:focus-visible > .draw-board-row[data-active] {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
-  outline-offset: calc(-1 * var(--focus-ring-width));
-}
-.draw-board-number {
-  margin-inline-end: var(--space-3);
-}
-.draw-board-size {
-  margin-inline-start: var(--space-3);
-}
-.draw-board-glyph,
-.draw-board-number,
-.draw-board-size {
-  color: var(--muted);
-}
-.draw-board-row[aria-current="true"] > .draw-board-glyph,
-.draw-board-row[aria-current="true"] > .draw-board-number,
-.draw-board-row[aria-current="true"] > .draw-board-size {
-  color: var(--text);
-}
-.draw-board-rename {
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-}
-
-/* Le forme. Il riquadro di una forma ha un filo e, sotto il puntatore, il
-   fondo del passaggio; quello da cui si parte con le frecce ha l'anello del
-   fuoco quando c'è. L'anteprima è nel colore del testo, a contorno come la
-   forma che entra. In sola lettura i riquadri sbiadiscono e restano
-   raggiungibili: il clic dice perché non entrano. */
-.draw-library-header,
-.draw-library-find,
-.draw-library-heading,
-.draw-library-empty {
-  padding: 0 var(--space-4);
-}
-.draw-library-header {
-  gap: var(--space-1) var(--space-3);
-}
-.draw-library-title {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-}
-.draw-library-count,
-.draw-library-empty {
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-.draw-library-search {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-}
-.draw-library-group {
-  gap: var(--space-1);
-  padding-bottom: var(--space-3);
-}
-.draw-library-heading {
-  color: var(--text);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-}
-.draw-library-grid {
-  gap: var(--space-1);
-  padding: 0 var(--space-3);
-}
-.draw-library-tile {
-  padding: var(--space-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text);
-  transition:
-    background var(--duration-fast) var(--ease),
-    box-shadow var(--duration-fast) var(--ease),
-    transform var(--duration-fast) var(--ease);
-}
-.draw-library-tile:hover:not([aria-disabled="true"]) {
-  background: var(--overlay-hover);
-}
-/* Il riquadro sollevato dal dito tenuto fermo: più grande di poco, con
-   l'ombra e il bordo della scelta, sopra i vicini. */
-.draw-library-tile[data-lifted] {
-  position: relative;
-  z-index: 1;
-  border-color: var(--accent);
-  background: var(--overlay-hover);
-  box-shadow: var(--shadow-md);
-  transform: scale(1.1);
-}
-.draw-library-tile[aria-disabled="true"] {
-  opacity: 0.4;
-}
-.draw-library-preview {
-  color: var(--text);
-}
-/* La presentazione. La tavola sta sulla carta bianca del foglio, come
-   nell'editor; il laser e l'inchiostro sono rossi, con un alone chiaro il
-   laser, perché si vedono sul disegno e non sul tema, come la carta. Lo
-   schermo di fine è nero in ogni tema, e porta il suo nero anche sotto la
-   riga più tenue, che non si legge su un altro fondo: il suo testo ha i
-   bianchi della lightbox. Lo stage è tutto lo schermo, e l'unica cosa col fuoco: un anello
-   attorno allo schermo lo vedrebbe soltanto la sala. Un tratto che svanisce
-   va a trasparente; col moto ridotto la presentazione lo toglie di colpo. */
-.draw-present-board {
-  background: #ffffff;
-}
-.draw-present-stage:focus-visible {
-  outline: none;
-}
-.draw-present-ink path {
-  fill: #e5191c;
-  transition: opacity var(--duration-slow) var(--ease-in);
-}
-.draw-present-ink path[data-fading] {
-  opacity: 0;
-}
-.draw-present-laser {
-  background: #ff1f1f;
-  box-shadow:
-    0 0 0 2px rgb(255 255 255 / 85%),
-    0 0 12px 4px rgb(255 40 40 / 55%);
-}
-.draw-present-end {
-  gap: var(--space-3);
-  padding: var(--space-6);
-  background: #000000;
-  color: rgb(255 255 255 / 92%);
-}
-.draw-present-end-title {
-  margin: 0;
-  font-size: var(--text-3xl);
-  font-weight: var(--weight-medium);
-}
-.draw-present-end-hint {
-  margin: 0;
-  background: #000000;
-  color: rgb(255 255 255 / 70%);
-  font-size: var(--text-lg);
-}
-
 /* La verifica dell'accessibilità: la gravità è un segno e una parola, mai
    il solo colore; il triangolo dell'avviso ha il colore degli avvisi, il
    cerchio della nota quello dell'informazione. Il nome dell'oggetto è
@@ -10062,10 +9793,6 @@ button.draw-isolation-crumb:hover {
   color: var(--text);
   font-size: var(--text-sm);
 }
-/* Il punto di un campo diverso dallo stile, nel colore dell'accento. */
-.draw-properties-field[data-differs] > .draw-properties-label::after {
-  background: var(--accent);
-}
 .draw-properties-number,
 .draw-properties-paint {
   gap: var(--space-2);
@@ -10098,11 +9825,6 @@ button.draw-isolation-crumb:hover {
 .draw-properties-menu[aria-expanded="true"] {
   background: var(--bg-active);
 }
-.draw-properties-picker {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-}
 .draw-properties-switch {
   gap: var(--space-2);
   color: var(--text);
@@ -10121,145 +9843,11 @@ button.draw-isolation-crumb:hover {
 .draw-properties-bar {
   gap: var(--space-1);
 }
-.draw-properties-apply,
 .draw-properties-export {
   padding: 0 var(--space-4);
   border: 1px solid var(--border);
   color: var(--text);
   font-size: var(--text-sm);
-}
-/* I colori del documento: il titolo di ogni griglia come il nome di un
-   campo, in grassetto; sotto ogni colore, piccolo e in grigio, il numero
-   degli oggetti che lo mostrano. Il colore di adesso è segnato come la
-   scelta della barra, col filo sotto; il più dei campioni ha il bordo a
-   tratti di ciò che ancora non c'è. Il modulo sta in una cornice. */
-.draw-swatches {
-  gap: var(--space-3);
-}
-.draw-swatches-target,
-.draw-swatches-group,
-.draw-swatches-form-row {
-  gap: var(--space-1);
-}
-.draw-swatches-target .draw-button {
-  padding: 0 var(--space-3);
-  font-size: var(--text-sm);
-}
-.draw-swatches-heading,
-.draw-swatches-form-title {
-  color: var(--text);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-}
-.draw-swatches-grid,
-.draw-swatches-form-actions {
-  gap: var(--space-1);
-}
-.draw-swatches-chip {
-  gap: var(--space-1);
-}
-.draw-swatches-count {
-  color: var(--muted);
-  font-size: var(--text-xs);
-  line-height: 1;
-}
-.draw-swatches-chip[aria-current="true"] {
-  background: var(--bg-active);
-  color: var(--text);
-  box-shadow:
-    inset 0 -3px 0 var(--text),
-    var(--shadow-sm);
-}
-.draw-swatches-chip[aria-current="true"] > .draw-swatches-count {
-  color: var(--text);
-}
-.draw-swatches-add {
-  border: 1px dashed var(--border);
-}
-.draw-swatches-form {
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-/* La sfumatura: la barra e i colori dei punti su una scacchiera chiara,
-   che fa vedere la trasparenza come la vede la carta. Ogni punto ha un
-   bordo del fondo del pannello, che lo stacca dai vicini, e un filo grigio;
-   il punto scelto ha il filo e la punta nel colore del testo. Un punto
-   trascinato via dalla barra, che lasciato si toglie, sbiadisce. */
-.draw-gradient {
-  gap: var(--space-4);
-}
-.draw-gradient-target,
-.draw-gradient-row,
-.draw-gradient-stops {
-  gap: var(--space-1);
-}
-.draw-gradient-target .draw-button,
-.draw-gradient-row .draw-button {
-  padding: 0 var(--space-3);
-  font-size: var(--text-sm);
-}
-/* Il bianco della scacchiera è uno strato dell'immagine, non il colore di
-   fondo: senza la sfumatura o il colore che il pannello scrive la
-   dichiarazione non vale, e non resta un fondo bianco da solo. */
-.draw-gradient-strip,
-.draw-gradient-thumb-color {
-  background-position: 0 0, 0 0, 4px 4px, 0 0;
-  background-size: 100% 100%, 8px 8px, 8px 8px, 100% 100%;
-}
-.draw-gradient-strip {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  background-image:
-    var(--gradient-image),
-    linear-gradient(45deg, #c8c8c8 25%, transparent 25%, transparent 75%, #c8c8c8 75%),
-    linear-gradient(45deg, #c8c8c8 25%, transparent 25%, transparent 75%, #c8c8c8 75%),
-    linear-gradient(#ffffff, #ffffff);
-}
-.draw-gradient-thumb-color {
-  border: 2px solid var(--bg-elev);
-  border-radius: var(--radius-xs);
-  background-image:
-    linear-gradient(var(--stop), var(--stop)),
-    linear-gradient(45deg, #c8c8c8 25%, transparent 25%, transparent 75%, #c8c8c8 75%),
-    linear-gradient(45deg, #c8c8c8 25%, transparent 25%, transparent 75%, #c8c8c8 75%),
-    linear-gradient(#ffffff, #ffffff);
-  box-shadow: 0 0 0 1px var(--muted);
-}
-.draw-gradient-thumb::before {
-  border-bottom-color: var(--muted);
-}
-.draw-gradient-thumb[data-selected]::before {
-  border-bottom-color: var(--text);
-}
-.draw-gradient-thumb[data-selected] > .draw-gradient-thumb-color {
-  box-shadow: 0 0 0 2px var(--text);
-}
-.draw-gradient-thumb[data-torn] {
-  opacity: 0.4;
-}
-.draw-gradient-bar:not([data-readonly]) > .draw-gradient-strip {
-  cursor: copy;
-}
-.draw-gradient-bar:not([data-readonly]) > .draw-gradient-thumb {
-  cursor: grab;
-}
-.draw-gradient-fields {
-  gap: var(--space-3) var(--space-2);
-}
-.draw-gradient-stop-title {
-  color: var(--text);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-}
-/* La campitura: il menu del tipo, i campi e i comandi del motivo hanno il
-   respiro dei campi delle altre sezioni. */
-.draw-hatch {
-  gap: var(--space-3);
-}
-.draw-hatch-fields {
-  gap: var(--space-3) var(--space-2);
 }
 /* Un colore misto: righe del colore del testo, che non sono un colore. */
 .draw-swatch-frame[data-shape="mixed"] > .draw-swatch {
@@ -15525,50 +15113,6 @@ h6.ui-heading {
   align-self: flex-start;
   min-height: 44px;
 }
-/* La finestra «Guide»: le righe in una tabella che scorre, coi titoli delle
-   colonne fermi in cima; sotto, i pulsanti che aggiungono una guida o le
-   tolgono tutte, sempre in vista. Ogni comando misura almeno 44 px. */
-.modale .draw-guides-message {
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-.modale .draw-guides-scroll {
-  max-height: min(45vh, 24rem);
-  overflow: auto;
-}
-.modale .draw-guides-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.modale .draw-guides-table th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding: 0 var(--space-2) var(--space-2) 0;
-  background: var(--elevation-dialog-surface);
-  color: var(--muted);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  text-align: start;
-}
-.modale .draw-guides-table td {
-  padding: var(--space-1) var(--space-2) var(--space-1) 0;
-  vertical-align: middle;
-}
-.modale .draw-guides-table select,
-.modale .draw-guides-table input[type="number"] {
-  min-width: 7rem;
-  min-height: 44px;
-}
-.modale .palette-form .draw-guides-check {
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  min-height: 44px;
-  cursor: pointer;
-}
-.modale .draw-guides-remove,
-.modale .draw-guides-tools button,
 .modale .draw-touch-tools button,
 .draw-hand-panel .draw-touch-tools button {
   min-height: 44px;
@@ -15579,38 +15123,14 @@ h6.ui-heading {
   font: inherit;
   cursor: pointer;
 }
-.modale .draw-guides-remove {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  padding: 0;
-}
-.modale .draw-guides-tools {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-.modale .draw-guides-tools button,
 .modale .draw-touch-tools button,
 .draw-hand-panel .draw-touch-tools button {
   padding: var(--space-2) var(--space-4);
 }
-.modale .draw-guides-tools button:disabled,
 .modale .draw-touch-tools button:disabled,
 .draw-hand-panel .draw-touch-tools button:disabled {
   opacity: 0.5;
   cursor: default;
-}
-.modale .draw-guides-tools .draw-guides-clear {
-  margin-inline-start: auto;
-  color: var(--danger);
-}
-.modale .draw-guides-remove:hover,
-.modale .draw-guides-tools .draw-guides-clear:not(:disabled):hover {
-  border-color: var(--danger);
-  background: var(--danger-wash);
-  color: var(--danger);
 }
 
 /* La finestra «Penna e dita»: due gruppi coi loro titoli, le dita e la

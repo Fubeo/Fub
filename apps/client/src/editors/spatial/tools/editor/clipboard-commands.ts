@@ -168,7 +168,7 @@ export function installClipboardCommands(ctx: EditorContext): void {
   const {
     life, has, measureText, pictureFonts, root, surface, progressBar, progressLabel, progressMeter, progressStop, editable, grownPage, newIds, announce,
     objects, numberText, stepNow, viewArea, viewCenter, selectedUnits, showHandles, askDescriptions, withFaces, syncControls, commit, withLabels, select,
-    cancelGesture, target, gridOn, finishText, boundsOf, arranging, arrange, settleCrop, options
+    cancelGesture, target, gridOn, boundsOf, arranging, arrange, options
   } = ctx;
   // --- Le immagini incollate --------------------------------------------------
 
@@ -245,7 +245,6 @@ export function installClipboardCommands(ctx: EditorContext): void {
       announce(t("draw.image.unreadable"));
       return;
     }
-    finishText();
     ctx.asking = true;
     cancelGesture();
     const loaded = ctx.loads;
@@ -299,9 +298,6 @@ export function installClipboardCommands(ctx: EditorContext): void {
 
   /// Le immagini nel livello che riceve, una sopra l'altra con uno scarto.
   const placeImages = (pictures: readonly Placed[], at: Point | null): void => {
-    // Il ritaglio aperto si scrive prima: il posto delle immagini nuove si
-    // conta sul disegno com'è dopo.
-    settleCrop();
     const ids = newIds();
     const to = target(ids);
     if (to === null) return;
@@ -464,8 +460,6 @@ export function installClipboardCommands(ctx: EditorContext): void {
     }
     const data = event.clipboardData;
     if (data === null) return;
-    // Tagliare un'immagine che si sta ritagliando porta via quella ritagliata.
-    if (kind === "cut" && editable()) settleCrop();
     const units = selectedUnits();
     if (units.length === 0) {
       announce(t("draw.selected.none"));
@@ -615,11 +609,7 @@ export function installClipboardCommands(ctx: EditorContext): void {
   /// come va un incolla che non viene dagli appunti.
   async function pasteSvgs(texts: ReadonlyArray<{ readonly text: string | null; readonly name: string | null }>, at: Point | null, inPlace: boolean, how: PasteHow = {}): Promise<void> {
     if (ctx.asking || ctx.disposed || texts.length === 0 || !editable()) return;
-    finishText();
     cancelGesture();
-    // Il ritaglio aperto si scrive prima di leggere com'è il disegno: un
-    // disegno che cambia a metà incolla ferma l'incolla.
-    settleCrop();
     ctx.asking = true;
     const run = { stopped: false };
     ctx.pasting = run;

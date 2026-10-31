@@ -10,7 +10,6 @@
 // (`editors/spatial/pdf/surface.ts`), per il formato `fubann` della stessa
 // feature.
 
-import type { ProofPorts } from "../core/proof-ports";
 import type {
   EditorSurface,
   SurfaceMountContext,
@@ -46,8 +45,6 @@ export interface CanvasSurfaceCallbacks {
   readonly drawingImages?: DrawingImagePort;
   /** The vault's font files, listed and read by the shell, that a drawing's text can use. */
   readonly drawingFonts?: VaultFontPort;
-  /** The spelling and grammar checker for the text written in a drawing. */
-  readonly drawingProof?: { readonly ports: ProofPorts; readonly notify?: (message: string) => void };
   readonly media?: CanvasEngineOptions["media"];
   readonly attachments?: CanvasEngineOptions["attachments"];
   readonly renderMarkdownForCard?: CanvasEngineOptions["renderMarkdownForCard"];
@@ -149,7 +146,6 @@ export function mountCanvasSurface(
       vaultFonts: callbacks.drawingFonts,
       // «Esporta» apre la finestra dello Scrittoio.
       onExport: shellCommand === undefined ? undefined : () => shellCommand("shell.doc.export"),
-      proof: callbacks.drawingProof,
     });
   }
   if (profile === PDF_PROFILE) {

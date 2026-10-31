@@ -1,10 +1,9 @@
 // L'editor del disegno: le funzioni di servizio, che più pezzi di
 // createDrawEditor condividono.
 
-import { resolvedLanguage } from "../../../../i18n/strings";
 import { validCurve } from "../../../../ink/input/pressure";
 import type { Bounds } from "../../scene/geometry";
-import type { Matrix, Point } from "../../scene/matrix";
+import type { Matrix } from "../../scene/matrix";
 import { elementChildren, type DocumentModel, type ElementPart } from "../../scene/model";
 import { t, type DrawKey } from "../../strings";
 import type { Destination } from "../edit";
@@ -12,9 +11,6 @@ import { isPenId } from "../../../../ink/pens";
 import { isBarrelAction, isEraseMode, isFidelity, isPenOutput, validClosed, validSteady, validStep, validSteps, type EraseMode, type Grid, type Steady } from "../grid";
 import type { LayerInfo } from "../hit";
 import { MAX_LAYER_NAME } from "../layers";
-
-/// Una frazione come percentuale, nella lingua dell'interfaccia.
-export const percentText = (value: number): string => new Intl.NumberFormat(resolvedLanguage(), { style: "percent", maximumFractionDigits: 1 }).format(value);
 
 /// Il nodo di `model` al percorso `path`; `null` se lì non c'è.
 export function nodeAtPath(model: DocumentModel, path: readonly number[]): ElementPart | null {
@@ -41,11 +37,6 @@ export function holdsPath(outer: readonly number[], inner: readonly number[]): b
 
 export function scaleOf(m: Matrix): number {
   return Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
-}
-
-/// Vero se `p` sta in `bounds`, bordi compresi.
-export function insideBounds(bounds: Bounds, p: Point): boolean {
-  return p[0] >= bounds.min[0] && p[0] <= bounds.max[0] && p[1] >= bounds.min[1] && p[1] <= bounds.max[1];
 }
 
 export function union(a: Bounds | null, b: Bounds | null): Bounds | null {
@@ -105,9 +96,6 @@ export function checkedGrid(next: Grid, before: Grid): Grid {
     snap: next.snap,
     step: validStep(next.step) ? next.step : before.step,
     steps: typeof next.steps === "object" && next.steps !== null ? validSteps(next.steps) : before.steps,
-    guides: flag(next.guides, before.guides),
-    rulers: flag(next.rulers, before.rulers),
-    rulerGuides: flag(next.rulerGuides, before.rulerGuides),
     panel: next.panel === null || typeof next.panel === "boolean" ? next.panel : before.panel,
     bar: flag(next.bar, before.bar),
     closed: validClosed(next.closed) ?? before.closed,

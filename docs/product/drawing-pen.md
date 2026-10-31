@@ -72,12 +72,10 @@ la punta sparisce e si vede l'inchiostro. Il dito non ha punta.
 - **Maiusc** tenuto durante il tratto lo fa dritto dal primo punto
   all'ultimo, a passi di 15°; lasciato Maiusc, resta dritto fino al rilascio.
 - **Maiusc+clic** tira una linea dritta dalla fine dell'ultimo tratto.
-- **Alt** tenuto fa della penna un contagocce: il tocco prende il colore di
-  ciò che sta sotto.
 - La **penna girata** cancella con qualunque strumento, come la gomma
   scelta.
 - Il **tasto laterale** fa ciò che si sceglie in «Penna e dita»: apre il
-  menu radiale, sceglie col lazo, cancella, o niente.
+  menu radiale, cancella, o niente.
 
 ## Cancellare
 

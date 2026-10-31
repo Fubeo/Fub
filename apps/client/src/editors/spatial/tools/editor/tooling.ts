@@ -1,101 +1,54 @@
-// L'editor del disegno: gli strumenti, la pipeline della penna e le guide
-// intelligenti. Un pezzo di createDrawEditor (`../editor.ts`): lavora sul
-// contesto che i pezzi condividono.
+// L'editor del disegno: gli strumenti e la pipeline della penna. Un pezzo di
+// createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
+// condividono.
 
-import { formatNumber } from "../../number";
 import type { InkPointerType } from "../../../../ink/input/pointer";
 import { MAX_PEN_SIZE, MIN_PEN_SIZE } from "../../../../ink/pens";
 import type { Bounds } from "../../scene/geometry";
-import { apply, compose, type Point } from "../../scene/matrix";
+import type { Point } from "../../scene/matrix";
 import type { ContainerNode } from "../../scene/model";
 import type { Tool } from "../../scene/analysis";
-import { t, type DrawKey } from "../../strings";
-import type { OverlayHandle } from "../../painter/overlay";
+import { t } from "../../strings";
 import { destination, destinationIn, destinationInto, NewIds, type Destination } from "../edit";
-import { rectBounds } from "../boards";
-import { pull, upright, type Axis as FrameAxis } from "../frame";
-import {
-  anchorsOf,
-  GUIDE_PX,
-  GuideIndex,
-  measure as measureBetween,
-  nearer,
-  ON_GUIDE,
-  type Edge as GuideEdge,
-  type GuideLine,
-  type GuideTarget,
-  type Spacing,
-} from "../guides";
 import { snapPoint } from "../grid";
-import { turnTo, type View } from "../../view";
+import { turnTo } from "../../view";
 import { SceneIndex, type Unit } from "../hit";
 import { COVER_COLOR, customColor, DEFAULT_COLOR, HIGHLIGHTER_COLOR, RECENT_COLORS, swatchOf } from "../palette";
 import { featuresFor, toolAfter, toolsOf, type Feature, type Level, type ToolId } from "../registry";
-import type { PolygonTool } from "../shapes";
-import { HIT_PX } from "./constants";
 import type { EditorContext } from "./context";
-import { disjoint, layerRefusal, layerTitle, translated } from "./helpers";
+import { layerRefusal, layerTitle } from "./helpers";
 import type { DrawStyle } from "./types";
 
 /// Quanti strumenti di prima l'editor ricorda per il menu radiale.
 const RECENT_MAX = 6;
-
-/// Ciò che le guide intelligenti mostrano: le linee su cui sta ciò che si
-/// muove, e le distanze uguali.
-interface GuideView {
-  readonly lines: readonly GuideLine[];
-  readonly spacings: readonly Spacing[];
-}
-
-/// I nomi dei bordi e dei centri da dire, per asse.
-const EDGE_NAMES: readonly [Readonly<Record<GuideEdge, DrawKey>>, Readonly<Record<GuideEdge, DrawKey>>] = [
-  { min: "draw.guides.edge.left", mid: "draw.guides.edge.center_x", max: "draw.guides.edge.right", point: "draw.guides.edge.point" },
-  { min: "draw.guides.edge.top", mid: "draw.guides.edge.center_y", max: "draw.guides.edge.bottom", point: "draw.guides.edge.point" },
-];
 
 /// Ciò che gli strumenti, la pipeline della penna e le guide intelligenti dà agli altri pezzi dell'editor.
 export interface ToolingContext {
   setLevel: (next: Level, custom?: readonly string[]) => void;
   setTool: (id: ToolId) => void;
   rememberColors: (...codes: string[]) => void;
-  setColor: (value: string, from?: { readonly swatch: string | null } | null) => void;
+  setColor: (value: string) => void;
   setWidth: (value: number) => void;
   pickTool: (id: ToolId) => void;
-  setPolygonTool: (next: PolygonTool) => void;
   cancelGesture: () => void;
   target: (ids: NewIds) => Destination | null;
   gridOn: (at?: ReadonlySet<Feature>) => boolean;
   snapped: (p: Point) => Point;
-  smartOn: (at?: ReadonlySet<Feature>) => boolean;
-  guidesOn: (at?: ReadonlySet<Feature>) => boolean;
-  guideReach: (pointer: InkPointerType) => number;
   pageBox: () => Bounds | null;
   seenUnits: (open?: readonly ContainerNode[]) => readonly Unit[];
   isolatedUnit: () => Unit | null;
-  seenTargets: (skipped: ReadonlySet<string>, open: readonly ContainerNode[], view: Bounds | null) => GuideTarget[];
-  rulerTargets: (skip: number | null) => GuideTarget[];
-  guidesFor: (owner: object, skip: readonly string[], points?: () => readonly Point[], skipGuide?: number | null) => GuideIndex;
-  guided: (p: Point, guides: () => GuideIndex, pointer: InkPointerType) => Point;
-  /// Le guide si vedono, e le misure con Alt: col gesto che finisce, o col
-  /// tasto lasciato, vanno tolte.
-  guiding: boolean;
-  measured: boolean;
-  guideHandles: () => OverlayHandle[];
-  snapNote: () => string;
   noted: (text: string, note: string) => string;
-  /// Dove sta il puntatore che passa sul foglio: le misure con Alt partono
-  /// da lì.
+  /// Dove sta il puntatore che passa sul foglio: la corda dello
+  /// stabilizzatore arriva lì.
   pointerAt: { readonly at: Point; readonly pointer: InkPointerType } | null;
-  measureHandles: () => OverlayHandle[];
 }
 
-/// Monta gli strumenti, la pipeline della penna e le guide intelligenti.
+/// Monta gli strumenti e la pipeline della penna.
 export function installTooling(ctx: EditorContext): void {
   const {
-    profile, folio, has, styles, style, toolLabel, widthsNow, live, showSurfaceHint, showToolMode, suggestions, field, indexer, boardsNow,
-    chosenSheet, sheetAt, isolatedNode, isolatedThrough, isolationSteps, currentIndex, currentPage, announce, showPage, surfaceSize, showGrid,
-    setCamera, stepNow, lengthText, lengthSpoken, guidesShown, showGuideLines, viewCenter, selectedUnits, showGrip, showHandles,
-    labelOf, showPanelByDefault, syncProperties, currentLayer, syncControls, nameOfNode, options
+    profile, folio, has, styles, style, toolLabel, widthsNow, showSurfaceHint, suggestions, indexer, isolatedNode, isolatedThrough, isolationSteps, currentIndex, currentPage, announce, showPage, showGrid,
+    setCamera, stepNow, viewCenter, showGrip, showHandles,
+    showPanelByDefault, currentLayer, syncControls, nameOfNode, options
   } = ctx;
   // --- Strumenti --------------------------------------------------------------
 
@@ -103,7 +56,6 @@ export function installTooling(ctx: EditorContext): void {
     ctx.picked = custom;
     const offered = featuresFor(next, ctx.picked, profile);
     if (next === ctx.level && offered.size === ctx.features.size && [...offered].every((feature) => ctx.features.has(feature))) return;
-    ctx.finishText();
     const hadPanel = has("properties");
     ctx.level = next;
     ctx.features = offered;
@@ -114,21 +66,17 @@ export function installTooling(ctx: EditorContext): void {
       cancelGesture();
       ctx.tool = toolAfter(ctx.tools, ctx.tool, profile);
     }
-    // Senza i colori del documento il colore non segue più un campione; senza
-    // i colori a piacere la barra non ha un campione per uno di loro: chi lo
-    // usava riparte dai colori di partenza, che la barra mostra.
-    if (!has("swatches")) for (const each of Object.values(styles)) each.swatch = null;
+    // Senza i colori a piacere la barra non ha un campione per uno di loro:
+    // chi lo usava riparte dai colori di partenza, che la barra mostra.
     if (!has("colors")) {
       const starts: Readonly<Record<Tool | "cover", string>> = { pen: DEFAULT_COLOR, highlighter: HIGHLIGHTER_COLOR, cover: COVER_COLOR };
       for (const [name, each] of Object.entries(styles) as Array<[Tool | "cover", DrawStyle]>) {
         if (swatchOf(each.color) !== null) continue;
         each.color = starts[name];
-        each.swatch = null;
       }
     }
     showSurfaceHint();
     showGrid();
-    showGuideLines();
     syncControls();
     suggestions.relabel();
     // Il pannello arriva come lo vuole chi disegna.
@@ -140,60 +88,17 @@ export function installTooling(ctx: EditorContext): void {
 
   function setTool(id: ToolId): void {
     if (!ctx.tools.some((spec) => spec.id === id)) return;
-    // Cambiare strumento conclude il tracciato della penna di Bézier, come in
-    // Inkscape: ciò che ne dice la fine precede il nome dello strumento.
-    let finished = "";
     if (id !== ctx.tool) {
-      ctx.finishText();
       cancelGesture();
-      const before = live.textContent;
-      // E applica il ritaglio, come in Illustrator.
-      ctx.applyCrop();
-      if (live.textContent !== before) finished = (live.textContent ?? "").trim();
       ctx.recentTools = [ctx.tool, ...ctx.recentTools.filter((each) => each !== ctx.tool && each !== id)].slice(0, RECENT_MAX);
-      // Le immagini aperte del contagocce sono dello strumento, e il capo
-      // scelto della sfumatura: il punto scelto è anche del pannello.
-      ctx.dropperHover = null;
-      ctx.dropPixels();
-      ctx.gradientGrip = null;
-      ctx.gradientTap = null;
     }
     ctx.tool = id;
-    // Lo strumento Tavola sceglie le tavole, non gli oggetti: la selezione si
-    // lascia, e senza una tavola scelta si sceglie quella che si guarda.
-    if (id === "board") {
-      ctx.selection = [];
-      if (chosenSheet() === null) ctx.boardChosen = ctx.sheetInView();
-    }
     syncControls();
-    // La cornice è dello strumento Selezione, il nome della tavola scelta
-    // si fa più scuro con lo strumento Tavola.
     showPage();
     showHandles();
     showGrip(null);
-    // Il contagocce mostra subito che cosa vede sotto il puntatore, e lo
-    // strumento Sfumatura che cosa sposterebbe.
-    if (id === "eyedropper" && ctx.pointerAt !== null) ctx.hoverDropper(ctx.pointerAt.at, ctx.pointerAt.pointer);
     ctx.hoverNib(ctx.pointerAt?.at ?? null, ctx.pointerAt?.pointer ?? "mouse");
-    if (id === "gradient" && ctx.pointerAt !== null) ctx.hoverGradient(ctx.pointerAt.at, ctx.pointerAt.pointer);
-    ctx.connectorHover = null;
-    if (id === "connector" && ctx.pointerAt !== null) ctx.hoverConnector(ctx.pointerAt.at, ctx.pointerAt.pointer);
-    const named = t("draw.announce.tool", { tool: t(toolLabel(id)) });
-    // Con lo strumento Tavola, anche quale
-    // tavola è scelta; col contagocce, dove va ciò che prende; con lo
-    // strumento Sfumatura, dove va la sfumatura.
-    const sheet = id === "board" ? chosenSheet() : null;
-    const target =
-      id === "eyedropper"
-            ? ctx.dropperFor()
-            : id === "gradient"
-              ? ctx.gradientFor()
-              : sheet !== null
-                ? ctx.sheetText(sheet)
-                : id === "pen" || id === "highlighter"
-                  ? ctx.symmetryText()
-                  : "";
-    announce([finished, named, target].filter((part) => part !== "").join(" "));
+    announce(t("draw.announce.tool", { tool: t(toolLabel(id)) }));
   }
   ctx.setTool = setTool;
 
@@ -211,29 +116,18 @@ export function installTooling(ctx: EditorContext): void {
 
   /// Il colore dello strumento di adesso, `value` come lo legge
   /// `customColor`. Un colore fuori dalla tavolozza chiede i colori
-  /// personalizzati, tranne quello che viene dai colori del documento
-  /// (`from`), che li offrono già; `from.swatch` è il campione da cui viene,
-  /// che gli oggetti nuovi usano. Anche il colore di prima resta fra i
-  /// recenti, per il menu radiale.
-  function setColor(value: string, from: { readonly swatch: string | null } | null = null): void {
+  /// personalizzati. Anche il colore di prima resta fra i recenti, per il
+  /// menu radiale.
+  function setColor(value: string): void {
     const code = customColor(value);
     if (code === null) return;
     if (swatchOf(code) === null) {
-      if (!has("colors") && from === null) return;
+      if (!has("colors")) return;
       ctx.custom = code;
     }
-    const before = style();
-    const swatch = from?.swatch ?? null;
-    const written: string[] = [];
-    if (swatch === null) written.push(code);
-    if (before.swatch === null) written.push(before.color);
-    rememberColors(...written);
+    rememberColors(code, style().color);
     style().color = code;
-    style().swatch = swatch;
     syncControls();
-    // Mentre si scrive, il colore va a ciò che è scelto nel campo, o a ciò
-    // che si scriverà.
-    restyleTyping("fill", code);
   }
   ctx.setColor = setColor;
 
@@ -244,44 +138,15 @@ export function installTooling(ctx: EditorContext): void {
     if (!free && !widthsNow().some((option) => option.value === value)) return;
     style().width = value;
     syncControls();
-    if (ctx.tool === "text") restyleTyping("font-size", formatNumber(value, 2));
   }
   ctx.setWidth = setWidth;
 
-  /// Il colore o il corpo che la barra dà mentre si scrive: a ciò che è
-  /// scelto nel campo; senza scelta, a tutto un testo nuovo, che è della
-  /// barra, e a ciò che si scriverà in uno che c'era.
-  function restyleTyping(name: "fill" | "font-size", value: string): void {
-    if (ctx.typing === null) return;
-    if (ctx.typing.key === null) field.restyleWhole(name, value);
-    else field.restyle(name, value);
-    ctx.placeText();
-  }
-
-  /// Lo strumento `id` scelto dalla barra o dal suo tasto. Il Poligono scelto
-  /// di nuovo passa dal poligono alla stella, e ritorno.
+  /// Lo strumento `id` scelto dalla barra o dal suo tasto.
   function pickTool(id: ToolId): void {
-    if (id === "polygon" && ctx.tool === "polygon") togglePolygon();
-    else setTool(id);
+    setTool(id);
   }
   ctx.pickTool = pickTool;
 
-  /// Lo strumento Poligono come `next`: la forma che si sta tirando, il
-  /// pulsante e il pannello lo seguono.
-  function setPolygonTool(next: PolygonTool): void {
-    const turned = next.shape !== ctx.polygonTool.shape;
-    ctx.polygonTool = next;
-    if (turned) showToolMode("polygon");
-    if (ctx.current?.kind === "shape" && ctx.current.tool === "polygon") ctx.drawShape(ctx.current);
-    syncProperties();
-  }
-  ctx.setPolygonTool = setPolygonTool;
-
-  /// Dal poligono alla stella, e ritorno, anche a metà gesto.
-  function togglePolygon(): void {
-    setPolygonTool({ ...ctx.polygonTool, shape: ctx.polygonTool.shape === "star" ? "polygon" : "star" });
-    announce(t("draw.announce.tool", { tool: t(toolLabel("polygon")) }));
-  }
 
   function cancelGesture(): void {
     if (ctx.pressed !== null) ctx.cancelPress();
@@ -337,26 +202,6 @@ export function installTooling(ctx: EditorContext): void {
   const snapped = (p: Point): Point => (gridOn() && !ctx.free ? snapPoint(p, stepNow()) : p);
   ctx.snapped = snapped;
 
-  // --- Le guide intelligenti -------------------------------------------------
-
-  /// Le guide intelligenti agganciano agli oggetti e alla pagina: se il
-  /// livello le offre, accese. `at` sono le parti da guardare, di solito
-  /// quelle di adesso.
-  const smartOn = (at: ReadonlySet<Feature> = ctx.features): boolean => at.has("guides") && ctx.grid.guides;
-  ctx.smartOn = smartOn;
-
-  /// Le guide del documento agganciano: se si vedono, e ce n'è una.
-  const rulerGuidesOn = (at: ReadonlySet<Feature> = ctx.features): boolean => guidesShown(at) && (ctx.scene.root.guides?.length ?? 0) > 0;
-
-  /// Qualcosa aggancia ciò che si muove: le guide intelligenti, o quelle del
-  /// documento.
-  const guidesOn = (at: ReadonlySet<Feature> = ctx.features): boolean => smartOn(at) || rulerGuidesOn(at);
-  ctx.guidesOn = guidesOn;
-
-  /// La soglia delle guide nella scena, per il puntatore `pointer`.
-  const guideReach = (pointer: InkPointerType): number => GUIDE_PX[pointer] / ctx.camera.scale;
-  ctx.guideReach = guideReach;
-
   /// La pagina nella scena, se c'è.
   const pageBox = (): Bounds | null => {
     const page = currentPage();
@@ -380,240 +225,11 @@ export function installTooling(ctx: EditorContext): void {
   };
   ctx.seenUnits = seenUnits;
 
-  /// I gruppi che contengono gli oggetti di chiave `keys`, fino al livello:
-  /// chi si sposta da dentro un gruppo si allinea ai suoi fratelli, e non al
-  /// gruppo che lo contiene.
-  const openedBy = (keys: readonly string[]): ContainerNode[] => {
-    const index = currentIndex();
-    const out: ContainerNode[] = [];
-    for (const key of keys) {
-      for (let at = index.get(key)?.node.parent ?? null; at !== null && at.parent !== null && at.details?.role !== "layer"; at = at.parent) out.push(at);
-    }
-    return out;
-  };
-
   /// Il gruppo isolato come oggetto, che riceve ciò che si disegna; `null`
   /// senza gruppo isolato. Un simbolo ha le coordinate dell'istanza da cui
   /// lo si modifica.
   const isolatedUnit = (): Unit | null => (isolatedNode() === null ? null : currentIndex().scope());
   ctx.isolatedUnit = isolatedUnit;
-
-  /// Gli oggetti che si vedono nella vista `view`, o tutti senza, come
-  /// bersagli delle guide: tranne quelli di chiave in `skipped`, e coi
-  /// gruppi `open` aperti.
-  const seenTargets = (skipped: ReadonlySet<string>, open: readonly ContainerNode[], view: Bounds | null): GuideTarget[] => {
-    const out: GuideTarget[] = [];
-    for (const unit of seenUnits(open)) {
-      const box = unit.geometry ?? unit.bounds;
-      if (box === null || skipped.has(unit.key) || (view !== null && disjoint(box, view))) continue;
-      out.push({ kind: "object", box, key: unit.key });
-    }
-    return out;
-  };
-  ctx.seenTargets = seenTargets;
-
-  /// Le guide del documento come bersagli, se agganciano, tranne la guida
-  /// `skip`.
-  const rulerTargets = (skip: number | null): GuideTarget[] => {
-    if (!rulerGuidesOn()) return [];
-    const out: GuideTarget[] = [];
-    (ctx.scene.root.guides ?? []).forEach((guide, i) => {
-      if (i === skip) return;
-      out.push({ kind: "guide", box: { min: [guide.at, guide.at], max: [guide.at, guide.at] }, key: String(i), axis: guide.axis === "x" ? 0 : 1 });
-    });
-    return out;
-  };
-  ctx.rulerTargets = rulerTargets;
-
-  /// I bersagli di `owner`, un gesto o i nodi della penna di Bézier, presi la
-  /// prima volta che servono e tenuti finché la scena e la vista restano
-  /// quelle: con le guide intelligenti gli oggetti che si vedono nella
-  /// vista, tranne quelli di chiave `skip`, la pagina, o le tavole che si
-  /// vedono, e i punti `points`; con le guide del documento, quelle, tranne
-  /// la guida `skipGuide`. Ci si allinea a ciò che si guarda; un foglio non
-  /// ancora disposto, senza misure, vede tutto.
-  let guideCache: { readonly owner: object; readonly index: SceneIndex; readonly view: View; readonly guides: GuideIndex } | null = null;
-  const guidesFor = (owner: object, skip: readonly string[], points: () => readonly Point[] = () => [], skipGuide: number | null = null): GuideIndex => {
-    const index = currentIndex();
-    if (guideCache !== null && guideCache.owner === owner && guideCache.index === index && guideCache.view === ctx.camera) return guideCache.guides;
-    const targets: GuideTarget[] = [];
-    if (smartOn()) {
-      const size = surfaceSize();
-      const view = size.w > 0 && size.h > 0 ? ctx.viewBounds() : null;
-      targets.push(...seenTargets(new Set(skip), openedBy(skip), view));
-      // Con le tavole, ognuna fa da pagina.
-      const list = boardsNow();
-      for (const board of list) if (view === null || !disjoint(board.box, view)) targets.push({ kind: "page", box: board.box, key: board.id });
-      const page = list.length === 0 ? pageBox() : null;
-      if (page !== null) targets.push({ kind: "page", box: page, key: "" });
-      for (const p of points()) targets.push({ kind: "node", box: { min: p, max: p }, key: "" });
-    }
-    targets.push(...rulerTargets(skipGuide));
-    const guides = new GuideIndex(targets);
-    guideCache = { owner, index, view: ctx.camera, guides };
-    return guides;
-  };
-  ctx.guidesFor = guidesFor;
-
-  /// Un punto di un gesto, con la griglia e con le guide di `guides`: lungo
-  /// ciascun asse sulla riga o sul bersaglio più vicino, a pari distanza sul
-  /// bersaglio, finché Ctrl o ⌘ non è tenuto.
-  const guided = (p: Point, guides: () => GuideIndex, pointer: InkPointerType): Point => {
-    if (ctx.free) return p;
-    const line = gridOn() ? snapPoint(p, stepNow()) : null;
-    if (!guidesOn()) return line ?? p;
-    const index = guides();
-    const reach = guideReach(pointer);
-    const along = (axis: FrameAxis): number => nearer(p[axis], index.nearest(axis, p[axis], reach), line === null ? null : line[axis]);
-    return [along(0), along(1)];
-  };
-  ctx.guided = guided;
-
-  /// Ciò che le guide mostrano adesso: le linee del gesto in corso; per uno
-  /// spostamento anche le distanze uguali. `null` se le guide non agganciano.
-  const guideView = (): GuideView | null => {
-    if (ctx.free || !guidesOn()) return null;
-    const point = (index: GuideIndex, p: Point): GuideView => {
-      const box: Bounds = { min: p, max: p };
-      return { lines: [...index.lines(0, box, [{ value: p[0], edge: "point" }]), ...index.lines(1, box, [{ value: p[1], edge: "point" }])], spacings: [] };
-    };
-    // Le linee di ciò che si è spostato in `moved`, e le distanze uguali.
-    const movedView = (index: GuideIndex, moved: Bounds): GuideView => {
-      const lines: GuideLine[] = [];
-      const spacings: Spacing[] = [];
-      for (const axis of [0, 1] as const) {
-        lines.push(...index.lines(axis, moved, anchorsOf(moved, axis)));
-        const spacing = index.spacing(axis, moved);
-        if (spacing !== null) spacings.push(spacing);
-      }
-      return { lines, spacings };
-    };
-    // Una forma tirata dal pannello mostra a che cosa si è agganciata.
-    if (ctx.shapeDrag?.box != null) return movedView(guidesFor(ctx.shapeDrag, []), ctx.shapeDrag.box);
-    const g = ctx.current;
-    if (g?.kind === "select" && g.mode === "move") {
-      const box = ctx.geometryOf(g.units);
-      if (box === null) return null;
-      return movedView(guidesFor(g, g.units.map((unit) => unit.key)), translated(box, ...ctx.moveDelta(g))!);
-    }
-    if (g?.kind === "board" && g.mode === "move" && g.sheet !== null) return movedView(ctx.boardGuides(g), translated(rectBounds(g.sheet.rect), ...ctx.boardDelta(g))!);
-    if (g?.kind === "board" && g.mode === "resize" && g.rect !== null && g.grip !== null) {
-      // I bordi tirati.
-      const box = rectBounds(g.rect);
-      const index = ctx.boardGuides(g);
-      const lines: GuideLine[] = [];
-      for (const axis of [0, 1] as const) {
-        const direction = pull(g.grip, axis);
-        if (direction !== 0) lines.push(...index.lines(axis, box, [{ value: direction > 0 ? box.max[axis] : box.min[axis], edge: direction > 0 ? "max" : "min" }]));
-      }
-      return { lines, spacings: [] };
-    }
-    if (g?.kind === "board" && g.mode === "draw") {
-      const end = ctx.drawnEnd(g);
-      return end === null ? null : point(ctx.boardGuides(g), end);
-    }
-    if (g?.kind === "select" && g.mode === "resize" && g.grip !== null && g.matrix !== null) {
-      const { grip, frame } = g.grip;
-      if (grip === "rotate" || !upright(frame.matrix)) return null;
-      // La geometria dopo il ridimensionamento, e i bordi tirati.
-      const m = compose(g.matrix, frame.matrix);
-      const a = apply(m, frame.geometry.min);
-      const b = apply(m, frame.geometry.max);
-      const box: Bounds = { min: [Math.min(a[0], b[0]), Math.min(a[1], b[1])], max: [Math.max(a[0], b[0]), Math.max(a[1], b[1])] };
-      const index = guidesFor(g, g.units.map((unit) => unit.key));
-      const lines: GuideLine[] = [];
-      for (const axis of [0, 1] as const) {
-        const direction = pull(grip, axis);
-        if (direction === 0) continue;
-        const value = (direction > 0 ? b : a)[axis];
-        const edge: GuideEdge = Math.abs(value - box.min[axis]) <= Math.abs(value - box.max[axis]) ? "min" : "max";
-        lines.push(...index.lines(axis, box, [{ value, edge }]));
-      }
-      return { lines, spacings: [] };
-    }
-    if (g?.kind === "shape") {
-      const ends = ctx.shapeEnds(g, g.to);
-      return ends === null ? null : point(guidesFor(g, []), apply(g.to.matrix, ends[1]));
-    }
-    if (g?.kind === "gradient" && g.dragging && g.snapped !== null) return point(ctx.gradientGuides(g), g.snapped);
-    return null;
-  };
-
-  ctx.guiding = false;
-  ctx.measured = false;
-
-  /// Le linee delle guide, coi segni e le distanze, e gli spazi uguali. La
-  /// distanza da un oggetto in linea si scrive una volta, sulla linea dei
-  /// centri se c'è, e non se la scrivono già le distanze uguali.
-  const guideHandles = (): OverlayHandle[] => {
-    const view = guideView();
-    if (view === null) return [];
-    const out: OverlayHandle[] = [];
-    const along = (line: GuideLine, value: number): Point => (line.axis === 0 ? [line.value, value] : [value, line.value]);
-    for (const line of view.lines) {
-      out.push({ kind: "guide", from: along(line, line.from), to: along(line, line.to), dashed: false });
-      for (const mark of line.marks) {
-        const [x, y] = along(line, mark);
-        out.push({ kind: "cross", x, y });
-      }
-    }
-    const written = new Set<string>();
-    const spaced = (axis: FrameAxis, [from, to]: readonly [number, number]): boolean =>
-      view.spacings.some((spacing) => spacing.axis === axis && spacing.gaps.some((gap) => Math.abs(gap.from - from) <= ON_GUIDE && Math.abs(gap.to - to) <= ON_GUIDE));
-    const middleFirst = [...view.lines].sort((a, b) => Number(b.source === "mid") - Number(a.source === "mid"));
-    for (const line of middleFirst) {
-      if (line.gap === null) continue;
-      const key = `${line.axis} ${line.gap[0]} ${line.gap[1]}`;
-      if (written.has(key) || spaced(line.axis === 0 ? 1 : 0, line.gap)) continue;
-      written.add(key);
-      out.push({ kind: "measure", from: along(line, line.gap[0]), to: along(line, line.gap[1]), text: lengthText(line.gap[1] - line.gap[0]) });
-    }
-    for (const { axis, gap, gaps } of view.spacings) {
-      for (const { from, to, across } of gaps) {
-        const at = (along: number): Point => (axis === 0 ? [along, across] : [across, along]);
-        out.push({ kind: "measure", from: at(from), to: at(to), text: lengthText(gap) });
-      }
-    }
-    return out;
-  };
-  ctx.guideHandles = guideHandles;
-
-  /// Una linea a parole: quale bordo o centro di ciò che si è mosso sta in
-  /// linea con quale dell'oggetto, della tavola, della pagina o del nodo.
-  const lineText = ({ axis, source, target, edge }: GuideLine): string => {
-    const names = EDGE_NAMES[axis];
-    const from = t(names[source]);
-    if (target.kind === "node") return t("draw.guides.node", { source: from });
-    if (target.kind === "guide") return t("draw.guides.line", { source: from });
-    const same = source === edge;
-    if (target.kind === "page" && target.key === "") return same ? t("draw.guides.page.same", { source: from }) : t("draw.guides.page", { source: from, edge: t(names[edge]) });
-    // Una tavola si dice come un oggetto, col suo nome.
-    const unit = seenUnits().find((each) => each.key === target.key);
-    const name = unit !== undefined ? labelOf(unit) : (ctx.boardById(target.key)?.name ?? target.key);
-    return same ? t("draw.guides.object.same", { source: from, name }) : t("draw.guides.object", { source: from, edge: t(names[edge]), name });
-  };
-
-  /// A che cosa si è agganciato il gesto di adesso, a parole, da dire alla
-  /// fine: per ciascun asse le distanze uguali, o una linea, prima con un
-  /// oggetto che con la pagina. Vuoto se niente.
-  const snapNote = (): string => {
-    const view = guideView();
-    if (view === null) return "";
-    const parts: string[] = [];
-    for (const axis of [0, 1] as const) {
-      const spacing = view.spacings.find((each) => each.axis === axis);
-      if (spacing !== undefined) {
-        parts.push(t(axis === 0 ? "draw.guides.spaced.x" : "draw.guides.spaced.y", { gap: lengthSpoken(spacing.gap) }));
-        continue;
-      }
-      // Prima un oggetto o un nodo, poi una guida, poi la pagina.
-      const lines = view.lines.filter((line) => line.axis === axis);
-      const line = lines.find((each) => each.target.kind !== "page" && each.target.kind !== "guide") ?? lines.find((each) => each.target.kind === "guide") ?? lines[0];
-      if (line !== undefined) parts.push(lineText(line));
-    }
-    return parts.length === 0 ? "" : t("draw.guides.snapped", { parts: parts.join("; ") });
-  };
-  ctx.snapNote = snapNote;
 
   /// `text` e, dopo, la nota delle guide, se c'è.
   const noted = (text: string, note: string): string => (note === "" ? text : `${text} ${note}`);
@@ -621,33 +237,4 @@ export function installTooling(ctx: EditorContext): void {
 
   ctx.pointerAt = null;
 
-  /// Con Alt e una selezione, le distanze fra la sua geometria e quella
-  /// dell'oggetto sotto il puntatore, bloccati compresi, o della tavola o
-  /// della pagina, se il puntatore ci sta sopra fuori dagli oggetti. Il
-  /// riquadro misurato si vede tratteggiato.
-  const measureHandles = (): OverlayHandle[] => {
-    if (!ctx.alt || ctx.current !== null || ctx.pressed !== null || ctx.pointerAt === null || ctx.tool !== "select" || !has("guides") || ctx.selection.length === 0) return [];
-    const a = ctx.geometryOf(selectedUnits());
-    if (a === null) return [];
-    const { at: p, pointer } = ctx.pointerAt;
-    const chosen = new Set(ctx.selection);
-    const tolerance = HIT_PX[pointer] / ctx.camera.scale;
-    const units = seenUnits();
-    let b: Bounds | null = null;
-    for (let i = units.length - 1; i >= 0 && b === null; i--) {
-      const unit = units[i]!;
-      if (!chosen.has(unit.key) && unit.hits(p, tolerance)) b = unit.geometry ?? unit.bounds;
-    }
-    const sheet = b === null ? sheetAt(p) : null;
-    if (sheet !== null) b = rectBounds(sheet.rect);
-    if (b === null) return [];
-    const { measures, extensions } = measureBetween(a, b);
-    const corners: Point[] = [b.min, [b.max[0], b.min[1]], b.max, [b.min[0], b.max[1]]];
-    return [
-      ...corners.map((corner, i): OverlayHandle => ({ kind: "guide", from: corner, to: corners[(i + 1) % 4]!, dashed: true })),
-      ...extensions.map(([from, to]): OverlayHandle => ({ kind: "guide", from, to, dashed: true })),
-      ...measures.map(({ from, to, value }): OverlayHandle => ({ kind: "measure", from, to, text: lengthText(value) })),
-    ];
-  };
-  ctx.measureHandles = measureHandles;
 }

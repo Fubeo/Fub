@@ -89,7 +89,6 @@ import { MAX_EDIT_BYTES, MAX_ELEMENTS, readScene, ReadError, type ReadOnly } fro
 import { href as parseHref } from "./scene/values";
 import { linkTarget, nodeOf } from "./tools/arrange";
 import { createDrawEditor, type DrawEditor, type DrawExport, type DrawImages, type DrawLinks, type DrawPlace } from "./tools/editor";
-import type { DrawProof } from "./tools/editor/text-proof";
 import { inspectorChrome, type InspectorChrome } from "./tools/editor/chrome/hosts";
 import { exportDialog } from "./tools/export-dialog";
 import { asking } from "./tools/export-plan";
@@ -119,8 +118,6 @@ export interface VectorSurfaceOptions {
   vaultFonts?: VaultFontPort;
   /// Apre la finestra «Esporta» della shell.
   onExport?(): void;
-  /// Il correttore per il testo che si scrive.
-  proof?: DrawProof;
 }
 
 /// Le immagini del vault di un disegno: `path` è l'`href` com'è scritto nel
@@ -458,7 +455,6 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       links,
       ...(images === undefined ? {} : { images }),
       ...(options.vaultFonts === undefined ? {} : { vaultFonts: options.vaultFonts }),
-      ...(options.proof === undefined ? {} : { proof: options.proof }),
       ...(options.onExport === undefined
         ? {}
         : {

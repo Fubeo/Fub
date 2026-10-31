@@ -259,18 +259,6 @@ function passedBy(node: ElementPart | null): Inherited {
   return passed;
 }
 
-/// Ciò che il testo `node` eredita da chi lo contiene, per gli attributi
-/// del testo, coi valori iniziali di SVG dove nessuno li scrive.
-export function textInherited(node: ElementPart): Record<string, string> {
-  const passed = passedBy(node.parent);
-  const out: Record<string, string> = {};
-  for (const name of [...INHERITED, "text-anchor"]) {
-    const value = passed.get(name);
-    if (value !== undefined) out[name] = value;
-  }
-  return out;
-}
-
 /// Ciò che eredita un testo nuovo in un livello che non scrive niente.
 export function initialText(): Record<string, string> {
   const out: Record<string, string> = {};
@@ -1197,13 +1185,6 @@ function firstPart(from: ElementPart, graphic = false): Part | null {
 export function styleOf(model: DocumentModel, unit: Unit, leaf: LeafNode | null = null): Style | null {
   const [node] = nodesOf(model, [unit]);
   return styleFrom(model, node!, leaf ?? node!);
-}
-
-/// Lo stile del nodo `node` del disegno, un oggetto o una parte di un
-/// oggetto, come [`styleOf`]: anche bloccato o nascosto, che si legge
-/// senza cambiarlo.
-export function nodeStyle(model: DocumentModel, node: ElementPart): Style | null {
-  return styleFrom(model, node, node);
 }
 
 /// Lo stile della prima parte di `from`, con l'opacità, la fusione e gli

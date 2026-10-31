@@ -63,14 +63,9 @@
 //   non entra nel file. Con l'aggancio vanno sulla griglia le forme, gli
 //   spostamenti, le copie, le immagini incollate e il cursore. Ctrl o ⌘,
 //   tenuto durante un gesto del puntatore, lo sospende.
-// - **Righelli e guide.** Dal livello Standard i righelli stanno sui bordi
-//   del foglio, nell'unità del documento (`fub:units`), e segnano la pagina,
-//   la selezione e il puntatore (`rulers.ts`). Da un righello si tira una
-//   guida, che entra nel file (`fub:guides`): con lo strumento Selezione la
-//   si sposta, riportata su un righello se ne va, e ciò che si muove ci si
-//   aggancia. «Guide…» le scrive coi numeri (`guide-dialog.ts`). L'unità
-//   vale per i righelli, i campi, le misure e gli annunci; il disegno resta
-//   in unità della scena.
+// - **Unità.** L'unità del documento (`fub:units`) vale per i campi, le
+//   misure e gli annunci; il disegno resta in unità della scena. Le guide che
+//   un file porta (`fub:guides`) restano nel file e non si toccano.
 // - **Immagini incollate.** Un'immagine incollata o trascinata sul foglio
 //   entra nel file come data URI (`images.ts`): il disegno resta un file
 //   solo. Oltre il peso massimo l'editor propone di ridurla.
@@ -79,27 +74,17 @@
 //   l'editor: entra per riferimento, col percorso relativo al disegno, dove
 //   entrerebbe incollata. Il foglio la mostra con l'URL che chi monta
 //   l'editor apre (`images`).
-// - **Testo.** Dal livello Standard lo strumento Testo scrive dove si tocca,
-//   in un campo sopra il foglio, col carattere, il corpo, il colore e la
-//   trasformazione del testo, così ciò che si scrive sta dove resterà
-//   (`text.ts`). Lo stesso campo cambia un testo che c'è: col tocco dello
-//   strumento, col doppio tocco della selezione, o con F2. Il testo si scrive
-//   quando il campo si chiude, in un passo di annulla solo.
-// - **Nodi.** Dal livello Esperto lo strumento Nodi modifica un tracciato
-//   dell'oggetto scelto (`nodes.ts`): si trascinano un nodo coi suoi
-//   compagni scelti, una maniglia o un punto di un segmento, e un riquadro
-//   sceglie più nodi. Una barra in cima al foglio, al posto di quella della
-//   selezione, aggiunge, elimina, cambia tipo, spezza e unisce, coi tasti di
-//   Inkscape; Tab passa di nodo in nodo e le frecce spostano quelli scelti.
-//   Ogni modifica riscrive il `d` intero, in un passo di annulla.
+// - **Testo.** I testi che un file porta si vedono, si scelgono e si
+//   cambiano dal pannello delle proprietà; non si scrivono sul posto
+//   (decisione 0231). F2 rinomina l'oggetto scelto.
 // - **Collegamenti.** Dal livello Standard Ctrl+K collega gli oggetti scelti
 //   a una nota del vault, che sceglie chi monta l'editor, o porta a un'altra
 //   nota il collegamento scelto; Ctrl+Maiusc+K lo toglie (`arrange.ts`). A
 //   ogni livello un segno sull'angolo di ogni collegamento ne apre la nota,
 //   con lo strumento Selezione o quando il disegno non si scrive, e Alt+Invio
 //   apre quella del collegamento scelto.
-// - **Selezione avanzata.** Dal livello Standard il Lazo (`q`) sceglie ciò
-//   che racchiude per intero; Ctrl o ⌘ col clic sceglie dentro i gruppi, e
+// - **Selezione avanzata.** Dal livello Standard Ctrl o ⌘ col clic sceglie
+//   dentro i gruppi, e
 //   il doppio clic su un gruppo lo isola: il resto si attenua e non si
 //   sceglie, una barra in fondo al foglio dice dove si è ed Esc esce, un
 //   gruppo alla volta. Isolare non cambia il file. Un menu, anche col tasto
@@ -162,20 +147,17 @@ import { installStyling } from "./editor/styling";
 import { installControls } from "./editor/controls";
 import { installOperations } from "./editor/operations";
 import { installTooling } from "./editor/tooling";
-import { installGuideDrag } from "./editor/guide-drag";
-import { installPenSymmetry } from "./editor/pen-symmetry";
-import { installBoardTool } from "./editor/board-tool";
-import { installDropperTool } from "./editor/dropper-tool";
+import { installGestureBegin } from "./editor/gesture-begin";
+import { installSelectionGestures } from "./editor/selection-gestures";
+import { installBoardView } from "./editor/board-view";
 import { installNib } from "./editor/nib";
 import { installReplay, type ReplaySpeed } from "./editor/replay";
 import { installRuler } from "./editor/ruler-ink";
-import { installGradientTool } from "./editor/gradient-tool";
-import { installGradientGesture } from "./editor/gradient-gesture";
 import { installInkGestures } from "./editor/ink-gestures";
 import { installInserts } from "./editor/inserts";
-import { installShapesConnector } from "./editor/shapes-connector";
+import { installStrokeShapes } from "./editor/stroke-shapes";
 import { installCurvatureTool } from "./editor/curvature-tool";
-import { installTextTool } from "./editor/text-tool";
+import { installSheetCursor } from "./editor/sheet-cursor";
 import type { DrawCommand } from "./editor/chrome/commands";
 import { installCommands } from "./editor/chrome/commands";
 import { installNavigator } from "./editor/chrome/navigator";
@@ -184,13 +166,12 @@ import { installHandZoom } from "./editor/hand-zoom";
 import { installInput } from "./editor/input";
 import { installArranging } from "./editor/arranging";
 import { installSelectionCommands } from "./editor/selection-commands";
-import { installImageCommands } from "./editor/image-commands";
+import { installInkShape } from "./editor/ink-shape";
 import { installLayersGrid } from "./editor/layers-grid";
 import { installKeys } from "./editor/keys";
 import { installClipboardCommands } from "./editor/clipboard-commands";
 import { installVaultImages } from "./editor/vault-images";
 import { installLife } from "./editor/life";
-import { installTextProof, type DrawProof } from "./editor/text-proof";
 export { DRAW_SCALE_LIMITS } from "./editor/constants";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
@@ -315,9 +296,6 @@ export interface DrawEditorOptions {
   /// I caratteri del vault: chi li elenca e li legge. Senza, e nel foglio
   /// delle annotazioni, i testi scrivono con le sole famiglie di Fub.
   readonly vaultFonts?: VaultFontPort;
-  /// Il correttore per il testo che si scrive. Senza, il testo non si
-  /// controlla.
-  readonly proof?: DrawProof;
   /// Ciò che il disegno dice dei suoi caratteri è cambiato: quelli che non
   /// carica, e perché.
   onFontNotes?(notes: FontNotes): void;
@@ -485,38 +463,34 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   installControls(ctx);
   installOperations(ctx);
   installTooling(ctx);
-  installGuideDrag(ctx);
-  installPenSymmetry(ctx);
-  installBoardTool(ctx);
-  installDropperTool(ctx);
+  installGestureBegin(ctx);
+  installSelectionGestures(ctx);
+  installBoardView(ctx);
   installNib(ctx);
   installReplay(ctx);
   installRuler(ctx);
-  installGradientTool(ctx);
-  installGradientGesture(ctx);
   installInkGestures(ctx);
   installInserts(ctx);
-  installShapesConnector(ctx);
+  installStrokeShapes(ctx);
   installCurvatureTool(ctx);
-  installTextTool(ctx);
-  installTextProof(ctx);
+  installSheetCursor(ctx);
   installInput(ctx);
   installHandZoom(ctx);
   installNavigator(ctx);
   installWorkspace(ctx);
   installArranging(ctx);
   installSelectionCommands(ctx);
-  installImageCommands(ctx);
+  installInkShape(ctx);
   installLayersGrid(ctx);
   installKeys(ctx);
   installClipboardCommands(ctx);
   installVaultImages(ctx);
   installLife(ctx);
   const {
-    has, following, styles, style, history, root, surface, labelSurface, suggestions, panel, cursorMark, boardsNow, editable, newIds, showGrid,
-    showGuideLines, fit, selectedUnits, showHandles, closeDescriptions, showPanel, syncProperties, refresh, commit, undo, redo, deleteSelection, select,
-    reveal, adopt, setReadOnly, setLevel, setTool, setColor, setWidth, cancelGesture, setSymmetry, undoable, redoable,
-    finishText, visibleBoundsOf, closeCrop, dispose
+    has, following, style, history, root, surface, labelSurface, suggestions, panel, cursorMark, boardsNow, editable, newIds, showGrid,
+    fit, selectedUnits, showHandles, closeDescriptions, showPanel, syncProperties, refresh, commit, undo, redo, deleteSelection, select,
+    reveal, adopt, setReadOnly, setLevel, setTool, setColor, setWidth, cancelGesture, undoable, redoable,
+    visibleBoundsOf, dispose
   } = ctx;
   const stage: DrawStage = {
     get overlay() {
@@ -579,7 +553,6 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (ctx.grid.penId !== undefined && ctx.grid.penId !== "highlighter") ctx.penId = ctx.grid.penId;
       suggestions.relabel();
       showGrid();
-      showGuideLines();
       showHandles();
       panel.setClosed(ctx.grid.closed as readonly SectionId[]);
       // Nell'ispettore il pannello sta nella sua scheda: aperto o chiuso lo
@@ -606,7 +579,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       // Chi sposta o cancella guarda oggetti che il testo nuovo può non
       // avere più: il gesto si annulla. Tratto e forma si scrivono alla fine,
       // sul livello che c'è allora.
-      if (ctx.current !== null && (ctx.current.kind === "select" || ctx.current.kind === "erase" || ctx.current.kind === "board")) cancelGesture();
+      if (ctx.current !== null && (ctx.current.kind === "select" || ctx.current.kind === "erase")) cancelGesture();
       ctx.engine = following(next);
       refresh();
     },
@@ -614,12 +587,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (ctx.disposed) return;
       if (next.model === null) throw new Error("documento in sola lettura: non si monta nell'editor");
       cancelGesture();
-      // Il testo in corso era del documento di prima.
-      finishText(false);
       ctx.engine = following(next);
       ctx.loads++;
       closeDescriptions();
-      closeCrop();
       history.clear();
       ctx.selection = [];
       ctx.chosen = null;
@@ -627,14 +597,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       ctx.isolation = null;
       ctx.cursor = null;
       cursorMark.hidden = true;
-      // I campioni erano del documento di prima: il colore resta, da solo.
-      for (const each of Object.values(styles)) each.swatch = null;
       refresh();
       ctx.placed = false;
       fit();
-      // Il centro della simmetria era del disegno di prima: torna al suo
-      // posto in questo, inquadrato.
-      setSymmetry({ ...ctx.symmetry, center: null });
     },
     setReadOnly,
     reveal,

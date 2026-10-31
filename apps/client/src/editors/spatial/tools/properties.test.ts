@@ -22,11 +22,7 @@ import {
   type SectionId,
 } from "./properties";
 import { lengthUnits, PERCENT_UNITS } from "./quantity";
-import type { ConnectorPanelView } from "./connector-panel";
-import type { GradientPanelView } from "./gradient-panel";
-import type { HatchPanelView } from "./hatch-panel";
 import type { PaintSample } from "./resources";
-import type { ColorsView } from "./swatches-panel";
 import { TIP_SHAPES } from "./tips";
 
 let host: HTMLElement;
@@ -50,14 +46,6 @@ let state: {
   /// I campioni del documento e i colori recenti, se il pannello li sa.
   swatches: FieldSwatch[] | null;
   recent: string[] | null;
-  /// La sezione «Colori del documento», se c'è.
-  colors: ColorsView | null;
-  /// La sezione «Connettore», se c'è.
-  connector: ConnectorPanelView | null;
-  /// La sezione «Sfumatura», se c'è.
-  gradient: GradientPanelView | null;
-  /// La sezione «Campitura», se c'è.
-  hatch: HatchPanelView | null;
   dash: string | null;
   anchor: string | null;
   bold: boolean | null;
@@ -65,15 +53,9 @@ let state: {
   ratio: boolean;
   grid: boolean;
   desc: string;
-  /// Il nome di una tavola, che c'è se non è `null`.
-  name: string | null;
   actions: Partial<Record<string, ActionState>>;
   /// Le punte delle due estremità, se i campi a menu ci sono.
   tips: { start: TipLook; end: TipLook } | null;
-  /// La riga «Stile» dell'aspetto, se c'è.
-  styleMenu: MenuChoiceState | null;
-  /// Che il riempimento è diverso dallo stile, se lo è.
-  differs: string | null;
   only: FieldId[] | null;
 };
 
@@ -139,7 +121,6 @@ function view(): PropertiesView {
       value: state.fill,
       ...(state.sample === null ? {} : { sample: state.sample }),
       ...(state.contrast === null ? {} : { contrast: state.contrast }),
-      ...(state.differs === null ? {} : { differs: state.differs }),
     },
     dash: {
       kind: "choice",
@@ -175,8 +156,6 @@ function view(): PropertiesView {
     fields.tipStart = tipMenu("start", state.tips.start);
     fields.tipEnd = tipMenu("end", state.tips.end);
   }
-  if (state.styleMenu !== null) fields.lookStyle = state.styleMenu;
-  if (state.name !== null) fields.boardName = { kind: "line", label: "Nome", value: state.name, max: 20 };
   const shown = state.only === null ? fields : Object.fromEntries(state.only.map((id) => [id, fields[id]]));
   return {
     key: state.key,
@@ -186,10 +165,6 @@ function view(): PropertiesView {
     actions: state.actions,
     ...(state.swatches === null ? {} : { swatches: state.swatches }),
     ...(state.recent === null ? {} : { recent: state.recent }),
-    ...(state.colors === null ? {} : { colors: state.colors }),
-    ...(state.connector === null ? {} : { connector: state.connector }),
-    ...(state.gradient === null ? {} : { gradient: state.gradient }),
-    ...(state.hatch === null ? {} : { hatch: state.hatch }),
   };
 }
 
@@ -221,7 +196,6 @@ function change(id: FieldId, value: number | string | boolean): string | null {
   else if (id === "ratio") state.ratio = value as boolean;
   else if (id === "grid") state.grid = value as boolean;
   else if (id === "desc") state.desc = value as string;
-  else if (id === "boardName") state.name = value as string;
   else if ((id === "tipStart" || id === "tipEnd") && state.tips !== null) {
     const end = id === "tipStart" ? "start" : "end";
     const text = value as string;
@@ -239,27 +213,6 @@ function mount(): Properties {
     onAction: (id) => calls.push(`action ${id}`),
     onSection: (id, open) => calls.push(`section ${id} ${open ? "open" : "closed"}`),
     onExportSelection: () => calls.push("export selection"),
-    colors: {
-      onApply: (choice, target) => (calls.push(`apply ${choice.value} ${target ?? "drawing"}`), null),
-      onCreate: (name, color, link) => (calls.push(`create ${name} ${color} ${link}`), null),
-      onLink: (id) => (calls.push(`link ${id}`), null),
-      onRename: (id, name) => (calls.push(`rename ${id} ${name}`), null),
-      onRecolor: (id, color) => (calls.push(`recolor ${id} ${color}`), null),
-      onDelete: (id) => (calls.push(`delete ${id}`), null),
-      onSelect: (value) => (calls.push(`select ${value}`), null),
-    },
-    connector: {
-      onChange: (change, label) => (calls.push(`connector ${JSON.stringify(change)} ${label}`), refusal),
-    },
-    gradient: {
-      onChange: (target, change, label) => (calls.push(`gradient ${target} ${JSON.stringify(change)} ${label}`), null),
-      onPreview: (target, change) => calls.push(`preview ${target} ${JSON.stringify(change)}`),
-      onStop: (index) => calls.push(`stop ${index}`),
-    },
-    hatch: {
-      onChange: (change, label) => (calls.push(`hatch ${JSON.stringify(change)} ${label}`), null),
-    },
-    onTarget: (target) => calls.push(`target ${target}`),
     announce: (text) => announced.push(text),
     onLeave: () => calls.push("leave"),
   });
@@ -308,10 +261,6 @@ beforeEach(() => {
     contrast: null,
     swatches: null,
     recent: null,
-    colors: null,
-    connector: null,
-    gradient: null,
-    hatch: null,
     dash: "solid",
     anchor: "start",
     bold: null,
@@ -319,11 +268,8 @@ beforeEach(() => {
     ratio: false,
     grid: false,
     desc: "",
-    name: null,
     actions: {},
     tips: null,
-    styleMenu: null,
-    differs: null,
     only: null,
   };
 });
@@ -732,483 +678,6 @@ describe("il contrasto con la carta", () => {
     expect(line().hidden).toBe(true);
   });
 });
-
-describe("la sezione «Colori del documento»", () => {
-  const COLORS: ColorsView = {
-    swatches: [{ id: "ra", name: "Blu marca", color: "#0072b2", uses: 3 }],
-    used: [{ color: "#000000", uses: 2 }],
-    hidden: 0,
-    recent: [],
-    targets: ["fill"],
-    current: { fill: "#0072b2" },
-    drawing: "#000000",
-    drawingSwatch: null,
-  };
-
-  it("c'è quando il livello la offre, in fondo, e i suoi gesti vanno all'editor", () => {
-    mount();
-    expect(section("colors").hidden).toBe(true);
-    state.colors = COLORS;
-    panel.update(view());
-    const visible = [...host.querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
-    expect(visible).toEqual(["place", "look", "fill", "stroke", "text", "document", "view", "colors"]);
-    expect(toggle("colors").textContent).toBe("Colori del documento");
-    expect(section("colors").querySelector(".draw-swatches")).not.toBeNull();
-    section("colors").querySelector<HTMLButtonElement>('.draw-swatches-chip[data-key="ra"]')!.click();
-    expect(calls).toEqual(["apply url(#ra) #0072b2 fill"]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("si chiude come le altre, e lo dice all'editor", () => {
-    state.colors = COLORS;
-    mount();
-    toggle("colors").click();
-    expect(calls).toEqual(["section colors closed"]);
-    expect(section("colors").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(true);
-  });
-});
-
-describe("la sezione «Sfumatura»", () => {
-  const STOPS = [
-    { offset: 0, color: "#0072b2", opacity: 1 },
-    { offset: 1, color: "#ffffff", opacity: 1 },
-  ];
-  const GRADIENT: GradientPanelView = {
-    key: "oaaaaaaaa",
-    channels: {
-      fill: { count: 1, gradients: 1, kind: "linear", based: false, look: { kind: "linear", stops: STOPS, spread: "pad" }, angle: 0 },
-      stroke: { count: 1, gradients: 0, kind: "color", based: true, look: null, angle: null },
-    },
-    stop: null,
-    expert: false,
-    swatches: [],
-  };
-  const COLORS: ColorsView = {
-    swatches: [],
-    used: [{ color: "#000000", uses: 2 }],
-    hidden: 0,
-    recent: [],
-    targets: ["fill", "stroke"],
-    current: { fill: "url(#ra)", stroke: "#000000" },
-    drawing: "#000000",
-    drawingSwatch: null,
-  };
-  const pressedTarget = (id: SectionId): string | undefined =>
-    section(id).querySelector<HTMLButtonElement>('[data-target][aria-pressed="true"]')?.dataset.target;
-
-  it("c'è quando l'editor la dà, dopo il riempimento, e i suoi gesti vanno all'editor", () => {
-    mount();
-    expect(section("gradient").hidden).toBe(true);
-    state.gradient = GRADIENT;
-    panel.update(view());
-    const visible = [...host.querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
-    expect(visible).toEqual(["place", "look", "fill", "gradient", "stroke", "text", "document", "view"]);
-    expect(toggle("gradient").textContent).toBe("Sfumatura");
-    section("gradient").querySelector<HTMLButtonElement>('[data-kind="radial"]')!.click();
-    expect(calls).toEqual(['gradient fill {"kind":"radial"} draw.action.gradient_kind', "stop 0"]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("«Applica a» è lo stesso nei colori del documento e nella sfumatura, e lo sa l'editor", () => {
-    state.gradient = GRADIENT;
-    state.colors = COLORS;
-    mount();
-    expect([pressedTarget("gradient"), pressedTarget("colors")]).toEqual(["fill", "fill"]);
-    section("gradient").querySelector<HTMLButtonElement>('[data-target="stroke"]')!.click();
-    expect([pressedTarget("gradient"), pressedTarget("colors")]).toEqual(["stroke", "stroke"]);
-    expect(panel.colorTarget()).toBe("stroke");
-    section("colors").querySelector<HTMLButtonElement>('[data-target="fill"]')!.click();
-    expect([pressedTarget("gradient"), pressedTarget("colors")]).toEqual(["fill", "fill"]);
-    expect(calls).toEqual(["target stroke", "target fill"]);
-  });
-
-  it("il fuoco va al colore del punto scelto, se la sezione ne mostra, anche chiusa", () => {
-    closed = ["gradient"];
-    mount();
-    expect(panel.focusGradientColor()).toBe(false);
-    state.gradient = { ...GRADIENT, channels: { stroke: GRADIENT.channels.stroke! } };
-    panel.update(view());
-    expect(panel.focusGradientColor()).toBe(false);
-    expect(calls).toEqual([]);
-    state.gradient = { ...GRADIENT, stop: 1 };
-    panel.update(view());
-    expect(panel.focusGradientColor()).toBe(true);
-    const input = document.activeElement as HTMLInputElement;
-    expect(input.closest(".draw-properties-field")?.querySelector("label")?.textContent).toBe("Colore");
-    expect(input.value).toBe("#ffffff");
-    expect([input.selectionStart, input.selectionEnd]).toEqual([0, 7]);
-    expect(section("gradient").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(false);
-    expect(calls).toEqual(["section gradient open"]);
-  });
-});
-
-describe("la sezione «Campitura»", () => {
-  const HATCH: HatchPanelView = {
-    key: "oaaaaaaaa",
-    hatch: { count: 1, hatched: 1, choice: "diagonal", kind: "lines", angle: 45, spacing: 8, width: 1, color: "#0072b2", background: "none" },
-    unit: "pt",
-    swatches: [],
-    motifs: [],
-  };
-  const GRADIENT: GradientPanelView = {
-    key: "oaaaaaaaa",
-    channels: { fill: { count: 1, gradients: 0, kind: "color", based: true, look: null, angle: null } },
-    stop: null,
-    expert: false,
-    swatches: [],
-  };
-  const COLORS: ColorsView = {
-    swatches: [],
-    used: [{ color: "#000000", uses: 2 }],
-    hidden: 0,
-    recent: [],
-    targets: ["fill", "stroke"],
-    current: { fill: "#0072b2", stroke: "#000000" },
-    drawing: "#000000",
-    drawingSwatch: null,
-  };
-  const visibleSections = (): Array<string | undefined> =>
-    [...host.querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
-  const menuItems = (): HTMLButtonElement[] => [...document.querySelectorAll<HTMLButtonElement>('#context-menu [role^="menuitem"]')];
-  const menuButton = (): HTMLButtonElement => section("hatch").querySelector<HTMLButtonElement>(".draw-properties-menu")!;
-
-  afterEach(() => closeContextMenu());
-
-  it("non c'è senza la campitura nella vista, e sta dopo la sfumatura e prima del contorno", () => {
-    state.gradient = GRADIENT;
-    state.colors = COLORS;
-    mount();
-    expect(section("hatch").hidden).toBe(true);
-    expect(visibleSections()).toEqual(["place", "look", "fill", "gradient", "stroke", "text", "document", "view", "colors"]);
-    state.hatch = HATCH;
-    panel.update(view());
-    expect(visibleSections()).toEqual(["place", "look", "fill", "gradient", "hatch", "stroke", "text", "document", "view", "colors"]);
-    expect(toggle("hatch").textContent).toBe("Campitura");
-    state.hatch = null;
-    panel.update(view());
-    expect(section("hatch").hidden).toBe(true);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("c'è anche senza la sfumatura, perché ha la sua parte del livello", () => {
-    state.hatch = HATCH;
-    mount();
-    expect(visibleSections()).toEqual(["place", "look", "fill", "hatch", "stroke", "text", "document", "view"]);
-  });
-
-  it("mostra il menu del tipo e i campi, e un gesto va all'editor col nome del suo passo", () => {
-    state.hatch = HATCH;
-    mount();
-    expect(menuButton().textContent).toBe("Diagonale");
-    expect(menuButton().getAttribute("aria-label")).toBe("Tipo: Diagonale");
-    const shown = [...section("hatch").querySelectorAll<HTMLElement>('.draw-properties-field[data-field^="hatch-"]')].filter((each) => each.closest("[hidden]") === null);
-    expect(shown.map((each) => each.dataset.field)).toEqual(["hatch-kind", "hatch-color", "hatch-background", "hatch-spacing", "hatch-width", "hatch-angle"]);
-    menuButton().click();
-    expect(menuItems().map((each) => each.querySelector(".menu-label")!.textContent)).toEqual(["Nessuna", "Diagonale", "Incrociata", "Orizzontale", "Puntinata", "Quadrettata"]);
-    menuItems()[3]!.click();
-    expect(calls).toEqual(['hatch {"preset":"horizontal"} draw.action.hatch']);
-  });
-
-  it("si chiude come le altre, e lo dice all'editor", () => {
-    state.hatch = HATCH;
-    mount();
-    toggle("hatch").click();
-    expect(calls).toEqual(["section hatch closed"]);
-    expect(section("hatch").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(true);
-    toggle("hatch").click();
-    expect(calls).toEqual(["section hatch closed", "section hatch open"]);
-    expect(section("hatch").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(false);
-  });
-
-  it("se il fuoco è in un campo che sparisce, va all'intestazione della sezione", () => {
-    state.hatch = HATCH;
-    mount();
-    const color = section("hatch").querySelector<HTMLInputElement>('[data-field="hatch-color"] input[type="text"]')!;
-    color.focus();
-    state.hatch = { ...HATCH, hatch: { ...HATCH.hatch, choice: "none", hatched: 0, kind: null, angle: null, spacing: null, width: null, color: null, background: null } };
-    panel.update(view());
-    expect(document.activeElement).toBe(toggle("hatch"));
-  });
-
-  it("in sola lettura si guarda e niente cambia", () => {
-    state.hatch = HATCH;
-    state.editable = false;
-    mount();
-    expect(menuButton().getAttribute("aria-disabled")).toBe("true");
-    menuButton().click();
-    expect(menuButton().getAttribute("aria-expanded")).toBe("false");
-    expect(announced).toEqual(["Modifica non applicata: il disegno è in sola lettura."]);
-    expect(calls).toEqual([]);
-  });
-});
-
-describe("la sezione «Connettore»", () => {
-  const CONNECTOR: ConnectorPanelView = { key: "oaaaaaaaa", count: 1, kind: "elbow", from: "right", to: "auto", label: "Costa", locked: 0 };
-  const GRADIENT: GradientPanelView = {
-    key: "oaaaaaaaa",
-    channels: { fill: { count: 1, gradients: 0, kind: "color", based: true, look: null, angle: null } },
-    stop: null,
-    expert: false,
-    swatches: [],
-  };
-  const visibleSections = (): Array<string | undefined> =>
-    [...host.querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
-  const radios = (): HTMLButtonElement[] => [...section("connector").querySelectorAll<HTMLButtonElement>('[role="radio"]')];
-  const menu = (end: "from" | "to"): HTMLSelectElement => field(`connector-${end}`).querySelector("select")!;
-  const label = (): HTMLTextAreaElement => field("connector-label").querySelector("textarea")!;
-  const invert = (): HTMLButtonElement => section("connector").querySelector<HTMLButtonElement>('[data-field="connector-invert"]')!;
-  const optionTexts = (select: HTMLSelectElement): string[] => [...select.options].map((each) => each.textContent!);
-
-  it("non c'è senza il connettore nella vista, e sta dopo il testo", () => {
-    state.gradient = GRADIENT;
-    mount();
-    expect(section("connector").hidden).toBe(true);
-    expect(visibleSections()).toEqual(["place", "look", "fill", "gradient", "stroke", "text", "document", "view"]);
-    state.connector = CONNECTOR;
-    panel.update(view());
-    expect(visibleSections()).toEqual(["place", "look", "fill", "gradient", "stroke", "text", "connector", "document", "view"]);
-    expect(toggle("connector").textContent).toBe("Connettore");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    state.connector = null;
-    panel.update(view());
-    expect(section("connector").hidden).toBe(true);
-  });
-
-  it("il tipo è un gruppo di tre scelte, con quella di adesso segnata", () => {
-    state.connector = CONNECTOR;
-    mount();
-    const group = section("connector").querySelector<HTMLElement>('[role="radiogroup"]')!;
-    expect(document.getElementById(group.getAttribute("aria-labelledby")!)!.textContent).toBe("Tipo");
-    expect(radios().map((each) => each.getAttribute("aria-label"))).toEqual(["Dritto", "A gomito", "Curvo"]);
-    expect(radios().map((each) => each.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
-    expect(radios().map((each) => each.tabIndex)).toEqual([-1, 0, -1]);
-    expect(radios().every((each) => each.querySelector("svg") !== null)).toBe(true);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("scegliere un tipo lo manda all'editor col nome del suo passo; il tipo di adesso, no", () => {
-    state.connector = CONNECTOR;
-    mount();
-    radios()[2]!.click();
-    expect(calls).toEqual(['connector {"kind":"curved"} draw.action.connector_kind']);
-    radios()[1]!.click();
-    expect(calls).toHaveLength(1);
-  });
-
-  it("le frecce spostano la scelta e la danno; Inizio e Fine vanno ai capi del gruppo", () => {
-    state.connector = { ...CONNECTOR, kind: "straight" };
-    mount();
-    radios()[0]!.focus();
-    expect(press(radios()[0]!, "ArrowRight").defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(radios()[1]);
-    expect(calls).toEqual(['connector {"kind":"elbow"} draw.action.connector_kind']);
-    expect(radios().map((each) => each.tabIndex)).toEqual([-1, 0, -1]);
-    press(radios()[1]!, "ArrowLeft");
-    expect(document.activeElement).toBe(radios()[0]);
-    press(radios()[0]!, "ArrowLeft");
-    expect(document.activeElement).toBe(radios()[2]);
-    expect(calls[calls.length - 1]).toBe('connector {"kind":"curved"} draw.action.connector_kind');
-    press(radios()[2]!, "Home");
-    expect(document.activeElement).toBe(radios()[0]);
-    press(radios()[0]!, "End");
-    expect(document.activeElement).toBe(radios()[2]);
-  });
-
-  it("con tipi diversi nessuno è scelto, e il Tab arriva al primo", () => {
-    state.connector = { ...CONNECTOR, kind: null };
-    mount();
-    expect(radios().map((each) => each.getAttribute("aria-checked"))).toEqual(["false", "false", "false"]);
-    expect(radios().map((each) => each.tabIndex)).toEqual([0, -1, -1]);
-    radios()[1]!.click();
-    expect(calls).toEqual(['connector {"kind":"elbow"} draw.action.connector_kind']);
-  });
-
-  it("gli agganci sono due menu coi sei punti, e scegliere un punto lo manda all'editor", () => {
-    state.connector = CONNECTOR;
-    mount();
-    expect(field("connector-from").querySelector("label")!.textContent).toBe("Aggancio d’inizio");
-    expect(field("connector-to").querySelector("label")!.textContent).toBe("Aggancio di fine");
-    expect(optionTexts(menu("from"))).toEqual(["Automatico", "Al centro", "In alto", "A destra", "In basso", "A sinistra"]);
-    expect(menu("from").value).toBe("right");
-    expect(menu("to").value).toBe("auto");
-    expect(menu("from").disabled).toBe(false);
-    menu("to").value = "bottom";
-    menu("to").dispatchEvent(new Event("change", { bubbles: true }));
-    expect(calls).toEqual(['connector {"end":"to","anchor":"bottom"} draw.action.connector_anchor']);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("un capo libero ha il menu spento che dice «Libero», e la nota di come si aggancia", () => {
-    state.connector = { ...CONNECTOR, to: "free" };
-    mount();
-    expect(menu("to").disabled).toBe(true);
-    expect(optionTexts(menu("to"))).toEqual(["Libero"]);
-    expect(menu("to").value).toBe("free");
-    const note = section("connector").querySelector<HTMLElement>(".draw-connector > .draw-properties-note:not([hidden])")!;
-    expect(note.textContent).toBe("Per agganciarlo, trascina il capo su un oggetto con lo strumento Connettore.");
-    expect(menu("to").getAttribute("aria-describedby")).toBe(note.id);
-    expect(menu("from").hasAttribute("aria-describedby")).toBe(false);
-    expect(menu("from").disabled).toBe(false);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    state.connector = CONNECTOR;
-    panel.update(view());
-    expect(menu("to").disabled).toBe(false);
-    expect(optionTexts(menu("to"))).toHaveLength(6);
-    expect(section("connector").querySelector(".draw-connector > .draw-properties-note:not([hidden])")).toBeNull();
-  });
-
-  it("con agganci diversi il menu dice «Misto» in una voce scelta e spenta", () => {
-    state.connector = { ...CONNECTOR, from: null };
-    mount();
-    expect(optionTexts(menu("from"))).toEqual(["Misto", "Automatico", "Al centro", "In alto", "A destra", "In basso", "A sinistra"]);
-    expect(menu("from").value).toBe("mixed");
-    expect(menu("from").selectedOptions[0]!.disabled).toBe(true);
-    expect(menu("from").disabled).toBe(false);
-    menu("from").value = "left";
-    menu("from").dispatchEvent(new Event("change", { bubbles: true }));
-    expect(calls).toEqual(['connector {"end":"from","anchor":"left"} draw.action.connector_anchor']);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("l'etichetta si scrive con Invio e con l'uscita dal campo", () => {
-    state.connector = CONNECTOR;
-    mount();
-    expect(label().value).toBe("Costa");
-    expect(label().labels![0]!.textContent).toBe("Etichetta");
-    write(label(), "Nuova");
-    expect(press(label(), "Enter").defaultPrevented).toBe(true);
-    expect(calls).toEqual(['connector {"label":"Nuova"} draw.action.connector_label']);
-    write(label(), "Altra");
-    label().blur();
-    expect(calls).toHaveLength(2);
-    expect(calls[1]).toBe('connector {"label":"Altra"} draw.action.connector_label');
-  });
-
-  it("Maiusc e Invio va a capo senza scrivere, e Invio manda tutte le righe", () => {
-    state.connector = CONNECTOR;
-    mount();
-    write(label(), "Prima\nSeconda");
-    expect(press(label(), "Enter", { shiftKey: true }).defaultPrevented).toBe(false);
-    expect(calls).toEqual([]);
-    press(label(), "Enter");
-    expect(calls).toEqual(['connector {"label":"Prima\\nSeconda"} draw.action.connector_label']);
-  });
-
-  it("Esc riporta il testo com'era; senza niente da annullare torna al foglio", () => {
-    state.connector = CONNECTOR;
-    mount();
-    write(label(), "A metà");
-    expect(press(label(), "Escape").defaultPrevented).toBe(true);
-    expect(label().value).toBe("Costa");
-    expect(calls).toEqual([]);
-    press(label(), "Escape");
-    expect(calls).toEqual(["leave"]);
-  });
-
-  it("vuoto manda un testo vuoto, che toglie le etichette", () => {
-    state.connector = CONNECTOR;
-    mount();
-    write(label(), "");
-    press(label(), "Enter");
-    expect(calls).toEqual(['connector {"label":""} draw.action.connector_label']);
-  });
-
-  it("uno stesso testo non parte, e un'etichetta mista è un campo vuoto che dice «Misto»", () => {
-    state.connector = { ...CONNECTOR, label: null };
-    mount();
-    expect(label().value).toBe("");
-    expect(label().placeholder).toBe("Misto");
-    press(label(), "Enter");
-    label().focus();
-    label().blur();
-    expect(calls).toEqual([]);
-    write(label(), "Tutte");
-    press(label(), "Enter");
-    expect(calls).toEqual(['connector {"label":"Tutte"} draw.action.connector_label']);
-  });
-
-  it("un testo che il disegno non accetta resta scritto e segnato", () => {
-    state.connector = CONNECTOR;
-    refusal = "Modifica non applicata: no.";
-    mount();
-    write(label(), "Rifiutata");
-    press(label(), "Enter");
-    expect(label().value).toBe("Rifiutata");
-    expect(label().getAttribute("aria-invalid")).toBe("true");
-    expect(field("connector-label").querySelector<HTMLElement>(".draw-properties-error")!.textContent).toBe("Modifica non applicata: no.");
-    expect(announced).toEqual(["Modifica non applicata: no."]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("il testo scritto a metà resta finché la selezione è la stessa, e cade con un'altra", () => {
-    state.connector = CONNECTOR;
-    mount();
-    write(label(), "A metà");
-    panel.update(view());
-    expect(label().value).toBe("A metà");
-    state.key = "obbbbbbbb";
-    state.connector = { ...CONNECTOR, key: "obbbbbbbb", label: "Un altro" };
-    panel.update(view());
-    expect(label().value).toBe("Un altro");
-  });
-
-  it("«Inverti» manda il cambio all'editor, e dice che cosa scambia", () => {
-    state.connector = CONNECTOR;
-    mount();
-    expect(invert().textContent).toBe("Inverti");
-    expect(invert().title).toBe("Scambia l’inizio e la fine: la punta passa all’altro capo.");
-    invert().click();
-    expect(calls).toEqual(['connector {"invert":true} draw.action.connector_invert']);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("dice quanti connettori sono bloccati, e se lo sono tutti i comandi sono spenti", () => {
-    state.connector = { ...CONNECTOR, count: 3, locked: 1 };
-    mount();
-    const note = section("connector").querySelector<HTMLElement>(".draw-connector > .draw-properties-note:not([hidden])")!;
-    expect(note.textContent).toBe("1 connettore è bloccato: non cambia.");
-    expect(radios()[0]!.hasAttribute("aria-disabled")).toBe(false);
-    state.connector = { ...CONNECTOR, count: 2, locked: 2 };
-    panel.update(view());
-    expect(note.textContent).toBe("2 connettori sono bloccati: non cambiano.");
-    expect(radios().every((each) => each.getAttribute("aria-disabled") === "true")).toBe(true);
-    expect(menu("from").disabled).toBe(true);
-    expect(label().readOnly).toBe(true);
-    expect(invert().getAttribute("aria-disabled")).toBe("true");
-    radios()[0]!.click();
-    invert().click();
-    expect(calls).toEqual([]);
-    expect(announced).toEqual(["2 connettori sono bloccati: non cambiano.", "2 connettori sono bloccati: non cambiano."]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("in sola lettura si guarda e niente cambia", () => {
-    state.connector = CONNECTOR;
-    state.editable = false;
-    mount();
-    expect(radios().every((each) => each.getAttribute("aria-disabled") === "true")).toBe(true);
-    expect(menu("from").disabled).toBe(true);
-    expect(menu("to").disabled).toBe(true);
-    expect(label().readOnly).toBe(true);
-    expect(invert().getAttribute("aria-disabled")).toBe("true");
-    radios()[0]!.click();
-    expect(announced).toEqual(["Modifica non applicata: il disegno è in sola lettura."]);
-    invert().click();
-    write(label(), "Niente");
-    press(label(), "Enter");
-    expect(calls).toEqual([]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("si chiude come le altre, e lo dice all'editor", () => {
-    state.connector = CONNECTOR;
-    mount();
-    toggle("connector").click();
-    expect(calls).toEqual(["section connector closed"]);
-    expect(section("connector").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(true);
-  });
-});
-
 describe("le scelte e i pulsanti", () => {
   it("una scelta parte quando si fa", () => {
     mount();
@@ -1543,144 +1012,6 @@ describe("un campo a menu", () => {
   });
 });
 
-describe("la riga «Stile»", () => {
-  const button = (): HTMLButtonElement => field("lookStyle").querySelector<HTMLButtonElement>(".draw-properties-menu")!;
-  const items = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>("#context-menu [role^='menuitem']")];
-  const item = (label: string): HTMLElement => items().find((each) => each.querySelector(".menu-label")!.textContent === label)!;
-  const form = (): HTMLElement => field("lookStyle").querySelector<HTMLElement>(".draw-properties-ask")!;
-  const nameInput = (): HTMLInputElement => form().querySelector<HTMLInputElement>("input")!;
-  const formButtons = (): HTMLButtonElement[] => [...form().querySelectorAll<HTMLButtonElement>(".draw-swatches-form-actions button")];
-  const RIQUADRO = { text: "", css: { background: "rgb(230 159 0)", "border-style": "dashed" } };
-
-  beforeEach(() => {
-    state.styleMenu = {
-      kind: "menu",
-      label: "Stile grafico",
-      value: "style:rbox00000",
-      summary: "Riquadro, modificato",
-      note: "Diverso dallo stile: riempimento.",
-      options: [
-        { value: "style:rbox00000", label: "Riquadro", checked: true, sample: RIQUADRO, note: "Lo seguono 2 oggetti" },
-        { value: "style:rnota0000", label: "Nota", sample: { text: "", css: { background: "rgb(0 114 178)" } }, note: "Nessun oggetto lo segue" },
-        { value: "new", label: "Nuovo stile dalla selezione…", action: true, separator: true, ask: { title: "Nuovo stile grafico", value: "Stile grafico 1", submit: "Crea" } },
-        { value: "update", label: "Aggiorna lo stile dalla selezione", action: true, disabled: true, note: "Lo stile è già come la selezione." },
-        { value: "revert", label: "Torna allo stile", action: true },
-        { value: "delete", label: "Elimina lo stile", action: true, danger: true },
-      ],
-    };
-    state.differs = "Diverso dallo stile «Riquadro»";
-  });
-
-  afterEach(() => closeContextMenu());
-
-  it("sta in testa all'aspetto, dice lo stile con la sua anteprima e la nota delle differenze", () => {
-    mount();
-    const order = [...section("look").querySelectorAll<HTMLElement>(".draw-properties-field")].map((each) => each.dataset.field);
-    expect(order[0]).toBe("lookStyle");
-    expect(button().querySelector(".draw-properties-menu-text")!.textContent).toBe("Riquadro, modificato");
-    expect(button().getAttribute("aria-label")).toBe("Stile grafico: Riquadro, modificato");
-    const sample = button().querySelector<HTMLElement>(".draw-properties-menu-picture .menu-sample")!;
-    expect(sample.classList.contains("menu-sample-box")).toBe(true);
-    expect(sample.style.borderStyle).toBe("dashed");
-    const note = field("lookStyle").querySelector<HTMLElement>(".draw-properties-note")!;
-    expect(note.textContent).toBe("Diverso dallo stile: riempimento.");
-    expect(button().getAttribute("aria-describedby")).toBe(note.id);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("segna il campo diverso dallo stile con un punto, e lo dice a chi ascolta", () => {
-    mount();
-    expect(field("fill").hasAttribute("data-differs")).toBe(true);
-    const said = field("fill").querySelector<HTMLElement>(".sr-only[id^='draw-properties-differs']")!;
-    expect(said.hidden).toBe(false);
-    expect(said.textContent).toBe("Diverso dallo stile «Riquadro»");
-    expect(input("fill").getAttribute("aria-describedby")!.split(" ")).toContain(said.id);
-    expect(field("opacity").hasAttribute("data-differs")).toBe(false);
-    state.differs = null;
-    panel.update(view());
-    expect(field("fill").hasAttribute("data-differs")).toBe(false);
-    expect(said.hidden).toBe(true);
-    expect(input("fill").hasAttribute("aria-describedby")).toBe(false);
-  });
-
-  it("nel menu ogni stile ha la sua anteprima e una riga; i comandi spenti dicono perché, ed eliminare si distingue", () => {
-    mount();
-    button().click();
-    const box = item("Riquadro");
-    expect(box.getAttribute("role")).toBe("menuitemradio");
-    expect(box.getAttribute("aria-checked")).toBe("true");
-    expect(box.querySelector(".menu-icon .menu-sample")).not.toBeNull();
-    expect(box.querySelector(".menu-description")!.textContent).toBe("Lo seguono 2 oggetti");
-    const update = item("Aggiorna lo stile dalla selezione");
-    expect(update.getAttribute("aria-disabled")).toBe("true");
-    expect(update.querySelector(".menu-description")!.textContent).toBe("Lo stile è già come la selezione.");
-    expect(item("Elimina lo stile").classList.contains("danger")).toBe(true);
-    // I comandi tengono il posto della figura, perché i nomi stiano allineati.
-    expect(item("Torna allo stile").querySelector(".menu-icon")!.childElementCount).toBe(0);
-    item("Nota").click();
-    expect(calls).toEqual(["lookStyle=style:rnota0000"]);
-    button().click();
-    item("Torna allo stile").click();
-    expect(calls).toEqual(["lookStyle=style:rnota0000", "lookStyle=revert"]);
-  });
-
-  it("una voce che chiede un nome apre un modulo sotto il campo, col nome proposto scelto; Esc lo chiude", () => {
-    mount();
-    button().click();
-    item("Nuovo stile dalla selezione…").click();
-    expect(calls).toEqual([]);
-    expect(form().hidden).toBe(false);
-    expect(form().getAttribute("role")).toBe("group");
-    expect(document.getElementById(form().getAttribute("aria-labelledby")!)!.textContent).toBe("Nuovo stile grafico");
-    expect(document.activeElement).toBe(nameInput());
-    expect(nameInput().value).toBe("Stile grafico 1");
-    expect([nameInput().selectionStart, nameInput().selectionEnd]).toEqual([0, "Stile grafico 1".length]);
-    expect(formButtons().map((each) => each.textContent)).toEqual(["Crea", "Annulla"]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    const escape = press(nameInput(), "Escape");
-    expect(escape.defaultPrevented).toBe(true);
-    expect(form().hidden).toBe(true);
-    expect(document.activeElement).toBe(button());
-    expect(calls).toEqual([]);
-  });
-
-  it("Invio manda il nome pulito con la sua voce; se il disegno non lo accetta il modulo resta e dice perché", () => {
-    mount();
-    button().click();
-    item("Nuovo stile dalla selezione…").click();
-    refusal = "C’è già uno stile «Riquadro» di questo tipo: scegline un altro.";
-    write(nameInput(), "  Riquadro  ");
-    press(nameInput(), "Enter");
-    expect(calls).toEqual(["lookStyle=new:Riquadro"]);
-    expect(form().hidden).toBe(false);
-    const problem = form().querySelector<HTMLElement>(".draw-properties-error")!;
-    expect(problem.hidden).toBe(false);
-    expect(problem.textContent).toBe(refusal);
-    expect(nameInput().getAttribute("aria-invalid")).toBe("true");
-    expect(nameInput().getAttribute("aria-describedby")).toBe(problem.id);
-    expect(announced).toEqual([refusal]);
-    // Scrivere toglie l'errore; «Crea» manda di nuovo, e il fuoco torna al pulsante.
-    refusal = null;
-    write(nameInput(), "Riquadro grande");
-    expect(problem.hidden).toBe(true);
-    formButtons()[0]!.click();
-    expect(calls).toEqual(["lookStyle=new:Riquadro", "lookStyle=new:Riquadro grande"]);
-    expect(form().hidden).toBe(true);
-    expect(document.activeElement).toBe(button());
-  });
-
-  it("il modulo si chiude se la sua voce non si sceglie più, come in un documento che si legge soltanto", () => {
-    mount();
-    button().click();
-    item("Nuovo stile dalla selezione…").click();
-    state.editable = false;
-    panel.update(view());
-    expect(form().hidden).toBe(true);
-    expect(document.activeElement).toBe(button());
-    expect(calls).toEqual([]);
-  });
-});
-
 describe("«Esporta la selezione»", () => {
   it("c'è se la vista lo dice, dopo le sezioni dell'oggetto, e apre la finestra sulla selezione", () => {
     mount();
@@ -1739,34 +1070,6 @@ describe("le sezioni", () => {
     expect(formatIssues(checkAccessibility(host))).toBe("");
   });
 });
-
-describe("il testo di una riga", () => {
-  it("parte con Invio o lasciandolo, torna com'era con Esc, e non passa la sua misura", () => {
-    state.name = "Copertina";
-    mount();
-    expect(section("board").hidden).toBe(false);
-    const name = input("boardName");
-    expect([name.tagName, name.type, name.value, name.maxLength]).toEqual(["INPUT", "text", "Copertina", 20]);
-    write(name, "Retro");
-    expect(press(name, "Enter").defaultPrevented).toBe(true);
-    expect(calls).toEqual(["boardName=Retro"]);
-    write(name, "Fronte");
-    press(name, "Escape");
-    expect(name.value).toBe("Retro");
-    write(name, "Fronte");
-    name.blur();
-    expect(calls).toEqual(["boardName=Retro", "boardName=Fronte"]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("in un documento che si legge soltanto non si scrive", () => {
-    state.name = "Copertina";
-    state.editable = false;
-    mount();
-    expect(input("boardName").readOnly).toBe(true);
-  });
-});
-
 describe("il testo di più righe", () => {
   it("va a capo con Invio, e parte con Ctrl e Invio o lasciandolo", () => {
     mount();

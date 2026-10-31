@@ -46,7 +46,7 @@ const TAP_SLOP_PX = 12;
 /// Gli strumenti che il menu radiale offre quando chi disegna ne ha usati
 /// meno di tre: prima quelli che si alternano di più alla penna.
 const FILL_TOOLS: readonly ToolId[] = [
-  "pen", "eraser", "select", "highlighter", "lasso", "text", "rect", "ellipse", "line", "arrow", "polygon",
+  "pen", "eraser", "select", "highlighter", "rect", "ellipse", "line", "arrow",
 ];
 
 /// Ciò che la navigazione, il menu radiale e la tastiera dà agli altri pezzi dell'editor.
@@ -78,7 +78,7 @@ export interface InputContext {
 /// Monta la navigazione, il menu radiale e la tastiera.
 export function installInput(ctx: EditorContext): void {
   const {
-    life, has, measureText, style, history, toolbar, surface, suggestions, titleInput, arrangeBar, textLayer, editable, grownPage,
+    life, has, measureText, style, history, toolbar, surface, suggestions, titleInput, arrangeBar, editable, grownPage,
     newIds, announce, setCamera, stepNow, lengthSpoken, localPoint, viewCenter, announceTurn, selectedUnits, inOrder, showHandles, currentTitle,
     syncControls, commit, undo, redo, moveSelection, setColor, pickTool, cancelGesture, pen
   } = ctx;
@@ -364,7 +364,6 @@ export function installInput(ctx: EditorContext): void {
   };
   life.add(() => clearTimeout(zoomTimer));
   life.listen(surface, "wheel", onWheel, { passive: false });
-  life.listen(textLayer, "wheel", onWheel, { passive: false });
 
   // --- Tastiera --------------------------------------------------------------
 
@@ -425,7 +424,6 @@ export function installInput(ctx: EditorContext): void {
   life.listen(titleInput, "change", () => {
     const value = titleInput.value.trim();
     if (value === currentTitle()) return;
-    ctx.settleCrop();
     commit("draw.action.title", { op: "meta", title: value === "" ? null : value });
   });
   life.listen(titleInput, "keydown", (event) => {

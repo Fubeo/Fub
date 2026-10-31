@@ -10,7 +10,7 @@ import { gesture as asGesture } from "../edit";
 import { GRID_MAJOR } from "../grid";
 import { sceneArrow } from "../../view";
 import type { Unit } from "../hit";
-import { featuresFor, levelsAbove, presentKeyGroups, presentStartRows, toolKeys, toolsOf, type Feature, type Level } from "../registry";
+import { featuresFor, levelsAbove, toolKeys, toolsOf, type Feature, type Level } from "../registry";
 import {
   BAR_FEATURES,
   COPY_STYLE_BINDING,
@@ -18,7 +18,6 @@ import {
   NUDGE,
   NUDGE_SHIFT,
   PASTE_STYLE_BINDING,
-  RULERS_BINDING,
 } from "./constants";
 import type { EditorContext } from "./context";
 
@@ -64,8 +63,8 @@ export interface KeysContext {
 /// Monta le frecce, le finestre e l'elenco dei tasti.
 export function installKeys(ctx: EditorContext): void {
   const {
-    folio, has, arrangeBar, editable, currentIndex, announce, lengthSpoken, lengthField, fieldValue, selectedUnits, labelOf, showPanel, rootText, commit, moveSelection, select, frameBounds, cancelGesture, gridOn, nudgeBoard, walkBoards, gradientKeysOn, walkGradient, nudgeGradient, finishText, moveCursor, moveCursorOnGrid, arrangeFocus, boundsOf, placeSelection, resizeSelection, moveOnGrid, resizeOnGrid,
-    settleCrop, slideCrop, options
+    folio, has, arrangeBar, editable, currentIndex, announce, lengthSpoken, lengthField, fieldValue, selectedUnits, labelOf, showPanel, rootText, commit, moveSelection, select, frameBounds, cancelGesture, gridOn, moveCursor, moveCursorOnGrid, arrangeFocus, boundsOf, placeSelection, resizeSelection, moveOnGrid, resizeOnGrid,
+    options
   } = ctx;
   // --- Frecce, finestre ed elenco dei tasti -----------------------------------
 
@@ -98,14 +97,7 @@ export function installKeys(ctx: EditorContext): void {
     const grow = direction[0] + direction[1];
     const fine = event.ctrlKey || event.metaKey;
     const lines = event.shiftKey ? GRID_MAJOR : 1;
-    // Mentre si ritaglia, le frecce spostano l'immagine sotto il ritaglio.
-    if (ctx.cropping !== null) {
-      if (ctx.pressed === null && ctx.current === null) slideCrop(x * (event.shiftKey ? NUDGE_SHIFT : NUDGE), y * (event.shiftKey ? NUDGE_SHIFT : NUDGE));
-      return true;
-    }
-    if (gradientKeysOn() && nudgeGradient(x, y, direction, fine, event.shiftKey)) return true;
-    if (ctx.tool === "board" && ctx.pressed === null && ctx.selection.length === 0 && editable() && nudgeBoard(x, y, grow, fine, event.shiftKey)) return true;
-    if (ctx.tool !== "eyedropper" && ctx.tool !== "gradient" && ctx.pressed === null && ctx.selection.length > 0 && editable()) {
+    if (ctx.pressed === null && ctx.selection.length > 0 && editable()) {
       const step = event.shiftKey ? NUDGE_SHIFT : NUDGE;
       const [gx, gy] = [x === 0 ? 0 : grow, y === 0 ? 0 : grow];
       if (gridOn()) {
@@ -148,8 +140,6 @@ export function installKeys(ctx: EditorContext): void {
   /// e oltre l'ultimo all'oggetto dopo; con lo strumento Tavola, di tavola in
   /// tavola.
   const walk = (step: 1 | -1): boolean => {
-    if (ctx.tool === "board" && ctx.pressed === null) return walkBoards(step);
-    if (gradientKeysOn() && walkGradient(step)) return true;
     if (ctx.selection.length === 0 || ctx.pressed !== null) return false;
     const anchor = currentIndex().get(step > 0 ? ctx.selection[ctx.selection.length - 1]! : ctx.selection[0]!);
     const units = walkList(anchor);
@@ -172,13 +162,11 @@ export function installKeys(ctx: EditorContext): void {
   async function properties(): Promise<void> {
     if (ctx.asking) return;
     if (has("properties")) {
-      finishText();
       cancelGesture();
       showPanel(true);
       return;
     }
     if (!editable()) return;
-    finishText();
     ctx.asking = true;
     cancelGesture();
     try {
@@ -194,7 +182,6 @@ export function installKeys(ctx: EditorContext): void {
   ctx.PLACES = PLACES;
 
   const placeDialog = async (): Promise<void> => {
-    settleCrop();
     const before = boundsOf(selectedUnits());
     if (before === null) return;
     const w = before.max[0] - before.min[0];
@@ -299,35 +286,7 @@ export function installKeys(ctx: EditorContext): void {
         ]
       : [];
 
-  /// I tasti delle guide intelligenti, se le parti `at` le offrono.
-  const guidesKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
-    at.has("guides")
-      ? [
-          {
-            title: t("draw.keys.guides"),
-            rows: [
-              ["Mod-u", t("draw.keys.guides.toggle")],
-              ["Mod", t("draw.keys.guides.free")],
-              ["Alt", t("draw.keys.guides.measure")],
-            ],
-          },
-        ]
-      : [];
 
-  /// I tasti dei righelli, se le parti `at` li offrono.
-  const rulersKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
-    at.has("rulers")
-      ? [
-          {
-            title: t("draw.keys.rulers"),
-            rows: [
-              [RULERS_BINDING, t("draw.keys.rulers.show")],
-              ["| Mod-;", t("draw.keys.rulers.guides")],
-              ["Mod", t("draw.keys.rulers.free")],
-            ],
-          },
-        ]
-      : [];
 
   /// I tasti del pannello delle proprietà, se le parti `at` lo offrono.
   const propertiesKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
@@ -345,97 +304,10 @@ export function installKeys(ctx: EditorContext): void {
         ]
       : [];
 
-  /// I tasti del testo, se le parti `at` lo offrono.
-  const textKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
-    at.has("text")
-      ? [
-          {
-            title: t("draw.keys.text"),
-            rows: [
-              ["Space", t("draw.keys.text.write")],
-              ["F2", t("draw.keys.text.edit")],
-              ["Enter", t("draw.keys.text.newline")],
-              ["Escape Tab Mod-Enter", t("draw.keys.text.finish")],
-              ["Mod-b", t("draw.keys.text.bold")],
-              ["Mod-i", t("draw.keys.text.italic")],
-              ["Mod-u", t("draw.keys.text.underline")],
-              ["Mod-Shift-x", t("draw.keys.text.strike")],
-            ],
-          },
-        ]
-      : [];
 
-  /// I tasti del contagocce, se le parti `at` lo offrono.
-  const eyedropperKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
-    at.has("eyedropper")
-      ? [
-          {
-            title: t("draw.tool.eyedropper"),
-            rows: [
-              [ARROW_KEYS, t("draw.keys.eyedropper.cursor")],
-              ["Space", t("draw.keys.eyedropper.take")],
-              ["Shift-Space", t("draw.keys.eyedropper.color")],
-              ["i", t("draw.keys.eyedropper.row")],
-              ["Shift-i", t("draw.keys.eyedropper.row.color")],
-            ],
-          },
-        ]
-      : [];
 
-  /// I tasti dello strumento Sfumatura, se le parti `at` lo offrono.
-  const gradientToolKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
-    at.has("gradient")
-      ? [
-          {
-            title: t("draw.tool.gradient"),
-            rows: [
-              ["Space", t("draw.keys.gradient.space")],
-              ["Shift", t("draw.keys.gradient.shift")],
-              ["Alt", t("draw.keys.gradient.alt")],
-              ["Tab Shift-Tab", t("draw.keys.gradient.walk")],
-              ["Home End", t("draw.keys.gradient.ends")],
-              [ARROW_KEYS, t(gridOn(at) ? "draw.keys.gradient.nudge.grid" : "draw.keys.gradient.nudge")],
-              ["Insert", t("draw.keys.gradient.insert")],
-              ["Delete", t("draw.keys.gradient.delete")],
-              ["Enter", t("draw.keys.gradient.edit")],
-              ["Escape", t("draw.keys.gradient.deselect")],
-            ],
-          },
-        ]
-      : [];
 
-  /// I tasti del ritaglio, se le parti `at` lo offrono.
-  const cropKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
-    at.has("crop")
-      ? [
-          {
-            title: t("draw.crop.title"),
-            rows: [
-              [ARROW_KEYS, t("draw.keys.crop.slide")],
-              ["Shift", t("draw.keys.crop.ratio")],
-              ["Alt", t("draw.keys.crop.center")],
-              ["Enter", t("draw.keys.crop.apply")],
-              ["Escape", t("draw.keys.crop.cancel")],
-            ],
-          },
-        ]
-      : [];
 
-  /// I tasti dello strumento Poligono, se le parti `at` lo offrono.
-  const polygonKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
-    at.has("polygon")
-      ? [
-          {
-            title: t("draw.tool.polygon"),
-            rows: [
-              ["y", t("draw.keys.polygon.toggle")],
-              ["ArrowUp ArrowDown PageUp PageDown", t("draw.keys.polygon.count")],
-              ["ArrowLeft ArrowRight", t("draw.keys.polygon.ratio")],
-              ["Shift", t("draw.keys.polygon.straight")],
-            ],
-          },
-        ]
-      : [];
 
   /// I tasti delle forme dal tratto, se le parti `at` le offrono.
   const recognizeKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
@@ -473,50 +345,7 @@ export function installKeys(ctx: EditorContext): void {
         ]
       : [];
 
-  /// I tasti delle tavole, se le parti `at` hanno lo strumento Tavola:
-  /// Alt+Pag con ogni strumento, gli altri con lo strumento Tavola.
-  const boardKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
-    at.has("board")
-      ? [
-          {
-            title: t("draw.keys.boards"),
-            rows: [
-              ["Alt-PageUp Alt-PageDown", t("draw.keys.board.step")],
-              ["Tab Shift-Tab", t("draw.keys.board.walk")],
-              ["Home End", t("draw.keys.board.ends")],
-              [ARROW_KEYS, t(gridOn(at) ? "draw.keys.board.nudge.grid" : "draw.keys.board.nudge")],
-              [`Mod-${ARROW_KEYS}`, t(gridOn(at) ? "draw.keys.board.resize.grid" : "draw.keys.board.resize")],
-              ["Mod-d", t("draw.keys.board.duplicate")],
-              ["Delete", t("draw.keys.board.delete")],
-              ["F2", t("draw.keys.board.rename")],
-              ["Escape", t("draw.keys.board.deselect")],
-              ["Shift", t("draw.keys.board.over")],
-              ["Alt", t("draw.keys.board.copy")],
-            ],
-          },
-        ]
-      : [];
 
-  /// I tasti dell'elenco delle tavole, se le parti `at` hanno lo strumento
-  /// Tavola.
-  const boardListKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
-    at.has("board")
-      ? [
-          {
-            title: t("draw.keys.boards.list"),
-            rows: [
-              ["ArrowUp ArrowDown Home End", t("draw.keys.boards.walk")],
-              ["Enter Space", t("draw.keys.boards.go")],
-              ["F2", t("draw.keys.boards.rename")],
-              ["Mod-d", t("draw.keys.boards.duplicate")],
-              ["Alt-ArrowUp Alt-ArrowDown", t("draw.keys.boards.move")],
-              ["Delete", t("draw.keys.boards.delete")],
-              ["Shift-F10", t("draw.keys.boards.menu")],
-              ["Escape", t("draw.keys.boards.leave")],
-            ],
-          },
-        ]
-      : [];
 
   /// I tasti della selezione avanzata.
   const selectionKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
@@ -590,17 +419,9 @@ export function installKeys(ctx: EditorContext): void {
     ...sheetKeys(),
     ...arrangeKeys(at),
     ...selectionKeys(at),
-    ...cropKeys(at),
-    ...polygonKeys(at),
     ...highlighterKeys(at),
     ...recognizeKeys(at),
-    ...textKeys(at),
-    ...boardKeys(at),
-    ...eyedropperKeys(at),
-    ...gradientToolKeys(at),
     ...gridKeys(at),
-    ...guidesKeys(at),
-    ...rulersKeys(at),
     ...propertiesKeys(at),
     {
       title: t("draw.view"),
@@ -613,7 +434,6 @@ export function installKeys(ctx: EditorContext): void {
         ["Mod-y", t("draw.outlines")],
         ["Mod-/", t("draw.keys.commands")],
         ["Mod-.", t("draw.bare")],
-        ...presentStartRows(at, t),
         ...(at.has("gestures") ? ([["4", t("draw.turn.left")], ["6", t("draw.turn.right")], ["5", t("draw.turn.straighten")]] as const) : []),
         // Col menu della selezione il radiale sta in fondo a quel menu.
         ...(at.has("gestures") && !at.has("selection") ? ([["Shift-F10", t("draw.keys.radial")]] as const) : []),
@@ -633,8 +453,6 @@ export function installKeys(ctx: EditorContext): void {
         ["?", t("draw.keys")],
       ],
     },
-    ...boardListKeys(at),
-    ...presentKeyGroups(at, t),
     ...historyKeys(at),
     ...accessKeys(at),
   ];

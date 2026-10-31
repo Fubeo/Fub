@@ -93,12 +93,9 @@ export function installArranging(ctx: EditorContext): void {
 
   /// Gli oggetti su cui lavora un comando della selezione, della parte
   /// `feature`: quelli scelti, se il livello offre la parte e il disegno si
-  /// scrive. `null`, e lo si dice, se non c'è niente di scelto. Un ritaglio
-  /// aperto si applica prima, e il comando lavora sull'immagine ritagliata:
-  /// salvo con `settle` falso, per chi il ritaglio lo apre.
-  const arranging = (feature: Feature, settle = true): Unit[] | null => {
+  /// scrive. `null`, e lo si dice, se non c'è niente di scelto.
+  const arranging = (feature: Feature): Unit[] | null => {
     if (!has(feature) || !editable()) return null;
-    if (settle) ctx.settleCrop();
     const units = selectedUnits();
     if (units.length === 0) {
       announce(t("draw.selected.none"));

@@ -9,36 +9,26 @@ import type { MenuItem } from "../../../../ui/menu";
 import { REPLAY_SPEEDS } from "./replay";
 import { ariaBinding, displayBinding } from "../../../../ui/commands";
 import { iconEl } from "../../../../ui/icons";
-import type { PenSymmetry } from "../symmetry";
-import type { Point } from "../../scene/matrix";
 import type { Item } from "../../scene/classify";
 import type { LengthUnit } from "../../scene/rulers";
 import { t, type DrawKey } from "../../strings";
-import type { Board } from "../boards";
-import type { PaintChannel, PlaceGrip } from "../gradients";
 import { createProperties, type SectionId, type Properties } from "../properties";
-import { documentSwatches, type DocumentColors } from "../swatches";
-import type { ConnectorView } from "../connector-ops";
-import type { HatchView } from "../patterns";
+import { documentSwatches } from "../swatches";
 import type { Grid } from "../grid";
 import { SceneIndex } from "../hit";
 import { createHistoryPanel, type HistoryPanel } from "../history-panel";
 import { createSuggestions, type SuggestionId, type Suggestions } from "../suggestions";
-import { createBoardsPanel, type BoardRow, type BoardsPanel } from "../boards-panel";
-import { createLibraryPanel, type LibraryPanel } from "../library-panel";
 import { createAccessPanel, type AccessPanel } from "../accessibility-panel";
 import type { Problem } from "../audit";
 import { createObjectTree, type ObjectTree } from "../objects";
 import { drawPickerText } from "../color-text";
 import { customColor, DEFAULT_COLOR, PALETTE, swatchOf, WIDTHS } from "../palette";
 import type { Feature, ToolId } from "../registry";
-import type { PolygonTool } from "../shapes";
-import { BAR_FEATURES, DRAG_PX, IMAGE_BINDING, ZOOM_STEP } from "./constants";
-import { installCharacter } from "./chrome/character";
+import { BAR_FEATURES, IMAGE_BINDING, ZOOM_STEP } from "./constants";
 import { installPenOptions } from "./chrome/pen-options";
 import { installRail } from "./chrome/rail";
 import type { EditorContext } from "./context";
-import type { GradientRead, PanelReading, ShapeDrag } from "./types";
+import type { PanelReading } from "./types";
 
 /// La lettera dei pulsanti delle dimensioni del testo, in pixel.
 const SIZE_GLYPH_PX: readonly number[] = [12, 16, 22];
@@ -103,11 +93,6 @@ export interface ToolbarContext {
   } | null;
   auditTimer: number | undefined;
   accessPanel: AccessPanel;
-  boardsShown: { readonly rows: readonly BoardRow[]; readonly current: string | null; readonly editable: boolean; readonly paged: boolean } | null;
-  boardRows: { readonly list: readonly Board[]; readonly rows: readonly BoardRow[] } | null;
-  boardsPanel: BoardsPanel;
-  shapeDrag: ShapeDrag | null;
-  libraryPanel: LibraryPanel;
   panel: Properties;
   /// Ciò che il pannello mostra: si ridisegna quando cambia il disegno, la
   /// selezione, la vista o il livello.
@@ -120,57 +105,18 @@ export interface ToolbarContext {
     readonly features: ReadonlySet<Feature>;
     readonly ratio: unknown;
     readonly kept: unknown;
-    readonly polygon: PolygonTool | null;
-    readonly symmetry: PenSymmetry | null;
-    readonly board: Board | null;
     readonly drawing: string;
     readonly recent: readonly string[];
-    readonly stop: unknown;
     /// Ciò che il pannello ha letto dagli oggetti scelti, da riusare finché
     /// non cambia ciò da cui dipende (vedi `syncProperties`).
     readonly reading: PanelReading;
   } | null;
-  /// I colori del documento contati per la scena `index`: si ricontano
-  /// soltanto quando il disegno cambia.
-  colorsCounted: { readonly index: SceneIndex; readonly colors: DocumentColors } | null;
-  /// Le campiture degli oggetti scelti `keys` lette per la scena `index`:
-  /// con mille oggetti scelti si rileggono soltanto quando il disegno o la
-  /// selezione cambiano, non a ogni colore recente o cambio di vista.
-  hatchRead: { readonly index: SceneIndex; readonly keys: string; readonly view: HatchView } | null;
-  /// I connettori fra gli oggetti scelti `keys` letti per la scena `index`,
-  /// come le campiture.
-  connectorRead: { readonly index: SceneIndex; readonly keys: string; readonly view: ConnectorView | null } | null;
   /// Il lucchetto delle proporzioni, come l'ha lasciato chi l'ha toccato,
   /// per la selezione di chiavi `keys`.
   ratioLock: { readonly keys: string; readonly on: boolean } | null;
-  /// Il punto scelto della sfumatura comune del bersaglio `target`, per la
-  /// selezione di chiavi `keys`: lo stesso nel pannello e, con lo strumento
-  /// Sfumatura, sul foglio, dove sta nella sfumatura `group`.
-  gradientStop: { readonly keys: string; readonly target: PaintChannel; readonly index: number; readonly group: number } | null;
-  /// Il capo scelto della sfumatura `group` sul foglio, con lo strumento
-  /// Sfumatura, come il punto scelto: scegliere l'uno lascia l'altro.
-  gradientGrip: { readonly keys: string; readonly target: PaintChannel; readonly group: number; readonly grip: PlaceGrip } | null;
-  /// Le sfumature che lo strumento Sfumatura mostra, lette per la scena, la
-  /// selezione, «Applica a» e lo zoom di quando le si è lette.
-  gradientCache: {
-    readonly index: SceneIndex;
-    readonly keys: string;
-    readonly chosen: PaintChannel;
-    readonly scale: number;
-    readonly read: GradientRead | null;
-  } | null;
-  /// L'ultimo tocco dello strumento Sfumatura su un punto o sulla linea, per
-  /// il doppio tocco.
-  gradientTap: { readonly kind: "stop" | "line"; readonly group: number; readonly index: number; readonly at: Point; readonly time: number } | null;
-  /// Vero mentre la sezione «Sfumatura» mostra sul disegno un cambio che non
-  /// ha ancora scritto.
-  gradientShown: boolean;
   zoomLevel: HTMLButtonElement;
   turnButton: HTMLButtonElement;
   pageButton: HTMLButtonElement;
-  boardsButton: HTMLButtonElement;
-  presentButton: HTMLButtonElement;
-  libraryButton: HTMLButtonElement;
   objectsButton: HTMLButtonElement;
   historyButton: HTMLButtonElement;
   accessButton: HTMLButtonElement;
@@ -363,7 +309,7 @@ export function installToolbar(ctx: EditorContext): void {
   });
   /// Il nome del gruppo e dei pulsanti: spessori, o dimensioni del testo.
   const showWidthLabels = (): void => {
-    const label = t(ctx.tool === "text" ? "draw.sizes" : "draw.widths");
+    const label = t("draw.widths");
     if (widthGroup.getAttribute("aria-label") !== label) widthGroup.setAttribute("aria-label", label);
     const widths = widthsNow();
     widthButtons.forEach(({ control }, at) => {
@@ -375,10 +321,6 @@ export function installToolbar(ctx: EditorContext): void {
   };
   ctx.showWidthLabels = showWidthLabels;
   relabels.push(showWidthLabels);
-
-  // Il carattere di ciò che si scrive (S5): famiglia, corpo ed enfasi,
-  // soltanto mentre si scrive un testo.
-  installCharacter(ctx, group("draw.character", false, 3));
 
   // La penna della Penna e il modo della Gomma (P3, P8).
   installPenOptions(ctx, group("draw.pen.choose", false, 3), group("draw.eraser.mode", true, 3));
@@ -471,19 +413,15 @@ export function installToolbar(ctx: EditorContext): void {
     onActivate: () => void ctx.properties(),
     onDelete: () => ctx.deleteSelection(),
     onLeave: () => surface.focus({ preventScroll: true }),
-    onToggle: (key, what) => ctx.toggleRow(ctx.settleCrop()(key), what === "lock" ? "locked" : "hidden"),
+    onToggle: (key, what) => ctx.toggleRow(key, what === "lock" ? "locked" : "hidden"),
     canRename: (key) => ctx.canRename(key),
-    onRename: (key, name) => ctx.renameRow(ctx.settleCrop()(key), name),
+    onRename: (key, name) => ctx.renameRow(key, name),
     canMove: (keys, drop) => {
       const plan = ctx.placing(keys, drop);
       return plan !== null && typeof plan !== "string";
     },
-    onMove: (keys, drop) => {
-      const rekey = ctx.settleCrop();
-      return ctx.moveRows(keys.map(rekey), { ...drop, key: rekey(drop.key) });
-    },
+    onMove: (keys, drop) => ctx.moveRows(keys, drop),
     onEdge: (key, front) => ctx.announce(t(ctx.outlineNow().byKey.get(key)?.item.role === "layer" ? (front ? "draw.layer.edge.top" : "draw.layer.edge.bottom") : front ? "draw.move.edge.front" : "draw.move.edge.back")),
-    onEyedropper: (key, colorOnly) => ctx.dropFromRow(ctx.settleCrop()(key), colorOnly),
   });
   ctx.tree = tree;
   tree.element.hidden = true;
@@ -528,8 +466,6 @@ export function installToolbar(ctx: EditorContext): void {
         return t(has("gestures") && ctx.grid.taps ? "draw.suggestion.two_fingers.taps" : "draw.suggestion.two_fingers");
       case "hold-shape":
         return t("draw.suggestion.hold_shape");
-      case "label-shape":
-        return t("draw.suggestion.label_shape");
     }
   };
 
@@ -545,7 +481,7 @@ export function installToolbar(ctx: EditorContext): void {
     onFix: (problem) => ctx.fixProblem(problem),
     onDescribe: (key, text) => ctx.describeImage(key, text),
     onDecorative: (key) => ctx.decorateImage(key),
-    onMove: (key, later, confirmed) => ctx.moveInReading(ctx.settleCrop()(key), later, confirmed),
+    onMove: (key, later, confirmed) => ctx.moveInReading(key, later, confirmed),
     onLeave: () => surface.focus({ preventScroll: true }),
   });
   ctx.accessPanel = accessPanel;
@@ -556,61 +492,6 @@ export function installToolbar(ctx: EditorContext): void {
     accessPanel.relabel();
     ctx.syncAccess();
   });
-
-  // L'elenco delle tavole, dal livello Standard: chiuso finché qualcuno non
-  // lo apre. Le righe si rifanno quando cambiano le tavole, e restano le
-  // stesse se dicono le stesse cose.
-  ctx.boardsShown = null;
-  ctx.boardRows = null;
-  const boardsPanel = createBoardsPanel(life, {
-    onGo: (id) => ctx.goToBoard(id),
-    onAdd: () => {
-      ctx.settleCrop();
-      ctx.newBoard();
-    },
-    onRename: (id, name) => {
-      ctx.settleCrop();
-      void ctx.writeBoardName(id, name);
-    },
-    onDuplicate: (id) => {
-      ctx.settleCrop();
-      const board = ctx.boardById(id);
-      if (board !== null) ctx.duplicateBoard(board);
-    },
-    onDelete: (id) => {
-      ctx.settleCrop();
-      const board = ctx.boardById(id);
-      if (board !== null) ctx.removeBoard(board);
-    },
-    onMove: (id, to) => {
-      ctx.settleCrop();
-      ctx.orderBoard(id, to);
-    },
-    onLeave: () => surface.focus({ preventScroll: true }),
-    onPresent: (id) => ctx.present(id),
-    canPresent: () => ctx.has("present"),
-  });
-  ctx.boardsPanel = boardsPanel;
-  boardsPanel.element.hidden = true;
-  relabels.push(() => {
-    ctx.boardRows = null;
-    ctx.boardsShown = null;
-    boardsPanel.relabel();
-    ctx.syncBoards();
-  });
-
-  // Le forme delle raccolte, dal livello Standard: chiuse finché qualcuno non
-  // le apre. Inserire, e trascinare, sono dell'editor.
-  ctx.shapeDrag = null;
-  const libraryPanel = createLibraryPanel(life, {
-    onInsert: (id) => ctx.insertShape(id),
-    onDrag: (id, event) => ctx.startShapeDrag(id, event),
-    onLeave: () => surface.focus({ preventScroll: true }),
-    slop: DRAG_PX,
-  });
-  ctx.libraryPanel = libraryPanel;
-  libraryPanel.element.hidden = true;
-  relabels.push(() => libraryPanel.relabel());
 
   // Le proprietà della selezione, o del disegno, dal livello Standard: un
   // pannello accanto al foglio, che si apre da sé se c'è posto.
@@ -623,47 +504,13 @@ export function installToolbar(ctx: EditorContext): void {
       const closed = ctx.grid.closed.filter((each) => each !== id);
       ctx.changeGrid({ ...ctx.grid, closed: open ? closed : [...closed, id] });
     },
-    colors: {
-      onApply: (choice, target) => ctx.applyColor(choice.value, choice.color, choice.name, target),
-      onCreate: (name, color, link) => ctx.createSwatch(name, color, link),
-      onLink: (id) => ctx.linkSwatch(id),
-      onRename: (id, name) => ctx.renameSwatch(id, name),
-      onRecolor: (id, color) => ctx.recolorSwatch(id, color),
-      onDelete: (id) => ctx.deleteSwatch(id),
-      onSelect: (value) => ctx.selectShowing(value),
-    },
-    gradient: {
-      onChange: (target, change, label) => ctx.changeGradient(target, change, label),
-      onPreview: (target, change) => ctx.previewGradient(target, change),
-      onStop: (index) => ctx.chooseGradientStop(index),
-    },
-    hatch: {
-      onChange: (change, label) => ctx.changeHatch(change, label),
-    },
-    connector: {
-      onChange: (change, label) => ctx.changeConnector(change, label),
-    },
-    // Lo strumento Sfumatura mostra le sfumature dell'altro colore.
-    onTarget: () => {
-      ctx.panelShown = null;
-      ctx.syncProperties();
-      ctx.showHandles();
-    },
     announce: (text) => ctx.announce(text),
     onLeave: () => surface.focus({ preventScroll: true }),
   });
   ctx.panel = panel;
   panel.element.hidden = true;
   ctx.panelShown = null;
-  ctx.colorsCounted = null;
-  ctx.hatchRead = null;
-  ctx.connectorRead = null;
   ctx.ratioLock = null;
-  ctx.gradientStop = null;
-  ctx.gradientGrip = null;
-  ctx.gradientCache = null;
-  ctx.gradientTap = null;
-  ctx.gradientShown = false;
   relabels.push(() => {
     panel.relabel();
     ctx.panelShown = null;
@@ -691,20 +538,6 @@ export function installToolbar(ctx: EditorContext): void {
   ctx.pageButton = pageButton;
   pageButton.setAttribute("aria-haspopup", "menu");
   pageButton.setAttribute("aria-expanded", "false");
-  // Le tavole, dal livello Standard.
-  const boardsButton = button(viewGroup, "draw-button", () => t("draw.boards"), "draw-boards", () => ctx.showBoards(ctx.toggles(boardsPanel.element)));
-  ctx.boardsButton = boardsButton;
-  boardsButton.setAttribute("aria-expanded", "false");
-  boardsButton.setAttribute("aria-controls", boardsPanel.element.id);
-  // Presenta, dal livello Standard: lo schermo intero, tavola per tavola.
-  const presentButton = button(viewGroup, "draw-button", () => t("draw.present"), "draw-present", () => ctx.present(null));
-  ctx.presentButton = presentButton;
-  presentButton.setAttribute("aria-keyshortcuts", "F5");
-  // Le forme, dal livello Standard.
-  const libraryButton = button(viewGroup, "draw-button", () => t("draw.library"), "draw-library", () => ctx.showLibrary(ctx.toggles(libraryPanel.element)));
-  ctx.libraryButton = libraryButton;
-  libraryButton.setAttribute("aria-expanded", "false");
-  libraryButton.setAttribute("aria-controls", libraryPanel.element.id);
   const objectsButton = button(viewGroup, "draw-button", () => t("draw.objects"), "outline", () => ctx.showObjects(ctx.toggles(tree.element)));
   ctx.objectsButton = objectsButton;
   objectsButton.setAttribute("aria-expanded", "false");
@@ -757,10 +590,8 @@ export function installToolbar(ctx: EditorContext): void {
   ctx.drawMenuItems = (): MenuItem[] => {
     const editable = ctx.editable();
     const items: MenuItem[] = [];
-    if (has("board")) items.push({ label: t("draw.boards.add"), icon: "draw-boards", disabled: !editable, run: () => ctx.newBoard() });
     if (ctx.insertsImages(ctx.features)) items.push({ label: t("draw.image.vault"), icon: "draw-image", hint: "Ctrl+I", disabled: !editable, run: () => void ctx.vaultImage() });
     if (onExport !== undefined) items.push({ label: t("draw.chrome.export.dialog"), icon: "draw-export", run: () => onExport() });
-    if (has("present")) items.push({ label: t("draw.present"), icon: "draw-present", hint: "F5", run: () => ctx.present(null) });
     if (has("selection")) items.push({ label: t("draw.selection.menu"), icon: "draw-selection", separator: true, submenu: true, items: ctx.selectionItems() });
     if (!pageButton.hidden) items.push({ label: t("draw.page_grid"), icon: "draw-page-grid", submenu: true, items: ctx.pageItems() });
     items.push({ label: t("draw.view"), submenu: true, items: viewItems() });

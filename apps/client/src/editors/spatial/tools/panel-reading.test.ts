@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-// Ciò che il pannello legge dagli oggetti scelti (i fatti della selezione e
-// le sfumature) si legge una volta per volta che serve: lo rifanno la scena,
+// Ciò che il pannello legge dagli oggetti scelti (i fatti della selezione)
+// si legge una volta per volta che serve: lo rifanno la scena,
 // la scelta, il livello e il lucchetto delle proporzioni; non lo rifà ciò che
 // cambia solo attorno, come una sezione che si apre.
 
@@ -10,19 +10,14 @@ import { closeContextMenu } from "../../../ui/menu";
 import { SceneEngine } from "../scene/engine";
 import { doc } from "../scene/test-support";
 import { createDrawEditor, type DrawEditor, type DrawEditorOptions } from "./editor";
-import { gradientView } from "./gradients";
 import { outlinesOf } from "./outline";
 import { LAYER } from "./test-support";
 
-// Le letture si contano: la prima è dei fatti della selezione, la seconda
-// delle sfumature. Chi le chiama è sempre lo stesso `syncProperties`.
+// Le letture dei fatti della selezione si contano. Chi le chiama è sempre lo
+// stesso `syncProperties`.
 vi.mock("./outline", async (real) => {
   const actual = await real<typeof import("./outline")>();
   return { ...actual, outlinesOf: vi.fn(actual.outlinesOf) };
-});
-vi.mock("./gradients", async (real) => {
-  const actual = await real<typeof import("./gradients")>();
-  return { ...actual, gradientView: vi.fn(actual.gradientView) };
 });
 
 const A = "o1a2b3c4d";
@@ -48,7 +43,6 @@ afterEach(() => {
   owner.close();
   host.remove();
   vi.mocked(outlinesOf).mockClear();
-  vi.mocked(gradientView).mockClear();
 });
 
 function mount(options: DrawEditorOptions = {}): void {
@@ -65,27 +59,22 @@ function key(name: string, init: KeyboardEventInit = {}): void {
   surface().dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...init }));
 }
 
-/// Quante volte il pannello ha letto i fatti della selezione e le sfumature
-/// dei suoi riempimenti e contorni, dall'inizio della prova.
-const reads = (): { readonly facts: number; readonly gradients: number } => ({
-  facts: vi.mocked(outlinesOf).mock.calls.length,
-  gradients: vi.mocked(gradientView).mock.calls.length,
-});
+/// Quante volte il pannello ha letto i fatti della selezione, dall'inizio
+/// della prova.
+const reads = (): { readonly facts: number } => ({ facts: vi.mocked(outlinesOf).mock.calls.length });
 
 /// Ciò che `action` fa leggere di nuovo al pannello.
-function rereads(action: () => void): { readonly facts: number; readonly gradients: number } {
+function rereads(action: () => void): { readonly facts: number } {
   const before = reads();
   action();
-  const after = reads();
-  return { facts: after.facts - before.facts, gradients: after.gradients - before.gradients };
+  return { facts: reads().facts - before.facts };
 }
 
 describe("la lettura degli oggetti scelti, nel pannello delle proprietà", () => {
-  it("la prima volta legge i fatti e le sfumature di riempimento e contorno, una volta sola", () => {
+  it("la prima volta legge i fatti, una volta sola", () => {
     mount();
     const first = rereads(() => editor.select([A]));
-    // Due sfumature: una per il riempimento e una per il contorno.
-    expect(first).toEqual({ facts: 1, gradients: 2 });
+    expect(first).toEqual({ facts: 1 });
     expect(propertyInput("width").value).toBe("22");
   });
 
@@ -99,7 +88,7 @@ describe("la lettura degli oggetti scelti, nel pannello delle proprietà", () =>
       toggle.click();
       toggle.click();
     });
-    expect(again).toEqual({ facts: 0, gradients: 0 });
+    expect(again).toEqual({ facts: 0 });
     expect(toggle.getAttribute("aria-expanded")).toBe(open);
     expect(editor.grid.closed).toEqual(closed);
     // Chiusa, la sezione si vede chiusa: il pannello non è rimasto com'era.
@@ -112,52 +101,54 @@ describe("la lettura degli oggetti scelti, nel pannello delle proprietà", () =>
     mount();
     editor.select([A]);
     expect(propertyInput("width").value).toBe("22");
-    expect(rereads(() => editor.select([B]))).toEqual({ facts: 1, gradients: 2 });
+    expect(rereads(() => editor.select([B]))).toEqual({ facts: 1 });
     expect(propertyInput("width").value).toBe("10");
-    expect(rereads(() => editor.select([A, B]))).toEqual({ facts: 1, gradients: 2 });
+    expect(rereads(() => editor.select([A, B]))).toEqual({ facts: 1 });
     // Tornare alla scelta di prima non è la stessa lettura: il pannello ha
     // tenuto solo l'ultima.
-    expect(rereads(() => editor.select([A]))).toEqual({ facts: 1, gradients: 2 });
+    expect(rereads(() => editor.select([A]))).toEqual({ facts: 1 });
   });
 
   it("cambiando il livello si rilegge", () => {
     mount();
     editor.select([A]);
-    expect(rereads(() => editor.setLevel("expert"))).toEqual({ facts: 1, gradients: 2 });
+    expect(rereads(() => editor.setLevel("expert"))).toEqual({ facts: 1 });
     // Lo stesso livello non cambia niente.
-    expect(rereads(() => editor.setLevel("expert"))).toEqual({ facts: 0, gradients: 0 });
-    expect(rereads(() => editor.setLevel("standard"))).toEqual({ facts: 1, gradients: 2 });
+    expect(rereads(() => editor.setLevel("expert"))).toEqual({ facts: 0 });
+    expect(rereads(() => editor.setLevel("standard"))).toEqual({ facts: 1 });
   });
 
   it("cambiando la scena si rilegge, e il pannello mostra la scena nuova", () => {
     mount();
     editor.select([A]);
     expect(propertyInput("x").value).toBe("59");
-    expect(rereads(() => key("ArrowRight"))).toEqual({ facts: 1, gradients: 2 });
+    expect(rereads(() => key("ArrowRight"))).toEqual({ facts: 1 });
     expect(propertyInput("x").value).toBe("60");
     // Annullare è un'altra scena: lo stesso conto.
-    expect(rereads(() => editor.undo())).toEqual({ facts: 1, gradients: 2 });
+    expect(rereads(() => editor.undo())).toEqual({ facts: 1 });
     expect(propertyInput("x").value).toBe("59");
-    expect(rereads(() => editor.redo())).toEqual({ facts: 1, gradients: 2 });
+    expect(rereads(() => editor.redo())).toEqual({ facts: 1 });
     expect(propertyInput("x").value).toBe("60");
   });
 
   it("cambiando l'unità del documento si rilegge, e le misure sono nell'unità nuova", () => {
     mount();
     editor.select([A]);
-    Object.defineProperty(surface(), "clientWidth", { configurable: true, value: 400 });
-    Object.defineProperty(surface(), "clientHeight", { configurable: true, value: 300 });
-    key("R", { shiftKey: true });
+    editor.select([]);
+    expect(property("unit").querySelector("select")!.value).toBe("px");
+    editor.select([A]);
     expect(property("width").querySelector("label")!.textContent).toBe("Larghezza (px)");
-    const reread = rereads(() => {
-      surface().dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 10, clientY: 10 }));
-      const entries = [...document.querySelectorAll<HTMLElement>('.context-menu [role="menuitemradio"]')];
-      entries.find((entry) => entry.querySelector(".menu-label")!.textContent === "Millimetri")!.click();
-    });
-    expect(reread).toEqual({ facts: 1, gradients: 2 });
+    editor.select([]);
+    const unit = property("unit").querySelector("select")!;
+    unit.value = "mm";
+    unit.dispatchEvent(new Event("change", { bubbles: true }));
     expect(editor.engine.text).toContain('fub:units="mm"');
+    expect(rereads(() => editor.select([A]))).toEqual({ facts: 1 });
     expect(property("width").querySelector("label")!.textContent).toBe("Larghezza (mm)");
     expect(propertyInput("width").value).toBe("5,821");
+    // Annullare riporta i pixel, e il pannello li rilegge.
+    expect(rereads(() => editor.undo())).toEqual({ facts: 1 });
+    expect(property("width").querySelector("label")!.textContent).toBe("Larghezza (px)");
   });
 
   it("il lucchetto delle proporzioni si rilegge, e il pannello lo mostra chiuso", () => {
@@ -165,8 +156,7 @@ describe("la lettura degli oggetti scelti, nel pannello delle proprietà", () =>
     editor.select([A]);
     const lock = (): HTMLButtonElement => property("ratio").querySelector<HTMLButtonElement>("button")!;
     expect(lock().getAttribute("aria-pressed")).toBe("false");
-    // Il lucchetto non cambia le sfumature, ma i fatti sì: il lucchetto
-    // chiuso è uno di loro.
+    // Il lucchetto chiuso è uno dei fatti.
     const pressed = rereads(() => lock().click());
     expect(pressed.facts).toBe(1);
     expect(lock().getAttribute("aria-pressed")).toBe("true");

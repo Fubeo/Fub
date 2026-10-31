@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_GUIDES, parseGuides, parseUnits, UNIT_SIZE, writeGuides, type RulerGuide } from "./rulers";
+import { MAX_GUIDES, parseGuides, parseUnits, UNIT_SIZE } from "./rulers";
 import cases from "../../../__fixtures__/scene-rulers/cases.json";
 
 describe("unità e guide del documento", () => {
@@ -21,21 +21,6 @@ describe("unità e guide del documento", () => {
     expect(parseGuides(many(MAX_GUIDES + 1))).toBeNull();
   });
 
-  it("le scrive nell'ordine dato, coi numeri della geometria, e le rilegge uguali", () => {
-    const guides: RulerGuide[] = [
-      { axis: "y", at: 340.504, locked: true },
-      { axis: "x", at: -0.001, locked: false },
-      { axis: "x", at: 120, locked: false },
-    ];
-    const written = writeGuides(guides);
-    expect(written).toBe("y 340.5 locked; x 0; x 120");
-    expect(parseGuides(written!)).toEqual([
-      { axis: "y", at: 340.5, locked: true },
-      { axis: "x", at: 0, locked: false },
-      { axis: "x", at: 120, locked: false },
-    ]);
-    expect(writeGuides([])).toBeNull();
-  });
 
   it("un pollice è 96 unità utente, 2,54 centimetri e 72 punti", () => {
     expect(UNIT_SIZE.in).toBe(96);

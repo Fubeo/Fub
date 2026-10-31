@@ -393,19 +393,6 @@ export const SCENE = onPage("shell", [
       await page.mouse.click(shape.x + shape.width / 2, shape.y + shape.height / 2);
     },
   },
-  {
-    id: "draw-text",
-    title: "Il disegno con un testo in scrittura",
-    query: "connectors=6",
-    prepare: async (page) => {
-      await openDrawing(page);
-      await page.keyboard.press("t");
-      const box = await page.locator(".draw-editor .draw-page").first().boundingBox();
-      if (!box) throw new Error("la pagina del disegno non c'è");
-      await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.85);
-      await page.keyboard.type("Una scritta");
-    },
-  },
   // Stretto: 900 px, e 800, la finestra minima del desktop (sotto, la shell
   // è quella del telefono).
   ...[

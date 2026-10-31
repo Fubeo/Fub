@@ -3,14 +3,10 @@
 // selezione, il documento e la vista. Che cosa mostra lo decide l'editor, e
 // lui scrive ogni cambio; qui c'è come si legge, si scrive e si raggiunge.
 //
-// - **Sezioni che si chiudono.** Posizione e misure, Forma, Aspetto, Connettore
-//   (`connector-panel.ts`), Sfumatura (`gradient-panel.ts`), Campitura
-//   (`hatch-panel.ts`), Colori del documento (`swatches-panel.ts`), Testo e
-//   Disponi;
-//   senza selezione i Colori del documento, Documento e Vista, Forma se lo
-//   strumento è il Poligono, e Tavola se è lo strumento Tavola con una tavola
-//   scelta. L'intestazione di una sezione è il pulsante che la apre e la
-//   chiude, e il pannello dice all'editor quali sono chiuse, che le ricorda.
+// - **Sezioni che si chiudono.** Posizione e misure, Forma, Aspetto, Testo e
+//   Disponi; senza selezione Documento e Vista. L'intestazione di una
+//   sezione è il pulsante che la apre e la chiude, e il pannello dice
+//   all'editor quali sono chiuse, che le ricorda.
 // - **Un campo misto dice «Misto»** e non ha valore: scriverlo dà il valore a
 //   tutti gli oggetti scelti, in un passo.
 // - **Un colore si scrive** come codice, come nome (`red`) o col nome di un
@@ -41,21 +37,17 @@ import { identifier } from "../../../ui/a11y";
 import { iconEl } from "../../../ui/icons";
 import { ensureDrawIcons } from "../icons";
 import type { Lifetime } from "../../../ui/lifetime";
-import { closeContextMenu, showContextMenu, type MenuItem, type MenuSample } from "../../../ui/menu";
+import { closeContextMenu, showContextMenu, type MenuItem } from "../../../ui/menu";
 import { createColorPicker, type ColorPicker } from "../../../kit/color/picker";
 import { openPopover, type PopoverHandle } from "../../../kit/popover";
 import { drawPickerText } from "./color-text";
 import { contrast, MIN_CONTRAST, MIN_TEXT_CONTRAST, over } from "../scene/analysis";
 import { paint } from "../scene/values";
 import { t, type DrawKey } from "../strings";
-import { cleanName, NAME_MAX } from "./naming";
+import { cleanName } from "./naming";
 import { customColor, PALETTE, swatchOf } from "./palette";
 import { evaluate, type QuantityProblem } from "./quantity";
 import type { PaintSample } from "./resources";
-import { createConnectorPanel, type ConnectorPanelOptions, type ConnectorPanelView } from "./connector-panel";
-import { createGradientPanel, type GradientPanelOptions, type GradientPanelView } from "./gradient-panel";
-import { createHatchPanel, type HatchPanelOptions, type HatchPanelView } from "./hatch-panel";
-import { createSwatchesPanel, type ColorsView, type PaintTarget, type SwatchesPanelOptions } from "./swatches-panel";
 
 /// Le sezioni, nell'ordine in cui si vedono.
 export type SectionId =
@@ -63,18 +55,11 @@ export type SectionId =
   | "arrange"
   | "look"
   | "fill"
-  | "gradient"
-  | "hatch"
   | "stroke"
   | "text"
-  | "shape"
-  | "connector"
-  | "symmetry"
   | "exportSelection"
   | "document"
-  | "board"
-  | "view"
-  | "colors";
+  | "view";
 
 export type NumberId =
   | "x"
@@ -82,32 +67,20 @@ export type NumberId =
   | "width"
   | "height"
   | "rotation"
-  | "count"
-  | "inner"
-  | "corner"
   | "strokeWidth"
   | "opacity"
   | "size"
   | "leading"
   | "spacing"
-  | "symmetrySlices"
-  | "symmetryX"
-  | "symmetryY"
-  | "boardX"
-  | "boardY"
-  | "boardWidth"
-  | "boardHeight"
   | "pageWidth"
   | "pageHeight";
 
 export type PaintId = "fill" | "stroke";
-export type ChoiceId = "dash" | "preset" | "family" | "weight" | "boardPreset" | "pagePreset" | "unit";
-/// I campi a menu: il tipo della simmetria della penna, gli stili del
-/// disegno, grafico e di testo, e le punte delle linee, all'inizio e alla
-/// fine.
-export type MenuId = "symmetry" | "lookStyle" | "textStyle" | "tipStart" | "tipEnd";
-export type SwitchId = "grid" | "snap" | "guides" | "rulers" | "rulerGuides" | "bar" | "symmetryMirror";
-export type FieldId = NumberId | PaintId | ChoiceId | MenuId | SwitchId | "ratio" | "shape" | "emphasis" | "anchor" | "boardName" | "boardOrientation" | "pageOrientation" | "desc";
+export type ChoiceId = "dash" | "preset" | "family" | "weight" | "pagePreset" | "unit";
+/// I campi a menu: le punte delle linee, all'inizio e alla fine.
+export type MenuId = "tipStart" | "tipEnd";
+export type SwitchId = "grid" | "snap" | "bar";
+export type FieldId = NumberId | PaintId | ChoiceId | MenuId | SwitchId | "ratio" | "emphasis" | "anchor" | "pageOrientation" | "desc";
 
 export type ActionId =
   | "align-left"
@@ -130,9 +103,6 @@ interface FieldBase {
   readonly note?: string;
   /// C'è, ma adesso non si cambia.
   readonly disabled?: boolean;
-  /// Il valore è diverso da quello dello stile che la selezione segue: un
-  /// punto accanto al nome, e questa frase per chi ascolta.
-  readonly differs?: string;
 }
 
 /// Un numero, nell'unità del campo.
@@ -219,24 +189,6 @@ export interface MenuOption {
   /// Una riga sotto il nome: che cosa fa la voce, o perché adesso non si
   /// sceglie.
   readonly note?: string;
-  /// L'anteprima al posto dell'icona, come quella di uno stile.
-  readonly sample?: MenuSample;
-  /// Un comando distruttivo, come eliminare uno stile.
-  readonly danger?: boolean;
-  /// Un comando che chiede un nome prima di partire.
-  readonly ask?: MenuAsk;
-}
-
-/// Un nome da chiedere per una voce di un campo a menu, in un modulo sotto
-/// il campo: ciò che si scrive parte come `valore:nome`, e il campo dice
-/// perché non va, se non va.
-export interface MenuAsk {
-  /// Il titolo del modulo, come «Nuovo stile grafico».
-  readonly title: string;
-  /// Il nome proposto, già scritto e scelto.
-  readonly value: string;
-  /// Il pulsante che conferma, come «Crea».
-  readonly submit: string;
 }
 
 /// Una scelta da un menu: un pulsante che dice quella di adesso e apre le
@@ -295,16 +247,7 @@ export interface TextState extends FieldBase {
   readonly value: string;
 }
 
-/// Un testo di una riga, come un nome: parte con Invio, o lasciando il
-/// campo.
-export interface LineState extends FieldBase {
-  readonly kind: "line";
-  readonly value: string;
-  /// Quanti caratteri al più.
-  readonly max?: number;
-}
-
-export type FieldState = NumberState | PaintState | ChoiceState | MenuChoiceState | SwitchState | PressState | SegmentState | TogglesState | TextState | LineState;
+export type FieldState = NumberState | PaintState | ChoiceState | MenuChoiceState | SwitchState | PressState | SegmentState | TogglesState | TextState;
 
 /// Un comando: il nome, e perché adesso non si usa.
 export interface ActionState {
@@ -332,14 +275,6 @@ export interface PropertiesView {
   readonly swatches?: readonly FieldSwatch[];
   /// I colori scelti di recente, dal più recente, per lo stesso menu.
   readonly recent?: readonly string[];
-  /// La sezione «Colori del documento»; senza, non c'è.
-  readonly colors?: ColorsView;
-  /// La sezione «Connettore»; senza, non c'è.
-  readonly connector?: ConnectorPanelView;
-  /// La sezione «Sfumatura»; senza, non c'è.
-  readonly gradient?: GradientPanelView;
-  /// La sezione «Campitura»; senza, non c'è.
-  readonly hatch?: HatchPanelView;
 }
 
 export interface PropertiesOptions {
@@ -351,18 +286,8 @@ export interface PropertiesOptions {
   onAction(id: ActionId): void;
   /// Una sezione si apre o si chiude.
   onSection(id: SectionId, open: boolean): void;
-  /// I gesti della sezione «Colori del documento» (`swatches-panel.ts`).
-  readonly colors: Omit<SwatchesPanelOptions, "announce" | "onTarget">;
-  /// I gesti della sezione «Connettore» (`connector-panel.ts`).
-  readonly connector: Omit<ConnectorPanelOptions, "announce">;
-  /// I gesti della sezione «Sfumatura» (`gradient-panel.ts`).
-  readonly gradient: Omit<GradientPanelOptions, "announce" | "onTarget">;
-  /// I gesti della sezione «Campitura» (`hatch-panel.ts`).
-  readonly hatch: Omit<HatchPanelOptions, "announce">;
   /// «Esporta…» di «Esporta la selezione»: la finestra, sulla selezione.
   onExportSelection?(): void;
-  /// «Applica a» cambia, in una delle due sezioni che lo hanno.
-  onTarget(target: PaintTarget): void;
   /// Dice `text` a chi usa uno screen reader.
   announce(text: string): void;
   /// Esc su un campo senza niente da annullare: il fuoco torna al foglio.
@@ -380,15 +305,9 @@ export interface Properties {
   focus(): void;
   /// Apre la sezione `id` e le dà il fuoco. Falso se la sezione non c'è.
   focusSection(id: SectionId): boolean;
-  /// Apre la sezione «Sfumatura» e dà il fuoco al colore del punto scelto.
-  /// Falso se la sezione non c'è o non mostra punti.
-  focusGradientColor(): boolean;
   /// Chiude le sezioni `ids` e apre le altre, come le ricorda l'editor,
   /// senza dirglielo.
   setClosed(ids: readonly SectionId[]): void;
-  /// Il bersaglio scelto in «Applica a» fra i colori del documento e nella
-  /// sfumatura, che è lo stesso.
-  colorTarget(): PaintTarget;
   /// Riscrive i testi nella lingua di adesso: quelli dei campi arrivano con
   /// la vista dopo.
   relabel(): void;
@@ -413,16 +332,6 @@ const SPECS: readonly Spec[] = [
   { id: "height", kind: "number", section: "place", column: "2" },
   { id: "ratio", kind: "press", section: "place", column: "3" },
   { id: "rotation", kind: "number", section: "place", column: "1" },
-  { id: "shape", kind: "segment", section: "shape", column: "all" },
-  { id: "count", kind: "number", section: "shape", column: "1" },
-  { id: "inner", kind: "number", section: "shape", column: "2" },
-  { id: "corner", kind: "number", section: "shape", column: "1" },
-  { id: "symmetry", kind: "menu", section: "symmetry", column: "all" },
-  { id: "symmetrySlices", kind: "number", section: "symmetry", column: "1" },
-  { id: "symmetryMirror", kind: "switch", section: "symmetry", column: "all" },
-  { id: "symmetryX", kind: "number", section: "symmetry", column: "1" },
-  { id: "symmetryY", kind: "number", section: "symmetry", column: "2" },
-  { id: "lookStyle", kind: "menu", section: "look", column: "all" },
   { id: "opacity", kind: "number", section: "look", column: "1" },
   { id: "fill", kind: "paint", section: "fill", column: "all" },
   { id: "stroke", kind: "paint", section: "stroke", column: "all" },
@@ -430,7 +339,6 @@ const SPECS: readonly Spec[] = [
   { id: "dash", kind: "choice", section: "stroke", column: "all" },
   { id: "tipStart", kind: "menu", section: "stroke", column: "all" },
   { id: "tipEnd", kind: "menu", section: "stroke", column: "all" },
-  { id: "textStyle", kind: "menu", section: "text", column: "all" },
   { id: "preset", kind: "choice", section: "text", column: "all" },
   { id: "family", kind: "choice", section: "text", column: "all" },
   { id: "size", kind: "number", section: "text", column: "1" },
@@ -439,13 +347,6 @@ const SPECS: readonly Spec[] = [
   { id: "leading", kind: "number", section: "text", column: "1" },
   { id: "spacing", kind: "number", section: "text", column: "2" },
   { id: "anchor", kind: "segment", section: "text", column: "all" },
-  { id: "boardName", kind: "line", section: "board", column: "all" },
-  { id: "boardPreset", kind: "choice", section: "board", column: "all" },
-  { id: "boardOrientation", kind: "segment", section: "board", column: "all" },
-  { id: "boardX", kind: "number", section: "board", column: "1" },
-  { id: "boardY", kind: "number", section: "board", column: "2" },
-  { id: "boardWidth", kind: "number", section: "board", column: "1" },
-  { id: "boardHeight", kind: "number", section: "board", column: "2" },
   { id: "pagePreset", kind: "choice", section: "document", column: "all" },
   { id: "pageOrientation", kind: "segment", section: "document", column: "all" },
   { id: "pageWidth", kind: "number", section: "document", column: "1" },
@@ -454,9 +355,6 @@ const SPECS: readonly Spec[] = [
   { id: "desc", kind: "text", section: "document", column: "all" },
   { id: "grid", kind: "switch", section: "view", column: "all" },
   { id: "snap", kind: "switch", section: "view", column: "all" },
-  { id: "guides", kind: "switch", section: "view", column: "all" },
-  { id: "rulers", kind: "switch", section: "view", column: "all" },
-  { id: "rulerGuides", kind: "switch", section: "view", column: "all" },
   { id: "bar", kind: "switch", section: "view", column: "all" },
 ];
 
@@ -465,18 +363,11 @@ const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey 
   { id: "arrange", label: "draw.properties.arrange" },
   { id: "look", label: "draw.properties.look" },
   { id: "fill", label: "draw.properties.fill" },
-  { id: "gradient", label: "draw.properties.gradient" },
-  { id: "hatch", label: "draw.properties.hatch" },
   { id: "stroke", label: "draw.properties.stroke" },
   { id: "text", label: "draw.properties.text" },
-  { id: "shape", label: "draw.properties.shape" },
-  { id: "connector", label: "draw.properties.connector" },
-  { id: "symmetry", label: "draw.properties.symmetry" },
   { id: "exportSelection", label: "draw.properties.export_section" },
   { id: "document", label: "draw.properties.document_section" },
-  { id: "board", label: "draw.properties.board_section" },
   { id: "view", label: "draw.properties.view_section" },
-  { id: "colors", label: "draw.properties.colors" },
 ];
 
 /// I comandi di «Disponi», in tre barre: allineare, distribuire, ordinare.
@@ -545,11 +436,6 @@ interface Line {
   readonly name: HTMLElement;
   readonly note: HTMLElement;
   readonly error: HTMLElement;
-  /// La frase che dice, a chi ascolta, che il valore è diverso dallo stile.
-  readonly differs: HTMLElement;
-  /// Il modulo di una voce che chiede un nome, quando c'è stato bisogno di
-  /// farlo.
-  ask: AskForm | null;
   /// Il controllo che prende il fuoco e che il nome nomina.
   readonly control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement | HTMLElement;
   /// La sigla dell'unità accanto al numero, e quella che si sente col nome.
@@ -572,19 +458,6 @@ interface Line {
   /// Le voci della scelta disegnate, per non rifarle a ogni aggiornamento; di
   /// un campo a menu, l'icona del pulsante.
   options: string;
-}
-
-/// Il modulo sotto un campo a menu che chiede un nome: per quale voce, se è
-/// aperto.
-interface AskForm {
-  readonly root: HTMLElement;
-  readonly title: HTMLElement;
-  readonly input: HTMLInputElement;
-  readonly label: HTMLLabelElement;
-  readonly error: HTMLElement;
-  readonly submit: HTMLButtonElement;
-  readonly cancel: HTMLButtonElement;
-  option: string | null;
 }
 
 interface Section {
@@ -765,47 +638,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     options.onSection(section.id, open);
   }
 
-  // --- I colori del documento ---------------------------------------------------
-
-  // «Applica a» è uno solo: la scelta in una sezione passa all'altra.
-  const colors = createSwatchesPanel(life, {
-    ...options.colors,
-    onTarget: (target) => {
-      gradient.setTarget(target);
-      options.onTarget(target);
-    },
-    announce: (text) => options.announce(text),
-  });
-  sections.get("colors")!.body.append(colors.element);
-
-  // --- La sfumatura ---------------------------------------------------------------
-
-  const gradient = createGradientPanel(life, {
-    ...options.gradient,
-    onTarget: (target) => {
-      colors.setTarget(target);
-      options.onTarget(target);
-    },
-    announce: (text) => options.announce(text),
-  });
-  sections.get("gradient")!.body.append(gradient.element);
-
-  // --- Il connettore --------------------------------------------------------------
-
-  const connector = createConnectorPanel(life, {
-    ...options.connector,
-    announce: (text) => options.announce(text),
-  });
-  sections.get("connector")!.body.append(connector.element);
-
-  // --- La campitura ---------------------------------------------------------------
-
-  const hatch = createHatchPanel(life, {
-    ...options.hatch,
-    announce: (text) => options.announce(text),
-  });
-  sections.get("hatch")!.body.append(hatch.element);
-
   // --- Le barre di pulsanti ---------------------------------------------------
 
   /// Una fila di pulsanti col roving tabindex: uno solo prende il Tab, le
@@ -897,16 +729,12 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   const lines = new Map<FieldId, Line>();
 
   /// Il nome e la nota di un campo, e l'errore.
-  const parts = (spec: Spec): { root: HTMLElement; note: HTMLElement; error: HTMLElement; differs: HTMLElement } => {
+  const parts = (spec: Spec): { root: HTMLElement; note: HTMLElement; error: HTMLElement } => {
     const root = document.createElement("div");
     root.className = "draw-properties-field";
     root.dataset.field = spec.id;
     root.dataset.column = spec.column;
     root.hidden = true;
-    const differs = document.createElement("span");
-    differs.className = "sr-only";
-    differs.id = identifier("draw-properties-differs");
-    differs.hidden = true;
     const note = document.createElement("p");
     note.className = "draw-properties-note";
     note.id = identifier("draw-properties-note");
@@ -915,8 +743,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     error.className = "draw-properties-error";
     error.id = identifier("draw-properties-error");
     error.hidden = true;
-    root.append(differs);
-    return { root, note, error, differs };
+    return { root, note, error };
   };
 
   const textInput = (): HTMLInputElement => {
@@ -939,7 +766,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   };
 
   const createLine = (spec: Spec): Line => {
-    const { root, note, error, differs } = parts(spec);
+    const { root, note, error } = parts(spec);
     let name: HTMLElement;
     let control: Line["control"];
     let unit: HTMLElement | null = null;
@@ -1028,15 +855,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         control = button;
         break;
       }
-      case "line": {
-        const input = textInput();
-        input.spellcheck = true;
-        input.setAttribute("autocapitalize", "sentences");
-        name = labelFor(input);
-        root.append(name, input, note, error);
-        control = input;
-        break;
-      }
       case "text": {
         const area = document.createElement("textarea");
         area.className = "draw-properties-input";
@@ -1089,7 +907,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         break;
       }
     }
-    return { spec, root, name, note, error, differs, ask: null, control, unit, spoken, chip, chipFrame, chipColor, contrast, segments, picture, caption, state: null, shown: "", options: "" };
+    return { spec, root, name, note, error, control, unit, spoken, chip, chipFrame, chipColor, contrast, segments, picture, caption, state: null, shown: "", options: "" };
   };
 
   // Un campo entra nella sua sezione la prima volta che ha di che mostrarsi:
@@ -1134,7 +952,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
 
   /// Chi descrive il campo: la nota, il contrasto e l'errore che si vedono.
   const describe = (line: Line): void => {
-    const ids = [line.differs, line.note, line.contrast, line.error].filter((part): part is HTMLElement => part !== null && !part.hidden).map((part) => part.id);
+    const ids = [line.note, line.contrast, line.error].filter((part): part is HTMLElement => part !== null && !part.hidden).map((part) => part.id);
     if (ids.length === 0) line.control.removeAttribute("aria-describedby");
     else line.control.setAttribute("aria-describedby", ids.join(" "));
   };
@@ -1283,35 +1101,18 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     select.disabled = !view.editable || state.disabled === true;
   };
 
-  /// L'anteprima di una voce sul pulsante del campo, come nel menu.
-  const sampleEl = (sample: MenuSample): HTMLElement => {
-    const out = document.createElement("span");
-    out.className = sample.text === "" ? "menu-sample menu-sample-box" : "menu-sample";
-    out.textContent = sample.text;
-    for (const [name, value] of Object.entries(sample.css)) out.style.setProperty(name, value);
-    return out;
-  };
-
   const paintMenu = (line: Line, state: MenuChoiceState): void => {
     const button = line.control as HTMLButtonElement;
     line.name.textContent = state.label;
     const current = state.value === null ? undefined : state.options.find((option) => option.value === state.value);
     const summary = state.summary ?? current?.label ?? t("draw.properties.mixed");
     line.caption!.textContent = summary;
-    // La figura è quella della voce di adesso, l'icona o l'anteprima; una
-    // scelta mista non ne ha.
-    const drawn = current?.sample !== undefined ? JSON.stringify(current.sample) : (current?.icon ?? "");
+    // La figura è l'icona della voce di adesso; una scelta mista non ne ha.
+    const drawn = current?.icon ?? "";
     if (drawn !== line.options) {
-      const glyph = current?.sample !== undefined ? sampleEl(current.sample) : drawn === "" ? null : iconEl(drawn);
+      const glyph = drawn === "" ? null : iconEl(drawn);
       line.picture!.replaceChildren(...(glyph === null ? [] : [glyph]));
       line.options = drawn;
-    }
-    // Il modulo di una voce che non c'è più, o che non si sceglie più, si
-    // chiude.
-    const asked = line.ask?.option ?? null;
-    if (asked !== null) {
-      const option = state.options.find((each) => each.value === asked);
-      if (option?.ask === undefined || option.disabled === true || !view.editable || state.disabled === true) closeAsk(line, false);
     }
     const spoken = t("draw.properties.menu_name", { label: state.label, value: summary });
     button.setAttribute("aria-label", spoken);
@@ -1395,15 +1196,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     (line.control as HTMLTextAreaElement).readOnly = !view.editable || state.disabled === true;
   };
 
-  const paintOneLine = (line: Line, state: LineState, fresh: boolean): void => {
-    const input = line.control as HTMLInputElement;
-    line.name.textContent = state.label;
-    if (state.max === undefined) input.removeAttribute("maxlength");
-    else input.maxLength = state.max;
-    showText(line, state.value, fresh);
-    input.readOnly = !view.editable || state.disabled === true;
-  };
-
   const paintLine = (line: Line, state: FieldState, fresh: boolean): void => {
     switch (state.kind) {
       case "number":
@@ -1433,18 +1225,11 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       case "text":
         paintText(line, state, fresh);
         break;
-      case "line":
-        paintOneLine(line, state, fresh);
-        break;
     }
     line.state = state;
     const note = state.note ?? "";
     line.note.hidden = note === "";
     line.note.textContent = note;
-    const differs = state.differs ?? "";
-    line.differs.hidden = differs === "";
-    line.differs.textContent = differs;
-    line.root.toggleAttribute("data-differs", differs !== "");
     describe(line);
   };
 
@@ -1566,10 +1351,10 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     return send(line, written.value, written.text, loud);
   }
 
-  /// Scrive il testo di `line`, di più righe o di una, se è cambiato.
+  /// Scrive il testo di `line`, se è cambiato.
   const commitText = (line: Line, loud: boolean): boolean => {
-    const state = line.state as TextState | LineState | null;
-    const control = line.control as HTMLTextAreaElement | HTMLInputElement;
+    const state = line.state as TextState | null;
+    const control = line.control as HTMLTextAreaElement;
     if (state === null || !view.editable || state.disabled === true || control.value === line.shown) return true;
     return send(line, control.value, control.value, loud);
   };
@@ -1624,9 +1409,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     const items: MenuItem[] = state.options.map((option) => ({
       label: option.label,
       ...(option.icon === undefined ? {} : { icon: option.icon }),
-      ...(option.sample === undefined ? {} : { sample: option.sample }),
       ...(option.note === undefined ? {} : { description: option.note }),
-      ...(option.danger === true ? { danger: true } : {}),
       ...(option.action === true ? {} : { choice: "radio" as const, checked: option.checked === true }),
       ...(option.checked === true ? { selected: true } : {}),
       ...(option.disabled === true ? { disabled: true } : {}),
@@ -1649,119 +1432,9 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     if (state === null || state.kind !== "menu" || !view.editable || state.disabled === true) return;
     const now = state.options.find((each) => each.value === option.value);
     if (now === undefined || now.disabled === true || (now.action !== true && now.checked === true)) return;
-    if (now.ask !== undefined) return openAsk(line, now.value, now.ask);
     const failure = options.onChange(line.spec.id, now.value);
     if (failure !== null) fail(line, failure, true);
     else showError(line, null);
-  }
-
-  /// Il modulo di `line` che chiede un nome, fatto la prima volta che
-  /// serve: il titolo, il nome, che cosa non va, e i due pulsanti.
-  const askFormOf = (line: Line): AskForm => {
-    if (line.ask !== null) return line.ask;
-    const root = document.createElement("div");
-    root.className = "draw-swatches-form draw-properties-ask";
-    root.setAttribute("role", "group");
-    root.hidden = true;
-    const title = document.createElement("p");
-    title.className = "draw-swatches-form-title";
-    title.id = identifier("draw-properties-ask");
-    root.setAttribute("aria-labelledby", title.id);
-    const input = textInput();
-    input.maxLength = NAME_MAX;
-    input.spellcheck = true;
-    input.setAttribute("autocapitalize", "sentences");
-    const label = labelFor(input);
-    const row = document.createElement("div");
-    row.className = "draw-swatches-form-row";
-    row.append(label, input);
-    const error = document.createElement("p");
-    error.className = "draw-properties-error";
-    error.id = identifier("draw-properties-error");
-    error.hidden = true;
-    const actions = document.createElement("div");
-    actions.className = "draw-swatches-form-actions";
-    const submit = document.createElement("button");
-    submit.type = "button";
-    submit.className = "draw-button draw-properties-apply";
-    const cancel = document.createElement("button");
-    cancel.type = "button";
-    cancel.className = "draw-button draw-properties-apply";
-    actions.append(submit, cancel);
-    root.append(title, row, error, actions);
-    // Sotto il pulsante del campo, prima della sua nota.
-    line.root.insertBefore(root, line.note);
-    const form: AskForm = { root, title, input, label, error, submit, cancel, option: null };
-    line.ask = form;
-    life.listen(root, "keydown", (event) => {
-      const plain = !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey;
-      if (event.key === "Escape" && plain) closeAsk(line, true);
-      else if (event.key === "Enter" && plain && event.target === input) submitAsk(line);
-      else return;
-      event.preventDefault();
-      event.stopPropagation();
-    });
-    life.listen(submit, "click", () => submitAsk(line));
-    life.listen(cancel, "click", () => closeAsk(line, true));
-    life.listen(input, "input", () => showAskError(form, null));
-    return form;
-  };
-
-  /// Dice nel modulo che cosa non va nel nome.
-  const showAskError = (form: AskForm, text: string | null): void => {
-    form.error.hidden = text === null;
-    form.error.textContent = text ?? "";
-    if (text === null) {
-      form.input.removeAttribute("aria-invalid");
-      form.input.removeAttribute("aria-describedby");
-    } else {
-      form.input.setAttribute("aria-invalid", "true");
-      form.input.setAttribute("aria-describedby", form.error.id);
-    }
-  };
-
-  /// Apre sotto `line` il modulo della voce `value`, col nome proposto
-  /// scritto e scelto.
-  function openAsk(line: Line, value: string, ask: MenuAsk): void {
-    const form = askFormOf(line);
-    form.option = value;
-    form.title.textContent = ask.title;
-    form.label.textContent = t("draw.properties.ask_name");
-    form.submit.textContent = ask.submit;
-    form.cancel.textContent = t("draw.properties.ask_cancel");
-    form.input.value = ask.value;
-    showAskError(form, null);
-    showError(line, null);
-    form.root.hidden = false;
-    form.input.focus({ preventScroll: true });
-    form.input.select();
-    form.root.scrollIntoView?.({ block: "nearest" });
-  }
-
-  /// Chiude il modulo di `line`; il fuoco torna al pulsante del campo se
-  /// `back`, o se era nel modulo.
-  function closeAsk(line: Line, back: boolean): void {
-    const form = line.ask;
-    if (form === null || form.option === null) return;
-    const inside = form.root.contains(document.activeElement);
-    form.option = null;
-    form.root.hidden = true;
-    showAskError(form, null);
-    if ((back || inside) && !line.root.hidden) line.control.focus({ preventScroll: true });
-  }
-
-  /// Manda il nome scritto nel modulo di `line` con la sua voce. Se il
-  /// disegno non lo accetta, il modulo resta aperto e dice perché.
-  function submitAsk(line: Line): void {
-    const form = line.ask;
-    const state = line.state;
-    if (form === null || form.option === null || state === null || state.kind !== "menu") return;
-    const value = form.option;
-    const failure = options.onChange(line.spec.id, `${value}:${cleanName(form.input.value)}`);
-    if (failure === null) return closeAsk(line, true);
-    showAskError(form, failure);
-    options.announce(failure);
-    form.input.focus({ preventScroll: true });
   }
 
   /// Un interruttore della fila: si accende se era spento o misto, e si
@@ -1848,7 +1521,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     return line !== undefined && line.control === target ? line : null;
   };
 
-  const writes = (line: Line): boolean => line.spec.kind === "number" || line.spec.kind === "paint" || line.spec.kind === "text" || line.spec.kind === "line";
+  const writes = (line: Line): boolean => line.spec.kind === "number" || line.spec.kind === "paint" || line.spec.kind === "text";
 
   life.listen(element, "keydown", (event) => {
     const line = lineOf(event.target);
@@ -1875,8 +1548,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         return;
       } else if (line.spec.kind === "number") {
         commitNumber(line, true);
-      } else if (line.spec.kind === "line") {
-        commitText(line, true);
       } else {
         commitPaint(line, (line.control as HTMLInputElement).value, true);
       }
@@ -1914,7 +1585,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     if (line === null || line.root.hidden) return;
     if (line.spec.kind === "number") commitNumber(line, false);
     else if (line.spec.kind === "paint") commitPaint(line, (line.control as HTMLInputElement).value, false);
-    else if (line.spec.kind === "text" || line.spec.kind === "line") commitText(line, false);
+    else if (line.spec.kind === "text") commitText(line, false);
   });
 
   // Un pulsante preso col puntatore non prende il fuoco: resta al foglio,
@@ -1952,10 +1623,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       nameButtons(line, line.state?.label ?? t(key));
     }
     exportButton.textContent = t("draw.chrome.export.dialog");
-    colors.relabel();
-    connector.relabel();
-    gradient.relabel();
-    hatch.relabel();
   };
 
   const update = (next: PropertiesView): void => {
@@ -1992,32 +1659,14 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       }
       for (const { bar } of actionBars) bar.hidden = [...bar.children].every((control) => (control as HTMLElement).hidden);
       if (next.exportSelection === true && options.onExportSelection !== undefined) shown.add("exportSelection");
-      if (next.colors !== undefined) {
-        shown.add("colors");
-        colors.update(next.colors, next.editable);
-      }
-      if (next.connector !== undefined) {
-        shown.add("connector");
-        connector.update(next.connector, next.editable);
-      }
-      if (next.gradient !== undefined) {
-        shown.add("gradient");
-        gradient.update(next.gradient, next.editable);
-      }
-      if (next.hatch !== undefined) {
-        shown.add("hatch");
-        hatch.update(next.hatch, next.editable);
-      }
       for (const section of sections.values()) section.root.hidden = !shown.has(section.id);
     } finally {
       rendering = false;
     }
     for (const sync of roves) sync();
     // Il fuoco in un campo che se n'è andato resta nel pannello: alla sua
-    // sezione, se c'è ancora. Dal modulo di un campo a menu, che chiudendosi
-    // lo ha già dato al pulsante del campo, resta lì.
-    const asked = lost !== null && document.activeElement !== lost && (lost as HTMLElement).closest(".draw-properties-ask") !== null;
-    if (lost !== null && !asked && (lost as HTMLElement).closest("[hidden]") !== null) {
+    // sezione, se c'è ancora.
+    if (lost !== null && (lost as HTMLElement).closest("[hidden]") !== null) {
       const section = [...sections.values()].find((each) => each.root.contains(lost));
       if (section !== undefined && !section.root.hidden) section.toggle.focus({ preventScroll: true });
       else element.focus({ preventScroll: true });
@@ -2049,12 +1698,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       (firstIn(section) ?? section.toggle).focus({ preventScroll: true });
       return true;
     },
-    focusGradientColor() {
-      const section = sections.get("gradient")!;
-      if (section.root.hidden || !gradient.hasStops()) return false;
-      setOpen(section, true);
-      return gradient.focusColor();
-    },
     setClosed(ids) {
       const shut = new Set(ids);
       for (const section of sections.values()) {
@@ -2065,7 +1708,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         showOpen(section);
       }
     },
-    colorTarget: () => colors.target(),
     relabel,
   };
 }

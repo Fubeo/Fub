@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { readConnectorGeom } from "../scene/connectors";
 import type { Op } from "../scene/ops";
 import { doc } from "../scene/test-support";
-import { connectorOps, connectorView, type ConnectorChange, type ConnectorChanged } from "./connector-ops";
+import { connectorOps, type ConnectorChange, type ConnectorChanged } from "./connector-ops";
 import { followConnectors, LABEL_GAP } from "./connectors";
 import type { Unit } from "./hit";
 import { estimate } from "./measure";
@@ -28,7 +28,6 @@ const find = (opened: Opened) => (id: string) => opened.engine.holder(id);
 /// Gli oggetti di `keys`, o tutti.
 const unitsOf = (opened: Opened, keys: readonly string[] | null = null): Unit[] => opened.reindex().units.filter((unit) => keys === null || keys.includes(unit.key));
 
-const view = (opened: Opened, keys: readonly string[] | null = null) => connectorView(opened.engine.model!, unitsOf(opened, keys), find(opened));
 
 function changed(opened: Opened, change: ConnectorChange, keys: readonly string[] | null = ["c"]): ConnectorChanged {
   return connectorOps(opened.engine.model!, unitsOf(opened, keys), change, find(opened), estimate, ids(opened));
@@ -54,7 +53,6 @@ const geomOf = (opened: Opened, id = "c") => readConnectorGeom(attr(opened, id, 
 
 const A = '<rect id="a" x="100" y="100" width="200" height="120" fill="#e69f00"/>';
 const B = '<rect id="b" x="500" y="400" width="200" height="120" fill="#009e73"/>';
-const D = '<rect id="d" x="100" y="400" width="200" height="120" fill="#56b4e9"/>';
 
 /// Un connettore da `a` a `b`; `kind` ne dice il tipo e la geometria scritta,
 /// che il seguito ricalcola.
@@ -76,80 +74,6 @@ function ready(body: string): Opened {
   applied(opened, { op: "set", id: "a", attrs: { "fub:name": "A" } });
   return opened;
 }
-
-describe("quello che il pannello legge", () => {
-  it("senza connettori non c'è niente da mostrare", () => {
-    const opened = sheet(`${A}${B}`);
-    expect(view(opened)).toBeNull();
-    expect(view(opened, ["a"])).toBeNull();
-  });
-
-  it("di un connettore dice tipo, agganci ed etichetta", () => {
-    const opened = sheet(`${A}${B}${LINE("c", "elbow", "a right", "b top")}`);
-    expect(view(opened, ["c"])).toEqual({ count: 1, kind: "elbow", from: "right", to: "top", label: "", locked: 0 });
-  });
-
-  it("conta soltanto i connettori scelti, non gli oggetti accanto", () => {
-    const opened = sheet(`${A}${B}${LINE()}`);
-    expect(view(opened, ["a", "b", "c"])?.count).toBe(1);
-  });
-
-  it("un gruppo che contiene un connettore non conta", () => {
-    const opened = sheet(`${A}${B}<g id="g">${LINE()}</g>`);
-    expect(view(opened, ["g"])).toBeNull();
-  });
-
-  it("fra due connettori diversi dice «misto» là dove differiscono", () => {
-    const opened = sheet(`${A}${B}${D}${LINE("c", "elbow", "a right", "b top")}${LINE("e", "curved", "a right", "d left")}`);
-    expect(view(opened, ["c", "e"])).toEqual({ count: 2, kind: null, from: "right", to: null, label: "", locked: 0 });
-  });
-
-  it("un capo senza oggetto, o con un oggetto che non vale, è libero", () => {
-    const opened = sheet(`${A}${LINE("c", "straight", "a auto", "")}${LINE("e", "straight", "nessuno left", "e top")}`);
-    expect(view(opened, ["c"])).toMatchObject({ from: "auto", to: "free" });
-    // Un id che non c'è, e un capo agganciato al connettore stesso.
-    expect(view(opened, ["e"])).toMatchObject({ from: "free", to: "free" });
-  });
-
-  it("un capo e un altro libero insieme sono «misto»", () => {
-    const opened = sheet(`${A}${B}${LINE("c", "straight", "a auto", "b auto")}${LINE("e", "straight", "a auto", "")}`);
-    expect(view(opened, ["c", "e"])).toMatchObject({ from: "auto", to: null });
-  });
-
-  it("l'etichetta è il testo della prima, a capo come si scrive", () => {
-    const opened = sheet(`${A}${B}${LINE()}${LABEL("t1", "c", ["Prima", "riga"])}${LABEL("t2", "c", ["Seconda"], "c 0.2 4")}`);
-    expect(view(opened, ["c"])?.label).toBe("Prima\nriga");
-  });
-
-  it("l'etichetta è «misto» se i connettori ne hanno di diverse", () => {
-    const opened = sheet(`${A}${B}${LINE("c")}${LINE("e")}${LABEL("t1", "c", ["Si"])}`);
-    expect(view(opened, ["c"])?.label).toBe("Si");
-    expect(view(opened, ["e"])?.label).toBe("");
-    expect(view(opened, ["c", "e"])?.label).toBeNull();
-    expect(view(opened, ["c", "e"])).toMatchObject({ count: 2 });
-  });
-
-  it("l'etichetta di un connettore in un gruppo si trova lo stesso", () => {
-    const opened = sheet(`${A}${B}<g id="g">${LINE()}${LABEL("t1", "c", ["Nel gruppo"])}</g>`);
-    expect(view(opened, ["c"])).toBeNull();
-    const units = opened.reindex(opened.engine.holder("g") as never).units.filter((unit) => unit.key === "c");
-    expect(connectorView(opened.engine.model!, units, find(opened))?.label).toBe("Nel gruppo");
-  });
-
-  it("dice quanti connettori sono bloccati, anche per il livello o il gruppo", () => {
-    const opened = open(
-      doc(`<g id="l1" fub:layer="Livello 1">${A}${B}${LINE("c")}${LINE("e")}<g id="g">${LINE("h")}</g></g><g id="l2" fub:layer="Livello 2">${LINE("f")}</g>`),
-    );
-    const units = lockedUnits(opened, ["c", "e", "f"], ["e", "l2"]);
-    const read = (keys: readonly string[]) => connectorView(opened.engine.model!, units.filter((unit) => keys.includes(unit.key)), find(opened));
-    expect(read(["c"])?.locked).toBe(0);
-    expect(read(["e"])?.locked).toBe(1);
-    expect(read(["c", "e"])).toMatchObject({ count: 2, locked: 1 });
-    expect(read(["f"])).toMatchObject({ count: 1, locked: 1 });
-    expect(read(["c", "e", "f"])).toMatchObject({ count: 3, locked: 2 });
-  });
-});
-
 describe("il tipo", () => {
   it("riscrive il percorso del tipo nuovo, e un annulla torna al byte", () => {
     const opened = ready(`${A}${B}${LINE("c", "elbow")}`);
@@ -294,32 +218,12 @@ describe("l'etichetta", () => {
     expect(after).toMatch(/<text id="o[a-z0-9]+"[^>]* fill="#d55e00"[^>]* font-size="20"/);
   });
 
-  it("con un'etichetta già scritta ne cambia le righe, non ne aggiunge un'altra", () => {
-    const opened = ready(`${A}${B}${LINE("c")}${LABEL("t1", "c", ["Prima"])}`);
-    const made = changed(opened, { label: "Nuova\nriga" });
-    expect(made.ops).toEqual([{ op: "text", id: "t1", lines: ["Nuova", "riga"] }]);
-    const after = applied(opened, made.ops);
-    expect(after.match(/<text /g)).toHaveLength(1);
-    expect(after).toContain(">Nuova</tspan>");
-    expect(view(opened, ["c"])?.label).toBe("Nuova\nriga");
-  });
 
   it("lo stesso testo non cambia niente", () => {
     const opened = ready(`${A}${B}${LINE("c")}${LABEL("t1", "c", ["Uguale"])}`);
     expect(changed(opened, { label: "Uguale" })).toEqual({ ops: [], keys: ["c"], reached: 0 });
   });
 
-  it("vuoto toglie tutte le etichette del connettore, e un annulla le riporta", () => {
-    const opened = ready(`${A}${B}${LINE("c")}${LABEL("t1", "c", ["Prima"])}${LABEL("t2", "c", ["Seconda"], "c 0.2 4")}${LINE("e")}${LABEL("t3", "e", ["Altra"])}`);
-    const made = changed(opened, { label: "  " }, ["c"]);
-    expect(made.reached).toBe(1);
-    expect(made.ops.filter((op) => op.op === "remove")).toHaveLength(2);
-    const after = applied(opened, made.ops);
-    expect(after).not.toContain('id="t1"');
-    expect(after).not.toContain('id="t2"');
-    expect(after).toContain('id="t3"');
-    expect(view(opened, ["c"])?.label).toBe("");
-  });
 
   it("vuoto, su un connettore senza etichette, non cambia niente", () => {
     const opened = ready(`${A}${B}${LINE("c")}`);

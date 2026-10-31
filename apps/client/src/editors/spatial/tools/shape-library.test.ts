@@ -10,7 +10,7 @@ import { polygonalPath, readPolygonal, STAR_RATIO } from "../scene/parametric";
 import { pathData } from "../scene/serialize";
 import { formatNumber } from "../number";
 import { drawStrings } from "../strings";
-import { d, LIBRARY, LIBRARY_GROUPS, libraryShape, polygonPath, type LibraryPiece, type LibraryShape } from "./shape-library";
+import { d, LIBRARY, libraryShape, polygonPath, type LibraryPiece, type LibraryShape } from "./shape-library";
 
 const IT = drawStrings.catalogFor("it");
 const EN = drawStrings.catalogFor("en");
@@ -83,16 +83,6 @@ describe("le raccolte di forme", () => {
     }
   });
 
-  it("vanno nell'ordine delle raccolte, e ogni raccolta ha forme", () => {
-    const order = LIBRARY.map((shape) => LIBRARY_GROUPS.indexOf(shape.group));
-    expect(order).not.toContain(-1);
-    expect(order).toEqual([...order].sort((a, b) => a - b));
-    for (const group of LIBRARY_GROUPS) {
-      expect(LIBRARY.filter((shape) => shape.group === group).length, group).toBeGreaterThan(0);
-      expect(IT[`draw.library.group.${group}`], group).toBeDefined();
-      expect(EN[`draw.library.group.${group}`], group).toBeDefined();
-    }
-  });
 
   it("ogni forma è fra le sue, col suo id", () => {
     for (const shape of LIBRARY) expect(libraryShape(shape.id)).toBe(shape);
@@ -115,17 +105,6 @@ describe("le raccolte di forme", () => {
     }
   });
 
-  it("non lasciano voci del catalogo senza forma", () => {
-    const keys = new Set<string>(LIBRARY_GROUPS.map((group) => `draw.library.group.${group}`));
-    for (const shape of LIBRARY) {
-      keys.add(shape.name);
-      if (shape.words !== undefined) keys.add(shape.words);
-    }
-    for (const catalog of [IT, EN]) {
-      const own = Object.keys(catalog).filter((key) => key.startsWith("draw.library."));
-      expect(own.sort()).toEqual([...keys].sort());
-    }
-  });
 
   it("partono da una misura di almeno 20 unità per lato", () => {
     for (const shape of LIBRARY) {

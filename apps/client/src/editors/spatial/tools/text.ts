@@ -26,7 +26,6 @@ import { formatNumber } from "../number";
 import type { Point } from "../scene/matrix";
 import type { TextLine } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
-import type { Width } from "./palette";
 
 /// Il carattere di un testo nuovo, come lo scrive il file.
 export const TEXT_FAMILY = "Inter, sans-serif";
@@ -34,14 +33,6 @@ export const TEXT_FAMILY = "Inter, sans-serif";
 /// I caratteri che il file scrive (formato della scena, §4): quelli che Fub
 /// distribuisce, ciascuno col suo ripiego generico.
 export const TEXT_FAMILIES: readonly string[] = [TEXT_FAMILY, "Literata, serif", "JetBrains Mono, monospace"];
-
-/// Le dimensioni di un testo nuovo, come gli spessori: tre, coi loro nomi,
-/// in unità della scena.
-export const TEXT_SIZES: readonly Width[] = [
-  { id: "small", value: 24, label: "draw.size.small" },
-  { id: "medium", value: 32, label: "draw.size.medium" },
-  { id: "large", value: 48, label: "draw.size.large" },
-];
 
 /// La dimensione di partenza: Medio, quella dell'esempio del formato.
 export const TEXT_SIZE = 32;

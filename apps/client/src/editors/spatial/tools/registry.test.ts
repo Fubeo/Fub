@@ -43,7 +43,7 @@ describe("il registro degli strumenti", () => {
     ]);
     // L'Esperto e il Personalizzato non aggiungono niente, e nessun comando.
     expect(toolsFor("expert", "pdf")).toEqual(toolsFor("standard", "pdf"));
-    expect(featuresFor("custom", ["layers", "text"], "pdf")).toEqual(featuresFor("standard", [], "pdf"));
+    expect(featuresFor("custom", ["layers", "highlighter"], "pdf")).toEqual(featuresFor("standard", [], "pdf"));
     expect([...featuresFor("expert", [], "pdf")].some((feature) => FEATURES.some((spec) => spec.id === feature && !TOOLS.some((tool) => tool.id === feature)))).toBe(false);
     // Note e copertura non sono del disegno, né parti del Personalizzato.
     expect(toolsFor("expert", "vector").some((tool) => tool.id === "note" || tool.id === "cover")).toBe(false);
@@ -61,34 +61,14 @@ describe("il registro degli strumenti", () => {
     expect(toolForKey(toolsFor("standard"), "c")).toBeNull();
   });
 
-  it("aggiunge allo Standard il lazo, la Tavola, il contagocce e la Sfumatura accanto alla selezione, l'evidenziatore dopo la penna, il Connettore dopo la freccia, il poligono dopo il Connettore e il testo in fondo", () => {
+  it("aggiunge allo Standard soltanto l'evidenziatore dopo la penna: gli altri strumenti se ne sono andati (ADR 0231)", () => {
     expect(toolsFor("standard").map((tool) => tool.id)).toEqual([
-      "select", "hand", "zoom", "lasso", "board", "eyedropper", "gradient", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "connector", "polygon", "text",
+      "select", "hand", "zoom", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow",
     ]);
-    // Il tasto del lazo è quello di Illustrator.
-    expect(toolSpec("lasso")).toMatchObject({ levels: { vector: "standard" }, group: "pick", shortcut: "q" });
-    expect(toolForKey(toolsFor("essential"), "q")).toBeNull();
     expect(toolSpec("highlighter").shortcut).toBe("Shift-p");
-    expect(toolSpec("text").shortcut).toBe("t");
-    // Il tasto del poligono è quello di CorelDRAW.
-    expect(toolSpec("polygon")).toMatchObject({ levels: { vector: "standard" }, group: "shape", shortcut: "y" });
-    expect(toolForKey(toolsFor("essential"), "y")).toBeNull();
-    // Il tasto della Tavola è quello del Frame di Figma.
-    expect(toolSpec("board")).toMatchObject({ levels: { vector: "standard" }, group: "pick", shortcut: "f" });
-    expect(toolForKey(toolsFor("essential"), "f")).toBeNull();
-    expect(toolForKey(toolsFor("standard"), "F")?.id).toBe("board");
-    // Quello del contagocce è di Illustrator e di Photoshop.
-    expect(toolSpec("eyedropper")).toMatchObject({ levels: { vector: "standard" }, group: "pick", shortcut: "i" });
-    expect(toolForKey(toolsFor("essential"), "i")).toBeNull();
-    expect(toolForKey(toolsFor("standard"), "I")?.id).toBe("eyedropper");
-    // E quello della Sfumatura è di Illustrator.
-    expect(toolSpec("gradient")).toMatchObject({ levels: { vector: "standard" }, group: "pick", shortcut: "g" });
-    expect(toolForKey(toolsFor("essential"), "g")).toBeNull();
-    expect(toolForKey(toolsFor("standard"), "G")?.id).toBe("gradient");
-    // Il Connettore è una forma, sulla X.
-    expect(toolSpec("connector")).toMatchObject({ levels: { vector: "standard" }, group: "shape", shortcut: "x" });
-    expect(toolForKey(toolsFor("essential"), "x")).toBeNull();
-    expect(toolForKey(toolsFor("standard"), "X")?.id).toBe("connector");
+    // Le lettere del lazo, della Tavola, del contagocce, della Sfumatura, del
+    // Connettore, del poligono e del testo non sono più di nessuno.
+    for (const key of ["q", "f", "i", "g", "x", "y", "t"]) expect(toolForKey(toolsFor("standard"), key), key).toBeNull();
     expect(reaches("standard", "essential")).toBe(true);
     expect(reaches("standard", "standard")).toBe(true);
     expect(reaches("standard", "expert")).toBe(false);
@@ -114,7 +94,7 @@ describe("il registro degli strumenti", () => {
   it("elenca le parti per livello, prima gli strumenti nell'ordine della barra, ciascuna una volta", () => {
     expect(FEATURES.map((feature) => feature.id)).toEqual([
       "pen", "eraser", "rect", "ellipse", "line", "arrow",
-      "lasso", "board", "eyedropper", "gradient", "highlighter", "connector", "polygon", "text", "colors", "swatches", "styles", "tips", "hatches", "selection", "arrange", "layers", "grid", "guides", "rulers", "recognize", "symmetry", "gestures", "links", "images", "crop", "library", "properties", "style", "history", "accessibility", "export", "present",
+      "highlighter", "colors", "tips", "selection", "arrange", "layers", "grid", "recognize", "gestures", "links", "images", "properties", "style", "history", "accessibility", "export",
     ]);
     expect(new Set(FEATURES.map((feature) => feature.label)).size).toBe(FEATURES.length);
     // Ogni strumento del disegno è una parte, tranne quelli della vista
@@ -138,13 +118,13 @@ describe("il registro degli strumenti", () => {
     expect(WORKSPACES).toEqual(["full", "simple"]);
     for (const each of WORKSPACES) expect(isWorkspace(each)).toBe(true);
     for (const other of ["Full", "", "essential", 1, null]) expect(isWorkspace(other)).toBe(false);
-    expect(SIMPLE_PARTS).toEqual(["pen", "eraser", "rect", "ellipse", "line", "arrow", "highlighter", "text", "colors", "gestures", "images", "properties", "export"]);
+    expect(SIMPLE_PARTS).toEqual(["pen", "eraser", "rect", "ellipse", "line", "arrow", "highlighter", "colors", "gestures", "images", "properties", "export"]);
     const full = workspaceLevel("full");
     expect(featuresFor(full.level, full.custom).size, "Completo non nasconde niente").toBe(FEATURES.length);
     const simple = workspaceLevel("simple");
     expect([...featuresFor(simple.level, simple.custom)]).toEqual(SIMPLE_PARTS);
     expect(toolsOf(featuresFor(simple.level, simple.custom)).map((tool) => tool.id)).toEqual([
-      "select", "hand", "zoom", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "text",
+      "select", "hand", "zoom", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow",
     ]);
     // Nelle annotazioni di un PDF il Semplice è l'Essenziale.
     expect(workspaceLevel("simple", "pdf").level).toBe("essential");
@@ -155,17 +135,16 @@ describe("il registro degli strumenti", () => {
 
   it("dà sempre la Selezione, la Mano e la Lente, e comincia dalla penna o dal primo strumento che disegna", () => {
     expect(toolsOf(new Set()).map((tool) => tool.id)).toEqual(["select", "hand", "zoom"]);
-    expect(toolsOf(featuresFor("custom", ["text", "lasso"])).map((tool) => tool.id)).toEqual(["select", "hand", "zoom", "lasso", "text"]);
+    expect(toolsOf(featuresFor("custom", ["highlighter", "layers"])).map((tool) => tool.id)).toEqual(["select", "hand", "zoom", "highlighter"]);
     expect(startTool(toolsFor("essential"))).toBe(DEFAULT_TOOL);
-    expect(startTool(toolsOf(featuresFor("custom", ["text", "lasso", "ellipse"])))).toBe("ellipse");
-    expect(startTool(toolsOf(featuresFor("custom", ["lasso"])))).toBe("select");
+    expect(startTool(toolsOf(featuresFor("custom", ["layers", "ellipse"])))).toBe("ellipse");
+    expect(startTool(toolsOf(featuresFor("custom", ["layers"])))).toBe("select");
   });
 
   it("dopo uno strumento che sceglie riprende la Selezione, dopo gli altri lo strumento di partenza", () => {
-    expect(toolAfter(toolsFor("essential"), "lasso")).toBe("select");
-    expect(toolAfter(toolsFor("standard"), "board")).toBe("select");
+    expect(toolAfter(toolsFor("essential"), "zoom")).toBe("select");
     expect(toolAfter(toolsFor("essential"), "highlighter")).toBe(DEFAULT_TOOL);
-    expect(toolAfter(toolsOf(featuresFor("custom", ["text"])), "pen")).toBe("text");
+    expect(toolAfter(toolsOf(featuresFor("custom", ["highlighter"])), "pen")).toBe("highlighter");
   });
 
   it("dà a ogni strumento un tasto suo nel profilo, una lettera minuscola, con Maiuscolo o no", () => {

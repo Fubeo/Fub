@@ -21,13 +21,6 @@ export const HIT_PX: Readonly<Record<InkPointerType, number>> = { pen: 6, mouse:
 /// trascinamento.
 export const DRAG_PX: Readonly<Record<InkPointerType, number>> = { pen: 3, mouse: 3, touch: 8 };
 
-/// Il Lazo tiene un punto ogni tanti pixel dello schermo, e al massimo
-/// tanti punti: oltre, ne lascia uno ogni due, e il lazo resta lo stesso a
-/// occhio.
-export const LASSO_STEP_PX = 2;
-
-export const LASSO_MAX_POINTS = 512;
-
 /// Sotto questa misura, in pixel, una forma è un tocco e non si scrive.
 export const MIN_SHAPE_PX = 4;
 
@@ -59,7 +52,7 @@ export const ROTATE_STEP = 15;
 export const RATIO_ROLES: ReadonlySet<Role> = new Set<Role>(["group", "link", "stroke", "text", "image"]);
 
 /// Le parti che hanno un pulsante nella barra della selezione.
-export const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "crop", "connector"];
+export const BAR_FEATURES: readonly Feature[] = ["arrange", "links", "layers", "recognize"];
 
 /// «Immagine dal vault…», dal livello Standard: il tasto con cui Inkscape
 /// importa.
@@ -88,18 +81,9 @@ export const DOUBLE_TAP_MS = 500;
 
 export const DOUBLE_TAP_PX: Readonly<Record<InkPointerType, number>> = { pen: 8, mouse: 6, touch: 16 };
 
-/// Quanto lontano da un nodo o da una maniglia un tocco li prende ancora, in
-/// pixel: un bersaglio largo almeno 24 pixel (WCAG 2.5.8), di più per il
-/// dito. Fra due vicini vince il più vicino.
-export const NODE_PX: Readonly<Record<InkPointerType, number>> = { pen: 12, mouse: 12, touch: 20 };
-
 /// La scelta dello strumento Tavola quando è la pagina: non è l'id di una
 /// tavola, perché un id XML non comincia con «#».
 export const PAGE_SHEET = "#page";
-
-/// Il tasto che mostra e nasconde i righelli: Ctrl+R, quello dei programmi di
-/// disegno, ricarica la pagina nel browser.
-export const RULERS_BINDING = "Shift-r";
 
 /// Ciò che si dice quando il documento cambia unità.
 export const UNITS_NOW: Readonly<Record<LengthUnit, DrawKey>> = {
@@ -135,7 +119,7 @@ export const AXES: ReadonlyArray<{ readonly axis: Axis; readonly label: DrawKey 
 ];
 
 /// Che cosa si annuncia quando una forma entra nel disegno.
-export const ADDED: Readonly<Record<Exclude<ShapeTool, "polygon">, DrawKey>> = {
+export const ADDED: Readonly<Record<ShapeTool, DrawKey>> = {
   rect: "draw.added.rect",
   ellipse: "draw.added.ellipse",
   line: "draw.added.line",

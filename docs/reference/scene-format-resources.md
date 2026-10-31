@@ -11,7 +11,7 @@
 > i vettori di prova da 50 a 59, 63, 64, 76 e 77 ([operazioni sulla
 > scena](scene-operations.md), §9), il disegno in `painter/paint.ts`, e le
 > punte delle linee in `tools/tips.ts`, coi vertici in `scene/markers.ts`;
-> le campiture in `tools/hatches.ts`, i motivi in `tools/patterns.ts`.
+> le campiture in `tools/hatches.ts`.
 
 Una parte del [formato della scena](scene-format.md), §4. Una risorsa è un
 elemento che non si disegna da solo e che gli oggetti usano per riferimento:

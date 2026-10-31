@@ -22,7 +22,7 @@
 import { formatNumber } from "../number";
 import type { Bounds, Segment } from "../scene/geometry";
 import { parsePath } from "../scene/geometry";
-import { apply, type Matrix, type Point } from "../scene/matrix";
+import type { Point } from "../scene/matrix";
 import { polygonalAttrs, readPolygonal, type PolygonalShape } from "../scene/parametric";
 import { pathData, type Elem } from "../scene/serialize";
 import type { NewIds } from "./edit";
@@ -151,20 +151,4 @@ export function forPreview(elem: Elem): Elem {
   const { id: _id, ...attrs } = elem.attrs;
   if (elem.children === undefined) return { ...elem, attrs };
   return { ...elem, attrs, children: elem.children.filter((child) => child.tag !== "title").map(forPreview) };
-}
-
-/// Il riquadro della forma `shape` nella scena, con il centro in `center`,
-/// della misura con cui s'inserisce.
-export function boxAround(shape: LibraryShape, center: Point): Bounds {
-  const [width, height] = shape.size;
-  return { min: [center[0] - width / 2, center[1] - height / 2], max: [center[0] + width / 2, center[1] + height / 2] };
-}
-
-/// Il riquadro `box`, della scena, nelle coordinate del livello che ha
-/// `inverse`: i due angoli opposti, come un rettangolo tirato in diagonale.
-/// Una scala del livello divide la misura; una rotazione la ruota con lui.
-export function boxIn(box: Bounds, inverse: Matrix): Bounds {
-  const a = apply(inverse, box.min);
-  const b = apply(inverse, box.max);
-  return { min: [Math.min(a[0], b[0]), Math.min(a[1], b[1])], max: [Math.max(a[0], b[0]), Math.max(a[1], b[1])] };
 }

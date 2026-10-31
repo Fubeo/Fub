@@ -57,11 +57,11 @@ Triangolo, media».
 ## Il colore
 
 - **Una punta ha il colore del contorno** della linea, con la sua opacità,
-  scritto da lei o preso dal gruppo, e lo segue: cambiare il contorno, quello
-  del gruppo che lo passa, ricolorare un campione o cambiare la sfumatura del
-  contorno ricolora le punte nello stesso passo di annulla.
-- **Un campione** resta un campione: la punta lo usa per nome, e cambia con
-  lui ([Disegni, colori](drawing-colors.md)).
+  scritto da lei o preso dal gruppo, e lo segue: cambiare il contorno, o
+  quello del gruppo che lo passa, ricolora le punte nello stesso passo di
+  annulla.
+- **Un campione** resta un campione: la punta lo usa per nome
+  ([Disegni, colori](drawing-colors.md)).
 - **Una sfumatura** dà alla punta il colore e la trasparenza che ha nel
   punto dove la punta sta: la punta di una dissolvenza svanisce con la
   linea. Un motivo dà il suo colore di ripiego.
@@ -95,14 +95,11 @@ risorse](../reference/scene-format-resources.md#le-punte-delle-linee).
 
 ## Con gli altri comandi
 
-- **«Incolla lo stile» e il contagocce** portano le punte della raccolta,
-  anche in un altro disegno; un capo con «Un’altra punta» resta com'era.
-  Il contagocce su una punta prende l'aspetto della sua linea.
+- **«Incolla lo stile»** porta le punte della raccolta, anche in un altro
+  disegno; un capo con «Un’altra punta» resta com'era.
 - **Duplicare, copiare e incollare** portano le punte con la linea: in un
   altro disegno, una punta uguale a una che c'è già usa quella.
-- **I connettori** hanno le punte come ogni linea, e uno nuovo parte con un
-  triangolo medio alla fine. «Inverti», nella sezione «Connettore», scambia
-  inizio e fine del connettore, e la punta va all'altro capo con la fine
+- **I connettori** che un disegno porta hanno le punte come ogni linea
   ([Disegni, connettori](drawing-connectors.md)).
 - **In Lettura e nell'export** le punte sono quelle del file, uguali a
   quelle del foglio.

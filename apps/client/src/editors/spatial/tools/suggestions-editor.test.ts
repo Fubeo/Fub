@@ -4,14 +4,13 @@
 // fatto che lo chiude per sempre; la memoria di chi monta l'editor, e la
 // casella che li spegne.
 
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { SceneEngine } from "../scene/engine";
 import { doc } from "../scene/test-support";
 import { createDrawEditor, type DrawChange, type DrawEditor, type DrawEditorOptions } from "./editor";
 import { LAYER } from "./test-support";
-import { loadWriting } from "./writing";
 
 /// Un foglio di 600 × 600 con un quadrato: i tratti e le forme ci stanno
 /// senza farlo crescere.
@@ -118,11 +117,6 @@ function key(name: string, init: KeyboardEventInit = {}, target: HTMLElement = s
   target.dispatchEvent(event);
   return event;
 }
-
-// Scrittura arriva prima dei testi, come dopo il montaggio del disegno.
-beforeAll(async () => {
-  await loadWriting();
-});
 
 beforeEach(() => {
   host = document.createElement("div");
@@ -248,40 +242,13 @@ describe("i suggerimenti nell'editor", () => {
     expect(showing()).toBeNull();
   });
 
-  it("dopo la seconda forma senza testo dice come si scrive dentro una forma; scritta un'etichetta, non torna", () => {
+  it("dopo due forme non dice più come si scrive dentro una forma: il testo non si scrive sul posto (ADR 0231)", () => {
     mount({ level: "standard", suggestions: { on: true, seen: ["two-fingers", "hold-shape"] } }, EMPTY);
     editor.setTool("rect");
     stroke([[100, 100], [200, 160]]);
-    expect(showing()).toBeNull();
     stroke([[300, 100], [400, 160]]);
-    expect(showing()).toBe("label-shape");
-    expect(text()).toBe("Per scrivere dentro una forma, fai doppio clic o due tocchi su di lei, oppure sceglila e premi F2.");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-
-    owner.close();
-    owner = openLifetime();
-    host.replaceChildren();
-    seen = [];
-    mount({ level: "standard", suggestions: { on: true, seen: ["two-fingers", "hold-shape"] } }, EMPTY);
-    editor.setTool("rect");
-    stroke([[100, 100], [200, 160]]);
-    editor.setTool("select");
-    editor.select([/<rect id="([^"]+)"/.exec(editor.engine.text)![1]!]);
-    surface().focus();
-    key("F2");
-    const input = host.querySelector<HTMLElement>(".draw-text-input")!;
-    const range = document.createRange();
-    range.selectNodeContents(input);
-    document.getSelection()!.removeAllRanges();
-    document.getSelection()!.addRange(range);
-    input.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "Inizio" }));
-    key("Escape", {}, input);
-    expect(editor.engine.text).toContain("fub:inside=");
-    expect(seen).toEqual([["two-fingers", "hold-shape", "label-shape"]]);
-    editor.setTool("rect");
-    stroke([[300, 100], [400, 160]]);
-    stroke([[100, 300], [200, 360]]);
     expect(showing()).toBeNull();
+    expect(seen).toEqual([]);
   });
 
   it("senza lo strumento Testo non dice di scrivere nelle forme", () => {

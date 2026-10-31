@@ -8,12 +8,11 @@
 In tutti e due gli spazi di lavoro il [disegno](drawing.md) ha il pannello
 delle proprietà, nella scheda «Design» dell'ispettore. Con una selezione dice com'è fatta e come si vede,
 in campi che si scrivono: posizione e misure, colori e contorno, il testo,
-come disporla. Senza selezione dice com'è fatto il disegno: i suoi colori,
-la pagina, l'unità di misura, la descrizione e come si vede il foglio.
+come disporla. Senza selezione dice com'è fatto il disegno: la pagina,
+l'unità di misura, la descrizione e come si vede il foglio.
 Nello Scrittoio il pannello sta nella scheda **Design** dell'ispettore, a
-destra, con le tavole; le altre schede del disegno sono
-Livelli (l'albero degli oggetti), Risorse (forme e simboli, con una ricerca
-sola quando ci sono tutti e due), Cronologia e Accessibilità. Dove l'editor
+destra; le altre schede del disegno sono Livelli (l'albero degli oggetti),
+Cronologia e Accessibilità. Dove l'editor
 tiene i pannelli con sé, come nei test, il pannello sta con l'albero degli
 oggetti, sotto di lui, e su un riquadro stretto va sotto il foglio
 (`apps/client/src/editors/spatial/tools/properties.ts`, i campi in
@@ -34,8 +33,8 @@ con `grid`, `setGrid` e `onGridChange`.
 
 ## Le sezioni
 
-Il pannello ha in cima ciò di cui parla, «Rettangolo», «3 oggetti», «Tavola
-2 di 5» o «Il disegno», e sotto le sezioni. L'intestazione di una sezione è un
+Il pannello ha in cima ciò di cui parla, «Rettangolo», «3 oggetti» o «Il
+disegno», e sotto le sezioni. L'intestazione di una sezione è un
 pulsante che la apre e la chiude; le sezioni chiuse si ricordano con la vista,
 in `grid.closed`. Una sezione senza niente da mostrare non c'è.
 
@@ -52,54 +51,32 @@ in `grid.closed`. Una sezione senza niente da mostrare non c'è.
 - **Disponi.** Allineare i bordi e i centri, distribuire in orizzontale e in
   verticale, e l'ordine, come la barra «Disponi» di [Disegni](drawing.md). Un
   comando che adesso non serve resta raggiungibile, sbiadito, e dice perché.
-- **Aspetto.** In testa, con la parte «Stili del documento», lo Stile
-  grafico che gli oggetti seguono ([Disegni, stili](drawing-styles.md)); poi
-  l'Opacità. Gli effetti e la fusione che un disegno porta si vedono sul
+- **Aspetto.** L'Opacità. Gli effetti e la fusione che un disegno porta si vedono sul
   foglio e non stanno nel pannello ([Disegni, effetti e
   fusione](drawing-effects.md)).
 - **Riempimento**, con la parte «Colori personalizzati»: il colore che
   riempie gli oggetti, con sotto il contrasto con la carta.
-- **Sfumatura.** Il tipo, Pieno, Lineare o Radiale, la barra dei punti coi
-  campi del punto scelto, le sfumature pronte, «Inverti» e l'Angolo;
-  nel Completo anche «Oltre i capi» ([Disegni, sfumature](drawing-gradients.md)).
-- **Campitura.** Il tipo, fra le campiture pronte, e i campi della campitura: Colore, Fondo, Passo, Spessore
-  e Angolo ([Disegni, campiture e motivi](drawing-patterns.md)).
 - **Contorno.** Il colore, con la parte «Colori personalizzati», lo
   Spessore e il Tratteggio; per linee,
   connettori e tracciati aperti, «Punta d’inizio» e «Punta di fine»
   ([Disegni, punte delle linee](drawing-tips.md)).
-- **Testo.** Con la parte «Stili del documento» lo Stile di testo, coi suoi
-  stili di serie; senza, lo Stile, un corpo e un peso insieme. Poi
+- **Testo.** Lo Stile, un corpo e un peso insieme ([Disegni,
+  tipografia](drawing-typography.md#il-pannello)). Poi
   Carattere, fra Inter, Literata e JetBrains Mono, con sotto il carattere
   usato quando uno non si carica, anche uno dei [caratteri del
   vault](drawing-fonts.md) che il disegno nomina; Dimensione, Peso,
   l'Enfasi (grassetto, corsivo, sottolineato e barrato), Interlinea,
   Spaziatura e Allineamento, per tutto il testo anche quando le sue parole
   sono diverse ([Disegni, tipografia](drawing-typography.md)).
-- **Forma**, per poligoni, stelle e rettangoli: Tipo, Lati o Punte, Raggio
-  interno di una stella e Raggio degli angoli; senza selezione, col Poligono
-  in mano, quelli dello strumento ([Disegni, poligoni e stelle](drawing-shapes.md)).
-- **Connettore**, per i connettori scelti: il Tipo, fra Dritto, A gomito e
-  Curvo; l'Aggancio d’inizio e quello di fine; l'Etichetta; e «Inverti», che
-  scambia inizio e fine ([Disegni, connettori](drawing-connectors.md)).
-- **Simmetria**, senza selezione, con la penna o l'evidenziatore in mano: il
-  Tipo, gli Spicchi e «Specchiata» di una radiale, e il Centro ([Disegni,
-  ripetizioni e simmetria](drawing-repeats.md#la-penna-in-simmetria)).
 - **Esporta la selezione**, con oggetti scelti e la finestra «Esporta»
   disponibile: «Esporta…» apre la finestra con la selezione già scelta come
   cosa da esportare, e lì si scelgono formato e scala.
 - **Documento**, senza selezione: in un disegno senza tavole Formato e
-  Orientamento della pagina, con le misure pronte delle tavole; poi Larghezza
-  e Altezza della pagina, l'unità di misura e la descrizione. Il titolo sta
+  Orientamento della pagina, con le misure pronte; poi Larghezza e Altezza
+  della pagina, l'unità di misura e la descrizione. Il titolo sta
   in cima al pannello.
-- **Tavola**, senza selezione, con lo strumento Tavola e una tavola scelta:
-  Nome, Formato, Orientamento, X, Y, Larghezza e Altezza della tavola
-  ([Disegni, tavole](drawing-boards.md#le-proprietà)).
-- **Griglia e guide**, senza selezione: le caselle della griglia,
-  dell'aggancio, delle guide intelligenti, dei righelli e delle guide, e
+- **Griglia**, senza selezione: le caselle della griglia, dell'aggancio e
   quella della barra della selezione, come in «Pagina e griglia».
-- **Colori del documento**, in fondo, con e senza selezione: i campioni, i
-  colori usati e i recenti, da dare agli oggetti scelti o con cui disegnare ([Disegni, colori](drawing-colors.md#la-sezione-colori-del-documento)).
 
 ## Scrivere un valore
 
@@ -111,7 +88,7 @@ in `grid.closed`. Una sezione senza niente da mostrare non c'è.
   di 1, 10 con `Maiusc`, e partono subito: i colpi di fila si annullano
   insieme.
 - **Le lunghezze sono nell'unità del documento**, col nome del campo che la
-  dice, «Larghezza (mm)», come in [Disegni, righelli e
+  dice, «Larghezza (mm)», come in [Disegni, unità e
   guide](drawing-rulers.md). Lo spessore del contorno e la dimensione del
   testo sono in punti, come nei programmi di disegno e d'impaginazione, e in
   pixel in un documento in pixel. Le rotazioni sono in gradi, l'opacità in
@@ -156,12 +133,12 @@ cercare (`apps/client/src/editors/spatial/tools/bar.ts`):
 - **sotto la selezione**, al centro, oltre le maniglie: non ne copre mai una;
 - **sopra, se sotto non c'è posto**, e in fondo a ciò che si vede se la
   selezione riempie la vista;
-- **dentro ciò che si vede**, accanto ai righelli: una selezione che esce
-  dalla vista lascia la barra sul bordo più vicino.
+- **dentro ciò che si vede**: una selezione che esce dalla vista lascia la
+  barra sul bordo più vicino.
 
 Durante un gesto, spostare, ridimensionare o ruotare, la barra non si vede,
 e torna quando il gesto finisce. `Alt+F10` le porta il fuoco come sempre.
-La casella «Barra accanto alla selezione», nella sezione «Griglia e guide», la riporta
+La casella «Barra accanto alla selezione», nella sezione «Griglia», la riporta
 in cima al foglio, e il cambiamento si annuncia; la scelta si ricorda con la
 vista, in `grid.bar`.
 

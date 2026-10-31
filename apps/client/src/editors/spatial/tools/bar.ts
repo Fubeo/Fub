@@ -6,7 +6,7 @@
 //   la barra non copre mai una maniglia che si vede.
 // - **Sopra, se sotto non c'è posto**; e se non c'è nemmeno sopra, perché la
 //   selezione riempie la vista, in fondo a ciò che si vede, sopra di lei.
-// - **Dentro ciò che si vede del foglio**, accanto ai righelli: una
+// - **Dentro ciò che si vede del foglio**: una
 //   selezione che esce dalla vista lascia la barra sul bordo più vicino.
 // - **Senza una selezione da affiancare**, in cima al foglio, al centro.
 //

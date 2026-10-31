@@ -28,9 +28,8 @@ import { UNIT_SIZE, UNITS, type LengthUnit } from "../scene/rulers";
 import { sceneBox, toScreen, type View } from "../view";
 
 /// La griglia, e ciò che sta con lei nel menu «Pagina e griglia» e si
-/// ricorda con lei: le guide intelligenti, i righelli e le loro guide, le
-/// forme dal tratto; e come si presentano il pannello delle proprietà e la
-/// barra della selezione.
+/// ricorda con lei: le guide intelligenti e le forme dal tratto; e come si
+/// presentano il pannello delle proprietà e la barra della selezione.
 export interface Grid {
   /// La griglia si vede.
   readonly shown: boolean;
@@ -41,13 +40,6 @@ export interface Grid {
   /// Il passo dei documenti nelle altre unità, in unità della scena: ogni
   /// unità ricorda il suo, e una che manca ha quello di serie.
   readonly steps: Readonly<Partial<Record<LengthUnit, number>>>;
-  /// Le guide intelligenti agganciano agli altri oggetti e alla pagina
-  /// (`guides.ts`).
-  readonly guides: boolean;
-  /// I righelli si vedono (`rulers.ts`).
-  readonly rulers: boolean;
-  /// Le guide dei righelli, scritte nel documento, si vedono e agganciano.
-  readonly rulerGuides: boolean;
   /// Il pannello delle proprietà è aperto. `null` finché nessuno l'ha aperto
   /// o chiuso: si apre da sé in un editor abbastanza largo da tenerlo.
   readonly panel: boolean | null;
@@ -101,13 +93,13 @@ export function isFidelity(value: unknown): value is Fidelity {
   return value === "high" || value === "medium" || value === "low";
 }
 
-/// Che cosa fa il tasto laterale della penna: il menu radiale, un lazo, una
-/// gomma o niente.
-export type BarrelAction = "radial" | "lasso" | "eraser" | "none";
+/// Che cosa fa il tasto laterale della penna: il menu radiale, una gomma o
+/// niente.
+export type BarrelAction = "radial" | "eraser" | "none";
 
 /// Vero se `value` è un'azione del tasto laterale.
 export function isBarrelAction(value: unknown): value is BarrelAction {
-  return value === "radial" || value === "lasso" || value === "eraser" || value === "none";
+  return value === "radial" || value === "eraser" || value === "none";
 }
 
 /// I modi della gomma.
@@ -156,7 +148,7 @@ export const GRID_STEPS: Readonly<Record<LengthUnit, readonly number[]>> = {
 /// Il passo di un'unità che nessuno ha ancora scelto, nell'unità.
 export const UNIT_STEP: Readonly<Record<LengthUnit, number>> = { px: 20, mm: 5, cm: 0.5, in: 0.25, pt: 12 };
 
-/// La prima volta la griglia e i righelli sono spenti, le guide e le forme dal
+/// La prima volta la griglia è spenta, le guide intelligenti e le forme dal
 /// tratto accese, come nei programmi di disegno che chi disegna conosce già.
 /// Il pannello si apre da sé se c'è posto, con «Trasforma» e gli attributi
 /// chiusi, e la barra sta accanto alla selezione. Le dita girano il foglio e
@@ -167,9 +159,6 @@ export const DEFAULT_GRID: Grid = {
   snap: false,
   step: 20,
   steps: {},
-  guides: true,
-  rulers: false,
-  rulerGuides: true,
   panel: null,
   bar: true,
   shapes: true,

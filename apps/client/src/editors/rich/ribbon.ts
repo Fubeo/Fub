@@ -943,7 +943,7 @@ export function mountRichRibbon(
     }
     // La scheda «Disegna»: Seleziona torna sempre al testo.
     for (const id of Object.keys(RICH_INK_COMMANDS)) put(id, id === "rich.ink.select" || editable);
-    for (const id of [...INK_WIDTH_COMMANDS, "rich.ink.color"]) put(id, editable && ink.tool !== "eraser" && ink.tool !== "lasso" && ink.tool !== "select");
+    for (const id of [...INK_WIDTH_COMMANDS, "rich.ink.color"]) put(id, editable && ink.tool !== "eraser" && ink.tool !== "select");
     // Un disegno entra dove entra un'immagine.
     const objectRoom = editable && engine.read(insertNote("·", false)) && engine.allows(insertBreak("\n"));
     put("rich.drawing.new", objectRoom && !drawing.editing);

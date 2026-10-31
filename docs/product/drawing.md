@@ -53,7 +53,7 @@ Gli strumenti stanno nella colonna a sinistra, a gruppi; i più rari nelle
 tendine, che si aprono tenendo premuta la casella, col tasto destro o con la
 freccia a destra. Ogni strumento ha un tasto: selezione (`V`), penna (`P`),
 evidenziatore (`Maiusc+P`), gomma per oggetto (`E`), rettangolo (`R`),
-ellisse (`O`), linea (`L`), freccia (`Maiusc+L`) e testo (`T`); la
+ellisse (`O`), linea (`L`) e freccia (`Maiusc+L`); la
 **Mano** (`H`) e lo **Zoom** (`Z`) muovono la vista in tutti e due gli spazi
 ([Disegni, vista](drawing-view.md#muovere-e-ingrandire-la-vista)). Il colore
 si sceglie col selettore, gli otto colori consigliati in cima, tondi e col
@@ -86,23 +86,15 @@ precedenti con `level` e `setLevel`
 
 Oltre agli strumenti per disegnare, il Completo ha:
 
-- il **Lazo** (`Q`), dopo la Selezione, e la **«Selezione avanzata»**: i simili, i gruppi isolati, gli oggetti bloccati e nascosti ([Disegni, selezione](drawing-selection.md));
-- la **Tavola** (`F`), dopo il Lazo, e l'elenco **«Tavole»**: le pagine del disegno, ognuna col suo nome e la sua carta ([Disegni, tavole](drawing-boards.md));
-- **«Presenta»** (`F5`), dopo «Tavole»: le tavole a schermo intero, una alla volta, col laser e l'inchiostro ([Disegni, presentare](drawing-present.md));
-- il **Contagocce** (`I`), dopo la Tavola, e nelle «Proprietà» i **colori del
-  documento**: i campioni, i colori usati e i recenti ([Disegni, colori](drawing-colors.md));
-- la **Sfumatura** (`G`), dopo il Contagocce, e nelle «Proprietà» la sezione
-  **«Sfumatura»**: lineare o radiale, coi suoi punti ([Disegni, sfumature](drawing-gradients.md)); e la sezione **«Campitura»**: righe e puntini ([Disegni, campiture e motivi](drawing-patterns.md));
-- nelle «Proprietà» gli **stili** di testo e grafici ([Disegni, stili](drawing-styles.md)), le **punte delle linee** ([Disegni, punte delle linee](drawing-tips.md)), e nella barra «Disponi» **«Ritaglia…»** per le immagini ([Disegni, ritagli e maschere](drawing-masks.md)) e l'**«Opacità»** ([Disegni, effetti e fusione](drawing-effects.md#lopacità-nella-barra));
+- la **«Selezione avanzata»**: i simili, i gruppi isolati, gli oggetti bloccati e nascosti ([Disegni, selezione](drawing-selection.md));
+- nelle «Proprietà» le **punte delle linee** ([Disegni, punte delle linee](drawing-tips.md)), e nella barra «Disponi» l'**«Opacità»** ([Disegni, effetti e fusione](drawing-effects.md#lopacità-nella-barra));
 - l'**evidenziatore** (`Maiusc+P`), dopo la penna: un tratto largo, costante e a
   punte piatte, che lascia vedere ciò che copre senza ingrigirlo, scritto come
   un tratto a penna con `fub:tool="highlighter"`, `fill-opacity="0.5"` e la
   fusione Moltiplica ([penne](drawing-pen.md)). Parte giallo, con colore
   e spessori suoi, 8, 16 e 24 unità, e la penna ritrova i propri quando torna;
 - le **forme dal tratto**: un tratto a penna tenuto fermo alla fine diventa
-  una forma pulita ([Disegni, forme dal tratto](drawing-ink-shapes.md)); e la **penna in simmetria**: ogni tratto scrive anche le sue copie, riflesse su un asse o girate intorno a un centro ([Disegni, ripetizioni e simmetria](drawing-repeats.md#la-penna-in-simmetria));
-- il **Connettore** (`X`), dopo la freccia: una linea che unisce due oggetti e li segue ([Disegni, connettori](drawing-connectors.md));
-- il **Poligono** (`Y`), dopo il Connettore: poligoni regolari e stelle che si cambiano anche dopo ([Disegni, poligoni e stelle](drawing-shapes.md)); il pannello **«Forme»**, accanto al foglio: cinquantuno forme pronte, da inserire col clic o trascinandole ([Disegni, raccolte di forme](drawing-library.md)); e le **etichette nelle forme**: due tocchi su una forma chiusa ci scrivono un testo che resta al centro ([Disegni, etichette nelle forme](drawing-labels.md));
+  una forma pulita ([Disegni, forme dal tratto](drawing-ink-shapes.md));
 - **«Altro colore…»**, dopo la tavolozza: un codice come `#3a7bd5`, anche di
   tre cifre o senza `#`, o il selettore del sistema. Il colore resta come un
   anello in più col codice per nome, che dice se sul bianco sta sotto il 3:1;
@@ -122,10 +114,21 @@ Oltre agli strumenti per disegnare, il Completo ha:
   con la sua correzione, e l'ordine di lettura ([Disegni, accessibilità](drawing-accessibility.md)).
 
 Di queste il Semplice tiene l'evidenziatore, «Altro colore…», «Immagine dal
-vault…», il pannello delle proprietà e la vista ruotata coi gesti. Passati al
-Semplice, il resto sparisce dalla colonna: chi aveva in mano il Connettore o
-il Poligono riprende la penna, chi aveva il Lazo, la Tavola, il Contagocce o
-la Sfumatura la Selezione.
+vault…», il pannello delle proprietà e la vista ruotata coi gesti; il resto
+sparisce dalla colonna.
+
+Il Lazo, la Tavola, il Contagocce, la Sfumatura, il Connettore, il Poligono e
+il Testo se ne sono andati con lo Standard di FubDraw (decisione 0231), con i
+colori e gli stili del documento, le campiture, le guide, i righelli e le
+misure, la simmetria della penna, il ritaglio delle immagini, le raccolte di
+forme e la presentazione. Ciò che hanno scritto nei file resta e si vede:
+[tavole](drawing-boards.md), [connettori](drawing-connectors.md), che seguono
+ancora gli oggetti a cui sono agganciati, [sfumature](drawing-gradients.md),
+[campiture e motivi](drawing-patterns.md), [stili](drawing-styles.md),
+[ritagli](drawing-masks.md), [testi](drawing-typography.md) ed
+[etichette](drawing-labels.md). Non si creano e non si cambiano più; un
+oggetto che li porta si sceglie, si sposta, si trasforma e si elimina come
+gli altri.
 
 ## Disporre
 
@@ -235,13 +238,10 @@ Con l'aggancio:
 - senza selezione le frecce portano il cursore all'incrocio seguente, cinque
   righe più in là con `Maiusc`; con `Ctrl` o `⌘` lo muovono libero di un pixel;
 - **Duplica** scosta le copie di un numero intero di passi, e un'immagine
-  incollata ha l'angolo in alto a sinistra sull'incrocio più vicino;
-- la prima linea di base di un testo nuovo comincia sull'incrocio più vicino.
+  incollata ha l'angolo in alto a sinistra sull'incrocio più vicino.
 
-Nello stesso menu, la casella **Guide intelligenti** fa fermare ciò che si
-muove in linea con gli altri oggetti e con la pagina ([Disegni, guide
-intelligenti](drawing-guides.md)); i righelli, le guide che se ne tirano e
-l'unità del documento hanno le loro voci ([Disegni, righelli e guide](drawing-rulers.md)).
+L'unità del documento si sceglie nella sezione «Documento» delle proprietà
+([Disegni, proprietà](drawing-properties.md)).
 
 **Adatta la pagina al disegno** porta la pagina attorno a tutto il disegno,
 livelli nascosti e bloccati compresi, con 20 unità di margine, e la allarga
@@ -254,45 +254,16 @@ scelte restano, e tornano con lo spazio Completo.
 
 ## Testo
 
-In tutti e due gli spazi lo strumento **Testo** (`T`) viene dopo le forme. Un
-tocco sul foglio apre lì un campo, con la prima riga a metà sul punto
-toccato; un tocco su un testo lo apre com'è. Con la selezione un testo si
-apre con due tocchi, con `F2` o con «Modifica il testo» nella barra
-«Disponi»; con lo strumento Testo, `Spazio` scrive dov'è il cursore.
-
-Il campo prende il posto del testo, col suo carattere, il suo corpo, il suo
-colore, il suo allineamento e la sua trasformazione, anche ruotato o
-ingrandito, e il testo sotto si nasconde finché si scrive. `Invio` va a capo;
-`Esc`, `Tab` e `Ctrl+Invio` o `⌘Invio` concludono, e così un tocco sul
-foglio, il fuoco che va altrove o un altro strumento. Il tocco che conclude
-non apre un altro testo. Ciò che si è scritto entra nel file in un solo passo
-di annulla, mentre dentro il campo `Ctrl+Z` o `⌘Z` annulla la scrittura.
-
-Un testo nuovo è in Inter, il carattere dell'interfaccia, col colore della
-penna e una delle tre dimensioni che, con lo strumento Testo, prendono il
-posto degli spessori: Piccolo, Medio e Grande, 24, 32 e 48 unità. Nel file è
-un `text` col punto d'ancoraggio, una riga per `tspan`, a un'interlinea di
-1,25 volte il corpo:
-
-```xml
-<text id="o5e6f7g8h" x="120" y="300" fill="#000000" font-family="Inter, sans-serif" font-size="32">
-  <tspan x="120" dy="0">Evaporazione</tspan>
-  <tspan x="120" dy="40">e pioggia</tspan>
-</text>
-```
-
-Il file scrive ciò che si vede: spazi e tabulazioni in fila valgono uno, e ai
-bordi di una riga niente; le righe vuote in testa e in coda non ci sono, e
-una vuota fra due scritte resta, come uno spazio indivisibile. Un testo nuovo
-vuoto non si scrive, e uno svuotato si elimina. In Lettura e in una nota,
-dove il disegno è un'immagine, il testo ha i caratteri del foglio: l'immagine
-li porta dentro, fino a 384 KB, e il file non cambia.
-
-Cambiare un testo che c'è riscrive solo le sue righe, e il resto resta come
-l'ha scritto chi l'ha fatto, anche in un altro programma: una riga nuova
-copia la precedente e ne prende l'interlinea. Si cambia sul posto un testo che
-non sta in un gruppo, un `tspan` per riga coi suoi pezzi: grassetto, corsivo,
-colori e il resto, e nel Completo i testi in area e su tracciato, sono in [Disegni, tipografia](drawing-typography.md).
+Un testo che il disegno porta, scritto da FubDraw o da un altro programma, si
+vede col suo carattere, il suo corpo, il suo colore e la sua trasformazione, e
+si sceglie, si sposta, si trasforma e si elimina come gli altri oggetti; i
+campi della sezione «Testo» delle proprietà ne cambiano il carattere, il corpo
+e l'allineamento. Il testo non si scrive più sul posto: lo strumento Testo e il
+campo in cui si scriveva se ne sono andati con lo Standard di FubDraw
+(decisione 0231), e le parole si cambiano con «Apri come sorgente». In Lettura
+e in una nota, dove il disegno è un'immagine, il testo ha i caratteri del
+foglio: l'immagine li porta dentro, fino a 384 KB, e il file non cambia. Come
+il file scrive un testo è in [Disegni, tipografia](drawing-typography.md).
 
 ## Collegamenti
 

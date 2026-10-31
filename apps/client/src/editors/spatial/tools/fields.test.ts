@@ -8,24 +8,17 @@ import {
   lookAction,
   lookChange,
   propertiesView,
-  shapeChange,
-  sheetChange,
   tipChange,
   typedOpacity,
-  type BoardFacts,
   type FieldsInput,
   type FontFacts,
   type SelectionFacts,
-  type StyleFacts,
 } from "./fields";
 import type { Frame } from "./frame";
 import { DEFAULT_GRID } from "./grid";
 import type { Look } from "./look";
-import { NAME_MAX } from "./naming";
 import type { ChoiceState, MenuChoiceState, NumberState, SegmentState, TogglesState } from "./properties";
 import { featuresFor, type Level } from "./registry";
-import type { ShapeFacts } from "./reshape";
-import type { DocumentStyle, StyleField, StyleRow } from "./styles";
 import { fieldMin, fromUnit } from "./rulers";
 import type { EndLook, TipsLook } from "./tips";
 
@@ -70,7 +63,6 @@ const selection = (parts: Partial<SelectionFacts> = {}): SelectionFacts => ({
   alignable: true,
   drawn: 1,
   orders: new Set(),
-  shape: null,
   ...parts,
 });
 
@@ -84,14 +76,9 @@ const input = (parts: Partial<FieldsInput> & { readonly level?: Level } = {}): F
     document: { page: { width: 400, height: 300 }, boards: false, desc: "" },
     grid: DEFAULT_GRID,
     bar: true,
-    tool: null,
-    board: null,
     swatches: [],
     recent: [],
     paper: "#ffffff",
-    colors: null,
-    gradient: null,
-    hatch: null,
     ...rest,
   };
 };
@@ -115,9 +102,6 @@ describe("senza selezione, il disegno", () => {
     expect(Object.keys(view.fields).filter((id) => view.fields[id as keyof typeof view.fields]?.kind === "switch")).toEqual([
       "grid",
       "snap",
-      "guides",
-      "rulers",
-      "rulerGuides",
       "bar",
     ]);
     expect(view.actions).toEqual({});
@@ -128,7 +112,7 @@ describe("senza selezione, il disegno", () => {
     expect(view.fields.pageWidth).toBeUndefined();
     expect(view.fields.pagePreset).toBeUndefined();
     expect(view.fields.unit).toBeDefined();
-    expect(["grid", "snap", "guides", "rulers", "rulerGuides", "bar"].filter((id) => id in view.fields)).toEqual([]);
+    expect(["grid", "snap", "bar"].filter((id) => id in view.fields)).toEqual([]);
   });
 
   it("con le tavole la pagina è la tela: ha i lati, non la misura pronta né il verso", () => {
@@ -143,92 +127,6 @@ describe("senza selezione, il disegno", () => {
     expect(view.fields.grid).toMatchObject({ on: true });
     expect(view.fields.snap).toMatchObject({ on: false });
     expect(view.fields.bar).toMatchObject({ on: false });
-  });
-});
-
-describe("la tavola dello strumento Tavola", () => {
-  /// Una tavola A4 coricata, la seconda di tre.
-  const board = (parts: Partial<BoardFacts> = {}): BoardFacts => ({ id: "b1a2b3c4d", name: "Copertina", rect: [10, 20, 1122.52, 793.7], index: 2, count: 3, ...parts });
-
-  it("ha il nome, la misura pronta, il verso, il posto e le misure, prima del documento", () => {
-    const view = propertiesView(input({ board: board(), document: { page: { width: 2560, height: 1024 }, boards: true, desc: "" } }));
-    expect(view.subject).toBe("Tavola 2 di 3");
-    expect(view.key).toBe("board\npx\nb1a2b3c4d");
-    expect(view.fields.boardName).toEqual({ kind: "line", label: "Nome", value: "Copertina", max: NAME_MAX });
-    expect(view.fields.boardPreset).toMatchObject({ kind: "choice", label: "Formato", value: "a4" });
-    expect(view.fields.boardOrientation).toMatchObject({ kind: "segment", label: "Orientamento", value: "landscape" });
-    expect((view.fields.boardOrientation as SegmentState).disabled).toBeUndefined();
-    expect(options(view.fields.boardOrientation).map((option) => [option.value, option.label])).toEqual([
-      ["portrait", "Verticale"],
-      ["landscape", "Orizzontale"],
-    ]);
-    expect([number(view.fields.boardX).label, number(view.fields.boardX).value, number(view.fields.boardY).value]).toEqual(["X", 10, 20]);
-    const width = number(view.fields.boardWidth);
-    expect([width.label, width.value, width.relative, width.min]).toEqual(["Larghezza", 1122.52, true, fieldMin(1, "px")]);
-    expect(number(view.fields.boardHeight).value).toBe(793.7);
-    // Il documento e la vista restano, sotto.
-    expect(view.fields.unit).toBeDefined();
-    expect(view.fields.grid).toBeDefined();
-  });
-
-  it("dice ogni misura pronta coi numeri che darebbe, nel verso di adesso e nella sua unità", () => {
-    const labels = options(propertiesView(input({ board: board() })).fields.boardPreset).map((option) => option.label);
-    expect(labels).toEqual([
-      "A3 (420 × 297 mm)",
-      "A4 (297 × 210 mm)",
-      "A5 (210 × 148 mm)",
-      "Lettera (11 × 8,5 in)",
-      "Legale (14 × 8,5 in)",
-      "Tabloid (17 × 11 in)",
-      "HD 16:9 (1280 × 720 px)",
-      "Full HD 16:9 (1920 × 1080 px)",
-      "Schermo 4:3 (1024 × 768 px)",
-      "Telefono (844 × 390 px)",
-      "Quadrato (1080 × 1080 px)",
-      "Disegno nuovo (1600 × 1000 px)",
-    ]);
-    // In piedi, ogni misura si dice in piedi.
-    const standing = options(propertiesView(input({ board: board({ rect: [0, 0, 100, 300] }) })).fields.boardPreset);
-    expect(standing[1]!.label).toBe("A4 (210 × 297 mm)");
-    expect(standing[9]!.label).toBe("Telefono (390 × 844 px)");
-  });
-
-  it("una tavola di nessuna misura pronta è su misura, e una quadrata non ha verso", () => {
-    const view = propertiesView(input({ board: board({ rect: [0, 0, 500, 500] }) }));
-    expect(view.fields.boardPreset).toMatchObject({ value: "custom" });
-    expect(options(view.fields.boardPreset).slice(-1)).toEqual([{ value: "custom", label: "Su misura" }]);
-    expect(view.fields.boardOrientation).toMatchObject({ value: null, disabled: true });
-    expect(options(propertiesView(input({ board: board() })).fields.boardPreset).some((option) => option.value === "custom")).toBe(false);
-  });
-
-  it("le lunghezze sono nell'unità del documento", () => {
-    const view = propertiesView(input({ unit: "mm", board: board() }));
-    expect(number(view.fields.boardWidth).value).toBeCloseTo(297, 2);
-    expect(number(view.fields.boardX).unit).toBe("mm");
-    expect(number(view.fields.boardHeight).min).toBe(fieldMin(1, "mm"));
-  });
-
-  it("con una selezione non c'è", () => {
-    const view = propertiesView(input({ board: board(), selection: selection() }));
-    expect(["boardName", "boardPreset", "boardOrientation", "boardX", "boardY", "boardWidth", "boardHeight"].filter((id) => id in view.fields)).toEqual([]);
-    expect(view.subject).toBe("Rettangolo");
-  });
-
-  it("dal valore al rettangolo: l'angolo in alto a sinistra resta", () => {
-    const rect = [10, 20, 1122.52, 793.7] as const;
-    expect(sheetChange("boardPreset", "hd", rect, "px")).toEqual([10, 20, 1280, 720]);
-    expect(sheetChange("pagePreset", "phone", rect, "px")).toEqual([10, 20, 844, 390]);
-    expect(sheetChange("boardPreset", "custom", rect, "px")).toBeNull();
-    expect(sheetChange("boardOrientation", "portrait", rect, "px")).toEqual([10, 20, 793.7, 1122.52]);
-    expect(sheetChange("pageOrientation", "landscape", rect, "px")).toEqual(rect);
-    expect(sheetChange("boardOrientation", "square", rect, "px")).toBeNull();
-    expect(sheetChange("boardX", 1, rect, "in")).toEqual([96, 20, 1122.52, 793.7]);
-    expect(sheetChange("boardY", -5, rect, "px")).toEqual([10, -5, 1122.52, 793.7]);
-    expect(sheetChange("boardWidth", 100, rect, "mm")).toEqual([10, 20, 377.95, 793.7]);
-    expect(sheetChange("boardHeight", 0, rect, "px")).toEqual([10, 20, 1122.52, 1]);
-    expect(sheetChange("boardWidth", Number.NaN, rect, "px")).toBeNull();
-    expect(sheetChange("boardWidth", "100", rect, "px")).toBeNull();
-    expect(sheetChange("width", 100, rect, "px")).toBeNull();
   });
 });
 
@@ -272,77 +170,6 @@ describe("posizione e misure", () => {
   });
 });
 
-describe("«Forma»", () => {
-  const facts = (parts: Partial<ShapeFacts> = {}): ShapeFacts => ({
-    shape: { count: 1, value: "star" },
-    count: { count: 1, value: 5 },
-    ratio: { count: 1, value: 0.382 },
-    corner: { count: 1, value: 4 },
-    ...parts,
-  });
-
-  it("ha il tipo, le punte, il raggio interno e quello degli angoli nell'unità del documento", () => {
-    const view = propertiesView(input({ unit: "mm", selection: selection({ shape: facts() }) }));
-    expect(view.fields.shape).toMatchObject({ kind: "segment", label: "Tipo", value: "star" });
-    expect((options(view.fields.shape) as SegmentState["options"]).map((option) => [option.label, option.icon])).toEqual([
-      ["Poligono", "draw-polygon"],
-      ["Stella", "draw-star"],
-    ]);
-    expect(number(view.fields.count)).toMatchObject({ label: "Punte", value: 5, places: 0, min: 3, max: 1000, relative: false });
-    expect(number(view.fields.inner)).toMatchObject({ label: "Raggio interno", unit: "%", places: 1, min: 1, max: 100 });
-    expect(number(view.fields.inner).value).toBeCloseTo(38.2, 9);
-    const corner = number(view.fields.corner);
-    expect([corner.label, corner.unit, corner.relative, corner.min]).toEqual(["Raggio degli angoli", "mm", true, 0]);
-    expect(corner.value).toBeCloseTo(4 * (25.4 / 96), 9);
-    expect(corner.note).toBeUndefined();
-  });
-
-  it("dice i lati di un poligono, e «Lati o punte» quando sono misti", () => {
-    const polygons = propertiesView(input({ selection: selection({ shape: facts({ shape: { count: 2, value: "polygon" }, ratio: { count: 0, value: null } }) }) }));
-    expect(number(polygons.fields.count).label).toBe("Lati");
-    expect(polygons.fields.inner).toBeUndefined();
-    const mixed = propertiesView(input({ selection: selection({ shape: facts({ shape: { count: 2, value: null }, count: { count: 2, value: null } }) }) }));
-    expect(mixed.fields.shape).toMatchObject({ value: null });
-    expect(number(mixed.fields.count)).toMatchObject({ label: "Lati o punte", value: null });
-  });
-
-  it("per i soli rettangoli ha soltanto il raggio degli angoli", () => {
-    const rects = facts({ shape: { count: 0, value: null }, count: { count: 0, value: null }, ratio: { count: 0, value: null }, corner: { count: 2, value: null } });
-    const view = propertiesView(input({ selection: selection({ shape: rects }) }));
-    expect(["shape", "count", "inner"].filter((id) => id in view.fields)).toEqual([]);
-    expect(number(view.fields.corner).value).toBeNull();
-  });
-
-  it("viene con lo strumento Poligono: nel Personalizzato senza di lui non c'è", () => {
-    const without = propertiesView(input({ features: featuresFor("custom", ["properties"]), selection: selection({ shape: facts() }) }));
-    expect(["shape", "count", "inner", "corner"].filter((id) => id in without.fields)).toEqual([]);
-    const withIt = propertiesView(input({ features: featuresFor("custom", ["properties", "polygon"]), selection: selection({ shape: facts() }) }));
-    expect(["shape", "count", "inner", "corner"].filter((id) => id in withIt.fields)).toEqual(["shape", "count", "inner", "corner"]);
-  });
-
-  it("senza selezione mostra lo strumento Poligono, con la nota", () => {
-    const tool = facts({ shape: { count: 1, value: "polygon" }, count: { count: 1, value: 6 }, ratio: { count: 0, value: null }, corner: { count: 1, value: 0 } });
-    const view = propertiesView(input({ tool }));
-    expect(view.fields.shape).toMatchObject({ value: "polygon", note: "Per i poligoni e le stelle che disegnerai." });
-    expect(number(view.fields.count).value).toBe(6);
-    expect(number(view.fields.corner).note).toBeUndefined();
-    expect(view.key).toBe("document\npx\npolygon");
-    // Il pannello si ricostruisce quando lo strumento diventa la stella.
-    expect(propertiesView(input({ tool: facts() })).key).toBe("document\npx\nstar");
-    expect(propertiesView(input()).fields.shape).toBeUndefined();
-  });
-
-  it("dal valore al cambio: le percentuali in frazione, il raggio nella scena", () => {
-    expect(shapeChange("shape", "star", "px")).toEqual({ shape: "star" });
-    expect(shapeChange("shape", "circle", "px")).toBeNull();
-    expect(shapeChange("count", 8, "px")).toEqual({ count: 8 });
-    expect(shapeChange("inner", 50, "px")).toEqual({ ratio: 0.5 });
-    expect(shapeChange("corner", 1, "in")).toEqual({ corner: 96 });
-    expect(shapeChange("corner", "1", "px")).toBeNull();
-    expect(shapeChange("x", 3, "px")).toBeNull();
-  });
-});
-
 describe("l'aspetto", () => {
   const painted = look({
     fill: { count: 2, value: "#0072b2" },
@@ -383,40 +210,6 @@ describe("l'aspetto", () => {
     // Senza la carta non si misura.
     const unknown = propertiesView(input({ paper: null, selection: selection({ look: painted }) }));
     expect("contrast" in unknown.fields.fill!).toBe(false);
-  });
-});
-
-describe("i colori del documento", () => {
-  const DOCUMENT = {
-    swatches: [{ id: "ra", name: "Blu marca", color: "#0072b2", stop: [0], uses: 3 }],
-    used: [{ color: "#000000", uses: 2 }],
-    hidden: 1,
-  };
-  const colors = (drawing = "#000000", swatch: string | null = null): FieldsInput["colors"] => ({ document: DOCUMENT, drawing, swatch });
-
-  it("ci sono se il livello li offre, coi recenti; senza selezione un colore è quello con cui si disegna", () => {
-    expect(propertiesView(input()).colors).toBeUndefined();
-    const view = propertiesView(input({ recent: ["#d55e00"], colors: colors("#0072b2", "ra") }));
-    expect(view.colors).toEqual({
-      swatches: [{ id: "ra", name: "Blu marca", color: "#0072b2", uses: 3 }],
-      used: [{ color: "#000000", uses: 2 }],
-      hidden: 1,
-      recent: ["#d55e00"],
-      targets: null,
-      current: {},
-      drawing: "#0072b2",
-      drawingSwatch: "ra",
-    });
-  });
-
-  it("con una selezione, il colore va al riempimento e al contorno che ha, e il pannello dice i loro", () => {
-    const both = propertiesView(input({ colors: colors(), selection: selection({ look: look({ fill: { count: 2, value: "url(#ra) #0072b2" }, stroke: { count: 1, value: null } }) }) }));
-    expect([both.colors!.targets, both.colors!.current]).toEqual([["fill", "stroke"], { fill: "url(#ra) #0072b2", stroke: null }]);
-    const line = propertiesView(input({ colors: colors(), selection: selection({ look: look({ stroke: { count: 1, value: "#000000" } }) }) }));
-    expect(line.colors!.targets).toEqual(["stroke"]);
-    // Un'immagine non ha un colore da cambiare.
-    const image = propertiesView(input({ colors: colors(), selection: selection() }));
-    expect(image.colors!.targets).toEqual([]);
   });
 });
 
@@ -788,107 +581,3 @@ describe("dal valore al cambio", () => {
     expect(tipChange("fill", "swap")).toBeNull();
   });
 });
-
-describe("gli stili del documento", () => {
-  const menu = (state: unknown): MenuChoiceState => state as MenuChoiceState;
-  const RIQUADRO = { id: "rbox00000", name: "Riquadro", kind: "graphic", followers: 2 } as unknown as DocumentStyle;
-  const TITOLO = { id: "rtitle000", name: "titolo", kind: "text", followers: 0 } as unknown as DocumentStyle;
-  const SAMPLE = { text: "", css: { background: "rgb(230 159 0)" } };
-  const row = (parts: Partial<StyleRow> = {}): StyleRow => ({
-    kind: "graphic",
-    count: 1,
-    style: RIQUADRO,
-    mixed: false,
-    following: 1,
-    differs: new Set<StyleField>(),
-    differing: 0,
-    fixed: 0,
-    ...parts,
-  });
-  const facts = (parts: Partial<StyleFacts> = {}): StyleFacts => ({
-    row: row(),
-    styles: [{ id: RIQUADRO.id, name: RIQUADRO.name, followers: 2, sample: SAMPLE }],
-    updatable: true,
-    undeletable: null,
-    fresh: "Stile grafico 1",
-    ...parts,
-  });
-  /// Una selezione con un riempimento, un corpo e le righe «Stile» `styles`.
-  const styled = (styles: SelectionFacts["styles"]): SelectionFacts =>
-    selection({ look: look({ fill: { count: 1, value: "#e69f00" }, width: { count: 1, value: 2 }, size: { count: 1, value: 32 }, weight: { count: 1, value: 400 } }), styles });
-
-  it("ci sono dallo Standard, in testa all'aspetto e al testo, e prendono il posto dello stile di serie", () => {
-    const styles = { graphic: facts(), text: facts({ row: row({ kind: "text", style: null, following: 0 }), styles: [], fresh: "Stile di testo 1" }) };
-    const view = propertiesView(input({ selection: styled(styles) }));
-    expect(view.fields.lookStyle).toMatchObject({ kind: "menu", label: "Stile grafico", value: "style:rbox00000", summary: "Riquadro" });
-    expect(view.fields.textStyle).toMatchObject({ kind: "menu", label: "Stile di testo", value: null, summary: "Nessuno" });
-    expect("preset" in view.fields).toBe(false);
-    const essential = propertiesView(input({ level: "essential", selection: styled(styles) }));
-    expect(["lookStyle", "textStyle"].some((id) => id in essential.fields)).toBe(false);
-    expect("preset" in essential.fields).toBe(true);
-    // Una selezione che non ne può seguire uno non ha la riga.
-    expect("lookStyle" in propertiesView(input({ selection: styled({ graphic: null, text: null }) })).fields).toBe(false);
-  });
-
-  it("dice lo stile, modificato, misto o nessuno", () => {
-    const summary = (styles: StyleFacts): string | undefined => menu(propertiesView(input({ selection: styled({ graphic: styles, text: null }) })).fields.lookStyle).summary;
-    expect(summary(facts())).toBe("Riquadro");
-    expect(summary(facts({ row: row({ differing: 1, differs: new Set<StyleField>(["width"]) }) }))).toBe("Riquadro, modificato");
-    expect(summary(facts({ row: row({ style: null, mixed: true, following: 1 }) }))).toBe("Misto");
-    expect(summary(facts({ row: row({ style: null, following: 0 }) }))).toBe("Nessuno");
-  });
-
-  it("nel menu gli stili con l'anteprima e chi li segue, poi i comandi, spenti col perché", () => {
-    const state = menu(propertiesView(input({ selection: styled({ graphic: facts({ updatable: false, undeletable: "locked" }), text: null }) })).fields.lookStyle);
-    expect(state.options.map((option) => [option.value, option.disabled === true])).toEqual([
-      ["style:rbox00000", false],
-      ["new", false],
-      ["update", true],
-      ["revert", true],
-      ["unlink", false],
-      ["rename", false],
-      ["delete", true],
-    ]);
-    expect(state.options[0]).toMatchObject({ label: "Riquadro", checked: true, sample: SAMPLE, note: "Lo seguono 2 oggetti" });
-    expect(state.options[1]).toMatchObject({ separator: true, ask: { title: "Nuovo stile grafico", value: "Stile grafico 1", submit: "Crea" } });
-    expect(state.options[2]!.note).toBe("Lo stile è già come la selezione.");
-    expect(state.options[3]!.note).toBe("La selezione è già come lo stile.");
-    expect(state.options[5]).toMatchObject({ ask: { title: "Rinomina «Riquadro»", value: "Riquadro", submit: "Rinomina" } });
-    expect(state.options[6]).toMatchObject({ danger: true, note: "Un oggetto che lo segue sta in un livello o in un gruppo bloccato." });
-    // Senza uno stile seguito da tutti, i comandi sullo stile dicono perché.
-    const mixed = menu(propertiesView(input({ selection: styled({ graphic: facts({ row: row({ style: null, mixed: true }) }), text: null }) })).fields.lookStyle);
-    expect(mixed.options.filter((option) => option.disabled === true).map((option) => [option.value, option.note])).toEqual([
-      ["update", "La selezione segue stili diversi."],
-      ["revert", "La selezione segue stili diversi."],
-      ["rename", "La selezione segue stili diversi."],
-      ["delete", "La selezione segue stili diversi."],
-    ]);
-    const none = menu(propertiesView(input({ selection: styled({ graphic: facts({ row: row({ style: null, following: 0 }), styles: [] }), text: null }) })).fields.lookStyle);
-    expect(none.options[0]).toMatchObject({ value: "new", separator: false });
-    expect(none.options.find((option) => option.value === "unlink")!.note).toBe("La selezione non segue uno stile.");
-  });
-
-  it("per il testo offre gli stili di serie che il documento non ha ancora", () => {
-    const text = facts({ row: row({ kind: "text", style: TITOLO }), styles: [{ id: TITOLO.id, name: TITOLO.name, followers: 0, sample: { text: "Aa", css: {} } }], fresh: "Stile di testo 1" });
-    const state = menu(propertiesView(input({ selection: styled({ graphic: null, text }) })).fields.textStyle);
-    // «titolo» c'è già, a meno delle maiuscole.
-    expect(state.options.slice(0, 5).map((option) => option.value)).toEqual(["style:rtitle000", "preset:subtitle", "preset:heading", "preset:body", "preset:caption"]);
-    expect(state.options[0]!.note).toBe("Nessun oggetto lo segue");
-    expect(state.options[1]).toMatchObject({ label: "Sottotitolo", action: true, sample: { text: "Aa", css: { "font-weight": "600" } } });
-    expect(state.options[5]).toMatchObject({ value: "new", ask: { title: "Nuovo stile di testo" } });
-  });
-
-  it("segna i campi diversi dallo stile, e la riga li nomina", () => {
-    const graphic = facts({ row: row({ differing: 1, differs: new Set<StyleField>(["width", "fill", "effects"]) }) });
-    const view = propertiesView(input({ selection: styled({ graphic, text: null }) }));
-    expect(view.fields.strokeWidth!.differs).toBe("Diverso dallo stile «Riquadro»");
-    expect(view.fields.fill!.differs).toBe("Diverso dallo stile «Riquadro»");
-    expect(view.fields.size!.differs).toBeUndefined();
-    expect(view.fields.lookStyle!.note).toBe("Diverso dallo stile: riempimento, spessore e effetti.");
-    // Senza uno stile seguito da tutti non c'è niente da segnare.
-    const mixed = propertiesView(input({ selection: styled({ graphic: facts({ row: row({ style: null, mixed: true, differs: new Set<StyleField>(["width"]) }) }), text: null }) }));
-    expect(mixed.fields.strokeWidth!.differs).toBeUndefined();
-    expect(mixed.fields.lookStyle!.note).toBeUndefined();
-  });
-});
-

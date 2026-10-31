@@ -4,9 +4,7 @@
 
 import type { Bounds } from "../../scene/geometry";
 import { apply, IDENTITY, translate, type Matrix } from "../../scene/matrix";
-import type { ContainerNode, DocumentModel } from "../../scene/model";
 import type { Op } from "../../scene/ops";
-import type { LengthUnit } from "../../scene/rulers";
 import { plural, t, type DrawKey } from "../../strings";
 import { gesture as asGesture, moveOps, roundDelta } from "../edit";
 import { orderOps, type Order } from "../arrange";
@@ -16,31 +14,20 @@ import { boundsAfter, numericOps } from "../transform";
 import {
   lookAction,
   lookChange,
-  lookUnit,
   outlineChange,
   propertiesView,
   tipChange,
   type SelectionFacts,
-  type StyleFacts,
 } from "../fields";
 import { lookOf as selectionLook, lookOps } from "../look";
-import { gradientView, paintedParts, type GradientView, type PaintChannel } from "../gradients";
-import type { GradientPanelView } from "../gradient-panel";
-import type { HatchPanelView } from "../hatch-panel";
-import { resourcesOf } from "../resources";
-import { deleteStyleProblem, documentStyles, freshStyleName, styleRow, styleSample, styleUpdatable, type StyleKind } from "../styles";
 import type { FieldId } from "../properties";
-import { documentColors, documentSwatches, paperColor, type DocumentColors } from "../swatches";
+import { documentSwatches, paperColor } from "../swatches";
 import { tipOps, tipsLookOf, type TipChange } from "../tips";
-import { connectorView } from "../connector-ops";
-import type { ConnectorPanelView } from "../connector-panel";
 import { angleOf, frameCenter, frameSize, movedFrame, normalized, resizeMatrix, rotationMatrix, scales, type Axis as FrameAxis, type Frame } from "../frame";
-import { documentPatterns, filledParts, hatchView } from "../patterns";
 import { fromUnit } from "../rulers";
 import type { Unit } from "../hit";
 import { overlaps } from "../audit";
 import { cleanName, decorative } from "../naming";
-import { shapeFacts, toolFacts } from "../reshape";
 import type { Font } from "../measure";
 import { BAR_FEATURES, ORDERS, RATIO_ROLES } from "./constants";
 import type { EditorContext } from "./context";
@@ -51,10 +38,6 @@ import type { PanelReading } from "./types";
 /// accanto al foglio e si apre da sé: sotto, i pannelli vanno sotto il
 /// foglio (`structure.css`).
 const PANEL_ROOM_REM = 36;
-
-/// I colori di un disegno che non se ne contano: per la sezione chiusa,
-/// che non li mostra.
-const NO_COLORS: DocumentColors = { swatches: [], used: [], hidden: 0 };
 
 /// Il nome del passo d'annulla di un cambio delle punte.
 function tipAction(change: TipChange): DrawKey {
@@ -77,9 +60,7 @@ export interface PanelContext {
   /// sapere se aprirsi.
   panelPending: boolean;
   showPanelByDefault: () => void;
-  originalUnits: (container: ContainerNode) => readonly Unit[];
   syncProperties: () => void;
-  colorsNow: () => DocumentColors;
   changeFromPanel: (label: DrawKey, ops: readonly Op[], keys: readonly string[] | null, extent?: Bounds | null) => string | null;
   withFaces: <R>(write: (late: () => boolean) => R, then?: (result: R) => void) => R;
   panelLater: (outcome: string | null) => void;
@@ -92,9 +73,8 @@ export interface PanelContext {
 /// Monta il pannello delle proprietà, gli attributi e la descrizione delle immagini.
 export function installPanel(ctx: EditorContext): void {
   const {
-    life, has, drawingFonts, measureText, style, root, surface, propertiesButton, tree, historyPanel, accessPanel, boardsPanel, libraryPanel,
-    panel, objectsButton, describeBar, describeLabel, describeInput, describeWrite, describeDecorative, describeSkip, dock,
-    indexer, boardsNow, chosenSheet, editable, isolatedThrough, currentIndex, grownPage, newIds, announce, rereadSize, docUnit, selectedUnits, frameOf,
+    life, has, drawingFonts, measureText, style, root, surface, propertiesButton, tree, historyPanel, accessPanel, panel, objectsButton, describeBar, describeLabel, describeInput, describeWrite, describeDecorative, describeSkip, dock,
+    boardsNow, editable, currentIndex, grownPage, newIds, announce, rereadSize, docUnit, selectedUnits, frameOf,
     showHandles, outlineNow, labelOf, syncTree, accessName, writeDescription, writeDecorative
   } = ctx;
   // --- La descrizione delle immagini appena entrate -------------------------------
@@ -276,7 +256,7 @@ export function installPanel(ctx: EditorContext): void {
   /// attributi, che vogliono più spazio.
   function syncDock(): void {
     dock.hidden =
-      boardsPanel.element.hidden && libraryPanel.element.hidden && tree.element.hidden && panel.element.hidden && historyPanel.element.hidden && accessPanel.element.hidden;
+      tree.element.hidden && panel.element.hidden && historyPanel.element.hidden && accessPanel.element.hidden;
     // Il dock occupa un lato del foglio: con lui che cambia, cambia la sua misura.
     rereadSize();
   }
@@ -336,10 +316,6 @@ export function installPanel(ctx: EditorContext): void {
   const ratioOn = (units: readonly Unit[]): boolean =>
     ctx.ratioLock !== null && ctx.ratioLock.keys === ctx.selection.join("\n") ? ctx.ratioLock.on : units.some((unit) => RATIO_ROLES.has(unit.role));
 
-  /// Gli originali della ripetizione `container`: gli oggetti che si
-  /// scelgono quando la si isola.
-  const originalUnits = (container: ContainerNode): readonly Unit[] => indexer.index(ctx.engine.model!, container, isolatedThrough()).units;
-  ctx.originalUnits = originalUnits;
 
 
   /// La selezione come la legge il pannello.
@@ -362,33 +338,10 @@ export function installPanel(ctx: EditorContext): void {
       alignable: ctx.alignReference(units) !== null,
       drawn: ctx.drawn(units),
       orders: new Set(has("arrange") ? ORDERS.map(({ order }) => order).filter((order) => changes.has(order)) : []),
-      shape: shapeFacts(model, units),
       tips: has("tips") ? tipsLookOf(model, units) : null,
-      styles: has("styles") ? styleFactsOf(model, units) : null,
     };
   };
 
-
-  /// Le due righe «Stile» per gli oggetti scelti `units`: che cosa seguono,
-  /// gli stili del documento con la loro anteprima, e che cosa si può fare.
-  const styleFactsOf = (model: DocumentModel, units: readonly Unit[]): NonNullable<SelectionFacts["styles"]> => {
-    const all = documentStyles(model);
-    let resources: ReturnType<typeof resourcesOf> | null = null;
-    const facts = (kind: StyleKind): StyleFacts | null => {
-      const row = styleRow(model, units, kind, all, measureText);
-      if (row === null) return null;
-      resources ??= resourcesOf(model);
-      const shown = resources;
-      return {
-        row,
-        styles: all.filter((style) => style.kind === kind).map((style) => ({ id: style.id, name: style.name, followers: style.followers, sample: styleSample(model, style, shown, drawingFonts.live) })),
-        updatable: row.style !== null && styleUpdatable(model, units, row.style),
-        undeletable: row.style === null ? null : deleteStyleProblem(model, row.style),
-        fresh: freshStyleName(all, kind, t(kind === "text" ? "draw.styles.text" : "draw.styles.graphic")),
-      };
-    };
-    return { graphic: facts("graphic"), text: facts("text") };
-  };
 
   /// Porta il pannello, se è aperto, al disegno e alla selezione di adesso.
   function syncProperties(): void {
@@ -397,16 +350,10 @@ export function installPanel(ctx: EditorContext): void {
     const keys = ctx.selection.join("\n");
     const unit = docUnit();
     const canEdit = editable();
-    // La forma dello strumento Poligono, quando è lui lo strumento, e la
-    // tavola scelta dallo strumento Tavola.
-    const polygonNow = ctx.tool === "polygon" ? ctx.polygonTool : null;
-    // La simmetria della penna, con la penna e l'evidenziatore.
-    const symmetryPanel = (ctx.tool === "pen" || ctx.tool === "highlighter") && has("symmetry") ? ctx.symmetryNow() : null;
-    const boardNow = ctx.tool === "board" ? (chosenSheet()?.board ?? null) : null;
     // Il titolo del disegno è del documento: con una selezione, no.
     ctx.titleField.hidden = ctx.selection.length > 0;
     // Il colore con cui si disegna, col campione da cui viene.
-    const drawing = `${style().color} ${style().swatch ?? ""}`;
+    const drawing = style().color;
     const last = ctx.panelShown;
     if (
       last !== null &&
@@ -418,12 +365,8 @@ export function installPanel(ctx: EditorContext): void {
       last.features === ctx.features &&
       last.ratio === ctx.ratioLock &&
       last.kept === ctx.kept &&
-      last.polygon === polygonNow &&
-      last.symmetry === symmetryPanel &&
-      last.board === boardNow &&
       last.drawing === drawing &&
-      last.recent === ctx.recentColors &&
-      last.stop === ctx.gradientStop
+      last.recent === ctx.recentColors
     ) {
       return;
     }
@@ -435,7 +378,7 @@ export function installPanel(ctx: EditorContext): void {
       last !== null && last.index === index && last.keys === keys && last.features === ctx.features && last.ratio === ctx.ratioLock && last.kept === ctx.kept
         ? last.reading
         : {};
-    ctx.panelShown = { index, keys, unit, editable: canEdit, grid: ctx.grid, features: ctx.features, ratio: ctx.ratioLock, kept: ctx.kept, polygon: polygonNow, symmetry: symmetryPanel, board: boardNow, drawing, recent: ctx.recentColors, stop: ctx.gradientStop, reading };
+    ctx.panelShown = { index, keys, unit, editable: canEdit, grid: ctx.grid, features: ctx.features, ratio: ctx.ratioLock, kept: ctx.kept, drawing, recent: ctx.recentColors, reading };
     const list = boardsNow();
     const model = ctx.engine.model;
     const units = ctx.selection.length === 0 || model === null ? [] : selectedUnits();
@@ -451,90 +394,14 @@ export function installPanel(ctx: EditorContext): void {
         grid: ctx.grid,
         bar: BAR_FEATURES.some(has),
         exportSelection: ctx.options.onExport !== undefined && has("export"),
-        tool: polygonNow === null ? null : toolFacts(polygonNow),
-        symmetry: symmetryPanel,
-        board:
-          boardNow === null
-            ? null
-            : { id: boardNow.id, name: boardNow.name, rect: boardNow.rect, index: list.indexOf(boardNow) + 1, count: list.length },
         swatches,
         recent: ctx.recentColors,
         paper: model === null ? null : paperColor(model),
-        // I colori si contano soltanto con la loro sezione aperta.
-        colors:
-          model === null || !has("swatches")
-            ? null
-            : {
-                document: ctx.grid.closed.includes("colors") ? (ctx.colorsCounted?.colors ?? NO_COLORS) : colorsNow(),
-                drawing: style().color,
-                swatch: style().swatch,
-              },
-        gradient: model === null || units.length === 0 || !has("gradient") ? null : gradientSection(model, units, keys, swatches, reading),
-        hatch: model === null || units.length === 0 || !has("hatches") ? null : hatchSection(model, units, keys, swatches, unit),
-        connector: model === null || units.length === 0 || !has("connector") ? null : connectorSection(model, units, keys),
         fonts: { families: [], notes: drawingFonts.fontNotes(), shown: drawingFonts.shown },
       }),
     );
   }
   ctx.syncProperties = syncProperties;
-
-  /// La sezione «Campitura» per gli oggetti scelti `units`, di chiavi `keys`;
-  /// `null` se nessuna delle loro parti ha un riempimento. C'è dal livello
-  /// Standard, con la parte «Campiture»; i motivi del documento, e il loro
-  /// nome, sono dell'Esperto.
-  function hatchSection(model: DocumentModel, units: readonly Unit[], keys: string, swatches: HatchPanelView["swatches"], unit: LengthUnit): HatchPanelView | null {
-    const index = currentIndex();
-    if (ctx.hatchRead?.index !== index || ctx.hatchRead.keys !== keys) ctx.hatchRead = { index, keys, view: hatchView(filledParts(model, units)) };
-    const shown = ctx.hatchRead.view;
-    if (shown.count === 0) return null;
-    return { key: keys, hatch: shown, unit: lookUnit(unit), swatches, motifs: documentPatterns(model) };
-  }
-
-  /// La sezione «Connettore» per gli oggetti scelti `units`, di chiavi
-  /// `keys`; `null` se fra loro non c'è un connettore.
-  function connectorSection(model: DocumentModel, units: readonly Unit[], keys: string): ConnectorPanelView | null {
-    const index = currentIndex();
-    if (ctx.connectorRead?.index !== index || ctx.connectorRead.keys !== keys) {
-      ctx.connectorRead = { index, keys, view: connectorView(model, units, (id) => ctx.engine.holder(id)) };
-    }
-    return ctx.connectorRead.view === null ? null : { key: keys, ...ctx.connectorRead.view };
-  }
-
-  /// La sezione «Sfumatura» per gli oggetti scelti `units`, di chiavi
-  /// `keys`; `null` se non hanno né riempimento né contorno.
-  function gradientSection(model: DocumentModel, units: readonly Unit[], keys: string, swatches: GradientPanelView["swatches"], reading: PanelReading): GradientPanelView | null {
-    // Le sfumature degli oggetti scelti si leggono una volta per lettura; il
-    // bersaglio, il punto scelto e il livello cambiano senza rileggerle.
-    if (reading.channels === undefined) {
-      const found: Partial<Record<PaintChannel, GradientView>> = {};
-      for (const target of ["fill", "stroke"] as const) {
-        const shown = gradientView(paintedParts(model, units, target));
-        if (shown.count > 0) found[target] = shown;
-      }
-      reading.channels = found;
-    }
-    const channels = reading.channels;
-    const chosen = panel.colorTarget();
-    const target = channels[chosen] !== undefined ? chosen : channels.fill !== undefined ? "fill" : channels.stroke !== undefined ? "stroke" : null;
-    if (target === null) return null;
-    return {
-      key: keys,
-      channels,
-      stop: ctx.gradientStop !== null && ctx.gradientStop.keys === keys && ctx.gradientStop.target === target ? ctx.gradientStop.index : null,
-      // Nel Personalizzato non c'è un livello: chi ha scelto lo strumento
-      // Sfumatura ha anche «Oltre i capi», che altrimenti non avrebbe mai.
-      expert: ctx.level === "expert" || ctx.level === "custom",
-      swatches,
-    };
-  }
-
-  /// I colori del documento, contati, per la scena di adesso.
-  function colorsNow(): DocumentColors {
-    const index = currentIndex();
-    if (ctx.colorsCounted?.index !== index) ctx.colorsCounted = { index, colors: documentColors(ctx.engine.model!) };
-    return ctx.colorsCounted.colors;
-  }
-  ctx.colorsNow = colorsNow;
 
   /// Scrive `ops`, un cambio chiesto dal pannello, col nome `label`; la
   /// selezione diventa `keys`, se ci sono, e la pagina cresce se `extent` ne
@@ -692,7 +559,6 @@ export function installPanel(ctx: EditorContext): void {
 
   /// L'aspetto o il contorno degli oggetti scelti, da un campo del pannello.
   const styleFromPanel = (id: FieldId, value: number | string | boolean): string | null => {
-    ctx.settleCrop();
     const model = ctx.engine.model;
     const units = selectedUnits();
     if (model === null || units.length === 0) return null;

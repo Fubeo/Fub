@@ -11,18 +11,13 @@ import { holdsLinks, isGroup, isLink, linkTarget, nodeOf } from "../arrange";
 import { barSpot, type ScreenBox } from "../bar";
 import { typedOpacity } from "../fields";
 import { opacityOf } from "../look";
-import { swatchPaint } from "../resources";
-import { documentSwatches } from "../swatches";
-import { attachable } from "../connectors";
 import { FRAME_PX } from "../frame";
 import { screenBox } from "../../view";
 import type { LayerInfo } from "../hit";
 import { inLayer } from "../layers";
-import { croppedImages, cropState } from "../crop";
 import { ARRANGE_SHOWN, BAR_FEATURES } from "./constants";
 import type { EditorContext } from "./context";
 import { layerState, layerTitle, union } from "./helpers";
-import type { DrawStyle } from "./types";
 
 /// I caratteri di un nome XML dopo il primo: dove uno di loro segue `#id`,
 /// il testo cita un altro id.
@@ -51,22 +46,20 @@ export interface ControlsContext {
   syncLayers: () => void;
   rootText: (role: "title" | "desc") => string;
   currentTitle: () => string;
-  syncArrange: () => void;
   syncControls: () => void;
-  drawnPaint: (color: string, from?: DrawStyle) => string;
   refresh: () => void;
 }
 
 /// Monta la barra accanto alla selezione, il livello corrente e lo stato dei controlli.
 export function installControls(ctx: EditorContext): void {
   const {
-    life, has, relabels, drawingFonts, styles, style, widthsNow, root, surface, insertGroup, imageButton,
+    life, has, relabels, drawingFonts, style, widthsNow, root, surface, insertGroup, imageButton,
     widthButtons, showWidthLabels, undoButton, redoButton, deleteButton, selectionButton,
-    propertiesButton, layerGroup, layersButton, layerText, layerStateText, historyPanel, accessPanel, boardsPanel, libraryPanel, panel, pageButton, boardsButton, presentButton, libraryButton, historyButton, accessButton, titleInput, arrangeBar, nameArrange,
-    arrangeButtons, arrangeMore, textButton, duplicateButton, groupButton, ungroupButton, linkText, openLinkText, linkButton, openLinkButton, unlinkButton, orderButton,
-    intoButton, alignButton, opacityField, opacityInput, connectButton, shapeButton, cropButton, uncropButton, linkLayer, painter, builder, paintSource, chosenSheet, editable, isolatedNode, isolationChain, currentIndex, announce, showPage,
-    readFirst, showGrid, viewArea, showGuideLines, selectedUnits, inOrder, frameNow, showHandles, outlineNow,
-    syncTree, showHistory, syncHistory, showBoards, syncBoards, showLibrary, showAccess, syncAccess, syncDescriptions, showPanel, syncProperties, changeField, options
+    propertiesButton, layerGroup, layersButton, layerText, layerStateText, historyPanel, accessPanel, panel, pageButton, historyButton, accessButton, titleInput, arrangeBar, nameArrange,
+    arrangeButtons, arrangeMore, duplicateButton, groupButton, ungroupButton, linkText, openLinkText, linkButton, openLinkButton, unlinkButton, orderButton,
+    intoButton, alignButton, shapeButton, opacityField, opacityInput, linkLayer, painter, builder, paintSource, chosenSheet, editable, isolatedNode, isolationChain, currentIndex, announce, showPage,
+    readFirst, showGrid, viewArea, selectedUnits, inOrder, frameNow, showHandles, outlineNow,
+    syncTree, showHistory, syncHistory, showAccess, syncAccess, syncDescriptions, showPanel, syncProperties, changeField, options
   } = ctx;
   // --- La barra accanto alla selezione ---------------------------------------
 
@@ -370,9 +363,8 @@ export function installControls(ctx: EditorContext): void {
   /// passa a quello che prende il Tab, o al foglio quando la barra se ne va.
   const syncArrange = (): void => {
     const focused = arrangeBar.contains(document.activeElement);
-    const units = ctx.typing === null && BAR_FEATURES.some(has) && editable() && ctx.selection.length > 0 ? selectedUnits() : [];
+    const units = BAR_FEATURES.some(has) && editable() && ctx.selection.length > 0 ? selectedUnits() : [];
     deleteButton.setAttribute("aria-keyshortcuts", "Delete");
-    textButton.hidden = !has("text") || units.length !== 1 || (units[0]!.look === null && !ctx.labelHost(units[0]!));
     for (const control of [duplicateButton, groupButton, ungroupButton, orderButton, alignButton]) control.hidden = !has("arrange");
     groupButton.disabled = units.length < 2;
     ungroupButton.disabled = !units.some(isGroup);
@@ -392,12 +384,6 @@ export function installControls(ctx: EditorContext): void {
     const layers = currentIndex().layers;
     intoButton.hidden = !has("layers") || layers.length === 0 || (layers.length === 1 && units.every((unit) => inLayer(unit, layers[0]!)));
     shapeButton.hidden = !has("recognize") || !units.some(ctx.holdsPenStroke);
-    // Un ritaglio che l'editor non sa cambiare lascia il pulsante, che dice
-    // come toglierlo.
-    const image = units.length === 1 && units[0]!.role === "image" ? units[0]! : null;
-    cropButton.hidden = !has("crop") || image === null || cropState(ctx.engine.model!, image.node) === null;
-    uncropButton.hidden = !has("crop") || croppedImages(ctx.engine.model!, units).length === 0;
-    connectButton.hidden = !has("connector") || units.filter((unit) => attachable(unit.node)).length < 2;
     // L'opacità si scrive agli oggetti che la possono avere, e si legge
     // senza il resto dell'aspetto.
     const opacity = units.length === 0 || !has("arrange") ? null : opacityOf(ctx.engine.model!, units);
@@ -423,7 +409,6 @@ export function installControls(ctx: EditorContext): void {
     if (next !== null) next.focus();
     else surface.focus({ preventScroll: true });
   };
-  ctx.syncArrange = syncArrange;
 
   const syncControls = (): void => readFirst(syncEverything);
   ctx.syncControls = syncControls;
@@ -436,19 +421,17 @@ export function installControls(ctx: EditorContext): void {
     linkLayer.toggleAttribute("data-active", ctx.tool === "select" || !canEdit);
     ctx.syncRail(canEdit);
     ctx.colorWell.setValue(now.color);
-    ctx.syncCharacter();
     ctx.syncPenOptions();
     ctx.colorWell.button.disabled = !canEdit;
     if (!canEdit) ctx.colorWell.close();
     const widths = widthsNow();
-    const sizes = ctx.tool === "text";
     // La nota ha il suo corpo e la copertura è piena: lo spessore non vale.
     const unsized = ctx.tool === "note" || ctx.tool === "cover";
     widthButtons.forEach(({ control, bar, glyph }, at) => {
       const value = widths[at]!.value;
-      bar.hidden = sizes;
-      glyph.hidden = !sizes;
-      if (!sizes) bar.style.setProperty("--draw-width", `${value}px`);
+      bar.hidden = false;
+      glyph.hidden = true;
+      bar.style.setProperty("--draw-width", `${value}px`);
       control.setAttribute("aria-checked", String(value === now.width));
       control.disabled = !canEdit || unsized;
     });
@@ -477,26 +460,18 @@ export function installControls(ctx: EditorContext): void {
       propertiesButton.removeAttribute("aria-expanded");
       if (!panel.element.hidden) showPanel(false, false, false);
     }
-    pageButton.hidden = !has("grid") && !has("guides") && !has("rulers") && !has("recognize") && !has("gestures");
+    pageButton.hidden = !has("grid") && !has("recognize") && !has("gestures");
     insertGroup.hidden = !ctx.insertsImages(ctx.features);
     imageButton.disabled = !canEdit;
     historyButton.hidden = !has("history");
     if (historyButton.hidden && !historyPanel.element.hidden) showHistory(false);
     syncHistory();
-    boardsButton.hidden = !has("board");
-    if (boardsButton.hidden && !boardsPanel.element.hidden) showBoards(false);
-    syncBoards();
-    presentButton.hidden = !has("present");
-    libraryButton.hidden = !has("library");
-    if (libraryButton.hidden && !libraryPanel.element.hidden) showLibrary(false);
-    libraryPanel.update({ editable: canEdit });
     accessButton.hidden = !has("accessibility");
     if (accessButton.hidden && !accessPanel.element.hidden) showAccess(false);
     // Le schede dell'ispettore seguono gli strumenti offerti.
     ctx.chrome.refresh?.();
     syncAccess();
     syncDescriptions();
-    ctx.syncCrop();
     syncProperties();
     // Il titolo sta nelle proprietà del documento (B6); senza il pannello,
     // nella barra in alto, come prima.
@@ -509,33 +484,6 @@ export function installControls(ctx: EditorContext): void {
     ctx.toolbarFocus.sync(null);
     syncArrange();
   };
-
-  /// Il valore con cui un oggetto nuovo scrive `color`, il colore dello
-  /// strumento o dello stile `from`: il campione da cui il colore viene, se
-  /// il disegno lo ha ancora di quel colore, così che l'oggetto lo segua; se
-  /// no il colore.
-  function drawnPaint(color: string, from: DrawStyle = style()): string {
-    const { swatch } = from;
-    const model = ctx.engine.model;
-    if (swatch === null || model === null || from.color !== color) return color;
-    const found = documentSwatches(model).find((each) => each.id === swatch);
-    return found?.color === color ? swatchPaint(found) : color;
-  }
-  ctx.drawnPaint = drawnPaint;
-
-  /// Il colore di uno strumento che viene da un campione lo segue: ne
-  /// prende il colore quando cambia, anche annullando, e lo lascia quando il
-  /// campione se ne va.
-  function followSwatches(): void {
-    const linked = Object.values(styles).filter((each) => each.swatch !== null);
-    if (linked.length === 0) return;
-    const swatches = ctx.engine.model === null ? [] : documentSwatches(ctx.engine.model);
-    for (const each of linked) {
-      const swatch = swatches.find((one) => one.id === each.swatch);
-      if (swatch === undefined) each.swatch = null;
-      else each.color = swatch.color;
-    }
-  }
 
   /// Porta la superficie alla scena del motore.
   const refresh = (): void => oneRound(refreshScene);
@@ -569,11 +517,8 @@ export function installControls(ctx: EditorContext): void {
       const layer = chosenIn(currentIndex().layers);
       ctx.chosen = layer === null ? null : { key: keyOf(layer), at: layer.path[0]! };
     }
-    ctx.showTyping();
-    followSwatches();
     syncControls();
     if (ctx.hotGuide !== null && (ctx.scene.root.guides?.[ctx.hotGuide] === undefined || ctx.scene.root.guides[ctx.hotGuide]!.locked)) ctx.hotGuide = null;
-    showGuideLines();
     showHandles();
     syncTree();
     syncProperties();

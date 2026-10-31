@@ -16,19 +16,13 @@
 //   non si scrive; e un lato non scende sotto la misura a cui lo riducono i
 //   tasti, se non lo era già.
 // - **Ciò che il livello non offre non c'è**: i colori a piacere, gli estremi
-//   e gli angoli del contorno, «Disponi», «Trasforma», i colori del
-//   documento, la griglia, le guide e i righelli. Il tratteggio c'è dallo
-//   Standard, accanto allo spessore.
+//   e gli angoli del contorno, «Disponi», «Trasforma» e la griglia. Il
+//   tratteggio c'è dallo Standard, accanto allo spessore.
 // - **Un colore dice il suo contrasto con la carta**: per il riempimento di
 //   una selezione con testi le soglie del testo, altrimenti quella di una
 //   forma; con l'opacità degli oggetti, se è una sola.
-// - **La forma dei poligoni, delle stelle e dei rettangoli**: il tipo, i
-//   lati o le punte, il raggio interno di una stella e il raggio degli
-//   angoli, nella scena come la larghezza (`reshape.ts`).
 // - **Senza selezione, il disegno**: la pagina, l'unità, la descrizione, e
-//   come si vede il foglio. Il titolo resta nella barra. Con lo strumento
-//   Poligono, prima, la forma che disegna; con lo strumento Tavola, la tavola
-//   che ha scelto: il nome, la misura pronta, il verso, il posto e le misure.
+//   come si vede il foglio. Il titolo resta nella barra.
 // - **Le punte delle linee** (livello Standard): «Punta d'inizio» e «Punta
 //   di fine» nell'Aspetto, di linee, spezzate e tracciati aperti. Ognuna
 //   dice la forma e la misura di adesso e apre un menu con le sei forme, la
@@ -42,13 +36,11 @@
 //   ne ha.
 
 import { resolvedLanguage } from "../../../i18n/strings";
-import type { MenuSample } from "../../../ui/menu";
 import { apply } from "../scene/matrix";
-import { MAX_COUNT, MIN_COUNT, type PolygonalShape } from "../scene/parametric";
 import { UNITS, type LengthUnit } from "../scene/rulers";
 import { plural, t, type DrawKey } from "../strings";
 import type { Axis, Edge, Order } from "./arrange";
-import { MIN_BOARD_SIDE, orientationOf, orientedRect, presetOf, presetRect, PRESETS, roundRect, type PresetId, type Rect } from "./boards";
+import { orientationOf, orientedRect, presetOf, presetRect, PRESETS, type PresetId, type Rect } from "./boards";
 import { angleOf, frameSize, MIN_SIZE, scales, type Frame } from "./frame";
 import type { Grid } from "./grid";
 import { ANCHORS, type Anchor, type Look, type LookChange } from "./look";
@@ -70,19 +62,9 @@ import {
   type SegmentState,
 } from "./properties";
 import { ANGLE_UNITS, evaluate, lengthUnits, PERCENT_UNITS, type QuantityProblem } from "./quantity";
-import { NAME_MAX, nameKey } from "./naming";
 import type { Feature } from "./registry";
 import type { PaintSample } from "./resources";
-import type { ShapeChange, ShapeFacts } from "./reshape";
-import { MAX_SLICES, MIN_SLICES, SYMMETRY_KINDS, type PenSymmetry, type SymmetryKind } from "./symmetry";
-import type { StyleField, StyleKind, StyleRow } from "./styles";
-import type { ConnectorPanelView } from "./connector-panel";
-import type { GradientPanelView } from "./gradient-panel";
-import type { HatchPanelView } from "./hatch-panel";
-import type { ColorsView, PaintTarget } from "./swatches-panel";
-import type { DocumentColors } from "./swatches";
 import { FIELD_PLACES, fieldMin, fromUnit, toUnit } from "./rulers";
-import { MIN_RATIO } from "./shapes";
 import { TEXT_FAMILIES, TEXT_SIZE } from "./text";
 import { parseFamilies, sameFamily, vaultNames, type Generic } from "../fonts/faces";
 import type { FontNotes } from "../fonts/vault";
@@ -167,20 +149,6 @@ const EMPHASIS_IDS = Object.keys(EMPHASES) as Array<keyof typeof EMPHASES>;
 /// Da quale peso un testo è in grassetto, per l'interruttore.
 const BOLD = 600;
 
-/// I tipi di forma di un poligono, coi nomi e le icone degli strumenti.
-const SHAPE_KINDS: ReadonlyArray<{ readonly value: PolygonalShape; readonly label: DrawKey; readonly icon: string }> = [
-  { value: "polygon", label: "draw.tool.polygon", icon: "draw-polygon" },
-  { value: "star", label: "draw.tool.star", icon: "draw-star" },
-];
-
-/// Il nome del passo di annulla di ogni campo di «Forma».
-export const SHAPE_ACTIONS: Readonly<Partial<Record<FieldId, DrawKey>>> = {
-  shape: "draw.action.shape_kind",
-  count: "draw.action.count",
-  inner: "draw.action.inner",
-  corner: "draw.action.corner",
-};
-
 /// Che cosa fa un comando di «Disponi».
 export type ActionCommand =
   | { readonly kind: "align"; readonly edge: Edge }
@@ -251,29 +219,8 @@ export interface SelectionFacts {
   readonly drawn: number;
   /// Gli spostamenti nell'ordine che cambierebbero qualcosa.
   readonly orders: ReadonlySet<Order>;
-  /// I poligoni, le stelle e i rettangoli scelti; `null` se non ce ne sono.
-  readonly shape: ShapeFacts | null;
   /// Le punte delle linee scelte; senza, o `null`, non ce n'è da mostrare.
   readonly tips?: TipsLook | null;
-  /// Le due righe «Stile», se il livello offre gli stili: ciascuna `null`
-  /// se nessun oggetto scelto può seguire uno stile di quel tipo.
-  readonly styles?: { readonly graphic: StyleFacts | null; readonly text: StyleFacts | null } | null;
-}
-
-/// Una riga «Stile» del pannello, come la legge l'editor.
-export interface StyleFacts {
-  /// Che cosa segue la selezione.
-  readonly row: StyleRow;
-  /// Gli stili del documento di quel tipo, nell'ordine del documento, con
-  /// quanti oggetti li seguono e l'anteprima del menu.
-  readonly styles: ReadonlyArray<{ readonly id: string; readonly name: string; readonly followers: number; readonly sample: MenuSample }>;
-  /// Vero se aggiornare dalla selezione lo stile che segue lo cambierebbe.
-  readonly updatable: boolean;
-  /// Perché lo stile che la selezione segue non si può eliminare; `null`
-  /// se si può.
-  readonly undeletable: "locked" | null;
-  /// Il nome proposto per uno stile nuovo: «Stile grafico 1».
-  readonly fresh: string;
 }
 
 /// Il disegno, quando non c'è niente di scelto.
@@ -283,17 +230,6 @@ export interface DocumentFacts {
   /// Vero se il disegno ha tavole: la pagina è la tela che le contiene.
   readonly boards: boolean;
   readonly desc: string;
-}
-
-/// La tavola che lo strumento Tavola ha scelto.
-export interface BoardFacts {
-  readonly id: string;
-  readonly name: string;
-  /// Il rettangolo, in unità della scena.
-  readonly rect: Rect;
-  /// Il suo posto fra le tavole, da 1, e quante sono.
-  readonly index: number;
-  readonly count: number;
 }
 
 /// I nomi delle misure pronte.
@@ -377,16 +313,6 @@ export interface FieldsInput {
   readonly bar: boolean;
   /// Vero se la selezione si può esportare dalla sua sezione.
   readonly exportSelection?: boolean;
-  /// La forma che disegna lo strumento Poligono, se è lo strumento di
-  /// adesso: senza selezione il pannello la mostra.
-  readonly tool: ShapeFacts | null;
-  /// La tavola scelta dallo strumento Tavola, se è lo strumento di adesso:
-  /// senza selezione il pannello la mostra.
-  readonly board: BoardFacts | null;
-  /// La simmetria della penna, col centro, se la penna o l'evidenziatore
-  /// sono lo strumento di adesso e il livello la offre: senza selezione il
-  /// pannello la mostra.
-  readonly symmetry?: (PenSymmetry & { readonly center: readonly [number, number] }) | null;
   /// I campioni del documento, che i campi dei colori scrivono per nome.
   readonly swatches: readonly FieldSwatch[];
   /// I colori scelti di recente, dal più recente.
@@ -394,18 +320,6 @@ export interface FieldsInput {
   /// Il colore della carta, `#rrggbb`, per il contrasto dei colori; `null`
   /// se non si sa.
   readonly paper: string | null;
-  /// I colori del documento, contati, e quello con cui si disegna, col
-  /// campione da cui viene, se il livello offre la loro sezione.
-  readonly colors: { readonly document: DocumentColors; readonly drawing: string; readonly swatch: string | null } | null;
-  /// La sezione «Connettore», com'è già pronta, se il livello la offre e la
-  /// selezione ha un connettore; senza, o `null`, non c'è.
-  readonly connector?: ConnectorPanelView | null;
-  /// La sezione «Sfumatura», com'è già pronta, se il livello la offre e la
-  /// selezione ha un riempimento o un contorno.
-  readonly gradient: GradientPanelView | null;
-  /// La sezione «Campitura», com'è già pronta, se il livello la offre e la
-  /// selezione ha un riempimento.
-  readonly hatch: HatchPanelView | null;
   /// I caratteri del disegno: le famiglie del vault, che il menu
   /// «Carattere» offre se il livello ha i caratteri del vault, e ciò che
   /// manca. Senza, le sole famiglie di Fub.
@@ -436,49 +350,6 @@ const degreesField = (label: string, value: number | null, extra: Partial<Number
   places: 2,
   ...extra,
 });
-
-/// I campi di «Forma» di `facts`, con le lunghezze in `unit`; `note` sotto il
-/// primo.
-function shapeFields(fields: Partial<Record<FieldId, FieldState>>, facts: ShapeFacts, unit: LengthUnit, note: string | null): void {
-  const noted = note === null ? {} : { note };
-  if (facts.shape.count > 0) {
-    fields.shape = {
-      kind: "segment",
-      label: t("draw.properties.shape_kind"),
-      value: facts.shape.value,
-      options: SHAPE_KINDS.map((kind) => ({ value: kind.value, label: t(kind.label), icon: kind.icon })),
-      ...noted,
-    };
-    const counted = facts.shape.value === "star" ? "draw.properties.points" : facts.shape.value === "polygon" ? "draw.properties.sides" : "draw.properties.count";
-    fields.count = { kind: "number", label: t(counted), value: facts.count.value, unit: "", units: {}, relative: false, places: 0, min: MIN_COUNT, max: MAX_COUNT };
-  }
-  if (facts.ratio.count > 0) {
-    fields.inner = {
-      kind: "number",
-      label: t("draw.properties.inner"),
-      value: facts.ratio.value === null ? null : facts.ratio.value * 100,
-      unit: "%",
-      units: PERCENT_UNITS,
-      relative: false,
-      places: 1,
-      min: MIN_RATIO * 100,
-      max: 100,
-    };
-  }
-  if (facts.corner.count > 0) {
-    fields.corner = {
-      kind: "number",
-      label: t("draw.properties.corner"),
-      value: facts.corner.value === null ? null : toUnit(facts.corner.value, unit),
-      unit,
-      units: lengthUnits(unit),
-      relative: true,
-      places: FIELD_PLACES[unit],
-      min: 0,
-      ...(facts.shape.count > 0 ? {} : noted),
-    };
-  }
-}
 
 /// L'icona della forma `shape` a un capo della linea, da `ui/icons.ts`.
 const tipIcon = (shape: EndLook["shape"] & string, end: TipEnd): string =>
@@ -517,169 +388,6 @@ function tipField(end: TipEnd, tips: TipsLook): MenuChoiceState {
     summary = look.size === null || !sizable ? shape : t("draw.tip.summary", { shape, size: t(TIP_SIZE_LABELS[look.size]).toLocaleLowerCase() });
   }
   return { kind: "menu", label: t(end === "start" ? "draw.properties.tip_start" : "draw.properties.tip_end"), value: look.shape, summary, options };
-}
-
-/// Il campo di ogni campo di uno stile, dove il pannello segna che la
-/// selezione ne è diversa; per le parti senza un campo lo dice la riga
-/// «Stile».
-const STYLE_FIELD_IDS: Readonly<Record<StyleField, FieldId | null>> = {
-  fill: "fill",
-  stroke: "stroke",
-  width: "strokeWidth",
-  dashes: "dash",
-  cap: null,
-  join: null,
-  tipStart: "tipStart",
-  tipEnd: "tipEnd",
-  opacity: "opacity",
-  blend: null,
-  effects: null,
-  family: "family",
-  size: "size",
-  weight: "weight",
-  italic: "emphasis",
-  underline: "emphasis",
-  strike: "emphasis",
-  spacing: "spacing",
-  leading: "leading",
-};
-
-/// I nomi dei campi di uno stile, come li dice la riga «Stile».
-const STYLE_FIELD_LABELS: Readonly<Record<StyleField, DrawKey>> = {
-  fill: "draw.properties.fill",
-  stroke: "draw.properties.stroke",
-  width: "draw.properties.stroke_width",
-  dashes: "draw.properties.dash",
-  cap: "draw.properties.cap",
-  join: "draw.properties.join",
-  tipStart: "draw.properties.tip_start",
-  tipEnd: "draw.properties.tip_end",
-  opacity: "draw.properties.opacity",
-  blend: "draw.properties.blend",
-  effects: "draw.properties.effects",
-  family: "draw.properties.family",
-  size: "draw.properties.size",
-  weight: "draw.properties.weight",
-  italic: "draw.text.italic",
-  underline: "draw.text.underline",
-  strike: "draw.text.strike",
-  spacing: "draw.properties.spacing",
-  leading: "draw.properties.leading",
-};
-
-/// L'ordine in cui la riga «Stile» nomina i campi diversi.
-const STYLE_FIELD_ORDER = Object.keys(STYLE_FIELD_LABELS) as StyleField[];
-
-/// Il campo della riga «Stile» di tipo `kind`: sul pulsante lo stile che
-/// la selezione segue, «modificato» se qualcuno ne è diverso, «Misto» o
-/// «Nessuno»; nel menu gli stili del documento con la loro anteprima, per
-/// il testo gli stili di serie che il documento non ha ancora, e i comandi,
-/// ciascuno spento col perché quando non vale.
-function styleField(kind: StyleKind, facts: StyleFacts, presets: boolean): MenuChoiceState {
-  const { row } = facts;
-  const current = row.style;
-  const options: MenuOption[] = facts.styles.map((style) => ({
-    value: `style:${style.id}`,
-    label: style.name,
-    sample: style.sample,
-    checked: current?.id === style.id,
-    note: style.followers === 0 ? t("draw.styles.followers.none") : plural(style.followers, "draw.styles.followers.one", "draw.styles.followers.other"),
-  }));
-  if (presets) {
-    // Uno stile di serie diventa uno stile del documento la prima volta che
-    // lo si sceglie: col suo nome, se il documento non ne ha già uno.
-    const taken = new Set(facts.styles.map((style) => nameKey(style.name)));
-    for (const preset of TEXT_PRESETS) {
-      const label = t(preset.label);
-      if (taken.has(nameKey(label))) continue;
-      options.push({ value: `preset:${preset.id}`, label, sample: { text: "Aa", css: { "font-weight": String(preset.weight) } }, note: t("draw.styles.preset_note"), action: true });
-    }
-  }
-  // Perché un comando sullo stile seguito non vale: la selezione ne segue
-  // più d'uno, o nessuno.
-  const unfollowed = t(row.mixed && row.following > 0 ? "draw.styles.why.mixed" : "draw.styles.why.none");
-  const off = (reason: string | null): Partial<MenuOption> => (reason === null ? {} : { disabled: true, note: reason });
-  const commands: MenuOption[] = [
-    {
-      value: "new",
-      label: t("draw.styles.new"),
-      action: true,
-      ask: { title: t(kind === "text" ? "draw.styles.form.new_text" : "draw.styles.form.new_graphic"), value: facts.fresh, submit: t("draw.styles.form.create") },
-    },
-    { value: "update", label: t("draw.styles.update"), action: true, ...off(current === null ? unfollowed : facts.updatable ? null : t("draw.styles.why.current")) },
-    { value: "revert", label: t("draw.styles.revert"), action: true, ...off(current === null ? unfollowed : row.differing > 0 ? null : t("draw.styles.why.same")) },
-    { value: "unlink", label: t("draw.styles.unlink"), action: true, ...off(row.following > 0 ? null : t("draw.styles.why.none")) },
-    {
-      value: "rename",
-      label: t("draw.styles.rename"),
-      action: true,
-      ...(current === null ? {} : { ask: { title: t("draw.styles.form.rename", { name: current.name }), value: current.name, submit: t("draw.styles.form.apply") } }),
-      ...off(current === null ? unfollowed : null),
-    },
-    { value: "delete", label: t("draw.styles.delete"), action: true, danger: true, ...off(current === null ? unfollowed : facts.undeletable === null ? null : t("draw.styles.why.locked")) },
-  ];
-  commands[0] = { ...commands[0]!, separator: options.length > 0 };
-  options.push(...commands);
-  const summary = current === null ? t(row.mixed ? "draw.properties.mixed" : "draw.styles.none") : row.differing > 0 ? t("draw.styles.modified", { name: current.name }) : current.name;
-  const differs = STYLE_FIELD_ORDER.filter((field) => row.differs.has(field)).map((field) => t(STYLE_FIELD_LABELS[field]).toLocaleLowerCase(resolvedLanguage()));
-  return {
-    kind: "menu",
-    label: t(kind === "text" ? "draw.styles.text" : "draw.styles.graphic"),
-    value: current === null ? null : `style:${current.id}`,
-    summary,
-    options,
-    ...(current !== null && differs.length > 0
-      ? { note: t("draw.styles.differs_note", { fields: new Intl.ListFormat(resolvedLanguage(), { type: "conjunction" }).format(differs) }) }
-      : {}),
-  };
-}
-
-const SYMMETRY_LABELS: Readonly<Record<SymmetryKind, DrawKey>> = {
-  none: "draw.symmetry.none",
-  vertical: "draw.symmetry.vertical",
-  horizontal: "draw.symmetry.horizontal",
-  radial: "draw.symmetry.radial",
-};
-
-/// I campi di «Simmetria» della penna, con le lunghezze in `unit`: il tipo,
-/// con «Rimetti al centro» nel suo menu; gli spicchi e lo specchio di una
-/// radiale; il centro.
-function symmetryFields(fields: Partial<Record<FieldId, FieldState>>, symmetry: PenSymmetry & { readonly center: readonly [number, number] }, unit: LengthUnit): void {
-  const on = symmetry.kind !== "none";
-  fields.symmetry = {
-    kind: "menu",
-    label: t("draw.properties.symmetry.kind"),
-    value: symmetry.kind,
-    summary: t(SYMMETRY_LABELS[symmetry.kind]),
-    options: [
-      ...SYMMETRY_KINDS.map((kind): MenuOption => ({ value: kind, label: t(SYMMETRY_LABELS[kind]), checked: kind === symmetry.kind })),
-      ...(on ? [{ value: "center", label: t("draw.symmetry.recenter"), action: true, separator: true }] : []),
-    ],
-  };
-  if (!on) return;
-  if (symmetry.kind === "radial") {
-    fields.symmetrySlices = countField(t("draw.properties.symmetry.slices"), symmetry.slices, MIN_SLICES, MAX_SLICES);
-    fields.symmetryMirror = { kind: "switch", label: t("draw.properties.symmetry.mirror"), on: symmetry.mirror };
-  }
-  fields.symmetryX = lengthField(t("draw.properties.symmetry.center_x"), symmetry.center[0], unit, false);
-  fields.symmetryY = lengthField(t("draw.properties.symmetry.center_y"), symmetry.center[1], unit, false);
-}
-
-/// Un conto intero da `min` a `max`, senza unità.
-const countField = (label: string, value: number, min: number, max: number): NumberState => ({ kind: "number", label, value, unit: "", units: {}, relative: false, places: 0, min, max });
-
-/// Segna i campi in cui la selezione è diversa dallo stile della riga
-/// `facts`: il punto, e la frase per chi ascolta. Un campo che due stili
-/// segnano, come il colore di un testo e di una forma, dice il primo.
-function markDiffers(fields: Partial<Record<FieldId, FieldState>>, facts: StyleFacts | null): void {
-  const style = facts?.row.style ?? null;
-  if (facts === null || style === null) return;
-  const said = t("draw.styles.differs", { name: style.name });
-  for (const field of facts.row.differs) {
-    const id = STYLE_FIELD_IDS[field];
-    const state = id === null ? undefined : fields[id];
-    if (id !== null && state !== undefined && state.differs === undefined) fields[id] = { ...state, differs: said };
-  }
 }
 
 /// Il nome di un carattere: la famiglia prima del ripiego, o il valore com'è
@@ -752,8 +460,6 @@ export function propertiesView(input: FieldsInput): PropertiesView {
       fields.rotation = degreesField(t("draw.properties.rotation"), angleOf(frame.matrix));
     }
 
-    // --- Forma: quella dello strumento che la disegna ---
-    if (has("polygon") && selection.shape !== null) shapeFields(fields, selection.shape, unit, null);
 
     // --- Aspetto ---
     const { look, outline } = selection;
@@ -811,7 +517,7 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     }
 
     // --- Testo ---
-    if (look.size.count > 0 && !has("styles")) {
+    if (look.size.count > 0) {
       const { size, weight } = look;
       const preset = size.value === null || weight.value === null ? undefined : TEXT_PRESETS.find((each) => Math.abs(each.size - size.value!) < 1e-6 && each.weight === weight.value);
       const presets: ChoiceOption[] = TEXT_PRESETS.map((each) => ({ value: each.id, label: t(each.label) }));
@@ -889,15 +595,6 @@ export function propertiesView(input: FieldsInput): PropertiesView {
       };
     }
 
-    // --- Gli stili, in testa ad «Aspetto» e a «Testo» ---
-    const styles = has("styles") ? (selection.styles ?? null) : null;
-    if (styles !== null) {
-      if (styles.graphic !== null) fields.lookStyle = styleField("graphic", styles.graphic, false);
-      if (styles.text !== null) fields.textStyle = styleField("text", styles.text, true);
-      markDiffers(fields, styles.graphic);
-      markDiffers(fields, styles.text);
-    }
-
     // --- Disponi ---
     if (has("arrange")) {
       for (const [id, command] of Object.entries(ACTION_COMMANDS) as Array<[ActionId, ActionCommand]>) {
@@ -916,27 +613,6 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     }
 
   } else {
-    // --- Forma, dello strumento ---
-    if (input.tool !== null) shapeFields(fields, input.tool, unit, t("draw.properties.shape_tool"));
-
-    // --- Simmetria, della penna ---
-    const symmetry = has("symmetry") ? (input.symmetry ?? null) : null;
-    if (symmetry !== null) symmetryFields(fields, symmetry, unit);
-
-    // --- Tavola, dello strumento ---
-    const board = input.board;
-    if (board !== null) {
-      const [x, y, width, height] = board.rect;
-      const min = fieldMin(MIN_BOARD_SIDE, unit);
-      fields.boardName = { kind: "line", label: t("draw.properties.board_name"), value: board.name, max: NAME_MAX };
-      fields.boardPreset = presetField(t("draw.properties.board_preset"), board.rect);
-      fields.boardOrientation = orientationField(t("draw.properties.orientation"), board.rect);
-      fields.boardX = lengthField("X", x, unit, false);
-      fields.boardY = lengthField("Y", y, unit, false);
-      fields.boardWidth = lengthField(t("draw.field.width"), width, unit, true, { min });
-      fields.boardHeight = lengthField(t("draw.field.height"), height, unit, true, { min });
-    }
-
     // --- Documento ---
     const { page, desc } = input.document;
     if (page !== null) {
@@ -958,56 +634,20 @@ export function propertiesView(input: FieldsInput): PropertiesView {
       fields.grid = { kind: "switch", label: t("draw.grid.show"), on: grid.shown };
       fields.snap = { kind: "switch", label: t("draw.grid.snap"), on: grid.snap };
     }
-    if (has("guides")) fields.guides = { kind: "switch", label: t("draw.feature.guides"), on: grid.guides };
-    if (has("rulers")) {
-      fields.rulers = { kind: "switch", label: t("draw.rulers.show"), on: grid.rulers };
-      fields.rulerGuides = { kind: "switch", label: t("draw.rulers.guides.show"), on: grid.rulerGuides };
-    }
     if (input.bar) fields.bar = { kind: "switch", label: t("draw.bar.beside"), on: grid.bar };
   }
 
-  const board = selection === null ? input.board : null;
   return {
     // Un'unità nuova lascia cadere i valori scritti a metà, come una
-    // selezione nuova o un'altra tavola.
-    key:
-      selection !== null
-        ? `selection\n${unit}\n${selection.keys}`
-        : board !== null
-          ? `board\n${unit}\n${board.id}`
-          : `document\n${unit}${input.tool === null ? "" : `\n${input.tool.shape.value}`}${input.symmetry === undefined || input.symmetry === null ? "" : `\n${input.symmetry.kind}`}`,
-    subject:
-      selection !== null ? selection.subject : board !== null ? t("draw.properties.board_subject", { index: board.index, count: board.count }) : t("draw.properties.drawing"),
+    // selezione nuova.
+    key: selection !== null ? `selection\n${unit}\n${selection.keys}` : `document\n${unit}`,
+    subject: selection !== null ? selection.subject : t("draw.properties.drawing"),
     editable: input.editable,
     fields,
     actions,
     exportSelection: selection !== null && input.exportSelection === true,
     swatches: input.swatches,
     recent: input.recent,
-    ...(input.colors === null ? {} : { colors: colorsView(input.colors, selection, input.recent) }),
-    ...(input.connector === undefined || input.connector === null ? {} : { connector: input.connector }),
-    ...(input.gradient === null ? {} : { gradient: input.gradient }),
-    ...(input.hatch === null ? {} : { hatch: input.hatch }),
-  };
-}
-
-/// La sezione «Colori del documento»: i colori del documento e i recenti, e
-/// dove va un colore, secondo la selezione: il riempimento e il contorno
-/// che ha; senza selezione, ciò che si disegna.
-function colorsView(colors: NonNullable<FieldsInput["colors"]>, selection: SelectionFacts | null, recent: readonly string[]): ColorsView {
-  const look = selection?.look;
-  const targets: PaintTarget[] | null = look === undefined ? null : [];
-  if (look !== undefined && look.fill.count > 0) targets!.push("fill");
-  if (look !== undefined && look.stroke.count > 0) targets!.push("stroke");
-  return {
-    swatches: colors.document.swatches.map(({ id, name, color, uses }) => ({ id, name, color, uses })),
-    used: colors.document.used,
-    hidden: colors.document.hidden,
-    recent,
-    targets,
-    current: look === undefined ? {} : { fill: look.fill.value, stroke: look.stroke.value },
-    drawing: colors.drawing,
-    drawingSwatch: colors.swatch,
   };
 }
 
@@ -1076,48 +716,18 @@ export function lookChange(id: FieldId, value: number | string | boolean, unit: 
   }
 }
 
-/// Il cambio di «Forma» che scrive il campo `id` col valore `value`, con le
-/// lunghezze in `unit`; `null` se il campo non è della forma, o il valore non
-/// è suo.
-export function shapeChange(id: FieldId, value: number | string | boolean, unit: LengthUnit): ShapeChange | null {
-  switch (id) {
-    case "shape":
-      return value === "polygon" || value === "star" ? { shape: value } : null;
-    case "count":
-      return typeof value === "number" ? { count: value } : null;
-    case "inner":
-      return typeof value === "number" ? { ratio: value / 100 } : null;
-    case "corner":
-      return typeof value === "number" ? { corner: fromUnit(value, unit) } : null;
-    default:
-      return null;
-  }
-}
 
-/// Il rettangolo che il campo `id` della tavola, o della pagina, scritto
-/// col valore `value` dà a `rect`, con le lunghezze in `unit`: la misura
-/// pronta, il verso e le misure tengono l'angolo in alto a sinistra. `null`
-/// se il campo non è della tavola o della pagina, o il valore non è suo.
-export function sheetChange(id: FieldId, value: number | string | boolean, rect: Rect, unit: LengthUnit): Rect | null {
-  const [x, y, width, height] = rect;
-  const length = typeof value === "number" && Number.isFinite(value) ? fromUnit(value, unit) : null;
+/// Il rettangolo che il campo `id` della pagina, scritto col valore `value`,
+/// dà a `rect`: la misura pronta e il verso. `null` se il campo non è della
+/// pagina, o il valore non è suo.
+export function sheetChange(id: FieldId, value: number | string | boolean, rect: Rect): Rect | null {
   switch (id) {
-    case "boardPreset":
     case "pagePreset": {
       const preset = PRESETS.find((each) => each.id === value);
       return preset === undefined ? null : presetRect(rect, preset);
     }
-    case "boardOrientation":
     case "pageOrientation":
       return value === "portrait" || value === "landscape" ? orientedRect(rect, value) : null;
-    case "boardX":
-      return length === null ? null : roundRect([length, y, width, height]);
-    case "boardY":
-      return length === null ? null : roundRect([x, length, width, height]);
-    case "boardWidth":
-      return length === null ? null : roundRect([x, y, Math.max(MIN_BOARD_SIDE, length), height]);
-    case "boardHeight":
-      return length === null ? null : roundRect([x, y, width, Math.max(MIN_BOARD_SIDE, length)]);
     default:
       return null;
   }

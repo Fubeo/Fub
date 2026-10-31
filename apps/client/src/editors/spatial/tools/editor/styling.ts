@@ -1,476 +1,34 @@
-// L'editor del disegno: gli stili, i colori, le sfumature, gli effetti e le
-// campiture del pannello. Un pezzo di createDrawEditor (`../editor.ts`): lavora
-// sul contesto che i pezzi condividono.
+// L'editor del disegno: i campi e i comandi del pannello delle proprietà. Un
+// pezzo di createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
+// condividono.
 
 import { formatNumber } from "../../number";
-import type { DocumentModel, ElementPart } from "../../scene/model";
 import { ROOT } from "../../scene/ops";
 import { UNITS } from "../../scene/rulers";
-import type { Elem } from "../../scene/serialize";
 import { paintReference } from "../../scene/values";
-import { plural, t, type DrawKey } from "../../strings";
-import type { PaintNode } from "../../painter/paint";
-import { roundDelta } from "../edit";
-import { carriedBy as onBoard, moveBoardOps, pageRect, rectText, renameBoardOps, resizeBoardOps } from "../boards";
-import { ACTION_COMMANDS, SHAPE_ACTIONS, shapeChange, sheetChange, TEXT_PRESETS } from "../fields";
-import { gradientOps, gradientPreview, type GradientChange, type PaintChannel } from "../gradients";
-import {
-  applyStyleOps,
-  deleteStyleOps,
-  differingFollowers,
-  documentStyles,
-  newStyleOps,
-  renameStyleOps,
-  revertStyleOps,
-  styleNameProblem,
-  updateStyleOps,
-  styleRow,
-  unlinkStyleOps,
-  type DocumentStyle,
-  type Preset as StylePreset,
-  type StyleChange,
-  type StyleKind,
-} from "../styles";
+import { t } from "../../strings";
+import { pageRect, rectText } from "../boards";
+import { ACTION_COMMANDS, sheetChange } from "../fields";
 import type { ActionId, FieldId } from "../properties";
-import {
-  documentSwatches,
-  linkSwatchOps,
-  newSwatchOps,
-  recolorSwatchOps,
-  removeSwatchOps,
-  renameSwatchOps,
-  unitsShowing,
-  type SwatchChange,
-} from "../swatches";
-import { connectorOps, type ConnectorChange } from "../connector-ops";
-import { documentPatterns, hatchOps, type HatchChange } from "../patterns";
 import { fromUnit } from "../rulers";
-import type { Unit } from "../hit";
-import { cleanName } from "../naming";
 import { customColor } from "../palette";
-import { shapeOps, toolWith } from "../reshape";
 import { UNITS_NOW } from "./constants";
 import type { EditorContext } from "./context";
 
-/// Ciò che gli stili, i colori, le sfumature, gli effetti e le campiture del pannello dà agli altri pezzi dell'editor.
+/// Ciò che i campi del pannello danno agli altri pezzi dell'editor.
 export interface StylingContext {
-  applyColor: (value: string, color: string, name: string, target: "fill" | "stroke" | null) => string | null;
-  createSwatch: (name: string, color: string, link: boolean) => string | null;
-  linkSwatch: (id: string) => string | null;
-  renameSwatch: (id: string, name: string) => string | null;
-  recolorSwatch: (id: string, color: string) => string | null;
-  deleteSwatch: (id: string) => string | null;
-  selectShowing: (value: string) => string | null;
-  changeGradient: (target: PaintChannel, change: GradientChange, label: DrawKey) => string | null;
-  changeConnector: (change: ConnectorChange, label: DrawKey) => string | null;
-  changeHatch: (change: HatchChange, label: DrawKey) => string | null;
-  previewGradient: (target: PaintChannel, change: GradientChange | null, only?: ReadonlySet<ElementPart> | null) => void;
-  chooseGradientStop: (index: number | null) => void;
   changeField: (id: FieldId, value: number | string | boolean) => string | null;
   runAction: (id: ActionId) => void;
 }
 
-/// Monta gli stili, i colori, le sfumature, gli effetti e le campiture del pannello.
+/// Monta i campi e i comandi del pannello delle proprietà.
 export function installStyling(ctx: EditorContext): void {
   const {
-    measureText, textStyle, painter, builder, indexer, chosenSheet, currentIndex, newIds, announce, announceSelection, docUnit,
-    selectedUnits, showHandles, syncProperties, colorsNow, changeFromPanel, withFaces, panelLater, moveFromPanel, resizeFromPanel,
+    announce, docUnit,
+    syncProperties, changeFromPanel, moveFromPanel, resizeFromPanel,
     rotateFromPanel, styleFromPanel
   } = ctx;
-  // --- Gli stili del documento ----------------------------------------------
-
-  /// `said`, e quanti oggetti restano com'erano perché bloccati, se ce ne
-  /// sono.
-  const withStyleKept = (said: string, change: StyleChange): string =>
-    change.kept === 0 ? said : `${said} ${plural(change.kept, "draw.styles.kept.one", "draw.styles.kept.other")}`;
-
-  /// Che cosa non va nel nome `name` di uno stile di tipo `kind`; `null` se
-  /// va. `except` è lo stile che si rinomina.
-  const styleNameFailure = (all: readonly DocumentStyle[], kind: StyleKind, name: string, except: string | null = null): string | null => {
-    const problem = styleNameProblem(all, kind, name, except);
-    if (problem === null) return null;
-    if (problem === "empty") return t("draw.colors.problem.empty");
-    return t(problem === "taken" ? "draw.styles.problem.taken" : "draw.colors.problem.reads_color", { name });
-  };
-
-
-  /// Un comando della riga «Stile» di tipo `kind`: `style:<id>` dà lo
-  /// stile alla selezione, `preset:<id>` fa uno stile di serie e lo dà,
-  /// `new:<nome>` fa uno stile dalla selezione; `update`, `revert`,
-  /// `unlink`, `rename:<nome>` e `delete` lavorano sullo stile che la
-  /// selezione segue. `null` se è fatto, altrimenti perché no.
-  function styleCommand(kind: StyleKind, value: string): string | null {
-    const model = ctx.engine.model;
-    const units = selectedUnits();
-    if (model === null || units.length === 0) return null;
-    const all = documentStyles(model);
-    const colon = value.indexOf(":");
-    const verb = colon < 0 ? value : value.slice(0, colon);
-    const rest = colon < 0 ? "" : value.slice(colon + 1);
-    const current = styleRow(model, units, kind, all, measureText)?.style ?? null;
-    switch (verb) {
-      case "style": {
-        const style = all.find((each) => each.id === rest && each.kind === kind);
-        return style === undefined ? null : applyStyle(model, units, style);
-      }
-      case "preset": {
-        const preset = TEXT_PRESETS.find((each) => each.id === rest);
-        if (kind !== "text" || preset === undefined) return null;
-        const name = t(preset.label);
-        // Uno stile con quel nome c'è già: si dà lui.
-        const named = all.find((each) => each.kind === kind && styleNameProblem([each], kind, name) === "taken");
-        return named === undefined ? makeStyle(model, units, kind, name, all, { size: preset.size, weight: preset.weight }) : applyStyle(model, units, named);
-      }
-      case "new":
-        return makeStyle(model, units, kind, cleanName(rest), all, null);
-      case "update": {
-        if (current === null) return null;
-        return withFaces((late) => {
-          const updated = updateStyleOps(model, units, current, measureText, newIds());
-          if (late()) return null;
-          if (updated === null) return t("draw.styles.problem.empty_look");
-          if (updated.ops.length === 0) {
-            announce(t("draw.styles.updated.same", { name: current.name }));
-            return null;
-          }
-          const outcome = changeFromPanel("draw.action.style_update", updated.ops, updated.keys);
-          if (outcome !== null) return outcome;
-          const after = ctx.engine.model === null ? undefined : documentStyles(ctx.engine.model).find((each) => each.id === current.id);
-          const differing = after === undefined ? 0 : differingFollowers(ctx.engine.model!, after, measureText);
-          const said = plural(after?.followers ?? 0, "draw.styles.updated.one", "draw.styles.updated.other", { name: current.name });
-          announce(withStyleKept(differing === 0 ? said : `${said} ${plural(differing, "draw.styles.updated.differing.one", "draw.styles.updated.differing.other")}`, updated));
-          return null;
-        }, panelLater);
-      }
-      case "revert": {
-        if (current === null) return null;
-        return withFaces((late) => {
-          const reverted = revertStyleOps(model, units, current, measureText, newIds());
-          if (late()) return null;
-          const outcome = changeFromPanel("draw.action.style_revert", reverted.ops, reverted.keys);
-          if (outcome === null) announce(withStyleKept(plural(reverted.changed, "draw.styles.reverted.one", "draw.styles.reverted.other", { name: current.name }), reverted));
-          return outcome;
-        }, panelLater);
-      }
-      case "unlink": {
-        const unlinked = unlinkStyleOps(model, units, kind, all, newIds());
-        const outcome = changeFromPanel("draw.action.style_unlink", unlinked.ops, unlinked.keys);
-        if (outcome === null) announce(withStyleKept(plural(unlinked.changed, "draw.styles.unlinked.one", "draw.styles.unlinked.other"), unlinked));
-        return outcome;
-      }
-      case "rename": {
-        if (current === null) return null;
-        const name = cleanName(rest);
-        const failure = styleNameFailure(all, kind, name, current.id);
-        if (failure !== null) return failure;
-        const renamed = renameStyleOps(model, current, name, units, newIds());
-        const outcome = changeFromPanel("draw.action.style_rename", renamed.ops, renamed.keys);
-        if (outcome === null && renamed.ops.length > 0) announce(t("draw.styles.renamed", { name }));
-        return outcome;
-      }
-      case "delete": {
-        if (current === null) return null;
-        const removed = deleteStyleOps(model, current, units, newIds());
-        if (removed === null) return t("draw.styles.refused.locked");
-        const outcome = changeFromPanel("draw.action.style_delete", removed.ops, removed.keys);
-        if (outcome === null) {
-          const { name } = current;
-          announce(removed.changed === 0 ? t("draw.styles.deleted", { name }) : plural(removed.changed, "draw.styles.deleted.one", "draw.styles.deleted.other", { name }));
-        }
-        return outcome;
-      }
-      default:
-        return null;
-    }
-  }
-
-  /// Dà lo stile `style` agli oggetti scelti `units`.
-  function applyStyle(model: DocumentModel, units: readonly Unit[], style: DocumentStyle): string | null {
-    return withFaces((late) => {
-      const applied = applyStyleOps(model, units, style, measureText, newIds());
-      if (late()) return null;
-      const outcome = changeFromPanel("draw.action.style_apply", applied.ops, applied.keys);
-      if (outcome === null) announce(withStyleKept(plural(applied.changed, "draw.styles.applied.one", "draw.styles.applied.other", { name: style.name }), applied));
-      return outcome;
-    }, panelLater);
-  }
-
-  /// Fa lo stile `name` di tipo `kind` dalla selezione `units`, col corpo e
-  /// il peso di `preset` se c'è, e lo fa seguire agli oggetti scelti.
-  function makeStyle(model: DocumentModel, units: readonly Unit[], kind: StyleKind, name: string, all: readonly DocumentStyle[], preset: StylePreset | null): string | null {
-    const failure = styleNameFailure(all, kind, name);
-    if (failure !== null) return failure;
-    return withFaces((late) => {
-      const made = newStyleOps(model, units, kind, name, measureText, newIds(), preset);
-      if (late()) return null;
-      if (made === null) return t("draw.styles.problem.empty_look");
-      const outcome = changeFromPanel("draw.action.style_new", made.ops, made.keys);
-      if (outcome === null) announce(withStyleKept(plural(made.changed, "draw.styles.created.one", "draw.styles.created.other", { name }), made));
-      return outcome;
-    }, panelLater);
-  }
-
-  // --- I colori del documento ------------------------------------------------
-
-  /// Il campione `id` del disegno di adesso, se c'è.
-  const swatchNamed = (id: string): { readonly id: string; readonly name: string; readonly color: string } | null => {
-    const model = ctx.engine.model;
-    return (model === null ? undefined : documentSwatches(model).find((each) => each.id === id)) ?? null;
-  };
-
-  /// Quanti elementi mostrano il campione `id`, nel disegno di adesso.
-  const swatchUses = (id: string): number => colorsNow().swatches.find((each) => each.id === id)?.uses ?? 0;
-
-  /// `said`, e quanti oggetti tengono il colore scritto, se ce ne sono.
-  const withKept = (said: string, change: SwatchChange): string =>
-    change.kept === 0 ? said : `${said} ${plural(change.kept, "draw.colors.kept.one", "draw.colors.kept.other")}`;
-
-  /// Un colore dalla sezione «Colori del documento»: `value` si scrive,
-  /// `color` è il suo `#rrggbb` e `name` come si dice. Va al bersaglio
-  /// `target` della selezione o, con `null`, a ciò che si disegna.
-  function applyColor(value: string, color: string, name: string, target: "fill" | "stroke" | null): string | null {
-    if (target === null) {
-      ctx.setColor(color, { swatch: paintReference(value)?.id ?? null });
-      announce(t("draw.announce.color", { color: name }));
-      return null;
-    }
-    const outcome = styleFromPanel(target, value);
-    if (outcome === null) {
-      if (paintReference(value) === null) ctx.rememberColors(color);
-      announce(t("draw.colors.applied", { target: t(target === "fill" ? "draw.properties.fill" : "draw.properties.stroke"), name }));
-    }
-    ctx.panelShown = null;
-    syncProperties();
-    return outcome;
-  }
-  ctx.applyColor = applyColor;
-
-  /// Il campione nuovo `name` del colore `color`; con `link`, chi usa
-  /// `color` scritto passa a lui.
-  function createSwatch(name: string, color: string, link: boolean): string | null {
-    ctx.settleCrop();
-    const model = ctx.engine.model;
-    if (model === null) return null;
-    const made = newSwatchOps(model, color, name, link, selectedUnits(), newIds());
-    const outcome = changeFromPanel(link ? "draw.action.swatch_make" : "draw.action.swatch_new", made.ops, made.keys);
-    if (outcome !== null) return outcome;
-    const uses = link ? swatchUses(made.id) : 0;
-    announce(withKept(uses === 0 ? t("draw.colors.created", { name }) : plural(uses, "draw.colors.created.one", "draw.colors.created.other", { name }), made));
-    return null;
-  }
-  ctx.createSwatch = createSwatch;
-
-  /// Chi usa scritto il colore del campione `id` passa a lui.
-  function linkSwatch(id: string): string | null {
-    ctx.settleCrop();
-    const model = ctx.engine.model;
-    const swatch = swatchNamed(id);
-    if (model === null || swatch === null) return null;
-    const linked = linkSwatchOps(model, id, selectedUnits(), newIds());
-    const outcome = changeFromPanel("draw.action.swatch_link", linked.ops, linked.keys);
-    if (outcome !== null) return outcome;
-    const { name } = swatch;
-    announce(withKept(linked.ops.length === 0 ? t("draw.colors.linked.none", { name }) : plural(swatchUses(id), "draw.colors.linked.one", "draw.colors.linked.other", { name }), linked));
-    return null;
-  }
-  ctx.linkSwatch = linkSwatch;
-
-  function renameSwatch(id: string, name: string): string | null {
-    ctx.settleCrop();
-    const model = ctx.engine.model;
-    if (model === null) return null;
-    const renamed = renameSwatchOps(model, id, name, selectedUnits(), newIds());
-    const outcome = changeFromPanel("draw.action.swatch_rename", renamed.ops, renamed.keys);
-    if (outcome === null && renamed.ops.length > 0) announce(t("draw.colors.renamed", { name }));
-    return outcome;
-  }
-  ctx.renameSwatch = renameSwatch;
-
-  /// Il colore nuovo `color` del campione `id`, per chi lo usa e, se viene
-  /// da lui, per ciò che si disegna.
-  function recolorSwatch(id: string, color: string): string | null {
-    ctx.settleCrop();
-    const model = ctx.engine.model;
-    const swatch = swatchNamed(id);
-    if (model === null || swatch === null) return null;
-    const recolored = recolorSwatchOps(model, id, color, selectedUnits(), newIds());
-    const outcome = changeFromPanel("draw.action.swatch_recolor", recolored.ops, recolored.keys);
-    if (outcome !== null) return outcome;
-    announce(t("draw.colors.recolored", { name: swatch.name, color: ctx.colorName(color) }));
-    return null;
-  }
-  ctx.recolorSwatch = recolorSwatch;
-
-  /// Toglie il campione `id`: chi lo usa torna al suo colore, scritto.
-  function deleteSwatch(id: string): string | null {
-    ctx.settleCrop();
-    const model = ctx.engine.model;
-    const swatch = swatchNamed(id);
-    if (model === null || swatch === null) return null;
-    const removed = removeSwatchOps(model, id, selectedUnits(), newIds());
-    const outcome = changeFromPanel("draw.action.swatch_delete", removed.ops, removed.keys);
-    if (outcome !== null) return outcome;
-    const { name } = swatch;
-    announce(removed.kept === 0 ? t("draw.colors.deleted", { name }) : plural(removed.kept, "draw.colors.deleted.kept.one", "draw.colors.deleted.kept.other", { name }));
-    return null;
-  }
-  ctx.deleteSwatch = deleteSwatch;
-
-  /// Sceglie gli oggetti che si scelgono e che mostrano `value`, un colore
-  /// `#rrggbb` o un campione `url(#id)`, come «Scegli simili».
-  function selectShowing(value: string): string | null {
-    const model = ctx.engine.model;
-    if (model === null) return null;
-    const units = unitsShowing(model, currentIndex(), value);
-    if (units.length === 0) {
-      announce(t("draw.colors.selected.none"));
-      return null;
-    }
-    ctx.cancelGesture();
-    ctx.select(units.map((unit) => unit.key));
-    announceSelection();
-    return null;
-  }
-  ctx.selectShowing = selectShowing;
-
-  // --- Le sfumature ----------------------------------------------------------
-
-  /// La sfumatura `change` per il bersaglio `target` degli oggetti scelti,
-  /// dalla sezione «Sfumatura», col nome `label` nella cronologia.
-  function changeGradient(target: PaintChannel, change: GradientChange, label: DrawKey): string | null {
-    ctx.settleCrop();
-    const model = ctx.engine.model;
-    const units = selectedUnits();
-    if (model === null || units.length === 0) return null;
-    previewGradient(target, null);
-    const changed = gradientOps(model, units, target, change, measureText, newIds());
-    // Un cambio che non arriva a nessuno è di oggetti senza una misura su
-    // cui stendere la sfumatura.
-    if (changed.reached === 0) return t("draw.gradient.no_place");
-    const before = ctx.selection.join("\n");
-    const failure = changeFromPanel(label, changed.ops, changed.keys);
-    if (failure === null) ctx.rekeyGradient(before);
-    return failure;
-  }
-  ctx.changeGradient = changeGradient;
-
-  // --- Gli effetti -----------------------------------------------------------
-
-
-  // --- Il connettore nelle proprietà ----------------------------------------
-
-  /// Il cambio `change` dei connettori scelti, dalla sezione «Connettore»,
-  /// col nome `label` nella cronologia. Una scelta (tipo, aggancio, verso)
-  /// dice a quanti connettori è arrivata; il testo di un'etichetta no, che si
-  /// legge. Il tipo scelto è anche quello dei connettori che lo strumento
-  /// disegna dopo. `null` se è fatto, altrimenti perché no.
-  function changeConnector(change: ConnectorChange, label: DrawKey): string | null {
-    ctx.settleCrop();
-    const model = ctx.engine.model;
-    const units = selectedUnits();
-    if (model === null || units.length === 0) return null;
-    if ("kind" in change) ctx.connectorKind = change.kind;
-    const changed = connectorOps(model, units, change, (id) => ctx.engine.holder(id), measureText, newIds(), { color: textStyle.color, size: textStyle.width });
-    const chosen = !("label" in change);
-    if (changed.ops.length === 0) {
-      if (chosen) announce(t("draw.unchanged"));
-      return null;
-    }
-    const failure = changeFromPanel(label, changed.ops, changed.keys);
-    if (failure !== null || !chosen) return failure;
-    announce(plural(changed.reached, "draw.connector.applied.one", "draw.connector.applied.other"));
-    return null;
-  }
-  ctx.changeConnector = changeConnector;
-
-  // --- Le campiture e i motivi -----------------------------------------------
-
-  /// Il cambio `change` delle campiture degli oggetti scelti, dalla sezione
-  /// «Campitura», col nome `label` nella cronologia. Una scelta del menu
-  /// dice a quanti oggetti è arrivata; un campo no, che si legge. `null` se
-  /// è fatto, altrimenti perché no.
-  function changeHatch(change: HatchChange, label: DrawKey): string | null {
-    ctx.settleCrop();
-    const model = ctx.engine.model;
-    const units = selectedUnits();
-    if (model === null || units.length === 0) return null;
-    const changed = hatchOps(model, units, change, measureText, newIds());
-    const chosen = "preset" in change || "none" in change || "pattern" in change;
-    if (changed.ops.length === 0) {
-      if (chosen) announce(t("draw.unchanged"));
-      return null;
-    }
-    const failure = changeFromPanel(label, changed.ops, changed.keys);
-    if (failure !== null || !chosen) return failure;
-    if ("preset" in change) {
-      announce(plural(changed.reached, "draw.hatch.applied.one", "draw.hatch.applied.other", { name: t(`draw.hatch.preset.${change.preset}`) }));
-    } else if ("pattern" in change) {
-      const name = documentPatterns(model).find((each) => each.id === change.pattern)?.name ?? "";
-      announce(plural(changed.reached, "draw.hatch.applied.motif.one", "draw.hatch.applied.motif.other", { name }));
-    } else {
-      announce(plural(changed.reached, "draw.hatch.removed.one", "draw.hatch.removed.other"));
-    }
-    return null;
-  }
-  ctx.changeHatch = changeHatch;
-
-
-
-
-
-  /// Mostra sul disegno la sfumatura `change` del bersaglio `target` degli
-  /// oggetti scelti, o delle sole parti `only`, senza scriverla; `null` toglie
-  /// ciò che mostrava.
-  function previewGradient(target: PaintChannel, change: GradientChange | null, only: ReadonlySet<ElementPart> | null = null): void {
-    const model = ctx.engine.model;
-    if (change === null || model === null) {
-      if (!ctx.gradientShown) return;
-      ctx.gradientShown = false;
-      painter.setDraft(null);
-      return;
-    }
-    const paints = new Map<PaintNode, Partial<Record<PaintChannel, string | Elem>>>();
-    for (const [node, shown] of gradientPreview(model, selectedUnits(), target, change, only)) {
-      for (const paint of builder.paintsOf(node)) paints.set(paint, { [shown.name]: shown.value });
-    }
-    ctx.gradientShown = paints.size > 0;
-    painter.setDraft(ctx.gradientShown ? { paints } : null);
-  }
-  ctx.previewGradient = previewGradient;
-
-  /// Il punto `index` della sfumatura comune diventa quello scelto, nel
-  /// pannello e sul foglio, dove lascia il capo scelto; `null` nessuno, e il
-  /// pannello mostra il primo. Il pannello ridice dopo ogni cambio il punto
-  /// che mostra: lo stesso di prima lascia le cose come stanno.
-  function chooseGradientStop(index: number | null): void {
-    const model = ctx.engine.model;
-    const units = selectedUnits();
-    const target = model === null || units.length === 0 ? null : ctx.gradientTarget(model, units);
-    const keys = ctx.selection.join("\n");
-    const before = ctx.gradientStop !== null && ctx.gradientStop.keys === keys && ctx.gradientStop.target === target ? ctx.gradientStop : null;
-    if (index !== null && index === (before?.index ?? 0)) return;
-    ctx.gradientStop = index === null || target === null ? null : { keys, target, index, group: before?.group ?? 0 };
-    ctx.gradientGrip = null;
-    showHandles();
-    syncProperties();
-  }
-  ctx.chooseGradientStop = chooseGradientStop;
-
-  /// Un campo di «Forma»: cambia i poligoni, le stelle e i rettangoli
-  /// scelti, o senza selezione lo strumento Poligono.
-  const shapeFromPanel = (id: FieldId, value: number | string | boolean): string | null => {
-    const change = shapeChange(id, value, docUnit());
-    const model = ctx.engine.model;
-    if (change === null || model === null) return null;
-    const units = selectedUnits();
-    if (units.length === 0) {
-      if (ctx.tool === "polygon") ctx.setPolygonTool(toolWith(ctx.polygonTool, change));
-      return null;
-    }
-    const reshaped = shapeOps(model, units, change, newIds(), ctx.polygonTool);
-    return changeFromPanel(SHAPE_ACTIONS[id]!, reshaped.ops, reshaped.keys);
-  };
-
+  // --- I campi del pannello ------------------------------------------------
 
   /// Un lato della pagina, nell'unità del documento.
   const pageFromPanel = (id: "pageWidth" | "pageHeight", value: number): string | null => {
@@ -483,35 +41,14 @@ export function installStyling(ctx: EditorContext): void {
     return changeFromPanel("draw.action.page_size", [{ op: "page", viewBox: next }], null);
   };
 
-  /// Un campo della tavola scelta o della pagina: la misura pronta, il
-  /// verso, il posto e le misure. Una tavola si sposta con ciò che porta,
-  /// come con le frecce; le misure tengono l'angolo in alto a sinistra.
+  /// Un campo della pagina: la misura pronta e il verso.
   const sheetFromPanel = (id: FieldId, value: number | string | boolean): string | null => {
-    const model = ctx.engine.model;
     const page = ctx.scene.root.page;
-    const board = id.startsWith("board") ? (chosenSheet()?.board ?? null) : null;
-    const rect = board?.rect ?? (id.startsWith("page") && page !== null ? pageRect(page) : null);
-    if (model === null || rect === null) return null;
-    const next = sheetChange(id, value, rect, docUnit());
+    if (ctx.engine.model === null || page === null) return null;
+    const rect = pageRect(page);
+    const next = sheetChange(id, value, rect);
     if (next === null || rectText(next) === rectText(rect)) return null;
-    if (board === null) return changeFromPanel("draw.action.page_size", [{ op: "page", viewBox: rectText(next) }], null);
-    if (id === "boardX" || id === "boardY") {
-      const carried = onBoard(board.box, indexer.movable(model));
-      const moved = moveBoardOps(model, board, roundDelta(next[0] - rect[0]), roundDelta(next[1] - rect[1]), carried, newIds(), page);
-      return changeFromPanel("draw.action.board_move", moved.ops, null);
-    }
-    return changeFromPanel("draw.action.board_resize", resizeBoardOps(model, board, next, newIds(), page).ops, null);
-  };
-
-  /// Il nome della tavola scelta, dal pannello: vuoto non cambia niente,
-  /// come nell'elenco.
-  const boardNameFromPanel = (value: string): string | null => {
-    const board = chosenSheet()?.board ?? null;
-    const model = ctx.engine.model;
-    const name = cleanName(value);
-    if (board === null || model === null || name === "" || name === board.name) return null;
-    const renamed = renameBoardOps(model, board, name, newIds());
-    return renamed === "foreign" ? t("draw.board.foreign") : changeFromPanel("draw.action.board_rename", renamed.ops, null);
+    return changeFromPanel("draw.action.page_size", [{ op: "page", viewBox: rectText(next) }], null);
   };
 
   const descFromPanel = (value: string): string | null => {
@@ -529,16 +66,10 @@ export function installStyling(ctx: EditorContext): void {
     return outcome;
   };
 
-  /// I campi del pannello che non scrivono nel disegno.
-  const SHEET_FIELDS: ReadonlySet<FieldId> = new Set<FieldId>(["grid", "snap", "guides", "rulers", "rulerGuides", "bar", "ratio", "symmetry", "symmetrySlices", "symmetryMirror", "symmetryX", "symmetryY"]);
-
   /// Scrive il valore di un campo del pannello: `null` se il disegno l'ha
   /// accettato, altrimenti la ragione per cui no. Dopo, il pannello mostra
   /// com'è il disegno, anche quando il valore scritto non cambiava niente.
   function changeField(id: FieldId, value: number | string | boolean): string | null {
-    // Ciò che scrive nel disegno applica prima il ritaglio aperto; la griglia
-    // e il lucchetto delle proporzioni sono del foglio, e lo lasciano.
-    if (!SHEET_FIELDS.has(id)) ctx.settleCrop();
     const on = value === true;
     const number = typeof value === "number" ? value : Number.NaN;
     let outcome: string | null = null;
@@ -548,15 +79,6 @@ export function installStyling(ctx: EditorContext): void {
         break;
       case "snap":
         ctx.changeGrid({ ...ctx.grid, snap: on });
-        break;
-      case "guides":
-        ctx.changeGrid({ ...ctx.grid, guides: on });
-        break;
-      case "rulers":
-        ctx.changeGrid({ ...ctx.grid, rulers: on });
-        break;
-      case "rulerGuides":
-        ctx.changeGrid({ ...ctx.grid, rulerGuides: on });
         break;
       case "bar":
         ctx.changeGrid({ ...ctx.grid, bar: on });
@@ -574,15 +96,6 @@ export function installStyling(ctx: EditorContext): void {
       case "pageHeight":
         if (Number.isFinite(number)) outcome = pageFromPanel(id, number);
         break;
-      case "boardName":
-        outcome = boardNameFromPanel(String(value));
-        break;
-      case "boardPreset":
-      case "boardOrientation":
-      case "boardX":
-      case "boardY":
-      case "boardWidth":
-      case "boardHeight":
       case "pagePreset":
       case "pageOrientation":
         outcome = sheetFromPanel(id, value);
@@ -597,23 +110,6 @@ export function installStyling(ctx: EditorContext): void {
         break;
       case "rotation":
         if (Number.isFinite(number)) outcome = rotateFromPanel(number);
-        break;
-      case "shape":
-      case "count":
-      case "inner":
-      case "corner":
-        outcome = shapeFromPanel(id, value);
-        break;
-      case "lookStyle":
-      case "textStyle":
-        outcome = styleCommand(id === "textStyle" ? "text" : "graphic", String(value));
-        break;
-      case "symmetry":
-      case "symmetrySlices":
-      case "symmetryMirror":
-      case "symmetryX":
-      case "symmetryY":
-        outcome = ctx.symmetryFromPanel(id, value);
         break;
       default:
         outcome = styleFromPanel(id, value);

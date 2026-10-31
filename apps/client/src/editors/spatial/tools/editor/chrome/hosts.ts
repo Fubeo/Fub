@@ -13,7 +13,7 @@
 import type { SurfacePanel, SurfacePanels } from "../../../../core/registry";
 
 /// Le schede dei pannelli, con gli id che l'ispettore ricorda.
-export type DrawPanelId = "design" | "layers" | "resources" | "history" | "accessibility";
+export type DrawPanelId = "design" | "layers" | "history" | "accessibility";
 
 /// Un pannello dell'editor, come lo sposta una cromatura.
 export interface DrawPanelPiece {

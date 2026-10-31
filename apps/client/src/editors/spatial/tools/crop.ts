@@ -48,9 +48,6 @@ export type CropState =
   | { readonly kind: "crop"; readonly crop: Crop; readonly clip: string }
   | { readonly kind: "other" };
 
-/// Il lato più piccolo che un ritaglio scrive.
-export const MIN_CROP = 0.01;
-
 /// I tag di `clipPath` che non si disegnano e non contano nel ritaglio.
 const META: ReadonlySet<string> = new Set(["title", "desc"]);
 
@@ -126,30 +123,6 @@ export function cropState(model: DocumentModel, node: ElementPart): CropState | 
 // ---------------------------------------------------------------------------
 // I margini.
 // ---------------------------------------------------------------------------
-
-export interface Margins {
-  readonly top: number;
-  readonly right: number;
-  readonly bottom: number;
-  readonly left: number;
-}
-
-/// Quanto il ritaglio dista dai quattro bordi dell'immagine.
-export function marginsOf(crop: Crop): Margins {
-  const { box, rect } = crop;
-  return { top: rect.min[1] - box.min[1], right: box.max[0] - rect.max[0], bottom: box.max[1] - rect.max[1], left: rect.min[0] - box.min[0] };
-}
-
-/// Il ritaglio coi margini `margins` dai bordi dell'immagine; `null` se uno
-/// è negativo o se lasciano meno di `MIN_CROP` per lato.
-export function withMargins(crop: Crop, margins: Margins): Crop | null {
-  const { box } = crop;
-  const { top, right, bottom, left } = margins;
-  if (![top, right, bottom, left].every((value) => Number.isFinite(value) && value >= 0)) return null;
-  const rect = bounds(box.min[0] + left, box.min[1] + top, box.max[0] - right, box.max[1] - bottom);
-  if (rect.max[0] - rect.min[0] < MIN_CROP || rect.max[1] - rect.min[1] < MIN_CROP) return null;
-  return { box, rect };
-}
 
 // ---------------------------------------------------------------------------
 // I gesti.

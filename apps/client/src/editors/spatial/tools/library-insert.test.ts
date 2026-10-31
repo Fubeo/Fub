@@ -6,14 +6,13 @@
 import { describe, expect, it } from "vitest";
 import type { Bounds } from "../scene/geometry";
 import { parsePath } from "../scene/geometry";
-import { IDENTITY } from "../scene/matrix";
 import { readPolygonal } from "../scene/parametric";
 import { doc } from "../scene/test-support";
 import { drawStrings } from "../strings";
 import type { Elem } from "../scene/serialize";
 import { NewIds } from "./edit";
 import { labelable, textBox } from "./label-hosts";
-import { boxAround, boxIn, libraryElem, PAPER_COLOR, PAPER_WIDTH, forPreview } from "./library-insert";
+import { libraryElem, PAPER_COLOR, PAPER_WIDTH, forPreview } from "./library-insert";
 import { LIBRARY, libraryShape, type LibraryShape } from "./shape-library";
 import { arrowPath } from "./shapes";
 import { TEXT_FAMILY } from "./text";
@@ -352,25 +351,6 @@ describe("forPreview", () => {
     expect(forPreview(rect).attrs).toEqual({ x: "37.5", y: "-12.25", width: "10", height: "10", fill: "none", stroke: "#0072b2", "stroke-width": "3" });
   });
 });
-
-describe("boxAround e boxIn", () => {
-  it("mette il centro dov'è chiesto, con la misura con cui la forma s'inserisce", () => {
-    const shape = libraryShape("basic-rectangle")!;
-    expect(boxAround(shape, [100, 50])).toEqual({ min: [20, 0], max: [180, 100] });
-  });
-
-  it("riporta il riquadro della scena a un livello che lo ingrandisce o lo gira", () => {
-    const box = { min: [20, 0], max: [180, 100] } as const;
-    expect(boxIn(box, IDENTITY)).toEqual(box);
-    // Un livello in scala 2: lo stesso riquadro nella scena è la metà nelle sue coordinate.
-    expect(boxIn(box, [0.5, 0, 0, 0.5, 0, 0])).toEqual({ min: [10, 0], max: [90, 50] });
-    // Un livello girato di 90°: la larghezza e l'altezza si scambiano, e il riquadro resta ordinato.
-    const turned = boxIn(box, [0, -1, 1, 0, 0, 0]);
-    expect(turned.max[0] - turned.min[0]).toBe(100);
-    expect(turned.max[1] - turned.min[1]).toBe(160);
-  });
-});
-
 describe("le etichette nelle forme delle raccolte", () => {
   it("ogni forma chiusa ne riceve una, in un riquadro del testo dentro di lei; quelle della scuola no", () => {
     for (const shape of LIBRARY) {

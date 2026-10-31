@@ -269,7 +269,7 @@ describe("le parti del Personalizzato nel pannello", () => {
   };
 
   it("una casella per parte, nei gruppi dei livelli da cui vengono, e il gruppo si descrive una volta", async () => {
-    await openPanel([custom(["pen", "text", "boolean"])]);
+    await openPanel([custom(["pen", "highlighter", "boolean"])]);
     const group = field();
     expect(group.getAttribute("role")).toBe("group");
     expect(document.getElementById(group.getAttribute("aria-labelledby")!)?.textContent).toBe("Parti del Personalizzato");
@@ -277,9 +277,9 @@ describe("le parti del Personalizzato nel pannello", () => {
       set.querySelector("legend")!.textContent,
       set.querySelectorAll("input[type=checkbox]").length,
     ]);
-    expect(levels).toEqual([["Essenziale", 6], ["Standard", 32]]);
+    expect(levels).toEqual([["Essenziale", 6], ["Standard", 16]]);
     const checked = [...group.querySelectorAll<HTMLInputElement>("input:checked")].map((input) => input.closest("label")!.textContent);
-    expect(checked).toEqual(["Penna", "Testo"]);
+    expect(checked).toEqual(["Penna", "Evidenziatore"]);
 
     // La prosa e la provenienza le sente chi arriva al gruppo, non a ogni casella.
     const described = group.getAttribute("aria-describedby")!.split(" ").map((id) => document.getElementById(id)?.textContent);
@@ -288,18 +288,18 @@ describe("le parti del Personalizzato nel pannello", () => {
   });
 
   it("una casella scrive l'elenco intero nell'ordine delle parti, tiene i nomi che non conosce e il fuoco", async () => {
-    await openPanel([custom(["text", "pen", "domani"])]);
+    await openPanel([custom(["highlighter", "pen", "domani"])]);
 
     await toggle("layers");
-    expect(fake.setSetting).toHaveBeenCalledWith(CUSTOM, ["pen", "text", "layers", "domani"]);
+    expect(fake.setSetting).toHaveBeenCalledWith(CUSTOM, ["pen", "highlighter", "layers", "domani"]);
     expect(box("layers").checked).toBe(true);
     expect(document.activeElement, "il fuoco resta sulla casella").toBe(box("layers"));
 
     await toggle("pen");
-    expect(fake.setSetting).toHaveBeenLastCalledWith(CUSTOM, ["text", "layers", "domani"]);
+    expect(fake.setSetting).toHaveBeenLastCalledWith(CUSTOM, ["highlighter", "layers", "domani"]);
 
     // Togliere tutto si può: resta la Selezione, e l'elenco vuoto non è un azzera.
-    await toggle("text");
+    await toggle("highlighter");
     await toggle("layers");
     expect(fake.setSetting).toHaveBeenLastCalledWith(CUSTOM, ["domani"]);
     expect(fake.resetSetting).not.toHaveBeenCalled();
@@ -341,14 +341,14 @@ describe("gli strumenti della colonna nel pannello", () => {
   const box = (tool: string): HTMLInputElement => document.getElementById(`setting-${TOOLBAR}-${tool}`) as HTMLInputElement;
 
   it("una casella per strumento; gli scelti si scrivono nel loro ordine, e un nome sconosciuto resta in fondo", async () => {
-    await openPanel([toolbar(["text", "select", "domani"])]);
-    expect(box("text").checked).toBe(true);
+    await openPanel([toolbar(["highlighter", "select", "domani"])]);
+    expect(box("highlighter").checked).toBe(true);
     expect(box("pen").checked).toBe(false);
     const input = box("pen");
     input.focus();
     input.click();
     await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalled());
-    expect(fake.setSetting).toHaveBeenLastCalledWith(TOOLBAR, ["text", "select", "pen", "domani"]);
+    expect(fake.setSetting).toHaveBeenLastCalledWith(TOOLBAR, ["highlighter", "select", "pen", "domani"]);
   });
 
   it("il predefinito accanto a «Azzera» dice la colonna di serie", async () => {

@@ -277,16 +277,15 @@ export function watchLevel(apply: (level: Level, custom: readonly string[]) => v
 }
 
 /// `value` come griglia, se lo è. Ciò che una griglia ricordata prima non
-/// aveva vale come la prima volta: le guide intelligenti accese, i righelli
-/// spenti e le loro guide accese, in ogni unità il passo di serie, il
+/// aveva vale come la prima volta: in ogni unità il passo di serie, il
 /// pannello delle proprietà come lo vuole la larghezza dell'editor, la barra
 /// accanto alla selezione, le dita che girano e toccano, e la pressione della
 /// penna com'è. Un passo ricordato che la griglia non accetta non conta.
 function gridOf(value: unknown): Grid | null {
   if (typeof value !== "object" || value === null) return null;
-  const { shown, snap, step, steps, guides, rulers, rulerGuides, panel, bar, shapes, closed, twist, taps, pen, steady, eraser, penId, barrel, output, fidelity } = value as Record<string, unknown>;
+  const { shown, snap, step, steps, panel, bar, shapes, closed, twist, taps, pen, steady, eraser, penId, barrel, output, fidelity } = value as Record<string, unknown>;
   if (typeof shown !== "boolean" || typeof snap !== "boolean" || typeof step !== "number" || !validStep(step)) return null;
-  for (const flag of [guides, rulers, rulerGuides, bar, shapes, twist, taps]) if (flag !== undefined && typeof flag !== "boolean") return null;
+  for (const flag of [bar, shapes, twist, taps]) if (flag !== undefined && typeof flag !== "boolean") return null;
   if (panel !== undefined && panel !== null && typeof panel !== "boolean") return null;
   if (steps !== undefined && (typeof steps !== "object" || steps === null)) return null;
   const sections = closed === undefined ? DEFAULT_GRID.closed : validClosed(closed);
@@ -300,9 +299,6 @@ function gridOf(value: unknown): Grid | null {
     snap,
     step,
     steps: validSteps(steps),
-    guides: (guides as boolean | undefined) ?? DEFAULT_GRID.guides,
-    rulers: (rulers as boolean | undefined) ?? DEFAULT_GRID.rulers,
-    rulerGuides: (rulerGuides as boolean | undefined) ?? DEFAULT_GRID.rulerGuides,
     panel: (panel as boolean | null | undefined) ?? DEFAULT_GRID.panel,
     bar: (bar as boolean | undefined) ?? DEFAULT_GRID.bar,
     shapes: (shapes as boolean | undefined) ?? DEFAULT_GRID.shapes,

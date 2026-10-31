@@ -1,7 +1,6 @@
 // Lo strato sopra la scena: l'inchiostro mentre si scrive, le maniglie
-// della selezione, i nodi del tracciato che si modifica, le linee delle guide
-// e le misure, l'anteprima del contagocce, le linee delle sfumature coi loro
-// punti, su un canvas 2D grande quanto la vista.
+// della selezione, il riquadro che sceglie, la punta sotto la penna sospesa
+// e il righello, su un canvas 2D grande quanto la vista.
 //
 // Non entra mai nel documento: è ciò che la superficie mostra fra un
 // evento e l'operazione che lo registrerà. L'inchiostro in corso si riempie
@@ -11,13 +10,11 @@
 // vede. Più tratti insieme hanno chiavi diverse: quello della penna locale e
 // quelli che una sessione live riceve dal tablet.
 //
-// Con la vista girata l'inchiostro, i riquadri e le guide girano col foglio;
-// le maniglie, i nodi e le scritte restano diritti sullo schermo.
+// Con la vista girata l'inchiostro e i riquadri girano col foglio; le
+// maniglie e le scritte restano diritte sullo schermo.
 //
 // I ridisegni si raccolgono in un fotogramma; `flush` disegna subito.
 
-import { arcToCubics } from "../scene/curves";
-import type { Bounds, Segment } from "../scene/geometry";
 import { compose, type Matrix, type Point } from "../scene/matrix";
 import type { OutlinePoint } from "../../../ink/pf1";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
@@ -41,79 +38,19 @@ export type OverlayHandle =
   /// Il riquadro di un elemento selezionato: il rettangolo locale portato
   /// nella scena da `matrix`.
   | { readonly kind: "box"; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly matrix: Matrix }
-  /// Il ritaglio di un'immagine che si regola: il rettangolo locale portato
-  /// nella scena da `matrix`, col bordo e, agli angoli e a metà dei lati, i
-  /// segni spessi da tirare; con `thirds`, mentre lo si tira, le linee che
-  /// lo dividono in terzi.
-  | { readonly kind: "crop"; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly matrix: Matrix; readonly thirds: boolean }
   /// Un punto da trascinare, di misura fissa sullo schermo.
   | { readonly kind: "grip"; readonly x: number; readonly y: number }
   /// La maniglia tonda che ruota, legata da un gambo al punto `stem`.
   | { readonly kind: "rotor"; readonly x: number; readonly y: number; readonly stem: Point }
-  /// La maniglia degli angoli arrotondati: un anello col punto in mezzo,
-  /// diverso dalle maniglie della cornice e dai nodi.
-  | { readonly kind: "corner"; readonly x: number; readonly y: number }
   /// Una scritta breve, come le misure mentre si ridimensiona: centrata
   /// sotto il punto, su un fondo del colore della linea.
   | { readonly kind: "label"; readonly x: number; readonly y: number; readonly text: string }
-  /// Il contorno di una selezione a mano libera, tratteggiato.
+  /// Il riquadro che sceglie, tratteggiato: sul foglio girato di traverso, i
+  /// quattro angoli che ha nella scena.
   | { readonly kind: "lasso"; readonly points: readonly Point[] }
-  /// La scia di un trascinamento, aperta: per dove è passato il puntatore.
-  | { readonly kind: "trail"; readonly points: readonly Point[] }
-  /// Una regione del Costruttore di forme: i segmenti nelle coordinate delle
-  /// forme, portati nella scena da `matrix`. Il tono dice che cosa ne sarà
-  /// (vedi [`RegionTone`]); `active` è quella a cui è arrivata la tastiera,
-  /// col bordo spesso.
-  | { readonly kind: "region"; readonly segments: readonly Segment[]; readonly matrix: Matrix; readonly tone: RegionTone; readonly active?: boolean }
-  /// Il contorno di un tracciato di cui si modificano i nodi: i segmenti
-  /// nelle coordinate del tracciato, portati nella scena da `matrix`. Un
-  /// `hint` è il contorno dell'oggetto sotto il puntatore, più tenue; uno
-  /// `dashed`, tratteggiato, è il bordo di una sfumatura radiale.
-  | { readonly kind: "outline"; readonly segments: readonly Segment[]; readonly matrix: Matrix; readonly hint?: boolean; readonly dashed?: boolean }
-  /// Un nodo di un tracciato, di misura fissa sullo schermo: la forma dice
-  /// il tipo, e un nodo scelto è pieno. Un `hint` è un nodo dell'oggetto
-  /// sotto il puntatore, più piccolo.
-  | { readonly kind: "node"; readonly x: number; readonly y: number; readonly shape: NodeShape; readonly selected: boolean; readonly hint?: boolean }
-  /// La maniglia di un nodo: un punto, legato al nodo da una linea. Una
-  /// maniglia `folded` è ritirata sul nodo e si mostra accanto, da tirare
-  /// fuori: la sua linea è tratteggiata.
-  | { readonly kind: "control"; readonly x: number; readonly y: number; readonly node: Point; readonly folded?: boolean }
-  /// Una linea delle guide fra due punti: piena, o tratteggiata quando
-  /// prolunga un bordo fino a una misura.
+  /// Una linea fra due punti, piena o tratteggiata: quella che il tratto
+  /// seguirà fino al puntatore.
   | { readonly kind: "guide"; readonly from: Point; readonly to: Point; readonly dashed: boolean }
-  /// Il segno a croce dove una guida passa per un bordo o per un centro.
-  | { readonly kind: "cross"; readonly x: number; readonly y: number }
-  /// La simmetria della penna: dal centro, i raggi tratteggiati fino al
-  /// bordo della vista nelle direzioni `rays`, in gradi nella scena; e il
-  /// centro, un anello col mirino da tirare, più spesso mentre lo si tira.
-  | { readonly kind: "symmetry"; readonly center: Point; readonly rays: readonly number[]; readonly active: boolean }
-  /// Una misura: la linea fra due punti, con le stanghette ai capi, e la
-  /// distanza scritta a metà.
-  | { readonly kind: "measure"; readonly from: Point; readonly to: Point; readonly text: string }
-  /// La linea di una sfumatura, dal primo capo al secondo o dal centro al
-  /// capo del raggio: un filo del colore della linea su uno della carta più
-  /// largo, perché si veda sopra ogni colore.
-  | { readonly kind: "ramp"; readonly from: Point; readonly to: Point }
-  /// Un punto di una sfumatura: un quadratino del suo colore in `x`, `y`,
-  /// appeso con un'asta al punto `at` della linea, con la scacchiera sotto
-  /// un colore trasparente. Uno scelto ha il bordo spesso del colore della
-  /// linea; uno `torn`, trascinato via dalla linea, è tenue e senza asta.
-  | {
-    readonly kind: "stop";
-    readonly x: number;
-    readonly y: number;
-    readonly at: Point;
-    readonly color: string;
-    readonly opacity: number;
-    readonly selected: boolean;
-    readonly torn?: boolean;
-  }
-  /// L'anteprima del contagocce accanto al punto: un disco di ciò che
-  /// prende, vuoto se non c'è un colore da mostrare, con l'anello del
-  /// contorno quando prende l'aspetto, e il suo nome. Sta in alto a destra
-  /// del punto, dove la mano non lo copre, o dall'altra parte vicino a un
-  /// bordo; `lifted`, sotto un dito, più lontano e proprio sopra.
-  | { readonly kind: "sample"; readonly x: number; readonly y: number; readonly fill: SamplePaint | null; readonly ring?: SamplePaint; readonly text: string; readonly lifted?: boolean }
   /// La punta sotto la penna sospesa: il contorno di ciò che lascerebbe, alla
   /// misura vera, col mirino in mezzo (vedi [`NibShape`]). `width` e `height`
   /// sono in unità della scena, girate di `angle` gradi nella scena; per la
@@ -129,20 +66,6 @@ export type OverlayHandle =
 /// cerchio tratteggiato della gomma.
 export type NibShape = "round" | "flat" | "block" | "eraser";
 
-/// Ciò che mostra l'anteprima del contagocce: un colore CSS, nessun colore o
-/// un motivo.
-export type SamplePaint = { readonly color: string } | "none" | "pattern";
-
-/// Come si vede una regione del Costruttore: `plain` col solo bordo, tenue;
-/// `hover` sotto il puntatore, appena colorata; `chosen` scelta, che si
-/// unirà, più colorata; `erase`, che si toglierà, a righe oblique e col bordo
-/// tratteggiato, perché non lo dica il solo colore.
-export type RegionTone = "plain" | "hover" | "chosen" | "erase";
-
-/// La forma di un nodo: un rombo per lo spigolo, un quadrato per il nodo
-/// liscio, un cerchio per quello simmetrico.
-export type NodeShape = "diamond" | "square" | "circle";
-
 export interface SceneOverlay {
   setView(view: PainterView): void;
   /// Mostra, aggiorna o toglie (`null`) il tratto `key`.
@@ -156,55 +79,8 @@ export interface SceneOverlay {
 /// Il lato di una maniglia, in pixel CSS.
 const GRIP = 8;
 
-/// La misura di un nodo, in pixel CSS: il lato del quadrato, e il diametro
-/// del cerchio; il rombo è largo quanto la sua diagonale. Il punto di una
-/// maniglia è più piccolo, perché non si confonda con un nodo.
-const NODE = 9;
-const CONTROL = 6;
-
-/// La misura dei nodi dell'oggetto sotto il puntatore, e la forza del suo
-/// contorno: si vedono, senza confondersi con quelli che si modificano.
-const HINT_NODE = 7;
-const HINT_ALPHA = 0.6;
-
-/// Quanto è colorata una regione sotto il puntatore e una scelta, e quanto
-/// distano le righe di una che si toglie, in pixel CSS.
-const REGION_HOVER_ALPHA = 0.16;
-const REGION_CHOSEN_ALPHA = 0.32;
-const REGION_HATCH = 6;
-
 /// Il diametro della maniglia che ruota, in pixel CSS.
 const ROTOR = 10;
-
-/// Il lato del quadratino di un punto di una sfumatura e dei quadretti della
-/// sua scacchiera, quanto è tenue uno trascinato via, e lo spessore della
-/// carta sotto la linea, in pixel CSS.
-const STOP = 12;
-const STOP_CHECK = 5;
-const STOP_TORN_ALPHA = 0.4;
-const RAMP_CASING = 3;
-
-/// I segni del ritaglio, in pixel CSS: il braccio di quelli agli angoli e
-/// la lunghezza di quelli a metà dei lati, mai più di un quarto del lato
-/// sullo schermo; lo spessore, e quanto la carta li borda. Le linee dei
-/// terzi sono più tenui.
-const CROP_ARM = 16;
-const CROP_MARK = 3;
-const CROP_CASING = 1;
-const CROP_THIRDS_ALPHA = 0.7;
-
-/// Il diametro della maniglia degli angoli, e del punto in mezzo, in pixel
-/// CSS.
-const CORNER = 10;
-const CORNER_DOT = 3;
-
-/// Il centro della simmetria, in pixel CSS: il diametro dell'anello, quanto
-/// sporgono le stanghette del mirino, il diametro del punto in mezzo; e
-/// quanto sono tenui i raggi, che stanno sotto ciò che si disegna.
-const SYMMETRY_RING = 14;
-const SYMMETRY_TICK = 4;
-const SYMMETRY_DOT = 3;
-const SYMMETRY_RAY_ALPHA = 0.6;
 
 /// Quanto una maniglia sporge dal suo punto, in pixel CSS: la metà della più
 /// grande, quella che ruota.
@@ -220,28 +96,11 @@ const LABEL_GAP = 12;
 /// pixel CSS: la barra della selezione ci si mette sotto.
 export const LABEL_ROOM_PX = LABEL_GAP + LABEL_SIZE + 2 * LABEL_PAD;
 
-/// Mezzo braccio del segno a croce, e mezza stanghetta di una misura, in
-/// pixel CSS.
-const CROSS = 3;
-const TICK = 4;
-
-/// L'anteprima del contagocce, in pixel CSS: il diametro del disco, lo
-/// spessore dell'anello del contorno, il bordo di carta attorno, e quanto il
-/// centro sta lontano dal punto in ciascuna direzione, di più sopra un dito,
-/// che copre ciò che tocca; lo spazio fra il disco e il nome, e il lato dei
-/// quadretti di un motivo.
-const SAMPLE = 28;
-const SAMPLE_RING = 6;
-const SAMPLE_HALO = 3;
-const SAMPLE_REACH = 26;
-const SAMPLE_LIFT = 60;
-const SAMPLE_GAP = 6;
-const SAMPLE_CHECK = 5;
-
 /// La punta: quanto sporgono le stanghette del mirino, e la misura più
 /// piccola del contorno sullo schermo, in pixel CSS.
 const NIB_TICK = 4;
 const NIB_MIN = 2;
+
 /// Il righello: quanto copre la sua carta, il passo delle tacche e la loro
 /// lunghezza, corta e lunga ogni cinque, in pixel dello schermo.
 const RULER_ALPHA = 0.72;
@@ -307,13 +166,6 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     if (typeof matchMedia === "function" && matchMedia("(forced-colors: active)").matches) return "HighlightText";
     const value = getComputedStyle(canvas).getPropertyValue("--accent-contrast").trim();
     return value === "" ? "HighlightText" : value;
-  };
-
-  /// Il colore del testo, sulla carta.
-  const ink = (): string => {
-    if (typeof matchMedia === "function" && matchMedia("(forced-colors: active)").matches) return "CanvasText";
-    const value = getComputedStyle(canvas).getPropertyValue("--text").trim();
-    return value === "" ? "CanvasText" : value;
   };
 
   /// Quanto è larga e alta la scritta `text`, col suo margine; prepara il
@@ -382,303 +234,6 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     ctx.fill("nonzero");
   };
 
-  /// Il contorno di un tracciato sullo schermo, da riempire o da tracciare:
-  /// gli archi come le cubiche che li approssimano, che `matrix` porta come
-  /// porta l'arco. Torna il riquadro dei punti sullo schermo, maniglie
-  /// comprese: contiene il tracciato.
-  const tracePath = (ctx: CanvasRenderingContext2D, segments: readonly Segment[], matrix: Matrix): Bounds => {
-    const [a, b, c, d, e, f] = matrix;
-    const box = { min: [Infinity, Infinity] as Point, max: [-Infinity, -Infinity] as Point };
-    const at = ([x, y]: Point): Point => {
-      const p = screen(a * x + c * y + e, b * x + d * y + f);
-      box.min = [Math.min(box.min[0], p[0]), Math.min(box.min[1], p[1])];
-      box.max = [Math.max(box.max[0], p[0]), Math.max(box.max[1], p[1])];
-      return p;
-    };
-    let current: Point = [0, 0];
-    let start: Point = [0, 0];
-    ctx.beginPath();
-    for (const segment of segments) {
-      switch (segment.kind) {
-        case "move":
-          ctx.moveTo(...at(segment.to));
-          start = segment.to;
-          break;
-        case "line":
-          ctx.lineTo(...at(segment.to));
-          break;
-        case "quad":
-          ctx.quadraticCurveTo(...at(segment.control), ...at(segment.to));
-          break;
-        case "cubic":
-          ctx.bezierCurveTo(...at(segment.c1), ...at(segment.c2), ...at(segment.to));
-          break;
-        case "arc":
-          for (const piece of arcToCubics(current, segment)) {
-            if (piece.kind === "cubic") ctx.bezierCurveTo(...at(piece.c1), ...at(piece.c2), ...at(piece.to));
-            else ctx.lineTo(...at(piece.to));
-          }
-          break;
-        case "close":
-          ctx.closePath();
-          current = start;
-          continue;
-      }
-      current = segment.to;
-    }
-    return box;
-  };
-
-  /// Il contorno di un tracciato, nella scena.
-  const traceOutline = (ctx: CanvasRenderingContext2D, segments: readonly Segment[], matrix: Matrix): void => {
-    tracePath(ctx, segments, matrix);
-    ctx.stroke();
-  };
-
-  /// Una regione del Costruttore, col suo tono, nel colore `line`.
-  const drawRegion = (ctx: CanvasRenderingContext2D, region: Extract<OverlayHandle, { kind: "region" }>, line: string): void => {
-    const box = tracePath(ctx, region.segments, region.matrix);
-    // I bordi delle regioni non si incrociano: pari e dispari riconosce i
-    // buchi in qualunque verso girino.
-    if (region.tone === "hover" || region.tone === "chosen") {
-      ctx.fillStyle = line;
-      ctx.globalAlpha = region.tone === "hover" ? REGION_HOVER_ALPHA : REGION_CHOSEN_ALPHA;
-      ctx.fill("evenodd");
-    } else if (region.tone === "erase") {
-      ctx.save();
-      ctx.clip("evenodd");
-      ctx.globalAlpha = HINT_ALPHA;
-      ctx.beginPath();
-      // Le righe solo dove si vedono, anche da molto vicino.
-      const left = Math.max(box.min[0], 0);
-      const right = Math.min(box.max[0], width);
-      const top = Math.max(box.min[1], 0);
-      const bottom = Math.min(box.max[1], height);
-      const span = bottom - top;
-      for (let x = left - span; x < right; x += REGION_HATCH) {
-        ctx.moveTo(x, bottom);
-        ctx.lineTo(x + span, top);
-      }
-      ctx.stroke();
-      ctx.restore();
-      tracePath(ctx, region.segments, region.matrix);
-    }
-    ctx.globalAlpha = region.tone === "plain" && region.active !== true ? HINT_ALPHA : 1;
-    ctx.setLineDash(region.tone === "erase" ? [4, 3] : []);
-    ctx.lineWidth = region.active === true ? 3 : region.tone === "plain" ? 1 : 2;
-    ctx.stroke();
-    if (region.tone === "erase") ctx.setLineDash([]);
-    ctx.lineWidth = 1;
-    ctx.globalAlpha = 1;
-  };
-
-  /// Il cerchio di centro `x`, `y` sullo schermo e raggio `r`, pieno di
-  /// `paint` e con un filo del colore del testo, perché si veda anche un
-  /// colore uguale alla carta: nessun colore è la carta con una riga
-  /// obliqua, un motivo una scacchiera, come nei campioni del pannello;
-  /// `null`, niente da mostrare, la carta sola.
-  const fillPaint = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number, paint: SamplePaint | null, base: string, text: string): void => {
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, 2 * Math.PI);
-    ctx.fillStyle = paint === null || typeof paint === "string" ? base : paint.color;
-    ctx.fill();
-    if (typeof paint === "string") {
-      ctx.save();
-      ctx.clip();
-      ctx.fillStyle = text;
-      ctx.strokeStyle = text;
-      ctx.beginPath();
-      if (paint === "none") {
-        ctx.lineWidth = 2;
-        ctx.moveTo(x - r, y + r);
-        ctx.lineTo(x + r, y - r);
-        ctx.stroke();
-      } else {
-        const cells = Math.ceil(r / SAMPLE_CHECK);
-        for (let i = -cells; i < cells; i++) {
-          for (let j = -cells; j < cells; j++) if (((i + j) & 1) === 0) ctx.rect(x + i * SAMPLE_CHECK, y + j * SAMPLE_CHECK, SAMPLE_CHECK, SAMPLE_CHECK);
-        }
-        ctx.fill();
-      }
-      ctx.restore();
-    }
-    ctx.globalAlpha = HINT_ALPHA / 2;
-    ctx.strokeStyle = text;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(x, y, r - 0.5, 0, 2 * Math.PI);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-  };
-
-  /// L'anteprima del contagocce, col nome accanto al disco: in alto a
-  /// destra del punto, o sopra un dito, se c'è posto; altrimenti dall'altra
-  /// parte.
-  const drawSample = (ctx: CanvasRenderingContext2D, sample: Extract<OverlayHandle, { kind: "sample" }>, line: string, base: string): void => {
-    const [px, py] = screen(sample.x, sample.y);
-    const r = SAMPLE / 2;
-    const halo = r + SAMPLE_HALO;
-    const [w, h] = labelSize(ctx, sample.text);
-    const reach = sample.lifted === true ? SAMPLE_LIFT : SAMPLE_REACH;
-    const spots: readonly Point[] =
-      sample.lifted === true
-        ? [
-            [px, py - reach],
-            [px - reach, py],
-            [px + reach, py],
-            [px, py + reach],
-          ]
-        : [
-            [px + reach, py - reach],
-            [px - reach, py - reach],
-            [px + reach, py + reach],
-            [px - reach, py + reach],
-          ];
-    // Il nome dalla parte opposta al punto: a sinistra del disco quando il
-    // disco ne sta a sinistra.
-    const labelLeft = ([cx]: Point): number => (cx < px ? cx - halo - SAMPLE_GAP - w : cx + halo + SAMPLE_GAP);
-    const fits = (spot: Point): boolean => {
-      const left = Math.min(spot[0] - halo, labelLeft(spot));
-      const right = Math.max(spot[0] + halo, labelLeft(spot) + w);
-      const rise = Math.max(halo, h / 2);
-      return left >= 0 && right <= width && spot[1] - rise >= 0 && spot[1] + rise <= height;
-    };
-    const spot = spots.find(fits) ?? spots[0]!;
-    const [cx, cy] = spot;
-    ctx.beginPath();
-    ctx.arc(cx, cy, halo, 0, 2 * Math.PI);
-    ctx.fillStyle = base;
-    ctx.fill();
-    ctx.strokeStyle = line;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    const text = ink();
-    if (sample.ring === undefined) {
-      fillPaint(ctx, cx, cy, r, sample.fill, base, text);
-    } else {
-      // L'anello del contorno, poi un filo di carta, che separa due colori
-      // uguali, e il disco del riempimento.
-      fillPaint(ctx, cx, cy, r, sample.ring, base, text);
-      ctx.beginPath();
-      ctx.arc(cx, cy, r - SAMPLE_RING, 0, 2 * Math.PI);
-      ctx.fillStyle = base;
-      ctx.fill();
-      fillPaint(ctx, cx, cy, r - SAMPLE_RING - 1, sample.fill, base, text);
-    }
-    paintLabel(ctx, labelLeft(spot), cy - h / 2, w, h, sample.text, line);
-    ctx.strokeStyle = line;
-  };
-
-  /// Il quadratino di un punto di una sfumatura: la carta, la scacchiera
-  /// sotto un colore trasparente come nei campioni del pannello, il colore,
-  /// e il bordo del testo, o della linea se è scelto.
-  const drawStop = (ctx: CanvasRenderingContext2D, stop: Extract<OverlayHandle, { kind: "stop" }>, line: string, base: string): void => {
-    const [px, py] = screen(stop.x, stop.y);
-    const x = Math.round(px - STOP / 2);
-    const y = Math.round(py - STOP / 2);
-    ctx.globalAlpha = stop.torn === true ? STOP_TORN_ALPHA : 1;
-    ctx.fillStyle = base;
-    ctx.fillRect(x, y, STOP, STOP);
-    if (stop.opacity < 1) {
-      ctx.fillStyle = "#c8c8c8";
-      for (let i = 0; i * STOP_CHECK < STOP; i++) {
-        for (let j = 0; j * STOP_CHECK < STOP; j++) {
-          if (((i + j) & 1) === 0) ctx.fillRect(x + i * STOP_CHECK, y + j * STOP_CHECK, Math.min(STOP_CHECK, STOP - i * STOP_CHECK), Math.min(STOP_CHECK, STOP - j * STOP_CHECK));
-        }
-      }
-    }
-    ctx.globalAlpha *= Math.min(1, Math.max(0, stop.opacity));
-    ctx.fillStyle = stop.color;
-    ctx.fillRect(x, y, STOP, STOP);
-    ctx.globalAlpha = stop.torn === true ? STOP_TORN_ALPHA : 1;
-    if (stop.selected) {
-      ctx.strokeStyle = line;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x - 1, y - 1, STOP + 2, STOP + 2);
-    } else {
-      ctx.strokeStyle = ink();
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x - 0.5, y - 0.5, STOP + 1, STOP + 1);
-    }
-    ctx.strokeStyle = line;
-    ctx.lineWidth = 1;
-    ctx.globalAlpha = 1;
-  };
-
-  /// Il ritaglio `crop`: il bordo, le linee dei terzi se le ha, e i segni da
-  /// tirare, bordati dalla carta perché si vedano su ogni immagine.
-  const drawCrop = (ctx: CanvasRenderingContext2D, crop: Extract<OverlayHandle, { kind: "crop" }>, line: string): void => {
-    const [a, b, c, d, e, f] = crop.matrix;
-    const corner = (x: number, y: number): Point => screen(a * x + c * y + e, b * x + d * y + f);
-    const { x, y, width: w, height: h } = crop;
-    const corners = [corner(x, y), corner(x + w, y), corner(x + w, y + h), corner(x, y + h)];
-    const along = (from: Point, to: Point, t: number): Point => [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t];
-    const polyline = (points: readonly Point[]): void => {
-      points.forEach(([px, py], i) => (i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)));
-    };
-    ctx.setLineDash([]);
-    ctx.beginPath();
-    polyline(corners);
-    ctx.closePath();
-    ctx.stroke();
-    if (crop.thirds) {
-      const [p0, p1, p2, p3] = corners as [Point, Point, Point, Point];
-      ctx.beginPath();
-      for (const t of [1 / 3, 2 / 3]) {
-        polyline([along(p0, p1, t), along(p3, p2, t)]);
-        polyline([along(p0, p3, t), along(p1, p2, t)]);
-      }
-      ctx.globalAlpha = CROP_THIRDS_ALPHA;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-    // Su ogni lato il braccio dei due angoli e il segno di mezzo.
-    const marks: Point[][] = [];
-    corners.forEach((from, i) => {
-      const to = corners[(i + 1) % 4]!;
-      const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
-      if (length === 0) return;
-      const t = Math.min(CROP_ARM, length / 4) / length;
-      const before = corners[(i + 3) % 4]!;
-      const back = Math.hypot(before[0] - from[0], before[1] - from[1]);
-      const s = back === 0 ? 0 : Math.min(CROP_ARM, back / 4) / back;
-      marks.push([along(from, before, s), from, along(from, to, t)]);
-      marks.push([along(from, to, 0.5 - t / 2), along(from, to, 0.5 + t / 2)]);
-    });
-    ctx.lineJoin = "miter";
-    ctx.beginPath();
-    for (const mark of marks) polyline(mark);
-    ctx.strokeStyle = paper();
-    ctx.lineWidth = CROP_MARK + 2 * CROP_CASING;
-    ctx.lineCap = "square";
-    ctx.stroke();
-    ctx.strokeStyle = line;
-    ctx.lineWidth = CROP_MARK;
-    ctx.lineCap = "butt";
-    ctx.stroke();
-    ctx.lineWidth = 1;
-  };
-
-  /// Un nodo in `x`, `y` sullo schermo, largo `size`.
-  const drawNode = (ctx: CanvasRenderingContext2D, x: number, y: number, shape: NodeShape, size: number): void => {
-    ctx.beginPath();
-    if (shape === "circle") {
-      ctx.arc(x, y, size / 2, 0, 2 * Math.PI);
-    } else if (shape === "diamond") {
-      const r = (size + 2) / 2;
-      ctx.moveTo(x, y - r);
-      ctx.lineTo(x + r, y);
-      ctx.lineTo(x, y + r);
-      ctx.lineTo(x - r, y);
-      ctx.closePath();
-    } else {
-      // Sul mezzo pixel, perché il bordo di un pixel resti netto.
-      ctx.rect(Math.round(x - size / 2) + 0.5, Math.round(y - size / 2) + 0.5, size - 1, size - 1);
-    }
-    ctx.fill();
-    ctx.stroke();
-  };
-
   const drawHandles = (ctx: CanvasRenderingContext2D): void => {
     if (handles.length === 0) return;
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -686,8 +241,7 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     const line = accent();
     ctx.strokeStyle = line;
     ctx.lineWidth = 1;
-    // Le regioni sotto ogni altra cosa, e il righello sopra di loro.
-    for (const handle of handles) if (handle.kind === "region") drawRegion(ctx, handle, line);
+    // Il righello sotto ogni altra cosa.
     for (const handle of handles) if (handle.kind === "ruler") drawRuler(ctx, handle, line, rulerPaper());
     for (const handle of handles) {
       if (handle.kind === "box") {
@@ -700,8 +254,6 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         corners.forEach(([px, py], i) => (i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)));
         ctx.closePath();
         ctx.stroke();
-      } else if (handle.kind === "crop") {
-        drawCrop(ctx, handle, line);
       } else if (handle.kind === "lasso") {
         if (handle.points.length < 2) continue;
         ctx.setLineDash([4, 3]);
@@ -712,51 +264,6 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
           else ctx.lineTo(px, py);
         });
         ctx.closePath();
-        ctx.stroke();
-      } else if (handle.kind === "trail") {
-        if (handle.points.length < 2) continue;
-        ctx.setLineDash([]);
-        ctx.lineWidth = 2;
-        ctx.lineJoin = "round";
-        ctx.lineCap = "round";
-        ctx.beginPath();
-        handle.points.forEach(([x, y], i) => {
-          const [px, py] = screen(x, y);
-          if (i === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        });
-        ctx.stroke();
-        ctx.lineWidth = 1;
-        ctx.lineJoin = "miter";
-        ctx.lineCap = "butt";
-      } else if (handle.kind === "outline") {
-        ctx.setLineDash(handle.dashed === true ? [4, 3] : []);
-        ctx.globalAlpha = handle.hint === true ? HINT_ALPHA : 1;
-        traceOutline(ctx, handle.segments, handle.matrix);
-        ctx.globalAlpha = 1;
-      } else if (handle.kind === "ramp") {
-        ctx.setLineDash([]);
-        ctx.beginPath();
-        ctx.moveTo(...screen(handle.from[0], handle.from[1]));
-        ctx.lineTo(...screen(handle.to[0], handle.to[1]));
-        ctx.strokeStyle = paper();
-        ctx.lineWidth = RAMP_CASING;
-        ctx.stroke();
-        ctx.strokeStyle = line;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      } else if (handle.kind === "stop") {
-        if (handle.torn === true) continue;
-        ctx.setLineDash([]);
-        ctx.beginPath();
-        ctx.moveTo(...screen(handle.at[0], handle.at[1]));
-        ctx.lineTo(...screen(handle.x, handle.y));
-        ctx.stroke();
-      } else if (handle.kind === "control") {
-        ctx.setLineDash(handle.folded === true ? [2, 2] : []);
-        ctx.beginPath();
-        ctx.moveTo(...screen(handle.node[0], handle.node[1]));
-        ctx.lineTo(...screen(handle.x, handle.y));
         ctx.stroke();
       } else if (handle.kind === "rotor") {
         ctx.setLineDash([]);
@@ -769,48 +276,6 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         ctx.beginPath();
         ctx.moveTo(...crisp(handle.from));
         ctx.lineTo(...crisp(handle.to));
-        ctx.stroke();
-      } else if (handle.kind === "symmetry") {
-        // Ogni raggio arriva oltre il bordo della vista, girata o no.
-        const [cx, cy] = screen(handle.center[0], handle.center[1]);
-        const reach = width + height;
-        ctx.setLineDash([6, 4]);
-        ctx.globalAlpha = SYMMETRY_RAY_ALPHA;
-        ctx.beginPath();
-        for (const ray of handle.rays) {
-          const radians = (ray * Math.PI) / 180;
-          const [ex, ey] = screen(handle.center[0] + Math.cos(radians), handle.center[1] + Math.sin(radians));
-          const length = Math.hypot(ex - cx, ey - cy);
-          if (length === 0) continue;
-          ctx.moveTo(cx, cy);
-          ctx.lineTo(cx + ((ex - cx) / length) * reach, cy + ((ey - cy) / length) * reach);
-        }
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-      } else if (handle.kind === "cross") {
-        ctx.setLineDash([]);
-        const [px, py] = screen(handle.x, handle.y);
-        ctx.beginPath();
-        ctx.moveTo(px - CROSS, py - CROSS);
-        ctx.lineTo(px + CROSS, py + CROSS);
-        ctx.moveTo(px + CROSS, py - CROSS);
-        ctx.lineTo(px - CROSS, py + CROSS);
-        ctx.stroke();
-      } else if (handle.kind === "measure") {
-        ctx.setLineDash([]);
-        const [ax, ay] = crisp(handle.from);
-        const [bx, by] = crisp(handle.to);
-        const length = Math.hypot(bx - ax, by - ay);
-        // Le stanghette di traverso alla linea.
-        const nx = length > 0 ? ((ay - by) / length) * TICK : 0;
-        const ny = length > 0 ? ((bx - ax) / length) * TICK : TICK;
-        ctx.beginPath();
-        ctx.moveTo(ax, ay);
-        ctx.lineTo(bx, by);
-        ctx.moveTo(ax - nx, ay - ny);
-        ctx.lineTo(ax + nx, ay + ny);
-        ctx.moveTo(bx - nx, by - ny);
-        ctx.lineTo(bx + nx, by + ny);
         ctx.stroke();
       }
     }
@@ -825,66 +290,20 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         const y = Math.round(py - GRIP / 2) + 0.5;
         ctx.fillRect(x, y, GRIP, GRIP);
         ctx.strokeRect(x, y, GRIP, GRIP);
-      } else if (handle.kind === "control" || handle.kind === "rotor") {
+      } else if (handle.kind === "rotor") {
         const [px, py] = screen(handle.x, handle.y);
         ctx.beginPath();
-        ctx.arc(px, py, (handle.kind === "rotor" ? ROTOR : CONTROL) / 2, 0, 2 * Math.PI);
+        ctx.arc(px, py, ROTOR / 2, 0, 2 * Math.PI);
         ctx.fill();
         ctx.stroke();
-      } else if (handle.kind === "symmetry") {
-        const [px, py] = screen(handle.center[0], handle.center[1]);
-        const r = SYMMETRY_RING / 2;
-        ctx.lineWidth = handle.active ? 2 : 1.5;
-        ctx.beginPath();
-        ctx.arc(px, py, r, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.moveTo(px - r - SYMMETRY_TICK, py);
-        ctx.lineTo(px - r, py);
-        ctx.moveTo(px + r, py);
-        ctx.lineTo(px + r + SYMMETRY_TICK, py);
-        ctx.moveTo(px, py - r - SYMMETRY_TICK);
-        ctx.lineTo(px, py - r);
-        ctx.moveTo(px, py + r);
-        ctx.lineTo(px, py + r + SYMMETRY_TICK);
-        ctx.stroke();
-        ctx.lineWidth = 1;
-        ctx.fillStyle = line;
-        ctx.beginPath();
-        ctx.arc(px, py, SYMMETRY_DOT / 2, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.fillStyle = fill;
-      } else if (handle.kind === "corner") {
-        const [px, py] = screen(handle.x, handle.y);
-        ctx.beginPath();
-        ctx.arc(px, py, CORNER / 2, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = line;
-        ctx.beginPath();
-        ctx.arc(px, py, CORNER_DOT / 2, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.fillStyle = fill;
       }
     }
-    // I nodi sopra le maniglie, e quelli scelti pieni del colore della linea.
     for (const handle of handles) {
-      if (handle.kind !== "node") continue;
+      if (handle.kind !== "label") continue;
       const [px, py] = screen(handle.x, handle.y);
-      ctx.fillStyle = handle.selected ? line : fill;
-      drawNode(ctx, px, py, handle.shape, handle.hint === true ? HINT_NODE : NODE);
+      drawLabel(ctx, px, py, handle.text, line, "below");
     }
-    for (const handle of handles) if (handle.kind === "stop") drawStop(ctx, handle, line, fill);
-    for (const handle of handles) {
-      if (handle.kind === "label") {
-        const [px, py] = screen(handle.x, handle.y);
-        drawLabel(ctx, px, py, handle.text, line, "below");
-      } else if (handle.kind === "measure") {
-        const [px, py] = screen((handle.from[0] + handle.to[0]) / 2, (handle.from[1] + handle.to[1]) / 2);
-        drawLabel(ctx, px, py, handle.text, line, "center");
-      }
-    }
-    // L'anteprima del contagocce sopra ogni altra cosa, e la punta.
-    for (const handle of handles) if (handle.kind === "sample") drawSample(ctx, handle, line, fill);
+    // La punta sopra ogni altra cosa.
     for (const handle of handles) if (handle.kind === "nib") drawNib(ctx, handle, line, fill);
   };
 

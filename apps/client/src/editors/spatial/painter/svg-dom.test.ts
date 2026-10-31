@@ -1036,7 +1036,7 @@ describe("lo strato sopra la scena", () => {
     expect(host.querySelector("canvas")).toBeNull();
   });
 
-  it("disegna le guide nette sul mezzo pixel, le croci, e le misure con la scritta in mezzo, che resta nella vista", () => {
+  it("disegna le guide nette sul mezzo pixel", () => {
     const calls: Array<readonly [string, ...unknown[]]> = [];
     const context = new Proxy({} as Record<string | symbol, unknown>, {
       get: (target, name) => {
@@ -1057,12 +1057,9 @@ describe("lo strato sopra la scena", () => {
     overlay.setHandles([
       { kind: "guide", from: [0, 0], to: [0, 50], dashed: false },
       { kind: "guide", from: [0, 0], to: [10, 0], dashed: true },
-      { kind: "cross", x: 5, y: 5 },
-      { kind: "measure", from: [0, 10], to: [30, 10], text: "30" },
     ]);
     overlay.flush();
     const lines = (): unknown[] => calls.filter(([name]) => name === "setLineDash" || name === "moveTo" || name === "lineTo");
-    const texts = (): unknown[] => calls.filter(([name]) => name === "fillText");
     expect(lines()).toEqual([
       ["setLineDash", []],
       ["moveTo", 10.5, 0.5],
@@ -1070,29 +1067,8 @@ describe("lo strato sopra la scena", () => {
       ["setLineDash", [4, 3]],
       ["moveTo", 10.5, 0.5],
       ["lineTo", 30.5, 0.5],
-      // La croce, centrata sul punto.
-      ["setLineDash", []],
-      ["moveTo", 17, 7],
-      ["lineTo", 23, 13],
-      ["moveTo", 23, 7],
-      ["lineTo", 17, 13],
-      // La misura, con le stanghette di traverso ai due capi.
-      ["setLineDash", []],
-      ["moveTo", 10.5, 20.5],
-      ["lineTo", 70.5, 20.5],
-      ["moveTo", 10.5, 16.5],
-      ["lineTo", 10.5, 24.5],
-      ["moveTo", 70.5, 16.5],
-      ["lineTo", 70.5, 24.5],
       ["setLineDash", []],
     ]);
-    expect(texts()).toEqual([["fillText", "30", 40, 20.5]]);
-
-    // Accanto all'angolo della vista, 800 per 600, la scritta ci resta dentro.
-    calls.length = 0;
-    overlay.setHandles([{ kind: "measure", from: [390, 298], to: [395, 298], text: "5" }]);
-    overlay.flush();
-    expect(texts()).toEqual([["fillText", "5", 790, 590.5]]);
   });
 
   it("disegna la punta alla misura vera per lo zoom, girata con la vista; la gomma resta della stessa misura", () => {
@@ -1130,49 +1106,6 @@ describe("lo strato sopra la scena", () => {
     overlay.flush();
     expect(ellipses()[0]).toEqual([0, 0, 8, 8, 0]);
     expect(calls.some(([name, dash]) => name === "setLineDash" && Array.isArray(dash) && dash.length > 0)).toBe(true);
-  });
-
-  it("disegna il ritaglio col bordo, i segni agli angoli e a metà dei lati, mai più lunghi di un quarto del lato, e i terzi solo se li chiede", () => {
-    const calls: Array<readonly [string, ...unknown[]]> = [];
-    const context = new Proxy({} as Record<string | symbol, unknown>, {
-      get: (target, name) => {
-        if (name in target) return target[name];
-        return (...args: unknown[]) => void calls.push([String(name), ...args]);
-      },
-      set: (target, name, value) => {
-        target[name] = value;
-        return true;
-      },
-    });
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context as never);
-    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation(() => 1);
-    vi.spyOn(globalThis, "cancelAnimationFrame").mockImplementation(() => undefined);
-    const overlay = createOverlay(host, owner);
-    overlay.setView({ scale: 1, angle: 0, tx: 0, ty: 0 });
-    const crop = { kind: "crop", x: 0, y: 0, width: 100, height: 40, matrix: [1, 0, 0, 1, 0, 0], thirds: false } as const;
-    overlay.setHandles([crop]);
-    overlay.flush();
-    const paths = (): unknown[][] => {
-      const out: unknown[][] = [];
-      for (const [name, ...args] of calls) {
-        if (name === "beginPath") out.push([]);
-        else if (name === "moveTo" || name === "lineTo") out[out.length - 1]!.push([name[0], ...args.map((n) => Math.round((n as number) * 1000) / 1000)]);
-      }
-      return out;
-    };
-    const [border, marks] = paths();
-    expect(border).toEqual([["m", 0, 0], ["l", 100, 0], ["l", 100, 40], ["l", 0, 40]]);
-    // In alto a sinistra il braccio corto sul lato di 40 e quello lungo su
-    // quello di 100, poi il segno a metà del lato in alto.
-    expect(marks!.slice(0, 5)).toEqual([["m", 0, 10], ["l", 0, 0], ["l", 16, 0], ["m", 42, 0], ["l", 58, 0]]);
-    expect(marks).toHaveLength(20);
-    calls.length = 0;
-    overlay.setHandles([{ ...crop, thirds: true }]);
-    overlay.flush();
-    expect(paths()[1]).toEqual([
-      ["m", 33.333, 0], ["l", 33.333, 40], ["m", 0, 13.333], ["l", 100, 13.333],
-      ["m", 66.667, 0], ["l", 66.667, 40], ["m", 0, 26.667], ["l", 100, 26.667],
-    ]);
   });
 });
 

@@ -45,7 +45,7 @@ export interface InkGesturesContext {
 /// Monta i gesti della penna e della gomma.
 export function installInkGestures(ctx: EditorContext): void {
   const {
-    suggestions, painter, currentIndex, grownPage, announce, objects, drawnPaint, commit, target, straightened
+    suggestions, painter, currentIndex, grownPage, announce, objects, commit, target, straightened
   } = ctx;
   const eraseAlong = (g: EraseGesture, p: Point): void => {
     const before = g.path[g.path.length - 1] ?? p;
@@ -114,7 +114,7 @@ export function installInkGestures(ctx: EditorContext): void {
     for (const point of built.outline) bounds.include(apply(to.matrix, point));
     const id = g.ids.next("object");
     const at = new Date(performance.timeOrigin + g.began).toISOString();
-    const paint = drawnPaint(g.color);
+    const paint = g.color;
     // Con l'uscita «Tracciato» la Penna lascia un tracciato al posto
     // dell'inchiostro (P11); uno che non si scrive resta inchiostro.
     const output = (elem: Elem): Elem => {

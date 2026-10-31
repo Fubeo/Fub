@@ -35,10 +35,6 @@ export type ToolId =
   | "select"
   | "hand"
   | "zoom"
-  | "lasso"
-  | "board"
-  | "eyedropper"
-  | "gradient"
   | "pen"
   | "highlighter"
   | "eraser"
@@ -47,10 +43,7 @@ export type ToolId =
   | "ellipse"
   | "line"
   | "arrow"
-  | "connector"
-  | "cover"
-  | "polygon"
-  | "text";
+  | "cover";
 
 /// I profili della famiglia `canvas` che hanno strumenti: il disegno e le
 /// annotazioni di un PDF.
@@ -87,37 +80,16 @@ export const TOOLS: readonly ToolSpec[] = [
   // La mano e la lente muovono la vista, non il disegno: ci sono sempre.
   { id: "hand", levels: BOTH, group: "pick", icon: "draw-hand", label: "draw.tool.hand", description: "draw.tool.hand.hint", shortcut: "h" },
   { id: "zoom", levels: BOTH, group: "pick", icon: "draw-zoom", label: "draw.tool.zoom", description: "draw.tool.zoom.hint", shortcut: "z" },
-  // Lo stesso tasto di Illustrator.
-  { id: "lasso", levels: { vector: "standard" }, group: "pick", icon: "draw-lasso", label: "draw.tool.lasso", description: "draw.tool.lasso.hint", shortcut: "q" },
-  // La lettera del Frame di Figma, dove le cornici sono le tavole: quella di
-  // Illustrator è la «O» con Maiusc, e qui la «O» è dell'ellisse.
-  { id: "board", levels: { vector: "standard" }, group: "pick", icon: "draw-board", label: "draw.tool.board", description: "draw.tool.board.hint", shortcut: "f" },
-  // La lettera di Illustrator e di Photoshop.
-  { id: "eyedropper", levels: { vector: "standard" }, group: "pick", icon: "draw-eyedropper", label: "draw.tool.eyedropper", description: "draw.tool.eyedropper.hint", shortcut: "i" },
-  // La lettera di Illustrator. Lo strumento porta con sé la sezione
-  // «Sfumatura» del pannello delle proprietà: nel Personalizzato si
-  // scelgono insieme.
-  { id: "gradient", levels: { vector: "standard" }, group: "pick", icon: "draw-gradient", label: "draw.tool.gradient", description: "draw.tool.gradient.hint", shortcut: "g" },
   { id: "pen", levels: BOTH, group: "ink", icon: "draw-pen", label: "draw.tool.pen", description: "draw.tool.pen.hint", shortcut: "p", simple: true },
   { id: "highlighter", levels: { vector: "standard", pdf: "essential" }, group: "ink", icon: "draw-highlighter", label: "draw.tool.highlighter", description: "draw.tool.highlighter.hint", shortcut: "Shift-p", simple: true },
   { id: "eraser", levels: BOTH, group: "ink", icon: "draw-eraser", label: "draw.tool.eraser", description: "draw.tool.eraser.hint", shortcut: "e", simple: true },
-  // Le note sono del PDF: nel disegno la «N» è dei Nodi.
+  // Le note e la copertura sono soltanto del PDF.
   { id: "note", levels: { pdf: "standard" }, group: "ink", icon: "draw-note", label: "draw.tool.note", description: "draw.tool.note.hint", shortcut: "n" },
   { id: "rect", levels: SHAPE, group: "shape", icon: "draw-rect", label: "draw.tool.rect", description: "draw.tool.rect.hint", shortcut: "r", simple: true },
   { id: "ellipse", levels: SHAPE, group: "shape", icon: "draw-ellipse", label: "draw.tool.ellipse", description: "draw.tool.ellipse.hint", shortcut: "o", simple: true },
   { id: "line", levels: SHAPE, group: "shape", icon: "draw-line", label: "draw.tool.line", description: "draw.tool.line.hint", shortcut: "l", simple: true },
   { id: "arrow", levels: SHAPE, group: "shape", icon: "draw-arrow", label: "draw.tool.arrow", description: "draw.tool.arrow.hint", shortcut: "Shift-l", simple: true },
-  // La lettera di FigJam. Lo strumento porta con sé la sezione «Connettore»
-  // del pannello delle proprietà e «Collega le forme scelte»: nel
-  // Personalizzato si scelgono insieme.
-  { id: "connector", levels: { vector: "standard" }, group: "shape", icon: "draw-connector", label: "draw.tool.connector", description: "draw.tool.connector.hint", shortcut: "x" },
-  // La copertura è del PDF: nel disegno la «C» è delle Forbici.
   { id: "cover", levels: { pdf: "standard" }, group: "shape", icon: "draw-cover", label: "draw.tool.cover", description: "draw.tool.cover.hint", shortcut: "c" },
-  // Lo stesso tasto di CorelDRAW. Premuto di nuovo, lo strumento passa dal
-  // poligono alla stella e ritorno: etichetta e icona sono quelle del
-  // poligono, l'editor le cambia per la stella.
-  { id: "polygon", levels: { vector: "standard" }, group: "shape", icon: "draw-polygon", label: "draw.tool.polygon", description: "draw.tool.polygon.hint", shortcut: "y" },
-  { id: "text", levels: { vector: "standard" }, group: "text", icon: "draw-text", label: "draw.tool.text", description: "draw.tool.text.hint", shortcut: "t", simple: true },
 ];
 
 /// Lo strumento con cui si apre un disegno: la penna, perché un disegno si
@@ -145,29 +117,20 @@ export function isViewTool(id: ToolId): id is ViewTool {
 export type Feature =
   | Exclude<ToolId, ViewTool>
   | "colors"
-  | "swatches"
-  | "styles"
   | "tips"
-  | "hatches"
   | "selection"
   | "arrange"
   | "layers"
   | "grid"
-  | "guides"
-  | "rulers"
   | "recognize"
-  | "symmetry"
   | "gestures"
   | "links"
   | "images"
-  | "crop"
-  | "library"
   | "properties"
   | "style"
   | "history"
   | "accessibility"
-  | "export"
-  | "present";
+  | "export";
 
 export interface FeatureSpec {
   readonly id: Feature;
@@ -182,39 +145,22 @@ export interface FeatureSpec {
 /// I comandi, nell'ordine della barra.
 const COMMANDS: readonly FeatureSpec[] = [
   { id: "colors", level: "standard", label: "draw.feature.colors", simple: true },
-  // I colori del documento sono una sezione del pannello delle proprietà:
-  // nel Personalizzato si vedono con lui.
-  { id: "swatches", level: "standard", label: "draw.feature.swatches" },
-  // Gli stili del documento sono due righe del pannello delle proprietà e i
-  // comandi del loro menu: nel Personalizzato si vedono con lui.
-  { id: "styles", level: "standard", label: "draw.feature.styles" },
   // Le punte delle linee sono due campi del pannello delle proprietà, e i
   // comandi che le cambiano: nel Personalizzato si vedono con lui.
   { id: "tips", level: "standard", label: "draw.feature.tips" },
-  // La campitura è una sezione del pannello delle proprietà: nel
-  // Personalizzato si vede con lui.
-  { id: "hatches", level: "standard", label: "draw.feature.hatches" },
   { id: "selection", level: "standard", label: "draw.feature.selection" },
   { id: "arrange", level: "standard", label: "draw.feature.arrange" },
   { id: "layers", level: "standard", label: "draw.feature.layers" },
   { id: "grid", level: "standard", label: "draw.feature.grid" },
-  { id: "guides", level: "standard", label: "draw.feature.guides" },
-  { id: "rulers", level: "standard", label: "draw.feature.rulers" },
   { id: "recognize", level: "standard", label: "draw.feature.recognize" },
-  // La simmetria della penna è una sezione del pannello delle proprietà,
-  // con la penna e l'evidenziatore: nel Personalizzato si vede con lui.
-  { id: "symmetry", level: "standard", label: "draw.feature.symmetry" },
   { id: "gestures", level: "standard", label: "draw.feature.gestures", simple: true },
   { id: "links", level: "standard", label: "draw.feature.links" },
   { id: "images", level: "standard", label: "draw.feature.images", simple: true },
-  { id: "crop", level: "standard", label: "draw.feature.crop" },
-  { id: "library", level: "standard", label: "draw.feature.library" },
   { id: "properties", level: "standard", label: "draw.feature.properties", simple: true },
   { id: "style", level: "standard", label: "draw.feature.style" },
   { id: "history", level: "standard", label: "draw.feature.history" },
   { id: "accessibility", level: "standard", label: "draw.feature.accessibility" },
   { id: "export", level: "standard", label: "draw.feature.export", simple: true },
-  { id: "present", level: "standard", label: "draw.feature.present" },
 ];
 
 /// Tutte le parti del disegno, per livello, e in un livello prima gli
@@ -322,8 +268,7 @@ export function startTool(tools: readonly ToolSpec[], profile: ToolProfile = "ve
 }
 
 /// Lo strumento che prende il posto di `lost` quando se ne va, fra `tools`:
-/// dopo uno strumento che sceglie, il Lazo, i Nodi o il Costruttore, la
-/// Selezione, così chi sceglieva non si ritrova a disegnare; dopo gli altri,
+/// dopo uno strumento che sceglie, la Selezione, così chi sceglieva non si ritrova a disegnare; dopo gli altri,
 /// quello con cui si comincia.
 export function toolAfter(tools: readonly ToolSpec[], lost: ToolId, profile: ToolProfile = "vector"): ToolId {
   return toolSpec(lost).group === "pick" ? "select" : startTool(tools, profile);
@@ -358,35 +303,3 @@ export function toolKeys(spec: ToolSpec): string {
 /// della shell, e che cosa fanno.
 export type KeyRow = readonly [keys: string, label: DrawKey];
 
-/// I tasti che presentano, col fuoco sul foglio.
-const PRESENT_START_KEYS: readonly KeyRow[] = [
-  ["F5", "draw.keys.present.start"],
-  ["Shift-F5", "draw.keys.present.here"],
-];
-
-/// I tasti della presentazione, che sta in un modulo suo e arriva solo
-/// quando si presenta: l'elenco dei tasti dell'editor li legge da qui.
-const PRESENT_KEYS: readonly KeyRow[] = [
-  ["ArrowRight ArrowDown Space PageDown Enter n", "draw.keys.present.forward"],
-  ["ArrowLeft ArrowUp PageUp Backspace p", "draw.keys.present.back"],
-  ["Home End", "draw.keys.present.ends"],
-  ["0…9", "draw.keys.present.number"],
-  ["b .", "draw.keys.present.black"],
-  ["w ,", "draw.keys.present.white"],
-  ["l", "draw.keys.present.laser"],
-  ["e", "draw.keys.present.erase"],
-  ["Escape", "draw.keys.present.exit"],
-];
-
-/// Le parole dei tasti: `t` di `strings.ts`, che l'editor passa.
-type Say = (key: DrawKey) => string;
-
-/// Le righe dei tasti che presentano, per il gruppo della vista dell'elenco
-/// dei tasti, se fra le parti `at` c'è «Presentare».
-export const presentStartRows = (at: ReadonlySet<Feature>, say: Say): (readonly [string, string])[] =>
-  at.has("present") ? PRESENT_START_KEYS.map(([keys, label]) => [keys, say(label)] as const) : [];
-
-/// Il gruppo dei tasti della presentazione, per l'elenco dei tasti, se fra le
-/// parti `at` c'è «Presentare».
-export const presentKeyGroups = (at: ReadonlySet<Feature>, say: Say): { title: string; rows: (readonly [string, string])[] }[] =>
-  at.has("present") ? [{ title: say("draw.keys.present"), rows: PRESENT_KEYS.map(([keys, label]) => [keys, say(label)] as const) }] : [];

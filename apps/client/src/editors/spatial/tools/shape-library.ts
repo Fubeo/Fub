@@ -30,8 +30,6 @@ import type { DrawKey } from "../strings";
 /// Le raccolte, nell'ordine del pannello.
 export type LibraryGroup = "basic" | "flowchart" | "callouts" | "arrows" | "school";
 
-export const LIBRARY_GROUPS: readonly LibraryGroup[] = ["basic", "flowchart", "callouts", "arrows", "school"];
-
 /// Come si dipinge un pezzo:
 /// - `outline`: il contorno del colore e dello spessore scelti, senza
 ///   riempimento, come le forme disegnate;
