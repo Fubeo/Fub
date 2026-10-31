@@ -39,16 +39,33 @@ ascolta niente e non chiede fotogrammi.
 | S5 | tratto di penna di 3 s su un disegno di 2.000 tracciati | massimo fra fotogrammi |
 | S6 | avvio a freddo fino alla prima nota | ms |
 | S7 | Blocchi su una nota di 2.000 righe: un blocco trascinato su e giù per 3 s, poi dieci trasformazioni da paragrafo a titolo e ritorno | p95 e massimo fra fotogrammi |
-| R1 | la memoria: dopo l'avvio, aprendo un file per modalità (nota, lavagna, disegno, documento Word, foglio Excel, PDF, immagine), dopo «chiudi tutto» | PSS in MiB dell'app e dei processi della WebView, soltanto Linux |
+| R1 | la memoria: l'app vuota, aprendo un file per modalità (nota, lavagna, disegno, documento Word, foglio Excel, PDF, immagine), dopo «chiudi tutto» e un minuto dopo | PSS in MiB, in tutto e per processo (app, WebView), soltanto Linux |
 | T1 | le tessere: un fotogramma di 2880 × 1800 RGBA letto a tessere di 256 × 256 dalla IPC (`resource_read_chunk`) e da `fub-asset:` con `Range`, poi disegnato su una tela, una tessera e un fotogramma intero per fotogramma | p95 per tessera, mediana per fotogramma, ms |
 
 R1 legge `/proc/<pid>/smaps_rollup` dei processi che discendono dal driver,
 tolti i driver (`memory.mjs`): la PSS divide le pagine condivise fra chi le
 usa, quindi la somma non conta due volte le librerie. Ogni lettura è la
-mediana di tre a mezzo secondo, dopo 3 s di quiete. Il referto dà anche la
-RSS, i gruppi (app, WebView, rete) e la superficie che ogni file ha aperto.
-`R1.residuo.MiB` è quanto resta dopo «chiudi tutto» rispetto all'avvio: la
-tolleranza la fissa K0 del piano dei componenti, dopo le prime misure.
+mediana di tre a mezzo secondo. Il referto dà anche la RSS, i gruppi per
+processo (`app` è l'host Rust con la finestra, `webview` i processi
+WebKitWebProcess, poi `rete` e `gpu`) e la superficie che ogni file ha
+aperto.
+
+La procedura è fissa:
+
+1. **vuota**: chiuse le schede che l'app riapre, 10 s di quiete, una lettura;
+2. **aperte**: un file per modalità, senza chiudere i precedenti, una lettura
+   3 s dopo ognuno;
+3. **chiuse**: chiuse tutte le schede, una lettura dopo 10 s e una dopo 60 s
+   (**chiuse.tardi**).
+
+Il **residuo dopo la chiusura** (`R1.residuo.MiB`, e `R1.residuo.app.MiB`,
+`R1.residuo.webview.MiB` per processo) è «chiuse.tardi» meno «vuota»: la
+memoria che le schede chiuse tengono ancora un minuto dopo. Lo fanno le cache
+(caratteri, immagini decodificate, tessere), i motori rimasti caldi, la
+memoria di JavaScript che la WebView non ha ancora raccolto e le pagine che
+l'allocatore ha liberato ma non ha restituito al sistema. Un residuo che
+cresce da una misura all'altra è memoria che non si libera; uno che oscilla è
+la raccolta della WebView. La tolleranza è il cancello di K3.
 
 T1 è la prima delle tre vie del piano dei componenti per la tela dei motori
 (tessere verso la WebView, superficie wgpu nativa, egui): misura il trasporto

@@ -53,6 +53,10 @@ let driverPid = null;
 /// Quanto si aspetta prima di leggere la memoria: che l'app abbia finito di
 /// disegnare e di indicizzare ciò che ha appena aperto.
 const MEMORY_QUIET_MS = 3_000;
+/// R1: quanto si aspetta dopo aver chiuso tutto prima della prima lettura, e
+/// quando si rilegge per vedere se la memoria torna col tempo.
+const R1_SETTLE_MS = 10_000;
+const R1_LATE_MS = 60_000;
 
 /// Un file per modalità, nell'ordine in cui R1 li apre: il nome che si cerca
 /// col selettore rapido e la modalità che il referto nomina.
@@ -148,6 +152,17 @@ async function centerOf(session, css) {
 
 const stop = (session) => session.execute("return window.__fubProbe.stop();");
 const start = (session) => session.execute("window.__fubProbe.start(); return true;");
+
+/// Chiude le schede una alla volta, come chi clicca le crocette, finché non
+/// ne resta nessuna (al più cento giri). Torna quante ne restano.
+async function closeAll(session) {
+  let left = await session.execute("return document.querySelectorAll('.tab').length;");
+  for (let i = 0; i < 100 && left > 0; i++) {
+    left = await session.execute("const close = document.querySelector('.tab-close'); close?.click(); return document.querySelectorAll('.tab').length;");
+    await pause(200);
+  }
+  return left;
+}
 
 const SCENARIOS = {
   /// Scrivere 200 caratteri in una nota di 5.000 righe.
@@ -280,14 +295,28 @@ const SCENARIOS = {
     const report = await stop(session);
     return { report, values: { "S7.frameGap.p95": report.frames.p95, "S7.frameGap.max": report.frames.max }, samples: report.frames.count };
   },
-  /// La memoria (K0): dopo l'avvio, dopo aver aperto un file per modalità e
-  /// dopo «chiudi tutto». PSS dell'app e dei processi della WebView.
+  /// La memoria (K0), con una procedura fissa:
+  ///
+  /// 1. **vuota**: l'app avviata, chiuse le schede che riapre, dopo
+  ///    `R1_SETTLE_MS` di quiete;
+  /// 2. **aperte**: un file per modalità, uno dopo l'altro, senza chiudere i
+  ///    precedenti; una lettura dopo ognuno;
+  /// 3. **chiuse**: chiuse tutte le schede, una lettura dopo `R1_SETTLE_MS` e
+  ///    una dopo `R1_LATE_MS`, per vedere se la memoria torna col tempo.
+  ///
+  /// Ogni lettura è PSS in MiB, per processo: l'app (l'host Rust e la
+  /// finestra), i processi della WebView, la rete, la GPU se c'è.
+  /// Il **residuo** è quanto le schede chiuse tengono ancora: «chiuse», dopo
+  /// l'attesa lunga, meno «vuota», per processo e in tutto.
   async R1(session) {
     if (process.platform !== "linux") return { skipped: "la memoria si legge da /proc: soltanto Linux" };
     await pause(MEMORY_QUIET_MS);
-    // L'app riapre la sessione di prima: le schede riaperte stanno nel referto.
+    // L'app riapre la sessione di prima: si chiude prima di misurare, così
+    // «vuota» non dipende da che cosa ha lasciato lo scenario precedente.
     const restored = await session.execute("return document.querySelectorAll('.tab').length;");
-    const startup = await settled(driverPid, pause);
+    await closeAll(session);
+    await pause(R1_SETTLE_MS);
+    const empty = await settled(driverPid, pause);
     const steps = [];
     for (const [name, mode] of MODES) {
       await openByName(session, name, "");
@@ -298,27 +327,35 @@ const SCENARIOS = {
       steps.push({ name, mode, surface, memory: await settled(driverPid, pause) });
     }
     const tabs = await session.execute("return document.querySelectorAll('.tab').length;");
-    let left = tabs;
-    for (let i = 0; i < 100 && left > 0; i++) {
-      left = await session.execute("const close = document.querySelector('.tab-close'); close?.click(); return document.querySelectorAll('.tab').length;");
-      await pause(200);
-    }
-    await pause(MEMORY_QUIET_MS);
+    const left = await closeAll(session);
+    const closedAt = Date.now();
+    await pause(R1_SETTLE_MS);
     const closed = await settled(driverPid, pause);
+    await pause(Math.max(0, R1_LATE_MS - (Date.now() - closedAt)));
+    const late = await settled(driverPid, pause);
     const opened = steps.at(-1)?.memory ?? null;
+    const values = {};
+    const put = (key, mem) => {
+      values[`R1.${key}.MiB`] = mem?.pss ?? null;
+      for (const group of ["app", "webview"]) values[`R1.${key}.${group}.MiB`] = mem?.groups[group]?.pss ?? null;
+    };
+    put("vuota", empty);
+    put("aperte", opened);
+    put("chiuse", closed);
+    put("chiuse.tardi", late);
+    const minus = (a, b) => (a === null || b === null ? null : Math.round((a - b) * 10) / 10);
+    values["R1.residuo.MiB"] = minus(values["R1.chiuse.tardi.MiB"], values["R1.vuota.MiB"]);
+    for (const group of ["app", "webview"]) values[`R1.residuo.${group}.MiB`] = minus(values[`R1.chiuse.tardi.${group}.MiB`], values[`R1.vuota.${group}.MiB`]);
     return {
+      procedure: { settleMs: R1_SETTLE_MS, lateMs: R1_LATE_MS, quietMs: MEMORY_QUIET_MS },
       restored,
-      startup,
+      empty,
       steps,
       tabs,
       left,
       closed,
-      values: {
-        "R1.avvio.MiB": startup?.pss ?? null,
-        "R1.aperti.MiB": opened?.pss ?? null,
-        "R1.chiusi.MiB": closed?.pss ?? null,
-        "R1.residuo.MiB": closed && startup ? Math.round((closed.pss - startup.pss) * 10) / 10 : null,
-      },
+      late,
+      values,
       samples: 3,
     };
   },
