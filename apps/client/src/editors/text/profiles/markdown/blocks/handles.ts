@@ -9,6 +9,7 @@ import { EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { createList, openPopover, type PopoverHandle } from "../../../../../kit";
 import { writeClipboardText } from "../../../../../platform/clipboard";
 import { type Lifetime, openLifetime } from "../../../../../ui/lifetime";
+import { openSlashAt, slashAvailable } from "../slash";
 import { liveStrings } from "../strings";
 import { detailsOf, setDetailsDefault } from "../details-live";
 import type { DetailsPair } from "../details";
@@ -375,14 +376,18 @@ class HandlesView {
     });
   }
 
-  /// «+»: una riga nuova sotto il blocco, col cursore dentro.
+  /// «+»: una riga nuova sotto il blocco, col cursore dentro, e il «/» aperto
+  /// lì quando l'editor lo ha.
   addBlock(): void {
     const view = this.view;
     const blocks = view.state.field(blockModel).blocks;
     const index = indexOf(blocks, this.shown);
     if (index < 0 || view.state.readOnly) return;
     const { changes, cursor } = addBelow(view.state, blocks, index);
-    view.dispatch({ changes, selection: EditorSelection.cursor(cursor), userEvent: "input", scrollIntoView: true });
+    const slash = slashAvailable(view.state);
+    const insert = slash ? `${changes.insert}/` : changes.insert;
+    view.dispatch({ changes: { from: changes.from, insert }, selection: EditorSelection.cursor(slash ? cursor + 1 : cursor), userEvent: "input", scrollIntoView: true });
+    if (slash) openSlashAt(view, cursor);
     this.pinned = null;
     view.focus();
   }

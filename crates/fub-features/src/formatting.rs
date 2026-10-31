@@ -33,6 +33,7 @@
 
 use fub_abi::command::{
     CommandEffect, CommandOutcome, CommandScope, CommandSpec, CommandSurface, InvokeMode,
+    ParamKind, ParamSpec,
 };
 use fub_abi::error::PluginError;
 use fub_abi::text::{StringCatalog, Text};
@@ -494,9 +495,9 @@ const BUTTONS: &[Button] = &[
     ],
     [
         "markdown.linkcard",
-        "Segnalibro web",
+        "Pagina web",
         "Apre un paragrafo per un indirizzo web, che si vede come una scheda.",
-        "Web bookmark",
+        "Web page",
         "Opens a paragraph for a web address, shown as a card.",
     ],
     // Proprietà: il frontmatter scritto dall'editor.
@@ -524,9 +525,9 @@ const BUTTONS: &[Button] = &[
     // Tabelle.
     [
         "markdown.table",
-        "Inserisci tabella",
+        "Tabella",
         "Inserisce una tabella, o fa una tabella delle righe separate da tabulazioni.",
-        "Insert table",
+        "Table",
         "Inserts a table, or makes one out of lines separated by tabs.",
     ],
     [
@@ -619,8 +620,9 @@ const BUTTONS: &[Button] = &[
 /// che cambia il blocco della riga. Fuori la cronologia, i gesti sul
 /// carattere, le operazioni sulla tabella e sulle proprietà già scritte: un
 /// «/» si scrive dove si comincia qualcosa, non su una selezione. Il
-/// sottolineato fa eccezione, come in Notion: col «/» apre la coppia vuota;
-/// e così i colori, che col «/» colorano il testo della riga.
+/// sottolineato fa eccezione, come in Notion: col «/» apre la coppia vuota.
+/// I colori non ci sono: il «/» li mostra in una voce sola, «Colore ›», e li
+/// trova scrivendo, perché restano azioni dell'editor.
 const SLASH: &[&str] = &[
     "markdown.paragraph",
     "markdown.heading.1",
@@ -653,27 +655,126 @@ const SLASH: &[&str] = &[
     "markdown.property.add",
     "markdown.comment",
     "markdown.underline",
-    "markdown.color.default",
-    "markdown.color.gray",
-    "markdown.color.brown",
-    "markdown.color.orange",
-    "markdown.color.yellow",
-    "markdown.color.green",
-    "markdown.color.blue",
-    "markdown.color.purple",
-    "markdown.color.pink",
-    "markdown.color.red",
-    "markdown.background.default",
-    "markdown.background.gray",
-    "markdown.background.brown",
-    "markdown.background.orange",
-    "markdown.background.yellow",
-    "markdown.background.green",
-    "markdown.background.blue",
-    "markdown.background.purple",
-    "markdown.background.pink",
-    "markdown.background.red",
 ];
+
+/// Gli argomenti che un'azione accetta dal registro: sono quelli dei comandi
+/// rapidi del «/» («/tab 3x4» è `markdown.table` con `rows` e `cols`), e così
+/// la riga di comando e l'MCP fanno lo stesso. Nessuno è obbligatorio: senza,
+/// l'azione fa ciò che fa dalla barra. Ognuno: azione, nome, specie, titolo e
+/// descrizione in italiano, poi in inglese.
+const PARAMS: &[(&str, &str, Kind, [&str; 4])] = &[
+    (
+        "markdown.table",
+        "rows",
+        Kind::Number,
+        [
+            "Righe",
+            "Le righe, intestazione compresa, da 1 a 50.",
+            "Rows",
+            "The rows, header included, from 1 to 50.",
+        ],
+    ),
+    (
+        "markdown.table",
+        "cols",
+        Kind::Number,
+        [
+            "Colonne",
+            "Le colonne, da 1 a 12.",
+            "Columns",
+            "The columns, from 1 to 12.",
+        ],
+    ),
+    (
+        "markdown.columns",
+        "count",
+        Kind::Number,
+        [
+            "Quante",
+            "Quante colonne, da 2 a 4.",
+            "How many",
+            "How many columns, from 2 to 4.",
+        ],
+    ),
+    (
+        "markdown.codeblock",
+        "language",
+        Kind::Text,
+        [
+            "Linguaggio",
+            "Il linguaggio del blocco, come `python` o `rust`.",
+            "Language",
+            "The language of the block, such as `python` or `rust`.",
+        ],
+    ),
+    (
+        "markdown.callout",
+        "type",
+        Kind::Text,
+        [
+            "Tipo",
+            "Il tipo del riquadro, come `tip` o `warning`.",
+            "Type",
+            "The callout type, such as `tip` or `warning`.",
+        ],
+    ),
+    (
+        "markdown.wikilink",
+        "target",
+        Kind::Text,
+        [
+            "Nota",
+            "La nota da collegare, con `#` e una sezione se serve.",
+            "Note",
+            "The note to link, with `#` and a section if needed.",
+        ],
+    ),
+    (
+        "markdown.embed",
+        "target",
+        Kind::Text,
+        [
+            "Nota",
+            "La nota da incorporare, con `#` e una sezione se serve.",
+            "Note",
+            "The note to embed, with `#` and a section if needed.",
+        ],
+    ),
+    (
+        "markdown.diagram",
+        "template",
+        Kind::Text,
+        [
+            "Modello",
+            "Il modello Mermaid da cui partire, come `flowchart` o `gantt`.",
+            "Template",
+            "The Mermaid template to start from, such as `flowchart` or `gantt`.",
+        ],
+    ),
+    (
+        "markdown.date",
+        "date",
+        Kind::Text,
+        [
+            "Giorno",
+            "Il giorno, come `2026-10-30`: il link va alla sua giornaliera.",
+            "Day",
+            "The day, such as `2026-10-30`: the link goes to its daily note.",
+        ],
+    ),
+];
+
+/// La specie di un argomento di [`PARAMS`]: una costante non può tenere un
+/// [`ParamKind`], che ha una variante con un `Vec`.
+#[derive(Clone, Copy)]
+enum Kind {
+    Number,
+    Text,
+}
+
+fn param_key(id: &str, name: &str) -> String {
+    format!("{id}.param.{name}")
+}
 
 fn title_key(id: &str) -> String {
     format!("{id}.title")
@@ -694,6 +795,13 @@ pub fn catalog() -> Vec<StringCatalog> {
         en = en.with(title_key(id), *en_title);
         en = en.with(desc_key(id), *en_desc);
     }
+    for (id, name, _, [it_title, it_desc, en_title, en_desc]) in PARAMS {
+        let key = param_key(id, name);
+        it = it.with(title_key(&key), *it_title);
+        it = it.with(desc_key(&key), *it_desc);
+        en = en.with(title_key(&key), *en_title);
+        en = en.with(desc_key(&key), *en_desc);
+    }
     vec![it, en]
 }
 
@@ -712,10 +820,21 @@ impl FormattingCommands {
 /// modifica è una battuta nella nota aperta, che la sessione salva come le
 /// altre.
 fn spec(id: &str) -> CommandSpec {
-    let spec = CommandSpec::new(id, Text::key(title_key(id)))
+    let mut spec = CommandSpec::new(id, Text::key(title_key(id)))
         .describing(Text::key(desc_key(id)))
         .with_scope(CommandScope::read_only())
         .offered_in(CommandSurface::Toolbar);
+    for (_, name, kind, _) in PARAMS.iter().filter(|(owner, ..)| *owner == id) {
+        let key = param_key(id, name);
+        let kind = match kind {
+            Kind::Number => ParamKind::Number,
+            Kind::Text => ParamKind::Text,
+        };
+        spec = spec.with_param(
+            ParamSpec::new(*name, Text::key(title_key(&key)), kind)
+                .describing(Text::key(desc_key(&key))),
+        );
+    }
     if SLASH.contains(&id) {
         spec.offered_in(CommandSurface::Slash)
     } else {
@@ -731,7 +850,7 @@ impl CommandProvider for FormattingCommands {
     fn invoke(
         &self,
         command: &str,
-        _args: serde_json::Value,
+        args: serde_json::Value,
         mode: InvokeMode,
         _host: &mut dyn HostApi,
     ) -> Result<CommandOutcome, PluginError> {
@@ -743,9 +862,27 @@ impl CommandProvider for FormattingCommands {
         if mode.is_dry_run() {
             return Ok(CommandOutcome::done());
         }
+        // Gli argomenti viaggiano con l'azione soltanto quando ce ne sono: la
+        // superficie li legge, e una barra che non ne dà resta `{ action }`.
+        let params: serde_json::Map<String, serde_json::Value> = match args {
+            serde_json::Value::Object(map) => map
+                .into_iter()
+                .filter(|(name, _)| {
+                    PARAMS
+                        .iter()
+                        .any(|(owner, param, ..)| *owner == command && param == name)
+                })
+                .collect(),
+            _ => serde_json::Map::new(),
+        };
+        let payload = if params.is_empty() {
+            serde_json::json!({ "action": command })
+        } else {
+            serde_json::json!({ "action": command, "params": params })
+        };
         Ok(CommandOutcome::done().with_effect(CommandEffect::Custom {
             ns: EDITOR_ACTION_NS.to_string(),
-            payload: serde_json::json!({ "action": command }),
+            payload,
         }))
     }
 }
@@ -768,7 +905,22 @@ mod tests {
             };
             assert_eq!(spec.surfaces, expected, "{}", spec.id);
             assert!(!spec.scope.writes, "{} non scrive nel vault", spec.id);
-            assert!(spec.params.is_empty(), "{} non chiede niente", spec.id);
+            let declared: Vec<&str> = PARAMS
+                .iter()
+                .filter(|(owner, ..)| *owner == spec.id)
+                .map(|(_, name, ..)| *name)
+                .collect();
+            let names: Vec<&str> = spec.params.iter().map(|p| p.name.as_str()).collect();
+            assert_eq!(
+                names, declared,
+                "{}: gli argomenti dei comandi rapidi",
+                spec.id
+            );
+            assert!(
+                spec.params.iter().all(|p| !p.required),
+                "{}: niente di obbligatorio",
+                spec.id
+            );
             assert!(spec.keybinding.is_none(), "{}: niente accordi", spec.id);
         }
     }
@@ -822,6 +974,36 @@ mod tests {
             assert_eq!(ns, EDITOR_ACTION_NS);
             assert_eq!(payload, serde_json::json!({ "action": id }));
             assert!(outcome.undo.is_none(), "annulla della cronologia locale");
+        }
+    }
+
+    #[test]
+    fn the_quick_commands_arguments_travel_with_the_action() {
+        let mut host = MemoryHost::new();
+        let outcome = FormattingCommands
+            .invoke(
+                "markdown.table",
+                serde_json::json!({ "rows": 3, "cols": 4, "estraneo": true }),
+                InvokeMode::Apply,
+                &mut host,
+            )
+            .unwrap();
+        let CommandEffect::Custom { payload, .. } = outcome.effect else {
+            panic!("un intento per la shell")
+        };
+        assert_eq!(
+            payload,
+            serde_json::json!({ "action": "markdown.table", "params": { "rows": 3, "cols": 4 } })
+        );
+    }
+
+    #[test]
+    fn the_colors_are_not_listed_in_the_slash_menu() {
+        for spec in FormattingCommands::specs() {
+            if spec.id.starts_with("markdown.color.") || spec.id.starts_with("markdown.background.")
+            {
+                assert_eq!(spec.surfaces, [CommandSurface::Toolbar], "{}", spec.id);
+            }
         }
     }
 

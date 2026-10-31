@@ -7,7 +7,7 @@
 import type { CommandEffect, ViewUpdate } from "../host/contract";
 import { t } from "../i18n/strings";
 import { openDocument, openFromView, reveal, runEditorAction } from "../state/document-controller";
-import { EDITOR_ACTION_NS, editorActionOf } from "../editors/core/editor-actions";
+import { EDITOR_ACTION_NS, editorActionOf, editorActionParams } from "../editors/core/editor-actions";
 import { state } from "../state/store";
 import { searchFor } from "../state/search-port";
 import { errorText } from "../host/errors";
@@ -215,7 +215,7 @@ function editorAction(payload: unknown): void {
     console.info("Fub: azione dell'editor senza id, ignorata.");
     return;
   }
-  const outcome = runEditorAction(action);
+  const outcome = runEditorAction(action, editorActionParams(payload));
   if (outcome === "unavailable") notify(t("format_bar.unavailable"));
   else if (outcome === "nothing") {
     const title = state.commandSpecs.find((spec) => spec.id === action)?.title ?? action;

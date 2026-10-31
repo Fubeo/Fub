@@ -181,6 +181,19 @@ async function hover(page, selector) {
 
 const has = (selector) => (page) => page.evaluate((s) => document.querySelector(s) !== null, selector);
 const lacks = (selector) => (page) => page.evaluate((s) => document.querySelector(s) === null, selector);
+/// Il menu «/» della scena chiuso togliendo il «/», poi riaperto con `query`
+/// scritto dopo (vuota: resta chiuso, la apre il gesto).
+const slashAgain = (query) => async (page) => {
+  await page.keyboard.press("Backspace");
+  await page.waitForSelector(".slash-panel", { state: "detached" });
+  if (query !== "") {
+    await page.keyboard.type(`/${query}`);
+    await page.waitForSelector(".slash-panel .slash-row.is-selected");
+  }
+};
+/// La riga scelta del menu «/» dice `label`.
+const slashSelected = (label) => (page) =>
+  page.evaluate((l) => document.querySelector(".slash-panel .slash-row.is-selected")?.textContent?.includes(l) ?? false, label);
 
 /// Le righe e le linguette del kit hanno id a contatore: si scelgono per posto.
 const TAB = (index) => `#sample-tabs .kit-tab >> nth=${index}`;
@@ -744,6 +757,56 @@ export const CHOREOGRAPHIES = [
     arrived: has(".rich-desk-running .rich-running-area"),
     undo: (page) => page.keyboard.press("Escape"),
     returned: lacks(".rich-desk-running"),
+  },
+  // Il menu «/» (N12): parte dalle sue scene, sulla riga vuota della Live.
+  {
+    id: "slash-apre",
+    title: "Menu «/»: si apre dal cursore e le prime righe entrano una dopo l'altra; cancellato il «/», esce",
+    sources: ["src/panels/slash/panel.ts"],
+    scene: "slash-01-aperto",
+    // La scena lo lascia aperto: lo si chiude togliendo il «/».
+    setup: slashAgain(""),
+    act: (page) => page.keyboard.type("/"),
+    arrived: has(".slash-panel .slash-row.is-selected"),
+    undo: (page) => page.keyboard.press("Backspace"),
+    returned: lacks(".slash-panel"),
+    exit: true,
+  },
+  {
+    id: "slash-scorre",
+    title: "Menu «/»: la pillola scivola da una riga all'altra, l'anteprima arriva dopo",
+    sources: ["src/panels/slash/panel.ts"],
+    scene: "slash-02-filtro",
+    act: (page) => page.keyboard.press("ArrowDown"),
+    arrived: slashSelected("Titolo 2"),
+    undo: (page) => page.keyboard.press("ArrowUp"),
+    returned: slashSelected("Titolo 1"),
+  },
+  {
+    id: "slash-passo",
+    title: "Menu «/»: una voce con «›» apre il suo passo di lato, e Backspace torna all'elenco",
+    sources: ["src/panels/slash/panel.ts"],
+    scene: "slash-01-aperto",
+    setup: slashAgain("tabella"),
+    act: (page) => page.keyboard.press("Enter"),
+    arrived: has(".slash-panel.is-step .slash-step-cell.is-selected"),
+    undo: (page) => page.keyboard.press("Backspace"),
+    returned: has(".slash-panel:not(.is-step) .slash-row.is-selected"),
+  },
+  {
+    id: "slash-chiude",
+    title: "Menu «/»: Esc lo chiude in meno di 140 ms, e il «/» resta testo",
+    sources: ["src/panels/slash/panel.ts"],
+    scene: "slash-01-aperto",
+    act: (page) => page.keyboard.press("Escape"),
+    arrived: lacks(".slash-panel"),
+    // Dopo Esc lo stesso «/» non riapre il menu: lo si toglie e se ne scrive
+    // un altro.
+    undo: async (page) => {
+      await page.keyboard.press("Backspace");
+      await page.keyboard.type("/");
+    },
+    returned: has(".slash-panel .slash-row.is-selected"),
   },
 ];
 

@@ -194,6 +194,12 @@ pub const EDITOR_MINIBAR: &str = "editor.minibar";
 /// Il «/» a inizio riga o dopo uno spazio apre il menu dei blocchi e dei
 /// comandi, filtrato da ciò che si scrive dopo. Spento, il «/» resta testo.
 pub const EDITOR_SLASH: &str = "editor.slash";
+/// Le voci tolte dal menu «/», per id di comando: restano comandi, nella
+/// palette e da tastiera.
+pub const EDITOR_SLASH_HIDDEN: &str = "editor.slash.hidden";
+/// L'ordine delle sezioni del menu «/», dopo Suggeriti, Preferiti e Recenti.
+/// Le sezioni non dette seguono nel loro ordine, gli id sconosciuti non contano.
+pub const EDITOR_SLASH_SECTIONS: &str = "editor.slash.sections";
 /// In che modalità si apre un riquadro nuovo: `source`, `live_preview`,
 /// `blocks` o `reading`, gli id delle modalità della superficie testuale.
 pub const EDITOR_DEFAULT_MODE: &str = "editor.default-mode";
@@ -728,6 +734,30 @@ fn editor_settings() -> Vec<SettingSpec> {
             .describing(Text::key(C_EDITOR_SLASH_DESC))
             .grouped(Text::key(C_GROUP_EDITOR))
             .for_machine(),
+    );
+    settings.push(
+        SettingSpec::new(
+            EDITOR_SLASH_HIDDEN,
+            Text::key(C_EDITOR_SLASH_HIDDEN),
+            SettingKind::List {
+                default: Vec::new(),
+            },
+        )
+        .describing(Text::key(C_EDITOR_SLASH_HIDDEN_DESC))
+        .grouped(Text::key(C_GROUP_EDITOR))
+        .for_machine(),
+    );
+    settings.push(
+        SettingSpec::new(
+            EDITOR_SLASH_SECTIONS,
+            Text::key(C_EDITOR_SLASH_SECTIONS),
+            SettingKind::List {
+                default: SLASH_SECTIONS.iter().map(|id| (*id).into()).collect(),
+            },
+        )
+        .describing(Text::key(C_EDITOR_SLASH_SECTIONS_DESC))
+        .grouped(Text::key(C_GROUP_EDITOR))
+        .for_machine(),
     );
     settings.push(
         SettingSpec::toggle(EDITOR_VIM, Text::key(C_EDITOR_VIM), false)
@@ -1333,6 +1363,15 @@ const C_EDITOR_MINIBAR_MENU: &str = "core.editor.minibar.menu";
 const C_EDITOR_MINIBAR_OFF: &str = "core.editor.minibar.off";
 const C_EDITOR_SLASH: &str = "core.editor.slash";
 const C_EDITOR_SLASH_DESC: &str = "core.editor.slash.desc";
+const C_EDITOR_SLASH_HIDDEN: &str = "core.editor.slash.hidden";
+const C_EDITOR_SLASH_HIDDEN_DESC: &str = "core.editor.slash.hidden.desc";
+const C_EDITOR_SLASH_SECTIONS: &str = "core.editor.slash.sections";
+const C_EDITOR_SLASH_SECTIONS_DESC: &str = "core.editor.slash.sections.desc";
+/// Le sezioni del menu «/» che si ordinano, gli id di `SECTION_ORDER` nella
+/// shell dopo le tre dell'uso.
+const SLASH_SECTIONS: [&str; 9] = [
+    "text", "lists", "blocks", "code", "media", "people", "style", "page", "vault",
+];
 const C_EDITOR_DEFAULT_MODE: &str = "core.editor.default_mode";
 const C_EDITOR_DEFAULT_MODE_DESC: &str = "core.editor.default_mode.desc";
 const C_EDITOR_LIVE_REVEAL: &str = "core.editor.live_reveal";
@@ -1886,6 +1925,10 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_MINIBAR_OFF, "Mai")
         .with(C_EDITOR_SLASH, "Menu «/» nel testo")
         .with(C_EDITOR_SLASH_DESC, "Un «/» a inizio riga o dopo uno spazio apre i blocchi e i comandi, filtrati da ciò che si scrive dopo. Esc lo lascia come testo.")
+        .with(C_EDITOR_SLASH_HIDDEN, "Voci nascoste dal menu «/»")
+        .with(C_EDITOR_SLASH_HIDDEN_DESC, "Gli id dei comandi che il menu «/» non mostra. Restano nella palette e da tastiera.")
+        .with(C_EDITOR_SLASH_SECTIONS, "Ordine delle sezioni del menu «/»")
+        .with(C_EDITOR_SLASH_SECTIONS_DESC, "Le sezioni dopo Suggeriti, Preferiti e Recenti. Quelle non elencate seguono nel loro ordine.")
         .with(C_EDITOR_DEFAULT_MODE, "Modalità iniziale")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "La modalità di una finestra nuova o di un vault aperto per la prima volta. Un riquadro diviso eredita quella del riquadro da cui nasce, e ognuno ricorda la sua.")
         .with(C_EDITOR_LIVE_REVEAL, "Segni del Markdown in Live")
@@ -2423,6 +2466,10 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_MINIBAR_OFF, "Never")
         .with(C_EDITOR_SLASH, "«/» menu in the text")
         .with(C_EDITOR_SLASH_DESC, "A «/» at the start of a line or after a space opens blocks and commands, filtered by what you type next. Esc leaves it as text.")
+        .with(C_EDITOR_SLASH_HIDDEN, "Items hidden from the «/» menu")
+        .with(C_EDITOR_SLASH_HIDDEN_DESC, "The ids of the commands the «/» menu leaves out. They stay in the palette and on the keyboard.")
+        .with(C_EDITOR_SLASH_SECTIONS, "Order of the «/» menu sections")
+        .with(C_EDITOR_SLASH_SECTIONS_DESC, "The sections after Suggested, Favorites and Recent. Those not listed follow in their own order.")
         .with(C_EDITOR_DEFAULT_MODE, "Initial mode")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "The mode of a new window or of a vault opened for the first time. A split pane inherits the mode of the pane it comes from, and each pane remembers its own.")
         .with(C_EDITOR_LIVE_REVEAL, "Markdown marks in Live")

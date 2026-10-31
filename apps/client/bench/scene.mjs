@@ -516,6 +516,44 @@ export const SCENE = onPage("shell", [
       },
     } : {}),
   })),
+  // Il menu «/» (N12) su una riga vuota della Live, coi comandi veri di
+  // `fub.formatting`: aperto, filtrato, un comando rapido, niente trovato, i
+  // passi di tabella, colore e data, poi la finestra stretta e il foglio.
+  ...[
+    ["slash-01-aperto", "Il menu «/» appena aperto: le sezioni, la prima voce e la sua anteprima", ["/"]],
+    ["slash-02-filtro", "Il menu «/» filtrato da «tit»: i Risultati, la parte trovata in evidenza", ["/tit"]],
+    ["slash-03-rapido", "Il menu «/» con un comando rapido: «/tab 3x4»", ["/tab 3x4"]],
+    ["slash-04-nessuno", "Il menu «/» senza risultati: Invio cerca fra tutti i comandi", ["/qwerty"]],
+    ["slash-05-tabella", "Il passo della tabella, allargato a 3 × 4", ["/tabella", "@Enter", "@ArrowRight"]],
+    ["slash-06-colore", "Il passo del colore: il testo e il fondo, coi nomi", ["/colore", "@Enter"]],
+    ["slash-07-data", "Il passo della data: i giorni a portata e il calendario", ["/data", "@Enter"]],
+    ["slash-08-stretta", "Il menu «/» nella finestra minima, con meno di 760 px a destra del riquadro: resta l'elenco", ["/"], { width: 800, height: 800 }],
+    ["slash-09-dito", "Il menu «/» toccato col dito: un foglio in fondo, righe da 44 px", ["/"], { width: 800, height: 800 }, true],
+  ].map(([id, title, keys, viewport, touch]) => ({
+    id,
+    title,
+    query: "live=riga-vuota&slash=1",
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      // Col dito vuol dire `(pointer: coarse)`: Chromium lo dà quando
+      // emula il tocco, e il pannello lo legge all'apertura.
+      if (touch) await (await page.context().newCDPSession(page)).send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+      await openLive(page, [], "top");
+      // Il «/» si scrive a scena ferma: se un antenato del riquadro si sta
+      // ancora muovendo quando il pannello nasce, CodeMirror lo crede in un
+      // contenitore trasformato e lo posiziona in assoluto per sempre, e la
+      // sua ombra cade un poco diversa da quella del moto ridotto.
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      for (const key of keys) {
+        if (key.startsWith("@")) await page.keyboard.press(key.slice(1));
+        else await page.keyboard.type(key);
+      }
+      await page.waitForSelector(".slash-panel");
+      // L'anteprima arriva 40 ms dopo l'ultima freccia; poi due fotogrammi.
+      await page.waitForTimeout(80);
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    },
+  })),
   {
     id: "compact",
     title: "Lo spazio dell'interfaccia al passo più stretto: le barre si ritirano, il foglio no",
