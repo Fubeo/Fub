@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { IDENTITY, apply, compose, type Matrix, type Point } from "./matrix";
-import { MAX_GRID, MAX_GRID_SIDE, MAX_RADIAL, copyCount, readRepeat, repeatMatrices, writeRepeat, type Repeat } from "./repeat";
+import { MAX_GRID, MAX_GRID_SIDE, MAX_RADIAL, copyCount, readRepeat, repeatMatrices, type Repeat } from "./repeat";
 import { formatTransform } from "./serialize";
 import cases from "../../../__fixtures__/scene-repeat/cases.json";
 
@@ -37,18 +37,6 @@ describe("la lettura di fub:repeat", () => {
     expect(readRepeat("grid 40 25 1 1")).not.toBeNull();
     expect(readRepeat("grid 40 26 1 1")).toBeNull();
   });
-});
-
-describe("la scrittura di fub:repeat", () => {
-  for (const { repeat, text } of cases.write) {
-    it(`si scrive ${JSON.stringify(text)}`, () => {
-      expect(writeRepeat(repeat as unknown as Repeat)).toBe(text);
-      // Scritta a due decimali, la ripetizione si rilegge e si riscrive uguale.
-      const again = readRepeat(text)!;
-      expect(again.kind).toBe(repeat.kind);
-      expect(writeRepeat(again)).toBe(text);
-    });
-  }
 });
 
 describe("le trasformazioni delle copie", () => {

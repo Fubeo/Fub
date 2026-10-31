@@ -59,7 +59,7 @@ della selezione e quanti oggetti ci sono o sono scelti.
 `?` elenca i tasti del livello di adesso, e «Mostra tutto» quelli dei livelli
 sopra. Un campo in cima cerca fra le righe, anche fra quelle tenute da parte;
 «Che cosa è cambiato», chiuso sopra l'elenco, dice i tasti che hanno cambiato
-posto: `H` è la Mano, `A` i Nodi, `Spazio` tenuto la Mano, `Maiusc+F10` il menu
+posto: `H` è la Mano, `Spazio` tenuto la Mano, `Maiusc+F10` il menu
 della selezione, `Ctrl+Y` i contorni.
 
 `Ctrl+/` cerca fra i comandi del disegno: gli strumenti, Annulla e Ripeti, le

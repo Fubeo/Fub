@@ -45,16 +45,14 @@ import { resolvedLanguage } from "../../../i18n/strings";
 import type { MenuSample } from "../../../ui/menu";
 import { apply } from "../scene/matrix";
 import { MAX_COUNT, MIN_COUNT, type PolygonalShape } from "../scene/parametric";
-import { MAX_GRID_SIDE, MAX_RADIAL } from "../scene/repeat";
 import { UNITS, type LengthUnit } from "../scene/rulers";
-import { BLEND_MODES } from "../scene/values";
 import { plural, t, type DrawKey } from "../strings";
 import type { Axis, Edge, Order } from "./arrange";
 import { MIN_BOARD_SIDE, orientationOf, orientedRect, presetOf, presetRect, PRESETS, roundRect, type PresetId, type Rect } from "./boards";
 import { angleOf, frameSize, MIN_SIZE, scales, type Frame } from "./frame";
 import type { Grid } from "./grid";
-import { ANCHORS, TEXT_FORMS, type Anchor, type Look, type LookChange, type TextForm } from "./look";
-import { CAPS, DASHES, JOINS, type Cap, type Dash, type Join, type OutlineChange, type OutlineLook } from "./outline";
+import { ANCHORS, type Anchor, type Look, type LookChange } from "./look";
+import { DASHES, type Dash, type OutlineChange, type OutlineLook } from "./outline";
 import {
   ACTION_LABELS,
   type ActionId,
@@ -69,14 +67,12 @@ import {
   type NumberState,
   type PaintContrast,
   type PropertiesView,
-  type RepeatNumberId,
   type SegmentState,
 } from "./properties";
 import { ANGLE_UNITS, evaluate, lengthUnits, PERCENT_UNITS, type QuantityProblem } from "./quantity";
 import { NAME_MAX, nameKey } from "./naming";
 import type { Feature } from "./registry";
 import type { PaintSample } from "./resources";
-import { REPEAT_KINDS, type RepeatEdit, type RepeatKind, type RepeatView } from "./repeat-ops";
 import type { ShapeChange, ShapeFacts } from "./reshape";
 import { MAX_SLICES, MIN_SLICES, SYMMETRY_KINDS, type PenSymmetry, type SymmetryKind } from "./symmetry";
 import type { StyleField, StyleKind, StyleRow } from "./styles";
@@ -88,10 +84,9 @@ import type { DocumentColors } from "./swatches";
 import { FIELD_PLACES, fieldMin, fromUnit, toUnit } from "./rulers";
 import { MIN_RATIO } from "./shapes";
 import { TEXT_FAMILIES, TEXT_SIZE } from "./text";
-import { parseFamilies, sameFamily, vaultNames, writtenFamily, type Generic } from "../fonts/faces";
+import { parseFamilies, sameFamily, vaultNames, type Generic } from "../fonts/faces";
 import type { FontNotes } from "../fonts/vault";
 import { TIP_SHAPES, TIP_SIZES, type EndLook, type TipChange, type TipEnd, type TipShape, type TipSize, type TipsLook } from "./tips";
-import { MAX_SCALE_PERCENT, MAX_SKEW } from "./transform";
 
 /// Il nome di ogni unità, come lo dicono i menu e il pannello.
 export const UNIT_NAMES: Readonly<Record<LengthUnit, DrawKey>> = {
@@ -108,51 +103,6 @@ export const DASH_LABELS: Readonly<Record<Dash, DrawKey>> = {
   dashed: "draw.outline.dashed",
   dotted: "draw.outline.dotted",
   dashdot: "draw.outline.dashdot",
-};
-
-/// I modi di fusione nei gruppi di Illustrator e Photoshop: il normale; poi
-/// quelli che scuriscono, quelli che schiariscono, quelli che li mescolano
-/// secondo la luce, le differenze, e quelli che cambiano il colore. Ogni
-/// modo di `BLEND_MODES` sta in un gruppo solo.
-export const BLEND_GROUPS: ReadonlyArray<readonly string[]> = [
-  ["normal"],
-  ["darken", "multiply", "color-burn"],
-  ["lighten", "screen", "color-dodge"],
-  ["overlay", "soft-light", "hard-light"],
-  ["difference", "exclusion"],
-  ["hue", "saturation", "color", "luminosity"],
-];
-
-/// I nomi dei modi di fusione.
-export const BLEND_LABELS: Readonly<Record<string, DrawKey>> = {
-  normal: "draw.blend.normal",
-  darken: "draw.blend.darken",
-  multiply: "draw.blend.multiply",
-  "color-burn": "draw.blend.color_burn",
-  lighten: "draw.blend.lighten",
-  screen: "draw.blend.screen",
-  "color-dodge": "draw.blend.color_dodge",
-  overlay: "draw.blend.overlay",
-  "soft-light": "draw.blend.soft_light",
-  "hard-light": "draw.blend.hard_light",
-  difference: "draw.blend.difference",
-  exclusion: "draw.blend.exclusion",
-  hue: "draw.blend.hue",
-  saturation: "draw.blend.saturation",
-  color: "draw.blend.color",
-  luminosity: "draw.blend.luminosity",
-};
-
-export const CAP_LABELS: Readonly<Record<Cap, DrawKey>> = {
-  butt: "draw.outline.butt",
-  round: "draw.outline.round_cap",
-  square: "draw.outline.square",
-};
-
-export const JOIN_LABELS: Readonly<Record<Join, DrawKey>> = {
-  miter: "draw.outline.miter",
-  round: "draw.outline.round_join",
-  bevel: "draw.outline.bevel",
 };
 
 /// I nomi delle forme delle punte delle linee, di nessuna punta e di una che
@@ -179,12 +129,6 @@ const ANCHOR_LABELS: Readonly<Record<Anchor, DrawKey>> = {
   start: "draw.properties.anchor.start",
   middle: "draw.properties.anchor.middle",
   end: "draw.properties.anchor.end",
-};
-
-/// I nomi dei tipi di testo, e le loro icone.
-const FORM_LABELS: Readonly<Record<TextForm, DrawKey>> = {
-  point: "draw.properties.text_form.point",
-  area: "draw.properties.text_form.area",
 };
 
 /// Gli stili del testo, dal più grande: il corpo, in unità della scena, e il
@@ -264,7 +208,6 @@ export const LOOK_ACTIONS: Readonly<Partial<Record<FieldId, DrawKey>>> = {
   stroke: "draw.action.outline_color",
   strokeWidth: "draw.action.stroke_width",
   opacity: "draw.action.opacity",
-  blend: "draw.action.blend",
   preset: "draw.action.text_style",
   family: "draw.action.font",
   size: "draw.action.font_size",
@@ -272,14 +215,11 @@ export const LOOK_ACTIONS: Readonly<Partial<Record<FieldId, DrawKey>>> = {
   leading: "draw.action.leading",
   spacing: "draw.action.letter_spacing",
   anchor: "draw.action.text_align",
-  textForm: "draw.action.text_form",
-  wrap: "draw.action.text_frame",
 };
 
 /// Il nome del passo di annulla del campo dell'aspetto `id` scritto con
 /// `value`: per «Enfasi», quello dell'interruttore.
 export function lookAction(id: FieldId, value: number | string | boolean): DrawKey | null {
-  if (id === "isolate") return value === true ? "draw.action.isolate" : "draw.action.unisolate";
   if (id !== "emphasis") return LOOK_ACTIONS[id] ?? null;
   const which = EMPHASIS_IDS.find((each) => typeof value === "string" && value.startsWith(`${each}:`));
   return which === undefined ? null : EMPHASES[which];
@@ -318,33 +258,6 @@ export interface SelectionFacts {
   /// Le due righe «Stile», se il livello offre gli stili: ciascuna `null`
   /// se nessun oggetto scelto può seguire uno stile di quel tipo.
   readonly styles?: { readonly graphic: StyleFacts | null; readonly text: StyleFacts | null } | null;
-  /// La riga «Simbolo», se il livello offre i simboli; senza, o `null`, non
-  /// c'è un'istanza fra gli oggetti scelti.
-  readonly symbols?: SymbolFacts | null;
-  /// La sezione «Ripetizione», se il livello offre le ripetizioni; senza, o
-  /// `null`, gli oggetti scelti non sono una ripetizione né i suoi
-  /// originali.
-  readonly repeat?: RepeatFacts | null;
-}
-
-/// La sezione «Ripetizione», come la legge l'editor: il tipo, e i numeri
-/// nella scena; senza numeri, `view` è `null`, se gli originali non
-/// disegnano niente o la ripetizione schiaccia il piano.
-export interface RepeatFacts {
-  readonly kind: RepeatKind;
-  readonly view: RepeatView | null;
-}
-
-/// La riga «Simbolo» del pannello, come la legge l'editor.
-export interface SymbolFacts {
-  /// Il simbolo delle istanze scelte; `null` se sono di simboli diversi.
-  readonly current: string | null;
-  /// I simboli del documento, nell'ordine del documento, con quante istanze
-  /// ha ciascuno, e vero se le istanze scelte non lo possono avere perché
-  /// conterrebbe sé stesso.
-  readonly symbols: ReadonlyArray<{ readonly id: string; readonly name: string; readonly instances: number; readonly cycle: boolean }>;
-  /// Vero se è scelta un'istanza sola: il suo simbolo si modifica.
-  readonly single: boolean;
 }
 
 /// Una riga «Stile» del pannello, come la legge l'editor.
@@ -462,8 +375,6 @@ export interface FieldsInput {
   readonly grid: Grid;
   /// Vero se c'è la barra della selezione, che si può affiancare.
   readonly bar: boolean;
-  /// Vero se il pannello ospita gli attributi.
-  readonly attributes: boolean;
   /// Vero se la selezione si può esportare dalla sua sezione.
   readonly exportSelection?: boolean;
   /// La forma che disegna lo strumento Poligono, se è lo strumento di
@@ -609,19 +520,19 @@ function tipField(end: TipEnd, tips: TipsLook): MenuChoiceState {
 }
 
 /// Il campo di ogni campo di uno stile, dove il pannello segna che la
-/// selezione ne è diversa; gli effetti sono una sezione, e lo dice la riga
+/// selezione ne è diversa; per le parti senza un campo lo dice la riga
 /// «Stile».
 const STYLE_FIELD_IDS: Readonly<Record<StyleField, FieldId | null>> = {
   fill: "fill",
   stroke: "stroke",
   width: "strokeWidth",
   dashes: "dash",
-  cap: "cap",
-  join: "join",
+  cap: null,
+  join: null,
   tipStart: "tipStart",
   tipEnd: "tipEnd",
   opacity: "opacity",
-  blend: "blend",
+  blend: null,
   effects: null,
   family: "family",
   size: "size",
@@ -723,47 +634,6 @@ function styleField(kind: StyleKind, facts: StyleFacts, presets: boolean): MenuC
   };
 }
 
-/// Il nome di un simbolo nel menu: il suo, o «Simbolo senza nome».
-export function symbolLabel(name: string): string {
-  const clean = name.replace(/\s+/g, " ").trim();
-  return clean === "" ? t("draw.isolation.symbol.unnamed") : clean;
-}
-
-/// Il campo della riga «Simbolo»: sul pulsante il simbolo delle istanze
-/// scelte, o «Misto»; nel menu i simboli del documento, da dare alle
-/// istanze scelte, con quante istanze ha ciascuno, e i comandi, ciascuno
-/// spento col perché quando non vale.
-function symbolField(facts: SymbolFacts): MenuChoiceState {
-  const options: MenuOption[] = facts.symbols.map((symbol) => ({
-    value: `symbol:${symbol.id}`,
-    label: symbolLabel(symbol.name),
-    checked: facts.current === symbol.id,
-    ...(symbol.cycle && facts.current !== symbol.id
-      ? { disabled: true, note: t("draw.symbols.why.cycle") }
-      : { note: symbol.instances === 0 ? t("draw.symbols.instances.none") : plural(symbol.instances, "draw.symbols.instances.one", "draw.symbols.instances.other") }),
-  }));
-  const current = facts.symbols.find((symbol) => symbol.id === facts.current) ?? null;
-  const off = (reason: string | null): Partial<MenuOption> => (reason === null ? {} : { disabled: true, note: reason });
-  options.push(
-    { value: "edit", label: t("draw.symbol.edit"), action: true, separator: options.length > 0, ...off(facts.single ? null : t("draw.symbol.edit.none")) },
-    {
-      value: "rename",
-      label: t("draw.symbols.rename"),
-      action: true,
-      ...(current === null ? {} : { ask: { title: t("draw.styles.form.rename", { name: symbolLabel(current.name) }), value: current.name, submit: t("draw.styles.form.apply") } }),
-      ...off(current === null ? t("draw.symbols.why.mixed") : null),
-    },
-    { value: "detach", label: t("draw.symbol.detach"), action: true },
-  );
-  return {
-    kind: "menu",
-    label: t("draw.properties.symbol"),
-    value: current === null ? null : `symbol:${current.id}`,
-    summary: current === null ? t("draw.properties.mixed") : symbolLabel(current.name),
-    options,
-  };
-}
-
 const SYMMETRY_LABELS: Readonly<Record<SymmetryKind, DrawKey>> = {
   none: "draw.symmetry.none",
   vertical: "draw.symmetry.vertical",
@@ -795,49 +665,8 @@ function symmetryFields(fields: Partial<Record<FieldId, FieldState>>, symmetry: 
   fields.symmetryY = lengthField(t("draw.properties.symmetry.center_y"), symmetry.center[1], unit, false);
 }
 
-const REPEAT_KIND_LABELS: Readonly<Record<RepeatKind, DrawKey>> = {
-  radial: "draw.properties.repeat.radial",
-  grid: "draw.properties.repeat.grid",
-  mirror: "draw.properties.repeat.mirror",
-};
-
 /// Un conto intero da `min` a `max`, senza unità.
 const countField = (label: string, value: number, min: number, max: number): NumberState => ({ kind: "number", label, value, unit: "", units: {}, relative: false, places: 0, min, max });
-
-/// I campi di «Ripetizione» di `facts`, con le lunghezze in `unit`: il tipo,
-/// con «Espandi la ripetizione» nel suo menu, e i numeri del tipo.
-function repeatFields(fields: Partial<Record<FieldId, FieldState>>, facts: RepeatFacts, unit: LengthUnit): void {
-  fields.repeat = {
-    kind: "menu",
-    label: t("draw.properties.repeat.kind"),
-    value: facts.kind,
-    summary: t(REPEAT_KIND_LABELS[facts.kind]),
-    options: [
-      ...REPEAT_KINDS.map((kind): MenuOption => ({ value: kind, label: t(REPEAT_KIND_LABELS[kind]), checked: kind === facts.kind })),
-      { value: "expand", label: t("draw.repeat.expand"), action: true, separator: true },
-    ],
-  };
-  const view = facts.view;
-  if (view === null) return;
-  switch (view.kind) {
-    case "radial":
-      fields.repeatCount = countField(t("draw.properties.repeat.count"), view.count, 2, MAX_RADIAL);
-      fields.repeatRadius = lengthField(t("draw.properties.repeat.radius"), view.radius, unit, false, { min: 0 });
-      fields.repeatX = lengthField(t("draw.properties.repeat.center_x"), view.center[0], unit, false);
-      fields.repeatY = lengthField(t("draw.properties.repeat.center_y"), view.center[1], unit, false);
-      return;
-    case "grid":
-      fields.repeatColumns = countField(t("draw.properties.repeat.columns"), view.columns, 1, MAX_GRID_SIDE);
-      fields.repeatRows = countField(t("draw.properties.repeat.rows"), view.rows, 1, MAX_GRID_SIDE);
-      fields.repeatStepX = lengthField(t("draw.properties.repeat.step_x"), view.step[0], unit, false);
-      fields.repeatStepY = lengthField(t("draw.properties.repeat.step_y"), view.step[1], unit, false);
-      return;
-    case "mirror":
-      fields.repeatAngle = degreesField(t("draw.properties.repeat.angle"), view.angle, { min: 0, max: 180 });
-      fields.repeatDistance = lengthField(t("draw.properties.repeat.distance"), view.distance, unit, false);
-      return;
-  }
-}
 
 /// Segna i campi in cui la selezione è diversa dallo stile della riga
 /// `facts`: il punto, e la frase per chi ascolta. Un campo che due stili
@@ -866,17 +695,6 @@ function sameFirstFamily(a: string, b: string): boolean {
   const first = parseFamilies(a)?.[0];
   const other = parseFamilies(b)?.[0];
   return first !== undefined && other !== undefined && "name" in first && "name" in other && sameFamily(first.name, other.name);
-}
-
-/// Le voci del menu «Carattere» per le famiglie del vault `families`:
-/// ciascuna col suo ripiego, soltanto quelle che il file sa scrivere.
-export function vaultFamilyOptions(families: readonly { readonly name: string; readonly generic: Generic }[]): ChoiceOption[] {
-  const options: ChoiceOption[] = [];
-  for (const { name, generic } of families) {
-    const written = writtenFamily(name);
-    if (written !== null) options.push({ value: `${written}, ${generic}`, label: name });
-  }
-  return options;
 }
 
 /// I file di caratteri che il vault non legge, per nome: i primi tre, e
@@ -934,15 +752,8 @@ export function propertiesView(input: FieldsInput): PropertiesView {
       fields.rotation = degreesField(t("draw.properties.rotation"), angleOf(frame.matrix));
     }
 
-    // --- Forma: il simbolo delle istanze, e quella dello strumento che la
-    // disegna ---
-    const symbols = has("symbols") ? (selection.symbols ?? null) : null;
-    if (symbols !== null) fields.symbol = symbolField(symbols);
+    // --- Forma: quella dello strumento che la disegna ---
     if (has("polygon") && selection.shape !== null) shapeFields(fields, selection.shape, unit, null);
-
-    // --- Ripetizione ---
-    const repeat = has("repeat") ? (selection.repeat ?? null) : null;
-    if (repeat !== null) repeatFields(fields, repeat, unit);
 
     // --- Aspetto ---
     const { look, outline } = selection;
@@ -985,28 +796,11 @@ export function propertiesView(input: FieldsInput): PropertiesView {
         max: 100,
       };
     }
-    // La fusione è del livello Esperto; l'isolamento, soltanto di chi è fatto
-    // di gruppi e collegamenti.
-    if (has("blend") && look.blend.count > 0) {
-      fields.blend = {
-        kind: "choice",
-        label: t("draw.properties.blend"),
-        value: look.blend.value,
-        options: BLEND_GROUPS.flatMap((group, at) => group.map((mode, i): ChoiceOption => ({ value: mode, label: t(BLEND_LABELS[mode]!), ...(at > 0 && i === 0 ? { separator: true } : {}) }))),
-      };
-      if (look.isolate.count === look.blend.count) {
-        fields.isolate = { kind: "switch", label: t("draw.properties.isolate"), on: look.isolate.value === true, ...(input.editable ? {} : { disabled: true }) };
-      }
-    }
     if (outline !== null) {
       const dashes: ChoiceOption[] = DASHES.map((dash) => ({ value: dash, label: t(DASH_LABELS[dash]) }));
       // Un tratteggio che non è del menu c'è, col suo valore.
       if (outline.dash === "custom") dashes.push({ value: "custom", label: t("draw.outline.custom", { value: outline.custom ?? "" }) });
       if (outline.dashable) fields.dash = { kind: "choice", label: t("draw.properties.dash"), value: outline.dash, options: dashes };
-      if (has("outline")) {
-        fields.cap = { kind: "choice", label: t("draw.properties.cap"), value: outline.cap, options: CAPS.map((cap) => ({ value: cap, label: t(CAP_LABELS[cap]) })) };
-        fields.join = { kind: "choice", label: t("draw.properties.join"), value: outline.join, options: JOINS.map((join) => ({ value: join, label: t(JOIN_LABELS[join]) })) };
-      }
     }
     // Le punte delle linee, se il livello le offre e ci sono linee che ne
     // abbiano.
@@ -1030,10 +824,6 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     if (look.family.count > 0) {
       const families: ChoiceOption[] = TEXT_FAMILIES.map((family) => ({ value: family, label: familyLabel(family) }));
       const current = look.family.value;
-      // Le famiglie del vault, dopo quelle di Fub.
-      if (has("fonts")) {
-        vaultFamilyOptions(input.fonts?.families ?? []).forEach((option, i) => families.push(i === 0 ? { ...option, separator: true } : option));
-      }
       // Un carattere che nessuno scrive è quello di serie. Uno scritto in un
       // altro modo, come `Liberation Serif, serif` senza virgolette, è la voce
       // della stessa famiglia, che il menu non ripete; uno che non è fra
@@ -1098,22 +888,6 @@ export function propertiesView(input: FieldsInput): PropertiesView {
         options: ANCHORS.map((anchor) => ({ value: anchor, label: t(ANCHOR_LABELS[anchor]), icon: `draw-anchor-${anchor}` })),
       };
     }
-    // Il tipo di testo e il riquadro, col testo in area.
-    if (has("typeset") && look.form.count > 0) {
-      fields.textForm = {
-        kind: "segment",
-        label: t("draw.properties.text_form"),
-        value: look.form.value,
-        options: TEXT_FORMS.map((form) => ({ value: form, label: t(FORM_LABELS[form]), icon: `draw-text-${form}` })),
-      };
-    }
-    if (has("typeset") && look.wrap.count > 0) {
-      const wrap = look.wrap.value;
-      fields.wrap = {
-        ...lengthField(t("draw.properties.text_frame"), wrap ?? 0, unit, true, { min: fieldMin(Math.min(wrap ?? MIN_SIZE, MIN_SIZE), unit) }),
-        value: wrap === null ? null : toUnit(wrap, unit),
-      };
-    }
 
     // --- Gli stili, in testa ad «Aspetto» e a «Testo» ---
     const styles = has("styles") ? (selection.styles ?? null) : null;
@@ -1141,25 +915,6 @@ export function propertiesView(input: FieldsInput): PropertiesView {
       }
     }
 
-    // --- Trasforma ---
-    if (has("transform")) {
-      const percent = (label: DrawKey): NumberState => ({
-        kind: "number",
-        label: t(label),
-        value: 100,
-        unit: "%",
-        units: PERCENT_UNITS,
-        relative: false,
-        places: 2,
-        min: -MAX_SCALE_PERCENT,
-        max: MAX_SCALE_PERCENT,
-      });
-      fields.turn = degreesField(t("draw.properties.turn"), 0);
-      fields.scaleX = percent("draw.properties.scale_x");
-      fields.scaleY = percent("draw.properties.scale_y");
-      fields.skewX = degreesField(t("draw.properties.skew_x"), 0, { min: -MAX_SKEW, max: MAX_SKEW });
-      fields.skewY = degreesField(t("draw.properties.skew_y"), 0, { min: -MAX_SKEW, max: MAX_SKEW });
-    }
   } else {
     // --- Forma, dello strumento ---
     if (input.tool !== null) shapeFields(fields, input.tool, unit, t("draw.properties.shape_tool"));
@@ -1226,7 +981,6 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     editable: input.editable,
     fields,
     actions,
-    attributes: selection !== null && input.attributes,
     exportSelection: selection !== null && input.exportSelection === true,
     swatches: input.swatches,
     recent: input.recent,
@@ -1290,10 +1044,6 @@ export function lookChange(id: FieldId, value: number | string | boolean, unit: 
       return typeof value === "number" ? { width: fromUnit(value, lookUnit(unit)) } : null;
     case "opacity":
       return typeof value === "number" ? { opacity: value / 100 } : null;
-    case "blend":
-      return typeof value === "string" && BLEND_MODES.includes(value) ? { blend: value } : null;
-    case "isolate":
-      return typeof value === "boolean" ? { isolate: value } : null;
     case "family":
       return typeof value === "string" && value !== "" ? { family: value } : null;
     case "size":
@@ -1321,10 +1071,6 @@ export function lookChange(id: FieldId, value: number | string | boolean, unit: 
       return typeof value === "number" ? { spacing: value / 100 } : null;
     case "anchor":
       return (ANCHORS as readonly unknown[]).includes(value) ? { anchor: value as Anchor } : null;
-    case "textForm":
-      return (TEXT_FORMS as readonly unknown[]).includes(value) ? { form: value as TextForm } : null;
-    case "wrap":
-      return typeof value === "number" && value > 0 ? { wrap: fromUnit(value, unit) } : null;
     default:
       return null;
   }
@@ -1333,26 +1079,6 @@ export function lookChange(id: FieldId, value: number | string | boolean, unit: 
 /// Il cambio di «Forma» che scrive il campo `id` col valore `value`, con le
 /// lunghezze in `unit`; `null` se il campo non è della forma, o il valore non
 /// è suo.
-/// Il cambio di una ripetizione per il campo `id` di «Ripetizione», che
-/// scrive `value` nell'unità `unit`; `null` se il campo non è un suo numero.
-export function repeatEdit(id: FieldId, value: number | string | boolean, unit: LengthUnit): RepeatEdit | null {
-  if (typeof value !== "number") return null;
-  const length = (field: Extract<RepeatEdit["field"], "center-x" | "center-y" | "radius" | "step-x" | "step-y" | "distance">): RepeatEdit => ({ field, value: fromUnit(value, unit) });
-  const fields: Readonly<Record<RepeatNumberId, () => RepeatEdit>> = {
-    repeatCount: () => ({ field: "count", value }),
-    repeatColumns: () => ({ field: "columns", value }),
-    repeatRows: () => ({ field: "rows", value }),
-    repeatAngle: () => ({ field: "angle", value }),
-    repeatRadius: () => length("radius"),
-    repeatX: () => length("center-x"),
-    repeatY: () => length("center-y"),
-    repeatStepX: () => length("step-x"),
-    repeatStepY: () => length("step-y"),
-    repeatDistance: () => length("distance"),
-  };
-  return id in fields ? fields[id as RepeatNumberId]() : null;
-}
-
 export function shapeChange(id: FieldId, value: number | string | boolean, unit: LengthUnit): ShapeChange | null {
   switch (id) {
     case "shape":
@@ -1401,8 +1127,6 @@ export function sheetChange(id: FieldId, value: number | string | boolean, rect:
 /// `null` se il campo non è del contorno, o il valore non è suo.
 export function outlineChange(id: FieldId, value: number | string | boolean): OutlineChange | null {
   if (id === "dash" && (DASHES as readonly unknown[]).includes(value)) return { dash: value as Dash };
-  if (id === "cap" && (CAPS as readonly unknown[]).includes(value)) return { cap: value as Cap };
-  if (id === "join" && (JOINS as readonly unknown[]).includes(value)) return { join: value as Join };
   return null;
 }
 

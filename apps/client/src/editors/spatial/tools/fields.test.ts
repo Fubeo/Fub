@@ -3,14 +3,10 @@
 // valore scritto al cambio dell'aspetto o del contorno.
 
 import { describe, expect, it } from "vitest";
-import { BLEND_MODES } from "../scene/values";
 import type { LengthUnit } from "../scene/rulers";
 import {
-  BLEND_GROUPS,
-  BLEND_LABELS,
   lookAction,
   lookChange,
-  outlineChange,
   propertiesView,
   shapeChange,
   sheetChange,
@@ -21,13 +17,12 @@ import {
   type FontFacts,
   type SelectionFacts,
   type StyleFacts,
-  type SymbolFacts,
 } from "./fields";
 import type { Frame } from "./frame";
 import { DEFAULT_GRID } from "./grid";
 import type { Look } from "./look";
 import { NAME_MAX } from "./naming";
-import type { ChoiceState, MenuChoiceState, NumberState, SegmentState, SwitchState, TogglesState } from "./properties";
+import type { ChoiceState, MenuChoiceState, NumberState, SegmentState, TogglesState } from "./properties";
 import { featuresFor, type Level } from "./registry";
 import type { ShapeFacts } from "./reshape";
 import type { DocumentStyle, StyleField, StyleRow } from "./styles";
@@ -53,8 +48,6 @@ const look = (parts: Partial<Look> = {}): Look => ({
   leading: NONE,
   spacing: NONE,
   anchor: NONE,
-  form: NONE,
-  wrap: NONE,
   samples: new Map(),
   ...parts,
 });
@@ -91,7 +84,6 @@ const input = (parts: Partial<FieldsInput> & { readonly level?: Level } = {}): F
     document: { page: { width: 400, height: 300 }, boards: false, desc: "" },
     grid: DEFAULT_GRID,
     bar: true,
-    attributes: false,
     tool: null,
     board: null,
     swatches: [],
@@ -112,7 +104,6 @@ describe("senza selezione, il disegno", () => {
     const view = propertiesView(input({ unit: "mm", document: { page: { width: fromUnit(210, "mm"), height: fromUnit(297, "mm") }, boards: false, desc: "Una prova" } }));
     expect(view.subject).toBe("Il disegno");
     expect(view.key).toBe("document\nmm");
-    expect(view.attributes).toBe(false);
     const width = number(view.fields.pageWidth);
     expect([width.label, width.value, width.unit, width.places, width.relative, width.min]).toEqual(["Larghezza della pagina", expect.closeTo(210, 9), "mm", 3, true, fieldMin(1, "mm")]);
     expect(number(view.fields.pageHeight).value).toBeCloseTo(297, 9);
@@ -395,69 +386,6 @@ describe("l'aspetto", () => {
   });
 });
 
-describe("la fusione", () => {
-  const blended = (parts: Partial<Look> = {}): Look =>
-    look({ fill: { count: 2, value: "#0072b2" }, opacity: { count: 2, value: 1 }, blend: { count: 2, value: "multiply" }, ...parts });
-
-  it("c'è dall'Esperto, per chi ha una fusione da dire; lo Standard non la offre", () => {
-    const expert = propertiesView(input({ level: "expert", selection: selection({ look: blended() }) }));
-    expect(expert.fields.blend).toMatchObject({ kind: "choice", label: "Fusione", value: "multiply" });
-    for (const level of ["essential", "standard"] as const) {
-      const view = propertiesView(input({ level, selection: selection({ look: blended() }) }));
-      expect(view.fields.blend).toBeUndefined();
-      expect(view.fields.isolate).toBeUndefined();
-      // L'opacità, invece, c'è sempre.
-      expect(view.fields.opacity).toBeDefined();
-    }
-    const nobody = propertiesView(input({ level: "expert", selection: selection({ look: blended({ blend: NONE }) }) }));
-    expect(nobody.fields.blend).toBeUndefined();
-    expect(nobody.fields.isolate).toBeUndefined();
-  });
-
-  it("ha tutti e sedici i modi, ciascuno una volta sola, a gruppi separati, col nome della tabella", () => {
-    const view = propertiesView(input({ level: "expert", selection: selection({ look: blended() }) }));
-    const choice = view.fields.blend as ChoiceState;
-    expect(choice.options.map((option) => option.value)).toEqual(BLEND_GROUPS.flat());
-    expect([...choice.options.map((option) => option.value)].sort()).toEqual([...BLEND_MODES].sort());
-    expect(choice.options).toHaveLength(16);
-    // Un filetto prima di ogni gruppo tranne il primo.
-    expect(choice.options.filter((option) => option.separator === true).map((option) => option.value)).toEqual(["darken", "lighten", "overlay", "difference", "hue"]);
-    expect(choice.options[0]).toEqual({ value: "normal", label: "Normale" });
-    expect(choice.options.find((option) => option.value === "multiply")!.label).toBe("Moltiplica");
-    expect(choice.options.find((option) => option.value === "color-dodge")!.label).toBe("Scherma colore");
-    expect(Object.keys(BLEND_LABELS).sort()).toEqual([...BLEND_MODES].sort());
-    expect(new Set(choice.options.map((option) => option.label)).size).toBe(16);
-  });
-
-  it("una fusione mista non ne dice nessuna, e normale è quella di chi non la scrive", () => {
-    const mixed = propertiesView(input({ level: "expert", selection: selection({ look: blended({ blend: { count: 2, value: null } }) }) }));
-    expect(mixed.fields.blend).toMatchObject({ kind: "choice", value: null });
-    const normal = propertiesView(input({ level: "expert", selection: selection({ look: blended({ blend: { count: 2, value: "normal" } }) }) }));
-    expect(normal.fields.blend).toMatchObject({ value: "normal" });
-  });
-
-  it("«Isola la fusione» c'è soltanto se tutti gli scelti sono gruppi o collegamenti, e dice se è accesa", () => {
-    const groups = (isolate: Look["isolate"]): Look => blended({ blend: { count: 2, value: "multiply" }, isolate });
-    const on = propertiesView(input({ level: "expert", selection: selection({ look: groups({ count: 2, value: true }) }) }));
-    expect(on.fields.isolate).toEqual({ kind: "switch", label: "Isola la fusione", on: true });
-    const off = propertiesView(input({ level: "expert", selection: selection({ look: groups({ count: 2, value: false }) }) }));
-    expect((off.fields.isolate as SwitchState).on).toBe(false);
-    // Misti: spento, e un clic li accende tutti.
-    const mixed = propertiesView(input({ level: "expert", selection: selection({ look: groups({ count: 2, value: null }) }) }));
-    expect((mixed.fields.isolate as SwitchState).on).toBe(false);
-    // Un oggetto che non è un gruppo fra i due: niente isolamento.
-    const some = propertiesView(input({ level: "expert", selection: selection({ look: groups({ count: 1, value: true }) }) }));
-    expect(some.fields.isolate).toBeUndefined();
-    const none = propertiesView(input({ level: "expert", selection: selection({ look: groups(NONE) }) }));
-    expect(none.fields.isolate).toBeUndefined();
-  });
-
-  it("in un disegno che non si modifica l'isolamento si vede e non si cambia", () => {
-    const view = propertiesView(input({ level: "expert", editable: false, selection: selection({ look: blended({ isolate: { count: 2, value: true } }) }) }));
-    expect(view.fields.isolate).toMatchObject({ on: true, disabled: true });
-  });
-});
-
 describe("i colori del documento", () => {
   const DOCUMENT = {
     swatches: [{ id: "ra", name: "Blu marca", color: "#0072b2", stop: [0], uses: 3 }],
@@ -493,22 +421,19 @@ describe("i colori del documento", () => {
 });
 
 describe("il contorno", () => {
-  it("ha il tratteggio dallo Standard; gli estremi e gli angoli dall'Esperto", () => {
+  it("ha il tratteggio, e non gli estremi né gli angoli (ADR 0231)", () => {
     const outline = { dashable: true, dash: "dashed" as const, custom: null, cap: "round" as const, join: null };
-    const standard = propertiesView(input({ selection: selection({ outline }) }));
-    expect(standard.fields.dash).toMatchObject({ kind: "choice", value: "dashed" });
-    expect(standard.fields.cap).toBeUndefined();
-    const expert = propertiesView(input({ level: "expert", selection: selection({ outline }) }));
-    expect(expert.fields.cap).toMatchObject({ value: "round" });
-    expect(expert.fields.join).toMatchObject({ value: null });
+    for (const level of ["standard", "expert"] as const) {
+      const view = propertiesView(input({ level, selection: selection({ outline }) }));
+      expect(view.fields.dash).toMatchObject({ kind: "choice", value: "dashed" });
+      expect(Object.keys(view.fields)).not.toContain("cap");
+      expect(Object.keys(view.fields)).not.toContain("join");
+    }
   });
 
   it("non offre il tratteggio alle sole linee a spessore variabile", () => {
     const outline = { dashable: false, dash: null, custom: null, cap: "round" as const, join: "bevel" as const };
-    const expert = propertiesView(input({ level: "expert", selection: selection({ outline }) }));
-    expect(expert.fields.dash).toBeUndefined();
-    expect(expert.fields.cap).toMatchObject({ value: "round" });
-    expect(expert.fields.join).toMatchObject({ value: "bevel" });
+    expect(propertiesView(input({ level: "expert", selection: selection({ outline }) })).fields.dash).toBeUndefined();
   });
 
   it("un tratteggio che non è del menu c'è, col suo valore", () => {
@@ -674,7 +599,7 @@ describe("il testo", () => {
     expect(families(null)).toHaveLength(3);
   });
 
-  it("dall'Esperto ha le famiglie del vault, ciascuna col suo ripiego, dopo quelle di Fub", () => {
+  it("non offre le famiglie del vault, e un testo che ne usa una la mostra col suo nome", () => {
     const fonts: FontFacts = {
       families: [
         { name: "Caslon", generic: "serif" },
@@ -686,35 +611,12 @@ describe("il testo", () => {
       shown: () => "Inter",
     };
     const families = (level: Level, value: string): ChoiceState["options"] => options(propertiesView(input({ level, fonts, selection: selection({ look: look({ family: { count: 1, value } }) }) })).fields.family);
-    expect(families("expert", "Inter, sans-serif").slice(3)).toEqual([
-      { value: "Caslon, serif", label: "Caslon", separator: true },
-      { value: '"Noto Sans JP", sans-serif', label: "Noto Sans JP" },
-      { value: `'Un "nome"', sans-serif`, label: 'Un "nome"' },
-    ]);
-    // Allo Standard il menu non le offre, ma un testo che ne usa una la
-    // mostra col suo nome.
+    // Senza i caratteri del vault (ADR 0231) nessun livello le offre, ma
+    // un testo che ne usa una la mostra col suo nome.
+    expect(families("expert", "Inter, sans-serif")).toHaveLength(3);
     expect(families("standard", "Inter, sans-serif")).toHaveLength(3);
     expect(families("standard", '"Noto Sans JP", sans-serif').slice(3)).toEqual([{ value: '"Noto Sans JP", sans-serif', label: "Noto Sans JP" }]);
-    expect(families("expert", '"Noto Sans JP", sans-serif')).toHaveLength(6);
-  });
-
-  it("riconosce il carattere di un testo scritto in un altro modo, e non lo ripete nel menu", () => {
-    const fonts: FontFacts = {
-      families: [{ name: "Liberation Serif", generic: "serif" }],
-      notes: { missing: [], unreadable: [], over: [], failed: [] },
-      shown: () => "Liberation Serif",
-    };
-    const field = (value: string): ChoiceState => propertiesView(input({ level: "expert", fonts, selection: selection({ look: look({ family: { count: 1, value } }) }) })).fields.family as ChoiceState;
-    for (const written of ["Liberation Serif, serif", "'liberation serif', Georgia, serif", '"Liberation Serif"']) {
-      expect(field(written).value).toBe('"Liberation Serif", serif');
-      expect(field(written).options.map((option) => option.label)).toEqual(["Inter", "Literata", "JetBrains Mono", "Liberation Serif"]);
-    }
-    expect(field("inter").value).toBe("Inter, sans-serif");
-    expect(field("inter").options).toHaveLength(4);
-    // Un'altra famiglia, o una generica sola, resta col suo nome.
-    expect(field("Liberation Sans, sans-serif").options.slice(-1)).toEqual([{ value: "Liberation Sans, sans-serif", label: "Liberation Sans" }]);
-    expect(field("serif")).toMatchObject({ value: "serif" });
-    expect(field("serif").options.slice(-1)).toEqual([{ value: "serif", label: "serif" }]);
+    expect(families("expert", '"Noto Sans JP", sans-serif')).toEqual(families("standard", '"Noto Sans JP", sans-serif'));
   });
 
   it("dice sotto il carattere la famiglia che manca, è oltre il tetto o non si carica, e con quale si vede", () => {
@@ -793,23 +695,6 @@ describe("il testo", () => {
     expect(number(one.fields.spacing).min).toBe(-80);
   });
 
-  it("il tipo di testo e la larghezza del riquadro, dal livello Esperto, nell'unità del documento", () => {
-    const parts = { form: { count: 2, value: null }, wrap: { count: 1, value: fromUnit(80, "mm") } };
-    const view = propertiesView(input({ level: "expert", unit: "mm", selection: selection({ look: look(parts) }) }));
-    expect(view.fields.textForm).toMatchObject({ kind: "segment", label: "Tipo di testo", value: null });
-    expect((options(view.fields.textForm) as SegmentState["options"]).map(({ value, label, icon }) => [value, label, icon])).toEqual([
-      ["point", "Da punto", "draw-text-point"],
-      ["area", "In area", "draw-text-area"],
-    ]);
-    expect(number(view.fields.wrap)).toMatchObject({ label: "Larghezza del riquadro", value: 80, unit: "mm", relative: true });
-    // Due riquadri diversi: misto.
-    const mixed = propertiesView(input({ level: "expert", selection: selection({ look: look({ ...parts, wrap: { count: 2, value: null } }) }) }));
-    expect(number(mixed.fields.wrap).value).toBeNull();
-    // Senza testi in area, niente riquadro; sotto Esperto, nessuno dei due.
-    expect("wrap" in propertiesView(input({ level: "expert", selection: selection({ look: look({ form: { count: 1, value: "point" } }) }) })).fields).toBe(false);
-    const standard = propertiesView(input({ selection: selection({ look: look(parts) }) }));
-    expect(["textForm", "wrap"].filter((id) => id in standard.fields)).toEqual([]);
-  });
 });
 
 describe("«Disponi»", () => {
@@ -828,23 +713,6 @@ describe("«Disponi»", () => {
   });
 });
 
-describe("«Trasforma»", () => {
-  it("c'è dall'Esperto, e parte da niente da cambiare, coi suoi limiti", () => {
-    expect(propertiesView(input({ selection: selection() })).fields.turn).toBeUndefined();
-    const view = propertiesView(input({ level: "expert", selection: selection() }));
-    expect((["turn", "scaleX", "scaleY", "skewX", "skewY"] as const).map((id) => number(view.fields[id]).value)).toEqual([0, 100, 100, 0, 0]);
-    expect(number(view.fields.scaleX)).toMatchObject({ unit: "%", min: -100_000, max: 100_000 });
-    expect(number(view.fields.skewY)).toMatchObject({ unit: "°", min: -89, max: 89 });
-  });
-});
-
-describe("gli attributi", () => {
-  it("il pannello li ospita solo con una selezione", () => {
-    expect(propertiesView(input({ attributes: true })).attributes).toBe(false);
-    expect(propertiesView(input({ attributes: true, selection: selection() })).attributes).toBe(true);
-  });
-});
-
 describe("dal valore al cambio", () => {
   it("l'aspetto: lo spessore e il corpo tornano in unità della scena, l'opacità in frazione", () => {
     const units: readonly LengthUnit[] = ["px", "mm"];
@@ -854,21 +722,6 @@ describe("dal valore al cambio", () => {
     expect(lookChange("fill", "#e69f00", "px")).toEqual({ fill: "#e69f00" });
     expect(lookChange("stroke", "none", "px")).toEqual({ stroke: "none" });
     expect(lookChange("anchor", "end", "px")).toEqual({ anchor: "end" });
-  });
-
-  it("la fusione e l'isolamento: solo un modo del formato, solo un sì o un no", () => {
-    for (const mode of BLEND_MODES) expect(lookChange("blend", mode, "px")).toEqual({ blend: mode });
-    expect(lookChange("blend", "plus-lighter", "px")).toBeNull();
-    expect(lookChange("blend", "inherit", "px")).toBeNull();
-    expect(lookChange("blend", "", "px")).toBeNull();
-    expect(lookChange("blend", 3, "px")).toBeNull();
-    expect(lookChange("isolate", true, "px")).toEqual({ isolate: true });
-    expect(lookChange("isolate", false, "px")).toEqual({ isolate: false });
-    expect(lookChange("isolate", "true", "px")).toBeNull();
-    // Il passo di annulla ha il suo nome, e l'interruttore dice il verso.
-    expect(lookAction("blend", "multiply")).toBe("draw.action.blend");
-    expect(lookAction("isolate", true)).toBe("draw.action.isolate");
-    expect(lookAction("isolate", false)).toBe("draw.action.unisolate");
   });
 
   it("l'opacità scritta nella barra: intera, fra 0 e 100, letta come quella del pannello", () => {
@@ -905,28 +758,11 @@ describe("dal valore al cambio", () => {
     expect(lookAction("emphasis", "overline:true")).toBeNull();
   });
 
-  it("il tipo di testo e il riquadro, in unità della scena", () => {
-    expect(lookChange("textForm", "area", "px")).toEqual({ form: "area" });
-    expect(lookChange("textForm", "path", "px")).toBeNull();
-    expect(lookChange("wrap", 10, "mm")).toEqual({ wrap: fromUnit(10, "mm") });
-    expect(lookChange("wrap", 0, "px")).toBeNull();
-    expect(lookAction("textForm", "point")).toBe("draw.action.text_form");
-    expect(lookAction("wrap", 10)).toBe("draw.action.text_frame");
-  });
-
   it("un valore che non è del campo, o un campo che non è dell'aspetto, non cambia niente", () => {
     expect(lookChange("family", "", "px")).toBeNull();
     expect(lookChange("anchor", "justify", "px")).toBeNull();
     expect(lookChange("fill", 3, "px")).toBeNull();
     expect(lookChange("x", 3, "px")).toBeNull();
-  });
-
-  it("il contorno: solo i valori dei menu", () => {
-    expect(outlineChange("dash", "dotted")).toEqual({ dash: "dotted" });
-    expect(outlineChange("cap", "square")).toEqual({ cap: "square" });
-    expect(outlineChange("join", "bevel")).toEqual({ join: "bevel" });
-    expect(outlineChange("dash", "custom")).toBeNull();
-    expect(outlineChange("fill", "dotted")).toBeNull();
   });
 
   it("le punte: la forma di un capo, la misura della punta e lo scambio", () => {
@@ -1056,53 +892,3 @@ describe("gli stili del documento", () => {
   });
 });
 
-describe("la riga «Simbolo»", () => {
-  const menu = (state: unknown): MenuChoiceState => state as MenuChoiceState;
-  const facts = (parts: Partial<SymbolFacts> = {}): SymbolFacts => ({
-    current: "r1",
-    symbols: [
-      { id: "r1", name: "Presa", instances: 3, cycle: false },
-      { id: "r2", name: "", instances: 1, cycle: false },
-      { id: "r3", name: "Quadro", instances: 0, cycle: true },
-    ],
-    single: true,
-    ...parts,
-  });
-  const view = (symbols: SymbolFacts, level: Level = "expert") =>
-    propertiesView(input({ level, selection: selection({ subject: "Istanza di simbolo «Presa»", symbols }) }));
-
-  it("c'è dall'Esperto, con un'istanza fra gli oggetti scelti, e dice il suo simbolo", () => {
-    expect(view(facts()).fields.symbol).toMatchObject({ kind: "menu", label: "Simbolo", value: "symbol:r1", summary: "Presa" });
-    expect("symbol" in view(facts(), "standard").fields).toBe(false);
-    expect("symbol" in propertiesView(input({ level: "expert", selection: selection() })).fields).toBe(false);
-    expect(view(facts({ current: null })).fields.symbol).toMatchObject({ value: null, summary: "Misto" });
-    expect(view(facts({ current: "r2" })).fields.symbol).toMatchObject({ summary: "Simbolo senza nome" });
-  });
-
-  it("nel menu i simboli con le loro istanze, poi i comandi, spenti col perché", () => {
-    const state = menu(view(facts()).fields.symbol);
-    expect(state.options.map((option) => [option.value, option.disabled === true])).toEqual([
-      ["symbol:r1", false],
-      ["symbol:r2", false],
-      ["symbol:r3", true],
-      ["edit", false],
-      ["rename", false],
-      ["detach", false],
-    ]);
-    expect(state.options[0]).toMatchObject({ label: "Presa", checked: true, note: "3 istanze" });
-    expect(state.options[1]).toMatchObject({ label: "Simbolo senza nome", checked: false, note: "1 istanza" });
-    expect(state.options[2]).toMatchObject({ label: "Quadro", note: "Conterrebbe sé stesso." });
-    expect(state.options[3]).toMatchObject({ label: "Modifica simbolo", action: true, separator: true });
-    expect(state.options[4]).toMatchObject({ ask: { title: "Rinomina «Presa»", value: "Presa", submit: "Rinomina" } });
-    // Più istanze, di simboli diversi.
-    const mixed = menu(view(facts({ current: null, single: false })).fields.symbol);
-    expect(mixed.options.filter((option) => option.disabled === true).map((option) => [option.value, option.note])).toEqual([
-      ["symbol:r3", "Conterrebbe sé stesso."],
-      ["edit", "Scegli un’istanza sola per modificarne il simbolo."],
-      ["rename", "Le istanze scelte sono di simboli diversi."],
-    ]);
-    // Il simbolo che le istanze hanno già resta scelto anche se non
-    // potrebbero averlo: non c'è niente da cambiare.
-    expect(menu(view(facts({ current: "r3" })).fields.symbol).options[2]).toMatchObject({ checked: true, note: "Nessuna istanza" });
-  });
-});

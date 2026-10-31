@@ -21,7 +21,6 @@
 // `apps/client/src/__fixtures__/scene-repeat/cases.json` valgono per tutte e
 // due.
 
-import { formatNumber } from "../number";
 import type { Matrix, Point } from "./matrix";
 import { number } from "./values";
 
@@ -103,21 +102,6 @@ export function readRepeat(value: string): Repeat | null {
     }
     default:
       return null;
-  }
-}
-
-/// `fub:repeat` di `repeat`, coi numeri del formato: due decimali.
-export function writeRepeat(repeat: Repeat): string {
-  const n = (value: number): string => formatNumber(value, 2);
-  switch (repeat.kind) {
-    case "radial":
-      return `radial ${repeat.count} ${n(repeat.center[0])} ${n(repeat.center[1])}`;
-    case "grid":
-      return `grid ${repeat.columns} ${repeat.rows} ${n(repeat.step[0])} ${n(repeat.step[1])}`;
-    case "mirror": {
-      const [[x1, y1], [x2, y2]] = repeat.axis;
-      return `mirror ${n(x1)} ${n(y1)} ${n(x2)} ${n(y2)}`;
-    }
   }
 }
 

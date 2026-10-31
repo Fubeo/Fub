@@ -9489,7 +9489,6 @@ button.draw-isolation-crumb:hover {
 }
 .draw-objects,
 .draw-properties,
-.draw-inspector,
 .draw-history,
 .draw-boards,
 .draw-library,
@@ -9836,113 +9835,6 @@ button.draw-isolation-crumb:hover {
 .draw-library-preview {
   color: var(--text);
 }
-
-/* I simboli: come le forme. Il riquadro ha un filo e, sotto il puntatore,
-   il fondo del passaggio; l'anteprima sta su un fondo chiaro come il foglio,
-   perché un simbolo ha i suoi colori. Il segno nell'angolo è una pastiglia:
-   il numero delle istanze in tinta tenue, la spunta e l'aggiornamento nel
-   colore della scelta, e sempre col loro segno. Un simbolo senza anteprima
-   ha al suo posto un riquadro tratteggiato. In sola lettura i riquadri
-   sbiadiscono e restano raggiungibili. */
-.draw-symbols-header,
-.draw-symbols-find,
-.draw-symbols-heading,
-.draw-symbols-note,
-.draw-symbols-empty,
-.draw-symbols-footer {
-  padding: 0 var(--space-4);
-}
-.draw-symbols-header {
-  gap: var(--space-1) var(--space-3);
-}
-.draw-symbols-title {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-}
-.draw-symbols-count,
-.draw-symbols-note,
-.draw-symbols-empty,
-.draw-symbols-footer {
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-.draw-symbols-search {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-}
-.draw-symbols-group {
-  gap: var(--space-1);
-  padding-bottom: var(--space-3);
-}
-.draw-symbols-heading {
-  color: var(--text);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-}
-.draw-symbols-grid {
-  gap: var(--space-2);
-  padding: 0 var(--space-3);
-}
-.draw-symbols-tile {
-  gap: var(--space-1);
-  padding: var(--space-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  transition:
-    background var(--duration-fast) var(--ease),
-    box-shadow var(--duration-fast) var(--ease),
-    transform var(--duration-fast) var(--ease);
-}
-.draw-symbols-tile:hover:not([aria-disabled="true"]) {
-  background: var(--overlay-hover);
-}
-.draw-symbols-tile[data-lifted] {
-  z-index: 1;
-  border-color: var(--accent);
-  background: var(--overlay-hover);
-  box-shadow: var(--shadow-md);
-  transform: scale(1.1);
-}
-.draw-symbols-tile[aria-disabled="true"] {
-  opacity: 0.4;
-}
-.draw-symbols-frame {
-  padding: var(--space-1);
-  border-radius: calc(var(--radius-sm) - 1px);
-  background: #ffffff;
-  color: #000000;
-}
-.draw-symbols-tile[data-picture="none"] .draw-symbols-frame {
-  border: 1px dashed var(--border);
-  background: transparent;
-}
-.draw-symbols-name {
-  font-size: var(--text-xs);
-  line-height: 1.25;
-}
-.draw-symbols-badge {
-  min-width: 1.25rem;
-  margin: calc(var(--space-1) * -1);
-  padding: 0 var(--space-1);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-elev);
-  color: var(--muted);
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.25rem;
-}
-.draw-symbols-tile[data-present] .draw-symbols-badge,
-.draw-symbols-tile[data-stale] .draw-symbols-badge {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-contrast);
-  font-weight: var(--weight-bold);
-}
 /* La presentazione. La tavola sta sulla carta bianca del foglio, come
    nell'editor; il laser e l'inchiostro sono rossi, con un alone chiaro il
    laser, perché si vedono sul disegno e non sul tema, come la carta. Lo
@@ -10116,89 +10008,6 @@ button.draw-isolation-crumb:hover {
 }
 .draw-access-moves > .draw-button {
   padding: 0 var(--space-3);
-  border: 1px solid var(--border);
-  color: var(--text);
-  font-size: var(--text-sm);
-}
-
-/* Gli attributi: nomi e valori come li scrive il file, in monospazio. Un
-   valore che si legge soltanto ha il bordo tratteggiato e nessun fondo; la
-   sua ragione, sotto, è in grigio, e un valore che non va è in rosso, col
-   bordo del campo. */
-.draw-inspector-header,
-.draw-inspector-empty,
-.draw-inspector-add {
-  padding: 0 var(--space-4);
-}
-.draw-inspector-header {
-  gap: var(--space-1);
-}
-.draw-inspector-title {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-}
-.draw-inspector-subject,
-.draw-inspector-empty,
-.draw-inspector-note {
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-.draw-inspector-table {
-  font-size: var(--text-sm);
-}
-.draw-inspector-key {
-  padding: 0 var(--space-2) 0 var(--space-4);
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-weight: var(--weight-medium);
-}
-.draw-inspector-value {
-  padding: var(--space-1) 0;
-}
-.draw-inspector-actions {
-  padding: var(--space-1) var(--space-2) var(--space-1) 0;
-}
-.draw-inspector-field {
-  gap: var(--space-2);
-}
-.draw-inspector-input {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-}
-.draw-inspector-input[readonly] {
-  border-style: dashed;
-  background: transparent;
-  color: var(--muted);
-}
-.draw-inspector-swatch {
-  border-radius: var(--radius-xs);
-  background: var(--swatch);
-  box-shadow: 0 0 0 1px var(--text);
-}
-.draw-inspector-note,
-.draw-inspector-error {
-  margin-top: var(--space-1);
-}
-.draw-inspector-error {
-  color: var(--danger);
-  font-size: var(--text-sm);
-}
-.draw-inspector-add {
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--border);
-}
-.draw-inspector-add-title {
-  color: var(--text);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-}
-.draw-inspector-add-button {
-  align-self: flex-start;
-  padding: 0 var(--space-4);
   border: 1px solid var(--border);
   color: var(--text);
   font-size: var(--text-sm);
@@ -10449,94 +10258,8 @@ button.draw-isolation-crumb:hover {
 .draw-hatch {
   gap: var(--space-3);
 }
-.draw-hatch-fields,
-.draw-hatch-motif {
+.draw-hatch-fields {
   gap: var(--space-3) var(--space-2);
-}
-.draw-hatch-motif > .draw-button {
-  padding: 0 var(--space-3);
-  font-size: var(--text-sm);
-}
-/* Gli effetti: ogni riga ha il suo filo; l'occhio è nel colore del testo
-   quando l'effetto si vede, in grigio e sbarrato quando no, e l'effetto
-   nascosto sbiadisce e ha il nome barrato, così lo stato non sta nel solo
-   colore. Il nome è in grassetto e, chiuso, dice i valori in breve in grigio;
-   il campione ha il colore dell'effetto. I campi della riga aperta stanno
-   sotto, rientrati. */
-.draw-effects {
-  gap: var(--space-3);
-}
-/* Il pulsante che aggiunge, in testa alla sezione: accanto al titolo, col
-   respiro di un campo dal bordo. */
-.draw-effects-add {
-  margin-inline-end: var(--space-2);
-}
-.draw-effects-state {
-  color: var(--text);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-}
-.draw-effects-list {
-  gap: var(--space-1);
-}
-.draw-effect {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-.draw-effect[data-open] {
-  background: var(--bg-active);
-}
-.draw-effect-head {
-  gap: var(--space-1);
-}
-.draw-effect-show,
-.draw-effect-remove {
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-}
-.draw-effect-show[aria-pressed="true"] {
-  color: var(--text);
-}
-.draw-effect-name {
-  gap: var(--space-2);
-  padding: 0 var(--space-2);
-  color: var(--text);
-  font-size: var(--text-sm);
-}
-.draw-effect-chip {
-  border: 1px solid var(--muted);
-  border-radius: var(--radius-xs);
-  background: var(--effect-color, transparent);
-}
-.draw-effect-title {
-  font-weight: var(--weight-bold);
-}
-.draw-effect-summary {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.draw-effect-name > svg {
-  color: var(--muted);
-  transition: transform var(--duration-fast) var(--ease);
-}
-.draw-effect[data-hidden] .draw-effect-title {
-  text-decoration: line-through;
-}
-.draw-effect[data-hidden] .draw-effect-title,
-.draw-effect[data-hidden] .draw-effect-summary,
-.draw-effect[data-hidden] .draw-effect-chip {
-  opacity: 0.55;
-}
-.draw-effect-fields {
-  gap: var(--space-3) var(--space-2);
-  padding: var(--space-1) var(--space-3) var(--space-3);
-}
-.draw-effects-actions {
-  gap: var(--space-2);
-}
-.draw-effects-actions .draw-button {
-  padding: 0 var(--space-3);
-  font-size: var(--text-sm);
 }
 /* Un colore misto: righe del colore del testo, che non sono un colore. */
 .draw-swatch-frame[data-shape="mixed"] > .draw-swatch {
@@ -10555,9 +10278,6 @@ button.draw-isolation-crumb:hover {
   background-image:
     linear-gradient(45deg, var(--text) 25%, transparent 25%, transparent 75%, var(--text) 75%),
     linear-gradient(45deg, var(--text) 25%, transparent 25%, transparent 75%, var(--text) 75%);
-}
-.draw-inspector[data-nested] {
-  padding: 0;
 }
 
 /* In Lettura, il disegno a parole sotto l'immagine. */
@@ -15804,56 +15524,6 @@ h6.ui-heading {
 .draw-toolbar-reset {
   align-self: flex-start;
   min-height: 44px;
-}
-/* «Aggiorna dalla libreria» e «Rendi modificabile»: prima e dopo, sullo
-   stesso fondo chiaro dei riquadri del pannello, col nome sotto in tinta
-   tenue. */
-.modale .draw-symbol-update-message,
-.modale .draw-editable-message {
-  margin: 0;
-}
-.modale .draw-symbol-update-pair,
-.modale .draw-editable-pair {
-  gap: var(--space-3);
-}
-.modale .draw-symbol-update-side,
-.modale .draw-editable-side {
-  gap: var(--space-1);
-}
-.modale .draw-symbol-update-frame,
-.modale .draw-editable-frame {
-  padding: var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: #ffffff;
-  color: #000000;
-}
-.modale .draw-symbol-update-caption,
-.modale .draw-editable-caption {
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-/* Gli elenchi di «Rendi modificabile»: i titoli piccoli, le righe in tinta
-   tenue, l'ultima riga di ciò che non si elenca in corsivo. */
-.modale .draw-editable-details {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.modale .draw-editable-heading {
-  margin: 0;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-}
-.modale .draw-editable-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-.modale .draw-editable-more {
-  font-style: italic;
 }
 /* La finestra «Guide»: le righe in una tabella che scorre, coi titoli delle
    colonne fermi in cima; sotto, i pulsanti che aggiungono una guida o le

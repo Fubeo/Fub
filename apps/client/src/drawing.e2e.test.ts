@@ -249,7 +249,7 @@ function drawWorkspace(value: string, source: "default" | "vault" = "vault"): Se
 }
 
 /// Gli strumenti della colonna del Completo, coi primi delle tendine.
-const FULL_TOOLS = ["select", "hand", "board", "pen", "eraser", "rect", "connector", "bezier", "text", "eyedropper"];
+const FULL_TOOLS = ["select", "hand", "board", "pen", "eraser", "rect", "connector", "text", "eyedropper"];
 
 /// Gli strumenti della colonna del Semplice.
 const SIMPLE_TOOLS = ["select", "hand", "pen", "eraser", "rect", "text"];
@@ -609,7 +609,7 @@ describe("il livello e la griglia del disegno", () => {
     press("#");
     expect(gridShown()).toBe(true);
     await waitFor("la griglia si ricorda", () => host.atGate("setViewState").some((call) => call.args[0] === "draw.grid"));
-    expect(await host.module.api.viewState("draw.grid")).toEqual({ shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
+    expect(await host.module.api.viewState("draw.grid")).toEqual({ shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE });
 
     await open("albero.svg");
     expect(await activeTab()).toMatchObject({ k: "doc", doc: "albero.svg" });

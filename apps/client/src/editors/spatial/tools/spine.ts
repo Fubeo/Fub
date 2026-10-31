@@ -22,13 +22,10 @@
 // - **La stessa spina per lo stesso inchiostro:** dipende soltanto dai
 //   campioni e dalla tolleranza.
 
-import { createInk, inkChannel, inkLength, inkPoint, type Ink } from "../ink/codec";
-import { INK_MAX_SAMPLES, quantizeAzimuth, quantizeCoordinate } from "../../../ink/sample";
-import { derivativeAt, pointAt, type Curve } from "../scene/curves";
-import { remEuclid } from "../scene/geometry";
+import { pointAt, type Curve } from "../scene/curves";
 import type { Point } from "../scene/matrix";
 import { AWAY_SAMPLES, REFINE_ROUNDS, away, closer, cumulative, endDirection, fitCubics, onLine, straight, unit, type Fitted } from "./fit";
-import { curveAt, parseKey, type Link, type NodeKey, type Subpath } from "./nodes";
+import { curveAt, type Link, type Subpath } from "./nodes";
 
 /// Un posto sulla spina: il segmento e il parametro. Su una spina di un nodo
 /// solo, senza segmenti, è `{ link: 0, t: 0 }`.
@@ -53,17 +50,9 @@ export const spineTolerance = (size: number): number => Math.max(0.5, size / 2);
 /// perché la spina vi metta uno spigolo.
 const CORNER_RADIANS = (75 * Math.PI) / 180;
 
-const plus = (a: Point, b: Point): Point => [a[0] + b[0], a[1] + b[1]];
 const minus = (a: Point, b: Point): Point => [a[0] - b[0], a[1] - b[1]];
 const dot = (a: Point, b: Point): number => a[0] * b[0] + a[1] * b[1];
 const distance = (a: Point, b: Point): number => Math.hypot(a[0] - b[0], a[1] - b[1]);
-const lerp = (a: Point, b: Point, f: number): Point => [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
-
-const rotate = (a: Point, radians: number): Point => {
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  return [a[0] * cos - a[1] * sin, a[0] * sin + a[1] * cos];
-};
 
 // ---------------------------------------------------------------------------
 // La spina dai campioni.
@@ -170,21 +159,6 @@ export function placePoint(sub: Subpath, place: Place): Point {
   return pointAt(from, curve, place.t);
 }
 
-/// L'angolo del verso in cui la spina `sub` passa per `place`; `null` se lì
-/// non va da nessuna parte.
-function headingAt(sub: Subpath, place: Place): number | null {
-  if (sub.links.length === 0) return null;
-  const { from, curve } = curveAt(sub, place.link);
-  let d = derivativeAt(from, curve, place.t);
-  // Una maniglia ritirata sul nodo: il verso di poco più in là.
-  if (Math.hypot(d[0], d[1]) < 1e-9) {
-    const a = pointAt(from, curve, Math.max(0, place.t - 1e-3));
-    const b = pointAt(from, curve, Math.min(1, place.t + 1e-3));
-    d = minus(b, a);
-  }
-  return Math.hypot(d[0], d[1]) < 1e-12 ? null : Math.atan2(d[1], d[0]);
-}
-
 /// La lunghezza del segmento `link`, sulla spezzata di sedici passi.
 function linkLength(sub: Subpath, link: number): number {
   const { from, curve } = curveAt(sub, link);
@@ -236,18 +210,6 @@ function nearestPlace(sub: Subpath, from: number, to: number, p: Point): Place {
     }
   }
   return best;
-}
-
-/// I nodi della spina in `moved` di una modifica di `nodes.ts`: dal numero
-/// di prima a quello di dopo.
-export function spineMoves(moved: ReadonlyMap<NodeKey, NodeKey>): Map<number, number> {
-  const out = new Map<number, number>();
-  for (const [from, to] of moved) {
-    const [s, at] = parseKey(from);
-    const [t, now] = parseKey(to);
-    if (s === 0 && t === 0) out.set(at, now);
-  }
-  return out;
 }
 
 /// Dove va ogni posto di `places` quando la spina `before` diventa `after`.
@@ -305,92 +267,4 @@ export function movedPlaces(before: Subpath, after: Subpath, moved: ReadonlyMap<
 export interface Following {
   readonly dense: boolean;
   readonly gap: number;
-}
-
-/// L'inchiostro `ink`, con la spina `spine`, quando la spina diventa `after`
-/// con i nodi portati da `moved`: i campioni ai loro posti sulla spina
-/// nuova, e la spina nuova coi loro posti, da rileggere senza ricalcolarla.
-/// `null` se non resta nessun campione, o se l'inchiostro non si scrive.
-export function followedInk(ink: Ink, spine: Spine, after: Subpath, moved: ReadonlyMap<number, number> | null, how: Following): { readonly ink: Ink; readonly spine: Spine } | null {
-  const width = ink.channels.length;
-  const count = inkLength(ink);
-  if (count !== spine.places.length) return null;
-  const azimuth = inkChannel(ink, "z");
-  const time = inkChannel(ink, "t");
-  const places = movedPlaces(spine.sub, after, moved, spine.places);
-  /// Un campione da scrivere: la riga dei valori, il posto, lo scarto com'era
-  /// e quanto gira, e il punto di prima.
-  interface Row {
-    readonly values: number[];
-    readonly place: Place;
-    readonly offset: Point;
-    readonly turn: number;
-    readonly old: Point;
-  }
-  const turnAt = (place: Place, was: Place): number => {
-    const now = headingAt(after, place);
-    const then = headingAt(spine.sub, was);
-    return now === null || then === null ? 0 : remEuclid(now - then + Math.PI, 2 * Math.PI) - Math.PI;
-  };
-  const rows: Row[] = [];
-  for (let i = 0; i < count; i++) {
-    const place = places[i];
-    if (place === null || place === undefined) continue;
-    rows.push({ values: ink.values.slice(i * width, (i + 1) * width), place, offset: spine.offsets[i]!, turn: turnAt(place, spine.places[i]!), old: inkPoint(ink, i) });
-  }
-  if (rows.length === 0) return null;
-  const pointOf = (row: Row): Point => plus(placePoint(after, row.place), rotate(row.offset, row.turn));
-  // Campioni in mezzo, dove due vicini si sono allontanati.
-  let out: Row[] = rows;
-  if (how.dense && after.links.length > 0) {
-    out = [];
-    let budget = INK_MAX_SAMPLES - rows.length;
-    rows.forEach((row, i) => {
-      out.push(row);
-      const next = rows[i + 1];
-      if (next === undefined || budget <= 0) return;
-      const was = distance(row.old, next.old);
-      const now = distance(pointOf(row), pointOf(next));
-      const step = Math.max(was, how.gap);
-      if (!(now > 1.5 * step)) return;
-      const extra = Math.min(budget, Math.ceil(now / step) - 1);
-      budget -= extra;
-      const g0 = row.place.link + row.place.t;
-      const g1 = next.place.link + next.place.t;
-      for (let k = 1; k <= extra; k++) {
-        const f = k / (extra + 1);
-        const g = g0 + (g1 - g0) * f;
-        const link = Math.min(after.links.length - 1, Math.max(0, Math.floor(g)));
-        const place = { link, t: Math.min(1, Math.max(0, g - link)) };
-        const values = row.values.map((value, j) => {
-          if (j === azimuth) return value + (remEuclid(next.values[j]! - value + 180, 360) - 180) * f;
-          return value + (next.values[j]! - value) * f;
-        });
-        // Lo scarto e il giro di mezzo.
-        const turn = row.turn + (remEuclid(next.turn - row.turn + Math.PI, 2 * Math.PI) - Math.PI) * f;
-        out.push({ values, place, offset: lerp(row.offset, next.offset, f), turn, old: lerp(row.old, next.old, f) });
-      }
-    });
-  }
-  const values: number[] = [];
-  const offsets: Point[] = [];
-  const firstTime = time === null ? 0 : Math.round(out[0]!.values[time]!);
-  for (const row of out) {
-    const at = pointOf(row);
-    const x = quantizeCoordinate(at[0], ink.scale);
-    const y = quantizeCoordinate(at[1], ink.scale);
-    offsets.push(minus([x / ink.scale, y / ink.scale], placePoint(after, row.place)));
-    row.values.forEach((value, j) => {
-      if (j === 0) values.push(x);
-      else if (j === 1) values.push(y);
-      else if (j === azimuth) values.push(quantizeAzimuth(value + (row.turn * 180) / Math.PI));
-      else if (j === time) values.push(Math.round(value) - firstTime);
-      else values.push(Math.round(value));
-    });
-  }
-  try {
-    return { ink: createInk(ink.scale, ink.channels, values), spine: { sub: after, places: out.map((row) => row.place), offsets } };
-  } catch {
-    return null;
-  }
 }

@@ -92,10 +92,7 @@ angoli, e ogni cambio riscrive il `d` da lì:
 ```
 
 Spostare, scalare e ruotare cambiano soltanto `transform`, come per gli altri
-oggetti. Fra gli [strumenti avanzati](drawing-expert.md) lo strumento Nodi mostra i vertici:
-portarli tutti insieme sposta la forma, che resta un poligono o una stella;
-spostarne uno ne fa un tracciato. «Oggetto in tracciato» toglie i parametri e
-lascia il `d`.
+oggetti.
 La grammatica è in [Formato della scena, poligoni e stelle](../reference/scene-format-shapes.md).
 
 ## Chi monta l'editor

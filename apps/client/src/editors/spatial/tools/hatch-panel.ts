@@ -1,15 +1,15 @@
 // La campitura degli oggetti scelti, come sezione del pannello delle
 // proprietà (livello Standard): il tipo, in un menu, e i campi della
-// campitura. All'Esperto il menu offre anche i motivi del documento, e un
-// motivo scelto si rinomina e si elimina da qui. Che cosa mostrare, e ogni
+// campitura. Un motivo del documento che il disegno porta si legge per nome
+// nel pulsante, e non si sceglie dal menu (decisione 0231). Che cosa
+// mostrare, e ogni
 // cambio, li decide l'editor, con [`hatchOps`]; qui c'è come si vede, si
 // sceglie e si raggiunge.
 //
 // - **Il menu del tipo** è un pulsante che dice la scelta di adesso, con la
 //   sua figura, e ne apre le voci: Nessuna e le cinque campiture pronte,
-//   ciascuna con la sua figura; all'Esperto, sotto, i motivi del documento
-//   per nome e, dopo una riga, «Motivo dalla selezione». Una campitura
-//   personalizzata, il motivo di un altro programma e una scelta mista si
+//   ciascuna con la sua figura. Una campitura personalizzata, un motivo del
+//   documento, il motivo di un altro programma e una scelta mista si
 //   leggono nel pulsante, e non sono voci da scegliere. Una scelta vale per
 //   tutti gli oggetti scelti che hanno un riempimento.
 // - **I campi sono della campitura**: il colore delle righe, il fondo (un
@@ -28,9 +28,6 @@
 //   documento, di cui si scrive il colore: la campitura non resta legata a
 //   un campione. Il suo campione apre i colori del documento e quelli della
 //   tavolozza; il fondo ha anche «Nessuno».
-// - **Un motivo del documento scelto** (Esperto) ha il suo nome, che si
-//   riscrive, e «Elimina motivo»: chi lo usava torna a un colore pieno.
-//   Il nome segue le regole dei nomi dei colori del documento.
 
 import { resolvedLanguage } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
@@ -41,12 +38,10 @@ import { showContextMenu, type MenuItem } from "../../../ui/menu";
 import type { LengthUnit } from "../scene/rulers";
 import { plural, t, type DrawKey } from "../strings";
 import { clampSpacing, clampWidth, HATCH_PRESETS, MAX_SPACING, MIN_SPACING, MIN_WIDTH, normalAngle, type HatchPreset } from "./hatches";
-import { cleanName } from "./naming";
 import { customColor, PALETTE } from "./palette";
 import type { HatchChange, HatchChoice, HatchView } from "./patterns";
 import { ANGLE_UNITS, evaluate, lengthUnits, type QuantityProblem } from "./quantity";
 import { FIELD_PLACES, fromUnit, toUnit } from "./rulers";
-import { swatchNameProblem } from "./swatches";
 
 /// Il nome della figura di una scelta del menu; `null` per la scelta mista,
 /// che non ne ha una.
@@ -102,25 +97,12 @@ export interface HatchPanelView {
   readonly swatches: readonly HatchSwatch[];
   /// I motivi del documento, per dire il nome di quello in uso.
   readonly motifs: readonly HatchMotif[];
-  /// Vero all'Esperto: il menu offre i motivi e «Motivo dalla selezione», e
-  /// un motivo scelto si rinomina e si elimina.
-  readonly expert: boolean;
 }
 
 export interface HatchPanelOptions {
   /// Dà `change` alle campiture degli oggetti scelti, col nome `label` nella
   /// cronologia. `null` se è fatto, altrimenti perché no.
   onChange(change: HatchChange, label: DrawKey): string | null;
-  /// «Motivo dalla selezione»: lo fa l'editor, che dice com'è andata.
-  onMotif(): void;
-  /// Perché «Motivo dalla selezione» non si fa con gli oggetti scelti, a
-  /// parole; `null` se si fa. Si chiede quando il menu si apre.
-  motifReason(): string | null;
-  /// Dà il nome `name` al motivo `id`. `null` se è fatto, altrimenti perché
-  /// no.
-  onRename(id: string, name: string): string | null;
-  /// Elimina il motivo `id`. `null` se è fatto, altrimenti perché no.
-  onDelete(id: string): string | null;
   /// Dice `text` a chi usa uno screen reader.
   announce(text: string): void;
 }
@@ -135,7 +117,7 @@ export interface HatchPanel {
   relabel(): void;
 }
 
-type FieldId = "color" | "background" | "spacing" | "width" | "angle" | "name";
+type FieldId = "color" | "background" | "spacing" | "width" | "angle";
 
 /// Un campo, col testo che ha scritto il disegno.
 interface Field {
@@ -161,7 +143,7 @@ interface Field {
 }
 
 /// Il nome del passo della cronologia di ogni campo.
-const ACTIONS: Readonly<Record<Exclude<FieldId, "name">, DrawKey>> = {
+const ACTIONS: Readonly<Record<FieldId, DrawKey>> = {
   color: "draw.action.hatch_color",
   background: "draw.action.hatch_background",
   spacing: "draw.action.hatch_spacing",
@@ -185,7 +167,7 @@ export function createHatchPanel(life: Lifetime, options: HatchPanelOptions): Ha
   element.className = "draw-hatch";
 
   const EMPTY: HatchView = { count: 0, hatched: 0, choice: "none", kind: null, angle: null, spacing: null, width: null, color: null, background: null };
-  let view: HatchPanelView = { key: "", hatch: EMPTY, unit: "pt", swatches: [], motifs: [], expert: false };
+  let view: HatchPanelView = { key: "", hatch: EMPTY, unit: "pt", swatches: [], motifs: [] };
   let editable = false;
   /// Vero mentre un cambio è in corso: la selezione può prendere un'altra
   /// chiave, ma è la stessa.
@@ -273,16 +255,7 @@ export function createHatchPanel(life: Lifetime, options: HatchPanelOptions): Ha
   fieldsError.id = identifier("draw-hatch-error");
   fieldsError.hidden = true;
 
-  const motifGroup = document.createElement("div");
-  motifGroup.className = "draw-hatch-motif";
-  motifGroup.setAttribute("role", "group");
-  motifGroup.hidden = true;
-  const motifError = document.createElement("p");
-  motifError.className = "draw-properties-error";
-  motifError.id = identifier("draw-hatch-error");
-  motifError.hidden = true;
-
-  element.append(note, kindRoot, fields, motifGroup);
+  element.append(note, kindRoot, fields);
 
   const textInput = (): HTMLInputElement => {
     const input = document.createElement("input");
@@ -334,12 +307,6 @@ export function createHatchPanel(life: Lifetime, options: HatchPanelOptions): Ha
       picker.className = "draw-properties-picker";
       box.append(chip, input, picker);
       label.append(name);
-    } else if (id === "name") {
-      input.spellcheck = true;
-      input.setAttribute("autocapitalize", "sentences");
-      box.className = "draw-properties-name";
-      box.append(input);
-      label.append(name);
     } else {
       input.setAttribute("role", "spinbutton");
       input.inputMode = "decimal";
@@ -363,12 +330,7 @@ export function createHatchPanel(life: Lifetime, options: HatchPanelOptions): Ha
   const widthField = createField(fields, "width", "2", fieldsError);
   const angleField = createField(fields, "angle", "1", fieldsError);
   fields.append(fieldsError);
-  const nameField = createField(motifGroup, "name", "all", motifError);
-  const deleteButton = document.createElement("button");
-  deleteButton.type = "button";
-  deleteButton.className = "draw-button";
-  motifGroup.append(deleteButton, motifError);
-  const allFields = [colorField, backgroundField, spacingField, widthField, angleField, nameField];
+  const allFields = [colorField, backgroundField, spacingField, widthField, angleField];
 
   // --- Ciò che si mostra ----------------------------------------------------------
 
@@ -412,8 +374,6 @@ export function createHatchPanel(life: Lifetime, options: HatchPanelOptions): Ha
         return hatch.width === null ? "" : lengthText(hatch.width);
       case "angle":
         return hatch.angle === null ? "" : numberText(hatch.angle, 2);
-      case "name":
-        return chosenMotif()?.name ?? "";
     }
   };
 
@@ -553,16 +513,6 @@ export function createHatchPanel(life: Lifetime, options: HatchPanelOptions): Ha
         fresh,
       );
       paintNumber(angleField, "draw.hatch.angle", hatch.angle, textOf(angleField), "°", { min: -180, max: 180 }, fresh);
-
-      // Il motivo del documento scelto, all'Esperto.
-      const motif = view.expert ? chosenMotif() : null;
-      motifGroup.hidden = motif === null;
-      motifGroup.setAttribute("aria-label", t("draw.hatch.motif.group", { name: motif?.name ?? "" }));
-      setText(nameField.name, t("draw.hatch.name"));
-      showField(nameField, textOf(nameField), fresh);
-      nameField.input.readOnly = !editable;
-      setText(deleteButton, t("draw.hatch.delete"));
-      offWhen(deleteButton, !editable);
     } finally {
       painting = false;
     }
@@ -638,30 +588,6 @@ export function createHatchPanel(life: Lifetime, options: HatchPanelOptions): Ha
         }),
       ),
     ];
-    if (!view.expert) return items;
-    motifs().forEach((motif, at) => {
-      const value = `pattern:${motif.id}` as const;
-      items.push({
-        label: motif.name,
-        icon: "draw-hatch-pattern",
-        choice: "radio",
-        checked: choice === value,
-        separator: at === 0,
-        swatches: [motif.color],
-        ...(choice === value ? { selected: true } : {}),
-        run: () => {
-          if (view.hatch.choice !== value) choose({ pattern: motif.id });
-        },
-      });
-    });
-    const reason = editable ? options.motifReason() : readOnly();
-    items.push({
-      label: t("draw.hatch.motif.make"),
-      separator: true,
-      disabled: reason !== null,
-      ...(reason === null ? {} : { description: reason }),
-      run: () => options.onMotif(),
-    });
     return items;
   };
 
@@ -827,64 +753,6 @@ export function createHatchPanel(life: Lifetime, options: HatchPanelOptions): Ha
     writeNumber(field, value, true);
   };
 
-  // --- Il motivo ------------------------------------------------------------------
-
-  /// I campioni e i motivi del documento, per i nomi.
-  const names = (): ReadonlyArray<{ readonly id: string; readonly name: string }> => [...view.swatches, ...motifs()];
-
-  const commitName = (loud: boolean): boolean => {
-    const motif = chosenMotif();
-    const field = nameField;
-    if (motif === null || !view.expert || !editable || field.input.value === field.shown) return true;
-    const name = cleanName(field.input.value);
-    const problem = swatchNameProblem(names(), name, motif.id);
-    if (problem !== null) {
-      const text = problem === "empty" ? t("draw.colors.problem.empty") : t(problem === "taken" ? "draw.hatch.problem.taken" : "draw.colors.problem.reads_color", { name });
-      return fail(field, text, loud);
-    }
-    if (name === motif.name) {
-      field.input.value = field.shown;
-      showError(null, field.error, null);
-      return true;
-    }
-    const draft = field.input.value;
-    const before = field.shown;
-    field.input.value = field.shown = name;
-    showError(null, field.error, null);
-    carry = true;
-    let failure: string | null;
-    try {
-      failure = options.onRename(motif.id, name);
-    } finally {
-      carry = false;
-    }
-    if (failure === null) return true;
-    field.shown = before;
-    field.input.value = draft;
-    return fail(field, failure, loud);
-  };
-
-  life.listen(deleteButton, "click", () => {
-    const motif = chosenMotif();
-    if (motif === null) return;
-    if (!editable) return options.announce(readOnly());
-    carry = true;
-    let failure: string | null;
-    try {
-      failure = options.onDelete(motif.id);
-    } finally {
-      carry = false;
-    }
-    if (failure !== null) {
-      showError(nameField, motifError, failure);
-      options.announce(failure);
-      return;
-    }
-    // Il motivo se n'è andato con i suoi campi: il fuoco resta nella
-    // sezione, al menu.
-    kindButton.focus({ preventScroll: true });
-  });
-
   // --- I tasti --------------------------------------------------------------------
 
   /// Il campo di cui `target` è il controllo che si scrive o il selettore.
@@ -903,8 +771,7 @@ export function createHatchPanel(life: Lifetime, options: HatchPanelOptions): Ha
       if (field.picker !== null) field.picker.value = customColor(field.shown) ?? field.picker.value;
       if (field.chip !== null) showChip(field, colorOf(field));
     } else if (event.key === "Enter" && plain && !event.shiftKey) {
-      if (field === nameField) commitName(true);
-      else if (field === colorField || field === backgroundField) {
+      if (field === colorField || field === backgroundField) {
         if (field.input.value !== field.shown) commitColor(field, field.input.value, true);
       } else commitNumber(field, true);
     } else if ((event.key === "ArrowUp" || event.key === "ArrowDown") && plain && (field === spacingField || field === widthField || field === angleField)) {
@@ -922,8 +789,7 @@ export function createHatchPanel(life: Lifetime, options: HatchPanelOptions): Ha
     // Un campo che se n'è andato non scrive: il valore a metà era per ciò
     // che mostrava prima.
     if (field === null || event.target === field.picker || field.root.closest("[hidden]") !== null) return;
-    if (field === nameField) commitName(false);
-    else if (field === colorField || field === backgroundField) {
+    if (field === colorField || field === backgroundField) {
       if (field.input.value !== field.shown) commitColor(field, field.input.value, false);
     } else commitNumber(field, false);
   });

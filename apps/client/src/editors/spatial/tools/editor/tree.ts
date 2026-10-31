@@ -108,7 +108,6 @@ export interface TreeContext {
   showBoards: (open: boolean, focus?: boolean) => void;
   syncBoards: () => void;
   showLibrary: (open: boolean, focus?: boolean) => void;
-  showSymbols: (open: boolean, focus?: boolean) => void;
   showAccess: (open: boolean, focus?: boolean) => void;
   accessNames: Map<string, string>;
   accessName: (key: string) => string;
@@ -124,8 +123,7 @@ export interface TreeContext {
 /// Monta l'albero degli oggetti.
 export function installTree(ctx: EditorContext): void {
   const {
-    has, drawingFonts, measureText, history, surface, tree, historyPanel, accessPanel, boardsPanel, libraryPanel, symbolLibraries, symbolsPanel,
-    boardsButton, libraryButton, symbolsButton, historyButton, accessButton, titleInput, images, builder, indexer, boardsNow, editable, isolatedNode,
+    has, drawingFonts, measureText, history, surface, tree, historyPanel, accessPanel, boardsPanel, libraryPanel, boardsButton, libraryButton, historyButton, accessButton, titleInput, images, builder, indexer, boardsNow, editable, isolatedNode,
     currentIndex, newIds, announce, announceSelection, hundredthsText, selectedUnits, measuresText
   } = ctx;
   // --- L'albero degli oggetti ----------------------------------------------
@@ -631,29 +629,6 @@ export function installTree(ctx: EditorContext): void {
     }
   }
   ctx.showLibrary = showLibrary;
-
-  /// Apre o chiude i simboli; aperti, il fuoco va al campo di ricerca, e le
-  /// librerie del vault si leggono, la prima volta. Un trascinamento in
-  /// corso finisce.
-  function showSymbols(open: boolean, focus = true): void {
-    if (open && !has("symbols")) return;
-    // Nell'ispettore: la sua scheda, e il fuoco ci va.
-    if (ctx.routed("resources", open)) {
-      if (open && focus && !symbolsPanel.element.hidden) symbolsPanel.focus();
-      return;
-    }
-    if (!open && symbolsPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
-    if (!open) ctx.cancelSymbolDrag();
-    symbolsPanel.element.hidden = !open;
-    symbolsButton.setAttribute("aria-expanded", String(open));
-    ctx.syncDock();
-    if (open) {
-      symbolLibraries?.start();
-      ctx.syncSymbols();
-      if (focus) symbolsPanel.focus();
-    }
-  }
-  ctx.showSymbols = showSymbols;
 
   /// Apre o chiude la verifica dell'accessibilità; aperta, il fuoco ci va.
   /// Chiusa, dimentica ciò che ha letto.

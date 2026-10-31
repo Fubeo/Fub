@@ -14,8 +14,10 @@ Una forma sintetica del [formato della scena](scene-format.md), §6: un
 `path` con `fub:shape="width"` e `fub:geom`, e il suo `d` calcolato dalla
 geometria. Il `d` è il contorno già pieno, dipinto col riempimento: un altro
 programma vede una forma piena e la disegna uguale, mentre FubDraw ne legge
-la linea centrale e il profilo, e cambiarli riscrive `d`. Come si disegna è
-in [Disegni, spessore variabile](../product/drawing-width.md). Le sezioni
+la linea centrale e il profilo, e cambiarli riscrive `d`. La penna con
+l'uscita a tracciato la scrive ([Disegni, penna](../product/drawing-pen.md));
+lo strumento che la modificava se n'è andato col livello Esperto
+(decisione 0231). Le sezioni
 del formato si citano come «formato della scena, §N».
 
 ```xml

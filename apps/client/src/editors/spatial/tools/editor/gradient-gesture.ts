@@ -23,7 +23,7 @@ import {
 import { GRID_MAJOR, lineBeyond } from "../grid";
 import { DOUBLE_TAP_MS, DOUBLE_TAP_PX, DRAG_PX, HIT_PX, NUDGE, NUDGE_SHIFT } from "./constants";
 import type { EditorContext } from "./context";
-import { holdsPath, sign } from "./helpers";
+import { holdsPath, percentText, sign } from "./helpers";
 import type { GradientGesture, GradientGrab, GradientRead, GradientSpot } from "./types";
 
 /// Come si vedono i capi di una sfumatura sul foglio: il primo capo e il
@@ -96,7 +96,7 @@ export interface GradientGestureContext {
 export function installGradientGesture(ctx: EditorContext): void {
   const {
     has, panel, currentIndex, announce, selectionSaid, stepNow, lengthText, lengthSpoken, selectedUnits, degreesText, showGrip, showHandles, clearPreviews,
-    showPanel, syncProperties, previewGradient, select, frameBounds, cancelGesture, gridOn, guided, percentText, gradientNow, gradientPicked, pickGradient,
+    showPanel, syncProperties, previewGradient, select, frameBounds, cancelGesture, gridOn, guided, gradientNow, gradientPicked, pickGradient,
     rampOf, rampSpot, gripPoint, stopSpot, focusShown, spotPoint, gradientSpotAt, gradientSpotText, gradientFor, groupParts, sameLookParts, drawnKind,
     drawnStops, gripPivot, sameStops, gradientGuides, writeGradient, settleMovedStop, placeGradient, addGradientStop, removeGradientStop
   } = ctx;

@@ -26,18 +26,16 @@ import {
   type GuideTarget,
   type Spacing,
 } from "../guides";
-import { nodeKey, parseKey } from "../nodes";
-import type { PenNode } from "../bezier";
 import { snapPoint } from "../grid";
 import { turnTo, type View } from "../../view";
 import { SceneIndex, type Unit } from "../hit";
 import { COVER_COLOR, customColor, DEFAULT_COLOR, HIGHLIGHTER_COLOR, RECENT_COLORS, swatchOf } from "../palette";
 import { featuresFor, toolAfter, toolsOf, type Feature, type Level, type ToolId } from "../registry";
 import type { PolygonTool } from "../shapes";
-import { HIT_PX, NO_KEYS } from "./constants";
+import { HIT_PX } from "./constants";
 import type { EditorContext } from "./context";
 import { disjoint, layerRefusal, layerTitle, translated } from "./helpers";
-import type { DrawStyle, NodeGrab, NodesGesture } from "./types";
+import type { DrawStyle } from "./types";
 
 /// Quanti strumenti di prima l'editor ricorda per il menu radiale.
 const RECENT_MAX = 6;
@@ -78,9 +76,6 @@ export interface ToolingContext {
   rulerTargets: (skip: number | null) => GuideTarget[];
   guidesFor: (owner: object, skip: readonly string[], points?: () => readonly Point[], skipGuide?: number | null) => GuideIndex;
   guided: (p: Point, guides: () => GuideIndex, pointer: InkPointerType) => Point;
-  nodeDragTo: (g: NodesGesture, grab: Extract<NodeGrab, { readonly origin: Point }>) => Point;
-  noNodes: readonly PenNode[];
-  bezierGuides: () => GuideIndex;
   /// Le guide si vedono, e le misure con Alt: col gesto che finisce, o col
   /// tasto lasciato, vanno tolte.
   guiding: boolean;
@@ -99,7 +94,7 @@ export function installTooling(ctx: EditorContext): void {
   const {
     profile, folio, has, styles, style, toolLabel, widthsNow, live, showSurfaceHint, showToolMode, suggestions, field, indexer, boardsNow,
     chosenSheet, sheetAt, isolatedNode, isolatedThrough, isolationSteps, currentIndex, currentPage, announce, showPage, surfaceSize, showGrid,
-    setCamera, stepNow, lengthText, lengthSpoken, guidesShown, showGuideLines, viewCenter, selectedUnits, pickedIn, editedUnits, showGrip, showHandles,
+    setCamera, stepNow, lengthText, lengthSpoken, guidesShown, showGuideLines, viewCenter, selectedUnits, showGrip, showHandles,
     labelOf, showPanelByDefault, syncProperties, currentLayer, syncControls, nameOfNode, options
   } = ctx;
   // --- Strumenti --------------------------------------------------------------
@@ -109,12 +104,6 @@ export function installTooling(ctx: EditorContext): void {
     const offered = featuresFor(next, ctx.picked, profile);
     if (next === ctx.level && offered.size === ctx.features.size && [...offered].every((feature) => ctx.features.has(feature))) return;
     ctx.finishText();
-    // Il tracciato della penna di Bézier si conclude prima che la penna se
-    // ne vada.
-    if (!offered.has("bezier")) {
-      cancelGesture();
-      ctx.finishBezier(false, true);
-    }
     const hadPanel = has("properties");
     ctx.level = next;
     ctx.features = offered;
@@ -158,17 +147,12 @@ export function installTooling(ctx: EditorContext): void {
       ctx.finishText();
       cancelGesture();
       const before = live.textContent;
-      ctx.finishBezier(false, true);
       // E applica il ritaglio, come in Illustrator.
       ctx.applyCrop();
       if (live.textContent !== before) finished = (live.textContent ?? "").trim();
       ctx.recentTools = [ctx.tool, ...ctx.recentTools.filter((each) => each !== ctx.tool && each !== id)].slice(0, RECENT_MAX);
-      ctx.forgetBuilder();
-      // Il punto scelto dello Spessore è dello strumento, e le immagini
-      // aperte del contagocce, e il capo scelto della sfumatura: il punto
-      // scelto è anche del pannello.
-      ctx.widthPicked = null;
-      ctx.widthHover = null;
+      // Le immagini aperte del contagocce sono dello strumento, e il capo
+      // scelto della sfumatura: il punto scelto è anche del pannello.
       ctx.dropperHover = null;
       ctx.dropPixels();
       ctx.gradientGrip = null;
@@ -195,17 +179,12 @@ export function installTooling(ctx: EditorContext): void {
     ctx.connectorHover = null;
     if (id === "connector" && ctx.pointerAt !== null) ctx.hoverConnector(ctx.pointerAt.at, ctx.pointerAt.pointer);
     const named = t("draw.announce.tool", { tool: t(toolLabel(id)) });
-    // Con lo strumento Nodi, anche di che cosa si modificano i nodi; col
-    // Costruttore, su quante regioni lavora; con lo strumento Tavola, quale
+    // Con lo strumento Tavola, anche quale
     // tavola è scelta; col contagocce, dove va ciò che prende; con lo
     // strumento Sfumatura, dove va la sfumatura.
     const sheet = id === "board" ? chosenSheet() : null;
     const target =
-      id === "nodes"
-        ? ctx.targetText()
-        : id === "builder"
-          ? ctx.builderText()
-          : id === "eyedropper"
+      id === "eyedropper"
             ? ctx.dropperFor()
             : id === "gradient"
               ? ctx.gradientFor()
@@ -253,9 +232,8 @@ export function installTooling(ctx: EditorContext): void {
     style().swatch = swatch;
     syncControls();
     // Mentre si scrive, il colore va a ciò che è scelto nel campo, o a ciò
-    // che si scriverà; e così il tracciato della penna.
+    // che si scriverà.
     restyleTyping("fill", code);
-    if (ctx.drafting !== null) ctx.showBezier();
   }
   ctx.setColor = setColor;
 
@@ -267,7 +245,6 @@ export function installTooling(ctx: EditorContext): void {
     style().width = value;
     syncControls();
     if (ctx.tool === "text") restyleTyping("font-size", formatNumber(value, 2));
-    if (ctx.drafting !== null) ctx.showBezier();
   }
   ctx.setWidth = setWidth;
 
@@ -282,11 +259,9 @@ export function installTooling(ctx: EditorContext): void {
   }
 
   /// Lo strumento `id` scelto dalla barra o dal suo tasto. Il Poligono scelto
-  /// di nuovo passa dal poligono alla stella, e ritorno; la penna di Bézier
-  /// alla Curvatura, e ritorno.
+  /// di nuovo passa dal poligono alla stella, e ritorno.
   function pickTool(id: ToolId): void {
     if (id === "polygon" && ctx.tool === "polygon") togglePolygon();
-    else if (id === "bezier" && ctx.tool === "bezier") toggleCurvature();
     else setTool(id);
   }
   ctx.pickTool = pickTool;
@@ -306,18 +281,6 @@ export function installTooling(ctx: EditorContext): void {
   function togglePolygon(): void {
     setPolygonTool({ ...ctx.polygonTool, shape: ctx.polygonTool.shape === "star" ? "polygon" : "star" });
     announce(t("draw.announce.tool", { tool: t(toolLabel("polygon")) }));
-  }
-
-  /// Dalla penna alla Curvatura, e ritorno. Il tracciato in corso resta: i
-  /// nodi che ha tengono il loro modo, i prossimi prendono l'altro. Il gesto
-  /// in corso finisce come era cominciato.
-  function toggleCurvature(): void {
-    ctx.curvature = !ctx.curvature;
-    ctx.curveTap = null;
-    showToolMode("bezier");
-    if (ctx.drafting !== null) ctx.showBezier();
-    else showHandles();
-    announce(t("draw.announce.tool", { tool: t(toolLabel("bezier")) }));
   }
 
   function cancelGesture(): void {
@@ -506,45 +469,8 @@ export function installTooling(ctx: EditorContext): void {
   };
   ctx.guided = guided;
 
-  /// I nodi delle forme che si modificano che restano fermi, nella scena:
-  /// bersagli delle guide. Con `moving` si muovono quelli scelti; senza, si
-  /// muove una maniglia, che si allinea anche al suo nodo.
-  const fixedNodes = (moving: boolean): Point[] => {
-    const out: Point[] = [];
-    for (const edit of ctx.edits) {
-      const chosen = moving ? pickedIn(edit) : NO_KEYS;
-      edit.subs.forEach((sub, s) => {
-        sub.nodes.forEach((node, at) => {
-          if (!chosen.has(nodeKey(s, at))) out.push(apply(edit.matrix, node));
-        });
-      });
-    }
-    return out;
-  };
-
-  /// Dove il trascinamento `g` porta il nodo o la maniglia presi, con la
-  /// griglia e con le guide: un nodo si allinea agli altri oggetti e ai nodi
-  /// che restano fermi, una maniglia anche al suo nodo.
-  const nodeDragTo = (g: NodesGesture, grab: Extract<NodeGrab, { readonly origin: Point }>): Point => {
-    const p: Point = [grab.origin[0] + g.end![0] - g.from![0], grab.origin[1] + g.end![1] - g.from![1]];
-    return guided(p, () => guidesFor(g, editedUnits(), () => fixedNodes(grab.kind === "node" && !grab.pull)), g.pointer);
-  };
-  ctx.nodeDragTo = nodeDragTo;
-
-  /// I nodi della penna di Bézier, finché il tracciato non ne ha.
-  const noNodes: readonly PenNode[] = [];
-  ctx.noNodes = noNodes;
-
-  /// I bersagli della penna di Bézier: gli oggetti e i nodi già posati.
-  const bezierGuides = (): GuideIndex => {
-    const nodes = ctx.drafting?.nodes ?? noNodes;
-    return guidesFor(nodes, [], () => nodes.map((node) => node.at));
-  };
-  ctx.bezierGuides = bezierGuides;
-
-  /// Ciò che le guide mostrano adesso: le linee del gesto in corso, o del
-  /// punto che la penna di Bézier poserebbe; per uno spostamento anche le
-  /// distanze uguali. `null` se le guide non agganciano.
+  /// Ciò che le guide mostrano adesso: le linee del gesto in corso; per uno
+  /// spostamento anche le distanze uguali. `null` se le guide non agganciano.
   const guideView = (): GuideView | null => {
     if (ctx.free || !guidesOn()) return null;
     const point = (index: GuideIndex, p: Point): GuideView => {
@@ -609,26 +535,6 @@ export function installTooling(ctx: EditorContext): void {
       const ends = ctx.shapeEnds(g, g.to);
       return ends === null ? null : point(guidesFor(g, []), apply(g.to.matrix, ends[1]));
     }
-    if (g?.kind === "nodes" && g.dragging && g.from !== null && g.end !== null && ctx.edits.length > 0) {
-      const grab = g.grab;
-      if (grab?.kind !== "node" && grab?.kind !== "handle") return null;
-      return point(guidesFor(g, editedUnits(), () => fixedNodes(grab.kind === "node" && !grab.pull)), nodeDragTo(g, grab));
-    }
-    if (g?.kind === "bezier" && g.mode === "path") {
-      if (g.reshaped === null) return null;
-      const [s, at] = parseKey(g.reshaped.key);
-      return point(guidesFor(g, editedUnits()), apply(g.path!.edit.matrix, g.reshaped.subs[s]!.nodes[at]!));
-    }
-    if (g?.kind === "bezier" && g.mode !== null && g.curve) {
-      // La Curvatura sposta punti, non maniglie.
-      if (g.dragging) return point(g.mode === "add" ? bezierGuides() : ctx.curveGuides(g), ctx.curveMoved(g));
-      return g.mode === "add" ? point(bezierGuides(), g.at!) : null;
-    }
-    if (g?.kind === "bezier" && g.mode !== null) {
-      const p = g.dragging ? ctx.bezierHandle(g) : g.mode === "add" ? g.at : null;
-      return p === null ? null : point(bezierGuides(), p);
-    }
-    if (g === null && ctx.tool === "bezier" && ctx.hover !== null && ctx.drawing() !== null) return point(bezierGuides(), ctx.bezierPoint(ctx.hover.at, ctx.hover.pointer));
     if (g?.kind === "gradient" && g.dragging && g.snapped !== null) return point(ctx.gradientGuides(g), g.snapped);
     return null;
   };

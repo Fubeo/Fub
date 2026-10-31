@@ -142,9 +142,7 @@ Il comando è un passo di annulla, anche se fa più connettori.
 - **Duplicare, copiare e incollare** oggetti coi loro connettori unisce le
   copie fra loro. Un connettore copiato senza uno dei suoi oggetti ha quel
   capo libero ([Disegni, appunti](drawing-clipboard.md)).
-- **I Nodi non cambiano un connettore:** il suo percorso lo calcola FubDraw, e
-  lo strumento lo dice. Si cambia il tipo o gli agganci. Nel Completo la
-  tabella degli attributi mostra il `d` del connettore, e dice lo stesso.
+- **Il percorso lo calcola FubDraw:** si cambia il tipo o gli agganci.
 - **Le punte** si danno come a ogni linea ([Disegni, punte delle
   linee](drawing-tips.md)); con «Inverti» passano all'altro capo.
 - **Un gruppo fatto di una forma e della sua etichetta** si aggancia col

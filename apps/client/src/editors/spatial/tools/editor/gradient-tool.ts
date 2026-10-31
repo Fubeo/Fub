@@ -28,6 +28,7 @@ import type { Unit } from "../hit";
 import { swatchOf } from "../palette";
 import { HIT_PX, NODE_PX } from "./constants";
 import type { EditorContext } from "./context";
+import { percentText } from "./helpers";
 import type { GradientGesture, GradientRead, GradientSpot } from "./types";
 
 /// I nomi dei capi di una sfumatura, e il nome nella cronologia di chi li
@@ -80,7 +81,7 @@ export interface GradientToolContext {
 export function installGradientTool(ctx: EditorContext): void {
   const {
     has, measureText, panel, editable, currentIndex, newIds, announce, coordText, selectedUnits, showHandles, clearPreviews, syncProperties,
-    changeFromPanel, previewGradient, guidesFor, percentText
+    changeFromPanel, previewGradient, guidesFor
   } = ctx;
   // --- Lo strumento Sfumatura ---------------------------------------------------
 

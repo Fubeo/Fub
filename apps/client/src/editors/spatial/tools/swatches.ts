@@ -637,28 +637,6 @@ export function removeSwatchOps(model: DocumentModel, id: string, units: readonl
   return finish(plan, units, kept);
 }
 
-/// Le operazioni che eliminano il motivo del documento `id`: chi lo usa
-/// torna al suo ripiego, o a `color` se non ne scrive uno, e il motivo se ne
-/// va. Se lo usa ancora qualcuno che non si riscrive, resta come risorsa
-/// condivisa e senza nome, e `kept` dice quanti sono.
-export function removeMotifOps(model: DocumentModel, id: string, color: string, units: readonly Unit[], ids: NewIds): SwatchChange {
-  const plan = new Plan(model, ids);
-  if (resourcesOf(model).get(id)?.details?.motif === undefined) return finish(plan, units, 0);
-  const walk = new Walk(model);
-  const writes = new Writes();
-  const owners = new Map<ElementPart, boolean>();
-  for (const site of walk.sites) {
-    const used = paintReference(site.value);
-    if (used?.id !== id) continue;
-    owners.set(site.node, (owners.get(site.node) ?? true) && site.free);
-    if (site.free) writes.write(site.node, site.part, site.name, used.fallback === null ? color : (hexOf(used.fallback) ?? "none"));
-  }
-  writes.into(plan);
-  const kept = referrers(model, id).filter((node) => owners.get(node) !== true).length;
-  plan.ops.push(kept === 0 ? { op: "remove", target: id } : { op: "set", id, attrs: { "fub:role": "shared", "fub:name": null } });
-  return finish(plan, units, kept);
-}
-
 /// Gli elementi che rimandano a `id`: un contenitore coi suoi attributi,
 /// un'unità con tutto ciò che contiene, fogli di stile compresi.
 function referrers(model: DocumentModel, id: string): ElementPart[] {

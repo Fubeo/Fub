@@ -1,22 +1,22 @@
 # Disegni, effetti e fusione
 
-> **Per chi:** chi vuole dare a un oggetto un'ombra, un bagliore o una
-> sfocatura, fonderlo coi colori sotto di lui, o cambiarne l'opacità al
-> volo.
-> **Risultato:** sapere come si danno e si cambiano gli effetti nel pannello
-> delle proprietà, come si sceglie un modo di fusione, dov'è l'opacità nella
-> barra, e che cosa ne fanno i comandi e l'export.
+> **Per chi:** chi apre un disegno con ombre, bagliori, sfocature o modi di
+> fusione, e chi vuole cambiare al volo l'opacità degli oggetti.
+> **Risultato:** sapere che cosa Fub disegna degli effetti e della fusione
+> che un disegno porta, dov'è l'opacità nella barra, e che cosa ne fanno i
+> comandi e l'export.
 
-Fra gli [strumenti avanzati](drawing-expert.md) un oggetto ha i suoi **effetti**, come
-l'Aspetto di Illustrator o gli Effetti di Figma: ombre e bagliori, fuori e
-dentro la forma, e una sfocatura, uno sopra l'altro nell'ordine della lista.
-Ogni effetto si cambia coi numeri, si nasconde senza perderlo e si toglie, e
-l'oggetto resta quello che era: spostarlo, ridimensionarlo o cambiarne il
-contorno porta con sé i suoi effetti. Il **modo di fusione** dice come
-l'oggetto si mescola coi colori sotto di lui, Moltiplica o Scolora come in
-Photoshop. Nello spazio Completo la barra «Disponi» ha l'**opacità** degli oggetti
-scelti. Il modello è in `apps/client/src/editors/spatial/tools/effects.ts`,
-la sezione in `tools/effects-panel.ts`, la fusione e l'opacità in
+Un disegno può portare degli **effetti**, come l'Aspetto di Illustrator o gli
+Effetti di Figma: ombre e bagliori, fuori e dentro la forma, e una sfocatura,
+uno sopra l'altro; e un **modo di fusione**, che dice come l'oggetto si
+mescola coi colori sotto di lui, Moltiplica o Scolora come in Photoshop. Fub
+li disegna e li conserva quando un disegno li porta, scritti da una versione
+precedente o da un altro programma, ma non li aggiunge e non li cambia: la
+sezione «Effetti» e il campo «Fusione» se ne sono andati col livello Esperto
+(decisione 0231). Spostare, ridimensionare o cambiare il contorno di un
+oggetto porta con sé i suoi effetti. Nello spazio Completo la barra
+«Disponi» ha l'**opacità** degli oggetti scelti. Il modello è in
+`apps/client/src/editors/spatial/tools/effects.ts`, l'opacità in
 `tools/look.ts`.
 
 ## Gli effetti
@@ -37,82 +37,16 @@ la sezione in `tools/effects-panel.ts`, la fusione e l'opacità in
   della lista più in basso; quelli interni sopra il suo riempimento, nello
   stesso ordine; la sfocatura vale per tutto.
 - **Al più otto effetti**, e una sola sfocatura.
-- **Un effetto nascosto** resta nella lista coi suoi valori, pronto a
-  tornare, e non si disegna; con tutti nascosti l'oggetto non ha filtro, e
+- **Un effetto nascosto** resta nel file coi suoi valori e non si disegna;
+  con tutti nascosti l'oggetto non ha filtro, e
   non costa niente a chi lo disegna.
 - **Sono nelle coordinate dell'oggetto,** come lo spessore del contorno: un
   oggetto ingrandito dalle maniglie ha l'ombra più grande e più sfocata, e
   uno ruotato la gira con sé.
 
-## La sezione «Effetti»
-
-Nel Completo il [pannello delle proprietà](drawing-properties.md) ha la
-sezione «Effetti» dopo «Sfumatura», con oggetti scelti che prendono effetti:
-le forme, anche le frecce, i poligoni e le stelle, i tratti a penna, le linee
-a spessore variabile, i testi, le immagini, i gruppi e i collegamenti.
-Nell'intestazione **«Aggiungi effetto»**, anche a sezione chiusa, apre il
-menu dei cinque effetti, col clic o con la freccia in giù; la sfocatura è
-spenta se c'è già, e ogni voce con otto effetti, e la voce dice perché.
-L'effetto nuovo entra in fondo alla lista coi suoi valori di partenza,
-aperto, e la sezione si apre.
-
-Ogni effetto è una riga della lista:
-
-- **l'occhio**, «Mostra ombra esterna», è premuto quando l'effetto si vede,
-  e lo nasconde o lo mostra; nascosto, l'occhio è sbarrato e il nome
-  barrato, così la riga lo dice anche senza colore;
-- **il nome** apre e chiude i suoi campi; chiuso, accanto al nome c'è il
-  riassunto dei valori, «0, 4 · 8 · 25%», così la lista si legge senza
-  aprirla. Una riga sola è aperta alla volta, e resta aperta finché la
-  selezione è la stessa. Le frecce in su e in giù, `Inizio` e `Fine` passano
-  da un nome all'altro;
-- **«Togli»**, o `Canc` sulla riga, lo toglie; il fuoco va alla riga che
-  segue, o alla precedente, o ad «Aggiungi effetto».
-
-I campi della riga aperta sono quelli dell'effetto: per un'ombra X, Y,
-Sfocatura, Colore e Opacità; per un bagliore Dimensione, Colore e Opacità;
-per la sfocatura Raggio. Le misure sono nell'unità dello spessore del
-contorno, i punti, o i pixel in un documento in pixel; l'opacità in
-percentuale. Si scrivono come gli altri campi del pannello: un valore si
-calcola, «4+2» o «50%»; le frecce cambiano di 1, con `Maiusc` di 10, e i
-passi di fila fanno un passo solo nella cronologia; `Invio` o lasciare il
-campo applica, `Esc` torna al valore di prima e poi al foglio. Un valore che
-non si legge resta scritto, segnato col suo perché. Lo scostamento sta fra
--2000 e 2000, la sfocatura, la dimensione e il raggio fra 0 e 500. Il colore
-si scrive come codice, come nome o col nome di un campione, di cui prende il
-colore: l'effetto non resta legato al campione.
-
-Ogni cambio è un passo di annulla col nome di ciò che fa: «Aggiungi ombra
-esterna», «Togli bagliore interno», «Nascondi sfocatura», «Ombra esterna»
-per un campo. Lo screen reader sente che cosa è cambiato.
-
-### Più oggetti
-
-Con più oggetti che hanno gli stessi effetti, uguali in tutto, la sezione
-li mostra e ogni cambio vale per tutti. Se sono diversi dice «Effetti
-diversi», con due pulsanti: **«Usa questi effetti per tutti»** dà a ognuno
-gli effetti del primo oggetto scelto che ne ha, **«Togli gli effetti»** li
-toglie a tutti. «Aggiungi effetto» aggiunge l'effetto alla lista di
-ciascuno.
-
-### Quando non si può
-
-- **Un oggetto ritagliato o mascherato** non prende effetti: SVG ritaglia
-  dopo il filtro, e l'ombra sparirebbe. La sezione lo dice, e suggerisce di
-  raggrupparlo e dare gli effetti al gruppo, come in Illustrator.
-- **Un gruppo con parti di un altro programma**, di cui non si sa la misura,
-  neppure: la sezione dice perché.
-- **I livelli, la carta e le tavole** non prendono effetti, e con soltanto
-  loro la sezione non c'è.
-- **Un filtro scritto da un altro programma** si vede e si conserva: la
-  sezione dice «Un filtro di un altro programma», con «Togli il filtro»; un
-  effetto aggiunto lo sostituisce.
-
 ## La fusione
 
-Nel Completo la sezione «Aspetto» ha, dopo «Opacità», **«Fusione»**: come i
-colori dell'oggetto si mescolano con ciò che sta sotto. I sedici modi, coi
-nomi e nei gruppi di Illustrator e di Photoshop:
+I sedici modi, coi nomi e nei gruppi di Illustrator e di Photoshop:
 
 | Modi | Che cosa fanno |
 |---|---|
@@ -127,12 +61,11 @@ nomi e nei gruppi di Illustrator e di Photoshop:
   attraverso i livelli: un oggetto in Moltiplica sulla carta bianca resta
   com'è, sopra una foto la scurisce. Mai l'editor o la pagina attorno al
   disegno.
-- **«Isola la fusione»**, per un gruppo o un collegamento scelti, tiene le
-  fusioni dei suoi oggetti dentro di lui: si fondono fra loro, e il gruppo
-  si posa intero su ciò che sta sotto.
-- Ogni scelta è un passo di annulla, «Fusione», «Isola la fusione» o «Non
-  isolare la fusione». «Normale» toglie la fusione dal file; con modi
-  diversi il campo dice «Misto».
+- **Un gruppo che isola la fusione** tiene le fusioni dei suoi oggetti
+  dentro di lui: si fondono fra loro, e il gruppo si posa intero su ciò che
+  sta sotto.
+- **Un filtro scritto da un altro programma** si vede e si conserva come gli
+  effetti di FubDraw.
 
 ## L'opacità nella barra
 
@@ -172,16 +105,9 @@ opacità diverse è vuoto e dice «Misto».
 - **Separa e «Togli il collegamento»** lasciano interi un gruppo o un
   collegamento con degli effetti, anche nascosti, e lo dicono: valgono per
   tutto ciò che contengono.
-- **«Applica trasformazione»** lascia la sua trasformazione a un oggetto con
-  degli effetti, anche nascosti: sono nelle sue coordinate, e riscriverli
-  cambierebbe com'è l'ombra ([Disegni, strumenti avanzati](drawing-expert.md#applica-trasformazione)).
 - **«Ritaglia…»** non ritaglia un'immagine con degli effetti, che il
   ritaglio taglierebbe, e lo dice; per un'immagine ritagliata con l'ombra si
   raggruppa l'immagine e si dà l'ombra al gruppo.
-- **Le maschere:** un oggetto con degli effetti che si vedono non fa da
-  maschera, e il comando lo dice; con gli effetti nascosti sì, e «Rilascia
-  maschera» glieli rende ([Disegni, ritagli e
-  maschere](drawing-masks.md)).
 
 ## In Lettura e nell'export
 
@@ -212,9 +138,5 @@ della scena, effetti e fusione](../reference/scene-format-effects.md).
 ## Spazi e parti
 
 L'opacità nella barra viene nello spazio Completo, con la barra «Disponi». Gli
-effetti e la fusione vengono nel Completo; fra le
-[parti dell'editor](drawing-custom.md#che-cosa-porta-una-parte) li portano le parti «Ombre, bagliori e
-sfocatura» e «Metodi di fusione». In uno spazio che non li ha gli effetti e
-le fusioni restano nel disegno e si vedono; mancano la sezione e il campo.
-In un documento in sola lettura la sezione mostra gli effetti, e non li
-cambia.
+effetti e le fusioni restano nel disegno e si vedono in ogni spazio e in sola
+lettura.

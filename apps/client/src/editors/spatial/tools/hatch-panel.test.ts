@@ -28,7 +28,7 @@ const MOTIFS: HatchMotif[] = [
 const SWATCHES = [{ id: "sa", name: "Blu marca", color: "#0072b2" }];
 
 function viewOf(hatch: Partial<HatchView> = {}, more: Partial<HatchPanelView> = {}): HatchPanelView {
-  return { key: "oa", hatch: { ...DIAGONAL, ...hatch }, unit: "px", swatches: SWATCHES, motifs: MOTIFS, expert: false, ...more };
+  return { key: "oa", hatch: { ...DIAGONAL, ...hatch }, unit: "px", swatches: SWATCHES, motifs: MOTIFS, ...more };
 }
 
 interface Sent {
@@ -42,13 +42,8 @@ let panel: HatchPanel;
 let state: { view: HatchPanelView; editable: boolean };
 let sent: Sent[];
 let announced: string[];
-let calls: string[];
 /// Ciò che l'editor risponde a un cambio: `null` se lo fa.
 let refusal: string | null;
-/// Perché l'editor non fa «Motivo dalla selezione»; `null` se lo fa.
-let motifBlock: string | null;
-/// Ciò che l'editor risponde a «Elimina motivo».
-let deleteRefusal: string | null;
 /// Un editor che, a ogni cambio, dà alla selezione un'altra chiave.
 let rekey: boolean;
 
@@ -89,22 +84,6 @@ function mount(view: HatchPanelView = viewOf(), editable = true): HatchPanel {
       update();
       return null;
     },
-    onMotif: () => calls.push("motif"),
-    motifReason: () => motifBlock,
-    onRename: (id, name) => {
-      calls.push(`rename ${id} ${name}`);
-      if (refusal !== null) return refusal;
-      state.view = { ...state.view, motifs: state.view.motifs.map((each) => (each.id === id ? { ...each, name } : each)) };
-      update();
-      return null;
-    },
-    onDelete: (id) => {
-      calls.push(`delete ${id}`);
-      if (deleteRefusal !== null) return deleteRefusal;
-      state.view = { ...state.view, hatch: { ...NONE }, motifs: state.view.motifs.filter((each) => each.id !== id) };
-      update();
-      return null;
-    },
     announce: (text) => announced.push(text),
   });
   host.append(panel.element);
@@ -115,16 +94,14 @@ function mount(view: HatchPanelView = viewOf(), editable = true): HatchPanel {
 const one = <T extends Element = HTMLElement>(selector: string): T => host.querySelector<T>(selector)!;
 const kind = (): HTMLButtonElement => one<HTMLButtonElement>(".draw-properties-menu");
 const group = (): HTMLElement => one(".draw-hatch-fields");
-const motifGroup = (): HTMLElement => one(".draw-hatch-motif");
 const field = (id: string): HTMLElement => one(`.draw-properties-field[data-field="hatch-${id}"]`);
 const input = (id: string): HTMLInputElement => field(id).querySelector<HTMLInputElement>('input[type="text"]')!;
 const picker = (id: string): HTMLInputElement => field(id).querySelector<HTMLInputElement>('input[type="color"]')!;
 const chip = (id: string): HTMLButtonElement => field(id).querySelector<HTMLButtonElement>(".draw-properties-chip")!;
 const labelOf = (id: string): string => field(id).querySelector("label")!.firstElementChild!.textContent!;
 const nameOf = (id: string): string => field(id).querySelector("label")!.textContent!;
-const errorOf = (id: string): HTMLElement => field(id).closest(".draw-hatch-fields, .draw-hatch-motif")!.querySelector<HTMLElement>(".draw-properties-error")!;
+const errorOf = (id: string): HTMLElement => field(id).closest(".draw-hatch-fields")!.querySelector<HTMLElement>(".draw-properties-error")!;
 const note = (): HTMLElement => one(".draw-hatch > .draw-properties-note");
-const deleteButton = (): HTMLButtonElement => motifGroup().querySelector<HTMLButtonElement>("button")!;
 const lastSent = (): Sent => sent[sent.length - 1]!;
 const visibleFields = (): string[] =>
   [...host.querySelectorAll<HTMLElement>(".draw-properties-field")].filter((each) => each.closest("[hidden]") === null).map((each) => each.dataset.field!.replace("hatch-", ""));
@@ -169,10 +146,7 @@ beforeEach(() => {
   life = openLifetime();
   sent = [];
   announced = [];
-  calls = [];
   refusal = null;
-  motifBlock = null;
-  deleteRefusal = null;
   rekey = false;
 });
 
@@ -194,7 +168,6 @@ describe("il menu del tipo, in ogni stato", () => {
     expect(kind().getAttribute("aria-expanded")).toBe("false");
     expect(kind().querySelector(".draw-properties-menu-picture svg")).not.toBeNull();
     expect(group().hidden).toBe(true);
-    expect(motifGroup().hidden).toBe(true);
     expect(note().hidden).toBe(true);
     expect(visibleFields()).toEqual(["kind"]);
   });
@@ -252,31 +225,20 @@ describe("il menu del tipo, in ogni stato", () => {
     expect(note().hidden).toBe(true);
   });
 
-  it("un motivo del documento dice il suo nome; all'Esperto ha il nome da riscrivere e il pulsante che elimina", () => {
-    mount(viewOf({ choice: "pattern:ra", hatched: 0, kind: null, angle: null, spacing: null, width: null, color: null, background: null }, { expert: true }));
+  it("un motivo del documento dice il suo nome, e non ha campi (ADR 0231)", () => {
+    mount(viewOf({ choice: "pattern:ra", hatched: 0, kind: null, angle: null, spacing: null, width: null, color: null, background: null }));
     expect(kind().textContent).toBe("Tratti blu");
     expect(kind().getAttribute("aria-label")).toBe("Tipo: Tratti blu");
     expect(kind().querySelector(".draw-properties-menu-picture svg")).not.toBeNull();
     expect(group().hidden).toBe(true);
-    expect(motifGroup().hidden).toBe(false);
-    expect(motifGroup().getAttribute("role")).toBe("group");
-    expect(motifGroup().getAttribute("aria-label")).toBe("Motivo «Tratti blu»");
-    expect(labelOf("name")).toBe("Nome");
-    expect(input("name").value).toBe("Tratti blu");
-    expect(deleteButton().textContent).toBe("Elimina motivo");
-    expect(visibleFields()).toEqual(["kind", "name"]);
+    expect(host.querySelector(".draw-hatch-motif")).toBeNull();
+    expect(visibleFields()).toEqual(["kind"]);
     expect(formatIssues(checkAccessibility(host))).toBe("");
-    // Sotto l'Esperto il nome si legge, e non si cambia da qui.
-    state.view = { ...state.view, expert: false };
-    update();
-    expect(kind().textContent).toBe("Tratti blu");
-    expect(motifGroup().hidden).toBe(true);
   });
 
   it("un motivo che il documento non ha più si legge come un motivo d'altri", () => {
-    mount(viewOf({ choice: "pattern:zz", hatched: 0, kind: null }, { expert: true }));
+    mount(viewOf({ choice: "pattern:zz", hatched: 0, kind: null }));
     expect(kind().textContent).toBe("Altro motivo");
-    expect(motifGroup().hidden).toBe(true);
   });
 
   it("le figure sono icone registrate, una per scelta", () => {
@@ -297,7 +259,7 @@ describe("il menu del tipo, in ogni stato", () => {
 });
 
 describe("il menu: le voci", () => {
-  it("sotto l'Esperto ha Nessuna e le cinque pronte, ciascuna con la sua figura, e la scelta di adesso è segnata", () => {
+  it("ha Nessuna e le cinque pronte, ciascuna con la sua figura, e la scelta di adesso è segnata", () => {
     mount();
     click(kind());
     expect(kind().getAttribute("aria-expanded")).toBe("true");
@@ -323,31 +285,8 @@ describe("il menu: le voci", () => {
     }
   });
 
-  it("all'Esperto ha anche i motivi del documento per nome, e dopo una riga «Motivo dalla selezione»", () => {
-    mount(viewOf({ choice: "pattern:rb", hatched: 0 }, { expert: true }));
-    click(kind());
-    expect(labels()).toEqual(["Nessuna", "Diagonale", "Incrociata", "Orizzontale", "Puntinata", "Quadrettata", "Tratti blu", "Pois", "Motivo dalla selezione"]);
-    expect(entries().map((each) => each.getAttribute("aria-checked"))).toEqual(["false", "false", "false", "false", "false", "false", "false", "true", null]);
-    const separators = [...menu().querySelectorAll('[role="separator"]')];
-    expect(separators).toHaveLength(2);
-    expect(separators[0]!.nextElementSibling).toBe(entry("Tratti blu"));
-    expect(separators[1]!.nextElementSibling).toBe(entry("Motivo dalla selezione"));
-    // Ogni motivo ha la striscia del suo colore e la sua figura.
-    expect(entry("Pois").querySelector(".menu-swatch")).not.toBeNull();
-    expect(entry("Pois").querySelector(".menu-icon svg")).not.toBeNull();
-    expect(document.activeElement).toBe(entry("Pois"));
-    expect(formatIssues(checkAccessibility(menu()))).toBe("");
-  });
-
-  it("senza motivi all'Esperto c'è soltanto il comando, dopo una riga", () => {
-    mount(viewOf({}, { expert: true, motifs: [] }));
-    click(kind());
-    expect(labels()).toEqual(["Nessuna", "Diagonale", "Incrociata", "Orizzontale", "Puntinata", "Quadrettata", "Motivo dalla selezione"]);
-    expect(menu().querySelectorAll('[role="separator"]')).toHaveLength(1);
-  });
-
   it("ogni voce manda il suo cambio col nome del suo passo", () => {
-    mount(viewOf({ choice: "none", hatched: 0 }, { expert: true }));
+    mount(viewOf({ choice: "none", hatched: 0 }));
     click(kind());
     click(entry("Incrociata"));
     expect(sent).toEqual([{ change: { preset: "cross" }, label: "draw.action.hatch" }]);
@@ -358,11 +297,7 @@ describe("il menu: le voci", () => {
     click(entry("Nessuna"));
     expect(lastSent()).toEqual({ change: { none: true }, label: "draw.action.hatch_none" });
     expect(kind().textContent).toBe("Nessuna");
-    click(kind());
-    click(entry("Pois"));
-    expect(lastSent()).toEqual({ change: { pattern: "rb" }, label: "draw.action.hatch" });
-    expect(kind().textContent).toBe("Pois");
-    expect(sent).toHaveLength(3);
+    expect(sent).toHaveLength(2);
   });
 
   it("scegliere ciò che c'è già non cambia niente", () => {
@@ -384,32 +319,6 @@ describe("il menu: le voci", () => {
     expect(lastSent().change).toEqual({ preset: "diagonal" });
   });
 
-  it("«Motivo dalla selezione» lo fa l'editor, e chiude il menu", () => {
-    mount(viewOf({}, { expert: true }));
-    click(kind());
-    click(entry("Motivo dalla selezione"));
-    expect(calls).toEqual(["motif"]);
-    expect(sent).toEqual([]);
-    expect(kind().getAttribute("aria-expanded")).toBe("false");
-  });
-
-  it("se l'editor non può fare un motivo, la voce c'è, spenta, e dice perché", () => {
-    motifBlock = "Gli oggetti scelti non disegnano niente.";
-    mount(viewOf({}, { expert: true }));
-    click(kind());
-    const disabled = entry("Motivo dalla selezione");
-    expect(disabled.getAttribute("aria-disabled")).toBe("true");
-    expect(reason("Motivo dalla selezione")).toBe("Gli oggetti scelti non disegnano niente.");
-    click(disabled);
-    expect(calls).toEqual([]);
-  });
-
-  it("la ragione si chiede quando il menu si apre, non prima", () => {
-    mount(viewOf({}, { expert: true }));
-    motifBlock = "Non ora.";
-    click(kind());
-    expect(reason("Motivo dalla selezione")).toBe("Non ora.");
-  });
 });
 
 describe("il menu: la tastiera", () => {
@@ -514,7 +423,7 @@ describe("i campi", () => {
   it("i numeri sono campi di valore con limiti, il valore e il testo che si sentono; i colori sono campi di testo", () => {
     mount();
     expect(["spacing", "width", "angle"].map((id) => input(id).getAttribute("role"))).toEqual(["spinbutton", "spinbutton", "spinbutton"]);
-    expect(["color", "background", "name"].map((id) => field(id).querySelector("input")!.getAttribute("role"))).toEqual([null, null, null]);
+    expect(["color", "background"].map((id) => field(id).querySelector("input")!.getAttribute("role"))).toEqual([null, null]);
     expect(input("spacing").getAttribute("aria-valuenow")).toBe("8");
     expect(input("spacing").getAttribute("aria-valuemin")).toBe(String(MIN_SPACING));
     expect(input("spacing").getAttribute("aria-valuemax")).toBe(String(MAX_SPACING));
@@ -870,101 +779,9 @@ describe("scrivere un colore", () => {
   });
 });
 
-describe("il motivo del documento", () => {
-  const motifView = (more: Partial<HatchPanelView> = {}): HatchPanelView =>
-    viewOf({ choice: "pattern:ra", hatched: 0, kind: null, angle: null, spacing: null, width: null, color: null, background: null }, { expert: true, ...more });
-
-  it("Invio lo rinomina, e lo dice a chi ascolta il pannello", () => {
-    mount(motifView());
-    enter(input("name"), "  Righe   blu ");
-    expect(calls).toEqual(["rename ra Righe blu"]);
-    expect(input("name").value).toBe("Righe blu");
-    expect(kind().textContent).toBe("Righe blu");
-    expect(motifGroup().getAttribute("aria-label")).toBe("Motivo «Righe blu»");
-    expect(errorOf("name").hidden).toBe(true);
-    expect(document.activeElement).toBe(input("name"));
-  });
-
-  it("lasciare il campo lo rinomina, e lo stesso nome non fa niente", () => {
-    mount(motifView());
-    type(input("name"), "Altro");
-    input("name").blur();
-    expect(calls).toEqual(["rename ra Altro"]);
-    enter(input("name"), "Altro");
-    expect(calls).toEqual(["rename ra Altro"]);
-  });
-
-  it("un nome che non va resta scritto, segnato, e dice perché", () => {
-    mount(motifView());
-    enter(input("name"), "");
-    expect(input("name").getAttribute("aria-invalid")).toBe("true");
-    expect(errorOf("name").textContent).toBe("Scrivi un nome.");
-    expect(input("name").getAttribute("aria-describedby")).toBe(errorOf("name").id);
-    expect(announced).toEqual(["Scrivi un nome."]);
-    // Come un campione, o un altro motivo, già c'è.
-    enter(input("name"), "pois");
-    expect(errorOf("name").textContent).toBe("C’è già un campione o un motivo «pois»: scegline un altro.");
-    enter(input("name"), "blu marca");
-    expect(errorOf("name").textContent).toBe("C’è già un campione o un motivo «blu marca»: scegline un altro.");
-    // Un nome che si legge come un colore non vale.
-    enter(input("name"), "#ff0000");
-    expect(errorOf("name").textContent).toBe("«#ff0000» si legge come un colore, non come un nome: scegline un altro.");
-    enter(input("name"), "nessuno");
-    expect(errorOf("name").textContent).toBe("«nessuno» si legge come un colore, non come un nome: scegline un altro.");
-    expect(calls).toEqual([]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    // Corretto, l'errore se ne va; il nome che ha già non è un problema.
-    enter(input("name"), "Nuovo");
-    expect(errorOf("name").hidden).toBe(true);
-    expect(calls).toEqual(["rename ra Nuovo"]);
-    enter(input("name"), "NUOVO");
-    expect(calls).toEqual(["rename ra Nuovo", "rename ra NUOVO"]);
-  });
-
-  it("se l'editor rifiuta il nome, il campo resta com'era scritto e dice perché", () => {
-    mount(motifView());
-    refusal = "Non si può.";
-    enter(input("name"), "Nuovo");
-    expect(input("name").value).toBe("Nuovo");
-    expect(input("name").getAttribute("aria-invalid")).toBe("true");
-    expect(errorOf("name").textContent).toBe("Non si può.");
-    expect(announced).toEqual(["Non si può."]);
-  });
-
-  it("Esc riporta il nome com'era, e di nuovo lascia il tasto al foglio", () => {
-    mount(motifView());
-    type(input("name"), "Boh");
-    expect(key("Escape").defaultPrevented).toBe(true);
-    expect(input("name").value).toBe("Tratti blu");
-    expect(key("Escape").defaultPrevented).toBe(false);
-    expect(calls).toEqual([]);
-  });
-
-  it("«Elimina motivo» lo elimina e il fuoco resta nella sezione, al menu", () => {
-    mount(motifView());
-    deleteButton().focus();
-    click(deleteButton());
-    expect(calls).toEqual(["delete ra"]);
-    expect(motifGroup().hidden).toBe(true);
-    expect(kind().textContent).toBe("Nessuna");
-    expect(document.activeElement).toBe(kind());
-    expect(announced).toEqual([]);
-  });
-
-  it("se l'editor non lo elimina, lo dice sotto, e a voce", () => {
-    mount(motifView());
-    deleteRefusal = "Non si può eliminare.";
-    click(deleteButton());
-    expect(errorOf("name").textContent).toBe("Non si può eliminare.");
-    expect(errorOf("name").hidden).toBe(false);
-    expect(announced).toEqual(["Non si può eliminare."]);
-    expect(motifGroup().hidden).toBe(false);
-  });
-});
-
 describe("la sola lettura", () => {
   it("tutto si guarda e niente cambia", () => {
-    mount(viewOf({}, { expert: true }), false);
+    mount(viewOf({}), false);
     expect(kind().getAttribute("aria-disabled")).toBe("true");
     for (const id of ["color", "background", "spacing", "width", "angle"]) expect(input(id).readOnly).toBe(true);
     expect([chip("color"), chip("background")].every((each) => each.disabled)).toBe(true);
@@ -983,18 +800,6 @@ describe("la sola lettura", () => {
     expect(announced).toEqual([READ_ONLY, READ_ONLY, READ_ONLY]);
     click(chip("color"));
     expect(sent).toEqual([]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("anche il motivo si guarda: il nome è di sola lettura e «Elimina motivo» lo dice", () => {
-    mount(viewOf({ choice: "pattern:ra", hatched: 0 }, { expert: true }), false);
-    expect(input("name").readOnly).toBe(true);
-    expect(deleteButton().getAttribute("aria-disabled")).toBe("true");
-    click(deleteButton());
-    type(input("name"), "Altro");
-    key("Enter");
-    expect(calls).toEqual([]);
-    expect(announced).toEqual([READ_ONLY]);
     expect(formatIssues(checkAccessibility(host))).toBe("");
   });
 
@@ -1043,21 +848,18 @@ describe("la lingua", () => {
     expect(labels()).toEqual(["None", "Diagonal", "Crosshatch", "Horizontal", "Dotted", "Grid"]);
   });
 
-  it("anche il diametro, la nota, il motivo e i suoi comandi", () => {
+  it("anche il diametro, la nota e il motivo", () => {
     mount(viewOf({ choice: "dots", kind: "dots" }));
     vi.stubGlobal("navigator", { language: "en-GB" });
     panel.relabel();
     expect(labelOf("width")).toBe("Diameter");
-    state.view = viewOf({ choice: "other", hatched: 0, kind: null }, { expert: true });
+    state.view = viewOf({ choice: "other", hatched: 0, kind: null });
     update();
     expect(kind().textContent).toBe("Other pattern");
     expect(note().textContent).toBe("This is a pattern from another program: FubDraw leaves it as it is. Choosing another one replaces it.");
-    state.view = viewOf({ choice: "pattern:ra", hatched: 0, kind: null }, { expert: true });
+    state.view = viewOf({ choice: "pattern:ra", hatched: 0, kind: null });
     update();
-    expect(motifGroup().getAttribute("aria-label")).toBe("Pattern “Tratti blu”");
-    expect(labelOf("name")).toBe("Name");
-    expect(deleteButton().textContent).toBe("Delete pattern");
-    click(kind());
-    expect(labels().slice(-1)).toEqual(["Pattern from selection"]);
+    expect(kind().textContent).toBe("Tratti blu");
+    expect(kind().getAttribute("aria-label")).toBe("Type: Tratti blu");
   });
 });

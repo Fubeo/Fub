@@ -83,9 +83,3 @@ intera nel file, e il ritaglio si cambia o si toglie quando si vuole.
 Nel Completo le maschere ritagliano o sfumano anche le immagini con una
 forma: [Disegni, ritagli e maschere](drawing-masks.md).
 
-## Ricalcare
-
-Nello spazio Completo, fra gli [strumenti avanzati](drawing-expert.md), «Ricalca immagine…» fa di
-un'immagine incollata o del vault un gruppo di tracciati pieni, da
-modificare come le altre forme, e la lascia nascosta sotto il gruppo:
-[Disegni, ricalco delle immagini](drawing-trace.md).

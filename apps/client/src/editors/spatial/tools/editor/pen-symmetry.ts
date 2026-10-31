@@ -5,14 +5,13 @@ import { polygonalKind } from "../../describe";
 import { clampSlices, isSymmetryKind, symmetryRays, type PenSymmetry } from "../symmetry";
 import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Bounds } from "../../scene/geometry";
-import { apply, compose, IDENTITY, invert, translate, type Matrix, type Point } from "../../scene/matrix";
+import { apply, compose, invert, translate, type Matrix, type Point } from "../../scene/matrix";
 import type { Elem } from "../../scene/serialize";
 import { t } from "../../strings";
 import type { OverlayHandle } from "../../painter/overlay";
 import type { PaintNode } from "../../painter/paint";
 import { movedMatrix, roundDelta, transformedMatrix, transformValue, type Destination } from "../edit";
 import { boundsAfter, numericMatrix, numericOps, UNCHANGED } from "../transform";
-import { framedText, lookOps } from "../look";
 import type { FieldId } from "../properties";
 import {
   angleOf,
@@ -25,27 +24,24 @@ import {
   MAGNET_DEGREES,
   MIN_SIZE,
   movedFrame,
-  pull,
   resized,
   resizeMatrix,
   rotation,
   rotationMatrix,
   type Axis as FrameAxis,
   type Frame,
-  type ResizeGrip,
 } from "../frame";
 import { anchorsOf, GUIDE_PX, GuideIndex, nearer } from "../guides";
 import { nearestCorner, snapDelta } from "../grid";
 import { fromUnit } from "../rulers";
 import { sceneCorners, toScene, toScreen } from "../../view";
-import { elemBounds, type Unit } from "../hit";
+import type { Unit } from "../hit";
 import { cornerAttrs, cornerCursor, cornerDrag, shapeOps } from "../reshape";
 import { constrainEnd, polygonCount, shapeElem, stepRatio, withCount } from "../shapes";
-import { wrapValue, type Side } from "../wrap";
 import { DOUBLE_TAP_MS, DOUBLE_TAP_PX, DRAG_PX, HIT_PX, MIN_SHAPE_PX, RATIO_ROLES, ROTATE_STEP } from "./constants";
 import type { EditorContext } from "./context";
 import { holdsPath, scaleOf, translated } from "./helpers";
-import type { AreaDrag, CornerDrag, GestureBase, SelectGesture, ShapeGesture, SymmetryGesture } from "./types";
+import type { CornerDrag, GestureBase, SelectGesture, ShapeGesture, SymmetryGesture } from "./types";
 
 /// Quanto lontano dal centro della simmetria, in pixel, il puntatore lo
 /// prende; e quanto vicino al centro della pagina o di una tavola, tirato,
@@ -87,10 +83,10 @@ export interface PenSymmetryContext {
 /// Monta la simmetria della penna.
 export function installPenSymmetry(ctx: EditorContext): void {
   const {
-    folio, has, measureText, painter, boardsNow, editable, currentIndex, currentPage, newIds, announce, announceSelection, readFirst, numberText, docUnit,
-    stepNow, lengthText, lengthSpoken, viewCenter, selectedUnits, inOrder, frameOf, frameNow, areaChosen, frameCursor, degreesText, cornerAt, showGrip,
+    folio, has, painter, boardsNow, editable, currentIndex, currentPage, newIds, announce, announceSelection, readFirst, numberText, docUnit,
+    stepNow, lengthText, lengthSpoken, viewCenter, selectedUnits, inOrder, frameOf, frameNow, frameCursor, degreesText, cornerAt, showGrip,
     showHandles, showShape, syncProperties, syncControls, drawnPaint, hookedIn, detachedNote, moveSelection, select, isolate, leaveIsolation, isolable,
-    setPolygonTool, gridOn, snapped, guidesOn, guideReach, guidesFor, guided, snapNote, noted
+    setPolygonTool, gridOn, guidesOn, guideReach, guidesFor, guided, snapNote, noted
   } = ctx;
   // --- La simmetria della penna ----------------------------------------------
   //
@@ -443,49 +439,6 @@ export function installPenSymmetry(ctx: EditorContext): void {
   };
   ctx.flipSelection = flipSelection;
 
-  /// La maniglia `grip` della cornice del testo in area scelto da solo:
-  /// tirarla ne cambierà il riquadro. `null` per ogni altra selezione.
-  const areaDrag = (grip: ResizeGrip): AreaDrag | null => {
-    const unit = areaChosen();
-    const look = unit?.look ?? null;
-    if (unit === null || look === null || look.wrap === null) return null;
-    const width = look.wrap;
-    const left = look.x - (look.anchor === "middle" ? width / 2 : look.anchor === "end" ? width : 0);
-    const fixed: Side = pull(grip, 0) < 0 ? "right" : "left";
-    return { unit, fixed, edge: fixed === "left" ? left + width : left, width, now: width, elem: null, box: null };
-  };
-
-  /// Il riquadro mentre la cornice di un testo in area si tira: il bordo
-  /// preso segue il puntatore nelle coordinate del testo, e con la griglia
-  /// si aggancia alla sua riga, non più vicino al bordo fermo del corpo del
-  /// testo. Il testo si vede già andato a capo.
-  const areaUpdate = (g: SelectGesture, drag: AreaDrag): void => {
-    const model = ctx.engine.model;
-    const inverse = invert(drag.unit.matrix);
-    if (model === null || inverse === null || g.from === null || g.end === null) return;
-    const from = apply(inverse, g.from);
-    const moved = drag.edge + apply(inverse, g.end)[0] - from[0];
-    const edge = apply(inverse, snapped(apply(drag.unit.matrix, [moved, from[1]])))[0];
-    const width = Math.max(drag.unit.look!.size, drag.fixed === "left" ? drag.width + edge - drag.edge : drag.width - edge + drag.edge);
-    if (drag.elem !== null && Math.abs(width - drag.now) < 1e-9) return;
-    drag.now = width;
-    const framed = framedText(model, drag.unit, width, drag.fixed, measureText);
-    drag.elem = framed?.elem ?? null;
-    drag.box = drag.elem === null ? null : elemBounds(drag.elem, IDENTITY);
-    const elem = drag.elem;
-    painter.setDraft(elem === null ? null : { replaced: new Map(drag.unit.paints.map((paint) => [paint, elem])) });
-  };
-
-  /// Scrive il riquadro della cornice tirata, in un passo, e lo dice.
-  const applyArea = (drag: AreaDrag): void => {
-    const model = ctx.engine.model;
-    if (model === null || wrapValue(drag.now) === wrapValue(drag.width)) return;
-    const restyled = lookOps(model, [drag.unit], { wrap: drag.now, fixed: drag.fixed }, measureText, newIds());
-    const extent = drag.elem === null ? null : elemBounds(drag.elem, drag.unit.matrix);
-    if (ctx.arrange("draw.action.text_frame", restyled, extent) === null) return;
-    announce(`${t("draw.text.framed", { width: lengthSpoken(drag.now) })}${restyled.overflow ? ` ${t("draw.text.overflow")}` : ""}`);
-  };
-
   /// Il primo punto di un gesto di selezione: una maniglia della cornice si
   /// potrà tirare; un oggetto sotto il puntatore si sceglie e si potrà
   /// trascinare; il vuoto comincia un riquadro.
@@ -504,7 +457,6 @@ export function installPenSymmetry(ctx: EditorContext): void {
     if (grip !== null) {
       g.grip = { grip, frame: view!.frame };
       g.units = selectedUnits();
-      g.area = grip === "rotate" ? null : areaDrag(grip);
       return;
     }
     // Con Ctrl o ⌘ si sceglie dentro i gruppi: l'oggetto più dentro sotto il
@@ -623,11 +575,6 @@ export function installPenSymmetry(ctx: EditorContext): void {
       showHandles();
       return;
     }
-    if (g.mode === "resize" && g.area !== null) {
-      areaUpdate(g, g.area);
-      showHandles();
-      return;
-    }
     if (g.mode === "resize" || g.mode === "rotate") {
       g.matrix = g.mode === "resize" ? resizeNow(g) : rotateNow(g);
       const transforms = new Map<PaintNode, string | null>();
@@ -679,8 +626,7 @@ export function installPenSymmetry(ctx: EditorContext): void {
       const note = g.mode === "resize" ? snapNote() : "";
       ctx.current = null;
       showGrip(null);
-      if (g.mode === "resize" && g.area !== null) applyArea(g.area);
-      else if (g.mode !== "pending" && g.matrix !== null) applyFrame(g.units, g.grip.frame, g.matrix, g.mode === "rotate" ? g.angle : null, note);
+      if (g.mode !== "pending" && g.matrix !== null) applyFrame(g.units, g.grip.frame, g.matrix, g.mode === "rotate" ? g.angle : null, note);
       showHandles();
       return;
     }

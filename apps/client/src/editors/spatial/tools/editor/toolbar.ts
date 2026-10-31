@@ -9,14 +9,11 @@ import type { MenuItem } from "../../../../ui/menu";
 import { REPLAY_SPEEDS } from "./replay";
 import { ariaBinding, displayBinding } from "../../../../ui/commands";
 import { iconEl } from "../../../../ui/icons";
-import { SymbolLibraries } from "../symbol-libraries";
-import type { Library, LibrarySymbol, SymbolCopy, SymbolSheet } from "../symbol-library";
 import type { PenSymmetry } from "../symmetry";
 import type { Point } from "../../scene/matrix";
 import type { Item } from "../../scene/classify";
 import type { LengthUnit } from "../../scene/rulers";
 import { t, type DrawKey } from "../../strings";
-import { attributeOps, heldNamer, renameOps } from "../attributes";
 import type { Board } from "../boards";
 import type { PaintChannel, PlaceGrip } from "../gradients";
 import { createProperties, type SectionId, type Properties } from "../properties";
@@ -29,21 +26,19 @@ import { createHistoryPanel, type HistoryPanel } from "../history-panel";
 import { createSuggestions, type SuggestionId, type Suggestions } from "../suggestions";
 import { createBoardsPanel, type BoardRow, type BoardsPanel } from "../boards-panel";
 import { createLibraryPanel, type LibraryPanel } from "../library-panel";
-import { createSymbolsPanel, type SymbolsPanel } from "../symbols-panel";
 import { createAccessPanel, type AccessPanel } from "../accessibility-panel";
 import type { Problem } from "../audit";
-import { createInspector, type Inspector } from "../inspector";
 import { createObjectTree, type ObjectTree } from "../objects";
 import { drawPickerText } from "../color-text";
 import { customColor, DEFAULT_COLOR, PALETTE, swatchOf, WIDTHS } from "../palette";
 import type { Feature, ToolId } from "../registry";
 import type { PolygonTool } from "../shapes";
-import { ATTRIBUTES_BINDING, BAR_FEATURES, DRAG_PX, IMAGE_BINDING, ZOOM_STEP } from "./constants";
+import { BAR_FEATURES, DRAG_PX, IMAGE_BINDING, ZOOM_STEP } from "./constants";
 import { installCharacter } from "./chrome/character";
 import { installPenOptions } from "./chrome/pen-options";
 import { installRail } from "./chrome/rail";
 import type { EditorContext } from "./context";
-import type { GradientRead, PanelReading, ShapeDrag, SymbolDrag, SymbolPictureEntry } from "./types";
+import type { GradientRead, PanelReading, ShapeDrag } from "./types";
 
 /// La lettera dei pulsanti delle dimensioni del testo, in pixel.
 const SIZE_GLYPH_PX: readonly number[] = [12, 16, 22];
@@ -113,28 +108,6 @@ export interface ToolbarContext {
   boardsPanel: BoardsPanel;
   shapeDrag: ShapeDrag | null;
   libraryPanel: LibraryPanel;
-  /// Forme e simboli nella stessa scheda: il campo delle forme cerca anche i
-  /// simboli, che nascondono il loro (C5).
-  shareSearch: (shared: boolean) => void;
-  symbolDrag: SymbolDrag | null;
-  /// Cresce a ogni cambiamento delle librerie: il pannello si rifà.
-  librariesRound: number;
-  symbolLibraries: SymbolLibraries | null;
-  symbolsPanel: SymbolsPanel;
-  /// Ciò che il pannello dei simboli mostra: il testo del disegno, il giro
-  /// delle librerie e se si modifica; `null` dopo un cambio di lingua.
-  symbolsShown: { readonly text: string; readonly round: number; readonly editable: boolean } | null;
-  /// I testi dei simboli del disegno di adesso, letti quando servono, col
-  /// testo del disegno da cui vengono: il modello resta lo stesso oggetto
-  /// quando il disegno cambia.
-  drawingSheet: { readonly text: string; readonly sheet: SymbolSheet } | null;
-  librarySymbols: WeakMap<Library, ReadonlyMap<string, LibrarySymbol>>;
-  symbolCopies: Map<string, { readonly version: string; readonly copy: SymbolCopy | null; }>;
-  symbolPictures: Map<string, SymbolPictureEntry>;
-  /// Le anteprime si fanno una alla volta, e fra l'una e l'altra la pagina
-  /// respira.
-  pictureQueue: Promise<unknown>;
-  inspector: Inspector;
   panel: Properties;
   /// Ciò che il pannello mostra: si ridisegna quando cambia il disegno, la
   /// selezione, la vista o il livello.
@@ -198,11 +171,9 @@ export interface ToolbarContext {
   boardsButton: HTMLButtonElement;
   presentButton: HTMLButtonElement;
   libraryButton: HTMLButtonElement;
-  symbolsButton: HTMLButtonElement;
   objectsButton: HTMLButtonElement;
   historyButton: HTMLButtonElement;
   accessButton: HTMLButtonElement;
-  attributesButton: HTMLButtonElement;
   titleField: HTMLLabelElement;
   titleInput: HTMLInputElement;
 }
@@ -636,90 +607,17 @@ export function installToolbar(ctx: EditorContext): void {
     onDrag: (id, event) => ctx.startShapeDrag(id, event),
     onLeave: () => surface.focus({ preventScroll: true }),
     slop: DRAG_PX,
-    onQuery: (text) => {
-      if (searchShared) ctx.symbolsPanel.follow(text);
-    },
   });
   ctx.libraryPanel = libraryPanel;
-  let searchShared = false;
-  ctx.shareSearch = (shared) => {
-    searchShared = shared;
-    libraryPanel.share(shared);
-    ctx.symbolsPanel.follow(shared ? libraryPanel.query() : null);
-  };
   libraryPanel.element.hidden = true;
   relabels.push(() => libraryPanel.relabel());
 
-  // I simboli del disegno e quelli delle librerie del vault, dal livello
-  // Esperto: chiusi finché qualcuno non li apre. Le librerie si leggono la
-  // prima volta che si aprono; un disegno annotato su un fondo non le ha.
-  // Inserire, trascinare e i comandi dei simboli sono dell'editor.
-  ctx.symbolDrag = null;
-  ctx.librariesRound = 0;
-  const symbolLibraries =
-    options.symbolLibraries === undefined || folio !== undefined
-      ? null
-      : new SymbolLibraries(options.symbolLibraries, () => {
-          ctx.librariesRound++;
-          ctx.syncSymbols();
-        });
-  ctx.symbolLibraries = symbolLibraries;
-  if (symbolLibraries !== null) life.add(() => symbolLibraries.dispose());
-  const symbolsPanel = createSymbolsPanel(life, {
-    onInsert: (ref) => void ctx.insertSymbol(ref),
-    onDrag: (ref, event) => ctx.startSymbolDrag(ref, event),
-    onMenu: (ref, at, labelledBy) => ctx.symbolMenu(ref, at, labelledBy),
-    picture: (ref, version) => ctx.symbolPictureUrl(ref, version),
-    onLeave: () => surface.focus({ preventScroll: true }),
-    slop: DRAG_PX,
-  });
-  ctx.symbolsPanel = symbolsPanel;
-  symbolsPanel.element.hidden = true;
-  ctx.symbolsShown = null;
-  ctx.drawingSheet = null;
-  /// I simboli di ogni libreria letta, per id.
-  const librarySymbols = new WeakMap<Library, ReadonlyMap<string, LibrarySymbol>>();
-  ctx.librarySymbols = librarySymbols;
-  /// Le copie dei simboli del pannello, per riquadro, con la versione da cui
-  /// vengono.
-  const symbolCopies = new Map<string, { readonly version: string; readonly copy: SymbolCopy | null }>();
-  ctx.symbolCopies = symbolCopies;
-  /// Le anteprime, per riquadro.
-  const symbolPictures = new Map<string, SymbolPictureEntry>();
-  ctx.symbolPictures = symbolPictures;
-  ctx.pictureQueue = Promise.resolve();
-  relabels.push(() => {
-    ctx.symbolsShown = null;
-    symbolsPanel.relabel();
-    ctx.syncSymbols();
-  });
-
-  // Gli attributi dell'oggetto scelto, dal livello Esperto: chiusi finché
-  // qualcuno non li apre, sotto l'albero se è aperto anche quello.
-  const inspector = createInspector(life, {
-    onSet: (subject, key, value) => {
-      const change = attributeOps(ctx.settledSubject(subject), key, value, ctx.newIds());
-      return ctx.changeObject("draw.action.attribute", change.ops, change.id);
-    },
-    onRename: (subject, next) => ctx.changeObject("draw.action.rename", renameOps(ctx.settledSubject(subject), next, ctx.engine.model), next),
-    taken: (id) => ctx.engine.holder(id) !== null,
-    cited: (id) => ctx.cited(id),
-    held: (id) => ctx.engine.model !== null && heldNamer(ctx.engine.model, id),
-    announce: (text) => ctx.announce(text),
-    onLeave: () => surface.focus({ preventScroll: true }),
-  });
-  ctx.inspector = inspector;
-  inspector.element.hidden = true;
-  relabels.push(() => inspector.relabel());
-
   // Le proprietà della selezione, o del disegno, dal livello Standard: un
-  // pannello accanto al foglio, che si apre da sé se c'è posto. Al livello
-  // Esperto ospita gli attributi, come una sua sezione.
+  // pannello accanto al foglio, che si apre da sé se c'è posto.
   const panel = createProperties(life, {
     closed: ctx.grid.closed as readonly SectionId[],
     onChange: (id, value) => ctx.changeField(id, value),
     onAction: (id) => ctx.runAction(id),
-    onTransform: (values) => ctx.transformFields(values),
     onExportSelection: () => options.onExport?.("selection"),
     onSection: (id, open) => {
       const closed = ctx.grid.closed.filter((each) => each !== id);
@@ -741,16 +639,9 @@ export function installToolbar(ctx: EditorContext): void {
     },
     hatch: {
       onChange: (change, label) => ctx.changeHatch(change, label),
-      onMotif: () => ctx.motifFromSelection(),
-      motifReason: () => ctx.motifReason(),
-      onRename: (id, name) => ctx.renameMotif(id, name),
-      onDelete: (id) => ctx.deleteMotif(id),
     },
     connector: {
       onChange: (change, label) => ctx.changeConnector(change, label),
-    },
-    effects: {
-      onChange: (change, label) => ctx.changeEffects(change, label),
     },
     // Lo strumento Sfumatura mostra le sfumature dell'altro colore.
     onTarget: () => {
@@ -814,11 +705,6 @@ export function installToolbar(ctx: EditorContext): void {
   ctx.libraryButton = libraryButton;
   libraryButton.setAttribute("aria-expanded", "false");
   libraryButton.setAttribute("aria-controls", libraryPanel.element.id);
-  // I simboli, dal livello Esperto.
-  const symbolsButton = button(viewGroup, "draw-button", () => t("draw.symbols.title"), "draw-symbols", () => ctx.showSymbols(ctx.toggles(symbolsPanel.element)));
-  ctx.symbolsButton = symbolsButton;
-  symbolsButton.setAttribute("aria-expanded", "false");
-  symbolsButton.setAttribute("aria-controls", symbolsPanel.element.id);
   const objectsButton = button(viewGroup, "draw-button", () => t("draw.objects"), "outline", () => ctx.showObjects(ctx.toggles(tree.element)));
   ctx.objectsButton = objectsButton;
   objectsButton.setAttribute("aria-expanded", "false");
@@ -831,15 +717,6 @@ export function installToolbar(ctx: EditorContext): void {
   ctx.accessButton = accessButton;
   accessButton.setAttribute("aria-expanded", "false");
   accessButton.setAttribute("aria-controls", accessPanel.element.id);
-  // Gli attributi, dal livello Esperto.
-  const attributesButton = button(viewGroup, "draw-button", () => t("draw.attributes"), "draw-attributes", () => ctx.showAttributes(ctx.toggles(inspector.element)));
-  ctx.attributesButton = attributesButton;
-  attributesButton.setAttribute("aria-expanded", "false");
-  attributesButton.setAttribute("aria-controls", inspector.element.id);
-  attributesButton.setAttribute("aria-keyshortcuts", ariaBinding(ATTRIBUTES_BINDING));
-  relabels.push(() => {
-    attributesButton.title = `${t("draw.attributes")} (${displayBinding(ATTRIBUTES_BINDING)})`;
-  });
   const keysButton = button(viewGroup, "draw-button", () => t("draw.keys"), "keyboard", () => void ctx.keys());
   keysButton.setAttribute("aria-keyshortcuts", "?");
   keysButton.setAttribute("aria-haspopup", "dialog");

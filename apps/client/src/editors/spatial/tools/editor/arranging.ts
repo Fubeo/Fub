@@ -6,7 +6,6 @@ import { displayBinding } from "../../../../ui/commands";
 import { showContextMenu, type MenuItem } from "../../../../ui/menu";
 import { linkName } from "../../describe";
 import type { Bounds } from "../../scene/geometry";
-import type { Repeat } from "../../scene/repeat";
 import type { Op } from "../../scene/ops";
 import { plural, t, type DrawKey } from "../../strings";
 import { gesture as asGesture, roundDelta } from "../edit";
@@ -31,13 +30,11 @@ import {
   type Edge,
   type Order,
 } from "../arrange";
-import { expandCopiesIn, expandOps, expandTargets, repeatOps, repeatTarget, type RepeatKind } from "../repeat-ops";
-import { detachOps, isInstance, symbolOps } from "../symbols";
+import { expandCopiesIn } from "../repeat-ops";
 import { wholeSteps } from "../grid";
 import type { Unit } from "../hit";
 import type { Feature } from "../registry";
 import { keepLook, refused, type Refusal as Unkept } from "../styled";
-import { releasable } from "../masks";
 import { AXES, COPY_STEP_PX, EDGES, ORDERS } from "./constants";
 import type { EditorContext } from "./context";
 import { translated } from "./helpers";
@@ -74,10 +71,6 @@ export interface ArrangingContext {
   orderSelection: (order: Order) => void;
   groupSelection: () => void;
   ungroupSelection: () => void;
-  symbolFromSelection: () => void;
-  detachSelection: () => void;
-  repeatSelection: (kind: RepeatKind) => void;
-  expandSelection: () => void;
   linkSelection: () => Promise<void>;
   unlinkSelection: () => void;
   openSelectedLink: () => boolean;
@@ -93,7 +86,7 @@ export interface ArrangingContext {
 /// Monta i comandi per disporre.
 export function installArranging(ctx: EditorContext): void {
   const {
-    has, editable, currentIndex, currentPage, grownPage, newIds, announce, objects, stepNow, selectedUnits, chosenCount, openLink, originalUnits, commit,
+    has, editable, currentIndex, currentPage, grownPage, newIds, announce, objects, stepNow, selectedUnits, openLink, commit,
     withLabels, select, cancelGesture, gridOn, boundsOf, options
   } = ctx;
   // --- Disporre ----------------------------------------------------------------
@@ -253,9 +246,7 @@ export function installArranging(ctx: EditorContext): void {
     }
     const groups = all.filter((unit) => unwrappable(ctx.engine.model!, unit)).length;
     if (groups === 0) {
-      // Un gruppo che non si separa per la sua maschera si rilascia.
-      const masked = has("masks") && all.some((unit) => releasable(ctx.engine.model!, unit));
-      announce(masked ? `${t("draw.ungroup.effect")} ${t("draw.ungroup.release")}` : t("draw.ungroup.effect"));
+      announce(t("draw.ungroup.effect"));
       return;
     }
     const kept = arrange("draw.action.ungroup", ungroupOps(ctx.engine.model!, units, newIds(), expandCopiesIn), null, { key: "draw.ungroup.styled" });
@@ -264,91 +255,9 @@ export function installArranging(ctx: EditorContext): void {
   }
   ctx.ungroupSelection = ungroupSelection;
 
-  /// «Crea simbolo»: gli oggetti scelti, con le etichette dei loro
-  /// connettori, diventano il contenuto di un simbolo nuovo, e al loro posto
-  /// resta una sua istanza, che diventa la selezione.
-  function symbolFromSelection(): void {
-    const units = arranging("symbols");
-    if (units === null) return;
-    const made = symbolOps(ctx.engine.model!, withLabels(units), t("draw.symbol.base"), newIds());
-    if (typeof made === "string") {
-      announce(t(`draw.symbol.refused.${made}`));
-      return;
-    }
-    const kept = arrange("draw.action.symbol_make", made, null, { key: "draw.symbol.styled" });
-    if (kept !== null) announce(`${t("draw.symbol.made", { name: made.name })}${kept}`);
-  }
-  ctx.symbolFromSelection = symbolFromSelection;
 
-  /// «Scollega dal simbolo»: ogni istanza scelta diventa un gruppo con una
-  /// copia del contenuto del suo simbolo, e il resto della selezione resta.
-  function detachSelection(): void {
-    const units = arranging("symbols");
-    if (units === null) return;
-    const count = units.filter(isInstance).length;
-    if (count === 0) {
-      announce(t("draw.symbol.detach.none"));
-      return;
-    }
-    const detached = detachOps(ctx.engine.model!, units, newIds());
-    if (detached === "content") {
-      announce(t("draw.symbol.detach.content"));
-      return;
-    }
-    if (arrange("draw.action.symbol_detach", detached) !== null) announce(plural(count, "draw.symbol.detached.one", "draw.symbol.detached.other"));
-  }
-  ctx.detachSelection = detachSelection;
 
-  /// La frase di una ripetizione fatta o cambiata in `repeat`.
-  const repeatText = (repeat: Repeat): string => {
-    switch (repeat.kind) {
-      case "radial":
-        return t("draw.repeat.made.radial", { count: repeat.count });
-      case "grid":
-        return t("draw.repeat.made.grid", { columns: repeat.columns, rows: repeat.rows });
-      case "mirror":
-        return t("draw.repeat.made.mirror");
-    }
-  };
 
-  /// «Ripetizione radiale», «a griglia» o «a specchio»: l'oggetto scelto,
-  /// o gli oggetti scelti messi prima in un gruppo, diventano l'originale di
-  /// una ripetizione nuova, che diventa la selezione. Una ripetizione
-  /// scelta, o i suoi originali, cambiano tipo e ricominciano coi valori di
-  /// partenza; il tipo che hanno già non cambia niente.
-  function repeatSelection(kind: RepeatKind): void {
-    const units = arranging("repeat");
-    if (units === null) return;
-    const target = repeatTarget(units);
-    if (target?.details?.repeat?.kind === kind) {
-      announce(t("draw.unchanged"));
-      return;
-    }
-    const made = repeatOps(ctx.engine.model!, withLabels(units), kind, newIds(), originalUnits);
-    if (typeof made === "string") {
-      announce(t(`draw.repeat.refused.${made}`));
-      return;
-    }
-    const kept = arrange(target === null ? "draw.action.repeat" : "draw.action.repeat_change", made, null, { key: "draw.repeat.styled" });
-    if (kept !== null) announce(`${repeatText(made.repeat)}${kept}`);
-  }
-  ctx.repeatSelection = repeatSelection;
-
-  /// «Espandi la ripetizione»: ogni copia delle ripetizioni scelte, o di
-  /// quella degli originali scelti, diventa una copia vera del suo
-  /// originale, e la ripetizione un gruppo; la selezione resta.
-  function expandSelection(): void {
-    const units = arranging("repeat");
-    if (units === null) return;
-    const count = expandTargets(units).length;
-    const expanded = expandOps(ctx.engine.model!, units, newIds());
-    if (typeof expanded === "string") {
-      announce(t(`draw.repeat.expand.${expanded}`));
-      return;
-    }
-    if (arrange("draw.action.repeat_expand", expanded) !== null) announce(plural(count, "draw.repeat.expanded.one", "draw.repeat.expanded.other"));
-  }
-  ctx.expandSelection = expandSelection;
 
   /// Il collegamento scelto da solo, se c'è.
   const lonelyLink = (units: readonly Unit[]): Unit | null => (units.length === 1 && isLink(units[0]!) ? units[0]! : null);
@@ -446,12 +355,8 @@ export function installArranging(ctx: EditorContext): void {
   };
   ctx.alignReference = alignReference;
 
-  /// «Allinea»: gli oggetti scelti, o con lo strumento Nodi i nodi scelti.
+  /// «Allinea»: gli oggetti scelti.
   function alignSelection(edge: Edge): void {
-    if (ctx.nodeKeysOn() && chosenCount() > 0) {
-      ctx.alignNodes(edge);
-      return;
-    }
     const units = arranging("arrange");
     if (units === null) return;
     const reference = alignReference(units);

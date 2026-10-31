@@ -36,10 +36,6 @@ export type ToolId =
   | "hand"
   | "zoom"
   | "lasso"
-  | "nodes"
-  | "builder"
-  | "scissors"
-  | "width"
   | "board"
   | "eyedropper"
   | "gradient"
@@ -54,7 +50,6 @@ export type ToolId =
   | "connector"
   | "cover"
   | "polygon"
-  | "bezier"
   | "text";
 
 /// I profili della famiglia `canvas` che hanno strumenti: il disegno e le
@@ -94,16 +89,6 @@ export const TOOLS: readonly ToolSpec[] = [
   { id: "zoom", levels: BOTH, group: "pick", icon: "draw-zoom", label: "draw.tool.zoom", description: "draw.tool.zoom.hint", shortcut: "z" },
   // Lo stesso tasto di Illustrator.
   { id: "lasso", levels: { vector: "standard" }, group: "pick", icon: "draw-lasso", label: "draw.tool.lasso", description: "draw.tool.lasso.hint", shortcut: "q" },
-  // Lo stesso tasto di Inkscape.
-  { id: "nodes", levels: { vector: "expert" }, group: "pick", icon: "draw-nodes", label: "draw.tool.nodes", description: "draw.tool.nodes.hint", shortcut: "a", aliases: ["n"] },
-  // La lettera di Illustrator, che la vuole con Maiusc: qui, come per gli
-  // altri strumenti, da sola.
-  { id: "builder", levels: { vector: "expert" }, group: "pick", icon: "draw-builder", label: "draw.tool.builder", description: "draw.tool.builder.hint", shortcut: "m" },
-  // La lettera di Illustrator. Un tocco taglia, un trascinamento è il
-  // Coltello, che in Illustrator è uno strumento a parte.
-  { id: "scissors", levels: { vector: "expert" }, group: "pick", icon: "draw-scissors", label: "draw.tool.scissors", description: "draw.tool.scissors.hint", shortcut: "c" },
-  // La lettera di Illustrator, che la vuole con Maiusc.
-  { id: "width", levels: { vector: "expert" }, group: "pick", icon: "draw-width", label: "draw.tool.width", description: "draw.tool.width.hint", shortcut: "w" },
   // La lettera del Frame di Figma, dove le cornici sono le tavole: quella di
   // Illustrator è la «O» con Maiusc, e qui la «O» è dell'ellisse.
   { id: "board", levels: { vector: "standard" }, group: "pick", icon: "draw-board", label: "draw.tool.board", description: "draw.tool.board.hint", shortcut: "f" },
@@ -132,8 +117,6 @@ export const TOOLS: readonly ToolSpec[] = [
   // poligono alla stella e ritorno: etichetta e icona sono quelle del
   // poligono, l'editor le cambia per la stella.
   { id: "polygon", levels: { vector: "standard" }, group: "shape", icon: "draw-polygon", label: "draw.tool.polygon", description: "draw.tool.polygon.hint", shortcut: "y" },
-  // Lo stesso tasto di Inkscape, dove la penna di Bézier è «B».
-  { id: "bezier", levels: { vector: "expert" }, group: "shape", icon: "draw-bezier", label: "draw.tool.bezier", description: "draw.tool.bezier.hint", shortcut: "b" },
   { id: "text", levels: { vector: "standard" }, group: "text", icon: "draw-text", label: "draw.tool.text", description: "draw.tool.text.hint", shortcut: "t", simple: true },
 ];
 
@@ -184,24 +167,7 @@ export type Feature =
   | "history"
   | "accessibility"
   | "export"
-  | "present"
-  | "attributes"
-  | "outline"
-  | "transform"
-  | "apply"
-  | "path"
-  | "boolean"
-  | "trace"
-  | "masks"
-  | "typeset"
-  | "fonts"
-  | "effects"
-  | "blend"
-  | "motifs"
-  | "print"
-  | "symbols"
-  | "repeat"
-  | "editable";
+  | "present";
 
 export interface FeatureSpec {
   readonly id: Feature;
@@ -213,8 +179,7 @@ export interface FeatureSpec {
   readonly simple?: true;
 }
 
-/// I comandi, nell'ordine della barra: quelli dello Standard, poi quelli
-/// dell'Esperto.
+/// I comandi, nell'ordine della barra.
 const COMMANDS: readonly FeatureSpec[] = [
   { id: "colors", level: "standard", label: "draw.feature.colors", simple: true },
   // I colori del documento sono una sezione del pannello delle proprietà:
@@ -250,45 +215,6 @@ const COMMANDS: readonly FeatureSpec[] = [
   { id: "accessibility", level: "standard", label: "draw.feature.accessibility" },
   { id: "export", level: "standard", label: "draw.feature.export", simple: true },
   { id: "present", level: "standard", label: "draw.feature.present" },
-  { id: "attributes", level: "expert", label: "draw.feature.attributes" },
-  { id: "outline", level: "expert", label: "draw.feature.outline" },
-  { id: "transform", level: "expert", label: "draw.feature.transform" },
-  { id: "apply", level: "expert", label: "draw.feature.apply" },
-  { id: "path", level: "expert", label: "draw.feature.path" },
-  { id: "boolean", level: "expert", label: "draw.feature.boolean" },
-  { id: "trace", level: "expert", label: "draw.feature.trace" },
-  { id: "masks", level: "expert", label: "draw.feature.masks" },
-  { id: "typeset", level: "expert", label: "draw.feature.typeset" },
-  // I caratteri del vault sono voci del menu «Carattere», nel pannello delle
-  // proprietà e negli attributi: nel Personalizzato si vedono con loro. Un
-  // disegno che li usa li mostra a ogni livello.
-  { id: "fonts", level: "expert", label: "draw.feature.fonts" },
-  // Gli effetti e la fusione sono sezioni e campi del pannello delle
-  // proprietà: nel Personalizzato si vedono con lui.
-  { id: "effects", level: "expert", label: "draw.feature.effects" },
-  { id: "blend", level: "expert", label: "draw.feature.blend" },
-  // I motivi del documento sono una voce del menu della campitura e due
-  // campi, il nome e l'eliminazione, nel pannello delle proprietà: nel
-  // Personalizzato si vedono con lui.
-  { id: "motifs", level: "expert", label: "draw.feature.motifs" },
-  // La pagina di stampa è il gruppo «Pagina» della finestra «Esporta», per
-  // il PDF: nel Personalizzato si vede con lei.
-  { id: "print", level: "expert", label: "draw.feature.print" },
-  // I simboli sono «Crea simbolo» e «Scollega» nella barra della selezione
-  // e nel menu, la riga «Simbolo» del pannello delle proprietà e il pannello
-  // dei simboli. Un'istanza si apre per modificare il suo simbolo dove si
-  // isola un gruppo, a ogni livello che ha la selezione avanzata.
-  { id: "symbols", level: "expert", label: "draw.feature.symbols" },
-  // Le ripetizioni sono il menu «Ripeti» nella barra della selezione e nel
-  // menu, e la sezione «Ripetizione» del pannello delle proprietà. Una
-  // ripetizione si apre per modificare i suoi originali dove si isola un
-  // gruppo, e si separa come un gruppo, a ogni livello.
-  { id: "repeat", level: "expert", label: "draw.feature.repeat" },
-  // «Rendi modificabile» è una voce del menu della selezione, per le parti
-  // di altri programmi scelte o sotto il puntatore, una per il disegno
-  // intero, e un pulsante accanto a «Modifica» sull'avviso di un SVG che
-  // FubDraw non ha fatto.
-  { id: "editable", level: "expert", label: "draw.feature.editable" },
 ];
 
 /// Tutte le parti del disegno, per livello, e in un livello prima gli

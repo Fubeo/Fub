@@ -26,13 +26,6 @@ entrano nel file del [disegno](drawing.md)
   schermo, arriva più vicino a un bersaglio, e l'altro lo segue. Un bersaglio
   oltre il bordo fermo non vale: l'oggetto non si ribalta.
 - **Disegnando** una forma, il primo punto e quello che si tira.
-- Con lo strumento **Nodi**, il nodo trascinato si ferma in linea con gli
-  altri oggetti e coi nodi del tracciato che restano fermi; una maniglia anche
-  col suo nodo.
-- Con la penna di **Bézier**, il nodo nuovo e la maniglia che si tira si
-  fermano in linea con gli oggetti, con la pagina e coi nodi già posati, anche
-  prima del tocco, nel segmento che verrebbe; con la Curvatura, il punto che
-  si posa o si trascina, anche su un tracciato scelto.
 - Con lo strumento **Tavola**, la tavola che si disegna, si sposta o si tira
   si ferma in linea con gli oggetti, tranne quelli che porta con sé, e con le
   altre tavole, e spostandola anche a distanze uguali; la pagina vale

@@ -23,6 +23,8 @@ import {
   freshLayerName,
   hideLayerOps,
   layerName,
+  inLayer,
+  intoLayerOps,
   lockLayerOps,
   MAX_LAYER_NAME,
   removeLayerOps,
@@ -42,6 +44,7 @@ const LAYER_IN_COMMAND = 24;
 export interface LayersGridContext {
   writeLayers: (label: DrawKey, arranged: Arranged, key: string | null) => boolean;
   layerItems: () => MenuItem[];
+  intoItems: () => MenuItem[];
   changeGrid: (next: Grid) => void;
   guideItems: (index: number) => MenuItem[];
   rulerItems: () => MenuItem[];
@@ -53,7 +56,7 @@ export function installLayersGrid(ctx: EditorContext): void {
   const {
     has, suggestions, pageButton, indexer, boardsNow, editable, currentIndex, newIds, announce, showGrid, docUnit, stepNow, lengthText, lengthSpoken,
     showGuideLines, turnView, showHandles, outlineNow, syncProperties, currentLayer, choose, syncLayers, commit, cancelGesture, lockGuide, deleteGuide,
-    lockAllGuides, deleteAllGuides, touchSettings, editGuides, effectsExtent, keptLook, openMenu, settleCrop, options
+    lockAllGuides, deleteAllGuides, touchSettings, editGuides, effectsExtent, keptLook, openMenu, settleCrop, selectedUnits, followSelection, arranging, arrange, options
   } = ctx;
   // --- Livelli -----------------------------------------------------------------
 
@@ -455,4 +458,49 @@ export function installLayersGrid(ctx: EditorContext): void {
     ];
   };
   ctx.pageItems = pageItems;
+
+  /// Porta gli oggetti scelti in cima a `layer`, dove si vedevano.
+  function moveIntoLayer(layer: LayerInfo): void {
+    const units = arranging("layers");
+    if (units === null) return;
+    const name = layerTitle(layer);
+    const refusal = layerRefusal(layer);
+    if (refusal !== null) {
+      announce(t(refusal, { name }));
+      return;
+    }
+    const arranged = intoLayerOps(ctx.engine.model!, units, layer, newIds());
+    if (arranged === null) {
+      announce(t("draw.layer.flat", { name }));
+      return;
+    }
+    const moving = units.filter((unit) => !inLayer(unit, layer)).length;
+    // Chi entra nel livello ne prende l'opacità e la visibilità.
+    const kept = arrange("draw.action.into_layer", arranged, null, { key: "draw.layer.styled", vars: { name }, containers: "take" });
+    if (kept === null) return;
+    // La selezione ha le stesse chiavi, ma sta nel livello nuovo.
+    followSelection();
+    announce(`${plural(moving, "draw.moved_to_layer.one", "draw.moved_to_layer.other", { name })}${kept}`);
+  }
+
+  /// Le voci di «Sposta in un livello», dalla cima: spento il livello che ha
+  /// già tutti gli oggetti scelti, e quello bloccato o nascosto, che lo dice.
+  const intoItems = (): MenuItem[] => {
+    const units = selectedUnits();
+    const layers = currentIndex().layers;
+    const items: MenuItem[] = [];
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const layer = layers[i]!;
+      const here = units.length > 0 && units.every((unit) => inLayer(unit, layer));
+      const description = here ? t("draw.into_layer.here") : layerState(layer);
+      items.push({
+        label: layerTitle(layer),
+        disabled: here || layerRefusal(layer) !== null,
+        ...(description === "" ? {} : { description }),
+        run: () => moveIntoLayer(layer),
+      });
+    }
+    return items;
+  };
+  ctx.intoItems = intoItems;
 }

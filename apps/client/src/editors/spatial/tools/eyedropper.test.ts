@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { Point } from "../scene/matrix";
 import { doc } from "../scene/test-support";
 import type { LeafNode } from "../scene/model";
-import { imagePixel, paintAt, pixelColor, shownPaint, sightAt, sightStyle, type ImageSight, type ShapeSight, type Sight } from "./eyedropper";
+import { imagePixel, paintAt, pixelColor, shownPaint, sightAt, sightStyle, pictureSource, type ImageSight, type ShapeSight, type Sight } from "./eyedropper";
 import { estimate } from "./measure";
 import { gesture, NewIds } from "./edit";
 import { styleOps } from "./look";
@@ -242,5 +242,18 @@ describe("il pixel di un'immagine", () => {
     expect(pixelColor([255, 128, 0, 64])).toBe("#ff8000");
     expect(pixelColor([255, 128, 0, 0])).toBeNull();
     expect(pixelColor([])).toBeNull();
+  });
+});
+
+describe("pictureSource", () => {
+  it("legge l'href, anche xlink:href, il riquadro e le proporzioni", () => {
+    const opened = open(doc(`${LAYER}<image id="a" x="10" y="20" width="30" height="40" preserveAspectRatio="xMinYMin slice" href="a.png"/><image id="b" width="5" height="6" xlink:href="b.png"/></g>`));
+    expect(pictureSource(opened.index.get("a")!.node)).toEqual({ href: "a.png", box: { min: [10, 20], max: [40, 60] }, aspect: "xMinYMin slice" });
+    expect(pictureSource(opened.index.get("b")!.node)).toEqual({ href: "b.png", box: { min: [0, 0], max: [5, 6] }, aspect: "" });
+  });
+
+  it("un'immagine senza area non si legge", () => {
+    const opened = open(doc(`${LAYER}<image id="a" width="0" height="40" href="a.png"/></g>`));
+    expect(pictureSource(opened.index.get("a")!.node)).toBeNull();
   });
 });

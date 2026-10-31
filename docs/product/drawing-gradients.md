@@ -146,11 +146,8 @@ Con più sfumature ciò che si dice nomina quale, «Sfumatura 2 di 3».
 - **«Incolla lo stile» e il contagocce** danno a ogni oggetto la sua copia;
   il contagocce con `Maiusc` prende il colore che la sfumatura ha in quel
   punto ([Disegni, colori](drawing-colors.md#il-contagocce)).
-- **Separa, il costruttore di forme e le forbici** lasciano agli oggetti che
-  nascono la stessa sfumatura, che usano insieme finché uno di loro non la
+- **Separa** lascia agli oggetti che nascono la stessa sfumatura, che usano insieme finché uno di loro non la
   cambia.
-- **«Applica trasformazione»**, nel Completo, riscrive la sfumatura nelle
-  coordinate nuove, e la si vede dov'era ([Disegni, strumenti avanzati](drawing-expert.md#applica-trasformazione)).
 - **In Lettura e nell'export** la sfumatura è quella del file, uguale a
   quella del foglio.
 

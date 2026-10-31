@@ -226,7 +226,7 @@ describe("un documento che non si modifica subito", () => {
   it("un SVG estraneo è l'immagine del documento intero, e «Modifica» lo adotta", () => {
     const { surface, changes } = mount(FOREIGN);
     expect(shown()).toEqual({
-      notice: "Questo SVG non è stato fatto con FubDraw: si guarda, e si disegna dopo «Modifica». Il file riceve due attributi sulla radice; il resto resta com’è. «Rendi modificabile…» riscrive anche le sue parti nel formato di FubDraw, dove si può senza che cambi ciò che si vede.",
+      notice: "Questo SVG non è stato fatto con FubDraw: si guarda, e si disegna dopo «Modifica». Il file riceve due attributi sulla radice; il resto resta com’è.",
       adopt: true,
       draw: false,
       read: true,
@@ -760,16 +760,16 @@ describe("lo spazio di lavoro e la griglia", () => {
     // L'Essenziale scelto nelle versioni precedenti vale «Semplice».
     const mountFresh = await fresh(createFakeHost({ settings: [level("essential")] }));
     mountFresh(parent);
-    expect(tools(parent), "prima della lettura, Completo").toContain("bezier");
+    expect(tools(parent), "prima della lettura, Completo").toContain("lasso");
     await settle();
-    expect(tools(parent)).not.toContain("bezier");
+    expect(tools(parent)).not.toContain("lasso");
     expect(tools(parent)).toContain("highlighter");
 
     const other = document.createElement("div");
     document.body.append(other);
     try {
       mountFresh(other);
-      expect(tools(other), "subito").not.toContain("bezier");
+      expect(tools(other), "subito").not.toContain("lasso");
     } finally {
       other.remove();
     }
@@ -798,7 +798,7 @@ describe("lo spazio di lavoro e la griglia", () => {
     const mountFresh = await fresh(host);
     const surface = mountFresh(parent);
     await settle();
-    expect(tools(parent)).not.toContain("bezier");
+    expect(tools(parent)).not.toContain("lasso");
     expect(parent.querySelector<HTMLElement>(".draw-rail-full")!.hidden).toBe(false);
     // Quando nasce legge lo spazio e i suggerimenti; poi un cambio dello
     // spazio lo rilegge una volta.
@@ -806,7 +806,7 @@ describe("lo spazio di lavoro e la griglia", () => {
 
     await host.module.api.setSetting("draw.workspace", "full");
     await settle();
-    expect(tools(parent)).toContain("bezier");
+    expect(tools(parent)).toContain("lasso");
     expect(reads(host)).toBe(born + 1);
 
     // «Completo» in fondo alla colonna scrive la scelta.
@@ -815,7 +815,7 @@ describe("lo spazio di lavoro e la griglia", () => {
     parent.querySelector<HTMLButtonElement>(".draw-rail-full")!.click();
     await settle();
     expect(host.atGate("setSetting").map((call) => call.args).pop()).toEqual(["draw.workspace", "full"]);
-    expect(tools(parent)).toContain("bezier");
+    expect(tools(parent)).toContain("lasso");
 
     surface.destroy();
     mounted = [];
@@ -936,7 +936,7 @@ describe("le schede dell'ispettore (C1)", () => {
     }
   });
 
-  it("Risorse ha una ricerca sola, per le forme e i simboli; smontata, i simboli riprendono la loro", async () => {
+  it("Risorse ha la ricerca delle forme, senza i simboli (ADR 0231)", async () => {
     const host = createFakeHost({ settings: [level("expert")] });
     const surface = (await fresh(host))(parent);
     await settle();
@@ -944,16 +944,9 @@ describe("le schede dell'ispettore (C1)", () => {
     document.body.append(sheet);
     try {
       const unmount = tab(surface, "draw.resources").mount(sheet);
-      const search = sheet.querySelector<HTMLInputElement>(".draw-library-search")!;
-      const own = sheet.querySelector<HTMLInputElement>(".draw-symbols-search")!;
-      expect(search.placeholder).toBe("Cerca fra forme e simboli");
-      expect(own.closest<HTMLElement>(".draw-symbols-find")!.hidden).toBe(true);
-      search.value = "freccia";
-      search.dispatchEvent(new Event("input", { bubbles: true }));
-      expect(own.value, "i simboli cercano la stessa cosa").toBe("freccia");
+      expect(sheet.querySelector<HTMLInputElement>(".draw-library-search")!.placeholder).toBe("Cerca una forma");
+      expect(sheet.querySelector(".draw-symbols-search")).toBeNull();
       unmount();
-      expect(own.closest<HTMLElement>(".draw-symbols-find")!.hidden).toBe(false);
-      expect(search.placeholder).toBe("Cerca una forma");
     } finally {
       sheet.remove();
     }
@@ -1041,67 +1034,6 @@ describe("le schede dell'ispettore (C1)", () => {
     } finally {
       sheet.remove();
     }
-  });
-});
-
-describe("«Rendi modificabile…» nell'avviso di un SVG estraneo", () => {
-  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
-  /// Il secondo pulsante dell'avviso, dopo «Modifica».
-  const editable = (): HTMLButtonElement => parent.querySelectorAll<HTMLButtonElement>(".vector-notice-action")[1]!;
-  const dialog = (): HTMLElement | null => document.querySelector<HTMLElement>(".shell-dialog");
-  const spoken = (): string => (parent.querySelector('.draw-editor > .sr-only[role="status"]')?.textContent ?? "").trim();
-  /// Lo stesso SVG estraneo col quadrato scritto con `style`.
-  const STYLED = FOREIGN.replace('fill="none" stroke="#000000" stroke-width="2"', 'style="fill:none;stroke:#000000;stroke-width:2"');
-
-  afterEach(() => {
-    for (const open of document.querySelectorAll(".shell-dialog")) open.remove();
-  });
-
-  it("c'è in Completo, accanto a «Modifica», e la frase dice che cosa fa", async () => {
-    const host = createFakeHost({ settings: [drawSetting("draw.workspace", "simple")] });
-    host.module.api.setSetting("draw.workspace", "simple");
-    (await fresh(host))(parent, {}, STYLED);
-    await settle();
-    expect(shown()).toMatchObject({ notice: "Questo SVG non è stato fatto con FubDraw: si guarda, e si disegna dopo «Modifica». Il file riceve due attributi sulla radice; il resto resta com’è.", adopt: true });
-    expect(editable().hidden).toBe(true);
-    await host.module.api.setSetting("draw.workspace", "full");
-    await settle();
-    expect(editable().hidden).toBe(false);
-    expect(editable().textContent).toBe("Rendi modificabile…");
-    expect(shown().notice).toBe(
-      "Questo SVG non è stato fatto con FubDraw: si guarda, e si disegna dopo «Modifica». Il file riceve due attributi sulla radice; il resto resta com’è. «Rendi modificabile…» riscrive anche le sue parti nel formato di FubDraw, dove si può senza che cambi ciò che si vede.",
-    );
-  });
-
-  it("adotta e riscrive in un passo dopo la finestra, e l'annulla torna all'immagine", async () => {
-    const surface = (await fresh(createFakeHost({ settings: [level("expert")] })))(parent, {}, STYLED);
-    await settle();
-    editable().click();
-    await vi.waitFor(() => expect(dialog()?.querySelector(".draw-editable-message")).toBeTruthy());
-    expect(dialog()!.querySelector(".palette-heading")!.textContent).toBe("Rendi modificabile il disegno");
-    expect(dialog()!.querySelector(".draw-editable-message")!.textContent).toBe(
-      "Una parte di un altro programma diventa modificabile, e si vede come prima. Il file riceve anche i due attributi di FubDraw sulla radice.",
-    );
-    dialog()!.querySelector("form")!.requestSubmit();
-    await vi.waitFor(() => expect(surface.buffer!.getDoc()).toContain('fub:version="1"'));
-    expect(surface.buffer!.getDoc()).toContain('fill="none" stroke="#000000" stroke-width="2"');
-    expect(surface.buffer!.getDoc()).not.toContain("style=");
-    expect(shown()).toEqual({ notice: null, adopt: false, draw: true, read: false });
-    await vi.waitFor(() => expect(document.activeElement).toBe(parent.querySelector(".draw-surface")));
-    expect(spoken()).toBe("Una parte è diventata modificabile.");
-    undo();
-    expect(surface.buffer!.getDoc()).toBe(STYLED);
-    expect(shown()).toMatchObject({ adopt: true, draw: false, read: true });
-  });
-
-  it("un SVG estraneo che è già tutto del formato si adotta e basta, senza finestra", async () => {
-    const surface = (await fresh(createFakeHost({ settings: [level("expert")] })))(parent, {}, FOREIGN);
-    await settle();
-    editable().click();
-    await vi.waitFor(() => expect(surface.buffer!.getDoc()).toContain('fub:version="1"'));
-    expect(surface.buffer!.getDoc()).toBe(SOURCE);
-    expect(dialog()).toBeNull();
-    expect(spoken()).toBe("Era già tutto nel formato di FubDraw: ora il disegno si modifica.");
   });
 });
 

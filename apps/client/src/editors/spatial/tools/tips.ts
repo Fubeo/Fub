@@ -69,17 +69,14 @@ import { formatNumber } from "../number";
 import type { Role } from "../scene/analysis";
 import { parsePath } from "../scene/geometry";
 import type { Segment } from "../scene/geometry";
-import { markerFit, markerMatrix, placed, vertices, type MarkerPlace, type Vertex } from "../scene/markers";
 import type { Point } from "../scene/matrix";
 import { elementChildren, writtenOf, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import type { Op } from "../scene/ops";
 import { pathData, type Elem } from "../scene/serialize";
-import { length, nonNegativeLength, opacity as parseOpacity, paint as parsePaint, paintReference, points as parsePoints, reference, trim } from "../scene/values";
+import { length, opacity as parseOpacity, paint as parsePaint, paintReference, points as parsePoints, reference, trim } from "../scene/values";
 import { elemOf, plainAttributes, Plan, type Arranged } from "./arrange";
-import { mapped } from "./boolean";
 import { gesture, type NewIds } from "./edit";
-import { geometryBox, shapeSegments, type Unit } from "./hit";
-import { strokeArea, type Cap, type Join } from "./offset";
+import { geometryBox, type Unit } from "./hit";
 import { gradientOf, gradientPaint, homeOf, paintCode, resourcesOf, swatchPaint, type Gradient, type Home } from "./resources";
 
 /// Una forma della raccolta: il triangolo pieno, la punta aperta, il
@@ -870,84 +867,6 @@ export class Tipper {
 // Le punte nel contorno.
 // ---------------------------------------------------------------------------
 
-/// I tag su cui SVG disegna i marcatori.
-const MARKED_TAGS: ReadonlySet<string> = new Set(["path", "line", "polyline", "polygon"]);
-
-/// Le proprietà dei marcatori, coi vertici dove ciascuna li mette.
-const MARKER_PLACES: ReadonlyArray<readonly [MarkerPlace, string]> = [["start", "marker-start"], ["mid", "marker-mid"], ["end", "marker-end"]];
-
-/// Dove `node` ha un marcatore, della raccolta o no: all'inizio, a metà, alla
-/// fine. Vuoto per una forma su cui SVG non li disegna.
-export function markedPlaces(node: ElementPart): ReadonlySet<MarkerPlace> {
-  const out = new Set<MarkerPlace>();
-  if (node.details === null || !MARKED_TAGS.has(node.details.tag)) return out;
-  const own = ownOf(node);
-  for (const [place, name] of MARKER_PLACES) {
-    const value = own.get(name);
-    if (value !== undefined && reference(value) !== null) out.add(place);
-  }
-  return out;
-}
-
-const capOf = (value: string | undefined): Cap => (value === "round" || value === "square" ? value : "butt");
-const joinOf = (value: string | undefined): Join => (value === "round" || value === "bevel" ? value : "miter");
-
-/// Le aree che il contenuto di un marcatore della raccolta dipinge, nelle
-/// coordinate del marcatore, una per forma: la forma com'è se si riempie, il
-/// suo contorno se si traccia. `null` se un contorno non diventa un'area.
-function contentAreas(children: readonly Elem[]): Segment[][] | null {
-  const out: Segment[][] = [];
-  for (const child of children) {
-    const segments = shapeSegments(child.tag, Object.entries(child.attrs));
-    if (segments.length === 0) continue;
-    const { fill, stroke } = child.attrs;
-    if (fill === undefined || trim(fill) !== "none") out.push([...segments]);
-    if (stroke === undefined || trim(stroke) === "none") continue;
-    const width = nonNegativeLength(child.attrs["stroke-width"] ?? "1") ?? 1;
-    const area = strokeArea(segments, { width, cap: capOf(child.attrs["stroke-linecap"]), join: joinOf(child.attrs["stroke-linejoin"]), miterLimit: 4, dashes: [] });
-    if (typeof area === "string") return null;
-    if (area.length > 0) out.push(area);
-  }
-  return out;
-}
-
-/// Le aree che le punte di `node` coprono, nelle coordinate della forma, una
-/// per punta e per forma del suo contenuto; `segments` è il tracciato di
-/// `node` e `width` lo spessore del suo contorno. Ogni punta sta dove la
-/// mette il disegno: sul vertice del suo capo, girata come il tracciato e
-/// grande quanto lo spessore, con le regole di `scene/markers.ts`. Il
-/// contenuto non si ritaglia col riquadro del marcatore, che SVG applica:
-/// nessuna punta della raccolta lo supera.
-///
-/// Vuoto se `node` non ha punte. `null` se non si possono mettere nel
-/// contorno: un marcatore che non è della raccolta a un capo, un marcatore a
-/// metà (FubDraw non ne scrive), o un'area che non si calcola.
-export function tipAreas(model: DocumentModel, node: ElementPart, segments: readonly Segment[], width: number): Segment[][] | null {
-  const marked = markedPlaces(node);
-  if (marked.size === 0) return [];
-  if (marked.has("mid")) return null;
-  const reader = new Reader(model);
-  const own = ownOf(node);
-  const out: Segment[][] = [];
-  let list: readonly Vertex[] | null = null;
-  for (const end of TIP_ENDS) {
-    const state = reader.state(own, end);
-    if (state.kind === "none") continue;
-    if (state.kind === "custom") return null;
-    const elem = elemOf(reader.markers.get(state.id)!.node);
-    if (elem === null || elem.children === undefined) return null;
-    const fit = markerFit((name) => elem.attrs[name]);
-    if (fit === null) continue;
-    const content = contentAreas(elem.children);
-    if (content === null) return null;
-    list ??= vertices(segments);
-    for (const vertex of placed(list, end)) {
-      const matrix = markerMatrix(fit, vertex, end, width);
-      for (const area of content) out.push(mapped(area, matrix));
-    }
-  }
-  return out;
-}
 
 // ---------------------------------------------------------------------------
 // Seguire la linea.

@@ -34,7 +34,7 @@ import {
   type Rich,
   type RichChange,
 } from "../rich";
-import { LINE_SPACING, TEXT_FAMILY } from "../text";
+import { TEXT_FAMILY } from "../text";
 import { LINES_FORM, type FieldForm } from "../text-field";
 import { unwrap, WRAP, wrapParagraphs, wrapValue } from "../wrap";
 import { HIT_PX } from "./constants";
@@ -68,7 +68,6 @@ export interface TextToolContext {
   editLabel: (unit: Unit) => boolean;
   editSelectedText: () => void;
   openText: (p: Point, pointer: InkPointerType) => void;
-  openArea: (from: Point, end: Point) => void;
   finishText: (write?: boolean) => void;
   cursorPoint: () => Point;
   announceCursor: () => void;
@@ -84,9 +83,7 @@ export function installTextTool(ctx: EditorContext): void {
   const {
     life, has, drawingFonts, measureText, textStyle, toolbar, surface, live, suggestions, textLayer, field, textInput, labelText, painter, cursorMark,
     editable, currentIndex, grownPage, newIds, announce, objects, showCursor, setCamera, stepNow, coordText, viewArea, viewCenter, selectedUnits, labelOf,
-    cited, syncControls, drawnPaint, commit, select, keyOfNode, cancelGesture, target, snapped, cutSpotAt, cutSpotText, hoverCut, widthSpotAt,
-    widthSpotText, hoverWidth, dropperAt, dropperText, hoverDropper, gradientNow, gradientSpotAt, gradientSpotText, drawing, bezierTarget, middlePoint,
-    showBezier, bezierNodeText, handlers
+    cited, syncControls, drawnPaint, commit, select, keyOfNode, cancelGesture, target, snapped, dropperAt, dropperText, hoverDropper, gradientNow, gradientSpotAt, gradientSpotText, handlers
   } = ctx;
   // --- Il testo ------------------------------------------------------------------
   //
@@ -305,23 +302,6 @@ export function installTextTool(ctx: EditorContext): void {
   };
   ctx.openText = openText;
 
-  /// Lo strumento Testo trascinato da `from` a `end`: un testo in area
-  /// nuovo, largo quanto il trascinamento e almeno quanto il corpo, con la
-  /// prima riga in cima al riquadro. L'aggancio vale per i due angoli.
-  const openArea = (from: Point, end: Point): void => {
-    if (!editable() || !has("text")) return;
-    const to = target(newIds());
-    if (to === null) return;
-    const a = apply(to.inverse, snapped(from));
-    const b = apply(to.inverse, snapped(end));
-    const size = textStyle.width;
-    const width = Math.max(Math.abs(b[0] - a[0]), size);
-    // Dalla cima della riga alla sua linea di base, come la mette il campo.
-    const drop = size * (LINE_SPACING / 2 + baselineOf("normal", "400", TEXT_FAMILY));
-    const before: Rich = { attrs: { ...newTextAttrs(), [WRAP]: wrapValue(width) }, inherited: initialText(), lines: [{ attrs: { dy: "0" }, spans: [] }] };
-    startTyping({ key: null, before, file: null, look: null, wrap: width, at: [Math.min(a[0], b[0]), Math.min(a[1], b[1]) + drop], matrix: to.matrix, label: null });
-  };
-  ctx.openArea = openArea;
 
   /// Chiude il campo; con `write` scrive ciò che è cambiato, in un passo di
   /// annulla. Un testo nuovo entra nel livello che riceve, uno che c'è
@@ -511,37 +491,11 @@ export function installTextTool(ctx: EditorContext): void {
     setCamera(panned(ctx.camera, dx, dy));
   };
 
-  /// Dove è il cursore, e che cosa c'è sotto: con la penna di Bézier, il
-  /// primo nodo o l'ultimo, se un tocco lì chiude o conclude il tracciato;
-  /// con la Curvatura anche un punto in mezzo, che un tocco cambia; col
-  /// contagocce la forma e il colore; con lo strumento Sfumatura un capo, un
-  /// punto o la linea.
+  /// Dove è il cursore, e che cosa c'è sotto: col contagocce la forma e il
+  /// colore; con lo strumento Sfumatura un capo, un punto o la linea.
   const announceCursor = (): void => {
     const p = cursorPoint();
     const at = t("draw.cursor.at", { x: coordText(p[0]), y: coordText(p[1]) });
-    const aim = ctx.pressed === null && drawing() !== null ? bezierTarget(p, "mouse") : "add";
-    if (aim === "point") {
-      announce(`${at}: ${bezierNodeText(drawing()!.nodes, middlePoint(p, "mouse"))} ${t("draw.bezier.cursor.point")}`);
-      return;
-    }
-    if (aim !== "add") {
-      announce(`${at}: ${t(aim === "close" ? "draw.bezier.cursor.close" : "draw.bezier.cursor.last")}`);
-      return;
-    }
-    if (ctx.pressed === null && ctx.tool === "scissors" && has("scissors")) {
-      const found = cutSpotAt(p, "mouse");
-      if (typeof found !== "string") {
-        announce(`${at}: ${cutSpotText(found)}`);
-        return;
-      }
-    }
-    if (ctx.pressed === null && ctx.tool === "width" && has("width")) {
-      const found = widthSpotAt(p, "mouse");
-      if (typeof found !== "string") {
-        announce(`${at}: ${widthSpotText(found)}`);
-        return;
-      }
-    }
     if (ctx.pressed === null && ctx.tool === "gradient") {
       const read = gradientNow();
       const spot = read === null ? null : gradientSpotAt(read, p, "mouse", false);
@@ -591,15 +545,7 @@ export function installTextTool(ctx: EditorContext): void {
     keepInView(next);
     showCursor();
     trace(next);
-    if (ctx.pressed === null && drawing() !== null) {
-      ctx.hover = { at: next, pointer: "mouse" };
-      showBezier();
-    }
-    if (ctx.pressed === null) {
-      hoverCut(next, "mouse");
-      hoverWidth(next, "mouse");
-      hoverDropper(next, "mouse", true);
-    }
+    if (ctx.pressed === null) hoverDropper(next, "mouse", true);
     announceCursor();
   };
 

@@ -6,11 +6,7 @@ import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Role } from "../../scene/analysis";
 import type { LengthUnit } from "../../scene/rulers";
 import type { DrawKey } from "../../strings";
-import type { NodeShape } from "../../painter/overlay";
 import type { Axis, Edge, Order } from "../arrange";
-import type { Join } from "../offset";
-import type { NodeKey, NodeKind } from "../nodes";
-import type { NoNodes } from "../nodable";
 import type { Feature } from "../registry";
 import type { ShapeTool } from "../shapes";
 
@@ -63,25 +59,11 @@ export const ROTATE_STEP = 15;
 export const RATIO_ROLES: ReadonlySet<Role> = new Set<Role>(["group", "link", "stroke", "text", "image"]);
 
 /// Le parti che hanno un pulsante nella barra della selezione.
-export const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "crop", "trace", "masks", "motifs", "typeset", "connector", "symbols", "repeat"];
-
-/// Il tasto che mostra e nasconde gli attributi, dal livello Esperto: lo
-/// stesso dell'editor XML di Inkscape.
-export const ATTRIBUTES_BINDING = "Mod-Shift-x";
-
-/// «Trasforma», dal livello Esperto: lo stesso tasto della finestra di
-/// Inkscape.
-export const TRANSFORM_BINDING = "Mod-Shift-m";
+export const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "crop", "connector"];
 
 /// «Immagine dal vault…», dal livello Standard: il tasto con cui Inkscape
 /// importa.
 export const IMAGE_BINDING = "Mod-i";
-
-/// «Crea maschera di ritaglio» e «Rilascia maschera», dal livello Esperto:
-/// i tasti di Illustrator, con il 7 per posizione.
-export const CLIP_MASK_BINDING = "Mod-7";
-
-export const RELEASE_MASK_BINDING = "Mod-Alt-7";
 
 /// Lo scarto di una copia dal suo originale, e fra due immagini incollate
 /// insieme, in pixel dello schermo: si vedono tutte, a ogni zoom.
@@ -111,35 +93,9 @@ export const DOUBLE_TAP_PX: Readonly<Record<InkPointerType, number>> = { pen: 8,
 /// dito. Fra due vicini vince il più vicino.
 export const NODE_PX: Readonly<Record<InkPointerType, number>> = { pen: 12, mouse: 12, touch: 20 };
 
-/// Quanto lontani due capi possono stare sullo schermo, in pixel, e con
-/// «Unisci» diventare un nodo solo: così si vedono toccarsi. Più lontani, li
-/// unisce una linea.
-export const JOIN_PX = 2;
-
-/// La forma di un nodo, per tipo, come la disegna lo strato sopra.
-export const NODE_SHAPES: Readonly<Record<NodeKind, NodeShape>> = { corner: "diamond", smooth: "square", symmetric: "circle" };
-
-/// Gli angoli dello scostamento, coi loro nomi, nell'ordine della barra.
-export const JOIN_NAMES: ReadonlyMap<Join, DrawKey> = new Map([
-  ["miter", "draw.offset.join.miter"],
-  ["round", "draw.offset.join.round"],
-  ["bevel", "draw.offset.join.bevel"],
-]);
-
-/// I passi del cursore di «Semplifica», e lo scarto ai due capi, in parti
-/// della diagonale delle forme scelte: da quasi niente a un ventesimo. Fra
-/// i capi lo scarto cresce in proporzione, e ogni passo semplifica in scala
-/// quanto il precedente.
-export const SIMPLIFY_STEPS = 100;
-
 /// La scelta dello strumento Tavola quando è la pagina: non è l'id di una
 /// tavola, perché un id XML non comincia con «#».
 export const PAGE_SHEET = "#page";
-
-/// Nessun nodo, e nessun tipo dato.
-export const NO_KEYS: ReadonlySet<NodeKey> = new Set();
-
-export const NO_KINDS: ReadonlyMap<NodeKey, NodeKind> = new Map();
 
 /// Il tasto che mostra e nasconde i righelli: Ctrl+R, quello dei programmi di
 /// disegno, ricarica la pagina nel browser.
@@ -177,34 +133,6 @@ export const AXES: ReadonlyArray<{ readonly axis: Axis; readonly label: DrawKey 
   { axis: "x", label: "draw.distribute.x" },
   { axis: "y", label: "draw.distribute.y" },
 ];
-
-export const NO_NODES: Readonly<Record<NoNodes, DrawKey>> = {
-  text: "draw.nodes.text",
-  image: "draw.nodes.image",
-  connector: "draw.nodes.connector",
-  unreadable: "draw.nodes.unreadable",
-  empty: "draw.nodes.empty",
-  stroke: "draw.nodes.stroke_fixed",
-  instance: "draw.nodes.instance",
-  copy: "draw.nodes.copy",
-  foreign: "draw.nodes.foreign",
-  other: "draw.nodes.no_path",
-};
-
-/// Il tipo di un nodo a parole; un capo di un tracciato aperto non ne ha.
-export const KIND_NAMES: Readonly<Record<NodeKind | "end", DrawKey>> = {
-  corner: "draw.nodes.kind.corner",
-  smooth: "draw.nodes.kind.smooth",
-  symmetric: "draw.nodes.kind.symmetric",
-  end: "draw.nodes.kind.end",
-};
-
-/// Che cosa si annuncia quando i nodi cambiano tipo.
-export const MADE: Readonly<Record<NodeKind, readonly [DrawKey, DrawKey]>> = {
-  corner: ["draw.nodes.made.corner.one", "draw.nodes.made.corner.other"],
-  smooth: ["draw.nodes.made.smooth.one", "draw.nodes.made.smooth.other"],
-  symmetric: ["draw.nodes.made.symmetric.one", "draw.nodes.made.symmetric.other"],
-};
 
 /// Che cosa si annuncia quando una forma entra nel disegno.
 export const ADDED: Readonly<Record<Exclude<ShapeTool, "polygon">, DrawKey>> = {

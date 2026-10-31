@@ -2,8 +2,9 @@
 
 > **Per chi:** chi vuole i testi di un disegno in un carattere suo, oltre ai
 > tre che Fub porta con sé.
-> **Risultato:** sapere quali file valgono come caratteri, come si sceglie una
-> faccia, dove il carattere si vede e che cosa succede quando manca.
+> **Risultato:** sapere quali file valgono come caratteri, come un disegno ne
+> nomina uno, come si sceglie la faccia, dove il carattere si vede e che cosa
+> succede quando manca.
 
 Fub porta con sé tre caratteri: Literata con le grazie, Inter senza grazie e
 JetBrains Mono a spaziatura fissa. Un [disegno](drawing.md) può usarne altri:
@@ -31,27 +32,19 @@ minuscole, ma soltanto nelle lettere ASCII, come nei browser: «roboto» è
   famiglia che il disegno chiede non c'è.
 
 Il vault si legge la prima volta che serve: quando un disegno nomina una
-famiglia che Fub non ha, o quando si apre il menu dei caratteri. Un file che
+famiglia che Fub non ha. Un file che
 arriva, cambia o se ne va nel vault cambia subito i disegni aperti.
 
-## Scegliere il carattere
+## Il nome nel disegno
 
-Nel Completo, o per chi monta l'editor con le sue [parti](drawing-custom.md#che-cosa-porta-una-parte) con la parte
-«Caratteri del vault», le famiglie del vault sono nel menu «Carattere» del
-[pannello delle proprietà](drawing-properties.md) e fra le scelte di
-`font-family` negli [attributi](drawing-expert.md#attributi), dopo i tre
-caratteri di Fub e separate da loro, in ordine alfabetico. Una famiglia si
-scrive nel disegno col suo nome, seguito dalla famiglia generica a cui
-somiglia: `Roboto, sans-serif`, `"Fira Code", monospace`. La generica la dice
-il file: la spaziatura fissa, le parole del nome («Sans», «Serif», «Mono»,
-«Script»), poi la classificazione del disegnatore, poi la forma delle lettere.
-
-Un disegno che usa già un carattere del vault lo mostra in tutti e due gli spazi, anche
-nel Semplice: lo spazio sceglie che cosa si può fare, non che cosa si vede.
-
-Un nome che il formato del disegno non saprebbe rileggere uguale, con una
-barra rovesciata, un carattere di controllo o con spazi in testa o in coda,
-non è fra le scelte: il file si può rinominare da un altro programma.
+Il menu «Carattere» del [pannello delle proprietà](drawing-properties.md)
+offre soltanto i tre caratteri di Fub: le famiglie del vault non sono fra le
+scelte da quando il livello Esperto se n'è andato (decisione 0231). Un
+disegno le nomina col nome della famiglia, seguito dalla famiglia generica a
+cui somiglia: `Roboto, sans-serif`, `"Fira Code", monospace`, come le scrive
+un altro programma o una versione precedente. Un testo che ne usa una la
+mostra nel menu col suo nome, in tutti e due gli spazi: lo spazio sceglie che
+cosa si può fare, non che cosa si vede.
 
 ## La faccia
 
@@ -90,18 +83,14 @@ tolgono quando il disegno si chiude.
 
 ## Gli a capo
 
-Gli a capo di un testo in area si scrivono nel file
-([tipografia](drawing-typography.md#il-testo-in-area)), quindi si misurano
-soltanto col carattere vero. Un cambio di carattere, di stile o di peso che
-tocca un testo con una famiglia del vault aspetta che la sua faccia arrivi, di
-solito un istante; se nel frattempo il disegno cambia, il cambio non si fa e
-si può ripetere. Mentre si scrive un testo, le sue facce, il peso del testo e
-il grassetto, diritti e corsivi, si chiedono subito: quando il campo si chiude
-sono già pronte.
-
-Aprire un disegno non rifà i suoi a capo: restano quelli scritti nel file, che
-sono quelli dell'export, anche se il carattere nel frattempo è cambiato. Si
-rifanno quando si cambia il testo, il suo riquadro o il suo carattere.
+Gli a capo di un testo in area, che un disegno porta da una versione
+precedente, sono scritti nel file: aprire il disegno non li rifà, e restano
+quelli dell'export anche se il carattere nel frattempo è cambiato. Un cambio
+di stile o di peso che tocca un testo con una famiglia del vault aspetta che
+la sua faccia arrivi, di solito un istante; se nel frattempo il disegno
+cambia, il cambio non si fa e si può ripetere. Mentre si scrive un testo, le
+sue facce, il peso del testo e il grassetto, diritti e corsivi, si chiedono
+subito: quando il campo si chiude sono già pronte.
 
 ## Quando manca
 
@@ -142,8 +131,7 @@ apre.
   del vault, si vede nel carattere di Fub che l'export userebbe; una famiglia
   generica come `sans-serif` che viene per prima, o un nome che viene prima di
   un carattere del vault, lo sceglie il browser, che può prenderlo dal
-  sistema. [«Rendi modificabile»](drawing-editable.md) porta la famiglia
-  nell'attributo.
+  sistema.
 
 ## Dove sta il codice
 

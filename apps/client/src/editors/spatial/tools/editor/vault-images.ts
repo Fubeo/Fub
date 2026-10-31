@@ -9,7 +9,6 @@ import { toolForKey, type Feature, type ToolSpec } from "../registry";
 import { ROTATE_STEP, ZOOM_STEP } from "./constants";
 import type { Edge } from "../arrange";
 import type { EditorContext } from "./context";
-import type { NodeCommand } from "./types";
 
 const ROTATE_STEP_SHIFT = 90;
 
@@ -25,16 +24,6 @@ const ALIGN_KEYS: Readonly<Record<string, Edge>> = {
   KeyS: "bottom",
 };
 
-const NODE_COMMANDS: Readonly<Record<string, NodeCommand>> = {
-  c: "corner",
-  s: "smooth",
-  y: "symmetric",
-  l: "line",
-  u: "curve",
-  b: "break",
-  j: "join",
-};
-
 /// Ciò che le immagini del vault dà agli altri pezzi dell'editor.
 export interface VaultImagesContext {
   insertsImages: (at: ReadonlySet<Feature>) => boolean;
@@ -44,18 +33,12 @@ export interface VaultImagesContext {
 /// Monta le immagini del vault.
 export function installVaultImages(ctx: EditorContext): void {
   const {
-    life, folio, has, root, surface, selectionButton, tree, historyPanel, accessPanel, boardsPanel, libraryPanel, symbolsPanel, inspector, panel,
-    titleInput, opacityInput, nodesBar, textLayer, textInput, describeBar, pathsBar, traceBar, cropBar, boardsNow, editable, currentIndex, announce,
-    announceSelection, sceneAt, zoomBy, turnView, fit, selectedUnits, curveOn, chosenCount, showHandles, renameSelection, showAttributes, nestedNow,
-    focusAttributes, focusTransform, undo, redo, deleteSelection, select, leaveIsolation, isolateSelection, pickTool, cancelGesture, drawInk, drawShape,
-    polygonKey, rotateSelection, selectUpdate, boardUpdate, duplicateSheet, removeBoard, renameBoard, visitBoard, stepBoard, leaveBoard, builderNow,
-    builderKeysOn, visitRegion, pickRegion, buildChosen, pickedWidth, widthKeysOn, deleteWidthPoint, widthDialog, takeAt, gradientNow, gradientUpdate,
-    gradientKeysOn, gradientEntries, visitGradient, deleteGradientStop, insertGradientStop, unpickGradient, editGradient, announceNodes, setNodes,
-    nodesUpdate, editSelectedNote, keyboardAdd, drawHeld, drawing, showBezier, bezierUpdate, curveKindKey, curveDelete, finishBezier, deleteBezierNode,
-    radialHere, editLabel, editSelectedText, openText, finishText, cursorPoint, press, release, showRadial, duplicateSelection, orderSelection,
-    groupSelection, ungroupSelection, linkSelection, unlinkSelection, openSelectedLink, menuPoint, flagSelection, transformDialog,
-    joinSelection, cancelCrop, applyCrop, cropUpdate, maskSelection, releaseMasks, insertSelectedNodes, deleteSelectedNodes, joinSelectedNodes,
-    runNodeCommand, changeGrid, focusArrange, nodeKeysOn, arrows, visit, nodeList, visitNode, selectAllNodes, walk, walkList, properties, keys, codec,
+    life, folio, has, root, surface, selectionButton, tree, historyPanel, accessPanel, boardsPanel, libraryPanel, panel,
+    titleInput, opacityInput, textLayer, textInput, describeBar, cropBar, boardsNow, editable, currentIndex, announce,
+    announceSelection, sceneAt, zoomBy, turnView, fit, selectedUnits, showHandles, renameSelection, undo, redo, deleteSelection, select, leaveIsolation, isolateSelection, pickTool, cancelGesture, drawInk, drawShape,
+    polygonKey, rotateSelection, selectUpdate, boardUpdate, duplicateSheet, removeBoard, renameBoard, visitBoard, stepBoard, leaveBoard, takeAt, gradientNow, gradientUpdate,
+    gradientKeysOn, gradientEntries, visitGradient, deleteGradientStop, insertGradientStop, unpickGradient, editGradient, editSelectedNote, keyboardAdd, drawHeld, radialHere, editLabel, editSelectedText, openText, finishText, cursorPoint, press, release, showRadial, duplicateSelection, orderSelection,
+    groupSelection, ungroupSelection, linkSelection, unlinkSelection, openSelectedLink, menuPoint, flagSelection, cancelCrop, applyCrop, cropUpdate, changeGrid, focusArrange, arrows, visit, walk, walkList, properties, keys, codec,
     placeImages, carriedBy, pasteCarried, copyStyle, pasteStyle, options
   } = ctx;
   // --- Le immagini del vault --------------------------------------------------
@@ -155,12 +138,8 @@ export function installVaultImages(ctx: EditorContext): void {
     // Maiusc o Alt a metà di un segno tirato: il ritaglio si rifà subito,
     // dall'ultimo punto del puntatore.
     else if (ctx.current?.kind === "crop" && ctx.current.dragging) cropUpdate(ctx.current);
-    else if (ctx.current?.kind === "nodes" && ctx.current.dragging) nodesUpdate(ctx.current);
-    else if (ctx.current?.kind === "bezier") bezierUpdate(ctx.current);
     else if (ctx.current?.kind === "board" && ctx.current.mode !== "pending") boardUpdate(ctx.current);
     else if (ctx.current?.kind === "gradient" && ctx.current.dragging) gradientUpdate(ctx.current);
-    else if (ctx.hover !== null && drawing() !== null) showBezier();
-    else if (ctx.current?.kind === "builder" || (ctx.current === null && ctx.regionHover >= 0)) showHandles();
     // Col contagocce Maiusc passa dall'aspetto al colore.
     else if (ctx.current?.kind === "dropper" || (ctx.current === null && ctx.dropperHover !== null)) showHandles();
     else if (ctx.current === null && (ctx.alt || ctx.measured)) showHandles();
@@ -178,24 +157,22 @@ export function installVaultImages(ctx: EditorContext): void {
       event.preventDefault();
       return;
     }
-    // I pannelli delle proprietà, degli attributi e dell'accessibilità, e i
-    // campi dell'albero (la ricerca, il tipo e il nome), tengono i loro tasti: un `?` o un Canc
-    // scritti in un valore restano lì, le frecce cambiano un numero, e un Canc
-    // sul pulsante che toglie un attributo non toglie l'oggetto. Passano i
-    // tasti che portano agli attributi e a «Trasforma» e, fuori da un campo
-    // di testo, annulla e ripeti, raggruppa e separa.
+    // I pannelli delle proprietà e dell'accessibilità, e i campi
+    // dell'albero (la ricerca, il tipo e il nome), tengono i loro tasti: un
+    // `?` o un Canc scritti in un valore restano lì, e le frecce cambiano un
+    // numero. Passano, fuori da un campo di testo, annulla e ripeti,
+    // raggruppa e separa.
     const treeField =
       (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) &&
       (tree.element.contains(event.target) || historyPanel.element.contains(event.target) || boardsPanel.element.contains(event.target));
-    const inAccess = event.target instanceof Node && (accessPanel.element.contains(event.target) || describeBar.contains(event.target) || pathsBar.contains(event.target) || traceBar.contains(event.target) || cropBar.contains(event.target));
-    if (event.target instanceof Node && (inspector.element.contains(event.target) || panel.element.contains(event.target) || libraryPanel.element.contains(event.target) || symbolsPanel.element.contains(event.target) || treeField || inAccess)) {
+    const inAccess = event.target instanceof Node && (accessPanel.element.contains(event.target) || describeBar.contains(event.target) || cropBar.contains(event.target));
+    if (event.target instanceof Node && (panel.element.contains(event.target) || libraryPanel.element.contains(event.target) || treeField || inAccess)) {
       const key = event.key.toLowerCase();
       const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
       const field = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
-      if (!(mod && (((key === "x" || key === "m") && event.shiftKey) || (!field && (key === "z" || key === "g" || (key === "y" && !event.shiftKey)))))) return;
+      if (!(mod && !field && (key === "z" || key === "g" || (key === "y" && !event.shiftKey)))) return;
     }
     const onSurface = event.target === surface;
-    const inNodesBar = event.target instanceof Node && nodesBar.contains(event.target);
     const inTree = event.target instanceof Node && tree.element.contains(event.target);
     // Mentre si disegna un poligono, le frecce e i tasti di pagina sono suoi.
     if (ctx.current?.kind === "shape" && ctx.current.tool === "polygon" && !event.ctrlKey && !event.metaKey && !event.altKey && polygonKey(event)) {
@@ -218,7 +195,7 @@ export function installVaultImages(ctx: EditorContext): void {
       return;
     }
     const turn = { "[": -ROTATE_STEP, "]": ROTATE_STEP, "{": -ROTATE_STEP_SHIFT, "}": ROTATE_STEP_SHIFT }[event.key];
-    if (turn !== undefined && onSurface && (altGraph || !mod) && ctx.tool !== "nodes" && ctx.tool !== "bezier") {
+    if (turn !== undefined && onSurface && (altGraph || !mod)) {
       if (ctx.current !== null || ctx.pressed !== null || ctx.selection.length === 0 || !editable()) return;
       rotateSelection(turn);
       event.preventDefault();
@@ -259,15 +236,6 @@ export function installVaultImages(ctx: EditorContext): void {
         event.preventDefault();
         return;
       }
-      // Ctrl+7 crea la maschera di ritaglio, Ctrl+Alt+7 la rilascia, come
-      // in Illustrator: il 7 per posizione, e non con AltGr, che lì scrive
-      // una graffa.
-      if (event.code === "Digit7" && !event.shiftKey && !altGraph && arranges("masks")) {
-        if (event.altKey) releaseMasks();
-        else maskSelection("clip");
-        event.preventDefault();
-        return;
-      }
       if (event.altKey) return;
       // Ctrl+/ cerca fra i comandi del disegno; sulla tastiera italiana la
       // barra si scrive con Maiusc.
@@ -293,28 +261,12 @@ export function installVaultImages(ctx: EditorContext): void {
       } else if (key === "y" && !event.shiftKey) {
         redo();
       } else if (key === "a" && !event.shiftKey) {
-        if (ctx.tool === "nodes" && ctx.pressed === null && has("nodes") && editable()) {
-          selectAllNodes();
-        } else {
-          select(currentIndex().units.map((unit) => unit.key));
-          announceSelection();
-        }
-      } else if (key === "x" && event.shiftKey && has("attributes")) {
-        // Nel pannello, il tasto porta agli attributi e, da lì, torna al
-        // foglio.
-        if (!nestedNow()) showAttributes(ctx.toggles(inspector.element));
-        else if (inspector.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
-        else focusAttributes();
-      } else if (key === "m" && event.shiftKey && arranges("transform")) {
-        if (!focusTransform()) void transformDialog();
+        select(currentIndex().units.map((unit) => unit.key));
+        announceSelection();
       } else if (key === "d" && !event.shiftKey && ctx.tool === "board" && has("board") && editable()) {
         if (ctx.pressed === null && ctx.current === null) duplicateSheet();
       } else if (key === "d" && !event.shiftKey && arranges("arrange")) {
         duplicateSelection();
-      } else if (key === "j" && !event.shiftKey && ctx.tool === "nodes" && nodeKeysOn() && chosenCount() > 0) {
-        joinSelectedNodes();
-      } else if (key === "j" && !event.shiftKey && arranges("path")) {
-        joinSelection();
       } else if (key === "g" && has("arrange") && editable()) {
         if (event.shiftKey) ungroupSelection();
         else groupSelection();
@@ -389,7 +341,7 @@ export function installVaultImages(ctx: EditorContext): void {
       event.preventDefault();
       ctx.keyedMenu = event.timeStamp;
       const at = menuPoint();
-      showContextMenu(at, ctx.canvasMenu(null, at), { labelledBy: selectionButton.id });
+      showContextMenu(at, ctx.canvasMenu(at), { labelledBy: selectionButton.id });
       return;
     }
     if (onSurface && event.key === "Tab") {
@@ -401,13 +353,9 @@ export function installVaultImages(ctx: EditorContext): void {
       if (ctx.pressed !== null) return;
       if (event.key === "PageUp") orderSelection(event.shiftKey ? "front" : "forward");
       else orderSelection(event.shiftKey ? "back" : "backward");
-    } else if (onSurface && (event.key === "Home" || event.key === "End") && nodeKeysOn()) {
-      visitNode(event.key === "Home" ? 0 : nodeList().length - 1);
     } else if (onSurface && (event.key === "Home" || event.key === "End") && gradientKeysOn()) {
       const read = gradientNow()!;
       visitGradient(event.key === "Home" ? 0 : gradientEntries(read).length - 1);
-    } else if (onSurface && (event.key === "Home" || event.key === "End") && builderKeysOn()) {
-      visitRegion(event.key === "Home" ? 0 : builderNow()!.regions.regions.length - 1);
     } else if (onSurface && (event.key === "Home" || event.key === "End") && ctx.tool === "board") {
       if (ctx.pressed !== null || !visitBoard(event.key === "Home" ? 0 : boardsNow().length - 1)) return;
     } else if (onSurface && (event.key === "Home" || event.key === "End")) {
@@ -419,7 +367,6 @@ export function installVaultImages(ctx: EditorContext): void {
       } else if (ctx.pressed === null && ctx.tool === "text") openText(cursorPoint(), "mouse");
       // Il contagocce prende subito; con Maiusc il solo colore.
       else if (ctx.pressed === null && ctx.tool === "eyedropper") void takeAt(cursorPoint(), "mouse", event.shiftKey);
-      else if (builderKeysOn()) pickRegion();
       else if (ctx.pressed === null) press(event.timeStamp);
       else release();
     } else if (onSurface && event.key === "F2" && folio !== undefined) {
@@ -442,15 +389,6 @@ export function installVaultImages(ctx: EditorContext): void {
       else if (ctx.cropping !== null) {
         // A metà gesto il ritaglio aspetta che il gesto finisca.
         if (ctx.current === null) applyCrop();
-      } else if (drawing() !== null) {
-        // A metà gesto il tracciato aspetta che il gesto finisca, come per
-        // Canc.
-        if (ctx.current === null) finishBezier(false);
-      } else if (builderKeysOn() && buildChosen(false)) {
-        // Col Costruttore, le regioni scelte si uniscono.
-      } else if (widthKeysOn()) {
-        // Con lo Spessore, le misure del punto scelto.
-        void widthDialog();
       } else if (gradientKeysOn() && has("properties")) {
         // Con lo strumento Sfumatura, il colore del punto scelto.
         editGradient();
@@ -468,26 +406,10 @@ export function installVaultImages(ctx: EditorContext): void {
       ctx.present(event.shiftKey ? ctx.currentBoard()?.id ?? null : null);
     } else if (event.key === "?") {
       void keys();
-    } else if ((event.key === "Delete" || event.key === "Backspace") && builderKeysOn() && buildChosen(true)) {
-      // Col Costruttore Canc toglie le regioni scelte; senza, l'oggetto.
-    } else if ((event.key === "Delete" || event.key === "Backspace") && nodeKeysOn()) {
-      // Con lo strumento Nodi Canc elimina i nodi, mai l'oggetto.
-      deleteSelectedNodes();
-    } else if ((event.key === "Delete" || event.key === "Backspace") && widthKeysOn()) {
-      // Con lo Spessore, il punto scelto, mai l'oggetto.
-      if (ctx.pressed !== null || ctx.current !== null) return;
-      deleteWidthPoint();
     } else if ((event.key === "Delete" || event.key === "Backspace") && gradientKeysOn()) {
       // Con lo strumento Sfumatura, il punto scelto, mai l'oggetto.
       if (ctx.current !== null) return;
       deleteGradientStop();
-    } else if ((event.key === "Delete" || event.key === "Backspace") && curveOn() && ctx.pressed === null && ctx.current === null && chosenCount() > 0) {
-      // Con la Curvatura, i nodi scelti, e la curva si rifà.
-      curveDelete();
-    } else if ((event.key === "Delete" || event.key === "Backspace") && drawing() !== null) {
-      // Con la penna di Bézier, l'ultimo nodo del tracciato.
-      if (ctx.current !== null) return;
-      deleteBezierNode(drawing()!);
     } else if ((event.key === "Delete" || event.key === "Backspace") && ctx.tool === "board" && ctx.selection.length === 0) {
       // Con lo strumento Tavola, la tavola scelta; il disegno resta.
       if (ctx.pressed !== null || ctx.current !== null) return;
@@ -495,18 +417,9 @@ export function installVaultImages(ctx: EditorContext): void {
     } else if (event.key === "Delete" || event.key === "Backspace") {
       if (ctx.selection.length === 0) return;
       deleteSelection();
-    } else if (event.key === "Insert" && !event.shiftKey && nodeKeysOn() && (onSurface || inNodesBar)) {
-      insertSelectedNodes();
     } else if (event.key === "Insert" && !event.shiftKey && onSurface && gradientKeysOn()) {
       if (ctx.current !== null) return;
       insertGradientStop();
-    } else if (event.shiftKey && onSurface && (event.key.toLowerCase() === "c" || event.key.toLowerCase() === "s") && ctx.tool === "bezier" && ctx.curvature && drawing() !== null) {
-      // Con la Curvatura, il punto sotto il cursore, o l'ultimo, a spigolo
-      // o liscio: le lettere dello strumento Nodi.
-      if (ctx.current !== null || ctx.pressed !== null) return;
-      curveKindKey(event.key.toLowerCase() === "c" ? "corner" : "smooth");
-    } else if (event.shiftKey && NODE_COMMANDS[event.key.toLowerCase()] !== undefined && nodeKeysOn() && (onSurface || inNodesBar)) {
-      runNodeCommand(NODE_COMMANDS[event.key.toLowerCase()]!);
     } else if (event.shiftKey && onSurface && (event.code === "KeyH" || event.code === "KeyV") && ctx.selection.length > 0 && editable()) {
       // Maiusc+H e Maiusc+V riflettono la selezione, come in Illustrator e Figma.
       if (ctx.current !== null || ctx.pressed !== null) return;
@@ -514,24 +427,8 @@ export function installVaultImages(ctx: EditorContext): void {
     } else if (event.key === "Escape") {
       if (ctx.current !== null) cancelGesture();
       else if (ctx.cropping !== null) cancelCrop();
-      else if (drawing() !== null) {
-        // Esc conclude il tracciato della penna, come conclude un testo: ciò
-        // che si è disegnato non si perde, e Annulla lo toglie in un passo.
-        finishBezier(false);
-      } else if ((ctx.tool === "nodes" || curveOn()) && chosenCount() > 0) {
-        setNodes(new Map());
-        announceNodes();
-      } else if (pickedWidth() !== null) {
-        ctx.widthPicked = null;
-        showHandles();
-        announce(t("draw.width.unpicked"));
-      } else if (gradientKeysOn() && unpickGradient()) {
+      else if (gradientKeysOn() && unpickGradient()) {
         // Con lo strumento Sfumatura, il capo o il punto scelto si lascia.
-      } else if (builderNow() !== null && (ctx.regionsChosen.length > 0 || ctx.regionActive >= 0)) {
-        ctx.regionsChosen = [];
-        ctx.regionActive = -1;
-        showHandles();
-        announce(t("draw.builder.cleared"));
       } else if (ctx.tool === "board" && ctx.selection.length === 0 && leaveBoard()) {
         // Con lo strumento Tavola, la tavola scelta si lascia.
       } else if (leaveIsolation(false)) {

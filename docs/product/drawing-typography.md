@@ -11,11 +11,12 @@ In tutti e due gli spazi di [lavoro](drawing.md#completo-e-semplice) un testo si
 posto con lo strumento **Testo**, come descrive [Disegni](drawing.md#testo).
 Questa pagina dice il resto: le righe e i **pezzi** di una riga, cioè le
 parole con un aspetto loro, i tasti che li fanno, la barra e il pannello
-delle proprietà mentre si scrive e dopo. Nello [spazio
-Completo](drawing.md#completo-e-semplice) un testo va anche a capo da sé in un
-riquadro, [in area](#il-testo-in-area), o scorre lungo una linea, [su
-tracciato](#il-testo-su-tracciato). Come il file li scrive è in [formato della
-scena, testo](../reference/scene-format-text.md).
+delle proprietà mentre si scrive e dopo. Un disegno può portare anche testi
+che vanno a capo da sé in un riquadro, [in area](#il-testo-in-area), o che
+scorrono lungo una linea, [su tracciato](#il-testo-su-tracciato): Fub li
+disegna e li riscrive, ma non ne fa più di nuovi (decisione 0231). Come il
+file li scrive è in [formato della scena,
+testo](../reference/scene-format-text.md).
 
 ## Il campo
 
@@ -62,7 +63,7 @@ due ondulate sulla stessa parola.
 | `Ctrl+B` o `⌘B` | Grassetto |
 | `Ctrl+I` o `⌘I` | Corsivo |
 | `Ctrl+U` o `⌘U` | Sottolineato |
-| `Ctrl+Maiusc+X` o `⌘⇧X` | Barrato; fuori dal campo, nel Completo, porta agli attributi |
+| `Ctrl+Maiusc+X` o `⌘⇧X` | Barrato |
 
 Un tasto vale per ciò che è scelto nel campo: lo accende se una parte della
 scelta non l'ha, e lo spegne se l'ha tutta. Senza scelta vale per ciò che si
@@ -118,8 +119,6 @@ scrive, toccare il pannello conclude prima il campo.
 - **Spaziatura** delle lettere, in percentuale del corpo che ogni pezzo ha:
   un pezzo più grande ha lo spazio più largo.
 - **Allineamento**: a sinistra, al centro o a destra del punto d'ancoraggio.
-- **Larghezza del riquadro**, per un testo in area, e il passaggio fra testo
-  da punto e testo in area: in [Il testo in area](#il-testo-in-area).
 
 Sottolineato e barrato scritti su tutto il testo hanno il colore del testo,
 anche sotto un pezzo di un altro colore: SVG dipinge la linea col
@@ -128,21 +127,14 @@ riempimento di chi la scrive. Scritti su un pezzo hanno il colore del pezzo.
 ## Il testo in area
 
 Un tocco con lo strumento Testo scrive un testo **da punto**, che va a capo
-soltanto dove si preme `Invio`. Un testo **in area** va a capo da sé, nella
-larghezza di un riquadro, come una colonna di giornale.
+soltanto dove si preme `Invio`, e così fa anche un trascinamento, dove
+comincia. Un testo **in area**, scritto da una versione precedente o da un
+altro programma, va a capo da sé, nella larghezza di un riquadro, come una
+colonna di giornale.
 
-- **Trascinare lo strumento Testo** disegna il riquadro: nello spazio
-  Completo, o per chi monta l'editor con le sue parti, con la parte «Testo in area e su tracciato».
-  È largo quanto il trascinamento, e almeno quanto il corpo; l'altezza non
-  si disegna, perché segue le righe. La prima riga sta in cima, e
-  l'aggancio vale per tutti e due gli angoli.
-- **Nel Semplice**, o senza quella parte, trascinare lo strumento Testo
-  scrive un testo da punto dove il trascinamento comincia, come un tocco.
 - **Il campo** di un testo in area è largo quanto il riquadro e va a capo
-  mentre si scrive, in tutti e due gli spazi: anche dove il riquadro non si disegna,
-  un testo in area che c'è si scrive così. Gli a capo del campo sono quelli
-  che il file scrive e che l'esportazione mostra, misurati coi caratteri del
-  foglio.
+  mentre si scrive. Gli a capo del campo sono quelli che il file scrive e
+  che l'esportazione mostra, misurati coi caratteri del foglio.
 - **Una riga prende le parole che ci stanno.** Va a capo dopo uno spazio,
   che in fondo alla riga non conta, o dopo un trattino attaccato a una
   parola; una parola più larga del riquadro si spezza fra due lettere.
@@ -158,71 +150,20 @@ larghezza di un riquadro, come una colonna di giornale.
   destra ci finisce, e le righe vi stanno allineate allo stesso modo.
   Cambiarlo nel pannello tiene il riquadro dov'è: si spostano le righe.
 
-Gli a capo cambiano quando cambiano il testo, il riquadro o il carattere:
-famiglia, corpo, peso, corsivo e spaziatura. Il colore, il sottolineato, il
-barrato e l'interlinea non li toccano. Quando un carattere resta più largo
-del riquadro, dopo un cambio del pannello o «Incolla lo stile», l'annuncio
-lo dice.
-
-Il pannello delle proprietà, con la parte «Testo in area e su tracciato»,
-ha per un testo scelto che non segue un tracciato il **Tipo di testo**: «Da
-punto» o «In area». Il passaggio non sposta niente di ciò che si vede.
-
-- **Da punto a in area**, il riquadro è largo quanto la riga più larga, e
-  ogni riga che c'era diventa un paragrafo suo.
-- **Da in area a punto**, ogni riga, come si vede, diventa una riga sua, che
-  non continua più quella prima, e il riquadro se ne va.
-- **«Larghezza del riquadro»**, per un testo in area, è un numero
-  nell'unità del documento, come le altre lunghezze del pannello. Scriverlo
-  cambia la larghezza tenendo fermo il bordo sinistro, e il testo va di
-  nuovo a capo.
-
-Le maniglie della cornice ([Disegni, trasformare](drawing-transform.md)) di
-un testo in area scelto da solo, con la stessa parte, cambiano la larghezza
-del suo riquadro, non il corpo:
-
-- quelle in alto e in basso non ci sono, e le altre tirano soltanto di lato;
-- il bordo opposto resta dov'è, l'aggancio porta il bordo che si trascina,
-  e il riquadro non diventa più stretto del corpo;
-- mentre si trascina il testo va già a capo come andrà;
-- lasciata la maniglia, il cambio è un passo di annulla, «Larghezza del
-  riquadro», e l'annuncio dice la larghezza nuova, «Riquadro largo …»,
-  nell'unità del documento.
-
-Senza quella parte la cornice scala un testo in area come ogni oggetto, e
-un testo in area che c'è va a capo da sé in tutti e due gli spazi, quando si scrive.
+Gli a capo cambiano quando cambiano il testo o il carattere: famiglia,
+corpo, peso, corsivo e spaziatura. Il colore, il sottolineato, il barrato e
+l'interlinea non li toccano. Quando un carattere resta più largo del
+riquadro, dopo un cambio del pannello o «Incolla lo stile», l'annuncio lo
+dice. La cornice scala un testo in area come ogni oggetto.
 
 ## Il testo su tracciato
 
 Un testo su tracciato scorre lungo una linea, una curva o il bordo di una
 forma, su una riga sola, e non va a capo. Il tracciato non si vede: dice
 soltanto dove passa il testo, che sta dalla parte sinistra del suo verso,
-sopra una linea tracciata da sinistra a destra.
-
-Il menu «Testo su tracciato», nella barra della selezione, c'è nello spazio
-Completo, o per chi monta l'editor con le sue parti, con la parte «Testo in area e su tracciato»,
-quando fra gli oggetti scelti c'è un testo. Ha tre comandi, un passo di
-annulla ciascuno col suo nome; una voce che adesso non serve è spenta e dice
-perché.
-
-- **«Metti sul tracciato»**, con un testo e una forma scelti, e nient'altro.
-  Si seguono un tracciato, un rettangolo, un'ellisse, un cerchio, una linea,
-  una spezzata, un poligono, una freccia, un poligono regolare e una stella;
-  non un tratto a penna, una linea a spessore variabile, un gruppo o
-  un'immagine. La forma lascia il disegno e diventa il tracciato del testo,
-  scritto nelle sue coordinate. Il testo diventa una riga sola: le righe si
-  uniscono con uno spazio, una parola spezzata in un testo in area torna
-  intera, una riga vuota non conta, e il riquadro se ne va. Dopo è scelto il
-  testo, e l'annuncio dice «Il testo segue il tracciato.».
-- **«Togli dal tracciato»:** ogni testo su tracciato scelto torna una riga
-  dritta, col punto d'ancoraggio dove l'aveva sul tracciato. Il tracciato se
-  ne va con l'ultimo testo che lo segue, se l'ha scritto FubDraw; quello di
-  un altro programma resta nel file. La forma di prima non torna, e la
-  selezione resta quella.
-- **«Rovescia sul tracciato»:** il tracciato si percorre al contrario, e il
-  testo passa dall'altra parte, restando dov'era lungo il tracciato. Un
-  tracciato che anche un altro testo segue, o che non è di FubDraw, resta
-  com'è: il testo ne prende uno suo, rovesciato.
+sopra una linea tracciata da sinistra a destra. Fub lo disegna e lo
+riscrive quando un disegno lo porta; non mette più un testo su un
+tracciato, e non lo toglie.
 
 **Dove comincia il testo.** Una forma si segue come la disegna SVG: un
 tracciato, una linea o una spezzata dal primo punto, un rettangolo
@@ -240,12 +181,6 @@ escono dal tracciato non si vedono.
   di formato, la barra e il pannello valgono come in ogni testo.
 - **Toccare:** il testo si prende lungo il tracciato, lettera per lettera;
   una lettera che esce dal tracciato non si vede e non si tocca.
-- **Lo strumento Nodi** ([Disegni, strumenti avanzati](drawing-expert.md#nodi)), su un testo su tracciato, mostra i nodi
-  del tracciato che il testo segue. Spostare i nodi e le maniglie, e i
-  comandi dei nodi, cambiano quel tracciato, in un passo di annulla, e il
-  testo lo segue già mentre si trascina; un altro testo che segue lo stesso
-  tracciato lo segue anche lui. Il tracciato resta lungo più di zero, e non
-  si unisce a un'altra forma: per lasciarlo c'è «Togli dal tracciato».
 - **Le copie:** duplicare un testo su tracciato copia anche il suo
   tracciato, quando è suo soltanto, e la copia segue il proprio; un
   tracciato condiviso, o scritto da un altro programma, resta lo stesso per
@@ -322,5 +257,4 @@ correttore in `tools/editor/text-proof.ts`. Il
 modello delle righe e dei pezzi in `rich.ts`, la lettura e la scrittura del
 pannello in `look.ts` e `fields.ts`, i caratteri in `text.ts` e
 `picture.ts`, gli a capo del testo in area in `wrap.ts`, con le misure dei
-caratteri in `measure.ts`, e i comandi del testo su tracciato in
-`text-path.ts`.
+caratteri in `measure.ts`.

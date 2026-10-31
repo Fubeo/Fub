@@ -28,7 +28,7 @@
 import { arcCenter, derivativeAt, pointAt, reversed, splitAt, type Curve } from "../scene/curves";
 import { roundHalfUp } from "../number";
 import type { Segment } from "../scene/geometry";
-import { apply, mappedEllipse, type Matrix, type Point } from "../scene/matrix";
+import type { Point } from "../scene/matrix";
 
 /// Le operazioni. La forma più in basso è la prima: la differenza le toglie
 /// le altre, e la divisione la taglia lungo i loro contorni.
@@ -70,31 +70,6 @@ const clamp01 = (t: number): number => Math.min(1, Math.max(0, t));
 /// punti si scrivono, al centesimo: due incroci sulla stessa verticale non si
 /// ordinano per un errore di calcolo.
 const leftward = (p: Point, q: Point): number => roundHalfUp(p[0], 100) - roundHalfUp(q[0], 100) || roundHalfUp(p[1], 100) - roundHalfUp(q[1], 100);
-
-/// I segmenti `segments` dopo `m`: gli archi coi raggi e la rotazione
-/// dell'ellisse trasformata, e col verso invertito da un ribaltamento. Un
-/// arco senza raggi ne resta senza.
-export function mapped(segments: readonly Segment[], m: Matrix): Segment[] {
-  const flips = m[0] * m[3] - m[1] * m[2] < 0;
-  const at = (p: Point): Point => apply(m, p);
-  return segments.map((segment): Segment => {
-    switch (segment.kind) {
-      case "move":
-      case "line":
-        return { kind: segment.kind, to: at(segment.to) };
-      case "quad":
-        return { kind: "quad", control: at(segment.control), to: at(segment.to) };
-      case "cubic":
-        return { kind: "cubic", c1: at(segment.c1), c2: at(segment.c2), to: at(segment.to) };
-      case "arc": {
-        const { radii, rotation } = mappedEllipse(m, Math.abs(segment.radii[0]), Math.abs(segment.radii[1]), segment.rotation);
-        return { kind: "arc", radii, rotation, large: segment.large, sweep: segment.sweep !== flips, to: at(segment.to) };
-      }
-      case "close":
-        return segment;
-    }
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Le curve delle forme.
@@ -1215,9 +1190,6 @@ function builtOrder(m: Built, n: Built): number {
   return leftward(m.start, n.start);
 }
 
-/// Gli anelli di un pezzo in un tracciato solo, in ordine.
-const joined = (list: readonly Built[]): Segment[] => [...list].sort(builtOrder).flatMap((loop) => loop.segments);
-
 // ---------------------------------------------------------------------------
 // L'operazione.
 // ---------------------------------------------------------------------------
@@ -1284,10 +1256,6 @@ export function combine(kind: BooleanKind, shapes: readonly Shape[], limit = Inf
 // Le regioni.
 // ---------------------------------------------------------------------------
 
-/// Più sottile di così, in media, una faccia non si vede né si tocca: va con
-/// la regione accanto con cui ha più bordo.
-const THIN = 2 * EPSILON;
-
 /// Una regione dell'arrangiamento: una faccia dentro almeno una forma, con
 /// le facce troppo sottili che le stanno accanto.
 export interface Region {
@@ -1300,194 +1268,4 @@ export interface Region {
   readonly center: Point;
   readonly min: Point;
   readonly max: Point;
-}
-
-/// Le regioni delle forme, da sinistra a destra e dall'alto in basso.
-export class Regions {
-  /// I lati del bordo di ogni regione, quattro numeri per lato, per dire
-  /// se un punto ci sta dentro.
-  private readonly borders: Float64Array[];
-
-  constructor(
-    private readonly arrangement: Arrangement | null,
-    readonly regions: readonly Region[],
-    /// La regione di ogni faccia, -1 fuori e per le facce sottili sole.
-    private readonly region: Int32Array,
-    /// Vero per le facce dentro almeno una forma.
-    private readonly covered: Uint8Array,
-  ) {
-    const lists: number[][] = regions.map(() => []);
-    if (arrangement !== null) {
-      const { net, edges, graph } = arrangement;
-      edges.forEach((edge, e) => {
-        const [one, other] = [region[graph.face[2 * e]!]!, region[graph.face[2 * e + 1]!]!];
-        if (one === other) return;
-        for (const r of [one, other]) if (r >= 0) lists[r]!.push(net.x[edge.a]!, net.y[edge.a]!, net.x[edge.b]!, net.y[edge.b]!);
-      });
-    }
-    this.borders = lists.map((list) => Float64Array.from(list));
-  }
-
-  /// Vero se il punto `p` sta nella regione `r`.
-  contains(r: number, p: Point): boolean {
-    const { min, max } = this.regions[r]!;
-    const [px, py] = p;
-    if (px < min[0] || px > max[0] || py < min[1] || py > max[1]) return false;
-    const border = this.borders[r]!;
-    let inside = false;
-    for (let i = 0; i < border.length; i += 4) {
-      const [ax, ay, bx, by] = [border[i]!, border[i + 1]!, border[i + 2]!, border[i + 3]!];
-      if (ay > py !== by > py && px < ax + ((py - ay) * (bx - ax)) / (by - ay)) inside = !inside;
-    }
-    return inside;
-  }
-
-  /// La regione nel punto `p`, o -1.
-  at(p: Point): number {
-    for (let r = 0; r < this.regions.length; r++) if (this.contains(r, p)) return r;
-    return -1;
-  }
-
-  /// Il tracciato delle facce delle regioni per cui `chosen` è vero, con
-  /// -1 per le facce sottili rimaste sole: di tutte quelle dentro una forma,
-  /// o, con `within`, di quelle dentro la forma `within`. Gli anelli girano
-  /// come la forma `like`. Vuoto se non resta niente; `null` se il calcolo
-  /// non riesce.
-  path(chosen: (region: number) => boolean, within: number | null, like: number): Segment[] | null {
-    const arrangement = this.arrangement;
-    if (arrangement === null) return [];
-    const piece = new Int32Array(arrangement.graph.faces);
-    for (let f = 0; f < piece.length; f++) {
-      const inside = within === null ? this.covered[f] === 1 : arrangement.inside(f, within);
-      piece[f] = inside && chosen(this.region[f]!) ? 0 : -1;
-    }
-    const built = arrangement.build(piece, () => like);
-    return built === null ? null : joined(built.get(0) ?? []);
-  }
-}
-
-/// Le regioni di `shapes`, dalla più in basso; le forme per cui `cuts` è
-/// vero tagliano soltanto. `"complex"` se le spezzate delle curve passano
-/// `limit` pezzi; `null` se il calcolo non riesce.
-export function regionsOf(shapes: readonly Shape[], cuts: readonly boolean[], limit = Infinity): Regions | "complex" | null {
-  const arrangement = arrange(shapes, (k) => cuts[k] === true, limit);
-  if (arrangement === null || arrangement === "complex") return arrangement;
-  if (arrangement === "empty") return new Regions(null, [], new Int32Array(0), new Uint8Array(0));
-  const { net, edges, graph } = arrangement;
-  const faces = graph.faces;
-  const covered = Uint8Array.from({ length: faces }, (_, f) => (shapes.some((_, k) => arrangement.inside(f, k)) ? 1 : 0));
-
-  // Area, momenti e bordo di ogni faccia, dai suoi mezzi lati: ognuno ha la
-  // faccia a sinistra, e un lato con la stessa faccia ai due lati non conta.
-  const twice = new Float64Array(faces);
-  const mx = new Float64Array(faces);
-  const my = new Float64Array(faces);
-  const rim = new Float64Array(faces);
-  for (let h = 0; h < graph.face.length; h++) {
-    const f = graph.face[h]!;
-    if (covered[f] === 0) continue;
-    const [p, q] = [graph.origin(h), graph.target(h)];
-    const [ax, ay, bx, by] = [net.x[p]!, net.y[p]!, net.x[q]!, net.y[q]!];
-    const cross = ax * by - bx * ay;
-    twice[f]! += cross;
-    mx[f]! += (ax + bx) * cross;
-    my[f]! += (ay + by) * cross;
-    if (graph.face[h ^ 1] !== f) rim[f]! += Math.hypot(bx - ax, by - ay);
-  }
-  const thin = (f: number): boolean => !(Math.abs(twice[f]!) >= THIN * rim[f]!);
-
-  // Le facce che si vedono sono regioni; quelle sottili vanno con la vicina
-  // con cui hanno più bordo, finché ne trovano una.
-  const region = new Int32Array(faces).fill(-1);
-  let count = 0;
-  for (let f = 0; f < faces; f++) if (covered[f] === 1 && !thin(f)) region[f] = count++;
-  for (let changed = true; changed; ) {
-    changed = false;
-    const shared = new Map<number, Map<number, number>>();
-    edges.forEach((edge, e) => {
-      const [f, g] = [graph.face[2 * e]!, graph.face[2 * e + 1]!];
-      if (f === g) return;
-      const length = Math.hypot(net.x[edge.b]! - net.x[edge.a]!, net.y[edge.b]! - net.y[edge.a]!);
-      for (const [one, other] of [
-        [f, g],
-        [g, f],
-      ] as const) {
-        if (covered[one] === 0 || region[one] !== -1 || region[other] === -1) continue;
-        const sums = shared.get(one) ?? new Map<number, number>();
-        sums.set(region[other]!, (sums.get(region[other]!) ?? 0) + length);
-        shared.set(one, sums);
-      }
-    });
-    for (const [f, sums] of shared) {
-      let best = -1;
-      for (const [r, length] of sums) if (best === -1 || length > sums.get(best)! || (length === sums.get(best) && r < best)) best = r;
-      region[f] = best;
-      changed = true;
-    }
-  }
-
-  // Il contorno di ogni regione, coi suoi anelli che girano come la forma
-  // più in alto che la copre.
-  const main = new Int32Array(count).fill(-1);
-  for (let f = 0; f < faces; f++) if (region[f]! >= 0 && !thin(f) && main[region[f]!] === -1) main[region[f]!] = f;
-  const coverOf = (r: number): number[] => shapes.flatMap((_, k) => (arrangement.inside(main[r]!, k) ? [k] : []));
-  const covers = Array.from({ length: count }, (_, r) => coverOf(r));
-  const outlines = arrangement.build(region, (r) => covers[r]![covers[r]!.length - 1]!);
-  if (outlines === null) return null;
-
-  // L'area, i momenti e il riquadro di ogni regione, in un giro sulle
-  // facce e uno sui lati del bordo.
-  const sum = new Float64Array(count);
-  const sx = new Float64Array(count);
-  const sy = new Float64Array(count);
-  for (let f = 0; f < faces; f++) {
-    const r = region[f]!;
-    if (r < 0) continue;
-    sum[r]! += twice[f]!;
-    sx[r]! += mx[f]!;
-    sy[r]! += my[f]!;
-  }
-  const box = new Float64Array(4 * count);
-  for (let r = 0; r < count; r++) box.set([Infinity, Infinity, -Infinity, -Infinity], 4 * r);
-  edges.forEach((edge, e) => {
-    const [one, other] = [region[graph.face[2 * e]!]!, region[graph.face[2 * e + 1]!]!];
-    if (one === other) return;
-    for (const r of [one, other]) {
-      if (r < 0) continue;
-      for (const v of [edge.a, edge.b]) {
-        box[4 * r] = Math.min(box[4 * r]!, net.x[v]!);
-        box[4 * r + 1] = Math.min(box[4 * r + 1]!, net.y[v]!);
-        box[4 * r + 2] = Math.max(box[4 * r + 2]!, net.x[v]!);
-        box[4 * r + 3] = Math.max(box[4 * r + 3]!, net.y[v]!);
-      }
-    }
-  });
-  const found: Array<{ readonly old: number; readonly region: Region }> = [];
-  for (let r = 0; r < count; r++) {
-    const list = outlines.get(r);
-    if (list === undefined) continue;
-    const [area, cx, cy] = [sum[r]!, sx[r]!, sy[r]!];
-    found.push({
-      old: r,
-      region: {
-        cover: covers[r]!,
-        segments: joined(list),
-        area: Math.abs(area) / 2,
-        center: [cx / (3 * area), cy / (3 * area)],
-        min: [box[4 * r]!, box[4 * r + 1]!],
-        max: [box[4 * r + 2]!, box[4 * r + 3]!],
-      },
-    });
-  }
-  // Da sinistra a destra, poi dall'alto in basso, come si scrivono i punti.
-  found.sort((m, n) => leftward(m.region.center, n.region.center) || m.old - n.old);
-  const renamed = new Int32Array(count).fill(-1);
-  found.forEach(({ old }, r) => (renamed[old] = r));
-  const final = region.map((r) => (r >= 0 ? renamed[r]! : -1));
-  return new Regions(
-    arrangement,
-    found.map(({ region }) => region),
-    final,
-    covered,
-  );
 }

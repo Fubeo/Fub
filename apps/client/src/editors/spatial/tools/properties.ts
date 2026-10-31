@@ -5,8 +5,8 @@
 //
 // - **Sezioni che si chiudono.** Posizione e misure, Forma, Aspetto, Connettore
 //   (`connector-panel.ts`), Sfumatura (`gradient-panel.ts`), Campitura
-//   (`hatch-panel.ts`), Effetti (`effects-panel.ts`), Colori del documento
-//   (`swatches-panel.ts`), Testo, Disponi, e all'Esperto Trasforma e Attributi;
+//   (`hatch-panel.ts`), Colori del documento (`swatches-panel.ts`), Testo e
+//   Disponi;
 //   senza selezione i Colori del documento, Documento e Vista, Forma se lo
 //   strumento è il Poligono, e Tavola se è lo strumento Tavola con una tavola
 //   scelta. L'intestazione di una sezione è il pulsante che la apre e la
@@ -21,8 +21,7 @@
 //   che si seguono hanno lo stesso nome, e la cronologia li unisce.
 // - **Un valore parte con Invio, o lasciando il campo**, come negli
 //   attributi; Esc lo riporta a com'era, e di nuovo torna al foglio. Un
-//   valore che non va resta scritto e segnato, col messaggio accanto. I
-//   campi di «Trasforma» dicono di quanto, non quanto: aspettano «Applica».
+//   valore che non va resta scritto e segnato, col messaggio accanto.
 // - **Il disegno può cambiare mentre si scrive**: un campo col fuoco e un
 //   valore scritto a metà non si tocca; una selezione nuova lo riporta a
 //   com'è.
@@ -54,7 +53,6 @@ import { customColor, PALETTE, swatchOf } from "./palette";
 import { evaluate, type QuantityProblem } from "./quantity";
 import type { PaintSample } from "./resources";
 import { createConnectorPanel, type ConnectorPanelOptions, type ConnectorPanelView } from "./connector-panel";
-import { createEffectsPanel, type EffectsPanelOptions, type EffectsPanelView } from "./effects-panel";
 import { createGradientPanel, type GradientPanelOptions, type GradientPanelView } from "./gradient-panel";
 import { createHatchPanel, type HatchPanelOptions, type HatchPanelView } from "./hatch-panel";
 import { createSwatchesPanel, type ColorsView, type PaintTarget, type SwatchesPanelOptions } from "./swatches-panel";
@@ -62,21 +60,17 @@ import { createSwatchesPanel, type ColorsView, type PaintTarget, type SwatchesPa
 /// Le sezioni, nell'ordine in cui si vedono.
 export type SectionId =
   | "place"
-  | "transform"
   | "arrange"
   | "look"
   | "fill"
   | "gradient"
   | "hatch"
   | "stroke"
-  | "effects"
   | "text"
   | "shape"
   | "connector"
-  | "repeat"
   | "symmetry"
   | "exportSelection"
-  | "attributes"
   | "document"
   | "board"
   | "view"
@@ -96,12 +90,9 @@ export type NumberId =
   | "size"
   | "leading"
   | "spacing"
-  | "wrap"
-  | RepeatNumberId
   | "symmetrySlices"
   | "symmetryX"
   | "symmetryY"
-  | TransformId
   | "boardX"
   | "boardY"
   | "boardWidth"
@@ -109,32 +100,14 @@ export type NumberId =
   | "pageWidth"
   | "pageHeight";
 
-/// I numeri di «Ripetizione»: quante volte, il raggio e il centro di una
-/// radiale, colonne, righe e passi di una griglia, l'angolo e la distanza
-/// dell'asse di uno specchio.
-export type RepeatNumberId =
-  | "repeatCount"
-  | "repeatRadius"
-  | "repeatX"
-  | "repeatY"
-  | "repeatColumns"
-  | "repeatRows"
-  | "repeatStepX"
-  | "repeatStepY"
-  | "repeatAngle"
-  | "repeatDistance";
-
-/// I campi di «Trasforma»: di quanto ruotare, scalare e inclinare.
-export type TransformId = "turn" | "scaleX" | "scaleY" | "skewX" | "skewY";
-
 export type PaintId = "fill" | "stroke";
-export type ChoiceId = "dash" | "cap" | "join" | "blend" | "preset" | "family" | "weight" | "boardPreset" | "pagePreset" | "unit";
-/// I campi a menu: il simbolo delle istanze, il tipo di una ripetizione e
-/// della simmetria della penna, gli stili del disegno, grafico e di testo, e
-/// le punte delle linee, all'inizio e alla fine.
-export type MenuId = "symbol" | "repeat" | "symmetry" | "lookStyle" | "textStyle" | "tipStart" | "tipEnd";
-export type SwitchId = "grid" | "snap" | "guides" | "rulers" | "rulerGuides" | "bar" | "isolate" | "symmetryMirror";
-export type FieldId = NumberId | PaintId | ChoiceId | MenuId | SwitchId | "ratio" | "shape" | "emphasis" | "anchor" | "textForm" | "boardName" | "boardOrientation" | "pageOrientation" | "desc";
+export type ChoiceId = "dash" | "preset" | "family" | "weight" | "boardPreset" | "pagePreset" | "unit";
+/// I campi a menu: il tipo della simmetria della penna, gli stili del
+/// disegno, grafico e di testo, e le punte delle linee, all'inizio e alla
+/// fine.
+export type MenuId = "symmetry" | "lookStyle" | "textStyle" | "tipStart" | "tipEnd";
+export type SwitchId = "grid" | "snap" | "guides" | "rulers" | "rulerGuides" | "bar" | "symmetryMirror";
+export type FieldId = NumberId | PaintId | ChoiceId | MenuId | SwitchId | "ratio" | "shape" | "emphasis" | "anchor" | "boardName" | "boardOrientation" | "pageOrientation" | "desc";
 
 export type ActionId =
   | "align-left"
@@ -352,8 +325,6 @@ export interface PropertiesView {
   /// senza niente nemmeno.
   readonly fields: Readonly<Partial<Record<FieldId, FieldState>>>;
   readonly actions: Readonly<Partial<Record<ActionId, ActionState>>>;
-  /// Vero se il pannello ospita gli attributi.
-  readonly attributes: boolean;
   /// Vero se c'è «Esporta la selezione».
   readonly exportSelection?: boolean;
   /// I campioni del documento, che i campi dei colori scrivono per nome e
@@ -369,8 +340,6 @@ export interface PropertiesView {
   readonly gradient?: GradientPanelView;
   /// La sezione «Campitura»; senza, non c'è.
   readonly hatch?: HatchPanelView;
-  /// La sezione «Effetti»; senza, non c'è.
-  readonly effects?: EffectsPanelView;
 }
 
 export interface PropertiesOptions {
@@ -380,8 +349,6 @@ export interface PropertiesOptions {
   /// ragione per cui no.
   onChange(id: FieldId, value: number | string | boolean): string | null;
   onAction(id: ActionId): void;
-  /// «Applica» di «Trasforma», come `onChange`.
-  onTransform(values: Readonly<Record<TransformId, number>>): string | null;
   /// Una sezione si apre o si chiude.
   onSection(id: SectionId, open: boolean): void;
   /// I gesti della sezione «Colori del documento» (`swatches-panel.ts`).
@@ -392,8 +359,6 @@ export interface PropertiesOptions {
   readonly gradient: Omit<GradientPanelOptions, "announce" | "onTarget">;
   /// I gesti della sezione «Campitura» (`hatch-panel.ts`).
   readonly hatch: Omit<HatchPanelOptions, "announce">;
-  /// I gesti della sezione «Effetti» (`effects-panel.ts`).
-  readonly effects: Omit<EffectsPanelOptions, "announce" | "reveal">;
   /// «Esporta…» di «Esporta la selezione»: la finestra, sulla selezione.
   onExportSelection?(): void;
   /// «Applica a» cambia, in una delle due sezioni che lo hanno.
@@ -407,8 +372,6 @@ export interface PropertiesOptions {
 export interface Properties {
   /// Il pannello: titolo, oggetto, sezioni.
   readonly element: HTMLElement;
-  /// Dove sta il pannello degli attributi, quando questo lo ospita.
-  readonly attributes: HTMLElement;
   /// Fra il titolo e le sezioni: ciò che l'editor ci mette (il titolo del
   /// disegno).
   readonly lead: HTMLElement;
@@ -450,7 +413,6 @@ const SPECS: readonly Spec[] = [
   { id: "height", kind: "number", section: "place", column: "2" },
   { id: "ratio", kind: "press", section: "place", column: "3" },
   { id: "rotation", kind: "number", section: "place", column: "1" },
-  { id: "symbol", kind: "menu", section: "shape", column: "all" },
   { id: "shape", kind: "segment", section: "shape", column: "all" },
   { id: "count", kind: "number", section: "shape", column: "1" },
   { id: "inner", kind: "number", section: "shape", column: "2" },
@@ -460,27 +422,12 @@ const SPECS: readonly Spec[] = [
   { id: "symmetryMirror", kind: "switch", section: "symmetry", column: "all" },
   { id: "symmetryX", kind: "number", section: "symmetry", column: "1" },
   { id: "symmetryY", kind: "number", section: "symmetry", column: "2" },
-  { id: "repeat", kind: "menu", section: "repeat", column: "all" },
-  { id: "repeatCount", kind: "number", section: "repeat", column: "1" },
-  { id: "repeatRadius", kind: "number", section: "repeat", column: "2" },
-  { id: "repeatX", kind: "number", section: "repeat", column: "1" },
-  { id: "repeatY", kind: "number", section: "repeat", column: "2" },
-  { id: "repeatColumns", kind: "number", section: "repeat", column: "1" },
-  { id: "repeatRows", kind: "number", section: "repeat", column: "2" },
-  { id: "repeatStepX", kind: "number", section: "repeat", column: "1" },
-  { id: "repeatStepY", kind: "number", section: "repeat", column: "2" },
-  { id: "repeatAngle", kind: "number", section: "repeat", column: "1" },
-  { id: "repeatDistance", kind: "number", section: "repeat", column: "2" },
   { id: "lookStyle", kind: "menu", section: "look", column: "all" },
   { id: "opacity", kind: "number", section: "look", column: "1" },
-  { id: "blend", kind: "choice", section: "look", column: "all" },
-  { id: "isolate", kind: "switch", section: "look", column: "all" },
   { id: "fill", kind: "paint", section: "fill", column: "all" },
   { id: "stroke", kind: "paint", section: "stroke", column: "all" },
   { id: "strokeWidth", kind: "number", section: "stroke", column: "1" },
   { id: "dash", kind: "choice", section: "stroke", column: "all" },
-  { id: "cap", kind: "choice", section: "stroke", column: "1" },
-  { id: "join", kind: "choice", section: "stroke", column: "2" },
   { id: "tipStart", kind: "menu", section: "stroke", column: "all" },
   { id: "tipEnd", kind: "menu", section: "stroke", column: "all" },
   { id: "textStyle", kind: "menu", section: "text", column: "all" },
@@ -492,13 +439,6 @@ const SPECS: readonly Spec[] = [
   { id: "leading", kind: "number", section: "text", column: "1" },
   { id: "spacing", kind: "number", section: "text", column: "2" },
   { id: "anchor", kind: "segment", section: "text", column: "all" },
-  { id: "textForm", kind: "segment", section: "text", column: "all" },
-  { id: "wrap", kind: "number", section: "text", column: "1" },
-  { id: "turn", kind: "number", section: "transform", column: "1" },
-  { id: "scaleX", kind: "number", section: "transform", column: "1" },
-  { id: "scaleY", kind: "number", section: "transform", column: "2" },
-  { id: "skewX", kind: "number", section: "transform", column: "1" },
-  { id: "skewY", kind: "number", section: "transform", column: "2" },
   { id: "boardName", kind: "line", section: "board", column: "all" },
   { id: "boardPreset", kind: "choice", section: "board", column: "all" },
   { id: "boardOrientation", kind: "segment", section: "board", column: "all" },
@@ -522,21 +462,17 @@ const SPECS: readonly Spec[] = [
 
 const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey }> = [
   { id: "place", label: "draw.properties.selection" },
-  { id: "transform", label: "draw.properties.transform" },
   { id: "arrange", label: "draw.properties.arrange" },
   { id: "look", label: "draw.properties.look" },
   { id: "fill", label: "draw.properties.fill" },
   { id: "gradient", label: "draw.properties.gradient" },
   { id: "hatch", label: "draw.properties.hatch" },
   { id: "stroke", label: "draw.properties.stroke" },
-  { id: "effects", label: "draw.properties.effects" },
   { id: "text", label: "draw.properties.text" },
   { id: "shape", label: "draw.properties.shape" },
   { id: "connector", label: "draw.properties.connector" },
-  { id: "repeat", label: "draw.properties.repeat" },
   { id: "symmetry", label: "draw.properties.symmetry" },
   { id: "exportSelection", label: "draw.properties.export_section" },
-  { id: "attributes", label: "draw.attributes" },
   { id: "document", label: "draw.properties.document_section" },
   { id: "board", label: "draw.properties.board_section" },
   { id: "view", label: "draw.properties.view_section" },
@@ -549,8 +485,6 @@ const ACTION_ROWS: ReadonlyArray<{ readonly label: DrawKey; readonly actions: re
   { label: "draw.properties.distribute", actions: ["distribute-x", "distribute-y"] },
   { label: "draw.order", actions: ["order-front", "order-forward", "order-backward", "order-back"] },
 ];
-
-const TRANSFORM_IDS: readonly TransformId[] = ["turn", "scaleX", "scaleY", "skewX", "skewY"];
 
 /// I nomi dei comandi prima che l'editor dica i suoi: un pulsante ha sempre
 /// un nome, anche nascosto.
@@ -778,7 +712,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   element.setAttribute("aria-labelledby", heading.id);
   element.append(header, lead, scroller);
 
-  let view: PropertiesView = { key: "", subject: "", editable: false, fields: {}, actions: {}, attributes: false };
+  let view: PropertiesView = { key: "", subject: "", editable: false, fields: {}, actions: {} };
   /// Vero mentre i campi si ridisegnano: un campo che se ne va non scrive.
   let rendering = false;
   const closed = new Set(options.closed);
@@ -831,8 +765,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     options.onSection(section.id, open);
   }
 
-  const attributes = sections.get("attributes")!.body;
-
   // --- I colori del documento ---------------------------------------------------
 
   // «Applica a» è uno solo: la scelta in una sezione passa all'altra.
@@ -873,18 +805,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     announce: (text) => options.announce(text),
   });
   sections.get("hatch")!.body.append(hatch.element);
-
-  // --- Gli effetti ----------------------------------------------------------------
-
-  // «Aggiungi effetto» sta nell'intestazione, accanto al titolo, anche con la
-  // sezione chiusa; aggiungere la apre.
-  const effects = createEffectsPanel(life, {
-    ...options.effects,
-    reveal: () => setOpen(sections.get("effects")!, true),
-    announce: (text) => options.announce(text),
-  });
-  sections.get("effects")!.body.append(effects.element);
-  sections.get("effects")!.toggle.after(effects.add);
 
   // --- Le barre di pulsanti ---------------------------------------------------
 
@@ -971,13 +891,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     actionBars.push({ bar, label: row.label });
     roves.push(rove(bar));
   }
-
-  // «Applica», sotto i campi di «Trasforma».
-  const transformBody = sections.get("transform")!.body;
-  const applyButton = document.createElement("button");
-  applyButton.type = "button";
-  applyButton.className = "draw-button draw-properties-apply";
-  life.listen(applyButton, "click", () => applyTransform());
 
   // --- I campi ----------------------------------------------------------------
 
@@ -1193,7 +1106,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     if (spec.kind === "menu") life.listen(line.control, "click", () => (line.control.getAttribute("aria-expanded") === "true" ? closeContextMenu() : openMenu(line)));
     if (spec.kind === "choice" || spec.kind === "switch") life.listen(line.control, "change", () => choose(line));
   }
-  transformBody.append(applyButton);
 
   const exportButton = document.createElement("button");
   exportButton.type = "button";
@@ -1202,11 +1114,11 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   sections.get("exportSelection")!.body.append(exportButton);
 
   /// Mette il campo al suo posto, nell'ordine di `SPECS`, prima del campo
-  /// seguente già entrato o di «Applica».
+  /// seguente già entrato.
   const place = (line: Line): void => {
     if (line.root.parentElement !== null) return;
     const { section } = line.spec;
-    let before: HTMLElement | null = section === "transform" ? applyButton : null;
+    let before: HTMLElement | null = null;
     for (let at = SPECS.indexOf(line.spec) + 1; at < SPECS.length; at += 1) {
       const spec = SPECS[at]!;
       const root = lines.get(spec.id)!.root;
@@ -1308,8 +1220,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     line.shown = text;
   };
 
-  const isDraft = (line: Line): boolean => (TRANSFORM_IDS as readonly string[]).includes(line.spec.id);
-
   const paintNumber = (line: Line, state: NumberState, fresh: boolean): void => {
     const input = line.control as HTMLInputElement;
     line.name.textContent = state.label;
@@ -1319,14 +1229,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     line.unit!.hidden = state.unit === "";
     input.placeholder = state.value === null ? t("draw.properties.mixed") : "";
     const text = state.value === null ? "" : numberText(state.value, state.places);
-    if (isDraft(line)) {
-      // Di quanto trasformare resta com'è scritto finché non lo si cambia:
-      // si applica di nuovo a un'altra selezione.
-      if (line.state === null) input.value = text;
-      line.shown = text;
-    } else {
-      showText(line, text, fresh);
-    }
+    showText(line, text, fresh);
     if (state.value === null) input.removeAttribute("aria-valuenow");
     else input.setAttribute("aria-valuenow", String(rounded(state.value, state.places)));
     input.setAttribute("aria-valuetext", state.value === null ? t("draw.properties.mixed") : `${text}${state.unit === "" ? "" : ` ${state.unit}`}`);
@@ -1622,11 +1525,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     if (state.max !== undefined) value = Math.min(state.max, value);
     value = rounded(value, state.places);
     const text = numberText(value, state.places);
-    if (isDraft(line)) {
-      input.value = text;
-      showError(line, null);
-      return;
-    }
     if (state.value !== null && value === rounded(state.value, state.places)) {
       input.value = line.shown;
       return;
@@ -1940,31 +1838,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     picker.focus();
   }
 
-  /// «Applica»: di quanto ruotare, scalare e inclinare, come è scritto.
-  function applyTransform(): boolean {
-    if (!view.editable) return false;
-    const values: Partial<Record<TransformId, number>> = {};
-    for (const id of TRANSFORM_IDS) {
-      const line = lines.get(id)!;
-      const state = line.state as NumberState | null;
-      if (state === null || view.fields[id] === undefined) return false;
-      const value = numberOf(state, (line.control as HTMLInputElement).value);
-      if (typeof value === "string") {
-        fail(line, value, true);
-        (line.control as HTMLInputElement).focus({ preventScroll: true });
-        return false;
-      }
-      showError(line, null);
-      values[id] = value;
-    }
-    const failure = options.onTransform(values as Record<TransformId, number>);
-    if (failure !== null) {
-      options.announce(failure);
-      return false;
-    }
-    return true;
-  }
-
   // --- I tasti ----------------------------------------------------------------
 
   /// Il campo di cui `target` è il controllo che si scrive.
@@ -2000,8 +1873,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         commitText(line, true);
       } else if (!plain) {
         return;
-      } else if (isDraft(line)) {
-        applyTransform();
       } else if (line.spec.kind === "number") {
         commitNumber(line, true);
       } else if (line.spec.kind === "line") {
@@ -2040,18 +1911,17 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     const line = lineOf(event.target);
     // Un campo che se n'è andato non scrive: il valore a metà era per ciò
     // che mostrava prima.
-    if (line === null || isDraft(line) || line.root.hidden) return;
+    if (line === null || line.root.hidden) return;
     if (line.spec.kind === "number") commitNumber(line, false);
     else if (line.spec.kind === "paint") commitPaint(line, (line.control as HTMLInputElement).value, false);
     else if (line.spec.kind === "text" || line.spec.kind === "line") commitText(line, false);
   });
 
   // Un pulsante preso col puntatore non prende il fuoco: resta al foglio,
-  // con le sue scorciatoie, o al campo in cui si scrive. Gli attributi,
-  // ospiti del pannello, fanno come sempre.
+  // con le sue scorciatoie, o al campo in cui si scrive.
   life.listen(element, "mousedown", (event) => {
     const pressed = (event.target as Element | null)?.closest("button:not(.draw-properties-toggle)");
-    if (pressed && !attributes.contains(pressed)) event.preventDefault();
+    if (pressed) event.preventDefault();
   });
 
   // --- Il pannello ------------------------------------------------------------
@@ -2081,13 +1951,11 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       const line = lines.get(id)!;
       nameButtons(line, line.state?.label ?? t(key));
     }
-    applyButton.textContent = t("draw.properties.apply");
     exportButton.textContent = t("draw.chrome.export.dialog");
     colors.relabel();
     connector.relabel();
     gradient.relabel();
     hatch.relabel();
-    effects.relabel();
   };
 
   const update = (next: PropertiesView): void => {
@@ -2123,9 +1991,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         else control.removeAttribute("aria-disabled");
       }
       for (const { bar } of actionBars) bar.hidden = [...bar.children].every((control) => (control as HTMLElement).hidden);
-      applyButton.hidden = !shown.has("transform");
-      applyButton.disabled = !next.editable;
-      if (next.attributes) shown.add("attributes");
       if (next.exportSelection === true && options.onExportSelection !== undefined) shown.add("exportSelection");
       if (next.colors !== undefined) {
         shown.add("colors");
@@ -2142,10 +2007,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       if (next.hatch !== undefined) {
         shown.add("hatch");
         hatch.update(next.hatch, next.editable);
-      }
-      if (next.effects !== undefined) {
-        shown.add("effects");
-        effects.update(next.effects, next.editable);
       }
       for (const section of sections.values()) section.root.hidden = !shown.has(section.id);
     } finally {
@@ -2167,7 +2028,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
 
   return {
     element,
-    attributes,
     lead,
     update,
     focus() {

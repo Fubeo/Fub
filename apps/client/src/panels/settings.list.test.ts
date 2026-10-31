@@ -277,9 +277,9 @@ describe("le parti del Personalizzato nel pannello", () => {
       set.querySelector("legend")!.textContent,
       set.querySelectorAll("input[type=checkbox]").length,
     ]);
-    expect(levels).toEqual([["Essenziale", 6], ["Standard", 32], ["Esperto", 22]]);
+    expect(levels).toEqual([["Essenziale", 6], ["Standard", 32]]);
     const checked = [...group.querySelectorAll<HTMLInputElement>("input:checked")].map((input) => input.closest("label")!.textContent);
-    expect(checked).toEqual(["Penna", "Testo", "Operazioni booleane"]);
+    expect(checked).toEqual(["Penna", "Testo"]);
 
     // La prosa e la provenienza le sente chi arriva al gruppo, non a ogni casella.
     const described = group.getAttribute("aria-describedby")!.split(" ").map((id) => document.getElementById(id)?.textContent);

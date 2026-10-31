@@ -1049,47 +1049,6 @@ export type Refusal = "dense" | "complex" | "failed";
 /// Il primo tracciato di un'operazione booleana, o perché non c'è.
 const first = (result: Segment[][] | "complex" | null): Segment[] | Refusal => (result === null ? "failed" : result === "complex" ? result : (result[0] ?? []));
 
-/// L'area che dipinge il contorno di `segments` disegnato con `style`, come
-/// tracciato; nessun segmento se non dipinge niente.
-export function strokeArea(segments: readonly Segment[], style: StrokeStyle): Segment[] | Refusal {
-  const loops = strokeLoops(segments, style);
-  if (loops === "dense" || loops.length === 0) return loops;
-  return first(combine("union", [{ segments: loops, evenOdd: false, written: false, built: true }], MAX_PIECES));
-}
-
-/// Gli spigoli di uno scostamento: i giunti della fascia attorno al bordo,
-/// e il loro limite.
-export interface OffsetStyle {
-  readonly join: Join;
-  readonly miterLimit: number;
-}
-
-/// L'area di `segments` allargata di `distance`, o ristretta se è negativa,
-/// con gli spigoli di `style`: un tracciato, nessun segmento se non resta
-/// niente. Una forma aperta che non racchiude niente, senza riempimento
-/// (`filled` falso) o con un riempimento senza area come una linea, si
-/// allarga attorno alle sue curve, coi capi tondi se i giunti sono tondi e
-/// quadrati altrimenti, e non si restringe.
-export function offsetArea(segments: readonly Segment[], distance: number, style: OffsetStyle, filled: boolean): Segment[] | Refusal {
-  const open = !subpathsOf(segments).some((sub) => sub.closed);
-  const strip = (): Segment[] | Refusal =>
-    distance > 0 ? strokeArea(segments, { width: 2 * distance, join: style.join, cap: style.join === "round" ? "round" : "square", miterLimit: style.miterLimit, dashes: [] }) : [];
-  if (!filled && open) return strip();
-  const boundary = first(combine("union", [{ segments, evenOdd: false, written: false, built: true }], MAX_PIECES));
-  if (typeof boundary === "string") return boundary;
-  // Un riempimento senza area, come quello di una linea, si scosta come la
-  // sua striscia.
-  if (boundary.length === 0 && open) return strip();
-  if (boundary.length === 0 || distance === 0) return boundary;
-  // Un bordo pulito non ha tratteggio: la sua fascia non è mai troppo fitta.
-  const band = strokeLoops(boundary, { width: 2 * Math.abs(distance), join: style.join, cap: "butt", miterLimit: style.miterLimit, dashes: [] }) as Segment[];
-  const shapes = [
-    { segments: boundary, evenOdd: false, written: false, built: true },
-    { segments: band, evenOdd: false, written: false, built: true },
-  ];
-  return first(combine(distance > 0 ? "union" : "difference", shapes, MAX_PIECES));
-}
-
 // ---------------------------------------------------------------------------
 // Lo spessore variabile.
 // ---------------------------------------------------------------------------

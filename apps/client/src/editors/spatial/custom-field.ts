@@ -13,7 +13,6 @@ import { FEATURES, isFeature, TOOLS, type Preset } from "./tools/registry";
 const LEVELS: readonly { readonly level: Preset; readonly label: DrawKey }[] = [
   { level: "essential", label: "draw.level.essential" },
   { level: "standard", label: "draw.level.standard" },
-  { level: "expert", label: "draw.level.expert" },
 ];
 
 /// Chi riceve una scelta: l'elenco intero da scrivere, e la parte cambiata

@@ -44,7 +44,7 @@ ripetono.
 - Da lì si continua: `Ctrl+Z` e `Ctrl+Y` vanno di un passo, e un gesto nuovo
   toglie i passi da ripetere, come dopo un annulla.
 - La selezione segue l'ultimo passo annullato o ripetuto, come dopo un
-  annulla. Un testo che si sta scrivendo, o un tracciato di Bézier a metà, si
+  annulla. Un testo che si sta scrivendo si
   conclude prima del salto, come cambiando strumento.
 - Se un passo non si annulla più, perché altrove è cambiato ciò che toccava,
   il salto si ferma lì: i passi prima di lui sono fatti, lui esce dalla

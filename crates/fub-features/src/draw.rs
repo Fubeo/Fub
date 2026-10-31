@@ -81,13 +81,15 @@
 //!
 //! # Le impostazioni
 //!
-//! [`settings`] dichiara sette chiavi, nel gruppo «Disegni»: lo spazio di
+//! [`settings`] dichiara sei chiavi, nel gruppo «Disegni»: lo spazio di
 //! lavoro e gli strumenti della colonna, il livello e le parti del
-//! Personalizzato delle versioni precedenti, le cartelle dei modelli e delle
-//! librerie di simboli del vault e i suggerimenti brevi. Le prime quattro le
-//! legge l'editor, che le segue dal vivo, e le due vecchie servono soltanto a
-//! dedurre le nuove; le cartelle le leggono «Nuovo disegno» e «Simboli»; i
-//! suggerimenti li scrive la casella «Non mostrare più suggerimenti».
+//! Personalizzato delle versioni precedenti, la cartella dei modelli del
+//! vault e i suggerimenti brevi. Le prime quattro le legge l'editor, che le
+//! segue dal vivo, e le due vecchie servono soltanto a dedurre le nuove; la
+//! cartella la legge «Nuovo disegno»; i suggerimenti li scrive la casella
+//! «Non mostrare più suggerimenti». La cartella delle librerie di simboli
+//! (`draw.symbols`) se n'è andata col pannello «Simboli» (decisione 0231):
+//! il valore che un vault ne porta resta nel file senza che nessuno lo legga.
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
@@ -190,11 +192,6 @@ pub const DRAW_CUSTOM_DEFAULT: [&str; 6] = ["pen", "eraser", "rect", "ellipse", 
 pub const DRAW_TEMPLATES_KEY: &str = "draw.templates";
 /// La cartella dei modelli quando nessuno ha scelto: `Templates`, nella radice.
 pub const DRAW_TEMPLATES_DEFAULT: &str = "Templates";
-/// L'impostazione della cartella delle librerie di simboli del vault.
-pub const DRAW_SYMBOLS_KEY: &str = "draw.symbols";
-/// La cartella delle librerie quando nessuno ha scelto: `Symbols`, nella
-/// radice.
-pub const DRAW_SYMBOLS_DEFAULT: &str = "Symbols";
 /// L'impostazione dei suggerimenti brevi dell'editor.
 pub const DRAW_SUGGESTIONS_KEY: &str = "draw.suggestions";
 
@@ -231,8 +228,6 @@ const S_CUSTOM: &str = "s_custom";
 const S_CUSTOM_DESC: &str = "s_custom_desc";
 const S_TEMPLATES: &str = "s_templates";
 const S_TEMPLATES_DESC: &str = "s_templates_desc";
-const S_SYMBOLS: &str = "s_symbols";
-const S_SYMBOLS_DESC: &str = "s_symbols_desc";
 const S_SUGGESTIONS: &str = "s_suggestions";
 const S_SUGGESTIONS_DESC: &str = "s_suggestions_desc";
 
@@ -326,16 +321,6 @@ pub fn settings() -> Vec<SettingSpec> {
         .grouped(Text::key(S_GROUP))
         .program_writable(),
         SettingSpec::new(
-            DRAW_SYMBOLS_KEY,
-            Text::key(S_SYMBOLS),
-            SettingKind::Text {
-                default: DRAW_SYMBOLS_DEFAULT.into(),
-            },
-        )
-        .describing(Text::key(S_SYMBOLS_DESC))
-        .grouped(Text::key(S_GROUP))
-        .program_writable(),
-        SettingSpec::new(
             DRAW_SUGGESTIONS_KEY,
             Text::key(S_SUGGESTIONS),
             SettingKind::Toggle { default: true },
@@ -406,14 +391,6 @@ pub fn catalog() -> Vec<StringCatalog> {
              modelli, sotto «Dal vault». Se non c'è, il vault non ha modelli \
              suoi: quelli di Fub restano.",
         )
-        .with(S_SYMBOLS, "Cartella delle librerie di simboli")
-        .with(
-            S_SYMBOLS_DESC,
-            "La cartella del vault coi disegni che il pannello «Simboli» \
-             offre come librerie: i simboli di ognuno si inseriscono in un \
-             altro disegno. Se non c'è, il pannello mostra soltanto i simboli \
-             del disegno aperto.",
-        )
         .with(S_SUGGESTIONS, "Suggerimenti brevi")
         .with(
             S_SUGGESTIONS_DESC,
@@ -475,14 +452,6 @@ pub fn catalog() -> Vec<StringCatalog> {
             "The vault folder with the drawings that «New drawing» offers as \
              templates, under «From the vault». If it does not exist, the \
              vault has no templates of its own: Fub's stay.",
-        )
-        .with(S_SYMBOLS, "Symbol libraries folder")
-        .with(
-            S_SYMBOLS_DESC,
-            "The vault folder with the drawings that the «Symbols» panel \
-             offers as libraries: the symbols of each can be inserted into \
-             another drawing. If it does not exist, the panel shows only the \
-             open drawing's own symbols.",
         )
         .with(S_SUGGESTIONS, "Short tips")
         .with(
@@ -3096,7 +3065,7 @@ mod tests {
     }
 
     #[test]
-    fn the_settings_are_seven_in_one_group_with_their_defaults() {
+    fn the_settings_are_six_in_one_group_with_their_defaults() {
         use fub_abi::settings::{SettingScope, SettingValue};
         let specs = settings();
         let keys: Vec<_> = specs.iter().map(|spec| spec.key.as_str()).collect();
@@ -3108,7 +3077,6 @@ mod tests {
                 "draw.level",
                 "draw.custom",
                 "draw.templates",
-                "draw.symbols",
                 "draw.suggestions"
             ]
         );
@@ -3120,7 +3088,6 @@ mod tests {
                 DRAW_LEVEL_KEY,
                 DRAW_CUSTOM_KEY,
                 DRAW_TEMPLATES_KEY,
-                DRAW_SYMBOLS_KEY,
                 DRAW_SUGGESTIONS_KEY
             ]
         );
@@ -3134,15 +3101,14 @@ mod tests {
                 SettingScope::Vault,
                 SettingScope::Vault,
                 SettingScope::Vault,
-                SettingScope::Vault,
                 SettingScope::Machine
             ]
         );
         // Un componente non cambia lo spazio di lavoro, la colonna, il
-        // livello o le parti e non spegne i suggerimenti da sé: soltanto le
-        // cartelle sono di tutti.
+        // livello o le parti e non spegne i suggerimenti da sé: soltanto la
+        // cartella è di tutti.
         let writable: Vec<_> = specs.iter().map(|spec| spec.program_writable).collect();
-        assert_eq!(writable, [false, false, false, false, true, true, false]);
+        assert_eq!(writable, [false, false, false, false, true, false]);
 
         let defaults: Vec<_> = specs.iter().map(|spec| spec.kind.default_value()).collect();
         assert_eq!(
@@ -3157,7 +3123,6 @@ mod tests {
                         .to_vec()
                 ),
                 SettingValue::Text("Templates".into()),
-                SettingValue::Text("Symbols".into()),
                 SettingValue::Toggle(true),
             ]
         );
@@ -3216,20 +3181,13 @@ mod tests {
             "Parti del Personalizzato (versioni precedenti)"
         );
         assert_eq!(said(&specs[4].label, "it"), "Cartella dei modelli");
-        assert_eq!(
-            said(&specs[5].label, "it"),
-            "Cartella delle librerie di simboli"
-        );
-        // Il pannello si chiama come nell'editor.
-        assert!(said(&specs[5].description, "it").contains("«Simboli»"));
-        assert!(said(&specs[5].description, "en").contains("«Symbols»"));
         // L'interruttore dei suggerimenti parla come l'editor: stessa parola
         // nell'etichetta e nella descrizione, e il nome della casella è
         // quello che l'editor mostra (apostrofo tipografico nell'inglese).
-        assert_eq!(said(&specs[6].label, "it"), "Suggerimenti brevi");
-        assert_eq!(said(&specs[6].label, "en"), "Short tips");
-        let it = said(&specs[6].description, "it");
-        let en = said(&specs[6].description, "en");
+        assert_eq!(said(&specs[5].label, "it"), "Suggerimenti brevi");
+        assert_eq!(said(&specs[5].label, "en"), "Short tips");
+        let it = said(&specs[5].description, "it");
+        let en = said(&specs[5].description, "en");
         assert!(it.contains("suggerimenti"), "{it}");
         assert!(it.contains("«Non mostrare più suggerimenti»"), "{it}");
         assert!(en.contains("tips"), "{en}");

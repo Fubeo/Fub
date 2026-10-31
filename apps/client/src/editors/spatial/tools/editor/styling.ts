@@ -4,7 +4,6 @@
 
 import { formatNumber } from "../../number";
 import type { DocumentModel, ElementPart } from "../../scene/model";
-import { MAX_GRID } from "../../scene/repeat";
 import { ROOT } from "../../scene/ops";
 import { UNITS } from "../../scene/rulers";
 import type { Elem } from "../../scene/serialize";
@@ -12,13 +11,9 @@ import { paintReference } from "../../scene/values";
 import { plural, t, type DrawKey } from "../../strings";
 import type { PaintNode } from "../../painter/paint";
 import { roundDelta } from "../edit";
-import { nodeOf } from "../arrange";
 import { carriedBy as onBoard, moveBoardOps, pageRect, rectText, renameBoardOps, resizeBoardOps } from "../boards";
-import { boundsAfter, numericMatrix, numericOps } from "../transform";
-import { ACTION_COMMANDS, repeatEdit, SHAPE_ACTIONS, shapeChange, sheetChange, symbolLabel, TEXT_PRESETS } from "../fields";
+import { ACTION_COMMANDS, SHAPE_ACTIONS, shapeChange, sheetChange, TEXT_PRESETS } from "../fields";
 import { gradientOps, gradientPreview, type GradientChange, type PaintChannel } from "../gradients";
-import { editedRepeat, isRepeatKind, repeatPlace, repeatTarget, rewriteOps as rewriteRepeatOps } from "../repeat-ops";
-import { cyclingSymbols, documentSymbols, isInstance, renameSymbolOps, swapOps, symbolNameProblem } from "../symbols";
 import {
   applyStyleOps,
   deleteStyleOps,
@@ -36,7 +31,7 @@ import {
   type StyleChange,
   type StyleKind,
 } from "../styles";
-import type { ActionId, FieldId, TransformId } from "../properties";
+import type { ActionId, FieldId } from "../properties";
 import {
   documentSwatches,
   linkSwatchOps,
@@ -48,8 +43,7 @@ import {
   type SwatchChange,
 } from "../swatches";
 import { connectorOps, type ConnectorChange } from "../connector-ops";
-import { effectsOps, effectsStates, MAX_EFFECTS, type EffectsChange } from "../effects";
-import { deleteMotifOps, documentPatterns, hatchOps, motifOps, renameMotifOps, type HatchChange } from "../patterns";
+import { documentPatterns, hatchOps, type HatchChange } from "../patterns";
 import { fromUnit } from "../rulers";
 import type { Unit } from "../hit";
 import { cleanName } from "../naming";
@@ -68,25 +62,19 @@ export interface StylingContext {
   deleteSwatch: (id: string) => string | null;
   selectShowing: (value: string) => string | null;
   changeGradient: (target: PaintChannel, change: GradientChange, label: DrawKey) => string | null;
-  changeEffects: (change: EffectsChange, label: DrawKey) => string | null;
   changeConnector: (change: ConnectorChange, label: DrawKey) => string | null;
   changeHatch: (change: HatchChange, label: DrawKey) => string | null;
-  renameMotif: (id: string, name: string) => string | null;
-  deleteMotif: (id: string) => string | null;
-  motifReason: () => string | null;
-  motifFromSelection: () => void;
   previewGradient: (target: PaintChannel, change: GradientChange | null, only?: ReadonlySet<ElementPart> | null) => void;
   chooseGradientStop: (index: number | null) => void;
   changeField: (id: FieldId, value: number | string | boolean) => string | null;
   runAction: (id: ActionId) => void;
-  transformFields: (values: Readonly<Record<TransformId, number>>) => string | null;
 }
 
 /// Monta gli stili, i colori, le sfumature, gli effetti e le campiture del pannello.
 export function installStyling(ctx: EditorContext): void {
   const {
-    has, measureText, textStyle, painter, builder, indexer, chosenSheet, editable, currentIndex, newIds, announce, announceSelection, docUnit,
-    selectedUnits, showHandles, originalUnits, syncProperties, colorsNow, changeFromPanel, withFaces, panelLater, moveFromPanel, resizeFromPanel,
+    measureText, textStyle, painter, builder, indexer, chosenSheet, currentIndex, newIds, announce, announceSelection, docUnit,
+    selectedUnits, showHandles, syncProperties, colorsNow, changeFromPanel, withFaces, panelLater, moveFromPanel, resizeFromPanel,
     rotateFromPanel, styleFromPanel
   } = ctx;
   // --- Gli stili del documento ----------------------------------------------
@@ -105,54 +93,6 @@ export function installStyling(ctx: EditorContext): void {
     return t(problem === "taken" ? "draw.styles.problem.taken" : "draw.colors.problem.reads_color", { name });
   };
 
-  /// Un comando della riga «Simbolo»: `symbol:<id>` dà quel simbolo alle
-  /// istanze scelte, al loro posto; `edit` entra nel simbolo dell'istanza
-  /// scelta da sola; `rename:<nome>` rinomina il simbolo delle istanze
-  /// scelte; `detach` le scollega. `null` se è fatto, altrimenti perché no.
-  function symbolCommand(value: string): string | null {
-    const model = ctx.engine.model;
-    const units = selectedUnits();
-    if (model === null || units.length === 0) return null;
-    const colon = value.indexOf(":");
-    const verb = colon < 0 ? value : value.slice(0, colon);
-    const rest = colon < 0 ? "" : value.slice(colon + 1);
-    const instances = units.filter(isInstance);
-    const all = documentSymbols(model);
-    switch (verb) {
-      case "symbol": {
-        const symbol = all.find((each) => each.id === rest);
-        if (symbol === undefined || instances.length === 0) return null;
-        if (cyclingSymbols(model, instances).has(symbol.id)) return t("draw.symbols.why.cycle");
-        const count = instances.filter((unit) => unit.node.details?.symbol !== symbol.id).length;
-        const swapped = swapOps(model, units, symbol.id, newIds());
-        const outcome = changeFromPanel("draw.action.symbol_swap", swapped.ops, swapped.keys);
-        if (outcome === null && count > 0) announce(plural(count, "draw.symbols.swapped.one", "draw.symbols.swapped.other", { name: symbolLabel(symbol.name) }));
-        return outcome;
-      }
-      case "edit":
-        ctx.editSymbol();
-        return null;
-      case "rename": {
-        const used = new Set(instances.map((unit) => unit.node.details?.symbol));
-        const current = used.size === 1 ? (all.find((each) => used.has(each.id)) ?? null) : null;
-        if (current === null) return t("draw.symbols.why.mixed");
-        const name = cleanName(rest);
-        const problem = symbolNameProblem(model, name, current.id);
-        if (problem !== null) return problem === "empty" ? t("draw.symbols.problem.empty") : t("draw.symbols.problem.taken", { name });
-        const renamed = renameSymbolOps(model, current, name, newIds());
-        if (renamed === "foreign") return t("draw.rename.foreign");
-        // La selezione resta sulle istanze: il nome sta nel simbolo.
-        const outcome = changeFromPanel("draw.action.symbol_rename", renamed.ops, null);
-        if (outcome === null && renamed.ops.length > 0) announce(t("draw.symbols.renamed", { name }));
-        return outcome;
-      }
-      case "detach":
-        ctx.detachSelection();
-        return null;
-      default:
-        return null;
-    }
-  }
 
   /// Un comando della riga «Stile» di tipo `kind`: `style:<id>` dà lo
   /// stile alla selezione, `preset:<id>` fa uno stile di serie e lo dà,
@@ -416,27 +356,6 @@ export function installStyling(ctx: EditorContext): void {
 
   // --- Gli effetti -----------------------------------------------------------
 
-  /// Il cambio `change` degli effetti degli oggetti scelti, dalla sezione
-  /// «Effetti», col nome `label` nella cronologia. `null` se è fatto,
-  /// altrimenti perché no.
-  function changeEffects(change: EffectsChange, label: DrawKey): string | null {
-    ctx.settleCrop();
-    const model = ctx.engine.model;
-    const units = selectedUnits();
-    if (model === null || units.length === 0) return null;
-    const changed = effectsOps(model, units, change, measureText, newIds());
-    if (typeof changed === "string") {
-      if (changed !== "full") return t(`draw.effects.refused.${changed}`);
-      // Otto effetti, o una seconda sfocatura: lo dice il caso.
-      const blurred =
-        change.kind === "add" &&
-        change.effect.kind === "blur" &&
-        effectsStates(model, units.map((each) => nodeOf(model, each))).some((state) => state.kind === "effects" && state.effects.some((effect) => effect.kind === "blur"));
-      return blurred ? t("draw.effects.full.blur") : t("draw.effects.full", { max: String(MAX_EFFECTS) });
-    }
-    return changeFromPanel(label, changed.ops, changed.keys);
-  }
-  ctx.changeEffects = changeEffects;
 
   // --- Il connettore nelle proprietà ----------------------------------------
 
@@ -495,67 +414,9 @@ export function installStyling(ctx: EditorContext): void {
   }
   ctx.changeHatch = changeHatch;
 
-  /// Dà il nome `name` al motivo `id` del documento, dalla sezione
-  /// «Campitura». `null` se è fatto, altrimenti perché no.
-  function renameMotif(id: string, name: string): string | null {
-    ctx.settleCrop();
-    const model = ctx.engine.model;
-    if (model === null) return null;
-    const renamed = renameMotifOps(model, id, name, selectedUnits(), newIds());
-    const outcome = changeFromPanel("draw.action.motif_rename", renamed.ops, renamed.keys);
-    if (outcome === null && renamed.ops.length > 0) announce(t("draw.hatch.motif.renamed", { name }));
-    return outcome;
-  }
-  ctx.renameMotif = renameMotif;
 
-  /// Elimina il motivo `id` del documento: chi lo usa torna al suo colore, e
-  /// si dice quanti oggetti non si sono potuti cambiare.
-  function deleteMotif(id: string): string | null {
-    ctx.settleCrop();
-    const model = ctx.engine.model;
-    const motif = model === null ? undefined : documentPatterns(model).find((each) => each.id === id);
-    if (model === null || motif === undefined) return null;
-    const removed = deleteMotifOps(model, id, selectedUnits(), newIds());
-    const outcome = changeFromPanel("draw.action.motif_delete", removed.ops, removed.keys);
-    if (outcome !== null) return outcome;
-    const { name } = motif;
-    announce(removed.kept === 0 ? t("draw.hatch.motif.deleted", { name }) : plural(removed.kept, "draw.hatch.motif.deleted.kept.one", "draw.hatch.motif.deleted.kept.other", { name }));
-    return null;
-  }
-  ctx.deleteMotif = deleteMotif;
 
-  /// Perché «Motivo dalla selezione» non si fa con gli oggetti scelti, a
-  /// parole; `null` se si fa. Si chiede quando un menu si apre, non a ogni
-  /// cambio della selezione: fare il motivo costa quanto copiare gli oggetti.
-  function motifReason(): string | null {
-    if (!editable()) return t("draw.rejected", { reason: t("draw.reason.read_only") });
-    const model = ctx.engine.model;
-    const units = selectedUnits();
-    if (model === null || units.length === 0) return t("draw.selected.none");
-    const made = motifOps(model, units, t("draw.hatch.motif.base"), newIds());
-    return typeof made === "string" ? t(`draw.hatch.motif.refused.${made}`) : null;
-  }
-  ctx.motifReason = motifReason;
 
-  /// «Motivo dalla selezione», dal livello Esperto: gli oggetti scelti
-  /// diventano un motivo del documento, col primo nome libero, che i
-  /// riempimenti possono usare. Gli oggetti restano, e restano scelti.
-  function motifFromSelection(): void {
-    // In sola lettura il comando c'è e lo dice, invece di non fare niente.
-    if (has("motifs") && !editable()) {
-      announce(t("draw.rejected", { reason: t("draw.reason.read_only") }));
-      return;
-    }
-    const units = ctx.arranging("motifs");
-    if (units === null) return;
-    const made = motifOps(ctx.engine.model!, units, t("draw.hatch.motif.base"), newIds());
-    if (typeof made === "string") {
-      announce(t(`draw.hatch.motif.refused.${made}`));
-      return;
-    }
-    if (ctx.arrange("draw.action.motif_make", made) !== null) announce(t("draw.hatch.motif.made", { name: made.name }));
-  }
-  ctx.motifFromSelection = motifFromSelection;
 
   /// Mostra sul disegno la sfumatura `change` del bersaglio `target` degli
   /// oggetti scelti, o delle sole parti `only`, senza scriverla; `null` toglie
@@ -610,28 +471,6 @@ export function installStyling(ctx: EditorContext): void {
     return changeFromPanel(SHAPE_ACTIONS[id]!, reshaped.ops, reshaped.keys);
   };
 
-  /// Un numero di «Ripetizione», nell'unità del documento: la ripetizione
-  /// della selezione cambia, con le sue copie, e il raggio sposta gli
-  /// originali; la selezione resta. Una griglia con troppe o troppo poche
-  /// celle non si scrive, e il campo lo dice.
-  const repeatFromPanel = (id: FieldId, value: number | string | boolean): string | null => {
-    const model = ctx.engine.model;
-    const units = selectedUnits();
-    const target = repeatTarget(units);
-    const repeat = target?.details?.repeat;
-    const edit = repeatEdit(id, value, docUnit());
-    if (model === null || target === null || repeat === undefined || edit === null) return null;
-    const place = repeatPlace(originalUnits(target));
-    const next = place === null ? null : editedRepeat(repeat, place, edit);
-    if (next === null) {
-      const side = edit.field === "columns" || edit.field === "rows" ? Math.round(edit.value) : null;
-      const cells = repeat.kind !== "grid" || side === null ? null : side * (edit.field === "columns" ? repeat.rows : repeat.columns);
-      return cells !== null && (cells < 2 || cells > MAX_GRID) ? t("draw.properties.repeat.cells") : null;
-    }
-    const keys = units.length === 1 && units[0]!.node === target ? [] : units.map((unit) => unit.key);
-    const made = rewriteRepeatOps(model, target, next.repeat, newIds(), next.move, keys);
-    return changeFromPanel("draw.action.repeat_change", made.ops, made.keys);
-  };
 
   /// Un lato della pagina, nell'unità del documento.
   const pageFromPanel = (id: "pageWidth" | "pageHeight", value: number): string | null => {
@@ -769,27 +608,6 @@ export function installStyling(ctx: EditorContext): void {
       case "textStyle":
         outcome = styleCommand(id === "textStyle" ? "text" : "graphic", String(value));
         break;
-      case "symbol":
-        outcome = symbolCommand(String(value));
-        break;
-      case "repeat":
-        // Un tipo rifà la ripetizione, «Espandi» la espande: dicono loro
-        // che cosa è successo.
-        if (value === "expand") ctx.expandSelection();
-        else if (isRepeatKind(value)) ctx.repeatSelection(value);
-        break;
-      case "repeatCount":
-      case "repeatRadius":
-      case "repeatX":
-      case "repeatY":
-      case "repeatColumns":
-      case "repeatRows":
-      case "repeatStepX":
-      case "repeatStepY":
-      case "repeatAngle":
-      case "repeatDistance":
-        outcome = repeatFromPanel(id, value);
-        break;
       case "symmetry":
       case "symmetrySlices":
       case "symmetryMirror":
@@ -821,23 +639,4 @@ export function installStyling(ctx: EditorContext): void {
   }
   ctx.runAction = runAction;
 
-  /// «Applica» di «Trasforma»: come la finestra, attorno al centro del
-  /// riquadro degli oggetti scelti.
-  function transformFields(values: Readonly<Record<TransformId, number>>): string | null {
-    if (values.scaleX === 0 || values.scaleY === 0) return t("draw.properties.zero_scale");
-    const units = ctx.arranging("transform");
-    const from = units === null ? null : ctx.boundsOf(units);
-    if (units === null || from === null) return null;
-    const m = numericMatrix(
-      { rotate: values.turn, scaleX: values.scaleX / 100, scaleY: values.scaleY / 100, skewX: values.skewX, skewY: values.skewY },
-      [(from.min[0] + from.max[0]) / 2, (from.min[1] + from.max[1]) / 2],
-    );
-    const transformed = numericOps(units, m, newIds());
-    if (transformed === null) return t("draw.transform.unwritable");
-    if (ctx.arrange("draw.action.transform", transformed, boundsAfter(units, m)) !== null) {
-      announce(plural(transformed.changed, "draw.transformed.one", "draw.transformed.other"));
-    }
-    return null;
-  }
-  ctx.transformFields = transformFields;
 }

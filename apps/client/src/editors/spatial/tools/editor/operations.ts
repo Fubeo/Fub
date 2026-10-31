@@ -3,9 +3,6 @@
 // condividono.
 
 import { describe, keyOf } from "../../describe";
-import { editableDialog, fadedMarkup } from "../editable-dialog";
-import type { EditablePlan, EditableScope } from "../make-editable";
-import { selfContained } from "../../picture";
 import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Bounds } from "../../scene/geometry";
 import { IDENTITY, translate, type Point } from "../../scene/matrix";
@@ -24,11 +21,6 @@ import type { DrawChange } from "../editor";
 import { FIT_PAD, HIT_PX } from "./constants";
 import type { EditorContext } from "./context";
 import { translated, union } from "./helpers";
-
-/// Quanti byte delle immagini del vault entrano in ciascuna anteprima della
-/// finestra di «Rendi modificabile»: oltre, un'immagine si vede come il
-/// segnaposto.
-const EDITABLE_IMAGE_BYTES = 16 * 1024 * 1024;
 
 /// Perché il motore ha rifiutato un gesto, detto a chi disegna.
 const REASONS: Readonly<Record<Reason, DrawKey>> = {
@@ -76,16 +68,15 @@ export interface OperationsContext {
   frameBounds: (bounds: Bounds | null) => void;
   reveal: (offset: number) => boolean;
   adopt: () => boolean;
-  makeEditable: (scope: EditableScope, all: boolean) => Promise<boolean>;
   setReadOnly: (readOnly: boolean) => void;
 }
 
 /// Monta le operazioni e il gruppo isolato.
 export function installOperations(ctx: EditorContext): void {
   const {
-    folio, has, pictureFonts, kindsAt, history, surface, historyPanel, isolationBar, isolationPath, nameIsolation, painter, indexer, boardsNow,
+    folio, has, history, surface, historyPanel, isolationBar, isolationPath, nameIsolation, painter, indexer, boardsNow,
     chosenSheet, editable, isolatedNode, isolatedThrough, isolationOf, isolationSteps, isolationChain, currentIndex, grownPage, newIds, announce, objects,
-    announceSelection, showPage, setCamera, viewArea, fitted, selectedUnits, inOrder, resolveNodes, frameOf, showHandles, clearPreviews, outlineNow,
+    announceSelection, showPage, setCamera, viewArea, fitted, selectedUnits, inOrder, frameOf, showHandles, clearPreviews, outlineNow,
     labelOf, syncTree, syncHistory, oneRound, choose, followSelection, syncControls, refresh, options
   } = ctx;
   // --- Operazioni -----------------------------------------------------------
@@ -161,10 +152,6 @@ export function installOperations(ctx: EditorContext): void {
     if (layer !== undefined) choose(layer);
     else if (touched.length > 0) followSelection();
     syncControls();
-    // I tipi dati ai nodi tornano come erano a questo punto.
-    resolveNodes();
-    const kinds = kindsAt.get(history.position);
-    if (kinds !== undefined) ctx.nodeKinds = kinds;
     showHandles();
   };
 
@@ -201,7 +188,6 @@ export function installOperations(ctx: EditorContext): void {
     if (at !== history.position) ctx.cancelCrop();
     ctx.finishText();
     ctx.cancelGesture();
-    ctx.finishBezier(false, true);
     const jump = history.goTo(ctx.engine, at);
     if (jump === null) {
       syncControls();
@@ -259,14 +245,7 @@ export function installOperations(ctx: EditorContext): void {
     }
     ctx.finishText();
     ctx.cancelGesture();
-    if (ctx.drafting !== null && ctx.drafting.done.length > 0) {
-      ctx.replayBezier(ctx.drafting, "undo");
-      return;
-    }
-    // Un tracciato vuoto, senza passi da annullare, lascia il posto al
-    // disegno, se il disegno ne ha uno.
     if (!history.canUndo) return;
-    ctx.dropBezier();
     replay(history.undo(ctx.engine), "undo");
   }
   ctx.undo = undo;
@@ -277,12 +256,7 @@ export function installOperations(ctx: EditorContext): void {
     ctx.cancelCrop();
     ctx.finishText();
     ctx.cancelGesture();
-    if (ctx.drafting !== null && ctx.drafting.undone.length > 0) {
-      ctx.replayBezier(ctx.drafting, "redo");
-      return;
-    }
-    if (ctx.drawing() !== null || !history.canRedo) return;
-    ctx.dropBezier();
+    if (!history.canRedo) return;
     replay(history.redo(ctx.engine), "redo");
   }
   ctx.redo = redo;
@@ -647,81 +621,12 @@ export function installOperations(ctx: EditorContext): void {
   }
   ctx.adopt = adopt;
 
-  /// L'anteprima del disegno `svg` per la finestra di «Rendi modificabile»,
-  /// come URL, con le immagini del vault e i caratteri dentro; `null` se
-  /// non si fa.
-  const drawingPictureUrl = async (svg: string): Promise<string | null> => {
-    const port = options.images;
-    const read = port === undefined ? () => Promise.resolve(null) : (path: string) => port.read(path);
-    const self = await selfContained(svg, read, EDITABLE_IMAGE_BYTES, pictureFonts).catch(() => null);
-    return self === null || ctx.disposed ? null : URL.createObjectURL(new Blob([self], { type: "image/svg+xml" }));
-  };
-
-  /// «Rendi modificabile»: le parti di altri programmi di `scope` diventano
-  /// oggetti del formato, dove si può senza che cambi ciò che si vede, dopo
-  /// la finestra che mostra il disegno prima e dopo e dice che cosa resta e
-  /// perché; in un passo, che per un SVG estraneo è anche l'adozione. Il
-  /// piano lo fa un modulo che arriva la prima volta che serve. `all` dice
-  /// se il comando è su tutto il disegno. Vero se il disegno è cambiato.
-  async function makeEditable(scope: EditableScope, all: boolean): Promise<boolean> {
-    const adopts = ctx.engine.status === "foreign";
-    if (ctx.asking || ctx.locked || ctx.engine.model === null || !(adopts || editable())) return false;
-    const text = ctx.engine.text;
-    const opened = ctx.loads;
-    ctx.finishText();
-    ctx.cancelGesture();
-    ctx.asking = true;
-    let plan: EditablePlan | null = null;
-    let yes = false;
-    try {
-      const { planEditable } = await import("../make-editable");
-      if (ctx.disposed || ctx.loads !== opened || ctx.engine.text !== text) return false;
-      plan = planEditable(text, scope);
-      if (plan.ops.length === 0 && plan.leftovers.length === 0) {
-        // Un SVG estraneo che è già tutto del formato si adotta e basta,
-        // come con «Modifica».
-        if (adopts && !ctx.locked && adoptWith("draw.action.adopt", { op: "adopt" })) {
-          announce(t("draw.editable.adopted"));
-          return true;
-        }
-        announce(t(all ? "draw.editable.none" : "draw.editable.none.here"));
-        return false;
-      }
-      const after = plan.after;
-      const urls = plan.ops.length === 0 || after === null ? [null, null] : await Promise.all([drawingPictureUrl(text), drawingPictureUrl(fadedMarkup(after, plan.leftovers.map((left) => left.path)))]);
-      try {
-        if (!ctx.disposed && ctx.loads === opened) yes = await editableDialog({ plan, all, adopts, before: urls[0] ?? null, after: urls[1] ?? null });
-      } finally {
-        for (const url of urls) if (url !== null) URL.revokeObjectURL(url);
-      }
-    } finally {
-      ctx.asking = false;
-    }
-    if (!yes || plan === null || ctx.disposed) return false;
-    // Mentre la finestra era aperta il disegno può essere cambiato: il piano
-    // era per quello di prima.
-    if (ctx.loads !== opened || ctx.engine.text !== text || ctx.locked || ctx.engine.status !== (adopts ? "foreign" : "fubdraw")) {
-      announce(t("draw.editable.gone"));
-      return false;
-    }
-    const op = asGesture(plan.ops);
-    if (op === null || !(adopts ? adoptWith("draw.action.make_editable", op) : commit("draw.action.make_editable", op) !== null)) return false;
-    const left = plan.leftovers.length;
-    const done = plan.converted === 0 ? t("draw.editable.tidied") : plural(plan.converted, "draw.editable.done.one", "draw.editable.done.other");
-    announce(left === 0 ? done : `${done} ${plural(left, "draw.editable.left.short.one", "draw.editable.left.short.other")}`);
-    return true;
-  }
-  ctx.makeEditable = makeEditable;
-
   function setReadOnly(readOnly: boolean): void {
     if (readOnly === ctx.locked) return;
     // Un documento che non si scrive più non riceve il testo in corso.
     if (readOnly) ctx.finishText(false);
     ctx.locked = readOnly;
-    if (ctx.locked) {
-      ctx.cancelGesture();
-      ctx.dropBezier();
-    }
+    if (ctx.locked) ctx.cancelGesture();
     syncControls();
   }
   ctx.setReadOnly = setReadOnly;

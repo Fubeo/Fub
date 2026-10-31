@@ -112,7 +112,7 @@ nuova le rimostra. La scelta si ricorda con la griglia, in
 
 Finché si vedono, ciò che si muove si ferma sulle guide come sui bersagli
 delle guide intelligenti, anche con quelle spente: spostando, ridimensionando,
-disegnando una forma, coi nodi e con la penna di Bézier, entro gli stessi
+disegnando una forma, entro gli stessi
 pixel dello schermo. L'annuncio lo dice: «1 oggetto spostato. Agganciato: il
 bordo destro in linea con una guida.». `Ctrl` o `⌘` tenuto lascia libero
 anche dalle guide.

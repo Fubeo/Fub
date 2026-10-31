@@ -16,9 +16,9 @@ import type { EditorContext } from "../context";
 type Layout = readonly (readonly (readonly ToolId[])[])[];
 
 const VECTOR: Layout = [
-  [["select", "nodes", "lasso"], ["hand", "zoom"], ["board"]],
+  [["select", "lasso"], ["hand", "zoom"], ["board"]],
   [["pen", "highlighter"], ["eraser"]],
-  [["rect", "ellipse", "polygon", "line", "arrow"], ["connector"], ["bezier", "width", "scissors", "builder"], ["text"]],
+  [["rect", "ellipse", "polygon", "line", "arrow"], ["connector"], ["text"]],
   [["eyedropper", "gradient"]],
 ];
 

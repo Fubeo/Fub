@@ -12,7 +12,9 @@
 //! backlink.
 //!
 //! Accesa, il vault ha anche le impostazioni dell'editor dei disegni; spenta,
-//! le chiavi non ci sono.
+//! le chiavi non ci sono. La cartella delle librerie di simboli
+//! (`draw.symbols`) non c'è più in nessuno dei due casi (decisione 0231), e il
+//! valore che un vault ne porta resta nel file senza che nessuno lo legga.
 //!
 //! Lo stesso file si compila nei due giri della CI: `cargo test --workspace`
 //! prova il ramo spento, `cargo test -p fub-host --features draw` quello acceso.
@@ -159,6 +161,35 @@ fn annotations_are_a_document_only_with_the_draw_feature() {
 }
 
 #[test]
+fn the_symbols_folder_of_an_older_vault_stays_in_the_file_unread() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+    std::fs::create_dir_all(root.join(".fub")).unwrap();
+    let file = root.join(".fub").join("settings.json");
+    std::fs::write(
+        &file,
+        serde_json::json!({"version": 1, "values": {"draw.symbols": "Simboli"}}).to_string(),
+    )
+    .unwrap();
+    let mut mounted = mounted(&root);
+    let ws = &mut mounted.workspace;
+
+    // Nessuno la dichiara: non si legge e non si scrive.
+    assert!(ws.setting("draw.symbols").is_err());
+    assert!(ws
+        .set_setting("draw.symbols", SettingValue::Text("Altro".into()))
+        .is_err());
+    // Il vault la porta ancora, com'era, anche dopo che un'altra chiave si
+    // scrive.
+    #[cfg(feature = "draw")]
+    ws.set_setting("draw.templates", SettingValue::Text("Modelli".into()))
+        .unwrap();
+    let written: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(written["values"]["draw.symbols"], "Simboli", "{written}");
+}
+
+#[test]
 fn the_drawing_settings_exist_only_with_the_draw_feature() {
     let dir = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
@@ -174,7 +205,6 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
             "draw.level",
             "draw.custom",
             "draw.templates",
-            "draw.symbols",
             "draw.suggestions",
         ] {
             assert!(ws.setting(key).is_err(), "{key}");
@@ -208,7 +238,6 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
                 "draw.level",
                 "draw.custom",
                 "draw.templates",
-                "draw.symbols",
                 "draw.suggestions"
             ]
         );
@@ -226,14 +255,12 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
             )
         );
         assert_eq!(entry("draw.templates").value, text("Templates"));
-        assert_eq!(entry("draw.symbols").value, text("Symbols"));
         assert_eq!(entry("draw.suggestions").value, SettingValue::Toggle(true));
         // Il vault le porta con sé, la macchina i suggerimenti.
         assert_eq!(entry("draw.workspace").spec.scope, SettingScope::Vault);
         assert_eq!(entry("draw.toolbar").spec.scope, SettingScope::Vault);
         assert_eq!(entry("draw.level").spec.scope, SettingScope::Vault);
         assert_eq!(entry("draw.templates").spec.scope, SettingScope::Vault);
-        assert_eq!(entry("draw.symbols").spec.scope, SettingScope::Vault);
         assert_eq!(entry("draw.suggestions").spec.scope, SettingScope::Machine);
 
         // La casella «Non mostrare più suggerimenti» scrive la chiave.
@@ -275,8 +302,6 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
         assert_eq!(ws.setting("draw.custom").unwrap(), parts);
         ws.set_setting("draw.templates", text("Modelli")).unwrap();
         assert_eq!(ws.setting("draw.templates").unwrap(), text("Modelli"));
-        ws.set_setting("draw.symbols", text("Simboli")).unwrap();
-        assert_eq!(ws.setting("draw.symbols").unwrap(), text("Simboli"));
 
         let written = std::fs::read_to_string(root.join(".fub").join("settings.json")).unwrap();
         for key in [
@@ -285,7 +310,6 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
             "draw.level",
             "draw.custom",
             "draw.templates",
-            "draw.symbols",
         ] {
             assert!(written.contains(&format!("\"{key}\"")), "{key}: {written}");
         }
