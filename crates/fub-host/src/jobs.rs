@@ -86,7 +86,8 @@ use fub_kernel::workspace::{
     PreparedPluginDataIo,
 };
 use fub_kernel::{
-    authorize_query, filter_query_result, ReadOnly, RenameRecoveryPosition, Workspace,
+    authorize_query, filter_query_result, IndexBatchStep, ReadOnly, RenameRecoveryPosition,
+    Workspace,
 };
 
 /// L'[`HostApi`] di un job: intestato a un plugin, servito da un workspace
@@ -714,9 +715,21 @@ pub(crate) fn run_detached_rebuild_index(
                     ws.prepare_index_batch_parse(checked)
                 }
                 .invoke(&mut work);
-                let pending = {
-                    let mut ws = workspace.write()?;
-                    ws.commit_index_batch_prepared(parsed)
+                // A prese brevi, come l'apertura (`runner.rs`): chi apre una
+                // nota durante il rebuild non aspetta la fetta intera.
+                let mut parsed = parsed;
+                let pending = loop {
+                    let step = {
+                        let mut ws = workspace.write()?;
+                        ws.commit_index_batch_within(parsed, fub_kernel::INDEX_WRITE_BUDGET)
+                    };
+                    match step {
+                        IndexBatchStep::Done(pending) => break pending,
+                        IndexBatchStep::More(rest) => {
+                            parsed = rest;
+                            workspace.make_way(crate::runner::MAKE_WAY);
+                        }
+                    }
                 };
                 let pending = pending.map(|pending| pending.invoke_indexes());
                 if let Some(pending) = pending {

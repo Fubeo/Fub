@@ -30,6 +30,7 @@ use fub_abi::traits::{
     HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryRoute, VaultEntry,
 };
 use fub_abi::{FormatProvider, Revision, WriteBase};
+use fub_kernel::IndexBatchStep;
 use fub_testkit::{Bench, Mounted};
 
 /// Un formato di testo nudo: il modello è il sorgente, così ciò che l'indice
@@ -203,5 +204,111 @@ fn without_no_one_in_middle_the_slice_enters_whole() {
         entry(&bench, &DocId::new("Nota1.md")).fingerprint,
         Some(Revision::of("corpo 1\n")),
         "l'impronta imparata leggendo non è tornata in anagrafe"
+    );
+}
+
+/// Applica una fetta a prese di durata zero, cioè un modello per presa, e
+/// chiama `between` dopo ogni presa che non l'ha finita.
+fn commit_in_steps(
+    bench: &mut Mounted,
+    plan: fub_kernel::ParsedBatch,
+    mut between: impl FnMut(&mut Mounted, usize),
+) -> usize {
+    let mut plan = plan;
+    let mut steps = 0;
+    loop {
+        steps += 1;
+        match bench.commit_index_batch_within(plan, std::time::Duration::ZERO) {
+            IndexBatchStep::Done(pending) => {
+                if let Some(pending) = pending {
+                    bench.finalize_index_batch_prepared(pending.invoke_indexes());
+                }
+                return steps;
+            }
+            IndexBatchStep::More(rest) => {
+                between(bench, steps);
+                plan = rest;
+            }
+        }
+    }
+}
+
+/// **Una fetta a prese brevi entra come una fetta intera**: fra le prese chi
+/// aspetta il workspace entra, ma il core e gli indici finiscono con gli
+/// stessi documenti, e i provider li ricevono una volta sola.
+#[test]
+fn a_slice_taken_in_short_holds_enters_whole() {
+    let (mut bench, probe) = bench_from_open();
+    for n in 0..3 {
+        bench.write(&format!("Nota{n}.md"), &format!("corpo {n}\n"));
+    }
+
+    let mut work = bench.scan_vault().expect("la scansione riesce");
+    let plan = bench.plan_batch(&mut work);
+    let steps = commit_in_steps(&mut bench, plan, |_, _| {});
+
+    assert_eq!(
+        steps, 3,
+        "con una presa di durata zero entra un modello per presa"
+    );
+    let mut texts = probe.texts.lock().unwrap().clone();
+    texts.sort();
+    assert_eq!(
+        texts,
+        ["corpo 0\n", "corpo 1\n", "corpo 2\n"],
+        "a prese brevi la fetta non è arrivata intera, o è arrivata due volte"
+    );
+    assert_eq!(
+        entry(&bench, &DocId::new("Nota2.md")).fingerprint,
+        Some(Revision::of("corpo 2\n")),
+        "l'impronta imparata leggendo non è tornata in anagrafe"
+    );
+}
+
+/// **Un salvataggio fra due prese vale come uno fra il piano e la prima**: la
+/// nota già data al core non porta agli indici il testo vecchio, e quella
+/// ancora da dare si butta.
+#[test]
+fn a_save_between_two_holds_wins_over_the_slice() {
+    let (mut bench, probe) = bench_from_open();
+    for n in 0..3 {
+        bench.write(&format!("Nota{n}.md"), &format!("dal disco {n}\n"));
+    }
+
+    let mut work = bench.scan_vault().expect("la scansione riesce");
+    let plan = bench.plan_batch(&mut work);
+    commit_in_steps(&mut bench, plan, |bench, step| {
+        if step == 1 {
+            // Nota0 è già nel core, Nota2 non ancora.
+            for n in [0, 2] {
+                bench
+                    .write_document(
+                        &DocId::new(format!("Nota{n}.md")),
+                        &format!("dall'utente {n}\n"),
+                        WriteBase::Dictated,
+                    )
+                    .expect("il salvataggio riesce");
+            }
+        }
+    });
+
+    for n in [0, 2] {
+        assert_eq!(
+            entry(&bench, &DocId::new(format!("Nota{n}.md"))).fingerprint,
+            Some(Revision::of(&format!("dall'utente {n}\n"))),
+            "Nota{n}: la fetta ha coperto il salvataggio fatto fra due prese"
+        );
+    }
+    let texts = probe.texts.lock().unwrap().clone();
+    for stale in ["dal disco 0\n", "dal disco 2\n"] {
+        assert!(
+            !texts.iter().any(|text| text == stale),
+            "agli indici è arrivato il testo di prima del salvataggio, {stale:?} \
+             ({texts:?})"
+        );
+    }
+    assert!(
+        texts.iter().any(|text| text == "dal disco 1\n"),
+        "la nota che nessuno ha toccato non è arrivata agli indici ({texts:?})"
     );
 }

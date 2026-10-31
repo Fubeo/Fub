@@ -2005,7 +2005,30 @@ pub struct ParsedBatch {
     /// salva *una* nota, e buttare le altre novecentonovantanove vorrebbe dire
     /// rileggerle dal disco per niente.
     seen: BTreeMap<DocId, Option<Revision>>,
+    /// I modelli già passati al core da una presa precedente della stessa
+    /// fetta, con l'impronta che avevano in quel momento: gli indici dei
+    /// provider li ricevono tutti insieme, quando la fetta finisce.
+    fed: Vec<(DocumentModel, Option<Revision>)>,
+    losses: Vec<IndexLoss>,
 }
+
+/// Dove è arrivata una fetta dopo una presa esclusiva a tempo: vedi
+/// [`Workspace::commit_index_batch_within`].
+pub enum IndexBatchStep {
+    /// Applicata tutta al core: resta, se c'è, il feed per gli indici dei
+    /// provider.
+    Done(Option<PreparedIndexBatchFeed>),
+    /// Il tempo è finito prima dei modelli: il resto della fetta, da
+    /// riprendere con un'altra presa.
+    More(ParsedBatch),
+}
+
+/// Per quanto una presa esclusiva applica i modelli di una fetta prima di
+/// lasciare il workspace a chi aspetta. Un modello può costare millisecondi
+/// (una nota che altre mille citano ri-collega tutte le mille), quindi il
+/// tetto si guarda dopo ognuno e non a fine fetta: con 512 modelli per fetta,
+/// una sola presa teneva fermo per più di un secondo chi apriva una nota.
+pub const INDEX_WRITE_BUDGET: std::time::Duration = std::time::Duration::from_millis(5);
 
 struct PendingIndexEntry {
     entry: VaultEntry,
@@ -3015,6 +3038,8 @@ impl PreparedIndexBatchParse {
             reused,
             models,
             seen,
+            fed: Vec::new(),
+            losses: Vec::new(),
         }
     }
 }
@@ -5730,11 +5755,41 @@ impl Workspace {
         &mut self,
         prepared: ParsedBatch,
     ) -> Option<PreparedIndexBatchFeed> {
+        let mut step = self.commit_index_batch_within(prepared, std::time::Duration::MAX);
+        loop {
+            match step {
+                IndexBatchStep::Done(feed) => return feed,
+                IndexBatchStep::More(rest) => {
+                    step = self.commit_index_batch_within(rest, std::time::Duration::MAX);
+                }
+            }
+        }
+    }
+
+    /// [`commit_index_batch_prepared`](Workspace::commit_index_batch_prepared)
+    /// a tempo: applica al core un modello dopo l'altro finché non è passato
+    /// `budget`, e rende il resto della fetta.
+    ///
+    /// Fra due prese il workspace è di chi aspetta, anche di chi scrive. Il
+    /// resto porta quindi l'impronta che ogni documento ha **adesso**, e la
+    /// presa successiva rifà il confronto: una nota salvata in mezzo si butta
+    /// come quella salvata fra il piano e la prima presa. Lo stesso vale per i
+    /// modelli già dati al core: alla fine, quelli la cui impronta è cambiata
+    /// non vanno agli indici dei provider, che dalla scrittura hanno già avuto
+    /// la versione nuova.
+    pub fn commit_index_batch_within(
+        &mut self,
+        prepared: ParsedBatch,
+        budget: std::time::Duration,
+    ) -> IndexBatchStep {
+        let started = std::time::Instant::now();
         let ParsedBatch {
             read,
             reused,
             models,
             seen,
+            mut fed,
+            mut losses,
         } = prepared;
         let aged: BTreeSet<DocId> = seen
             .into_iter()
@@ -5756,15 +5811,42 @@ impl Workspace {
             }
             self.indexes.core.restore(&id, metadata);
         }
-        let models: Vec<DocumentModel> = models
-            .into_iter()
-            .filter(|model| !aged.contains(&model.id))
-            .collect();
 
         // **Il kernel taglia** (§20.1): la fetta di lavoro è già grande quanto
         // il lotto di alimentazione, quindi qui non si taglia una seconda
-        // volta. I modelli interi vivono solo nel feed preparato qui, il tempo
-        // di alimentare indici e conteggi: in cache restano i metadati.
+        // volta per i provider. Il core invece la prende a pezzi, un modello
+        // alla volta, finché dura `budget`.
+        let mut models = models.into_iter().filter(|model| !aged.contains(&model.id));
+        for model in models.by_ref() {
+            losses.extend(
+                self.indexes
+                    .core
+                    .on_documents_indexed(std::slice::from_ref(&model)),
+            );
+            let fingerprint = self.entry_fingerprint(&model.id);
+            fed.push((model, fingerprint));
+            if started.elapsed() >= budget {
+                break;
+            }
+        }
+        let rest: Vec<DocumentModel> = models.collect();
+        if !rest.is_empty() {
+            let seen = rest
+                .iter()
+                .map(|model| (model.id.clone(), self.entry_fingerprint(&model.id)))
+                .collect();
+            return IndexBatchStep::More(ParsedBatch {
+                read: Vec::new(),
+                reused: Vec::new(),
+                models: rest,
+                seen,
+                fed,
+                losses,
+            });
+        }
+
+        // I modelli interi vivono solo nel feed preparato qui, il tempo di
+        // alimentare indici e conteggi: in cache restano i metadati.
         //
         // **Una fetta senza modelli non attraversa il confine** (§17.1,
         // decisione 0113): è il caso normale di una riapertura a caldo, dove
@@ -5772,17 +5854,20 @@ impl Workspace {
         // porta nessuna notizia a nessuno — a M5 sarebbe una serializzazione
         // per dire niente. Lo ha trovato il banco contando le chiamate: nessun
         // altro presidio le conta.
+        let models: Vec<DocumentModel> = fed
+            .into_iter()
+            .filter(|(model, fingerprint)| self.entry_fingerprint(&model.id) == *fingerprint)
+            .map(|(model, _)| model)
+            .collect();
         if models.is_empty() {
-            return None;
+            return IndexBatchStep::Done(None);
         }
-
-        let losses = self.indexes.core.on_documents_indexed(&models);
         let providers = self.indexes.feed_handles();
-        Some(PreparedIndexBatchFeed {
+        IndexBatchStep::Done(Some(PreparedIndexBatchFeed {
             models,
             providers,
             losses,
-        })
+        }))
     }
 
     pub fn finalize_index_batch_prepared(&mut self, pending: PreparedIndexBatchFeed) {

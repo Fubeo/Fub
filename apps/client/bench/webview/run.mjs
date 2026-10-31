@@ -54,6 +54,24 @@ async function ready(session) {
   await session.waitFor("return !!window.__fubProbe && !!document.querySelector('#file-list .tree-row')", [], 120_000);
 }
 
+/// L'indice dell'avvio arrivato in fondo. Ogni avvio sul vault del banco
+/// indicizza le diecimila note da capo, e la shell risponde prima che abbia
+/// finito: gli scenari misurano un vault pronto, non l'indicizzazione.
+async function indexed(session, timeoutMs = 300_000) {
+  const since = Date.now();
+  for (;;) {
+    const running = await session.executeAsync(`
+      const done = arguments[arguments.length - 1];
+      window.__TAURI_INTERNALS__.invoke("query_index", { query: { kind: "vault_status" }, vault: null })
+        .then((status) => done(JSON.stringify(status).includes('"indexing":"running"')), (error) => done(String(error)));
+    `);
+    if (running === false) return;
+    if (typeof running === "string") throw new Error(`vault_status: ${running}`);
+    if (Date.now() - since > timeoutMs) throw new Error(`l'indice non è pronto dopo ${timeoutMs / 1000} s`);
+    await pause(250);
+  }
+}
+
 // Ctrl+O apre il lanciatore dello Scrittoio; finché lo Scrittoio non l'ha
 // montato, nei primi istanti dopo l'avvio, apre ancora il selettore comune.
 // Lo scenario va bene con tutti e due.
@@ -230,9 +248,10 @@ async function main() {
   let failed = 0;
   try {
     await waitForDriver(base);
-    // Il primo avvio sul vault nuovo costruisce gli indici di diecimila note:
-    // una sessione che non misura aspetta che la ricerca per nome risponda,
-    // così gli scenari partono da un vault già indicizzato.
+    // Il primo avvio sul vault nuovo legge dal disco diecimila note: lo fa una
+    // sessione che non misura, e aspetta che la ricerca per nome risponda. Gli
+    // avvii dopo indicizzano di nuovo da capo, e ogni scenario aspetta che
+    // l'indice sia pronto (`indexed`).
     const warm = await openSession(base, app);
     try {
       await ready(warm);
@@ -249,7 +268,10 @@ async function main() {
     for (const id of order) {
       const session = await openSession(base, app);
       try {
-        if (id !== "S6") await ready(session);
+        if (id !== "S6") {
+          await ready(session);
+          await indexed(session);
+        }
         const result = await SCENARIOS[id](session);
         results[id] = result;
         writeFileSync(join(out, `${id}.json`), JSON.stringify(result, null, 2) + "\n");

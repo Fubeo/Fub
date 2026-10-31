@@ -2,6 +2,7 @@
 // (§31.1), più i gesti che un browser compie davvero quando si usa la tastiera.
 //
 //     node bench/a11y.mjs
+//     node bench/a11y.mjs --light=dark    # una luce sola, come la CI in due job
 //
 // Una scansione strutturale non basta: il nome può esserci ma il fuoco non
 // arrivare mai, un controllo può avere un ruolo valido ma non reagire a Invio,
@@ -29,6 +30,13 @@ const DEBT = [
   })),
 ];
 
+/// Le luci da esaminare: tutte e due, o quella che `--light=` nomina.
+const ONLY = process.argv.find((arg) => arg.startsWith("--light="))?.slice("--light=".length);
+if (ONLY !== undefined && !LIGHTS.includes(ONLY)) {
+  throw new Error(`--light=${ONLY}: le luci sono ${LIGHTS.join(" e ")}`);
+}
+const RUN_LIGHTS = ONLY === undefined ? LIGHTS : [ONLY];
+
 /// Che cosa si esamina, e dove va il referto.
 const SET = { scenes: SCENE, report: join(OUTPUT, "accessibilita") };
 
@@ -51,7 +59,7 @@ async function main() {
   const report = [];
 
   try {
-    for (const light of LIGHTS) {
+    for (const light of RUN_LIGHTS) {
       const page = await openPage(stage.browser, light);
       let size = WINDOW;
       for (const scene of SET.scenes) {
@@ -670,7 +678,8 @@ function summary(report) {
     }
   }
 
-  const fixed = DEBT.filter((d) => !d.seen);
+  // Una voce del debito di una luce che non si è esaminata non è riparata.
+  const fixed = DEBT.filter((d) => RUN_LIGHTS.includes(d.light) && !d.seen);
   if (fixed.length > 0) {
     console.error(`\n${fixed.length} voci del debito non si vedono più:`);
     for (const d of fixed) {
