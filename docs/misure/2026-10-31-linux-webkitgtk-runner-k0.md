@@ -14,7 +14,8 @@ tre vie per la tela dei motori.
 - commit `342b7361`, ramo `fase/k0-misure` (la CI misura il merge `24ac1120`
   della PR #269), 2026-10-31;
 - misurato dal job «la WebView vera (WebKitGTK, S1–S3)» della CI, run
-  41163700163, artifact `webview-24ac1120…`;
+  41163700163, artifact `webview-24ac1120…`; secondo giro nel run
+  41165492127 (commit `082f2b1e`);
 - comando: `node bench/webview/run.mjs --only=S1,S2,S3,S7,R1,T1`.
 
 ## La macchina e la WebView
@@ -47,8 +48,16 @@ fine si chiudono tutte le schede.
 - La WebView cresce di 113 MiB con la nota lunga e di 271 con la lavagna; le
   altre modalità oscillano di qualche decina di MiB, perché la memoria del
   motore JavaScript si raccoglie quando vuole.
-- **Chiudere tutte le schede non restituisce memoria**: dopo la chiusura il
-  totale è 318,6 MiB sopra l'avvio, quanto con le schede aperte.
+- Chiudere tutte le schede non restituisce memoria subito: dopo la chiusura
+  il totale è 318,6 MiB sopra l'avvio, quanto con le schede aperte.
+
+Il secondo giro (run 41165492127, commit `082f2b1e`, stesse schede) dice
+quanto il numero dipende da quando la WebView raccoglie la memoria: avvio
+984,7, picco 1435,1 con la lavagna, 1083,7 con le sette schede aperte, 1082
+dopo la chiusura, **residuo 97,3 MiB**. La WebView è scesa da 1041 a 675 MiB
+fra la lavagna e l'immagine, con le schede ancora aperte. Un residuo si
+legge soltanto su più giri, e chiudere le schede non lo abbassa in nessuno
+dei due.
 
 ## T1, le tessere
 
@@ -74,7 +83,8 @@ millisecondi.
   via delle tessere servirebbe quell'intestazione per l'origine fidata, in
   `fub-app/src/resources.rs`.
 - La IPC regge la mediana (14 ms per 256 KiB) ma ha una coda di quasi due
-  secondi: una tessera su venti arriva tardi di cento fotogrammi.
+  secondi: una tessera su venti arriva tardi di cento fotogrammi. Il
+  secondo giro conferma: p50 11, p95 2138, max 3099 ms.
 - Il disegno non è il collo di bottiglia: un fotogramma intero si posa in
   5 ms anche senza GPU.
 
