@@ -1,5 +1,5 @@
-// Gli scenari di N0, S7 di N13 e la memoria di K0 (R1), nella WebView vera,
-// guidati da WebDriver.
+// Gli scenari di N0, S7 di N13, la memoria (R1) e le tessere (T1) di K0,
+// nella WebView vera, guidati da WebDriver.
 //
 //   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3]
 //        [--driver=tauri-driver] [--native-driver=/usr/bin/WebKitWebDriver]
@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
 import { noteName, writeFixtures } from "./fixtures.mjs";
 import { settled } from "./memory.mjs";
+import { TILES_SCRIPT } from "./tiles.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
@@ -31,7 +32,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
-const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,R1").split(","));
+const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,R1,T1").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
 const port = Number(args.port ?? 4444);
@@ -307,6 +308,26 @@ const SCENARIOS = {
       samples: 3,
     };
   },
+  /// Le tessere (K0, la prima via per la tela dei motori): i byte di un
+  /// fotogramma letti a tessere dalla IPC e da `fub-asset:`, e disegnati su
+  /// una tela di 2880 × 1800 (`tiles.mjs`).
+  async T1(session) {
+    const report = await session.executeAsync(TILES_SCRIPT, ["T1/Tessere.png", 60]);
+    if (report.errors.length > 0) throw new Error(report.errors.join("; "));
+    return {
+      report,
+      values: {
+        "T1.ipc.tessera.p95": report.ipcTile.p95,
+        "T1.asset.tessera.p95": report.assetTile.p95,
+        "T1.asset.fotogramma.p50": report.assetFrame.p50,
+        "T1.disegno.tessera.p95": report.drawTile.put.p95,
+        "T1.disegno.fotogramma.p50": report.drawFrame.put.p50,
+        "T1.frameGap.tessera.p95": report.drawTile.frameGap.p95,
+        "T1.frameGap.fotogramma.p95": report.drawFrame.frameGap.p95,
+      },
+      samples: report.ipcTile.count,
+    };
+  },
   /// Avvio a freddo fino alla prima nota visibile: l'app riapre la nota che
   /// S1 ha lasciato aperta.
   async S6(session) {
@@ -367,7 +388,7 @@ async function main() {
       await warm.close();
     }
     // S6 dopo S1: l'avvio da misurare riapre la nota che S1 ha lasciato.
-    const order = ["S1", "S6", "S2", "S3", "S4", "S5", "S7", "R1"].filter((id) => only.has(id));
+    const order = ["S1", "S6", "S2", "S3", "S4", "S5", "S7", "R1", "T1"].filter((id) => only.has(id));
     for (const id of order) {
       const session = await openSession(base, app);
       try {

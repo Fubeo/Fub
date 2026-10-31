@@ -429,8 +429,8 @@ jobs:
         run: cargo build --release --locked -p fub-app --features tauri/custom-protocol
       - name: tauri-driver, alla versione fissata
         run: cargo install tauri-driver --version "=2.1.0" --locked
-      - name: S1–S3, S7 e la memoria (R1) nella WebKitGTK
-        run: xvfb-run -a -s "-screen 0 1280x800x24" npm run bench:webview -- --only=S1,S2,S3,S7,R1 --native-driver=/usr/bin/WebKitWebDriver
+      - name: S1–S3, S7, la memoria (R1) e le tessere (T1) nella WebKitGTK
+        run: xvfb-run -a -s "-screen 0 1280x800x24" npm run bench:webview -- --only=S1,S2,S3,S7,R1,T1 --native-driver=/usr/bin/WebKitWebDriver
         working-directory: apps/client
       - name: il referto delle misure
         if: always()

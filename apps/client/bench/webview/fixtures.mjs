@@ -10,11 +10,14 @@
 // - `R1/`: un file per modalità, per la memoria (R1): un documento Word e
 //   un PDF e un'immagine presi dalle prove del repo, e un foglio Excel
 //   scritto qui;
+// - `T1/Tessere.png`: un fotogramma di 2880 × 1800 RGBA senza compressione,
+//   i byte che T1 legge a tessere;
 // - `config/settings.json`: le impostazioni di macchina con la sonda accesa.
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { crc32 } from "node:zlib";
+import { FRAME, storedPng } from "./tiles.mjs";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
 
@@ -147,7 +150,7 @@ function workbook() {
 export function writeFixtures(root) {
   const vault = join(root, "vault");
   const config = join(root, "config");
-  for (const dir of ["S1", "S2", "S3", "S5", "S7", "R1"]) mkdirSync(join(vault, dir), { recursive: true });
+  for (const dir of ["S1", "S2", "S3", "S5", "S7", "R1", "T1"]) mkdirSync(join(vault, dir), { recursive: true });
   mkdirSync(config, { recursive: true });
   writeFileSync(join(vault, "S1", "Lunga.md"), longNote());
   for (let i = 1; i <= NOTES; i++) writeFileSync(join(vault, "S2", `${noteName(i)}.md`), note(i));
@@ -155,6 +158,7 @@ export function writeFixtures(root) {
   writeFileSync(join(vault, "S5", "Foglio.svg"), drawing());
   writeFileSync(join(vault, "S7", "Blocchi.md"), blocksNote());
   writeFileSync(join(vault, "R1", "Tabella.xlsx"), workbook());
+  writeFileSync(join(vault, "T1", "Tessere.png"), storedPng(FRAME.width, FRAME.height));
   for (const [name, from] of Object.entries(MODE_FILES)) copyFileSync(join(repo, from), join(vault, "R1", name));
   // Il formato del livello macchina (`fub_kernel::settings`, schema 2).
   writeFileSync(join(config, "settings.json"), JSON.stringify({ version: 2, values: { "perf.probe": true } }, null, 2) + "\n");

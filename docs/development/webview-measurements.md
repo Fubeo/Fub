@@ -40,6 +40,7 @@ ascolta niente e non chiede fotogrammi.
 | S6 | avvio a freddo fino alla prima nota | ms |
 | S7 | Blocchi su una nota di 2.000 righe: un blocco trascinato su e giù per 3 s, poi dieci trasformazioni da paragrafo a titolo e ritorno | p95 e massimo fra fotogrammi |
 | R1 | la memoria: dopo l'avvio, aprendo un file per modalità (nota, lavagna, disegno, documento Word, foglio Excel, PDF, immagine), dopo «chiudi tutto» | PSS in MiB dell'app e dei processi della WebView, soltanto Linux |
+| T1 | le tessere: un fotogramma di 2880 × 1800 RGBA letto a tessere di 256 × 256 dalla IPC (`resource_read_chunk`) e da `fub-asset:` con `Range`, poi disegnato su una tela, una tessera e un fotogramma intero per fotogramma | p95 per tessera, mediana per fotogramma, ms |
 
 R1 legge `/proc/<pid>/smaps_rollup` dei processi che discendono dal driver,
 tolti i driver (`memory.mjs`): la PSS divide le pagine condivise fra chi le
@@ -48,6 +49,12 @@ mediana di tre a mezzo secondo, dopo 3 s di quiete. Il referto dà anche la
 RSS, i gruppi (app, WebView, rete) e la superficie che ogni file ha aperto.
 `R1.residuo.MiB` è quanto resta dopo «chiudi tutto» rispetto all'avvio: la
 tolleranza la fissa K0 del piano dei componenti, dopo le prime misure.
+
+T1 è la prima delle tre vie del piano dei componenti per la tela dei motori
+(tessere verso la WebView, superficie wgpu nativa, egui): misura il trasporto
+e il disegno senza motore (`tiles.mjs`). Il tempo del motore per un fotogramma
+sta nelle prove di `tools/motori-prova`. Le chiamate passano da
+`__TAURI_INTERNALS__`, come fa `@tauri-apps/api`.
 
 Le fixture nascono in una cartella temporanea
 (`apps/client/bench/webview/fixtures.mjs`); il vault vero di chi misura non
@@ -82,8 +89,8 @@ e il referto scrive lo scenario come saltato, senza numero.
 Il referto va in `apps/client/bench/.output/webview/referto.json`. Il comando
 esce con 1 se un valore supera la soglia scelta.
 
-Il job `webview` della CI fa lo stesso con S1–S3, S7 e R1, sotto Xvfb e senza scheda
-grafica, e carica il referto come artifact `webview-<sha>`.
+Il job `webview` della CI fa lo stesso con S1–S3, S7, R1 e T1, sotto Xvfb e
+senza scheda grafica, e carica il referto come artifact `webview-<sha>`.
 
 ## macOS
 
