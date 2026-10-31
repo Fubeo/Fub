@@ -1175,6 +1175,46 @@
     {
       "id": "Long Note.md",
       "out": "Long Note"
+    },
+    {
+      "id": "Viaggio/_index.md",
+      "out": "Viaggio"
+    },
+    {
+      "id": "Viaggio/_index.canvas",
+      "out": "Viaggio"
+    },
+    {
+      "id": "a/b.c/_index.md",
+      "out": "b.c"
+    },
+    {
+      "id": "Città/_index.md",
+      "out": "Città"
+    },
+    {
+      "id": "_index.md",
+      "out": "_index"
+    },
+    {
+      "id": "Viaggio/_Index.md",
+      "out": "_Index"
+    },
+    {
+      "id": "Viaggio/_index.bak.md",
+      "out": "_index.bak"
+    },
+    {
+      "id": "Viaggio/Viaggio.md",
+      "out": "Viaggio"
+    },
+    {
+      "id": "Viaggio/index.md",
+      "out": "index"
+    },
+    {
+      "id": "Viaggio/._index",
+      "out": "._index"
     }
   ],
   "name_fault": [

@@ -20,7 +20,7 @@ import { THEME_CONTRAST_PAIRS, type ContrastPair } from "../contrast-fixture";
 import type { ThemeProfile } from "../loader";
 import { CONTENT_GATE, HOOKS } from "./anatomia";
 import { CHROME_MEASURE_TOKENS } from "./measures";
-import { COLOR_TOKENS } from "./recipe";
+import { COLOR_TOKENS, CONTENT_HUES } from "./recipe";
 
 export const THEME_2_ENGINE = "theme-2";
 
@@ -74,6 +74,12 @@ export const THEME_2_OPTIONAL_PAIRS: readonly ContrastPair[] = [
   ["doc-comment", "doc-bg", UI, "il filo di un commento"],
   ...[1, 2, 3, 4, 5, 6].map((n): ContrastPair => [`doc-author-${n}`, "doc-bg", AA, `il testo di una revisione del ${n}° autore`]),
   ["doc-fg", "doc-find", AA, "il testo di un risultato della ricerca"],
+  ["doc-syntax-near", "doc-bg", UI, "un segno ancora visibile in Live"],
+  ["doc-ghost", "doc-bg", UI, "il testo fantasma di un blocco vuoto"],
+  ["doc-wavy", "doc-bg", UI, "l'onda di un segno non ancora chiuso"],
+  ["doc-drop-line", "doc-bg", UI, "la linea dove cade un blocco trascinato"],
+  ...Object.keys(CONTENT_HUES).map((name): ContrastPair => [`doc-color-${name}`, "doc-bg", AA, `il testo colorato «${name}»`]),
+  ...Object.keys(CONTENT_HUES).map((name): ContrastPair => ["doc-fg", `doc-tint-${name}`, AA, `il testo sul fondo «${name}»`]),
   ["doc-fg", "doc-find-now", AA, "il testo del risultato corrente"],
   ["paper-ink", "paper-bg", AA, "il testo automatico sulla carta di un file"],
   ["paper-ink", "paper-selection", AA, "il testo selezionato sulla carta di un file"],

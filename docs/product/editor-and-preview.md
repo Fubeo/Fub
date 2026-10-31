@@ -10,12 +10,13 @@ Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre:
 
 - **sorgente**, con la sintassi esplicita;
 - **live preview**, che mantiene l'editing e riduce il rumore della sintassi;
+- **[blocchi](editor-blocks.md)**, la Live con maniglie, menu e spostamenti per blocco;
 - **lettura**, che mostra la resa senza cursore di testo.
 
-La superficie plain text offre soltanto **sorgente**: non simula capacità
-Markdown. Un file `.svg` si apre come testo in **Sorgente**, **Diviso**
-(predefinita, con l'anteprima accanto o sotto) e **Anteprima**, o come
-[disegno](drawing.md) con la feature `draw` dell'host. L'anteprima si ridisegna
+La superficie plain text offre soltanto **sorgente**. Un file `.svg` si apre
+come testo in **Sorgente**, **Diviso** (predefinita, con l'anteprima accanto
+o sotto) e **Anteprima**, o come [disegno](drawing.md) con la feature `draw`
+dell'host. L'anteprima si ridisegna
 dopo una pausa di scrittura, come immagine inerte; una versione rotta lascia
 l'ultima buona, attenuata, sotto il motivo con riga e colonna. I documenti
 `.xlsx` usano invece la famiglia Grid. Il commutatore nella barra di
@@ -73,11 +74,17 @@ I blocchi di codice dichiarano il linguaggio dopo i backtick di apertura.
 Sorgente e Live caricano la colorazione del linguaggio quando serve, senza
 caricare tutti i parser all'avvio.
 
+In Live i recinti non si vedono: c'è una testata con la lingua (un menu con
+filtro, che riscrive soltanto l'info string), «A capo» (della vista, non del
+file) e «Copia». ↑ e ↓ escono dal blocco, Backspace lo toglie se è vuoto; con
+`elemento` i recinti tornano col cursore nel blocco, con `riga` restano.
+
 Un blocco con linguaggio `mermaid` mostra un diagramma in Live e Lettura,
 anche dentro una nota trasclusa. In Live, portare il cursore nel blocco o usare
-**Apri sorgente** rende nuovamente modificabile il testo. Selezioni e
-multi-cursori mantengono visibili i blocchi che toccano; un blocco ancora privo
-della chiusura resta sorgente durante l'editing.
+**Apri sorgente** rende nuovamente modificabile il testo, e il disegno resta
+sotto: si rifà dopo 300 ms di quiete e, se il sorgente ha un errore, resta
+l'ultimo buono con un avviso. Selezioni e multi-cursori mantengono visibili i
+blocchi che toccano; un blocco ancora privo della chiusura resta sorgente.
 
 La resa usa Mermaid incluso nell'app, senza un servizio esterno, e conserva la
 sorgente in una sezione espandibile. Un errore di sintassi o di caricamento
@@ -104,22 +111,18 @@ classi, stati, entità e relazioni, Gantt, torta, mappa mentale, linea del
 tempo, grafo git, percorso utente, quadranti, grafico XY e Sankey. Si apre
 scrivendo il tipo o il nome, in italiano o in inglese, oppure con `Ctrl-Space`
 su una riga vuota. Il modello entra nella lingua dell'interfaccia, col rientro
-della riga e, se manca, con la chiusura del recinto; un Gantt parte dalla data
-corrente.
+della riga e la chiusura se manca; un Gantt parte dalla data corrente.
 
 La configurazione usa la modalità di sicurezza `strict`, protegge i limiti di
 Mermaid e non consente alla nota di sostituire la policy o il CSS della shell.
-La vista finale è un'immagine SVG inerte, senza callback del diagramma.
-Restano i vincoli della CSP della webview, compreso il blocco delle immagini
-remote. Il rendering accetta fino a 50.000 caratteri di sorgente per diagramma;
-il limite Mermaid degli archi è 500. Il cambio di superficie rilascia gli
-osservatori e gli URL delle immagini; una risposta vecchia non rimonta il
-diagramma.
+La vista finale è un SVG inerte, senza callback né navigazione propria, sotto
+la CSP della webview. Il rendering accetta fino a 50.000 caratteri per
+diagramma e 500 archi. Il cambio di superficie rilascia osservatori e URL delle
+immagini; una risposta vecchia non rimonta il diagramma.
 
 I link espliciti del diagramma diventano controlli adiacenti, soltanto per
 `http`, `https`, `mailto` o frammenti locali; un nodo con la classe
-`internal-link` aggiunge un wikilink alla nota col suo testo. Lo SVG resta
-un'immagine inerte, senza callback o navigazione propria nella webview.
+`internal-link` aggiunge un wikilink alla nota col suo testo.
 
 ## Formule
 
@@ -137,43 +140,55 @@ di espansione e dimensione mostra un errore leggibile e conserva il testo.
 La resa condivisa supporta task, highlight, callout annidati e ripiegabili,
 wikilink con alias, heading e block id, tabelle, note a piè di pagina etichettate
 e inline. Nelle immagini Markdown il suffisso dell'alt `|larghezza` o
-`|larghezzaxaltezza` imposta dimensioni numeriche senza entrare nel testo
-alternativo.
+`|larghezzaxaltezza` è una dimensione, non testo alternativo. I commenti `%%…%%`
+restano nel file, non nella resa; in Live sono attenuati sulla riga del cursore.
+Evidenziati e commenti non attraversano link, wikilink, tag, codice, enfasi,
+formule o note in riga; una nota attraversata si perde.
 
-I commenti `%%…%%` restano nel file e nel modello, non nella resa; in Live si
-vedono attenuati sulla riga del cursore. Come nel provider, evidenziati e
-commenti non contengono né attraversano link, wikilink, tag, codice, enfasi,
-formule o note in riga, e una nota in riga attraversata si perde.
-
-Fuori dalla riga del cursore Live nasconde anche il `>` di una citazione (resta
-il filo a sinistra) e i segni di apice `^…^` e pedice `~…~`; il segno di una
-voce puntata diventa un pallino largo quanto lui, e un rimando `[^nota]` a una
-nota definita diventa il suo apice. Un rimando senza definizione resta testo,
-come in Lettura. I byte del file non cambiano.
+`editor.live-reveal` dice quanto si vede dei segni. Con `mai`, il predefinito, `**`,
+`^…^`, `~…~`, `#` e `>` non si vedono col cursore dentro: la barra dice gli stili
+premuti, il cursore si ferma due volte al bordo, Backspace cancella oltre i segni o il
+prefisso. Un link ha una pastiglia col dominio: Mod-k o un clic aprono «Collegamento».
+I gesti di formato, come in Word, a metà di una parola la formattano tutta, al bordo
+aprono una coppia nascosta che sparisce se resta vuota, in un elemento lo tolgono e
+alla fine ne escono. Segni che non reggono (`^a b^`) passano al tag gemello (`<sup>`);
+un taglio a metà elemento ne tiene i segni. `elemento` e `riga` mostrano i segni
+attenuati. `~x~` è pedice (ADR 0228); un rimando `[^nota]` definito è un apice e la
+definizione ha un ↩. La guida (`editor.live-guide`) dà lo stile al testo dopo un segno
+aperto a mano e mostra in grigio la chiusura: → o Tab la scrivono, Esc la spegne, lo
+spazio chiude apice e pedice e Backspace lo annulla; un segno lasciato aperto è
+ondulato. Il titolo del cursore ha «H2» nel margine, che apre i livelli; la riga vuota
+un segnaposto. Invio su un recinto senza chiusura la scrive; `[] ` diventa `- [ ] `.
 
 Immagini e media del vault si risolvono con la regola dei link del kernel:
 un'immagine Markdown con path relativo parte dalla nota, un embed `![[nome]]`
-si cerca per nome. I byte arrivano dal
-protocollo `fub-asset` (`fub-asset://localhost/…`, su Windows
-`http://fub-asset.localhost/…`) tramite un lease chiuso quando la resa si
-smonta; un riferimento che non si risolve resta marcato come non risolto. Negli
-embed `![[file|120]]` e `![[file|200x100]]` il suffisso è una dimensione, non
-un'etichetta. Audio e video diventano un player con controlli, un PDF un
-collegamento al visualizzatore dedicato. Un media incorporato si mostra senza
-la cornice delle trasclusioni.
+si cerca per nome. I byte arrivano dal protocollo `fub-asset`
+(`fub-asset://localhost/…`, su Windows `http://fub-asset.localhost/…`) tramite
+un lease chiuso quando la resa si smonta; un riferimento che non si risolve
+resta marcato come non risolto. In `![[file|120]]` e `![[file|200x100]]` il
+suffisso è una dimensione. Audio e video diventano un player, un PDF un link
+al visualizzatore; un media incorporato non ha la cornice delle trasclusioni.
 
 Un clic su un'immagine del vault in Lettura apre la lightbox, una finestra
 modale su fondo scuro: rotella, pizzico, `+` e `−` ingrandiscono, `0` adatta,
 `1` mostra le dimensioni reali, trascinamento e frecce spostano, `R` ruota di
-90°, `Esc` chiude. In Live un'immagine del vault dentro una riga (un'immagine
-Markdown su una riga sola, o `![[foto.png|120]]`) si mostra quando il cursore è
-fuori dalla riga; un clic torna alla sorgente, `Mod`-clic apre la lightbox.
-`data:` resta sorgente; una remota è un [segnaposto](../reference/permissions-and-security.md#immagini-remote).
+90°, `Esc` chiude. In Live un'immagine resta resa: un clic la seleziona, con
+contorno e maniglia, e la maniglia scrive `|larghezza` al rilascio, un passo di
+annulla. Con `mai` Invio o il doppio clic aprono «Immagine» (testo alternativo,
+file, larghezza), con `elemento` la sorgente; `Mod`-clic apre la lightbox. Sola
+nel paragrafo è una figura con la didascalia dal testo alternativo, anche in
+Lettura e nell'export. `data:` resta sorgente; una remota è un
+[segnaposto](../reference/permissions-and-security.md#immagini-remote).
 
-In Live i callout diventano un blocco reso quando il cursore è fuori, e i
-recinti con info string dichiarata (Mermaid, formule) si comportano allo stesso
-modo. Le formule in riga sono rese fuori dalla riga attiva e l'ID di blocco
-finale di un blocco è nascosto, come in Lettura.
+In Live un callout col cursore dentro resta un riquadro: la pastiglia del tipo
+apre i tipi, la freccia scambia `+` e `-`. Le voci d'elenco vanno a capo sotto
+il testo; cancellare o spostare righe rinumera le seguenti. L'HTML ammesso
+(`<kbd>`, `<u>`, i [colori](editor-blocks.md#i-colori)) si vede senza tag. I
+recinti con info string dichiarata (Mermaid, formule) tornano sorgente col
+cursore dentro, con la resa sotto. Con `mai` una formula in riga resta resa: un
+clic, o → e ← che ci entrano, aprono il riquadro col TeX e l'anteprima, e Invio
+o Esc lo chiudono. Con `elemento` torna la sorgente, con l'anteprima sopra la
+riga, o sotto per `$$`. L'ID di blocco finale è nascosto.
 
 La vista Struttura può spostare una sezione fra fratelli adiacenti con una
 singola modifica protetta dalla revisione osservata. La vista Note a piè di
@@ -199,23 +214,10 @@ flowchart LR
 ## Documento e superficie
 
 Un documento aperto in più riquadri condivide, tramite un'unica
-`DocumentSession`:
-
-- testo;
-- revisione di base;
-- stato dirty;
-- coda di salvataggio;
-- bozza;
-- ultimo esito di scrittura.
-
-La sessione coordina questo buffer autorevole e il suo lifecycle. Ogni
-superficie conserva invece:
-
-- cursore e selezioni;
-- scroll;
-- modalità;
-- focus;
-- la propria history nativa di undo e redo.
+`DocumentSession`, testo, revisione di base, stato dirty, coda di salvataggio,
+bozza e ultimo esito di scrittura. La sessione coordina questo buffer autorevole
+e il suo lifecycle. Ogni superficie conserva invece cursore e selezioni, scroll,
+modalità, focus e la propria history nativa di undo e redo.
 
 Questa distinzione impedisce di creare due copie concorrenti dello stesso
 buffer e, allo stesso tempo, evita che il cursore di un riquadro muova quello
@@ -237,18 +239,16 @@ L'editor offre due piani distinti:
 1. undo e redo del contenuto, legati alla superficie;
 2. undo di un comando applicato dal core, descritto nel suo esito.
 
-Nel piano del contenuto, i comandi visibili sono `Mod-z` per annullare e
-`Mod-y` per rifare. Sono disponibili anche `Mod-Shift-z` su macOS e
-`Ctrl-Shift-z` su Linux per rifare. `Mod-u` annulla l'ultima selezione e `Alt-u`
+Nel piano del contenuto `Mod-z` annulla e `Mod-y` rifà, come `Mod-Shift-z` su
+macOS e `Ctrl-Shift-z` su Linux. `Mod-u` annulla l'ultima selezione e `Alt-u`
 la rifà; su macOS il redo della selezione è `Mod-Shift-u`. `Mod` indica il
 modificatore della piattaforma.
 
-Gli undo e redo del contenuto sono disponibili anche negli eventi di modifica
-del browser `historyUndo` e `historyRedo`. Le battute adiacenti vengono
-raggruppate secondo le regole native dell'editor; composizione, incolla,
-cancellazione, sostituzione e modifiche multi-cursore conservano i propri
-confini osservabili. La history della selezione è distinta da quella del
-contenuto.
+Gli undo e redo del contenuto sono disponibili anche negli eventi di modifica del
+browser `historyUndo` e `historyRedo`. Le battute adiacenti vengono raggruppate
+secondo le regole native dell'editor; composizione, incolla, cancellazione,
+sostituzione e modifiche multi-cursore conservano i propri confini osservabili. La
+history della selezione è distinta da quella del contenuto.
 
 Una modifica ricevuta da un altro riquadro aggiorna il testo ma non diventa una
 battuta nella history della superficie destinataria. Se il cambio esterno è
@@ -347,20 +347,19 @@ base) il testo del modello; la view `stats.document` li dà a `fub-cli wordcount
 
 Sopra il testo di una nota Markdown aperta in scrittura (Sorgente o Live) c'è
 una barra con le funzioni testuali: annulla e ripeti, lo stile del paragrafo
-(testo normale, titoli da 1 a 6), grassetto, corsivo, barrato, evidenziato,
-codice e formula in riga, commento `%%`, cancella formattazione, link, link a
-una nota, immagine, nota a piè di pagina, elenchi puntati, numerati e di
-attività, rientro, citazione, riquadro `> [!note]`, blocco di codice, blocco di
-formula, linea di separazione e tabella, con un menu per righe, colonne e
-ordinamento. In Lettura la barra non c'è.
+(testo normale, titoli da 1 a 6), grassetto, corsivo, sottolineato, barrato,
+apice, pedice, evidenziato, codice e formula in riga, commento `%%`, cancella
+formattazione, link, link a una nota, immagine, nota a piè di pagina, elenchi
+puntati, numerati e di attività, rientro, citazione, riquadro `> [!note]`,
+blocchi di codice e di formula, separatore e tabella, con un menu per righe,
+colonne e ordinamento. In Lettura la barra non c'è.
 
 Un pulsante agisce sulla selezione, o sulla parola sotto il cursore, come la
 scorciatoia corrispondente, e la modifica entra nella cronologia locale del
-riquadro. Lo stato si legge sulla barra: il grassetto è premuto con il cursore
-dentro un grassetto, il selettore dello stile dice «Titolo 2» su un titolo di
-secondo livello, le operazioni sulla tabella sono spente fuori da una tabella e
-le formattazioni in riga sono spente dentro il codice. In sola lettura tutto è
-spento. Il tasto destro toglie una nota a piè di pagina e i suoi richiami.
+riquadro. La barra dice lo stato: il grassetto è premuto col cursore in un
+grassetto, lo stile dice «Titolo 2» su un titolo di secondo livello, la tabella
+è spenta fuori da una tabella e il formato in riga dentro il codice; in sola
+lettura tutto è spento. Il tasto destro toglie una nota e i suoi richiami.
 
 La barra sta su una riga: i gruppi che non entrano scendono nel menu «altri
 strumenti». La tastiera la raggiunge con un solo arresto di tabulazione:
@@ -382,7 +381,8 @@ Il tasto destro, la mini-barra e il menu «/» nel testo sono descritti in
 In Live ogni tabella è una griglia da foglio di calcolo, anche col cursore
 dentro; la sorgente con le pipe resta della modalità Sorgente, e Lettura la
 mostra resa. Sulla griglia compaiono le lettere delle colonne e i numeri
-delle righe; la prima riga è l'intestazione della tabella.
+delle righe; la prima riga è l'intestazione della tabella. La griglia non è una
+fermata del Tab: ci si entra dal testo con le frecce, come in una riga.
 
 - Le frecce muovono la cella attiva, Maiusc allarga la selezione, Mod le porta
   al bordo, Home ed End ai capi della riga; Tab e Maiusc+Tab avanzano lungo le

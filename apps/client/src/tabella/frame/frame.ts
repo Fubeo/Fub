@@ -56,6 +56,11 @@ export interface TableFrameHost {
   writeClipboard(data: TableClipboard): Promise<void>;
   focused?(): void;
   changed?(): void;
+  /// `false` se la griglia non è una fermata del Tab: una tabella dentro un
+  /// testo si raggiunge con le frecce, come il testo attorno, e il Tab
+  /// dall'ultima cella che aggiunge una riga non trattiene chi scorre la
+  /// pagina. Senza, la griglia è una fermata.
+  readonly tabStop?: boolean;
 }
 
 interface Editing {
@@ -102,7 +107,7 @@ export class TableFrame {
     this.element.contentEditable = "false";
     this.#grid = document.createElement("div");
     this.#grid.className = `${C}-grid`;
-    this.#grid.tabIndex = 0;
+    this.#grid.tabIndex = host.tabStop === false ? -1 : 0;
     this.#grid.setAttribute("role", "grid");
     this.#grid.setAttribute("aria-multiselectable", "true");
     this.#fillHandle = document.createElement("div");

@@ -152,6 +152,11 @@
   color: var(--muted);
   vertical-align: -1px;
 }
+/* L'icona della pagina (`icon:`), un'emoji: grande quanto il nome, staccata
+   come le figure. */
+.tab-page-icon {
+  margin-right: var(--space-2);
+}
 .tab-pinned {
   padding-right: var(--space-5);
 }

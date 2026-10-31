@@ -182,6 +182,7 @@ fn inline_name(the: &Inline) -> &'static str {
         Inline::Emph(_) => "Emph",
         Inline::Strong(_) => "Strong",
         Inline::Superscript(_) => "Superscript",
+        Inline::Subscript(_) => "Subscript",
         Inline::Strikethrough(_) => "Strikethrough",
         Inline::Code(_) => "Code",
         Inline::Link { .. } => "Link",
@@ -279,6 +280,7 @@ fn observe_inlines(inlines: &[Inline], or: &mut Observed) {
             Inline::Emph(children)
             | Inline::Strong(children)
             | Inline::Superscript(children)
+            | Inline::Subscript(children)
             | Inline::Strikethrough(children) => observe_inlines(children, or),
             Inline::Text(_)
             | Inline::Code(_)
@@ -920,6 +922,7 @@ fn inline_block_spans(blocks: &[Block]) -> Vec<(Span, Span)> {
                 Inline::Emph(children)
                 | Inline::Strong(children)
                 | Inline::Superscript(children)
+                | Inline::Subscript(children)
                 | Inline::Strikethrough(children) => inline(children, out),
                 Inline::Link { label, span, .. } => {
                     out.push(*span);
@@ -1033,6 +1036,7 @@ fn flat_text(d: &DocumentModel) -> String {
                 Inline::Emph(children)
                 | Inline::Strong(children)
                 | Inline::Superscript(children)
+                | Inline::Subscript(children)
                 | Inline::Strikethrough(children) => round(children, out),
                 Inline::TagRef { name, .. } => {
                     out.push('#');
@@ -1235,6 +1239,7 @@ fn model_wikilinks(model: &DocumentModel, text: &str) -> Vec<Value> {
                 Inline::Emph(kids)
                 | Inline::Strong(kids)
                 | Inline::Superscript(kids)
+                | Inline::Subscript(kids)
                 | Inline::Strikethrough(kids) => inline(kids, text, out),
                 Inline::Link {
                     label: Some(kids), ..
@@ -1294,6 +1299,7 @@ fn model_math(model: &DocumentModel, text: &str) -> Vec<Value> {
                 Inline::Emph(kids)
                 | Inline::Strong(kids)
                 | Inline::Superscript(kids)
+                | Inline::Subscript(kids)
                 | Inline::Strikethrough(kids) => inline(kids, text, false, out),
                 Inline::Link {
                     label: Some(kids), ..
@@ -1340,6 +1346,59 @@ fn model_math(model: &DocumentModel, text: &str) -> Vec<Value> {
     out
 }
 
+/// Gli stili in riga del modello, in ordine di documento e da fuori verso
+/// dentro: la Live li decora con le sue classi (`strong`, `em`, `strike`,
+/// `sup`, `sub`, `code`), e le due passate devono dire gli stessi.
+fn model_styles(model: &DocumentModel) -> Vec<Value> {
+    fn inline(nodes: &[Inline], out: &mut Vec<Value>) {
+        for n in nodes {
+            let (style, kids) = match n {
+                Inline::Strong(kids) => ("strong", kids.as_slice()),
+                Inline::Emph(kids) => ("em", kids.as_slice()),
+                Inline::Strikethrough(kids) => ("strike", kids.as_slice()),
+                Inline::Superscript(kids) => ("sup", kids.as_slice()),
+                Inline::Subscript(kids) => ("sub", kids.as_slice()),
+                Inline::Code(_) => ("code", &[][..]),
+                Inline::Link {
+                    label: Some(kids), ..
+                } => {
+                    inline(kids, out);
+                    continue;
+                }
+                _ => continue,
+            };
+            out.push(Value::from(style));
+            inline(kids, out);
+        }
+    }
+    fn walk(blocks: &[Block], out: &mut Vec<Value>) {
+        for b in blocks {
+            match b {
+                Block::Paragraph { inlines, .. } | Block::Heading { inlines, .. } => {
+                    inline(inlines, out)
+                }
+                Block::List { items, .. } => {
+                    for item in items {
+                        walk(&item.blocks, out);
+                    }
+                }
+                Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => walk(blocks, out),
+                Block::Table { head, rows, .. } => {
+                    for row in head.iter().chain(rows) {
+                        for cell in &row.cells {
+                            inline(&cell.inlines, out);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&model.body, &mut out);
+    out
+}
+
 fn corpus_for_the_shell() -> Value {
     let mut cases = Vec::new();
     for case in corpus() {
@@ -1361,6 +1420,7 @@ fn corpus_for_the_shell() -> Value {
             "wikilink": model_wikilinks(&model, case.source),
             "task": task,
             "math": model_math(&model, case.source),
+            "style": model_styles(&model),
         }));
     }
     Value::Array(cases)

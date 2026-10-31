@@ -2,6 +2,7 @@
 import { smartLists } from "./smart-lists";
 import { pasteHtml } from "./paste-html";
 import { propertiesDisplay } from "./properties-display";
+import { liveReveal } from "./live-reveal";
 import { describe, expect, it, vi } from "vitest";
 import { getCM } from "@replit/codemirror-vim";
 import { EditorView } from "@codemirror/view";
@@ -16,6 +17,7 @@ import {
   EDITOR_INDENT_GUIDES_KEY,
   EDITOR_CURSOR_BLINK_KEY,
   EDITOR_PASTE_HTML_KEY,
+  EDITOR_LIVE_REVEAL_KEY,
   EDITOR_PROPERTIES_KEY,
   EDITOR_RTL_KEY,
   EDITOR_SPELLCHECK_KEY,
@@ -232,6 +234,35 @@ describe("text input settings", () => {
     await vi.waitFor(() => expect(view.state.facet(propertiesDisplay)).toBe("visible"));
     change("tabella");
     await vi.waitFor(() => expect(view.state.facet(propertiesDisplay)).toBe("source"));
+    engine.destroy();
+    host.remove();
+  });
+
+  it("editor.live-reveal cambia la Live aperta senza perdere selezione e undo, e un valore ignoto è «mai»", async () => {
+    const read = vi.mocked(settings);
+    read.mockReset();
+    read.mockResolvedValue([]);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const engine = createTextEngine(host, { onChange: () => {}, onSelectionChange: () => {} });
+    const view = EditorView.findFromDOM(host)!;
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    expect(view.state.facet(liveReveal)).toBe("mai");
+    view.dispatch({ changes: { from: 0, insert: "a **b** c" }, userEvent: "input" });
+    view.dispatch({ selection: { anchor: 4 } });
+    const change = (value: string) => {
+      read.mockResolvedValue([{ ...entry(EDITOR_LIVE_REVEAL_KEY, false), value }]);
+      forwardNotice({
+        event: { type: "setting_changed", key: EDITOR_LIVE_REVEAL_KEY, scope: "machine" },
+        origin: { actor: { kind: "user" }, batch: null },
+      });
+    };
+    change("elemento");
+    await vi.waitFor(() => expect(view.state.facet(liveReveal)).toBe("elemento"));
+    expect(view.state.selection.main.head).toBe(4);
+    expect(engine.historyDepth().undo).toBe(1);
+    change("ovunque");
+    await vi.waitFor(() => expect(view.state.facet(liveReveal)).toBe("mai"));
     engine.destroy();
     host.remove();
   });

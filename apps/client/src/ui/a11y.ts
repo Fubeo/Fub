@@ -186,6 +186,14 @@ export function trapFocus(root: HTMLElement, close: () => void): Teardown {
     if (trapStack[trapStack.length - 1] !== io) return;
     if (e.key === "Escape") {
       e.preventDefault();
+      // Un campo di ricerca pieno si svuota prima: è l'Escape che il campo ha
+      // di suo, e che la cattura qui sopra gli toglierebbe chiudendo tutto.
+      const field = e.target;
+      if (field instanceof HTMLInputElement && field.type === "search" && field.value !== "" && root.contains(field)) {
+        field.value = "";
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        return;
+      }
       close();
       return;
     }

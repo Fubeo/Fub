@@ -5,6 +5,7 @@ import { Prec, RangeSetBuilder, type Extension } from "@codemirror/state";
 import {
   Decoration,
   EditorView,
+  keymap,
   ViewPlugin,
   type DecorationSet,
   type ViewUpdate,
@@ -12,11 +13,16 @@ import {
 import type { SyntaxForm } from "../../../../host/contract";
 import { markdownEditingExtensions } from "./commands";
 import { markdownCompletions, type CompletionSources } from "./completions";
+import { linkDialog } from "./link-dialog";
 import { livePreview, type LivePreviewCallbacks } from "./livepreview";
+import { cursorElements } from "./cursor-elements";
 import { markdownPaste } from "./paste";
 import { openLinkKeymap } from "./open-link";
 import { markdownGrammar } from "./grammar";
 import { frontmatterRange } from "./render";
+import { liveReveal } from "../../live-reveal";
+import { blockIdMarks } from "./block-id";
+import { transformKeymap } from "./blocks/transform";
 
 const typography = Prec.high(EditorView.theme({
   ".cm-content": {
@@ -147,6 +153,10 @@ export interface MarkdownProfile {
   extensions(): Extension;
   /// Changes whether live-preview decorations are mounted on the next reconfigure.
   setLivePreview(on: boolean): void;
+  /// I Blocchi (H1): `null` spenti; altrimenti le loro estensioni, sopra la
+  /// Live, con la politica `mai` qualunque sia `editor.live-reveal`. Si
+  /// caricano a richiesta: fino ad allora `[]` tiene già la politica.
+  setBlocks(extension: Extension | null): void;
   /// Replaces the syntax declaration used by live preview on the next reconfigure.
   setSyntaxForms(forms: readonly SyntaxForm[]): void;
   /// Mounts the proofing extension (`./proof`) on the next reconfigure. It is
@@ -159,6 +169,7 @@ export interface MarkdownProfile {
 /// invoke the engine's generic `reconfigure()` seam.
 export function createMarkdownProfile(options: MarkdownProfileOptions): MarkdownProfile {
   let previewOn = true;
+  let blocks: Extension | null = null;
   let syntaxForms: readonly SyntaxForm[] | undefined;
   // Un'estensione sola per la vita del profilo: un `reconfigure` (Live ↔
   // Sorgente) tiene la stessa istanza del plugin, e con lei le parole
@@ -175,13 +186,19 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
         markdownPaste,
         openLinkKeymap(options.callbacks),
         markdown({ base: markdownGrammar, codeLanguages: languages }),
-        previewOn ? livePreview(options.callbacks, syntaxForms) : [],
+        cursorElements,
+        // «Trasforma in» da tastiera (Mod-Alt-0…8) vale in Live e in Blocchi.
+        previewOn ? [livePreview(options.callbacks, syntaxForms), linkDialog(options.completions.searchNotes), blockIdMarks, Prec.high(keymap.of(transformKeymap))] : [],
+        previewOn && blocks !== null ? [Prec.highest(liveReveal.of("mai")), blocks] : [],
         markdownCompletions(options.completions),
         proof,
       ];
     },
     setLivePreview(on) {
       previewOn = on;
+    },
+    setBlocks(extension) {
+      blocks = extension;
     },
     setSyntaxForms(forms) {
       syntaxForms = forms;

@@ -30,7 +30,7 @@ flowchart LR
 
 - [Panoramica](product/overview.md)
 - [Vault e file](product/vault-and-files.md), [explorer e cartelle](product/explorer-and-folders.md) e [importare ed esportare](product/import-and-export.md)
-- [Editor e anteprima](product/editor-and-preview.md), [tasto destro, mini-barra e «/»](product/editor-menus.md), [correttore](product/proofing.md) e [documenti di Word](product/word-documents.md)
+- [Editor e anteprima](product/editor-and-preview.md), [Blocchi](product/editor-blocks.md), [tasto destro, mini-barra e «/»](product/editor-menus.md), [correttore](product/proofing.md) e [documenti di Word](product/word-documents.md)
 - [Disegni](product/drawing.md) e [penne](product/drawing-pen.md)
 - [Disegni, modelli e suggerimenti](product/drawing-new.md)
 - [Disegni, importare da Excalidraw e draw.io](product/drawing-import.md)

@@ -244,7 +244,9 @@ const pasteHandler = EditorView.domEventHandlers({
       view.dispatch(view.state.replaceSelection(link), { userEvent: "input.paste" });
       return true;
     }
-    if (!view.state.facet(pasteHtml)) return false;
+    // Nel codice l'HTML degli appunti resta il loro testo (C4): convertirlo
+    // in Markdown scriverebbe segni dentro il codice.
+    if (!view.state.facet(pasteHtml) || isStrictlyInsideCode(view.state, view.state.selection.main.from)) return false;
     const rich = richPaste(event.clipboardData);
     if (rich === null) return false;
     const insert = (markdown: string) =>

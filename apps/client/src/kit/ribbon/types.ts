@@ -40,9 +40,11 @@ export interface ControlBase<V, K extends string> {
   readonly label: K;
   /// I tasti dopo la lettera della scheda.
   readonly keytip: string;
-  /// Un'icona del repertorio, o un segno scritto come «B».
+  /// Un'icona del repertorio, o un segno scritto come «B». Un segno che
+  /// cambia con la lingua («G» in italiano, «B» in inglese) è una funzione,
+  /// e si rilegge quando la barra si rinomina.
   readonly icon?: string;
-  readonly glyph?: string;
+  readonly glyph?: string | (() => string);
   /// Grande: icona sopra il nome. Piccolo: in una fila, con il nome soltanto
   /// se `labelled`.
   readonly size?: "large" | "small";

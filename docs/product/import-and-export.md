@@ -55,6 +55,28 @@ file. Si scrive il link o l'id di una pagina o di un database Notion, oppure
 di una base Airtable con, se serve, le tabelle separate da virgole (vuoto vuol
 dire tutte). Le tappe restano le stesse: anteprima, import, annullamento.
 
+Una pagina di Notion arriva con le forme che l'editor scrive da sé (vedi
+[I blocchi dell'editor](editor-blocks.md)):
+
+- il testo tiene grassetto, corsivo, barrato, codice, sottolineato, link e i
+  nove colori, di testo e di fondo; i caratteri che in Markdown sarebbero
+  sintassi restano testo;
+- il codice tiene la sua lingua; ripiegabili, callout, colonne, indice,
+  formule e tabelle tengono la loro forma; un segnalibro, un embed o
+  un'anteprima di link diventano l'URL sulla sua riga; un blocco sincronizzato
+  diventa il suo contenuto;
+- le menzioni di una persona portano alla sua nota in `Persone/`, quelle di
+  una data alla giornaliera di quel giorno, quelle di una pagina alla pagina;
+- una sottopagina è una nota nella cartella della pagina, che diventa
+  `Pagina/_index.md`, e al suo posto resta il link;
+- immagini, file, PDF, video e audio caricati su Notion si scaricano nella
+  cartella degli allegati del vault, con un link relativo. Il link di Notion
+  scade dopo un'ora: un file che non si scarica tiene l'URL, e il rapporto
+  dice perché. Gli URL esterni restano come sono;
+- un database dentro la pagina non entra con lei: al suo posto c'è un avviso
+  col link, e lo si importa a parte con il suo id. Ciò che non ha una forma
+  in Fub compare nel rapporto.
+
 Il connettore ha bisogno di un token. Lo si incolla una volta nel riquadro
 «Token» e si salva su questa macchina, nella cartella di configurazione,
 leggibile dal solo proprietario. La finestra dice soltanto se un token c'è e

@@ -50,9 +50,9 @@ use fub_abi::command::{
 };
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::error::PluginError;
-use fub_abi::model::{Block, DocId, DocumentModel, Span, TaskMarker};
+use fub_abi::model::{Block, DocId, DocumentModel, Span, TaskMarker, FOLDER_PAGE_STEM};
 use fub_abi::settings::{SettingEntry, SettingKind, SettingSource, SettingValue};
-use fub_abi::text::{Arg, StringCatalog, Text};
+use fub_abi::text::{Arg, StringCatalog, Strings, Text};
 use fub_abi::traits::{
     BacklinkRef, CommandProvider, FolderScope, HostApi, IndexQuery, IndexResult,
 };
@@ -87,6 +87,12 @@ pub const VAULT_ARCHIVE: &str = "vault.archive";
 pub const FOLDER_RENAME: &str = "folder.rename";
 /// Manda nel cestino una cartella intera, voce per voce.
 pub const FOLDER_TRASH: &str = "folder.trash";
+/// Fa di una nota la pagina della sua cartella: la rinomina in `_index`,
+/// tenendo l'estensione (decisione 0229). Soltanto su richiesta.
+pub const NOTES_FOLDER_PAGE: &str = "note.folder_page";
+/// «Nuova sottopagina»: la nota diventa la pagina della sua cartella, se non
+/// lo è già, e nella cartella nasce una nota nuova.
+pub const NOTES_SUBPAGE: &str = "note.subpage";
 /// Spunta (o de-spunta) un task.
 pub const NOTES_TASK_TOGGLE: &str = "note.task.toggle";
 /// Cambia un'impostazione (§11.1).
@@ -103,10 +109,16 @@ pub const VAULT_UNDO: &str = "vault.undo";
 /// Il `ns` con cui l'esito di `settings.export` arriva alla shell.
 pub const SETTINGS_NS: &str = fub_abi::ui::SETTINGS_EXPORT_NS;
 
-/// Il nome di una nota senza nome. L'estensione la sceglie l'impostazione del
-/// core `files.new-note-extension`, la stessa che legge il kernel (vedi
-/// [`crate::formats::new_note_extension`]).
-const UNTITLED: &str = "Untitled";
+/// La chiave del nome di una nota senza nome, nella lingua di chi la crea: è
+/// il nome che la descrizione di `note.create` promette. L'estensione la
+/// sceglie l'impostazione del core `files.new-note-extension`, la stessa che
+/// legge il kernel (vedi [`crate::formats::new_note_extension`]).
+const N_UNTITLED: &str = "note.untitled";
+
+/// Il nome di una nota senza nome, dal catalogo di questo componente.
+pub(crate) fn untitled(host: &dyn HostApi) -> String {
+    Strings::new(&catalog(), "it", &host.user_locale()).render(&Text::key(N_UNTITLED))
+}
 
 /// Un comando del core, col titolo e la descrizione presi dal catalogo.
 ///
@@ -189,6 +201,9 @@ const E_EMPTY_FIND: &str = "err.empty_find";
 const E_EMPTY_TO: &str = "err.empty_to";
 const AND_NO_NOTES_GIVEN: &str = "err.no_note_given";
 const AND_NOT_IN_TRASH: &str = "err.not_in_trash";
+const E_PAGE_AT_ROOT: &str = "err.folder_page_at_root";
+const E_PAGE_ALREADY: &str = "err.folder_page_already";
+const E_SUBPAGE_NAME: &str = "err.subpage_name";
 const AND_TASK_NO_NOTES: &str = "err.task_no_note";
 const AND_TASK_NO_POSITION: &str = "err.task_no_position";
 const AND_TASK_WRONG_PANE: &str = "err.task_wrong_pane";
@@ -368,6 +383,7 @@ fn catalog_it() -> StringCatalog {
              se quel nome è preso «Senza titolo 1», «2», … Un nome senza \
              estensione diventa una nota markdown.",
         )
+        .with(N_UNTITLED, "Senza titolo")
         .with("note.create.name.title", "Nome")
         .with(
             "note.create.name.desc",
@@ -481,6 +497,32 @@ fn catalog_it() -> StringCatalog {
         )
         .with("folder.trash.folder.title", "Cartella")
         .with("folder.trash.folder.desc", "Il path della cartella da cestinare.")
+        .with("note.folder_page.title", "Usa come pagina della cartella")
+        .with(
+            "note.folder_page.desc",
+            "Rinomina la nota in «_index», così cliccare la cartella la apre e \
+             i link alla cartella la trovano. I link alla nota seguono. Non \
+             sostituisce mai una pagina che c'è già.",
+        )
+        .with("note.folder_page.doc.title", "Nota")
+        .with(
+            "note.folder_page.doc.desc",
+            "La nota da usare come pagina; in mancanza, quella aperta.",
+        )
+        .with("note.subpage.title", "Nuova sottopagina")
+        .with(
+            "note.subpage.desc",
+            "Crea una nota dentro la cartella della pagina. Se la pagina non è \
+             ancora quella di una cartella, prima la sposta in «Nome/_index»: i \
+             link seguono. Non sostituisce mai una nota o una pagina che c'è già.",
+        )
+        .with("note.subpage.doc.title", "Pagina")
+        .with(
+            "note.subpage.doc.desc",
+            "La pagina che riceve la sottopagina; in mancanza, quella aperta.",
+        )
+        .with("note.subpage.name.title", "Nome")
+        .with("note.subpage.name.desc", "Il nome della sottopagina, senza cartella.")
         .with("note.task.toggle.title", "Spunta il task")
         .with(
             "note.task.toggle.desc",
@@ -582,6 +624,15 @@ fn catalog_it() -> StringCatalog {
             "Nessuna nota indicata e nessuna nota aperta nel pannello attivo.",
         )
         .with(AND_NOT_IN_TRASH, "`{entry}` non è nel cestino.")
+        .with(
+            E_PAGE_AT_ROOT,
+            "`{doc}` sta nella radice del vault, che non ha una pagina.",
+        )
+        .with(E_PAGE_ALREADY, "`{doc}` è già la pagina della sua cartella.")
+        .with(
+            E_SUBPAGE_NAME,
+            "Il nome della sottopagina non può essere vuoto né contenere «/».",
+        )
         .with(
             AND_TASK_NO_NOTES,
             "Nessuna nota: né in `doc`, né nel pannello attivo.",
@@ -805,6 +856,7 @@ fn catalog_en() -> StringCatalog {
              «Untitled», and if that name is taken «Untitled 1», «2», … A name \
              without extension becomes a markdown note.",
         )
+        .with(N_UNTITLED, "Untitled")
         .with("note.create.name.title", "Name")
         .with(
             "note.create.name.desc",
@@ -916,6 +968,32 @@ fn catalog_en() -> StringCatalog {
         )
         .with("folder.trash.folder.title", "Folder")
         .with("folder.trash.folder.desc", "The path of the folder to trash.")
+        .with("note.folder_page.title", "Use as folder page")
+        .with(
+            "note.folder_page.desc",
+            "Renames the note to «_index», so clicking the folder opens it and \
+             links to the folder find it. Links to the note follow. It never \
+             replaces a page that is already there.",
+        )
+        .with("note.folder_page.doc.title", "Note")
+        .with(
+            "note.folder_page.doc.desc",
+            "The note to use as the page; otherwise, the open one.",
+        )
+        .with("note.subpage.title", "New subpage")
+        .with(
+            "note.subpage.desc",
+            "Creates a note inside the page's folder. If the page is not a \
+             folder's page yet, it first moves to «Name/_index»: links follow. \
+             It never replaces a note or a page that is already there.",
+        )
+        .with("note.subpage.doc.title", "Page")
+        .with(
+            "note.subpage.doc.desc",
+            "The page that gets the subpage; if missing, the open one.",
+        )
+        .with("note.subpage.name.title", "Name")
+        .with("note.subpage.name.desc", "The subpage's name, without a folder.")
         .with("note.task.toggle.title", "Toggle the task")
         .with(
             "note.task.toggle.desc",
@@ -1014,6 +1092,15 @@ fn catalog_en() -> StringCatalog {
             "No note given and no note open in the active pane.",
         )
         .with(AND_NOT_IN_TRASH, "`{entry}` is not in the trash.")
+        .with(
+            E_PAGE_AT_ROOT,
+            "`{doc}` is at the vault root, which has no page.",
+        )
+        .with(E_PAGE_ALREADY, "`{doc}` is already its folder's page.")
+        .with(
+            E_SUBPAGE_NAME,
+            "The subpage's name can't be empty or contain «/».",
+        )
         .with(
             AND_TASK_NO_NOTES,
             "No note: neither in `doc`, nor in the active pane.",
@@ -1238,6 +1325,16 @@ impl CoreCommands {
             command(FOLDER_TRASH)
                 .with_param(parameter(FOLDER_TRASH, "folder", ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Documents)),
+            // Una rinomina: riscrive anche chi linkava la nota.
+            command(NOTES_FOLDER_PAGE)
+                .with_param(parameter(NOTES_FOLDER_PAGE, "doc", ParamKind::Document))
+                .with_scope(CommandScope::writing(CommandReach::Documents)),
+            // Una rinomina, se serve, e una creazione.
+            command(NOTES_SUBPAGE)
+                .offered_in(CommandSurface::Slash)
+                .with_param(parameter(NOTES_SUBPAGE, "doc", ParamKind::Document))
+                .with_param(parameter(NOTES_SUBPAGE, "name", ParamKind::Text).required())
+                .with_scope(CommandScope::writing(CommandReach::Documents)),
             // Nessuna scorciatoia, e in particolare **non** `Mod-Enter`:
             // quella la tiene l'editor, che spunta le todo delle righe
             // selezionate nel **buffer** tramite i comandi Markdown dell'editor.
@@ -1333,6 +1430,8 @@ impl CommandProvider for CoreCommands {
             VAULT_ARCHIVE => vault_archive(args, mode, host),
             FOLDER_RENAME => folder_rename(args, mode, host),
             FOLDER_TRASH => folder_trash(args, mode, host),
+            NOTES_FOLDER_PAGE => notes_folder_page(args, mode, host),
+            NOTES_SUBPAGE => notes_subpage(args, mode, host),
             NOTES_TASK_TOGGLE => notes_task_toggle(args, mode, host),
             VAULT_UNDO => vault_undo(mode, host),
             SETTINGS_SET => settings_set(args, mode, host),
@@ -1722,7 +1821,10 @@ fn notes_create(
         )),
         // Il nome libero lo chiede all'host: la convenzione D3 è una sola, e
         // sta nel vault che è l'unico a sapere cosa è occupato.
-        None => host.free_name(&DocId::new(placed(&format!("{UNTITLED}.{extension}")))),
+        None => host.free_name(&DocId::new(placed(&format!(
+            "{}.{extension}",
+            untitled(host)
+        )))),
     };
     // Le proprietà iniziali sono un frontmatter: davanti a un `.base` o a un
     // canvas corromperebbero il file che nasce.
@@ -1866,6 +1968,170 @@ fn notes_rename(
     // Nessun `Navigate`: chi guardava quella nota la segue attraverso
     // `document-renamed`, e chi ne guardava un'altra non deve essere spostato.
     Ok(CommandOutcome::notify(two(D_RENAME, doc.as_str(), to.as_str())).undoable(undo))
+}
+
+/// `note.folder_page`: la nota diventa `X/_index.<ext>` con la rinomina di
+/// `note.rename`, che si porta dietro i link, il piano del dry-run e
+/// l'annullamento. Rifiuta se la cartella ha già una pagina, con qualunque
+/// estensione: due pagine per una cartella non si scelgono, e una che c'è non
+/// si sovrascrive.
+fn notes_folder_page(
+    args: Args<'_>,
+    _mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let doc = args
+        .document("doc")
+        .or_else(|| host.active_context().and_then(|c| c.doc))
+        .ok_or_else(|| PluginError::BadArgs(Text::key(AND_NO_NOTES_GIVEN)))?;
+    if doc.is_folder_page() {
+        return Err(PluginError::BadArgs(one(
+            E_PAGE_ALREADY,
+            A_DOC,
+            doc.as_str(),
+        )));
+    }
+    let Some((folder, base)) = doc.as_str().rsplit_once('/') else {
+        return Err(PluginError::BadArgs(one(
+            E_PAGE_AT_ROOT,
+            A_DOC,
+            doc.as_str(),
+        )));
+    };
+    let extension = base
+        .rsplit_once('.')
+        .filter(|(stem, _)| !stem.is_empty())
+        .map(|(_, ext)| ext);
+    let to = match extension {
+        Some(ext) => format!("{folder}/{FOLDER_PAGE_STEM}.{ext}"),
+        None => format!("{folder}/{FOLDER_PAGE_STEM}"),
+    };
+    if let Some(page) = folder_page_in(host, folder)? {
+        return Err(PluginError::AlreadyExists(page.to_string().into()));
+    }
+    // La rinomina vera, annidata: il modo (dry-run o no) lo propaga l'host.
+    host.run_command(
+        NOTES_RENAME,
+        serde_json::json!({ "doc": doc.as_str(), "to": to }),
+    )
+}
+
+/// La pagina della cartella `folder`, se c'è, con qualunque estensione.
+fn folder_page_in(host: &mut dyn HostApi, folder: &str) -> Result<Option<DocId>, PluginError> {
+    let entries = match host.query_index(IndexQuery::Entries {
+        of_kind: None,
+        within: Some(FolderScope {
+            path: folder.to_string(),
+            descendants: false,
+        }),
+        page: None,
+    })? {
+        IndexResult::Entries(entries) => entries,
+        other => return Err(off_topic("voci", &other)),
+    };
+    Ok(entries
+        .items
+        .into_iter()
+        .map(|e| e.id)
+        .find(DocId::is_folder_page))
+}
+
+/// `note.subpage`: «Nuova sottopagina» su `Viaggio.md`. Se la nota non è
+/// ancora la pagina di una cartella la sposta in `Viaggio/_index.md` con la
+/// rinomina di `note.rename` (`[[Viaggio]]` continua a trovarla, perché il
+/// nome della pagina è quello della cartella), poi crea `Viaggio/Nome.md`.
+/// Il link nel testo lo scrive chi ha il buffer. Non sovrascrive niente: una
+/// pagina che la cartella ha già, o una nota col nome chiesto, fermano tutto
+/// prima del primo passo; e se la creazione fallisce dopo lo spostamento, la
+/// pagina torna dov'era.
+fn notes_subpage(
+    args: Args<'_>,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let doc = args
+        .document("doc")
+        .or_else(|| host.active_context().and_then(|c| c.doc))
+        .ok_or_else(|| PluginError::BadArgs(Text::key(AND_NO_NOTES_GIVEN)))?;
+    let name = args
+        .text("name")
+        .map(str::trim)
+        .filter(|n| !n.is_empty() && !n.contains('/'))
+        .ok_or_else(|| PluginError::BadArgs(Text::key(E_SUBPAGE_NAME)))?;
+    let extension = match crate::formats::extension_of(&doc) {
+        Some(ext) => ext.to_string(),
+        None => crate::formats::new_note_extension(host)?,
+    };
+    // La cartella della pagina, e dove andrebbe la pagina se non ci sta già.
+    let (folder, moved) = if doc.is_folder_page() {
+        let folder = doc.as_str().rsplit_once('/').map_or("", |(f, _)| f);
+        (folder.to_string(), None)
+    } else {
+        let id = doc.as_str();
+        let stem = match id.rsplit_once('.') {
+            Some((stem, _)) if stem.len() > id.rfind('/').map_or(0, |s| s + 1) => stem,
+            _ => id,
+        };
+        let page = DocId::new(format!("{stem}/{FOLDER_PAGE_STEM}.{extension}"));
+        (stem.to_string(), Some(page))
+    };
+    let child = DocId::new(crate::formats::with_extension(
+        host,
+        &format!("{folder}/{name}"),
+        &extension,
+    ));
+    if moved.is_some() {
+        if let Some(page) = folder_page_in(host, &folder)? {
+            return Err(PluginError::AlreadyExists(page.to_string().into()));
+        }
+    }
+    // Il vault sa che cosa è occupato, anche per una differenza di maiuscole.
+    if host.free_name(&child) != child {
+        return Err(PluginError::AlreadyExists(child.to_string().into()));
+    }
+
+    if mode.is_dry_run() {
+        let mut docs = vec![doc.clone()];
+        docs.extend(moved.iter().cloned());
+        docs.push(child.clone());
+        return Ok(plan(one(P_CREATE, A_DOC, child.as_str()), docs));
+    }
+
+    if let Some(page) = &moved {
+        host.run_command(
+            NOTES_RENAME,
+            serde_json::json!({ "doc": doc.as_str(), "to": page.as_str() }),
+        )?;
+    }
+    if let Err(error) = host.create_document(&child, "") {
+        // Il passo fallito non lascia la pagina a metà strada: torna dov'era,
+        // con i link. Se anche il ritorno fallisce, l'errore che conta resta
+        // quello della creazione.
+        if let Some(page) = &moved {
+            let _ = host.run_command(
+                NOTES_RENAME,
+                serde_json::json!({ "doc": page.as_str(), "to": doc.as_str() }),
+            );
+        }
+        return Err(error);
+    }
+    // Si annulla all'incontrario: prima la sottopagina nel cestino, poi la
+    // pagina al suo posto di prima.
+    let mut steps = vec![UndoStep::Command {
+        command: NOTES_TRASH.to_string(),
+        args: serde_json::json!({ "doc": child.as_str() }),
+    }];
+    if let Some(page) = &moved {
+        steps.push(UndoStep::Command {
+            command: NOTES_RENAME.to_string(),
+            args: serde_json::json!({ "doc": page.as_str(), "to": doc.as_str() }),
+        });
+    }
+    let undo = Undo {
+        label: one(U_CREATE, A_DOC, child.as_str()),
+        steps,
+    };
+    Ok(CommandOutcome::notify(one(D_CREATE, A_DOC, child.as_str())).undoable(undo))
 }
 
 fn notes_trash(
@@ -3481,7 +3747,7 @@ mod tests {
             InvokeMode::Apply,
         )
         .unwrap();
-        assert_eq!(navigate(first).as_str(), format!("Progetti/{UNTITLED}.md"));
+        assert_eq!(navigate(first).as_str(), "Progetti/Senza titolo.md");
         let named = invoke(
             &mut host,
             NOTES_CREATE,

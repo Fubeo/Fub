@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Organization, VaultFolder } from "../host/contract";
-import { folderNoteCandidates, folderNoteIn, orderedNames, sortContent } from "./organizer";
+import {
+  folderNoteCandidates,
+  folderNoteIn,
+  folderNoteOf,
+  orderedNames,
+  sortContent,
+} from "./organizer";
 
 const meta = (order: Record<string, string[]> = {}): Organization => ({
   icons: {},
@@ -52,11 +58,17 @@ describe("l'organizzazione di un livello (§14.3, §14.4)", () => {
     expect(ordered.notes).toEqual(["z.md", "k.md"]);
   });
 
-  it("la folder note di una cartella non aperta si sa dai path che esistono", () => {
+  it("la pagina di una cartella non aperta si sa dai path che esistono", () => {
     // È la domanda che rimpiazza «carica il contenuto per guardarci dentro»:
     // i candidati sono pochi e noti, e quali esistano lo dice il kernel.
-    const candidates = folderNoteCandidates("a/Diario", ["md", "canvas"]);
-    expect(candidates).toEqual([
+    expect(folderNoteCandidates("a/Diario", ["md", "canvas"])).toEqual([
+      "a/Diario/_index.md",
+      "a/Diario/_index.canvas",
+    ]);
+    // Con i vecchi nomi riconosciuti, dopo `_index` vengono l'omonima e `index`.
+    expect(folderNoteCandidates("a/Diario", ["md", "canvas"], true)).toEqual([
+      "a/Diario/_index.md",
+      "a/Diario/_index.canvas",
       "a/Diario/Diario.md",
       "a/Diario/Diario.canvas",
       "a/Diario/index.md",
@@ -64,10 +76,33 @@ describe("l'organizzazione di un livello (§14.3, §14.4)", () => {
     ]);
 
     const existing = new Set(["a/Diario/index.md", "a/Diario/Diario.canvas"]);
-    expect(folderNoteIn("a/Diario", ["md", "canvas"], existing)).toBe("a/Diario/Diario.canvas");
+    // `X/X` e `X/index` sono note normali, finché l'opzione è spenta.
+    expect(folderNoteIn("a/Diario", ["md", "canvas"], existing)).toBeNull();
+    expect(folderNoteIn("a/Diario", ["md", "canvas"], existing, true)).toBe(
+      "a/Diario/Diario.canvas",
+    );
+    existing.add("a/Diario/_index.md");
+    expect(folderNoteIn("a/Diario", ["md", "canvas"], existing, true)).toBe("a/Diario/_index.md");
     expect(folderNoteIn("a/Vuota", ["md"], existing)).toBeNull();
-    // La radice non ha una folder note: non è una cartella con un nome.
+    // La radice non ha una pagina: non è una cartella con un nome.
     expect(folderNoteCandidates("", ["md"])).toEqual([]);
+  });
+
+  it("la pagina di una cartella aperta è `_index`, scritto esatto", () => {
+    const content = (notes: string[]) => ({
+      path: "Viaggio",
+      folders: [],
+      notes,
+      files: [],
+      otherFolders: 0,
+      otherNote: 0,
+    });
+    expect(folderNoteOf(content(["Viaggio/a.md", "Viaggio/_index.md"]), ["md"])).toBe(
+      "Viaggio/_index.md",
+    );
+    expect(folderNoteOf(content(["Viaggio/_Index.md"]), ["md"])).toBeNull();
+    expect(folderNoteOf(content(["Viaggio/Viaggio.md"]), ["md"])).toBeNull();
+    expect(folderNoteOf(content(["Viaggio/Viaggio.md"]), ["md"], true)).toBe("Viaggio/Viaggio.md");
   });
 });
 

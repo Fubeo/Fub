@@ -12,6 +12,7 @@
 // riesportato sotto, con gli stessi nomi.
 import { promptText } from "../ui/dialogs";
 import { openCompare } from "../ui/compare";
+import { pageIcon } from "../state/page-icons";
 import { FORMAT_ICON, formatKindOf, formatNameOf, formatTagOf } from "../ui/format-kind";
 import { iconEl } from "../ui/icons";
 import { api } from "../host/ipc";
@@ -913,6 +914,15 @@ function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boo
     format.classList.add("tab-format");
     name.prepend(format);
   }
+  // Una nota con `icon:` nel frontmatter la porta anche nella scheda (K9).
+  const pageMark = target.k === "doc" && !format ? pageIcon(target.doc) : null;
+  if (pageMark) {
+    const mark = document.createElement("span");
+    mark.className = "tab-page-icon";
+    mark.setAttribute("aria-hidden", "true");
+    mark.textContent = pageMark;
+    name.prepend(mark);
+  }
   const pin = target.pinned ? iconEl("pin") : null;
   if (pin) {
     pin.classList.add("tab-pin");
@@ -1082,6 +1092,7 @@ function drawToolbar(r: Pane): void {
   frameOf(r).standing.follow(tab?.k === "doc" ? r.surface?.standing ?? null : null);
   group.setAttribute("aria-label", t("document.toolbar.modes"));
   menu.setAttribute("aria-label", t("document.pane.menu"));
+  setTooltip(menu, t("document.pane.menu"));
   const modes = r.surface && r.surface.modes.length > 1 ? r.surface.modes : [];
   const active = selectedMode(r);
   group.hidden = modes.length <= 1;

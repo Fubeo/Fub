@@ -36,6 +36,9 @@ pub fn build_options(ctx: &ParseContext) -> Options<'static> {
     // irrappresentabili proprio nel modello che la decisione 0003 apre per loro.
     or.parse.relaxed_tasklist_matching = true;
     or.extension.superscript = true;
+    // `~x~` è pedice, `~~x~~` barrato (decisione 0228): come nella Live, dove
+    // la grammatica Lezer li legge già così.
+    or.extension.subscript = true;
     // GitHub alerts ≈ callout Obsidian.
     or.extension.alerts = true;
     // Footnote e definition list: la decisione 0003 dice che restino
@@ -578,6 +581,7 @@ fn strip_marker(inlines: &mut Vec<Inline>, text: &mut String, written: &str) {
             Inline::Emph(children)
             | Inline::Strong(children)
             | Inline::Superscript(children)
+            | Inline::Subscript(children)
             | Inline::Strikethrough(children) => {
                 strip_last(children, written);
                 if children.is_empty() {
@@ -1286,6 +1290,11 @@ fn convert_inlines<'a>(
             // loro, distinta l'una dall'altra e dall'enfasi.
             NodeValue::Superscript => {
                 out.push(Inline::Superscript(convert_inlines(
+                    child, source, offsets, ctx, acc, text_out, down,
+                )));
+            }
+            NodeValue::Subscript => {
+                out.push(Inline::Subscript(convert_inlines(
                     child, source, offsets, ctx, acc, text_out, down,
                 )));
             }

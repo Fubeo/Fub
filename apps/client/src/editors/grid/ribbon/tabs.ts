@@ -12,7 +12,7 @@
 // del file, in inglese: sono valori, non testo. Si traduce ciò che si legge.
 import type { GridBook, GridCellStyle, GridObject, GridSheetView, GridTable } from "../../../host/contract";
 import { resultList } from "../dialogs/result";
-import type { RibbonKey } from "./strings";
+import { t, type RibbonKey } from "./strings";
 
 import type {
   ButtonControl as KitButtonControl,
@@ -349,15 +349,15 @@ const HOME: RibbonTab = {
               { kind: "button", id: "home.decreaseFontSize", label: "ribbon.font.shrink", keytip: "FK", glyph: "A⁻" },
             ],
             [
-              { kind: "button", id: "home.bold", label: "ribbon.font.bold", keytip: "1", glyph: "B", className: "grid-ribbon-bold", pressed: (v) => style(v)?.bold === true },
-              { kind: "button", id: "home.italic", label: "ribbon.font.italic", keytip: "2", glyph: "I", className: "grid-ribbon-italic", pressed: (v) => style(v)?.italic === true },
+              { kind: "button", id: "home.bold", label: "ribbon.font.bold", keytip: "1", glyph: () => t("ribbon.glyph.bold"), className: "grid-ribbon-bold", pressed: (v) => style(v)?.bold === true },
+              { kind: "button", id: "home.italic", label: "ribbon.font.italic", keytip: "2", glyph: () => t("ribbon.glyph.italic"), className: "grid-ribbon-italic", pressed: (v) => style(v)?.italic === true },
               {
                 kind: "split",
                 id: "home.underline",
                 label: "ribbon.font.underline",
                 menuLabel: "ribbon.font.underline.menu",
                 keytip: "3",
-                glyph: "U",
+                glyph: () => t("ribbon.glyph.underline"),
                 className: "grid-ribbon-underline",
                 pressed: (v) => (style(v)?.underline ?? null) !== null,
                 menu: (v) => [
@@ -365,7 +365,7 @@ const HOME: RibbonTab = {
                   { label: "ribbon.font.underline.double", id: "home.underline", params: { style: "double" }, choice: "radio", checked: style(v)?.underline === "double" },
                 ],
               },
-              { kind: "button", id: "home.strikethrough", label: "ribbon.font.strike", keytip: "4", glyph: "S", className: "grid-ribbon-strike", pressed: (v) => style(v)?.strike === true },
+              { kind: "button", id: "home.strikethrough", label: "ribbon.font.strike", keytip: "4", glyph: "abc", className: "grid-ribbon-strike", pressed: (v) => style(v)?.strike === true },
               {
                 kind: "split",
                 id: "home.borders",

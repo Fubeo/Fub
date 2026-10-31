@@ -254,6 +254,20 @@ export async function notesByName(text: string, count = MAX_NAMES): Promise<stri
   return page.items.map((m) => m.doc);
 }
 
+/// Le note dentro `folder` (e le sue sottocartelle) il cui nome combacia con
+/// `text`, dalla più pertinente; con `text` vuoto, le prime della cartella.
+/// È la domanda di `@` per le persone (K5): [`notesByName`] ristretta a una
+/// cartella, che la finestra dei venti più pertinenti del vault taglierebbe.
+export async function notesInFolder(folder: string, text: string, count = MAX_NAMES): Promise<string[]> {
+  const written = text.trim();
+  const inFolder = { negated: false, predicate: { kind: "folder" as const, path: folder, descendants: true } };
+  const matching: QueryExpr = written
+    ? { any: nameQuery(written).any.map((clause) => ({ all: [...clause.all, inFolder] })) }
+    : { any: [{ all: [inFolder] }] };
+  const page = await matchingDocuments(matching, { offset: 0, limit: count }, "omit");
+  return page.items.map((m) => m.doc);
+}
+
 /// Le note di [`notesByName`], ognuna con i suoi alias del frontmatter.
 ///
 /// L'indice cerca il nome **e** gli alias nello stesso campo, quindi una nota

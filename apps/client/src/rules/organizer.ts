@@ -12,7 +12,7 @@
 import type { Organization, VaultFolder } from "../host/contract";
 // Le regole che hanno una gemella Rust stanno in un file solo, e da lì le
 // riprende chiunque: qui servono il nome pagina e la chiave di risoluzione.
-import { childName, pageName, resolutionKey } from "./mirrored";
+import { childName, FOLDER_PAGE_STEM, pageName, resolutionKey } from "./mirrored";
 
 export { childName, pageName };
 
@@ -126,41 +126,55 @@ function sortBy(content: FolderContent, mode: Exclude<ExplorerSort, "manual">): 
   };
 }
 
-/// La folder note di una cartella: `X/X.<ext>`, o in mancanza `X/index.<ext>`.
-/// Cliccare la cartella apre questa nota, e la lista dei figli non la mostra.
+/// La pagina di una cartella: `X/_index.<ext>` (decisione 0229). Cliccare la
+/// cartella apre questa nota, e la lista dei figli non la mostra.
+///
+/// Con `legacy` acceso (l'opzione «riconosci i vecchi nomi» delle Preferenze)
+/// valgono anche `X/X.<ext>` e `X/index.<ext>`, dopo `_index`: è il modo di
+/// lavorare di Obsidian e make.md, e chi usa il vault anche lì lo ritrova.
 ///
 /// `exts` sono le estensioni che i provider registrati gestiscono
 /// (`VaultInfo.extensions`): quale sia l'estensione di una nota lo sanno i
 /// `FormatDescriptor` del backend, non la UI. Cablare `.md` qui sarebbe vero solo
 /// finché markdown è l'unico formato, cioè finché il progetto non fa ciò per cui
 /// esiste.
-export function folderNoteOf(content: FolderContent, exts: string[]): string | null {
+export function folderNoteOf(
+  content: FolderContent,
+  exts: string[],
+  legacy = false,
+): string | null {
   // `resolutionKey` e non `toLowerCase()`: è la chiave con cui il kernel decide
   // che due nomi sono lo stesso nome, e su un vault sincronizzato con macOS
   // (nomi file in NFD) il solo minuscolo non farebbe incontrare `Città/Città.md`
-  // con sé stessa.
+  // con sé stessa. `_index` invece si confronta esatto, come fa `DocId`.
   const byKey = new Map(content.notes.map((n) => [resolutionKey(n), n]));
-  // Prima il nome della cartella, poi `index`: l'omonima vince, come in make.md.
-  for (const candidate of folderNoteCandidates(content.path, exts)) {
+  const notes = new Set(content.notes);
+  for (const candidate of folderNoteCandidates(content.path, exts, legacy)) {
+    if (childName(candidate).startsWith(`${FOLDER_PAGE_STEM}.`)) {
+      if (notes.has(candidate)) return candidate;
+      continue;
+    }
     const hit = byKey.get(resolutionKey(candidate));
     if (hit) return hit;
   }
   return null;
 }
 
-/// I path che **potrebbero** essere la folder note di una cartella, in ordine di
-/// preferenza: prima l'omonima, poi `index`, e per ciascuna le estensioni
-/// registrate nell'ordine in cui il backend le dichiara.
+/// I path che **potrebbero** essere la pagina di una cartella, in ordine di
+/// preferenza: prima `_index`, poi (soltanto con `legacy`) l'omonima e `index`,
+/// e per ciascuna le estensioni registrate nell'ordine in cui il backend le
+/// dichiara.
 ///
 /// Esiste perché la stessa regola serve a due domande diverse: «qual è la
-/// folder note di questa cartella, che ho in mano?» ([`folderNoteOf`]) e «quali
+/// pagina di questa cartella, che ho in mano?» ([`folderNoteOf`]) e «quali
 /// di queste cartelle, che non ho aperto, ne hanno una?» — la seconda si fa
 /// chiedendo al kernel quali di questi path esistono, in una domanda sola,
 /// invece di caricare il contenuto di ogni cartella per guardarci dentro.
-export function folderNoteCandidates(path: string, exts: string[]): string[] {
+export function folderNoteCandidates(path: string, exts: string[], legacy = false): string[] {
   if (!path) return [];
   const out: string[] = [];
-  for (const stem of [childName(path), "index"]) {
+  const stems = legacy ? [FOLDER_PAGE_STEM, childName(path), "index"] : [FOLDER_PAGE_STEM];
+  for (const stem of stems) {
     for (const ext of exts) out.push(`${path}/${stem}.${ext}`);
   }
   return out;
@@ -171,8 +185,9 @@ export function folderNoteIn(
   path: string,
   exts: string[],
   existing: ReadonlySet<string>,
+  legacy = false,
 ): string | null {
-  return folderNoteCandidates(path, exts).find((c) => existing.has(c)) ?? null;
+  return folderNoteCandidates(path, exts, legacy).find((c) => existing.has(c)) ?? null;
 }
 
 /// I nomi dei figli di una cartella nell'ordine in cui la sidebar li mostra

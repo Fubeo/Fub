@@ -89,7 +89,8 @@
 .cm-editor .cm-content .cm-activeLine {
   background-color: var(--doc-active-line);
 }
-[data-markdown-mode="live_preview"] .cm-content .cm-activeLine {
+[data-markdown-mode="live_preview"] .cm-content .cm-activeLine,
+[data-markdown-mode="blocks"] .cm-content .cm-activeLine {
   background-color: transparent;
 }
 .pane-editor[data-markdown-mode="source"] .cm-content > .cm-line {

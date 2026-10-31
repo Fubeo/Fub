@@ -12,13 +12,14 @@
 
 /* ── La colonna ──────────────────────────────────────────────────────────── */
 
-/* La colonna di lettura sta al centro della carta, e nelle tre modalità parte
-   dalla stessa ascissa: cambiare modalità non sposta il testo. In Live e
-   Sorgente la porta `.cm-content`; in Lettura il riquadro scorre a tutta
+/* La colonna di lettura sta al centro della carta, e in ogni modalità parte
+   dalla stessa ascissa: cambiare modalità non sposta il testo. In Live,
+   Blocchi e Sorgente la porta `.cm-content`; in Lettura il riquadro scorre a tutta
    larghezza — la barra di scorrimento resta sul bordo del foglio — e la
    colonna la fa il padding. */
 .pane-editor[data-markdown-mode="source"] .cm-content,
-.pane-editor[data-markdown-mode="live_preview"] .cm-content {
+.pane-editor[data-markdown-mode="live_preview"] .cm-content,
+.pane-editor[data-markdown-mode="blocks"] .cm-content {
   box-sizing: border-box;
   max-width: calc(var(--content-width) + 2 * var(--space-9));
   margin-inline: auto;
@@ -32,14 +33,16 @@
 }
 /* CodeMirror rientra ogni riga di 6px: in Lettura quel rientro non c'è, e la
    pagina salterebbe di lato passando da Live a Lettura. */
-.pane-editor[data-markdown-mode="live_preview"] .cm-content > .cm-line {
+.pane-editor[data-markdown-mode="live_preview"] .cm-content > .cm-line,
+.pane-editor[data-markdown-mode="blocks"] .cm-content > .cm-line {
   padding-inline: 0;
 }
 /* Un foglio stretto (due affiancati, la finestra piccola) cede margine prima
    di cedere testo. */
 @container sheet (max-width: 560px) {
   .pane-editor[data-markdown-mode="source"] .cm-content,
-  .pane-editor[data-markdown-mode="live_preview"] .cm-content {
+  .pane-editor[data-markdown-mode="live_preview"] .cm-content,
+  .pane-editor[data-markdown-mode="blocks"] .cm-content {
     padding: var(--space-8) var(--space-7) var(--space-10);
   }
   .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
@@ -269,6 +272,315 @@
   color: inherit;
   text-decoration: none;
 }
+/* La pastiglia di un collegamento col cursore dentro, con «mai»: dice dove
+   porta senza mostrare l'indirizzo, e un clic apre «Collegamento». */
+.cm-editor .cm-content .cm-fub-link-pill {
+  margin-inline-start: var(--space-2);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--doc-fill-soft);
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+.cm-editor .cm-content .cm-fub-link-pill:hover {
+  color: var(--doc-link);
+}
+/* Una persona (K5): il link a una nota di `Persone/` è una pastiglia con la
+   `@` davanti, come la si è chiamata, senza il filo del collegamento. */
+.cm-editor .cm-content .cm-fub-wikilink.cm-fub-person {
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--doc-fill-soft);
+  text-decoration: none;
+}
+.cm-editor .cm-content .cm-fub-wikilink.cm-fub-person:not([data-page-icon])::before {
+  content: "@";
+  color: var(--doc-gutter-fg);
+}
+/* Il segnalibro web (K8): un indirizzo da solo è una scheda con il titolo,
+   due righe di descrizione e il sito con la sua icona. Senza scheda, l'indirizzo
+   e il pulsante che la chiede, nei toni del margine. */
+.cm-editor .cm-content .cm-fub-link-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-2) 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--doc-rule-soft);
+  border-radius: var(--radius-control);
+  font-family: var(--font-ui);
+}
+.cm-editor .cm-content .cm-fub-link-card:hover {
+  background: var(--doc-fill-soft);
+}
+.cm-editor .cm-content .cm-fub-link-card-main {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--doc-fg);
+  text-decoration: none;
+}
+.cm-editor .cm-content .cm-fub-link-card-main:focus-visible,
+.cm-editor .cm-content .cm-fub-link-card-fetch:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+.cm-editor .cm-content .cm-fub-link-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+/* Il testo va a capo e non allarga il foglio: una riga che non si spezza
+   farebbe largo quanto lei tutto il contenuto dell'editor. La descrizione si
+   ferma a due righe. */
+.cm-editor .cm-content .cm-fub-link-card-title,
+.cm-editor .cm-content .cm-fub-link-card-desc,
+.cm-editor .cm-content .cm-fub-link-card-site,
+.cm-editor .cm-content .cm-fub-link-card-url,
+.cm-editor .cm-content .cm-fub-link-card-note {
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: var(--leading-tight);
+}
+.cm-editor .cm-content .cm-fub-link-card-title,
+.cm-editor .cm-content .cm-fub-link-card-desc,
+.cm-editor .cm-content .cm-fub-link-card-url {
+  max-height: calc(2em * var(--leading-tight));
+}
+.cm-editor .cm-content .cm-fub-link-card-title {
+  font-weight: var(--weight-medium);
+}
+.cm-editor .cm-content .cm-fub-link-card-desc,
+.cm-editor .cm-content .cm-fub-link-card-site,
+.cm-editor .cm-content .cm-fub-link-card-note {
+  font-size: var(--text-sm);
+  color: var(--doc-gutter-fg);
+}
+.cm-editor .cm-content .cm-fub-link-card-site {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.cm-editor .cm-content .cm-fub-link-card-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-xs);
+}
+.cm-editor .cm-content .cm-fub-link-card-url {
+  color: var(--doc-link);
+}
+.cm-editor .cm-content .cm-fub-link-card-fetch {
+  flex: none;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--doc-rule-soft);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.cm-editor .cm-content .cm-fub-link-card-fetch:hover:not(:disabled) {
+  background: var(--doc-fill-soft);
+}
+.cm-editor .cm-content .cm-fub-link-card-fetch:disabled {
+  color: var(--doc-gutter-fg);
+}
+/* Un segno che si vede ancora in Live, con «elemento» o «riga»: un passo sotto
+   la sintassi della Sorgente, dentro o fuori dallo span che la colora. */
+.cm-editor .cm-content .cm-fub-near,
+.cm-editor .cm-content .cm-fub-near * {
+  color: var(--doc-syntax-near, var(--syn-comment));
+}
+/* La guida (07): il segno scritto a mano e non ancora chiuso è attenuato, la
+   chiusura che manca è in grigio, e un segno rimasto aperto ha l'ondulato. */
+.cm-editor .cm-content .cm-fub-pending-mark {
+  color: var(--doc-syntax-near, var(--syn-comment));
+}
+.cm-editor .cm-content .cm-fub-ghost {
+  color: var(--doc-ghost, var(--doc-gutter-fg));
+}
+.cm-editor .cm-content .cm-fub-wavy {
+  text-decoration-color: var(--doc-wavy, var(--doc-danger));
+}
+/* I cenni (07): il segnaposto della riga vuota e la pastiglia del titolo nel
+   margine, che apre i livelli. Il segnaposto si legge: ha l'inchiostro dei
+   numeri di riga, non quello della chiusura in grigio. */
+.cm-editor .cm-content .cm-fub-placeholder {
+  color: var(--doc-gutter-fg);
+}
+.cm-editor .cm-content .cm-fub-heading-pill-button {
+  font-family: var(--font-ui);
+  color: var(--doc-gutter-fg);
+  background: var(--doc-fill-soft);
+}
+.cm-editor .cm-content .cm-fub-heading-pill-button:hover,
+.cm-editor .cm-content .cm-fub-heading-pill-button[aria-expanded="true"] {
+  color: var(--doc-fg);
+  background: var(--doc-fill);
+}
+.cm-editor .cm-content .cm-fub-heading-pill-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+/* I Blocchi (H3–H7): il «+» e la maniglia nel margine, la linea d'arrivo
+   del trascinamento, i blocchi selezionati. Fuori dal passaggio i pulsanti
+   del blocco del cursore restano tenui; sotto il puntatore si leggono. */
+.cm-editor .cm-fub-block-add,
+.cm-editor .cm-fub-block-grip {
+  color: var(--doc-gutter-fg);
+  opacity: 0.55;
+}
+.cm-editor .cm-fub-block-handles[data-active="true"] .cm-fub-block-add,
+.cm-editor .cm-fub-block-handles[data-active="true"] .cm-fub-block-grip,
+.cm-editor .cm-fub-block-add:focus-visible,
+.cm-editor .cm-fub-block-grip:focus-visible,
+.cm-editor .cm-fub-block-grip[aria-expanded="true"] {
+  opacity: 1;
+}
+.cm-editor .cm-fub-block-add:hover,
+.cm-editor .cm-fub-block-grip:hover,
+.cm-editor .cm-fub-block-grip[aria-expanded="true"] {
+  color: var(--doc-fg);
+  background: var(--doc-fill-soft);
+}
+.cm-editor .cm-fub-block-add:focus-visible,
+.cm-editor .cm-fub-block-grip:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.cm-editor .cm-fub-block-drop {
+  background: var(--doc-link);
+}
+/* (0,4,0): batte la riga attiva resa trasparente in Live e il fondo del
+   codice, che altrimenti lascerebbero fuori una riga della selezione. */
+.cm-editor .cm-content .cm-line.cm-fub-block-selected {
+  background: var(--doc-selection);
+}
+/* Sul fondo della selezione l'indirizzo del link vuole l'inchiostro pieno. */
+.cm-editor .cm-content .cm-fub-block-selected .cm-fub-link-pill {
+  color: var(--doc-fg);
+}
+/* Un `^id` lasciato in vista con `elemento` e `riga`: è un indirizzo. */
+.cm-editor .cm-content .cm-fub-block-id {
+  color: var(--doc-gutter-fg);
+  font-size: 0.85em;
+}
+.cm-fub-block-menu [data-danger="true"] {
+  color: var(--doc-danger);
+}
+/* La testata della pagina (H12): icona, copertina e titolo in cima ai
+   Blocchi. Il titolo è il nome del file, nel carattere del testo; gli
+   strumenti parlano con quello dell'interfaccia e si vedono al passaggio. */
+.cm-editor .cm-fub-page-cover {
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+}
+.cm-editor .cm-fub-page-title {
+  color: var(--doc-fg);
+  font-family: var(--font-reading);
+}
+.cm-editor .cm-fub-page-title::placeholder {
+  color: var(--doc-gutter-fg);
+}
+.cm-editor .cm-fub-page-tool {
+  border-radius: var(--radius-control);
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.cm-editor .cm-fub-page-tool:hover,
+.cm-editor .cm-fub-page-icon:hover {
+  background: var(--sheet-2);
+  color: var(--doc-fg);
+}
+/* Il segno della scelta in vigore nel menu «…» della pagina. */
+.cm-fub-block-menu .cm-fub-page-check {
+  display: inline-block;
+  width: 1.4em;
+  color: var(--accent);
+}
+/* Il campione di «Colore» nel menu del blocco: la tinta gliela dà chi lo
+   disegna, coi colori del contenuto. */
+.cm-fub-block-menu .cm-fub-color-swatch {
+  display: inline-block;
+  width: 1.4em;
+  margin-right: var(--space-2);
+  border-radius: 3px;
+  font-weight: var(--weight-bold);
+  text-align: center;
+}
+/* La pagina larga, il testo piccolo e il carattere (H13): le classi che il
+   menu «…» scrive in `cssclasses`, sul riquadro della nota. */
+.fub-note--wide .pane-editor[data-markdown-mode] .cm-content {
+  max-width: none;
+}
+.fub-note--wide .pane-editor[data-markdown-mode] > .pane-preview.markdown-preview {
+  padding-inline: var(--space-9);
+}
+.fub-note--small .markdown-rendered {
+  font-size: var(--text-lg);
+}
+.fub-note--serif .markdown-rendered {
+  font-family: var(--font-reading);
+}
+.fub-note--sans .markdown-rendered {
+  font-family: var(--font-ui);
+}
+.fub-note--mono .markdown-rendered {
+  font-family: var(--font-mono);
+}
+/* La definizione di una nota: l'etichetta e il ↩ verso il rimando. */
+.cm-editor .cm-content .cm-fub-footnote-label {
+  color: var(--doc-gutter-fg);
+}
+.cm-editor .cm-content .cm-fub-footnote-back {
+  color: var(--doc-link);
+}
+/* Il riquadro «Collegamento»: la sintassi che scriverà, e le note che
+   corrispondono a ciò che si scrive. */
+.md-link-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+.md-link-dialog-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.md-link-dialog-note {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.md-link-dialog-note:hover {
+  background: var(--bg-hover);
+}
+.md-link-dialog-note:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+.md-link-dialog-preview {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.md-link-dialog-preview code {
+  font-family: var(--font-mono);
+  color: var(--text);
+}
 /* Il collegamento che non porta da nessuna parte. */
 .markdown-rendered a.unresolved,
 .markdown-rendered a.unresolved:hover {
@@ -303,6 +615,98 @@
   border-radius: 3px;
   background: var(--doc-highlight);
   color: var(--doc-fg);
+}
+/* I nove colori del contenuto (`fub-color-*`, `fub-bg-*`): dopo l'evidenziato,
+   così un `<mark>` colorato prende il suo fondo e il suo inchiostro. */
+.markdown-rendered .fub-color-gray,
+.cm-editor .cm-content .fub-color-gray {
+  color: var(--doc-color-gray);
+}
+.markdown-rendered .fub-color-brown,
+.cm-editor .cm-content .fub-color-brown {
+  color: var(--doc-color-brown);
+}
+.markdown-rendered .fub-color-orange,
+.cm-editor .cm-content .fub-color-orange {
+  color: var(--doc-color-orange);
+}
+.markdown-rendered .fub-color-yellow,
+.cm-editor .cm-content .fub-color-yellow {
+  color: var(--doc-color-yellow);
+}
+.markdown-rendered .fub-color-green,
+.cm-editor .cm-content .fub-color-green {
+  color: var(--doc-color-green);
+}
+.markdown-rendered .fub-color-blue,
+.cm-editor .cm-content .fub-color-blue {
+  color: var(--doc-color-blue);
+}
+.markdown-rendered .fub-color-purple,
+.cm-editor .cm-content .fub-color-purple {
+  color: var(--doc-color-purple);
+}
+.markdown-rendered .fub-color-pink,
+.cm-editor .cm-content .fub-color-pink {
+  color: var(--doc-color-pink);
+}
+.markdown-rendered .fub-color-red,
+.cm-editor .cm-content .fub-color-red {
+  color: var(--doc-color-red);
+}
+.markdown-rendered .fub-bg-gray,
+.markdown-rendered mark.fub-bg-gray,
+.cm-editor .cm-content .fub-bg-gray {
+  border-radius: 3px;
+  background: var(--doc-tint-gray);
+}
+.markdown-rendered .fub-bg-brown,
+.markdown-rendered mark.fub-bg-brown,
+.cm-editor .cm-content .fub-bg-brown {
+  border-radius: 3px;
+  background: var(--doc-tint-brown);
+}
+.markdown-rendered .fub-bg-orange,
+.markdown-rendered mark.fub-bg-orange,
+.cm-editor .cm-content .fub-bg-orange {
+  border-radius: 3px;
+  background: var(--doc-tint-orange);
+}
+.markdown-rendered .fub-bg-yellow,
+.markdown-rendered mark.fub-bg-yellow,
+.cm-editor .cm-content .fub-bg-yellow {
+  border-radius: 3px;
+  background: var(--doc-tint-yellow);
+}
+.markdown-rendered .fub-bg-green,
+.markdown-rendered mark.fub-bg-green,
+.cm-editor .cm-content .fub-bg-green {
+  border-radius: 3px;
+  background: var(--doc-tint-green);
+}
+.markdown-rendered .fub-bg-blue,
+.markdown-rendered mark.fub-bg-blue,
+.cm-editor .cm-content .fub-bg-blue {
+  border-radius: 3px;
+  background: var(--doc-tint-blue);
+}
+.markdown-rendered .fub-bg-purple,
+.markdown-rendered mark.fub-bg-purple,
+.cm-editor .cm-content .fub-bg-purple {
+  border-radius: 3px;
+  background: var(--doc-tint-purple);
+}
+.markdown-rendered .fub-bg-pink,
+.markdown-rendered mark.fub-bg-pink,
+.cm-editor .cm-content .fub-bg-pink {
+  border-radius: 3px;
+  background: var(--doc-tint-pink);
+}
+.markdown-rendered .fub-bg-red,
+.markdown-rendered mark.fub-bg-red,
+.cm-editor .cm-content .fub-bg-red {
+  border-radius: 3px;
+  background: var(--doc-tint-red);
 }
 /* Un commento `%%…%%` si vede solo mentre lo si scrive: a voce bassa. */
 .cm-editor .cm-content .cm-fub-comment {
@@ -375,77 +779,327 @@
   outline-offset: var(--focus-ring-offset);
 }
 .markdown-rendered .callout[data-callout="note"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="note"],
 .markdown-rendered .callout[data-callout="info"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="info"],
 .markdown-rendered .callout[data-callout="abstract"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="abstract"],
 .markdown-rendered .callout[data-callout="summary"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="summary"],
 .markdown-rendered .callout[data-callout="todo"],
-.markdown-rendered .callout[data-callout="tldr"] {
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="todo"],
+.markdown-rendered .callout[data-callout="tldr"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="tldr"] {
   background: var(--info-wash);
 }
 .markdown-rendered .callout[data-callout="note"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="note"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="note"] .cm-fub-callout-title,
 .markdown-rendered .callout[data-callout="info"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="info"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="info"] .cm-fub-callout-title,
 .markdown-rendered .callout[data-callout="abstract"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="abstract"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="abstract"] .cm-fub-callout-title,
 .markdown-rendered .callout[data-callout="summary"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="summary"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="summary"] .cm-fub-callout-title,
 .markdown-rendered .callout[data-callout="todo"] > .callout-title,
-.markdown-rendered .callout[data-callout="tldr"] > .callout-title {
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="todo"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="todo"] .cm-fub-callout-title,
+.markdown-rendered .callout[data-callout="tldr"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="tldr"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="tldr"] .cm-fub-callout-title {
   color: var(--info);
 }
 .markdown-rendered .callout[data-callout="tip"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="tip"],
 .markdown-rendered .callout[data-callout="hint"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="hint"],
 .markdown-rendered .callout[data-callout="success"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="success"],
 .markdown-rendered .callout[data-callout="check"],
-.markdown-rendered .callout[data-callout="done"] {
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="check"],
+.markdown-rendered .callout[data-callout="done"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="done"] {
   background: var(--success-wash);
 }
 .markdown-rendered .callout[data-callout="tip"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="tip"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="tip"] .cm-fub-callout-title,
 .markdown-rendered .callout[data-callout="hint"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="hint"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="hint"] .cm-fub-callout-title,
 .markdown-rendered .callout[data-callout="success"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="success"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="success"] .cm-fub-callout-title,
 .markdown-rendered .callout[data-callout="check"] > .callout-title,
-.markdown-rendered .callout[data-callout="done"] > .callout-title {
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="check"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="check"] .cm-fub-callout-title,
+.markdown-rendered .callout[data-callout="done"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="done"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="done"] .cm-fub-callout-title {
   color: var(--success);
 }
 .markdown-rendered .callout[data-callout="warning"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="warning"],
 .markdown-rendered .callout[data-callout="caution"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="caution"],
 .markdown-rendered .callout[data-callout="attention"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="attention"],
 .markdown-rendered .callout[data-callout="important"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="important"],
 .markdown-rendered .callout[data-callout="question"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="question"],
 .markdown-rendered .callout[data-callout="help"],
-.markdown-rendered .callout[data-callout="faq"] {
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="help"],
+.markdown-rendered .callout[data-callout="faq"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="faq"] {
   background: var(--warning-wash);
 }
 .markdown-rendered .callout[data-callout="warning"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="warning"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="warning"] .cm-fub-callout-title,
 .markdown-rendered .callout[data-callout="caution"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="caution"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="caution"] .cm-fub-callout-title,
 .markdown-rendered .callout[data-callout="attention"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="attention"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="attention"] .cm-fub-callout-title,
 .markdown-rendered .callout[data-callout="important"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="important"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="important"] .cm-fub-callout-title,
 .markdown-rendered .callout[data-callout="question"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="question"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="question"] .cm-fub-callout-title,
 .markdown-rendered .callout[data-callout="help"] > .callout-title,
-.markdown-rendered .callout[data-callout="faq"] > .callout-title {
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="help"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="help"] .cm-fub-callout-title,
+.markdown-rendered .callout[data-callout="faq"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="faq"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="faq"] .cm-fub-callout-title {
   color: var(--warning);
 }
 .markdown-rendered .callout[data-callout="danger"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="danger"],
 .markdown-rendered .callout[data-callout="error"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="error"],
 .markdown-rendered .callout[data-callout="failure"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="failure"],
 .markdown-rendered .callout[data-callout="fail"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="fail"],
 .markdown-rendered .callout[data-callout="bug"],
-.markdown-rendered .callout[data-callout="missing"] {
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="bug"],
+.markdown-rendered .callout[data-callout="missing"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="missing"] {
   background: var(--danger-wash);
 }
 .markdown-rendered .callout[data-callout="danger"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="danger"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="danger"] .cm-fub-callout-title,
 .markdown-rendered .callout[data-callout="error"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="error"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="error"] .cm-fub-callout-title,
 .markdown-rendered .callout[data-callout="failure"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="failure"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="failure"] .cm-fub-callout-title,
 .markdown-rendered .callout[data-callout="fail"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="fail"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="fail"] .cm-fub-callout-title,
 .markdown-rendered .callout[data-callout="bug"] > .callout-title,
-.markdown-rendered .callout[data-callout="missing"] > .callout-title {
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="bug"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="bug"] .cm-fub-callout-title,
+.markdown-rendered .callout[data-callout="missing"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="missing"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="missing"] .cm-fub-callout-title {
   color: var(--danger);
 }
-.markdown-rendered .callout[data-callout="example"] {
+.markdown-rendered .callout[data-callout="example"],
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="example"] {
   background: var(--accent-wash);
 }
-.markdown-rendered .callout[data-callout="example"] > .callout-title {
+.markdown-rendered .callout[data-callout="example"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="example"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="example"] .cm-fub-callout-title {
   color: var(--accent);
 }
 .markdown-rendered .callout[data-callout="quote"] > .callout-title,
-.markdown-rendered .callout[data-callout="cite"] > .callout-title {
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="quote"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="quote"] .cm-fub-callout-title,
+.markdown-rendered .callout[data-callout="cite"] > .callout-title,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="cite"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="cite"] .cm-fub-callout-title {
+  color: var(--doc-gutter-fg);
+}
+
+/* In Live, col cursore dentro, il callout resta un riquadro (D1): le righe
+   hanno il velo del tipo, gli angoli la prima e l'ultima; la testata è la
+   pastiglia del tipo e il titolo. */
+.cm-editor .cm-content .cm-line.cm-fub-callout-line {
+  padding-inline: var(--space-6);
+  background: var(--sheet-2);
+}
+.cm-editor .cm-content :not(.cm-fub-callout-line) + .cm-fub-callout-line,
+.cm-editor .cm-content .cm-fub-callout-line:first-child {
+  padding-top: var(--space-5);
+  border-top-left-radius: var(--radius-control);
+  border-top-right-radius: var(--radius-control);
+}
+.cm-editor .cm-content .cm-fub-callout-line:has(+ :not(.cm-fub-callout-line)),
+.cm-editor .cm-content .cm-fub-callout-line:last-child {
+  padding-bottom: var(--space-5);
+  border-bottom-right-radius: var(--radius-control);
+  border-bottom-left-radius: var(--radius-control);
+}
+.cm-editor .cm-content .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-title {
+  color: var(--doc-heading);
+  font-family: var(--font-ui);
+  font-size: 0.82em;
+  font-weight: var(--weight-bold);
+}
+.cm-editor .cm-content .cm-fub-callout-type {
+  margin-inline-end: var(--space-2);
+  border-radius: var(--radius-xs);
+  background: none;
+  cursor: pointer;
+}
+.cm-editor .cm-content .cm-fub-callout-type:hover,
+.cm-editor .cm-content .cm-fub-callout-type[aria-expanded="true"],
+.cm-editor .cm-content .cm-fub-callout-fold:hover {
+  background: var(--doc-fill-soft);
+}
+.cm-editor .cm-content .cm-fub-callout-fold {
+  color: var(--doc-gutter-fg);
+  background: none;
+  cursor: pointer;
+}
+.cm-editor .cm-content .cm-fub-callout-type:focus-visible,
+.cm-editor .cm-content .cm-fub-callout-fold:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* ── Ripiegabili (K2) ────────────────────────────────────────────────────── */
+.markdown-rendered details.fub-details {
+  margin: 0 0 var(--space-3);
+}
+/* Come in Live: la freccia sta nel margine, il sommario dove comincia il
+   testo, il contenuto rientrato sotto. */
+.markdown-rendered details.fub-details > summary {
+  margin-left: -1.4em;
+  list-style: none;
+  cursor: pointer;
+}
+.markdown-rendered details.fub-details > summary::before {
+  display: inline-block;
+  width: 1.4em;
+  color: var(--doc-gutter-fg);
+  text-align: center;
+  content: "▸";
+}
+.markdown-rendered details.fub-details[open] > summary::before {
+  content: "▾";
+}
+.markdown-rendered details.fub-details > summary:focus-visible {
+  border-radius: var(--radius-xs);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+.markdown-rendered details.fub-details > :not(summary) {
+  margin-left: 1.4em;
+}
+.cm-editor .cm-content .cm-fub-details-arrow {
+  color: var(--doc-gutter-fg);
+  border-radius: var(--radius-xs);
+}
+.cm-editor .cm-content .cm-fub-details-arrow:hover {
+  color: var(--doc-fg);
+  background: var(--doc-fill-soft);
+}
+.cm-editor .cm-content .cm-fub-details-arrow:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.cm-editor .cm-content .cm-fub-details-empty {
+  color: var(--doc-gutter-fg);
+}
+
+/* ── Colonne (K3) ────────────────────────────────────────────────────────── */
+/* Da due a quattro colonne alla pari; un foglio stretto le mette una sotto
+   l'altra, nell'ordine in cui sono scritte. */
+.markdown-rendered .fub-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--space-7);
+  row-gap: var(--space-5);
+  margin: 0 0 calc(var(--text-reading) * var(--leading-relaxed));
+}
+.markdown-rendered .fub-columns[data-columns="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.markdown-rendered .fub-columns[data-columns="4"] {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.markdown-rendered .fub-column > :last-child {
+  margin-bottom: 0;
+}
+@container sheet (max-width: 700px) {
+  .markdown-rendered .fub-columns,
+  .markdown-rendered .fub-columns[data-columns="3"],
+  .markdown-rendered .fub-columns[data-columns="4"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.cm-editor .cm-content .cm-fub-column-label {
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: 0.82em;
+  font-weight: var(--weight-medium);
+}
+
+/* ── Indice (K4) ─────────────────────────────────────────────────────────── */
+/* Un elenco piatto di link ai titoli, ogni voce rientrata del suo livello:
+   si legge come un sommario, non come un elenco puntato. */
+.markdown-rendered .fub-toc {
+  margin: 0 0 calc(var(--text-reading) * var(--leading-relaxed));
+  padding-left: var(--space-5);
+  border-left: 2px solid var(--doc-rule);
+}
+.markdown-rendered .fub-toc ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.markdown-rendered .fub-toc-item {
+  margin: 0;
+}
+.markdown-rendered .fub-toc-item[data-depth="1"] {
+  padding-left: 1.2em;
+}
+.markdown-rendered .fub-toc-item[data-depth="2"] {
+  padding-left: 2.4em;
+}
+.markdown-rendered .fub-toc-item[data-depth="3"] {
+  padding-left: 3.6em;
+}
+.markdown-rendered .fub-toc-item[data-depth="4"] {
+  padding-left: 4.8em;
+}
+.markdown-rendered .fub-toc-item[data-depth="5"] {
+  padding-left: 6em;
+}
+.markdown-rendered .fub-toc-item > a {
+  color: var(--doc-fg);
+  text-decoration: underline;
+  text-decoration-color: var(--doc-rule);
+  text-underline-offset: 0.2em;
+}
+.markdown-rendered .fub-toc-item > a:hover {
+  text-decoration-color: currentColor;
+}
+.markdown-rendered .fub-toc-empty {
+  margin: 0;
   color: var(--doc-gutter-fg);
 }
 
@@ -566,6 +1220,36 @@
   padding-bottom: var(--space-4);
   border-bottom-right-radius: var(--radius-control);
   border-bottom-left-radius: var(--radius-control);
+}
+/* La testata del blocco in Live (C1), al posto del recinto d'apertura: la
+   lingua a sinistra, «A capo» e «Copia» a destra, nei toni del margine. */
+.cm-editor .cm-content .cm-fub-code-header button {
+  font-family: var(--font-ui);
+  color: var(--doc-gutter-fg);
+}
+.cm-editor .cm-content .cm-fub-code-header button:hover,
+.cm-editor .cm-content .cm-fub-code-lang[aria-expanded="true"],
+.cm-editor .cm-content .cm-fub-code-wrap[aria-pressed="false"] {
+  color: var(--doc-fg);
+  background: var(--doc-fill-soft);
+}
+.cm-editor .cm-content .cm-fub-code-header button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+/* L'avviso sotto il diagramma che si scrive: l'ultima resa buona resta. */
+.cm-editor .cm-content .cm-fub-diagram-notice {
+  color: var(--doc-danger);
+  font-family: var(--font-ui);
+}
+/* Il riquadro della formula (C6): il TeX in carattere fisso, e sotto la resa. */
+.cm-fub-math-field {
+  font-family: var(--font-mono);
+}
+.cm-fub-math-popover-preview {
+  padding: var(--space-3) var(--space-4);
+  text-align: center;
+  color: var(--doc-fg);
 }
 /* Il bottone copia vive dentro il `pre` senza spostare il codice: in un
    angolo, fuori dalla selezione del testo. Resta nascosto finché il blocco non
@@ -718,6 +1402,60 @@
   max-width: 100%;
   height: auto;
   border-radius: var(--radius-control);
+}
+/* Un'immagine da sola nel paragrafo è una figura (K10): la didascalia è il
+   suo testo alternativo, piccola e quieta sotto di lei, in Lettura come in
+   Live. */
+.markdown-rendered figure:not(.mermaid-diagram),
+.cm-editor .cm-content .cm-fub-image figure {
+  margin: var(--space-4) 0;
+}
+.markdown-rendered figure:not(.mermaid-diagram) > figcaption,
+.cm-editor .cm-content .cm-fub-image figcaption {
+  margin-top: var(--space-2);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  text-align: center;
+}
+/* L'immagine selezionata in Live (D8): il contorno d'accento e, sul bordo
+   destro, la maniglia della larghezza (D9) con la misura mentre la si tira. */
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected img:not([hidden]),
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected .embed,
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected .image-missing {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* La selezione del testo non si stende sotto l'immagine scelta: il contorno
+   dice già che è presa, come in Word. */
+.cm-editor .cm-content .cm-fub-image.cm-fub-image-selected {
+  background: var(--doc-bg);
+}
+.cm-editor .cm-content .cm-fub-image-handle {
+  border: 2px solid var(--doc-bg);
+  border-radius: var(--radius-chip);
+  background: var(--accent);
+}
+.cm-editor .cm-content .cm-fub-image-size {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-chip);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+}
+/* Il riquadro «Immagine»: i campi in colonna, le quote della pagina in fila. */
+.cm-fub-image-dialog {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  min-width: 18rem;
+}
+.cm-fub-image-shares {
+  display: flex;
+  gap: var(--space-2);
 }
 /* L'immagine che non si vede: il suo testo alternativo e il path, dove sarebbe
    stata, invece dell'icona rotta del browser. */
@@ -974,20 +1712,25 @@
   font-size: 1em;
   line-height: inherit;
 }
-[data-markdown-mode="live_preview"] .cm-content .cm-line.cm-fub-frontmatter {
+[data-markdown-mode="live_preview"] .cm-content .cm-line.cm-fub-frontmatter,
+[data-markdown-mode="blocks"] .cm-content .cm-line.cm-fub-frontmatter {
   padding-inline: var(--space-5);
   background: var(--sheet-2);
   font-size: var(--text-sm);
   line-height: var(--leading-relaxed);
 }
 [data-markdown-mode="live_preview"] .cm-content .cm-fub-frontmatter:first-child,
-[data-markdown-mode="live_preview"] .cm-content :not(.cm-fub-frontmatter) + .cm-fub-frontmatter {
+[data-markdown-mode="blocks"] .cm-content .cm-fub-frontmatter:first-child,
+[data-markdown-mode="live_preview"] .cm-content :not(.cm-fub-frontmatter) + .cm-fub-frontmatter,
+[data-markdown-mode="blocks"] .cm-content :not(.cm-fub-frontmatter) + .cm-fub-frontmatter {
   padding-top: var(--space-4);
   border-top-left-radius: var(--radius-control);
   border-top-right-radius: var(--radius-control);
 }
 [data-markdown-mode="live_preview"] .cm-content .cm-fub-frontmatter:has(+ :not(.cm-fub-frontmatter)),
-[data-markdown-mode="live_preview"] .cm-content .cm-fub-frontmatter:last-child {
+[data-markdown-mode="blocks"] .cm-content .cm-fub-frontmatter:has(+ :not(.cm-fub-frontmatter)),
+[data-markdown-mode="live_preview"] .cm-content .cm-fub-frontmatter:last-child,
+[data-markdown-mode="blocks"] .cm-content .cm-fub-frontmatter:last-child {
   padding-bottom: var(--space-4);
   border-bottom-right-radius: var(--radius-control);
   border-bottom-left-radius: var(--radius-control);
