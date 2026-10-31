@@ -87,7 +87,7 @@ if (process.argv.includes("--autoprova")) {
 }
 
 const files = [
-  ...["README.md", "AGENTS.md", "CONTRIBUTING.md", "SECURITY.md", "CODE_OF_CONDUCT.md", "CHANGELOG.md"]
+  ...["README.md", "CLAUDE.md", "CONTRIBUTING.md", "SECURITY.md", "CODE_OF_CONDUCT.md", "CHANGELOG.md"]
     .map((file) => path.join(root, file))
     .filter(fs.existsSync),
   ...walk(path.join(root, "docs")).filter((file) => file.endsWith(".md")),

@@ -16,7 +16,7 @@ Devi implementare SOLO `TASK_ID`.
 ## Prima di modificare
 
 1. verifica repository, branch e `BASE_SHA`;
-2. leggi `AGENTS.md`;
+2. leggi `CLAUDE.md`;
 3. leggi `CONTRIBUTING.md`;
 4. leggi le sezioni pertinenti del TODO canonico;
 5. leggi `.github/agent-tasks/shared-editing-surfaces/GLOBAL-RULES.md`;
