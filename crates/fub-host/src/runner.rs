@@ -52,7 +52,7 @@ use std::time::{Duration, Instant};
 use fub_abi::event::{Actor, Event, Origin};
 use fub_abi::traits::{JobId, JobProgress, JobSpec, TimerSchedule};
 use fub_abi::{Notice, PluginError};
-use fub_kernel::{EventBus, Indexing, JobBell, PendingJob, Workspace};
+use fub_kernel::{EventBus, IndexBatchStep, Indexing, JobBell, PendingJob, Workspace};
 use jiff::Timestamp;
 
 use crate::wall::{verdict, Position, Zone};
@@ -170,6 +170,11 @@ impl Flags {
 /// Sotto questo lock non gira mai codice di nessuno — ci si scrive un id e si
 /// esce — quindi avvelenarlo vuol dire che è panicato il runner stesso, e
 /// continuare vorrebbe dire spegnere un componente mentre un suo job è dentro.
+/// Al più quanto una fetta dell'indicizzazione aspetta, fra due prese, che
+/// chi è in fila sul workspace entri: un lettore entra in microsecondi, e il
+/// tetto c'è perché una fila che non si svuota non fermi l'apertura.
+pub(crate) const MAKE_WAY: std::time::Duration = std::time::Duration::from_millis(50);
+
 const POISONED: &str = "il conto dei job in volo è avvelenato";
 
 /// Come si dice a un job che non parte, e perché.
@@ -718,14 +723,31 @@ impl Shared {
                 ws.prepare_index_batch_parse(checked)
             }
             .invoke(&mut in_progress.work);
-            // Il turno serializza le mutazioni dell'apertura con le altre scritture,
-            // ma non è il `RwLock<Workspace>`: durante il codice del provider i
-            // lettori devono poter entrare. È la stessa forma di `write_document`:
-            // prepare/commit sotto lock, callback fuori lock, finalize sotto lock.
-            let _turn = self.workspace.write_turn();
-            let pending = {
-                let mut ws = self.workspace.write()?;
-                ws.commit_index_batch_prepared(parsed)
+            // Il core prende la fetta a prese brevi (`INDEX_WRITE_BUDGET`): fra
+            // una e l'altra il workspace è di chi aspetta, chi apre una nota o
+            // chi salva, e la presa dopo rifà il confronto delle impronte.
+            //
+            // L'ultima presa tiene il turno fino al finalize. Il turno
+            // serializza le mutazioni dell'apertura con le altre scritture, ma
+            // non è il `RwLock<Workspace>`: durante il codice del provider i
+            // lettori devono poter entrare. È la stessa forma di
+            // `write_document`: prepare/commit sotto lock, callback fuori lock,
+            // finalize sotto lock.
+            let mut parsed = parsed;
+            let (_turn, pending) = loop {
+                let turn = self.workspace.write_turn();
+                let step = {
+                    let mut ws = self.workspace.write()?;
+                    ws.commit_index_batch_within(parsed, fub_kernel::INDEX_WRITE_BUDGET)
+                };
+                match step {
+                    IndexBatchStep::Done(pending) => break (turn, pending),
+                    IndexBatchStep::More(rest) => {
+                        parsed = rest;
+                        drop(turn);
+                        self.workspace.make_way(MAKE_WAY);
+                    }
+                }
             };
             let pending = pending.map(|pending| pending.invoke_indexes());
             with_event_drain(&self.workspace, |ws| {
