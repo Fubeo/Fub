@@ -1,5 +1,5 @@
-// Gli scenari di N0, S7 di N13, la memoria (R1) e le tessere (T1) di K0,
-// nella WebView vera, guidati da WebDriver.
+// Gli scenari di N0, S7 di N13, la memoria (R1), le tessere (T1) e
+// l'indicizzazione (I1) di K0, nella WebView vera, guidati da WebDriver.
 //
 //   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3]
 //        [--driver=tauri-driver] [--native-driver=/usr/bin/WebKitWebDriver]
@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
 import { noteName, writeFixtures } from "./fixtures.mjs";
 import { settled } from "./memory.mjs";
+import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -32,7 +33,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
-const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,R1,T1").split(","));
+const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,R1,T1,I1").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
 const port = Number(args.port ?? 4444);
@@ -384,6 +385,24 @@ const SCENARIOS = {
       samples: report.ipcTile?.count ?? report.drawTile?.put.count ?? 0,
     };
   },
+  /// Il vault durante l'indicizzazione dell'avvio: una nota aperta e una
+  /// tessera letta dopo l'altra, finché l'indice non è pronto
+  /// (`indexing.mjs`).
+  async I1(session) {
+    const report = await session.executeAsync(INDEXING_SCRIPT, ["T1/Tessere.png", 120_000]);
+    if (report.errors.run) throw new Error(report.errors.run);
+    // Un avvio che trova l'indice già pronto non misura niente: lo dice, e
+    // la soglia non passa con zero campioni.
+    if (!report.indexingAtStart) throw new Error("l'indice era già pronto all'avvio");
+    return {
+      report,
+      values: {
+        "I1.nota.p95": report.open?.p95 ?? null,
+        "I1.tessera.p95": report.tile?.p95 ?? null,
+      },
+      samples: report.open?.count ?? 0,
+    };
+  },
   /// Avvio a freddo fino alla prima nota visibile: l'app riapre la nota che
   /// S1 ha lasciato aperta.
   async S6(session) {
@@ -446,7 +465,7 @@ async function main() {
     // R1 subito dopo il riscaldamento: l'avvio riapre soltanto la nota del
     // riscaldamento, non le schede degli altri scenari. S6 dopo S1: l'avvio
     // da misurare riapre la nota che S1 ha lasciato.
-    const order = ["R1", "S1", "S6", "S2", "S3", "S4", "S5", "S7", "T1"].filter((id) => only.has(id));
+    const order = ["R1", "S1", "S6", "S2", "S3", "S4", "S5", "S7", "T1", "I1"].filter((id) => only.has(id));
     for (const id of order) {
       const session = await openSession(base, app);
       try {

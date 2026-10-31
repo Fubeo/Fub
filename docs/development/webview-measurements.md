@@ -41,6 +41,7 @@ ascolta niente e non chiede fotogrammi.
 | S7 | Blocchi su una nota di 2.000 righe: un blocco trascinato su e giù per 3 s, poi dieci trasformazioni da paragrafo a titolo e ritorno | p95 e massimo fra fotogrammi |
 | R1 | la memoria: l'app vuota, aprendo un file per modalità (nota, lavagna, disegno, documento Word, foglio Excel, PDF, immagine), dopo «chiudi tutto» e un minuto dopo | PSS in MiB, in tutto e per processo (app, WebView), soltanto Linux |
 | T1 | le tessere: un fotogramma di 2880 × 1800 RGBA letto a tessere di 256 × 256 dalla IPC (`resource_read_chunk`) e da `fub-asset:` con `Range`, poi disegnato su una tela, una tessera e un fotogramma intero per fotogramma | p95 per tessera, mediana per fotogramma, ms |
+| I1 | il vault durante l'indicizzazione dell'avvio (10.000 note): una nota aperta con `read_document` e una tessera letta dalla IPC, una dopo l'altra, finché `vault_status` non dice che l'indice è pronto | p95 per nota e per tessera, ms |
 
 R1 legge `/proc/<pid>/smaps_rollup` dei processi che discendono dal driver,
 tolti i driver (`memory.mjs`): la PSS divide le pagine condivise fra chi le
@@ -72,6 +73,11 @@ T1 è la prima delle tre vie del piano dei componenti per la tela dei motori
 e il disegno senza motore (`tiles.mjs`). Il tempo del motore per un fotogramma
 sta nelle prove di `tools/motori-prova`. Le chiamate passano da
 `__TAURI_INTERNALS__`, come fa `@tauri-apps/api`.
+
+I1 controlla che l'indicizzazione non fermi il vault (`indexing.mjs`): ogni
+avvio sul vault del banco indicizza le diecimila note, e i comandi che passano
+dal workspace non devono aspettare la fine di una fetta. Lo scenario fallisce
+se l'indice era già pronto all'avvio, perché allora non ha misurato niente.
 
 Le fixture nascono in una cartella temporanea
 (`apps/client/bench/webview/fixtures.mjs`); il vault vero di chi misura non
@@ -121,7 +127,7 @@ in più vanno a `run.mjs`, per esempio `--only=R1,T1`.
 Il referto va in `apps/client/bench/.output/webview/referto.json`. Il comando
 esce con 1 se un valore supera la soglia scelta.
 
-Il job `webview` della CI fa lo stesso con S1–S3, S7, R1 e T1, sotto Xvfb e
+Il job `webview` della CI fa lo stesso con S1–S3, S7, R1, T1 e I1, sotto Xvfb e
 senza scheda grafica, e carica il referto come artifact `webview-<sha>`.
 
 ## macOS
