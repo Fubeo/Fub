@@ -540,17 +540,19 @@ jobs:
     # runner senza scheda grafica i numeri non sono assoluti: la sezione `ci`
     # di `bench/webview/budgets.json` è una soglia di peggioramento. La memoria
     # (R1, dieci giri per tre campioni) da sola vale più di tutto il resto:
-    # gira in un job suo, accanto agli altri scenari.
+    # gira in un job suo, con I1, accanto agli altri scenari.
     name: la WebView vera (WebKitGTK, ${{ matrix.parte }})
     strategy:
       fail-fast: false
       matrix:
         include:
-          - parte: S1–S3, S7, T1, I1
-            scenari: S1,S2,S3,S7,T1,I1
+          - parte: S1–S3, S7, T1
+            scenari: S1,S2,S3,S7,T1
             referto: tempi
-          - parte: R1
-            scenari: R1
+          # I1 dopo R1, come nel banco intero: subito dopo il riscaldamento
+          # l'avvio trova l'indice già pronto e I1 non misura niente.
+          - parte: R1, I1
+            scenari: R1,I1
             referto: memoria
     runs-on: ubuntu-24.04
     steps:
