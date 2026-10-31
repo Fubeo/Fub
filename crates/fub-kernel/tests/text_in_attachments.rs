@@ -1,6 +1,6 @@
 //! Il tragitto di un documento che **non è testo**, dalla scansione all'indice.
 //!
-//! La [§21.8](../../../docs/project/roadmap.md) chiedeva «il
+//! La §21.8 della vecchia roadmap chiedeva «il
 //! testo che sta dentro gli allegati», e nominava due blocchi che nel frattempo
 //! erano caduti: `Vault::list_documents` (via con la
 //! [0046](../../../docs/decisions/0188-identita-path-e-rename.md)) e

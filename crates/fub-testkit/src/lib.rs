@@ -466,7 +466,7 @@ impl EventHandler for Spy {
 /// invece di elencarli a mano — un `ogni_view_ufficiale()`. Il posto naturale è
 /// questo modulo, e non c'è: costruirlo qui vorrebbe dire mettere
 /// `fub-features` fra le dipendenze di questo crate, che è una decisione della
-/// [seduta 16](../../../docs/project/roadmap.md) e non di
+/// seduta 16 della vecchia roadmap e non di
 /// questa. La nota resta perché il posto sia già nominato quando quella voce si
 /// aprirà.
 #[doc(hidden)]
