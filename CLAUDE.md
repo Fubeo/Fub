@@ -20,8 +20,9 @@ asking.
 Fub is a local-first writing workspace: it opens vaults of Markdown files without
 converting them. The core is a Rust workspace (`crates/`). The client is Tauri v2
 plus Vite/TypeScript (`apps/client/`). Markdown is the first `FormatProvider`,
-not a format built into the kernel. The code, comments and docs are written in
-**English**; the user interface and commit messages stay in Italian.
+not a format built into the kernel. Rust comments and the documentation in
+`docs/` are written in **Italian**, like the user interface and the commit
+messages. This file and the agent files under `.claude/` are in English.
 
 Toolchain: Rust 1.95, Node.js >=22.12.0 with **npm only** (`npm ci`, never
 `npm install` during setup: it rewrites the lockfile). Tauri CLI v2. The
@@ -44,12 +45,14 @@ was needed or an unverified architectural change.
 ## Working with the maintainer
 
 - Never work on `main` directly: each change gets its own branch and a PR
-  against `main`. Pushing your branch and opening the PR are part of the work.
+  against `main`. Pushing your branch and opening the PR are part of the work
+  (in the plan workflow, only the orchestrator does it).
   **Merging a PR needs the maintainer's explicit OK.** If `gh` isn't
   authenticated, ask.
 - No subagents, workflows or parallel sessions unless the maintainer allows them
-  for that task; then they are read-only.
-- Work only inside the repository (and `piani/`, see below). Don't install
+  for that task; then they are read-only. The one standing exception is the
+  plan workflow below, whose coders write in their own worktrees.
+- Work only inside the repository. Don't install
   system packages or change system settings: give the exact command and why it
   is needed.
 - Tests and probes never use the maintainer's real vault or files: use the bench
@@ -59,10 +62,10 @@ was needed or an unverified architectural change.
   not yours. Keep an eye on disk space.
 - Never send personal data (an email address, a token) to an external service,
   not even in a header.
-- **Plans.** When the maintainer gives a plan, follow it to the letter and
-  re-read it at the start of every session. When the plan and the code
-  disagree, the code wins: write the difference down. Work status, open
-  questions and the differences go in `piani/STATO.md`. `piani/` is untracked.
+- **Plans.** A plan is `PLAN.md` on its plan branch (see "Plan workflow").
+  Follow it to the letter and re-read it at the start of every session. When
+  the plan and the code disagree, the code wins: write the difference down.
+  Status lives in the plan's `Stato:` lines, decisions in `DECISIONS.md`.
 - **Final report** in Italian, readable on its own: the behaviour obtained,
   where it lives (paths, branch, PR), the checks run, the checks not run and
   why, real residual risks, and the next command if there is one. Don't present
@@ -122,7 +125,41 @@ when it can change the diagnosis. Don't repeat unchanged reads or commands for
 reassurance. Stop exploring when the evidence is enough for a concrete next
 step, and resume as soon as a material doubt appears.
 
+## Plan workflow
+
+Larger work goes through three roles and one file.
+
+| Role | Model, effort | Does |
+|---|---|---|
+| planner, `/pianifica` | Opus, xhigh, its own session | thinks, asks, prototypes graphic work, writes and pushes `PLAN.md` |
+| orchestrator, `/orchestra` | Opus, high, its own session | runs 2-3 coders, reviews, integrates, pushes, asks the maintainer |
+| coder, `.claude/agents/coder.md` | Opus, medium, subagent | one task in its own worktree, closes on `scripts/check.sh --rapido` |
+
+- `PLAN.md` (and `PLAN-ui/` for the prototype) on the branch `piano/<slug>` is
+  the only hand-off. A message between the planner and the orchestrator
+  sessions only points at a pushed commit of it; the file is what counts.
+- `DECISIONS.md` says what the orchestrator decides alone and what it asks, and
+  logs the choices made during the work for the next plan.
+- Coders never push, open PRs, touch CI or start agents. Only the orchestrator
+  pushes, once per integrated task, to a draft PR, and waits for CI in the
+  background.
+- A new session, or `/clear`, for each plan. Start the orchestrator with a
+  lower compaction threshold, for example
+  `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=60 claude`, and compact at natural pauses:
+  the state is in `PLAN.md` and git.
+
 ## Commands
+
+The local loop, the same checks as CI:
+
+```bash
+scripts/check.sh --rapido     # what the diff touches, and every crate that uses it
+scripts/check.sh              # everything CI runs on Linux, benches excluded
+scripts/check.sh --banchi     # plus the frontend benches
+```
+
+One line per step, full logs in `target/check/`. A `SALTA` line is a check
+that couldn't run on this machine: it is not a proof, and the report says so.
 
 From the repo root (Rust):
 
@@ -178,6 +215,9 @@ The checks are in `.github/workflows/ci.yml` (plus `npm-supply-chain.yml`).
 
 - A push runs CI only on `main`. A PR runs it once per push, and a newer push
   cancels the older run.
+- A **draft** PR gets the short CI: Linux only, no benches. Marking it ready
+  runs the full CI, Windows and macOS included; the frontend benches run on a
+  ready PR only when `apps/client/` changed. `main` always runs everything.
 - `rust-cache` saves only from `main`, because the repository has a 10 GB cache
   budget and PR caches used to evict `main`'s. Jobs that can reuse the Linux
   test cache read it with `shared-key: test` and don't save their own.
@@ -217,14 +257,14 @@ convenient layer.
   early and serialize contract shapes; no duplicated business logic.
 - `fub-wasm-host`: the only crate that names `wasmtime`. It runs third-party
   components with the same traits as native providers.
-- Format providers: `fub-format-markdown` (Markdown semantics), `-sheet`,
-  `-canvas` and `-base`. `fub-features` holds the official features, each
+- Format providers: `fub-format-markdown` (Markdown semantics), `-rich`,
+  `-xlsx`, `-svg`, `-canvas` and `-base`. `fub-features` holds the official features, each
   behind its own Cargo feature and not allowed to import the others: a feature
   turned off never makes another one mandatory. CI builds it with
   `--no-default-features`.
 - `fub-sdk`: the author API plus the `MemoryHost` test bench. `fub-testkit`:
   host/kernel integration fixtures, used only as a dev-dependency.
-- `examples/*-wasm` and `tools/gate-wasm` are deliberately **excluded** from the
+- `esempi/*-wasm` and `tools/varco-wasm` are deliberately **excluded** from the
   workspace because they target wasm. `fub-wasm-host` tests build the examples
   from source.
 
@@ -393,73 +433,13 @@ Keep the taxonomy and the style of
 - no archives, implementation logs or permanent future specs in the canonical
   pages.
 
-## Looking at the UI in a headless browser
+## Looking at the UI
 
-Check a UI change by looking at it, not only by reading the DOM. The bench
-(`apps/client/bench/`) runs the real shell in Playwright's pinned Chromium.
-`vite.bench.config.ts` swaps only the seam: `host/ipc.ts` becomes
-`bench/fake-ipc.ts` and `host/dialog.ts` becomes `bench/fake-dialog.ts`. No
-file in `src/` knows the bench exists, so keep it that way.
-
-- `bench/stage.mjs` exports the harness: `openStage()` starts Vite on port 1431
-  and the browser; `openPage(browser, light)` fixes viewport (1280×800),
-  locale, time zone, reduced motion and clock; `prepareScene(page, scene,
-  light, base, sceneUrl)` waits for `document.documentElement.dataset.bench ===
-  "ready"` and the fonts. The scenes are in `bench/scene.mjs`, the light comes
-  from `?light=dark|light`.
-- `window.bench` drives the fake host from outside with `emit`,
-  `fault(port, reason)`, `throttle(port)` and `calls`, for error, pending and
-  event states. The fake `setSetting` writes the value before a `fault` rejects
-  the call.
-- Output goes to `bench/.output/`: `attuale/` (latest photos), `differenze/`
-  (diffs), `foglio-di-contatto.html` (contact sheet) and
-  `accessibilita/accessibilita.json` (a11y `failures` and `incompletes` per
-  scene).
-- `openPage` freezes the clock, so CodeMirror's `interactionDelay` never passes
-  and Enter can't accept a completion: pass `{ clock: false }` for that.
-- Don't edit files under `apps/client` while a bench runs: Vite reloads the
-  page and the bench dies.
-
-Probes:
-
-- Put a temporary probe in `apps/client/bench/` as a dotfile, for example
-  `bench/.probe-x.mjs`, so bare imports of `vite` and `playwright` resolve.
-  Delete it when you are done and never commit it.
-- Write screenshots to a scratch directory, never into the repo. Open the PNGs
-  and look at them: both lights, a narrow width (for example 700×800), scrolled
-  states, empty and error states, and focus.
-- If a state needs data the fixture lacks, extend `bench/fake-ipc.ts`
-  temporarily, then restore it byte for byte (`git diff --quiet
-  bench/fake-ipc.ts`). Don't wrap the fixture in a second Vite config: that
-  broke startup with a `metadata` error.
-
-Pitfalls:
-
-- **Rejected skin.** The skin goes through the theme CSS sanitizer
-  (`src/ui/sanitize-css.ts`). If one rule is rejected, the **whole page renders
-  unstyled**; `src/theme/gate.test.ts` catches this. The house series is
-  **`theme-2`** (`src/theme/scrittoio/`), whose vocabulary admits `minmax()`,
-  `row-gap`, `oklch()` and `color-mix()`. A `theme-1` theme (and any CSS
-  snippet) gets the narrow profile, where `minmax()`, `scroll-margin-top` and
-  `row-gap` are rejected. After editing `src/theme/scrittoio/skin/*.css`, run
-  `npm run theme:generate && npm run theme:verify` and `npx vitest run
-  src/theme/scrittoio`, and add every new class to the hooks of that piece in
-  `src/theme/scrittoio/anatomia/`.
-- **a11y bench.** It treats `button`, `summary` and the roles `checkbox`,
-  `radio` and `switch` as commands: Enter **and** Space must each produce
-  exactly one click, so a native checkbox with `role="switch"` needs an Enter
-  handler. axe counts a label clipped by a scroll container as not visible:
-  name controls with an explicit `label[for]` (it can be `.sr-only`), not with
-  `aria-labelledby` pointing at a label that may scroll away. A part styled for
-  a dark overlay scopes its colours under the overlay's class, because the
-  catalog scene renders it alone.
-- **Visual baselines.** Never rewrite `bench/baseline/` locally. Take the
-  images from the runner's `banco-visivo` artifact after the push. How much a
-  local `bench:verify` diff can be trusted depends on the machine (see
-  `CLAUDE_DEVICE.md`).
-- **Flaky timing tests.** Under a full Vitest run on a loaded machine, a timing
-  test such as `src/redraw.test.ts` can hit its timeout at a clean HEAD too.
-  Run it alone to confirm.
+Check a UI change by looking at it, not only by reading the DOM: both lights,
+a narrow width, empty and error states, focus. How to drive the bench, write
+probes and avoid its pitfalls (a rejected skin unstyles the whole app, the a11y
+bench rules, visual baselines that come only from the runner) is in the
+`banco` skill, [`.claude/skills/banco/SKILL.md`](.claude/skills/banco/SKILL.md).
 
 ## Commits, PRs and Git
 
