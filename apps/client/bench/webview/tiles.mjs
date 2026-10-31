@@ -80,21 +80,58 @@ const frame = () => new Promise((r) => requestAnimationFrame(r));
     out.len = len;
     const tileBytes = TILE * TILE * 4;
     const at = (i) => (i * 7919 * CHUNK) % Math.max(1, len - tileBytes);
-    // 1. La IPC: una tessera è quattro pezzi, uno dopo l'altro.
-    const ipc = [];
-    for (let i = 0; i < rounds; i++) {
-      const t0 = performance.now();
-      let got = 0;
-      for (let off = at(i); got < tileBytes; ) {
-        const bytes = await internals.invoke("resource_read_chunk", { handle, offset: off, len: CHUNK });
-        const n = bytes.byteLength ?? bytes.length ?? 0;
-        if (n === 0) throw new Error("resource_read_chunk: nessun byte");
-        got += n;
-        off += n;
+    // 1. La IPC: una tessera è quattro pezzi, uno dopo l'altro. Due giri:
+    // subito dopo l'avvio, mentre l'app può ancora indicizzare il vault, e
+    // dopo che l'indice ha finito. Fra una tessera e l'altra un comando che
+    // non tocca il vault (\`plugin:app|version\`, anche lui sul thread
+    // principale) dice se l'attesa è della coda della IPC o del vault.
+    const indexing = async () => {
+      try {
+        const r = await internals.invoke("query_index", { query: { kind: "vault_status" }, vault: null });
+        return JSON.stringify(r).includes('"indexing":"running"');
+      } catch {
+        return null;
       }
-      ipc.push(performance.now() - t0);
-    }
-    out.ipcTile = stats(ipc);
+    };
+    const tiles = async () => {
+      const ipc = [], ping = [], raw = [];
+      for (let i = 0; i < rounds; i++) {
+        let t0 = performance.now();
+        try {
+          await internals.invoke("plugin:app|version");
+          ping.push(performance.now() - t0);
+        } catch (error) {
+          out.errors.ping = String(error?.message ?? error);
+        }
+        t0 = performance.now();
+        let got = 0;
+        for (let off = at(i); got < tileBytes; ) {
+          const bytes = await internals.invoke("resource_read_chunk", { handle, offset: off, len: CHUNK });
+          const n = bytes.byteLength ?? bytes.length ?? 0;
+          if (n === 0) throw new Error("resource_read_chunk: nessun byte");
+          got += n;
+          off += n;
+        }
+        const ms = performance.now() - t0;
+        ipc.push(ms);
+        raw.push([Math.round(t0 - began), Math.round(ms), Math.round(ping.at(-1) ?? -1)]);
+      }
+      return { tile: stats(ipc), ping: stats(ping), raw };
+    };
+    const began = performance.now();
+    out.indexingAtStart = await indexing();
+    const cold = await tiles();
+    out.ipcTile = cold.tile;
+    out.ipcPing = cold.ping;
+    out.ipcRaw = cold.raw;
+    // Il secondo giro aspetta l'indice, al più due minuti.
+    const waitFrom = performance.now();
+    while ((await indexing()) === true && performance.now() - waitFrom < 120000) await new Promise((r) => setTimeout(r, 500));
+    out.indexWaitMs = Math.round(performance.now() - waitFrom);
+    const settled = await tiles();
+    out.ipcTileSettled = settled.tile;
+    out.ipcPingSettled = settled.ping;
+    out.ipcRawSettled = settled.raw;
   } catch (error) {
     out.errors.ipc = String(error?.message ?? error);
   }

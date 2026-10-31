@@ -232,8 +232,11 @@ const SCENARIOS = {
     await session.click(".pane.focus .cm-content");
     await chord2(session, CTRL, SHIFT, "b");
     await session.waitFor("return !!document.querySelector('.pane.focus .cm-fub-block-handles')", [], 30_000);
-    // La maniglia compare sul blocco sotto il puntatore: la riga a metà vista.
-    const line = await session.execute("const lines = [...document.querySelectorAll('.pane.focus .cm-content > .cm-line')].filter((l) => l.textContent.startsWith('Blocco')); const r = lines[Math.floor(lines.length / 2)]?.getBoundingClientRect(); return r ? { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } : null;");
+    // La maniglia compare sul blocco sotto il puntatore: la riga più vicina
+    // al centro della finestra fra quelle che si vedono intere. CodeMirror
+    // disegna anche righe fuori vista, e un puntatore mandato lì è «move
+    // target out of bounds».
+    const line = await session.execute("const mid = innerHeight / 2; const seen = [...document.querySelectorAll('.pane.focus .cm-content > .cm-line')].filter((l) => l.textContent.startsWith('Blocco')).map((l) => l.getBoundingClientRect()).filter((r) => r.top >= 0 && r.bottom <= innerHeight && r.left + 40 < innerWidth); seen.sort((a, b) => Math.abs(a.top - mid) - Math.abs(b.top - mid)); const r = seen[0]; return r ? { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } : null;");
     if (!line) throw new Error("nessuna riga di blocco in vista");
     await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [{ type: "pointerMove", x: line.x, y: line.y, duration: 0, origin: "viewport" }] }]);
     // La maniglia sta sul blocco sotto il puntatore, o su quello del cursore
@@ -249,18 +252,22 @@ const SCENARIOS = {
       throw new Error(`${error.message} — ${seen}`);
     }
     const grip = await centerOf(session, ".pane.focus .cm-fub-block-grip");
+    const height = await session.execute("return innerHeight;");
+    if (!grip || grip.y < 0 || grip.y > height) throw new Error(`la maniglia è fuori dalla finestra: ${JSON.stringify(grip)}`);
+    // Su e giù di 160 px, o meno se la maniglia è vicina a un bordo.
+    const swing = Math.max(0, Math.min(160, grip.y - 4, height - 4 - grip.y));
     await start(session);
     const steps = Math.round(3_000 / 16);
     const actions = [{ type: "pointerMove", x: grip.x, y: grip.y, duration: 0, origin: "viewport" }, { type: "pointerDown", button: 0 }];
     for (let i = 1; i <= steps; i++) {
-      actions.push({ type: "pointerMove", x: grip.x, y: Math.round(grip.y + 160 * Math.sin((i / steps) * Math.PI * 2)), duration: 16, origin: "viewport" });
+      actions.push({ type: "pointerMove", x: grip.x, y: Math.round(grip.y + swing * Math.sin((i / steps) * Math.PI * 2)), duration: 16, origin: "viewport" });
     }
     actions.push({ type: "pointerUp", button: 0 });
     await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions }]);
     await session.releaseActions();
     await pause(500);
     // Il cursore su un paragrafo in vista, non su una riga vuota.
-    const text = await session.execute("const l = [...document.querySelectorAll('.pane.focus .cm-content > .cm-line')].find((l) => / un paragrafo /.test(l.textContent) && l.getBoundingClientRect().top > 100); const r = l?.getBoundingClientRect(); return r ? { x: Math.round(r.right - 8), y: Math.round(r.top + r.height / 2) } : null;");
+    const text = await session.execute("const l = [...document.querySelectorAll('.pane.focus .cm-content > .cm-line')].find((l) => { const r = l.getBoundingClientRect(); return / un paragrafo /.test(l.textContent) && r.top > 100 && r.bottom < innerHeight; }); const r = l?.getBoundingClientRect(); return r ? { x: Math.round(Math.min(r.right - 8, innerWidth - 8)), y: Math.round(r.top + r.height / 2) } : null;");
     if (!text) throw new Error("nessun paragrafo in vista");
     await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
       { type: "pointerMove", x: text.x, y: text.y, duration: 0, origin: "viewport" }, { type: "pointerDown", button: 0 }, { type: "pointerUp", button: 0 },
@@ -327,6 +334,9 @@ const SCENARIOS = {
       report,
       values: {
         "T1.ipc.tessera.p95": report.ipcTile?.p95 ?? null,
+        "T1.ipc.ping.p95": report.ipcPing?.p95 ?? null,
+        "T1.ipc.tessera.riposo.p95": report.ipcTileSettled?.p95 ?? null,
+        "T1.ipc.ping.riposo.p95": report.ipcPingSettled?.p95 ?? null,
         "T1.asset.tessera.p95": report.assetTile?.p95 ?? null,
         "T1.asset.fotogramma.p50": report.assetFrame?.p50 ?? null,
         "T1.disegno.tessera.p95": report.drawTile?.put.p95 ?? null,
