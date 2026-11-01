@@ -430,7 +430,7 @@ entrambe; `spegni fub.markdown` rifiuta. `tests/mcp.rs`: i quattro strumenti
 in `tools/list`; senza `apply` niente cambia; senza radici di scrittura il
 rifiuto. Ogni test prova il componente acceso e spento.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base c4eaa514
 
 ## Alla fine (orchestratore)
 
