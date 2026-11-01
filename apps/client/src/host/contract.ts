@@ -2366,9 +2366,12 @@ export interface ComponentMissing {
   id: string;
 }
 
-// Una riga della pagina: `nome` è la chiave del catalogo (`component.*.name`),
-// `richiede` i requisiti diretti già risolti in id, `usa` gli «usa se c'è» che
-// in questa build sono righe.
+// Una riga della pagina: `nome` e `descrizione` sono già nella lingua del vault
+// (l'id e la stringa vuota se il catalogo non li ha: mai una chiave), `gruppo`
+// è l'id di un `ComponentGroup` (`altro` se la riga non ne dice uno), `ui` le
+// cartelle del client che carica (`editors/media`), `richiede` i requisiti
+// diretti già risolti in id, `usa` gli «usa se c'è» che in questa build sono
+// righe.
 export interface ComponentRow {
   id: string;
   nome: string;
@@ -2377,13 +2380,22 @@ export interface ComponentRow {
   acceso: boolean;
   perche: ComponentWhy;
   richiesto_da: string[];
+  descrizione: string;
   tipo: ComponentKind;
+  ui: string[];
   richiede: string[];
   usa: string[];
 }
 
-// Un profilo: `piu_avanti` se aspetta componenti che non ci sono ancora
-// (`arriva_con`), e allora non si applica.
+// Un gruppo della pagina, con il nome nella lingua del vault.
+export interface ComponentGroup {
+  id: string;
+  nome: string;
+}
+
+// Un profilo: `etichetta` è il nome da mostrare, nella lingua del vault;
+// `piu_avanti` se aspetta componenti che non ci sono ancora (`arriva_con`), e
+// allora non si applica.
 export interface ComponentProfile {
   nome: string;
   etichetta: string;
@@ -2393,7 +2405,9 @@ export interface ComponentProfile {
 }
 
 // Ciò che `components_map` risponde. `profilo` null = personalizzato.
+// `gruppi` sono quelli che hanno righe, nell'ordine in cui si disegnano.
 export interface ComponentsMap {
+  gruppi: ComponentGroup[];
   righe: ComponentRow[];
   stato: ComponentState;
   profilo: string | null;

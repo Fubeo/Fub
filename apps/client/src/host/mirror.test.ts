@@ -5,6 +5,7 @@ import type {
   BundleInfo,
   ComponentAction,
   ComponentEffect,
+  ComponentGroup,
   ComponentMissing,
   ComponentOrphans,
   ComponentOutcome,
@@ -981,12 +982,13 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
   // (`fub_app_lib::Components*`, e quelli di `fub_host::componenti` col
   // prefisso `Component`).
   ComponentsMap: keysOf<ComponentsMap>({
-    righe: true, stato: true, profilo: true, profili: true, mancanti: true,
+    gruppi: true, righe: true, stato: true, profilo: true, profili: true, mancanti: true,
   }),
   ComponentRow: keysOf<ComponentRow>({
     id: true, nome: true, gruppo: true, bundle: true, acceso: true, perche: true,
-    richiesto_da: true, tipo: true, richiede: true, usa: true,
+    richiesto_da: true, descrizione: true, tipo: true, ui: true, richiede: true, usa: true,
   }),
+  ComponentGroup: keysOf<ComponentGroup>({ id: true, nome: true }),
   ComponentProfile: keysOf<ComponentProfile>({
     nome: true, etichetta: true, componenti: true, arriva_con: true, piu_avanti: true,
   }),
@@ -1657,14 +1659,28 @@ describe("mirror TS↔Rust", () => {
 
     // Lo scenario dei fake è fatto degli stessi tipi: ogni mappa e ogni
     // risposta registrata dall'host vero ha le chiavi del mirror.
+    expect(Object.keys(COMPONENT_SCENARIO).sort()).toEqual(["mappe", "partenze", "profilo", "scelte", "senza_vault"]);
     for (const map of COMPONENT_SCENARIO.mappe) {
       expect(Object.keys(map).sort()).toEqual(APP_RECORD_KEYS.ComponentsMap);
+      for (const group of map.gruppi) expect(Object.keys(group).sort()).toEqual(APP_RECORD_KEYS.ComponentGroup);
       for (const row of map.righe) expect(Object.keys(row).sort()).toEqual(APP_RECORD_KEYS.ComponentRow);
       for (const profile of map.profili) expect(Object.keys(profile).sort()).toEqual(APP_RECORD_KEYS.ComponentProfile);
     }
+    const choiceKeys = keysOf<(typeof COMPONENT_SCENARIO.scelte)[number]>({
+      prima: true, azione: true, apply: true, risposta: true, dopo: true, eventi: true,
+    });
     for (const choice of COMPONENT_SCENARIO.scelte) {
+      expect(Object.keys(choice).sort()).toEqual(choiceKeys);
       expect(Object.keys(choice.azione).sort()).toEqual(actions[choice.azione.azione]);
       expect(Object.keys(choice.risposta).sort()).toEqual(keysOfApplied(choice.risposta));
+      // Gli eventi sono quelli che la shell sa leggere: chiavi scritte e
+      // rimontaggio.
+      for (const event of choice.eventi) {
+        expect(["setting_changed", "vault_closed", "vault_opened"]).toContain(event.type);
+      }
+    }
+    for (const start of Object.values(COMPONENT_SCENARIO.partenze)) {
+      expect(COMPONENT_SCENARIO.mappe[start]).toBeDefined();
     }
   });
 

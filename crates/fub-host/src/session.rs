@@ -4277,6 +4277,24 @@ impl Host {
         Ok(os_trash_outcome(receipt))
     }
 
+    /// **La lingua di chi guarda** il vault `vault`: le sue `locale.*` sopra la
+    /// lingua del sistema (`Workspace::locale`), o la sola lingua del sistema
+    /// se il vault non c'è.
+    ///
+    /// Serve ai testi che l'host scrive da sé con un catalogo che non è di un
+    /// bundle montato — i nomi della mappa dei componenti
+    /// ([`crate::componenti::Testi`]). A differenza di
+    /// [`localize_core`](Self::localize_core) **aspetta** il workspace: chi la
+    /// chiama ha appena letto il vault e non sta dentro un `mount.*`, e un nome
+    /// che esce nella lingua sbagliata perché un altro scriveva sarebbe un
+    /// cambio di lingua a caso.
+    pub fn speaking_locale(&self, vault: Option<&str>) -> fub_abi::locale::Locale {
+        self.with_session(vault, |session| session.workspace.clone())
+            .ok()
+            .and_then(|workspace| workspace.read().ok().map(|ws| ws.locale()))
+            .unwrap_or_else(|| self.system_locale.get())
+    }
+
     /// Un valore dell'host nella lingua di chi guarda, col catalogo del core.
     /// Non **aspetta** il workspace: `mount.*` deve finire anche mentre un
     /// altro writer lo tiene, quindi se il lock non è libero — o un vault non

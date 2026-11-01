@@ -99,22 +99,34 @@ import COMPONENTS_SCENARIO from "../__fixtures__/components-scenario.json";
 /// risolutore**: serve questi stati e queste scelte, e una scelta che qui non
 /// c'è la rifiuta lanciando.
 ///
-/// `mappe` sono gli stati del vault (ciò che `components_map` risponde); ogni
-/// voce di `scelte` parte da uno stato (`prima`), porta l'azione come la scrive
-/// serde, coi default, e la risposta di `components_apply`, e arriva in uno
-/// stato (`dopo`). `senza_vault` sono gli errori dei due comandi a vault chiuso.
+/// `mappe` sono gli stati del vault (ciò che `components_map` risponde);
+/// `partenze` dà un nome agli stati da cui il finto può partire (`studio`,
+/// `solo-note`, `tutto`), e `profilo` è quello di serie. Ogni voce di `scelte`
+/// parte da uno stato (`prima`), porta l'azione come la scrive serde, coi
+/// default, la risposta di `components_apply`, lo stato in cui arriva (`dopo`)
+/// e gli `eventi` che l'host ha mandato alla shell dopo aver risposto, nel loro
+/// ordine, con la radice `/vault`. `senza_vault` sono gli errori dei due
+/// comandi a vault chiuso.
 export interface ComponentScenario {
   profilo: string;
+  partenze: Record<string, number>;
   mappe: ComponentsMap[];
-  scelte: {
-    prima: number;
-    azione: ComponentAction;
-    apply: boolean;
-    risposta: ComponentsApplied;
-    dopo: number;
-  }[];
+  scelte: ComponentChoice[];
   senza_vault: { components_map: PluginError; components_apply: PluginError };
 }
+
+/// Una scelta registrata dello scenario dei componenti.
+export interface ComponentChoice {
+  prima: number;
+  azione: ComponentAction;
+  apply: boolean;
+  risposta: ComponentsApplied;
+  dopo: number;
+  eventi: KernelEvent[];
+}
+
+/// La radice del vault con cui lo scenario registra gli eventi.
+const SCENARIO_ROOT = "/vault";
 
 /// Lo scenario di serie: il JSON allarga le unioni del contratto a `string`.
 export const COMPONENT_SCENARIO = COMPONENTS_SCENARIO as unknown as ComponentScenario;
@@ -256,6 +268,11 @@ export interface Options {
   /// registrate dall'host vero. Con `root: null` i due comandi rispondono
   /// l'errore che l'host dà a vault chiuso.
   components?: ComponentScenario;
+  /// Lo stato da cui parte la pagina «Componenti»: un nome di
+  /// `components.partenze` (`solo-note`, `tutto`). Di serie
+  /// `components.profilo`, cioè «Studio». Un nome che lo scenario non ha
+  /// lancia.
+  componentsStart?: string;
 }
 
 /// Gli indirizzi privati delle interfacce attive, quello della rotta
@@ -305,6 +322,15 @@ export interface FakeHost {
   /// lascia i byte, o un banco che chiede «il disco rifiuta» leggerebbe il file
   /// nuovo e crederebbe di aver provato il contrario.
   fault(gate: string, reason?: string): () => void;
+  /// Fa rispondere a `componentsApply` l'errore tipato `error`, finché non si
+  /// chiama ciò che torna: è l'host che non riesce a scrivere la scelta. Lo
+  /// stato non cambia e nessun evento arriva.
+  componentsFail(error: PluginError): () => void;
+  /// Applica una scelta dei componenti **senza che la shell l'abbia chiesto**:
+  /// la CLI, MCP, un'altra finestra. Lo stato cambia e gli eventi registrati
+  /// arrivano subito, nel loro ordine, senza passare da `componentsApply`. Una
+  /// scelta che lo scenario non ha da questo stato lancia.
+  componentsFromOutside(azione: ComponentAction, apply?: boolean): ComponentsApplied;
 
   /// Chiede di chiudere la finestra, e **aspetta** ciò che la shell fa prima.
   ///
@@ -433,8 +459,36 @@ export function createFakeHost(options: Options = {}): FakeHost {
   );
   const installablePlugins = options.installablePlugins ?? {};
   const components = options.components ?? COMPONENT_SCENARIO;
+  const componentsStart = options.componentsStart ?? components.profilo;
   /// Lo stato del vault di prova: un indice in `components.mappe`.
-  let componentState = 0;
+  let componentState = components.partenze[componentsStart] ?? -1;
+  if (components.mappe[componentState] === undefined) {
+    throw new Error(`host fake: the component scenario has no start «${componentsStart}»`);
+  }
+  /// L'errore che `componentsApply` dà adesso, se qualcuno l'ha guastata.
+  let componentsFailure: PluginError | null = null;
+
+  /// La scelta registrata per `azione` dallo stato di adesso: chi la trova la
+  /// applica. Una scelta che lo scenario non ha non si inventa.
+  function componentChoice(azione: ComponentAction, apply: boolean): ComponentChoice {
+    const wanted = canonical(withSerdeDefaults(azione));
+    const recorded = components.scelte.find(
+      (scelta) => scelta.prima === componentState && scelta.apply === apply && canonical(scelta.azione) === wanted,
+    );
+    if (recorded === undefined) {
+      throw new Error(`host fake: no recorded answer for ${wanted} (apply: ${apply}) in component state ${componentState}`);
+    }
+    componentState = recorded.dopo;
+    return recorded;
+  }
+
+  /// Gli eventi di una scelta, con la radice di questo vault al posto di
+  /// quella dello scenario.
+  function componentEvents(recorded: ComponentChoice): KernelEvent[] {
+    return recorded.eventi.map((event) =>
+      "root" in event && event.root === SCENARIO_ROOT && root !== null ? { ...event, root } : structuredClone(event),
+    );
+  }
   let listener: ((n: KernelNotice) => void) | null = null;
   let onClose: (() => Promise<boolean>) | null = null;
   let onCloseFailure: ((reason: unknown) => void) | null = null;
@@ -1605,20 +1659,24 @@ export function createFakeHost(options: Options = {}): FakeHost {
         ),
       // Una mutazione pigra: un guasto o un freno agiscono prima che lo stato
       // cambi, come nell'host che non scrive una scelta che non è arrivata.
-      componentsApply: (azione, apply, vault) =>
-        installedOperation("componentsApply", named(apply === undefined ? [azione] : [azione, apply], vault), () => {
+      // Gli eventi arrivano **dopo** la risposta: nel ponte vero li consegna un
+      // altro thread, e la shell ha già ripreso con la risposta quando arriva
+      // il primo. Qui li manda una catena di promesse agganciata alla
+      // risposta, due passi dietro a chi la aspetta: niente timer da possedere.
+      componentsApply: (azione, apply, vault) => {
+        let events: KernelEvent[] = [];
+        const answer = installedOperation("componentsApply", named(apply === undefined ? [azione] : [azione, apply], vault), () => {
           if (root === null) throw components.senza_vault.components_apply;
-          const wanted = canonical(withSerdeDefaults(azione));
-          const applying = apply ?? false;
-          const recorded = components.scelte.find(
-            (scelta) => scelta.prima === componentState && scelta.apply === applying && canonical(scelta.azione) === wanted,
-          );
-          if (recorded === undefined) {
-            throw new Error(`host fake: no recorded answer for ${wanted} (apply: ${applying}) in component state ${componentState}`);
-          }
-          componentState = recorded.dopo;
+          if (componentsFailure !== null) throw structuredClone(componentsFailure);
+          const recorded = componentChoice(azione, apply ?? false);
+          events = componentEvents(recorded);
           return structuredClone(recorded.risposta);
-        }),
+        });
+        answer
+          .then(() => Promise.resolve())
+          .then(() => events.forEach(emit), () => undefined);
+        return answer;
+      },
       listInstalledPlugins: (vault) =>
         gate(
           "listInstalledPlugins",
@@ -1971,6 +2029,18 @@ export function createFakeHost(options: Options = {}): FakeHost {
         throttles.delete(name);
         unlock();
       };
+    },
+    componentsFail: (error) => {
+      componentsFailure = structuredClone(error);
+      return () => {
+        componentsFailure = null;
+      };
+    },
+    componentsFromOutside: (azione, apply = true) => {
+      if (root === null) throw new Error("host fake: no vault is open");
+      const recorded = componentChoice(azione, apply);
+      componentEvents(recorded).forEach(emit);
+      return structuredClone(recorded.risposta);
     },
     fault: (name, reason) => {
       faults.set(name, reason ?? `host fake: «${name}» è guasta`);

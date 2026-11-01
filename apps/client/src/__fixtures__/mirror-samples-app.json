@@ -795,16 +795,26 @@
   ],
   "ComponentsMap": [
     {
+      "gruppi": [
+        {
+          "id": "pensare",
+          "nome": "Pensare"
+        }
+      ],
       "righe": [
         {
           "id": "fub.lavagna",
-          "nome": "component.lavagna.name",
+          "nome": "Lavagna",
           "gruppo": "pensare",
           "bundle": false,
           "acceso": true,
           "perche": "Scelto",
           "richiesto_da": [],
+          "descrizione": "Schede, fili e inchiostro sopra qualsiasi cosa.",
           "tipo": "mode",
+          "ui": [
+            "editors/canvas"
+          ],
           "richiede": [
             "fub.penna"
           ],
@@ -825,7 +835,7 @@
       "profili": [
         {
           "nome": "grafica",
-          "etichetta": "profile.grafica.name",
+          "etichetta": "Grafica",
           "componenti": [
             "fub.markdown",
             "fub.lavagna"
@@ -844,6 +854,7 @@
       ]
     },
     {
+      "gruppi": [],
       "righe": [],
       "stato": {
         "scelti": [],
@@ -857,13 +868,17 @@
   "ComponentRow": [
     {
       "id": "fub.lavagna",
-      "nome": "component.lavagna.name",
+      "nome": "Lavagna",
       "gruppo": "pensare",
       "bundle": false,
       "acceso": true,
       "perche": "Scelto",
       "richiesto_da": [],
+      "descrizione": "Schede, fili e inchiostro sopra qualsiasi cosa.",
       "tipo": "mode",
+      "ui": [
+        "editors/canvas"
+      ],
       "richiede": [
         "fub.penna"
       ],
@@ -872,10 +887,16 @@
       ]
     }
   ],
+  "ComponentGroup": [
+    {
+      "id": "pensare",
+      "nome": "Pensare"
+    }
+  ],
   "ComponentProfile": [
     {
       "nome": "grafica",
-      "etichetta": "profile.grafica.name",
+      "etichetta": "Grafica",
       "componenti": [
         "fub.markdown",
         "fub.lavagna"

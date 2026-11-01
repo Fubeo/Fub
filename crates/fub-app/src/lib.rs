@@ -1691,12 +1691,24 @@ async fn set_plugin_enabled(
 
 /// Una riga della pagina «Componenti»: la riga del vault
 /// ([`componenti::RigaNelVault`], appiattita) con ciò che la mappa dice di lei.
+///
+/// Sul filo `nome` è **già nella lingua di chi guarda** (la lingua del vault,
+/// con quella del sistema come ripiego), non la chiave del catalogo che la
+/// riga del vault porta: la shell quel catalogo non ce l'ha. Una chiave che
+/// manca dà l'id. `gruppo` è sempre uno di [`ComponentsMap::gruppi`]: le righe
+/// che non ne dicono uno stanno in `altro`.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ComponentRow {
     #[serde(flatten)]
     pub riga: componenti::RigaNelVault,
+    /// Che cosa fa per chi usa Fub, in una frase, risolta come il nome; vuota
+    /// se il catalogo non l'ha.
+    pub descrizione: String,
     /// Modo, motore, servizio o dati.
     pub tipo: fub_abi::ComponentKind,
+    /// I pezzi del client che la riga carica, cartelle sotto
+    /// `apps/client/src/` (`editors/media`): gli stessi di `manifest.ui`.
+    pub ui: Vec<String>,
     /// I requisiti diretti, già risolti in id di righe (`provides` compresi).
     pub richiede: Vec<String>,
     /// Gli «usa se c'è» che in questa build sono righe: non accendono niente.
@@ -1707,7 +1719,8 @@ pub struct ComponentRow {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ComponentProfile {
     pub nome: String,
-    /// La chiave del catalogo con il nome da mostrare.
+    /// Il nome da mostrare, nella lingua di chi guarda; il nome interno se il
+    /// catalogo non l'ha.
     pub etichetta: String,
     pub componenti: Vec<String>,
     /// I componenti che il profilo aspetta e che non esistono ancora.
@@ -1716,11 +1729,22 @@ pub struct ComponentProfile {
     pub piu_avanti: bool,
 }
 
-/// Ciò che `components_map` risponde: le righe, lo stato, il profilo attivo
-/// (`None` = personalizzato), i profili e gli id che le chiavi nominano a
-/// vuoto.
+/// Un gruppo della pagina «Componenti», come la pagina lo intitola.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ComponentGroup {
+    pub id: String,
+    /// Il nome nella lingua di chi guarda; l'id se il catalogo non l'ha.
+    pub nome: String,
+}
+
+/// Ciò che `components_map` risponde: i gruppi, le righe, lo stato, il
+/// profilo attivo (`None` = personalizzato), i profili e gli id che le chiavi
+/// nominano a vuoto.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ComponentsMap {
+    /// I gruppi che la pagina disegna, nel suo ordine: solo quelli che in
+    /// questa build hanno righe.
+    pub gruppi: Vec<ComponentGroup>,
     pub righe: Vec<ComponentRow>,
     pub stato: componenti::Stato,
     pub profilo: Option<String>,
@@ -1743,6 +1767,7 @@ pub enum ComponentsApplied {
 /// `components_map`, con gli errori nella lingua di chi guarda.
 pub fn components_map_for(host: &Host, vault: Option<&str>) -> Result<ComponentsMap, PluginError> {
     let result = host.components(vault).map(|nel_vault| {
+        let testi = host.component_texts(vault);
         let definizioni = componenti::righe();
         let mappa = componenti::mappa();
         let righe = nel_vault
@@ -1750,12 +1775,15 @@ pub fn components_map_for(host: &Host, vault: Option<&str>) -> Result<Components
             .into_iter()
             // Le righe del vault nascono dalla mappa: una senza definizione
             // non esiste, e se esistesse la pagina non saprebbe disegnarla.
-            .filter_map(|riga| {
+            .filter_map(|mut riga| {
                 let definizione = definizioni
                     .iter()
                     .find(|definizione| definizione.id == riga.id)?;
+                riga.nome = testi.nome(definizione);
                 Some(ComponentRow {
+                    descrizione: testi.descrizione(definizione),
                     tipo: definizione.kind,
+                    ui: definizione.ui.iter().map(|ui| ui.to_string()).collect(),
                     richiede: mappa.richiesti(&riga.id).to_vec(),
                     usa: definizione
                         .uses
@@ -1772,12 +1800,20 @@ pub fn components_map_for(host: &Host, vault: Option<&str>) -> Result<Components
             .map(|profilo| ComponentProfile {
                 piu_avanti: profilo.piu_avanti(),
                 nome: profilo.nome.to_string(),
-                etichetta: profilo.etichetta.to_string(),
+                etichetta: testi.profilo(&profilo),
                 componenti: profilo.componenti.iter().map(|id| id.to_string()).collect(),
                 arriva_con: profilo.arriva_con.iter().map(|id| id.to_string()).collect(),
             })
             .collect();
+        let gruppi = componenti::gruppi()
+            .into_iter()
+            .map(|gruppo| ComponentGroup {
+                id: gruppo.to_string(),
+                nome: testi.gruppo(gruppo),
+            })
+            .collect();
         ComponentsMap {
+            gruppi,
             righe,
             stato: nel_vault.stato,
             profilo: nel_vault.profilo,

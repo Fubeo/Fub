@@ -20,9 +20,9 @@ use fub_abi::theme::ThemeLight;
 use fub_abi::traits::PluginPermissions;
 use fub_abi::ui::UiNode;
 use fub_app_lib::{
-    BundleInfo, ComponentProfile, ComponentRow, ComponentsApplied, ComponentsMap, DemoClosed,
-    DocumentSource, EmbedContent, InstalledPluginInfo, LiveAddress, LiveStart, LiveStarted,
-    OpenVaults, ThemeInfo, ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
+    BundleInfo, ComponentGroup, ComponentProfile, ComponentRow, ComponentsApplied, ComponentsMap,
+    DemoClosed, DocumentSource, EmbedContent, InstalledPluginInfo, LiveAddress, LiveStart,
+    LiveStarted, OpenVaults, ThemeInfo, ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
 };
 use fub_host::componenti::{
     Azione, Effetto, Esito, Mancante, Orfani, Perche, Rifiuto, RigaNelVault, Scrittura, Stato,
@@ -680,7 +680,7 @@ fn component_samples() -> serde_json::Map<String, Value> {
     };
     let riga = RigaNelVault {
         id: "fub.lavagna".into(),
-        nome: "component.lavagna.name".into(),
+        nome: "Lavagna".into(),
         gruppo: "pensare".into(),
         bundle: false,
         acceso: true,
@@ -689,16 +689,22 @@ fn component_samples() -> serde_json::Map<String, Value> {
     };
     let row = ComponentRow {
         riga: riga.clone(),
+        descrizione: "Schede, fili e inchiostro sopra qualsiasi cosa.".into(),
+        ui: ids(&["editors/canvas"]),
         tipo: fub_abi::ComponentKind::Mode,
         richiede: ids(&["fub.penna"]),
         usa: ids(&["fub.rich"]),
     };
     let profile = ComponentProfile {
         nome: "grafica".into(),
-        etichetta: "profile.grafica.name".into(),
+        etichetta: "Grafica".into(),
         componenti: ids(&["fub.markdown", "fub.lavagna"]),
         arriva_con: ids(&["fub.foto"]),
         piu_avanti: true,
+    };
+    let gruppo = ComponentGroup {
+        id: "pensare".into(),
+        nome: "Pensare".into(),
     };
     let mancante = Mancante {
         chiave: "components.off".into(),
@@ -708,6 +714,7 @@ fn component_samples() -> serde_json::Map<String, Value> {
         "ComponentsMap",
         vec![
             to_value(ComponentsMap {
+                gruppi: vec![gruppo.clone()],
                 righe: vec![row.clone()],
                 stato: stato(),
                 profilo: Some("studio".into()),
@@ -715,6 +722,7 @@ fn component_samples() -> serde_json::Map<String, Value> {
                 mancanti: vec![mancante.clone()],
             }),
             to_value(ComponentsMap {
+                gruppi: vec![],
                 righe: vec![],
                 stato: Stato::default(),
                 profilo: None,
@@ -724,6 +732,7 @@ fn component_samples() -> serde_json::Map<String, Value> {
         ],
     );
     put("ComponentRow", vec![to_value(&row)]);
+    put("ComponentGroup", vec![to_value(&gruppo)]);
     put("ComponentProfile", vec![to_value(&profile)]);
     put("ComponentState", vec![to_value(stato())]);
     put("ComponentMissing", vec![to_value(&mancante)]);
@@ -819,18 +828,112 @@ fn component_samples() -> serde_json::Map<String, Value> {
     samples
 }
 
+/// Gli eventi che l'host vero manda alla shell durante una scelta, come li
+/// gira l'app su `fub://event`: il ponte li consegna da un suo thread.
+struct Uscita(std::sync::Mutex<Vec<fub_abi::Event>>);
+
+impl fub_host::EventSink for Uscita {
+    fn emit(&self, notice: &fub_abi::Notice) -> fub_host::Delivery {
+        self.0.lock().unwrap().push(notice.event.clone());
+        fub_host::Delivery::Done
+    }
+}
+
+/// La radice del vault dei fake (`createFakeHost` di serie): negli eventi
+/// registrati prende il posto della cartella temporanea, che cambia a ogni
+/// giro.
+const RADICE_DEI_FAKE: &str = "/vault";
+
+impl Uscita {
+    /// Gli eventi di una scelta che la shell usa per aggiornarsi: le chiavi
+    /// scritte e il rimontaggio. Gli altri (l'indice che riparte dopo la
+    /// riapertura, le viste da ridisegnare) arrivano quando arrivano, e la
+    /// pagina non li aspetta.
+    fn della_scelta(event: &fub_abi::Event) -> bool {
+        matches!(
+            event,
+            fub_abi::Event::SettingChanged { .. }
+                | fub_abi::Event::VaultClosed { .. }
+                | fub_abi::Event::VaultOpened { .. }
+        )
+    }
+
+    fn visti(&self) -> Vec<fub_abi::Event> {
+        self.0
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|event| Self::della_scelta(event))
+            .cloned()
+            .collect()
+    }
+
+    /// Aspetta che arrivino gli eventi che `esito` promette — un
+    /// `setting_changed` per ogni chiave scritta, e chiusura e riapertura se la
+    /// lavagna cambia — e li rende nell'ordine del ponte, con la radice dei
+    /// fake. Dopo l'ultimo aspetta ancora un poco: un evento in più, o due
+    /// volte lo stesso, si deve vedere nello scenario.
+    fn della(&self, esito: &Esito, radice: &str) -> Vec<Value> {
+        let mut attesi: Vec<String> = Vec::new();
+        if esito.scritture.iter().any(|s| s.bundle) {
+            attesi.push("plugins.disabled".into());
+        }
+        attesi.extend(esito.chiavi.iter().cloned());
+        let rimonta = esito
+            .scritture
+            .iter()
+            .any(|s| s.id == fub_host::componenti::LAVAGNA);
+        let completi = |visti: &[fub_abi::Event]| {
+            let chiavi_viste = attesi.iter().all(|chiave| {
+                visti.iter().any(
+                    |e| matches!(e, fub_abi::Event::SettingChanged { key, .. } if key == chiave),
+                )
+            });
+            let riaperto = !rimonta
+                || visti
+                    .iter()
+                    .any(|e| matches!(e, fub_abi::Event::VaultOpened { .. }));
+            chiavi_viste && riaperto
+        };
+        let fine = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while !completi(&self.visti()) {
+            assert!(
+                std::time::Instant::now() < fine,
+                "the host did not emit what {:?} promises: {:?}",
+                esito.azione,
+                self.0.lock().unwrap()
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        self.visti()
+            .into_iter()
+            .map(|event| {
+                let mut value = to_value(&event);
+                if value.get("root").and_then(Value::as_str) == Some(radice) {
+                    value["root"] = Value::from(RADICE_DEI_FAKE);
+                }
+                value
+            })
+            .collect()
+    }
+}
+
 /// **Il vault di prova dei fake** (A7): la mappa e le risposte dell'host vero
 /// per un vault temporaneo con il profilo «Studio» applicato, e per una
-/// sequenza di scelte fissa. `host/fake.ts` e `bench/fake-ipc.ts` servono
+/// sequenza di scelte fissa che passa per ogni gesto della pagina, da
+/// «Studio» e da «Solo note». `host/fake.ts` e `bench/fake-ipc.ts` servono
 /// questo file e nient'altro: non hanno un risolutore, e una scelta che qui
 /// non c'è la rifiutano.
 ///
 /// La forma: `mappe` sono gli stati del vault (la risposta di
-/// `components_map`, senza doppioni); ogni voce di `scelte` dice in quale
-/// stato si parte (`prima`), l'azione come la scrive serde (con i default),
-/// `apply` (assente = falso), la risposta di `components_apply` e lo stato in
-/// cui si arriva (`dopo`). `senza_vault` sono gli errori dei due comandi
-/// quando nessun vault è aperto.
+/// `components_map`, senza doppioni); `partenze` dà un nome agli stati da cui
+/// un fake può partire, e `profilo` è quello di serie; ogni voce di `scelte`
+/// dice in quale stato si parte (`prima`), l'azione come la scrive serde (con
+/// i default), `apply`, la risposta di `components_apply`, lo stato in cui si
+/// arriva (`dopo`) e gli `eventi` che l'host ha mandato alla shell dopo aver
+/// risposto, nel loro ordine (vuoto per una prova o un rifiuto).
+/// `senza_vault` sono gli errori dei due comandi quando nessun vault è aperto.
 fn component_scenario() -> Value {
     fn stato_di(mappe: &mut Vec<Value>, mappa: Value) -> usize {
         match mappe.iter().position(|known| *known == mappa) {
@@ -860,8 +963,9 @@ fn component_scenario() -> Value {
 
     let dir = tempfile::tempdir().expect("tempdir");
     let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
-    let host = fub_host::Host::new();
-    host.open(&root).expect("the vault opens");
+    let uscita = std::sync::Arc::new(Uscita(std::sync::Mutex::new(Vec::new())));
+    let host = fub_host::Host::new().with_sink(uscita.clone());
+    let radice = host.open(&root).expect("the vault opens").root.to_string();
     let studio = fub_app_lib::components_apply_for(
         &host,
         None,
@@ -882,55 +986,118 @@ fn component_scenario() -> Value {
         orfani: Orfani::Chiedi,
     };
     let accendi = |id: &str| Azione::Accendi { id: id.into() };
-    // `None` è `apply` assente: una prova.
-    let sequenza: Vec<(Azione, Option<bool>)> = vec![
-        (spegni("fub.penna", false), None),
-        (accendi("fub.inesistente"), None),
-        (accendi("fub.inesistente"), Some(true)),
-        (
-            Azione::Profilo {
-                nome: "solo-pdf".into(),
-            },
-            Some(true),
-        ),
-        (spegni("fub.properties", false), Some(true)),
-        (spegni("fub.properties", true), None),
-        (spegni("fub.properties", true), Some(true)),
-        (spegni("fub.penna", false), None),
-        (accendi("fub.template"), None),
-        (accendi("fub.template"), Some(true)),
-        (
-            Azione::Profilo {
-                nome: "studio".into(),
-            },
-            Some(true),
-        ),
+    let profilo = |nome: &str| Azione::Profilo { nome: nome.into() };
+    let rispondi = |orfani: Orfani| Azione::Rispondi {
+        orfani,
+        ids: vec![],
+    };
+    // `false` è una prova; la pagina prova prima di applicare, quindi un gesto
+    // applicato ha quasi sempre la sua prova davanti.
+    let prova_e_applica = |azione: Azione| [(azione.clone(), false), (azione, true)];
+    let mut sequenza: Vec<(Azione, bool)> = vec![
+        // Da «Studio».
+        (spegni("fub.penna", false), false),
+        (accendi("fub.inesistente"), false),
+        (accendi("fub.inesistente"), true),
+        (profilo("solo-pdf"), false),
+        (profilo("solo-pdf"), true),
+        (spegni("fub.core", false), false),
+        (spegni("fub.core", false), true),
+        (spegni("fub.properties", false), true),
+        (spegni("fub.properties", true), false),
+        (spegni("fub.properties", true), true),
+        (spegni("fub.penna", false), false),
     ];
+    sequenza.extend(prova_e_applica(accendi("fub.template")));
+    sequenza.extend(prova_e_applica(profilo("studio")));
+    // La penna con PDF e lavagna: rifiutata da sola, spenta con chi la
+    // richiede (la lavagna rimonta il vault).
+    sequenza.extend(prova_e_applica(spegni("fub.penna", true)));
+    sequenza.extend(prova_e_applica(profilo("studio")));
+    // Un interruttore qualsiasi: il profilo diventa personalizzato.
+    sequenza.extend(prova_e_applica(spegni("fub.graph", false)));
+    sequenza.extend(prova_e_applica(profilo("studio")));
+    sequenza.extend(prova_e_applica(profilo("tutto")));
+    sequenza.extend(prova_e_applica(profilo("studio")));
+    // «Solo note»: la prova dice che cosa si spegne.
+    sequenza.extend(prova_e_applica(profilo("solo-note")));
+    // Da «Solo note»: il PDF accende anche la penna, la lavagna rimonta.
+    sequenza.extend(prova_e_applica(accendi("fub.pdf")));
+    sequenza.extend(prova_e_applica(accendi("fub.lavagna")));
+    // Spenti PDF e lavagna, la penna resta orfana, in attesa.
+    sequenza.extend(prova_e_applica(spegni("fub.pdf", false)));
+    sequenza.extend(prova_e_applica(spegni("fub.lavagna", false)));
+    // «Togli», poi di nuovo nello stesso stato, «Tieni».
+    sequenza.extend(prova_e_applica(rispondi(Orfani::Togli)));
+    sequenza.extend(prova_e_applica(accendi("fub.pdf")));
+    sequenza.extend(prova_e_applica(spegni("fub.pdf", false)));
+    sequenza.extend(prova_e_applica(rispondi(Orfani::Tieni)));
 
     let mut mappe = Vec::new();
-    let mut scelte = Vec::new();
+    let mut scelte: Vec<Value> = Vec::new();
+    let mut partenze = serde_json::Map::new();
     for (azione, apply) in sequenza {
         let prima = stato_di(
             &mut mappe,
             to_value(fub_app_lib::components_map_for(&host, None).expect("the map")),
         );
-        let risposta =
-            fub_app_lib::components_apply_for(&host, None, azione.clone(), apply.unwrap_or(false))
-                .expect("the host answers");
+        // Una scelta registrata due volte dallo stesso stato è una voce
+        // sola: il fake la troverebbe comunque per prima.
+        let gia = scelte.iter().any(|scelta| {
+            scelta["prima"] == prima
+                && scelta["apply"] == apply
+                && scelta["azione"] == to_value(&azione)
+        });
+        uscita.0.lock().unwrap().clear();
+        let risposta = fub_app_lib::components_apply_for(&host, None, azione.clone(), apply)
+            .expect("the host answers");
+        let eventi = match &risposta {
+            ComponentsApplied::Esito(esito) if esito.applicato && esito.scrive() => {
+                uscita.della(esito, &radice)
+            }
+            _ => Vec::new(),
+        };
         let dopo = stato_di(
             &mut mappe,
             to_value(fub_app_lib::components_map_for(&host, None).expect("the map")),
         );
-        scelte.push(json!({
-            "prima": prima,
-            "azione": to_value(&azione),
-            "apply": apply.unwrap_or(false),
-            "risposta": to_value(&risposta),
-            "dopo": dopo,
-        }));
+        if apply {
+            if let Azione::Profilo { nome } = &azione {
+                if matches!(risposta, ComponentsApplied::Esito(_)) {
+                    partenze.insert(nome.clone(), Value::from(dopo));
+                }
+            }
+        }
+        if !gia {
+            scelte.push(json!({
+                "prima": prima,
+                "azione": to_value(&azione),
+                "apply": apply,
+                "risposta": to_value(&risposta),
+                "dopo": dopo,
+                "eventi": eventi,
+            }));
+        }
     }
+    assert_eq!(
+        partenze.get("studio"),
+        Some(&Value::from(0)),
+        "the first state is «Studio»"
+    );
+    // «Togli» e «Tieni» rispondono dallo stesso stato: la penna orfana.
+    let risposte: Vec<&Value> = scelte
+        .iter()
+        .filter(|scelta| scelta["azione"]["azione"] == "rispondi" && scelta["apply"] == true)
+        .map(|scelta| &scelta["prima"])
+        .collect();
+    assert_eq!(risposte.len(), 2, "{risposte:?}");
+    assert_eq!(
+        risposte[0], risposte[1],
+        "«togli» and «tieni» from the same state"
+    );
     json!({
         "profilo": "studio",
+        "partenze": partenze,
         "mappe": mappe,
         "scelte": scelte,
         "senza_vault": senza_vault,
@@ -1015,4 +1182,90 @@ fn the_app_side_ts_mirror_fixture_is_in_sync_with_the_rust_types() {
          ts_mirror_app`), poi riallinea `apps/client/src/host/contract.ts` finché \
          `mirror.test.ts` non torna verde."
     );
+}
+
+/// Un vault aperto con le `locale.*` in `values`.
+fn vault_in(values: Value) -> (tempfile::TempDir, fub_host::Host) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    std::fs::create_dir_all(root.join(".fub")).unwrap();
+    std::fs::write(
+        root.join(".fub").join("settings.json"),
+        json!({"version": 1, "values": values}).to_string(),
+    )
+    .unwrap();
+    let host = fub_host::Host::new();
+    host.open(&root).expect("the vault opens");
+    (dir, host)
+}
+
+/// I nomi della mappa come li legge la pagina: nella lingua del vault.
+fn nomi_della_mappa(host: &fub_host::Host) -> (String, String, String, String) {
+    let mappa = fub_app_lib::components_map_for(host, None).expect("the map");
+    let penna = mappa
+        .righe
+        .iter()
+        .find(|row| row.riga.id == "fub.penna")
+        .expect("the pen is a row");
+    let gruppo = mappa
+        .gruppi
+        .iter()
+        .find(|gruppo| gruppo.id == "supporto")
+        .expect("the support group");
+    let studio = mappa
+        .profili
+        .iter()
+        .find(|profilo| profilo.nome == "studio")
+        .expect("«Studio»");
+    (
+        penna.riga.nome.clone(),
+        penna.descrizione.clone(),
+        gruppo.nome.clone(),
+        studio.etichetta.clone(),
+    )
+}
+
+#[test]
+fn the_component_map_speaks_the_language_of_the_vault() {
+    let (_dir, host) = vault_in(json!({"locale.language": "en"}));
+    assert_eq!(
+        nomi_della_mappa(&host),
+        (
+            "Pen".into(),
+            "Pressure, palm, low-latency trail, strokes.".into(),
+            "Support".into(),
+            "Study".into(),
+        )
+    );
+    let (_dir, host) = vault_in(json!({"locale.language": "it"}));
+    assert_eq!(
+        nomi_della_mappa(&host),
+        (
+            "Penna".into(),
+            "Pressione, palmo, scia a bassa latenza, tratti.".into(),
+            "Di supporto".into(),
+            "Studio".into(),
+        )
+    );
+    // Il vault non dice una lingua: vale quella del sistema.
+    let (_dir, host) = vault_in(json!({}));
+    host.publish_locale(fub_abi::Locale {
+        language: "en-US".into(),
+        ..Default::default()
+    });
+    assert_eq!(nomi_della_mappa(&host).0, "Pen");
+    // Nessuna riga, gruppo o profilo esce con una chiave al posto del nome.
+    let mappa = fub_app_lib::components_map_for(&host, None).expect("the map");
+    let nomi = mappa
+        .righe
+        .iter()
+        .map(|row| &row.riga.nome)
+        .chain(mappa.gruppi.iter().map(|gruppo| &gruppo.nome))
+        .chain(mappa.profili.iter().map(|profilo| &profilo.etichetta));
+    for nome in nomi {
+        assert!(
+            !nome.starts_with("component.") && !nome.starts_with("profile."),
+            "«{nome}» is a key"
+        );
+    }
 }

@@ -160,6 +160,13 @@ impl Riga {
         self
     }
 
+    /// La chiave del catalogo con la descrizione: `component.<nome>.description`,
+    /// accanto a quella del nome.
+    pub fn descrizione(&self) -> String {
+        let radice = self.nome.strip_suffix(".name").unwrap_or(self.nome);
+        format!("{radice}.description")
+    }
+
     /// I `requires` che vanno nel manifest: quelli della riga senza
     /// [`SOLO_DELLA_MAPPA`].
     pub fn requires_del_manifest(&self) -> Vec<&'static str> {
@@ -289,6 +296,7 @@ pub fn righe() -> Vec<Riga> {
         #[cfg(feature = "draw")]
         Riga::servizio("fub.draw", "component.draw.name")
             .group("disegnare")
+            .ui(&["editors/spatial"])
             .cargo_feature("draw"),
         // Documenti e Fogli: il bundle e il codec stanno in `fub-host`.
         #[cfg(feature = "rich")]
@@ -376,17 +384,243 @@ pub fn mappa() -> Mappa {
         .unwrap_or_else(|errore| panic!("la mappa dei componenti non si costruisce: {errore}"))
 }
 
-/// I nomi dei componenti, in tutte le lingue (A10). Le chiavi ci sono anche per
-/// le righe che questa build non compila: il catalogo è uno solo.
+/// I gruppi della pagina dei componenti, nell'ordine in cui si disegnano. Una
+/// riga che non ne dice uno sta in `altro`, il gruppo di serie di [`Riga`].
+pub const GRUPPI: [&str; 8] = [
+    "scrivere",
+    "leggere",
+    "pensare",
+    "disegnare",
+    "ufficio",
+    "foto",
+    "altro",
+    "supporto",
+];
+
+/// La chiave del catalogo con il nome di un gruppo: `component.group.<g>.name`.
+pub fn nome_del_gruppo(gruppo: &str) -> String {
+    format!("component.group.{gruppo}.name")
+}
+
+/// I gruppi che questa build disegna: quelli di [`GRUPPI`] con almeno una
+/// riga, nel loro ordine.
+pub fn gruppi() -> Vec<&'static str> {
+    let righe = righe();
+    GRUPPI
+        .into_iter()
+        .filter(|gruppo| righe.iter().any(|riga| riga.gruppo == *gruppo))
+        .collect()
+}
+
+/// I nomi e le descrizioni dei componenti, i nomi dei gruppi e dei profili, in
+/// tutte le lingue (A10). Le chiavi ci sono anche per le righe che questa
+/// build non compila: il catalogo è uno solo.
 pub fn catalog() -> Vec<StringCatalog> {
     let mut it = StringCatalog::new("it");
     let mut en = StringCatalog::new("en");
-    for (nome, it_nome, en_nome) in NOMI.iter().chain(NOMI_DEI_PROFILI) {
+    for (nome, it_nome, en_nome) in NOMI
+        .iter()
+        .chain(DESCRIZIONI)
+        .chain(NOMI_DEI_GRUPPI)
+        .chain(NOMI_DEI_PROFILI)
+    {
         it = it.with(*nome, *it_nome);
         en = en.with(*nome, *en_nome);
     }
     vec![it, en]
 }
+
+/// I nomi dei gruppi: chiave, italiano, inglese.
+const NOMI_DEI_GRUPPI: &[(&str, &str, &str)] = &[
+    ("component.group.scrivere.name", "Scrivere", "Write"),
+    ("component.group.leggere.name", "Leggere", "Read"),
+    ("component.group.pensare.name", "Pensare", "Think"),
+    ("component.group.disegnare.name", "Disegnare", "Draw"),
+    ("component.group.ufficio.name", "Ufficio", "Office"),
+    ("component.group.foto.name", "Foto", "Photos"),
+    ("component.group.altro.name", "Altro", "Other"),
+    ("component.group.supporto.name", "Di supporto", "Support"),
+];
+
+/// Che cosa fa ogni componente per chi usa Fub, in una frase: chiave,
+/// italiano, inglese.
+const DESCRIZIONI: &[(&str, &str, &str)] = &[
+    (
+        "component.core.description",
+        "Il vault, i suoi file e le impostazioni.",
+        "The vault, its files and the settings.",
+    ),
+    (
+        "component.maintenance.description",
+        "Rifare l'indice e raccogliere ciò che serve per chiedere aiuto.",
+        "Rebuild the index and gather what you need to ask for help.",
+    ),
+    (
+        "component.markdown.description",
+        "L'editor Markdown: Live, Blocchi e il menu «/».",
+        "The Markdown editor: Live, Blocks and the “/” menu.",
+    ),
+    (
+        "component.search.description",
+        "Trovare una parola in tutte le note.",
+        "Find a word in every note.",
+    ),
+    (
+        "component.versioning.description",
+        "Le versioni passate di ogni file, da riprendere quando serve.",
+        "Past versions of every file, to bring back when needed.",
+    ),
+    (
+        "component.backlinks.description",
+        "Le note che portano a quella che stai leggendo.",
+        "The notes that link to the one you are reading.",
+    ),
+    (
+        "component.outline.description",
+        "I titoli della nota, per saltare da una parte all'altra.",
+        "The headings of the note, to jump from one part to another.",
+    ),
+    (
+        "component.tags.description",
+        "Tutti i tag del vault, e le note che li portano.",
+        "Every tag in the vault, and the notes that carry it.",
+    ),
+    (
+        "component.properties.description",
+        "Le proprietà in testa alla nota, da leggere e cambiare.",
+        "The properties at the top of a note, to read and change.",
+    ),
+    (
+        "component.template.description",
+        "Modelli di nota, la nota del giorno, la data e l'ora.",
+        "Note templates, the daily note, the date and the time.",
+    ),
+    (
+        "component.queries.description",
+        "Le ricerche salvate, da rifare con un clic.",
+        "Saved searches, to run again with one click.",
+    ),
+    (
+        "component.dashboard.description",
+        "Il vault in numeri: note, tag, file e collegamenti rotti.",
+        "The vault in numbers: notes, tags, files and broken links.",
+    ),
+    (
+        "component.backup.description",
+        "Copie delle note da cui ripartire.",
+        "Copies of your notes to start again from.",
+    ),
+    (
+        "component.trash.description",
+        "Le note eliminate, da recuperare o togliere per sempre.",
+        "Deleted notes, to bring back or remove for good.",
+    ),
+    (
+        "component.stats.description",
+        "Parole, caratteri e tempo di lettura della nota.",
+        "Words, characters and reading time of the note.",
+    ),
+    (
+        "component.graph.description",
+        "I collegamenti fra le note, in una mappa.",
+        "The links between notes, on a map.",
+    ),
+    (
+        "component.commands.description",
+        "Le azioni che trovi nella palette dei comandi.",
+        "The actions you find in the command palette.",
+    ),
+    (
+        "component.blocks.description",
+        "Diagrammi, formule ed evidenziato dentro le note.",
+        "Diagrams, formulas and highlights inside notes.",
+    ),
+    (
+        "component.base.description",
+        "Tabelle che raccolgono le note per proprietà.",
+        "Tables that gather notes by their properties.",
+    ),
+    (
+        "component.formatting.description",
+        "I pulsanti per grassetto, elenchi e titoli, senza ricordare i simboli.",
+        "Buttons for bold, lists and headings, without remembering the symbols.",
+    ),
+    (
+        "component.proof.description",
+        "L'ortografia mentre scrivi.",
+        "Spelling as you write.",
+    ),
+    (
+        "component.draw.description",
+        "I file SVG: penna, forme, frecce, testo.",
+        "SVG files: pen, shapes, arrows, text.",
+    ),
+    (
+        "component.rich.description",
+        "I file Word e OpenDocument, semplici o completi.",
+        "Word and OpenDocument files, simple or complete.",
+    ),
+    (
+        "component.xlsx.description",
+        "I file Excel e OpenDocument, semplici o completi.",
+        "Excel and OpenDocument files, simple or complete.",
+    ),
+    (
+        "component.lavagna.description",
+        "Schede, fili e inchiostro sopra qualsiasi cosa.",
+        "Cards, threads and ink over anything.",
+    ),
+    (
+        "component.pdf.description",
+        "Leggere, cercare, evidenziare, annotare a penna.",
+        "Read, search, highlight, annotate with a pen.",
+    ),
+    (
+        "component.penna.description",
+        "Pressione, palmo, scia a bassa latenza, tratti.",
+        "Pressure, palm, low-latency trail, strokes.",
+    ),
+    (
+        "component.dizionari.description",
+        "Le lingue del correttore.",
+        "The languages of the spell checker.",
+    ),
+    (
+        "component.motore-documenti.description",
+        "Impaginazione e comandi dei documenti.",
+        "Page layout and commands for documents.",
+    ),
+    (
+        "component.motore-fogli.description",
+        "Formule, calcolo e comandi dei fogli.",
+        "Formulas, calculation and commands for spreadsheets.",
+    ),
+    (
+        "component.importers.description",
+        "Portare in Fub le note di Evernote, OneNote, Tomboy e altri.",
+        "Bring in notes from Evernote, OneNote, Tomboy and others.",
+    ),
+    (
+        "component.linkcard.description",
+        "Un link da solo diventa una scheda con titolo e icona, quando lo chiedi.",
+        "A link on its own becomes a card with title and icon, when you ask.",
+    ),
+    (
+        "component.updates.description",
+        "Sapere se c'è una versione nuova di Fub, solo quando lo chiedi.",
+        "Find out whether a new version of Fub is out, only when you ask.",
+    ),
+    (
+        "component.publish.description",
+        "Mettere le note su un sito.",
+        "Put your notes on a website.",
+    ),
+    (
+        "component.sync.description",
+        "Le stesse note su più dispositivi, cifrate.",
+        "The same notes on several devices, encrypted.",
+    ),
+];
 
 /// Chiave, italiano, inglese.
 const NOMI: &[(&str, &str, &str)] = &[

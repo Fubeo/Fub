@@ -652,28 +652,150 @@ impl Host {
     }
 }
 
+/// **I testi della mappa nella lingua di chi guarda**: nomi e descrizioni
+/// delle righe, nomi dei gruppi e dei profili, risolti dal [`catalog`] della
+/// mappa.
+///
+/// Sul filo non esce mai una chiave: una chiave che il catalogo non ha dà il
+/// ripiego che la pagina sa mostrare — l'id per un nome, il nome interno per
+/// un gruppo o un profilo, niente per una descrizione. La scala delle lingue è
+/// quella di `Strings::template`: la lingua di chi guarda, la sua base, poi
+/// l'italiano, in cui il catalogo è scritto.
+pub struct Testi {
+    cataloghi: Vec<fub_abi::text::StringCatalog>,
+    lingua: fub_abi::locale::Locale,
+}
+
+impl Testi {
+    /// I testi in `lingua`, con il catalogo di questa build.
+    pub fn in_lingua(lingua: fub_abi::locale::Locale) -> Testi {
+        Testi::con(catalog(), lingua)
+    }
+
+    /// I testi con un catalogo dato: per provare il ripiego.
+    pub fn con(
+        cataloghi: Vec<fub_abi::text::StringCatalog>,
+        lingua: fub_abi::locale::Locale,
+    ) -> Testi {
+        Testi { cataloghi, lingua }
+    }
+
+    fn testo(&self, chiave: &str) -> Option<String> {
+        fub_abi::text::Strings::new(
+            &self.cataloghi,
+            crate::settings::CORE_DEFAULT_LOCALE,
+            &self.lingua,
+        )
+        .template(chiave)
+        .map(str::to_string)
+    }
+
+    /// Il nome di una riga; l'id se il catalogo non l'ha.
+    pub fn nome(&self, riga: &Riga) -> String {
+        self.testo(riga.nome).unwrap_or_else(|| riga.id.to_string())
+    }
+
+    /// Che cosa fa una riga, in una frase; vuota se il catalogo non l'ha.
+    pub fn descrizione(&self, riga: &Riga) -> String {
+        self.testo(&riga.descrizione()).unwrap_or_default()
+    }
+
+    /// Il nome di un gruppo; il suo id se il catalogo non l'ha.
+    pub fn gruppo(&self, gruppo: &str) -> String {
+        self.testo(&nome_del_gruppo(gruppo))
+            .unwrap_or_else(|| gruppo.to_string())
+    }
+
+    /// Il nome di un profilo; il suo nome interno se il catalogo non l'ha.
+    pub fn profilo(&self, profilo: &DefProfilo) -> String {
+        self.testo(profilo.etichetta)
+            .unwrap_or_else(|| profilo.nome.to_string())
+    }
+}
+
+impl Host {
+    /// I testi della mappa nella lingua del vault `vault`, con quella del
+    /// sistema come ripiego ([`Host::speaking_locale`]).
+    pub fn component_texts(&self, vault: Option<&str>) -> Testi {
+        Testi::in_lingua(self.speaking_locale(vault))
+    }
+}
+
 /// Il nome di ogni riga nel catalogo italiano: per chi parla da terminale.
 pub fn nomi_italiani() -> BTreeMap<String, String> {
-    let italiano: BTreeMap<String, String> = catalog()
-        .into_iter()
-        .find(|c| c.locale == "it")
-        .map(|c| c.entries)
-        .unwrap_or_default();
+    let testi = Testi::in_lingua(fub_abi::locale::Locale {
+        language: "it".into(),
+        ..Default::default()
+    });
     righe()
         .iter()
-        .map(|r| {
-            let nome = italiano
-                .get(r.nome)
-                .cloned()
-                .unwrap_or_else(|| r.id.to_string());
-            (r.id.to_string(), nome)
-        })
+        .map(|r| (r.id.to_string(), testi.nome(r)))
         .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const PENNA: &str = "fub.penna";
+
+    fn in_lingua(lingua: &str) -> fub_abi::locale::Locale {
+        fub_abi::locale::Locale {
+            language: lingua.into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn i_testi_parlano_la_lingua_di_chi_guarda() {
+        let penna = riga(PENNA).expect("la penna è una riga");
+        let studio = profili()
+            .into_iter()
+            .find(|p| p.nome == "studio")
+            .expect("«Studio»");
+        let it = Testi::in_lingua(in_lingua("it"));
+        assert_eq!(it.nome(&penna), "Penna");
+        assert_eq!(
+            it.descrizione(&penna),
+            "Pressione, palmo, scia a bassa latenza, tratti."
+        );
+        assert_eq!(it.gruppo("supporto"), "Di supporto");
+        assert_eq!(it.profilo(&studio), "Studio");
+        let en = Testi::in_lingua(in_lingua("en-GB"));
+        assert_eq!(en.nome(&penna), "Pen");
+        assert_eq!(
+            en.descrizione(&penna),
+            "Pressure, palm, low-latency trail, strokes."
+        );
+        assert_eq!(en.gruppo("supporto"), "Support");
+        assert_eq!(en.profilo(&studio), "Study");
+        // Una lingua che il catalogo non ha scende all'italiano.
+        assert_eq!(Testi::in_lingua(in_lingua("de")).nome(&penna), "Penna");
+    }
+
+    /// Una chiave che il catalogo non ha non esce mai: il nome ripiega
+    /// sull'id, la descrizione resta vuota.
+    #[test]
+    fn una_chiave_che_manca_ripiega_sull_id() {
+        let penna = riga(PENNA).expect("la penna è una riga");
+        let studio = profili()
+            .into_iter()
+            .find(|p| p.nome == "studio")
+            .expect("«Studio»");
+        let poco = fub_abi::text::StringCatalog::new("it").with("component.pdf.name", "PDF");
+        for testi in [
+            Testi::con(vec![], in_lingua("it")),
+            Testi::con(vec![poco], in_lingua("en")),
+        ] {
+            assert_eq!(testi.nome(&penna), PENNA);
+            assert_eq!(testi.descrizione(&penna), "");
+            assert_eq!(testi.gruppo("supporto"), "supporto");
+            assert_eq!(testi.profilo(&studio), "studio");
+        }
+        let poco = fub_abi::text::StringCatalog::new("it").with("component.pdf.name", "PDF");
+        let pdf = riga(PDF).expect("il PDF è una riga");
+        assert_eq!(Testi::con(vec![poco], in_lingua("en")).nome(&pdf), "PDF");
+    }
 
     fn lettura(disabled: &[&str], off: &[&str], kept: &[&str], waiting: &[&str]) -> Lettura {
         let elenco = |ids: &[&str]| ids.iter().map(|id| id.to_string()).collect::<Vec<_>>();

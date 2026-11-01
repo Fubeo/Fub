@@ -276,6 +276,9 @@ export const LIGHT: "dark" | "light" = params.get("light") === "light" ? "light"
 /// finestra senza vault — l'unica in cui metà delle superfici non esiste, e
 /// l'unica che si fotografa per vedere cosa resta.
 const ROOT = params.get("vault") === "vuoto" ? null : "/Bench vault";
+/// Lo stato da cui parte la pagina «Componenti»: un nome delle `partenze`
+/// dello scenario (`solo-note`, `tutto`). Senza, «Studio».
+const COMPONENTS_START = params.get("componenti");
 
 // `theme.ts` legge questa chiave prima di chiedere qualunque cosa al canale
 // dati. Scriverla qui — cioè all'`import` di questo module, che Vite mette
@@ -1029,7 +1032,9 @@ const options: Options = {
   // La pagina «Componenti» non è scenografia: sono le risposte registrate
   // dall'host vero (vault di prova con «Studio»), le stesse dei test. Una
   // scelta che lo scenario non ha la porta la rifiuta, come nei test.
+  // `?componenti=solo-note` parte da un altro stato registrato.
   components: COMPONENT_SCENARIO,
+  ...(COMPONENTS_START === null ? {} : { componentsStart: COMPONENTS_START }),
 };
 
 const host = createFakeHost(options);
