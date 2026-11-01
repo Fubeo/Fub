@@ -65,12 +65,13 @@ profili. Le foto di T3 la confrontano con la pagina vera.
 - D-4 · Con l'app aperta, CLI e MCP continuano a passare dall'app: il canale
   CLI↔app (`crates/fub-host/src/control.rs`, `crates/fub-cli/src/port.rs`)
   impara due richieste nuove, la mappa e «applica questa scelta».
-- D-5 · Il formato di `components.state`: **una chiave sola, un elenco di testi
-  con prefisso**, perché `SettingValue` non ha oggetti e il contratto dei plugin
-  non si tocca. Le voci: `off:<id>` (riga senza bundle spenta), `kept:<id>`
-  (tenuto con «Tienili»), `waiting:<id>` (in attesa), al più una
-  `profile:<nome>` (nessuna = personalizzato). Per esempio
-  `["off:fub.lavagna", "kept:fub.penna", "profile:studio"]`.
+- D-5 · Il formato dello stato dei componenti: **quattro chiavi del vault**,
+  perché `SettingValue` non ha oggetti e il contratto dei plugin non si tocca:
+  `components.off` (elenco: righe senza bundle spente, per esempio
+  `["fub.lavagna"]`), `components.kept` (elenco: tenuti con «Tienili»),
+  `components.waiting` (elenco: in attesa) e `components.profile` (testo: il
+  profilo scelto, vuoto = personalizzato). Nel testo del piano
+  «`components.*`» vuol dire queste quattro.
 
 ## Assunzioni
 
@@ -79,13 +80,13 @@ differenza è scritta qui.
 
 - A1 · **`plugins.disabled` resta la fonte per i bundle.** CLI, MCP, vault di
   oggi e `set_plugin_enabled` continuano a leggerla e scriverla. Il dato nuovo
-  (Q-4) è una chiave `components.state` del vault, aggiunta a
+  (Q-4) sono le chiavi `components.*` del vault (D-5), aggiunte a
   `SETTINGS_WITH_THEIR_OWN_GESTURE` (`crates/fub-host/src/shell.rs`, specchio
   `apps/client/src/ui/shell-ids.generated.ts`), non `program_writable` come
   `plugins.disabled` (`crates/fub-host/src/settings.rs:520-536`). Contiene solo
   ciò che `plugins.disabled` non sa dire: le righe senza bundle spente
   (lavagna, PDF), i componenti tenuti con «Tienili», quelli «in attesa» e il
-  profilo scelto (`null` = personalizzato). Un vault senza la chiave vale come
+  profilo scelto (vuoto = personalizzato). Un vault senza le chiavi vale come
   oggi: tutto acceso tranne `plugins.disabled`.
 - A2 · **La logica passa nell'host.** Oggi accendi, spegni e perché stanno in
   `crates/fub-cli/src/componenti.rs`. Si spostano in `fub-host` (un modulo
@@ -120,7 +121,7 @@ differenza è scritta qui.
   si stringa, e anche per questo è «più avanti».
 - A6 · **Che cosa vuol dire «vault nuovo»** (Q-1): il vault aperto da «Crea un
   vault nuovo…» (`onboarding-create`, `apps/client/src/desktop-shell.ts:547`)
-  in una cartella senza file visibili e senza `components.state`. Aprire con
+  in una cartella senza file visibili e senza `components.*`. Aprire con
   «Apri vault…» non chiede mai il profilo.
 - A7 · **I comandi IPC** (Q-4) seguono `docs/reference/ipc-contract.md` e i test
   di `crates/fub-app/tests/lean_ipc.rs`, `ipc_permissions.rs`,
@@ -166,8 +167,8 @@ differenza è scritta qui.
 | tempo d'avvio uguale fra «Solo note» e «Tutto» | S6 `coldStart` su server-di-fub, «Solo note» e «Tutto», stesso build, numeri nella PR; la differenza dentro il rumore misurato fra due giri uguali | T4, fine |
 | `bench:a11y` verde | `npm run bench:a11y` con la scena `settings-components` nuova e la scena della scelta del profilo | T3, T5 |
 | tutto si fa da tastiera | test e2e: profilo, interruttore, finestra delle dipendenze, «Togli»/«Tienili», ricerca e la schermata del profilo, solo con la tastiera | T3, T5 |
-| (da K1) accendere e poi spegnere torna allo stato di prima, anche per lavagna e PDF | test in `fub-host`: spegni e riaccendi lavagna e PDF, `plugins.disabled`, `components.state`, provider montati e superfici del client identici | T1, T4 |
-| (da Q-1) i vault che esistono già non cambiano | test: un vault senza `components.state` monta gli stessi bundle e le stesse superfici di prima e non mostra la schermata del profilo | T1, T5 |
+| (da K1) accendere e poi spegnere torna allo stato di prima, anche per lavagna e PDF | test in `fub-host`: spegni e riaccendi lavagna e PDF, `plugins.disabled`, `components.*`, provider montati e superfici del client identici | T1, T4 |
+| (da Q-1) i vault che esistono già non cambiano | test: un vault senza `components.*` monta gli stessi bundle e le stesse superfici di prima e non mostra la schermata del profilo | T1, T5 |
 
 ## Regole che valgono per ogni task
 
@@ -206,21 +207,21 @@ Non toccare: `crates/fub-componenti/` (se serve un'operazione nuova, blocco),
 generato.
 Dipende da: nessuno
 Cosa fare:
-- `components.state` come in A1, nel formato di D-5, con la sua `SettingSpec`
-  nel gruppo «Componenti» e nel form generico escluso.
+- Le chiavi `components.*` come in A1 e D-5, ognuna con la sua `SettingSpec`
+  nel gruppo «Componenti» ed esclusa dal form generico.
 - Il modulo `componenti` dell'host: `Host::components(vault)` legge mappa,
-  `plugins.disabled` e `components.state` e dà righe, stato e perché;
+  `plugins.disabled` e `components.*` e dà righe, stato e perché;
   `Host::apply_components(vault, azione, apply)` usa `fub-componenti`, scrive i
-  bundle in `plugins.disabled` e il resto in `components.state`, e monta o
+  bundle in `plugins.disabled` e il resto in `components.*`, e monta o
   smonta subito come `set_plugin_enabled`.
 - Lavagna spenta: `CanvasProvider` non registrato, e il vault si rimonta come
   per un bundle. PDF spento: nell'host non cambia niente (pdfjs è del client),
-  ma lo stato sta in `components.state` e la mappa lo dice.
+  ma lo stato sta in `components.*` e la mappa lo dice.
 - Profili in `fub-features` come in A4; applicare un profilo scrive il nome in
-  `components.state`, toccare un interruttore lo azzera («personalizzato»).
+  `components.*`, toccare un interruttore lo azzera («personalizzato»).
 - CLI e MCP chiamano l'host: le risposte di oggi non cambiano, tranne lavagna e
   PDF, che ora restano spenti anche dopo il comando.
-Casi limite: vault senza `components.state` (come oggi); chiave con un id che
+Casi limite: vault senza `components.*` (come oggi); chiave con un id che
 la mappa non ha (si ignora e si dice in `mancanti`); spegnere la penna con PDF e
 lavagna accesi (`Richiesto`); «Tienili» su un componente di supporto (resta
 acceso dopo la riapertura del vault); un profilo «più avanti» (rifiutato con un
@@ -377,6 +378,6 @@ Stato: [ ]
 
 - Banco WebView S1–S3 prima e dopo, S6 «Solo note» contro «Tutto», l'elenco
   dei chunk: tutto nella PR, su server-di-fub.
-- `scripts/check.sh` completo; ADR nuova se lo stato `components.state` o i
+- `scripts/check.sh` completo; ADR nuova se le chiavi `components.*` o i
   comandi IPC lo chiedono (da decidere in revisione); `DECISIONS.md`
   aggiornato; PLAN.md cancellato con l'ultimo commit.
