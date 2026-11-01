@@ -3377,11 +3377,30 @@ impl Host {
     /// solo montando: i formati registrati, come la lavagna. Il lease di
     /// scrittura resta di questo processo fra la chiusura e la riapertura,
     /// come per lo snapshot; il corrente resta quello di prima.
+    ///
+    /// **E lo dice a chi guarda.** La chiusura esce dal ponte come
+    /// `VaultClosed`; il `VaultOpened` della riapertura invece no, perché il
+    /// kernel lo emette durante la scansione, prima che il ponte nuovo si
+    /// abboni (è voluto: l'apertura non è un temporale di eventi). Senza un
+    /// secondo avviso la shell vedrebbe un vault chiuso e mai riaperto: qui
+    /// lo si emette sul bus del vault riaperto, che lo porta soltanto agli
+    /// abbonati (il ponte, cioè `fub://event`) e non agli handler dei plugin,
+    /// che il loro `VaultOpened` l'hanno già ricevuto dal kernel. Vale per
+    /// ogni strada che arriva qui: `components_apply` dell'app e il canale di
+    /// controllo (CLI, MCP).
     pub(crate) fn remount(&self, root: &Utf8Path) -> Result<Vec<PluginError>, PluginError> {
         let current = self.current();
         let _writer = self.writer_lease(root)?;
         let faults = self.close_vault(root)?;
         self.open(root)?;
+        self.read_workspace(Some(root.as_str()), |workspace| {
+            workspace
+                .bus()
+                .emit(Notice::of(fub_abi::Event::VaultOpened {
+                    root: workspace.root().to_string(),
+                }));
+            Ok(())
+        })?;
         if let Some(current) = current.filter(|current| current != root) {
             self.set_current(&current)?;
         }

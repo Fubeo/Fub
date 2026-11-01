@@ -3,6 +3,19 @@ import { GRID_THEME_COLORS, MAIN_PANE } from "./contract";
 import type {
   BacklinkRef,
   BundleInfo,
+  ComponentAction,
+  ComponentEffect,
+  ComponentMissing,
+  ComponentOrphans,
+  ComponentOutcome,
+  ComponentProfile,
+  ComponentRefusal,
+  ComponentRow,
+  ComponentState,
+  ComponentWhy,
+  ComponentWrite,
+  ComponentsApplied,
+  ComponentsMap,
   ThemeInfo,
   ThemePayload,
   InstalledPluginInfo,
@@ -132,6 +145,7 @@ import type { EventKind } from "./enums.generated";
 import { asPluginError, errorText, isErrorKind } from "./errors";
 import samples from "../__fixtures__/mirror-samples.json";
 import appSamples from "../__fixtures__/mirror-samples-app.json";
+import { COMPONENT_SCENARIO } from "./fake";
 
 // L'altra metà del presidio dei mirror (la prima è `crates/fub-abi`… ehm,
 // `crates/fub-features/tests/ts_mirror.rs`): la fixture è generata dai tipi
@@ -963,6 +977,28 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     accepted: true, refused: true, admitted: true, rejected: true, commits: true, answered: true,
   }),
   StopReport: keysOf<LiveStopReport>({ pending: true }),
+  // La pagina «Componenti» (A7): le chiavi sono i nomi dei tipi Rust
+  // (`fub_app_lib::Components*`, e quelli di `fub_host::componenti` col
+  // prefisso `Component`).
+  ComponentsMap: keysOf<ComponentsMap>({
+    righe: true, stato: true, profilo: true, profili: true, mancanti: true,
+  }),
+  ComponentRow: keysOf<ComponentRow>({
+    id: true, nome: true, gruppo: true, bundle: true, acceso: true, perche: true,
+    richiesto_da: true, tipo: true, richiede: true, usa: true,
+  }),
+  ComponentProfile: keysOf<ComponentProfile>({
+    nome: true, etichetta: true, componenti: true, arriva_con: true, piu_avanti: true,
+  }),
+  ComponentState: keysOf<ComponentState>({ scelti: true, in_attesa: true }),
+  ComponentMissing: keysOf<ComponentMissing>({ chiave: true, id: true }),
+  ComponentEffect: keysOf<ComponentEffect>({
+    accesi_anche: true, spenti_anche: true, orfani: true, mancanti: true,
+  }),
+  ComponentWrite: keysOf<ComponentWrite>({ id: true, acceso: true, bundle: true }),
+  ComponentOutcome: keysOf<ComponentOutcome>({
+    azione: true, effetto: true, scritture: true, chiavi: true, stato: true, applicato: true, avvisi: true,
+  }),
 };
 const APP_OPTIONAL_KEYS = {
   InstalledPluginInfo: {
@@ -1221,6 +1257,7 @@ describe("mirror TS↔Rust", () => {
       expect(appFixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
     }
     for (const type of [
+      "ComponentWhy", "ComponentOrphans", "ComponentAction", "ComponentRefusal", "ComponentsApplied",
       "ConfigFileKind", "ConfigStatus", "RecoverAction",
       "LiveEvent", "ShellMessage", "LeaveReason", "ReleaseReason", "EndReason", "NackReason",
     ]) {
@@ -1574,6 +1611,60 @@ describe("mirror TS↔Rust", () => {
         for (const key of keys) expect(all, `${type}.${key} not in TS mirror`).toContain(key);
         for (const key of required) expect(keys, `${type}.${key} missing`).toContain(key);
       }
+    }
+  });
+
+  it("le unioni della pagina «Componenti» hanno un ramo TS per ogni variante Rust", () => {
+    type ActionOf<T extends ComponentAction["azione"]> = Extract<ComponentAction, { azione: T }>;
+    type RefusalOf<T extends ComponentRefusal["rifiuto"]> = Extract<ComponentRefusal, { rifiuto: T }>;
+    // Rust scrive l'azione con tutti i campi, anche quelli col default.
+    const actions: { [T in ComponentAction["azione"]]: string[] } = {
+      accendi: keysOf<ActionOf<"accendi">>({ azione: true, id: true }),
+      spegni: keysOf<Required<ActionOf<"spegni">>>({ azione: true, id: true, anche_questi: true, orfani: true }),
+      rispondi: keysOf<Required<ActionOf<"rispondi">>>({ azione: true, orfani: true, ids: true }),
+      profilo: keysOf<ActionOf<"profilo">>({ azione: true, nome: true }),
+    };
+    const refusals: { [T in ComponentRefusal["rifiuto"]]: string[] } = {
+      sconosciuto: keysOf<RefusalOf<"sconosciuto">>({ rifiuto: true, id: true }),
+      nucleo: keysOf<RefusalOf<"nucleo">>({ rifiuto: true, id: true }),
+      richiesto: keysOf<RefusalOf<"richiesto">>({ rifiuto: true, id: true, da: true }),
+      profilo_sconosciuto: keysOf<RefusalOf<"profilo_sconosciuto">>({ rifiuto: true, nome: true }),
+      profilo_piu_avanti: keysOf<RefusalOf<"profilo_piu_avanti">>({ rifiuto: true, nome: true, arriva_con: true }),
+    };
+    const sampleActions = appFixture.ComponentAction as ComponentAction[];
+    for (const action of sampleActions) expect(Object.keys(action).sort()).toEqual(actions[action.azione]);
+    expect(new Set(sampleActions.map((action) => action.azione))).toEqual(new Set(Object.keys(actions)));
+    const sampleRefusals = appFixture.ComponentRefusal as ComponentRefusal[];
+    for (const refusal of sampleRefusals) expect(Object.keys(refusal).sort()).toEqual(refusals[refusal.rifiuto]);
+    expect(new Set(sampleRefusals.map((refusal) => refusal.rifiuto))).toEqual(new Set(Object.keys(refusals)));
+
+    // La risposta di `components_apply`: il tag `risposta` più le chiavi del ramo.
+    const outcome = keysOf<ComponentOutcome>({
+      azione: true, effetto: true, scritture: true, chiavi: true, stato: true, applicato: true, avvisi: true,
+    });
+    const keysOfApplied = (applied: ComponentsApplied): string[] =>
+      applied.risposta === "esito"
+        ? [...outcome, "risposta"].sort()
+        : [...refusals[applied.rifiuto], "risposta"].sort();
+    const applied = appFixture.ComponentsApplied as ComponentsApplied[];
+    for (const sample of applied) expect(Object.keys(sample).sort()).toEqual(keysOfApplied(sample));
+    expect(new Set(applied.map((sample) => sample.risposta))).toEqual(new Set(["esito", "rifiuto"]));
+
+    const whys: ComponentWhy[] = ["Nucleo", "Scelto", { RichiestoDa: ["fub.lavagna", "fub.pdf"] }, "InAttesa", "Spento", "Sconosciuto"];
+    expect(appFixture.ComponentWhy).toEqual(whys);
+    const orphans: ComponentOrphans[] = ["chiedi", "togli", "tieni"];
+    expect(appFixture.ComponentOrphans).toEqual(orphans);
+
+    // Lo scenario dei fake è fatto degli stessi tipi: ogni mappa e ogni
+    // risposta registrata dall'host vero ha le chiavi del mirror.
+    for (const map of COMPONENT_SCENARIO.mappe) {
+      expect(Object.keys(map).sort()).toEqual(APP_RECORD_KEYS.ComponentsMap);
+      for (const row of map.righe) expect(Object.keys(row).sort()).toEqual(APP_RECORD_KEYS.ComponentRow);
+      for (const profile of map.profili) expect(Object.keys(profile).sort()).toEqual(APP_RECORD_KEYS.ComponentProfile);
+    }
+    for (const choice of COMPONENT_SCENARIO.scelte) {
+      expect(Object.keys(choice.azione).sort()).toEqual(actions[choice.azione.azione]);
+      expect(Object.keys(choice.risposta).sort()).toEqual(keysOfApplied(choice.risposta));
     }
   });
 

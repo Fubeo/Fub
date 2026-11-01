@@ -42,6 +42,9 @@
 // che compone sono tipizzate dal contratto e non da sé.
 import type {
   BundleInfo,
+  ComponentAction,
+  ComponentsApplied,
+  ComponentsMap,
   InstalledPluginInfo,
   CommandSpec,
   DraftInfo,
@@ -88,6 +91,57 @@ import type {
 } from "./contract";
 import type { PrintArtifactOutcome, RevealOutcome, SaveArtifactOutcome } from "./ipc";
 import { mediaKindOfMime, mimeOrOctet } from "../editors/media/media-types";
+import COMPONENTS_SCENARIO from "../__fixtures__/components-scenario.json";
+
+/// Le risposte dell'host vero per la pagina «Componenti», registrate da
+/// `crates/fub-app/tests/ts_mirror_app.rs` (`UPDATE_MIRROR=1`) su un vault
+/// temporaneo con il profilo «Studio» applicato. Il finto **non ha un
+/// risolutore**: serve questi stati e queste scelte, e una scelta che qui non
+/// c'è la rifiuta lanciando.
+///
+/// `mappe` sono gli stati del vault (ciò che `components_map` risponde); ogni
+/// voce di `scelte` parte da uno stato (`prima`), porta l'azione come la scrive
+/// serde, coi default, e la risposta di `components_apply`, e arriva in uno
+/// stato (`dopo`). `senza_vault` sono gli errori dei due comandi a vault chiuso.
+export interface ComponentScenario {
+  profilo: string;
+  mappe: ComponentsMap[];
+  scelte: {
+    prima: number;
+    azione: ComponentAction;
+    apply: boolean;
+    risposta: ComponentsApplied;
+    dopo: number;
+  }[];
+  senza_vault: { components_map: PluginError; components_apply: PluginError };
+}
+
+/// Lo scenario di serie: il JSON allarga le unioni del contratto a `string`.
+export const COMPONENT_SCENARIO = COMPONENTS_SCENARIO as unknown as ComponentScenario;
+
+/// L'azione come la scrive serde: con i campi che hanno un default. È la sola
+/// regola che il finto sa dei componenti, ed è quella di `#[serde(default)]`.
+function withSerdeDefaults(azione: ComponentAction): ComponentAction {
+  switch (azione.azione) {
+    case "accendi":
+      return { azione: "accendi", id: azione.id };
+    case "spegni":
+      return { azione: "spegni", id: azione.id, anche_questi: azione.anche_questi ?? false, orfani: azione.orfani ?? "chiedi" };
+    case "rispondi":
+      return { azione: "rispondi", orfani: azione.orfani, ids: azione.ids ?? [] };
+    case "profilo":
+      return { azione: "profilo", nome: azione.nome };
+  }
+}
+
+/// Un JSON con le chiavi in ordine: due azioni uguali si scrivono uguali.
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, inner: unknown) =>
+    inner !== null && typeof inner === "object" && !Array.isArray(inner)
+      ? Object.fromEntries(Object.entries(inner as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)))
+      : inner,
+  );
+}
 
 /// Una chiamata arrivata alla porta: quale, e con cosa.
 ///
@@ -198,6 +252,10 @@ export interface Options {
   /// sono servite; con zero indirizzi è un PC fuori da una rete locale, che
   /// l'app rifiuta con `unserved`.
   live?: LiveNetwork;
+  /// La pagina «Componenti»: di serie [`COMPONENT_SCENARIO`], le risposte
+  /// registrate dall'host vero. Con `root: null` i due comandi rispondono
+  /// l'errore che l'host dà a vault chiuso.
+  components?: ComponentScenario;
 }
 
 /// Gli indirizzi privati delle interfacce attive, quello della rotta
@@ -374,6 +432,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
     ]),
   );
   const installablePlugins = options.installablePlugins ?? {};
+  const components = options.components ?? COMPONENT_SCENARIO;
+  /// Lo stato del vault di prova: un indice in `components.mappe`.
+  let componentState = 0;
   let listener: ((n: KernelNotice) => void) | null = null;
   let onClose: (() => Promise<boolean>) | null = null;
   let onCloseFailure: ((reason: unknown) => void) | null = null;
@@ -1534,6 +1595,30 @@ export function createFakeHost(options: Options = {}): FakeHost {
       },
       setPluginEnabled: (id, enabled) =>
         gate("setPluginEnabled", [id, enabled], Promise.resolve([])),
+      componentsMap: (vault) =>
+        gate(
+          "componentsMap",
+          named([], vault),
+          root === null
+            ? Promise.reject(components.senza_vault.components_map)
+            : Promise.resolve(structuredClone(components.mappe[componentState])),
+        ),
+      // Una mutazione pigra: un guasto o un freno agiscono prima che lo stato
+      // cambi, come nell'host che non scrive una scelta che non è arrivata.
+      componentsApply: (azione, apply, vault) =>
+        installedOperation("componentsApply", named(apply === undefined ? [azione] : [azione, apply], vault), () => {
+          if (root === null) throw components.senza_vault.components_apply;
+          const wanted = canonical(withSerdeDefaults(azione));
+          const applying = apply ?? false;
+          const recorded = components.scelte.find(
+            (scelta) => scelta.prima === componentState && scelta.apply === applying && canonical(scelta.azione) === wanted,
+          );
+          if (recorded === undefined) {
+            throw new Error(`host fake: no recorded answer for ${wanted} (apply: ${applying}) in component state ${componentState}`);
+          }
+          componentState = recorded.dopo;
+          return structuredClone(recorded.risposta);
+        }),
       listInstalledPlugins: (vault) =>
         gate(
           "listInstalledPlugins",

@@ -384,3 +384,82 @@ fn turning_lavagna_and_pdf_off_and_on_leaves_everything_as_it_was() {
         assert!(matches!(perche(&host, "fub.penna"), Perche::RichiestoDa(_)));
     }
 }
+
+/// Gli eventi che escono dal ponte, come li vede la WebView.
+struct Uscita(std::sync::Mutex<Vec<fub_abi::Event>>);
+
+impl fub_host::EventSink for Uscita {
+    fn emit(&self, notice: &fub_abi::Notice) -> fub_host::Delivery {
+        self.0.lock().unwrap().push(notice.event.clone());
+        fub_host::Delivery::Done
+    }
+}
+
+impl Uscita {
+    /// Aspetta che dopo un `VaultClosed` di `root` esca un `VaultOpened` dello
+    /// stesso vault. Il ponte consegna da un suo thread: l'attesa è parte di
+    /// ciò che si prova, e se l'avviso non arriva il test cade sul tempo.
+    fn riaperto(&self, root: &str) -> bool {
+        let fine = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while std::time::Instant::now() < fine {
+            {
+                let visti = self.0.lock().unwrap();
+                let chiuso = visti.iter().position(
+                    |e| matches!(e, fub_abi::Event::VaultClosed { root: r } if r == root),
+                );
+                if let Some(chiuso) = chiuso {
+                    if visti[chiuso..]
+                        .iter()
+                        .any(|e| matches!(e, fub_abi::Event::VaultOpened { root: r } if r == root))
+                    {
+                        return true;
+                    }
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        false
+    }
+}
+
+/// **La shell sa quando il vault si rimonta**, da qualunque strada arrivi la
+/// scelta: dalla porta dell'app (`Host::apply_components`, ciò che chiama
+/// `components_apply`) e dal canale di controllo (CLI, MCP con l'app aperta).
+/// La chiusura esce come `VaultClosed`; dopo, esce un `VaultOpened`.
+#[test]
+fn a_remount_tells_the_shell_the_vault_is_open_again() {
+    let (_dir, root) = vault();
+    let uscita = Arc::new(Uscita(std::sync::Mutex::new(Vec::new())));
+    let host = fub_host::Host::new().with_sink(uscita.clone());
+    let info = host.open(&root).expect("the vault opens");
+    let canonica = info.root.to_string();
+
+    // La strada dell'app.
+    uscita.0.lock().unwrap().clear();
+    spegni(&host, componenti::LAVAGNA, Orfani::Chiedi);
+    assert!(
+        uscita.riaperto(&canonica),
+        "app: no VaultOpened after the remount: {:?}",
+        uscita.0.lock().unwrap()
+    );
+
+    // La strada del canale di controllo.
+    uscita.0.lock().unwrap().clear();
+    let risposta = fub_host::control::answer(
+        &host,
+        fub_host::control::Call::ApplyComponents {
+            vault: None,
+            azione: Azione::Accendi {
+                id: componenti::LAVAGNA.into(),
+            },
+            apply: true,
+        },
+    )
+    .expect("the control channel answers");
+    assert_eq!(risposta["Ok"]["applicato"], true, "{risposta}");
+    assert!(
+        uscita.riaperto(&canonica),
+        "control: no VaultOpened after the remount: {:?}",
+        uscita.0.lock().unwrap()
+    );
+}

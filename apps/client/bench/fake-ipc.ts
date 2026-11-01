@@ -36,7 +36,7 @@
 // poi rilegge l'impostazione dal canale dati, quindi il banco scrive tutte e
 // due — la cache qui sotto, prima che `main.ts` giri, e il valore di
 // `appearance.theme` fra le impostazioni che serve.
-import { createFakeHost, type GridBytesFake, type Options } from "../src/host/fake";
+import { COMPONENT_SCENARIO, createFakeHost, type GridBytesFake, type Options } from "../src/host/fake";
 import { MARKDOWN_SYNTAX } from "../src/rules/syntax.generated";
 import XLSX_GRID from "../src/__fixtures__/xlsx-grid.json";
 import RICH_PROJECTION from "../src/__fixtures__/rich-projection.json";
@@ -1026,6 +1026,10 @@ const options: Options = {
     } as GridBytesFake,
   }),
   ...(DRAWING === null ? {} : { draw: true }),
+  // La pagina «Componenti» non è scenografia: sono le risposte registrate
+  // dall'host vero (vault di prova con «Studio»), le stesse dei test. Una
+  // scelta che lo scenario non ha la porta la rifiuta, come nei test.
+  components: COMPONENT_SCENARIO,
 };
 
 const host = createFakeHost(options);

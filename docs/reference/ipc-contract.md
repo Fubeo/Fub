@@ -27,6 +27,7 @@ test usano un fake.
 | tema | manifest e artefatti della skin |
 | eventi | ascolto del canale tipizzato |
 | sessione live | avviare, interrogare e fermare la sessione di un disegno, rispondere allo scrittore |
+| componenti | leggere la mappa dei componenti di un vault e applicare una scelta |
 
 Le operazioni offerte da provider passano da porte generiche. Una feature non
 aggiunge una porta soltanto per evitare di usare il proprio registro.
@@ -156,6 +157,54 @@ la shell non offre la sessione. Il fake host li serve se riceve una rete con
 | `unserved` | nessuna interfaccia attiva ha un indirizzo IPv4 privato |
 | `io` | interfacce di rete illeggibili, porta occupata |
 | `internal` | certificato, generatore casuale o QR non disponibili |
+
+## Componenti
+
+La pagina «Componenti» ha due porte dedicate, in `allow-shell` e quindi solo
+per la finestra principale. Non passa da `query_index` o `invoke_command`
+perché lo stato dei componenti, come `plugins.disabled`, non è
+`program_writable`: un componente non deve poter spegnere gli altri. Le due
+porte applicano la stessa regola della CLI e di MCP (`Host::components`,
+`Host::apply_components`); con l'app aperta CLI e MCP arrivano dal canale di
+controllo (`Call::Components`, `Call::ApplyComponents`).
+
+- `components_map(vault)` risponde `ComponentsMap`: le righe
+  (`ComponentRow`: id, chiave del nome `component.*.name`, gruppo, `tipo`
+  `mode`/`engine`/`service`/`data`, `richiede` già risolto in id, `usa`,
+  `acceso`, `perche`, `richiesto_da`, `bundle`), lo `stato` (scelti, in
+  attesa), il `profilo` attivo (`null` = personalizzato), i `profili` con
+  `piu_avanti` e `arriva_con`, e i `mancanti` delle chiavi `components.*`.
+- `components_apply(vault, azione, apply)` riceve un'azione
+  (`{ azione: "accendi" | "spegni" | "rispondi" | "profilo", … }`; spegni ha
+  `anche_questi` e `orfani` `chiedi`/`togli`/`tieni`). Con `apply` assente o
+  falso è una prova: dice che cosa cambierebbe e non scrive. Risponde
+  `ComponentsApplied`, con il tag `risposta`:
+  - `{ risposta: "esito", … }`: l'`effetto` (`accesi_anche` è «Attivati
+    anche…», `spenti_anche`, `orfani`, `mancanti`), le `scritture`, le
+    `chiavi` che cambiano, lo `stato` dopo, `applicato` e gli `avvisi`;
+  - `{ risposta: "rifiuto", rifiuto: … }`: il **rifiuto tipato**
+    (`sconosciuto`, `nucleo`, `richiesto` con `da`, `profilo_sconosciuto`,
+    `profilo_piu_avanti` con `arriva_con`). Non è un errore: la shell lo dice
+    con le sue parole.
+
+Gli errori restano per ciò che non è una scelta: a vault chiuso tutte e due le
+porte rispondono `not_found`.
+
+**L'avviso del rimontaggio.** Spegnere o riaccendere la lavagna rimonta il
+vault (`Host::remount`): l'esito ha una scrittura su `fub.lavagna`, e dal
+ponte degli eventi escono `vault_closed` e poi `vault_opened` dello stesso
+`root`. Il secondo lo emette `remount` sul bus del vault riaperto, solo verso
+gli abbonati e non verso gli handler dei plugin, perché quello della
+scansione esce prima che il ponte nuovo si abboni. Vale per ogni strada:
+`components_apply` e il canale di controllo. Una scelta che non rimonta lo
+dice con `setting_changed` su `plugins.disabled` o sulle chiavi
+`components.*`.
+
+Nei test e nel banco l'host finto non ha un risolutore: serve le risposte
+dell'host vero registrate in `apps/client/src/__fixtures__/components-scenario.json`
+(vault temporaneo con il profilo «Studio»), che
+`UPDATE_MIRROR=1 cargo test -p fub-app --test ts_mirror_app` rigenera, e
+rifiuta una scelta che lo scenario non ha.
 
 ## Tipi principali
 

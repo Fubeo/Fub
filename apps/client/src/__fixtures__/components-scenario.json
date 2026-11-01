@@ -1,0 +1,2775 @@
+{
+  "profilo": "studio",
+  "mappe": [
+    {
+      "righe": [
+        {
+          "id": "fub.core",
+          "nome": "component.core.name",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Nucleo",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.maintenance",
+          "nome": "component.maintenance.name",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Nucleo",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.markdown",
+          "nome": "component.markdown.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Nucleo",
+          "richiesto_da": [
+            "fub.backlinks",
+            "fub.backup",
+            "fub.base",
+            "fub.blocks",
+            "fub.commands",
+            "fub.dashboard",
+            "fub.formatting",
+            "fub.graph",
+            "fub.outline",
+            "fub.proof",
+            "fub.properties",
+            "fub.queries",
+            "fub.search",
+            "fub.stats",
+            "fub.tags",
+            "fub.template",
+            "fub.trash",
+            "fub.versioning"
+          ],
+          "tipo": "mode",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.search",
+          "nome": "component.search.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.versioning",
+          "nome": "component.versioning.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.backlinks",
+          "nome": "component.backlinks.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.outline",
+          "nome": "component.outline.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.tags",
+          "nome": "component.tags.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.properties",
+          "nome": "component.properties.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [
+            "fub.base",
+            "fub.template"
+          ],
+          "tipo": "service",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.template",
+          "nome": "component.template.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown",
+            "fub.properties"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.queries",
+          "nome": "component.queries.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.dashboard",
+          "nome": "component.dashboard.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.backup",
+          "nome": "component.backup.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.trash",
+          "nome": "component.trash.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.commands",
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.stats",
+          "nome": "component.stats.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.graph",
+          "nome": "component.graph.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.commands",
+          "nome": "component.commands.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [
+            "fub.trash"
+          ],
+          "tipo": "service",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.blocks",
+          "nome": "component.blocks.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.base",
+          "nome": "component.base.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown",
+            "fub.properties"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.formatting",
+          "nome": "component.formatting.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.proof",
+          "nome": "component.proof.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.dizionari",
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.draw",
+          "nome": "component.draw.name",
+          "gruppo": "disegnare",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.rich",
+          "nome": "component.rich.name",
+          "gruppo": "ufficio",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.motore-documenti"
+          ],
+          "usa": [
+            "fub.penna",
+            "fub.dizionari"
+          ]
+        },
+        {
+          "id": "fub.xlsx",
+          "nome": "component.xlsx.name",
+          "gruppo": "ufficio",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.motore-fogli"
+          ],
+          "usa": [
+            "fub.penna"
+          ]
+        },
+        {
+          "id": "fub.lavagna",
+          "nome": "component.lavagna.name",
+          "gruppo": "pensare",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.penna"
+          ],
+          "usa": [
+            "fub.rich",
+            "fub.xlsx"
+          ]
+        },
+        {
+          "id": "fub.pdf",
+          "nome": "component.pdf.name",
+          "gruppo": "leggere",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.penna"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.penna",
+          "nome": "component.penna.name",
+          "gruppo": "supporto",
+          "bundle": false,
+          "acceso": true,
+          "perche": {
+            "RichiestoDa": [
+              "fub.lavagna",
+              "fub.pdf"
+            ]
+          },
+          "richiesto_da": [
+            "fub.lavagna",
+            "fub.pdf"
+          ],
+          "tipo": "engine",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.dizionari",
+          "nome": "component.dizionari.name",
+          "gruppo": "supporto",
+          "bundle": false,
+          "acceso": true,
+          "perche": {
+            "RichiestoDa": [
+              "fub.proof"
+            ]
+          },
+          "richiesto_da": [
+            "fub.proof"
+          ],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.motore-documenti",
+          "nome": "component.motore-documenti.name",
+          "gruppo": "supporto",
+          "bundle": false,
+          "acceso": true,
+          "perche": {
+            "RichiestoDa": [
+              "fub.rich"
+            ]
+          },
+          "richiesto_da": [
+            "fub.rich"
+          ],
+          "tipo": "engine",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.motore-fogli",
+          "nome": "component.motore-fogli.name",
+          "gruppo": "supporto",
+          "bundle": false,
+          "acceso": true,
+          "perche": {
+            "RichiestoDa": [
+              "fub.xlsx"
+            ]
+          },
+          "richiesto_da": [
+            "fub.xlsx"
+          ],
+          "tipo": "engine",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.importers",
+          "nome": "component.importers.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.linkcard",
+          "nome": "component.linkcard.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.updates",
+          "nome": "component.updates.name",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.publish",
+          "nome": "component.publish.name",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.sync",
+          "nome": "component.sync.name",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        }
+      ],
+      "stato": {
+        "scelti": [
+          "fub.backlinks",
+          "fub.backup",
+          "fub.base",
+          "fub.blocks",
+          "fub.commands",
+          "fub.dashboard",
+          "fub.draw",
+          "fub.formatting",
+          "fub.graph",
+          "fub.importers",
+          "fub.lavagna",
+          "fub.linkcard",
+          "fub.outline",
+          "fub.pdf",
+          "fub.proof",
+          "fub.properties",
+          "fub.publish",
+          "fub.queries",
+          "fub.rich",
+          "fub.search",
+          "fub.stats",
+          "fub.sync",
+          "fub.tags",
+          "fub.template",
+          "fub.trash",
+          "fub.updates",
+          "fub.versioning",
+          "fub.xlsx"
+        ],
+        "in_attesa": []
+      },
+      "profilo": "studio",
+      "profili": [
+        {
+          "nome": "note",
+          "etichetta": "profile.note.name",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
+        },
+        {
+          "nome": "solo-note",
+          "etichetta": "profile.solo-note.name",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
+        },
+        {
+          "nome": "studio",
+          "etichetta": "profile.studio.name",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.graph",
+            "fub.proof",
+            "fub.pdf",
+            "fub.lavagna",
+            "fub.rich",
+            "fub.xlsx"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
+        },
+        {
+          "nome": "tutto",
+          "etichetta": "profile.tutto.name",
+          "componenti": [
+            "fub.core",
+            "fub.maintenance",
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.graph",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.proof",
+            "fub.draw",
+            "fub.rich",
+            "fub.xlsx",
+            "fub.lavagna",
+            "fub.pdf",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.updates",
+            "fub.publish",
+            "fub.sync"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
+        },
+        {
+          "nome": "solo-pdf",
+          "etichetta": "profile.solo-pdf.name",
+          "componenti": [
+            "fub.pdf"
+          ],
+          "arriva_con": [
+            "fub.pdf-completo"
+          ],
+          "piu_avanti": true
+        },
+        {
+          "nome": "grafica",
+          "etichetta": "profile.grafica.name",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.lavagna"
+          ],
+          "arriva_con": [
+            "fub.disegno-completo",
+            "fub.foto"
+          ],
+          "piu_avanti": true
+        },
+        {
+          "nome": "fotografia",
+          "etichetta": "profile.fotografia.name",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard"
+          ],
+          "arriva_con": [
+            "fub.libreria-foto",
+            "fub.foto"
+          ],
+          "piu_avanti": true
+        }
+      ],
+      "mancanti": []
+    },
+    {
+      "righe": [
+        {
+          "id": "fub.core",
+          "nome": "component.core.name",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Nucleo",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.maintenance",
+          "nome": "component.maintenance.name",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Nucleo",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.markdown",
+          "nome": "component.markdown.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Nucleo",
+          "richiesto_da": [
+            "fub.backlinks",
+            "fub.backup",
+            "fub.blocks",
+            "fub.commands",
+            "fub.dashboard",
+            "fub.formatting",
+            "fub.graph",
+            "fub.outline",
+            "fub.proof",
+            "fub.queries",
+            "fub.search",
+            "fub.stats",
+            "fub.tags",
+            "fub.trash",
+            "fub.versioning"
+          ],
+          "tipo": "mode",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.search",
+          "nome": "component.search.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.versioning",
+          "nome": "component.versioning.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.backlinks",
+          "nome": "component.backlinks.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.outline",
+          "nome": "component.outline.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.tags",
+          "nome": "component.tags.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.properties",
+          "nome": "component.properties.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": false,
+          "perche": "Spento",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.template",
+          "nome": "component.template.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": false,
+          "perche": "Spento",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown",
+            "fub.properties"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.queries",
+          "nome": "component.queries.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.dashboard",
+          "nome": "component.dashboard.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.backup",
+          "nome": "component.backup.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.trash",
+          "nome": "component.trash.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.commands",
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.stats",
+          "nome": "component.stats.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.graph",
+          "nome": "component.graph.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.commands",
+          "nome": "component.commands.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [
+            "fub.trash"
+          ],
+          "tipo": "service",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.blocks",
+          "nome": "component.blocks.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.base",
+          "nome": "component.base.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": false,
+          "perche": "Spento",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown",
+            "fub.properties"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.formatting",
+          "nome": "component.formatting.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.proof",
+          "nome": "component.proof.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.dizionari",
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.draw",
+          "nome": "component.draw.name",
+          "gruppo": "disegnare",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.rich",
+          "nome": "component.rich.name",
+          "gruppo": "ufficio",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.motore-documenti"
+          ],
+          "usa": [
+            "fub.penna",
+            "fub.dizionari"
+          ]
+        },
+        {
+          "id": "fub.xlsx",
+          "nome": "component.xlsx.name",
+          "gruppo": "ufficio",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.motore-fogli"
+          ],
+          "usa": [
+            "fub.penna"
+          ]
+        },
+        {
+          "id": "fub.lavagna",
+          "nome": "component.lavagna.name",
+          "gruppo": "pensare",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.penna"
+          ],
+          "usa": [
+            "fub.rich",
+            "fub.xlsx"
+          ]
+        },
+        {
+          "id": "fub.pdf",
+          "nome": "component.pdf.name",
+          "gruppo": "leggere",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.penna"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.penna",
+          "nome": "component.penna.name",
+          "gruppo": "supporto",
+          "bundle": false,
+          "acceso": true,
+          "perche": {
+            "RichiestoDa": [
+              "fub.lavagna",
+              "fub.pdf"
+            ]
+          },
+          "richiesto_da": [
+            "fub.lavagna",
+            "fub.pdf"
+          ],
+          "tipo": "engine",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.dizionari",
+          "nome": "component.dizionari.name",
+          "gruppo": "supporto",
+          "bundle": false,
+          "acceso": true,
+          "perche": {
+            "RichiestoDa": [
+              "fub.proof"
+            ]
+          },
+          "richiesto_da": [
+            "fub.proof"
+          ],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.motore-documenti",
+          "nome": "component.motore-documenti.name",
+          "gruppo": "supporto",
+          "bundle": false,
+          "acceso": true,
+          "perche": {
+            "RichiestoDa": [
+              "fub.rich"
+            ]
+          },
+          "richiesto_da": [
+            "fub.rich"
+          ],
+          "tipo": "engine",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.motore-fogli",
+          "nome": "component.motore-fogli.name",
+          "gruppo": "supporto",
+          "bundle": false,
+          "acceso": true,
+          "perche": {
+            "RichiestoDa": [
+              "fub.xlsx"
+            ]
+          },
+          "richiesto_da": [
+            "fub.xlsx"
+          ],
+          "tipo": "engine",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.importers",
+          "nome": "component.importers.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.linkcard",
+          "nome": "component.linkcard.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.updates",
+          "nome": "component.updates.name",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.publish",
+          "nome": "component.publish.name",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.sync",
+          "nome": "component.sync.name",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        }
+      ],
+      "stato": {
+        "scelti": [
+          "fub.backlinks",
+          "fub.backup",
+          "fub.blocks",
+          "fub.commands",
+          "fub.dashboard",
+          "fub.draw",
+          "fub.formatting",
+          "fub.graph",
+          "fub.importers",
+          "fub.lavagna",
+          "fub.linkcard",
+          "fub.outline",
+          "fub.pdf",
+          "fub.proof",
+          "fub.publish",
+          "fub.queries",
+          "fub.rich",
+          "fub.search",
+          "fub.stats",
+          "fub.sync",
+          "fub.tags",
+          "fub.trash",
+          "fub.updates",
+          "fub.versioning",
+          "fub.xlsx"
+        ],
+        "in_attesa": []
+      },
+      "profilo": null,
+      "profili": [
+        {
+          "nome": "note",
+          "etichetta": "profile.note.name",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
+        },
+        {
+          "nome": "solo-note",
+          "etichetta": "profile.solo-note.name",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
+        },
+        {
+          "nome": "studio",
+          "etichetta": "profile.studio.name",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.graph",
+            "fub.proof",
+            "fub.pdf",
+            "fub.lavagna",
+            "fub.rich",
+            "fub.xlsx"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
+        },
+        {
+          "nome": "tutto",
+          "etichetta": "profile.tutto.name",
+          "componenti": [
+            "fub.core",
+            "fub.maintenance",
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.graph",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.proof",
+            "fub.draw",
+            "fub.rich",
+            "fub.xlsx",
+            "fub.lavagna",
+            "fub.pdf",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.updates",
+            "fub.publish",
+            "fub.sync"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
+        },
+        {
+          "nome": "solo-pdf",
+          "etichetta": "profile.solo-pdf.name",
+          "componenti": [
+            "fub.pdf"
+          ],
+          "arriva_con": [
+            "fub.pdf-completo"
+          ],
+          "piu_avanti": true
+        },
+        {
+          "nome": "grafica",
+          "etichetta": "profile.grafica.name",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.lavagna"
+          ],
+          "arriva_con": [
+            "fub.disegno-completo",
+            "fub.foto"
+          ],
+          "piu_avanti": true
+        },
+        {
+          "nome": "fotografia",
+          "etichetta": "profile.fotografia.name",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard"
+          ],
+          "arriva_con": [
+            "fub.libreria-foto",
+            "fub.foto"
+          ],
+          "piu_avanti": true
+        }
+      ],
+      "mancanti": []
+    },
+    {
+      "righe": [
+        {
+          "id": "fub.core",
+          "nome": "component.core.name",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Nucleo",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.maintenance",
+          "nome": "component.maintenance.name",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Nucleo",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.markdown",
+          "nome": "component.markdown.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Nucleo",
+          "richiesto_da": [
+            "fub.backlinks",
+            "fub.backup",
+            "fub.blocks",
+            "fub.commands",
+            "fub.dashboard",
+            "fub.formatting",
+            "fub.graph",
+            "fub.outline",
+            "fub.proof",
+            "fub.properties",
+            "fub.queries",
+            "fub.search",
+            "fub.stats",
+            "fub.tags",
+            "fub.template",
+            "fub.trash",
+            "fub.versioning"
+          ],
+          "tipo": "mode",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.search",
+          "nome": "component.search.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.versioning",
+          "nome": "component.versioning.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.backlinks",
+          "nome": "component.backlinks.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.outline",
+          "nome": "component.outline.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.tags",
+          "nome": "component.tags.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.properties",
+          "nome": "component.properties.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [
+            "fub.template"
+          ],
+          "tipo": "service",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.template",
+          "nome": "component.template.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown",
+            "fub.properties"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.queries",
+          "nome": "component.queries.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.dashboard",
+          "nome": "component.dashboard.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.backup",
+          "nome": "component.backup.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.trash",
+          "nome": "component.trash.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.commands",
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.stats",
+          "nome": "component.stats.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.graph",
+          "nome": "component.graph.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.commands",
+          "nome": "component.commands.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [
+            "fub.trash"
+          ],
+          "tipo": "service",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.blocks",
+          "nome": "component.blocks.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.base",
+          "nome": "component.base.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": false,
+          "perche": "Spento",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown",
+            "fub.properties"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.formatting",
+          "nome": "component.formatting.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.proof",
+          "nome": "component.proof.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.dizionari",
+            "fub.markdown"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.draw",
+          "nome": "component.draw.name",
+          "gruppo": "disegnare",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.rich",
+          "nome": "component.rich.name",
+          "gruppo": "ufficio",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.motore-documenti"
+          ],
+          "usa": [
+            "fub.penna",
+            "fub.dizionari"
+          ]
+        },
+        {
+          "id": "fub.xlsx",
+          "nome": "component.xlsx.name",
+          "gruppo": "ufficio",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.motore-fogli"
+          ],
+          "usa": [
+            "fub.penna"
+          ]
+        },
+        {
+          "id": "fub.lavagna",
+          "nome": "component.lavagna.name",
+          "gruppo": "pensare",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.penna"
+          ],
+          "usa": [
+            "fub.rich",
+            "fub.xlsx"
+          ]
+        },
+        {
+          "id": "fub.pdf",
+          "nome": "component.pdf.name",
+          "gruppo": "leggere",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "mode",
+          "richiede": [
+            "fub.penna"
+          ],
+          "usa": []
+        },
+        {
+          "id": "fub.penna",
+          "nome": "component.penna.name",
+          "gruppo": "supporto",
+          "bundle": false,
+          "acceso": true,
+          "perche": {
+            "RichiestoDa": [
+              "fub.lavagna",
+              "fub.pdf"
+            ]
+          },
+          "richiesto_da": [
+            "fub.lavagna",
+            "fub.pdf"
+          ],
+          "tipo": "engine",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.dizionari",
+          "nome": "component.dizionari.name",
+          "gruppo": "supporto",
+          "bundle": false,
+          "acceso": true,
+          "perche": {
+            "RichiestoDa": [
+              "fub.proof"
+            ]
+          },
+          "richiesto_da": [
+            "fub.proof"
+          ],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.motore-documenti",
+          "nome": "component.motore-documenti.name",
+          "gruppo": "supporto",
+          "bundle": false,
+          "acceso": true,
+          "perche": {
+            "RichiestoDa": [
+              "fub.rich"
+            ]
+          },
+          "richiesto_da": [
+            "fub.rich"
+          ],
+          "tipo": "engine",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.motore-fogli",
+          "nome": "component.motore-fogli.name",
+          "gruppo": "supporto",
+          "bundle": false,
+          "acceso": true,
+          "perche": {
+            "RichiestoDa": [
+              "fub.xlsx"
+            ]
+          },
+          "richiesto_da": [
+            "fub.xlsx"
+          ],
+          "tipo": "engine",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.importers",
+          "nome": "component.importers.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.linkcard",
+          "nome": "component.linkcard.name",
+          "gruppo": "scrivere",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.updates",
+          "nome": "component.updates.name",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.publish",
+          "nome": "component.publish.name",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        },
+        {
+          "id": "fub.sync",
+          "nome": "component.sync.name",
+          "gruppo": "altro",
+          "bundle": true,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "tipo": "service",
+          "richiede": [],
+          "usa": []
+        }
+      ],
+      "stato": {
+        "scelti": [
+          "fub.backlinks",
+          "fub.backup",
+          "fub.blocks",
+          "fub.commands",
+          "fub.dashboard",
+          "fub.draw",
+          "fub.formatting",
+          "fub.graph",
+          "fub.importers",
+          "fub.lavagna",
+          "fub.linkcard",
+          "fub.outline",
+          "fub.pdf",
+          "fub.proof",
+          "fub.properties",
+          "fub.publish",
+          "fub.queries",
+          "fub.rich",
+          "fub.search",
+          "fub.stats",
+          "fub.sync",
+          "fub.tags",
+          "fub.template",
+          "fub.trash",
+          "fub.updates",
+          "fub.versioning",
+          "fub.xlsx"
+        ],
+        "in_attesa": []
+      },
+      "profilo": null,
+      "profili": [
+        {
+          "nome": "note",
+          "etichetta": "profile.note.name",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
+        },
+        {
+          "nome": "solo-note",
+          "etichetta": "profile.solo-note.name",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
+        },
+        {
+          "nome": "studio",
+          "etichetta": "profile.studio.name",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.graph",
+            "fub.proof",
+            "fub.pdf",
+            "fub.lavagna",
+            "fub.rich",
+            "fub.xlsx"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
+        },
+        {
+          "nome": "tutto",
+          "etichetta": "profile.tutto.name",
+          "componenti": [
+            "fub.core",
+            "fub.maintenance",
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.graph",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.proof",
+            "fub.draw",
+            "fub.rich",
+            "fub.xlsx",
+            "fub.lavagna",
+            "fub.pdf",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.updates",
+            "fub.publish",
+            "fub.sync"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
+        },
+        {
+          "nome": "solo-pdf",
+          "etichetta": "profile.solo-pdf.name",
+          "componenti": [
+            "fub.pdf"
+          ],
+          "arriva_con": [
+            "fub.pdf-completo"
+          ],
+          "piu_avanti": true
+        },
+        {
+          "nome": "grafica",
+          "etichetta": "profile.grafica.name",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.lavagna"
+          ],
+          "arriva_con": [
+            "fub.disegno-completo",
+            "fub.foto"
+          ],
+          "piu_avanti": true
+        },
+        {
+          "nome": "fotografia",
+          "etichetta": "profile.fotografia.name",
+          "componenti": [
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.importers",
+            "fub.linkcard"
+          ],
+          "arriva_con": [
+            "fub.libreria-foto",
+            "fub.foto"
+          ],
+          "piu_avanti": true
+        }
+      ],
+      "mancanti": []
+    }
+  ],
+  "scelte": [
+    {
+      "prima": 0,
+      "azione": {
+        "azione": "spegni",
+        "id": "fub.penna",
+        "anche_questi": false,
+        "orfani": "chiedi"
+      },
+      "apply": false,
+      "risposta": {
+        "risposta": "rifiuto",
+        "rifiuto": "richiesto",
+        "id": "fub.penna",
+        "da": [
+          "fub.lavagna",
+          "fub.pdf"
+        ]
+      },
+      "dopo": 0
+    },
+    {
+      "prima": 0,
+      "azione": {
+        "azione": "accendi",
+        "id": "fub.inesistente"
+      },
+      "apply": false,
+      "risposta": {
+        "risposta": "rifiuto",
+        "rifiuto": "sconosciuto",
+        "id": "fub.inesistente"
+      },
+      "dopo": 0
+    },
+    {
+      "prima": 0,
+      "azione": {
+        "azione": "accendi",
+        "id": "fub.inesistente"
+      },
+      "apply": true,
+      "risposta": {
+        "risposta": "rifiuto",
+        "rifiuto": "sconosciuto",
+        "id": "fub.inesistente"
+      },
+      "dopo": 0
+    },
+    {
+      "prima": 0,
+      "azione": {
+        "azione": "profilo",
+        "nome": "solo-pdf"
+      },
+      "apply": true,
+      "risposta": {
+        "risposta": "rifiuto",
+        "rifiuto": "profilo_piu_avanti",
+        "nome": "solo-pdf",
+        "arriva_con": [
+          "fub.pdf-completo"
+        ]
+      },
+      "dopo": 0
+    },
+    {
+      "prima": 0,
+      "azione": {
+        "azione": "spegni",
+        "id": "fub.properties",
+        "anche_questi": false,
+        "orfani": "chiedi"
+      },
+      "apply": true,
+      "risposta": {
+        "risposta": "rifiuto",
+        "rifiuto": "richiesto",
+        "id": "fub.properties",
+        "da": [
+          "fub.base",
+          "fub.template"
+        ]
+      },
+      "dopo": 0
+    },
+    {
+      "prima": 0,
+      "azione": {
+        "azione": "spegni",
+        "id": "fub.properties",
+        "anche_questi": true,
+        "orfani": "chiedi"
+      },
+      "apply": false,
+      "risposta": {
+        "risposta": "esito",
+        "azione": {
+          "azione": "spegni",
+          "id": "fub.properties",
+          "anche_questi": true,
+          "orfani": "chiedi"
+        },
+        "effetto": {
+          "accesi_anche": [],
+          "spenti_anche": [
+            "fub.base",
+            "fub.template"
+          ],
+          "orfani": [],
+          "mancanti": []
+        },
+        "scritture": [
+          {
+            "id": "fub.base",
+            "acceso": false,
+            "bundle": true
+          },
+          {
+            "id": "fub.template",
+            "acceso": false,
+            "bundle": true
+          },
+          {
+            "id": "fub.properties",
+            "acceso": false,
+            "bundle": true
+          }
+        ],
+        "chiavi": [
+          "components.profile"
+        ],
+        "stato": {
+          "scelti": [
+            "fub.backlinks",
+            "fub.backup",
+            "fub.blocks",
+            "fub.commands",
+            "fub.dashboard",
+            "fub.draw",
+            "fub.formatting",
+            "fub.graph",
+            "fub.importers",
+            "fub.lavagna",
+            "fub.linkcard",
+            "fub.outline",
+            "fub.pdf",
+            "fub.proof",
+            "fub.publish",
+            "fub.queries",
+            "fub.rich",
+            "fub.search",
+            "fub.stats",
+            "fub.sync",
+            "fub.tags",
+            "fub.trash",
+            "fub.updates",
+            "fub.versioning",
+            "fub.xlsx"
+          ],
+          "in_attesa": []
+        },
+        "applicato": false,
+        "avvisi": []
+      },
+      "dopo": 0
+    },
+    {
+      "prima": 0,
+      "azione": {
+        "azione": "spegni",
+        "id": "fub.properties",
+        "anche_questi": true,
+        "orfani": "chiedi"
+      },
+      "apply": true,
+      "risposta": {
+        "risposta": "esito",
+        "azione": {
+          "azione": "spegni",
+          "id": "fub.properties",
+          "anche_questi": true,
+          "orfani": "chiedi"
+        },
+        "effetto": {
+          "accesi_anche": [],
+          "spenti_anche": [
+            "fub.base",
+            "fub.template"
+          ],
+          "orfani": [],
+          "mancanti": []
+        },
+        "scritture": [
+          {
+            "id": "fub.base",
+            "acceso": false,
+            "bundle": true
+          },
+          {
+            "id": "fub.template",
+            "acceso": false,
+            "bundle": true
+          },
+          {
+            "id": "fub.properties",
+            "acceso": false,
+            "bundle": true
+          }
+        ],
+        "chiavi": [
+          "components.profile"
+        ],
+        "stato": {
+          "scelti": [
+            "fub.backlinks",
+            "fub.backup",
+            "fub.blocks",
+            "fub.commands",
+            "fub.dashboard",
+            "fub.draw",
+            "fub.formatting",
+            "fub.graph",
+            "fub.importers",
+            "fub.lavagna",
+            "fub.linkcard",
+            "fub.outline",
+            "fub.pdf",
+            "fub.proof",
+            "fub.publish",
+            "fub.queries",
+            "fub.rich",
+            "fub.search",
+            "fub.stats",
+            "fub.sync",
+            "fub.tags",
+            "fub.trash",
+            "fub.updates",
+            "fub.versioning",
+            "fub.xlsx"
+          ],
+          "in_attesa": []
+        },
+        "applicato": true,
+        "avvisi": []
+      },
+      "dopo": 1
+    },
+    {
+      "prima": 1,
+      "azione": {
+        "azione": "spegni",
+        "id": "fub.penna",
+        "anche_questi": false,
+        "orfani": "chiedi"
+      },
+      "apply": false,
+      "risposta": {
+        "risposta": "rifiuto",
+        "rifiuto": "richiesto",
+        "id": "fub.penna",
+        "da": [
+          "fub.lavagna",
+          "fub.pdf"
+        ]
+      },
+      "dopo": 1
+    },
+    {
+      "prima": 1,
+      "azione": {
+        "azione": "accendi",
+        "id": "fub.template"
+      },
+      "apply": false,
+      "risposta": {
+        "risposta": "esito",
+        "azione": {
+          "azione": "accendi",
+          "id": "fub.template"
+        },
+        "effetto": {
+          "accesi_anche": [
+            "fub.properties"
+          ],
+          "spenti_anche": [],
+          "orfani": [],
+          "mancanti": []
+        },
+        "scritture": [
+          {
+            "id": "fub.properties",
+            "acceso": true,
+            "bundle": true
+          },
+          {
+            "id": "fub.template",
+            "acceso": true,
+            "bundle": true
+          }
+        ],
+        "chiavi": [],
+        "stato": {
+          "scelti": [
+            "fub.backlinks",
+            "fub.backup",
+            "fub.blocks",
+            "fub.commands",
+            "fub.dashboard",
+            "fub.draw",
+            "fub.formatting",
+            "fub.graph",
+            "fub.importers",
+            "fub.lavagna",
+            "fub.linkcard",
+            "fub.outline",
+            "fub.pdf",
+            "fub.proof",
+            "fub.publish",
+            "fub.queries",
+            "fub.rich",
+            "fub.search",
+            "fub.stats",
+            "fub.sync",
+            "fub.tags",
+            "fub.template",
+            "fub.trash",
+            "fub.updates",
+            "fub.versioning",
+            "fub.xlsx"
+          ],
+          "in_attesa": []
+        },
+        "applicato": false,
+        "avvisi": []
+      },
+      "dopo": 1
+    },
+    {
+      "prima": 1,
+      "azione": {
+        "azione": "accendi",
+        "id": "fub.template"
+      },
+      "apply": true,
+      "risposta": {
+        "risposta": "esito",
+        "azione": {
+          "azione": "accendi",
+          "id": "fub.template"
+        },
+        "effetto": {
+          "accesi_anche": [
+            "fub.properties"
+          ],
+          "spenti_anche": [],
+          "orfani": [],
+          "mancanti": []
+        },
+        "scritture": [
+          {
+            "id": "fub.properties",
+            "acceso": true,
+            "bundle": true
+          },
+          {
+            "id": "fub.template",
+            "acceso": true,
+            "bundle": true
+          }
+        ],
+        "chiavi": [],
+        "stato": {
+          "scelti": [
+            "fub.backlinks",
+            "fub.backup",
+            "fub.blocks",
+            "fub.commands",
+            "fub.dashboard",
+            "fub.draw",
+            "fub.formatting",
+            "fub.graph",
+            "fub.importers",
+            "fub.lavagna",
+            "fub.linkcard",
+            "fub.outline",
+            "fub.pdf",
+            "fub.proof",
+            "fub.publish",
+            "fub.queries",
+            "fub.rich",
+            "fub.search",
+            "fub.stats",
+            "fub.sync",
+            "fub.tags",
+            "fub.template",
+            "fub.trash",
+            "fub.updates",
+            "fub.versioning",
+            "fub.xlsx"
+          ],
+          "in_attesa": []
+        },
+        "applicato": true,
+        "avvisi": []
+      },
+      "dopo": 2
+    },
+    {
+      "prima": 2,
+      "azione": {
+        "azione": "profilo",
+        "nome": "studio"
+      },
+      "apply": true,
+      "risposta": {
+        "risposta": "esito",
+        "azione": {
+          "azione": "profilo",
+          "nome": "studio"
+        },
+        "effetto": {
+          "accesi_anche": [],
+          "spenti_anche": [],
+          "orfani": [],
+          "mancanti": []
+        },
+        "scritture": [
+          {
+            "id": "fub.base",
+            "acceso": true,
+            "bundle": true
+          }
+        ],
+        "chiavi": [
+          "components.profile"
+        ],
+        "stato": {
+          "scelti": [
+            "fub.backlinks",
+            "fub.backup",
+            "fub.base",
+            "fub.blocks",
+            "fub.commands",
+            "fub.dashboard",
+            "fub.draw",
+            "fub.formatting",
+            "fub.graph",
+            "fub.importers",
+            "fub.lavagna",
+            "fub.linkcard",
+            "fub.markdown",
+            "fub.outline",
+            "fub.pdf",
+            "fub.proof",
+            "fub.properties",
+            "fub.publish",
+            "fub.queries",
+            "fub.rich",
+            "fub.search",
+            "fub.stats",
+            "fub.sync",
+            "fub.tags",
+            "fub.template",
+            "fub.trash",
+            "fub.updates",
+            "fub.versioning",
+            "fub.xlsx"
+          ],
+          "in_attesa": []
+        },
+        "applicato": true,
+        "avvisi": []
+      },
+      "dopo": 0
+    }
+  ],
+  "senza_vault": {
+    "components_map": {
+      "kind": "not_found",
+      "message": "Nessun vault aperto."
+    },
+    "components_apply": {
+      "kind": "not_found",
+      "message": "Nessun vault aperto."
+    }
+  }
+}
