@@ -67,6 +67,7 @@ flowchart TD
     host --> svg
     host --> kernel
     cli --> abi
+    cli --> componenti
     cli --> host
     services --> abi
     base --> abi

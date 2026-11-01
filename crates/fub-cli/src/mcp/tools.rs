@@ -10,6 +10,9 @@
 //! - **`fub_invoke` parte in prova.** Restituisce il piano; per eseguire
 //!   serve `"apply": true`, e un comando che scrive si esegue soltanto se il
 //!   suo piano tocca documenti sotto le radici di scrittura.
+//! - **I componenti** (`fub_components*`) seguono le regole di
+//!   `fub-cli componenti` (`crate::componenti`): accendere e spegnere partono
+//!   in prova, e con `"apply": true` vogliono una radice di scrittura.
 //! - **Le risposte sono a pagine**, 50 per difetto e al più 200, per non
 //!   riempire il contesto dell'agente.
 
@@ -22,6 +25,7 @@ use serde_json::{json, Value};
 use super::access::{Access, Scope};
 use super::RpcError;
 use crate::commands::{doc_id, paginate, render_text_value, Connection, Failure};
+use crate::componenti::{Orfani, Vista, OPZIONI_MCP};
 use crate::local::{link_target, match_json, outcome_json, search_expr};
 
 const LIMIT_DEFAULT: u32 = 50;
@@ -148,6 +152,59 @@ pub fn specs() -> Value {
                 "additionalProperties": false
             },
             "annotations": { "readOnlyHint": false, "destructiveHint": true, "idempotentHint": false }
+        },
+        {
+            "name": "fub_components",
+            "description": "I componenti di Fub nel vault: acceso o spento, se è scelto o serve a un altro, il nome e chi lo richiede.",
+            "inputSchema": {
+                "type": "object",
+                "properties": { "limit": limit, "offset": offset },
+                "additionalProperties": false
+            },
+            "annotations": { "readOnlyHint": true }
+        },
+        {
+            "name": "fub_components_why",
+            "description": "Perché un componente di Fub è acceso: scelto, richiesto da altri o parte del nucleo. O che è spento.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string", "description": "L'id del componente, da fub_components" }
+                },
+                "required": ["id"],
+                "additionalProperties": false
+            },
+            "annotations": { "readOnlyHint": true }
+        },
+        {
+            "name": "fub_components_enable",
+            "description": "Accende un componente di Fub, e con lui quelli senza cui non funziona. Senza apply è una prova: dice che cosa si accenderebbe. Con \"apply\": true lo fa.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string", "description": "L'id del componente, da fub_components" },
+                    "apply": { "type": "boolean", "default": false, "description": "Accendi davvero invece di provare" }
+                },
+                "required": ["id"],
+                "additionalProperties": false
+            },
+            "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": true }
+        },
+        {
+            "name": "fub_components_disable",
+            "description": "Spegne un componente di Fub. Se altri lo richiedono rifiuta e dice chi, a meno di also_dependents. Ciò che non serve più a nessuno si toglie con orphans \"remove\" o resta con \"keep\". Senza apply è una prova. Il nucleo non si spegne.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string", "description": "L'id del componente, da fub_components" },
+                    "apply": { "type": "boolean", "default": false, "description": "Spegni davvero invece di provare" },
+                    "also_dependents": { "type": "boolean", "default": false, "description": "Spegni anche i componenti che lo richiedono" },
+                    "orphans": { "type": "string", "enum": ["remove", "keep"], "description": "Che cosa fare di ciò che non serve più a nessuno" }
+                },
+                "required": ["id"],
+                "additionalProperties": false
+            },
+            "annotations": { "readOnlyHint": false, "destructiveHint": true, "idempotentHint": true }
         }
     ])
 }
@@ -173,6 +230,10 @@ pub fn call(c: &Connection, access: &Access, params: &Value) -> Result<Value, Rp
         "fub_create" => create(c, access, &args),
         "fub_commands" => commands(c, &args),
         "fub_invoke" => invoke(c, access, &args),
+        "fub_components" => components(c, &args),
+        "fub_components_why" => components_why(c, &args),
+        "fub_components_enable" => components_enable(c, access, &args),
+        "fub_components_disable" => components_disable(c, access, &args),
         other => {
             return Err(RpcError::invalid_params(&format!(
                 "strumento sconosciuto: {other}"
@@ -684,4 +745,53 @@ fn invoke(c: &Connection, access: &Access, args: &Value) -> Result<Value, Failur
     }
     let outcome = run(InvokeMode::Apply)?;
     Ok(json!({ "dry_run": false, "outcome": outcome_json(&outcome) }))
+}
+
+fn components(c: &Connection, args: &Value) -> Result<Value, Failure> {
+    let page = page_of(args)?;
+    let (items, total) = paginate(Vista::leggi(c)?.elenco(), page.offset, Some(page.limit));
+    Ok(json!({ "items": items, "offset": page.offset, "limit": page.limit, "total": total }))
+}
+
+fn components_why(c: &Connection, args: &Value) -> Result<Value, Failure> {
+    Vista::leggi(c)?.perche(required(args, "id")?)
+}
+
+/// Senza `apply` una prova; con `apply` prima di tutto la radice di
+/// scrittura, poi le scritture.
+fn components_apply(
+    c: &Connection,
+    access: &Access,
+    args: &Value,
+    esito: impl FnOnce(&Vista) -> Result<crate::componenti::Esito, Failure>,
+) -> Result<Value, Failure> {
+    let apply = bool_arg(args, "apply")?;
+    if apply {
+        access.check_writer()?;
+    }
+    let esito = esito(&Vista::leggi(c)?)?;
+    if !apply {
+        return Ok(esito.json(true, &[]));
+    }
+    let avvisi = esito.applica(c)?;
+    Ok(esito.json(false, &avvisi))
+}
+
+fn components_enable(c: &Connection, access: &Access, args: &Value) -> Result<Value, Failure> {
+    let id = required(args, "id")?;
+    components_apply(c, access, args, |vista| vista.accendi(id, &OPZIONI_MCP))
+}
+
+fn components_disable(c: &Connection, access: &Access, args: &Value) -> Result<Value, Failure> {
+    let id = required(args, "id")?;
+    let also = bool_arg(args, "also_dependents")?;
+    let orfani = match text_arg(args, "orphans")? {
+        None => Orfani::Chiedi,
+        Some("remove") => Orfani::Togli,
+        Some("keep") => Orfani::Tieni,
+        Some(_) => return Err(Failure::bad_args("`orphans` è \"remove\" o \"keep\"")),
+    };
+    components_apply(c, access, args, |vista| {
+        vista.spegni(id, also, orfani, &OPZIONI_MCP)
+    })
 }

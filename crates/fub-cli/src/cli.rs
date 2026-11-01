@@ -63,6 +63,7 @@ pub enum CliCommand {
     },
     Views(ViewsArgs),
     Plugin(PluginArgs),
+    Componenti(ComponentiArgs),
     Theme(ThemeArgs),
     Diagnostics(DiagnosticsArgs),
     Capture(CaptureArgs),
@@ -268,6 +269,26 @@ pub struct PluginArgs {
     pub disable: Option<String>,
 }
 
+/// `componenti`: l'elenco, `perche ID`, `accendi ID`, `spegni ID`.
+#[derive(Clone, Debug)]
+pub struct ComponentiArgs {
+    pub global: GlobalArgs,
+    pub action: ComponentiAction,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ComponentiAction {
+    Elenco,
+    Perche(String),
+    Accendi(String),
+    Spegni {
+        id: String,
+        anche_questi: bool,
+        togli: bool,
+        tieni: bool,
+    },
+}
+
 #[derive(Clone, Debug)]
 pub struct ThemeArgs {
     pub global: GlobalArgs,
@@ -411,6 +432,7 @@ impl CliCommand {
             CliCommand::Outline(a) | CliCommand::Wordcount(a) => a.global.clone(),
             CliCommand::Views(a) => a.global.clone(),
             CliCommand::Plugin(a) => a.global.clone(),
+            CliCommand::Componenti(a) => a.global.clone(),
             CliCommand::Theme(a) => a.global.clone(),
             CliCommand::Diagnostics(a) => a.global.clone(),
             CliCommand::Capture(a) => a.global.clone(),
@@ -514,6 +536,10 @@ impl CliCommand {
             CliCommand::Plugin(mut a) => {
                 a.global = global;
                 CliCommand::Plugin(a)
+            }
+            CliCommand::Componenti(mut a) => {
+                a.global = global;
+                CliCommand::Componenti(a)
             }
             CliCommand::Theme(mut a) => {
                 a.global = global;
@@ -745,6 +771,68 @@ pub fn parse_cli(argv: &[String]) -> Result<CliCommand, String> {
         ));
     }
     Ok(tail_command.with_global(merged_global))
+}
+
+/// `componenti [perche ID | accendi ID | spegni ID [--anche-questi] [--togli|--tieni]]`.
+/// I flag globali possono stare in mezzo: `spegni x --yes --togli`.
+fn parse_componenti(parser: &mut Parser, mut global: GlobalArgs) -> Result<CliCommand, String> {
+    parse_global(parser, &mut global)?;
+    let verbo = match parser.peek() {
+        Some(v) if split_flag(v).is_none() => {
+            parser.next();
+            Some(v)
+        }
+        _ => None,
+    };
+    let mut id = None;
+    let (mut anche_questi, mut togli, mut tieni) = (false, false, false);
+    loop {
+        parse_global(parser, &mut global)?;
+        let Some(arg) = parser.peek() else { break };
+        match split_flag(arg) {
+            None if verbo.is_some() && id.is_none() => {
+                id = Some(arg.to_string());
+                parser.next();
+            }
+            Some((name, inline)) if verbo == Some("spegni") => {
+                if inline.is_some() {
+                    return Err(format!("--{name} non prende valori"));
+                }
+                match name {
+                    "anche-questi" => anche_questi = true,
+                    "togli" => togli = true,
+                    "tieni" => tieni = true,
+                    _ => break,
+                }
+                parser.next();
+            }
+            _ => break,
+        }
+    }
+    if togli && tieni {
+        return Err("--togli e --tieni insieme: scegline uno".to_string());
+    }
+    let id_di = |verbo: &str| {
+        id.clone()
+            .ok_or_else(|| format!("componenti {verbo} vuole un id"))
+    };
+    let action = match verbo {
+        None => ComponentiAction::Elenco,
+        Some("perche") => ComponentiAction::Perche(id_di("perche")?),
+        Some("accendi") => ComponentiAction::Accendi(id_di("accendi")?),
+        Some("spegni") => ComponentiAction::Spegni {
+            id: id_di("spegni")?,
+            anche_questi,
+            togli,
+            tieni,
+        },
+        Some(altro) => {
+            return Err(format!(
+                "componenti: `{altro}` non è un'azione (perche, accendi, spegni)"
+            ))
+        }
+    };
+    Ok(CliCommand::Componenti(ComponentiArgs { global, action }))
 }
 
 fn parse_command(
@@ -1654,6 +1742,7 @@ fn parse_command(
             }
             Ok(CliCommand::Plugin(args))
         }
+        "componenti" => parse_componenti(parser, global),
         "theme" => {
             let mut args = ThemeArgs {
                 global,
@@ -2392,6 +2481,7 @@ pub fn command_names() -> Vec<&'static str> {
         "bookmarks",
         "views",
         "plugin",
+        "componenti",
         "theme",
         "diagnostics",
         "capture",
@@ -2410,7 +2500,7 @@ pub fn command_names() -> Vec<&'static str> {
     ]
 }
 pub fn usage() -> &'static str {
-    "uso: fub-cli [--vault PATH] [--format json|jsonl|tsv|csv|md|text] [--config-dir DIR] [--no-watcher] [--standalone] <comando> [args]\ncomandi: vault mcp read write create exec files query search command properties tasks templates daily outline wordcount random bookmarks views plugin theme diagnostics capture uri callback login mfa config sync publish native-install pair repl completion help"
+    "uso: fub-cli [--vault PATH] [--format json|jsonl|tsv|csv|md|text] [--config-dir DIR] [--no-watcher] [--standalone] <comando> [args]\ncomandi: vault mcp read write create exec files query search command properties tasks templates daily outline wordcount random bookmarks views plugin componenti theme diagnostics capture uri callback login mfa config sync publish native-install pair repl completion help"
 }
 
 pub fn help_text(topic: Option<&str>) -> String {
@@ -2443,6 +2533,7 @@ pub fn help_text(topic: Option<&str>) -> String {
             "random" => "random\nUna nota a caso fra quelle in prosa del vault, scelta da note.random. Non scrive.".to_string(),
             "views" => "views [--list|--render ID|--action ID --payload JSON]".to_string(),
             "plugin" => "plugin [--list|--enable ID|--disable ID]".to_string(),
+            "componenti" => "componenti [perche ID | accendi ID | spegni ID [--anche-questi] [--togli|--tieni]]\nI componenti con le regole dell'app: chi è acceso, perché, chi richiede chi. Senza azione l'elenco (acceso/spento, scelto/serve, id, nome, ← chi lo richiede). accendi accende anche ciò che serve; spegni rifiuta se altri lo richiedono (--anche-questi spegne anche loro) e chiede che fare di ciò che non serve più (--togli lo spegne, --tieni lo lascia). Lo stato è plugins.disabled; --dry-run mostra l'effetto senza cambiare niente, le scritture vogliono --yes fuori da un terminale.".to_string(),
             "theme" => "theme [--list|--show ID|--light ID]".to_string(),
             "diagnostics" => "diagnostics [--startup|--session|--jobs|--health CHECK|--status]".to_string(),
             "config" => "config [--list|--get KEY|--set KEY=VALUE|--reset KEY]".to_string(),

@@ -11,6 +11,7 @@ mod capture;
 mod cli;
 mod commands;
 mod completer;
+mod componenti;
 mod local;
 mod login;
 mod mcp;
@@ -339,6 +340,7 @@ fn dispatch(
         CliCommand::Plugin(args) => {
             local::plugin(connection, global, format, args, print_line(global, format))
         }
+        CliCommand::Componenti(args) => componenti::run(connection, global, format, args),
         CliCommand::Theme(args) => {
             local::theme(connection, global, format, args, print_line(global, format))
         }

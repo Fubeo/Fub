@@ -31,7 +31,7 @@ const RESOURCES_PAGE: u32 = 100;
 
 /// Che cosa dice `initialize` a chi legge: le regole che un agente deve
 /// sapere prima della prima chiamata.
-const INSTRUCTIONS: &str = "Il vault di Fub: note Markdown e altri file. Cerca con fub_search e fub_query, leggi con fub_read. Per cambiare una nota passa a fub_write la revisione letta: se nel frattempo è cambiata torna un conflitto, rileggi e riprova. Le note nuove si fanno con fub_create. fub_invoke senza apply mostra il piano, con \"apply\": true lo esegue. Si scrive soltanto sotto le radici di scrittura.";
+const INSTRUCTIONS: &str = "Il vault di Fub: note Markdown e altri file. Cerca con fub_search e fub_query, leggi con fub_read. Per cambiare una nota passa a fub_write la revisione letta: se nel frattempo è cambiata torna un conflitto, rileggi e riprova. Le note nuove si fanno con fub_create. fub_invoke senza apply mostra il piano, con \"apply\": true lo esegue. I componenti si vedono con fub_components e fub_components_why; fub_components_enable e fub_components_disable senza apply mostrano l'effetto, con \"apply\": true lo applicano, e vogliono una radice di scrittura. Si scrive soltanto sotto le radici di scrittura.";
 
 /// Un errore JSON-RPC: il messaggio non è arrivato a uno strumento.
 #[derive(Debug)]
