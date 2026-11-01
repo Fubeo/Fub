@@ -290,6 +290,10 @@ solo in due punti: `struct CoreBundle` e i suoi builder (`providing`,
 e il ciclo delle feature ufficiali (`for feature in
 fub_features::every_official_feature()`, righe ~405–430), dove il manifest di
 ogni bundle ufficiale si costruisce dalla sua riga; `Cargo.lock`.
+Autorizzati dopo il blocco del coder (2026-11-01): in `mount.rs` anche i due
+blocchi che montano `fub.rich` e `fub.xlsx` (~376–404), solo per i campi della
+riga. I requisiti solo della mappa (`fub.markdown`, `fub.dizionari`) stanno
+nella riga e non nel manifest; il test confronta manifest e riga tolti questi.
 Non toccare: il resto di `crates/fub-host/src/mount.rs` (quali bundle si
 montano e in che ordine non cambia), `crates/fub-host/src/session.rs`, `crates/fub-host/src/settings.rs`, `fub-abi`, `fub-cli`, il client.
 Dipende da: T1, T2
@@ -370,7 +374,7 @@ componenti` verde e `cargo tree -p fub-host --no-default-features -e normal`
 non contiene `fub-format-rich` né `fub-format-xlsx` (spento non costa codice:
 l'output nella PR); `official_views.rs` invariato e verde.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 4014ba43
 
 ## T4 · `fub-cli componenti` e gli stessi comandi via MCP
 

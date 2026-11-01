@@ -34,6 +34,19 @@ registro.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-01 · K1 · I requisiti che esistono solo per la mappa
+  (`fub.markdown`, `fub.dizionari`: nucleo e componenti senza bundle) stanno
+  nella riga di `fub-features::componenti`, non nel manifest; il manifest tiene
+  i `requires` di oggi, perché il kernel soddisfa un requisito solo col
+  `provides` di un bundle montato (`provider_of`) · fonte: risposta
+  dell'utente al blocco del coder di T3; altrimenti le feature delle note non
+  si monterebbero più.
+- 2026-11-01 · K1 · T3 tocca anche i due blocchi di `mount.rs` che montano
+  `fub.rich` e `fub.xlsx` fuori dal ciclo ufficiale (~376–404), solo per i
+  campi della riga; righe anche per `fub.core` e `fub.maintenance` (il nucleo
+  deve avere una riga); `fub.draw` resta fuori dal `default` come oggi e non
+  richiede `fub.markdown` · fonte: risposta dell'utente; il resto deciso
+  dall'orchestratore (il codice vince).
 - 2026-11-01 · K1 · `Delivery` nel JSON è un enum con tag interno `kind`
   (`{"kind":"download","url":…}`), e la validazione di `fub-wasm-host` accetta
   lo sha256 in esadecimale maiuscolo o minuscolo; la conversione WIT → Rust di
