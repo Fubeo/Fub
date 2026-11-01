@@ -34,6 +34,16 @@ registro.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K2 · I comandi della sessione live dei disegni arrivano col
+  codice dei disegni, la prima volta che un disegno si apre, e non più
+  all'avvio quando `editors/spatial` è acceso: la prima misura di C1 li ha
+  trovati con «Solo note», perché per A4 nessun profilo tranne «Tutto» tocca
+  `fub.draw`, che quindi resta acceso, mentre la riga di «Fatto quando» vuole
+  «Solo note» senza `editors/spatial`. Servono solo con un disegno a
+  fuoco o una sessione aperta, quindi chi usa Fub non vede differenze; il
+  disegno si monta quando sono arrivati (`withDrawings` delle opzioni del
+  registro). C1 vale per «Solo note» e per «Tutto» · fonte: l'orchestratore,
+  dalla misura di C1 (D-1, A4).
 - 2026-11-01 · K2 · C1 entra nel job `webview` con un controllo vero, non
   solo con l'elenco: il build scrive `dist/switchable-chunks.json` (i chunk di
   ogni pezzo di `NOT_AT_STARTUP`) e C1 fallisce se con «Solo note» uno di

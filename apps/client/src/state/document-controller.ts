@@ -29,7 +29,7 @@
 import { pickFromList } from "../ui/dialogs";
 import { rebaseStaleChange, type EditorChange } from "../editors/core/text-operation";
 import { createDocumentSurfaceRegistry, setComponentEditors } from "../editors/core/bootstrap";
-import { UI_SPATIAL, VECTOR_PROFILE, uisForFile } from "../editors/core/component-surfaces";
+import { VECTOR_PROFILE, uisForFile } from "../editors/core/component-surfaces";
 import { componentsReady, mountComponents, onComponents, refreshComponents, type Components } from "./components";
 import {
   selectionSetOf,
@@ -855,6 +855,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       pick: () => pickDrawingImage(),
     },
     drawingFonts,
+    withDrawings: loadLiveCommands,
     renderCanvasMarkdown: (_nodeId, text, host, documentId, forms) => mountMarkdown(host, renderMarkdown(text, forms).html, {
       documentId,
       openWikilink: (page, heading, block) => openWikilink(page, heading, block),
@@ -1432,7 +1433,9 @@ function registerCommands(): void {
 
 /// La sessione live di un disegno (ADR 0205): i comandi pesano poco, la
 /// sessione arriva quando si avvia. Sono dei disegni (`editors/spatial`), e
-/// arrivano con un `import()` la prima volta che i disegni sono accesi.
+/// arrivano con un `import()` insieme al loro codice, la prima volta che un
+/// disegno si apre: prima non servono, perché «Avvia» vuole un disegno a
+/// fuoco e gli altri due una sessione, che nasce solo da lì.
 let liveCommands: Promise<void> | null = null;
 
 const LIVE_TARGETS: LiveCommandTargets = {
@@ -1443,13 +1446,13 @@ const LIVE_TARGETS: LiveCommandTargets = {
   },
 };
 
-function registerLiveCommandsOnce(): void {
-  if (liveCommands) return;
+function loadLiveCommands(): Promise<void> {
+  if (liveCommands) return liveCommands;
   const mine = import("../editors/spatial/live/commands").then(({ registerLiveCommands }) => {
     if (liveCommands === mine) registerLiveCommands(LIVE_TARGETS);
   });
   liveCommands = mine;
-  void mine.catch((error: unknown) => {
+  return mine.catch((error: unknown) => {
     if (liveCommands === mine) liveCommands = null;
     console.error(error);
   });
@@ -2306,7 +2309,6 @@ function applyComponentEditors(current: Components | null): void {
   if (!surfaceRegistry) return;
   const on = (ui: string) => !current || current.uiOn(ui) || heldEditors.has(ui);
   setComponentEditors(surfaceRegistry, on, current?.uis ?? []);
-  if (on(UI_SPATIAL)) registerLiveCommandsOnce();
 }
 
 /// I pezzi spenti di cui il file ha bisogno per il suo editor.

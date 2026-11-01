@@ -42,7 +42,7 @@ ascolta niente e non chiede fotogrammi.
 | R1 | la memoria: l'app vuota, aprendo un file per modalità (nota, lavagna, disegno, documento Word, foglio Excel, PDF, immagine), dopo «chiudi tutto» e un minuto dopo | PSS in MiB, in tutto e per processo (app, WebView), soltanto Linux |
 | T1 | le tessere: un fotogramma di 2880 × 1800 RGBA letto a tessere di 256 × 256 dalla IPC (`resource_read_chunk`) e da `fub-asset:` con `Range`, poi disegnato su una tela, una tessera e un fotogramma intero per fotogramma | p95 per tessera, mediana per fotogramma, ms |
 | I1 | il vault durante l'indicizzazione dell'avvio (10.000 note): una nota aperta con `read_document` e una tessera letta dalla IPC, una dopo l'altra, finché `vault_status` non dice che l'indice è pronto | p95 per nota e per tessera, ms |
-| C1 | i profili dei componenti: «Solo note» e poi «Tutto» applicati con `components_apply`, l'app riavviata sulla nota lunga, poi un'altra nota aperta | avvio a freddo in ms, chunk scaricati all'avvio, chunk dei componenti spegnibili arrivati |
+| C1 | i profili dei componenti: «Solo note» e poi «Tutto» applicati con `components_apply`, l'app riavviata sulla nota lunga, poi un'altra nota aperta | avvio a freddo in ms, chunk scaricati all'avvio, chunk dei componenti spegnibili arrivati (zero in tutti e due i profili) |
 
 R1 legge `/proc/<pid>/smaps_rollup` dei processi che discendono dal driver,
 tolti i driver (`memory.mjs`): la PSS divide le pagine condivise fra chi le
@@ -92,14 +92,16 @@ avvio sul vault del banco indicizza le diecimila note, e i comandi che passano
 dal workspace non devono aspettare la fine di una fetta. Lo scenario fallisce
 se l'indice era già pronto all'avvio, perché allora non ha misurato niente.
 
-C1 controlla che un componente spento non arrivi nella WebView. Il build
-scrive in `dist/switchable-chunks.json` i chunk che contengono un pezzo del
-PDF, della lavagna, dei disegni, dei documenti o dei fogli; con «Solo note»
-nessuno di questi deve comparire fra gli script scaricati, all'avvio o aprendo
-una nota (`C1.solo-note.spegnibili`, soglia 0). Senza quel file, cioè senza
+C1 controlla che il codice dei componenti spegnibili non arrivi nella WebView
+prima che serva. Il build scrive in `dist/switchable-chunks.json` i chunk che
+contengono un pezzo del PDF, della lavagna, dei disegni, dei documenti o dei
+fogli, con i moduli che ce lo portano; con «Solo note» e con «Tutto» nessuno
+di questi deve comparire fra gli script scaricati, all'avvio o aprendo una
+nota (`C1.<profilo>.spegnibili`, soglia 0): arrivano quando si apre un loro
+file, e soltanto se il componente è acceso. Senza quel file, cioè senza
 `npm run build` prima dell'app, lo scenario fallisce. Il referto elenca i
-chunk di ogni profilo. C1 gira per ultimo e lascia il vault del banco a
-«Tutto».
+chunk di ogni profilo e, per uno spegnibile arrivato, i moduli che lo hanno
+portato. C1 gira per ultimo e lascia il vault del banco a «Tutto».
 
 Ogni scenario è un avvio dell'app. L'avvio indicizza il vault da capo, e la
 shell risponde prima che abbia finito: tranne S6, gli scenari partono quando

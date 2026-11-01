@@ -34,8 +34,8 @@ function withoutComments(css: string): string {
 const STARTUP_FILE = "startup-chunks.json";
 
 /// Il file del build con i chunk di ogni pezzo di `NOT_AT_STARTUP`, all'avvio
-/// o no: il banco WebView (C1) controlla che con «Solo note» nessuno arrivi
-/// nella WebView vera.
+/// o no, con i moduli che li portano: il banco WebView (C1) controlla che
+/// nessuno arrivi nella WebView vera, all'avvio o aprendo una nota.
 const SWITCHABLE_FILE = "switchable-chunks.json";
 
 /// Ciò che un componente spento non deve portare nella WebView, e che quindi
@@ -105,13 +105,17 @@ function reportStartup(context: Rollup.PluginContext, bundle: Rollup.OutputBundl
     }
   }
   context.emitFile({ type: "asset", fileName: STARTUP_FILE, source: `${JSON.stringify(startup, null, 2)}\n` });
-  const switchable: Record<string, string[]> = {};
+  // Per ogni pezzo, i chunk che lo contengono e i moduli suoi che ci stanno:
+  // il banco li nomina quando uno arriva nella WebView.
+  const switchable: Record<string, Record<string, string[]>> = {};
   for (const rule of NOT_AT_STARTUP) {
-    switchable[rule.what] = Object.values(bundle)
-      .filter((chunk): chunk is Rollup.OutputChunk => chunk.type === "chunk")
-      .filter((chunk) => rule.chunk?.test(chunk.name) || Object.keys(chunk.modules).some((id) => rule.module?.test(id)))
-      .map((chunk) => chunk.fileName)
-      .sort();
+    const files: Record<string, string[]> = {};
+    for (const chunk of Object.values(bundle)) {
+      if (chunk.type !== "chunk") continue;
+      const modules = Object.keys(chunk.modules).filter((id) => rule.module?.test(id)).map(shortId).sort();
+      if (rule.chunk?.test(chunk.name) || modules.length) files[chunk.fileName] = modules;
+    }
+    switchable[rule.what] = Object.fromEntries(Object.entries(files).sort(([a], [b]) => a.localeCompare(b)));
   }
   context.emitFile({ type: "asset", fileName: SWITCHABLE_FILE, source: `${JSON.stringify(switchable, null, 2)}\n` });
   if (problems.length) {

@@ -212,10 +212,11 @@ const CHUNKS_SCRIPT = `
 /// (`editors-canvas-Bx3kQ9aZ.js` → `editors-canvas`).
 const chunkName = (file) => file.replace(/\.js$/, "").replace(/-[A-Za-z0-9_-]{8}$/, "");
 
-/// I chunk del build che contengono un pezzo di un componente spegnibile
-/// (il PDF, la lavagna, i disegni, i documenti, i fogli): li scrive il plugin
-/// di `vite.config.ts` accanto a ciò che descrive. Con «Solo note» nessuno
-/// deve arrivare nella WebView, né all'avvio né aprendo una nota (D-1, A8).
+/// I chunk del build che contengono un pezzo di un componente spegnibile (il
+/// PDF, la lavagna, i disegni, i documenti, i fogli), con i moduli che ce lo
+/// portano: li scrive il plugin di `vite.config.ts` accanto a ciò che
+/// descrive. Nessuno deve arrivare nella WebView all'avvio o aprendo una
+/// nota, in nessun profilo (D-1, A8): arrivano quando si apre un loro file.
 function switchableChunks() {
   const file = join(here, "../../dist/switchable-chunks.json");
   let parsed;
@@ -224,12 +225,16 @@ function switchableChunks() {
   } catch (error) {
     throw new Error(`manca l'elenco dei chunk spegnibili del build (${file}): serve \`npm run build\` prima dell'app (${error?.code ?? error})`);
   }
-  const owner = new Map();
+  const chunks = new Map();
   for (const [what, files] of Object.entries(parsed)) {
-    for (const name of files) owner.set(name.split("/").pop(), what);
+    for (const [name, modules] of Object.entries(files)) {
+      const shown = modules.length > 3 ? [...modules.slice(0, 3), `altri ${modules.length - 3}`] : modules;
+      const key = name.split("/").pop();
+      chunks.set(key, [...(chunks.get(key) ?? []), shown.length ? `${what}: ${shown.join(", ")}` : what]);
+    }
   }
-  if (owner.size === 0) throw new Error(`${file} non nomina nessun chunk: il build non separa più i componenti spegnibili`);
-  return owner;
+  if (chunks.size === 0) throw new Error(`${file} non nomina nessun chunk: il build non separa più i componenti spegnibili`);
+  return chunks;
 }
 
 /// Applica un profilo dei componenti col comando vero dell'host, come la
@@ -557,7 +562,7 @@ const SCENARIOS = {
         await pause(MEMORY_QUIET_MS);
         const after = await current.execute(CHUNKS_SCRIPT);
         const afterNote = after.filter((name) => !startup.includes(name));
-        const switchableSeen = after.filter((name) => switchable.has(name)).map((name) => `${chunkName(name)} (${switchable.get(name)})`);
+        const switchableSeen = after.filter((name) => switchable.has(name)).map((name) => `${chunkName(name)} (${switchable.get(name).join("; ")})`);
         profiles[nome] = { label, coldStart: report.coldStart, startup: startup.map(chunkName), afterNote: afterNote.map(chunkName), switchable: switchableSeen };
         values[`C1.${nome}.coldStart`] = report.coldStart;
         values[`C1.${nome}.chunks`] = startup.length;

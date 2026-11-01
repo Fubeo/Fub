@@ -112,6 +112,10 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   /// I file di caratteri del vault, che i testi dei disegni possono usare:
   /// elencati e letti dalla shell.
   readonly drawingFonts?: VaultFontPort;
+  /// Ciò che la shell carica insieme al codice dei disegni, la prima volta che
+  /// un disegno si apre (i comandi della sessione live): il disegno si monta
+  /// quando è arrivato anche questo.
+  readonly withDrawings?: () => Promise<void>;
   readonly renderCanvasMarkdown?: (
     nodeId: string,
     text: string,
@@ -694,7 +698,7 @@ export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> 
 };
 
 async function drawingFactory(options: SurfaceBootstrapOptions): Promise<SurfaceFactory> {
-  const { mountDrawingSurface } = await import("../spatial/lazy");
+  const [{ mountDrawingSurface }] = await Promise.all([import("../spatial/lazy"), options.withDrawings?.()]);
   return {
     mount(profile: string, context: SurfaceMountContext): EditorSurface {
       context.parent.replaceChildren();
