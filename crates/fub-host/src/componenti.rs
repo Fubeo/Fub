@@ -924,7 +924,7 @@ mod tests {
         let lettura = lettura(&[], &[], &[], &[]);
         let piano = lettura
             .pianifica(&Azione::Profilo {
-                nome: "note".into(),
+                nome: "solo-note".into(),
             })
             .unwrap();
         for r in righe() {
@@ -933,9 +933,10 @@ mod tests {
             }
         }
         assert!(!piano.stato.scelti.contains(LAVAGNA));
-        assert!(piano
-            .chiavi
-            .contains(&(COMPONENTS_PROFILE, Some(SettingValue::Text("note".into())))));
+        assert!(piano.chiavi.contains(&(
+            COMPONENTS_PROFILE,
+            Some(SettingValue::Text("solo-note".into()))
+        )));
     }
 
     // Spostati da `fub-cli` con la logica (A2).

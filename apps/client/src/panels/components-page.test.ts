@@ -100,8 +100,15 @@ describe("la pagina «Componenti»", () => {
     expect($("#components-page-title")!.textContent).toBe("Componenti");
     expect(profile("studio").getAttribute("aria-pressed")).toBe("true");
     expect(profile("studio").textContent).toContain("consigliato");
-    // «note» è lo stesso insieme di «Solo note»: un pulsante solo.
-    expect($('[data-profile="note"]')).toBeNull();
+    // I sei profili, nell'ordine in cui l'host li elenca.
+    expect([...document.querySelectorAll<HTMLElement>("[data-profile]")].map((b) => b.dataset.profile)).toEqual([
+      "solo-note",
+      "solo-pdf",
+      "studio",
+      "grafica",
+      "fotografia",
+      "tutto",
+    ]);
     expect(profile("solo-note").getAttribute("aria-pressed")).toBe("false");
     const titles = [...document.querySelectorAll(".components-group-title")].map((h) => h.textContent);
     expect(titles).toContain("Di supporto");

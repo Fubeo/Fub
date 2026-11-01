@@ -215,18 +215,14 @@ fn studio_accende_la_penna_e_i_motori() {
     assert!(attivi.contains("fub.motore-fogli"));
 }
 
-/// «Note» sono le note e il gruppo `scrivere`, senza grafo e correttore; un
-/// profilo che non è «Tutto» non nomina i gruppi che lascia stare.
+/// «Solo note» sono le note e il gruppo `scrivere`, senza grafo e correttore;
+/// un profilo che non è «Tutto» non nomina i gruppi che lascia stare.
 #[test]
-fn note_e_i_gruppi_che_un_profilo_non_tocca() {
-    let note = componenti::profilo("note").unwrap();
+fn solo_note_e_i_gruppi_che_un_profilo_non_tocca() {
+    let note = componenti::profilo("solo-note").unwrap();
     assert!(note.componenti.contains(&"fub.markdown"));
     assert!(!note.componenti.contains(&"fub.graph"));
     assert!(!note.componenti.contains(&"fub.proof"));
-    assert_eq!(
-        componenti::profilo("solo-note").unwrap().componenti,
-        note.componenti
-    );
     for profilo in componenti::profili() {
         let tutto = profilo.nome == componenti::PROFILO_TUTTO;
         for id in &profilo.componenti {

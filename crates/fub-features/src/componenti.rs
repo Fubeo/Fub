@@ -742,8 +742,13 @@ pub fn profili() -> Vec<DefProfilo> {
         arriva_con: arriva_con.to_vec(),
     };
     vec![
-        profilo("note", "profile.note.name", note.clone(), &[]),
         profilo("solo-note", "profile.solo-note.name", note.clone(), &[]),
+        profilo(
+            "solo-pdf",
+            "profile.solo-pdf.name",
+            di_questa_build(&["fub.pdf"]),
+            &["fub.pdf-completo"],
+        ),
         profilo(
             "studio",
             "profile.studio.name",
@@ -758,22 +763,6 @@ pub fn profili() -> Vec<DefProfilo> {
             &[],
         ),
         profilo(
-            PROFILO_TUTTO,
-            "profile.tutto.name",
-            righe
-                .iter()
-                .filter(|riga| riga.gruppo != "supporto")
-                .map(|riga| riga.id)
-                .collect(),
-            &[],
-        ),
-        profilo(
-            "solo-pdf",
-            "profile.solo-pdf.name",
-            di_questa_build(&["fub.pdf"]),
-            &["fub.pdf-completo"],
-        ),
-        profilo(
             "grafica",
             "profile.grafica.name",
             con_le_note(&["fub.lavagna"]),
@@ -785,6 +774,16 @@ pub fn profili() -> Vec<DefProfilo> {
             note.clone(),
             &["fub.libreria-foto", "fub.foto"],
         ),
+        profilo(
+            PROFILO_TUTTO,
+            "profile.tutto.name",
+            righe
+                .iter()
+                .filter(|riga| riga.gruppo != "supporto")
+                .map(|riga| riga.id)
+                .collect(),
+            &[],
+        ),
     ]
 }
 
@@ -795,7 +794,6 @@ pub fn profilo(nome: &str) -> Option<DefProfilo> {
 
 /// I nomi dei profili: chiave, italiano, inglese.
 const NOMI_DEI_PROFILI: &[(&str, &str, &str)] = &[
-    ("profile.note.name", "Note", "Notes"),
     ("profile.solo-note.name", "Solo note", "Notes only"),
     ("profile.studio.name", "Studio", "Study"),
     ("profile.tutto.name", "Tutto", "Everything"),

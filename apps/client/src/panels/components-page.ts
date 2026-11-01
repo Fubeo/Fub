@@ -94,11 +94,6 @@ export function componentIcon(id: string): string {
 /// Il profilo consigliato: un consiglio della shell, non una regola dell'host.
 const RECOMMENDED = "studio";
 
-/// I profili che l'host elenca con un altro nome per lo stesso insieme: «note»
-/// è il nome corto di «Solo note» per la CLI. La pagina mostra un pulsante
-/// solo, e lo dà per premuto anche quando la scelta è arrivata col nome corto.
-const ALIASES: Readonly<Record<string, string>> = { note: "solo-note" };
-
 /// Il gruppo dei componenti che si aggiungono e si tolgono da soli.
 const SUPPORT = "supporto";
 
@@ -314,9 +309,8 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
     label.id = "components-profiles-label";
     label.textContent = t("components.profile");
     const nodes: HTMLElement[] = [label];
-    const current = map?.profilo ? (ALIASES[map.profilo] ?? map.profilo) : null;
+    const current = map?.profilo ?? null;
     for (const profile of map?.profili ?? []) {
-      if (ALIASES[profile.nome]) continue;
       nodes.push(profileButton(profile, current === profile.nome));
     }
     if (map && map.profilo === null) {

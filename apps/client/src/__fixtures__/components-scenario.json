@@ -683,33 +683,6 @@
       "profilo": "studio",
       "profili": [
         {
-          "nome": "note",
-          "etichetta": "Note",
-          "componenti": [
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.importers",
-            "fub.linkcard"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
           "nome": "solo-note",
           "etichetta": "Solo note",
           "componenti": [
@@ -735,6 +708,17 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
+        },
+        {
+          "nome": "solo-pdf",
+          "etichetta": "Solo PDF",
+          "componenti": [
+            "fub.pdf"
+          ],
+          "arriva_con": [
+            "fub.pdf-completo"
+          ],
+          "piu_avanti": true
         },
         {
           "nome": "studio",
@@ -768,56 +752,6 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
-        },
-        {
-          "nome": "tutto",
-          "etichetta": "Tutto",
-          "componenti": [
-            "fub.core",
-            "fub.maintenance",
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.graph",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.proof",
-            "fub.draw",
-            "fub.rich",
-            "fub.xlsx",
-            "fub.lavagna",
-            "fub.pdf",
-            "fub.importers",
-            "fub.linkcard",
-            "fub.updates",
-            "fub.publish",
-            "fub.sync"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
-          "nome": "solo-pdf",
-          "etichetta": "Solo PDF",
-          "componenti": [
-            "fub.pdf"
-          ],
-          "arriva_con": [
-            "fub.pdf-completo"
-          ],
-          "piu_avanti": true
         },
         {
           "nome": "grafica",
@@ -879,6 +813,45 @@
             "fub.foto"
           ],
           "piu_avanti": true
+        },
+        {
+          "nome": "tutto",
+          "etichetta": "Tutto",
+          "componenti": [
+            "fub.core",
+            "fub.maintenance",
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.graph",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.proof",
+            "fub.draw",
+            "fub.rich",
+            "fub.xlsx",
+            "fub.lavagna",
+            "fub.pdf",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.updates",
+            "fub.publish",
+            "fub.sync"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
         }
       ],
       "mancanti": []
@@ -1551,33 +1524,6 @@
       "profilo": null,
       "profili": [
         {
-          "nome": "note",
-          "etichetta": "Note",
-          "componenti": [
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.importers",
-            "fub.linkcard"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
           "nome": "solo-note",
           "etichetta": "Solo note",
           "componenti": [
@@ -1603,6 +1549,17 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
+        },
+        {
+          "nome": "solo-pdf",
+          "etichetta": "Solo PDF",
+          "componenti": [
+            "fub.pdf"
+          ],
+          "arriva_con": [
+            "fub.pdf-completo"
+          ],
+          "piu_avanti": true
         },
         {
           "nome": "studio",
@@ -1636,56 +1593,6 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
-        },
-        {
-          "nome": "tutto",
-          "etichetta": "Tutto",
-          "componenti": [
-            "fub.core",
-            "fub.maintenance",
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.graph",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.proof",
-            "fub.draw",
-            "fub.rich",
-            "fub.xlsx",
-            "fub.lavagna",
-            "fub.pdf",
-            "fub.importers",
-            "fub.linkcard",
-            "fub.updates",
-            "fub.publish",
-            "fub.sync"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
-          "nome": "solo-pdf",
-          "etichetta": "Solo PDF",
-          "componenti": [
-            "fub.pdf"
-          ],
-          "arriva_con": [
-            "fub.pdf-completo"
-          ],
-          "piu_avanti": true
         },
         {
           "nome": "grafica",
@@ -1747,6 +1654,45 @@
             "fub.foto"
           ],
           "piu_avanti": true
+        },
+        {
+          "nome": "tutto",
+          "etichetta": "Tutto",
+          "componenti": [
+            "fub.core",
+            "fub.maintenance",
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.graph",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.proof",
+            "fub.draw",
+            "fub.rich",
+            "fub.xlsx",
+            "fub.lavagna",
+            "fub.pdf",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.updates",
+            "fub.publish",
+            "fub.sync"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
         }
       ],
       "mancanti": []
@@ -2425,33 +2371,6 @@
       "profilo": null,
       "profili": [
         {
-          "nome": "note",
-          "etichetta": "Note",
-          "componenti": [
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.importers",
-            "fub.linkcard"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
           "nome": "solo-note",
           "etichetta": "Solo note",
           "componenti": [
@@ -2477,6 +2396,17 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
+        },
+        {
+          "nome": "solo-pdf",
+          "etichetta": "Solo PDF",
+          "componenti": [
+            "fub.pdf"
+          ],
+          "arriva_con": [
+            "fub.pdf-completo"
+          ],
+          "piu_avanti": true
         },
         {
           "nome": "studio",
@@ -2510,56 +2440,6 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
-        },
-        {
-          "nome": "tutto",
-          "etichetta": "Tutto",
-          "componenti": [
-            "fub.core",
-            "fub.maintenance",
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.graph",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.proof",
-            "fub.draw",
-            "fub.rich",
-            "fub.xlsx",
-            "fub.lavagna",
-            "fub.pdf",
-            "fub.importers",
-            "fub.linkcard",
-            "fub.updates",
-            "fub.publish",
-            "fub.sync"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
-          "nome": "solo-pdf",
-          "etichetta": "Solo PDF",
-          "componenti": [
-            "fub.pdf"
-          ],
-          "arriva_con": [
-            "fub.pdf-completo"
-          ],
-          "piu_avanti": true
         },
         {
           "nome": "grafica",
@@ -2621,6 +2501,45 @@
             "fub.foto"
           ],
           "piu_avanti": true
+        },
+        {
+          "nome": "tutto",
+          "etichetta": "Tutto",
+          "componenti": [
+            "fub.core",
+            "fub.maintenance",
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.graph",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.proof",
+            "fub.draw",
+            "fub.rich",
+            "fub.xlsx",
+            "fub.lavagna",
+            "fub.pdf",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.updates",
+            "fub.publish",
+            "fub.sync"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
         }
       ],
       "mancanti": []
@@ -3292,33 +3211,6 @@
       "profilo": null,
       "profili": [
         {
-          "nome": "note",
-          "etichetta": "Note",
-          "componenti": [
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.importers",
-            "fub.linkcard"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
           "nome": "solo-note",
           "etichetta": "Solo note",
           "componenti": [
@@ -3344,6 +3236,17 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
+        },
+        {
+          "nome": "solo-pdf",
+          "etichetta": "Solo PDF",
+          "componenti": [
+            "fub.pdf"
+          ],
+          "arriva_con": [
+            "fub.pdf-completo"
+          ],
+          "piu_avanti": true
         },
         {
           "nome": "studio",
@@ -3377,56 +3280,6 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
-        },
-        {
-          "nome": "tutto",
-          "etichetta": "Tutto",
-          "componenti": [
-            "fub.core",
-            "fub.maintenance",
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.graph",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.proof",
-            "fub.draw",
-            "fub.rich",
-            "fub.xlsx",
-            "fub.lavagna",
-            "fub.pdf",
-            "fub.importers",
-            "fub.linkcard",
-            "fub.updates",
-            "fub.publish",
-            "fub.sync"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
-          "nome": "solo-pdf",
-          "etichetta": "Solo PDF",
-          "componenti": [
-            "fub.pdf"
-          ],
-          "arriva_con": [
-            "fub.pdf-completo"
-          ],
-          "piu_avanti": true
         },
         {
           "nome": "grafica",
@@ -3488,6 +3341,45 @@
             "fub.foto"
           ],
           "piu_avanti": true
+        },
+        {
+          "nome": "tutto",
+          "etichetta": "Tutto",
+          "componenti": [
+            "fub.core",
+            "fub.maintenance",
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.graph",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.proof",
+            "fub.draw",
+            "fub.rich",
+            "fub.xlsx",
+            "fub.lavagna",
+            "fub.pdf",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.updates",
+            "fub.publish",
+            "fub.sync"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
         }
       ],
       "mancanti": []
@@ -4167,33 +4059,6 @@
       "profilo": null,
       "profili": [
         {
-          "nome": "note",
-          "etichetta": "Note",
-          "componenti": [
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.importers",
-            "fub.linkcard"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
           "nome": "solo-note",
           "etichetta": "Solo note",
           "componenti": [
@@ -4219,6 +4084,17 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
+        },
+        {
+          "nome": "solo-pdf",
+          "etichetta": "Solo PDF",
+          "componenti": [
+            "fub.pdf"
+          ],
+          "arriva_con": [
+            "fub.pdf-completo"
+          ],
+          "piu_avanti": true
         },
         {
           "nome": "studio",
@@ -4252,56 +4128,6 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
-        },
-        {
-          "nome": "tutto",
-          "etichetta": "Tutto",
-          "componenti": [
-            "fub.core",
-            "fub.maintenance",
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.graph",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.proof",
-            "fub.draw",
-            "fub.rich",
-            "fub.xlsx",
-            "fub.lavagna",
-            "fub.pdf",
-            "fub.importers",
-            "fub.linkcard",
-            "fub.updates",
-            "fub.publish",
-            "fub.sync"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
-          "nome": "solo-pdf",
-          "etichetta": "Solo PDF",
-          "componenti": [
-            "fub.pdf"
-          ],
-          "arriva_con": [
-            "fub.pdf-completo"
-          ],
-          "piu_avanti": true
         },
         {
           "nome": "grafica",
@@ -4363,6 +4189,45 @@
             "fub.foto"
           ],
           "piu_avanti": true
+        },
+        {
+          "nome": "tutto",
+          "etichetta": "Tutto",
+          "componenti": [
+            "fub.core",
+            "fub.maintenance",
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.graph",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.proof",
+            "fub.draw",
+            "fub.rich",
+            "fub.xlsx",
+            "fub.lavagna",
+            "fub.pdf",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.updates",
+            "fub.publish",
+            "fub.sync"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
         }
       ],
       "mancanti": []
@@ -5044,33 +4909,6 @@
       "profilo": "tutto",
       "profili": [
         {
-          "nome": "note",
-          "etichetta": "Note",
-          "componenti": [
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.importers",
-            "fub.linkcard"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
           "nome": "solo-note",
           "etichetta": "Solo note",
           "componenti": [
@@ -5096,6 +4934,17 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
+        },
+        {
+          "nome": "solo-pdf",
+          "etichetta": "Solo PDF",
+          "componenti": [
+            "fub.pdf"
+          ],
+          "arriva_con": [
+            "fub.pdf-completo"
+          ],
+          "piu_avanti": true
         },
         {
           "nome": "studio",
@@ -5129,56 +4978,6 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
-        },
-        {
-          "nome": "tutto",
-          "etichetta": "Tutto",
-          "componenti": [
-            "fub.core",
-            "fub.maintenance",
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.graph",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.proof",
-            "fub.draw",
-            "fub.rich",
-            "fub.xlsx",
-            "fub.lavagna",
-            "fub.pdf",
-            "fub.importers",
-            "fub.linkcard",
-            "fub.updates",
-            "fub.publish",
-            "fub.sync"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
-          "nome": "solo-pdf",
-          "etichetta": "Solo PDF",
-          "componenti": [
-            "fub.pdf"
-          ],
-          "arriva_con": [
-            "fub.pdf-completo"
-          ],
-          "piu_avanti": true
         },
         {
           "nome": "grafica",
@@ -5240,6 +5039,45 @@
             "fub.foto"
           ],
           "piu_avanti": true
+        },
+        {
+          "nome": "tutto",
+          "etichetta": "Tutto",
+          "componenti": [
+            "fub.core",
+            "fub.maintenance",
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.graph",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.proof",
+            "fub.draw",
+            "fub.rich",
+            "fub.xlsx",
+            "fub.lavagna",
+            "fub.pdf",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.updates",
+            "fub.publish",
+            "fub.sync"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
         }
       ],
       "mancanti": []
@@ -5887,33 +5725,6 @@
       "profilo": "solo-note",
       "profili": [
         {
-          "nome": "note",
-          "etichetta": "Note",
-          "componenti": [
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.importers",
-            "fub.linkcard"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
           "nome": "solo-note",
           "etichetta": "Solo note",
           "componenti": [
@@ -5939,6 +5750,17 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
+        },
+        {
+          "nome": "solo-pdf",
+          "etichetta": "Solo PDF",
+          "componenti": [
+            "fub.pdf"
+          ],
+          "arriva_con": [
+            "fub.pdf-completo"
+          ],
+          "piu_avanti": true
         },
         {
           "nome": "studio",
@@ -5972,56 +5794,6 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
-        },
-        {
-          "nome": "tutto",
-          "etichetta": "Tutto",
-          "componenti": [
-            "fub.core",
-            "fub.maintenance",
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.graph",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.proof",
-            "fub.draw",
-            "fub.rich",
-            "fub.xlsx",
-            "fub.lavagna",
-            "fub.pdf",
-            "fub.importers",
-            "fub.linkcard",
-            "fub.updates",
-            "fub.publish",
-            "fub.sync"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
-          "nome": "solo-pdf",
-          "etichetta": "Solo PDF",
-          "componenti": [
-            "fub.pdf"
-          ],
-          "arriva_con": [
-            "fub.pdf-completo"
-          ],
-          "piu_avanti": true
         },
         {
           "nome": "grafica",
@@ -6083,6 +5855,45 @@
             "fub.foto"
           ],
           "piu_avanti": true
+        },
+        {
+          "nome": "tutto",
+          "etichetta": "Tutto",
+          "componenti": [
+            "fub.core",
+            "fub.maintenance",
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.graph",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.proof",
+            "fub.draw",
+            "fub.rich",
+            "fub.xlsx",
+            "fub.lavagna",
+            "fub.pdf",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.updates",
+            "fub.publish",
+            "fub.sync"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
         }
       ],
       "mancanti": []
@@ -6737,33 +6548,6 @@
       "profilo": null,
       "profili": [
         {
-          "nome": "note",
-          "etichetta": "Note",
-          "componenti": [
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.importers",
-            "fub.linkcard"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
           "nome": "solo-note",
           "etichetta": "Solo note",
           "componenti": [
@@ -6789,6 +6573,17 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
+        },
+        {
+          "nome": "solo-pdf",
+          "etichetta": "Solo PDF",
+          "componenti": [
+            "fub.pdf"
+          ],
+          "arriva_con": [
+            "fub.pdf-completo"
+          ],
+          "piu_avanti": true
         },
         {
           "nome": "studio",
@@ -6822,56 +6617,6 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
-        },
-        {
-          "nome": "tutto",
-          "etichetta": "Tutto",
-          "componenti": [
-            "fub.core",
-            "fub.maintenance",
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.graph",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.proof",
-            "fub.draw",
-            "fub.rich",
-            "fub.xlsx",
-            "fub.lavagna",
-            "fub.pdf",
-            "fub.importers",
-            "fub.linkcard",
-            "fub.updates",
-            "fub.publish",
-            "fub.sync"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
-          "nome": "solo-pdf",
-          "etichetta": "Solo PDF",
-          "componenti": [
-            "fub.pdf"
-          ],
-          "arriva_con": [
-            "fub.pdf-completo"
-          ],
-          "piu_avanti": true
         },
         {
           "nome": "grafica",
@@ -6933,6 +6678,45 @@
             "fub.foto"
           ],
           "piu_avanti": true
+        },
+        {
+          "nome": "tutto",
+          "etichetta": "Tutto",
+          "componenti": [
+            "fub.core",
+            "fub.maintenance",
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.graph",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.proof",
+            "fub.draw",
+            "fub.rich",
+            "fub.xlsx",
+            "fub.lavagna",
+            "fub.pdf",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.updates",
+            "fub.publish",
+            "fub.sync"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
         }
       ],
       "mancanti": []
@@ -7590,33 +7374,6 @@
       "profilo": null,
       "profili": [
         {
-          "nome": "note",
-          "etichetta": "Note",
-          "componenti": [
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.importers",
-            "fub.linkcard"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
           "nome": "solo-note",
           "etichetta": "Solo note",
           "componenti": [
@@ -7642,6 +7399,17 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
+        },
+        {
+          "nome": "solo-pdf",
+          "etichetta": "Solo PDF",
+          "componenti": [
+            "fub.pdf"
+          ],
+          "arriva_con": [
+            "fub.pdf-completo"
+          ],
+          "piu_avanti": true
         },
         {
           "nome": "studio",
@@ -7675,56 +7443,6 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
-        },
-        {
-          "nome": "tutto",
-          "etichetta": "Tutto",
-          "componenti": [
-            "fub.core",
-            "fub.maintenance",
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.graph",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.proof",
-            "fub.draw",
-            "fub.rich",
-            "fub.xlsx",
-            "fub.lavagna",
-            "fub.pdf",
-            "fub.importers",
-            "fub.linkcard",
-            "fub.updates",
-            "fub.publish",
-            "fub.sync"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
-          "nome": "solo-pdf",
-          "etichetta": "Solo PDF",
-          "componenti": [
-            "fub.pdf"
-          ],
-          "arriva_con": [
-            "fub.pdf-completo"
-          ],
-          "piu_avanti": true
         },
         {
           "nome": "grafica",
@@ -7786,6 +7504,45 @@
             "fub.foto"
           ],
           "piu_avanti": true
+        },
+        {
+          "nome": "tutto",
+          "etichetta": "Tutto",
+          "componenti": [
+            "fub.core",
+            "fub.maintenance",
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.graph",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.proof",
+            "fub.draw",
+            "fub.rich",
+            "fub.xlsx",
+            "fub.lavagna",
+            "fub.pdf",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.updates",
+            "fub.publish",
+            "fub.sync"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
         }
       ],
       "mancanti": []
@@ -8440,33 +8197,6 @@
       "profilo": null,
       "profili": [
         {
-          "nome": "note",
-          "etichetta": "Note",
-          "componenti": [
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.importers",
-            "fub.linkcard"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
           "nome": "solo-note",
           "etichetta": "Solo note",
           "componenti": [
@@ -8492,6 +8222,17 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
+        },
+        {
+          "nome": "solo-pdf",
+          "etichetta": "Solo PDF",
+          "componenti": [
+            "fub.pdf"
+          ],
+          "arriva_con": [
+            "fub.pdf-completo"
+          ],
+          "piu_avanti": true
         },
         {
           "nome": "studio",
@@ -8525,56 +8266,6 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
-        },
-        {
-          "nome": "tutto",
-          "etichetta": "Tutto",
-          "componenti": [
-            "fub.core",
-            "fub.maintenance",
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.graph",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.proof",
-            "fub.draw",
-            "fub.rich",
-            "fub.xlsx",
-            "fub.lavagna",
-            "fub.pdf",
-            "fub.importers",
-            "fub.linkcard",
-            "fub.updates",
-            "fub.publish",
-            "fub.sync"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
-          "nome": "solo-pdf",
-          "etichetta": "Solo PDF",
-          "componenti": [
-            "fub.pdf"
-          ],
-          "arriva_con": [
-            "fub.pdf-completo"
-          ],
-          "piu_avanti": true
         },
         {
           "nome": "grafica",
@@ -8636,6 +8327,45 @@
             "fub.foto"
           ],
           "piu_avanti": true
+        },
+        {
+          "nome": "tutto",
+          "etichetta": "Tutto",
+          "componenti": [
+            "fub.core",
+            "fub.maintenance",
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.graph",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.proof",
+            "fub.draw",
+            "fub.rich",
+            "fub.xlsx",
+            "fub.lavagna",
+            "fub.pdf",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.updates",
+            "fub.publish",
+            "fub.sync"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
         }
       ],
       "mancanti": []
@@ -9285,33 +9015,6 @@
       "profilo": null,
       "profili": [
         {
-          "nome": "note",
-          "etichetta": "Note",
-          "componenti": [
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.importers",
-            "fub.linkcard"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
           "nome": "solo-note",
           "etichetta": "Solo note",
           "componenti": [
@@ -9337,6 +9040,17 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
+        },
+        {
+          "nome": "solo-pdf",
+          "etichetta": "Solo PDF",
+          "componenti": [
+            "fub.pdf"
+          ],
+          "arriva_con": [
+            "fub.pdf-completo"
+          ],
+          "piu_avanti": true
         },
         {
           "nome": "studio",
@@ -9370,56 +9084,6 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
-        },
-        {
-          "nome": "tutto",
-          "etichetta": "Tutto",
-          "componenti": [
-            "fub.core",
-            "fub.maintenance",
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.graph",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.proof",
-            "fub.draw",
-            "fub.rich",
-            "fub.xlsx",
-            "fub.lavagna",
-            "fub.pdf",
-            "fub.importers",
-            "fub.linkcard",
-            "fub.updates",
-            "fub.publish",
-            "fub.sync"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
-          "nome": "solo-pdf",
-          "etichetta": "Solo PDF",
-          "componenti": [
-            "fub.pdf"
-          ],
-          "arriva_con": [
-            "fub.pdf-completo"
-          ],
-          "piu_avanti": true
         },
         {
           "nome": "grafica",
@@ -9481,6 +9145,45 @@
             "fub.foto"
           ],
           "piu_avanti": true
+        },
+        {
+          "nome": "tutto",
+          "etichetta": "Tutto",
+          "componenti": [
+            "fub.core",
+            "fub.maintenance",
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.graph",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.proof",
+            "fub.draw",
+            "fub.rich",
+            "fub.xlsx",
+            "fub.lavagna",
+            "fub.pdf",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.updates",
+            "fub.publish",
+            "fub.sync"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
         }
       ],
       "mancanti": []
@@ -10128,33 +9831,6 @@
       "profilo": null,
       "profili": [
         {
-          "nome": "note",
-          "etichetta": "Note",
-          "componenti": [
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.importers",
-            "fub.linkcard"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
           "nome": "solo-note",
           "etichetta": "Solo note",
           "componenti": [
@@ -10180,6 +9856,17 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
+        },
+        {
+          "nome": "solo-pdf",
+          "etichetta": "Solo PDF",
+          "componenti": [
+            "fub.pdf"
+          ],
+          "arriva_con": [
+            "fub.pdf-completo"
+          ],
+          "piu_avanti": true
         },
         {
           "nome": "studio",
@@ -10213,56 +9900,6 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
-        },
-        {
-          "nome": "tutto",
-          "etichetta": "Tutto",
-          "componenti": [
-            "fub.core",
-            "fub.maintenance",
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.graph",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.proof",
-            "fub.draw",
-            "fub.rich",
-            "fub.xlsx",
-            "fub.lavagna",
-            "fub.pdf",
-            "fub.importers",
-            "fub.linkcard",
-            "fub.updates",
-            "fub.publish",
-            "fub.sync"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
-          "nome": "solo-pdf",
-          "etichetta": "Solo PDF",
-          "componenti": [
-            "fub.pdf"
-          ],
-          "arriva_con": [
-            "fub.pdf-completo"
-          ],
-          "piu_avanti": true
         },
         {
           "nome": "grafica",
@@ -10324,6 +9961,45 @@
             "fub.foto"
           ],
           "piu_avanti": true
+        },
+        {
+          "nome": "tutto",
+          "etichetta": "Tutto",
+          "componenti": [
+            "fub.core",
+            "fub.maintenance",
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.graph",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.proof",
+            "fub.draw",
+            "fub.rich",
+            "fub.xlsx",
+            "fub.lavagna",
+            "fub.pdf",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.updates",
+            "fub.publish",
+            "fub.sync"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
         }
       ],
       "mancanti": []
@@ -10972,33 +10648,6 @@
       "profilo": null,
       "profili": [
         {
-          "nome": "note",
-          "etichetta": "Note",
-          "componenti": [
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.importers",
-            "fub.linkcard"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
           "nome": "solo-note",
           "etichetta": "Solo note",
           "componenti": [
@@ -11024,6 +10673,17 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
+        },
+        {
+          "nome": "solo-pdf",
+          "etichetta": "Solo PDF",
+          "componenti": [
+            "fub.pdf"
+          ],
+          "arriva_con": [
+            "fub.pdf-completo"
+          ],
+          "piu_avanti": true
         },
         {
           "nome": "studio",
@@ -11057,56 +10717,6 @@
           ],
           "arriva_con": [],
           "piu_avanti": false
-        },
-        {
-          "nome": "tutto",
-          "etichetta": "Tutto",
-          "componenti": [
-            "fub.core",
-            "fub.maintenance",
-            "fub.markdown",
-            "fub.search",
-            "fub.versioning",
-            "fub.backlinks",
-            "fub.outline",
-            "fub.tags",
-            "fub.properties",
-            "fub.template",
-            "fub.queries",
-            "fub.dashboard",
-            "fub.backup",
-            "fub.trash",
-            "fub.stats",
-            "fub.graph",
-            "fub.commands",
-            "fub.blocks",
-            "fub.base",
-            "fub.formatting",
-            "fub.proof",
-            "fub.draw",
-            "fub.rich",
-            "fub.xlsx",
-            "fub.lavagna",
-            "fub.pdf",
-            "fub.importers",
-            "fub.linkcard",
-            "fub.updates",
-            "fub.publish",
-            "fub.sync"
-          ],
-          "arriva_con": [],
-          "piu_avanti": false
-        },
-        {
-          "nome": "solo-pdf",
-          "etichetta": "Solo PDF",
-          "componenti": [
-            "fub.pdf"
-          ],
-          "arriva_con": [
-            "fub.pdf-completo"
-          ],
-          "piu_avanti": true
         },
         {
           "nome": "grafica",
@@ -11168,6 +10778,45 @@
             "fub.foto"
           ],
           "piu_avanti": true
+        },
+        {
+          "nome": "tutto",
+          "etichetta": "Tutto",
+          "componenti": [
+            "fub.core",
+            "fub.maintenance",
+            "fub.markdown",
+            "fub.search",
+            "fub.versioning",
+            "fub.backlinks",
+            "fub.outline",
+            "fub.tags",
+            "fub.properties",
+            "fub.template",
+            "fub.queries",
+            "fub.dashboard",
+            "fub.backup",
+            "fub.trash",
+            "fub.stats",
+            "fub.graph",
+            "fub.commands",
+            "fub.blocks",
+            "fub.base",
+            "fub.formatting",
+            "fub.proof",
+            "fub.draw",
+            "fub.rich",
+            "fub.xlsx",
+            "fub.lavagna",
+            "fub.pdf",
+            "fub.importers",
+            "fub.linkcard",
+            "fub.updates",
+            "fub.publish",
+            "fub.sync"
+          ],
+          "arriva_con": [],
+          "piu_avanti": false
         }
       ],
       "mancanti": []
