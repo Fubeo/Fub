@@ -307,6 +307,26 @@ fn mount_error_with_resource_disposal(
     })
 }
 
+/// Se la lavagna è spenta nel file delle impostazioni di `root`.
+fn lavagna_spenta(
+    root: &Utf8Path,
+    storage: &Arc<dyn VaultStorage>,
+    machine: &Arc<MachineSettings>,
+) -> bool {
+    let mut settings =
+        fub_kernel::SettingsStore::open(root, Arc::clone(storage), Arc::clone(machine));
+    if settings
+        .declare(
+            crate::settings::CORE_ID,
+            &crate::settings::components_settings(),
+        )
+        .is_err()
+    {
+        return false;
+    }
+    crate::componenti::lavagna_spenta(&settings)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn mount_with_formats(
     root: &Utf8Path,
@@ -326,9 +346,15 @@ pub(crate) fn mount_with_formats(
     #[cfg_attr(not(feature = "draw"), allow(unused_mut))]
     let mut builtin = vec![
         MarkdownProvider::boxed(),
-        fub_format_canvas::CanvasProvider::boxed(),
         fub_format_base::BaseProvider::boxed(),
     ];
+    // La lavagna spenta (`components.off`, `crate::componenti`) non registra
+    // il formato `.canvas`: un `.canvas` resta un file di specie sconosciuta.
+    // Si legge dal file prima che il workspace esista, perché i formati si
+    // registrano prima di lui; riaccenderla rimonta il vault.
+    if !lavagna_spenta(root, &storage, &machine) {
+        builtin.insert(1, fub_format_canvas::CanvasProvider::boxed());
+    }
     // Le scene di FubDraw (ADR 0203). Senza la feature un `.svg` resta un
     // allegato, e la shell lo apre come testo col profilo `svg`.
     #[cfg(feature = "draw")]

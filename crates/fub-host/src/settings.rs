@@ -115,6 +115,20 @@ pub const VERSIONING_ENABLED: &str = "versioning.enabled";
 /// Gli id dei bundle che l'utente ha spento (chiave dell'app).
 pub const PLUGINS_DISABLED: &str = "plugins.disabled";
 
+/// Le righe senza bundle spente a mano (Lavagna, PDF): ciò che
+/// `plugins.disabled` non sa dire. Le legge e le scrive `crate::componenti`.
+pub const COMPONENTS_OFF: &str = "components.off";
+
+/// I componenti di supporto tenuti accesi con «Tienili».
+pub const COMPONENTS_KEPT: &str = "components.kept";
+
+/// I componenti che non servono più a nessuno, accesi in attesa di «Togli» o
+/// «Tienili».
+pub const COMPONENTS_WAITING: &str = "components.waiting";
+
+/// Il profilo scelto; vuoto (o assente) vuol dire «personalizzato».
+pub const COMPONENTS_PROFILE: &str = "components.profile";
+
 /// In che luce si guarda Fub: `""` (come il sistema), `light`, `dark`.
 ///
 /// Il valore vuoto è «come il sistema» per la stessa convenzione delle chiavi
@@ -535,6 +549,9 @@ pub fn core_settings() -> Vec<SettingSpec> {
         .describing(Text::key(C_PLUGINS_DISABLED_DESC))
         .grouped(Text::key(C_GROUP_COMPONENTS)),
     );
+    // Lo stato dei componenti che `plugins.disabled` non sa dire. Come lei,
+    // **non** `program_writable`: lo scrive soltanto chi accende e spegne.
+    settings.extend(components_settings());
     settings.push(history_enabled_spec());
     settings.push(log_level_spec());
     settings.push(log_verbose_spec());
@@ -1402,6 +1419,14 @@ const C_HISTORY: &str = "core.history";
 const C_HISTORY_DESC: &str = "core.history.desc";
 const C_PLUGINS_DISABLED: &str = "core.plugins_disabled";
 const C_PLUGINS_DISABLED_DESC: &str = "core.plugins_disabled.desc";
+const C_COMPONENTS_OFF: &str = "core.components_off";
+const C_COMPONENTS_OFF_DESC: &str = "core.components_off.desc";
+const C_COMPONENTS_KEPT: &str = "core.components_kept";
+const C_COMPONENTS_KEPT_DESC: &str = "core.components_kept.desc";
+const C_COMPONENTS_WAITING: &str = "core.components_waiting";
+const C_COMPONENTS_WAITING_DESC: &str = "core.components_waiting.desc";
+const C_COMPONENTS_PROFILE: &str = "core.components_profile";
+const C_COMPONENTS_PROFILE_DESC: &str = "core.components_profile.desc";
 const C_THEME: &str = "core.theme";
 const C_THEME_DESC: &str = "core.theme.desc";
 const C_THEME_LIGHT: &str = "core.theme.light";
@@ -1970,6 +1995,30 @@ pub fn core_catalog() -> Vec<StringCatalog> {
              vault. Si cambiano accendendo e spegnendo un componente, non scrivendo \
              qui dentro.",
         )
+        .with(C_COMPONENTS_OFF, "Altri componenti spenti")
+        .with(
+            C_COMPONENTS_OFF_DESC,
+            "I componenti spenti che non sono fra quelli montati, come la lavagna \
+             e il PDF. Si cambiano accendendo e spegnendo un componente.",
+        )
+        .with(C_COMPONENTS_KEPT, "Componenti tenuti")
+        .with(
+            C_COMPONENTS_KEPT_DESC,
+            "I componenti tenuti accesi con «Tienili» anche se non servono più a \
+             nessun altro.",
+        )
+        .with(C_COMPONENTS_WAITING, "Componenti in attesa")
+        .with(
+            C_COMPONENTS_WAITING_DESC,
+            "I componenti che non servono più a nessuno e sono ancora accesi, in \
+             attesa che tu scelga «Togli» o «Tienili».",
+        )
+        .with(C_COMPONENTS_PROFILE, "Profilo")
+        .with(
+            C_COMPONENTS_PROFILE_DESC,
+            "Il profilo dei componenti scelto per questo vault. Vuoto vuol dire \
+             personalizzato: lo diventa appena accendi o spegni un componente.",
+        )
         .with(C_THEME, "Tema")
         .with(
             C_THEME_DESC,
@@ -2505,6 +2554,30 @@ pub fn core_catalog() -> Vec<StringCatalog> {
              opened. You change them by turning a component on and off, not by \
              writing in here.",
         )
+        .with(C_COMPONENTS_OFF, "Other disabled components")
+        .with(
+            C_COMPONENTS_OFF_DESC,
+            "The disabled components that are not among the mounted ones, such as \
+             the whiteboard and PDF. You change them by turning a component on and off.",
+        )
+        .with(C_COMPONENTS_KEPT, "Kept components")
+        .with(
+            C_COMPONENTS_KEPT_DESC,
+            "The components kept on with «Keep them» even though nothing else \
+             needs them any more.",
+        )
+        .with(C_COMPONENTS_WAITING, "Waiting components")
+        .with(
+            C_COMPONENTS_WAITING_DESC,
+            "The components nothing needs any more that are still on, waiting for \
+             you to choose «Remove» or «Keep them».",
+        )
+        .with(C_COMPONENTS_PROFILE, "Profile")
+        .with(
+            C_COMPONENTS_PROFILE_DESC,
+            "The component profile chosen for this vault. Empty means custom: it \
+             becomes so as soon as you turn a component on or off.",
+        )
         .with(C_GROUP_PRIVACY, "Privacy")
         .with(C_HISTORY, "Recent searches and notes")
         .with(
@@ -2786,6 +2859,39 @@ pub fn versioning_enabled(ws: &fub_kernel::Workspace) -> bool {
         .ok()
         .and_then(|v| v.as_toggle())
         .unwrap_or(true)
+}
+
+/// Le quattro chiavi `components.*` (D-5), nel gruppo «Componenti».
+pub fn components_settings() -> Vec<SettingSpec> {
+    let list = |key: &str, name: &str, desc: &str| {
+        SettingSpec::new(
+            key,
+            Text::key(name),
+            SettingKind::List {
+                default: Vec::new(),
+            },
+        )
+        .describing(Text::key(desc))
+        .grouped(Text::key(C_GROUP_COMPONENTS))
+    };
+    vec![
+        list(COMPONENTS_OFF, C_COMPONENTS_OFF, C_COMPONENTS_OFF_DESC),
+        list(COMPONENTS_KEPT, C_COMPONENTS_KEPT, C_COMPONENTS_KEPT_DESC),
+        list(
+            COMPONENTS_WAITING,
+            C_COMPONENTS_WAITING,
+            C_COMPONENTS_WAITING_DESC,
+        ),
+        SettingSpec::new(
+            COMPONENTS_PROFILE,
+            Text::key(C_COMPONENTS_PROFILE),
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )
+        .describing(Text::key(C_COMPONENTS_PROFILE_DESC))
+        .grouped(Text::key(C_GROUP_COMPONENTS)),
+    ]
 }
 
 /// Gli id spenti per questo vault.

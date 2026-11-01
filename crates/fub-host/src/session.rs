@@ -3329,6 +3329,65 @@ impl Host {
         self.with_session(vault, f)?
     }
 
+    /// La radice canonica della sessione di `vault` (`None`: la corrente).
+    pub(crate) fn session_root(&self, vault: Option<&str>) -> Result<Utf8PathBuf, PluginError> {
+        self.with_session(vault, |session| session.root.clone())
+    }
+
+    /// Il valore di alcune chiavi del vault, e da dove viene ciascuno: per
+    /// chi deve sapere se una chiave sta davvero nel file (`crate::componenti`).
+    pub(crate) fn settings_with_source(
+        &self,
+        vault: Option<&str>,
+        keys: &[&str],
+    ) -> Result<
+        Vec<(
+            fub_abi::settings::SettingValue,
+            fub_abi::settings::SettingSource,
+        )>,
+        PluginError,
+    > {
+        self.read_workspace(vault, |workspace| {
+            keys.iter()
+                .map(|key| workspace.setting_source(key))
+                .collect()
+        })
+    }
+
+    /// Scrive (`Some`) o azzera (`None`) chiavi del vault per conto
+    /// dell'utente, in un turno solo. Solo per chiavi che non sono di
+    /// macchina e non sono scorciatoie: chi le ha (`crate::componenti`) lo sa.
+    pub(crate) fn write_vault_settings(
+        &self,
+        vault: Option<&str>,
+        writes: Vec<(&str, Option<fub_abi::settings::SettingValue>)>,
+    ) -> Result<(), PluginError> {
+        self.write_workspace(vault, |workspace| {
+            for (key, value) in writes {
+                match value {
+                    Some(value) => workspace.set_setting(key, value)?,
+                    None => workspace.reset_setting(key)?,
+                }
+            }
+            Ok(())
+        })
+    }
+
+    /// Chiude e riapre il vault di `root` (canonica), per ciò che si decide
+    /// solo montando: i formati registrati, come la lavagna. Il lease di
+    /// scrittura resta di questo processo fra la chiusura e la riapertura,
+    /// come per lo snapshot; il corrente resta quello di prima.
+    pub(crate) fn remount(&self, root: &Utf8Path) -> Result<Vec<PluginError>, PluginError> {
+        let current = self.current();
+        let _writer = self.writer_lease(root)?;
+        let faults = self.close_vault(root)?;
+        self.open(root)?;
+        if let Some(current) = current.filter(|current| current != root) {
+            self.set_current(&current)?;
+        }
+        Ok(faults)
+    }
+
     /// Esegue una lettura breve sul workspace selezionato. La custodia non
     /// attraversa questa porta: i consumer dell'host ricevono operazioni, non
     /// l'oggetto monolitico che le implementa.

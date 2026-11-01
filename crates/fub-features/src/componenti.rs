@@ -15,14 +15,24 @@
 //!
 //! # Righe che non sono bundle
 //!
-//! Lavagna, Penna, Dizionari e i due motori sono componenti senza un bundle
-//! loro (`bundle: false`): li richiede o li usa qualcun altro, e in K1 sono
-//! sempre dentro il binario. I loro id sono quelli dell'ADR, e nel manifest di
-//! chi li richiede non compaiono: vedi [`SOLO_DELLA_MAPPA`].
+//! Lavagna, PDF, Penna, Dizionari e i due motori sono componenti senza un
+//! bundle loro (`bundle: false`): sono sempre dentro il binario. Penna,
+//! Dizionari e i motori li richiede o li usa qualcun altro; Lavagna e PDF si
+//! spengono a mano, e il loro stato sta nelle chiavi `components.*` del vault
+//! (`fub_host::componenti`), non in `plugins.disabled`. I loro id sono quelli
+//! dell'ADR, e nel manifest di chi li richiede non compaiono: vedi
+//! [`SOLO_DELLA_MAPPA`].
+//!
+//! # Profili
+//!
+//! [`profili`] sono scelte già fatte sopra questa mappa: un nome e i
+//! componenti che accende. Un profilo che nomina componenti che non esistono
+//! ancora ([`DefProfilo::arriva_con`]) è «più avanti»: si mostra, e non si
+//! applica.
 
 use fub_abi::text::StringCatalog;
 use fub_abi::{ComponentKind, Delivery};
-use fub_componenti::{Componente, ErroreMappa, Mappa};
+use fub_componenti::{Componente, ErroreMappa, Mappa, Profilo};
 
 /// Ciò che l'host monta sempre: non si spegne (A6). In K1 «Note» ne fa parte.
 pub const NUCLEO: [&str; 3] = ["fub.core", "fub.maintenance", "fub.markdown"];
@@ -295,14 +305,22 @@ pub fn righe() -> Vec<Riga> {
             .uses(&["fub.penna"])
             .ui(&["editors/grid"])
             .cargo_feature("xlsx"),
-        // Oggi sempre compilata nel client, e senza bundle. Il motore
-        // vettoriale che la porterà non esiste ancora: quando ci sarà, sarà
-        // una riga di supporto che questa richiede.
+        // Sempre compilata nel client, e senza bundle: spenta, l'host non
+        // registra il formato `.canvas`. Il motore vettoriale che la porterà
+        // non esiste ancora: quando ci sarà, sarà una riga di supporto che
+        // questa richiede.
         Riga::modalita("fub.lavagna", "component.lavagna.name")
             .group("pensare")
             .requires(&["fub.penna"])
             .uses(&["fub.rich", "fub.xlsx"])
             .ui(&["editors/canvas"])
+            .senza_bundle(),
+        // Il visore dei PDF del client (pdfjs, profilo `media-pdf`): senza
+        // bundle, e nell'host non c'è niente da spegnere.
+        Riga::modalita("fub.pdf", "component.pdf.name")
+            .group("leggere")
+            .requires(&["fub.penna"])
+            .ui(&["editors/media"])
             .senza_bundle(),
         // Di supporto: accesi quando qualcuno li richiede.
         Riga::motore("fub.penna", "component.penna.name")
@@ -363,7 +381,7 @@ pub fn mappa() -> Mappa {
 pub fn catalog() -> Vec<StringCatalog> {
     let mut it = StringCatalog::new("it");
     let mut en = StringCatalog::new("en");
-    for (nome, it_nome, en_nome) in NOMI {
+    for (nome, it_nome, en_nome) in NOMI.iter().chain(NOMI_DEI_PROFILI) {
         it = it.with(*nome, *it_nome);
         en = en.with(*nome, *en_nome);
     }
@@ -401,6 +419,7 @@ const NOMI: &[(&str, &str, &str)] = &[
     ("component.rich.name", "Documenti", "Documents"),
     ("component.xlsx.name", "Fogli", "Spreadsheets"),
     ("component.lavagna.name", "Lavagna", "Whiteboard"),
+    ("component.pdf.name", "PDF", "PDF"),
     ("component.penna.name", "Penna", "Pen"),
     ("component.dizionari.name", "Dizionari", "Dictionaries"),
     (
@@ -422,4 +441,131 @@ const NOMI: &[(&str, &str, &str)] = &[
     ("component.updates.name", "Aggiornamenti", "Updates"),
     ("component.publish.name", "Pubblicazione", "Publishing"),
     ("component.sync.name", "Sincronizzazione", "Sync"),
+];
+
+/// Un profilo: un nome e i componenti che accende (A4).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DefProfilo {
+    /// Il nome che sta in `components.profile`.
+    pub nome: &'static str,
+    /// La chiave del catalogo con il nome da mostrare.
+    pub etichetta: &'static str,
+    /// I componenti di questa build che il profilo sceglie.
+    pub componenti: Vec<&'static str>,
+    /// I componenti che il profilo vuole e che non esistono ancora: se ce
+    /// n'è uno, il profilo è «più avanti» e non si applica.
+    pub arriva_con: Vec<&'static str>,
+}
+
+impl DefProfilo {
+    /// Se il profilo aspetta componenti che non ci sono ancora.
+    pub fn piu_avanti(&self) -> bool {
+        !self.arriva_con.is_empty()
+    }
+
+    /// Il profilo per il risolutore.
+    pub fn profilo(&self) -> Profilo {
+        Profilo {
+            nome: self.nome.to_string(),
+            componenti: self.componenti.iter().map(|id| id.to_string()).collect(),
+        }
+    }
+}
+
+/// I gruppi che un profilo non tocca, tranne «Tutto»: le righe senza gruppo
+/// (aggiornamenti, pubblicazione, sincronizzazione) e i disegni.
+pub const GRUPPI_FUORI_DAI_PROFILI: &[&str] = &["altro", "disegnare"];
+
+/// Il nome del profilo che accende tutto.
+pub const PROFILO_TUTTO: &str = "tutto";
+
+/// I profili, nell'ordine in cui si mostrano.
+pub fn profili() -> Vec<DefProfilo> {
+    let righe = righe();
+    let note: Vec<&'static str> = righe
+        .iter()
+        .filter(|riga| {
+            riga.id == "fub.markdown"
+                || (riga.gruppo == "scrivere" && !["fub.graph", "fub.proof"].contains(&riga.id))
+        })
+        .map(|riga| riga.id)
+        .collect();
+    let di_questa_build = |ids: &[&'static str]| -> Vec<&'static str> {
+        ids.iter()
+            .copied()
+            .filter(|id| righe.iter().any(|riga| riga.id == *id))
+            .collect()
+    };
+    let con_le_note = |altri: &[&'static str]| -> Vec<&'static str> {
+        let mut ids = note.clone();
+        ids.extend(di_questa_build(altri));
+        ids
+    };
+    let profilo = |nome, etichetta, componenti, arriva_con: &[&'static str]| DefProfilo {
+        nome,
+        etichetta,
+        componenti,
+        arriva_con: arriva_con.to_vec(),
+    };
+    vec![
+        profilo("note", "profile.note.name", note.clone(), &[]),
+        profilo("solo-note", "profile.solo-note.name", note.clone(), &[]),
+        profilo(
+            "studio",
+            "profile.studio.name",
+            con_le_note(&[
+                "fub.graph",
+                "fub.proof",
+                "fub.pdf",
+                "fub.lavagna",
+                "fub.rich",
+                "fub.xlsx",
+            ]),
+            &[],
+        ),
+        profilo(
+            PROFILO_TUTTO,
+            "profile.tutto.name",
+            righe
+                .iter()
+                .filter(|riga| riga.gruppo != "supporto")
+                .map(|riga| riga.id)
+                .collect(),
+            &[],
+        ),
+        profilo(
+            "solo-pdf",
+            "profile.solo-pdf.name",
+            di_questa_build(&["fub.pdf"]),
+            &["fub.pdf-completo"],
+        ),
+        profilo(
+            "grafica",
+            "profile.grafica.name",
+            con_le_note(&["fub.lavagna"]),
+            &["fub.disegno-completo", "fub.foto"],
+        ),
+        profilo(
+            "fotografia",
+            "profile.fotografia.name",
+            note.clone(),
+            &["fub.libreria-foto", "fub.foto"],
+        ),
+    ]
+}
+
+/// Il profilo che si chiama `nome`, se c'è.
+pub fn profilo(nome: &str) -> Option<DefProfilo> {
+    profili().into_iter().find(|profilo| profilo.nome == nome)
+}
+
+/// I nomi dei profili: chiave, italiano, inglese.
+const NOMI_DEI_PROFILI: &[(&str, &str, &str)] = &[
+    ("profile.note.name", "Note", "Notes"),
+    ("profile.solo-note.name", "Solo note", "Notes only"),
+    ("profile.studio.name", "Studio", "Study"),
+    ("profile.tutto.name", "Tutto", "Everything"),
+    ("profile.solo-pdf.name", "Solo PDF", "PDF only"),
+    ("profile.grafica.name", "Grafica", "Graphics"),
+    ("profile.fotografia.name", "Fotografia", "Photography"),
 ];

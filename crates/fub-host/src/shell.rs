@@ -271,6 +271,10 @@ pub const SETTINGS_WITH_THEIR_OWN_GESTURE: &[&str] = &[
     crate::settings::CHROME_SCHEMA,
     // La scheda Componenti.
     crate::settings::PLUGINS_DISABLED,
+    crate::settings::COMPONENTS_OFF,
+    crate::settings::COMPONENTS_KEPT,
+    crate::settings::COMPONENTS_WAITING,
+    crate::settings::COMPONENTS_PROFILE,
     // Ordine e icone nascoste si gestiscono dalla barra laterale.
     crate::settings::CHROME_RAIL_ORDER,
     crate::settings::CHROME_RAIL_HIDDEN,
