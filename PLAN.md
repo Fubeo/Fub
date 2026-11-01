@@ -58,6 +58,10 @@ profili. Le foto di T3 la confrontano con la pagina vera.
   capire perché la penna non si spegne, aprire un PDF da «Solo note») e che
   cosa osservare. La fa l'utente, se può anche con una persona che non conosce
   Fub. **La PR non si segna pronta prima del suo resoconto.**
+- D-3 · Per A2, `fub-host` dipende direttamente da `fub-componenti`: una
+  freccia nuova `host --> componenti` nel diagramma di
+  `docs/architecture/overview.md`, con `dependency_invariant` aggiornato.
+  Nessuna dipendenza esterna nuova.
 
 ## Assunzioni
 
@@ -176,7 +180,10 @@ differenza è scritta qui.
 Perché: la pagina, la CLI e MCP devono leggere e cambiare lo stesso stato, e la
 lavagna e il PDF devono potersi spegnere davvero.
 Tocca: `crates/fub-host/src/` (un modulo `componenti.rs` nuovo, `settings.rs`,
-`shell.rs`, `mount.rs`, `session.rs`), `crates/fub-host/tests/componenti.rs`,
+`shell.rs`, `mount.rs`, `session.rs`), `crates/fub-host/Cargo.toml` (la
+dipendenza da `fub-componenti`, D-3), `docs/architecture/overview.md` (la
+freccia e la riga che la spiega), `crates/fub-abi/tests/dependency_invariant.rs`
+se ha un elenco delle frecce, `Cargo.lock`, `crates/fub-host/tests/componenti.rs`,
 `apps/client/src/ui/shell-ids.generated.ts` (solo rigenerato),
 `crates/fub-features/src/componenti.rs` (righe `fub.pdf`, lavagna spegnibile,
 `profili()`), `crates/fub-features/tests/componenti.rs`, i cataloghi di
