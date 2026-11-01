@@ -2054,6 +2054,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fub-componenti"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "fub-features"
 version = "0.1.0"
 dependencies = [

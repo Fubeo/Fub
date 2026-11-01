@@ -1,0 +1,13 @@
+[package]
+name = "fub-componenti"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Il risolutore dei componenti: che cosa è acceso, chi lo richiede, che cosa non serve più. Puro: niente I/O, niente fub-abi."
+
+[dependencies]
+# Solo per serializzare `Stato`, `Effetto` e `Perche` verso chi li mostra o li
+# salva (host, CLI, MCP). Il crate non ha altre dipendenze, e
+# `crates/fub-abi/tests/dependency_invariant.rs` lo disegna senza archi.
+serde = { workspace = true }

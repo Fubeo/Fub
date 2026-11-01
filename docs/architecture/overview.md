@@ -40,6 +40,7 @@ flowchart TD
     svg["fub-format-svg"]
     scene["fub-scene"]
     ink["fub-ink"]
+    componenti["fub-componenti"]
     rich["fub-format-rich"]
     importers["fub-importers"]
     cli["fub-cli"]
@@ -237,6 +238,11 @@ del tratto, e quella di `fub-format-rich`, che ne scrive e legge l'InkML
 dell'inchiostro dei documenti; chi altro può dipenderne è un elenco chiuso,
 deciso nell'[ADR 0204](../decisions/0204-nucleo-inchiostro.md) e allargato
 nell'[ADR 0226](../decisions/0226-inchiostro-e-disegni-nei-documenti.md).
+
+`fub-componenti`, il risolutore dei componenti, non ha frecce né in uscita né
+in ingresso: dipende soltanto da `serde`, non vede `fub-abi`, e dice in un
+posto solo che cosa è acceso, chi lo richiede e che cosa non serve più. Chi
+costruisce la mappa dei componenti traduce le proprie righe nelle sue.
 
 `fub-scene`, il lettore delle scene di FubDraw, ha come sola freccia in uscita
 `fub-ink`: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché

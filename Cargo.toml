@@ -14,6 +14,8 @@ members = [
     "crates/fub-format-canvas",
     "crates/fub-format-base",
     "crates/fub-ink",
+    # Il risolutore dei componenti (K1): puro, non dipende da nessun membro.
+    "crates/fub-componenti",
     "crates/fub-scene",
     "crates/fub-format-svg",
     "crates/fub-format-rich",
@@ -156,6 +158,7 @@ fub-format-markdown = { path = "crates/fub-format-markdown", version = "0.1.0" }
 fub-format-canvas = { path = "crates/fub-format-canvas", version = "0.1.0" }
 fub-format-base = { path = "crates/fub-format-base", version = "0.1.0" }
 fub-ink = { path = "crates/fub-ink", version = "0.1.0" }
+fub-componenti = { path = "crates/fub-componenti", version = "0.1.0" }
 fub-scene = { path = "crates/fub-scene", version = "0.1.0" }
 fub-format-svg = { path = "crates/fub-format-svg", version = "0.1.0" }
 fub-format-rich = { path = "crates/fub-format-rich", version = "0.1.0" }
