@@ -172,7 +172,7 @@ i default, e uno con tutti i campi fa il giro serde identico; `cargo test -p
 fub-wasm-host` verde con gli esempi ricompilati; nessun file in `frozen/`
 cambiato (`git diff --stat` nella PR).
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base 90c48297
+Stato: [x] fatto · ad71c598
 
 ## T2 · Il risolutore `fub-componenti`
 

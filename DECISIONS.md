@@ -34,6 +34,11 @@ registro.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-01 · K1 · `Delivery` nel JSON è un enum con tag interno `kind`
+  (`{"kind":"download","url":…}`), e la validazione di `fub-wasm-host` accetta
+  lo sha256 in esadecimale maiuscolo o minuscolo; la conversione WIT → Rust di
+  0.2.0 sta in `translate.rs`, `compat.rs` (ABI legacy) prende i default ·
+  fonte: report del coder di T1.
 - 2026-11-01 · K1 · Le regole di `fub-componenti` che il piano lasciava aperte:
   un requisito offerto via `provides` da più componenti è un errore della mappa
   (`RequisitoAmbiguo`); `attivi` segue i `requires` anche dal nucleo;
