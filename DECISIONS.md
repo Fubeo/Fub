@@ -34,6 +34,22 @@ registro.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-01 · K1 · L'assunzione A2 era sbagliata: un campo in coda a un
+  record rompe i plugin compilati prima (il guest a undici campi del manifest
+  non si istanzia nell'host a sedici); `0.2.0` non è pubblicata e K1 resta, ma
+  dal primo rilascio un record pubblicato non cresce e le novità passano da
+  interfacce nuove · fonte: prova dell'orchestratore con `ping-wasm` compilato
+  su `d235d3f6`, decisione con l'utente; ADR 0235.
+- 2026-11-01 · K1 · Via MCP accendere e spegnere un componente con `apply`
+  vogliono tutto il vault fra le radici di scrittura, come un piano che non
+  dice quali note tocca: un componente cambia il comportamento di tutto il
+  vault · fonte: revisione dell'orchestratore su T4 (il coder chiedeva una
+  radice qualsiasi); ADR 0234.
+- 2026-11-01 · K1 · `fub-cli` dipende da `fub-componenti` (con la freccia nel
+  grafo di `overview.md`): i tipi del risolutore (`Stato`, `Effetto`,
+  `Perche`, `Errore`) non sono riesportati da `fub-features` e la CLI li
+  usa nelle firme e nei `match` · fonte: blocco del coder di T4, scelta
+  dell'orchestratore (l'alternativa toccava `fub-features`, fuori dal Tocca).
 - 2026-11-01 · K1 · La mappa vera (`fub-features::componenti`): le righe
   senza feature Cargo sono 7, non 4 (anche `fub.core`, `fub.maintenance`,
   `fub.importers`, che oggi si compilano sempre); `SOLO_DELLA_MAPPA` è
@@ -41,16 +57,6 @@ La più recente in cima: data · piano · decisione · perché.
   perché; una feature marcatore nuova `http-client` per le righe di sync,
   publish, updates e linkcard; `rich` e `xlsx` portano con sé i loro motori ·
   fonte: report del coder di T3; il codice vince sul «Fatto quando» del piano.
-- 2026-11-01 · K1 · `fub-cli` dipende da `fub-componenti` (con la freccia nel
-  grafo di `overview.md`): i tipi del risolutore (`Stato`, `Effetto`,
-  `Perche`, `Errore`) non sono riesportati da `fub-features` e la CLI li
-  usa nelle firme e nei `match` · fonte: blocco del coder di T4, scelta
-  dell'orchestratore (l'alternativa toccava `fub-features`, fuori dal Tocca).
-- 2026-11-01 · K1 · Via MCP accendere e spegnere un componente con `apply`
-  vogliono tutto il vault fra le radici di scrittura, come un piano che non
-  dice quali note tocca: un componente cambia il comportamento di tutto il
-  vault · fonte: revisione dell'orchestratore su T4 (il coder chiedeva una
-  radice qualsiasi); ADR 0234.
 - 2026-11-01 · K1 · I requisiti che esistono solo per la mappa
   (`fub.markdown`, `fub.dizionari`: nucleo e componenti senza bundle) stanno
   nella riga di `fub-features::componenti`, non nel manifest; il manifest tiene
