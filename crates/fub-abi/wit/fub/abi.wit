@@ -4461,6 +4461,43 @@ interface plugin {
         /// definizione. Nomi nudi: la qualifica è strutturale, e chi è il
         /// proprietario lo dice `event-timer-fired.owner`.
         timers: list<timer-spec>,
+        /// I servizi che USA SE C'È (K1): come `requires`, ma se nessuno li
+        /// offre il componente si monta lo stesso. Un nome anche in `requires`
+        /// resta un requisito: `requires` vince.
+        uses: list<string>,
+        /// Di che tipo è il componente (K1).
+        kind: component-kind,
+        /// Come arriva (K1, ADR 0233): il livello 3 sono le edizioni, niente
+        /// librerie caricate a runtime.
+        delivery: delivery,
+        /// I pezzi del client che carica: chunk Vite, percorsi sotto
+        /// `apps/client/src/` (es. `editors/rich`).
+        ui: list<string>,
+        /// Il gruppo della pagina dei componenti. Assente = nessuno.
+        group: option<string>,
+    }
+
+    /// Di che tipo è un componente (K1). Un caso nuovo va in coda.
+    enum component-kind {
+        mode,
+        engine,
+        service,
+        data,
+    }
+    /// Come arriva un componente (K1, ADR 0233). Un caso nuovo va in coda.
+    variant delivery {
+        /// Dentro il binario che gira.
+        included,
+        /// In un'edizione dell'app: il nome dell'edizione.
+        edition(string),
+        /// Da scaricare.
+        download(delivery-download),
+    }
+    /// Un componente da scaricare: SHA-256 in 64 cifre esadecimali, byte mai 0.
+    record delivery-download {
+        url: string,
+        sha256: string,
+        bytes: u64,
     }
 
     /// Una sveglia dichiarata da un componente (§22.1, decisione 0069).

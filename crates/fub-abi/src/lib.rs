@@ -163,17 +163,17 @@ pub use theme::{
     THEME_ENGINE, THEME_ENGINE_2,
 };
 pub use traits::{
-    BacklinkRef, CivilTime, CommandProvider, DataRead, DataWrite, DocPosition, DocumentMatch,
-    DraftInfo, EntryKind, EventHandler, Excerpts, FolderScope, HealthCheck, HealthIssue, HostApi,
-    HostCommands, HostEnv, HostEvents, HostNetwork, HostQuery, HostServices, IndexLoss,
-    IndexProvider, IndexQuery, IndexResult, IndexingState, JobId, JobProgress, JobSpec, JobStatus,
-    LinkDirection, NeighborRef, Page, Paged, Plugin, PluginManifest, PluginPermissions,
-    PredicateKind, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect, PropertySort,
-    PropertyTest, QueryKind, QueryRoute, ReadApi, ResolvedRef, ServiceProvider, SettingsRead,
-    SettingsWrite, TagCount, TimerSchedule, TimerSpec, TransferRead, TrashEntry, VaultEntry,
-    VaultFolder, VaultRead, VaultStatus, VaultStructure, VaultWrite, ViewInstance, ViewInterests,
-    ViewProvider, ViewSpec, ViewStateRead, ViewStateWrite, ViewSurface, WallClock,
-    MAX_RANDOM_BYTES,
+    BacklinkRef, CivilTime, CommandProvider, ComponentKind, DataRead, DataWrite, Delivery,
+    DocPosition, DocumentMatch, DraftInfo, EntryKind, EventHandler, Excerpts, FolderScope,
+    HealthCheck, HealthIssue, HostApi, HostCommands, HostEnv, HostEvents, HostNetwork, HostQuery,
+    HostServices, IndexLoss, IndexProvider, IndexQuery, IndexResult, IndexingState, JobId,
+    JobProgress, JobSpec, JobStatus, LinkDirection, NeighborRef, Page, Paged, Plugin,
+    PluginManifest, PluginPermissions, PredicateKind, PropertyCount, PropertyEntry, PropertyFilter,
+    PropertySelect, PropertySort, PropertyTest, QueryKind, QueryRoute, ReadApi, ResolvedRef,
+    ServiceProvider, SettingsRead, SettingsWrite, TagCount, TimerSchedule, TimerSpec, TransferRead,
+    TrashEntry, VaultEntry, VaultFolder, VaultRead, VaultStatus, VaultStructure, VaultWrite,
+    ViewInstance, ViewInterests, ViewProvider, ViewSpec, ViewStateRead, ViewStateWrite,
+    ViewSurface, WallClock, MAX_RANDOM_BYTES,
 };
 pub use transfer::{
     ArtifactContent, ArtifactHandle, ArtifactSink, ConflictPolicy, ExportArtifact, ExportProvider,

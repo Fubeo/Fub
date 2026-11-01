@@ -341,6 +341,24 @@ pub(crate) fn from_manifest(
             .collect(),
         default_locale: m.default_locale,
         timers: m.timers.into_iter().map(from_timer).collect(),
+        uses: m.uses,
+        kind: match m.kind {
+            w_plugin::ComponentKind::Mode => fub_abi::traits::ComponentKind::Mode,
+            w_plugin::ComponentKind::Engine => fub_abi::traits::ComponentKind::Engine,
+            w_plugin::ComponentKind::Service => fub_abi::traits::ComponentKind::Service,
+            w_plugin::ComponentKind::Data => fub_abi::traits::ComponentKind::Data,
+        },
+        delivery: match m.delivery {
+            w_plugin::Delivery::Included => fub_abi::traits::Delivery::Included,
+            w_plugin::Delivery::Edition(name) => fub_abi::traits::Delivery::Edition { name },
+            w_plugin::Delivery::Download(d) => fub_abi::traits::Delivery::Download {
+                url: d.url,
+                sha256: d.sha256,
+                bytes: d.bytes,
+            },
+        },
+        ui: m.ui,
+        group: m.group,
     })
 }
 

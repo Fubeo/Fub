@@ -4249,6 +4249,63 @@ pub struct PluginManifest {
     /// chi è.
     #[serde(default)]
     pub timers: Vec<TimerSpec>,
+    /// I servizi che **usa se c'è** (K1): come [`requires`](Self::requires),
+    /// ma se nessuno li offre il componente si monta lo stesso. Un nome che
+    /// compare anche in `requires` resta un requisito: `requires` vince.
+    #[serde(default)]
+    pub uses: Vec<String>,
+    /// Di che tipo è il componente (K1). Il default è [`ComponentKind::Mode`].
+    #[serde(default)]
+    pub kind: ComponentKind,
+    /// Come arriva (K1, ADR 0233): incluso, in un'edizione, o da scaricare.
+    /// Niente librerie caricate a runtime: il livello 3 sono le edizioni.
+    #[serde(default)]
+    pub delivery: Delivery,
+    /// I pezzi del client che il componente carica (K1): chunk Vite, come
+    /// percorsi sotto `apps/client/src/` (es. `editors/rich`).
+    #[serde(default)]
+    pub ui: Vec<String>,
+    /// Il gruppo della pagina dei componenti (K1): `scrivere`, `leggere`,
+    /// `pensare`, `disegnare`, `foto`, `ufficio`, `altro`, `supporto`.
+    /// Assente = nessun gruppo dichiarato.
+    #[serde(default)]
+    pub group: Option<String>,
+}
+
+/// Di che tipo è un componente (K1). L'ordine dei casi è il discriminante
+/// dell'ABI: un caso nuovo va in coda.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ComponentKind {
+    /// Un modo di lavorare (scrivere, leggere, disegnare…): il default.
+    #[default]
+    Mode,
+    /// Un motore che altri componenti usano.
+    Engine,
+    /// Un servizio di supporto.
+    Service,
+    /// Dati (dizionari, modelli, cataloghi).
+    Data,
+}
+
+/// Come arriva un componente (K1, ADR 0233). L'ordine dei casi è il
+/// discriminante dell'ABI: un caso nuovo va in coda.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Delivery {
+    /// Dentro il binario che gira: il default.
+    #[default]
+    Included,
+    /// In un'edizione dell'app (il livello 3 dell'ADR 0233): non si carica a
+    /// runtime, si installa l'edizione che lo contiene.
+    Edition { name: String },
+    /// Da scaricare: l'indirizzo, l'impronta SHA-256 (64 cifre esadecimali) e
+    /// la dimensione in byte (mai 0).
+    Download {
+        url: String,
+        sha256: String,
+        bytes: u64,
+    },
 }
 
 /// Una sveglia dichiarata da un componente (§22.1, decisione 0069).
@@ -4630,6 +4687,11 @@ impl PluginManifest {
             strings: Vec::new(),
             default_locale: String::new(),
             timers: Vec::new(),
+            uses: Vec::new(),
+            kind: ComponentKind::Mode,
+            delivery: Delivery::Included,
+            ui: Vec::new(),
+            group: None,
         }
     }
 
@@ -4796,6 +4858,73 @@ pub trait Plugin: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **Un manifest di prima di K1 si legge come prima**: i campi nuovi
+    /// prendono i default, e nessun manifest di oggi cambia valore.
+    #[test]
+    fn a_manifest_without_the_component_fields_reads_with_defaults() {
+        let old = r#"{"id":"acme.x","name":"X","version":"1.0.0","abi_version":"0.2.0",
+            "permissions":{"granted":{}},"provides":["acme.x"],"requires":["fub.y"]}"#;
+        let m: PluginManifest = serde_json::from_str(old).expect("old manifest reads");
+        assert!(m.uses.is_empty());
+        assert_eq!(m.kind, ComponentKind::Mode);
+        assert_eq!(m.delivery, Delivery::Included);
+        assert!(m.ui.is_empty());
+        assert_eq!(m.group, None);
+        let mut fresh = PluginManifest::new("acme.x", "X");
+        fresh.version = "1.0.0".into();
+        fresh.provides = vec!["acme.x".into()];
+        fresh.requires = vec!["fub.y".into()];
+        assert_eq!(m, fresh);
+    }
+
+    /// **Un manifest con tutti i campi di K1 fa il giro serde identico**, e i
+    /// nomi sul JSON sono `snake_case` come gli altri enum del contratto.
+    #[test]
+    fn a_manifest_with_every_component_field_round_trips() {
+        for delivery in [
+            Delivery::Included,
+            Delivery::Edition {
+                name: "studio".into(),
+            },
+            Delivery::Download {
+                url: "https://example.org/x.wasm".into(),
+                sha256: "ab".repeat(32),
+                bytes: 4096,
+            },
+        ] {
+            for kind in [
+                ComponentKind::Mode,
+                ComponentKind::Engine,
+                ComponentKind::Service,
+                ComponentKind::Data,
+            ] {
+                let mut m = PluginManifest::new("acme.x", "X").requiring(&["fub.y"]);
+                m.uses = vec!["fub.spell".into(), "fub.y".into()];
+                m.kind = kind;
+                m.delivery = delivery.clone();
+                m.ui = vec!["editors/rich".into()];
+                m.group = Some("scrivere".into());
+                let json = serde_json::to_string(&m).unwrap();
+                let back: PluginManifest = serde_json::from_str(&json).unwrap();
+                assert_eq!(back, m, "{json}");
+            }
+        }
+        let json = serde_json::to_value(Delivery::Download {
+            url: "u".into(),
+            sha256: "s".into(),
+            bytes: 1,
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({"kind":"download","url":"u","sha256":"s","bytes":1})
+        );
+        assert_eq!(
+            serde_json::to_value(ComponentKind::Engine).unwrap(),
+            serde_json::json!("engine")
+        );
+    }
 
     /// **`ViewSurface::ALL` copre ogni superficie una volta sola.**
     ///

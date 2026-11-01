@@ -21,6 +21,8 @@ export type CommandReach = "session" | "document" | "documents" | "vault" | "set
 
 export type CommandSurface = "slash" | "slash_selection" | "toolbar";
 
+export type ComponentKind = "mode" | "engine" | "service" | "data";
+
 export type ConflictPolicy = "skip" | "replace" | "rename";
 
 export type ContextKind = "document" | "selection" | "mode";

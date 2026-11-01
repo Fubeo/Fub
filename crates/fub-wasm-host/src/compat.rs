@@ -953,6 +953,12 @@ pub(crate) fn from_legacy_manifest(
             .into_iter()
             .map(abi_timer_from_legacy)
             .collect(),
+        // Le ABI legacy non conoscono il modello dei componenti (K1): default.
+        uses: Vec::new(),
+        kind: fub_abi::traits::ComponentKind::Mode,
+        delivery: fub_abi::traits::Delivery::Included,
+        ui: Vec::new(),
+        group: None,
     })
 }
 

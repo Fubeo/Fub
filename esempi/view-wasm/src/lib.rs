@@ -81,6 +81,11 @@ impl PluginGuest for Component {
             strings: vec![],
             default_locale: "en".to_string(),
             timers: vec![],
+            uses: Vec::new(),
+            kind: exports::fub::abi::plugin::ComponentKind::Mode,
+            delivery: exports::fub::abi::plugin::Delivery::Included,
+            ui: Vec::new(),
+            group: None,
         }
     }
 

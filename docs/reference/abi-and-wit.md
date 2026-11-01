@@ -34,7 +34,7 @@ package fub:abi@0.2.0;
 - impostazioni, locale e tema;
 - servizi host;
 - errori, regole e schema;
-- capability e manifest.
+- capability e manifest (da K1 il manifest porta in coda, tutti con default, `uses`, `kind`/`component-kind`, `delivery` — `included`, `edition`, `download` —, `ui` e `group`).
 
 La radice del crate ri-esporta la superficie pubblica. Un test confronta i tipi
 pubblici con l'elenco per impedire esportazioni accidentali o dimenticate.
