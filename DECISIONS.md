@@ -46,6 +46,11 @@ La più recente in cima: data · piano · decisione · perché.
   `Perche`, `Errore`) non sono riesportati da `fub-features` e la CLI li
   usa nelle firme e nei `match` · fonte: blocco del coder di T4, scelta
   dell'orchestratore (l'alternativa toccava `fub-features`, fuori dal Tocca).
+- 2026-11-01 · K1 · Via MCP accendere e spegnere un componente con `apply`
+  vogliono tutto il vault fra le radici di scrittura, come un piano che non
+  dice quali note tocca: un componente cambia il comportamento di tutto il
+  vault · fonte: revisione dell'orchestratore su T4 (il coder chiedeva una
+  radice qualsiasi); ADR 0234.
 - 2026-11-01 · K1 · I requisiti che esistono solo per la mappa
   (`fub.markdown`, `fub.dizionari`: nucleo e componenti senza bundle) stanno
   nella riga di `fub-features::componenti`, non nel manifest; il manifest tiene
