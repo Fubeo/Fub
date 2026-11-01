@@ -259,7 +259,7 @@ Fatto quando: i test di conformità IPC verdi; `mirror.test.ts` confronta i
 campioni nuovi; un test vitest chiama i due comandi sul fake e riceve
 «Attivati anche…» e `Richiesto`.
 Prova: scripts/check.sh --rapido
-Stato: [ ]
+Stato: [x] fatto
 
 ## T3 · La pagina «Componenti»
 
