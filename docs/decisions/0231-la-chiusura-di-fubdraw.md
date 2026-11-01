@@ -11,11 +11,14 @@
 L'editor dei disegni è cresciuto fino a un programma di grafica alla
 Illustrator: tre livelli pronti (Essenziale, Standard, Esperto), un livello
 Personalizzato, e dietro di loro lazo, nodi, booleane, simboli, tavole,
-presentazione, ricalco delle immagini e molto altro. Fub è uno spazio per
-scrivere e studiare: di un disegno servono l'inchiostro, le forme di base e la
-sessione dal tablet. Il resto lo fanno meglio le app Craft, che Fub apre con
-«Apri in VectorCraft». Non c'è ancora una release pubblicata: nessun utente
-dipende dalle funzioni che si tolgono.
+presentazione, ricalco delle immagini e molto altro. Fub è un gestore della
+conoscenza, un sistema operativo della conoscenza che si usa per tutto, e non
+per questo deve contenere ogni programma: la grafica vera la fanno meglio le
+app Craft, che Fub apre con «Apri in VectorCraft». Dentro Fub, di un disegno
+servono l'inchiostro, le forme di base e la sessione dal tablet, cioè quello
+che basta per fissare un'idea, annotarla e collegarla al resto del vault.
+Non c'è ancora una release pubblicata: nessun utente dipende dalle funzioni
+che si tolgono.
 
 Le scelte che restano valide: la scena SVG modificata con operazioni testuali
 ([0203](0203-superfici-spaziali.md)), l'inchiostro come componente di sistema

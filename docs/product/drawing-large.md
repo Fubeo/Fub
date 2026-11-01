@@ -44,8 +44,8 @@ ogni movimento. Per chi disegna non cambia niente.
 
 Il banco delle scene grandi apre tre lavagne, di 5 000, 20 000 e 49 900
 elementi, con fondi, titoli, gruppi, forme e tratti a penna, e le percorre
-come farebbe una persona. Su un portatile con un Ryzen 7 7730U, a riposo,
-nel peggiore di otto giri, dall'evento al fotogramma dipinto:
+come farebbe una persona. Su server-di-fub, un mini PC con un Ryzen 7 7730U,
+a riposo, nel peggiore di otto giri, dall'evento al fotogramma dipinto:
 
 | | 5 000 elementi | 20 000 | 49 900 |
 |---|---:|---:|---:|

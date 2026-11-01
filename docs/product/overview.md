@@ -5,12 +5,16 @@
 
 ## In breve
 
-Fub è un'app desktop local-first per lavorare su un vault di file. I documenti
-restano file leggibili e modificabili da altri programmi. Il core non incorpora
-Markdown: usa contratti comuni e provider sostituibili.
+Fub è un gestore della conoscenza, un vero e proprio sistema operativo della
+conoscenza: un'app desktop local-first per lavorare su un vault di file, che
+si usa per tutto. I documenti restano file leggibili e modificabili da altri
+programmi. Il core non incorpora Markdown: usa contratti comuni e provider
+sostituibili.
 
-Le capacità correnti si concentrano su scrittura, organizzazione, ricerca,
-navigazione dei collegamenti, sicurezza delle modifiche ed estensibilità.
+Le capacità correnti comprendono scrittura, organizzazione, ricerca,
+navigazione dei collegamenti, sicurezza delle modifiche ed estensibilità, e
+oltre alle note i [documenti di Word](word-documents.md), le
+[annotazioni dei PDF](pdf-annotations.md) e i [disegni](drawing.md).
 
 ## Principi
 
