@@ -15,7 +15,7 @@ l'errore «comando di un componente spento» (K3); dati scaricabili ed edizioni
 (K4); l'interruttore Semplice·Completo nelle modalità (arriva con la prima
 modalità completa); la domanda del profilo sui vault che esistono già.
 Assunzioni: vedi «Assunzioni» qui sotto (A1–A12), approvate il 2026-11-01.
-Ondate: T1 | T2 | T3 T4 | T5
+Ondate: T1 | T2 | T2b | T3 T4 | T5
 Prototipo: l'anteprima dal vivo in cima al piano «Fub a componenti»
 (https://claude.ai/artifact/T2Ts14vEwWTNzHHs6NKP9w): gruppi, interruttori,
 «Serve a…», «Non serve più», la finestra delle dipendenze, la ricerca, i
@@ -259,6 +259,17 @@ Fatto quando: i test di conformità IPC verdi; `mirror.test.ts` confronta i
 campioni nuovi; un test vitest chiama i due comandi sul fake e riceve
 «Attivati anche…» e `Richiesto`.
 Prova: scripts/check.sh --rapido
+Stato: [x] fatto
+
+## T2b · Nomi, descrizioni e scenario completo
+
+Aggiunto dall'orchestratore (vedi DECISIONS.md): T2 mandava alla shell le
+chiavi del catalogo e uno scenario del fake con pochi gesti.
+Fatto: `components_map` risponde nome, descrizione ed etichetta nella lingua
+del vault (ripiego sull'id), `gruppi` in ordine, `ui` per riga; lo scenario
+registrato copre ogni gesto di T3 e «Solo note», con gli eventi dell'host; il
+fake parte da uno stato scelto (`?componenti=solo-note` nel banco), applica
+scelte «da fuori» e sa fallire.
 Stato: [x] fatto
 
 ## T3 · La pagina «Componenti»
