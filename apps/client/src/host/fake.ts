@@ -224,6 +224,10 @@ export interface Options {
   /// sul disco.
   file?: Record<string, string>;
   root?: string | null;
+  /// Il vault che l'app trova all'avvio (`initialVault`): di serie `root`.
+  /// Con `null` l'avvio finisce sul benvenuto, mentre `root` resta il vault
+  /// che i comandi servono quando lo si apre (un vault nuovo appena creato).
+  initialVault?: string | null;
   sessionNotice?: KernelNotice | null;
   /// La versione che `appVersion` dichiara; di serie `0.1.0`.
   appVersion?: string;
@@ -1356,7 +1360,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
 
   const module: typeof import("./ipc") = {
     api: {
-      initialVault: () => gate("initialVault", [], Promise.resolve(root)),
+      initialVault: () => gate("initialVault", [], Promise.resolve(options.initialVault === undefined ? root : options.initialVault)),
       appVersion: () => gate("appVersion", [], Promise.resolve(options.appVersion ?? "0.1.0")),
       sessionNotice: () =>
         gate("sessionNotice", [], Promise.resolve(options.sessionNotice ?? null)),

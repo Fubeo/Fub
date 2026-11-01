@@ -932,7 +932,10 @@ impl Uscita {
 /// dice in quale stato si parte (`prima`), l'azione come la scrive serde (con
 /// i default), `apply`, la risposta di `components_apply`, lo stato in cui si
 /// arriva (`dopo`) e gli `eventi` che l'host ha mandato alla shell dopo aver
-/// risposto, nel loro ordine (vuoto per una prova o un rifiuto).
+/// risposto, nel loro ordine (vuoto per una prova o un rifiuto). La partenza
+/// `nuovo` è un vault appena creato, senza chiavi `components.*`, con la prova
+/// e l'applicazione di «Studio», «Solo note», «Tutto» e di un profilo «più
+/// avanti», ciascuna da un vault nuovo suo.
 /// `senza_vault` sono gli errori dei due comandi quando nessun vault è aperto.
 fn component_scenario() -> Value {
     fn stato_di(mappe: &mut Vec<Value>, mappa: Value) -> usize {
@@ -1033,41 +1036,40 @@ fn component_scenario() -> Value {
     sequenza.extend(prova_e_applica(spegni("fub.pdf", false)));
     sequenza.extend(prova_e_applica(rispondi(Orfani::Tieni)));
 
-    let mut mappe = Vec::new();
-    let mut scelte: Vec<Value> = Vec::new();
-    let mut partenze = serde_json::Map::new();
-    for (azione, apply) in sequenza {
+    /// Una scelta, come la registra lo scenario: lo stato da cui parte, la
+    /// risposta e lo stato in cui arriva. Una scelta registrata due volte dallo
+    /// stesso stato è una voce sola: il fake la troverebbe comunque per prima.
+    fn registra(
+        host: &fub_host::Host,
+        uscita: &Uscita,
+        radice: &str,
+        mappe: &mut Vec<Value>,
+        scelte: &mut Vec<Value>,
+        azione: Azione,
+        apply: bool,
+    ) -> (usize, ComponentsApplied, usize) {
         let prima = stato_di(
-            &mut mappe,
-            to_value(fub_app_lib::components_map_for(&host, None).expect("the map")),
+            mappe,
+            to_value(fub_app_lib::components_map_for(host, None).expect("the map")),
         );
-        // Una scelta registrata due volte dallo stesso stato è una voce
-        // sola: il fake la troverebbe comunque per prima.
         let gia = scelte.iter().any(|scelta| {
             scelta["prima"] == prima
                 && scelta["apply"] == apply
                 && scelta["azione"] == to_value(&azione)
         });
         uscita.0.lock().unwrap().clear();
-        let risposta = fub_app_lib::components_apply_for(&host, None, azione.clone(), apply)
+        let risposta = fub_app_lib::components_apply_for(host, None, azione.clone(), apply)
             .expect("the host answers");
         let eventi = match &risposta {
             ComponentsApplied::Esito(esito) if esito.applicato && esito.scrive() => {
-                uscita.della(esito, &radice)
+                uscita.della(esito, radice)
             }
             _ => Vec::new(),
         };
         let dopo = stato_di(
-            &mut mappe,
-            to_value(fub_app_lib::components_map_for(&host, None).expect("the map")),
+            mappe,
+            to_value(fub_app_lib::components_map_for(host, None).expect("the map")),
         );
-        if apply {
-            if let Azione::Profilo { nome } = &azione {
-                if matches!(risposta, ComponentsApplied::Esito(_)) {
-                    partenze.insert(nome.clone(), Value::from(dopo));
-                }
-            }
-        }
         if !gia {
             scelte.push(json!({
                 "prima": prima,
@@ -1078,7 +1080,82 @@ fn component_scenario() -> Value {
                 "eventi": eventi,
             }));
         }
+        (prima, risposta, dopo)
     }
+
+    let mut mappe = Vec::new();
+    let mut scelte: Vec<Value> = Vec::new();
+    let mut partenze = serde_json::Map::new();
+    for (azione, apply) in sequenza {
+        let (_, risposta, dopo) = registra(
+            &host,
+            &uscita,
+            &radice,
+            &mut mappe,
+            &mut scelte,
+            azione.clone(),
+            apply,
+        );
+        if apply {
+            if let Azione::Profilo { nome } = &azione {
+                if matches!(risposta, ComponentsApplied::Esito(_)) {
+                    partenze.insert(nome.clone(), Value::from(dopo));
+                }
+            }
+        }
+    }
+
+    // **Il vault nuovo** (T5): una cartella vuota aperta come vault, senza
+    // nessuna chiave `components.*`. È lo stato in cui la shell chiede il
+    // profilo dopo «Crea un vault nuovo…». Ogni gesto parte da un vault nuovo
+    // suo, perché un profilo applicato scrive le chiavi; la prova e
+    // l'applicazione dello stesso gesto stanno sullo stesso vault, perché la
+    // prova non scrive niente.
+    let mut nuovo: Option<usize> = None;
+    for nome in ["studio", "solo-note", "tutto", "grafica"] {
+        let cartella = tempfile::tempdir().expect("tempdir");
+        let dove = camino::Utf8PathBuf::from_path_buf(cartella.path().to_path_buf()).expect("utf8");
+        let uscita = std::sync::Arc::new(Uscita(std::sync::Mutex::new(Vec::new())));
+        let host = fub_host::Host::new().with_sink(uscita.clone());
+        let radice = host.open(&dove).expect("the vault opens").root.to_string();
+        for apply in [false, true] {
+            let (prima, risposta, _) = registra(
+                &host,
+                &uscita,
+                &radice,
+                &mut mappe,
+                &mut scelte,
+                profilo(nome),
+                apply,
+            );
+            if !apply {
+                assert_eq!(
+                    *nuovo.get_or_insert(prima),
+                    prima,
+                    "every new vault starts from the same state"
+                );
+            }
+            if nome == "grafica" {
+                assert!(
+                    matches!(risposta, ComponentsApplied::Rifiuto(_)),
+                    "«grafica» is a profile for later: {risposta:?}"
+                );
+            } else {
+                assert!(
+                    matches!(risposta, ComponentsApplied::Esito(ref esito) if esito.applicato == apply),
+                    "{risposta:?}"
+                );
+            }
+        }
+    }
+    let nuovo = nuovo.expect("the new vault was recorded");
+    assert!(
+        !partenze
+            .values()
+            .any(|stato| stato.as_u64() == Some(nuovo as u64)),
+        "a new vault is not the same state as a profile applied"
+    );
+    partenze.insert("nuovo".into(), Value::from(nuovo));
     assert_eq!(
         partenze.get("studio"),
         Some(&Value::from(0)),

@@ -1667,6 +1667,9 @@
     "onboarding-recent",
     "onboarding-recent-item",
     "onboarding-forget",
+    "onboarding-profile",
+    "onboarding-profile-status",
+    "onboarding-profile-note",
     "onboarding-extra",
     "onboarding-trouble",
     "cm-cursorLayer",
@@ -3183,6 +3186,9 @@
     "onboarding-recent": "cornice",
     "onboarding-recent-item": "cornice",
     "onboarding-forget": "cornice",
+    "onboarding-profile": "cornice",
+    "onboarding-profile-status": "cornice",
+    "onboarding-profile-note": "cornice",
     "onboarding-extra": "cornice",
     "onboarding-trouble": "cornice",
     "cm-cursorLayer": "segno",
@@ -7184,6 +7190,19 @@
       ]
     },
     {
+      "name": "welcome-profile",
+      "part": "welcome",
+      "hooks": [
+        "onboarding-profile",
+        "onboarding-profile-status",
+        "onboarding-profile-note",
+        "components-profiles"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
       "name": "welcome-extras",
       "part": "welcome",
       "hooks": [
@@ -8429,10 +8448,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1514,
+    "hooks": 1517,
     "state_names": 7,
-    "assigned_states": 717,
-    "components": 215,
+    "assigned_states": 718,
+    "components": 216,
     "preference_tokens": 186
   }
 }

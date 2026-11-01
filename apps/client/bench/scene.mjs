@@ -315,6 +315,15 @@ export const SCENE = onPage("shell", [
     prepare: async () => {},
   },
   {
+    id: "new-vault-profile",
+    title: "Il vault nuovo: come lo userai, con «Studio» già scelto",
+    query: "vault=nuovo",
+    prepare: async (page) => {
+      await page.click("#onboarding-create");
+      await page.waitForSelector('#onboarding-profile .components-profile[aria-pressed="true"]');
+    },
+  },
+  {
     id: "grid-workbook",
     title: "Grid v2: una cartella di Excel sui suoi byte",
     query: "workbook=1",

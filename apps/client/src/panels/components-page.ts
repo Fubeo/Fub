@@ -42,7 +42,7 @@ import { icon } from "../ui/icons";
 import type { Lifetime } from "../ui/lifetime";
 import { notify } from "../ui/notify";
 import { CoalescingQueue } from "../ui/race";
-import { setTooltip } from "../ui/tooltip";
+import { guardDisabledKeys, laterReason, profileButton } from "./component-profiles";
 import { matchesTerms, normalizeSearch, searchTerms } from "./settings-model";
 
 /// L'icona di ogni componente che questa shell conosce. È presentazione della
@@ -90,9 +90,6 @@ const ICONS: Readonly<Record<string, string>> = {
 export function componentIcon(id: string): string {
   return icon(ICONS[id] ?? "component") || icon("component");
 }
-
-/// Il profilo consigliato: un consiglio della shell, non una regola dell'host.
-const RECOMMENDED = "studio";
 
 /// Il gruppo dei componenti che si aggiungono e si tolgono da soli.
 const SUPPORT = "supporto";
@@ -182,22 +179,11 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
   root.append(head, profiles, list, empty, notice);
 
   lifetime.listen(find, "input", () => applySearch());
-  // Un controllo `aria-disabled` resta raggiungibile (per sentirne il perché)
-  // ma Invio e Spazio non devono attivarlo: il tasto si ferma qui, prima che
-  // il browser ne faccia un clic. Un profilo «più avanti» dice invece perché.
-  const stopDisabled = (event: KeyboardEvent) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    const target = (event.target as HTMLElement | null)?.closest<HTMLElement>('[aria-disabled="true"]');
-    if (!target || !root.contains(target)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.type !== "keydown" || event.repeat) return;
-    const name = target.dataset.profile;
-    const profile = name ? map?.profili.find((candidate) => candidate.nome === name) : undefined;
-    if (profile?.piu_avanti) say(laterReason(profile));
-  };
-  lifetime.listen(root, "keydown", stopDisabled, { capture: true });
-  lifetime.listen(root, "keyup", stopDisabled, { capture: true });
+  // La guardia dei tasti sui controlli `aria-disabled` (`component-profiles.ts`):
+  // un profilo «più avanti» dice perché.
+  guardDisabledKeys(lifetime, root, (name) => map?.profili.find((candidate) => candidate.nome === name), (profile) =>
+    say(laterReason(profile)),
+  );
   lifetime.listen(root, "focusin", (event) => {
     const key = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-focus-key]")?.dataset.focusKey;
     if (key) focusKey = key;
@@ -311,7 +297,16 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
     const nodes: HTMLElement[] = [label];
     const current = map?.profilo ?? null;
     for (const profile of map?.profili ?? []) {
-      nodes.push(profileButton(profile, current === profile.nome));
+      const pressed = current === profile.nome;
+      nodes.push(profileButton(profile, {
+        pressed,
+        busy: busy !== null,
+        busyHere: busy?.has(`profile:${profile.nome}`) ?? false,
+        onLater: (later) => say(laterReason(later)),
+        onChoose: (chosen) => {
+          if (!pressed) void gesture(`profile:${chosen.nome}`, () => chooseProfile(chosen));
+        },
+      }));
     }
     if (map && map.profilo === null) {
       const custom = document.createElement("span");
@@ -321,50 +316,6 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
     }
     profiles.replaceChildren(...nodes);
     profiles.hidden = map === null;
-  }
-
-  function laterReason(profile: ComponentProfile): string {
-    return plural(profile.arriva_con.length, "components.profile.later_why.one", "components.profile.later_why", {
-      name: profile.etichetta,
-    });
-  }
-
-  function profileButton(profile: ComponentProfile, pressed: boolean): HTMLButtonElement {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "components-profile";
-    button.dataset.focusKey = `profile:${profile.nome}`;
-    button.dataset.profile = profile.nome;
-    button.setAttribute("aria-pressed", String(pressed));
-    const name = document.createElement("span");
-    name.textContent = profile.etichetta;
-    button.append(name);
-    if (profile.piu_avanti) {
-      button.classList.add("components-profile--later");
-      button.setAttribute("aria-disabled", "true");
-      const later = document.createElement("span");
-      later.className = "components-profile-later";
-      later.textContent = t("components.profile.later");
-      button.append(later);
-      setTooltip(button, laterReason(profile));
-    } else if (profile.nome === RECOMMENDED) {
-      const recommended = document.createElement("span");
-      recommended.className = "components-profile-rec";
-      recommended.textContent = t("components.profile.recommended");
-      button.append(recommended);
-    }
-    if (busy) button.setAttribute("aria-disabled", "true");
-    if (busy?.has(`profile:${profile.nome}`)) button.setAttribute("aria-busy", "true");
-    button.addEventListener("click", () => {
-      if (busy) return;
-      if (profile.piu_avanti) {
-        say(laterReason(profile));
-        return;
-      }
-      if (pressed) return;
-      void gesture(`profile:${profile.nome}`, () => chooseProfile(profile));
-    });
-    return button;
   }
 
   function drawList(): void {

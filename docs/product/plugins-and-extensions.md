@@ -67,6 +67,23 @@ applica e rilegge, anche quando la scelta arriva dalla CLI o da MCP. I
 permessi dei componenti inclusi restano sotto, in «Permessi dei componenti
 inclusi».
 
+## Il profilo di un vault nuovo
+
+«Crea un vault nuovo…» su una cartella senza file visibili e senza chiavi
+`components.*` apre il vault dietro il benvenuto e chiede, in una schermata
+sola, «Come userai questo vault?». Ci sono i sei profili della stessa riga
+della pagina «Componenti» (tre «più avanti», grigi e col perché), «Studio» già
+scelto e «Continua» come tasto principale; sotto, «Si cambia quando vuoi, da
+Impostazioni › Componenti». Scegliere un profilo non applica niente: applica
+«Continua», ed Esc vale «Studio». Poi il vault si mostra coi suoi componenti;
+se il profilo spegne la lavagna, la schermata aspetta che il vault si rimonti.
+
+Un errore nell'applicare, o un rifiuto dell'host, si dice con le parole della
+shell e il vault si apre come prima, senza profilo. «Apri vault…», o «Crea» su
+una cartella che ha già dei file, non chiede niente. Se l'app si chiude con la
+schermata aperta, il vault resta senza `components.*` e vale come un vault di
+prima dei componenti: tutto acceso.
+
 ## Permessi
 
 I permessi sono capability con namespace e, quando serve, parametri. Il kernel
