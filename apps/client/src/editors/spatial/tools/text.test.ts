@@ -2,7 +2,7 @@
 // porta.
 
 import { describe, expect, it } from "vitest";
-import { BLANK_LINE, editableText, LINE_SPACING, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES, textElem, textLines } from "./text";
+import { BLANK_LINE, editableText, textElem, textLines } from "./text";
 
 describe("le righe di un testo", () => {
   it("vanno a capo a ogni fine riga, e le vuote in testa e in coda non ci sono", () => {
@@ -44,14 +44,4 @@ describe("l'elemento di un testo nuovo", () => {
     });
   });
 
-  it("parte dalla dimensione media di tre, con l'interlinea dell'operazione `text`", () => {
-    expect(TEXT_SIZES.map((option) => [option.value, option.label])).toEqual([
-      [24, "draw.size.small"],
-      [32, "draw.size.medium"],
-      [48, "draw.size.large"],
-    ]);
-    expect(TEXT_SIZE).toBe(32);
-    expect(LINE_SPACING).toBe(1.25);
-    expect(TEXT_FAMILY).toBe("Inter, sans-serif");
-  });
 });

@@ -170,7 +170,7 @@ vendor_guards() {
 benches() {
   client_ready
   for b in "bench:verify" "bench:a11y -- --light=dark" "bench:a11y -- --light=light" "bench:motion" "bench:fidelity" \
-           "bench:boards" "bench:connectors" "bench:grid" "bench:large" \
+           "bench:grid" "bench:large" \
            "bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3" \
            "bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8" \
            "bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16"; do

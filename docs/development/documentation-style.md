@@ -24,6 +24,7 @@ Non svolge più ruoli insieme.
 
 | Tipo | Contenuto | Cartella |
 |---|---|---|
+| mappa | orientarsi: percorsi, ownership, «dove sta X» | `map/` |
 | guida iniziale | procedura verificabile | `getting-started/` |
 | prodotto | comportamento osservabile | `product/` |
 | architettura | responsabilità, flussi e invarianti | `architecture/` |
@@ -96,7 +97,7 @@ Ordine di autorità:
 2. contratti persistenti;
 3. pagina canonica;
 4. ADR;
-5. stato, roadmap e TODO attivi;
+5. stato e TODO attivi;
 6. Git.
 
 Non copiare intere enum o strutture quando un link al sorgente è più preciso.
@@ -110,7 +111,15 @@ Spiega significato e invarianti.
 - dopo una rinomina, aggiorna tutti i chiamanti;
 - ogni pagina deve essere raggiungibile da `docs/README.md`;
 - ogni ADR deve essere indicizzato;
-- ogni TODO deve essere collegato dalla roadmap, dallo stato e dalla sua issue.
+- ogni TODO deve essere collegato dallo stato e dalla sua issue.
+
+## Figure
+
+Una pagina che descrive un flusso, una gerarchia o un confine apre con la
+figura che lo mostra, e la figura porta l'unica domanda della pagina: le
+regole dei diagrammi stanno nella sezione [Mermaid](#mermaid). Le mappe di
+orientamento (`map/`) e le pagine di architettura lo fanno sempre; le guide
+e i riferimenti quando la prosa da sola costa di più.
 
 ## Mermaid
 
@@ -176,4 +185,5 @@ node .github/scripts/check-mermaid.mjs
 node .github/scripts/check-markdown-style.mjs
 node .github/scripts/check-prose.mjs
 node .github/scripts/check-tables.mjs
+node .github/scripts/check-locale-loop.mjs
 ```

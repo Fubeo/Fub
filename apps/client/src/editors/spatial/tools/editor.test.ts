@@ -3,7 +3,7 @@
 // operazioni attese, annulla e ripeti le disfano, e chi non vede sente che
 // cosa è successo.
 
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_GRID } from "./grid";
 import { FIDELITY } from "../../../../bench/fidelity-corpus";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
@@ -12,29 +12,21 @@ import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { closeContextMenu } from "../../../ui/menu";
 import { displayBinding } from "../../../ui/commands";
 import { SHELL_KEYS } from "../../../ui/shell-keys.generated";
-import { decodeInk, inkLength, inkPoint } from "../ink/codec";
-import { polygonalAttrs, readPolygonal } from "../scene/parametric";
+import { decodeInk } from "../ink/codec";
 import { SceneEngine } from "../scene/engine";
 import type { Op } from "../scene/ops";
 import { readScene } from "../scene/read";
-import { transform as parseTransform } from "../scene/values";
 import { doc } from "../scene/test-support";
 import { filterElem, writeEffects, type Shadow } from "./effects";
 import { createDrawEditor, type DrawChange, type DrawEditor, type DrawEditorOptions, type DrawImages, type DrawPlace } from "./editor";
 import { MERGE_MS } from "./history";
-import { blockMiddle } from "./labels";
-import { textRich } from "./look";
 import type { Decoded, EncodeType, ImageCodec } from "./images";
 import { rasterize } from "./png";
-import { arrowPath } from "./shapes";
-import { inlineTracer } from "./trace-runner";
 import { appearance, LAYER } from "./test-support";
-import { DEFS, MARKER, markersIn, tipOf, written } from "./tip-support";
+import { DEFS, written } from "./tip-support";
 import { DEFAULT_CURVE } from "../../../ink/input/pressure";
 import { closeRadial } from "./radial";
-import { FEATURES } from "./registry";
-import { loadWriting } from "./writing";
-import type { ProofPorts } from "../../core/proof-ports";
+import type { Workspace } from "./registry";
 import { setReducedMotionPreference } from "../../../theme/reduced-motion";
 
 // happy-dom non disegna: il PNG degli appunti è il testo che riceve.
@@ -189,17 +181,6 @@ function typeIn(target: HTMLInputElement | HTMLTextAreaElement, text: string): v
   target.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-/// Mette `value` al posto di tutto il testo del campo di Scrittura `field`,
-/// come il browser quando sostituisce la scelta.
-function replaceAll(field: HTMLElement, value: string): void {
-  const range = document.createRange();
-  range.selectNodeContents(field);
-  const selection = document.getSelection()!;
-  selection.removeAllRanges();
-  selection.addRange(range);
-  field.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertReplacementText", data: value }));
-}
-
 /// Scrive `text` nel campo e lo fa partire con Invio.
 function enter(target: HTMLInputElement, text: string): void {
   typeIn(target, text);
@@ -236,11 +217,6 @@ function recording(): { readonly frame: () => void; readonly texts: () => string
   };
 }
 
-// Scrittura arriva prima dei testi, come dopo il montaggio del disegno.
-beforeAll(async () => {
-  await loadWriting();
-});
-
 beforeEach(() => {
   host = document.createElement("div");
   document.body.append(host);
@@ -262,12 +238,13 @@ describe("la barra e il foglio", () => {
     mount();
     const toolbar = host.querySelector('[role="toolbar"]')!;
     expect(toolbar.getAttribute("aria-label")).toBe("Strumenti di disegno");
-    // Ciò che il livello Standard aggiunge c'è, nascosto.
     const groups = [...toolbar.querySelectorAll(".draw-group:not([hidden])")].map((group) => [group.getAttribute("role"), group.getAttribute("aria-label")]);
     expect(groups).toEqual([
       ["group", "Colore"],
       ["radiogroup", "Spessore"],
+      ["group", "Penna"],
       ["group", "Modifica"],
+      ["group", "Livelli"],
       ["group", "Vista"],
     ]);
     // Gli strumenti stanno nella colonna, a sinistra del foglio: le forme in
@@ -278,7 +255,7 @@ describe("la barra e il foglio", () => {
     const tools = railSlots();
     expect(tools.map((control) => control.getAttribute("aria-label"))).toEqual(["Selezione", "Mano", "Penna", "Gomma", "Rettangolo"]);
     expect(tools.map((control) => control.getAttribute("aria-pressed"))).toEqual(["false", "false", "true", "false", "false"]);
-    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia"]);
+    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia"]);
     expect(tools[4]!.getAttribute("aria-keyshortcuts")).toBe("R");
     tools[4]!.focus();
     expect(document.getElementById(tools[4]!.getAttribute("aria-describedby")!)?.textContent).toMatch(/^Rettangolo \(R\) — .*Maiusc/);
@@ -390,11 +367,11 @@ describe("gli strumenti", () => {
   it("con lo stabilizzatore di «Penna e dita» la corda assorbe il tremito del tratto", () => {
     const shaky: [number, number][] = [[10, 10], [14, 13], [18, 9], [22, 13], [26, 9], [30, 13], [34, 9], [60, 11]];
     const pathOf = (): string => /fub:tool="pen"[^>]* d="([^"]+)"/.exec(editor.engine.text)![1]!;
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     drag(shaky);
     const raw = pathOf();
     editor.dispose();
-    mount(SOURCE, { level: "standard", grid: { ...DEFAULT_GRID, steady: { amount: 1, string: true } } });
+    mount(SOURCE, { grid: { ...DEFAULT_GRID, steady: { amount: 1, string: true } } });
     drag(shaky);
     const steady = pathOf();
     expect(steady).not.toBe(raw);
@@ -509,7 +486,7 @@ describe("gli strumenti", () => {
   });
 });
 
-describe("il livello Standard", () => {
+describe("l'evidenziatore e il colore", () => {
   /// Se il selettore sceglie un colore qualunque, o soltanto i campioni.
   const free = (): boolean => {
     const open = picker().querySelector(".kit-color-input") !== null;
@@ -519,40 +496,33 @@ describe("il livello Standard", () => {
   const widths = (): string[] =>
     [...host.querySelectorAll<HTMLElement>(".draw-width")].map((control) => `${control.querySelector<HTMLElement>(".draw-width-bar")!.style.getPropertyValue("--draw-width")}${control.getAttribute("aria-checked") === "true" ? "*" : ""}`);
 
-  it("aggiunge l'evidenziatore dopo la penna e un colore qualunque, e il livello cambia dal vivo", () => {
-    mount();
-    expect(railNames()).not.toContain("Evidenziatore");
-    expect(free()).toBe(false);
+  it("il Semplice e il Completo hanno lo stesso evidenziatore e lo stesso colore a piacere", () => {
+    mount(SOURCE, { workspace: "simple" });
+    expect(railNames()).toContain("Evidenziatore");
+    expect(free()).toBe(true);
     key("q");
     expect(editor.tool).toBe("pen");
+    key("P", { shiftKey: true });
+    expect(editor.tool).toBe("highlighter");
 
     editor.select(["o1a2b3c4d"]);
-    editor.setLevel("standard");
-    expect(editor.level).toBe("standard");
-    expect(railNames()).toEqual(["Selezione", "Lazo", "Mano", "Zoom", "Tavola", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Poligono", "Linea", "Freccia", "Connettore", "Testo", "Contagocce", "Sfumatura"]);
+    editor.setWorkspace("full");
+    expect(editor.workspace).toBe("full");
+    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia"]);
     expect(free()).toBe(true);
     expect(railTool("Evidenziatore").title).toBe("Evidenziatore (Shift+P)");
-    editor.setTool("highlighter");
+    // Lo strumento, il documento, la selezione e la cronologia restano.
+    expect(editor.tool).toBe("highlighter");
     const highlighter = host.querySelector<HTMLButtonElement>('.draw-rail [data-tool="highlighter"]')!;
     highlighter.focus();
     expect(document.getElementById(highlighter.getAttribute("aria-describedby")!)?.textContent).toContain("spessore costante");
-    editor.setTool("pen");
-    // Il documento, la selezione e la cronologia restano.
     expect(changes).toEqual([]);
     expect(editor.selection).toEqual(["o1a2b3c4d"]);
     expect(formatIssues(checkAccessibility(host))).toBe("");
-
-    key("P", { shiftKey: true });
-    expect(editor.tool).toBe("highlighter");
-    // Tornati all'Essenziale, l'evidenziatore non c'è più: si riparte dalla penna.
-    editor.setLevel("essential");
-    expect(editor.tool).toBe("pen");
-    expect(railNames()).not.toContain("Evidenziatore");
-    expect(changes).toEqual([]);
   });
 
   it("l'evidenziatore scrive un tratto giallo, largo e trasparente, che si annulla col suo nome", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     editor.setTool("highlighter");
     expect(editor.color).toBe("#f0e442");
     expect(editor.width).toBe(16);
@@ -570,7 +540,7 @@ describe("il livello Standard", () => {
   });
 
   it("l'evidenziatore ha colore e spessori suoi, e la penna ritrova i propri", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     expect(widths()).toEqual(["2px", "4px*", "8px"]);
     editor.setColor("#d55e00");
     editor.setTool("highlighter");
@@ -590,7 +560,7 @@ describe("il livello Standard", () => {
   });
 
   it("il selettore scrive un codice, e il colore resta fra i recenti", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     expect(pickerGroups()).toEqual([["Consigliati", "Nero", "Blu", "Vermiglio", "Verde", "Porpora", "Arancione", "Azzurro", "Giallo"]]);
     expect(picker().querySelector('.kit-color-swatch[aria-pressed="true"]')?.getAttribute("aria-label")).toBe("Nero");
     typeColor("3A7BD5");
@@ -615,7 +585,7 @@ describe("il livello Standard", () => {
   });
 
   it("un codice della tavolozza sceglie il suo campione, e uno sbagliato non sceglie niente", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     typeColor("#0072B2");
     expect(editor.color).toBe("#0072b2");
     expect(spoken()).toBe("Colore: Blu.");
@@ -625,26 +595,9 @@ describe("il livello Standard", () => {
     expect(picker().querySelector(".kit-color-input")!.getAttribute("aria-invalid")).toBe("true");
     well().click();
   });
-
-  it("sotto lo Standard il colore a piacere non c'è: si torna al nero", () => {
-    mount(SOURCE, { level: "standard" });
-    editor.setColor("#3a7bd5");
-    editor.setLevel("essential");
-    expect(editor.color).toBe("#000000");
-    expect(well().getAttribute("aria-label")).toBe("Colore: Nero");
-    // All'Essenziale un colore fuori dalla tavolozza non si sceglie, e il
-    // selettore ha soltanto i consigliati.
-    editor.setColor("#3a7bd5");
-    expect(editor.color).toBe("#000000");
-    expect(pickerGroups().map((group) => group[0])).toEqual(["Consigliati"]);
-    well().click();
-    editor.setLevel("standard");
-    expect(pickerGroups().map((group) => group[0])).toEqual(["Consigliati", "Recenti"]);
-    well().click();
-  });
 });
 
-describe("disporre, dal livello Standard", () => {
+describe("disporre, nel Completo", () => {
   /// Tre rettangoli pieni senza contorno: i loro riquadri sono quelli scritti.
   const ROW = doc(
     `<title>Prova</title>${LAYER}<rect id="oa1a1a1a1" x="10" y="10" width="20" height="10" fill="#0072b2"/>` +
@@ -671,25 +624,25 @@ describe("disporre, dal livello Standard", () => {
   });
 
   it("accanto alla selezione mostra al più sei azioni, e le altre nel «…»", () => {
-    mount(ROW, { level: "expert" });
+    mount(ROW);
     editor.select([A, B]);
     const more = named("Altri comandi");
     const shown = (): HTMLButtonElement[] =>
       [...bar().querySelectorAll<HTMLButtonElement>("button")].filter((control) => !control.hidden && !control.hasAttribute("data-more") && control !== more);
     const extra = (): HTMLButtonElement[] => [...bar().querySelectorAll<HTMLButtonElement>("button[data-more]")];
-    expect(more.hidden).toBe(false);
-    expect(shown()).toHaveLength(6);
-    expect(extra().length).toBeGreaterThan(0);
-    // Le altre non si raggiungono con le frecce: ci porta il «…».
-    expect(extra().every((control) => control.tabIndex === -1)).toBe(true);
-    more.click();
-    expect(more.getAttribute("aria-expanded")).toBe("true");
-    expect(menu().map((entry) => entry.querySelector(".menu-label")!.textContent)).toEqual(extra().map((control) => control.getAttribute("aria-label")));
-    const group = extra().find((control) => control.getAttribute("aria-label") === "Applica trasformazione");
-    if (group !== undefined) expect(item("Applica trasformazione").disabled).toBe(group.disabled);
-    closeContextMenu();
+    // Senza l'Esperto (ADR 0231) le azioni di due forme stanno nella barra.
+    expect(shown().length).toBeLessThanOrEqual(6);
+    expect(more.hidden).toBe(extra().length === 0);
+    if (extra().length > 0) {
+      // Le altre non si raggiungono con le frecce: ci porta il «…».
+      expect(extra().every((control) => control.tabIndex === -1)).toBe(true);
+      more.click();
+      expect(more.getAttribute("aria-expanded")).toBe("true");
+      expect(menu().map((entry) => entry.querySelector(".menu-label")!.textContent)).toEqual(extra().map((control) => control.getAttribute("aria-label")));
+      closeContextMenu();
+    }
     // Con meno azioni, niente «…».
-    editor.setLevel("standard");
+    editor.setWorkspace("full");
     editor.select([A]);
     expect(extra()).toEqual([]);
     expect(shown().length).toBeLessThanOrEqual(6);
@@ -697,7 +650,7 @@ describe("disporre, dal livello Standard", () => {
   });
 
   it("accanto alla selezione non si vede durante lo zoom con la rotella, e torna quando la rotella tace", async () => {
-    mount(ROW, { level: "standard" });
+    mount(ROW);
     editor.select([A]);
     expect(bar().hasAttribute("data-beside")).toBe(true);
     expect(bar().hasAttribute("data-gesture")).toBe(false);
@@ -710,21 +663,19 @@ describe("disporre, dal livello Standard", () => {
     expect(bar().hasAttribute("data-gesture")).toBe(false);
   });
 
-  it("la barra della selezione c'è dal livello Standard, con qualcosa di scelto; Alt+F10 ci va ed Esc torna al foglio", () => {
-    mount(ROW);
+  it("la barra della selezione c'è nel Completo, con qualcosa di scelto; Alt+F10 ci va ed Esc torna al foglio", () => {
+    mount(ROW, { workspace: "simple" });
     editor.select([A]);
     expect(bar().hidden).toBe(true);
     expect(key("d", { ctrlKey: true }).defaultPrevented).toBe(false);
     expect(key("F10", { altKey: true }).defaultPrevented).toBe(false);
 
-    editor.setLevel("standard");
+    editor.setWorkspace("full");
     expect(bar().hidden).toBe(false);
     expect(bar().getAttribute("role")).toBe("toolbar");
     expect(bar().getAttribute("aria-label")).toBe("Disponi");
-    // «Sposta in un livello» non serve con un livello solo, che ha già tutto;
-    // «Modifica il testo» scrive l'etichetta della forma chiusa.
+    // «Sposta in un livello» non serve con un livello solo, che ha già tutto.
     expect([...bar().querySelectorAll("button:not([hidden])")].map((control) => control.getAttribute("aria-label"))).toEqual([
-      "Modifica il testo",
       "Duplica",
       "Raggruppa",
       "Separa",
@@ -743,8 +694,6 @@ describe("disporre, dal livello Standard", () => {
 
     surface().focus();
     expect(key("F10", { altKey: true }).defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(named("Modifica il testo"));
-    key("ArrowRight", {}, named("Modifica il testo"));
     expect(document.activeElement).toBe(named("Duplica"));
     key("ArrowRight", {}, named("Duplica"));
     expect(document.activeElement).toBe(named("Ordine"));
@@ -756,14 +705,14 @@ describe("disporre, dal livello Standard", () => {
     expect(bar().hidden).toBe(true);
     expect(key("F10", { altKey: true }).defaultPrevented).toBe(false);
     editor.select([A]);
-    editor.setLevel("essential");
+    editor.setWorkspace("simple");
     expect(bar().hidden).toBe(true);
     expect(hint?.textContent).not.toContain("Alt+F10");
     expect(changes).toEqual([]);
   });
 
   it("Ctrl+D copia sopra l'originale, un passo più in là, e la selezione passa alla copia", () => {
-    mount(ROW, { level: "standard" });
+    mount(ROW);
     expect(key("d", { ctrlKey: true }).defaultPrevented).toBe(false);
     editor.select([A]);
     expect(key("d", { ctrlKey: true }).defaultPrevented).toBe(true);
@@ -782,7 +731,7 @@ describe("disporre, dal livello Standard", () => {
   });
 
   it("Ctrl+G raggruppa al posto del più alto, e Ctrl+Maiusc+G separa", () => {
-    mount(ROW, { level: "standard" });
+    mount(ROW);
     editor.select([A, C]);
     expect(named("Raggruppa").disabled).toBe(false);
     key("g", { ctrlKey: true });
@@ -804,7 +753,7 @@ describe("disporre, dal livello Standard", () => {
   });
 
   it("l'ordine: Ctrl+] e Ctrl+[ di un posto, con Maiusc agli estremi, anche su una tastiera italiana e con PagSu e PagGiù", () => {
-    mount(ROW, { level: "standard" });
+    mount(ROW);
     editor.select([A]);
     key("]", { ctrlKey: true, code: "BracketRight" });
     expect(order()).toEqual([B, A, C]);
@@ -829,7 +778,7 @@ describe("disporre, dal livello Standard", () => {
   });
 
   it("il menu dell'ordine spegne le voci che non cambierebbero niente, e dice le scorciatoie", () => {
-    mount(ROW, { level: "standard" });
+    mount(ROW);
     editor.select([C]);
     named("Ordine").click();
     expect(named("Ordine").getAttribute("aria-expanded")).toBe("true");
@@ -845,7 +794,7 @@ describe("disporre, dal livello Standard", () => {
   });
 
   it("allinea al riquadro della selezione, o alla pagina un oggetto solo, e distribuisce lo spazio", () => {
-    mount(ROW, { level: "standard" });
+    mount(ROW);
     editor.select([A, B, C]);
     named("Allinea e distribuisci").click();
     expect(menu().map((entry) => entry.querySelector(".menu-label")!.textContent)).toEqual([
@@ -878,7 +827,7 @@ describe("disporre, dal livello Standard", () => {
   });
 
   it("allinea con Alt e A, D, W, S, centra con Alt+H e Alt+V, distribuisce con Maiusc", () => {
-    mount(ROW, { level: "standard" });
+    mount(ROW);
     editor.select([A, B, C]);
     surface().focus();
     expect(key("ç", { altKey: true, shiftKey: true, code: "KeyH" }).defaultPrevented).toBe(true);
@@ -895,7 +844,7 @@ describe("disporre, dal livello Standard", () => {
   });
 
   it("riflette la selezione con Maiusc+H e Maiusc+V, in un passo che si annulla", () => {
-    mount(ROW, { level: "standard" });
+    mount(ROW);
     editor.select([A]);
     surface().focus();
     const before = editor.engine.text;
@@ -913,7 +862,7 @@ describe("disporre, dal livello Standard", () => {
   });
 
   it("un pulsante che si spegne passa il fuoco a quello che prende il Tab", () => {
-    mount(doc(`${LAYER}<g id="og1g1g1g1">${"<rect id=\"oa1a1a1a1\" x=\"0\" y=\"0\" width=\"5\" height=\"5\"/>"}<rect id="ob2b2b2b2" x="10" y="0" width="5" height="5"/></g></g>`), { level: "standard" });
+    mount(doc(`${LAYER}<g id="og1g1g1g1">${"<rect id=\"oa1a1a1a1\" x=\"0\" y=\"0\" width=\"5\" height=\"5\"/>"}<rect id="ob2b2b2b2" x="10" y="0" width="5" height="5"/></g></g>`));
     editor.select(["og1g1g1g1"]);
     surface().focus();
     key("F10", { altKey: true });
@@ -928,7 +877,7 @@ describe("disporre, dal livello Standard", () => {
 
   it("un gruppo con parti estranee si separa, e loro restano dove si vedevano; non si duplica", () => {
     const source = doc(`${LAYER}<g id="og1g1g1g1" transform="translate(5 0)"><rect id="oa1a1a1a1" x="0" y="0" width="5" height="5"/><use href="#oa1a1a1a1" x="10"/><circle class="c" r="2"/></g></g>`);
-    mount(source, { level: "standard" });
+    mount(source);
     editor.select(["og1g1g1g1"]);
     key("d", { ctrlKey: true });
     expect(editor.engine.text).toBe(source);
@@ -947,7 +896,7 @@ describe("disporre, dal livello Standard", () => {
 
   it("il diagramma di Mermaid del banco di fedeltà si separa coi tasti e con la barra, e si vede com'era", () => {
     const source = FIDELITY.find((scene) => scene.id === "mermaid")!.text;
-    mount(source, { level: "standard" });
+    mount(source);
     editor.select(["m"]);
     expect(key("g", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(true);
     const after = editor.engine.text;
@@ -972,7 +921,7 @@ describe("disporre, dal livello Standard", () => {
   });
 
   it("Ctrl+G e Ctrl+Maiusc+G restano all'editor anche senza niente di scelto, o dal pannello, e lo dicono", () => {
-    mount(doc(`${LAYER}<g id="og1g1g1g1"><rect id="${A}" x="0" y="0" width="5" height="5"/><rect id="${B}" x="10" y="0" width="5" height="5"/></g></g>`), { level: "standard" });
+    mount(doc(`${LAYER}<g id="og1g1g1g1"><rect id="${A}" x="0" y="0" width="5" height="5"/><rect id="${B}" x="10" y="0" width="5" height="5"/></g></g>`));
     expect(key("g", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(true);
     expect(spoken()).toBe("Nessun oggetto scelto.");
     expect(key("g", { ctrlKey: true }).defaultPrevented).toBe(true);
@@ -981,14 +930,14 @@ describe("disporre, dal livello Standard", () => {
     host.querySelector<HTMLButtonElement>(`[aria-controls="${properties().id}"]`)!.click();
     expect(key("g", { ctrlKey: true, shiftKey: true }, properties()).defaultPrevented).toBe(true);
     expect(spoken()).toBe("1 gruppo separato.");
-    // All'Essenziale non si raggruppa: i tasti restano a chi li aveva.
-    editor.setLevel("essential");
+    // Nel Semplice non si raggruppa: i tasti restano a chi li aveva.
+    editor.setWorkspace("simple");
     expect(key("g", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
   });
 
   it("non raggruppa né riordina ciò a cui il foglio di stile del disegno darebbe uno stile che non si può togliere, e dice perché", () => {
     const source = doc(`<style>g g rect{fill:#d55e00}rect:last-child{stroke:#000}</style>${LAYER}<rect id="${A}" x="0" y="0" width="5" height="5"/><rect id="${B}" x="10" y="0" width="5" height="5"/></g>`);
-    mount(source, { level: "standard" });
+    mount(source);
     editor.select([A, B]);
     key("g", { ctrlKey: true });
     expect(editor.engine.text).toBe(source);
@@ -1001,7 +950,7 @@ describe("disporre, dal livello Standard", () => {
 
   it("un foglio di stile che dipende da dove si guarda il disegno ferma il comando, e si dice quale", () => {
     const source = doc(`<style>@media (prefers-color-scheme: dark){#m rect{fill:#ffffff}}</style>${LAYER}<g id="m"><rect id="${A}" x="0" y="0" width="5" height="5"/><rect id="${B}" x="10" y="0" width="5" height="5"/></g></g>`);
-    mount(source, { level: "standard" });
+    mount(source);
     editor.select(["m"]);
     key("g", { ctrlKey: true, shiftKey: true });
     expect(editor.engine.text).toBe(source);
@@ -1009,7 +958,7 @@ describe("disporre, dal livello Standard", () => {
   });
 
   it("un foglio di stile che sceglie per classe, come quelli di Illustrator, lascia separare", () => {
-    mount(doc(`<style>.st0{fill:#d55e00}</style>${LAYER}<g id="og1g1g1g1"><rect id="${A}" class="st0" x="0" y="0" width="5" height="5"/><rect id="${B}" x="10" y="0" width="5" height="5"/></g></g>`), { level: "standard" });
+    mount(doc(`<style>.st0{fill:#d55e00}</style>${LAYER}<g id="og1g1g1g1"><rect id="${A}" class="st0" x="0" y="0" width="5" height="5"/><rect id="${B}" x="10" y="0" width="5" height="5"/></g></g>`));
     editor.select(["og1g1g1g1"]);
     key("g", { ctrlKey: true, shiftKey: true });
     expect(spoken()).toBe("1 gruppo separato.");
@@ -1022,7 +971,7 @@ describe("disporre, dal livello Standard", () => {
         `${LAYER}<g id="og1g1g1g1" clip-path="url(#rcccccccc)"><rect id="${A}" x="0" y="0" width="5" height="5"/></g>` +
         `<g id="og2g2g2g2"><rect id="${B}" x="10" y="0" width="5" height="5"/></g></g>`,
     );
-    mount(source, { level: "standard" });
+    mount(source);
     editor.select(["og1g1g1g1"]);
     key("g", { ctrlKey: true, shiftKey: true });
     expect(editor.engine.text).toBe(source);
@@ -1035,7 +984,7 @@ describe("disporre, dal livello Standard", () => {
   });
 
   it("«?» elenca anche i tasti per disporre", () => {
-    mount(ROW, { level: "standard" });
+    mount(ROW);
     key("?", { shiftKey: true });
     expect([...dialog().querySelectorAll("caption")].map((caption) => caption.textContent)).toContain("Disponi");
     const rows = [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
@@ -1072,9 +1021,9 @@ describe("i collegamenti a una nota", () => {
 
   it("Ctrl+K mette gli oggetti scelti in un collegamento alla nota che si sceglie, al posto del più alto", async () => {
     const links = stub();
-    mount(ROW, { level: "standard", links });
+    mount(ROW, { links });
     editor.select([A, B]);
-    expect(shown()).toEqual(["Duplica", "Raggruppa", "Separa", "Collega a una nota…", "Ordine", "Allinea e distribuisci", "Collega le forme scelte"]);
+    expect(shown()).toEqual(["Duplica", "Raggruppa", "Separa", "Collega a una nota…", "Ordine", "Allinea e distribuisci"]);
     const link = named("Collega a una nota…")!;
     expect(link.title).toBe("Collega a una nota… (Ctrl+K)");
     expect(link.getAttribute("aria-keyshortcuts")).toBe("Control+K");
@@ -1100,7 +1049,7 @@ describe("i collegamenti a una nota", () => {
 
   it("col collegamento scelto da solo, Ctrl+K lo porta a un'altra nota, partendo da quella di adesso", async () => {
     const links = stub("Altre/b.md");
-    mount(LINKED, { level: "standard", links });
+    mount(LINKED, { links });
     editor.select([L]);
     named("Cambia il collegamento…")!.click();
     await settle();
@@ -1116,7 +1065,7 @@ describe("i collegamenti a una nota", () => {
 
   it("un collegamento non ne contiene un altro: il pulsante si spegne, e Ctrl+K lo dice", () => {
     const links = stub();
-    mount(LINKED, { level: "standard", links });
+    mount(LINKED, { links });
     editor.select([L, B]);
     expect(named("Collega a una nota…")!.disabled).toBe(true);
     key("k", { ctrlKey: true });
@@ -1127,7 +1076,7 @@ describe("i collegamenti a una nota", () => {
 
   it("una scelta lasciata a metà, o che non riesce, non cambia niente; una seconda non parte finché c'è la prima", async () => {
     const empty = stub(null);
-    mount(ROW, { level: "standard", links: empty });
+    mount(ROW, { links: empty });
     editor.select([A]);
     key("k", { ctrlKey: true });
     key("k", { ctrlKey: true });
@@ -1139,7 +1088,7 @@ describe("i collegamenti a una nota", () => {
     owner = openLifetime();
     host.replaceChildren();
     const failing = { choose: vi.fn(async () => Promise.reject(new Error("no"))), open: vi.fn() };
-    mount(ROW, { level: "standard", links: failing });
+    mount(ROW, { links: failing });
     editor.select([A]);
     key("k", { ctrlKey: true });
     await settle();
@@ -1150,7 +1099,7 @@ describe("i collegamenti a una nota", () => {
   it("mentre si sceglie la nota, valgono gli oggetti scelti alla fine", async () => {
     let answer: (href: string | null) => void = () => {};
     const links = { choose: vi.fn(() => new Promise<string | null>((resolve) => (answer = resolve))), open: vi.fn() };
-    mount(ROW, { level: "standard", links });
+    mount(ROW, { links });
     editor.select([A, B]);
     key("k", { ctrlKey: true });
     editor.select([B]);
@@ -1160,7 +1109,7 @@ describe("i collegamenti a una nota", () => {
   });
 
   it("Ctrl+Maiusc+K toglie i collegamenti scelti e lascia gli oggetti dov'erano, anche senza chi sceglie le note", () => {
-    mount(LINKED, { level: "standard" });
+    mount(LINKED);
     editor.select([B]);
     // Senza chi sceglie le note non si collega: Ctrl+K resta al browser.
     expect(shown()).not.toContain("Collega a una nota…");
@@ -1188,7 +1137,7 @@ describe("i collegamenti a una nota", () => {
         `<a id="ol3l3l3l3" href="https://example.org"><rect x="70" y="70" width="5" height="5"/></a></g>`,
     );
     mount(source, { links });
-    // Anche al livello Essenziale, e anche dentro un gruppo; un indirizzo
+    // Anche nel Semplice, e anche dentro un gruppo; un indirizzo
     // del web non porta a una nota, e non ha segno.
     expect(marks().map((mark) => [mark.getAttribute("aria-label"), mark.title, mark.tabIndex, mark.style.transform])).toEqual([
       ["Apri «Ciclo dell'acqua»", "Apri «Ciclo dell'acqua»", -1, "translate(30px, 10px)"],
@@ -1234,14 +1183,14 @@ describe("i collegamenti a una nota", () => {
     mount(LINKED, { links: stub() });
     host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
     expect([...host.querySelectorAll(".draw-object-label")].map((label) => label.textContent)).toEqual([
-      "Livello «Livello 1»",
+      "Livello «Livello 1», corrente",
       "Rettangolo, Nero",
       "Collegamento a «Ciclo dell'acqua», 1 oggetto",
     ]);
   });
 
   it("«?» elenca i tasti dei collegamenti", () => {
-    mount(ROW, { level: "standard", links: stub() });
+    mount(ROW, { links: stub() });
     key("?", { shiftKey: true });
     const rows = [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
     expect(rows).toContainEqual(["Ctrl+K", "Collega a una nota, o cambia il collegamento scelto"]);
@@ -1251,7 +1200,7 @@ describe("i collegamenti a una nota", () => {
   });
 });
 
-describe("i livelli, dal livello Standard", () => {
+describe("i livelli, nel Completo", () => {
   /// Due livelli con un rettangolo ciascuno: «Sfondo» sotto, «Note» sopra.
   const TWO = doc(
     `<title>Prova</title><g id="l1" fub:layer="Sfondo"><rect id="oa1a1a1a1" x="10" y="10" width="20" height="10" fill="#0072b2"/></g>` +
@@ -1279,10 +1228,10 @@ describe("i livelli, dal livello Standard", () => {
     for (const open of document.querySelectorAll(".context-menu")) open.remove();
   });
 
-  it("il pulsante c'è dal livello Standard e dice dove si disegna; il menu sceglie il livello corrente", () => {
-    mount(TWO);
+  it("il pulsante c'è nel Completo e dice dove si disegna; il menu sceglie il livello corrente", () => {
+    mount(TWO, { workspace: "simple" });
     expect(layers().closest("[hidden]")).not.toBeNull();
-    editor.setLevel("standard");
+    editor.setWorkspace("full");
     expect(layers().closest("[hidden]")).toBeNull();
     expect(layers().closest('[role="group"]')!.getAttribute("aria-label")).toBe("Livelli");
     expect(shownName()).toBe("Note");
@@ -1315,14 +1264,14 @@ describe("i livelli, dal livello Standard", () => {
     drag([[60, 60], [90, 80]]);
     expect(editor.engine.text).toMatch(new RegExp(`<g id="l1" fub:layer="Sfondo">\\s*<rect id="${A}"[^>]*/>\\s*<rect id="o[a-z0-9]{8}"[^>]*/>\\s*</g>`));
     expect(editor.selection).toEqual([]);
-    // All'Essenziale si disegna nel più alto, come sempre.
-    editor.setLevel("essential");
+    // Nel Semplice si disegna nel più alto, come sempre.
+    editor.setWorkspace("simple");
     drag([[60, 60], [90, 80]]);
     expect(editor.engine.text).toMatch(new RegExp(`<rect id="${B}"[^>]*/>\\s*<rect id="o[a-z0-9]{8}"[^>]*/>\\s*</g>\\s*</svg>`));
   });
 
   it("scegliere oggetti di un livello solo lo rende corrente, e l'albero lo dice", () => {
-    mount(TWO, { level: "standard" });
+    mount(TWO);
     host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
     const labels = (): string[] => [...host.querySelectorAll(".draw-object-label")].map((label) => label.textContent ?? "");
     // Dal davanti: il livello sopra è in cima.
@@ -1335,12 +1284,12 @@ describe("i livelli, dal livello Standard", () => {
     expect(shownName()).toBe("Sfondo");
     editor.select([B]);
     expect(shownName()).toBe("Note");
-    editor.setLevel("essential");
+    editor.setWorkspace("simple");
     expect(labels()).toEqual(["Livello «Note»", "Rettangolo, Nero", "Livello «Sfondo»", "Rettangolo, Blu"]);
   });
 
   it("un livello nuovo sopra quello corrente, rinominato, nascosto e mostrato: un passo di annulla ciascuno", async () => {
-    mount(TWO, { level: "standard" });
+    mount(TWO);
     choose("Sfondo");
     choose("Nuovo livello");
     const [, , made] = order();
@@ -1386,7 +1335,7 @@ describe("i livelli, dal livello Standard", () => {
   });
 
   it("un livello bloccato non riceve né si elimina; i suoi oggetti escono dalla selezione", () => {
-    mount(TWO, { level: "standard" });
+    mount(TWO);
     editor.select([B]);
     choose("Blocca «Note»");
     expect(editor.engine.text).toContain('<g id="l2" fub:layer="Note" fub:locked="true">');
@@ -1414,7 +1363,7 @@ describe("i livelli, dal livello Standard", () => {
   });
 
   it("cambia l'ordine dei livelli ed elimina quello corrente con ciò che contiene; annulla lo riporta", () => {
-    mount(TWO, { level: "standard" });
+    mount(TWO);
     choose("Sfondo");
     layers().click();
     expect(menu().find((entry) => labelOf(entry) === "Sposta «Sfondo» giù")!.getAttribute("aria-disabled")).toBe("true");
@@ -1446,7 +1395,7 @@ describe("i livelli, dal livello Standard", () => {
 
   it("«Sposta in un livello» porta la selezione in cima a un altro livello, dove si vedeva", () => {
     const scaled = TWO.replace('<g id="l2" fub:layer="Note">', '<g id="l2" fub:layer="Note" transform="scale(2)">');
-    mount(scaled, { level: "standard" });
+    mount(scaled);
     const into = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Sposta in un livello"]')!;
     editor.select([A]);
     expect(into().hidden).toBe(false);
@@ -1470,7 +1419,7 @@ describe("i livelli, dal livello Standard", () => {
 
   it("un livello senza id resta quello corrente quando ne riceve uno", () => {
     const source = doc(`<g fub:layer="Sotto"/><g fub:layer="Sopra"/>`);
-    mount(source, { level: "standard" });
+    mount(source);
     choose("Sotto");
     editor.setTool("rect");
     drag([[10, 10], [40, 30]]);
@@ -1486,9 +1435,9 @@ describe("i livelli, dal livello Standard", () => {
   });
 });
 
-describe("la griglia e la pagina, dal livello Standard", () => {
+describe("la griglia e la pagina, nel Completo", () => {
   /// La griglia con l'aggancio acceso, al passo di partenza.
-  const SNAP = { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE } as const;
+  const SNAP = { shown: false, snap: true, step: 20, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE } as const;
   /// Un quadrato pieno senza contorno, fuori dalla griglia, in una pagina
   /// che lo lascia muovere: il riquadro è quello scritto.
   const OFF = doc(`<title>Prova</title>${LAYER}<rect id="oa1a1a1a1" x="13" y="7" width="40" height="40" fill="#000000"/></g>`).replace(
@@ -1522,13 +1471,13 @@ describe("la griglia e la pagina, dal livello Standard", () => {
     for (const open of document.querySelectorAll(".context-menu")) open.remove();
   });
 
-  it("«Pagina e griglia» c'è dal livello Standard; la griglia si vede sopra la carta, e chi monta l'editor lo sa", () => {
+  it("«Pagina e griglia» c'è nei due spazi; la griglia, nel Completo, si vede sopra la carta, e chi monta l'editor lo sa", () => {
     const grids: unknown[] = [];
-    mount(SOURCE, { onGridChange: (grid) => grids.push(grid) });
+    mount(SOURCE, { workspace: "simple", onGridChange: (grid) => grids.push(grid) });
     size(200, 100);
-    expect(pageButton().hidden).toBe(true);
+    expect(pageButton().hidden).toBe(false);
     expect(lines().style.display).toBe("none");
-    editor.setLevel("standard");
+    editor.setWorkspace("full");
     expect(pageButton().hidden).toBe(false);
     expect(pageButton().getAttribute("aria-haspopup")).toBe("menu");
     expect(lines().getAttribute("aria-hidden")).toBe("true");
@@ -1544,12 +1493,7 @@ describe("la griglia e la pagina, dal livello Standard", () => {
       ["menuitemradio", "Passo di 20", "true", null],
       ["menuitemradio", "Passo di 50", "false", null],
       ["menuitemradio", "Passo di 100", "false", null],
-      ["menuitemcheckbox", "Guide intelligenti", "true", null],
       ["menuitemcheckbox", "Forme dal tratto", "true", null],
-      ["menuitemcheckbox", "Mostra i righelli", "false", "Shift+R"],
-      ["menuitemcheckbox", "Mostra le guide", "true", "|"],
-      ["menuitem", "Guide…", null, null],
-      ["menuitem", "Unità: Pixel…", null, null],
       ["menuitemcheckbox", "Barra accanto alla selezione", "true", null],
       ["menuitem", "Ruota la vista a sinistra", null, "4"],
       ["menuitem", "Ruota la vista a destra", null, "6"],
@@ -1575,18 +1519,18 @@ describe("la griglia e la pagina, dal livello Standard", () => {
     expect(entry("Mostra la griglia").getAttribute("aria-checked")).toBe("true");
     entry("Aggancia alla griglia").click();
     expect(spoken()).toBe("Aggancio alla griglia acceso.");
-    expect(editor.grid).toEqual({ shown: true, snap: true, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
+    expect(editor.grid).toEqual({ shown: true, snap: true, step: 50, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE });
     expect(grids).toEqual([
-      { shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE },
-      { shown: true, snap: false, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE },
-      { shown: true, snap: true, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE },
+      { shown: true, snap: false, step: 20, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE },
+      { shown: true, snap: false, step: 50, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE },
+      { shown: true, snap: true, step: 50, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE },
     ]);
 
-    // Sotto lo Standard non si vede e non aggancia, ma resta com'era.
-    editor.setLevel("essential");
+    // Nel Semplice non si vede e non aggancia, ma resta com'era.
+    editor.setWorkspace("simple");
     expect(lines().style.display).toBe("none");
     expect(editor.grid.shown).toBe(true);
-    editor.setLevel("standard");
+    editor.setWorkspace("full");
     expect(lines().style.display).toBe("");
     // La griglia non entra nel file.
     expect(changes).toEqual([]);
@@ -1594,11 +1538,11 @@ describe("la griglia e la pagina, dal livello Standard", () => {
 
   it("`setGrid` la cambia senza dirlo; un passo fuori dai limiti resta quello di prima, e uno insolito entra nel menu", () => {
     const grids: unknown[] = [];
-    mount(SOURCE, { level: "standard", grid: { shown: true, snap: false, step: 0, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE }, onGridChange: (grid) => grids.push(grid) });
-    expect(editor.grid).toEqual({ shown: true, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
-    editor.setGrid({ shown: true, snap: true, step: 25, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
-    editor.setGrid({ shown: false, snap: true, step: 5000, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
-    expect(editor.grid).toEqual({ shown: false, snap: true, step: 25, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
+    mount(SOURCE, { grid: { shown: true, snap: false, step: 0, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE }, onGridChange: (grid) => grids.push(grid) });
+    expect(editor.grid).toEqual({ shown: true, snap: false, step: 20, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE });
+    editor.setGrid({ shown: true, snap: true, step: 25, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE });
+    editor.setGrid({ shown: false, snap: true, step: 5000, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE });
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 25, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE });
     expect(spoken()).toBe("");
     expect(grids).toEqual([]);
     pageButton().click();
@@ -1613,41 +1557,41 @@ describe("la griglia e la pagina, dal livello Standard", () => {
     expect(entry("Passo di 25").getAttribute("aria-checked")).toBe("true");
   });
 
-  it("«#» la mostra e «%» aggancia, anche con AltGr; con Ctrl e sotto lo Standard no", () => {
-    mount(SOURCE, { level: "standard" });
+  it("«#» la mostra e «%» aggancia, anche con AltGr; con Ctrl e nel Semplice no", () => {
+    mount(SOURCE);
     expect(key("#", { shiftKey: true }).defaultPrevented).toBe(true);
     expect(spoken()).toBe("Griglia visibile.");
     expect(key("%", { shiftKey: true }).defaultPrevented).toBe(true);
     expect(spoken()).toBe("Aggancio alla griglia acceso.");
     expect(altGraph("#").defaultPrevented).toBe(true);
     expect(spoken()).toBe("Griglia nascosta.");
-    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE });
     expect(key("#", { ctrlKey: true }).defaultPrevented).toBe(false);
-    editor.setLevel("essential");
+    editor.setWorkspace("simple");
     expect(key("%", { shiftKey: true }).defaultPrevented).toBe(false);
-    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
+    expect(editor.grid).toEqual({ shown: false, snap: true, step: 20, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE });
     // Nel titolo si scrivono.
-    editor.setLevel("standard");
+    editor.setWorkspace("full");
     const title = host.querySelector<HTMLInputElement>(".draw-title-input")!;
     expect(key("#", { shiftKey: true }, title).defaultPrevented).toBe(false);
     expect(editor.grid.shown).toBe(false);
   });
 
   it("una forma va da un incrocio all'altro; tenendo Ctrl si posa libera", () => {
-    mount(doc(`${LAYER}</g>`), { level: "standard", grid: SNAP });
+    mount(doc(`${LAYER}</g>`), { grid: SNAP });
     editor.setTool("rect");
     drag([[13, 17], [30, 40], [59, 61]]);
     expect(editor.engine.text).toMatch(/<rect id="o[a-z0-9]{8}" x="20" y="20" width="40" height="40" fill="none"/);
     drag([[13, 17], [30, 40], [59, 61]], { ctrlKey: true });
     expect(editor.engine.text).toMatch(/<rect id="o[a-z0-9]{8}" x="13" y="17" width="46" height="44" fill="none"/);
-    // All'Essenziale non si aggancia.
-    editor.setLevel("essential");
+    // Nel Semplice non si aggancia.
+    editor.setWorkspace("simple");
     drag([[113, 117], [159, 161]]);
     expect(editor.engine.text).toMatch(/<rect id="o[a-z0-9]{8}" x="113" y="117" width="46" height="44" fill="none"/);
   });
 
   it("trascinare porta sull'incrocio più vicino l'angolo della geometria vicino al punto preso, contorno escluso", () => {
-    mount(SOURCE, { level: "standard", grid: SNAP });
+    mount(SOURCE, { grid: SNAP });
     editor.setTool("select");
     // Preso a sinistra, a metà altezza: l'angolo in alto a sinistra, (60, 60),
     // spostato di (13, 9) va a (73, 69), e si aggancia a (80, 60).
@@ -1661,7 +1605,7 @@ describe("la griglia e la pagina, dal livello Standard", () => {
 
   it("le frecce spostano la selezione di riga in riga, cinque con Maiusc", () => {
     vi.spyOn(performance, "now").mockReturnValue(0);
-    mount(OFF, { level: "standard", grid: SNAP });
+    mount(OFF, { grid: SNAP });
     editor.select([A]);
     key("ArrowRight");
     expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 7 0)"');
@@ -1678,7 +1622,7 @@ describe("la griglia e la pagina, dal livello Standard", () => {
 
   it("Ctrl e le frecce portano il lato destro o quello in basso alla riga dopo, ma non oltre la prima dopo quello opposto", () => {
     vi.spyOn(performance, "now").mockReturnValue(0);
-    mount(doc(`${LAYER}<rect id="${A}" x="0" y="0" width="50" height="10" fill="#000000"/></g>`), { level: "standard", grid: SNAP });
+    mount(doc(`${LAYER}<rect id="${A}" x="0" y="0" width="50" height="10" fill="#000000"/></g>`), { grid: SNAP });
     editor.select([A]);
     key("ArrowRight", { ctrlKey: true });
     expect(editor.engine.text).toContain('transform="matrix(1.2 0 0 1 0 0)"');
@@ -1695,7 +1639,7 @@ describe("la griglia e la pagina, dal livello Standard", () => {
   });
 
   it("con un contorno, la geometria va sulla riga e la misura detta è quella che si vede", () => {
-    mount(SOURCE, { level: "standard", grid: SNAP });
+    mount(SOURCE, { grid: SNAP });
     editor.select(["o1a2b3c4d"]);
     key("ArrowRight", { ctrlKey: true });
     // Da 60–80 a 60–100: il contorno di 2 si allarga con la forma.
@@ -1704,7 +1648,7 @@ describe("la griglia e la pagina, dal livello Standard", () => {
   });
 
   it("il cursore va di incrocio in incrocio; con Ctrl resta libero", () => {
-    mount(SOURCE, { level: "standard", grid: SNAP });
+    mount(SOURCE, { grid: SNAP });
     size(200, 140);
     key("ArrowRight");
     expect(spoken()).toBe("x 120, y 80");
@@ -1718,7 +1662,7 @@ describe("la griglia e la pagina, dal livello Standard", () => {
   });
 
   it("Ctrl+D scosta le copie di un numero intero di passi", () => {
-    mount(OFF, { level: "standard", grid: SNAP });
+    mount(OFF, { grid: SNAP });
     editor.select([A]);
     key("d", { ctrlKey: true });
     const [copy] = editor.selection;
@@ -1726,7 +1670,7 @@ describe("la griglia e la pagina, dal livello Standard", () => {
   });
 
   it("«Adatta la pagina» la porta attorno al disegno con un margine, in un passo che si annulla", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     choose("Adatta la pagina al disegno");
     // Il rettangolo col contorno va da 59 a 81: 20 di margine, a numeri interi.
     expect(editor.engine.text).toContain('viewBox="39 39 62 62"');
@@ -1750,7 +1694,7 @@ describe("la griglia e la pagina, dal livello Standard", () => {
           `<g id="l2" fub:layer="Note" display="none"><rect x="200" y="10" width="10" height="10" fill="#000000"/></g>` +
           `<g id="l3" fub:layer="Disegno"><rect x="10" y="10" width="10" height="10" fill="#000000"/></g>`,
       ),
-      { level: "standard" },
+      {},
     );
     choose("Adatta la pagina al disegno");
     expect(editor.engine.text).toContain('viewBox="-70 -70 300 110"');
@@ -1758,7 +1702,7 @@ describe("la griglia e la pagina, dal livello Standard", () => {
   });
 
   it("un disegno vuoto non ha una pagina da adattare, e lo dice", () => {
-    mount(doc(`${LAYER}</g>`), { level: "standard" });
+    mount(doc(`${LAYER}</g>`));
     pageButton().click();
     const fit = entry("Adatta la pagina al disegno");
     expect(fit.getAttribute("aria-disabled")).toBe("true");
@@ -1776,7 +1720,7 @@ describe("la griglia e la pagina, dal livello Standard", () => {
           '<view id="b9i0j1k2l" fub:role="board" viewBox="480 0 400 200"><title>Evaporazione</title></view>' +
           `${LAYER}</g>`,
       ),
-      { level: "standard" },
+      {},
     );
     pageButton().click();
     const fit = entry("Adatta la pagina al disegno");
@@ -1788,7 +1732,7 @@ describe("la griglia e la pagina, dal livello Standard", () => {
   });
 
   it("«?» elenca i tasti della griglia, e le frecce dicono dove vanno con l'aggancio", async () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     const rows = (): (string | null)[][] => [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
     key("?", { shiftKey: true });
     expect([...dialog().querySelectorAll("caption")].map((caption) => caption.textContent)).toContain("Griglia");
@@ -1808,1687 +1752,7 @@ describe("la griglia e la pagina, dal livello Standard", () => {
   });
 });
 
-describe("le guide intelligenti, dal livello Standard", () => {
-  const A = "oa1a1a1a1";
-  const B = "ob2b2b2b2";
-  const C = "oc3c3c3c3";
-  /// Un disegno in una pagina larga, perché i suoi bordi e il suo centro
-  /// restino lontani da ciò che si sposta.
-  const wide = (body: string): string => doc(`<title>Prova</title>${body}`).replace('viewBox="0 0 100 100"', 'viewBox="0 0 400 400"');
-  /// Un quadrato blu da spostare, da (20, 200) a (60, 240), e un rettangolo
-  /// arancione, da (200, 50) a (260, 80).
-  const APART = wide(
-    `${LAYER}<rect id="${A}" x="20" y="200" width="40" height="40" fill="#0072b2"/><rect id="${B}" x="200" y="50" width="60" height="30" fill="#e69f00"/></g>`,
-  );
-  /// Il quadrato blu, e due quadrati in fila a 60 l'uno dall'altro.
-  const ROW = wide(
-    `${LAYER}<rect id="${A}" x="20" y="300" width="40" height="40" fill="#0072b2"/>` +
-      `<rect id="${B}" x="100" y="100" width="40" height="40" fill="#e69f00"/><rect id="${C}" x="200" y="100" width="40" height="40" fill="#009e73"/></g>`,
-  );
-
-  const transformOf = (id: string): string | null => editor.engine.text.match(new RegExp(`id="${id}"[^>]*? transform="([^"]*)"`))?.[1] ?? null;
-  const hover = (x: number, y: number, init: Init = {}): void => {
-    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }));
-  };
-  const pageButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Pagina e griglia"]')!;
-  const menu = (): HTMLButtonElement[] => {
-    const open = document.querySelectorAll<HTMLElement>(".context-menu");
-    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>("button")];
-  };
-  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
-  const entry = (label: string): HTMLButtonElement => menu().find((one) => labelOf(one) === label)!;
-
-  // Un menu rimasto aperto va chiuso davvero: tolto e basta, terrebbe il
-  // fuoco anche nella prova dopo.
-  afterEach(() => {
-    closeContextMenu();
-    for (const open of document.querySelectorAll(".context-menu")) open.remove();
-  });
-
-  it("spostando, un bordo si ferma in linea con quello di un altro oggetto, e lo si dice; Ctrl o ⌘ lascia libero, e le frecce non agganciano", () => {
-    mount(APART, { level: "standard" });
-    editor.setTool("select");
-    // Il bordo in alto arriva a 53, a 3 da quello del rettangolo: ci va sopra.
-    drag([[40, 220], [41, 150], [43, 73]]);
-    expect(transformOf(A)).toBe("matrix(1 0 0 1 3 -150)");
-    expect(spoken()).toBe("1 oggetto spostato. Agganciato: il bordo superiore in linea con quello di Rettangolo, Arancione.");
-    editor.undo();
-    drag([[40, 220], [41, 150], [43, 73]], { ctrlKey: true });
-    expect(transformOf(A)).toBe("matrix(1 0 0 1 3 -147)");
-    expect(spoken()).toBe("1 oggetto spostato.");
-    key("ArrowUp");
-    expect(transformOf(A)).toBe("matrix(1 0 0 1 3 -148)");
-  });
-
-  it("spostando, si ferma alla distanza che c'è fra due oggetti della fila, e mentre si trascina la mostra", () => {
-    const layer = recording();
-    mount(ROW, { level: "standard" });
-    editor.setTool("select");
-    const target = surface();
-    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 40, clientY: 320, timeStamp: (clock += 8) }));
-    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 323, clientY: 122, timeStamp: (clock += 8) }));
-    layer.frame();
-    // Le due distanze uguali; quella dal quadrato in linea non si ripete.
-    expect(layer.texts()).toEqual(["60", "60"]);
-    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 323, clientY: 122, timeStamp: (clock += 8) }));
-    layer.frame();
-    // Fermo, sotto la selezione restano le sue misure.
-    expect(layer.texts()).toEqual(["40 × 40"]);
-    expect(transformOf(A)).toBe("matrix(1 0 0 1 280 -200)");
-    expect(spoken()).toBe("1 oggetto spostato. Agganciato: a distanze uguali in orizzontale, 60; il bordo superiore in linea con quello di Rettangolo, Verde.");
-  });
-
-  it("con la griglia vince il più vicino fra la riga e il bersaglio", () => {
-    mount(APART, { level: "standard", grid: { shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE } });
-    editor.setTool("select");
-    // In alto a 53: il bordo del rettangolo, a 50, è più vicino della riga a 60.
-    drag([[40, 220], [41, 150], [43, 73]]);
-    expect(transformOf(A)).toBe("matrix(1 0 0 1 0 -150)");
-    editor.undo();
-    // A 56 la riga è più vicina.
-    drag([[40, 220], [41, 150], [43, 76]]);
-    expect(transformOf(A)).toBe("matrix(1 0 0 1 0 -140)");
-  });
-
-  it("si allineano agli oggetti dei livelli bloccati, non a quelli dei livelli nascosti", () => {
-    mount(
-      wide(
-        `<g id="l1" fub:layer="Sfondo" fub:locked="true"><rect id="${B}" x="200" y="50" width="60" height="30" fill="#e69f00"/></g>` +
-          `<g id="l2" fub:layer="Note" display="none"><rect x="200" y="55" width="60" height="30" fill="#000000"/></g>` +
-          `<g id="l3" fub:layer="Disegno"><rect id="${A}" x="20" y="200" width="40" height="40" fill="#0072b2"/></g>`,
-      ),
-      { level: "standard" },
-    );
-    editor.setTool("select");
-    drag([[40, 220], [41, 150], [43, 73]]);
-    expect(transformOf(A)).toBe("matrix(1 0 0 1 3 -150)");
-  });
-
-  it("si allineano a ciò che si vede nella vista", () => {
-    mount(
-      wide(`${LAYER}<rect id="${A}" x="20" y="100" width="40" height="40" fill="#0072b2"/><rect id="${B}" x="200" y="60" width="40" height="40" fill="#e69f00"/></g>`),
-      { level: "standard" },
-    );
-    editor.setTool("select");
-    size(150, 150);
-    drag([[40, 120], [40, 100], [40, 83]]);
-    expect(transformOf(A)).toBe("matrix(1 0 0 1 0 -37)");
-    editor.undo();
-    size(300, 300);
-    drag([[40, 120], [40, 100], [40, 83]]);
-    expect(transformOf(A)).toBe("matrix(1 0 0 1 0 -40)");
-  });
-
-  it("ridimensionando, il bordo tirato si ferma in linea con un altro oggetto", () => {
-    mount(
-      wide(`${LAYER}<rect id="${A}" x="100" y="100" width="100" height="50" fill="#000000"/><rect id="${B}" x="236" y="20" width="20" height="20" fill="#e69f00"/></g>`),
-      { level: "standard" },
-    );
-    editor.setTool("select");
-    editor.select([A]);
-    // Il lato destro, preso a 204, arriva a 232: il bordo dell'altro è a 236.
-    drag([[204, 125], [220, 125], [236, 125]]);
-    expect(transformOf(A)).toBe("matrix(1.36 0 0 1 -36 0)");
-    expect(spoken()).toBe("Misure: 136 × 50. Agganciato: il bordo destro in linea con il bordo sinistro di Rettangolo, Arancione.");
-    editor.undo();
-    drag([[204, 125], [220, 125], [236, 125]], { ctrlKey: true });
-    expect(transformOf(A)).toBe("matrix(1.32 0 0 1 -32 0)");
-  });
-
-  it("disegnando una forma, il punto tirato si ferma in linea con gli oggetti", () => {
-    mount(APART, { level: "standard" });
-    editor.setTool("rect");
-    drag([[103, 303], [150, 320], [197, 348]]);
-    expect(editor.engine.text).toMatch(/<rect id="o[a-z0-9]{8}" x="103" y="303" width="97" height="45" fill="none"/);
-    expect(spoken()).toBe("Rettangolo aggiunto. Il disegno ha 3 oggetti. Agganciato: il punto in linea con il bordo sinistro di Rettangolo, Arancione.");
-  });
-
-  it("modificando i nodi, il nodo trascinato si ferma in linea con gli altri nodi del tracciato", () => {
-    const P = "op3p3p3p3";
-    mount(wide(`${LAYER}<path id="${P}" d="M10 10 L150 10 L150 150" fill="none" stroke="#000000" stroke-width="2"/></g>`), { level: "expert" });
-    editor.select([P]);
-    editor.focus();
-    key("n");
-    drag([[150, 150], [100, 150], [13, 153]]);
-    expect(editor.engine.text).toContain('d="M10 10 L150 10 L10 153"');
-    expect(spoken()).toBe("Nodo spostato: x 10, y 153. Agganciato: il punto in linea con un nodo.");
-  });
-
-  it("con la penna di Bézier, il nodo nuovo si ferma in linea con quelli già posati e con la pagina", () => {
-    mount(doc(`<title>Prova</title>${LAYER}</g>`), { level: "expert" });
-    editor.focus();
-    key("b");
-    drag([[10, 10]]);
-    expect(spoken()).toBe("Nodo 1, spigolo: x 10, y 10.");
-    drag([[52, 12]]);
-    expect(spoken()).toBe("Nodo 2, spigolo: x 50, y 10. Agganciato: il punto in linea con il centro orizzontale della pagina; il punto in linea con un nodo.");
-    drag([[73, 12]], { ctrlKey: true });
-    expect(spoken()).toBe("Nodo 3, spigolo: x 73, y 12.");
-  });
-
-  it("«Pagina e griglia» le spegne e le riaccende, e chi monta l'editor lo sa", () => {
-    const grids: unknown[] = [];
-    mount(APART, { level: "standard", onGridChange: (grid) => grids.push(grid) });
-    pageButton().click();
-    const item = entry("Guide intelligenti");
-    expect(item.getAttribute("role")).toBe("menuitemcheckbox");
-    expect(item.getAttribute("aria-checked")).toBe("true");
-    expect(item.querySelector(".menu-description")!.textContent).toBe(
-      "Allinea ai bordi e ai centri degli altri oggetti e della pagina. Tieni premuto Ctrl mentre trascini per posare libero.",
-    );
-    item.click();
-    expect(spoken()).toBe("Guide intelligenti spente.");
-    expect(editor.grid).toEqual({ shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
-    expect(grids).toEqual([{ shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE }]);
-    editor.setTool("select");
-    drag([[40, 220], [41, 150], [43, 73]]);
-    expect(transformOf(A)).toBe("matrix(1 0 0 1 3 -147)");
-    pageButton().click();
-    entry("Guide intelligenti").click();
-    expect(spoken()).toBe("Guide intelligenti accese.");
-    expect(grids).toHaveLength(2);
-  });
-
-  it("nel Personalizzato ci sono anche senza la griglia, sole nel menu; all'Essenziale no", () => {
-    mount(APART, { level: "custom", custom: ["pen", "eraser", "rect", "ellipse", "line", "arrow", "guides"] });
-    expect(pageButton().hidden).toBe(false);
-    pageButton().click();
-    expect(menu().map(labelOf)).toEqual(["Guide intelligenti"]);
-    editor.setLevel("essential");
-    expect(pageButton().hidden).toBe(true);
-    editor.setTool("select");
-    drag([[40, 220], [41, 150], [43, 73]]);
-    expect(transformOf(A)).toBe("matrix(1 0 0 1 3 -147)");
-  });
-
-  it("con Alt e una selezione, misurano le distanze dall'oggetto sotto il puntatore, o dalla pagina", () => {
-    const layer = recording();
-    mount(APART, { level: "standard" });
-    editor.setTool("select");
-    hover(230, 65, { altKey: true });
-    layer.frame();
-    expect(layer.texts(), "senza selezione niente").toEqual([]);
-    editor.select([A]);
-    hover(230, 65, { altKey: true });
-    layer.frame();
-    // Le misure della selezione restano sotto di lei.
-    expect(layer.texts()).toEqual(["40 × 40", "140", "120"]);
-    // Fuori dagli oggetti, dalla pagina.
-    hover(300, 300, { altKey: true });
-    layer.frame();
-    expect(layer.texts()).toEqual(["40 × 40", "20", "340", "200", "160"]);
-    // Lasciato Alt, le distanze se ne vanno.
-    surface().dispatchEvent(new KeyboardEvent("keyup", { key: "Alt", bubbles: true }));
-    layer.frame();
-    expect(layer.texts()).toEqual(["40 × 40"]);
-    expect(changes).toEqual([]);
-  });
-
-  it("«?» elenca i loro tasti", async () => {
-    mount(SOURCE, { level: "standard" });
-    key("?", { shiftKey: true });
-    const rows = [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
-    expect([...dialog().querySelectorAll("caption")].map((caption) => caption.textContent)).toContain("Guide intelligenti");
-    expect(rows).toContainEqual(["Ctrl", "Tenuto mentre si trascina: posa libero, senza agganciarsi agli altri oggetti"]);
-    expect(rows).toContainEqual(["Alt", "Tenuto con una selezione: le distanze dall’oggetto sotto il puntatore, o dalla pagina"]);
-    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
-    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
-    // La finestra chiusa rende il fuoco dopo.
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-});
-
-describe("i righelli e le guide del documento, dal livello Standard", () => {
-  const A = "oa1a1a1a1";
-  const B = "ob2b2b2b2";
-  /// Un disegno in una pagina larga, con gli attributi `root` sulla radice:
-  /// un quadrato blu da (20, 200) a (60, 240) e un rettangolo arancione da
-  /// (200, 50) a (260, 80), lontani dalle guide delle prove.
-  const sheet = (root = ""): string =>
-    doc(`<title>Prova</title>${LAYER}<rect id="${A}" x="20" y="200" width="40" height="40" fill="#0072b2"/><rect id="${B}" x="200" y="50" width="60" height="30" fill="#e69f00"/></g>`).replace(
-      'viewBox="0 0 100 100"',
-      `viewBox="0 0 400 400"${root}`,
-    );
-
-  const stage = (): HTMLElement => host.querySelector<HTMLElement>(".draw-stage")!;
-  const rulers = (): SVGSVGElement => host.querySelector<SVGSVGElement>(".draw-rulers")!;
-  const corner = (): string => rulers().querySelector('[data-part="unit"]')!.textContent ?? "";
-  const guidesOf = (): string | null => editor.engine.text.match(/fub:guides="([^"]*)"/)?.[1] ?? null;
-  const transformOf = (id: string): string | null => editor.engine.text.match(new RegExp(`id="${id}"[^>]*? transform="([^"]*)"`))?.[1] ?? null;
-  const hover = (x: number, y: number): void => {
-    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8) }));
-  };
-  const shift = (name: string): KeyboardEvent => key(name, { shiftKey: true });
-  const pageButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Pagina e griglia"]')!;
-  const menu = (): HTMLButtonElement[] => {
-    const open = document.querySelectorAll<HTMLElement>(".context-menu");
-    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>("button")];
-  };
-  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
-  const entry = (label: string): HTMLButtonElement => menu().find((one) => labelOf(one) === label)!;
-  const rightClick = (x: number, y: number): MouseEvent => {
-    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y });
-    surface().dispatchEvent(event);
-    return event;
-  };
-  /// Monta il disegno al livello Standard, col foglio di 400 per 300 e i
-  /// righelli accesi: la camera resta l'identità, e i punti dello schermo
-  /// sono quelli della scena.
-  const withRulers = (source: string, options: DrawEditorOptions = {}): void => {
-    mount(source, { level: "standard", ...options });
-    size(400, 300);
-    shift("R");
-  };
-
-  // Un menu rimasto aperto va chiuso davvero: tolto e basta, terrebbe il
-  // fuoco anche nella prova dopo.
-  afterEach(() => {
-    closeContextMenu();
-    for (const open of document.querySelectorAll(".context-menu")) open.remove();
-  });
-
-  it("Maiusc+R mostra e nasconde i righelli, «|» le guide; l'Essenziale non li ha, e chi monta l'editor lo sa", () => {
-    const grids: unknown[] = [];
-    mount(sheet(), { onGridChange: (grid) => grids.push(grid) });
-    size(400, 300);
-    shift("R");
-    expect(editor.grid.rulers).toBe(false);
-    expect(rulers().style.display).toBe("none");
-
-    editor.setLevel("standard");
-    expect(shift("R").defaultPrevented).toBe(true);
-    expect(spoken()).toBe("Righelli visibili.");
-    expect(editor.grid.rulers).toBe(true);
-    expect(stage().hasAttribute("data-rulers")).toBe(true);
-    expect(rulers().style.display).toBe("");
-    expect(rulers().getAttribute("aria-hidden")).toBe("true");
-    expect(corner()).toBe("px");
-    // Un numero ogni cento pixel; lo zero sta sotto l'angolo.
-    const labels = [...rulers().querySelectorAll('[data-ruler="x"] [data-part="labels"] text')].map((text) => text.textContent);
-    expect(labels).toContain("100");
-    expect(labels).not.toContain("0");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-
-    key("|");
-    expect(spoken()).toBe("Guide nascoste.");
-    expect(editor.grid.rulerGuides).toBe(false);
-    shift("R");
-    expect(spoken()).toBe("Righelli nascosti.");
-    expect(stage().hasAttribute("data-rulers")).toBe(false);
-    expect(rulers().style.display).toBe("none");
-    expect(grids).toEqual([
-      expect.objectContaining({ rulers: true, rulerGuides: true }),
-      expect.objectContaining({ rulers: true, rulerGuides: false }),
-      expect.objectContaining({ rulers: false, rulerGuides: false }),
-    ]);
-  });
-
-  it("una guida si tira da un righello, con qualunque strumento: orizzontale da quello in alto, verticale da quello a sinistra, un passo di annulla ciascuna", () => {
-    // Due gesti di fila, ma non così vicini da fondersi in un passo.
-    const now = vi.spyOn(performance, "now").mockReturnValue(0);
-    withRulers(sheet());
-    editor.setTool("pen");
-    drag([[100, 10], [100, 60], [100, 120]]);
-    expect(guidesOf()).toBe("y 120");
-    expect(spoken()).toBe("Guida orizzontale aggiunta a 120.");
-    now.mockReturnValue(MERGE_MS + 1);
-    drag([[10, 100], [60, 100], [150.4, 100]]);
-    expect(guidesOf()).toBe("y 120; x 150.4");
-    expect(spoken()).toBe("Guida verticale aggiunta a 150,4.");
-    // La penna non ha disegnato niente.
-    expect(editor.engine.text).not.toContain('fub:tool="pen"');
-    editor.undo();
-    expect(guidesOf()).toBe("y 120");
-    editor.undo();
-    expect(guidesOf()).toBeNull();
-    // Rilasciata sopra un righello, o senza averla mossa, non c'è.
-    drag([[100, 10], [100, 60], [100, 12]]);
-    drag([[100, 10], [100, 10]]);
-    expect(guidesOf()).toBeNull();
-    // Dall'angolo non se ne tira nessuna.
-    drag([[10, 10], [100, 100]]);
-    expect(guidesOf()).toBeNull();
-  });
-
-  it("si aggancia alla griglia e agli oggetti, finché Ctrl o ⌘ non è tenuto", () => {
-    withRulers(sheet(), { grid: { shown: false, snap: true, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE } });
-    drag([[10, 100], [50, 100], [93, 100]]);
-    expect(guidesOf()).toBe("x 100");
-    editor.undo();
-    drag([[10, 100], [50, 100], [93, 100]], { ctrlKey: true });
-    expect(guidesOf()).toBe("x 93");
-    editor.undo();
-    // Il bordo destro del quadrato, a 60, è più vicino della riga a 80.
-    drag([[10, 100], [50, 100], [63, 100]]);
-    expect(guidesOf()).toBe("x 60");
-  });
-
-  it("con Selezione una guida si sposta e, rilasciata su un righello, se ne va; una bloccata si attraversa", () => {
-    withRulers(sheet(' fub:guides="x 200; y 150 locked"'));
-    editor.setTool("select");
-    hover(201, 280);
-    expect(surface().dataset.grip).toBe("ew");
-    hover(300, 151);
-    expect(surface().dataset.grip).toBeUndefined();
-    hover(100, 10);
-    expect(surface().dataset.ruler).toBe("top");
-    hover(10, 10);
-    expect(surface().dataset.ruler).toBe("corner");
-
-    drag([[201, 280], [230, 280], [251, 280]]);
-    expect(guidesOf()).toBe("x 250; y 150 locked");
-    expect(spoken()).toBe("Guida verticale spostata a 250.");
-    expect(editor.selection).toEqual([]);
-    // Sulla guida bloccata il gesto è della selezione: un riquadro sul vuoto.
-    drag([[300, 151], [330, 170], [390, 290]]);
-    expect(guidesOf()).toBe("x 250; y 150 locked");
-    drag([[250, 280], [100, 280], [10, 280]]);
-    expect(guidesOf()).toBe("y 150 locked");
-    expect(spoken()).toBe("Guida verticale eliminata.");
-    editor.undo();
-    expect(guidesOf()).toBe("x 250; y 150 locked");
-  });
-
-  it("gli oggetti si agganciano alle guide finché si vedono, e lo si dice", () => {
-    withRulers(sheet(' fub:guides="x 100"'));
-    editor.setTool("select");
-    // Il bordo destro arriva a 97, a 3 dalla guida: ci va sopra. Il bordo in
-    // alto resta sul centro della pagina, dov'era.
-    drag([[40, 220], [60, 220], [77, 220]]);
-    expect(transformOf(A)).toBe("matrix(1 0 0 1 40 0)");
-    expect(spoken()).toBe("1 oggetto spostato. Agganciato: il bordo destro in linea con una guida; il bordo superiore in linea con il centro verticale della pagina.");
-    editor.undo();
-    key("|");
-    drag([[40, 220], [60, 220], [77, 220]]);
-    expect(transformOf(A)).toBe("matrix(1 0 0 1 37 0)");
-    expect(spoken()).toBe("1 oggetto spostato. Agganciato: il bordo superiore in linea con il centro verticale della pagina.");
-  });
-
-  it("il tasto destro su una guida apre il suo menu, anche per una bloccata; sull'angolo, quello dei righelli", () => {
-    withRulers(sheet(' fub:guides="x 200; y 150 locked"'));
-    // Lontano dalle guide, il menu della selezione, col radiale in fondo.
-    expect(rightClick(300, 280).defaultPrevented).toBe(true);
-    expect(document.querySelector(".draw-radial")).toBeNull();
-    expect(menu().map(labelOf)).toContain("Menu radiale");
-    closeContextMenu();
-
-    expect(rightClick(202, 280).defaultPrevented).toBe(true);
-    expect(menu().map(labelOf)).toEqual(["Blocca la guida", "Elimina la guida", "Guide…", "Blocca tutte le guide", "Elimina tutte le guide"]);
-    entry("Blocca la guida").click();
-    expect(guidesOf()).toBe("x 200 locked; y 150 locked");
-    expect(spoken()).toBe("Guida bloccata.");
-    rightClick(300, 151);
-    expect(menu().map(labelOf)).toEqual(["Sblocca la guida", "Elimina la guida", "Guide…", "Sblocca tutte le guide", "Elimina tutte le guide"]);
-    entry("Sblocca tutte le guide").click();
-    expect(guidesOf()).toBe("x 200; y 150");
-    expect(spoken()).toBe("Guide sbloccate.");
-
-    surface().dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 10, clientY: 10 }));
-    expect(menu().map((one) => [labelOf(one), one.getAttribute("aria-checked")])).toEqual([
-      ["Pixel", "true"],
-      ["Millimetri", "false"],
-      ["Centimetri", "false"],
-      ["Pollici", "false"],
-      ["Punti", "false"],
-      ["Mostra le guide", "true"],
-      ["Guide…", null],
-      ["Blocca tutte le guide", null],
-      ["Elimina tutte le guide", null],
-      ["Nascondi i righelli", null],
-    ]);
-    entry("Elimina tutte le guide").click();
-    expect(guidesOf()).toBeNull();
-    expect(spoken()).toBe("2 guide eliminate.");
-    rightClick(100, 10);
-    entry("Nascondi i righelli").click();
-    expect(editor.grid.rulers).toBe(false);
-  });
-
-  it("l'unità del documento si sceglie dall'angolo dei righelli, in un passo che si annulla, e il disegno non cambia", () => {
-    withRulers(sheet());
-    const before = editor.engine.text;
-    surface().dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 10, clientY: 10 }));
-    entry("Millimetri").click();
-    expect(spoken()).toBe("Il documento ora misura in millimetri.");
-    expect(editor.engine.text).toBe(before.replace('viewBox="0 0 400 400"', 'viewBox="0 0 400 400" fub:units="mm"'));
-    expect(corner()).toBe("mm");
-    pageButton().click();
-    expect(entry("Unità: Millimetri…")).toBeDefined();
-    closeContextMenu();
-    editor.undo();
-    expect(editor.engine.text).toBe(before);
-    expect(corner()).toBe("px");
-  });
-
-  it("nell'unità del documento: il passo della griglia, le misure dette e i campi; il passo di ogni unità si ricorda", () => {
-    mount(sheet(' fub:units="mm"'), { level: "standard" });
-    size(400, 300);
-    pageButton().click();
-    expect(menu().filter((one) => one.getAttribute("role") === "menuitemradio").map((one) => [labelOf(one), one.getAttribute("aria-checked")])).toEqual([
-      ["Passo di 1 mm", "false"],
-      ["Passo di 2 mm", "false"],
-      ["Passo di 5 mm", "true"],
-      ["Passo di 10 mm", "false"],
-      ["Passo di 20 mm", "false"],
-    ]);
-    entry("Passo di 10 mm").click();
-    expect(spoken()).toBe("Passo della griglia: 10 millimetri.");
-    expect(editor.grid.step).toBe(20);
-    expect(editor.grid.steps.mm).toBeCloseTo(37.795, 3);
-
-    editor.select([A]);
-    editor.focus();
-    key("Enter");
-    expect(["x", "y", "width", "height"].map((id) => [propertyLabel(id), propertyInput(id).value])).toEqual([
-      ["X (mm)", "5,292"],
-      ["Y (mm)", "52,917"],
-      ["Larghezza (mm)", "10,583"],
-      ["Altezza (mm)", "10,583"],
-    ]);
-    enter(propertyInput("width"), "20");
-    expect(transformOf(A)).toBe("matrix(1.8898 0 0 1 -17.7953 0)");
-    expect(propertyInput("width").value).toBe("20");
-  });
-
-  it("«Guide…» le scrive coi numeri, in un passo, e un doppio clic su una guida apre la sua riga", async () => {
-    withRulers(sheet(' fub:guides="x 200"'));
-    pageButton().click();
-    entry("Guide…").click();
-    expect(dialog().querySelector("h2")!.textContent).toBe("Guide");
-    const buttons = (): HTMLButtonElement[] => [...dialog().querySelectorAll<HTMLButtonElement>(".draw-guides-tools button")];
-    buttons().find((one) => one.textContent === "Aggiungi un’orizzontale")!.click();
-    const positions = (): HTMLInputElement[] => [...dialog().querySelectorAll<HTMLInputElement>('input[type="number"]')];
-    // Al centro di ciò che si vede, fuori dai righelli.
-    expect(positions().map((input) => input.value)).toEqual(["200", "162"]);
-    positions()[1]!.value = "75.5";
-    await submit();
-    expect(guidesOf()).toBe("x 200; y 75.5");
-    expect(spoken()).toBe("Guide aggiornate.");
-    editor.undo();
-    expect(guidesOf()).toBe("x 200");
-
-    editor.setTool("select");
-    drag([[200, 280], [200, 280]]);
-    drag([[200, 280], [200, 280]]);
-    expect(dialog().querySelector("h2")!.textContent).toBe("Guide");
-    expect(document.activeElement).toBe(positions()[0]);
-    dialog().querySelector<HTMLButtonElement>(".palette-actions button:not(.primary)")!.click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(guidesOf()).toBe("x 200");
-  });
-
-  it("i tasti dei righelli stanno nell'elenco dei tasti", () => {
-    mount(sheet(), { level: "standard" });
-    shift("?");
-    const table = [...dialog().querySelectorAll("table")].find((one) => one.querySelector("caption")!.textContent === "Righelli e guide")!;
-    expect([...table.querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent])).toEqual([
-      ["Shift+R", "Mostra o nasconde i righelli"],
-      ["| o Ctrl+;", "Mostra o nasconde le guide"],
-      ["Ctrl", "Tenuto mentre si tira una guida: posa libero, senza agganciarsi"],
-    ]);
-    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
-  });
-});
-
-describe("il testo, dal livello Standard", () => {
-  /// Un testo blu di due righe, nel corpo 20: il suo riquadro va da (10, 24)
-  /// a (46, 70).
-  const T = "ot1t1t1t1";
-  const TEXT = doc(
-    `<title>Prova</title>${LAYER}<text id="${T}" x="10" y="40" fill="#0072b2" font-family="Inter, sans-serif" font-size="20">` +
-      `<tspan x="10" dy="0">Uno</tspan><tspan x="10" dy="25">Due</tspan></text></g>`,
-  );
-  const EMPTY = doc(`<title>Prova</title>${LAYER}</g>`);
-
-  const input = (): HTMLElement => host.querySelector<HTMLElement>(".draw-text-input")!;
-  /// Le righe del campo, come le mostra.
-  const rows = (): HTMLElement[] => [...input().querySelectorAll<HTMLElement>(".draw-text-line")];
-  const shown = (): string => rows().map((row) => row.textContent).join("\n");
-  const layer = (): HTMLElement => host.querySelector<HTMLElement>(".draw-text-layer")!;
-  const painted = (): SVGElement => host.querySelector<SVGElement>(".spatial-painter text")!;
-  /// Un tocco col mouse in (`x`, `y`).
-  const tap = (x: number, y: number): void => drag([[x, y]]);
-  /// Mette `value` al posto del testo del campo.
-  const type = (value: string): void => {
-    replaceAll(input(), value);
-  };
-  /// Le righe del testo `id`, come le scrive il file.
-  const lines = (id: string): string[] => {
-    const text = new RegExp(`<text id="${id}"[^>]*>([\\s\\S]*?)</text>`).exec(editor.engine.text)?.[1] ?? "";
-    return [...text.matchAll(/<tspan[^>]*>([^<]*)<\/tspan>/g)].map((match) => match[1]!);
-  };
-
-  it("lo strumento c'è dal livello Standard: un tocco apre il campo dove resterà il testo, ed Esc lo scrive in un passo che si annulla", () => {
-    mount(EMPTY);
-    key("t");
-    expect(editor.tool).toBe("pen");
-    editor.setLevel("standard");
-    key("t");
-    expect(editor.tool).toBe("text");
-    expect(surface().dataset.tool).toBe("text");
-    tap(30, 50);
-    expect(layer().hidden).toBe(false);
-    expect(document.activeElement).toBe(input());
-    expect(input().getAttribute("aria-label")).toBe("Testo nuovo");
-    expect(document.getElementById(input().getAttribute("aria-describedby")!)?.textContent).toBe("Invio va a capo; Ctrl+B, I e U formattano; Esc, Tab o Ctrl+Invio concludono.");
-    // Il campo scrive con le famiglie che la superficie usa davvero: quelle
-    // di Fub al posto delle generiche, come l'export.
-    expect(input().style.fontFamily).toBe('Inter, Literata, "JetBrains Mono"');
-    expect(input().style.fontSize).toBe("32px");
-    expect(input().style.lineHeight).toBe("1.25");
-    expect(input().getAttribute("contenteditable")).toBe("true");
-    expect(input().getAttribute("role")).toBe("textbox");
-    expect(input().getAttribute("aria-multiline")).toBe("true");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    expect(changes).toEqual([]);
-
-    // Gli spazi in fila valgono uno, le righe vuote ai bordi non ci sono, e
-    // quella in mezzo resta.
-    type("  Ciao\t  mondo \n\n due\n\n");
-    expect(input().style.height).toBe("200px");
-    expect(key("Enter", {}, input()).defaultPrevented).toBe(false);
-    expect(key("Escape", {}, input()).defaultPrevented).toBe(true);
-    expect(layer().hidden).toBe(true);
-    expect(document.activeElement).toBe(surface());
-    expect(changes).toHaveLength(1);
-    // La prima linea di base va sotto il tocco di metà riga.
-    expect(editor.engine.text).toMatch(/<text id="o[a-z0-9]{8}" x="30" y="61.62" fill="#000000" font-family="Inter, sans-serif" font-size="32">/);
-    const [id] = editor.selection;
-    expect(lines(id!)).toEqual(["Ciao mondo", " ", "due"]);
-    expect(editor.engine.text).toContain('<tspan x="30" dy="40">due</tspan>');
-    expect(spoken()).toBe("Testo aggiunto. Il disegno ha 1 oggetto.");
-
-    key("z", { ctrlKey: true });
-    expect(editor.engine.text).not.toContain("<text");
-    expect(spoken()).toBe("Annullato: Testo.");
-  });
-
-  it("un tocco su un testo lo apre com'è, al suo posto, e Tab scrive le righe cambiate", () => {
-    mount(TEXT, { level: "standard" });
-    editor.setTool("text");
-    tap(20, 35);
-    expect(shown()).toBe("Uno\nDue");
-    expect(input().getAttribute("aria-label")).toBe("Testo");
-    expect(input().style.fontSize).toBe("20px");
-    expect(rows().map((row) => [row.style.textAlign, row.style.marginTop])).toEqual([
-      ["left", ""],
-      ["left", "0px"],
-    ]);
-    // Il testo sotto il campo non si vede, finché il campo è aperto.
-    expect(painted().style.visibility).toBe("hidden");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-
-    type("Uno\n\nTre");
-    expect(key("Tab", {}, input()).defaultPrevented).toBe(true);
-    expect(painted().style.visibility).toBe("");
-    expect(lines(T)).toEqual(["Uno", " ", "Tre"]);
-    // Le righe nuove copiano la precedente e ne prendono l'interlinea.
-    expect(editor.engine.text).toContain('<tspan x="10" dy="25"> </tspan>');
-    expect(editor.engine.text).toContain('<tspan x="10" dy="25">Tre</tspan>');
-    expect(editor.selection).toEqual([T]);
-    expect(spoken()).toBe("Testo modificato.");
-    expect(changes).toHaveLength(1);
-    key("z", { ctrlKey: true });
-    expect(lines(T)).toEqual(["Uno", "Due"]);
-    expect(spoken()).toBe("Annullato: Modifica del testo.");
-  });
-
-  it("Ctrl+Invio conclude; un testo nuovo vuoto, o uno che non cambia, non scrive niente; uno svuotato se ne va", () => {
-    mount(TEXT, { level: "standard" });
-    editor.setTool("text");
-    tap(80, 90);
-    type(" \n\t ");
-    expect(key("Enter", { ctrlKey: true }, input()).defaultPrevented).toBe(true);
-    expect(layer().hidden).toBe(true);
-    expect(changes).toEqual([]);
-
-    tap(20, 35);
-    type("Uno  \nDue");
-    key("Escape", {}, input());
-    expect(changes).toEqual([]);
-    expect(editor.selection).toEqual([T]);
-
-    tap(20, 35);
-    type("\n ");
-    key("Escape", {}, input());
-    expect(editor.engine.text).not.toContain(T);
-    expect(editor.selection).toEqual([]);
-    expect(spoken()).toBe("1 oggetto eliminato. Il disegno ha 0 oggetti.");
-    key("z", { ctrlKey: true });
-    expect(lines(T)).toEqual(["Uno", "Due"]);
-  });
-
-  it("con la selezione, due tocchi su un testo lo aprono; F2 e «Modifica il testo» aprono quello scelto", () => {
-    mount(doc(`<title>Prova</title>${LAYER}<line id="oa1a1a1a1" x1="60" y1="60" x2="80" y2="80" stroke="#000000"/>${TEXT.slice(TEXT.indexOf("<text"), TEXT.indexOf("</g>"))}</g>`), { level: "standard" });
-    editor.setTool("select");
-    tap(20, 35);
-    expect(editor.selection).toEqual([T]);
-    expect(layer().hidden).toBe(true);
-    tap(22, 36);
-    expect(layer().hidden).toBe(false);
-    expect(document.activeElement).toBe(input());
-    key("Escape", {}, input());
-    expect(editor.selection).toEqual([T]);
-    // Due tocchi lenti non lo aprono.
-    tap(20, 35);
-    clock += 1000;
-    tap(20, 35);
-    expect(layer().hidden).toBe(true);
-
-    const edit = host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Modifica il testo"]')!;
-    expect(edit.hidden).toBe(false);
-    expect(edit.title).toBe("Modifica il testo (F2)");
-    expect(edit.getAttribute("aria-keyshortcuts")).toBe("F2");
-    edit.click();
-    expect(document.activeElement).toBe(input());
-    // Mentre si scrive, la barra della selezione non c'è.
-    expect(host.querySelector<HTMLElement>(".draw-arrange")!.hidden).toBe(true);
-    key("Escape", {}, input());
-
-    surface().focus();
-    expect(key("F2").defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(input());
-    key("Escape", {}, input());
-    editor.select(["oa1a1a1a1"]);
-    expect(edit.hidden).toBe(true);
-    // Su un oggetto che non è un testo e non ne ha uno dentro, F2 apre il
-    // suo nome nell'albero.
-    key("F2");
-    expect(layer().hidden).toBe(true);
-    expect(document.activeElement).toBe(host.querySelector(".draw-object-rename"));
-    key("Escape", {}, document.activeElement as HTMLElement);
-    expect(changes).toEqual([]);
-    editor.setLevel("essential");
-    editor.select([T]);
-    expect(key("F2").defaultPrevented).toBe(false);
-    expect(layer().hidden).toBe(true);
-  });
-
-  it("Ctrl+B su una parola la scrive in un pezzo, con l'operazione text; il campo riapre il testo coi suoi pezzi", () => {
-    mount(TEXT, { level: "standard" });
-    editor.setTool("text");
-    tap(20, 35);
-    const two = rows()[1]!.firstChild!;
-    document.getSelection()!.setBaseAndExtent(two, 0, two, 3);
-    expect(key("b", { ctrlKey: true }, input()).defaultPrevented).toBe(true);
-    expect(spoken()).toBe("Grassetto attivato.");
-    key("Escape", {}, input());
-    expect(editor.engine.text).toContain('<tspan x="10" dy="0">Uno</tspan>\n  <tspan x="10" dy="25"><tspan font-weight="bold">Due</tspan></tspan>');
-    expect(changes).toHaveLength(1);
-    expect(spoken()).toBe("Testo modificato.");
-
-    tap(20, 35);
-    const piece = rows()[1]!.querySelector<HTMLElement>(".draw-text-piece")!;
-    expect(piece.textContent).toBe("Due");
-    expect(piece.style.fontWeight).toBe("bold");
-    key("Escape", {}, input());
-    expect(changes).toHaveLength(1);
-    key("z", { ctrlKey: true });
-    expect(lines(T)).toEqual(["Uno", "Due"]);
-  });
-
-  it("una riga spezzata sopra una che scrive il suo aspetto riscrive il testo intero, con lo stesso nome, in un passo", () => {
-    mount(TEXT.replace('<tspan x="10" dy="25">Due', '<tspan x="10" dy="25" font-style="italic">Due'), { level: "standard" });
-    editor.setTool("text");
-    tap(20, 35);
-    const one = rows()[0]!.firstChild!;
-    document.getSelection()!.setBaseAndExtent(one, 1, one, 1);
-    const split = new InputEvent("beforeinput", { inputType: "insertParagraph", bubbles: true, cancelable: true });
-    input().dispatchEvent(split);
-    expect(split.defaultPrevented).toBe(true);
-    expect(shown()).toBe("U\nno\nDue");
-    key("Escape", {}, input());
-    expect(editor.engine.text).toContain(`<text id="${T}" x="10" y="40" fill="#0072b2" font-family="Inter, sans-serif" font-size="20">`);
-    expect(editor.engine.text).toContain('<tspan x="10" dy="0">U</tspan>\n  <tspan x="10" dy="25">no</tspan>\n  <tspan x="10" dy="25" font-style="italic">Due</tspan>');
-    expect(changes).toHaveLength(1);
-    expect(editor.selection).toEqual([T]);
-    key("z", { ctrlKey: true });
-    expect(lines(T)).toEqual(["Uno", "Due"]);
-  });
-
-  it("Spazio scrive dov'è il cursore, e con l'aggancio la linea di base va sulla griglia", () => {
-    mount(EMPTY, { level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE } });
-    size(200, 100);
-    editor.setTool("text");
-    surface().focus();
-    expect(key(" ").defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(input());
-    type("A");
-    key("Escape", {}, input());
-    expect(editor.engine.text).toMatch(/<text id="o[a-z0-9]{8}" x="100" y="60" /);
-  });
-
-  it("toccare il foglio, cambiare strumento o livello e annullare concludono il testo; caricare un documento o la sola lettura lo lasciano", () => {
-    mount(TEXT, { level: "standard" });
-    editor.setTool("text");
-    tap(80, 90);
-    type("Tre");
-    // Il tocco che conclude un testo non ne apre un altro.
-    tap(70, 10);
-    expect(layer().hidden).toBe(true);
-    expect(changes).toHaveLength(1);
-    expect(spoken()).toBe("Testo aggiunto. Il disegno ha 2 oggetti.");
-    tap(70, 10);
-    expect(layer().hidden).toBe(false);
-    type("Quattro");
-    editor.setTool("select");
-    expect(changes).toHaveLength(2);
-
-    editor.setTool("text");
-    tap(60, 95);
-    type("Cinque");
-    editor.undo();
-    expect(changes).toHaveLength(4);
-    expect(editor.engine.text).not.toContain("Cinque");
-    expect(editor.canRedo).toBe(true);
-
-    tap(60, 95);
-    type("Sei");
-    editor.setLevel("essential");
-    expect(changes).toHaveLength(5);
-    expect(editor.engine.text).toContain(">Sei</tspan>");
-    editor.setLevel("standard");
-    editor.setTool("text");
-
-    tap(60, 80);
-    type("Sette");
-    host.querySelector<HTMLInputElement>(".draw-title-input")!.focus();
-    expect(changes).toHaveLength(6);
-    expect(editor.engine.text).toContain(">Sette</tspan>");
-
-    tap(60, 65);
-    type("Otto");
-    editor.setReadOnly(true);
-    expect(layer().hidden).toBe(true);
-    expect(changes).toHaveLength(6);
-    editor.setReadOnly(false);
-
-    tap(60, 65);
-    type("Nove");
-    editor.load(SceneEngine.open(TEXT));
-    expect(layer().hidden).toBe(true);
-    expect(changes).toHaveLength(6);
-    expect(editor.engine.text).not.toContain("Nove");
-  });
-
-  it("le dimensioni prendono il posto degli spessori; il colore è quello della penna, e cambiano il testo che si scrive", () => {
-    mount(SOURCE, { level: "standard" });
-    editor.setColor("#d55e00");
-    editor.setTool("text");
-    expect(editor.color).toBe("#d55e00");
-    expect(editor.width).toBe(32);
-    const group = host.querySelector<HTMLElement>('[role="toolbar"] .draw-group[aria-label="Dimensione"]');
-    expect(group).not.toBeNull();
-    const sizes = [...host.querySelectorAll<HTMLButtonElement>(".draw-width")];
-    expect(sizes.map((control) => [control.getAttribute("aria-label"), control.getAttribute("aria-checked")])).toEqual([
-      ["Piccolo", "false"],
-      ["Medio", "true"],
-      ["Grande", "false"],
-    ]);
-    for (const control of sizes) {
-      expect(control.querySelector<HTMLElement>(".draw-width-bar")!.hidden).toBe(true);
-      expect(control.querySelector<HTMLElement>(".draw-size-glyph")!.hidden).toBe(false);
-    }
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-
-    tap(20, 30);
-    type("Ciao");
-    // Un pulsante della barra lascia il fuoco al campo.
-    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-    sizes[2]!.dispatchEvent(down);
-    expect(down.defaultPrevented).toBe(true);
-    sizes[2]!.click();
-    expect(editor.width).toBe(48);
-    expect(input().style.fontSize).toBe("48px");
-    editor.setColor("#009e73");
-    expect(input().style.color).toMatch(/^(#009e73|rgb\(0, 158, 115\))$/);
-    key("Escape", {}, input());
-    expect(editor.engine.text).toMatch(/<text id="o[a-z0-9]{8}" x="20" y="[\d.]+" fill="#009e73" font-family="Inter, sans-serif" font-size="48">/);
-
-    // La penna ha il suo spessore, e lo stesso colore.
-    editor.setTool("pen");
-    expect(editor.width).toBe(4);
-    expect(editor.color).toBe("#009e73");
-    expect(group!.getAttribute("aria-label")).toBe("Spessore");
-    expect(sizes.map((control) => control.getAttribute("aria-label"))).toEqual(["Sottile", "Medio", "Spesso"]);
-  });
-
-  it("il gruppo «Carattere» c'è mentre si scrive: famiglia, corpo ed enfasi di ciò che si scrive, col fuoco che resta al campo", () => {
-    mount(SOURCE, { level: "standard" });
-    editor.setTool("text");
-    const character = host.querySelector<HTMLElement>('[role="toolbar"] .draw-group[aria-label="Carattere"]')!;
-    expect(character.hidden).toBe(true);
-    tap(20, 30);
-    type("Ciao");
-    expect(character.hidden).toBe(false);
-    const toggle = (name: string): HTMLButtonElement => character.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`)!;
-    const font = character.querySelector<HTMLButtonElement>(".kit-font-button")!;
-    const size = character.querySelector<HTMLInputElement>("input")!;
-    expect(font.getAttribute("aria-label")).toBe("Carattere: Inter");
-    expect(size.value).toBe("32");
-    expect(toggle("Grassetto").getAttribute("aria-pressed")).toBe("false");
-
-    // Senza scelta, il grassetto vale per ciò che si scriverà, e il gruppo
-    // lo dice; il fuoco resta al campo.
-    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-    toggle("Grassetto").dispatchEvent(down);
-    expect(down.defaultPrevented).toBe(true);
-    toggle("Grassetto").click();
-    expect(toggle("Grassetto").getAttribute("aria-pressed")).toBe("true");
-    toggle("Grassetto").click();
-    expect(toggle("Grassetto").getAttribute("aria-pressed")).toBe("false");
-
-    // La scelta del carattere prende il fuoco senza concludere il testo, e lo
-    // ridà al campo; la famiglia va a tutto ciò che è scelto.
-    const range = document.createRange();
-    range.selectNodeContents(input());
-    document.getSelection()!.removeAllRanges();
-    document.getSelection()!.addRange(range);
-    font.click();
-    const search = document.querySelector<HTMLInputElement>(".kit-font-popover input")!;
-    expect(document.activeElement).toBe(search);
-    search.value = "literata";
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-    key("Enter", {}, search);
-    expect(layer().hidden).toBe(false);
-    expect(font.getAttribute("aria-label")).toBe("Carattere: Literata");
-    expect(document.activeElement).toBe(input());
-    // Il corpo scritto nel campo numerico, sul testo scelto.
-    size.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-    size.focus();
-    size.value = "40";
-    key("Enter", {}, size);
-    expect(layer().hidden).toBe(false);
-    key("Escape", {}, input());
-    expect(editor.engine.text).toMatch(/font-family="Literata, serif"/);
-    expect(editor.engine.text).toMatch(/font-size="40"/);
-    expect(character.hidden).toBe(true);
-  });
-
-  it("il correttore segna ciò che si scrive, e dal menu del tasto destro corregge in un passo del testo", async () => {
-    const checks: string[][] = [];
-    const proof = {
-      queryIndex: vi.fn(async (query: { kind: string; query?: unknown }) => {
-        const segments = (query.query as { segments: string[] }).segments;
-        checks.push(segments);
-        const encoder = new TextEncoder();
-        return {
-          kind: "custom",
-          value: {
-            language: { code: "it", spelling: true, grammar: true, missing_dictionary: null },
-            segments: segments.map((segment) => {
-              const at = segment.indexOf("speling");
-              if (at < 0) return [];
-              const start = encoder.encode(segment.slice(0, at)).length;
-              return [{ start, end: start + 7, kind: "spelling", message: "Ortografia", suggestions: ["spelling"] }];
-            }),
-          },
-        };
-      }),
-      invokeCommand: vi.fn(async () => ({ notify: null })),
-      settings: vi.fn(async () => [{ spec: { key: "proof.language" }, value: "it", source: "default" }]),
-      interfaceLanguage: () => "it",
-      watch: () => () => {},
-    } as unknown as ProofPorts;
-    mount(SOURCE, { level: "standard", proof: { ports: proof } });
-    editor.setTool("text");
-    tap(20, 30);
-    // Il correttore di Fub prende il posto di quello del browser.
-    expect(input().spellcheck).toBe(false);
-    type("un speling qui");
-    const mark = await vi.waitFor(() => {
-      const found = input().querySelector<HTMLElement>(".draw-text-proof-spelling");
-      expect(found).not.toBeNull();
-      return found!;
-    });
-    expect(mark.textContent).toBe("speling");
-    expect(mark.title).toBe("Ortografia");
-    expect(checks).toEqual([["un speling qui"]]);
-
-    // Dalla tastiera, il menu del cursore che sta nel tratto.
-    const text = mark.firstChild ?? mark;
-    document.getSelection()!.setBaseAndExtent(text, 2, text, 2);
-    const menuKey = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
-    input().dispatchEvent(menuKey);
-    expect(menuKey.defaultPrevented).toBe(true);
-    const items = [...document.querySelectorAll<HTMLElement>(".context-menu [role=menuitem]")];
-    expect(items.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["spelling", "Aggiungi al dizionario", "Ignora"]);
-    items[0]!.click();
-    expect(layer().hidden).toBe(false);
-    expect(input().textContent).toBe("un spelling qui");
-    // La riga cambiata perde il suo tratto.
-    expect(input().querySelector(".draw-text-proof-spelling")).toBeNull();
-    key("Escape", {}, input());
-    expect(lines(editor.engine.text.match(/<text id="(o[a-z0-9]{8})"/)![1]!)).toEqual(["un spelling qui"]);
-  });
-
-  it("il campo segue la trasformazione del testo e lo zoom", () => {
-    const turned = doc(`<title>Prova</title>${LAYER}<text id="${T}" x="0" y="0" transform="rotate(90 50 50)" font-size="10"><tspan x="0" dy="0">Su</tspan></text></g>`);
-    mount(turned, { level: "standard" });
-    editor.setTool("text");
-    editor.select([T]);
-    surface().focus();
-    key("F2");
-    const [, matrix] = /^matrix\(([^)]*)\) translate\(/.exec(input().style.transform) ?? [];
-    expect(matrix!.split(", ").map((n) => Math.round(Number(n) * 1e9) / 1e9 || 0)).toEqual([0, 1, -1, 0, 100, 0]);
-    expect(input().style.fontSize).toBe("10px");
-    key("+");
-    expect(input().style.fontSize).toBe("12.5px");
-    key("Escape", {}, input());
-  });
-
-  describe("le etichette nelle forme", () => {
-    const R = "or1r1r1r1";
-    /// Un rettangolo arancio da (100, 100) a (300, 220): il centro è in
-    /// (200, 160), e le righe di un'etichetta sono larghe 200 − 2 · 6.
-    const SHAPE = doc(`<title>Prova</title>${LAYER}<rect id="${R}" x="100" y="100" width="200" height="120" fill="#e69f00" stroke="#000000" stroke-width="2"/></g>`).replace('viewBox="0 0 100 100"', 'viewBox="0 0 400 300"');
-    /// L'id dell'etichetta del disegno.
-    const labelId = (): string => /<text id="([^"]+)"/.exec(editor.engine.text)![1]!;
-    /// Dove cade, nella scena, il mezzo delle righe dell'etichetta: fra la
-    /// cima delle maiuscole della prima riga e il fondo dell'ultima.
-    const middleOf = (id: string): [number, number] => {
-      const label = editor.engine.holder(id)!;
-      const rich = textRich(label)!;
-      const [a, b, c, d, e, f] = parseTransform(rich.attrs.transform!)!;
-      const y = blockMiddle(rich);
-      expect([a, b, c, d]).toEqual([1, 0, 0, 1]);
-      return [e + c * y, f + d * y];
-    };
-
-    it("due tocchi su una forma chiusa ci scrivono dentro, al centro; Esc la mette in un gruppo con la forma, in un passo", () => {
-      mount(SHAPE, { level: "standard" });
-      editor.setTool("select");
-      tap(150, 130);
-      expect(editor.selection).toEqual([R]);
-      tap(151, 131);
-      expect(layer().hidden).toBe(false);
-      expect(document.activeElement).toBe(input());
-      expect(input().getAttribute("aria-label")).toBe("Etichetta nella forma");
-      expect(rows().map((row) => row.style.textAlign)).toEqual(["center"]);
-      expect(formatIssues(checkAccessibility(host))).toBe("");
-      type("Inizio");
-      key("Escape", {}, input());
-      expect(changes).toHaveLength(1);
-      const [group] = editor.selection;
-      expect(group).not.toBe(R);
-      const label = labelId();
-      expect(editor.engine.text).toMatch(
-        new RegExp(`<g id="${group}">\\s*<rect id="${R}"[^>]*/>\\s*<text id="${label}" fub:inside="${R}" fub:wrap="188" x="0" y="0" fill="#000000" font-family="Inter, sans-serif" font-size="32" text-anchor="middle" transform="matrix\\(1 0 0 1 200 168.8\\)">`),
-      );
-      const [x, y] = middleOf(label);
-      expect(x).toBeCloseTo(200, 2);
-      expect(y).toBeCloseTo(160, 2);
-      expect(spoken()).toBe("Etichetta aggiunta.");
-      key("z", { ctrlKey: true });
-      expect(editor.engine.text).toBe(SHAPE);
-      expect(spoken()).toBe("Annullato: Etichetta nella forma.");
-    });
-
-    it("F2 e «Modifica il testo» sulla forma scelta fanno lo stesso; un'etichetta vuota non scrive niente e la forma resta scelta", () => {
-      mount(SHAPE, { level: "standard" });
-      editor.select([R]);
-      const edit = host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Modifica il testo"]')!;
-      expect(edit.hidden).toBe(false);
-      edit.click();
-      expect(document.activeElement).toBe(input());
-      key("Escape", {}, input());
-      expect(changes).toEqual([]);
-      expect(editor.selection).toEqual([R]);
-      surface().focus();
-      expect(key("F2").defaultPrevented).toBe(true);
-      expect(document.activeElement).toBe(input());
-      type("Fine");
-      key("Tab", {}, input());
-      expect(changes).toHaveLength(1);
-      // All'Essenziale, senza lo strumento Testo, niente etichette.
-      editor.setLevel("essential");
-      editor.select([R]);
-      expect(key("F2").defaultPrevented).toBe(false);
-      expect(layer().hidden).toBe(true);
-    });
-
-    it("due tocchi sul gruppo cambiano l'etichetta, che va a capo e resta al centro; svuotata, la forma torna com'era", () => {
-      mount(SHAPE, { level: "standard" });
-      editor.setTool("select");
-      editor.select([R]);
-      surface().focus();
-      key("F2");
-      type("Uno");
-      key("Escape", {}, input());
-      const [group] = editor.selection;
-      const label = labelId();
-      tap(150, 130);
-      tap(151, 131);
-      expect(shown()).toBe("Uno");
-      expect(input().getAttribute("aria-label")).toBe("Etichetta nella forma");
-      type("Uno due tre quattro cinque sei sette otto");
-      // Mentre si scrive il campo resta al centro della forma.
-      expect(rows().length).toBeGreaterThan(1);
-      key("Escape", {}, input());
-      expect(editor.selection).toEqual([group]);
-      expect(spoken()).toBe("Testo modificato.");
-      expect(lines(label).length).toBeGreaterThan(1);
-      const [x, y] = middleOf(label);
-      expect(x).toBeCloseTo(200, 2);
-      expect(y).toBeCloseTo(160, 2);
-
-      tap(150, 130);
-      tap(151, 131);
-      type(" ");
-      key("Escape", {}, input());
-      // La forma torna nel livello com'era, a capo come la scrive il motore.
-      expect(editor.engine.text.replace(/\n\s*/g, "")).toBe(SHAPE);
-      expect(editor.selection).toEqual([R]);
-      expect(spoken()).toBe("Etichetta tolta.");
-      key("z", { ctrlKey: true });
-      expect(lines(label).length).toBeGreaterThan(1);
-      expect(spoken()).toBe("Annullato: Rimozione dell’etichetta.");
-    });
-
-    it("due tocchi dentro una forma senza riempimento ci scrivono lo stesso", () => {
-      mount(SHAPE.replace('fill="#e69f00"', 'fill="none"'), { level: "standard" });
-      editor.setTool("select");
-      // Un tocco nel vuoto della forma non la sceglie: due ne aprono l'etichetta.
-      tap(200, 160);
-      expect(editor.selection).toEqual([]);
-      tap(201, 161);
-      expect(document.activeElement).toBe(input());
-      type("Dentro");
-      key("Escape", {}, input());
-      expect(changes).toHaveLength(1);
-      expect(editor.engine.text).toContain(`fub:inside="${R}"`);
-      // Fuori dalla forma due tocchi non aprono niente.
-      tap(360, 260);
-      tap(361, 261);
-      expect(layer().hidden).toBe(true);
-    });
-
-    it("svuotata l'etichetta, il gruppo a cui è agganciato un connettore resta", () => {
-      const G = "og1g1g1g1";
-      const L = "ot1t1t1t1";
-      const C = "oc1c1c1c1";
-      mount(
-        SHAPE.replace(
-          /<rect [^>]*\/>/,
-          (rect) =>
-            `<g id="${G}">${rect}` +
-            `<text id="${L}" fub:inside="${R}" fub:wrap="188" x="0" y="0" font-size="32" text-anchor="middle" transform="matrix(1 0 0 1 200 168.8)"><tspan x="0" dy="0">Uno</tspan></text></g>` +
-            `<path id="${C}" fub:shape="connector" fub:geom="straight 300 160 380 160" fub:from="${G} right" d="M300 160 L380 160" fill="none" stroke="#000000" stroke-width="2"/>`,
-        ),
-        { level: "standard" },
-      );
-      editor.setTool("select");
-      tap(150, 130);
-      tap(151, 131);
-      expect(shown()).toBe("Uno");
-      type(" ");
-      key("Escape", {}, input());
-      expect(spoken()).toBe("Etichetta tolta.");
-      expect(editor.engine.text).not.toContain(`id="${L}"`);
-      expect(editor.engine.holder(G)).not.toBeNull();
-      expect(editor.engine.text).toContain(`fub:from="${G} right"`);
-    });
-
-    it("la forma che cambia misura si porta dietro l'etichetta, nello stesso passo", () => {
-      mount(SHAPE, { level: "standard" });
-      editor.select([R]);
-      surface().focus();
-      key("F2");
-      type("Uno");
-      key("Escape", {}, input());
-      const label = labelId();
-      expect(editor.engine.apply({ op: "set", id: R, attrs: { x: "0", width: "100" } }).outcome).toBe("applied");
-      const [x, y] = middleOf(label);
-      expect(x).toBeCloseTo(50, 2);
-      expect(y).toBeCloseTo(160, 2);
-      expect(textRich(editor.engine.holder(label)!)!.attrs["fub:wrap"]).toBe("88");
-    });
-
-    it("un'etichetta che esce dalla pagina la fa crescere, nello stesso passo", () => {
-      mount(SHAPE, { level: "standard" });
-      editor.select([R]);
-      surface().focus();
-      key("F2");
-      type("uno due tre quattro cinque sei sette otto nove dieci undici dodici");
-      key("Escape", {}, input());
-      expect(changes).toHaveLength(1);
-      const [, , , height] = editor.engine.text.match(/viewBox="([^"]*)"/)![1]!.split(" ").map(Number);
-      expect(height).toBeGreaterThan(300);
-      key("z", { ctrlKey: true });
-      expect(editor.engine.text).toBe(SHAPE);
-    });
-
-    it("con la forma scelta, «Rinomina» nel menu non promette F2, che scrive l'etichetta", () => {
-      mount(SHAPE, { level: "standard" });
-      editor.select([R]);
-      host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Selezione avanzata"]')!.click();
-      const open = document.querySelectorAll<HTMLElement>(".context-menu");
-      const rename = [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((entry) => entry.querySelector(".menu-label")!.textContent === "Rinomina")!;
-      expect(rename.querySelector(".menu-hint")).toBeNull();
-    });
-  });
-
-  it("«?» elenca i tasti del testo", () => {
-    mount(SOURCE, { level: "standard" });
-    key("?", { shiftKey: true });
-    expect([...dialog().querySelectorAll("caption")].map((caption) => caption.textContent)).toContain("Testo");
-    const rows = [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
-    expect(rows).toContainEqual(["Space", "Con lo strumento Testo: scrive dov’è il cursore, o cambia il testo che c’è"]);
-    expect(rows).toContainEqual(["F2", "Modifica il testo scelto, o l’etichetta della forma scelta"]);
-    expect(rows).toContainEqual(["Enter", "Va a capo, mentre si scrive"]);
-    expect(rows).toContainEqual(["Esc o Tab o Ctrl+Enter", "Conclude il testo, mentre si scrive"]);
-    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
-    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
-  });
-});
-
-describe("il testo in area e su tracciato, dal livello Esperto", () => {
-  /// Un testo in area di corpo 20, largo 120: dieci grafemi per riga.
-  const A = "oa2a2a2a2";
-  const AREA = doc(
-    `<title>Prova</title>${LAYER}<text id="${A}" fub:wrap="120" x="10" y="40" font-size="20">` +
-      `<tspan x="10" dy="0">Il testo</tspan><tspan fub:join="space" x="10" dy="25">in area</tspan></text></g>`,
-  );
-  /// Un testo di corpo 20 sul tracciato orizzontale da (0, 100) a (200, 100).
-  const P = "op3p3p3p3";
-  const ALONG = doc(
-    `<title>Prova</title><defs id="fub-defs"><path id="r1" fub:role="private" d="M 0 100 L 200 100"/></defs>${LAYER}` +
-      `<text id="${P}" font-size="20"><textPath startOffset="20" href="#r1">Sul colle</textPath></text></g>`,
-  );
-  const EMPTY = doc(`<title>Prova</title>${LAYER}</g>`);
-
-  const input = (): HTMLElement => host.querySelector<HTMLElement>(".draw-text-input")!;
-  const shown = (): string => [...input().querySelectorAll<HTMLElement>(".draw-text-line")].map((row) => row.textContent).join("\n");
-  const tap = (x: number, y: number): void => drag([[x, y]]);
-  const type = (value: string): void => {
-    replaceAll(input(), value);
-  };
-  /// Le righe del testo `id`, ciascuna col suo `fub:join`.
-  const lines = (id: string): Array<[string, string | null]> => {
-    const text = new RegExp(`<text id="${id}"[^>]*>([\\s\\S]*?)</text>`).exec(editor.engine.text)?.[1] ?? "";
-    return [...text.matchAll(/<tspan([^>]*)>([^<]*)<\/tspan>/g)].map((match) => [match[2]!, /fub:join="([^"]*)"/.exec(match[1]!)?.[1] ?? null]);
-  };
-
-  it("trascinare col Testo apre un testo in area largo quanto il trascinamento, che va a capo da sé", () => {
-    mount(EMPTY, { level: "expert" });
-    editor.setTool("text");
-    drag([[20, 40], [70, 60], [120, 60]]);
-    expect(document.activeElement).toBe(input());
-    // Il riquadro è largo 100: col corpo 32 dello strumento, cinque grafemi.
-    expect(input().style.width).toBe("100px");
-    type("Il testo in area va a capo");
-    expect(shown()).toBe("Il\ntesto\nin\narea\nva a\ncapo");
-    key("Escape", {}, input());
-    expect(changes).toHaveLength(1);
-    const [id] = editor.selection;
-    expect(editor.engine.text).toMatch(new RegExp(`<text id="${id}" fub:wrap="100" x="20" `));
-    expect(lines(id!)).toEqual([
-      ["Il", null],
-      ["testo", "space"],
-      ["in", "space"],
-      ["area", "space"],
-      ["va a", "space"],
-      ["capo", "space"],
-    ]);
-    key("z", { ctrlKey: true });
-    expect(editor.engine.text).not.toContain("<text");
-  });
-
-  it("al livello Standard trascinare col Testo scrive dove comincia, senza riquadro", () => {
-    mount(EMPTY, { level: "standard" });
-    editor.setTool("text");
-    drag([[20, 40], [70, 60], [120, 60]]);
-    expect(input().style.width).not.toBe("100px");
-    type("Il testo in area");
-    key("Escape", {}, input());
-    expect(editor.engine.text).not.toContain("fub:wrap");
-  });
-
-  it("un testo in area si riapre nel suo riquadro, e scrivere rifà gli a capo con l'operazione text", () => {
-    mount(AREA, { level: "expert" });
-    editor.setTool("text");
-    tap(20, 35);
-    expect(shown()).toBe("Il testo\nin area");
-    expect(input().style.width).toBe("120px");
-    type("Il testo in area va a capo");
-    expect(shown()).toBe("Il testo\nin area va\na capo");
-    key("Tab", {}, input());
-    expect(lines(A)).toEqual([
-      ["Il testo", null],
-      ["in area va", "space"],
-      ["a capo", "space"],
-    ]);
-    expect(editor.engine.text).toContain('<tspan fub:join="space" x="10" dy="25">a capo</tspan>');
-    expect(spoken()).toBe("Testo modificato.");
-    // Un paragrafo nuovo non continua quello prima.
-    tap(20, 35);
-    type("Uno\nDue");
-    key("Tab", {}, input());
-    expect(lines(A)).toEqual([
-      ["Uno", null],
-      ["Due", null],
-    ]);
-    key("z", { ctrlKey: true });
-    key("z", { ctrlKey: true });
-    expect(lines(A)).toEqual([
-      ["Il testo", null],
-      ["in area", "space"],
-    ]);
-  });
-
-  it("un testo su tracciato si apre su una riga sola, dritto dove comincia, e si scrive nel suo textPath", () => {
-    mount(ALONG, { level: "expert" });
-    editor.setTool("text");
-    tap(40, 95);
-    expect(document.activeElement).toBe(input());
-    expect(shown()).toBe("Sul colle");
-    expect(input().getAttribute("aria-multiline")).toBe("false");
-    expect(input().style.transform).toMatch(/translate\(20px, 100px\) rotate\(0deg\)/);
-    type("Sul colle alto");
-    key("Escape", {}, input());
-    expect(editor.engine.text).toContain('<textPath startOffset="20" href="#r1">Sul colle alto</textPath>');
-    expect(editor.selection).toEqual([P]);
-  });
-});
-
-describe("la cornice di un testo in area", () => {
-  const T = "ot1t1t1t1";
-  // Corpo 10, a stima: dieci caratteri per riga. Il riquadro va da 20 a 80,
-  // e le righe da 32 a 55; la cornice sta quattro pixel fuori.
-  const AREA = doc(`${LAYER}<text id="${T}" fub:wrap="60" x="20" y="40" font-size="10"><tspan x="20" dy="0">Il testo</tspan><tspan fub:join="space" x="20" dy="12.5">va a capo</tspan></text></g>`);
-  const press = (x: number, y: number): void => {
-    surface().dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: x, clientY: y, timeStamp: (clock += 8) }));
-  };
-  const move = (x: number, y: number, buttons = 1): void => {
-    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons, pressure: 0.5, clientX: x, clientY: y, timeStamp: (clock += 8) }));
-  };
-  const release = (x: number, y: number): void => {
-    surface().dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: x, clientY: y, timeStamp: (clock += 8) }));
-  };
-  const painted = (): Element => host.querySelector(`[data-scene-id="${T}"]`)!;
-
-  it("cambia la larghezza del riquadro e non il corpo: il testo va di nuovo a capo mentre la si tira", () => {
-    mount(AREA, { level: "expert" });
-    editor.setTool("select");
-    editor.select([T]);
-    // L'angolo in basso a destra tira in orizzontale.
-    move(84, 59, 0);
-    expect(surface().dataset.grip).toBe("ew");
-    press(84, 59);
-    move(104, 70);
-    move(124, 80);
-    // L'anteprima mostra le righe di dopo; il file non cambia ancora.
-    expect([...painted().nextElementSibling!.querySelectorAll("tspan")].map((line) => line.textContent)).toEqual(["Il testo va a", "capo"]);
-    expect(editor.engine.text).toBe(AREA);
-    release(124, 80);
-    expect(editor.engine.text).toContain('fub:wrap="100" x="20" y="40" font-size="10"');
-    expect(editor.engine.text).toMatch(/<tspan x="20" dy="0">Il testo va a<\/tspan>\s*<tspan fub:join="space" x="20" dy="12.5">capo<\/tspan>/);
-    expect(spoken()).toBe("Riquadro largo 100.");
-    expect(changes).toHaveLength(1);
-    expect(painted().nextElementSibling).toBeNull();
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Larghezza del riquadro.");
-    expect(editor.engine.text).toBe(AREA);
-  });
-
-  it("da sinistra resta fermo il bordo destro; in alto e in basso non ci sono maniglie", () => {
-    mount(AREA, { level: "expert" });
-    editor.setTool("select");
-    editor.select([T]);
-    move(50, 28, 0);
-    expect(surface().dataset.grip).toBeUndefined();
-    press(16, 59);
-    move(-24, 59);
-    release(-24, 59);
-    expect(editor.engine.text).toContain('fub:wrap="100" x="-20"');
-    expect(editor.engine.text).toContain('<tspan x="-20" dy="0">Il testo va a</tspan>');
-  });
-
-  it("sotto Esperto la cornice scala il testo come ogni oggetto", () => {
-    mount(AREA, { level: "standard" });
-    editor.setTool("select");
-    editor.select([T]);
-    move(50, 28, 0);
-    expect(surface().dataset.grip).toBe("ns");
-  });
-});
-
-describe("il testo su tracciato, dal menu", () => {
-  const T = "ot4t4t4t4";
-  const R = "or4r4r4r4";
-  const PAIR = doc(
-    `<title>Prova</title>${LAYER}<text id="${T}" x="20" y="40" font-size="10"><tspan x="20" dy="0">Sul colle</tspan></text>` +
-      `<rect id="${R}" x="0" y="50" width="200" height="40" fill="none" stroke="#000000"/></g>`,
-  );
-
-  const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
-  const button = (): HTMLButtonElement => bar().querySelector<HTMLButtonElement>('button[aria-label="Testo su tracciato"]')!;
-  const menu = (): HTMLButtonElement[] => {
-    const open = document.querySelectorAll<HTMLElement>(".context-menu");
-    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
-  };
-  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
-  /// Le voci, col nome, se sono spente e che cosa dicono.
-  const entries = (): (string | boolean | null)[][] =>
-    menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled") === "true", entry.querySelector(".menu-description")?.textContent ?? null]);
-  const closeMenus = (): void => {
-    for (const open of document.querySelectorAll(".context-menu")) open.remove();
-  };
-  /// La voce `label` del menu, sugli oggetti `keys`.
-  const run = (keys: string[], label: string): void => {
-    editor.select(keys);
-    button().click();
-    menu().find((entry) => labelOf(entry) === label)!.click();
-    closeMenus();
-  };
-
-  afterEach(closeMenus);
-
-  it("c'è dall'Esperto con un testo scelto; le voci dicono perché sono spente", () => {
-    mount(PAIR, { level: "standard" });
-    editor.select([T, R]);
-    expect(button().hidden).toBe(true);
-    editor.setLevel("expert");
-    expect(button().hidden).toBe(false);
-    expect(button().getAttribute("aria-haspopup")).toBe("menu");
-    editor.select([R]);
-    expect(button().hidden).toBe(true);
-    editor.select([T]);
-    button().click();
-    expect(entries()).toEqual([
-      ["Metti sul tracciato", true, "Scegli un testo e la forma che deve seguire, e nient’altro."],
-      ["Togli dal tracciato", true, "Fra gli oggetti scelti non c’è un testo su tracciato."],
-      ["Rovescia sul tracciato", true, "Fra gli oggetti scelti non c’è un testo su tracciato."],
-    ]);
-  });
-
-  it("mette il testo sul rettangolo, lo rovescia e lo toglie, un passo di annulla ciascuno", () => {
-    mount(PAIR, { level: "expert" });
-    run([T, R], "Metti sul tracciato");
-    expect(spoken()).toBe("Il testo segue il tracciato.");
-    expect(editor.selection).toEqual([T]);
-    expect(editor.engine.text).not.toContain(R);
-    const href = /<textPath startOffset="20" href="#(r[a-z0-9]{8})">Sul colle<\/textPath>/.exec(editor.engine.text)![1]!;
-    expect(editor.engine.text).toContain(`<path id="${href}" fub:role="private" d="M0 50 L200 50 L200 90 L0 90 Z"/>`);
-    run([T], "Rovescia sul tracciato");
-    expect(spoken()).toBe("1 testo è passato dall’altra parte del tracciato.");
-    expect(editor.engine.text).toContain(`d="M0 50 L0 90 L200 90 L200 50 L0 50 Z"`);
-    run([T], "Togli dal tracciato");
-    expect(spoken()).toBe("1 testo è tornato una riga dritta.");
-    expect(editor.engine.text).toMatch(new RegExp(`<text id="${T}" x="[0-9.]+" y="[0-9.]+" font-size="10">`));
-    expect(editor.engine.text).not.toContain("<textPath");
-    expect(changes).toHaveLength(3);
-    for (let i = 0; i < 3; i++) editor.undo();
-    expect(editor.engine.text).toBe(PAIR);
-  });
-});
-
-describe("i poligoni e le stelle, dal livello Standard", () => {
-  const A = "o1a2b3c4d";
-  const H = "oh1h1h1h1";
-  const hexagon = (geom: string): string => {
-    const attrs = polygonalAttrs(readPolygonal("polygon", geom)!)!;
-    return `<path id="${H}" fub:shape="polygon" fub:geom="${attrs["fub:geom"]}" d="${attrs.d}" fill="none" stroke="#000000" stroke-width="2"/>`;
-  };
-  /// Un rettangolo pieno da (100, 100) a (200, 150), e un esagono di raggio
-  /// 50 attorno a (200, 300).
-  const SHAPES = doc(`${LAYER}<rect id="${A}" x="100" y="100" width="100" height="50" fill="#000000"/>${hexagon("200 300 50 6 0 0")}</g>`);
-  const toolButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-keyshortcuts="Y"], [role="toolbar"] button[aria-label="Poligono"], [role="toolbar"] button[aria-label="Stella"]')!;
-  const press = (x: number, y: number, init: Init = {}): void => {
-    surface().dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }));
-  };
-  const move = (x: number, y: number, init: Init = {}): void => {
-    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }));
-  };
-  const release = (x: number, y: number, init: Init = {}): void => {
-    surface().dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }));
-  };
-  const hover = (x: number, y: number): void => {
-    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8) }));
-  };
-  const painted = (id: string): Element => host.querySelector(`[data-scene-id="${id}"]`)!;
-
-  it("il Poligono disegna dal centro, col vertice sotto il puntatore, e lo dice per nome", () => {
-    mount(SOURCE, { level: "standard" });
-    editor.setTool("polygon");
-    expect(spoken()).toBe("Strumento: Poligono.");
-    drag([[200, 200], [200, 170], [200, 150]]);
-    expect(editor.engine.text).toMatch(
-      /<path id="o[a-z0-9]{8}" fub:shape="polygon" fub:geom="200 200 50 6 -30 0" d="M200 250 L156.7 225 L156.7 175 L200 150 L243.3 175 L243.3 225 Z" fill="none" stroke="#000000" stroke-width="4"\/>/,
-    );
-    expect(spoken()).toBe("Esagono aggiunto. Il disegno ha 2 oggetti.");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Poligono.");
-    // Un tocco non disegna niente.
-    drag([[200, 200], [201, 201]]);
-    expect(editor.engine.text).toBe(SOURCE);
-  });
-
-  it("Y di nuovo, o il pulsante, passa alla stella e ritorno; la stella ha una punta sotto il puntatore", () => {
-    mount(SOURCE, { level: "standard" });
-    key("y");
-    expect(editor.tool).toBe("polygon");
-    key("y");
-    expect(spoken()).toBe("Strumento: Stella.");
-    expect(toolButton().getAttribute("aria-label")).toBe("Stella");
-    drag([[200, 200], [200, 160]]);
-    expect(editor.engine.text).toContain('fub:shape="star" fub:geom="200 200 40 5 0.382 0 0" d="M200 160 ');
-    expect(spoken()).toBe("Stella a 5 punte aggiunta. Il disegno ha 2 oggetti.");
-    toolButton().click();
-    expect(spoken()).toBe("Strumento: Poligono.");
-    expect(toolButton().getAttribute("aria-label")).toBe("Poligono");
-    // Un altro strumento, e di nuovo Y: si torna al poligono di prima.
-    editor.setTool("rect");
-    key("y");
-    expect([editor.tool, toolButton().getAttribute("aria-label")]).toEqual(["polygon", "Poligono"]);
-  });
-
-  it("mentre si trascina, ↑ e ↓ cambiano i lati, ← e → il raggio interno della stella, e Maiusc la tiene diritta", () => {
-    mount(SOURCE, { level: "standard" });
-    editor.setTool("polygon");
-    press(200, 200);
-    move(200, 150);
-    key("ArrowUp");
-    key("ArrowUp");
-    expect(spoken()).toBe("Ottagono.");
-    release(200, 150);
-    expect(editor.engine.text).toContain('fub:geom="200 200 50 8 -22.5 0"');
-    // I lati restano per la forma dopo.
-    drag([[300, 200], [330, 240]], { shiftKey: true });
-    expect(editor.engine.text).toContain('fub:geom="300 200 50 8 0 0"');
-    key("y");
-    // Lontano dagli altri, perché niente si agganci.
-    press(437, 419);
-    move(437, 369);
-    key("ArrowRight");
-    expect(spoken()).toBe("Raggio interno 40%.");
-    key("PageDown");
-    expect(spoken()).toBe("Stella a 4 punte.");
-    // Le frecce non spostano niente mentre si disegna.
-    expect(editor.selection).toEqual([]);
-    release(437, 369);
-    expect(editor.engine.text).toContain('fub:shape="star" fub:geom="437 419 50 4 0.4 0 0"');
-    expect(spoken()).toBe("Stella a 4 punte aggiunta. Il disegno ha 4 oggetti.");
-  });
-
-  it("da tastiera: Spazio preme sul centro, le frecce tirano il vertice, PgUp e PgDn cambiano i lati", () => {
-    mount(SOURCE, { level: "standard" });
-    size(400, 300);
-    key("y");
-    key("ArrowRight");
-    key(" ");
-    key("ArrowUp", { shiftKey: true });
-    key("PageUp");
-    expect(spoken()).toBe("Ettagono.");
-    key(" ");
-    // Con un numero dispari di lati, diritto vuol dire un vertice in alto.
-    expect(editor.engine.text).toContain('fub:shape="polygon" fub:geom="210 150 50 7 0 0"');
-    // Il vertice tirato è sul bordo della pagina, e si aggancia.
-    expect(spoken()).toBe("Ettagono aggiunto. Il disegno ha 2 oggetti. Agganciato: il punto in linea con il bordo inferiore della pagina.");
-  });
-
-  it("Esc a metà lascia il disegno com'era", () => {
-    mount(SOURCE, { level: "standard" });
-    editor.setTool("polygon");
-    press(200, 200);
-    move(240, 230);
-    key("Escape");
-    release(240, 230);
-    expect(editor.engine.text).toBe(SOURCE);
-    expect(changes).toEqual([]);
-  });
-
-  it("all'Essenziale non c'è, e Y non fa niente", () => {
-    mount(SOURCE);
-    key("y");
-    expect(editor.tool).toBe("pen");
-    expect(host.querySelector('[role="toolbar"] button[data-tool="polygon"]:not([hidden])')).toBeNull();
-  });
-
-  it("«Forma» nel pannello: senza selezione lo strumento, con un poligono scelto i suoi lati e il tipo, un passo ciascuno", () => {
-    mount(SHAPES, { level: "standard" });
-    editor.setTool("polygon");
-    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!.click();
-    expect(property("shape").textContent).toContain("Per i poligoni e le stelle che disegnerai.");
-    expect(propertyLabel("count")).toBe("Lati");
-    enter(propertyInput("count"), "5");
-    drag([[400, 200], [400, 150]]);
-    expect(editor.engine.text).toContain('fub:geom="400 200 50 5 0 0"');
-    // Il tipo dello strumento dal pannello: il pulsante lo segue.
-    property("shape").querySelector<HTMLButtonElement>('button[aria-label="Stella"]')!.click();
-    expect(toolButton().getAttribute("aria-label")).toBe("Stella");
-    expect(propertyLabel("count")).toBe("Punte");
-    expect(propertyInput("inner").value).toBe("38,2");
-    // Con l'esagono scelto, il pannello cambia lui.
-    editor.setTool("select");
-    editor.select([H]);
-    expect(propertyLabel("count")).toBe("Lati");
-    expect(propertyInput("count").value).toBe("6");
-    const before = editor.engine.text;
-    enter(propertyInput("count"), "8");
-    expect(editor.engine.text).toContain(`<path id="${H}" fub:shape="polygon" fub:geom="200 300 50 8 0 0" d="${polygonalAttrs(readPolygonal("polygon", "200 300 50 8 0 0")!)!.d}"`);
-    expect(editor.selection).toEqual([H]);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Lati o punte.");
-    expect(editor.engine.text).toBe(before);
-    property("shape").querySelector<HTMLButtonElement>('button[aria-label="Stella"]')!.click();
-    expect(editor.engine.text).toContain(`<path id="${H}" fub:shape="star" fub:geom="200 300 50 6 0.382 0 0"`);
-    expect(propertyLabel("count")).toBe("Punte");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Tipo di forma.");
-    // Il raggio degli angoli vale anche per il rettangolo, in un passo.
-    editor.select([A, H]);
-    enter(propertyInput("corner"), "4");
-    expect(editor.engine.text).toContain(`<rect id="${A}" x="100" y="100" width="100" height="50" rx="4" fill="#000000"/>`);
-    expect(editor.engine.text).toContain('fub:geom="200 300 50 6 0 4"');
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Raggio degli angoli.");
-    expect(editor.engine.text).toBe(before);
-  });
-
-  it("la maniglia degli angoli arrotonda il rettangolo scelto mentre la si tira, in un passo che si annulla", () => {
-    mount(SHAPES, { level: "standard" });
-    editor.setTool("select");
-    editor.select([A]);
-    // Sulla bisettrice dell'angolo in alto a sinistra, 16 pixel dentro.
-    const at = 100 + 16 * Math.SQRT1_2;
-    hover(at, at);
-    expect(surface().dataset.grip).toBe("nwse");
-    press(at, at);
-    move(at + 5, at + 5);
-    move(at + 10, at + 10);
-    expect(painted(A).getAttribute("rx")).toBe("10");
-    expect(editor.engine.text).toBe(SHAPES);
-    release(at + 10, at + 10);
-    expect(editor.engine.text).toContain(`<rect id="${A}" x="100" y="100" width="100" height="50" rx="10" fill="#000000"/>`);
-    expect(spoken()).toBe("Raggio degli angoli 10.");
-    expect(editor.selection).toEqual([A]);
-    expect(changes).toHaveLength(1);
-    // La maniglia sta dove il raggio l'ha portata, e torna indietro.
-    press(at + 10, at + 10);
-    move(at - 20, at - 20);
-    release(at - 20, at - 20);
-    expect(editor.engine.text).toBe(SHAPES);
-    editor.undo();
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Raggio degli angoli.");
-    expect(editor.engine.text).toBe(SHAPES);
-  });
-
-  it("e quella di un poligono sta sul vertice più in alto, e scrive il raggio nella sua geometria", () => {
-    mount(SHAPES, { level: "standard" });
-    editor.setTool("select");
-    editor.select([H]);
-    // Il vertice in alto a sinistra è in (175, 256,7); la bisettrice va al
-    // centro, a 60° sotto l'orizzontale.
-    const [ix, iy] = [0.5, Math.sqrt(3) / 2];
-    const [x, y] = [175 + 16 * ix, 300 - 25 * Math.sqrt(3) + 16 * iy];
-    hover(x, y);
-    expect(surface().dataset.grip).toBe("nwse");
-    // 10 di raggio portano il centro dell'arco 10 / sin 60° più in là.
-    const along = 10 / (Math.sqrt(3) / 2);
-    press(x, y);
-    move(x + along * ix, y + along * iy);
-    expect(painted(H).getAttribute("d")).toBe(polygonalAttrs(readPolygonal("polygon", "200 300 50 6 0 10")!)!.d);
-    release(x + along * ix, y + along * iy);
-    expect(editor.engine.text).toContain('fub:geom="200 300 50 6 0 10"');
-    expect(spoken()).toBe("Raggio degli angoli 10.");
-  });
-
-  it("un tocco sulla maniglia o Esc a metà non cambiano niente; Esc riporta la forma di prima", () => {
-    mount(SHAPES, { level: "standard" });
-    editor.setTool("select");
-    editor.select([A]);
-    const at = 100 + 16 * Math.SQRT1_2;
-    drag([[at, at], [at, at]]);
-    expect(editor.selection).toEqual([A]);
-    press(at, at);
-    move(at + 20, at + 20);
-    expect(painted(A).getAttribute("rx")).toBe("20");
-    key("Escape");
-    expect(painted(A).hasAttribute("rx")).toBe(false);
-    release(at + 20, at + 20);
-    expect(editor.engine.text).toBe(SHAPES);
-    expect(changes).toEqual([]);
-  });
-
-  it("non c'è su una forma troppo piccola sullo schermo, con più oggetti scelti, o all'Essenziale", () => {
-    mount(SOURCE, { level: "standard" });
-    editor.setTool("select");
-    // Un quadrato di 20: la maniglia avrebbe meno di 32 pixel per scorrere.
-    editor.select([A]);
-    const at = 60 + 16 * Math.SQRT1_2;
-    hover(at, at);
-    expect(surface().dataset.grip).toBeUndefined();
-    owner.close();
-    owner = openLifetime();
-    host.replaceChildren();
-    mount(SHAPES, { level: "standard" });
-    editor.setTool("select");
-    editor.select([A, H]);
-    hover(100 + 16 * Math.SQRT1_2, 100 + 16 * Math.SQRT1_2);
-    expect(surface().dataset.grip).toBeUndefined();
-    editor.setLevel("essential");
-    editor.select([A]);
-    hover(100 + 16 * Math.SQRT1_2, 100 + 16 * Math.SQRT1_2);
-    expect(surface().dataset.grip).toBeUndefined();
-  });
-
-  it("«?» elenca i tasti del poligono", () => {
-    mount(SOURCE, { level: "standard" });
-    key("?", { shiftKey: true });
-    expect([...dialog().querySelectorAll("caption")].map((caption) => caption.textContent)).toContain("Poligono");
-    const rows = [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
-    expect(rows).toContainEqual(["Y", "Di nuovo, dal poligono alla stella e ritorno"]);
-    expect(rows).toContainEqual(["↑ o ↓ o PgUp o PgDn", "Mentre si disegna, un lato o una punta in più o in meno; disegnando con la tastiera, PgUp e PgDn"]);
-    expect(rows).toContainEqual(["← o →", "Mentre si disegna una stella, il raggio interno"]);
-    expect(rows).toContainEqual(["Shift", "Tenuto, la forma resta diritta"]);
-    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
-    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
-  });
-});
-
-describe("le forme dal tratto, dal livello Standard", () => {
+describe("le forme dal tratto, nel Completo", () => {
   /// La pagina larga quanto i tratti: non cresce, e i passi sono quelli
   /// dei tratti.
   const PAGE = SOURCE.replace('viewBox="0 0 100 100"', 'viewBox="0 0 600 600"');
@@ -3551,7 +1815,7 @@ describe("le forme dal tratto, dal livello Standard", () => {
   });
 
   it("un tratto a penna tenuto fermo mezzo secondo diventa la forma a cui somiglia, e annulla riporta l'inchiostro", () => {
-    mount(PAGE, { level: "standard" });
+    mount(PAGE);
     press(RECT);
     hold(499);
     expect(preview()).toBeNull();
@@ -3575,7 +1839,7 @@ describe("le forme dal tratto, dal livello Standard", () => {
   });
 
   it("muovendo dopo la tenuta la forma cresce e gira attorno al centro, e Maiusc la tiene regolare", () => {
-    mount(PAGE, { level: "standard" });
+    mount(PAGE);
     press(RECT);
     hold(500);
     // Il tremito della mano ferma non la muove.
@@ -3592,7 +1856,7 @@ describe("le forme dal tratto, dal livello Standard", () => {
   });
 
   it("una linea tenuta ferma diventa un segmento, e la sua fine segue il puntatore", () => {
-    mount(PAGE, { level: "standard" });
+    mount(PAGE);
     press(LINE);
     hold(500);
     expect(spoken()).toBe("Linea.");
@@ -3602,7 +1866,7 @@ describe("le forme dal tratto, dal livello Standard", () => {
   });
 
   it("un tratto piccolo, o che non somiglia a una forma, resta inchiostro e si continua a disegnare", () => {
-    mount(PAGE, { level: "standard" });
+    mount(PAGE);
     press(trace([[100, 100], [115, 100], [115, 110], [100, 110], [100, 100]]));
     hold(800);
     lift(100, 100);
@@ -3620,7 +1884,7 @@ describe("le forme dal tratto, dal livello Standard", () => {
   });
 
   it("Esc lascia il tratto e la forma", () => {
-    mount(PAGE, { level: "standard" });
+    mount(PAGE);
     press(RECT);
     hold(500);
     key("Escape");
@@ -3630,14 +1894,14 @@ describe("le forme dal tratto, dal livello Standard", () => {
     expect(editor.engine.text).toBe(PAGE);
   });
 
-  it("non c'è all'Essenziale, con l'evidenziatore, né con l'interruttore spento, che si ricorda", () => {
+  it("non c'è nel Semplice, con l'evidenziatore, né con l'interruttore spento, che si ricorda", () => {
     const grids: unknown[] = [];
-    mount(PAGE, { onGridChange: (grid) => grids.push(grid) });
+    mount(PAGE, { workspace: "simple", onGridChange: (grid) => grids.push(grid) });
     press(RECT);
     hold(600);
     lift(100, 100);
     expect(strokes()).toHaveLength(1);
-    editor.setLevel("standard");
+    editor.setWorkspace("full");
     editor.setTool("highlighter");
     press(RECT);
     hold(600);
@@ -3663,7 +1927,7 @@ describe("le forme dal tratto, dal livello Standard", () => {
   });
 
   it("«Rendi forma» c'è con un tratto a penna scelto, e fa forme dei tratti in un passo che si annulla", () => {
-    mount(PAGE, { level: "standard" });
+    mount(PAGE);
     drag(RECT);
     drag(trace([[100, 300], [140, 360], [180, 300], [220, 360], [260, 300]]));
     const [rect, zigzag] = strokes();
@@ -3684,13 +1948,13 @@ describe("le forme dal tratto, dal livello Standard", () => {
     editor.undo();
     expect(editor.engine.text).toBe(before);
     expect(spoken()).toBe("Annullato: Forma dal tratto.");
-    editor.setLevel("essential");
+    editor.setWorkspace("simple");
     editor.select([rect!]);
     expect(shapeButton().hidden).toBe(true);
   });
 
   it("«?» elenca il tasto delle forme dal tratto", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     key("?", { shiftKey: true });
     const tables = [...dialog().querySelectorAll(".keys-list > table")].map((table) => ({
       caption: table.querySelector("caption")!.textContent,
@@ -3701,7 +1965,7 @@ describe("le forme dal tratto, dal livello Standard", () => {
   });
 });
 
-describe("il pannello delle proprietà, dal livello Standard", () => {
+describe("il pannello delle proprietà, nel Completo", () => {
   const A = "o1a2b3c4d";
   const B = "ob2b2b2b2";
   const TWO = doc(
@@ -3718,7 +1982,7 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
 
   it("«Proprietà» lo apre e lo chiude accanto al foglio, e chi monta l'editor lo sa", () => {
     const panels: (boolean | null)[] = [];
-    mount(SOURCE, { level: "standard", onGridChange: (grid) => panels.push(grid.panel) });
+    mount(SOURCE, { onGridChange: (grid) => panels.push(grid.panel) });
     expect(button().hasAttribute("aria-haspopup")).toBe(false);
     expect(button().getAttribute("aria-controls")).toBe(properties().id);
     expect(button().getAttribute("aria-expanded")).toBe("false");
@@ -3734,10 +1998,10 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
     expect(dock().hidden).toBe(true);
     expect(document.activeElement).toBe(surface());
     expect(panels).toEqual([true, false]);
-    // Senza il pannello, all'Essenziale, il pulsante apre una finestra.
-    editor.setLevel("essential");
-    expect(button().getAttribute("aria-haspopup")).toBe("dialog");
-    expect(button().hasAttribute("aria-expanded")).toBe(false);
+    // Anche il Semplice ha il pannello: il pulsante non apre una finestra.
+    editor.setWorkspace("simple");
+    expect(button().hasAttribute("aria-haspopup")).toBe(false);
+    expect(button().getAttribute("aria-expanded")).toBe("false");
   });
 
   it("si apre da sé se l'editor ha posto accanto al foglio, o come l'ha lasciato chi disegna", () => {
@@ -3756,7 +2020,7 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
       Object.defineProperty(host.querySelector(".draw-editor")!, "clientWidth", { configurable: true, value: width });
       for (const callback of observers.splice(0)) callback([], {} as ResizeObserver);
     };
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     // Finché l'editor non ha una misura, il pannello aspetta di saperla.
     expect(properties().hidden).toBe(true);
     measured(1000);
@@ -3765,12 +2029,12 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
     expect(editor.grid.panel).toBeNull();
     editor.dispose();
 
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     measured(400);
     expect(properties().hidden).toBe(true);
     editor.dispose();
 
-    mount(SOURCE, { level: "standard", grid: { ...editor.grid, panel: false } });
+    mount(SOURCE, { grid: { ...editor.grid, panel: false } });
     measured(1000);
     expect(properties().hidden).toBe(true);
     // Chi monta l'editor lo riapre come l'aveva lasciato chi disegna.
@@ -3780,7 +2044,7 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
   });
 
   it("Invio ci porta; posizione e misure si scrivono, ciascuna in un passo che si annulla col suo nome", () => {
-    mount(TWO, { level: "standard" });
+    mount(TWO);
     editor.select([A]);
     editor.focus();
     key("Enter");
@@ -3809,7 +2073,7 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
   });
 
   it("il lucchetto tiene le proporzioni, finché chi disegna non lo riapre", () => {
-    mount(TWO, { level: "standard" });
+    mount(TWO);
     editor.select([A]);
     key("Enter");
     const lock = (): HTMLButtonElement => property("ratio").querySelector<HTMLButtonElement>("button")!;
@@ -3825,7 +2089,7 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
   });
 
   it("l'aspetto: il riempimento, lo spessore in punti e l'opacità", () => {
-    mount(TWO, { level: "standard" });
+    mount(TWO);
     editor.select([A]);
     key("Enter");
     // In un documento in pixel lo spessore è in pixel; negli altri, in punti.
@@ -3853,14 +2117,14 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
       `${LAYER}<text id="${T}" x="10" y="40" fill="#000000" font-family="Inter, sans-serif" font-size="32">` +
         `<tspan x="10" dy="0">Uno</tspan><tspan x="10" dy="40">Due <tspan font-weight="bold">tre</tspan></tspan></text></g>`,
     );
-    mount(TEXT, { level: "standard" });
+    mount(TEXT);
     editor.select([T]);
     key("Enter");
     const toggle = (label: string): HTMLButtonElement => property("emphasis").querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
     const opening = (): string => /<text [^>]*>/.exec(editor.engine.text)![0];
-    // Il grassetto di una parola rende misto il peso. Lo stile di serie,
-    // dallo Standard, sta nel menu degli stili di testo.
-    expect(property("preset")).toBeNull();
+    // Il grassetto di una parola rende misto il peso. Senza gli stili del
+    // documento (ADR 0231) lo stile di serie ha il suo campo.
+    expect(property("preset")).not.toBeNull();
     expect(property("weight").querySelector("select")!.value).toBe("");
     expect(toggle("Grassetto").getAttribute("aria-pressed")).toBe("mixed");
     expect(toggle("Corsivo").getAttribute("aria-pressed")).toBe("false");
@@ -3895,32 +2159,8 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
     expect(editor.engine.text).toBe(TEXT);
   });
 
-  it("il testo in area: la larghezza del riquadro lo manda di nuovo a capo, e il tipo lo fa da punto", () => {
-    const T = "ot1t1t1t1";
-    // Corpo 10, a stima: dieci caratteri per riga.
-    const AREA = doc(`${LAYER}<text id="${T}" fub:wrap="60" x="20" y="40" font-size="10"><tspan x="20" dy="0">Il testo</tspan><tspan fub:join="space" x="20" dy="12.5">va a capo</tspan></text></g>`);
-    mount(AREA, { level: "expert" });
-    editor.select([T]);
-    key("Enter");
-    const segment = (label: string): HTMLButtonElement => property("textForm").querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
-    expect(propertyInput("wrap").value).toBe("60");
-    expect(segment("In area").getAttribute("aria-pressed")).toBe("true");
-    enter(propertyInput("wrap"), "100");
-    expect(editor.engine.text).toContain('<tspan x="20" dy="0">Il testo va a</tspan>');
-    segment("Da punto").click();
-    expect(editor.engine.text).toMatch(/<text id="ot1t1t1t1" x="20" y="40" font-size="10">\s*<tspan x="20" dy="0">Il testo va a<\/tspan>\s*<tspan x="20" dy="12.5">capo<\/tspan>/);
-    // Da punto non ha riquadro.
-    expect(property("wrap").hidden).toBe(true);
-    const undone = [1, 2].map(() => {
-      editor.undo();
-      return spoken();
-    });
-    expect(undone).toEqual(["Annullato: Tipo di testo.", "Annullato: Larghezza del riquadro."]);
-    expect(editor.engine.text).toBe(AREA);
-  });
-
   it("«Disponi» ha i comandi della barra, che dicono quando non servono", () => {
-    mount(TWO, { level: "standard" });
+    mount(TWO);
     editor.select([A, B]);
     key("Enter");
     expect(properties().querySelector(".draw-properties-subject")!.textContent).toBe("2 oggetti");
@@ -3935,7 +2175,7 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
 
   it("senza selezione: la pagina, l'unità, la descrizione e la vista", () => {
     const grids: (readonly [boolean | null, boolean])[] = [];
-    mount(TWO, { level: "standard", onGridChange: (grid) => grids.push([grid.panel, grid.shown]) });
+    mount(TWO, { onGridChange: (grid) => grids.push([grid.panel, grid.shown]) });
     key("Enter");
     expect(propertyInput("pageWidth").value).toBe("100");
     enter(propertyInput("pageWidth"), "200");
@@ -3961,7 +2201,7 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
   });
 
   it("in un documento che si legge soltanto mostra, e non scrive", () => {
-    mount(TWO, { level: "standard" });
+    mount(TWO);
     editor.select([A]);
     key("Enter");
     editor.setReadOnly(true);
@@ -3974,1509 +2214,12 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
   });
 });
 
-describe("i colori del documento, dal livello Standard", () => {
-  const A = "o1a2b3c4d";
-  const B = "ob2b2b2b2";
-  const C = "oc3c3c3c3";
-  /// Il campione «Blu marca», che il riempimento di A usa; B e C hanno il
-  /// colore scritto, C proprio quello del campione.
-  const SWATCHED = doc(
-    '<defs id="fub-defs"><linearGradient id="rs" fub:role="swatch" fub:name="Blu marca" gradientUnits="userSpaceOnUse"><stop stop-color="#0072b2"/></linearGradient></defs>' +
-      `${LAYER}<rect id="${A}" x="60" y="60" width="20" height="20" fill="url(#rs) #0072b2" stroke="#000000" stroke-width="2"/>` +
-      `<rect id="${B}" x="10" y="20" width="10" height="10" fill="#d55e00"/><rect id="${C}" x="30" y="20" width="10" height="10" fill="#0072b2"/></g>`,
-  );
-  const panelButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!;
-  const section = (): HTMLElement => properties().querySelector<HTMLElement>('.draw-properties-section[data-section="colors"]')!;
-  const group = (kind: string): HTMLElement => section().querySelector<HTMLElement>(`.draw-swatches-group[data-group="${kind}"]`)!;
-  const chips = (kind: string): HTMLButtonElement[] => [...group(kind).querySelectorAll<HTMLButtonElement>(".draw-swatches-chip")];
-  const chip = (kind: string, key: string): HTMLButtonElement => group(kind).querySelector<HTMLButtonElement>(`.draw-swatches-chip[data-key="${key}"]`)!;
-  const keys = (kind: string): string[] => chips(kind).map((each) => each.dataset.key!);
-  const labels = (kind: string): string[] => chips(kind).map((each) => each.getAttribute("aria-label")!);
-  /// I colori detti «di adesso», con la loro griglia.
-  const current = (): string[] =>
-    [...section().querySelectorAll<HTMLElement>('.draw-swatches-chip[aria-current="true"]')].map(
-      (each) => `${each.closest<HTMLElement>(".draw-swatches-group")!.dataset.group} ${each.dataset.key}`,
-    );
-  const addButton = (): HTMLButtonElement => section().querySelector<HTMLButtonElement>(".draw-swatches-add")!;
-  const targetButton = (target: string): HTMLButtonElement => section().querySelector<HTMLButtonElement>(`.draw-swatches-target [data-target="${target}"]`)!;
-  const form = (): HTMLElement => section().querySelector<HTMLElement>(".draw-swatches-form")!;
-  const formTitle = (): string => form().querySelector(".draw-swatches-form-title")!.textContent!;
-  const nameInput = (): HTMLInputElement => form().querySelectorAll<HTMLInputElement>('input[type="text"]')[0]!;
-  const colorInput = (): HTMLInputElement => form().querySelectorAll<HTMLInputElement>('input[type="text"]')[1]!;
-  const shiftClick = (target: HTMLElement): void => {
-    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, shiftKey: true }));
-  };
-  /// Il menu di un colore, col clic destro, e una sua voce.
-  const menuOf = (kind: string, key: string): void => {
-    chip(kind, key).dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
-  };
-  const item = (label: string): HTMLButtonElement => {
-    const open = document.querySelectorAll<HTMLElement>(".context-menu");
-    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((entry) => entry.querySelector(".menu-label")!.textContent === label)!;
-  };
-  /// Il rettangolo `id` com'è scritto adesso.
-  const rect = (id: string): string => new RegExp(`<rect id="${id}"[^>]*/>`).exec(editor.engine.text)![0];
-  /// Il colore dei tratti della penna e del contorno dei rettangoli nuovi,
-  /// nell'ordine del file.
-  const inked = (): string[] => [...editor.engine.text.matchAll(/fub:tool="pen"[^>]*? fill="([^"]*)"/g)].map((match) => match[1]!);
-  const outlined = (): string[] =>
-    [...editor.engine.text.matchAll(new RegExp(`<rect id="(?!(?:${A}|${B}|${C})")[^"]*"[^>]*? stroke="([^"]*)"`, "g"))].map((match) => match[1]!);
-  /// Il colore che la barra dà per scelto.
-  const checked = (): string | null => well().querySelector(".kit-color-well-name")?.textContent ?? null;
-
-  afterEach(() => {
-    closeContextMenu();
-    for (const open of document.querySelectorAll(".context-menu")) open.remove();
-  });
-
-  it("mostra i campioni, i colori scritti e i recenti, contati, e il colore di adesso", () => {
-    mount(SWATCHED, { level: "standard", colors: ["#e69f00"] });
-    panelButton().click();
-    expect(section().hidden).toBe(false);
-    expect(labels("swatches")).toEqual(["Blu marca, campione #0072b2, usato da 1 oggetto"]);
-    expect(keys("used")).toEqual(["#000000", "#d55e00", "#0072b2"]);
-    expect(labels("used")).toEqual(["Nero, usato da 1 oggetto", "Vermiglio, usato da 1 oggetto", "Blu, usato da 1 oggetto"]);
-    expect(keys("recent")).toEqual(["#e69f00"]);
-    // Senza selezione il colore di adesso è quello con cui si disegna.
-    expect(current()).toEqual(["used #000000"]);
-    expect(formatIssues(checkAccessibility(section()))).toBe("");
-    // Con una selezione, quello del riempimento; «Applica a» sceglie il
-    // contorno.
-    editor.select([A]);
-    expect(current()).toEqual(["swatches rs"]);
-    targetButton("stroke").click();
-    expect(current()).toEqual(["used #000000"]);
-    expect(formatIssues(checkAccessibility(section()))).toBe("");
-  });
-
-  it("un clic dà il colore al riempimento della selezione e Maiusc al contorno; un campione si scrive col suo colore", () => {
-    const remembered: (readonly string[])[] = [];
-    mount(SWATCHED, { level: "standard", onColorsChange: (colors) => remembered.push(colors) });
-    editor.select([B]);
-    key("Enter");
-    chip("swatches", "rs").click();
-    expect(rect(B)).toBe(`<rect id="${B}" x="10" y="20" width="10" height="10" fill="url(#rs) #0072b2"/>`);
-    expect(spoken()).toBe("Riempimento: Blu marca.");
-    expect(labels("swatches")).toEqual(["Blu marca, campione #0072b2, usato da 2 oggetti"]);
-    expect(current()).toEqual(["swatches rs"]);
-    // Un campione non è un colore recente: ha la sua griglia.
-    expect(remembered).toEqual([]);
-    shiftClick(chip("used", "#000000"));
-    expect(rect(B)).toContain('stroke="#000000"');
-    expect(spoken()).toBe("Contorno: Nero.");
-    expect(remembered).toEqual([["#000000"]]);
-    expect(keys("recent")).toEqual(["#000000"]);
-    editor.undo();
-    expect(rect(B)).not.toContain("stroke=");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Riempimento.");
-    expect(editor.engine.text).toBe(SWATCHED);
-  });
-
-  it("«Nuovo campione…» fa un campione del colore della selezione, e il fuoco va a lui", () => {
-    mount(SWATCHED, { level: "standard" });
-    editor.select([B]);
-    key("Enter");
-    addButton().click();
-    expect(formTitle()).toBe("Nuovo campione");
-    // Un colore della tavolozza dà il suo nome al campione.
-    expect(nameInput().value).toBe("Vermiglio");
-    expect(colorInput().value).toBe("#d55e00");
-    expect(document.activeElement).toBe(nameInput());
-    key("Enter", {}, nameInput());
-    const made = /<linearGradient id="([a-z0-9]+)" fub:role="swatch" fub:name="Vermiglio" gradientUnits="userSpaceOnUse">\s*<stop stop-color="#d55e00"\/>\s*<\/linearGradient>/.exec(
-      editor.engine.text,
-    );
-    expect(made).not.toBeNull();
-    // Nuovo, il campione non prende chi ha il colore scritto.
-    expect(rect(B)).toContain('fill="#d55e00"');
-    expect(spoken()).toBe("Campione «Vermiglio» creato.");
-    expect(form().hidden).toBe(true);
-    expect(keys("swatches")).toEqual(["rs", made![1]]);
-    expect(document.activeElement).toBe(chip("swatches", made![1]!));
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Nuovo campione.");
-    expect(editor.engine.text).toBe(SWATCHED);
-  });
-
-  it("«Rendi campione…» dal menu di un colore scritto: chi lo usa passa al campione", () => {
-    mount(SWATCHED, { level: "standard" });
-    panelButton().click();
-    menuOf("used", "#d55e00");
-    item("Rendi campione…").click();
-    expect(formTitle()).toBe("Rendi campione #d55e00");
-    typeIn(nameInput(), "Accento");
-    key("Enter", {}, nameInput());
-    const id = /<linearGradient id="([a-z0-9]+)" fub:role="swatch" fub:name="Accento"/.exec(editor.engine.text)![1]!;
-    expect(rect(B)).toBe(`<rect id="${B}" x="10" y="20" width="10" height="10" fill="url(#${id}) #d55e00"/>`);
-    expect(spoken()).toBe("Campione «Accento» creato: lo usa 1 oggetto.");
-    expect(keys("used")).toEqual(["#000000", "#0072b2"]);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Colore reso campione.");
-    expect(editor.engine.text).toBe(SWATCHED);
-  });
-
-  it("«Usa il campione» porta al campione chi ha il suo colore scritto", () => {
-    mount(SWATCHED, { level: "standard" });
-    panelButton().click();
-    menuOf("used", "#0072b2");
-    item("Usa il campione «Blu marca»").click();
-    expect(rect(C)).toBe(`<rect id="${C}" x="30" y="20" width="10" height="10" fill="url(#rs) #0072b2"/>`);
-    expect(spoken()).toBe("Ora «Blu marca» lo usano 2 oggetti.");
-    expect(keys("used")).toEqual(["#000000", "#d55e00"]);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Oggetti passati a un campione.");
-    expect(editor.engine.text).toBe(SWATCHED);
-  });
-
-  it("F2 rinomina un campione, e «Cambia colore…» lo cambia per chi lo usa", () => {
-    mount(SWATCHED, { level: "standard" });
-    panelButton().click();
-    chip("swatches", "rs").focus();
-    key("F2", {}, chip("swatches", "rs"));
-    expect(formTitle()).toBe("Rinomina «Blu marca»");
-    expect(nameInput().value).toBe("Blu marca");
-    typeIn(nameInput(), "Blu scuro");
-    key("Enter", {}, nameInput());
-    expect(editor.engine.text).toContain('fub:name="Blu scuro"');
-    expect(spoken()).toBe("Il campione ora si chiama «Blu scuro».");
-    expect(document.activeElement).toBe(chip("swatches", "rs"));
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Nome di un campione.");
-    expect(editor.engine.text).toBe(SWATCHED);
-
-    menuOf("swatches", "rs");
-    item("Cambia colore…").click();
-    expect(formTitle()).toBe("Cambia il colore di «Blu marca»");
-    expect(document.activeElement).toBe(colorInput());
-    typeIn(colorInput(), "#56b4e9");
-    key("Enter", {}, colorInput());
-    expect(editor.engine.text).toContain('<stop stop-color="#56b4e9"/>');
-    expect(rect(A)).toContain('fill="url(#rs) #56b4e9"');
-    // Chi ha il colore di prima scritto lo tiene: non usa il campione.
-    expect(rect(C)).toContain('fill="#0072b2"');
-    expect(spoken()).toBe("«Blu marca» ora è Azzurro.");
-    expect(labels("swatches")).toEqual(["Blu marca, campione #56b4e9, usato da 1 oggetto"]);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Colore di un campione.");
-    expect(editor.engine.text).toBe(SWATCHED);
-  });
-
-  it("Canc elimina un campione: chi lo usava tiene il suo colore, scritto, e il fuoco resta nella griglia", () => {
-    mount(SWATCHED, { level: "standard" });
-    panelButton().click();
-    chip("swatches", "rs").focus();
-    key("Delete", {}, chip("swatches", "rs"));
-    expect(editor.engine.text).not.toContain("linearGradient");
-    expect(rect(A)).toContain('fill="#0072b2"');
-    expect(spoken()).toBe("Campione «Blu marca» eliminato: chi lo usava tiene il suo colore.");
-    expect(keys("swatches")).toEqual([]);
-    expect(document.activeElement).toBe(addButton());
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Campione eliminato.");
-    expect(editor.engine.text).toBe(SWATCHED);
-  });
-
-  it("il menu di un colore sceglie gli oggetti che lo mostrano, se si possono scegliere", () => {
-    mount(SWATCHED, { level: "standard" });
-    panelButton().click();
-    menuOf("swatches", "rs");
-    item("Scegli gli oggetti con questo campione").click();
-    expect(editor.selection).toEqual([A]);
-    expect(spoken()).toBe("1 oggetto scelto.");
-    menuOf("used", "#0072b2");
-    item("Scegli gli oggetti con questo colore").click();
-    expect(editor.selection).toEqual([C]);
-    editor.dispose();
-
-    mount(
-      doc(
-        `${LAYER}<rect id="${A}" x="0" y="0" width="5" height="5" fill="#000000"/></g>` +
-          `<g id="l2" fub:layer="Bloccato" fub:locked="true"><rect id="${B}" x="10" y="0" width="5" height="5" fill="#009e73"/></g>`,
-      ),
-      { level: "standard" },
-    );
-    editor.select([A]);
-    key("Enter");
-    menuOf("used", "#009e73");
-    item("Scegli gli oggetti con questo colore").click();
-    expect(spoken()).toBe("Nessun oggetto che si può scegliere mostra questo colore.");
-    expect(editor.selection).toEqual([A]);
-  });
-
-  it("senza selezione un campione è il colore con cui si disegna: gli oggetti nuovi lo usano e lo seguono", () => {
-    mount(SWATCHED, { level: "standard" });
-    panelButton().click();
-    chip("swatches", "rs").click();
-    expect(spoken()).toBe("Colore: Blu marca.");
-    expect(current()).toEqual(["swatches rs"]);
-    expect(checked()).toBe("Blu");
-    drag([[100, 100], [140, 120]]);
-    editor.setTool("rect");
-    drag([[100, 20], [130, 50]]);
-    expect(editor.selection).toEqual([]);
-    expect(inked()).toEqual(["url(#rs) #0072b2"]);
-    expect(outlined()).toEqual(["url(#rs) #0072b2"]);
-    expect(labels("swatches")).toEqual(["Blu marca, campione #0072b2, usato da 3 oggetti"]);
-
-    // Il campione cambia colore, e ciò che si disegna con lui; anche
-    // annullando.
-    menuOf("swatches", "rs");
-    item("Cambia colore…").click();
-    typeIn(colorInput(), "#009e73");
-    key("Enter", {}, colorInput());
-    expect(checked()).toBe("Verde");
-    expect(current()).toEqual(["swatches rs"]);
-    // Annullare sceglie gli oggetti che tornano come prima.
-    editor.undo();
-    expect(checked()).toBe("Blu");
-    editor.select([]);
-    expect(current()).toEqual(["swatches rs"]);
-
-    // Un colore della barra lascia il campione.
-    pickSwatch("Vermiglio");
-    well().click();
-    expect(current()).toEqual(["used #d55e00", "recent #d55e00"]);
-    drag([[140, 20], [170, 50]]);
-    expect(outlined()).toEqual(["url(#rs) #0072b2", "#d55e00"]);
-
-    // Se il campione se ne va, ciò che si disegna tiene il suo colore,
-    // scritto.
-    chip("swatches", "rs").click();
-    chip("swatches", "rs").focus();
-    key("Delete", {}, chip("swatches", "rs"));
-    expect(current()).toEqual(["used #0072b2"]);
-    drag([[180, 20], [210, 50]]);
-    expect(outlined()).toEqual(["#0072b2", "#d55e00", "#0072b2"]);
-  });
-
-  it("il colore lascia il campione con un disegno nuovo, o senza «Colori del documento»; e lì la sezione non c'è", () => {
-    mount(SWATCHED, { level: "standard" });
-    panelButton().click();
-    chip("swatches", "rs").click();
-    editor.setLevel("custom", ["pen", "properties", "colors"]);
-    expect(section().hidden).toBe(true);
-    editor.setLevel("standard");
-    expect(section().hidden).toBe(false);
-    expect(current()).toEqual(["used #0072b2"]);
-    drag([[100, 100], [140, 120]]);
-    expect(inked()).toEqual(["#0072b2"]);
-
-    chip("swatches", "rs").click();
-    editor.setEngine(SceneEngine.open(SOURCE));
-    expect(keys("swatches")).toEqual([]);
-    drag([[100, 100], [140, 120]]);
-    expect(inked()).toEqual(["#0072b2"]);
-  });
-
-  it("i colori scritti entrano fra i recenti, che chi monta l'editor ricorda; i campioni no", () => {
-    const remembered: (readonly string[])[] = [];
-    mount(SWATCHED, { level: "standard", colors: ["#cc79a7"], onColorsChange: (colors) => remembered.push(colors) });
-    editor.select([B]);
-    key("Enter");
-    expect(keys("recent")).toEqual(["#cc79a7"]);
-    enter(propertyInput("fill"), "#e69f00");
-    expect(remembered).toEqual([["#e69f00", "#cc79a7"]]);
-    expect(keys("recent")).toEqual(["#e69f00", "#cc79a7"]);
-    // Il campione scritto per nome nel campo non è un recente.
-    enter(propertyInput("fill"), "blu marca");
-    expect(rect(B)).toContain('fill="url(#rs) #0072b2"');
-    expect(remembered).toHaveLength(1);
-    // Un recente si dà come gli altri colori.
-    chip("recent", "#cc79a7").click();
-    expect(rect(B)).toContain('fill="#cc79a7"');
-    expect(remembered[1]).toEqual(["#cc79a7", "#e69f00"]);
-    // I recenti di un'altra finestra, da chi monta l'editor, non gli
-    // tornano indietro.
-    editor.setRecentColors(["#56b4e9", "#3a7bd5"]);
-    expect(keys("recent")).toEqual(["#56b4e9", "#3a7bd5"]);
-    expect(labels("recent")).toEqual(["Azzurro", "#3a7bd5"]);
-    expect(remembered).toHaveLength(2);
-  });
-
-  it("in sola lettura la sezione mostra i colori, e un gesto dice perché non cambia nulla", () => {
-    mount(SWATCHED, { level: "standard" });
-    editor.select([B]);
-    key("Enter");
-    editor.setReadOnly(true);
-    chip("swatches", "rs").click();
-    expect(spoken()).toBe("Modifica non applicata: il disegno è in sola lettura.");
-    expect(addButton().getAttribute("aria-disabled")).toBe("true");
-    expect(changes).toEqual([]);
-  });
-});
-
-describe("gli stili del documento, dal livello Standard", () => {
-  const A = "o1a2b3c4d";
-  const B = "ob2b2b2b2";
-  const C = "oc3c3c3c3";
-  const T = "ot4t4t4t4";
-  const BOX = '<polyline id="rbox00000" fub:role="style" fub:name="Riquadro" points="0,0 100,0 100,100" fill="#e69f00" stroke="#000000" stroke-width="2"/>';
-  const TITLE = '<text id="rtitle000" fub:role="style" fub:name="Titolo" fill="#1a1a1a" font-family="Inter, sans-serif" font-size="48" font-weight="600"/>';
-  /// Lo stile «Riquadro», che A segue con un contorno più spesso e C così
-  /// com'è; B non segue niente; il testo T nemmeno.
-  const STYLED = doc(
-    `<defs id="fub-defs">${BOX}${TITLE}</defs>` +
-      `${LAYER}<rect id="${A}" fub:style="rbox00000" x="60" y="60" width="20" height="20" fill="#e69f00" stroke="#000000" stroke-width="4"/>` +
-      `<rect id="${B}" x="10" y="20" width="10" height="10" fill="#0072b2"/>` +
-      `<rect id="${C}" fub:style="rbox00000" x="30" y="20" width="10" height="10" fill="#e69f00" stroke="#000000" stroke-width="2"/>` +
-      `<text id="${T}" x="10" y="140" fill="#000000" font-family="Inter, sans-serif" font-size="32"><tspan x="10" dy="0">Capitolo</tspan></text></g>`,
-  );
-  const face = (id: string): HTMLButtonElement => property(id).querySelector<HTMLButtonElement>(".draw-properties-menu")!;
-  const menu = (): HTMLButtonElement[] => {
-    const open = document.querySelectorAll<HTMLElement>(".context-menu");
-    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"], [role="menuitemradio"]')];
-  };
-  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
-  /// Apre il menu del campo `id` e ne preme la voce `label`.
-  const pick = (id: string, label: string): void => {
-    face(id).click();
-    menu().find((entry) => labelOf(entry) === label)!.click();
-  };
-  const ask = (id: string): HTMLElement => property(id).querySelector<HTMLElement>(".draw-properties-ask")!;
-  const askInput = (id: string): HTMLInputElement => ask(id).querySelector<HTMLInputElement>("input")!;
-  /// L'elemento `id` com'è scritto adesso.
-  const element = (id: string): string => new RegExp(`<[a-z]+ id="${id}"[^>]*>`).exec(editor.engine.text)?.[0] ?? "";
-
-  afterEach(() => {
-    closeContextMenu();
-    for (const open of document.querySelectorAll(".context-menu")) open.remove();
-  });
-
-  it("la riga dice lo stile della selezione, e sceglierne uno lo dà, in un passo col suo nome", () => {
-    mount(STYLED, { level: "standard" });
-    editor.select([B]);
-    key("Enter");
-    expect(face("lookStyle").getAttribute("aria-label")).toBe("Stile grafico: Nessuno");
-    face("lookStyle").click();
-    expect(menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled") === "true"])).toEqual([
-      ["Riquadro", false],
-      ["Nuovo stile dalla selezione…", false],
-      ["Aggiorna lo stile dalla selezione", true],
-      ["Torna allo stile", true],
-      ["Scollega dallo stile", true],
-      ["Rinomina lo stile…", true],
-      ["Elimina lo stile", true],
-    ]);
-    expect(formatIssues(checkAccessibility(document.querySelector<HTMLElement>(".context-menu")!))).toBe("");
-    closeContextMenu();
-    pick("lookStyle", "Riquadro");
-    expect(element(B)).toBe(`<rect id="${B}" fub:style="rbox00000" x="10" y="20" width="10" height="10" fill="#e69f00" stroke="#000000" stroke-width="2"/>`);
-    expect(spoken()).toBe("Stile «Riquadro» applicato a 1 oggetto.");
-    expect(face("lookStyle").getAttribute("aria-label")).toBe("Stile grafico: Riquadro");
-    expect(formatIssues(checkAccessibility(properties()))).toBe("");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Stile applicato.");
-    expect(editor.engine.text).toBe(STYLED);
-  });
-
-  it("«Nuovo stile dalla selezione…» chiede il nome nel pannello, e lo stile nuovo lo segue chi era scelto", () => {
-    mount(STYLED, { level: "standard" });
-    editor.select([B]);
-    key("Enter");
-    pick("lookStyle", "Nuovo stile dalla selezione…");
-    expect(ask("lookStyle").hidden).toBe(false);
-    expect(ask("lookStyle").textContent).toContain("Nuovo stile grafico");
-    expect(askInput("lookStyle").value).toBe("Stile grafico 1");
-    expect(document.activeElement).toBe(askInput("lookStyle"));
-    // Un nome che c'è già non va, e il modulo lo dice e resta.
-    enter(askInput("lookStyle"), "riquadro");
-    expect(ask("lookStyle").hidden).toBe(false);
-    expect(askInput("lookStyle").getAttribute("aria-invalid")).toBe("true");
-    expect(ask("lookStyle").textContent).toContain("C’è già uno stile «riquadro» di questo tipo: scegline un altro.");
-    expect(editor.engine.text).toBe(STYLED);
-    enter(askInput("lookStyle"), "Avviso");
-    // Lo stile nuovo dice tutto l'aspetto che si vede, anche ciò che B non
-    // scrive: chi lo segue poi avrà lo stesso aspetto.
-    const made =
-      /<polyline id="([a-z0-9]+)" fub:role="style" fub:name="Avviso" points="0,0 100,0 100,100" fill="#0072b2" stroke="none" stroke-width="1" stroke-linecap="butt" stroke-linejoin="miter" stroke-dasharray="none"\/>/.exec(
-        editor.engine.text,
-      );
-    expect(made).not.toBeNull();
-    expect(element(B)).toBe(`<rect id="${B}" fub:style="${made![1]}" x="10" y="20" width="10" height="10" fill="#0072b2"/>`);
-    expect(spoken()).toBe("Stile «Avviso» creato: lo segue 1 oggetto.");
-    expect(ask("lookStyle").hidden).toBe(true);
-    expect(document.activeElement).toBe(face("lookStyle"));
-    expect(face("lookStyle").getAttribute("aria-label")).toBe("Stile grafico: Avviso");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Nuovo stile.");
-    expect(editor.engine.text).toBe(STYLED);
-  });
-
-  it("aggiornare, tornare, rinominare ed eliminare lavorano sullo stile che la selezione segue", () => {
-    mount(STYLED, { level: "standard" });
-    editor.select([A]);
-    key("Enter");
-    expect(face("lookStyle").getAttribute("aria-label")).toBe("Stile grafico: Riquadro, modificato");
-    expect(property("strokeWidth").hasAttribute("data-differs")).toBe(true);
-    expect(property("fill").hasAttribute("data-differs")).toBe(false);
-    expect(property("lookStyle").textContent).toContain("Diverso dallo stile: spessore.");
-    pick("lookStyle", "Aggiorna lo stile dalla selezione");
-    expect(element("rbox00000")).toContain('stroke-width="4"');
-    expect(element(C)).toContain('stroke-width="4"');
-    expect(spoken()).toBe("Stile «Riquadro» aggiornato: lo seguono 2 oggetti.");
-    expect(face("lookStyle").getAttribute("aria-label")).toBe("Stile grafico: Riquadro");
-    expect(property("strokeWidth").hasAttribute("data-differs")).toBe(false);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Stile aggiornato.");
-    expect(editor.engine.text).toBe(STYLED);
-    // Annulla sceglie ciò che il passo ha toccato: C.
-    expect(editor.selection).toEqual([C]);
-    editor.select([A]);
-    pick("lookStyle", "Torna allo stile");
-    expect(element(A)).toContain('stroke-width="2"');
-    expect(spoken()).toBe("1 oggetto torna allo stile «Riquadro».");
-    pick("lookStyle", "Rinomina lo stile…");
-    expect(ask("lookStyle").textContent).toContain("Rinomina «Riquadro»");
-    expect(askInput("lookStyle").value).toBe("Riquadro");
-    enter(askInput("lookStyle"), "Avviso");
-    expect(element("rbox00000")).toContain('fub:name="Avviso"');
-    expect(spoken()).toBe("Lo stile ora si chiama «Avviso».");
-    pick("lookStyle", "Elimina lo stile");
-    expect(editor.engine.text).not.toContain("rbox00000");
-    expect(element(A)).toBe(`<rect id="${A}" x="60" y="60" width="20" height="20" fill="#e69f00" stroke="#000000" stroke-width="2"/>`);
-    expect(spoken()).toBe("Stile «Avviso» eliminato: 2 oggetti che lo seguivano tengono il loro aspetto.");
-    expect(face("lookStyle").getAttribute("aria-label")).toBe("Stile grafico: Nessuno");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Stile eliminato.");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Nome di uno stile.");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Ritorno allo stile.");
-    expect(editor.engine.text).toBe(STYLED);
-  });
-
-  it("«Scollega dallo stile» lascia l'aspetto, e un testo sceglie fra i suoi stili e quelli di serie", () => {
-    mount(STYLED, { level: "standard" });
-    editor.select([C]);
-    key("Enter");
-    pick("lookStyle", "Scollega dallo stile");
-    expect(element(C)).toBe(`<rect id="${C}" x="30" y="20" width="10" height="10" fill="#e69f00" stroke="#000000" stroke-width="2"/>`);
-    expect(spoken()).toBe("1 oggetto scollegato dallo stile: tiene il suo aspetto.");
-    editor.select([T]);
-    expect(face("textStyle").getAttribute("aria-label")).toBe("Stile di testo: Nessuno");
-    face("textStyle").click();
-    // «Titolo» c'è già nel documento: quello di serie non si offre.
-    expect(menu().map(labelOf).slice(0, 5)).toEqual(["Titolo", "Sottotitolo", "Titoletto", "Testo", "Didascalia"]);
-    closeContextMenu();
-    pick("textStyle", "Sottotitolo");
-    const made = /<text id="([a-z0-9]+)" fub:role="style" fub:name="Sottotitolo" [^>]*\/>/.exec(editor.engine.text);
-    expect(made![0]).toContain('font-size="48"');
-    expect(made![0]).toContain('font-weight="600"');
-    expect(element(T)).toContain(`fub:style="${made![1]}"`);
-    expect(element(T)).toContain('font-size="48"');
-    expect(spoken()).toBe("Stile «Sottotitolo» creato: lo segue 1 oggetto.");
-    pick("textStyle", "Titolo");
-    expect(element(T)).toContain('fub:style="rtitle000"');
-    expect(element(T)).toContain('fill="#1a1a1a"');
-    expect(spoken()).toBe("Stile «Titolo» applicato a 1 oggetto.");
-    editor.undo();
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Nuovo stile.");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Scollegamento dallo stile.");
-    expect(editor.engine.text).toBe(STYLED);
-  });
-
-  it("senza gli stili del documento, lo stile di serie torna un menu che cambia soltanto il corpo e il peso", () => {
-    mount(STYLED, { level: "custom", custom: ["text", "properties"] });
-    editor.select([T]);
-    key("Enter");
-    expect(property("textStyle")).toBeNull();
-    const select = property("preset").querySelector("select")!;
-    select.value = "title";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(element(T)).toBe(`<text id="${T}" x="10" y="140" fill="#000000" font-family="Inter, sans-serif" font-size="64" font-weight="bold">`);
-    expect(editor.engine.text.match(/fub:role="style"/g)).toHaveLength(2);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Stile del testo.");
-    expect(editor.engine.text).toBe(STYLED);
-  });
-
-  it("in sola lettura il menu si apre ma non cambia niente", () => {
-    mount(STYLED, { level: "standard" });
-    editor.select([B]);
-    key("Enter");
-    editor.setReadOnly(true);
-    expect(face("lookStyle").getAttribute("aria-disabled")).toBe("true");
-    expect(changes).toEqual([]);
-  });
-});
-
-describe("i simboli, dall'Esperto", () => {
-  const S = "os1s1s1s1";
-  const P = "op2p2p2p2";
-  const I = "oi1i1i1i1";
-  const J = "oj2j2j2j2";
-  const A = "oa1a1a1a1";
-  const B = "ob2b2b2b2";
-  /// La «Presa», un quadrato blu attorno all'origine, e il «Punto»; due
-  /// istanze della presa in alto e due rettangoli sotto.
-  const SYMBOLS = doc(
-    '<title>Prova</title><defs id="fub-defs"><symbol id="rpresa000" overflow="visible"><title>Presa</title>' +
-      `<rect id="${S}" x="-10" y="-10" width="20" height="20" fill="#0072b2"/></symbol>` +
-      `<symbol id="rpunto000" overflow="visible"><title>Punto</title><circle id="${P}" r="5" fill="#000000"/></symbol></defs>` +
-      `${LAYER}<use id="${I}" transform="translate(20 20)" href="#rpresa000"/><use id="${J}" transform="translate(80 20)" href="#rpresa000"/>` +
-      `<rect id="${A}" x="10" y="60" width="20" height="20" fill="#d55e00"/><rect id="${B}" x="50" y="60" width="20" height="20" fill="#000000"/></g>`,
-  );
-  const barButton = (label: string): HTMLButtonElement => host.querySelector<HTMLButtonElement>(`.draw-arrange button[aria-label="${label}"]`)!;
-  const menu = (): HTMLButtonElement[] => {
-    const open = document.querySelectorAll<HTMLElement>(".context-menu");
-    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"], [role="menuitemradio"]')];
-  };
-  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
-  const item = (label: string): HTMLButtonElement => menu().find((entry) => labelOf(entry) === label)!;
-  const rightClick = (x: number, y: number): void => {
-    surface().dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y }));
-  };
-  const isolation = (): HTMLElement => host.querySelector<HTMLElement>(".draw-isolation")!;
-  const crumbs = (): string[] => [...isolation().querySelectorAll(".draw-isolation-crumb")].map((crumb) => crumb.textContent ?? "");
-  const painted = (id: string): SVGElement => host.querySelector<SVGElement>(`[data-scene-id="${id}"]`)!;
-  const doubleTap = (x: number, y: number): void => {
-    clock += 1000;
-    drag([[x, y]]);
-    drag([[x, y]]);
-  };
-  const face = (id: string): HTMLButtonElement => property(id).querySelector<HTMLButtonElement>(".draw-properties-menu")!;
-  const pick = (id: string, label: string): void => {
-    face(id).click();
-    menu().find((entry) => labelOf(entry) === label)!.click();
-  };
-  const askInput = (id: string): HTMLInputElement => property(id).querySelector<HTMLInputElement>(".draw-properties-ask input")!;
-  const element = (id: string): string => new RegExp(`<[a-z]+ id="${id}"[^>]*>`).exec(editor.engine.text)?.[0] ?? "";
-
-  afterEach(() => {
-    closeContextMenu();
-    for (const open of document.querySelectorAll(".context-menu")) open.remove();
-  });
-
-  it("«Crea simbolo» mette gli oggetti scelti in un simbolo nuovo, e un'istanza al loro posto, in un passo", () => {
-    mount(SYMBOLS, { level: "standard" });
-    editor.select([A, B]);
-    expect(barButton("Crea simbolo").hidden).toBe(true);
-    editor.setLevel("expert");
-    expect(barButton("Crea simbolo").hidden).toBe(false);
-    expect(barButton("Scollega dal simbolo").hidden).toBe(true);
-    barButton("Crea simbolo").click();
-    const made = /<symbol id="(r[a-z0-9]{8})" overflow="visible">\s*<title>Simbolo<\/title>/.exec(editor.engine.text);
-    expect(made).not.toBeNull();
-    const instance = editor.selection[0]!;
-    expect(editor.selection).toHaveLength(1);
-    expect(element(instance)).toBe(`<use id="${instance}" transform="matrix(1 0 0 1 40 70)" href="#${made![1]}"/>`);
-    expect(spoken()).toBe("Simbolo «Simbolo» creato: al posto degli oggetti scelti c’è una sua istanza.");
-    expect(barButton("Scollega dal simbolo").hidden).toBe(false);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Simbolo dalla selezione.");
-    expect(editor.engine.text).toBe(SYMBOLS);
-  });
-
-  it("due tocchi su un'istanza aprono il suo simbolo dove sta: cambiarlo cambia tutte le istanze, Esc torna all'istanza", () => {
-    mount(SYMBOLS, { level: "expert" });
-    editor.setTool("select");
-    doubleTap(20, 20);
-    expect(editor.selection).toEqual([S]);
-    expect(spoken()).toBe("Simbolo «Presa»: cambiarlo cambia tutte le sue istanze. Si sceglie solo qui dentro; Esc esce. Rettangolo, Blu, 1 di 1.");
-    expect(isolation().hidden).toBe(false);
-    expect(isolation().getAttribute("aria-label")).toBe("Simbolo in modifica");
-    expect(isolation().querySelector("button.draw-button")!.getAttribute("aria-label")).toBe("Esci dal simbolo");
-    expect(crumbs()).toEqual(["Livello «Livello 1»", "Simbolo «Presa»"]);
-    // L'altra istanza e il resto si attenuano; quella in cui si è no.
-    expect(painted(J).style.opacity).toBe("0.4");
-    expect(painted(A).style.opacity).toBe("0.4");
-    expect(painted(I).style.opacity).toBe("");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    // Si sposta il quadrato nelle coordinate del simbolo: tutte e due le
-    // istanze lo mostrano spostato.
-    clock += 1000;
-    drag([[20, 20], [25, 20], [30, 20]]);
-    expect(element(S)).toBe(`<rect id="${S}" x="-10" y="-10" width="20" height="20" fill="#0072b2" transform="matrix(1 0 0 1 10 0)"/>`);
-    expect(editor.selection).toEqual([S]);
-    key("Escape");
-    expect(editor.selection).toEqual([I]);
-    expect(spoken()).toBe("Fuori dal simbolo: si sceglie in tutto il disegno.");
-    expect(isolation().hidden).toBe(true);
-    expect(painted(J).style.opacity).toBe("");
-    editor.undo();
-    expect(editor.engine.text).toBe(SYMBOLS);
-  });
-
-  it("un'istanza si sposta, si ridimensiona e si gira come un oggetto, col suo `transform`", () => {
-    mount(SYMBOLS, { level: "expert" });
-    editor.setTool("select");
-    clock += 1000;
-    drag([[80, 20], [85, 25], [90, 30]]);
-    expect(editor.selection).toEqual([J]);
-    expect(element(J)).toBe(`<use id="${J}" transform="matrix(1 0 0 1 90 30)" href="#rpresa000"/>`);
-    key("Enter");
-    enter(propertyInput("width"), "40");
-    // Il riquadro resta dove comincia, a sinistra.
-    expect(element(J)).toBe(`<use id="${J}" transform="matrix(2 0 0 1 100 30)" href="#rpresa000"/>`);
-    enter(propertyInput("rotation"), "90");
-    // Gira attorno al centro, che resta.
-    expect(element(J)).toBe(`<use id="${J}" transform="matrix(0 2 -1 0 100 30)" href="#rpresa000"/>`);
-    // Il simbolo non cambia: soltanto l'istanza.
-    expect(editor.engine.text).toContain(`<rect id="${S}" x="-10" y="-10" width="20" height="20" fill="#0072b2"/>`);
-  });
-
-  it("dal menu: «Modifica simbolo» con un'istanza sola, e ciò che si disegna dentro entra nel simbolo", () => {
-    mount(SYMBOLS, { level: "expert" });
-    editor.setTool("select");
-    rightClick(80, 20);
-    expect(editor.selection).toEqual([J]);
-    const entries = menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled")]);
-    expect(entries).toContainEqual(["Crea simbolo", null]);
-    expect(entries).toContainEqual(["Scollega dal simbolo", null]);
-    expect(entries).toContainEqual(["Modifica simbolo", null]);
-    expect(entries.map(([label]) => label)).not.toContain("Isola il gruppo");
-    item("Modifica simbolo").click();
-    expect(crumbs()).toEqual(["Livello «Livello 1»", "Simbolo «Presa»"]);
-    rightClick(80, 20);
-    expect(menu().map(labelOf)).toContain("Esci dal simbolo");
-    closeContextMenu();
-    // Un rettangolo tirato da (90, 30) a (100, 40) sta nel simbolo, nelle
-    // sue coordinate.
-    editor.setTool("rect");
-    drag([[90, 30], [95, 35], [100, 40]]);
-    expect(editor.engine.text).toMatch(new RegExp(`<rect id="${S}"[^>]*/>\\s*<rect id="o[a-z0-9]{8}" x="10" y="10" width="10" height="10"[^>]*/>\\s*</symbol>`));
-    expect(isolation().hidden).toBe(false);
-    editor.undo();
-    expect(editor.engine.text).toBe(SYMBOLS);
-  });
-
-  it("la riga «Simbolo» del pannello scambia il simbolo, lo rinomina e scollega l'istanza", () => {
-    mount(SYMBOLS, { level: "expert" });
-    editor.select([I]);
-    key("Enter");
-    expect(face("symbol").getAttribute("aria-label")).toBe("Simbolo: Presa");
-    face("symbol").click();
-    expect(menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled") === "true"])).toEqual([
-      ["Presa", false],
-      ["Punto", false],
-      ["Modifica simbolo", false],
-      ["Rinomina simbolo…", false],
-      ["Scollega dal simbolo", false],
-    ]);
-    expect(formatIssues(checkAccessibility(document.querySelector<HTMLElement>(".context-menu")!))).toBe("");
-    closeContextMenu();
-    pick("symbol", "Punto");
-    expect(element(I)).toBe(`<use id="${I}" transform="translate(20 20)" href="#rpunto000"/>`);
-    expect(spoken()).toBe("1 istanza ora mostra «Punto».");
-    expect(face("symbol").getAttribute("aria-label")).toBe("Simbolo: Punto");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Scambio del simbolo.");
-    // Un nome che un altro simbolo ha già non va.
-    pick("symbol", "Rinomina simbolo…");
-    expect(askInput("symbol").value).toBe("Presa");
-    enter(askInput("symbol"), "punto");
-    expect(askInput("symbol").getAttribute("aria-invalid")).toBe("true");
-    expect(property("symbol").textContent).toContain("C’è già un simbolo «punto»: scegline un altro.");
-    enter(askInput("symbol"), "Presa doppia");
-    expect(editor.engine.text).toContain("<title>Presa doppia</title>");
-    expect(spoken()).toBe("Il simbolo ora si chiama «Presa doppia».");
-    expect(editor.selection).toEqual([I]);
-    expect(face("symbol").getAttribute("aria-label")).toBe("Simbolo: Presa doppia");
-    editor.undo();
-    pick("symbol", "Scollega dal simbolo");
-    const group = editor.selection[0]!;
-    expect(element(group)).toBe(`<g id="${group}" transform="translate(20 20)">`);
-    expect(editor.engine.text).toMatch(new RegExp(`<g id="${group}" transform="translate\\(20 20\\)">\\s*<title>Presa</title>\\s*<rect id="o[a-z0-9]{8}" x="-10" y="-10" width="20" height="20" fill="#0072b2"/>\\s*</g>`));
-    expect(spoken()).toBe("1 istanza scollegata: ora è un gruppo, che si modifica da solo.");
-    expect(property("symbol").hidden).toBe(true);
-    editor.undo();
-    expect(editor.engine.text).toBe(SYMBOLS);
-  });
-
-  it("un'istanza si chiama col nome del suo simbolo, e ciò che sta nel simbolo col suo", () => {
-    mount(SYMBOLS, { level: "expert" });
-    key("Tab");
-    key("Home");
-    expect(editor.selection).toEqual([I]);
-    expect(spoken()).toBe("Istanza di simbolo «Presa», 1 di 4.");
-    // L'albero mostra il disegno; mentre si modifica il simbolo, il suo
-    // contenuto, che si sceglie anche da lì.
-    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
-    const tree = (): HTMLElement => host.querySelector<HTMLElement>('[role="tree"]')!;
-    const rows = (): [string | undefined, string | null][] =>
-      [...tree().querySelectorAll<HTMLElement>('[role="treeitem"]')].map((row) => [row.dataset.key, row.querySelector(".draw-object-label")!.textContent]);
-    expect(rows()).toEqual([
-      ["l1", "Livello «Livello 1», corrente"],
-      [B, "Rettangolo, Nero"],
-      [A, "Rettangolo, Vermiglio"],
-      [J, "Istanza di simbolo «Presa»"],
-      [I, "Istanza di simbolo «Presa»"],
-    ]);
-    key("Enter", { ctrlKey: true });
-    expect(rows()).toEqual([[S, "Rettangolo, Blu"]]);
-    expect(tree().querySelector('[aria-selected="true"]')!.getAttribute("data-key")).toBe(S);
-    key("Escape");
-    expect(rows()).toHaveLength(5);
-  });
-});
-
-describe("il contagocce, dal livello Standard", () => {
-  const A = "oa1a1a1a1";
-  const B = "ob2b2b2b2";
-  const C = "oc3c3c3c3";
-  const D = "od4d4d4d4";
-  const G = "og5g5g5g5";
-  const P = "op8p8p8p8";
-  const IMAGE = "oi9i9i9i9";
-  const UNDER = "ou0u0u0u0";
-  /// A, da vestire, in alto a sinistra; B, arancione col contorno vermiglio
-  /// tratteggiato e mezzo trasparente, sotto il cursore che parte dal mezzo
-  /// di un foglio di 400 × 300; C col campione «Blu marca»; P col motivo; un
-  /// gruppo di due forme; D in un livello bloccato, sotto gli altri; e la
-  /// parte di un altro programma.
-  const A_RECT = `<rect id="${A}" x="10" y="10" width="40" height="40" fill="#000000" stroke="#000000" stroke-width="2"/>`;
-  const B_RECT = `<rect id="${B}" x="230" y="130" width="40" height="40" fill="#e69f00" stroke="#d55e00" stroke-width="6" stroke-dasharray="4 2" opacity="0.5"/>`;
-  const LOOKS = doc(
-    '<defs id="fub-defs"><linearGradient id="rs" fub:role="swatch" fub:name="Blu marca" gradientUnits="userSpaceOnUse"><stop stop-color="#0072b2"/></linearGradient>' +
-      '<pattern id="rpppppppp" width="0.5" height="0.5"><rect x="0" y="0" width="0.25" height="0.25" fill="#000000"/></pattern></defs>' +
-      `<g id="l2" fub:layer="Sfondo" fub:locked="true"><rect id="${D}" x="300" y="200" width="40" height="40" fill="#56b4e9"/></g>` +
-      `${LAYER}${A_RECT}${B_RECT}` +
-      `<rect id="${C}" x="100" y="10" width="40" height="40" fill="url(#rs) #0072b2"/>` +
-      `<rect id="${P}" x="10" y="200" width="40" height="40" fill="url(#rpppppppp) #000000"/>` +
-      `<g id="${G}"><rect id="oh6h6h6h6" x="100" y="200" width="40" height="40" fill="#009e73"/><rect id="oj7j7j7j7" x="140" y="200" width="40" height="40" fill="#cc79a7" stroke="#56b4e9" stroke-width="4"/></g>` +
-      '<rect class="estraneo" x="300" y="10" width="40" height="40" fill="#f0e442"/></g>',
-  );
-  /// Un'immagine di 40 × 20 pixel, la metà sinistra rossa e la destra
-  /// trasparente, larga il doppio sopra un quadrato verde.
-  const PICTURE = doc(
-    `${LAYER}${A_RECT}<rect id="${UNDER}" x="200" y="100" width="100" height="100" fill="#009e73"/>` +
-      `<image id="${IMAGE}" x="200" y="100" width="80" height="40" href="data:image/png;base64,iVBORw0KGgo="/></g>`,
-  );
-
-  /// Un codec coi pixel dell'immagine di `PICTURE`: quelli che legge, e le
-  /// immagini che chiude.
-  function pixelCodec(): ImageCodec & { rects: string[]; closed: number } {
-    const fake = {
-      rects: [] as string[],
-      closed: 0,
-      async decode(): Promise<Decoded | null> {
-        return {
-          width: 40,
-          height: 20,
-          opaque: () => false,
-          encode: async () => null,
-          pixels(rect: { x: number; y: number; width: number; height: number }, most: number) {
-            fake.rects.push(`${rect.x} ${rect.y} ${rect.width} ${rect.height} ${most}`);
-            const data = new Uint8ClampedArray(rect.width * rect.height * 4);
-            for (let at = 0; at < data.length; at += 4) if (rect.x < 20) data.set([255, 0, 0, 255], at);
-            return { width: rect.width, height: rect.height, data } as ImageData;
-          },
-          close() {
-            fake.closed++;
-          },
-        };
-      },
-    };
-    return fake;
-  }
-
-  const rect = (id: string): string => new RegExp(`<rect id="${id}"[^>]*/>`).exec(editor.engine.text)![0];
-  /// Un clic nel punto `x`, `y` del foglio, che è anche quello della scena.
-  const click = (x: number, y: number, init: Init = {}): void => drag([[x, y], [x, y]], init);
-  const hover = (x: number, y: number, init: Init = {}): void => {
-    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }));
-  };
-  const dropper = (source = LOOKS, options: DrawEditorOptions = {}): void => {
-    mount(source, { level: "standard", ...options });
-    size(400, 300);
-  };
-  const panelButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!;
-  const targetButton = (target: string): HTMLButtonElement =>
-    properties().querySelector<HTMLButtonElement>(`.draw-properties-section[data-section="colors"] .draw-swatches-target [data-target="${target}"]`)!;
-  /// Il colore che la barra dà per scelto.
-  const checked = (): string | null => well().querySelector(".kit-color-well-name")?.textContent ?? null;
-  /// Il contorno dei rettangoli nuovi, nell'ordine del file.
-  const outlined = (): string[] =>
-    [...editor.engine.text.matchAll(/<rect id="(?!o[a-z]\d[a-z]\d[a-z]\d[a-z]\d")[^"]*"[^>]*? stroke="([^"]*)"/g)].map((match) => match[1]!);
-
-  async function settle(): Promise<void> {
-    for (let i = 0; i < 6; i++) await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-
-  it("è uno strumento dello Standard, col tasto I, e dice dove va ciò che prende", () => {
-    mount(LOOKS);
-    key("i");
-    expect(editor.tool).toBe("pen");
-    editor.setLevel("standard");
-    key("i");
-    expect(editor.tool).toBe("eyedropper");
-    expect(spoken()).toBe("Strumento: Contagocce. Il colore che prendi è quello con cui disegni.");
-    expect(railTool("Contagocce").title).toBe("Contagocce (I)");
-    const control = host.querySelector<HTMLButtonElement>('.draw-rail [data-tool="eyedropper"]')!;
-    control.focus();
-    expect(document.getElementById(control.getAttribute("aria-describedby")!)?.textContent).toContain("Maiusc");
-    editor.setTool("select");
-    editor.select([A, C]);
-    key("i");
-    expect(spoken()).toBe("Strumento: Contagocce. Ciò che prendi va ai 2 oggetti scelti.");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("un clic dà agli oggetti scelti l'aspetto della forma sotto il puntatore, in un passo", () => {
-    dropper();
-    editor.select([A]);
-    editor.setTool("eyedropper");
-    click(250, 150);
-    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#d55e00" stroke-width="6" stroke-dasharray="4 2" opacity="0.5"/>`);
-    expect(spoken()).toBe("Aspetto di Rettangolo dato a 1 oggetto.");
-    expect(changes).toHaveLength(1);
-    // Il contagocce non sceglie e non sposta: la selezione resta, e la forma
-    // da cui prende non cambia.
-    expect(editor.selection).toEqual([A]);
-    expect(rect(B)).toBe(B_RECT);
-    editor.undo();
-    expect(editor.engine.text).toBe(LOOKS);
-    expect(spoken()).toBe("Annullato: Aspetto preso col contagocce.");
-    // Dentro un gruppo, la forma sotto il puntatore; da un livello bloccato
-    // si legge senza cambiarlo.
-    click(160, 220);
-    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#cc79a7" stroke="#56b4e9" stroke-width="4"/>`);
-    click(320, 220);
-    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#56b4e9"/>`);
-    expect(rect(D)).toBe(`<rect id="${D}" x="300" y="200" width="40" height="40" fill="#56b4e9"/>`);
-    // Lo stesso aspetto di nuovo non cambia niente.
-    click(320, 220);
-    expect(spoken()).toBe("È già così: niente da cambiare.");
-    expect(changes).toHaveLength(4);
-  });
-
-  it("con Maiusc dà il solo colore sotto il puntatore, al riempimento o al contorno come dice «Applica a»; un campione resta un campione", () => {
-    const remembered: (readonly string[])[] = [];
-    dropper(LOOKS, { onColorsChange: (colors) => remembered.push(colors) });
-    editor.select([A]);
-    editor.setTool("eyedropper");
-    click(250, 150, { shiftKey: true });
-    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#000000" stroke-width="2"/>`);
-    expect(spoken()).toBe("Riempimento: Arancione.");
-    // Sul contorno, il colore del contorno.
-    click(231, 150, { shiftKey: true });
-    expect(rect(A)).toContain('fill="#d55e00"');
-    expect(spoken()).toBe("Riempimento: Vermiglio.");
-    expect(remembered).toEqual([["#e69f00"], ["#d55e00", "#e69f00"]]);
-    panelButton().click();
-    targetButton("stroke").click();
-    click(120, 30, { shiftKey: true });
-    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#d55e00" stroke="url(#rs) #0072b2" stroke-width="2"/>`);
-    expect(spoken()).toBe("Contorno: Blu marca.");
-    // Un campione non è un colore recente; un motivo si dà come gli altri.
-    expect(remembered).toHaveLength(2);
-    click(30, 220, { shiftKey: true });
-    expect(rect(A)).toContain('stroke="url(#rpppppppp) #000000"');
-    expect(spoken()).toBe("Contorno: un motivo.");
-    expect(changes).toHaveLength(4);
-  });
-
-  it("senza selezione prende il colore con cui si disegna, anche un campione; un motivo no", () => {
-    const remembered: (readonly string[])[] = [];
-    dropper(LOOKS, { onColorsChange: (colors) => remembered.push(colors) });
-    editor.setTool("eyedropper");
-    click(250, 150);
-    expect(spoken()).toBe("Colore: Arancione.");
-    expect(checked()).toBe("Arancione");
-    expect(remembered).toEqual([["#e69f00", "#000000"]]);
-    editor.setTool("rect");
-    drag([[300, 60], [350, 90]]);
-    editor.setTool("eyedropper");
-    click(120, 30);
-    expect(spoken()).toBe("Colore: Blu marca.");
-    editor.setTool("rect");
-    drag([[300, 100], [350, 120]]);
-    expect(outlined()).toEqual(["#e69f00", "url(#rs) #0072b2"]);
-    editor.setTool("eyedropper");
-    click(30, 220);
-    expect(spoken()).toBe("Un motivo non è un colore con cui disegnare: scegli prima gli oggetti a cui darlo.");
-    click(380, 120);
-    expect(spoken()).toBe("Qui non c’è niente da prendere: tocca un oggetto o un’immagine.");
-    click(320, 30);
-    expect(spoken()).toBe("Questa parte viene da un altro programma: FubDraw la mostra, ma non ne prende il colore.");
-    // Soltanto i due rettangoli nuovi.
-    expect(changes).toHaveLength(2);
-  });
-
-  it("da un'immagine prende il colore del pixel, e dove è trasparente guarda sotto", async () => {
-    const codec = pixelCodec();
-    dropper(PICTURE, { imageCodec: codec });
-    editor.setTool("eyedropper");
-    click(210, 110);
-    await settle();
-    expect(spoken()).toBe("Colore: Personalizzato #ff0000.");
-    // Un pixel solo, quello sotto il puntatore: per l'anteprima e per ciò
-    // che prende.
-    expect([...new Set(codec.rects)]).toEqual(["5 5 1 1 1"]);
-    click(270, 110);
-    expect(spoken()).toBe("Colore: Verde.");
-    editor.select([A]);
-    click(210, 110);
-    expect(rect(A)).toContain('fill="#ff0000"');
-    expect(spoken()).toBe("Riempimento: Personalizzato #ff0000.");
-    // Un'immagine aperta per il contagocce si chiude con lo strumento.
-    expect(codec.closed).toBe(0);
-    editor.setTool("select");
-    expect(codec.closed).toBe(1);
-  });
-
-  it("dalla tastiera, sopra un'immagine il cursore dice il colore appena l'ha letto", async () => {
-    const layer = recording();
-    dropper(PICTURE, { imageCodec: pixelCodec() });
-    editor.setTool("eyedropper");
-    key("ArrowUp", { shiftKey: true });
-    expect(spoken()).toBe("x 200, y 100: Immagine, lettura dei pixel…");
-    layer.frame();
-    expect(layer.texts()).toEqual(["Lettura…"]);
-    await settle();
-    expect(spoken()).toBe("x 200, y 100: Immagine, Personalizzato #ff0000");
-    layer.frame();
-    expect(layer.texts()).toEqual(["#ff0000"]);
-  });
-
-  it("un'immagine dal web non si legge, e lo dice", () => {
-    dropper(doc(`${LAYER}<image id="${IMAGE}" x="200" y="100" width="80" height="40" href="https://example.com/a.png"/></g>`), { imageCodec: pixelCodec() });
-    editor.setTool("eyedropper");
-    click(210, 110);
-    expect(spoken()).toBe("Il colore di un’immagine dal web non si legge: mettila nel vault, e prendilo da quella.");
-    expect(changes).toEqual([]);
-  });
-
-  it("dalla tastiera: le frecce portano il cursore anche con una selezione, e dice che cosa c'è sotto; Spazio prende l'aspetto, Maiusc+Spazio il colore", () => {
-    dropper();
-    editor.select([A]);
-    editor.setTool("eyedropper");
-    key("ArrowRight", { shiftKey: true });
-    expect(spoken()).toBe("x 250, y 150: Rettangolo, Arancione");
-    expect(rect(A)).toBe(A_RECT);
-    key(" ");
-    expect(rect(A)).toContain('fill="#e69f00" stroke="#d55e00"');
-    expect(spoken()).toBe("Aspetto di Rettangolo dato a 1 oggetto.");
-    editor.undo();
-    key(" ", { shiftKey: true });
-    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#000000" stroke-width="2"/>`);
-    expect(spoken()).toBe("Riempimento: Arancione.");
-    key("ArrowUp", { shiftKey: true });
-    key("ArrowUp", { shiftKey: true });
-    key("ArrowRight", { shiftKey: true });
-    expect(spoken()).toBe("x 300, y 50: una parte di un altro programma, che il contagocce non legge");
-  });
-
-  it("accanto al puntatore mostra ciò che prende, col suo nome; Maiusc passa al colore, e un dito lo vede sopra di sé", () => {
-    const layer = recording();
-    dropper();
-    editor.select([A]);
-    editor.setTool("eyedropper");
-    hover(250, 150);
-    layer.frame();
-    expect(layer.texts()).toEqual(["Rettangolo"]);
-    key("Shift", { shiftKey: true });
-    layer.frame();
-    expect(layer.texts()).toEqual(["Arancione"]);
-    surface().dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", bubbles: true }));
-    hover(120, 30);
-    layer.frame();
-    expect(layer.texts()).toEqual(["Rettangolo"]);
-    editor.select([]);
-    hover(120, 30);
-    layer.frame();
-    expect(layer.texts()).toEqual(["Blu marca"]);
-    hover(320, 30);
-    layer.frame();
-    expect(layer.texts()).toEqual(["Non si prende"]);
-    hover(380, 120);
-    layer.frame();
-    expect(layer.texts()).toEqual([]);
-    // Il dito non passa sopra: l'anteprima c'è mentre tocca, e poi sparisce.
-    const TOUCH = { pointerId: 7, pointerType: "touch" } as const;
-    surface().dispatchEvent(pointer("pointerdown", { ...TOUCH, button: 0, buttons: 1, pressure: 0.5, clientX: 380, clientY: 120, timeStamp: (clock += 8) }));
-    surface().dispatchEvent(pointer("pointermove", { ...TOUCH, button: -1, buttons: 1, pressure: 0.5, clientX: 250, clientY: 150, timeStamp: (clock += 8) }));
-    layer.frame();
-    expect(layer.texts()).toEqual(["Arancione"]);
-    surface().dispatchEvent(pointer("pointerup", { ...TOUCH, button: 0, buttons: 0, pressure: 0, clientX: 250, clientY: 150, timeStamp: (clock += 8) }));
-    layer.frame();
-    expect(layer.texts()).toEqual([]);
-    expect(spoken()).toBe("Colore: Arancione.");
-  });
-
-  it("Esc a metà non prende niente", () => {
-    dropper();
-    editor.select([A]);
-    editor.setTool("eyedropper");
-    surface().dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 250, clientY: 150, timeStamp: (clock += 8) }));
-    key("Escape");
-    surface().dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 250, clientY: 150, timeStamp: (clock += 8) }));
-    expect(editor.engine.text).toBe(LOOKS);
-    expect(changes).toEqual([]);
-  });
-
-  /// Le righe dell'albero: A da vestire e B, come sopra; K bloccato e N
-  /// nascosto, senza riempimento; R con una sfumatura sua; un'immagine; il
-  /// gruppo; e D nel livello bloccato.
-  const K = "ok1k1k1k1";
-  const N = "on2n2n2n2";
-  const R = "or3r3r3r3";
-  const ROWS = doc(
-    '<defs id="fub-defs"><linearGradient id="r1a1a1a1a" fub:role="private" x2="1"><stop offset="0" stop-color="#0072b2"/><stop offset="1" stop-color="#e69f00"/></linearGradient></defs>' +
-      `<g id="l2" fub:layer="Sfondo" fub:locked="true"><rect id="${D}" x="300" y="200" width="40" height="40" fill="#56b4e9"/></g>` +
-      `${LAYER}${A_RECT}${B_RECT}` +
-      `<rect id="${K}" x="100" y="10" width="40" height="40" fill="#009e73" fub:locked="true"/>` +
-      `<rect id="${N}" x="160" y="10" width="40" height="40" fill="none" stroke="#cc79a7" stroke-width="3" display="none"/>` +
-      `<rect id="${R}" x="10" y="200" width="40" height="40" fill="url(#r1a1a1a1a) #0072b2"/>` +
-      `<image id="${IMAGE}" x="200" y="100" width="80" height="40" href="data:image/png;base64,iVBORw0KGgo="/>` +
-      `<g id="${G}"><rect id="oh6h6h6h6" x="100" y="200" width="40" height="40" fill="#009e73"/><rect id="oj7j7j7j7" x="140" y="200" width="40" height="40" fill="#cc79a7" stroke="#56b4e9" stroke-width="4"/></g></g>`,
-  );
-  const objectsTree = (): HTMLElement => host.querySelector<HTMLElement>('[role="tree"]')!;
-  const inTree = (name: string, init: KeyboardEventInit = {}): KeyboardEvent => key(name, init, objectsTree());
-  /// Apre l'albero, se è chiuso, e porta la riga attiva a `id` con Ctrl e le
-  /// frecce, senza cambiare la selezione.
-  const reach = (id: string): void => {
-    if (objectsTree().closest<HTMLElement>(".draw-objects")!.hidden) host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
-    objectsTree().focus();
-    const keys = (): (string | undefined)[] => [...objectsTree().querySelectorAll<HTMLElement>('[role="treeitem"]')].map((row) => row.dataset.key);
-    const at = (): number => keys().indexOf(document.getElementById(objectsTree().getAttribute("aria-activedescendant") ?? "")?.dataset.key);
-    for (let step = 0; step < 20 && at() !== keys().indexOf(id); step++) inTree(at() < keys().indexOf(id) ? "ArrowDown" : "ArrowUp", { ctrlKey: true });
-    expect(keys()[at()]).toBe(id);
-  };
-
-  it("dall'albero, I dà agli oggetti scelti l'aspetto dell'oggetto della riga, anche bloccato o nascosto, e non cambia strumento", () => {
-    dropper(ROWS);
-    editor.select([A]);
-    const tool = editor.tool;
-    reach(B);
-    expect(inTree("i").defaultPrevented).toBe(true);
-    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#d55e00" stroke-width="6" stroke-dasharray="4 2" opacity="0.5"/>`);
-    expect(spoken()).toBe("Aspetto di Rettangolo dato a 1 oggetto.");
-    expect(editor.tool).toBe(tool);
-    expect(editor.selection).toEqual([A]);
-    expect(document.activeElement).toBe(objectsTree());
-    editor.undo();
-    expect(editor.engine.text).toBe(ROWS);
-    // Bloccato o nascosto si legge senza cambiarlo. Col blocco delle
-    // maiuscole la lettera è grande, ed è sempre l'aspetto.
-    reach(K);
-    inTree("I");
-    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#009e73"/>`);
-    expect(spoken()).toBe("Aspetto di Rettangolo dato a 1 oggetto.");
-    reach(N);
-    inTree("i");
-    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="none" stroke="#cc79a7" stroke-width="3"/>`);
-    expect(rect(N)).toContain('display="none"');
-    reach(D);
-    inTree("i");
-    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#56b4e9"/>`);
-    // Un gruppo dà quello della sua prima parte; una sua parte, il suo.
-    reach(G);
-    inTree("i");
-    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#009e73"/>`);
-    expect(spoken()).toBe("Aspetto di Gruppo dato a 1 oggetto.");
-    inTree("ArrowRight");
-    reach("oj7j7j7j7");
-    inTree("i");
-    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#cc79a7" stroke="#56b4e9" stroke-width="4"/>`);
-    // Una sfumatura viene intera, in una copia che resta di A.
-    reach(R);
-    inTree("i");
-    expect(rect(A)).toMatch(new RegExp(`^<rect id="${A}" x="10" y="10" width="40" height="40" fill="url\\(#r[a-z0-9]+\\) #0072b2"/>$`));
-    expect(rect(A)).not.toContain("r1a1a1a1a");
-    expect(editor.engine.text.match(/<linearGradient /g)).toHaveLength(2);
-    // Un livello non ha un aspetto; l'oggetto stesso non cambia niente.
-    reach("l1");
-    inTree("i");
-    expect(spoken()).toBe("Un livello non ha un aspetto da prendere: il contagocce prende da un oggetto.");
-    reach(A);
-    inTree("i");
-    expect(spoken()).toBe("È già così: niente da cambiare.");
-    expect(editor.selection).toEqual([A]);
-  });
-
-  it("dall'albero, Maiusc con I dà il colore della riga, il riempimento o il contorno se non riempie; senza selezione è quello con cui si disegna", () => {
-    const remembered: (readonly string[])[] = [];
-    dropper(ROWS, { onColorsChange: (colors) => remembered.push(colors) });
-    editor.select([A]);
-    reach(B);
-    expect(inTree("I", { shiftKey: true }).defaultPrevented).toBe(true);
-    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#000000" stroke-width="2"/>`);
-    expect(spoken()).toBe("Riempimento: Arancione.");
-    expect(remembered).toEqual([["#e69f00"]]);
-    // Senza riempimento il contorno, anche nascosto; al contorno, come dice
-    // «Applica a».
-    panelButton().click();
-    targetButton("stroke").click();
-    reach(N);
-    inTree("I", { shiftKey: true });
-    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#cc79a7" stroke-width="2"/>`);
-    expect(spoken()).toBe("Contorno: Porpora.");
-    // Una sfumatura ha un colore per punto, e un'immagine anche: sul foglio.
-    reach(R);
-    inTree("I", { shiftKey: true });
-    expect(spoken()).toBe("Una sfumatura ha un colore in ogni punto: prendine uno col contagocce sul foglio. Senza Maiusc, I dà l’aspetto intero, sfumatura compresa.");
-    reach(IMAGE);
-    inTree("I", { shiftKey: true });
-    expect(spoken()).toBe("Il colore di un’immagine è quello di un punto: prendilo col contagocce sul foglio.");
-    expect(changes).toHaveLength(2);
-    // Senza selezione, il colore con cui si disegna.
-    editor.select([]);
-    reach(K);
-    inTree("i");
-    expect(spoken()).toBe("Colore: Verde.");
-    expect(checked()).toBe("Verde");
-    reach(R);
-    inTree("i");
-    expect(spoken()).toBe("Una sfumatura ha un colore in ogni punto: prendine uno col contagocce sul foglio.");
-    expect(changes).toHaveLength(2);
-    // Senza il contagocce il tasto passa all'editor.
-    editor.setLevel("essential");
-    expect(inTree("i").defaultPrevented).toBe(false);
-  });
-});
-
-describe("lo strumento Sfumatura, dal livello Standard", () => {
-  const A = "oa1a1a1a1";
-  const B = "ob2b2b2b2";
-  const C = "oc3c3c3c3";
-  /// A con la sua sfumatura lineare, dal blu al bianco da sinistra a destra;
-  /// B arancione pieno; C con la sua radiale, dal bianco al vermiglio.
-  const SHADES = doc(
-    '<defs id="fub-defs"><linearGradient id="ra" fub:role="private" gradientUnits="userSpaceOnUse" x1="20" y1="50" x2="180" y2="50"><stop offset="0" stop-color="#0072b2"/><stop offset="1" stop-color="#ffffff"/></linearGradient>' +
-      '<radialGradient id="rc" fub:role="private" gradientUnits="userSpaceOnUse" cx="300" cy="200" r="50"><stop offset="0" stop-color="#ffffff"/><stop offset="0.5" stop-color="#e69f00"/><stop offset="1" stop-color="#d55e00"/></radialGradient></defs>' +
-      `${LAYER}<rect id="${A}" x="0" y="0" width="200" height="100" fill="url(#ra) #80b9d8"/>` +
-      `<rect id="${B}" x="0" y="150" width="100" height="100" fill="#e69f00"/>` +
-      `<rect id="${C}" x="250" y="150" width="100" height="100" fill="url(#rc) #e69f00"/></g>`,
-  );
-  /// La sfumatura che riempie `id`, com'è scritta adesso.
-  const shade = (id: string): string => {
-    const text = editor.engine.text;
-    const ref = new RegExp(`<rect id="${id}"[^>]* fill="url\\(#([^)]+)\\)`).exec(text)?.[1];
-    if (ref === undefined) return new RegExp(`<rect id="${id}"[^>]*/>`).exec(text)![0];
-    return new RegExp(`<(linear|radial)Gradient id="${ref}"[^>]*>[\\s\\S]*?</\\1Gradient>`).exec(text)![0].replace(/\s*\n\s*/g, "");
-  };
-  /// Un tocco, lontano nel tempo dal precedente: non fa un doppio tocco.
-  const tap = (x: number, y: number, init: Init = {}): void => {
-    clock += 1000;
-    drag([[x, y]], init);
-  };
-  const hover = (x: number, y: number, init: Init = {}): void => {
-    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }));
-  };
-  const gradientTool = () => railTool("Sfumatura");
-
-  /// Il disegno `source`, con gli oggetti `keys` scelti e lo strumento
-  /// Sfumatura.
-  const shading = (keys: readonly string[] = [A], source = SHADES): void => {
-    mount(source, { level: "standard" });
-    size(400, 300);
-    editor.focus();
-    editor.select(keys);
-    key("g");
-  };
-
-  it("c'è dal livello Standard, col tasto G, e dice dove va la sfumatura", () => {
-    mount(SHADES, { level: "standard" });
-    size(400, 300);
-    editor.focus();
-    expect(gradientTool().title).toBe("Sfumatura (G)");
-    key("g");
-    expect(editor.tool).toBe("gradient");
-    expect(surface().dataset.tool).toBe("gradient");
-    expect(spoken()).toBe("Strumento: Sfumatura. Scegli gli oggetti a cui dare una sfumatura: un clic su un oggetto lo sceglie.");
-    editor.select([B]);
-    key("v");
-    key("g");
-    expect(spoken()).toBe("Strumento: Sfumatura. La sfumatura va al riempimento degli oggetti scelti.");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    expect(changes).toEqual([]);
-  });
-
-  it("trascinata sugli oggetti scelti traccia la loro sfumatura, dal loro colore; con Maiusc va di 45° in 45°", () => {
-    shading([B]);
-    drag([[20, 200], [50, 200], [80, 200]]);
-    expect(shade(B)).toMatch(/^<linearGradient id="[^"]+" fub:role="private" x1="20" y1="200" x2="80" y2="200" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#e69f00"\/><stop offset="1" stop-color="#e69f00" stop-opacity="0"\/><\/linearGradient>$/);
-    expect(spoken()).toBe("Sfumatura lineare tracciata: angolo 0°, lunga 60.");
-    expect(editor.selection).toEqual([B]);
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(SHADES);
-    expect(spoken()).toBe("Annullato: Sfumatura tracciata.");
-    drag([[20, 200], [50, 220], [80, 230]], { shiftKey: true });
-    expect(shade(B)).toContain('x1="20" y1="200" x2="65" y2="245"');
-    expect(spoken()).toBe("Sfumatura lineare tracciata: angolo 45°, lunga 63,6.");
-  });
-
-  it("su un oggetto campito nasce dal fondo della campitura, come dal pannello", () => {
-    const hatched = doc(
-      '<defs id="fub-defs"><pattern id="rh" fub:role="private" fub:pattern="lines -45 8 1.5 #000000 #e69f00" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(-45)"><rect width="8" height="8" fill="#e69f00"/><rect y="3.25" width="8" height="1.5" fill="#000000"/></pattern></defs>' +
-        `${LAYER}<rect id="${B}" x="0" y="150" width="100" height="100" fill="url(#rh) #bb8100"/></g>`,
-    );
-    shading([B], hatched);
-    drag([[20, 200], [50, 200], [80, 200]]);
-    expect(shade(B)).toContain('<stop offset="0" stop-color="#e69f00"/><stop offset="1" stop-color="#e69f00" stop-opacity="0"/>');
-    // La campitura che nessuno usa più se ne va.
-    expect(editor.engine.text).not.toContain("<pattern");
-  });
-
-  it("radiale se lo sono già tutte quelle degli oggetti scelti, col centro dove parte", () => {
-    shading([C]);
-    drag([[280, 180], [290, 180], [300, 180]]);
-    // La stessa sfumatura, cambiata sul posto, coi punti di prima.
-    expect(shade(C)).toBe(
-      '<radialGradient id="rc" fub:role="private" cx="280" cy="180" r="20" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ffffff"/><stop offset="0.5" stop-color="#e69f00"/><stop offset="1" stop-color="#d55e00"/></radialGradient>',
-    );
-    expect(spoken()).toBe("Sfumatura radiale tracciata: raggio 20.");
-  });
-
-  it("senza niente di scelto, il trascinamento sceglie l'oggetto da cui parte; dal vuoto dice che cosa serve", () => {
-    shading([]);
-    drag([[20, 200], [50, 200], [80, 200]]);
-    expect(editor.selection).toEqual([B]);
-    expect(shade(B)).toContain('x1="20" y1="200" x2="80" y2="200"');
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    editor.select([]);
-    drag([[380, 20], [380, 50], [380, 80]]);
-    expect(spoken()).toBe("Scegli gli oggetti a cui dare una sfumatura: un clic su un oggetto lo sceglie.");
-    expect(editor.selection).toEqual([]);
-    expect(editor.engine.text).toBe(SHADES);
-  });
-
-  it("un tocco sul foglio sceglie l'oggetto, con Maiusc lo aggiunge o lo toglie, e sul vuoto lascia la selezione", () => {
-    shading([]);
-    tap(50, 200);
-    expect(editor.selection).toEqual([B]);
-    expect(spoken()).toBe("1 oggetto scelto. La sfumatura va al riempimento degli oggetti scelti.");
-    tap(300, 160, { shiftKey: true });
-    expect(editor.selection).toEqual([B, C]);
-    tap(50, 200, { shiftKey: true });
-    expect(editor.selection).toEqual([C]);
-    tap(380, 20);
-    expect(editor.selection).toEqual([]);
-    expect(spoken()).toBe("Scegli gli oggetti a cui dare una sfumatura: un clic su un oggetto lo sceglie.");
-    expect(changes).toEqual([]);
-  });
-
-  it("i capi si trascinano: uno gira e allunga la linea attorno all'altro, con Maiusc di 45° in 45°; la linea la sposta", () => {
-    shading();
-    drag([[180, 50], [180, 70], [180, 90]]);
-    expect(shade(A)).toContain('x1="20" y1="50" x2="180" y2="90"');
-    expect(spoken()).toBe("Fine della sfumatura: x 180, y 90.");
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Capo della sfumatura spostato.");
-    drag([[180, 50], [180, 100], [180, 140]], { shiftKey: true });
-    expect(shade(A)).toContain('x1="20" y1="50" x2="145" y2="175"');
-    editor.undo();
-    // La linea, presa a metà, porta con sé la sfumatura.
-    drag([[100, 50], [110, 60], [120, 70]]);
-    expect(shade(A)).toContain('x1="40" y1="70" x2="200" y2="70"');
-    expect(spoken()).toBe("Inizio della sfumatura: x 40, y 70.");
-    editor.undo();
-    expect(editor.engine.text).toBe(SHADES);
-  });
-
-  it("il centro di una radiale la sposta, il raggio la gira e la allarga; con Alt sul centro si prende il fuoco", () => {
-    shading([C]);
-    drag([[300, 200], [310, 200], [320, 210]]);
-    expect(shade(C)).toContain('cx="320" cy="210" r="50"');
-    expect(spoken()).toBe("Centro della sfumatura: x 320, y 210.");
-    editor.undo();
-    drag([[350, 200], [360, 200], [370, 200]]);
-    expect(shade(C)).toContain('cx="300" cy="200" r="70"');
-    editor.undo();
-    drag([[300, 200], [310, 200], [320, 200]], { altKey: true });
-    expect(shade(C)).toContain('cx="300" cy="200" r="50" fx="320" fy="200"');
-    expect(spoken()).toBe("Fuoco della sfumatura: x 320, y 200.");
-  });
-
-  it("un punto scorre lungo la linea, e lontano da lei si toglie, se ne restano due", () => {
-    shading([C]);
-    // Il punto a metà pende 16 pixel sotto la linea, a 325.
-    drag([[325, 216], [330, 216], [335, 216]]);
-    expect(shade(C)).toContain('<stop offset="0.7" stop-color="#e69f00"/>');
-    expect(spoken()).toBe("Punto 2 di 3 della sfumatura, Arancione, al 70%.");
-    expect(changes).toHaveLength(1);
-    // Tirato giù, lontano dalla linea, se ne va.
-    drag([[335, 216], [335, 240], [335, 260]]);
-    expect(shade(C)).not.toContain("#e69f00\"/>");
-    expect(spoken()).toBe("Punto 2 tolto.");
-    // Degli ultimi due, nessuno si stacca.
-    drag([[350, 216], [350, 240], [350, 260]]);
-    expect(changes).toHaveLength(2);
-  });
-
-  it("un tocco sceglie un capo o un punto e lo dice; due sulla linea aggiungono un punto, del colore che si vede lì", () => {
-    shading();
-    tap(20, 50);
-    expect(spoken()).toBe("Inizio della sfumatura: x 20, y 50.");
-    tap(180, 66);
-    expect(spoken()).toBe("Punto 2 di 2 della sfumatura, #ffffff, al 100%.");
-    tap(60, 50);
-    expect(spoken()).toBe("Linea della sfumatura, al 25%: il doppio clic aggiunge un punto qui.");
-    drag([[60, 50]]);
-    expect(shade(A)).toMatch(/<stop offset="0" stop-color="#0072b2"\/><stop offset="0.25" stop-color="#[0-9a-f]{6}"\/><stop offset="1" stop-color="#ffffff"\/>/);
-    expect(spoken()).toBe("Punto 2 aggiunto, al 25%.");
-    expect(changes).toHaveLength(1);
-  });
-
-  it("due tocchi su un punto, o Invio, portano al suo colore nel pannello; Invio su un capo, alla sezione", () => {
-    shading();
-    /// Il campo che ha il fuoco, se sta nella sezione «Sfumatura».
-    const focused = (): HTMLInputElement | null =>
-      document.activeElement?.closest('.draw-properties-section[data-section="gradient"]') === null ? null : (document.activeElement as HTMLInputElement);
-    tap(180, 66);
-    drag([[180, 66]]);
-    expect(focused()?.value).toBe("#ffffff");
-    editor.focus();
-    key("Home");
-    key("Enter");
-    expect(focused()).not.toBeNull();
-    editor.focus();
-    key("Tab");
-    key("Tab");
-    key("Enter");
-    expect(focused()?.value).toBe("#0072b2");
-    expect(changes).toEqual([]);
-  });
-
-  it("dalla tastiera: Tab va di capo in capo e di punto in punto, Inizio e Fine agli estremi, Esc lascia", () => {
-    shading();
-    key("Tab");
-    expect(spoken()).toBe("Inizio della sfumatura: x 20, y 50.");
-    key("Tab");
-    expect(spoken()).toBe("Fine della sfumatura: x 180, y 50.");
-    key("Tab");
-    expect(spoken()).toBe("Punto 1 di 2 della sfumatura, Blu, al 0%.");
-    key("End");
-    expect(spoken()).toBe("Punto 2 di 2 della sfumatura, #ffffff, al 100%.");
-    key("Home");
-    expect(spoken()).toBe("Inizio della sfumatura: x 20, y 50.");
-    key("Tab", { shiftKey: true });
-    key("Escape");
-    expect(spoken()).toBe("Nessun capo o punto della sfumatura scelto.");
-    expect(changes).toEqual([]);
-  });
-
-  it("le frecce spostano il capo scelto come un nodo, e il punto scelto lungo la linea", () => {
-    shading();
-    key("Tab");
-    key("ArrowRight");
-    expect(shade(A)).toContain('x1="21" y1="50" x2="180" y2="50"');
-    expect(spoken()).toBe("Inizio della sfumatura: x 21, y 50.");
-    key("ArrowDown", { shiftKey: true });
-    expect(shade(A)).toContain('x1="21" y1="60" x2="180" y2="50"');
-    // Il punto: verso la fine con →, verso l'inizio con ←; di traverso, ↑ va
-    // avanti.
-    key("End");
-    key("ArrowLeft");
-    expect(shade(A)).toContain('<stop offset="0.99" stop-color="#ffffff"/>');
-    expect(spoken()).toBe("Punto 2 di 2 della sfumatura, #ffffff, al 99%.");
-    key("ArrowLeft", { shiftKey: true });
-    expect(shade(A)).toContain('<stop offset="0.89" stop-color="#ffffff"/>');
-    expect(changes).toHaveLength(4);
-  });
-
-  it("Canc toglie il punto scelto, mai l'oggetto; Ins ne aggiunge uno a metà col seguente", () => {
-    shading([C]);
-    key("Delete");
-    expect(spoken()).toBe("Canc e Ins valgono per un punto della sfumatura: sceglilo con Tab.");
-    expect(editor.engine.text).toBe(SHADES);
-    key("End");
-    key("Insert");
-    expect(shade(C)).toMatch(/<stop offset="0.5" stop-color="#e69f00"\/><stop offset="0.75" stop-color="#[0-9a-f]{6}"\/><stop offset="1" stop-color="#d55e00"\/>/);
-    expect(spoken()).toBe("Punto 3 aggiunto, al 75%.");
-    key("Delete");
-    expect(spoken()).toBe("Punto 3 tolto.");
-    expect(changes).toHaveLength(2);
-  });
-
-  it("con più sfumature dice di quale parla", () => {
-    shading([A, C]);
-    key("Tab");
-    expect(spoken()).toBe("Inizio della sfumatura: x 20, y 50. Sfumatura 1 di 2.");
-  });
-
-  it("«Applica a» il contorno: la sfumatura va al contorno degli oggetti scelti", () => {
-    const D = "od4d4d4d4";
-    shading([D], doc(`${LAYER}<rect id="${D}" x="0" y="0" width="100" height="100" fill="#ffffff" stroke="#000000" stroke-width="4"/></g>`));
-    properties().querySelector<HTMLButtonElement>('.draw-properties-section[data-section="colors"] .draw-swatches-target [data-target="stroke"]')!.click();
-    drag([[20, 50], [50, 50], [80, 50]]);
-    expect(editor.engine.text).toMatch(new RegExp(`<rect id="${D}"[^>]* fill="#ffffff" stroke="url\\(#[^)]+\\) #000000"`));
-    expect(shade(D)).toBe(new RegExp(`<rect id="${D}"[^>]*/>`).exec(editor.engine.text)![0]);
-  });
-
-  it("mentre si trascina, il foglio mostra la sfumatura nuova; Esc la lascia com'era", () => {
-    shading();
-    const target = surface();
-    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 180, clientY: 50, timeStamp: (clock += 8) }));
-    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 180, clientY: 90, timeStamp: (clock += 8) }));
-    const rect = host.querySelector<SVGElement>(`[data-scene-id="${A}"]`)!;
-    const shown = host.querySelector<SVGElement>("svg.spatial-defs:last-child linearGradient")!;
-    expect(rect.style.fill.replace(/"/g, "")).toBe(`url(#${shown.id})`);
-    expect(["x1", "y1", "x2", "y2"].map((name) => shown.getAttribute(name))).toEqual(["20", "50", "180", "90"]);
-    key("Escape");
-    expect(rect.style.fill).toBe("");
-    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 180, clientY: 90, timeStamp: (clock += 8) }));
-    expect(editor.engine.text).toBe(SHADES);
-    expect(changes).toEqual([]);
-  });
-
-  it("il foglio mostra la linea, i capi e i quadratini dei punti, appesi sotto la linea; di una radiale anche il bordo", () => {
-    const layer = recording();
-    shading();
-    layer.frame();
-    const at = (name: string, x: number, y: number): boolean => layer.calls().some((call) => call[0] === name && Math.round(call[1] as number) === x && Math.round(call[2] as number) === y);
-    // La linea e l'asta del primo punto; il cerchio dell'inizio; i
-    // quadratini, larghi 12.
-    expect([at("moveTo", 20, 50), at("lineTo", 180, 50), at("lineTo", 20, 66), at("arc", 20, 50)]).toEqual([true, true, true, true]);
-    expect([at("fillRect", 14, 60), at("fillRect", 174, 60)]).toEqual([true, true]);
-    expect(layer.calls().some(([name, dash]) => name === "setLineDash" && (dash as number[]).length > 0)).toBe(false);
-    editor.select([C]);
-    layer.frame();
-    expect(layer.calls().some(([name, dash]) => name === "setLineDash" && (dash as number[]).length > 0)).toBe(true);
-    // Senza lo strumento, niente.
-    key("v");
-    layer.frame();
-    expect(at("fillRect", 294, 210)).toBe(false);
-  });
-
-  it("il puntatore sopra un capo, un punto o la linea dice che li sposta", () => {
-    shading();
-    hover(20, 50);
-    expect(surface().dataset.grip).toBe("move");
-    hover(100, 66);
-    expect(surface().dataset.grip).toBeUndefined();
-    hover(100, 51);
-    expect(surface().dataset.grip).toBe("move");
-  });
-
-  it("il cursore dice il capo, il punto o la linea sotto di sé; Spazio, le frecce e Spazio li spostano", () => {
-    shading([C]);
-    // Il cursore parte dal mezzo del foglio, a 200, 150.
-    key("ArrowRight", { shiftKey: true });
-    key("ArrowRight", { shiftKey: true });
-    expect(spoken()).toBe("x 300, y 150: Rettangolo");
-    key("ArrowDown", { shiftKey: true });
-    expect(spoken()).toBe("x 300, y 200: Centro della sfumatura.");
-    key(" ");
-    key("ArrowRight", { shiftKey: true });
-    key(" ");
-    expect(shade(C)).toContain('cx="350" cy="200" r="50"');
-    expect(spoken()).toBe("Centro della sfumatura: x 350, y 200.");
-    expect(changes).toHaveLength(1);
-  });
-
-  it("i tasti della Sfumatura stanno nell'elenco", () => {
-    shading();
-    key("?", { shiftKey: true });
-    const table = [...dialog().querySelectorAll("table")].find((each) => each.querySelector("caption")!.textContent === "Sfumatura")!;
-    expect([...table.querySelectorAll("tr")].map((row) => row.querySelector("th")!.textContent)).toEqual(["Space", "Shift", "Alt", "Tab o Shift+Tab", "Home o End", "←↑→↓", "Insert", "Del", "Enter", "Esc"]);
-    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
-  });
-});
-
-describe("la barra accanto alla selezione, dal livello Standard", () => {
+describe("la barra accanto alla selezione, nel Completo", () => {
   const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
   const spot = (): readonly number[] => /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(bar().style.transform)!.slice(1).map(Number);
 
   it("sta sotto la selezione, oltre le maniglie; in cima al foglio se chi disegna lo sceglie", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     size(800, 600);
     editor.select(["o1a2b3c4d"]);
     expect(bar().hidden).toBe(false);
@@ -5497,7 +2240,7 @@ describe("la barra accanto alla selezione, dal livello Standard", () => {
   });
 
   it("durante un gesto non si vede, e dopo segue la selezione", () => {
-    mount(doc(`${LAYER}<rect id="oa1a1a1a1" x="10" y="20" width="10" height="10" fill="#000000"/></g>`), { level: "standard" });
+    mount(doc(`${LAYER}<rect id="oa1a1a1a1" x="10" y="20" width="10" height="10" fill="#000000"/></g>`));
     size(800, 600);
     editor.setTool("select");
     editor.select(["oa1a1a1a1"]);
@@ -5511,8 +2254,8 @@ describe("la barra accanto alla selezione, dal livello Standard", () => {
     expect(spot()[0]).toBe(115);
   });
 
-  it("senza il pannello delle proprietà, si sceglie in «Pagina e griglia»", () => {
-    mount(SOURCE, { level: "custom", custom: ["arrange", "grid"] });
+  it("si sceglie anche in «Pagina e griglia»", () => {
+    mount(SOURCE);
     size(800, 600);
     host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Pagina e griglia"]')!.click();
     const item = [...document.querySelectorAll<HTMLElement>(".context-menu button")].find(
@@ -5719,7 +2462,8 @@ describe("da tastiera", () => {
   });
 
   it("Invio apre posizione e misure; i campi non toccati restano esatti", async () => {
-    mount(BOXES);
+    // Senza il pannello delle proprietà, che il PDF non ha, Invio apre una finestra.
+    mount(BOXES, { profile: "pdf" });
     editor.select(["oa1a1a1a1"]);
     editor.focus();
     key("Enter");
@@ -5741,7 +2485,8 @@ describe("da tastiera", () => {
   });
 
   it("Invio senza selezione apre le proprietà del disegno, in un passo che si annulla", async () => {
-    mount(BOXES);
+    // Senza il pannello delle proprietà, che il PDF non ha, Invio apre una finestra.
+    mount(BOXES, { profile: "pdf" });
     key("Enter");
     expect(dialog().querySelector("h2")!.textContent).toBe("Proprietà del disegno");
     expect(field("title").value).toBe("Prova");
@@ -5761,7 +2506,8 @@ describe("da tastiera", () => {
   });
 
   it("annullare la finestra non scrive niente", () => {
-    mount(BOXES);
+    // Senza il pannello delle proprietà, che il PDF non ha, Invio apre una finestra.
+    mount(BOXES, { profile: "pdf" });
     editor.select(["oa1a1a1a1"]);
     key("Enter");
     // Un secondo Invio non apre un'altra finestra.
@@ -5772,13 +2518,15 @@ describe("da tastiera", () => {
   });
 
   it("«?» elenca i tasti, gruppo per gruppo", () => {
-    mount();
+    mount(SOURCE, { workspace: "simple" });
     key("?", { shiftKey: true });
     expect(dialog().querySelector("h2")!.textContent).toBe("Tasti del disegno");
     expect([...dialog().querySelectorAll(".keys-list > table caption")].map((caption) => caption.textContent)).toEqual([
       "Strumenti",
       "Disegnare da tastiera",
       "Oggetti",
+      "Evidenziatore",
+      "Proprietà",
       "Vista",
       "Modifica",
     ]);
@@ -5792,266 +2540,13 @@ describe("da tastiera", () => {
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
 
-  it("«Mostra tutto» aggiunge i tasti dei livelli sopra, ciascuno col livello da cui vale", () => {
-    mount();
-    key("?", { shiftKey: true });
-    const extra = dialog().querySelector<HTMLElement>(".keys-more")!;
-    expect(extra.hidden).toBe(true);
-    dialog().querySelector<HTMLButtonElement>(".keys-show-all")!.click();
-    expect(extra.querySelector(".keys-note")!.textContent).toBe(
-      "Il livello di adesso è «Essenziale». I tasti qui sotto valgono da un livello più alto, che si sceglie nelle Impostazioni, nel gruppo «Disegni».",
-    );
-    const tables = [...extra.querySelectorAll("table")].map((table) => ({
-      caption: table.querySelector("caption")!.textContent,
-      rows: [...table.querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]),
-    }));
-    expect(tables.map((table) => table.caption)).toEqual([
-      "Strumenti · dal livello Standard",
-      "Oggetti · dal livello Standard",
-      "Disponi · dal livello Standard",
-      "Selezione avanzata · dal livello Standard",
-      "Ritaglia l’immagine · dal livello Standard",
-      "Poligono · dal livello Standard",
-      "Evidenziatore · dal livello Standard",
-      "Forme dal tratto · dal livello Standard",
-      "Testo · dal livello Standard",
-      "Tavole · dal livello Standard",
-      "Contagocce · dal livello Standard",
-      "Sfumatura · dal livello Standard",
-      "Griglia · dal livello Standard",
-      "Guide intelligenti · dal livello Standard",
-      "Righelli e guide · dal livello Standard",
-      "Proprietà · dal livello Standard",
-      "Vista · dal livello Standard",
-      "Modifica · dal livello Standard",
-      "Elenco delle tavole · dal livello Standard",
-      "Presentazione · dal livello Standard",
-      "Cronologia · dal livello Standard",
-      "Accessibilità · dal livello Standard",
-      "Strumenti · dal livello Esperto",
-      "Disponi · dal livello Esperto",
-      "Tracciato · dal livello Esperto",
-      "Maschera · dal livello Esperto",
-      "Nodi · dal livello Esperto",
-      "Costruttore di forme · dal livello Esperto",
-      "Forbici · dal livello Esperto",
-      "Spessore · dal livello Esperto",
-      "Bézier · dal livello Esperto",
-      "Curvatura · dal livello Esperto",
-      "Attributi · dal livello Esperto",
-    ]);
-    // Solo ciò che manca: i sette strumenti dell'Essenziale non si ripetono.
-    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["G", "Sfumatura"], ["Shift+P", "Evidenziatore"], ["X", "Connettore"], ["Y", "Poligono"], ["T", "Testo"]]);
-    // Dell'albero, il nome, la ricerca e il passo.
-    expect(tables[1]!.rows).toEqual([
-      ["F2", "Nell’albero cambia il nome della riga; sul foglio, quello dell’oggetto scelto, se non è un testo"],
-      ["Ctrl+F", "Nell’albero, porta alla ricerca fra gli oggetti"],
-      ["Alt+↑ o Alt+↓", "Nell’albero porta la riga di un passo, davanti o dietro, dentro o fuori da un gruppo"],
-    ]);
-    expect(tables[2]!.rows).toContainEqual(["Ctrl+D", "Duplica"]);
-    expect(tables[3]!.rows).toEqual([
-      ["Ctrl", "Tenuto col clic, sceglie l’oggetto dentro il gruppo"],
-      ["Ctrl+Enter", "Isola il gruppo scelto"],
-      ["Esc", "Esce dal gruppo isolato, un gruppo alla volta"],
-      ["Ctrl+Shift+L", "Blocca la selezione; nell’albero blocca o sblocca la riga"],
-      ["Ctrl+Shift+H", "Nasconde la selezione; nell’albero nasconde o mostra la riga"],
-      ["Shift+F10", "Apre il menu della selezione"],
-    ]);
-    expect(tables[4]!.rows).toEqual([
-      ["←↑→↓", "Sposta l’immagine sotto il ritaglio, con Maiusc di più"],
-      ["Shift", "Tirando un segno, tiene le proporzioni del ritaglio"],
-      ["Alt", "Tirando un segno, ritaglia attorno al centro"],
-      ["Enter", "Applica il ritaglio"],
-      ["Esc", "Annulla il ritaglio"],
-    ]);
-    expect(tables[5]!.rows).toContainEqual(["Y", "Di nuovo, dal poligono alla stella e ritorno"]);
-    expect(tables[6]!.rows).toEqual([["Shift", "Tenuto premuto mentre si traccia, il tratto è dritto"]]);
-    expect(tables[7]!.rows).toEqual([["Shift", "Tenuto, la forma dal tratto resta regolare"]]);
-    // Le tavole, tutte dallo Standard: i passi fra loro valgono con ogni
-    // strumento, il resto con lo strumento Tavola.
-    expect(tables[9]!.rows).toEqual([
-      ["Alt+PgUp o Alt+PgDn", "Va alla tavola prima o dopo, e la inquadra"],
-      ["Tab o Shift+Tab", "Con lo strumento Tavola, la tavola dopo o prima"],
-      ["Home o End", "Con lo strumento Tavola, la prima o l’ultima tavola"],
-      ["←↑→↓", "Con lo strumento Tavola, sposta la tavola scelta di 1, con Maiusc di 10, con ciò che ci sta sopra"],
-      ["Ctrl+←↑→↓", "Con lo strumento Tavola, allarga o stringe la tavola scelta, o la pagina, di 1, con Maiusc di 10"],
-      ["Ctrl+D", "Con lo strumento Tavola, duplica la tavola scelta, o la pagina, con ciò che ci sta sopra"],
-      ["Del", "Con lo strumento Tavola, elimina la tavola scelta; il disegno resta"],
-      ["F2", "Con lo strumento Tavola, rinomina la tavola scelta"],
-      ["Esc", "Con lo strumento Tavola, lascia la tavola scelta"],
-      ["Shift", "Tenuto all’inizio del trascinamento: disegna una tavola anche dentro un’altra"],
-      ["Alt", "Tenuto mentre si sposta una tavola: ne lascia una copia dove la si posa, con ciò che ci sta sopra"],
-    ]);
-    expect(tables[10]!.rows).toEqual([
-      ["←↑→↓", "Muovono il cursore, anche con oggetti scelti, e dicono che cosa c’è sotto"],
-      ["Space", "Dà agli oggetti scelti l’aspetto di ciò che è sotto il cursore; senza selezione, ne prende il colore per disegnare"],
-      ["Shift+Space", "Prende soltanto il colore sotto il cursore"],
-      ["I", "Nell’albero degli oggetti, dà agli oggetti scelti l’aspetto della riga; senza selezione, ne prende il colore per disegnare"],
-      ["Shift+I", "Nell’albero degli oggetti, prende soltanto il colore della riga"],
-    ]);
-    expect(tables[12]!.rows).toContainEqual(["# o Ctrl+'", "Mostra o nasconde la griglia"]);
-    expect(tables[13]!.rows).toEqual([
-      ["Ctrl+U", "Accende o spegne le guide intelligenti"],
-      ["Ctrl", "Tenuto mentre si trascina: posa libero, senza agganciarsi agli altri oggetti"],
-      ["Alt", "Tenuto con una selezione: le distanze dall’oggetto sotto il puntatore, o dalla pagina"],
-    ]);
-    // Lo zoom c'è già; presentare e la vista girata, dallo
-    // Standard.
-    expect(tables[16]!.rows).toEqual([
-      ["F5", "Presenta dalla prima tavola"],
-      ["Shift+F5", "Presenta dalla tavola di adesso: quella scelta, o quella al centro della vista"],
-      ["4", "Ruota la vista a sinistra"],
-      ["6", "Ruota la vista a destra"],
-      ["5", "Raddrizza la vista"],
-    ]);
-    // Copiare e incollare ci sono già; lo stile, dallo Standard.
-    expect(tables[17]!.rows).toEqual([
-      ["Ctrl+Alt+C", "Copia lo stile"],
-      ["Ctrl+Alt+V", "Incolla lo stile"],
-    ]);
-    // L'elenco delle tavole e la cronologia, tutti dallo Standard.
-    expect(tables[18]!.rows).toEqual([
-      ["↑ o ↓ o Home o End", "Nell’elenco delle tavole, la tavola prima o dopo, la prima o l’ultima"],
-      ["Enter o Space", "Nell’elenco delle tavole, porta alla tavola"],
-      ["F2", "Nell’elenco delle tavole, cambia il nome della tavola"],
-      ["Ctrl+D", "Nell’elenco delle tavole, duplica la tavola col suo contenuto"],
-      ["Alt+↑ o Alt+↓", "Nell’elenco delle tavole, sposta la tavola prima o dopo la sua vicina"],
-      ["Del", "Nell’elenco delle tavole, elimina la tavola"],
-      ["Shift+F10", "Nell’elenco delle tavole, apre il menu della tavola"],
-      ["Esc", "Dall’elenco delle tavole torna al foglio"],
-    ]);
-    // Dentro la presentazione, i suoi tasti.
-    expect(tables[19]!.rows).toEqual([
-      ["→ o ↓ o Space o PgDn o Enter o N", "La tavola dopo, come un clic o il dito che scorre verso sinistra; dopo l’ultima, lo schermo di fine, e da lì esce"],
-      ["← o ↑ o PgUp o ⌫ o P", "La tavola prima, come il dito che scorre verso destra"],
-      ["Home o End", "La prima o l’ultima tavola"],
-      ["0…9", "Un numero e poi Invio: la tavola con quel numero"],
-      ["B o .", "Mette e toglie lo schermo nero"],
-      ["W o ,", "Mette e toglie lo schermo bianco"],
-      ["L", "Accende e spegne il laser"],
-      ["E", "Cancella l’inchiostro"],
-      ["Esc", "Esce dalla presentazione"],
-    ]);
-    expect(tables[20]!.rows.map(([keys]) => keys)).toEqual(["Enter o Space", "F2", "Del", "Esc"]);
-    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
-
-    // Ciò che è elencato non si può fare: il livello resta l'Essenziale.
-    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
-    key("P", { shiftKey: true });
-    expect(editor.tool).toBe("pen");
-    expect(editor.level).toBe("essential");
-    key("#");
-    expect(editor.grid.shown).toBe(false);
-  });
-
-  it("dallo Standard «Mostra tutto» aggiunge i tasti dell'Esperto; dall'Esperto non c'è", async () => {
-    mount(SOURCE, { level: "standard" });
-    key("?", { shiftKey: true });
-    dialog().querySelector<HTMLButtonElement>(".keys-show-all")!.click();
-    const extra = dialog().querySelector<HTMLElement>(".keys-more")!;
-    const tables = [...extra.querySelectorAll("table")].map((table) => ({
-      caption: table.querySelector("caption")!.textContent,
-      rows: [...table.querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]),
-    }));
-    expect(tables).toEqual([
-      { caption: "Strumenti · dal livello Esperto", rows: [["A o N", "Nodi"], ["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]] },
-      { caption: "Disponi · dal livello Esperto", rows: [["Ctrl+Shift+M", "Trasforma…"]] },
-      { caption: "Tracciato · dal livello Esperto", rows: [["Ctrl+J", "Unisce i capi più vicini dei tracciati aperti scelti; un tracciato solo si chiude"]] },
-      { caption: "Maschera · dal livello Esperto", rows: [["Ctrl+7", "Crea maschera di ritaglio"], ["Ctrl+Alt+7", "Rilascia maschera"]] },
-      {
-        caption: "Nodi · dal livello Esperto",
-        rows: [
-          ["←↑→↓", "Sposta i nodi scelti di 1, con Maiusc di 10, con Ctrl o ⌘ di un pixel"],
-          ["Tab o Shift+Tab", "Il nodo dopo o prima"],
-          ["Home o End", "Il primo o l’ultimo nodo"],
-          ["Ctrl+A", "Sceglie tutti i nodi"],
-          ["Enter", "Posizione dei nodi"],
-          ["Insert", "Aggiungi nodi"],
-          ["Del", "Elimina nodi"],
-          ["Shift+C", "Nodi a spigolo"],
-          ["Shift+S", "Nodi lisci"],
-          ["Shift+Y", "Nodi simmetrici"],
-          ["Shift+L", "Segmenti in linee"],
-          ["Shift+U", "Segmenti in curve"],
-          ["Shift+B", "Spezza ai nodi"],
-          ["Shift+J o Ctrl+J", "Unisci i capi"],
-          ["Alt", "Tenuto, un nodo trascinato tira fuori le sue maniglie, e una maniglia trascinata si sposta da sola"],
-          ["Esc", "Toglie la scelta dei nodi, poi quella dell’oggetto"],
-          ["Alt+F10", "Va alla barra dei nodi"],
-        ],
-      },
-      {
-        caption: "Costruttore di forme · dal livello Esperto",
-        rows: [
-          ["Tab o Shift+Tab", "La regione dopo o prima"],
-          ["Home o End", "La prima o l’ultima regione"],
-          ["Space", "Sceglie la regione, o la lascia"],
-          ["Enter", "Unisce le regioni scelte; senza, separa quella a cui si è"],
-          ["Del", "Toglie le regioni scelte, o quella a cui si è"],
-          ["Alt", "Tenuto, il trascinamento e il tocco tolgono le regioni invece di unirle"],
-          ["Shift", "Tenuto, il tocco e il riquadro scelgono le forme invece delle regioni"],
-          ["Esc", "Lascia le regioni scelte, poi la selezione"],
-        ],
-      },
-      {
-        caption: "Forbici · dal livello Esperto",
-        rows: [
-          ["Space", "Taglia dove è il cursore: Spazio e di nuovo Spazio. Spazio, le frecce e Spazio tirano il Coltello"],
-          ["Alt", "Tenuto, il Coltello taglia dritto"],
-        ],
-      },
-      {
-        caption: "Spessore · dal livello Esperto",
-        rows: [
-          ["Space", "Allarga o stringe dove è il cursore: Spazio, le frecce e Spazio. Su un punto in mezzo, lo sposta"],
-          ["Alt", "Tenuto, cambia soltanto il lato che si tira"],
-          ["Del", "Toglie il punto dello spessore scelto"],
-          ["Enter", "Apre le misure del punto scelto"],
-          ["Esc", "Lascia il punto scelto"],
-        ],
-      },
-      {
-        caption: "Bézier · dal livello Esperto",
-        rows: [
-          ["Space", "Un nodo dove è il cursore: Spazio e di nuovo Spazio per uno spigolo, o in mezzo le frecce per tirarne le maniglie"],
-          ["Shift", "Tenuto, porta il nodo o la maniglia a passi di 15°"],
-          ["Enter o Esc", "Conclude il tracciato"],
-          ["Del", "Elimina l’ultimo nodo"],
-        ],
-      },
-      {
-        caption: "Curvatura · dal livello Esperto",
-        rows: [
-          ["B", "Premuto di nuovo, passa dalla penna alla Curvatura e ritorno"],
-          ["Space", "Un punto liscio dove è il cursore: Spazio e di nuovo Spazio. Su un punto in mezzo lo fa liscio o spigolo"],
-          ["Shift+C", "Il punto sotto il cursore, o l’ultimo, diventa uno spigolo"],
-          ["Shift+S", "Il punto sotto il cursore, o l’ultimo, diventa liscio"],
-          ["Alt", "Tenuto mentre si tocca, il punto nuovo è uno spigolo"],
-        ],
-      },
-      {
-        caption: "Attributi · dal livello Esperto",
-        rows: [
-          ["Ctrl+Shift+X", "Va agli attributi, nel pannello delle proprietà"],
-          ["Enter", "Applica il valore scritto"],
-          ["Shift+Enter", "Va a capo, nei punti e nei percorsi"],
-          ["Esc", "Riporta il valore com’era; di nuovo, torna al foglio"],
-        ],
-      },
-    ]);
-    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
-    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
-    // Dallo Standard il tasto non apre niente.
-    editor.select(["o1a2b3c4d"]);
-    key("X", { ctrlKey: true, shiftKey: true });
-    expect(host.querySelector<HTMLElement>(".draw-inspector")!.hidden).toBe(true);
-
-    editor.setLevel("expert");
-    // L'elenco di prima si chiude con la sua risposta.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+  it("nel Completo non c'è «Mostra tutto»: non ci sono altri tasti (ADR 0231)", () => {
+    mount(SOURCE);
     key("?", { shiftKey: true });
     expect(dialog().querySelector(".keys-show-all")).toBeNull();
-    expect([...dialog().querySelectorAll(".keys-list > table caption")].map((caption) => caption.textContent)).toContain("Attributi");
+    const captions = [...dialog().querySelectorAll(".keys-list > table caption")].map((caption) => caption.textContent);
+    expect(captions.some((caption) => /Nodi|Bézier|Attributi|Maschera|Tracciato/.test(caption ?? ""))).toBe(false);
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
 
@@ -6159,7 +2654,7 @@ describe("la cornice di trasformazione", () => {
   });
 
   it("con la griglia il bordo va sulla riga, e Ctrl o ⌘ lo lascia libero", () => {
-    selecting(ONE, [A], { level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE } });
+    selecting(ONE, [A], { grid: { shown: false, snap: true, step: 20, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE } });
     drag([[204, 125], [220, 125], [237, 125]]);
     expect(transformOf(A)).toBe("matrix(1.4 0 0 1 -40 0)");
     editor.undo();
@@ -6340,7 +2835,7 @@ describe("l'albero degli oggetti", () => {
     expect(panel.hidden).toBe(false);
     expect(button().getAttribute("aria-expanded")).toBe("true");
     expect(document.activeElement).toBe(tree());
-    expect(labels()).toEqual(["Livello «Livello 1»", "Rettangolo, Nero"]);
+    expect(labels()).toEqual(["Livello «Livello 1», corrente", "Rettangolo, Nero"]);
     expect(host.querySelector(".draw-objects-count")!.textContent).toBe("1 oggetto");
     expect(formatIssues(checkAccessibility(host))).toBe("");
     button().click();
@@ -6369,10 +2864,10 @@ describe("l'albero degli oggetti", () => {
     button().click();
     editor.setTool("ellipse");
     drag([[10, 10], [50, 30]]);
-    expect(labels()).toEqual(["Livello «Livello 1»", "Ellisse, Nero", "Rettangolo, Nero"]);
+    expect(labels()).toEqual(["Livello «Livello 1», corrente", "Ellisse, Nero", "Rettangolo, Nero"]);
     editor.select(["o1a2b3c4d"]);
     editor.deleteSelection();
-    expect(labels()).toEqual(["Livello «Livello 1»", "Ellisse, Nero"]);
+    expect(labels()).toEqual(["Livello «Livello 1», corrente", "Ellisse, Nero"]);
   });
 
   it("Invio su un oggetto apre le sue proprietà, Canc lo elimina", () => {
@@ -6380,14 +2875,15 @@ describe("l'albero degli oggetti", () => {
     button().click();
     tree().dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true }));
     tree().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
-    expect(dialog().querySelector("h2")!.textContent).toBe("Posizione e misure");
-    dialog().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    const properties = host.querySelector<HTMLElement>(".draw-properties")!;
+    expect(properties.hidden).toBe(false);
+    expect(properties.querySelector(".draw-properties-subject")!.textContent).not.toBe("Il disegno");
     tree().dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true }));
     expect(editor.engine.text).not.toContain("o1a2b3c4d");
   });
 });
 
-describe("i nomi e il filtro dell'albero, dal livello Standard", () => {
+describe("i nomi e il filtro dell'albero, nel Completo", () => {
   const NAMED = doc(`${LAYER}<rect id="oa1a1a1a1" x="10" y="10" width="20" height="20" fill="#000000"/><rect x="40" y="10" width="20" height="20" fill="#0072b2"/></g>`);
   const button = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!;
   const tree = (): HTMLElement => host.querySelector<HTMLElement>('[role="tree"]')!;
@@ -6404,7 +2900,7 @@ describe("i nomi e il filtro dell'albero, dal livello Standard", () => {
   }
 
   it("F2 sulla riga dà all'oggetto il suo nome, il primo `title`, in un passo che si annulla; vuoto lo toglie", () => {
-    mount(NAMED, { level: "standard" });
+    mount(NAMED);
     button().click();
     // Dal davanti: in cima il rettangolo che il documento ha per ultimo.
     expect(labels()).toEqual(["Livello «Livello 1», corrente", "Rettangolo, Blu", "Rettangolo, Nero"]);
@@ -6438,7 +2934,7 @@ describe("i nomi e il filtro dell'albero, dal livello Standard", () => {
   });
 
   it("un oggetto senza id ne riceve uno, e resta scelto e sulla riga attiva", () => {
-    mount(NAMED, { level: "standard" });
+    mount(NAMED);
     button().click();
     inTree("ArrowDown");
     expect(editor.selection[0]).toMatch(/^@/);
@@ -6451,7 +2947,7 @@ describe("i nomi e il filtro dell'albero, dal livello Standard", () => {
   });
 
   it("un livello si rinomina da qui, e non resta senza nome", () => {
-    mount(NAMED, { level: "standard" });
+    mount(NAMED);
     button().click();
     inTree("F2");
     expect(field()!.value).toBe("Livello 1");
@@ -6480,7 +2976,7 @@ describe("i nomi e il filtro dell'albero, dal livello Standard", () => {
           `<g id="og1g1g1g1" fub:locked="true"><rect id="ob2b2b2b2" width="10" height="10"/></g>` +
           `<rect id="oc3c3c3c3" xmlns:inkscape="${INKSCAPE}" inkscape:label="Tetto" width="10" height="10"/></g>`,
       ),
-      { level: "standard" },
+      {},
     );
     button().click();
     inTree("ArrowDown");
@@ -6503,7 +2999,7 @@ describe("i nomi e il filtro dell'albero, dal livello Standard", () => {
     expect(changes).toEqual([]);
 
     editor.dispose();
-    mount(doc(`${LAYER.replace(">", ' fub:locked="true">')}<rect id="oa1a1a1a1" width="10" height="10"/></g>`), { level: "standard" });
+    mount(doc(`${LAYER.replace(">", ' fub:locked="true">')}<rect id="oa1a1a1a1" width="10" height="10"/></g>`));
     button().click();
     inTree("ArrowDown");
     inTree("F2");
@@ -6516,7 +3012,7 @@ describe("i nomi e il filtro dell'albero, dal livello Standard", () => {
 
   it("F2 sul foglio e «Rinomina» nel menu della selezione aprono il nome nell'albero", () => {
     // Una linea: F2 su una forma chiusa ne scrive l'etichetta.
-    mount(NAMED.replace('<rect id="oa1a1a1a1" x="10" y="10" width="20" height="20" fill="#000000"/>', '<line id="oa1a1a1a1" x1="10" y1="10" x2="30" y2="30" stroke="#000000"/>'), { level: "standard" });
+    mount(NAMED.replace('<rect id="oa1a1a1a1" x="10" y="10" width="20" height="20" fill="#000000"/>', '<line id="oa1a1a1a1" x1="10" y1="10" x2="30" y2="30" stroke="#000000"/>'));
     editor.select(["oa1a1a1a1"]);
     surface().focus();
     expect(key("F2").defaultPrevented).toBe(true);
@@ -6540,7 +3036,7 @@ describe("i nomi e il filtro dell'albero, dal livello Standard", () => {
   });
 
   it("il filtro c'è coi livelli, e scriverci non comanda il foglio", () => {
-    mount(NAMED, { level: "standard" });
+    mount(NAMED);
     button().click();
     const filter = host.querySelector<HTMLElement>(".draw-objects-filter")!;
     const search = host.querySelector<HTMLInputElement>(".draw-objects-search")!;
@@ -6559,7 +3055,7 @@ describe("i nomi e il filtro dell'albero, dal livello Standard", () => {
     editor.setTool("rect");
     drag([[100, 100], [120, 120]]);
     expect(host.querySelector(".draw-objects-status")!.textContent).toBe("1 oggetto trovato.");
-    editor.setLevel("essential");
+    editor.setWorkspace("simple");
     expect(filter.hidden).toBe(true);
     expect(search.value).toBe("");
     expect(labels()).toHaveLength(4);
@@ -6570,7 +3066,7 @@ describe("i nomi e il filtro dell'albero, dal livello Standard", () => {
   });
 });
 
-describe("spostare dall'albero, dal livello Standard", () => {
+describe("spostare dall'albero, nel Completo", () => {
   // Dal davanti: «Sopra» col cerchio, poi «Livello 1» con c, il gruppo g
   // (chiuso, con b) e a.
   const STACKED = doc(
@@ -6598,7 +3094,7 @@ describe("spostare dall'albero, dal livello Standard", () => {
   }
 
   it("Alt+↓ porta l'oggetto dietro a ciò che ha dietro, in un passo che si annulla, e dice dove è arrivato", () => {
-    mount(STACKED, { level: "standard" });
+    mount(STACKED);
     openAt("oc3c3c3c3");
     expect(keys()).toEqual(["l2", "od4d4d4d4", "l1", "oc3c3c3c3", "og1g1g1g1", "oa1a1a1a1"]);
     expect(inTree("ArrowDown", { altKey: true }).defaultPrevented).toBe(true);
@@ -6618,7 +3114,7 @@ describe("spostare dall'albero, dal livello Standard", () => {
   });
 
   it("entra in un gruppo aperto restando dov'era sul foglio, ne esce, e passa al livello accanto", () => {
-    mount(STACKED, { level: "standard" });
+    mount(STACKED);
     openAt("oc3c3c3c3");
     inTree("ArrowDown");
     inTree("ArrowRight");
@@ -6647,7 +3143,7 @@ describe("spostare dall'albero, dal livello Standard", () => {
   });
 
   it("un livello va sopra o sotto gli altri, e resta il livello corrente", () => {
-    mount(STACKED, { level: "standard" });
+    mount(STACKED);
     button().click();
     inTree("Home");
     expect(activeKey()).toBe("l2");
@@ -6673,7 +3169,7 @@ describe("spostare dall'albero, dal livello Standard", () => {
           + `<g id="og1g1g1g1" fub:locked="true"><rect id="ob2b2b2b2" width="10" height="10"/></g>`
           + `<rect id="oc3c3c3c3" width="10" height="10"/></g>`,
       ),
-      { level: "standard" },
+      {},
     );
     button().click();
     expect(keys()).toEqual(["l2", "oc3c3c3c3", "og1g1g1g1", "oa1a1a1a1", "l1", "oe5e5e5e5"]);
@@ -6710,7 +3206,7 @@ describe("spostare dall'albero, dal livello Standard", () => {
       `<style>#l2 rect{fill:#d55e00}</style>${LAYER}<rect id="oe5e5e5e5" width="10" height="10"/></g>`
         + `<g id="l2" fub:layer="Sopra"><rect id="oc3c3c3c3" width="10" height="10"/></g>`,
     );
-    mount(source, { level: "standard" });
+    mount(source);
     button().click();
     expect(keys()).toEqual(["l2", "oc3c3c3c3", "l1", "oe5e5e5e5"]);
     inTree("Home");
@@ -6737,7 +3233,7 @@ describe("spostare dall'albero, dal livello Standard", () => {
         `${LAYER}<a id="ol1l1l1l1" href="Note/uno.md"><rect id="oa1a1a1a1" width="10" height="10"/></a>`
           + `<a id="ol2l2l2l2" href="Note/due.md"><rect id="ob2b2b2b2" width="10" height="10"/></a></g>`,
       ),
-      { level: "standard" },
+      {},
     );
     openAt("ol2l2l2l2");
     inTree("ArrowDown");
@@ -6760,7 +3256,7 @@ describe("spostare dall'albero, dal livello Standard", () => {
     const frame = (): void => {
       for (let round = 0; round < 50 && frames.length > 0; round++) for (const callback of frames.splice(0)) callback(0);
     };
-    mount(STACKED, { level: "standard" });
+    mount(STACKED);
     openAt("oc3c3c3c3");
     frame();
     const thumb = (id: string): Element | null => host.querySelector(`.draw-object[data-key="${id}"] .draw-object-thumb > svg`);
@@ -6795,7 +3291,7 @@ describe("spostare dall'albero, dal livello Standard", () => {
         + `${LAYER}<rect id="oa1a1a1a1" x="10" y="10" width="20" height="20" fill="url(#r1a1a1a1a) #0072b2"/>`
         + '<rect id="oc3c3c3c3" x="70" y="10" width="20" height="20" fill="#000000"/></g>',
     );
-    mount(source, { level: "standard" });
+    mount(source);
     openAt("oa1a1a1a1");
     frame();
     const thumb = (id: string): Element | null => host.querySelector(`.draw-object[data-key="${id}"] .draw-object-thumb > svg`);
@@ -6814,8 +3310,8 @@ describe("spostare dall'albero, dal livello Standard", () => {
     expect(thumb("oa1a1a1a1")!.querySelector("stop")!.getAttribute("stop-color")).toBe("#d55e00");
   });
 
-  it("all'Essenziale l'albero non sposta e non ha miniature", () => {
-    mount(STACKED);
+  it("nel Semplice l'albero non sposta e non ha miniature", () => {
+    mount(STACKED, { workspace: "simple" });
     openAt("oc3c3c3c3");
     inTree("ArrowDown", { altKey: true });
     expect(editor.engine.text).toBe(STACKED);
@@ -6824,7 +3320,7 @@ describe("spostare dall'albero, dal livello Standard", () => {
   });
 });
 
-describe("la selezione avanzata, dal livello Standard", () => {
+describe("la selezione avanzata, nel Completo", () => {
   const A = "oa1a1a1a1";
   const B = "ob2b2b2b2";
   const C = "oc3c3c3c3";
@@ -6846,7 +3342,8 @@ describe("la selezione avanzata, dal livello Standard", () => {
   const selectionButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Selezione avanzata"]')!;
   const menu = (): HTMLButtonElement[] => {
     const open = document.querySelectorAll<HTMLElement>(".context-menu");
-    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+    // Le voci, fuori dalla riga degli appunti.
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(.menu-quick)')];
   };
   const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
   const item = (label: string): HTMLButtonElement => menu().find((entry) => labelOf(entry) === label)!;
@@ -6858,15 +3355,6 @@ describe("la selezione avanzata, dal livello Standard", () => {
   const isolation = (): HTMLElement => host.querySelector<HTMLElement>(".draw-isolation")!;
   const crumbs = (): string[] => [...isolation().querySelectorAll(".draw-isolation-crumb")].map((crumb) => crumb.textContent ?? "");
   const painted = (id: string): SVGElement => host.querySelector<SVGElement>(`[data-scene-id="${id}"]`)!;
-  /// Un lazo col mouse lungo i lati del poligono `corners`, chiuso.
-  const lasso = (corners: readonly (readonly [number, number])[], init: Init = {}): void => {
-    const points: [number, number][] = [];
-    corners.forEach((corner, at) => {
-      const next = corners[(at + 1) % corners.length]!;
-      for (let step = 0; step < 4; step++) points.push([corner[0] + ((next[0] - corner[0]) * step) / 4, corner[1] + ((next[1] - corner[1]) * step) / 4]);
-    });
-    drag(points, init);
-  };
   /// Un tocco, lontano nel tempo dal precedente: non fa un doppio tocco.
   const tap = (x: number, y: number, init: Init = {}): void => {
     clock += 1000;
@@ -6883,8 +3371,8 @@ describe("la selezione avanzata, dal livello Standard", () => {
     for (const open of document.querySelectorAll(".context-menu")) open.remove();
   });
 
-  it("all'Essenziale non c'è: niente Lazo, niente menu, e i tasti restano a chi li aveva", () => {
-    mount(SET);
+  it("nel Semplice non c'è: niente Lazo, niente menu, e i tasti restano a chi li aveva", () => {
+    mount(SET, { workspace: "simple" });
     editor.setTool("select");
     expect(key("q").defaultPrevented).toBe(false);
     expect(editor.tool).toBe("select");
@@ -6901,65 +3389,8 @@ describe("la selezione avanzata, dal livello Standard", () => {
     expect(editor.engine.text).toBe(SET);
   });
 
-  it("il Lazo, col tasto Q, sceglie ciò che racchiude per intero; Maiusc aggiunge, Alt toglie, un tocco sceglie", () => {
-    mount(SET, { level: "standard" });
-    key("q");
-    expect(editor.tool).toBe("lasso");
-    lasso([[5, 5], [75, 5], [75, 35], [5, 35]]);
-    expect(editor.selection).toEqual([A, B]);
-    expect(spoken()).toBe("2 oggetti scelti.");
-    // Un gruppo si sceglie solo intero.
-    lasso([[5, 55], [35, 55], [35, 85], [5, 85]]);
-    expect(editor.selection).toEqual([]);
-    editor.select([A]);
-    lasso([[5, 55], [115, 55], [115, 85], [5, 85]], { shiftKey: true });
-    expect(editor.selection).toEqual([A, G]);
-    lasso([[5, 5], [35, 5], [35, 35], [5, 35]], { altKey: true });
-    expect(editor.selection).toEqual([G]);
-    tap(60, 20);
-    expect(editor.selection).toEqual([B]);
-    tap(20, 20, { shiftKey: true });
-    expect(editor.selection).toEqual([A, B]);
-    tap(60, 20, { shiftKey: true });
-    expect(editor.selection).toEqual([A]);
-    tap(150, 150);
-    expect(editor.selection).toEqual([]);
-    // Senza il Lazo, chi lo aveva in mano riprende la Selezione, non la penna.
-    editor.setLevel("essential");
-    expect(editor.tool).toBe("select");
-    expect(changes).toEqual([]);
-  });
-
-  it("il Lazo si tira anche dalla tastiera: Spazio lo comincia, le frecce lo tirano, Spazio lo chiude", () => {
-    mount(SET, { level: "standard" });
-    // Il cursore parte dal centro della vista, (40, 40). Spazio due volte,
-    // senza frecce, sceglie ciò che è sotto il cursore.
-    size(80, 80);
-    key("q");
-    for (let step = 0; step < 2; step++) key("ArrowLeft");
-    for (let step = 0; step < 3; step++) key("ArrowDown");
-    key(" ");
-    key(" ");
-    expect(editor.selection).toEqual([G]);
-    // Senza selezione le frecce muovono il cursore. Da (0, 0), il lazo gira
-    // attorno al primo rettangolo.
-    key("Escape");
-    for (let step = 0; step < 2; step++) key("ArrowLeft");
-    key("ArrowUp", { shiftKey: true });
-    for (let step = 0; step < 2; step++) key("ArrowUp");
-    expect(spoken()).toBe("x 0, y 0");
-    key(" ");
-    for (let step = 0; step < 4; step++) key("ArrowRight");
-    for (let step = 0; step < 4; step++) key("ArrowDown");
-    for (let step = 0; step < 4; step++) key("ArrowLeft");
-    key(" ");
-    expect(editor.selection).toEqual([A]);
-    expect(spoken()).toBe("1 oggetto scelto.");
-    expect(changes).toEqual([]);
-  });
-
   it("con Ctrl o ⌘ un clic sceglie l'oggetto dentro il gruppo, Maiusc lo aggiunge, e lo si sposta da solo", () => {
-    mount(SET, { level: "standard" });
+    mount(SET);
     editor.setTool("select");
     tap(20, 70);
     expect(editor.selection).toEqual([G]);
@@ -6981,7 +3412,7 @@ describe("la selezione avanzata, dal livello Standard", () => {
   });
 
   it("due tocchi su un gruppo lo isolano: il resto si attenua e non si sceglie, la barra dice dove si è, Esc esce; il file non cambia", () => {
-    mount(SET, { level: "standard" });
+    mount(SET);
     editor.setTool("select");
     expect(isolation().hidden).toBe(true);
     doubleTap(20, 70);
@@ -7016,7 +3447,7 @@ describe("la selezione avanzata, dal livello Standard", () => {
   });
 
   it("Ctrl+Invio isola il gruppo scelto; dentro, un gruppo si isola ancora, e la barra riporta a ogni gruppo del percorso", () => {
-    mount(SET, { level: "standard" });
+    mount(SET);
     editor.setTool("select");
     editor.select([A]);
     key("Enter", { ctrlKey: true });
@@ -7052,7 +3483,7 @@ describe("la selezione avanzata, dal livello Standard", () => {
   });
 
   it("con un gruppo isolato ciò che si disegna entra nel gruppo, in cima, e il gruppo resta isolato", () => {
-    mount(SET, { level: "standard" });
+    mount(SET);
     editor.select([G]);
     key("Enter", { ctrlKey: true });
     editor.setTool("rect");
@@ -7064,7 +3495,7 @@ describe("la selezione avanzata, dal livello Standard", () => {
   });
 
   it("Ctrl+Maiusc+L blocca e Ctrl+Maiusc+H nasconde gli oggetti scelti, in un passo; «Sblocca tutto» e «Mostra tutto» li riportano", () => {
-    mount(SET, { level: "standard" });
+    mount(SET);
     editor.setTool("select");
     editor.select([A]);
     key("L", { ctrlKey: true, shiftKey: true });
@@ -7097,7 +3528,7 @@ describe("la selezione avanzata, dal livello Standard", () => {
   });
 
   it("il menu sceglie i simili, a ogni profondità, e il resto; le voci che adesso non servono dicono perché", () => {
-    mount(SET, { level: "standard" });
+    mount(SET);
     editor.setTool("select");
     selectionButton().click();
     expect(menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled")])).toEqual([
@@ -7120,11 +3551,9 @@ describe("la selezione avanzata, dal livello Standard", () => {
       ["Nascondi", "true"],
       ["Sblocca tutto", "true"],
       ["Mostra tutto", "true"],
-      ["Collega le forme scelte", "true"],
       ["Isola il gruppo", "true"],
     ]);
     expect(item("Stesso riempimento").querySelector(".menu-description")!.textContent).toBe("Scegli prima degli oggetti.");
-    expect(item("Collega le forme scelte").querySelector(".menu-description")!.textContent).toBe("Scegli almeno due oggetti da unire: i connettori non contano.");
     expect(item("Rinomina").querySelector(".menu-description")!.textContent).toBe("Scegli un oggetto solo per cambiargli il nome.");
     item("Seleziona tutto").click();
     expect(editor.selection).toEqual([A, B, G]);
@@ -7160,7 +3589,7 @@ describe("la selezione avanzata, dal livello Standard", () => {
   });
 
   it("il tasto destro su un oggetto lo sceglie e apre il menu della selezione; Maiusc+F10 lo apre dalla tastiera", () => {
-    mount(SET, { level: "standard" });
+    mount(SET);
     editor.setTool("select");
     expect(rightClick(60, 20).defaultPrevented).toBe(true);
     expect(editor.selection).toEqual([B]);
@@ -7193,9 +3622,52 @@ describe("la selezione avanzata, dal livello Standard", () => {
     closeContextMenu();
   });
 
+  it("il tasto destro sul foglio vuoto dà le sole voci che fanno qualcosa, e il piede invita a scrivere", () => {
+    mount(SET);
+    editor.setTool("select");
+    expect(rightClick(150, 150).defaultPrevented).toBe(true);
+    expect(editor.selection).toEqual([]);
+    expect(document.querySelector("#context-menu .menu-clipboard")).toBeNull();
+    expect(menu().map(labelOf)).toEqual(["Incolla", "Incolla nello stesso punto", "Seleziona tutto", "Mostra tutto il disegno", "Menu radiale"]);
+    expect(menu().every((entry) => entry.getAttribute("aria-disabled") === null)).toBe(true);
+    expect(document.querySelector("#context-menu .menu-foot")!.textContent).toContain("Scrivi per cercare");
+    item("Seleziona tutto").click();
+    expect(editor.selection).toEqual([A, B, G]);
+    // Il resto si trova scrivendo.
+    editor.select([]);
+    rightClick(150, 150);
+    for (const letter of "inverti") key(letter, {}, document.activeElement as HTMLElement);
+    expect(menu().map(labelOf)).toEqual(["Inverti la selezione"]);
+    closeContextMenu();
+    // A chi legge soltanto non resta che vedere il disegno.
+    editor.setReadOnly(true);
+    rightClick(150, 150);
+    expect(menu().map(labelOf)).toEqual(["Seleziona tutto", "Mostra tutto il disegno"]);
+    closeContextMenu();
+  });
+
+  it("con una selezione il tasto destro dà gli appunti in cima e le sue voci, sempre sotto nove", () => {
+    mount(SET);
+    editor.setTool("select");
+    rightClick(60, 20);
+    expect(editor.selection).toEqual([B]);
+    const row = document.querySelector<HTMLElement>("#context-menu .menu-clipboard")!;
+    expect([...row.querySelectorAll("[role=menuitem]")].map((b) => b.textContent)).toEqual(["Taglia", "Copia", "Incolla"]);
+    const labels = menu().map(labelOf);
+    expect(labels).toEqual(["Copia lo stile", "Incolla lo stile", "Seleziona simili", "Blocca", "Nascondi", "Isola il gruppo", "Menu radiale"]);
+    expect(labels.length).toBeLessThan(9);
+    closeContextMenu();
+    // Dentro un gruppo, con l'uscita.
+    doubleTap(20, 70);
+    rightClick(20, 70);
+    expect(menu().map(labelOf)).toContain("Esci dal gruppo");
+    expect(menu().length).toBeLessThan(9);
+    closeContextMenu();
+  });
+
   it("l'albero mostra il blocco e la visibilità con un segno e a parole, e li cambia dal segno o coi tasti", () => {
     const flagged = SET.replace(`fill="#0072b2"/>`, `fill="#0072b2" fub:locked="true"/>`).replace(`<g id="${H}">`, `<g id="${H}" display="none">`);
-    mount(flagged, { level: "standard" });
+    mount(flagged);
     host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
     const row = (key: string): HTMLElement => host.querySelector<HTMLElement>(`.draw-object[data-key="${key}"]`)!;
     const sign = (key: string, what: "lock" | "hide"): HTMLElement => row(key).querySelector<HTMLElement>(`.draw-object-sign[data-sign="${what}"]`)!;
@@ -7226,3361 +3698,10 @@ describe("la selezione avanzata, dal livello Standard", () => {
   });
 
   it("«?» elenca i tasti della selezione avanzata", () => {
-    mount(SET, { level: "standard" });
+    mount(SET);
     key("?", { shiftKey: true });
     expect([...dialog().querySelectorAll(".keys-list > table caption")].map((caption) => caption.textContent)).toContain("Selezione avanzata");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
-  });
-});
-
-describe("gli attributi, dal livello Esperto", () => {
-  const button = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Attributi"]')!;
-  const panel = (): HTMLElement => host.querySelector<HTMLElement>(".draw-inspector")!;
-  const dock = (): HTMLElement => host.querySelector<HTMLElement>(".draw-dock")!;
-  const row = (name: string): HTMLTableRowElement => panel().querySelector<HTMLTableRowElement>(`tr[data-key="${name}"]`)!;
-  const control = (name: string): HTMLInputElement => row(name).querySelector<HTMLInputElement>(".draw-inspector-input")!;
-  const keysOf = (): string[] => [...panel().querySelectorAll<HTMLTableRowElement>("tbody tr")].map((tr) => tr.dataset.key!);
-
-  const write = typeIn;
-  /// Gli attributi senza il pannello delle proprietà, in un livello
-  /// Personalizzato: un pannello da sé, accanto al foglio.
-  const ALONE = ["pen", "attributes"];
-
-  /// Il fuoco agli attributi, come lo porta il tasto.
-  const open = (): void => {
-    key("X", { ctrlKey: true, shiftKey: true });
-  };
-
-  it("dall'Esperto sono una sezione del pannello delle proprietà, e il tasto ci porta e ne torna", () => {
-    mount(SOURCE, { level: "standard" });
-    editor.setLevel("expert");
-    expect(button().hidden).toBe(true);
-    expect(properties().contains(panel())).toBe(true);
-    expect(panel().hidden).toBe(false);
-    expect(panel().hasAttribute("aria-labelledby")).toBe(false);
-    // Senza un oggetto solo, il tasto dice perché non ci porta.
-    open();
-    expect(spoken()).toBe("Scegli un oggetto per vederne gli attributi.");
-    expect(properties().hidden).toBe(true);
-    editor.select(["o1a2b3c4d"]);
-    open();
-    expect(properties().hidden).toBe(false);
-    expect(properties().querySelector<HTMLElement>('[data-section="attributes"]')!.hidden).toBe(false);
-    expect(keysOf()).toEqual(["id", "x", "y", "width", "height", "fill", "stroke", "stroke-width"]);
-    expect(panel().contains(document.activeElement)).toBe(true);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    // Di nuovo, anche da un campo, il fuoco torna al foglio.
-    key("X", { ctrlKey: true, shiftKey: true }, control("fill"));
-    expect(document.activeElement).toBe(surface());
-    // Scesi dall'Esperto, gli attributi escono dal pannello, chiusi.
-    editor.setLevel("standard");
-    expect(properties().contains(panel())).toBe(false);
-    expect(panel().hidden).toBe(true);
-    expect(panel().getAttribute("aria-labelledby")).not.toBeNull();
-  });
-
-  it("senza il pannello delle proprietà il pulsante li apre accanto al foglio, e il fuoco ci va", () => {
-    mount(SOURCE, { level: "custom", custom: ["pen"] });
-    expect(button().hidden).toBe(true);
-    editor.setLevel("custom", ALONE);
-    expect(button().hidden).toBe(false);
-    expect(button().title).toBe("Attributi (Ctrl+Shift+X)");
-    expect(button().getAttribute("aria-keyshortcuts")).toBe("Control+Shift+X");
-    expect(button().getAttribute("aria-controls")).toBe(panel().id);
-    expect(button().getAttribute("aria-expanded")).toBe("false");
-    expect(dock().hidden).toBe(true);
-    button().click();
-    expect(panel().hidden).toBe(false);
-    expect(dock().hidden).toBe(false);
-    expect(button().getAttribute("aria-expanded")).toBe("true");
-    expect(panel().querySelector(".draw-inspector-empty")!.textContent).toBe("Scegli un oggetto per vederne gli attributi.");
-    expect(document.activeElement).toBe(panel());
-    editor.select(["o1a2b3c4d"]);
-    expect(panel().querySelector(".draw-inspector-subject")!.textContent).toBe("Rettangolo, Nero, elemento rect");
-    expect(keysOf()).toEqual(["id", "x", "y", "width", "height", "fill", "stroke", "stroke-width"]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    // Il tasto lo chiude, anche da un campo, e il fuoco torna al foglio.
-    key("X", { ctrlKey: true, shiftKey: true }, control("fill"));
-    expect(panel().hidden).toBe(true);
-    expect(dock().hidden).toBe(true);
-    expect(document.activeElement).toBe(surface());
-    key("X", { ctrlKey: true, shiftKey: true });
-    expect(panel().hidden).toBe(false);
-    expect(document.activeElement).toBe(control("id"));
-    // Senza gli attributi, il pannello si chiude e il pulsante sparisce.
-    editor.setLevel("custom", ["pen"]);
-    expect(panel().hidden).toBe(true);
-    expect(button().hidden).toBe(true);
-  });
-
-  it("l'albero e gli attributi stanno uno sotto l'altro", () => {
-    mount(SOURCE, { level: "custom", custom: ALONE });
-    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
-    button().click();
-    expect([...dock().children].filter((child) => !(child as HTMLElement).hidden).map((child) => child.className)).toEqual(["draw-objects", "draw-inspector"]);
-    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
-    expect(dock().hidden).toBe(false);
-    button().click();
-    expect(dock().hidden).toBe(true);
-  });
-
-  it("un valore cambiato è un passo, che si annulla col suo nome", () => {
-    mount(SOURCE, { level: "expert" });
-    editor.select(["o1a2b3c4d"]);
-    open();
-    write(control("stroke-width"), "4");
-    key("Enter", {}, control("stroke-width"));
-    expect(editor.engine.text).toContain('stroke-width="4"');
-    expect(changes).toHaveLength(1);
-    expect(spoken()).toBe("stroke-width cambiato.");
-    expect(editor.selection).toEqual(["o1a2b3c4d"]);
-    // Annulla dal pulsante che toglie, fuori da un campo di testo.
-    row("fill").querySelector<HTMLButtonElement>(".draw-inspector-remove")!.focus();
-    key("z", { ctrlKey: true }, row("fill").querySelector<HTMLButtonElement>(".draw-inspector-remove")!);
-    expect(editor.engine.text).toContain('stroke-width="2"');
-    expect(spoken()).toBe("Annullato: Modifica di un attributo.");
-    expect(control("stroke-width").value).toBe("2");
-  });
-
-  it("un oggetto senza id lo riceve, e resta scelto col campo che si stava usando", () => {
-    mount(doc(`${LAYER}<rect x="0" y="0" width="20" height="20" fill="#000000"/></g>`), { level: "expert" });
-    editor.select(["@0.0"]);
-    open();
-    expect(control("id").value).toBe("");
-    // Un valore che non è partito, in un'altra riga, resta com'era scritto.
-    write(control("x"), "dieci");
-    key("Enter", {}, control("x"));
-    write(control("fill"), "#e69f00");
-    const field = control("fill");
-    key("Enter", {}, field);
-    expect(control("x").value).toBe("dieci");
-    expect(control("x").getAttribute("aria-invalid")).toBe("true");
-    expect(editor.engine.text).toMatch(/<rect id="(o[a-z0-9]{8})" x="0" y="0" width="20" height="20" fill="#e69f00"\/>/);
-    const id = /<rect id="(o[a-z0-9]{8})"/.exec(editor.engine.text)![1]!;
-    expect(editor.selection).toEqual([id]);
-    expect(control("id").value).toBe(id);
-    expect(control("fill")).toBe(field);
-    expect(document.activeElement).toBe(field);
-  });
-
-  it("l'id si cambia, e resta scelto l'oggetto col nome nuovo", () => {
-    mount(SOURCE, { level: "expert" });
-    editor.select(["o1a2b3c4d"]);
-    open();
-    write(control("id"), "Quadrato");
-    key("Enter", {}, control("id"));
-    expect(editor.engine.text).toContain('<rect id="Quadrato"');
-    expect(editor.selection).toEqual(["Quadrato"]);
-    expect(spoken()).toBe("Ora l’id è «Quadrato».");
-    editor.undo();
-    expect(editor.engine.text).toContain('<rect id="o1a2b3c4d"');
-    expect(spoken()).toBe("Annullato: Cambio dell’id.");
-  });
-
-  it("un id citato da una parte di un altro programma non si cambia", () => {
-    const source = doc(
-      `<defs><linearGradient id="sfumato"><stop offset="0" stop-color="#ffffff"/></linearGradient></defs>${LAYER}<rect id="o1a2b3c4d" x="0" y="0" width="20" height="20" fill="#000000"/></g><use href="#o1a2b3c4d" x="40"/>`,
-    );
-    mount(source, { level: "expert" });
-    editor.select(["o1a2b3c4d"]);
-    open();
-    write(control("id"), "Quadrato");
-    key("Enter", {}, control("id"));
-    expect(editor.engine.text).toBe(source);
-    expect(row("id").querySelector(".draw-inspector-error")!.textContent).toBe(
-      "Una parte di un altro programma cita «o1a2b3c4d»: cambiarlo romperebbe il riferimento.",
-    );
-  });
-
-  describe("l'id di una forma con l'etichetta", () => {
-    const shape = '<rect id="o1a2b3c4d" x="100" y="100" width="200" height="120" fill="#e69f00"/>';
-    const label = '<text id="o5e6f7g8h" fub:inside="o1a2b3c4d" fub:wrap="188" x="0" y="0" font-size="16" text-anchor="middle" transform="matrix(1 0 0 1 200 165.6)"><tspan x="0" dy="0">Inizio</tspan></text>';
-    const line = '<path id="o9j8k7m6n" fub:shape="connector" fub:geom="straight 300 160 380 160" fub:from="o1a2b3c4d right" d="M300 160 L380 160" fill="none" stroke="#000000" stroke-width="2"/>';
-
-    it("cambiato, la sua etichetta e il connettore agganciato la seguono ancora", () => {
-      const source = doc(`${LAYER}<g id="o2b3c4d5e">${shape}${label}</g>${line}</g>`);
-      mount(source, { level: "expert" });
-      editor.select(["o1a2b3c4d"]);
-      open();
-      write(control("id"), "Inizio");
-      key("Enter", {}, control("id"));
-      expect(editor.engine.text).toContain('fub:inside="Inizio"');
-      expect(editor.engine.text).toContain('fub:from="Inizio right"');
-      // Un passo solo: annullato, tutto com'era.
-      editor.undo();
-      expect(editor.engine.text).toBe(source);
-    });
-
-    it("non si cambia se un oggetto bloccato lo nomina: lo staccherebbe", () => {
-      const locked = doc(`${LAYER}<g id="o2b3c4d5e">${shape}${label}</g></g><g id="l2" fub:layer="Due" fub:locked="true">${line}</g>`);
-      mount(locked, { level: "expert" });
-      editor.select(["o1a2b3c4d"]);
-      open();
-      write(control("id"), "Inizio");
-      key("Enter", {}, control("id"));
-      expect(editor.engine.text).toBe(locked);
-      expect(row("id").querySelector(".draw-inspector-error")!.textContent).toBe(
-        "Un oggetto bloccato nomina «o1a2b3c4d»: cambiarlo lo staccherebbe. Sblocca prima il suo livello o il suo gruppo.",
-      );
-    });
-  });
-
-  it("i tasti del foglio non partono dal pannello", () => {
-    mount(SOURCE, { level: "expert" });
-    editor.select(["o1a2b3c4d"]);
-    open();
-    write(control("fill"), "#00");
-    for (const name of ["Delete", "Backspace", "?", "r", "#", "Escape"]) key(name, {}, control("fill"));
-    expect(editor.engine.text).toContain("o1a2b3c4d");
-    expect(editor.tool).toBe("pen");
-    expect(editor.grid.shown).toBe(false);
-    expect(document.querySelectorAll(".modale")).toHaveLength(0);
-    // Esc ha riportato il valore; il secondo torna al foglio, con la selezione.
-    expect(control("fill").value).toBe("none");
-    key("Escape", {}, control("fill"));
-    expect(document.activeElement).toBe(surface());
-    expect(editor.selection).toEqual(["o1a2b3c4d"]);
-    // In un campo, Ctrl+Z è del campo; Canc sul pulsante che toglie non
-    // elimina l'oggetto.
-    key("z", { ctrlKey: true }, control("fill"));
-    const remove = row("stroke").querySelector<HTMLButtonElement>(".draw-inspector-remove")!;
-    key("Delete", {}, remove);
-    expect(changes).toEqual([]);
-  });
-
-  it("un documento in sola lettura si legge e non si scrive, e torna a scriversi dal vivo", () => {
-    mount(SOURCE, { level: "expert" });
-    editor.select(["o1a2b3c4d"]);
-    open();
-    editor.setReadOnly(true);
-    expect(control("fill").readOnly).toBe(true);
-    expect(panel().querySelector<HTMLElement>(".draw-inspector-add")!.hidden).toBe(true);
-    editor.setReadOnly(false);
-    expect(control("fill").readOnly).toBe(false);
-    expect(panel().querySelector<HTMLElement>(".draw-inspector-add")!.hidden).toBe(false);
-  });
-});
-
-describe("il contorno, dal livello Esperto", () => {
-  const A = "oa1a1a1a1";
-  const B = "ob2b2b2b2";
-  const C = "oc3c3c3c3";
-  const RECT_A = `<rect id="${A}" x="10" y="10" width="20" height="10" fill="none" stroke="#000000" stroke-width="2"/>`;
-  const LINE_B = `<line id="${B}" x1="0" y1="50" x2="50" y2="50" stroke="#0072b2" stroke-width="4" stroke-linecap="round"/>`;
-  const FILLED_C = `<rect id="${C}" x="60" y="60" width="10" height="10" fill="#000000"/>`;
-  const SHAPES = doc(`${LAYER}${RECT_A}${LINE_B}${FILLED_C}</g>`);
-
-  const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
-  const outline = (): HTMLButtonElement => bar().querySelector<HTMLButtonElement>('button[aria-label="Contorno"]')!;
-  /// Le voci del menu aperto per ultimo, scelte comprese.
-  const menu = (): HTMLButtonElement[] => {
-    const open = document.querySelectorAll<HTMLElement>(".context-menu");
-    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
-  };
-  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
-  const item = (label: string): HTMLButtonElement => menu().find((entry) => labelOf(entry) === label)!;
-  const closeMenus = (): void => {
-    for (const open of document.querySelectorAll(".context-menu")) open.remove();
-  };
-
-  afterEach(closeMenus);
-
-  it("c'è solo all'Esperto, nella barra della selezione, e il menu segna il contorno che gli oggetti scelti hanno tutti", () => {
-    mount(SHAPES, { level: "standard" });
-    editor.select([A]);
-    expect(bar().hidden).toBe(false);
-    expect(outline().hidden).toBe(true);
-    editor.setLevel("expert");
-    expect(outline().hidden).toBe(false);
-    expect(outline().getAttribute("aria-haspopup")).toBe("menu");
-    outline().click();
-    expect(outline().getAttribute("aria-expanded")).toBe("true");
-    expect(menu().map((entry) => [labelOf(entry), entry.getAttribute("role"), entry.getAttribute("aria-checked")])).toEqual([
-      ["Continuo", "menuitemradio", "true"],
-      ["Tratteggiato", "menuitemradio", "false"],
-      ["Punteggiato", "menuitemradio", "false"],
-      ["Tratto e punto", "menuitemradio", "false"],
-      ["Estremi piatti", "menuitemradio", "true"],
-      ["Estremi arrotondati", "menuitemradio", "false"],
-      ["Estremi quadrati", "menuitemradio", "false"],
-      ["Angoli vivi", "menuitemradio", "true"],
-      ["Angoli arrotondati", "menuitemradio", "false"],
-      ["Angoli smussati", "menuitemradio", "false"],
-      ["Uniforme", "menuitemradio", "true"],
-      ["Affusolato", "menuitemradio", "false"],
-      ["A goccia", "menuitemradio", "false"],
-      ["A fuso", "menuitemradio", "false"],
-      ["Rovescia lungo la linea", "menuitem", null],
-      ["Scambia i lati", "menuitem", null],
-    ]);
-    // Un contorno uniforme non si rovescia.
-    expect(item("Rovescia lungo la linea").getAttribute("aria-disabled")).toBe("true");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    closeMenus();
-    // Estremi diversi: nessuno è segnato. Il rettangolo pieno non ha contorno
-    // e non conta.
-    editor.select([A, B, C]);
-    outline().click();
-    expect(menu().filter((entry) => entry.getAttribute("aria-checked") === "true").map(labelOf)).toEqual(["Continuo", "Angoli vivi", "Uniforme"]);
-    closeMenus();
-    editor.setLevel("standard");
-    expect(outline().hidden).toBe(true);
-    expect(changes).toEqual([]);
-  });
-
-  it("una scelta cambia ogni contorno scelto, col suo spessore e i suoi estremi, in un passo che si annulla", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([A, B, C]);
-    outline().click();
-    item("Tratteggiato").click();
-    expect(editor.engine.text).toContain(`<rect id="${A}" x="10" y="10" width="20" height="10" fill="none" stroke="#000000" stroke-width="2" stroke-dasharray="8 6"/>`);
-    // Con gli estremi arrotondati il trattino si accorcia di uno spessore, e
-    // si vede lungo uguale.
-    expect(editor.engine.text).toContain(`stroke-width="4" stroke-linecap="round" stroke-dasharray="12 16"/>`);
-    expect(editor.engine.text).toContain(FILLED_C);
-    expect(spoken()).toBe("Tratteggiato: 2 contorni.");
-    expect(editor.selection).toEqual([A, B, C]);
-    expect(changes).toHaveLength(1);
-
-    outline().click();
-    expect(item("Tratteggiato").getAttribute("aria-checked")).toBe("true");
-    item("Angoli arrotondati").click();
-    expect(editor.engine.text).toContain('stroke-linejoin="round"');
-    expect(changes).toHaveLength(2);
-
-    key("z", { ctrlKey: true });
-    key("z", { ctrlKey: true });
-    expect(editor.engine.text).toBe(SHAPES);
-  });
-
-  it("un profilo fa del contorno una linea a spessore variabile, e uniforme la riporta, in passi che si annullano", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([B]);
-    outline().click();
-    item("Affusolato").click();
-    expect(editor.engine.text).toContain(`<path id="${B}" fub:shape="width" fub:geom="round miter 0 2 2 1 0 0 M0 50 L50 50" d="`);
-    expect(spoken()).toBe("Affusolato: un contorno.");
-    expect(editor.selection).toEqual([B]);
-    outline().click();
-    // Il menu la segna, e non le offre il tratteggio.
-    expect(menu().filter((entry) => entry.getAttribute("aria-checked") === "true").map(labelOf)).toEqual(["Estremi arrotondati", "Angoli vivi", "Affusolato"]);
-    expect(item("Continuo").getAttribute("aria-disabled")).toBe("true");
-    expect(item("Estremi piatti").getAttribute("aria-disabled")).toBeNull();
-    item("Rovescia lungo la linea").click();
-    expect(editor.engine.text).toContain('fub:geom="round miter 0 0 0 1 2 2 M0 50 L50 50"');
-    expect(spoken()).toBe("Rovescia lungo la linea: un contorno.");
-    outline().click();
-    item("Estremi piatti").click();
-    expect(editor.engine.text).toContain('fub:geom="butt miter 0 0 0 1 2 2 M0 50 L50 50"');
-    outline().click();
-    item("Uniforme").click();
-    expect(editor.engine.text).toContain(`<path id="${B}" d="M0 50 L50 50" fill="none" stroke="#0072b2" stroke-width="4"/>`);
-    expect(changes).toHaveLength(4);
-    for (let i = 0; i < 4; i++) key("z", { ctrlKey: true });
-    expect(editor.engine.text).toBe(SHAPES);
-  });
-
-  it("senza contorni fra gli oggetti scelti le voci sono spente, e dicono perché", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([C]);
-    outline().click();
-    expect(menu().every((entry) => entry.getAttribute("aria-disabled") === "true")).toBe(true);
-    expect(item("Continuo").querySelector(".menu-description")!.textContent).toBe("Nessun oggetto scelto ha un contorno.");
-  });
-
-  it("un tratteggio su misura c'è, segnato e spento, col suo valore; gli estremi lo lasciano com'è", () => {
-    const custom = doc(`${LAYER}<rect id="${A}" x="10" y="10" width="20" height="10" fill="none" stroke="#000000" stroke-width="2" stroke-dasharray="5,1 2"/></g>`);
-    mount(custom, { level: "expert" });
-    editor.select([A]);
-    outline().click();
-    const own = item("Su misura: 5 1 2");
-    expect(own.getAttribute("aria-checked")).toBe("true");
-    expect(own.getAttribute("aria-disabled")).toBe("true");
-    expect(menu().filter((entry) => entry.getAttribute("aria-checked") === "true").map(labelOf)).toEqual(["Su misura: 5 1 2", "Estremi piatti", "Angoli vivi"]);
-    item("Estremi quadrati").click();
-    expect(editor.engine.text).toContain('stroke-linecap="square" stroke-dasharray="5,1 2"');
-    expect(spoken()).toBe("Estremi quadrati: un contorno.");
-  });
-});
-
-describe("trasformare con i numeri, dal livello Esperto", () => {
-  const A = "oa1a1a1a1";
-  const B = "ob2b2b2b2";
-  const RECT_A = `<rect id="${A}" x="0" y="0" width="20" height="10" fill="#000000"/>`;
-  const RECT_B = `<rect id="${B}" x="40" y="0" width="10" height="10" fill="#000000"/>`;
-  const SHAPES = doc(`${LAYER}${RECT_A}${RECT_B}</g>`);
-
-  const transform = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Trasforma…"]')!;
-  const apply = (): HTMLButtonElement => properties().querySelector<HTMLButtonElement>('[data-section="transform"] .draw-properties-apply')!;
-  /// Senza il pannello delle proprietà, «Trasforma…» apre una finestra.
-  const DIALOG: DrawEditorOptions = { level: "custom", custom: ["rect", "transform"] };
-
-  it("c'è solo all'Esperto, col suo tasto, e porta ai campi di «Trasforma» nel pannello", () => {
-    mount(SHAPES, { level: "standard" });
-    editor.select([A]);
-    editor.focus();
-    expect(transform().hidden).toBe(true);
-    // Sotto l'Esperto il tasto resta a chi lo aveva.
-    expect(key("m", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
-    editor.setLevel("expert");
-    expect(transform().hidden).toBe(false);
-    expect(transform().hasAttribute("aria-haspopup")).toBe(false);
-    expect(transform().getAttribute("aria-keyshortcuts")).toBe("Control+Shift+M");
-    expect(key("m", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(true);
-    expect(properties().hidden).toBe(false);
-    expect(document.activeElement).toBe(propertyInput("turn"));
-    expect(["turn", "scaleX", "scaleY", "skewX", "skewY"].map((id) => [propertyLabel(id), propertyInput(id).value])).toEqual([
-      ["Rotazione oraria (°)", "0"],
-      ["Scala orizzontale (%)", "100"],
-      ["Scala verticale (%)", "100"],
-      ["Inclinazione orizzontale (°)", "0"],
-      ["Inclinazione verticale (°)", "0"],
-    ]);
-    expect(apply().textContent).toBe("Applica");
-    expect(document.querySelectorAll(".modale")).toHaveLength(0);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    // Il pulsante della barra porta allo stesso posto.
-    surface().focus();
-    transform().click();
-    expect(document.activeElement).toBe(propertyInput("turn"));
-    expect(changes).toEqual([]);
-  });
-
-  it("ruota attorno al centro, in un passo che si annulla, e la pagina cresce se l'oggetto ne esce", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([A]);
-    transform().click();
-    enter(propertyInput("turn"), "90");
-    // Il centro è (10, 5): in senso orario la destra va in basso.
-    expect(editor.engine.text).toContain(`<rect id="${A}" x="0" y="0" width="20" height="10" fill="#000000" transform="matrix(0 1 -1 0 15 -5)"/>`);
-    expect(editor.engine.text).toContain('viewBox="0 -256 100 356"');
-    expect(spoken()).toBe("1 oggetto trasformato.");
-    expect(editor.selection).toEqual([A]);
-    expect(changes).toHaveLength(1);
-    // I valori restano scritti: «Applica» di nuovo ruota ancora.
-    expect(propertyInput("turn").value).toBe("90");
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-    expect(spoken()).toBe("Annullato: Trasformazione.");
-  });
-
-  it("trasforma la selezione come un insieme: una scala negativa la rispecchia attorno al suo centro", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([A, B]);
-    transform().click();
-    typeIn(propertyInput("scaleX"), "-100");
-    apply().click();
-    // Il riquadro va da 0 a 50: ogni oggetto passa dall'altra parte.
-    expect(editor.engine.text).toContain(`<rect id="${A}" x="0" y="0" width="20" height="10" fill="#000000" transform="matrix(-1 0 0 1 50 0)"/>`);
-    expect(editor.engine.text).toContain(`<rect id="${B}" x="40" y="0" width="10" height="10" fill="#000000" transform="matrix(-1 0 0 1 50 0)"/>`);
-    expect(spoken()).toBe("2 oggetti trasformati.");
-    expect(editor.selection).toEqual([A, B]);
-  });
-
-  it("non scrive una scala dello zero, o niente se non cambia niente", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([A]);
-    transform().click();
-    enter(propertyInput("scaleX"), "0");
-    expect(spoken()).toBe("Una scala dello zero per cento schiaccerebbe gli oggetti: scrivi un valore diverso da zero.");
-    typeIn(propertyInput("scaleX"), "100");
-    enter(propertyInput("turn"), "360");
-    expect(spoken()).toBe("È già così: niente da cambiare.");
-    expect(changes).toEqual([]);
-  });
-
-  it("senza il pannello delle proprietà apre una finestra, che parte da niente da cambiare", () => {
-    mount(SHAPES, DIALOG);
-    editor.select([A]);
-    editor.focus();
-    expect(transform().hidden).toBe(false);
-    expect(transform().getAttribute("aria-haspopup")).toBe("dialog");
-    key("m", { ctrlKey: true, shiftKey: true });
-    expect(dialog().querySelector("h2")!.textContent).toBe("Trasforma");
-    expect(document.getElementById(dialog().getAttribute("aria-describedby")!)!.textContent).toBe(
-      "Attorno al centro degli oggetti scelti: prima la scala, poi l’inclinazione, poi la rotazione. Una scala negativa rispecchia.",
-    );
-    const fields = ["rotate", "scaleX", "scaleY", "skewX", "skewY"];
-    expect(fields.map((name) => [field(name).closest("label")!.querySelector(".palette-label")!.textContent, field(name).value])).toEqual([
-      ["Rotazione in senso orario (°)", "0"],
-      ["Scala orizzontale (%)", "100"],
-      ["Scala verticale (%)", "100"],
-      ["Inclinazione orizzontale (°)", "0"],
-      ["Inclinazione verticale (°)", "0"],
-    ]);
-    expect([(field("skewX") as HTMLInputElement).min, (field("skewX") as HTMLInputElement).max]).toEqual(["-89", "89"]);
-    expect(document.activeElement).toBe(field("rotate"));
-    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
-    // Un secondo Ctrl+Maiusc+M non apre un'altra finestra; Esc non scrive.
-    key("m", { ctrlKey: true, shiftKey: true });
-    expect(document.querySelectorAll(".modale")).toHaveLength(1);
-    dialog().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
-    expect(changes).toEqual([]);
-  });
-
-  it("la finestra scrive in un passo; non scrive ciò che il file perderebbe, né niente se intanto la trasformazione se n'è andata", async () => {
-    mount(SHAPES, DIALOG);
-    editor.select([A]);
-    transform().click();
-    field("rotate").value = "90";
-    await submit();
-    expect(editor.engine.text).toContain(`<rect id="${A}" x="0" y="0" width="20" height="10" fill="#000000" transform="matrix(0 1 -1 0 15 -5)"/>`);
-    expect(spoken()).toBe("1 oggetto trasformato.");
-    expect(changes).toHaveLength(1);
-    transform().click();
-    field("rotate").value = "360";
-    await submit();
-    expect(spoken()).toBe("È già così: niente da cambiare.");
-    transform().click();
-    field("scaleX").value = "0.001";
-    field("scaleY").value = "0.001";
-    await submit();
-    expect(spoken()).toBe("Un oggetto diventerebbe troppo piccolo per scriverne la trasformazione: niente è cambiato.");
-    // Togliendo la trasformazione mentre la finestra è aperta, la risposta
-    // non scrive niente.
-    transform().click();
-    field("rotate").value = "45";
-    editor.setLevel("custom", ["rect"]);
-    await submit();
-    expect(changes).toHaveLength(1);
-  });
-
-  it("l'elenco dei tasti lo nomina all'Esperto", () => {
-    mount(SHAPES, { level: "expert" });
-    key("?", { shiftKey: true });
-    const rows = [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
-    expect(rows).toContainEqual(["Ctrl+Shift+M", "Trasforma…"]);
-    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
-  });
-});
-
-describe("applicare la trasformazione, dal livello Esperto", () => {
-  const A = "oa1a1a1a1";
-  const T = "ot1t1t1t1";
-  const R = "or1r1r1r1";
-  const SHAPES = doc(
-    `${LAYER}<rect id="${A}" x="0" y="0" width="20" height="10" fill="#000000" transform="translate(5 5) scale(2)"/>`
-      + `<text id="${T}" x="0" y="40" transform="rotate(30)"><tspan x="0" dy="0">Ciao</tspan></text>`
-      + `<rect id="${R}" x="0" y="60" width="10" height="10" fill="#000000"/></g>`,
-  );
-
-  const applyButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Applica trasformazione"]')!;
-
-  it("c'è solo all'Esperto, e porta la trasformazione nella geometria in un passo che si annulla", () => {
-    mount(SHAPES, { level: "standard" });
-    editor.select([A]);
-    expect(applyButton().hidden).toBe(true);
-    // Sotto l'Esperto il comando non scrive, anche chiesto.
-    applyButton().click();
-    expect(changes).toEqual([]);
-    editor.setLevel("expert");
-    expect(applyButton().hidden).toBe(false);
-    expect(applyButton().hasAttribute("aria-keyshortcuts")).toBe(false);
-    applyButton().click();
-    expect(editor.engine.text).toContain(`<rect id="${A}" x="5" y="5" width="40" height="20" fill="#000000"/>`);
-    expect(spoken()).toBe("Trasformazione applicata a 1 oggetto.");
-    expect(editor.selection).toEqual([A]);
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-    expect(spoken()).toBe("Annullato: Applicazione della trasformazione.");
-  });
-
-  it("dice quanti oggetti conservano una trasformazione, e quando non c'è niente da applicare", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([A, T]);
-    applyButton().click();
-    expect(spoken()).toBe("Trasformazione applicata a 1 oggetto. 1 oggetto conserva una trasformazione che la sua forma non sa scrivere.");
-    expect(editor.selection).toEqual([A, T]);
-    editor.select([T]);
-    applyButton().click();
-    expect(spoken()).toBe("È già così: niente da cambiare. 1 oggetto conserva una trasformazione che la sua forma non sa scrivere.");
-    editor.select([R]);
-    applyButton().click();
-    expect(spoken()).toBe("È già così: niente da cambiare.");
-    expect(changes).toHaveLength(1);
-  });
-});
-
-describe("il menu Tracciato, dal livello Esperto", () => {
-  const A = "oa2a2a2a2";
-  const T = "ot2t2t2t2";
-  const P = "op2p2p2p2";
-  const L = "ol2l2l2l2";
-  const G = "og2g2g2g2";
-  // Un poligono di 64 lati: un cerchio fatto di linee.
-  const ROUND = Array.from({ length: 64 }, (_, i) => {
-    const a = (2 * Math.PI * i) / 64;
-    return `${(300 + 80 * Math.cos(a)).toFixed(2)},${(300 + 80 * Math.sin(a)).toFixed(2)}`;
-  }).join(" ");
-  const SHAPES = doc(
-    `${LAYER}<rect id="${A}" x="0" y="0" width="20" height="10" fill="#000000"/>`
-      + `<text id="${T}" x="0" y="40"><tspan x="0" dy="0">Ciao</tspan></text>`
-      + `<path id="${P}" d="M0 60 L10 70" fill="none" stroke="#000000" stroke-width="1"/>`
-      + `<line id="${L}" x1="100" y1="100" x2="200" y2="100" stroke="#0072b2" stroke-width="10"/>`
-      + `<polygon id="${G}" points="${ROUND}" fill="#d55e00"/></g>`,
-  );
-
-  const pathButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Tracciato"]')!;
-  /// Le voci del menu aperto per ultimo.
-  const menu = (): HTMLButtonElement[] => {
-    const open = document.querySelectorAll<HTMLElement>(".context-menu");
-    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
-  };
-  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
-  const item = (label: string): HTMLButtonElement => menu().find((entry) => labelOf(entry) === label)!;
-  /// Le voci, col nome, se sono spente e che cosa dicono.
-  const entries = (): (string | boolean | null)[][] =>
-    menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled") === "true", entry.querySelector(".menu-description")?.textContent ?? null]);
-  const closeMenus = (): void => {
-    for (const open of document.querySelectorAll(".context-menu")) open.remove();
-  };
-  /// La voce `label` del menu sugli oggetti scelti.
-  const run = (label: string): void => {
-    pathButton().click();
-    item(label).click();
-    closeMenus();
-  };
-  /// La barra dello scostamento e della semplificazione, e le sue parti.
-  const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-paths")!;
-  const field = <E extends HTMLElement>(name: string): E =>
-    [...bar().querySelectorAll("label")].find((label) => label.querySelector("span")!.textContent === name)!.querySelector<E>("input, select")!;
-  const shown = (): string[] => [...bar().querySelectorAll("label")].filter((label) => !label.hidden).map((label) => label.querySelector("span")!.textContent ?? "");
-  const status = (): string => bar().querySelector("output")!.textContent ?? "";
-  const action = (name: string): HTMLButtonElement => [...bar().querySelectorAll("button")].find((control) => control.textContent === name)!;
-  /// Scrive `value` nel campo `control`, come chi lo cambia.
-  const write = (control: HTMLInputElement | HTMLSelectElement, value: string): void => {
-    control.value = value;
-    control.dispatchEvent(new Event("input", { bubbles: true }));
-  };
-  /// I punti delle linee dell'ultimo disegno sopra il foglio.
-  const drawnPoints = (layer: ReturnType<typeof recording>): string[] => {
-    layer.frame();
-    return layer.calls().filter(([name]) => name === "moveTo" || name === "lineTo").map(([, x, y]) => `${Math.round(x as number)},${Math.round(y as number)}`);
-  };
-
-  afterEach(closeMenus);
-
-  it("c'è solo all'Esperto, e le voci che non servono dicono perché", () => {
-    mount(SHAPES, { level: "standard" });
-    editor.select([A]);
-    expect(pathButton().hidden).toBe(true);
-    // Sotto l'Esperto il comando non scrive, anche chiesto.
-    run("Oggetto in tracciato");
-    expect(changes).toEqual([]);
-    editor.setLevel("expert");
-    expect(pathButton().hidden).toBe(false);
-    expect(pathButton().getAttribute("aria-haspopup")).toBe("menu");
-    expect(pathButton().hasAttribute("aria-keyshortcuts")).toBe(false);
-    pathButton().click();
-    expect(pathButton().getAttribute("aria-expanded")).toBe("true");
-    const noStroke = "Fra gli oggetti scelti non c’è una forma col contorno.";
-    const noInk = "Fra gli oggetti scelti non c’è un tratto a penna.";
-    const noOpen = "Fra gli oggetti scelti non c’è un tracciato aperto.";
-    const noPen = "Fra gli oggetti scelti non c’è un tratto a penna: un tratto già in tracciato non ha più i suoi campioni.";
-    expect(entries()).toEqual([
-      ["Oggetto in tracciato", false, null],
-      ["Contorno in tracciato", true, noStroke],
-      ["Inchiostro in tracciato", true, noInk],
-      ["Ripenna con la Penna di adesso", true, noPen],
-      ["Leviga i tratti", true, noPen],
-      ["Scostamento…", false, null],
-      ["Semplifica…", false, null],
-      ["Unisci", true, noOpen],
-    ]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    closeMenus();
-    editor.select([T, L]);
-    pathButton().click();
-    expect(entries()).toEqual([
-      ["Oggetto in tracciato", false, null],
-      ["Contorno in tracciato", false, null],
-      ["Inchiostro in tracciato", true, noInk],
-      ["Ripenna con la Penna di adesso", true, noPen],
-      ["Leviga i tratti", true, noPen],
-      ["Scostamento…", false, null],
-      ["Semplifica…", false, null],
-      ["Unisci", false, null],
-    ]);
-    closeMenus();
-    editor.select([T]);
-    pathButton().click();
-    const noShape = "Fra gli oggetti scelti non c’è una forma.";
-    expect(entries()).toEqual([
-      ["Oggetto in tracciato", false, null],
-      ["Contorno in tracciato", true, noStroke],
-      ["Inchiostro in tracciato", true, noInk],
-      ["Ripenna con la Penna di adesso", true, noPen],
-      ["Leviga i tratti", true, noPen],
-      ["Scostamento…", true, noShape],
-      ["Semplifica…", true, noShape],
-      ["Unisci", true, noOpen],
-    ]);
-    item("Scostamento…").click();
-    expect(bar().hidden).toBe(true);
-    expect(changes).toEqual([]);
-  });
-
-  it("«Oggetto in tracciato» fa degli oggetti tracciati in un passo che si annulla", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([A]);
-    run("Oggetto in tracciato");
-    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L20 0 L20 10 L0 10 Z" fill="#000000"/>`);
-    expect(spoken()).toBe("1 oggetto è diventato un tracciato.");
-    expect(editor.selection).toEqual([A]);
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-    expect(spoken()).toBe("Annullato: Oggetto in tracciato.");
-  });
-
-  it("dice quanti oggetti restano come sono, e quando non c'è niente da fare", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([A, T]);
-    run("Oggetto in tracciato");
-    expect(spoken()).toBe("1 oggetto è diventato un tracciato. 1 oggetto resta com’è: testi, immagini e forme vuote non diventano tracciati.");
-    expect(editor.selection).toEqual([A, T]);
-    editor.select([T]);
-    run("Oggetto in tracciato");
-    expect(spoken()).toBe("È già così: niente da cambiare. 1 oggetto resta com’è: testi, immagini e forme vuote non diventano tracciati.");
-    editor.select([P]);
-    run("Oggetto in tracciato");
-    expect(spoken()).toBe("È già così: niente da cambiare.");
-    expect(changes).toHaveLength(1);
-  });
-
-  it("«Contorno in tracciato» fa del contorno una forma piena del suo colore", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([L, A]);
-    run("Contorno in tracciato");
-    expect(new RegExp(`<path id="${L}"[^>]*>`).exec(editor.engine.text)?.[0]).toBe(`<path id="${L}" d="M100 105 L100 95 L200 95 L200 105 Z" fill="#0072b2"/>`);
-    expect(spoken()).toBe("1 contorno è diventato una forma piena. 1 oggetto resta com’è: non ha un contorno.");
-    expect(editor.selection).toEqual([A, L]);
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-    expect(spoken()).toBe("Annullato: Contorno in tracciato.");
-  });
-
-  it("«Inchiostro in tracciato» fa di un tratto a penna la sua spina, col colore e lo spessore", () => {
-    mount(doc(`${LAYER}</g>`), { level: "expert" });
-    editor.setTool("pen");
-    drag([[20, 300], [40, 330], [60, 360], [80, 330], [100, 300]]);
-    const id = /<path id="(o[a-z0-9]{8})" fub:tool="pen"/.exec(editor.engine.text)![1]!;
-    const before = editor.engine.text;
-    editor.setTool("select");
-    editor.select([id]);
-    run("Inchiostro in tracciato");
-    expect(editor.engine.text).toMatch(new RegExp(`<path id="${id}" d="M20 300 [^"]+" fill="none" stroke="#000000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`));
-    expect(editor.engine.text).not.toContain("fub:ink");
-    expect(spoken()).toBe("1 tratto a penna è diventato un tracciato.");
-    expect(editor.selection).toEqual([id]);
-    editor.undo();
-    expect(editor.engine.text).toBe(before);
-  });
-
-  it("«Scostamento…» apre una barra con l'anteprima; Invio scrive il tracciato nuovo, sotto la forma", () => {
-    const layer = recording();
-    mount(SHAPES, { level: "expert" });
-    editor.select([A]);
-    editor.focus();
-    run("Scostamento…");
-    expect(bar().hidden).toBe(false);
-    expect(document.getElementById(bar().getAttribute("aria-labelledby")!)!.textContent).toBe("Scostamento");
-    expect(shown()).toEqual(["Distanza", "Angoli", "Limite"]);
-    const distance = field<HTMLInputElement>("Distanza");
-    expect(document.activeElement).toBe(distance);
-    expect(distance.value).toBe("4");
-    expect(field<HTMLSelectElement>("Angoli").value).toBe("miter");
-    expect(field<HTMLInputElement>("Limite").value).toBe("4");
-    expect(status()).toBe("1 tracciato nuovo.");
-    // L'anteprima: il rettangolo allargato di 4.
-    expect(drawnPoints(layer)).toEqual(expect.arrayContaining(["-4,-4", "24,-4", "24,14", "-4,14"]));
-    expect(changes).toEqual([]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    // Gli angoli arrotondati non hanno limite.
-    write(field<HTMLSelectElement>("Angoli"), "round");
-    expect(shown()).toEqual(["Distanza", "Angoli"]);
-    write(field<HTMLSelectElement>("Angoli"), "miter");
-    write(distance, "-6");
-    expect(status()).toBe("1 forma sparisce: è più stretta del doppio della distanza.");
-    write(distance, "");
-    expect(status()).toBe("Scrivi una distanza: in più allarga, in meno restringe.");
-    key("Enter", {}, distance);
-    expect(spoken()).toBe("Scrivi una distanza: in più allarga, in meno restringe.");
-    expect(bar().hidden).toBe(false);
-    write(distance, "2");
-    expect(drawnPoints(layer)).toEqual(expect.arrayContaining(["-2,-2", "22,-2", "22,12", "-2,12"]));
-    key("Enter", {}, distance);
-    expect(bar().hidden).toBe(true);
-    expect(document.activeElement).toBe(surface());
-    const added = editor.selection[0]!;
-    expect(added).not.toBe(A);
-    // Quattro nodi, come il rettangolo.
-    expect(editor.engine.text).toMatch(new RegExp(`<path id="${added}" d="M22 -2 L22 12 L-2 12 L-2 -2 Z" fill="#000000"/>\\s*<rect id="${A}"`));
-    expect(spoken()).toBe("1 tracciato nuovo, scostato di 2.");
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-    expect(spoken()).toBe("Annullato: Scostamento.");
-    // La barra riapre con la distanza dell'ultima volta; Esc la chiude senza
-    // cambiare niente.
-    editor.select([A]);
-    run("Scostamento…");
-    expect(field<HTMLInputElement>("Distanza").value).toBe("2");
-    key("Escape", {}, field<HTMLInputElement>("Distanza"));
-    expect(bar().hidden).toBe(true);
-    expect(document.activeElement).toBe(surface());
-    expect(changes).toHaveLength(2);
-  });
-
-  it("l'anteprima segue la selezione, e la barra se ne va col livello", () => {
-    const layer = recording();
-    mount(SHAPES, { level: "expert" });
-    editor.select([A]);
-    run("Scostamento…");
-    editor.select([L]);
-    expect(status()).toBe("1 tracciato nuovo.");
-    expect(drawnPoints(layer)).toEqual(expect.arrayContaining(["96,96", "204,96", "204,104", "96,104"]));
-    editor.select([]);
-    expect(status()).toBe("Scegli le forme da cambiare.");
-    editor.select([A, T]);
-    expect(status()).toBe("1 tracciato nuovo. 1 oggetto resta com’è: non è una forma.");
-    editor.setLevel("standard");
-    expect(bar().hidden).toBe(true);
-    expect(changes).toEqual([]);
-  });
-
-  it("«Semplifica…» dice i nodi prima e dopo, e lo scarto; «Applica» scrive in un passo", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([G]);
-    run("Semplifica…");
-    expect(document.getElementById(bar().getAttribute("aria-labelledby")!)!.textContent).toBe("Semplifica");
-    expect(shown()).toEqual(["Semplificazione"]);
-    const amount = field<HTMLInputElement>("Semplificazione");
-    expect(document.activeElement).toBe(amount);
-    expect(amount.value).toBe("50");
-    expect(status()).toBe("Da 64 nodi a 8, scarto fino a 0,51.");
-    expect(amount.getAttribute("aria-valuetext")).toBe("scarto fino a 0,51");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    write(amount, "0");
-    expect(status()).toBe("64 nodi: niente da togliere entro 0,023.");
-    action("Applica").click();
-    expect(spoken()).toBe("64 nodi: niente da togliere entro 0,023.");
-    expect(changes).toEqual([]);
-    write(amount, "50");
-    const after = Number(/a (\d+),/.exec(status())![1]);
-    action("Applica").click();
-    expect(bar().hidden).toBe(true);
-    expect(editor.engine.text).toMatch(new RegExp(`<path id="${G}" d="M[^"]+C[^"]+" fill="#d55e00"/>`));
-    expect(spoken()).toBe(`1 forma semplificata: da 64 nodi a ${after}.`);
-    expect(editor.selection).toEqual([G]);
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-    expect(spoken()).toBe("Annullato: Semplifica.");
-  });
-});
-
-describe("le operazioni booleane, dal livello Esperto", () => {
-  const A = "oa4a4a4a4";
-  const B = "ob4b4b4b4";
-  const C = "oc4c4c4c4";
-  const T = "ot4t4t4t4";
-  const P = "op4p4p4p4";
-  const SHAPES = doc(
-    `${LAYER}<rect id="${A}" x="0" y="0" width="20" height="20" fill="#d55e00"/>`
-      + `<rect id="${B}" x="10" y="10" width="20" height="20" fill="#0072b2"/>`
-      + `<circle id="${C}" cx="100" cy="100" r="5" fill="#000000"/>`
-      + `<path id="${P}" d="M50 50 L60 50 L60 60 Z" fill="#000000"/>`
-      + `<text id="${T}" x="0" y="60"><tspan x="0" dy="0">Ciao</tspan></text></g>`,
-  );
-
-  const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
-  const booleans = (): HTMLButtonElement => bar().querySelector<HTMLButtonElement>('button[aria-label="Operazioni booleane"]')!;
-  /// Le voci del menu aperto per ultimo.
-  const menu = (): HTMLButtonElement[] => {
-    const open = document.querySelectorAll<HTMLElement>(".context-menu");
-    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
-  };
-  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
-  const item = (label: string): HTMLButtonElement => menu().find((entry) => labelOf(entry) === label)!;
-  /// Le voci, col nome, se sono spente e che cosa dicono.
-  const entries = (): (string | boolean | null)[][] =>
-    menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled") === "true", entry.querySelector(".menu-description")?.textContent ?? null]);
-  const closeMenus = (): void => {
-    for (const open of document.querySelectorAll(".context-menu")) open.remove();
-  };
-  /// L'operazione `label` sugli oggetti `keys`, dal menu.
-  const run = (keys: string[], label: string): void => {
-    editor.select(keys);
-    booleans().click();
-    item(label).click();
-    closeMenus();
-  };
-
-  afterEach(closeMenus);
-
-  it("c'è solo all'Esperto, nella barra della selezione, con le cinque operazioni", () => {
-    mount(SHAPES, { level: "standard" });
-    editor.select([A, B]);
-    expect(bar().hidden).toBe(false);
-    expect(booleans().hidden).toBe(true);
-    // Sotto l'Esperto il comando non scrive, anche chiesto.
-    run([A, B], "Unione");
-    expect(changes).toEqual([]);
-    editor.setLevel("expert");
-    expect(booleans().hidden).toBe(false);
-    expect(booleans().getAttribute("aria-haspopup")).toBe("menu");
-    expect(booleans().hasAttribute("aria-keyshortcuts")).toBe(false);
-    booleans().click();
-    expect(booleans().getAttribute("aria-expanded")).toBe("true");
-    expect(entries()).toEqual([
-      ["Unione", false, null],
-      ["Differenza", false, null],
-      ["Intersezione", false, null],
-      ["Esclusione", false, null],
-      ["Divisione", false, null],
-    ]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    closeMenus();
-    editor.setLevel("standard");
-    expect(booleans().hidden).toBe(true);
-    expect(changes).toEqual([]);
-  });
-
-  it("le voci spente dicono perché: una forma sola si unisce e basta, e un testo non è una forma", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([A]);
-    booleans().click();
-    const few = "Servono almeno due forme.";
-    expect(entries()).toEqual([
-      ["Unione", false, null],
-      ["Differenza", true, few],
-      ["Intersezione", true, few],
-      ["Esclusione", true, few],
-      ["Divisione", true, few],
-    ]);
-    item("Differenza").click();
-    expect(changes).toEqual([]);
-    closeMenus();
-    editor.select([A, B, T]);
-    booleans().click();
-    const text = "Le operazioni booleane lavorano sulle forme: 1 oggetto scelto non lo è.";
-    expect(entries()).toEqual(
-      ["Unione", "Differenza", "Intersezione", "Esclusione", "Divisione"].map((label) => [label, true, text]),
-    );
-    item("Unione").click();
-    expect(changes).toEqual([]);
-  });
-
-  it("l'unione fa della forma più in basso un tracciato, con l'area di tutte, in un passo che si annulla", () => {
-    mount(SHAPES, { level: "expert" });
-    run([B, A], "Unione");
-    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L20 0 L20 10 L30 10 L30 30 L10 30 L10 20 L0 20 Z" fill="#d55e00"/>`);
-    expect(editor.engine.text).not.toContain(B);
-    expect(spoken()).toBe("Unione: 2 forme diventano un tracciato.");
-    expect(editor.selection).toEqual([A]);
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-    expect(spoken()).toBe("Annullato: Unione.");
-    // Una forma sola diventa il tracciato della sua area.
-    run([A], "Unione");
-    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L20 0 L20 20 L0 20 Z" fill="#d55e00"/>`);
-    expect(spoken()).toBe("Unione: 1 forma diventa un tracciato.");
-  });
-
-  it("differenza, intersezione ed esclusione", () => {
-    mount(SHAPES, { level: "expert" });
-    run([A, B], "Differenza");
-    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L20 0 L20 10 L10 10 L10 20 L0 20 Z" fill="#d55e00"/>`);
-    expect(spoken()).toBe("Differenza: 2 forme diventano un tracciato.");
-    editor.undo();
-    run([A, B], "Intersezione");
-    // Ogni anello comincia, se può, da un nodo della forma più in basso.
-    expect(editor.engine.text).toContain(`<path id="${A}" d="M20 20 L10 20 L10 10 L20 10 Z" fill="#d55e00"/>`);
-    editor.undo();
-    run([A, B], "Esclusione");
-    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L20 0 L20 10 L10 10 L10 20 L0 20 Z M20 20 L20 10 L30 10 L30 30 L10 30 L10 20 Z" fill="#d55e00"/>`);
-    expect(spoken()).toBe("Esclusione: 2 forme diventano un tracciato.");
-    expect(changes).toHaveLength(5);
-  });
-
-  it("la divisione taglia la forma più in basso, e sono scelti i pezzi", () => {
-    mount(SHAPES, { level: "expert" });
-    run([A, B], "Divisione");
-    const pieces = [...editor.engine.text.matchAll(/<path id="([^"]+)" d="([^"]+)" fill="#d55e00"\/>/g)].map((match) => [match[1], match[2]]);
-    expect(pieces).toHaveLength(2);
-    expect(pieces[0]).toEqual([A, "M0 0 L20 0 L20 10 L10 10 L10 20 L0 20 Z"]);
-    expect(pieces[1]![1]).toBe("M20 20 L10 20 L10 10 L20 10 Z");
-    expect(editor.engine.text).not.toContain(B);
-    expect(editor.selection).toEqual([A, pieces[1]![0]]);
-    expect(spoken()).toBe("Divisione: la forma diventa 2 tracciati.");
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-    expect(spoken()).toBe("Annullato: Divisione.");
-  });
-
-  it("un risultato vuoto, o una divisione che non divide, non cambiano niente, e lo si dice", () => {
-    mount(SHAPES, { level: "expert" });
-    run([A, C], "Intersezione");
-    expect(spoken()).toBe("Il risultato sarebbe vuoto: niente è cambiato.");
-    run([A, C], "Divisione");
-    expect(spoken()).toBe("Le altre forme non dividono quella più in basso: niente è cambiato.");
-    expect(editor.selection).toEqual([A, C]);
-    // Un tracciato solo che è già il risultato resta com'è.
-    run([P], "Unione");
-    expect(spoken()).toBe("È già così: niente da cambiare.");
-    expect(editor.engine.text).toBe(SHAPES);
-    expect(changes).toEqual([]);
-    // Una forma lontana non toglie niente, e se ne va.
-    run([A, C], "Differenza");
-    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L20 0 L20 20 L0 20 Z" fill="#d55e00"/>`);
-    expect(editor.engine.text).not.toContain(C);
-    expect(changes).toHaveLength(1);
-  });
-
-  it("dice quando la forma più in basso non si riscrive", () => {
-    mount(doc(`${LAYER}<rect xmlns:x="urn:x" id="${A}" x:a="1" x="0" y="0" width="20" height="20"/><rect id="${B}" x="10" y="10" width="20" height="20"/></g>`), { level: "expert" });
-    run([A, B], "Unione");
-    expect(spoken()).toBe("La forma più in basso ha attributi di un altro programma che FubDraw non sa riscrivere: niente è cambiato.");
-    expect(changes).toEqual([]);
-  });
-
-  it("dice quando il calcolo non riesce", () => {
-    mount(doc(`${LAYER}<rect id="${A}" x="0" y="0" width="20" height="20" transform="scale(0)"/><rect id="${B}" x="10" y="10" width="20" height="20"/></g>`), { level: "expert" });
-    run([A, B], "Unione");
-    expect(spoken()).toBe("Il calcolo non riesce su queste forme: niente è cambiato.");
-    expect(changes).toEqual([]);
-  });
-});
-
-describe("i nodi, dal livello Esperto", () => {
-  const P = "op3p3p3p3";
-  const C = "oc3c3c3c3";
-  const R = "or3r3r3r3";
-  const PATH = `<path id="${P}" d="M10 10 L50 10 L50 50" fill="none" stroke="#000000" stroke-width="2"/>`;
-  const CURVE = `<path id="${C}" d="M100 100 C120 80 140 80 160 100" fill="none" stroke="#000000" stroke-width="2"/>`;
-  const RECT = `<rect id="${R}" x="200" y="200" width="20" height="20" fill="#000000"/>`;
-  const SHAPES = doc(`${LAYER}${PATH}${CURVE}${RECT}</g>`);
-  /// Il `d` del tracciato `id`, com'è adesso.
-  const d = (id = P): string | null => new RegExp(`<path id="${id}" d="([^"]*)"`).exec(editor.engine.text)?.[1] ?? null;
-
-  const tap = (x: number, y: number, init: Init = {}): void => drag([[x, y]], init);
-  const nodesTool = () => railTool("Nodi");
-  const nodesBar = (): HTMLElement => host.querySelector<HTMLElement>('.draw-arrange[aria-label="Comandi dei nodi"]')!;
-  const arrangeBar = (): HTMLElement => host.querySelector<HTMLElement>('.draw-arrange[aria-label="Disponi"]')!;
-  const command = (label: string): HTMLButtonElement => nodesBar().querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
-  const enabled = (): string[] => [...nodesBar().querySelectorAll<HTMLButtonElement>("button")].filter((control) => !control.disabled).map((control) => control.getAttribute("aria-label")!);
-
-  /// Il tracciato P scelto, con lo strumento Nodi.
-  const editing = (source = SHAPES): void => {
-    mount(source, { level: "expert" });
-    editor.select([P]);
-    editor.focus();
-    key("n");
-  };
-
-  it("c'è solo all'Esperto, col tasto N, e dice di che cosa si modificano i nodi", () => {
-    mount(SHAPES, { level: "standard" });
-    editor.select([P]);
-    editor.focus();
-    expect(nodesTool().hidden).toBe(true);
-    key("n");
-    expect(editor.tool).not.toBe("nodes");
-    editor.setLevel("expert");
-    expect(nodesTool().hidden).toBe(false);
-    expect(nodesTool().title).toBe("Nodi (A, N)");
-    key("n");
-    expect(editor.tool).toBe("nodes");
-    expect(nodesTool().checked).toBe(true);
-    expect(spoken()).toBe("Strumento: Nodi. Tracciato, Nero: 3 nodi da modificare.");
-    // La barra dei nodi prende il posto di quella della selezione.
-    expect(nodesBar().hidden).toBe(false);
-    expect(nodesBar().getAttribute("role")).toBe("toolbar");
-    expect(arrangeBar().hidden).toBe(true);
-    expect([...nodesBar().querySelectorAll("button")].map((control) => [control.getAttribute("aria-label"), control.getAttribute("aria-keyshortcuts")])).toEqual([
-      ["Aggiungi nodi", "Insert"],
-      ["Elimina nodi", "Delete"],
-      ["Nodi a spigolo", "Shift+C"],
-      ["Nodi lisci", "Shift+S"],
-      ["Nodi simmetrici", "Shift+Y"],
-      ["Segmenti in linee", "Shift+L"],
-      ["Segmenti in curve", "Shift+U"],
-      ["Spezza ai nodi", "Shift+B"],
-      ["Unisci i capi", "Shift+J"],
-      ["Allinea i nodi", null],
-    ]);
-    expect(command("Nodi a spigolo").title).toBe("Nodi a spigolo (Shift+C)");
-    // Canc elimina i nodi: il pulsante che elimina l'oggetto non lo dichiara.
-    const remove = host.querySelector<HTMLButtonElement>('.draw-toolbar button[aria-label="Elimina la selezione"]')!;
-    expect(remove.hasAttribute("aria-keyshortcuts")).toBe(false);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    // Senza nodi scelti nessun comando serve, e Alt+F10 lo dice.
-    expect(enabled()).toEqual([]);
-    expect(key("F10", { altKey: true }).defaultPrevented).toBe(true);
-    expect(spoken()).toBe("Nessun nodo scelto.");
-    expect(document.activeElement).toBe(surface());
-    editor.setTool("select");
-    expect(nodesBar().hidden).toBe(true);
-    expect(arrangeBar().hidden).toBe(false);
-    expect(remove.getAttribute("aria-keyshortcuts")).toBe("Delete");
-    expect(changes).toEqual([]);
-  });
-
-  it("dice quando l'oggetto scelto non ha nodi, e di quanti oggetti si modificano i nodi", () => {
-    const T = "ot3t3t3t3";
-    const TEXT = `<text id="${T}" x="300" y="300" fill="#000000" font-family="Inter, sans-serif" font-size="20"><tspan x="300" dy="0">Ciao</tspan></text>`;
-    mount(doc(`${LAYER}${PATH}${CURVE}${RECT}${TEXT}</g>`), { level: "expert" });
-    editor.select([T]);
-    editor.focus();
-    key("n");
-    expect(spoken()).toBe("Strumento: Nodi. Un testo non ha nodi: si modifica scrivendo.");
-    expect(nodesBar().hidden).toBe(true);
-    expect(arrangeBar().hidden).toBe(false);
-    // Le frecce non spostano mai l'oggetto, con lo strumento Nodi.
-    key("ArrowRight");
-    expect(changes).toEqual([]);
-    // Con più oggetti scelti si modificano i nodi di tutti.
-    editor.select([P, R]);
-    editor.setTool("nodes");
-    expect(spoken()).toBe("Strumento: Nodi. 2 oggetti: 7 nodi da modificare.");
-    expect(nodesBar().hidden).toBe(false);
-    editor.select([]);
-    editor.setTool("nodes");
-    expect(spoken()).toBe("Strumento: Nodi.");
-    // Un tocco sceglie l'oggetto di cui modificare i nodi, e prende subito
-    // ciò che tocca: qui un segmento, coi suoi due nodi.
-    tap(30, 10);
-    expect(editor.selection).toEqual([P]);
-    expect(spoken()).toBe("Tracciato, Nero: 3 nodi da modificare. 2 nodi scelti.");
-    tap(310, 292);
-    expect(editor.selection).toEqual([T]);
-    expect(spoken()).toBe("Un testo non ha nodi: si modifica scrivendo.");
-    // Il riquadro sceglie i nodi che racchiude, coi loro oggetti, e con
-    // Maiusc in aggiunta; il vuoto toglie la scelta dei nodi, poi quella
-    // degli oggetti.
-    drag([[0, 0], [60, 60]], { shiftKey: true });
-    expect(editor.selection).toEqual([P, T]);
-    expect(spoken()).toBe("Tracciato, Nero: 3 nodi da modificare. 3 nodi scelti.");
-    tap(120, 300);
-    expect(spoken()).toBe("Nessun nodo scelto.");
-    expect(editor.selection).toEqual([P, T]);
-    tap(120, 300);
-    expect(editor.selection).toEqual([]);
-    expect(spoken()).toBe("Nessun oggetto scelto.");
-    expect(changes).toEqual([]);
-  });
-
-  it("su un testo su tracciato modifica il tracciato, e il testo lo segue", () => {
-    const T = "ot3t3t3t3";
-    const K = "rk3k3k3k3";
-    const ALONG = doc(
-      `<defs id="fub-defs"><path id="${K}" fub:role="private" d="M 0 100 L 200 100"/></defs>${LAYER}` +
-        `<text id="${T}" font-size="10"><textPath href="#${K}">Sul colle</textPath></text>${PATH}</g>`,
-    );
-    mount(ALONG, { level: "expert" });
-    editor.select([T]);
-    editor.focus();
-    key("n");
-    expect(spoken()).toMatch(/: 2 nodi da modificare\.$/);
-    expect(nodesBar().hidden).toBe(false);
-    // Mentre si trascina, il testo segue il tracciato che si vedrà.
-    const track = (): string | null => host.querySelector("defs path")!.getAttribute("d");
-    const target = surface();
-    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 200, clientY: 100, timeStamp: (clock += 8) }));
-    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 200, clientY: 80, timeStamp: (clock += 8) }));
-    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 200, clientY: 60, timeStamp: (clock += 8) }));
-    expect(track()).toBe("M0 100 L200 60");
-    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 200, clientY: 60, timeStamp: (clock += 8) }));
-    expect(editor.engine.text).toContain(`<path id="${K}" fub:role="private" d="M0 100 L200 60"/>`);
-    expect(editor.engine.text).toContain(`<text id="${T}" font-size="10"><textPath href="#${K}">Sul colle</textPath></text>`);
-    expect(spoken()).toBe("Nodo spostato: x 200, y 60.");
-    expect(editor.selection).toEqual([T]);
-    expect(changes).toHaveLength(1);
-    // La pagina cresce col testo, che sta sul tracciato.
-    expect(editor.engine.text).toContain('viewBox="-256 0 612 356"');
-    // I comandi dei nodi: il segmento diventa una curva.
-    tap(100, 80);
-    expect(spoken()).toBe("2 nodi scelti.");
-    key("U", { shiftKey: true });
-    expect(editor.engine.text).toMatch(new RegExp(`<path id="${K}" fub:role="private" d="M0 100 C[^"]+"/>`));
-    expect(changes).toHaveLength(2);
-    // Il tracciato resta lungo più di zero, e resta suo.
-    tap(0, 100);
-    key("Delete");
-    expect(spoken()).toBe("Il testo ha bisogno di un tracciato lungo più di zero: per lasciarlo, «Togli dal tracciato».");
-    expect(changes).toHaveLength(2);
-    editor.select([T, P]);
-    editor.setTool("nodes");
-    tap(0, 100);
-    tap(10, 10, { shiftKey: true });
-    key("J", { shiftKey: true });
-    expect(spoken()).toBe("Il tracciato di un testo resta suo: non si unisce a un’altra forma.");
-    expect(changes).toHaveLength(2);
-    editor.undo();
-    editor.undo();
-    expect(editor.engine.text).toBe(ALONG);
-  });
-
-  it("trascinare un nodo lo sposta, in un passo che si annulla", () => {
-    editing();
-    drag([[50, 10], [60, 10], [70, 20]]);
-    expect(d()).toBe("M10 10 L70 20 L50 50");
-    expect(editor.engine.text).toContain(`<path id="${P}" d="M10 10 L70 20 L50 50" fill="none" stroke="#000000" stroke-width="2"/>`);
-    expect(spoken()).toBe("Nodo spostato: x 70, y 20.");
-    expect(editor.selection).toEqual([P]);
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-    expect(spoken()).toBe("Annullato: Spostamento di nodi.");
-  });
-
-  it("Maiusc aggiunge e toglie nodi, il riquadro li sceglie, e il vuoto toglie la scelta", () => {
-    editing();
-    tap(10, 10);
-    expect(spoken()).toBe("Nodo 1 di 3, capo: x 10, y 10.");
-    tap(50, 50, { shiftKey: true });
-    expect(spoken()).toBe("2 nodi scelti.");
-    // Trascinare uno dei nodi scelti li sposta tutti.
-    drag([[10, 10], [20, 10], [30, 20]]);
-    expect(d()).toBe("M30 20 L50 10 L70 60");
-    expect(spoken()).toBe("2 nodi spostati.");
-    tap(70, 60, { shiftKey: true });
-    expect(spoken()).toBe("Nodo 1 di 3, capo: x 30, y 20.");
-    // Un tocco su un nodo scelto con altri lo lascia solo.
-    tap(70, 60, { shiftKey: true });
-    tap(70, 60);
-    expect(spoken()).toBe("Nodo 3 di 3, capo: x 70, y 60.");
-    drag([[90, 40], [60, 70]]);
-    expect(spoken()).toBe("Nodo 3 di 3, capo: x 70, y 60.");
-    // Con Maiusc il riquadro aggiunge, e un tocco sul vuoto non toglie.
-    drag([[0, 0], [40, 30]], { shiftKey: true });
-    expect(spoken()).toBe("2 nodi scelti.");
-    tap(30, 40, { shiftKey: true });
-    expect(spoken()).toBe("2 nodi scelti.");
-    expect(enabled()).toContain("Elimina nodi");
-    drag([[0, 0], [100, 90]]);
-    expect(spoken()).toBe("3 nodi scelti.");
-    tap(30, 40);
-    expect(spoken()).toBe("Nessun nodo scelto.");
-    expect(editor.selection).toEqual([P]);
-    tap(30, 40);
-    expect(spoken()).toBe("Nessun oggetto scelto.");
-    expect(editor.selection).toEqual([]);
-    expect(nodesBar().hidden).toBe(true);
-    expect(changes).toHaveLength(1);
-  });
-
-  it("un tocco su un segmento ne sceglie i due nodi, due tocchi ci aggiungono un nodo", () => {
-    editing();
-    // Un tremolio sotto la soglia è ancora un tocco.
-    drag([[30, 10], [31, 10]]);
-    expect(spoken()).toBe("2 nodi scelti.");
-    // Un segmento che è già una linea non diventa una linea.
-    expect(enabled()).toEqual(["Aggiungi nodi", "Elimina nodi", "Nodi a spigolo", "Nodi lisci", "Nodi simmetrici", "Segmenti in curve", "Spezza ai nodi", "Allinea i nodi"]);
-    tap(30, 10);
-    expect(d()).toBe("M10 10 L30 10 L50 10 L50 50");
-    expect(spoken()).toBe("1 nodo aggiunto.");
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Aggiunta di nodi.");
-    // Due tocchi lenti no.
-    tap(30, 10);
-    clock += 1000;
-    tap(30, 10);
-    expect(d()).toBe("M10 10 L50 10 L50 50");
-  });
-
-  it("Esc a metà di un trascinamento lascia il tracciato e i nodi scelti com'erano", () => {
-    editing();
-    tap(10, 10);
-    const target = surface();
-    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 50, clientY: 50, timeStamp: (clock += 8) }));
-    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 70, clientY: 70, timeStamp: (clock += 8) }));
-    key("Escape");
-    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 70, clientY: 70, timeStamp: (clock += 8) }));
-    expect(d()).toBe("M10 10 L50 10 L50 50");
-    expect(changes).toEqual([]);
-    // Scelto è ancora il primo nodo, non quello preso dal gesto.
-    key("Delete");
-    expect(d()).toBe("M50 10 L50 50");
-  });
-
-  it("trascinare un segmento lo piega, e una maniglia si sposta da sola", () => {
-    editing();
-    drag([[30, 10], [30, 20], [30, 30]]);
-    expect(d()).toMatch(/^M10 10 C[-\d. ]+ 50 10 L50 50$/);
-    expect(spoken()).toBe("Segmento piegato.");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Piegatura di un segmento.");
-    editor.select([C]);
-    tap(100, 100);
-    expect(spoken()).toBe("Nodo 1 di 2, capo: x 100, y 100.");
-    drag([[120, 80], [120, 70], [120, 60]]);
-    expect(d(C)).toBe("M100 100 C120 60 140 80 160 100");
-    expect(spoken()).toBe("Maniglia spostata.");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Spostamento di una maniglia.");
-    // Lo stesso tracciato, con gli stessi nodi: il nodo resta scelto.
-    expect(enabled()).toContain("Elimina nodi");
-    // Un tocco sulla maniglia non cambia niente.
-    tap(120, 80);
-    expect(d(C)).toBe("M100 100 C120 80 140 80 160 100");
-  });
-
-  it("Tab va di nodo in nodo e poi all'oggetto dopo; Inizio, Fine, Ctrl+A ed Esc", () => {
-    editing();
-    size(400, 300);
-    key("Tab");
-    expect(spoken()).toBe("Nodo 1 di 3, capo: x 10, y 10.");
-    key("Tab");
-    expect(spoken()).toBe("Nodo 2 di 3, spigolo: x 50, y 10.");
-    key("End");
-    expect(spoken()).toBe("Nodo 3 di 3, capo: x 50, y 50.");
-    key("Tab", { shiftKey: true });
-    expect(spoken()).toBe("Nodo 2 di 3, spigolo: x 50, y 10.");
-    key("Home");
-    expect(spoken()).toBe("Nodo 1 di 3, capo: x 10, y 10.");
-    key("a", { ctrlKey: true });
-    expect(spoken()).toBe("3 nodi scelti.");
-    expect(editor.selection).toEqual([P]);
-    // Prima del primo nodo scelto non c'è niente: il Tab esce dal foglio.
-    expect(key("Tab", { shiftKey: true }).defaultPrevented).toBe(false);
-    expect(spoken()).toBe("3 nodi scelti.");
-    // Oltre l'ultimo, l'oggetto dopo e i suoi nodi.
-    key("Tab");
-    expect(editor.selection).toEqual([C]);
-    key("Tab");
-    expect(spoken()).toBe("Nodo 1 di 2, capo: x 100, y 100.");
-    key("Escape");
-    expect(spoken()).toBe("Nessun nodo scelto.");
-    expect(editor.selection).toEqual([C]);
-    key("Escape");
-    expect(spoken()).toBe("Nessun oggetto scelto.");
-    expect(editor.selection).toEqual([]);
-    expect(changes).toEqual([]);
-  });
-
-  it("le frecce spostano i nodi scelti, e senza nodi il cursore; Invio apre la loro posizione", async () => {
-    editing();
-    key("ArrowRight");
-    expect(changes).toEqual([]);
-    key("Home");
-    key("ArrowRight");
-    expect(d()).toBe("M11 10 L50 10 L50 50");
-    expect(spoken()).toBe("Nodo spostato: x 11, y 10.");
-    key("ArrowDown", { shiftKey: true });
-    expect(d()).toBe("M11 20 L50 10 L50 50");
-    expect(changes).toHaveLength(2);
-    // Con Ctrl, un pixel dello schermo: al 156 %, 0,64.
-    size(400, 300);
-    key("+");
-    key("+");
-    key("ArrowLeft", { ctrlKey: true });
-    expect(d()).toBe("M10.36 20 L50 10 L50 50");
-    key("ArrowRight", { ctrlKey: true });
-    expect(d()).toBe("M11 20 L50 10 L50 50");
-    key("0");
-    key("Enter");
-    expect(dialog().querySelector("h2")!.textContent).toBe("Posizione dei nodi");
-    expect(["x", "y"].map((name) => field(name).value)).toEqual(["11", "20"]);
-    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
-    field("x").value = "15";
-    await submit();
-    expect(d()).toBe("M15 20 L50 10 L50 50");
-    expect(spoken()).toBe("Nodo spostato: x 15, y 20.");
-    expect(document.activeElement).toBe(surface());
-    // Coi nodi tutti scelti, la posizione è quella del loro riquadro.
-    key("a", { ctrlKey: true });
-    key("Enter");
-    expect(["x", "y"].map((name) => field(name).value)).toEqual(["15", "10"]);
-    field("y").value = "0";
-    await submit();
-    expect(d()).toBe("M15 10 L50 0 L50 40");
-    expect(spoken()).toBe("3 nodi spostati.");
-  });
-
-  it("Insert aggiunge, Canc elimina i nodi e mai l'oggetto, e senza nodi il tracciato se ne va", () => {
-    editing();
-    key("Delete");
-    expect(spoken()).toBe("Nessun nodo scelto.");
-    expect(changes).toEqual([]);
-    key("a", { ctrlKey: true });
-    key("Insert");
-    expect(d()).toBe("M10 10 L30 10 L50 10 L50 30 L50 50");
-    expect(spoken()).toBe("2 nodi aggiunti.");
-    // Scelti restano i nodi nuovi.
-    key("Delete");
-    expect(d()).toBe("M10 10 L50 10 L50 50");
-    expect(spoken()).toBe("2 nodi eliminati.");
-    key("Home");
-    key("Insert");
-    expect(spoken()).toBe("Aggiungere nodi chiede due nodi vicini scelti: il nodo nuovo va a metà del segmento fra loro.");
-    key("Delete");
-    expect(d()).toBe("M50 10 L50 50");
-    expect(spoken()).toBe("1 nodo eliminato.");
-    key("a", { ctrlKey: true });
-    key("Backspace");
-    expect(editor.engine.text).not.toContain(`id="${P}"`);
-    expect(spoken()).toBe("Senza nodi la forma non c’è più: eliminata. Il disegno ha 2 oggetti.");
-    expect(editor.selection).toEqual([]);
-    expect(changes).toHaveLength(4);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Eliminazione di nodi.");
-    expect(d()).toBe("M50 10 L50 50");
-  });
-
-  it("Maiusc e una lettera, o la barra, cambiano tipo dei nodi e dei segmenti, spezzano e uniscono", () => {
-    editing();
-    key("Home");
-    // Un capo si elimina soltanto, o si allinea.
-    expect(enabled()).toEqual(["Elimina nodi", "Allinea i nodi"]);
-    key("C", { shiftKey: true });
-    expect(spoken()).toBe("Il tipo è dei nodi in mezzo al tracciato: i capi di un tracciato aperto non ne hanno.");
-    key("Tab");
-    key("C", { shiftKey: true });
-    // Il nodo è già uno spigolo: il tipo resta, la geometria no.
-    expect(spoken()).toBe("1 nodo a spigolo.");
-    expect(changes).toEqual([]);
-    key("S", { shiftKey: true });
-    expect(d()).toMatch(/^M10 10 C[-\d. ]+ 50 10 C[-\d. ]+ 50 50$/);
-    expect(spoken()).toBe("1 nodo liscio.");
-    key("Tab", { shiftKey: true });
-    expect(spoken()).toBe("Nodo 1 di 3, capo: x 10, y 10.");
-    key("Tab");
-    expect(spoken()).toBe("Nodo 2 di 3, liscio: x 50, y 10.");
-    // Uno spigolo non cambia la geometria, ma il nodo lo è.
-    key("C", { shiftKey: true });
-    expect(spoken()).toBe("1 nodo a spigolo.");
-    expect(changes).toHaveLength(1);
-    key("Tab", { shiftKey: true });
-    key("Tab");
-    expect(spoken()).toBe("Nodo 2 di 3, spigolo: x 50, y 10.");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Tipo dei nodi.");
-    tap(30, 10);
-    key("L", { shiftKey: true });
-    expect(spoken()).toBe("È già così: niente da cambiare.");
-    key("U", { shiftKey: true });
-    expect(d()).toMatch(/^M10 10 C[-\d. ]+ 50 10 L50 50$/);
-    expect(spoken()).toBe("1 segmento ora è una curva.");
-    // Dalla barra, come dai tasti.
-    command("Segmenti in linee").click();
-    expect(d()).toBe("M10 10 L50 10 L50 50");
-    expect(spoken()).toBe("1 segmento ora è una linea.");
-    key("Home");
-    key("L", { shiftKey: true });
-    expect(spoken()).toBe("Cambiare i segmenti chiede due nodi vicini scelti.");
-    key("B", { shiftKey: true });
-    expect(spoken()).toBe("Spezzare chiede un nodo scelto in mezzo al tracciato, o su un tracciato chiuso.");
-    key("Tab");
-    key("B", { shiftKey: true });
-    expect(d()).toBe("M10 10 L50 10 M50 10 L50 50");
-    expect(spoken()).toBe("Tracciato spezzato in 1 nodo.");
-    // Spezzato, il tracciato ha due capi dove c'era il nodo, scelti.
-    expect(enabled()).toContain("Unisci i capi");
-    key("End");
-    expect(spoken()).toBe("Nodo 4 di 4, capo: x 50, y 50.");
-    drag([[65, 0], [45, 15]]);
-    expect(spoken()).toBe("2 nodi scelti.");
-    key("J", { shiftKey: true });
-    expect(d()).toBe("M10 10 L50 10 L50 50");
-    expect(spoken()).toBe("Capi uniti: il tracciato ora è uno solo.");
-    tap(10, 10);
-    tap(50, 50, { shiftKey: true });
-    command("Unisci i capi").click();
-    expect(d()).toBe("M10 10 L50 10 L50 50 Z");
-    expect(spoken()).toBe("Capi uniti: il tracciato ora è chiuso.");
-    key("J", { shiftKey: true });
-    expect(spoken()).toBe("Unire chiede due capi scelti di tracciati aperti.");
-  });
-
-  it("Alt+F10 va alla barra dei nodi, i suoi tasti valgono lì, ed Esc torna al foglio", () => {
-    editing();
-    key("Tab");
-    key("Tab");
-    expect(key("F10", { altKey: true }).defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(command("Elimina nodi"));
-    key("S", { shiftKey: true }, command("Elimina nodi"));
-    expect(spoken()).toBe("1 nodo liscio.");
-    expect(nodesBar().contains(document.activeElement)).toBe(true);
-    key("Escape", {}, document.activeElement as HTMLElement);
-    expect(document.activeElement).toBe(surface());
-    expect(editor.selection).toEqual([P]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("dentro un gruppo si vedono i nodi di tutte le forme, e la forma toccata resta quella di cui si modificano, col gruppo scelto", () => {
-    const G = "og4g4g4g4";
-    const A = "oa4a4a4a4";
-    const B = "ob4b4b4b4";
-    const GROUP = doc(
-      `${LAYER}<g id="${G}"><path id="${A}" d="M10 10 L50 10" fill="none" stroke="#000000" stroke-width="2"/>`
-        + `<path id="${B}" d="M10 50 L50 50 L50 90" fill="none" stroke="#000000" stroke-width="2"/></g></g>`,
-    );
-    mount(GROUP, { level: "expert" });
-    editor.select([G]);
-    editor.focus();
-    key("n");
-    expect(spoken()).toBe("Strumento: Nodi. Gruppo, 2 oggetti: 5 nodi da modificare.");
-    tap(30, 50);
-    expect(spoken()).toBe("Gruppo, 2 oggetti: 3 nodi da modificare. 2 nodi scelti.");
-    drag([[50, 90], [60, 90], [70, 90]]);
-    expect(d(B)).toBe("M10 50 L50 50 L70 90");
-    expect(d(A)).toBe("M10 10 L50 10");
-    expect(editor.selection).toEqual([G]);
-    // La forma resta quella anche dopo la modifica.
-    key("Home");
-    expect(spoken()).toBe("Nodo 1 di 3, capo: x 10, y 50.");
-  });
-
-  it("i capi di due linee scelti col riquadro si allineano in un passo, che un annulla toglie, e si dice di quanti oggetti sono", () => {
-    const L = "ol5l5l5l5";
-    const M = "om5m5m5m5";
-    const LINES = `<line id="${L}" x1="10" y1="10" x2="50" y2="20" stroke="#000000" stroke-width="2"/>`
-      + `<line id="${M}" x1="10" y1="60" x2="60" y2="70" stroke="#000000" stroke-width="2"/>`;
-    mount(doc(`${LAYER}${LINES}${RECT}</g>`), { level: "expert" });
-    editor.focus();
-    key("n");
-    expect(spoken()).toBe("Strumento: Nodi.");
-    // Il riquadro prende i capi a destra delle due linee, e i loro oggetti.
-    drag([[40, 0], [80, 40], [80, 80]]);
-    expect(editor.selection).toEqual([L, M]);
-    expect(spoken()).toBe("2 oggetti: 4 nodi da modificare. 2 nodi scelti in 2 oggetti.");
-    expect(changes).toEqual([]);
-    command("Allinea i nodi").click();
-    const open = [...document.querySelectorAll<HTMLElement>(".context-menu")].pop()!;
-    const entries = [...open.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
-    expect(entries.map((entry) => entry.querySelector(".menu-label")!.textContent)).toEqual([
-      "Allinea a sinistra",
-      "Allinea al centro",
-      "Allinea a destra",
-      "Allinea in alto",
-      "Allinea in mezzo",
-      "Allinea in basso",
-      "Distribuisci orizzontalmente",
-      "Distribuisci verticalmente",
-    ]);
-    entries[1]!.click();
-    expect(editor.engine.text).toContain(`<line id="${L}" x1="10" y1="10" x2="55" y2="20" stroke="#000000" stroke-width="2"/>`);
-    expect(editor.engine.text).toContain(`<line id="${M}" x1="10" y1="60" x2="55" y2="70" stroke="#000000" stroke-width="2"/>`);
-    expect(spoken()).toBe("2 nodi allineati.");
-    expect(changes).toHaveLength(1);
-    // Maiusc+Tab va al nodo prima, anche di un'altra forma, e dice di quale.
-    key("Tab", { shiftKey: true });
-    expect(spoken()).toBe("Linea, Nero, nodo 1 di 2, capo: x 10, y 10.");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Allineamento di nodi.");
-    expect(editor.engine.text).toContain(LINES);
-    for (const menu of document.querySelectorAll(".context-menu")) menu.remove();
-  });
-
-  it("«Distribuisci» spazia i nodi scelti fra il primo e l'ultimo, che restano, e chiede almeno tre nodi", () => {
-    const ZIGZAG = doc(`${LAYER}<path id="${P}" d="M0 0 L10 30 L50 10 L60 40" fill="none" stroke="#000000" stroke-width="2"/></g>`);
-    editing(ZIGZAG);
-    const menu = (): HTMLElement[] => {
-      command("Allinea i nodi").click();
-      return [...[...document.querySelectorAll<HTMLElement>(".context-menu")].pop()!.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-    };
-    const entry = (label: string): HTMLElement => menu().find((each) => each.querySelector(".menu-label")!.textContent === label)!;
-    tap(10, 30);
-    tap(50, 10, { shiftKey: true });
-    const few = entry("Distribuisci orizzontalmente");
-    expect(few.getAttribute("aria-disabled")).toBe("true");
-    expect(few.querySelector(".menu-description")!.textContent).toBe("Servono almeno tre nodi scelti.");
-    for (const open of document.querySelectorAll(".context-menu")) open.remove();
-    key("a", { ctrlKey: true });
-    expect(spoken()).toBe("4 nodi scelti.");
-    entry("Distribuisci orizzontalmente").click();
-    expect(d()).toBe("M0 0 L20 30 L40 10 L60 40");
-    expect(spoken()).toBe("4 nodi distribuiti.");
-    // In verticale, nell'ordine dell'altezza: 0, 10, 30 e 40 diventano 0,
-    // 13.33, 26.67 e 40.
-    entry("Distribuisci verticalmente").click();
-    expect(d()).toBe("M0 0 L20 26.67 L40 13.33 L60 40");
-    expect(changes).toHaveLength(2);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Distribuzione di nodi.");
-    expect(d()).toBe("M0 0 L20 30 L40 10 L60 40");
-    for (const open of document.querySelectorAll(".context-menu")) open.remove();
-  });
-
-  it("con Maiusc si aggiungono i nodi di un altro oggetto, che si trascinano insieme; Ctrl+A sceglie le forme, poi il disegno", () => {
-    editing();
-    tap(50, 50);
-    expect(spoken()).toBe("Nodo 3 di 3, capo: x 50, y 50.");
-    tap(100, 100, { shiftKey: true });
-    expect(editor.selection).toEqual([P, C]);
-    expect(spoken()).toBe("2 oggetti: 5 nodi da modificare. 2 nodi scelti in 2 oggetti.");
-    // Un nodo si trascina con tutti quelli scelti, di ogni forma, in un passo.
-    drag([[100, 100], [105, 100], [110, 110]]);
-    expect(d()).toBe("M10 10 L50 10 L60 60");
-    expect(d(C)).toBe("M110 110 C130 90 140 80 160 100");
-    expect(spoken()).toBe("2 nodi spostati.");
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(d()).toBe("M10 10 L50 10 L50 50");
-    expect(d(C)).toBe("M100 100 C120 80 140 80 160 100");
-    // Un tocco senza Maiusc su un nodo scelto lascia scelto soltanto lui, e
-    // la sua forma.
-    tap(100, 100);
-    expect(editor.selection).toEqual([C]);
-    expect(spoken()).toBe("Tracciato, Nero: 2 nodi da modificare. Nodo 1 di 2, capo: x 100, y 100.");
-    key("a", { ctrlKey: true });
-    expect(spoken()).toBe("2 nodi scelti.");
-    key("a", { ctrlKey: true });
-    expect(editor.selection).toEqual([P, C, R]);
-    expect(spoken()).toBe("9 nodi scelti in 3 oggetti.");
-    key("Escape");
-    expect(spoken()).toBe("Nessun nodo scelto.");
-    expect(editor.selection).toEqual([P, C, R]);
-    // Il trascinamento e il suo annulla.
-    expect(changes).toHaveLength(2);
-  });
-
-  it("un rettangolo ha i suoi quattro nodi: portati tutti resta un rettangolo, uno solo lo fa tracciato", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([R]);
-    editor.focus();
-    key("n");
-    expect(spoken()).toBe("Strumento: Nodi. Rettangolo, Nero: 4 nodi da modificare.");
-    expect(nodesBar().hidden).toBe(false);
-    // Dentro la forma, lontano dai bordi, si prendono tutti i nodi.
-    drag([[210, 210], [220, 210], [230, 220]]);
-    expect(editor.engine.text).toContain(`<rect id="${R}" x="220" y="210" width="20" height="20" fill="#000000"/>`);
-    expect(spoken()).toBe("4 nodi spostati.");
-    // Un tocco sul nodo in basso a destra lo sceglie da solo, e trascinarlo
-    // fa della forma un tracciato, con lo stesso id e lo stesso colore.
-    tap(240, 230);
-    expect(spoken()).toBe("Nodo 3 di 4, spigolo: x 240, y 230.");
-    drag([[240, 230], [250, 240], [260, 250]]);
-    expect(editor.engine.text).toContain(`<path id="${R}" d="M220 210 L240 210 L260 250 L220 230 Z" fill="#000000"/>`);
-    expect(spoken()).toBe("Nodo spostato: x 260, y 250. La forma ora è un tracciato.");
-    expect(editor.selection).toEqual([R]);
-    editor.undo();
-    expect(editor.engine.text).toContain(`<rect id="${R}" x="220" y="210" width="20" height="20" fill="#000000"/>`);
-    expect(changes).toHaveLength(3);
-  });
-
-  it("un punto su un nodo di un altro oggetto lo prende subito, e lo trascina nello stesso gesto", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([R]);
-    editor.focus();
-    key("n");
-    drag([[50, 50], [65, 50], [90, 50]]);
-    expect(editor.selection).toEqual([P]);
-    expect(d()).toBe("M10 10 L50 10 L90 50");
-    expect(spoken()).toBe("Nodo spostato: x 90, y 50. Agganciato: il punto in linea con il centro verticale della pagina.");
-    // Dentro un oggetto pieno, il punto prende tutti i suoi nodi.
-    drag([[210, 210], [215, 210], [220, 210]]);
-    expect(editor.selection).toEqual([R]);
-    expect(editor.engine.text).toContain(`<rect id="${R}" x="210" y="200" width="20" height="20" fill="#000000"/>`);
-    expect(spoken()).toBe("4 nodi spostati.");
-  });
-
-  it("la freccia ha i due capi dell'asta: la punta segue il suo, e l'asta non si piega", () => {
-    const F = "of3f3f3f3";
-    const arrow = (x1: number, y1: number, x2: number, y2: number): string =>
-      `<path id="${F}" fub:shape="arrow" fub:geom="${x1} ${y1} ${x2} ${y2}" d="${arrowPath(x1, y1, x2, y2, 2)}" fill="none" stroke="#000000" stroke-width="2"/>`;
-    mount(doc(`${LAYER}${arrow(20, 300, 120, 300)}</g>`), { level: "expert" });
-    editor.select([F]);
-    editor.focus();
-    key("n");
-    expect(spoken()).toBe("Strumento: Nodi. Freccia, Nero: 2 nodi da modificare.");
-    drag([[120, 300], [120, 320], [120, 340]]);
-    expect(editor.engine.text).toContain(arrow(20, 300, 120, 340));
-    expect(spoken()).toBe("Nodo spostato: x 120, y 340.");
-    // Il punto sull'asta prende tutta la freccia.
-    drag([[70, 320], [80, 320], [90, 330]]);
-    expect(editor.engine.text).toContain(arrow(40, 310, 140, 350));
-    expect(spoken()).toBe("2 nodi spostati.");
-    // In curva no, e nemmeno un nodo in più: lo dice, e niente cambia.
-    key("U", { shiftKey: true });
-    expect(spoken()).toBe("Una freccia ha un’asta dritta fra due capi: per curvarla o darle altri nodi, prima «Oggetto in tracciato».");
-    key("Insert");
-    expect(spoken()).toBe("Una freccia ha un’asta dritta fra due capi: per curvarla o darle altri nodi, prima «Oggetto in tracciato».");
-    expect(editor.engine.text).toContain(arrow(40, 310, 140, 350));
-    expect(changes).toHaveLength(2);
-  });
-
-  it("un tratto a penna ha i nodi della sua spina: spostarne uno porta l'inchiostro, e il tratto resta uno", () => {
-    mount(doc(`${LAYER}</g>`), { level: "expert" });
-    editor.setTool("pen");
-    drag([[20, 300], [40, 330], [60, 360], [80, 330], [100, 300]]);
-    const id = /<path id="(o[a-z0-9]{8})" fub:tool="pen"/.exec(editor.engine.text)![1]!;
-    const ink = () => decodeInk(/fub:ink="([^"]+)"/.exec(editor.engine.text)![1]!);
-    const shape = () => /fub:tool="pen" [^>]* d="([^"]+)"/.exec(editor.engine.text)![1]!;
-    const before = { ink: ink(), d: shape() };
-    editor.select([id]);
-    editor.focus();
-    key("n");
-    expect(spoken()).toBe("Strumento: Nodi. Tratto, Nero: 3 nodi da modificare.");
-    // Lo spigolo in basso scende di 20: il campione lì scende con lui, i capi
-    // restano, e il contorno si rifà.
-    drag([[60, 360], [60, 370], [60, 380]]);
-    expect(spoken()).toBe("Nodo spostato: x 60, y 380.");
-    const after = ink();
-    expect(inkLength(after)).toBe(inkLength(before.ink));
-    const points = Array.from({ length: inkLength(after) }, (_, i) => inkPoint(after, i));
-    expect(points).toContainEqual([60, 380]);
-    expect(points[0]).toEqual([20, 300]);
-    expect(points[points.length - 1]).toEqual([100, 300]);
-    expect(shape()).not.toBe(before.d);
-    expect(editor.selection).toEqual([id]);
-    // Non si spezza: lo dice, e niente cambia.
-    key("B", { shiftKey: true });
-    expect(spoken()).toBe("Un tratto a penna resta un tratto solo e aperto: non si spezza e non si chiude.");
-    editor.undo();
-    expect(ink()).toEqual(before.ink);
-    expect(shape()).toBe(before.d);
-  });
-
-  it("passando col puntatore, una forma mostra il contorno e i nodi prima di toccarla", () => {
-    const layer = recording();
-    mount(SHAPES, { level: "expert" });
-    editor.select([P]);
-    editor.focus();
-    key("n");
-    const hover = (x: number, y: number): void => {
-      surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8) }));
-      layer.frame();
-    };
-    /// I rombi dei nodi a spigolo dell'ultimo disegno: dove stanno, e quanto
-    /// sono grandi.
-    const diamonds = (): string[] => {
-      const calls = layer.calls();
-      return calls.flatMap((call, i) => {
-        const next = calls[i + 1];
-        if (call[0] !== "moveTo" || next?.[0] !== "lineTo") return [];
-        const [x, top] = [call[1] as number, call[2] as number];
-        const [right, y] = [next[1] as number, next[2] as number];
-        return right - x === y - top && right > x ? [`${x},${y} r${right - x}`] : [];
-      });
-    };
-    hover(400, 400);
-    const editingOnly = diamonds();
-    // I tre nodi del tracciato, grandi.
-    expect(editingOnly).toEqual(expect.arrayContaining(["10,10 r5.5", "50,50 r5.5"]));
-    // Sopra il rettangolo: i suoi quattro spigoli, più piccoli.
-    hover(210, 210);
-    expect(diamonds().filter((each) => !editingOnly.includes(each))).toEqual(["200,200 r4.5", "220,200 r4.5", "220,220 r4.5", "200,220 r4.5"]);
-    // Sopra il tracciato che si modifica, o sul vuoto, niente in più.
-    hover(30, 10);
-    expect(diamonds()).toEqual(editingOnly);
-    hover(210, 210);
-    hover(400, 400);
-    expect(diamonds()).toEqual(editingOnly);
-    // Lo strumento Selezione non li mostra.
-    editor.setTool("select");
-    hover(210, 210);
-    expect(diamonds()).toEqual([]);
-  });
-
-  it("una parte di un altro programma non ha nodi, e un tocco lo dice", () => {
-    const G = "og5g5g5g5";
-    const A = "oa5a5a5a5";
-    mount(doc(
-      `${LAYER}<g id="${G}"><path id="${A}" d="M10 10 L50 10" fill="none" stroke="#000000" stroke-width="2"/>`
-        + `<path style="fill:none;stroke:#000000;stroke-width:2" d="M10 50 L50 50"/></g></g>`,
-    ), { level: "expert" });
-    editor.select([G]);
-    editor.focus();
-    key("n");
-    // La parte dell'altro programma non si conta fra gli oggetti.
-    expect(spoken()).toBe("Strumento: Nodi. Gruppo, 1 oggetto: 2 nodi da modificare.");
-    tap(30, 50);
-    expect(spoken()).toBe("Questa parte viene da un altro programma: FubDraw la lascia com’è, e i suoi nodi non si modificano.");
-    // I nodi restano quelli della forma di prima.
-    key("Home");
-    expect(spoken()).toBe("Nodo 1 di 2, capo: x 10, y 10.");
-    expect(changes).toEqual([]);
-  });
-
-  it("«?» elenca i tasti dei nodi, all'Esperto", () => {
-    editing();
-    key("?", { shiftKey: true });
-    const captions = [...dialog().querySelectorAll(".keys-list > table caption")].map((caption) => caption.textContent);
-    expect(captions).toContain("Nodi");
-    const rows = [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
-    expect(rows).toContainEqual(["Shift+C", "Nodi a spigolo"]);
-    expect(rows).toContainEqual(["Alt+F10", "Va alla barra dei nodi"]);
-    expect(rows).toContainEqual(["Tab o Shift+Tab", "Il nodo dopo o prima"]);
-    expect(rows).toContainEqual(["Alt", "Tenuto, un nodo trascinato tira fuori le sue maniglie, e una maniglia trascinata si sposta da sola"]);
-    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
-    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
-  });
-
-  describe("le maniglie di ogni nodo", () => {
-    const A = "oa6a6a6a6";
-    const Q = "oq6q6q6q6";
-    const F = "of6f6f6f6";
-    const G = "og6g6g6g6";
-    /// Una linea, mezzo giro d'arco e una cubica con la prima maniglia
-    /// ritirata sul suo nodo, come la scrive la penna di Bézier.
-    const MIXED = `<path id="${A}" d="M100 100 L160 100 A30 30 0 0 1 220 100 C220 100 280 160 280 100" fill="none" stroke="#000000" stroke-width="2"/>`;
-    const SQUARE = `<rect id="${Q}" x="100" y="200" width="60" height="60" fill="#000000"/>`;
-    const ARROW = `<path id="${F}" fub:shape="arrow" fub:geom="300 300 400 300" d="${arrowPath(300, 300, 400, 300, 2)}" fill="none" stroke="#000000" stroke-width="2"/>`;
-    const FREE = { ctrlKey: true } as const;
-
-    /// L'oggetto `id` di `source` scelto, con lo strumento Nodi; lo strato
-    /// sopra registra ciò che disegna.
-    const nodesOn = (source: string, ...ids: string[]): ReturnType<typeof recording> => {
-      const layer = recording();
-      mount(doc(`${LAYER}${source}</g>`), { level: "expert" });
-      editor.select(ids);
-      editor.focus();
-      key("n");
-      return layer;
-    };
-    /// Le maniglie dell'ultimo disegno, arrotondate al pixel: i punti, e
-    /// quelli legati al nodo da una linea tratteggiata, le ritirate.
-    const handlesIn = (layer: ReturnType<typeof recording>): { readonly dots: string[]; readonly folded: string[] } => {
-      layer.frame();
-      const calls = layer.calls();
-      const at = (x: unknown, y: unknown): string => `${Math.round(x as number)},${Math.round(y as number)}`;
-      const dots = calls.filter((call) => call[0] === "arc" && call[3] === 3).map((call) => at(call[1], call[2]));
-      const folded = calls.flatMap((call, i) => {
-        const end = calls[i + 3];
-        return call[0] === "setLineDash" && JSON.stringify(call[1]) === "[2,2]" && end?.[0] === "lineTo" ? [at(end[1], end[2])] : [];
-      });
-      return { dots, folded };
-    };
-
-    it("ogni nodo scelto mostra le sue maniglie: sulle linee, sugli archi, e quella ritirata accanto, tratteggiata", () => {
-      const layer = nodesOn(`${MIXED}${SQUARE}${ARROW}<rect id="or6r6r6r6" x="450" y="100" width="18" height="18" fill="#000000"/>`, A);
-      tap(100, 100);
-      expect(handlesIn(layer)).toEqual({ dots: ["120,100"], folded: [] });
-      tap(160, 100);
-      expect(handlesIn(layer)).toEqual({ dots: ["140,100", "160,83", "220,83"], folded: [] });
-      tap(220, 100);
-      expect(handlesIn(layer)).toEqual({ dots: ["160,83", "220,83", "234,114", "280,160"], folded: ["234,114"] });
-      // La maniglia ritirata è del nodo prima: con l'ultimo si vede l'altra.
-      tap(280, 100);
-      expect(handlesIn(layer)).toEqual({ dots: ["280,160"], folded: [] });
-      // Gli spigoli di un rettangolo, sui suoi lati.
-      tap(130, 230);
-      tap(100, 200);
-      expect(spoken()).toBe("Nodo 1 di 4, spigolo: x 100, y 200.");
-      expect(handlesIn(layer)).toEqual({ dots: ["120,200", "100,220"], folded: [] });
-      // Lo stesso andando di nodo in nodo con Tab, e col riquadro.
-      key("Tab");
-      expect(spoken()).toBe("Nodo 2 di 4, spigolo: x 160, y 200.");
-      expect(handlesIn(layer)).toEqual({ dots: ["140,200", "160,220"], folded: [] });
-      drag([[270, 90], [280, 100], [290, 110]]);
-      expect(spoken()).toBe("Tracciato, Nero: 4 nodi da modificare. Nodo 4 di 4, capo: x 280, y 100.");
-      expect(handlesIn(layer)).toEqual({ dots: ["280,160"], folded: [] });
-      // L'asta di una freccia non si piega: niente maniglie.
-      tap(350, 300);
-      tap(400, 300);
-      expect(spoken()).toBe("Nodo 2 di 2, capo: x 400, y 300.");
-      expect(handlesIn(layer).dots).toEqual([]);
-      // Su un lato corto la maniglia coprirebbe il nodo: non si vede.
-      tap(459, 109);
-      tap(450, 100);
-      expect(spoken()).toBe("Nodo 1 di 4, spigolo: x 450, y 100.");
-      expect(handlesIn(layer).dots).toEqual([]);
-      expect(changes).toEqual([]);
-    });
-
-    it("trascinare la maniglia di un lato lo curva, e il rettangolo diventa un tracciato, in un passo", () => {
-      const layer = nodesOn(SQUARE, Q);
-      tap(100, 200);
-      drag([[120, 200], [120, 190], [120, 180]], FREE);
-      expect(editor.engine.text).toContain(`<path id="${Q}" d="M100 200 C120 180 140 200 160 200 L160 260 L100 260 Z" fill="#000000"/>`);
-      expect(spoken()).toBe("Maniglia tirata fuori. La forma ora è un tracciato.");
-      // Il nodo resta scelto, e il lato curvo ha ora anche la maniglia
-      // dell'altro capo.
-      expect(handlesIn(layer).dots).toEqual(["120,180", "140,200", "100,220"]);
-      expect(changes).toHaveLength(1);
-      editor.undo();
-      expect(editor.engine.text).toContain(SQUARE);
-      expect(spoken()).toBe("Annullato: Spostamento di una maniglia.");
-      // Col dito, allo stesso modo.
-      tap(100, 200, { pointerType: "touch" });
-      drag([[100, 220], [90, 230], [80, 240]], { ...FREE, pointerType: "touch" });
-      expect(editor.engine.text).toContain(`<path id="${Q}" d="M100 200 L160 200 L160 260 L100 260 C100 240 80 240 100 200 Z" fill="#000000"/>`);
-      expect(spoken()).toBe("Maniglia tirata fuori. La forma ora è un tracciato.");
-    });
-
-    it("la maniglia di un arco si trascina come quella delle cubiche che lo approssimano, e il nodo resta scelto", () => {
-      const layer = nodesOn(`<path id="${A}" d="M100 100 L160 100 A30 30 0 0 1 220 100 L280 100" fill="none" stroke="#000000" stroke-width="2"/>`, A);
-      tap(220, 100);
-      expect(handlesIn(layer).dots).toEqual(["160,83", "220,83", "240,100"]);
-      drag([[220, 83], [225, 75], [230, 70]], FREE);
-      expect(d(A)).toBe("M100 100 L160 100 C160 83.43 173.43 70 190 70 C206.57 70 230 70.43 220 100 L280 100");
-      expect(spoken()).toBe("Maniglia spostata.");
-      // Il nodo in mezzo all'arco è nuovo: quello scelto resta il suo.
-      expect(handlesIn(layer).dots).toEqual(["207,70", "230,70", "240,100"]);
-      key("Home");
-      key("End");
-      expect(spoken()).toBe("Nodo 5 di 5, capo: x 280, y 100.");
-      editor.undo();
-      expect(d(A)).toBe("M100 100 L160 100 A30 30 0 0 1 220 100 L280 100");
-    });
-
-    it("la maniglia ritirata si tira fuori dal suo nodo", () => {
-      const layer = nodesOn(MIXED, A);
-      tap(220, 100);
-      drag([[234, 114], [234, 130], [234, 150]], FREE);
-      expect(d(A)).toBe("M100 100 L160 100 A30 30 0 0 1 220 100 C234.14 150.14 280 160 280 100");
-      expect(spoken()).toBe("Maniglia tirata fuori.");
-      expect(handlesIn(layer).folded).toEqual([]);
-    });
-
-    it("con Alt, trascinare un nodo ne tira fuori le maniglie, e il nodo diventa simmetrico", () => {
-      const layer = nodesOn(`${SQUARE}${MIXED}`, Q, A);
-      expect(spoken()).toBe("Strumento: Nodi. 2 oggetti: 8 nodi da modificare.");
-      drag([[100, 200], [110, 195], [130, 190]], { ...FREE, altKey: true });
-      expect(editor.engine.text).toContain(`<path id="${Q}" d="M100 200 C130 190 140 200 160 200 L160 260 L100 260 C100 240 70 210 100 200 Z" fill="#000000"/>`);
-      expect(spoken()).toBe("Maniglie tirate fuori: il nodo ora è simmetrico. La forma ora è un tracciato.");
-      expect(handlesIn(layer).dots).toEqual(["130,190", "140,200", "100,240", "70,210"]);
-      expect(d(A)).toBe("M100 100 L160 100 A30 30 0 0 1 220 100 C220 100 280 160 280 100");
-      expect(changes).toHaveLength(1);
-      tap(100, 200);
-      expect(spoken()).toBe("Nodo 1 di 4, simmetrico: x 100, y 200.");
-      // Trascinato verso l'altro lato, la maniglia sotto il puntatore è di
-      // quello.
-      editor.undo();
-      expect(editor.engine.text).toContain(SQUARE);
-      drag([[160, 200], [150, 205], [130, 210]], { ...FREE, altKey: true });
-      expect(editor.engine.text).toContain(`<path id="${Q}" d="M100 200 C120 200 130 210 160 200 C190 190 160 240 160 260 L100 260 Z" fill="#000000"/>`);
-      // Un capo ha una maniglia sola; un tocco con Alt sceglie e basta.
-      tap(100, 100, { altKey: true });
-      expect(spoken()).toBe("Tracciato, Nero: 4 nodi da modificare. Nodo 1 di 4, capo: x 100, y 100.");
-      drag([[100, 100], [100, 90], [110, 80]], { ...FREE, altKey: true });
-      expect(d(A)).toBe("M100 100 C110 80 140 100 160 100 A30 30 0 0 1 220 100 C220 100 280 160 280 100");
-      expect(spoken()).toBe("Maniglia tirata fuori.");
-    });
-
-    it("con Alt un tratto a penna resta un tratto, e una freccia non si piega", () => {
-      const layer = nodesOn(ARROW, F);
-      drag([[400, 300], [400, 290], [410, 280]], { ...FREE, altKey: true });
-      expect(spoken()).toBe("Una freccia ha un’asta dritta fra due capi: per curvarla o darle altri nodi, prima «Oggetto in tracciato».");
-      expect(changes).toEqual([]);
-      expect(handlesIn(layer).dots).toEqual([]);
-      owner.close();
-      host.remove();
-      host = document.createElement("div");
-      document.body.append(host);
-      owner = openLifetime();
-      mount(doc(`${LAYER}</g>`), { level: "expert" });
-      editor.setTool("pen");
-      drag([[20, 300], [40, 330], [60, 360], [80, 330], [100, 300]]);
-      const id = /<path id="(o[a-z0-9]{8})" fub:tool="pen"/.exec(editor.engine.text)![1]!;
-      const ink = (): string => /fub:ink="([^"]+)"/.exec(editor.engine.text)![1]!;
-      const before = ink();
-      editor.select([id]);
-      editor.focus();
-      key("n");
-      drag([[60, 360], [70, 360], [90, 360]], { ...FREE, altKey: true });
-      expect(spoken()).toBe("Maniglie tirate fuori: il nodo ora è simmetrico.");
-      expect(ink()).not.toBe(before);
-      expect(editor.engine.text).toMatch(new RegExp(`<path id="${id}" fub:tool="pen"`));
-      expect(inkLength(decodeInk(ink()))).toBeGreaterThanOrEqual(inkLength(decodeInk(before)));
-    });
-
-    it("con Alt una maniglia si sposta da sola, e il suo nodo diventa uno spigolo", () => {
-      const S = `<path id="${A}" d="M100 100 C120 80 140 80 160 100 C180 120 200 120 220 100" fill="none" stroke="#000000" stroke-width="2"/>`;
-      nodesOn(S, A);
-      tap(160, 100);
-      expect(spoken()).toBe("Nodo 2 di 3, simmetrico: x 160, y 100.");
-      drag([[180, 120], [180, 130], [180, 140]], { ...FREE, altKey: true });
-      expect(d(A)).toBe("M100 100 C120 80 140 80 160 100 C180 140 200 120 220 100");
-      expect(spoken()).toBe("Maniglia spostata da sola: il nodo ora è uno spigolo.");
-      tap(160, 100);
-      expect(spoken()).toBe("Nodo 2 di 3, spigolo: x 160, y 100.");
-      // Annullato il passo il nodo torna simmetrico, e ripetuto uno spigolo.
-      editor.undo();
-      tap(160, 100);
-      expect(spoken()).toBe("Nodo 2 di 3, simmetrico: x 160, y 100.");
-      editor.redo();
-      tap(160, 100);
-      expect(spoken()).toBe("Nodo 2 di 3, spigolo: x 160, y 100.");
-      // Senza Alt l'altra maniglia segue quella trascinata.
-      editor.undo();
-      drag([[180, 120], [180, 130], [180, 140]], FREE);
-      expect(d(A)).toBe("M100 100 C120 80 140 60 160 100 C180 140 200 120 220 100");
-      expect(spoken()).toBe("Maniglia spostata.");
-    });
-
-    it("toccare la maniglia di una linea sceglie la linea, e il doppio tocco ci aggiunge un nodo", () => {
-      editing();
-      tap(50, 10);
-      tap(37, 10);
-      expect(spoken()).toBe("2 nodi scelti.");
-      expect(d()).toBe("M10 10 L50 10 L50 50");
-      tap(37, 10);
-      expect(d()).toBe("M10 10 L37 10 L50 10 L50 50");
-      expect(spoken()).toBe("1 nodo aggiunto.");
-    });
-
-    it("dentro un gruppo ingrandito le maniglie stanno dove si vedono, e la ritirata è lunga uguale sullo schermo", () => {
-      const layer = nodesOn(`<g id="${G}" transform="translate(300 0) scale(2)"><path id="${A}" d="M0 50 C0 50 20 80 40 50 L60 50" fill="none" stroke="#000000" stroke-width="1"/></g>`, G);
-      tap(300, 100);
-      expect(handlesIn(layer)).toEqual({ dots: ["311,117", "340,160"], folded: ["311,117"] });
-      tap(380, 100);
-      expect(handlesIn(layer).dots).toEqual(["340,160", "393,100"]);
-      tap(300, 100);
-      drag([[311, 117], [311, 130], [311, 140]], FREE);
-      expect(d(A)).toBe("M0 50 C5.55 69.82 20 80 40 50 L60 50");
-      expect(spoken()).toBe("Maniglia tirata fuori.");
-    });
-  });
-});
-
-describe("il Costruttore di forme, dal livello Esperto", () => {
-  const A = "oa7a7a7a7";
-  const B = "ob7b7b7b7";
-  const T = "ot7t7t7t7";
-  const SHAPES = doc(
-    `${LAYER}<rect id="${A}" x="0" y="0" width="40" height="40" fill="#d55e00"/>`
-      + `<rect id="${B}" x="20" y="20" width="40" height="40" fill="#0072b2"/>`
-      + `<text id="${T}" x="0" y="200"><tspan x="0" dy="0">Ciao</tspan></text></g>`,
-  );
-  /// Il `d` del tracciato `id`, com'è adesso.
-  const d = (id: string): string | null => new RegExp(`<path id="${id}" d="([^"]*)"`).exec(editor.engine.text)?.[1] ?? null;
-  const tap = (x: number, y: number, init: Init = {}): void => drag([[x, y]], init);
-  const hover = (x: number, y: number, init: Init = {}): void => {
-    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }));
-  };
-  const builderTool = () => railTool("Costruttore di forme");
-
-  /// Gli oggetti `ids` scelti, col Costruttore.
-  const building = (...ids: string[]): void => {
-    mount(SHAPES, { level: "expert" });
-    editor.select(ids);
-    editor.focus();
-    key("m");
-  };
-
-  it("c'è solo all'Esperto, col tasto M, e dice su quante regioni lavora", () => {
-    mount(SHAPES, { level: "standard" });
-    editor.select([A, B]);
-    editor.focus();
-    expect(builderTool().hidden).toBe(true);
-    key("m");
-    expect(editor.tool).not.toBe("builder");
-    editor.setLevel("expert");
-    expect(builderTool().hidden).toBe(false);
-    expect(builderTool().title).toBe("Costruttore di forme (M)");
-    key("m");
-    expect(editor.tool).toBe("builder");
-    expect(surface().dataset.tool).toBe("builder");
-    expect(spoken()).toBe("Strumento: Costruttore di forme. 3 regioni in 2 forme.");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    editor.select([A, B, T]);
-    editor.setTool("builder");
-    expect(spoken()).toBe("Strumento: Costruttore di forme. 3 regioni in 2 forme. 1 oggetto scelto non è una forma e resta com’è.");
-    editor.select([A]);
-    editor.setTool("builder");
-    expect(spoken()).toBe("Strumento: Costruttore di forme. 1 regione nella forma scelta.");
-    editor.select([]);
-    editor.setTool("builder");
-    expect(spoken()).toBe("Strumento: Costruttore di forme. Scegli le forme da unire o separare: tocca una forma, o tira un riquadro attorno a più forme.");
-    expect(changes).toEqual([]);
-  });
-
-  it("su forme troppe o troppo complesse lo dice, senza regioni, e sceglie le forme come la Selezione", () => {
-    const ids = Array.from({ length: 300 }, (_, i) => `oc${i}`);
-    const circles = ids.map((id, i) => `<circle id="${id}" cx="${(i % 20) * 7}" cy="${Math.floor(i / 20) * 7}" r="60" fill="#0072b2"/>`).join("");
-    mount(doc(`${LAYER}${circles}</g>`), { level: "expert" });
-    editor.select(ids);
-    editor.focus();
-    key("m");
-    expect(spoken()).toBe("Strumento: Costruttore di forme. Le forme scelte sono troppe, o troppo complesse, per il Costruttore: scegline meno.");
-    hover(70, 50);
-    expect(surface().hasAttribute("data-region")).toBe(false);
-    tap(300, 300);
-    expect(editor.selection).toEqual([]);
-    tap(70, 50);
-    expect(editor.selection).toHaveLength(1);
-    expect(spoken()).toBe("1 oggetto scelto. 1 regione nella forma scelta.");
-    expect(changes).toEqual([]);
-  });
-
-  it("trascinare attraverso le regioni le unisce, con lo stile della prima, in un passo che si annulla", () => {
-    building(A, B);
-    drag([[10, 10], [30, 30], [50, 50]]);
-    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L40 0 L40 20 L60 20 L60 60 L20 60 L20 40 L0 40 Z" fill="#d55e00"/>`);
-    expect(editor.engine.text).not.toContain(B);
-    expect(spoken()).toBe("3 regioni unite in una forma. 1 forma, rimasta vuota, se ne va. 1 regione nella forma scelta.");
-    expect(editor.selection).toEqual([A]);
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-    expect(spoken()).toBe("Annullato: Unione di regioni.");
-    // La prima regione dà lo stile: da quella di B, l'unione è B, che resta
-    // com'è, e A perde ciò che ne copriva.
-    drag([[50, 50], [30, 30]]);
-    expect(editor.engine.text).toContain(`<rect id="${B}" x="20" y="20" width="40" height="40" fill="#0072b2"/>`);
-    expect(d(A)).toBe("M0 0 L40 0 L40 20 L20 20 L20 40 L0 40 Z");
-    expect(spoken()).toBe("2 regioni unite in una forma. 2 regioni in 2 forme.");
-  });
-
-  it("un tocco separa la regione, con Alt la toglie; una forma intera resta com'è", () => {
-    building(A, B);
-    tap(30, 30);
-    const piece = editor.selection.find((key) => key !== A && key !== B)!;
-    expect(editor.selection).toEqual([A, B, piece]);
-    expect(d(piece)).toBe("M40 40 L20 40 L20 20 L40 20 Z");
-    expect(editor.engine.text).toContain(`d="M40 40 L20 40 L20 20 L40 20 Z" fill="#0072b2"/>`);
-    expect(spoken()).toBe("La regione diventa una forma a sé. 3 regioni in 3 forme.");
-    editor.undo();
-    tap(30, 30, { altKey: true });
-    expect(d(A)).toBe("M0 0 L40 0 L40 20 L20 20 L20 40 L0 40 Z");
-    expect(d(B)).toBe("M40 40 L40 20 L60 20 L60 60 L20 60 L20 40 Z");
-    expect(spoken()).toBe("1 regione tolta. 2 regioni in 2 forme.");
-    // Il tocco, l'annulla e il tocco con Alt.
-    expect(changes).toHaveLength(3);
-    editor.select([A]);
-    tap(10, 10);
-    expect(spoken()).toBe("La regione è già una forma intera: niente è cambiato.");
-    expect(changes).toHaveLength(3);
-  });
-
-  it("fuori dalle regioni, o con Maiusc, sceglie gli oggetti come la Selezione", () => {
-    building(A);
-    // B non è scelto: le sue regioni non ci sono, e il tocco lo sceglie.
-    tap(50, 50);
-    expect(editor.selection).toEqual([B]);
-    expect(spoken()).toBe("1 oggetto scelto. 1 regione nella forma scelta.");
-    tap(10, 10, { shiftKey: true });
-    expect(editor.selection).toEqual([A, B]);
-    expect(spoken()).toBe("2 oggetti scelti. 3 regioni in 2 forme.");
-    // Con Maiusc il tocco su un oggetto scelto lo toglie, anche su una
-    // regione.
-    tap(10, 10, { shiftKey: true });
-    expect(editor.selection).toEqual([B]);
-    tap(150, 150);
-    expect(editor.selection).toEqual([]);
-    expect(spoken()).toBe("Scegli le forme da unire o separare: tocca una forma, o tira un riquadro attorno a più forme.");
-    drag([[-5, -5], [30, 30], [70, 70]]);
-    expect(editor.selection).toEqual([A, B]);
-    expect(spoken()).toBe("2 oggetti scelti. 3 regioni in 2 forme.");
-    expect(changes).toEqual([]);
-  });
-
-  it("la regione sotto il puntatore si accende, e con Alt si tratteggia", () => {
-    const layer = recording();
-    building(A, B);
-    const drawn = (): { readonly filled: number; readonly hatched: number } => {
-      layer.frame();
-      const calls = layer.calls();
-      return {
-        filled: calls.filter((call) => call[0] === "fill" && call[1] === "evenodd").length,
-        hatched: calls.filter((call) => call[0] === "clip" && call[1] === "evenodd").length,
-      };
-    };
-    expect(drawn()).toEqual({ filled: 0, hatched: 0 });
-    hover(30, 30);
-    expect(drawn()).toEqual({ filled: 1, hatched: 0 });
-    expect(surface().hasAttribute("data-region")).toBe(true);
-    hover(31, 31, { altKey: true });
-    key("Alt", { altKey: true });
-    expect(drawn()).toEqual({ filled: 0, hatched: 1 });
-    expect(surface().hasAttribute("data-region")).toBe(false);
-    hover(150, 150);
-    expect(drawn()).toEqual({ filled: 0, hatched: 0 });
-    expect(surface().hasAttribute("data-region")).toBe(false);
-  });
-
-  it("dalla tastiera Tab passa fra le regioni, Spazio le sceglie, Invio le unisce, Canc le toglie, Esc le lascia", () => {
-    building(A, B);
-    size(400, 400);
-    expect(key("Tab").defaultPrevented).toBe(true);
-    expect(spoken()).toBe("Regione 1 di 3, di Rettangolo, Vermiglio.");
-    key("Tab");
-    // Le forme che coprono la regione, dalla più in alto.
-    expect(spoken()).toBe("Regione 2 di 3, di Rettangolo, Blu e Rettangolo, Vermiglio.");
-    key(" ");
-    expect(spoken()).toBe("Regione scelta: 1 in tutto.");
-    key("Tab", { shiftKey: true });
-    expect(spoken()).toBe("Regione 1 di 3, di Rettangolo, Vermiglio.");
-    key("Tab");
-    expect(spoken()).toBe("Regione 2 di 3, di Rettangolo, Blu e Rettangolo, Vermiglio, scelta.");
-    key("End");
-    expect(spoken()).toBe("Regione 3 di 3, di Rettangolo, Blu.");
-    // Oltre l'ultima, il Tab esce dal foglio.
-    expect(key("Tab").defaultPrevented).toBe(false);
-    key(" ");
-    expect(spoken()).toBe("Regione scelta: 2 in tutto.");
-    key(" ");
-    expect(spoken()).toBe("Regione lasciata: 1 in tutto.");
-    key(" ");
-    key("Enter");
-    // La prima scelta, di A e di B, è di B, la più in alto: l'unione è B.
-    expect(editor.engine.text).toContain(`<rect id="${B}" x="20" y="20" width="40" height="40" fill="#0072b2"/>`);
-    expect(d(A)).toBe("M0 0 L40 0 L40 20 L20 20 L20 40 L0 40 Z");
-    expect(spoken()).toBe("2 regioni unite in una forma. 2 regioni in 2 forme.");
-    // L'annulla sceglie ciò che ha cambiato: si torna a scegliere tutte e due.
-    editor.undo();
-    editor.select([A, B]);
-    key("Home");
-    expect(spoken()).toBe("Regione 1 di 3, di Rettangolo, Vermiglio.");
-    key("Delete");
-    expect(d(A)).toBe("M40 40 L20 40 L20 20 L40 20 Z");
-    expect(editor.engine.text).toContain(B);
-    expect(spoken()).toBe("1 regione tolta. 2 regioni in 2 forme.");
-    editor.undo();
-    editor.select([A, B]);
-    key("Tab");
-    key(" ");
-    key("Escape");
-    expect(spoken()).toBe("Nessuna regione scelta.");
-    // Senza una regione, Spazio prende quella sotto il cursore, al centro
-    // della vista: qui non ce n'è.
-    key(" ");
-    expect(spoken()).toBe("Qui non c’è una regione: Tab passa fra le regioni.");
-    key("Escape");
-    expect(editor.selection).toEqual([]);
-    expect(changes).toHaveLength(4);
-  });
-});
-
-describe("le Forbici e il Coltello, dal livello Esperto", () => {
-  const A = "oa9a9a9a9";
-  const L = "ol9l9l9l9";
-  const F = "of9f9f9f9";
-  const T = "ot9t9t9t9";
-  const RECT = `<rect id="${A}" x="0" y="0" width="100" height="50" fill="#d55e00"/>`;
-  const LINE = `<line id="${L}" x1="200" y1="20" x2="300" y2="20" stroke="#000000" stroke-width="2"/>`;
-  const ARROW = `<path id="${F}" fub:shape="arrow" fub:geom="300 300 400 300" d="${arrowPath(300, 300, 400, 300, 2)}" fill="none" stroke="#000000" stroke-width="2"/>`;
-  const TEXT = `<text id="${T}" x="0" y="200"><tspan x="0" dy="0">Ciao</tspan></text>`;
-  const SHAPES = doc(`${LAYER}${RECT}${LINE}${ARROW}${TEXT}</g>`);
-  /// Il `d` del tracciato `id`, com'è adesso.
-  const d = (id: string): string | null => new RegExp(`<path id="${id}" d="([^"]*)"`).exec(editor.engine.text)?.[1] ?? null;
-  /// Gli id dei tracciati del disegno, in ordine.
-  const paths = (): string[] => [...editor.engine.text.matchAll(/<path id="([^"]+)"/g)].map((found) => found[1]!);
-  const tap = (x: number, y: number, init: Init = {}): void => drag([[x, y]], init);
-  const scissorsTool = () => railTool("Forbici");
-
-  /// Il disegno `source`, con le Forbici e niente di scelto.
-  const cutting = (source = SHAPES): void => {
-    mount(source, { level: "expert" });
-    editor.focus();
-    key("c");
-  };
-
-  it("c'è solo all'Esperto, col tasto C", () => {
-    mount(SHAPES, { level: "standard" });
-    editor.focus();
-    expect(scissorsTool().hidden).toBe(true);
-    key("c");
-    expect(editor.tool).not.toBe("scissors");
-    editor.setLevel("expert");
-    expect(scissorsTool().hidden).toBe(false);
-    expect(scissorsTool().title).toBe("Forbici (C)");
-    key("c");
-    expect(editor.tool).toBe("scissors");
-    expect(surface().dataset.tool).toBe("scissors");
-    expect(spoken()).toBe("Strumento: Forbici.");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    expect(changes).toEqual([]);
-  });
-
-  it("un tocco sul contorno di una linea la taglia in due oggetti, scelti, in un passo che si annulla", () => {
-    cutting();
-    tap(250, 21);
-    const [, piece] = paths().filter((id) => id !== F);
-    expect(d(L)).toBe("M200 20 L250 20");
-    expect(d(piece!)).toBe("M250 20 L300 20");
-    // Il secondo pezzo sta sopra il primo, col suo aspetto.
-    expect(editor.engine.text).toContain(`<path id="${L}" d="M200 20 L250 20" stroke="#000000" stroke-width="2"/>\n<path id="${piece}" d="M250 20 L300 20" stroke="#000000" stroke-width="2"/>`);
-    expect(editor.selection).toEqual([L, piece]);
-    expect(spoken()).toBe("Tracciato tagliato in 2 pezzi.");
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-    expect(spoken()).toBe("Annullato: Taglio con le Forbici.");
-    // Su un capo non c'è niente da tagliare.
-    tap(200, 20);
-    expect(spoken()).toBe("È un capo del tracciato: lì non c’è niente da tagliare.");
-    expect(changes).toHaveLength(2);
-  });
-
-  it("una forma chiusa tagliata si apre nel punto, e di nuovo si divide; tagliata in un nodo, si apre lì", () => {
-    cutting();
-    tap(101, 25);
-    expect(d(A)).toBe("M100 25 L100 50 L0 50 L0 0 L100 0 L100 25");
-    expect(editor.engine.text).toContain(`<path id="${A}" d="M100 25 L100 50 L0 50 L0 0 L100 0 L100 25" fill="#d55e00"/>`);
-    expect(editor.selection).toEqual([A]);
-    expect(spoken()).toBe("Tracciato aperto nel punto tagliato.");
-    tap(50, 50);
-    expect(d(A)).toBe("M100 25 L100 50 L50 50");
-    expect(spoken()).toBe("Tracciato tagliato in 2 pezzi.");
-    expect(editor.selection).toHaveLength(2);
-    expect(d(editor.selection[1]!)).toBe("M50 50 L0 50 L0 0 L100 0 L100 25");
-    editor.undo();
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-    // Vicino a un nodo, si taglia nel nodo.
-    tap(98, 2);
-    expect(d(A)).toBe("M100 0 L100 50 L0 50 L0 0 L100 0");
-  });
-
-  it("dove non si taglia lo dice: fuori dal contorno, una freccia, un testo", () => {
-    cutting();
-    tap(50, 25);
-    expect(spoken()).toBe("Le Forbici tagliano sul contorno: tocca il bordo di un tracciato o di una forma, o un suo nodo.");
-    tap(350, 300);
-    expect(spoken()).toBe("Una freccia non si taglia: prima «Oggetto in tracciato».");
-    tap(10, 195);
-    expect(spoken()).toBe("Un testo non ha nodi: si modifica scrivendo.");
-    expect(changes).toEqual([]);
-  });
-
-  it("il puntatore sopra un contorno mostra dove si taglia", () => {
-    const layer = recording();
-    cutting();
-    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 250, clientY: 22, timeStamp: (clock += 8) }));
-    layer.frame();
-    // Il contorno della linea, e la croce dove taglia.
-    const drawn = layer.calls().filter(([name]) => name === "moveTo" || name === "lineTo").map(([, x, y]) => `${Math.round(x as number)},${Math.round(y as number)}`);
-    expect(drawn).toEqual(expect.arrayContaining(["200,20", "300,20", "247,17", "253,23", "253,17", "247,23"]));
-    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 150, clientY: 150, timeStamp: (clock += 8) }));
-    layer.frame();
-    expect(layer.calls().filter(([name]) => name === "moveTo" || name === "lineTo")).toEqual([]);
-  });
-
-  it("trascinato è il Coltello: divide la forma che attraversa da parte a parte, e taglia la linea dove la incrocia", () => {
-    cutting();
-    drag([[50, -20], [52, 10], [50, 40], [50, 70]]);
-    expect(spoken()).toBe("1 oggetto tagliato in 2 pezzi.");
-    // Il tratto è la scia del trascinamento; i due pezzi chiusi sono scelti,
-    // il primo col posto e l'id del rettangolo.
-    const [, piece] = editor.selection;
-    expect(editor.selection).toEqual([A, piece]);
-    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L51.33 0 L52 10 L50 40 L50 50 L0 50 Z" fill="#d55e00"/>`);
-    expect(editor.engine.text).toContain(`<path id="${piece}" d="M100 0 L100 50 L50 50 L50 40 L52 10 L51.33 0 Z" fill="#d55e00"/>`);
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-    expect(spoken()).toBe("Annullato: Taglio col Coltello.");
-    // Con Alt il taglio è dritto, dal primo punto all'ultimo.
-    editor.select([]);
-    drag([[250, 0], [290, 20], [250, 40]], { altKey: true });
-    expect(d(L)).toBe("M200 20 L250 20");
-    expect(spoken()).toBe("1 oggetto tagliato in 2 pezzi.");
-  });
-
-  it("il Coltello che entra e non esce non taglia, e dice che cosa resta intero", () => {
-    cutting();
-    drag([[50, -20], [50, 25]]);
-    expect(spoken()).toBe("Il Coltello non ha tagliato niente: una forma chiusa si divide quando il tratto la attraversa da parte a parte.");
-    drag([[350, 280], [350, 320]]);
-    expect(spoken()).toBe("Il Coltello non ha tagliato niente: una forma chiusa si divide quando il tratto la attraversa da parte a parte. 1 oggetto attraversato resta intero: frecce, linee a spessore variabile, tratti a penna, testi, immagini e parti di altri programmi non si tagliano.");
-    expect(changes).toEqual([]);
-  });
-
-  it("con una selezione, il Coltello taglia soltanto gli oggetti scelti", () => {
-    const B = "ob9b9b9b9";
-    const TWO = doc(`${LAYER}${RECT}<rect id="${B}" x="0" y="100" width="100" height="50" fill="#0072b2"/></g>`);
-    cutting(TWO);
-    editor.select([B]);
-    drag([[50, -20], [50, 200]]);
-    expect(editor.engine.text).toContain(RECT);
-    expect(editor.engine.text).not.toContain(`<rect id="${B}"`);
-    expect(editor.selection).toHaveLength(2);
-    expect(spoken()).toBe("1 oggetto tagliato in 2 pezzi.");
-  });
-
-  it("dalla tastiera: il cursore dice dove taglierebbe, Spazio e Spazio tagliano, Spazio e le frecce tirano il Coltello", () => {
-    const K = "ok9k9k9k9";
-    const BOX = doc(`${LAYER}<rect id="${K}" x="150" y="100" width="100" height="100" fill="#009e73"/></g>`);
-    cutting(BOX);
-    size(400, 300);
-    key("ArrowRight", { shiftKey: true });
-    expect(spoken()).toBe("x 250, y 150: Contorno di Rettangolo, Verde, Spazio taglia qui");
-    key(" ");
-    key(" ");
-    expect(d(K)).toBe("M250 150 L250 200 L150 200 L150 100 L250 100 L250 150");
-    expect(spoken()).toBe("Tracciato aperto nel punto tagliato.");
-    editor.undo();
-    editor.select([]);
-    key("ArrowLeft", { shiftKey: true });
-    key("ArrowUp", { shiftKey: true });
-    key("ArrowUp", { shiftKey: true });
-    expect(spoken()).toBe("x 200, y 50");
-    key(" ");
-    for (let i = 0; i < 4; i++) key("ArrowDown", { shiftKey: true });
-    key(" ");
-    expect(spoken()).toBe("1 oggetto tagliato in 2 pezzi.");
-    expect(editor.selection).toHaveLength(2);
-    expect(editor.engine.text).not.toContain("<rect");
-    // Esc a metà lascia il disegno com'era.
-    const cut = editor.engine.text;
-    key(" ");
-    key("ArrowUp", { shiftKey: true });
-    key("Escape");
-    expect(editor.engine.text).toBe(cut);
-    expect(changes).toHaveLength(3);
-  });
-});
-
-describe("lo Spessore, dal livello Esperto", () => {
-  const L = "ol9l9l9l9";
-  const R = "or9r9r9r9";
-  const D = "od9d9d9d9";
-  const N = "on9n9n9n9";
-  const T = "ot9t9t9t9";
-  const LINE = `<line id="${L}" x1="0" y1="50" x2="100" y2="50" stroke="#000000" stroke-width="4"/>`;
-  const BOX = `<rect id="${R}" x="200" y="0" width="100" height="100" fill="#d55e00" stroke="#0072b2" stroke-width="2"/>`;
-  const DASHED = `<line id="${D}" x1="0" y1="200" x2="100" y2="200" stroke="#000000" stroke-width="2" stroke-dasharray="4 2"/>`;
-  const BARE = `<rect id="${N}" x="200" y="200" width="50" height="50" fill="#009e73"/>`;
-  const TEXT = `<text id="${T}" x="0" y="300"><tspan x="0" dy="0">Ciao</tspan></text>`;
-  const SHAPES = doc(`${LAYER}${LINE}${BOX}${DASHED}${BARE}${TEXT}</g>`);
-  /// La geometria della linea a spessore variabile `id`, com'è adesso.
-  const geom = (id: string): string | null => new RegExp(`<path id="${id}"[^>]* fub:geom="([^"]*)"`).exec(editor.engine.text)?.[1] ?? null;
-  /// Un tocco, lontano nel tempo dal precedente: non fa un doppio tocco.
-  const tap = (x: number, y: number, init: Init = {}): void => {
-    clock += 1000;
-    drag([[x, y]], init);
-  };
-  const widthTool = () => railTool("Spessore");
-
-  /// Il disegno `source`, con lo Spessore e niente di scelto.
-  const widening = (source = SHAPES): void => {
-    mount(source, { level: "expert" });
-    editor.focus();
-    key("w");
-  };
-
-  it("c'è solo all'Esperto, col tasto W", () => {
-    mount(SHAPES, { level: "standard" });
-    editor.focus();
-    expect(widthTool().hidden).toBe(true);
-    key("w");
-    expect(editor.tool).not.toBe("width");
-    editor.setLevel("expert");
-    expect(widthTool().hidden).toBe(false);
-    expect(widthTool().title).toBe("Spessore (W)");
-    key("w");
-    expect(editor.tool).toBe("width");
-    expect(surface().dataset.tool).toBe("width");
-    expect(spoken()).toBe("Strumento: Spessore.");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    expect(changes).toEqual([]);
-  });
-
-  it("trascinato da un contorno lo allarga lì: la linea diventa a spessore variabile, col suo id, in un passo che si annulla", () => {
-    widening();
-    drag([[50, 52], [50, 54], [50, 56]]);
-    expect(geom(L)).toBe("butt miter 0 2 2 0.5 6 6 1 2 2 M0 50 L100 50");
-    // Il colore del contorno la riempie, e il contorno non c'è più.
-    expect(editor.engine.text).toMatch(new RegExp(`<path id="${L}" [^>]*fill="#000000"/>`));
-    expect(editor.engine.text).not.toMatch(new RegExp(`<path id="${L}" [^>]*stroke=`));
-    expect(spoken()).toBe("Largo 12 qui: 6 a sinistra, 6 a destra.");
-    expect(editor.selection).toEqual([]);
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-    expect(spoken()).toBe("Annullato: Spessore.");
-    // Con Alt, soltanto il lato che si tira: sotto, a destra di chi va verso
-    // destra; sopra, a sinistra.
-    drag([[50, 52], [50, 56]], { altKey: true });
-    expect(geom(L)).toBe("butt miter 0 2 2 0.5 2 6 1 2 2 M0 50 L100 50");
-    expect(spoken()).toBe("Largo 8 qui: 2 a sinistra, 6 a destra.");
-    editor.undo();
-    drag([[50, 48], [50, 44]], { altKey: true });
-    expect(geom(L)).toBe("butt miter 0 2 2 0.5 6 2 1 2 2 M0 50 L100 50");
-  });
-
-  it("premuto sulla linea, tira la parte verso cui va; preso sul lato, verso la linea lo stringe", () => {
-    widening();
-    drag([[50, 50], [50, 46], [50, 44]], { altKey: true });
-    expect(geom(L)).toBe("butt miter 0 2 2 0.5 8 2 1 2 2 M0 50 L100 50");
-    editor.undo();
-    drag([[50, 50], [50, 54]]);
-    expect(geom(L)).toBe("butt miter 0 2 2 0.5 6 6 1 2 2 M0 50 L100 50");
-    editor.undo();
-    // Il lato di sopra preso e tirato verso il basso: la linea si assottiglia.
-    drag([[30, 48], [30, 52]]);
-    expect(geom(L)).toBe("butt miter 0 2 2 0.3 0 0 1 2 2 M0 50 L100 50");
-  });
-
-  it("un punto si allarga dai suoi lati, e preso al centro scorre lungo la linea; il centro di un capo è la linea", () => {
-    widening();
-    drag([[50, 52], [50, 56]]);
-    // Il lato di sotto del punto, a 6 dalla linea, tirato di 4: i due lati
-    // crescono insieme.
-    drag([[50, 56], [50, 60]]);
-    expect(geom(L)).toBe("butt miter 0 2 2 0.5 10 10 1 2 2 M0 50 L100 50");
-    drag([[50, 50], [60, 52], [70, 50]]);
-    expect(geom(L)).toBe("butt miter 0 2 2 0.7 10 10 1 2 2 M0 50 L100 50");
-    expect(spoken()).toBe("Punto spostato al 70% della linea.");
-    // Il capo non scorre: preso al centro e tirato in su, si allarga.
-    drag([[0, 50], [0, 46], [0, 44]]);
-    expect(geom(L)).toBe("butt miter 0 8 8 0.7 10 10 1 2 2 M0 50 L100 50");
-    expect(changes).toHaveLength(4);
-    for (let i = 0; i < 4; i++) editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-  });
-
-  it("un tocco sceglie un punto; Canc lo toglie, i capi restano, Esc lo lascia", () => {
-    widening();
-    drag([[50, 52], [50, 56]]);
-    tap(50, 50);
-    expect(spoken()).toBe("Punto 2 di 3 scelto: 6 a sinistra, 6 a destra. Canc lo toglie, Invio ne apre le misure.");
-    key("Delete");
-    expect(geom(L)).toBe("butt miter 0 2 2 1 2 2 M0 50 L100 50");
-    expect(spoken()).toBe("Punto dello spessore tolto.");
-    tap(0, 52);
-    expect(spoken()).toBe("Punto 1 di 2 scelto: 2 a sinistra, 2 a destra. Canc lo toglie, Invio ne apre le misure.");
-    key("Delete");
-    expect(spoken()).toBe("I punti ai capi della linea restano: stringili a zero per una punta.");
-    key("Escape");
-    expect(spoken()).toBe("Nessun punto dello spessore scelto.");
-    // Senza un punto scelto, Canc non toglie niente: nemmeno la linea.
-    key("Delete");
-    expect(geom(L)).toBe("butt miter 0 2 2 1 2 2 M0 50 L100 50");
-    // Un tocco sulla linea non aggiunge un punto: lo dice.
-    tap(30, 51);
-    expect(spoken()).toBe("Trascina per allargare o stringere qui: un tocco sceglie soltanto i punti dello spessore.");
-    expect(changes).toHaveLength(2);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Rimozione di un punto dello spessore.");
-  });
-
-  it("Invio o un doppio tocco aprono le misure del punto scelto", async () => {
-    widening();
-    drag([[50, 52], [50, 56]]);
-    key("Enter");
-    expect(dialog().textContent).toContain("Punto dello spessore");
-    expect([field("left").value, field("right").value, field("at").value]).toEqual(["6", "6", "50"]);
-    field("left").value = "3";
-    field("at").value = "25";
-    await submit();
-    expect(geom(L)).toBe("butt miter 0 2 2 0.25 3 6 1 2 2 M0 50 L100 50");
-    expect(spoken()).toBe("Largo 9 qui: 3 a sinistra, 6 a destra.");
-    // Due tocchi su un capo: niente posizione, e senza cambiare niente,
-    // niente da fare.
-    clock += 1000;
-    drag([[100, 52]]);
-    drag([[100, 52]]);
-    expect(field("at")).toBeNull();
-    expect([field("left").value, field("right").value]).toEqual(["2", "2"]);
-    await submit();
-    expect(spoken()).toBe("È già così: niente da cambiare.");
-    expect(changes).toHaveLength(2);
-  });
-
-  it("una forma piena diventa un gruppo, col riempimento sotto e la linea del contorno sopra", () => {
-    widening();
-    // Dal bordo di sopra, verso l'interno: chi percorre il rettangolo dal suo
-    // angolo in alto a sinistra lo ha a destra.
-    drag([[250, 1], [250, 5]]);
-    expect(editor.engine.text).toMatch(
-      new RegExp(`<g id="${R}">\\s*<rect id="[^"]+" x="200" y="0" width="100" height="100" fill="#d55e00"/>\\s*<path id="[^"]+" fub:shape="width" fub:geom="butt miter 0 1 1 0.125 5 5 1 1 1 M200 0 L300 0 L300 100 L200 100 Z" d="[^"]+" fill="#0072b2"/>\\s*</g>`),
-    );
-    expect(spoken()).toBe("Largo 10 qui: 5 a sinistra, 5 a destra.");
-    // Il punto è sulla linea nel gruppo: un tocco lo sceglie.
-    tap(250, 0);
-    expect(spoken()).toBe("Punto 2 di 3 scelto: 5 a sinistra, 5 a destra. Canc lo toglie, Invio ne apre le misure.");
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-  });
-
-  it("dove non cambia spessore lo dice: fuori da un contorno, un tratteggio, una forma senza contorno, un testo", () => {
-    widening();
-    tap(150, 150);
-    expect(spoken()).toBe("Lo Spessore lavora sui contorni: trascina da una linea, o dal bordo di una forma col contorno.");
-    drag([[50, 201], [50, 210]]);
-    expect(spoken()).toBe("Un contorno tratteggiato non cambia spessore: prima rendilo continuo.");
-    tap(225, 225);
-    expect(spoken()).toBe("Questa forma non ha un contorno che si vede: prima dagliene uno.");
-    tap(10, 295);
-    expect(spoken()).toBe("Testi, immagini, frecce e tratti a penna non hanno un contorno che cambia spessore.");
-    expect(changes).toEqual([]);
-  });
-
-  it("il puntatore sopra un contorno mostra la linea, e il punto che un trascinamento aggiungerebbe", () => {
-    const layer = recording();
-    widening();
-    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 50, clientY: 51, timeStamp: (clock += 8) }));
-    layer.frame();
-    const drawn = layer.calls().filter(([name]) => name === "moveTo" || name === "lineTo").map(([, x, y]) => `${Math.round(x as number)},${Math.round(y as number)}`);
-    expect(drawn).toEqual(expect.arrayContaining(["0,50", "100,50"]));
-    expect(layer.calls().some(([name, x, y]) => name === "arc" && Math.round(x as number) === 50 && Math.round(y as number) === 50)).toBe(true);
-    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 150, clientY: 150, timeStamp: (clock += 8) }));
-    layer.frame();
-    expect(layer.calls().filter(([name]) => name === "moveTo" || name === "lineTo")).toEqual([]);
-  });
-
-  it("mentre si trascina, il foglio mostra la linea nuova al posto del contorno", () => {
-    widening();
-    const target = surface();
-    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 50, clientY: 52, timeStamp: (clock += 8) }));
-    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 50, clientY: 58, timeStamp: (clock += 8) }));
-    const line = host.querySelector<SVGElement>(`[data-scene-id="${L}"]`)!;
-    const stand = line.nextElementSibling as SVGElement;
-    expect([stand.localName, stand.getAttribute("d")?.slice(0, 1), stand.style.fill, line.style.stroke]).toEqual(["path", "M", "#000000", "none"]);
-    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 50, clientY: 58, timeStamp: (clock += 8) }));
-    expect(geom(L)).toBe("butt miter 0 2 2 0.5 8 8 1 2 2 M0 50 L100 50");
-  });
-
-  it("dalla tastiera: il cursore dice la larghezza, Spazio, le frecce e Spazio allargano", () => {
-    const K = "ok9k9k9k9";
-    const WIDE = doc(`${LAYER}<line id="${K}" x1="100" y1="150" x2="300" y2="150" stroke="#000000" stroke-width="4"/></g>`);
-    widening(WIDE);
-    size(400, 300);
-    key("ArrowRight", { shiftKey: true });
-    expect(spoken()).toBe("x 250, y 150: Contorno di Linea, Nero, largo 4 qui: Spazio, le frecce e Spazio lo allargano o lo stringono");
-    key(" ");
-    key("ArrowDown");
-    key(" ");
-    expect(geom(K)).toBe("butt miter 0 2 2 0.75 12 12 1 2 2 M100 150 L300 150");
-    expect(spoken()).toBe("Largo 24 qui: 12 a sinistra, 12 a destra.");
-    // Sul punto, il cursore lo dice.
-    key("ArrowUp");
-    expect(spoken()).toBe("x 250, y 150: Punto 2 di 3 dello spessore di Linea a spessore variabile, Nero: 12 a sinistra, 12 a destra");
-    // Esc a metà lascia il disegno com'era.
-    const wide = editor.engine.text;
-    key(" ");
-    key("ArrowUp", { shiftKey: true });
-    key("Escape");
-    expect(editor.engine.text).toBe(wide);
-    expect(changes).toHaveLength(1);
-  });
-
-  it("i tasti dello Spessore stanno nell'elenco, dal livello Esperto", () => {
-    widening();
-    key("?", { shiftKey: true });
-    const table = [...dialog().querySelectorAll("table")].find((each) => each.querySelector("caption")!.textContent === "Spessore")!;
-    expect([...table.querySelectorAll("tr")].map((row) => row.querySelector("th")!.textContent)).toEqual(["Space", "Alt", "Del", "Enter", "Esc"]);
-    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
-  });
-});
-
-describe("«Unisci», dal livello Esperto", () => {
-  const A = "oa0a0a0a0";
-  const B = "ob0b0b0b0";
-  const R = "or0r0r0r0";
-  const T = "ot0t0t0t0";
-  const FIRST = `<line id="${A}" x1="0" y1="0" x2="50" y2="0" stroke="#000000" stroke-width="2"/>`;
-  const SECOND = `<path id="${B}" d="M50 50 L50 0.5" fill="none" stroke="#0072b2" stroke-width="2"/>`;
-  const RECT = `<rect id="${R}" x="200" y="200" width="20" height="20" fill="#000000"/>`;
-  const TEXT = `<text id="${T}" x="0" y="200"><tspan x="0" dy="0">Ciao</tspan></text>`;
-  const SHAPES = doc(`${LAYER}${FIRST}${SECOND}${RECT}${TEXT}</g>`);
-  const d = (id: string): string | null => new RegExp(`<path id="${id}" d="([^"]*)"`).exec(editor.engine.text)?.[1] ?? null;
-  const pathButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Tracciato"]')!;
-
-  afterEach(() => {
-    for (const menu of document.querySelectorAll(".context-menu")) menu.remove();
-  });
-
-  it("Ctrl+J unisce i capi che si toccano in un tracciato solo, il più in basso, in un passo che si annulla", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([B, A]);
-    editor.focus();
-    key("j", { ctrlKey: true });
-    expect(d(A)).toBe("M0 0 L50 0.25 L50 50");
-    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L50 0.25 L50 50" stroke="#000000" stroke-width="2"/>`);
-    expect(editor.engine.text).not.toContain(B);
-    expect(editor.selection).toEqual([A]);
-    expect(spoken()).toBe("Tracciati uniti: ora sono uno solo.");
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-    expect(spoken()).toBe("Annullato: Unione di tracciati.");
-  });
-
-  it("un tracciato solo si chiude; capi lontani, una linea li unisce", () => {
-    const OPEN = doc(`${LAYER}<path id="${B}" d="M0 0 L50 0 L50 50" fill="none" stroke="#000000" stroke-width="2"/><line id="${A}" x1="100" y1="0" x2="150" y2="0" stroke="#000000" stroke-width="2"/></g>`);
-    mount(OPEN, { level: "expert" });
-    editor.select([B]);
-    editor.focus();
-    key("j", { ctrlKey: true });
-    expect(d(B)).toBe("M0 0 L50 0 L50 50 Z");
-    expect(spoken()).toBe("Tracciato chiuso. 1 linea nuova unisce capi lontani.");
-    editor.undo();
-    editor.select([B, A]);
-    key("j", { ctrlKey: true });
-    // Si uniscono i capi più vicini: (50, 50) e (100, 0).
-    expect(d(B)).toBe("M0 0 L50 0 L50 50 L100 0 L150 0");
-    expect(spoken()).toBe("Tracciati uniti: ora sono uno solo. 1 linea nuova unisce capi lontani.");
-  });
-
-  it("dice perché non unisce, e nel menu Tracciato è spenta senza un tracciato aperto", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.focus();
-    editor.select([R]);
-    key("j", { ctrlKey: true });
-    expect(spoken()).toBe("Un tracciato scelto è già chiuso: si uniscono soltanto i capi di tracciati aperti.");
-    editor.select([A]);
-    key("j", { ctrlKey: true });
-    expect(spoken()).toBe("Una linea sola non ha niente da chiudere.");
-    editor.select([A, T]);
-    key("j", { ctrlKey: true });
-    expect(spoken()).toBe("1 oggetto scelto non è un tracciato: gruppi, testi, immagini, frecce e tratti a penna non si uniscono.");
-    expect(changes).toEqual([]);
-    editor.select([R]);
-    pathButton().click();
-    const join = [...document.querySelectorAll<HTMLElement>('.context-menu [role="menuitem"]')].find((entry) => entry.querySelector(".menu-label")!.textContent === "Unisci")!;
-    expect(join.getAttribute("aria-disabled")).toBe("true");
-    expect(join.querySelector(".menu-description")!.textContent).toBe("Fra gli oggetti scelti non c’è un tracciato aperto.");
-    expect(join.querySelector(".menu-hint")!.textContent).toBe("Ctrl+J");
-    for (const menu of document.querySelectorAll(".context-menu")) menu.remove();
-    editor.select([A, B]);
-    pathButton().click();
-    const enabled = [...document.querySelectorAll<HTMLElement>('.context-menu [role="menuitem"]')].find((entry) => entry.querySelector(".menu-label")!.textContent === "Unisci")!;
-    expect(enabled.getAttribute("aria-disabled")).not.toBe("true");
-    enabled.click();
-    expect(d(A)).toBe("M0 0 L50 0.25 L50 50");
-  });
-
-  it("sotto l'Esperto Ctrl+J non unisce", () => {
-    mount(SHAPES, { level: "standard" });
-    editor.select([A, B]);
-    editor.focus();
-    key("j", { ctrlKey: true });
-    expect(changes).toEqual([]);
-  });
-
-  it("nello strumento Nodi, due capi scelti di due forme si uniscono in una, con Ctrl+J come con Maiusc+J", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select([A, B]);
-    editor.focus();
-    key("n");
-    drag([[40, -10], [60, -10], [60, 10]]);
-    expect(spoken()).toBe("2 nodi scelti in 2 oggetti.");
-    key("j", { ctrlKey: true });
-    expect(d(A)).toBe("M0 0 L50 0.25 L50 50");
-    expect(editor.engine.text).not.toContain(B);
-    expect(spoken()).toBe("Capi uniti: le due forme ora sono un tracciato solo. La forma ora è un tracciato.");
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(SHAPES);
-  });
-});
-
-describe("la penna di Bézier, dal livello Esperto", () => {
-  const EMPTY = doc(`${LAYER}</g>`);
-  const R = "or3r3r3r3";
-  const WITH_RECT = doc(`${LAYER}<rect id="${R}" x="200" y="200" width="20" height="20" fill="#000000"/></g>`);
-  /// Il tracciato scritto: tutto l'elemento, o il suo `d`.
-  const PATH = /<path id="o[a-z0-9]{8}" d="([^"]*)"([^>]*)\/>/;
-  const written = (): string | null => PATH.exec(editor.engine.text)?.[1] ?? null;
-  const look = (): string | null => PATH.exec(editor.engine.text)?.[2] ?? null;
-  /// Il `d` dell'anteprima, nelle coordinate del livello.
-  const preview = (): string | null => host.querySelector(".draw-preview path")?.getAttribute("d") ?? null;
-  const tap = (x: number, y: number, init: Init = {}): void => drag([[x, y]], init);
-  const bezierTool = () => railTool("Bézier");
-  const undoButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-header button[aria-label="Annulla"]')!;
-  const redoButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-header button[aria-label="Ripeti"]')!;
-  /// Preme la voce `label` del menu dei livelli.
-  const chooseLayer = (label: string): void => {
-    host.querySelector<HTMLButtonElement>(".draw-layer-button")!.click();
-    const open = document.querySelectorAll<HTMLElement>(".context-menu");
-    [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>("button")].find((entry) => entry.querySelector(".menu-label")!.textContent === label)!.click();
-  };
-
-  afterEach(() => {
-    for (const open of document.querySelectorAll(".context-menu")) open.remove();
-  });
-
-  /// Un disegno vuoto all'Esperto, con la penna di Bézier.
-  /// La penna, senza le guide intelligenti, che hanno i loro casi.
-  const drawing = (source = EMPTY): void => {
-    mount(source, { level: "expert", grid: { shown: false, snap: false, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE } });
-    editor.focus();
-    key("b");
-  };
-
-  it("c'è solo all'Esperto, col tasto B, dopo le forme", () => {
-    mount(EMPTY, { level: "standard" });
-    editor.focus();
-    expect(bezierTool().hidden).toBe(true);
-    key("b");
-    expect(editor.tool).toBe("pen");
-    editor.setLevel("expert");
-    expect(bezierTool().hidden).toBe(false);
-    expect(bezierTool().title).toBe("Bézier (B)");
-    // Nella sua casella dopo il Connettore, con gli strumenti dei tracciati.
-    const tools = railNames();
-    expect(tools.slice(tools.indexOf("Freccia"))).toEqual(["Freccia", "Connettore", "Bézier", "Spessore", "Forbici", "Costruttore di forme", "Testo", "Contagocce", "Sfumatura"]);
-    key("b");
-    expect(editor.tool).toBe("bezier");
-    expect(bezierTool().checked).toBe(true);
-    expect(spoken()).toBe("Strumento: Bézier.");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("un tocco mette uno spigolo, e Invio scrive il tracciato in un passo che si annulla", () => {
-    drawing();
-    tap(10, 10);
-    expect(spoken()).toBe("Nodo 1, spigolo: x 10, y 10.");
-    expect(preview()).toBeNull();
-    tap(50, 10);
-    expect(spoken()).toBe("Nodo 2, spigolo: x 50, y 10.");
-    expect(preview()).toBe("M10 10 L50 10");
-    tap(50, 50);
-    expect(preview()).toBe("M10 10 L50 10 L50 50");
-    // Finché si disegna, il disegno non cambia.
-    expect(changes).toEqual([]);
-    key("Enter");
-    expect(written()).toBe("M10 10 L50 10 L50 50");
-    expect(look()).toBe(' fill="none" stroke="#000000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"');
-    expect(spoken()).toBe("Tracciato aggiunto. Il disegno ha 1 oggetto.");
-    expect(changes).toHaveLength(1);
-    expect(preview()).toBeNull();
-    // Invio di nuovo apre le proprietà, come sempre: il tracciato è finito.
-    editor.undo();
-    expect(editor.engine.text).toBe(EMPTY);
-    expect(spoken()).toBe("Annullato: Tracciato.");
-  });
-
-  it("un trascinamento mette un nodo simmetrico, e un tocco sull'ultimo nodo conclude", () => {
-    drawing();
-    editor.setColor("#0072b2");
-    editor.setWidth(8);
-    tap(10, 10);
-    drag([[50, 10], [55, 20], [60, 30]]);
-    expect(spoken()).toBe("Nodo 2, simmetrico: x 50, y 10.");
-    expect(preview()).toBe("M10 10 C10 10 40 -10 50 10");
-    tap(90, 10);
-    expect(preview()).toBe("M10 10 C10 10 40 -10 50 10 C60 30 90 10 90 10");
-    // Il secondo tocco di un doppio clic cade sull'ultimo nodo, anche se
-    // trema un poco.
-    drag([[91, 11], [92, 12]]);
-    expect(written()).toBe("M10 10 C10 10 40 -10 50 10 C60 30 90 10 90 10");
-    expect(look()).toBe(' fill="none" stroke="#0072b2" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"');
-    expect(spoken()).toBe("Tracciato aggiunto. Il disegno ha 1 oggetto.");
-    // Il tracciato dopo comincia da capo.
-    tap(200, 200);
-    expect(spoken()).toBe("Nodo 1, spigolo: x 200, y 200.");
-  });
-
-  it("un tocco sul primo nodo chiude il tracciato; trascinato, il primo nodo diventa simmetrico", () => {
-    drawing();
-    tap(0, 0);
-    tap(40, 0);
-    tap(40, 40);
-    tap(2, 1);
-    expect(written()).toBe("M0 0 L40 0 L40 40 Z");
-    // Un tracciato chiuso non ha capi.
-    expect(look()).toBe(' fill="none" stroke="#000000" stroke-width="4" stroke-linejoin="round"');
-    expect(spoken()).toBe("Tracciato chiuso aggiunto. Il disegno ha 1 oggetto.");
-    editor.undo();
-    tap(100, 0);
-    tap(140, 0);
-    tap(140, 40);
-    drag([[100, 0], [100, -10], [100, -20]]);
-    expect(written()).toBe("M100 0 C100 -20 140 0 140 0 L140 40 C140 40 100 20 100 0 Z");
-    editor.undo();
-    // Riportato sul primo nodo, il trascinamento chiude con uno spigolo.
-    tap(100, 0);
-    tap(140, 0);
-    tap(140, 40);
-    drag([[100, 0], [110, 0], [100.5, 0]]);
-    expect(written()).toBe("M100 0 L140 0 L140 40 Z");
-    // Un nodo solo non si chiude: il tocco lo conclude.
-    tap(300, 300);
-    tap(301, 300);
-    expect(spoken()).toBe("Un tracciato vuole almeno due nodi in punti diversi: non c’è niente da scrivere.");
-    expect(changes).toHaveLength(5);
-  });
-
-  it("trascinare dall'ultimo nodo ne cambia la maniglia d'uscita: lo spigolo dopo una curva", () => {
-    drawing();
-    drag([[0, 0], [10, 0], [20, 0]]);
-    expect(spoken()).toBe("Nodo 1, simmetrico: x 0, y 0.");
-    drag([[40, 0], [40, 10], [40, 20]]);
-    expect(spoken()).toBe("Nodo 2, simmetrico: x 40, y 0.");
-    drag([[40, 0], [50, 0], [60, 0]]);
-    expect(spoken()).toBe("Nodo 2, spigolo: x 40, y 0.");
-    tap(80, 0);
-    expect(preview()).toBe("M0 0 C20 0 40 -20 40 0 C60 0 80 0 80 0");
-    // Una maniglia riportata sul suo nodo non c'è: il trascinamento non
-    // conclude il tracciato.
-    drag([[80, 0], [90, 0], [80.5, 0]]);
-    expect(spoken()).toBe("Nodo 3, spigolo: x 80, y 0.");
-    expect(changes).toEqual([]);
-    // Così un nodo nuovo trascinato e riportato al suo posto è uno spigolo, e
-    // il segmento una linea.
-    drag([[120, 0], [130, 0], [120.5, 0]]);
-    expect(spoken()).toBe("Nodo 4, spigolo: x 120, y 0.");
-    key("Enter");
-    expect(written()).toBe("M0 0 C20 0 40 -20 40 0 C60 0 80 0 80 0 L120 0");
-  });
-
-  it("Maiusc porta i nodi e le maniglie a passi di 15°, e la griglia li aggancia", () => {
-    drawing();
-    // La maniglia a 0°, e il nodo dopo a 15° dal primo.
-    drag([[100, 0], [110, 1], [120, 2]], { shiftKey: true });
-    tap(148, 14, { shiftKey: true });
-    key("Enter");
-    expect(written()).toBe("M100 0 C120.1 0 148.3 12.94 148.3 12.94");
-    editor.undo();
-    editor.setGrid({ shown: false, snap: true, step: 10, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
-    tap(1, 2);
-    drag([[38, 41], [44, 47], [52, 49]]);
-    // Ctrl lascia il punto libero.
-    tap(73, 77, { ctrlKey: true });
-    key("Enter");
-    expect(written()).toBe("M0 0 C0 0 30 30 40 40 C50 50 73 77 73 77");
-    // Due nodi sullo stesso incrocio non fanno un tracciato.
-    editor.setGrid({ shown: false, snap: true, step: 50, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
-    tap(0, 0);
-    tap(20, 0);
-    expect(spoken()).toBe("Nodo 2, spigolo: x 0, y 0.");
-    expect(preview()).toBeNull();
-    const before = editor.engine.text;
-    key("Enter");
-    expect(spoken()).toBe("Un tracciato vuole almeno due nodi in punti diversi: non c’è niente da scrivere.");
-    expect(editor.engine.text).toBe(before);
-  });
-
-  it("Canc toglie l'ultimo nodo, e Annulla e Ripeti percorrono i passi del tracciato", () => {
-    drawing();
-    expect(undoButton().disabled).toBe(true);
-    tap(10, 10);
-    tap(50, 10);
-    drag([[50, 10], [60, 10], [70, 10]]);
-    expect(spoken()).toBe("Nodo 2, spigolo: x 50, y 10.");
-    expect(undoButton().disabled).toBe(false);
-    expect(editor.canUndo).toBe(true);
-    expect(editor.canRedo).toBe(false);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Maniglia del nodo 2.");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Nodo 2.");
-    expect(preview()).toBeNull();
-    expect(redoButton().disabled).toBe(false);
-    editor.redo();
-    expect(spoken()).toBe("Ripetuto: Nodo 2.");
-    expect(preview()).toBe("M10 10 L50 10");
-    key("Delete");
-    expect(spoken()).toBe("Nodo 2 eliminato.");
-    expect(preview()).toBeNull();
-    // Un passo nuovo toglie quelli da ripetere.
-    expect(editor.canRedo).toBe(false);
-    key("Backspace");
-    expect(spoken()).toBe("Nodo 1 eliminato.");
-    // Il tracciato vuoto tiene i suoi passi: Annulla rimette il nodo, anche
-    // dopo un Ripeti che non aveva niente da fare.
-    expect(editor.canUndo).toBe(true);
-    editor.redo();
-    key("z", { ctrlKey: true });
-    expect(spoken()).toBe("Annullato: Eliminazione del nodo 1.");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Eliminazione del nodo 2.");
-    expect(preview()).toBe("M10 10 L50 10");
-    editor.undo();
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Nodo 1.");
-    // Senza nodi e senza passi, Annulla torna al disegno, che non ne ha: i
-    // passi da ripetere restano.
-    expect(editor.canUndo).toBe(false);
-    expect(editor.canRedo).toBe(true);
-    editor.undo();
-    editor.redo();
-    expect(spoken()).toBe("Ripetuto: Nodo 1.");
-    tap(30, 30);
-    key("Enter");
-    expect(written()).toBe("M10 10 L30 30");
-    expect(changes).toHaveLength(1);
-  });
-
-  it("Annulla e Ripeti tornano al disegno quando il tracciato non ha più passi", () => {
-    drawing();
-    tap(10, 10);
-    tap(50, 10);
-    key("Enter");
-    tap(10, 50);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Nodo 1.");
-    // Il tracciato vuoto lascia il posto al disegno, e i suoi passi vanno.
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Tracciato.");
-    expect(editor.engine.text).toBe(EMPTY);
-    editor.redo();
-    expect(spoken()).toBe("Ripetuto: Tracciato.");
-    expect(written()).toBe("M10 10 L50 10");
-    // Mentre il tracciato ha nodi, Ripeti non tocca il disegno.
-    editor.undo();
-    tap(10, 50);
-    expect(editor.canRedo).toBe(false);
-    editor.redo();
-    expect(editor.engine.text).toBe(EMPTY);
-  });
-
-  it("Esc conclude il tracciato; a metà gesto annulla solo il gesto", () => {
-    drawing();
-    tap(10, 10);
-    key("Escape");
-    expect(spoken()).toBe("Un tracciato vuole almeno due nodi in punti diversi: non c’è niente da scrivere.");
-    expect(changes).toEqual([]);
-    tap(10, 10);
-    tap(50, 50);
-    const target = surface();
-    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 90, clientY: 10 }));
-    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 100, clientY: 20 }));
-    expect(preview()).toBe("M10 10 L50 50 C50 50 80 0 90 10");
-    key("Escape");
-    expect(preview()).toBe("M10 10 L50 50");
-    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 100, clientY: 20 }));
-    expect(changes).toEqual([]);
-    key("Escape");
-    expect(written()).toBe("M10 10 L50 50");
-    expect(spoken()).toBe("Tracciato aggiunto. Il disegno ha 1 oggetto.");
-    // Senza tracciato, Esc fa ciò che faceva.
-    editor.select([editor.engine.text.match(/<path id="(o[a-z0-9]{8})"/)![1]!]);
-    key("Escape");
-    expect(editor.selection).toEqual([]);
-  });
-
-  it("cambiare strumento o livello conclude il tracciato; la sola lettura e un altro documento lo buttano", () => {
-    const paths = (): number => editor.engine.text.match(/<path /g)?.length ?? 0;
-    drawing();
-    tap(10, 10);
-    tap(50, 10);
-    key("v");
-    expect(written()).toBe("M10 10 L50 10");
-    expect(spoken()).toBe("Tracciato aggiunto. Il disegno ha 1 oggetto. Strumento: Selezione.");
-    key("b");
-    tap(10, 100);
-    editor.setTool("pen");
-    expect(spoken()).toBe("Un tracciato vuole almeno due nodi in punti diversi: non c’è niente da scrivere. Strumento: Penna.");
-    key("b");
-    tap(10, 200);
-    tap(50, 200);
-    editor.setLevel("standard");
-    expect(editor.tool).toBe("pen");
-    expect(paths()).toBe(2);
-    expect(spoken()).toBe("Tracciato aggiunto. Il disegno ha 2 oggetti.");
-    editor.setLevel("expert");
-    key("b");
-    tap(10, 300);
-    tap(50, 300);
-    editor.setReadOnly(true);
-    expect(preview()).toBeNull();
-    editor.setReadOnly(false);
-    tap(90, 300);
-    key("Enter");
-    expect(spoken()).toBe("Un tracciato vuole almeno due nodi in punti diversi: non c’è niente da scrivere.");
-    expect(paths()).toBe(2);
-    tap(10, 10);
-    editor.load(SceneEngine.open(EMPTY));
-    expect(preview()).toBeNull();
-    expect(editor.canUndo).toBe(false);
-    expect(changes).toHaveLength(2);
-  });
-
-  it("da tastiera: Spazio mette i nodi al cursore, e le frecce ne tirano le maniglie", () => {
-    drawing(WITH_RECT);
-    editor.select([R]);
-    // Con la penna le frecce muovono il cursore, mai la selezione.
-    key("ArrowRight");
-    expect(spoken()).toBe("x 10, y 0");
-    key(" ");
-    key(" ");
-    expect(spoken()).toBe("Nodo 1, spigolo: x 10, y 0.");
-    for (let i = 0; i < 4; i++) key("ArrowRight");
-    key(" ");
-    key("ArrowDown");
-    key("ArrowDown");
-    key(" ");
-    expect(spoken()).toBe("Nodo 2, simmetrico: x 50, y 0.");
-    key("ArrowUp");
-    key("ArrowUp");
-    expect(spoken()).toBe("x 50, y 0: Ultimo nodo, Spazio conclude il tracciato");
-    for (let i = 0; i < 4; i++) key("ArrowLeft");
-    expect(spoken()).toBe("x 10, y 0: Primo nodo, Spazio chiude il tracciato");
-    expect(changes).toEqual([]);
-    key(" ");
-    key(" ");
-    expect(written()).toBe("M10 0 C10 0 50 -20 50 0 C50 20 10 0 10 0 Z");
-    expect(spoken()).toBe("Tracciato chiuso aggiunto. Il disegno ha 2 oggetti.");
-    expect(editor.selection).toEqual([R]);
-  });
-
-  it("scrive nelle coordinate del livello, anche trasformato", () => {
-    drawing(doc(`<g id="l1" fub:layer="Livello 1" transform="matrix(2 0 0 2 100 0)"></g>`));
-    tap(100, 0);
-    drag([[140, 0], [150, 10], [160, 20]]);
-    expect(host.querySelector(".draw-preview g g")!.getAttribute("transform")).toBe("matrix(2 0 0 2 100 0)");
-    expect(preview()).toBe("M0 0 C0 0 10 -10 20 0");
-    key("Enter");
-    expect(written()).toBe("M0 0 C0 0 10 -10 20 0");
-    expect(editor.engine.text).toContain('stroke-width="4"');
-  });
-
-  it("fra il primo e l'ultimo nodo, vicini, un tocco prende il più vicino", () => {
-    drawing();
-    for (const [x, y] of [[0, 0], [100, 0], [20, 0], [8, 0]] as const) tap(x, y);
-    expect(written()).toBe("M0 0 L100 0 L20 0 Z");
-    editor.undo();
-    for (const [x, y] of [[0, 0], [100, 0], [20, 0], [12, 0]] as const) tap(x, y);
-    expect(written()).toBe("M0 0 L100 0 L20 0");
-    // La pagina si allarga quando il tracciato, col suo spessore, ne esce.
-    expect(editor.engine.text).toContain('viewBox="-256 -256 612 356"');
-    // Un nodo solo è l'ultimo: trascinarlo ne tira la maniglia, e il
-    // tracciato continua.
-    tap(300, 0);
-    drag([[300, 0], [310, 0], [320, 0]]);
-    expect(spoken()).toBe("Nodo 1, spigolo: x 300, y 0.");
-    tap(340, 20);
-    expect(preview()).toBe("M300 0 C320 0 340 20 340 20");
-  });
-
-  it("Maiusc, il colore e lo spessore cambiano subito l'anteprima, e Canc e Invio aspettano la fine del gesto", () => {
-    drawing();
-    tap(0, 0);
-    const target = surface();
-    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 50, clientY: 0 }));
-    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 70, clientY: 2 }));
-    expect(preview()).toBe("M0 0 C0 0 30 -2 50 0");
-    key("Shift", { shiftKey: true });
-    expect(preview()).toBe("M0 0 C0 0 29.9 0 50 0");
-    target.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", bubbles: true }));
-    expect(preview()).toBe("M0 0 C0 0 30 -2 50 0");
-    key("Delete");
-    key("Enter");
-    expect(preview()).toBe("M0 0 C0 0 30 -2 50 0");
-    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 70, clientY: 2 }));
-    expect(spoken()).toBe("Nodo 2, simmetrico: x 50, y 0.");
-    editor.setColor("#0072b2");
-    expect(host.querySelector(".draw-preview path")!.getAttribute("stroke")).toBe("#0072b2");
-    editor.setWidth(8);
-    expect(host.querySelector(".draw-preview path")!.getAttribute("stroke-width")).toBe("8");
-    // Canc toglie l'ultimo nodo, non il primo.
-    tap(100, 0);
-    key("Delete");
-    expect(preview()).toBe("M0 0 C0 0 30 -2 50 0");
-  });
-
-  it("un livello bloccato non riceve i nodi, e il tracciato aspetta che riceva", () => {
-    const LOCKED = "«Livello 1» è bloccato: sbloccalo, o scegli un altro livello, per disegnare.";
-    drawing();
-    tap(10, 10);
-    tap(50, 10);
-    chooseLayer("Blocca «Livello 1»");
-    tap(90, 10);
-    expect(spoken()).toBe(LOCKED);
-    key("Enter");
-    expect(preview()).toBe("M10 10 L50 10");
-    expect(written()).toBeNull();
-    chooseLayer("Sblocca «Livello 1»");
-    key("Enter");
-    expect(written()).toBe("M10 10 L50 10");
-    // Cambiare strumento lo butta, e lo dice.
-    tap(10, 50);
-    tap(50, 50);
-    chooseLayer("Blocca «Livello 1»");
-    key("v");
-    expect(spoken()).toBe(`${LOCKED} Strumento: Selezione.`);
-    expect(preview()).toBeNull();
-    expect(editor.engine.text.match(/<path /g)).toHaveLength(1);
-  });
-
-  it("si scrive sul livello corrente quando si conclude, e l'anteprima lo segue", () => {
-    drawing(doc(`${LAYER}</g><g id="l2" fub:layer="Sopra" transform="matrix(2 0 0 2 100 0)"></g>`));
-    const transform = (): string | null => host.querySelector(".draw-preview g g")!.getAttribute("transform");
-    tap(100, 0);
-    tap(140, 0);
-    expect(transform()).toBe("matrix(2 0 0 2 100 0)");
-    expect(preview()).toBe("M0 0 L20 0");
-    chooseLayer("Livello 1");
-    tap(140, 40);
-    expect(transform()).toBe("matrix(1 0 0 1 0 0)");
-    expect(preview()).toBe("M100 0 L140 0 L140 40");
-    key("Enter");
-    expect(editor.engine.text).toMatch(/<g id="l1" fub:layer="Livello 1">\s*<path id="o[a-z0-9]{8}" d="M100 0 L140 0 L140 40"/);
-  });
-
-  it("i tasti della penna stanno nell'elenco, dal livello Esperto", () => {
-    drawing();
-    key("?", { shiftKey: true });
-    const table = [...dialog().querySelectorAll("table")].find((each) => each.querySelector("caption")!.textContent === "Bézier")!;
-    expect([...table.querySelectorAll("tr")].map((row) => row.querySelector("th")!.textContent)).toEqual(["Space", "Shift", "Enter o Esc", "Del"]);
-    const curves = [...dialog().querySelectorAll("table")].find((each) => each.querySelector("caption")!.textContent === "Curvatura")!;
-    expect([...curves.querySelectorAll("tr")].map((row) => row.querySelector("th")!.textContent)).toEqual(["B", "Space", "Shift+C", "Shift+S", "Alt"]);
-    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
-  });
-
-  describe("la Curvatura", () => {
-    const control = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-rail .draw-tool[data-tool="bezier"]')!;
-    /// La penna nel modo Curvatura.
-    const curving = (source = EMPTY): void => {
-      drawing(source);
-      key("b");
-    };
-    /// Il tocco dopo non è il secondo di un doppio tocco.
-    const later = (): void => {
-      clock += 1000;
-    };
-
-    it("è la penna premuta di nuovo, col suo nome e la sua icona, e ritorno", () => {
-      drawing();
-      const glyph = control().querySelector("svg")!.innerHTML;
-      key("b");
-      expect(editor.tool).toBe("bezier");
-      expect(spoken()).toBe("Strumento: Curvatura.");
-      expect(control().getAttribute("aria-label")).toBe("Curvatura");
-      expect(control().getAttribute("aria-keyshortcuts")).toBe("B");
-      expect(control().querySelector("svg")!.innerHTML).not.toBe(glyph);
-      expect(formatIssues(checkAccessibility(host))).toBe("");
-      key("b");
-      expect(spoken()).toBe("Strumento: Bézier.");
-      expect(control().getAttribute("aria-label")).toBe("Bézier");
-      expect(control().querySelector("svg")!.innerHTML).toBe(glyph);
-    });
-
-    it("tre punti fanno un arco: la curva passa morbida per tutti", () => {
-      curving();
-      tap(0, 100);
-      expect(spoken()).toBe("Nodo 1, liscio: x 0, y 100.");
-      tap(50, 50);
-      tap(100, 100);
-      expect(spoken()).toBe("Nodo 3, liscio: x 100, y 100.");
-      expect(preview()).toBe("M0 100 C0 72.39 22.39 50 50 50 C77.61 50 100 72.39 100 100");
-      expect(changes).toEqual([]);
-      key("Enter");
-      expect(written()).toBe("M0 100 C0 72.39 22.39 50 50 50 C77.61 50 100 72.39 100 100");
-      expect(spoken()).toBe("Tracciato aggiunto. Il disegno ha 1 oggetto.");
-      expect(changes).toHaveLength(1);
-    });
-
-    it("quattro punti chiusi fanno un cerchio", () => {
-      curving();
-      for (const [x, y] of [[100, 50], [150, 100], [100, 150], [50, 100], [101, 51]] as const) tap(x, y);
-      expect(written()).toBe("M100 50 C127.61 50 150 72.39 150 100 C150 127.61 127.61 150 100 150 C72.39 150 50 127.61 50 100 C50 72.39 72.39 50 100 50 Z");
-      expect(spoken()).toBe("Tracciato chiuso aggiunto. Il disegno ha 1 oggetto.");
-    });
-
-    it("col doppio tocco, o con Alt, uno spigolo; fra due spigoli una linea", () => {
-      curving();
-      tap(0, 100);
-      tap(0, 100);
-      expect(spoken()).toBe("Nodo 1, spigolo: x 0, y 100.");
-      tap(50, 50);
-      tap(100, 100, { altKey: true });
-      expect(spoken()).toBe("Nodo 3, spigolo: x 100, y 100.");
-      tap(150, 100, { altKey: true });
-      expect(preview()).toBe("M0 100 C0 72.39 22.39 50 50 50 C77.61 50 100 72.39 100 100 L150 100");
-      // Il doppio tocco ha posato uno spigolo in un passo solo.
-      for (let i = 0; i < 4; i++) editor.undo();
-      expect(spoken()).toBe("Annullato: Nodo 1.");
-      expect(editor.canUndo).toBe(false);
-    });
-
-    it("un trascinamento sposta un punto, un tocco in mezzo lo fa spigolo, e Annulla percorre i passi", () => {
-      curving();
-      tap(0, 100);
-      tap(50, 50);
-      tap(100, 100);
-      drag([[50, 50], [50, 30], [50, 0]]);
-      expect(spoken()).toBe("Nodo 2, liscio: x 50, y 0.");
-      expect(preview()).toMatch(/^M0 100 C[^L]* 50 0 C[^L]* 100 100$/);
-      tap(50, 0);
-      expect(spoken()).toBe("Nodo 2, spigolo: x 50, y 0.");
-      expect(preview()).toBe("M0 100 L50 0 L100 100");
-      editor.undo();
-      expect(spoken()).toBe("Annullato: Tipo del punto 2.");
-      expect(preview()).toMatch(/^M0 100 C[^L]* 50 0 C[^L]* 100 100$/);
-      editor.undo();
-      expect(spoken()).toBe("Annullato: Spostamento del punto 2.");
-      expect(preview()).toBe("M0 100 C0 72.39 22.39 50 50 50 C77.61 50 100 72.39 100 100");
-      expect(changes).toEqual([]);
-    });
-
-    it("un tocco sull'ultimo punto conclude, ma non subito dopo averlo posato", () => {
-      curving();
-      tap(0, 100);
-      tap(50, 50);
-      later();
-      tap(50, 50);
-      expect(written()).toBe("M0 100 L50 50");
-      expect(spoken()).toBe("Tracciato aggiunto. Il disegno ha 1 oggetto.");
-    });
-
-    it("da tastiera: Spazio posa i punti, Maiusc+C e Maiusc+S ne cambiano il tipo", () => {
-      curving();
-      for (let i = 0; i < 10; i++) key("ArrowDown");
-      key(" ");
-      key(" ");
-      expect(spoken()).toBe("Nodo 1, liscio: x 0, y 100.");
-      for (let i = 0; i < 5; i++) key("ArrowRight");
-      for (let i = 0; i < 5; i++) key("ArrowUp");
-      key(" ");
-      key(" ");
-      for (let i = 0; i < 5; i++) key("ArrowRight");
-      for (let i = 0; i < 5; i++) key("ArrowDown");
-      key(" ");
-      key(" ");
-      expect(spoken()).toBe("Nodo 3, liscio: x 100, y 100.");
-      expect(preview()).toBe("M0 100 C0 72.39 22.39 50 50 50 C77.61 50 100 72.39 100 100");
-      // Sul punto in mezzo il cursore lo dice, e Maiusc+C lo fa spigolo.
-      for (let i = 0; i < 5; i++) key("ArrowLeft");
-      for (let i = 0; i < 5; i++) key("ArrowUp");
-      expect(spoken()).toBe("x 50, y 50: Nodo 2, liscio: x 50, y 50. Spazio lo fa liscio o spigolo");
-      key("C", { shiftKey: true });
-      expect(spoken()).toBe("Nodo 2, spigolo: x 50, y 50.");
-      expect(preview()).toBe("M0 100 L50 50 L100 100");
-      key("S", { shiftKey: true });
-      expect(preview()).toBe("M0 100 C0 72.39 22.39 50 50 50 C77.61 50 100 72.39 100 100");
-      key("S", { shiftKey: true });
-      expect(spoken()).toBe("È già così: niente da cambiare. Nodo 2, liscio: x 50, y 50.");
-      key("Enter");
-      expect(written()).toBe("M0 100 C0 72.39 22.39 50 50 50 C77.61 50 100 72.39 100 100");
-    });
-
-    describe("su un tracciato scelto", () => {
-      const LINE = doc(`${LAYER}<path id="opathpath" d="M0 100 L200 100" fill="none" stroke="#000000"/></g>`);
-      const RECT = doc(`${LAYER}<rect id="orectrect" x="0" y="0" width="100" height="50" fill="#000000"/></g>`);
-
-      it("trascinato da un segmento, vi posa un punto e la curva lo segue", () => {
-        curving(LINE);
-        editor.select(["opathpath"]);
-        drag([[100, 100], [100, 50], [100, 0]]);
-        expect(written()).toBe("M0 100 C0 44.77 44.77 0 100 0 C155.23 0 200 44.77 200 100");
-        expect(spoken()).toBe("Nodo spostato: x 100, y 0.");
-        expect(editor.selection).toEqual(["opathpath"]);
-        editor.undo();
-        expect(editor.engine.text).toBe(LINE);
-      });
-
-      it("due tocchi su un punto lo fanno spigolo; un tocco lo sceglie, e Canc lo toglie", () => {
-        curving(LINE);
-        editor.select(["opathpath"]);
-        drag([[100, 100], [100, 50], [100, 0]]);
-        later();
-        tap(100, 0);
-        tap(100, 0);
-        expect(written()).toBe("M0 100 L100 0 L200 100");
-        expect(spoken()).toBe("1 nodo a spigolo.");
-        editor.undo();
-        later();
-        tap(100, 0);
-        key("Delete");
-        expect(written()).toBe("M0 100 L200 100");
-        expect(spoken()).toBe("1 nodo eliminato.");
-        // Un tocco sul segmento posa un punto, e il tracciato non cambia.
-        later();
-        tap(50, 100);
-        expect(written()).toBe("M0 100 L50 100 L200 100");
-        expect(spoken()).toBe("1 nodo aggiunto.");
-      });
-
-      it("lo spigolo di un rettangolo si sposta coi suoi lati diritti", () => {
-        curving(RECT);
-        editor.select(["orectrect"]);
-        drag([[100, 0], [110, 0], [120, 0]]);
-        expect(editor.engine.text).toMatch(/<path id="orectrect" d="M0 0 L120 0 L100 50 L0 50 Z"/);
-      });
-
-      it("con un tracciato in corso, i punti sono suoi", () => {
-        curving(LINE);
-        editor.select(["opathpath"]);
-        tap(300, 300);
-        tap(100, 100);
-        expect(spoken()).toBe("Nodo 2, liscio: x 100, y 100.");
-        key("Enter");
-        expect(editor.engine.text.match(/<path /g)).toHaveLength(2);
-      });
-    });
   });
 });
 
@@ -10660,7 +3781,7 @@ describe("le immagini incollate", () => {
   });
 
   it("va dove è il cursore, e due immagini insieme sono un gesto, una sopra l'altra", async () => {
-    mount(SOURCE, { imageCodec: codec(100, 50) });
+    mount(SOURCE, { workspace: "simple", imageCodec: codec(100, 50) });
     size(1000, 500);
     // Con la selezione già in mano, lo strumento non cambia e non si dice.
     editor.setTool("select");
@@ -10674,7 +3795,7 @@ describe("le immagini incollate", () => {
   });
 
   it("con l'aggancio, l'angolo in alto a sinistra va sull'incrocio più vicino, e le immagini si scostano di passi interi", async () => {
-    mount(SOURCE, { imageCodec: codec(100, 50), level: "standard", grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE } });
+    mount(SOURCE, { imageCodec: codec(100, 50), grid: { shown: false, snap: true, step: 20, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE } });
     size(1000, 500);
     editor.setTool("select");
     surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 300, clientY: 300 }));
@@ -10725,7 +3846,7 @@ describe("le immagini incollate", () => {
       1, 0, 0x12, 0x01, 3, 0, 1, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xda, 0, 2,
     ]);
     const fake = codec(30, 40, { "image/jpeg": 500, "image/png": 900 });
-    mount(SOURCE, { imageCodec: fake });
+    mount(SOURCE, { workspace: "simple", imageCodec: fake });
     paste([file(exif, "foto.jpg", "image/jpeg")]);
     await settle();
     expect(fake.calls).toEqual(["image/jpeg 1"]);
@@ -10778,7 +3899,7 @@ describe("le immagini incollate", () => {
     expect(changes).toEqual([]);
   });
 
-  describe("la descrizione, dal livello Standard", () => {
+  describe("la descrizione, nel Completo", () => {
     const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-describe")!;
     const input = (): HTMLInputElement => bar().querySelector<HTMLInputElement>(".draw-describe-input")!;
     const label = (): string => bar().querySelector("label")!.textContent!;
@@ -10786,7 +3907,7 @@ describe("le immagini incollate", () => {
     const ids = (): string[] => [...editor.engine.text.matchAll(/<image id="([^"]+)"/g)].map((found) => found[1]!);
 
     it("entrata un'immagine, la barra la chiede col fuoco nel campo; Invio la scrive in un passo suo", async () => {
-      mount(SOURCE, { imageCodec: codec(200, 100), level: "standard" });
+      mount(SOURCE, { imageCodec: codec(200, 100) });
       size(1000, 500);
       expect(bar().hidden).toBe(true);
       paste([file(PNG)]);
@@ -10818,7 +3939,7 @@ describe("le immagini incollate", () => {
     });
 
     it("più immagini, una alla volta e scelta; «Decorativa» e «Salta» passano alla prossima, e alla fine tornano scelte tutte", async () => {
-      mount(SOURCE, { imageCodec: codec(100, 50), level: "standard" });
+      mount(SOURCE, { imageCodec: codec(100, 50) });
       size(1000, 500);
       paste([file(PNG), file(PNG, "due.png"), file(PNG, "tre.png")]);
       await settle();
@@ -10843,7 +3964,7 @@ describe("le immagini incollate", () => {
     });
 
     it("un campo vuoto non scrive niente e lo dice; Esc chiude, e la verifica elenca l'immagine", async () => {
-      mount(SOURCE, { imageCodec: codec(100, 50), level: "standard" });
+      mount(SOURCE, { imageCodec: codec(100, 50) });
       size(1000, 500);
       paste([file(PNG)]);
       await settle();
@@ -10860,7 +3981,7 @@ describe("le immagini incollate", () => {
     });
 
     it("si chiude quando l'immagine se ne va, quando il disegno non si scrive più, e con un altro disegno", async () => {
-      mount(SOURCE, { imageCodec: codec(100, 50), level: "standard" });
+      mount(SOURCE, { imageCodec: codec(100, 50) });
       size(1000, 500);
       paste([file(PNG)]);
       await settle();
@@ -10879,8 +4000,8 @@ describe("le immagini incollate", () => {
       expect(bar().hidden).toBe(true);
     });
 
-    it("all'Essenziale non c'è: l'immagine entra e il fuoco resta sul foglio", async () => {
-      mount(SOURCE, { imageCodec: codec(100, 50) });
+    it("nel Semplice non c'è: l'immagine entra e il fuoco resta sul foglio", async () => {
+      mount(SOURCE, { workspace: "simple", imageCodec: codec(100, 50) });
       size(1000, 500);
       surface().focus();
       paste([file(PNG)]);
@@ -10891,7 +4012,7 @@ describe("le immagini incollate", () => {
   });
 });
 
-describe("le immagini del vault, dal livello Standard", () => {
+describe("le immagini del vault", () => {
   const PNG = new Blob([Uint8Array.from([0x89, 0x50, 0x4e, 0x47])], { type: "image/png" });
   const HREF = "immagini/foto.png";
 
@@ -10948,7 +4069,7 @@ describe("le immagini del vault, dal livello Standard", () => {
   it("Ctrl+I mette l'immagine scelta per riferimento, dove è il cursore e con la sua misura, e il foglio la mostra", async () => {
     const images = vault(HREF);
     const fake = codec(200, 100);
-    mount(SOURCE, { level: "standard", imageCodec: fake, images });
+    mount(SOURCE, { imageCodec: fake, images });
     size(1000, 500);
     editor.setTool("pen");
     surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 300, clientY: 300 }));
@@ -10970,12 +4091,11 @@ describe("le immagini del vault, dal livello Standard", () => {
     expect(imageLine()).toBe("");
   });
 
-  it("il pulsante «Immagine dal vault…» c'è dallo Standard, se chi monta l'editor sa scegliere", async () => {
+  it("il pulsante «Immagine dal vault…» c'è nei due spazi, se chi monta l'editor sa scegliere", async () => {
     const images = vault(HREF);
-    mount(SOURCE, { imageCodec: codec(20, 10), images });
-    expect(insertShown()).toBe(false);
-    expect(key("i", { ctrlKey: true }).defaultPrevented).toBe(false);
-    editor.setLevel("standard");
+    mount(SOURCE, { workspace: "simple", imageCodec: codec(20, 10), images });
+    expect(insertShown()).toBe(true);
+    editor.setWorkspace("full");
     expect(insertShown()).toBe(true);
     const control = imageButton();
     expect(control.closest('[role="group"]')!.getAttribute("aria-label")).toBe("Inserisci");
@@ -11000,13 +4120,13 @@ describe("le immagini del vault, dal livello Standard", () => {
     host.replaceChildren();
     owner = openLifetime();
     // Chi non sa scegliere non ha il pulsante, né il tasto.
-    mount(SOURCE, { level: "standard", imageCodec: codec(20, 10), images: { url: images.url, read: images.read } });
+    mount(SOURCE, { imageCodec: codec(20, 10), images: { url: images.url, read: images.read } });
     expect(insertShown()).toBe(false);
     expect(key("i", { ctrlKey: true }).defaultPrevented).toBe(false);
   });
 
   it("«?» elenca Ctrl+I tra i tasti della modifica", () => {
-    mount(SOURCE, { level: "standard", images: vault(HREF) });
+    mount(SOURCE, { images: vault(HREF) });
     key("?", { shiftKey: true });
     const rows = [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
     expect(rows).toContainEqual(["Ctrl+I", "Immagine dal vault…"]);
@@ -11014,7 +4134,7 @@ describe("le immagini del vault, dal livello Standard", () => {
   });
 
   it("una scelta annullata o fallita non aggiunge niente; un'immagine sparita o illeggibile lo si dice", async () => {
-    mount(SOURCE, { level: "standard", imageCodec: codec(20, 10), images: vault(null) });
+    mount(SOURCE, { imageCodec: codec(20, 10), images: vault(null) });
     key("i", { ctrlKey: true });
     await settle();
     expect(spoken()).toBe("");
@@ -11022,21 +4142,21 @@ describe("le immagini del vault, dal livello Standard", () => {
     host.replaceChildren();
     owner = openLifetime();
     // Chi sceglie dice da sé perché non ha potuto.
-    mount(SOURCE, { level: "standard", imageCodec: codec(20, 10), images: vault(new Error("rotto")) });
+    mount(SOURCE, { imageCodec: codec(20, 10), images: vault(new Error("rotto")) });
     key("i", { ctrlKey: true });
     await settle();
     expect(spoken()).toBe("");
     owner.close();
     host.replaceChildren();
     owner = openLifetime();
-    mount(SOURCE, { level: "standard", imageCodec: codec(20, 10), images: vault(HREF, null) });
+    mount(SOURCE, { imageCodec: codec(20, 10), images: vault(HREF, null) });
     key("i", { ctrlKey: true });
     await settle();
     expect(spoken()).toBe("L’immagine scelta non si apre: forse non è più nel vault.");
     owner.close();
     host.replaceChildren();
     owner = openLifetime();
-    mount(SOURCE, { level: "standard", imageCodec: codec(20, 10, false), images: vault(HREF) });
+    mount(SOURCE, { imageCodec: codec(20, 10, false), images: vault(HREF) });
     key("i", { ctrlKey: true });
     await settle();
     expect(spoken()).toBe("Non è un’immagine che il disegno sa leggere.");
@@ -11058,7 +4178,7 @@ describe("le immagini del vault, dal livello Standard", () => {
         return new Promise((resolve) => (answer = resolve));
       },
     };
-    mount(SOURCE, { level: "standard", imageCodec: codec(20, 10), images });
+    mount(SOURCE, { imageCodec: codec(20, 10), images });
     key("i", { ctrlKey: true });
     await settle();
     // Un secondo Ctrl+I, mentre la scelta è aperta, non ne apre un'altra.
@@ -11116,7 +4236,7 @@ describe("annulla e ripeti", () => {
   });
 });
 
-describe("la cronologia, dal livello Standard", () => {
+describe("la cronologia, nel Completo", () => {
   const button = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Cronologia"]')!;
   const panel = (): HTMLElement => host.querySelector<HTMLElement>(".draw-history")!;
   const list = (): HTMLElement => panel().querySelector<HTMLElement>('[role="listbox"]')!;
@@ -11140,10 +4260,10 @@ describe("la cronologia, dal livello Standard", () => {
     return texts;
   }
 
-  it("c'è dal livello Standard: il pulsante la apre a destra del foglio, e aperta prende il fuoco", () => {
-    mount();
+  it("c'è nel Completo: il pulsante la apre a destra del foglio, e aperta prende il fuoco", () => {
+    mount(SOURCE, { workspace: "simple" });
     expect(button().hidden).toBe(true);
-    editor.setLevel("standard");
+    editor.setWorkspace("full");
     expect(button().hidden).toBe(false);
     expect(panel().hidden).toBe(true);
     expect(button().getAttribute("aria-expanded")).toBe("false");
@@ -11162,16 +4282,16 @@ describe("la cronologia, dal livello Standard", () => {
     button().click();
     expect(panel().hidden).toBe(true);
     expect(panel().closest(".draw-dock")!.hasAttribute("hidden")).toBe(true);
-    // Sotto il livello Standard si chiude.
+    // Nel Semplice si chiude.
     button().click();
-    editor.setLevel("essential");
+    editor.setWorkspace("simple");
     expect(button().hidden).toBe(true);
     expect(panel().hidden).toBe(true);
     expect(changes).toEqual([]);
   });
 
   it("ogni gesto è un passo; un clic su un passo ci torna in un colpo, con un cambiamento solo e gli stessi byte", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     button().click();
     const texts = three();
     expect(rows()).toEqual(["Disegno aperto", "Rettangolo", "Rettangolo", "Rettangolo *"]);
@@ -11210,7 +4330,7 @@ describe("la cronologia, dal livello Standard", () => {
   });
 
   it("dalla tastiera: le frecce scelgono la riga, Invio ci va", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     const texts = three();
     button().click();
     key("ArrowUp", {}, list());
@@ -11225,7 +4345,7 @@ describe("la cronologia, dal livello Standard", () => {
   });
 
   it("si ferma al passo che non si annulla più, che esce dalla cronologia, e lo dice", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     const texts = three();
     button().click();
     // Il secondo rettangolo, altrove, se n'è andato.
@@ -11244,7 +4364,7 @@ describe("la cronologia, dal livello Standard", () => {
   });
 
   it("un segno: «Segna questo punto» lo mette dove si è, col nome da scrivere, e ci si torna", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     const texts = three();
     button().click();
     row("p2").click();
@@ -11280,7 +4400,7 @@ describe("la cronologia, dal livello Standard", () => {
   });
 
   it("in sola lettura si guarda soltanto", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     const texts = three();
     button().click();
     editor.setReadOnly(true);
@@ -11297,7 +4417,7 @@ describe("la cronologia, dal livello Standard", () => {
   });
 
   it("un altro disegno ricomincia da capo, senza segni", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     three();
     button().click();
     panel().querySelector<HTMLButtonElement>(".draw-history-action")!.click();
@@ -11307,7 +4427,7 @@ describe("la cronologia, dal livello Standard", () => {
   });
 
   it("«?» elenca i tasti della cronologia", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     key("?", { shiftKey: true });
     const tables = [...dialog().querySelectorAll(".keys-list > table")].map((table) => ({
       caption: table.querySelector("caption")!.textContent,
@@ -11324,7 +4444,7 @@ describe("la cronologia, dal livello Standard", () => {
   });
 });
 
-describe("la verifica dell'accessibilità, dal livello Standard", () => {
+describe("la verifica dell'accessibilità, nel Completo", () => {
   const button = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Accessibilità"]')!;
   const panel = (): HTMLElement => host.querySelector<HTMLElement>(".draw-access")!;
   const rows = (): HTMLElement[] => [...panel().querySelectorAll<HTMLElement>(".draw-access-problem")];
@@ -11358,10 +4478,10 @@ describe("la verifica dell'accessibilità, dal livello Standard", () => {
     vi.useRealTimers();
   });
 
-  it("c'è dal livello Standard: il pulsante la apre a destra del foglio, e aperta legge il disegno e prende il fuoco", () => {
-    mount(POOR);
+  it("c'è nel Completo: il pulsante la apre a destra del foglio, e aperta legge il disegno e prende il fuoco", () => {
+    mount(POOR, { workspace: "simple" });
     expect(button().hidden).toBe(true);
-    editor.setLevel("standard");
+    editor.setWorkspace("full");
     expect(button().hidden).toBe(false);
     expect(panel().hidden).toBe(true);
     expect(button().getAttribute("aria-expanded")).toBe("false");
@@ -11381,16 +4501,16 @@ describe("la verifica dell'accessibilità, dal livello Standard", () => {
     button().click();
     expect(panel().hidden).toBe(true);
     expect(panel().closest(".draw-dock")!.hasAttribute("hidden")).toBe(true);
-    // Sotto il livello Standard si chiude.
+    // Nel Semplice si chiude.
     button().click();
-    editor.setLevel("essential");
+    editor.setWorkspace("simple");
     expect(button().hidden).toBe(true);
     expect(panel().hidden).toBe(true);
     expect(changes).toEqual([]);
   });
 
   it("un colore che si legge si mette in un passo; il fuoco passa al problema dopo, e un annulla lo riporta", () => {
-    mount(POOR, { level: "standard" });
+    mount(POOR);
     button().click();
     const color = action(1, "fix");
     expect(color.textContent).toMatch(/^Usa #[0-9a-f]{6} \(4,\d\d:1\)$/);
@@ -11411,7 +4531,7 @@ describe("la verifica dell'accessibilità, dal livello Standard", () => {
   });
 
   it("una correzione su un disegno che intanto è cambiato si rilegge: se il problema non c'è più, non fa niente", () => {
-    mount(POOR, { level: "standard" });
+    mount(POOR);
     button().click();
     editor.setEngine(SceneEngine.open(POOR.replace('fill="#f0e442"', 'fill="#222222"')));
     // Il disegno nuovo non si è ancora riletto: la riga c'è ancora.
@@ -11424,7 +4544,7 @@ describe("la verifica dell'accessibilità, dal livello Standard", () => {
   });
 
   it("«Scrivi il titolo» porta al campo del titolo", () => {
-    mount(POOR, { level: "standard" });
+    mount(POOR);
     button().click();
     action(0, "fix").click();
     const input = host.querySelector<HTMLInputElement>(".draw-title-input")!;
@@ -11436,7 +4556,7 @@ describe("la verifica dell'accessibilità, dal livello Standard", () => {
   });
 
   it("un'immagine si descrive nella riga, o si dichiara decorativa, ciascuna in un passo", () => {
-    mount(POOR, { level: "standard" });
+    mount(POOR);
     button().click();
     action(2, "describe").click();
     const field = panel().querySelector<HTMLInputElement>(".draw-access-describe")!;
@@ -11457,7 +4577,7 @@ describe("la verifica dell'accessibilità, dal livello Standard", () => {
   });
 
   it("un oggetto bloccato non si corregge da qui: ci si va, e si dice perché", () => {
-    mount(POOR.replace('<text id="o1a1a1a1a"', '<text id="o1a1a1a1a" fub:locked="true"'), { level: "standard" });
+    mount(POOR.replace('<text id="o1a1a1a1a"', '<text id="o1a1a1a1a" fub:locked="true"'));
     button().click();
     expect(action(1, "fix")).toBeNull();
     action(1, "go").click();
@@ -11466,7 +4586,7 @@ describe("la verifica dell'accessibilità, dal livello Standard", () => {
   });
 
   it("in sola lettura i problemi si guardano soltanto", () => {
-    mount(POOR, { level: "standard" });
+    mount(POOR);
     button().click();
     editor.setReadOnly(true);
     expect(panel().querySelector<HTMLElement>(".draw-access-note")!.hidden).toBe(false);
@@ -11475,7 +4595,7 @@ describe("la verifica dell'accessibilità, dal livello Standard", () => {
   });
 
   it("l'ordine di lettura: un clic sceglie l'oggetto, Alt+↓ lo sposta, e se passerebbe sopra un vicino che copre prima lo dice", () => {
-    mount(STACK, { level: "standard" });
+    mount(STACK);
     button().click();
     expect(panel().querySelector(".draw-access-count")!.textContent).toBe("nessun problema");
     expect(document.activeElement).toBe(tree());
@@ -11512,7 +4632,7 @@ describe("la verifica dell'accessibilità, dal livello Standard", () => {
   });
 
   it("«?» elenca i tasti della verifica", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     key("?", { shiftKey: true });
     const tables = [...dialog().querySelectorAll(".keys-list > table")].map((table) => ({
       caption: table.querySelector("caption")!.textContent,
@@ -11557,12 +4677,17 @@ describe("un documento che non si modifica", () => {
     expect(changes).toEqual([]);
   });
 
-  it("e un documento con ogni livello bloccato lo dice", () => {
-    mount(doc('<g id="l1" fub:layer="Uno" fub:locked="true"></g>'));
+  it("e un documento con ogni livello bloccato lo dice: nel Completo nomina il livello", () => {
+    const LOCKED = doc('<g id="l1" fub:layer="Uno" fub:locked="true"></g>');
+    mount(LOCKED, { workspace: "simple" });
     editor.setTool("rect");
     drag([[10, 10], [50, 40]]);
     expect(changes).toEqual([]);
     expect(spoken()).toBe("Ogni livello è bloccato o nascosto: non c’è dove disegnare.");
+    editor.setWorkspace("full");
+    drag([[10, 10], [50, 40]]);
+    expect(changes).toEqual([]);
+    expect(spoken()).toBe("«Uno» è bloccato: sbloccalo, o scegli un altro livello, per disegnare.");
   });
 });
 
@@ -11751,17 +4876,16 @@ describe("la Mano e la Lente", () => {
     expect(changes).toEqual([]);
   });
 
-  it("Ctrl+', Ctrl+; e Ctrl+U accendono e spengono griglia, guide e guide intelligenti", () => {
-    mount(SOURCE, { level: "expert" });
+  it("Ctrl+' accende e spegne la griglia; Ctrl+; e Ctrl+U non fanno più niente (ADR 0231)", () => {
+    mount(SOURCE);
     surface().focus();
-    const { shown, rulerGuides, guides } = editor.grid;
+    const { shown } = editor.grid;
     key("'", { ctrlKey: true });
     expect(editor.grid.shown).toBe(!shown);
+    const grid = editor.grid;
     key(";", { ctrlKey: true, shiftKey: true });
-    expect(editor.grid.rulerGuides).toBe(!rulerGuides);
     key("u", { ctrlKey: true });
-    expect(editor.grid.guides).toBe(!guides);
-    expect(spoken()).toBe(guides ? "Guide intelligenti spente." : "Guide intelligenti accese.");
+    expect(editor.grid).toEqual(grid);
   });
 
   it("Ctrl+. nasconde l'interfaccia del disegno e la riporta", () => {
@@ -11871,13 +4995,13 @@ describe("la Mano e la Lente", () => {
   });
 
   it("i tasti del disegno non prendono quelli dello Scrittoio, tranne quelli dichiarati", async () => {
-    mount(SOURCE, { level: "expert" });
+    mount(SOURCE);
     key("?", { shiftKey: true });
     const drawn = new Set([...dialog().querySelectorAll("th kbd")].map((kbd) => kbd.textContent!));
     // Col fuoco nel disegno il disegno tiene questi, e fuori restano dello
-    // Scrittoio: sul foglio Ctrl+0 è il 100% e Ctrl+7 la maschera, fra gli
-    // oggetti Ctrl+F li filtra.
-    const declared = new Set<string>(["Mod-0", "Mod-7", "Mod-f"]);
+    // Scrittoio: sul foglio Ctrl+0 è il 100%, fra gli oggetti Ctrl+F li
+    // filtra.
+    const declared = new Set<string>(["Mod-0", "Mod-f"]);
     const shell = Object.values(SHELL_KEYS).flatMap((chord): string[] => (chord === null ? [] : [chord]));
     const clashes = shell.filter((chord) => !declared.has(chord) && drawn.has(displayBinding(chord)));
     expect(clashes).toEqual([]);
@@ -11918,17 +5042,13 @@ describe("il catalogo dei comandi", () => {
     links: { choose: async () => null, open: () => {} },
     images: { url: async () => null, read: async () => null, choose: async () => null },
   };
-  /// Le funzioni che non stanno nell'editor: la stampa è della finestra
-  /// «Esporta» della superficie, i caratteri del vault sono voci in più nella
-  /// scelta della famiglia, quando chi ospita ne dà.
-  const OUTSIDE = new Set(["print", "fonts"]);
 
-  /// Ciò che si raggiunge con le funzioni `features`: i comandi del catalogo,
+  /// Ciò che si raggiunge nello spazio `workspace`: i comandi del catalogo,
   /// le sezioni e i campi delle proprietà che si vedono, senza selezione, con
   /// ogni oggetto da solo e con tutti insieme, con la selezione e con la penna.
-  const reach = (features: readonly string[]): Set<string> => {
+  const reach = (workspace: Workspace): Set<string> => {
     host.replaceChildren();
-    mount(KINDS, { level: "custom", custom: features, ...HOST });
+    mount(KINDS, { workspace, ...HOST });
     editor.setTool("select");
     // Le proprietà aperte, se ci sono: le sezioni si leggono lì.
     editor.commands().find((one) => one.id === "draw.button:properties")?.run();
@@ -11956,7 +5076,7 @@ describe("il catalogo dei comandi", () => {
   };
 
   it("ha strumenti, Annulla, Ripeti, il menu «Disegno» e la barra della selezione, con id unici", () => {
-    mount(KINDS, { level: "expert" });
+    mount(KINDS);
     editor.setTool("select");
     editor.select(IDS.slice(0, 2));
     const all = editor.commands();
@@ -11978,20 +5098,18 @@ describe("il catalogo dei comandi", () => {
     }
   });
 
-  it("ogni funzione del registro si raggiunge: spegnerla toglie un comando, una sezione o un campo", () => {
-    const every = FEATURES.map((spec) => spec.id);
-    const full = reach(every);
-    const unreachable = every.filter((feature) => {
-      if (OUTSIDE.has(feature)) return false;
-      const without = reach(every.filter((one) => one !== feature));
-      return ![...full].some((what) => !without.has(what));
-    });
-    expect(unreachable.join(" ")).toBe("");
-    // Un editor per funzione: più lento degli altri.
-  }, 60_000);
+  it("il Completo raggiunge tutto ciò che raggiunge il Semplice, e in più le funzioni che il Semplice non ha", () => {
+    const full = reach("full");
+    const simple = reach("simple");
+    expect([...simple].filter((what) => !full.has(what))).toEqual([]);
+    const more = [...full].filter((what) => !simple.has(what));
+    for (const what of ["comando draw.menu:selezione-avanzata/isola-il-gruppo", "comando draw.button:draw-layers", "comando draw.button:draw-history", "comando draw.button:draw-access", "comando draw.group", "campo grid", "comando draw.unlink"]) {
+      expect(more, what).toContain(what);
+    }
+  });
 
   it("il menu radiale prende dal catalogo strumenti, Annulla e Ripeti, e si apre dal catalogo da tastiera", () => {
-    mount(KINDS, { level: "standard" });
+    mount(KINDS);
     editor.setTool("pen");
     const radial = editor.commands().find((one) => one.id === "draw.radial")!;
     radial.run();
@@ -11999,161 +5117,6 @@ describe("il catalogo dei comandi", () => {
     expect(items).toContain("Annulla");
     expect(items).toContain("Ripeti");
     closeRadial();
-  });
-});
-
-describe("il livello Personalizzato", () => {
-  /// Due livelli: «Sfondo» con due rettangoli, «Note» con un testo.
-  const PARTS = doc(
-    `<title>Prova</title><g id="l1" fub:layer="Sfondo"><rect id="oa5a5a5a5" x="0" y="0" width="20" height="20" fill="#d55e00"/>` +
-      `<rect id="ob5b5b5b5" x="10" y="10" width="20" height="20" fill="#0072b2"/></g>` +
-      `<g id="l2" fub:layer="Note"><text id="ot5t5t5t5" x="0" y="60"><tspan x="0" dy="0">Ciao</tspan></text></g>`,
-  );
-  const A = "oa5a5a5a5";
-  const B = "ob5b5b5b5";
-  const T = "ot5t5t5t5";
-
-  const shownTools = railNames;
-  /// Se nella barra degli strumenti si vede il pulsante `label`.
-  const visible = (label: string): boolean =>
-    [...host.querySelectorAll<HTMLButtonElement>(".draw-toolbar button")].some(
-      (control) => control.getAttribute("aria-label") === label && control.closest("[hidden]") === null,
-    );
-  const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
-  const barButtons = (): string[] => [...bar().querySelectorAll<HTMLButtonElement>("button:not([hidden])")].map((control) => control.getAttribute("aria-label") ?? "");
-  const hint = (): string => document.getElementById(surface().getAttribute("aria-describedby")!)?.textContent ?? "";
-
-  it("ha le parti scelte una per una, e i tasti e i comandi delle altre non partono", () => {
-    mount(PARTS, { level: "custom", custom: ["rect", "ellipse", "layers", "boolean", "futuro"] });
-    expect(editor.level).toBe("custom");
-    // Un nome che l'editor non conosce non conta.
-    expect([...editor.features]).toEqual(["rect", "ellipse", "layers", "boolean"]);
-    // Senza la penna si comincia dal primo strumento che disegna.
-    expect(editor.tool).toBe("rect");
-    expect(shownTools()).toEqual(["Selezione", "Mano", "Zoom", "Rettangolo", "Ellisse"]);
-    expect(host.querySelector(".draw-layer-button")!.closest("[hidden]")).toBeNull();
-    expect(visible("Pagina e griglia")).toBe(false);
-    expect(visible("Altro colore…")).toBe(false);
-    expect(visible("Attributi")).toBe(false);
-    key("p");
-    expect(editor.tool).toBe("rect");
-    key("#");
-    expect(editor.grid.shown).toBe(false);
-
-    editor.select([A, B]);
-    // Della barra della selezione, i pulsanti delle parti scelte.
-    expect(barButtons()).toEqual(["Sposta in un livello", "Operazioni booleane"]);
-    expect(key("d", { ctrlKey: true }).defaultPrevented).toBe(false);
-    expect(key("g", { ctrlKey: true }).defaultPrevented).toBe(false);
-    expect(key("M", { ctrlKey: true, shiftKey: true }).defaultPrevented).toBe(false);
-    expect(hint()).toContain("Alt+F10");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    // Un testo scelto da solo non si modifica senza la parte del testo: coi
-    // livelli, F2 ne apre il nome.
-    editor.select([T]);
-    expect(barButtons()).toEqual(["Sposta in un livello", "Operazioni booleane"]);
-    expect(key("F2").defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(host.querySelector(".draw-object-rename"));
-    key("Escape", {}, document.activeElement as HTMLElement);
-    expect(changes).toEqual([]);
-  });
-
-  it("la barra della selezione c'è quando ha un pulsante da mostrare", () => {
-    mount(PARTS, { level: "custom", custom: ["text"] });
-    editor.select([T]);
-    expect(bar().hidden).toBe(false);
-    expect(barButtons()).toEqual(["Modifica il testo"]);
-    // Una forma chiusa ci riceve l'etichetta; due oggetti, niente.
-    editor.select([A]);
-    expect(barButtons()).toEqual(["Modifica il testo"]);
-    editor.select([A, B]);
-    expect(bar().hidden).toBe(true);
-    expect(key("F10", { altKey: true }).defaultPrevented).toBe(false);
-    editor.setLevel("custom", ["pen"]);
-    editor.select([T]);
-    expect(bar().hidden).toBe(true);
-    expect(hint()).not.toContain("Alt+F10");
-  });
-
-  it("cambia dal vivo con le parti, e tornando al Personalizzato ritrova quelle di prima", () => {
-    mount(PARTS, { level: "custom", custom: ["pen", "text"] });
-    expect(editor.tool).toBe("pen");
-    expect(shownTools()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Testo"]);
-    editor.setTool("text");
-    editor.setLevel("custom", ["ellipse", "pen"]);
-    // Uno strumento che se ne va lascia il posto alla penna, se c'è.
-    expect(editor.tool).toBe("pen");
-    editor.setLevel("custom", ["ellipse"]);
-    expect(editor.tool).toBe("ellipse");
-    editor.setLevel("standard");
-    expect(editor.features.has("text")).toBe(true);
-    editor.setLevel("custom");
-    expect([...editor.features]).toEqual(["ellipse"]);
-    // Senza strumenti che disegnano resta la Selezione.
-    editor.setLevel("custom", []);
-    expect(editor.tool).toBe("select");
-    expect(shownTools()).toEqual(["Selezione", "Mano", "Zoom"]);
-    expect(changes).toEqual([]);
-  });
-
-  it("«Mostra tutto» elenca i tasti delle parti che non ha, col livello da cui vengono", () => {
-    mount(SOURCE, { level: "custom", custom: ["pen", "eraser", "rect", "ellipse", "line", "arrow", "grid", "nodes"] });
-    key("?", { shiftKey: true });
-    expect([...dialog().querySelectorAll(".keys-list > table caption")].map((caption) => caption.textContent)).toEqual([
-      "Strumenti",
-      "Disegnare da tastiera",
-      "Oggetti",
-      "Nodi",
-      "Griglia",
-      "Vista",
-      "Modifica",
-    ]);
-    dialog().querySelector<HTMLButtonElement>(".keys-show-all")!.click();
-    const extra = dialog().querySelector<HTMLElement>(".keys-more")!;
-    expect(extra.querySelector(".keys-note")!.textContent).toBe(
-      "Il livello di adesso è «Personalizzato». I tasti qui sotto sono delle parti che non ha: si aggiungono nelle Impostazioni, nel gruppo «Disegni».",
-    );
-    const tables = [...extra.querySelectorAll("table")].map((table) => ({
-      caption: table.querySelector("caption")!.textContent,
-      rows: [...table.querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]),
-    }));
-    expect(tables.map((table) => table.caption)).toEqual([
-      "Strumenti · dal livello Standard",
-      "Oggetti · dal livello Standard",
-      "Disponi · dal livello Standard",
-      "Selezione avanzata · dal livello Standard",
-      "Ritaglia l’immagine · dal livello Standard",
-      "Poligono · dal livello Standard",
-      "Evidenziatore · dal livello Standard",
-      "Forme dal tratto · dal livello Standard",
-      "Testo · dal livello Standard",
-      "Tavole · dal livello Standard",
-      "Contagocce · dal livello Standard",
-      "Sfumatura · dal livello Standard",
-      "Guide intelligenti · dal livello Standard",
-      "Righelli e guide · dal livello Standard",
-      "Proprietà · dal livello Standard",
-      "Vista · dal livello Standard",
-      "Modifica · dal livello Standard",
-      "Elenco delle tavole · dal livello Standard",
-      "Presentazione · dal livello Standard",
-      "Cronologia · dal livello Standard",
-      "Accessibilità · dal livello Standard",
-      "Strumenti · dal livello Esperto",
-      "Disponi · dal livello Esperto",
-      "Tracciato · dal livello Esperto",
-      "Maschera · dal livello Esperto",
-      "Costruttore di forme · dal livello Esperto",
-      "Forbici · dal livello Esperto",
-      "Spessore · dal livello Esperto",
-      "Bézier · dal livello Esperto",
-      "Curvatura · dal livello Esperto",
-      "Attributi · dal livello Esperto",
-    ]);
-    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["G", "Sfumatura"], ["Shift+P", "Evidenziatore"], ["X", "Connettore"], ["Y", "Poligono"], ["T", "Testo"]]);
-    expect(tables[21]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
-    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
-    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
 });
 
@@ -12441,7 +5404,7 @@ describe("gli appunti", () => {
   });
 
   it("Esc e «Interrompi» fermano l'incolla, e il disegno non cambia", async () => {
-    mount();
+    mount(SOURCE, { workspace: "simple" });
     const svg = heavy(256);
     clip("paste", holding(svg));
     expect(key("Escape").defaultPrevented).toBe(true);
@@ -12463,7 +5426,7 @@ describe("gli appunti", () => {
   });
 
   it("dal menu: copia col comando del browser, incolla dagli appunti che legge; dove non può lo dice", async () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     size(1000, 500);
     editor.setTool("select");
     editor.select([ID]);
@@ -12562,18 +5525,18 @@ describe("gli appunti", () => {
     }
   });
 
-  it("lo stile si copia e si incolla con Ctrl+Alt+C e Ctrl+Alt+V, dal livello Standard, in un passo", () => {
+  it("lo stile si copia e si incolla con Ctrl+Alt+C e Ctrl+Alt+V, nel Completo, in un passo", () => {
     const A = "oa1a1a1a1";
     const B = "ob2b2b2b2";
     const PAIR = doc(
       `<title>Prova</title>${LAYER}<rect id="${A}" x="10" y="10" width="20" height="20" fill="#0072b2" stroke="#d55e00" stroke-width="4" stroke-dasharray="4 2" opacity="0.5"/>` +
         `<rect id="${B}" x="50" y="10" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/></g>`,
     );
-    mount(PAIR);
+    mount(PAIR, { workspace: "simple" });
     editor.select([A]);
     expect(key("c", { ctrlKey: true, altKey: true }).defaultPrevented).toBe(false);
     editor.dispose();
-    mount(PAIR, { level: "standard" });
+    mount(PAIR);
     editor.select([B]);
     // Lo stile copiato è della pagina: finché nessuno lo copia, non c'è.
     expect(key("v", { ctrlKey: true, altKey: true }).defaultPrevented).toBe(true);
@@ -12603,7 +5566,7 @@ describe("gli appunti", () => {
         `<defs id="fub-defs">${swatch("rs1s1s1s1", "Blu mare", "#0072b2")}${swatch("rs2s2s2s2", "Vermiglio", "#d55e00")}</defs>` +
           `${LAYER}<rect id="${A}" x="10" y="10" width="20" height="20" fill="url(#rs1s1s1s1) #0072b2" stroke="url(#rs2s2s2s2) #d55e00" stroke-width="4"/></g>`,
       ),
-      { level: "standard" },
+      {},
     );
     editor.select([A]);
     key("c", { ctrlKey: true, altKey: true });
@@ -12613,7 +5576,7 @@ describe("gli appunti", () => {
       `<defs id="fub-defs">${swatch("rt1t1t1t1", "blu mare", "#0072b2")}${swatch("rt2t2t2t2", "Vermiglio", "#e69f00")}</defs>` +
         `${LAYER}<rect id="${B}" x="50" y="10" width="20" height="20" fill="#000000"/></g>`,
     );
-    mount(OTHER, { level: "standard" });
+    mount(OTHER);
     editor.select([B]);
     key("v", { ctrlKey: true, altKey: true });
     expect(spoken()).toBe("Stile incollato su 1 oggetto.");
@@ -12632,7 +5595,7 @@ describe("gli appunti", () => {
           `${LAYER}<rect id="${A}" x="10" y="10" width="20" height="20" fill="url(#rs1s1s1s1) #0072b2"/>` +
           `<rect id="${B}" x="50" y="10" width="20" height="20" fill="#000000"/></g>`,
       ),
-      { level: "standard" },
+      {},
     );
     editor.select([A]);
     key("c", { ctrlKey: true, altKey: true });
@@ -12643,7 +5606,7 @@ describe("gli appunti", () => {
         { op: "set", id: A, attrs: { fill: "url(#rs1s1s1s1) #56b4e9" } },
       ],
     };
-    expect(editor.perform("draw.action.swatch_recolor", recolor)).toBe(true);
+    expect(editor.perform("draw.action.fill", recolor)).toBe(true);
     editor.select([B]);
     key("v", { ctrlKey: true, altKey: true });
     expect(rects()[1]).toBe(`<rect id="${B}" x="50" y="10" width="20" height="20" fill="url(#rs1s1s1s1) #56b4e9"/>`);
@@ -12665,7 +5628,7 @@ describe("la fine", () => {
   });
 });
 
-describe("la vista girata e i gesti, dal livello Standard", () => {
+describe("la vista girata e i gesti", () => {
   const A = "o1a2b3c4d";
   /// La camera del foglio, come matrice `[a b c d e f]`.
   const cameraOf = (): number[] => host.querySelector(".draw-preview g")!.getAttribute("transform")!.match(/^matrix\((.*)\)$/)![1]!.split(" ").map(Number);
@@ -12703,7 +5666,7 @@ describe("la vista girata e i gesti, dal livello Standard", () => {
   });
 
   it("4 e 6 girano la vista di 15° attorno al centro, 5 la raddrizza; il pulsante dice l'angolo e la raddrizza", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     size(200, 100);
     expect(turnButton().hidden).toBe(true);
     key("6");
@@ -12731,22 +5694,18 @@ describe("la vista girata e i gesti, dal livello Standard", () => {
     expect(turnButton().hidden).toBe(true);
   });
 
-  it("all'Essenziale la vista non gira, e il livello che toglie la vista girata la raddrizza", () => {
-    mount();
+  it("la vista gira nel Semplice e nel Completo, e cambiare spazio non la raddrizza", () => {
+    mount(SOURCE, { workspace: "simple" });
     size(200, 100);
     key("6");
-    near(cameraOf(), [1, 0, 0, 1, 0, 0]);
-    expect(turnButton().hidden).toBe(true);
-    editor.setLevel("standard");
-    key("6");
     expect(turnButton().hidden).toBe(false);
-    editor.setLevel("essential");
-    near(cameraOf(), [1, 0, 0, 1, 0, 0]);
-    expect(turnButton().hidden).toBe(true);
+    editor.setWorkspace("full");
+    expect(turnButton().hidden).toBe(false);
+    expect(cameraOf()[0]).not.toBeCloseTo(1);
   });
 
   it("la rotella con Ctrl e Maiusc gira a passi, attorno al puntatore", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     size(200, 100);
     wheel({ deltaY: 100, ctrlKey: true, shiftKey: true });
     expect(spoken()).toBe("Vista ruotata di 15°.");
@@ -12766,7 +5725,7 @@ describe("la vista girata e i gesti, dal livello Standard", () => {
   });
 
   it("sul foglio girato si sceglie e si sposta ciò che si vede sotto il puntatore, e le frecce vanno dove si vede", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     size(200, 100);
     editor.setTool("select");
     for (let i = 0; i < 6; i++) key("6");
@@ -12788,7 +5747,7 @@ describe("la vista girata e i gesti, dal livello Standard", () => {
   });
 
   it("il riquadro di selezione su un foglio girato di traverso sceglie ciò che sta nel rettangolo come si vede", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     size(200, 100);
     editor.setTool("select");
     key("6");
@@ -12806,7 +5765,7 @@ describe("la vista girata e i gesti, dal livello Standard", () => {
   });
 
   it("due dita che ruotano girano il foglio, oltre una soglia e senza salti, e rilasciate vicino a un angolo retto ci si posano", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     size(200, 100);
     let at = 1000;
     const around = (degrees: number): [number, number] => [50 + 100 * Math.cos((degrees * Math.PI) / 180), 50 + 100 * Math.sin((degrees * Math.PI) / 180)];
@@ -12844,7 +5803,7 @@ describe("la vista girata e i gesti, dal livello Standard", () => {
   });
 
   it("un tocco di due dita annulla, uno di tre ripete; un tocco lungo o che scorre no, e si spengono", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     size(200, 100);
     drag([[10, 10], [40, 10]]);
     const drawn = editor.engine.text;
@@ -12875,7 +5834,7 @@ describe("la vista girata e i gesti, dal livello Standard", () => {
 
   it("«Penna e dita…», da «Pagina e griglia», sceglie i gesti e la curva della penna, che preme con lei", async () => {
     const grids: unknown[] = [];
-    mount(SOURCE, { level: "standard", onGridChange: (grid) => grids.push(grid) });
+    mount(SOURCE, { onGridChange: (grid) => grids.push(grid) });
     size(200, 100);
     pageButton().click();
     entry("Penna e dita…").click();
@@ -12917,7 +5876,7 @@ describe("la vista girata e i gesti, dal livello Standard", () => {
   });
 });
 
-describe("il menu radiale, dal livello Standard", () => {
+describe("il menu radiale", () => {
   const A = "o1a2b3c4d";
   const radial = (): HTMLElement | null => document.querySelector<HTMLElement>(".draw-radial:not([data-shell-motion='exit'])");
   /// Le voci, dall'alto in senso orario: il nome, o `-` per una spenta.
@@ -12950,7 +5909,7 @@ describe("il menu radiale, dal livello Standard", () => {
   });
 
   it("il clic destro con la penna lo apre: annulla in alto, gli strumenti di prima a destra, i colori a sinistra", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     size(200, 100);
     surface().focus();
     expect(rightClick(100, 50).defaultPrevented).toBe(true);
@@ -12989,22 +5948,17 @@ describe("il menu radiale, dal livello Standard", () => {
   it("i colori a sinistra sono i recenti che chi monta l'editor ricorda, senza quello di adesso", () => {
     /// Le voci a sinistra, quelle dei colori.
     const colors = (): string[] => voices().filter((each) => /^(sw|w|nw) /.test(each));
-    mount(SOURCE, { level: "standard", colors: ["#3a7bd5", "#000000", "#cc79a7", "#56b4e9"] });
+    mount(SOURCE, { colors: ["#3a7bd5", "#000000", "#cc79a7", "#56b4e9"] });
     size(200, 100);
     surface().focus();
     rightClick(100, 50);
     expect(colors()).toEqual(["sw Colore: Azzurro", "w Colore: Personalizzato #3a7bd5", "nw Colore: Porpora"]);
     voice("Colore: Personalizzato #3a7bd5").click();
     expect(spoken()).toBe("Colore: Personalizzato #3a7bd5.");
-    // Senza i colori a piacere la penna torna al nero, e a sinistra restano
-    // i recenti della tavolozza.
-    editor.setLevel("custom", ["pen", "gestures"]);
-    rightClick(100, 50);
-    expect(colors()).toEqual(["sw Colore: Blu", "w Colore: Porpora", "nw Colore: Azzurro"]);
   });
 
   it("tenuto premuto segue il puntatore: lasciato verso una voce la sceglie, e non disegna", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     size(200, 100);
     drag([[10, 10], [40, 10]]);
     const drawn = editor.engine.text;
@@ -13029,7 +5983,7 @@ describe("il menu radiale, dal livello Standard", () => {
   });
 
   it("il tasto laterale della penna lo apre dov'è la penna; il clic destro che il sistema manda dopo non lo riapre", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     size(200, 100);
     const PEN = { pointerId: 6, pointerType: "pen" } as const;
     const down = pointer("pointerdown", { ...PEN, button: 2, buttons: 2, pressure: 0.3, clientX: 400, clientY: 300, timeStamp: (clock += 8) });
@@ -13046,7 +6000,7 @@ describe("il menu radiale, dal livello Standard", () => {
   });
 
   it("la penna girata cancella con qualunque strumento, e lo strumento resta", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     size(200, 100);
     drag([[10, 10], [40, 10]]);
     expect(editor.engine.text).not.toBe(SOURCE);
@@ -13056,8 +6010,8 @@ describe("il menu radiale, dal livello Standard", () => {
     expect(editor.tool).toBe("pen");
   });
 
-  it("il tasto laterale fa ciò che si è scelto: il lazo, la gomma o niente, e il clic destro dopo non apre il menu", () => {
-    mount(SOURCE, { level: "standard" });
+  it("il tasto laterale fa ciò che si è scelto: la gomma o niente", () => {
+    mount(SOURCE);
     size(200, 100);
     drag([[10, 10], [40, 10]]);
     const drawn = editor.engine.text;
@@ -13066,11 +6020,6 @@ describe("il menu radiale, dal livello Standard", () => {
     drag([[25, 2], [25, 18]], BARREL);
     expect(radial()).toBeNull();
     expect(editor.engine.text).toBe(drawn);
-    editor.setGrid({ ...editor.grid, barrel: "lasso" });
-    drag([[5, 5], [45, 5], [45, 15], [5, 15]], BARREL);
-    expect(editor.selection).toHaveLength(1);
-    expect(rightClick(45, 15, { pointerType: "pen" }).defaultPrevented).toBe(true);
-    expect(document.querySelector(".context-menu")).toBeNull();
     editor.setGrid({ ...editor.grid, barrel: "eraser" });
     drag([[25, 2], [25, 18]], BARREL);
     expect(editor.engine.text).toBe(SOURCE);
@@ -13078,7 +6027,7 @@ describe("il menu radiale, dal livello Standard", () => {
   });
 
   it("il tocco lungo del dito che disegna lo apre senza lasciare un punto; alzato nel mezzo, resta aperto", () => {
-    mount(SOURCE, { level: "standard" });
+    mount(SOURCE);
     size(200, 100);
     const FINGER = { pointerId: 9, pointerType: "touch" } as const;
     surface().dispatchEvent(pointer("pointerdown", { ...FINGER, button: 0, buttons: 1, pressure: 0.5, clientX: 100, clientY: 50, timeStamp: (clock += 8) }));
@@ -13092,12 +6041,12 @@ describe("il menu radiale, dal livello Standard", () => {
     expect(document.activeElement).toBe(surface());
   });
 
-  it("col mouse e con Maiusc+F10 si apre il menu della selezione, e il radiale è la sua ultima voce, col fuoco sulla prima voce che vale", () => {
-    mount(SOURCE, { level: "standard" });
+  it("col mouse e con Maiusc+F10 si apre il menu del foglio, e il radiale è la sua ultima voce, col fuoco sulla prima voce che vale", () => {
+    mount(SOURCE);
     size(200, 100);
     expect(rightClick(100, 50, { pointerType: "mouse" }).defaultPrevented).toBe(true);
     expect(radial()).toBeNull();
-    expect(entries().map((one) => one.querySelector(".menu-label")!.textContent).slice(0, 2)).toEqual(["Taglia", "Copia"]);
+    expect(entries().map((one) => one.querySelector(".menu-label")!.textContent).slice(0, 2)).toEqual(["Incolla", "Incolla nello stesso punto"]);
     closeContextMenu();
     surface().focus();
     expect(key("F10", { shiftKey: true }).defaultPrevented).toBe(true);
@@ -13120,220 +6069,24 @@ describe("il menu radiale, dal livello Standard", () => {
     expect(document.querySelector(".context-menu")).not.toBeNull();
     // Senza il menu della selezione Maiusc+F10 apre il radiale.
     closeContextMenu();
-    editor.setLevel("custom", ["pen", "gestures"]);
+    editor.setWorkspace("simple");
     surface().focus();
     expect(key("F10", { shiftKey: true }).defaultPrevented).toBe(true);
     expect(radial()).not.toBeNull();
   });
 
-  it("con gli strumenti che scelgono, sulle guide e all'Essenziale il clic destro resta quello di prima", () => {
-    mount(SOURCE, { level: "standard" });
+  it("con gli strumenti che scelgono il clic destro resta quello di prima", () => {
+    mount(SOURCE);
     size(200, 100);
     editor.setTool("select");
     rightClick(100, 50);
     expect(radial()).toBeNull();
     expect(document.querySelector(".context-menu")).not.toBeNull();
     closeContextMenu();
-    editor.setTool("pen");
-    editor.setLevel("essential");
-    expect(rightClick(100, 50).defaultPrevented).toBe(false);
-    expect(radial()).toBeNull();
-    const PEN = { pointerId: 6, pointerType: "pen" } as const;
-    surface().dispatchEvent(pointer("pointerdown", { ...PEN, button: 2, buttons: 2, pressure: 0.3, clientX: 100, clientY: 50, timeStamp: (clock += 8) }));
-    expect(radial()).toBeNull();
-    expect(key("F10", { shiftKey: true }).defaultPrevented).toBe(false);
   });
 });
 
-describe("«Ricalca immagine», dal livello Esperto", () => {
-  const IMAGE = "img";
-  const PNG_HREF = "data:image/png;base64,iVBORw0KGgo=";
-  const DRAWING = doc(
-    `${LAYER}<image id="${IMAGE}" x="10" y="10" width="40" height="20" href="${PNG_HREF}"><title>Logo</title></image><rect id="r" x="60" y="60" width="20" height="20"/></g>`,
-  );
-
-  /// Un codec con i pixel: 40 × 20, la metà sinistra nera e la destra
-  /// bianca.
-  function pixelCodec(): ImageCodec & { rects: string[]; closed: number } {
-    const fake = {
-      rects: [] as string[],
-      closed: 0,
-      async decode(): Promise<Decoded | null> {
-        return {
-          width: 40,
-          height: 20,
-          opaque: () => true,
-          encode: async () => null,
-          pixels(rect: { x: number; y: number; width: number; height: number }, most: number) {
-            fake.rects.push(`${rect.x} ${rect.y} ${rect.width} ${rect.height} ${most}`);
-            const data = new Uint8ClampedArray(rect.width * rect.height * 4);
-            for (let y = 0; y < rect.height; y++) {
-              for (let x = 0; x < rect.width; x++) {
-                const at = (y * rect.width + x) * 4;
-                data.fill(rect.x + x < 20 ? 0 : 255, at, at + 3);
-                data[at + 3] = 255;
-              }
-            }
-            return { width: rect.width, height: rect.height, data } as ImageData;
-          },
-          close() {
-            fake.closed++;
-          },
-        };
-      },
-    };
-    return fake;
-  }
-
-  /// Il ricalco nella pagina, che nei test non ha worker.
-  const tracer: DrawEditorOptions["tracer"] = (raster) => inlineTracer(raster, () => import("./trace"));
-
-  const traceButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Ricalca immagine…"]')!;
-  const bar = (): HTMLElement => [...host.querySelectorAll<HTMLElement>(".draw-paths")].find((each) => each.querySelector(".draw-paths-title")!.textContent === "Ricalca immagine")!;
-  const shown = (): string[] => [...bar().querySelectorAll("label")].filter((label) => !label.hidden).map((label) => label.querySelector("span")!.textContent ?? "");
-  const control = <E extends HTMLElement>(name: string): E =>
-    [...bar().querySelectorAll("label")].find((label) => label.textContent!.startsWith(name))!.querySelector<E>("input, select")!;
-  const status = (): string => bar().querySelector("output")!.textContent ?? "";
-  const action = (name: string): HTMLButtonElement => [...bar().querySelectorAll("button")].find((each) => each.textContent === name)!;
-  const painted = (): Element => surface().querySelector(`image[data-scene-id="${IMAGE}"]`)!;
-  /// Il gruppo che l'anteprima mostra al posto dell'immagine; `null` senza.
-  const cover = (): Element | null => {
-    const next = painted().nextElementSibling;
-    return next !== null && next.localName === "g" && !next.hasAttribute("data-scene-id") ? next : null;
-  };
-
-  /// Apre la barra e aspetta il primo ricalco.
-  async function openBar(): Promise<void> {
-    editor.select([IMAGE]);
-    traceButton().click();
-    await vi.waitFor(() => expect(status()).toMatch(/^1 forma/));
-  }
-
-  it("c'è solo all'Esperto, con un'immagine scelta da sola", () => {
-    mount(DRAWING, { level: "standard", imageCodec: pixelCodec(), tracer });
-    editor.select([IMAGE]);
-    expect(traceButton().hidden).toBe(true);
-    editor.setLevel("expert");
-    expect(traceButton().hidden).toBe(false);
-    editor.select([IMAGE, "r"]);
-    expect(traceButton().hidden).toBe(true);
-    editor.select(["r"]);
-    expect(traceButton().hidden).toBe(true);
-  });
-
-  it("ricalca i pixel che si vedono, mostra il gruppo al posto dell'immagine e lo scrive in un passo sopra di lei", async () => {
-    const codec = pixelCodec();
-    mount(DRAWING, { level: "expert", imageCodec: codec, tracer });
-    const before = editor.engine.text;
-    await openBar();
-    expect(codec.rects).toEqual(["0 0 40 20 8000000"]);
-    expect(codec.closed).toBe(1);
-    expect(shown()).toEqual(["Tipo", "Colori", "Dettaglio", "Senza il bianco"]);
-    expect(control<HTMLSelectElement>("Tipo").value).toBe("colors");
-    expect(status()).toBe("1 forma, 4 nodi, 1 colore.");
-    // L'anteprima: l'immagine non si vede, e al suo posto il gruppo, senza id.
-    expect((painted() as SVGElement).style.visibility).toBe("hidden");
-    const preview = cover()!;
-    expect([...preview.querySelectorAll("path")].map((path) => path.getAttribute("fill"))).toEqual(["#000000"]);
-    expect(preview.querySelector("[id]")).toBeNull();
-    expect(changes).toEqual([]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    action("Applica").click();
-    expect(changes).toHaveLength(1);
-    const [group] = editor.selection;
-    const text = editor.engine.text;
-    expect(text).toMatch(/<image id="img"[^>]* display="none"/);
-    const written = new RegExp(`<g id="${group}">\\s*<title>Logo</title>\\s*<path id="[^"]+" d="([^"]+)" fill="#000000"/>\\s*</g>`).exec(text);
-    expect(written).not.toBeNull();
-    // La metà nera, dove l'immagine la mostra.
-    expect(written![1]!.match(/-?\d+(\.\d+)?/g)!.map(Number).sort((a, b) => a - b)).toEqual([10, 10, 10, 10, 30, 30, 30, 30]);
-    expect(spoken()).toBe("Immagine ricalcata: 1 forma, in un gruppo. L’immagine resta, nascosta, sotto il gruppo.");
-    expect(bar().hidden).toBe(true);
-    expect(document.activeElement).toBe(surface());
-    editor.undo();
-    expect(editor.engine.text).toBe(before);
-  });
-
-  it("il tipo cambia i campi, un cursore ricalca di nuovo, Esc chiude senza scrivere", async () => {
-    mount(DRAWING, { level: "expert", imageCodec: pixelCodec(), tracer });
-    await openBar();
-    const kind = control<HTMLSelectElement>("Tipo");
-    kind.value = "bw";
-    kind.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(shown()).toEqual(["Tipo", "Soglia", "Dettaglio"]);
-    // I campi aspettano le impostazioni del tipo, che li riscrivono.
-    const threshold = control<HTMLInputElement>("Soglia");
-    expect(threshold.disabled).toBe(true);
-    expect(status()).toBe("Ricalco…");
-    await vi.waitFor(() => expect(threshold.disabled).toBe(false));
-    await vi.waitFor(() => expect(status()).toBe("1 forma, 4 nodi, 1 colore."));
-    // Una soglia sotto il nero non trova inchiostro.
-    threshold.value = "0";
-    threshold.dispatchEvent(new Event("input", { bubbles: true }));
-    expect(threshold.closest("label")!.querySelector(".draw-paths-value")!.textContent).toBe("0");
-    await vi.waitFor(() => expect(status()).toBe("Il ricalco non trova forme: prova un altro tipo o un’altra soglia."));
-    expect(cover()!.querySelector("path")).toBeNull();
-    action("Applica").click();
-    expect(spoken()).toBe("Il ricalco non trova forme: prova un altro tipo o un’altra soglia.");
-    expect(bar().hidden).toBe(false);
-    key("Escape", {}, threshold);
-    expect(bar().hidden).toBe(true);
-    expect(cover()).toBeNull();
-    expect((painted() as SVGElement).style.visibility).toBe("");
-    expect(changes).toEqual([]);
-    expect(document.activeElement).toBe(surface());
-  });
-
-  it("si chiude se cambia la scelta; riapre col tipo e i valori dell'ultimo ricalco scritto", async () => {
-    mount(DRAWING, { level: "expert", imageCodec: pixelCodec(), tracer });
-    await openBar();
-    editor.select(["r"]);
-    expect(bar().hidden).toBe(true);
-    expect(cover()).toBeNull();
-    await openBar();
-    const detail = control<HTMLInputElement>("Dettaglio");
-    detail.value = "90";
-    detail.dispatchEvent(new Event("input", { bubbles: true }));
-    await vi.waitFor(() => expect(status()).toMatch(/^1 forma/));
-    action("Applica").click();
-    editor.undo();
-    await openBar();
-    expect(control<HTMLInputElement>("Dettaglio").value).toBe("90");
-  });
-
-  it("legge un'immagine del vault da chi monta l'editor", async () => {
-    const read: string[] = [];
-    const images: DrawImages = {
-      url: async (href) => `blob:vault/${href}`,
-      read: async (href) => {
-        read.push(href);
-        return new Blob([Uint8Array.from([0x89, 0x50, 0x4e, 0x47])], { type: "image/png" });
-      },
-    };
-    mount(DRAWING.replace(PNG_HREF, "immagini/logo.png"), { level: "expert", imageCodec: pixelCodec(), tracer, images });
-    await openBar();
-    expect(read).toEqual(["immagini/logo.png"]);
-  });
-
-  it("un'immagine dal web non si ricalca, e lo dice", () => {
-    mount(DRAWING.replace(PNG_HREF, "https://example.com/logo.png"), { level: "expert", imageCodec: pixelCodec(), tracer });
-    editor.select([IMAGE]);
-    traceButton().click();
-    expect(spoken()).toBe("Un’immagine dal web non si ricalca: mettila nel vault, e ricalca quella.");
-    expect(bar().hidden).toBe(true);
-  });
-
-  it("un data URI che non si legge lo dice, e la barra si chiude", async () => {
-    mount(DRAWING.replace(PNG_HREF, "data:image/png,%89PNG"), { level: "expert", imageCodec: pixelCodec(), tracer });
-    editor.select([IMAGE]);
-    traceButton().click();
-    await vi.waitFor(() => expect(spoken()).toBe("Non è un’immagine che il disegno sa leggere."));
-    expect(bar().hidden).toBe(true);
-    expect(cover()).toBeNull();
-  });
-});
-
-describe("le tavole, dal livello Standard", () => {
+describe("le tavole dei disegni che le hanno", () => {
   const SQUARE = "oa1a1a1a1";
   /// Due tavole 400 × 200, la seconda a 80 unità dalla prima, con un
   /// quadrato sopra.
@@ -13348,367 +6101,11 @@ describe("le tavole, dal livello Standard", () => {
 
   const names = (): Array<[string | null, boolean]> =>
     [...host.querySelectorAll<HTMLElement>(".draw-sheet-name")].map((name) => [name.textContent, name.hasAttribute("data-chosen")]);
-  const boarding = (source = BOARDS): void => {
-    mount(source, { level: "standard" });
-    size(1000, 500);
-    key("f");
-  };
-  const boardsButton = (): HTMLButtonElement | null => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Tavole"]');
-  const boardsList = (): HTMLElement => host.querySelector<HTMLElement>('.draw-boards [role="listbox"]')!;
-  /// Le righe dell'elenco, dall'alto: il nome e la misura, e `*` su quella
-  /// di adesso.
-  const boardRows = (): string[] =>
-    [...host.querySelectorAll<HTMLElement>('.draw-boards [role="option"]')]
-      .sort((a, b) => Number(a.dataset.index) - Number(b.dataset.index))
-      .map((item) => `${item.querySelector(".draw-board-name")!.textContent} ${item.querySelector(".draw-board-size")!.textContent}${item.getAttribute("aria-current") === "true" ? " *" : ""}`);
   /// Dove stanno le carte delle tavole sullo schermo.
   const sheets = (): string[] => [...host.querySelectorAll<HTMLElement>(".draw-sheets .draw-page")].map((sheet) => sheet.style.transform);
 
-  it("F sceglie lo strumento e la tavola che si guarda, e lascia la selezione", () => {
-    mount(BOARDS, { level: "standard" });
-    size(1000, 500);
-    editor.select([SQUARE]);
-    expect(names()).toEqual([["Copertina", false], ["Evaporazione", false]]);
-    key("f");
-    expect(editor.tool).toBe("board");
-    expect(editor.selection).toEqual([]);
-    expect(spoken()).toBe("Strumento: Tavola. Copertina, tavola 1 di 2, 400 × 200.");
-    expect(names()).toEqual([["Copertina", true], ["Evaporazione", false]]);
-    expect(host.querySelectorAll(".draw-sheets .draw-page")).toHaveLength(2);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("un trascinamento fuori dalle tavole ne disegna una, e con Maiusc anche dentro", () => {
-    boarding();
-    drag([[100, 300], [150, 350], [300, 420]]);
-    expect(spoken()).toBe("Tavola 3 aggiunta, 200 × 120.");
-    expect(editor.engine.text).toMatch(/<view id="b[0-9a-z]{8}" fub:role="board" viewBox="100 300 200 120">\s*<title>Tavola 3<\/title>\s*<\/view>/);
-    expect(names().map(([name, chosen]) => [name, chosen])).toEqual([["Copertina", false], ["Evaporazione", false], ["Tavola 3", true]]);
-    // Senza Maiusc, dentro una tavola si sposta lei.
-    drag([[50, 50], [100, 100], [150, 120]], { shiftKey: true });
-    expect(spoken()).toBe("Tavola 4 aggiunta, 100 × 70.");
-    editor.undo();
-    editor.undo();
-    expect(editor.engine.text).toBe(BOARDS);
-  });
-
-  it("spostare una tavola porta con sé ciò che le sta sopra, e annulla la riporta", () => {
-    boarding();
-    drag([[600, 150], [620, 170], [650, 200]]);
-    expect(spoken()).toBe("Evaporazione spostata a x 530, y 50, con 1 oggetto.");
-    expect(editor.engine.text).toContain('<view id="b9i0j1k2l" fub:role="board" viewBox="530 50 400 200">');
-    expect(editor.engine.text).toContain('<rect id="c5e6f7g8h" fub:role="paper" fub:board="b9i0j1k2l" x="530" y="50" width="400" height="200" fill="#fafafa"/>');
-    expect(names()).toEqual([["Copertina", false], ["Evaporazione", true]]);
-    expect(editor.selection).toEqual([]);
-    editor.undo();
-    expect(editor.engine.text).toBe(BOARDS);
-  });
-
-  it("una maniglia del bordo allarga la tavola scelta", () => {
-    boarding();
-    drag([[400, 100], [420, 100], [440, 100]]);
-    expect(spoken()).toBe("Copertina, 440 × 200.");
-    expect(editor.engine.text).toContain('<view id="b1a2b3c4d" fub:role="board" viewBox="0 0 440 200">');
-    expect(editor.engine.text).toContain('x="0" y="0" width="440" height="200" fill="#fafafa"/>');
-  });
-
-  it("da tastiera si va di tavola in tavola, si sposta, si allarga e si toglie", () => {
-    boarding();
-    key("Tab");
-    expect(spoken()).toBe("Evaporazione, tavola 2 di 2, 400 × 200.");
-    // Oltre l'ultima, il Tab esce dal foglio.
-    expect(key("Tab").defaultPrevented).toBe(false);
-    key("ArrowRight");
-    expect(spoken()).toBe("Evaporazione spostata a x 481, y 0, con 1 oggetto.");
-    key("ArrowDown", { ctrlKey: true, shiftKey: true });
-    expect(spoken()).toBe("Evaporazione, 400 × 210.");
-    key("Home");
-    expect(spoken()).toBe("Copertina, tavola 1 di 2, 400 × 200.");
-    key("Delete");
-    expect(spoken()).toBe("Copertina eliminata; il disegno resta com’era. Evaporazione, tavola 1 di 1, 400 × 210.");
-    expect(names()).toEqual([["Evaporazione", true]]);
-    key("Escape");
-    expect(spoken()).toBe("Nessuna tavola scelta.");
-    expect(names()).toEqual([["Evaporazione", false]]);
-    editor.undo();
-    editor.undo();
-    editor.undo();
-    expect(editor.engine.text).toBe(BOARDS);
-  });
-
-  it("Alt e Pag vanno di tavola in tavola con ogni strumento", () => {
-    mount(BOARDS, { level: "standard" });
-    size(1000, 500);
-    key("PageDown", { altKey: true });
-    expect(spoken()).toBe("Copertina, tavola 1 di 2, 400 × 200.");
-    key("PageDown", { altKey: true });
-    expect(spoken()).toBe("Evaporazione, tavola 2 di 2, 400 × 200.");
-    key("PageDown", { altKey: true });
-    expect(spoken()).toBe("Evaporazione è l’ultima tavola.");
-    expect(editor.tool).toBe("pen");
-  });
-
-  it("senza tavole sceglie la pagina, e la prima tavola disegnata la fa diventare la tavola 1", () => {
-    boarding(SOURCE);
-    expect(spoken()).toBe("Strumento: Tavola. Pagina, 100 × 100. Disegna una tavola per dividere il disegno in pagine.");
-    drag([[200, 20], [250, 50], [300, 90]]);
-    expect(spoken()).toBe("La pagina è diventata Tavola 1; Tavola 2 aggiunta, 100 × 70.");
-    expect(names()).toEqual([["Tavola 1", false], ["Tavola 2", true]]);
-    // Due passi: la pagina che diventa la tavola 1, poi la tavola nuova.
-    // Annullata questa, resta la tavola 1, ed è lei la scelta.
-    expect(changes).toHaveLength(2);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Nuova tavola.");
-    expect(names()).toEqual([["Tavola 1", true]]);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Prima tavola dalla pagina.");
-    expect(editor.engine.text).toBe(SOURCE);
-    key("d", { ctrlKey: true });
-    expect(spoken()).toBe("La pagina è diventata Tavola 1. Tavola 1 copia aggiunta a x 180, y 0, con 1 oggetto.");
-    editor.undo();
-    editor.undo();
-    editor.redo();
-    expect(spoken()).toBe("Ripetuto: Prima tavola dalla pagina.");
-    expect(names()).toEqual([["Tavola 1", true]]);
-    editor.redo();
-    expect(names()).toEqual([["Tavola 1", false], ["Tavola 1 copia", true]]);
-  });
-
-  it("con Alt, spostare una tavola ne lascia una copia dove la si posa, con ciò che le sta sopra", () => {
-    boarding();
-    const target = surface();
-    const at = (type: string, x: number, y: number, altKey: boolean): void => {
-      const buttons = type === "pointerup" ? 0 : 1;
-      target.dispatchEvent(pointer(type, { ...MOUSE, button: type === "pointermove" ? -1 : 0, buttons, pressure: buttons * 0.5, clientX: x, clientY: y, altKey, timeStamp: (clock += 8) }));
-    };
-    at("pointerdown", 600, 150, true);
-    at("pointermove", 600, 300, true);
-    // La tavola resta dov'è; la cornice della copia dice dove andrà.
-    expect(target.dataset.grip).toBe("copy");
-    expect(sheets()).toEqual(["translate(0px, 0px)", "translate(480px, 0px)"]);
-    // Alt lasciato a metà gesto: la tavola si sposta, e lo si vede.
-    target.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt", bubbles: true }));
-    expect(target.dataset.grip).toBe("move");
-    expect(sheets()).toEqual(["translate(0px, 0px)", "translate(480px, 150px)"]);
-    target.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", altKey: true, bubbles: true }));
-    expect(target.dataset.grip).toBe("copy");
-    expect(sheets()).toEqual(["translate(0px, 0px)", "translate(480px, 0px)"]);
-    at("pointermove", 600, 450, true);
-    at("pointerup", 600, 450, true);
-    // La copia si aggancia anche alla tavola da cui viene.
-    expect(spoken()).toBe("Evaporazione copia aggiunta a x 480, y 300, con 1 oggetto. Agganciato: il bordo sinistro in linea con quello di Evaporazione.");
-    const text = editor.engine.text;
-    expect(text).toContain('<view id="b9i0j1k2l" fub:role="board" viewBox="480 0 400 200"><title>Evaporazione</title></view>');
-    expect(text).toMatch(/<view id="b[0-9a-z]{8}" fub:role="board" viewBox="480 300 400 200">\s*<title>Evaporazione copia<\/title>\s*<\/view>/);
-    expect(text).toMatch(/<rect id="o[0-9a-z]{8}" x="600" y="50" width="20" height="20" fill="#000000" transform="matrix\(1 0 0 1 0 300\)"\/>/);
-    expect(text).toContain(`<rect id="${SQUARE}" x="600" y="50" width="20" height="20" fill="#000000"/>`);
-    expect(names()).toEqual([["Copertina", false], ["Evaporazione", false], ["Evaporazione copia", true]]);
-    editor.undo();
-    expect(editor.engine.text).toBe(BOARDS);
-  });
-
-  it("Ctrl+D con lo strumento Tavola duplica la tavola scelta accanto, con ciò che le sta sopra", () => {
-    boarding();
-    key("Tab");
-    expect(key("d", { ctrlKey: true }).defaultPrevented).toBe(true);
-    expect(spoken()).toBe("Evaporazione copia aggiunta a x 960, y 0, con 1 oggetto.");
-    const text = editor.engine.text;
-    // La copia sta subito dopo la sua tavola, con la sua carta.
-    expect(text).toMatch(/<view id="b9i0j1k2l" fub:role="board" viewBox="480 0 400 200"><title>Evaporazione<\/title><\/view>\s*<view id="b[0-9a-z]{8}" fub:role="board" viewBox="960 0 400 200">/);
-    expect(text).toMatch(/<rect id="c[0-9a-z]{8}" fub:role="paper" fub:board="b[0-9a-z]{8}" x="960" y="0" width="400" height="200" fill="#fafafa"\/>/);
-    expect(text).toMatch(/<rect id="o[0-9a-z]{8}" x="600" y="50" width="20" height="20" fill="#000000" transform="matrix\(1 0 0 1 480 0\)"\/>/);
-    expect(names()).toEqual([["Copertina", false], ["Evaporazione", false], ["Evaporazione copia", true]]);
-    // Ancora: la copia della copia va più in là.
-    key("d", { ctrlKey: true });
-    expect(spoken()).toBe("Evaporazione copia copia aggiunta a x 1440, y 0, con 1 oggetto.");
-    editor.undo();
-    editor.undo();
-    expect(editor.engine.text).toBe(BOARDS);
-    key("Escape");
-    key("d", { ctrlKey: true });
-    expect(spoken()).toBe("Nessuna tavola scelta.");
-    expect(editor.engine.text).toBe(BOARDS);
-  });
-
-  it("senza tavole, Ctrl+D duplica la pagina, che prima diventa la tavola 1", () => {
-    boarding(SOURCE);
-    key("d", { ctrlKey: true });
-    expect(spoken()).toBe("La pagina è diventata Tavola 1. Tavola 1 copia aggiunta a x 180, y 0, con 1 oggetto.");
-    expect(names()).toEqual([["Tavola 1", false], ["Tavola 1 copia", true]]);
-    // Annullata la copia, resta la tavola 1, scelta; poi la pagina.
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Copia di una tavola.");
-    expect(names()).toEqual([["Tavola 1", true]]);
-    editor.undo();
-    expect(editor.engine.text).toBe(SOURCE);
-    expect(spoken()).toBe("Annullato: Prima tavola dalla pagina.");
-  });
-
-  it("il pulsante Tavole apre l'elenco, che segna la tavola di adesso e porta alle altre", () => {
-    mount(BOARDS, { level: "standard" });
-    size(1000, 500);
-    expect(boardsButton()!.hidden).toBe(false);
-    boardsButton()!.click();
-    expect(boardsButton()!.getAttribute("aria-expanded")).toBe("true");
-    expect(document.activeElement).toBe(boardsList());
-    // Senza una tavola scelta, quella di adesso è quella che si guarda.
-    expect(boardRows()).toEqual(["Copertina 400 × 200 *", "Evaporazione 400 × 200"]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    key("ArrowDown", {}, boardsList());
-    key("Enter", {}, boardsList());
-    expect(spoken()).toBe("Evaporazione, tavola 2 di 2, 400 × 200.");
-    expect(boardRows()).toEqual(["Copertina 400 × 200", "Evaporazione 400 × 200 *"]);
-    expect(document.activeElement).toBe(boardsList());
-    // Esc torna al foglio; il pulsante chiude l'elenco.
-    key("Escape", {}, boardsList());
-    expect(document.activeElement).toBe(surface());
-    boardsButton()!.click();
-    expect(host.querySelector<HTMLElement>(".draw-boards")!.hidden).toBe(true);
-  });
-
-  it("dall'elenco si aggiungono, si rinominano, si riordinano, si duplicano e si eliminano le tavole", () => {
-    mount(BOARDS, { level: "standard" });
-    size(1000, 500);
-    boardsButton()!.click();
-    host.querySelector<HTMLButtonElement>(".draw-boards-add")!.click();
-    // Della misura di quella di adesso, a destra di tutte; il nome si scrive
-    // subito.
-    expect(spoken()).toBe("Tavola 3 aggiunta, 400 × 200.");
-    expect(editor.engine.text).toMatch(/<view id="b[0-9a-z]{8}" fub:role="board" viewBox="960 0 400 200">\s*<title>Tavola 3<\/title>/);
-    const name = host.querySelector<HTMLInputElement>(".draw-boards .draw-board-rename")!;
-    expect(document.activeElement).toBe(name);
-    name.value = "Condensazione";
-    key("Enter", {}, name);
-    expect(spoken()).toBe("Ora la tavola si chiama «Condensazione».");
-    expect(boardRows()).toEqual(["Copertina 400 × 200", "Evaporazione 400 × 200", "Condensazione 400 × 200 *"]);
-    key("ArrowUp", { altKey: true }, boardsList());
-    expect(spoken()).toBe("Condensazione ora è la tavola 2 di 3.");
-    expect(boardRows()).toEqual(["Copertina 400 × 200", "Condensazione 400 × 200 *", "Evaporazione 400 × 200"]);
-    key("d", { ctrlKey: true }, boardsList());
-    expect(spoken()).toBe("Condensazione copia aggiunta a x 1440, y 0.");
-    expect(boardRows()).toEqual(["Copertina 400 × 200", "Condensazione 400 × 200", "Condensazione copia 400 × 200 *", "Evaporazione 400 × 200"]);
-    key("Delete", {}, boardsList());
-    expect(spoken()).toBe("Condensazione copia eliminata; il disegno resta com’era. Evaporazione, tavola 3 di 3, 400 × 200.");
-    expect(boardRows()).toEqual(["Copertina 400 × 200", "Condensazione 400 × 200", "Evaporazione 400 × 200 *"]);
-    // Con l'elenco aperto, F2 sul foglio apre il nome lì.
-    key("f");
-    key("F2");
-    expect(document.activeElement).toBe(host.querySelector(".draw-boards .draw-board-rename"));
-    expect(document.querySelector(".modale")).toBeNull();
-    key("Escape", {}, host.querySelector<HTMLElement>(".draw-boards .draw-board-rename")!);
-    for (let step = 0; step < 5; step++) editor.undo();
-    expect(editor.engine.text).toBe(BOARDS);
-  });
-
-  it("in un disegno senza pagina, «Nuova tavola» ne mette una attorno a ciò che c'è", () => {
-    const loose = SOURCE.replace(' viewBox="0 0 100 100"', "");
-    mount(loose, { level: "standard" });
-    size(1000, 500);
-    boardsButton()!.click();
-    expect(host.querySelector(".draw-boards-empty")!.textContent).toBe(
-      "Il disegno non ha una pagina: è un foglio senza bordi. Con «Nuova tavola» una tavola racchiude tutto ciò che c’è.",
-    );
-    host.querySelector<HTMLButtonElement>(".draw-boards-add")!.click();
-    expect(spoken()).toBe("Tavola 1 aggiunta, 22 × 22.");
-    expect(editor.engine.text).toMatch(/<view id="b[0-9a-z]{8}" fub:role="board" viewBox="59 59 22 22">\s*<title>Tavola 1<\/title>/);
-    expect(boardRows()).toEqual(["Tavola 1 22 × 22 *"]);
-    editor.undo();
-    expect(editor.engine.text).toBe(loose);
-  });
-
-  /// Il pannello delle proprietà, aperto, e i suoi campi.
-  const openProperties = (): void => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!.click();
-  const propertySection = (id: string): HTMLElement => properties().querySelector<HTMLElement>(`.draw-properties-section[data-section="${id}"]`)!;
-  const subject = (): string | null => properties().querySelector(".draw-properties-subject")!.textContent;
-  const preset = (id: string): HTMLSelectElement => property(id).querySelector("select")!;
-  const choosePreset = (id: string, value: string): void => {
-    preset(id).value = value;
-    preset(id).dispatchEvent(new Event("change", { bubbles: true }));
-  };
-  const orientations = (id: string): Array<string | null> => [...property(id).querySelectorAll("button")].map((button) => button.getAttribute("aria-pressed"));
-  /// Vero se il pannello mostra il campo `id`: un campo entra nel pannello
-  /// la prima volta che ha di che mostrarsi.
-  const showing = (id: string): boolean => {
-    const field = properties().querySelector<HTMLElement>(`.draw-properties-field[data-field="${id}"]`);
-    return field !== null && !field.hidden;
-  };
-  /// Scrive `text` nel campo `id` del pannello e lo fa partire con Invio.
-  const writeProperty = (id: string, text: string): void => {
-    const input = propertyInput(id);
-    input.focus();
-    input.value = text;
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
-  };
-
-  it("il pannello delle proprietà mostra la tavola scelta, e la segue", () => {
-    boarding();
-    openProperties();
-    expect(subject()).toBe("Tavola 1 di 2");
-    expect(propertySection("board").hidden).toBe(false);
-    expect(propertyInput("boardName").value).toBe("Copertina");
-    expect(preset("boardPreset").value).toBe("custom");
-    expect(orientations("boardOrientation")).toEqual(["false", "true"]);
-    expect(["boardX", "boardY", "boardWidth", "boardHeight"].map((id) => propertyInput(id).value)).toEqual(["0", "0", "400", "200"]);
-    // Con le tavole la pagina è la tela: non ha un formato.
-    expect(showing("pagePreset")).toBe(false);
-    expect(showing("pageWidth")).toBe(true);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    key("Tab");
-    expect(subject()).toBe("Tavola 2 di 2");
-    expect(propertyInput("boardName").value).toBe("Evaporazione");
-    expect(propertyInput("boardX").value).toBe("480");
-    // Con un altro strumento il pannello torna al disegno.
-    key("v");
-    expect(subject()).toBe("Il disegno");
-    expect(propertySection("board").hidden).toBe(true);
-  });
-
-  it("dal pannello la tavola prende una misura pronta, il verso, il posto con ciò che porta, le misure e il nome", () => {
-    boarding();
-    openProperties();
-    key("Tab");
-    choosePreset("boardPreset", "hd");
-    expect(editor.engine.text).toContain('<view id="b9i0j1k2l" fub:role="board" viewBox="480 0 1280 720">');
-    expect(preset("boardPreset").value).toBe("hd");
-    property("boardOrientation").querySelector<HTMLButtonElement>('button[aria-label="Verticale"]')!.click();
-    expect(editor.engine.text).toContain('<view id="b9i0j1k2l" fub:role="board" viewBox="480 0 720 1280">');
-    expect(orientations("boardOrientation")).toEqual(["true", "false"]);
-    writeProperty("boardX", "500");
-    expect(editor.engine.text).toContain('<view id="b9i0j1k2l" fub:role="board" viewBox="500 0 720 1280">');
-    expect(editor.engine.text).toContain(`<rect id="${SQUARE}" x="600" y="50" width="20" height="20" fill="#000000" transform="matrix(1 0 0 1 20 0)"/>`);
-    writeProperty("boardWidth", "800");
-    expect(editor.engine.text).toContain('<view id="b9i0j1k2l" fub:role="board" viewBox="500 0 800 1280">');
-    expect(preset("boardPreset").value).toBe("custom");
-    writeProperty("boardName", "Retro");
-    expect(editor.engine.text).toContain("<title>Retro</title>");
-    expect(names()).toEqual([["Copertina", false], ["Retro", true]]);
-    // Un nome vuoto non cambia niente, come nell'elenco.
-    writeProperty("boardName", "  ");
-    expect(propertyInput("boardName").value).toBe("Retro");
-    for (let step = 0; step < 5; step += 1) editor.undo();
-    expect(editor.engine.text).toBe(BOARDS);
-  });
-
-  it("senza tavole, il pannello dà alla pagina una misura pronta e un verso", () => {
-    mount(SOURCE, { level: "standard" });
-    openProperties();
-    expect(subject()).toBe("Il disegno");
-    expect(preset("pagePreset").value).toBe("custom");
-    expect(property("pageOrientation").querySelector("button")!.getAttribute("aria-disabled")).toBe("true");
-    choosePreset("pagePreset", "a4");
-    expect(editor.engine.text).toContain('viewBox="0 0 793.7 1122.52"');
-    property("pageOrientation").querySelector<HTMLButtonElement>('button[aria-label="Orizzontale"]')!.click();
-    expect(editor.engine.text).toContain('viewBox="0 0 1122.52 793.7"');
-    expect(preset("pagePreset").value).toBe("a4");
-    expect(orientations("pageOrientation")).toEqual(["false", "true"]);
-    editor.undo();
-    editor.undo();
-    expect(editor.engine.text).toBe(SOURCE);
-  });
-
   it("dall'indice una tavola si sceglie e si inquadra, e la selezione resta", () => {
-    mount(BOARDS, { level: "standard" });
+    mount(BOARDS);
     size(1000, 500);
     editor.select([SQUARE]);
     const before = sheets();
@@ -13724,12 +6121,9 @@ describe("le tavole, dal livello Standard", () => {
     // trova scelta.
     expect(editor.reveal(BOARDS.indexOf("<title>Copertina"))).toBe(true);
     expect(spoken()).toBe("Copertina, tavola 1 di 2, 400 × 200.");
-    key("f");
-    expect(spoken()).toBe("Strumento: Tavola. Copertina, tavola 1 di 2, 400 × 200.");
-    expect(names()).toEqual([["Copertina", true], ["Evaporazione", false]]);
   });
 
-  it("all'Essenziale le tavole si vedono, ma lo strumento, i suoi tasti e l'elenco non ci sono", () => {
+  it("si vedono coi loro nomi, ma lo strumento, i suoi tasti e l'elenco non ci sono più (ADR 0231)", () => {
     mount(BOARDS);
     size(1000, 500);
     key("f");
@@ -13737,7 +6131,7 @@ describe("le tavole, dal livello Standard", () => {
     expect(editor.tool).toBe("pen");
     expect(spoken()).toBe("");
     expect(names()).toEqual([["Copertina", false], ["Evaporazione", false]]);
-    expect(boardsButton()?.hidden ?? true).toBe(true);
+    expect(host.querySelector('[role="toolbar"] button[aria-label="Tavole"]')).toBeNull();
   });
 });
 
@@ -13758,12 +6152,12 @@ describe("«Esporta»: ciò che il disegno offre", () => {
   ];
 
   it("senza selezione, le tavole nel loro ordine", () => {
-    mount(SOURCE_EXPORT, { level: "standard" });
+    mount(SOURCE_EXPORT);
     expect(editor.exportScene()).toEqual({ scene: { selection: null, boards: BOARDS_OFFERED }, naming: null, named: 0 });
   });
 
   it("la selezione per id, col riquadro sui numeri interi, e gli id che mancano pronti in un passo che non è ancora scritto", () => {
-    mount(SOURCE_EXPORT, { level: "standard" });
+    mount(SOURCE_EXPORT);
     key("a", { ctrlKey: true });
     const offer = editor.exportScene();
     const naming = offer.naming as { op: "batch"; ops: { op: string; path: number[]; tag: string; id: string }[] };
@@ -13786,7 +6180,7 @@ describe("«Esporta»: ciò che il disegno offre", () => {
   });
 
   it("in sola lettura gli id non si danno: la selezione resta con quelli che ha", () => {
-    mount(SOURCE_EXPORT, { level: "standard" });
+    mount(SOURCE_EXPORT);
     key("a", { ctrlKey: true });
     editor.setReadOnly(true);
     expect(editor.exportScene()).toEqual({
@@ -13797,7 +6191,7 @@ describe("«Esporta»: ciò che il disegno offre", () => {
   });
 });
 
-describe("le punte delle linee, dal livello Standard", () => {
+describe("le punte delle linee, nel Completo", () => {
   const L = "ol1l1l1l1";
   const LINE = doc(`${LAYER}<line id="${L}" x1="20" y1="40" x2="120" y2="40" stroke="#d55e00" stroke-width="2"/></g>`);
   const face = (id: string): HTMLButtonElement => property(id).querySelector<HTMLButtonElement>(".draw-properties-menu")!;
@@ -13814,7 +6208,7 @@ describe("le punte delle linee, dal livello Standard", () => {
   const markers = (): string[] => [...editor.engine.text.matchAll(/<marker [^>]*>/g)].map((match) => match[0]);
 
   it("dal pannello una punta prende il colore della linea, e lo segue, ogni scelta in un passo col suo nome", () => {
-    mount(LINE, { level: "standard" });
+    mount(LINE);
     editor.select([L]);
     key("Enter");
     expect(face("tipEnd").getAttribute("aria-label")).toBe("Punta di fine: Nessuna");
@@ -13842,7 +6236,7 @@ describe("le punte delle linee, dal livello Standard", () => {
   });
 
   it("«Scambia inizio e fine» porta la punta al capo opposto, e Esc chiude il menu tornando al pulsante", () => {
-    mount(LINE, { level: "standard" });
+    mount(LINE);
     editor.select([L]);
     key("Enter");
     pick("tipStart", "Cerchio");
@@ -13859,609 +6253,6 @@ describe("le punte delle linee, dal livello Standard", () => {
     expect(document.activeElement).toBe(face("tipEnd"));
     editor.undo();
     expect(spoken()).toBe("Annullato: Punte scambiate.");
-  });
-});
-
-describe("le punte dei tracciati nei comandi, dal livello Esperto", () => {
-  const MS = MARKER("rs9s9s9s9", "circle", "small", "start");
-  const ME = MARKER("re9e9e9e9", "triangle", "large", "end");
-  const MV = MARKER("rv9v9v9v9", "vee", "medium", "start");
-  const L = "ol9l9l9l9";
-  const B = "ob9b9b9b9";
-  const P = "op9p9p9p9";
-  const STROKE = 'stroke="#d55e00" stroke-width="2"';
-  const LINE = `<line id="${L}" x1="200" y1="20" x2="300" y2="20" ${STROKE} marker-start="url(#rs9s9s9s9)" marker-end="url(#re9e9e9e9)"/>`;
-  const tap = (x: number, y: number, init: Init = {}): void => drag([[x, y]], init);
-
-  it("le Forbici: una punta per pezzo", () => {
-    const SRC = doc(DEFS(MS, ME) + LAYER + LINE + "</g>");
-    mount(SRC, { level: "expert" });
-    editor.focus();
-    key("c");
-    tap(250, 21);
-    const [, piece] = editor.selection;
-    expect(editor.engine.text).toContain(`<path id="${L}" d="M200 20 L250 20" ${STROKE} marker-start="url(#rs9s9s9s9)"/>`);
-    expect(editor.engine.text).toContain(`<path id="${piece}" d="M250 20 L300 20" ${STROKE} marker-end="url(#re9e9e9e9)"/>`);
-    expect(markersIn({ engine: editor.engine } as never)).toEqual(["rs9s9s9s9", "re9e9e9e9"]);
-    editor.undo();
-    expect(editor.engine.text).toBe(SRC);
-  });
-
-  it("il Coltello su una forma chiusa con punte: regioni senza punte", () => {
-    const SRC = doc(DEFS(MS, ME) + LAYER + `<path id="${P}" d="M0 0 L100 0 L100 50 L0 50 Z" fill="#d55e00" ${STROKE} marker-start="url(#rs9s9s9s9)" marker-end="url(#re9e9e9e9)"/></g>`);
-    mount(SRC, { level: "expert" });
-    editor.focus();
-    key("c");
-    drag([[50, -20], [52, 10], [50, 40], [50, 70]]);
-    expect(editor.selection).toHaveLength(2);
-    expect(editor.engine.text).not.toContain("marker-");
-    expect(editor.engine.text).not.toContain("<marker");
-    editor.undo();
-    expect(editor.engine.text).toBe(SRC);
-  });
-
-  it("i nodi: chiudere toglie le punte", () => {
-    const SRC = doc(DEFS(MS, ME) + LAYER + `<path id="${P}" d="M10 10 L50 10 L50 50" fill="none" ${STROKE} marker-start="url(#rs9s9s9s9)" marker-end="url(#re9e9e9e9)"/></g>`);
-    mount(SRC, { level: "expert" });
-    editor.select([P]);
-    editor.focus();
-    key("n");
-    tap(10, 10);
-    tap(50, 50, { shiftKey: true });
-    key("J", { shiftKey: true });
-    expect(spoken()).toBe("Capi uniti: il tracciato ora è chiuso.");
-    expect(editor.engine.text).toContain(`<path id="${P}" d="M10 10 L50 10 L50 50 Z" fill="none" ${STROKE}/>`);
-    expect(editor.engine.text).not.toContain("<marker");
-    editor.undo();
-    expect(editor.engine.text).toBe(SRC);
-  });
-
-  it("Ctrl+J: la punta dell'altro capo, capovolta, e quella che finisce in mezzo se ne va", () => {
-    const SRC = doc(
-      DEFS(MS, ME, MV) + LAYER +
-        `<line id="${L}" x1="0" y1="0" x2="50" y2="0" ${STROKE} marker-start="url(#rs9s9s9s9)" marker-end="url(#re9e9e9e9)"/>` +
-        `<path id="${B}" d="M50 50 L50 0.5" fill="none" ${STROKE} marker-start="url(#rv9v9v9v9)"/></g>`,
-    );
-    mount(SRC, { level: "expert" });
-    editor.select([B, L]);
-    editor.focus();
-    key("j", { ctrlKey: true });
-    expect(spoken()).toBe("Tracciati uniti: ora sono uno solo.");
-    expect(editor.engine.text).not.toContain(B);
-    const o = { engine: editor.engine } as never;
-    expect(tipOf(o, L, "start")).toBe("circle small start #d55e00");
-    expect(tipOf(o, L, "end")).toBe("vee medium end #d55e00");
-    expect(markersIn(o)).toHaveLength(2);
-    editor.undo();
-    expect(editor.engine.text).toBe(SRC);
-  });
-  it("i nodi di due forme: la punta del capo che arriva, capovolta; quella dei capi uniti se ne va", () => {
-    const MB = MARKER("rb9b9b9b9", "square", "medium", "end");
-    const SRC = doc(
-      DEFS(MS, ME, MV, MB) + LAYER +
-        `<line id="${L}" x1="0" y1="0" x2="50" y2="0" ${STROKE} marker-start="url(#rs9s9s9s9)" marker-end="url(#re9e9e9e9)"/>` +
-        `<path id="${B}" d="M50 50 L50 0.5" fill="none" ${STROKE} marker-start="url(#rv9v9v9v9)" marker-end="url(#rb9b9b9b9)"/></g>`,
-    );
-    mount(SRC, { level: "expert" });
-    editor.select([L, B]);
-    editor.focus();
-    key("n");
-    drag([[35, -25], [65, -25], [65, 12]]);
-    expect(spoken()).toBe("2 nodi scelti in 2 oggetti.");
-    key("j", { ctrlKey: true });
-    expect(spoken()).toContain("Capi uniti: le due forme ora sono un tracciato solo.");
-    expect(editor.engine.text).not.toContain(B);
-    const o = { engine: editor.engine } as never;
-    expect(tipOf(o, L, "start")).toBe("circle small start #d55e00");
-    expect(tipOf(o, L, "end")).toBe("vee medium end #d55e00");
-    expect(markersIn(o)).toHaveLength(2);
-    editor.undo();
-    expect(editor.engine.text).toBe(SRC);
-  });
-});
-
-describe("«Ritaglia immagine», dal livello Standard", () => {
-  const IMAGE = "img";
-  const PNG_HREF = "data:image/png;base64,iVBORw0KGgo=";
-  const DRAWING = doc(`${LAYER}<image id="${IMAGE}" x="10" y="10" width="40" height="20" href="${PNG_HREF}"/><rect id="r" x="60" y="60" width="20" height="20"/></g>`);
-  const CROPPED = doc(
-    `<defs id="fub-defs"><clipPath id="c1" fub:role="private"><rect x="20" y="10" width="20" height="20"/></clipPath></defs>` +
-      `${LAYER}<image id="${IMAGE}" x="10" y="10" width="40" height="20" href="${PNG_HREF}" clip-path="url(#c1)"/><rect id="r" x="60" y="60" width="20" height="20"/></g>`,
-  );
-
-  const arrangeAction = (label: string): HTMLButtonElement => host.querySelector<HTMLButtonElement>(`.draw-arrange button[aria-label="${label}"]`)!;
-  const cropButton = (): HTMLButtonElement => arrangeAction("Ritaglia…");
-  const uncropButton = (): HTMLButtonElement => arrangeAction("Togli il ritaglio");
-  const bar = (): HTMLElement => [...host.querySelectorAll<HTMLElement>(".draw-paths")].find((each) => each.querySelector(".draw-paths-title")!.textContent === "Ritaglia l’immagine")!;
-  const names = (): string[] => [...bar().querySelectorAll("label")].map((label) => label.querySelector("span")!.textContent ?? "");
-  const side = (name: string): HTMLInputElement => [...bar().querySelectorAll("label")].find((label) => label.textContent!.startsWith(name))!.querySelector("input")!;
-  const status = (): string => bar().querySelector("output")!.textContent ?? "";
-  const action = (name: string): HTMLButtonElement => [...bar().querySelectorAll("button")].find((each) => each.textContent === name)!;
-  const painted = (): SVGElement => surface().querySelector<SVGElement>(`image[data-scene-id="${IMAGE}"]`)!;
-  /// Il rettangolo del ritaglio scritto, e la posizione dell'immagine.
-  const written = (): string => {
-    const text = editor.engine.text;
-    const rect = /<clipPath id="([^"]+)" fub:role="private">\s*<rect ([^/]*)\/>\s*<\/clipPath>/.exec(text);
-    const image = new RegExp(`<image id="${IMAGE}" ([^>]*)/>`).exec(text)![1]!;
-    const at = / x="([^"]+)" y="([^"]+)"/.exec(` ${image}`)!;
-    const clip = /clip-path="url\(#([^)]+)\)"/.exec(image);
-    return `${at[1]} ${at[2]}${clip === null ? "" : ` ${clip[1] === rect![1] ? "" : "!"}${rect![2]}`}`;
-  };
-  /// Due tocchi del mouse nello stesso punto.
-  const twice = (x: number, y: number): void => {
-    clock += 1000;
-    drag([[x, y]]);
-    drag([[x, y]]);
-  };
-
-  it("c'è dallo Standard, con un'immagine scelta da sola; «Togli il ritaglio» con una ritagliata", () => {
-    mount(CROPPED, { level: "essential" });
-    editor.select([IMAGE]);
-    expect(cropButton().hidden).toBe(true);
-    editor.setLevel("standard");
-    expect(cropButton().hidden).toBe(false);
-    expect(uncropButton().hidden).toBe(false);
-    editor.select([IMAGE, "r"]);
-    expect(cropButton().hidden).toBe(true);
-    expect(uncropButton().hidden).toBe(false);
-    editor.select(["r"]);
-    expect(cropButton().hidden).toBe(true);
-    expect(uncropButton().hidden).toBe(true);
-  });
-
-  it("dalla barra: i margini e quanto si vede, l'anteprima, Invio scrive il ritaglio in un passo", () => {
-    mount(DRAWING, { level: "standard" });
-    const before = editor.engine.text;
-    editor.select([IMAGE]);
-    cropButton().click();
-    expect(bar().hidden).toBe(false);
-    expect(names()).toEqual(["In alto", "A destra", "In basso", "A sinistra"]);
-    expect(names().map((name) => side(name).value)).toEqual(["0", "0", "0", "0"]);
-    expect(document.activeElement).toBe(side("In alto"));
-    expect(status()).toBe("Si vede l’immagine intera.");
-    expect(spoken()).toBe("Tira i segni per ritagliare, e l’immagine per spostarla sotto il ritaglio; anche le frecce la spostano. Invio applica, Esc annulla.");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    typeIn(side("A sinistra"), "10");
-    typeIn(side("In basso"), "5");
-    expect(status()).toBe("Si vede 30 × 15 di 40 × 20.");
-    // L'anteprima: l'immagine intera attenuata, e sopra la parte che resta.
-    expect(painted().style.visibility).toBe("hidden");
-    const stands = [...surface().querySelectorAll("image:not([data-scene-id])")];
-    expect(stands).toHaveLength(2);
-    expect(stands[0]!.parentElement!.getAttribute("style")).toMatch(/^opacity: ?0\.3;?$/);
-    expect(stands[1]!.getAttribute("clip-path")).toMatch(/^url\(#/);
-    expect(changes).toEqual([]);
-    // Un margine che lascia troppo poco non cambia il ritaglio.
-    typeIn(side("A destra"), "40");
-    expect(status()).toBe("I margini lasciano troppo poco dell’immagine.");
-    typeIn(side("A destra"), "0");
-    key("Enter", {}, side("A destra"));
-    expect(bar().hidden).toBe(true);
-    expect(painted().style.visibility).toBe("");
-    expect(surface().querySelectorAll("image:not([data-scene-id])")).toHaveLength(0);
-    expect(changes).toHaveLength(1);
-    expect(written()).toBe('10 10 x="20" y="10" width="30" height="15"');
-    expect(spoken()).toBe("Immagine ritagliata: si vede 30 × 15.");
-    expect(document.activeElement).toBe(surface());
-    expect(editor.selection).toEqual([IMAGE]);
-    // L'immagine è dove si vede, anche per l'export della selezione.
-    expect(editor.exportScene().scene.selection!.box).toEqual([20, 10, 30, 15]);
-    expect(uncropButton().hidden).toBe(false);
-    editor.undo();
-    expect(editor.engine.text).toBe(before);
-  });
-
-  it("sul foglio: un segno tira il ritaglio, l'immagine si sposta sotto, anche con le frecce, e Invio applica", () => {
-    mount(DRAWING, { level: "standard" });
-    editor.select([IMAGE]);
-    cropButton().click();
-    surface().focus();
-    // Il segno a metà del lato destro.
-    drag([[50, 20], [46, 20], [40, 20]]);
-    expect(status()).toBe("Si vede 30 × 20 di 40 × 20.");
-    expect(spoken()).toBe("Si vede 30 × 20 di 40 × 20.");
-    expect(side("A destra").value).toBe("10");
-    // Dentro, l'immagine scorre sotto il ritaglio, e si ferma al suo bordo.
-    drag([[20, 20], [16, 20], [12, 20], [0, 20]]);
-    expect(spoken()).toBe("Margini: in alto 0, a destra 0, in basso 0, a sinistra 10.");
-    key("ArrowRight");
-    expect(spoken()).toBe("Margini: in alto 0, a destra 1, in basso 0, a sinistra 9.");
-    expect(changes).toEqual([]);
-    key("Enter");
-    expect(bar().hidden).toBe(true);
-    expect(changes).toHaveLength(1);
-    expect(written()).toBe('1 10 x="10" y="10" width="30" height="20"');
-  });
-
-  it("con Maiusc un angolo tiene le proporzioni, con Alt il ritaglio resta attorno al centro", () => {
-    mount(DRAWING, { level: "standard" });
-    editor.select([IMAGE]);
-    cropButton().click();
-    surface().focus();
-    // L'angolo in basso a destra verso l'alto a sinistra: metà, nelle
-    // proporzioni di 40 × 20.
-    drag([[50, 30], [40, 26], [30, 20]], { shiftKey: true });
-    expect(status()).toBe("Si vede 20 × 10 di 40 × 20.");
-    action("Annulla").click();
-    expect(spoken()).toBe("Ritaglio annullato.");
-    cropButton().click();
-    surface().focus();
-    drag([[50, 20], [46, 20], [45, 20]], { altKey: true });
-    expect(names().map((name) => side(name).value)).toEqual(["0", "5", "0", "5"]);
-    action("Applica").click();
-    expect(written()).toBe('10 10 x="15" y="10" width="30" height="20"');
-  });
-
-  it("due tocchi la aprono; Esc annulla; un tocco fuori applica e sceglie ciò che tocca", () => {
-    mount(DRAWING, { level: "standard" });
-    editor.setTool("select");
-    twice(30, 20);
-    expect(bar().hidden).toBe(false);
-    expect(document.activeElement).toBe(surface());
-    drag([[50, 20], [46, 20], [40, 20]]);
-    key("Escape");
-    expect(bar().hidden).toBe(true);
-    expect(spoken()).toBe("Ritaglio annullato.");
-    expect(changes).toEqual([]);
-    expect(editor.selection).toEqual([IMAGE]);
-    twice(30, 20);
-    drag([[50, 20], [46, 20], [40, 20]]);
-    drag([[70, 70]]);
-    expect(bar().hidden).toBe(true);
-    expect(changes).toHaveLength(1);
-    expect(written()).toBe('10 10 x="10" y="10" width="30" height="20"');
-    expect(editor.selection).toEqual(["r"]);
-  });
-
-  it("un ritaglio che c'è si cambia sul posto, e portato all'immagine intera se ne va", () => {
-    mount(CROPPED, { level: "standard" });
-    editor.select([IMAGE]);
-    cropButton().click();
-    expect(names().map((name) => side(name).value)).toEqual(["0", "10", "0", "10"]);
-    expect(status()).toBe("Si vede 20 × 20 di 40 × 20.");
-    typeIn(side("A destra"), "0");
-    key("Enter", {}, side("A destra"));
-    expect(written()).toBe('10 10 x="20" y="10" width="30" height="20"');
-    cropButton().click();
-    typeIn(side("A sinistra"), "0");
-    key("Enter", {}, side("A sinistra"));
-    expect(spoken()).toBe("Ritaglio tolto: si vede l’immagine intera.");
-    expect(written()).toBe("10 10");
-    expect(editor.engine.text).not.toContain("clipPath");
-  });
-
-  it("cambiare strumento o scelta applica il ritaglio; un annulla lo chiude senza scriverlo", () => {
-    mount(DRAWING, { level: "standard" });
-    editor.select([IMAGE]);
-    cropButton().click();
-    surface().focus();
-    drag([[50, 20], [46, 20], [40, 20]]);
-    editor.select(["r"]);
-    expect(bar().hidden).toBe(true);
-    expect(changes).toHaveLength(1);
-    editor.select([IMAGE]);
-    cropButton().click();
-    surface().focus();
-    drag([[40, 20], [36, 20], [30, 20]]);
-    key("r");
-    expect(bar().hidden).toBe(true);
-    expect(changes).toHaveLength(2);
-    expect(written()).toBe('10 10 x="10" y="10" width="20" height="20"');
-    key("v");
-    editor.select([IMAGE]);
-    cropButton().click();
-    surface().focus();
-    drag([[30, 20], [26, 20], [20, 20]]);
-    // Annulla chiude il ritaglio come Esc, e non annulla altro.
-    editor.undo();
-    expect(bar().hidden).toBe(true);
-    expect(spoken()).toBe("Ritaglio annullato.");
-    expect(written()).toBe('10 10 x="10" y="10" width="20" height="20"');
-    expect(changes).toHaveLength(2);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Ritaglio.");
-    expect(written()).toBe('10 10 x="10" y="10" width="30" height="20"');
-  });
-
-  /// Il ritaglio aperto con il lato destro tirato a 30, sull'immagine scelta.
-  const cropping = (source = DRAWING): void => {
-    mount(source, { level: "standard" });
-    editor.select([IMAGE]);
-    cropButton().click();
-    surface().focus();
-    drag([[50, 20], [46, 20], [40, 20]]);
-    expect(status()).toBe("Si vede 30 × 20 di 40 × 20.");
-  };
-
-  it("Ctrl+D con un ritaglio aperto lo applica prima: due passi, il ritaglio e la duplicazione", () => {
-    cropping();
-    const before = DRAWING;
-    key("d", { ctrlKey: true });
-    expect(bar().hidden).toBe(true);
-    expect(changes).toHaveLength(2);
-    expect(editor.engine.text.match(/<image /g)).toHaveLength(2);
-    // La copia è dell'immagine com'è dopo il ritaglio.
-    expect(editor.engine.text.match(/clip-path="url\(#/g)).toHaveLength(2);
-    // Ognuna col suo ritaglio.
-    expect(editor.engine.text.match(/<clipPath /g)).toHaveLength(2);
-    expect(editor.selection).toHaveLength(1);
-    expect(editor.selection[0]).not.toBe(IMAGE);
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Duplicazione.");
-    expect(editor.engine.text.match(/<image /g)).toHaveLength(1);
-    expect(written()).toBe('10 10 x="10" y="10" width="30" height="20"');
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Ritaglio.");
-    expect(editor.engine.text).toBe(before);
-  });
-
-  it("Canc con un ritaglio aperto lo applica prima, e poi toglie l'immagine", () => {
-    cropping();
-    key("Delete");
-    expect(bar().hidden).toBe(true);
-    expect(changes).toHaveLength(2);
-    expect(editor.engine.text).not.toContain("<image");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Eliminazione.");
-    expect(written()).toBe('10 10 x="10" y="10" width="30" height="20"');
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Ritaglio.");
-    expect(editor.engine.text).toBe(DRAWING);
-  });
-
-  it("tagliare e incollare con un ritaglio aperto lo applicano prima, e poi tagliano o incollano", async () => {
-    cropping();
-    const clipboard = (type: "cut" | "paste", data = new DataTransfer()): DataTransfer => {
-      surface().dispatchEvent(new ClipboardEvent(type, { bubbles: true, cancelable: true, clipboardData: data }));
-      return data;
-    };
-    const cut = clipboard("cut");
-    expect(bar().hidden).toBe(true);
-    expect(changes).toHaveLength(2);
-    expect(editor.engine.text).not.toContain("<image");
-    // Ciò che si è tagliato è l'immagine già ritagliata.
-    expect(cut.getData("text/plain")).toContain("clip-path");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Taglio.");
-    expect(written()).toBe('10 10 x="10" y="10" width="30" height="20"');
-    // Incollare, con un altro ritaglio aperto.
-    editor.select([IMAGE]);
-    cropButton().click();
-    surface().focus();
-    drag([[40, 20], [36, 20], [30, 20]]);
-    const data = new DataTransfer();
-    data.setData("text/plain", cut.getData("text/plain"));
-    clipboard("paste", data);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(bar().hidden).toBe(true);
-    expect(written()).toBe('10 10 x="10" y="10" width="20" height="20"');
-    expect(editor.engine.text.match(/<image /g)).toHaveLength(2);
-  });
-
-  it("un valore scritto nel pannello delle proprietà applica prima il ritaglio aperto", () => {
-    mount(DRAWING, { level: "standard" });
-    editor.select([IMAGE]);
-    key("Enter");
-    expect(propertyInput("x").value).toBe("10");
-    cropButton().click();
-    surface().focus();
-    drag([[50, 20], [46, 20], [40, 20]]);
-    enter(propertyInput("x"), "15");
-    expect(bar().hidden).toBe(true);
-    expect(changes).toHaveLength(2);
-    // L'immagine è ritagliata, e poi spostata di 5.
-    expect(editor.engine.text).toMatch(/<image id="img" [^>]*clip-path="url\(#[^)]+\)" transform="matrix\(1 0 0 1 5 0\)"/);
-    expect(editor.engine.text).toContain('<rect x="10" y="10" width="30" height="20"/>');
-    editor.undo();
-    expect(editor.engine.text).not.toContain("matrix(1 0 0 1 5 0)");
-    expect(written()).toBe('10 10 x="10" y="10" width="30" height="20"');
-    editor.undo();
-    expect(editor.engine.text).toBe(DRAWING);
-  });
-
-  it("un'immagine senza id, ritagliata da un comando, resta la scelta di quel comando", () => {
-    const loose = doc(`${LAYER}<image x="10" y="10" width="40" height="20" href="${PNG_HREF}"/><rect id="r" x="60" y="60" width="20" height="20"/></g>`);
-    mount(loose, { level: "standard" });
-    editor.setTool("select");
-    twice(30, 20);
-    expect(bar().hidden).toBe(false);
-    drag([[50, 20], [46, 20], [40, 20]]);
-    key("d", { ctrlKey: true });
-    expect(bar().hidden).toBe(true);
-    expect(changes).toHaveLength(2);
-    expect(editor.engine.text.match(/<image /g)).toHaveLength(2);
-    expect(editor.selection).toHaveLength(1);
-    editor.undo();
-    editor.undo();
-    expect(editor.engine.text).toBe(loose);
-  });
-
-  it("annulla con un ritaglio aperto lo chiude come Esc e non annulla altro; ripeti lo chiude e poi ripete", () => {
-    mount(DRAWING, { level: "standard" });
-    editor.select(["r"]);
-    key("d", { ctrlKey: true });
-    const duplicated = editor.engine.text;
-    expect(changes).toHaveLength(1);
-    editor.select([IMAGE]);
-    cropButton().click();
-    surface().focus();
-    drag([[50, 20], [46, 20], [40, 20]]);
-    key("z", { ctrlKey: true });
-    expect(bar().hidden).toBe(true);
-    expect(spoken()).toBe("Ritaglio annullato.");
-    expect(editor.engine.text).toBe(duplicated);
-    expect(changes).toHaveLength(1);
-    // Il passo prima è ancora lì, e si annulla col secondo annulla.
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Duplicazione.");
-    expect(editor.engine.text).toBe(DRAWING);
-    // Ripetere con il ritaglio aperto lo chiude, e poi ripete.
-    editor.select([IMAGE]);
-    cropButton().click();
-    surface().focus();
-    drag([[50, 20], [46, 20], [40, 20]]);
-    editor.redo();
-    expect(bar().hidden).toBe(true);
-    expect(spoken()).toBe("Ripetuto: Duplicazione.");
-    expect(editor.engine.text).toBe(duplicated);
-    expect(written()).toBe("10 10");
-  });
-
-  /// Un segno preso con il mouse e tirato fin dove si dice, senza lasciarlo.
-  const grab = (from: readonly [number, number], to: readonly [number, number], init: Init = {}): void => {
-    const target = surface();
-    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: from[0], clientY: from[1], timeStamp: (clock += 8), ...init }));
-    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: to[0], clientY: to[1], timeStamp: (clock += 8), ...init }));
-  };
-  const release = (at: readonly [number, number], init: Init = {}): void => {
-    surface().dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: at[0], clientY: at[1], timeStamp: (clock += 8), ...init }));
-  };
-  const modifier = (name: string, down: boolean, init: KeyboardEventInit = {}): void => {
-    surface().dispatchEvent(new KeyboardEvent(down ? "keydown" : "keyup", { key: name, bubbles: true, cancelable: true, ...init }));
-  };
-
-  it("Maiusc premuto a metà del segno, senza muovere il puntatore, rifà subito il ritaglio; lasciandolo, torna libero", () => {
-    mount(DRAWING, { level: "standard" });
-    editor.select([IMAGE]);
-    cropButton().click();
-    surface().focus();
-    grab([50, 30], [40, 26]);
-    expect(status()).toBe("Si vede 30 × 16 di 40 × 20.");
-    modifier("Shift", true, { shiftKey: true });
-    // Nelle proporzioni di 40 × 20.
-    expect(status()).toBe("Si vede 32 × 16 di 40 × 20.");
-    expect(names().map((name) => side(name).value)).toEqual(["0", "8", "4", "0"]);
-    modifier("Shift", false);
-    expect(status()).toBe("Si vede 30 × 16 di 40 × 20.");
-    modifier("Shift", true, { shiftKey: true });
-    // Il puntatore si alza con Maiusc premuto, senza muoversi: vale il ritaglio con le proporzioni.
-    release([40, 26], { shiftKey: true });
-    expect(spoken()).toBe("Si vede 32 × 16 di 40 × 20.");
-    expect(side("A destra").value).toBe("8");
-    action("Applica").click();
-    expect(written()).toBe('10 10 x="10" y="10" width="32" height="16"');
-  });
-
-  it("Maiusc lasciato prima del puntatore: al rilascio il ritaglio è quello senza proporzioni", () => {
-    mount(DRAWING, { level: "standard" });
-    editor.select([IMAGE]);
-    cropButton().click();
-    surface().focus();
-    grab([50, 30], [40, 26], { shiftKey: true });
-    expect(status()).toBe("Si vede 32 × 16 di 40 × 20.");
-    // Il tasto si lascia fuori dal foglio, e il puntatore si alza senza Maiusc.
-    release([40, 26], { shiftKey: false });
-    expect(spoken()).toBe("Si vede 30 × 16 di 40 × 20.");
-    expect([side("A destra").value, side("In basso").value]).toEqual(["10", "4"]);
-  });
-
-  it("Alt premuto e lasciato a metà del segno tiene il ritaglio attorno al centro, o no", () => {
-    mount(DRAWING, { level: "standard" });
-    editor.select([IMAGE]);
-    cropButton().click();
-    surface().focus();
-    grab([50, 20], [45, 20]);
-    expect(names().map((name) => side(name).value)).toEqual(["0", "5", "0", "0"]);
-    modifier("Alt", true, { altKey: true });
-    expect(names().map((name) => side(name).value)).toEqual(["0", "5", "0", "5"]);
-    expect(status()).toBe("Si vede 30 × 20 di 40 × 20.");
-    modifier("Alt", false);
-    expect(names().map((name) => side(name).value)).toEqual(["0", "5", "0", "0"]);
-    modifier("Alt", true, { altKey: true });
-    release([45, 20], { altKey: true });
-    expect(spoken()).toBe("Si vede 30 × 20 di 40 × 20.");
-    expect(names().map((name) => side(name).value)).toEqual(["0", "5", "0", "5"]);
-  });
-
-  it("un margine vuoto o illeggibile non cambia niente, e lasciando il campo si riscrive com'è", () => {
-    mount(DRAWING, { level: "standard" });
-    editor.select([IMAGE]);
-    cropButton().click();
-    typeIn(side("A destra"), "10");
-    expect(status()).toBe("Si vede 30 × 20 di 40 × 20.");
-    // Il campo svuotato, o con ciò che un campo numerico non legge, non porta il margine al bordo.
-    for (const text of ["", "abc"]) {
-      typeIn(side("A destra"), text);
-      expect(status()).toBe("Scrivi un valore.");
-      expect(painted().style.visibility).toBe("hidden");
-      side("A destra").dispatchEvent(new Event("change", { bubbles: true }));
-      expect(side("A destra").value).toBe("10");
-      expect(status()).toBe("Si vede 30 × 20 di 40 × 20.");
-    }
-    // Invio con il campo vuoto applica l'ultimo ritaglio che si vedeva.
-    typeIn(side("A destra"), "");
-    key("Enter", {}, side("A destra"));
-    expect(written()).toBe('10 10 x="10" y="10" width="30" height="20"');
-  });
-
-  it("i margini si leggono come i campi di «Trasforma»: la virgola dei decimali, lo zero negativo, il segno meno", () => {
-    mount(DRAWING, { level: "standard" });
-    editor.select([IMAGE]);
-    cropButton().click();
-    typeIn(side("A sinistra"), "2,5");
-    expect(status()).toBe("Si vede 37,5 × 20 di 40 × 20.");
-    typeIn(side("A sinistra"), "2.5");
-    expect(status()).toBe("Si vede 37,5 × 20 di 40 × 20.");
-    typeIn(side("In alto"), "-0");
-    expect(status()).toBe("Si vede 37,5 × 20 di 40 × 20.");
-    side("In alto").dispatchEvent(new Event("change", { bubbles: true }));
-    expect(side("In alto").value).toBe("0");
-    // Un margine non è sotto lo zero.
-    typeIn(side("A sinistra"), "-4");
-    expect(status()).toBe("Si vede l’immagine intera.");
-    side("A sinistra").dispatchEvent(new Event("change", { bubbles: true }));
-    expect(side("A sinistra").value).toBe("0");
-    typeIn(side("In basso"), "2+3");
-    expect(status()).toBe("Si vede 40 × 15 di 40 × 20.");
-    typeIn(side("In basso"), "1,5e1");
-    expect(status()).toBe("Si vede 40 × 5 di 40 × 20.");
-  });
-
-  it("un tocco fuori con Maiusc applica il ritaglio e aggiunge ciò che tocca; sul vuoto lascia la scelta", () => {
-    cropping();
-    drag([[40, 80]], { shiftKey: true });
-    expect(bar().hidden).toBe(true);
-    expect(changes).toHaveLength(1);
-    expect(editor.selection).toEqual([IMAGE]);
-    cropButton().click();
-    surface().focus();
-    drag([[40, 20], [36, 20], [30, 20]]);
-    drag([[70, 70]], { shiftKey: true });
-    expect(bar().hidden).toBe(true);
-    expect(changes).toHaveLength(2);
-    expect(editor.selection).toEqual([IMAGE, "r"]);
-  });
-
-  it("un tocco fuori con Ctrl sceglie dentro i gruppi, dopo aver applicato il ritaglio", () => {
-    const grouped = doc(`${LAYER}<image id="${IMAGE}" x="10" y="10" width="40" height="20" href="${PNG_HREF}"/><g id="grp"><rect id="in" x="60" y="60" width="20" height="20"/></g></g>`);
-    mount(grouped, { level: "standard" });
-    editor.select([IMAGE]);
-    cropButton().click();
-    surface().focus();
-    drag([[50, 20], [46, 20], [40, 20]]);
-    drag([[70, 70]], { ctrlKey: true });
-    expect(bar().hidden).toBe(true);
-    expect(changes).toHaveLength(1);
-    expect(editor.selection).toEqual(["in"]);
-    editor.select([IMAGE]);
-    cropButton().click();
-    surface().focus();
-    drag([[40, 20], [36, 20], [30, 20]]);
-    drag([[70, 70]]);
-    expect(editor.selection).toEqual(["grp"]);
-  });
-
-  it("«Togli il ritaglio» rende intere le immagini scelte, in un passo", () => {
-    mount(CROPPED, { level: "standard" });
-    const before = editor.engine.text;
-    editor.select([IMAGE, "r"]);
-    uncropButton().click();
-    expect(spoken()).toBe("1 immagine di nuovo intera.");
-    expect(written()).toBe("10 10");
-    expect(editor.engine.text).not.toContain("clipPath");
-    expect(editor.selection).toEqual([IMAGE, "r"]);
-    editor.undo();
-    expect(editor.engine.text).toBe(before);
   });
 });
 
@@ -14484,8 +6275,8 @@ describe("la fusione e l'opacità", () => {
   /// Un tasto dentro il campo dell'opacità.
   const press = (name: string, init: KeyboardEventInit = {}): KeyboardEvent => key(name, init, opacity());
 
-  it("c'è dallo Standard, nella barra «Disponi», col nome, il valore e i limiti; sotto lo Standard e senza selezione no", () => {
-    mount(SHEET, { level: "standard" });
+  it("c'è nel Completo, nella barra «Disponi», col nome, il valore e i limiti; nel Semplice e senza selezione no", () => {
+    mount(SHEET);
     expect(arrangeBar().hidden).toBe(true);
     editor.select([A]);
     expect(arrangeBar().hidden).toBe(false);
@@ -14508,14 +6299,14 @@ describe("la fusione e l'opacità", () => {
     expect(opacity().hasAttribute("aria-valuenow")).toBe(false);
     editor.select([]);
     expect(arrangeBar().hidden).toBe(true);
-    editor.setLevel("essential");
+    editor.setWorkspace("simple");
     editor.select([A]);
     expect(opacityLabel().hidden).toBe(true);
     expect(changes).toEqual([]);
   });
 
   it("un valore scritto e Invio cambiano l'opacità in un passo, «Opacità», che si annulla e si ripete", () => {
-    mount(SHEET, { level: "standard" });
+    mount(SHEET);
     editor.select([A]);
     typeIn(opacity(), "30");
     expect(press("Enter").defaultPrevented).toBe(true);
@@ -14536,7 +6327,7 @@ describe("la fusione e l'opacità", () => {
   });
 
   it("lasciare il campo scrive il numero; lo stesso numero non scrive niente", () => {
-    mount(SHEET, { level: "standard" });
+    mount(SHEET);
     editor.select([A]);
     typeIn(opacity(), "50");
     opacity().dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
@@ -14550,7 +6341,7 @@ describe("la fusione e l'opacità", () => {
 
   it("le frecce, Pagina, Inizio e Fine la cambiano subito, fra 0 e 100, e i colpi di fila sono un passo", () => {
     vi.spyOn(performance, "now").mockReturnValue(0);
-    mount(SHEET, { level: "standard" });
+    mount(SHEET);
     editor.select([A]);
     opacity().focus();
     press("ArrowUp");
@@ -14591,7 +6382,7 @@ describe("la fusione e l'opacità", () => {
   });
 
   it("un valore che non si legge lo dice e il campo torna com'era; Esc toglie il numero, e poi torna al foglio", () => {
-    mount(SHEET, { level: "standard" });
+    mount(SHEET);
     editor.select([A]);
     opacity().focus();
     typeIn(opacity(), "abc");
@@ -14622,7 +6413,7 @@ describe("la fusione e l'opacità", () => {
   });
 
   it("con opacità diverse le frecce dicono che sono diverse, e un numero le porta tutte allo stesso valore", () => {
-    mount(SHEET, { level: "standard" });
+    mount(SHEET);
     editor.select([A, B]);
     opacity().focus();
     press("ArrowUp");
@@ -14638,7 +6429,7 @@ describe("la fusione e l'opacità", () => {
   });
 
   it("un gruppo prende l'opacità sul gruppo, e il campo segue la selezione senza perdere il fuoco", () => {
-    mount(SHEET, { level: "standard" });
+    mount(SHEET);
     editor.select([G]);
     opacity().focus();
     press("PageDown");
@@ -14653,7 +6444,7 @@ describe("la fusione e l'opacità", () => {
   });
 
   it("si raggiunge con le frecce dai pulsanti vicini, ha il suo Tab, e dentro le frecce sono sue", () => {
-    mount(SHEET, { level: "standard" });
+    mount(SHEET);
     editor.select([A]);
     const buttons = [...arrangeBar().querySelectorAll<HTMLButtonElement>("button")].filter((control) => !control.hidden);
     // I pulsanti hanno un Tab solo fra loro; il campo ha il suo.
@@ -14674,7 +6465,7 @@ describe("la fusione e l'opacità", () => {
   });
 
   it("in un disegno che non si modifica non c'è", () => {
-    mount(SHEET.replace(' fub:version="1"', ""), { level: "standard" });
+    mount(SHEET.replace(' fub:version="1"', ""));
     editor.select([A]);
     expect(arrangeBar().hidden).toBe(true);
     expect(changes).toEqual([]);
@@ -14683,81 +6474,18 @@ describe("la fusione e l'opacità", () => {
   // --- La fusione nel pannello ----------------------------------------------
 
   const panelButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!;
-  const choose = (id: string, value: string): void => {
-    const select = property(id).querySelector("select")!;
-    select.value = value;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-  };
-  const flip = (id: string): void => property(id).querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
 
-  it("«Fusione» è dell'Esperto, e il modo scelto va nello style del formato, in un passo che si annulla col suo nome", () => {
-    mount(SHEET, { level: "standard" });
-    editor.select([A]);
-    panelButton().click();
-    expect(host.querySelector('.draw-properties-field[data-field="blend"]')).toBeNull();
-    expect(host.querySelector('.draw-properties-field[data-field="isolate"]')).toBeNull();
-    editor.setLevel("expert");
-    expect(propertyLabel("blend")).toBe("Fusione");
-    const select = property("blend").querySelector("select")!;
-    expect(select.value).toBe("normal");
-    expect(select.querySelectorAll("option")).toHaveLength(16);
-    expect(select.querySelectorAll("hr")).toHaveLength(5);
-    // Un oggetto che non è un gruppo non ha l'isolamento.
-    expect(host.querySelector('.draw-properties-field[data-field="isolate"]')).toBeNull();
-    choose("blend", "multiply");
-    expect(style(A)).toBe("mix-blend-mode: multiply");
-    expect(opacityOf(A)).toBe("0.5");
-    expect(changes).toHaveLength(1);
-    expect(property("blend").querySelector("select")!.value).toBe("multiply");
-    choose("blend", "color-dodge");
-    expect(style(A)).toBe("mix-blend-mode: color-dodge");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Fusione.");
-    expect(editor.engine.text).toBe(SHEET);
-    expect(property("blend").querySelector("select")!.value).toBe("normal");
-    editor.redo();
-    expect(style(A)).toBe("mix-blend-mode: color-dodge");
-    choose("blend", "normal");
-    expect(style(A)).toBeNull();
-    expect(editor.engine.text).toBe(SHEET);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("con oggetti di fusioni diverse il campo è misto, e una scelta le porta tutte allo stesso modo", () => {
-    mount(SHEET.replace(`<rect id="${B}" `, `<rect id="${B}" style="mix-blend-mode: screen" `), { level: "expert" });
-    editor.select([A, B]);
-    panelButton().click();
-    const select = property("blend").querySelector("select")!;
-    expect(select.value).toBe("");
-    expect(select.querySelector("option")!.textContent).toBe("Misto");
-    expect(select.querySelectorAll("option")).toHaveLength(17);
-    choose("blend", "overlay");
-    expect(style(A)).toBe("mix-blend-mode: overlay");
-    expect(style(B)).toBe("mix-blend-mode: overlay");
-    expect(changes).toHaveLength(1);
-  });
-
-  it("«Isola la fusione» è dei gruppi: si accende e si spegne, e tiene la fusione che c'è", () => {
-    mount(SHEET, { level: "expert" });
-    editor.select([G]);
-    panelButton().click();
-    expect(propertyLabel("isolate")).toBe("Isola la fusione");
-    choose("blend", "multiply");
-    flip("isolate");
-    expect(style(G)).toBe("mix-blend-mode: multiply; isolation: isolate");
-    expect(property("isolate").querySelector<HTMLInputElement>("input")!.checked).toBe(true);
-    flip("isolate");
-    expect(style(G)).toBe("mix-blend-mode: multiply");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Non isolare la fusione.");
-    expect(style(G)).toBe("mix-blend-mode: multiply; isolation: isolate");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Isola la fusione.");
-    editor.undo();
-    expect(editor.engine.text).toBe(SHEET);
-    // Con un oggetto che non è un gruppo fra gli scelti, l'isolamento non c'è.
-    editor.select([G, A]);
-    expect(property("isolate").hidden).toBe(true);
+  it("«Fusione» non c'è più in nessuno spazio (ADR 0231)", () => {
+    for (const workspace of ["simple", "full"] as const) {
+      mount(SHEET, { workspace });
+      editor.select([A]);
+      panelButton().click();
+      expect(host.querySelector('.draw-properties-field[data-field="blend"]')).toBeNull();
+      expect(host.querySelector('.draw-properties-field[data-field="isolate"]')).toBeNull();
+      owner.close();
+      owner = openLifetime();
+      host.replaceChildren();
+    }
   });
 
   // --- Gli effetti: lo stile copiato, il contagocce, il riquadro -------------
@@ -14773,8 +6501,8 @@ describe("la fusione e l'opacità", () => {
       + `<rect id="${B}" x="230" y="130" width="40" height="40" fill="#e69f00" ${FX} style="mix-blend-mode: multiply"/></g>`,
   );
 
-  it("lo stile copiato porta la fusione e gli effetti, dallo Standard, e incollarli è un passo solo", () => {
-    mount(LOOKS, { level: "standard" });
+  it("lo stile copiato porta la fusione e gli effetti, nel Completo, e incollarli è un passo solo", () => {
+    mount(LOOKS);
     editor.select([B]);
     key("c", { ctrlKey: true, altKey: true });
     expect(spoken()).toBe("Stile copiato.");
@@ -14799,19 +6527,6 @@ describe("la fusione e l'opacità", () => {
     expect(editor.engine.text).toBe(LOOKS);
   });
 
-  it("il contagocce dà anche la fusione e gli effetti della forma sotto il puntatore", () => {
-    mount(LOOKS, { level: "standard" });
-    size(400, 300);
-    editor.select([A]);
-    editor.setTool("eyedropper");
-    drag([[250, 150], [250, 150]]);
-    expect(style(A)).toBe("mix-blend-mode: multiply");
-    expect(editor.engine.text).toMatch(new RegExp(`<rect id="${A}"[^>]* fub:effect="shadow 0 4 8 #000000 0\\.25"`));
-    expect(changes).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(LOOKS);
-  });
-
   /// Un rettangolo con l'ombra, e un gruppo spostato di 100 con un altro dentro.
   const SHADOWED = doc(
     `${filterFor("rf1f1f1f1", 10, 10, 20)}${LAYER}<rect id="${A}" x="10" y="10" width="20" height="20" fill="#0072b2" ${FX}/>`
@@ -14819,7 +6534,7 @@ describe("la fusione e l'opacità", () => {
   );
 
   it("l'export della selezione conta l'ombra: quella di un oggetto, e quella di ciò che un gruppo porta, spostata come lui", () => {
-    mount(SHADOWED, { level: "standard" });
+    mount(SHADOWED);
     editor.select([A]);
     // L'ombra arriva 12 a sinistra e a destra, 8 sopra e 16 sotto.
     expect(editor.exportScene().scene.selection!.box).toEqual([-2, 2, 44, 44]);
@@ -14829,13 +6544,13 @@ describe("la fusione e l'opacità", () => {
     expect(editor.exportScene().scene.selection!.box).toEqual([-2, 2, 144, 44]);
     // Senza effetti, il riquadro è quello della forma.
     editor.dispose();
-    mount(doc(`${LAYER}<rect id="${A}" x="10" y="10" width="20" height="20" fill="#0072b2"/></g>`), { level: "standard" });
+    mount(doc(`${LAYER}<rect id="${A}" x="10" y="10" width="20" height="20" fill="#0072b2"/></g>`));
     editor.select([A]);
     expect(editor.exportScene().scene.selection!.box).toEqual([10, 10, 20, 20]);
   });
 
   it("«Adatta la pagina al disegno» comprende l'ombra, con il suo margine, in un passo che si annulla", () => {
-    mount(SHADOWED, { level: "standard" });
+    mount(SHADOWED);
     host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Pagina e griglia"]')!.click();
     const open = document.querySelectorAll<HTMLElement>(".context-menu");
     [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>("button")].find((one) => one.querySelector(".menu-label")!.textContent === "Adatta la pagina al disegno")!.click();
@@ -14849,2598 +6564,89 @@ describe("la fusione e l'opacità", () => {
   });
 });
 
-describe("«Maschera», dal livello Esperto", () => {
-  const PNG_HREF = "data:image/png;base64,iVBORw0KGgo=";
-  const SHAPES = doc(
-    `${LAYER}<rect id="r" x="0" y="0" width="40" height="40" fill="#0072b2"/>`
-      + `<circle id="c" cx="20" cy="20" r="10" fill="#000000"/>`
-      + `<line id="l" x1="0" y1="50" x2="40" y2="50" stroke="#000000"/>`
-      + `<image id="i" x="50" y="0" width="20" height="20" href="${PNG_HREF}"/></g>`,
-  );
-
-  const maskButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Maschera"]')!;
-  /// Le voci del menu aperto per ultimo.
-  const menu = (): HTMLButtonElement[] => {
-    const open = document.querySelectorAll<HTMLElement>(".context-menu");
-    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
-  };
-  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
-  const item = (label: string): HTMLButtonElement => menu().find((entry) => labelOf(entry) === label)!;
-  /// Le voci, col nome, se sono spente e che cosa dicono.
-  const entries = (): (string | boolean | null)[][] =>
-    menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled") === "true", entry.querySelector(".menu-description")?.textContent ?? null]);
-  const closeMenus = (): void => {
-    for (const open of document.querySelectorAll(".context-menu")) open.remove();
-  };
-  const clipKey = (): KeyboardEvent => key("7", { code: "Digit7", ctrlKey: true });
-  /// Ctrl+Alt+7, coi tasti Ctrl e Alt e non con AltGr, che happy-dom non
-  /// distingue.
-  const releaseKey = (altGraph = false): KeyboardEvent => {
-    const event = new KeyboardEvent("keydown", { key: "7", code: "Digit7", ctrlKey: true, altKey: true, bubbles: true, cancelable: true });
-    Object.defineProperty(event, "getModifierState", { value: (state: string) => state === "AltGraph" && altGraph });
-    surface().dispatchEvent(event);
-    return event;
-  };
-
-  afterEach(closeMenus);
-
-  it("c'è solo all'Esperto, nella barra della selezione, con le tre voci", () => {
-    mount(SHAPES, { level: "standard" });
-    editor.select(["r", "c"]);
-    expect(maskButton().hidden).toBe(true);
-    // Sotto l'Esperto il tasto non scrive.
-    clipKey();
-    expect(changes).toEqual([]);
-    editor.setLevel("expert");
-    expect(maskButton().hidden).toBe(false);
-    expect(maskButton().getAttribute("aria-haspopup")).toBe("menu");
-    maskButton().click();
-    expect(entries()).toEqual([
-      ["Crea maschera di ritaglio", false, null],
-      ["Crea maschera d’opacità", false, null],
-      ["Rilascia maschera", true, "Fra gli oggetti scelti non c’è una maschera da rilasciare."],
-    ]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    closeMenus();
-    editor.select(["r"]);
-    maskButton().click();
-    const few = "Per una maschera servono almeno due oggetti: quello in cima fa da maschera agli altri.";
-    expect(entries().slice(0, 2)).toEqual([
-      ["Crea maschera di ritaglio", true, few],
-      ["Crea maschera d’opacità", true, few],
-    ]);
-    item("Crea maschera di ritaglio").click();
-    expect(changes).toEqual([]);
-  });
-
-  it("Ctrl+7: la forma in cima ritaglia le altre, in un gruppo nuovo e scelto; Ctrl+Alt+7 la rilascia", () => {
-    mount(SHAPES, { level: "expert" });
-    const before = editor.engine.text;
-    editor.select(["c", "r"]);
-    expect(clipKey().defaultPrevented).toBe(true);
-    expect(changes).toHaveLength(1);
-    expect(spoken()).toBe("Maschera di ritaglio: la forma in cima ritaglia 1 oggetto.");
-    const text = editor.engine.text;
-    const clip = /<clipPath id="([^"]+)" fub:role="private">\s*<circle cx="20" cy="20" r="10"[^>]*\/>\s*<\/clipPath>/.exec(text);
-    expect(clip).not.toBeNull();
-    expect(text).not.toContain('id="c"');
-    const group = new RegExp(`<g id="([^"]+)" clip-path="url\\(#${clip![1]}\\)">\\s*<rect id="r" `).exec(text);
-    expect(group).not.toBeNull();
-    expect(editor.selection).toEqual([group![1]]);
-    // Il gruppo è dove si vede, nel riquadro del cerchio, anche per l'export.
-    expect(editor.exportScene().scene.selection!.box).toEqual([10, 10, 20, 20]);
-    // Ciò che il cerchio nasconde non si tocca più.
-    editor.setTool("select");
-    editor.select([]);
-    drag([[2, 2]]);
-    expect(editor.selection).toEqual([]);
-    drag([[20, 20]]);
-    expect(editor.selection).toEqual([group![1]]);
-    // «Separa» non separa un gruppo ritagliato, e dice da dove si rilascia.
-    key("G", { ctrlKey: true, shiftKey: true });
-    expect(spoken()).toBe("Non separato: un ritaglio, una maschera, degli effetti o un filtro valgono per tutto il gruppo. Una maschera si rilascia dal menu «Maschera».");
-    expect(changes).toHaveLength(1);
-    expect(releaseKey().defaultPrevented).toBe(true);
-    expect(changes).toHaveLength(2);
-    expect(spoken()).toBe("1 maschera rilasciata: la sua forma torna un oggetto, in cima.");
-    const released = editor.engine.text;
-    expect(released).not.toContain("clipPath");
-    expect(released).not.toContain(group![1]);
-    expect(released).toMatch(/<rect id="r" [^>]*\/>\s*<circle id="[^"]+" cx="20" cy="20" r="10"/);
-    editor.undo();
-    expect(editor.engine.text).toBe(text);
-    editor.undo();
-    expect(editor.engine.text).toBe(before);
-  });
-
-  /// Il rettangolo e il cerchio, in un disegno col foglio di stile `sheet`.
-  const styledShapes = (sheet: string): string =>
-    doc(`<style>${sheet}</style>${LAYER}<rect id="r" x="0" y="0" width="40" height="40" fill="#0072b2"/><circle id="c" cx="20" cy="20" r="10" fill="#000000"/></g>`);
-
-  it("con un foglio di stile che non tocca il gruppo, la maschera si crea e si rilascia", () => {
-    mount(styledShapes(".nota{fill:#ff0000}"), { level: "expert" });
-    editor.select(["c", "r"]);
-    clipKey();
-    expect(changes).toHaveLength(1);
-    expect(spoken()).toBe("Maschera di ritaglio: la forma in cima ritaglia 1 oggetto.");
-    expect(editor.engine.text).toContain("<style>.nota{fill:#ff0000}</style>");
-    expect(editor.engine.text).toMatch(/<g id="[^"]+" clip-path="url\(#[^"]+\)">/);
-    releaseKey();
-    expect(changes).toHaveLength(2);
-    expect(spoken()).toBe("1 maschera rilasciata: la sua forma torna un oggetto, in cima.");
-    expect(editor.engine.text).not.toContain("clipPath");
-  });
-
-  it("con una regola che dà a ogni gruppo il suo ritaglio, che vincerebbe su quello della maschera, la maschera non si crea", () => {
-    mount(styledShapes("g{clip-path:none}"), { level: "expert" });
-    const before = editor.engine.text;
-    editor.select(["c", "r"]);
-    clipKey();
-    expect(changes).toEqual([]);
-    expect(spoken()).toMatch(/^Maschera non creata: /);
-    expect(editor.engine.text).toBe(before);
-  });
-
-  it("dal menu, la maschera d'opacità; con AltGr il tasto non la rilascia", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select(["r", "c"]);
-    maskButton().click();
-    item("Crea maschera d’opacità").click();
-    expect(changes).toHaveLength(1);
-    expect(spoken()).toBe("Maschera d’opacità su 1 oggetto: il chiaro dell’oggetto in cima lo mostra, lo scuro lo nasconde.");
-    expect(editor.engine.text).toMatch(/<mask id="([^"]+)" fub:role="private"[^>]*>\s*<circle cx="20" cy="20" r="10" fill="#000000"\/>\s*<\/mask>/);
-    closeMenus();
-    maskButton().click();
-    expect(entries()[2]).toEqual(["Rilascia maschera", false, null]);
-    closeMenus();
-    // AltGr arriva come Ctrl e Alt, e scrive un carattere: non rilascia.
-    expect(releaseKey(true).defaultPrevented).toBe(false);
-    expect(changes).toHaveLength(1);
-  });
-
-  it("il menu spegne le voci che il comando rifiuterebbe, con le sue parole, e mostra i tasti", () => {
-    mount(SHAPES, { level: "expert" });
-    const hints = (): (string | null)[] => menu().map((entry) => entry.querySelector(".menu-hint")?.textContent ?? null);
-    editor.select(["r", "c"]);
-    maskButton().click();
-    expect(hints()).toEqual(["Ctrl+7", null, "Ctrl+Alt+7"]);
-    expect(entries().map((entry) => entry[1])).toEqual([false, false, true]);
-    closeMenus();
-    // In cima una linea: non ha un'area.
-    editor.select(["r", "l"]);
-    maskButton().click();
-    const line = "La linea in cima non ha un’area: non ritaglia niente.";
-    expect(entries().slice(0, 2).map((entry) => entry[1])).toEqual([true, true]);
-    expect(entries()[0]![2]).toBe(line);
-    closeMenus();
-    clipKey();
-    expect(spoken()).toBe(line);
-    // In cima un'immagine: né ritaglia né fa da maschera di ritaglio.
-    editor.select(["r", "i"]);
-    maskButton().click();
-    const image = "A ritagliare è l’oggetto in cima, se è una forma o un testo: un’immagine, un gruppo, un collegamento o un testo su tracciato non ritagliano.";
-    expect(entries()[0]).toEqual(["Crea maschera di ritaglio", true, image]);
-    expect(entries()[1]).toEqual([
-      "Crea maschera d’opacità",
-      true,
-      "A fare da maschera è l’oggetto in cima, se è una forma, un testo o un gruppo di forme e testi: un’immagine, un collegamento o un testo su tracciato no.",
-    ]);
-    closeMenus();
-    clipKey();
-    expect(spoken()).toBe(image);
-    // Niente di scelto: lo dice.
-    editor.select([]);
-    maskButton().click();
-    expect(entries().slice(0, 2).map((entry) => entry[1])).toEqual([true, true]);
-    expect(changes).toEqual([]);
-  });
-
-  it("le maschere che non si fanno dicono perché, e non scrivono", () => {
-    mount(SHAPES, { level: "expert" });
-    editor.select(["r", "l"]);
-    clipKey();
-    expect(spoken()).toBe("La linea in cima non ha un’area: non ritaglia niente.");
-    editor.select(["r", "i"]);
-    clipKey();
-    expect(spoken()).toBe("A ritagliare è l’oggetto in cima, se è una forma o un testo: un’immagine, un gruppo, un collegamento o un testo su tracciato non ritagliano.");
-    editor.select(["r"]);
-    clipKey();
-    expect(spoken()).toBe("Per una maschera servono almeno due oggetti: quello in cima fa da maschera agli altri.");
-    releaseKey();
-    expect(spoken()).toBe("Fra gli oggetti scelti non c’è una maschera da rilasciare.");
-    expect(changes).toEqual([]);
-  });
-});
-
-describe("la verifica propone le campiture", () => {
-  const button = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Accessibilità"]')!;
-  const panel = (): HTMLElement => host.querySelector<HTMLElement>(".draw-access")!;
-  const rows = (): HTMLElement[] => [...panel().querySelectorAll<HTMLElement>(".draw-access-problem")];
-  /// I colori confusi di ogni riga, dall'alto: il suo e quello accanto.
-  const confused = (): string[] => rows().map((row) => [...row.querySelectorAll<HTMLElement>(".draw-access-swatch")].map((chip) => chip.style.background).join(" "));
-  const fixes = (): HTMLButtonElement[] => rows().map((row) => row.querySelector<HTMLButtonElement>('[data-action="fix"]')!);
-
-  const rect = (id: string, x: number, fill: string): string => `<rect id="${id}" x="${x}" y="0" width="20" height="20" fill="${fill}"/>`;
-  const BLUE = "#a6cee3";
-  const GREEN = "#b2df8a";
-  const YELLOW = "#f0e442";
-  /// Due coppie di quadrati, azzurro e verde chiaro, ciascun colore su due
-  /// aree: si distinguono soltanto per la tinta.
-  const CODE = doc(
-    `<title>Prova</title>${LAYER}${rect("oa1a1a1a1", 0, BLUE)}${rect("ob2b2b2b2", 30, GREEN)}${rect("oc3c3c3c3", 60, BLUE)}${rect("od4d4d4d4", 90, GREEN)}</g>`,
-  );
-
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  });
-
-  afterEach(() => {
-    vi.runOnlyPendingTimers();
-    vi.useRealTimers();
-  });
-
-  it("«Dai una campitura» dà una campitura a tutte le aree del colore, in un passo; le righe se ne vanno e un annulla riporta il file", () => {
-    mount(CODE, { level: "standard" });
-    button().click();
-    expect(rows().map((row) => row.querySelector(".draw-access-what")!.textContent)).toEqual([
-      "Nota: Due colori si distinguono solo per la tinta",
-      "Nota: Due colori si distinguono solo per la tinta",
-    ]);
-    expect(confused()).toEqual([`${BLUE} ${GREEN}`, `${GREEN} ${BLUE}`]);
-    expect(rows()[0]!.querySelector(".draw-access-detail")!.textContent).toContain("hanno un contrasto di 1,1:1, ne servono almeno 3:1");
-    expect(fixes().map((fix) => [fix.textContent, fix.getAttribute("aria-label")])).toEqual([
-      ["Dai una campitura", `Dai una campitura alle 2 aree di colore ${BLUE}`],
-      ["Dai una campitura", `Dai una campitura alle 2 aree di colore ${GREEN}`],
-    ]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-
-    fixes()[0]!.click();
-    // Un passo solo, con il suo nome.
-    expect(changes).toHaveLength(1);
-    expect(spoken()).toBe("Campitura diagonale su 2 aree.");
-    const text = editor.engine.text;
-    // Le due aree azzurre hanno una campitura sul loro colore, righe nere;
-    // le verdi no.
-    expect(text.match(/<pattern [^>]*fub:pattern="lines -45 [\d.]+ [\d.]+ #000000 #a6cee3"/g)).toHaveLength(2);
-    expect([...text.matchAll(/<rect id="(o[^"]+)"[^>]* fill="([^"]+)"\/>/g)].map((found) => [found[1], found[2]!.startsWith("url(#r") ? "campitura" : found[2]])).toEqual([
-      ["oa1a1a1a1", "campitura"],
-      ["ob2b2b2b2", GREEN],
-      ["oc3c3c3c3", "campitura"],
-      ["od4d4d4d4", GREEN],
-    ]);
-    // L'azzurro non è più un colore di codice: il verde non ha più chi lo
-    // confonda, e le due righe se ne vanno insieme.
-    expect(rows()).toHaveLength(0);
-    expect(panel().querySelector(".draw-access-count")!.textContent).toBe("nessun problema");
-
-    key("z", { ctrlKey: true });
-    expect(spoken()).toBe("Annullato: Dai una campitura.");
-    expect(editor.engine.text).toBe(CODE);
-    vi.advanceTimersByTime(250);
-    expect(rows()).toHaveLength(2);
-  });
-
-  it("un colore dopo l'altro: ogni campitura è diversa dalle già date", () => {
-    const CODES = doc(
-      `<title>Prova</title>${LAYER}${rect("oa1a1a1a1", 0, BLUE)}${rect("ob2b2b2b2", 30, GREEN)}${rect("oc3c3c3c3", 60, YELLOW)}` +
-        `${rect("od4d4d4d4", 90, BLUE)}${rect("oe5e5e5e5", 120, GREEN)}${rect("of6f6f6f6", 150, YELLOW)}</g>`,
-    );
-    mount(CODES, { level: "standard" });
-    button().click();
-    expect(confused()).toEqual([`${BLUE} ${GREEN}`, `${GREEN} ${BLUE}`, `${YELLOW} ${GREEN}`]);
-    fixes()[0]!.click();
-    expect(spoken()).toBe("Campitura diagonale su 2 aree.");
-    // Il verde e il giallo restano confusi fra loro.
-    expect(confused()).toEqual([`${GREEN} ${YELLOW}`, `${YELLOW} ${GREEN}`]);
-    fixes()[0]!.click();
-    expect(spoken()).toBe("Campitura puntinata su 2 aree.");
-    expect(rows()).toHaveLength(0);
-    expect(changes).toHaveLength(2);
-    key("z", { ctrlKey: true });
-    expect(spoken()).toBe("Annullato: Dai una campitura.");
-    key("z", { ctrlKey: true });
-    expect(editor.engine.text).toBe(CODES);
-  });
-
-  it("un'area che non si sceglie resta com'è: la campitura va alle altre", () => {
-    const LOCKED = doc(
-      `<title>Prova</title>${LAYER}${rect("oa1a1a1a1", 0, BLUE)}${rect("ob2b2b2b2", 30, GREEN)}${rect("od4d4d4d4", 90, GREEN)}</g>` +
-        `<g id="l2" fub:layer="Bloccato" fub:locked="true">${rect("oc3c3c3c3", 60, BLUE)}</g>`,
-    );
-    mount(LOCKED, { level: "standard" });
-    button().click();
-    expect(confused()).toEqual([`${BLUE} ${GREEN}`, `${GREEN} ${BLUE}`]);
-    fixes()[0]!.click();
-    expect(spoken()).toBe("Campitura diagonale su un’area.");
-    expect(editor.engine.text).toContain(`<rect id="oc3c3c3c3" x="60" y="0" width="20" height="20" fill="${BLUE}"/>`);
-    expect(editor.engine.text).not.toContain(`<rect id="oa1a1a1a1" x="0" y="0" width="20" height="20" fill="${BLUE}"/>`);
-    // Un solo azzurro resta fra le aree: non fa più un codice.
-    expect(rows()).toHaveLength(0);
-    key("z", { ctrlKey: true });
-    expect(editor.engine.text).toBe(LOCKED);
-  });
-
-  it("in sola lettura la campitura non si propone", () => {
-    mount(CODE, { level: "standard" });
-    button().click();
-    editor.setReadOnly(true);
-    expect(rows()).toHaveLength(2);
-    expect(rows().map((row) => row.querySelector('[data-action="fix"]'))).toEqual([null, null]);
-    expect(changes).toEqual([]);
-  });
-});
-
-describe("gli effetti, dal livello Esperto", () => {
-  /// `source` su una pagina larga, che contiene tutto: la pagina che cresce
-  /// per ciò che esce non è l'argomento.
-  const wide = (source: string): string => source.replace('viewBox="0 0 100 100"', 'viewBox="0 0 400 400"');
-  const SHAPES = wide(
-    doc(
-      `${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="#0072b2"/>`
-        + `<rect id="s" x="100" y="20" width="40" height="30" fill="#d55e00"/>`
-        + `<ellipse id="e" cx="200" cy="40" rx="20" ry="10" fill="#009e73"/>`
-        + `<rect id="t" x="20" y="100" width="40" height="30" fill="#ffffff" stroke="#000000" stroke-width="2"/></g>`,
-    ),
-  );
-  const SHADOW = "shadow 0 4 8 #000000 0.25";
-
-  const openProperties = (): void => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!.click();
-  const section = (): HTMLElement => properties().querySelector<HTMLElement>('.draw-properties-section[data-section="effects"]')!;
-  const addButton = (): HTMLButtonElement => section().querySelector<HTMLButtonElement>(".draw-effects-add")!;
-  const rows = (): HTMLElement[] => [...section().querySelectorAll<HTMLElement>(".draw-effect")];
-  const nameButton = (at: number): HTMLButtonElement => rows()[at]!.querySelector<HTMLButtonElement>(".draw-effect-name")!;
-  const eye = (at: number): HTMLButtonElement => rows()[at]!.querySelector<HTMLButtonElement>(".draw-effect-show")!;
-  const takeOff = (at: number): HTMLButtonElement => rows()[at]!.querySelector<HTMLButtonElement>(".draw-effect-remove")!;
-  const opened = (): number[] => rows().flatMap((_, at) => (nameButton(at).getAttribute("aria-expanded") === "true" ? [at] : []));
-  /// Il campo `label` della riga `at`, o `null` se non c'è.
-  const effectField = (at: number, label: string): HTMLInputElement =>
-    [...rows()[at]!.querySelectorAll<HTMLInputElement>('input[type="text"]')].find(
-      (each) => host.querySelector(`label[for="${each.id}"]`)!.firstElementChild!.textContent === label,
-    )!;
-  const buttons = (): HTMLButtonElement[] => [...section().querySelectorAll<HTMLButtonElement>(".draw-effects-actions > button")];
-  const note = (): string => section().querySelector(".draw-effects > .draw-properties-note")!.textContent ?? "";
-  const headline = (): string => section().querySelector<HTMLElement>(".draw-effects-state")!.textContent ?? "";
-  /// Il menu aperto per ultimo, e le sue voci.
-  const menuItems = (): HTMLButtonElement[] => {
-    const menus = document.querySelectorAll<HTMLElement>(".context-menu");
-    return [...menus[menus.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
-  };
-  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
-  /// Sceglie dal menu «Aggiungi effetto» la voce `label`.
-  function addEffect(label: string): void {
-    addButton().click();
-    menuItems().find((entry) => labelOf(entry) === label)!.click();
-  }
-  /// Il filtro (`<filter …>`) che il testo ha, e quanti.
-  const filters = (text = editor.engine.text): string[] => text.match(/<filter [\s\S]*?<\/filter>/g) ?? [];
-  const effectOf = (id: string, text = editor.engine.text): string | null => new RegExp(`<[a-z]+ id="${id}"[^>]*? fub:effect="([^"]*)"`).exec(text)?.[1] ?? null;
-  const filterOf = (id: string, text = editor.engine.text): string | null => new RegExp(`<[a-z]+ id="${id}"[^>]*? filter="url\\(#([^)]+)\\)"`).exec(text)?.[1] ?? null;
-  afterEach(() => {
-    for (const open of document.querySelectorAll(".context-menu")) open.remove();
-  });
-
-  it("all'Essenziale e allo Standard la sezione non c'è; all'Esperto sì", () => {
-    mount(SHAPES, { level: "standard" });
-    openProperties();
-    editor.select(["r"]);
-    expect(section().hidden).toBe(true);
-    editor.setLevel("expert");
-    expect(section().hidden).toBe(false);
-    expect(section().querySelector("h3")!.textContent).toBe("Effetti");
-    expect(addButton().getAttribute("aria-label")).toBe("Aggiungi effetto");
-    expect(note()).toBe("Nessun effetto: aggiungi un’ombra, un bagliore o una sfocatura.");
-    editor.setLevel("standard");
-    expect(section().hidden).toBe(true);
-    expect(changes).toEqual([]);
-  });
-
-  it("c'è dopo «Contorno», che viene dopo «Campitura», e i colori del documento sono in fondo", () => {
-    mount(SHAPES, { level: "expert" });
-    openProperties();
-    editor.select(["r"]);
-    const order = [...properties().querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
-    expect(order.indexOf("hatch")).toBe(order.indexOf("gradient") + 1);
-    expect(order.indexOf("stroke")).toBe(order.indexOf("hatch") + 1);
-    expect(order.indexOf("effects")).toBe(order.indexOf("stroke") + 1);
-    expect(order.indexOf("colors")).toBe(order.length - 1);
-  });
-
-  it("dal menu si aggiunge un'ombra: fub:effect e il filtro privato in un solo passo, e annulla li disfa al byte", () => {
-    mount(SHAPES, { level: "expert" });
-    openProperties();
-    editor.select(["r"]);
-    const before = editor.engine.text;
-    addButton().click();
-    expect(addButton().getAttribute("aria-expanded")).toBe("true");
-    expect(menuItems().map(labelOf)).toEqual(["Ombra esterna", "Ombra interna", "Bagliore esterno", "Bagliore interno", "Sfocatura"]);
-    expect(menuItems().map((entry) => entry.getAttribute("aria-disabled"))).toEqual([null, null, null, null, null]);
-    menuItems()[0]!.click();
-    expect(changes).toHaveLength(1);
-    const after = editor.engine.text;
-    expect(effectOf("r")).toBe(SHADOW);
-    const id = filterOf("r")!;
-    expect(id).toMatch(/^r[0-9a-z]{8}$/);
-    expect(filters()).toHaveLength(1);
-    expect(filters()[0]).toContain(`<filter id="${id}" fub:role="private"`);
-    expect(filters()[0]).toContain('filterUnits="userSpaceOnUse"');
-    // Il filtro è della regione dell'oggetto, con il margine dell'ombra.
-    expect(filters()[0]).toMatch(/x="(1\d|\d)(\.\d+)?" y="/);
-    expect(editor.selection).toEqual(["r"]);
-    expect(spoken()).toContain("Aggiunto: Ombra esterna.");
-    // La riga nuova è aperta, coi suoi campi.
-    expect(rows()).toHaveLength(1);
-    expect(opened()).toEqual([0]);
-    expect(effectField(0, "Y").value).toBe("4");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    // Un solo passo, col suo nome, e al byte.
-    editor.undo();
-    expect(editor.engine.text).toBe(before);
-    expect(spoken()).toBe("Annullato: Aggiungi ombra esterna.");
-    expect(rows()).toEqual([]);
-    expect(editor.selection).toEqual(["r"]);
-    editor.redo();
-    expect(editor.engine.text).toBe(after);
-    expect(rows()).toHaveLength(1);
-  });
-
-  it("ogni genere si aggiunge col suo nome e il suo testo", () => {
-    mount(SHAPES, { level: "expert" });
-    openProperties();
-    editor.select(["r"]);
-    const before = editor.engine.text;
-    const wanted: Array<[string, string, string]> = [
-      ["Ombra interna", "inner-shadow 0 2 4 #000000 0.25", "Annullato: Aggiungi ombra interna."],
-      ["Bagliore esterno", "glow 8 #ffd400 0.75", "Annullato: Aggiungi bagliore esterno."],
-      ["Bagliore interno", "inner-glow 6 #ffffff 0.75", "Annullato: Aggiungi bagliore interno."],
-      ["Sfocatura", "blur 4", "Annullato: Aggiungi sfocatura."],
-    ];
-    for (const [label, text, undone] of wanted) {
-      addEffect(label);
-      expect(effectOf("r")).toBe(text);
-      editor.undo();
-      expect(spoken()).toBe(undone);
-      expect(editor.engine.text).toBe(before);
-    }
-  });
-
-  it("nasconde e mostra un effetto, col suo nome, e il filtro se ne va e torna", () => {
-    mount(SHAPES, { level: "expert" });
-    openProperties();
-    editor.select(["r"]);
-    addEffect("Ombra esterna");
-    const shown = editor.engine.text;
-    eye(0).click();
-    expect(effectOf("r")).toBe(`${SHADOW} hidden`);
-    expect(filterOf("r")).toBeNull();
-    expect(filters()).toEqual([]);
-    expect(eye(0).getAttribute("aria-pressed")).toBe("false");
-    expect(eye(0).getAttribute("aria-label")).toBe("Mostra Ombra esterna");
-    expect(spoken()).toContain("Nascosto: Ombra esterna.");
-    const hidden = editor.engine.text;
-    eye(0).click();
-    expect(effectOf("r")).toBe(SHADOW);
-    expect(filters()).toHaveLength(1);
-    expect(eye(0).getAttribute("aria-pressed")).toBe("true");
-    expect(spoken()).toContain("Mostrato: Ombra esterna.");
-    editor.undo();
-    expect(editor.engine.text).toBe(hidden);
-    expect(spoken()).toBe("Annullato: Mostra ombra esterna.");
-    editor.undo();
-    expect(editor.engine.text).toBe(shown);
-    expect(spoken()).toBe("Annullato: Nascondi ombra esterna.");
-  });
-
-  it("un campo cambiato è un passo, e due colpi di freccia di seguito se ne fanno uno", () => {
-    const now = vi.spyOn(performance, "now").mockReturnValue(0);
-    mount(SHAPES, { level: "expert" });
-    openProperties();
-    editor.select(["r"]);
-    addEffect("Ombra esterna");
-    const added = editor.engine.text;
-    now.mockReturnValue(MERGE_MS + 1);
-    enter(effectField(0, "X"), "6");
-    expect(effectOf("r")).toBe("shadow 6 4 8 #000000 0.25");
-    expect(effectField(0, "X").value).toBe("6");
-    const typed = editor.engine.text;
-    now.mockReturnValue(2 * MERGE_MS + 2);
-    effectField(0, "Y").focus();
-    key("ArrowUp", {}, effectField(0, "Y"));
-    key("ArrowUp", {}, effectField(0, "Y"));
-    expect(effectOf("r")).toBe("shadow 6 6 8 #000000 0.25");
-    expect(effectField(0, "Y").value).toBe("6");
-    expect(document.activeElement).toBe(effectField(0, "Y"));
-    // I due colpi si annullano insieme; il campo scritto, a parte.
-    editor.undo();
-    expect(editor.engine.text).toBe(typed);
-    expect(spoken()).toBe("Annullato: Ombra esterna.");
-    editor.undo();
-    expect(editor.engine.text).toBe(added);
-    expect(spoken()).toBe("Annullato: Ombra esterna.");
-    editor.undo();
-    expect(effectOf("r")).toBeNull();
-  });
-
-  it("il filtro segue i valori dei campi: più sfocatura, regione più larga", () => {
-    mount(SHAPES, { level: "expert" });
-    openProperties();
-    editor.select(["r"]);
-    addEffect("Ombra esterna");
-    const width = (): number => Number(/<filter [^>]*? width="([^"]*)"/.exec(filters()[0]!)![1]);
-    const narrow = width();
-    enter(effectField(0, "Sfocatura"), "40");
-    expect(width()).toBeGreaterThan(narrow);
-    expect(filters()).toHaveLength(1);
-    enter(effectField(0, "Colore"), "red");
-    expect(effectOf("r")).toBe("shadow 0 4 40 #ff0000 0.25");
-    enter(effectField(0, "Opacità"), "50%");
-    expect(effectOf("r")).toBe("shadow 0 4 40 #ff0000 0.5");
-    enter(effectField(0, "Colore"), "grigio");
-    expect(effectField(0, "Colore").getAttribute("aria-invalid")).toBe("true");
-    expect(effectOf("r")).toBe("shadow 0 4 40 #ff0000 0.5");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("toglie un effetto: il fuoco va al seguente, e annulla lo rimette", () => {
-    mount(SHAPES, { level: "expert" });
-    openProperties();
-    editor.select(["r"]);
-    addEffect("Ombra esterna");
-    addEffect("Bagliore esterno");
-    addEffect("Sfocatura");
-    expect(effectOf("r")).toBe(`${SHADOW}; glow 8 #ffd400 0.75; blur 4`);
-    expect(rows()).toHaveLength(3);
-    // Il fuoco sul pulsante della riga di mezzo, e si toglie con la tastiera.
-    takeOff(1).focus();
-    takeOff(1).click();
-    expect(effectOf("r")).toBe(`${SHADOW}; blur 4`);
-    expect(spoken()).toContain("Tolto: Bagliore esterno.");
-    expect(document.activeElement).toBe(nameButton(1));
-    const two = editor.engine.text;
-    takeOff(1).focus();
-    takeOff(1).click();
-    expect(document.activeElement).toBe(nameButton(0));
-    takeOff(0).focus();
-    takeOff(0).click();
-    expect(effectOf("r")).toBeNull();
-    expect(filters()).toEqual([]);
-    expect(document.activeElement).toBe(addButton());
-    expect(editor.engine.text).not.toContain("fub:effect");
-    editor.undo();
-    expect(effectOf("r")).toBe(SHADOW);
-    expect(spoken()).toBe("Annullato: Togli ombra esterna.");
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Togli sfocatura.");
-    expect(effectOf("r")).toBe(`${SHADOW}; blur 4`);
-    expect(editor.engine.text).toBe(two);
-  });
-
-  it("l'unica sfocatura: con una già c'è, spenta, e dice perché", () => {
-    mount(SHAPES, { level: "expert" });
-    openProperties();
-    editor.select(["r"]);
-    addEffect("Sfocatura");
-    addButton().click();
-    const blur = menuItems().find((entry) => labelOf(entry) === "Sfocatura")!;
-    expect(blur.getAttribute("aria-disabled")).toBe("true");
-    expect(blur.querySelector(".menu-description")!.textContent).toBe("Un oggetto ha già una sfocatura: ne prende una sola.");
-    const count = changes.length;
-    blur.click();
-    expect(changes).toHaveLength(count);
-  });
-
-  it("a otto effetti il menu è tutto spento, e dice perché", () => {
-    mount(SHAPES, { level: "expert" });
-    openProperties();
-    editor.select(["r"]);
-    for (let n = 0; n < 8; n += 1) addEffect("Bagliore esterno");
-    expect(rows()).toHaveLength(8);
-    addButton().click();
-    expect(menuItems().map((entry) => entry.getAttribute("aria-disabled"))).toEqual(["true", "true", "true", "true", "true"]);
-    expect(menuItems()[0]!.querySelector(".menu-description")!.textContent).toBe("Un oggetto ha già 8 effetti: è il massimo.");
-    expect(editor.engine.text.match(/glow 8 #ffd400 0.75/g)).toHaveLength(8);
-  });
-
-  it("due oggetti con gli stessi effetti li mostrano e li cambiano insieme, in un solo passo", () => {
-    mount(SHAPES, { level: "expert" });
-    openProperties();
-    editor.select(["r", "s"]);
-    const before = editor.engine.text;
-    addEffect("Ombra esterna");
-    expect(effectOf("r")).toBe(SHADOW);
-    expect(effectOf("s")).toBe(SHADOW);
-    expect(filters()).toHaveLength(2);
-    expect(filterOf("r")).not.toBe(filterOf("s"));
-    expect(headline()).toBe("");
-    expect(rows()).toHaveLength(1);
-    const added = editor.engine.text;
-    enter(effectField(0, "Y"), "9");
-    expect(effectOf("r")).toBe("shadow 0 9 8 #000000 0.25");
-    expect(effectOf("s")).toBe("shadow 0 9 8 #000000 0.25");
-    expect(filters()).toHaveLength(2);
-    editor.undo();
-    expect(editor.engine.text).toBe(added);
-    editor.undo();
-    expect(editor.engine.text).toBe(before);
-    expect(editor.selection).toEqual(["r", "s"]);
-  });
-
-  it("con effetti diversi lo dice, e li dà tutti uguali, quelli del primo che ne ha", () => {
-    mount(SHAPES, { level: "expert" });
-    openProperties();
-    editor.select(["s"]);
-    addEffect("Sfocatura");
-    editor.select(["r"]);
-    addEffect("Ombra esterna");
-    editor.select(["r", "s", "e"]);
-    expect(headline()).toBe("Effetti diversi");
-    expect(note()).toBe("Il primo oggetto che ne ha: Ombra esterna.");
-    expect(rows()).toEqual([]);
-    expect(buttons().map((button) => button.textContent)).toEqual(["Usa questi effetti per tutti", "Togli gli effetti"]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    const before = editor.engine.text;
-    buttons()[0]!.click();
-    expect([effectOf("r"), effectOf("s"), effectOf("e")]).toEqual([SHADOW, SHADOW, SHADOW]);
-    expect(filters()).toHaveLength(3);
-    expect(headline()).toBe("");
-    expect(rows()).toHaveLength(1);
-    expect(spoken()).toContain("Gli stessi effetti per 3 oggetti.");
-    editor.undo();
-    expect(editor.engine.text).toBe(before);
-    expect(spoken()).toBe("Annullato: Effetti per tutti.");
-    // «Togli gli effetti» li toglie a tutti. Un annulla sceglie ciò che ha
-    // rimesso a posto: la selezione si rifà come prima.
-    editor.select(["r", "s", "e"]);
-    expect(headline()).toBe("Effetti diversi");
-    buttons()[1]!.click();
-    expect(editor.engine.text).not.toContain("fub:effect");
-    expect(filters()).toEqual([]);
-    editor.undo();
-    expect(editor.engine.text).toBe(before);
-    expect(spoken()).toBe("Annullato: Togli gli effetti.");
-  });
-
-  it("aggiungere a oggetti con elenchi diversi aggiunge a ciascuno, in fondo", () => {
-    mount(SHAPES, { level: "expert" });
-    openProperties();
-    editor.select(["s"]);
-    addEffect("Sfocatura");
-    editor.select(["r", "s"]);
-    expect(headline()).toBe("Effetti diversi");
-    expect(note()).toBe("Il primo oggetto che ne ha: Sfocatura.");
-    addEffect("Ombra esterna");
-    expect(effectOf("r")).toBe(SHADOW);
-    expect(effectOf("s")).toBe(`blur 4; ${SHADOW}`);
-    // Il menu ricorda che uno di loro ha già la sfocatura.
-    addButton().click();
-    expect(menuItems().find((entry) => labelOf(entry) === "Sfocatura")!.getAttribute("aria-disabled")).toBe("true");
-  });
-
-  it("un filtro di un altro programma si vede, si toglie, e un effetto nuovo lo sostituisce", () => {
-    const source = wide(doc(
-      `${DEFS('<filter id="ext" x="0" y="0" width="400" height="400" filterUnits="userSpaceOnUse"><feGaussianBlur stdDeviation="2"/></filter>')}${LAYER}`
-        + `<rect id="r" x="20" y="20" width="40" height="30" fill="#0072b2" filter="url(#ext)"/>`
-        + `<rect id="s" x="100" y="20" width="40" height="30" fill="#d55e00" filter="url(#ext)"/>`
-        + `<ellipse id="e" cx="200" cy="40" rx="20" ry="10" fill="#009e73"/></g>`,
-    ));
-    mount(source, { level: "expert" });
-    openProperties();
-    editor.select(["r"]);
-    expect(headline()).toBe("Un filtro di un altro programma");
-    expect(note()).toBe("FubDraw lo lascia com’è. Un effetto nuovo lo sostituisce.");
-    expect(buttons().map((button) => [button.textContent, button.hidden])).toEqual([["Usa questi effetti per tutti", true], ["Togli il filtro", false]]);
-    expect(rows()).toEqual([]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    // Un effetto nuovo lo sostituisce: il filtro dell'altro resta a chi lo usa.
-    addEffect("Ombra esterna");
-    expect(filterOf("r")).not.toBe("ext");
-    expect(effectOf("r")).toBe(SHADOW);
-    expect(filterOf("s")).toBe("ext");
-    expect(editor.engine.text).toContain('<filter id="ext"');
-    expect(headline()).toBe("");
-    editor.undo();
-    expect(filterOf("r")).toBe("ext");
-    expect(spoken()).toBe("Annullato: Aggiungi ombra esterna.");
-    // Togliere il filtro toglie il riferimento, e lascia il filtro dov'è.
-    buttons()[1]!.click();
-    expect(filterOf("r")).toBeNull();
-    expect(filterOf("s")).toBe("ext");
-    expect(editor.engine.text).toContain('<filter id="ext"');
-    expect(spoken()).toContain("Filtro tolto.");
-    editor.undo();
-    expect(filterOf("r")).toBe("ext");
-    expect(spoken()).toBe("Annullato: Togli il filtro.");
-    // Con un altro oggetto senza filtro, gli effetti sono diversi.
-    editor.select(["r", "e"]);
-    expect(headline()).toBe("Effetti diversi");
-  });
-
-  it("un'immagine ritagliata non prende effetti, e la sezione lo dice", () => {
-    const PNG = "data:image/png;base64,iVBORw0KGgo=";
-    const clip = '<clipPath id="c" fub:role="private"><rect x="0" y="0" width="10" height="10"/></clipPath>';
-    mount(doc(`${DEFS(clip)}${LAYER}<image id="i" x="0" y="0" width="20" height="20" href="${PNG}" clip-path="url(#c)"/><rect id="r" x="40" y="0" width="20" height="20" fill="#000000"/></g>`), { level: "expert" });
-    openProperties();
-    const before = editor.engine.text;
-    editor.select(["i"]);
-    expect(section().hidden).toBe(false);
-    expect(note()).toContain("Un oggetto scelto è ritagliato o mascherato, e non prende effetti");
-    expect(note()).not.toContain("Nessun effetto");
-    expect(addButton().getAttribute("aria-disabled")).toBe("true");
-    addButton().click();
-    expect(menuItems().every((entry) => entry.getAttribute("aria-disabled") === "true")).toBe(true);
-    expect(menuItems()[0]!.querySelector(".menu-description")!.textContent).toContain("ritagliato o mascherato");
-    menuItems()[0]!.click();
-    expect(editor.engine.text).toBe(before);
-    expect(changes).toEqual([]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    // Anche con un oggetto che li prende accanto: il ritaglio taglierebbe gli effetti.
-    for (const open of document.querySelectorAll(".context-menu")) open.remove();
-    editor.select(["r", "i"]);
-    expect(addButton().getAttribute("aria-disabled")).toBe("true");
-    editor.select(["r"]);
-    expect(addButton().getAttribute("aria-disabled")).toBeNull();
-  });
-
-  it("con molti oggetti il rifiuto arriva col cambio, e a voce", () => {
-    const clip = '<clipPath id="c" fub:role="private"><rect x="0" y="0" width="10" height="10"/></clipPath>';
-    const crowd = Array.from({ length: 70 }, (_, at) => `<rect id="q${at}" x="${at * 30}" y="0" width="20" height="20" fill="#000000"/>`).join("");
-    mount(doc(`${DEFS(clip)}${LAYER}${crowd}<rect id="k" x="0" y="40" width="20" height="20" clip-path="url(#c)"/></g>`), { level: "expert" });
-    openProperties();
-    const before = editor.engine.text;
-    editor.select([...Array.from({ length: 70 }, (_, at) => `q${at}`), "k"]);
-    expect(addButton().getAttribute("aria-disabled")).toBeNull();
-    addEffect("Ombra esterna");
-    expect(editor.engine.text).toBe(before);
-    expect(changes).toEqual([]);
-    expect(spoken()).toContain("ritagliato o mascherato");
-    // Togliere gli effetti si può comunque.
-    editor.select(["q1"]);
-    addEffect("Ombra esterna");
-    expect(effectOf("q1")).toBe(SHADOW);
-  });
-
-  it("spostare, ridimensionare o ingrossare il contorno di un oggetto con un'ombra ne segue la regione, in un passo solo", () => {
-    const now = vi.spyOn(performance, "now").mockReturnValue(0);
-    mount(SHAPES, { level: "expert" });
-    openProperties();
-    editor.select(["t"]);
-    addEffect("Ombra esterna");
-    const region = (): string => /<filter [^>]*? (x="[^"]*" y="[^"]*" width="[^"]*" height="[^"]*")/.exec(filters()[0]!)![1]!;
-    const id = filterOf("t");
-    const before = editor.engine.text;
-    const first = region();
-    // Spostato, l'oggetto porta con sé la sua regione: sta nel suo spazio.
-    now.mockReturnValue(MERGE_MS + 1);
-    key("ArrowRight", { shiftKey: true });
-    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 10 0)"');
-    expect(region()).toBe(first);
-    expect(filterOf("t")).toBe(id);
-    editor.undo();
-    expect(editor.engine.text).toBe(before);
-    // Ridimensionato dal pannello, lo stesso: la scala è nell'oggetto.
-    now.mockReturnValue(2 * MERGE_MS + 2);
-    enter(propertyInput("width"), "100");
-    expect(editor.engine.text).toMatch(/<rect id="t"[^>]* transform="matrix\(2\.\d+ 0 0 1 /);
-    expect(filters()).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(before);
-    // Un contorno più spesso allarga ciò che l'oggetto copre: la regione
-    // lo segue, nello stesso passo del contorno.
-    now.mockReturnValue(3 * MERGE_MS + 3);
-    enter(propertyInput("strokeWidth"), "20");
-    expect(editor.engine.text).toContain('stroke-width="20"');
-    const grown = region();
-    expect(grown).not.toBe(first);
-    const box = (text: string): number[] => /x="([^"]*)" y="([^"]*)" width="([^"]*)" height="([^"]*)"/.exec(text)!.slice(1).map(Number);
-    expect(box(grown)[2]!).toBeGreaterThan(box(first)[2]!);
-    expect(box(grown)[3]!).toBeGreaterThan(box(first)[3]!);
-    expect(filters()).toHaveLength(1);
-    expect(filterOf("t")).toBe(id);
-    expect(effectOf("t")).toBe(SHADOW);
-    editor.undo();
-    expect(editor.engine.text).toBe(before);
-    expect(region()).toBe(first);
-    editor.redo();
-    expect(region()).toBe(grown);
-  });
-
-  it("l'ombra di un gruppo segue ciò che il gruppo contiene, nello stesso passo", () => {
-    const now = vi.spyOn(performance, "now").mockReturnValue(0);
-    mount(
-      wide(doc(`${LAYER}<g id="g"><rect id="a" x="20" y="20" width="40" height="30" fill="#0072b2"/><rect id="b" x="80" y="20" width="40" height="30" fill="#d55e00"/></g></g>`)),
-      { level: "expert" },
-    );
-    openProperties();
-    editor.select(["g"]);
-    addEffect("Ombra esterna");
-    const region = (): string => /<filter [^>]*? (x="[^"]*" y="[^"]*" width="[^"]*" height="[^"]*")/.exec(filters()[0]!)![1]!;
-    const before = editor.engine.text;
-    const first = region();
-    now.mockReturnValue(MERGE_MS + 1);
-    editor.select(["b"]);
-    key("ArrowRight", { shiftKey: true });
-    key("ArrowRight", { shiftKey: true });
-    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 20 0)"');
-    expect(region()).not.toBe(first);
-    expect(filters()).toHaveLength(1);
-    editor.undo();
-    expect(editor.engine.text).toBe(before);
-    expect(region()).toBe(first);
-  });
-
-  it("un oggetto senza id lo riceve col primo effetto, e la riga resta aperta e col fuoco", () => {
-    mount(doc(`${LAYER}<rect x="0" y="0" width="20" height="20" fill="#000000"/></g>`), { level: "expert" });
-    openProperties();
-    editor.select(["@0.0"]);
-    const before = editor.engine.text;
-    addButton().focus();
-    key("ArrowDown", {}, addButton());
-    menuItems()[0]!.click();
-    const id = /<rect id="(o[a-z0-9]{8})"/.exec(editor.engine.text)![1]!;
-    expect(editor.selection).toEqual([id]);
-    expect(effectOf(id)).toBe(SHADOW);
-    expect(rows()).toHaveLength(1);
-    expect(opened()).toEqual([0]);
-    // Dalla tastiera, il fuoco è sul nome dell'effetto nuovo.
-    expect(document.activeElement).toBe(nameButton(0));
-    enter(effectField(0, "X"), "3");
-    expect(effectOf(id)).toBe("shadow 3 4 8 #000000 0.25");
-    expect(opened()).toEqual([0]);
-    expect(document.activeElement).toBe(effectField(0, "X"));
-    editor.undo();
-    editor.undo();
-    expect(editor.engine.text).toBe(before);
-  });
-
-  it("in sola lettura gli effetti si guardano e basta", () => {
-    mount(SHAPES, { level: "expert" });
-    openProperties();
-    editor.select(["r"]);
-    addEffect("Ombra esterna");
-    const shaded = editor.engine.text;
-    const count = changes.length;
-    editor.setReadOnly(true);
-    expect(rows()).toHaveLength(1);
-    expect(eye(0).getAttribute("aria-disabled")).toBe("true");
-    expect(takeOff(0).getAttribute("aria-disabled")).toBe("true");
-    expect(addButton().getAttribute("aria-disabled")).toBe("true");
-    expect(effectField(0, "X").readOnly).toBe(true);
-    eye(0).click();
-    expect(spoken()).toContain("sola lettura");
-    takeOff(0).click();
-    addButton().click();
-    expect(menuItems().every((entry) => entry.getAttribute("aria-disabled") === "true")).toBe(true);
-    expect(editor.engine.text).toBe(shaded);
-    expect(changes).toHaveLength(count);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-});
-
-describe("la campitura", () => {
-  const DEFS = (inner: string): string => `<defs id="fub-defs">${inner}</defs>`;
-  const BLUE = doc(`${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="#0072b2"/></g>`);
-  /// Due rettangoli e un gruppo con una parte bloccata.
-  const PARTS = doc(
-    `${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="#0072b2"/>`
-      + `<rect id="s" x="80" y="20" width="40" height="30" fill="#d55e00"/>`
-      + `<g id="og" fill="#009e73"><rect id="oa" x="20" y="80" width="40" height="30"/>`
-      + `<rect id="ob" x="80" y="80" width="40" height="30" fill="#cc79a7" fub:locked="true"/></g>`
-      + `<line id="l" x1="0" y1="150" x2="100" y2="150" stroke="#000000" stroke-width="2"/></g>`,
-  );
-  /// Un motivo del documento, e un oggetto bloccato che lo usa.
-  const MOTIF = '<pattern id="rm" fub:role="swatch" fub:name="Pois" patternUnits="userSpaceOnUse" width="10" height="10"><rect width="10" height="5" fill="#ff0000"/><rect y="5" width="10" height="5" fill="#0000ff"/></pattern>';
-
-  const openProperties = (): void => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!.click();
-  const section = (): HTMLElement => properties().querySelector<HTMLElement>('.draw-properties-section[data-section="hatch"]')!;
-  const kindButton = (): HTMLButtonElement => section().querySelector<HTMLButtonElement>(".draw-properties-menu")!;
-  const hatchField = (id: string): HTMLInputElement => section().querySelector<HTMLInputElement>(`.draw-properties-field[data-field="hatch-${id}"] input[type="text"]`)!;
-  const fieldsGroup = (): HTMLElement => section().querySelector<HTMLElement>(".draw-hatch-fields")!;
-  const motifGroup = (): HTMLElement => section().querySelector<HTMLElement>(".draw-hatch-motif")!;
-  const deleteButton = (): HTMLButtonElement => motifGroup().querySelector<HTMLButtonElement>("button")!;
-  const visible = (): Array<string | undefined> =>
-    [...properties().querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
-  /// Le voci del menu aperto per ultimo.
-  const menuItems = (): HTMLButtonElement[] => {
-    const menus = document.querySelectorAll<HTMLElement>(".context-menu");
-    return [...menus[menus.length - 1]!.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
-  };
-  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
-  const entry = (label: string): HTMLButtonElement => menuItems().find((each) => labelOf(each) === label)!;
-  /// Sceglie dal menu del tipo la voce `label`.
-  function choose(label: string): void {
-    kindButton().click();
-    entry(label).click();
-  }
-  /// Il pulsante «Motivo dalla selezione» della barra della selezione.
-  const motifButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Motivo dalla selezione"]')!;
-  /// La campitura privata che il testo ha, e quante.
-  const patterns = (text = editor.engine.text): string[] => text.match(/<pattern [\s\S]*?<\/pattern>/g) ?? [];
-  const patternOf = (id: string, text = editor.engine.text): string | null => new RegExp(`<[a-z]+ id="${id}"[^>]*? fill="url\\(#([^)]+)\\)`).exec(text)?.[1] ?? null;
-  const closeMenus = (): void => {
-    for (const open of document.querySelectorAll(".context-menu")) open.remove();
-  };
-  afterEach(closeMenus);
-
-  it("c'è dal livello Standard, dopo «Sfumatura» e prima del contorno; con «Campiture» fuori dal Personalizzato non c'è", () => {
-    mount(PARTS, { level: "standard" });
-    openProperties();
-    expect(section().hidden).toBe(true);
-    editor.select(["r"]);
-    expect(section().hidden).toBe(false);
-    expect(section().querySelector("h3")!.textContent).toBe("Campitura");
-    expect(kindButton().textContent).toBe("Nessuna");
-    expect(fieldsGroup().hidden).toBe(true);
-    expect(visible().indexOf("hatch")).toBe(visible().indexOf("gradient") + 1);
-    editor.setLevel("expert");
-    expect(visible().slice(visible().indexOf("gradient"), visible().indexOf("gradient") + 4)).toEqual(["gradient", "hatch", "stroke", "effects"]);
-    // Una linea senza riempimento non ha la sezione.
-    editor.select(["l"]);
-    expect(section().hidden).toBe(true);
-    editor.select([]);
-    expect(section().hidden).toBe(true);
-    // Nel Personalizzato si vede con la sua parte.
-    editor.setLevel("custom", ["rect", "properties"]);
-    editor.select(["r"]);
-    expect(section().hidden).toBe(true);
-    editor.setLevel("custom", ["rect", "properties", "hatches"]);
-    editor.select(["r"]);
-    expect(section().hidden).toBe(false);
-    expect(changes).toEqual([]);
-  });
-
-  it("una campitura pronta scrive la campitura privata e il riempimento col ripiego, in un solo passo che annulla al byte", () => {
-    mount(BLUE, { level: "standard" });
-    openProperties();
-    editor.select(["r"]);
-    const before = editor.engine.text;
-    kindButton().click();
-    expect(kindButton().getAttribute("aria-expanded")).toBe("true");
-    expect(menuItems().map(labelOf)).toEqual(["Nessuna", "Diagonale", "Incrociata", "Orizzontale", "Puntinata", "Quadrettata"]);
-    expect(menuItems().map((each) => each.getAttribute("aria-checked"))).toEqual(["true", "false", "false", "false", "false", "false"]);
-    entry("Diagonale").click();
-    expect(changes).toHaveLength(1);
-    const after = editor.engine.text;
-    const id = patternOf("r")!;
-    expect(id).toMatch(/^r[0-9a-z]{8}$/);
-    expect(after).toContain(
-      `  <defs id="fub-defs">
-    <pattern id="${id}" fub:role="private" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)" fub:pattern="lines -45 8 1.5 #ffffff #0072b2">
-      <rect width="8" height="8" fill="#0072b2"/>
-      <rect y="3.25" width="8" height="1.5" fill="#ffffff"/>
-    </pattern>
-  </defs><g id="l1" fub:layer="Livello 1"><rect id="r" x="20" y="20" width="40" height="30" fill="url(#${id}) #308cc0"/></g></svg>`,
-    );
-    expect(patterns()).toHaveLength(1);
-    expect(editor.selection).toEqual(["r"]);
-    expect(spoken()).toContain("Campitura «Diagonale» su 1 oggetto.");
-    // Il pannello segue: la scelta, i campi e le loro unità.
-    expect(kindButton().textContent).toBe("Diagonale");
-    expect(kindButton().getAttribute("aria-expanded")).toBe("false");
-    expect(fieldsGroup().hidden).toBe(false);
-    expect(["color", "background", "spacing", "width", "angle"].map((name) => hatchField(name).value)).toEqual(["#ffffff", "#0072b2", "8", "1,5", "-45"]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    // Un passo solo, col suo nome, e al byte.
-    editor.undo();
-    expect(editor.engine.text).toBe(before);
-    expect(spoken()).toBe("Annullato: Campitura.");
-    expect(kindButton().textContent).toBe("Nessuna");
-    expect(editor.selection).toEqual(["r"]);
-    editor.redo();
-    expect(editor.engine.text).toBe(after);
-    expect(kindButton().textContent).toBe("Diagonale");
-  });
-
-  it("scegliere la campitura che c'è già non scrive niente", () => {
-    mount(BLUE, { level: "standard" });
-    openProperties();
-    editor.select(["r"]);
-    choose("Diagonale");
-    const count = changes.length;
-    const said = spoken();
-    choose("Diagonale");
-    expect(changes).toHaveLength(count);
-    expect(spoken()).toBe(said);
-    expect(kindButton().getAttribute("aria-expanded")).toBe("false");
-  });
-
-  it("il passo cambia sul posto, con `set`: la campitura è la stessa, e un colpo di freccia dopo l'altro si annulla insieme", () => {
-    const now = vi.spyOn(performance, "now").mockReturnValue(0);
-    mount(BLUE, { level: "standard" });
-    openProperties();
-    editor.select(["r"]);
-    choose("Diagonale");
-    const first = editor.engine.text;
-    const id = patternOf("r")!;
-    now.mockReturnValue(MERGE_MS + 1);
-    enter(hatchField("spacing"), "12");
-    expect(patterns()).toHaveLength(1);
-    expect(patternOf("r")).toBe(id);
-    expect(editor.engine.text).toContain(`<pattern id="${id}" fub:role="private" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)" fub:pattern="lines -45 12 1.5 #ffffff #0072b2">`);
-    expect(hatchField("spacing").value).toBe("12");
-    const typed = editor.engine.text;
-    now.mockReturnValue(2 * MERGE_MS + 2);
-    hatchField("spacing").focus();
-    key("ArrowUp", {}, hatchField("spacing"));
-    key("ArrowUp", {}, hatchField("spacing"));
-    expect(editor.engine.text).toContain('fub:pattern="lines -45 14 1.5 #ffffff #0072b2"');
-    expect(patterns()).toHaveLength(1);
-    expect(document.activeElement).toBe(hatchField("spacing"));
-    // I due colpi si annullano insieme; il numero scritto, a parte.
-    editor.undo();
-    expect(editor.engine.text).toBe(typed);
-    expect(spoken()).toBe("Annullato: Passo della campitura.");
-    editor.undo();
-    expect(editor.engine.text).toBe(first);
-    expect(spoken()).toBe("Annullato: Passo della campitura.");
-  });
-
-  it("ogni genere di cambio ha il suo nome nella cronologia", () => {
-    let time = 0;
-    vi.spyOn(performance, "now").mockImplementation(() => time);
-    mount(BLUE, { level: "standard" });
-    openProperties();
-    editor.select(["r"]);
-    choose("Puntinata");
-    const wanted: Array<[() => void, string]> = [
-      [() => enter(hatchField("width"), "4"), "Annullato: Diametro dei puntini."],
-      [() => enter(hatchField("angle"), "20"), "Annullato: Angolo della campitura."],
-      [() => enter(hatchField("color"), "#ffff00"), "Annullato: Colore della campitura."],
-      [() => enter(hatchField("background"), "nessuno"), "Annullato: Fondo della campitura."],
-    ];
-    const texts = [editor.engine.text];
-    for (const [change] of wanted) {
-      time += 10 * MERGE_MS;
-      change();
-      texts.push(editor.engine.text);
-    }
-    for (let at = wanted.length - 1; at >= 0; at -= 1) {
-      editor.undo();
-      expect(spoken()).toBe(wanted[at]![1]);
-      expect(editor.engine.text).toBe(texts[at]);
-    }
-  });
-
-  it("«Nessuna» torna al colore del fondo, e un annulla riporta la campitura", () => {
-    mount(BLUE, { level: "standard" });
-    openProperties();
-    editor.select(["r"]);
-    choose("Incrociata");
-    const hatched = editor.engine.text;
-    choose("Nessuna");
-    expect(patterns()).toEqual([]);
-    expect(editor.engine.text).toContain('<rect id="r" x="20" y="20" width="40" height="30" fill="#0072b2"/>');
-    expect(spoken()).toContain("Campitura tolta da 1 oggetto.");
-    expect(kindButton().textContent).toBe("Nessuna");
-    expect(fieldsGroup().hidden).toBe(true);
-    editor.undo();
-    expect(editor.engine.text).toBe(hatched);
-    expect(spoken()).toBe("Annullato: Togli la campitura.");
-    expect(kindButton().textContent).toBe("Incrociata");
-  });
-
-  it("un gruppo la dà alle sue parti, e una parte bloccata resta com'è", () => {
-    mount(PARTS, { level: "standard" });
-    openProperties();
-    editor.select(["og"]);
-    expect(kindButton().textContent).toBe("Nessuna");
-    choose("Orizzontale");
-    const text = editor.engine.text;
-    expect(patterns()).toHaveLength(1);
-    expect(text).toMatch(/<rect id="oa" x="20" y="80" width="40" height="30" fill="url\(#r[0-9a-z]{8}\) #[0-9a-f]{6}"\/>/);
-    expect(text).toContain('<rect id="ob" x="80" y="80" width="40" height="30" fill="#cc79a7" fub:locked="true"/>');
-    expect(text).toContain('<g id="og" fill="#009e73">');
-    expect(spoken()).toContain("Campitura «Orizzontale» su 1 oggetto.");
-    editor.undo();
-    expect(patterns()).toEqual([]);
-  });
-
-  it("più oggetti: una scelta li cambia tutti, e i campi non toccano chi non ha una campitura", () => {
-    const now = vi.spyOn(performance, "now").mockReturnValue(0);
-    mount(PARTS, { level: "standard" });
-    openProperties();
-    editor.select(["r", "s"]);
-    choose("Diagonale");
-    expect(patterns()).toHaveLength(2);
-    expect(spoken()).toContain("Campitura «Diagonale» su 2 oggetti.");
-    expect(kindButton().textContent).toBe("Diagonale");
-    enter(hatchField("angle"), "30");
-    expect(editor.engine.text.match(/rotate\(30\)/g)).toHaveLength(2);
-    const turned = editor.engine.text;
-    // Con un oggetto senza campitura i campi cambiano soltanto le altre.
-    editor.select(["r", "s", "oa"]);
-    expect(kindButton().textContent).toBe("Misto");
-    expect(section().querySelector(".draw-hatch > .draw-properties-note")!.textContent).toBe("I campi cambiano la campitura di 2 oggetti: gli altri restano come sono.");
-    // Un altro passo, a tempo debito: due passi di seguito si unirebbero.
-    now.mockReturnValue(10 * MERGE_MS);
-    enter(hatchField("angle"), "10");
-    expect(editor.engine.text.match(/rotate\(10\)/g)).toHaveLength(2);
-    expect(editor.engine.text).toContain('<rect id="oa" x="20" y="80" width="40" height="30"/>');
-    editor.undo();
-    expect(editor.engine.text).toBe(turned);
-  });
-
-  it("in sola lettura la campitura si guarda e basta", () => {
-    mount(BLUE, { level: "standard" });
-    openProperties();
-    editor.select(["r"]);
-    choose("Diagonale");
-    const shown = editor.engine.text;
-    const count = changes.length;
-    editor.setReadOnly(true);
-    expect(kindButton().getAttribute("aria-disabled")).toBe("true");
-    expect(hatchField("spacing").readOnly).toBe(true);
-    kindButton().click();
-    expect(spoken()).toContain("sola lettura");
-    expect(kindButton().getAttribute("aria-expanded")).toBe("false");
-    key("ArrowUp", {}, hatchField("spacing"));
-    expect(editor.engine.text).toBe(shown);
-    expect(changes).toHaveLength(count);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  describe("i motivi del documento, dal livello Esperto", () => {
-    it("«Motivo dalla selezione» fa il motivo col suo nome, in un passo; gli oggetti e la selezione restano", () => {
-      const now = vi.spyOn(performance, "now").mockReturnValue(0);
-      mount(BLUE, { level: "expert" });
-      editor.select(["r"]);
-      const before = editor.engine.text;
-      expect(motifButton().hidden).toBe(false);
-      motifButton().click();
-      expect(changes).toHaveLength(1);
-      const after = editor.engine.text;
-      expect(after).toContain('fub:role="swatch" fub:name="Motivo"');
-      expect(after).toMatch(/<pattern id="r[0-9a-z]{8}" fub:role="swatch" fub:name="Motivo" x="20" y="20" width="40" height="30" patternUnits="userSpaceOnUse">/);
-      expect(after).toContain('<rect id="r" x="20" y="20" width="40" height="30" fill="#0072b2"/>');
-      expect(editor.selection).toEqual(["r"]);
-      expect(spoken()).toBe("Motivo «Motivo» creato: lo trovi nel menu della campitura.");
-      // Un altro prende il primo nome libero.
-      now.mockReturnValue(10 * MERGE_MS);
-      motifButton().click();
-      expect(editor.engine.text).toContain('fub:name="Motivo 2"');
-      expect(spoken()).toBe("Motivo «Motivo 2» creato: lo trovi nel menu della campitura.");
-      editor.undo();
-      expect(spoken()).toBe("Annullato: Motivo dalla selezione.");
-      editor.undo();
-      expect(editor.engine.text).toBe(before);
-      expect(editor.selection).toEqual(["r"]);
-      editor.redo();
-      expect(editor.engine.text).toBe(after);
-    });
-
-    it("sotto l'Esperto il comando non c'è, né nel menu della selezione né nel menu della campitura", () => {
-      mount(BLUE, { level: "standard" });
-      openProperties();
-      editor.select(["r"]);
-      expect(motifButton().hidden).toBe(true);
-      host.querySelector<HTMLButtonElement>('[aria-label="Selezione avanzata"]')!.click();
-      expect(menuItems().map(labelOf)).not.toContain("Motivo dalla selezione");
-      closeMenus();
-      kindButton().click();
-      expect(menuItems().map(labelOf)).not.toContain("Motivo dalla selezione");
-      expect(changes).toEqual([]);
-    });
-
-    it("sta anche nel menu della selezione, spento senza oggetti, e nel menu della campitura", () => {
-      mount(BLUE, { level: "expert" });
-      openProperties();
-      const selectionMenu = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[aria-label="Selezione avanzata"]')!;
-      selectionMenu().click();
-      expect(entry("Motivo dalla selezione").getAttribute("aria-disabled")).toBe("true");
-      expect(entry("Motivo dalla selezione").querySelector(".menu-description")!.textContent).toBe("Nessun oggetto scelto.");
-      closeMenus();
-      editor.select(["r"]);
-      selectionMenu().click();
-      expect(entry("Motivo dalla selezione").getAttribute("aria-disabled")).toBeNull();
-      entry("Motivo dalla selezione").click();
-      expect(changes).toHaveLength(1);
-      expect(editor.engine.text).toContain('fub:name="Motivo"');
-      expect(editor.selection).toEqual(["r"]);
-      // Il menu della campitura ha il motivo nuovo e, in fondo, il comando.
-      kindButton().click();
-      expect(menuItems().map(labelOf)).toEqual(["Nessuna", "Diagonale", "Incrociata", "Orizzontale", "Puntinata", "Quadrettata", "Motivo", "Motivo dalla selezione"]);
-      entry("Motivo dalla selezione").click();
-      expect(editor.engine.text).toContain('fub:name="Motivo 2"');
-      expect(formatIssues(checkAccessibility(host))).toBe("");
-    });
-
-    it("un motivo si dà a un altro oggetto dal menu, col suo colore medio per ripiego", () => {
-      mount(PARTS, { level: "expert" });
-      openProperties();
-      editor.select(["r"]);
-      motifButton().click();
-      editor.select(["s"]);
-      expect(kindButton().textContent).toBe("Nessuna");
-      choose("Motivo");
-      expect(editor.engine.text).toMatch(/<rect id="s" x="80" y="20" width="40" height="30" fill="url\(#r[0-9a-z]{8}\) #[0-9a-f]{6}"\/>/);
-      expect(spoken()).toContain("Motivo «Motivo» su 1 oggetto.");
-      expect(kindButton().textContent).toBe("Motivo");
-      // Il motivo scelto ha il suo nome e il pulsante che lo elimina; i campi della campitura no.
-      expect(fieldsGroup().hidden).toBe(true);
-      expect(motifGroup().hidden).toBe(false);
-      expect(hatchField("name").value).toBe("Motivo");
-      expect(deleteButton().textContent).toBe("Elimina motivo");
-      expect(formatIssues(checkAccessibility(host))).toBe("");
-      editor.undo();
-      expect(spoken()).toBe("Annullato: Campitura.");
-    });
-
-    it("un motivo si rinomina dal suo nome, in un passo, e un nome già preso non va", () => {
-      mount(doc(`${DEFS(MOTIF)}${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="url(#rm) #800080"/><rect id="s" x="80" y="20" width="40" height="30" fill="#d55e00"/></g>`), { level: "expert" });
-      openProperties();
-      editor.select(["r"]);
-      expect(kindButton().textContent).toBe("Pois");
-      expect(hatchField("name").value).toBe("Pois");
-      const before = editor.engine.text;
-      enter(hatchField("name"), "  Quadri   rossi ");
-      expect(changes).toHaveLength(1);
-      expect(editor.engine.text).toContain('<pattern id="rm" fub:role="swatch" fub:name="Quadri rossi"');
-      expect(spoken()).toBe("Il motivo ora si chiama «Quadri rossi».");
-      expect(kindButton().textContent).toBe("Quadri rossi");
-      expect(hatchField("name").value).toBe("Quadri rossi");
-      expect(document.activeElement).toBe(hatchField("name"));
-      // Un nome vuoto, o che si legge come un colore, non va.
-      enter(hatchField("name"), "");
-      expect(hatchField("name").getAttribute("aria-invalid")).toBe("true");
-      expect(motifGroup().querySelector(".draw-properties-error")!.textContent).toBe("Scrivi un nome.");
-      enter(hatchField("name"), "#ff0000");
-      expect(motifGroup().querySelector(".draw-properties-error")!.textContent).toBe("«#ff0000» si legge come un colore, non come un nome: scegline un altro.");
-      expect(changes).toHaveLength(1);
-      editor.undo();
-      expect(editor.engine.text).toBe(before);
-      expect(spoken()).toBe("Annullato: Rinomina il motivo.");
-    });
-
-    it("un nome di un campione del documento non va ai motivi", () => {
-      const swatch = '<linearGradient id="rs" fub:role="swatch" fub:name="Blu marca" gradientUnits="userSpaceOnUse"><stop stop-color="#0072b2"/></linearGradient>';
-      mount(doc(`${DEFS(MOTIF + swatch)}${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="url(#rm) #800080"/></g>`), { level: "expert" });
-      openProperties();
-      editor.select(["r"]);
-      enter(hatchField("name"), "blu marca");
-      expect(changes).toEqual([]);
-      expect(hatchField("name").getAttribute("aria-invalid")).toBe("true");
-      expect(motifGroup().querySelector(".draw-properties-error")!.textContent).toBe("C’è già un campione o un motivo «blu marca»: scegline un altro.");
-    });
-
-    it("«Elimina motivo» lo toglie: chi lo usava torna a un colore pieno, in un passo; il fuoco resta nella sezione", () => {
-      mount(doc(`${DEFS(MOTIF)}${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="url(#rm) #800080"/><rect id="s" x="80" y="20" width="40" height="30" fill="url(#rm) #800080"/></g>`), { level: "expert" });
-      openProperties();
-      editor.select(["r", "s"]);
-      const before = editor.engine.text;
-      deleteButton().focus();
-      deleteButton().click();
-      expect(changes).toHaveLength(1);
-      expect(editor.engine.text).not.toContain("<pattern");
-      expect(editor.engine.text).toContain('<rect id="r" x="20" y="20" width="40" height="30" fill="#800080"/>');
-      expect(editor.engine.text).toContain('<rect id="s" x="80" y="20" width="40" height="30" fill="#800080"/>');
-      expect(spoken()).toBe("Motivo «Pois» eliminato: chi lo usava torna a un colore pieno.");
-      expect(motifGroup().hidden).toBe(true);
-      expect(section().contains(document.activeElement)).toBe(true);
-      editor.undo();
-      expect(editor.engine.text).toBe(before);
-      expect(spoken()).toBe("Annullato: Elimina il motivo.");
-      expect(kindButton().textContent).toBe("Pois");
-    });
-
-    it("chi lo usa e non si può cambiare lo tiene: si dice quanti sono", () => {
-      mount(
-        doc(`${DEFS(MOTIF)}${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="url(#rm) #800080"/><rect id="k" x="80" y="20" width="40" height="30" fill="url(#rm) #800080" fub:locked="true"/></g>`),
-        { level: "expert" },
-      );
-      openProperties();
-      editor.select(["r"]);
-      deleteButton().click();
-      expect(editor.engine.text).toContain('<pattern id="rm" fub:role="shared"');
-      expect(editor.engine.text).toContain('<rect id="r" x="20" y="20" width="40" height="30" fill="#800080"/>');
-      expect(spoken()).toBe("1 oggetto che non si può cambiare usa ancora «Pois»: il motivo resta fra le risorse, senza nome.");
-    });
-
-    it("il nome e il pulsante non ci sono sotto l'Esperto", () => {
-      mount(doc(`${DEFS(MOTIF)}${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="url(#rm) #800080"/></g>`), { level: "standard" });
-      openProperties();
-      editor.select(["r"]);
-      expect(kindButton().textContent).toBe("Pois");
-      expect(motifGroup().hidden).toBe(true);
-    });
-
-    describe("i rifiuti", () => {
-      const PNG_HREF = "data:image/png;base64,iVBORw0KGgo=";
-      const refusal = (source: string, keys: string[]): string => {
-        mount(source, { level: "expert" });
-        openProperties();
-        editor.select(keys);
-        const before = editor.engine.text;
-        // Dal pulsante, e a voce; il file non cambia.
-        motifButton().click();
-        expect(changes).toEqual([]);
-        expect(editor.engine.text).toBe(before);
-        const said = spoken();
-        // Dal menu della selezione la voce è spenta, e dice lo stesso.
-        host.querySelector<HTMLButtonElement>('[aria-label="Selezione avanzata"]')!.click();
-        expect(entry("Motivo dalla selezione").getAttribute("aria-disabled")).toBe("true");
-        expect(entry("Motivo dalla selezione").querySelector(".menu-description")!.textContent).toBe(said);
-        closeMenus();
-        return said;
-      };
-      const clip = '<clipPath id="rc" fub:role="private"><rect x="20" y="20" width="10" height="10"/></clipPath>';
-
-      it("niente da disegnare", () => {
-        expect(refusal(doc(`${LAYER}<rect id="z" x="20" y="20" width="0" height="30" fill="#0072b2"/></g>`), ["z"])).toBe(
-          "Gli oggetti scelti non disegnano niente: per un motivo serve qualcosa da ripetere.",
-        );
-      });
-
-      it("un'immagine, un collegamento o un testo su tracciato", () => {
-        expect(refusal(doc(`${LAYER}<image id="i" x="20" y="20" width="20" height="20" href="${PNG_HREF}"/></g>`), ["i"])).toBe(
-          "Un’immagine, un collegamento o un testo su tracciato non stanno in un motivo.",
-        );
-      });
-
-      it("ritagli, maschere, effetti, punte, altri motivi", () => {
-        expect(refusal(doc(`${DEFS(clip)}${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="#0072b2" clip-path="url(#rc)"/></g>`), ["r"])).toBe(
-          "Un oggetto scelto porta ritagli, maschere, effetti, filtri, punte, una campitura, un altro motivo o un tratto che FubDraw non sa ridisegnare: in un motivo cambierebbero ciò che mostra.",
-        );
-      });
-
-      it("un contenitore con un ritaglio, una maschera, degli effetti, o nascosto", () => {
-        expect(refusal(doc(`${DEFS(clip)}${LAYER}<g id="og" clip-path="url(#rc)"><rect id="oa" x="20" y="20" width="40" height="30" fill="#0072b2"/></g></g>`), ["oa"])).toBe(
-          "Un oggetto scelto sta in un gruppo con un ritaglio, una maschera, degli effetti, o nascosto: nel motivo si vedrebbe diverso.",
-        );
-      });
-
-      it("un foglio di stile che li farebbe vedere diversi", () => {
-        expect(refusal(doc(`<style>pattern rect{fill:#ff0000}</style>${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="#0072b2"/></g>`), ["r"])).toBe(
-          "Nel disegno c’è uno stile che, dentro il motivo, cambierebbe l’aspetto degli oggetti scelti: FubDraw non sa riscriverlo com’era.",
-        );
-      });
-    });
-
-    it("in sola lettura il comando dice che non si può, e il menu della selezione lo mostra spento", () => {
-      mount(BLUE, { level: "expert" });
-      openProperties();
-      editor.select(["r"]);
-      editor.setReadOnly(true);
-      motifButton().click();
-      expect(changes).toEqual([]);
-      expect(spoken()).toBe("Modifica non applicata: il disegno è in sola lettura.");
-      host.querySelector<HTMLButtonElement>('[aria-label="Selezione avanzata"]')!.click();
-      expect(entry("Motivo dalla selezione").getAttribute("aria-disabled")).toBe("true");
-      expect(entry("Motivo dalla selezione").querySelector(".menu-description")!.textContent).toBe("Modifica non applicata: il disegno è in sola lettura.");
-      closeMenus();
-      kindButton().focus();
-      key("ArrowDown", {}, kindButton());
-      expect(kindButton().getAttribute("aria-expanded")).toBe("false");
-    });
-  });
-});
-
-describe("il Connettore, dal livello Standard", () => {
+describe("i connettori del file", () => {
   const A = "oa1a1a1a1";
   const B = "ob2b2b2b2";
-  const C = "oc3c3c3c3";
-  const G = "og4g4g4g4";
-  const I = "oi5i5i5i5";
-  const J = "oj6j6j6j6";
-  const rect = (id: string, name: string, x: number, y: number, width: number, height: number, fill: string): string =>
-    `<rect id="${id}" x="${x}" y="${y}" width="${width}" height="${height}" fill="${fill}"><title>${name}</title></rect>`;
-  /// Tre rettangoli, Alfa in alto a sinistra, Beta alla sua destra e Gamma
-  /// sotto, e in basso a destra un gruppo di due.
-  const SHAPES = doc(
-    `<title>Prova</title>${LAYER}${rect(A, "Alfa", 40, 60, 60, 40, "#e69f00")}${rect(B, "Beta", 240, 60, 60, 40, "#009e73")}${rect(C, "Gamma", 140, 200, 60, 40, "#56b4e9")}` +
-      `<g id="${G}"><title>Coppia</title>${rect(I, "Dentro", 290, 200, 40, 40, "#d55e00")}${rect(J, "Fuori", 340, 200, 40, 40, "#cc79a7")}</g></g>`,
+  const K = "ok3k3k3k3";
+  const rect = (id: string, name: string, x: number, y: number): string =>
+    `<rect id="${id}" x="${x}" y="${y}" width="60" height="40" fill="#e69f00"><title>${name}</title></rect>`;
+  /// Alfa e Beta, e un connettore scritto prima della decisione 0231 dal
+  /// lato destro di Alfa al sinistro di Beta.
+  const LINKED = doc(
+    `<title>Prova</title>${LAYER}${rect(A, "Alfa", 40, 60)}${rect(B, "Beta", 240, 60)}` +
+      `<path id="${K}" fub:shape="connector" fub:geom="straight 100 80 240 80" fub:from="${A} right" fub:to="${B} left" d="M100 80 L240 80" fill="none" stroke="#000000"/></g>`,
   ).replace('viewBox="0 0 100 100"', 'viewBox="0 0 400 300"');
-
-  // Per i test che guardano i marcatori nel disegno.
-  const scene = (): never => ({ engine: editor.engine }) as never;
-  /// L'elemento `id`, com'è scritto nel testo del disegno.
   const tag = (id: string): string => new RegExp(`<[a-zA-Z]+ id="${id}"[^>]*>`).exec(editor.engine.text)![0];
   const attr = (id: string, name: string): string | null => new RegExp(` ${name}="([^"]*)"`).exec(tag(id))?.[1] ?? null;
-  /// Gli id dei connettori del disegno, in ordine di documento.
-  const lines = (): string[] => [...editor.engine.text.matchAll(/<path id="([^"]+)" [^>]*fub:shape="connector"/g)].map((match) => match[1]!);
-  const numbers = (geom: string): number[] => geom.split(" ").slice(1).map(Number);
   const pointsOf = (id: string): Array<[number, number]> => {
-    const all = numbers(attr(id, "fub:geom")!);
+    const all = attr(id, "fub:geom")!.split(" ").slice(1).map(Number);
     return Array.from({ length: all.length / 2 }, (_, i) => [all[2 * i]!, all[2 * i + 1]!]);
   };
-  /// Il `d` che la geometria `fub:geom` di `id` detta: i punti in fila, o
-  /// la curva.
+  /// Il `d` che la geometria dritta di `id` detta.
   const dictated = (id: string): string => {
-    const geom = attr(id, "fub:geom")!;
     const points = pointsOf(id).map(([x, y]) => `${x} ${y}`);
-    return geom.startsWith("curved") ? `M${points[0]} C${points.slice(1).join(" ")}` : `M${points[0]} ${points.slice(1).map((each) => `L${each}`).join(" ")}`;
+    return `M${points[0]} ${points.slice(1).map((each) => `L${each}`).join(" ")}`;
   };
-  /// Un trascinamento col Connettore in mano, da `from` a `to` passando a
-  /// metà.
-  const link = (from: readonly [number, number], to: readonly [number, number], init: Init = {}): void =>
-    drag([from, [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2], to], init);
-  /// Un tocco, lontano nel tempo dal precedente.
-  const tap = (x: number, y: number, init: Init = {}): void => {
-    clock += 1000;
-    drag([[x, y]], init);
-  };
-  const toolButton = () => railTool("Connettore");
-  const connecting = (source = SHAPES, options: DrawEditorOptions = {}): void => {
-    mount(source, { level: "standard", ...options });
-    key("x");
-  };
-
-  it("c'è dal livello Standard, col tasto X dopo la freccia; all'Essenziale no, e chi lo aveva in mano riprende la penna", () => {
-    mount(SHAPES);
-    expect(toolButton().hidden).toBe(true);
-    expect(key("x").defaultPrevented).toBe(false);
-    expect(editor.tool).toBe("pen");
-    editor.setLevel("standard");
-    expect(toolButton().hidden).toBe(false);
-    expect(toolButton().title).toBe("Connettore (X)");
-    const tools = railNames();
-    expect(tools.slice(tools.indexOf("Freccia"))).toEqual(["Freccia", "Connettore", "Testo", "Contagocce", "Sfumatura"]);
-    key("x");
-    expect(editor.tool).toBe("connector");
-    expect(spoken()).toBe("Strumento: Connettore.");
-    expect(toolButton().checked).toBe(true);
-    editor.setLevel("essential");
-    expect(toolButton().hidden).toBe(true);
-    expect(editor.tool).toBe("pen");
-    expect(changes).toEqual([]);
-  });
-
-  it("un trascinamento da un oggetto a un altro scrive un connettore a gomito, agganciato a tutti e due, in un passo che si annulla", () => {
-    connecting();
-    // Lontano dai punti d'aggancio, il lato lo sceglie FubDraw.
-    link([60, 90], [155, 225]);
-    const [id] = lines();
-    expect(lines()).toHaveLength(1);
-    expect(attr(id!, "fub:from")).toBe(`${A} auto`);
-    expect(attr(id!, "fub:to")).toBe(`${C} auto`);
-    expect(attr(id!, "fub:geom")).toMatch(/^elbow /);
-    // Un gomito ha almeno una svolta, parte da un lato di Alfa e arriva a uno di Gamma.
-    const points = pointsOf(id!);
-    expect(points.length).toBeGreaterThanOrEqual(3);
-    expect([[70, 60], [100, 80], [70, 100], [40, 80]]).toContainEqual(points[0]);
-    expect([[170, 200], [200, 220], [170, 240], [140, 220]]).toContainEqual(points[points.length - 1]);
-    expect(attr(id!, "d")).toBe(dictated(id!));
-    expect(attr(id!, "fill")).toBe("none");
-    expect(attr(id!, "stroke")).toBe("#000000");
-    // La punta è un triangolo medio alla fine, e il capo d'inizio non ne ha.
-    expect(attr(id!, "marker-start")).toBeNull();
-    expect(tipOf(scene(), id!, "end")).toBe("triangle medium end #000000");
-    expect(markersIn(scene())).toHaveLength(1);
-    // Resta scelto, e lo strumento è ancora il Connettore.
-    expect(editor.selection).toEqual([id]);
-    expect(editor.tool).toBe("connector");
-    expect(spoken()).toBe("Connettore aggiunto da Rettangolo «Alfa» a Rettangolo «Gamma». Il disegno ha 5 oggetti.");
-    expect(changes).toHaveLength(1);
-    const written = editor.engine.text;
-    editor.undo();
-    expect(spoken()).toBe("Annullato: Connettore.");
-    expect(editor.engine.text).toBe(SHAPES);
-    editor.redo();
-    expect(spoken()).toBe("Ripetuto: Connettore.");
-    expect(editor.engine.text).toBe(written);
-  });
-
-  /// Un gesto del puntatore che passa per `steps`: il primo preme, l'ultimo
-  /// alza, ognuno coi suoi modificatori.
-  const sweep = (steps: ReadonlyArray<readonly [number, number, Init?]>): void => {
-    const last = steps.length - 1;
-    steps.forEach(([x, y, init], at) => {
-      const type = at === 0 ? "pointerdown" : at === last ? "pointerup" : "pointermove";
-      surface().dispatchEvent(
-        pointer(type, { ...MOUSE, button: at === 0 || at === last ? 0 : -1, buttons: at === last ? 0 : 1, pressure: at === last ? 0 : 0.5, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }),
-      );
-    });
-  };
-  /// Il puntatore passa sopra `x`, `y` senza premere.
-  const hover = (x: number, y: number, init: Init = {}): void =>
-    void surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }));
-  const edges = (box: readonly [number, number, number, number]): string[] => {
-    const [x1, y1, x2, y2] = box;
-    return [`${x1},${y1}`, `${x2},${y1}`, `${x2},${y2}`, `${x1},${y2}`];
-  };
-
-  describe("sopra un oggetto", () => {
-    let layer: ReturnType<typeof recording>;
-    beforeEach(() => {
-      layer = recording();
-    });
-    /// I cerchi dell'ultimo disegno, dove stanno e quanto sono larghi: da 3,5
-    /// i punti d'aggancio, da 4,5 quello che il capo prenderebbe.
-    const circles = (): string[] =>
-      layer
-        .calls()
-        .filter(([name]) => name === "arc")
-        .map(([, x, y, radius]) => `${x},${y} r${radius}`)
-        .sort();
-    /// Gli angoli da cui parte un tratto del contorno, dell'ultimo disegno.
-    const outlined = (): string[] =>
-      layer
-        .calls()
-        .filter(([name]) => name === "moveTo")
-        .map(([, x, y]) => `${x},${y}`)
-        .sort();
-    const over = (x: number, y: number, init: Init = {}): void => {
-      hover(x, y, init);
-      layer.frame();
-    };
-
-    it("il Connettore mostra il contorno e i cinque punti d'aggancio, e il punto vicino al puntatore pieno", () => {
-      connecting();
-      over(200, 140);
-      expect(circles()).toEqual([]);
-      expect(outlined()).toEqual([]);
-      over(60, 90);
-      expect(circles()).toEqual(["100,80 r3.5", "40,80 r3.5", "70,100 r3.5", "70,60 r3.5", "70,80 r3.5"]);
-      expect(outlined()).toEqual(edges([40, 60, 100, 100]).sort());
-      // Vicino al punto di destra, è quello che il capo prenderebbe.
-      over(97, 83);
-      expect(circles()).toEqual(["100,80 r4.5", "40,80 r3.5", "70,100 r3.5", "70,60 r3.5", "70,80 r3.5"]);
-      over(200, 140);
-      expect(circles()).toEqual([]);
-      // Gli altri strumenti non li mostrano.
-      editor.setTool("select");
-      over(60, 90);
-      expect(circles()).toEqual([]);
-    });
-
-    it("un gruppo mostra i suoi punti, e con Ctrl o ⌘ quelli dell'oggetto dentro", () => {
-      connecting();
-      over(300, 230);
-      expect(circles()).toEqual(["290,220 r3.5", "335,200 r3.5", "335,220 r3.5", "335,240 r3.5", "380,220 r3.5"]);
-      over(300, 230, { ctrlKey: true });
-      expect(circles()).toEqual(["290,220 r3.5", "310,200 r3.5", "310,220 r3.5", "310,240 r3.5", "330,220 r3.5"]);
-    });
-
-    it("uscendo dal foglio o cambiando strumento i punti spariscono, e scegliendo il Connettore sopra un oggetto si vedono subito", () => {
-      connecting();
-      over(60, 90);
-      expect(circles()).toHaveLength(5);
-      surface().dispatchEvent(new Event("pointerleave"));
-      layer.frame();
-      expect(circles()).toEqual([]);
-      over(60, 90);
-      expect(circles()).toHaveLength(5);
-      editor.setTool("rect");
-      layer.frame();
-      expect(circles()).toEqual([]);
-      editor.setTool("connector");
-      layer.frame();
-      expect(circles()).toHaveLength(5);
-    });
-
-    it("tirando un connettore si vedono i punti dell'oggetto da cui parte e di quello che si tocca", () => {
-      connecting();
-      const target = surface();
-      target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 60, clientY: 90, timeStamp: (clock += 8) }));
-      target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 150, clientY: 90, timeStamp: (clock += 8) }));
-      target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 242, clientY: 82, timeStamp: (clock += 8) }));
-      layer.frame();
-      // Alfa da cui parte, con l'aggancio automatico: nessun punto pieno. Beta,
-      // dove il capo si aggancerebbe a sinistra.
-      expect(circles()).toEqual(
-        ["100,80 r3.5", "40,80 r3.5", "70,100 r3.5", "70,60 r3.5", "70,80 r3.5", "240,80 r4.5", "270,100 r3.5", "270,60 r3.5", "270,80 r3.5", "300,80 r3.5"].sort(),
-      );
-      target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 242, clientY: 82, timeStamp: (clock += 8) }));
-    });
-  });
-
-  it("il capo preso vicino a un punto d'aggancio si aggancia lì, altrove sceglie FubDraw", () => {
-    connecting();
-    link([97, 83], [243, 78]);
-    expect(attr(lines()[0]!, "fub:from")).toBe(`${A} right`);
-    expect(attr(lines()[0]!, "fub:to")).toBe(`${B} left`);
-    // Fra due punti che stanno allo stesso livello il gomito è un tratto solo.
-    expect(attr(lines()[0]!, "fub:geom")).toBe("elbow 100 80 240 80");
-    expect(attr(lines()[0]!, "d")).toBe("M100 80 L240 80");
-    // A 9 pixel dal punto di sinistra di Alfa si aggancia ancora; a 11 no.
-    // (Il connettore nuovo resta scelto, e i suoi capi si prendono: si lascia.)
-    editor.select([]);
-    link([49, 80], [160, 215]);
-    expect(attr(lines()[1]!, "fub:from")).toBe(`${A} left`);
-    editor.select([]);
-    link([51, 80], [160, 215]);
-    expect(attr(lines()[2]!, "fub:from")).toBe(`${A} auto`);
-    expect(attr(lines()[2]!, "fub:to")).toBe(`${C} auto`);
-  });
-
-  it("la soglia dell'aggancio è la stessa sullo schermo a qualunque zoom", () => {
-    connecting();
-    size(400, 300);
-    key("+");
-    key("+");
-    // Al 156 % la scena sta attorno al centro del foglio: il punto sinistro
-    // di Alfa, in 40, 80, è a -50, 40,6 sullo schermo.
-    const onScreen = (x: number, y: number): [number, number] => [200 + (x - 200) * 1.5625, 150 + (y - 150) * 1.5625];
-    const to = onScreen(160, 215);
-    link([-41, 40.625], to);
-    expect(attr(lines()[0]!, "fub:from")).toBe(`${A} left`);
-    editor.select([]);
-    // A 11 pixel, che sulla scena sono 7 unità, no: il limite è di pixel.
-    link([-39, 40.625], to);
-    expect(attr(lines()[1]!, "fub:from")).toBe(`${A} auto`);
-  });
-
-  it("con Ctrl o ⌘ il capo si aggancia all'oggetto dentro un gruppo, senza al gruppo", () => {
-    connecting();
-    link([300, 230], [60, 90]);
-    expect(attr(lines()[0]!, "fub:from")).toBe(`${G} auto`);
-    editor.select([]);
-    link([300, 230], [60, 90], { ctrlKey: true });
-    expect(attr(lines()[1]!, "fub:from")).toBe(`${I} auto`);
-    expect(attr(lines()[1]!, "fub:to")).toBe(`${A} auto`);
-  });
-
-  it("un capo non si aggancia all'oggetto dell'altro capo, né a chi lo contiene o vi sta dentro", () => {
-    connecting();
-    // Da Alfa a un punto di Alfa: l'altro capo resta libero dove cade.
-    link([60, 90], [80, 70]);
-    expect(attr(lines()[0]!, "fub:from")).toBe(`${A} auto`);
-    expect(attr(lines()[0]!, "fub:to")).toBeNull();
-    expect(pointsOf(lines()[0]!)[pointsOf(lines()[0]!).length - 1]).toEqual([80, 70]);
-    expect(spoken()).toBe("Connettore aggiunto da Rettangolo «Alfa». Il disegno ha 5 oggetti.");
-    // Dal gruppo a un oggetto dentro il gruppo.
-    editor.select([]);
-    sweep([[300, 230], [330, 225], [350, 220, { ctrlKey: true }], [352, 220, { ctrlKey: true }]]);
-    expect(attr(lines()[1]!, "fub:from")).toBe(`${G} auto`);
-    expect(attr(lines()[1]!, "fub:to")).toBeNull();
-    // Da un oggetto dentro il gruppo al gruppo.
-    editor.select([]);
-    sweep([[300, 230, { ctrlKey: true }], [330, 225, { ctrlKey: true }], [360, 230], [362, 230]]);
-    expect(attr(lines()[2]!, "fub:from")).toBe(`${I} auto`);
-    expect(attr(lines()[2]!, "fub:to")).toBeNull();
-    // Due fratelli, invece, si uniscono.
-    editor.select([]);
-    link([300, 230], [350, 230], { ctrlKey: true });
-    expect(attr(lines()[3]!, "fub:from")).toBe(`${I} auto`);
-    expect(attr(lines()[3]!, "fub:to")).toBe(`${J} auto`);
-  });
-
-  it("con Ctrl o ⌘ una linea che passa sopra un oggetto in un gruppo non gli toglie l'aggancio", () => {
-    connecting();
-    // Una linea libera, in verticale, sopra il secondo oggetto del gruppo.
-    link([352, 150], [352, 280]);
-    expect(lines()).toHaveLength(1);
-    editor.select([]);
-    link([60, 90], [350, 232], { ctrlKey: true });
-    expect(attr(lines()[1]!, "fub:to")).toBe(`${J} auto`);
-    // Senza Ctrl, il gruppo.
-    editor.select([]);
-    link([60, 90], [350, 232]);
-    expect(attr(lines()[2]!, "fub:to")).toBe(`${G} auto`);
-  });
-
-  it("da un punto vuoto a un altro il connettore è libero, e uno quasi fermo non si scrive", () => {
-    connecting();
-    link([120, 130], [200, 150]);
-    const [id] = lines();
-    expect(attr(id!, "fub:from")).toBeNull();
-    expect(attr(id!, "fub:to")).toBeNull();
-    expect(pointsOf(id!)[0]).toEqual([120, 130]);
-    expect(pointsOf(id!)[pointsOf(id!).length - 1]).toEqual([200, 150]);
-    expect(attr(id!, "d")).toBe(dictated(id!));
-    expect(spoken()).toBe("Connettore aggiunto. Il disegno ha 5 oggetti.");
-    expect(changes).toHaveLength(1);
-    // Oltre la soglia del trascinamento, ma sotto la misura minima.
-    drag([[150, 130], [153.5, 130]]);
-    expect(lines()).toHaveLength(1);
-    expect(changes).toHaveLength(1);
-    // Con un capo solo su un oggetto, la frase dice quale.
-    editor.select([]);
-    link([60, 90], [200, 140]);
-    expect(attr(lines()[1]!, "fub:from")).toBe(`${A} auto`);
-    expect(attr(lines()[1]!, "fub:to")).toBeNull();
-    expect(spoken()).toBe("Connettore aggiunto da Rettangolo «Alfa». Il disegno ha 6 oggetti.");
-    editor.select([]);
-    link([200, 140], [250, 90]);
-    expect(attr(lines()[2]!, "fub:from")).toBeNull();
-    expect(attr(lines()[2]!, "fub:to")).toBe(`${B} auto`);
-    expect(spoken()).toBe("Connettore aggiunto verso Rettangolo «Beta». Il disegno ha 7 oggetti.");
-  });
-
-  it("con la griglia accesa i capi liberi vanno alla griglia, e con Ctrl o ⌘ restano dove sono", () => {
-    const snap: DrawEditorOptions = {
-      grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE },
-    };
-    connecting(SHAPES, snap);
-    link([118, 127], [203, 152]);
-    expect(pointsOf(lines()[0]!)[0]).toEqual([120, 120]);
-    expect(pointsOf(lines()[0]!)[pointsOf(lines()[0]!).length - 1]).toEqual([200, 160]);
-    editor.select([]);
-    link([118, 127], [203, 152], { ctrlKey: true });
-    expect(pointsOf(lines()[1]!)[0]).toEqual([118, 127]);
-    expect(pointsOf(lines()[1]!)[pointsOf(lines()[1]!).length - 1]).toEqual([203, 152]);
-    // I capi agganciati a un oggetto non vanno alla griglia.
-    editor.select([]);
-    link([97, 83], [243, 78]);
-    expect(attr(lines()[2]!, "fub:geom")).toBe("elbow 100 80 240 80");
-  });
-
-  it("un tocco sceglie come la Selezione: Maiusc aggiunge e toglie, Ctrl o ⌘ entra nei gruppi, il vuoto toglie", () => {
-    connecting();
-    tap(60, 90);
-    expect(editor.selection).toEqual([A]);
-    tap(260, 80, { shiftKey: true });
-    expect(editor.selection).toEqual([A, B]);
-    tap(60, 90, { shiftKey: true });
-    expect(editor.selection).toEqual([B]);
-    // Il vuoto con Maiusc non toglie niente.
-    tap(200, 140, { shiftKey: true });
-    expect(editor.selection).toEqual([B]);
-    tap(320, 220);
-    expect(editor.selection).toEqual([G]);
-    tap(310, 220, { ctrlKey: true });
-    expect(editor.selection).toEqual([I]);
-    tap(200, 140);
-    expect(editor.selection).toEqual([]);
-    expect(editor.tool).toBe("connector");
-    expect(lines()).toEqual([]);
-    expect(changes).toEqual([]);
-  });
-
-  /// Un connettore da Alfa, a destra, a Beta, a sinistra: resta scelto, e il
-  /// Connettore in mano.
-  const joined = (): string => {
-    link([97, 83], [243, 78]);
-    return lines()[0]!;
-  };
-  /// Come si vede sul foglio l'oggetto `id`.
   const painted = (id: string): SVGElement => host.querySelector<SVGElement>(`[data-scene-id="${id}"]`)!;
 
-  describe("riagganciare un capo", () => {
-    const ends = (id: string): { first: [number, number]; last: [number, number] } => {
-      const points = pointsOf(id);
-      return { first: points[0]!, last: points[points.length - 1]! };
-    };
-
-    it("un connettore scelto ha ai capi due quadrati, e tirato su un altro oggetto il capo vi si aggancia, in un passo", () => {
-      const layer = recording();
-      connecting();
-      const id = joined();
-      layer.frame();
-      // I quadrati dei nodi: non i cerchi dell'aggancio, che qui non ci sono.
-      const squares = (): string[] =>
-        layer
-          .calls()
-          .filter(([name, , , width, height]) => name === "rect" && width === 8 && height === 8)
-          .map(([, x, y]) => `${x},${y}`);
-      expect(squares()).toEqual(["96.5,76.5", "236.5,76.5"]);
-      const before = editor.engine.text;
-      link([240, 80], [160, 215]);
-      expect(attr(id, "fub:from")).toBe(`${A} right`);
-      expect(attr(id, "fub:to")).toBe(`${C} auto`);
-      expect(attr(id, "fub:geom")).toMatch(/^elbow /);
-      expect(ends(id).first).toEqual([100, 80]);
-      expect([[170, 200], [200, 220], [170, 240], [140, 220]]).toContainEqual(ends(id).last);
-      expect(attr(id, "d")).toBe(dictated(id));
-      expect(spoken()).toBe("Fine agganciata a Rettangolo «Gamma».");
-      expect(editor.selection).toEqual([id]);
-      expect(changes).toHaveLength(2);
-      editor.undo();
-      expect(spoken()).toBe("Annullato: Aggancio del connettore.");
-      expect(editor.engine.text).toBe(before);
-    });
-
-    it("mentre lo si tira il connettore si vede dove andrebbe", () => {
-      connecting();
-      const id = joined();
-      const resting = painted(id).getAttribute("d");
-      expect(resting).toBe(attr(id, "d"));
-      const target = surface();
-      const at = (type: string, x: number, y: number, held = 1): void =>
-        void target.dispatchEvent(pointer(type, { ...MOUSE, button: type === "pointermove" ? -1 : 0, buttons: held, pressure: held === 1 ? 0.5 : 0, clientX: x, clientY: y, timeStamp: (clock += 8) }));
-      at("pointerdown", 240, 80);
-      at("pointermove", 200, 150);
-      at("pointermove", 160, 215);
-      // Il testo non cambia finché non si lascia, il disegno sì.
-      expect(attr(id, "d")).toBe(resting);
-      expect(painted(id).getAttribute("d")).not.toBe(resting);
-      expect(painted(id).getAttribute("d")).toMatch(/^M100 80 /);
-      at("pointerup", 160, 215, 0);
-      expect(painted(id).getAttribute("d")).toBe(attr(id, "d"));
-      expect(attr(id, "d")).not.toBe(resting);
-    });
-
-    it("tirato nel vuoto il capo si stacca e resta dove si lascia; l'altro capo resta agganciato", () => {
-      connecting();
-      const id = joined();
-      const before = editor.engine.text;
-      link([240, 80], [200, 140]);
-      expect(attr(id, "fub:from")).toBe(`${A} right`);
-      expect(attr(id, "fub:to")).toBeNull();
-      expect(ends(id).last).toEqual([200, 140]);
-      expect(attr(id, "d")).toBe(dictated(id));
-      expect(spoken()).toBe("Fine staccata: ora è libera.");
-      // Il capo libero si riaggancia come ogni altro; qui l'inizio, prima a Gamma.
-      link([100, 80], [160, 215]);
-      expect(attr(id, "fub:from")).toBe(`${C} auto`);
-      expect(spoken()).toBe("Inizio agganciato a Rettangolo «Gamma».");
-      editor.undo();
-      editor.undo();
-      expect(editor.engine.text).toBe(before);
-    });
-
-    it("un capo non si riaggancia all'oggetto dell'altro capo", () => {
-      connecting();
-      const id = joined();
-      // L'inizio, portato su Beta, dove sta la fine: resta libero.
-      link([100, 80], [270, 70]);
-      expect(attr(id, "fub:from")).toBeNull();
-      expect(attr(id, "fub:to")).toBe(`${B} left`);
-      expect(spoken()).toBe("Inizio staccato: ora è libero.");
-    });
-
-    it("un connettore che non è scelto non ha capi da prendere: il gesto ne tira uno nuovo", () => {
-      connecting();
-      joined();
-      editor.select([]);
-      link([240, 80], [160, 215]);
-      expect(lines()).toHaveLength(2);
-    });
+  it("seguono l'oggetto spostato col mouse, e un annulla riporta tutto com'era", () => {
+    mount(LINKED);
+    editor.setTool("select");
+    const before = editor.engine.text;
+    const resting = attr(K, "d");
+    const target = surface();
+    const at = (type: string, x: number, y: number, held = 1): void =>
+      void target.dispatchEvent(pointer(type, { ...MOUSE, button: type === "pointermove" ? -1 : 0, buttons: held, pressure: held === 1 ? 0.5 : 0, clientX: x, clientY: y, timeStamp: (clock += 8) }));
+    at("pointerdown", 60, 90);
+    at("pointermove", 65, 110);
+    at("pointermove", 60, 130);
+    // Mentre si trascina, la linea segue l'oggetto sul foglio.
+    expect(painted(K).getAttribute("d")).not.toBe(resting);
+    expect(attr(K, "d")).toBe(resting);
+    at("pointerup", 60, 130, 0);
+    expect(attr(A, "transform")).toBe("matrix(1 0 0 1 0 40)");
+    expect(attr(K, "fub:from")).toBe(`${A} right`);
+    expect(pointsOf(K)[0]).toEqual([100, 120]);
+    expect(attr(K, "d")).toBe(dictated(K));
+    expect(painted(K).getAttribute("d")).toBe(attr(K, "d"));
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
   });
 
-  describe("quando gli oggetti si muovono o se ne vanno", () => {
-    it("il connettore segue l'oggetto spostato col mouse, e un annulla riporta tutto com'era", () => {
-      connecting();
-      const id = joined();
-      const before = editor.engine.text;
-      const resting = attr(id, "d");
-      editor.setTool("select");
-      editor.select([]);
-      const target = surface();
-      const at = (type: string, x: number, y: number, held = 1): void =>
-        void target.dispatchEvent(pointer(type, { ...MOUSE, button: type === "pointermove" ? -1 : 0, buttons: held, pressure: held === 1 ? 0.5 : 0, clientX: x, clientY: y, timeStamp: (clock += 8) }));
-      at("pointerdown", 60, 90);
-      at("pointermove", 65, 110);
-      at("pointermove", 60, 130);
-      // Mentre si trascina, la linea segue l'oggetto sul foglio.
-      expect(painted(id).getAttribute("d")).not.toBe(resting);
-      expect(attr(id, "d")).toBe(resting);
-      at("pointerup", 60, 130, 0);
-      expect(editor.engine.text).toContain(`<rect id="${A}" `);
-      expect(attr(A, "transform")).toBe("matrix(1 0 0 1 0 40)");
-      expect(attr(id, "fub:from")).toBe(`${A} right`);
-      expect(pointsOf(id)[0]).toEqual([100, 120]);
-      expect(attr(id, "d")).toBe(dictated(id));
-      expect(painted(id).getAttribute("d")).toBe(attr(id, "d"));
-      expect(changes).toHaveLength(2);
-      editor.undo();
-      expect(editor.engine.text).toBe(before);
-      editor.redo();
-      expect(pointsOf(id)[0]).toEqual([100, 120]);
-    });
-
-    it("e quello spostato con le frecce, anche questo in un passo solo", () => {
-      connecting();
-      const id = joined();
-      const before = editor.engine.text;
-      editor.select([B]);
-      key("ArrowDown", { shiftKey: true });
-      expect(attr(B, "transform")).toBe("matrix(1 0 0 1 0 10)");
-      const points = pointsOf(id);
-      expect(points[points.length - 1]).toEqual([240, 90]);
-      expect(attr(id, "d")).toBe(dictated(id));
-      expect(changes).toHaveLength(2);
-      editor.undo();
-      expect(editor.engine.text).toBe(before);
-    });
-
-    it("l'oggetto eliminato lascia il connettore con l'ultima geometria e il capo libero, e un annulla ridà tutto", () => {
-      connecting();
-      const id = joined();
-      const before = editor.engine.text;
-      const geom = attr(id, "fub:geom");
-      const d = attr(id, "d");
-      editor.select([B]);
-      key("Delete");
-      expect(editor.engine.text).not.toContain(`id="${B}"`);
-      expect(attr(id, "fub:to")).toBeNull();
-      expect(attr(id, "fub:from")).toBe(`${A} right`);
-      expect(attr(id, "fub:geom")).toBe(geom);
-      expect(attr(id, "d")).toBe(d);
-      editor.undo();
-      expect(editor.engine.text).toBe(before);
-      // L'inizio, lo stesso.
-      editor.select([A]);
-      key("Delete");
-      expect(attr(id, "fub:from")).toBeNull();
-      expect(attr(id, "fub:to")).toBe(`${B} left`);
-      expect(attr(id, "d")).toBe(d);
-    });
+  it("e quello spostato con le frecce, in un passo solo", () => {
+    mount(LINKED);
+    const before = editor.engine.text;
+    editor.select([B]);
+    key("ArrowDown", { shiftKey: true });
+    expect(attr(B, "transform")).toBe("matrix(1 0 0 1 0 10)");
+    const points = pointsOf(K);
+    expect(points[points.length - 1]).toEqual([240, 90]);
+    expect(attr(K, "d")).toBe(dictated(K));
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
   });
 
-  // --- Il pannello delle proprietà ----------------------------------------------
-
-  const openProperties = (): void => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!.click();
-  const section = (): HTMLElement => properties().querySelector<HTMLElement>('.draw-properties-section[data-section="connector"]')!;
-  const kindRadio = (kind: string): HTMLButtonElement => section().querySelector<HTMLButtonElement>(`button[data-kind="${kind}"]`)!;
-  const anchorMenu = (end: "from" | "to"): HTMLSelectElement => section().querySelector<HTMLSelectElement>(`[data-field="connector-${end}"] select`)!;
-  const labelArea = (): HTMLTextAreaElement => section().querySelector<HTMLTextAreaElement>('[data-field="connector-label"] textarea')!;
-  const invertButton = (): HTMLButtonElement => section().querySelector<HTMLButtonElement>('[data-field="connector-invert"]')!;
-  const pickAnchor = (end: "from" | "to", value: string): void => {
-    anchorMenu(end).value = value;
-    anchorMenu(end).dispatchEvent(new Event("change", { bubbles: true }));
-  };
-  const writeLabel = (text: string): void => {
-    typeIn(labelArea(), text);
-    key("Enter", {}, labelArea());
-  };
-  /// Le etichette del disegno: l'id, dove stanno lungo il connettore, e il
-  /// `transform` che le porta al loro posto.
-  const labels = (): Array<{ id: string; along: string; transform: string | null }> =>
-    [...editor.engine.text.matchAll(/<text [^>]*>/g)].flatMap(([element]) => {
-      const along = / fub:along="([^"]*)"/.exec(element)?.[1];
-      return along === undefined ? [] : [{ id: / id="([^"]*)"/.exec(element)![1]!, along, transform: / transform="([^"]*)"/.exec(element)?.[1] ?? null }];
-    });
-  /// Un connettore da Alfa a Beta con l'etichetta «Sì», e il pannello aperto.
-  const labelled = (): string => {
-    connecting();
-    const id = joined();
-    openProperties();
-    writeLabel("Sì");
-    return id;
-  };
-
-  describe("le etichette e le copie", () => {
-    const clip = (type: "copy" | "cut" | "paste", data = new DataTransfer()): DataTransfer => {
-      // Con il fuoco in un campo, gli appunti sono del campo.
-      editor.focus();
-      surface().dispatchEvent(new ClipboardEvent(type, { bubbles: true, cancelable: true, clipboardData: data }));
-      return data;
-    };
-    const settle = async (): Promise<void> => {
-      for (let i = 0; i < 10; i++) await new Promise((resolve) => setTimeout(resolve, 0));
-    };
-
-    it("un'etichetta scritta nel pannello è un testo che segue il connettore", () => {
-      const id = labelled();
-      expect(labels()).toEqual([{ id: expect.any(String), along: `${id} 0.5 4`, transform: "matrix(1 0 0 1 170 68)" }]);
-      expect(editor.engine.text).toContain("<tspan x=\"0\" dy=\"0\">Sì</tspan>");
-      expect(editor.selection).toEqual([id]);
-    });
-
-    it("eliminare o tagliare il connettore porta via la sua etichetta, e un annulla le ridà", () => {
-      const id = labelled();
-      const before = editor.engine.text;
-      key("Delete");
-      expect(lines()).toEqual([]);
-      expect(labels()).toEqual([]);
-      expect(editor.engine.text).not.toContain("<text");
-      editor.undo();
-      expect(editor.engine.text).toBe(before);
-      editor.select([id]);
-      const data = clip("cut");
-      expect(data.getData("text/plain")).toContain(`fub:along="${id} 0.5 4"`);
-      expect(labels()).toEqual([]);
-      editor.undo();
-      expect(editor.engine.text).toBe(before);
-    });
-
-    it("copiare il connettore copia anche l'etichetta, e incollarlo la lega al connettore nuovo", async () => {
-      const id = labelled();
-      const data = clip("copy");
-      const svg = data.getData("text/plain");
-      expect(svg).toContain(`fub:along="${id} 0.5 4"`);
-      expect(changes).toHaveLength(2);
-      const holding = new DataTransfer();
-      holding.setData("text/plain", svg);
-      clip("paste", holding);
-      await settle();
-      expect(lines()).toHaveLength(2);
-      const copy = lines()[1]!;
-      expect(labels().map((label) => label.along)).toEqual([`${id} 0.5 4`, `${copy} 0.5 4`]);
-      // Gli oggetti a cui era agganciato non sono stati copiati: i capi della copia sono liberi.
-      expect(attr(copy, "fub:from")).toBeNull();
-      expect(attr(copy, "fub:to")).toBeNull();
-      expect(attr(id, "fub:from")).toBe(`${A} right`);
-    });
-
-    it("duplicare il connettore da solo lo lascia coi capi liberi e la sua etichetta", () => {
-      const id = labelled();
-      editor.select([id]);
-      key("d", { ctrlKey: true });
-      expect(lines()).toHaveLength(2);
-      const copy = lines()[1]!;
-      expect(labels().map((label) => label.along)).toEqual([`${id} 0.5 4`, `${copy} 0.5 4`]);
-      expect(attr(copy, "fub:from")).toBeNull();
-      expect(attr(copy, "fub:to")).toBeNull();
-      expect(attr(id, "fub:from")).toBe(`${A} right`);
-      expect(attr(id, "fub:to")).toBe(`${B} left`);
-    });
-
-    it("duplicando gli oggetti insieme al connettore, la copia si aggancia alle copie e la sua etichetta la segue", () => {
-      const id = labelled();
-      const before = editor.engine.text;
-      editor.select([A, B, id]);
-      key("d", { ctrlKey: true });
-      expect(lines()).toHaveLength(2);
-      const copy = lines()[1]!;
-      const [copyA, copyB] = editor.selection.filter((key) => key !== copy && labels().every((label) => label.id !== key));
-      expect(attr(copy, "fub:from")).toBe(`${copyA} right`);
-      expect(attr(copy, "fub:to")).toBe(`${copyB} left`);
-      // L'originale è rimasto agganciato agli originali.
-      expect(attr(id, "fub:from")).toBe(`${A} right`);
-      expect(attr(id, "fub:to")).toBe(`${B} left`);
-      expect(labels().map((label) => label.along)).toEqual([`${id} 0.5 4`, `${copy} 0.5 4`]);
-      // Muovendo la copia di Beta, segue la copia del connettore e non l'originale.
-      const original = attr(id, "d");
-      editor.select([copyB!]);
-      key("ArrowDown", { shiftKey: true });
-      expect(attr(id, "d")).toBe(original);
-      expect(attr(copy, "d")).toBe(dictated(copy));
-      expect(attr(copy, "d")).not.toBe(original);
-      editor.undo();
-      editor.undo();
-      expect(editor.engine.text).toBe(before);
-    });
+  it("l'oggetto eliminato lascia il connettore con l'ultima geometria e il capo libero", () => {
+    mount(LINKED);
+    const before = editor.engine.text;
+    editor.select([B]);
+    key("Delete");
+    expect(editor.engine.text).not.toContain(`id="${B}"`);
+    expect(attr(K, "fub:to")).toBeNull();
+    expect(attr(K, "fub:from")).toBe(`${A} right`);
+    expect(attr(K, "fub:geom")).toBe("straight 100 80 240 80");
+    expect(attr(K, "d")).toBe("M100 80 L240 80");
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
   });
 
-  describe("«Collega le forme scelte»", () => {
-    const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
-    const connectButton = (): HTMLButtonElement => bar().querySelector<HTMLButtonElement>('button[aria-label="Collega le forme scelte"]')!;
-    const selectionButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Selezione avanzata"]')!;
-    const menu = (): HTMLButtonElement[] => {
-      const open = document.querySelectorAll<HTMLElement>(".context-menu");
-      return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
-    };
-    const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
-    const item = (label: string): HTMLButtonElement => menu().find((entry) => labelOf(entry) === label)!;
-    afterEach(() => {
-      closeContextMenu();
-      for (const open of document.querySelectorAll(".context-menu")) open.remove();
-    });
-
-    it("tre forme scelte si uniscono in fila, da sinistra a destra, con due connettori che restano scelti, in un passo", () => {
-      mount(SHAPES, { level: "standard" });
-      editor.select([A, B, C]);
-      expect(connectButton().hidden).toBe(false);
-      connectButton().click();
-      // I centri sono più distesi in larghezza: Alfa, Gamma e Beta.
-      expect(lines()).toHaveLength(2);
-      const [first, second] = lines();
-      expect([attr(first!, "fub:from"), attr(first!, "fub:to")]).toEqual([`${A} auto`, `${C} auto`]);
-      expect([attr(second!, "fub:from"), attr(second!, "fub:to")]).toEqual([`${C} auto`, `${B} auto`]);
-      for (const id of lines()) {
-        expect(attr(id, "fub:geom")).toMatch(/^elbow /);
-        expect(attr(id, "d")).toBe(dictated(id));
-        expect(tipOf(scene(), id, "end")).toBe("triangle medium end #000000");
-      }
-      expect(markersIn(scene())).toHaveLength(1);
-      expect(editor.selection).toEqual(lines());
-      expect(spoken()).toBe("2 connettori aggiunti. Il disegno ha 6 oggetti.");
-      expect(changes).toHaveLength(1);
-      editor.undo();
-      expect(spoken()).toBe("Annullato: Collega le forme.");
-      expect(editor.engine.text).toBe(SHAPES);
-    });
-
-    it("dal menu della selezione fa lo stesso, e con le forme già unite lo dice senza scrivere niente", () => {
-      mount(SHAPES, { level: "standard" });
-      editor.select([A, B]);
-      selectionButton().click();
-      item("Collega le forme scelte").click();
-      expect(spoken()).toBe("1 connettore aggiunto. Il disegno ha 5 oggetti.");
-      expect(attr(lines()[0]!, "fub:from")).toBe(`${A} auto`);
-      expect(attr(lines()[0]!, "fub:to")).toBe(`${B} auto`);
-      const written = editor.engine.text;
-      editor.select([A, B]);
-      selectionButton().click();
-      item("Collega le forme scelte").click();
-      expect(spoken()).toBe("Le forme scelte sono già unite.");
-      expect(editor.engine.text).toBe(written);
-      expect(changes).toHaveLength(1);
-      expect(editor.selection).toEqual([A, B]);
-    });
-
-    it("una coppia già unita, nell'uno o nell'altro verso, si salta e si dice", () => {
-      connecting();
-      // Da Gamma ad Alfa, a mano.
-      link([160, 225], [60, 90]);
-      editor.setTool("select");
-      editor.select([A, B, C]);
-      connectButton().click();
-      expect(lines()).toHaveLength(2);
-      expect([attr(lines()[1]!, "fub:from"), attr(lines()[1]!, "fub:to")]).toEqual([`${C} auto`, `${B} auto`]);
-      expect(spoken()).toBe("1 connettore aggiunto. 1 coppia era già unita. Il disegno ha 6 oggetti.");
-    });
-
-    it("gli oggetti senza id ne ricevono uno, nello stesso passo", () => {
-      const plain = doc(`${LAYER}<rect x="40" y="60" width="60" height="40" fill="#e69f00"/><rect x="240" y="60" width="60" height="40" fill="#009e73"/></g>`).replace('viewBox="0 0 100 100"', 'viewBox="0 0 400 300"');
-      mount(plain, { level: "standard" });
-      key("a", { ctrlKey: true });
-      expect(editor.selection).toHaveLength(2);
-      connectButton().click();
-      const [id] = lines();
-      const [from, to] = [attr(id!, "fub:from")!.split(" ")[0]!, attr(id!, "fub:to")!.split(" ")[0]!];
-      expect(editor.engine.text).toMatch(new RegExp(`<rect id="${from}" x="40"`));
-      expect(editor.engine.text).toMatch(new RegExp(`<rect id="${to}" x="240"`));
-      expect(changes).toHaveLength(1);
-      editor.undo();
-      expect(editor.engine.text).toBe(plain);
-    });
-
-    it("con meno di due oggetti il pulsante non c'è e la voce del menu è spenta, e dice perché; i connettori non contano", () => {
-      mount(SHAPES, { level: "standard" });
-      editor.select([A]);
-      expect(connectButton().hidden).toBe(true);
-      selectionButton().click();
-      expect(item("Collega le forme scelte").getAttribute("aria-disabled")).toBe("true");
-      expect(item("Collega le forme scelte").querySelector(".menu-description")!.textContent).toBe("Scegli almeno due oggetti da unire: i connettori non contano.");
-      item("Collega le forme scelte").click();
-      expect(changes).toEqual([]);
-      closeContextMenu();
-      for (const open of document.querySelectorAll(".context-menu")) open.remove();
-      // Un oggetto e un connettore sono ancora uno solo da unire.
-      key("x");
-      link([97, 83], [243, 78]);
-      editor.select([A, lines()[0]!]);
-      expect(connectButton().hidden).toBe(true);
-      selectionButton().click();
-      expect(item("Collega le forme scelte").getAttribute("aria-disabled")).toBe("true");
-    });
-
-    it("all'Essenziale non c'è, e in sola lettura la voce è spenta e la barra non si vede", () => {
-      mount(SHAPES);
-      editor.select([A, B]);
-      expect(connectButton().hidden).toBe(true);
-      editor.setLevel("standard");
-      expect(connectButton().hidden).toBe(false);
-      selectionButton().click();
-      expect(item("Collega le forme scelte").getAttribute("aria-disabled")).toBeNull();
-      closeContextMenu();
-      for (const open of document.querySelectorAll(".context-menu")) open.remove();
-      editor.setReadOnly(true);
-      expect(bar().hidden).toBe(true);
-      selectionButton().click();
-      expect(item("Collega le forme scelte").getAttribute("aria-disabled")).toBe("true");
-      item("Collega le forme scelte").click();
-      expect(lines()).toEqual([]);
-      expect(changes).toEqual([]);
-    });
-  });
-
-  describe("la sezione «Connettore» delle proprietà", () => {
-    it("c'è con un connettore scelto e non senza, e dice il suo tipo, gli agganci e l'etichetta", () => {
-      connecting();
-      openProperties();
-      expect(section().hidden).toBe(true);
-      const id = joined();
-      expect(section().hidden).toBe(false);
-      expect(["straight", "elbow", "curved"].map((kind) => kindRadio(kind).getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
-      expect([anchorMenu("from").value, anchorMenu("to").value]).toEqual(["right", "left"]);
-      expect(labelArea().value).toBe("");
-      // Un oggetto scelto accanto non cambia la sezione; da solo, la toglie.
-      editor.select([A, id]);
-      expect(section().hidden).toBe(false);
-      editor.select([A]);
-      expect(section().hidden).toBe(true);
-      expect(formatIssues(checkAccessibility(host))).toBe("");
-    });
-
-    it("«Curvo» riscrive il percorso in un passo, e il connettore che si tira dopo è curvo", () => {
-      connecting();
-      const id = joined();
-      openProperties();
-      const before = editor.engine.text;
-      kindRadio("curved").click();
-      expect(attr(id, "fub:geom")).toMatch(/^curved (-?[\d.]+ ){7}-?[\d.]+$/);
-      expect(attr(id, "d")).toBe(dictated(id));
-      expect(attr(id, "fub:from")).toBe(`${A} right`);
-      expect(attr(id, "fub:to")).toBe(`${B} left`);
-      expect(kindRadio("curved").getAttribute("aria-checked")).toBe("true");
-      expect(spoken()).toBe("1 connettore cambiato.");
-      expect(changes).toHaveLength(2);
-      editor.undo();
-      expect(spoken()).toBe("Annullato: Tipo del connettore.");
-      expect(editor.engine.text).toBe(before);
-      expect(kindRadio("elbow").getAttribute("aria-checked")).toBe("true");
-      editor.redo();
-      expect(attr(id, "fub:geom")).toMatch(/^curved /);
-      // Lo strumento disegna del tipo scelto per ultimo.
-      editor.select([]);
-      link([60, 90], [155, 225]);
-      expect(attr(lines()[1]!, "fub:geom")).toMatch(/^curved (-?[\d.]+ ){7}-?[\d.]+$/);
-      expect(attr(lines()[1]!, "d")).toBe(dictated(lines()[1]!));
-      expect(kindRadio("curved").getAttribute("aria-checked")).toBe("true");
-      // Anche «Collega le forme scelte».
-      editor.select([A, B, C]);
-      host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Collega le forme scelte"]')!.click();
-      expect(attr(lines()[2]!, "fub:geom")).toMatch(/^curved /);
-    });
-
-    it("l'aggancio di un capo cambia il punto in cui il connettore tocca l'oggetto, in un passo", () => {
-      connecting();
-      const id = joined();
-      openProperties();
-      const before = editor.engine.text;
-      pickAnchor("from", "top");
-      expect(attr(id, "fub:from")).toBe(`${A} top`);
-      expect(attr(id, "fub:to")).toBe(`${B} left`);
-      expect(pointsOf(id)[0]).toEqual([70, 60]);
-      expect(attr(id, "d")).toBe(dictated(id));
-      expect(spoken()).toBe("1 connettore cambiato.");
-      expect(anchorMenu("from").value).toBe("top");
-      editor.undo();
-      expect(spoken()).toBe("Annullato: Aggancio del connettore.");
-      expect(editor.engine.text).toBe(before);
-      expect(anchorMenu("from").value).toBe("right");
-      pickAnchor("to", "bottom");
-      expect(attr(id, "fub:to")).toBe(`${B} bottom`);
-      const points = pointsOf(id);
-      expect(points[points.length - 1]).toEqual([270, 100]);
-    });
-
-    it("un capo libero lo dice e non si cambia dal menu", () => {
-      connecting();
-      const id = joined();
-      openProperties();
-      editor.select([B]);
-      key("Delete");
-      editor.select([id]);
-      expect(anchorMenu("to").value).toBe("free");
-      expect(anchorMenu("to").disabled).toBe(true);
-      expect(anchorMenu("from").disabled).toBe(false);
-      expect(section().textContent).toContain("Per agganciarlo, trascina il capo su un oggetto con lo strumento Connettore.");
-      expect(formatIssues(checkAccessibility(host))).toBe("");
-    });
-
-    it("l'etichetta è un testo lungo il connettore: lo segue quando gli oggetti si muovono, e vuota se ne va", () => {
-      const id = labelled();
-      const [label] = labels();
-      expect(label!.transform).toBe("matrix(1 0 0 1 170 68)");
-      const before = editor.engine.text;
-      editor.select([B]);
-      key("ArrowRight", { shiftKey: true });
-      // Il connettore si allunga di 10, e l'etichetta resta a metà.
-      expect(labels()).toEqual([{ id: label!.id, along: `${id} 0.5 4`, transform: "matrix(1 0 0 1 175 68)" }]);
-      editor.undo();
-      expect(editor.engine.text).toBe(before);
-      // Un testo nuovo cambia le righe dell'etichetta che c'è, e non ne fa un'altra.
-      editor.select([id]);
-      writeLabel("No");
-      expect(labels().map((each) => each.id)).toEqual([label!.id]);
-      expect(editor.engine.text).toContain('<tspan x="0" dy="0">No</tspan>');
-      expect(editor.engine.text).not.toContain(">Sì<");
-      writeLabel("");
-      expect(labels()).toEqual([]);
-      expect(editor.engine.text).not.toContain("<text");
-      editor.undo();
-      expect(spoken()).toBe("Annullato: Etichetta del connettore.");
-      expect(labels()).toHaveLength(1);
-    });
-
-    it("«Inverti» porta la freccia dall'altra parte: la punta di fine resta di fine, e l'etichetta resta dov'è", () => {
-      const id = labelled();
-      const before = editor.engine.text;
-      const first = pointsOf(id)[0]!;
-      const last = pointsOf(id)[pointsOf(id).length - 1]!;
-      const place = labels()[0]!.transform;
-      expect(tipOf(scene(), id, "end")).toBe("triangle medium end #000000");
-      invertButton().click();
-      expect(attr(id, "fub:from")).toBe(`${B} left`);
-      expect(attr(id, "fub:to")).toBe(`${A} right`);
-      expect(pointsOf(id)[0]).toEqual(last);
-      expect(pointsOf(id)[pointsOf(id).length - 1]).toEqual(first);
-      expect(attr(id, "d")).toBe(dictated(id));
-      // La punta non cambia lato: ora indica Alfa.
-      expect(tipOf(scene(), id, "end")).toBe("triangle medium end #000000");
-      expect(attr(id, "marker-start")).toBeNull();
-      expect(markersIn(scene())).toHaveLength(1);
-      expect(labels()[0]!.along).toBe(`${id} 0.5 4`);
-      expect(labels()[0]!.transform).toBe(place);
-      expect(spoken()).toBe("1 connettore cambiato.");
-      editor.undo();
-      expect(spoken()).toBe("Annullato: Inverti il connettore.");
-      expect(editor.engine.text).toBe(before);
-    });
-  });
-
-  it("l'accessibilità resta pulita con lo strumento in mano, i punti d'aggancio in vista e la sezione aperta", () => {
-    const layer = recording();
-    labelled();
-    hover(60, 90);
-    layer.frame();
-    expect(editor.tool).toBe("connector");
-    expect(layer.calls().filter(([name]) => name === "arc")).toHaveLength(5);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    editor.select([A, B]);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  describe("il gesto", () => {
-    const press = (type: "pointerdown" | "pointermove" | "pointerup", x: number, y: number): void =>
-      void surface().dispatchEvent(
-        pointer(type, { ...MOUSE, button: type === "pointermove" ? -1 : 0, buttons: type === "pointerup" ? 0 : 1, pressure: type === "pointerup" ? 0 : 0.5, clientX: x, clientY: y, timeStamp: (clock += 8) }),
-      );
-    const preview = (): SVGElement | null => host.querySelector<SVGElement>('.draw-preview path[fill="none"]');
-
-    it("mentre lo si tira il connettore nuovo si vede in anteprima, come sarà scritto", () => {
-      connecting();
-      expect(preview()).toBeNull();
-      press("pointerdown", 60, 90);
-      // Un tocco appena mosso non è ancora un trascinamento.
-      press("pointermove", 61, 90);
-      expect(preview()).toBeNull();
-      press("pointermove", 150, 90);
-      press("pointermove", 243, 78);
-      const shown = preview()!;
-      expect(shown.getAttribute("d")).toBe("M100 80 L240 80");
-      expect(shown.getAttribute("marker-end")).toMatch(/^url\(#draw-preview-tip-\d+\)$/);
-      press("pointerup", 243, 78);
-      expect(preview()).toBeNull();
-      expect(attr(lines()[0]!, "d")).toBe("M100 80 L240 80");
-    });
-
-    it("Esc a metà del gesto lo annulla: niente anteprima e niente connettore", () => {
-      connecting();
-      press("pointerdown", 60, 90);
-      press("pointermove", 150, 90);
-      press("pointermove", 243, 78);
-      expect(preview()).not.toBeNull();
-      key("Escape");
-      expect(preview()).toBeNull();
-      press("pointerup", 243, 78);
-      expect(lines()).toEqual([]);
-      expect(changes).toEqual([]);
-    });
-
-    it("in un livello bloccato non si scrive niente, e si dice perché", () => {
-      const locked = doc(`<title>Prova</title><g id="l1" fub:layer="Livello 1" fub:locked="true">${rect(A, "Alfa", 40, 60, 60, 40, "#e69f00")}</g>`).replace('viewBox="0 0 100 100"', 'viewBox="0 0 400 300"');
-      connecting(locked);
-      link([120, 130], [200, 150]);
-      expect(lines()).toEqual([]);
-      expect(changes).toEqual([]);
-      expect(spoken()).toBe("«Livello 1» è bloccato: sbloccalo, o scegli un altro livello, per disegnare.");
-      expect(preview()).toBeNull();
-    });
-
-    it("un oggetto bloccato non si aggancia, e in sola lettura il gesto non scrive", () => {
-      connecting();
-      editor.select([A]);
-      key("L", { ctrlKey: true, shiftKey: true });
-      editor.select([]);
-      const written = editor.engine.text;
-      link([60, 90], [155, 225]);
-      expect(attr(lines()[0]!, "fub:from")).toBeNull();
-      expect(attr(lines()[0]!, "fub:to")).toBe(`${C} auto`);
-      editor.undo();
-      expect(editor.engine.text).toBe(written);
-      editor.setReadOnly(true);
-      link([60, 90], [155, 225]);
-      expect(lines()).toEqual([]);
-    });
-  });
-
-  describe("più oggetti insieme a un connettore", () => {
-    it("oggetti e connettore scelti insieme si spostano senza cambiare niente fra loro", () => {
-      connecting();
-      const id = joined();
-      const geom = attr(id, "fub:geom");
-      editor.select([A, B, id]);
-      key("ArrowRight", { shiftKey: true });
-      expect(attr(A, "transform")).toBe("matrix(1 0 0 1 10 0)");
-      expect(attr(B, "transform")).toBe("matrix(1 0 0 1 10 0)");
-      expect(attr(id, "transform")).toBe("matrix(1 0 0 1 10 0)");
-      expect(attr(id, "fub:geom")).toBe(geom);
-      expect(attr(id, "fub:from")).toBe(`${A} right`);
-      expect(attr(id, "fub:to")).toBe(`${B} left`);
-      expect(spoken()).toBe("3 oggetti spostati.");
-    });
-
-    it("un connettore scelto con uno solo dei suoi oggetti si sposta, e il capo dell'altro resta dov'è sul foglio", () => {
-      connecting();
-      const id = joined();
-      editor.select([A, id]);
-      key("ArrowDown", { shiftKey: true });
-      expect(attr(A, "transform")).toBe("matrix(1 0 0 1 0 10)");
-      expect(attr(id, "transform")).toBe("matrix(1 0 0 1 0 10)");
-      // Nel suo riferimento, spostato di 10 in giù: l'inizio sta a destra di
-      // Alfa spostata, la fine a sinistra di Beta, ferma.
-      const points = pointsOf(id);
-      expect([points[0]![0], points[0]![1] + 10]).toEqual([100, 90]);
-      expect([points[points.length - 1]![0], points[points.length - 1]![1] + 10]).toEqual([240, 80]);
-      expect(attr(id, "d")).toBe(dictated(id));
-      // Resta agganciato: niente da dire.
-      expect(spoken()).toBe("2 oggetti spostati.");
-    });
-
-    it("un connettore spostato da solo si stacca dagli oggetti, resta com'è e lo dice", () => {
-      connecting();
-      const id = joined();
-      const geom = attr(id, "fub:geom");
-      editor.select([id]);
-      key("ArrowDown", { shiftKey: true });
-      expect(attr(id, "fub:from")).toBeNull();
-      expect(attr(id, "fub:to")).toBeNull();
-      expect(attr(id, "fub:geom")).toBe(geom);
-      expect(attr(id, "transform")).toBe("matrix(1 0 0 1 0 10)");
-      // Sul foglio non si vede: lo dice l'annuncio.
-      expect(spoken()).toBe("1 oggetto spostato. Il connettore si è staccato: i suoi oggetti non erano fra gli scelti.");
-      editor.undo();
-      expect(attr(id, "fub:from")).toBe(`${A} right`);
-      // Anche spostato dal pannello delle proprietà.
-      openProperties();
-      editor.select([id]);
-      enter(propertyInput("x"), "90");
-      expect(attr(id, "fub:from")).toBeNull();
-      expect(spoken()).toBe("Il connettore si è staccato: i suoi oggetti non erano fra gli scelti.");
-      // E girato da solo, con la sua cornice.
-      editor.undo();
-      key("]");
-      expect(attr(id, "fub:to")).toBeNull();
-      expect(spoken()).toMatch(/ Il connettore si è staccato: i suoi oggetti non erano fra gli scelti\.$/);
-    });
-
-    it("l'oggetto agganciato dentro un gruppo segue il gruppo, e il gruppo eliminato libera il capo", () => {
-      connecting();
-      link([300, 230], [60, 90], { ctrlKey: true });
-      const id = lines()[0]!;
-      expect(attr(id, "fub:from")).toBe(`${I} auto`);
-      const before = editor.engine.text;
-      editor.select([G]);
-      key("ArrowRight", { shiftKey: true });
-      expect(pointsOf(id)[0]).toEqual([300, 220]);
-      expect(attr(id, "d")).toBe(dictated(id));
-      editor.undo();
-      expect(editor.engine.text).toBe(before);
-      editor.select([G]);
-      key("Delete");
-      expect(attr(id, "fub:from")).toBeNull();
-      expect(attr(id, "fub:to")).toBe(`${A} auto`);
-    });
-  });
-});
-
-describe("presentare, dal livello Standard", () => {
-  /// Tre tavole 400 × 200 in fila, con un quadrato sulla seconda.
-  const DECK = doc(
-    "<title>Ciclo</title>" +
-      '<view id="b1a2b3c4d" fub:role="board" viewBox="0 0 400 200"><title>Copertina</title></view>' +
-      '<view id="b9i0j1k2l" fub:role="board" viewBox="480 0 400 200"><title>Evaporazione</title><desc>Il sole scalda il mare.</desc></view>' +
-      '<view id="bmnopqrst" fub:role="board" viewBox="960 0 400 200"><title>Pioggia</title></view>' +
-      `${LAYER}<rect id="oa1a1a1a1" x="600" y="50" width="20" height="20" fill="#000000"/></g>`,
-  ).replace('viewBox="0 0 100 100"', 'viewBox="0 0 1360 200"');
-
-  const presentButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Presenta"]')!;
-  const presentation = (): HTMLElement | null => document.querySelector<HTMLElement>(".draw-present");
-  /// Ciò che la presentazione ha detto per ultimo.
-  const told = (): string => (presentation()?.querySelector('[role="status"]')?.textContent ?? "").trim();
-  /// Un tasto nella presentazione, dove sta il fuoco.
-  const inside = (name: string): KeyboardEvent => key(name, {}, document.activeElement as HTMLElement);
-
-  /// Aspetta che la presentazione si apra, e il suo primo annuncio.
-  async function opened(): Promise<HTMLElement> {
-    await vi.waitFor(() => expect(presentation()).not.toBeNull());
-    await vi.waitFor(() => expect(told()).not.toBe(""));
-    return presentation()!;
-  }
-
-  afterEach(() => {
-    presentation()?.remove();
-  });
-
-  it("il pulsante e F5 ci sono dallo Standard, non nell'Essenziale", async () => {
-    mount(DECK);
-    expect(presentButton().hidden).toBe(true);
-    expect(key("F5").defaultPrevented).toBe(false);
-    editor.setLevel("standard");
-    expect(presentButton().hidden).toBe(false);
-    expect(presentButton().getAttribute("aria-keyshortcuts")).toBe("F5");
-    // Accanto a «Tavole».
-    expect(presentButton().previousElementSibling?.getAttribute("aria-label")).toBe("Tavole");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-    presentButton().click();
-    await opened();
-    expect(told()).toBe("Presentazione: Copertina, tavola 1 di 3. Esc per uscire.");
-  });
-
-  it("nel Personalizzato è una parte, «Presentare»", () => {
-    mount(DECK, { level: "custom", custom: ["present"] });
-    expect(editor.features.has("present")).toBe(true);
-    expect(presentButton().hidden).toBe(false);
-    editor.setLevel("custom", ["pen"]);
-    expect(presentButton().hidden).toBe(true);
-    expect(key("F5").defaultPrevented).toBe(false);
-  });
-
-  it("F5 presenta dalla prima tavola, anche in sola lettura, e all'uscita il foglio sceglie e inquadra la tavola dov'era arrivata", async () => {
-    mount(DECK, { level: "standard" });
-    size(1000, 500);
-    editor.setReadOnly(true);
-    expect(key("F5").defaultPrevented).toBe(true);
-    // Con Ctrl, F5 resta del browser.
-    expect(key("F5", { ctrlKey: true }).defaultPrevented).toBe(false);
-    const shown = await opened();
-    expect(told()).toBe("Presentazione: Copertina, tavola 1 di 3. Esc per uscire.");
-    expect(formatIssues(checkAccessibility(shown))).toBe("");
-    expect([...shown.querySelectorAll("img")].map((img) => img.alt)).toContain("Copertina");
-    inside("ArrowRight");
-    expect(told()).toBe("Evaporazione, tavola 2 di 3.");
-    inside("Escape");
-    expect(presentation()).toBeNull();
-    expect(document.activeElement).toBe(surface());
-    expect(spoken()).toBe("Evaporazione, tavola 2 di 3, 400 × 200.");
-    // La tavola scelta è quella di adesso anche per l'elenco.
-    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Tavole"]')!.click();
-    expect([...host.querySelectorAll<HTMLElement>('.draw-boards [aria-current="true"] .draw-board-name')].map((name) => name.textContent)).toEqual(["Evaporazione"]);
-    expect(changes).toEqual([]);
-    expect(editor.engine.text).toBe(DECK);
-  });
-
-  it("Maiusc+F5 presenta dalla tavola di adesso", async () => {
-    mount(DECK, { level: "standard" });
-    size(1000, 500);
-    key("PageDown", { altKey: true });
-    key("PageDown", { altKey: true });
-    key("PageDown", { altKey: true });
-    expect(spoken()).toBe("Pioggia, tavola 3 di 3, 400 × 200.");
-    expect(key("F5", { shiftKey: true }).defaultPrevented).toBe(true);
-    await opened();
-    expect(told()).toBe("Presentazione: Pioggia, tavola 3 di 3. Esc per uscire.");
-    inside("ArrowLeft");
-    inside("Escape");
-    expect(spoken()).toBe("Evaporazione, tavola 2 di 3, 400 × 200.");
-  });
-
-  it("«Presenta da qui» nel menu di una tavola dell'elenco", async () => {
-    mount(DECK, { level: "standard" });
-    size(1000, 500);
-    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Tavole"]')!.click();
-    const row = host.querySelector<HTMLElement>('.draw-boards [role="option"][data-index="1"]')!;
-    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 40, clientY: 40 }));
-    const items = [...document.querySelectorAll<HTMLButtonElement>('.context-menu [role="menuitem"]')];
-    const here = items.find((item) => item.querySelector(".menu-label")!.textContent === "Presenta da qui")!;
-    expect(here).toBeDefined();
-    here.click();
-    closeContextMenu();
-    await opened();
-    expect(told()).toBe("Presentazione: Evaporazione, tavola 2 di 3. Esc per uscire.");
-  });
-
-  it("l'inchiostro, gli schermi vuoti e il resto non toccano il disegno", async () => {
-    mount(DECK, { level: "standard" });
-    size(1000, 500);
-    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1000);
-    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(500);
-    key("F5");
-    const shown = await opened();
-    const stage = shown.querySelector<HTMLElement>(".draw-present-stage")!;
-    const at = (type: string, x: number, y: number, buttons: number): void =>
-      void stage.dispatchEvent(pointer(type, { ...MOUSE, button: type === "pointermove" ? -1 : 0, buttons, pressure: buttons === 0 ? 0 : 0.5, clientX: x, clientY: y, timeStamp: (clock += 8) }));
-    at("pointerdown", 100, 100, 1);
-    at("pointermove", 200, 150, 1);
-    at("pointermove", 300, 200, 1);
-    at("pointerup", 300, 200, 0);
-    expect(shown.querySelectorAll(".draw-present-ink path")).toHaveLength(1);
-    for (const name of ["b", "b", "w", "l", "e", "w", "End", "ArrowRight"]) inside(name);
-    expect(presentation()).not.toBeNull();
-    inside("ArrowRight");
-    expect(presentation()).toBeNull();
-    expect(changes).toEqual([]);
-    expect(editor.canUndo).toBe(false);
-    expect(editor.engine.text).toBe(DECK);
-    expect(spoken()).toBe("Pioggia, tavola 3 di 3, 400 × 200.");
-  });
-
-  it("«?» elenca F5 e Maiusc+F5 nella vista, e i tasti della presentazione nel loro gruppo", () => {
-    mount(DECK, { level: "standard" });
-    key("?", { shiftKey: true });
-    const tables = [...dialog().querySelectorAll(".keys-list > table")].map((table) => ({
-      caption: table.querySelector("caption")!.textContent,
-      rows: [...table.querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]),
-    }));
-    const view = tables.find((table) => table.caption === "Vista")!;
-    expect(view.rows).toContainEqual(["F5", "Presenta dalla prima tavola"]);
-    expect(view.rows).toContainEqual(["Shift+F5", "Presenta dalla tavola di adesso: quella scelta, o quella al centro della vista"]);
-    const inner = tables.find((table) => table.caption === "Presentazione")!;
-    expect(inner.rows.map(([keys]) => keys)).toEqual(["→ o ↓ o Space o PgDn o Enter o N", "← o ↑ o PgUp o ⌫ o P", "Home o End", "0…9", "B o .", "W o ,", "L", "E", "Esc"]);
-    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
-    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
-  });
-
-  it("un editor che se ne va porta via la presentazione", async () => {
-    mount(DECK, { level: "standard" });
-    key("F5");
-    await opened();
-    owner.close();
-    expect(presentation()).toBeNull();
-    owner = openLifetime();
+  it("lo strumento, il tasto X e la sezione delle proprietà non ci sono più (ADR 0231)", () => {
+    mount(LINKED);
+    key("x");
+    expect(editor.tool).toBe("pen");
+    expect(railTool("Connettore").hidden).toBe(true);
   });
 });
 
@@ -17465,7 +6671,7 @@ describe("lo spazio di lavoro e la colonna personalizzata", () => {
     mount(SOURCE, { workspace: "simple", onWorkspace });
     expect(host.querySelector<HTMLElement>(".draw-editor")!.dataset.workspace).toBe("simple");
     expect(rail().dataset.size).toBe("large");
-    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Testo"]);
+    expect(railNames()).toEqual(["Selezione", "Mano", "Zoom", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia"]);
     expect(fullButton().hidden).toBe(false);
 
     fullButton().click();
@@ -17473,7 +6679,6 @@ describe("lo spazio di lavoro e la colonna personalizzata", () => {
     expect(host.querySelector<HTMLElement>(".draw-editor")!.dataset.workspace).toBe("full");
     expect(rail().dataset.size).toBe("normal");
     expect(fullButton().hidden).toBe(true);
-    expect(railNames()).toContain("Bézier");
     expect(spoken()).toContain("Completo");
   });
 
@@ -17489,15 +6694,12 @@ describe("lo spazio di lavoro e la colonna personalizzata", () => {
     expect(simple.getAttribute("aria-checked")).toBe("false");
     simple.click();
     expect(onWorkspace).toHaveBeenLastCalledWith("simple");
-    expect(railNames()).not.toContain("Bézier");
 
     // Dall'esterno (un'altra finestra ha cambiato l'impostazione): niente
     // richiamo, perché la scelta è già ricordata.
     onWorkspace.mockClear();
-    editor.setWorkspace("full");
-    expect(railNames()).toContain("Bézier");
-    editor.setWorkspace("full", ["select", "text", "pen"]);
-    expect(railNames()).toEqual(["Selezione", "Testo", "Penna"]);
+    editor.setWorkspace("full", ["select", "rect", "pen"]);
+    expect(railNames()).toEqual(["Selezione", "Rettangolo", "Penna"]);
     expect(onWorkspace).not.toHaveBeenCalled();
   });
 
@@ -17510,7 +6712,9 @@ describe("lo spazio di lavoro e la colonna personalizzata", () => {
       "I tasti qui sotto sono dello spazio «Completo», che si sceglie dal menu «Disegno» o col pulsante in fondo alla colonna.",
     );
     const captions = [...extra.querySelectorAll("caption")].map((caption) => caption.textContent);
-    expect(captions[0]).toBe("Strumenti");
+    // Gli strumenti sono gli stessi nei due spazi (ADR 0231): manca ciò che
+    // si fa con gli oggetti.
+    expect(captions[0]).toBe("Oggetti");
     expect(captions.some((caption) => caption!.includes("livello")), "niente livelli").toBe(false);
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
     await settle();
@@ -17526,10 +6730,10 @@ describe("lo spazio di lavoro e la colonna personalizzata", () => {
     mount(SOURCE, { workspace: "full", toolbar: ["select", "ellipse", "pen", "domani" as never] });
     expect(railNames()).toEqual(["Selezione", "Ellisse", "Penna"]);
     // Senza la Selezione, la colonna la mette in cima.
-    editor.setWorkspace("full", ["text", "pen"]);
-    expect(railNames()).toEqual(["Selezione", "Testo", "Penna"]);
-    key("r");
-    expect(editor.tool).toBe("rect");
+    editor.setWorkspace("full", ["rect", "pen"]);
+    expect(railNames()).toEqual(["Selezione", "Rettangolo", "Penna"]);
+    key("o");
+    expect(editor.tool).toBe("ellipse");
   });
 
   it("«Personalizza la barra…» sposta, toglie, rimette di serie e salva; Annulla rimette com'era", async () => {
@@ -17544,10 +6748,11 @@ describe("lo spazio di lavoro e la colonna personalizzata", () => {
 
     // Giù la Selezione, via la Mano: la colonna cambia mentre si sceglie.
     row("select").querySelectorAll<HTMLButtonElement>(".draw-toolbar-move")[1]!.click();
-    expect(rows().slice(0, 2)).toEqual(["nodes", "select"]);
+    expect(rows().slice(0, 2)).toEqual(["hand", "select"]);
+    expect(railNames().slice(0, 2)).toEqual(["Mano", "Selezione"]);
     const hand = row("hand").querySelector<HTMLInputElement>("input")!;
     hand.click();
-    expect(railNames().slice(0, 2)).toEqual(["Nodi", "Selezione"]);
+    expect(railNames().slice(0, 2)).toEqual(["Selezione", "Zoom"]);
     expect(railNames()).not.toContain("Mano");
 
     // Annulla: com'era, e niente salvato.

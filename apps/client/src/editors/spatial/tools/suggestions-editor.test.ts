@@ -4,14 +4,13 @@
 // fatto che lo chiude per sempre; la memoria di chi monta l'editor, e la
 // casella che li spegne.
 
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { SceneEngine } from "../scene/engine";
 import { doc } from "../scene/test-support";
 import { createDrawEditor, type DrawChange, type DrawEditor, type DrawEditorOptions } from "./editor";
 import { LAYER } from "./test-support";
-import { loadWriting } from "./writing";
 
 /// Un foglio di 600 × 600 con un quadrato: i tratti e le forme ci stanno
 /// senza farlo crescere.
@@ -119,11 +118,6 @@ function key(name: string, init: KeyboardEventInit = {}, target: HTMLElement = s
   return event;
 }
 
-// Scrittura arriva prima dei testi, come dopo il montaggio del disegno.
-beforeAll(async () => {
-  await loadWriting();
-});
-
 beforeEach(() => {
   host = document.createElement("div");
   document.body.append(host);
@@ -167,7 +161,7 @@ describe("i suggerimenti nell'editor", () => {
     expect(showing()).toBeNull();
     stroke(SCRIBBLE, FINGER);
     expect(showing()).toBe("two-fingers");
-    expect(text()).toBe("Con due dita sposti il foglio; allargandole o stringendole lo avvicini o lo allontani.");
+    expect(text()).toBe("Con due dita sposti il foglio; allargandole o stringendole lo avvicini o lo allontani. Un tocco di due dita annulla, uno di tre ripete.");
     expect(said()).toBe(`Suggerimento: ${text()}`);
     expect(row().getAttribute("role")).toBe("group");
     expect(row().getAttribute("aria-label")).toBe("Suggerimento");
@@ -177,8 +171,8 @@ describe("i suggerimenti nell'editor", () => {
     expect(changes).toHaveLength(2);
   });
 
-  it("dal livello Standard, coi gesti, dice anche dei tocchi che annullano e ripetono", () => {
-    mount({ level: "standard" });
+  it("coi gesti dice anche dei tocchi che annullano e ripetono", () => {
+    mount();
     stroke(SCRIBBLE, FINGER);
     expect(text()).toBe("Con due dita sposti il foglio; allargandole o stringendole lo avvicini o lo allontani. Un tocco di due dita annulla, uno di tre ripete.");
     editor.setGrid({ ...editor.grid, taps: false });
@@ -213,7 +207,7 @@ describe("i suggerimenti nell'editor", () => {
   });
 
   it("uno alla volta: un altro che arriva mentre uno è a schermo aspetta la sua occasione dopo", () => {
-    mount({ level: "standard" });
+    mount();
     stroke(SCRIBBLE, FINGER);
     expect(showing()).toBe("two-fingers");
     // Un rettangolo a mano non tenuto: la forma pulita aspetta.
@@ -228,11 +222,11 @@ describe("i suggerimenti nell'editor", () => {
   });
 
   it("il tratto tenuto fermo dice della forma pulita soltanto dove si riconosce, e dopo un tratto che somiglia a una forma", () => {
-    mount();
-    // All'Essenziale le forme dal tratto non ci sono.
+    mount({ workspace: "simple" });
+    // Nel Semplice le forme dal tratto non ci sono.
     stroke(RECT, MOUSE);
     expect(showing()).toBeNull();
-    editor.setLevel("standard");
+    editor.setWorkspace("full");
     stroke(SCRIBBLE, MOUSE);
     expect(showing()).toBeNull();
     stroke(RECT, MOUSE);
@@ -240,7 +234,7 @@ describe("i suggerimenti nell'editor", () => {
   });
 
   it("chi tiene fermo un tratto e ne fa una forma non lo vede più", () => {
-    mount({ level: "standard" }, EMPTY);
+    mount({}, EMPTY);
     stroke(RECT, MOUSE, 500);
     expect(editor.engine.text).toMatch(/<rect id="o[a-z0-9]{8}" x="100" y="100" width="200" height="120"/);
     expect(seen[0]).toEqual(["hold-shape"]);
@@ -248,40 +242,13 @@ describe("i suggerimenti nell'editor", () => {
     expect(showing()).toBeNull();
   });
 
-  it("dopo la seconda forma senza testo dice come si scrive dentro una forma; scritta un'etichetta, non torna", () => {
-    mount({ level: "standard", suggestions: { on: true, seen: ["two-fingers", "hold-shape"] } }, EMPTY);
+  it("dopo due forme non dice più come si scrive dentro una forma: il testo non si scrive sul posto (ADR 0231)", () => {
+    mount({ suggestions: { on: true, seen: ["two-fingers", "hold-shape"] } }, EMPTY);
     editor.setTool("rect");
     stroke([[100, 100], [200, 160]]);
-    expect(showing()).toBeNull();
     stroke([[300, 100], [400, 160]]);
-    expect(showing()).toBe("label-shape");
-    expect(text()).toBe("Per scrivere dentro una forma, fai doppio clic o due tocchi su di lei, oppure sceglila e premi F2.");
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-
-    owner.close();
-    owner = openLifetime();
-    host.replaceChildren();
-    seen = [];
-    mount({ level: "standard", suggestions: { on: true, seen: ["two-fingers", "hold-shape"] } }, EMPTY);
-    editor.setTool("rect");
-    stroke([[100, 100], [200, 160]]);
-    editor.setTool("select");
-    editor.select([/<rect id="([^"]+)"/.exec(editor.engine.text)![1]!]);
-    surface().focus();
-    key("F2");
-    const input = host.querySelector<HTMLElement>(".draw-text-input")!;
-    const range = document.createRange();
-    range.selectNodeContents(input);
-    document.getSelection()!.removeAllRanges();
-    document.getSelection()!.addRange(range);
-    input.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "Inizio" }));
-    key("Escape", {}, input);
-    expect(editor.engine.text).toContain("fub:inside=");
-    expect(seen).toEqual([["two-fingers", "hold-shape", "label-shape"]]);
-    editor.setTool("rect");
-    stroke([[300, 100], [400, 160]]);
-    stroke([[100, 300], [200, 360]]);
     expect(showing()).toBeNull();
+    expect(seen).toEqual([]);
   });
 
   it("senza lo strumento Testo non dice di scrivere nelle forme", () => {
@@ -315,7 +282,7 @@ describe("i suggerimenti nell'editor", () => {
   });
 
   it("la casella li spegne tutti e lo scrive; tolto il segno, tornano", () => {
-    mount({ level: "standard" });
+    mount();
     stroke(SCRIBBLE, FINGER);
     expect(box().checked).toBe(false);
     expect(box().closest("label")!.textContent).toBe("Non mostrare più suggerimenti");

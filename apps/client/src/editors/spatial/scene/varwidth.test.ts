@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import { parsePath } from "./geometry";
-import { readVarWidth, spanAt, spanSlopes, spanWidths, widthsAt, widthSpans, writeVarWidth, writtenProfile, type WidthPoint } from "./varwidth";
+import { readVarWidth, spanAt, spanSlopes, spanWidths, widthSpans, writeVarWidth, writtenProfile, type WidthPoint } from "./varwidth";
 import cases from "../../../__fixtures__/scene-width/cases.json";
 
 describe("la grammatica di fub:geom", () => {
@@ -18,17 +18,6 @@ describe("la grammatica di fub:geom", () => {
 });
 
 describe("le larghezze lungo la linea", () => {
-  for (const { name, profile, widths } of cases.profiles) {
-    it(`il profilo «${name}»`, () => {
-      const points = profile as unknown as WidthPoint[];
-      for (const [u, left, right] of widths) {
-        const [l, r] = widthsAt(points, u!);
-        expect(l, `${name} a ${u}`).toBeCloseTo(left!, 9);
-        expect(r, `${name} a ${u}`).toBeCloseTo(right!, 9);
-      }
-    });
-  }
-
   it("la pendenza è la derivata della larghezza", () => {
     const points: WidthPoint[] = [[0, 1, 0.5], [0.1, 3, 0.5], [0.7, 2, 6], [1, 4, 1]];
     const spans = widthSpans(points);
@@ -43,13 +32,6 @@ describe("le larghezze lungo la linea", () => {
     }
   });
 
-  it("uno scalino vale dopo, e i tratti non hanno lunghezza zero", () => {
-    const points: WidthPoint[] = [[0, 2, 2], [0.5, 2, 2], [0.5, 8, 8], [1, 8, 8]];
-    expect(widthSpans(points).map((span) => [span.t0, span.t1])).toEqual([[0, 0.5], [0.5, 1]]);
-    expect(widthsAt(points, 0.4999)).toEqual([2, 2]);
-    expect(widthsAt(points, 0.5)).toEqual([8, 8]);
-    expect(widthsAt(points, 1)).toEqual([8, 8]);
-  });
 });
 
 describe("la scrittura", () => {

@@ -51,8 +51,6 @@ npm run bench:a11y
 npm run bench:verify
 npm run bench:motion
 npm run bench:fidelity
-npm run bench:boards
-npm run bench:connectors
 npm run bench:grid
 npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
 npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
@@ -162,7 +160,11 @@ Segui
 
 Una pagina canonica descrive il presente. Un lavoro aperto diventa una GitHub
 Issue. Una decisione architetturale usa il template ADR. Non creare cartelle
-`archive`, alias Markdown o verbali di implementazione.
+`archive`, alias Markdown o verbali di implementazione. Chi chiude una fase
+di lavoro aggiorna
+[`docs/project/status.md`](docs/project/status.md): la riga della fase, i
+collegamenti alle PR e, se un cancello è passato, i numeri in
+[`docs/misure/`](docs/misure/).
 
 ## Baseline visuali
 

@@ -33,13 +33,6 @@
 // distribuisce, il tondo e il corsivo, come se il vault li avesse con
 // quel nome. Il foglio li registra, la Lettura e l'export li portano dentro.
 //
-// Una scena da rendere modificabile (`editable`) si rende modificabile tutta,
-// col piano di «Rendi modificabile il disegno…», e le tre strade mostrano il
-// disegno di dopo; `#before` è il disegno di prima, in un `img` come la
-// Lettura: ciò che il browser fa del file che FubDraw non ha toccato. Il
-// piano deve dare le parti che la scena dice. `foglio` toglie al prima i fogli
-// di stile, come una conversione che li perdesse.
-//
 // `?wrap=check` prova invece gli a capo dei testi in area contro il browser
 // (`wrap-check.ts`), e ne mette gli esiti in `data-wrap`; `?wrap=zwnj` li
 // prova con la spaziatura che la misura mette da sé, come dove il canvas non
@@ -56,7 +49,6 @@ import type { FaceInfo } from "../src/editors/spatial/fonts/faces";
 import { appFonts, fontSheets, section, selfContained, type FontSheets } from "../src/editors/spatial/picture";
 import { SceneEngine } from "../src/editors/spatial/scene/engine";
 import { boardsOf } from "../src/editors/spatial/tools/boards";
-import { planEditable } from "../src/editors/spatial/tools/make-editable";
 import { rasterize } from "../src/editors/spatial/tools/png";
 import { browserMeasure, estimate } from "../src/editors/spatial/tools/measure";
 import { ensureTextFont, FONT_FILES } from "../src/editors/spatial/tools/text";
@@ -150,13 +142,7 @@ async function main(): Promise<void> {
     return;
   }
   if (found === undefined) return;
-  // Una scena da rendere modificabile si mostra com'è dopo il comando.
-  const editable = found.editable;
-  const plan = editable === undefined ? null : planEditable(found.text, { kind: "all" });
-  if (plan !== null && (plan.after === null || plan.converted !== editable!.converted || plan.leftovers.length !== editable!.left)) {
-    throw new Error(`${found.id}: ${plan.converted} parti diventano modificabili e ${plan.leftovers.length} restano, non ${editable!.converted} e ${editable!.left}`);
-  }
-  const drawing = plan?.after ?? found.text;
+  const drawing = found.text;
   const vault = found.vault === true ? await benchVault() : null;
   const fonts = vault === null ? appFonts : fontSheets(vault);
   if (vault !== null) {
@@ -215,16 +201,6 @@ async function main(): Promise<void> {
   const png = await rasterize(await selfContained(out, async () => null, 0, fonts));
   if (png === null) throw new Error(`il PNG di ${found.id} non si fa`);
   await picture("export", png);
-
-  // Il disegno di prima, il termine di paragone di «Rendi modificabile».
-  if (plan !== null) {
-    const before = variant === "foglio" ? found.text.replace(/<style>[\s\S]*?<\/style>/g, "") : found.text;
-    await fonts.load(before);
-    const shown = await selfContained(before, async () => null, 0, fonts);
-    await rasterize(shown);
-    await picture("before", new Blob([shown], { type: "image/svg+xml" }));
-    document.documentElement.dataset.before = "";
-  }
 
   // Gli strati immagine del foglio si decodificano da soli.
   for (let i = 0; i < 50; i++) {

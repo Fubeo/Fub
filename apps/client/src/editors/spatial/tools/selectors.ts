@@ -166,11 +166,6 @@ const BY_CLASS = 1_000;
 // Fogli.
 // ---------------------------------------------------------------------------
 
-/// Le regole del foglio `css`, da solo.
-export function readSheet(css: string): Sheet {
-  return readSheets([{ id: "0", css }]);
-}
-
 /// Le regole dei fogli `sheets`, nell'ordine del documento: i livelli di
 /// `@layer` hanno lo stesso nome in tutti i fogli.
 export function readSheets(sheets: ReadonlyArray<{ readonly id: string; readonly css: string }>): Sheet {

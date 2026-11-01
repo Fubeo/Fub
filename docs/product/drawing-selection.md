@@ -2,36 +2,18 @@
 
 > **Per chi:** chi sceglie fra molti oggetti, dentro i gruppi, o vuole
 > mettere da parte qualcosa mentre lavora sul resto.
-> **Risultato:** sapere come si sceglie col Lazo, coi simili e dentro i
-> gruppi, come si isola un gruppo e come si bloccano e si nascondono gli
+> **Risultato:** sapere come si sceglie coi simili e dentro i gruppi, come si isola un gruppo e come si bloccano e si nascondono gli
 > oggetti uno per uno.
 
 Nello spazio Completo il [disegno](drawing.md) sceglie in più modi della sola
-freccia: il Lazo, il menu «Selezione avanzata», i clic dentro i gruppi, i
-gruppi isolati; e gli oggetti si bloccano e si nascondono uno per uno, non
+freccia: il menu «Selezione avanzata», i clic dentro i gruppi, i gruppi
+isolati; e gli oggetti si bloccano e si nascondono uno per uno, non
 solo per livello. Scegliere e isolare non cambiano il file; bloccare e
 nascondere sì, e sono passi di annulla
-(`apps/client/src/editors/spatial/tools/selecting.ts`, il lazo e l'indice in
-`apps/client/src/editors/spatial/tools/hit.ts`).
-
-## Il Lazo
-
-Lo strumento **Lazo** (`Q`, come in Illustrator) viene dopo la freccia. Si
-disegna attorno agli oggetti, e si scelgono quelli che il lazo racchiude per
-intero: la stessa regola del riquadro che la freccia tira sul vuoto. Il lazo
-si chiude da solo, dall'ultimo punto al primo, e la selezione lo segue mentre
-lo si tira; un giro che ripassa sul proprio inizio non lascia buchi.
-
-- **`Maiusc`** aggiunge ciò che il lazo racchiude alla selezione di prima,
-  **`Alt`** lo toglie.
-- **Un tocco** senza trascinare sceglie l'oggetto sotto, come la freccia; con
-  `Maiusc` lo aggiunge o lo toglie, con `Alt` lo toglie.
-- **`Esc`** annulla il lazo e riporta la selezione di prima.
-- **Dalla tastiera** `Spazio` comincia il lazo dove è il cursore del foglio,
-  le frecce lo tirano e `Spazio`, o `Invio`, lo chiude.
-
-Il lazo tiene un punto ogni due pixel dello schermo, al più 512: oltre, ne
-lascia uno ogni due, e un giro lunghissimo resta leggero.
+(`apps/client/src/editors/spatial/tools/selecting.ts`, l'indice in
+`apps/client/src/editors/spatial/tools/hit.ts`). Lo strumento Lazo se n'è
+andato col livello Standard (decisione 0231): il riquadro che la freccia tira
+sul vuoto sceglie ciò che racchiude per intero.
 
 ## Dentro i gruppi
 
@@ -78,12 +60,26 @@ da soli.
 ## Il menu della selezione
 
 «Selezione avanzata», nella barra dopo «Elimina», apre il menu della
-selezione. Lo stesso menu si apre col tasto destro del mouse sul foglio, con
-ogni strumento, col tocco lungo con la freccia o il Lazo in mano, e dalla
-tastiera con `Maiusc+F10` o col tasto del menu, sotto la selezione. Con la
-freccia o il Lazo il tasto destro su un oggetto che non è scelto prima lo
-sceglie; con gli strumenti che disegnano il menu finisce con «Menu radiale»
-([Disegni, vista, gesti e menu radiale](drawing-view.md#il-menu-radiale)).
+selezione, con tutte le voci che seguono.
+
+Il tasto destro del mouse sul foglio, con ogni strumento, il tocco lungo con
+la freccia in mano e, dalla tastiera, `Maiusc+F10` o il tasto del menu, sotto
+la selezione, aprono invece un menu più corto. Con la freccia il tasto
+destro su un oggetto che non è scelto prima lo sceglie.
+
+- Senza niente di scelto restano le sole voci che adesso fanno qualcosa:
+  **Incolla** (`Ctrl+V`), **Incolla nello stesso punto** (`Ctrl+Maiusc+V`),
+  **Seleziona tutto** (`Ctrl+A`), **Mostra tutto il disegno** (`Maiusc+1`) e
+  **Menu radiale** ([Disegni, vista, gesti e menu
+  radiale](drawing-view.md#il-menu-radiale)). A chi legge soltanto restano
+  Seleziona tutto e Mostra tutto il disegno.
+- Con una selezione, Taglia, Copia e Incolla stanno nella riga dei pulsanti
+  in cima; sotto, lo stile, **Seleziona
+  simili** in un sottomenu, Blocca, Nascondi, Isola il gruppo, Esci dal
+  gruppo dentro un gruppo isolato, e Menu radiale: sempre meno di nove voci.
+
+Il resto, Incolla nello stesso punto con una selezione, Inverti la
+selezione, Rinomina, Sblocca tutto e Mostra tutto, si trova scrivendo, come dice il piede «Scrivi per cercare».
 
 - **Seleziona tutto** (`Ctrl+A`) e **Inverti la selezione**, che sceglie
   tutto il resto: di un gruppo con dentro un oggetto scelto, gli altri oggetti
@@ -107,8 +103,8 @@ prima degli oggetti.», o «Gli oggetti scelti non hanno questa proprietà.».
 
 ## Bloccare e nascondere
 
-Un oggetto bloccato si vede e non si sceglie, né sul foglio né col Lazo, né
-con Seleziona tutto; un oggetto nascosto non si vede. Bloccare e nascondere
+Un oggetto bloccato si vede e non si sceglie, né sul foglio né con
+Seleziona tutto; un oggetto nascosto non si vede. Bloccare e nascondere
 valgono per gli oggetti scelti, anche un gruppo intero, e la selezione si
 svuota; si dice quanti sono, «2 oggetti bloccati: non si scelgono finché non
 li sblocchi.». Nel file l'oggetto ha `fub:locked="true"`, come un livello
@@ -136,16 +132,15 @@ gruppo bloccato si sblocca da lui, e il suo segno non si tocca.
 
 Nel Semplice non c'è niente di questa pagina: la freccia sceglie gli
 oggetti in cima, e gli oggetti bloccati o nascosti da un file restano tali.
-Per chi monta l'editor con le sue parti il Lazo e la «Selezione avanzata» sono due parti, come
-dice [Disegni, spazio di lavoro e barra](drawing-custom.md); senza la seconda
+Per chi monta l'editor con le sue parti la «Selezione avanzata» è una parte, come
+dice [Disegni, spazio di lavoro e barra](drawing-custom.md); senza
 non ci sono il menu, il clic dentro i gruppi, l'isolamento e il blocco, i
 gruppi dell'albero non si aprono e i suoi segni dicono lo stato senza
 cambiarlo. In un documento in sola lettura si sceglie, si isola e si
 usa il menu, ma le voci che cambiano il file sono spente.
 
 `?` elenca i tasti in «Selezione avanzata»: `Ctrl` col clic, `Ctrl+Invio`,
-`Esc`, `Ctrl+Maiusc+L`, `Ctrl+Maiusc+H` e `Maiusc+F10`; con «Strumenti» il
-Lazo, `Q`. Su macOS `⌘` vale per `Ctrl`.
+`Esc`, `Ctrl+Maiusc+L`, `Ctrl+Maiusc+H` e `Maiusc+F10`. Su macOS `⌘` vale per `Ctrl`.
 
 La barra «Gruppo isolato» è una navigazione: dopo il foglio la si raggiunge
 con `Tab`, ed `Esc` riporta al foglio senza uscire dal gruppo. Il gruppo dove

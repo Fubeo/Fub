@@ -1,0 +1,32 @@
+# WordCraft con la sua facciata engine, collegato a Fub da solo (K0 del piano
+# dei componenti). Vedi `../README.md`.
+[package]
+name = "prova-documenti"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+[workspace]
+
+[dependencies]
+motori-prova-comune = { path = "../comune" }
+fub-abi = { path = "../../../crates/fub-abi" }
+serde_json = "1"
+# La facciata non è in `vendor/wordcraft` (Fub ne ha copiato soltanto i crate
+# del documento): qui arriva da Git, alla revisione della copia (v0.10.0).
+wordcraft-engine = { git = "https://github.com/storytold/wordcraft", rev = "9130181a5fdaee2293e67756fd5458c601489f3c" }
+wordcraft-render = { git = "https://github.com/storytold/wordcraft", rev = "9130181a5fdaee2293e67756fd5458c601489f3c" }
+
+[profile.release]
+strip = false
+
+[profile.spoglio]
+inherits = "release"
+strip = true
+
+# Le `[patch.crates-io]` di WordCraft (v0.10.0), tolte quelle
+# dell'interfaccia. krilla va a craft-libs c348732, non alla 92d392c di
+# VectorCraft.
+[patch.crates-io]
+krilla = { git = "https://github.com/storytold/craft-libs", rev = "c3487320b2d1de657b860b3c8abb44e1f2b32bd8" }

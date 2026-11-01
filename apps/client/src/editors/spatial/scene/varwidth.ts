@@ -283,10 +283,3 @@ export function spanSlopes(span: WidthSpan, t: number): [number, number] {
   const s = Math.min(1, Math.max(0, (t - span.t0) / h));
   return [hermiteSlope(span.left, h, s), hermiteSlope(span.right, h, s)];
 }
-
-/// Le larghezze a sinistra e a destra di `profile` in `t`, dopo lo scalino
-/// se `t` ne ha uno.
-export function widthsAt(profile: readonly WidthPoint[], t: number): [number, number] {
-  const spans = widthSpans(profile);
-  return spanWidths(spans[spanAt(spans, t)]!, t);
-}

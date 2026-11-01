@@ -12,7 +12,11 @@
 //! backlink.
 //!
 //! Accesa, il vault ha anche le impostazioni dell'editor dei disegni; spenta,
-//! le chiavi non ci sono.
+//! le chiavi non ci sono. La cartella delle librerie di simboli
+//! (`draw.symbols`), il livello d'interfaccia (`draw.level`) e le parti del
+//! Personalizzato (`draw.custom`) non ci sono più in nessuno dei due casi
+//! (decisione 0231), e il valore che un vault ne porta resta nel file senza
+//! che nessuno lo legga.
 //!
 //! Lo stesso file si compila nei due giri della CI: `cargo test --workspace`
 //! prova il ramo spento, `cargo test -p fub-host --features draw` quello acceso.
@@ -159,6 +163,50 @@ fn annotations_are_a_document_only_with_the_draw_feature() {
 }
 
 #[test]
+fn the_settings_of_an_older_vault_stay_in_the_file_unread() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+    std::fs::create_dir_all(root.join(".fub")).unwrap();
+    let file = root.join(".fub").join("settings.json");
+    std::fs::write(
+        &file,
+        serde_json::json!({"version": 1, "values": {
+            "draw.symbols": "Simboli",
+            "draw.level": "essential",
+            "draw.custom": ["pen", "layers"],
+        }})
+        .to_string(),
+    )
+    .unwrap();
+    let mut mounted = mounted(&root);
+    let ws = &mut mounted.workspace;
+
+    // Nessuno le dichiara: non si leggono e non si scrivono.
+    for key in ["draw.symbols", "draw.level", "draw.custom"] {
+        assert!(ws.setting(key).is_err(), "{key}");
+        assert!(
+            ws.set_setting(key, SettingValue::Text("Altro".into()))
+                .is_err(),
+            "{key}"
+        );
+    }
+    // Il vault le porta ancora, com'erano, anche dopo che un'altra chiave si
+    // scrive.
+    #[cfg(feature = "draw")]
+    ws.set_setting("draw.templates", SettingValue::Text("Modelli".into()))
+        .unwrap();
+    let written: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(written["values"]["draw.symbols"], "Simboli", "{written}");
+    assert_eq!(written["values"]["draw.level"], "essential", "{written}");
+    assert_eq!(
+        written["values"]["draw.custom"],
+        serde_json::json!(["pen", "layers"]),
+        "{written}"
+    );
+}
+
+#[test]
 fn the_drawing_settings_exist_only_with_the_draw_feature() {
     let dir = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
@@ -171,10 +219,7 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
         for key in [
             "draw.workspace",
             "draw.toolbar",
-            "draw.level",
-            "draw.custom",
             "draw.templates",
-            "draw.symbols",
             "draw.suggestions",
         ] {
             assert!(ws.setting(key).is_err(), "{key}");
@@ -205,10 +250,7 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
             [
                 "draw.workspace",
                 "draw.toolbar",
-                "draw.level",
-                "draw.custom",
                 "draw.templates",
-                "draw.symbols",
                 "draw.suggestions"
             ]
         );
@@ -216,24 +258,12 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
         // I valori di serie.
         assert_eq!(entry("draw.workspace").value, text("full"));
         assert_eq!(entry("draw.toolbar").value, SettingValue::List(vec![]));
-        assert_eq!(entry("draw.level").value, text("essential"));
-        assert_eq!(
-            entry("draw.custom").value,
-            SettingValue::List(
-                ["pen", "eraser", "rect", "ellipse", "line", "arrow"]
-                    .map(String::from)
-                    .to_vec()
-            )
-        );
         assert_eq!(entry("draw.templates").value, text("Templates"));
-        assert_eq!(entry("draw.symbols").value, text("Symbols"));
         assert_eq!(entry("draw.suggestions").value, SettingValue::Toggle(true));
         // Il vault le porta con sé, la macchina i suggerimenti.
         assert_eq!(entry("draw.workspace").spec.scope, SettingScope::Vault);
         assert_eq!(entry("draw.toolbar").spec.scope, SettingScope::Vault);
-        assert_eq!(entry("draw.level").spec.scope, SettingScope::Vault);
         assert_eq!(entry("draw.templates").spec.scope, SettingScope::Vault);
-        assert_eq!(entry("draw.symbols").spec.scope, SettingScope::Vault);
         assert_eq!(entry("draw.suggestions").spec.scope, SettingScope::Machine);
 
         // La casella «Non mostrare più suggerimenti» scrive la chiave.
@@ -260,33 +290,12 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
         ws.set_setting("draw.toolbar", column.clone()).unwrap();
         assert_eq!(ws.setting("draw.toolbar").unwrap(), column);
 
-        // Il livello ha i quattro nomi dell'editor, e nessun altro.
-        for level in ["standard", "expert", "custom", "essential"] {
-            ws.set_setting("draw.level", text(level))
-                .unwrap_or_else(|error| panic!("{level}: {error:?}"));
-            assert_eq!(ws.setting("draw.level").unwrap(), text(level));
-        }
-        assert!(ws.set_setting("draw.level", text("master")).is_err());
-        assert_eq!(ws.setting("draw.level").unwrap(), text("essential"));
-
-        // Le parti del Personalizzato sono un elenco, e la cartella un testo.
-        let parts = SettingValue::List(vec!["pen".into(), "text".into()]);
-        ws.set_setting("draw.custom", parts.clone()).unwrap();
-        assert_eq!(ws.setting("draw.custom").unwrap(), parts);
+        // La cartella è un testo.
         ws.set_setting("draw.templates", text("Modelli")).unwrap();
         assert_eq!(ws.setting("draw.templates").unwrap(), text("Modelli"));
-        ws.set_setting("draw.symbols", text("Simboli")).unwrap();
-        assert_eq!(ws.setting("draw.symbols").unwrap(), text("Simboli"));
 
         let written = std::fs::read_to_string(root.join(".fub").join("settings.json")).unwrap();
-        for key in [
-            "draw.workspace",
-            "draw.toolbar",
-            "draw.level",
-            "draw.custom",
-            "draw.templates",
-            "draw.symbols",
-        ] {
+        for key in ["draw.workspace", "draw.toolbar", "draw.templates"] {
             assert!(written.contains(&format!("\"{key}\"")), "{key}: {written}");
         }
         // I suggerimenti sono della macchina: non entrano nel file del vault.

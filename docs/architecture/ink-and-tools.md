@@ -229,8 +229,9 @@ strumento che scrive:
   dagli interni della versione fissata della libreria: `pf1-live.test.ts` la
   prova a ogni prefisso.
 - `buildStroke` è il tratto finito: inchiostro quantizzato, contorno e le
-  copie portate da altre trasformazioni (la simmetria). Una copia che esce dai
-  numeri dell'inchiostro non c'è, le altre sì. Il fallimento ha due motivi:
+  copie portate da altre trasformazioni. FubDraw non ne chiede più (la penna
+  in simmetria se n'è andata, decisione 0231), e il passaggio resta del
+  nucleo. Una copia che esce dai numeri dell'inchiostro non c'è, le altre sì. Il fallimento ha due motivi:
   `failed` (campioni non scrivibili) ed `empty` (nessun contorno).
 
 `EraseSweep` in `ink/tools/sweep.ts` è il gesto della gomma: percorre il
@@ -248,14 +249,14 @@ FubDraw è il primo consumatore e non il proprietario.
 - `tools/editor/curvature-tool.ts` attacca `attachInkInput` alla superficie,
   passa la curva della pressione, l'angolo della vista e la politica del tocco,
   e rifà l'anteprima in `onSettled`, una volta per evento.
-- `tools/editor/guide-drag.ts` (`begin`, `drawInk`) sceglie lo strumento da
+- `tools/editor/gesture-begin.ts` (`begin`, `drawInk`) sceglie lo strumento da
   `INK_TOOLS`, ne prende il pennello e crea per ogni tratto uno
   `StrokePreview`, con cui `drawInk` rifà l'anteprima e la disegna subito
   sullo strato sopra la scena (`painter/overlay.ts`), dentro il gestore
   dell'evento e senza aspettare il fotogramma.
-- `tools/editor/text-tool.ts`, il cursore da tastiera, chiama gli stessi
+- `tools/editor/sheet-cursor.ts`, il cursore da tastiera, chiama gli stessi
   gestori senza l'adattatore, e chiama da sé `onSettled` dopo i campioni.
-- `tools/editor/node-gestures.ts` (`writeInk`, `eraseAlong`) costruisce il
+- `tools/editor/ink-gestures.ts` (`writeInk`, `eraseAlong`) costruisce il
   tratto con `buildStroke`, lo scrive in un'unica operazione nello storico e fa
   correre la gomma con `EraseSweep` sull'indice della scena.
 - `tools/hit.ts` (`SceneIndex.along`) è la fonte della gomma e non riprova ciò
@@ -266,8 +267,7 @@ FubDraw è il primo consumatore e non il proprietario.
   il risultato è quello della scansione.
 - `tools/edit.ts` (`strokeElem`) scrive nel file l'opacità dello strumento.
 
-Restano del prodotto il livello di destinazione, gli id, la simmetria, gli
-annunci per lo screen reader, il passo di annulla e il formato della scena.
+Restano del prodotto il livello di destinazione, gli id, gli annunci per lo screen reader, il passo di annulla e il formato della scena.
 
 ## Confini e verifica
 
@@ -316,6 +316,6 @@ la regola va nel nucleo.
 
 ## Fuori dall'ambito
 
-Nessun prodotto ha una penna propria. Gli editor PDF e le annotazioni sono
-sospesi: non hanno profili, modalità o rotte di inchiostro in più, e un
-prodotto futuro userà questi stessi strumenti.
+Nessun prodotto ha una penna propria. Le annotazioni dei PDF (il profilo
+`pdf` della famiglia `canvas`) usano questi stessi strumenti di sistema, senza
+rotte di inchiostro proprie, e un prodotto futuro userà gli stessi.

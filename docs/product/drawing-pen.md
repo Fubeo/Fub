@@ -54,8 +54,8 @@ Accanto stanno:
 - **«Uscita»**: **Inchiostro** (il tratto coi suoi campioni), o
   **Tracciato fedele**, **Tracciato** e **Tracciato leggero**, che al
   rilascio trasformano il tratto in una linea di Bézier, con lo spessore della
-  pressione nel profilo che lo strumento Spessore legge
-  ([spessore](drawing-width.md)). Il tracciato non tiene i campioni: non si
+  pressione in una linea a spessore variabile
+  ([formato](../reference/scene-format-width.md)). Il tracciato non tiene i campioni: non si
   ripenna, non si leviga e non si riproduce.
 
 La penna, il modo della gomma e l'uscita sono della macchina e si ritrovano
@@ -72,12 +72,10 @@ la punta sparisce e si vede l'inchiostro. Il dito non ha punta.
 - **Maiusc** tenuto durante il tratto lo fa dritto dal primo punto
   all'ultimo, a passi di 15°; lasciato Maiusc, resta dritto fino al rilascio.
 - **Maiusc+clic** tira una linea dritta dalla fine dell'ultimo tratto.
-- **Alt** tenuto fa della penna un contagocce: il tocco prende il colore di
-  ciò che sta sotto.
 - La **penna girata** cancella con qualunque strumento, come la gomma
   scelta.
 - Il **tasto laterale** fa ciò che si sceglie in «Penna e dita»: apre il
-  menu radiale, sceglie col lazo, cancella, o niente.
+  menu radiale, cancella, o niente.
 
 ## Cancellare
 

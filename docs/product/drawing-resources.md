@@ -1,8 +1,8 @@
 # Disegni, risorse
 
 > **Per chi:** chi apre e cambia disegni con sfumature, motivi, punte di
-> freccia, ritagli, maschere od ombre, fatti con FubDraw o con un altro
-> programma.
+> freccia, ritagli, maschere od ombre, fatti con una versione precedente o
+> con un altro programma.
 > **Risultato:** sapere quali oggetti restano modificabili, come si vedono,
 > che cosa ne fanno i comandi e gli appunti.
 
@@ -40,10 +40,10 @@ nell'esportazione il file è quello che è.
 - **Un riempimento o un contorno con una risorsa** si legge «Sfumatura»,
   «Campitura», il nome di un motivo del documento o «Motivo». Il pulsante del
   colore accanto mostra i punti della sfumatura, da sinistra a destra o dal
-  centro, le righe della campitura, o una scacchiera per un motivo. Le
-  sezioni «Sfumatura» e «Campitura» li cambiano ([Disegni,
+  centro, le righe della campitura, o una scacchiera per un motivo. Non ci
+  sono più le sezioni che le cambiavano (decisione 0231): [Disegni,
   sfumature](drawing-gradients.md), [Disegni, campiture e
-  motivi](drawing-patterns.md)).
+  motivi](drawing-patterns.md).
 - **Scrivere un colore** e confermarlo mette il colore al posto della
   risorsa, in un passo di annulla; `Esc` prima di confermare torna alla
   risorsa, e `Invio` senza aver cambiato niente non fa niente.
@@ -58,29 +58,15 @@ nell'esportazione il file è quello che è.
 - **Separa** (`Ctrl+Maiusc+G`) non separa un gruppo con un ritaglio, una
   maschera, degli effetti o un filtro, che valgono per tutto il gruppo, e lo dice; con più
   gruppi separa gli altri e dice quanti ne restano interi. Allo stesso modo
-  «Togli il collegamento» lascia un collegamento con un effetto. Un ritaglio
-  o una maschera si tolgono con «Rilascia maschera» ([Disegni, ritagli e
-  maschere](drawing-masks.md)).
-- **«Applica trasformazione»** riscrive le sfumature degli oggetti nelle
-  coordinate nuove, e si vedono dov'erano: una sfumatura soltanto
-  dell'oggetto cambia sul posto, una che usa con altri, o di un altro
-  programma, diventa una copia sua, come quando la si cambia. Un campione,
-  o una sfumatura di un colore solo, si vede uguale dovunque. Lascia invece
-  la trasformazione a un oggetto con un motivo, un marcatore o una sfumatura
-  che eredita dal gruppo, a un oggetto con degli [effetti](drawing-effects.md),
-  e a un gruppo con un ritaglio, una maschera o un filtro: la risorsa vive
-  nelle loro coordinate, e portarla nella geometria
-  cambierebbe ciò che si vede. Un'immagine col suo ritaglio la applica, e il
-  ritaglio la segue. Gli oggetti dentro il gruppo la applicano
-  ciascuno per sé
-  ([Disegni, strumenti avanzati](drawing-expert.md#applica-trasformazione)).
+  «Togli il collegamento» lascia un collegamento con un effetto ([Disegni,
+  ritagli e maschere](drawing-masks.md)).
 - **Eliminare** un oggetto toglie anche le risorse proprie o condivise che
   nessun altro usa più, nello stesso passo di annulla; quelle scritte da un
   altro programma restano.
-- **Più oggetti con la stessa risorsa propria** possono nascere da Separa,
-  dal costruttore di forme o dalle forbici: la usano insieme, e resta finché
-  uno di loro la usa. «Incolla lo stile» e il contagocce danno invece a ogni
-  oggetto la sua copia.
+- **Più oggetti con la stessa risorsa propria** possono nascere da Separa:
+  la usano insieme, e resta finché
+  uno di loro la usa. «Incolla lo stile» dà invece a ogni oggetto la sua
+  copia.
 
 ## Copiare e incollare
 

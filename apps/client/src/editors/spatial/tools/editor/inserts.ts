@@ -1,51 +1,42 @@
-// L'editor del disegno: le note, Invio sul foglio e le forme delle raccolte. Un
-// pezzo di createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
+// L'editor del disegno: le note e Invio sul foglio. Un pezzo di
+// createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
 // condividono.
 
 import { INK_TOOLS } from "../../../../ink/tools/registry";
 import { buildStroke } from "../../../../ink/tools/stroke";
 import type { InkPointerType } from "../../../../ink/input/pointer";
-import type { Bounds } from "../../scene/geometry";
-import { apply, IDENTITY, type Point } from "../../scene/matrix";
+import { apply, type Point } from "../../scene/matrix";
 import type { Op } from "../../scene/ops";
 import type { Elem } from "../../scene/serialize";
 import { t, type DrawKey } from "../../strings";
-import { addOp, gesture as asGesture, NewIds, strokeElem, type Destination } from "../edit";
+import { addOp, gesture as asGesture, strokeElem, type Destination } from "../edit";
 import { toScene } from "../../view";
 import type { Unit } from "../hit";
-import { boxAround as shapeBox, boxIn, forPreview, libraryElem } from "../library-insert";
-import { libraryShape, type LibraryShape } from "../shape-library";
 import { NOTE_SIZE, noteElem, noteLabel, promptNote, readNote, type NoteText } from "../note";
 import { shapeElem } from "../shapes";
 import { ADDED, HIT_PX } from "./constants";
 import type { EditorContext } from "./context";
 import { straight } from "../../../../ink/geometry";
-import { nodeAtPath, translated } from "./helpers";
-import type { ShapeDrag } from "./types";
+import { nodeAtPath } from "./helpers";
 
 /// Ciò che Invio aggiunge sul foglio delle annotazioni, in unità della
 /// scena: un tratto o una linea larghi così, una forma alta la metà.
 const KEYBOARD_SIZE = 96;
 
-/// Ciò che le note, Invio sul foglio e le forme delle raccolte dà agli altri pezzi dell'editor.
+/// Ciò che le note e Invio sul foglio danno agli altri pezzi dell'editor.
 export interface InsertsContext {
   noteOf: (unit: Unit) => NoteText | null;
   editNote: (unit: Unit) => Promise<void>;
   noteAt: (at: Point | null, pointer: InkPointerType) => void;
   editSelectedNote: () => boolean;
   keyboardAdd: () => void;
-  onSheet: (clientX: number, clientY: number) => boolean;
-  insertShape: (id: string) => void;
-  cancelShapeDrag: (said?: boolean) => void;
-  startShapeDrag: (id: string, event: PointerEvent) => void;
 }
 
-/// Monta le note, Invio sul foglio e le forme delle raccolte.
+/// Monta le note e Invio sul foglio.
 export function installInserts(ctx: EditorContext): void {
   const {
-    life, folio, styles, style, toolLabel, root, surface, dock, previewLayer, editable, currentIndex, currentPage, grownPage, newIds, announce, objects,
-    sceneAt, viewCenter, selectedUnits, showHandles, showShape, drawnPaint, commit, select, setTool, cancelGesture, target, snapped, guidesOn, guidesFor,
-    snappedDelta
+    folio, styles, style, toolLabel, editable, currentIndex, currentPage, newIds, announce, objects,
+    viewCenter, selectedUnits, commit, select, cancelGesture, target
   } = ctx;
   // --- Le note e Invio sul foglio -----------------------------------------------
   //
@@ -190,7 +181,7 @@ export function installInserts(ctx: EditorContext): void {
           return;
         }
         const highlight = ctx.tool === "highlighter";
-        const elem = strokeElem(ids.next("object"), drawnPaint(color), brush, built.ink, new Date().toISOString(), ctx.tool, ctx.tool === "highlighter" ? ctx.inkOpacity.highlighter : ctx.inkOpacity.pen);
+        const elem = strokeElem(ids.next("object"), color, brush, built.ink, new Date().toISOString(), ctx.tool, ctx.tool === "highlighter" ? ctx.inkOpacity.highlighter : ctx.inkOpacity.pen);
         placeNew(to, elem, highlight ? "draw.action.highlight" : "draw.action.stroke", highlight ? "draw.added.highlight" : "draw.added.stroke", true);
         return;
       }
@@ -205,7 +196,7 @@ export function installInserts(ctx: EditorContext): void {
         const flat = ctx.tool === "line" || ctx.tool === "arrow";
         const from = apply(to.inverse, [cx - half, flat ? cy : cy - half / 2]);
         const end = apply(to.inverse, [cx + half, flat ? cy : cy + half / 2]);
-        const elem = shapeElem(ctx.tool, ids.next("object"), from, end, { color: drawnPaint(color), width }, 0);
+        const elem = shapeElem(ctx.tool, ids.next("object"), from, end, { color: color, width }, 0);
         if (elem !== null) placeNew(to, elem, toolLabel(ctx.tool), ADDED[ctx.tool], true);
         return;
       }
@@ -217,164 +208,4 @@ export function installInserts(ctx: EditorContext): void {
     }
   };
   ctx.keyboardAdd = keyboardAdd;
-
-  // --- Le forme delle raccolte ------------------------------------------------
-  //
-  // Una forma del pannello entra nel disegno in un passo solo, che porta il
-  // nome della forma: con un clic, o con Invio, al centro di ciò che si
-  // vede; trascinata fuori dal pannello, dove la si lascia. Mentre la si
-  // tira il foglio la mostra com'è, alla sua misura e al zoom di adesso, col
-  // centro sotto il puntatore e agganciata come un oggetto spostato (la
-  // griglia e le guide, e Ctrl o ⌘ la lascia libera). Rilasciata fuori dal
-  // foglio, o con Esc, non lascia traccia. Il puntatore lo tiene il riquadro
-  // del pannello: i suoi eventi arrivano al documento, e il trascinamento
-  // del browser, che nell'app prende i file, non c'entra.
-
-  /// Il punto dello schermo è sul foglio, e non sotto un pannello.
-  const onSheet = (clientX: number, clientY: number): boolean => {
-    const rect = surface.getBoundingClientRect();
-    if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return false;
-    const top = surface.ownerDocument.elementFromPoint?.(clientX, clientY) ?? null;
-    return top === null || !dock.contains(top);
-  };
-  ctx.onSheet = onSheet;
-
-  /// Scrive la forma `shape` nel riquadro `box` della scena, di `to`, in un
-  /// passo: scelta, e detta. Lo stile è quello delle forme che si
-  /// disegnano. Falso se il documento non l'ha accettata.
-  const placeShape = (shape: LibraryShape, to: Destination, ids: NewIds, box: Bounds): boolean => {
-    const pen = styles.pen;
-    const elem = libraryElem(shape, boxIn(box, to.inverse), { color: drawnPaint(pen.color, pen), width: pen.width }, t(shape.name), ids);
-    const ops: Op[] = [...to.prelude, addOp(to, elem)];
-    const half = pen.width / 2;
-    const page = grownPage({ min: [box.min[0] - half, box.min[1] - half], max: [box.max[0] + half, box.max[1] + half] });
-    if (page !== null) ops.push({ op: "page", viewBox: page });
-    if (commit(shape.name, asGesture(ops)) === null) return false;
-    // Una forma nuova si sceglie e si muove: con lo strumento Selezione.
-    if (ctx.tool !== "select") setTool("select");
-    select([elem.attrs.id!]);
-    announce(`${t("draw.shapes.inserted", { name: t(shape.name) })} ${objects()}`);
-    ctx.offerLabel();
-    return true;
-  };
-
-  /// Inserisce la forma `id` al centro di ciò che si vede; con la griglia, il
-  /// suo angolo in alto a sinistra va sull'incrocio più vicino.
-  function insertShape(id: string): void {
-    const shape = libraryShape(id);
-    if (shape === null || !editable()) return;
-    ctx.settleCrop();
-    const ids = newIds();
-    const to = target(ids);
-    if (to === null) return;
-    const [x, y] = snapped(shapeBox(shape, toScene(ctx.camera, viewCenter())).min);
-    placeShape(shape, to, ids, { min: [x, y], max: [x + shape.size[0], y + shape.size[1]] });
-  }
-  ctx.insertShape = insertShape;
-
-  /// La forma tirata, e dove andrebbe con il puntatore dove l'evento dice: il
-  /// riquadro nella scena e il livello che la riceve; `null` fuori dal
-  /// foglio, o dove niente la riceve.
-  const dragPlace = (drag: ShapeDrag, event: PointerEvent): { readonly box: Bounds; readonly to: Destination } | null => {
-    drag.over = onSheet(event.clientX, event.clientY);
-    if (!drag.over) return null;
-    const to = ctx.destinationNow();
-    if (to === null) return null;
-    const raw = shapeBox(drag.shape, sceneAt(event.clientX, event.clientY));
-    const [dx, dy] = snappedDelta(0, 0, raw.min, raw, () => guidesFor(drag, []), drag.pointer);
-    return { box: translated(raw, dx, dy)!, to };
-  };
-
-  /// Mostra la forma tirata dove andrebbe, e il cursore che dice se si può
-  /// lasciare.
-  const showShapeDrag = (drag: ShapeDrag, event: PointerEvent): void => {
-    ctx.readModifiers(event);
-    const place = dragPlace(drag, event);
-    drag.box = place === null ? null : place.box;
-    root.dataset.libraryDrop = place === null ? "none" : "copy";
-    if (place === null) {
-      showShape(null, IDENTITY);
-    } else {
-      const pen = styles.pen;
-      const elem = libraryElem(drag.shape, boxIn(place.box, place.to.inverse), { color: drawnPaint(pen.color, pen), width: pen.width }, "", new NewIds(() => false));
-      showShape(forPreview(elem), place.to.matrix);
-    }
-    // Le guide seguono la forma.
-    if (guidesOn() || ctx.guiding) showHandles();
-  };
-
-  /// Finisce il trascinamento, senza scrivere: toglie la forma mostrata e il
-  /// cursore.
-  const endShapeDrag = (): void => {
-    if (ctx.shapeDrag === null) return;
-    ctx.shapeDrag = null;
-    delete root.dataset.libraryDrop;
-    previewLayer.removeAttribute("opacity");
-    showShape(null, IDENTITY);
-    showHandles();
-  };
-
-  /// Esc, un puntatore annullato, o il pannello che si chiude: la forma tirata
-  /// non entra; con `said`, lo si dice.
-  function cancelShapeDrag(said = false): void {
-    if (ctx.shapeDrag === null) return;
-    endShapeDrag();
-    if (said) announce(t("draw.shapes.cancelled"));
-  }
-  ctx.cancelShapeDrag = cancelShapeDrag;
-
-  /// Comincia a tirare la forma `id` dal pannello: `event` è il movimento che
-  /// ha superato la soglia.
-  function startShapeDrag(id: string, event: PointerEvent): void {
-    const shape = libraryShape(id);
-    if (shape === null || !editable() || ctx.shapeDrag !== null) return;
-    cancelGesture();
-    ctx.settleCrop();
-    ctx.shapeDrag = { shape, pointerId: event.pointerId, pointer: event.pointerType === "pen" || event.pointerType === "touch" ? event.pointerType : "mouse", over: false, box: null };
-    previewLayer.setAttribute("opacity", "0.75");
-    showShapeDrag(ctx.shapeDrag, event);
-  }
-  ctx.startShapeDrag = startShapeDrag;
-
-  /// Rilascia la forma tirata: sul foglio entra dove sta; fuori no, e lo si
-  /// dice. Dove il livello non riceve, si dice perché.
-  const dropShape = (drag: ShapeDrag, event: PointerEvent): void => {
-    showShapeDrag(drag, event);
-    const { shape, box, over } = drag;
-    endShapeDrag();
-    if (box === null) {
-      if (over) target(newIds());
-      else announce(t("draw.shapes.cancelled"));
-      return;
-    }
-    if (!editable()) return;
-    ctx.settleCrop();
-    const ids = newIds();
-    const to = target(ids);
-    // Chi ha lasciato la forma sul foglio continua lì, non nel pannello.
-    if (to !== null && placeShape(shape, to, ids, box)) surface.focus({ preventScroll: true });
-  };
-
-  life.listen(surface.ownerDocument, "pointermove", (event) => {
-    if (ctx.shapeDrag !== null && event.pointerId === ctx.shapeDrag.pointerId) showShapeDrag(ctx.shapeDrag, event);
-  });
-  life.listen(surface.ownerDocument, "pointerup", (event) => {
-    if (ctx.shapeDrag !== null && event.pointerId === ctx.shapeDrag.pointerId) dropShape(ctx.shapeDrag, event);
-  });
-  life.listen(surface.ownerDocument, "pointercancel", (event) => {
-    if (ctx.shapeDrag !== null && event.pointerId === ctx.shapeDrag.pointerId) cancelShapeDrag(true);
-  });
-  // Esc ferma il trascinamento prima di chiunque altro.
-  life.listen(
-    surface.ownerDocument,
-    "keydown",
-    (event) => {
-      if (ctx.shapeDrag === null || event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      cancelShapeDrag(true);
-    },
-    { capture: true },
-  );
-  life.add(() => cancelShapeDrag());
 }

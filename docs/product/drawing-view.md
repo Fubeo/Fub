@@ -28,8 +28,7 @@ cambia il disegno.
 - Da tastiera `+` e `-` ingrandiscono e rimpiccioliscono; `0`, e `Ctrl+0` col
   foglio a fuoco, tornano al 100%; `Maiusc+1` mostra tutto il disegno e
   `Maiusc+2` la selezione.
-- `Ctrl+'` mostra e nasconde la griglia, `Ctrl+;` le guide dei righelli,
-  `Ctrl+U` accende e spegne le guide intelligenti, `Maiusc+R` i righelli.
+- `Ctrl+'` mostra e nasconde la griglia.
 - `Ctrl+.` nasconde la colonna, la riga delle opzioni e la barra della
   selezione, e lascia il foglio; lo stesso tasto le riporta.
 - `Ctrl+Y`, col foglio a fuoco, mostra i **contorni**: ogni tracciato è un
@@ -56,10 +55,10 @@ della selezione e quanti oggetti ci sono o sono scelti.
 
 ## Cercare un comando
 
-`?` elenca i tasti del livello di adesso, e «Mostra tutto» quelli dei livelli
-sopra. Un campo in cima cerca fra le righe, anche fra quelle tenute da parte;
+`?` elenca i tasti dello spazio di adesso, e «Mostra tutto» quelli che il
+Completo aggiunge. Un campo in cima cerca fra le righe, anche fra quelle tenute da parte;
 «Che cosa è cambiato», chiuso sopra l'elenco, dice i tasti che hanno cambiato
-posto: `H` è la Mano, `A` i Nodi, `Spazio` tenuto la Mano, `Maiusc+F10` il menu
+posto: `H` è la Mano, `Spazio` tenuto la Mano, `Maiusc+F10` il menu
 della selezione, `Ctrl+Y` i contorni.
 
 `Ctrl+/` cerca fra i comandi del disegno: gli strumenti, Annulla e Ripeti, le
@@ -97,19 +96,16 @@ scrive nel verso delle sue righe. Il resto si adatta allo schermo:
 - la cornice della selezione gira con gli oggetti, ma le maniglie, i nodi, le
   misure accanto e le scritte restano diritti, e il cursore di ogni maniglia
   punta dove la maniglia tira sullo schermo;
-- il clic, l'aggancio alla griglia, alle guide e agli oggetti sono esatti a
+- il clic e l'aggancio alla griglia sono esatti a
   ogni angolo, perché si fanno nel disegno;
 - il riquadro tirato sul vuoto è un rettangolo dello schermo: di sbieco
-  sceglie con la regola del [Lazo](drawing-selection.md), ciò che racchiude
-  per intero;
+  sceglie ciò che racchiude per intero;
 - le frecce spostano la selezione lungo l'asse del disegno che si vede più
   vicino al loro verso, e con `Ctrl` o `⌘` allargano con `→` e `↓` e
   stringono con `←` e `↑` la misura che si vede in quel verso; il cursore del
   foglio va dove la freccia punta sullo schermo, come il puntatore, e con
   l'aggancio alla griglia di riga in riga;
-- la griglia gira col foglio; i righelli aspettano, con una freccia che segna
-  l'alto del disegno, e le guide se ne tirano lo stesso
-  ([Disegni, righelli e guide](drawing-rulers.md));
+- la griglia gira col foglio;
 - un'immagine messa nel disegno sta in ciò che si vede del foglio.
 
 Tolta la parte a chi monta l'editor con le sue parti, la vista si
@@ -140,8 +136,10 @@ Al centro c'è l'icona dello strumento in mano, in un anello del colore di
 adesso. Lo strumento e il colore in mano non sono fra le voci, perché ci sono
 già. Finché se ne sono usati meno di tre, completano le voci gli strumenti che
 si alternano di più alla penna, a partire da gomma, selezione ed
-evidenziatore, e i colori della tavolozza nel loro ordine. L'editor ricorda gli
-strumenti e i colori finché il disegno è aperto.
+evidenziatore, e i colori della tavolozza nel loro ordine. Gli strumenti usati
+si ricordano finché il disegno è aperto; i colori sono i recenti, che la
+macchina ricorda per tutti i disegni
+([Disegni, colori](drawing-colors.md#i-colori-recenti)).
 
 Il menu si apre:
 
@@ -173,10 +171,10 @@ tastierino numerico: `8` in alto, `9` in alto a destra, `6` a destra, fino a
 `7` in alto a sinistra; `5` chiude. Il lettore di schermo legge un menu con le
 sue voci e le loro scorciatoie.
 
-Il clic destro del mouse apre con ogni strumento il menu della selezione
-([Disegni, selezione](drawing-selection.md)): con la Selezione e il Lazo
-sceglie prima l'oggetto sotto il puntatore, con gli altri strumenti resta sulla
-selezione che c'è. Sui righelli e sulle guide si aprono i loro menu. Dove il
+Il clic destro del mouse apre con ogni strumento il menu del foglio
+([Disegni, selezione](drawing-selection.md#il-menu-della-selezione)), che
+finisce con «Menu radiale»: con la Selezione sceglie prima l'oggetto sotto il
+puntatore, con gli altri strumenti resta sulla selezione che c'è. Dove il
 menu della selezione non c'è, `Maiusc+F10` apre il menu radiale. In sola
 lettura il menu radiale non c'è.
 
@@ -214,9 +212,8 @@ curva, vale su questo dispositivo in tutti i disegni.
 
 In fondo, **I tasti della penna**. La penna girata cancella con qualunque
 strumento, come la gomma scelta, e lo strumento in mano resta. Il **Tasto
-laterale** apre il menu radiale (di partenza), sceglie col lazo, cancella o
-non fa niente. Il clic destro che il sistema manda dopo il tasto non apre il
-menu della selezione.
+laterale** apre il menu radiale (di partenza), cancella o non fa niente. Il clic destro che il sistema manda dopo il tasto non apre il
+menu del foglio.
 
 Le scelte valgono con **OK**: «Penna e dita aggiornate.».
 

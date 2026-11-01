@@ -211,6 +211,15 @@ nome che non è un manifest dell'host resta com'è; `--uninstall` toglie
 soltanto ciò che l'host ha scritto. Quando l'invio ripiega, il popup scrive i
 due comandi con l'id vero dell'estensione.
 
+## Server MCP
+
+`fub-cli mcp` dà il vault a un agente, su stdio. Senza
+`--automation-write-root` è in sola lettura; con
+`--automation-read-root` legge soltanto sotto le radici date. Una scrittura
+vuole sempre la revisione letta, e un comando si esegue soltanto se lo si
+chiede e se il suo piano sta sotto le radici di scrittura. I dettagli sono in
+[Server MCP](mcp-server.md).
+
 ## Canale di controllo
 
 Un vault ha un solo scrittore. Quando lo tiene l'app desktop, la CLI e l'host

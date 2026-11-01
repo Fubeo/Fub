@@ -16,14 +16,20 @@
 > e `typefaces.rs`, con la stessa scelta in `fonts/faces.ts` e i vettori di
 > `apps/client/src/__fixtures__/scene-fonts/choose.json`.
 
+Lo strumento Testo se n'è andato col livello Standard, e il testo in area
+e su tracciato con l'Esperto
+([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)): il testo
+dei file si legge, si vede, si sposta e resta identico, ma l'editor non lo
+scrive più.
+
 Una parte del [formato della scena](scene-format.md), §4: un `text` è un
 oggetto modificabile, e ogni suo `tspan` è una riga. Una riga può avere,
 oltre al suo testo, dei pezzi con un aspetto loro: una parola in grassetto,
 un'altra in corsivo o di un altro colore. Un testo ha tre forme: **da
 punto**, che va a capo soltanto dove lo si spezza; **in area**, che FubDraw
 manda a capo nella larghezza di un riquadro (§4); **su tracciato**, una riga
-sola lungo un tracciato delle risorse (§5). Come si scrive e si cambia il
-testo è in [Disegni, tipografia](../product/drawing-typography.md). Le
+sola lungo un tracciato delle risorse (§5). Che cosa ne cambia l'editor è in
+[Disegni, tipografia](../product/drawing-typography.md). Le
 sezioni del formato si citano come «formato della scena, §N»; quelle di
 questa pagina col solo numero.
 

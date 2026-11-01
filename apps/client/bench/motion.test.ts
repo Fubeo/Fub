@@ -30,11 +30,11 @@ import {
   residue,
 } from "./motion-rules.mjs";
 
-/// I sorgenti della shell, dei pannelli, del kit e dell'editor dei documenti, come Vite li vede: il percorso dalla
+/// I sorgenti della shell, dei pannelli, del kit, dell'editor dei documenti e dei Blocchi, come Vite li vede: il percorso dalla
 /// radice del client e il testo.
 const sources = new Map(
   Object.entries(
-    import.meta.glob(["../src/shells/scrittoio/**/*.ts", "../src/panels/**/*.ts", "../src/kit/**/*.ts", "../src/editors/rich/**/*.ts", "../src/ui/motion.ts"], {
+    import.meta.glob(["../src/shells/scrittoio/**/*.ts", "../src/panels/**/*.ts", "../src/kit/**/*.ts", "../src/editors/rich/**/*.ts", "../src/editors/text/profiles/markdown/blocks/**/*.ts", "../src/ui/motion.ts"], {
       eager: true,
       query: "?raw",
       import: "default",

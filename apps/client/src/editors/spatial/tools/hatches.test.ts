@@ -4,21 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { doc } from "../scene/test-support";
-import {
-  clampWidth,
-  coverage,
-  formatHatch,
-  hatchElem,
-  hatchFallback,
-  hatchImage,
-  hatchOf,
-  inkFor,
-  normalAngle,
-  parseHatch,
-  presetHatch,
-  presetOf,
-  type Hatch,
-} from "./hatches";
+import { clampWidth, coverage, formatHatch, hatchElem, hatchFallback, hatchImage, hatchOf, normalAngle, parseHatch, presetHatch, type Hatch } from "./hatches";
 import { resourcesOf } from "./resources";
 import { LAYER, open } from "./test-support";
 
@@ -127,12 +113,6 @@ describe("le campiture pronte", () => {
     expect(presetHatch("horizontal", { ...wide, kind: "dots", width: 6 })).toEqual({ ...wide, angle: 0, width: 3 });
   });
 
-  it("si riconoscono a meno di mezzo giro per le righe e di un quarto per il resto", () => {
-    const of = (kind: Hatch["kind"], angle: number) => presetOf({ ...DIAGONAL, kind, angle });
-    expect([of("lines", -45), of("lines", 135), of("lines", 0), of("lines", 180), of("lines", 30)]).toEqual(["diagonal", "diagonal", "horizontal", "horizontal", null]);
-    expect([of("cross", 45), of("cross", -45), of("cross", 135), of("cross", 0), of("cross", 90), of("cross", 10)]).toEqual(["cross", "cross", "cross", "grid", "grid", null]);
-    expect([of("dots", 45), of("dots", -135), of("dots", 0)]).toEqual(["dots", "dots", null]);
-  });
 });
 
 describe("i numeri", () => {
@@ -158,9 +138,6 @@ describe("il ripiego e il colore delle righe", () => {
     expect(hatchFallback({ ...DIAGONAL, color: "#ffffff", background: "#000000", width: 8 })).toBe("#ffffff");
   });
 
-  it("le righe sono nere o bianche, quelle che si leggono meglio sul fondo, nere a parità e senza fondo", () => {
-    expect([inkFor("#ffff00"), inkFor("#000080"), inkFor("#777777"), inkFor("#56b4e9"), inkFor(null)]).toEqual(["#000000", "#ffffff", "#000000", "#000000", "#000000"]);
-  });
 
   it("il campione del pannello: le righe a un passo di 6 px", () => {
     expect(hatchImage(DIAGONAL)).toBe("repeating-linear-gradient(-45deg, #000000 0 1.13px, #56b4e9 1.13px 6px)");

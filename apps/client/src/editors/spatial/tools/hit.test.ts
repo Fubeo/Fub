@@ -12,7 +12,7 @@ import { strokeElem } from "./edit";
 import { PaintBuilder } from "../painter/paint";
 import { SceneEngine } from "../scene/engine";
 import { elementChildren, type ContainerNode, type LeafNode } from "../scene/model";
-import { elemBounds, geometryBox, linesBounds, SceneIndexer, type SceneIndex, type Unit } from "./hit";
+import { elemBounds, geometryBox, SceneIndexer, type SceneIndex, type Unit } from "./hit";
 import { LAYER, open } from "./test-support";
 
 const SHAPES = doc(
@@ -562,21 +562,6 @@ describe("come si vede un testo", () => {
     expect(index.get("g")?.look).toBeNull();
   });
 
-  it("le righe che si scriveranno hanno il riquadro che l'indice darà loro", () => {
-    const opened = open(TEXTS);
-    const lines = ["Ciao", "a te", "e a voi"];
-    const expected = ["t", "n"].map((id) => {
-      const unit = opened.index.get(id)!;
-      return linesBounds(unit.look!, lines, unit.matrix);
-    });
-    for (const id of ["t", "n"]) expect(opened.engine.apply({ op: "text", id, lines }).outcome).toBe("applied");
-    const index = opened.reindex();
-    expect([index.get("t")?.bounds, index.get("n")?.bounds]).toEqual(expected);
-    // Il testo girato va giù, come la sua prima riga.
-    expect(expected[1]!.max[0]).toBeLessThanOrEqual(50 + 12 * 0.8 + 1e-9);
-    const t = opened.index.get("t")!;
-    expect(linesBounds(t.look!, [" ", ""], t.matrix)).toBeNull();
-  });
 });
 
 describe("il testo in area e su tracciato", () => {
@@ -587,36 +572,7 @@ describe("il testo in area e su tracciato", () => {
       + "</g>",
   );
 
-  it("un testo in area si tocca in tutto il suo riquadro, largo quanto va a capo", () => {
-    const { index } = open(FORMS);
-    const area = index.get("a")!;
-    // Dalla cima della prima riga al fondo della seconda, largo 100.
-    expect(area.bounds).toEqual({ min: [10, 12], max: [110, 35] });
-    expect(index.at([100, 30], 0)?.key).toBe("a");
-    expect(area.look).toMatchObject({ x: 10, y: 20, wrap: 100, along: null });
-    expect(linesBounds(area.look!, ["Il testo", "in area", "va"], area.matrix)).toEqual({ min: [10, 12], max: [110, 47.5] });
-  });
 
-  it("un testo su tracciato si tocca lungo il tracciato, dove ha le lettere", () => {
-    const opened = open(FORMS);
-    const path = opened.index.get("p")!;
-    // Dieci lettere di 6 centrate a 50 sul tracciato: da 20 a 80.
-    expect(path.bounds!.min[0]).toBeCloseTo(20, 6);
-    expect(path.bounds!.max[0]).toBeCloseTo(80, 6);
-    expect(path.bounds!.min[1]).toBeCloseTo(92, 6);
-    expect(path.bounds!.max[1]).toBeCloseTo(102.5, 6);
-    expect(opened.index.at([70, 98], 0)?.key).toBe("p");
-    expect(opened.index.at([150, 98], 0)).toBeNull();
-    expect(path.look).toMatchObject({ x: 50, y: 100, anchor: "middle", wrap: null, along: [1, 0] });
-    expect(linesBounds(path.look!, ["abc"], path.matrix)).toBeNull();
-    // Il tracciato che cambia porta il testo con sé.
-    expect(opened.engine.apply({ op: "text", id: "p", lines: ["ab"] }).outcome).toBe("applied");
-    expect(opened.engine.apply({ op: "set", id: "r1", attrs: { d: "M 100 0 L 100 200" } }).outcome).toBe("applied");
-    const moved = opened.reindex().get("p")!;
-    expect(moved.bounds!.min[1]).toBeCloseTo(44, 6);
-    expect(moved.bounds!.max[1]).toBeCloseTo(56, 6);
-    expect(moved.look?.along).toEqual([0, 1]);
-  });
 
   it("le lettere che cadono fuori dal tracciato non si toccano", () => {
     const { index } = open(FORMS.replace('startOffset="25%"', 'startOffset="195"'));

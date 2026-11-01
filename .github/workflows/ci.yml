@@ -505,7 +505,7 @@ jobs:
           include-hidden-files: true
 
   benches:
-    name: banchi del movimento, dei disegni, delle tavole e della griglia
+    name: banchi del movimento, dei disegni e della griglia
     needs: changes
     if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.changes.outputs.client == 'true')
     runs-on: ubuntu-24.04
@@ -546,30 +546,6 @@ jobs:
         with:
           name: banco-fedelta-${{ github.sha }}
           path: apps/client/bench/.output/fidelity/
-          include-hidden-files: true
-      - name: venti tavole si percorrono senza scatti
-        id: bench_boards
-        if: ${{ !cancelled() }}
-        run: npm run bench:boards
-        working-directory: apps/client
-      - name: il referto del banco delle tavole
-        if: ${{ failure() && steps.bench_boards.outcome == 'failure' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: banco-tavole-${{ github.sha }}
-          path: apps/client/bench/.output/boards-20.json
-          include-hidden-files: true
-      - name: trecento connettori si spostano senza scatti
-        id: bench_connectors
-        if: ${{ !cancelled() }}
-        run: npm run bench:connectors
-        working-directory: apps/client
-      - name: il referto del banco dei connettori
-        if: ${{ failure() && steps.bench_connectors.outcome == 'failure' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: banco-connettori-${{ github.sha }}
-          path: apps/client/bench/.output/connectors-300.json
           include-hidden-files: true
       - name: i gesti della griglia tengono bozza, fuoco e cella attiva
         id: bench_grid
@@ -630,8 +606,8 @@ jobs:
         run: cargo build --release --locked -p fub-app --features tauri/custom-protocol
       - name: tauri-driver, alla versione fissata
         run: cargo install tauri-driver --version "=2.1.0" --locked
-      - name: S1–S3 nella WebKitGTK
-        run: xvfb-run -a -s "-screen 0 1280x800x24" npm run bench:webview -- --only=S1,S2,S3 --native-driver=/usr/bin/WebKitWebDriver
+      - name: S1–S3, S7, la memoria (R1) e le tessere (T1) nella WebKitGTK
+        run: xvfb-run -a -s "-screen 0 1280x800x24 -maxclients 2048" npm run bench:webview -- --only=S1,S2,S3,S7,R1,T1,I1 --native-driver=/usr/bin/WebKitWebDriver
         working-directory: apps/client
       - name: il referto delle misure
         if: always()
@@ -640,3 +616,30 @@ jobs:
           name: webview-${{ github.sha }}
           path: apps/client/bench/.output/webview
           include-hidden-files: true
+
+  librerie-runtime:
+    # K0, livello 3 del piano dei componenti: due componenti Rust in librerie
+    # dinamiche e una libreria comune caricate a runtime, sui tre sistemi. Il
+    # referto dice se il caricamento, la rimozione di un file e le firme
+    # tengono, e quanto pesa la consegna contro l'ospite statico.
+    name: le librerie a runtime (${{ matrix.os }})
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        # Una PR bozza la prova solo su Linux, come i test.
+        os: ${{ fromJSON((github.event_name == 'pull_request' && github.event.pull_request.draft) && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22.12.0
+      - run: node tools/librerie-runtime/prova.mjs --out librerie-runtime-referto
+      - name: il referto
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: librerie-runtime-${{ matrix.os }}-${{ github.sha }}
+          path: librerie-runtime-referto/referto.json

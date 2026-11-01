@@ -1,0 +1,45 @@
+# VectorCraft collegato a Fub da solo (K0 del piano dei componenti). Vedi
+# `../README.md`.
+[package]
+name = "prova-vettori"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+# Un workspace a sé: le `[patch.crates-io]` di un motore valgono per tutto il
+# workspace, e quelle dei motori non sono le stesse.
+[workspace]
+
+[dependencies]
+motori-prova-comune = { path = "../comune" }
+# Il contratto di Fub: il motore si compila accanto a lui, con un lock solo.
+fub-abi = { path = "../../../crates/fub-abi" }
+serde_json = "1"
+# VectorCraft alla revisione che il piano fissa (ed733b7). Senza i caratteri
+# inclusi: Fub li dà a runtime (`FontDb::add_font`), come il motore prevede
+# per chi lo incorpora.
+vectorcraft-engine = { git = "https://github.com/storytold/vectorcraft", rev = "ed733b7d91db185db50dbb75d5a54c3b7061ae49", default-features = false }
+vectorcraft-render = { git = "https://github.com/storytold/vectorcraft", rev = "ed733b7d91db185db50dbb75d5a54c3b7061ae49" }
+vectorcraft-geom = { git = "https://github.com/storytold/vectorcraft", rev = "ed733b7d91db185db50dbb75d5a54c3b7061ae49" }
+vectorcraft-format = { git = "https://github.com/storytold/vectorcraft", rev = "ed733b7d91db185db50dbb75d5a54c3b7061ae49" }
+
+[profile.release]
+# I simboli servono a `cargo bloat`, che li legge per crate.
+strip = false
+
+# Il peso come lo si distribuisce: senza simboli.
+[profile.spoglio]
+inherits = "release"
+strip = true
+
+# Come dipendenza Git un motore non porta le sue `[patch.crates-io]`: chi lo
+# incorpora le ripete. Queste sono quelle di VectorCraft (ed733b7) per il
+# PDF, tolte quelle dell'interfaccia (egui, winit), che la prova non compila.
+[patch.crates-io]
+hayro-syntax = { git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }
+hayro-interpret = { git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }
+hayro-jbig2 = { git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }
+hayro-cmap = { git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }
+hayro-postscript = { git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }
+krilla = { git = "https://github.com/storytold/craft-libs", rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0" }

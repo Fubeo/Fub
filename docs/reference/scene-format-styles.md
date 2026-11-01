@@ -11,6 +11,10 @@
 > `crates/fub-scene/src/export/clean.rs`; ciò che l'editor ne fa in
 > `tools/styles.ts`.
 
+Gli stili non si creano e non si scelgono più: se ne sono andati col
+livello Standard ([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)).
+Quelli dei file si leggono, si vedono ed escono nell'export.
+
 Una parte del [formato della scena](scene-format.md), §4, e delle sue
 [risorse](scene-format-resources.md). Uno stile è un aspetto con un nome,
 che gli oggetti seguono: un titolo di capitolo, una nota, un riquadro di

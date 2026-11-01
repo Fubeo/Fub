@@ -8,20 +8,7 @@ import { pathOf, type ContainerNode } from "../scene/model";
 import { doc } from "../scene/test-support";
 import { boundsOf, duplicateOps, nodeOf } from "./arrange";
 import { copySvg, planPaste, readPaste } from "./clipboard";
-import {
-  cropOps,
-  cropState,
-  croppedImages,
-  dragCrop,
-  MIN_CROP,
-  marginsOf,
-  slideImage,
-  uncropOps,
-  withMargins,
-  type Crop,
-  type CropHandle,
-  type CropState,
-} from "./crop";
+import { cropOps, cropState, croppedImages, dragCrop, slideImage, uncropOps, type Crop, type CropHandle, type CropState } from "./crop";
 import { destinationIn, NewIds } from "./edit";
 import { LAYER, open, type Opened } from "./test-support";
 import { applied } from "./tip-support";
@@ -157,41 +144,6 @@ describe("cropState", () => {
     expect(cropState(model, opened.engine.holder("wide")!)).toBeNull();
   });
 });
-
-describe("margini", () => {
-  it("si leggono dai bordi dell'immagine", () => {
-    expect(marginsOf(crop(20, 10, 220, 130))).toEqual({ top: 10, right: 80, bottom: 70, left: 20 });
-    expect(marginsOf(FULL)).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
-  });
-
-  it("scritti danno il ritaglio, e un giro li riporta uguali", () => {
-    const margins = { top: 10, right: 80, bottom: 70, left: 20 };
-    expect(withMargins(FULL, margins)).toEqual(crop(20, 10, 220, 130));
-    expect(marginsOf(withMargins(FULL, margins)!)).toEqual(margins);
-  });
-
-  it("nessun margine è l'immagine intera", () => {
-    expect(withMargins(crop(20, 10, 220, 130), { top: 0, right: 0, bottom: 0, left: 0 })).toEqual(FULL);
-  });
-
-  it("un margine negativo o che non si legge si rifiuta", () => {
-    expect(withMargins(FULL, { top: -1, right: 0, bottom: 0, left: 0 })).toBeNull();
-    expect(withMargins(FULL, { top: 0, right: -0.01, bottom: 0, left: 0 })).toBeNull();
-    expect(withMargins(FULL, { top: 0, right: 0, bottom: 0, left: Number.NaN })).toBeNull();
-    expect(withMargins(FULL, { top: 0, right: Number.POSITIVE_INFINITY, bottom: 0, left: 0 })).toBeNull();
-  });
-
-  it("margini che lasciano meno di MIN_CROP per lato si rifiutano", () => {
-    expect(MIN_CROP).toBe(0.01);
-    expect(withMargins(FULL, { top: 0, right: 150, bottom: 0, left: 150 })).toBeNull();
-    expect(withMargins(FULL, { top: 0, right: 150, bottom: 0, left: 149.995 })).toBeNull();
-    expect(withMargins(FULL, { top: 100, right: 0, bottom: 100, left: 0 })).toBeNull();
-    expect(withMargins(FULL, { top: 100, right: 0, bottom: 99.995, left: 0 })).toBeNull();
-    expect(withMargins(FULL, { top: 99, right: 0, bottom: 99, left: 0 })).not.toBeNull();
-    expect(withMargins(FULL, { top: 0, right: 299.5, bottom: 0, left: 0 })).not.toBeNull();
-  });
-});
-
 describe("dragCrop", () => {
   // L'immagine 0 0 300 200, il ritaglio 100 60 → 200 140 (100 × 80, 5:4).
   const start = crop(100, 60, 200, 140);

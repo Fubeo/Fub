@@ -226,7 +226,7 @@ describe("un documento che non si modifica subito", () => {
   it("un SVG estraneo è l'immagine del documento intero, e «Modifica» lo adotta", () => {
     const { surface, changes } = mount(FOREIGN);
     expect(shown()).toEqual({
-      notice: "Questo SVG non è stato fatto con FubDraw: si guarda, e si disegna dopo «Modifica». Il file riceve due attributi sulla radice; il resto resta com’è. «Rendi modificabile…» riscrive anche le sue parti nel formato di FubDraw, dove si può senza che cambi ciò che si vede.",
+      notice: "Questo SVG non è stato fatto con FubDraw: si guarda, e si disegna dopo «Modifica». Il file riceve due attributi sulla radice; il resto resta com’è.",
       adopt: true,
       draw: false,
       read: true,
@@ -677,29 +677,7 @@ describe("montare e smontare", () => {
   });
 });
 
-/// Il livello dichiarato da `fub.draw`, col valore `value`.
-const level = (value: string): SettingEntry => ({
-  spec: {
-    key: "draw.level",
-    label: "Livello d'interfaccia",
-    description: "",
-    group: "Disegni",
-    scope: "vault",
-    kind: {
-      kind: "choice",
-      default: "essential",
-      options: [
-        { value: "essential", label: "Essenziale" },
-        { value: "standard", label: "Standard" },
-      ],
-    },
-    program_writable: false,
-  },
-  value,
-  source: "vault",
-});
-
-/// Una chiave di `fub.draw` delle nuove, di serie finché non si sceglie.
+/// Una chiave di `fub.draw`, di serie finché non si sceglie.
 const drawSetting = (key: "draw.workspace" | "draw.toolbar", value: string | string[] = key === "draw.workspace" ? "full" : []): SettingEntry =>
   ({
     spec: {
@@ -714,21 +692,6 @@ const drawSetting = (key: "draw.workspace" | "draw.toolbar", value: string | str
     value,
     source: "default",
   }) as SettingEntry;
-
-/// Le parti del Personalizzato, col valore `value`.
-const custom = (value: string[]): SettingEntry => ({
-  spec: {
-    key: "draw.custom",
-    label: "Parti del Personalizzato",
-    description: "",
-    group: "Disegni",
-    scope: "vault",
-    kind: { kind: "list", default: ["pen", "eraser", "rect", "ellipse", "line", "arrow"] },
-    program_writable: false,
-  },
-  value,
-  source: "vault",
-});
 
 /// Moduli nuovi, perché il livello e la griglia letti restano in memoria,
 /// e il router del kernel acceso: è lui che porta `setting_changed`.
@@ -752,30 +715,33 @@ describe("lo spazio di lavoro e la griglia", () => {
   const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
   const tools = (at: HTMLElement): string[] =>
     [...at.querySelectorAll<HTMLElement>(".draw-tool")].filter((control) => control.closest("[hidden]") === null).flatMap((control) => control.dataset.tools!.split(" "));
+  /// Vero nel Semplice: in fondo alla colonna c'è «Completo».
+  const simple = (at: HTMLElement): boolean => at.querySelector<HTMLElement>(".draw-rail-full")?.hidden === false;
   const gridShown = (at: HTMLElement): boolean => at.querySelector<HTMLElement>(".draw-grid")!.style.display !== "none";
   const reads = (host: FakeHost): number =>
     host.atGate("queryIndex").filter((call) => (call.args[0] as { kind: string }).kind === "settings").length;
 
   it("una superficie nuova parte dall'ultimo spazio e dall'ultima griglia, senza aspettare la lettura", async () => {
-    // L'Essenziale scelto nelle versioni precedenti vale «Semplice».
-    const mountFresh = await fresh(createFakeHost({ settings: [level("essential")] }));
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
+    await host.module.api.setSetting("draw.workspace", "simple");
+    const mountFresh = await fresh(host);
     mountFresh(parent);
-    expect(tools(parent), "prima della lettura, Completo").toContain("bezier");
+    expect(simple(parent), "prima della lettura, Completo").toBe(false);
     await settle();
-    expect(tools(parent)).not.toContain("bezier");
+    expect(simple(parent)).toBe(true);
     expect(tools(parent)).toContain("highlighter");
 
     const other = document.createElement("div");
     document.body.append(other);
     try {
       mountFresh(other);
-      expect(tools(other), "subito").not.toContain("bezier");
+      expect(simple(other), "subito").toBe(true);
     } finally {
       other.remove();
     }
 
     // La griglia, in Completo.
-    const full = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const full = await fresh(createFakeHost({ settings: [drawSetting("draw.workspace")] }));
     const second = document.createElement("div");
     const third = document.createElement("div");
     document.body.append(second, third);
@@ -798,7 +764,7 @@ describe("lo spazio di lavoro e la griglia", () => {
     const mountFresh = await fresh(host);
     const surface = mountFresh(parent);
     await settle();
-    expect(tools(parent)).not.toContain("bezier");
+    expect(simple(parent)).toBe(true);
     expect(parent.querySelector<HTMLElement>(".draw-rail-full")!.hidden).toBe(false);
     // Quando nasce legge lo spazio e i suggerimenti; poi un cambio dello
     // spazio lo rilegge una volta.
@@ -806,7 +772,7 @@ describe("lo spazio di lavoro e la griglia", () => {
 
     await host.module.api.setSetting("draw.workspace", "full");
     await settle();
-    expect(tools(parent)).toContain("bezier");
+    expect(simple(parent)).toBe(false);
     expect(reads(host)).toBe(born + 1);
 
     // «Completo» in fondo alla colonna scrive la scelta.
@@ -815,7 +781,7 @@ describe("lo spazio di lavoro e la griglia", () => {
     parent.querySelector<HTMLButtonElement>(".draw-rail-full")!.click();
     await settle();
     expect(host.atGate("setSetting").map((call) => call.args).pop()).toEqual(["draw.workspace", "full"]);
-    expect(tools(parent)).toContain("bezier");
+    expect(simple(parent)).toBe(false);
 
     surface.destroy();
     mounted = [];
@@ -826,61 +792,55 @@ describe("lo spazio di lavoro e la griglia", () => {
   });
 
   it("i colori recenti vengono dallo stato di vista, si ricordano scelti, e una superficie nuova parte da lì", async () => {
-    /// I recenti della sezione «Colori del documento», nella scheda Design
-    /// dell'ispettore montata per leggerli.
-    const recent = (surface: EditorSurface): string[] => {
-      const design = surface.panels!.list().find((tab) => tab.id === "draw.design")!;
-      const sheet = document.createElement("div");
-      const unmount = design.mount(sheet);
+    /// I recenti nel selettore del colore della barra, che i colori della
+    /// tavolozza lasciano ai «Consigliati».
+    const recent = (at: HTMLElement): string[] => {
+      at.querySelector<HTMLButtonElement>(".draw-toolbar .kit-color-well-button")!.click();
       try {
-        return [...sheet.querySelectorAll<HTMLElement>('.draw-swatches-group[data-group="recent"] .draw-swatches-chip')].map((chip) => chip.dataset.key!);
+        const group = [...document.querySelectorAll<HTMLElement>(".kit-color-popover .kit-color-group")].find((each) => each.querySelector(".kit-color-group-title")!.textContent === "Recenti");
+        return group === undefined ? [] : [...group.querySelectorAll<HTMLElement>(".kit-color-swatch")].map((swatch) => swatch.dataset.color!);
       } finally {
-        unmount();
+        at.querySelector<HTMLButtonElement>(".draw-toolbar .kit-color-well-button")!.click();
       }
     };
-    const host = createFakeHost({ settings: [level("standard")] });
-    await host.module.api.setViewState("draw.colors", { colors: ["#cc79a7"] });
-    const mountFresh = await fresh(host);
-    const surface = mountFresh(parent);
-    await settle();
-    expect(recent(surface)).toEqual(["#cc79a7"]);
-    parent.querySelector<HTMLButtonElement>(".draw-toolbar .kit-color-well-button")!.click();
-    document.querySelector<HTMLButtonElement>('.kit-color-popover .kit-color-swatch[aria-label="Vermiglio"]')!.click();
-    parent.querySelector<HTMLButtonElement>(".draw-toolbar .kit-color-well-button")!.click();
-    expect(recent(surface)).toEqual(["#d55e00", "#000000", "#cc79a7"]);
-    await settle();
-    expect(await host.module.api.viewState("draw.colors")).toEqual({ colors: ["#d55e00", "#000000", "#cc79a7"] });
-
-    const other = document.createElement("div");
-    document.body.append(other);
-    try {
-      expect(recent(mountFresh(other)), "subito").toEqual(["#d55e00", "#000000", "#cc79a7"]);
-    } finally {
-      other.remove();
-    }
-  });
-
-  it("la colonna scelta vale, anche su una superficie nuova; non scelta, la danno le parti del Personalizzato", async () => {
-    const host = createFakeHost({ settings: [level("custom"), custom(["rect", "text", "layers"]), drawSetting("draw.toolbar")] });
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
+    await host.module.api.setViewState("draw.colors", { colors: ["#123456"] });
     const mountFresh = await fresh(host);
     mountFresh(parent);
     await settle();
-    expect(tools(parent)).toEqual(["select", "rect", "text"]);
-
-    await host.module.api.setSetting("draw.custom", ["ellipse", "highlighter"]);
+    expect(recent(parent)).toEqual(["#123456"]);
+    parent.querySelector<HTMLButtonElement>(".draw-toolbar .kit-color-well-button")!.click();
+    document.querySelector<HTMLButtonElement>('.kit-color-popover .kit-color-swatch[aria-label="Vermiglio"]')!.click();
+    parent.querySelector<HTMLButtonElement>(".draw-toolbar .kit-color-well-button")!.click();
     await settle();
-    expect(tools(parent)).toEqual(["select", "ellipse", "highlighter"]);
-
-    // La colonna scelta vince sulle parti.
-    await host.module.api.setSetting("draw.toolbar", ["pen", "select", "text"]);
-    await settle();
-    expect(tools(parent)).toEqual(["pen", "select", "text"]);
+    expect(await host.module.api.viewState("draw.colors")).toEqual({ colors: ["#d55e00", "#000000", "#123456"] });
 
     const other = document.createElement("div");
     document.body.append(other);
     try {
       mountFresh(other);
-      expect(tools(other), "subito").toEqual(["pen", "select", "text"]);
+      expect(recent(other), "subito").toEqual(["#123456"]);
+    } finally {
+      other.remove();
+    }
+  });
+
+  it("la colonna scelta vale, anche su una superficie nuova", async () => {
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace"), drawSetting("draw.toolbar")] });
+    const mountFresh = await fresh(host);
+    mountFresh(parent);
+    await settle();
+    expect(tools(parent)).toContain("rect");
+
+    await host.module.api.setSetting("draw.toolbar", ["pen", "select", "line"]);
+    await settle();
+    expect(tools(parent)).toEqual(["pen", "select", "line"]);
+
+    const other = document.createElement("div");
+    document.body.append(other);
+    try {
+      mountFresh(other);
+      expect(tools(other), "subito").toEqual(["pen", "select", "line"]);
     } finally {
       other.remove();
     }
@@ -892,31 +852,31 @@ describe("le schede dell'ispettore (C1)", () => {
   const ids = (surface: EditorSurface): string[] => surface.panels!.list().map((tab) => tab.id);
   const tab = (surface: EditorSurface, id: string) => surface.panels!.list().find((each) => each.id === id)!;
 
-  it("il disegno porta Design, Livelli, Risorse, Cronologia e Accessibilità, non il dock, e lascia fuori i titoli, le note e le proprietà", async () => {
-    const host = createFakeHost({ settings: [level("expert")] });
+  it("il disegno porta Design, Livelli, Cronologia e Accessibilità, non Risorse (ADR 0231) né il dock, e lascia fuori i titoli, le note e le proprietà", async () => {
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const surface = (await fresh(host))(parent);
     await settle();
-    expect(ids(surface)).toEqual(["draw.design", "draw.layers", "draw.resources", "draw.history", "draw.accessibility"]);
-    expect(surface.panels!.list().map((each) => each.title())).toEqual(["Design", "Livelli", "Risorse", "Cronologia del disegno", "Accessibilità"]);
+    expect(ids(surface)).toEqual(["draw.design", "draw.layers", "draw.history", "draw.accessibility"]);
+    expect(surface.panels!.list().map((each) => each.title())).toEqual(["Design", "Livelli", "Cronologia del disegno", "Accessibilità"]);
     expect(surface.panels!.covers).toEqual(["outline", "footnotes", "properties"]);
     expect(parent.querySelector(".draw-dock"), "il dock non sta nel foglio").toBeNull();
     expect(parent.querySelector(".draw-properties")).toBeNull();
   });
 
-  it("le schede seguono lo spazio, e il Semplice (dall'Essenziale) non ne porta che quelle che ha", async () => {
-    const host = createFakeHost({ settings: [level("expert")] });
+  it("le schede seguono lo spazio, e il Semplice non ne porta che quelle che ha", async () => {
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const surface = (await fresh(host))(parent);
     await settle();
     let told = 0;
     surface.panels!.subscribe(() => (told += 1));
-    await host.module.api.setSetting("draw.level", "essential");
+    await host.module.api.setSetting("draw.workspace", "simple");
     await settle();
     expect(told).toBeGreaterThan(0);
     expect(ids(surface)).toEqual(["draw.design", "draw.layers"]);
   });
 
   it("montata, una scheda mostra i suoi pannelli; smontata, li chiude e li riprende", async () => {
-    const host = createFakeHost({ settings: [level("expert")] });
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const surface = (await fresh(host))(parent);
     await settle();
     const sheet = document.createElement("div");
@@ -925,7 +885,7 @@ describe("le schede dell'ispettore (C1)", () => {
       const unmount = tab(surface, "draw.design").mount(sheet);
       const properties = sheet.querySelector<HTMLElement>(".draw-sheet > .draw-properties")!;
       expect(properties.hidden).toBe(false);
-      expect(sheet.querySelector(".draw-sheet > .draw-boards")!.hasAttribute("hidden")).toBe(false);
+      expect(sheet.querySelector(".draw-boards"), "l'elenco delle tavole se n'è andato (ADR 0231)").toBeNull();
       expect(document.activeElement, "montare non prende il fuoco").not.toBe(properties);
       unmount();
       expect(sheet.childElementCount).toBe(0);
@@ -936,31 +896,8 @@ describe("le schede dell'ispettore (C1)", () => {
     }
   });
 
-  it("Risorse ha una ricerca sola, per le forme e i simboli; smontata, i simboli riprendono la loro", async () => {
-    const host = createFakeHost({ settings: [level("expert")] });
-    const surface = (await fresh(host))(parent);
-    await settle();
-    const sheet = document.createElement("div");
-    document.body.append(sheet);
-    try {
-      const unmount = tab(surface, "draw.resources").mount(sheet);
-      const search = sheet.querySelector<HTMLInputElement>(".draw-library-search")!;
-      const own = sheet.querySelector<HTMLInputElement>(".draw-symbols-search")!;
-      expect(search.placeholder).toBe("Cerca fra forme e simboli");
-      expect(own.closest<HTMLElement>(".draw-symbols-find")!.hidden).toBe(true);
-      search.value = "freccia";
-      search.dispatchEvent(new Event("input", { bubbles: true }));
-      expect(own.value, "i simboli cercano la stessa cosa").toBe("freccia");
-      unmount();
-      expect(own.closest<HTMLElement>(".draw-symbols-find")!.hidden).toBe(false);
-      expect(search.placeholder).toBe("Cerca una forma");
-    } finally {
-      sheet.remove();
-    }
-  });
-
   it("la banda di stato dice zoom, oggetti, misure della selezione e puntatore, al posto delle parole", async () => {
-    const host = createFakeHost({ settings: [level("standard")] });
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const surface = (await fresh(host))(parent);
     await settle();
     const status = surface.status!;
@@ -990,7 +927,7 @@ describe("le schede dell'ispettore (C1)", () => {
   });
 
   it("«Proprietà» e «Cronologia» nella barra chiedono la loro scheda, e la chiedono sempre", async () => {
-    const host = createFakeHost({ settings: [level("expert")] });
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const surface = (await fresh(host))(parent);
     await settle();
     const asked: string[] = [];
@@ -1012,7 +949,7 @@ describe("le schede dell'ispettore (C1)", () => {
   });
 
   it("in Lettura non ci sono schede, e tornano nel Disegno", async () => {
-    const host = createFakeHost({ settings: [level("expert")] });
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const surface = (await fresh(host))(parent);
     await settle();
     let told = 0;
@@ -1021,11 +958,11 @@ describe("le schede dell'ispettore (C1)", () => {
     expect(ids(surface)).toEqual([]);
     expect(told).toBe(1);
     surface.setMode!("draw");
-    expect(ids(surface)).toHaveLength(5);
+    expect(ids(surface)).toHaveLength(4);
   });
 
   it("una superficie distrutta con una scheda montata chiude i pannelli e non ne offre più", async () => {
-    const host = createFakeHost({ settings: [level("expert")] });
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const surface = (await fresh(host))(parent);
     await settle();
     const sheet = document.createElement("div");
@@ -1041,67 +978,6 @@ describe("le schede dell'ispettore (C1)", () => {
     } finally {
       sheet.remove();
     }
-  });
-});
-
-describe("«Rendi modificabile…» nell'avviso di un SVG estraneo", () => {
-  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
-  /// Il secondo pulsante dell'avviso, dopo «Modifica».
-  const editable = (): HTMLButtonElement => parent.querySelectorAll<HTMLButtonElement>(".vector-notice-action")[1]!;
-  const dialog = (): HTMLElement | null => document.querySelector<HTMLElement>(".shell-dialog");
-  const spoken = (): string => (parent.querySelector('.draw-editor > .sr-only[role="status"]')?.textContent ?? "").trim();
-  /// Lo stesso SVG estraneo col quadrato scritto con `style`.
-  const STYLED = FOREIGN.replace('fill="none" stroke="#000000" stroke-width="2"', 'style="fill:none;stroke:#000000;stroke-width:2"');
-
-  afterEach(() => {
-    for (const open of document.querySelectorAll(".shell-dialog")) open.remove();
-  });
-
-  it("c'è in Completo, accanto a «Modifica», e la frase dice che cosa fa", async () => {
-    const host = createFakeHost({ settings: [drawSetting("draw.workspace", "simple")] });
-    host.module.api.setSetting("draw.workspace", "simple");
-    (await fresh(host))(parent, {}, STYLED);
-    await settle();
-    expect(shown()).toMatchObject({ notice: "Questo SVG non è stato fatto con FubDraw: si guarda, e si disegna dopo «Modifica». Il file riceve due attributi sulla radice; il resto resta com’è.", adopt: true });
-    expect(editable().hidden).toBe(true);
-    await host.module.api.setSetting("draw.workspace", "full");
-    await settle();
-    expect(editable().hidden).toBe(false);
-    expect(editable().textContent).toBe("Rendi modificabile…");
-    expect(shown().notice).toBe(
-      "Questo SVG non è stato fatto con FubDraw: si guarda, e si disegna dopo «Modifica». Il file riceve due attributi sulla radice; il resto resta com’è. «Rendi modificabile…» riscrive anche le sue parti nel formato di FubDraw, dove si può senza che cambi ciò che si vede.",
-    );
-  });
-
-  it("adotta e riscrive in un passo dopo la finestra, e l'annulla torna all'immagine", async () => {
-    const surface = (await fresh(createFakeHost({ settings: [level("expert")] })))(parent, {}, STYLED);
-    await settle();
-    editable().click();
-    await vi.waitFor(() => expect(dialog()?.querySelector(".draw-editable-message")).toBeTruthy());
-    expect(dialog()!.querySelector(".palette-heading")!.textContent).toBe("Rendi modificabile il disegno");
-    expect(dialog()!.querySelector(".draw-editable-message")!.textContent).toBe(
-      "Una parte di un altro programma diventa modificabile, e si vede come prima. Il file riceve anche i due attributi di FubDraw sulla radice.",
-    );
-    dialog()!.querySelector("form")!.requestSubmit();
-    await vi.waitFor(() => expect(surface.buffer!.getDoc()).toContain('fub:version="1"'));
-    expect(surface.buffer!.getDoc()).toContain('fill="none" stroke="#000000" stroke-width="2"');
-    expect(surface.buffer!.getDoc()).not.toContain("style=");
-    expect(shown()).toEqual({ notice: null, adopt: false, draw: true, read: false });
-    await vi.waitFor(() => expect(document.activeElement).toBe(parent.querySelector(".draw-surface")));
-    expect(spoken()).toBe("Una parte è diventata modificabile.");
-    undo();
-    expect(surface.buffer!.getDoc()).toBe(STYLED);
-    expect(shown()).toMatchObject({ adopt: true, draw: false, read: true });
-  });
-
-  it("un SVG estraneo che è già tutto del formato si adotta e basta, senza finestra", async () => {
-    const surface = (await fresh(createFakeHost({ settings: [level("expert")] })))(parent, {}, FOREIGN);
-    await settle();
-    editable().click();
-    await vi.waitFor(() => expect(surface.buffer!.getDoc()).toContain('fub:version="1"'));
-    expect(surface.buffer!.getDoc()).toBe(SOURCE);
-    expect(dialog()).toBeNull();
-    expect(spoken()).toBe("Era già tutto nel formato di FubDraw: ora il disegno si modifica.");
   });
 });
 
@@ -1261,7 +1137,7 @@ describe("le immagini del vault", () => {
 
   it("Ctrl+I sceglie con la shell, e l'immagine si scrive relativa al disegno", async () => {
     measure();
-    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const mountFresh = await fresh(createFakeHost({ settings: [drawSetting("draw.workspace")] }));
     const images = shell({ "foto/a%20b.png": new Blob([PNG], { type: "image/png" }) });
     const surface = mountFresh(parent, { images: { ...images, pick: async () => "disegni/foto/a b.png" } });
     await settle();
@@ -1274,7 +1150,7 @@ describe("le immagini del vault", () => {
 
   it("una scelta che fallisce lo dice, e non aggiunge niente", async () => {
     measure();
-    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const mountFresh = await fresh(createFakeHost({ settings: [drawSetting("draw.workspace")] }));
     // Gli avvisi di questa superficie sono quelli dei moduli nuovi.
     const notices = await import("../../ui/notify");
     notices.clearHistory();
@@ -1325,7 +1201,7 @@ describe("la finestra «Esporta»", () => {
   });
 
   it("apre la finestra sul disegno, torna la richiesta, e le scelte si ricordano", async () => {
-    const host = createFakeHost({ settings: [level("standard")] });
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const mountFresh = await fresh(host);
     const surface = mountFresh(parent);
     await settle();
@@ -1351,7 +1227,7 @@ describe("la finestra «Esporta»", () => {
   });
 
   it("gli oggetti scelti senza id lo ricevono quando si esporta la selezione, in un passo che si annulla", async () => {
-    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const mountFresh = await fresh(createFakeHost({ settings: [drawSetting("draw.workspace")] }));
     const surface = mountFresh(parent);
     surface.buffer!.setDoc(UNNAMED);
     await settle();
@@ -1383,7 +1259,7 @@ describe("la finestra «Esporta»", () => {
   });
 
   it("se il disegno cambia mentre si sceglie, la selezione non si esporta e lo dice", async () => {
-    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const mountFresh = await fresh(createFakeHost({ settings: [drawSetting("draw.workspace")] }));
     const notices = await import("../../ui/notify");
     notices.clearHistory();
     const surface = mountFresh(parent);
@@ -1406,7 +1282,7 @@ describe("la finestra «Esporta»", () => {
 
   it("«Esporta la selezione» dell'ispettore apre la finestra già sulla selezione, per quella volta", async () => {
     let asked = 0;
-    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const mountFresh = await fresh(createFakeHost({ settings: [drawSetting("draw.workspace")] }));
     const surface = mountFresh(parent, { onExport: () => (asked += 1) });
     await settle();
     key(parent, { key: "a", ctrlKey: true });
@@ -1435,7 +1311,7 @@ describe("la finestra «Esporta»", () => {
   });
 
   it("in Lettura la selezione non si vede, e non si offre", async () => {
-    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const mountFresh = await fresh(createFakeHost({ settings: [drawSetting("draw.workspace")] }));
     const surface = mountFresh(parent);
     await settle();
     key(parent, { key: "a", ctrlKey: true });
@@ -1490,7 +1366,7 @@ describe("F6 fra le zone del disegno (H3)", () => {
   const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
   it("va dalla tela alla colonna e alla barra in alto, poi lascia il giro alla shell; Maiusc+F6 torna indietro", async () => {
-    const host = createFakeHost({ settings: [level("expert")] });
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace")] });
     const surface = (await fresh(host))(parent);
     await settle();
     const canvas = parent.querySelector<HTMLElement>(".draw-surface")!;

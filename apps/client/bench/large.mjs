@@ -144,8 +144,8 @@
 // volta su quattro, il primo tasto dello zoom: un clic che a riposo costa
 // 48 ms con la macchina presa ne costa fino a 368, e una soglia che lo
 // tenesse sarebbe larga più di tre volte ciò che RAIL chiede a una risposta.
-// La CI ha i tempi di questa macchina a riposo: il banco dei connettori vi
-// misura un movimento in 13,7 ms (50° percentile), qui in 15. Le soglie dei
+// La CI ha i tempi di questa macchina a riposo: il banco dei connettori, finché
+// c'è stato, vi misurava un movimento in 13,7 ms (50° percentile), qui in 15. Le soglie dei
 // passi che scrivono, 250, 500 e 1 000 ms, stanno sopra il peggio a riposo
 // di due volte o più; a macchina piena le passano i rilasci dei due disegni
 // più grandi, fino a 570 e 1 040 ms, anche perché il rilascio che segue la

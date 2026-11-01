@@ -1,0 +1,28 @@
+# LightCraft collegato a Fub da solo (K0 del piano dei componenti). Vedi
+# `../README.md`.
+[package]
+name = "prova-luce"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+[workspace]
+
+[dependencies]
+motori-prova-comune = { path = "../comune" }
+fub-abi = { path = "../../../crates/fub-abi" }
+serde_json = "1"
+# LightCraft alla revisione che il piano fissa (445dd31), senza le feature
+# dei modelli (riduzione del rumore, maschere): sono dati scaricabili.
+lightcraft-engine = { git = "https://github.com/storytold/lightcraft", rev = "445dd3106ef0b9f399584505daa29cbfba636c96" }
+
+[profile.release]
+strip = false
+
+[profile.spoglio]
+inherits = "release"
+strip = true
+
+# LightCraft (445dd31) ha soltanto le patch dell'interfaccia (egui, winit),
+# che la prova non compila: qui nessuna.

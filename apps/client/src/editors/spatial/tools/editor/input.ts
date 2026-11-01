@@ -46,7 +46,7 @@ const TAP_SLOP_PX = 12;
 /// Gli strumenti che il menu radiale offre quando chi disegna ne ha usati
 /// meno di tre: prima quelli che si alternano di più alla penna.
 const FILL_TOOLS: readonly ToolId[] = [
-  "pen", "eraser", "select", "highlighter", "lasso", "text", "rect", "ellipse", "line", "arrow", "polygon", "bezier", "nodes", "builder", "scissors", "width",
+  "pen", "eraser", "select", "highlighter", "rect", "ellipse", "line", "arrow",
 ];
 
 /// Ciò che la navigazione, il menu radiale e la tastiera dà agli altri pezzi dell'editor.
@@ -65,7 +65,6 @@ export interface InputContext {
   /// selezione non si vede finché la vista non si ferma (B7).
   zooming: boolean;
   arrangeFocus: { readonly sync: (target: HTMLButtonElement | null) => void; readonly current: () => HTMLButtonElement | null; };
-  nodesFocus: { readonly sync: (target: HTMLButtonElement | null) => void; readonly current: () => HTMLButtonElement | null; };
   boundsOf: (units: readonly Unit[]) => Bounds | null;
   geometryOf: (units: readonly Unit[]) => Bounds | null;
   visibleBoundsOf: (units: readonly Unit[]) => Bounds | null;
@@ -79,7 +78,7 @@ export interface InputContext {
 /// Monta la navigazione, il menu radiale e la tastiera.
 export function installInput(ctx: EditorContext): void {
   const {
-    life, has, measureText, style, history, toolbar, surface, suggestions, titleInput, arrangeBar, nodesBar, textLayer, editable, grownPage,
+    life, has, measureText, style, history, toolbar, surface, suggestions, titleInput, arrangeBar, editable, grownPage,
     newIds, announce, setCamera, stepNow, lengthSpoken, localPoint, viewCenter, announceTurn, selectedUnits, inOrder, showHandles, currentTitle,
     syncControls, commit, undo, redo, moveSelection, setColor, pickTool, cancelGesture, pen
   } = ctx;
@@ -177,7 +176,7 @@ export function installInput(ctx: EditorContext): void {
   /// Il tocco di due dita annulla, quello di tre ripete; se non c'è niente,
   /// lo dice, perché il dito non ha visto succedere niente.
   const tapped = (command: "undo" | "redo"): void => {
-    const can = command === "undo" ? history.canUndo || (ctx.drafting?.done.length ?? 0) > 0 : history.canRedo || (ctx.drafting?.undone.length ?? 0) > 0;
+    const can = command === "undo" ? history.canUndo : history.canRedo;
     if (!can) {
       announce(t(command === "undo" ? "draw.undo.none" : "draw.redo.none"));
       return;
@@ -365,7 +364,6 @@ export function installInput(ctx: EditorContext): void {
   };
   life.add(() => clearTimeout(zoomTimer));
   life.listen(surface, "wheel", onWheel, { passive: false });
-  life.listen(textLayer, "wheel", onWheel, { passive: false });
 
   // --- Tastiera --------------------------------------------------------------
 
@@ -422,13 +420,10 @@ export function installInput(ctx: EditorContext): void {
   ctx.toolbarFocus = toolbarFocus;
   const arrangeFocus = rove(arrangeBar);
   ctx.arrangeFocus = arrangeFocus;
-  const nodesFocus = rove(nodesBar);
-  ctx.nodesFocus = nodesFocus;
 
   life.listen(titleInput, "change", () => {
     const value = titleInput.value.trim();
     if (value === currentTitle()) return;
-    ctx.settleCrop();
     commit("draw.action.title", { op: "meta", title: value === "" ? null : value });
   });
   life.listen(titleInput, "keydown", (event) => {

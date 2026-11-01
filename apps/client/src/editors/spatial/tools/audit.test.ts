@@ -89,11 +89,9 @@ describe("i problemi", () => {
     ]);
   });
 
-  it("due colori di codice che si distinguono soltanto per la tinta: ogni colore ha una campitura per tutte le sue aree", () => {
+  it("due colori di codice che si distinguono soltanto per la tinta: S017 lo dice, senza correzione (le campiture se ne sono andate, ADR 0231)", () => {
     const box = (id: string, x: number, fill: string): string => `<rect id="${id}" x="${x}" y="0" width="10" height="10" fill="${fill}"/>`;
-    // Il blu e il verde chiari, due aree ciascuno, una in un gruppo: la
-    // chiave di ognuna sta nella correzione del suo colore, non soltanto la
-    // prima.
+    // Il blu e il verde chiari, due aree ciascuno, una in un gruppo.
     const source = doc(
       `<title>Prova</title>${LAYER}${box("o1a1a1a1a", 0, "#a6cee3")}${box("o2b2b2b2b", 20, "#b2df8a")}` +
         `<g id="og1g1g1g1">${box("o3c3c3c3c", 40, "#a6cee3")}</g>${box("o4d4d4d4d", 60, "#b2df8a")}</g>`,
@@ -103,18 +101,15 @@ describe("i problemi", () => {
       ["S017", "o1a1a1a1a", "rect", "info", "#a6cee3 #b2df8a 1.10", 3],
       ["S017", "o2b2b2b2b", "rect", "info", "#b2df8a #a6cee3 1.10", 3],
     ]);
-    expect(found.map((problem) => problem.fix)).toEqual([
-      { kind: "hatch", color: "#a6cee3", keys: ["o1a1a1a1a", "o3c3c3c3c"] },
-      { kind: "hatch", color: "#b2df8a", keys: ["o2b2b2b2b", "o4d4d4d4d"] },
-    ]);
+    expect(found.map((problem) => problem.fix)).toEqual([null, null]);
     // Un colore composto con l'opacità è il colore che si vede, sulla carta.
     const translucent = doc(
       `<title>Prova</title><rect id="fub-paper" fub:role="paper" width="100" height="100" fill="#f0f0f0"/>${LAYER}` +
         `<g id="og1g1g1g1" opacity="0.5">${box("o1a1a1a1a", 0, "#1f78b4")}${box("o2b2b2b2b", 20, "#1f78b4")}</g>${box("o3c3c3c3c", 40, "#a6cee3")}${box("o4d4d4d4d", 60, "#a6cee3")}</g>`,
     );
     expect(problems(translucent).map((problem) => [problem.detail, problem.fix])).toEqual([
-      ["#88b4d2 #a6cee3 1.32", { kind: "hatch", color: "#88b4d2", keys: ["o1a1a1a1a", "o2b2b2b2b"] }],
-      ["#a6cee3 #88b4d2 1.32", { kind: "hatch", color: "#a6cee3", keys: ["o3c3c3c3c", "o4d4d4d4d"] }],
+      ["#88b4d2 #a6cee3 1.32", null],
+      ["#a6cee3 #88b4d2 1.32", null],
     ]);
   });
 

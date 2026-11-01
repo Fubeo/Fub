@@ -106,15 +106,6 @@ export function labelable(node: ElementPart): boolean {
   return role === "path" && piecesOf(node)?.entry.pieces != null;
 }
 
-/// Vero se `p`, nelle coordinate di `shape`, sta dentro la forma chiusa
-/// `shape`, con la regola `nonzero`, che sia riempita o no: dove due tocchi
-/// ne aprono l'etichetta.
-export function insideShape(shape: ElementPart, p: Point): boolean {
-  if (!labelable(shape)) return false;
-  const pieces = piecesOf(shape)?.entry.pieces;
-  return pieces != null && winding(pieces.closed, p) !== 0;
-}
-
 /// Vero se `node` è un testo che nomina la forma `id` con `fub:inside`: non
 /// uno su tracciato, né l'etichetta di un connettore, che segue la sua
 /// linea.

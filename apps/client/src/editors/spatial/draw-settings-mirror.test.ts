@@ -3,15 +3,13 @@
 // stessi**.
 //
 // `fub.draw` dichiara in Rust `draw.workspace` (Completo o Semplice),
-// `draw.toolbar` (gli strumenti della colonna), `draw.level` (con i suoi
-// quattro valori, letto ancora per dedurre lo spazio dalle versioni
-// precedenti), `draw.custom` (con le parti di partenza del Personalizzato),
-// `draw.suggestions` e le cartelle dei modelli e delle librerie di simboli
+// `draw.toolbar` (gli strumenti della colonna), `draw.suggestions` e la
+// cartella dei modelli
 // (`crates/fub-features/src/draw.rs`); il client li legge da
-// `preferences.ts`, da `templates/choices.ts` e da
-// `tools/symbol-libraries.ts`, e li interpreta con `tools/registry.ts`. Una parte
-// rinominata da una parte sola non fa rumore: il livello scritto dal pannello
-// Impostazioni non lo riconosce più l'editor, e ricade in silenzio sul livello
+// `preferences.ts` e da `templates/choices.ts`, e li interpreta con
+// `tools/registry.ts`. Una parte
+// rinominata da una parte sola non fa rumore: lo spazio scritto dal pannello
+// Impostazioni non lo riconosce più l'editor, e ricade in silenzio su quello
 // di serie. Per questo un test le tiene ferme tutte e due.
 //
 // Il sorgente Rust si legge come testo, col `?raw` di Vite e non con
@@ -23,9 +21,8 @@
 // confronta non deve restare verde.
 import { describe, expect, it } from "vitest";
 import DRAW_RS from "../../../../../crates/fub-features/src/draw.rs?raw";
-import { CUSTOM_KEY, LEVEL_KEY, SUGGESTIONS_KEY, TOOLBAR_KEY, WORKSPACE_KEY, currentCustom, currentLevel, currentWorkspace } from "./preferences";
-import { CUSTOM_DEFAULT, WORKSPACES, isFeature, isLevel, levelsAbove } from "./tools/registry";
-import { SYMBOLS_FOLDER, SYMBOLS_SETTING, symbolsFolder } from "./tools/symbol-libraries";
+import { SUGGESTIONS_KEY, TOOLBAR_KEY, WORKSPACE_KEY, currentWorkspace } from "./preferences";
+import { WORKSPACES } from "./tools/registry";
 import { DRAW_BUNDLE, TEMPLATES_FOLDER, TEMPLATES_SETTING, templatesFolder } from "./templates/choices";
 
 /// Il valore, come testo, della costante pubblica `name` di `draw.rs`.
@@ -35,7 +32,7 @@ function constant(name: string): string {
   return found[1]!.trim();
 }
 
-/// Una costante di testo: `"draw.level"` → `draw.level`.
+/// Una costante di testo: `"draw.toolbar"` → `draw.toolbar`.
 function text(name: string): string {
   const found = /^"([^"\\]*)"$/.exec(constant(name));
   if (found === null) throw new Error(`${name} non è una stringa semplice: ${constant(name)}`);
@@ -57,49 +54,25 @@ function strings(name: string): string[] {
 
 describe("le impostazioni dei disegni, Rust e client", () => {
   it("il sorgente Rust si legge: le costanti che si confrontano ci sono", () => {
-    for (const name of ["DRAW_WORKSPACE_KEY", "DRAW_TOOLBAR_KEY", "DRAW_LEVEL_KEY", "DRAW_CUSTOM_KEY", "DRAW_SUGGESTIONS_KEY"]) {
+    for (const name of ["DRAW_WORKSPACE_KEY", "DRAW_TOOLBAR_KEY", "DRAW_SUGGESTIONS_KEY"]) {
       expect(text(name), name).toMatch(/^draw\.[a-z]+$/);
     }
-    expect(strings("DRAW_LEVELS").length).toBeGreaterThan(0);
-    expect(strings("DRAW_CUSTOM_DEFAULT").length).toBeGreaterThan(0);
+    expect(strings("DRAW_WORKSPACES").length).toBeGreaterThan(0);
   });
 
   it("le chiavi sono quelle che il client legge e scrive", () => {
     expect(text("DRAW_WORKSPACE_KEY")).toBe(WORKSPACE_KEY);
     expect(text("DRAW_TOOLBAR_KEY")).toBe(TOOLBAR_KEY);
-    expect(text("DRAW_LEVEL_KEY")).toBe(LEVEL_KEY);
-    expect(text("DRAW_CUSTOM_KEY")).toBe(CUSTOM_KEY);
     expect(text("DRAW_SUGGESTIONS_KEY")).toBe(SUGGESTIONS_KEY);
     expect(text("DRAW_TEMPLATES_KEY")).toBe(TEMPLATES_SETTING);
-    expect(text("DRAW_SYMBOLS_KEY")).toBe(SYMBOLS_SETTING);
+    // Le chiavi tolte (ADR 0231) non tornano da una parte sola.
+    for (const gone of ["DRAW_SYMBOLS_KEY", "DRAW_LEVEL_KEY", "DRAW_CUSTOM_KEY"]) expect(DRAW_RS).not.toContain(gone);
     expect(text("DRAW_ID")).toBe(DRAW_BUNDLE);
   });
 
-  it("le cartelle di serie sono quelle che il client usa quando l'impostazione non dice niente", () => {
+  it("la cartella di serie è quella che il client usa quando l'impostazione non dice niente", () => {
     expect(text("DRAW_TEMPLATES_DEFAULT")).toBe(TEMPLATES_FOLDER);
     expect(templatesFolder(undefined)).toBe(text("DRAW_TEMPLATES_DEFAULT"));
-    expect(text("DRAW_SYMBOLS_DEFAULT")).toBe(SYMBOLS_FOLDER);
-    expect(symbolsFolder(undefined)).toBe(text("DRAW_SYMBOLS_DEFAULT"));
-  });
-
-  it("i livelli sono quelli del registro, nello stesso ordine, e il primo è quello di serie", () => {
-    const levels = strings("DRAW_LEVELS");
-    // I tre pronti dal più semplice, poi il Personalizzato.
-    expect(levels).toEqual([...levelsAbove("custom"), "custom"]);
-    for (const level of levels) expect(isLevel(level), level).toBe(true);
-    expect(new Set(levels).size).toBe(levels.length);
-    // Senza impostazioni l'editor parte dal primo: è il default che il Rust
-    // dichiara per `draw.level`.
-    expect(currentLevel()).toBe(levels[0]);
-  });
-
-  it("le parti di partenza del Personalizzato sono quelle del registro, nello stesso ordine", () => {
-    const parts = strings("DRAW_CUSTOM_DEFAULT");
-    expect(parts).toEqual([...CUSTOM_DEFAULT]);
-    for (const part of parts) expect(isFeature(part), part).toBe(true);
-    expect(new Set(parts).size).toBe(parts.length);
-    // E sono ciò che l'editor usa quando l'impostazione non dice niente.
-    expect(currentCustom()).toEqual(parts);
   });
 
   it("gli spazi di lavoro sono quelli del registro, e il primo è quello di serie", () => {

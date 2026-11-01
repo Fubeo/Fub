@@ -30,3 +30,34 @@ resta **non provato**.
 | Data | Sistema | WebView | Pagina |
 |---|---|---|---|
 | 2026-10-30 | Linux 7.0 (Azure), X11 sotto Xvfb | WebKitGTK, Safari 605.1.15 | [Runner della CI](2026-10-30-linux-webkitgtk-runner.md) |
+| 2026-10-31 | Linux 7.0 (Azure), X11 sotto Xvfb | WebKitGTK, Safari 605.1.15 | [Runner della CI: la memoria e le tessere](2026-10-31-linux-webkitgtk-runner-k0.md) |
+
+## I motori
+
+Le misure di K0 dei motori Craft, collegati a Fub da soli
+([`tools/motori-prova`](../../tools/motori-prova/README.md)): una pagina
+`motori-AAAA-MM-GG-sistema-macchina.md` per misura, con peso, memoria, tempi
+e librerie.
+
+| Data | Sistema | Macchina | Pagina |
+|---|---|---|---|
+| 2026-10-31 | Debian 13, kernel 6.12 | AMD Ryzen 7 7730U, senza scheda grafica | [I sei motori da soli](motori-2026-10-31-linux-ryzen.md) |
+
+## Gli inventari
+
+Gli inventari di K0 sul codice dei motori: che cosa vive dove, con righe
+contate e revisione.
+
+| Data | Motore | Pagina |
+|---|---|---|
+| 2026-10-31 | PhotoCraft `b1cfff9` | [Gli strumenti dentro l'interfaccia](photocraft-strumenti-2026-10-31.md) |
+
+## Le librerie a runtime
+
+La prova del livello 3 del piano dei componenti
+([`tools/librerie-runtime`](../../tools/librerie-runtime/README.md)), sui
+tre sistemi della CI.
+
+| Data | Sistemi | Pagina |
+|---|---|---|
+| 2026-10-31 | Linux, macOS, Windows (runner) | [Le librerie a runtime](librerie-runtime-2026-10-31.md) |

@@ -332,9 +332,10 @@ l'IPC.
   codec aggiunge al documento gli stili che mancano. Un sommario scritto da
   Word senza il campo nel suo titolo non si riconosce e resta.
 
-Gli import `prosemirror-*` stanno sotto `editors/rich/`, ma nessun guard lo
-verifica ancora come per CodeMirror. Il Markdown non dipende da questa famiglia;
-senza la feature `rich` dell'host questi documenti tornano file a byte.
+Gli import `prosemirror-*` stanno sotto `editors/rich/` e nel nucleo
+`scrittura/`, ma nessun guard lo verifica ancora come per CodeMirror. Il
+Markdown non dipende da questa famiglia; senza la feature `rich` dell'host
+questi documenti tornano file a byte.
 
 L'aspetto del contenuto
 ([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)): le
@@ -424,10 +425,9 @@ il testo verbatim, gli oggetti come `U+FFFC` e gli a-capo e i salti come
 separatori. I segni sono decorazioni ProseMirror e una correzione è una
 transazione della superficie, nella sua cronologia e nella sessione.
 
-Il testo dei disegni (`editors/spatial/tools/editor/text-proof.ts`) usa lo
-stesso client: un segmento per riga, i segni come decorazioni del campo di
-Scrittura, i suggerimenti sul tasto destro. Le porte gliele dà
-`editors/core/bootstrap.ts` (`drawingProof`).
+Il testo dei disegni non ha più il correttore: con lo strumento Testo se n'è
+andato lo scrivere sul posto (decisione 0231), e non c'è testo da correggere
+mentre si scrive.
 
 La superficie Markdown carica client e adattatore con un import dinamico e li monta con
 `MarkdownProfile.setProof` e `TextEngine.reconfigure()`; la sua `Lifetime`

@@ -13,6 +13,7 @@ mod commands;
 mod completer;
 mod local;
 mod login;
+mod mcp;
 mod native;
 mod output;
 mod port;
@@ -118,6 +119,7 @@ fn run(raw: Vec<String>) -> i32 {
             action: cli::PublishAction::Watch { .. },
             ..
         }) | CliCommand::Repl { .. }
+            | CliCommand::Mcp(_)
     );
     let connection = if want_watcher {
         Connection::watch(&global)
@@ -241,6 +243,21 @@ fn dispatch(
 ) -> Result<(), commands::Failure> {
     match command {
         CliCommand::Help { .. } => unreachable!("help gestito in run"),
+        CliCommand::Mcp(args) => {
+            // Il server vive quanto il client: col watcher l'indice resta
+            // quello del disco anche per ciò che altri scrivono intanto.
+            let root = connection
+                .host
+                .root(connection.vault_selector())
+                .map_err(|error| commands::Failure::from_plugin(&error))?;
+            let access = mcp::Access::new(&args.read_roots, &args.write_roots, &root)?;
+            mcp::serve(
+                connection,
+                &access,
+                std::io::stdin().lock(),
+                std::io::stdout().lock(),
+            )
+        }
         CliCommand::Repl { .. } => {
             let code = repl_loop(connection, global, format)?;
             if code != 0 {

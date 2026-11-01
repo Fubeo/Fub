@@ -1,0 +1,14 @@
+# Ciò che le prove dei motori hanno in comune: orologio, memoria, referto.
+[package]
+name = "motori-prova-comune"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+[lib]
+name = "motori_prova"
+path = "src/lib.rs"
+
+[dependencies]
+serde_json = "1"

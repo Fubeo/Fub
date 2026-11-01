@@ -136,19 +136,12 @@ import {
 } from "./rich";
 import { protoTips, Tipper, tippable, tipsStyleOf, type TipsStyle } from "./tips";
 import { replaceElem } from "./topath";
-import { areaText, pointText, rewrapped, withWrap, type Side } from "./wrap";
+import { rewrapped } from "./wrap";
 
 /// Dove un testo si allinea al suo punto d'ancoraggio.
 export type Anchor = "start" | "middle" | "end";
 
 export const ANCHORS: readonly Anchor[] = ["start", "middle", "end"];
-
-/// Il tipo di un testo che non segue un tracciato: da punto, con le righe
-/// che si scrivono, o in area, che va a capo da solo (formato della scena,
-/// testo).
-export type TextForm = "point" | "area";
-
-export const TEXT_FORMS: readonly TextForm[] = ["point", "area"];
 
 /// Un valore della selezione: quante parti lo hanno, e il valore se è lo
 /// stesso per tutte; `null` se è misto, o se nessuna lo ha.
@@ -191,10 +184,6 @@ export interface Look {
   /// La spaziatura delle lettere, in volte il corpo.
   readonly spacing: Shared<number>;
   readonly anchor: Shared<Anchor>;
-  /// Il tipo dei testi che non seguono un tracciato.
-  readonly form: Shared<TextForm>;
-  /// La larghezza del riquadro dei testi in area, nelle loro coordinate.
-  readonly wrap: Shared<number>;
 }
 
 /// Ciò che una parte eredita, coi valori iniziali di SVG: i colori, il
@@ -268,18 +257,6 @@ function passedBy(node: ElementPart | null): Inherited {
   const passed = out ?? from;
   passes.set(node, { from, own, out: passed });
   return passed;
-}
-
-/// Ciò che il testo `node` eredita da chi lo contiene, per gli attributi
-/// del testo, coi valori iniziali di SVG dove nessuno li scrive.
-export function textInherited(node: ElementPart): Record<string, string> {
-  const passed = passedBy(node.parent);
-  const out: Record<string, string> = {};
-  for (const name of [...INHERITED, "text-anchor"]) {
-    const value = passed.get(name);
-    if (value !== undefined) out[name] = value;
-  }
-  return out;
 }
 
 /// Ciò che eredita un testo nuovo in un livello che non scrive niente.
@@ -544,8 +521,6 @@ export function lookOf(model: DocumentModel, units: readonly Unit[]): Look {
       const rich = richOfPart(part);
       return one(rich === null ? [anchorIn(seen(part, "text-anchor"))] : anchorsOf(rich).map(anchorIn));
     })),
-    form: shared(parts.texts.filter((part) => part.node.details?.textPath === undefined).map((part): TextForm => (part.node.details?.wrap === undefined ? "point" : "area"))),
-    wrap: shared(parts.texts.flatMap((part) => (part.node.details?.wrap === undefined ? [] : [Number(place(part.node.details.wrap))]))),
   };
 }
 
@@ -575,12 +550,7 @@ export type LookChange =
   | { readonly spacing: number }
   /// Uno stile del testo: il corpo e il peso insieme.
   | { readonly preset: { readonly size: number; readonly weight: number } }
-  | { readonly anchor: Anchor }
-  /// La larghezza del riquadro dei testi in area, nelle loro coordinate, e
-  /// il bordo che resta fermo: il sinistro, se non lo si dice.
-  | { readonly wrap: number; readonly fixed?: Side }
-  /// Il tipo dei testi che non seguono un tracciato.
-  | { readonly form: TextForm };
+  | { readonly anchor: Anchor };
 
 /// Un cambio pronto, e quante parti cambia.
 export interface Restyled extends Arranged {
@@ -1050,14 +1020,6 @@ export function lookOps(model: DocumentModel, units: readonly Unit[], change: Lo
       changes.textWrite(part, "font-size", place(change.preset.size));
       changes.textWrite(part, "font-weight", weightText(change.preset.weight));
     }
-  } else if ("wrap" in change) {
-    for (const part of parts.texts) {
-      if (part.node.details?.wrap !== undefined) changes.text(part, (rich) => withWrap(rich, change.wrap, change.fixed));
-    }
-  } else if ("form" in change) {
-    for (const part of parts.texts) {
-      if (part.node.details?.textPath === undefined) changes.text(part, (rich) => (change.form === "area" ? areaText(rich, measure) : pointText(rich)));
-    }
   } else if ("leading" in change) {
     for (const part of parts.texts) changes.text(part, (rich) => withLeading(rich, change.leading));
   } else if ("spacing" in change) {
@@ -1131,20 +1093,6 @@ export function paintEachOps(
 /// lo contiene; `null` se un'operazione non saprebbe riscriverlo intero.
 export function textRich(node: ElementPart): Rich | null {
   return node.details?.role === "text" ? richOfPart({ node, role: "text", own: ownOf(node), inherited: passedBy(node.parent) }) : null;
-}
-
-/// Il testo in area `unit` col riquadro largo `width`, fermo il bordo
-/// `fixed`, come lo scriverebbe [`lookOps`]: l'anteprima della cornice che
-/// lo allarga o lo stringe, e se una riga supera il riquadro. `null` se
-/// `unit` non è un testo in area che si legge coi suoi pezzi.
-export function framedText(model: DocumentModel, unit: Unit, width: number, fixed: Side, measure: Measure): { readonly elem: Elem; readonly overflow: boolean } | null {
-  const [node] = nodesOf(model, [unit]);
-  if (node === undefined || node.details?.role !== "text" || node.details.wrap === undefined) return null;
-  const rich = richOfPart({ node, role: "text", own: ownOf(node), inherited: passedBy(node.parent) });
-  const old = elemOf(node);
-  if (rich === null || old === null) return null;
-  const flowed = rewrapped(rich, withWrap(rich, width, fixed), measure);
-  return { elem: richElem(old, flowed.rich), overflow: flowed.overflow };
 }
 
 // ---------------------------------------------------------------------------
@@ -1237,13 +1185,6 @@ function firstPart(from: ElementPart, graphic = false): Part | null {
 export function styleOf(model: DocumentModel, unit: Unit, leaf: LeafNode | null = null): Style | null {
   const [node] = nodesOf(model, [unit]);
   return styleFrom(model, node!, leaf ?? node!);
-}
-
-/// Lo stile del nodo `node` del disegno, un oggetto o una parte di un
-/// oggetto, come [`styleOf`]: anche bloccato o nascosto, che si legge
-/// senza cambiarlo.
-export function nodeStyle(model: DocumentModel, node: ElementPart): Style | null {
-  return styleFrom(model, node, node);
 }
 
 /// Lo stile della prima parte di `from`, con l'opacità, la fusione e gli

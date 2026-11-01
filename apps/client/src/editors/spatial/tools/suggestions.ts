@@ -22,7 +22,7 @@ import { t } from "../strings";
 
 /// I suggerimenti, per nome: due dita che spostano e avvicinano il foglio,
 /// il tratto tenuto fermo che diventa forma, il testo dentro una forma.
-export type SuggestionId = "two-fingers" | "hold-shape" | "label-shape";
+export type SuggestionId = "two-fingers" | "hold-shape";
 
 /// Ciò che chi monta l'editor ricorda: se i suggerimenti si mostrano, e
 /// quelli già visti o che non servono più, per nome. Un nome che l'editor

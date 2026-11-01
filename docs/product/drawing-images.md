@@ -75,17 +75,10 @@ dice al posto dei pixel, oppure la dichiara decorativa, da saltare. Si può
 anche lasciarla senza, e ritrovarla poi fra i problemi della verifica:
 [Disegni, accessibilità](drawing-accessibility.md#la-descrizione-allinserimento).
 
-## Ritagliare
+## Ritagli
 
-Nello spazio [Completo](drawing.md#completo-e-semplice) «Ritaglia…», o due
-tocchi sull'immagine, ne sceglie la parte da mostrare: l'immagine resta
-intera nel file, e il ritaglio si cambia o si toglie quando si vuole.
-Nel Completo le maschere ritagliano o sfumano anche le immagini con una
-forma: [Disegni, ritagli e maschere](drawing-masks.md).
+Un'immagine ritagliata da una versione precedente o da un altro programma
+mostra soltanto la parte del ritaglio, e resta intera nel file; l'editor non
+ritaglia più (decisione 0231). Come stanno i ritagli e le maschere è in
+[Disegni, ritagli e maschere](drawing-masks.md).
 
-## Ricalcare
-
-Nello spazio Completo, fra gli [strumenti avanzati](drawing-expert.md), «Ricalca immagine…» fa di
-un'immagine incollata o del vault un gruppo di tracciati pieni, da
-modificare come le altre forme, e la lascia nascosta sotto il gruppo:
-[Disegni, ricalco delle immagini](drawing-trace.md).

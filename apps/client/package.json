@@ -21,8 +21,6 @@
     "bench:interaction": "node bench/interaction.mjs",
     "bench:ink": "vitest run --config bench/vitest.ink.config.mjs --reporter=verbose",
     "bench:fidelity": "node bench/fidelity.mjs",
-    "bench:boards": "node bench/boards.mjs",
-    "bench:connectors": "node bench/connectors.mjs",
     "bench:grid": "node bench/grid-gestures.mjs",
     "bench:large": "node bench/large.mjs",
     "bench:webview": "node bench/webview/run.mjs",

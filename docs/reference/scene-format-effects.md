@@ -11,6 +11,11 @@
 > fusione in `painter/svg-dom.ts`; la risoluzione del PDF in
 > `crates/fub-features/src/draw.rs`.
 
+Effetti e fusione non si scelgono più: se ne sono andati col livello
+Esperto ([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)).
+Quelli dei file si leggono, si vedono, restano identici ed escono
+nell'export.
+
 Una parte del [formato della scena](scene-format.md), §4, e delle sue
 [risorse](scene-format-resources.md): il filtro di un effetto è una
 risorsa privata, come una sfumatura. Che cosa ne fa l'editor sta in

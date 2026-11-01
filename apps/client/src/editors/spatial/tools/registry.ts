@@ -1,20 +1,19 @@
-// Il registro degli strumenti, uno solo per tutti i livelli: ogni strumento
-// dichiara id, livello minimo, gruppo, icona, etichetta, scorciatoia e
-// descrizione per lo screen reader, e i livelli filtrano: la barra e i tasti
-// di un livello sono i suoi strumenti e quelli dei livelli sotto.
+// Il registro degli strumenti, uno solo per il disegno e per le annotazioni
+// di un PDF: ogni strumento dichiara id, profili, gruppo, icona, etichetta,
+// scorciatoia e descrizione per lo screen reader. Non ci sono livelli (ADR
+// 0231): lo spazio di lavoro sceglie che cosa si offre, «Completo» tutto e
+// «Semplice» le parti per disegnare a mano o col dito.
 //
-// Il livello minimo dipende dal profilo, perché profili e livelli sono
-// indipendenti: un disegno (`vector`) ha all'Essenziale la penna, la gomma e
-// le forme; le annotazioni di un PDF (`pdf`) hanno all'Essenziale penna,
-// evidenziatore e gomma, e allo Standard le note, le forme e la copertura.
-// Uno strumento senza livello per un profilo non c'è.
+// Lo spazio da cui uno strumento c'è dipende dal profilo: un disegno
+// (`vector`) ha nel Semplice la penna, l'evidenziatore, la gomma e le forme;
+// le annotazioni di un PDF (`pdf`) hanno nel Semplice penna, evidenziatore e
+// gomma, e nel Completo anche le note, le forme e la copertura. Uno strumento
+// senza spazio per un profilo non c'è.
 //
-// Il registro elenca anche le parti che un livello offre o no, strumenti e
-// comandi (`FEATURES`): un livello pronto ha quelle del suo livello e dei
-// livelli sotto, il Personalizzato quelle scelte una per una. La Selezione
-// c'è sempre, come i colori della tavolozza, gli spessori, annulla e la vista.
-// Le annotazioni di un PDF hanno i loro strumenti e nessuno dei comandi: le
-// parti dei livelli sono quelle del disegno.
+// Il registro elenca anche le parti che uno spazio offre o no, strumenti e
+// comandi (`FEATURES`). La Selezione c'è sempre, come i colori della
+// tavolozza, gli spessori, annulla e la vista. Le annotazioni di un PDF hanno
+// i loro strumenti e nessuno dei comandi.
 //
 // Le scorciatoie sono una lettera senza modificatori, quelle che chi disegna
 // conosce già da altri programmi, e valgono solo col fuoco sulla superficie.
@@ -22,27 +21,10 @@
 
 import type { DrawKey } from "../strings";
 
-/// I livelli pronti, dal più semplice al più ricco.
-export type Preset = "essential" | "standard" | "expert";
-
-/// I livelli dell'interfaccia: i tre pronti, e il Personalizzato, che ha le
-/// parti scelte una per una.
-export type Level = Preset | "custom";
-
-const LEVEL_ORDER: readonly Preset[] = ["essential", "standard", "expert"];
-
 export type ToolId =
   | "select"
   | "hand"
   | "zoom"
-  | "lasso"
-  | "nodes"
-  | "builder"
-  | "scissors"
-  | "width"
-  | "board"
-  | "eyedropper"
-  | "gradient"
   | "pen"
   | "highlighter"
   | "eraser"
@@ -51,11 +33,7 @@ export type ToolId =
   | "ellipse"
   | "line"
   | "arrow"
-  | "connector"
-  | "cover"
-  | "polygon"
-  | "bezier"
-  | "text";
+  | "cover";
 
 /// I profili della famiglia `canvas` che hanno strumenti: il disegno e le
 /// annotazioni di un PDF.
@@ -67,8 +45,9 @@ export type ToolGroup = "pick" | "ink" | "shape" | "text";
 
 export interface ToolSpec {
   readonly id: ToolId;
-  /// Il livello minimo per profilo; un profilo che manca non lo offre.
-  readonly levels: Readonly<Partial<Record<ToolProfile, Preset>>>;
+  /// Lo spazio da cui c'è, per profilo: nel Semplice c'è anche nel
+  /// Completo. Un profilo che manca non lo offre.
+  readonly spaces: Readonly<Partial<Record<ToolProfile, Workspace>>>;
   readonly group: ToolGroup;
   /// Il nome di un'icona registrata (`ui/icons.ts`).
   readonly icon: string;
@@ -79,62 +58,27 @@ export interface ToolSpec {
   readonly shortcut: string;
   /// Altri tasti che lo scelgono, come N per i Nodi accanto ad A.
   readonly aliases?: readonly string[];
-  /// Nello spazio «Semplice».
-  readonly simple?: true;
 }
 
-const BOTH = { vector: "essential", pdf: "essential" } as const;
-const SHAPE = { vector: "essential", pdf: "standard" } as const;
+const BOTH = { vector: "simple", pdf: "simple" } as const;
+const SHAPE = { vector: "simple", pdf: "full" } as const;
 
 /// Nell'ordine della barra.
 export const TOOLS: readonly ToolSpec[] = [
-  { id: "select", levels: BOTH, group: "pick", icon: "draw-select", label: "draw.tool.select", description: "draw.tool.select.hint", shortcut: "v" },
+  { id: "select", spaces: BOTH, group: "pick", icon: "draw-select", label: "draw.tool.select", description: "draw.tool.select.hint", shortcut: "v" },
   // La mano e la lente muovono la vista, non il disegno: ci sono sempre.
-  { id: "hand", levels: BOTH, group: "pick", icon: "draw-hand", label: "draw.tool.hand", description: "draw.tool.hand.hint", shortcut: "h" },
-  { id: "zoom", levels: BOTH, group: "pick", icon: "draw-zoom", label: "draw.tool.zoom", description: "draw.tool.zoom.hint", shortcut: "z" },
-  // Lo stesso tasto di Illustrator.
-  { id: "lasso", levels: { vector: "standard" }, group: "pick", icon: "draw-lasso", label: "draw.tool.lasso", description: "draw.tool.lasso.hint", shortcut: "q" },
-  // Lo stesso tasto di Inkscape.
-  { id: "nodes", levels: { vector: "expert" }, group: "pick", icon: "draw-nodes", label: "draw.tool.nodes", description: "draw.tool.nodes.hint", shortcut: "a", aliases: ["n"] },
-  // La lettera di Illustrator, che la vuole con Maiusc: qui, come per gli
-  // altri strumenti, da sola.
-  { id: "builder", levels: { vector: "expert" }, group: "pick", icon: "draw-builder", label: "draw.tool.builder", description: "draw.tool.builder.hint", shortcut: "m" },
-  // La lettera di Illustrator. Un tocco taglia, un trascinamento è il
-  // Coltello, che in Illustrator è uno strumento a parte.
-  { id: "scissors", levels: { vector: "expert" }, group: "pick", icon: "draw-scissors", label: "draw.tool.scissors", description: "draw.tool.scissors.hint", shortcut: "c" },
-  // La lettera di Illustrator, che la vuole con Maiusc.
-  { id: "width", levels: { vector: "expert" }, group: "pick", icon: "draw-width", label: "draw.tool.width", description: "draw.tool.width.hint", shortcut: "w" },
-  // La lettera del Frame di Figma, dove le cornici sono le tavole: quella di
-  // Illustrator è la «O» con Maiusc, e qui la «O» è dell'ellisse.
-  { id: "board", levels: { vector: "standard" }, group: "pick", icon: "draw-board", label: "draw.tool.board", description: "draw.tool.board.hint", shortcut: "f" },
-  // La lettera di Illustrator e di Photoshop.
-  { id: "eyedropper", levels: { vector: "standard" }, group: "pick", icon: "draw-eyedropper", label: "draw.tool.eyedropper", description: "draw.tool.eyedropper.hint", shortcut: "i" },
-  // La lettera di Illustrator. Lo strumento porta con sé la sezione
-  // «Sfumatura» del pannello delle proprietà: nel Personalizzato si
-  // scelgono insieme.
-  { id: "gradient", levels: { vector: "standard" }, group: "pick", icon: "draw-gradient", label: "draw.tool.gradient", description: "draw.tool.gradient.hint", shortcut: "g" },
-  { id: "pen", levels: BOTH, group: "ink", icon: "draw-pen", label: "draw.tool.pen", description: "draw.tool.pen.hint", shortcut: "p", simple: true },
-  { id: "highlighter", levels: { vector: "standard", pdf: "essential" }, group: "ink", icon: "draw-highlighter", label: "draw.tool.highlighter", description: "draw.tool.highlighter.hint", shortcut: "Shift-p", simple: true },
-  { id: "eraser", levels: BOTH, group: "ink", icon: "draw-eraser", label: "draw.tool.eraser", description: "draw.tool.eraser.hint", shortcut: "e", simple: true },
-  // Le note sono del PDF: nel disegno la «N» è dei Nodi.
-  { id: "note", levels: { pdf: "standard" }, group: "ink", icon: "draw-note", label: "draw.tool.note", description: "draw.tool.note.hint", shortcut: "n" },
-  { id: "rect", levels: SHAPE, group: "shape", icon: "draw-rect", label: "draw.tool.rect", description: "draw.tool.rect.hint", shortcut: "r", simple: true },
-  { id: "ellipse", levels: SHAPE, group: "shape", icon: "draw-ellipse", label: "draw.tool.ellipse", description: "draw.tool.ellipse.hint", shortcut: "o", simple: true },
-  { id: "line", levels: SHAPE, group: "shape", icon: "draw-line", label: "draw.tool.line", description: "draw.tool.line.hint", shortcut: "l", simple: true },
-  { id: "arrow", levels: SHAPE, group: "shape", icon: "draw-arrow", label: "draw.tool.arrow", description: "draw.tool.arrow.hint", shortcut: "Shift-l", simple: true },
-  // La lettera di FigJam. Lo strumento porta con sé la sezione «Connettore»
-  // del pannello delle proprietà e «Collega le forme scelte»: nel
-  // Personalizzato si scelgono insieme.
-  { id: "connector", levels: { vector: "standard" }, group: "shape", icon: "draw-connector", label: "draw.tool.connector", description: "draw.tool.connector.hint", shortcut: "x" },
-  // La copertura è del PDF: nel disegno la «C» è delle Forbici.
-  { id: "cover", levels: { pdf: "standard" }, group: "shape", icon: "draw-cover", label: "draw.tool.cover", description: "draw.tool.cover.hint", shortcut: "c" },
-  // Lo stesso tasto di CorelDRAW. Premuto di nuovo, lo strumento passa dal
-  // poligono alla stella e ritorno: etichetta e icona sono quelle del
-  // poligono, l'editor le cambia per la stella.
-  { id: "polygon", levels: { vector: "standard" }, group: "shape", icon: "draw-polygon", label: "draw.tool.polygon", description: "draw.tool.polygon.hint", shortcut: "y" },
-  // Lo stesso tasto di Inkscape, dove la penna di Bézier è «B».
-  { id: "bezier", levels: { vector: "expert" }, group: "shape", icon: "draw-bezier", label: "draw.tool.bezier", description: "draw.tool.bezier.hint", shortcut: "b" },
-  { id: "text", levels: { vector: "standard" }, group: "text", icon: "draw-text", label: "draw.tool.text", description: "draw.tool.text.hint", shortcut: "t", simple: true },
+  { id: "hand", spaces: BOTH, group: "pick", icon: "draw-hand", label: "draw.tool.hand", description: "draw.tool.hand.hint", shortcut: "h" },
+  { id: "zoom", spaces: BOTH, group: "pick", icon: "draw-zoom", label: "draw.tool.zoom", description: "draw.tool.zoom.hint", shortcut: "z" },
+  { id: "pen", spaces: BOTH, group: "ink", icon: "draw-pen", label: "draw.tool.pen", description: "draw.tool.pen.hint", shortcut: "p" },
+  { id: "highlighter", spaces: BOTH, group: "ink", icon: "draw-highlighter", label: "draw.tool.highlighter", description: "draw.tool.highlighter.hint", shortcut: "Shift-p" },
+  { id: "eraser", spaces: BOTH, group: "ink", icon: "draw-eraser", label: "draw.tool.eraser", description: "draw.tool.eraser.hint", shortcut: "e" },
+  // Le note e la copertura sono soltanto del PDF.
+  { id: "note", spaces: { pdf: "full" }, group: "ink", icon: "draw-note", label: "draw.tool.note", description: "draw.tool.note.hint", shortcut: "n" },
+  { id: "rect", spaces: SHAPE, group: "shape", icon: "draw-rect", label: "draw.tool.rect", description: "draw.tool.rect.hint", shortcut: "r" },
+  { id: "ellipse", spaces: SHAPE, group: "shape", icon: "draw-ellipse", label: "draw.tool.ellipse", description: "draw.tool.ellipse.hint", shortcut: "o" },
+  { id: "line", spaces: SHAPE, group: "shape", icon: "draw-line", label: "draw.tool.line", description: "draw.tool.line.hint", shortcut: "l" },
+  { id: "arrow", spaces: SHAPE, group: "shape", icon: "draw-arrow", label: "draw.tool.arrow", description: "draw.tool.arrow.hint", shortcut: "Shift-l" },
+  { id: "cover", spaces: { pdf: "full" }, group: "shape", icon: "draw-cover", label: "draw.tool.cover", description: "draw.tool.cover.hint", shortcut: "c" },
 ];
 
 /// Lo strumento con cui si apre un disegno: la penna, perché un disegno si
@@ -146,164 +90,73 @@ export function defaultTool(profile: ToolProfile): ToolId {
   return profile === "pdf" ? "highlighter" : DEFAULT_TOOL;
 }
 
-/// Gli strumenti che ci sono a ogni livello, come parti di nessuno: la
+/// Gli strumenti che ci sono in ogni spazio, come parti di nessuno: la
 /// Selezione, la Mano e la Lente.
 export type ViewTool = "select" | "hand" | "zoom";
 
 const VIEW_TOOLS: readonly ToolId[] = ["select", "hand", "zoom"];
 
-/// Vero per uno strumento che c'è a ogni livello.
+/// Vero per uno strumento che c'è in ogni spazio.
 export function isViewTool(id: ToolId): id is ViewTool {
   return VIEW_TOOLS.includes(id);
 }
 
-/// Una parte che un livello offre o no: uno strumento, tranne quelli di
+/// Una parte che uno spazio offre o no: uno strumento, tranne quelli di
 /// `ViewTool`, o un comando con i suoi tasti.
 export type Feature =
   | Exclude<ToolId, ViewTool>
   | "colors"
-  | "swatches"
-  | "styles"
   | "tips"
-  | "hatches"
   | "selection"
   | "arrange"
   | "layers"
   | "grid"
-  | "guides"
-  | "rulers"
   | "recognize"
-  | "symmetry"
   | "gestures"
   | "links"
   | "images"
-  | "crop"
-  | "library"
   | "properties"
   | "style"
   | "history"
   | "accessibility"
-  | "export"
-  | "present"
-  | "attributes"
-  | "outline"
-  | "transform"
-  | "apply"
-  | "path"
-  | "boolean"
-  | "trace"
-  | "masks"
-  | "typeset"
-  | "fonts"
-  | "effects"
-  | "blend"
-  | "motifs"
-  | "print"
-  | "symbols"
-  | "repeat"
-  | "editable";
+  | "export";
 
 export interface FeatureSpec {
   readonly id: Feature;
-  /// Il livello pronto da cui la parte c'è: conta soltanto per leggere il
-  /// livello delle versioni precedenti (`draw.level`).
-  readonly level: Preset;
   readonly label: DrawKey;
   /// Nello spazio «Semplice»; in «Completo» ci sono tutte.
   readonly simple?: true;
 }
 
-/// I comandi, nell'ordine della barra: quelli dello Standard, poi quelli
-/// dell'Esperto.
+/// I comandi, nell'ordine della barra.
 const COMMANDS: readonly FeatureSpec[] = [
-  { id: "colors", level: "standard", label: "draw.feature.colors", simple: true },
-  // I colori del documento sono una sezione del pannello delle proprietà:
-  // nel Personalizzato si vedono con lui.
-  { id: "swatches", level: "standard", label: "draw.feature.swatches" },
-  // Gli stili del documento sono due righe del pannello delle proprietà e i
-  // comandi del loro menu: nel Personalizzato si vedono con lui.
-  { id: "styles", level: "standard", label: "draw.feature.styles" },
+  { id: "colors", label: "draw.feature.colors", simple: true },
   // Le punte delle linee sono due campi del pannello delle proprietà, e i
-  // comandi che le cambiano: nel Personalizzato si vedono con lui.
-  { id: "tips", level: "standard", label: "draw.feature.tips" },
-  // La campitura è una sezione del pannello delle proprietà: nel
-  // Personalizzato si vede con lui.
-  { id: "hatches", level: "standard", label: "draw.feature.hatches" },
-  { id: "selection", level: "standard", label: "draw.feature.selection" },
-  { id: "arrange", level: "standard", label: "draw.feature.arrange" },
-  { id: "layers", level: "standard", label: "draw.feature.layers" },
-  { id: "grid", level: "standard", label: "draw.feature.grid" },
-  { id: "guides", level: "standard", label: "draw.feature.guides" },
-  { id: "rulers", level: "standard", label: "draw.feature.rulers" },
-  { id: "recognize", level: "standard", label: "draw.feature.recognize" },
-  // La simmetria della penna è una sezione del pannello delle proprietà,
-  // con la penna e l'evidenziatore: nel Personalizzato si vede con lui.
-  { id: "symmetry", level: "standard", label: "draw.feature.symmetry" },
-  { id: "gestures", level: "standard", label: "draw.feature.gestures", simple: true },
-  { id: "links", level: "standard", label: "draw.feature.links" },
-  { id: "images", level: "standard", label: "draw.feature.images", simple: true },
-  { id: "crop", level: "standard", label: "draw.feature.crop" },
-  { id: "library", level: "standard", label: "draw.feature.library" },
-  { id: "properties", level: "standard", label: "draw.feature.properties", simple: true },
-  { id: "style", level: "standard", label: "draw.feature.style" },
-  { id: "history", level: "standard", label: "draw.feature.history" },
-  { id: "accessibility", level: "standard", label: "draw.feature.accessibility" },
-  { id: "export", level: "standard", label: "draw.feature.export", simple: true },
-  { id: "present", level: "standard", label: "draw.feature.present" },
-  { id: "attributes", level: "expert", label: "draw.feature.attributes" },
-  { id: "outline", level: "expert", label: "draw.feature.outline" },
-  { id: "transform", level: "expert", label: "draw.feature.transform" },
-  { id: "apply", level: "expert", label: "draw.feature.apply" },
-  { id: "path", level: "expert", label: "draw.feature.path" },
-  { id: "boolean", level: "expert", label: "draw.feature.boolean" },
-  { id: "trace", level: "expert", label: "draw.feature.trace" },
-  { id: "masks", level: "expert", label: "draw.feature.masks" },
-  { id: "typeset", level: "expert", label: "draw.feature.typeset" },
-  // I caratteri del vault sono voci del menu «Carattere», nel pannello delle
-  // proprietà e negli attributi: nel Personalizzato si vedono con loro. Un
-  // disegno che li usa li mostra a ogni livello.
-  { id: "fonts", level: "expert", label: "draw.feature.fonts" },
-  // Gli effetti e la fusione sono sezioni e campi del pannello delle
-  // proprietà: nel Personalizzato si vedono con lui.
-  { id: "effects", level: "expert", label: "draw.feature.effects" },
-  { id: "blend", level: "expert", label: "draw.feature.blend" },
-  // I motivi del documento sono una voce del menu della campitura e due
-  // campi, il nome e l'eliminazione, nel pannello delle proprietà: nel
-  // Personalizzato si vedono con lui.
-  { id: "motifs", level: "expert", label: "draw.feature.motifs" },
-  // La pagina di stampa è il gruppo «Pagina» della finestra «Esporta», per
-  // il PDF: nel Personalizzato si vede con lei.
-  { id: "print", level: "expert", label: "draw.feature.print" },
-  // I simboli sono «Crea simbolo» e «Scollega» nella barra della selezione
-  // e nel menu, la riga «Simbolo» del pannello delle proprietà e il pannello
-  // dei simboli. Un'istanza si apre per modificare il suo simbolo dove si
-  // isola un gruppo, a ogni livello che ha la selezione avanzata.
-  { id: "symbols", level: "expert", label: "draw.feature.symbols" },
-  // Le ripetizioni sono il menu «Ripeti» nella barra della selezione e nel
-  // menu, e la sezione «Ripetizione» del pannello delle proprietà. Una
-  // ripetizione si apre per modificare i suoi originali dove si isola un
-  // gruppo, e si separa come un gruppo, a ogni livello.
-  { id: "repeat", level: "expert", label: "draw.feature.repeat" },
-  // «Rendi modificabile» è una voce del menu della selezione, per le parti
-  // di altri programmi scelte o sotto il puntatore, una per il disegno
-  // intero, e un pulsante accanto a «Modifica» sull'avviso di un SVG che
-  // FubDraw non ha fatto.
-  { id: "editable", level: "expert", label: "draw.feature.editable" },
+  // comandi che le cambiano.
+  { id: "tips", label: "draw.feature.tips" },
+  { id: "selection", label: "draw.feature.selection" },
+  { id: "arrange", label: "draw.feature.arrange" },
+  { id: "layers", label: "draw.feature.layers" },
+  { id: "grid", label: "draw.feature.grid" },
+  { id: "recognize", label: "draw.feature.recognize" },
+  { id: "gestures", label: "draw.feature.gestures", simple: true },
+  { id: "links", label: "draw.feature.links" },
+  { id: "images", label: "draw.feature.images", simple: true },
+  { id: "properties", label: "draw.feature.properties", simple: true },
+  { id: "style", label: "draw.feature.style" },
+  { id: "history", label: "draw.feature.history" },
+  { id: "accessibility", label: "draw.feature.accessibility" },
+  { id: "export", label: "draw.feature.export", simple: true },
 ];
 
-/// Tutte le parti del disegno, per livello, e in un livello prima gli
-/// strumenti nell'ordine della barra: l'ordine in cui il Personalizzato le
-/// propone.
-export const FEATURES: readonly FeatureSpec[] = LEVEL_ORDER.flatMap((level) => [
-  ...TOOLS.filter((tool) => !isViewTool(tool.id) && tool.levels.vector === level).map(
-    (tool): FeatureSpec => ({ id: tool.id as Feature, level, label: tool.label, ...(tool.simple === true ? { simple: true } : {}) }),
+/// Tutte le parti del disegno: prima gli strumenti nell'ordine della barra,
+/// poi i comandi.
+export const FEATURES: readonly FeatureSpec[] = [
+  ...TOOLS.filter((tool) => !isViewTool(tool.id) && tool.spaces.vector !== undefined).map(
+    (tool): FeatureSpec => ({ id: tool.id as Feature, label: tool.label, ...(tool.spaces.vector === "simple" ? { simple: true } : {}) }),
   ),
-  ...COMMANDS.filter((command) => command.level === level),
-]);
-
-/// Le parti del Personalizzato quando nessuno le ha scelte: quelle
-/// dell'Essenziale.
-export const CUSTOM_DEFAULT: readonly Feature[] = FEATURES.filter((feature) => feature.level === "essential").map((feature) => feature.id);
+  ...COMMANDS,
+];
 
 /// Lo spazio di lavoro: «Completo» ha tutto, «Semplice» le parti per
 /// disegnare a mano o col dito, con pulsanti grandi. Nessuno dei due toglie
@@ -318,60 +171,14 @@ export function isWorkspace(value: unknown): value is Workspace {
   return typeof value === "string" && (WORKSPACES as readonly string[]).includes(value);
 }
 
-/// Le parti dello spazio «Semplice», nell'ordine delle parti.
-export const SIMPLE_PARTS: readonly Feature[] = FEATURES.filter((feature) => feature.simple === true).map((feature) => feature.id);
-
-/// Il livello con cui l'editor offre lo spazio `workspace`: «Completo» è
-/// l'Esperto, che ha tutte le parti; «Semplice» il Personalizzato con le
-/// parti semplici, e nelle annotazioni di un PDF l'Essenziale.
-export function workspaceLevel(workspace: Workspace, profile: ToolProfile = "vector"): { readonly level: Level; readonly custom: readonly Feature[] } {
-  if (workspace === "full") return { level: "expert", custom: CUSTOM_DEFAULT };
-  return profile === "pdf" ? { level: "essential", custom: CUSTOM_DEFAULT } : { level: "custom", custom: SIMPLE_PARTS };
-}
-
-/// Lo spazio di lavoro che vale per un livello delle versioni precedenti:
-/// l'Essenziale è «Semplice», gli altri «Completo».
-export function workspaceOfLevel(level: Level): Workspace {
-  return level === "essential" ? "simple" : "full";
-}
-
-/// Vero se `value` è il nome di un livello.
-export function isLevel(value: unknown): value is Level {
-  return value === "custom" || (typeof value === "string" && (LEVEL_ORDER as readonly string[]).includes(value));
-}
-
-/// Vero se `value` è il nome di una parte.
-export function isFeature(value: unknown): value is Feature {
-  return FEATURES.some((feature) => feature.id === value);
-}
-
-/// Vero se ciò che chiede il livello `minimum` c'è al livello `level`.
-export function reaches(level: Preset, minimum: Preset): boolean {
-  return LEVEL_ORDER.indexOf(minimum) <= LEVEL_ORDER.indexOf(level);
-}
-
-/// I livelli pronti sopra `level`, dal più vicino; per il Personalizzato
-/// tutti, perché ognuno può avere parti che non sono state scelte.
-export function levelsAbove(level: Level): readonly Preset[] {
-  return level === "custom" ? LEVEL_ORDER : LEVEL_ORDER.slice(LEVEL_ORDER.indexOf(level) + 1);
-}
-
-/// Le parti che l'editor offre al livello `level` nel profilo `profile`:
-/// per un livello pronto le sue e quelle dei livelli sotto, per il
-/// Personalizzato quelle di `custom` che l'editor conosce. Un nome che non
-/// conosce, di una versione più nuova o scritto a mano, non conta.
-///
-/// Le annotazioni di un PDF hanno solo i loro strumenti, e il Personalizzato
-/// vale per loro come lo Standard, che li ha già tutti.
-export function featuresFor(level: Level, custom: readonly unknown[] = CUSTOM_DEFAULT, profile: ToolProfile = "vector"): ReadonlySet<Feature> {
+/// Le parti che l'editor offre nello spazio `workspace` del profilo
+/// `profile`. Le annotazioni di un PDF hanno solo i loro strumenti.
+export function featuresFor(workspace: Workspace = "full", profile: ToolProfile = "vector"): ReadonlySet<Feature> {
+  const offers = (space: Workspace | undefined): boolean => space !== undefined && (workspace === "full" || space === "simple");
   if (profile === "pdf") {
-    const preset = level === "custom" ? "standard" : level;
-    return new Set(
-      TOOLS.filter((tool) => !isViewTool(tool.id) && tool.levels.pdf !== undefined && reaches(preset, tool.levels.pdf)).map((tool) => tool.id as Feature),
-    );
+    return new Set(TOOLS.filter((tool) => !isViewTool(tool.id) && offers(tool.spaces.pdf)).map((tool) => tool.id as Feature));
   }
-  if (level === "custom") return new Set(custom.filter(isFeature));
-  return new Set(FEATURES.filter((feature) => reaches(level, feature.level)).map((feature) => feature.id));
+  return new Set(FEATURES.filter((feature) => workspace === "full" || feature.simple === true).map((feature) => feature.id));
 }
 
 /// Gli strumenti delle parti `features`, nell'ordine della barra: la
@@ -380,10 +187,9 @@ export function toolsOf(features: ReadonlySet<Feature>): readonly ToolSpec[] {
   return TOOLS.filter((tool) => (isViewTool(tool.id) ? true : features.has(tool.id)));
 }
 
-/// Gli strumenti di un livello pronto in un profilo: i suoi e quelli dei
-/// livelli sotto.
-export function toolsFor(level: Preset, profile: ToolProfile = "vector"): readonly ToolSpec[] {
-  return toolsOf(featuresFor(level, CUSTOM_DEFAULT, profile));
+/// Gli strumenti di uno spazio in un profilo.
+export function toolsFor(workspace: Workspace = "full", profile: ToolProfile = "vector"): readonly ToolSpec[] {
+  return toolsOf(featuresFor(workspace, profile));
 }
 
 /// Lo strumento con cui si comincia fra `tools`: quello con cui si apre il
@@ -396,8 +202,7 @@ export function startTool(tools: readonly ToolSpec[], profile: ToolProfile = "ve
 }
 
 /// Lo strumento che prende il posto di `lost` quando se ne va, fra `tools`:
-/// dopo uno strumento che sceglie, il Lazo, i Nodi o il Costruttore, la
-/// Selezione, così chi sceglieva non si ritrova a disegnare; dopo gli altri,
+/// dopo uno strumento che sceglie, la Selezione, così chi sceglieva non si ritrova a disegnare; dopo gli altri,
 /// quello con cui si comincia.
 export function toolAfter(tools: readonly ToolSpec[], lost: ToolId, profile: ToolProfile = "vector"): ToolId {
   return toolSpec(lost).group === "pick" ? "select" : startTool(tools, profile);
@@ -432,35 +237,3 @@ export function toolKeys(spec: ToolSpec): string {
 /// della shell, e che cosa fanno.
 export type KeyRow = readonly [keys: string, label: DrawKey];
 
-/// I tasti che presentano, col fuoco sul foglio.
-const PRESENT_START_KEYS: readonly KeyRow[] = [
-  ["F5", "draw.keys.present.start"],
-  ["Shift-F5", "draw.keys.present.here"],
-];
-
-/// I tasti della presentazione, che sta in un modulo suo e arriva solo
-/// quando si presenta: l'elenco dei tasti dell'editor li legge da qui.
-const PRESENT_KEYS: readonly KeyRow[] = [
-  ["ArrowRight ArrowDown Space PageDown Enter n", "draw.keys.present.forward"],
-  ["ArrowLeft ArrowUp PageUp Backspace p", "draw.keys.present.back"],
-  ["Home End", "draw.keys.present.ends"],
-  ["0…9", "draw.keys.present.number"],
-  ["b .", "draw.keys.present.black"],
-  ["w ,", "draw.keys.present.white"],
-  ["l", "draw.keys.present.laser"],
-  ["e", "draw.keys.present.erase"],
-  ["Escape", "draw.keys.present.exit"],
-];
-
-/// Le parole dei tasti: `t` di `strings.ts`, che l'editor passa.
-type Say = (key: DrawKey) => string;
-
-/// Le righe dei tasti che presentano, per il gruppo della vista dell'elenco
-/// dei tasti, se fra le parti `at` c'è «Presentare».
-export const presentStartRows = (at: ReadonlySet<Feature>, say: Say): (readonly [string, string])[] =>
-  at.has("present") ? PRESENT_START_KEYS.map(([keys, label]) => [keys, say(label)] as const) : [];
-
-/// Il gruppo dei tasti della presentazione, per l'elenco dei tasti, se fra le
-/// parti `at` c'è «Presentare».
-export const presentKeyGroups = (at: ReadonlySet<Feature>, say: Say): { title: string; rows: (readonly [string, string])[] }[] =>
-  at.has("present") ? [{ title: say("draw.keys.present"), rows: PRESENT_KEYS.map(([keys, label]) => [keys, say(label)] as const) }] : [];

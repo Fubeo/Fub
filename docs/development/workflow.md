@@ -71,6 +71,7 @@ node .github/scripts/check-mermaid.mjs
 node .github/scripts/check-markdown-style.mjs
 node .github/scripts/check-prose.mjs
 node .github/scripts/check-tables.mjs
+node .github/scripts/check-locale-loop.mjs
 ```
 
 ## 5. Cambi trasversali

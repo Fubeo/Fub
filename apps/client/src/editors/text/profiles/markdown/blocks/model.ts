@@ -15,6 +15,7 @@ import type { SyntaxNode, Tree } from "@lezer/common";
 import { calloutHead } from "../callout-head";
 import { detailsHead, isDetailsClose as isDetailsCloseText } from "../details";
 import { frontmatterRange } from "../render";
+import { liveStrings } from "../strings";
 
 export type BlockKind =
   | "frontmatter"
@@ -336,4 +337,11 @@ export function subtreeEnd(blocks: readonly Block[], index: number): number {
   let end = index + 1;
   while (end < blocks.length && blocks[end]!.depth > depth) end++;
   return end;
+}
+
+/// Il nome della specie, per la maniglia, per «Trasforma in» e per la regione
+/// viva.
+export function kindName(block: Pick<Block, "kind" | "level">): string {
+  if (block.kind === "heading") return liveStrings.t("blocks.kind.heading", { level: String(block.level) });
+  return liveStrings.t(`blocks.kind.${block.kind}`);
 }

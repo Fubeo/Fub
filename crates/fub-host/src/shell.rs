@@ -91,6 +91,11 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // (`selectSelectionMatches`) e vinceva sempre; `Mod-e` alterna già.
     ("shell.mode.live", None),
     ("shell.mode.source", None),
+    // I Blocchi di una nota (N13). Sono una modalità della superficie
+    // Markdown, non un ruolo: il comando c'è soltanto dove la superficie ne
+    // dichiara una con quell'id. `Mod-Shift-b` era libero; `Mod-Alt-b` è la
+    // barra laterale.
+    ("shell.mode.blocks", Some("Mod-Shift-b")),
     // Apre la linguetta attiva nella vista sorgente che la sua superficie
     // dichiara (un disegno come testo SVG, ADR 0203), lì o in un riquadro
     // nuovo accanto, e ne torna. **Senza accordo**: il gesto serve a capire

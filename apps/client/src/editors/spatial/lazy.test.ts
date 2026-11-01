@@ -211,22 +211,7 @@ describe("dopo", () => {
 
 describe("la finestra «Esporta»", () => {
   it("prima che il codice arrivi non si apre; dopo è quella della superficie vera", async () => {
-    // Per ultimo: il livello letto resta ai moduli di questo file.
-    box.host = createFakeHost({
-      settings: [{
-        spec: {
-          key: "draw.level",
-          label: "Livello d'interfaccia",
-          description: "",
-          group: "Disegni",
-          scope: "vault",
-          kind: { kind: "choice", default: "essential", options: [{ value: "essential", label: "Essenziale" }, { value: "standard", label: "Standard" }] },
-          program_writable: false,
-        },
-        value: "standard",
-        source: "vault",
-      }],
-    });
+    box.host = createFakeHost();
     const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
     const lazy = mount();
     lazy.buffer!.setDoc(SOURCE);

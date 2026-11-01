@@ -1,8 +1,10 @@
 # Budget prestazionale
 
-> **Ambito:** evidenza osservazionale e criteri provvisori per la Graph View;
-> budget applicati in CI per i [disegni grandi](#i-disegni-grandi); il
-> [budget d'interazione](#il-budget-dinterazione) dello Scrittoio, fuori dalla CI.
+> **Ambito:** i numeri e i gate di prestazione del prodotto: la Graph View
+> (evidenza osservazionale e criteri provvisori), i
+> [disegni grandi](#i-disegni-grandi) applicati in CI e il
+> [budget d'interazione](#il-budget-dinterazione) dello Scrittoio, fuori
+> dalla CI, che include [la battuta](#la-battuta).
 > **Snapshot applicativo della Graph View:** SHA `4383a7c9d54b1e6557d070501e5ad998224ff294`.
 
 Questa pagina documenta tre distribuzioni dello stesso codice (locale, CI push e
@@ -14,7 +16,7 @@ non sono claim universali sulle macchine, sui browser o sui grafi arbitrari.
 Il runner registra Node, Chromium, piattaforma, CPU, viewport e preferenze media
 nel referto. I comandi canonici sono lo script
 [`graph-scale.mjs`](../../apps/client/bench/graph-scale.mjs), richiamato dagli
-script npm in [`apps/client/package.json`](../../apps/client/package.json#L12-L16):
+script npm in [`apps/client/package.json`](../../apps/client/package.json#L15-L26):
 
 ```bash
 cd apps/client
@@ -191,7 +193,7 @@ soglia delle scene grandi, con le stesse tre serie di corse.
 Quanto lo Scrittoio ci mette a rispondere a un gesto, col moto pieno e con
 l'ora vera. Lo misura [`interaction.mjs`](../../apps/client/bench/interaction.mjs),
 in Chromium con l'host finto; la stessa domanda nell'app vera, con la sua
-WebView, la fanno i sei scenari di [Misure nella WebView](../development/webview-measurements.md):
+WebView, la fanno i sette scenari di [Misure nella WebView](../development/webview-measurements.md):
 
 ```bash
 cd apps/client

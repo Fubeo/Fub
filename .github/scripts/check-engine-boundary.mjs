@@ -4,7 +4,9 @@
 // - WordCraft da `fub-format-rich` (documenti) e da
 //   `fub-features/src/proof.rs` (correttore); i test di `fub-host` lo usano per
 //   costruire documenti di prova;
-// - GridCraft da `fub-format-xlsx` (cartelle di Excel).
+// - GridCraft da `fub-format-xlsx` (cartelle di Excel);
+// - tutti e due dalle prove di `tools/motori-prova`, programmi di misura fuori
+//   dal workspace che collegano un motore a Fub da solo (K0).
 //
 // `dependency_invariant.rs` vede i `Cargo.toml`; questo guard vede i sorgenti,
 // dove un `use wordcraft_…` passerebbe da una dipendenza già dichiarata per
@@ -22,13 +24,14 @@ const engines = [
       /^crates\/fub-format-rich\//,
       /^crates\/fub-features\/src\/proof\.rs$/,
       /^crates\/fub-host\/tests\//,
+      /^tools\/motori-prova\//,
     ],
     hint: "Passa da fub-format-rich o da fub-features/src/proof.rs (vedi l'ADR 0213).",
   },
   {
     name: "GridCraft",
     crate: /\bgridcraft_[a-z]+\s*(?:::|;|\s+as\b)/,
-    allowed: [/^crates\/fub-format-xlsx\//],
+    allowed: [/^crates\/fub-format-xlsx\//, /^tools\/motori-prova\//],
     hint: "Passa da fub-format-xlsx (vedi l'ADR 0214).",
   },
 ];

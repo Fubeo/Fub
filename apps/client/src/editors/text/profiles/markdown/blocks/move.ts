@@ -5,6 +5,7 @@
 // Markdown si legga ancora come prima. I numeri delle voci li sistema la
 // rinumerazione (D4), che ascolta lo spostamento.
 import { EditorSelection, type EditorState, type SelectionRange, type StateCommand, type TransactionSpec } from "@codemirror/state";
+import { blockGesture } from "../block-gesture";
 import { type Block, type BlockKind } from "./model";
 import { modelOf, touchedBlocks } from "./transform";
 
@@ -34,6 +35,12 @@ function gapBetween(left: Block, right: Block, base: string): string {
 /// serve a chi deve portarsi dietro qualcosa, come la selezione di blocchi.
 export interface MoveSpec extends TransactionSpec {
   follow(pos: number): number | null;
+  /// Il contrario di `follow` per tutta la finestra riscritta: da dove viene,
+  /// nel documento di prima, un punto del documento nuovo (`null` fuori dalla
+  /// finestra). Serve a chi anima lo spostamento (N13).
+  origin(pos: number): number | null;
+  /// Dove stanno, nel documento nuovo, i blocchi spostati.
+  moved: { from: number; to: number };
 }
 
 /// La transazione che porta i fratelli `[first, last]` (indici di blocco)
@@ -70,13 +77,20 @@ export function moveSiblings(
   if (hi + 1 < sibs.length) order.push(hi + 1);
   let text = "";
   let movedFrom = -1;
+  // Ogni pezzo del testo nuovo con il suo posto di prima: i blocchi e, dopo
+  // ciascuno, le righe vuote che venivano dopo di lui.
+  const pieces: { at: number; length: number; old: number }[] = [];
   order.forEach((k, i) => {
     if (i > 0) {
       const prev = order[i - 1]!;
-      if (prev + 1 === k) text += gapAfter(prev)!;
-      else text += gapBetween(blocks[sibs[prev]!]!, blocks[sibs[k]!]!, gapAfter(prev) ?? gapBefore(prev) ?? gapBefore(k) ?? gapAfter(k) ?? "\n\n");
+      const gap = prev + 1 === k
+        ? gapAfter(prev)!
+        : gapBetween(blocks[sibs[prev]!]!, blocks[sibs[k]!]!, gapAfter(prev) ?? gapBefore(prev) ?? gapBefore(k) ?? gapAfter(k) ?? "\n\n");
+      pieces.push({ at: text.length, length: gap.length, old: blocks[sibs[prev]!]!.to });
+      text += gap;
     }
     if (k === a) movedFrom = text.length;
+    pieces.push({ at: text.length, length: chunk(k).length, old: blocks[sibs[k]!]!.from });
     text += chunk(k);
   });
   const from = blocks[sibs[Math.min(...order)]!]!.from;
@@ -95,7 +109,18 @@ export function moveSiblings(
   const selection = ranges.every((range) => range !== null)
     ? EditorSelection.create(ranges as SelectionRange[], state.selection.mainIndex)
     : undefined;
-  return { changes, selection, userEvent: "move.block", scrollIntoView: true, follow };
+  const origin = (pos: number) => {
+    const at = pos - from;
+    if (at < 0 || at > text.length) return null;
+    // Sul confine fra due pezzi vince quello che comincia lì.
+    const piece = pieces.find((each) => at >= each.at && at < each.at + each.length) ??
+      pieces.find((each) => at === each.at + each.length);
+    return piece ? piece.old + (at - piece.at) : null;
+  };
+  const moved = { from: from + movedFrom, to: from + movedFrom + (movedEnd - movedStart) };
+  // Di serie è uno scambio, come da tastiera; il rilascio lo ridice.
+  const annotations = blockGesture.of({ kind: "swap", origin, lead: moved });
+  return { changes, selection, userEvent: "move.block", scrollIntoView: true, annotations, follow, origin, moved };
 }
 
 /// La tratta di fratelli su cui lavora un comando: quella data, o il blocco

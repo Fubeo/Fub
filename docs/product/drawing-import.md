@@ -108,7 +108,7 @@ altro disegno.
 
 | In Excalidraw | Nel disegno |
 | --- | --- |
-| rettangolo, ellisse, rombo | la stessa forma, col rettangolo dall'angolo tondo e il rombo della [raccolta di forme](drawing-library.md) |
+| rettangolo, ellisse, rombo | la stessa forma, col rettangolo dall'angolo tondo e il rombo delle raccolte di forme |
 | riempimento pieno, a tratteggio, incrociato | pieno, o una [campitura](drawing-patterns.md) a righe del colore del riempimento, col passo di Excalidraw |
 | testo dentro una forma | l'[etichetta della forma](drawing-labels.md) |
 | testo a sé | un testo, a punto o in area se in Excalidraw ha una larghezza fissa |

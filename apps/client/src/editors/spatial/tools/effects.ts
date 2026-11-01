@@ -53,8 +53,6 @@ import { homeOf, resourcesOf, usersOf, type Home } from "./resources";
 /// I generi di effetto, nell'ordine del menu «Aggiungi effetto».
 export type EffectKind = "shadow" | "inner-shadow" | "glow" | "inner-glow" | "blur";
 
-export const EFFECT_KINDS: readonly EffectKind[] = ["shadow", "inner-shadow", "glow", "inner-glow", "blur"];
-
 /// Un'ombra, esterna o interna: lo scostamento, la sfocatura, il colore
 /// `#rrggbb` e la sua opacità.
 export interface Shadow {

@@ -35,7 +35,7 @@ const coordinates = (d: string, axis: "x" | "y"): number[] =>
 
 describe("la griglia", () => {
   it("parte spenta, con un passo che divide la pagina di un documento nuovo", () => {
-    expect(DEFAULT_GRID).toEqual({ shown: false, snap: false, step: 20, steps: {}, guides: true, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
+    expect(DEFAULT_GRID).toEqual({ shown: false, snap: false, step: 20, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE });
     for (const step of GRID_STEPS.px) {
       expect(1600 % step).toBe(0);
       expect(1000 % step).toBe(0);

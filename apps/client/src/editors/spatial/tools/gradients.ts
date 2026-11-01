@@ -34,7 +34,6 @@ import type { DocumentModel, ElementPart, LeafNode } from "../scene/model";
 import type { Op } from "../scene/ops";
 import { formatTransform, type Elem } from "../scene/serialize";
 import { fraction, length, opacity as parseOpacity, paint, paintReference, transform as parseTransform, trim, type Paint } from "../scene/values";
-import type { DrawKey } from "../strings";
 import { elemOf, plainAttributes } from "./arrange";
 import type { NewIds } from "./edit";
 import { geometryBox, type Unit } from "./hit";
@@ -52,8 +51,6 @@ export type GradientKind = "linear" | "radial";
 /// Come una sfumatura continua oltre i suoi capi: col colore del capo, a
 /// specchio o daccapo.
 export type Spread = "pad" | "reflect" | "repeat";
-
-export const SPREADS: readonly Spread[] = ["pad", "reflect", "repeat"];
 
 /// Un punto di una sfumatura, come lo mostra il pannello.
 export interface GradientStop {
@@ -275,40 +272,6 @@ export interface GradientView {
   readonly angle: number | null;
 }
 
-/// Vero se due sfumature si vedono uguali, a parte dove stanno.
-export function sameLook(a: GradientLook, b: GradientLook): boolean {
-  if (a.kind !== b.kind || a.spread !== b.spread || a.stops.length !== b.stops.length) return false;
-  return a.stops.every((stop, at) => {
-    const other = b.stops[at]!;
-    return stop.color === other.color && Math.abs(stop.offset - other.offset) < 1e-4 && Math.abs(stop.opacity - other.opacity) < 1e-4;
-  });
-}
-
-/// Le sfumature di `painted`.
-export function gradientView(painted: readonly Painted[]): GradientView {
-  if (painted.length === 0) return { count: 0, gradients: 0, kind: null, based: false, look: null, angle: null };
-  const first = painted[0]!.gradient;
-  const kinds = new Set(painted.map((part) => part.gradient?.look.kind ?? (part.solid === null ? "other" : "color")));
-  const kind = kinds.size === 1 ? [...kinds][0]! : null;
-  const look = first !== null && painted.every((part) => part.gradient !== null && sameLook(part.gradient.look, first.look)) ? first.look : null;
-  const shaded = painted.filter((part) => part.gradient !== null);
-  const angles = shaded.map((part) => {
-    const placed = part.gradient!.place;
-    return placed === null ? null : Math.round(placeAngle(placed) * 100) / 100;
-  });
-  const angle = angles.length > 0 && angles.every((each) => each !== null && each === angles[0]) ? angles[0]! : null;
-  const based = painted.some((part) => part.gradient === null && part.base !== null);
-  return { count: painted.length, gradients: shaded.length, kind, based, look, angle };
-}
-
-/// Una sfumatura sul foglio: le parti che la mostrano uguale e nello stesso
-/// posto, la sfumatura e dove sta.
-export interface GradientHandles {
-  readonly parts: readonly Painted[];
-  readonly look: GradientLook;
-  readonly place: GradientPlace;
-}
-
 /// I punti di `place`, nell'ordine in cui la tastiera li percorre.
 export function placeGrips(place: GradientPlace): Array<readonly [PlaceGrip, Point]> {
   return place.kind === "linear"
@@ -322,34 +285,6 @@ export function placeGrips(place: GradientPlace): Array<readonly [PlaceGrip, Poi
         ["b", place.b],
         ["focus", place.focus],
       ];
-}
-
-/// Vero se `a` e `b` stanno nello stesso posto, a meno di `tolerance`.
-function samePlace(a: GradientPlace, b: GradientPlace, tolerance: number): boolean {
-  if (a.kind !== b.kind) return false;
-  const near = (p: Point, q: Point): boolean => Math.abs(p[0] - q[0]) <= tolerance && Math.abs(p[1] - q[1]) <= tolerance;
-  // La riga di uguale colore conta per la direzione, non per la lunghezza.
-  if (a.kind === "linear" && b.kind === "linear") {
-    const u = sub(a.across, a.start);
-    const v = sub(b.across, b.start);
-    return near(a.start, b.start) && near(a.end, b.end) && dot(u, v) > 0 && Math.abs(cross(u, v)) <= 1e-3 * Math.hypot(u[0], u[1]) * Math.hypot(v[0], v[1]);
-  }
-  return placeGrips(a).every(([, p], at) => near(p, placeGrips(b)[at]![1]));
-}
-
-/// Le sfumature di `painted` sul foglio, una per gruppo di parti che la
-/// mostrano uguale e nello stesso posto, a meno di `tolerance` unità della
-/// scena; nell'ordine della prima parte di ciascuna.
-export function gradientHandles(painted: readonly Painted[], tolerance: number): GradientHandles[] {
-  const out: Array<{ parts: Painted[]; look: GradientLook; place: GradientPlace }> = [];
-  for (const part of painted) {
-    const used = part.gradient;
-    if (used === null || used.place === null) continue;
-    const same = out.find((each) => sameLook(each.look, used.look) && samePlace(each.place, used.place!, tolerance));
-    if (same !== undefined) same.parts.push(part);
-    else out.push({ parts: [part], look: used.look, place: used.place });
-  }
-  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -383,19 +318,6 @@ export function placeAngle(place: GradientPlace): number {
 /// `m` attorno a `pivot`, che resta fermo.
 const about = (pivot: Point, m: Matrix): Matrix => compose(translate(pivot[0], pivot[1]), compose(m, translate(-pivot[0], -pivot[1])));
 
-/// La trasformazione che tiene fermo `pivot` e porta `from` in `to`,
-/// girando e scalando: `null` se `from` sta su `pivot`.
-function similarity(pivot: Point, from: Point, to: Point): Matrix | null {
-  const u = sub(from, pivot);
-  const v = sub(to, pivot);
-  const squared = dot(u, u);
-  if (!(squared > 0)) return null;
-  // v / u come numeri complessi.
-  const re = dot(u, v) / squared;
-  const im = cross(u, v) / squared;
-  return about(pivot, [re, im, -im, re, 0, 0]);
-}
-
 /// `place` portata da `m`, una trasformazione della scena.
 export function placeMapped(place: GradientPlace, m: Matrix): GradientPlace {
   if (place.kind === "linear") return { kind: "linear", start: apply(m, place.start), end: apply(m, place.end), across: apply(m, place.across) };
@@ -410,98 +332,6 @@ export function placeTurned(place: GradientPlace, degrees: number): GradientPlac
   const cos = Math.cos(turn);
   const sin = Math.sin(turn);
   return placeMapped(place, about(pivot, [cos, sin, -sin, cos, 0, 0]));
-}
-
-/// Dove sta il fuoco di una radiale nelle sue coordinate: quanti raggi `a`
-/// e quanti raggi `b` dal centro.
-function focusShare(center: Point, a: Point, b: Point, focus: Point): Point | null {
-  const u = sub(a, center);
-  const v = sub(b, center);
-  const det = cross(u, v);
-  if (det === 0 || !Number.isFinite(det)) return null;
-  const f = sub(focus, center);
-  return [cross(f, v) / det, cross(u, f) / det];
-}
-
-/// Il fuoco che sta a `share` raggi dal centro, dentro il bordo.
-function focusAt(center: Point, a: Point, b: Point, [s, t]: Point): Point {
-  const away = Math.hypot(s, t);
-  const k = away > FOCUS_LIMIT ? FOCUS_LIMIT / away : 1;
-  return add(center, add(scale(sub(a, center), s * k), scale(sub(b, center), t * k)));
-}
-
-/// `place` col punto `grip` portato in `to`, nella scena:
-///
-/// - un capo di una lineare gira e allunga la linea attorno all'altro, e
-///   le righe di uguale colore girano con lei;
-/// - il centro di una radiale la sposta tutta;
-/// - il capo `a` la gira e la scala attorno al centro, `b` compreso;
-/// - il capo `b` allunga o accorcia soltanto il suo raggio, nella sua
-///   direzione, fino a un millesimo dell'altro;
-/// - il fuoco si sposta, dentro il bordo.
-///
-/// Il fuoco resta dov'era nelle coordinate della sfumatura. `place` resta
-/// com'è se il gesto non si può fare, come un capo portato sull'altro.
-export function placeWith(place: GradientPlace, grip: PlaceGrip, to: Point): GradientPlace {
-  if (place.kind === "linear") {
-    if (grip !== "start" && grip !== "end") return place;
-    const fixed = grip === "start" ? place.end : place.start;
-    const moved = grip === "start" ? place.start : place.end;
-    if (span(to, fixed) === 0) return place;
-    const m = similarity(fixed, moved, to);
-    if (m === null) {
-      const start = grip === "start" ? to : place.start;
-      const end = grip === "end" ? to : place.end;
-      return { kind: "linear", start, end, across: add(start, quarter(sub(end, start))) };
-    }
-    return placeMapped(place, m);
-  }
-  const { center, a, b, focus } = place;
-  switch (grip) {
-    case "center":
-      return placeMapped(place, translate(to[0] - center[0], to[1] - center[1]));
-    case "a": {
-      if (span(to, center) === 0) return place;
-      const m = similarity(center, a, to);
-      return m === null ? place : placeMapped(place, m);
-    }
-    case "b": {
-      const shares = focusShare(center, a, b, focus);
-      const along = sub(b, center);
-      const length = Math.hypot(along[0], along[1]);
-      if (shares === null || !(length > 0)) return place;
-      const reach = Math.max(dot(sub(to, center), along) / length, span(a, center) / 1000);
-      const next = add(center, scale(along, reach / length));
-      return { kind: "radial", center, a, b: next, focus: focusAt(center, a, next, shares) };
-    }
-    case "focus": {
-      const shares = focusShare(center, a, b, to);
-      return shares === null ? place : { kind: "radial", center, a, b, focus: focusAt(center, a, b, shares) };
-    }
-    default:
-      return place;
-  }
-}
-
-/// `to` vincolato da `from` a un multiplo di 45°, alla stessa distanza
-/// lungo quella direzione: il gesto con `Maiusc`.
-export function constrained(from: Point, to: Point): Point {
-  const v = sub(to, from);
-  const length = Math.hypot(v[0], v[1]);
-  if (!(length > 0)) return to;
-  const step = Math.PI / 4;
-  const angle = Math.round(Math.atan2(v[1], v[0]) / step) * step;
-  const dir: Point = [Math.cos(angle), Math.sin(angle)];
-  return add(from, scale(dir, dot(v, dir)));
-}
-
-/// La sfumatura tracciata da `from` a `to` nella scena: una lineare con le
-/// righe di uguale colore di traverso, o una radiale circolare col centro
-/// in `from`. `null` se i due punti coincidono.
-export function drawnPlace(kind: GradientKind, from: Point, to: Point): GradientPlace | null {
-  if (span(from, to) === 0) return null;
-  const turned = add(from, quarter(sub(to, from)));
-  return kind === "linear" ? { kind, start: from, end: to, across: turned } : { kind, center: from, a: to, b: turned, focus: from };
 }
 
 /// Dove nasce una sfumatura su una parte con la matrice `matrix` e il
@@ -544,13 +374,6 @@ export function placeAs(place: GradientPlace, kind: GradientKind): GradientPlace
   return { kind: "linear", start, end: place.a, across: add(start, quarter(sub(place.a, start))) };
 }
 
-/// Il punto della scena dove sta `t`, da 0 a 1, lungo la linea di `place`:
-/// per una radiale, lungo il primo raggio.
-export function pointAt(place: GradientPlace, t: number): Point {
-  const [from, to] = place.kind === "linear" ? [place.start, place.end] : [place.center, place.a];
-  return add(from, scale(sub(to, from), t));
-}
-
 /// Dove sta il punto `p` della scena lungo la linea di `place`: sulla riga
 /// di uguale colore che passa per lui, per una lineare; per una radiale
 /// lungo il primo raggio. 0 al primo capo, 1 al secondo, oltre fuori.
@@ -583,52 +406,10 @@ export function sortedStops(stops: readonly GradientStop[]): GradientStop[] {
     .map(({ stop }) => stop);
 }
 
-/// Il colore e l'opacità che `stops` hanno in `t`, mescolati in sRGB come
-/// li disegna SVG.
-export function stopAt(stops: readonly GradientStop[], t: number): { readonly color: string; readonly opacity: number } {
-  const first = stops[0]!;
-  if (t <= first.offset) return first;
-  for (let i = 1; i < stops.length; i++) {
-    const stop = stops[i]!;
-    if (t > stop.offset) continue;
-    const before = stops[i - 1]!;
-    const k = stop.offset > before.offset ? (t - before.offset) / (stop.offset - before.offset) : 1;
-    const p = rgbOf(before.color);
-    const q = rgbOf(stop.color);
-    return { color: hex(p.map((value, at) => value + (q[at]! - value) * k)), opacity: before.opacity + (stop.opacity - before.opacity) * k };
-  }
-  return stops[stops.length - 1]!;
-}
-
 /// I tre canali di `#rrggbb`.
 function rgbOf(color: string): [number, number, number] {
   const value = paint(color);
   return value === null || value === "none" ? [0, 0, 0] : [value[0], value[1], value[2]];
-}
-
-/// `stops` con un punto in più in `t`, del colore e dell'opacità che si
-/// vedono lì, così che niente cambi a vederlo; e dove sta il nuovo.
-export function withStop(stops: readonly GradientStop[], t: number): { readonly stops: GradientStop[]; readonly index: number } {
-  const at = Math.min(1, Math.max(0, t));
-  const seen = stopAt(stops, at);
-  // Dopo i punti nella stessa posizione, come in Illustrator.
-  let index = stops.findIndex((stop) => stop.offset > at);
-  if (index < 0) index = stops.length;
-  const out = [...stops];
-  out.splice(index, 0, { offset: at, color: seen.color, opacity: seen.opacity });
-  return { stops: out, index };
-}
-
-/// `stops` col punto `index` in `t`, rimesso in ordine; e dove sta adesso.
-export function movedStop(stops: readonly GradientStop[], index: number, t: number): { readonly stops: GradientStop[]; readonly index: number } {
-  const moved = { ...stops[index]!, offset: Math.min(1, Math.max(0, t)) };
-  const rest = stops.filter((_, at) => at !== index);
-  // Fra i punti della stessa posizione resta dalla parte da cui arriva.
-  const from = stops[index]!.offset;
-  let to = moved.offset === from ? index : rest.findIndex((stop) => (moved.offset < from ? stop.offset > moved.offset : stop.offset >= moved.offset));
-  if (to < 0) to = rest.length;
-  rest.splice(to, 0, moved);
-  return { stops: rest, index: to };
 }
 
 /// `stops` rovesciati: il primo colore all'altro capo.
@@ -685,28 +466,6 @@ export function averageColor(stops: readonly GradientStop[]): string {
   if (total === 0) return first.color;
   return hex(weight > 1e-9 ? sum.map((value) => value / weight) : plain.map((value) => value / total));
 }
-
-/// Una sfumatura pronta del menu: il nome, e i punti; quella senza punti è
-/// la dissolvenza del colore che la sfumatura ha già.
-export interface GradientPreset {
-  readonly id: string;
-  readonly label: DrawKey;
-  readonly stops: readonly GradientStop[] | null;
-}
-
-/// I punti di `colors`, pieni e a distanze uguali.
-const evenly = (...colors: string[]): GradientStop[] => colors.map((color, at) => ({ offset: colors.length === 1 ? 0 : at / (colors.length - 1), color, opacity: 1 }));
-
-/// Le sfumature pronte, coi colori della tavolozza: si leggono anche con le
-/// forme comuni di daltonismo.
-export const GRADIENT_PRESETS: readonly GradientPreset[] = [
-  { id: "fade", label: "draw.gradient.preset.fade", stops: null },
-  { id: "mono", label: "draw.gradient.preset.mono", stops: evenly("#ffffff", "#000000") },
-  { id: "sky", label: "draw.gradient.preset.sky", stops: evenly("#56b4e9", "#0072b2") },
-  { id: "sunset", label: "draw.gradient.preset.sunset", stops: evenly("#f0e442", "#e69f00", "#d55e00") },
-  { id: "meadow", label: "draw.gradient.preset.meadow", stops: evenly("#f0e442", "#009e73") },
-  { id: "dusk", label: "draw.gradient.preset.dusk", stops: evenly("#cc79a7", "#0072b2") },
-];
 
 // ---------------------------------------------------------------------------
 // Scrivere.
@@ -977,27 +736,6 @@ export interface PreviewPaint {
   readonly value: string | Elem;
 }
 
-/// Ciò che le parti di `units` che mostrano `channel`, o soltanto quelle di
-/// `only`, mostrerebbero con `change`, per l'anteprima. Le parti che
-/// restano come sono non ci sono.
-export function gradientPreview(
-  model: DocumentModel,
-  units: readonly Unit[],
-  channel: PaintChannel,
-  change: GradientChange,
-  only: ReadonlySet<ElementPart> | null = null,
-): Map<ElementPart, PreviewPaint> {
-  const resources = resourcesOf(model);
-  const out = new Map<ElementPart, PreviewPaint>();
-  for (const part of paintedParts(model, units, channel)) {
-    if (only !== null && !only.has(part.node)) continue;
-    const plan = planOf(part, change, resources);
-    if (plan === null) continue;
-    out.set(part.node, { name: part.name, value: "color" in plan ? plan.color : gradientElem("preview", plan.look, plan.attrs) });
-  }
-  return out;
-}
-
 /// Il cambio pronto, e quante parti cambiano.
 export interface GradientChanged extends Restyled {
   /// Le parti a cui il cambio arriva.
@@ -1054,63 +792,3 @@ export function gradientOps(
 // ---------------------------------------------------------------------------
 // Coordinate nuove.
 // ---------------------------------------------------------------------------
-
-/// Gli attributi che dicono dove sta una sfumatura: le coordinate, le unità e
-/// la trasformazione.
-const PLACE_ATTRS: readonly string[] = GRADIENT_ATTRS.filter((name) => name !== "spreadMethod");
-
-/// Come segue un oggetto le cui coordinate cambiano, come in «Applica
-/// trasformazione», la risorsa `node` che usa come colore: `same` se si vede
-/// uguale dovunque, come un campione o una sfumatura di un colore solo;
-/// `gradient` per una sfumatura che si legge, e che si riscrive dove si
-/// vedeva; `null` per ogni altra, come un motivo o una sfumatura che rimanda
-/// a un'altra, che resta nelle coordinate di prima.
-export function paintFollows(node: LeafNode): "same" | "gradient" | null {
-  if (node.details?.swatch !== undefined) return "same";
-  if (node.refs.length > 0) return null;
-  const gradient = gradientOf(node);
-  if (gradient === null) return null;
-  return gradient.stops.length < 2 ? "same" : "gradient";
-}
-
-/// Le coordinate della sfumatura `node`, usata da `user`, quando quelle di
-/// `user` diventano quelle che dà `m`: si vede dov'era, nelle coordinate di
-/// chi la usa (`userSpaceOnUse`), con una `gradientTransform` soltanto dove
-/// serve. `null` se non si scrive.
-export function movedPlace(node: LeafNode, user: ElementPart, m: Matrix): Record<string, string> | null {
-  const placed = placeOf(node, IDENTITY, boxOf(user));
-  const coords = placed === null ? null : writtenPlace(placeMapped(placed, m), IDENTITY);
-  return coords === null ? null : { gradientUnits: "userSpaceOnUse", ...coords };
-}
-
-/// Gli attributi che portano la sfumatura `node` nelle coordinate `coords`
-/// di [`movedPlace`]: quelli che cambiano, `null` per quelli da togliere.
-export function placeChanges(node: LeafNode, coords: Readonly<Record<string, string>>): Record<string, string | null> {
-  const written = plainAttributes(node);
-  const out: Record<string, string | null> = {};
-  for (const name of PLACE_ATTRS) {
-    const before = written.get(name) ?? null;
-    const after = coords[name] ?? null;
-    if (!sameAttr(name, before, after)) out[name] = after;
-  }
-  return out;
-}
-
-/// La sfumatura `node` come copia privata con l'id `id` e le coordinate
-/// `coords` di [`movedPlace`]: il resto com'è, con un id nuovo per ogni sua
-/// parte che ne ha uno. `null` se non si scrive.
-export function movedCopy(node: LeafNode, id: string, coords: Readonly<Record<string, string>>, ids: NewIds): Elem | null {
-  const elem = elemOf(node);
-  if (elem === null) return null;
-  const attrs: Record<string, string> = { id, "fub:role": "private" };
-  for (const [name, value] of Object.entries(elem.attrs)) {
-    if (!(name in attrs) && !PLACE_ATTRS.includes(name)) attrs[name] = value;
-  }
-  Object.assign(attrs, coords);
-  const renamed = (each: Elem): Elem => ({
-    ...each,
-    attrs: each.attrs.id === undefined ? each.attrs : { ...each.attrs, id: ids.next("resource") },
-    ...(each.children === undefined ? {} : { children: each.children.map(renamed) }),
-  });
-  return { ...elem, attrs, ...(elem.children === undefined ? {} : { children: elem.children.map(renamed) }) };
-}

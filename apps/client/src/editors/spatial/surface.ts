@@ -44,8 +44,6 @@
 // - un SVG estraneo è l'immagine inerte del documento intero, con «Modifica»,
 //   che applica `adopt` nell'editor: l'editor c'è già, nascosto, così
 //   l'adozione è un passo di annulla, e annullarla riporta all'immagine;
-//   all'Esperto anche con «Rendi modificabile…», che nello stesso passo
-//   riscrive le sue parti nel formato dove si vedono uguali;
 // - un documento in sola lettura (un DOCTYPE, una versione futura, un file
 //   troppo grande) è l'immagine inerte del documento intero, col motivo;
 // - un file che non si legge come scena è il motivo e basta: il testo lo
@@ -64,7 +62,6 @@ import { mountZoomView, type ZoomView } from "../media/zoom-view";
 import { countObjects, describe, keyOf, linkName, outline, sceneTargets, type LinkTargets, type OutlineNode } from "./describe";
 import { familyKey } from "./fonts/faces";
 import { DrawingFonts, markupFonts, vaultFontsOf, type FontNotes, type VaultFontPort } from "./fonts/vault";
-import type { SymbolLibraryPort } from "./tools/symbol-libraries";
 import { VECTOR_EXPORTS, VECTOR_MODES, VECTOR_PROFILE } from "./modes";
 import {
   currentGrid,
@@ -92,11 +89,10 @@ import { MAX_EDIT_BYTES, MAX_ELEMENTS, readScene, ReadError, type ReadOnly } fro
 import { href as parseHref } from "./scene/values";
 import { linkTarget, nodeOf } from "./tools/arrange";
 import { createDrawEditor, type DrawEditor, type DrawExport, type DrawImages, type DrawLinks, type DrawPlace } from "./tools/editor";
-import type { DrawProof } from "./tools/editor/text-proof";
 import { inspectorChrome, type InspectorChrome } from "./tools/editor/chrome/hosts";
 import { exportDialog } from "./tools/export-dialog";
 import { asking } from "./tools/export-plan";
-import { featuresFor, workspaceLevel } from "./tools/registry";
+import { featuresFor } from "./tools/registry";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, type ImageRef } from "./read-images";
 import { fontSheets, picture, type FontSheets } from "./picture";
 import { noteSceneChange, offerStage } from "./live/registry";
@@ -120,12 +116,8 @@ export interface VectorSurfaceOptions {
   fonts?: FontSheets;
   /// I caratteri del vault, che la shell elenca e legge.
   vaultFonts?: VaultFontPort;
-  /// Le librerie di simboli del vault, che la shell elenca e legge.
-  symbolLibraries?: SymbolLibraryPort;
   /// Apre la finestra «Esporta» della shell.
   onExport?(): void;
-  /// Il correttore per il testo che si scrive.
-  proof?: DrawProof;
 }
 
 /// Le immagini del vault di un disegno: `path` è l'`href` com'è scritto nel
@@ -250,12 +242,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   const adoptButton = document.createElement("button");
   adoptButton.type = "button";
   adoptButton.className = "primary vector-notice-action";
-  // All'Esperto, accanto a «Modifica»: adotta e riscrive le parti nello
-  // stesso passo, dopo la finestra che mostra il prima e il dopo.
-  const editableButton = document.createElement("button");
-  editableButton.type = "button";
-  editableButton.className = "vector-notice-action";
-  notice.append(noticeText, adoptButton, editableButton);
+  notice.append(noticeText, adoptButton);
   const drawHost = document.createElement("div");
   drawHost.className = "vector-draw";
   const readHost = document.createElement("div");
@@ -334,10 +321,8 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   let connectedText: string | null = null;
   let connectedLanguage: string | null = null;
   /// Lo spazio di lavoro, la colonna e la griglia dell'editor: quelli
-  /// dell'ultima lettura, finché non arriva quella di questa superficie. Il
-  /// livello e le parti sono quelli con cui l'editor offre lo spazio.
+  /// dell'ultima lettura, finché non arriva quella di questa superficie.
   let workspace = currentWorkspace();
-  let { level, custom } = workspaceLevel(workspace.workspace);
   let grid = currentGrid();
   /// Chi disegna ha già scelto la griglia qui: la lettura non la riporta
   /// indietro.
@@ -468,8 +453,6 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       links,
       ...(images === undefined ? {} : { images }),
       ...(options.vaultFonts === undefined ? {} : { vaultFonts: options.vaultFonts }),
-      ...(options.symbolLibraries === undefined ? {} : { symbolLibraries: options.symbolLibraries }),
-      ...(options.proof === undefined ? {} : { proof: options.proof }),
       ...(options.onExport === undefined
         ? {}
         : {
@@ -760,15 +743,13 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     const foreign = state?.kind === "scene" && state.engine.status === "foreign";
     let message: string | null = null;
     let canAdopt = false;
-    let canMake = false;
     if (state?.kind === "unreadable") {
       message = unreadableText(state.error);
     } else if (mode === "draw" && state?.kind === "inert") {
       message = t("vector.read_only", { reason: readOnlyText(state.engine.readOnly[0]!), command: t("commands.doc.source.open") });
     } else if (mode === "draw" && foreign) {
       canAdopt = !readOnly;
-      canMake = canAdopt && featuresFor(level, custom).has("editable");
-      message = canMake ? `${t("vector.foreign")} ${t("vector.foreign.editable.hint")}` : t("vector.foreign");
+      message = t("vector.foreign");
     }
     // Chi annulla l'adozione dal foglio non resta col fuoco su un nodo
     // nascosto: passa a «Modifica».
@@ -777,8 +758,6 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     notice.hidden = message === null;
     adoptButton.textContent = t("vector.foreign.edit");
     adoptButton.hidden = !canAdopt;
-    editableButton.textContent = t("vector.foreign.editable");
-    editableButton.hidden = !canMake;
     drawHost.hidden = !(mode === "draw" && state?.kind === "scene" && !foreign);
     const image = state !== null && state.kind !== "unreadable" && (mode === "read" || state.kind === "inert" || foreign);
     readHost.hidden = !image;
@@ -795,20 +774,13 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   life.listen(adoptButton, "click", () => {
     if (editor?.adopt()) editor.focus();
   });
-  life.listen(editableButton, "click", () => {
-    void editor?.makeDrawingEditable().then((done) => {
-      if (done && !life.closed) editor?.focus();
-    });
-  });
   life.add(onLanguage(paint));
 
   // --- Lo spazio di lavoro e la griglia -------------------------------------
 
   life.add(watchWorkspace((next) => {
     workspace = next;
-    ({ level, custom } = workspaceLevel(next.workspace));
     editor?.setWorkspace(next.workspace, next.toolbar);
-    // «Rendi modificabile…» sull'avviso c'è all'Esperto.
     paint();
   }));
   void readGrid().then((next) => {
@@ -871,7 +843,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   /// legge. Quando si esporta la selezione, gli oggetti scelti senza id lo
   /// ricevono in un passo che si annulla; le scelte si ricordano.
   const exportWindow: SurfaceExportWindow = {
-    available: () => featuresFor(level, custom).has("export") && shownEngine() !== null,
+    available: () => featuresFor(workspace.workspace).has("export") && shownEngine() !== null,
     open: async () => {
       // Ciò che l'editor ha chiesto vale per questa apertura soltanto.
       const asked = exportAsked;
@@ -890,7 +862,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
         memory,
         fonts,
         fontNotes: readingFonts,
-        print: featuresFor(level, custom).has("print"),
+        print: false,
         ...(imagePort === undefined ? {} : { read: (path: string, limit: number) => imagePort.read(path, limit) }),
       });
       if (choice === null || life.closed) return null;

@@ -1,33 +1,27 @@
-// L'editor del disegno: le barre del ricalco e del ritaglio, gli strati del
-// foglio e il painter. Un pezzo di createDrawEditor (`../editor.ts`): lavora
-// sul contesto che i pezzi condividono.
+// L'editor del disegno: gli strati del foglio e il painter. Un pezzo di
+// createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
+// condividono.
 
-import { resolvedLanguage } from "../../../../i18n/strings";
-import { identifier } from "../../../../ui/a11y";
 import type { Lifetime } from "../../../../ui/lifetime";
 import type { Bounds } from "../../scene/geometry";
 import type { Point } from "../../scene/matrix";
 import { pathOf, tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../../scene/model";
 import { SVG_NS } from "../../scene/read";
-import type { Elem } from "../../scene/serialize";
 import { t } from "../../strings";
 import { createOverlay, type SceneOverlay } from "../../painter/overlay";
-import { PaintBuilder, type Page, type PaintNode, type PaintScene, type PaintSource } from "../../painter/paint";
+import { PaintBuilder, type Page, type PaintScene, type PaintSource } from "../../painter/paint";
 import { createSvgPainter, type ScenePainter } from "../../painter/svg-dom";
 import { NewIds, pageFor } from "../edit";
 import { boardAt, boardsOf, pageRect, type Board } from "../boards";
 import type { LineEnd } from "../connectors";
 import type { ConnectorKind } from "../../scene/connectors";
-import { createGuideLines, createRulers, type GuideLines, type Rulers } from "../rulers";
 import { SceneIndex, SceneIndexer } from "../hit";
-import type { Crop } from "../crop";
-import { MAX_COLORS, MIN_COLORS, TRACE_PRESETS, type TracePreset, type TraceSettings } from "../trace-settings";
 import type { DrawImages } from "../editor";
 import { INK_KEY, inkCopyKey, PAGE_SHEET } from "./constants";
 import { inlineChrome, type DrawChrome, type DrawPanelId, type DrawPanelPiece } from "./chrome/hosts";
 import type { EditorContext } from "./context";
 import { nodeAtPath } from "./helpers";
-import type { Entered, Hook, Sheet, Tracing } from "./types";
+import type { Entered, Sheet } from "./types";
 
 /// Un passo del percorso dell'isolamento: il contenitore, ciò che lo
 /// rappresenta dove sta, lui o per un simbolo l'istanza da cui ci si entra,
@@ -42,7 +36,7 @@ interface IsolationStep {
 /// essere unico nella pagina.
 let previewTips = 0;
 
-/// Ciò che le barre del ricalco e del ritaglio, gli strati del foglio e il painter dà agli altri pezzi dell'editor.
+/// Ciò che la barra del ritaglio, gli strati del foglio e il painter dà agli altri pezzi dell'editor.
 export interface StageContext {
   /// Dove stanno barra, colonna, foglio e pannelli.
   chrome: DrawChrome;
@@ -53,47 +47,11 @@ export interface StageContext {
   /// Ciò che chiede il pulsante di un pannello: aprirlo se è chiuso; con le
   /// schede, sempre mostrarlo.
   toggles: (element: HTMLElement) => boolean;
-  traceBar: HTMLDivElement;
-  presetSelect: HTMLSelectElement;
-  thresholdRange: { readonly input: HTMLInputElement; readonly field: HTMLLabelElement; readonly name: HTMLSpanElement; readonly show: () => void; };
-  colorsRange: { readonly input: HTMLInputElement; readonly field: HTMLLabelElement; readonly name: HTMLSpanElement; readonly show: () => void; };
-  detailRange: { readonly input: HTMLInputElement; readonly field: HTMLLabelElement; readonly name: HTMLSpanElement; readonly show: () => void; };
-  whiteInput: HTMLInputElement;
-  whiteField: HTMLLabelElement;
-  traceStatus: HTMLOutputElement;
-  traceApply: HTMLButtonElement;
-  traceCancel: HTMLButtonElement;
-  /// Il ricalco aperto; `null` se la barra è chiusa.
-  tracing: Tracing | null;
-  /// Le parti dell'immagine che il painter mostra coperte, e da quale
-  /// gruppo.
-  covered: { readonly paints: readonly PaintNode[]; readonly group: Elem } | null;
-  /// Il tipo dell'ultimo ricalco, e le ultime impostazioni di ogni tipo: la
-  /// barra riapre con quelle. La soglia del bianco e nero no: è quella che
-  /// divide meglio i chiari dagli scuri di ogni immagine.
-  presetLast: TracePreset;
-  settingsLast: Map<TracePreset, TraceSettings>;
-  /// L'immagine che si ritaglia, per chiave, del disegno aperto per
-  /// `loaded`: il suo ritaglio quando si è aperto e quello di adesso, nelle
-  /// sue coordinate. Si scrive quando si applica.
-  cropping: { readonly key: string; readonly loaded: number; readonly start: Crop; crop: Crop } | null;
   /// Il tipo del prossimo connettore: l'ultimo scelto nel pannello.
   connectorKind: ConnectorKind;
-  /// Con lo strumento Connettore, il puntatore sopra il foglio senza
-  /// premere: l'oggetto a cui un capo si aggancerebbe, o il capo di un
-  /// connettore scelto che prenderebbe.
-  connectorHover: { readonly hook: Hook | null; readonly end: LineEnd | null } | null;
   /// I capi dei connettori che si possono prendere, per l'indice `index`.
   lineEndsFor: { readonly index: SceneIndex; readonly ends: readonly LineEnd[] } | null;
   previewTip: string;
-  /// L'ultimo tocco dentro l'immagine che si ritaglia, per il doppio tocco
-  /// che applica.
-  cropTap: { readonly time: number; readonly at: Point } | null;
-  cropBar: HTMLDivElement;
-  cropSides: { field: HTMLLabelElement; name: HTMLSpanElement; side: "top" | "bottom" | "right" | "left"; input: HTMLInputElement; }[];
-  cropStatus: HTMLOutputElement;
-  cropApply: HTMLButtonElement;
-  cropCancel: HTMLButtonElement;
   stage: HTMLDivElement;
   dock: HTMLDivElement;
   paper: HTMLDivElement;
@@ -106,14 +64,11 @@ export interface StageContext {
   previewCamera: SVGGElement;
   previewLayer: SVGGElement;
   nameLayer: HTMLDivElement;
-  guideLines: GuideLines;
   overlay: SceneOverlay;
   /// Quante copie in simmetria del tratto in corso lo strato può mostrare.
   inkCopies: number;
   clearInk: () => void;
   cursorMark: HTMLDivElement;
-  tickFormats: Map<number, Intl.NumberFormat>;
-  rulers: Rulers;
   builder: PaintBuilder;
   indexer: SceneIndexer;
   paintSource: () => PaintSource;
@@ -141,162 +96,30 @@ export interface StageContext {
   newIds: () => NewIds;
 }
 
-/// Monta le barre del ricalco e del ritaglio, gli strati del foglio e il painter.
+/// Monta gli strati del foglio e il painter.
 export function installStage(ctx: EditorContext): void {
   const {
-    life, folio, relabels, drawingFonts, pictureFonts, root, header, toolbar, surface, live, surfaceHint, tree, historyPanel, suggestions, accessPanel,
-    boardsPanel, libraryPanel, symbolsPanel, inspector, panel, arrangeBar, nodesBar, isolationBar, textLayer, linkLayer, progressBar,
-    describeBar, pathsBar, pathsField, pathsAction, host, options
+    life, folio, drawingFonts, pictureFonts, root, header, toolbar, surface, live, surfaceHint, tree, historyPanel, suggestions, accessPanel,
+    panel, arrangeBar, isolationBar, linkLayer, progressBar, describeBar, host, options
   } = ctx;
-  // «Ricalca immagine», dal livello Esperto: come lo scostamento, in fondo
-  // al foglio. Il tipo, i suoi cursori, ciò che il ricalco trova; al posto
-  // dell'immagine, mentre si regola, il gruppo che si scriverà.
-  const traceBar = document.createElement("div");
-  ctx.traceBar = traceBar;
-  traceBar.className = "draw-paths";
-  traceBar.setAttribute("role", "group");
-  traceBar.hidden = true;
-  const traceTitle = document.createElement("span");
-  traceTitle.className = "draw-paths-title";
-  traceTitle.id = identifier("draw-trace");
-  traceBar.setAttribute("aria-labelledby", traceTitle.id);
-  const presetSelect = document.createElement("select");
-  ctx.presetSelect = presetSelect;
-  const presetOptions = new Map<TracePreset, HTMLOptionElement>();
-  for (const preset of TRACE_PRESETS) {
-    const option = document.createElement("option");
-    option.value = preset;
-    presetOptions.set(preset, option);
-    presetSelect.append(option);
-  }
-  const presetField = pathsField(presetSelect);
-  /// Un cursore da `min` a `max`, col suo valore scritto accanto: `show`
-  /// lo riscrive dopo averlo cambiato da qui.
-  const traceRange = (min: number, max: number): { readonly input: HTMLInputElement; readonly field: HTMLLabelElement; readonly name: HTMLSpanElement; readonly show: () => void } => {
-    const input = document.createElement("input");
-    input.type = "range";
-    input.min = String(min);
-    input.max = String(max);
-    input.step = "1";
-    const { field, name } = pathsField(input);
-    const value = document.createElement("span");
-    value.className = "draw-paths-value";
-    value.setAttribute("aria-hidden", "true");
-    field.append(value);
-    const show = (): void => {
-      value.textContent = input.value;
-    };
-    life.listen(input, "input", show);
-    return { input, field, name, show };
-  };
-  const thresholdRange = traceRange(0, 255);
-  ctx.thresholdRange = thresholdRange;
-  const colorsRange = traceRange(MIN_COLORS, MAX_COLORS);
-  ctx.colorsRange = colorsRange;
-  const detailRange = traceRange(0, 100);
-  ctx.detailRange = detailRange;
-  const whiteInput = document.createElement("input");
-  ctx.whiteInput = whiteInput;
-  whiteInput.type = "checkbox";
-  const whiteField = document.createElement("label");
-  ctx.whiteField = whiteField;
-  whiteField.className = "draw-paths-field draw-paths-check";
-  const whiteName = document.createElement("span");
-  whiteField.append(whiteInput, whiteName);
-  const traceStatus = document.createElement("output");
-  ctx.traceStatus = traceStatus;
-  traceStatus.className = "draw-paths-status";
-  traceStatus.setAttribute("aria-live", "polite");
-  const traceApply = pathsAction();
-  ctx.traceApply = traceApply;
-  const traceCancel = pathsAction();
-  ctx.traceCancel = traceCancel;
-  traceBar.append(
-    traceTitle,
-    presetField.field,
-    thresholdRange.field,
-    colorsRange.field,
-    detailRange.field,
-    whiteField,
-    traceApply,
-    traceCancel,
-    traceStatus,
-  );
-  ctx.tracing = null;
-  ctx.covered = null;
-  ctx.presetLast = "colors";
-  const settingsLast = new Map<TracePreset, TraceSettings>();
-  ctx.settingsLast = settingsLast;
-  relabels.push(() => {
-    traceTitle.textContent = t("draw.trace_image.title");
-    presetField.name.textContent = t("draw.trace_image.preset");
-    for (const [preset, option] of presetOptions) option.textContent = t(`draw.trace_image.preset.${preset}`);
-    thresholdRange.name.textContent = t("draw.trace_image.threshold");
-    colorsRange.name.textContent = t("draw.trace_image.colors");
-    detailRange.name.textContent = t("draw.trace_image.detail");
-    whiteName.textContent = t("draw.trace_image.white");
-    traceApply.textContent = t("draw.paths.apply");
-    traceCancel.textContent = t("draw.paths.cancel");
-    ctx.showTracing();
-  });
-
-  // «Ritaglia», dal livello Standard: come lo scostamento, in fondo al
-  // foglio. Quanto si toglie da ogni lato dell'immagine, nell'unità del
-  // documento, e quanto se ne vedrà; sul foglio, i segni da tirare.
-  ctx.cropping = null;
   ctx.connectorKind = "elbow";
-  ctx.connectorHover = null;
   ctx.lineEndsFor = null;
   /// L'id del marcatore dell'anteprima di un connettore nuovo.
   const previewTip = `draw-preview-tip-${++previewTips}`;
   ctx.previewTip = previewTip;
-  ctx.cropTap = null;
-  const cropBar = document.createElement("div");
-  ctx.cropBar = cropBar;
-  cropBar.className = "draw-paths";
-  cropBar.setAttribute("role", "group");
-  cropBar.hidden = true;
-  const cropTitle = document.createElement("span");
-  cropTitle.className = "draw-paths-title";
-  cropTitle.id = identifier("draw-crop");
-  cropBar.setAttribute("aria-labelledby", cropTitle.id);
-  const cropSides = (["top", "right", "bottom", "left"] as const).map((side) => {
-    const input = document.createElement("input");
-    input.type = "number";
-    input.inputMode = "decimal";
-    input.step = "any";
-    input.min = "0";
-    input.autocomplete = "off";
-    return { side, input, ...pathsField(input) };
-  });
-  ctx.cropSides = cropSides;
-  const cropStatus = document.createElement("output");
-  ctx.cropStatus = cropStatus;
-  cropStatus.className = "draw-paths-status";
-  const cropApply = pathsAction();
-  ctx.cropApply = cropApply;
-  const cropCancel = pathsAction();
-  ctx.cropCancel = cropCancel;
-  cropBar.append(cropTitle, ...cropSides.map((each) => each.field), cropApply, cropCancel, cropStatus);
-  relabels.push(() => {
-    cropTitle.textContent = t("draw.crop.title");
-    cropApply.textContent = t("draw.paths.apply");
-    cropCancel.textContent = t("draw.paths.cancel");
-    ctx.showCropBar();
-  });
 
   // Il foglio con la sua barra e, accanto, i pannelli: l'albero degli
-  // oggetti, le proprietà, gli attributi e, in fondo, la cronologia e
+  // oggetti, le proprietà e, in fondo, la cronologia e
   // l'accessibilità.
   const stage = document.createElement("div");
   ctx.stage = stage;
   stage.className = "draw-stage";
-  stage.append(surface, linkLayer, textLayer, arrangeBar, nodesBar, isolationBar, progressBar, describeBar, pathsBar, traceBar, cropBar);
+  stage.append(surface, linkLayer, arrangeBar, isolationBar, progressBar, describeBar);
   const dock = document.createElement("div");
   ctx.dock = dock;
   dock.className = "draw-dock";
   dock.hidden = true;
-  dock.append(boardsPanel.element, libraryPanel.element, symbolsPanel.element, tree.element, panel.element, inspector.element, historyPanel.element, accessPanel.element);
+  dock.append(tree.element, panel.element, historyPanel.element, accessPanel.element);
   header.append(ctx.topStart, toolbar);
   if (folio?.controls) header.append(folio.controls);
   header.append(ctx.topEnd);
@@ -322,8 +145,6 @@ export function installStage(ctx: EditorContext): void {
     return { element, offered, open: placed(true), close: placed(false) };
   };
   const { has } = ctx;
-  const library = piece(libraryPanel.element, () => has("library"), (open) => ctx.showLibrary(open, false));
-  const symbols = piece(symbolsPanel.element, () => has("symbols"), (open) => ctx.showSymbols(open, false));
   chrome.place(host, {
     root,
     top: header,
@@ -339,19 +160,9 @@ export function installStage(ctx: EditorContext): void {
         icon: "draw-design",
         pieces: [
           piece(panel.element, () => has("properties"), (open) => ctx.showPanel(open, false, false)),
-          piece(inspector.element, () => has("attributes") && !ctx.nestedNow(), (open) => ctx.showAttributes(open, false)),
-          piece(boardsPanel.element, () => has("board"), (open) => ctx.showBoards(open, false)),
         ],
       },
       { id: "layers", title: () => t("draw.chrome.tab.layers"), icon: "draw-layers", pieces: [piece(tree.element, () => true, (open) => ctx.showObjects(open, false))] },
-      {
-        id: "resources",
-        title: () => t("draw.chrome.tab.resources"),
-        icon: "draw-resources",
-        pieces: [library, symbols],
-        // Una ricerca sola, quando ci sono tutte e due.
-        arranged: (inside) => ctx.shareSearch(inside.includes(library) && inside.includes(symbols)),
-      },
       { id: "history", title: () => t("draw.chrome.tab.history"), icon: "draw-history", pieces: [piece(historyPanel.element, () => has("history"), (open) => ctx.showHistory(open, false))] },
       { id: "accessibility", title: () => t("draw.chrome.tab.accessibility"), icon: "draw-access", pieces: [piece(accessPanel.element, () => has("accessibility"), (open) => ctx.showAccess(open, false))] },
     ],
@@ -411,9 +222,6 @@ export function installStage(ctx: EditorContext): void {
   nameLayer.className = "draw-sheets";
   nameLayer.setAttribute("aria-hidden", "true");
   surface.append(nameLayer);
-  // Le guide del documento: sopra il disegno, sotto le maniglie.
-  const guideLines = createGuideLines(surface);
-  ctx.guideLines = guideLines;
   const overlay = createOverlay(surface, life);
   ctx.overlay = overlay;
   ctx.inkCopies = 0;
@@ -431,20 +239,6 @@ export function installStage(ctx: EditorContext): void {
   cursorMark.setAttribute("aria-hidden", "true");
   cursorMark.hidden = true;
   surface.append(cursorMark);
-  // I righelli, per ultimi: coprono i bordi in alto e a sinistra, sopra ogni
-  // cosa. Le tacche hanno i numeri della lingua di adesso.
-  const tickFormats = new Map<number, Intl.NumberFormat>();
-  ctx.tickFormats = tickFormats;
-  const tickText = (value: number, places: number): string => {
-    let format = tickFormats.get(places);
-    if (format === undefined) {
-      format = new Intl.NumberFormat(resolvedLanguage(), { maximumFractionDigits: places, useGrouping: false });
-      tickFormats.set(places, format);
-    }
-    return format.format(value);
-  };
-  const rulers = createRulers(surface, tickText, (unit) => unit);
-  ctx.rulers = rulers;
 
   const builder = new PaintBuilder();
   ctx.builder = builder;

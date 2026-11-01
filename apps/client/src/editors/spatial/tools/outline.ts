@@ -36,8 +36,6 @@ export type Cap = "butt" | "round" | "square";
 export type Join = "miter" | "round" | "bevel";
 
 export const DASHES: readonly Dash[] = ["solid", "dashed", "dotted", "dashdot"];
-export const CAPS: readonly Cap[] = ["butt", "round", "square"];
-export const JOINS: readonly Join[] = ["miter", "round", "bevel"];
 
 /// Trattini e spazi di ogni tratteggio, in spessori, come si vedono.
 const PATTERNS: Readonly<Record<Exclude<Dash, "solid">, readonly number[]>> = {

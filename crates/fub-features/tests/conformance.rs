@@ -30,7 +30,7 @@
 //! `view_refresh_masks.rs`: una suite di conformità che copre le implementazioni
 //! che qualcuno si è ricordato di scriverci dentro è esattamente il difetto che
 //! il
-//! [§16.7](../../../docs/project/roadmap.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
+//! §16.7 della vecchia roadmap
 //! accusa — e qui morde due volte, perché una view non provata non è solo una
 //! view non presidiata: è **un dogfooding in meno**, cioè una prova in meno che
 //! le asserzioni della suite siano giuste.
@@ -52,7 +52,7 @@
 //!
 //! `il_dogfooding_dichiara_fin_dove_arriva` lo scrive: per ogni superficie, o
 //! una feature ufficiale ci sta, o c'è la ragione per cui non ci sta. È la forma
-//! della [§23.2](../../../docs/project/roadmap.md):
+//! della §23.2 della vecchia roadmap:
 //! l'invariante resta vero dove è provato, e dove non lo è si legge invece di
 //! scoprirsi.
 

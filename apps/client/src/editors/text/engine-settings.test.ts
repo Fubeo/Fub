@@ -3,6 +3,7 @@ import { smartLists } from "./smart-lists";
 import { pasteHtml } from "./paste-html";
 import { propertiesDisplay } from "./properties-display";
 import { liveReveal } from "./live-reveal";
+import { softCursor } from "./soft-cursor";
 import { describe, expect, it, vi } from "vitest";
 import { getCM } from "@replit/codemirror-vim";
 import { EditorView } from "@codemirror/view";
@@ -16,6 +17,7 @@ import {
   EDITOR_SMART_LISTS_KEY,
   EDITOR_INDENT_GUIDES_KEY,
   EDITOR_CURSOR_BLINK_KEY,
+  EDITOR_SOFT_CURSOR_KEY,
   EDITOR_PASTE_HTML_KEY,
   EDITOR_LIVE_REVEAL_KEY,
   EDITOR_PROPERTIES_KEY,
@@ -209,6 +211,26 @@ describe("text input settings", () => {
       origin: { actor: { kind: "user" }, batch: null },
     });
     await vi.waitFor(() => expect(rate()).toBe("1200ms"));
+    engine.destroy();
+    host.remove();
+  });
+
+  it("editor.soft-cursor: di serie spento, la preferenza accende il cursore morbido dei Blocchi", async () => {
+    const read = vi.mocked(settings);
+    read.mockReset();
+    read.mockResolvedValue([]);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const engine = createTextEngine(host, { onChange: () => {}, onSelectionChange: () => {} });
+    const view = EditorView.findFromDOM(host)!;
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    expect(view.state.facet(softCursor)).toBe(false);
+    read.mockResolvedValue([entry(EDITOR_SOFT_CURSOR_KEY, true)]);
+    forwardNotice({
+      event: { type: "setting_changed", key: EDITOR_SOFT_CURSOR_KEY, scope: "machine" },
+      origin: { actor: { kind: "user" }, batch: null },
+    });
+    await vi.waitFor(() => expect(view.state.facet(softCursor)).toBe(true));
     engine.destroy();
     host.remove();
   });

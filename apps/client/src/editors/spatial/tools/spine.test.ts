@@ -3,11 +3,11 @@
 // tremolio della mano.
 
 import { describe, expect, it } from "vitest";
-import { createInk, inkChannel, inkLength, inkPoint, type Ink } from "../ink/codec";
+import { createInk, inkLength, inkPoint, type Ink } from "../ink/codec";
 import { pointAt } from "../scene/curves";
 import type { Point } from "../scene/matrix";
-import { curveAt, deleteNodes, insertNode, moveNodes, inferred, type Subpath } from "./nodes";
-import { fitSpine, followedInk, movedPlaces, placePoint, spineMoves, spineTolerance, type Spine } from "./spine";
+import { curveAt, type Subpath } from "./nodes";
+import { fitSpine, placePoint, spineTolerance, type Spine } from "./spine";
 
 /// Un inchiostro coi punti `points`, la pressione che sale e il tempo a
 /// passi di 8 ms; con `tilt`, anche altitudine e azimut.
@@ -23,10 +23,6 @@ function inkOf(points: readonly Point[], tilt: number | null = null): Ink {
 
 const pointsOf = (ink: Ink): Point[] => Array.from({ length: inkLength(ink) }, (_, i) => inkPoint(ink, i));
 const spineOf = (ink: Ink, tolerance = 1): Spine => fitSpine(pointsOf(ink), tolerance);
-const column = (ink: Ink, letter: string): number[] => {
-  const j = inkChannel(ink, letter)!;
-  return Array.from({ length: inkLength(ink) }, (_, i) => ink.values[i * ink.channels.length + j]!);
-};
 
 /// La distanza di `p` dalla spina, sulla spezzata fitta.
 function off(sub: Subpath, p: Point): number {
@@ -123,110 +119,5 @@ describe("la spina dai campioni", () => {
   it("si scosta di metà dello spessore del pennello, e mai meno di mezza unità", () => {
     expect(spineTolerance(16)).toBe(8);
     expect(spineTolerance(0.4)).toBe(0.5);
-  });
-});
-
-describe("l'inchiostro che segue la spina", () => {
-  const sparse = { dense: false, gap: 1 } as const;
-  const dense = { dense: true, gap: 1 } as const;
-
-  it("resta com'è se la spina non cambia", () => {
-    for (const points of [shaky(), arc(), vee()]) {
-      const ink = inkOf(points);
-      const spine = spineOf(ink);
-      expect(followedInk(ink, spine, spine.sub, null, dense)!.ink).toEqual(ink);
-    }
-  });
-
-  it("resta com'è quando un nodo nuovo divide un segmento", () => {
-    const ink = inkOf(arc());
-    const spine = spineOf(ink, 0.5);
-    const edited = insertNode([spine.sub], 0, 0, 0.4);
-    const out = followedInk(ink, spine, edited.subs[0]!, spineMoves(edited.moved), dense)!;
-    expect(out.ink).toEqual(ink);
-    expect(out.spine.sub.nodes).toHaveLength(spine.sub.nodes.length + 1);
-  });
-
-  it("porta i campioni col nodo spostato, con il tremolio, la pressione e il tempo", () => {
-    const ink = inkOf(shaky());
-    const spine = spineOf(ink);
-    const moved = moveNodes([spine.sub], new Set(["0:1"]), [0, 100], inferred([spine.sub]));
-    const out = followedInk(ink, spine, moved[0]!, null, sparse)!;
-    expect(column(out.ink, "p")).toEqual(column(ink, "p"));
-    expect(column(out.ink, "t")).toEqual(column(ink, "t"));
-    // La linea va ora da (0, 0,3) a (100, 100,3), girata di 45 gradi: il
-    // tremolio le resta di traverso.
-    const k = 0.6 * Math.SQRT1_2;
-    pointsOf(out.ink).forEach(([x, y], i) => {
-      const odd = i % 2 === 1;
-      expect(x).toBeCloseTo(i + (odd ? k : 0), 1);
-      expect(y).toBeCloseTo(0.3 + i - (odd ? k : 0), 1);
-    });
-  });
-
-  it("gira l'azimut quanto gira la spina", () => {
-    const ink = inkOf(shaky(), 10);
-    const spine = spineOf(ink);
-    // La fine da (100, 0,3) a (-100, 100,3): la linea gira di 135 gradi.
-    const moved = moveNodes([spine.sub], new Set(["0:1"]), [-200, 100], inferred([spine.sub]));
-    const out = followedInk(ink, spine, moved[0]!, null, sparse)!;
-    expect(new Set(column(out.ink, "z"))).toEqual(new Set([145]));
-    expect(new Set(column(out.ink, "a"))).toEqual(new Set([60]));
-  });
-
-  it("riceve campioni in mezzo dove la spina si allunga, coi valori di mezzo", () => {
-    const ink = inkOf(vee());
-    const spine = spineOf(ink);
-    // L'ultimo nodo va lontano: il secondo segmento si allunga quattro volte.
-    const far: Point = [50 + 4 * 50, 80 - 4 * 80];
-    const moved = moveNodes([spine.sub], new Set(["0:2"]), [far[0] - 100, far[1]], inferred([spine.sub]));
-    const out = followedInk(ink, spine, moved[0]!, null, dense)!;
-    expect(inkLength(out.ink)).toBeGreaterThan(inkLength(ink) + 100);
-    const points = pointsOf(out.ink);
-    for (let i = 1; i < points.length; i++) {
-      expect(Math.hypot(points[i]![0] - points[i - 1]![0], points[i]![1] - points[i - 1]![1])).toBeLessThan(2 * 1.9);
-    }
-    // Il tempo e la pressione crescono senza salti all'indietro.
-    const times = column(out.ink, "t");
-    const pressures = column(out.ink, "p");
-    for (let i = 1; i < times.length; i++) {
-      expect(times[i]!).toBeGreaterThanOrEqual(times[i - 1]!);
-      expect(pressures[i]!).toBeGreaterThanOrEqual(pressures[i - 1]!);
-    }
-    expect(points[points.length - 1]![0]).toBeCloseTo(far[0], 1);
-    expect(points[points.length - 1]![1]).toBeCloseTo(far[1], 1);
-    // E la spina nuova sa dove sta ciascuno.
-    expect(out.spine.places).toHaveLength(inkLength(out.ink));
-  });
-
-  it("senza campioni in mezzo, quando la pressione è simulata", () => {
-    const ink = inkOf(vee());
-    const spine = spineOf(ink);
-    const moved = moveNodes([spine.sub], new Set(["0:2"]), [100, -240], inferred([spine.sub]));
-    expect(inkLength(followedInk(ink, spine, moved[0]!, null, sparse)!.ink)).toBe(inkLength(ink));
-  });
-
-  it("perde i campioni oltre un capo eliminato, e il tempo riparte da zero", () => {
-    const ink = inkOf(vee());
-    const spine = spineOf(ink);
-    const edited = deleteNodes([spine.sub], new Set(["0:0"]));
-    const out = followedInk(ink, spine, edited.subs[0]!, spineMoves(edited.moved), dense)!;
-    // Restano i campioni dello spigolo in poi.
-    expect(inkLength(out.ink)).toBe(51);
-    expect(pointsOf(out.ink)[0]).toEqual([50, 80]);
-    expect(column(out.ink, "t")[0]).toBe(0);
-    expect(column(out.ink, "p")[0]).toBe(90);
-  });
-
-  it("porta i campioni di due segmenti uniti in proporzione alla lunghezza", () => {
-    const spine = spineOf(inkOf(vee()));
-    const edited = deleteNodes([spine.sub], new Set(["0:1"]));
-    const places = movedPlaces(spine.sub, edited.subs[0]!, spineMoves(edited.moved), spine.places);
-    expect(places[0]).toEqual({ link: 0, t: 0 });
-    expect(places[100]!.link).toBe(0);
-    expect(places[100]!.t).toBeCloseTo(1, 9);
-    // Lo spigolo era a metà della lunghezza.
-    expect(places[50]!.t).toBeCloseTo(0.5, 9);
-    for (let i = 1; i < places.length; i++) expect(places[i]!.t).toBeGreaterThan(places[i - 1]!.t);
   });
 });

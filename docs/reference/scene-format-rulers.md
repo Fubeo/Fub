@@ -7,12 +7,17 @@
 > `apps/client/src/__fixtures__/scene-rulers/cases.json`, che valgono per
 > tutte e due le letture.
 
+Righelli e guide se ne sono andati col livello Standard
+([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)):
+`fub:guides` si legge e resta com'è, e l'editor non lo scrive più;
+`fub:units` si sceglie ancora, nella sezione Documento delle proprietà.
+
 Due attributi facoltativi della radice del
 [formato della scena](scene-format.md): l'unità in cui la superficie mostra le
 misure e le guide tirate dai righelli. Non cambiano il disegno e gli altri
 programmi li ignorano: il file resta in unità utente, e cambiare unità non
 riscrive la geometria. Come si usano sta in
-[Disegni, righelli e guide](../product/drawing-rulers.md); la superficie li
+[Disegni, unità e guide](../product/drawing-rulers.md); la superficie li
 cambia soltanto col `set` sulla radice delle
 [operazioni sulla scena](scene-operations.md), §2. Le sezioni del formato si
 citano come «formato della scena, §N».
@@ -68,8 +73,8 @@ superficie non lo sostituisce:
 - **`fub:units`:** l'unità è `px`. Scegliere un'unità sostituisce
   l'attributo, o lo toglie se è `px`.
 - **`fub:guides`:** il documento non ha guide. La superficie non ne mostra e
-  nessun gesto riscrive l'attributo; lo sostituisce soltanto l'elenco di
-  «Guide…», quando lo si conferma.
+  nessun gesto dell'editor riscrive l'attributo; lo cambia soltanto
+  un'operazione `set` sulla radice, col valore nella sua grammatica.
 - **S011** (info): una per attributo, senza span, col nome dell'attributo
   come dettaglio; prima `fub:units`, poi `fub:guides`. Sta con gli altri
   codici in formato della scena, §12.
@@ -77,13 +82,10 @@ superficie non lo sostituisce:
 ## 4. Scrittura
 
 - **Unità:** `px` non si scrive: scegliere i pixel toglie l'attributo.
-- **Guide:** FubDraw le scrive come `x 120; y 340.5 locked`, con uno spazio
-  fra le parti, `; ` fra una guida e l'altra e i numeri della geometria, al
-  più con due decimali (formato della scena, §7, punto 3). Ogni modifica
-  riscrive l'attributo intero, quindi anche le posizioni delle altre guide
-  passano per questa regola. L'ordine è quello dell'elenco: una guida nuova
-  va in fondo, una spostata resta al suo posto. Senza guide l'attributo si
-  toglie.
+- **Guide:** la forma canonica è `x 120; y 340.5 locked`, con uno spazio fra
+  le parti, `; ` fra una guida e l'altra e i numeri della geometria, al più
+  con due decimali (formato della scena, §7, punto 3). Chi cambia l'elenco
+  con un'operazione riscrive l'attributo intero, e senza guide lo toglie.
 - **Ordine sulla radice:** quando la radice si riscrive, gli attributi vanno
   nell'ordine dell'esempio: le dichiarazioni, `fub:version`, `viewBox`,
   `width`, `height` e `fub:units`, poi gli altri nell'ordine originale e in

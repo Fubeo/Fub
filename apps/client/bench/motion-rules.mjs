@@ -10,7 +10,7 @@
 // Una coreografia è un gesto che fa partire un movimento, e il gesto che lo
 // disfa. Sta scritta come le scene di `scene.mjs`: da che scena si parte, che
 // cosa si preme, come si riconosce l'arrivo. L'elenco è **chiuso**: ogni file
-// di `src/shells/scrittoio`, di `src/panels`, di `src/kit` e di `src/editors/rich`
+// di `src/shells/scrittoio`, di `src/panels`, di `src/kit`, di `src/editors/rich` e dei Blocchi
 // che fa partire una corsa di `moto` è la sorgente di una coreografia, oppure sta in `UNCOVERED` con la sua
 // ragione. Lo verifica `motion.test.ts`, perché un movimento nuovo che il banco
 // non guarda è un verde che non dice niente.
@@ -326,6 +326,33 @@ const commentShown = (yes) => (page) =>
     ([note, want]) => [...document.querySelectorAll(".rich-side-comments .rich-side-comment")].some((el) => el.textContent.includes(note)) === want,
     [NOTE, yes],
   );
+/// Nei Blocchi, la riga con `first` viene prima di quella con `second`.
+const blockOrder = (first, second) => (page) =>
+  page.evaluate(([a, b]) => {
+    const texts = [...document.querySelectorAll(".pane.focus .cm-content > .cm-line")].map((line) => line.textContent);
+    const at = (text) => texts.findIndex((line) => line.includes(text));
+    return at(a) >= 0 && at(b) >= 0 && at(a) < at(b);
+  }, [first, second]);
+/// La riga del cursore, nei Blocchi, contiene `text` (`yes`) o no: una riga
+/// appena nata può mostrare il suggerimento del blocco vuoto.
+const cursorLine = (text, yes) => (page) =>
+  page.evaluate(([want, inside]) => {
+    const node = document.getSelection()?.focusNode;
+    const line = (node instanceof Element ? node : node?.parentElement)?.closest(".pane.focus .cm-line");
+    return !!line && line.textContent.includes(want) === inside;
+  }, [text, yes]);
+/// Il blocco «Il treno» preso per la maniglia e portato 90 px più giù, col
+/// tasto ancora premuto.
+const liftBlock = async (page) => {
+  await page.hover(".pane.focus .cm-content .cm-line:has-text('Il treno')");
+  await page.waitForSelector('.pane.focus .cm-fub-block-handles[data-active="true"]');
+  const grip = await page.$(".pane.focus .cm-fub-block-grip");
+  const box = await grip.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 30, { steps: 3 });
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 90, { steps: 6 });
+};
 const light = (theme) => (page) =>
   page.evaluate(
     (t) => document.documentElement.dataset.theme === t && document.querySelector(".light-scene") === null,
@@ -807,6 +834,66 @@ export const CHOREOGRAPHIES = [
       await page.keyboard.type("/");
     },
     returned: has(".slash-panel .slash-row.is-selected"),
+  },
+  // Il blocco vivo (N13): i gesti dei Blocchi, sulla nota delle loro scene,
+  // col cursore nel paragrafo «Il treno».
+  {
+    id: "blocchi-scambia",
+    title: "Blocchi: Mod+Maiusc+↓ scambia il paragrafo col titolo sotto, e i due scivolano al loro posto",
+    sources: ["src/editors/text/profiles/markdown/blocks/motion.ts"],
+    scene: "blocchi-01-passaggio",
+    act: (page) => page.keyboard.press("Control+Shift+ArrowDown"),
+    arrived: blockOrder("Cose da fare", "Il treno"),
+    undo: (page) => page.keyboard.press("Control+Shift+ArrowUp"),
+    returned: blockOrder("Il treno", "Cose da fare"),
+  },
+  {
+    id: "blocchi-trasforma",
+    title: "Blocchi: il paragrafo diventa un titolo crescendo sul posto, e torna paragrafo",
+    sources: ["src/editors/text/profiles/markdown/blocks/motion.ts"],
+    scene: "blocchi-01-passaggio",
+    act: (page) => page.keyboard.press("Control+Alt+2"),
+    arrived: (page) => page.evaluate(() => [...document.querySelectorAll(".pane.focus .cm-fub-h2")].some((el) => el.textContent.includes("treno"))),
+    undo: (page) => page.keyboard.press("Control+Alt+0"),
+    returned: (page) => page.evaluate(() => ![...document.querySelectorAll(".pane.focus .cm-fub-h2")].some((el) => el.textContent.includes("treno"))),
+  },
+  {
+    id: "blocchi-nasce",
+    title: "Blocchi: Invio fa nascere una riga che scende di 8 px e appare; Backspace la toglie in meno di 140 ms",
+    sources: ["src/editors/text/profiles/markdown/blocks/motion.ts"],
+    scene: "blocchi-01-passaggio",
+    // In fondo al paragrafo, che va a capo: «Fine» da sola si ferma alla
+    // prima riga vista e Invio lo spezzerebbe a metà.
+    setup: async (page) => {
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("End");
+    },
+    act: (page) => page.keyboard.press("Enter"),
+    arrived: cursorLine("Il treno", false),
+    undo: (page) => page.keyboard.press("Backspace"),
+    returned: cursorLine("Il treno", true),
+    exit: true,
+  },
+  {
+    id: "blocchi-sceglie",
+    title: "Blocchi: Esc sceglie il blocco del cursore e il velo della selezione appare; Esc lo lascia",
+    sources: ["src/editors/text/profiles/markdown/blocks/motion.ts"],
+    scene: "blocchi-01-passaggio",
+    act: (page) => page.keyboard.press("Escape"),
+    arrived: has(".pane.focus .cm-fub-block-mark"),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: lacks(".pane.focus .cm-fub-block-mark"),
+  },
+  {
+    id: "blocchi-solleva",
+    title: "Blocchi: la maniglia trascinata solleva il blocco e gli altri si scostano; Esc lo rimette al suo posto",
+    sources: ["src/editors/text/profiles/markdown/blocks/handles.ts"],
+    scene: "blocchi-01-passaggio",
+    act: liftBlock,
+    arrived: has(".pane.focus .cm-fub-block-lift"),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: lacks(".pane.focus .cm-fub-block-lift, .pane.focus .cm-fub-block-lifted"),
+    holds: true,
   },
 ];
 

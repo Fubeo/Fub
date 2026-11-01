@@ -63,8 +63,11 @@ const MOTION_TOKEN = Object.keys(MOTION) as readonly (keyof typeof MOTION)[];
 
 /// La durata delle scene è delle coreografie di `src/moto/`, non della pelle:
 /// è dichiarata perché una pelle di terzi possa allinearsi, non per essere
-/// spesa da quella di serie.
-const SPENT_BY_SKIN = MOTION_TOKEN.filter((name) => name !== "duration-scene");
+/// spesa da quella di serie. Lo stesso vale per la curva d'uscita: le uscite
+/// della shell passano da `exitGhost` con la curva di `moto`, e l'ultima regola
+/// della pelle che la spendeva (il gesso della presentazione) se n'è andata
+/// col livello Standard (decisione 0231).
+const SPENT_BY_SKIN = MOTION_TOKEN.filter((name) => name !== "duration-scene" && name !== "ease-in");
 
 /// Il corpo di un blocco `selettore { … }` di primo livello, coi commenti già
 /// tolti: senza toglierli, un `--token: valore;` citato dentro una spiegazione

@@ -11,7 +11,14 @@
 > i vettori di prova da 50 a 59, 63, 64, 76 e 77 ([operazioni sulla
 > scena](scene-operations.md), §9), il disegno in `painter/paint.ts`, e le
 > punte delle linee in `tools/tips.ts`, coi vertici in `scene/markers.ts`;
-> le campiture in `tools/hatches.ts`, i motivi in `tools/patterns.ts`.
+> le campiture in `tools/hatches.ts`.
+
+Delle risorse l'editor sceglie ancora le punte dei tratti (i marcatori).
+Sfumature, campioni, motivi, campiture, ritagli, maschere, filtri e
+tracciati dei testi non si creano più
+([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)): quelli
+dei file si leggono, si vedono, restano identici, e le operazioni tengono
+veri i riferimenti.
 
 Una parte del [formato della scena](scene-format.md), §4. Una risorsa è un
 elemento che non si disegna da solo e che gli oggetti usano per riferimento:

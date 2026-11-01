@@ -114,6 +114,15 @@ export default defineConfig({
       allow: [
         searchForWorkspaceRoot(process.cwd()),
         fileURLToPath(new URL("../../crates/fub-features/templates", import.meta.url)),
+        // Sotto Vitest, anche gli altri disegni del corpus che
+        // `src/editors/spatial/corpus-open.test.ts` apre: quelli di altri
+        // programmi e l'icona del clipper. Il server di sviluppo non li serve.
+        ...(process.env.VITEST
+          ? [
+              fileURLToPath(new URL("../../crates/fub-scene/tests/corpus", import.meta.url)),
+              fileURLToPath(new URL("../clipper/icons", import.meta.url)),
+            ]
+          : []),
       ],
     },
   },

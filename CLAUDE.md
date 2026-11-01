@@ -82,10 +82,12 @@ was needed or an unverified architectural change.
 4. Read **only** the canonical page of the area and the deeper pages you need.
    For cross-cutting work read
    [`docs/architecture/components-and-boundaries.md`](docs/architecture/components-and-boundaries.md).
+   To find your way around paths, the owner of a rule or "where is this
+   defined", start from [`docs/map/`](docs/map/).
 5. If you touch a public or persistent contract, read the matching page in
    [`docs/reference/`](docs/reference/).
 6. Read an ADR (`docs/decisions/`) only when you need the reason for a choice
-   or you are weighing a change to it. Read roadmaps and TODOs only when the
+   or you are weighing a change to it. Read status pages and TODOs only when the
    task is about that work.
 7. Check in the code and the tests that the documentation still describes the
    present before you build on it.
@@ -105,10 +107,10 @@ Before implementing, you must be able to answer:
 2. WIT, persistent schemas and serialized formats;
 3. architecture pages and canonical references;
 4. ADRs, only for the reasons behind decisions;
-5. active status, roadmaps and TODOs;
+5. active status pages and TODOs;
 6. Git history.
 
-A roadmap, a TODO or a candidate API is **not** current architecture. Don't
+A status page, a TODO or a candidate API is **not** current architecture. Don't
 promote a future shape into `fub-abi`, WIT or IPC just because it is described
 in detail. Public contracts are born when real cases, compatibility, limits and
 fallbacks have proved them. The planning files at the root (`todo.md`,

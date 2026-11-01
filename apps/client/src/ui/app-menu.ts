@@ -132,6 +132,7 @@ const MENU: { title: string; entries: MenuEntry[] }[] = [
       { label: "menu.view.inspector", command: "shell.inspector.toggle" },
       { label: "menu.view.focus", command: "shell.focus.toggle" },
       { label: "menu.view.mode_live", command: "shell.mode.live", separator: true },
+      { label: "menu.view.mode_blocks", command: "shell.mode.blocks" },
       { label: "menu.view.mode_source", command: "shell.mode.source" },
       { label: "menu.view.mode_reading", command: "shell.mode.reading" },
       { label: "menu.view.zoom_in", command: "shell.zoom.in", separator: true },

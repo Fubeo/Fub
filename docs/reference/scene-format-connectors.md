@@ -14,12 +14,17 @@
 > scena](scene-operations.md), §9); il modo di dire un connettore a parole in
 > `apps/client/src/editors/spatial/describe.ts`.
 
+Lo strumento Connettore se n'è andato col livello Standard
+([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)): i
+connettori dei file si leggono, si vedono e seguono ancora gli oggetti
+spostati, ma l'editor non ne crea e non ne cambia più.
+
 Una forma sintetica del [formato della scena](scene-format.md), §6: un `path`
 con `fub:shape="connector"` e `fub:geom`, il suo `d` calcolato dalla
 geometria, e due agganci che dicono a quali oggetti la linea è attaccata. Un
 altro programma vede un tracciato qualunque e lo disegna uguale; FubDraw legge
 gli agganci, e quando un oggetto agganciato cambia riscrive la geometria e il
-`d` del connettore. Come si disegna è in [Disegni,
+`d` del connettore. Che cosa ne fa l'editor è in [Disegni,
 connettori](../product/drawing-connectors.md). Le sezioni del formato si
 citano come «formato della scena, §N»; quelle di questa pagina col solo
 numero.

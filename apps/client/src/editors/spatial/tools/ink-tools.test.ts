@@ -26,7 +26,7 @@ let editor: DrawEditor;
 let clock = 100;
 
 function mount(source = PAGE, options: DrawEditorOptions = {}): DrawEditor {
-  editor = createDrawEditor(host, SceneEngine.open(source), owner, { level: "standard", ...options });
+  editor = createDrawEditor(host, SceneEngine.open(source), owner, options);
   return editor;
 }
 
@@ -239,7 +239,7 @@ describe("la gomma dell'editor", () => {
   });
 });
 
-describe("la penna con Maiusc e Alt", () => {
+describe("la penna con Maiusc", () => {
   const WAVY: ReadonlyArray<readonly [number, number]> = [[10, 10], [20, 18], [30, 12], [45, 22], [60, 15], [70, 20]];
 
   it("Maiusc durante il tratto lo raddrizza a passi di 15°", () => {
@@ -274,18 +274,6 @@ describe("la penna con Maiusc e Alt", () => {
     expect(line.length).toBeGreaterThan(2);
     editor.undo();
     expect(editor.engine.text).toBe(before);
-  });
-
-  it("Alt tenuto con la penna prende il colore di un tratto, e non scrive", () => {
-    mount();
-    editor.setTool("highlighter");
-    drag([[10, 30], [80, 30]]);
-    editor.setTool("pen");
-    expect(editor.color).toBe("#000000");
-    const before = editor.engine.text;
-    drag([[40, 30], [40, 30]], MOUSE, 0.5, [{ alt: true }]);
-    expect(editor.engine.text).toBe(before);
-    expect(editor.color).toBe("#f0e442");
   });
 });
 
@@ -424,7 +412,7 @@ describe("la galleria delle penne e le mie penne", () => {
   });
 
   it("in «Semplice» le opzioni della penna non ci sono", () => {
-    mount(PAGE, { level: "essential" });
+    mount(PAGE, { workspace: "simple" });
     editor.setTool("pen");
     expect(host.querySelector<HTMLElement>(".draw-pen-choice")!.closest<HTMLElement>(".draw-group")!.hidden).toBe(true);
   });

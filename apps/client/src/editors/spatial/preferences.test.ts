@@ -30,47 +30,6 @@ vi.mock("../../host/ipc", () => {
 
 const { createFakeHost } = await import("../../host/fake");
 
-/// La riga del livello come la dichiara `fub.draw`, col valore `value`.
-function levelEntry(value: string): SettingEntry {
-  return {
-    spec: {
-      key: "draw.level",
-      label: "Livello d'interfaccia",
-      description: "",
-      group: "Disegni",
-      scope: "vault",
-      kind: {
-        kind: "choice",
-        default: "essential",
-        options: [
-          { value: "essential", label: "Essenziale" },
-          { value: "standard", label: "Standard" },
-        ],
-      },
-      program_writable: false,
-    },
-    value,
-    source: value === "essential" ? "default" : "vault",
-  };
-}
-
-/// La riga delle parti del Personalizzato, col valore `value`.
-function customEntry(value: unknown): SettingEntry {
-  return {
-    spec: {
-      key: "draw.custom",
-      label: "Parti del Personalizzato",
-      description: "",
-      group: "Disegni",
-      scope: "vault",
-      kind: { kind: "list", default: ["pen", "eraser", "rect", "ellipse", "line", "arrow"] },
-      program_writable: false,
-    },
-    value,
-    source: "vault",
-  } as SettingEntry;
-}
-
 /// Un'altra impostazione, che il disegno non guarda.
 const OTHER: SettingEntry = {
   spec: {
@@ -115,124 +74,6 @@ beforeEach(() => {
   box.host = null;
 });
 
-describe("il livello del disegno", () => {
-  it("si legge dalle impostazioni del bundle fub.draw, e un valore sconosciuto vale l'Essenziale", async () => {
-    const host = createFakeHost({ settings: [levelEntry("standard")] });
-    const { currentLevel, watchLevel } = await boot(host);
-    expect(currentLevel(), "prima di leggere").toBe("essential");
-
-    const applied: string[] = [];
-    const stop = watchLevel((level) => applied.push(level));
-    await settle();
-    expect(applied).toEqual(["standard"]);
-    expect(currentLevel()).toBe("standard");
-    expect(settingsReads(host)).toEqual([{ kind: "settings", plugin: "fub.draw" }]);
-    stop();
-
-    for (const settings of [[levelEntry("beginner")], [OTHER]]) {
-      const other = createFakeHost({ settings });
-      const fresh = await boot(other);
-      const seen: string[] = [];
-      fresh.watchLevel((level) => seen.push(level));
-      await settle();
-      expect(seen, JSON.stringify(settings.map((e) => e.value))).toEqual(["essential"]);
-    }
-  });
-
-  it("segue i cambi del livello, e solo quelli, finché non si smette", async () => {
-    const host = createFakeHost({ settings: [levelEntry("essential"), OTHER] });
-    const { watchLevel } = await boot(host);
-    const applied: string[] = [];
-    const stop = watchLevel((level) => applied.push(level));
-    await settle();
-    expect(applied).toEqual(["essential"]);
-
-    await host.module.api.setSetting("editor.line_numbers", false);
-    await settle();
-    expect(settingsReads(host), "un'altra impostazione non fa rileggere").toHaveLength(1);
-
-    await host.module.api.setSetting("draw.level", "standard");
-    await settle();
-    expect(applied).toEqual(["essential", "standard"]);
-
-    stop();
-    await host.module.api.setSetting("draw.level", "essential");
-    await settle();
-    expect(applied, "dopo stop").toEqual(["essential", "standard"]);
-    expect(settingsReads(host)).toHaveLength(2);
-  });
-
-  it("una lettura superata da una più recente non arriva, né all'editor né alla memoria", async () => {
-    const host = createFakeHost({ settings: [levelEntry("essential")] });
-    const { currentLevel, watchLevel } = await boot(host);
-    const applied: string[] = [];
-    watchLevel((level) => applied.push(level));
-    await settle();
-
-    // Due cambi, e le risposte tornano al contrario: prima la seconda.
-    const first = host.throttle("queryIndex");
-    await host.module.api.setSetting("draw.level", "standard");
-    const second = host.throttle("queryIndex");
-    await host.module.api.setSetting("draw.level", "essential");
-    second();
-    await settle();
-    first();
-    await settle();
-
-    expect(settingsReads(host)).toHaveLength(3);
-    expect(applied).toEqual(["essential", "essential"]);
-    expect(currentLevel()).toBe("essential");
-  });
-
-  it("le parti del Personalizzato si leggono col livello, e un loro cambio fa rileggere", async () => {
-    const host = createFakeHost({ settings: [levelEntry("custom"), customEntry(["pen", "layers", 7, "domani"])] });
-    const { currentCustom, currentLevel, watchLevel } = await boot(host);
-    expect(currentCustom(), "prima di leggere").toEqual(["pen", "eraser", "rect", "ellipse", "line", "arrow"]);
-
-    const applied: [string, readonly string[]][] = [];
-    const stop = watchLevel((level, custom) => applied.push([level, custom]));
-    await settle();
-    // Ciò che non è un nome cade; un nome sconosciuto resta, per chi lo conosce.
-    expect(applied).toEqual([["custom", ["pen", "layers", "domani"]]]);
-    expect(currentLevel()).toBe("custom");
-    expect(currentCustom()).toEqual(["pen", "layers", "domani"]);
-    expect(settingsReads(host), "una lettura per le due impostazioni").toHaveLength(1);
-
-    await host.module.api.setSetting("draw.custom", ["text"]);
-    await settle();
-    expect(applied[applied.length - 1]).toEqual(["custom", ["text"]]);
-    expect(currentCustom()).toEqual(["text"]);
-    expect(settingsReads(host)).toHaveLength(2);
-
-    // Senza la riga, o con un valore che non è un elenco, valgono le parti dell'Essenziale.
-    for (const settings of [[levelEntry("custom")], [levelEntry("custom"), customEntry("pen")]]) {
-      const other = createFakeHost({ settings });
-      const fresh = await boot(other);
-      const seen: (readonly string[])[] = [];
-      fresh.watchLevel((_level, custom) => seen.push(custom));
-      await settle();
-      expect(seen, JSON.stringify(settings.map((e) => e.value))).toEqual([["pen", "eraser", "rect", "ellipse", "line", "arrow"]]);
-    }
-    stop();
-  });
-
-  it("se le impostazioni non si leggono, vale l'ultimo livello letto", async () => {
-    const host = createFakeHost({ settings: [levelEntry("standard")] });
-    const { currentLevel, watchLevel } = await boot(host);
-    const stop = watchLevel(() => {});
-    await settle();
-    stop();
-
-    const heal = host.fault("queryIndex", "vault chiuso");
-    const applied: [string, readonly string[]][] = [];
-    watchLevel((level, custom) => applied.push([level, custom]));
-    await settle();
-    heal();
-    expect(applied).toEqual([["standard", ["pen", "eraser", "rect", "ellipse", "line", "arrow"]]]);
-    expect(currentLevel()).toBe("standard");
-  });
-});
-
 describe("le mie penne", () => {
   it("si leggono da draw.pens, si salvano in fila, e una chiave illeggibile non ne dà", async () => {
     const host = createFakeHost();
@@ -254,11 +95,11 @@ describe("la griglia ricordata", () => {
   it("si legge dallo stato di vista, e ciò che non è una griglia vale quella di serie", async () => {
     const host = createFakeHost();
     const { currentGrid, readGrid } = await boot(host);
-    const standard = { shown: false, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE };
+    const standard = { shown: false, snap: false, step: 20, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE };
     expect(currentGrid()).toEqual(standard);
     expect(await readGrid(), "niente di ricordato").toEqual(standard);
 
-    const chosen = { shown: true, snap: true, step: 50, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE };
+    const chosen = { shown: true, snap: true, step: 50, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE };
     await host.module.api.setViewState(GRID_KEY, chosen);
     expect(await readGrid()).toEqual(chosen);
     expect(currentGrid()).toEqual(chosen);
@@ -270,9 +111,6 @@ describe("la griglia ricordata", () => {
       { shown: true, snap: true, step: 0 },
       { shown: true, snap: true, step: 5000 },
       { shown: true, snap: true },
-      { shown: true, snap: true, step: 50, guides: "sì" },
-      { shown: true, snap: true, step: 50, rulers: 1 },
-      { shown: true, snap: true, step: 50, rulerGuides: null },
       { shown: true, snap: true, step: 50, steps: "mm" },
       { shown: true, snap: true, step: 50, panel: "sì" },
       { shown: true, snap: true, step: 50, bar: 1 },
@@ -288,26 +126,26 @@ describe("la griglia ricordata", () => {
   it("ricorda il pannello delle proprietà, la barra, le forme dal tratto e le sezioni chiuse", async () => {
     const host = createFakeHost();
     const { readGrid } = await boot(host);
-    const chosen = { shown: false, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: false, bar: false, shapes: false, closed: ["look", "look"], twist: true, taps: true, pen: DEFAULT_CURVE };
+    const chosen = { shown: false, snap: false, step: 20, steps: {}, panel: false, bar: false, shapes: false, closed: ["look", "look"], twist: true, taps: true, pen: DEFAULT_CURVE };
     await host.module.api.setViewState(GRID_KEY, chosen);
     expect(await readGrid()).toEqual({ ...chosen, closed: ["look"] });
   });
 
-  it("una griglia ricordata prima delle guide intelligenti le ha accese", async () => {
+  it("una griglia ricordata con le sole scelte di base ha il resto di serie", async () => {
     const host = createFakeHost();
     const { readGrid } = await boot(host);
     await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10 });
-    expect(await readGrid()).toEqual({ shown: true, snap: false, step: 10, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
+    expect(await readGrid()).toEqual({ shown: true, snap: false, step: 10, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE });
   });
 
-  it("una griglia ricordata prima dei righelli li ha spenti, e dei passi delle unità tiene quelli buoni", async () => {
+  it("una griglia ricordata con le guide e i righelli li lascia cadere, e dei passi delle unità tiene quelli buoni", async () => {
     const host = createFakeHost();
     const { readGrid } = await boot(host);
     await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10, guides: false });
-    expect(await readGrid()).toEqual({ shown: true, snap: false, step: 10, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
+    expect(await readGrid()).toEqual({ shown: true, snap: false, step: 10, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE });
     const steps = { mm: 18.9, cm: 0, in: "24", pt: 5000, px: 40, km: 10 };
     await host.module.api.setViewState(GRID_KEY, { shown: false, snap: true, step: 20, steps, guides: true, rulers: true, rulerGuides: false });
-    expect(await readGrid()).toEqual({ shown: false, snap: true, step: 20, steps: { mm: 18.9 }, guides: true, rulers: true, rulerGuides: false, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
+    expect(await readGrid()).toEqual({ shown: false, snap: true, step: 20, steps: { mm: 18.9 }, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE });
   });
 
   it("lo stabilizzatore ricordato torna; uno che non si legge vale spento e non butta la griglia", async () => {
@@ -324,8 +162,12 @@ describe("la griglia ricordata", () => {
   it("la gomma e la penna ricordate tornano; quelle che non si leggono valgono quelle di serie", async () => {
     const host = createFakeHost();
     const { readGrid } = await boot(host);
-    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10, eraser: "precise", penId: "fountain", barrel: "lasso", output: "path", fidelity: "low" });
-    expect(await readGrid()).toMatchObject({ eraser: "precise", penId: "fountain", barrel: "lasso", output: "path", fidelity: "low" });
+    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10, eraser: "precise", penId: "fountain", barrel: "eraser", output: "path", fidelity: "low" });
+    expect(await readGrid()).toMatchObject({ eraser: "precise", penId: "fountain", barrel: "eraser", output: "path", fidelity: "low" });
+    // Il lazo se n'è andato (ADR 0231): il tasto laterale che lo faceva torna
+    // al menu radiale.
+    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10, barrel: "lasso" });
+    expect("barrel" in (await readGrid())).toBe(false);
     await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10, eraser: "half", penId: "quill", barrel: "jump", output: "svg", fidelity: 3 });
     const grid = await readGrid();
     expect(grid.shown).toBe(true);
@@ -335,7 +177,7 @@ describe("la griglia ricordata", () => {
   it("se lo stato di vista non si legge, resta l'ultima griglia", async () => {
     const host = createFakeHost();
     const { readGrid, saveGrid } = await boot(host);
-    const chosen = { shown: true, snap: false, step: 10, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE };
+    const chosen = { shown: true, snap: false, step: 10, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE };
     saveGrid(chosen);
     await settle();
     const heal = host.fault("viewState");
@@ -346,8 +188,8 @@ describe("la griglia ricordata", () => {
   it("si ricorda nell'ordine delle scelte, e la lettura aspetta le scritture", async () => {
     const host = createFakeHost();
     const { currentGrid, readGrid, saveGrid } = await boot(host);
-    const shown = { shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE };
-    const snapped = { shown: true, snap: true, step: 10, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE };
+    const shown = { shown: true, snap: false, step: 20, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE };
+    const snapped = { shown: true, snap: true, step: 10, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE };
 
     const release = host.throttle("setViewState");
     saveGrid(shown);
@@ -369,12 +211,12 @@ describe("la griglia ricordata", () => {
   it("una scelta fatta mentre si legge vale più di ciò che si legge", async () => {
     const host = createFakeHost();
     const { currentGrid, readGrid, saveGrid } = await boot(host);
-    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: true, step: 50, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
+    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: true, step: 50, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE });
 
     const release = host.throttle("viewState");
     const reading = readGrid();
     await settle();
-    const chosen = { shown: false, snap: false, step: 5, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE };
+    const chosen = { shown: false, snap: false, step: 5, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE };
     saveGrid(chosen);
     release();
     expect(await reading).toEqual(chosen);
@@ -387,14 +229,14 @@ describe("la griglia ricordata", () => {
     clearHistory();
 
     const heal = host.fault("setViewState", "disco pieno");
-    saveGrid({ shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
+    saveGrid({ shown: true, snap: false, step: 20, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE });
     await settle();
     expect(recentNotices().map(({ text, tone }) => ({ text, tone }))).toEqual([
       { text: "Non riesco a ricordare la griglia per i prossimi disegni: disco pieno", tone: "guasto" },
     ]);
     heal();
 
-    const next = { shown: true, snap: true, step: 100, guides: true, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE };
+    const next = { shown: true, snap: true, step: 100, steps: {}, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true, pen: DEFAULT_CURVE };
     saveGrid(next);
     await settle();
     expect(await host.module.api.viewState(GRID_KEY)).toEqual(next);
@@ -703,36 +545,60 @@ function drawEntry(key: string, value: unknown, chosen = true): SettingEntry {
 }
 
 describe("lo spazio di lavoro del disegno", () => {
-  it("una chiave nuova scelta vale; non scelta, la deduce la vecchia, che resta", async () => {
+  it("la chiave scelta vale; il livello di prima non si legge più", async () => {
     const { workspaceOf } = await boot(createFakeHost({ settings: [] }));
-    // Niente scelto: Completo, colonna di serie, anche col livello di serie.
+    // Niente scelto: Completo, colonna di serie.
     expect(workspaceOf([])).toEqual({ workspace: "full", toolbar: [] });
-    expect(workspaceOf([drawEntry("draw.level", "essential", false)])).toEqual({ workspace: "full", toolbar: [] });
-    // Il livello scelto: l'Essenziale è Semplice, gli altri Completo.
-    expect(workspaceOf([drawEntry("draw.level", "essential")])).toEqual({ workspace: "simple", toolbar: [] });
-    expect(workspaceOf([drawEntry("draw.level", "expert")])).toEqual({ workspace: "full", toolbar: [] });
-    // Il Personalizzato dà la colonna coi suoi strumenti; le parti che non
-    // sono strumenti non contano.
-    expect(workspaceOf([drawEntry("draw.level", "custom"), drawEntry("draw.custom", ["pen", "layers", "rect", "pen", 7])])).toEqual({
-      workspace: "full",
-      toolbar: ["pen", "rect"],
-    });
-    // Le chiavi nuove scelte vincono sulle vecchie.
-    expect(
-      workspaceOf([
-        drawEntry("draw.level", "essential"),
-        drawEntry("draw.custom", ["pen"]),
-        drawEntry("draw.workspace", "full"),
-        drawEntry("draw.toolbar", ["select", "text", "domani"]),
-      ]),
-    ).toEqual({ workspace: "full", toolbar: ["select", "text"] });
-    // Uno spazio sconosciuto ricade sul vecchio livello.
-    expect(workspaceOf([drawEntry("draw.level", "essential"), drawEntry("draw.workspace", "tablet")]).workspace).toBe("simple");
+    // `draw.level` e `draw.custom` restano nel file, ma non contano più.
+    expect(workspaceOf([drawEntry("draw.level", "essential"), drawEntry("draw.custom", ["pen"])])).toEqual({ workspace: "full", toolbar: [] });
+    expect(workspaceOf([drawEntry("draw.workspace", "simple")])).toEqual({ workspace: "simple", toolbar: [] });
+    // Uno strumento che non c'è, o non c'è più come il Testo, non conta.
+    expect(workspaceOf([drawEntry("draw.workspace", "full"), drawEntry("draw.toolbar", ["select", "text", "domani"])])).toEqual({ workspace: "full", toolbar: ["select"] });
+    // Uno spazio sconosciuto vale Completo.
+    expect(workspaceOf([drawEntry("draw.workspace", "tablet")]).workspace).toBe("full");
   });
 
-  it("segue le quattro chiavi, e scrive le scelte dell'editor senza cancellare le vecchie", async () => {
+  it("una lettura superata da una più recente non arriva, né all'editor né alla memoria", async () => {
+    const host = createFakeHost({ settings: [drawEntry("draw.workspace", "full", false)] });
+    const { currentWorkspace, watchWorkspace } = await boot(host);
+    const applied: string[] = [];
+    watchWorkspace((choice) => applied.push(choice.workspace));
+    await settle();
+
+    // Due cambi, e le risposte tornano al contrario: prima la seconda.
+    const first = host.throttle("queryIndex");
+    await host.module.api.setSetting("draw.workspace", "simple");
+    const second = host.throttle("queryIndex");
+    await host.module.api.setSetting("draw.workspace", "full");
+    second();
+    await settle();
+    first();
+    await settle();
+
+    expect(settingsReads(host)).toHaveLength(3);
+    expect(applied).toEqual(["full", "full"]);
+    expect(currentWorkspace().workspace).toBe("full");
+  });
+
+  it("se le impostazioni non si leggono, vale l'ultimo spazio letto", async () => {
+    const host = createFakeHost({ settings: [drawEntry("draw.workspace", "simple")] });
+    const { currentWorkspace, watchWorkspace } = await boot(host);
+    const stop = watchWorkspace(() => {});
+    await settle();
+    stop();
+
+    const heal = host.fault("queryIndex", "vault chiuso");
+    const applied: string[] = [];
+    watchWorkspace((choice) => applied.push(choice.workspace));
+    await settle();
+    heal();
+    expect(applied).toEqual(["simple"]);
+    expect(currentWorkspace().workspace).toBe("simple");
+  });
+
+  it("segue le due chiavi, e scrive le scelte dell'editor", async () => {
     const host = createFakeHost({
-      settings: [drawEntry("draw.level", "essential"), drawEntry("draw.custom", ["pen"]), drawEntry("draw.workspace", "full", false), drawEntry("draw.toolbar", [], false), OTHER],
+      settings: [drawEntry("draw.workspace", "simple"), drawEntry("draw.toolbar", [], false), OTHER],
     });
     const { currentWorkspace, saveToolbar, saveWorkspace, watchWorkspace } = await boot(host);
     const applied: unknown[] = [];
@@ -754,7 +620,7 @@ describe("lo spazio di lavoro del disegno", () => {
       ["draw.toolbar", ["select", "pen"]],
     ]);
     expect(applied[applied.length - 1]).toEqual({ workspace: "full", toolbar: ["select", "pen"] });
-    expect(host.atGate("resetSetting"), "le vecchie restano").toEqual([]);
+    expect(host.atGate("resetSetting")).toEqual([]);
 
     stop();
     await host.module.api.setSetting("draw.workspace", "simple");

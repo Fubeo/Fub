@@ -10,7 +10,6 @@
 // (`editors/spatial/pdf/surface.ts`), per il formato `fubann` della stessa
 // feature.
 
-import type { ProofPorts } from "../core/proof-ports";
 import type {
   EditorSurface,
   SurfaceMountContext,
@@ -19,7 +18,6 @@ import { CanvasEngine, type CanvasChange, type CanvasEngineOptions } from "./eng
 import { t } from "../../i18n/strings";
 import type { EditorChange, TextOperation } from "../core/text-operation";
 import type { VaultFontPort } from "../spatial/fonts/vault";
-import type { SymbolLibraryPort } from "../spatial/tools/symbol-libraries";
 import { mountPdfSurfaceLazily, mountVectorSurfaceLazily } from "../spatial/lazy";
 import { PDF_PROFILE, VECTOR_PROFILE } from "../spatial/modes";
 import type { PdfPorts } from "../spatial/pdf/surface";
@@ -47,10 +45,6 @@ export interface CanvasSurfaceCallbacks {
   readonly drawingImages?: DrawingImagePort;
   /** The vault's font files, listed and read by the shell, that a drawing's text can use. */
   readonly drawingFonts?: VaultFontPort;
-  /** The vault's symbol libraries, listed and read by the shell, that a drawing can take symbols from. */
-  readonly drawingSymbols?: SymbolLibraryPort;
-  /** The spelling and grammar checker for the text written in a drawing. */
-  readonly drawingProof?: { readonly ports: ProofPorts; readonly notify?: (message: string) => void };
   readonly media?: CanvasEngineOptions["media"];
   readonly attachments?: CanvasEngineOptions["attachments"];
   readonly renderMarkdownForCard?: CanvasEngineOptions["renderMarkdownForCard"];
@@ -150,11 +144,8 @@ export function mountCanvasSurface(
         pick: pickImage === undefined ? undefined : () => pickImage(context.documentId),
       },
       vaultFonts: callbacks.drawingFonts,
-      // Il disegno aperto non è una libreria per sé stesso.
-      symbolLibraries: callbacks.drawingSymbols === undefined ? undefined : { ...callbacks.drawingSymbols, here: context.documentId },
       // «Esporta» apre la finestra dello Scrittoio.
       onExport: shellCommand === undefined ? undefined : () => shellCommand("shell.doc.export"),
-      proof: callbacks.drawingProof,
     });
   }
   if (profile === PDF_PROFILE) {

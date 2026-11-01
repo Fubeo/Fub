@@ -11,6 +11,11 @@
 > prova da 84 a 88 ([operazioni sulla scena](scene-operations.md), §9);
 > l'SVG pulito in `crates/fub-scene/src/export/clean.rs`.
 
+I simboli non si creano più: se ne sono andati col livello Esperto, con
+la porta della libreria ([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)).
+Quelli dei file si leggono, si vedono, si aprono per guardarli, restano
+identici e si esportano.
+
 Una parte del [formato della scena](scene-format.md), §4, e delle sue
 [risorse](scene-format-resources.md). Un simbolo è un disegno piccolo che
 si usa più volte: una presa in una pianta, un'icona in uno schema, un

@@ -307,6 +307,24 @@ describe("i comandi delle modalità seguono il ruolo dichiarato", () => {
     expect(paneMode(), "la nota ritrova la sua Sorgente").toBe("source");
   });
 
+  it("i Blocchi hanno il loro comando, soltanto nelle note, e Mod-e ne torna", async () => {
+    await start();
+    await open("lavagna.canvas");
+    expect(await offered(["shell.mode.blocks"]), "la tela non ha Blocchi").toEqual([]);
+    await open("Benvenuto.md");
+    expect(await offered(["shell.mode.blocks"])).toEqual(["shell.mode.blocks"]);
+    await run("shell.mode.blocks");
+    expect(paneMode()).toBe("blocks");
+    pressModE();
+    await settle();
+    expect(paneMode()).toBe("reading");
+    pressModE();
+    await settle();
+    expect(paneMode(), "Mod-e torna ai Blocchi, non alla Live").toBe("blocks");
+    await run("shell.mode.live");
+    expect(paneMode(), "dai Blocchi Live porta alla Live, anche se hanno lo stesso ruolo").toBe("live_preview");
+  });
+
   it("sulla tela Live torna dal JSON alle carte", async () => {
     await start();
     await open("lavagna.canvas");

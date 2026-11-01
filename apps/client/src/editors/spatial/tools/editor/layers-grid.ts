@@ -2,18 +2,15 @@
 // createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
 // condividono.
 
-import { displayBinding, modifierName } from "../../../../ui/commands";
+import { modifierName } from "../../../../ui/commands";
 import { promptForm } from "../../../../ui/form-dialog";
 import type { MenuItem } from "../../../../ui/menu";
 import { keyOf } from "../../describe";
 import { sameCurve } from "../../../../ink/input/pressure";
 import type { Bounds } from "../../scene/geometry";
-import { ROOT } from "../../scene/ops";
-import { UNITS, type LengthUnit } from "../../scene/rulers";
 import { plural, t, type DrawKey } from "../../strings";
 import { fittedPage, gesture as asGesture } from "../edit";
 import type { Arranged } from "../arrange";
-import { UNIT_NAMES } from "../fields";
 import { gridStep, sameStep, unitSteps, withStep, type Grid } from "../grid";
 import { nextTurn } from "../../view";
 import type { LayerInfo } from "../hit";
@@ -23,6 +20,8 @@ import {
   freshLayerName,
   hideLayerOps,
   layerName,
+  inLayer,
+  intoLayerOps,
   lockLayerOps,
   MAX_LAYER_NAME,
   removeLayerOps,
@@ -30,7 +29,7 @@ import {
   shiftLayerOps,
   type Shift,
 } from "../layers";
-import { BAR_FEATURES, RULERS_BINDING, UNITS_NOW } from "./constants";
+import { BAR_FEATURES } from "./constants";
 import type { EditorContext } from "./context";
 import { checkedGrid, layerRefusal, layerState, layerTitle, union } from "./helpers";
 
@@ -42,18 +41,16 @@ const LAYER_IN_COMMAND = 24;
 export interface LayersGridContext {
   writeLayers: (label: DrawKey, arranged: Arranged, key: string | null) => boolean;
   layerItems: () => MenuItem[];
+  intoItems: () => MenuItem[];
   changeGrid: (next: Grid) => void;
-  guideItems: (index: number) => MenuItem[];
-  rulerItems: () => MenuItem[];
   pageItems: () => MenuItem[];
 }
 
 /// Monta i livelli, la griglia e la pagina.
 export function installLayersGrid(ctx: EditorContext): void {
   const {
-    has, suggestions, pageButton, indexer, boardsNow, editable, currentIndex, newIds, announce, showGrid, docUnit, stepNow, lengthText, lengthSpoken,
-    showGuideLines, turnView, showHandles, outlineNow, syncProperties, currentLayer, choose, syncLayers, commit, cancelGesture, lockGuide, deleteGuide,
-    lockAllGuides, deleteAllGuides, touchSettings, editGuides, effectsExtent, keptLook, openMenu, settleCrop, options
+    has, suggestions, indexer, boardsNow, editable, currentIndex, newIds, announce, showGrid, docUnit, stepNow, lengthText, lengthSpoken,
+    turnView, outlineNow, syncProperties, currentLayer, choose, syncLayers, commit, cancelGesture, touchSettings, effectsExtent, keptLook, selectedUnits, followSelection, arranging, arrange, options
   } = ctx;
   // --- Livelli -----------------------------------------------------------------
 
@@ -62,7 +59,6 @@ export function installLayersGrid(ctx: EditorContext): void {
   const layering = (): LayerInfo | null => {
     if (!has("layers") || !editable()) return null;
     cancelGesture();
-    settleCrop();
     return currentLayer();
   };
 
@@ -99,7 +95,6 @@ export function installLayersGrid(ctx: EditorContext): void {
   function addLayer(): void {
     if (!has("layers") || !editable()) return;
     cancelGesture();
-    settleCrop();
     const name = freshLayerName(currentIndex().layers, (n) => t("draw.layer.default", { n }));
     const arranged = addLayerOps(ctx.engine.model!, currentLayer(), name, newIds());
     if (writeLayers("draw.action.layer_add", arranged, arranged.keys[0] ?? null)) announce(t("draw.layer.added", { name }));
@@ -237,16 +232,10 @@ export function installLayersGrid(ctx: EditorContext): void {
     ctx.grid = checkedGrid(next, before);
     suggestions.relabel();
     showGrid();
-    showGuideLines();
-    // I righelli, e la cornice che segnano.
-    showHandles();
     const unit = docUnit();
     if (ctx.grid.shown !== before.shown) announce(t(ctx.grid.shown ? "draw.grid.shown" : "draw.grid.hidden"));
     else if (ctx.grid.snap !== before.snap) announce(t(ctx.grid.snap ? "draw.grid.snap.on" : "draw.grid.snap.off"));
     else if (!sameStep(gridStep(ctx.grid, unit), gridStep(before, unit))) announce(t("draw.grid.stepped", { step: lengthSpoken(stepNow()) }));
-    else if (ctx.grid.guides !== before.guides) announce(t(ctx.grid.guides ? "draw.guides.on" : "draw.guides.off"));
-    else if (ctx.grid.rulers !== before.rulers) announce(t(ctx.grid.rulers ? "draw.rulers.shown" : "draw.rulers.hidden"));
-    else if (ctx.grid.rulerGuides !== before.rulerGuides) announce(t(ctx.grid.rulerGuides ? "draw.rulers.guides.shown" : "draw.rulers.guides.hidden"));
     else if (ctx.grid.shapes !== before.shapes) announce(t(ctx.grid.shapes ? "draw.recognize.on" : "draw.recognize.off"));
     else if (ctx.grid.bar !== before.bar) announce(t(ctx.grid.bar ? "draw.bar.beside.on" : "draw.bar.beside.off"));
     else if (ctx.grid.twist !== before.twist || ctx.grid.taps !== before.taps || !sameCurve(ctx.grid.pen, before.pen) || ctx.grid.steady?.amount !== before.steady?.amount || ctx.grid.steady?.string !== before.steady?.string) announce(t("draw.touch.changed"));
@@ -258,74 +247,6 @@ export function installLayersGrid(ctx: EditorContext): void {
     options.onGridChange?.(ctx.grid);
   };
   ctx.changeGrid = changeGrid;
-
-  /// L'unità del documento diventa `unit`: un passo di annulla, e il disegno
-  /// resta com'è. I pixel non si scrivono, perché sono l'unità di serie.
-  const setUnits = (unit: LengthUnit): void => {
-    if (unit === docUnit() || !editable()) return;
-    settleCrop();
-    if (commit("draw.action.units", { op: "set", id: ROOT, attrs: { "fub:units": unit === "px" ? null : unit } }) === null) return;
-    announce(t(UNITS_NOW[unit]));
-  };
-
-  /// Le unità del documento, una fra cinque.
-  const unitItems = (): MenuItem[] =>
-    UNITS.map((unit): MenuItem => ({
-      label: t(UNIT_NAMES[unit]),
-      choice: "radio",
-      checked: unit === docUnit(),
-      disabled: !editable(),
-      run: () => setUnits(unit),
-    }));
-
-  /// Le voci di tutte le guide del documento: «Guide…», bloccarle o
-  /// sbloccarle, eliminarle.
-  const allGuidesItems = (): MenuItem[] => {
-    const guides = ctx.scene.root.guides;
-    const count = guides?.length ?? 0;
-    const usable = editable() && count > 0;
-    const allLocked = count > 0 && guides!.every((each) => each.locked);
-    return [
-      { label: t("draw.guides.dialog"), separator: true, disabled: !editable(), run: () => void editGuides(null) },
-      { label: t(allLocked ? "draw.guides.unlock_all" : "draw.guides.lock_all"), disabled: !usable, run: () => lockAllGuides(!allLocked) },
-      { label: t("draw.guides.delete_all"), danger: true, disabled: !usable, run: () => deleteAllGuides() },
-    ];
-  };
-
-  /// Le voci di una guida, col tasto destro o col tocco lungo: bloccarla o
-  /// sbloccarla, eliminarla, e quelle di tutte le guide.
-  const guideItems = (index: number): MenuItem[] => {
-    const guide = ctx.scene.root.guides?.[index];
-    if (guide === undefined) return [];
-    const canEdit = editable();
-    const [dialog, ...rest] = allGuidesItems();
-    return [
-      { label: t(guide.locked ? "draw.guide.unlock" : "draw.guide.lock"), disabled: !canEdit, run: () => lockGuide(index, !guide.locked) },
-      { label: t("draw.guide.delete"), danger: true, disabled: !canEdit, run: () => deleteGuide(index) },
-      { ...dialog!, run: () => void editGuides(index) },
-      ...rest,
-    ];
-  };
-  ctx.guideItems = guideItems;
-
-  /// Le voci dei righelli, dal loro angolo o col tasto destro: l'unità, le
-  /// guide, e nasconderli. Sul foglio girato, dove i righelli aspettano,
-  /// prima di tutto raddrizzarlo.
-  const rulerItems = (): MenuItem[] => [
-    ...(ctx.camera.angle === 0 ? [] : [{ label: t("draw.turn.straighten"), hint: "5", run: () => turnView(0) }]),
-    ...unitItems().map((item, at) => (at === 0 && ctx.camera.angle !== 0 ? { ...item, separator: true } : item)),
-    {
-      label: t("draw.rulers.guides.show"),
-      choice: "checkbox",
-      checked: ctx.grid.rulerGuides,
-      hint: "|",
-      separator: true,
-      run: () => changeGrid({ ...ctx.grid, rulerGuides: !ctx.grid.rulerGuides }),
-    },
-    ...allGuidesItems(),
-    { label: t("draw.rulers.hide"), hint: displayBinding(RULERS_BINDING), separator: true, run: () => changeGrid({ ...ctx.grid, rulers: false }) },
-  ];
-  ctx.rulerItems = rulerItems;
 
   /// Ciò attorno a cui «Adatta la pagina al disegno» porta la pagina: tutto
   /// il disegno, livelli bloccati e nascosti compresi, e le tavole, che la
@@ -342,7 +263,6 @@ export function installLayersGrid(ctx: EditorContext): void {
   function fitPage(): void {
     if (!has("grid") || !editable()) return;
     cancelGesture();
-    settleCrop();
     const extent = fitExtent();
     const viewBox = fittedPage(ctx.scene.root.page, extent);
     if (viewBox === null) {
@@ -355,8 +275,7 @@ export function installLayersGrid(ctx: EditorContext): void {
   }
 
   /// Le voci di «Pagina e griglia»: la griglia, il suo passo nell'unità del
-  /// documento, le guide intelligenti, le forme dal tratto, i righelli con le
-  /// loro guide e l'unità, dove sta la barra della selezione, la vista
+  /// documento, le forme dal tratto, dove sta la barra della selezione, la vista
   /// girata, e la pagina, ciascuna se il livello la offre. Adattare la
   /// pagina si spegne, e dice perché, quando non cambierebbe niente.
   const pageItems = (): MenuItem[] => {
@@ -369,49 +288,14 @@ export function installLayersGrid(ctx: EditorContext): void {
     const fitItem: MenuItem = { label: t("draw.page.fit"), separator: true, disabled: !editable() || viewBox === null, run: () => fitPage() };
     if (extent === null) fitItem.description = t("draw.page.fit.empty");
     else if (viewBox === null) fitItem.description = t("draw.page.fit.already");
-    const guidesItem: MenuItem = {
-      label: t("draw.feature.guides"),
-      choice: "checkbox",
-      checked: ctx.grid.guides,
-      separator: has("grid"),
-      description: t("draw.guides.hint", { key: modifierName("Mod") ?? "Ctrl" }),
-      run: () => changeGrid({ ...ctx.grid, guides: !ctx.grid.guides }),
-    };
-    const rulersItems: MenuItem[] = has("rulers")
-      ? [
-          {
-            label: t("draw.rulers.show"),
-            choice: "checkbox",
-            checked: ctx.grid.rulers,
-            hint: displayBinding(RULERS_BINDING),
-            separator: true,
-            run: () => changeGrid({ ...ctx.grid, rulers: !ctx.grid.rulers }),
-          },
-          {
-            label: t("draw.rulers.guides.show"),
-            choice: "checkbox",
-            checked: ctx.grid.rulerGuides,
-            hint: "|",
-            description: t("draw.rulers.guides.hint"),
-            run: () => changeGrid({ ...ctx.grid, rulerGuides: !ctx.grid.rulerGuides }),
-          },
-          { label: t("draw.guides.dialog"), disabled: !editable(), run: () => void editGuides(null) },
-          {
-            label: t("draw.units.item", { unit: t(UNIT_NAMES[unit]) }),
-            description: t("draw.units.hint"),
-            disabled: !editable(),
-            run: () => openMenu(pageButton, unitItems()),
-          },
-        ]
-      : [];
-    // Accanto alle guide intelligenti: anche lei aiuta mentre si disegna.
+    // Accanto alla griglia: anche lei aiuta mentre si disegna.
     const recognizeItems: MenuItem[] = has("recognize")
       ? [
           {
             label: t("draw.feature.recognize"),
             choice: "checkbox",
             checked: ctx.grid.shapes,
-            separator: has("grid") && !has("guides"),
+            separator: has("grid"),
             description: t("draw.recognize.hint"),
             run: () => changeGrid({ ...ctx.grid, shapes: !ctx.grid.shapes }),
           },
@@ -428,7 +312,7 @@ export function installLayersGrid(ctx: EditorContext): void {
           { label: t("draw.touch.dialog"), run: () => void touchSettings() },
         ]
       : [];
-    if (!has("grid")) return [...(has("guides") ? [guidesItem] : []), ...recognizeItems, ...rulersItems, ...barItems, ...turnItems];
+    if (!has("grid")) return [...recognizeItems, ...barItems, ...turnItems];
     return [
       { label: t("draw.grid.show"), choice: "checkbox", checked: ctx.grid.shown, hint: "#", run: () => changeGrid({ ...ctx.grid, shown: !ctx.grid.shown }) },
       {
@@ -446,13 +330,56 @@ export function installLayersGrid(ctx: EditorContext): void {
         separator: at === 0,
         run: () => changeGrid(withStep(ctx.grid, unit, each)),
       })),
-      ...(has("guides") ? [guidesItem] : []),
       ...recognizeItems,
-      ...rulersItems,
       ...barItems,
       ...turnItems,
       fitItem,
     ];
   };
   ctx.pageItems = pageItems;
+
+  /// Porta gli oggetti scelti in cima a `layer`, dove si vedevano.
+  function moveIntoLayer(layer: LayerInfo): void {
+    const units = arranging("layers");
+    if (units === null) return;
+    const name = layerTitle(layer);
+    const refusal = layerRefusal(layer);
+    if (refusal !== null) {
+      announce(t(refusal, { name }));
+      return;
+    }
+    const arranged = intoLayerOps(ctx.engine.model!, units, layer, newIds());
+    if (arranged === null) {
+      announce(t("draw.layer.flat", { name }));
+      return;
+    }
+    const moving = units.filter((unit) => !inLayer(unit, layer)).length;
+    // Chi entra nel livello ne prende l'opacità e la visibilità.
+    const kept = arrange("draw.action.into_layer", arranged, null, { key: "draw.layer.styled", vars: { name }, containers: "take" });
+    if (kept === null) return;
+    // La selezione ha le stesse chiavi, ma sta nel livello nuovo.
+    followSelection();
+    announce(`${plural(moving, "draw.moved_to_layer.one", "draw.moved_to_layer.other", { name })}${kept}`);
+  }
+
+  /// Le voci di «Sposta in un livello», dalla cima: spento il livello che ha
+  /// già tutti gli oggetti scelti, e quello bloccato o nascosto, che lo dice.
+  const intoItems = (): MenuItem[] => {
+    const units = selectedUnits();
+    const layers = currentIndex().layers;
+    const items: MenuItem[] = [];
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const layer = layers[i]!;
+      const here = units.length > 0 && units.every((unit) => inLayer(unit, layer));
+      const description = here ? t("draw.into_layer.here") : layerState(layer);
+      items.push({
+        label: layerTitle(layer),
+        disabled: here || layerRefusal(layer) !== null,
+        ...(description === "" ? {} : { description }),
+        run: () => moveIntoLayer(layer),
+      });
+    }
+    return items;
+  };
+  ctx.intoItems = intoItems;
 }

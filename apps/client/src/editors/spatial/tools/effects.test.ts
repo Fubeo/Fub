@@ -7,9 +7,9 @@ import { describe, expect, it } from "vitest";
 import { PF1_DEFAULTS } from "../../../ink/brush";
 import { quantizeInk, type InkSample } from "../../../ink/sample";
 import { parsePath } from "../scene/geometry";
+import { polygonalAttrs, readPolygonal, type Polygonal } from "../scene/parametric";
 import type { Elem } from "../scene/serialize";
 import { doc } from "../scene/test-support";
-import { applyOps } from "./apply";
 import { duplicateOps, ungroupOps } from "./arrange";
 import { NewIds, strokeElem } from "./edit";
 import {
@@ -32,7 +32,7 @@ import {
 import type { Unit } from "./hit";
 import { estimate } from "./measure";
 import { widthAttrs } from "./profile";
-import { POLYGON_TOOL, shapeElem } from "./shapes";
+import { shapeElem } from "./shapes";
 import { LAYER, open, type Opened } from "./test-support";
 import { applied, DEFS, written } from "./tip-support";
 
@@ -66,6 +66,12 @@ const stateOf = (opened: Opened, id: string): ReturnType<typeof effectsState> =>
 const elementOf = (text: string, tag: string): string => new RegExp(`<${tag}[ >][\\s\\S]*?</${tag}>`).exec(text)?.[0] ?? "";
 
 /// Un elemento scritto, su una riga sola.
+/// Un poligono, o una stella, come lo scriveva lo strumento Poligono.
+const polygonal = (id: string, shape: Polygonal): Elem => ({
+  tag: "path",
+  attrs: { id, ...polygonalAttrs(shape)!, fill: "none", stroke: "#0072b2", "stroke-width": "4" },
+});
+
 const flat = (elem: Parameters<typeof written>[0]): string => written(elem).replace(/\n\s*/g, "");
 
 const RECT = '<rect id="r" x="10" y="20" width="100" height="50" fill="#0072b2"/>';
@@ -301,13 +307,12 @@ describe("effectsOps", () => {
     for (let i = 0; i <= 25; i++) samples.push({ x: 10 + 2 * i, y: 50, p: 0.5, t: 8 * i });
     const brush = { ...PF1_DEFAULTS, size: 8, thinning: 0, taperStart: 0, taperEnd: 0 };
     const style = { color: "#0072b2", width: 4 };
-    const straight = { ...POLYGON_TOOL, straight: false };
     const width = widthAttrs({ cap: "round", join: "miter", profile: [[0, 2, 2], [1, 0, 0]], spine: parsePath("M0 0 L100 0")! })!;
     const drawn: [string, Elem][] = [
       ["stroke", strokeElem("o1a2b3c4k", "#000000", brush, quantizeInk(samples), null)],
       ["arrow", shapeElem("arrow", "o1a2b3c4a", [10, 20], [110, 20], style, 4)!],
-      ["ngon", shapeElem("polygon", "o1a2b3c4p", [100, 100], [100, 50], style, 4, straight)!],
-      ["star", shapeElem("polygon", "o1a2b3c4s", [0, 0], [0, -40], style, 4, { ...straight, shape: "star" })!],
+      ["ngon", polygonal("o1a2b3c4p", readPolygonal("polygon", "100 100 50 6 -30 0")!)],
+      ["star", polygonal("o1a2b3c4s", readPolygonal("star", "0 0 40 5 0.382 0 0")!)],
       ["width", { tag: "path", attrs: { id: "o1a2b3c4w", "fub:shape": "width", "fub:geom": width.geom, d: width.d, fill: "#000000" } }],
     ];
     const opened = sheet("");
@@ -404,12 +409,4 @@ describe("con gli altri comandi", () => {
     expect(a.kind === "effects" && b.kind === "effects" && a.filter !== null && b.filter !== null && a.filter !== b.filter).toBe(true);
   });
 
-  it("chi ha degli effetti, anche nascosti, tiene la sua trasformazione: sono nelle sue coordinate", () => {
-    const scene = (effect: string): string => `<rect id="r" width="10" height="10" transform="matrix(0 1 -1 0 50 0)" ${effect}/><g id="g" transform="matrix(2 0 0 2 0 0)" ${effect}><rect id="s" width="10" height="10"/></g>`;
-    const opened = sheet(scene(HIDDEN));
-    const out = applyOps(opened.engine.model!, units(opened, "r", "g"), ids(opened));
-    expect([out.changed, out.kept]).toEqual([0, 2]);
-    const plain = sheet(scene(""));
-    expect(applyOps(plain.engine.model!, units(plain, "r", "g"), ids(plain)).changed).toBe(2);
-  });
 });

@@ -86,7 +86,7 @@
 //! più, perché è rimasta l'unica copia. Una nota cancellata mentre una bozza era
 //! aperta lascia una bozza **orfana**, che si mostra e si butta con un gesto,
 //! non con uno sweep silenzioso: il criterio della
-//! [seduta 20](../../../docs/project/roadmap.md) è che un
+//! seduta 20 della vecchia roadmap è che un
 //! dato autorevole non si perde in silenzio, e qui il dato autorevole è il
 //! testo.
 

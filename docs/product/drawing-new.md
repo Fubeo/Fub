@@ -65,10 +65,11 @@ anche senza colore; col movimento ridotto non c'è nessuna transizione.
 | Storyboard | sei tavole di 1920 × 1080, «Scena 1» … «Scena 6», tre per riga |
 | Mappa concettuale | un argomento al centro e quattro idee attorno, ognuna legata all'argomento |
 
-Ogni modello è un disegno come gli altri, che si cambia tutto: le forme del
-diagramma e della mappa vengono dalle [raccolte di forme](drawing-library.md),
-coi testi come [etichette nelle forme](drawing-labels.md) e legate da
-[connettori](drawing-connectors.md), e seguono come quelle disegnate a mano.
+Ogni modello è un disegno come gli altri: le forme del diagramma e della
+mappa sono quelle delle raccolte di forme
+(`apps/client/src/editors/spatial/tools/shape-library.ts`), coi testi come
+[etichette nelle forme](drawing-labels.md) e legate da
+[connettori](drawing-connectors.md), che seguono le forme quando si spostano.
 Le forme del diagramma stanno sulla griglia di 20: chi accende la griglia le
 trova allineate. La griglia resta com'era, perché è una scelta della vista,
 non del file.
@@ -95,9 +96,8 @@ che gli somiglia:
 
 | Dopo | Il suggerimento |
 | --- | --- |
-| un tratto fatto col dito | due dita spostano il foglio, e allargandole o stringendole lo avvicinano o lo allontanano; nello spazio Completo, coi gesti accesi, anche che un tocco di due dita annulla e uno di tre ripete |
+| un tratto fatto col dito | due dita spostano il foglio, e allargandole o stringendole lo avvicinano o lo allontanano; e, col tocco di due dita acceso, che un tocco di due dita annulla e uno di tre ripete |
 | un tratto che somiglia a una forma, nello spazio Completo | tenendo fermo mezzo secondo alla fine del tratto, prima di lasciare, il tratto diventa una forma pulita ([forme dal tratto](drawing-ink-shapes.md)) |
-| una forma nuova, quando ce ne sono almeno due senza testo, nello spazio Completo | due tocchi o `F2` scrivono dentro una forma |
 
 - **Uno alla volta, e una volta sola.** Un suggerimento mostrato non torna, in
   nessun disegno. Chi fa già il gesto da sé, per esempio sposta il foglio con

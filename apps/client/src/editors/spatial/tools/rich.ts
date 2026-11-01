@@ -81,9 +81,6 @@ const LINE_ORDER = ["underline", "overline", "line-through"];
 /// Il peso da cui un carattere è in grassetto.
 const BOLD_FROM = 600;
 
-/// Ciò che XML 1.0 non ammette, e le righe.
-const BREAK = /\r\n|[\r\n\u2028\u2029]/;
-
 /// L'attributo di una riga che continua il paragrafo della riga prima, in
 /// un testo in area (formato della scena, testo): `space` o `word`.
 export const JOIN = "fub:join";
@@ -136,12 +133,6 @@ export function richOf(elem: Elem, inherited: Attrs): Rich {
     return child.tag === "textPath" ? [richLine({}, child.runs ?? child.text ?? "")] : [];
   });
   return { attrs: elem.attrs, inherited, lines: lines.length === 0 ? [{ attrs: { dy: "0" }, spans: [] }] : lines };
-}
-
-/// `rich` come si apre per scriverlo: una riga che non ha niente da leggere,
-/// come lo spazio indivisibile di una riga vuota, si apre vuota.
-export function editableRich(rich: Rich): Rich {
-  return { ...rich, lines: rich.lines.map((line) => (lineText(line).trim() === "" ? { attrs: line.attrs, spans: [] } : line)) };
 }
 
 /// Il testo `old` con gli attributi e le righe di `rich`; gli altri figli,
@@ -247,12 +238,6 @@ export function clampCaret(rich: Rich, caret: Caret): Caret {
   return { line, offset: Math.max(0, Math.min(size, caret.offset)) };
 }
 
-/// La fine di `rich`.
-export function endOf(rich: Rich): Caret {
-  const line = rich.lines.length - 1;
-  return { line, offset: lineText(rich.lines[line]!).length };
-}
-
 /// I tratti di `spans` prima e dopo `offset`.
 function splitAt(spans: readonly Span[], offset: number): [Span[], Span[]] {
   const before: Span[] = [];
@@ -299,44 +284,9 @@ export function newLeading(rich: Rich): string {
 
 const sizeOf = (value: string | undefined): number => (value === undefined ? null : nonNegativeLength(value)) ?? 16;
 
-/// Gli attributi di una riga nuova dopo `previous`: i suoi, senza `id`, e
-/// l'interlinea `leading`. Una riga nuova comincia un paragrafo: non copia
-/// [`JOIN`].
-export function freshAttrs(previous: RichLine, leading: string): Attrs {
-  const out: Record<string, string> = {};
-  for (const [name, value] of Object.entries(previous.attrs)) if (name !== "id" && name !== "dy" && name !== JOIN) out[name] = value;
-  out.dy = leading;
-  return out;
-}
-
 /// Ciò che il file può scrivere di `text`: senza i caratteri che XML non
 /// ammette.
 export const cleanText = (text: string): string => xmlText(text);
-
-/// `rich` con il testo fra `from` e `to` sostituito da `text`, che può
-/// andare a capo, scritto coi pezzi `attrs`; e il punto dopo ciò che si è
-/// scritto.
-export function replaceRange(rich: Rich, from: Caret, to: Caret, text: string, attrs: Attrs | null): { readonly rich: Rich; readonly caret: Caret } {
-  const [start, end] = ordered(clampCaret(rich, from), clampCaret(rich, to));
-  const first = rich.lines[start.line]!;
-  const last = rich.lines[end.line]!;
-  const [head] = splitAt(first.spans, start.offset);
-  const [, tail] = splitAt(last.spans, end.offset);
-  const chunks = cleanText(text).split(BREAK);
-  const leading = newLeading(rich);
-  const made: RichLine[] = [];
-  let caret: Caret = start;
-  chunks.forEach((chunk, i) => {
-    const piece: Span = { text: chunk, attrs };
-    const line: RichLine = i === 0 ? { attrs: first.attrs, spans: [...head, piece] } : { attrs: freshAttrs(made[i - 1]!, leading), spans: [piece] };
-    made.push(line);
-    caret = { line: start.line + i, offset: lineText(line).length };
-  });
-  const closing = made[made.length - 1]!;
-  made[made.length - 1] = { attrs: closing.attrs, spans: [...closing.spans, ...tail] };
-  const lines = [...rich.lines.slice(0, start.line), ...made.map((line) => ({ attrs: line.attrs, spans: canonicalSpans(line.spans) })), ...rich.lines.slice(end.line + 1)];
-  return { rich: { ...rich, lines }, caret };
-}
 
 // ---------------------------------------------------------------------------
 // Formattare.
@@ -665,27 +615,6 @@ export function emphasisIn(rich: Rich, from: Caret, to: Caret, which: Emphasis):
   return hasEmphasis(rich, line, { text: "", attrs: styleAt(rich, from) }, which);
 }
 
-/// L'aspetto dei caratteri fra `from` e `to`, come lo mostra il gruppo
-/// «Carattere»: la famiglia e il corpo, `null` se sono diversi, e le enfasi
-/// accese su tutti. Senza caratteri, quello di ciò che vi si scriverebbe.
-export interface RichLook {
-  readonly family: string | null;
-  readonly size: number | null;
-  readonly emphasis: Readonly<Record<Emphasis, boolean>>;
-}
-
-export function lookIn(rich: Rich, from: Caret, to: Caret): RichLook {
-  let seen = spansIn(rich, from, to);
-  if (seen.length === 0) seen = [{ line: rich.lines[clampCaret(rich, from).line]!, span: { text: "", attrs: styleAt(rich, from) } }];
-  const one = <T>(values: readonly T[]): T | null => (values.every((value) => value === values[0]) ? (values[0] ?? null) : null);
-  const all = (which: Emphasis): boolean => seen.every(({ line, span }) => hasEmphasis(rich, line, span, which));
-  return {
-    family: one(seen.map(({ line, span }) => trim(seenIn(rich, line, span, "font-family") ?? ""))),
-    size: one(seen.map(({ line, span }) => sizeIn(rich, line, span))),
-    emphasis: { bold: all("bold"), italic: all("italic"), underline: all("underline"), strike: all("strike") },
-  };
-}
-
 /// `rich` coi caratteri fra `from` e `to` con l'enfasi `which` accesa o
 /// spenta.
 export function emphasize(rich: Rich, from: Caret, to: Caret, which: Emphasis, on: boolean): Rich {
@@ -780,30 +709,4 @@ export function sameRich(a: Rich, b: Rich): boolean {
       return sameAttrs(line.attrs, other.attrs) && p.length === q.length && p.every((span, k) => span.text === q[k]!.text && sameAttrs(span.attrs, q[k]!.attrs));
     })
   );
-}
-
-/// Come scrivere `after` al posto di `before`, il testo che c'era: niente,
-/// le righe con l'operazione `text` se gli attributi del testo e delle
-/// righe restano quelli che lei darebbe, o il testo intero. Le righe di un
-/// testo in area dicono anche come continua ciascuna il suo paragrafo, se
-/// cambia: `joins`, il [`JOIN`] di ogni riga.
-export type RichChange =
-  | { readonly kind: "none" }
-  | { readonly kind: "lines"; readonly lines: readonly TextLine[]; readonly joins?: readonly (string | null)[] }
-  | { readonly kind: "elem"; readonly rich: Rich };
-
-export function richChange(before: Rich, after: Rich): RichChange {
-  if (sameRich(before, after)) return { kind: "none" };
-  if (!sameAttrs(before.attrs, after.attrs) || before.lines.length === 0) return { kind: "elem", rich: after };
-  const leading = newLeading(before);
-  let joins = false;
-  for (let i = 0; i < after.lines.length; i++) {
-    const own = after.lines[i]!.attrs;
-    const old = i < before.lines.length ? before.lines[i]!.attrs : null;
-    const expected = old !== null ? withoutJoin(old) : freshAttrs(after.lines[i - 1]!, leading);
-    if (!sameAttrs(expected, withoutJoin(own))) return { kind: "elem", rich: after };
-    if ((own[JOIN] ?? null) !== (old?.[JOIN] ?? null)) joins = true;
-  }
-  const lines = after.lines.map(lineRuns);
-  return joins ? { kind: "lines", lines, joins: after.lines.map((line) => line.attrs[JOIN] ?? null) } : { kind: "lines", lines };
 }

@@ -42,7 +42,7 @@ non come passato.
 
 ## Con il mouse
 
-Strumenti: penna (`P`), evidenziatore (`H`), gomma (`E`).
+Strumenti: penna (`P`), evidenziatore (`Maiusc+P`), gomma (`E`).
 
 | N. | Gesto | Atteso |
 |---|---|---|
@@ -111,9 +111,7 @@ un segno prima che la penna tocchi, il ruolo è stato deciso troppo tardi.
 3. **Rotazione del foglio.** Gira la vista con due dita, e disegna con la
    penna: il tratto parte sotto la punta e il suo spessore e la sua
    inclinazione non cambiano rispetto al foglio dritto.
-4. **Simmetria.** Accendi la penna in simmetria e disegna: le copie nascono
-   insieme al tratto, e un solo `Ctrl+Z` toglie il tratto e le sue copie.
-5. **Vista che scorre sotto la punta.** Con la gomma giù e ferma accanto a un
+4. **Vista che scorre sotto la punta.** Con la gomma giù e ferma accanto a un
    oggetto, scorri la vista con la rotella o il trackpad fin oltre l'oggetto,
    poi alza senza muovere: l'oggetto resta. Con la penna lo stesso gesto non
    lascia una coda dritta.

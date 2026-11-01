@@ -24,11 +24,11 @@ import { apply, compose, invert, rotate, translate, type Matrix, type Point } fr
 import { elementChildren, type DocumentModel, type ElementPart } from "../scene/model";
 import type { Op } from "../scene/ops";
 import { length } from "../scene/values";
-import { elemOf, holdsEffects, nodeOf, Plan, unwrapIn, wrapIn, type Arranged } from "./arrange";
+import { elemOf, nodeOf, Plan, wrapIn, type Arranged } from "./arrange";
 import { gesture, NewIds, transformValue } from "./edit";
 import { among, lockedAbove, movedBy, SceneMatrices, touchedBy } from "./follow";
 import { elemBounds, type Unit } from "./hit";
-import { labelable, labelOf, labelledPair, labelTarget, textBox } from "./label-hosts";
+import { labelable, labelOf, labelTarget, textBox } from "./label-hosts";
 import { textRich } from "./look";
 import type { Measure } from "./measure";
 import { lineText, richElem, type Rich, type RichLine } from "./rich";
@@ -138,14 +138,6 @@ export function labelTransform(frame: LabelFrame, rich: Rich, parent: Matrix): s
 /// cresce se ne esce, come per ogni testo.
 function extentIn(frame: LabelFrame, rich: Rich): Bounds | null {
   return elemBounds(richElem({ tag: "text", attrs: {} }, rich), labelScene(frame, rich));
-}
-
-/// Dove starà nella scena l'etichetta `rich` di `shape`, quando il seguito
-/// l'avrà rimessa al centro e di nuovo a capo. `null` se la forma non ha un
-/// riquadro del testo.
-export function labelExtent(shape: ElementPart, rich: Rich, measure: Measure): Bounds | null {
-  const frame = labelFrame(shape, new SceneMatrices().of(shape));
-  return frame === null ? null : extentIn(frame, fitted(rich, frame, measure));
 }
 
 /// Vero se le due trasformazioni si scrivono uguali, o quasi.
@@ -292,42 +284,4 @@ export function labelOps(model: DocumentModel, unit: Unit, draft: Rich, measure:
   const elem = richElem({ tag: "text", attrs: {} }, { ...rich, attrs });
   plan.ops.push({ op: "add", parent: group, pos: inGroup ? { after: shapeId } : { last: true }, elem });
   return { ...plan.finish([inGroup ? shapeId : group]), extent: extentIn(place.frame, rich) };
-}
-
-/// Vero se un elemento del disegno nomina `id`: un connettore agganciato a
-/// lui, un `url(#id)` o un `href="#id"`.
-function namedIn(model: DocumentModel, id: string): boolean {
-  const names = (node: ElementPart): boolean => {
-    const ends = node.details?.connector;
-    if (ends !== undefined && (ends.from?.id === id || ends.to?.id === id)) return true;
-    if ((node.kind === "leaf" ? node.refs : node.facts.refs).includes(id)) return true;
-    return node.kind === "container" && elementChildren(node).some(names);
-  };
-  return names(model.root);
-}
-
-/// Le operazioni che tolgono l'etichetta `label`, che sta nel gruppo
-/// `group`. Il gruppo si scioglie se teneva soltanto la forma e lei, senza
-/// titolo, descrizione né effetti, e se niente lo nomina: un connettore
-/// agganciato a lui o un riferimento nel disegno, o una parte estranea che
-/// lo cita (`cited`). La selezione dopo è la forma.
-export function unlabelOps(model: DocumentModel, label: Unit, group: Unit | null, ids: NewIds, cited: (id: string) => boolean): Arranged {
-  const plan = new Plan(model, ids);
-  const node = nodeOf(model, label);
-  const shape = labelTarget(node);
-  const id = plan.idOf(node);
-  const container = group === null ? null : nodeOf(model, group);
-  const loose =
-    container !== null &&
-    shape !== null &&
-    container === node.parent &&
-    labelledPair(container) !== null &&
-    elementChildren(container).length === 2 &&
-    !holdsEffects(container) &&
-    (container.facts.id === null || !(namedIn(model, container.facts.id) || cited(container.facts.id)));
-  // Prima si scioglie il gruppo, poi se ne va l'etichetta: i percorsi del
-  // piano sono quelli di prima.
-  const keys = loose ? unwrapIn(plan, [group!], () => true).freed.filter((each) => each !== id) : shape === null ? [] : [plan.idOf(shape)];
-  plan.ops.push({ op: "remove", target: id });
-  return plan.finish(keys);
 }

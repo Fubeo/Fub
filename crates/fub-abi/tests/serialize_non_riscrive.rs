@@ -3,7 +3,7 @@
 //! Il doc di [`FormatProvider::serialize`](fub_abi::FormatProvider::serialize)
 //! lo dice alla lettera — *«il kernel non riscrive mai un file esistente passando
 //! da qui»* — e fino a questo file era **solo una frase**. È la sesta specie del
-//! [§16.8](../../../docs/project/roadmap.md): la *garanzia
+//! §16.8 della vecchia roadmap: la *garanzia
 //! dichiarata*, quella che batte tutte le altre perché il motivo per cui si
 //! scrive una garanzia è smettere di doverci pensare — un conteggio qualcuno
 //! prima o poi lo ricontrolla, una rete che si crede tesa non la guarda nessuno.

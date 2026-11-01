@@ -37,11 +37,11 @@ import type { Op } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
 import { length } from "../scene/values";
 import { elemOf, fubAttributes, plainAttributes } from "./arrange";
-import { gesture, transformValue, type Destination, type NewIds } from "./edit";
+import { gesture, transformValue } from "./edit";
 import { strokeHalf, textExtent } from "./effects";
 import { among, Changes, lockedAbove, movedBy, namedBy, SceneMatrices, touchedBy } from "./follow";
 import { labelTarget } from "./label-hosts";
-import { shapeSegments, type Unit } from "./hit";
+import { shapeSegments } from "./hit";
 import type { Measure } from "./measure";
 
 /// Quanto un gomito esce dritto da un oggetto prima di girare, e quanto
@@ -947,17 +947,6 @@ export function sceneRoute(kind: ConnectorKind, from: EndInput, to: EndInput, me
   return route(kind, spec(from), spec(to));
 }
 
-/// I cinque punti d'aggancio di `node` nella scena: il centro e il centro
-/// dei quattro lati, nel verso dell'oggetto, dove il capo lo tocca. `null`
-/// se `node` non disegna niente che si sappia.
-export function anchorPoints(node: ElementPart, measure: Measure, router: Router = new Router(measure)): ReadonlyMap<Exclude<Anchor, "auto">, Point> | null {
-  const o = router.outline(node);
-  if (o === null) return null;
-  const out = new Map<Exclude<Anchor, "auto">, Point>([["center", o.centre]]);
-  for (const side of ["top", "right", "bottom", "left"] as const) out.set(side, sidePort(o, side).at);
-  return out;
-}
-
 /// I capi di `line` come sono adesso: agganciati al loro oggetto, o liberi
 /// dove sono, nella scena. `null` se `line` non è un connettore.
 export function endInputs(line: ElementPart, find: (id: string) => ElementPart | null, measure: Measure, router: Router = new Router(measure)): [EndInput, EndInput] | null {
@@ -1002,16 +991,6 @@ export function connectorRoute(
     return "at" in current ? current : { at: sceneRoute(kind, current, current, measure, router)[0]! };
   };
   return connectorAttrsFor(line, kind, input(from, now[0]), input(to, now[1]), measure, router);
-}
-
-/// Il contorno di `node` nella scena, come lo tocca un capo, in segmenti;
-/// `null` se non disegna niente che si sappia.
-export function outlineSegments(node: ElementPart, measure: Measure, router: Router = new Router(measure)): Segment[] | null {
-  const o = router.outline(node);
-  if (o === null) return null;
-  const out: Segment[] = [];
-  for (const [a, b] of o.chords) out.push({ kind: "move", to: a }, { kind: "line", to: b });
-  return out;
 }
 
 /// Le etichette dei connettori che sono in `nodes` o vi stanno dentro, e
@@ -1062,85 +1041,12 @@ export interface Connected {
   readonly skipped: number;
 }
 
-/// «Collega le forme scelte»: unisce ogni oggetto di `units` a cui ci si
-/// aggancia al seguente, con un connettore di tipo `kind` e lo stile
-/// `style`, agganci automatici, in cima a `to`. L'ordine è quello in cui gli
-/// oggetti stanno sul foglio, perché la selezione non ricorda i clic: da
-/// sinistra a destra se i centri sono più distesi in larghezza che in
-/// altezza, se no dall'alto in basso. Due oggetti già uniti, in un verso o
-/// nell'altro, non si uniscono di nuovo. `null` se gli oggetti da unire
-/// sono meno di due.
-export function connectOps(model: DocumentModel, units: readonly Unit[], kind: ConnectorKind, style: LineStyle, to: Destination, ids: NewIds, measure: Measure): Connected | null {
-  const centres = new Map<Unit, Point>();
-  for (const unit of units) {
-    if (unit.bounds !== null && attachable(unit.node)) centres.set(unit, [(unit.bounds.min[0] + unit.bounds.max[0]) / 2, (unit.bounds.min[1] + unit.bounds.max[1]) / 2]);
-  }
-  if (centres.size < 2) return null;
-  const spread = (axis: 0 | 1): number => {
-    const values = [...centres.values()].map((p) => p[axis]);
-    return Math.max(...values) - Math.min(...values);
-  };
-  const [first, second] = spread(0) >= spread(1) ? [0, 1] : [1, 0];
-  const ordered = [...centres.keys()].sort((a, b) => centres.get(a)![first]! - centres.get(b)![first]! || centres.get(a)![second]! - centres.get(b)![second]!);
-  const joined = new Set<string>();
-  for (const line of scan(model).lines) {
-    const facts = line.details!.connector!;
-    if (facts.from === null || facts.to === null) continue;
-    joined.add(`${facts.from.id} ${facts.to.id}`);
-    joined.add(`${facts.to.id} ${facts.from.id}`);
-  }
-  const idents: Op[] = [];
-  const named = new Map<Unit, string>();
-  const idOf = (unit: Unit): string => {
-    let id = unit.id ?? named.get(unit);
-    if (id === undefined) {
-      id = ids.next("object");
-      named.set(unit, id);
-      idents.push({ op: "ident", path: unit.path, tag: unit.tag, id });
-    }
-    return id;
-  };
-  const router = new Router(measure);
-  const adds: Op[] = [];
-  const lines: string[] = [];
-  let skipped = 0;
-  for (let i = 1; i < ordered.length; i++) {
-    const from = ordered[i - 1]!;
-    const next = ordered[i]!;
-    if (from.id !== null && next.id !== null && joined.has(`${from.id} ${next.id}`)) {
-      skipped++;
-      continue;
-    }
-    const scene = sceneRoute(kind, { node: from.node, anchor: "auto" }, { node: next.node, anchor: "auto" }, measure, router);
-    const id = ids.next("object");
-    const elem = connectorElem(id, kind, scene.map((p) => apply(to.inverse, p)), { id: idOf(from), anchor: "auto" }, { id: idOf(next), anchor: "auto" }, style);
-    adds.push({ op: "add", parent: to.parent, pos: { last: true }, elem });
-    lines.push(id);
-  }
-  return { idents, adds, lines, skipped };
-}
-
 /// Un capo di un connettore del disegno, nella scena.
 export interface LineEnd {
   readonly line: ElementPart;
   readonly id: string;
   readonly end: "from" | "to";
   readonly at: Point;
-}
-
-/// I capi dei connettori del disegno che si possono riagganciare: non quelli
-/// bloccati, nascosti, o in un contenitore bloccato.
-export function lineEnds(model: DocumentModel, measure: Measure, router: Router = new Router(measure)): LineEnd[] {
-  const out: LineEnd[] = [];
-  for (const line of scan(model).lines) {
-    const id = line.facts.id;
-    const facts = line.details!.connector!;
-    if (id === null || line.details!.locked === true || line.details!.hidden === true || lockedAbove(line)) continue;
-    const m = router.matrixOf(line);
-    const points = facts.geom.points;
-    out.push({ line, id, end: "from", at: apply(m, points[0]!) }, { line, id, end: "to", at: apply(m, points[points.length - 1]!) });
-  }
-  return out;
 }
 
 /// `fub:geom` e `d` di un connettore di tipo `kind` con i punti `points`,

@@ -10,6 +10,11 @@
 > di prova da 65 a 73 ([operazioni sulla scena](scene-operations.md), §9);
 > l'indice in `crates/fub-format-svg/src/parse.rs`.
 
+Lo strumento Tavola, che le creava, se n'è andato col livello Standard
+([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)): le tavole
+dei file si leggono, si vedono e si esportano, e le operazioni le tengono
+vere, ma l'editor non ne crea e non ne cambia più.
+
 Una parte del [formato della scena](scene-format.md), §2. Una tavola è una
 pagina dentro il disegno, col suo nome e la sua carta: un disegno ne può
 avere più d'una, da incorporare in una nota una per una. Si scrive con `view`

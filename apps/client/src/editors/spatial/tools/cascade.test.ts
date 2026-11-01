@@ -2,8 +2,11 @@
 // eredita, come si risolvono colori, misure e variabili.
 
 import { describe, expect, it } from "vitest";
-import { Cascade, cssOrigin, cssTransform, expandFont, normal, plainValue, renders, same, type CascadeNode } from "./cascade";
-import { readSheet } from "./selectors";
+import { Cascade, cssOrigin, cssTransform, expandFont, normal, renders, same, type CascadeNode } from "./cascade";
+import { readSheets, type Sheet } from "./selectors";
+
+/// Le regole del foglio `css`, da solo.
+const readSheet = (css: string): Sheet => readSheets([{ id: "0", css }]);
 
 const SVG = "http://www.w3.org/2000/svg";
 
@@ -299,19 +302,6 @@ describe("dove una proprietà si vede", () => {
 });
 
 describe("simboli e use", () => {
-  it("un contesto prende il posto del genitore; ciò che non dà vale come all'inizio", () => {
-    const rect = el("rect", { id: "r", width: "10", height: "10" });
-    const symbol = el("symbol", { id: "s" }, [rect]);
-    const root = el("svg", { fill: "#f00", stroke: "#0f0" }, [el("defs", {}, [symbol])]);
-    const c = cascade("", root);
-    expect(c.value(rect, "fill").key).toBe("#ff0000");
-    c.setContext(symbol, (p) => (p === "fill" ? plainValue("fill", "blue") : null));
-    expect(c.value(rect, "fill").key).toBe("#0000ff");
-    expect(c.received(symbol, "fill")).toMatchObject({ key: "#0000ff", own: false });
-    expect(c.value(rect, "stroke").key).toBe("none");
-    c.setContext(symbol, null);
-    expect([c.value(rect, "fill").key, c.value(rect, "stroke").key]).toEqual(["#ff0000", "#00ff00"]);
-  });
 
   it("la finestra di un use: posizione, misura, viewBox e preserveAspectRatio del simbolo", () => {
     const inner = el("rect", { width: "50%", height: "10" });

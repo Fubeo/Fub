@@ -44,7 +44,7 @@ import {
   type SurfaceRequest,
   type SurfaceScrollLink,
 } from "../editors/core/registry";
-import { modeForContext, offersContext, offersReadingToggle, readingToggleTarget } from "../editors/core/surface-modes";
+import { modeForContext, offersContext, offersMode, offersReadingToggle, readingToggleTarget } from "../editors/core/surface-modes";
 import { draggedEntries, ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../ui/drag-types";
 import { pageName } from "../rules/organizer";
 import { folderForNote } from "../rules/mirrored";
@@ -80,7 +80,6 @@ import { existingRecentNotes } from "./recent";
 import { linkPreference, markdownDestination, wikiPathCandidates, type LinkFormat, type LinkPreference } from "./note-links";
 import { onEvent } from "./kernel";
 import { drawingFonts } from "./drawing-fonts";
-import { drawingSymbols } from "./drawing-symbols";
 import { emit, on, state } from "./store";
 import { CASE_KEY, caseOf, toRecover } from "./drafts";
 import { addSheetNotice, clearAllRemovedNotices, clearSheetNotices, dismissSheetNotice, moveSheetNotices, setLimitedMode, setRemovedNotice } from "./sheet-notices";
@@ -832,7 +831,6 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       pick: () => pickDrawingImage(),
     },
     drawingFonts,
-    drawingSymbols,
     renderCanvasMarkdown: (_nodeId, text, host, documentId, forms) => mountMarkdown(host, renderMarkdown(text, forms).html, {
       documentId,
       openWikilink: (page, heading, block) => openWikilink(page, heading, block),
@@ -1216,6 +1214,16 @@ function registerCommands(): void {
     layer: "profile",
     available: () => offersContext(focusedModes(), "source"),
     run: () => void setContextMode("source"),
+  });
+  // I Blocchi (N13) sono una modalità della nota con il ruolo della Live: il
+  // comando la nomina per id, e c'è soltanto dove la superficie la dichiara.
+  registerShellCommand({
+    id: "shell.mode.blocks",
+    title: "commands.mode.blocks",
+    description: "commands.mode.blocks.desc",
+    layer: "profile",
+    available: () => offersMode(focusedModes(), "blocks"),
+    run: () => void setMode("blocks"),
   });
   // La vista sorgente di una scheda (ADR 0203): lo stesso documento, sulla
   // stessa sessione, nella superficie che la sua dichiara come sorgente — un
@@ -2391,6 +2399,13 @@ export function focusedContextMode(): PaneMode | undefined {
   return selectedMode(r)?.contextMode;
 }
 
+/// L'id della modalità del riquadro col fuoco, dove ce n'è più d'una.
+export function focusedModeId(): string | undefined {
+  const r = panes.get(layout.focus);
+  if ((r?.surface?.modes.length ?? 0) < 2) return undefined;
+  return selectedMode(r)?.id;
+}
+
 /// Le modalità della superficie del riquadro col fuoco; nessuna senza superficie.
 function focusedModes(): readonly SurfaceMode[] {
   return panes.get(layout.focus)?.surface?.modes ?? [];
@@ -2868,7 +2883,10 @@ async function toggleReading(): Promise<void> {
 async function setContextMode(context: PaneMode): Promise<void> {
   const r = panes.get(layout.focus);
   if (!r?.surface) return;
-  const target = modeForContext(r.surface.modes, selectedMode(r)?.id, context);
+  // Dai Blocchi «Passa a Live» porta alla Live: hanno lo stesso ruolo, ma i
+  // Blocchi hanno un comando loro e la Live sarebbe altrimenti irraggiungibile.
+  const current = selectedMode(r)?.id;
+  const target = modeForContext(r.surface.modes.filter((mode) => mode.id !== "blocks" || current !== "blocks"), current === "blocks" ? undefined : current, context);
   if (target) await setMode(target.id);
 }
 

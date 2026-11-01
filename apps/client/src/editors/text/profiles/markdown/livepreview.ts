@@ -80,6 +80,7 @@ import { liveHints } from "./hints";
 import { DiagramLiveWidget, fenceBody } from "./diagram-live";
 import { calloutGestures, CalloutTypeWidget } from "./callout";
 import { detailsLive } from "./details-live";
+import { blockGesture } from "./block-gesture";
 import { calloutHead } from "./callout-head";
 import { hangingIndent } from "./hanging";
 import { blockTex, MathBlockLiveWidget, mathPopovers, type LiveFormula } from "./math-live";
@@ -1484,8 +1485,11 @@ function handleClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks):
     const pos = view.posAtDOM(target);
     const threeChars = view.state.doc.sliceString(pos, pos + 3);
     if (/^\[[^\]\n]\]$/.test(threeChars)) {
+      const checked = !taskChecked(threeChars[1]);
+      const line = view.state.doc.lineAt(pos);
       view.dispatch({
-        changes: { from: pos + 1, to: pos + 2, insert: taskChecked(threeChars[1]) ? " " : "x" },
+        changes: { from: pos + 1, to: pos + 2, insert: checked ? "x" : " " },
+        annotations: blockGesture.of({ kind: "check", lead: { from: line.from, to: line.to }, say: liveStrings.t(checked ? "blocks.checked" : "blocks.unchecked") }),
         // Come ogni battuta di contenuto: senza, la modifica cade fuori dalla
         // history nativa dell'editor.
         userEvent: "input",

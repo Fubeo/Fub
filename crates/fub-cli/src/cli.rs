@@ -42,6 +42,7 @@ pub enum CliCommand {
     },
     Read(ReadArgs),
     Write(WriteArgs),
+    Mcp(McpArgs),
     Create(CreateArgs),
     Edit(EditArgs),
     Files(FilesArgs),
@@ -240,6 +241,14 @@ pub struct DocArgs {
     pub doc: String,
 }
 
+/// `mcp`: il server MCP su stdio, con le radici dell'automazione.
+#[derive(Clone, Debug)]
+pub struct McpArgs {
+    pub global: GlobalArgs,
+    pub read_roots: Vec<String>,
+    pub write_roots: Vec<String>,
+}
+
 #[derive(Clone, Debug)]
 pub struct ViewsArgs {
     pub global: GlobalArgs,
@@ -387,6 +396,7 @@ impl CliCommand {
             | CliCommand::NativeInstall { global, .. }
             | CliCommand::Pair { global, .. } => global.clone(),
             CliCommand::Read(a) => a.global.clone(),
+            CliCommand::Mcp(a) => a.global.clone(),
             CliCommand::Write(a) => a.global.clone(),
             CliCommand::Create(a) => a.global.clone(),
             CliCommand::Edit(a) => a.global.clone(),
@@ -440,6 +450,10 @@ impl CliCommand {
             CliCommand::Read(mut a) => {
                 a.global = global;
                 CliCommand::Read(a)
+            }
+            CliCommand::Mcp(mut a) => {
+                a.global = global;
+                CliCommand::Mcp(a)
             }
             CliCommand::Write(mut a) => {
                 a.global = global;
@@ -758,6 +772,38 @@ fn parse_command(
             })
         }
         "vault" => parse_vault(parser, global),
+        "mcp" => {
+            let mut args = McpArgs {
+                global,
+                read_roots: Vec::new(),
+                write_roots: Vec::new(),
+            };
+            while let Some(arg) = parser.peek() {
+                let Some((name, inline)) = split_flag(arg) else {
+                    break;
+                };
+                let roots = match name {
+                    "automation-read-root" => &mut args.read_roots,
+                    "automation-write-root" => &mut args.write_roots,
+                    _ => break,
+                };
+                let value = match inline {
+                    Some(value) => value.to_string(),
+                    None => {
+                        parser.next();
+                        parser.expect_value(&format!("--{name}"))?
+                    }
+                };
+                if inline.is_some() {
+                    parser.next();
+                }
+                if value.trim().is_empty() {
+                    return Err(format!("--{name} vuota"));
+                }
+                roots.push(value);
+            }
+            Ok(CliCommand::Mcp(args))
+        }
         "read" => {
             let doc = parser
                 .next()
@@ -2327,6 +2373,7 @@ fn parse_vault(parser: &mut Parser, global: GlobalArgs) -> Result<CliCommand, St
 pub fn command_names() -> Vec<&'static str> {
     vec![
         "vault",
+        "mcp",
         "read",
         "write",
         "create",
@@ -2363,13 +2410,14 @@ pub fn command_names() -> Vec<&'static str> {
     ]
 }
 pub fn usage() -> &'static str {
-    "uso: fub-cli [--vault PATH] [--format json|jsonl|tsv|csv|md|text] [--config-dir DIR] [--no-watcher] [--standalone] <comando> [args]\ncomandi: vault read write create exec files query search command properties tasks templates daily outline wordcount random bookmarks views plugin theme diagnostics capture uri callback login mfa config sync publish native-install pair repl completion help"
+    "uso: fub-cli [--vault PATH] [--format json|jsonl|tsv|csv|md|text] [--config-dir DIR] [--no-watcher] [--standalone] <comando> [args]\ncomandi: vault mcp read write create exec files query search command properties tasks templates daily outline wordcount random bookmarks views plugin theme diagnostics capture uri callback login mfa config sync publish native-install pair repl completion help"
 }
 
 pub fn help_text(topic: Option<&str>) -> String {
     match topic {
         None => format!("fub-cli — automazione locale sopra Host.\n\n{}\n\nflag globali: --vault PATH --format F --config-dir DIR --no-watcher --standalone --limit N --offset N --dry-run --yes --no-input --quiet --verbose --no-color --color\nUsa `help <comando>` per la sintassi. Con il vault aperto nell'app, i comandi passano dall'app (canale di controllo locale); --standalone non passa dall'app e non elude il writer lock: vault occupato = busy.", usage()),
         Some(name) => match name {
+            "mcp" => "mcp [--automation-read-root DIR]… [--automation-write-root DIR]…\nServer MCP su stdio (JSON-RPC 2.0, un messaggio per riga) per gli agenti: fub_search, fub_query, fub_read, fub_read_model, fub_write, fub_create, fub_commands, fub_invoke, e le note come risorse. Senza --automation-write-root è in sola lettura; senza --automation-read-root legge tutto il vault. fub_write vuole la revisione letta, fub_invoke senza apply mostra il piano. Vault da --vault/FUB_VAULT/corrente.".to_string(),
             "read" => "read <doc> [--revision] [--model]\nLegge sorgente+revisione via Host::read_document. --model aggiunge il modello parsato. Vault da --vault/FUB_VAULT/corrente.".to_string(),
             "write" => "write <doc> [--base REV|--force] [--stdin|--text T|--file F]\nScrive con guardia CAS: --base la revisione letta, --force detta esplicita. Sorgente da --text/--file/stdin. Exit 5 su conflitto.".to_string(),
             "create" => "create [name] [--text T|--file F|--stdin] [--template T] [--title T]\nCrea senza sovrascrivere (AlreadyExists se occupato). --template espande note.from_template, --daily via templates.".to_string(),

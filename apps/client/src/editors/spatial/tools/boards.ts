@@ -45,18 +45,14 @@ import { ROOT, type Op, type Pos } from "../scene/ops";
 import { MAX_BOARDS } from "../scene/read";
 import type { LengthUnit } from "../scene/rulers";
 import { elemToOut, type Elem } from "../scene/serialize";
-import { duplicateOps, elemOf, Plan, type Arranged } from "./arrange";
-import { moveOps, pageFor, roundDelta, type NewIds } from "./edit";
+import { elemOf, Plan, type Arranged } from "./arrange";
+import { moveOps, pageFor, type NewIds } from "./edit";
 import type { Unit } from "./hit";
 import { NAME_MAX } from "./naming";
-import { ResourceCopies } from "./resources";
 
 /// Lo spazio fra la tavola più a destra e quella nuova che le nasce dopo, in
 /// unità della scena.
 export const BOARD_GAP = 80;
-
-/// Il lato più corto di una tavola, in unità della scena.
-export const MIN_BOARD_SIDE = 1;
 
 /// I decimali dei numeri di una tavola, come quelli della geometria.
 const PLACES = 2;
@@ -120,11 +116,6 @@ export function rectBounds([x, y, width, height]: Rect): Bounds {
   return { min: [x, y], max: [x + width, y + height] };
 }
 
-/// Il rettangolo di `bounds`.
-export function boundsRect(bounds: Bounds): Rect {
-  return [bounds.min[0], bounds.min[1], bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1]];
-}
-
 /// Il rettangolo della pagina.
 export function pageRect(page: Page): Rect {
   return [page.x, page.y, page.width, page.height];
@@ -145,10 +136,6 @@ export function rectText(rect: Rect): string {
 export function roundRect(rect: Rect): Rect {
   const [x, y, width, height] = numbers(rect).map(Number);
   return [x!, y!, width!, height!];
-}
-
-function sameRect(a: Rect, b: Rect): boolean {
-  return rectText(a) === rectText(b);
 }
 
 /// Il riquadro che contiene `a` e `b`.
@@ -204,18 +191,6 @@ export function boardAt(boards: readonly Board[], p: Point): Board | null {
   return found;
 }
 
-/// Gli oggetti di `units` che una tavola col riquadro `box` porta con sé:
-/// quelli che hanno il centro dentro, bordi compresi.
-export function carriedBy(box: Bounds, units: readonly Unit[]): Unit[] {
-  return units.filter((unit) => {
-    const bounds = unit.bounds;
-    if (bounds === null) return false;
-    const x = (bounds.min[0] + bounds.max[0]) / 2;
-    const y = (bounds.min[1] + bounds.max[1]) / 2;
-    return x >= box.min[0] && x <= box.max[0] && y >= box.min[1] && y <= box.max[1];
-  });
-}
-
 /// Il rettangolo di una tavola nuova: della misura di `like`, o dell'ultima
 /// tavola, o della pagina in un disegno senza tavole; in alto come lei, a
 /// destra di tutte le tavole a [`BOARD_GAP`] unità. `null` senza tavole e
@@ -226,26 +201,6 @@ export function nextBoardRect(boards: readonly Board[], page: Page | null, like:
   if (base === null) return null;
   const right = boards.reduce((most, board) => Math.max(most, board.box.max[0]), base[0] + base[2]);
   return roundRect([right + BOARD_GAP, base[1], base[2], base[3]]);
-}
-
-/// Dove va la copia di una tavola col rettangolo `rect` quando non la porta
-/// il puntatore: lo spostamento che la mette alla sua destra, a
-/// [`BOARD_GAP`] unità, e più a destra finché, con lo stesso spazio attorno,
-/// non tocca nessuna di `boards`. Resta alla stessa altezza.
-export function duplicateSpot(boards: readonly Board[], rect: Rect): [dx: number, dy: number] {
-  const [left, top, width, height] = rect;
-  let x = left + width + BOARD_GAP;
-  for (;;) {
-    // Oltre ogni tavola che toccherebbe, spazio compreso: una tavola
-    // superata non torna davanti, perché la copia va solo a destra.
-    let past = x;
-    for (const { box } of boards) {
-      const near = x < box.max[0] + BOARD_GAP && box.min[0] < x + width + BOARD_GAP && top < box.max[1] + BOARD_GAP && box.min[1] < top + height + BOARD_GAP;
-      if (near) past = Math.max(past, box.max[0] + BOARD_GAP);
-    }
-    if (past === x) return [roundDelta(x - left), 0];
-    x = past;
-  }
 }
 
 /// Il `view` di una tavola nuova.
@@ -273,25 +228,6 @@ function paperElem(id: string, board: string, rect: Rect, fill: string | null): 
   const attrs: Record<string, string> = { id, "fub:role": "paper", "fub:board": board, ...geometry(rect) };
   if (fill !== null) attrs.fill = fill;
   return { tag: "rect", attrs };
-}
-
-/// `elem` senza id: un titolo o una descrizione che si copia.
-function withoutId(elem: Elem): Elem {
-  const attrs = { ...elem.attrs };
-  delete attrs.id;
-  return { ...elem, attrs };
-}
-
-/// La copia della carta `paper` per la tavola `board`, con l'id `id` e la
-/// geometria di `rect`: gli altri attributi restano, e titoli e descrizioni
-/// la seguono senza id. `null` se ha parti o nomi che un'operazione non sa
-/// scrivere.
-function paperCopy(model: DocumentModel, paper: ElementPart, id: string, board: string, rect: Rect): Elem | null {
-  const elem = elemOf(paper);
-  if (elem === null) return null;
-  const attrs = { ...elem.attrs, id, "fub:board": board, ...geometry(rect) };
-  const copy: Elem = elem.children === undefined ? { tag: "rect", attrs } : { tag: "rect", attrs, children: elem.children.map(withoutId) };
-  return writable(copy, model) ? copy : null;
 }
 
 /// Dove va la carta di una tavola nuova: dopo l'ultima carta; in testa se
@@ -438,97 +374,9 @@ export function moveBoardOps(model: DocumentModel, board: Board, dx: number, dy:
   return plan.finish([board.id]);
 }
 
-/// I nomi che scrive un duplicato, nella lingua di adesso.
-export interface CopyNames {
-  /// Il nome della tavola `n` che nasce dalla pagina: «Tavola n».
-  board(n: number): string;
-  /// Il nome della copia `n` di una tavola che si chiama `name`: «{name}
-  /// copia» la prima, poi «{name} copia {n}».
-  copy(name: string, n: number): string;
-}
-
 /// Perché una tavola non si duplica: quelli di [`AddRefusal`], o un oggetto
 /// che porta e che non si copia, perché ha parti estranee (`"content"`).
 export type DuplicateRefusal = AddRefusal | "content";
-
-/// Le operazioni che duplicano la tavola `board` con gli oggetti di
-/// `carried`, ciò che porta: la copia è spostata di (`dx`, `dy`), già
-/// arrotondati, e sta subito dopo di lei fra le tavole, col nome di
-/// [`copyName`]; la sua carta, se ce l'ha, è una copia della sua, e gli
-/// oggetti si copiano come li copia «Duplica», con le risorse private che
-/// usano. Con `board` `null` si duplica la pagina di un disegno senza
-/// tavole, che prima diventa la tavola 1 come in [`addBoardOps`]. La pagina
-/// si allarga a coprire la copia e ciò che porta. La chiave che torna è l'id
-/// della copia; nessuna operazione se non c'è una tavola o una pagina da
-/// duplicare.
-export function duplicateBoardOps(
-  model: DocumentModel,
-  board: Board | null,
-  dx: number,
-  dy: number,
-  carried: readonly Unit[],
-  names: CopyNames,
-  ids: NewIds,
-  page: Page | null,
-): Arranged | DuplicateRefusal {
-  const boards = boardsOf(model);
-  if (board === null && (boards.length > 0 || page === null)) return { ops: [], keys: [] };
-  // Dalla pagina nascono due tavole: lei e la copia.
-  if (boards.length + (board === null ? 2 : 1) > MAX_BOARDS) return "limit";
-  let made: PageBoard | null = null;
-  let from: Pick<Board, "id" | "rect" | "name" | "paper">;
-  if (board === null) {
-    const name = freshBoardName([], (n) => names.board(n));
-    const first = pageBoard(model, page!, name, ids);
-    if (first === "paper") return "paper";
-    made = first;
-    from = { id: first.id, rect: first.rect, name, paper: first.paper };
-  } else {
-    from = board;
-  }
-  const id = ids.next("board");
-  const rect = roundRect([from.rect[0] + dx, from.rect[1] + dy, from.rect[2], from.rect[3]]);
-  const name = copyName(made === null ? boards.map((each) => each.name) : [from.name], from.name, (base, n) => names.copy(base, n));
-  // Le risorse della carta si copiano con quelle degli oggetti: la `defs`
-  // che le riceve, se manca, nasce una volta sola.
-  let copies = new ResourceCopies(model, ids, elemOf);
-  let sheet: Elem | null = null;
-  if (from.paper !== null) {
-    const paper = ids.next("paper");
-    const exact = paperCopy(model, from.paper, paper, id, rect);
-    sheet = exact === null ? null : copies.adopt(exact);
-    if (sheet === null) {
-      // Una carta che non si sa copiare somiglia alla sua, come quella di
-      // una tavola nuova; le copie a metà delle sue risorse se ne vanno.
-      copies = new ResourceCopies(model, ids, elemOf);
-      sheet = paperElem(paper, id, rect, paperFill(from.paper));
-    }
-  }
-  const content = duplicateOps(model, carried, dx, dy, ids, copies);
-  if (content === null) return "content";
-  const plan = new Plan(model, ids);
-  // Prima le copie degli oggetti, che nominano col percorso chi non ha id:
-  // una tavola o una carta aggiunta prima cambierebbe i percorsi.
-  plan.ops.push(...content.ops);
-  if (made !== null) plan.ops.push(...made.ops);
-  if (sheet !== null) plan.ops.push({ op: "add", parent: ROOT, pos: paperPlace(model), elem: sheet });
-  const view = board === null ? null : copiedView(model, board, id, rect, name);
-  plan.ops.push({ op: "add", parent: ROOT, pos: { after: from.id }, elem: view ?? boardElem(id, rect, name) });
-  growPage(plan, page, coverOf(rect, carried, dx, dy));
-  return plan.finish([id]);
-}
-
-/// Le operazioni che danno alla tavola `board` il rettangolo `rect`, con le
-/// sue carte; il disegno resta dov'è. La chiave che torna è l'id della
-/// tavola.
-export function resizeBoardOps(model: DocumentModel, board: Board, rect: Rect, ids: NewIds, page: Page | null): Arranged {
-  const next = roundRect(rect);
-  if (sameRect(next, board.rect) || next[2] <= 0 || next[3] <= 0) return { ops: [], keys: [board.id] };
-  const plan = new Plan(model, ids);
-  placeSheets(plan, board, next);
-  growPage(plan, page, rectBounds(next));
-  return plan.finish([board.id]);
-}
 
 /// Le operazioni che tolgono la tavola `board`; il disegno resta com'è.
 /// Con lei se ne vanno le sue carte, tranne con l'ultima tavola: allora la
@@ -596,14 +444,6 @@ function namedView(model: DocumentModel, board: Board, name: string, attrs: Read
   return writable(next, model) ? next : null;
 }
 
-/// Il `view` della copia della tavola `board`: il suo, con l'id `id`, il
-/// rettangolo `rect` e il nome `name`, e i figli senza id. `null` se ha nomi
-/// che un'operazione non sa scrivere.
-function copiedView(model: DocumentModel, board: Board, id: string, rect: Rect, name: string): Elem | null {
-  const view = namedView(model, board, name, { id, viewBox: rectText(rect) });
-  return view === null ? null : { ...view, children: (view.children ?? []).map(withoutId) };
-}
-
 /// Le operazioni che danno alla tavola `board` il nome `name`, già pulito da
 /// `cleanName`. Nessuna operazione se il nome è vuoto, o se è già il suo.
 /// La chiave che torna è l'id della tavola dopo: lo stesso, o uno nuovo se il
@@ -619,30 +459,6 @@ export function renameBoardOps(model: DocumentModel, board: Board, name: string,
   plan.ops.push({ op: "remove", target: board.id }, { op: "add", parent: ROOT, pos: place.pos, elem: next }, ...place.then);
   if (id !== board.id) for (const paper of papersOf(model, board.id)) plan.ops.push({ op: "set", id: plan.idOf(paper, "paper"), attrs: { "fub:board": id } });
   return plan.finish([id]);
-}
-
-/// Le operazioni che portano la tavola `board` al posto `to`, contato da 0,
-/// fra le tavole: cambia l'ordine dei `view`, e basta. La chiave che torna è
-/// il suo id.
-export function reorderBoardOps(model: DocumentModel, board: Board, to: number): Arranged {
-  const boards = boardsOf(model);
-  const from = boards.findIndex((each) => each.id === board.id);
-  const place = Math.max(0, Math.min(boards.length - 1, Math.trunc(to)));
-  if (from < 0 || place === from) return { ops: [], keys: [board.id] };
-  const there = boards[place]!;
-  if (place > from) return { ops: [{ op: "move", target: board.id, parent: ROOT, pos: { after: there.id } }], keys: [board.id] };
-  // Prima di quella che sta lì: dopo l'elemento che la precede, se ha un id;
-  // se no le due si scambiano.
-  const siblings = elementChildren(model.root);
-  const before = siblings[siblings.indexOf(there.node) - 1];
-  const ops: Op[] =
-    before !== undefined && before.details !== null && before.facts.id !== null
-      ? [{ op: "move", target: board.id, parent: ROOT, pos: { after: before.facts.id } }]
-      : [
-          { op: "move", target: board.id, parent: ROOT, pos: { after: there.id } },
-          { op: "move", target: there.id, parent: ROOT, pos: { after: board.id } },
-        ];
-  return { ops, keys: [board.id] };
 }
 
 // ---------------------------------------------------------------------------

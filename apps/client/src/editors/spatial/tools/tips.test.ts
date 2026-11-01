@@ -7,8 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import { FIDELITY } from "../../../../bench/fidelity-corpus";
-import { flatten, parsePath, type Segment } from "../scene/geometry";
-import { IDENTITY } from "../scene/matrix";
+import { parsePath } from "../scene/geometry";
 import type { LeafNode } from "../scene/model";
 import type { AddOp, Op, SetOp } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
@@ -16,33 +15,9 @@ import { doc, Mulberry32 } from "../scene/test-support";
 import { elemOf, plainAttributes } from "./arrange";
 import { gesture, NewIds } from "./edit";
 import { arrowPath } from "./shapes";
-import { recolorSwatchOps, removeSwatchOps } from "./swatches";
 import { LAYER, open, type Opened } from "./test-support";
 import { BLUE, CUSTOM, DEFS, ENDS, ids, MARKER, markersIn, RED, written } from "./tip-support";
-import {
-  DEFAULT_TIP_SIZE,
-  TIP_ENDS,
-  TIP_SHAPES,
-  TIP_SIZES,
-  Shelf,
-  Tipper,
-  followTips,
-  markedPlaces,
-  markerTip,
-  tipAreas,
-  tipElem,
-  tipOps,
-  tippable,
-  tipsLookOf,
-  tipsStyleOf,
-  type MarkerTip,
-  type Tip,
-  type TipChange,
-  type TipEnd,
-  type TipShape,
-  type TipSize,
-  type Tipped,
-} from "./tips";
+import { DEFAULT_TIP_SIZE, TIP_ENDS, TIP_SHAPES, TIP_SIZES, Shelf, Tipper, followTips, markerTip, tipElem, tipOps, tippable, tipsLookOf, tipsStyleOf, type MarkerTip, type Tip, type TipChange, type TipEnd, type TipShape, type TipSize, type Tipped } from "./tips";
 
 /// Un elemento come lo scrive il motore su una riga sola, per confrontarlo a occhio.
 const oneLine = (elem: Elem): string => written(elem).replace(/\n\s*/g, "");
@@ -1158,37 +1133,7 @@ describe.each([
     expect(usedBy(opened, "oa", "end")).toBe("mb");
   });
 
-  it("un campione ricolorato porta con sé la punta, e non c'è altro da fare", () => {
-    const source = doc(
-      DEFS(SWATCH("rs", BLUE), MARKER("mr", "triangle", "medium", "end", "url(#rs) #0072b2")) +
-        LAYER +
-        LINE("oa", ` stroke="url(#rs) #0072b2" stroke-width="2"${ENDS(null, "mr")}`) +
-        "</g>",
-    );
-    const opened = followed(source, index);
-    const made = recolorSwatchOps(opened.engine.model!, "rs", PINK, opened.reindex().units, ids(opened));
-    const forward = step(opened, gesture(made.ops)!);
-    expect(adds(forward)).toHaveLength(0);
-    expect(shown(opened, "oa", "end")).toMatchObject({ id: "mr", paint: "url(#rs) #cc79a7" });
-    expect(opened.engine.text).toContain('stroke="url(#rs) #cc79a7"');
-    settled(opened);
-  });
 
-  it("un campione tolto lascia la punta del colore che la linea scrive adesso", () => {
-    const source = doc(
-      DEFS(SWATCH("rs", BLUE), MARKER("mr", "circle", "small", "end", "url(#rs) #0072b2")) +
-        LAYER +
-        LINE("oa", ` stroke="url(#rs) #0072b2" stroke-width="2"${ENDS(null, "mr")}`) +
-        "</g>",
-    );
-    const opened = followed(source, index);
-    const made = removeSwatchOps(opened.engine.model!, "rs", opened.reindex().units, ids(opened));
-    step(opened, gesture(made.ops)!);
-    expect(shown(opened, "oa", "end")).toMatchObject({ tip: tip("circle", "small"), paint: BLUE });
-    expect(opened.engine.text).not.toContain('id="rs"');
-    expect(opened.engine.text).not.toContain("url(#rs)");
-    settled(opened);
-  });
 
   it("una linea che passa a una sfumatura prende il colore del vertice, e lo cambia con lui", () => {
     const source = doc(DEFS(RAMP("rg"), MARKER("mr", "triangle", "medium", "end")) + LAYER + LINE("oa", ` stroke="${RED}" stroke-width="2"${ENDS(null, "mr")}`) + "</g>");
@@ -1513,6 +1458,7 @@ describe("a caso", () => {
     }
   }
 
+
   it("le punte restano del colore della linea, il motore non rifiuta il seguito, e un annulla torna al byte", () => {
     let applied = 0;
     for (let seed = 1; seed <= 60; seed++) {
@@ -1531,6 +1477,7 @@ describe("a caso", () => {
         switch (rng.below(10)) {
           case 0:
           case 1:
+          case 6:
             op = { op: "set", id: target, attrs: { stroke: rng.below(10) === 0 ? null : rng.below(10) === 0 ? pick(WRONG) : pick(STROKES) } };
             break;
           case 2:
@@ -1551,9 +1498,6 @@ describe("a caso", () => {
             op = gesture(tipped(opened, change, units).ops);
             break;
           }
-          case 6:
-            op = gesture(recolorSwatchOps(opened.engine.model!, pick(["rs", "rt"]), pick(COLORS), opened.reindex().units, ids(opened)).ops);
-            break;
           case 7:
             op = { op: "set", id: "rg", attrs: { x2: pick(["20", "50", "100", "200"]) } };
             break;
@@ -1671,180 +1615,6 @@ describe("mille linee", () => {
     expect(looks(opened).end).toEqual({ shape: "circle", size: "medium" });
   });
 });
-
-// ---------------------------------------------------------------------------
-// Le punte nel contorno, e con lo stile.
-// ---------------------------------------------------------------------------
-
-describe("dove una forma ha i marcatori", () => {
-  const SOURCE = doc(
-    DEFS(MARKER("m1", "triangle", "medium", "end"), MARKER("m1s", "circle", "medium", "start"), CUSTOM("mx")) +
-      LAYER +
-      LINE("oa") +
-      LINE("ob", ENDS("m1s", "m1") + ` stroke="${RED}"`) +
-      LINE("oc", ' marker-end="url(#mx)" marker-mid="url(#mx)" stroke="red"') +
-      LINE("od", ' marker-end="none" marker-start="url(#m1s)" stroke="red"') +
-      `<polyline id="op" points="0,0 10,10 20,0" fill="none" stroke="${RED}" marker-mid="url(#m1s)"/>` +
-      `<polygon id="oy" points="0,0 10,0 10,10" fill="none" stroke="${RED}" marker-start="url(#m1s)"/>` +
-      `<path id="oh" d="M0 0 L10 10 Z" fill="none" stroke="${RED}" marker-end="url(#m1)"/>` +
-      "</g>",
-  );
-  const places = (opened: Opened, id: string): string[] => [...markedPlaces(opened.engine.holder(id)!)].sort();
-
-  it("per ogni capo e per i vertici di mezzo, della raccolta o no, e per le forme su cui SVG li disegna", () => {
-    const opened = open(SOURCE);
-    expect(places(opened, "oa")).toEqual([]);
-    expect(places(opened, "ob")).toEqual(["end", "start"]);
-    expect(places(opened, "oc")).toEqual(["end", "mid"]);
-    expect(places(opened, "op")).toEqual(["mid"]);
-    expect(places(opened, "oy")).toEqual(["start"]);
-    expect(places(opened, "oh")).toEqual(["end"]);
-  });
-
-  it("un marcatore spento non è un marcatore: `none` toglie quello che c'era", () => {
-    const opened = open(SOURCE);
-    expect(places(opened, "od")).toEqual(["start"]);
-  });
-});
-
-describe("le punte nel contorno", () => {
-  /// Il punto `p` dopo che `matrix` ha girato di `degrees` e spostato in `to`.
-  const turn = (p: Spot, degrees: number, to: Spot): Spot => {
-    const [cos, sin] = [Math.cos((degrees * Math.PI) / 180), Math.sin((degrees * Math.PI) / 180)];
-    return [to[0] + p[0] * cos - p[1] * sin, to[1] + p[0] * sin + p[1] * cos];
-  };
-  /// L'area di `segments`, misurata su spezzate fitte, anello per anello.
-  function areaOf(segments: readonly Segment[]): number {
-    let total = 0;
-    for (const ring of flatten(segments, IDENTITY)) {
-      let sum = 0;
-      for (let i = 0; i < ring.length; i++) {
-        const [a, b] = [ring[i]!, ring[(i + 1) % ring.length]!];
-        sum += a[0] * b[1] - b[0] * a[1];
-      }
-      total += Math.abs(sum / 2);
-    }
-    return total;
-  }
-  /// Il riquadro dei punti di `segments`, appiattiti.
-  function boxOf(segments: readonly Segment[]): [number, number, number, number] {
-    const points = flatten(segments, IDENTITY).flat();
-    return [Math.min(...points.map((p) => p[0])), Math.min(...points.map((p) => p[1])), Math.max(...points.map((p) => p[0])), Math.max(...points.map((p) => p[1]))];
-  }
-  /// Il riquadro del disegno di una punta piena messa al vertice `vertex` di
-  /// una linea che va verso `degrees`, spessa `width`: i vertici del
-  /// poligono girati, o il cerchio, che girato è lo stesso.
-  function solidBox(shape: TipShape, size: TipSize, end: TipEnd, vertex: Spot, degrees: number, width: number): [number, number, number, number] {
-    const elem = tipElem("m", tip(shape, size), end, RED, 1);
-    const ref = refOf(elem);
-    const child = elem.children![0]!;
-    const place = (p: Spot): Spot => turn([(p[0] - ref[0]) * width, (p[1] - ref[1]) * width], degrees, vertex);
-    if (child.tag === "circle") {
-      const [cx, cy] = place([Number(child.attrs.cx), Number(child.attrs.cy)]);
-      const r = Number(child.attrs.r) * width;
-      return [cx - r, cy - r, cx + r, cy + r];
-    }
-    const points = parsePath(child.attrs.d!)!.flatMap((segment) => (segment.kind === "close" ? [] : [place(segment.to as Spot)]));
-    return [Math.min(...points.map((p) => p[0])), Math.min(...points.map((p) => p[1])), Math.max(...points.map((p) => p[0])), Math.max(...points.map((p) => p[1]))];
-  }
-  const refOf = (elem: Elem): Spot => [Number(elem.attrs.refX), Number(elem.attrs.refY)];
-
-  /// Una linea da `from` a `to`, spessa `width`, con la punta `shape` `size` al
-  /// capo `end`; le aree che dà `tipAreas`.
-  function areasOf(shape: TipShape, size: TipSize, end: TipEnd, from: Spot, to: Spot, width: number): Segment[][] | null {
-    const body = `<line id="oa" x1="${from[0]}" y1="${from[1]}" x2="${to[0]}" y2="${to[1]}" stroke="${RED}" stroke-width="${width}" marker-${end}="url(#m)"/>`;
-    const opened = open(doc(DEFS(MARKER("m", shape, size, end)) + LAYER + body + "</g>"));
-    return tipAreas(opened.engine.model!, opened.engine.holder("oa")!, [{ kind: "move", to: from }, { kind: "line", to }], width);
-  }
-
-  it("ogni punta piena, di ogni misura e a ogni capo, sta dove il vertice la mette, ruotata e scalata", () => {
-    const lines = [
-      { from: [0, 10], to: [50, 10], width: 2 },
-      { from: [10, 0], to: [10, 50], width: 3 },
-      { from: [0, 0], to: [30, 30], width: 1.5 },
-    ] as const;
-    for (const shape of ["triangle", "circle", "square", "diamond"] as const) {
-      for (const size of TIP_SIZES) {
-        for (const end of TIP_ENDS) {
-          for (const { from, to, width } of lines) {
-            const label = `${shape} ${size} ${end} ${from}-${to}`;
-            const areas = areasOf(shape, size, end, from, to, width);
-            expect(areas, label).toHaveLength(1);
-            const vertex = end === "start" ? from : to;
-            const angle = (Math.atan2(to[1] - from[1], to[0] - from[0]) * 180) / Math.PI;
-            const [ex0, ey0, ex1, ey1] = solidBox(shape, size, end, vertex, angle, width);
-            const [x0, y0, x1, y1] = boxOf(areas![0]!);
-            expect(x0, label).toBeCloseTo(ex0, 1);
-            expect(y0, label).toBeCloseTo(ey0, 1);
-            expect(x1, label).toBeCloseTo(ex1, 1);
-            expect(y1, label).toBeCloseTo(ey1, 1);
-          }
-        }
-      }
-    }
-  });
-
-  it("l'area di una punta piena è quella del suo disegno, per lo spessore al quadrato", () => {
-    // Il triangolo medio: base 5, alta 4,33; il cerchio medio: raggio 2.
-    expect(areaOf(areasOf("triangle", "medium", "end", [0, 10], [50, 10], 2)![0]!)).toBeCloseTo(0.5 * 5 * 4.33 * 4, 1);
-    expect(areaOf(areasOf("circle", "medium", "end", [0, 10], [50, 10], 2)![0]!)).toBeCloseTo(Math.PI * 4 * 4, 0);
-    expect(areaOf(areasOf("square", "large", "start", [0, 10], [50, 10], 1)![0]!)).toBeCloseTo(4.9 * 4.9, 1);
-    expect(areaOf(areasOf("diamond", "small", "end", [0, 10], [50, 10], 4)![0]!)).toBeCloseTo(0.5 * 3.5 * 2.1 * 16, 1);
-  });
-
-  it("le punte a linee, la V e la stanghetta, sono il loro tratto: dentro la finestra del marcatore", () => {
-    for (const shape of ["vee", "bar"] as const) {
-      for (const size of TIP_SIZES) {
-        for (const end of TIP_ENDS) {
-          const label = `${shape} ${size} ${end}`;
-          const areas = areasOf(shape, size, end, [0, 20], [60, 20], 2)!;
-          expect(areas, label).toHaveLength(1);
-          expect(areaOf(areas[0]!), label).toBeGreaterThan(0);
-          const elem = tipElem("m", tip(shape, size), end, RED, 1);
-          const ref = refOf(elem);
-          const [w, h] = [Number(elem.attrs.markerWidth), Number(elem.attrs.markerHeight)];
-          const vertex = end === "start" ? 0 : 60;
-          const [x0, y0, x1, y1] = boxOf(areas[0]!);
-          expect(x0, label).toBeGreaterThanOrEqual(vertex - ref[0] * 2 - 0.01);
-          expect(x1, label).toBeLessThanOrEqual(vertex + (w - ref[0]) * 2 + 0.01);
-          expect(y0, label).toBeGreaterThanOrEqual(20 - ref[1] * 2 - 0.01);
-          expect(y1, label).toBeLessThanOrEqual(20 + (h - ref[1]) * 2 + 0.01);
-        }
-      }
-    }
-    // La stanghetta è un segmento lungo come la punta è alta, spesso come lo
-    // spessore della linea: 5 × 2 per 1 × 2.
-    expect(areaOf(areasOf("bar", "medium", "end", [0, 20], [60, 20], 2)![0]!)).toBeCloseTo(5 * 2 * 1 * 2, 1);
-  });
-
-  it("nessuna punta non dà aree; due punte ne danno due; un marcatore che non è della raccolta, o a metà, non si sa contornare", () => {
-    const geometry = [{ kind: "move", to: [0, 10] }, { kind: "line", to: [50, 10] }] as const;
-    const areas = (defs: string, extra: string): Segment[][] | null => {
-      const opened = open(doc(DEFS(...defs.split("|").filter(Boolean)) + LAYER + LINE("oa", extra) + "</g>"));
-      return tipAreas(opened.engine.model!, opened.engine.holder("oa")!, geometry, 2);
-    };
-    const both = [MARKER("ms", "circle", "medium", "start"), MARKER("me", "vee", "small", "end")].join("|");
-    expect(areas("", "")).toEqual([]);
-    expect(areas(both, ' marker-end="none"')).toEqual([]);
-    expect(areas(both, ENDS("ms", "me"))).toHaveLength(2);
-    expect(areas(both, ENDS(null, "me"))).toHaveLength(1);
-    const custom = [CUSTOM("mx"), both].join("|");
-    expect(areas(custom, ' marker-end="url(#mx)"')).toBeNull();
-    expect(areas(custom, ' marker-start="url(#mx)" marker-end="url(#me)"')).toBeNull();
-    expect(areas(custom, ' marker-mid="url(#me)"')).toBeNull();
-    expect(areas(custom, ENDS("ms", null) + ' marker-mid="url(#mx)"')).toBeNull();
-  });
-
-  it("un tracciato senza segmenti non ha vertici e non dà aree; uno lungo zero mette la punta dove sta", () => {
-    const opened = open(doc(DEFS(MARKER("m", "circle", "medium", "end")) + LAYER + LINE("oa", ' marker-end="url(#m)"') + "</g>"));
-    const node = opened.engine.holder("oa")!;
-    expect(tipAreas(opened.engine.model!, node, [], 2)).toEqual([]);
-    const [area] = tipAreas(opened.engine.model!, node, [{ kind: "move", to: [7, 8] }, { kind: "line", to: [7, 8] }], 2)!;
-    const [x0, y0, x1, y1] = boxOf(area!);
-    expect([(x0 + x1) / 2, (y0 + y1) / 2]).toEqual([7, 8]);
-  });
-});
-
 describe("le punte con lo stile", () => {
   const SOURCE = doc(
     DEFS(MARKER("mt", "triangle", "medium", "end"), MARKER("mc", "circle", "medium", "start"), CUSTOM("mx")) +

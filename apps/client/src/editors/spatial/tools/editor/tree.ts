@@ -6,7 +6,7 @@ import { countObjects, describe, keyOf, outlineAll, type OutlineNode } from "../
 import type { Bounds } from "../../scene/geometry";
 import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart } from "../../scene/model";
 import type { Role } from "../../scene/analysis";
-import { auditScene, MAX_BOARDS } from "../../scene/read";
+import { auditScene } from "../../scene/read";
 import type { ElementItem, Item } from "../../scene/classify";
 import { plural, t, type DrawKey } from "../../strings";
 import { resourcesFor, symbolsFor, type HeadInfo, type PaintNode, type PaintScene } from "../../painter/paint";
@@ -14,10 +14,8 @@ import { miniaturePicture, paintMiniature, shapeCount, type MiniatureBox } from 
 import { gesture as asGesture } from "../edit";
 import { holdsLink, linkTarget, nodeOf } from "../arrange";
 import { lookOps, type LookChange } from "../look";
-import { distinguishOps, type HatchPreset } from "../patterns";
 import { SceneIndex, type Unit } from "../hit";
 import { HISTORY_LIMIT } from "../history";
-import type { BoardRow } from "../boards-panel";
 import { problemsOf, readingOrder, type AuditCode, type Problem } from "../audit";
 import { layerName, renameLayerOps } from "../layers";
 import { cleanName, decorativeOps, nameable, nameOps } from "../naming";
@@ -30,15 +28,6 @@ import { layerTitle } from "./helpers";
 /// Quanto aspetta la verifica dell'accessibilità, dopo l'ultimo cambio del
 /// disegno, prima di rileggerlo: rileggerlo costa quanto aprirlo.
 const AUDIT_MS = 250;
-
-/// Come si dice, nell'annuncio della verifica, ogni campitura pronta.
-const HATCH_NAMES: Readonly<Record<HatchPreset, DrawKey>> = {
-  diagonal: "draw.access.preset.diagonal",
-  cross: "draw.access.preset.cross",
-  horizontal: "draw.access.preset.horizontal",
-  dots: "draw.access.preset.dots",
-  grid: "draw.access.preset.grid",
-};
 
 /// Perché una voce dell'albero non si rinomina e non si sposta: è bloccata,
 /// o lo è ciò che la contiene, o il suo livello.
@@ -105,10 +94,6 @@ export interface TreeContext {
   renameSelection: () => void;
   showHistory: (open: boolean, focus?: boolean) => void;
   syncHistory: () => void;
-  showBoards: (open: boolean, focus?: boolean) => void;
-  syncBoards: () => void;
-  showLibrary: (open: boolean, focus?: boolean) => void;
-  showSymbols: (open: boolean, focus?: boolean) => void;
   showAccess: (open: boolean, focus?: boolean) => void;
   accessNames: Map<string, string>;
   accessName: (key: string) => string;
@@ -124,9 +109,8 @@ export interface TreeContext {
 /// Monta l'albero degli oggetti.
 export function installTree(ctx: EditorContext): void {
   const {
-    has, drawingFonts, measureText, history, surface, tree, historyPanel, accessPanel, boardsPanel, libraryPanel, symbolLibraries, symbolsPanel,
-    boardsButton, libraryButton, symbolsButton, historyButton, accessButton, titleInput, images, builder, indexer, boardsNow, editable, isolatedNode,
-    currentIndex, newIds, announce, announceSelection, hundredthsText, selectedUnits, measuresText
+    has, drawingFonts, measureText, history, surface, tree, historyPanel, accessPanel, historyButton, accessButton, titleInput, images, builder, indexer, editable, isolatedNode,
+    currentIndex, newIds, announce, announceSelection, hundredthsText, selectedUnits
   } = ctx;
   // --- L'albero degli oggetti ----------------------------------------------
 
@@ -569,92 +553,6 @@ export function installTree(ctx: EditorContext): void {
   }
   ctx.syncHistory = syncHistory;
 
-  /// Apre o chiude l'elenco delle tavole; aperto, il fuoco ci va.
-  function showBoards(open: boolean, focus = true): void {
-    if (open && !has("board")) return;
-    // Nell'ispettore: la sua scheda, e il fuoco ci va.
-    if (ctx.routed("design", open)) {
-      if (open && focus && !boardsPanel.element.hidden) boardsPanel.focus();
-      return;
-    }
-    if (!open && boardsPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
-    boardsPanel.element.hidden = !open;
-    boardsButton.setAttribute("aria-expanded", String(open));
-    ctx.syncDock();
-    if (open) {
-      ctx.boardsShown = null;
-      syncBoards();
-      if (focus) boardsPanel.focus();
-    }
-  }
-  ctx.showBoards = showBoards;
-
-  /// Porta l'elenco delle tavole, se è aperto, alle tavole di adesso e a
-  /// quella di adesso (vedi [`currentBoard`]).
-  function syncBoards(): void {
-    if (boardsPanel.element.hidden) return;
-    const list = boardsNow();
-    if (ctx.boardRows?.list !== list) {
-      const rows = list.map((board): BoardRow => ({ id: board.id, name: board.name, size: measuresText([board.rect[2], board.rect[3]]) }));
-      const before = ctx.boardRows?.rows;
-      const same = before !== undefined && before.length === rows.length && rows.every((row, at) => before[at]!.id === row.id && before[at]!.name === row.name && before[at]!.size === row.size);
-      ctx.boardRows = { list, rows: same ? before : rows };
-    }
-    const rows = ctx.boardRows.rows;
-    const current = ctx.currentBoard()?.id ?? null;
-    const canEdit = editable();
-    const paged = ctx.scene.root.page !== null;
-    const shown = ctx.boardsShown;
-    if (shown !== null && shown.rows === rows && shown.current === current && shown.editable === canEdit && shown.paged === paged) return;
-    ctx.boardsShown = { rows, current, editable: canEdit, paged };
-    boardsPanel.update({ boards: rows, current, editable: canEdit, canAdd: rows.length < MAX_BOARDS, paged });
-  }
-  ctx.syncBoards = syncBoards;
-
-  /// Apre o chiude le forme; aperte, il fuoco va al campo di ricerca. Un
-  /// trascinamento in corso finisce.
-  function showLibrary(open: boolean, focus = true): void {
-    if (open && !has("library")) return;
-    // Nell'ispettore: la sua scheda, e il fuoco ci va.
-    if (ctx.routed("resources", open)) {
-      if (open && focus && !libraryPanel.element.hidden) libraryPanel.focus();
-      return;
-    }
-    if (!open && libraryPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
-    if (!open) ctx.cancelShapeDrag();
-    libraryPanel.element.hidden = !open;
-    libraryButton.setAttribute("aria-expanded", String(open));
-    ctx.syncDock();
-    if (open) {
-      libraryPanel.update({ editable: editable() });
-      if (focus) libraryPanel.focus();
-    }
-  }
-  ctx.showLibrary = showLibrary;
-
-  /// Apre o chiude i simboli; aperti, il fuoco va al campo di ricerca, e le
-  /// librerie del vault si leggono, la prima volta. Un trascinamento in
-  /// corso finisce.
-  function showSymbols(open: boolean, focus = true): void {
-    if (open && !has("symbols")) return;
-    // Nell'ispettore: la sua scheda, e il fuoco ci va.
-    if (ctx.routed("resources", open)) {
-      if (open && focus && !symbolsPanel.element.hidden) symbolsPanel.focus();
-      return;
-    }
-    if (!open && symbolsPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
-    if (!open) ctx.cancelSymbolDrag();
-    symbolsPanel.element.hidden = !open;
-    symbolsButton.setAttribute("aria-expanded", String(open));
-    ctx.syncDock();
-    if (open) {
-      symbolLibraries?.start();
-      ctx.syncSymbols();
-      if (focus) symbolsPanel.focus();
-    }
-  }
-  ctx.showSymbols = showSymbols;
-
   /// Apre o chiude la verifica dell'accessibilità; aperta, il fuoco ci va.
   /// Chiusa, dimentica ciò che ha letto.
   function showAccess(open: boolean, focus = true): void {
@@ -773,28 +671,6 @@ export function installTree(ctx: EditorContext): void {
     if (now !== key && ctx.selection.includes(key)) ctx.select(ctx.selection.map((each) => (each === key ? now : each)));
   };
 
-  /// Dà una campitura che le distingue alle aree `keys` di un colore, in un
-  /// passo; quelle che non si scelgono, o che hanno già una campitura, una
-  /// sfumatura o un motivo, restano.
-  function hatchAreas(keys: readonly string[]): void {
-    const model = ctx.engine.model;
-    const index = currentIndex();
-    const units = keys.flatMap((key) => {
-      const unit = index.get(key);
-      return unit === null ? [] : [unit];
-    });
-    if (model === null || units.length === 0) return;
-    ctx.cancelGesture();
-    const hatched = distinguishOps(model, units, measureText, newIds());
-    if (hatched.ops.length === 0 || hatched.preset === null) return;
-    if (ctx.commit("draw.access.action.hatch", asGesture(hatched.ops)) === null) return;
-    // Le aree che ricevono un id cambiano chiave: la selezione le segue.
-    const now = new Map(units.map((unit, at) => [unit.key, hatched.keys[at] ?? unit.key]));
-    if (ctx.selection.some((key) => (now.get(key) ?? key) !== key)) ctx.select(ctx.selection.map((key) => now.get(key) ?? key));
-    syncAccess(true);
-    announce(plural(hatched.reached, "draw.access.fixed.hatch.one", "draw.access.fixed.hatch.other", { preset: t(HATCH_NAMES[hatched.preset]) }));
-  }
-
   /// Corregge `stale`, com'è nel disegno di adesso, in un passo.
   function fixProblem(stale: Problem): void {
     const problem = problemNow(stale.code, stale.key);
@@ -807,13 +683,8 @@ export function installTree(ctx: EditorContext): void {
       return;
     }
     if (fix.kind === "describe" || !editable()) return;
-    const rekey = ctx.settleCrop();
     const model = ctx.engine.model;
-    if (fix.kind === "hatch") {
-      hatchAreas(fix.keys.map(rekey));
-      return;
-    }
-    const unit = problem.key === null ? null : currentIndex().get(rekey(problem.key));
+    const unit = problem.key === null ? null : currentIndex().get(problem.key);
     if (model === null || unit === null) return;
     ctx.cancelGesture();
     const change: LookChange = fix.kind === "size" ? { size: fix.size } : fix.paint === "fill" ? { fill: fix.color } : { stroke: fix.color };
@@ -869,7 +740,7 @@ export function installTree(ctx: EditorContext): void {
   /// Dalla verifica: descrive l'immagine `key`, se le serve ancora.
   function describeImage(key: string, text: string): void {
     if (problemNow("S012", key) === null) return;
-    if (writeDescription(ctx.settleCrop()(key), text)) syncAccess(true);
+    if (writeDescription(key, text)) syncAccess(true);
   }
   ctx.describeImage = describeImage;
 
@@ -877,7 +748,7 @@ export function installTree(ctx: EditorContext): void {
   /// ancora una descrizione.
   function decorateImage(key: string): void {
     if (problemNow("S012", key) === null) return;
-    if (writeDecorative(ctx.settleCrop()(key))) syncAccess(true);
+    if (writeDecorative(key)) syncAccess(true);
   }
   ctx.decorateImage = decorateImage;
 }

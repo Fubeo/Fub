@@ -42,7 +42,7 @@ beforeEach(() => {
   document.body.append(outside, host);
   life = openLifetime();
   calls = [];
-  words = { "two-fingers": "Due dita.", "hold-shape": "Tieni fermo.", "label-shape": "Scrivi dentro." };
+  words = { "two-fingers": "Due dita.", "hold-shape": "Tieni fermo." };
 });
 
 afterEach(() => {
@@ -77,8 +77,8 @@ describe("i suggerimenti", () => {
     expect(said()).toBe("Suggerimento: Tieni fermo.");
     // Un nome sconosciuto resta, per una versione più nuova.
     expect(calls).toEqual(["seen domani hold-shape"]);
-    expect(tips.wants("label-shape"), "un altro aspetta").toBe(false);
-    expect(tips.offer("label-shape")).toBe(false);
+    expect(tips.wants("two-fingers"), "un altro aspetta").toBe(false);
+    expect(tips.offer("two-fingers")).toBe(false);
     expect(formatIssues(checkAccessibility(host))).toBe("");
 
     closer().click();
@@ -86,7 +86,7 @@ describe("i suggerimenti", () => {
     expect(tips.showing).toBeNull();
     expect(calls, "il fuoco non era dentro: resta dov'è").toEqual(["seen domani hold-shape"]);
     expect(tips.offer("hold-shape"), "non torna").toBe(false);
-    expect(tips.offer("label-shape")).toBe(true);
+    expect(tips.offer("two-fingers")).toBe(true);
   });
 
   it("chi fa il gesto non lo vede più, e se è a schermo si chiude", () => {
@@ -98,11 +98,11 @@ describe("i suggerimenti", () => {
     tips.done("two-fingers");
     expect(calls, "una volta sola").toHaveLength(1);
 
-    tips.offer("label-shape");
+    tips.offer("hold-shape");
     closer().focus();
-    tips.done("label-shape");
+    tips.done("hold-shape");
     expect(row().hidden).toBe(true);
-    expect(calls, "il fuoco era dentro: torna al foglio").toEqual(["seen two-fingers", "seen two-fingers label-shape", "close"]);
+    expect(calls, "il fuoco era dentro: torna al foglio").toEqual(["seen two-fingers", "seen two-fingers hold-shape", "close"]);
     expect(document.activeElement).toBe(outside);
   });
 
