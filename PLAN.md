@@ -14,7 +14,7 @@ con il suo codice; `fub-motori`, `Pigro<T>`, la preparazione in anticipo e
 l'errore «comando di un componente spento» (K3); dati scaricabili ed edizioni
 (K4); l'interruttore Semplice·Completo nelle modalità (arriva con la prima
 modalità completa); la domanda del profilo sui vault che esistono già.
-Assunzioni: vedi «Assunzioni» qui sotto (A1–A12), da approvare.
+Assunzioni: vedi «Assunzioni» qui sotto (A1–A12), approvate il 2026-11-01.
 Ondate: T1 | T2 | T3 T4 | T5
 Prototipo: l'anteprima dal vivo in cima al piano «Fub a componenti»
 (https://claude.ai/artifact/T2Ts14vEwWTNzHHs6NKP9w): gruppi, interruttori,
@@ -44,7 +44,20 @@ profili. Le foto di T3 la confrontano con la pagina vera.
   generico non disegna, e a **due comandi IPC nuovi**: uno legge la mappa con lo
   stato, uno applica le scelte. CLI, MCP e pagina usano la stessa regola.
 
-Domande ancora aperte: vedi «Domande» in fondo.
+- Piano approvato, con A4 così com'è: «Solo note» senza grafo né correttore;
+  sincronizzazione, pubblicazione, aggiornamenti e disegni non li tocca nessun
+  profilo tranne «Tutto» (senza un server configurato o un clic non fanno
+  niente).
+- D-1 · Sì alla CI, **dentro il job della WebView che c'è già**, non in un job
+  nuovo. In più un controllo statico sulla build del client, su ogni PR:
+  l'insieme dei chunk caricati all'avvio con «Solo note» non contiene pdfjs,
+  `editors/canvas`, `drawing-*` né `editors/spatial` (T4, nel plugin di Vite).
+- D-2 · La prova con persone si fa. Quando la pagina è pronta sulla PR in
+  bozza, l'orchestratore prepara la build e un protocollo di una pagina con
+  cinque compiti (accendere il PDF, spegnere la lavagna, tornare a «Solo note»,
+  capire perché la penna non si spegne, aprire un PDF da «Solo note») e che
+  cosa osservare. La fa l'utente, se può anche con una persona che non conosce
+  Fub. **La PR non si segna pronta prima del suo resoconto.**
 
 ## Assunzioni
 
@@ -293,14 +306,19 @@ Cosa fare:
   senza ricaricare la pagina.
 - Il banco WebView: con «Solo note» e con «Tutto», l'elenco dei chunk scaricati
   all'avvio e dopo aver aperto una nota; S6 `coldStart` per tutti e due.
-- Il plugin `bundle-size-budgets` dà errore se un chunk di un componente
-  spegnibile entra nell'insieme eager.
+- Il controllo statico (D-1): il plugin `bundle-size-budgets`
+  (`apps/client/vite.config.ts`) calcola l'insieme dei chunk caricati
+  all'avvio, lo scrive in un file del build (`dist/`, non nel repo) e dà errore
+  se contiene pdfjs, `editors/canvas`, `drawing-*` o `editors/spatial`. Gira
+  con `npm run build`, quindi su ogni PR. Il test lo rompe apposta una volta
+  (un import statico di `editors/canvas`) e il messaggio nella PR.
 Casi limite: spegnere il componente del file aperto (la scheda passa a «solo
 come file» senza perdere modifiche non salvate: se ci sono, si chiede prima);
 riaccendere con il file aperto; un PDF annotato con PDF spento.
 Fatto quando: test vitest del registro (spento = nessun import); e2e: «Solo
 note», apri un PDF e una lavagna, vedi «solo come file», «Accendi», il file si
-apre; elenco dei chunk e S6 nella PR (cancello).
+apre; elenco dei chunk e S6 nella PR (cancello); `npm run build` rifiuta un import
+statico di `editors/canvas` (rottura apposta, messaggio nel report).
 Prova: scripts/check.sh --rapido
 Stato: [ ]
 
@@ -331,16 +349,17 @@ Stato: [ ]
 
 ## Fine
 
+- CI (D-1, lo fa l'orchestratore, non i coder): lo scenario nuovo del banco
+  WebView entra nell'elenco `--only=` del job «la WebView vera»
+  (`.github/workflows/ci.yml`, ~riga 610), con la sua soglia `ci` in
+  `apps/client/bench/webview/budgets.json` se ne ha una. Nessun job nuovo.
+- Prova con persone (D-2): build su server-di-fub, protocollo di una pagina
+  con i cinque compiti e che cosa osservare, consegnato all'utente; la PR resta
+  in bozza fino al suo resoconto, e ciò che emerge diventa un task o una riga
+  in `DECISIONS.md`.
+
 - Banco WebView S1–S3 prima e dopo, S6 «Solo note» contro «Tutto», l'elenco
   dei chunk: tutto nella PR, su server-di-fub.
 - `scripts/check.sh` completo; ADR nuova se lo stato `components.state` o i
   comandi IPC lo chiedono (da decidere in revisione); `DECISIONS.md`
   aggiornato; PLAN.md cancellato con l'ultimo commit.
-
-## Domande
-
-- D-1 · Mettere nella CI il controllo «con Solo note nessun chunk spento arriva
-  nella WebView» (lo scenario nuovo del banco WebView)? Tocca
-  `.github/workflows/ci.yml`, che è dell'orchestratore e va chiesto.
-- D-2 · La prova con persone del piano («Troppi interruttori confondono»):
-  la fai tu sulla PR in bozza, con le foto e l'app costruita, o la saltiamo?
