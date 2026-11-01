@@ -307,7 +307,7 @@ Fatto quando: test vitest per ogni gesto; foto chiara e scura della pagina
 accanto all'anteprima nella PR; `bench:verify` con le baseline nuove;
 `bench:a11y` verde; e2e: tutto il giro con la sola tastiera.
 Prova: scripts/check.sh --rapido
-Stato: [ ]
+Stato: [x] fatto
 
 ## T4 · Gli editor caricati solo se accesi
 
