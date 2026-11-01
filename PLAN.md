@@ -15,7 +15,7 @@ libreria, disegno completo, motore vettoriale, caratteri, colore, scheda
 grafica, RAW, tablet, agenti): ognuna arriva con il suo codice; i dati
 scaricabili e le edizioni (K4); l'errore «comando di un componente spento» che
 nomina il componente (arriva con i comandi dei motori, K3); il piano K2.
-Assunzioni: vedi «Assunzioni» qui sotto (A1–A10), da approvare con l'OK.
+Assunzioni: vedi «Assunzioni» qui sotto (A1–A10), approvate il 2026-11-01.
 Ondate: T1 T2 | T3 | T4
 Prototipo: nessuno (K1 non cambia l'interfaccia)
 
@@ -68,7 +68,7 @@ differenza è scritta qui.
   si spegne (il profilo «Solo PDF» senza note sarà possibile solo dopo). Oggi
   `set_plugin_enabled` (`crates/fub-host/src/session.rs:2547`) rifiuta solo
   `fub.core` (`CORE_ID`, `crates/fub-host/src/settings.rs:110`).
-- A7 · **Lo stato resta `plugins.disabled`** (vedi la domanda aperta Q-a): nessuna
+- A7 · **Lo stato resta `plugins.disabled`** (risposta Q-a): nessuna
   chiave nuova, perché ogni `SettingSpec` del gruppo «Componenti» si vede nelle
   Impostazioni (`SettingSpec` non ha un campo «nascosto»), e il cancello vuole
   nessun cambiamento visibile. Scelti = i componenti non di supporto che non
@@ -85,18 +85,13 @@ differenza è scritta qui.
   (`component.<nome>.name`, una voce per ogni lingua che hanno gli altri
   cataloghi: oggi `it` e `en`), presidiato da `tests/catalogs.rs`.
 
-## Domande aperte (da chiudere con l'OK, poi questa sezione si toglie)
+## Risposte dell'utente (2026-11-01)
 
-- Q-a · Dove vive lo stato dei componenti in K1? Consiglio: in
-  `plugins.disabled` come oggi (A7), nessuna chiave nuova; «in attesa» non si
-  conserva fra due comandi (la CLI chiede `--togli`/`--tieni` subito). Le due
-  chiavi `components.chosen`/`components.pending` arrivano in K2 con la pagina.
-  L'alternativa (chiavi nuove già in K1) si vedrebbe nelle Impostazioni.
-- Q-b · (del piano, n. 3) Componenti per vault? Consiglio del piano: sì; sul
-  disco vale per la macchina, acceso vale per il vault. K1 lo segue già.
-- Q-c · (del piano, n. 1) Nomi delle modalità? Consiglio del piano: un nome per
-  tipo di file e l'interruttore Semplice·Completo; nella pagina righe separate.
-  In K1 tocca solo le chiavi dei nomi (`component.*.name`).
+- Q-a · Lo stato resta `plugins.disabled`, senza chiavi nuove (A7).
+- Q-b · Componenti per vault: sì; sul disco vale per la macchina, acceso vale
+  per il vault.
+- Q-c · Nomi delle modalità: un nome per tipo di file e l'interruttore
+  Semplice·Completo; in K1 solo le chiavi `component.*.name`.
 
 ## Cancello di K1
 
@@ -267,7 +262,10 @@ test di proprietà fallisce se si rompe apposta la regola che prova (scriverlo
 nella PR: quale riga si è cambiata e che cosa ha stampato); `cargo tree -p
 fub-componenti -e normal` mostra al più `serde`; `dependency_invariant` verde
 col diagramma aggiornato.
-Prova: scripts/check.sh --rapido
+Prova: scripts/check.sh --rapido --base <sha> -p fub-componenti -p fub-abi
+(`fub-abi` per `dependency_invariant`; senza `-p` la riga nuova nel
+`Cargo.toml` della radice fa controllare tutto il workspace mentre T1 fa lo
+stesso. Il controllo completo lo fa l'orchestratore dopo aver unito T2.)
 Stato: [ ] da fare
 
 ## T3 · L'inventario diventa la mappa
@@ -280,10 +278,14 @@ Tocca: `crates/fub-features/src/inventory.rs`,
 `crates/fub-features/tests/componenti.rs` (nuovo), `crates/fub-host/Cargo.toml`
 (solo `[features]` e la dipendenza da `fub-componenti` se serve),
 `crates/fub-host/src/lib.rs` (una riga: `pub use fub_features::componenti`),
-`crates/fub-host/tests/componenti.rs` (nuovo), dove si costruisce il manifest
-dei bundle ufficiali dalla riga dell'inventario, `Cargo.lock`.
-Non toccare: `crates/fub-host/src/mount.rs` e `session.rs` (il montaggio non
-cambia), `crates/fub-host/src/settings.rs`, `fub-abi`, `fub-cli`, il client.
+`crates/fub-host/tests/componenti.rs` (nuovo), `crates/fub-host/src/mount.rs`
+solo in due punti: `struct CoreBundle` e i suoi builder (`providing`,
+`requiring`, righe ~60–130, se ne aggiungono per `uses`, `kind`, `group`, `ui`)
+e il ciclo delle feature ufficiali (`for feature in
+fub_features::every_official_feature()`, righe ~405–430), dove il manifest di
+ogni bundle ufficiale si costruisce dalla sua riga; `Cargo.lock`.
+Non toccare: il resto di `crates/fub-host/src/mount.rs` (quali bundle si
+montano e in che ordine non cambia), `crates/fub-host/src/session.rs`, `crates/fub-host/src/settings.rs`, `fub-abi`, `fub-cli`, il client.
 Dipende da: T1, T2
 Cosa fare:
 - In `fub-features`, `componenti.rs`: `pub fn righe() -> Vec<Riga>` e
