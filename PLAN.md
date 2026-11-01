@@ -183,7 +183,8 @@ Tocca: `crates/fub-componenti/` (nuovo: `Cargo.toml`, `src/lib.rs`,
 (`members` e `[workspace.dependencies]`), `Cargo.lock`,
 `docs/architecture/overview.md` (il diagramma dei crate: lo controlla
 `crates/fub-abi/tests/dependency_invariant.rs`), e se serve
-`.github/scripts/membri-del-workspace.mjs`.
+`.github/scripts/workspace-members.mjs` (il piano diceva
+`membri-del-workspace.mjs`, che non esiste; non è servito).
 Non toccare: `fub-abi`, `fub-features`, `fub-host`, `fub-cli`.
 Dipende da: nessuno
 Cosa fare:
@@ -271,7 +272,7 @@ Prova: scripts/check.sh --rapido --base <sha> -p fub-componenti -p fub-abi
 (`fub-abi` per `dependency_invariant`; senza `-p` la riga nuova nel
 `Cargo.toml` della radice fa controllare tutto il workspace mentre T1 fa lo
 stesso. Il controllo completo lo fa l'orchestratore dopo aver unito T2.)
-Stato: [~] in corso · coder · base 90c48297
+Stato: [x] fatto · 95bfb1aa
 
 ## T3 · L'inventario diventa la mappa
 

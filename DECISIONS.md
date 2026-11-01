@@ -34,6 +34,14 @@ registro.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-01 · K1 · Le regole di `fub-componenti` che il piano lasciava aperte:
+  un requisito offerto via `provides` da più componenti è un errore della mappa
+  (`RequisitoAmbiguo`); `attivi` segue i `requires` anche dal nucleo;
+  `applica_profilo` svuota `in_attesa`; `Richiesto { da }` elenca i dipendenti
+  a catena, e `spegni_con_dipendenti` dà `Nucleo` se la catena lo tocca;
+  `perche` ha anche `Nucleo` e `Sconosciuto` · fonte: report del coder di T2,
+  accettato dall'orchestratore; chi costruisce la mappa (T3) non può dichiarare
+  due offerenti dello stesso requisito.
 - 2026-11-01 · K1 · T1 tocca anche `crates/fub-abi/src/lib.rs` (`ComponentKind`
   e `Delivery` nel `pub use`, per `superficie_della_radice`) e
   `apps/client/src/host/enums.generated.ts`, solo rigenerato con
