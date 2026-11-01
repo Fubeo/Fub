@@ -47,6 +47,26 @@ Il contratto comprende famiglie per:
 Un bundle dichiara manifest, versione ABI, fiducia, permessi e registrazioni.
 L'host possiede mount, attivazione, disattivazione e smontaggio.
 
+## La pagina «Componenti»
+
+Nelle impostazioni, la scheda «Componenti» si apre sulla pagina che dice che
+cosa è acceso e perché. In alto i profili (un clic: «Solo note», «Studio»,
+«Tutto»…; un profilo che spegne qualcosa lo dice prima, coi nomi; uno «più
+avanti» resta grigio e dice perché, al passaggio e al fuoco; una scelta a mano
+lo fa diventare «personalizzato»), poi i componenti per gruppo, con la
+ricerca. Ogni riga ha l'interruttore e, se serve, «Serve a …» o «Non serve
+più»; il nucleo è «sempre acceso». Il gruppo «Di supporto» sta chiuso dietro
+«Mostra»: si aggiunge e si toglie da sé.
+
+Accendere un componente accende anche ciò che gli serve, e la pagina lo dice
+(«Attivati anche …»). Spegnere ciò che serve ad altri chiede prima, con
+l'elenco di chi si spegne insieme. Chi resta senza nessuno che lo usi compare
+in un avviso, «Togli» o «Tienili», finché non si risponde. La regola è
+dell'host (`components_map`, `components_apply`): la pagina chiede una prova,
+applica e rilegge, anche quando la scelta arriva dalla CLI o da MCP. I
+permessi dei componenti inclusi restano sotto, in «Permessi dei componenti
+inclusi».
+
 ## Permessi
 
 I permessi sono capability con namespace e, quando serve, parametri. Il kernel

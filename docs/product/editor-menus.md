@@ -32,14 +32,15 @@ perché. Le parole sono quelle del lessico dei menu (`i18n/lexicon.ts`): «Togli
 il link», «Apri con un'altra app», «Mostra nell'esploratore», «Incolla senza
 formattazione».
 
-I componenti si dicono con le stesse parole ovunque — la pagina Componenti, il
-riquadro di un file il cui editor è spento, la riga di comando: Componente,
-Accendi, Spegni, Serve a, Non serve più, Togli, Tienili, Profilo,
-personalizzato, più avanti, solo come file. Le voci di un componente spento
-non ci sono nei menu (barra laterale, «Nuovo» e «Apri» dell'esploratore, menu
-dell'app, tasto destro); tornano quando si riaccende, senza ricaricare. Un
-file di un componente spento si apre lo stesso, «solo come file»: nome,
-dimensione, «Accendi …» e «Apri con un'altra app».
+Lo stesso lessico tiene le parole dei componenti, uguali nella pagina
+«Componenti» delle impostazioni, nel riquadro di un file il cui editor è spento
+e nella riga di comando: Componente (non «Plugin», «Estensione», «Modulo»),
+Accendi e Spegni (non «Abilita», «Disabilita», «Disattiva»), Serve a, Non serve
+più, Togli, Tienili, Profilo, personalizzato, più avanti e solo come file. Le
+voci di un componente spento non ci sono nei menu (barra laterale, «Nuovo» e
+«Apri» dell'esploratore, menu dell'app, tasto destro); tornano quando si
+riaccende, senza ricaricare. Un file di un componente spento si apre lo stesso,
+«solo come file»: nome, dimensione, «Accendi …» e «Apri con un'altra app».
 
 In una nota Markdown in scrittura le voci del posto sono:
 

@@ -229,7 +229,7 @@ beforeEach(() => {
 describe("inventario dei componenti installati", () => {
   it("mostra un'installazione negata senza nascondere il bundle ufficiale omonimo", async () => {
     box.host = createFakeHost({
-      bundles: [bundled({ id: "com.acme.notes", name: "Official Notes" })],
+      bundles: [bundled({ id: "com.acme.notes", name: "Official Notes", permissions: { "fub:read-vault": true } })],
       installedPlugins: [installed({ consent: "denied", runtime_known: false })],
     });
 
@@ -257,13 +257,15 @@ describe("inventario dei componenti installati", () => {
   });
 
   it("un inventario installato illeggibile non nasconde i controlli nativi", async () => {
-    box.host = createFakeHost({ bundles: [bundled()] });
+    box.host = createFakeHost({ bundles: [bundled({ permissions: { "fub:read-vault": true } })] });
     box.host.fault("listInstalledPlugins", "inventario illeggibile");
     await openComponents();
 
-    const native = document.getElementById("bundle-fub.search") as HTMLInputElement | null;
-    expect(native?.checked).toBe(true);
-    expect(native?.disabled).toBe(false);
+    await vi.waitFor(() => expect(document.getElementById("component-fub.search")).not.toBeNull());
+    const native = document.getElementById("component-fub.search") as HTMLInputElement;
+    expect(native.checked).toBe(true);
+    expect(native.getAttribute("aria-disabled")).toBeNull();
+    expect(document.querySelector('[data-bundle-permissions="fub.search"]')).not.toBeNull();
     expect(document.getElementById("installed-enabled-41")).toBeNull();
   });
 
@@ -276,7 +278,7 @@ describe("inventario dei componenti installati", () => {
     const permission = document.getElementById(`permission-${box.entries[0].spec.key}`) as HTMLInputElement | null;
     expect(permission?.checked).toBe(true);
     expect(permission?.disabled).toBe(false);
-    expect(document.getElementById(`bundle-${plugin.id}`)).toBeNull();
+    expect(document.querySelector(`[data-bundle-permissions="${plugin.id}"]`)).toBeNull();
   });
 
   it("un riquadro dei permessi aperto resta aperto dopo la scrittura del suo interruttore", async () => {
@@ -311,7 +313,7 @@ describe("inventario dei componenti installati", () => {
     const controls = [...document.querySelectorAll<HTMLInputElement>("input")].filter((input) => input.id === permissionId);
     expect(controls).toHaveLength(1);
     expect(controls[0].checked).toBe(true);
-    expect(document.getElementById(`bundle-${plugin.id}`)).not.toBeNull();
+    expect(document.querySelector(`[data-bundle-permissions="${plugin.id}"]`)).not.toBeNull();
     expect(document.getElementById("installed-enabled-41")).not.toBeNull();
   });
 

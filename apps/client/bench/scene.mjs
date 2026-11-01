@@ -184,7 +184,10 @@ export const SCENE = onPage("shell", [
     prepare: async (page) => {
       await page.click("#open-settings");
       await page.click('#settings-tabs button[data-tab="components"]');
-      await page.waitForSelector("#settings-body");
+      // La pagina «Componenti» è a schermo quando ha i profili e le righe
+      // della mappa letta.
+      await page.waitForSelector('#settings-body .components-profile[aria-pressed="true"]');
+      await page.waitForSelector("#settings-body .components-row");
     },
   },
   {

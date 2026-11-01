@@ -28,17 +28,17 @@ export const LEXICON: readonly LexiconEntry[] = [
   { say: "Arancione, Blu", instead: ["Arancio", "Azzurro"], why: "Una tavolozza sola: i nove colori dei Blocchi" },
   // I componenti (K2): le parole della pagina Componenti, del riquadro «solo
   // come file» e della riga di comando sono queste, dappertutto.
-  { say: "Componente", instead: ["Modulo", "Estensione"], why: "Una parola sola per ciò che si accende e si spegne" },
-  { say: "Accendi", instead: ["Abilita", "Attiva il componente"], why: "Come un interruttore: si capisce senza spiegarlo" },
-  { say: "Spegni", instead: ["Disabilita", "Disattiva il componente"], why: "Il contrario di «Accendi»" },
-  { say: "Serve a", instead: ["Serve per"], why: "Chi richiede un componente lo dice così" },
-  { say: "Non serve più", instead: ["Non più necessario"], why: "Una frase, non un'etichetta" },
-  { say: "Togli", instead: ["Disinstalla"], why: "«Togli» quando i file restano: il componente se ne va, il vault no" },
-  { say: "Tienili", instead: ["Mantienili"], why: "Corto, come «Togli»" },
-  { say: "Profilo", instead: ["Preset"], why: "Una scelta di componenti già pronta, in italiano" },
-  { say: "personalizzato", instead: ["Custom"], why: "Il profilo che non è nessuno dei pronti, in italiano" },
-  { say: "più avanti", instead: ["Prossimamente"], why: "Ciò che c'è ma non si può ancora scegliere" },
-  { say: "solo come file", instead: ["Solo file"], why: "Il file c'è e si apre altrove; qui manca il suo editor" },
+  { say: "Componente", instead: ["Plugin", "Estensione", "Modulo"], why: "Una parola sola per ciò che si accende e si spegne" },
+  { say: "Accendi", instead: ["Abilita", "Attiva il componente"], why: "Come un interruttore, che è ciò che si tocca" },
+  { say: "Spegni", instead: ["Disabilita", "Disattiva"], why: "Il contrario di «Accendi»" },
+  { say: "Serve a", instead: ["Serve per", "Richiesto da", "Necessario a", "Usato da"], why: "Dice chi ne ha bisogno, senza gergo" },
+  { say: "Non serve più", instead: ["Orfano", "Inutilizzato", "Non più necessario"], why: "Dice perché si può togliere" },
+  { say: "Togli", instead: ["Disinstalla"], why: "Si spegne, e i file restano" },
+  { say: "Tienili", instead: ["Mantienili", "Conservali"], why: "Corto, e risponde a «Non servono più»" },
+  { say: "Profilo", instead: ["Preset"], why: "Un insieme di componenti con un nome" },
+  { say: "personalizzato", instead: ["Personalizzata", "Custom"], why: "Il profilo, al maschile e in italiano" },
+  { say: "più avanti", instead: ["In arrivo", "Prossimamente"], why: "Non promette una data" },
+  { say: "solo come file", instead: ["Solo file", "Non supportato", "Formato sconosciuto"], why: "Il file c'è e si apre altrove: dice che cosa si può fare lo stesso" },
 ];
 
 /// Le varianti, tutte: nessuna voce di menu le contiene. «Arancio» è anche
