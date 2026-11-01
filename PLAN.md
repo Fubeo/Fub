@@ -15,7 +15,7 @@ l'errore «comando di un componente spento» (K3); dati scaricabili ed edizioni
 (K4); l'interruttore Semplice·Completo nelle modalità (arriva con la prima
 modalità completa); la domanda del profilo sui vault che esistono già.
 Assunzioni: vedi «Assunzioni» qui sotto (A1–A12), approvate il 2026-11-01.
-Ondate: T1 | T2 | T2b | T3 T4 | T5
+Ondate: T1 | T2 | T2b | T3 T4 | T3b T5
 Prototipo: l'anteprima dal vivo in cima al piano «Fub a componenti»
 (https://claude.ai/artifact/T2Ts14vEwWTNzHHs6NKP9w): gruppi, interruttori,
 «Serve a…», «Non serve più», la finestra delle dipendenze, la ricerca, i
@@ -350,6 +350,50 @@ apre; elenco dei chunk e S6 nella PR (cancello); `npm run build` rifiuta un impo
 statico di `editors/canvas` (rottura apposta, messaggio nel report).
 Prova: scripts/check.sh --rapido
 Stato: [x] fatto
+
+## T3b · Il riquadro «Fub con questi componenti» e la pagina sullo stato condiviso
+
+Aggiunto dall'orchestratore (vedi DECISIONS.md): T3 ha consegnato la pagina
+senza il riquadro laterale dell'anteprima, con una lettura della mappa sua
+accanto a quella di T4, e con un'icona di ripiego per il correttore.
+Perché: chi sceglie deve vedere che cosa cambia in Fub prima di uscire dalla
+pagina: le voci di «Nuovo», che cosa si apre dentro Fub e che cosa resta un
+file, quanto è acceso.
+Tocca: `apps/client/src/panels/components-page.ts` e il suo test, gli stili
+della pagina (`apps/client/src/theme/scrittoio/skin/settings.css` e i derivati
+rigenerati), i cataloghi del client, `apps/client/bench/scene.mjs` (la scena
+`settings-components` e le sue varianti), `docs/product/plugins-and-extensions.md`;
+per il riquadro, in modo additivo, `editors/core/component-surfaces.ts` e
+`state/components.ts`; la fonte delle voci di «Nuovo» se oggi non si può
+leggere da fuori dell'esploratore; `ui/app-menu.ts` e il menu dell'app in
+`desktop-shell.ts` solo se la verifica di A12 trova una voce che non segue.
+Non toccare: la riga dei profili della pagina (`drawProfiles`,
+`profileButton`, `laterReason`, la guardia dei tasti su `aria-disabled`: T5 la
+sposta in un modulo suo), `ui/onboarding.ts` e il giro di «Crea un vault
+nuovo…» (T5), `host/ipc.ts`, `host/contract.ts`, i fake e lo scenario.
+Dipende da: T3, T4
+Cosa fare:
+- Il riquadro dell'anteprima, «Fub con questi componenti»: «Il menu «Nuovo»»
+  con le voci che il menu «Nuovo» vero mostra con questi componenti, dalla
+  stessa fonte; «Che cosa si apre dentro Fub», le estensioni con l'editor che
+  le apre o «solo come file», da `uisForFile` e dallo stato; «Che cosa pesa»,
+  con i componenti attivi, quelli di supporto e quelli spenti. Ogni frase è
+  vera per questa build.
+- Largo, il riquadro sta accanto all'elenco; stretto, sopra o sotto.
+- La pagina legge i componenti da `state/components.ts`, non da sé.
+- L'icona di ogni componente della mappa, allineata all'anteprima dove il kit
+  ce l'ha.
+- A12: «Nuovo», «Importa» e le altre voci del menu dell'app e del tasto destro
+  seguono i componenti accesi.
+Casi limite: «Solo note» (una voce sola in «Nuovo»; PDF, lavagna, documenti e
+fogli «solo come file»); la mappa che non risponde; una scelta arrivata dalla
+CLI mentre la pagina è aperta; il rimontaggio della lavagna.
+Fatto quando: test vitest del riquadro con «Studio», «Solo note» e «Tutto», e
+dopo un interruttore; un test che ogni id dello scenario ha la sua icona; foto
+chiara e scura, larga e a 700 px; `bench:a11y` verde; A12 verificato, con un
+test per ogni voce corretta.
+Prova: scripts/check.sh --rapido
+Stato: [ ]
 
 ## T5 · Il profilo al vault nuovo
 
