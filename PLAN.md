@@ -62,6 +62,15 @@ profili. Le foto di T3 la confrontano con la pagina vera.
   freccia nuova `host --> componenti` nel diagramma di
   `docs/architecture/overview.md`, con `dependency_invariant` aggiornato.
   Nessuna dipendenza esterna nuova.
+- D-4 · Con l'app aperta, CLI e MCP continuano a passare dall'app: il canale
+  CLI↔app (`crates/fub-host/src/control.rs`, `crates/fub-cli/src/port.rs`)
+  impara due richieste nuove, la mappa e «applica questa scelta».
+- D-5 · Il formato di `components.state`: **una chiave sola, un elenco di testi
+  con prefisso**, perché `SettingValue` non ha oggetti e il contratto dei plugin
+  non si tocca. Le voci: `off:<id>` (riga senza bundle spenta), `kept:<id>`
+  (tenuto con «Tienili»), `waiting:<id>` (in attesa), al più una
+  `profile:<nome>` (nessuna = personalizzato). Per esempio
+  `["off:fub.lavagna", "kept:fub.penna", "profile:studio"]`.
 
 ## Assunzioni
 
@@ -188,16 +197,17 @@ se ha un elenco delle frecce, `Cargo.lock`, `crates/fub-host/tests/componenti.rs
 `crates/fub-features/src/componenti.rs` (righe `fub.pdf`, lavagna spegnibile,
 `profili()`), `crates/fub-features/tests/componenti.rs`, i cataloghi di
 `fub-features` e di `fub-host` per i nomi e le descrizioni nuove,
-`crates/fub-cli/src/componenti.rs` e `crates/fub-cli/src/mcp.rs` (chiamano
-l'host invece di fare da sé), i loro test, `docs/reference/mcp-server.md` se una
+`crates/fub-cli/src/componenti.rs`, `crates/fub-cli/src/mcp.rs` e
+`crates/fub-cli/src/port.rs` (chiamano l'host invece di fare da sé, D-4), i
+loro test (`tests/componenti.rs`, `tests/mcp.rs`, `tests/through_app.rs`), `docs/reference/mcp-server.md` se una
 risposta cambia.
 Non toccare: `crates/fub-componenti/` (se serve un'operazione nuova, blocco),
 `crates/fub-abi/`, il WIT, `crates/fub-app/`, `apps/client/` tranne il file
 generato.
 Dipende da: nessuno
 Cosa fare:
-- `components.state` come in A1, con la sua `SettingSpec` nel gruppo
-  «Componenti» e nel form generico escluso.
+- `components.state` come in A1, nel formato di D-5, con la sua `SettingSpec`
+  nel gruppo «Componenti» e nel form generico escluso.
 - Il modulo `componenti` dell'host: `Host::components(vault)` legge mappa,
   `plugins.disabled` e `components.state` e dà righe, stato e perché;
   `Host::apply_components(vault, azione, apply)` usa `fub-componenti`, scrive i
