@@ -14,6 +14,8 @@ use fub_abi::settings::SettingSpec;
 use fub_abi::text::StringCatalog;
 use fub_abi::traits::HostNetwork;
 use fub_abi::traits::{Plugin, PluginManifest};
+use fub_abi::ComponentKind;
+use fub_features::componenti;
 use fub_features::{HostWiring, OfficialFeature};
 #[cfg(feature = "search")]
 use fub_features::{SearchIndex, SEARCH_ID};
@@ -74,6 +76,12 @@ struct CoreBundle {
     strings: Vec<StringCatalog>,
     provides: Vec<&'static str>,
     requires: Vec<&'static str>,
+    /// Dalla riga della mappa dei componenti (`fub_features::componenti`),
+    /// per chi ne ha una: usa se c'è, tipo, gruppo e pezzi del client.
+    uses: Vec<&'static str>,
+    kind: ComponentKind,
+    group: Option<&'static str>,
+    ui: Vec<&'static str>,
     #[allow(clippy::type_complexity)]
     register: Box<dyn Fn(&mut Registrar<'_>) -> Vec<String> + Send + Sync>,
 }
@@ -92,6 +100,10 @@ impl CoreBundle {
             strings: Vec::new(),
             provides: Vec::new(),
             requires: Vec::new(),
+            uses: Vec::new(),
+            kind: ComponentKind::default(),
+            group: None,
+            ui: Vec::new(),
             register: Box::new(register),
         }
     }
@@ -116,15 +128,55 @@ impl CoreBundle {
         self.requires.extend_from_slice(services);
         self
     }
+
+    fn using(mut self, components: &[&'static str]) -> Self {
+        self.uses.extend_from_slice(components);
+        self
+    }
+
+    fn of_kind(mut self, kind: ComponentKind) -> Self {
+        self.kind = kind;
+        self
+    }
+
+    fn grouped(mut self, group: &'static str) -> Self {
+        self.group = Some(group);
+        self
+    }
+
+    fn loading_ui(mut self, chunks: &[&'static str]) -> Self {
+        self.ui.extend_from_slice(chunks);
+        self
+    }
+
+    /// I campi della riga della mappa che il manifest porta: `uses`, `kind`,
+    /// `group` e `ui`. `provides` e `requires` restano quelli del bundle,
+    /// perché nella riga ci sono anche requisiti che sono solo della mappa
+    /// (`componenti::SOLO_DELLA_MAPPA`).
+    fn described_by(self, row: Option<&componenti::Riga>) -> Self {
+        match row {
+            Some(row) => self
+                .using(row.uses)
+                .of_kind(row.kind)
+                .grouped(row.gruppo)
+                .loading_ui(row.ui),
+            None => self,
+        }
+    }
 }
 
 impl Bundle for CoreBundle {
     fn manifest(&self) -> PluginManifest {
-        PluginManifest::core(self.id, self.name)
+        let mut manifest = PluginManifest::core(self.id, self.name)
             .configuring(self.settings.clone())
             .speaking(self.default_locale, self.strings.clone())
             .providing(&self.provides)
-            .requiring(&self.requires)
+            .requiring(&self.requires);
+        manifest.uses = self.uses.iter().map(|id| id.to_string()).collect();
+        manifest.kind = self.kind;
+        manifest.group = self.group.map(str::to_string);
+        manifest.ui = self.ui.iter().map(|chunk| chunk.to_string()).collect();
+        manifest
     }
 
     fn trust(&self) -> Trust {
@@ -385,7 +437,8 @@ pub(crate) fn mount_with_formats(
         .speaking(
             crate::settings::CORE_DEFAULT_LOCALE,
             fub_format_rich::export::catalog(),
-        ),
+        )
+        .described_by(componenti::riga(crate::rich::RICH_ID).as_ref()),
     ));
 
     // La griglia delle cartelle di Excel, sui byte del file, e la loro stampa
@@ -400,12 +453,16 @@ pub(crate) fn mount_with_formats(
         .speaking(
             crate::settings::CORE_DEFAULT_LOCALE,
             fub_format_xlsx::export::catalog(),
-        ),
+        )
+        .described_by(componenti::riga(crate::workbook::WORKBOOK_ID).as_ref()),
     ));
 
     // Ogni feature ufficiale si monta con lo stesso ciclo: ciò che registra, le
     // impostazioni, i servizi forniti e richiesti e il collegamento che solo
     // l'host sa fare sono campi della sua riga d'inventario, non rami per id.
+    // `uses`, `kind`, `group` e `ui` del manifest vengono dalla sua riga della
+    // mappa dei componenti.
+    let rows = componenti::righe();
     let wirings = FeatureWirings {
         #[cfg(feature = "versioning")]
         versions: store.clone(),
@@ -430,7 +487,8 @@ pub(crate) fn mount_with_formats(
             catalog_assembled(feature),
         )
         .providing(feature.provides)
-        .requiring(feature.requires);
+        .requiring(feature.requires)
+        .described_by(rows.iter().find(|row| row.id == feature.id));
         bundles.push(Arc::new(bundle));
     }
 

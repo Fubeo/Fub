@@ -2068,6 +2068,7 @@ dependencies = [
  "camino",
  "flate2",
  "fub-abi",
+ "fub-componenti",
  "fub-format-base",
  "fub-format-markdown",
  "fub-format-svg",

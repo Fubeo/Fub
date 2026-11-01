@@ -146,18 +146,22 @@ notify-watcher = ["dep:notify", "dep:notify-debouncer-full"]
 # Word 97-2003): i formati a byte, la proiezione che la superficie ricca
 # modifica e il bundle `fub.rich` che ne esporta una copia in altri formati.
 # Spento, un `.docx` o un `.odt` sono file come altri, e il resto dei
-# formati e delle feature non cambia.
-rich = ["dep:fub-format-rich"]
+# formati e delle feature non cambia. Inoltra le due righe della mappa dei
+# componenti (Documenti e Motore dei documenti), che spariscono con il codec.
+rich = ["dep:fub-format-rich", "fub-features/rich", "fub-features/engine-documents"]
 
 # Le cartelle di Excel (`fub-format-xlsx`: `.xlsx`, `.xlsm`, `.xltx`,
 # `.xltm`) in sola lettura: il formato a byte e la proiezione che la griglia
-# mostra. Spento, una cartella è un file come altri.
-xlsx = ["dep:fub-format-xlsx"]
+# mostra. Spento, una cartella è un file come altri. Inoltra le righe Fogli e
+# Motore dei fogli della mappa dei componenti.
+xlsx = ["dep:fub-format-xlsx", "fub-features/xlsx", "fub-features/engine-sheets"]
 
 # Il client HTTP: acceso di default come il watcher, e per la stessa ragione —
 # i client desktop previsti (CLI 27.1, API locale 27.2, l'app) lo vogliono, e
-# spegnerlo è la scelta di chi non può o non vuole averlo.
-http-client = ["dep:ureq", "dep:uuid"]
+# spegnerlo è la scelta di chi non può o non vuole averlo. Inoltra le righe
+# della mappa dei componenti dei bundle che porta (sync, pubblicazione,
+# aggiornamenti, anteprime dei link).
+http-client = ["dep:ureq", "dep:uuid", "fub-features/http-client"]
 
 # **Le feature ufficiali, una cargo feature per bundle** (§16.3). Inoltrano e
 # basta: l'elenco vero è `fub_features::ogni_feature_ufficiale`, e questi nomi

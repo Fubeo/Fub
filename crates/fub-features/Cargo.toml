@@ -37,6 +37,11 @@ default = [
     "base",
     "formatting",
     "proof",
+    "rich",
+    "xlsx",
+    "engine-documents",
+    "engine-sheets",
+    "http-client",
 ]
 search = ["dep:tantivy", "dep:regex"]
 versioning = []
@@ -102,10 +107,27 @@ draw = [
 ]
 # Il correttore porta il motore di WordCraft, e nessun altro lo tira dentro.
 proof = ["dep:wordcraft-proof"]
+# I componenti che non sono moduli di questo crate: il codice sta in
+# `fub-host` (e nei formati che porta), qui c'è solo la loro riga della mappa
+# (`src/componenti.rs`). Sono marcatori senza dipendenze, e `fub-host` li
+# inoltra dalle sue feature omonime: spento `rich` in `fub-host`, spariscono il
+# codec e le due righe, Documenti e Motore dei documenti. Una riga che richiede
+# un'altra riga accende la sua feature, così la mappa di una build parziale si
+# costruisce sempre (`tests/cargo_features.rs`).
+rich = ["engine-documents"]
+xlsx = ["engine-sheets"]
+engine-documents = []
+engine-sheets = []
+# Sincronizzazione, pubblicazione, aggiornamenti e anteprime dei link: i bundle
+# che `fub-host` monta solo con la sua feature `http-client`.
+http-client = []
 
 [dependencies]
 camino.workspace = true
 fub-abi = { workspace = true }
+# La mappa dei componenti (`src/componenti.rs`) si costruisce col risolutore,
+# che è puro e porta solo `serde`.
+fub-componenti = { workspace = true }
 serde = { workspace = true }
 fub-format-base = { workspace = true, optional = true }
 # Dietro `draw`: un disegno nuovo lo scrive `serialize` del provider dei

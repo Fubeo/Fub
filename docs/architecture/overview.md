@@ -77,6 +77,7 @@ flowchart TD
     rich --> ink
     importers --> abi
     features --> abi
+    features --> componenti
     features --> base
     features --> svg
     features --> scene
@@ -239,10 +240,12 @@ dell'inchiostro dei documenti; chi altro può dipenderne è un elenco chiuso,
 deciso nell'[ADR 0204](../decisions/0204-nucleo-inchiostro.md) e allargato
 nell'[ADR 0226](../decisions/0226-inchiostro-e-disegni-nei-documenti.md).
 
-`fub-componenti`, il risolutore dei componenti, non ha frecce né in uscita né
-in ingresso: dipende soltanto da `serde`, non vede `fub-abi`, e dice in un
-posto solo che cosa è acceso, chi lo richiede e che cosa non serve più. Chi
-costruisce la mappa dei componenti traduce le proprie righe nelle sue.
+`fub-componenti`, il risolutore dei componenti, non ha frecce in uscita:
+dipende soltanto da `serde`, non vede `fub-abi`, e dice in un posto solo che
+cosa è acceso, chi lo richiede e che cosa non serve più. La sola freccia in
+ingresso viene da `fub-features`, che costruisce la mappa dei componenti di Fub
+(`src/componenti.rs`): una riga per componente, dietro la sua cargo feature, da
+cui `fub-host` prende anche `uses`, `kind`, `group` e `ui` dei manifest.
 
 `fub-scene`, il lettore delle scene di FubDraw, ha come sola freccia in uscita
 `fub-ink`: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché
