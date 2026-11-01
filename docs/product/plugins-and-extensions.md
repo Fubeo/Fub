@@ -62,10 +62,20 @@ Accendere un componente accende anche ciò che gli serve, e la pagina lo dice
 («Attivati anche …»). Spegnere ciò che serve ad altri chiede prima, con
 l'elenco di chi si spegne insieme. Chi resta senza nessuno che lo usi compare
 in un avviso, «Togli» o «Tienili», finché non si risponde. La regola è
-dell'host (`components_map`, `components_apply`): la pagina chiede una prova,
-applica e rilegge, anche quando la scelta arriva dalla CLI o da MCP. I
-permessi dei componenti inclusi restano sotto, in «Permessi dei componenti
-inclusi».
+dell'host (`components_map`, `components_apply`): la pagina chiede una prova e
+applica; la mappa la legge lo stato dei componenti di tutta l'app
+(`state/components.ts`), una volta per evento, anche quando la scelta arriva
+dalla CLI o da MCP. I permessi dei componenti inclusi restano sotto, in
+«Permessi dei componenti inclusi».
+
+Accanto all'elenco (sopra, con la finestra stretta) il riquadro «Fub con questi
+componenti» dice che cosa cambia prima di uscire dalla pagina: le voci del menu
+«Nuovo» (le stesse dell'esploratore: «Nota», e «Disegno» se i disegni sono
+accesi), che cosa si apre dentro Fub (le estensioni di ogni editor che si può
+spegnere, con il componente che le apre o «solo come file») e che cosa pesa
+(i componenti attivi, quanti di supporto, quanti spenti: Fub non li avvia e
+non ne carica il codice; un editor acceso carica il suo codice solo quando si
+apre un suo file).
 
 ## Il profilo di un vault nuovo
 

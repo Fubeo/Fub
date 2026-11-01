@@ -106,6 +106,7 @@ interface VaultComponents {
 let vault: VaultComponents | null = null;
 const race = new Race();
 const listeners = new Set<Listener>();
+const readers = new Set<(next: Components) => void>();
 
 /// I componenti del vault aperto, se la mappa è già arrivata.
 export function components(): Components | null {
@@ -132,6 +133,14 @@ export function onComponents(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
+/// Chi mostra la mappa intera (la pagina «Componenti»: profilo, perché, chi è
+/// in attesa) e deve saperlo a ogni lettura, anche quando ciò che è acceso
+/// resta com'era. Il disposer toglie l'ascolto.
+export function onComponentsRead(listener: (next: Components) => void): () => void {
+  readers.add(listener);
+  return () => readers.delete(listener);
+}
+
 function vaultEntry(root: string): VaultComponents {
   if (vault?.root !== root) {
     race.cancel();
@@ -141,7 +150,9 @@ function vaultEntry(root: string): VaultComponents {
 }
 
 /// Una lettura della mappa per il vault di `entry`. Se ne è già in volo una,
-/// questa diventa il giro in più che la segue.
+/// questa diventa il giro in più che la segue (uno solo, quanti che siano gli
+/// eventi), e chi la chiede aspetta la fine di quel giro: la risposta vecchia
+/// non arriva mai a chi ascolta, solo l'ultima.
 function read(entry: VaultComponents): Promise<Components> {
   if (entry.reading) {
     entry.again = true;
@@ -181,6 +192,13 @@ function publish(entry: VaultComponents, next: Components): void {
   if (vault !== entry) return;
   const previous = entry.current;
   entry.current = next;
+  for (const reader of [...readers]) {
+    try {
+      reader(next);
+    } catch (error) {
+      console.error(error);
+    }
+  }
   if (next.sameAs(previous)) return;
   for (const listener of [...listeners]) {
     try {
@@ -221,13 +239,29 @@ export function refreshComponents(): Promise<Components | null> {
   return read(vaultEntry(root));
 }
 
-function refresh(): void {
-  void refreshComponents().catch((error: unknown) => console.error(error));
-}
-
 /// Gli ascolti che tengono la mappa fresca, ciascuno col suo disposer nella
 /// vita di chi monta.
+///
+/// Una scelta manda i suoi eventi di fila (una chiave per volta, poi il
+/// rimontaggio del vault), e nell'host vero ognuno arriva in un task suo. Li
+/// fonde la coda di `read`, senza timer: una lettura in volo e al più una in
+/// attesa, che parte quando la prima finisce, e chi ascolta sente soltanto
+/// l'ultima. Il gesto della pagina (`refreshComponents`) passa dalla stessa
+/// coda: una scelta con quanti eventi si voglia fa al più due letture. Gli
+/// eventi arrivati nello stesso giro di microtask chiedono un giro solo, ma è
+/// un risparmio in più: la garanzia è della coda. Chi ascolta (registro, menu,
+/// la pagina «Componenti») non legge da sé.
 export function mountComponents(lifetime: Lifetime): void {
+  let asked = false;
+  const refresh = (): void => {
+    if (asked) return;
+    asked = true;
+    queueMicrotask(() => {
+      asked = false;
+      if (lifetime.closed) return;
+      void refreshComponents().catch((error: unknown) => console.error(error));
+    });
+  };
   lifetime.add(onEvent("setting_changed", ({ key }) => {
     if (COMPONENT_KEYS.test(key) || key === DISABLED_KEY || key === LANGUAGE_KEY) refresh();
   }));

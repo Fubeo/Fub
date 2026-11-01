@@ -76,7 +76,7 @@ vi.mock("../host/dialog", () => ({
 }));
 vi.mock("../host/query", () => ({ settings: async () => box.entries }));
 vi.mock("../state/kernel", () => ({ onEvent: vi.fn() }));
-vi.mock("../ui/commands", () => ({ allCommands: () => [], keybindingKey: (id: string) => id }));
+vi.mock("../ui/commands", () => ({ allCommands: () => [], keybindingKey: (id: string) => id, newKinds: () => ["note"] }));
 vi.mock("../ui/a11y", () => ({ trapFocus: () => () => {} }));
 vi.mock("../ui/motion", () => ({
   enterSurface: () => {},

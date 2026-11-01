@@ -1579,10 +1579,18 @@
  * supporto» sta chiuso: si aggiunge e si toglie da sé. L'avviso resta in fondo
  * alla vista mentre si scorre. */
 .components-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  align-items: start;
+  gap: var(--space-6) var(--space-8);
+  margin-bottom: var(--space-9);
+}
+
+.components-main {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
-  margin-bottom: var(--space-9);
+  min-width: 0;
 }
 
 .components-head {
@@ -1882,6 +1890,150 @@
   color: var(--text);
   font-size: var(--text-base);
   line-height: var(--leading-normal);
+}
+
+/* --- il riquadro «Fub con questi componenti» -------------------------------
+ *
+ * Accanto all'elenco, e resta in vista mentre si scorre: le voci del menu
+ * «Nuovo», che cosa si apre dentro Fub e che cosa resta un file, quanti
+ * componenti sono accesi. Con la finestra stretta va fra i profili e l'elenco. */
+.components-preview {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  border-radius: var(--radius-sheet);
+  background: var(--sheet-2);
+}
+
+.components-preview-title,
+.components-preview-head {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.components-preview-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.components-new {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--elevation-floating-surface);
+  list-style: none;
+}
+
+.components-new-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 28px;
+  padding: 0 var(--space-4);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.components-new-icon {
+  display: inline-flex;
+  color: var(--muted);
+}
+
+.components-opens {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+.components-opens-item {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+.components-opens-ext {
+  min-width: 0;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.components-opens-in {
+  color: var(--text);
+}
+
+.components-opens-out {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.components-weight {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.components-weight-count {
+  flex: none;
+  min-width: 26px;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.components-weight-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+
+/* Stretta, una colonna sola: l'involucro dell'elenco si scioglie, e il
+ * riquadro passa fra i profili e l'elenco. L'ordine di lettura non cambia per
+ * chi usa la tastiera: nel riquadro non c'è niente da raggiungere. */
+@media (max-width: 1100px) {
+  .components-page {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+
+  .components-main {
+    display: contents;
+  }
+
+  .components-preview {
+    position: static;
+    order: 1;
+  }
+
+  .components-list,
+  .components-empty,
+  .components-notice {
+    order: 2;
+  }
 }
 
 .settings-btn--primary {

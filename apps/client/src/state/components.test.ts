@@ -30,7 +30,8 @@ vi.mock("./store", () => ({
   on: () => () => {},
 }));
 
-const { components, componentsReady, mountComponents, onComponents } = await import("./components");
+const { components, componentsReady, mountComponents, onComponents, onComponentsRead, refreshComponents } =
+  await import("./components");
 
 function map(lavagna: boolean): ComponentsMap {
   return {
@@ -164,6 +165,103 @@ describe("i componenti del vault aperto", () => {
     expect(fresh?.root).toBe("/altro");
     expect(components()?.root).toBe("/altro");
     expect(components()?.uiOn("editors/canvas")).toBe(false);
+    lifetime.close();
+  });
+
+  it("gli eventi di una scelta, fuori da una lettura, diventano una lettura sola", async () => {
+    const lifetime = openLifetime();
+    mountComponents(lifetime);
+    world.map.mockResolvedValue(map(true));
+    await componentsReady();
+    world.map.mockClear();
+    world.map.mockResolvedValue(map(false));
+    // Come li manda una scelta: una chiave per volta, poi il rimontaggio.
+    for (const key of ["components.off", "components.profile", "plugins.disabled"]) {
+      world.handlers.get("setting_changed")!({ key } as never);
+    }
+    world.handlers.get("vault_opened")!({ root: "/vault" } as never);
+    for (let i = 0; i < 4; i += 1) await tick();
+    expect(world.map).toHaveBeenCalledTimes(1);
+    expect(components()?.uiOn("editors/canvas")).toBe(false);
+    lifetime.close();
+  });
+
+  // Nell'host vero ogni evento arriva in un task suo: niente li fonde nello
+  // stesso giro. Li fonde la coda: una lettura in volo, una sola in attesa.
+  it("eventi in task separati durante una lettura lenta: al più due letture, vince la più nuova", async () => {
+    const lifetime = openLifetime();
+    mountComponents(lifetime);
+    world.map.mockResolvedValue(map(true));
+    await componentsReady();
+    world.map.mockClear();
+    let release!: () => void;
+    world.map.mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve(map(true)); }));
+    world.map.mockResolvedValue(map(false));
+    const read: boolean[] = [];
+    const stopRead = onComponentsRead((next) => read.push(next.uiOn("editors/canvas")));
+    for (const key of ["components.off", "components.profile", "components.extra", "components.on", "plugins.disabled"]) {
+      world.handlers.get("setting_changed")!({ key } as never);
+      await tick();
+    }
+    world.handlers.get("vault_opened")!({ root: "/vault" } as never);
+    await tick();
+    // Il gesto della pagina trova una lettura in attesa e aspetta quella.
+    const gesture = refreshComponents();
+    await tick();
+    release();
+    const state = await gesture;
+    for (let i = 0; i < 4; i += 1) await tick();
+    expect(world.map).toHaveBeenCalledTimes(2);
+    expect(state?.uiOn("editors/canvas")).toBe(false);
+    expect(components()?.uiOn("editors/canvas")).toBe(false);
+    // La lettura vecchia non arriva a chi ascolta: una sola, la nuova.
+    expect(read).toEqual([false]);
+    stopRead();
+    lifetime.close();
+  });
+
+  it("un gesto e poi i suoi eventi in task separati: al più due letture", async () => {
+    const lifetime = openLifetime();
+    mountComponents(lifetime);
+    world.map.mockResolvedValue(map(true));
+    await componentsReady();
+    world.map.mockClear();
+    let release!: () => void;
+    world.map.mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve(map(true)); }));
+    world.map.mockResolvedValue(map(false));
+    const gesture = refreshComponents();
+    for (const key of ["components.off", "components.profile", "plugins.disabled"]) {
+      await tick();
+      world.handlers.get("setting_changed")!({ key } as never);
+    }
+    await tick();
+    release();
+    const state = await gesture;
+    for (let i = 0; i < 4; i += 1) await tick();
+    expect(world.map).toHaveBeenCalledTimes(2);
+    expect(state?.uiOn("editors/canvas")).toBe(false);
+    expect(components()?.uiOn("editors/canvas")).toBe(false);
+    lifetime.close();
+  });
+
+  it("chi mostra la mappa intera la sente a ogni lettura, anche se l'acceso non cambia", async () => {
+    const lifetime = openLifetime();
+    mountComponents(lifetime);
+    world.map.mockResolvedValue(map(true));
+    await componentsReady();
+    const custom = map(true);
+    (custom as { profilo: string | null }).profilo = "studio";
+    world.map.mockResolvedValue(custom);
+    const read: Array<string | null> = [];
+    const changed: number[] = [];
+    const stopRead = onComponentsRead((next) => read.push(next.map?.profilo ?? null));
+    const stop = onComponents(() => changed.push(1));
+    world.handlers.get("setting_changed")!({ key: "components.profile" } as never);
+    for (let i = 0; i < 4; i += 1) await tick();
+    expect(read).toEqual(["studio"]);
+    expect(changed).toEqual([]);
+    stopRead();
+    stop();
     lifetime.close();
   });
 });

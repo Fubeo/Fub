@@ -82,3 +82,31 @@ export function uisForFile(id: string): readonly string[] {
   if (point <= 0) return [];
   return BY_EXTENSION.get(base.slice(point + 1).toLowerCase()) ?? [];
 }
+
+/// Le estensioni delle note: il testo è del nucleo, e le apre sempre.
+const NOTE_EXTENSIONS: readonly string[] = ["md"];
+
+/// Un editor e le estensioni dei file che apre, per chi deve dire che cosa si
+/// apre dentro Fub (il riquadro della pagina «Componenti»).
+export interface EditorFiles {
+  readonly ui: string;
+  readonly extensions: readonly string[];
+}
+
+/// Le note, poi ogni pezzo che si può spegnere con le estensioni che apre da
+/// solo, nell'ordine della tabella. Le annotazioni di un PDF non hanno un
+/// editor loro: chiedono il disegno e il PDF insieme, e non fanno riga.
+export function editorFiles(): readonly EditorFiles[] {
+  const byUi = new Map<string, string[]>();
+  for (const [extension, uis] of FILES) {
+    if (uis.length !== 1) continue;
+    const ui = uis[0]!;
+    const list = byUi.get(ui) ?? [];
+    list.push(extension);
+    byUi.set(ui, list);
+  }
+  return [
+    { ui: UI_TEXT, extensions: NOTE_EXTENSIONS },
+    ...[...byUi].map(([ui, extensions]) => ({ ui, extensions })),
+  ];
+}

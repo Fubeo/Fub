@@ -188,6 +188,8 @@ export const SCENE = onPage("shell", [
       // della mappa letta.
       await page.waitForSelector('#settings-body .components-profile[aria-pressed="true"]');
       await page.waitForSelector("#settings-body .components-row");
+      // E il riquadro «Fub con questi componenti», che si disegna dalla stessa mappa.
+      await page.waitForSelector("#settings-body .components-preview:not([hidden]) .components-weight");
     },
   },
   {

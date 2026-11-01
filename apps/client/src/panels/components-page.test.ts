@@ -48,7 +48,14 @@ vi.mock("../ui/tooltip", () => ({
 const { createFakeHost } = await import("../host/fake");
 const { startKernelRouter } = await import("../state/kernel");
 const { openLifetime } = await import("../ui/lifetime");
-const { mountComponentsPage } = await import("./components-page");
+const { mountComponentsPage, COMPONENT_ICONS, componentIcon } = await import("./components-page");
+const { mountComponents } = await import("../state/components");
+const { setCommandSpecs, state } = await import("../state/store");
+const { drawingCreateSpec } = await import("../host/fake");
+const { icon } = await import("../ui/icons");
+const scenario = (await import("../__fixtures__/components-scenario.json")).default as unknown as {
+  mappe: Array<{ righe: Array<{ id: string }> }>;
+};
 
 let stopRouter: (() => void) | null = null;
 let lifetime = openLifetime();
@@ -59,6 +66,9 @@ async function mount(start?: string) {
   box.host = createFakeHost(start ? { componentsStart: start } : {});
   stopRouter = await startKernelRouter();
   lifetime = openLifetime();
+  // La mappa è quella di tutta l'app: la pagina la legge da lì.
+  state.vaultRoot = "/vault";
+  mountComponents(lifetime);
   const page = mountComponentsPage(lifetime, { visible: () => visible, reloadProvider });
   document.body.replaceChildren(page.element);
   await page.show();
@@ -89,6 +99,8 @@ beforeEach(() => {
 
 afterEach(() => {
   lifetime.close();
+  state.vaultRoot = "";
+  setCommandSpecs([]);
   stopRouter?.();
   stopRouter = null;
   document.body.replaceChildren();
@@ -307,19 +319,6 @@ describe("la pagina «Componenti»", () => {
     expect($(".components-custom")).not.toBeNull();
   });
 
-  it("una pagina nascosta non legge, e rilegge quando torna", async () => {
-    const page = await mount();
-    visible = false;
-    box.maps = 0;
-    box.host!.componentsFromOutside({ azione: "spegni", id: "fub.graph" });
-    await new Promise((resolve) => setTimeout(resolve, 80));
-    expect(box.maps).toBe(0);
-    visible = true;
-    await page.show();
-    expect(box.maps).toBe(1);
-    expect(toggle("fub.graph").checked).toBe(false);
-  });
-
   it("il rimontaggio del vault durante una scelta non rompe la pagina", async () => {
     await mount("solo-note");
     toggle("fub.pdf").click();
@@ -330,12 +329,150 @@ describe("la pagina «Componenti»", () => {
     expect($("#components-page-title")!.isConnected).toBe(true);
   });
 
-  it("smontata, la pagina non legge più e non lascia ascoltatori", async () => {
-    await mount();
-    lifetime.close();
+  it("smontata, la pagina non ridisegna più e non lascia ascoltatori", async () => {
+    box.host = createFakeHost({});
+    stopRouter = await startKernelRouter();
+    lifetime = openLifetime();
+    state.vaultRoot = "/vault";
+    mountComponents(lifetime);
+    const own = openLifetime();
+    const page = mountComponentsPage(own, { visible: () => visible, reloadProvider });
+    document.body.replaceChildren(page.element);
+    await page.show();
+    own.close();
+    box.maps = 0;
+    box.host.componentsFromOutside({ azione: "spegni", id: "fub.graph" });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    // Lo stato dell'app rilegge (una volta); la pagina smontata no.
+    expect(box.maps).toBe(1);
+    expect(toggle("fub.graph").checked).toBe(true);
+  });
+
+  it("dopo una scelta da fuori, la pagina nascosta non ridisegna e torna aggiornata", async () => {
+    const page = await mount();
+    visible = false;
     box.maps = 0;
     box.host!.componentsFromOutside({ azione: "spegni", id: "fub.graph" });
     await new Promise((resolve) => setTimeout(resolve, 80));
-    expect(box.maps).toBe(0);
+    // La mappa si rilegge una volta per tutta l'app; la pagina non la ridisegna.
+    expect(box.maps).toBe(1);
+    expect(toggle("fub.graph").checked).toBe(true);
+    visible = true;
+    await page.show();
+    expect(box.maps).toBe(1);
+    expect(toggle("fub.graph").checked).toBe(false);
+  });
+
+  it("una mappa che non si legge lo dice, e il riquadro non c'è", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    box.host = createFakeHost({});
+    stopRouter = await startKernelRouter();
+    lifetime = openLifetime();
+    // Un vault che il finto non conosce: `components_map` rifiuta.
+    state.vaultRoot = "/nessuno";
+    const original = box.host.module.api.componentsMap;
+    box.host.module.api.componentsMap = () => Promise.reject(new Error("giù"));
+    mountComponents(lifetime);
+    const page = mountComponentsPage(lifetime, { visible: () => visible, reloadProvider });
+    document.body.replaceChildren(page.element);
+    await page.show();
+    expect($(".components-list")!.textContent).toBe("I componenti di questo vault non si leggono, per ora.");
+    expect($<HTMLElement>(".components-preview")!.hidden).toBe(true);
+    box.host.module.api.componentsMap = original;
+    error.mockRestore();
+  });
+});
+
+describe("il riquadro «Fub con questi componenti»", () => {
+  const preview = () => $<HTMLElement>(".components-preview")!;
+  const newItems = () => [...preview().querySelectorAll(".components-new-item")].map((item) => item.textContent);
+  const opens = () =>
+    Object.fromEntries(
+      [...preview().querySelectorAll<HTMLElement>(".components-opens-item")].map((item) => [
+        item.querySelector("code")!.textContent,
+        item.querySelector("span")!.textContent,
+      ]),
+    );
+  const weight = () => [...preview().querySelectorAll(".components-weight")].map((line) => line.textContent);
+
+  it("con «Studio»: un aside col suo nome, le voci di «Nuovo», tutto si apre dentro Fub", async () => {
+    await mount("studio");
+    const aside = preview();
+    expect(aside.tagName).toBe("ASIDE");
+    expect(aside.hidden).toBe(false);
+    expect(aside.getAttribute("aria-live")).toBeNull();
+    expect(document.getElementById(aside.getAttribute("aria-labelledby")!)!.textContent).toBe("Fub con questi componenti");
+    // Senza `drawing.create` il kernel non fa disegni: il menu dice solo «Nota».
+    expect(newItems()).toEqual(["Nota"]);
+    expect(opens()).toEqual({
+      ".md": "in «Note»",
+      ".canvas": "in «Lavagna»",
+      ".pdf": "in «PDF»",
+      ".docx .odt .rtf .doc .dot": "in «Documenti»",
+      ".xlsx .xlsm .xltx .xltm": "in «Fogli»",
+    });
+    expect(weight()).toEqual([
+      "35componenti attivi, 4 di supporto",
+      "0spenti: Fub non li avvia e non ne carica il codice",
+    ]);
+    // I comandi arrivano anche dopo la mappa: il riquadro segue.
+    setCommandSpecs([drawingCreateSpec()]);
+    expect(newItems()).toEqual(["Nota", "Disegno"]);
+  });
+
+  it("con «Solo note»: PDF, lavagna, documenti e fogli restano file", async () => {
+    await mount("solo-note");
+    expect(newItems()).toEqual(["Nota"]);
+    expect(opens()).toEqual({
+      ".md": "in «Note»",
+      ".canvas": "solo come file",
+      ".pdf": "solo come file",
+      ".docx .odt .rtf .doc .dot": "solo come file",
+      ".xlsx .xlsm .xltx .xltm": "solo come file",
+    });
+    expect(weight()).toEqual([
+      "25componenti attivi, 0 di supporto",
+      "10spenti: Fub non li avvia e non ne carica il codice",
+    ]);
+  });
+
+  it("scelto «Tutto», il riquadro dice tutto acceso", async () => {
+    await mount("studio");
+    profile("tutto").click();
+    await settled();
+    expect(profile("tutto").getAttribute("aria-pressed")).toBe("true");
+    expect(Object.values(opens()).every((where) => where.startsWith("in «"))).toBe(true);
+    expect(weight()).toEqual([
+      "35componenti attivi, 4 di supporto",
+      "0spenti: Fub non li avvia e non ne carica il codice",
+    ]);
+  });
+
+  it("dopo un interruttore il riquadro segue", async () => {
+    await mount("solo-note");
+    toggle("fub.pdf").click();
+    await settled();
+    expect(toggle("fub.pdf").checked).toBe(true);
+    expect(opens()[".pdf"]).toBe("in «PDF»");
+    expect(opens()[".canvas"]).toBe("solo come file");
+    // Il PDF porta con sé la penna, che è di supporto.
+    expect(weight()).toEqual([
+      "27componenti attivi, 1 di supporto",
+      "8spenti: Fub non li avvia e non ne carica il codice",
+    ]);
+  });
+});
+
+describe("le icone dei componenti", () => {
+  it("ogni componente dello scenario ha la sua icona in tabella, non quella di ripiego", () => {
+    const ids = new Set(scenario.mappe.flatMap((map) => map.righe.map((row) => row.id)));
+    expect(ids.size).toBeGreaterThan(0);
+    for (const id of ids) {
+      const name = COMPONENT_ICONS[id];
+      expect({ id, name: name ?? null }).toEqual({ id, name: expect.any(String) });
+      expect({ id, drawn: icon(name!) !== "" }).toEqual({ id, drawn: true });
+    }
+    expect(componentIcon("fub.proof")).toBe(icon("footnote"));
+    expect(componentIcon("fub.rich")).toBe(icon("format-word"));
   });
 });

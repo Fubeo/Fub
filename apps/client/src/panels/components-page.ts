@@ -10,15 +10,24 @@
 // applica, e poi rilegge. I nomi negli avvisi vengono dalle righe della mappa,
 // mai dagli id.
 //
-// # Una lettura alla volta, e mai una vecchia sopra una nuova
+// # La mappa è quella di tutta l'app
 //
-// La mappa cambia per un gesto di qui, per una scelta arrivata da fuori (la
-// CLI, MCP) e per il rimontaggio del vault che la lavagna porta con sé. Ogni
-// strada chiede una lettura con `requestRead`: le richieste di fila si fondono
-// in una (un breve ritardo, poi `CoalescingQueue`, che tiene al più una lettura
-// in volo e una che aspetta), e le letture partono in ordine, quindi l'ultima
-// che arriva è anche l'ultima chiesta. Una lettura che fallisce — il vault è
-// chiuso per un istante mentre si rimonta — lascia la mappa di prima.
+// La pagina non legge da sé: la mappa è quella di `state/components.ts`, che
+// la rilegge per una scelta arrivata da fuori (la CLI, MCP) e per il
+// rimontaggio del vault che la lavagna porta con sé, una volta per evento per
+// tutta l'app. La pagina ridisegna a ogni lettura (`onComponentsRead`: anche
+// il profilo e chi è in attesa, che non cambiano ciò che è acceso), e dopo un
+// suo gesto chiede `refreshComponents()` e la aspetta. Una lettura che
+// fallisce — il vault è chiuso per un istante mentre si rimonta — lascia la
+// mappa di prima.
+//
+// # Il riquadro «Fub con questi componenti»
+//
+// Accanto all'elenco (sopra, se la finestra è stretta) dice che cosa cambia in
+// Fub con ciò che è acceso: le voci del menu «Nuovo» (`newKinds`, la stessa
+// fonte dell'esploratore), che cosa si apre dentro Fub e che cosa resta un file
+// (`editorFiles` e `uiOn`), e quanti componenti sono accesi. Non è una regione
+// che parla: l'esito di un gesto lo dice già l'avviso.
 //
 // # Il disegno
 //
@@ -37,18 +46,26 @@ import type {
 import { errorText } from "../host/errors";
 import { plural, resolvedLanguage, t } from "../i18n/strings";
 import { confirm } from "../platform/confirm";
-import { onEvent } from "../state/kernel";
+import { editorFiles, UI_TEXT } from "../editors/core/component-surfaces";
+import {
+  components,
+  componentsReady,
+  onComponentsRead,
+  refreshComponents,
+  type Components,
+} from "../state/components";
+import { on } from "../state/store";
+import { newKinds, type NewKind } from "../ui/commands";
 import { icon } from "../ui/icons";
 import type { Lifetime } from "../ui/lifetime";
 import { notify } from "../ui/notify";
-import { CoalescingQueue } from "../ui/race";
 import { guardDisabledKeys, laterReason, profileButton } from "./component-profiles";
 import { matchesTerms, normalizeSearch, searchTerms } from "./settings-model";
 
 /// L'icona di ogni componente che questa shell conosce. È presentazione della
 /// shell, non dell'host: un componente nuovo prende `component` e la pagina
 /// non si rompe.
-const ICONS: Readonly<Record<string, string>> = {
+export const COMPONENT_ICONS: Readonly<Record<string, string>> = {
   "fub.core": "vault",
   "fub.maintenance": "settings",
   "fub.markdown": "notes",
@@ -65,12 +82,13 @@ const ICONS: Readonly<Record<string, string>> = {
   "fub.trash": "trash",
   "fub.stats": "stats",
   "fub.graph": "graph",
+  "fub.proof": "footnote",
   "fub.commands": "keyboard",
   "fub.blocks": "square",
   "fub.base": "collection",
   "fub.formatting": "format-word",
   "fub.draw": "format-drawing",
-  "fub.rich": "format-odt",
+  "fub.rich": "format-word",
   "fub.xlsx": "format-sheet",
   "fub.lavagna": "layout-dashboard",
   "fub.pdf": "view",
@@ -88,20 +106,21 @@ const ICONS: Readonly<Record<string, string>> = {
 /// L'icona di una riga, con quella di ripiego per un id che non è in tabella o
 /// un nome che questo kit non disegna.
 export function componentIcon(id: string): string {
-  return icon(ICONS[id] ?? "component") || icon("component");
+  return icon(COMPONENT_ICONS[id] ?? "component") || icon("component");
 }
 
 /// Il gruppo dei componenti che si aggiungono e si tolgono da soli.
 const SUPPORT = "supporto";
 
-/// Quanto aspetta una lettura chiesta da un evento: gli eventi di una scelta
-/// arrivano a raffica (`setting_changed` per chiave, poi il rimontaggio), e
-/// devono diventare una lettura sola.
-const READ_DELAY_MS = 30;
+/// Le voci del menu «Nuovo», con l'icona e il nome che il menu dice.
+const NEW_ENTRIES: Readonly<Record<NewKind, { icon: string; label: "components.preview.new.note" | "components.preview.new.drawing" }>> = {
+  note: { icon: "notes", label: "components.preview.new.note" },
+  drawing: { icon: "format-drawing", label: "components.preview.new.drawing" },
+};
 
 export interface ComponentsPageHooks {
-  /// Se la pagina è a schermo: una pagina nascosta non legge, e si segna da
-  /// rileggere quando torna.
+  /// Se la pagina è a schermo: una pagina nascosta non ridisegna, e si segna
+  /// da ridisegnare quando torna.
   visible(): boolean;
   /// Dopo una scelta che accende o spegne un bundle: la shell ricarica ciò che
   /// i bundle registrano.
@@ -112,11 +131,11 @@ export interface ComponentsPage {
   /// La radice della pagina: sempre la stessa, così la testata e la ricerca
   /// sopravvivono ai ridisegni delle impostazioni.
   readonly element: HTMLElement;
-  /// La pagina sta per comparire: rilegge se qualcosa è cambiato mentre non si
-  /// vedeva (o se non ha mai letto), e ridisegna.
+  /// La pagina sta per comparire: ridisegna dalla mappa di tutta l'app,
+  /// aspettandola se non è ancora arrivata.
   show(): Promise<void>;
   /// Le impostazioni si sono chiuse: si dimenticano ricerca, avviso e gruppo
-  /// aperto, e alla prossima apertura si rilegge.
+  /// aperto.
   reset(): void;
 }
 
@@ -129,15 +148,14 @@ interface Message {
 
 export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHooks): ComponentsPage {
   let map: ComponentsMap | null = null;
-  let readError: unknown = null;
-  let stale = true;
+  /// Il vault della mappa a schermo, e se la sua mappa non si è letta.
+  let mapRoot: string | null = null;
+  let unreadable = false;
+  let current: Components | null = null;
   let supportOpen = false;
   let message: Message | null = null;
   /// Le righe e i profili di un gesto in corso: un gesto alla volta.
   let busy: Set<string> | null = null;
-  const reads = new CoalescingQueue();
-  let readTimer: ReturnType<typeof setTimeout> | null = null;
-  let waiting: Array<() => void> = [];
   /// Il controllo che aveva il fuoco, per ritrovarlo dopo un ridisegno.
   let focusKey: string | null = null;
 
@@ -176,7 +194,14 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
   const notice = document.createElement("div");
   notice.className = "components-notice";
   notice.hidden = true;
-  root.append(head, profiles, list, empty, notice);
+  const main = document.createElement("div");
+  main.className = "components-main";
+  main.append(head, profiles, list, empty, notice);
+  const preview = document.createElement("aside");
+  preview.className = "components-preview";
+  preview.setAttribute("aria-labelledby", "components-preview-title");
+  preview.hidden = true;
+  root.append(main, preview);
 
   lifetime.listen(find, "input", () => applySearch());
   // La guardia dei tasti sui controlli `aria-disabled` (`component-profiles.ts`):
@@ -189,59 +214,44 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
     if (key) focusKey = key;
   });
 
-  const interesting = (key: string) =>
-    key.startsWith("components.") || key === "plugins.disabled" || key === "locale.language";
-  lifetime.add(onEvent("setting_changed", (event) => {
-    if (interesting(event.key)) changed();
+  lifetime.add(onComponentsRead((next) => {
+    if (lifetime.closed) return;
+    take(next);
+    // Nascosta non ridisegna: `show` ridisegna quando torna.
+    if (hooks.visible()) draw();
   }));
-  lifetime.add(onEvent("vault_opened", () => changed()));
-  lifetime.add(() => {
-    if (readTimer !== null) clearTimeout(readTimer);
-    readTimer = null;
-    for (const resolve of waiting) resolve();
-    waiting = [];
-  });
-
-  /// Qualcosa fuori di qui ha cambiato la mappa.
-  function changed(): void {
+  // Il disegno nuovo c'è se il kernel sa farli: i comandi arrivano anche dopo
+  // la mappa.
+  lifetime.add(on("commands", () => {
     if (lifetime.closed) return;
-    if (!hooks.visible()) {
-      stale = true;
-      return;
+    if (hooks.visible()) drawPreview();
+  }));
+
+  /// La mappa di una lettura diventa quella della pagina. Una lettura fallita
+  /// dello stesso vault lascia quella di prima; di un vault nuovo, dice che non
+  /// si legge.
+  function take(next: Components | null): void {
+    if (!next) return;
+    if (next.map) {
+      map = next.map;
+      unreadable = false;
+    } else if (next.root !== mapRoot || map === null) {
+      map = null;
+      unreadable = true;
     }
-    void requestRead();
+    mapRoot = next.root;
+    current = next;
   }
 
-  /// Una lettura, fusa con quelle chieste nello stesso istante. Torna quando la
-  /// mappa letta è a schermo.
-  function requestRead(): Promise<void> {
-    if (lifetime.closed) return Promise.resolve();
-    return new Promise((resolve) => {
-      waiting.push(resolve);
-      if (readTimer !== null) clearTimeout(readTimer);
-      readTimer = setTimeout(() => {
-        readTimer = null;
-        const done = waiting;
-        waiting = [];
-        void reads.enqueueByKey("map", read).finally(() => {
-          for (const finish of done) finish();
-        });
-      }, READ_DELAY_MS);
-    });
-  }
-
-  async function read(): Promise<void> {
-    if (lifetime.closed) return;
+  /// Rilegge la mappa dopo un gesto e la mette a schermo, anche se la lettura
+  /// non è cambiata o non è riuscita: il gesto è finito e i controlli tornano.
+  async function reread(): Promise<void> {
     try {
-      map = await api.componentsMap();
-      readError = null;
+      take(await refreshComponents());
     } catch (error) {
-      // Il vault che si rimonta risponde per un istante «nessun vault»: la
-      // mappa di prima resta, e il `vault_opened` che segue rilegge.
-      if (map === null) readError = error;
+      console.error(error);
     }
-    stale = false;
-    draw();
+    if (!lifetime.closed) draw();
   }
 
   // --- il disegno -------------------------------------------------------------
@@ -278,6 +288,7 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
     drawProfiles();
     drawList();
     drawNotice();
+    drawPreview();
     applySearch();
     if (hadFocus) restoreFocus(hadFocus);
   }
@@ -320,9 +331,7 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
 
   function drawList(): void {
     if (!map) {
-      list.replaceChildren(...(readError === null ? [] : [
-        paragraph("muted settings-note", t("settings.read_failed", { reason: errorText(readError) })),
-      ]));
+      list.replaceChildren(...(unreadable ? [paragraph("muted settings-note", t("components.unreadable"))] : []));
       return;
     }
     const byGroup = new Map<string, ComponentRow[]>();
@@ -478,6 +487,112 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
     notice.hidden = nodes.length === 0;
   }
 
+  /// Il riquadro: che cosa cambia in Fub con ciò che è acceso adesso.
+  function drawPreview(): void {
+    preview.hidden = map === null;
+    if (!map) {
+      preview.replaceChildren();
+      return;
+    }
+    const heading = document.createElement("h4");
+    heading.className = "components-preview-title";
+    heading.id = "components-preview-title";
+    heading.textContent = t("components.preview.title");
+    preview.replaceChildren(heading, newSection(), opensSection(), weightSection(map));
+  }
+
+  function previewSection(label: string): HTMLElement {
+    const section = document.createElement("section");
+    section.className = "components-preview-section";
+    const heading = document.createElement("h5");
+    heading.className = "components-preview-head";
+    heading.textContent = label;
+    section.append(heading);
+    return section;
+  }
+
+  function newSection(): HTMLElement {
+    const section = previewSection(t("components.preview.new"));
+    const items = document.createElement("ul");
+    items.className = "components-new";
+    const kinds = newKinds();
+    for (const kind of kinds) {
+      const entry = NEW_ENTRIES[kind];
+      const item = document.createElement("li");
+      item.className = "components-new-item";
+      const figure = document.createElement("span");
+      figure.className = "components-new-icon";
+      figure.setAttribute("aria-hidden", "true");
+      figure.innerHTML = icon(entry.icon);
+      const name = document.createElement("span");
+      name.textContent = t(entry.label);
+      item.append(figure, name);
+      items.append(item);
+    }
+    section.append(items);
+    return section;
+  }
+
+  /// Una riga per le note, che si aprono sempre, e una per ogni editor che si
+  /// può spegnere: le sue estensioni, e il componente acceso che le apre o
+  /// «solo come file».
+  function opensSection(): HTMLElement {
+    const section = previewSection(t("components.preview.opens"));
+    const items = document.createElement("ul");
+    items.className = "components-opens";
+    for (const editor of editorFiles()) {
+      const item = document.createElement("li");
+      item.className = "components-opens-item";
+      item.dataset.ui = editor.ui;
+      const code = document.createElement("code");
+      code.className = "components-opens-ext";
+      code.textContent = editor.extensions.map((extension) => `.${extension}`).join(" ");
+      const inside = editor.ui === UI_TEXT || (current?.uiOn(editor.ui) ?? true);
+      const owners = (map?.righe ?? []).filter((row) => row.ui.includes(editor.ui) && (row.acceso || editor.ui === UI_TEXT));
+      const where = document.createElement("span");
+      if (inside) {
+        where.className = "components-opens-in";
+        where.textContent = owners.length > 0
+          ? t("components.preview.opens.in", { names: names(owners.map((row) => row.id)) })
+          : t("components.preview.opens.inside");
+      } else {
+        where.className = "components-opens-out";
+        where.textContent = t("components.preview.opens.file");
+      }
+      item.append(code, where);
+      items.append(item);
+    }
+    section.append(items);
+    return section;
+  }
+
+  /// Quanti componenti sono accesi e quanti spenti, contando le righe della
+  /// mappa, e che cosa vuol dire per ciò che Fub carica.
+  function weightSection(shown: ComponentsMap): HTMLElement {
+    const section = previewSection(t("components.preview.weight"));
+    const active = shown.righe.filter((row) => row.acceso);
+    const support = active.filter((row) => row.gruppo === SUPPORT).length;
+    const off = shown.righe.length - active.length;
+    section.append(
+      weightLine(active.length, plural(active.length, "components.preview.active.one", "components.preview.active", { support })),
+      weightLine(off, plural(off, "components.preview.off.one", "components.preview.off")),
+      paragraph("components-weight-note", t("components.preview.lazy")),
+    );
+    return section;
+  }
+
+  function weightLine(count: number, text: string): HTMLElement {
+    const line = document.createElement("p");
+    line.className = "components-weight";
+    const number = document.createElement("b");
+    number.className = "components-weight-count";
+    number.textContent = String(count);
+    const words = document.createElement("span");
+    words.textContent = text;
+    line.append(number, words);
+    return line;
+  }
+
   function applySearch(): void {
     const terms = searchTerms(find.value);
     const filtering = terms.length > 0;
@@ -517,7 +632,7 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
       message = { text: t("components.failed", { reason: errorText(error) }), error: true };
     }
     busy = null;
-    await requestRead();
+    await reread();
     if (!root.contains(document.activeElement) && document.activeElement === document.body) {
       restoreFocus(origin);
     }
@@ -627,11 +742,19 @@ export function mountComponentsPage(lifetime: Lifetime, hooks: ComponentsPageHoo
   return {
     element: root,
     async show() {
-      if (stale || map === null) await requestRead();
-      else draw();
+      let next = components();
+      if (!next) {
+        try {
+          next = await componentsReady();
+        } catch (error) {
+          console.error(error);
+        }
+      }
+      if (lifetime.closed) return;
+      take(next);
+      draw();
     },
     reset() {
-      stale = true;
       message = null;
       supportOpen = false;
       find.value = "";

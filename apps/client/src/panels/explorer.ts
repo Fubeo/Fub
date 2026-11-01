@@ -45,7 +45,7 @@ import { iconEl } from "../ui/icons";
 import { pickIcon, showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/menu";
 import { selectInspectorTab } from "../ui/views";
 import {
-  canCreateDrawing,
+  newKinds,
   canImportDrawing,
   canImportFile,
   hasKernelCommand,
@@ -553,7 +553,7 @@ function renderFileList(): void {
     create.addEventListener("click", () => void newNote());
     li.append(text, create);
     // Il primo gesto può anche essere un disegno, se il kernel sa farli.
-    if (canCreateDrawing()) {
+    if (newKinds().includes("drawing")) {
       const draw = document.createElement("button");
       draw.type = "button";
       draw.className = "link-button";
@@ -1306,7 +1306,7 @@ function folderMenu(at: MouseEvent, path: string): void {
           { label: t("explorer.new.folder"), run: () => startNewFolder(path) },
           // Il disegno nasce se il kernel sa farli: la cartella arriva alla
           // galleria già scelta.
-          ...(canCreateDrawing() ? [{ label: t("explorer.new.drawing"), run: () => void newDrawing(path) }] : []),
+          ...(newKinds().includes("drawing") ? [{ label: t("explorer.new.drawing"), run: () => void newDrawing(path) }] : []),
         ],
       },
       importItems(path),
@@ -1348,7 +1348,7 @@ function rootMenu(at: MouseEvent): void {
   showContextMenu(at, [
     { label: t("explorer.new_note"), hint: chordOf("shell.note.new"), run: () => void newNote(state.activeSpace) },
     { label: t("explorer.new_folder"), run: () => startNewFolder(root) },
-    ...(canCreateDrawing() ? [{ label: t("explorer.new_drawing_menu"), run: () => void newDrawing(root) }] : []),
+    ...(newKinds().includes("drawing") ? [{ label: t("explorer.new_drawing_menu"), run: () => void newDrawing(root) }] : []),
     {
       separator: true,
       label: t("explorer.sort"),

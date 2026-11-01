@@ -249,6 +249,16 @@ export function canCreateDrawing(): boolean {
   return hasKernelCommand(NEW_DRAWING) && (components()?.uiOn(UI_SPATIAL) ?? true);
 }
 
+/// Che cosa si crea adesso dai menu «Nuovo», nel loro ordine: la nota c'è
+/// sempre (il testo è del nucleo), il disegno alle condizioni delle sue porte.
+/// L'esploratore e il riquadro della pagina «Componenti» leggono da qui, così
+/// il riquadro dice le voci che il menu mostra davvero.
+export type NewKind = "note" | "drawing";
+
+export function newKinds(): NewKind[] {
+  return canCreateDrawing() ? ["note", "drawing"] : ["note"];
+}
+
 /// Apre «Nuovo disegno…»: il modulo proprio del comando, la galleria, o la
 /// palette sul comando se nessuno ne ha registrato uno. `folder` è la cartella
 /// dove nasce ("" è la radice, e non si passa: il campo resta vuoto).
