@@ -1,0 +1,1180 @@
+// COPIA FERMA, NON SI AGGIORNA. Sono le interfacce `json`, `options`, `model`,
+// `ui`, `settings`, `intl`, `text`, `errors` e `plugin` di
+// `crates/fub-abi/wit/fub/abi.wit` com'erano a `d235d3f6`, cioè su main subito
+// prima della #285 (K1, il modello dei componenti): copiate byte per byte con
+// `git show d235d3f6:crates/fub-abi/wit/fub/abi.wit`, senza il resto del file.
+//
+// Il `plugin-manifest` qui ha undici campi; quello vivo ne ha sedici, perché
+// K1 ne ha aggiunti cinque in coda. Questo esempio esiste per provare che cosa
+// succede a un plugin compilato prima di quella crescita (ADR 0235): se lo si
+// riallinea al vivo non prova più niente.
+
+package fub:abi@0.2.0;
+
+/// JSON serializzato come stringa: frontmatter, `attrs` dell'escape hatch,
+/// argomenti dei comandi, storage dei plugin.
+interface json {
+    type json = string;
+}
+
+/// *Cosa è acceso, e con quale parametro.*
+///
+/// La risposta comune ai quattro tipi che il §3.5 nomina insieme — uno, tre o
+/// cinque booleani dove la domanda che arriva ha una coda aperta: le ~50
+/// sintassi del 5.2, i bersagli di rendering del 6.3, i permessi del 20.3.
+/// Quello che scade col freeze non è la LARGHEZZA di quei tipi (un campo in
+/// fondo a un record è additivo) ma la loro FORMA: sostituire N booleani con una
+/// mappa è la sola cosa che dopo non si fa più.
+///
+/// Chiave: `ns:nome`. Il namespace è di chi definisce la voce — `fub` per il
+/// core, l'id del plugin per gli altri — così due estensioni che vogliono
+/// chiamarsi allo stesso modo hanno due chiavi diverse.
+///
+/// Presente = acceso, e il valore è il parametro; un `false` esplicito spegne.
+/// Qui è una LISTA perché WIT non ha mappe: lato Rust è una `BTreeMap`, e
+/// l'ordine stabile è ciò che rende questa lista confrontabile.
+interface options {
+    use json.{json};
+
+    record option-entry {
+        key: string,
+        value: json,
+    }
+    type option-map = list<option-entry>;
+}
+
+/// Il modello di documento comune e agnostico rispetto al formato.
+interface model {
+    use json.{json};
+
+    /// Path relativo al vault, separatori `/`, estensione inclusa.
+    type doc-id = string;
+
+    /// CHE SPECIE DI FILE È (§14.1). Tre casi, e il terzo è il punto: prima il
+    /// vault vedeva i documenti e basta. NON è una proprietà del file, è una
+    /// proprietà del file dato chi è registrato adesso: un `.canvas` è
+    /// `unknown` finché nessuno rivendica quell'estensione.
+    ///
+    /// Sta qui, nel modello, e non in `index` dove si usa di più, perché anche
+    /// `events` ne ha bisogno e un'interfaccia di eventi non può dipendere da
+    /// una di query: il vocabolario comune sta nel posto comune.
+    enum entry-kind {
+        /// Un `format-provider` rivendica la sua estensione: ha un modello, sta
+        /// nell'indice, è ciò che `host-api.list-documents` restituisce.
+        document,
+        /// Un allegato: un tipo di contenuto che si sa nominare e che nessuno
+        /// parsa.
+        asset,
+        /// Il vault lo vede e nessuno sa cosa sia. Non è un errore: un file che
+        /// nessuno riconosce esiste lo stesso — occupa spazio, si cancella per
+        /// sbaglio, e un backup che lo saltasse lo perderebbe in silenzio.
+        unknown,
+    }
+
+    /// Intervallo [start, end) in byte sulla sorgente.
+    ///
+    /// **La sorgente sono i byte del file decodificati, integralmente**: il BOM
+    /// se c'era, i terminatori di riga come stanno sul disco, nessuna
+    /// normalizzazione. È la stessa stringa che `read-document` restituisce,
+    /// quella su cui la `revision` è calcolata e quella che `write-document`
+    /// scrive. Un `span { start: 0, end: 0 }` su un file col BOM inserisce
+    /// *prima* del BOM.
+    ///
+    /// Va detto qui perché è la premessa che rende confrontabili un offset
+    /// calcolato da un guest e un offset applicato dall'host: se uno dei due
+    /// intendesse «il testo normalizzato», gli edit atterrerebbero spostati di
+    /// quanto misura ciò che è stato normalizzato, e il documento resterebbe
+    /// valido — quindi nessuno se ne accorgerebbe. Il ragionamento sta accanto a
+    /// `Span` in `src/model.rs` (§15.5).
+    ///
+    /// Lato Rust i campi sono `usize` (indicizzano `&str` in memoria); qui sono
+    /// `u64` perché il confine deve avere una larghezza fissa. Su wasm32
+    /// `usize` è a 32 bit: usize→u64 è sempre lecito, u64→usize passa da una
+    /// conversione controllata nel proxy (un documento più grande di 4 GiB non
+    /// entrerebbe comunque nella memoria di un modulo wasm32).
+    record span {
+        start: u64,
+        end: u64,
+    }
+
+    /// Metadati del documento (frontmatter proiettato su JSON).
+    type frontmatter = json;
+
+    /// Un heading estratto (outline e link a heading).
+    record heading {
+        level: u8,
+        text: string,
+        slug: string,
+        span: span,
+        /// L'ancora esplicita del titolo (`## Titolo ^Mio-ID`), com'è scritta;
+        /// `none` quando lo slug è generato dal testo.
+        explicit-anchor: option<string>,
+    }
+
+    /// Un tag `#foo` / `#foo/bar` estratto.
+    record tag {
+        name: string,
+        span: span,
+    }
+
+    /// Un'ancora di blocco esplicita (`^abc123`). `span` è il blocco intero
+    /// (ciò che un embed ritaglia), `marker` il solo token (ciò che si toglie
+    /// esportando). `id` è canonico: `fub_abi::model::canonical_anchor`.
+    record anchor {
+        id: string,
+        span: span,
+        marker: span,
+    }
+
+    /// Intento di link non risolto; la risoluzione a doc-id è del kernel.
+    /// L'embed NON è qui: incorporare è un fatto del riferimento, non del
+    /// bersaglio (`link.embed`), e la stessa nota si può linkare e incorporare.
+    record link-target-wiki {
+        page: string,
+        heading: option<string>,
+        block: option<string>,
+    }
+    variant link-target {
+        wiki(link-target-wiki),
+        url(string),
+        path(string),
+    }
+
+    /// Un riferimento da scrivere nella grammatica del formato di un
+    /// documento: dove porta, con quale testo, se incorpora. Chi lo chiede non
+    /// compone la sintassi; la scrive il provider (`format-edits`).
+    record link-insert {
+        target: link-target,
+        label: option<string>,
+        embed: bool,
+    }
+
+    /// Un link estratto, piatto, con span e contesto per i backlink.
+    record link {
+        target: link-target,
+        embed: bool,
+        span: span,
+        context: option<string>,
+    }
+
+    /// Il valore di una proprietà del frontmatter, normalizzato: senza, ogni
+    /// consumatore reinventerebbe il parsing delle date. La verità grezza resta
+    /// `frontmatter` (JSON); questa è la sua lettura.
+    record property-date {
+        year: s32,
+        month: u8,
+        day: u8,
+        time: option<property-time>,
+    }
+    /// Fuso COME ERA SCRITTO: `offset-minutes` assente = orario senza fuso,
+    /// che il modello non indovina (il fuso dell'utente è una capacità).
+    record property-time {
+        hour: u8,
+        minute: u8,
+        second: u8,
+        offset-minutes: option<s16>,
+    }
+    /// La voce di un elenco: `property-value` meno la lista. La lista di liste
+    /// non è esprimibile al confine (WIT non ha tipi ricorsivi) e cade in
+    /// `unknown`, che è JSON e quindi non perde niente.
+    variant property-scalar {
+        empty,
+        text(string),
+        number(f64),
+        %bool(bool),
+        date(property-date),
+        link(link-target),
+        unknown(json),
+    }
+    variant property-value {
+        /// `chiave:` senza valore. Diverso da chiave assente.
+        empty,
+        text(string),
+        number(f64),
+        %bool(bool),
+        date(property-date),
+        /// Una relazione: `autore: "[[Mario Rossi]]"`.
+        link(link-target),
+        %list(list<property-scalar>),
+        /// Ciò che non si normalizza (oggetti annidati): il JSON com'è.
+        unknown(json),
+    }
+
+    // --- albero a blocchi / inline, come arena piatta -------------------------
+    //
+    // `Vec<Inline>` diventa `list<inline-ref>`, `Vec<Block>` diventa
+    // `list<block-ref>`: i nodi veri stanno tutti in `document-tree`.
+
+    /// Indice in `document-tree.inlines`. Fuori range = modello malformato.
+    type inline-ref = u32;
+    /// Indice in `document-tree.blocks`. Fuori range = modello malformato.
+    type block-ref = u32;
+
+    record inline-link {
+        target: link-target,
+        label: option<list<inline-ref>>,
+        embed: bool,
+        span: span,
+    }
+    record inline-tag-ref {
+        name: string,
+        span: span,
+    }
+    record inline-custom {
+        custom-kind: string,
+        attrs: json,
+        span: span,
+    }
+    variant inline {
+        text(string),
+        emph(list<inline-ref>),
+        strong(list<inline-ref>),
+        code(string),
+        link(inline-link),
+        tag-ref(inline-tag-ref),
+        custom(inline-custom),
+        superscript(list<inline-ref>),
+        strikethrough(list<inline-ref>),
+        hard-break,
+        soft-break,
+        /// `~pedice~` (decisione 0228): in coda, il discriminante di ciò che
+        /// c'era non si muove.
+        subscript(list<inline-ref>),
+    }
+
+    // Ogni blocco porta un `anchor`: per un heading è lo slug del titolo
+    // (generato da `heading-slug`, o l'id esplicito che l'utente ha scritto in
+    // coda, **com'è scritto** — la chiave canonica sta nello `slug` dell'outline
+    // e nella tabella piatta `anchors`), per gli altri l'id esplicito `^abc123`
+    // scritto in coda (`canonical-anchor`). È ciò che rende indirizzabile un
+    // pezzo di documento — link a blocco, embed di blocco, deep link, diff a
+    // blocchi.
+
+    record block-heading {
+        level: u8,
+        inlines: list<inline-ref>,
+        anchor: option<string>,
+        span: span,
+        /// L'ancora esplicita del titolo, com'è scritta; `none` quando lo slug
+        /// è generato dal testo.
+        explicit-anchor: option<string>,
+    }
+    record block-paragraph {
+        inlines: list<inline-ref>,
+        anchor: option<string>,
+        span: span,
+    }
+    /// Il marcatore di una task: cosa c'è fra le parentesi (`none` = `[ ]`) e
+    /// DOVE. Lo span è quello del SIMBOLO (`[ ]` → lo spazio, `[x]` → la `x`):
+    /// spuntare è la sostituzione di un carattere, non una riscrittura.
+    /// Un carattere e non un booleano: gli stati personalizzati (`[/]`, `[-]`,
+    /// `[>]`) sono una richiesta esplicita del prodotto e nascono tutti qui.
+    record task-marker {
+        symbol: option<char>,
+        span: span,
+    }
+    /// Una voce di lista. Non è una `list<block-ref>` nuda perché una voce PUÒ
+    /// essere una task, e una task list rappresentata come lista di paragrafi
+    /// obbliga ogni consumatore a ricominciare dal parsing del testo.
+    record list-item {
+        blocks: list<block-ref>,
+        task: option<task-marker>,
+        span: span,
+    }
+    record block-list {
+        ordered: bool,
+        items: list<list-item>,
+        anchor: option<string>,
+        span: span,
+        /// Il numero da cui parte un elenco ordinato (`3.` → 3). `none` per un
+        /// elenco puntato. In fondo al record perché la posizione è ABI.
+        start: option<u32>,
+    }
+    record block-code-block {
+        lang: option<string>,
+        code: string,
+        anchor: option<string>,
+        span: span,
+    }
+    record block-quote {
+        blocks: list<block-ref>,
+        anchor: option<string>,
+        span: span,
+    }
+    record block-thematic-break {
+        anchor: option<string>,
+        span: span,
+    }
+    /// Escape hatch: callout, math, footnote, definition list. I `custom-kind`
+    /// condivisi stanno in `fub_abi::model::custom_kind` e nella tabella di
+    /// ../../../../docs/architecture/document-model.md; un kind di terzi porta i propri byte
+    /// negli `attrs` sotto la chiave `source` (convenzione §25.7,
+    /// `fub_abi::rules::carichi`).
+    record block-custom {
+        custom-kind: string,
+        attrs: json,
+        blocks: list<block-ref>,
+        anchor: option<string>,
+        span: span,
+    }
+    /// Una cella porta INLINE, non blocchi: è la ragione per cui la tabella non
+    /// stava dentro `block-custom` (che porta solo blocchi) e degenerava in
+    /// `custom("table")` di `custom("block")` indistinguibili.
+    record table-cell {
+        inlines: list<inline-ref>,
+        span: span,
+    }
+    record table-row {
+        cells: list<table-cell>,
+    }
+    enum column-align { none, left, center, right }
+    /// L'unica delle tre candidate promossa a variante: chi la consuma è
+    /// trasversale al formato (database su file, CSV/JSON, Pandoc/Typst,
+    /// stampa, chunking) e ha bisogno di righe, celle e allineamento come tipo.
+    record block-table {
+        head: option<table-row>,
+        rows: list<table-row>,
+        /// Per colonna, in ordine; può essere più corta delle righe.
+        align: list<column-align>,
+        anchor: option<string>,
+        span: span,
+    }
+    /// Una reference definition CommonMark: `[etichetta]: destinazione "titolo"`.
+    /// È metadata — dichiara il bersaglio di un `[a][etichetta]` — e comrak la
+    /// consuma senza lasciare un nodo nell'AST: senza questo caso la riga
+    /// spariva dal modello e la prima riscrittura la cancellava dal file.
+    /// `url` è la destinazione nuda (le `<…>` si normalizzano) e `title` il
+    /// titolo senza i delimitatori; non entra nel testo piatto.
+    record block-reference-definition {
+        label: string,
+        url: string,
+        title: option<string>,
+        anchor: option<string>,
+        span: span,
+    }
+    variant block {
+        heading(block-heading),
+        paragraph(block-paragraph),
+        %list(block-list),
+        code-block(block-code-block),
+        quote(block-quote),
+        thematic-break(block-thematic-break),
+        custom(block-custom),
+        table(block-table),
+        reference-definition(block-reference-definition),
+    }
+
+    /// Il corpo del documento: arena dei nodi + radici in ordine di lettura.
+    /// Lato Rust è `Vec<Block>` (albero); qui è appiattito.
+    record document-tree {
+        blocks: list<block>,
+        inlines: list<inline>,
+        roots: list<block-ref>,
+    }
+
+    /// Il documento parsato nel modello comune.
+    record document-model {
+        id: doc-id,
+        frontmatter: frontmatter,
+        body: document-tree,
+        outline: list<heading>,
+        links: list<link>,
+        tags: list<tag>,
+        /// Ancore di blocco esplicite, piatte: è così che il kernel risolve un
+        /// `[[Nota#^blocco]]` senza camminare l'albero. Le ancore degli heading
+        /// NON stanno qui: sono lo `slug` di `heading` in `outline`, perché
+        /// `#titolo` e `#^blocco` sono due sintassi e due spazi di nomi diversi.
+        anchors: list<anchor>,
+        text: string,
+        /// Il documento porta un frontmatter, anche se senza nessuna proprietà:
+        /// una mappa vuota non distingue «assente» da «presente e vuoto», e chi
+        /// riscrive il file toglierebbe due righe che l'utente ha battuto. In
+        /// fondo al record perché la posizione è ABI.
+        frontmatter-present: bool,
+    }
+}
+
+/// Protocollo di UI dichiarativa (`UiNode`).
+interface ui {
+    use json.{json};
+    use model.{span, doc-id};
+    use text.{text};
+
+    type action-id = string;
+
+    /// L'azione attaccata a un nodo: cosa chiamare, e con cosa. Il `payload` è
+    /// del PROVIDER — lo scrive rendendo l'albero e gli torna intatto in
+    /// `ui-action.payload`. Prima esisteva solo l'id, e i dati che servivano a
+    /// servire il click ci finivano concatenati dentro (`open:a/Uno.md`): una
+    /// convenzione privata che stava diventando contratto de facto.
+    record action-ref {
+        action: action-id,
+        payload: json,
+    }
+
+    enum axis { row, column }
+    enum intent { neutral, primary, danger }
+    /// L'allineamento di una colonna di tabella. Non è stile: un numero
+    /// allineato a sinistra è una tabella che non si legge, e solo il provider
+    /// sa se una colonna contiene numeri.
+    enum align { start, center, end }
+
+    /// Il valore di un campo di input, come torna dalla shell. Non è `json`
+    /// perché il tipo lo dichiara il nodo che disegna il campo: chi legge non
+    /// deve difendersi da una checkbox che risponde con una stringa.
+    variant ui-value {
+        text(string),
+        number(f64),
+        %bool(bool),
+        /// Selezione multipla: i `value` delle opzioni scelte.
+        choices(list<string>),
+    }
+    /// Lo stato di un campo, come la shell lo consegna al provider.
+    record field-value {
+        field: string,
+        value: ui-value,
+    }
+    /// Una scelta di `select`/`radio`. Due campi e non uno: `value` è ciò che
+    /// torna, `label` ciò che si legge — cioè ciò che si localizza (§12.1).
+    record ui-option {
+        value: string,
+        label: text,
+    }
+    /// TUTTE E DUE le metà sono `text`, ed è il caso che mostra perché il tipo
+    /// porta la propria provenienza invece di essere una chiave: l'etichetta di
+    /// una riga è quasi sempre da tradurre («Creata il»), il valore quasi mai
+    /// (una data, un conteggio, un path).
+    record key-value-entry {
+        label: text,
+        value: text,
+    }
+    record table-column {
+        title: text,
+        align: align,
+    }
+
+    /// Indice in `ui-tree.nodes`. Fuori range = albero malformato.
+    type ui-ref = u32;
+
+    record ui-stack {
+        dir: axis,
+        gap: u8,
+        children: list<ui-ref>,
+    }
+    record ui-heading {
+        level: u8,
+        content: text,
+    }
+    record ui-list-item {
+        title: text,
+        subtitle: option<text>,
+        action: option<action-ref>,
+        /// È l'elemento CORRENTE? Non è stile: è l'unica cosa che una lista non
+        /// sa dire di sé, e senza chi ce l'ha se la scrive nel titolo — il §2.7
+        /// in un'altra forma.
+        selected: bool,
+    }
+    record ui-button {
+        label: text,
+        intent: intent,
+        action: action-ref,
+    }
+    record ui-web-view {
+        url: string,
+        height: u32,
+    }
+    /// Un gruppo con un titolo, apribile e richiudibile. `collapsed` è lo stato
+    /// INIZIALE: la piega è faccenda della shell, che non disturba il provider
+    /// per aprirla — e con la chiave sopravvive al ridisegno.
+    record ui-section {
+        title: text,
+        collapsed: bool,
+        children: list<ui-ref>,
+    }
+    /// Le righe sono NODI e non record proprio perché una riga ha una chiave: è
+    /// il caso del §2.8, il pannello con 500 righe che si riordina.
+    record ui-table {
+        columns: list<table-column>,
+        rows: list<ui-ref>,
+    }
+    record ui-row {
+        cells: list<ui-ref>,
+        action: option<action-ref>,
+    }
+    /// Una voce di `tree`: l'annidamento passa dai `children`, che sono altri
+    /// `tree-item`.
+    record ui-tree-item {
+        label: text,
+        expanded: bool,
+        action: option<action-ref>,
+        selected: bool,
+        children: list<ui-ref>,
+    }
+    /// `active` è l'indice iniziale in `tabs`; fuori range = la prima.
+    record ui-tabs {
+        active: u32,
+        tabs: list<ui-ref>,
+    }
+    /// `action`, se c'è, scatta quando la scheda viene scelta: la shell cambia
+    /// scheda da sé e avvisa solo chi ha chiesto di saperlo.
+    record ui-tab {
+        label: text,
+        action: option<action-ref>,
+        children: list<ui-ref>,
+    }
+    record ui-badge {
+        label: text,
+        intent: intent,
+    }
+    /// `value` in 0.0..=1.0; assente = indeterminato, che è il caso normale di
+    /// chi non sa quanto manca.
+    record ui-progress {
+        value: option<f32>,
+        label: option<text>,
+    }
+    /// Il vuoto detto bene: non c'è niente E questo è ciò che si può fare.
+    record ui-empty-state {
+        title: text,
+        detail: option<text>,
+        action: option<action-ref>,
+    }
+    /// I nodi di input portano `field` (la chiave sotto cui il valore torna in
+    /// `ui-action.fields`) e `value` (ciò che il provider vuole vederci ADESSO:
+    /// il protocollo resta senza stato lato shell). `action`, dove c'è, scatta
+    /// quando il valore si assesta.
+    record ui-text-input {
+        field: string,
+        label: option<text>,
+        value: string,
+        placeholder: option<text>,
+        action: option<action-ref>,
+    }
+    record ui-text-area {
+        field: string,
+        label: option<text>,
+        value: string,
+        rows: u32,
+        action: option<action-ref>,
+    }
+    record ui-number {
+        field: string,
+        label: option<text>,
+        value: option<f64>,
+        min: option<f64>,
+        max: option<f64>,
+        step: option<f64>,
+        action: option<action-ref>,
+    }
+    record ui-checkbox {
+        field: string,
+        label: text,
+        value: bool,
+        action: option<action-ref>,
+    }
+    record ui-select {
+        field: string,
+        label: option<text>,
+        value: list<string>,
+        options: list<ui-option>,
+        multiple: bool,
+        action: option<action-ref>,
+    }
+    record ui-radio {
+        field: string,
+        label: option<text>,
+        value: option<string>,
+        options: list<ui-option>,
+        action: option<action-ref>,
+    }
+    record ui-slider {
+        field: string,
+        label: option<text>,
+        value: f64,
+        min: f64,
+        max: f64,
+        step: f64,
+        action: option<action-ref>,
+    }
+    /// Una data civile in ISO-8601 (`2026-07-26`). Stringa e non istante: il
+    /// tempo civile è il §12.3 e non è deciso; una data qui è ciò che l'utente
+    /// ha scritto su un calendario, non un punto sulla linea del tempo.
+    record ui-date-picker {
+        field: string,
+        label: option<text>,
+        value: option<string>,
+        action: option<action-ref>,
+    }
+    /// Inviare manda TUTTI i campi contenuti, anche quelli senza `action`
+    /// propria: è ciò che distingue un form da una fila di input sciolti.
+    record ui-form {
+        children: list<ui-ref>,
+        submit-label: text,
+        submit: action-ref,
+    }
+    /// Widget che il protocollo non prevede: la shell che conosce `ns` disegna
+    /// il suo (grafo, canvas, chart), chi non lo conosce disegna il `fallback`
+    /// dichiarativo. È il modo di far entrare le superfici privilegiate DENTRO
+    /// il protocollo invece di tenerle fuori come ha dovuto fare il grafo.
+    record ui-custom {
+        ns: string,
+        payload: json,
+        fallback: list<ui-ref>,
+    }
+    /// «Non ce l'ho fatta», con l'invito a riprovare. Distinto da un
+    /// `plugin-error` restituito da `render-view`: quello dice che la view non
+    /// si è disegnata, questo che una sua parte non ha un dato.
+    record ui-failed {
+        message: text,
+        retry: option<action-ref>,
+    }
+    variant ui-kind {
+        stack(ui-stack),
+        %text(text),
+        heading(ui-heading),
+        %list(list<ui-ref>),
+        list-item(ui-list-item),
+        button(ui-button),
+        /// SOLO codice fidato: l'host rifiuta `html`/`web-view` dai plugin
+        /// (UiNode::validate_untrusted) — un plugin sandboxato non deve poter
+        /// iniettare contenuto attivo nella webview principale.
+        html(string),
+        web-view(ui-web-view),
+        section(ui-section),
+        table(ui-table),
+        row(ui-row),
+        tree(list<ui-ref>),
+        tree-item(ui-tree-item),
+        tabs(ui-tabs),
+        tab(ui-tab),
+        badge(ui-badge),
+        /// Un'icona dal repertorio della shell. Un nome che non conosce non
+        /// disegna niente: un'icona mancante non rompe un pannello.
+        icon(string),
+        progress(ui-progress),
+        separator,
+        empty-state(ui-empty-state),
+        key-value(list<key-value-entry>),
+        text-input(ui-text-input),
+        text-area(ui-text-area),
+        number(ui-number),
+        checkbox(ui-checkbox),
+        select(ui-select),
+        radio(ui-radio),
+        slider(ui-slider),
+        date-picker(ui-date-picker),
+        form(ui-form),
+        custom(ui-custom),
+        /// «Non ancora»: il dato non c'è perché qualcuno lo sta preparando
+        /// (§2.5). È un nodo e non una risposta di `render-view` perché il caso
+        /// normale è PARZIALE — la testata c'è, la tabella arriva.
+        pending(option<text>),
+        failed(ui-failed),
+    }
+
+    /// Un nodo: la sua CHIAVE e la sua specie. La chiave è l'identità del nodo
+    /// attraverso due ridisegni — deve essere stabile e unica fra i fratelli
+    /// (l'id di un documento, non l'indice nella lista). Senza, l'identità è la
+    /// posizione, e una lista che si riordina sposta il focus e la selezione
+    /// insieme alle righe: con i nodi di input, un campo di testo che si svuota
+    /// a ogni salvataggio.
+    ///
+    /// Un nodo NON dichiara se accetta un rilascio (decisione 0157): il
+    /// trascinamento del puntatore (`preferred-size`) non è un bersaglio di
+    /// drop, e i bersagli restano della shell. `drag` dice che cosa si
+    /// trascina da lui: è il campo in fondo che la 0157 aveva previsto.
+    record ui-node {
+        key: option<string>,
+        kind: ui-kind,
+        drag: option<ui-drag>,
+    }
+
+    /// Che cosa porta un nodo trascinato; la shell decide come si offre e
+    /// dove si lascia. `document`: una nota del vault, che nell'editor
+    /// diventa un link.
+    variant ui-drag {
+        document(doc-id),
+    }
+
+    /// Arena dell'albero UI: `root` indicizza `nodes`. Lato Rust è un
+    /// `UiNode` (albero); qui è appiattito, stessa scelta di `document-tree`.
+    record ui-tree {
+        nodes: list<ui-node>,
+        root: ui-ref,
+    }
+
+    /// Le due metà hanno due proprietari e non si mescolano: `payload` è ciò che
+    /// il provider ha attaccato al nodo, `fields` ciò che l'utente ha digitato.
+    /// Senza la seconda, i nodi di input nascerebbero sopra una convenzione che
+    /// nessuno ha scritto.
+    ///
+    /// Se un rilascio un giorno attraversa il confine, il carico sta in
+    /// `payload` (decisione 0157): con l'invocazione, non con lo stato — lo
+    /// stesso canale che la 0152 ha lasciato aperto per il bersaglio di un
+    /// clic. Nessun campo nuovo.
+    record ui-action {
+        action: action-id,
+        payload: json,
+        fields: list<field-value>,
+    }
+    record view-update-reveal {
+        doc-id: string,
+        span: span,
+    }
+    /// Varco di estensione degli intenti, con namespace (`ns` = plugin id).
+    record view-update-custom {
+        ns: string,
+        payload: json,
+    }
+    /// Rimpiazza UN SOLO nodo, quello con questa chiave. Per chiave e non per
+    /// posizione: un patch indirizzato per path si rompe al primo riordino, cioè
+    /// esattamente nel caso che lo motivava. Una chiave che la shell non trova
+    /// non è un errore.
+    record view-update-patch {
+        key: string,
+        node: ui-tree,
+    }
+    /// NESSUNA VARIANTE PORTA UN ANNULLA, ed è una decisione: le pile sono due
+    /// (decisione 0045) e una view con stato proprio non ne ha una terza. La
+    /// strada è comporre COMANDI, che dichiarano il proprio inverso e che a
+    /// profondità zero finiscono in pila da sé; il prezzo è `fub:run-command`,
+    /// ed è anche il metro che riaprirebbe la domanda (decisione 0153).
+    variant view-update {
+        replace(ui-tree),
+        none,
+        navigate(string),
+        /// Apri (se serve) e porta la vista su un intervallo del documento:
+        /// `span` è in byte UTF-8, chi disegna lo mappa sull'editor. Usato
+        /// dall'outline per saltare a un heading.
+        reveal(view-update-reveal),
+        /// Esegui una ricerca e mostrane i risultati (usato dal pannello tag).
+        run-search(string),
+        /// Intento che il protocollo non prevede: la shell che non riconosce
+        /// `ns` NON FA NULLA (degrado garbato, come gli altri `custom`). Gli
+        /// intenti nuovi nascono qui e vengono promossi a varianti proprie
+        /// solo se universali — è ciò che tiene l'enum chiudibile al freeze.
+        custom(view-update-custom),
+        patch(view-update-patch),
+    }
+}
+
+/// Le IMPOSTAZIONI (§11.1): cosa un componente dichiara di poter configurare, e
+/// in che forma il valore torna indietro.
+///
+/// Lo schema sta nel manifest (`plugin.plugin-manifest.settings`) e non in un
+/// provider da registrare: la dichiarazione viene PRIMA di `activate`, e il
+/// primo cliente vero di un'impostazione è un `activate` che deve sapere se la
+/// sua feature è accesa. Ne segue che l'insieme delle chiavi di un componente è
+/// il suo manifest, e che ciò che sta nel file di configurazione senza essere
+/// dichiarato resta lì senza essere letto — questo NON è lo spazio
+/// chiave→valore che la decisione 0013 ha tolto.
+///
+/// Cosa non entra, detto: i SEGRETI. Il file è JSON in chiaro e il valore è
+/// leggibile da chiunque possa interrogare il canale dati; una chiave d'API
+/// vuole un portachiavi di sistema, che sarà una capacità sua.
+interface settings {
+    use ui.{ui-option};
+    use text.{text};
+
+    /// DOVE un'impostazione ha il diritto di stare.
+    ///
+    /// Due livelli e non tre: «profilo/portable» non è un posto in cui cercare
+    /// un valore, è DOVE STA il livello macchina, e lo decide chi monta. Un
+    /// terzo strato di merge sarebbe un terzo posto in cui la stessa chiave può
+    /// valere un'altra cosa, senza che nessuno dei tre sappia dire chi ha vinto.
+    ///
+    /// Non è una preferenza di chi scrive lo schema: è una regola di sicurezza.
+    /// Un vault è dato che ARRIVA DA FUORI — si scarica, si sincronizza, lo
+    /// passa un collega — e un vault che decidesse impostazioni della macchina
+    /// sarebbe un file che cambia il comportamento di chi lo apre. Le chiavi
+    /// `machine` scritte in un `.fub/settings.json` si IGNORANO.
+    enum setting-scope {
+        /// Del vault: sta in `.fub/settings.json`, viaggia col vault, ed è
+        /// autorevole per quel vault.
+        vault,
+        /// Della macchina: tema, scorciatoie, vault recenti. Non viaggia.
+        machine,
+    }
+
+    record setting-toggle { %default: bool }
+    /// Gli estremi li usa chi disegna il campo e li rispetta chi scrive il
+    /// valore: fuori intervallo è un RIFIUTO e non un arrotondamento — un
+    /// valore corretto in silenzio è un valore che l'utente non ha scelto e non
+    /// sa di non avere.
+    record setting-number { %default: f64, min: option<f64>, max: option<f64> }
+    record setting-text { %default: string }
+    /// Una fra N. Le opzioni sono le stesse di un `select` perché valore ed
+    /// etichetta sono due cose anche qui: una scelta che è anche la propria
+    /// etichetta non si può localizzare (§12.1).
+    record setting-choice { %default: string, options: list<ui-option> }
+    /// Un elenco di stringhe: gli id dei plugin spenti, le cartelle escluse.
+    /// Il protocollo di UI non ha un editor di liste, quindi chi disegna lo
+    /// MOSTRA e non lo edita, e si cambia dal comando che lo scrive.
+    record setting-list { %default: list<string> }
+    /// Di che specie è un'impostazione, COL SUO DEFAULT DENTRO: sono la stessa
+    /// informazione detta una volta, e un `default` in un campo accanto sarebbe
+    /// un caso da validare a ogni lettura.
+    variant setting-kind {
+        toggle(setting-toggle),
+        number(setting-number),
+        text(setting-text),
+        choice(setting-choice),
+        %list(setting-list),
+    }
+
+    /// Il valore di un'impostazione. Sul confine JSON è NUDO (`true`, `12`,
+    /// `"scuro"`, `["a"]`): un `.fub/settings.json` si apre con un editor di
+    /// testo e si legge in una diff, e un valore etichettato lo renderebbe
+    /// illeggibile per guadagnare un'ambiguità che non c'è — la specie la
+    /// dichiara lo schema.
+    variant setting-value {
+        toggle(bool),
+        number(f64),
+        text(string),
+        %list(list<string>),
+    }
+
+    /// Un'impostazione DICHIARATA: come si chiama, cosa vuol dire, dove sta e
+    /// chi la può scrivere.
+    record setting-spec {
+        /// Con la regola dei nomi del §7.4: il core nomina nudo
+        /// (`versioning.enabled`), un plugin dentro il proprio id.
+        key: string,
+        label: text,
+        /// In prosa: è l'unica cosa che chi non ha scritto il plugin legge per
+        /// decidere se toccarla.
+        description: text,
+        /// Sotto quale intestazione raggrupparla nel form. Vuoto = in fondo.
+        /// È un `text` come le altre due: chi disegna raggruppa per
+        /// INTESTAZIONE RISOLTA e non per una chiave — stessa semantica di
+        /// prima, quando il campo era prosa libera.
+        group: text,
+        scope: setting-scope,
+        kind: setting-kind,
+        /// UN PROGRAMMA LA PUÒ SCRIVERE? È il residuo che la decisione 0010
+        /// aveva lasciato aperto: `command-reach.settings` diceva che un
+        /// comando può toccare la configurazione, e nessuno schema diceva
+        /// QUALI CHIAVI. È per chiave e non per famiglia perché la riga non
+        /// negoziabile — privacy e AI non si spostano da sole — non è una
+        /// proprietà di chi scrive: è una proprietà di ciò che si scrive.
+        /// Default `false`, per la regola di `trust`: ciò che si ottiene
+        /// dimenticandosi di dichiarare non può essere più di ciò che si
+        /// ottiene dichiarando.
+        program-writable: bool,
+    }
+
+    /// Da dove viene il valore che si sta leggendo. Serve a chi disegna il form
+    /// («questa la stai sovrascrivendo per questo vault») e a chi azzera:
+    /// azzerare fa RICADERE al livello sotto, che non è sempre il default.
+    enum setting-source { %default, machine, vault }
+
+    /// Una riga di configurazione RISOLTA: lo schema, il valore che vale
+    /// adesso, e da dove viene. I tre insieme e non tre domande separate: un
+    /// form che chiedesse gli schemi da una parte e i valori dall'altra avrebbe
+    /// due risposte da riconciliare, e le riconcilierebbe male ogni volta che
+    /// un valore cambia fra le due chiamate.
+    record setting-entry {
+        spec: setting-spec,
+        value: setting-value,
+        source: setting-source,
+    }
+}
+
+/// Chi legge, e da dove: la lingua, il fuso, il calendario (§12.3). Vedi
+/// `crates/fub-abi/src/locale.rs`.
+///
+/// È il gemello dell'orologio: `now-unix-millis` dà millisecondi UTC, cioè
+/// QUANDO è successo, e senza questi campi non c'è modo di dirlo a qualcuno.
+/// Lo pubblica la shell — che nella webview ha un ICU intero — e il kernel lo
+/// custodisce senza derivarlo, come il contesto di sessione.
+interface intl {
+    /// Il primo giorno della settimana. Non si deriva dalla lingua: `en-US`
+    /// comincia di domenica e `en-GB` di lunedì.
+    enum weekday { monday, tuesday, wednesday, thursday, friday, saturday, sunday }
+
+    /// Orologio a 24 (`14:30`) o a 12 ore (`2:30 PM`).
+    enum hour-cycle { h23, h12 }
+
+    /// Un record solo e non quattro capacità: chi lo chiede lo chiede tutto —
+    /// formattare una data vuole il fuso E la lingua E l'orologio — e quattro
+    /// chiamate darebbero quattro istantanee di momenti diversi.
+    ///
+    /// `utc-offset-minutes` è l'offset di ADESSO e vale per adesso: chi fa
+    /// aritmetica su date passate usa `timezone`, che porta con sé le regole
+    /// dell'ora legale. Minuti e non ore perché esistono i fusi a mezz'ora
+    /// (`Asia/Kolkata`) e a tre quarti d'ora (`Asia/Kathmandu`).
+    record locale {
+        language: string,
+        timezone: string,
+        utc-offset-minutes: s16,
+        first-day-of-week: weekday,
+        hour-cycle: hour-cycle,
+    }
+}
+
+/// Il TESTO CHE SI LEGGE: una stringa, o una chiave con i suoi argomenti
+/// (§12.1). Vedi `crates/fub-abi/src/text.rs`.
+///
+/// Le due risposte ovvie sono sbagliate in modo simmetrico. Se traduce il
+/// PROVIDER, ogni componente si porta un runtime i18n e la qualità della
+/// traduzione dell'app è la peggiore fra quelle installate — e soprattutto un
+/// messaggio già composto non si traduce più. Se TUTTO È UNA CHIAVE, il nome di
+/// un tag e il path di un file — la maggioranza di ciò che attraversa il confine
+/// verso uno schermo — devono passare da un catalogo che non li contiene.
+///
+/// Quindi il tipo porta la propria PROVENIENZA: `literal` è un dato e viaggia
+/// com'è, `message` è una chiave che il KERNEL risolve sulla via d'uscita — non
+/// la shell, che è uno dei tre host previsti (app, CLI, API locale) mentre il
+/// kernel è l'unico posto che ognuno attraversa.
+interface text {
+    use intl.{locale};
+
+    /// Testo destinato a un umano. Dopo la risoluzione del kernel è sempre un
+    /// `literal`: sul filo verso la shell è quindi una stringa nuda.
+    variant text {
+        /// Un dato: il nome di un tag, un path, il titolo di una nota.
+        literal(string),
+        /// Una chiave del catalogo di chi l'ha scritta, coi suoi argomenti.
+        message(message),
+    }
+
+    /// La chiave è NUDA, e qui sta la differenza deliberata dalle chiavi delle
+    /// impostazioni: quelle vivono in un archivio solo e devono qualificarsi col
+    /// nome di chi le dichiara (`versioning.enabled`); un catalogo appartiene a
+    /// un componente e basta, quindi la qualifica è STRUTTURALE — un plugin non
+    /// ha nemmeno il modo di nominare la stringa di un altro.
+    record message {
+        key: string,
+        args: list<arg>,
+    }
+
+    record arg {
+        name: string,
+        value: arg-value,
+    }
+
+    /// TIPIZZATO, non una stringa già formattata. Chi passasse `"28/07/2026"`
+    /// avrebbe già deciso il calendario e il fuso di un utente che non conosce;
+    /// chi passasse `"3"` avrebbe già buttato via ciò con cui si sceglie una
+    /// forma plurale. Il dato arriva intero e chi conosce il `locale` decide
+    /// come si legge.
+    variant arg-value {
+        %text(string),
+        int(s64),
+        float(f64),
+        /// Millisecondi dall'epoca UNIX, UTC: l'unico argomento che a M2 si
+        /// formatta davvero secondo il locale.
+        timestamp(u64),
+    }
+
+    /// Le stringhe di un componente in UNA lingua. Sta nel manifest come lo
+    /// schema delle impostazioni, più una ragione che è solo sua: un catalogo è
+    /// DATO, e dato nel manifest vuol dire che una traduzione si corregge senza
+    /// ricompilare e che un componente di terzi non se la scrive a build time.
+    record string-catalog {
+        locale: string,
+        entries: list<tuple<string, string>>,
+    }
+}
+
+/// Errore prodotto da un plugin (nativo o WASM), e la forma con cui OGNI
+/// fallimento arriva a chi disegna.
+///
+/// Il payload è un `text` e non una `string` (§12.2): un errore è testo che
+/// qualcuno legge, ed era l'unica cosa che attraversava il confine verso uno
+/// schermo senza poter essere tradotta. È il gemello dichiarato del §12.1 —
+/// chi localizza le stringhe localizza anche gli errori.
+interface errors {
+    use text.{text};
+
+    variant plugin-error {
+        unknown-command(text),
+        unknown-view(text),
+        unknown-job(text),
+        bad-args(text),
+        permission-denied(text),
+        internal(text),
+        /// Il sorgente su cui l'operazione era stata calcolata non è più quello
+        /// (`edit-request.base`). Caso a sé e non `bad-args` perché è l'unico
+        /// errore che non è una colpa di chi chiama: gli argomenti erano giusti
+        /// quando li ha calcolati, e la risposta giusta è ricalcolare.
+        conflict(text),
+        /// NESSUNO serve questa domanda: nessun indice ha dichiarato la rotta
+        /// che servirebbe. Distinguerlo da «chi la serve ha fallito» è metà del
+        /// valore del routing dichiarato — chi disegna deve poter scegliere fra
+        /// «installa un indice» e «qualcosa è andato storto».
+        unserved(text),
+        /// ANNULLATO: il lavoro non è fallito, è stato fermato — da chi lo ha
+        /// chiesto, o dalla chiusura del vault. È l'unico esito che non è un
+        /// difetto di nessuno, e chi disegna deve poterlo dire diversamente:
+        /// senza, l'unica forma disponibile sarebbe `internal`, cioè «errore
+        /// interno del plugin» scritto sotto un pulsante che l'utente ha appena
+        /// premuto. Lo riceve chi chiama una capacità dell'host dopo che il
+        /// proprio job è stato annullato: la cancellazione non aggiunge una
+        /// capacità, toglie le altre.
+        cancelled(text),
+        /// NON C'È: il documento, la versione, la voce di cestino che si nomina
+        /// non esiste. Distinto da `bad-args` perché l'argomento ERA ben
+        /// formato — chi lo ha chiesto non ha sbagliato a scriverlo, semmai
+        /// qualcuno l'ha cancellato nel frattempo. Chi disegna deve poter dire
+        /// «non esiste più» invece di «hai sbagliato a chiedere», e chi
+        /// automatizza deve poter smettere invece di correggere.
+        not-found(text),
+        /// C'È GIÀ: il path che si vuole occupare è occupato. È l'unica
+        /// variante che rende vero il ramo del ripristino dal cestino: solo
+        /// qui la domanda «lo ripristino con un altro nome?» è quella giusta.
+        /// Con un `io` o un `permission-denied` è la domanda sbagliata, e la
+        /// risposta affermativa ritenta qualcosa che fallirà uguale.
+        already-exists(text),
+        /// IL SUPPORTO HA DETTO DI NO: disco pieno, file in uso, cartella
+        /// sparita sotto i piedi, path non UTF-8. Non è `internal`, e la
+        /// differenza è chi ha sbagliato: `internal` è un difetto di chi ha
+        /// scritto il codice, questo è il mondo. Chi disegna lo dice
+        /// diversamente («riprova», non «segnala un bug»).
+        io(text),
+    }
+}
+
+/// Ciclo di vita del plugin + manifest e permessi.
+interface plugin {
+    use errors.{plugin-error};
+    use json.{json};
+    use options.{option-map};
+    use settings.{setting-spec};
+    use text.{string-catalog};
+    // Il giorno della settimana è quello del locale (§22.4, decisione 0091): un
+    // secondo enum con gli stessi sette casi sarebbe stato due modi di dire
+    // lunedì, e il secondo si sarebbe scoperto il giorno di tradurli.
+    use intl.{weekday};
+
+    /// Cosa un plugin dichiara di voler fare. Erano tre booleani — leggere,
+    /// scrivere, rete — contro ciò che 20.1, 23.1 e 20.3 chiedono: appunti,
+    /// camera e microfono, filesystem esterno, e soprattutto rete CON ALLOWLIST
+    /// e file CON ALLOWLIST, cioè permessi che hanno un parametro. Un booleano
+    /// non ha dove metterlo, e «rete» senza allowlist è o tutto o niente.
+    ///
+    /// Un permesso con un namespace di terzi attraversa il confine intatto: un
+    /// host che non lo conosce può RIFIUTARLO, che è ciò che un enum chiuso non
+    /// gli avrebbe permesso di fare. Il punto di applicazione resta il §7.3.
+    record plugin-permissions {
+        granted: option-map,
+    }
+    record plugin-manifest {
+        id: string,
+        name: string,
+        version: string,
+        /// La versione del contratto (`fub:abi@X.Y.Z`) contro cui il plugin
+        /// è scritto. Regola di caricamento (host): major diversa → rifiuto;
+        /// minor del plugin ≤ minor dell'host → accetto (post-freeze il
+        /// contratto cresce solo per aggiunta); minor maggiore → rifiuto.
+        /// Vedi `fub_abi::traits::abi_compatible`.
+        abi-version: string,
+        permissions: plugin-permissions,
+        /// I SERVIZI CHE OFFRE (§7.5): i `ns` con cui altri plugin lo chiamano
+        /// via `host-services.call-service`. Sta nel manifest e non in una
+        /// funzione del provider perché l'host deve poterlo leggere prima di
+        /// montarlo: è ciò con cui risolve le dipendenze di chi arriva dopo.
+        provides: list<string>,
+        /// I servizi di cui HA BISOGNO. Un requisito che nessuno offre non è un
+        /// avvertimento: il plugin non si dichiara affatto, e chi lo monta legge
+        /// quale requisito manca. «Attivo ma degradato» è uno stato che nessuno
+        /// prova e che ogni feature dovrebbe poi gestire.
+        requires: list<string>,
+        /// Le IMPOSTAZIONI che dichiara (§11.1). Sta nel manifest e non in un
+        /// provider da registrare per la ragione di `provides`, un passo più in
+        /// là: la dichiarazione viene prima di `activate`, e il primo che legge
+        /// un'impostazione è proprio un `activate` che deve sapere se la sua
+        /// feature è accesa. Ogni chiave vale la regola del §7.4.
+        settings: list<setting-spec>,
+        /// Le STRINGHE che dichiara (§12.1), una voce per lingua. Stessa
+        /// ragione di `settings` — si legge prima di montare, e un catalogo
+        /// registrato da `activate` sarebbe assente quando serve — più una che
+        /// è solo sua: un catalogo è dato, quindi si corregge una traduzione
+        /// senza ricompilare.
+        strings: list<string-catalog>,
+        /// La lingua in cui il componente è scritto: il penultimo gradino della
+        /// scala di ripiego. Vuoto = si scende dritti alla chiave nuda.
+        default-locale: string,
+        /// Le SVEGLIE che dichiara (§22.1, decisione 0069). Sta nel manifest per
+        /// la ragione di `settings` letta su un asse diverso: una sveglia è ciò
+        /// che FA SUCCEDERE un evento, non ciò che ne filtra uno, e una maschera
+        /// — che si applica a ciò che accade — è il posto sbagliato per
+        /// definizione. Nomi nudi: la qualifica è strutturale, e chi è il
+        /// proprietario lo dice `event-timer-fired.owner`.
+        timers: list<timer-spec>,
+    }
+
+    /// Una sveglia dichiarata da un componente (§22.1, decisione 0069).
+    record timer-spec {
+        /// Nudo: viaggia in `event-timer-fired.timer` e distingue le sveglie di
+        /// chi ne ha dichiarata più di una.
+        id: string,
+        schedule: timer-schedule,
+    }
+    /// Ogni quanto suona (§22.1, decisione 0069; §22.4, decisione 0091). DUE
+    /// FAMIGLIE: le prime due si misurano in TEMPO TRASCORSO e la loro regola è
+    /// pura senza sapere che ore sono (`TimerSchedule::nth_after`); la terza si
+    /// misura in ORA CIVILE, e la sua regola è `WallClock::next_after`, che l'ora
+    /// civile la riceve invece di leggerla. Il terzo caso è IN CODA perché
+    /// l'ordine dei casi è il discriminante dell'ABI (decisione 0088).
+    variant timer-schedule {
+        /// Ogni N secondi, per sempre, dalla registrazione.
+        every(u64),
+        /// Una volta sola, N secondi dopo la registrazione.
+        after(u64),
+        /// A un orario di parete: «ogni giorno alle 9».
+        at-wall-clock(wall-clock),
+    }
+
+    /// Una sveglia a ORARIO DI PARETE (§22.4, decisione 0091). «Ogni giorno alle
+    /// 9» non è «ogni 86400 secondi»: l'una segue il calendario di chi la legge,
+    /// e quindi il suo fuso e la sua ora legale, l'altra no.
+    record wall-clock {
+        /// 0..=23. Fuori scala non suona, e non è un errore di registrazione: un
+        /// manifest si legge quando il componente entra, e rifiutare un
+        /// componente intero per una sveglia storta è sproporzionato.
+        hour: u8,
+        /// 0..=59.
+        minute: u8,
+        /// In che giorni. VUOTO = ogni giorno — un caso solo invece di un
+        /// `daily` e un `weekly` che avrebbero la stessa aritmetica dentro. È il
+        /// `weekday` del locale, che c'era già: un secondo enum con gli stessi
+        /// sette casi sarebbe stato due modi di dire lunedì.
+        days: list<weekday>,
+        /// Il fuso come nome IANA (`Europe/Rome`). ASSENTE = il fuso della
+        /// macchina, cioè il sistema salvo l'impostazione `timers.zone`. I due
+        /// stati sono due significati: assente è «quando chi guarda lo schermo
+        /// comincia a lavorare» (un portatile a Tokyo suona alle 9 di Tokyo),
+        /// presente è «ancorato a un posto» — ciò che un vault condiviso fra due
+        /// paesi vuole poter dire. Un nome sconosciuto NON fa suonare la sveglia
+        /// e non ripiega su UTC.
+        zone: option<string>,
+        /// Quanto tardi è ancora utile suonare, in secondi. 0 = mai. NON è il
+        /// campo dell'ora legale: a quella rispondono due REGOLE (sotto), e
+        /// restava scoperta un'altra domanda — la macchina che dormiva, il pool
+        /// occupato, l'app chiusa. Non «si recupera?» ma «fino a quanto tardi ha
+        /// senso»: un promemoria delle 9 alle 17 non serve più (0), un backup in
+        /// ritardo di venti minuti va fatto (3600). Un intero al posto di una
+        /// bandiera risolve da sé la macchina spenta due giorni: cade fuori
+        /// dalla finestra invece di suonare due volte.
+        ///
+        /// LE DUE REGOLE DELL'ORA LEGALE, che non sono campi. Un'ora che NON
+        /// ESISTE si sposta in avanti della durata del salto: le 2:30 suonano
+        /// alle 3:30 (disambiguazione «compatible» di RFC 5545, cioè ciò che fa
+        /// ogni calendario) — la sveglia non perde mai un giorno. Un'ora che
+        /// esiste DUE VOLTE suona alla prima, e discende dall'invariante e non
+        /// da una scelta: al più UNA suonata per occorrenza, sempre, perché
+        /// un'occorrenza è la sua data civile e non il suo istante.
+        catch-up-seconds: u64,
+    }
+
+    manifest: func() -> plugin-manifest;
+    activate: func() -> result<_, plugin-error>;
+    deactivate: func() -> result<_, plugin-error>;
+    /// Corpo di un job (vedi `host-events.spawn-job`): eseguito fuori dal giro
+    /// sincrono del kernel, CON le capacità dell'host — che qui non compaiono
+    /// perché il world le importa (decisione 0027). La disciplina che vale lì
+    /// dentro sta sull'interfaccia `jobs`; chi esegue chiama questa funzione
+    /// senza tenere niente in mano, o la prima capacità che il job usa
+    /// aspetterebbe il proprio chiamante.
+    run-job: func(job: string, payload: json) -> result<json, plugin-error>;
+}

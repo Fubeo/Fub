@@ -217,7 +217,9 @@ albero malformato.
 - gli span si riferiscono alla sorgente esatta;
 - parse e serializzazione non normalizzano dati senza dichiararlo;
 - gli alberi ricorsivi hanno una sola conversione al confine;
-- un nuovo campo pubblico rispetta l'additività del WIT;
+- un record del modello che attraversa il confine non cresce dopo il primo
+  rilascio: un dato nuovo passa da un'interfaccia nuova
+  ([ADR 0235](../decisions/0235-un-record-pubblicato-non-cresce.md));
 - una regola comune vive nel contratto, non in due provider;
 - un workbook a celle conserva autorità e identità fuori da `DocumentModel`;
 - i byte di una cartella di Excel restano all'host, e il file cambia soltanto dal giornale: per innesto delle celle cambiate, o con una riscrittura misurata che non perde niente.
