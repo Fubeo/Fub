@@ -393,7 +393,7 @@ dopo un interruttore; un test che ogni id dello scenario ha la sua icona; foto
 chiara e scura, larga e a 700 px; `bench:a11y` verde; A12 verificato, con un
 test per ogni voce corretta.
 Prova: scripts/check.sh --rapido
-Stato: [ ]
+Stato: [x] fatto
 
 ## T5 · Il profilo al vault nuovo
 
@@ -418,7 +418,7 @@ Fatto quando: e2e: crea, scegli «Solo note» da tastiera, il vault ha solo Note
 crea e «Esc», il vault ha «Studio»; apri un vault esistente, nessuna
 schermata; `bench:a11y` verde con la scena nuova; foto nella PR.
 Prova: scripts/check.sh --rapido
-Stato: [ ]
+Stato: [x] fatto
 
 ## Fine
 
