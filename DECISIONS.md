@@ -41,6 +41,11 @@ La più recente in cima: data · piano · decisione · perché.
   perché; una feature marcatore nuova `http-client` per le righe di sync,
   publish, updates e linkcard; `rich` e `xlsx` portano con sé i loro motori ·
   fonte: report del coder di T3; il codice vince sul «Fatto quando» del piano.
+- 2026-11-01 · K1 · `fub-cli` dipende da `fub-componenti` (con la freccia nel
+  grafo di `overview.md`): i tipi del risolutore (`Stato`, `Effetto`,
+  `Perche`, `Errore`) non sono riesportati da `fub-features` e la CLI li
+  usa nelle firme e nei `match` · fonte: blocco del coder di T4, scelta
+  dell'orchestratore (l'alternativa toccava `fub-features`, fuori dal Tocca).
 - 2026-11-01 · K1 · I requisiti che esistono solo per la mappa
   (`fub.markdown`, `fub.dizionari`: nucleo e componenti senza bundle) stanno
   nella riga di `fub-features::componenti`, non nel manifest; il manifest tiene
