@@ -58,6 +58,10 @@
 //!   esso: è da qui che `fub_host::mount` le monta, quindi una feature fuori
 //!   dall'elenco semplicemente non c'è. Le view ne sono un sottoinsieme
 //!   derivato, non una seconda tabella (§16.7).
+//! - [`componenti`] — la mappa dei componenti: una riga per ogni feature
+//!   ufficiale e per ogni altro componente dell'app, dietro la sua cargo
+//!   feature, da cui `fub_host::mount` prende `uses`, `kind`, `group` e `ui`
+//!   dei manifest.
 
 #[cfg(feature = "backlinks")]
 pub mod backlinks;
@@ -69,6 +73,7 @@ pub mod base;
 pub mod blocks;
 #[cfg(feature = "commands")]
 pub mod commands;
+pub mod componenti;
 #[cfg(feature = "dashboard")]
 pub mod dashboard;
 #[cfg(feature = "draw")]

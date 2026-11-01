@@ -2046,11 +2046,19 @@ dependencies = [
  "base64 0.22.1",
  "camino",
  "fub-abi",
+ "fub-componenti",
  "fub-host",
  "ring",
  "serde",
  "serde_json",
  "tempfile",
+]
+
+[[package]]
+name = "fub-componenti"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -2061,6 +2069,7 @@ dependencies = [
  "camino",
  "flate2",
  "fub-abi",
+ "fub-componenti",
  "fub-format-base",
  "fub-format-markdown",
  "fub-format-svg",

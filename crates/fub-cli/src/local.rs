@@ -28,7 +28,7 @@ fn dry_run(global: &GlobalArgs) -> bool {
     global.dry_run
 }
 
-fn confirm_write(global: &GlobalArgs, prompt: &str) -> Result<(), Failure> {
+pub(crate) fn confirm_write(global: &GlobalArgs, prompt: &str) -> Result<(), Failure> {
     if global.no_input {
         return Err(Failure::new(
             4,

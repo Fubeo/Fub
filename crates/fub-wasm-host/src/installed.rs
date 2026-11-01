@@ -762,5 +762,83 @@ fn validate_manifest(manifest: &PluginManifest) -> Result<(), InstallError> {
     {
         return Err(InstallError::Invalid("timer vuoto o duplicato".into()));
     }
+    // «Usa se c'è» (K1): come i timer, niente id vuoti né doppi. Un nome che
+    // ripete un `requires` si accetta: `requires` vince.
+    let mut uses = BTreeSet::new();
+    if manifest
+        .uses
+        .iter()
+        .any(|name| name.is_empty() || !uses.insert(name))
+    {
+        return Err(InstallError::Invalid("uses vuoto o duplicato".into()));
+    }
+    if let fub_abi::traits::Delivery::Download { sha256, bytes, .. } = &manifest.delivery {
+        if *bytes == 0 || sha256.len() != 64 || !sha256.bytes().all(|c| c.is_ascii_hexdigit()) {
+            return Err(InstallError::Invalid(
+                "download senza dimensione o sha256 non esadecimale di 64 caratteri".into(),
+            ));
+        }
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fub_abi::traits::Delivery;
+
+    fn manifest() -> PluginManifest {
+        let mut m = PluginManifest::new("acme.x", "X");
+        m.version = "1.0.0".into();
+        m
+    }
+
+    /// I default di K1 passano: un manifest di oggi non cambia esito.
+    #[test]
+    fn a_manifest_without_component_fields_still_validates() {
+        assert!(validate_manifest(&manifest()).is_ok());
+    }
+
+    /// `uses` con id vuoti o doppi si rifiuta come i timer; un `uses` che
+    /// ripete un `requires` si accetta (`requires` vince).
+    #[test]
+    fn uses_rejects_empty_and_duplicate_ids() {
+        let mut m = manifest();
+        m.uses = vec![String::new()];
+        assert!(matches!(
+            validate_manifest(&m),
+            Err(InstallError::Invalid(_))
+        ));
+        m.uses = vec!["fub.spell".into(), "fub.spell".into()];
+        assert!(matches!(
+            validate_manifest(&m),
+            Err(InstallError::Invalid(_))
+        ));
+        m.uses = vec!["fub.spell".into(), "fub.y".into()];
+        m.requires = vec!["fub.y".into()];
+        assert!(validate_manifest(&m).is_ok());
+    }
+
+    /// `Download` vuole byte > 0 e uno sha256 di 64 cifre esadecimali.
+    #[test]
+    fn download_rejects_zero_bytes_and_a_bad_sha256() {
+        let download = |sha256: String, bytes| {
+            let mut m = manifest();
+            m.delivery = Delivery::Download {
+                url: "https://example.org/x.wasm".into(),
+                sha256,
+                bytes,
+            };
+            validate_manifest(&m)
+        };
+        assert!(download("ab".repeat(32), 4096).is_ok());
+        assert!(download("ab".repeat(32), 0).is_err());
+        assert!(download("ab".repeat(31), 4096).is_err());
+        assert!(download("zz".repeat(32), 4096).is_err());
+        let mut m = manifest();
+        m.delivery = Delivery::Edition {
+            name: "studio".into(),
+        };
+        assert!(validate_manifest(&m).is_ok());
+    }
 }

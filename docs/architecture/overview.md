@@ -40,6 +40,7 @@ flowchart TD
     svg["fub-format-svg"]
     scene["fub-scene"]
     ink["fub-ink"]
+    componenti["fub-componenti"]
     rich["fub-format-rich"]
     importers["fub-importers"]
     cli["fub-cli"]
@@ -66,6 +67,7 @@ flowchart TD
     host --> svg
     host --> kernel
     cli --> abi
+    cli --> componenti
     cli --> host
     services --> abi
     base --> abi
@@ -76,6 +78,7 @@ flowchart TD
     rich --> ink
     importers --> abi
     features --> abi
+    features --> componenti
     features --> base
     features --> svg
     features --> scene
@@ -237,6 +240,16 @@ del tratto, e quella di `fub-format-rich`, che ne scrive e legge l'InkML
 dell'inchiostro dei documenti; chi altro può dipenderne è un elenco chiuso,
 deciso nell'[ADR 0204](../decisions/0204-nucleo-inchiostro.md) e allargato
 nell'[ADR 0226](../decisions/0226-inchiostro-e-disegni-nei-documenti.md).
+
+`fub-componenti`, il risolutore dei componenti, non ha frecce in uscita:
+dipende soltanto da `serde`, non vede `fub-abi`, e dice in un posto solo che
+cosa è acceso, chi lo richiede e che cosa non serve più. Le frecce in
+ingresso sono due. Una viene da `fub-features`, che costruisce la mappa dei
+componenti di Fub (`src/componenti.rs`): una riga per componente, dietro la sua
+cargo feature, da cui `fub-host` prende anche `uses`, `kind`, `group` e `ui` dei
+manifest. L'altra viene da `fub-cli`, che per `fub-cli componenti` e gli
+strumenti `fub_components*` usa i tipi del risolutore (`Stato`, `Perche`,
+`Errore`, `Effetto`), che `fub-host` non riesporta.
 
 `fub-scene`, il lettore delle scene di FubDraw, ha come sola freccia in uscita
 `fub-ink`: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché

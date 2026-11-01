@@ -131,6 +131,11 @@ pub fn manifest() -> PluginManifest {
         strings: Vec::new(),
         default_locale: String::new(),
         timers: Vec::new(),
+        uses: Vec::new(),
+        kind: Default::default(),
+        delivery: Default::default(),
+        ui: Vec::new(),
+        group: None,
     }
 }
 

@@ -339,3 +339,62 @@ fn the_search_weights_speak_in_all_languages() {
         .collect();
     assert!(missing.is_empty(), "{}", missing.join(", "));
 }
+
+/// I nomi dei componenti (A10): ogni riga della mappa ha il suo
+/// `component.<nome>.name` in ogni lingua, e le lingue dicono le stesse cose.
+#[test]
+fn every_component_has_its_name_in_every_language() {
+    let catalogs = fub_features::componenti::catalog();
+    assert!(
+        catalogs.len() >= 2,
+        "i nomi dei componenti in una lingua sola"
+    );
+    let reference: std::collections::BTreeSet<&String> = catalogs[0].entries.keys().collect();
+    for other in &catalogs[1..] {
+        let keys: std::collections::BTreeSet<&String> = other.entries.keys().collect();
+        assert_eq!(
+            reference, keys,
+            "i nomi dei componenti in «{}» e in «{}» non coincidono",
+            catalogs[0].locale, other.locale
+        );
+    }
+    let mut missing = Vec::new();
+    for riga in fub_features::componenti::righe() {
+        for catalog in &catalogs {
+            if !catalog.entries.contains_key(riga.nome) {
+                missing.push(format!(
+                    "{}: «{}» manca in «{}»",
+                    riga.id, riga.nome, catalog.locale
+                ));
+            }
+        }
+    }
+    assert!(missing.is_empty(), "{}", missing.join("\n  "));
+}
+
+/// I nomi italiani che il piano dei componenti dà: sono le parole della pagina.
+#[test]
+fn the_component_names_are_those_of_the_plan() {
+    let it = fub_features::componenti::catalog()
+        .into_iter()
+        .find(|c| c.locale == "it")
+        .expect("il catalogo italiano");
+    for (key, name) in [
+        ("component.markdown.name", "Note"),
+        ("component.graph.name", "Grafo"),
+        ("component.proof.name", "Correttore"),
+        ("component.rich.name", "Documenti"),
+        ("component.xlsx.name", "Fogli"),
+        ("component.lavagna.name", "Lavagna"),
+        ("component.penna.name", "Penna"),
+        ("component.dizionari.name", "Dizionari"),
+        ("component.motore-documenti.name", "Motore dei documenti"),
+        ("component.motore-fogli.name", "Motore dei fogli"),
+    ] {
+        assert_eq!(
+            it.entries.get(key).map(String::as_str),
+            Some(name),
+            "«{key}»"
+        );
+    }
+}

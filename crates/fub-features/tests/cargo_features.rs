@@ -7,10 +7,18 @@
 //! elenchi di cosa esiste, uno nel `Cargo.toml` e uno in `src/inventory.rs`,
 //! che nessuno confronta.
 //!
-//! # Cosa questo presidio **non** guarda
+//! # E adesso anche le righe della mappa dei componenti
 //!
-//! Solo il `Cargo.toml` di questo crate. Chi consuma le feature ufficiali le
-//! **inoltra** (`fub-host` ha una cargo feature omonima per ognuna, e la
+//! Le cargo feature non sono più solo i moduli dell'inventario: ogni riga di
+//! `fub_features::componenti` che sta dietro una feature lo dice
+//! (`cargo_feature`), e le feature dei componenti che non sono moduli di questo
+//! crate (`rich`, `xlsx`, i due motori, `http-client`) sono marcatori. Il
+//! confronto si fa fra le righe e `[features]`, nei due versi.
+//!
+//! # Il guardiano di `fub-host`
+//!
+//! Prima questo presidio guardava solo il `Cargo.toml` di questo crate. Chi
+//! consuma le feature ufficiali le **inoltra** (`fub-host` ha una cargo feature omonima per ognuna, e la
 //! dipendenza è a `default-features = false`), e quell'elenco lì nessuno lo
 //! confronta con questo: `trash` ci è mancato dal giorno in cui il bundle è
 //! nato, e non se n'è accorto nessuno perché `cargo test --workspace` unifica
@@ -18,6 +26,7 @@
 //! default e la mancanza sparisce. Si vede solo compilando `fub-host` da solo,
 //! che è ciò che farebbe chi lo usa come libreria. È il §16.3 visto da un piano
 //! più su, ed è una casella della [0079](../../../docs/decisions/0190-sessioni-documento-e-undo.md).
+//! Adesso lo guarda [`fub_host_inoltra_ogni_feature_componente`].
 //!
 //! È esattamente il difetto che la
 //! [decisione 0056](../../../docs/decisions/0196-test-e-artefatti-generati.md)
@@ -160,6 +169,147 @@ fn every_cargo_feature_and_on_of_default() {
     );
 }
 
+/// Le cargo feature che non sono componenti, e perché. Oggi nessuna: ogni
+/// feature ha almeno una riga nella mappa.
+const NON_COMPONENTI: &[(&str, &str)] = &[];
+
+/// Le righe della mappa senza una cargo feature: sempre compilate, e il test le
+/// elenca perché una riga in più senza feature è una riga che non si spegne da
+/// Cargo.
+const SENZA_FEATURE: &[(&str, &str)] = &[
+    ("fub.core", "il nucleo dell'host"),
+    (
+        "fub.maintenance",
+        "il nucleo: la manutenzione non sparisce nel vault da riparare",
+    ),
+    ("fub.markdown", "il nucleo: le note sono sempre compilate"),
+    ("fub.importers", "l'importazione è sempre montata dall'host"),
+    ("fub.lavagna", "la lavagna è sempre compilata nel client"),
+    (
+        "fub.penna",
+        "l'inchiostro è una libreria dei formati, sempre compilata",
+    ),
+    (
+        "fub.dizionari",
+        "i dizionari della macchina, sempre letti da chi li vuole",
+    ),
+];
+
+/// Le cargo feature dei componenti: quelle dichiarate, tolte quelle che non lo
+/// sono.
+fn feature_dei_componenti() -> BTreeSet<String> {
+    let (declared, _) = declared();
+    declared
+        .into_iter()
+        .filter(|name| NON_COMPONENTI.iter().all(|(non, _)| non != name))
+        .collect()
+}
+
+/// Ogni riga con una cargo feature la trova in `[features]` e nel `default`
+/// (o fra le feature fuori dal default di proposito).
+#[test]
+fn ogni_riga_con_feature_e_una_feature_del_default() {
+    let (declared, default) = declared();
+    for riga in fub_features::componenti::righe() {
+        let Some(feature) = riga.cargo_feature else {
+            continue;
+        };
+        assert!(
+            declared.contains(feature),
+            "«{}» sta dietro «{feature}», che non è in `[features]`",
+            riga.id
+        );
+        assert!(
+            default.contains(feature) || OUT_OF_DEFAULT.iter().any(|(out, _, _)| *out == feature),
+            "«{}» sta dietro «{feature}», che non è nel `default`",
+            riga.id
+        );
+    }
+}
+
+/// Le righe senza cargo feature sono esattamente quelle di [`SENZA_FEATURE`].
+#[test]
+fn le_righe_senza_feature_sono_quelle_elencate() {
+    let senza: BTreeSet<&str> = fub_features::componenti::righe()
+        .iter()
+        .filter(|riga| riga.cargo_feature.is_none())
+        .map(|riga| riga.id)
+        .collect();
+    let attese: BTreeSet<&str> = SENZA_FEATURE
+        .iter()
+        .map(|(id, perche)| {
+            assert!(!perche.is_empty());
+            *id
+        })
+        .collect();
+    assert_eq!(
+        senza, attese,
+        "una riga senza cargo feature non si spegne da Cargo: o le dai la sua \
+         feature, o la scrivi in `SENZA_FEATURE` con il perché"
+    );
+}
+
+/// **Una riga che ne richiede un'altra ne accende la cargo feature**: così la
+/// mappa di una build parziale non resta con un requisito che nessuno offre.
+#[test]
+fn una_riga_richiesta_e_una_feature_accesa() {
+    let implied = implied();
+    let righe = fub_features::componenti::righe();
+    for riga in &righe {
+        let Some(feature) = riga.cargo_feature else {
+            continue;
+        };
+        for requisito in riga.requires {
+            let chi = righe
+                .iter()
+                .find(|altra| altra.id == *requisito)
+                .or_else(|| {
+                    righe
+                        .iter()
+                        .find(|altra| altra.provides.contains(requisito))
+                })
+                .unwrap_or_else(|| panic!("«{}» richiede «{requisito}» e non c'è", riga.id));
+            let Some(sua) = chi.cargo_feature else {
+                continue;
+            };
+            let accese = implied.get(feature).cloned().unwrap_or_default();
+            assert!(
+                sua == feature || accese.contains(sua),
+                "«{}» richiede «{}», che sta dietro «{sua}», ma «{feature}» non la accende",
+                riga.id,
+                chi.id
+            );
+        }
+    }
+}
+
+/// **`fub-host` inoltra ogni feature dei componenti.** Senza, spegnere un
+/// componente in `fub-host` lascerebbe la sua riga (o accendere il bundle non
+/// la porterebbe), e `cargo test --workspace`, che unifica le feature, non lo
+/// vedrebbe mai.
+#[test]
+fn fub_host_inoltra_ogni_feature_componente() {
+    let manifest = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../fub-host/Cargo.toml"
+    ))
+    .unwrap();
+    let section = manifest
+        .split("\n[features]\n")
+        .nth(1)
+        .expect("fub-host ha una sezione [features]");
+    let section = section.split("\n[").next().unwrap();
+    let mancanti: Vec<String> = feature_dei_componenti()
+        .into_iter()
+        .filter(|feature| !section.contains(&format!("\"fub-features/{feature}\"")))
+        .collect();
+    assert!(
+        mancanti.is_empty(),
+        "`fub-host` non inoltra {mancanti:?}: compilato da solo, quei componenti \
+         non si spengono o non arrivano"
+    );
+}
+
 /// E nella build piena i due elenchi sono **lo stesso elenco**.
 ///
 /// Questa è la direzione opposta, e vale solo qui: se una riga sparisse
@@ -180,22 +330,32 @@ fn every_cargo_feature_and_on_of_default() {
     feature = "stats",
     feature = "graph",
     feature = "commands",
-    feature = "blocks"
+    feature = "blocks",
+    feature = "rich",
+    feature = "xlsx",
+    feature = "engine-documents",
+    feature = "engine-sheets",
+    feature = "http-client"
 ))]
 fn with_all_the_feature_the_two_lists_coincide() {
-    let (declared, _) = declared();
-    // Una feature fuori dal default c'è nell'inventario solo se questa build
-    // l'ha accesa.
-    let expected: BTreeSet<String> = declared
+    // Una feature fuori dal default c'è nella mappa solo se questa build l'ha
+    // accesa.
+    let expected: BTreeSet<String> = feature_dei_componenti()
         .into_iter()
         .filter(|name| OUT_OF_DEFAULT.iter().all(|(out, on, _)| out != name || *on))
         .collect();
+    let nella_mappa: BTreeSet<String> = fub_features::componenti::righe()
+        .iter()
+        .filter_map(|riga| riga.cargo_feature.map(str::to_string))
+        .collect();
     assert_eq!(
-        expected,
-        in_the_inventory(),
-        "una cargo feature senza riga nell'inventario è un bundle che il \
-         `Cargo.toml` promette e che non si monta"
+        expected, nella_mappa,
+        "una cargo feature senza riga nella mappa è un componente che il \
+         `Cargo.toml` promette e che non esiste"
     );
+    // Le feature dell'inventario sono quelle delle sue righe, che sono anche
+    // righe della mappa.
+    assert!(in_the_inventory().is_subset(&nella_mappa));
 }
 
 /// Ciò che ogni cargo feature accende, per nome: le liste su una riga

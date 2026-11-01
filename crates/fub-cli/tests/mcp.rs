@@ -184,6 +184,16 @@ fn writer(f: &Fixture) -> Server {
     .initialized()
 }
 
+/// Un agente che scrive in tutto il vault.
+fn vault_writer(f: &Fixture) -> Server {
+    Server::start(
+        &f.vault,
+        &f.config,
+        &[("--automation-write-root", &f.vault)],
+    )
+    .initialized()
+}
+
 fn docs(page: &Value) -> Vec<String> {
     let mut docs: Vec<String> = page["items"]
         .as_array()
@@ -238,7 +248,11 @@ fn inizializzazione_elenco_e_errori_del_protocollo() {
             "fub_write",
             "fub_create",
             "fub_commands",
-            "fub_invoke"
+            "fub_invoke",
+            "fub_components",
+            "fub_components_why",
+            "fub_components_enable",
+            "fub_components_disable"
         ]
     );
     for tool in tools["result"]["tools"].as_array().unwrap() {
@@ -427,6 +441,14 @@ fn senza_radice_di_scrittura_ogni_strumento_che_scrive_e_rifiutato() {
             "fub_invoke",
             json!({ "command": "note.create", "args": { "name": "Agente/nuova.md" }, "apply": true }),
         ),
+        (
+            "fub_components_disable",
+            json!({ "id": "fub.graph", "apply": true }),
+        ),
+        (
+            "fub_components_enable",
+            json!({ "id": "fub.graph", "apply": true }),
+        ),
     ] {
         let refused = server.refused(tool, args);
         assert!(
@@ -445,6 +467,166 @@ fn senza_radice_di_scrittura_ogni_strumento_che_scrive_e_rifiutato() {
         std::fs::read_to_string(f.vault.join("Agente/bozza.md")).unwrap(),
         "# Bozza\n"
     );
+}
+
+/// Il componente nell'elenco di `fub_components`.
+fn component(server: &mut Server, id: &str) -> Value {
+    let list = server.ok("fub_components", json!({ "limit": 200 }));
+    list["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == id)
+        .unwrap_or_else(|| panic!("{id} non è nell'elenco"))
+        .clone()
+}
+
+#[test]
+fn i_componenti_senza_apply_sono_una_prova() {
+    let f = fixture();
+    let mut server = vault_writer(&f);
+    let page = server.ok("fub_components", json!({ "limit": 3, "offset": 1 }));
+    assert_eq!(page["items"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        (page["offset"].clone(), page["limit"].clone()),
+        (json!(1), json!(3))
+    );
+
+    // Acceso: spegnerlo in prova dice che cosa farebbe, e non cambia niente.
+    assert_eq!(component(&mut server, "fub.graph")["enabled"], true);
+    let why = server.ok("fub_components_why", json!({ "id": "fub.graph" }));
+    assert_eq!(why["message"], "fub.graph è attivo perché l'hai scelto.");
+    let dry = server.ok("fub_components_disable", json!({ "id": "fub.graph" }));
+    assert_eq!(dry["dry_run"], true);
+    assert_eq!(
+        dry["writes"],
+        json!([{ "id": "fub.graph", "enabled": false }])
+    );
+    assert_eq!(component(&mut server, "fub.graph")["enabled"], true);
+
+    // Con apply si spegne.
+    let off = server.ok(
+        "fub_components_disable",
+        json!({ "id": "fub.graph", "apply": true }),
+    );
+    assert_eq!(off["dry_run"], false);
+    assert_eq!(component(&mut server, "fub.graph")["enabled"], false);
+    let why = server.ok("fub_components_why", json!({ "id": "fub.graph" }));
+    assert_eq!(why["reason"], "off");
+
+    // Spento: accenderlo in prova non cambia niente; con apply sì.
+    let dry = server.ok("fub_components_enable", json!({ "id": "fub.graph" }));
+    assert_eq!(
+        dry["writes"],
+        json!([{ "id": "fub.graph", "enabled": true }])
+    );
+    assert_eq!(component(&mut server, "fub.graph")["enabled"], false);
+    server.ok(
+        "fub_components_enable",
+        json!({ "id": "fub.graph", "apply": true }),
+    );
+    assert_eq!(component(&mut server, "fub.graph")["enabled"], true);
+
+    // Chi serve ad altri si rifiuta e dice a chi, con il nome del parametro.
+    let refused = server.refused(
+        "fub_components_disable",
+        json!({ "id": "fub.properties", "apply": true }),
+    );
+    assert!(refused.starts_with("conflict:"), "{refused}");
+    assert!(refused.contains("fub.template"), "{refused}");
+    assert!(refused.contains("also_dependents"), "{refused}");
+    let both = server.ok(
+        "fub_components_disable",
+        json!({ "id": "fub.properties", "also_dependents": true }),
+    );
+    assert_eq!(both["dry_run"], true);
+    assert_eq!(component(&mut server, "fub.properties")["enabled"], true);
+    // Il nucleo no, e un id che non c'è nemmeno.
+    let core = server.refused("fub_components_disable", json!({ "id": "fub.markdown" }));
+    assert!(core.contains("fa parte del nucleo"), "{core}");
+    let unknown = server.refused("fub_components_why", json!({ "id": "fub.niente" }));
+    assert!(unknown.contains("nessun componente si chiama"), "{unknown}");
+    let bad = server.refused(
+        "fub_components_disable",
+        json!({ "id": "fub.lavagna", "orphans": "forse" }),
+    );
+    assert!(bad.starts_with("bad_args"), "{bad}");
+}
+
+#[test]
+fn senza_radice_di_scrittura_i_componenti_si_vedono_e_non_si_cambiano() {
+    let f = fixture();
+    // Il grafo spento da un agente che scrive in tutto il vault.
+    {
+        let mut server = vault_writer(&f);
+        server.ok(
+            "fub_components_disable",
+            json!({ "id": "fub.graph", "apply": true }),
+        );
+    }
+    let mut server = Server::start(&f.vault, &f.config, &[]).initialized();
+    // Spento: accenderlo con apply è rifiutato, in prova si può.
+    assert_eq!(component(&mut server, "fub.graph")["enabled"], false);
+    let refused = server.refused(
+        "fub_components_enable",
+        json!({ "id": "fub.graph", "apply": true }),
+    );
+    assert!(refused.starts_with("denied: sola lettura"), "{refused}");
+    let dry = server.ok("fub_components_enable", json!({ "id": "fub.graph" }));
+    assert_eq!(dry["dry_run"], true);
+    assert_eq!(component(&mut server, "fub.graph")["enabled"], false);
+    // Acceso: spegnerlo con apply è rifiutato.
+    assert_eq!(component(&mut server, "fub.stats")["enabled"], true);
+    let refused = server.refused(
+        "fub_components_disable",
+        json!({ "id": "fub.stats", "apply": true }),
+    );
+    assert!(refused.starts_with("denied: sola lettura"), "{refused}");
+    assert_eq!(component(&mut server, "fub.stats")["enabled"], true);
+}
+
+#[test]
+fn con_una_radice_parziale_i_componenti_non_si_cambiano() {
+    let f = fixture();
+    // Il grafo spento da un agente che scrive in tutto il vault.
+    {
+        let mut server = vault_writer(&f);
+        server.ok(
+            "fub_components_disable",
+            json!({ "id": "fub.graph", "apply": true }),
+        );
+    }
+    let disabled = |server: &mut Server| {
+        let mut off: Vec<String> = server.ok("fub_components", json!({ "limit": 200 }))["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|item| item["enabled"] == false)
+            .map(|item| item["id"].as_str().unwrap().to_string())
+            .collect();
+        off.sort();
+        off
+    };
+    // Una cartella sola fra le radici di scrittura.
+    let mut server = writer(&f);
+    let before = disabled(&mut server);
+    assert!(before.contains(&"fub.graph".to_string()), "{before:?}");
+    for (id, enabled) in [("fub.graph", false), ("fub.stats", true)] {
+        assert_eq!(component(&mut server, id)["enabled"], enabled);
+        for tool in ["fub_components_disable", "fub_components_enable"] {
+            let refused = server.refused(tool, json!({ "id": id, "apply": true }));
+            assert!(
+                refused.starts_with("denied:") && refused.contains("tutto il vault"),
+                "{tool} {id}: {refused}"
+            );
+        }
+        assert_eq!(component(&mut server, id)["enabled"], enabled);
+    }
+    assert_eq!(disabled(&mut server), before);
+    drop(server);
+    // plugins.disabled sul disco, riletto da un server nuovo: com'era.
+    let mut server = vault_writer(&f);
+    assert_eq!(disabled(&mut server), before);
 }
 
 #[test]

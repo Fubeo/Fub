@@ -158,3 +158,59 @@ fn standalone_or_without_an_app_the_vault_stays_busy() {
     assert_eq!(error["kind"], "busy");
     drop(app.host);
 }
+
+#[test]
+fn with_the_app_open_componenti_turns_bundles_off_and_on_through_it() {
+    let tmp = tempfile::tempdir().unwrap();
+    let vault = tmp.path().join("vault");
+    let config = tmp.path().join("config");
+    std::fs::create_dir(&vault).unwrap();
+    std::fs::write(vault.join("a.md"), "# A\n").unwrap();
+    let app = app(&vault, &config);
+    let graph_mounted = |app: &App| {
+        app.host
+            .bundles(None)
+            .unwrap()
+            .iter()
+            .any(|b| b.id == "fub.graph" && b.mounted)
+    };
+    assert!(graph_mounted(&app));
+
+    let list = ok(&cli(&vault, &config, &["componenti"]));
+    let graph = list["data"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["id"] == "fub.graph")
+        .unwrap()
+        .clone();
+    assert_eq!(graph["enabled"], true);
+
+    // Lo spegne l'app: smonta il bundle e lo scrive in plugins.disabled.
+    let off = ok(&cli(
+        &vault,
+        &config,
+        &["--yes", "componenti", "spegni", "fub.graph"],
+    ));
+    assert_eq!(off["data"]["dry_run"], false);
+    assert!(!graph_mounted(&app));
+    let why = ok(&cli(
+        &vault,
+        &config,
+        &["componenti", "perche", "fub.graph"],
+    ));
+    assert_eq!(why["data"]["reason"], "off");
+
+    ok(&cli(
+        &vault,
+        &config,
+        &["--yes", "componenti", "accendi", "fub.graph"],
+    ));
+    assert!(graph_mounted(&app));
+    let disabled = ok(&cli(
+        &vault,
+        &config,
+        &["config", "--get", "plugins.disabled"],
+    ));
+    assert_eq!(disabled["data"]["value"], serde_json::json!([]));
+}

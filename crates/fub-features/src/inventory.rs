@@ -64,6 +64,10 @@
 //! `tests/cargo_features.rs`, che li confronta senza tabella di corrispondenza:
 //! il nome è lo stesso, quindi si calcola.
 //!
+//! Ogni riga ha anche la sua riga nella mappa dei componenti
+//! ([`crate::componenti`]), con la stessa cargo feature: lì stanno il gruppo,
+//! il tipo e ciò che usa, e i requisiti che sono solo della mappa.
+//!
 //! La misura che giustifica tutto è una: con la sola `outline`, il grafo delle
 //! dipendenze di questo crate scende da **120 crate a 26**, perché tantivy sta
 //! dietro `search`.

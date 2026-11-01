@@ -114,14 +114,14 @@ use fub_abi::settings::{
 };
 use fub_abi::text::{Arg, ArgValue, Message, StringCatalog, Text};
 use fub_abi::traits::{
-    BacklinkRef, CommandProvider, DocPosition, DocumentMatch, DraftInfo, EntryKind, EventHandler,
-    Excerpts, FolderScope, HealthCheck, HealthIssue, HostApi, IndexLoss, IndexProvider, IndexQuery,
-    IndexResult, IndexingState, JobId, JobProgress, JobSpec, JobStatus, LinkDirection, NeighborRef,
-    Page, Paged, Plugin, PluginManifest, PluginPermissions, PredicateKind, PropertyCount,
-    PropertyEntry, PropertyFilter, PropertySelect, PropertySort, PropertyTest, QueryKind,
-    QueryRoute, ReadApi, ResolvedRef, ServiceProvider, TagCount, TimerSchedule, TimerSpec,
-    TrashEntry, VaultEntry, VaultFolder, VaultStatus, ViewInstance, ViewInterests, ViewProvider,
-    ViewSpec, ViewSurface, WallClock, ABI_VERSION,
+    BacklinkRef, CommandProvider, ComponentKind, Delivery, DocPosition, DocumentMatch, DraftInfo,
+    EntryKind, EventHandler, Excerpts, FolderScope, HealthCheck, HealthIssue, HostApi, IndexLoss,
+    IndexProvider, IndexQuery, IndexResult, IndexingState, JobId, JobProgress, JobSpec, JobStatus,
+    LinkDirection, NeighborRef, Page, Paged, Plugin, PluginManifest, PluginPermissions,
+    PredicateKind, PropertyCount, PropertyEntry, PropertyFilter, PropertySelect, PropertySort,
+    PropertyTest, QueryKind, QueryRoute, ReadApi, ResolvedRef, ServiceProvider, TagCount,
+    TimerSchedule, TimerSpec, TrashEntry, VaultEntry, VaultFolder, VaultStatus, ViewInstance,
+    ViewInterests, ViewProvider, ViewSpec, ViewSurface, WallClock, ABI_VERSION,
 };
 use fub_abi::transfer::{
     ArtifactContent, ArtifactHandle, ArtifactSink, ConflictPolicy, ExportArtifact, ExportProvider,
@@ -442,6 +442,8 @@ wit_kebab! {
     TimerSpec,
     TimerSchedule,
     WallClock,
+    ComponentKind,
+    Delivery,
     Actor,
     Origin,
     Notice,
@@ -2271,6 +2273,22 @@ fn query_predicate_case(p: &QueryPredicate) -> Case {
             "task-due",
             "task-due-predicate",
             vec![("min", wit(min)), ("max", wit(max))],
+        ),
+    }
+}
+
+fn delivery_case(d: &Delivery) -> Case {
+    match d {
+        Delivery::Included => case("included"),
+        Delivery::Edition { name } => case_ty("edition", wit(name)),
+        Delivery::Download { url, sha256, bytes } => case_rec(
+            "download",
+            "delivery-download",
+            vec![
+                ("url", wit(url)),
+                ("sha256", wit(sha256)),
+                ("bytes", wit(bytes)),
+            ],
         ),
     }
 }
@@ -5558,6 +5576,11 @@ fn conform(source: &str) -> Result<(), String> {
         strings,
         default_locale,
         timers,
+        uses,
+        kind,
+        delivery,
+        ui,
+        group,
     } = PluginManifest {
         id: String::new(),
         name: String::new(),
@@ -5570,6 +5593,11 @@ fn conform(source: &str) -> Result<(), String> {
         strings: Vec::new(),
         default_locale: String::new(),
         timers: Vec::new(),
+        uses: Vec::new(),
+        kind: ComponentKind::Mode,
+        delivery: Delivery::Included,
+        ui: Vec::new(),
+        group: None,
     };
     contract.record(
         "plugin-manifest",
@@ -5597,6 +5625,28 @@ fn conform(source: &str) -> Result<(), String> {
             // ragione di tutte le altre: chi si è congelato senza dichiarare
             // timer non si sposta per far posto a chi ne dichiara.
             ("timers", wit(&timers)),
+            // E il modello dei componenti (K1), in fondo per la stessa ragione.
+            ("uses", wit(&uses)),
+            ("kind", wit(&kind)),
+            ("delivery", wit(&delivery)),
+            ("ui", wit(&ui)),
+            ("group", wit(&group)),
+        ],
+    );
+    contract.enumeration_from("component-kind", ("traits.rs", "ComponentKind"));
+    contract.variant_src(
+        "delivery",
+        ("traits.rs", "Delivery"),
+        &[
+            delivery_case(&Delivery::Included),
+            delivery_case(&Delivery::Edition {
+                name: String::new(),
+            }),
+            delivery_case(&Delivery::Download {
+                url: String::new(),
+                sha256: String::new(),
+                bytes: 0,
+            }),
         ],
     );
 
