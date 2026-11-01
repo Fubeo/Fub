@@ -25,6 +25,7 @@ use serde_json::{json, Value};
 
 use crate::cli::{ComponentiAction, ComponentiArgs, GlobalArgs};
 use crate::commands::{paginate, render_error_text, Connection, Failure};
+use crate::local::confirm_write;
 use crate::output::{envelope_ok, OutputFormat};
 
 /// Il gruppo dei componenti di supporto: accesi se qualcuno li richiede.
@@ -460,39 +461,6 @@ fn vault_required(c: &Connection) -> Result<(), Failure> {
         return Ok(());
     }
     Err(Failure::bad_args("nessun vault: --vault PATH o FUB_VAULT"))
-}
-
-/// La conferma di una scrittura, come per `plugin`.
-fn confirm_write(global: &GlobalArgs, prompt: &str) -> Result<(), Failure> {
-    if global.no_input {
-        return Err(Failure::new(
-            4,
-            "denied",
-            format!("{prompt}: rifiutato (--no-input)"),
-        ));
-    }
-    if global.yes {
-        return Ok(());
-    }
-    if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
-        return Err(Failure::new(
-            4,
-            "denied",
-            format!("{prompt}: serve --yes su stdin non interattivo"),
-        ));
-    }
-    eprint!("{prompt} [y/N] ");
-    use std::io::BufRead;
-    let mut line = String::new();
-    std::io::stdin()
-        .lock()
-        .read_line(&mut line)
-        .map_err(|e| Failure::local(format!("stdin: {e}")))?;
-    if line.trim().eq_ignore_ascii_case("y") || line.trim().eq_ignore_ascii_case("yes") {
-        Ok(())
-    } else {
-        Err(Failure::new(4, "denied", "rifiutato dall'utente"))
-    }
 }
 
 /// Stampa: righe di testo per chi legge, la busta per gli altri formati.
