@@ -39,7 +39,9 @@ La più recente in cima: data · piano · decisione · perché.
   non si istanzia nell'host a sedici); `0.2.0` non è pubblicata e K1 resta, ma
   dal primo rilascio un record pubblicato non cresce e le novità passano da
   interfacce nuove · fonte: prova dell'orchestratore con `ping-wasm` compilato
-  su `d235d3f6`, decisione con l'utente; ADR 0235.
+  su `d235d3f6`, decisione con l'utente; ADR 0235. Fuori dal Tocca, con
+  l'OK dell'utente: la riga dell'esempio in `exclude` del `Cargo.toml` della
+  radice e la frase sull'additività in `docs/architecture/document-model.md`.
 - 2026-11-01 · K1 · Via MCP accendere e spegnere un componente con `apply`
   vogliono tutto il vault fra le radici di scrittura, come un piano che non
   dice quali note tocca: un componente cambia il comportamento di tutto il
