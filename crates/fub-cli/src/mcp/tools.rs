@@ -12,7 +12,9 @@
 //!   suo piano tocca documenti sotto le radici di scrittura.
 //! - **I componenti** (`fub_components*`) seguono le regole di
 //!   `fub-cli componenti` (`crate::componenti`): accendere e spegnere partono
-//!   in prova, e con `"apply": true` vogliono una radice di scrittura.
+//!   in prova, e con `"apply": true` vogliono tutto il vault fra le radici
+//!   di scrittura: un componente cambia il comportamento del vault intero,
+//!   come un piano che non dice quali note tocca.
 //! - **Le risposte sono a pagine**, 50 per difetto e al più 200, per non
 //!   riempire il contesto dell'agente.
 
@@ -768,6 +770,13 @@ fn components_apply(
     let apply = bool_arg(args, "apply")?;
     if apply {
         access.check_writer()?;
+        if !access.write.is_all() {
+            return Err(Failure::new(
+                4,
+                "denied",
+                "accendere o spegnere un componente cambia tutto il vault: si fa soltanto con tutto il vault fra le radici di scrittura",
+            ));
+        }
     }
     let esito = esito(&Vista::leggi(c)?)?;
     if !apply {

@@ -184,6 +184,16 @@ fn writer(f: &Fixture) -> Server {
     .initialized()
 }
 
+/// Un agente che scrive in tutto il vault.
+fn vault_writer(f: &Fixture) -> Server {
+    Server::start(
+        &f.vault,
+        &f.config,
+        &[("--automation-write-root", &f.vault)],
+    )
+    .initialized()
+}
+
 fn docs(page: &Value) -> Vec<String> {
     let mut docs: Vec<String> = page["items"]
         .as_array()
@@ -474,7 +484,7 @@ fn component(server: &mut Server, id: &str) -> Value {
 #[test]
 fn i_componenti_senza_apply_sono_una_prova() {
     let f = fixture();
-    let mut server = writer(&f);
+    let mut server = vault_writer(&f);
     let page = server.ok("fub_components", json!({ "limit": 3, "offset": 1 }));
     assert_eq!(page["items"].as_array().unwrap().len(), 3);
     assert_eq!(
@@ -546,9 +556,9 @@ fn i_componenti_senza_apply_sono_una_prova() {
 #[test]
 fn senza_radice_di_scrittura_i_componenti_si_vedono_e_non_si_cambiano() {
     let f = fixture();
-    // Il grafo spento da un agente che può scrivere.
+    // Il grafo spento da un agente che scrive in tutto il vault.
     {
-        let mut server = writer(&f);
+        let mut server = vault_writer(&f);
         server.ok(
             "fub_components_disable",
             json!({ "id": "fub.graph", "apply": true }),
@@ -573,6 +583,50 @@ fn senza_radice_di_scrittura_i_componenti_si_vedono_e_non_si_cambiano() {
     );
     assert!(refused.starts_with("denied: sola lettura"), "{refused}");
     assert_eq!(component(&mut server, "fub.stats")["enabled"], true);
+}
+
+#[test]
+fn con_una_radice_parziale_i_componenti_non_si_cambiano() {
+    let f = fixture();
+    // Il grafo spento da un agente che scrive in tutto il vault.
+    {
+        let mut server = vault_writer(&f);
+        server.ok(
+            "fub_components_disable",
+            json!({ "id": "fub.graph", "apply": true }),
+        );
+    }
+    let disabled = |server: &mut Server| {
+        let mut off: Vec<String> = server.ok("fub_components", json!({ "limit": 200 }))["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|item| item["enabled"] == false)
+            .map(|item| item["id"].as_str().unwrap().to_string())
+            .collect();
+        off.sort();
+        off
+    };
+    // Una cartella sola fra le radici di scrittura.
+    let mut server = writer(&f);
+    let before = disabled(&mut server);
+    assert!(before.contains(&"fub.graph".to_string()), "{before:?}");
+    for (id, enabled) in [("fub.graph", false), ("fub.stats", true)] {
+        assert_eq!(component(&mut server, id)["enabled"], enabled);
+        for tool in ["fub_components_disable", "fub_components_enable"] {
+            let refused = server.refused(tool, json!({ "id": id, "apply": true }));
+            assert!(
+                refused.starts_with("denied:") && refused.contains("tutto il vault"),
+                "{tool} {id}: {refused}"
+            );
+        }
+        assert_eq!(component(&mut server, id)["enabled"], enabled);
+    }
+    assert_eq!(disabled(&mut server), before);
+    drop(server);
+    // plugins.disabled sul disco, riletto da un server nuovo: com'era.
+    let mut server = vault_writer(&f);
+    assert_eq!(disabled(&mut server), before);
 }
 
 #[test]

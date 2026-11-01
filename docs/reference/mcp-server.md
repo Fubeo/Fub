@@ -113,8 +113,10 @@ risorse, né come bersaglio di un link risolto.
   `plugins.disabled`, chi è acceso lo decide la mappa dei componenti, e si
   scrive soltanto per i bundle. Senza `"apply": true` accendere e spegnere
   restituiscono l'effetto (`also_enabled`, `also_disabled`, `orphans`,
-  `writes`) e non cambiano niente. Con `apply` vogliono una radice di
-  scrittura qualsiasi, perché le impostazioni non stanno in una cartella.
+  `writes`) e non cambiano niente. Con `apply` vogliono tutto il vault
+  fra le radici di scrittura, come un comando che non dice quali note tocca:
+  un componente cambia il comportamento del vault intero. Con una radice più
+  stretta la risposta è `denied`.
   Il nucleo (`fub.core`, `fub.maintenance`, `fub.markdown`) non si spegne
   (`denied`); un componente che altri richiedono è un `conflict` che li
   nomina; un id che la mappa non ha è `not_found`.
