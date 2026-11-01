@@ -349,7 +349,7 @@ note», apri un PDF e una lavagna, vedi «solo come file», «Accendi», il file
 apre; elenco dei chunk e S6 nella PR (cancello); `npm run build` rifiuta un import
 statico di `editors/canvas` (rottura apposta, messaggio nel report).
 Prova: scripts/check.sh --rapido
-Stato: [ ]
+Stato: [x] fatto
 
 ## T5 · Il profilo al vault nuovo
 
