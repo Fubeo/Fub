@@ -28,7 +28,9 @@
 // nessun selettore. La vista della shell di oggi è `panels/document.ts`.
 import { pickFromList } from "../ui/dialogs";
 import { rebaseStaleChange, type EditorChange } from "../editors/core/text-operation";
-import { createDocumentSurfaceRegistry } from "../editors/core/bootstrap";
+import { createDocumentSurfaceRegistry, setComponentEditors } from "../editors/core/bootstrap";
+import { UI_SPATIAL, VECTOR_PROFILE, uisForFile } from "../editors/core/component-surfaces";
+import { componentsReady, mountComponents, onComponents, refreshComponents, type Components } from "./components";
 import {
   selectionSetOf,
   type DocumentSurfaceRegistry,
@@ -51,7 +53,7 @@ import { folderForNote } from "../rules/mirrored";
 import { looksLikeWebShortcut, webShortcut } from "../rules/web-shortcut";
 import { declaredFences } from "../rules/syntax";
 import { pdfIdWithoutFragment } from "../editors/media/pdf-view";
-import { mediaKindOfId, mimeOfId } from "../editors/media/media-types";
+import { formatBytes, mediaKindOfId, mimeOfId } from "../editors/media/media-types";
 import { openResourcePort, type ResourceTransport } from "../editors/media/resource-port";
 import { vaultImageSource } from "../editors/text/profiles/markdown/media";
 import { renderMarkdown } from "../editors/text/profiles/markdown/render";
@@ -84,7 +86,7 @@ import { emit, on, state } from "./store";
 import { CASE_KEY, caseOf, toRecover } from "./drafts";
 import { addSheetNotice, clearAllRemovedNotices, clearSheetNotices, dismissSheetNotice, moveSheetNotices, setLimitedMode, setRemovedNotice } from "./sheet-notices";
 import { syntaxForms, unsavedDrafts } from "../host/query";
-import type { DraftInfo, Origin } from "../host/contract";
+import type { ComponentRefusal, ComponentRow, DraftInfo, Origin } from "../host/contract";
 import {
   documentSessions,
   flushPendingSave,
@@ -137,8 +139,7 @@ import {
 import { createNote, handToSystem, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
 import { confirm } from "../platform/confirm";
 import { registerShellCommand } from "../ui/commands";
-import { registerLiveCommands } from "../editors/spatial/live/commands";
-import { VECTOR_PROFILE } from "../editors/spatial/modes";
+import type { LiveCommandTargets } from "../editors/spatial/live/commands";
 import { EXPORT_COMMAND } from "../ui/shell-ids.generated";
 import { showActivity } from "../panels/activity";
 import { notify } from "../ui/notify";
@@ -247,6 +248,28 @@ export interface PaneView {
   focusedTab(): { pane: string; index: number } | null;
   /// Dove si monta il registratore del riquadro.
   recorderHost(pane: Pane): HTMLElement;
+  /// Il riquadro «solo come file» di un file il cui componente è spento (K2):
+  /// disegna `file` dentro `host`, che sta già nel riquadro. Arriva di nuovo a
+  /// ogni cambio (la dimensione letta, «Accendi …» in corso, un rifiuto).
+  drawFileOnly(pane: Pane, host: HTMLElement, file: FileOnly): void;
+}
+
+/// Ciò che il riquadro «solo come file» mostra e i suoi due gesti.
+export interface FileOnly {
+  readonly doc: string;
+  /// Il nome del file, con l'estensione.
+  readonly name: string;
+  /// La dimensione già scritta per chi legge, o `null` finché non si sa.
+  readonly size: string | null;
+  /// Il nome del componente spento, già nella lingua del vault; `null` se la
+  /// mappa non ne nomina uno da accendere.
+  readonly component: string | null;
+  /// «Accendi …» è in corso.
+  readonly busy: boolean;
+  /// Un rifiuto o un errore dell'ultimo «Accendi …», da leggere nel riquadro.
+  readonly problem: string | null;
+  switchOn(): void;
+  openOutside(): void;
 }
 
 /// Un riquadro **a schermo**: la sua parte di DOM, il suo editor, e quale
@@ -312,6 +335,7 @@ let view: PaneView = {
   focusTab: unmounted,
   focusedTab: () => null,
   recorderHost: unmounted,
+  drawFileOnly: unmounted,
 };
 let surfaceRegistry: DocumentSurfaceRegistry;
 let theme: Theme | null = null;
@@ -980,6 +1004,18 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     },
   });
   view.attach();
+  // I componenti accesi (K2): la mappa del vault, e il registro, i riquadri
+  // e i comandi dei disegni che la seguono.
+  heldEditors.clear();
+  mountComponents(lifetime);
+  lifetime.add(onComponents((next) => {
+    void drawQueue.enqueue(async () => {
+      await componentsChanged(next);
+      await render();
+    }).catch((error: unknown) => {
+      notify(t("panes.redraw_failed", { reason: errorText(error) }), "guasto");
+    });
+  }));
   sessionEventsStop?.();
   paintedSessions.clear();
   const stopSessionEvents = documentSessions.subscribe(handleSessionEvent);
@@ -1391,14 +1427,31 @@ function registerCommands(): void {
     layer: "document",
     run: () => void resolveDiscardingMine(activeDoc()),
   });
-  // La sessione live di un disegno (ADR 0205): i comandi pesano poco, la
-  // sessione arriva quando si avvia.
-  registerLiveCommands({
-    focusedDoc: () => activeDoc(),
-    focusedDrawing: () => {
-      const pane = panes.get(layout.focus);
-      return pane?.surface?.profile === VECTOR_PROFILE && pane.shown?.k === "doc" ? pane.shown.doc : null;
-    },
+  liveCommands = null;
+}
+
+/// La sessione live di un disegno (ADR 0205): i comandi pesano poco, la
+/// sessione arriva quando si avvia. Sono dei disegni (`editors/spatial`), e
+/// arrivano con un `import()` la prima volta che i disegni sono accesi.
+let liveCommands: Promise<void> | null = null;
+
+const LIVE_TARGETS: LiveCommandTargets = {
+  focusedDoc: () => activeDoc(),
+  focusedDrawing: () => {
+    const pane = panes.get(layout.focus);
+    return pane?.surface?.profile === VECTOR_PROFILE && pane.shown?.k === "doc" ? pane.shown.doc : null;
+  },
+};
+
+function registerLiveCommandsOnce(): void {
+  if (liveCommands) return;
+  const mine = import("../editors/spatial/live/commands").then(({ registerLiveCommands }) => {
+    if (liveCommands === mine) registerLiveCommands(LIVE_TARGETS);
+  });
+  liveCommands = mine;
+  void mine.catch((error: unknown) => {
+    if (liveCommands === mine) liveCommands = null;
+    console.error(error);
   });
 }
 
@@ -1725,6 +1778,9 @@ export function resetDocumentsForVault(): Promise<string[]> {
 }
 
 async function render(): Promise<void> {
+  // La mappa dei componenti si legge insieme al resto, non in coda: un file
+  // di un componente la aspetta (`show`), una nota no.
+  if (openVaultRoot() !== undefined) void componentsReady().catch((error: unknown) => console.error(error));
   buildStructure();
   const active = activeDoc();
   let failure: { error: unknown } | null = null;
@@ -2031,6 +2087,21 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     return;
   }
 
+  // Un file di un componente (una lavagna, un PDF, un documento di Word)
+  // aspetta di sapere se il componente è acceso, invece di indovinare. Spento,
+  // il file si mostra «solo come file»: i file non si toccano.
+  const needs = uisForFile(tab.doc);
+  if (needs.length) {
+    const current = await componentsReady();
+    if (generation !== r.loadGeneration || r.shown !== tab) return;
+    const off = current ? needs.find((ui) => !current.uiOn(ui)) : undefined;
+    if (current && off !== undefined) {
+      showFileOnly(r, tab.doc, current, off);
+      return;
+    }
+    applyComponentEditors(current);
+  }
+
   // Un file che nessun formato del vault gestisce e che il registro sa
   // mostrare dai byte (un'immagine, un PDF) non ha una sorgente UTF-8: la
   // superficie dei byte possiede soltanto il suo prestito della risorsa, e la
@@ -2041,10 +2112,19 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     // sulla scheda (uno stato scritto a mano, un file cambiato di natura) si
     // scarta, e il visualizzatore si monta come sempre.
     tab = forgetOverride(r, tab);
-    const surface = surfaceRegistry.mount(
-      { formatId: null, sourceKind: "bytes", documentId: tab.doc },
-      { paneId: r.id, documentId: tab.doc, parent: r.editorEl },
-    );
+    const bytes = { formatId: null, sourceKind: "bytes", documentId: tab.doc } as const;
+    if (!surfaceRegistry.isLoaded(bytes)) {
+      try {
+        await surfaceRegistry.load(bytes);
+      } catch (error) {
+        if (generation !== r.loadGeneration || r.shown !== tab) return;
+        showSurfaceError(r, tab.doc, error);
+        forgetFailedRead(r);
+        return;
+      }
+      if (generation !== r.loadGeneration || r.shown !== tab) return;
+    }
+    const surface = surfaceRegistry.mount(bytes, { paneId: r.id, documentId: tab.doc, parent: r.editorEl });
     r.surface = surface;
     surface.setMode("view");
     markMode(r, "view");
@@ -2067,10 +2147,6 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     return;
   }
   if (generation !== r.loadGeneration || r.shown !== tab) return;
-  // Durante le due attese un altro riquadro può aver cambiato la sessione, e
-  // la sottoscrizione non riporta ciò che è passato prima di lei: il testo da
-  // montare si prende adesso, senza attese fino a `attachSurface`.
-  const text = documentSessions.text(tab.doc) ?? source.text;
 
   const request = { formatId: source.formatId, sourceKind: source.sourceKind, documentId: tab.doc };
   // La vista sorgente si conosce da qui, e resta anche se la superficie poi
@@ -2084,11 +2160,28 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   if (tab.override && !resolvesToSourceView(request, tab.override, r.sourceView)) {
     tab = forgetOverride(r, tab);
   }
+  const chosen = { ...request, ...(tab.override ? { override: tab.override } : {}) };
+  // Il codice di un editor di un componente arriva adesso, la prima volta.
+  if (!surfaceRegistry.isLoaded(chosen)) {
+    try {
+      await surfaceRegistry.load(chosen);
+    } catch (error) {
+      if (generation !== r.loadGeneration || r.shown !== tab) return;
+      showSurfaceError(r, tab.doc, error);
+      forgetFailedRead(r);
+      return;
+    }
+    if (generation !== r.loadGeneration || r.shown !== tab) return;
+  }
+  // Durante le attese un altro riquadro può aver cambiato la sessione, e
+  // la sottoscrizione non riporta ciò che è passato prima di lei: il testo da
+  // montare si prende adesso, senza attese fino a `attachSurface`.
+  const text = documentSessions.text(tab.doc) ?? source.text;
 
   let surface: EditorSurface;
   try {
     surface = surfaceRegistry.mount(
-      { ...request, ...(tab.override ? { override: tab.override } : {}) },
+      chosen,
       {
         paneId: r.id,
         documentId: tab.doc,
@@ -2172,14 +2265,18 @@ function handledByVault(doc: string): boolean {
 /// superficie registrata sa mostrarlo: dai suoi byte (un'immagine, un PDF) o
 /// come testo con un profilo suo (un SVG). L'esploratore chiede qui, invece di
 /// ripetere la classificazione della shell.
+///
+/// Un file di un componente si apre sempre: col componente spento nel
+/// riquadro «solo come file».
 export function canShowFile(id: string): boolean {
-  return surfaceRegistry?.opensWithoutFormat(id) ?? false;
+  return uisForFile(id).length > 0 || (surfaceRegistry?.opensWithoutFormat(id) ?? false);
 }
 
 /// Il file si mostra dai byte e non ha un testo da condividere: una finestra
 /// staccata, che monta soltanto un `TextEngine`, non ha niente da scrivere.
 export function showsFileBytes(id: string): boolean {
-  return surfaceRegistry?.showsBytes(id) ?? false;
+  // Un PDF col lettore spento resta un file di byte.
+  return mediaKindOfId(pdfIdWithoutFragment(id)) === "pdf" || (surfaceRegistry?.showsBytes(id) ?? false);
 }
 
 /// Il profilo di testo con cui il registro mostrerebbe questo documento, o
@@ -2188,6 +2285,191 @@ export function showsFileBytes(id: string): boolean {
 export function textProfileFor(id: string, source: DocumentSurfaceDescriptor): string | null {
   const resolved = surfaceRegistry?.resolve({ formatId: source.formatId, sourceKind: source.sourceKind, documentId: id });
   return resolved?.family === "text" ? resolved.profile : null;
+}
+
+/// La famiglia del riquadro «solo come file». Non viene dal registro: non è
+/// un editor, è il posto di uno che è spento.
+export const FILE_ONLY_FAMILY = "file-only";
+
+const FILE_ONLY_MODES = [
+  { id: "file", label: () => t("file_only.mode"), presentation: "surface", contextMode: "reading", looks: ["tema"] },
+] as const;
+
+/// I pezzi di interfaccia che restano registrati anche col componente spento:
+/// quelli di un editor aperto il cui salvataggio non è riuscito, che resta a
+/// mostrare l'errore della sessione finché le modifiche non sono al sicuro.
+const heldEditors = new Set<string>();
+
+/// Il registro segue la mappa: i pezzi accesi si registrano, gli altri si
+/// tolgono, tranne quelli tenuti.
+function applyComponentEditors(current: Components | null): void {
+  if (!surfaceRegistry) return;
+  const on = (ui: string) => !current || current.uiOn(ui) || heldEditors.has(ui);
+  setComponentEditors(surfaceRegistry, on, current?.uis ?? []);
+  if (on(UI_SPATIAL)) registerLiveCommandsOnce();
+}
+
+/// I pezzi spenti di cui il file ha bisogno per il suo editor.
+function offFor(doc: string, current: Components): string[] {
+  return uisForFile(doc).filter((ui) => !current.uiOn(ui));
+}
+
+/// Il documento che il riquadro mostra in un editor, non nel posto vuoto di
+/// uno; `null` altrimenti.
+function editorDoc(r: Pane): string | null {
+  return r.shown?.k === "doc" && r.surface && r.surface.family !== FILE_ONLY_FAMILY ? r.shown.doc : null;
+}
+
+/// Ciò che è acceso è cambiato. Un riquadro «solo come file» il cui
+/// componente è tornato si rimonta nel suo editor; un editor il cui
+/// componente si è spento prima salva ciò che la sessione ha in sospeso, poi
+/// passa a «solo come file». Se il salvataggio non riesce l'editor resta, con
+/// l'errore della sessione: niente si perde. Vale per ogni strada della
+/// scelta, anche la riga di comando, dove non c'è nessuno a cui chiedere.
+/// Gira nella coda dei disegni, e chi la accoda ridisegna dopo.
+async function componentsChanged(next: Components): Promise<void> {
+  if (next.root !== openVaultRoot()) return;
+  const leaving = [...panes.values()].filter((r) => {
+    const doc = editorDoc(r);
+    return doc !== null && offFor(doc, next).length > 0;
+  });
+  for (const r of leaving) {
+    for (const ui of offFor(editorDoc(r)!, next)) heldEditors.add(ui);
+  }
+  applyComponentEditors(next);
+  for (const r of panes.values()) {
+    if (r.shown?.k !== "doc" || r.surface?.family !== FILE_ONLY_FAMILY) continue;
+    if (offFor(r.shown.doc, next).length === 0 || r.surface.profile !== offFor(r.shown.doc, next)[0]) {
+      detachSurface(r);
+      destroySurface(r);
+      r.shown = null;
+    }
+  }
+  const flushed = new Map<string, Promise<boolean>>();
+  for (const r of leaving) {
+    const doc = editorDoc(r);
+    if (doc === null) continue;
+    const surface = r.surface;
+    let saving = flushed.get(doc);
+    if (!saving) {
+      saving = documentSessions.flush(doc).catch((error: unknown) => {
+        console.error(error);
+        return true;
+      });
+      flushed.set(doc, saving);
+    }
+    const dirty = await saving;
+    if (r.surface !== surface || r.shown?.k !== "doc" || r.shown.doc !== doc) continue;
+    if (dirty) continue;
+    detachSurface(r);
+    destroySurface(r);
+    r.shown = null;
+  }
+  // Tenuti restano soltanto i pezzi degli editor che non hanno salvato.
+  heldEditors.clear();
+  for (const r of panes.values()) {
+    const doc = editorDoc(r);
+    if (doc !== null) for (const ui of offFor(doc, next)) heldEditors.add(ui);
+  }
+  applyComponentEditors(next);
+}
+
+/// Monta nel riquadro il posto «solo come file» di `doc`: nome, dimensione,
+/// «Accendi …» col nome della riga spenta che servirebbe, e «Apri con un'altra
+/// app». Il profilo della pseudo-superficie è il pezzo spento: cambia quale,
+/// e il riquadro si ridisegna.
+function showFileOnly(r: Pane, doc: string, current: Components, ui: string): void {
+  const host = document.createElement("div");
+  host.className = "document-surface document-surface-file-only";
+  host.tabIndex = 0;
+  r.editorEl.replaceChildren(host);
+  const row: ComponentRow | null = current.offRowFor(ui);
+  const vault = openVaultRoot();
+  let active = true;
+  let size: string | null = null;
+  let busy = false;
+  let problem: string | null = null;
+  const draw = (): void => {
+    if (!active) return;
+    view.drawFileOnly(r, host, {
+      doc,
+      name: doc.split("/").pop() ?? doc,
+      size,
+      component: row?.nome || null,
+      busy,
+      problem,
+      switchOn: () => void switchOn(),
+      openOutside: () => void handToSystem(pdfIdWithoutFragment(doc), true),
+    });
+  };
+  const switchOn = async (): Promise<void> => {
+    if (!row || busy) return;
+    busy = true;
+    problem = null;
+    draw();
+    try {
+      const answer = await api.componentsApply({ azione: "accendi", id: row.id }, true, ...vaultArg(vault));
+      if (answer.risposta === "rifiuto") problem = refusalText(answer, row.nome);
+      // Acceso: lo dice la mappa, che si rilegge con gli eventi della scelta,
+      // e il riquadro torna al suo editor da `componentsChanged`.
+      else await refreshComponents();
+    } catch (error) {
+      problem = t("file_only.failed", { name: row.nome, reason: errorText(error) });
+    }
+    busy = false;
+    draw();
+  };
+  const stopLanguage = onLanguage(draw);
+  const surface: EditorSurface = {
+    family: FILE_ONLY_FAMILY,
+    profile: ui,
+    surfaceId: r.id,
+    modes: FILE_ONLY_MODES,
+    setMode(mode) {
+      host.dataset.mode = mode;
+    },
+    focus() {
+      host.focus();
+    },
+    setTheme(next) {
+      host.dataset.theme = next;
+    },
+    destroy() {
+      if (!active) return;
+      active = false;
+      stopLanguage();
+      host.remove();
+    },
+  };
+  r.surface = surface;
+  surface.setMode("file");
+  markMode(r, "file");
+  if (theme) surface.setTheme?.(theme);
+  draw();
+  void fileSize(pdfIdWithoutFragment(doc), vault).then((bytes) => {
+    if (bytes === null) return;
+    size = formatBytes(bytes);
+    draw();
+  });
+}
+
+/// La dimensione del file, dall'apertura della sua risorsa: `null` se l'host
+/// non la dice.
+async function fileSize(id: string, vault: string | undefined): Promise<number | null> {
+  try {
+    const resource = await api.resourceOpen(id, vault ?? null);
+    void Promise.resolve(api.resourceClose(resource.handle)).catch(() => {});
+    return resource.len;
+  } catch {
+    return null;
+  }
+}
+
+/// Perché «Accendi …» non si è fatto, detto a chi legge.
+function refusalText(refusal: ComponentRefusal, name: string): string {
+  return refusal.rifiuto === "sconosciuto"
+    ? t("file_only.refused_unknown", { name })
+    : t("file_only.refused", { name });
 }
 
 async function followRemote(target: NavigateTarget, from: string): Promise<void> {

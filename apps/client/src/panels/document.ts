@@ -50,7 +50,8 @@ import { allCommands, ariaBinding, canCreateDrawing, displayBinding, newDrawing,
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
 import { t, type Key } from "../i18n/strings";
-import type { Lifetime } from "../ui/lifetime";
+import { openLifetime, type Lifetime } from "../ui/lifetime";
+import { textButton } from "../kit/button";
 import { setTooltip } from "../ui/tooltip";
 import { tabIndexForKey } from "../ui/tab-keys";
 import { createFormatBar, registerFormatIcons, type FormatBar } from "./format-bar";
@@ -94,6 +95,7 @@ import {
   type Pane,
   type PaneElements,
   type PaneView,
+  type FileOnly,
   runSlashCommand,
 } from "../state/document-controller";
 
@@ -230,7 +232,70 @@ const view: PaneView = {
   focusTab: (pane, index) => focusPaneTab(frameOf(pane), index),
   focusedTab,
   recorderHost: (pane) => frameOf(pane).toolbarEl,
+  drawFileOnly: (_pane, host, file) => drawFileOnly(host, file),
 };
+
+/// La vita dei pulsanti dell'ultimo disegno di ciascun riquadro «solo come
+/// file»: il disegno dopo la chiude.
+const fileOnlyDrawn = new WeakMap<HTMLElement, Lifetime>();
+
+/// Il riquadro «solo come file» (K2): il file c'è, il suo editor è di un
+/// componente spento. Nome e dimensione, una frase che dice cosa manca, e i
+/// due gesti: accendere il componente qui, o aprire il file con un'altra app.
+/// I file non si toccano.
+function drawFileOnly(host: HTMLElement, file: FileOnly): void {
+  fileOnlyDrawn.get(host)?.close();
+  const drawn = openLifetime();
+  fileOnlyDrawn.set(host, drawn);
+  const focused = host.contains(document.activeElement) ? (document.activeElement as HTMLElement).dataset.action : undefined;
+
+  const title = document.createElement("p");
+  title.className = "file-only-title";
+  title.textContent = t("file_only.title");
+  const name = document.createElement("p");
+  name.className = "file-only-name";
+  name.textContent = file.name;
+  const size = document.createElement("p");
+  size.className = "file-only-size";
+  size.textContent = file.size ?? "";
+  size.hidden = file.size === null;
+  const note = document.createElement("p");
+  note.className = "file-only-note";
+  note.textContent = file.component ? t("file_only.note", { name: file.component }) : t("file_only.note_unnamed");
+
+  const actions = document.createElement("div");
+  actions.className = "file-only-actions";
+  if (file.component) {
+    const on = textButton({
+      label: file.busy ? t("file_only.switching_on", { name: file.component }) : t("file_only.switch_on", { name: file.component }),
+      kind: "primary",
+      lifetime: drawn,
+      onPress: () => file.switchOn(),
+    });
+    on.dataset.action = "switch-on";
+    // Mentre si accende resta al suo posto col fuoco, e non risponde.
+    if (file.busy) on.setAttribute("aria-disabled", "true");
+    actions.append(on);
+  }
+  const outside = textButton({
+    label: t("explorer.open_system"),
+    lifetime: drawn,
+    onPress: () => file.openOutside(),
+  });
+  outside.dataset.action = "open-outside";
+  actions.append(outside);
+
+  const problem = document.createElement("p");
+  problem.className = "file-only-problem";
+  problem.setAttribute("role", "alert");
+  problem.textContent = file.problem ?? "";
+  problem.hidden = file.problem === null;
+
+  host.setAttribute("aria-label", `${t("file_only.title")}: ${file.name}`);
+  host.replaceChildren(title, name, size, note, actions, problem);
+  // Il fuoco resta dov'era: ridisegnare il riquadro non lo butta via.
+  if (focused) (host.querySelector<HTMLElement>(`[data-action="${focused}"]`) ?? host).focus();
+}
 
 /// La linguetta col fuoco della tastiera, se il fuoco è su una linguetta — le
 /// frecce della striscia la raggiungono senza attivarla.

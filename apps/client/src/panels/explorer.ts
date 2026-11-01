@@ -64,6 +64,7 @@ import { showPanel } from "./sidebar";
 import { writeClipboardText } from "../platform/clipboard";
 import { searchFor } from "../state/search-port";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
+import { onComponents } from "../state/components";
 import { canShowFile, copyNoteLinks, focusEditor, openDocument, openDocumentBeside } from "../state/document-controller";
 import { addBookmark, loadBookmarks, type BookmarkTarget } from "../state/bookmarks";
 import { openCurrentInNewWindow } from "../state/document-windows";
@@ -331,6 +332,10 @@ export function mountExplorer(lifetime: Lifetime): void {
   // offre «Nuovo disegno…» solo da quel momento, e lo toglie se il comando se
   // ne va. Un albero con delle note non ha niente da ridisegnare.
   lifetime.add(on("commands", () => {
+    if (fileListEl.querySelector(".tree-empty") !== null) renderFileList();
+  }));
+  // Le porte di un componente (i disegni) seguono ciò che è acceso.
+  lifetime.add(onComponents(() => {
     if (fileListEl.querySelector(".tree-empty") !== null) renderFileList();
   }));
   lifetime.add(on("active-doc", markActive));

@@ -467,13 +467,24 @@ export interface SurfaceFactory {
   mount(profile: string, context: SurfaceMountContext): EditorSurface;
 }
 
+/**
+ * A factory whose code arrives with an `import()`: the editor of a component
+ * that may be switched off. The registry knows its family, profiles and
+ * formats from the registration alone, and asks for the code only when a
+ * document needs it (`load`); `mount` stays synchronous and refuses a factory
+ * that has not arrived.
+ */
+export interface LazySurfaceFactory {
+  load(): Promise<SurfaceFactory>;
+}
+
 export interface SurfaceRegistration {
   readonly owner: string;
   readonly family: SurfaceFamily;
   readonly defaultProfile: string;
   /** Every profile a binding or explicit override may select for this family. */
   readonly profiles?: readonly string[];
-  readonly factory: SurfaceFactory;
+  readonly factory: SurfaceFactory | LazySurfaceFactory;
   readonly formats?: Readonly<Record<string, string>>;
   readonly sources?: Readonly<Partial<Record<SourceKind, string>>>;
   /**
@@ -502,14 +513,22 @@ export interface ResolvedSurface {
   readonly owner: string;
   readonly family: SurfaceFamily;
   readonly profile: string;
-  readonly factory: SurfaceFactory;
 }
 
+/**
+ * One registration. A family may hold several, all of the same owner and
+ * with profiles that do not overlap: the parts of an editor that different
+ * components switch on (the board and the drawings in `canvas`, the PDF
+ * profile of the viewer), each registered and unregistered on its own.
+ */
 interface RegistrationRecord extends SurfaceRegistration {
   readonly profileSet: ReadonlySet<string>;
   readonly formats: Readonly<Record<string, string>>;
   readonly sources: Readonly<Partial<Record<SourceKind, string>>>;
   readonly sourceViews: Readonly<Record<string, SurfaceOverride>>;
+  /** The factory once its code has arrived; the factory itself when it is not lazy. */
+  loaded: SurfaceFactory | null;
+  loading: Promise<SurfaceFactory> | null;
 }
 
 interface Binding {
@@ -540,9 +559,14 @@ function required(label: string, value: string): string {
   return normalized;
 }
 
+function isLazy(factory: SurfaceFactory | LazySurfaceFactory): factory is LazySurfaceFactory {
+  return typeof (factory as Partial<LazySurfaceFactory>).load === "function";
+}
+
 /** Owns family bindings and every instance mounted through those bindings. */
 export class DocumentSurfaceRegistry {
-  readonly #families = new Map<SurfaceFamily, RegistrationRecord>();
+  /** The parts of each family, in registration order: the first one's default profile is the family's. */
+  readonly #families = new Map<SurfaceFamily, RegistrationRecord[]>();
   readonly #formats = new Map<string, Binding>();
   readonly #sources = new Map<SourceKind, Binding>();
   readonly #mounted = new Set<MountedSurface>();
@@ -592,9 +616,15 @@ export class DocumentSurfaceRegistry {
       }
     }
 
-    const occupiedFamily = this.#families.get(family);
-    if (occupiedFamily) {
+    const parts = this.#families.get(family) ?? [];
+    const occupiedFamily = parts[0];
+    if (occupiedFamily && occupiedFamily.owner !== owner) {
       throw new SurfaceRegistrationConflict(`family:${family}`, occupiedFamily.owner, owner);
+    }
+    for (const profile of profiles) {
+      if (parts.some((part) => part.profileSet.has(profile))) {
+        throw new SurfaceRegistrationConflict(`profile:${family}/${profile}`, owner, owner);
+      }
     }
     for (const format of Object.keys(formats)) {
       const occupied = this.#formats.get(format);
@@ -619,8 +649,10 @@ export class DocumentSurfaceRegistry {
       sources,
       selectSourceProfile: registration.selectSourceProfile,
       sourceViews,
+      loaded: isLazy(registration.factory) ? null : registration.factory,
+      loading: null,
     };
-    this.#families.set(family, record);
+    this.#families.set(family, [...parts, record]);
     for (const [format, profile] of Object.entries(formats)) {
       this.#formats.set(format, { registration: record, profile });
     }
@@ -637,22 +669,71 @@ export class DocumentSurfaceRegistry {
   }
 
   resolve(request: SurfaceRequest): ResolvedSurface | null {
+    const binding = this.#binding(request);
+    return binding ? this.#resolved(binding.registration, binding.profile) : null;
+  }
+
+  /**
+   * Brings in the code of the surface `request` resolves to, when it comes
+   * with an `import()`: after it, `mount` of the same request does not wait.
+   * A surface already here, or no surface at all, resolves at once; a failed
+   * import rejects, and the next call tries again.
+   */
+  async load(request: SurfaceRequest): Promise<void> {
+    const binding = this.#binding(request);
+    if (!binding) return;
+    const record = binding.registration;
+    if (record.loaded) return;
+    const factory = record.factory;
+    if (!isLazy(factory)) return;
+    record.loading ??= factory.load().then(
+      (loaded) => {
+        record.loaded = loaded;
+        return loaded;
+      },
+      (error: unknown) => {
+        record.loading = null;
+        throw error;
+      },
+    );
+    await record.loading;
+  }
+
+  /**
+   * Whether `mount` of `request` can run now, without `load` first: its
+   * surface is already here, or there is no surface (and `mount` throws).
+   */
+  isLoaded(request: SurfaceRequest): boolean {
+    const binding = this.#binding(request);
+    return !binding || !!binding.registration.loaded;
+  }
+
+  /** The registration and profile `request` resolves to now. */
+  #binding(request: SurfaceRequest): Binding | null {
     if (request.override) {
-      const overridden = this.#families.get(request.override.family);
-      if (overridden) {
-        const profile = request.override.profile ?? overridden.defaultProfile;
-        if (overridden.profileSet.has(profile)) return this.#resolved(overridden, profile);
+      const parts = this.#families.get(request.override.family);
+      if (parts?.length) {
+        const profile = request.override.profile ?? parts[0]!.defaultProfile;
+        const part = this.#part(request.override.family, profile);
+        if (part) return { registration: part, profile };
       }
     }
     if (request.formatId) {
       const exact = this.#formats.get(request.formatId);
-      if (exact) return this.#resolved(exact.registration, exact.profile);
+      if (exact) return exact;
     }
     const source = this.#sources.get(request.sourceKind);
     const profile = source ? this.#sourceProfile(source, request) : null;
-    if (source && profile !== null) return this.#resolved(source.registration, profile);
-    const error = this.#families.get("error");
-    return error ? this.#resolved(error, error.defaultProfile) : null;
+    if (source && profile !== null) {
+      return { registration: this.#part(source.registration.family, profile)!, profile };
+    }
+    const error = this.#families.get("error")?.[0];
+    return error ? { registration: error, profile: error.defaultProfile } : null;
+  }
+
+  /** The part of `family` that registered `profile`. */
+  #part(family: SurfaceFamily, profile: string): RegistrationRecord | undefined {
+    return this.#families.get(family)?.find((part) => part.profileSet.has(profile));
   }
 
   /**
@@ -663,14 +744,12 @@ export class DocumentSurfaceRegistry {
    * without one, so a tab already showing it can still name the way back.
    */
   sourceView(request: SurfaceRequest): SourceView | null {
-    const natural = this.resolve({ ...request, override: undefined });
-    const registration = natural ? this.#families.get(natural.family) : undefined;
-    const view = natural && registration ? registration.sourceViews[natural.profile] : undefined;
+    const natural = this.#binding({ ...request, override: undefined });
+    const view = natural ? natural.registration.sourceViews[natural.profile] : undefined;
     if (!view) return null;
-    const target = this.#families.get(view.family);
-    const profile = view.profile ?? target?.defaultProfile;
-    if (!target || profile === undefined || !target.profileSet.has(profile)) return null;
-    return { family: target.family, profile };
+    const profile = view.profile ?? this.#families.get(view.family)?.[0]?.defaultProfile;
+    if (profile === undefined || !this.#part(view.family, profile)) return null;
+    return { family: view.family, profile };
   }
 
   /**
@@ -699,27 +778,34 @@ export class DocumentSurfaceRegistry {
     return profile !== null && profile !== text.profile;
   }
 
+  /**
+   * The profile the source binding selects, among every profile its family
+   * registers now: the owner of a binding may choose a profile another part
+   * of its family brought.
+   */
   #sourceProfile(source: Binding, request: SurfaceRequest): string | null {
     const selected = source.registration.selectSourceProfile;
     const profile = selected ? selected(request, source.profile) : source.profile;
-    if (profile !== null && !source.registration.profileSet.has(profile)) {
+    if (profile !== null && !this.#part(source.registration.family, profile)) {
       throw new Error(`surface owner ${source.registration.owner} selected unregistered profile ${profile}`);
     }
     return profile;
   }
 
   mount(request: SurfaceRequest, context: SurfaceMountContext): EditorSurface {
-    const resolved = this.resolve(request);
-    if (!resolved) {
+    const binding = this.#binding(request);
+    if (!binding) {
       throw new Error(
         `no surface for format ${request.formatId ?? "unknown"} and source ${request.sourceKind}`,
       );
     }
-    const registration = this.#families.get(resolved.family);
-    if (!registration || registration.owner !== resolved.owner) {
-      throw new Error(`surface family ${resolved.family} was unregistered before mount`);
+    const resolved = this.#resolved(binding.registration, binding.profile);
+    const registration = binding.registration;
+    const factory = registration.loaded;
+    if (!factory) {
+      throw new Error(`surface ${resolved.owner} for ${resolved.family}/${resolved.profile} is not loaded`);
     }
-    const surface = resolved.factory.mount(resolved.profile, context);
+    const surface = factory.mount(resolved.profile, context);
     if (surface.family !== resolved.family || surface.profile !== resolved.profile) {
       surface.destroy();
       throw new Error(
@@ -739,6 +825,11 @@ export class DocumentSurfaceRegistry {
       surface.destroy();
       throw new Error(`surface ${surface.surfaceId} declares no modes`);
     }
+    // The family may have been unregistered while the factory ran.
+    if (!this.#families.get(registration.family)?.includes(registration)) {
+      surface.destroy();
+      throw new Error(`surface family ${resolved.family} was unregistered before mount`);
+    }
     const mounted: MountedSurface = { registration, surface, active: true };
     this.#mounted.add(mounted);
     return this.#ownedSurface(mounted);
@@ -749,7 +840,6 @@ export class DocumentSurfaceRegistry {
       owner: registration.owner,
       family: registration.family,
       profile,
-      factory: registration.factory,
     };
   }
 
@@ -769,9 +859,9 @@ export class DocumentSurfaceRegistry {
   }
 
   #unregister(registration: RegistrationRecord): void {
-    if (this.#families.get(registration.family) === registration) {
-      this.#families.delete(registration.family);
-    }
+    const parts = this.#families.get(registration.family)?.filter((part) => part !== registration) ?? [];
+    if (parts.length) this.#families.set(registration.family, parts);
+    else this.#families.delete(registration.family);
     for (const format of Object.keys(registration.formats)) {
       if (this.#formats.get(format)?.registration === registration) this.#formats.delete(format);
     }

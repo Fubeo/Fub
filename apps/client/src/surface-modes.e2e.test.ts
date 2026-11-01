@@ -84,6 +84,13 @@ vi.mock("./editors/core/bootstrap", () => ({
     registry.register(drawRegistration());
     return registry;
   },
+  // I componenti accesi registrano i loro editor col bootstrap vero.
+  setComponentEditors: (
+    ...args: Parameters<typeof import("./editors/core/bootstrap").setComponentEditors>
+  ) => {
+    if (!box.bootstrap) throw new Error("il bootstrap vero non è stato caricato");
+    box.bootstrap.setComponentEditors(...args);
+  },
 }));
 
 /// La famiglia finta: due modalità con id suoi, il testo tenuto com'è, e
@@ -198,6 +205,10 @@ async function open(doc: string): Promise<void> {
   const { openDocument } = await import("./panels/document");
   await openDocument(doc);
   await settle();
+  // Il codice di un editor di un componente (la lavagna) arriva con un
+  // `import()` la prima volta: si aspetta che il riquadro abbia la sua
+  // modalità.
+  await waitFor(`${doc} montato`, () => paneMode() !== undefined);
 }
 
 const MODE_COMMANDS = ["shell.mode.reading", "shell.mode.live", "shell.mode.source"];

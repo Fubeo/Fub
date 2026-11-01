@@ -26,6 +26,19 @@ export const LEXICON: readonly LexiconEntry[] = [
   { say: "Riquadro, Elenco di attività, Blocco di codice, Colonne", instead: ["Callout", "In colonne"], why: "Le stesse parole dei comandi e del «/»" },
   { say: "Pagina web", instead: ["Segnalibro web"], why: "«Pagina web» è la parola della lavagna" },
   { say: "Arancione, Blu", instead: ["Arancio", "Azzurro"], why: "Una tavolozza sola: i nove colori dei Blocchi" },
+  // I componenti (K2): le parole della pagina Componenti, del riquadro «solo
+  // come file» e della riga di comando sono queste, dappertutto.
+  { say: "Componente", instead: ["Modulo", "Estensione"], why: "Una parola sola per ciò che si accende e si spegne" },
+  { say: "Accendi", instead: ["Abilita", "Attiva il componente"], why: "Come un interruttore: si capisce senza spiegarlo" },
+  { say: "Spegni", instead: ["Disabilita", "Disattiva il componente"], why: "Il contrario di «Accendi»" },
+  { say: "Serve a", instead: ["Serve per"], why: "Chi richiede un componente lo dice così" },
+  { say: "Non serve più", instead: ["Non più necessario"], why: "Una frase, non un'etichetta" },
+  { say: "Togli", instead: ["Disinstalla"], why: "«Togli» quando i file restano: il componente se ne va, il vault no" },
+  { say: "Tienili", instead: ["Mantienili"], why: "Corto, come «Togli»" },
+  { say: "Profilo", instead: ["Preset"], why: "Una scelta di componenti già pronta, in italiano" },
+  { say: "personalizzato", instead: ["Custom"], why: "Il profilo che non è nessuno dei pronti, in italiano" },
+  { say: "più avanti", instead: ["Prossimamente"], why: "Ciò che c'è ma non si può ancora scegliere" },
+  { say: "solo come file", instead: ["Solo file"], why: "Il file c'è e si apre altrove; qui manca il suo editor" },
 ];
 
 /// Le varianti, tutte: nessuna voce di menu le contiene. «Arancio» è anche

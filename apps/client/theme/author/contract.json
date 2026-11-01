@@ -662,6 +662,13 @@
     "document-surface-error",
     "document-surface-viewer",
     "media-surface",
+    "document-surface-file-only",
+    "file-only-title",
+    "file-only-name",
+    "file-only-size",
+    "file-only-note",
+    "file-only-actions",
+    "file-only-problem",
     "grid-surface",
     "grid-formula-bar",
     "grid-cell-name",
@@ -2130,6 +2137,13 @@
     "document-surface-error": "cornice",
     "document-surface-viewer": "cornice",
     "media-surface": "cornice",
+    "document-surface-file-only": "cornice",
+    "file-only-title": "cornice",
+    "file-only-name": "cornice",
+    "file-only-size": "cornice",
+    "file-only-note": "cornice",
+    "file-only-actions": "cornice",
+    "file-only-problem": "cornice",
     "grid-surface": "cornice",
     "grid-formula-bar": "cornice",
     "grid-cell-name": "cornice",
@@ -4842,6 +4856,23 @@
         "document-surface-error",
         "document-surface-viewer",
         "media-surface"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "surface-file-only",
+      "part": "editors",
+      "hooks": [
+        "document-surface-file-only",
+        "file-only-title",
+        "file-only-name",
+        "file-only-size",
+        "file-only-note",
+        "file-only-actions",
+        "file-only-problem"
       ],
       "states": [
         "rest",
@@ -8262,10 +8293,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1466,
+    "hooks": 1473,
     "state_names": 7,
-    "assigned_states": 710,
-    "components": 213,
+    "assigned_states": 712,
+    "components": 214,
     "preference_tokens": 186
   }
 }

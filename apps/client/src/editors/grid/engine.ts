@@ -21,6 +21,7 @@ import type {
   GridWindowRequest,
 } from "../../host/contract";
 import { GRID_BYTES_PROTOCOL_VERSION } from "../../host/contract";
+import { GRID_OVERSCAN } from "../core/row-window";
 import { errorText, isErrorKind } from "../../host/errors";
 import { operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
 import {
@@ -97,7 +98,7 @@ const DEFAULT_COLUMN_WIDTH = 120;
 const ROW_HEADER_WIDTH = 52;
 const COLUMN_HEADER_HEIGHT = 28;
 const EMPTY_SHEET: GridSheet = { id: "", name: "", rows: [], columns: [] };
-export const GRID_OVERSCAN = 2;
+export { GRID_OVERSCAN, uniformRowRange } from "../core/row-window";
 export const GRID_WINDOW_ROWS = 256;
 export const GRID_WINDOW_COLUMNS = 128;
 export const MAX_GRID_SESSION_WINDOWS = 256;
@@ -526,11 +527,6 @@ function viewportRange(
     start: Math.max(0, Math.min(total - 1, first - GRID_OVERSCAN)),
     end: Math.max(0, Math.min(total - 1, last + GRID_OVERSCAN)),
   };
-}
-/** Shared, read-only fixed-row window for query-backed tables. It reuses the
- * Grid overscan geometry but never opens a mutative workbook session. */
-export function uniformRowRange(total: number, scrollTop: number, viewportHeight: number, rowHeight: number): { start: number; end: number } | null {
-  return viewportRange(total, { offsets: [], sizes: [], total: 0 }, scrollTop, viewportHeight, 0, rowHeight);
 }
 function clamp(value: number, maximum: number): number {
   return Math.max(0, Math.min(maximum, value));

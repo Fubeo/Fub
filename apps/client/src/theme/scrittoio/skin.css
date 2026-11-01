@@ -6953,6 +6953,61 @@ kbd,
   outline-offset: calc(var(--focus-ring-width) * -2);
 }
 
+/* ── Il file di un componente spento ─────────────────────────────────────── */
+
+/* «Solo come file»: il file c'è, il suo editor è spento. Una scheda sobria al
+   centro della carta — il nome in evidenza, la dimensione sotto, una frase che
+   dice cosa manca e i due gesti. Niente allarme: non è un errore. */
+.document-surface-file-only {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  box-sizing: border-box;
+  height: 100%;
+  padding: var(--space-9);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+.document-surface-file-only p {
+  max-width: 44ch;
+  margin: 0;
+}
+.document-surface-file-only:focus-visible {
+  outline-offset: calc(var(--focus-ring-width) * -2);
+}
+.file-only-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.file-only-name {
+  color: var(--text);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+}
+.file-only-size {
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.file-only-note {
+  margin-top: var(--space-3);
+}
+.file-only-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.file-only-problem {
+  color: var(--danger);
+}
+
 /* ── Il foglio di calcolo ────────────────────────────────────────────────── */
 
 /* Una griglia è un dato: carattere dell'interfaccia, cifre in colonna, fili

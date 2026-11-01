@@ -5,26 +5,50 @@ import { api } from "../../host/ipc";
 import { openVaultRoot, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
 import type { GridDialogs, GridRibbon } from "../grid/ribbon/ribbon";
+import type { GridMenuHost } from "../grid/menu";
 import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
 import { onEvent } from "../../state/kernel";
 import { PROOF_NS, type ProofPorts } from "./proof-ports";
 import { currentTheme } from "../../theme/theme";
-import { GridEngine } from "../grid/engine";
-import { gridContextMenu, gridMiniBar, type GridMenuHost } from "../grid/menu";
 import { mountBaseSurface } from "../base/surface";
 import { BASE_OWNER, BASE_PROFILE, BASE_FORMAT } from "../base/data";
 import { createTextEngine } from "../text/engine";
 import { createPlainTextProfile } from "../text/profiles/plain-text";
-import { CANVAS_MOUNT, mountCanvasSurface } from "../canvas/surface";
-import { mountRichSurface, RICH_FAMILY, RICH_FORMATS, RICH_OWNER, RICH_PROFILE } from "../rich/surface";
 import { mountMediaSurface, profileForKind, type MediaSurfaceDeps } from "../media/media-surface";
 import { mediaKindOfId, mimeOfId } from "../media/media-types";
 import { mountSvgSurface, SVG_PROFILE } from "../text/profiles/svg";
-import { makePdfJsLoader, pdfIdWithoutFragment, type PdfJsModule } from "../media/pdf-view";
-import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { makePdfJsLoader, pdfIdWithoutFragment, type PdfEngineLoader, type PdfJsModule } from "../media/pdf-view";
 import type { CanvasAttachmentPort, CanvasMediaPort } from "../canvas/engine";
 import type { DrawingImagePort } from "../canvas/surface";
+import {
+  CANVAS_FAMILY,
+  CANVAS_FORMAT,
+  CANVAS_OWNER,
+  CANVAS_PROFILE,
+  CANVAS_SOURCE_PROFILE,
+  FUBANN_FORMAT,
+  GRID_FAMILY,
+  GRID_FORMAT,
+  GRID_OWNER,
+  GRID_PROFILE,
+  MEDIA_PDF_PROFILE,
+  PDF_PROFILE,
+  RICH_FAMILY,
+  RICH_FORMATS,
+  RICH_OWNER,
+  RICH_PROFILE,
+  SVG_FORMAT,
+  UI_CANVAS,
+  UI_GRID,
+  UI_MEDIA,
+  UI_RICH,
+  UI_SPATIAL,
+  UI_TEXT,
+  VECTOR_PROFILE,
+  VIEWER_OWNER,
+} from "./component-surfaces";
 import type { VaultFontPort } from "../spatial/fonts/vault";
+import type { DrawingSurfaceCallbacks } from "../spatial/lazy";
 import type { GridDialog, SyntaxForm } from "../../host/contract";
 import { adaptedPaper, type Look } from "../../theme/content-look";
 import {
@@ -33,6 +57,8 @@ import {
   type SurfaceCallbacks,
   type SurfaceExport,
   type SurfaceMountContext,
+  type SurfaceFactory,
+  type SurfaceRegistration,
 } from "./registry";
 
 export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
@@ -207,10 +233,27 @@ function staticSurface(
 /// Le parole della banda per il modo della cella di una cartella.
 const GRID_MODE_KEYS = { ready: "grid.mode.ready", insert: "grid.mode.insert", edit: "grid.mode.edit" } as const satisfies Record<string, Key>;
 
-const loadPdf = makePdfJsLoader(
-  () => import("pdfjs-dist/build/pdf.min.mjs") as unknown as Promise<PdfJsModule>,
-  pdfWorkerUrl,
-);
+/// pdf.js e il suo worker arrivano con un `import()` quando un PDF si apre
+/// davvero: il primo PDF, o la stampa di una cartella. L'indirizzo del worker è
+/// un modulo anche lui, perché anche soltanto nominarlo all'avvio porterebbe
+/// pdf.js nel grafo dei chunk iniziali (piano K2, D-1).
+let pdfEngine: Promise<PdfEngineLoader> | null = null;
+
+function pdfEngineLoader(): Promise<PdfEngineLoader> {
+  pdfEngine ??= import("pdfjs-dist/build/pdf.worker.min.mjs?url").then(
+    ({ default: workerUrl }) => makePdfJsLoader(
+      () => import("pdfjs-dist/build/pdf.min.mjs") as unknown as Promise<PdfJsModule>,
+      workerUrl,
+    ),
+    (error: unknown) => {
+      pdfEngine = null;
+      throw error;
+    },
+  );
+  return pdfEngine;
+}
+
+const loadPdf: PdfEngineLoader = async (bytes) => (await pdfEngineLoader())(bytes);
 
 /**
  * Registers the shell's built-in surface families. Every owner goes through
@@ -323,186 +366,15 @@ export function createDocumentSurfaceRegistry(
       },
     },
   });
+  const parts = new Map<string, () => void>();
   registry.register({
-    owner: "fub.shell.grid",
-    family: "grid",
-    defaultProfile: "workbook",
-    // Una cartella di Excel si apre sui suoi byte con il protocollo a byte
-    // (`editors/grid/workbook.ts`).
-    profiles: ["workbook"],
-    formats: { xlsx: "workbook" },
-    factory: {
-      mount(profile, context) {
-        if (profile !== "workbook") throw new Error(`grid surface profile ${profile} is not registered`);
-        // La barra multifunzione e le finestre arrivano con un `import()`: chi
-        // non apre una cartella di Excel non le scarica. La barra si aggiorna
-        // con i richiami del motore, al più una volta per fotogramma; una
-        // finestra chiesta prima che arrivino aspetta e si apre con loro.
-        let ribbon: GridRibbon | null = null;
-        let dialogs: GridDialogs | null = null;
-        let waiting: GridDialog | null = null;
-        let destroyed = false;
-        // Il modo della cella, nella banda di stato: «Pronto», «Inserisci» o
-        // «Modifica», come nei fogli di calcolo.
-        const statusListeners = new Set<() => void>();
-        const engine = new GridEngine(context.parent, {
-          surfaceId: context.paneId,
-          formatId: context.formatId,
-          revision: context.revision,
-          documentId: context.documentId,
-          base: () => options.documentBase?.(context.documentId) ?? context.revision ?? null,
-          onChange: (change) => options.onChange(context.paneId, change),
-          onSelectionChange: () => {
-            options.onSelectionChange(context.paneId);
-            ribbon?.schedule();
-          },
-          onCommands: () => ribbon?.schedule(),
-          onView: () => ribbon?.schedule(),
-          onEditMode: () => {
-            for (const listener of statusListeners) listener();
-          },
-          onDialog: (dialog) => {
-            if (dialogs) dialogs.open(dialog);
-            else waiting = dialog;
-          },
-          grid: options.gridHost,
-          theme: currentTheme(),
-          pdf: options.media?.pdfLoader ?? loadPdf,
-          exportPdf: options.exportDocument && {
-            available: () => options.exportDocument!.available(),
-            run: () => options.exportDocument!.run(context.documentId, GRID_EXPORTS[0]!),
-          },
-        });
-        // L'aspetto lo decide la shell con la classe `look-*` del contenitore:
-        // nell'adattato le celle portano i colori del file sulla carta del tema.
-        const looks = new MutationObserver(() => engine.setPaper(adaptedPaper(context.parent)));
-        looks.observe(context.parent, { attributes: true, attributeFilter: ["class"] });
-        engine.setPaper(adaptedPaper(context.parent));
-        void import("../grid/ribbon/ribbon").then(
-          ({ mountRibbon, mountGridDialogs }) => {
-            if (destroyed) return;
-            ribbon = mountRibbon(engine);
-            dialogs = mountGridDialogs(engine);
-            if (waiting) dialogs.open(waiting);
-            waiting = null;
-          },
-          () => {},
-        );
-        const menuHost: GridMenuHost = {
-          engine,
-          ribbon: () => ribbon,
-          notify: options.slash ? (message) => options.slash!.notify(message) : undefined,
-        };
-        return {
-          family: "grid",
-          profile,
-          surfaceId: context.paneId,
-          modes: GRID_MODES,
-          exports: GRID_EXPORTS,
-          setMode(mode) {
-            requireMode(GRID_MODES, mode);
-            context.parent.dataset.surfaceMode = mode;
-          },
-          buffer: {
-            setDoc: (text) => engine.setDoc(text),
-            syncDoc: (update) => engine.syncDoc(update),
-            getDoc: () => engine.getDoc(),
-          },
-          focus: () => engine.focus(),
-          selectedText: () => engine.selectedText(),
-          setReadOnly: (readOnly) => engine.setReadOnly(readOnly),
-          setTheme: (theme) => {
-            engine.setTheme(theme);
-            engine.setPaper(adaptedPaper(context.parent));
-          },
-          contextMenu: (at) => gridContextMenu(menuHost, at),
-          miniBar: () => gridMiniBar(menuHost),
-          status: {
-            counts: false,
-            items: () => [{
-              id: "grid-mode",
-              text: t(GRID_MODE_KEYS[engine.editMode()]),
-              hint: t("grid.mode.hint"),
-            }],
-            subscribe(listener) {
-              statusListeners.add(listener);
-              return () => statusListeners.delete(listener);
-            },
-          },
-          destroy: () => {
-            destroyed = true;
-            statusListeners.clear();
-            looks.disconnect();
-            ribbon?.destroy();
-            ribbon = null;
-            dialogs?.destroy();
-            dialogs = null;
-            waiting = null;
-            engine.destroy();
-          },
-        };
-      },
-    },
-  });
-  registry.register({
-    owner: CANVAS_MOUNT.owner,
-    family: CANVAS_MOUNT.family,
-    defaultProfile: CANVAS_MOUNT.defaultProfile,
-    profiles: CANVAS_MOUNT.profiles,
-    formats: CANVAS_MOUNT.formats,
-    sourceViews: CANVAS_MOUNT.sourceViews,
-    factory: {
-      mount(profile, context) {
-        return mountCanvasSurface(profile, context, {
-          onChange: options.onChange,
-          onSelectionChange: options.onSelectionChange,
-          onOpenWikilink: options.onOpenWikilink,
-          onOpenPath: options.onOpenPath,
-          onCreateNote: options.onCreateCanvasNote,
-          onPickFile: options.onPickCanvasFile,
-          onPickDrawingLink: options.onPickDrawingLink,
-          drawingImages: options.drawingImages,
-          drawingFonts: options.drawingFonts,
-          shellCommand: options.runShellCommand,
-          renderMarkdownForCard: options.renderCanvasMarkdown
-            ? (nodeId, text, host, forms) => options.renderCanvasMarkdown!(nodeId, text, host, context.documentId, forms)
-            : undefined,
-          media: options.canvasMedia,
-          attachments: options.canvasAttachments,
-          // Le annotazioni leggono il PDF come il visore: stessi byte, stesso
-          // pdf.js.
-          pdf: options.media ? { transport: options.media.transport, loader: options.media.pdfLoader ?? loadPdf } : undefined,
-        });
-      },
-    },
-  });
-  registry.register({
-    owner: RICH_OWNER,
-    family: RICH_FAMILY,
-    defaultProfile: RICH_PROFILE,
-    formats: RICH_FORMATS,
-    factory: {
-      mount(profile, context) {
-        return mountRichSurface(profile, context, {
-          onChange: options.onChange,
-          onSelectionChange: options.onSelectionChange,
-          images: options.drawingImages,
-          shellCommand: options.runShellCommand ? (id) => () => options.runShellCommand!(id) : undefined,
-          requestMode: options.requestMode ? (mode) => options.requestMode!(context.paneId, mode) : undefined,
-          requestLook: options.requestLook ? (look) => options.requestLook!(context.paneId, look) : undefined,
-          proof: {
-            ports: proofPorts(openVaultRoot()),
-            notify: options.slash ? (message) => options.slash!.notify(message) : undefined,
-          },
-        });
-      },
-    },
-  });
-  registry.register({
-    owner: "fub.shell.viewer",
+    owner: VIEWER_OWNER,
     family: "viewer",
     defaultProfile: "bytes-read-only",
-    profiles: ["media-image", "media-audio", "media-video", "media-pdf"],
+    // Il profilo PDF è di `fub.pdf` (`COMPONENT_EDITORS`): un PDF col
+    // componente spento non è di questa famiglia, e lo mostra il riquadro
+    // «solo come file».
+    profiles: ["media-image", "media-audio", "media-video"],
     sources: { bytes: "bytes-read-only" },
     // L'unica classificazione di un file senza formato: la tabella MIME della
     // shell sceglie la vista, e ciò che nessuna vista sa mostrare non è di
@@ -512,13 +384,12 @@ export function createDocumentSurfaceRegistry(
       if (!request.documentId) return fallback;
       if (mimeOfId(request.documentId) === "image/svg+xml") return null;
       const kind = mediaKindOfId(pdfIdWithoutFragment(request.documentId));
+      if (kind === "pdf" && !parts.has(MEDIA_PDF_PART)) return null;
       return kind === "other" ? null : profileForKind(kind);
     },
     factory: {
       mount(profile, context) {
-        return options.media
-          ? mountMediaSurface(profile, context, { ...options.media, pdfLoader: options.media.pdfLoader ?? loadPdf })
-          : staticSurface("viewer", profile, context, "viewer.unavailable");
+        return mountViewer(options, profile, context);
       },
     },
   });
@@ -532,5 +403,347 @@ export function createDocumentSurfaceRegistry(
       },
     },
   });
+  components.set(registry, { options, parts });
+  setComponentEditors(registry, () => true);
   return registry;
+}
+
+/// Il visore di immagini, audio, video e PDF: senza le porte dei media dice
+/// soltanto che non può mostrare il file.
+function mountViewer(options: SurfaceBootstrapOptions, profile: string, context: SurfaceMountContext): EditorSurface {
+  return options.media
+    ? mountMediaSurface(profile, context, { ...options.media, pdfLoader: options.media.pdfLoader ?? loadPdf })
+    : staticSurface("viewer", profile, context, "viewer.unavailable");
+}
+
+type GridModule = typeof import("../grid/engine");
+type GridMenuModule = typeof import("../grid/menu");
+
+function mountGrid(
+  options: SurfaceBootstrapOptions,
+  grid: GridModule,
+  menu: GridMenuModule,
+  profile: string,
+  context: SurfaceMountContext,
+): EditorSurface {
+    if (profile !== GRID_PROFILE) throw new Error(`grid surface profile ${profile} is not registered`);
+    // La barra multifunzione e le finestre arrivano con un `import()`: chi
+    // non apre una cartella di Excel non le scarica. La barra si aggiorna
+    // con i richiami del motore, al più una volta per fotogramma; una
+    // finestra chiesta prima che arrivino aspetta e si apre con loro.
+    let ribbon: GridRibbon | null = null;
+    let dialogs: GridDialogs | null = null;
+    let waiting: GridDialog | null = null;
+    let destroyed = false;
+    // Il modo della cella, nella banda di stato: «Pronto», «Inserisci» o
+    // «Modifica», come nei fogli di calcolo.
+    const statusListeners = new Set<() => void>();
+    const engine = new grid.GridEngine(context.parent, {
+      surfaceId: context.paneId,
+      formatId: context.formatId,
+      revision: context.revision,
+      documentId: context.documentId,
+      base: () => options.documentBase?.(context.documentId) ?? context.revision ?? null,
+      onChange: (change) => options.onChange(context.paneId, change),
+      onSelectionChange: () => {
+        options.onSelectionChange(context.paneId);
+        ribbon?.schedule();
+      },
+      onCommands: () => ribbon?.schedule(),
+      onView: () => ribbon?.schedule(),
+      onEditMode: () => {
+        for (const listener of statusListeners) listener();
+      },
+      onDialog: (dialog) => {
+        if (dialogs) dialogs.open(dialog);
+        else waiting = dialog;
+      },
+      grid: options.gridHost,
+      theme: currentTheme(),
+      pdf: options.media?.pdfLoader ?? loadPdf,
+      exportPdf: options.exportDocument && {
+        available: () => options.exportDocument!.available(),
+        run: () => options.exportDocument!.run(context.documentId, GRID_EXPORTS[0]!),
+      },
+    });
+    // L'aspetto lo decide la shell con la classe `look-*` del contenitore:
+    // nell'adattato le celle portano i colori del file sulla carta del tema.
+    const looks = new MutationObserver(() => engine.setPaper(adaptedPaper(context.parent)));
+    looks.observe(context.parent, { attributes: true, attributeFilter: ["class"] });
+    engine.setPaper(adaptedPaper(context.parent));
+    void import("../grid/ribbon/ribbon").then(
+      ({ mountRibbon, mountGridDialogs }) => {
+        if (destroyed) return;
+        ribbon = mountRibbon(engine);
+        dialogs = mountGridDialogs(engine);
+        if (waiting) dialogs.open(waiting);
+        waiting = null;
+      },
+      () => {},
+    );
+    const menuHost: GridMenuHost = {
+      engine,
+      ribbon: () => ribbon,
+      notify: options.slash ? (message) => options.slash!.notify(message) : undefined,
+    };
+    return {
+      family: GRID_FAMILY,
+      profile,
+      surfaceId: context.paneId,
+      modes: GRID_MODES,
+      exports: GRID_EXPORTS,
+      setMode(mode) {
+        requireMode(GRID_MODES, mode);
+        context.parent.dataset.surfaceMode = mode;
+      },
+      buffer: {
+        setDoc: (text) => engine.setDoc(text),
+        syncDoc: (update) => engine.syncDoc(update),
+        getDoc: () => engine.getDoc(),
+      },
+      focus: () => engine.focus(),
+      selectedText: () => engine.selectedText(),
+      setReadOnly: (readOnly) => engine.setReadOnly(readOnly),
+      setTheme: (theme) => {
+        engine.setTheme(theme);
+        engine.setPaper(adaptedPaper(context.parent));
+      },
+      contextMenu: (at) => menu.gridContextMenu(menuHost, at),
+      miniBar: () => menu.gridMiniBar(menuHost),
+      status: {
+        counts: false,
+        items: () => [{
+          id: "grid-mode",
+          text: t(GRID_MODE_KEYS[engine.editMode()]),
+          hint: t("grid.mode.hint"),
+        }],
+        subscribe(listener) {
+          statusListeners.add(listener);
+          return () => statusListeners.delete(listener);
+        },
+      },
+      destroy: () => {
+        destroyed = true;
+        statusListeners.clear();
+        looks.disconnect();
+        ribbon?.destroy();
+        ribbon = null;
+        dialogs?.destroy();
+        dialogs = null;
+        waiting = null;
+        engine.destroy();
+      },
+    };
+}
+
+/// Un pezzo di un editor legato a un componente: la sua registrazione, che
+/// porta formati, famiglia e profili senza il codice, che arriva col suo
+/// `import()` (`LazySurfaceFactory`) soltanto quando un file lo chiede.
+interface EditorPart {
+  /// Il nome del pezzo, unico fra tutti.
+  readonly id: string;
+  /// Gli altri pezzi di interfaccia che devono essere accesi anche loro.
+  readonly alsoNeeds?: readonly string[];
+  registration(options: SurfaceBootstrapOptions): SurfaceRegistration;
+}
+
+const MEDIA_PDF_PART = "media.pdf";
+
+/// I collegamenti, le immagini e i caratteri di un disegno o delle
+/// annotazioni di un PDF, come per la lavagna.
+function drawingCallbacks(options: SurfaceBootstrapOptions): DrawingSurfaceCallbacks {
+  return {
+    onChange: options.onChange,
+    onSelectionChange: options.onSelectionChange,
+    onOpenPath: options.onOpenPath,
+    onPickDrawingLink: options.onPickDrawingLink,
+    drawingImages: options.drawingImages,
+    drawingFonts: options.drawingFonts,
+    shellCommand: options.runShellCommand,
+    // Le annotazioni leggono il PDF come il visore: stessi byte, stesso
+    // pdf.js.
+    pdf: options.media ? { transport: options.media.transport, loader: options.media.pdfLoader ?? loadPdf } : undefined,
+  };
+}
+
+/// La tabella sola che lega il campo `ui` di una riga di `components_map` al
+/// codice del suo editor e alla sua registrazione. `editors/text` è del nucleo
+/// e non c'è: le sue superfici si registrano sempre.
+export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> = {
+  [UI_GRID]: [{
+    id: "grid",
+    registration: (options) => ({
+      owner: GRID_OWNER,
+      family: GRID_FAMILY,
+      defaultProfile: GRID_PROFILE,
+      // Una cartella di Excel si apre sui suoi byte con il protocollo a byte
+      // (`editors/grid/workbook.ts`).
+      profiles: [GRID_PROFILE],
+      formats: { [GRID_FORMAT]: GRID_PROFILE },
+      factory: {
+        load: async () => {
+          const [grid, menu] = await Promise.all([import("../grid/engine"), import("../grid/menu")]);
+          return { mount: (profile, context) => mountGrid(options, grid, menu, profile, context) };
+        },
+      },
+    }),
+  }],
+  [UI_RICH]: [{
+    id: "rich",
+    registration: (options) => ({
+      owner: RICH_OWNER,
+      family: RICH_FAMILY,
+      defaultProfile: RICH_PROFILE,
+      formats: RICH_FORMATS,
+      factory: {
+        load: async () => {
+          const { mountRichSurface } = await import("../rich/surface");
+          return {
+            mount: (profile, context) => mountRichSurface(profile, context, {
+              onChange: options.onChange,
+              onSelectionChange: options.onSelectionChange,
+              images: options.drawingImages,
+              shellCommand: options.runShellCommand ? (id) => () => options.runShellCommand!(id) : undefined,
+              requestMode: options.requestMode ? (mode) => options.requestMode!(context.paneId, mode) : undefined,
+              requestLook: options.requestLook ? (look) => options.requestLook!(context.paneId, look) : undefined,
+              proof: {
+                ports: proofPorts(openVaultRoot()),
+                notify: options.slash ? (message) => options.slash!.notify(message) : undefined,
+              },
+            }),
+          };
+        },
+      },
+    }),
+  }],
+  // La lavagna (`fub.lavagna`): la tela e il suo sorgente.
+  [UI_CANVAS]: [{
+    id: "canvas.board",
+    registration: (options) => ({
+      owner: CANVAS_OWNER,
+      family: CANVAS_FAMILY,
+      defaultProfile: CANVAS_PROFILE,
+      profiles: [CANVAS_PROFILE, CANVAS_SOURCE_PROFILE],
+      formats: { [CANVAS_FORMAT]: CANVAS_PROFILE },
+      factory: {
+        load: async () => {
+          const { mountCanvasSurface } = await import("../canvas/surface");
+          return {
+            mount: (profile, context) => mountCanvasSurface(profile, context, {
+              onChange: options.onChange,
+              onSelectionChange: options.onSelectionChange,
+              onOpenWikilink: options.onOpenWikilink,
+              onOpenPath: options.onOpenPath,
+              onCreateNote: options.onCreateCanvasNote,
+              onPickFile: options.onPickCanvasFile,
+              onPickDrawingLink: options.onPickDrawingLink,
+              drawingImages: options.drawingImages,
+              drawingFonts: options.drawingFonts,
+              shellCommand: options.runShellCommand,
+              renderMarkdownForCard: options.renderCanvasMarkdown
+                ? (nodeId, text, host, forms) => options.renderCanvasMarkdown!(nodeId, text, host, context.documentId, forms)
+                : undefined,
+              media: options.canvasMedia,
+              attachments: options.canvasAttachments,
+            }),
+          };
+        },
+      },
+    }),
+  }],
+  // I disegni (`fub.draw`), nella stessa famiglia della lavagna ma senza di
+  // lei; le annotazioni di un PDF vogliono anche il lettore PDF.
+  [UI_SPATIAL]: [{
+    id: "spatial.vector",
+    registration: (options) => ({
+      owner: CANVAS_OWNER,
+      family: CANVAS_FAMILY,
+      defaultProfile: VECTOR_PROFILE,
+      formats: { [SVG_FORMAT]: VECTOR_PROFILE },
+      sourceViews: { [VECTOR_PROFILE]: { family: "text", profile: SVG_PROFILE } },
+      factory: { load: () => drawingFactory(options) },
+    }),
+  }, {
+    id: "spatial.pdf",
+    alsoNeeds: [UI_MEDIA],
+    registration: (options) => ({
+      owner: CANVAS_OWNER,
+      family: CANVAS_FAMILY,
+      defaultProfile: PDF_PROFILE,
+      formats: { [FUBANN_FORMAT]: PDF_PROFILE },
+      sourceViews: { [PDF_PROFILE]: { family: "text", profile: SVG_PROFILE } },
+      factory: { load: () => drawingFactory(options) },
+    }),
+  }],
+  // Il lettore PDF (`fub.pdf`): soltanto il profilo PDF del visore, con
+  // pdf.js e il suo worker. Immagini, audio e video sono del nucleo.
+  [UI_MEDIA]: [{
+    id: MEDIA_PDF_PART,
+    registration: (options) => ({
+      owner: VIEWER_OWNER,
+      family: "viewer",
+      defaultProfile: MEDIA_PDF_PROFILE,
+      factory: {
+        load: async () => {
+          await pdfEngineLoader();
+          return { mount: (profile, context) => mountViewer(options, profile, context) };
+        },
+      },
+    }),
+  }],
+};
+
+async function drawingFactory(options: SurfaceBootstrapOptions): Promise<SurfaceFactory> {
+  const { mountDrawingSurface } = await import("../spatial/lazy");
+  return {
+    mount(profile: string, context: SurfaceMountContext): EditorSurface {
+      context.parent.replaceChildren();
+      return mountDrawingSurface(profile, context, drawingCallbacks(options));
+    },
+  };
+}
+
+interface ComponentEditorState {
+  readonly options: SurfaceBootstrapOptions;
+  /// I pezzi registrati adesso, col disposer della loro registrazione.
+  readonly parts: Map<string, () => void>;
+}
+
+const components = new WeakMap<DocumentSurfaceRegistry, ComponentEditorState>();
+const unknownLogged = new Set<string>();
+
+/// `ui` ha il suo caricatore: è del nucleo o sta in `COMPONENT_EDITORS`.
+export function hasComponentEditor(ui: string): boolean {
+  return ui === UI_TEXT || Object.prototype.hasOwnProperty.call(COMPONENT_EDITORS, ui);
+}
+
+/// Registra i pezzi degli editor i cui `ui` sono accesi e toglie gli altri,
+/// insieme a ciò che avevano montato: chi spegne un componente col suo file
+/// aperto porta prima il riquadro altrove (`document-controller.ts`). Un `ui`
+/// che `named` nomina e che la tabella non conosce si ignora, e lo si dice nei
+/// log di sviluppo.
+export function setComponentEditors(
+  registry: DocumentSurfaceRegistry,
+  uiOn: (ui: string) => boolean,
+  named: Iterable<string> = [],
+): void {
+  const state = components.get(registry);
+  if (!state) throw new Error("the registry was not created by createDocumentSurfaceRegistry");
+  for (const ui of named) {
+    if (hasComponentEditor(ui) || unknownLogged.has(ui)) continue;
+    unknownLogged.add(ui);
+    if (import.meta.env.DEV) console.warn(`Fub: nessun editor per il pezzo di interfaccia «${ui}»: si ignora.`);
+  }
+  for (const [ui, editorParts] of Object.entries(COMPONENT_EDITORS)) {
+    for (const part of editorParts) {
+      const wanted = uiOn(ui) && (part.alsoNeeds ?? []).every(uiOn);
+      const unregister = state.parts.get(part.id);
+      if (wanted && !unregister) {
+        state.parts.set(part.id, registry.register(part.registration(state.options)));
+      } else if (!wanted && unregister) {
+        state.parts.delete(part.id);
+        unregister();
+      }
+    }
+  }
 }
