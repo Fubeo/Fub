@@ -234,7 +234,7 @@ gli stessi bundle di prima; `crates/fub-cli/tests/componenti.rs` e
 profili in `fub-features` (ogni id esiste o è «più avanti»; «Studio» accende
 penna e motori).
 Prova: scripts/check.sh --rapido
-Stato: [ ]
+Stato: [x] fatto
 
 ## T2 · I due comandi IPC
 
