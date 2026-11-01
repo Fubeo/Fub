@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "targets: gli obiettivi di N0, da tarare dopo la prima misura su ogni WebView. ci: la soglia di peggioramento del runner senza scheda grafica (job webview), una volta e mezza la misura peggiore vista sul runner, che non dice nulla di una macchina con la GPU. WebKitGTK sotto Xvfb, rendering software: S1 p95 220 ms (run 40988538177), S2 p95 517 ms e S3 p95 238 ms (run 40999650702); S3 max 1062 ms (run 41073706787: fra 229 e 1062 ms in nove giri, il massimo di un solo fotogramma è il numero più rumoroso); S7 p95 228 ms e max 770 ms (stesso giro; fra 543 e 770 ms in cinque giri); vedi docs/misure/2026-10-30-linux-webkitgtk-runner.md. I1: prima delle prese brevi una tessera durante l'indicizzazione aveva p95 1477 ms (T1, run 41193655323) e la stessa tessera a indice pronto 20 ms; la soglia della CI è cinque volte quella. R1: la tolleranza di K0. Obiettivo (il cancello di K3): residuo dopo «chiudi tutto» entro 50 MiB e pendenza dei dieci giri entro 1 MiB per giro. Runner: una volta e mezza il peggiore visto, residuo 318,6 MiB (run 41163700163) e pendenza 11,88 MiB per giro (run 41197858474).",
+  "note": "targets: gli obiettivi di N0, da tarare dopo la prima misura su ogni WebView. ci: la soglia di peggioramento del runner senza scheda grafica (job webview), una volta e mezza la misura peggiore vista sul runner, che non dice nulla di una macchina con la GPU. WebKitGTK sotto Xvfb, rendering software: S1 p95 220 ms (run 40988538177), S2 p95 517 ms e S3 p95 238 ms (run 40999650702); S3 max 1062 ms (run 41073706787: fra 229 e 1062 ms in nove giri, il massimo di un solo fotogramma è il numero più rumoroso); S7 p95 228 ms e max 770 ms (stesso giro; fra 543 e 770 ms in cinque giri); vedi docs/misure/2026-10-30-linux-webkitgtk-runner.md. I1: prima delle prese brevi una tessera durante l'indicizzazione aveva p95 1477 ms (T1, run 41193655323) e la stessa tessera a indice pronto 20 ms; la soglia della CI è cinque volte quella. R1: la tolleranza di K0. Obiettivo (il cancello di K3): residuo dopo «chiudi tutto» entro 50 MiB e pendenza dei dieci giri entro 1 MiB per giro. Runner: una volta e mezza il peggiore visto, residuo 318,6 MiB (run 41163700163) e pendenza 11,88 MiB per giro (run 41197858474). C1: con «Solo note» nessun chunk di un componente spegnibile (l'elenco lo scrive il build in dist/switchable-chunks.json) arriva nella WebView, all'avvio o aprendo una nota, sul runner come altrove; l'avvio a freddo e il numero dei chunk di C1 non hanno ancora una soglia, finché non c'è una misura del runner.",
   "targets": {
     "S1.keyToPaint.p95": 16.7,
     "S2.noteSwitch.p95": 100,
@@ -12,7 +12,8 @@
     "I1.nota.p95": 50,
     "I1.tessera.p95": 50,
     "R1.residuo.MiB": 50,
-    "R1.giri.pendenza.MiB": 1
+    "R1.giri.pendenza.MiB": 1,
+    "C1.solo-note.spegnibili": 0
   },
   "ci": {
     "S1.keyToPaint.p95": 330,
@@ -24,6 +25,7 @@
     "I1.nota.p95": 100,
     "I1.tessera.p95": 100,
     "R1.residuo.MiB": 480,
-    "R1.giri.pendenza.MiB": 20
+    "R1.giri.pendenza.MiB": 20,
+    "C1.solo-note.spegnibili": 0
   }
 }

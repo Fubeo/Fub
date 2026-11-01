@@ -191,8 +191,8 @@ async function closeAll(session) {
 /// resta all'ultimo, «Tutto», come chi non ha scelto niente.
 const C1_PROFILES = [["solo-note", "Solo note"], ["tutto", "Tutto"]];
 
-/// I file JavaScript che la pagina ha scaricato fin qui, col nome del chunk
-/// senza l'impronta (`editors-canvas-Bx3k.js` → `editors-canvas`), in ordine.
+/// I file JavaScript che la pagina ha scaricato fin qui, con l'impronta
+/// (`editors-canvas-Bx3kQ9aZ.js`), in ordine.
 const CHUNKS_SCRIPT = `
   // La WebView non mette sempre fra le risorse ciò che arriva dal protocollo
   // dell'app: contano anche gli script della pagina e i modulepreload, che
@@ -204,10 +204,33 @@ const CHUNKS_SCRIPT = `
   ];
   const names = urls
     .map((url) => url.split("?")[0].split("/").pop() ?? "")
-    .filter((name) => name.endsWith(".js"))
-    .map((name) => name.replace(/\.js$/, "").replace(/-[A-Za-z0-9_-]{8}$/, ""));
+    .filter((name) => name.endsWith(".js"));
   return [...new Set(names)].sort();
 `;
+
+/// Il nome di un chunk senza l'impronta, per il referto
+/// (`editors-canvas-Bx3kQ9aZ.js` → `editors-canvas`).
+const chunkName = (file) => file.replace(/\.js$/, "").replace(/-[A-Za-z0-9_-]{8}$/, "");
+
+/// I chunk del build che contengono un pezzo di un componente spegnibile
+/// (il PDF, la lavagna, i disegni, i documenti, i fogli): li scrive il plugin
+/// di `vite.config.ts` accanto a ciò che descrive. Con «Solo note» nessuno
+/// deve arrivare nella WebView, né all'avvio né aprendo una nota (D-1, A8).
+function switchableChunks() {
+  const file = join(here, "../../dist/switchable-chunks.json");
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch (error) {
+    throw new Error(`manca l'elenco dei chunk spegnibili del build (${file}): serve \`npm run build\` prima dell'app (${error?.code ?? error})`);
+  }
+  const owner = new Map();
+  for (const [what, files] of Object.entries(parsed)) {
+    for (const name of files) owner.set(name.split("/").pop(), what);
+  }
+  if (owner.size === 0) throw new Error(`${file} non nomina nessun chunk: il build non separa più i componenti spegnibili`);
+  return owner;
+}
 
 /// Applica un profilo dei componenti col comando vero dell'host, come la
 /// pagina Componenti: le chiavi del vault le scrive l'host, non il banco.
@@ -514,6 +537,7 @@ const SCENARIOS = {
   /// documenti o dei fogli: lo vieta già il build (D-1), qui si vede nella
   /// WebView vera.
   async C1(session) {
+    const switchable = switchableChunks();
     const profiles = {};
     const values = {};
     let current = session;
@@ -532,9 +556,12 @@ const SCENARIOS = {
         await openByName(current, noteName(1), noteName(1));
         await pause(MEMORY_QUIET_MS);
         const after = await current.execute(CHUNKS_SCRIPT);
-        profiles[nome] = { label, coldStart: report.coldStart, startup, afterNote: after.filter((name) => !startup.includes(name)) };
+        const afterNote = after.filter((name) => !startup.includes(name));
+        const switchableSeen = after.filter((name) => switchable.has(name)).map((name) => `${chunkName(name)} (${switchable.get(name)})`);
+        profiles[nome] = { label, coldStart: report.coldStart, startup: startup.map(chunkName), afterNote: afterNote.map(chunkName), switchable: switchableSeen };
         values[`C1.${nome}.coldStart`] = report.coldStart;
         values[`C1.${nome}.chunks`] = startup.length;
+        values[`C1.${nome}.spegnibili`] = switchableSeen.length;
       }
     } finally {
       await current?.close();
@@ -655,12 +682,13 @@ async function main() {
           const limit = limits[key];
           const over = limit !== undefined && (value === null || value > limit);
           if (over) failed++;
-          const unit = key.endsWith("MiB") ? "MiB" : key.endsWith(".chunks") ? "chunk" : "ms";
+          const unit = key.endsWith("MiB") ? "MiB" : key.endsWith(".chunks") || key.endsWith(".spegnibili") ? "chunk" : "ms";
           console.log(`${over ? "✗" : "✓"} ${key} = ${value ?? "—"} ${unit}${limit !== undefined ? ` (soglia ${limit})` : ""} · ${result.samples} campioni`);
         }
         for (const [nome, seen] of Object.entries(result.profiles ?? {})) {
           console.log(`· ${seen.label}: all'avvio ${seen.startup.join(", ")}`);
           console.log(`· ${seen.label}: dopo una nota ${seen.afterNote.join(", ") || "niente in più"}`);
+          console.log(`· ${seen.label}: dei componenti spegnibili ${seen.switchable.join(", ") || "niente"}`);
         }
       } catch (error) {
         failed++;

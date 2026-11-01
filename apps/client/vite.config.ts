@@ -33,6 +33,11 @@ function withoutComments(css: string): string {
 /// `dist/`, accanto a ciò che descrive, e non nel repository.
 const STARTUP_FILE = "startup-chunks.json";
 
+/// Il file del build con i chunk di ogni pezzo di `NOT_AT_STARTUP`, all'avvio
+/// o no: il banco WebView (C1) controlla che con «Solo note» nessuno arrivi
+/// nella WebView vera.
+const SWITCHABLE_FILE = "switchable-chunks.json";
+
 /// Ciò che un componente spento non deve portare nella WebView, e che quindi
 /// non si carica all'avvio di nessuna pagina: il lettore PDF, la lavagna, i
 /// disegni, i documenti e i fogli arrivano soltanto con un `import()` quando il loro componente è
@@ -100,6 +105,15 @@ function reportStartup(context: Rollup.PluginContext, bundle: Rollup.OutputBundl
     }
   }
   context.emitFile({ type: "asset", fileName: STARTUP_FILE, source: `${JSON.stringify(startup, null, 2)}\n` });
+  const switchable: Record<string, string[]> = {};
+  for (const rule of NOT_AT_STARTUP) {
+    switchable[rule.what] = Object.values(bundle)
+      .filter((chunk): chunk is Rollup.OutputChunk => chunk.type === "chunk")
+      .filter((chunk) => rule.chunk?.test(chunk.name) || Object.keys(chunk.modules).some((id) => rule.module?.test(id)))
+      .map((chunk) => chunk.fileName)
+      .sort();
+  }
+  context.emitFile({ type: "asset", fileName: SWITCHABLE_FILE, source: `${JSON.stringify(switchable, null, 2)}\n` });
   if (problems.length) {
     context.error(`un componente che si può spegnere arriva all'avvio:\n${problems.join("\n")}`);
   }
