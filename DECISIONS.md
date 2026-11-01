@@ -34,6 +34,33 @@ registro.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-01 · K1 · Le PR #261–#269 (N13, N1, N2, K0) sono tutte in `main`:
+  #269 è stata unita con lo stack intero, le altre chiuse perché contenute,
+  #264 unita il 31/10 · fonte: `gh pr list`; nessun task di K1 aspetta una PR.
+- 2026-10-31 · K0 · Il livello 3 della consegna sono le **edizioni**; niente
+  librerie caricate a runtime (ADR 0233) · fonte: `piani/STATO.md`, risposte
+  del 31/10 mattina; in K1 è il caso `Delivery::Edition` del manifest.
+- 2026-10-31 · K0 · La tolleranza di R1 sta in
+  `apps/client/bench/webview/budgets.json` (residuo 50 MiB, pendenza 1 MiB a
+  giro; nella CI 480 e 20) · fonte: `piani/STATO.md`; è il metro di «spento non
+  costa» per i task che misurano.
+- 2026-10-31 · N2 · Il server MCP sta in `fub-cli mcp` sulla stessa
+  `Connection` (passa dall'app se tiene il vault), protocollo scritto a mano
+  (stdio, JSON-RPC sincrono), niente `rmcp` (ADR 0232,
+  `docs/reference/mcp-server.md`) · fonte: `piani/STATO.md`; gli strumenti
+  nuovi (i componenti di K1) seguono la stessa forma e i nomi `fub_*`.
+- 2026-10-31 · N2 · Senza `--automation-write-root` il server è in sola
+  lettura; senza `--automation-read-root` si legge tutto il vault;
+  `fub_invoke` senza `apply` è una prova · fonte: `piani/STATO.md`; vale anche
+  per accendere e spegnere componenti via MCP.
+- 2026-10-30 · tasto destro (piano 2) · Le parole dei componenti sono
+  Accendi, Spegni, Serve a…, Non serve più, Togli, Tienili, «Accendi…»; regola
+  12: un componente spento non ha voci · fonte: `piani/STATO.md`; K1 le usa
+  nei testi della CLI, K2 nel client.
+- 2026-10-31 · piani · Le domande aperte dei piani seguono il loro
+  «Consiglio» se l'utente non dice altro · fonte: `piani/STATO.md`,
+  «Questions for the user».
+
 - 2026-10-31 · workflow · Il piano vive in `PLAN.md` (e il prototipo in
   `PLAN-ui/`) sul branch del piano, e se ne va con l'ultimo commit prima del
   merge · una sessione sul web vede solo ciò che è su GitHub; dopo il merge
