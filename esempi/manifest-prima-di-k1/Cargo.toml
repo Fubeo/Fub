@@ -1,0 +1,21 @@
+# Un plugin compilato contro `fub:abi@0.2.0` com'era prima della #285, quando
+# il manifest aveva undici campi (ADR 0235).
+#
+# Come `legacy-format-0_1`: fuori dal workspace, solo `wit-bindgen`, nessuna
+# dipendenza da `fub-abi`. Il WIT che ha in mano è la copia ferma in
+# `wit/deps/fub-abi/`, e la prova sta proprio nel fatto che non è quello vivo.
+[package]
+name = "manifest-prima-di-k1"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.60"
+
+[profile.release]
+strip = true
+opt-level = "s"

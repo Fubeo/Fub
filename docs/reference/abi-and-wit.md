@@ -210,13 +210,30 @@ Gli snapshot congelati rendono meccanica l'additività. Sono incompatibili:
 - spostamento fra interfacce;
 - modifica della firma.
 
-Sono compatibili, quando aggiunte in coda o in una nuova superficie:
+Un campo nuovo in un record che attraversa il confine rompe i plugin già
+compilati, anche quando sta in coda. Nel component model l'host controlla il
+tipo di un record campo per campo: un plugin compilato contro il manifest a
+undici campi non si istanzia davanti all'host che ne ha sedici («expected
+record of 16 fields, found 11 fields»). Lo prova
+`crates/fub-wasm-host/tests/published_record_does_not_grow.rs`, e il perché
+della regola è nell'[ADR 0235](../decisions/0235-un-record-pubblicato-non-cresce.md).
 
-- nuovo record o alias;
-- nuovo caso;
-- nuovo campo;
-- nuova funzione;
+Dal primo rilascio di una versione, quindi, un record pubblicato non cresce.
+Le novità arrivano con interfacce nuove: l'host cerca gli export una
+interfaccia alla volta, e un plugin vecchio quell'interfaccia semplicemente
+non ce l'ha, per cui l'host prende il default.
+
+Sono compatibili:
+
+- nuovo record o alias, usato soltanto da superfici nuove;
+- nuova funzione in un'interfaccia che l'host offre (un import del guest): il
+  guest importa solo ciò che usa;
 - nuova interfaccia.
+
+Un nuovo caso o una nuova funzione in un'interfaccia **esportata** dal plugin
+vanno trattati come un campo nuovo finché un test non dice il contrario:
+l'host controlla con `GuestIndices` il tipo di ogni funzione dell'interfaccia
+esportata, e non c'è una prova che un caso o una funzione in più passino.
 
 La patch non cambia la superficie.
 

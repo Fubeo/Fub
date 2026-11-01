@@ -1,0 +1,9 @@
+// Il mondo minimo di un plugin compilato contro `fub:abi@0.2.0` prima della
+// #285: esporta soltanto `plugin`, con il manifest a undici campi della copia
+// ferma in `deps/fub-abi/`. Nessun import: all'host basta trovare l'export e
+// controllarne il tipo, ed è lì che il guest deve cadere (ADR 0235).
+package esempio:manifest-prima-di-k1@0.1.0;
+
+world manifest-prima-di-k1 {
+    export fub:abi/plugin@0.2.0;
+}
