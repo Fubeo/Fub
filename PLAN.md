@@ -21,7 +21,9 @@ Prototipo: nessuno (K1 non cambia l'interfaccia)
 
 ## Modifiche
 
-nessuna
+- 2026-11-01 · Tocca di T3 col percorso esatto (`mount.rs`, due punti); prova
+  di T2 limitata a `-p fub-componenti -p fub-abi`; misura di main del banco
+  WebView prima dei coder · richiesta dell'utente con l'OK · T2, T3, fine.
 
 ## Fonti
 
@@ -425,9 +427,19 @@ Stato: [ ] da fare
 ## Alla fine (orchestratore)
 
 - `scripts/check.sh` completo.
-- Banco WebView S1–S3 su questa macchina su main (d235d3f6) e sul branch,
-  numeri nella PR accanto a quelli del 2026-11-01 (S1 124 ms, S2 417 ms, S3
-  145/831 ms): devono restare dentro i budget `ci`.
+- Banco WebView S1–S3 sul branch, su questa macchina, quando nessuna
+  compilazione è in corso (carico sotto 0,8 alla partenza), con lo stesso
+  comando; confronto con la misura di main qui sotto, numeri nella PR. Devono
+  restare dentro i budget `ci`.
+- Misura di main (d235d3f6), 2026-11-01 04:55, server-di-fub (Debian 13,
+  WebKitGTK 2.54 sotto Xvfb, rendering software), nessun coder e nessuna
+  compilazione in corso, carico 0,78 alla partenza; `xvfb-run -a -s "-screen 0
+  1280x800x24" npm run bench:webview -- --only=S1,S2,S3
+  --native-driver=/usr/bin/WebKitWebDriver`, dopo `npm run build` e `cargo build
+  --release --locked -p fub-app --features tauri/custom-protocol`:
+  S1.keyToPaint.p95 128 ms (soglia 330, 100 campioni) · S2.noteSwitch.p95
+  445 ms (soglia 780, 20) · S3.frameGap.p95 181 ms (soglia 360, 124) ·
+  S3.frameGap.max 789 ms (soglia 1600, 124).
 - ADR nuova: «Il modello dei componenti» (primo numero libero: 0234, perché
   0228–0233 sono usate e 0230 è tenuta per PdfCraft).
 - Il registro di `DECISIONS.md` con ciò che si è deciso strada facendo.
