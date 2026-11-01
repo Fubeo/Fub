@@ -34,6 +34,12 @@ registro.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-01 · K1 · T1 tocca anche `crates/fub-abi/src/lib.rs` (`ComponentKind`
+  e `Delivery` nel `pub use`, per `superficie_della_radice`) e
+  `apps/client/src/host/enums.generated.ts`, solo rigenerato con
+  `UPDATE_MIRROR=1 cargo test -p fub-abi --test ts_enums` · fonte: risposta
+  dell'utente al blocco del coder; un enum senza payload in `fub-abi` porta
+  sempre con sé la sua riga nel derivato TS.
 - 2026-11-01 · K1 · Le PR #261–#269 (N13, N1, N2, K0) sono tutte in `main`:
   #269 è stata unita con lo stack intero, le altre chiuse perché contenute,
   #264 unita il 31/10 · fonte: `gh pr list`; nessun task di K1 aspetta una PR.

@@ -132,6 +132,9 @@ Tocca: `crates/fub-abi/src/traits.rs`, `crates/fub-abi/wit/fub/abi.wit`,
 `PluginManifest { … }` o di `plugin-manifest` nel repo (oggi 33 file in
 `crates/`; cercare anche in `tools/` e negli esempi WASM che `fub-wasm-host`
 compila), `docs/reference/abi-and-wit.md` (una riga sui campi nuovi).
+Autorizzati dopo il blocco del coder (2026-11-01): `crates/fub-abi/src/lib.rs`
+(i due tipi nel `pub use`) e `apps/client/src/host/enums.generated.ts`, solo
+rigenerato con `UPDATE_MIRROR=1 cargo test -p fub-abi --test ts_enums`.
 Non toccare: `crates/fub-abi/wit/frozen/`, `ABI_VERSION`, `abi_compatible`,
 `crates/fub-features/src/inventory.rs`, il client.
 Dipende da: nessuno
@@ -169,7 +172,7 @@ i default, e uno con tutti i campi fa il giro serde identico; `cargo test -p
 fub-wasm-host` verde con gli esempi ricompilati; nessun file in `frozen/`
 cambiato (`git diff --stat` nella PR).
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 90c48297
 
 ## T2 · Il risolutore `fub-componenti`
 
@@ -268,7 +271,7 @@ Prova: scripts/check.sh --rapido --base <sha> -p fub-componenti -p fub-abi
 (`fub-abi` per `dependency_invariant`; senza `-p` la riga nuova nel
 `Cargo.toml` della radice fa controllare tutto il workspace mentre T1 fa lo
 stesso. Il controllo completo lo fa l'orchestratore dopo aver unito T2.)
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 90c48297
 
 ## T3 · L'inventario diventa la mappa
 
