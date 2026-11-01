@@ -374,7 +374,7 @@ componenti` verde e `cargo tree -p fub-host --no-default-features -e normal`
 non contiene `fub-format-rich` né `fub-format-xlsx` (spento non costa codice:
 l'output nella PR); `official_views.rs` invariato e verde.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base 4014ba43
+Stato: [x] fatto · 376d12f8
 
 ## T4 · `fub-cli componenti` e gli stessi comandi via MCP
 

@@ -34,6 +34,13 @@ registro.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-01 · K1 · La mappa vera (`fub-features::componenti`): le righe
+  senza feature Cargo sono 7, non 4 (anche `fub.core`, `fub.maintenance`,
+  `fub.importers`, che oggi si compilano sempre); `SOLO_DELLA_MAPPA` è
+  `fub.markdown`, `fub.dizionari`, `fub.penna` e i due motori, ognuno col suo
+  perché; una feature marcatore nuova `http-client` per le righe di sync,
+  publish, updates e linkcard; `rich` e `xlsx` portano con sé i loro motori ·
+  fonte: report del coder di T3; il codice vince sul «Fatto quando» del piano.
 - 2026-11-01 · K1 · I requisiti che esistono solo per la mappa
   (`fub.markdown`, `fub.dizionari`: nucleo e componenti senza bundle) stanno
   nella riga di `fub-features::componenti`, non nel manifest; il manifest tiene
