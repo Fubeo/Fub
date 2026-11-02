@@ -59,7 +59,7 @@ export const IMAGE_SNAPSHOT_PREFIX = "whole";
 /// Quante volte la larghezza della scheda può essere larga l'immagine ferma.
 const DENSITY = 2;
 
-/// Che cosa mostra la scheda, in `data-state`.
+/// Che cosa mostra la scheda, in `data-card-state`.
 type ImageCardState = "placeholder" | "loading" | "picture" | "vector" | "unreadable" | "too-large" | "missing";
 
 export function imageCardRenderer(port: ImageCardPort): CardRenderer {
@@ -105,7 +105,7 @@ function mountImageCard(
       vectorUrl = null;
     }
     if (state !== "picture") painted = null;
-    root.dataset.state = state;
+    root.dataset.cardState = state;
     root.replaceChildren(...children);
   };
 
@@ -252,13 +252,13 @@ function mountImageCard(
       return;
     }
     generation++;
-    if (root.dataset.state === "missing") return;
+    if (root.dataset.cardState === "missing") return;
     if (painted !== null || fromCache()) return;
     placeholder();
   };
 
   lifetime.listen(root, "dblclick", () => {
-    if (root.dataset.state === "missing") return;
+    if (root.dataset.cardState === "missing") return;
     port.open(path);
   });
   lifetime.add(
@@ -290,7 +290,7 @@ function mountImageCard(
     resize: () => {
       if (lifetime.closed) return;
       if (mode === "live") {
-        if (root.dataset.state === "vector" || painted === part()) return;
+        if (root.dataset.cardState === "vector" || painted === part()) return;
         void load();
       } else {
         fromCache();

@@ -141,7 +141,7 @@ function mount(port: ImageCardPort, path: string, cache = new CardCache(), mode:
   const { ctx, missing, lifetime } = context(path, cache, width);
   const view: CardView = imageCardRenderer(port).mount(node(path), host, mode, ctx);
   const root = () => host.querySelector<HTMLElement>(".canvas-card-image");
-  return { host, view, missing, lifetime, cache, root, state: () => root()?.dataset.state };
+  return { host, view, missing, lifetime, cache, root, state: () => root()?.dataset.cardState };
 }
 
 const settle = () => new Promise<void>((done) => setTimeout(done, 0));

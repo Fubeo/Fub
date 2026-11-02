@@ -90,6 +90,7 @@ class NoteCard implements CardView {
     this.#mode = mode;
     this.#root = document.createElement("div");
     this.#root.className = "canvas-card-note";
+    this.#root.dataset.cardKind = "note";
     host.append(this.#root);
     this.#unwatch = port.watch(context.path, () => this.#changed());
     context.lifetime.add(() => this.destroy());

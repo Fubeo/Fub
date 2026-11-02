@@ -58,6 +58,7 @@ function mountPdfCard(
 
   const root = document.createElement("div");
   root.className = "canvas-card-pdf";
+  root.dataset.cardKind = "pdf";
   const screen = document.createElement("canvas");
   screen.className = "canvas-card-pdf-page";
   screen.hidden = true;
