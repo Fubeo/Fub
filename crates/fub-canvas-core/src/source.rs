@@ -27,6 +27,7 @@ use thiserror::Error;
 
 use crate::js::{encode, encode_pretty, js_entries, js_string};
 use crate::model::{Canvas, CanvasEdge, CanvasNode};
+use crate::patch::{same_map, same_value};
 use crate::read::is_blank;
 
 /// Il BOM UTF-8, come testo.
@@ -206,28 +207,6 @@ fn with_extra(mut map: Map<String, Value>, extra: &Map<String, Value>) -> Map<St
         }
     }
     map
-}
-
-/// Due valori JSON uguali come li confronta `same` di `source-edit.ts`: gli
-/// oggetti con le stesse chiavi in qualunque ordine, gli array nello stesso
-/// ordine, i numeri per valore (`1` e `1.0` sono uguali, come in
-/// JavaScript, dove sono lo stesso numero).
-pub fn same_value(left: &Value, right: &Value) -> bool {
-    match (left, right) {
-        (Value::Number(a), Value::Number(b)) => match (a.as_f64(), b.as_f64()) {
-            (Some(x), Some(y)) => x == y,
-            _ => a == b,
-        },
-        (Value::Array(a), Value::Array(b)) => {
-            a.len() == b.len() && a.iter().zip(b).all(|(x, y)| same_value(x, y))
-        }
-        (Value::Object(a), Value::Object(b)) => {
-            a.len() == b.len()
-                && a.iter()
-                    .all(|(key, x)| b.get(key).is_some_and(|y| same_value(x, y)))
-        }
-        _ => left == right,
-    }
 }
 
 fn same(left: Option<&Value>, right: &Value) -> bool {
@@ -553,15 +532,7 @@ fn same_root_field(key: &str, before: &Canvas, after: &Canvas) -> Result<bool, S
 fn same_canvas(before: &Canvas, after: &Canvas) -> Result<bool, SourceError> {
     Ok(same_entries(&before.nodes, &after.nodes)?
         && same_entries(&before.edges, &after.edges)?
-        && same_value_map(&before.extra, &after.extra))
-}
-
-/// Gli oggetti di due mappe uguali come valori JSON.
-fn same_value_map(left: &Map<String, Value>, right: &Map<String, Value>) -> bool {
-    left.len() == right.len()
-        && left
-            .iter()
-            .all(|(key, x)| right.get(key).is_some_and(|y| same_value(x, y)))
+        && same_map(&before.extra, &after.extra))
 }
 
 struct Patcher<'s> {

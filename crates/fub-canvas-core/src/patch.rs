@@ -183,7 +183,9 @@ fn same_number(left: &Number, right: &Number) -> bool {
     }
 }
 
-fn same_map(left: &Map<String, Value>, right: &Map<String, Value>) -> bool {
+/// Due mappe uguali come valori JSON (R9): le stesse chiavi, in qualunque
+/// ordine, con valori uguali per [`same_value`].
+pub(crate) fn same_map(left: &Map<String, Value>, right: &Map<String, Value>) -> bool {
     left.len() == right.len()
         && left
             .iter()
