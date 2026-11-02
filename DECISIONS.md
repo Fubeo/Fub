@@ -59,6 +59,16 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N3 T8 · operazioni d'intento (`ops.rs`): un id che non è né
+  scheda né arco in `remove`/`set` dà `UnknownEdge`; `set` vale anche sugli
+  archi; un id dato già preso o ripetuto in `ids` dà `DuplicateId`; `reorder
+  {ids}` porta in cima gli id dati, nell'ordine dato; gli id nuovi vengono
+  da SplitMix64 sul seme (`IdSource`, sedici cifre esadecimali); ogni scheda
+  e arco messi passano `Canvas::validate`; l'`at` delle `remove-node` è la
+  posizione all'inizio della serie, anche fra due operazioni; i vettori
+  hanno l'esito `malformed` per un'operazione che non si legge · così il
+  TypeScript (T14, T16) rifà lo stesso generatore e le stesse posizioni dai
+  vettori, e l'inversa rimette ogni scheda al suo posto.
 - 2026-11-02 · N3 · T5: `patch_source` ritocca il sorgente con uno
   scanner suo, più severo di quello TypeScript (rifiuta virgola finale e
   valori vuoti, si ferma a 256 livelli, `SourceError::TooDeep`); gli archi

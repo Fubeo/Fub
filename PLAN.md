@@ -598,7 +598,7 @@ preso; 100 001 schede (`TooMany`).
 Fatto quando: `cargo test -p fub-canvas-core --test op_vectors` passa su
 tutti i vettori.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T9 · Lo specchio a caso fra Rust e TypeScript
 
