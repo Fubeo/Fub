@@ -369,6 +369,7 @@ pub struct MovedExplicitAssetRename {
     stat: crate::storage::Stat,
     identity: Option<crate::storage::FileIdentity>,
     rewrites: Vec<(DocId, EditRequest)>,
+    stale_byte_links: Vec<String>,
     side_data: CompletedAssetRenameSideData,
     recovery: RenameRecoveryReceipt,
 }
@@ -379,6 +380,7 @@ pub struct PendingExplicitAssetRename {
     workspace_id: u64,
     installed: VaultEntry,
     rewrites: Vec<(DocId, EditRequest)>,
+    stale_byte_links: Vec<String>,
     side_data: CompletedAssetRenameSideData,
     recovery: RenameRecoveryReceipt,
     journal: Arc<Journal>,
@@ -397,6 +399,7 @@ pub struct CompletedExplicitAssetRename {
     to: DocId,
     owns_batch: bool,
     rewrite_failures: Vec<String>,
+    stale_byte_links: Vec<String>,
     journal_fault: Option<String>,
 }
 
@@ -410,6 +413,7 @@ pub struct ParsedExplicitRename {
     stat: crate::storage::Stat,
     identity: Option<crate::storage::FileIdentity>,
     rewrites: Vec<(DocId, EditRequest)>,
+    stale_byte_links: Vec<String>,
     side_data: CompletedRenameSideData,
     recovery: RenameRecoveryReceipt,
 }
@@ -419,6 +423,7 @@ pub struct ParsedExplicitRename {
 pub struct PendingExplicitRename {
     identity: PendingIdentityMigration,
     rewrites: Vec<(DocId, EditRequest)>,
+    stale_byte_links: Vec<String>,
     side_data: CompletedRenameSideData,
     recovery: RenameRecoveryReceipt,
     journal: Arc<Journal>,
@@ -436,6 +441,7 @@ pub struct CompletedExplicitRename {
     recovery: RenameRecoveryReceipt,
     owns_batch: bool,
     rewrite_failures: Vec<String>,
+    stale_byte_links: Vec<String>,
     journal_fault: Option<String>,
 }
 
@@ -868,7 +874,11 @@ impl PreparedExplicitRename {
             SourceKind::Bytes => DocumentSource::Bytes(bytes),
         };
         let model = parser.invoke(source)?;
-        let durable_rewrites = invoke_prepared_link_rewrites(storage.as_ref(), rewrites)?;
+        let PreparedLinkRewriteOutcome {
+            edits: durable_rewrites,
+            unwritable_bytes,
+        } = invoke_prepared_link_rewrites(storage.as_ref(), rewrites)?;
+        let stale_byte_links = stale_byte_link_lines(&unwritable_bytes, &snapshot.from);
 
         // Rename "case-only" (`nota.md` → `Nota.md`): su un filesystem
         // case-insensitive (macOS/Windows) `storage.exists` vede lo STESSO
@@ -958,6 +968,7 @@ impl PreparedExplicitRename {
             stat: after,
             identity,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
         })
@@ -1059,6 +1070,7 @@ impl PendingExplicitRename {
         let PendingExplicitRename {
             identity,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
             journal,
@@ -1082,6 +1094,7 @@ impl PendingExplicitRename {
             recovery,
             owns_batch,
             rewrite_failures: Vec::new(),
+            stale_byte_links,
             journal_fault,
         }
     }
@@ -1126,12 +1139,24 @@ impl CompletedExplicitRename {
 /// nel kernel, nessun provider sotto lock, nessuna omissione silenziosa.
 /// La CAS di [`EditRequest`] resta la preimmagine per-file; i conflitti restano
 /// [`KernelError::Stale`]/`AlreadyExists`, senza protocollo parallelo.
+///
+/// L'unica eccezione è una sorgente a byte ([`SourceKind::Bytes`]) che non sa
+/// riscriversi (provider assente o `Ok(None)`): i file Craft dichiarano i loro
+/// collegamenti ma Fub non li scrive mai (D-3). Quella sorgente non ferma il
+/// piano: resta com'è e finisce in [`PreparedLinkRewriteOutcome::unwritable_bytes`],
+/// e chi chiama decide che cosa dirne. Una sorgente a byte che risponde con
+/// degli edit resta un errore, come prima.
 fn invoke_prepared_link_rewrites(
     storage: &dyn crate::storage::VaultStorage,
     rewrites: Vec<PreparedExplicitLinkRewrite>,
-) -> Result<Vec<RenameRecoveryEdit>> {
+) -> Result<PreparedLinkRewriteOutcome> {
     let mut out = Vec::new();
+    let mut unwritable_bytes = Vec::new();
     for prepared in rewrites {
+        if prepared.source_kind == SourceKind::Bytes && prepared.provider.is_none() {
+            unwritable_bytes.push(prepared.destination);
+            continue;
+        }
         let bytes = storage
             .read(&prepared.source_path)
             .map_err(|source| KernelError::Io {
@@ -1157,10 +1182,7 @@ fn invoke_prepared_link_rewrites(
             DocumentSource::Bytes(bytes) => Revision::of_bytes(bytes),
         };
         let Some(provider) = prepared.provider.clone() else {
-            return Err(KernelError::Format(FormatError::Parse(format!(
-                "il formato di {} non offre la riscrittura dei link",
-                prepared.destination
-            ))));
+            return Err(no_link_rewrite(&prepared.destination));
         };
         let provider_id = prepared.provider_id.clone();
         let destination = prepared.destination.clone();
@@ -1172,12 +1194,15 @@ fn invoke_prepared_link_rewrites(
             destination.as_str(),
             FormatError::Parse,
             || provider.rewrite_links(&source, &ctx, &wanted),
-        )?
-        .ok_or_else(|| {
-            KernelError::Format(FormatError::Parse(format!(
-                "il formato di {destination} non offre la riscrittura dei link"
-            )))
-        })?;
+        )?;
+        let edits = match edits {
+            Some(edits) => edits,
+            None if prepared.source_kind == SourceKind::Bytes => {
+                unwritable_bytes.push(destination);
+                continue;
+            }
+            None => return Err(no_link_rewrite(&destination)),
+        };
         validate_rewrite_output(&wanted, &edits, &source, &destination)?;
         if edits.is_empty() {
             continue;
@@ -1199,7 +1224,34 @@ fn invoke_prepared_link_rewrites(
         };
         out.push(RenameRecoveryEdit::new(destination, request, result));
     }
-    Ok(out)
+    Ok(PreparedLinkRewriteOutcome {
+        edits: out,
+        unwritable_bytes,
+    })
+}
+
+/// Il risultato di [`invoke_prepared_link_rewrites`]: gli edit da applicare e
+/// le sorgenti a byte lasciate com'erano, nell'ordine del piano.
+struct PreparedLinkRewriteOutcome {
+    edits: Vec<RenameRecoveryEdit>,
+    unwritable_bytes: Vec<DocId>,
+}
+
+/// L'errore di una sorgente che il suo formato non sa riscrivere.
+fn no_link_rewrite(destination: &DocId) -> KernelError {
+    KernelError::Format(FormatError::Parse(format!(
+        "il formato di {destination} non offre la riscrittura dei link"
+    )))
+}
+
+/// Una riga per ogni file a byte che punta ancora al nome vecchio `from`: la
+/// rinomina è fatta, le note sono aggiornate, e queste righe arrivano a chi
+/// l'ha chiesta nell'esito parziale [`KernelError::LinkRewrite`].
+fn stale_byte_link_lines(unwritable: &[DocId], from: &DocId) -> Vec<String> {
+    unwritable
+        .iter()
+        .map(|src| format!("{src}: un file a byte non si riscrive, il link punta ancora a {from}"))
+        .collect()
 }
 
 /// Vincolo d'output della porta format-owned: copertura totale, confini
@@ -1290,7 +1342,11 @@ impl PreparedExplicitAssetRename {
             return Err(KernelError::Stale(snapshot.from.to_string()));
         }
         let identity = identity_after;
-        let durable_rewrites = invoke_prepared_link_rewrites(storage.as_ref(), rewrites)?;
+        let PreparedLinkRewriteOutcome {
+            edits: durable_rewrites,
+            unwritable_bytes,
+        } = invoke_prepared_link_rewrites(storage.as_ref(), rewrites)?;
+        let stale_byte_links = stale_byte_link_lines(&unwritable_bytes, &snapshot.from);
         let same_file = storage.same_file(&snapshot.from_path, &snapshot.to_path);
         if !same_file && storage.exists(&snapshot.to_path) {
             return Err(KernelError::AlreadyExists(snapshot.to.to_string()));
@@ -1360,6 +1416,7 @@ impl PreparedExplicitAssetRename {
             stat: after,
             identity,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
         })
@@ -1469,6 +1526,7 @@ impl PendingExplicitAssetRename {
             workspace_id,
             installed,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
             journal,
@@ -1508,6 +1566,7 @@ impl PendingExplicitAssetRename {
             to,
             owns_batch,
             rewrite_failures,
+            stale_byte_links,
             journal_fault,
         }
     }
@@ -2699,13 +2758,23 @@ impl PreparedLinkRetarget {
     /// Gli edit, uno per documento che cambia, ciascuno sulla revisione dei
     /// byte appena letti: chi li applica li vede fallire se nel frattempo il
     /// documento è cambiato.
+    ///
+    /// Un file a byte che non sa riscriversi ferma il piano, come una sorgente
+    /// di testo senza riscrittura: qui non c'è una rinomina già fatta a cui
+    /// appendere l'avviso, e chi unisce le note cestinerebbe un file a cui quel
+    /// link punta ancora.
     pub fn edits(self) -> Result<Vec<(DocId, EditRequest)>> {
-        Ok(
-            invoke_prepared_link_rewrites(self.storage.as_ref(), self.rewrites)?
-                .into_iter()
-                .map(|edit| (edit.source().clone(), edit.request().clone()))
-                .collect(),
-        )
+        let PreparedLinkRewriteOutcome {
+            edits,
+            unwritable_bytes,
+        } = invoke_prepared_link_rewrites(self.storage.as_ref(), self.rewrites)?;
+        if let Some(destination) = unwritable_bytes.first() {
+            return Err(no_link_rewrite(destination));
+        }
+        Ok(edits
+            .into_iter()
+            .map(|edit| (edit.source().clone(), edit.request().clone()))
+            .collect())
     }
 }
 
@@ -8784,6 +8853,7 @@ impl Workspace {
             stat: _,
             identity: _,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
         } = parsed;
@@ -8793,6 +8863,7 @@ impl Workspace {
         Ok(PendingExplicitRename {
             identity,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
             journal: Arc::clone(&self.journal),
@@ -8825,6 +8896,7 @@ impl Workspace {
             recovery: _,
             owns_batch,
             rewrite_failures,
+            stale_byte_links,
             journal_fault,
         } = completed;
         if self.finish_identity_migration(identity).is_err() {
@@ -8839,7 +8911,11 @@ impl Workspace {
                 None,
             );
         }
-        let failed = rewrite_failures;
+        // Le righe dei file a byte vanno in coda solo qui: l'intent di recupero
+        // si chiude quando le riscritture vere sono riuscite, e un file a byte
+        // che non si riscrive non ha niente da recuperare.
+        let mut failed = rewrite_failures;
+        failed.extend(stale_byte_links);
         // Dentro il lotto questo `index-updated` non esce: diventa il
         // `batch-ended` che la chiusura emette. Resta scritto qui perché il
         // rename **ha** aggiornato l'indice, e chi legge questo metodo non deve
@@ -8983,6 +9059,7 @@ impl Workspace {
             stat,
             identity: _,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
         } = moved;
@@ -9001,6 +9078,7 @@ impl Workspace {
             workspace_id: snapshot.workspace_id,
             installed,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
             journal: Arc::clone(&self.journal),
@@ -9032,9 +9110,11 @@ impl Workspace {
             from,
             to,
             owns_batch,
-            rewrite_failures,
+            mut rewrite_failures,
+            stale_byte_links,
             journal_fault,
         } = completed;
+        rewrite_failures.extend(stale_byte_links);
         for error in side_data.errors {
             self.doc_data_warnings.push(format!(
                 "lo stato per-documento di {} non ha potuto seguire la rinomina in {} — {error}",
