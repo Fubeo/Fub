@@ -101,8 +101,13 @@ Le regole che la sessione garantisce:
 ignorato. La punta della penna disegna; la penna girata (`button` 5) e il
 tasto laterale (`button` 2) fanno anch'essi un tratto, coi ruoli `erase` e
 `barrel`, che `StrokeStart.role` porta a chi disegna. Ogni tratto vive finché
-è premuto il suo bit di `buttons` (1, 32, 2). Il mouse disegna col tasto
-principale.
+è premuto il suo bit di `buttons` (1, 32, 2). Il tasto centrale del mouse
+muove la vista; il principale segue la politica del mouse, che sceglie il
+prodotto (`mouse` nella configurazione, `setMousePolicy` mentre vive): `ink`,
+quella di serie, disegna, `ignore` lo lascia a chi sta sotto, per esempio a
+una lavagna dove il mouse seleziona. Vale dal prossimo appoggio: un tratto
+in corso finisce com'è. Un tipo di puntatore sconosciuto (`""`) segue il
+mouse: un driver che manda la penna così, con `ignore`, non scrive.
 Un dito non disegna mentre una penna tocca lo schermo o è sospesa: è il palmo, e
 un suo tratto già cominciato si annulla quando la penna arriva. Con due dita
 giù il gesto è di navigazione. Altrimenti decide la politica del tocco
