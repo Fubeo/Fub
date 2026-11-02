@@ -370,6 +370,20 @@ export const SCENE = onPage("shell", [
       await page.mouse.move(header.x, header.y);
     },
   },
+  // **I comandi dei fogli nella tavolozza**: un comando senza una finestra
+  // scritta a mano e con dei parametri obbligatori apre quella costruita dal
+  // catalogo (`editors/grid/palette/form.ts`), con l'intervallo che parte
+  // dalla selezione, una scelta e una casella.
+  {
+    id: "grid-command-form",
+    title: "Grid v2: la finestra costruita per «Grafici sparkline», aperta dalla tavolozza",
+    query: "workbook=1",
+    prepare: async (page) => {
+      await openWorkbook(page);
+      await runScrittoioCommand(page, "Grafici sparkline");
+      await page.waitForSelector(".grid-command-dialog .grid-command-form");
+    },
+  },
   // **Il disegno**: il disegno dei connettori (`?connectors=6`, vedi
   // `fake-ipc.ts`), aperto e guardato com'è prima che l'impianto nuovo lo
   // rifaccia, largo e stretto. Le scene della colonna, dell'ispettore, del
