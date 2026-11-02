@@ -11,7 +11,7 @@
 use fub_abi::command::{
     Args, CommandEffect, CommandOutcome, CommandPlan, InvokeMode, PlannedEdit, Undo,
 };
-use fub_abi::edit::{EditRequest, Revision, TextEdit};
+use fub_abi::edit::{EditRequest, Fnv1a, Revision, TextEdit};
 use fub_abi::error::PluginError;
 use fub_abi::model::{DocId, Span};
 use fub_abi::text::{Arg, Text};
@@ -54,7 +54,7 @@ pub(super) fn canvas_apply(
     let mut core = Core::open(source).map_err(|error| opening(&doc, &error))?;
     // Senza un seme gli id nascono dalla revisione: anteprima e applicazione
     // sulla stessa revisione danno gli stessi id.
-    let seed = seed.unwrap_or_else(|| fnv1a(&revision.0));
+    let seed = seed.unwrap_or_else(|| Fnv1a::hash(revision.0.as_bytes()));
     let compiled = compile(core.canvas(), &ops, seed).map_err(operation)?;
     let committed = core
         .commit(&compiled.patches)
@@ -138,13 +138,6 @@ fn seed(raw: &str) -> Result<u64, PluginError> {
         .map_err(|_| PluginError::BadArgs(Text::message(E_SEED, vec![Arg::text("seed", raw)])))
 }
 
-/// FNV-1a a 64 bit: il seme che viene dalla revisione.
-fn fnv1a(text: &str) -> u64 {
-    text.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
-        (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3)
-    })
-}
-
 /// Una lavagna che il nucleo non sa leggere (R1–R10 di `canvas-format.md`).
 fn opening(doc: &DocId, error: &CanvasError) -> PluginError {
     let key = match error {
@@ -213,12 +206,6 @@ mod tests {
         ));
         assert!(matches!(seed("-1"), Err(PluginError::BadArgs(_))));
         assert!(matches!(seed("dodici"), Err(PluginError::BadArgs(_))));
-    }
-
-    #[test]
-    fn il_seme_della_revisione_e_fnv1a() {
-        assert_eq!(fnv1a(""), 0xcbf2_9ce4_8422_2325);
-        assert_eq!(fnv1a("a"), 0xaf63_dc4c_8601_ec8c);
     }
 
     #[test]

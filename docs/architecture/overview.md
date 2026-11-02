@@ -232,8 +232,11 @@ flowchart LR
 
     canvas["fub-format-canvas"]
     canvascore["fub-canvas-core"]
+    features["fub-features"]
 
     canvas --> canvascore
+    features --> canvascore
+    features -.-> canvas
 ```
 
 Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso
@@ -257,10 +260,11 @@ nell'[ADR 0226](../decisions/0226-inchiostro-e-disegni-nei-documenti.md).
 `fub-canvas-core`, il nucleo della lavagna, non ha frecce verso altri crate
 del workspace: dipende soltanto da `serde`, `serde_json` e `thiserror`, e non
 vede `fub-abi` né il Markdown, perché lo carica anche la WebView come modulo
-`wasm32-unknown-unknown`. Ha il modello di una `.canvas` e la sua lettura; la
-sua freccia in ingresso è quella di `fub-format-canvas`, che lo riespone con la
-stessa API. Chi altro può dipenderne è un elenco chiuso
-(`dependency_invariant.rs`), e il giro completo di `scripts/check.sh` lo
+`wasm32-unknown-unknown`. Ha il modello di una `.canvas` e la sua lettura; le
+sue frecce in ingresso sono quella di `fub-format-canvas`, che lo riespone con
+la stessa API, e quella di `fub-features`, facoltativa dietro la feature
+`lavagna`, per il comando `canvas.apply`. Chi altro può dipenderne è un elenco
+chiuso (`dependency_invariant.rs`), e il giro completo di `scripts/check.sh` lo
 compila per quel bersaglio. Le regole stanno nel [formato della
 lavagna](../reference/canvas-format.md).
 
