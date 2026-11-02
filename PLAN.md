@@ -440,7 +440,7 @@ Fatto quando: test vitest della tavolozza e della finestra generata (anche da
 tastiera); `bench:a11y` verde con la scena nuova; le foto della finestra nelle
 due luci e stretta.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto (le due foto del banco della scena `grid-command-form` arrivano dal runner)
 
 ## T8 · Scaldare e «documento chiuso» (branch a parte, A8)
 
