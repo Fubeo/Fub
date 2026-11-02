@@ -251,6 +251,21 @@ manifest. L'altra viene da `fub-cli`, che per `fub-cli componenti` e gli
 strumenti `fub_components*` usa i tipi del risolutore (`Stato`, `Perche`,
 `Errore`, `Effetto`), che `fub-host` non riesporta.
 
+`fub-motori`, lo strato dei motori, non ha frecce verso altri crate di Fub:
+dipende soltanto da `rayon`, `thiserror`, `tracing` e, su Linux con la glibc,
+`libc`. Dà la costruzione dei motori alla prima richiesta, il loro gruppo di
+thread, il budget comune delle cache e il registro dove ogni adattatore iscrive
+il suo motore. Non nomina nessun motore: un adattatore che lo usa dipende da
+lui, mai il contrario. Le regole stanno in [Lo strato dei motori](motori.md).
+
+```mermaid
+flowchart LR
+    %% @grafo-dipendenze
+    %% Il seguito del grafo: lo strato dei motori, senza frecce verso Fub.
+
+    motori["fub-motori"]
+```
+
 `fub-scene`, il lettore delle scene di FubDraw, ha come sola freccia in uscita
 `fub-ink`: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché
 deve poterlo usare anche un componente `wasm32-wasip2`. Lo verificano

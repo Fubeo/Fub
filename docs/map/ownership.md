@@ -49,6 +49,8 @@
 | una feature spenta non rompe il build | `crates/fub-features/` | la CI compila `--no-default-features` |
 | i motori di terzi si nominano dai soli adattatori | `crates/fub-format-rich/`, `crates/fub-format-xlsx/` | `.github/scripts/check-engine-boundary.mjs` |
 | nessuna interfaccia delle app Craft in `fub-app`, librerie doppie sotto il tetto | `docs/reference/budgets.json` | `.github/scripts/check-motori.mjs` |
+| un motore si costruisce alla prima richiesta e una volta sola, senza lucchetto tenuto | `crates/fub-motori/src/pigro.rs` | `crates/fub-motori/tests/pigro.rs` |
+| le cache dei motori stanno sotto un tetto comune, dalla meno usata | `crates/fub-motori/src/memoria.rs` | `crates/fub-motori/tests/memoria.rs` |
 | la copia di un motore è derivata e verificata | `tools/vendor-craft/vendor.mjs` | `vendor.mjs check`, `verify-upstream`, `gate` |
 | i componenti WASM rispettano tempi e memoria | `crates/fub-wasm-host/src/limits.rs` | `crates/fub-wasm-host/tests/` |
 | i plugin installati si accendono e spengono per vault | `crates/fub-host/src/session.rs` | `crates/fub-kernel/tests/deactivation.rs` e `crates/fub-host/tests/draw_feature.rs` |

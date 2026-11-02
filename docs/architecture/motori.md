@@ -1,0 +1,208 @@
+# Lo strato dei motori
+
+Questa pagina spiega come Fub costruisce i motori copiati (GridCraft per i
+fogli, WordCraft per i documenti, e quelli che verranno) soltanto quando
+servono, come li fa lavorare e come ne tiene le cache sotto un tetto comune.
+
+> **Ambito:** `crates/fub-motori` e il modo in cui un adattatore di formato vi
+> iscrive il suo motore.
+> **Fonte autorevole:** il codice e i test di `crates/fub-motori/`.
+> **Decisione:** [ADR 0236](../decisions/0236-lo-strato-dei-motori.md).
+
+## Regola
+
+Un motore è una cosa cara: memoria, tabelle, dizionari, thread. Fub li tratta
+tutti nello stesso modo, da un posto solo:
+
+1. **niente all'avvio**: aprire Fub o un vault non costruisce nessun motore,
+   non avvia thread e non legge file per conto dei motori; il motore nasce alla
+   prima richiesta;
+2. **un lucchetto mai tenuto** mentre un motore si costruisce o lavora, o
+   mentre si chiama una cache: si prende l'`Arc`, si lascia il lucchetto, poi
+   si chiama;
+3. **un budget comune**: le cache di tutti i motori stanno sotto un tetto, e
+   quando lo superano si libera dalla meno usata di recente;
+4. **chiudere libera**: quando l'ultimo documento di un motore si chiude, le
+   sue cache si svuotano e la memoria torna al sistema.
+
+`fub-motori` non nomina nessun motore e non dipende da nessun adattatore. I
+motori di terzi si nominano soltanto dai loro adattatori
+(`check-engine-boundary.mjs`, `WORDCRAFT_OWNERS` e `GRIDCRAFT_OWNERS` in
+`dependency_invariant.rs`): sono gli adattatori a dipendere da `fub-motori`
+e a iscrivervi il loro motore.
+
+## I pezzi
+
+| Pezzo | Percorso | Che cosa fa |
+|---|---|---|
+| `Pigro<T>` | `src/pigro.rs` | il motore costruito alla prima richiesta, una volta sola |
+| `Lavori` | `src/lavori.rs` | il gruppo di thread dei motori, costruito al primo lavoro |
+| `Cache`, `Budget` | `src/memoria.rs` | le cache dei motori come le vede il budget, e il budget |
+| `Tetto` | `src/pressione.rs` | il tetto della memoria e la pressione che lo abbassa |
+| `Servizi` | `src/servizi.rs` | ciò che i motori hanno in comune: `lavori()` e `memoria()` |
+| `Motori`, `Voce` | `src/registro.rs` | il registro dove ogni adattatore iscrive il suo motore |
+| `ErroreMotore` | `src/lib.rs` | lucchetto avvelenato, creazione fallita, motore sconosciuto, iscrizioni doppie |
+
+```mermaid
+flowchart LR
+    ADA["Adattatore<br/>fub-format-xlsx, fub-format-rich"] --> REG["Motori<br/>registro del processo"]
+    ADA --> PIG["Pigro del motore"]
+    ADA --> CAC["Cache del motore"]
+    PIG --> SER["Servizi del processo"]
+    CAC --> BUD["Budget"]
+    SER --> LAV["Lavori<br/>gruppo di thread"]
+    SER --> BUD
+    BUD --> TET["Tetto<br/>RAM e pressione"]
+```
+
+## Il motore pigro
+
+`Pigro::nuovo(crea)` non costruisce niente; è `const`, quindi un adattatore
+può tenere il suo motore in uno `static`. Lo stato è uno fra tre:
+
+- **Vuoto**: il primo `prendi` segna In costruzione, lascia il lucchetto e
+  chiama `crea`;
+- **In costruzione**: chi chiama `prendi` intanto aspetta su una `Condvar`,
+  senza lucchetto tenuto mentre `crea` lavora, e riceve lo stesso esito di chi
+  costruisce, lo stesso `Arc` o lo stesso errore;
+- **Pronto**: `prendi` dà una copia dell'`Arc`.
+
+Se `crea` fallisce lo stato torna Vuoto, e il `prendi` dopo riprova. Se `crea`
+va in panico, il panico diventa `ErroreMotore::CreazioneFallita` con il suo
+messaggio, si scrive nel log, e lo stato torna Vuoto: nessuno resta ad
+aspettare per sempre.
+
+`libera` toglie il motore dal `Pigro`, ma non lo distrugge sotto i piedi di
+nessuno: chi tiene già un `Arc` continua a usarlo, e il motore se ne va con
+l'ultimo `Arc`. Il motore non cade mai a lucchetto tenuto. Durante una
+costruzione `libera` non fa niente e dà falso: la costruzione arriva in fondo.
+
+`scalda` avvia `prendi` sul gruppo di thread dei motori e torna subito; un
+motore già acceso o in costruzione non avvia niente. `se_acceso` dà il motore
+soltanto se c'è già: serve a contare o svuotare le cache di un motore senza
+accenderlo.
+
+## Il gruppo di thread
+
+`Lavori` è un `rayon::ThreadPool` suo, non quello globale di `rayon`, che
+anche altre dipendenze del workspace possono usare. Nasce al primo lavoro: un
+Fub che non apre mai un motore non ha un thread in più. I thread si chiamano
+`fub-motore-{n}` e sono `available_parallelism() - 1`, almeno 1 e al più 8,
+così il thread di chi chiede resta libero.
+
+- `in_sottofondo(lavoro)` avvia e torna subito. Un panico dentro il lavoro si
+  scrive nel log (`panic_handler`) e non chiude il processo.
+- `installa(lavoro)` esegue dentro il gruppo e aspetta il risultato; il
+  parallelismo di `rayon` usato dentro resta nel gruppo. Un panico torna a chi
+  ha chiamato.
+
+Se il gruppo non si può costruire, `installa` esegue sul thread di chi chiama
+e `in_sottofondo` scrive l'errore nel log; il lavoro dopo riprova a costruirlo.
+
+## Il budget delle cache
+
+Una cache di un motore implementa `Cache`: `nome`, `byte` (una stima onesta,
+la capacità delle strutture), `libera(quanto)` (libera almeno `quanto` se può,
+anche tutto, e dice quanto ha liberato) e `ultimo_uso`. Il motore la iscrive
+nel budget dei suoi servizi con `registra`.
+
+Il budget tiene delle `Weak`: una cache che il suo motore lascia cadere esce
+dall'elenco da sola. Il lucchetto dell'elenco copre soltanto l'elenco: il
+budget prende gli `Arc` vivi, lo lascia, poi chiama le cache, che quindi
+possono chiamare il budget anche da dentro `libera`.
+
+- `usati()` somma i byte delle cache vive; `tetto()` è il tetto adesso.
+- `rispetta()` ordina le cache dalla meno usata di recente e chiede a ognuna
+  ciò che manca per stare sotto il tetto, finché ci si sta. Conta i byte che
+  la cache tiene dopo, non quelli che dice di aver liberato. Una cache che
+  libera meno, o niente, fa passare alla seguente. Con il tetto a zero si
+  svuota tutto ciò che si può. Due `rispetta()` insieme non lavorano due
+  volte: la seconda torna subito (`saltato`), e la prima ripassa una volta in
+  più alla fine.
+- `svuota_tutto()` svuota ogni cache senza guardare il tetto: è la chiusura.
+- `rilascia_al_sistema()` rende al sistema la memoria che l'allocatore tiene
+  libera.
+
+Chi chiama `rispetta()` è l'adattatore, quando una cache cresce o un documento
+si chiude; il budget non ha un thread suo.
+
+## Il tetto della memoria
+
+Il tetto parte da un ottavo della RAM installata, fra 256 MiB e 2 GiB. Su
+Linux la RAM è `MemTotal` di `/proc/meminfo`; se non si legge, e su macOS e
+Windows, il tetto parte da 1 GiB.
+
+Su Linux il tetto scende con la pressione della memoria
+(`/proc/pressure/memory`, PSI): a metà con `some avg10 ≥ 10`, a un quarto con
+`full avg10 ≥ 5`. Senza PSI (kernel vecchio, container) il tetto resta quello
+di partenza. Su macOS e Windows non c'è un segnale di pressione: il tetto
+resta quello di partenza.
+
+La pressione si legge quando si chiama `rispetta()` o `tetto()`, senza un
+thread in più, e al più una volta al secondo: chiamate fitte non rileggono il
+file. La RAM si legge una volta sola, alla prima domanda. La lettura dei file è
+separata dal significato: `pressione::mem_totale` e `pressione::psi` sono
+funzioni pure sul testo, e la `Sorgente` del testo si sostituisce nelle prove
+(`Tetto::da_sorgente`).
+
+## Chiudere libera
+
+glibc trattiene le pagine liberate: chiudere un motore non abbassa la memoria
+del processo finché non si chiede di renderla
+([misure di K0](../misure/motori-2026-10-31-linux-ryzen.md)).
+`rilascia_al_sistema()` su Linux con glibc chiama `malloc_trim(0)`; altrove non
+fa niente. Un adattatore la chiama dopo aver svuotato le cache, quando l'ultimo
+documento del suo motore si chiude.
+
+## Servizi e registro del processo
+
+`Servizi::processo()` e `Motori::processo()` sono uno solo per processo, e
+crearli non avvia niente. Per le prove `Servizi::nuovi(config)` dà servizi
+separati, con il numero di thread e il tetto che la prova sceglie
+(`Tetto::fisso`), e `Motori::nuovi(servizi)` un registro separato.
+
+`Servizi` ha i campi privati e un metodo per servizio (`lavori()`,
+`memoria()`): un servizio nuovo, come la scheda grafica o l'archivio comune
+dei caratteri, si aggiunge con il primo motore che lo usa senza cambiare chi
+usa quelli che ci sono.
+
+## Come un adattatore iscrive il suo motore
+
+1. Tiene il motore in un `Pigro`, con una `crea` che prepara ciò che il motore
+   prepara alla prima apertura.
+2. Implementa `Voce` per il motore: `acceso`, `scalda(servizi)`, `svuota`
+   (le cache, senza spegnere), `libera` (spegne) e `byte`. Un motore spento ha
+   zero byte e niente da svuotare: per guardarlo usa `Pigro::se_acceso`.
+3. Lo iscrive in `Motori::processo()` con il suo spazio e le estensioni dei
+   file che apre, la prima volta che il suo provider si crea, non all'avvio:
+
+   ```rust
+   motori.registra("fogli", &["xlsx", "xlsm"], voce)?;
+   ```
+
+   Uno spazio si iscrive una volta sola e un'estensione appartiene a un motore
+   solo: un secondo `registra` dà `SpazioGiaIscritto` o `EstensioneContesa`.
+   L'adattatore che si crea più volte nello stesso processo iscrive una volta
+   sola, per esempio dietro un `OnceLock`.
+4. Iscrive le sue cache nel budget dei servizi con `registra`, chiama
+   `rispetta()` quando una cache cresce o un documento si chiude, e alla
+   chiusura dell'ultimo documento `svuota` più `rilascia_al_sistema()`.
+
+Il registro dà `scalda_per(estensione)` (l'estensione con o senza punto, in
+qualunque maiuscola), `voce(spazio)` (o `MotoreSconosciuto`) ed `elenco()`,
+con spazio, acceso e byte di ogni motore. Non tiene lucchetti mentre chiama
+una voce.
+
+## Prove
+
+- `crates/fub-motori/tests/pigro.rs`: dieci thread insieme e una costruzione
+  sola; errore e ritentativo; chi aspettava riceve l'errore; panico in `crea`;
+  `libera` mentre un altro tiene l'`Arc`; `libera` durante la costruzione;
+  `scalda` sul gruppo dei motori.
+- `crates/fub-motori/tests/memoria.rs`: `rispetta()` dalla meno usata fin
+  sotto il tetto; cache che liberano meno o niente; tetto zero; `Weak` morte;
+  due `rispetta()` insieme senza lucchetti tenuti; i lettori di `meminfo` e di
+  PSI sui campioni; `/proc/pressure` assente; letture non ripetute.
+- `crates/fub-motori/tests/registro.rs`: iscrizione, `scalda_per`, iscrizioni
+  doppie; servizi e registro del processo; nome e numero dei thread; un panico
+  in un lavoro.

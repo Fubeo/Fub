@@ -51,6 +51,7 @@ sotto `crates/` con gli altri e non compaiono nel disegno per non superare i
 | i formati | `crates/fub-format-*/` | i provider: markdown, canvas, base, svg, rich, xlsx | il test del crate |
 | l'inchiostro | `crates/fub-ink/` | campioni, pressione, stabilizzatore, InkML; il gemello caldo sta in `apps/client/src/ink/` | `cargo test -p fub-ink` |
 | i disegni | `crates/fub-scene/` | lettura del formato scena e delle annotazioni PDF | `cargo test -p fub-scene` |
+| lo strato dei motori | `crates/fub-motori/` | motori costruiti alla prima richiesta, il loro gruppo di thread, il budget delle cache, il registro | `cargo test -p fub-motori` |
 | il runtime dei plugin | `crates/fub-wasm-host/` | l'unico crate che nomina Wasmtime | `cargo test -p fub-wasm-host` |
 | la riga di comando | `crates/fub-cli/` | automazione senza Tauri e il server MCP | `cargo test -p fub-cli` |
 | la sessione live | `crates/fub-live/` | PC host, tablet scrittore, QR e TLS | `cargo test -p fub-live` |

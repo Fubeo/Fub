@@ -68,6 +68,7 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   e la [superficie dei fogli](architecture/grid-surface.md)
 - [Inchiostro e strumenti](architecture/ink-and-tools.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md)
+- [Lo strato dei motori](architecture/motori.md)
 
 ## Sviluppare
 
@@ -109,7 +110,6 @@ fase passa il cancello (l'ordine sta in [Stato](project/status.md)).
 |---|---|
 | `misure/motori-*.md` | K0, le misure dei motori |
 | `architecture/componenti.md` | K1 e K2, il modello a componenti |
-| `reference/fub-motori.md` | K3, lo strato dei motori |
 | `product/lavagna.md` | la lavagna, prima versione |
 | `product/pdf-lettore.md` | P2, il visore PDF |
 | `product/pdf-completo.md` | P5, la modifica completa |
