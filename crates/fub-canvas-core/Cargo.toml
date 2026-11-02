@@ -4,9 +4,13 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Il nucleo della lavagna: modello JSON Canvas 1.0 con i campi sconosciuti conservati, lettura e validazione. Puro: niente contratto, niente Markdown, compila per wasm32-unknown-unknown."
+description = "Il nucleo della lavagna: modello JSON Canvas 1.0 con i campi sconosciuti conservati, lettura e validazione, e il suo inchiostro `fub:ink`. Puro: niente contratto, niente Markdown, compila per wasm32-unknown-unknown."
 
 [dependencies]
+# Il codec dei tratti: la stringa `fub:ink` e il pennello `fub:brush` con i
+# loro limiti, per leggere e controllare l'inchiostro delle schede (`ink`).
+# Puro come il nucleo: prende soltanto `fub-ink`.
+fub-ink-codec = { workspace = true }
 serde = { workspace = true }
 # `float_roundtrip`: un decimale si rilegge esatto, non a meno di un ulp. Le
 # feature di Cargo si uniscono, quindi vale per tutto il grafo che contiene il

@@ -762,8 +762,12 @@ const INK_CODEC_ALLOWED_DEPENDENTS: &[&str] = &["fub-scene", "fub-canvas-core"];
 /// che detta la forma: un modulo `wasm32-unknown-unknown` non può portarsi
 /// dietro il contratto, il Markdown, il kernel o un toolkit, e ogni byte in più
 /// lo paga chi apre una lavagna. Per questo le dirette sono un elenco chiuso
-/// (`serde`, `serde_json`, `thiserror`) e la chiusura non contiene nessun
-/// membro del workspace né una famiglia proibita. Il giro completo di
+/// (`serde`, `serde_json`, `thiserror` e il codec dei tratti `fub-ink-codec`,
+/// per l'inchiostro `fub:ink` delle schede) e la chiusura non contiene una
+/// famiglia proibita né un membro del workspace, salvo i due nominati in
+/// [`CANVAS_CORE_ALLOWED_MEMBERS`]: il codec e il nucleo dell'inchiostro che
+/// lui prende, puri e già controllati da `the_ink_codec_stands_alone` e
+/// `the_ink_core_stands_alone`. Il giro completo di
 /// `scripts/check.sh` lo compila per quel bersaglio; questa rete dice il
 /// perché prima del linker.
 ///
@@ -792,13 +796,16 @@ fn the_canvas_core_stands_alone() {
     let trespassers: Vec<&str> = graph
         .closure("fub-canvas-core")
         .into_iter()
-        .filter(|n| members.contains(n) || forbidden(n))
+        .filter(|n| {
+            forbidden(n) || (members.contains(n) && !CANVAS_CORE_ALLOWED_MEMBERS.contains(n))
+        })
         .collect();
     assert!(
         trespassers.is_empty(),
         "`fub-canvas-core` raggiunge {trespassers:?} fra le dipendenze normali.\n\
          Il nucleo della lavagna non vede il contratto, il Markdown, il kernel,\n\
-         il toolkit dell'app né un altro membro del workspace."
+         il toolkit dell'app né un altro membro del workspace, salvo\n\
+         {CANVAS_CORE_ALLOWED_MEMBERS:?} (l'inchiostro delle schede)."
     );
 
     let dependents: Vec<&str> = members
@@ -818,7 +825,15 @@ fn the_canvas_core_stands_alone() {
 }
 
 /// Le sole dipendenze normali dirette del nucleo della lavagna. Elenco chiuso.
-const CANVAS_CORE_ALLOWED_DIRECT: &[&str] = &["serde", "serde_json", "thiserror"];
+const CANVAS_CORE_ALLOWED_DIRECT: &[&str] = &["fub-ink-codec", "serde", "serde_json", "thiserror"];
+
+/// L'eccezione nominata nella chiusura del nucleo della lavagna: i soli membri
+/// del workspace che può raggiungere. Il codec dei tratti legge e controlla
+/// l'inchiostro `fub:ink` delle schede, e prende con sé il nucleo
+/// dell'inchiostro, di cui quantizza il campione. Tutti e due sono puri e
+/// compilano per `wasm32-unknown-unknown` (punto 2 di
+/// docs/decisions/0204-nucleo-inchiostro.md).
+const CANVAS_CORE_ALLOWED_MEMBERS: &[&str] = &["fub-ink-codec", "fub-ink"];
 
 /// Chi può dipendere dal nucleo della lavagna. Elenco chiuso: il formato, i
 /// comandi della lavagna e la facciata WebAssembly.
