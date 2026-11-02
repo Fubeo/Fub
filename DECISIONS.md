@@ -59,6 +59,26 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K3 · Lavoro di notte senza l'utente: le domande del «Chiede
+  sempre» si raccolgono in `PLAN.md` (D-1…D-3) e intanto vale la scelta più
+  sicura e reversibile; i due IPC nuovi (scaldare, «documento chiuso») si
+  scrivono su un branch a parte, `piano/k3-ipc-motori`, e non entrano nel
+  branch del piano senza un sì; nessun merge · fonte: l'utente («voglio che
+  tu implementi più parti possibili durante la notte … segui il piano»).
+- 2026-11-02 · K3 · `fub-motori` non nomina nessun motore: dà `Pigro<T>`,
+  `Servizi`, `Budget`, `Cache`, il catalogo e un registro `Motori` dinamico in
+  cui ogni adattatore iscrive il suo motore («fogli», «documenti»); servizi e
+  registro unici nel processo · perché: solo gli adattatori nominano i motori
+  (`check-engine-boundary.mjs`, `GRIDCRAFT_OWNERS`, `WORDCRAFT_OWNERS`) e un
+  campo per motore farebbe un ciclo fra `fub-motori` e gli adattatori; ADR
+  0236.
+- 2026-11-02 · K3 · `rayon` (gruppo di thread dei motori, suo e con un nome)
+  e `libc` (`malloc_trim` su glibc) diretti in `fub-motori`: erano già
+  nell'albero, nessun crate nuovo · fonte: `Cargo.lock` (rayon 1.12 da
+  tantivy; libc 0.2 come in `fub-kernel`).
+- 2026-11-02 · K3 · Scheda grafica e archivio dei caratteri non entrano in K3:
+  nessun motore acceso li usa e `wgpu` sarebbe una dipendenza nuova; arrivano
+  col primo motore che li chiede · domanda D-1 per l'utente.
 - 2026-11-01 · regole · L'orchestratore e i coder decidono da soli il come
   tecnico, i formati interni, le dipendenze fra crate del workspace e i file
   legati al task; «Chiede sempre» resta per ciò che si vede, il contratto
