@@ -20,6 +20,7 @@ import { mountRichSurface, RICH_FAMILY, RICH_FORMATS, RICH_OWNER, RICH_PROFILE }
 import { mountMediaSurface, profileForKind, type MediaSurfaceDeps } from "../media/media-surface";
 import { mediaKindOfId, mimeOfId } from "../media/media-types";
 import { mountSvgSurface, SVG_PROFILE } from "../text/profiles/svg";
+import { CRAFT_FAMILY, CRAFT_FORMATS, CRAFT_OWNER, CRAFT_PROFILE, XMP_PROFILE, mountCraftSurface } from "../craft/index";
 import { makePdfJsLoader, pdfIdWithoutFragment, type PdfJsModule } from "../media/pdf-view";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { CanvasAttachmentPort, CanvasMediaPort } from "../canvas/engine";
@@ -441,6 +442,23 @@ export function createDocumentSurfaceRegistry(
             engine.destroy();
           },
         };
+      },
+    },
+  });
+  registry.register({
+    owner: CRAFT_OWNER,
+    family: CRAFT_FAMILY,
+    defaultProfile: CRAFT_PROFILE,
+    // I file delle app Craft e gli XMP, in sola lettura: la superficie arriva
+    // con un `import()` alla prima scheda (`editors/craft/`).
+    profiles: [XMP_PROFILE],
+    formats: CRAFT_FORMATS,
+    factory: {
+      mount(profile, context) {
+        return mountCraftSurface(profile, context, {
+          onOpenDocument: options.onOpenDocument,
+          onSearchTag: options.onSearchTag,
+        });
       },
     },
   });

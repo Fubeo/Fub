@@ -656,6 +656,231 @@
   cursor: default;
 }
 
+/* ── I file delle app Craft ──────────────────────────────────────────────── */
+
+/* La scheda di un disegno, di un'immagine o di un progetto: l'anteprima con
+   lo zoom delle foto e, sotto, la riga dei dati in grafite. Senza anteprima,
+   un riquadro sobrio come ciò che non si apre, senza il segno d'allarme: il
+   nome, i dati, ciò che succede e un'azione sola nel colore d'accento. */
+.craft-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.craft-info {
+  flex: none;
+  margin: 0;
+  padding: var(--space-3) var(--space-5);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+.craft-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  box-sizing: border-box;
+  max-width: 36rem;
+  margin: auto;
+  padding: var(--space-9);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+.craft-empty > .craft-info {
+  padding: 0;
+}
+.craft-empty-name {
+  margin: 0;
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.craft-empty-state {
+  margin: 0;
+}
+.craft-render {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.craft-render:hover,
+.craft-render:focus-visible {
+  background: var(--accent-wash);
+  color: var(--accent-soft);
+}
+.craft-render:active {
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+}
+.craft-render:disabled {
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* La scheda di un XMP: i campi scorrono, la riga su LightCraft resta in
+   fondo. Le parole chiave sono i tag della nota e vanno a capo: mai uno
+   scorrimento di lato. */
+.craft-xmp {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.craft-xmp-body {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: var(--space-9) var(--space-7);
+}
+.craft-xmp-head {
+  margin-bottom: var(--space-7);
+}
+.craft-xmp-head > .craft-info {
+  padding: 0;
+  text-align: start;
+}
+.craft-xmp-title {
+  margin: 0 0 var(--space-2);
+  color: var(--text);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+}
+.craft-xmp-fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: var(--space-7);
+  margin: 0;
+}
+.craft-xmp-field {
+  display: contents;
+}
+.craft-xmp-field > dt,
+.craft-xmp-field > dd {
+  margin: 0;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+.craft-xmp-field > dt {
+  color: var(--muted);
+}
+.craft-xmp-field > dd {
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.craft-xmp-absent {
+  color: var(--muted);
+}
+.craft-xmp-stars {
+  letter-spacing: 0.1em;
+}
+.craft-xmp-star {
+  color: var(--muted);
+}
+.craft-xmp-star[data-on="true"] {
+  color: var(--accent);
+}
+.craft-xmp-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.craft-xmp-swatch {
+  flex: none;
+  width: 0.8em;
+  height: 0.8em;
+  border-radius: var(--radius-pill);
+  background: var(--muted);
+}
+.craft-xmp-label[data-color="red"] > .craft-xmp-swatch { background: var(--doc-color-red); }
+.craft-xmp-label[data-color="yellow"] > .craft-xmp-swatch { background: var(--doc-color-yellow); }
+.craft-xmp-label[data-color="green"] > .craft-xmp-swatch { background: var(--doc-color-green); }
+.craft-xmp-label[data-color="blue"] > .craft-xmp-swatch { background: var(--doc-color-blue); }
+.craft-xmp-label[data-color="purple"] > .craft-xmp-swatch { background: var(--doc-color-purple); }
+.craft-xmp-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.craft-xmp-tag {
+  max-width: 100%;
+  padding: 0.1em 0.6em;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--accent-wash);
+  color: var(--accent);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+.craft-xmp-tag:hover {
+  color: var(--accent-soft);
+}
+.craft-xmp-edits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+}
+.craft-xmp-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  overflow-wrap: anywhere;
+  text-align: start;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.craft-xmp-link:hover {
+  color: var(--accent-soft);
+}
+.craft-xmp-tag:focus-visible,
+.craft-xmp-link:focus-visible {
+  border-radius: var(--radius-xs);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.craft-xmp-note {
+  flex: none;
+  margin: 0;
+  padding: var(--space-4) var(--space-7);
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
 /* ── Il registratore ─────────────────────────────────────────────────────── */
 
 /* Sta nella testata del foglio, fra i comandi: una riga sola, piccola. Il

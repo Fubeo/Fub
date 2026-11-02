@@ -6,11 +6,14 @@
 // È una scelta di resa della shell, non il registro dei formati: quale
 // provider apre il file lo decide il backend. Le estensioni sono quelle che
 // dichiarano i formati ufficiali (`fub-format-rich`, `fub-format-xlsx`,
-// `fub-format-canvas`, `fub-format-markdown`); l'SVG è il disegno di
-// `fub.draw`. Un'estensione che qui non c'è non ha una specie, e resta com'era.
+// `fub-format-canvas`, `fub-format-markdown`, `fub-format-craft`); l'SVG è il
+// disegno di `fub.draw`. I file delle app Craft hanno la sigla dell'app: un
+// disegno di VectorCraft o un progetto di FigCraft sono disegni, un'immagine di
+// PhotoCraft e l'XMP che LightCraft scrive accanto a una foto sono foto.
+// Un'estensione che qui non c'è non ha una specie, e resta com'era.
 import { t, type Key } from "../i18n/strings";
 
-export type FormatKind = "word" | "odt" | "sheet" | "drawing" | "note";
+export type FormatKind = "word" | "odt" | "sheet" | "drawing" | "photo" | "note";
 
 interface Known {
   readonly kind: FormatKind;
@@ -30,6 +33,10 @@ const BY_EXTENSION: Readonly<Record<string, Known>> = {
   xltm: { kind: "sheet", tag: "EXCEL" },
   canvas: { kind: "drawing" },
   svg: { kind: "drawing", tag: "SVG" },
+  vectorcraft: { kind: "drawing", tag: "VECTORCRAFT" },
+  figcraft: { kind: "drawing", tag: "FIGCRAFT" },
+  pcraft: { kind: "photo", tag: "PHOTOCRAFT" },
+  xmp: { kind: "photo", tag: "XMP" },
   md: { kind: "note" },
   markdown: { kind: "note" },
 };
@@ -40,6 +47,7 @@ export const FORMAT_ICON: Readonly<Record<FormatKind, string>> = {
   odt: "format-odt",
   sheet: "format-sheet",
   drawing: "format-drawing",
+  photo: "format-photo",
   note: "notes",
 };
 
@@ -48,6 +56,7 @@ const FORMAT_NAME: Readonly<Record<FormatKind, Key>> = {
   odt: "format.kind.odt",
   sheet: "format.kind.sheet",
   drawing: "format.kind.drawing",
+  photo: "format.kind.photo",
   note: "format.kind.note",
 };
 

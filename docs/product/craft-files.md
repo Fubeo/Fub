@@ -12,9 +12,44 @@ collegati e l'anteprima che il file porta. Non li scrive mai, e per
 modificarli li lascia all'app che li ha creati. Gli id dei formati e la
 forma dell'anteprima sono in [Formati dei file Craft](../reference/craft-formats.md).
 
-Il lettore sta nel crate `fub-format-craft`, che l'host non monta ancora:
-finché non lo monta, un file Craft resta nel vault come un file di un formato
-che Fub non conosce.
+Il lettore sta nel crate `fub-format-craft`; la scheda che mostra il file è
+del componente `fub.craft`.
+
+## La scheda
+
+Un file Craft si apre in una scheda in sola lettura, con la sola modalità di
+lettura.
+
+- **Con l'anteprima.** L'immagine che il file porta si guarda come una foto,
+  con lo zoom e la sua barra. Sotto c'è la riga dei dati: che cosa è il file e
+  di quale app, la versione del formato se il file la dice, il peso
+  («Disegno di VectorCraft · formato 4 · 178.1 KiB»).
+- **Senza anteprima.** Un riquadro col nome del file e la stessa riga dei
+  dati. Se un'app installata sa fare l'anteprima, la scheda gliela chiede da
+  sola la prima volta che si apre e intanto dice «Preparo l'anteprima…»;
+  quando l'app finisce, l'immagine entra nella scheda. Se l'app non ce la fa,
+  la scheda dice perché e mostra il pulsante «Crea l'anteprima con …», che la
+  richiede una volta. Senza app installata dice «Il file non porta
+  un'anteprima», senza pulsante.
+- **Troppo grande.** Un file oltre 64 MiB non si legge: la scheda dice «File
+  troppo grande per l'anteprima» e non offre il pulsante.
+
+Quando il file cambia sul disco la scheda lo rilegge da sola. Il nome di
+un'app che Fub non conosce si mostra come il file lo scrive. Con il
+componente `fub.craft` spento la scheda dice «Nessuna superficie
+disponibile», come per ogni file che Fub non sa mostrare.
+
+Un XMP di LightCraft mostra invece i dati della foto: il voto in stelle
+(«Scartata» per una foto scartata), l'etichetta col suo colore, la scelta, le
+parole chiave come tag del vault (`New York` diventa `#New-York`, e un clic lo
+cerca), la foto a cui appartiene e le sue copie modificate, che si aprono con
+un clic. Un dato che l'XMP non dice ha la sua frase, come «Nessun voto». In
+fondo una riga ricorda che questi dati li scrive LightCraft, quando si salva
+con ⌘S o sempre se nelle sue preferenze è accesa la scrittura automatica
+degli XMP: Fub non li cambia.
+
+Nell'albero dei file un disegno o un progetto ha l'icona dei disegni, un
+`.pcraft` o un XMP quella delle foto.
 
 ## File collegati
 

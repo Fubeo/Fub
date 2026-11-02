@@ -92,6 +92,7 @@ import { mountPageIcons } from "./state/page-icons";
 import { mountPeople } from "./state/people";
 import { mountDates } from "./state/dates";
 import { mountLinkCards } from "./state/link-cards";
+import { mountCraftPreviews } from "./state/craft-previews";
 import { closeInDocumentSearch, mountDocSearch } from "./panels/doc-search";
 import { mountGraph } from "./panels/graph";
 import { mountQuickSwitcher } from "./panels/quick-switcher";
@@ -847,6 +848,7 @@ async function init(): Promise<Teardown> {
   mountPeople(pageWindowLifetime);
   mountDates(pageWindowLifetime);
   mountLinkCards(pageWindowLifetime);
+  mountCraftPreviews(pageWindowLifetime);
   mountExplorer(pageWindowLifetime);
   mountLinkPreview(pageWindowLifetime);
   mountBookmarksPanel(pageWindowLifetime);

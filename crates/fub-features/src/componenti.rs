@@ -285,6 +285,7 @@ pub fn righe() -> Vec<Riga> {
         #[cfg(feature = "craft")]
         Riga::servizio("fub.craft", "component.craft.name")
             .group("disegnare")
+            .ui(&["editors/craft"])
             .cargo_feature("craft"),
         // Documenti e Fogli: il bundle e il codec stanno in `fub-host`.
         #[cfg(feature = "rich")]

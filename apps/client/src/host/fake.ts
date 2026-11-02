@@ -88,6 +88,17 @@ import type {
 } from "./contract";
 import type { PrintArtifactOutcome, RevealOutcome, SaveArtifactOutcome } from "./ipc";
 import { mediaKindOfMime, mimeOrOctet } from "../editors/media/media-types";
+import {
+  CRAFT_BUNDLE_NS,
+  CRAFT_PREVIEW_COMMAND,
+  CRAFT_PREVIEW_VERSION,
+  CRAFT_RENDER_JOB,
+  type CraftApp,
+  type CraftPreview,
+  type CraftPreviewImage,
+  type CraftPreviewInfo,
+  type CraftPreviewSize,
+} from "./craft";
 
 /// Una chiamata arrivata alla porta: quale, e con cosa.
 ///
@@ -198,6 +209,51 @@ export interface Options {
   /// sono servite; con zero indirizzi è un PC fuori da una rete locale, che
   /// l'app rifiuta con `unserved`.
   live?: LiveNetwork;
+  /// I file delle app Craft (N7). Con, un `.vectorcraft`, un `.pcraft`, un
+  /// `.figcraft` e un `.xmp` hanno il formato `craft-*` a byte, come con
+  /// `fub-format-craft` montato, e il bundle `fub.craft` risponde a
+  /// `craft.preview`. Senza, restano file senza formato.
+  craft?: FakeCraft;
+}
+
+/// Il bundle `fub.craft` del finto. I byte dei file stanno in `resources`.
+export interface FakeCraft {
+  /// Il componente «File delle app Craft»: spento, i formati restano e
+  /// `craft.preview` non c'è (`unknown_command`). Di serie acceso.
+  component?: boolean;
+  /// Ciò che il bundle sa di ogni documento. Un file Craft che qui non c'è
+  /// risponde senza immagine, col peso dei suoi byte.
+  docs?: Record<string, FakeCraftDoc>;
+}
+
+/// Ciò che il bundle finto sa di un documento Craft.
+export interface FakeCraftDoc {
+  /// Ciò che si sa del file; ciò che manca si ricava dall'estensione e dai
+  /// byte.
+  info?: Partial<CraftPreviewInfo>;
+  /// L'immagine che il file porta (`origin: file`), per tutte e due le misure.
+  image?: CraftPreviewImage | null;
+  /// L'app installata che può fare l'anteprima che manca. `render: true`
+  /// mette in coda il job `craft.render`, e `done` è ciò che il job consegna
+  /// subito dopo la risposta: l'immagine fatta dall'app, un errore, o niente
+  /// (`null`: il job resta in coda finché il banco non manda il suo
+  /// `job_done`).
+  render?: { app: string; done: CraftPreviewImage | PluginError | null };
+}
+
+/// L'app di un file Craft dall'estensione, come i formati di `fub-format-craft`.
+const CRAFT_FAKE_APPS: Readonly<Record<string, { app: CraftApp; editor: string }>> = {
+  vectorcraft: { app: "vectorcraft", editor: "VectorCraft" },
+  pcraft: { app: "photocraft", editor: "PhotoCraft" },
+  figcraft: { app: "figcraft", editor: "FigCraft" },
+  xmp: { app: "xmp", editor: "LightCraft" },
+};
+
+function craftExtensionOf(id: string): string | null {
+  const point = id.lastIndexOf(".");
+  if (point < 0 || point < id.lastIndexOf("/")) return null;
+  const extension = id.slice(point + 1);
+  return extension in CRAFT_FAKE_APPS ? extension : null;
 }
 
 /// Gli indirizzi privati delle interfacce attive, quello della rotta
@@ -435,6 +491,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
     if (id.endsWith(".rtf")) return "rtf";
     if (id.endsWith(".doc") || id.endsWith(".dot")) return "doc";
     if (XLSX_FAKE_EXTENSIONS.some((extension) => id.toLowerCase().endsWith(`.${extension}`))) return "xlsx";
+    const craft = options.craft ? craftExtensionOf(id) : null;
+    if (craft) return `craft-${CRAFT_FAKE_APPS[craft]!.app}`;
     return null;
   }
 
@@ -443,7 +501,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// (`fub-format-rich`).
   function sourceKindOf(id: string): "text" | "bytes" {
     const format = formatOf(id) ?? "";
-    return RICH_FAKE_FORMATS.has(format) || format === "xlsx" ? "bytes" : "text";
+    return RICH_FAKE_FORMATS.has(format) || format === "xlsx" || format.startsWith("craft-") ? "bytes" : "text";
   }
 
   /// Registra la chiamata e restituisce ciò che la porta risponde.
@@ -962,8 +1020,72 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// della palette usano per provare che un comando che non scrive non
   /// flussa — e un host finto che non lo sapesse eseguire lancerebbe al posto
   /// di rispondere.
+  /// Le anteprime fatte dal job finto, per documento e revisione: la prossima
+  /// domanda le trova, come la cache del bundle.
+  const craftRendered = new Map<string, CraftPreviewImage>();
+
+  /// L'anteprima del bundle finto per `doc` alla misura `size`.
+  function craftPreview(doc: string, size: CraftPreviewSize, render: boolean): CraftPreview {
+    const extension = craftExtensionOf(doc);
+    const stored = docs.get(doc);
+    if (!options.craft || !extension) {
+      throw { kind: "bad_args", message: `\`${doc}\` non è un file delle app Craft.` } satisfies PluginError;
+    }
+    if (!stored) throw { kind: "not_found", message: `host fake: «${doc}» non c'è` } satisfies PluginError;
+    const known = options.craft.docs?.[doc] ?? {};
+    const base = CRAFT_FAKE_APPS[extension]!;
+    const info: CraftPreviewInfo = {
+      app: base.app,
+      editor: base.editor,
+      format_version: null,
+      bytes: bytesOf(stored).byteLength,
+      photo: null,
+      edits: [],
+      xmp: null,
+      ...known.info,
+    };
+    const rendered = craftRendered.get(`${doc}\u0000${stored.revision}`) ?? null;
+    const image = known.image ?? rendered;
+    const preview: CraftPreview = {
+      version: CRAFT_PREVIEW_VERSION,
+      doc,
+      revision: stored.revision,
+      size,
+      origin: known.image ? "file" : rendered ? "cli" : "none",
+      queued: false,
+      image: image ?? null,
+      info,
+      render: image || !known.render ? null : { app: known.render.app },
+    };
+    if (!render || !preview.render || !known.render) return preview;
+    // Il job in coda: la risposta lo dice, il `job_done` arriva dopo.
+    nextJob += 1;
+    const job = `craft-${nextJob}`;
+    const done = known.render.done;
+    const revision = stored.revision;
+    if (done !== null) {
+      void Promise.resolve().then(() => {
+        if ("kind" in done && "message" in done) {
+          emit({ type: "job_done", id: job, job: CRAFT_RENDER_JOB, result: { Err: done } });
+          return;
+        }
+        craftRendered.set(`${doc}\u0000${revision}`, done as CraftPreviewImage);
+        emit({ type: "job_done", id: job, job: CRAFT_RENDER_JOB, result: { Ok: craftPreview(doc, size, false) } });
+      });
+    }
+    return { ...preview, queued: true };
+  }
+
   function command(id: string, args: Record<string, unknown> | null, mode: InvokeMode) {
     switch (id) {
+      case CRAFT_PREVIEW_COMMAND: {
+        if (!options.craft || options.craft.component === false) {
+          throw { kind: "unknown_command", message: id } satisfies PluginError;
+        }
+        const size = args?.size === "large" ? "large" : "small";
+        const preview = craftPreview(String(args?.doc), size, args?.render === true);
+        return { notify: null, effect: { kind: "custom" as const, ns: CRAFT_BUNDLE_NS, payload: preview }, undo: null, partial: null };
+      }
       case "search.open":
         return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
       case "note.create": {
@@ -1257,7 +1379,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       configHealth: () => gate("configHealth", [], Promise.reject(new Error("host fake: configurazione di macchina non disponibile"))),
       recoverConfig: (path, action) => gate("recoverConfig", [path, action], Promise.reject(new Error("host fake: recovery senza disco"))),
       openVault: (path) => {
-        const extensions = ["md", "markdown", "docx", "odt", "rtf", "doc", "dot", ...XLSX_FAKE_EXTENSIONS, "canvas", "base", ...(options.draw === true ? ["svg", "fubann"] : [])];
+        const extensions = ["md", "markdown", "docx", "odt", "rtf", "doc", "dot", ...XLSX_FAKE_EXTENSIONS, "canvas", "base", ...(options.draw === true ? ["svg", "fubann"] : []), ...(options.craft ? Object.keys(CRAFT_FAKE_APPS) : [])];
         const info: VaultInfo = { root: path, extensions, plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },
