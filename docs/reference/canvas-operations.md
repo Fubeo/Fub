@@ -311,10 +311,10 @@ sola**: un passo d'anteprima, un passo d'annulla. Scrive un documento solo
 |---|---|---|
 | `doc` | documento, obbligatorio | il file `.canvas`; un documento di un altro formato è `BadArgs` |
 | `ops` | testo, obbligatorio | un array JSON di operazioni, come sopra; testo che non è un array di operazioni, o un array vuoto, è `BadArgs` |
-| `base` | testo | la revisione su cui valgono le operazioni; se oggi il documento ne ha un'altra è `Conflict` |
+| `base` | testo | la revisione su cui valgono le operazioni; se il documento ne ha già un'altra è `Conflict` |
 | `seed` | testo | il seme degli id nuovi, un intero decimale da 0 a 2⁶⁴ − 1 (in stringa, perché un `u64` non sta in un numero JSON) |
 
-Senza `seed` il seme è l'FNV-1a a 64 bit della revisione di oggi: l'anteprima
+Senza `seed` il seme è l'FNV-1a a 64 bit della revisione corrente: l'anteprima
 e l'applicazione sulla stessa revisione danno gli stessi id. Due chiamate con
 la stessa `base` non si applicano tutte e due: la seconda trova la revisione
 scritta dalla prima ed è `Conflict`. Senza `base`, una scrittura avvenuta fra
@@ -334,4 +334,4 @@ scrive. L'applicazione restituisce l'annulla (l'inversa che l'host dà della
 modifica) e l'effetto `Custom` con namespace `fub.lavagna` e payload
 `{"created": [...], "revision": "..."}`: gli id nati, nell'ordine di
 `created`, e la revisione del file dopo. Operazioni che non cambiano un byte
-non scrivono e non lasciano un annulla; l'effetto dice la revisione di oggi.
+non scrivono e non lasciano un annulla; l'effetto dice la revisione corrente.
