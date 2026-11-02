@@ -307,8 +307,11 @@ impl Voce for Fogli {
         self.pigro.acceso()
     }
 
-    fn scalda(&self, servizi: &Arc<Servizi>) {
-        self.pigro.scalda(Arc::clone(servizi));
+    /// Accende il motore in sottofondo con i **suoi** servizi, quelli nel cui
+    /// budget iscrive le cache, come fa la prima apertura; per il motore del
+    /// processo sono gli stessi del registro.
+    fn scalda(&self, _servizi: &Arc<Servizi>) {
+        self.pigro.scalda(Arc::clone(&self.servizi));
     }
 
     fn svuota(&self) -> u64 {
