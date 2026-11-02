@@ -878,8 +878,11 @@ impl From<fub_kernel::snapshot::SnapshotError> for SnapshotHostError {
 /// `Closing` resta nella mappa per tutta la durata del teardown: è il confine
 /// atomico che impedisce a un'apertura concorrente di montare una seconda
 /// sessione sulla stessa radice.
+///
+/// La sessione aperta sta in una `Box`: è grande, gli altri due stati sono un
+/// puntatore, e la mappa non deve pagare la sessione per ogni slot.
 enum SessionSlot {
-    Open(VaultSession),
+    Open(Box<VaultSession>),
     Closing(Arc<ClosingToken>),
     Applying(Arc<ApplyingToken>),
 }
@@ -2173,7 +2176,7 @@ impl Host {
                                     let (session, lease) = opening.into_session_with_lease();
                                     sessions
                                         .slots
-                                        .insert(root.clone(), SessionSlot::Open(session));
+                                        .insert(root.clone(), SessionSlot::Open(Box::new(session)));
                                     drop(lease);
                                     (Ok(info), None)
                                 }
@@ -2204,7 +2207,7 @@ impl Host {
                             let (session, lease) = opening.into_session_with_lease();
                             sessions
                                 .slots
-                                .insert(root.clone(), SessionSlot::Open(session));
+                                .insert(root.clone(), SessionSlot::Open(Box::new(session)));
                             drop(lease);
                             (Ok(info), None)
                         }
@@ -3189,7 +3192,7 @@ impl Host {
                     else {
                         unreachable!("lo slot verificato era aperto")
                     };
-                    session
+                    *session
                 }
                 SessionSlot::Closing(_) => return Err(closing_conflict(&root)),
                 SessionSlot::Applying(_) => return Err(applying_conflict(&root)),
@@ -3237,7 +3240,7 @@ impl Host {
                         else {
                             unreachable!("lo slot verificato era aperto")
                         };
-                        claimed.push((root.clone(), token, session));
+                        claimed.push((root.clone(), token, *session));
                     }
                 }
                 claimed
