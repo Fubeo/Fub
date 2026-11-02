@@ -52,7 +52,12 @@ fn open(provider: &mut XlsxGridProvider) -> GridBytesSession {
         .unwrap()
 }
 
-fn give(provider: &mut XlsxGridProvider, session: &GridBytesSession, id: &str, params: &str) -> bool {
+fn give(
+    provider: &mut XlsxGridProvider,
+    session: &GridBytesSession,
+    id: &str,
+    params: &str,
+) -> bool {
     provider
         .command(
             &session.instance,
@@ -75,12 +80,20 @@ fn give(provider: &mut XlsxGridProvider, session: &GridBytesSession, id: &str, p
 /// senza l'elenco di parole del sistema (`/usr/share/dict/words`) GridCraft
 /// rifiuta il controllo e il dizionario resta a zero byte.
 fn riempi(provider: &mut XlsxGridProvider, session: &GridBytesSession, fogli: &Fogli) -> bool {
-    assert!(give(provider, session, "fub.copyHtml", r#"{"range":"A1:B2"}"#));
+    assert!(give(
+        provider,
+        session,
+        "fub.copyHtml",
+        r#"{"range":"A1:B2"}"#
+    ));
     let controllato = give(provider, session, "review.spelling", "{}");
     let motore = fogli.se_acceso().expect("il motore è acceso");
     assert!(motore.byte_dei_formati() > 0, "i formati dei numeri letti");
     if motore.byte_del_dizionario() == 0 {
-        assert!(!controllato, "senza elenco di parole il controllo è rifiutato");
+        assert!(
+            !controllato,
+            "senza elenco di parole il controllo è rifiutato"
+        );
         return false;
     }
     assert!(controllato);
@@ -96,14 +109,20 @@ fn creare_il_provider_non_costruisce_il_motore_e_la_prima_apertura_si() {
     let _turno = turno();
     let fogli = largo();
     let mut provider = XlsxGridProvider::con_fogli(Arc::clone(&fogli));
-    assert!(!fogli.acceso(), "il provider da solo non costruisce il motore");
+    assert!(
+        !fogli.acceso(),
+        "il provider da solo non costruisce il motore"
+    );
     assert_eq!(fogli.aperte(), 0);
 
     let session = open(&mut provider);
     assert!(fogli.acceso(), "la prima apertura costruisce il motore");
     assert_eq!(fogli.aperte(), 1);
     let motore = fogli.se_acceso().unwrap();
-    assert!(!motore.comandi().is_empty(), "il catalogo dei comandi è pronto");
+    assert!(
+        !motore.comandi().is_empty(),
+        "il catalogo dei comandi è pronto"
+    );
 
     // La seconda apertura prende lo stesso motore.
     let _altra = open(&mut provider);
@@ -228,7 +247,12 @@ fn chiudere_con_il_dizionario_mai_caricato() {
     let session = open(&mut provider);
     let motore = fogli.se_acceso().unwrap();
     motore.svuota();
-    assert!(give(&mut provider, &session, "fub.copyHtml", r#"{"range":"A1:B2"}"#));
+    assert!(give(
+        &mut provider,
+        &session,
+        "fub.copyHtml",
+        r#"{"range":"A1:B2"}"#
+    ));
     assert_eq!(motore.byte_del_dizionario(), 0);
     assert!(motore.byte_dei_formati() > 0);
 
