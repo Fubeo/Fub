@@ -498,7 +498,7 @@ testo con le facce di `crates/fub-features/fonts/inter-400.ttf` lette dal
 disco dà pixel non bianchi. `cargo tree -p fub-features` mostra lo stesso
 `resvg` di prima.
 Prova: scripts/check.sh --rapido; cargo test -p fub-testkit --features pixel --test pixel
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T3 · I vettori dei gesti
 

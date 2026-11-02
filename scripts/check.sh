@@ -216,6 +216,10 @@ if [ "$MODE" = rapido ]; then
       case " $CRATES " in *" fub-features "*)
         run "fub-features senza feature" cargo check -p fub-features --no-default-features --all-targets ;;
       esac
+      case " $CRATES " in *" fub-testkit "*)
+        run "clippy del banco con pixel" cargo clippy -p fub-testkit --features pixel --all-targets -- -D warnings
+        run "fub-testkit con pixel (test)" tests -p fub-testkit --features pixel ;;
+      esac
     fi
     rust_guards
   fi
@@ -238,6 +242,7 @@ else
   run "cargo clippy --workspace --all-targets -- -D warnings" cargo clippy --workspace $EXCLUDE --all-targets -- -D warnings
   run "clippy dell'host senza draw" cargo clippy -p fub-host --no-default-features --features notify-watcher,http-client,official-features,rich --all-targets -- -D warnings
   run "clippy di fub-features con draw" cargo clippy -p fub-features --features draw --all-targets -- -D warnings
+  run "clippy del banco con pixel" cargo clippy -p fub-testkit --features pixel --all-targets -- -D warnings
   if has_target x86_64-pc-windows-msvc; then
     run "kernel per Windows" cargo check -p fub-kernel --all-targets --target x86_64-pc-windows-msvc
   else
@@ -283,6 +288,7 @@ else
   # varianti
   run "host senza draw (test)" tests -p fub-host --no-default-features --features notify-watcher,http-client,official-features,rich
   run "fub-features con draw (test)" tests -p fub-features --features draw
+  run "fub-testkit con pixel (test)" tests -p fub-testkit --features pixel
   run "motori di WordCraft (workspace loro)" env CARGO_TARGET_DIR=target/wordcraft cargo test --manifest-path vendor/wordcraft/Cargo.toml --workspace --locked --no-fail-fast
   run "motori di GridCraft (workspace loro)" env CARGO_TARGET_DIR=target/gridcraft cargo test --manifest-path vendor/gridcraft/Cargo.toml --workspace --locked --no-fail-fast
 
