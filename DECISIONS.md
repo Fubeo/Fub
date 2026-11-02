@@ -59,6 +59,20 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K5 · T10: i gesti di select, rect, ellipse, line e arrow
+  passano dal motore (`editors/spatial/motore/gesti.ts`) e ogni esito è un
+  passo di annulla. L'opzione dell'editor è una porta `MotoreDelDisegno` che
+  può essere ancora «in apertura» (non la `SessioneMotore` del piano): la
+  superficie la passa subito, un gesto aspetta l'apertura fino a 2 s e poi
+  non scrive niente; con il motore assente, o se l'apertura fallisce, fanno
+  gli strumenti TypeScript come prima, in silenzio. Il motore non si usa sui
+  fogli PDF né dentro un gruppo isolato; il doppio clic resta del client; il
+  movimento senza tasto premuto non si manda. I connettori seguono con
+  l'hook `follow` del motore della scena dentro il commit, quindi
+  `followConnectors` non si chiama a mano. Toccati anche `marks.ts` e
+  `stroke-shapes.ts` (maniglie e lazo dall'anteprima del motore). I motivi
+  dei rifiuti usano le chiavi che ci sono, fino a T21. Perché: senza motore
+  niente deve cambiare, e con il motore un gesto è un solo passo.
 - 2026-11-02 · K5 · T8: la sessione del motore nel client
   (`editors/spatial/motore/sessione.ts`) segue la `DocumentSession` come
   superficie `motore-disegno:<n>` (un id per sessione, come `live:<n>`, così

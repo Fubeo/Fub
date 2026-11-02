@@ -902,7 +902,7 @@ testo dopo il gesto è uguale a `expect.text`; un gesto è un passo di
 annullamento; la penna non chiama l'IPC; con il motore assente
 `tools/editor.test.ts` è verde come prima.
 Prova: scripts/check.sh --rapido; npm --prefix apps/client test -- src/editors/spatial/motore/gesti.test.ts src/editors/spatial/tools/editor.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T11 · Aprire, seguire il file, la differenza
 
