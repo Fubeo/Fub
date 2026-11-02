@@ -195,6 +195,12 @@ cfb = "0.15"
 # Anche dei disegni di `fub-features`: l'impronta dei PDF annotati e dei caratteri.
 sha2 = "0.11"
 image = { version = "0.25.10", default-features = false }
+# Il rasterizzatore dei disegni. Lo prendono due crate: `fub-features`, per
+# l'export (dietro `draw`), e `fub-testkit`, per l'oracolo a pixel dei test
+# (dietro `pixel`). Senza i default, che sono `system-fonts` e `memmap-fonts`:
+# chi lo prende dice da sé quali feature vuole, e nessuno dei due legge i
+# caratteri del sistema.
+resvg = { version = "0.45.1", default-features = false }
 # Il YAML del frontmatter. Era scritta a mano in due crate con la stessa
 # versione, ed è la coppia che `check-cargo-versioni.mjs` esiste per
 # prendere: due `Cargo.toml` da toccare per un `cargo update` sono uno di
