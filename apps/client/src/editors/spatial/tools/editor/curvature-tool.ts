@@ -325,6 +325,9 @@ export function installCurvatureTool(ctx: EditorContext): void {
         case "note":
           g.at ??= toPoint(samples[0]!);
           break;
+        case "motore":
+          ctx.motoreSamples(g, samples);
+          break;
         case "refused":
           break;
       }
@@ -385,6 +388,10 @@ export function installCurvatureTool(ctx: EditorContext): void {
           ctx.current = null;
           noteAt(g.at, g.pointer);
           return;
+        case "motore":
+          ctx.current = null;
+          ctx.motoreEnd(g);
+          return;
         case "refused":
           ctx.current = null;
           return;
@@ -399,6 +406,8 @@ export function installCurvatureTool(ctx: EditorContext): void {
       if (g.kind === "select") showGrip(null);
       // E il righello.
       if (g.kind === "ruler") ctx.rulerCancel(g);
+      // E il gesto sul motore, che rimette la selezione di prima.
+      if (g.kind === "motore") ctx.motoreCancel(g);
       clearPreviews();
     },
     ...(options.touch === undefined ? {} : { touch: options.touch }),

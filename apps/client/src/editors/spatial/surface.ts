@@ -50,6 +50,8 @@
 //   mostra «Apri come sorgente».
 
 import { errorText } from "../../host/errors";
+import { api } from "../../host/ipc";
+import { documentSessions } from "../../state/document-session";
 import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
 import { relativeRef, resolveAgainst } from "../../rules/mirrored";
 import { focusZone, identifier } from "../../ui/a11y";
@@ -96,6 +98,8 @@ import { featuresFor } from "./tools/registry";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, type ImageRef } from "./read-images";
 import { fontSheets, picture, type FontSheets } from "./picture";
 import { noteSceneChange, offerStage } from "./live/registry";
+import { motoreDa, type MotoreAperto } from "./motore/gesti";
+import { apriSessione } from "./motore/sessione";
 
 type VectorMode = "draw" | "read";
 
@@ -420,8 +424,28 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
 
   // --- L'editor -------------------------------------------------------------
 
+  /// Il motore del disegno (K5), aperto la prima volta che l'editor si
+  /// monta su un documento della `DocumentSession`, e chiuso con la
+  /// superficie. In tutti e due gli spazi di lavoro: gli strumenti del
+  /// disegno sono gli stessi. Senza sessione del documento, il motore non
+  /// si apre e gli strumenti fanno da sé.
+  let motore: MotoreAperto | null = null;
+  const openMotore = (): MotoreAperto | null => {
+    if (motore !== null) return motore;
+    const session = documentSessions.get(context.documentId);
+    if (session === undefined) return null;
+    const vault = documentSessions.vaultFor(context.documentId) ?? null;
+    motore = motoreDa(apriSessione(api, context.documentId, session.text(), session, { vault }));
+    return motore;
+  };
+  life.add(() => {
+    void motore?.chiudi();
+    motore = null;
+  });
+
   const mountEditor = (engine: SceneEngine): DrawEditor => {
     const editorLifetime = openLifetime();
+    const drawing = openMotore();
     const made = inspectorChrome();
     const mounted = createDrawEditor(drawHost, engine, editorLifetime, {
       chrome: made,
@@ -463,6 +487,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
           }),
       onFontNotes: sayFonts,
       place,
+      ...(drawing === null ? {} : { motore: drawing }),
       onChange: (change) => {
         text = change.text;
         opened = { kind: "scene", engine: mounted.engine };
