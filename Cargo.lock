@@ -2222,6 +2222,7 @@ dependencies = [
  "fub-features",
  "fub-format-base",
  "fub-format-canvas",
+ "fub-format-craft",
  "fub-format-markdown",
  "fub-format-rich",
  "fub-format-svg",

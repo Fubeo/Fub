@@ -92,6 +92,37 @@ un campo mancante o di un altro tipo dà `null`, un campo in più si ignora.
 `UPDATE_MIRROR=1 cargo test -p fub-format-craft --test ts_preview` riscrive
 la fixture che tiene uguali i due lati.
 
+## Anteprima e cache
+
+Il bundle `fub.craft` (`crates/fub-host/src/craft/`, feature `craft`)
+risponde al comando `craft.preview` (`{ "doc", "size", "render" }`, in sola
+lettura) con un `CraftPreview` nell'effetto `Custom` con `ns` `fub.craft`.
+`size` assente vale `small`; un documento che non è un file Craft è un
+`bad_args`. I formati non dipendono dal bundle: col componente spento il
+comando non c'è, e ricerca, backlink e tag restano.
+
+- La cache sta in `.fub/data/plugins/fub.craft/previews/*.json`, alla chiave
+  `cache_key(revision, size)`. Una voce vale se si legge, è della versione 1 e
+  ripete `doc`, `revision` e `size`; una rotta, di un'altra versione o di un
+  altro documento vale assente.
+- Altrimenti si leggono i byte: l'anteprima nel file dà `origin: file`, e
+  senza `origin: none`. Per un XMP `info.xmp` viene da `xmp::read`, la foto
+  dai figli diretti della sua cartella (il nome esatto, o per il solo gambo
+  il primo in ordine di id con un'altra estensione, confrontando i nomi come
+  sono scritti) e `info.edits` dalla copia `-Edit.psd` della foto, se c'è.
+- Un file oltre 64 MiB, col peso che dice l'anagrafe, non si legge: è
+  `origin: none`.
+- Si scrive in cache solo un'anteprima con `origin` `file` o `cli`, e solo se
+  la revisione è la stessa prima e dopo la lettura. La scrive chi ha il
+  permesso di scrivere i dati del bundle: il comando, che è in sola lettura,
+  la legge ma non la scrive, perché il kernel nega le scritture a un comando
+  di sola lettura; una scrittura che non riesce non toglie l'anteprima.
+- La cache è ricostruibile: cancellarla non perde niente, l'anteprima si
+  rilegge dal file. Una revisione nuova è una chiave nuova, e le voci vecchie
+  restano finché la cache del bundle non si pulisce.
+- Il job `craft.render` risponde che nessuna app installata può fare
+  l'anteprima (`unserved`).
+
 ## Contenitori
 
 `container::read_meta` legge la versione, il titolo, il testo per la ricerca

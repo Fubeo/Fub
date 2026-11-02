@@ -24,6 +24,9 @@ fub-format-base = { workspace = true }
 fub-format-svg = { workspace = true, optional = true }
 fub-format-rich = { workspace = true, optional = true }
 fub-format-xlsx = { workspace = true, optional = true }
+# I file delle app Craft (`.vectorcraft`, `.pcraft`, `.figcraft` e gli XMP di
+# LightCraft) in sola lettura, dietro la feature `craft` qui sotto.
+fub-format-craft = { workspace = true, optional = true }
 fub-importers = { workspace = true }
 fub-kernel = { workspace = true }
 serde = { workspace = true }
@@ -139,7 +142,7 @@ ureq = { version = "3", default-features = false, features = [
 rustix = { workspace = true }
 
 [features]
-default = ["notify-watcher", "http-client", "official-features", "rich", "xlsx", "draw"]
+default = ["notify-watcher", "http-client", "official-features", "rich", "xlsx", "draw", "craft"]
 notify-watcher = ["dep:notify", "dep:notify-debouncer-full"]
 
 # I documenti di videoscrittura (`fub-format-rich`: Word, OpenDocument, RTF,
@@ -212,6 +215,13 @@ proof = ["fub-features/proof"]
 # disegni senza disegni nel vault non avrebbe niente da esportare. Nel
 # `default`; la CI prova anche l'host senza, in un passo suo.
 draw = ["dep:fub-format-svg", "fub-features/draw"]
+
+# I file delle app Craft (`fub-format-craft`): i quattro formati a byte in sola
+# lettura (metadati, testo per la ricerca, file collegati) e il bundle
+# `fub.craft`, che risponde l'anteprima di un file con la sua cache. Spento, un
+# `.vectorcraft` o un `.pcraft` sono file come altri. Inoltra la riga «File
+# delle app Craft» della mappa dei componenti.
+craft = ["dep:fub-format-craft", "fub-features/craft"]
 
 [dev-dependencies]
 # Il banco del lato host (§16.2).

@@ -42,6 +42,7 @@ default = [
     "engine-documents",
     "engine-sheets",
     "http-client",
+    "craft",
 ]
 search = ["dep:tantivy", "dep:regex"]
 versioning = []
@@ -121,6 +122,9 @@ engine-sheets = []
 # Sincronizzazione, pubblicazione, aggiornamenti e anteprime dei link: i bundle
 # che `fub-host` monta solo con la sua feature `http-client`.
 http-client = []
+# I file delle app Craft: il bundle `fub.craft` e i formati stanno in
+# `fub-host` (e in `fub-format-craft`), qui c'è solo la riga della mappa.
+craft = []
 
 [dependencies]
 camino.workspace = true

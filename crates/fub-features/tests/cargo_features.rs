@@ -12,7 +12,7 @@
 //! Le cargo feature non sono più solo i moduli dell'inventario: ogni riga di
 //! `fub_features::componenti` che sta dietro una feature lo dice
 //! (`cargo_feature`), e le feature dei componenti che non sono moduli di questo
-//! crate (`rich`, `xlsx`, i due motori, `http-client`) sono marcatori. Il
+//! crate (`rich`, `xlsx`, i due motori, `http-client`, `craft`) sono marcatori. Il
 //! confronto si fa fra le righe e `[features]`, nei due versi.
 //!
 //! # Il guardiano di `fub-host`
@@ -335,7 +335,8 @@ fn fub_host_inoltra_ogni_feature_componente() {
     feature = "xlsx",
     feature = "engine-documents",
     feature = "engine-sheets",
-    feature = "http-client"
+    feature = "http-client",
+    feature = "craft"
 ))]
 fn with_all_the_feature_the_two_lists_coincide() {
     // Una feature fuori dal default c'è nella mappa solo se questa build l'ha

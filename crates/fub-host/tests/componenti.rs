@@ -79,6 +79,7 @@ fn before() -> BTreeSet<&'static str> {
         ("fub.publish", cfg!(feature = "http-client")),
         ("fub.updates", cfg!(feature = "http-client")),
         ("fub.linkcard", cfg!(feature = "http-client")),
+        ("fub.craft", cfg!(feature = "craft")),
     ];
     always
         .into_iter()
@@ -149,6 +150,8 @@ fn the_manifest_says_what_the_row_says() {
     ids.push("fub.rich");
     #[cfg(feature = "xlsx")]
     ids.push("fub.xlsx");
+    #[cfg(feature = "craft")]
+    ids.push("fub.craft");
     let strings = |items: &[&str]| items.iter().map(|s| s.to_string()).collect::<Vec<_>>();
     for id in &ids {
         let row = componenti::riga(id).unwrap_or_else(|| panic!("`{id}` has no row"));
@@ -200,4 +203,5 @@ fn the_rows_follow_the_cargo_features() {
     assert_eq!(ids.contains("fub.motore-fogli"), cfg!(feature = "xlsx"));
     assert_eq!(ids.contains("fub.sync"), cfg!(feature = "http-client"));
     assert_eq!(ids.contains("fub.graph"), cfg!(feature = "graph"));
+    assert_eq!(ids.contains("fub.craft"), cfg!(feature = "craft"));
 }

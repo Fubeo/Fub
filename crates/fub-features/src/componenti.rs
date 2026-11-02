@@ -280,6 +280,12 @@ pub fn righe() -> Vec<Riga> {
         Riga::servizio("fub.draw", "component.draw.name")
             .group("disegnare")
             .cargo_feature("draw"),
+        // I file delle app Craft: il bundle e i formati stanno in `fub-host`.
+        // Spento il componente, l'anteprima non c'è e i formati restano.
+        #[cfg(feature = "craft")]
+        Riga::servizio("fub.craft", "component.craft.name")
+            .group("disegnare")
+            .cargo_feature("craft"),
         // Documenti e Fogli: il bundle e il codec stanno in `fub-host`.
         #[cfg(feature = "rich")]
         Riga::modalita("fub.rich", "component.rich.name")
@@ -398,6 +404,11 @@ const NOMI: &[(&str, &str, &str)] = &[
     ),
     ("component.proof.name", "Correttore", "Proofing"),
     ("component.draw.name", "Disegni", "Drawings"),
+    (
+        "component.craft.name",
+        "File delle app Craft",
+        "Craft app files",
+    ),
     ("component.rich.name", "Documenti", "Documents"),
     ("component.xlsx.name", "Fogli", "Spreadsheets"),
     ("component.lavagna.name", "Lavagna", "Whiteboard"),
