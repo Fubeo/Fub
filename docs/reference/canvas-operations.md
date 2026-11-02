@@ -380,7 +380,8 @@ che Fub non sa disegnare si conserva e non si cancella: `Invalid`.
 ```
 
 `move` e `resize` non toccano l'inchiostro: i punti di una scheda sono in
-unità della scheda, e la resa li stira alla misura di adesso. `remove` porta
+unità della scheda, e la resa li porta alla misura di adesso come dice
+[«La misura della scheda»](canvas-ink.md#la-misura-della-scheda). `remove` porta
 via l'inchiostro della scheda con lei, e l'annulla lo rimette. I vettori
 sono `apps/client/src/__fixtures__/canvas-patches/*-ink-*.json` e
 `canvas-ops/*strokes*.json`, `canvas-ops/*-card-with-ink.json`.

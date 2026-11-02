@@ -37,8 +37,11 @@ conversione dei file.
 3. **I punti sono in unità della scheda alla misura di riferimento.**
    L'ancora `{"kind": "card", "width": W, "height": H}` dice la misura della
    scheda quando il tratto si è scritto; `{"kind": "free"}` dice coordinate
-   della lavagna. Spostare o ridimensionare una scheda non scrive niente: la
-   resa stira il tratto da `W × H` alla misura di adesso.
+   della lavagna. Spostare o ridimensionare una scheda non scrive niente.
+   Sulle immagini e sui PDF la resa scala il tratto da `W × H` alla misura
+   di adesso con lo stesso fattore nei due sensi, il minore, centrato; sulle
+   altre schede lo lascia alla misura in cui è stato scritto, in alto a
+   sinistra.
 4. **Ciò che Fub non capisce si conserva e non si tocca.** Un livello estraneo
    (un'altra versione, un id doppio o mancante) si conserva byte per byte e
    Fub non ci scrive; un tratto non valido si conserva e non si disegna.
@@ -56,8 +59,10 @@ La forma precisa, le regole e i vettori stanno in
   lingue, con la stessa quantizzazione;
 - la stringa della §5 è più corta del base64 di numeri `f32` a parità di
   traccia, e resta leggibile;
-- un'annotazione resta sopra la stessa parte della scheda anche dopo un
-  ridimensionamento.
+- su un'immagine o un PDF un'annotazione resta sopra la stessa parte del
+  contenuto, che scala anche lui senza deformarsi;
+- la regola della resa è una formula sola, con i suoi vettori
+  (`canvas-ink-fit/`), che un altro programma può rifare uguale.
 
 ### Negative
 
@@ -73,8 +78,12 @@ La forma precisa, le regole e i vettori stanno in
   sconosciuti. Che cosa ne fa quando riscrive il file (li tiene, li riordina,
   li perde) lo dice soltanto una prova con Obsidian vero: finché la prova non
   c'è, la decisione resta proposta.
-- un ridimensionamento non uniforme deforma un po' il tratto, spessore
-  compreso.
+- **Il ridimensionamento non uniforme non deforma, ma non riempie.** Su
+  un'immagine o un PDF allargati in un senso solo il tratto scala col fattore
+  minore e lascia una fascia vuota ai lati; su una nota, un foglio o un
+  gruppo il tratto non scala affatto, e se la scheda si rimpicciolisce può
+  uscirne (si vede, non si taglia) o finire sopra un'altra parte del
+  contenuto, che lì si ridispone invece di scalare.
 
 ## Alternative scartate
 
@@ -103,6 +112,8 @@ ridimensionata.
 
 - I vettori in `apps/client/src/__fixtures__/canvas-ink/`, un caso per file,
   sono la prova comune dei lettori in Rust e in TypeScript.
+- I vettori in `apps/client/src/__fixtures__/canvas-ink-fit/` provano la
+  regola della resa quando la scheda cambia misura.
 - Il test delle dipendenze (`dependency_invariant.rs`) nomina l'eccezione del
   nucleo della lavagna.
 - La prova con Obsidian dice che cosa succede ai campi `fub:ink` quando

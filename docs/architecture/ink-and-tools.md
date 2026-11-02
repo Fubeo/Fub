@@ -302,9 +302,11 @@ mouse `ignore`: i loro eventi restano alla lavagna, che li usa come prima.
   arriva alla lavagna.
 - **L'asciutto.** `editors/canvas/ink-paint.ts`: `paintCard` mette nella
   scheda un `<svg class="canvas-ink-card">` largo e alto quanto lei, con un
-  `<svg>` per ogni misura di riferimento (`viewBox`, `preserveAspectRatio`
-  di `INK_ASPECT`, D-9); spostare o ridimensionare la scheda porta
-  l'inchiostro senza ridisegnarlo. `paintBoard` disegna l'inchiostro libero
+  `<svg>` per ogni misura di riferimento nel modo della scheda
+  (`editors/canvas/ink-fit.ts`, D-9): `scale` per immagini e PDF (largo
+  quanto la scheda, `viewBox` e `xMidYMid meet`), `fixed` per le altre
+  (largo `W` e alto `H`, senza scala); spostare o ridimensionare la scheda
+  porta l'inchiostro senza ridisegnarlo. `paintBoard` disegna l'inchiostro libero
   sullo stage dopo le schede. Ridisegnare tratti uguali tiene i percorsi;
   `InkPathCache` tiene i contorni per id, inchiostro e pennello e lascia
   andare a ogni giro (`sweep`) quelli non più chiesti.

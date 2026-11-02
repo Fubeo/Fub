@@ -113,7 +113,8 @@ L'ancora dice in quali unità sono i punti del tratto.
 | `{"kind": "free"}` | solo nel livello della radice | coordinate della lavagna |
 
 - **`W`, `H`:** la misura della scheda quando il tratto si è scritto, numeri
-  finiti maggiori di zero. Si confrontano per valore: `640.0` e `6.4e2` sono
+  finiti maggiori di zero. Dicono in che unità sono i punti; come seguono la
+  misura di adesso lo dice «La misura della scheda». Si confrontano per valore: `640.0` e `6.4e2` sono
   640.
 - **Fuori posto:** un'ancora `card` alla radice o `free` su una scheda non è
   valida, e il tratto non si disegna.
@@ -127,13 +128,47 @@ L'ancora dice in quali unità sono i punti del tratto.
 - **L'inchiostro libero** si disegna sopra tutte le schede.
 - **Spostare una scheda** non cambia niente nel file: i punti sono relativi
   alla scheda.
-- **Ridimensionare una scheda** non cambia niente nel file. La resa stira il
-  tratto da `W × H` alla misura di adesso, in larghezza e in altezza
-  separatamente: il punto (x, y) va a (x · w / W, y · h / H), e il contorno,
-  spessore compreso, si stira allo stesso modo. Così un'annotazione resta
-  sopra la stessa parte della scheda.
+- **Ridimensionare una scheda** non cambia niente nel file. Come la resa
+  porta il tratto da `W × H` alla misura di adesso `w × h` dipende dalla
+  scheda (sotto, «La misura della scheda»).
 - **Un tratto che esce dalla scheda** resta valido: i punti non hanno limiti
-  di posizione.
+  di posizione, e ciò che esce si vede, non si taglia.
+
+### La misura della scheda
+
+Ogni scheda ha un **modo**, che si legge dal tipo e dal nome del file, mai dai
+tratti:
+
+| Modo | Schede | Il punto (x, y) va a | Spessore |
+|---|---|---|---|
+| `scale` | `file` il cui file è un'immagine o un PDF | (dx + s · x, dy + s · y) | per `s` |
+| `fixed` | tutte le altre: `file` di altro tipo o senza estensione, `text`, `link`, `group` | (x, y) | com'è |
+
+- **Con `scale`** l'inchiostro scala senza deformarsi e si centra nella
+  scheda: `s = min(w / W, h / H)`, `dx = (w − W · s) / 2`,
+  `dy = (h − H · s) / 2`. È ciò che fa SVG con `viewBox="0 0 W H"` e
+  `preserveAspectRatio="xMidYMid meet"` su un riquadro `w × h`.
+- **Con `fixed`** l'inchiostro resta alla misura in cui è stato scritto,
+  nell'angolo in alto a sinistra, qualunque sia la misura di adesso.
+- **Immagine e PDF** si riconoscono dall'estensione del campo `file`, senza
+  distinguere maiuscole: è l'ultima parte del nome dopo un punto, e un nome
+  come `.png` non ne ha. Immagini: `png`, `jpg`, `jpeg`, `gif`, `webp`,
+  `svg`, `bmp`, `ico`, `avif`, `heic`, `tif`, `tiff`; PDF: `pdf`. Il
+  `subpath` non conta. Conta il tipo: una scheda `text` con un campo `file`
+  è `fixed`.
+- **Misure senza senso:** una scheda larga o alta zero dà `s = 0` e il tratto
+  non si vede; una misura non finita o negativa, o una misura di riferimento
+  che non vale, dà `s = 0`, `dx = dy = 0`. Mai `NaN`.
+- **Rinominare il file** (da `.png` a `.md`) cambia il modo, non il file.
+  Ridimensionare a un'altra proporzione e tornare rimette l'inchiostro
+  com'era.
+- Un gruppo è `fixed` anche quando contiene immagini; ogni immagine dentro di
+  lui segue il proprio modo.
+
+I vettori stanno in `apps/client/src/__fixtures__/canvas-ink-fit/`, un caso
+per file, scritti a mano: `name`, `description`, la scheda (`card`, con
+`type` e `file`), `ref` (`W`, `H`), `size` (`w`, `h`) e in `expect` il modo,
+`s`, `x` (`dx`), `y` (`dy`) e qualche punto `from` → `to`.
 
 ## Il livello estraneo
 
