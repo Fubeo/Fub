@@ -1,0 +1,234 @@
+// Dove nascono le schede portate sulla lavagna: la misura di nascita di ogni
+// specie, la griglia in cui si dispongono più elementi lasciati cadere
+// insieme, il gruppo che li raccoglie quando sono tanti, e la tabella
+// Markdown in cui diventano le celle copiate da un foglio.
+//
+// Solo funzioni pure, senza DOM: la tela (T15) le chiama al rilascio e per i
+// rettangoli tratteggiati mentre si trascina, i test senza montare niente.
+
+import type { CardKind, CardSize, Rect } from "./cards";
+
+/// Il passo a cui la tela aggancia posizioni e misure. È `CANVAS_SNAP` di
+/// `engine.ts`, ripetuto qui perché `engine.ts` tira dentro il DOM e i testi;
+/// `drop-layout.test.ts` controlla che i due valori restino uguali.
+export const DROP_SNAP = 8;
+
+/// La misura più piccola di una scheda: `CANVAS_MIN_SIZE` di `engine.ts`,
+/// ripetuta qui per lo stesso motivo e controllata dallo stesso test.
+export const DROP_MIN_SIZE = 40;
+
+/// Lo spazio fra le schede della griglia, e il margine del gruppo intorno.
+export const DROP_GAP = 24;
+
+/// Oltre questo numero di elementi, le schede nate stanno in un gruppo.
+export const DROP_GROUP_THRESHOLD = 12;
+
+/// Le misure di nascita (D-11, prima opzione), già sulla griglia di 8 px. Le specie con le proporzioni
+/// del contenuto (immagine, PDF) usano queste quando la misura non si sa.
+const BORN_SIZE: Readonly<Record<CardKind, CardSize>> = {
+  note: { width: 320, height: 240 },
+  document: { width: 320, height: 240 },
+  // D-11 dice 480×300; 300 non sta sulla griglia di 8 px, che vince.
+  sheet: { width: 480, height: 304 },
+  // 360 di larghezza; 360×480 finché la prima pagina non si sa.
+  pdf: { width: 360, height: 480 },
+  // Il lato lungo è 480; senza misura, una 4:3 orizzontale.
+  image: { width: 480, height: 360 },
+  web: { width: 320, height: 120 },
+  // Un file Craft è una scheda di file finché N7 non c'è (A-3).
+  craft: { width: 320, height: 160 },
+  file: { width: 320, height: 160 },
+};
+
+/// Il lato lungo di un'immagine appena nata.
+const IMAGE_LONG_SIDE = 480;
+/// La larghezza di una scheda PDF appena nata.
+const PDF_WIDTH = 360;
+
+/// La misura di una scheda appena nata, agganciata alla griglia della tela.
+///
+/// `image` è la misura del contenuto: dell'immagine per `image` (il lato
+/// lungo diventa 480, l'altro segue le proporzioni), della prima pagina per
+/// `pdf` (larghezza 360, l'altezza segue). Per le altre specie non conta.
+/// Una misura mancante, nulla o non finita vale come non data. Nessun lato
+/// scende sotto la misura minima della tela.
+export function bornSize(
+  kind: CardKind,
+  image?: { readonly width: number; readonly height: number },
+): CardSize {
+  const fallback = BORN_SIZE[kind];
+  const known =
+    image !== undefined && validSide(image.width) && validSide(image.height)
+      ? image
+      : null;
+  if (known === null || (kind !== "image" && kind !== "pdf")) return fallback;
+  if (kind === "pdf") {
+    return snapSize({
+      width: PDF_WIDTH,
+      height: (PDF_WIDTH * known.height) / known.width,
+    });
+  }
+  const scale = IMAGE_LONG_SIDE / Math.max(known.width, known.height);
+  return snapSize({ width: known.width * scale, height: known.height * scale });
+}
+
+/// Un elemento lasciato cadere: il file, la sua specie, la sua misura.
+export interface DropItem {
+  readonly path: string;
+  readonly kind: CardKind;
+  readonly size: CardSize;
+}
+
+/// Una scheda disposta: il file e il suo rettangolo sulla lavagna.
+export interface DropCard {
+  readonly path: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface DropLayout {
+  /// Le schede in ordine di nome, nell'ordine in cui la griglia le riempie.
+  readonly cards: readonly DropCard[];
+  /// Il gruppo che le contiene, oltre 12 elementi; sennò `null`.
+  readonly group: Rect | null;
+}
+
+const NAME_ORDER = new Intl.Collator(undefined, { numeric: true });
+
+/// Dispone gli elementi in griglia a partire dal punto `at`.
+///
+/// Ordine per nome del file (con i numeri in ordine di valore: «foto 2»
+/// prima di «foto 10»); a parità di nome, per percorso intero. Le colonne
+/// sono `ceil(sqrt(n))` e si riempiono per righe; ogni colonna è larga
+/// quanto la sua scheda più larga, ogni riga alta quanto la più alta, con
+/// 24 px fra l'una e l'altra. L'angolo in alto a sinistra della prima
+/// scheda è il punto, e tutto (punto e misure) si aggancia a 8 px come la
+/// tela. Oltre 12 elementi, `group` è il rettangolo che contiene le schede
+/// con 24 px di margine per lato.
+export function dropLayout(
+  items: readonly DropItem[],
+  at: { readonly x: number; readonly y: number },
+): DropLayout {
+  const n = items.length;
+  if (n === 0) return { cards: [], group: null };
+
+  const ordered = [...items]
+    .map((item) => ({ path: item.path, size: snapSize(item.size) }))
+    .sort(byName);
+  const columns = Math.ceil(Math.sqrt(n));
+  const rows = Math.ceil(n / columns);
+
+  const columnWidth = new Array<number>(columns).fill(0);
+  const rowHeight = new Array<number>(rows).fill(0);
+  ordered.forEach((item, index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    columnWidth[column] = Math.max(columnWidth[column]!, item.size.width);
+    rowHeight[row] = Math.max(rowHeight[row]!, item.size.height);
+  });
+
+  const originX = snap(at.x);
+  const originY = snap(at.y);
+  const columnX = offsets(originX, columnWidth);
+  const rowY = offsets(originY, rowHeight);
+
+  const cards = ordered.map((item, index): DropCard => ({
+    path: item.path,
+    x: columnX[index % columns]!,
+    y: rowY[Math.floor(index / columns)]!,
+    width: item.size.width,
+    height: item.size.height,
+  }));
+
+  if (n <= DROP_GROUP_THRESHOLD) return { cards, group: null };
+  let right = -Infinity;
+  let bottom = -Infinity;
+  for (const card of cards) {
+    right = Math.max(right, card.x + card.width);
+    bottom = Math.max(bottom, card.y + card.height);
+  }
+  const group: Rect = {
+    x: originX - DROP_GAP,
+    y: originY - DROP_GAP,
+    width: right - originX + 2 * DROP_GAP,
+    height: bottom - originY + 2 * DROP_GAP,
+  };
+  return { cards, group };
+}
+
+/// Le celle come tabella Markdown. La prima riga è l'intestazione; ogni riga
+/// ha tante celle quante la più lunga (le corte si allungano con celle
+/// vuote). Nelle celle la barra verticale si scrive `\|` e gli a capo
+/// diventano spazi, perché una riga di tabella sta su una riga. Nessuna riga,
+/// o righe tutte vuote: la stringa vuota.
+export function markdownTable(rows: readonly (readonly string[])[]): string {
+  const width = rows.reduce((most, row) => Math.max(most, row.length), 0);
+  if (width === 0) return "";
+  const line = (cells: readonly string[]): string =>
+    `| ${Array.from({ length: width }, (_, index) => tableCell(cells[index] ?? "")).join(" | ")} |`;
+  const [header, ...body] = rows;
+  return [
+    line(header!),
+    line(new Array<string>(width).fill("---")),
+    ...body.map(line),
+  ].join("\n");
+}
+
+function tableCell(text: string): string {
+  return text.replace(/\r\n|\r|\n/g, " ").replace(/\|/g, "\\|");
+}
+
+function byName(
+  a: { readonly path: string },
+  b: { readonly path: string },
+): number {
+  return (
+    NAME_ORDER.compare(fileName(a.path), fileName(b.path)) ||
+    NAME_ORDER.compare(a.path, b.path) ||
+    compareCodeUnits(a.path, b.path)
+  );
+}
+
+function compareCodeUnits(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/// L'ultimo segmento del percorso, senza `subpath`.
+function fileName(path: string): string {
+  const hash = path.indexOf("#");
+  const file = hash < 0 ? path : path.slice(0, hash);
+  return file.slice(file.lastIndexOf("/") + 1);
+}
+
+/// Le posizioni di partenza di colonne (o righe) di misure date, con lo
+/// spazio fra l'una e l'altra.
+function offsets(origin: number, sizes: readonly number[]): number[] {
+  const starts: number[] = [];
+  let at = origin;
+  for (const size of sizes) {
+    starts.push(at);
+    at += size + DROP_GAP;
+  }
+  return starts;
+}
+
+function snapSize(size: CardSize): CardSize {
+  return { width: snapSide(size.width), height: snapSide(size.height) };
+}
+
+function snapSide(value: number): number {
+  return Math.max(DROP_MIN_SIZE, validSide(value) ? snap(value) : 0);
+}
+
+function snap(value: number): number {
+  // `+ 0` toglie lo zero negativo (`Math.round(-0.4)` è `-0`).
+  return Number.isFinite(value)
+    ? Math.round(value / DROP_SNAP) * DROP_SNAP + 0
+    : 0;
+}
+
+function validSide(value: number): boolean {
+  return Number.isFinite(value) && value > 0;
+}
