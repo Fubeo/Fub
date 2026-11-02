@@ -59,6 +59,16 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N3 · T3: in Rust R2 è un solo visitor (`SafeInteger`) che
+  porta il nome del campo nell'errore, R7 un `null_as_empty` su `nodes` ed
+  `edges`; il nucleo espone `read::is_blank` (la regola di
+  `isBlankCanvasSource`) e `model::MAX_SAFE_INTEGER`, nessuna variante nuova
+  di `CanvasError`. R3, R4 e R5 li rifiutava già `serde_json`: i test li
+  fissano. Fuori da R1-R10 la validazione diverge ancora: TypeScript limita
+  `background` a 8192 byte e `subpath`/`url` su ogni scheda, Rust no e solo
+  sul loro tipo; per la regola «nel dubbio si apre» si allinea il
+  TypeScript a Rust in T7, e lo specchio di T9 lo controlla.
+
 - 2026-11-02 · N3 · T4: `js.rs` espone, oltre a `js_number`, `js_string`,
   `encode` ed `encode_pretty`, anche `js_json_number`, `is_array_index` e
   `js_entries` (l'ordine delle chiavi di JavaScript, che serve a T5 per

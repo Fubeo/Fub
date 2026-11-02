@@ -414,7 +414,7 @@ U+0085 da solo; un BOM da solo; `"nodes": null` con `"edges"` assente.
 Fatto quando: `tests/read_rules.rs` ha un test per regola con i casi della
 prova 2, e passa; `cargo test -p fub-format-canvas` passa ancora.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T4 · Il codificatore come `JSON.stringify`
 
