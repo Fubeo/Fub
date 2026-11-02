@@ -51,6 +51,21 @@ degli XMP: Fub non li cambia.
 Nell'albero dei file un disegno o un progetto ha l'icona dei disegni, un
 `.pcraft` o un XMP quella delle foto.
 
+## Nelle note
+
+`![[logo.vectorcraft]]` in una nota mostra l'anteprima che il file porta, in
+Lettura e in Live, come la figura di un disegno: l'immagine con il nome del
+file sotto (o il testo del link, `![[logo.vectorcraft|Il logo]]`), e un clic
+apre il file nella sua scheda. Senza anteprima resta un riquadro col nome,
+l'app e i dati del file e la frase «Nessuna anteprima»; un XMP incorporato è
+sempre un riquadro, con il voto, l'etichetta e la scelta che dice. Lo stesso
+si vede passando col puntatore su `[[logo.vectorcraft]]`.
+
+Una nota non avvia mai l'app che sa fare l'anteprima: la chiede soltanto la
+scheda. La stessa figura dieci volte nella stessa nota fa una domanda sola. Un
+file che non c'è più resta un embed non risolto; con il componente `fub.craft`
+spento resta il riquadro col nome e l'app.
+
 ## File collegati
 
 Un file piazzato in un documento Craft, come una foto messa in un disegno di
