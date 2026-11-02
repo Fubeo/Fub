@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N3 · T9: lo specchio a caso fra fub-canvas-core e la lavagna
+  TypeScript ha 2051 casi (1333 sorgenti, 718 prove con toppe) in una
+  fixture di 501 KB, un sorgente per riga con le sue prove per stare sotto i
+  512 KB. Ha trovato una divergenza (26 casi): in una toppa il TS trattava
+  un campo noto a null diversamente dal nucleo Rust; corretto il lato TS
+  secondo R7 (null vale come assente, sia nel dopo sia nel confronto del
+  prima), vettori 44 e 45.
 - 2026-11-02 · N3 T7 · il commit in Rust (`fub-canvas-core/src/commit.rs`:
   `Core`, `Committed{source,inverse,edit}`, `Edit::between/apply` ai confini
   di carattere, `CommitError` Stale/Invalid/Rejected/Unstable con

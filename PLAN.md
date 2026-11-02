@@ -631,7 +631,7 @@ Fatto quando: lo specchio con almeno 2000 casi passa in tutti e due; la riga
 in `ownership.md` dice chi è la copia autorevole.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core --test
 ts_mirror; cd apps/client && npx vitest run src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T10 · Il componente «Lavagna» e `canvas.apply`
 
