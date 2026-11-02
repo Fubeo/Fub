@@ -1567,7 +1567,7 @@ modi e che ridimensionare non riscrive i percorsi; `grep -rn INK_ASPECT
 apps/client/src` non trova niente; le pagine dicono la regola nuova.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas; cd ../.. && node .github/scripts/check-doc-links.mjs
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 2808eb49
 
 ## T19 · Le impostazioni della lavagna
 
