@@ -174,6 +174,7 @@ flowchart LR
     abi["fub-abi"]
     markdown["fub-format-markdown"]
     sdk["fub-sdk"]
+    motori["fub-motori"]
     xlsx["fub-format-xlsx"]
     gcalc["gridcraft-calc"]
     gchart["gridcraft-chart"]
@@ -259,10 +260,12 @@ strumenti `fub_components*` usa i tipi del risolutore (`Stato`, `Perche`,
 dipende soltanto da `rayon`, `thiserror`, `tracing` e, su Linux con la glibc,
 `libc`. Dà la costruzione dei motori alla prima richiesta, il loro gruppo di
 thread, il budget comune delle cache e il registro dove ogni adattatore iscrive
-il suo motore. Non nomina nessun motore: un adattatore che lo usa dipende da
-lui, mai il contrario. Le regole stanno in [Lo strato dei motori](motori.md).
-Le frecce in ingresso: `fub-format-rich`, che iscrive il motore dei documenti
-e ne tiene le prove a vuoto nel budget; `fub-features`, dietro la feature
+il suo motore, e il catalogo che fa dei comandi di un motore i comandi di Fub.
+Non nomina nessun motore: un adattatore che lo usa dipende da lui, mai il
+contrario. Le regole stanno in [Lo strato dei motori](motori.md). Le frecce in
+ingresso: `fub-format-xlsx`, che iscrive il motore dei fogli e ne importa il
+catalogo dei comandi; `fub-format-rich`, che iscrive il motore dei documenti e
+ne tiene le prove a vuoto nel budget; `fub-features`, dietro la feature
 `proof`, che iscrive nel budget i dizionari del correttore letti dal disco; e
 `fub-host`, che alla chiusura dell'ultimo vault svuota quelle cache e
 restituisce la memoria al sistema.

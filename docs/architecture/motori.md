@@ -41,6 +41,8 @@ e a iscrivervi il loro motore.
 | `Tetto` | `src/pressione.rs` | il tetto della memoria e la pressione che lo abbassa |
 | `Servizi` | `src/servizi.rs` | ciò che i motori hanno in comune: `lavori()` e `memoria()` |
 | `Motori`, `Voce` | `src/registro.rs` | il registro dove ogni adattatore iscrive il suo motore |
+| `importa`, `verifica_copertura` | `src/catalogo.rs` | i comandi di un motore come comandi di Fub, e la prova che nessuno resta fuori |
+| `Modulo`, `Campo`, `Tipo` | `src/modulo.rs` | il modulo dei parametri di un comando, letto dallo schema del motore |
 | `ErroreMotore` | `src/lib.rs` | lucchetto avvelenato, creazione fallita, motore sconosciuto, iscrizioni doppie |
 
 ```mermaid
@@ -255,6 +257,40 @@ ritirato lo slot della sessione e senza lucchetti tenuti. Con un altro vault
 aperto, o in chiusura, le cache restano al budget: l'host non sa quale vault
 abbia letto quale documento.
 
+## Il catalogo dei comandi
+
+Un motore descrive i suoi comandi con un id, un'etichetta inglese, il percorso
+nei suoi menu e uno schema dei parametri scritto a parole (`{range?, on?:
+bool}`). `importa(spazio, specifiche, adattamento)` ne fa un `ComandoFub` per
+comando:
+
+- l'id in Fub è `<spazio>.<id del motore>` (`fogli.home.bold`), il titolo è la
+  chiave `<spazio>.cmd.<id del motore>` dei testi di Fub, e se il comando è
+  abilitato lo dice il motore (`Delega::Motore`);
+- il posto viene dalla tabella `Adattamento::posti` dell'adattatore, che lega
+  un percorso intero dei menu a una scheda e un gruppo della barra
+  (`Posto::Barra`) o alla sola tavolozza (`Posto::Tavolozza`); un comando senza
+  menu va nella tavolozza;
+- i parametri diventano un `Modulo` di `Campo` tipati (testo, numero, sì/no,
+  cella, intervallo, foglio, scelta, …): i nomi nudi prendono il tipo dal
+  lessico dell'adattatore (`Adattamento::nomi`), che un comando può
+  correggere per sé (`Adattamento::nomi_del_comando`).
+
+`importa` non si ferma al primo problema: restituisce tutte le `Mancanza`
+(id doppio o non valido, etichetta vuota, percorso che la tabella non conosce,
+schema che non si legge). `verifica_copertura(motore, catalogo, perche)`
+confronta l'elenco intero del motore con il catalogo: ogni comando del motore
+o è nel catalogo o ha un perché, non vuoto, per cui Fub non lo serve; nessun
+comando è tutte e due le cose, e il catalogo non ha comandi che il motore non
+ha. Se va bene dà i conti (`Copertura`).
+
+L'adattatore dei fogli tiene la sua tabella in
+`crates/fub-format-xlsx/src/catalogo.rs` e i perché dei comandi non serviti in
+`src/commands.rs`. La shell riceve il catalogo in
+`apps/client/src/editors/grid/catalogo.generated.json`, che non si modifica a
+mano: si rigenera con
+`UPDATE_MIRROR=1 cargo test -p fub-format-xlsx --test ts_catalogo`.
+
 ## Prove
 
 - `crates/fub-motori/tests/pigro.rs`: dieci thread insieme e una costruzione
@@ -280,3 +316,11 @@ abbia letto quale documento.
   dizionario letto, il tetto basso che lo lascia cadere e la risposta uguale.
 - `crates/fub-host/tests/engines_on_close.rs`: con due vault aperti chiuderne
   uno lascia le cache; chiuso l'ultimo sono a zero.
+- `crates/fub-motori/tests/modulo.rs`: ogni forma dello schema dei parametri,
+  gli errori e il lessico dei nomi.
+- `crates/fub-motori/tests/copertura.rs`: `importa` e `verifica_copertura` su
+  un motore finto, con ogni `Mancanza` e i conti.
+- `crates/fub-format-xlsx/tests/copertura.rs`: ogni comando di GridCraft è
+  nel catalogo o ha il suo perché; un comando nuovo senza posto né perché fa
+  fallire il test. `tests/ts_catalogo.rs`: il file della shell non è stantio
+  e le sue schede e i suoi gruppi sono quelli della barra.

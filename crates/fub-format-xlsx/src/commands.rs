@@ -60,38 +60,57 @@ const COMPOSED: &[(&str, bool, &str)] = &[
     (COPY_HTML, false, "{range?} → {range, text, html?}"),
 ];
 
-/// I gruppi del catalogo che Fub non serve: file e finestre sono della shell,
-/// gli script eseguono codice del documento, la cronologia è del documento.
-const NOT_SERVED_PREFIXES: &[&str] = &["file.", "automate.", "app.", "window.", "history."];
+/// I gruppi del catalogo che Fub non serve, ciascuno con il suo perché: file
+/// e finestre sono della shell, gli script eseguono codice del documento, la
+/// cronologia è del documento.
+const NOT_SERVED_PREFIXES: &[(&str, &str)] = &[
+    (
+        "file.",
+        "aprire, salvare, stampare e chiudere i file è della shell di Fub, non della cartella",
+    ),
+    (
+        "automate.",
+        "gli script eseguono codice scritto nel documento, e Fub non lo esegue",
+    ),
+    (
+        "app.",
+        "le impostazioni del programma sono della shell di Fub",
+    ),
+    ("window.", "le finestre sono della shell di Fub"),
+    (
+        "history.",
+        "la cronologia delle versioni è del documento in Fub, non del motore",
+    ),
+];
 /// I comandi che leggono o cambiano uno stato fuori dalla cartella (gli
 /// appunti, il pennello, il dizionario, gli strumenti dell'interfaccia di
 /// GridCraft) o che aprono un collegamento: rifare il giornale non li
-/// ritroverebbe.
-const NOT_SERVED: &[&str] = &[
-    "edit.copy",
-    "edit.cut",
-    "edit.paste",
-    "edit.pasteSpecial",
-    "edit.clearClipboard",
-    "edit.formatPainter",
-    "edit.beginEdit",
-    "link.open",
-    "home.addIns",
-    "draw.pen",
-    "draw.eraser",
-    "draw.lasso",
-    "review.addToDictionary",
-    "review.showComments",
-    "review.showAllNotes",
-    "view.formulaBar",
-    "view.ruler",
-    "view.macros",
-    "view.newWindow",
-    "view.arrangeAll",
-    "view.hideWindow",
-    "view.unhideWindow",
-    "view.switchWindows",
-    "data.queriesConnections",
+/// ritroverebbe. Ciascuno con il suo perché.
+const NOT_SERVED: &[(&str, &str)] = &[
+    ("edit.copy", "gli appunti sono del sistema: la shell copia con fub.copyHtml"),
+    ("edit.cut", "gli appunti sono del sistema: la shell taglia con fub.copyHtml e fub.pasteFrom"),
+    ("edit.paste", "gli appunti sono del sistema: la shell incolla con fub.pasteFrom"),
+    ("edit.pasteSpecial", "gli appunti sono del sistema: la shell incolla con fub.pasteFrom e la sua scelta di che cosa"),
+    ("edit.clearClipboard", "gli appunti sono del sistema, non della cartella"),
+    ("edit.formatPainter", "il pennello tiene un formato fra due clic, uno stato dell'interfaccia che il giornale non ritrova"),
+    ("edit.beginEdit", "scrivere in una cella è della griglia della shell"),
+    ("link.open", "aprire un collegamento esce dalla cartella: lo fa la shell"),
+    ("home.addIns", "i componenti aggiuntivi del motore non esistono in Fub"),
+    ("draw.pen", "la penna è uno strumento dell'interfaccia del motore"),
+    ("draw.eraser", "la gomma è uno strumento dell'interfaccia del motore"),
+    ("draw.lasso", "il lazo è uno strumento dell'interfaccia del motore"),
+    ("review.addToDictionary", "il dizionario è della correzione di Fub, non della cartella"),
+    ("review.showComments", "mostrare i commenti è della vista della shell"),
+    ("review.showAllNotes", "mostrare le note è della vista della shell"),
+    ("view.formulaBar", "la barra della formula è della shell"),
+    ("view.ruler", "il righello è della vista della shell"),
+    ("view.macros", "le macro eseguono codice scritto nel documento, e Fub non lo esegue"),
+    ("view.newWindow", "le finestre sono della shell di Fub"),
+    ("view.arrangeAll", "le finestre sono della shell di Fub"),
+    ("view.hideWindow", "le finestre sono della shell di Fub"),
+    ("view.unhideWindow", "le finestre sono della shell di Fub"),
+    ("view.switchWindows", "le finestre sono della shell di Fub"),
+    ("data.queriesConnections", "le query e le connessioni leggono dati fuori dalla cartella"),
 ];
 /// I comandi dei gruppi esclusi che restano: le proprietà del documento sono
 /// nella cartella, e l'anteprima di stampa e il PDF senza percorso leggono la
@@ -109,11 +128,43 @@ pub(crate) fn served(id: &str) -> bool {
     if SERVED_ANYWAY.contains(&id) {
         return find_command(id).is_some();
     }
-    !NOT_SERVED.contains(&id)
-        && !NOT_SERVED_PREFIXES
+    why_not_served(id).is_none() && find_command(id).is_some()
+}
+
+/// Perché Fub non serve il comando `id` della facciata, se non lo serve per
+/// scelta: `None` per i comandi serviti e per quelli che la facciata non ha.
+pub(crate) fn why_not_served(id: &str) -> Option<&'static str> {
+    if id == UNDO
+        || id == REDO
+        || COMPOSED.iter().any(|(composed, ..)| *composed == id)
+        || SERVED_ANYWAY.contains(&id)
+    {
+        return None;
+    }
+    if let Some((_, why)) = NOT_SERVED.iter().find(|(not_served, _)| *not_served == id) {
+        return Some(why);
+    }
+    NOT_SERVED_PREFIXES
+        .iter()
+        .find(|(prefix, _)| id.starts_with(prefix))
+        .map(|(_, why)| *why)
+}
+
+/// Le voci dell'elenco dei non serviti, per il test che non restino voci
+/// stantie: gli id esatti e i prefissi.
+pub(crate) fn not_served_entries() -> (Vec<&'static str>, Vec<&'static str>) {
+    (
+        NOT_SERVED.iter().map(|(id, _)| *id).collect(),
+        NOT_SERVED_PREFIXES
             .iter()
-            .any(|prefix| id.starts_with(prefix))
-        && find_command(id).is_some()
+            .map(|(prefix, _)| *prefix)
+            .collect(),
+    )
+}
+
+/// Se `id` è un comando composto di Fub, fuori dal catalogo della facciata.
+pub(crate) fn composed(id: &str) -> bool {
+    COMPOSED.iter().any(|(composed, ..)| *composed == id)
 }
 
 /// Se il comando `id` può cambiare la cartella.
