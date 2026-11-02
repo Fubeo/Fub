@@ -59,6 +59,11 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · N4 · terzo merge di `piano/n3-logica-in-rust` (fino a N3 T17
+  e alla fusione di main con #303, `async-executor` 1.14.1) dentro
+  `piano/n4-inchiostro`; PLAN.md resta quello di N4 e DECISIONS.md tiene le
+  righe di tutti e due · senza main la versione ritirata 1.14.0 teneva rosso
+  il controllo delle librerie, e N4 riceve main solo attraverso N3.
 - 2026-11-02 · N4 · T20: l'utente approva il prototipo delle penne con una
   modifica: lo spessore si sceglie con un cursore (la penna da 0,5 a 20
   pixel, l'evidenziatore da 4 a 48), non con Sottile, Medio e Spesso;
@@ -119,6 +124,30 @@ La più recente in cima: data · piano · decisione · perché.
   PLAN.md resta quello di N4 e DECISIONS.md tiene le righe di tutti e due:
   senza il merge la PR #298 era in conflitto con la sua base e la CI non
   partiva.
+- 2026-11-02 · N3 · Le risposte dell'utente a D-1…D-8 e a merge-n3n4: le non
+  ovvie sono tre. D-5 (c): il testo di una scheda si registra a pause di
+  circa 250 ms, Esc registra invece di buttare (la D-10 nuova chiede
+  conferma), il testo ancora nel campo va nelle bozze, e il ritardo della
+  bozza diventa una cadenza per ogni documento (T16, T19). D-7 (c): Fub
+  riscrive conservando i null dei campi noti, gli array assenti e il posto
+  degli archi, l'annulla della tela torna ai byte di prima, e una lavagna
+  che non si riscrive senza perdere niente si apre in sola lettura (T20–T22;
+  i valori sconosciuti dei campi noti restano fuori, D-9). merge-n3n4 (b):
+  N3 entra in main solo finito, dopo la CI completa e una revisione riga per
+  riga (T23) · non perdere dati e non cambiare senza dirlo i file degli
+  altri programmi vengono prima della comodità, e N3 a metà in main
+  lascerebbe due copie della logica.
+- 2026-11-02 · N3 · T17: fatto con D-4 (a), solo la misura: il banco
+  `tools/ink-wasm-banco/` (nessuna crate nuova nel lock) e `wasm.bench.ts`,
+  che si salta senza il `.wasm`. Il primo giro era a macchina carica; la
+  pagina tiene i tre giri rifatti con il carico sotto 2,5. La condizione del
+  passo 12a non è vera per intero: un evento per chiamata, il WebAssembly è
+  4,3 volte più lento col mouse e il 16% con lo stabilizzatore, pari con la
+  penna; il riduttore da solo è pari o più veloce. La pagina non dice che
+  cosa fare: resta all'utente con D-4.
+- 2026-11-02 · N3 · ADR 0234 allineato: la lavagna non è più fra i
+  componenti senza bundle, perché da T10 è il bundle fub.lavagna. Perché:
+  l'ADR deve dire com'è fatto il codice.
 - 2026-11-02 · N3 · T12: gli strumenti MCP fub_canvas_create e
   fub_canvas_apply chiamano canvas.create e canvas.apply con gli id scritti
   come costanti, come note.create, perché fub-cli non dipende da fub-
