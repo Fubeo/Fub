@@ -46,6 +46,7 @@
 pub mod arena;
 pub mod command;
 pub mod custom;
+pub mod drawing;
 pub mod edit;
 pub mod error;
 pub mod event;
@@ -88,6 +89,15 @@ pub use command::{
 pub use custom::{
     CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxForm, SyntaxMatch,
     SyntaxProduct, SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
+};
+pub use drawing::{
+    DrawingChange, DrawingCommandInfo, DrawingCommandRequest, DrawingEdit, DrawingGesture,
+    DrawingLoss, DrawingLossKind, DrawingOpen, DrawingOutcome, DrawingPhase, DrawingPointer,
+    DrawingPointerKind, DrawingPreview, DrawingRefusal, DrawingSnap, DrawingStyle, DrawingSync,
+    DrawingSynced, DrawingTool, DRAWING_COMMANDS, DRAWING_COMMAND_FILL_COLOR,
+    DRAWING_COMMAND_STROKE_COLOR, DRAWING_COMMAND_WIDTH, MAX_DRAWING_COLOR_BYTES,
+    MAX_DRAWING_LOSSES, MAX_DRAWING_OPS, MAX_DRAWING_OPS_BYTES, MAX_DRAWING_TEXT_BYTES,
+    MAX_GESTURE_EVENTS,
 };
 pub use edit::{
     AppliedEdit, EditReport, EditRequest, Fnv1a, Revision, RevisionHasher, TextEdit, WriteBase,
