@@ -59,6 +59,25 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N4 · T11: la toppa ink nel client sta in `operation.ts`, con
+  i costruttori dei tratti e `eraseStrokePatches` per la gomma; i vettori di
+  T10 passano anche dal lato della shell. `operation.ts` e `ink-record.ts`
+  si importano a vicenda, ma usano i valori dell'altro solo dentro le
+  funzioni, mai al caricamento del modulo, quindi il ciclo non rompe
+  l'ordine ESM. Perché: la tela e il nucleo devono costruire la stessa
+  toppa.
+- 2026-11-02 · N4 · T10: la toppa `ink` e le operazioni
+  `add_strokes`/`erase_strokes` stanno nel nucleo; l'id di un tratto nuovo
+  nasce dal seme dell'operazione, così due giri con lo stesso seme danno lo
+  stesso file. Due errori nuovi, `E_OP_UNKNOWN_STROKE` ed
+  `E_OP_FOREIGN_LAYER`, con le frasi anche in `fub-features` (lavagna.rs e
+  lavagna/apply.rs), che altrimenti non compilava. `source.rs` non si tocca:
+  il test prova che gli array annidati si accoppiano già per id. I vettori
+  ink sono numerati 46–62, dopo il 45 di N3, per non avere doppioni dopo la
+  fusione. Misura: su una scheda con 2000 tratti spostare la scheda dà una
+  toppa d'annulla di circa 6 MB mentre il file cambia di 1 byte; un tratto
+  nuovo aggiunge circa 1,5 KB al file. Perché: un agente deve poter
+  aggiungere e cancellare tratti con la stessa strada dell'annulla.
 - 2026-11-02 · N4 · T8: l'inchiostro fub:ink sta in fub-canvas-core (modulo
   ink), che ora dipende anche da fub-ink-codec; i campi noti di un tratto
   sono Option<Value>, così un tratto non valido si conserva com'era e il suo

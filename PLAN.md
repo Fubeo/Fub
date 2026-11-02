@@ -925,7 +925,7 @@ tratto» (il livello torna in fondo ai campi della scheda, R10).
 Fatto quando: `cargo test -p fub-canvas-core` passa (vettori delle toppe,
 delle operazioni e `ink_patch.rs`); il rapporto dà le due misure in byte.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T11 · La toppa nel client
 
@@ -957,7 +957,7 @@ Fatto quando: `npx vitest run src/editors/canvas` passa coi vettori `ink-*`;
 i due costruttori hanno test.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T12 · La penna scrive sulla lavagna
 
