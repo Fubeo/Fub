@@ -59,6 +59,26 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N4 · piano: il formato `fub:ink` sulla lavagna (campi nel
+  `.canvas`, strada A, con la stringa dei punti della §5 dei disegni e la
+  misura della scheda al momento del tratto) è un'assunzione del
+  pianificatore, scritta di notte: l'utente la conferma (D-1, D-2) prima
+  dell'ondata 2, perché altri programmi leggeranno il file e cambiarlo dopo
+  vuol dire una `v: 2` e una conversione.
+- 2026-11-02 · N4 · piano: il codice dei punti e dei pennelli (`ink.rs`,
+  `brush.rs` di `fub-scene`) passa in un crate piccolo, `fub-ink-codec`, che
+  dipende solo da `fub-ink`; il nucleo della lavagna lo usa con
+  un'eccezione nominata nell'invariante delle dipendenze: il nucleo non può
+  portarsi dietro il lettore XML dei disegni, e una seconda copia del codec
+  sarebbe una divergenza da tenere d'occhio per sempre.
+- 2026-11-02 · N4 · piano: ogni tratto è una toppa `ink` sul suo livello
+  (`LayerRef`: la lavagna o una scheda), non un `upsert-node` della scheda
+  intera: con 2000 tratti l'annulla terrebbe due copie della scheda intera
+  per ogni tratto (la misura dei byte la fa T10).
+- 2026-11-02 · N4 · piano: `PenQuiet` è puro, con lo scheduler passato da
+  fuori e una chiave per lavoro: il nucleo dell'inchiostro non usa globali
+  del DOM (ADR 0204), i timer passano da una `Lifetime`, e due richieste per
+  la stessa cosa ne fanno una.
 - 2026-11-02 · N3 · T2: in TypeScript i controlli di R3, R4 e R5 stanno
   nello scanner di `source-edit.ts` (`inspectCanvasJson`), una passata sola
   sul testo dopo `JSON.parse`, e non in un reviver: misurato a 2000 schede,
