@@ -98,7 +98,54 @@ dubbio si apre e si conserva.
 
 ## Scrittura
 
-Da scrivere.
+Il sorgente si ritocca, non si riscrive: `source::patch_source(sorgente,
+prima, dopo)` cambia solo i valori e gli oggetti che passano dal modello di
+prima a quello di dopo, e il resto del file resta byte per byte (spazi, a
+capo, ordine delle chiavi, campi sconosciuti, il modo in cui è scritto un
+numero). È il porto di `patchCanvasSource`
+(`apps/client/src/editors/canvas/source-edit.ts`); i casi sono in
+`crates/fub-canvas-core/tests/source_edit.rs`.
+
+- **Lo scanner** legge il sorgente una volta, in byte UTF-8: conta come
+  spazio solo lo spazio JSON, lascia un BOM iniziale fuori dalla radice e
+  rifiuta una chiave doppia a qualunque profondità, anche sconosciuta
+  (`SourceError::DuplicateKey`, con l'offset della seconda). `source::node_at`
+  dice quale scheda contiene un offset in byte.
+- **Il confronto** è fra valori JSON: le chiavi in qualunque ordine, i numeri
+  per valore (`1.0` e `1` sono uguali). Un valore uguale resta com'era.
+- **Un oggetto** che tiene tutti i campi del sorgente e non ne aggiunge
+  cambia solo i valori. Altrimenti si ricompone con il prefisso, il
+  separatore (`,` se aveva un campo solo) e il suffisso che aveva: i campi
+  tolti cadono, quelli nuovi vanno in fondo come `"chiave":valore` compatti.
+- **`nodes` ed `edges`** si accoppiano per id: una voce rimasta tiene il suo
+  testo anche se si sposta, una voce nuova si scrive compatta, un array che
+  si svuota diventa `[]`. Il modello ha sempre `nodes` ed `edges`: una radice
+  che si ricompone e non li aveva li riceve in fondo, come in TypeScript.
+- **Un sorgente vuoto** (R1) diventa la lavagna scritta per intero, rientrata
+  di due spazi e chiusa da `"\n"`; tiene il BOM e, se il file ne aveva, i
+  terminatori CRLF.
+
+Le regole dei byte nuovi:
+
+- **R6 · Scrivere è `JSON.stringify`.** L'escape solo per `"`, `\\` e i
+  controlli; `/`, i caratteri non ASCII, U+2028 e U+2029 restano come sono. I
+  numeri come `Number.prototype.toString`, anche quelli dei campi
+  sconosciuti, che si scrivono come li riscriverebbe JavaScript dopo averli
+  letti (`1.50` riscritto è `1.5`). Il codificatore è `js.rs`.
+- **R7 · Il `null` sparisce.** Un `"color": null` vale assente: quando Fub
+  ricompone quella scheda il campo cade; in una scheda che non cambia resta.
+  `"edges": null` resta finché gli archi non cambiano.
+- **R10 · L'ordine dei campi** di una scheda o di un arco scritti per intero:
+  per le schede `id`, `type`, `x`, `y`, `width`, `height`, `color`, `text`,
+  `file`, `subpath`, `url`, `label`, `background`, `backgroundStyle`; per gli
+  archi `id`, `fromNode`, `fromSide`, `fromEnd`, `toNode`, `toSide`, `toEnd`,
+  `color`, `label`. Poi i campi sconosciuti nel loro ordine, poi la regola di
+  JavaScript: le chiavi che sembrano indici (`"0"`) vanno prima, in ordine
+  crescente. Una chiave aggiunta a un oggetto che c'era va in fondo.
+  `source::node_value` ed `edge_value` danno questo ordine.
+
+Il lavoro è lineare: una scheda uguale prima e dopo si confronta come struct
+e non diventa un valore JSON.
 
 ## Parità
 
