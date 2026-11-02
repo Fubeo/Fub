@@ -59,6 +59,41 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N4 · merge di `piano/n3-logica-in-rust` (fino a T8) dentro
+  `piano/n4-inchiostro`, con un merge e non un rebase: PLAN.md resta quello
+  di N4, DECISIONS.md e `docs/README.md` tengono le righe di tutti e due ·
+  senza, la PR #298 era in conflitto con la sua base e la CI non partiva; va
+  rifatto quando N3 cambia di nuovo PLAN.md o DECISIONS.md.
+- 2026-11-02 · N4 T5 · la forma `fub:ink` in `docs/reference/canvas-ink.md`
+  con 28 vettori, uno per file, in
+  `apps/client/src/__fixtures__/canvas-ink/`; ADR 0238 «proposta» (0236 è di
+  K3, 0237 di N3 T15); le ragioni si guardano nell'ordine tool, anchor,
+  color, brush, ink; un canale sconosciuto vale `ink`; id vuoto, tratto non
+  oggetto, `fub:ink` non oggetto o `v` assente fanno il livello estraneo,
+  con `strokes: []`; i livelli nell'ordine di `nodes`, poi la radice; i
+  campi sconosciuti dell'ancora restano dopo kind, width, height · T8 in
+  Rust e T9 in TypeScript leggono gli stessi vettori e devono dire le stesse
+  ragioni.
+- 2026-11-02 · N4 T4 · lo strato d'inchiostro
+  (`editors/canvas/ink-layer.ts`, `ink-paint.ts`): una penna alla volta,
+  perché la sessione fa un tratto alla volta (la seconda è fermata e
+  ignorata); i suoi eventi si fermano con `stopImmediatePropagation` prima
+  della lavagna, i click solo con `detail > 0`; un SVG annidato per ogni
+  gruppo consecutivo di tratti con la stessa misura; `InkPathCache` con
+  `sweep()`; `INK_ASPECT = "none"` (D-9 a); `data-ink-stroke` sui tratti per
+  la gomma di T13 · la lavagna non vede mai un tratto come un trascinamento;
+  rischio: l'SVG sta in `inset: 0` e un bordo vero della scheda (T16) lo
+  sposterebbe.
+- 2026-11-02 · N4 T3 · la scheda sotto il tratto
+  (`editors/canvas/anchor.ts`): solo geometria sulle coordinate della
+  lavagna, il riquadro del tratto allargato di metà spessore, nessun `NaN`
+  (punti non finiti saltati, riquadro che trabocca = tratto libero) · lo
+  chiede lo strato una volta sola, quando la penna si alza.
+- 2026-11-02 · N4 T1 · la politica del mouse in `fub-ink` (`roles.rs`,
+  `setMousePolicy`): `ink` di serie, `ignore` lascia il tasto principale a
+  chi sta sotto; vale dal prossimo appoggio; un puntatore di tipo
+  sconosciuto segue il mouse · la regola di serie resta com'era per i
+  disegni, e la lavagna può tenere il mouse per selezionare.
 - 2026-11-02 · N4 T2 · `PenQuiet` (`ink/quiet.ts`) con la coda per chiave letta viva mentre gira (un `defer` da un lavoro toglie il vecchio della stessa chiave e gira subito; un `enter` da un lavoro ferma il giro), `dispose` azzera il conto; `idleSchedule` (`ink/dom/idle.ts`) usa la `Lifetime` di `ui/lifetime.ts` con un solo smontaggio per tutte le richieste in attesa · così un lavoro vecchio non gira mai dopo uno nuovo della stessa chiave, e una lavagna aperta a lungo non accumula smontaggi; più errori nello stesso giro: si rilancia il primo e gli altri si perdono, come in `dom/pointer-adapter.ts`.
 - 2026-11-02 · N4 · piano: il formato `fub:ink` sulla lavagna (campi nel
   `.canvas`, strada A, con la stringa dei punti della §5 dei disegni e la

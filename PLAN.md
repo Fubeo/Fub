@@ -506,7 +506,7 @@ di serie niente cambia: i test di oggi passano, toccati solo dove
 costruiscono un `RoleContext`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-ink; cd apps/client &&
 npx vitest run src/ink
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T2 · PenQuiet
 
@@ -582,7 +582,7 @@ Fatto quando: `anchor.test.ts` ha un caso con l'attesa scritta a mano per
 ogni caso limite e passa; il file non importa niente del DOM.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/anchor.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T4 · Lo strato d'inchiostro della lavagna
 
@@ -655,7 +655,7 @@ crea due SVG annidati coi `viewBox` giusti; cambiare la misura dell'elemento
 non tocca i percorsi; un tratto uguale non si ricalcola.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/ink-layer.test.ts src/editors/canvas/ink-paint.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T5 · La forma `fub:ink` e la decisione
 
@@ -702,7 +702,7 @@ Prova: scripts/check.sh --rapido; node -e "const fs = require('fs'), d =
 'apps/client/src/__fixtures__/canvas-ink/'; for (const f of
 fs.readdirSync(d)) JSON.parse(JSON.parse(fs.readFileSync(d + f,
 'utf8')).source.replace(/^\uFEFF/, ''))"
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T6 · Il crate `fub-ink-codec`
 
