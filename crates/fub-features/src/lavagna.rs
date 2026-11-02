@@ -1,7 +1,8 @@
 //! La lavagna come componente: il comando `canvas.apply`, che porta in un
 //! file `.canvas` una lista di operazioni del nucleo
 //! ([`fub_canvas_core::ops::CanvasOp`]) e ne fa una modifica sola, con
-//! l'anteprima e l'annulla di ogni altra modifica al testo.
+//! l'anteprima e l'annulla di ogni altra modifica al testo, e il comando
+//! `canvas.create`, che fa nascere una lavagna vuota e la apre (`create`).
 //!
 //! Il comando non sa niente di schede e archi: legge il documento, chiede al
 //! nucleo di aprirlo, compilare le operazioni e scriverle
@@ -14,6 +15,7 @@
 //! comando e un agente.
 
 mod apply;
+mod create;
 
 use fub_abi::command::{
     CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode, ParamKind, ParamSpec,
@@ -28,6 +30,9 @@ pub const LAVAGNA_ID: &str = "fub.lavagna";
 /// Applica una lista di operazioni a una lavagna.
 pub const CANVAS_APPLY: &str = "canvas.apply";
 
+/// Crea una lavagna vuota e la apre.
+pub const CANVAS_CREATE: &str = "canvas.create";
+
 /// Il namespace dell'effetto che dice che cosa ha fatto `canvas.apply`.
 pub const LAVAGNA_NS: &str = LAVAGNA_ID;
 
@@ -35,6 +40,8 @@ const DOC: &str = "doc";
 const OPS: &str = "ops";
 const BASE: &str = "base";
 const SEED: &str = "seed";
+const NAME: &str = "name";
+const FOLDER: &str = "folder";
 
 const P_APPLY: &str = "canvas.apply.p_apply";
 const N_APPLIED: &str = "canvas.apply.n_applied";
@@ -60,6 +67,25 @@ const E_COMMIT_INVALID: &str = "canvas.apply.e_commit_invalid";
 const E_COMMIT_REJECTED: &str = "canvas.apply.e_commit_rejected";
 const E_COMMIT_UNSTABLE: &str = "canvas.apply.e_commit_unstable";
 
+/// Il nome di una lavagna senza nome, prima del numero che lo rende libero.
+const N_UNTITLED: &str = "canvas.create.untitled";
+const P_CREATE: &str = "canvas.create.p_create";
+const N_CREATED: &str = "canvas.create.n_created";
+const U_CREATE: &str = "canvas.create.u_create";
+const E_NO_FORMAT: &str = "canvas.create.e_no_format";
+const E_NAME_NOT_CANVAS: &str = "canvas.create.e_name_not_canvas";
+const E_TAKEN: &str = "canvas.create.e_taken";
+const E_SOURCE: &str = "canvas.create.e_source";
+const E_NAME_EMPTY: &str = "canvas.create.e_name_empty";
+const E_NAME_TRAVERSAL: &str = "canvas.create.e_name_traversal";
+const E_NAME_MACHINE: &str = "canvas.create.e_name_machine";
+const E_NAME_CONTROL: &str = "canvas.create.e_name_control";
+const E_NAME_RESERVED: &str = "canvas.create.e_name_reserved";
+const E_NAME_DEVICE: &str = "canvas.create.e_name_device";
+const E_NAME_TRAILING_DOT: &str = "canvas.create.e_name_trailing_dot";
+const E_NAME_HIDDEN: &str = "canvas.create.e_name_hidden";
+const E_NAME_TOO_LONG: &str = "canvas.create.e_name_too_long";
+
 /// I comandi della lavagna.
 pub struct LavagnaCommands;
 
@@ -68,10 +94,17 @@ impl CommandProvider for LavagnaCommands {
         vec![
             CommandSpec::new(CANVAS_APPLY, Text::key(format!("{CANVAS_APPLY}.title")))
                 .describing(Text::key(format!("{CANVAS_APPLY}.desc")))
-                .with_param(parameter(DOC, ParamKind::Document).required())
-                .with_param(parameter(OPS, ParamKind::Text).required())
-                .with_param(parameter(BASE, ParamKind::Text))
-                .with_param(parameter(SEED, ParamKind::Text))
+                .with_param(parameter(CANVAS_APPLY, DOC, ParamKind::Document).required())
+                .with_param(parameter(CANVAS_APPLY, OPS, ParamKind::Text).required())
+                .with_param(parameter(CANVAS_APPLY, BASE, ParamKind::Text))
+                .with_param(parameter(CANVAS_APPLY, SEED, ParamKind::Text))
+                .with_scope(CommandScope::writing(CommandReach::Document)),
+            CommandSpec::new(CANVAS_CREATE, Text::key(format!("{CANVAS_CREATE}.title")))
+                .describing(Text::key(format!("{CANVAS_CREATE}.desc")))
+                .with_param(parameter(CANVAS_CREATE, NAME, ParamKind::Text))
+                .with_param(parameter(CANVAS_CREATE, FOLDER, ParamKind::Text))
+                // Un documento solo, e il cestino lo rende reversibile: lo
+                // stesso raggio di `note.create` e di `drawing.create`.
                 .with_scope(CommandScope::writing(CommandReach::Document)),
         ]
     }
@@ -85,18 +118,15 @@ impl CommandProvider for LavagnaCommands {
     ) -> Result<CommandOutcome, PluginError> {
         match command {
             CANVAS_APPLY => apply::canvas_apply(fub_abi::command::Args::new(&args), mode, host),
+            CANVAS_CREATE => create::canvas_create(fub_abi::command::Args::new(&args), mode, host),
             other => Err(PluginError::UnknownCommand(other.to_string().into())),
         }
     }
 }
 
-fn parameter(name: &str, kind: ParamKind) -> ParamSpec {
-    ParamSpec::new(
-        name,
-        Text::key(format!("{CANVAS_APPLY}.{name}.title")),
-        kind,
-    )
-    .describing(Text::key(format!("{CANVAS_APPLY}.{name}.desc")))
+fn parameter(command: &str, name: &str, kind: ParamKind) -> ParamSpec {
+    ParamSpec::new(name, Text::key(format!("{command}.{name}.title")), kind)
+        .describing(Text::key(format!("{command}.{name}.desc")))
 }
 
 /// Le frasi del componente, in italiano e in inglese: chiave, italiano,
@@ -243,6 +273,97 @@ const STRINGS: &[(&str, &str, &str)] = &[
         "La lavagna {doc} scritta non si rilegge uguale: non l'ho cambiata.",
         "The written whiteboard {doc} does not read back the same: it was not changed.",
     ),
+    ("canvas.create.title", "Nuova lavagna", "New whiteboard"),
+    (
+        "canvas.create.desc",
+        "Crea una lavagna vuota e la apre. Senza nome nasce «Lavagna», e se quel nome è preso «Lavagna 1», «2», …",
+        "Creates an empty whiteboard and opens it. Without a name it is called «Whiteboard», and if that name is taken «Whiteboard 1», «2», …",
+    ),
+    ("canvas.create.name.title", "Nome", "Name"),
+    (
+        "canvas.create.name.desc",
+        "Il nome o il path della lavagna. Senza estensione riceve `.canvas`. Assente = «Lavagna».",
+        "The name or the path of the whiteboard. Without an extension it gets `.canvas`. Absent = «Whiteboard».",
+    ),
+    ("canvas.create.folder.title", "Cartella", "Folder"),
+    (
+        "canvas.create.folder.desc",
+        "La cartella in cui nasce una lavagna con un nome semplice. Assente = la radice del vault.",
+        "The folder where a whiteboard with a plain name is created. Absent = the root of the vault.",
+    ),
+    (N_UNTITLED, "Lavagna", "Whiteboard"),
+    (P_CREATE, "Crea la lavagna «{doc}»", "Create the whiteboard «{doc}»"),
+    (N_CREATED, "Creata la lavagna «{doc}»", "Created the whiteboard «{doc}»"),
+    (
+        U_CREATE,
+        "la creazione della lavagna «{doc}»",
+        "the creation of the whiteboard «{doc}»",
+    ),
+    (
+        E_NO_FORMAT,
+        "Questo vault non apre le lavagne: nessun formato serve i file `.canvas`.",
+        "This vault does not open whiteboards: no format serves `.canvas` files.",
+    ),
+    (
+        E_NAME_NOT_CANVAS,
+        "«{doc}» non è il nome di una lavagna: una lavagna è un file `.canvas`.",
+        "«{doc}» is not the name of a whiteboard: a whiteboard is a `.canvas` file.",
+    ),
+    (
+        E_TAKEN,
+        "«{doc}» c'è già: una lavagna nuova non prende il posto di un file.",
+        "«{doc}» already exists: a new whiteboard does not replace a file.",
+    ),
+    (
+        E_SOURCE,
+        "La lavagna «{doc}» non si è potuta scrivere: {reason}",
+        "The whiteboard «{doc}» could not be written: {reason}",
+    ),
+    (
+        E_NAME_EMPTY,
+        "La lavagna non può chiamarsi «{doc}»: manca il nome.",
+        "The whiteboard cannot be called «{doc}»: the name is missing.",
+    ),
+    (
+        E_NAME_TRAVERSAL,
+        "La lavagna non può chiamarsi «{doc}»: «.» e «..» non sono nomi.",
+        "The whiteboard cannot be called «{doc}»: «.» and «..» are not names.",
+    ),
+    (
+        E_NAME_MACHINE,
+        "La lavagna non può chiamarsi «{doc}»: «{segment}» è il modo in cui il vault è fatto, non ciò che contiene.",
+        "The whiteboard cannot be called «{doc}»: «{segment}» is how the vault is made, not what it holds.",
+    ),
+    (
+        E_NAME_CONTROL,
+        "La lavagna non può chiamarsi «{doc}»: «{segment}» contiene un carattere di controllo.",
+        "The whiteboard cannot be called «{doc}»: «{segment}» contains a control character.",
+    ),
+    (
+        E_NAME_RESERVED,
+        "La lavagna non può chiamarsi «{doc}»: «{segment}» contiene «{ch}», che un filesystem si riserva.",
+        "The whiteboard cannot be called «{doc}»: «{segment}» contains «{ch}», which a filesystem reserves.",
+    ),
+    (
+        E_NAME_DEVICE,
+        "La lavagna non può chiamarsi «{doc}»: «{segment}» è un nome che Windows si riserva.",
+        "The whiteboard cannot be called «{doc}»: «{segment}» is a name Windows reserves.",
+    ),
+    (
+        E_NAME_TRAILING_DOT,
+        "La lavagna non può chiamarsi «{doc}»: «{segment}» finisce con un punto, che Windows toglie.",
+        "The whiteboard cannot be called «{doc}»: «{segment}» ends with a dot, which Windows removes.",
+    ),
+    (
+        E_NAME_HIDDEN,
+        "La lavagna non può chiamarsi «{doc}»: «{segment}» comincia con un punto, e il vault non lo elencherebbe.",
+        "The whiteboard cannot be called «{doc}»: «{segment}» starts with a dot, and the vault would not list it.",
+    ),
+    (
+        E_NAME_TOO_LONG,
+        "La lavagna non può chiamarsi «{doc}»: «{segment}» è troppo lungo (il massimo è {max} byte).",
+        "The whiteboard cannot be called «{doc}»: «{segment}» is too long (at most {max} bytes).",
+    ),
 ];
 
 /// Le stringhe del componente.
@@ -287,6 +408,23 @@ mod tests {
             E_COMMIT_INVALID,
             E_COMMIT_REJECTED,
             E_COMMIT_UNSTABLE,
+            N_UNTITLED,
+            P_CREATE,
+            N_CREATED,
+            U_CREATE,
+            E_NO_FORMAT,
+            E_NAME_NOT_CANVAS,
+            E_TAKEN,
+            E_SOURCE,
+            E_NAME_EMPTY,
+            E_NAME_TRAVERSAL,
+            E_NAME_MACHINE,
+            E_NAME_CONTROL,
+            E_NAME_RESERVED,
+            E_NAME_DEVICE,
+            E_NAME_TRAILING_DOT,
+            E_NAME_HIDDEN,
+            E_NAME_TOO_LONG,
         ];
         for catalog in &catalogs {
             for key in keys {

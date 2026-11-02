@@ -1,9 +1,11 @@
 // Senza la cargo feature `lavagna` il modulo non è compilato, e un test che lo
 // nomina non avrebbe un soggetto.
 #![cfg(feature = "lavagna")]
-//! **`canvas.apply` end-to-end**, attraverso il kernel vero e il formato vero
-//! delle lavagne: le operazioni arrivano nel file come una modifica sola, il
-//! piano non scrive niente, e l'annulla riporta i byte di prima.
+//! **`canvas.apply` e `canvas.create` end-to-end**, attraverso il kernel vero
+//! e il formato vero delle lavagne: le operazioni arrivano nel file come una
+//! modifica sola, il piano non scrive niente, e l'annulla riporta i byte di
+//! prima; una lavagna nuova prende il nome libero, è la lavagna vuota del
+//! nucleo, e l'annulla la manda nel cestino.
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandEffect, CommandOutcome, InvokeMode, UndoStep};
@@ -11,6 +13,7 @@ use fub_abi::edit::WriteBase;
 use fub_abi::event::Actor;
 use fub_abi::model::DocId;
 use fub_abi::PluginError;
+use fub_features::lavagna::CANVAS_CREATE;
 use fub_features::{LavagnaCommands, CANVAS_APPLY, LAVAGNA_ID, LAVAGNA_NS};
 use fub_format_canvas::CanvasProvider;
 use fub_format_markdown::MarkdownProvider;
@@ -52,6 +55,19 @@ impl Vault {
         .expect("dichiarato");
         ws.register_command_provider(LAVAGNA_ID, Box::new(LavagnaCommands))
             .expect("registrato");
+        // `note.trash`, l'annulla di `canvas.create`, è dei comandi di base.
+        #[cfg(feature = "commands")]
+        {
+            use fub_features::{CoreCommands, COMMANDS_ID};
+            ws.register_plugin(
+                fub_abi::traits::PluginManifest::core(COMMANDS_ID, COMMANDS_ID)
+                    .speaking("it", fub_features::commands::catalog()),
+                fub_kernel::Trust::Core,
+            )
+            .expect("dichiarato");
+            ws.register_command_provider(COMMANDS_ID, Box::new(CoreCommands))
+                .expect("registrato");
+        }
         ws
     }
 }
@@ -282,4 +298,110 @@ fn una_lavagna_che_non_si_legge_e_rifiutata() {
         assert!(matches!(error, PluginError::BadArgs(_)), "{text}: {error:?}");
         assert_eq!(source(&ws, BOARD), text, "{text}: il file non cambia");
     }
+}
+
+fn create(
+    ws: &mut Workspace,
+    args: Value,
+    mode: InvokeMode,
+) -> Result<CommandOutcome, PluginError> {
+    ws.invoke_command(CANVAS_CREATE, args, mode, Actor::User)
+}
+
+fn opened(outcome: &CommandOutcome) -> DocId {
+    match &outcome.effect {
+        CommandEffect::Navigate { doc } => doc.clone(),
+        other => panic!("una lavagna nuova si apre, non {other:?}"),
+    }
+}
+
+/// Il «Fatto quando» di `canvas.create`: due lavagne senza nome, la seconda
+/// col nome libero dopo; il sorgente lo apre il nucleo; l'annulla, anche dopo
+/// che il file è cambiato, lo porta nel cestino con quello che aveva.
+#[cfg(feature = "commands")]
+#[test]
+fn due_lavagne_senza_nome_si_aprono_col_nucleo_e_l_annulla_le_cestina() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.reindex().expect("reindex");
+
+    let first = create(&mut ws, json!({}), InvokeMode::Apply).expect("la prima nasce");
+    let second = create(&mut ws, json!({}), InvokeMode::Apply).expect("la seconda nasce");
+    assert_eq!(opened(&first), DocId::new("Lavagna.canvas"));
+    assert_eq!(opened(&second), DocId::new("Lavagna 1.canvas"));
+
+    for doc in [opened(&first), opened(&second)] {
+        let text = source(&ws, doc.as_str());
+        assert_eq!(text, "{\n  \"nodes\": [],\n  \"edges\": []\n}\n");
+        let core = fub_canvas_core::commit::Core::open(text.as_str()).expect("il nucleo la apre");
+        assert!(core.canvas().nodes.is_empty());
+        assert!(vault.root.join(doc.as_str()).is_file(), "{doc} è sul disco");
+    }
+
+    // La seconda cambia prima dell'annulla: il cestino tiene ciò che aveva.
+    let doc = opened(&second);
+    let added = json!([
+        { "op": "add_card", "node": { "id": "b", "type": "text", "x": 0, "y": 0, "width": 200, "height": 80, "text": "Dopo" } }
+    ])
+    .to_string();
+    apply(
+        &mut ws,
+        json!({ "doc": doc.as_str(), "ops": added }),
+        InvokeMode::Apply,
+    )
+    .expect("si cambia");
+    let changed = source(&ws, doc.as_str());
+
+    let undo = second.undo.expect("la creazione si annulla");
+    for step in undo.steps {
+        let UndoStep::Command { command, args } = step else {
+            panic!("l'annulla di una creazione è un comando");
+        };
+        ws.invoke_command(&command, args, InvokeMode::Apply, Actor::User)
+            .expect("l'annulla si esegue");
+    }
+    assert!(ws.read_source(&doc).is_err(), "la lavagna non c'è più");
+    assert!(ws.read_source(&opened(&first)).is_ok(), "la prima resta");
+    let trash = ws.list_trash().expect("il cestino");
+    assert_eq!(trash.len(), 1);
+    assert_eq!(trash[0].original, doc);
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join(trash[0].id.as_str())).expect("nel cestino"),
+        changed,
+        "il cestino tiene la lavagna cambiata"
+    );
+
+    // Il nome liberato torna il primo libero.
+    let again = create(&mut ws, json!({}), InvokeMode::Apply).expect("un'altra");
+    assert_eq!(opened(&again), DocId::new("Lavagna 1.canvas"));
+}
+
+#[test]
+fn una_lavagna_nasce_anche_in_una_cartella_che_non_c_e() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.reindex().expect("reindex");
+    let outcome = create(
+        &mut ws,
+        json!({ "name": "Piano.canvas", "folder": "Nuove/Idee" }),
+        InvokeMode::Apply,
+    )
+    .expect("nasce con la sua cartella");
+    assert_eq!(opened(&outcome), DocId::new("Nuove/Idee/Piano.canvas"));
+    assert!(vault.root.join("Nuove/Idee/Piano.canvas").is_file());
+}
+
+#[test]
+fn una_lavagna_non_prende_il_posto_di_un_file() {
+    let (_vault, mut ws) = with_board(BEFORE);
+    for name in ["Idee", BOARD] {
+        for mode in [InvokeMode::DryRun, InvokeMode::Apply] {
+            let error = create(&mut ws, json!({ "name": name }), mode).expect_err("occupato");
+            assert!(matches!(error, PluginError::AlreadyExists(_)), "{error:?}");
+        }
+    }
+    assert_eq!(source(&ws, BOARD), BEFORE);
+    let error = create(&mut ws, json!({ "name": "Idee: due" }), InvokeMode::Apply)
+        .expect_err("un nome vietato");
+    assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
 }

@@ -335,3 +335,24 @@ modifica) e l'effetto `Custom` con namespace `fub.lavagna` e payload
 `{"created": [...], "revision": "..."}`: gli id nati, nell'ordine di
 `created`, e la revisione del file dopo. Operazioni che non cambiano un byte
 non scrivono e non lasciano un annulla; l'effetto dice la revisione corrente.
+
+`canvas.create` («Nuova lavagna», «New whiteboard») fa nascere una lavagna
+vuota e la apre, con le regole dei nomi di `drawing.create`. Scrive un
+documento solo e si annulla (`CommandScope::writing(CommandReach::Document)`).
+
+| Parametro | Tipo | |
+|---|---|---|
+| `name` | testo | il nome o il path; senza estensione riceve `.canvas`; assente, il primo nome libero di «Lavagna», «Lavagna 1», … («Whiteboard» in inglese) |
+| `folder` | testo | la cartella di un nome semplice (un path resta dov'è); se non c'è, nasce col file |
+
+Un nome già preso è `AlreadyExists`, anche nell'anteprima, e niente si
+sovrascrive; un nome con l'estensione di un altro formato, o che la regola dei
+nomi nuovi rifiuta (caratteri riservati, nomi di Windows, un punto in testa o
+in fondo), è `BadArgs` con la sua frase; un vault senza il formato delle
+lavagne è `BadArgs`. Il testo è il sorgente nuovo di una lavagna vuota come lo
+scrive il nucleo (R6: `{"nodes": [], "edges": []}` rientrato di due spazi e
+chiuso da `"\n"`), riletto dal nucleo prima di scrivere. L'anteprima nomina il
+file e non scrive; l'applicazione lo crea con `create_document` (che rifiuta
+un path preso nel frattempo) e risponde con `Navigate`. L'annulla è
+`note.trash` sul file: lo porta nel cestino anche se nel frattempo è cambiato,
+e dal cestino si ripristina com'era al momento dell'annulla.
