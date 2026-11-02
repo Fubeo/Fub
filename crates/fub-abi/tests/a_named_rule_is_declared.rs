@@ -296,6 +296,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-motori/src/registro.rs::normale",
+            (
+                Family::ContextualCase,
+                "è la chiave delle estensioni nel registro dei motori: piega in minuscolo \
+                 full-Unicode come `checked_extensions`, perché `scalda_per` deve accendere il \
+                 motore del provider che il registro dei formati sceglie per la stessa \
+                 estensione. Toglie in più il punto davanti, perché chi chiama passa anche \
+                 l'estensione scritta come nel nome di un file.",
+            ),
+        ),
+        (
             "crates/fub-kernel/src/registry.rs::provider_for_ext",
             (
                 Family::ContextualCase,
