@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N6 · T1: il contratto delle schede
+  (`editors/canvas/cards.ts`, `docs/reference/canvas-cards.md`). PenQuiet
+  non c'è ancora in main: `cards.ts` ha un tipo strutturale suo, `CardQuiet
+  { defer(key, work) }`, con la chiave `cards`. `snapshotPart` dà sempre
+  `prefisso@larghezza` (multiplo di 32, minimo 32). «Più vicine al centro»
+  si misura dal centro della vista al punto più vicino della scheda; se un
+  `setMode` lancia, le altre schede cambiano lo stesso e l'errore esce alla
+  fine; lo stesso renderer che nomina due volte una specie non è un
+  doppione.
 - 2026-11-02 · N6 · T2: la cache delle immagini ferme
   (`editors/canvas/card-cache.ts`) ha un tipo suo, `CardCacheSnapshot`,
   uguale per forma a quello del contratto di T1 senza importarlo; percorso e

@@ -616,7 +616,7 @@ dove il modo cambia (un `quiet` finto che tiene i lavori finché il test non
 li lascia andare).
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/cards.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T2 · La cache delle immagini ferme
 
