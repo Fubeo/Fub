@@ -15,6 +15,36 @@ import {
   type MediaPort,
 } from "./media";
 import { setSanitizedHtml } from "../../../../ui/sanitize";
+import type { EmbedContent } from "../../../../host/contract";
+import type { CraftPreview } from "../../../../host/craft";
+import type { MarkdownResources } from "../../../../ui/markdown-resources";
+import { mountMarkdown } from "./mount";
+
+// Le anteprime dei file Craft: lo store finto risponde e conta le domande;
+// la figura vera passa da una spia, per sapere che la nota l'ha usata.
+const craft = vi.hoisted(() => ({
+  asks: [] as Array<{ doc: string; size: string; options: unknown }>,
+  preview: null as CraftPreview | null,
+  figures: [] as string[],
+}));
+vi.mock("../../../../state/craft-previews", () => ({
+  previewOf: async (doc: string, size: string, options: unknown) => {
+    craft.asks.push({ doc, size, options });
+    if (!craft.preview) throw new Error("componente spento");
+    return { preview: { ...craft.preview, doc }, renderError: null };
+  },
+  watchCraftPreviews: () => {},
+}));
+vi.mock("../../../craft/figure", async (original) => {
+  const real = await original<typeof import("../../../craft/figure")>();
+  return {
+    ...real,
+    showEmbeddedCraft: (...args: Parameters<typeof real.showEmbeddedCraft>) => {
+      craft.figures.push(args[2].doc);
+      return real.showEmbeddedCraft(...args);
+    },
+  };
+});
 
 function port(files: Record<string, string>, delay?: Promise<void>, names: Record<string, string> = {}) {
   const opened: string[] = [];
@@ -523,5 +553,147 @@ describe("le immagini remote (L04)", () => {
     await Promise.resolve();
     expect(buttons[0]!.disabled).toBe(false);
     life.close();
+  });
+});
+
+describe("i file Craft dentro una nota", () => {
+  const LOGO = "Disegni/logo.vectorcraft";
+  const FIGURE = `<figure class="fub-craft" data-embed-kind="craft" data-embed-doc="${LOGO}" data-craft-app="vectorcraft">`
+    + "<figcaption>logo.vectorcraft</figcaption></figure>";
+  const PNG = btoa(String.fromCharCode(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a));
+
+  /// Le risorse della nota: `embed` risponde come il kernel, col segnaposto
+  /// del provider per ogni file Craft.
+  function resources(answer: (page: string) => EmbedContent | Promise<EmbedContent>) {
+    const asked: string[] = [];
+    const value: MarkdownResources = {
+      documentId: "Nota.md",
+      match: () => undefined,
+      embed: async (page) => {
+        asked.push(page);
+        return answer(page);
+      },
+      subscribe: () => () => {},
+      invalidate: () => {},
+      release: () => {},
+    };
+    return { value, asked };
+  }
+
+  function preview(image: boolean): CraftPreview {
+    return {
+      version: 1,
+      doc: LOGO,
+      revision: "r1",
+      size: "small",
+      origin: image ? "file" : "none",
+      queued: false,
+      image: image ? { media_type: "image/png", data: PNG, width: 40, height: 30 } : null,
+      info: { app: "vectorcraft", editor: "VectorCraft", format_version: null, bytes: 2048, photo: null, edits: [], xmp: null },
+      render: image ? null : { app: "VectorCraft" },
+    };
+  }
+
+  const disposers: Array<() => void> = [];
+  beforeEach(() => {
+    craft.asks = [];
+    craft.figures = [];
+    craft.preview = preview(true);
+    vi.spyOn(URL, "createObjectURL").mockImplementation(() => "blob:logo");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    for (const dispose of disposers.splice(0)) dispose();
+    document.body.replaceChildren();
+    vi.restoreAllMocks();
+    // Nessuna figura ha chiesto all'app di fare l'anteprima.
+    for (const ask of craft.asks) expect(ask.options).toEqual({ render: false });
+  });
+
+  function note(markup: string, embeds: ReturnType<typeof resources>, opened: string[] = []): HTMLElement {
+    const root = document.createElement("div");
+    root.className = "markdown-rendered";
+    document.body.append(root);
+    disposers.push(mountMarkdown(root, markup, {
+      documentId: "Nota.md",
+      resources: embeds.value,
+      openWikilink: (page) => { opened.push(page); },
+    }));
+    return root;
+  }
+
+  it("`![[logo.vectorcraft]]` passa da showEmbeddedCraft: l'anteprima piccola, e un clic apre il file", async () => {
+    const embeds = resources(() => ({ doc_id: LOGO, html: FIGURE, parts: [] }));
+    const opened: string[] = [];
+    const root = note('<p><span class="embed" data-embed-page="logo.vectorcraft">logo.vectorcraft</span></p>', embeds, opened);
+    await vi.waitFor(() => expect(root.querySelector("figure.craft-figure img")).not.toBeNull());
+    expect(craft.figures).toEqual([LOGO]);
+    expect(craft.asks).toEqual([{ doc: LOGO, size: "small", options: { render: false } }]);
+    expect(root.querySelector<HTMLImageElement>("figure.craft-figure img")!.getAttribute("src")).toBe("blob:logo");
+    // Il segnaposto del provider non entra nella nota.
+    expect(root.querySelector(".fub-craft")).toBeNull();
+    root.querySelector<HTMLElement>("figure.craft-figure")!.click();
+    await vi.waitFor(() => expect(opened).toEqual([LOGO]));
+  });
+
+  it("da sola nel paragrafo la didascalia è quella della resa (K10): una sola", async () => {
+    const opened: string[] = [];
+    const root = note(
+      '<figure><span class="embed" data-embed-page="logo.vectorcraft">logo.vectorcraft</span><figcaption>logo.vectorcraft</figcaption></figure>'
+        + '<figure><span class="embed" data-embed-page="schizzo.vectorcraft">schizzo.vectorcraft</span><figcaption>schizzo.vectorcraft</figcaption></figure>',
+      resources((page) => page === "logo.vectorcraft"
+        ? { doc_id: LOGO, html: FIGURE, parts: [] }
+        : { doc_id: "Disegni/schizzo.vectorcraft", html: FIGURE.replaceAll(LOGO, "Disegni/schizzo.vectorcraft"), parts: [] }),
+      opened,
+    );
+    await vi.waitFor(() => expect(root.querySelector("img.craft-figure-image")).not.toBeNull());
+    expect(root.querySelectorAll("figcaption")).toHaveLength(2);
+    expect(root.querySelector(".craft-figure")).toBeNull();
+    root.querySelector<HTMLElement>("img.craft-figure-image")!.click();
+    await vi.waitFor(() => expect(opened).toEqual([LOGO]));
+  });
+
+  it("senza anteprima resta il riquadro col nome, e l'app non si avvia", async () => {
+    craft.preview = preview(false);
+    const embeds = resources(() => ({ doc_id: LOGO, html: FIGURE, parts: [] }));
+    const root = note('<span class="embed" data-embed-page="logo.vectorcraft">logo.vectorcraft</span>', embeds);
+    await vi.waitFor(() => expect(root.querySelector(".embed")!.getAttribute("data-vault-media")).toBe("loaded"));
+    expect(root.querySelector(".craft-figure-box")!.textContent).toBe("logo.vectorcraft · Disegno di VectorCraft · 2.0 KiB · Nessuna anteprima");
+    expect(root.querySelector("img")).toBeNull();
+  });
+
+  it("la stessa figura dieci volte: una resa e una domanda sola", async () => {
+    const embeds = resources(() => ({ doc_id: LOGO, html: FIGURE, parts: [] }));
+    const root = note('<span class="embed" data-embed-page="logo.vectorcraft">logo.vectorcraft</span>'.repeat(10), embeds);
+    await vi.waitFor(() => expect(root.querySelectorAll("figure.craft-figure img")).toHaveLength(10));
+    expect(embeds.asked).toEqual(["logo.vectorcraft"]);
+    expect(new Set(craft.asks.map((ask) => ask.doc))).toEqual(new Set([LOGO]));
+  });
+
+  it("un segnaposto che nomina un altro documento non è la figura di questo", async () => {
+    const embeds = resources(() => ({ doc_id: "Altra.md", html: FIGURE, parts: [] }));
+    const root = note('<span class="embed" data-embed-page="Altra">Altra</span>', embeds);
+    await vi.waitFor(() => expect(root.querySelector(".embed-loaded")).not.toBeNull());
+    expect(craft.figures).toEqual([]);
+    expect(root.querySelector(".craft-figure, .craft-figure-box")).toBeNull();
+  });
+
+  it("una figura dentro un embed dentro un embed si mostra anche lì", async () => {
+    const embeds = resources((page) => page === "Prima"
+      ? { doc_id: "Prima.md", html: '<span class="embed" data-embed-page="Seconda">Seconda</span>', parts: [] }
+      : page === "Seconda"
+        ? { doc_id: "Seconda.md", html: '<span class="embed" data-embed-page="logo.vectorcraft">logo.vectorcraft</span>', parts: [] }
+        : { doc_id: LOGO, html: FIGURE, parts: [] });
+    const root = note('<span class="embed" data-embed-page="Prima">Prima</span>', embeds);
+    await vi.waitFor(() => expect(root.querySelector(".embed-loaded .embed-loaded figure.craft-figure img")).not.toBeNull());
+    expect(craft.figures).toEqual([LOGO]);
+  });
+
+  it("un file Craft che non c'è più resta l'embed non risolto", async () => {
+    const embeds = resources(() => Promise.reject(new Error("non c'è")));
+    const root = note('<span class="embed" data-embed-page="logo.vectorcraft">logo.vectorcraft</span>', embeds);
+    await vi.waitFor(() => expect(root.querySelector(".embed.unresolved")).not.toBeNull());
+    expect(craft.figures).toEqual([]);
+    expect(craft.asks).toEqual([]);
   });
 });

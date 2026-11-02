@@ -8,6 +8,7 @@ import { mountMermaidBlocks } from "../../../../ui/mermaid";
 import type { DiagramLight } from "../../../../ui/mermaid-styles";
 import { mountMathBlocks } from "./math";
 import { claimQueryBlocks, fillQueryBlock } from "./query-block";
+import { craftPlaceholder, showEmbeddedCraft } from "../../../craft/figure";
 import { hydrateVaultMedia, scenePlaceholder, showEmbeddedDrawing, showRemoteImages, vaultImageSource } from "./media";
 import { openLightbox } from "../../../../ui/lightbox";
 import { mediaKindOfId, mimeOfId } from "../../../media/media-types";
@@ -474,6 +475,19 @@ async function hydrateEmbeds(
     const drawing = mediaKindOfId(content.doc_id) === "image" ? scenePlaceholder(content.html) : null;
     if (drawing?.doc === content.doc_id) {
       await showEmbeddedDrawing(container, slot, drawing, life);
+      return;
+    }
+    // Un file Craft (`![[logo.vectorcraft]]`) torna come il segnaposto del
+    // suo formato: diventa la sua anteprima, e un clic lo apre nella sua
+    // scheda. L'app non parte mai da una nota.
+    const craft = craftPlaceholder(content.html);
+    if (craft && craft.doc === content.doc_id) {
+      const openWikilink = options.openWikilink;
+      await showEmbeddedCraft(container, slot, craft, life, openWikilink ? {
+        open: (doc) => Promise.resolve().then(() => openWikilink(doc)).catch((error: unknown) => {
+          if (!life.closed) notify(t("preview.open_failed", { page: doc, reason: errorText(error) }), "guasto");
+        }),
+      } : {});
       return;
     }
     // Embedded offsets never mutate the containing note.

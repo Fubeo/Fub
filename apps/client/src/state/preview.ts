@@ -8,6 +8,9 @@
 // aprono, non eseguono). Una sola scheda per owner: la risposta di una riga
 // vecchia non riempie la scheda nuova (Race per owner). Upgrade a sticky:
 // la scheda resta finché Invio/Escape/click-fuori; downgrade mai implicito.
+// Un file Craft (N7) torna dal canale dati come il segnaposto del suo
+// formato: la scheda mostra la sua figura (`editors/craft/figure.ts`) con
+// l'anteprima piccola, chiesta sempre senza avviare l'app.
 import { renderEmbed } from "../host/query";
 import { setSanitizedHtml } from "../ui/sanitize";
 import { errorText } from "../host/errors";
@@ -16,6 +19,9 @@ import { state } from "../state/store";
 import { activeDoc } from "../state/layout";
 import { Race } from "../ui/race";
 import { notify } from "../ui/notify";
+import { openLifetime, type Lifetime } from "../ui/lifetime";
+import type { EmbedContent } from "../host/contract";
+import { craftPlaceholder, showEmbeddedCraft } from "../editors/craft/figure";
 
 const HOVER_MS = 350;
 
@@ -26,13 +32,16 @@ interface PreviewOwner {
   timer: number | undefined;
   for: string | null;
   sticky: boolean;
+  /// Ciò che la resa mostrata accende (la figura di un file Craft): muore
+  /// con la resa dopo e con la scheda.
+  life: Lifetime;
 }
 
 let owner: PreviewOwner | null = null;
 
 function ensureOwner(): PreviewOwner {
   if (!owner) {
-    owner = { alive: true, race: new Race(), el: null, timer: undefined, for: null, sticky: false };
+    owner = { alive: true, race: new Race(), el: null, timer: undefined, for: null, sticky: false, life: openLifetime() };
   }
   owner.alive = true;
   return owner;
@@ -54,6 +63,24 @@ function mountEl(box: HTMLElement): HTMLElement {
   return current.el;
 }
 
+/// Mette in `el` la resa di `content`: l'HTML sanitizzato, o, per il
+/// segnaposto di un file Craft, la sua figura con l'anteprima piccola (mai
+/// fatta dall'app: `render: false`). Ciò che la resa di prima aveva acceso
+/// si spegne.
+function paint(current: PreviewOwner, el: HTMLElement, content: EmbedContent): void {
+  current.life.close();
+  current.life = openLifetime();
+  const craft = craftPlaceholder(content.html);
+  if (!craft || craft.doc !== content.doc_id) {
+    setSanitizedHtml(el, content.html);
+    return;
+  }
+  const slot = document.createElement("div");
+  slot.className = "embed";
+  el.replaceChildren(slot);
+  void showEmbeddedCraft(el, slot, craft, current.life);
+}
+
 /// Mostra l’anteprima del documento corrente (shell.preview.show):
 /// `sticky` da Ctrl+Invio resta, altrimenti hover. Read-only: nessun
 /// editor montato, nessun `DocumentSurface`, nessuna sottoscrizione.
@@ -69,6 +96,7 @@ export async function showPreviewForCurrent(sticky: boolean): Promise<void> {
   const current = ensureOwner();
   current.for = doc;
   current.sticky = sticky;
+  current.life.close();
   el.textContent = doc;
   const shown = await current.race.last((expected) =>
     expected(
@@ -83,7 +111,7 @@ export async function showPreviewForCurrent(sticky: boolean): Promise<void> {
     hidePreview();
     return;
   }
-  setSanitizedHtml(el, shown.content.html);
+  paint(current, el, shown.content);
 }
 
 /// Programma l’anteprima sopra una riga (hover quick-switcher/ricerca):
@@ -110,6 +138,7 @@ async function showPreviewIn(doc: string, box: HTMLElement, sticky: boolean): Pr
   current.for = doc;
   current.sticky = sticky;
   el.setAttribute("aria-label", doc);
+  current.life.close();
   const shown = await current.race.last((expected) =>
     expected(
       renderEmbed(doc, null, null)
@@ -123,7 +152,7 @@ async function showPreviewIn(doc: string, box: HTMLElement, sticky: boolean): Pr
     el.title = shown.error;
     return;
   }
-  setSanitizedHtml(el, shown.content.html);
+  paint(current, el, shown.content);
 }
 
 /// Annulla un hover programmato senza chiudere una sticky.
@@ -146,6 +175,7 @@ export function hidePreview(): void {
   owner.timer = undefined;
   owner.for = null;
   owner.sticky = false;
+  owner.life.close();
   owner.el?.remove();
   owner.el = null;
   owner = null;
