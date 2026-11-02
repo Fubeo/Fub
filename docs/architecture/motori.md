@@ -193,6 +193,38 @@ qualunque maiuscola), `voce(spazio)` (o `MotoreSconosciuto`) ed `elenco()`,
 con spazio, acceso e byte di ogni motore. Non tiene lucchetti mentre chiama
 una voce.
 
+## Il motore dei documenti
+
+`fub-format-rich` (`src/motore.rs`) iscrive `MotoreDocumenti` con lo spazio
+«documenti» e le estensioni di ogni `Codec` (`docx`, `odt`, `rtf`, `doc`,
+`dot`) la prima volta che un `RichProvider` si crea, una volta per processo.
+I codec di WordCraft non hanno stato: il motore acceso tiene soltanto la
+cache delle prove a vuoto accettate (`documenti.prove`), che l'apertura
+ricorda per l'impronta dei byte e il salvataggio degli stessi byte ritrova.
+
+- Restano le regole di prima: al più otto prove, e quelle prima dell'ultima
+  entro quattro milioni di voci di peso. Sopra c'è il tetto del budget, che
+  toglie dalla più vecchia e può togliere anche l'ultima: una prova che da
+  sola supera il tetto non resta. Il salvataggio che non trova la prova la
+  rifà, più lento, e scrive gli stessi byte.
+- La cache conta i byte di una prova dal suo peso: 100 byte per voce più
+  160 KiB per prova, misurati sui documenti del corpus con un allocatore che
+  conta i byte vivi (il metodo e i numeri sono accanto a `BYTES_PER_ENTRY`,
+  in `src/preservation.rs`). La stima sta sopra ogni misura.
+- `remember` chiama `rispetta()` dopo aver ricordato, fuori dal lucchetto
+  della cache.
+
+Il correttore (`fub-features`, feature `proof`) iscrive nel budget del
+processo i dizionari Hunspell letti dal disco (`correttore.dizionari`), quando
+si crea con i dizionari della macchina. Il motore non sa toglierne una lingua
+sola: `libera` li lascia cadere tutti, e la parola dopo li rilegge.
+
+`fub-host` svuota le due cache e chiama `rilascia_al_sistema()` quando si
+chiude l'ultimo vault (`Host::close_vault` o `Host::close`), dopo aver
+ritirato lo slot della sessione e senza lucchetti tenuti. Con un altro vault
+aperto, o in chiusura, le cache restano al budget: l'host non sa quale vault
+abbia letto quale documento.
+
 ## Prove
 
 - `crates/fub-motori/tests/pigro.rs`: dieci thread insieme e una costruzione
@@ -206,3 +238,11 @@ una voce.
 - `crates/fub-motori/tests/registro.rs`: iscrizione, `scalda_per`, iscrizioni
   doppie; servizi e registro del processo; nome e numero dei thread; un panico
   in un lavoro.
+- `crates/fub-format-rich/tests/motore.rs` e i test in `src/motore.rs`:
+  l'iscrizione con spazio ed estensioni; i byte di una prova ricordata; un
+  budget a tetto basso che la toglie e il salvataggio dopo con gli stessi
+  byte; una prova sola sopra il tetto.
+- `crates/fub-features/tests/proof_dictionaries_budget.rs`: i byte del
+  dizionario letto, il tetto basso che lo lascia cadere e la risposta uguale.
+- `crates/fub-host/tests/engines_on_close.rs`: con due vault aperti chiuderne
+  uno lascia le cache; chiuso l'ultimo sono a zero.

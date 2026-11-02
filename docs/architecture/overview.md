@@ -257,13 +257,26 @@ dipende soltanto da `rayon`, `thiserror`, `tracing` e, su Linux con la glibc,
 thread, il budget comune delle cache e il registro dove ogni adattatore iscrive
 il suo motore. Non nomina nessun motore: un adattatore che lo usa dipende da
 lui, mai il contrario. Le regole stanno in [Lo strato dei motori](motori.md).
+Le frecce in ingresso: `fub-format-rich`, che iscrive il motore dei documenti
+e ne tiene le prove a vuoto nel budget; `fub-features`, dietro la feature
+`proof`, che iscrive nel budget i dizionari del correttore letti dal disco; e
+`fub-host`, che alla chiusura dell'ultimo vault svuota quelle cache e
+restituisce la memoria al sistema.
 
 ```mermaid
 flowchart LR
     %% @grafo-dipendenze
-    %% Il seguito del grafo: lo strato dei motori, senza frecce verso Fub.
+    %% Il seguito del grafo: lo strato dei motori, senza frecce verso Fub, e
+    %% chi lo usa.
 
     motori["fub-motori"]
+    rich["fub-format-rich"]
+    features["fub-features"]
+    host["fub-host"]
+
+    rich --> motori
+    features --> motori
+    host --> motori
 ```
 
 `fub-scene`, il lettore delle scene di FubDraw, ha come sola freccia in uscita

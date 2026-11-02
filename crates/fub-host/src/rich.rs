@@ -32,6 +32,29 @@ pub(crate) use fub_format_rich::Codec;
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Codec {}
 
+/// Svuota le cache dei motori che tengono documenti e dizionari: le prove a
+/// vuoto del motore dei documenti e i dizionari del correttore letti dal
+/// disco, poi restituisce al sistema la memoria liberata. La chiama la
+/// chiusura dell'ultimo vault, fuori da ogni lucchetto dell'host; con un altro
+/// vault aperto le cache restano al budget dei motori, che le toglie da solo.
+///
+/// Senza le feature `rich` e `proof` non c'è niente da svuotare, ma la memoria
+/// si restituisce lo stesso. Dà i byte stimati liberati.
+pub(crate) fn empty_engine_caches() -> u64 {
+    let mut freed = 0u64;
+    #[cfg(feature = "rich")]
+    {
+        use fub_motori::Voce as _;
+        freed += fub_format_rich::motore::MotoreDocumenti::processo().svuota();
+    }
+    #[cfg(feature = "proof")]
+    {
+        freed += fub_features::proof::empty_dictionaries();
+    }
+    fub_motori::rilascia_al_sistema();
+    freed
+}
+
 /// I provider di formato da registrare al montaggio.
 pub(crate) fn providers() -> Vec<Box<dyn FormatProvider>> {
     #[cfg(feature = "rich")]
