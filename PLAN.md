@@ -800,7 +800,7 @@ src/editors/spatial/motore/sessione.test.ts` passa con: apertura su
 come `edits` con le revisioni 1, 2, 3; `stale` porta a un testo intero e a un
 solo nuovo tentativo; chiusa, la sessione non manda più niente.
 Prova: scripts/check.sh --rapido; npm --prefix apps/client test -- src/editors/spatial/motore/sessione.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T9 · Il crate `fub-disegno` e il workspace
 

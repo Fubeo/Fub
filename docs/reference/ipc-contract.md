@@ -154,6 +154,13 @@ confermare, D-4):
   o `null`) e `disegno.spessore` (un numero, zero o più) (arriva con T19);
 - `close_drawing` chiude l'istanza (arriva con T19).
 
+Dal lato del client le sei porte sono `openDrawing`, `drawingSync`,
+`drawingGesture`, `drawingCommands`, `drawingCommand` e `closeDrawing` di
+`host/ipc.ts`, con il vault in coda; le usa soltanto la sessione del motore
+(`editors/spatial/motore/sessione.ts`), che tiene la copia allineata alla
+`DocumentSession`, manda le richieste in fila con un tempo limite di 10 s e,
+a un `stale`, rimanda il testo intero e riprova una volta.
+
 Ogni richiesta passa da `validate()` prima di arrivare al motore, e un
 rifiuto è `BadArgs` col nome del campo. Il testo è al massimo di 20 MiB,
 una richiesta di gesto porta al più 100.000 eventi, un esito al più 10.000
