@@ -47,12 +47,14 @@ user merges.
    handle CI results as they arrive.
 4. **A report arrives:**
    - `FATTO`: integrate it, following [unione.md](unione.md).
-   - `BLOCCATO`: if the answer is covered by "L'orchestratore decide da solo" in
-     `DECISIONS.md`, decide, add a line to its `Registro` and resume the coder
-     with the answer (SendMessage to the same agent keeps its context). If it
-     is a gap in the plan, ask the planner first when it is reachable.
-     Otherwise ask the user: one question, the options, your recommendation
-     first. The other coders keep going meanwhile.
+   - `BLOCCATO`: unless the answer is in "Chiede sempre" of `DECISIONS.md`,
+     decide it yourself (see "Il criterio" there: the best result, not the
+     shortest path), add a line to its `Registro` and resume the coder with the
+     answer (SendMessage to the same agent keeps its context). If it is a gap in
+     the plan, ask the planner first when it is reachable. Only for "Chiede
+     sempre" ask the user: all the questions of that moment together, the
+     options, your recommendation first. The other coders keep going
+     meanwhile.
    - `ROSSO`: open the red step's log (`grep`/`tail`), then resume the coder with
      a precise hint, take the fix over if it is small, or ask the user.
 5. **After each integration** the freed slot takes the next ready task at once.
