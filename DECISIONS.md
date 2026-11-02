@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N3 · T2: in TypeScript i controlli di R3, R4 e R5 stanno
+  nello scanner di `source-edit.ts` (`inspectCanvasJson`), una passata sola
+  sul testo dopo `JSON.parse`, e non in un reviver: misurato a 2000 schede,
+  il reviver portava la lettura da circa 17 a 23 ms, lo scanner la lascia a
+  13-14. La regola del vuoto (`isBlankCanvasSource`) è una sola, per il
+  lettore e per il riscrittore. `backgroundStyle` è qualunque stringa senza
+  limite suo (resta quello di 16 MiB del file), come in Rust; `-0` si legge
+  `0`, come un intero Rust.
+
 - 2026-11-01 · regole · L'orchestratore e i coder decidono da soli il come
   tecnico, i formati interni, le dipendenze fra crate del workspace e i file
   legati al task; «Chiede sempre» resta per ciò che si vede, il contratto

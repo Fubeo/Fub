@@ -383,7 +383,7 @@ Fatto quando: `model.test.ts` ha un test per R1, R2, R3, R4, R7, R8 che
 fallisce sul codice di prima e passa dopo; i test della cartella passano.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T3 · Le regole di lettura in Rust
 
