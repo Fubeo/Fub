@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N3 · T10: il componente «Lavagna» (fub.lavagna) porta
+  canvas.apply; il seme degli id usa l'Fnv1a del contratto; spegnere
+  fub.lavagna toglie solo canvas.apply, e il test fub-cli
+  spegnere_la_lavagna_dice_che_la_penna_non_serve_piu è stato aggiornato di
+  conseguenza (opzione a: dice con precisione che cosa sparisce, non è
+  indebolito). Resta da allineare l'ADR 0234, che mette ancora la Lavagna
+  fra i componenti senza bundle. Perché: la lavagna diventa un componente
+  che si scrive come gli altri, e un componente spento toglie solo ciò che
+  porta.
 - 2026-11-02 · N3 · T9: lo specchio a caso fra fub-canvas-core e la lavagna
   TypeScript ha 2051 casi (1333 sorgenti, 718 prove con toppe) in una
   fixture di 501 KB, un sorgente per riga con le sue prove per stare sotto i

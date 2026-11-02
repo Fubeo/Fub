@@ -681,7 +681,7 @@ fub-features --no-default-features --features lavagna` passa.
 Prova: scripts/check.sh --rapido; cargo check -p fub-features
 --no-default-features --features lavagna; cargo test -p fub-cli --test
 componenti
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T11 · `canvas.create`
 
