@@ -912,7 +912,7 @@ fub-features --test cargo_features --test componenti` passano;
 `node .github/scripts/check-error-literals.mjs` passano senza cambiare
 soglie.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test craft
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T7 · Il registro delle app
 

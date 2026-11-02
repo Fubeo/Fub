@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N7 · T6: il bundle fub.craft sta in fub-host dietro la
+  feature `craft`, nel default, sul modello di LinkCardBundle; il comando
+  craft.preview è in sola lettura e il job craft.render per ora risponde
+  «niente CLI» (lo riempie T11). I test dell'inventario e delle estensioni
+  conoscono fub.craft. Il check è rosso solo per i due test a tempo di fub-
+  services (stalled publish/vault), che rilanciati da soli passano. Perché:
+  il formato si monta come gli altri componenti e si spegne con la sua
+  feature.
 - 2026-11-02 · N7 · T5: un file a byte che non sa riscriversi (provider
   assente o `Ok(None)`) non ferma più la rinomina;
   `invoke_prepared_link_rewrites` restituisce `PreparedLinkRewriteOutcome {
