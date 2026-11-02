@@ -6,10 +6,28 @@ e tiene il registro delle scelte fatte durante il lavoro, perché il piano dopo
 ne tenga conto. Le scelte di architettura vere vanno in un ADR
 (`docs/decisions/`); qui resta una riga che lo nomina.
 
+## Il criterio
+
+Il risultato migliore, anche quando costa più tempo, più lavoro o più coder:
+fra due strade si sceglie quella più solida, non quella più corta. E poche
+domande: l'utente decide ciò che vede e ciò che non si può disfare; il resto lo
+decide l'orchestratore, lo scrive nel registro e lo dice nel resoconto. Nel
+dubbio su una scelta tecnica si decide, non si chiede.
+
 ## L'orchestratore decide da solo
 
 - l'ordine dei task pronti e quanti coder far lavorare insieme (al massimo tre);
-- i nomi interni, la forma dei test, un piccolo refactor dentro i file del task;
+- il come che il piano approvato lascia aperto: nomi, tipi, dove sta una
+  funzione, la forma di un messaggio d'errore, la forma dei test;
+- un piccolo refactor dentro i file del task;
+- i formati interni che solo Fub legge e scrive (chiavi delle impostazioni,
+  file di cache, il canale fra CLI e app), dentro ciò che il piano ha approvato;
+- una dipendenza nuova fra crate del workspace che il piano implica, con il
+  diagramma di `docs/architecture/overview.md` e `dependency_invariant`
+  aggiornati;
+- allargare il perimetro di un task a un file strettamente legato (il suo
+  test, un chiamante, un file generato, la pagina di `docs/` che lo descrive),
+  anche su richiesta del coder;
 - i conflitti banali quando unisce (una riga in una lista, un indice, una
   tabella di testi);
 - rilanciare un coder con un'indicazione più precisa, o finire da sé una
@@ -22,13 +40,20 @@ registro.
 
 ## Chiede sempre
 
-- tutto ciò che cambia il comportamento visibile;
-- ABI, WIT, IPC, formati su disco, sicurezza e permessi;
-- una dipendenza nuova o una licenza;
+- ciò che chi usa Fub vede o fa in modo diverso da come dice il piano
+  approvato;
+- il contratto pubblico: ABI e WIT dei plugin, i comandi IPC del client che il
+  piano non nomina, un formato su disco che leggono altri programmi o versioni
+  già pubblicate;
+- sicurezza e permessi;
+- una dipendenza esterna nuova o una licenza;
 - cambiare «Fatto quando» o «Fuori scope», saltare o rinviare un task;
-- toccare file fuori dal perimetro di ogni task;
 - disattivare, saltare o mettere in quarantena un test;
 - il merge.
+
+Quando chiede: le domande di un momento tutte insieme, solo quelle la cui
+risposta cambia davvero il risultato, con la conseguenza pratica di ogni
+scelta e la raccomandazione per prima.
 
 ## Registro
 
@@ -87,6 +112,13 @@ La più recente in cima: data · piano · decisione · perché.
   scenario del fake di pochi gesti (T2b); T3 aveva consegnato la pagina senza
   il riquadro laterale dell'anteprima, con una lettura della mappa sua accanto
   a quella di T4 (T3b) · fonte: revisione dell'orchestratore.
+- 2026-11-01 · regole · L'orchestratore e i coder decidono da soli il come
+  tecnico, i formati interni, le dipendenze fra crate del workspace e i file
+  legati al task; «Chiede sempre» resta per ciò che si vede, il contratto
+  pubblico, sicurezza, dipendenze esterne, scope, test e merge; il criterio è
+  il risultato migliore, non la strada più corta · fonte: l'utente («mi stai
+  facendo troppe domande … ti voglio più autonomo»; «voglio sempre ottenere il
+  risultato migliore, non importa se ci mettiamo più tempo o più risorse»).
 - 2026-11-01 · K1 · L'assunzione A2 era sbagliata: un campo in coda a un
   record rompe i plugin compilati prima (il guest a undici campi del manifest
   non si istanzia nell'host a sedici); `0.2.0` non è pubblicata e K1 resta, ma

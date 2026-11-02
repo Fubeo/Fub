@@ -32,13 +32,18 @@ expected.
 - **Your copy, your branch.** You work in your worktree, on the branch it was
   created with. Never push, open a PR, look at or start CI, switch branch,
   rebase, reset or rewrite history. Never start other agents.
-- **Your files.** Touch only the paths under `Tocca`, plus the tests and the
-  `docs/` page that sit with them. Anything listed under `Non toccare` is off
-  limits. If the task needs another file, stop: report `BLOCCATO`.
-- **Don't guess.** If the brief and the code disagree, or the task needs a
-  choice the brief doesn't make, stop and report `BLOCCATO` with the question
-  and the options you see, your recommendation first. For facts the code wins
-  over the plan: note the difference in the report.
+- **Your files.** Touch only the paths under `Tocca`, plus the tests, the
+  callers, the generated files and the `docs/` page that sit with them: name
+  each extra file in the report. Anything listed under `Non toccare` is off
+  limits; if the task needs one of those, or an unrelated file, stop: report
+  `BLOCCATO`.
+- **Decide the technical how.** Names, types, where a function lives, the
+  shape of an internal format or of an error message: choose the most solid
+  option, not the shortest, and write it under `DIFFERENZE DAL PIANO`. For
+  facts the code wins over the plan: note the difference in the report. Stop
+  with `BLOCCATO` (the question, the options, your recommendation first) only
+  for what `DECISIONS.md` lists under "Chiede sempre", or when the brief and
+  the code disagree on what the person using Fub sees.
 - **Read narrowly.** The files in `Tocca`, their tests, what they import and
   who calls them. Don't map the repository.
 - **Graphic task.** Start from the prototype under `PLAN-ui/`. Move its CSS into
