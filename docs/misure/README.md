@@ -61,3 +61,12 @@ tre sistemi della CI.
 | Data | Sistemi | Pagina |
 |---|---|---|
 | 2026-10-31 | Linux, macOS, Windows (runner) | [Le librerie a runtime](librerie-runtime-2026-10-31.md) |
+
+## Le versioni in comune
+
+Il controllo di K5 sulle librerie che Fub e il motore del disegno hanno in
+comune: versioni, librerie doppie e che cosa manca per allinearle.
+
+| Data | Motore | Pagina |
+|---|---|---|
+| 2026-11-02 | VectorCraft `cfb30d81` | [Le versioni in comune](disegno-versioni-2026-11.md) |
