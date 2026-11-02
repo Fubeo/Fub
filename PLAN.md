@@ -929,7 +929,7 @@ numeri.
 Prova: scripts/check.sh --rapido; cargo build --manifest-path
 tools/ink-wasm-banco/Cargo.toml --release --target wasm32-unknown-unknown;
 cd apps/client && npm run bench:ink
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T18 · Il TypeScript della lavagna si toglie
 

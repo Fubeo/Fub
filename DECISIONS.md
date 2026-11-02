@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N3 · T17: fatto con D-4 (a), solo la misura: il banco
+  `tools/ink-wasm-banco/` (nessuna crate nuova nel lock) e `wasm.bench.ts`,
+  che si salta senza il `.wasm`. Il primo giro era a macchina carica; la
+  pagina tiene i tre giri rifatti con il carico sotto 2,5. La condizione del
+  passo 12a non è vera per intero: un evento per chiamata, il WebAssembly è
+  4,3 volte più lento col mouse e il 16% con lo stabilizzatore, pari con la
+  penna; il riduttore da solo è pari o più veloce. La pagina non dice che
+  cosa fare: resta all'utente con D-4.
 - 2026-11-02 · N3 · ADR 0234 allineato: la lavagna non è più fra i
   componenti senza bundle, perché da T10 è il bundle fub.lavagna. Perché:
   l'ADR deve dire com'è fatto il codice.
