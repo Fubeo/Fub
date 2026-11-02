@@ -17,10 +17,12 @@ asking.
 
 ## Project in brief
 
-Fub is a local-first writing workspace: it opens vaults of Markdown files without
-converting them. The core is a Rust workspace (`crates/`). The client is Tauri v2
-plus Vite/TypeScript (`apps/client/`). Markdown is the first `FormatProvider`,
-not a format built into the kernel. Rust comments and the documentation in
+Fub is a local-first knowledge manager, a true operating system for knowledge,
+and it is meant to be used for anything: notes, documents, spreadsheets, PDFs
+and drawings. It opens vaults of Markdown files without converting them. The
+core is a Rust workspace (`crates/`). The client is Tauri v2 plus
+Vite/TypeScript (`apps/client/`). Markdown is the first `FormatProvider`, not a
+format built into the kernel. Rust comments and the documentation in
 `docs/` are written in **Italian**, like the user interface and the commit
 messages. This file and the agent files under `.claude/` are in English.
 

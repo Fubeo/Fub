@@ -39,10 +39,11 @@ qualche centinaio di byte a finestra la coda che il gate misura, senza che
 l'app trattenga niente. Senza di lui un frame è quello del compositore. Le
 distribuzioni qui sotto sono state misurate prima, con l'ora ferma.
 
-La distribuzione locale è stata misurata su Linux x64
-`6.12.107+deb13-amd64`, Node `22.23.1`, Intel N150 con 4 CPU logiche e
-16 539 889 664 byte di RAM. Il browser era Chromium `149.0.7827.55`, viewport
-1280 × 800, DPR 1, `prefers-reduced-motion: reduce` e schema scuro. I due job CI
+La macchina della distribuzione locale non è nota: non è quella su cui si
+sviluppa Fub. Ne restano il sistema, Linux x64 `6.12.107+deb13-amd64`, Node
+`22.23.1`, 4 CPU logiche e 16 539 889 664 byte di RAM. Il browser era
+Chromium `149.0.7827.55`, viewport 1280 × 800, DPR 1,
+`prefers-reduced-motion: reduce` e schema scuro. I due job CI
 usavano `ubuntu-latest`, Node `22.23.2` e Chromium `149.0.7827.55`; Actions non
 espone modello CPU e RAM dei runner, quindi quei dati restano non disponibili.
 
@@ -211,7 +212,7 @@ che la fa partire:
 
 Il budget vale per la mediana dei giri, e il banco esce diverso da zero se una
 mediana lo supera. Non sta nella CI, perché i tempi del runner condiviso non
-sono quelli della macchina di chi scrive.
+sono quelli della macchina di chi usa Fub.
 
 | Interazione | Primo fotogramma | Fine del moto | Misura (mediana) |
 |---|---:|---:|---:|
@@ -219,8 +220,8 @@ sono quelli della macchina di chi scrive.
 | Aprire la palette (il lanciatore) | ≤ 100 ms | ≤ 700 ms | 14 / 598 ms |
 | Aprire una nota dall'albero | ≤ 100 ms | ≤ 700 ms | 27 / 544 ms |
 
-La misura è della stessa macchina della Graph View (Intel N150, Chromium della
-revisione Playwright fissata, 1280 × 800). Il primo fotogramma ha la soglia dei
+La misura è di server-di-fub (AMD Ryzen 7 7730U, Chromium della revisione
+Playwright fissata, 1280 × 800). Il primo fotogramma ha la soglia dei
 100 ms, sotto la quale una risposta si sente immediata. La fine del moto ha
 per tetto la misura nella tabella con un margine: la coda di una molla che si assesta
 conta, anche se l'occhio non la vede più, e un tetto più basso si sceglie
@@ -265,8 +266,8 @@ nuovo.
 Prima di questa resa incrementale la battuta sulla nota grande costava
 13,8 · 17,3 · 26,6 ms. Sulla nota grande la Live, e con lei Blocchi, supera ancora il budget: a
 ogni battuta scorre tutti i blocchi di primo livello (2.800 su 7.201 righe),
-e la Sorgente da sola sta già a 3,8 ms. La cifra dell'Intel N150 della tabella
-sopra va ancora misurata là.
+e la Sorgente da sola sta già a 3,8 ms. Le cifre della tabella sono soltanto
+di server-di-fub: su una macchina più lenta la battuta non è stata misurata.
 
 Siccome questo banco non sta nella CI, la guardia in CI è il test che conta le
 rese della Live (`render-incremental.test.ts`): una battuta in un paragrafo

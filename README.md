@@ -1,8 +1,10 @@
 # Fub
 
-Fub è un workspace di scrittura **local-first**: apre vault di file Markdown
-senza convertirli, conserva i dati dell'utente sul disco e separa il core dai
-formati, dalla shell nativa e dai runtime dei plugin.
+Fub è un gestore della conoscenza **local-first**, un vero e proprio sistema
+operativo della conoscenza, e si usa per tutto: note, documenti, fogli di
+calcolo, PDF e disegni. Apre vault di file Markdown senza convertirli,
+conserva i dati dell'utente sul disco e separa il core dai formati, dalla
+shell nativa e dai runtime dei plugin.
 
 Il client unificato vive in `apps/client/`: logica applicativa, editor, stato e
 contratto host sono condivisi, mentre desktop e mobile hanno shell di
