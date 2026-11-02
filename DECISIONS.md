@@ -59,6 +59,12 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K5 · T1: l'ADR 0239 «Il disegno passa dal motore vettoriale,
+  e il file lo scrive il client» (stato proposta, ambito contratto) e la
+  pagina docs/architecture/disegno.md; le domande D-1…D-13 stanno nell'ADR
+  come «Da decidere»; ciò che non esiste ancora è nominato come percorso in
+  codice con «(arriva con T…)» · il numero 0239 segue 0236–0238 di K3, N3 e
+  N4, e si rinumera alla fusione se serve.
 - 2026-11-01 · regole · L'orchestratore e i coder decidono da soli il come
   tecnico, i formati interni, le dipendenze fra crate del workspace e i file
   legati al task; «Chiede sempre» resta per ciò che si vede, il contratto
