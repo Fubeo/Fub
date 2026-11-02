@@ -1,0 +1,3723 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anteprime dei file Craft</title>
+<!-- Prototipo di N7 T18: le parti nuove che le risposte a D-1, D-5, D-7, D-8 e
+     D-9 portano. Generato da uno script del pianificatore
+     (gen-n7-proto.mjs) dal CSS e dai cataloghi del worktree.
+
+     Come si legge:
+     - i blocchi «copia» sono il CSS di Fub com'è: non si spostano;
+     - i blocchi «→ file» sono il codice nuovo: il task indicato lo porta in
+       quel file, e le classi nuove vanno nell'anatomia del pezzo;
+     - i blocchi «solo prototipo» restano qui (la pagina, la barra, ciò che nel
+       codice vero scrive una vista: la geometria dello zoom, il PDF, il testo
+       di un documento).
+     Ogni testo ha la sua chiave in data-i18n; le chiavi nuove sono nella
+     tabella in fondo alla barra («I testi»).
+
+     La prova del sanificatore: il 2026-11-03 il pianificatore
+     ha passato i blocchi «→ file» delle pelli (17 regole; non quello di
+     structure.css, che non attraversa il sanificatore) da themeCssViolations
+     e sanitizeThemeCss di ui/sanitize-css.ts, con la politica del caricatore
+     (validateThemeBundle in theme/loader.ts) e kind skin, requiredRoles
+     vuoto e le 13 classi nuove della tabella «Le classi nuove» aggiunte a
+     THEME_2_PROFILE.hooks: nessuna violazione, 17 regole su 17 tenute. Per
+     rifarla dopo un cambio: un test Vitest usa e getta in apps/client/src,
+     mai committato, che fa la stessa chiamata e vuole zero violazioni. -->
+<!-- solo prototipo: Fub porta i suoi caratteri (theme/scrittoio/fonts.css). -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&amp;family=Newsreader:opsz,wght@6..72,400;6..72,500&amp;display=swap">
+<style>
+/* da theme/scrittoio/sheet-light.css (copia dei token della luce chiara) */
+:root {
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 12px;
+  --space-6: 16px;
+  --space-7: 20px;
+  --space-8: 24px;
+  --space-9: 32px;
+  --space-10: 48px;
+  --space-11: 64px;
+  --control-h: 32px;
+  --row-h: 28px;
+  --radius-xs: 4px;
+  --radius-chip: 6px;
+  --radius-control: 8px;
+  --radius-menu: 10px;
+  --radius-sheet: 12px;
+  --radius-dialog: 14px;
+  --radius-pill: 999px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --font-ui: "Hanken Grotesk Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-reading: "Newsreader Variable", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 15px;
+  --text-xl: 16px;
+  --text-2xl: 19px;
+  --text-3xl: 23px;
+  --text-reading: 17px;
+  --text-source: 14px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-bold: 600;
+  --leading-tight: 1.3;
+  --leading-normal: 1.45;
+  --leading-relaxed: 1.65;
+  --content-width: 68ch;
+  --tracking-caps: 0.06em;
+  --duration-state: 90ms;
+  --duration-fast: 140ms;
+  --duration-med: 220ms;
+  --duration-slow: 360ms;
+  --duration-scene: 560ms;
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.32, 0, 0.67, 0);
+  --spring-snap-k: 560;
+  --spring-snap-c: 38;
+  --spring-soft-k: 300;
+  --spring-soft-c: 30;
+  --spring-wide-k: 170;
+  --spring-wide-c: 24;
+  --spring-elastic-k: 420;
+  --spring-elastic-c: 20;
+  --spring-jelly-k: 260;
+  --spring-jelly-c: 12;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --bg: #e8edf5;
+  --bg-chrome: #e8edf5;
+  --bg-panel: #e8edf5;
+  --bg-hover: #dce4ee;
+  --bg-active: #d1dae6;
+  --sheet: #fcfdff;
+  --sheet-2: #f3f6f9;
+  --bg-input: #f3f6f9;
+  --bg-elev: #ffffff;
+  --overlay-hover: rgb(26 31 41 / 5%);
+  --overlay-active: rgb(26 31 41 / 9%);
+  --scrim: rgb(14 22 36 / 32%);
+  --text: #1a1f29;
+  --muted: #5a5f6a;
+  --border: #d3d8e0;
+  --border-strong: #b2b8c2;
+  --outline: #808691;
+  --accent: #2b56cc;
+  --accent-soft: #1a40b6;
+  --accent-contrast: #fafcff;
+  --accent-wash: #d8e5ff;
+  --accent-veil: rgb(43 86 204 / 12%);
+  --focus-ring: #2b56cc;
+  --danger: #ca131b;
+  --danger-wash: rgb(202 19 27 / 12%);
+  --danger-contrast: #fffbfa;
+  --warning: #905900;
+  --warning-wash: rgb(144 89 0 / 14%);
+  --warning-contrast: #fefbf8;
+  --success: #007541;
+  --success-wash: rgb(0 117 65 / 14%);
+  --success-contrast: #f9fdfa;
+  --info: #006ba0;
+  --info-wash: rgb(0 107 160 / 12%);
+  --info-contrast: #f9fcff;
+  --highlight: #fade4e;
+  --amber: #d18500;
+  --shadow-1: 0 1px 1px rgb(24 28 44 / 5%), 0 6px 20px rgb(24 28 44 / 7%);
+  --shadow-2: 0 1px 2px rgb(24 28 44 / 6%), 0 10px 28px rgb(24 28 44 / 10%);
+  --shadow-3: 0 2px 4px rgb(24 28 44 / 8%), 0 14px 36px rgb(24 28 44 / 14%);
+  --shadow-4: 0 3px 8px rgb(24 28 44 / 9%), 0 20px 52px rgb(24 28 44 / 18%);
+  --shadow-5: 0 4px 10px rgb(24 28 44 / 10%), 0 28px 70px rgb(24 28 44 / 22%);
+  --shadow-6: 0 6px 14px rgb(24 28 44 / 12%), 0 32px 80px rgb(24 28 44 / 24%);
+  --shadow-7: 0 10px 24px rgb(24 28 44 / 16%), 0 40px 96px rgb(24 28 44 / 28%);
+  --shadow-sm: 0 1px 1px rgb(24 28 44 / 5%), 0 6px 20px rgb(24 28 44 / 7%);
+  --shadow-md: 0 2px 4px rgb(24 28 44 / 8%), 0 14px 36px rgb(24 28 44 / 14%);
+  --shadow-lg: 0 4px 10px rgb(24 28 44 / 10%), 0 28px 70px rgb(24 28 44 / 22%);
+  --elevation-paper-surface: #fcfdff;
+  --elevation-paper-border: #fcfdff;
+  --elevation-paper-shadow: 0 1px 1px rgb(24 28 44 / 5%), 0 6px 20px rgb(24 28 44 / 7%);
+  --elevation-base-surface: #e8edf5;
+  --elevation-base-border: #e8edf5;
+  --elevation-base-shadow: none;
+  --elevation-chrome-surface: #e8edf5;
+  --elevation-chrome-border: #e8edf5;
+  --elevation-chrome-shadow: none;
+  --elevation-floating-surface: #ffffff;
+  --elevation-floating-border: #ffffff;
+  --elevation-floating-shadow: 0 2px 4px rgb(24 28 44 / 8%), 0 14px 36px rgb(24 28 44 / 14%);
+  --elevation-dialog-surface: #ffffff;
+  --elevation-dialog-border: #ffffff;
+  --elevation-dialog-shadow: 0 4px 10px rgb(24 28 44 / 10%), 0 28px 70px rgb(24 28 44 / 22%);
+  --draw-desk: #edeef1;
+  --graph-node: #808693;
+  --graph-node-active: #2b56cc;
+  --graph-node-hover: #1a40b6;
+  --doc-bg: #fcfdff;
+  --doc-active-line: #f4f7fb;
+  --doc-selection: #d0defd;
+  --doc-tooltip-bg: #ffffff;
+  --doc-fill: rgb(26 31 41 / 8%);
+  --doc-fill-soft: rgb(26 31 41 / 5%);
+  --doc-rule: rgb(26 31 41 / 30%);
+  --doc-rule-soft: rgb(26 31 41 / 16%);
+  --doc-highlight: rgb(250 222 78 / 55%);
+  --doc-fg: #22272f;
+  --doc-link: #2c57cd;
+  --doc-heading: #22272f;
+  --doc-danger: #c60817;
+  --doc-gutter-fg: #5d626d;
+  --doc-caret: #2b56cc;
+  --syn-keyword: #6f4797;
+  --syn-name: #9a3936;
+  --syn-function: #215da5;
+  --syn-literal: #904700;
+  --syn-type: #785800;
+  --syn-operator: #006b74;
+  --syn-comment: #5c626e;
+  --syn-string: #067132;
+  --syn-heading: #22272f;
+  --syn-invalid: #993a33;
+  --doc-ins: #2c57cd;
+  --doc-del: #c60817;
+  --doc-proof-spell: #d01d21;
+  --doc-proof-gram: #a16500;
+  --doc-find: #f6e697;
+  --doc-find-now: #fac053;
+  --doc-comment: #b16f00;
+  --doc-author-1: #0060bf;
+  --doc-author-2: #b02a2d;
+  --doc-author-3: #007219;
+  --doc-author-4: #813faa;
+  --doc-author-5: #934f00;
+  --doc-author-6: #006d72;
+  --doc-syntax-near: #588963;
+  --doc-ghost: #797e88;
+  --doc-wavy: #b16f00;
+  --doc-block-hover: rgb(26 31 41 / 4%);
+  --doc-block-selected: rgb(43 86 204 / 12%);
+  --doc-drop-line: #2b56cc;
+  --doc-color-gray: #5e626b;
+  --doc-tint-gray: #e4e8ef;
+  --doc-color-brown: #84573e;
+  --doc-tint-brown: #f6e4da;
+  --doc-color-orange: #984b00;
+  --doc-tint-orange: #ffe1ce;
+  --doc-color-yellow: #795f00;
+  --doc-tint-yellow: #f4e7c3;
+  --doc-color-green: #007231;
+  --doc-tint-green: #d2f2d7;
+  --doc-color-blue: #0064b0;
+  --doc-tint-blue: #d7eaff;
+  --doc-color-purple: #7847a6;
+  --doc-tint-purple: #eee1ff;
+  --doc-color-pink: #9e366f;
+  --doc-tint-pink: #ffddec;
+  --doc-color-red: #b7191c;
+  --doc-tint-red: #ffdfdb;
+  --paper-bg: #ffffff;
+  --paper-ink: #14161a;
+  --paper-link: #2c57cd;
+  --paper-danger: #c60817;
+  --paper-rule: rgb(20 22 26 / 30%);
+  --paper-rule-soft: rgb(20 22 26 / 16%);
+  --paper-fill: rgb(20 22 26 / 8%);
+  --paper-fill-soft: rgb(20 22 26 / 5%);
+  --paper-caret: #2c57cd;
+  --paper-selection: #d0defd;
+  --paper-active-line: #f4f7fb;
+  --paper-highlight: rgb(250 222 78 / 55%);
+  --paper-ins: #2c57cd;
+  --paper-del: #c60817;
+  --paper-proof-spell: #d01d21;
+  --paper-proof-gram: #a16500;
+  --paper-find: #f6e697;
+  --paper-find-now: #fac053;
+  --paper-comment: #b16f00;
+  --paper-author-1: #0060bf;
+  --paper-author-2: #b02a2d;
+  --paper-author-3: #007219;
+  --paper-author-4: #813faa;
+  --paper-author-5: #934f00;
+  --paper-author-6: #006d72;
+  color-scheme: light;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+</style>
+<style>
+/* da theme/scrittoio/sheet-dark.css (copia dei token della luce scura: la radice
+   prende data-luce="scura" dalla barra del prototipo) */
+:root[data-luce="scura"] {
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 12px;
+  --space-6: 16px;
+  --space-7: 20px;
+  --space-8: 24px;
+  --space-9: 32px;
+  --space-10: 48px;
+  --space-11: 64px;
+  --control-h: 32px;
+  --row-h: 28px;
+  --radius-xs: 4px;
+  --radius-chip: 6px;
+  --radius-control: 8px;
+  --radius-menu: 10px;
+  --radius-sheet: 12px;
+  --radius-dialog: 14px;
+  --radius-pill: 999px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --font-ui: "Hanken Grotesk Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-reading: "Newsreader Variable", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 15px;
+  --text-xl: 16px;
+  --text-2xl: 19px;
+  --text-3xl: 23px;
+  --text-reading: 17px;
+  --text-source: 14px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-bold: 600;
+  --leading-tight: 1.3;
+  --leading-normal: 1.45;
+  --leading-relaxed: 1.65;
+  --content-width: 68ch;
+  --tracking-caps: 0.06em;
+  --duration-state: 90ms;
+  --duration-fast: 140ms;
+  --duration-med: 220ms;
+  --duration-slow: 360ms;
+  --duration-scene: 560ms;
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.32, 0, 0.67, 0);
+  --spring-snap-k: 560;
+  --spring-snap-c: 38;
+  --spring-soft-k: 300;
+  --spring-soft-c: 30;
+  --spring-wide-k: 170;
+  --spring-wide-c: 24;
+  --spring-elastic-k: 420;
+  --spring-elastic-c: 20;
+  --spring-jelly-k: 260;
+  --spring-jelly-c: 12;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --bg: #0a0e16;
+  --bg-chrome: #0a0e16;
+  --bg-panel: #0a0e16;
+  --bg-hover: #121720;
+  --bg-active: #1a1f2a;
+  --sheet: #151a21;
+  --sheet-2: #1d222a;
+  --bg-input: #1d222a;
+  --bg-elev: #212730;
+  --overlay-hover: rgb(229 232 237 / 7%);
+  --overlay-active: rgb(229 232 237 / 12%);
+  --scrim: rgb(0 0 0 / 52%);
+  --text: #e5e8ed;
+  --muted: #a0a5ae;
+  --border: #2b303a;
+  --border-strong: #424853;
+  --outline: #747b87;
+  --accent: #82a8fd;
+  --accent-soft: #a3c0ff;
+  --accent-contrast: #070d1a;
+  --accent-wash: #213156;
+  --accent-veil: rgb(130 168 253 / 20%);
+  --focus-ring: #82a8fd;
+  --danger: #f66d67;
+  --danger-wash: rgb(246 109 103 / 18%);
+  --danger-contrast: #180807;
+  --warning: #eeb154;
+  --warning-wash: rgb(238 177 84 / 20%);
+  --warning-contrast: #150b01;
+  --success: #5ec386;
+  --success-wash: rgb(94 195 134 / 20%);
+  --success-contrast: #031108;
+  --info: #73baea;
+  --info-wash: rgb(115 186 234 / 18%);
+  --info-contrast: #020f19;
+  --highlight: rgb(216 189 81 / 30%);
+  --amber: #eeb154;
+  --shadow-1: 0 1px 1px rgb(0 0 0 / 25%), 0 6px 20px rgb(0 0 0 / 22%);
+  --shadow-2: 0 1px 2px rgb(0 0 0 / 28%), 0 10px 28px rgb(0 0 0 / 28%);
+  --shadow-3: 0 2px 4px rgb(0 0 0 / 30%), 0 14px 36px rgb(0 0 0 / 38%);
+  --shadow-4: 0 3px 8px rgb(0 0 0 / 32%), 0 20px 52px rgb(0 0 0 / 44%);
+  --shadow-5: 0 4px 10px rgb(0 0 0 / 35%), 0 28px 70px rgb(0 0 0 / 50%);
+  --shadow-6: 0 6px 14px rgb(0 0 0 / 38%), 0 32px 80px rgb(0 0 0 / 54%);
+  --shadow-7: 0 10px 24px rgb(0 0 0 / 42%), 0 40px 96px rgb(0 0 0 / 60%);
+  --shadow-sm: 0 1px 1px rgb(0 0 0 / 25%), 0 6px 20px rgb(0 0 0 / 22%);
+  --shadow-md: 0 2px 4px rgb(0 0 0 / 30%), 0 14px 36px rgb(0 0 0 / 38%);
+  --shadow-lg: 0 4px 10px rgb(0 0 0 / 35%), 0 28px 70px rgb(0 0 0 / 50%);
+  --elevation-paper-surface: #151a21;
+  --elevation-paper-border: #151a21;
+  --elevation-paper-shadow: 0 1px 1px rgb(0 0 0 / 25%), 0 6px 20px rgb(0 0 0 / 22%);
+  --elevation-base-surface: #0a0e16;
+  --elevation-base-border: #0a0e16;
+  --elevation-base-shadow: none;
+  --elevation-chrome-surface: #0a0e16;
+  --elevation-chrome-border: #0a0e16;
+  --elevation-chrome-shadow: none;
+  --elevation-floating-surface: #212730;
+  --elevation-floating-border: #212730;
+  --elevation-floating-shadow: 0 2px 4px rgb(0 0 0 / 30%), 0 14px 36px rgb(0 0 0 / 38%);
+  --elevation-dialog-surface: #212730;
+  --elevation-dialog-border: #212730;
+  --elevation-dialog-shadow: 0 4px 10px rgb(0 0 0 / 35%), 0 28px 70px rgb(0 0 0 / 50%);
+  --draw-desk: #2b2e32;
+  --graph-node: #747b87;
+  --graph-node-active: #82a8fd;
+  --graph-node-hover: #a3c0ff;
+  --doc-bg: #151a21;
+  --doc-active-line: #1b1f28;
+  --doc-selection: #26365c;
+  --doc-tooltip-bg: #212730;
+  --doc-fill: rgb(229 232 237 / 11%);
+  --doc-fill-soft: rgb(229 232 237 / 7%);
+  --doc-rule: rgb(229 232 237 / 34%);
+  --doc-rule-soft: rgb(229 232 237 / 20%);
+  --doc-highlight: rgb(216 189 81 / 30%);
+  --doc-fg: #dbdee3;
+  --doc-link: #82a8fd;
+  --doc-heading: #dbdee3;
+  --doc-danger: #ff746e;
+  --doc-gutter-fg: #a0a5ae;
+  --doc-caret: #82a8fd;
+  --syn-keyword: #c8a5f0;
+  --syn-name: #f69b94;
+  --syn-function: #87bafd;
+  --syn-literal: #eea471;
+  --syn-type: #d8b260;
+  --syn-operator: #4fccd9;
+  --syn-comment: #98a0ac;
+  --syn-string: #82cb92;
+  --syn-heading: #dbdee3;
+  --syn-invalid: #f69c91;
+  --doc-ins: #82a8fd;
+  --doc-del: #ff746e;
+  --doc-proof-spell: #f66d67;
+  --doc-proof-gram: #eeb154;
+  --doc-find: #473d13;
+  --doc-find-now: #755010;
+  --doc-comment: #eeb154;
+  --doc-author-1: #7cb4fc;
+  --doc-author-2: #f4928a;
+  --doc-author-3: #7fc581;
+  --doc-author-4: #c89bea;
+  --doc-author-5: #e99e5e;
+  --doc-author-6: #30c8cf;
+  --doc-syntax-near: #679270;
+  --doc-ghost: #7b808a;
+  --doc-wavy: #d49838;
+  --doc-block-hover: rgb(229 232 237 / 6%);
+  --doc-block-selected: rgb(130 168 253 / 20%);
+  --doc-drop-line: #82a8fd;
+  --doc-color-gray: #acb1bb;
+  --doc-tint-gray: #2f3339;
+  --doc-color-brown: #cda894;
+  --doc-tint-brown: #3f2f26;
+  --doc-color-orange: #ec9c63;
+  --doc-tint-orange: #4b290f;
+  --doc-color-yellow: #cbae5e;
+  --doc-tint-yellow: #3e310b;
+  --doc-color-green: #7fc48e;
+  --doc-tint-green: #1c3b23;
+  --doc-color-blue: #78b6f6;
+  --doc-tint-blue: #193550;
+  --doc-color-purple: #c29feb;
+  --doc-tint-purple: #3a2a4b;
+  --doc-color-pink: #e793bb;
+  --doc-tint-pink: #492537;
+  --doc-color-red: #ff8b7f;
+  --doc-tint-red: #53211d;
+  --paper-bg: #ffffff;
+  --paper-ink: #14161a;
+  --paper-link: #2c57cd;
+  --paper-danger: #c60817;
+  --paper-rule: rgb(20 22 26 / 30%);
+  --paper-rule-soft: rgb(20 22 26 / 16%);
+  --paper-fill: rgb(20 22 26 / 8%);
+  --paper-fill-soft: rgb(20 22 26 / 5%);
+  --paper-caret: #2c57cd;
+  --paper-selection: #d0defd;
+  --paper-active-line: #f4f7fb;
+  --paper-highlight: rgb(250 222 78 / 55%);
+  --paper-ins: #2c57cd;
+  --paper-del: #c60817;
+  --paper-proof-spell: #d01d21;
+  --paper-proof-gram: #a16500;
+  --paper-find: #f6e697;
+  --paper-find-now: #fac053;
+  --paper-comment: #b16f00;
+  --paper-author-1: #0060bf;
+  --paper-author-2: #b02a2d;
+  --paper-author-3: #007219;
+  --paper-author-4: #813faa;
+  --paper-author-5: #934f00;
+  --paper-author-6: #006d72;
+  color-scheme: dark;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+</style>
+<style>
+/* da theme/scrittoio/structure.css (copia, non si sposta) */
+/* righe 21–68 */
+:root {
+  /* I piani. Una superficie che intrappola il fuoco sta su `--z-modal`, e
+     sotto di lei non ne passa un'altra che lo intrappoli. */
+  --z-sheet: 1;
+  --z-sheet-active: 2;
+  --z-drawer: 40;
+  --z-menu: 50;
+  --z-picker: 60;
+  --z-popover: 70;
+  --z-dialog: 80;
+  --z-toast: 85;
+  --z-modal: 90;
+  --z-drag: 95;
+
+  /* La cornice al passo 0 di `chrome.compactness`. */
+  --titlebar-h: 40px;
+  --chrome-btn: 28px;
+  --win-ctrl-w: 46px;
+  --rail-w: 44px;
+  --rail-icon: 18px;
+  --rail-target: 32px;
+  --drawer-icon: 16px;
+  --tree-indent: 16px;
+  --drawer-pad: 12px;
+  --drawer-head-h: 36px;
+  --sidebar-w: 264px;
+  --sidebar-min: 208px;
+  --inspector-w: 300px;
+  --inspector-min: 248px;
+  --status-h: 26px;
+
+  /* I fogli: fermi a ogni passo. */
+  --sheet-gap: 8px;
+  /* Il foglio di testo che resta solo in concentrazione. */
+  --focus-sheet-width: 56rem;
+  --tab-h: 34px;
+  --tab-min: 96px;
+  --tab-max: 220px;
+  --sheet-head-h: 40px;
+  --format-bar-h: 36px;
+  --tab-fillet: 8px;
+  --tab-air: 4px;
+  --tab-lap: 2px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* righe 113–115 */
+[hidden] {
+  display: none !important;
+}
+
+/* righe 182–193 */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* In un dialogo il pulsante col fuoco è quello che Invio preme. L'anello si
+   vede anche quando il dialogo è nato da un clic: lì il browser, da solo, non
+   lo mostrerebbe, e la risposta di serie resterebbe senza un segno. */
+.kit-dialog-actions > :focus {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* righe 221–231 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+</style>
+<style>
+/* da theme/scrittoio/skin/foundation.css (copia, non si sposta) */
+/* righe 1–162 */
+/* Le fondamenta: la pagina, il bottone nudo, gli intenti, il testo attenuato,
+   i piani del rilievo. Ogni altro pezzo parte da qui. */
+
+/* La pagina è la scrivania: il piano di fondo, senza rilievo. Il carattere
+   dell'interfaccia vale ovunque, tranne dove un foglio dichiara il suo. */
+html, body, .app {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  font-optical-sizing: auto;
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
+  accent-color: var(--accent);
+}
+
+/* Le barre di scorrimento sono un filo: non hanno pista, e il pollice ha il
+   colore dei tratti. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+::selection {
+  background: var(--accent-veil);
+}
+
+/* Il salto al contenuto. Il meccanismo — fisso, fuori dallo schermo, rivelato
+   dal fuoco — è della struttura; qui la superficie con cui arriva. */
+.skip-link {
+  top: var(--space-4);
+  left: var(--space-4);
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-weight: var(--weight-bold);
+  text-decoration: none;
+  box-shadow: var(--shadow-3);
+  transition: transform var(--duration-med) var(--ease-out);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* Lo scheletro: righe del colore del passaggio al posto di ciò che tarda.
+   Fermo: l'attesa non ha bisogno di luccicare. Le righe si accorciano a
+   turno, come un testo. */
+.skeleton {
+  display: block;
+  padding: var(--space-3) var(--space-4);
+}
+.skeleton-line {
+  display: block;
+  height: 0.75em;
+  border-radius: var(--radius-chip);
+  background: var(--bg-hover);
+}
+.skeleton-line + .skeleton-line {
+  margin-top: var(--space-4);
+}
+/* La sagoma di un elenco di righe, al passo di quelle vere. */
+.skeleton-rows {
+  padding: var(--space-5) var(--space-6);
+}
+.skeleton-rows .skeleton-line + .skeleton-line {
+  margin-top: var(--space-7);
+}
+.skeleton-line:nth-child(3n + 2) {
+  width: 72%;
+}
+.skeleton-line:nth-child(3n) {
+  width: 48%;
+}
+
+/* Il bottone nudo è un fantasma: niente fondo finché non lo si sfiora. Sta a
+   specificità zero, così un componente che gli dà una classe decide da solo
+   anche il proprio passaggio, senza doverlo disfare. */
+:where(button) {
+  padding: var(--space-3) var(--space-5);
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+:where(button:hover) {
+  background: var(--overlay-hover);
+}
+:where(button:active) {
+  background: var(--overlay-active);
+}
+:where(button:disabled) {
+  opacity: 0.4;
+  cursor: default;
+}
+:where(button:disabled:hover),
+:where(button:disabled:active) {
+  background: transparent;
+}
+
+/* L'azione primaria: una per superficie. Dialoghi, stati vuoti, conferme. */
+button.primary,
+.ui-button.intent-primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: var(--weight-bold);
+  transition: scale var(--duration-state) var(--ease);
+}
+/* L'inchiostro cambia col fondo: `--accent-soft` è più chiaro dell'accento al
+   buio e più scuro alla luce, e `--bg` gli sta sopra in tutte e due — è la
+   coppia che il presidio del contrasto misura. */
+button.primary:hover,
+.ui-button.intent-primary:hover {
+  background: var(--accent-soft);
+  color: var(--bg);
+}
+button.primary:active,
+.ui-button.intent-primary:active {
+  scale: 0.98;
+}
+button.primary:disabled,
+.ui-button.intent-primary:disabled {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  scale: 1;
+}
+
+/* L'azione distruttiva non grida a riposo: il rosso arriva col gesto. */
+.ui-button.intent-danger {
+  color: var(--danger);
+}
+/* Pieno e non velato: il rosso sul suo velo non arriva a 4,5:1. */
+.ui-button.intent-danger:hover {
+  background: var(--danger);
+  color: var(--danger-contrast);
+}
+
+/* I cinque piani nel catalogo del banco: stessa anatomia, tre token per riga. */
+.elevation-paper,
+.elevation-base,
+.elevation-chrome,
+.elevation-floating,
+.elevation-dialog {
+  min-height: var(--space-10);
+  padding: var(--space-4);
+  border: 1px solid;
+  border-radius: var(--radius-control);
+}
+.elevation-paper { background: var(--elevation-paper-surface); border-color: var(--elevation-paper-border); box-shadow: var(--elevation-paper-shadow); }
+.elevation-base { background: var(--elevation-base-surface); border-color: var(--elevation-base-border); box-shadow: var(--elevation-base-shadow); }
+.elevation-chrome { background: var(--elevation-chrome-surface); border-color: var(--elevation-chrome-border); box-shadow: var(--elevation-chrome-shadow); }
+.elevation-floating { background: var(--elevation-floating-surface); border-color: var(--elevation-floating-border); box-shadow: var(--elevation-floating-shadow); }
+.elevation-dialog { background: var(--elevation-dialog-surface); border-color: var(--elevation-dialog-border); box-shadow: var(--elevation-dialog-shadow); }
+</style>
+<style>
+/* da theme/scrittoio/skin/controls.css (copia, non si sposta) */
+/* righe 1–319 */
+/* I controlli generici: campi, segmenti, suggerimenti. */
+
+/* Qui stanno i controlli che la shell scrive **senza una classe** — campo,
+   casella, radio, interruttore, cursore, barra, tasto — più i due che nomina:
+   il gruppo a segmenti e il suggerimento. Il bottone nudo e il primario sono
+   delle fondamenta; l'azione testuale (`.link-button`) è dei cassetti. */
+
+/* ── Il campo ────────────────────────────────────────────────────────────── */
+
+/* Il default di un campo sta a specificità zero (`:where`): chiunque nomini il
+   proprio campo per classe lo scavalca senza doverlo disfare. Le esclusioni
+   hanno una forma loro, più sotto. */
+input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])),
+textarea,
+select {
+  height: var(--control-h);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+/* Un'area di testo cresce: l'altezza del controllo è il suo minimo, non la
+   sua misura. */
+textarea {
+  height: auto;
+  min-height: calc(var(--control-h) * 2);
+  padding: var(--space-3) var(--space-4);
+}
+
+/* Un elenco a scelta multipla è alto quanto ciò che elenca. */
+select:where([multiple], [size]) {
+  height: auto;
+  padding: var(--space-2);
+}
+
+/* Sulla scrivania il campo è un pezzo di carta (`--sheet`); dentro un foglio
+   o un rialzo resta un gradino sotto (`--sheet-2`), che è il default. */
+:where(.sidebar, .inspector-pane) input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])),
+:where(.sidebar, .inspector-pane) textarea,
+:where(.sidebar, .inspector-pane) select {
+  background: var(--sheet);
+}
+
+input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])):hover,
+textarea:hover,
+select:hover {
+  border-color: var(--text);
+}
+
+/* Il fuoco è l'anello della shell portato a filo: copre il confine e sporge di
+   un pixel, così il campo sembra prendere un bordo blu spesso due. L'alone è
+   un di più — in colori forzati sparisce e resta l'anello della struttura. */
+input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])):focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  border-color: var(--focus-ring);
+  outline-offset: -1px;
+  box-shadow: 0 0 0 4px var(--accent-veil);
+}
+
+/* Un campo che non regge ciò che c'è scritto lo dice anche a colpo d'occhio:
+   `aria-invalid` lo annuncia, il confine lo mostra. */
+:where(input, textarea, select)[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+:where(input, textarea, select)[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 4px var(--danger-wash);
+}
+
+/* Un campo che non si può cambiare lo sembra, prima del clic. */
+:where(input, textarea, select):disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])):disabled,
+textarea:disabled,
+select:disabled {
+  border-color: var(--outline);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+/* ── Casella e radio ─────────────────────────────────────────────────────── */
+
+/* Disegnate, non native: il widget del sistema non segue né il confine né la
+   matita blu. Le misure sono scritte quattro volte (`width`, `min-width` e le
+   due altezze) perché una regola larga di un altro pezzo — «ogni campo di
+   questa scatola è largo cento» — non le deformi. Il `:not()` del radio non
+   esclude niente: pareggia il peso della casella. */
+input[type="checkbox"]:not([role="switch"]),
+input[type="radio"]:not([role="switch"]) {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 1.5px solid var(--outline);
+  border-radius: var(--radius-xs);
+  background: var(--bg-elev);
+  box-shadow: none;
+  vertical-align: -3px;
+  cursor: pointer;
+}
+input[type="radio"]:not([role="switch"]) {
+  border-radius: var(--radius-pill);
+}
+/* Il segno: una spunta ritagliata, che entra crescendo. */
+input[type="checkbox"]:not([role="switch"])::before,
+input[type="radio"]:not([role="switch"])::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  background: var(--accent-contrast);
+  clip-path: polygon(8% 54%, 20% 42%, 40% 62%, 80% 20%, 92% 32%, 40% 86%);
+  transform: scale(0);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+input[type="radio"]:not([role="switch"])::before {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  clip-path: none;
+}
+/* Né sì né no: un tratto. */
+input[type="checkbox"]:not([role="switch"]):indeterminate::before {
+  clip-path: polygon(10% 41%, 90% 41%, 90% 59%, 10% 59%);
+}
+input[type="checkbox"]:not([role="switch"]):hover,
+input[type="radio"]:not([role="switch"]):hover {
+  border-color: var(--text);
+}
+input[type="checkbox"]:not([role="switch"]):checked,
+input[type="checkbox"]:not([role="switch"]):indeterminate,
+input[type="radio"]:not([role="switch"]):checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+input[type="checkbox"]:not([role="switch"]):checked::before,
+input[type="checkbox"]:not([role="switch"]):indeterminate::before,
+input[type="radio"]:not([role="switch"]):checked::before {
+  transform: scale(1);
+}
+input[type="checkbox"]:not([role="switch"]):disabled,
+input[type="radio"]:not([role="switch"]):disabled {
+  border-color: var(--outline);
+}
+input[type="checkbox"]:not([role="switch"]):checked:disabled,
+input[type="radio"]:not([role="switch"]):checked:disabled {
+  border-color: var(--accent);
+}
+
+/* ── L'interruttore ──────────────────────────────────────────────────────── */
+
+/* Un binario a pillola e un pomello che scivola. Il binario spento è
+   `--outline` e non `--border-strong`: è l'unico confine del controllo, e
+   deve staccarsi 3:1 da qualunque superficie gli stia sotto. */
+input[role="switch"] {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  width: 32px;
+  min-width: 32px;
+  height: 18px;
+  min-height: 18px;
+  margin: 0;
+  padding: 2px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--outline);
+  box-shadow: none;
+  vertical-align: -4px;
+  cursor: pointer;
+}
+input[role="switch"]::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+/* Un pomello solo: chi ne disegnasse un secondo qui lo vedrebbe doppio. */
+input[role="switch"]::after {
+  content: none;
+}
+input[role="switch"]:hover {
+  background: var(--muted);
+}
+input[role="switch"]:checked {
+  background: var(--accent);
+}
+input[role="switch"]:checked::before {
+  transform: translateX(14px);
+}
+
+/* ── Il cursore e la barra ───────────────────────────────────────────────── */
+
+/* Il cursore resta quello del sistema, tinto. */
+input:where([type="range"]) {
+  accent-color: var(--accent);
+}
+
+/* La `<progress>` nativa non segue il tema e da indeterminata si anima anche
+   col moto ridotto, perché quell'animazione non è CSS. `appearance: none` la
+   porta dentro il tema e la ferma. Le pseudo-classi dei due motori vanno
+   scritte separate: un selettore che le unisse cadrebbe intero su quello che
+   non conosce l'altra. */
+progress {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 4px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-active);
+  overflow: hidden;
+}
+/* La pista è il fondo dell'elemento, ed è una velatura perché una barra sta
+   su qualunque superficie: questo strato, che le starebbe sopra, resta
+   trasparente o la velatura si sommerebbe a sé stessa. */
+progress::-webkit-progress-bar {
+  background: transparent;
+}
+progress::-webkit-progress-value {
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+progress::-moz-progress-bar {
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+/* Senza conteggio non c'è una misura da riempire: la pista si riga di blu, e
+   dice «al lavoro» stando ferma. */
+progress:indeterminate {
+  background: repeating-linear-gradient(-45deg, var(--accent) 0 4px, var(--accent-wash) 4px 8px);
+}
+
+
+/* ── Il gruppo a segmenti ────────────────────────────────────────────────── */
+
+/* Opzioni che si escludono dentro un incavo solo. L'incavo è una velatura,
+   non un colore: sta nella testata di un foglio, nelle preferenze, sulla
+   scrivania, e regge su tutte. Alto 28: entra nella testata del foglio. */
+.segmented {
+  display: inline-flex;
+  align-items: stretch;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--overlay-hover);
+}
+.segmented-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  cursor: pointer;
+}
+/* Quando le opzioni sono parole intere il gruppo prende l'altezza di un
+   controllo. */
+.segmented--wide .segmented-option {
+  min-height: calc(var(--control-h) - 2 * var(--space-1));
+  padding: 0 var(--space-5);
+}
+.segmented-option:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.segmented-option:active {
+  background: var(--overlay-active);
+  color: var(--text);
+}
+/* L'accesa si legge **dall'attributo che la annuncia**, e sono tre perché
+   sono tre widget: `aria-pressed` per un gruppo di pulsanti, `aria-selected`
+   in una `tablist`, `aria-checked` in un `radiogroup`. La dice la matita blu,
+   mai un grigio. */
+.segmented-option[aria-pressed="true"],
+.segmented-option[aria-selected="true"],
+.segmented-option[aria-checked="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+.segmented-option:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.segmented-option:disabled:hover,
+.segmented-option:disabled:active {
+  background: transparent;
+  color: var(--muted);
+}
+</style>
+<style>
+/* da theme/scrittoio/skin/drawers.css (copia, non si sposta): l'azione testuale */
+/* righe 142–177 */
+/* **L'azione testuale** dentro un titolo o accanto a una frase («+ Nuova»,
+   «Riprova»): pesa quanto una parola, in matita blu. Il fondo arriva solo
+   sotto il puntatore. */
+.link-button,
+.bookmarks-panel .panel-title button,
+.workspaces-panel .panel-title button {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  min-height: var(--space-8);
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.link-button:hover,
+.bookmarks-panel .panel-title button:hover,
+.workspaces-panel .panel-title button:hover {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.link-button:active,
+.bookmarks-panel .panel-title button:active,
+.workspaces-panel .panel-title button:active {
+  background: var(--accent-veil);
+}
+.link-button.danger:hover {
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+</style>
+<style>
+/* da theme/scrittoio/skin/tree.css (copia, non si sposta) */
+/* righe 1–267 */
+/* L'albero dei file. */
+
+/* Una lista che non è un elenco puntato: la lista dei file, le appuntate, i
+   risultati, gli avvisi, la palette. È il nome che chi scrive un tema cerca
+   per primo. */
+.plain-list,
+.tree-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* Appuntate e albero sono due liste una sotto l'altra senza un'etichetta in
+   mezzo: le stacca un respiro. */
+.files-panel .plain-list + .plain-list {
+  margin-top: var(--space-4);
+}
+/* Il filtro per percorso sta sopra l'albero (`shell.explorer.filter`): un
+   campo largo quanto le righe, staccato da ciò che filtra. */
+.explorer-filter {
+  padding: 0 var(--space-2) var(--space-3);
+}
+
+/* **Una riga del cassetto**: nota o cartella, nell'albero o tra le appuntate.
+   È larga quanto il cassetto a ogni profondità — il rientro è un margine
+   interno, non della lista — così il fondo della riga corrente e quello sotto
+   il puntatore vanno da un bordo all'altro, come un evidenziatore. */
+.tree-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--row-h);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+.tree-row:hover {
+  background: var(--bg-hover);
+}
+.tree-row:active {
+  background: var(--bg-active);
+}
+/* La riga presa per trascinarla si solleva dal suo posto: di poco, con
+   l'ombra, sopra le vicine. Il fantasma che segue il puntatore è quello del
+   sistema; la scala arriva con una transizione, così l'immagine che il
+   sistema fotografa alla partenza è la riga a riposo. */
+.tree-row[data-lifted] {
+  z-index: 1;
+  background: var(--bg-hover);
+  box-shadow: var(--shadow-md);
+  transform: scale(1.02);
+  transition: transform var(--duration-fast) var(--ease);
+}
+
+/* Il rientro, un livello alla volta (`--tree-indent` si stringe coi passi di
+   compattezza). Otto livelli sono scritti per esteso; dal nono rientra la
+   lista, che è meno bello — il fondo non arriva più al bordo — ma non perde
+   la gerarchia. */
+.tree-children .tree-row {
+  padding-left: calc(var(--space-4) + var(--tree-indent));
+}
+.tree-children .tree-children .tree-row {
+  padding-left: calc(var(--space-4) + 2 * var(--tree-indent));
+}
+.tree-children .tree-children .tree-children .tree-row {
+  padding-left: calc(var(--space-4) + 3 * var(--tree-indent));
+}
+.tree-children .tree-children .tree-children .tree-children .tree-row {
+  padding-left: calc(var(--space-4) + 4 * var(--tree-indent));
+}
+.tree-children .tree-children .tree-children .tree-children .tree-children .tree-row {
+  padding-left: calc(var(--space-4) + 5 * var(--tree-indent));
+}
+.tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-row {
+  padding-left: calc(var(--space-4) + 6 * var(--tree-indent));
+}
+.tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-row {
+  padding-left: calc(var(--space-4) + 7 * var(--tree-indent));
+}
+.tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-row {
+  padding-left: calc(var(--space-4) + 8 * var(--tree-indent));
+}
+.tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-children {
+  padding-left: var(--tree-indent);
+}
+
+/* **La nota aperta.** Lo stato si legge da dove è annunciato: nell'albero è il
+   `treeitem` a essere selezionato, fra le appuntate è la riga a essere
+   «quella corrente». La dice la matita blu — fondo tenue, inchiostro blu,
+   peso da titolo — e non un grigio: è l'unica riga del cassetto che parla del
+   foglio aperto. */
+[role="treeitem"][aria-selected="true"] > .tree-row {
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+/* Fra le appuntate la stessa nota ha soltanto un punto blu sul bordo: la riga
+   accesa è una, nell'albero. Sta su pixel interi: a mezzo pixel il suo
+   bordo si sfuma in modo diverso secondo gli strati della pagina, e le foto
+   di un'andata e ritorno non tornano uguali. */
+.tree-row[aria-current="true"]::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: var(--space-2);
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Il fuoco da tastiera sta sul `treeitem`, che contiene anche il sottoalbero:
+   l'anello attorno a lui cingerebbe l'intera cartella aperta. Lo porta la
+   riga, dentro il suo bordo perché il cassetto taglia ciò che sporge. */
+[role="treeitem"]:focus-visible {
+  outline: none;
+}
+[role="treeitem"]:focus-visible > .tree-row,
+.tree-row:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(var(--focus-ring-width) * -1);
+}
+
+.row-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* **La colonna dell'icona**, larga `--drawer-icon` per tutti: l'emoji scelta,
+   la cartella, o il foglietto disegnato qui sotto per chi non ne ha una. */
+.row-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--drawer-icon);
+  height: var(--drawer-icon);
+  font-size: calc(var(--drawer-icon) - 3px);
+  line-height: 1;
+}
+/* La cartella senza un'emoji scelta: la figura a linea, in grafite come il
+   foglietto delle note. */
+.row-icon > svg {
+  width: var(--drawer-icon);
+  height: var(--drawer-icon);
+  color: var(--muted);
+}
+[role="treeitem"][aria-selected="true"] > .tree-row > .row-icon > svg {
+  color: var(--accent);
+}
+/* Una nota senza icona tiene la colonna con un foglietto: contorno grafite,
+   l'angolo piegato. È disegnato, non un carattere, così prende il colore
+   della riga corrente. */
+.tree-row.no-icon::after {
+  content: "";
+  order: -1;
+  flex: none;
+  box-sizing: border-box;
+  width: calc(var(--drawer-icon) - 5px);
+  height: calc(var(--drawer-icon) - 2px);
+  margin: 0 2.5px;
+  border: 1.5px solid var(--muted);
+  border-radius: 2.5px;
+  background: linear-gradient(to bottom left, transparent 50%, var(--muted) 50%) top right / 5px 5px no-repeat border-box;
+  clip-path: polygon(0 0, calc(100% - 4.5px) 0, 100% 4.5px, 100% 100%, 0 100%);
+}
+[role="treeitem"][aria-selected="true"] > .tree-row.no-icon::after {
+  border-color: var(--accent);
+  background-image: linear-gradient(to bottom left, transparent 50%, var(--accent) 50%);
+}
+
+/* **Il triangolino di apertura.** Nel markup è un carattere (▸ o ▾): qui il
+   carattere si spegne e il triangolo si disegna, uno solo, che ruota quando
+   la cartella è aperta. */
+.chevron {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--drawer-icon);
+  height: var(--drawer-icon);
+  margin-right: calc(var(--space-2) * -1);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0;
+  cursor: pointer;
+}
+.chevron::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+  clip-path: polygon(25% 8%, 85% 50%, 25% 92%);
+  transition: transform var(--duration-fast) var(--ease);
+}
+.chevron[aria-expanded="true"]::before {
+  transform: rotate(90deg);
+}
+/* Il bersaglio è più largo del disegno: 24 px attorno a un triangolo di 8. */
+.chevron::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+}
+.chevron:hover,
+.chevron:active {
+  background: transparent;
+  color: var(--text);
+}
+/* Una cartella vuota non ha niente da aprire: il triangolo non c'è, il suo
+   posto resta. */
+.chevron:disabled {
+  opacity: 0;
+  cursor: default;
+}
+[role="treeitem"][aria-selected="true"] > .tree-row .chevron {
+  color: var(--accent);
+}
+/* Una foglia tiene il posto del triangolo delle cartelle sorelle: cartelle e
+   note dello stesso livello hanno l'icona sulla stessa colonna. Lo tiene
+   anche «…e altre N», che comincia dove cominciano le icone delle righe che
+   continua. */
+.tree-row.leaf::before,
+.tree-row.troncata::before {
+  content: "";
+  order: -2;
+  flex: none;
+  width: var(--drawer-icon);
+  margin-right: calc(var(--space-2) * -1);
+}
+/* Dove in cima non c'è nessuna cartella (uno spazio di sole note, un vault
+   piatto) non c'è un triangolo a cui fare posto: le note partono dalla
+   verticale delle appuntate e del titolo. */
+.plain-list:not(:has(> li > .tree-row > .chevron)) > li > .tree-row.leaf::before,
+.plain-list:not(:has(> li > .tree-row > .chevron)) > li > .tree-row.troncata::before {
+  display: none;
+}
+
+/* «…e altre N»: la riga che apre il resto di una cartella lunga. È un
+   bottone, e si presenta come una riga sommessa. */
+.tree-row.troncata {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-align: left;
+}
+.tree-row.troncata:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.tree-row.troncata:active {
+  background: var(--bg-active);
+}
+</style>
+<style>
+/* da theme/scrittoio/skin/sheets.css (copia, non si sposta): le righe d'avviso */
+/* righe 868–898 */
+/* Gli altri avvisi della nota: una riga ciascuno sotto il conflitto, velata del
+   colore del suo tono (rosso per ciò che non si salva, ambra per ciò che
+   aspetta una scelta, accento per ciò che è solo da sapere). */
+.sheet-notices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0 var(--space-5) var(--space-3);
+}
+.sheet-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--accent-wash);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.sheet-notice[data-tone="warning"] {
+  background: var(--warning-wash);
+}
+.sheet-notice[data-tone="danger"] {
+  background: var(--danger-wash);
+}
+.sheet-notice-text {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+</style>
+<style>
+/* da theme/scrittoio/skin/media.css (copia, non si sposta) */
+/* righe 1–212 */
+/* Immagini, zoom, lightbox, SVG. */
+
+/*
+   Ciò che non è testo: un'immagine, un PDF, un suono, un filmato, le slide.
+   Sta sulla stessa carta del documento — la superficie è trasparente, la carta
+   è del foglio — e i suoi comandi non sono strisce attaccate ai bordi ma
+   pillole in rialzo posate sopra: l'oggetto resta solo sulla pagina.
+
+   Dentro il foglio non si dichiarano transizioni: `motion.css` le spegne tutte
+   sotto `.pane-editor`. La lightbox e le slide stanno fuori, sul corpo della
+   pagina, e lì il moto è quello delle modali.
+*/
+
+/* ── La superficie ───────────────────────────────────────────────────────── */
+
+.media-surface {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: transparent;
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+/* La superficie prende il fuoco intera: l'anello sta dentro il foglio, che
+   taglia ciò che esce. */
+.media-surface:focus-visible {
+  outline-offset: calc(var(--focus-ring-width) * -2);
+}
+/* La riga di stato sta da sola finché il contenuto non arriva, e resta da sola
+   se non arriva: una frase in grafite al centro, come ogni superficie che non
+   si apre. */
+.media-surface > [role="status"] {
+  margin: auto;
+  padding: var(--space-9);
+  color: var(--muted);
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.media-image {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+}
+.media-image > [role="alert"] {
+  margin: auto;
+  padding: var(--space-9);
+  color: var(--muted);
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+/* ── La vista che ingrandisce ────────────────────────────────────────────── */
+
+/*
+   Una sola vista ingrandisce tutto (`editors/media/zoom-view.ts`): l'immagine
+   aperta in un foglio, l'SVG in anteprima, la foto o il diagramma nella
+   lightbox. Qui c'è come si vede; la geometria del palco — il contenuto posato
+   al centro e mosso con una trasformazione — la scrive la vista, perché è
+   gesto e non aspetto.
+*/
+.zoom-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.zoom-stage {
+  flex: 1;
+  min-height: 0;
+  cursor: zoom-in;
+  outline-offset: calc(var(--focus-ring-width) * -1);
+}
+.zoom-stage[data-zoomed="true"] {
+  cursor: grab;
+}
+.zoom-stage[data-dragging] {
+  cursor: grabbing;
+}
+
+/* L'immagine è un cartoncino posato sulla carta: un filo che dice dove
+   finisce anche quando è bianca su bianco, e un'ombra bassa. */
+.zoom-content {
+  border-radius: var(--radius-control);
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-1);
+  user-select: none;
+}
+/* Ingrandita si guarda il file, non il cartoncino: gli angoli tornano vivi,
+   anche perché il raggio crescerebbe con lo zoom. */
+.zoom-stage[data-zoomed="true"] .zoom-content {
+  border-radius: 0;
+}
+.zoom-content[data-animate] {
+  transition: transform var(--duration-fast) var(--ease);
+}
+
+/* Il fondo sotto la trasparenza sta **sotto l'immagine**, non sotto tutto il
+   palco: la scacchiera dice dove finisce il file, e intorno resta la pagina.
+   Le sue caselle hanno la misura dello schermo a ogni scala: il passo lo
+   scrive la vista, perché dipende dallo zoom. */
+.zoom-view[data-backdrop="checker"] .zoom-content {
+  background-color: var(--doc-bg);
+  background-image:
+    linear-gradient(45deg, var(--doc-rule-soft) 25%, transparent 25%, transparent 75%, var(--doc-rule-soft) 75%),
+    linear-gradient(45deg, var(--doc-rule-soft) 25%, transparent 25%, transparent 75%, var(--doc-rule-soft) 75%);
+}
+/* «Chiaro» e «scuro» promettono un fondo, non un ruolo: sono lo stesso nelle
+   due luci. I gettoni però cambiano con la luce, e al buio la coppia si
+   scambia: il chiaro è l'inchiostro, lo scuro è il tavolo. */
+.zoom-view[data-backdrop="light"] .zoom-content {
+  background-color: var(--bg-elev);
+}
+.zoom-view[data-backdrop="dark"] .zoom-content {
+  background-color: var(--text);
+}
+:root[data-theme="dark"] .zoom-view[data-backdrop="light"] .zoom-content {
+  background-color: var(--text);
+}
+:root[data-theme="dark"] .zoom-view[data-backdrop="dark"] .zoom-content {
+  background-color: var(--bg);
+}
+
+/* La barra è una pillola in rialzo sotto l'immagine: i comandi, e in coda la
+   riga delle informazioni, in cifre tabellari perché la percentuale non balli
+   mentre si zooma. Se manca il posto cede prima la riga, poi i comandi vanno a
+   capo. */
+.zoom-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-self: center;
+  justify-content: center;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  max-width: calc(100% - 2 * var(--space-5));
+  margin: var(--space-3) var(--space-5) var(--space-6);
+  padding: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-normal);
+}
+.zoom-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.zoom-button:hover,
+.zoom-button:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.zoom-button:active {
+  background: var(--overlay-active);
+  color: var(--text);
+}
+.zoom-button:disabled {
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.4;
+  cursor: default;
+}
+.zoom-level {
+  flex: none;
+  min-width: 5ch;
+  color: var(--text);
+  font-weight: var(--weight-medium);
+  text-align: center;
+}
+.zoom-info {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-5);
+  border-left: 1px solid var(--border);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.zoom-info:empty {
+  display: none;
+}
+/* Nel foglio stretto la riga delle informazioni se ne va: il nome e il tipo
+   stanno già in testata. */
+@container sheet (max-width: 420px) {
+  .zoom-info {
+    display: none;
+  }
+}
+
+/* righe 659–882 */
+/* ── I file delle app Craft ──────────────────────────────────────────────── */
+
+/* La scheda di un disegno, di un'immagine o di un progetto: l'anteprima con
+   lo zoom delle foto e, sotto, la riga dei dati in grafite. Senza anteprima,
+   un riquadro sobrio come ciò che non si apre, senza il segno d'allarme: il
+   nome, i dati, ciò che succede e un'azione sola nel colore d'accento. */
+.craft-card {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.craft-info {
+  flex: none;
+  margin: 0;
+  padding: var(--space-3) var(--space-5);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+.craft-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  box-sizing: border-box;
+  max-width: 36rem;
+  margin: auto;
+  padding: var(--space-9);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+.craft-empty > .craft-info {
+  padding: 0;
+}
+.craft-empty-name {
+  margin: 0;
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.craft-empty-state {
+  margin: 0;
+}
+.craft-render {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.craft-render:hover,
+.craft-render:focus-visible {
+  background: var(--accent-wash);
+  color: var(--accent-soft);
+}
+.craft-render:active {
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+}
+.craft-render:disabled {
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* La scheda di un XMP: i campi scorrono, la riga su LightCraft resta in
+   fondo. Le parole chiave sono i tag della nota e vanno a capo: mai uno
+   scorrimento di lato. */
+.craft-xmp {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.craft-xmp-body {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: var(--space-9) var(--space-7);
+}
+.craft-xmp-head {
+  margin-bottom: var(--space-7);
+}
+.craft-xmp-head > .craft-info {
+  padding: 0;
+  text-align: start;
+}
+.craft-xmp-title {
+  margin: 0 0 var(--space-2);
+  color: var(--text);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+}
+.craft-xmp-fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: var(--space-7);
+  margin: 0;
+}
+.craft-xmp-field {
+  display: contents;
+}
+.craft-xmp-field > dt,
+.craft-xmp-field > dd {
+  margin: 0;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+.craft-xmp-field > dt {
+  color: var(--muted);
+}
+.craft-xmp-field > dd {
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.craft-xmp-absent {
+  color: var(--muted);
+}
+.craft-xmp-stars {
+  letter-spacing: 0.1em;
+}
+.craft-xmp-star {
+  color: var(--muted);
+}
+.craft-xmp-star[data-on="true"] {
+  color: var(--accent);
+}
+.craft-xmp-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.craft-xmp-swatch {
+  flex: none;
+  width: 0.8em;
+  height: 0.8em;
+  border-radius: var(--radius-pill);
+  background: var(--muted);
+}
+.craft-xmp-label[data-color="red"] > .craft-xmp-swatch { background: var(--doc-color-red); }
+.craft-xmp-label[data-color="yellow"] > .craft-xmp-swatch { background: var(--doc-color-yellow); }
+.craft-xmp-label[data-color="green"] > .craft-xmp-swatch { background: var(--doc-color-green); }
+.craft-xmp-label[data-color="blue"] > .craft-xmp-swatch { background: var(--doc-color-blue); }
+.craft-xmp-label[data-color="purple"] > .craft-xmp-swatch { background: var(--doc-color-purple); }
+.craft-xmp-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.craft-xmp-tag {
+  max-width: 100%;
+  padding: 0.1em 0.6em;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--accent-wash);
+  color: var(--accent);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+.craft-xmp-tag:hover {
+  color: var(--accent-soft);
+}
+.craft-xmp-edits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+}
+.craft-xmp-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  overflow-wrap: anywhere;
+  text-align: start;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.craft-xmp-link:hover {
+  color: var(--accent-soft);
+}
+.craft-xmp-tag:focus-visible,
+.craft-xmp-link:focus-visible {
+  border-radius: var(--radius-xs);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.craft-xmp-note {
+  flex: none;
+  margin: 0;
+  padding: var(--space-4) var(--space-7);
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+</style>
+<style>
+/* da theme/scrittoio/skin/document.css (copia, non si sposta) */
+/* righe 55–62 */
+.markdown-rendered {
+  color: var(--doc-fg);
+  font-family: var(--font-reading);
+  font-size: var(--text-reading);
+  font-optical-sizing: auto;
+  line-height: var(--leading-relaxed);
+  overflow-wrap: break-word;
+}
+
+/* righe 102–133 */
+.markdown-rendered p,
+.markdown-rendered ul,
+.markdown-rendered ol,
+.markdown-rendered dl,
+.markdown-rendered blockquote,
+.markdown-rendered pre,
+.markdown-rendered table,
+.markdown-rendered hr,
+.markdown-rendered h1,
+.markdown-rendered h2,
+.markdown-rendered h3,
+.markdown-rendered h4,
+.markdown-rendered h5,
+.markdown-rendered h6,
+.markdown-rendered .callout,
+.markdown-rendered .math-block,
+.markdown-rendered .mermaid-diagram,
+.markdown-rendered .ui-slot,
+.markdown-rendered [class^="block-"],
+.markdown-rendered [class*=" block-"] {
+  margin: 0 0 calc(var(--text-reading) * var(--leading-relaxed));
+}
+/* L'ultimo di una scatola non lascia aria sotto di sé: è della scatola. Sta
+   dopo l'elenco e nessuna regola più sotto riscrive un margine di blocco, o lo
+   stacco tornerebbe doppio. */
+.markdown-rendered > :last-child,
+.markdown-rendered li > :last-child,
+.markdown-rendered blockquote > :last-child,
+.markdown-rendered .callout > :last-child,
+.markdown-rendered .embed > :last-child {
+  margin-bottom: 0;
+}
+
+/* righe 249–267 */
+/* ── Collegamenti, etichette, evidenziati ────────────────────────────────── */
+
+/* Un `[testo](url)` e un `[[Nota]]` sono lo stesso gesto: lo stesso inchiostro
+   e lo stesso filo sottile. La regola copre ogni `<a>` reso, così il viola
+   dello user-agent non compare mai. */
+.markdown-rendered a,
+.cm-editor .cm-content .cm-fub-link,
+.cm-editor .cm-content .cm-fub-wikilink {
+  color: var(--doc-link);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+.markdown-rendered a:hover,
+.cm-editor .cm-content .cm-fub-link:hover,
+.cm-editor .cm-content .cm-fub-wikilink:hover {
+  color: var(--accent-soft);
+}
+
+/* righe 600–610 */
+.markdown-rendered a.unresolved,
+.markdown-rendered a.unresolved:hover {
+  color: var(--doc-danger);
+  text-decoration-style: dashed;
+}
+.markdown-rendered a:focus-visible,
+.markdown-rendered .tag:focus-visible {
+  border-radius: var(--radius-xs);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* righe 1415–1436 */
+.markdown-rendered img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-control);
+}
+/* Un'immagine da sola nel paragrafo è una figura (K10): la didascalia è il
+   suo testo alternativo, piccola e quieta sotto di lei, in Lettura come in
+   Live. */
+.markdown-rendered figure:not(.mermaid-diagram),
+.cm-editor .cm-content .cm-fub-image figure {
+  margin: var(--space-4) 0;
+}
+.markdown-rendered figure:not(.mermaid-diagram) > figcaption,
+.cm-editor .cm-content .cm-fub-image figcaption {
+  margin-top: var(--space-2);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  text-align: center;
+}
+
+/* righe 1475–1496 */
+/* L'immagine che non si vede: il suo testo alternativo e il path, dove sarebbe
+   stata, invece dell'icona rotta del browser. */
+.image-missing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.image-missing::before {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border: 1.5px dashed var(--outline);
+  border-radius: 3px;
+  content: "";
+}
+
+/* righe 1525–1567 */
+
+/* Una nota riportata dentro un'altra: sta nel documento, col suo filo a
+   sinistra — è una citazione di sé — e un corpo appena più piccolo. */
+.embed {
+  display: block;
+  margin: 0;
+  padding: var(--space-2) 0 var(--space-2) var(--space-6);
+  border-left: 2px solid var(--accent-wash);
+  font-size: 0.94em;
+}
+/* I titoli di una nota riportata non fanno concorrenza a quelli della pagina
+   che la ospita: scendono di un gradino. */
+.embed h1 {
+  font-size: 1.5em;
+}
+.embed h2 {
+  font-size: 1.28em;
+}
+.embed h1:first-child,
+.embed h2:first-child,
+.embed h3:first-child {
+  padding-top: 0;
+}
+/* Il motivo lo scrive la shell nella lingua corrente (`data-embed-note`): un
+   ciclo e una catena troppo profonda sono due cose diverse. */
+.embed-cycle::after,
+.embed-too-deep::after {
+  color: var(--muted);
+  content: " (" attr(data-embed-note) ")";
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.embed.unresolved {
+  border-left-color: var(--doc-rule-soft);
+  color: var(--muted);
+}
+/* Un'immagine, un audio o un video incorporati sono il media, non una nota
+   riportata: niente filo intorno. */
+.embed.embed-media {
+  padding: 0;
+  border-left: 0;
+  font-size: 1em;
+}
+</style>
+<style>
+/* da theme/scrittoio/skin/settings.css (copia, non si sposta) */
+/* righe 359–780 */
+.settings-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-8) var(--space-9) var(--space-10);
+  border-top: 1px solid var(--border);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/* Le schede senza ricerca tengono la stessa fascia: il contenuto non passa
+ * sotto la chiusura e comincia alla stessa altezza delle altre. */
+.settings-toolbar[hidden] + .settings-scroll {
+  margin-top: 56px;
+}
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-9);
+}
+
+/* --- le sezioni -------------------------------------------------------------
+ *
+ * Il titolo è nel carattere di lettura: è il solo punto della finestra in cui
+ * si legge un'intestazione e non un'etichetta. */
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.settings-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-5);
+}
+
+.settings-section-title {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-reading);
+  font-size: 24px;
+  font-weight: var(--weight-medium);
+  line-height: 1.2;
+}
+
+.settings-section-meta {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.settings-section-reset {
+  margin-left: auto;
+}
+
+.settings-section-hint {
+  max-width: 68ch;
+  color: var(--muted);
+  font-size: var(--text-base);
+}
+
+/* Le righe di una sezione stanno una sotto l'altra senza cornice: le divide
+ * un filo. Lo porta ogni riga che ne ha una visibile prima di sé, così una
+ * riga nascosta dalla ricerca non lascia un filo doppio né uno in cima. */
+.settings-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-card > :not([hidden]) ~ * {
+  border-top: 1px solid var(--border);
+}
+
+/* Componenti, profili, catalogo: ognuno è una scheda sul secondo tono, e
+ * dentro una scheda non c'è mai un'altra cornice. */
+.settings-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  margin-top: var(--space-5);
+}
+
+.settings-section-body > .settings-card {
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+}
+
+.settings-section-body > .settings-card > * {
+  padding-left: var(--space-6);
+  padding-right: var(--space-6);
+}
+
+/* --- la riga ----------------------------------------------------------------
+ *
+ * A sinistra il nome e ciò che lo spiega, a destra il controllo, allineato in
+ * alto. Il testo scende di quanto serve perché la prima riga stia a metà
+ * altezza di un controllo. La descrizione e la provenienza stanno sotto il
+ * nome e non in un tooltip: quale livello vince non si deduce. */
+.setting-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(45%, 1fr) auto;
+  align-items: start;
+  gap: var(--space-4) var(--space-8);
+  padding: var(--space-6) 0;
+}
+
+.setting-text {
+  min-width: 0;
+  max-width: 60ch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-top: calc((var(--control-h) - 1.45em) / 2);
+}
+
+.setting-text label,
+.setting-label {
+  position: relative;
+  display: block;
+  color: var(--text);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-normal);
+}
+
+/* Una riga con un valore scelto porta un punto d'accento accanto al nome,
+ * appeso nel margine: i nomi restano in colonna e il punto si conta a colpo
+ * d'occhio. Sta a metà della prima riga del nome, anche quando va a capo. */
+.setting-row[data-modified="true"] > .setting-text > label::before,
+.setting-row[data-modified="true"] > .setting-text > .setting-label::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: calc(0.725em - 3px);
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+.setting-description,
+.setting-text .muted {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.setting-source {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+/* Portata, predefinito e ripristino: una riga sola, sottovoce. */
+.setting-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-5);
+  margin-top: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.setting-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.setting-scope-icon {
+  display: inline-flex;
+}
+
+.setting-scope-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.setting-default {
+  font-variant-numeric: tabular-nums;
+}
+
+/* I collegamenti della finestra: grafite, accento sotto il puntatore. Alti
+ * 24px per il dito, con un margine negativo che non allarga la riga. */
+.settings-panel .link-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin-top: -4px;
+  margin-bottom: -4px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+}
+
+.settings-panel .link-button:hover {
+  background: transparent;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.settings-panel .setting-reset {
+  font-size: var(--text-xs);
+}
+
+.setting-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  min-width: 0;
+  min-height: var(--control-h);
+}
+
+/* --- i controlli ------------------------------------------------------------
+ *
+ * Campi e menu sono quelli della shell: qui solo le misure che hanno dentro
+ * una riga. */
+.setting-input {
+  width: min(280px, 100%);
+  height: var(--control-h);
+}
+
+.setting-select {
+  min-width: 180px;
+  max-width: 280px;
+  height: var(--control-h);
+}
+
+.setting-number {
+  width: 72px;
+  height: var(--control-h);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.setting-range {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+/* Il cursore: un binario di 4px, riempimento e pollice d'accento. Il binario
+ * è nel tono dei contorni e non in `--bg-active`: sul rialzo, al buio, quello
+ * non si stacca dal fondo (1,1:1) e non si vedrebbe dove finisce la corsa.
+ *
+ * Chromium e WebKit non hanno un nome per la parte percorsa, e la pelle non
+ * sa a che punto è il valore. La disegna il pollice: è un quadrato (il
+ * cerchio è il suo fondo) che getta a sinistra una fila di ombre rimpicciolite
+ * a 4px, una attaccata all'altra, e il cursore taglia quelle che escono. */
+.setting-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  width: 180px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  cursor: pointer;
+}
+
+.setting-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--outline);
+}
+
+.setting-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 0;
+  background: radial-gradient(circle closest-side, var(--accent) calc(100% - 0.5px), transparent);
+  box-shadow:
+    -10px 0 0 -6px var(--accent), -14px 0 0 -6px var(--accent), -18px 0 0 -6px var(--accent),
+    -22px 0 0 -6px var(--accent), -26px 0 0 -6px var(--accent), -30px 0 0 -6px var(--accent),
+    -34px 0 0 -6px var(--accent), -38px 0 0 -6px var(--accent), -42px 0 0 -6px var(--accent),
+    -46px 0 0 -6px var(--accent), -50px 0 0 -6px var(--accent), -54px 0 0 -6px var(--accent),
+    -58px 0 0 -6px var(--accent), -62px 0 0 -6px var(--accent), -66px 0 0 -6px var(--accent),
+    -70px 0 0 -6px var(--accent), -74px 0 0 -6px var(--accent), -78px 0 0 -6px var(--accent),
+    -82px 0 0 -6px var(--accent), -86px 0 0 -6px var(--accent), -90px 0 0 -6px var(--accent),
+    -94px 0 0 -6px var(--accent), -98px 0 0 -6px var(--accent), -102px 0 0 -6px var(--accent),
+    -106px 0 0 -6px var(--accent), -110px 0 0 -6px var(--accent), -114px 0 0 -6px var(--accent),
+    -118px 0 0 -6px var(--accent), -122px 0 0 -6px var(--accent), -126px 0 0 -6px var(--accent),
+    -130px 0 0 -6px var(--accent), -134px 0 0 -6px var(--accent), -138px 0 0 -6px var(--accent),
+    -142px 0 0 -6px var(--accent), -146px 0 0 -6px var(--accent), -150px 0 0 -6px var(--accent),
+    -154px 0 0 -6px var(--accent), -158px 0 0 -6px var(--accent), -162px 0 0 -6px var(--accent),
+    -166px 0 0 -6px var(--accent), -170px 0 0 -6px var(--accent);
+}
+
+.setting-slider::-moz-range-track {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--outline);
+}
+
+.setting-slider::-moz-range-progress {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+.setting-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+.setting-slider:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* I segmenti dentro una riga sono quelli della shell (`controls.css`):
+ * l'incavo, e la scelta detta dalla matita blu. Qui solo come stanno nella
+ * riga: a destra, e a capo quando non ci stanno. */
+.setting-segmented {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* L'interruttore lo disegna il pezzo dei controlli (`input[role="switch"]`),
+ * uguale in ogni superficie: qui gli si dà solo il posto nella riga. */
+.setting-switch {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+/* L'elenco: le voci come pastiglie, e il campo per aggiungerne una. */
+.setting-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-4);
+  width: 380px;
+  max-width: 100%;
+}
+
+.setting-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.setting-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 24px;
+  padding: 0 var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--sheet-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.setting-chip:has(.setting-chip-remove) {
+  padding-right: 0;
+}
+
+.setting-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: -1px -1px -1px 0;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+}
+
+.setting-chip-remove:hover {
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+
+.setting-chip-remove svg {
+  width: 12px;
+  height: 12px;
+}
+
+.setting-list-add {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  width: 100%;
+}
+
+.setting-list-add .setting-input {
+  flex: 1;
+  width: auto;
+  min-width: 120px;
+}
+
+.setting-field-error {
+  flex-basis: 100%;
+  color: var(--danger);
+  font-size: var(--text-sm);
+  text-align: right;
+}
+</style>
+<style>
+/* → structure.css (VARIANTE, solo se l'utente sceglie le miniature da 24 px; T26) */
+:root {
+  --tree-thumb: 24px;
+}
+</style>
+<style>
+/* → skin/media.css (nuovo, dopo `.craft-render:disabled`; T23 la domanda, T25 i dati sulla foto) */
+/* La domanda sulle anteprime fatte dalle app (T23), nel riquadro al posto del
+   pulsante: un filo la stacca da ciò che dice il file. Le due risposte pesano
+   uguale, perché è una scelta e non un invito. */
+.craft-ask {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--border);
+}
+.craft-ask-text {
+  max-width: 30rem;
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-base);
+}
+.craft-ask-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3) var(--space-4);
+}
+.craft-ask-answer {
+  padding: var(--space-3) var(--space-6);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.craft-ask-answer:hover,
+.craft-ask-answer:focus-visible {
+  background: var(--accent-wash);
+  color: var(--accent-soft);
+}
+.craft-ask-answer:active {
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+}
+.craft-ask-answer:disabled {
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.4;
+  cursor: default;
+}
+.craft-ask-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+/* Spente: una riga in grafite, col collegamento alle impostazioni. */
+.craft-off {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* I dati di LightCraft sotto una foto o un RAW (T25): una riga sottovoce come
+   quella dei dati di un file Craft, con le stelle, l'etichetta e i tag della
+   scheda dell'XMP. Le parole chiave vanno a capo fino a tre righe, poi
+   scorrono: la foto tiene il suo posto. */
+.photo-data {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 var(--space-5) var(--space-5);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.photo-data-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2) var(--space-6);
+}
+.photo-data-open {
+  font-weight: var(--weight-medium);
+}
+/* Tre righe di tag (la riga è il corpo per l'interlinea, più il padding del
+   tag) e il loro stacco; il padding lascia intero l'anello del fuoco, che lo
+   scorrimento taglierebbe. */
+.photo-data-tags {
+  justify-content: center;
+  max-width: 48rem;
+  max-height: calc(3 * var(--text-sm) * (var(--leading-normal) + 0.2) + 2 * var(--space-2) + 2 * var(--focus-ring-width) + 2px);
+  padding: calc(var(--focus-ring-width) + 1px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+</style>
+<style>
+/* → skin/tree.css (nuovo, dopo `.row-icon > svg`; T26) */
+/* La miniatura (T26): l'anteprima che il file ha già, nella colonna
+   dell'icona e alla sua misura, ritagliata al quadrato; il filo la stacca dal
+   fondo della riga accesa. L'orientamento di un RAW non sta qui: lo scrive il
+   codice sull'immagine (T28). */
+.tree-thumb {
+  display: block;
+  width: var(--drawer-icon);
+  height: var(--drawer-icon);
+  border-radius: var(--radius-xs);
+  box-shadow: 0 0 0 1px var(--border);
+  object-fit: cover;
+}
+</style>
+<style>
+/* → skin/tree.css (nuovo, VARIANTE, solo se l'utente sceglie le miniature da 24 px; T26 con `--tree-thumb: 24px` in structure.css) */
+/* Con le miniature grandi la colonna dell'icona si allarga per tutte le
+   righe, così i nomi restano in colonna. */
+.files-panel[data-tree-thumbs="large"] .row-icon,
+.files-panel[data-tree-thumbs="large"] .tree-thumb {
+  width: var(--tree-thumb);
+  height: var(--tree-thumb);
+}
+</style>
+<style>
+/* → skin/document.css (nuovo, dopo la figura delle immagini (K10, `figure` e `figcaption`); T31) */
+/* La figura di un file Craft, di un PDF o di un documento (T15, T31) è
+   larga quanto la sua immagine: il nome sta sotto di lei, non al centro della
+   colonna. */
+.craft-figure {
+  width: fit-content;
+  max-width: 100%;
+}
+/* La prima pagina di un PDF o di un documento come figura (T31): un foglio
+   bianco sulla carta, col filo e l'ombra bassa del cartoncino delle foto. */
+.craft-figure-page {
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-1);
+}
+</style>
+<style>
+/* solo prototipo: la pagina attorno alla finestra, la barra degli stati, e
+   ciò che nel codice vero disegna una vista (la geometria dello zoom, il PDF,
+   il testo di un documento, la linguetta). */
+:root,
+:root[data-luce="scura"] {
+  --font-ui: "Hanken Grotesk Variable", "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-reading: "Newsreader Variable", "Newsreader", Georgia, "Times New Roman", serif;
+}
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+.proto-bar {
+  position: relative;
+  z-index: 100;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-7);
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px dashed var(--border-strong);
+  background: var(--bg-panel);
+}
+.proto-bar h1 {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+}
+.proto-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.proto-field label {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.proto-field select {
+  max-width: 26rem;
+}
+.proto-notes {
+  flex: 1 1 100%;
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.proto-notes summary {
+  color: var(--accent);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.proto-notes-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4) var(--space-8);
+  max-height: 42vh;
+  overflow: auto;
+  padding: var(--space-4) 0;
+}
+@media (max-width: 800px) {
+  .proto-notes-body {
+    grid-template-columns: 1fr;
+  }
+}
+.proto-notes h2 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.proto-notes ol,
+.proto-notes ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+.proto-notes li + li {
+  margin-top: var(--space-2);
+}
+/* Le due tabelle prendono tutta la larghezza: le liste stanno in colonna. */
+.proto-notes-body > section:has(table) {
+  grid-column: 1 / -1;
+}
+.proto-notes table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.proto-notes td:first-child {
+  width: 1%;
+  white-space: nowrap;
+}
+.proto-notes td code {
+  overflow-wrap: anywhere;
+}
+.proto-notes th,
+.proto-notes td {
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+.proto-notes code {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+.proto-log {
+  flex: 1 1 14em;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-align: right;
+}
+.proto-stage {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  min-height: 0;
+  padding: var(--space-6);
+  overflow: hidden;
+}
+.proto-window {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1280px;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sheet);
+  background: var(--sheet);
+  box-shadow: var(--shadow-2);
+}
+.proto-window[data-larghezza="stretta"] {
+  width: 700px;
+}
+.proto-tabs {
+  display: flex;
+  flex: none;
+  align-items: flex-end;
+  gap: var(--space-2);
+  height: var(--tab-h);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.proto-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: var(--tab-max);
+  height: calc(var(--tab-h) - var(--tab-air));
+  padding: 0 var(--space-5);
+  overflow: hidden;
+  border-radius: var(--tab-fillet) var(--tab-fillet) 0 0;
+  background: var(--sheet);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.proto-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.proto-tab-tag {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+}
+.proto-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding-top: var(--space-3);
+}
+.proto-pane > .media-surface {
+  flex: 1;
+}
+/* La geometria del palco la scrive la vista dello zoom (`zoom-view.ts`), con
+   stili in linea che il prototipo non ha: qui la stessa posa, l'immagine
+   adattata al centro. */
+.zoom-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: var(--space-6);
+}
+.zoom-stage > .zoom-content {
+  max-width: 100%;
+  max-height: 100%;
+}
+/* Il RAW girato: la vista dello zoom parte con la rotazione che il file dice
+   (T28); qui la si mima. */
+.zoom-stage > .zoom-content.proto-turn-90 {
+  max-width: none;
+  max-height: none;
+  width: 44vh;
+  transform: rotate(90deg);
+}
+.proto-pdf {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--space-7);
+  background: var(--sheet-2);
+}
+.proto-pdf-page {
+  width: min(28rem, 100%);
+  height: max-content;
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-1);
+}
+.proto-doc {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--space-8) var(--space-9);
+}
+.proto-doc .markdown-rendered {
+  max-width: 44rem;
+  margin: 0 auto;
+}
+.proto-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.proto-drawer {
+  flex: none;
+  width: var(--sidebar-w);
+  overflow: hidden;
+  padding: var(--space-4) var(--drawer-pad);
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.proto-window[data-larghezza="stretta"] .proto-drawer {
+  width: var(--sidebar-min);
+}
+.proto-drawer-title {
+  margin: 0 0 var(--space-3);
+  padding: 0 var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.proto-paper {
+  flex: 1;
+  background: var(--sheet);
+}
+.proto-settings {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-8) var(--space-9) var(--space-10);
+  background: var(--bg-elev);
+}
+.proto-window[data-larghezza="stretta"] .proto-settings {
+  padding: var(--space-7) var(--space-6);
+}
+</style>
+</head>
+<body>
+<header class="proto-bar" aria-label="Comandi del prototipo">
+  <h1 data-i18n="(solo prototipo)">Prototipo · le anteprime dei file Craft (N7)</h1>
+  <div class="proto-field">
+    <label for="proto-stato" data-i18n="(solo prototipo)">Schermata</label>
+    <select id="proto-stato">
+      <optgroup label="La scheda di un file Craft (T23)">
+        <option value="domanda">La domanda, la prima volta</option>
+        <option value="domanda-fuoco">La domanda, col fuoco su «Sì, accendi»</option>
+        <option value="nome-lungo">La domanda, con un nome lunghissimo</option>
+        <option value="legge">Mentre legge il file</option>
+        <option value="prepara">Accese: l'app prepara l'anteprima</option>
+        <option value="fatta">L'anteprima fatta</option>
+        <option value="pulsante">Accese, ma riaperta all'avvio: il pulsante</option>
+        <option value="spente">Spente</option>
+        <option value="peso">Oltre il peso massimo</option>
+        <option value="rotto">Il file non si legge</option>
+        <option value="fallita">L'app non è riuscita</option>
+        <option value="senza-app">L'app non è installata</option>
+      </optgroup>
+      <optgroup label="Una foto (T25)">
+        <option value="foto">Con l'XMP di LightCraft</option>
+        <option value="foto-500">Con 500 parole chiave</option>
+        <option value="foto-vuoto">L'XMP c'è ma non dice niente</option>
+        <option value="foto-rotto">L'XMP non si legge</option>
+        <option value="foto-senza">Senza XMP (come oggi)</option>
+      </optgroup>
+      <optgroup label="Un RAW (T28)">
+        <option value="raw">Dritto</option>
+        <option value="raw-girato">Scattato in verticale (orientamento 6)</option>
+        <option value="raw-senza">Senza un JPEG dentro: la domanda con LightCraft</option>
+      </optgroup>
+      <optgroup label="PDF e documenti (T31)">
+        <option value="nota-pdf">Una nota con un PDF che ha l'anteprima</option>
+        <option value="nota-pdf-senza">La stessa nota, il PDF senza anteprima</option>
+        <option value="pdf-domanda">Il PDF aperto: la domanda nella riga d'avviso</option>
+        <option value="docx-due-righe">Un documento Word: il prestito e la domanda</option>
+      </optgroup>
+      <optgroup label="L'albero (T26)">
+        <option value="albero">Di partenza: miniature spente, XMP visibili</option>
+        <option value="albero-miniature">Miniature accese</option>
+        <option value="albero-xmp">Miniature accese, XMP nascosti</option>
+        <option value="albero-fuoco">Il fuoco su una riga con la miniatura</option>
+        <option value="albero-grandi">Variante: miniature da 24 px</option>
+      </optgroup>
+      <optgroup label="Le impostazioni (T19)">
+        <option value="impostazioni">App esterne, di partenza</option>
+        <option value="impostazioni-scelte">App esterne, con valori scelti</option>
+      </optgroup>
+    </select>
+  </div>
+  <div class="proto-field">
+    <label for="proto-luce" data-i18n="(solo prototipo)">Luce</label>
+    <select id="proto-luce">
+      <option value="chiara">Chiara</option>
+      <option value="scura">Scura</option>
+    </select>
+  </div>
+  <div class="proto-field">
+    <label for="proto-larghezza" data-i18n="(solo prototipo)">Larghezza</label>
+    <select id="proto-larghezza">
+      <option value="piena">Piena</option>
+      <option value="stretta">700 px</option>
+    </select>
+  </div>
+  <p class="proto-log" role="status" aria-live="polite"></p>
+  <details class="proto-notes">
+    <summary data-i18n="(solo prototipo)">Note per chi guarda: da decidere guardando, i testi, le classi</summary>
+    <div class="proto-notes-body">
+      <section>
+        <h2>Da decidere guardando</h2>
+        <ol>
+          <li>Le due risposte della domanda pesano uguale (nessuna è il pulsante pieno): è una scelta, non un invito. In alternativa «Sì, accendi» come pulsante primario.</li>
+          <li>La miniatura nell'albero sta nella colonna dell'icona, a 16 px: la riga non cambia altezza e i nomi restano in colonna. La variante da 24 px (ultima voce dell'albero) si vede meglio ma allarga la colonna di tutte le righe.</li>
+          <li>«Anteprime fatte dalle app» ha tre scelte; «Chiedi la prima volta» è più lunga di 18 lettere, e il modulo generico delle impostazioni la disegna come tendina. Con «Chiedi», «Accese», «Spente» sarebbero tre pulsanti affiancati.</li>
+          <li>Con molte parole chiave la riga dei dati sotto la foto va a capo fino a tre righe e poi scorre, così la foto tiene il suo posto. In alternativa le prime dodici e «altre 488», che apre l'XMP.</li>
+          <li>Sotto una foto e un RAW la riga dei dati non ha etichette scritte (le stelle, il colore, «Scelta», i tag si riconoscono); chi usa un lettore di schermo le sente.</li>
+          <li>Il PDF incorporato in una nota ha un filo e un'ombra bassa, come una foto aperta: una pagina bianca sulla carta bianca, senza, non si vede dove finisce. La figura è larga quanto la pagina e il nome sta sotto di lei; vale anche per i disegni Craft nelle note (T15), il cui nome oggi sta al centro della colonna.</li>
+        </ol>
+      </section>
+      <section>
+        <h2>Che cosa il prototipo ha cambiato nel piano</h2>
+        <ul>
+          <li>L'orientamento di un RAW non è CSS della pelle: lo applica il codice, come la vista dello zoom scrive già la sua trasformazione (una classe sarebbe sovrascritta). La vista dello zoom parte con la rotazione e lo specchio che il file dice; la miniatura dell'albero riceve la stessa trasformazione da <code>editors/media/orientation.ts</code>. Entrambe tolgono l'orientamento che il browser leggerebbe dal JPEG, così non gira due volte; e un tema con un'altra pelle non lo può perdere (T26, T28).</li>
+          <li>La riga dei dati sulla foto ha quattro classi: <code>photo-data</code>, <code>photo-data-line</code>, <code>photo-data-tags</code>, <code>photo-data-open</code> (T25).</li>
+          <li>Le due risposte della domanda hanno la loro classe, <code>craft-ask-answer</code>; <code>craft-render</code> resta il solo «Crea l'anteprima» (T23).</li>
+          <li>La riga d'avviso con due azioni non chiede CSS nuovo: <code>.sheet-notice</code> (in <code>skin/sheets.css</code>, non in <code>document.css</code>) va già a capo (T31).</li>
+          <li>Il peso massimo dice l'unità nel nome, «(MiB)», come «Corpo del testo (px)»; la frase di «Dove sono le app Craft» perde «Vale su questo computer.», che nessun'altra impostazione dice (T19).</li>
+          <li>Un RAW nell'albero ha l'icona delle foto anche a miniature spente (T26).</li>
+          <li>La figura di un file Craft nella nota ha una regola sua, <code>.craft-figure</code> larga quanto l'immagine, che T31 dichiara nell'anatomia insieme a <code>craft-figure-page</code> (T31).</li>
+          <li>Il peso massimo nella frase si scrive con uno spazio che non va a capo fra il numero e «MiB» (T23).</li>
+          <li>Un RAW girato dice nella riga dello zoom le misure dritte, 800 × 1200 e non 1200 × 800 (T28).</li>
+        </ul>
+      </section>
+      <section>
+        <h2>I testi nuovi e cambiati</h2>
+        <table>
+          <thead><tr><th>Chiave</th><th>Testo</th><th>Task</th></tr></thead>
+          <tbody id="proto-strings"></tbody>
+        </table>
+      </section>
+      <section>
+        <h2>Le classi nuove</h2>
+        <table>
+          <thead><tr><th>Classe</th><th>Pezzo</th><th>Task</th></tr></thead>
+          <tbody>
+            <tr><td><code>craft-ask</code>, <code>craft-ask-text</code>, <code>craft-ask-actions</code>, <code>craft-ask-answer</code>, <code>craft-ask-hint</code>, <code>craft-off</code></td><td><code>skin/media.css</code>, <code>anatomia/media.ts</code></td><td>T23</td></tr>
+            <tr><td><code>photo-data</code>, <code>photo-data-line</code>, <code>photo-data-tags</code>, <code>photo-data-open</code></td><td><code>skin/media.css</code>, <code>anatomia/media.ts</code></td><td>T25</td></tr>
+            <tr><td><code>tree-thumb</code></td><td><code>skin/tree.css</code>, <code>anatomia/tree.ts</code></td><td>T26</td></tr>
+            <tr><td><code>craft-figure</code>, <code>craft-figure-page</code></td><td><code>skin/document.css</code>, <code>anatomia/document.ts</code></td><td>T31</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </details>
+</header>
+
+<main class="proto-stage">
+  <div class="proto-window" id="proto-window" data-larghezza="piena"></div>
+</main>
+
+<script>
+const STRINGS = {
+ "craft.kind.vectorcraft": "Disegno di {app}",
+ "craft.info.version": "formato {version}",
+ "craft.loading": "Leggo il file…",
+ "craft.no_preview": "Il file non porta un'anteprima",
+ "craft.render": "Crea l'anteprima con {app}",
+ "craft.queued": "Preparo l'anteprima…",
+ "craft.figure.alt": "Anteprima di {name}",
+ "craft.xmp.stars_one": "{count} stella su 5",
+ "craft.xmp.stars_other": "{count} stelle su 5",
+ "craft.xmp.color.red": "Rossa",
+ "craft.xmp.color.yellow": "Gialla",
+ "craft.xmp.color.green": "Verde",
+ "craft.xmp.color.blue": "Blu",
+ "craft.xmp.color.purple": "Viola",
+ "craft.xmp.flag.pick": "Scelta",
+ "craft.xmp.flag.reject": "Scartata",
+ "craft.xmp.search_tag": "Cerca il tag {tag}",
+ "craft.xmp.label": "Etichetta",
+ "craft.xmp.keywords": "Parole chiave",
+ "craft.xmp.open": "Apri {name}",
+ "zoom.stage": "immagine ingrandibile",
+ "zoom.toolbar": "Zoom",
+ "zoom.out": "Riduci (−)",
+ "zoom.in": "Ingrandisci (+)",
+ "zoom.fit": "Adatta",
+ "zoom.fit_hint": "Adatta alla finestra (0)",
+ "zoom.actual": "Dimensioni reali (1)",
+ "zoom.rotate": "Ruota di 90° (R)",
+ "zoom.backdrop": "Sfondo: {name}",
+ "zoom.backdrop.checker": "scacchiera",
+ "media.image.info": "{format} · {width} × {height} px · {size}",
+ "explorer.altre_voci": "…e altre {n} qui dentro",
+ "settings.reset": "Azzera",
+ "settings.default": "Predefinito: {value}",
+ "settings.scope.chip.machine": "Questa macchina",
+ "settings.source.default": "valore predefinito · vale per {dove}",
+ "settings.source.machine": "scelto per questa macchina",
+ "settings.scope.machine": "questa macchina",
+ "settings.nothing": "niente",
+ "core.group.external_apps": "App esterne",
+ "core.craft.editor_paths": "Dove sono le app Craft",
+ "craft.consent.region": "Anteprime fatte dalle app",
+ "craft.consent.ask": "Fub può far fare l'anteprima a {app}, che lavora su una copia del file. Vuoi che lo faccia per i file che apri?",
+ "craft.consent.yes": "Sì, accendi",
+ "craft.consent.no": "No, lasciale spente",
+ "craft.consent.hint": "Puoi cambiare idea in Impostazioni › App esterne",
+ "craft.consent.off": "Le anteprime fatte dalle app sono spente",
+ "craft.consent.settings": "Apri le impostazioni",
+ "craft.over_limit": "Il file pesa più del massimo da leggere per un'anteprima ({limit})",
+ "craft.unreadable": "Il file non si legge: forse è rotto",
+ "craft.cli_failed": "{app} non è riuscita a fare l'anteprima",
+ "craft.photo.region": "Dati di LightCraft",
+ "craft.photo.open_xmp": "Apri l'XMP",
+ "craft.photo.unreadable": "I dati dell'XMP non si leggono",
+ "craft.photo.empty": "L'XMP non ha voto, etichetta, scelta né parole chiave",
+ "craft.kind.raw": "Foto RAW",
+ "craft.consent.notice": "Fub può far fare l'anteprima di questo file a {app}, che lavora su una copia. Accendo le anteprime fatte dalle app?",
+ "lend.notice": "Aperto in {app}. Fub non lo modifica finché non lo riprendi.",
+ "lend.resume": "Riprendi qui",
+ "core.craft.editor_paths.desc": "Una riga per programma, come vectorcraft=/opt/vc/vectorcraft, o vectorcraft-cli=… per la riga di comando. Il percorso intero vince su quello che Fub trova da solo.",
+ "core.craft.cli_previews": "Anteprime fatte dalle app",
+ "core.craft.cli_previews.desc": "Fub fa fare l'anteprima di un file che non ne ha una all'app che lo apre, su una copia, solo quando apri il file tu.",
+ "core.craft.cli_previews.ask": "Chiedi la prima volta",
+ "core.craft.cli_previews.on": "Accese",
+ "core.craft.cli_previews.off": "Spente",
+ "core.craft.preview_max_mib": "Peso massimo da leggere per un'anteprima (MiB)",
+ "core.craft.preview_max_mib.desc": "Un file che va letto intero per l'anteprima e pesa di più resta senza: i file che si leggono a pezzi non hanno limite.",
+ "core.craft.tree_thumbnails": "Miniature nell'albero",
+ "core.craft.tree_thumbnails.desc": "Accanto al nome di un file Craft, di un RAW, di un PDF o di un documento, la piccola anteprima che il file ha già. L'albero non avvia mai un'app.",
+ "core.craft.tree_show_xmp": "Mostra i file XMP nell'albero",
+ "core.craft.tree_show_xmp.desc": "Spento, gli XMP spariscono dall'albero: la ricerca li trova e la foto mostra i loro dati."
+};
+const ICONS = {
+ "vault": "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M3 7a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"/></svg>",
+ "notes": "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M4 5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z\"/><path d=\"M13 3v5h5\"/></svg>",
+ "monitor": "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"12\" rx=\"2\"/><path d=\"M9 20h6M12 16v4\"/></svg>",
+ "format-photo": "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"1.5\"/><path d=\"M4 16h16\"/><path d=\"M7 16l3.5-4.5 2.5 3 1.5-1.5 2.5 3\"/><circle cx=\"15.5\" cy=\"7.5\" r=\"1.3\"/></svg>",
+ "format-drawing": "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><circle cx=\"8.5\" cy=\"8.5\" r=\"4.5\"/><rect x=\"11\" y=\"11\" width=\"9\" height=\"9\" rx=\"1.5\"/></svg>",
+ "format-word": "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M6 3h8l4 4v14H6z\"/><path d=\"M14 3v4h4\"/><path d=\"M8.5 11l1.5 6 2-4.5 2 4.5 1.5-6\"/></svg>",
+ "format-odt": "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M6 3h8l4 4v14H6z\"/><path d=\"M14 3v4h4\"/><circle cx=\"12\" cy=\"14\" r=\"3\"/></svg>",
+ "format-sheet": "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\"><rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"2\"/><path d=\"M4 10h16M4 15h16M10 4v16\"/></svg>"
+};
+const NEW_STRINGS = [
+ [
+  "craft.consent.region",
+  "T23",
+  "Anteprime fatte dalle app"
+ ],
+ [
+  "craft.consent.ask",
+  "T23",
+  "Fub può far fare l'anteprima a {app}, che lavora su una copia del file. Vuoi che lo faccia per i file che apri?"
+ ],
+ [
+  "craft.consent.yes",
+  "T23",
+  "Sì, accendi"
+ ],
+ [
+  "craft.consent.no",
+  "T23",
+  "No, lasciale spente"
+ ],
+ [
+  "craft.consent.hint",
+  "T23",
+  "Puoi cambiare idea in Impostazioni › App esterne"
+ ],
+ [
+  "craft.consent.off",
+  "T23",
+  "Le anteprime fatte dalle app sono spente"
+ ],
+ [
+  "craft.consent.settings",
+  "T23",
+  "Apri le impostazioni"
+ ],
+ [
+  "craft.over_limit",
+  "T23",
+  "Il file pesa più del massimo da leggere per un'anteprima ({limit})"
+ ],
+ [
+  "craft.unreadable",
+  "T23",
+  "Il file non si legge: forse è rotto"
+ ],
+ [
+  "craft.cli_failed",
+  "T23",
+  "{app} non è riuscita a fare l'anteprima"
+ ],
+ [
+  "craft.photo.region",
+  "T25",
+  "Dati di LightCraft"
+ ],
+ [
+  "craft.photo.open_xmp",
+  "T25",
+  "Apri l'XMP"
+ ],
+ [
+  "craft.photo.unreadable",
+  "T25",
+  "I dati dell'XMP non si leggono"
+ ],
+ [
+  "craft.photo.empty",
+  "T25",
+  "L'XMP non ha voto, etichetta, scelta né parole chiave"
+ ],
+ [
+  "craft.kind.raw",
+  "T28",
+  "Foto RAW"
+ ],
+ [
+  "craft.consent.notice",
+  "T31",
+  "Fub può far fare l'anteprima di questo file a {app}, che lavora su una copia. Accendo le anteprime fatte dalle app?"
+ ],
+ [
+  "lend.notice",
+  "T17",
+  "Aperto in {app}. Fub non lo modifica finché non lo riprendi."
+ ],
+ [
+  "lend.resume",
+  "T17",
+  "Riprendi qui"
+ ],
+ [
+  "core.craft.editor_paths.desc",
+  "T19 (cambia)",
+  "Una riga per programma, come vectorcraft=/opt/vc/vectorcraft, o vectorcraft-cli=… per la riga di comando. Il percorso intero vince su quello che Fub trova da solo."
+ ],
+ [
+  "core.craft.cli_previews",
+  "T19 (cambia)",
+  "Anteprime fatte dalle app"
+ ],
+ [
+  "core.craft.cli_previews.desc",
+  "T19 (cambia)",
+  "Fub fa fare l'anteprima di un file che non ne ha una all'app che lo apre, su una copia, solo quando apri il file tu."
+ ],
+ [
+  "core.craft.cli_previews.ask",
+  "T19",
+  "Chiedi la prima volta"
+ ],
+ [
+  "core.craft.cli_previews.on",
+  "T19",
+  "Accese"
+ ],
+ [
+  "core.craft.cli_previews.off",
+  "T19",
+  "Spente"
+ ],
+ [
+  "core.craft.preview_max_mib",
+  "T19",
+  "Peso massimo da leggere per un'anteprima (MiB)"
+ ],
+ [
+  "core.craft.preview_max_mib.desc",
+  "T19",
+  "Un file che va letto intero per l'anteprima e pesa di più resta senza: i file che si leggono a pezzi non hanno limite."
+ ],
+ [
+  "core.craft.tree_thumbnails",
+  "T19",
+  "Miniature nell'albero"
+ ],
+ [
+  "core.craft.tree_thumbnails.desc",
+  "T19",
+  "Accanto al nome di un file Craft, di un RAW, di un PDF o di un documento, la piccola anteprima che il file ha già. L'albero non avvia mai un'app."
+ ],
+ [
+  "core.craft.tree_show_xmp",
+  "T19",
+  "Mostra i file XMP nell'albero"
+ ],
+ [
+  "core.craft.tree_show_xmp.desc",
+  "T19",
+  "Spento, gli XMP spariscono dall'albero: la ricerca li trova e la foto mostra i loro dati."
+ ]
+];
+</script>
+<script>
+"use strict";
+
+// ── Le piccole cose ──────────────────────────────────────────────────────
+function T(key, args) {
+  const text = STRINGS[key];
+  if (text === undefined) throw new Error(`testo senza chiave: ${key}`);
+  return text.replace(/\{(\w+)\}/g, (_, name) => (args && name in args ? String(args[name]) : `{${name}}`));
+}
+function h(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") e.className = v;
+    else if (k === "text") e.textContent = v;
+    else if (k === "html") e.innerHTML = v;
+    else e.setAttribute(k, v === true ? "" : String(v));
+  }
+  for (const kid of kids) if (kid !== null && kid !== undefined && kid !== false) e.append(kid);
+  return e;
+}
+/// Un elemento col suo testo e la chiave che lo dice.
+function say(tag, attrs, key, args) {
+  return h(tag, { ...attrs, text: T(key, args), "data-i18n": key });
+}
+function icon(name) {
+  return h("span", { class: "row-icon", "aria-hidden": "true", html: ICONS[name] });
+}
+const MiB = 1024 * 1024;
+/// Come `formatBytes` di `editors/media/media-types.ts`, oggi.
+function bytes(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < MiB) return `${(n / 1024).toFixed(1)} KiB`;
+  return `${(n / MiB).toFixed(1)} MiB`;
+}
+
+// ── Le immagini finte: sono il contenuto dei file, non colori del tema ──
+function svg(w, hh, body) {
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${hh}" width="${w}" height="${hh}">${body}</svg>`,
+  );
+}
+const LIGHTHOUSE = `
+  <defs><linearGradient id="c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6b37a"/><stop offset="1" stop-color="#7aa7d9"/></linearGradient></defs>
+  <rect width="800" height="1200" fill="url(#c)"/>
+  <rect y="900" width="800" height="300" fill="#2f5d8a"/>
+  <path d="M0 960 Q200 930 400 960 T800 960 V1200 H0z" fill="#264d73"/>
+  <path d="M330 900 L360 380 H440 L470 900z" fill="#f4f1ea"/>
+  <path d="M352 520 H448 L452 580 H348z M342 700 H458 L462 760 H338z" fill="#c8453b"/>
+  <rect x="350" y="300" width="100" height="80" fill="#3b3b3b"/>
+  <circle cx="400" cy="340" r="26" fill="#ffe08a"/>
+  <path d="M380 300 L400 250 L420 300z" fill="#3b3b3b"/>
+  <path d="M260 900 Q400 860 540 900z" fill="#5b4a3a"/>`;
+const IMG = {
+  drawing: svg(1200, 900, `
+    <rect width="1200" height="900" fill="#fbfaf7"/>
+    <circle cx="430" cy="420" r="230" fill="#e4572e"/>
+    <rect x="560" y="300" width="330" height="330" rx="36" fill="#2e86ab" opacity="0.92"/>
+    <path d="M380 690 L520 470 L660 690z" fill="#f3a712"/>
+    <text x="600" y="800" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="64" font-weight="700" letter-spacing="18" fill="#1f2a37">STUDIO</text>`),
+  pcraft: svg(1600, 1000, `
+    <defs><radialGradient id="g" cx="0.3" cy="0.35" r="0.9"><stop offset="0" stop-color="#ffd27a"/><stop offset="0.5" stop-color="#e0608a"/><stop offset="1" stop-color="#3b2a6b"/></radialGradient></defs>
+    <rect width="1600" height="1000" fill="url(#g)"/>
+    <circle cx="1150" cy="620" r="260" fill="#ffffff" opacity="0.18"/>
+    <text x="120" y="860" font-family="Georgia, serif" font-size="120" fill="#fff8ee">Copertina</text>`),
+  figcraft: svg(1440, 900, `
+    <rect width="1440" height="900" fill="#eef1f5"/>
+    <rect x="80" y="80" width="560" height="740" rx="24" fill="#ffffff" stroke="#c9d2de" stroke-width="4"/>
+    <rect x="800" y="80" width="560" height="740" rx="24" fill="#ffffff" stroke="#c9d2de" stroke-width="4"/>
+    <rect x="130" y="140" width="300" height="40" rx="8" fill="#5b6cff"/>
+    <rect x="130" y="220" width="460" height="260" rx="12" fill="#dfe4ff"/>
+    <rect x="850" y="140" width="460" height="400" rx="12" fill="#ffe2d6"/>
+    <rect x="850" y="580" width="220" height="56" rx="28" fill="#5b6cff"/>`),
+  beach: svg(1500, 1000, `
+    <defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8ec5f0"/><stop offset="1" stop-color="#e8f4fb"/></linearGradient></defs>
+    <rect width="1500" height="1000" fill="url(#s)"/>
+    <circle cx="1120" cy="250" r="90" fill="#fff2b3"/>
+    <rect y="520" width="1500" height="230" fill="#2f86b8"/>
+    <path d="M0 560 Q375 530 750 560 T1500 560 V600 H0z" fill="#5fb0d8"/>
+    <path d="M0 740 Q500 690 1000 730 T1500 720 V1000 H0z" fill="#ecd3a2"/>
+    <path d="M180 780 l40 -150 l14 4 l-36 150z" fill="#8a5a3c"/>
+    <path d="M120 640 Q230 560 340 640z" fill="#d94f4f"/>`),
+  mountains: svg(1500, 1000, `
+    <defs><linearGradient id="m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c9d9ee"/><stop offset="1" stop-color="#f3efe6"/></linearGradient></defs>
+    <rect width="1500" height="1000" fill="url(#m)"/>
+    <path d="M0 760 L320 380 L520 600 L780 260 L1080 640 L1250 470 L1500 720 V1000 H0z" fill="#6f7f95"/>
+    <path d="M700 360 L780 260 L860 360 L820 340 L780 370 L740 345z" fill="#ffffff"/>
+    <path d="M0 860 Q400 760 800 840 T1500 820 V1000 H0z" fill="#4d6b4f"/>`),
+  lighthouse: svg(800, 1200, LIGHTHOUSE),
+  // Il JPEG di un RAW scattato in verticale: sul disco sta coricato
+  // (orientamento 6), e chi lo mostra lo gira di 90° a destra.
+  lighthouseStored: svg(1200, 800, `<g transform="translate(0 800) rotate(-90)">${LIGHTHOUSE}</g>`),
+  pdfPage: svg(595, 842, `
+    <rect width="595" height="842" fill="#ffffff"/>
+    <text x="64" y="110" font-family="Georgia, serif" font-size="26" fill="#1a1a1a">Contratto di locazione</text>
+    <text x="64" y="140" font-family="Georgia, serif" font-size="13" fill="#555">Via Roma 12, Bologna · 1 novembre 2026</text>
+    ${Array.from({ length: 22 }, (_, i) => `<rect x="64" y="${180 + i * 26}" width="${i % 6 === 5 ? 280 : 467}" height="8" rx="4" fill="#d8d8d8"/>`).join("")}
+    <rect x="64" y="760" width="180" height="1.5" fill="#999"/><rect x="351" y="760" width="180" height="1.5" fill="#999"/>`),
+  docxPage: svg(595, 842, `
+    <rect width="595" height="842" fill="#ffffff"/>
+    <rect x="64" y="80" width="300" height="22" rx="4" fill="#2b579a"/>
+    ${Array.from({ length: 18 }, (_, i) => `<rect x="64" y="${140 + i * 30}" width="${i % 5 === 4 ? 240 : 467}" height="9" rx="4" fill="#cfd6e0"/>`).join("")}`),
+};
+
+// ── La vista dello zoom (com'è in `editors/media/zoom-view.ts`) ─────────
+function zoomButton(text, key) {
+  return h("button", { type: "button", class: "zoom-button", "aria-label": T(key), "data-i18n-aria": key, title: T(key) }, text);
+}
+function zoomView({ src, label, info, level, turned }) {
+  const stage = h("div", { class: "zoom-stage", tabindex: "0", role: "img", "aria-label": label, "aria-roledescription": T("zoom.stage"), "data-i18n-roledescription": "zoom.stage" },
+    h("img", { class: turned ? "zoom-content proto-turn-90" : "zoom-content", alt: label, src, draggable: "false", decoding: "async" }));
+  const bar = h("div", { class: "zoom-bar", role: "toolbar", "aria-label": T("zoom.toolbar"), "data-i18n-aria": "zoom.toolbar" },
+    zoomButton("−", "zoom.out"),
+    h("span", { class: "zoom-level", text: `${level}%` }),
+    zoomButton("+", "zoom.in"),
+    h("button", { type: "button", class: "zoom-button", "aria-label": T("zoom.fit_hint"), "data-i18n-aria": "zoom.fit_hint", text: T("zoom.fit"), "data-i18n": "zoom.fit" }),
+    zoomButton("1:1", "zoom.actual"),
+    zoomButton("↻", "zoom.rotate"),
+    h("button", { type: "button", class: "zoom-button", "aria-label": T("zoom.backdrop", { name: T("zoom.backdrop.checker") }), "data-i18n-aria": "zoom.backdrop" }, "◩"),
+    h("span", { class: "zoom-info", text: info, "data-i18n": "media.image.info" }));
+  return h("div", { class: "zoom-view", "data-backdrop": "checker" }, stage, bar);
+}
+function mediaImage(opts) {
+  return h("figure", { class: "media-image" }, zoomView(opts));
+}
+
+// ── La scheda di un file Craft (`editors/craft/surface.ts`, T23) ────────
+const DRAWING = { name: "logo-studio.vectorcraft", kind: "craft.kind.vectorcraft", app: "VectorCraft", version: "3", bytes: 2_516_582 };
+const LONG = { ...DRAWING, name: "Un nome di file lunghissimo per la tavola della nuova sede di via Garibaldi, versione definitiva approvata dal cliente.vectorcraft" };
+const BIG = { ...DRAWING, name: "tavola-grande.vectorcraft", bytes: 187_432_960 };
+function infoLine(file) {
+  const parts = [T(file.kind, { app: file.app })];
+  if (file.version) parts.push(T("craft.info.version", { version: file.version }));
+  if (file.format) parts.push(file.format);
+  parts.push(bytes(file.bytes));
+  return h("p", { class: "craft-info", text: parts.join(" · "), "data-i18n": file.version ? `${file.kind} + craft.info.version` : file.kind });
+}
+function surface(...kids) {
+  return h("div", { class: "media-surface", "data-surface": "craft" }, ...kids);
+}
+function emptyBox(file, stateKey, stateArgs, ...after) {
+  return h("div", { class: "craft-empty" },
+    h("p", { class: "craft-empty-name", text: file.name }),
+    infoLine(file),
+    say("p", { class: "craft-empty-state", role: "status" }, stateKey, stateArgs),
+    ...after);
+}
+/// La domanda (`editors/craft/consent.ts`, `ask`).
+function ask(app) {
+  return h("section", { class: "craft-ask", "aria-label": T("craft.consent.region"), "data-i18n-aria": "craft.consent.region" },
+    say("p", { class: "craft-ask-text" }, "craft.consent.ask", { app }),
+    h("div", { class: "craft-ask-actions" },
+      say("button", { type: "button", class: "craft-ask-answer", "data-answer": "on" }, "craft.consent.yes"),
+      say("button", { type: "button", class: "craft-ask-answer", "data-answer": "off" }, "craft.consent.no")),
+    say("p", { class: "craft-ask-hint" }, "craft.consent.hint"));
+}
+function settingsLink() {
+  return say("button", { type: "button", class: "link-button" }, "craft.consent.settings");
+}
+function craftSheet(file, content) {
+  return [tabs(file.name, "VECTORCRAFT"), h("div", { class: "proto-pane" }, surface(content))];
+}
+const CRAFT = {
+  domanda: () => craftSheet(DRAWING, emptyBox(DRAWING, "craft.no_preview", null, ask("VectorCraft"))),
+  "domanda-fuoco": () => craftSheet(DRAWING, emptyBox(DRAWING, "craft.no_preview", null, ask("VectorCraft"))),
+  "nome-lungo": () => craftSheet(LONG, emptyBox(LONG, "craft.no_preview", null, ask("VectorCraft"))),
+  legge: () => [tabs(DRAWING.name, "VECTORCRAFT"), h("div", { class: "proto-pane" }, surface(say("p", { class: "craft-status", role: "status" }, "craft.loading")))],
+  prepara: () => craftSheet(DRAWING, emptyBox(DRAWING, "craft.queued")),
+  fatta: () => craftSheet(DRAWING, h("div", { class: "craft-card" },
+    mediaImage({ src: IMG.drawing, label: T("craft.figure.alt", { name: DRAWING.name }), info: T("media.image.info", { format: "PNG", width: 1200, height: 900, size: "312.4 KiB" }), level: 58 }),
+    infoLine(DRAWING))),
+  pulsante: () => craftSheet(DRAWING, emptyBox(DRAWING, "craft.no_preview", null, say("button", { type: "button", class: "craft-render" }, "craft.render", { app: "VectorCraft" }))),
+  spente: () => craftSheet(DRAWING, emptyBox(DRAWING, "craft.no_preview", null,
+    h("p", { class: "craft-off" }, say("span", {}, "craft.consent.off"), settingsLink()))),
+  peso: () => craftSheet(BIG, emptyBox(BIG, "craft.over_limit", { limit: "64\u00a0MiB" }, settingsLink())),
+  rotto: () => craftSheet(DRAWING, emptyBox({ ...DRAWING, version: null }, "craft.unreadable")),
+  fallita: () => craftSheet(DRAWING, emptyBox(DRAWING, "craft.cli_failed", { app: "VectorCraft" })),
+  "senza-app": () => craftSheet(DRAWING, emptyBox(DRAWING, "craft.no_preview")),
+};
+
+// ── I dati sulla foto (`editors/craft/photo-data.ts`, T25) ──────────────
+const KEYWORDS = ["mare", "estate", "Liguria", "famiglia/Giulia", "tramonto", "da-stampare"];
+const MANY = Array.from({ length: 500 }, (_, i) => (i < KEYWORDS.length ? KEYWORDS[i] : `scatto-${String(i).padStart(3, "0")}`));
+const COLORS = { red: "craft.xmp.color.red", yellow: "craft.xmp.color.yellow", green: "craft.xmp.color.green", blue: "craft.xmp.color.blue", purple: "craft.xmp.color.purple" };
+function stars(rating) {
+  const label = T(rating === 1 ? "craft.xmp.stars_one" : "craft.xmp.stars_other", { count: rating });
+  const box = h("span", { class: "craft-xmp-stars", role: "img", "aria-label": label, title: label, "data-i18n-aria": "craft.xmp.stars_other" });
+  for (let i = 1; i <= 5; i++) box.append(h("span", { class: "craft-xmp-star", "data-on": String(i <= rating), text: i <= rating ? "★" : "☆" }));
+  return box;
+}
+function photoData(x) {
+  const open = say("button", { type: "button", class: "link-button photo-data-open", title: T("craft.xmp.open", { name: x.xmp }) }, "craft.photo.open_xmp");
+  const section = h("section", { class: "photo-data", "aria-label": T("craft.photo.region"), "data-i18n-aria": "craft.photo.region" });
+  if (x.broken) {
+    section.append(h("div", { class: "photo-data-line" }, say("span", { class: "craft-xmp-absent" }, "craft.photo.unreadable"), open));
+    return section;
+  }
+  const line = h("div", { class: "photo-data-line" });
+  if (x.rating !== null && x.rating >= 0) line.append(stars(x.rating));
+  if (x.label) {
+    line.append(h("span", { class: "craft-xmp-label", "data-color": x.label },
+      h("span", { class: "sr-only", text: `${T("craft.xmp.label")}: `, "data-i18n": "craft.xmp.label" }),
+      h("span", { class: "craft-xmp-swatch", "aria-hidden": "true" }),
+      say("span", {}, COLORS[x.label])));
+  }
+  if (x.flag) line.append(say("span", {}, x.flag === "pick" ? "craft.xmp.flag.pick" : "craft.xmp.flag.reject"));
+  if (!line.childElementCount && !x.keywords.length) line.append(say("span", { class: "craft-xmp-absent" }, "craft.photo.empty"));
+  line.append(open);
+  section.append(line);
+  if (x.keywords.length) {
+    const list = h("ul", { class: "craft-xmp-tags photo-data-tags", "aria-label": T("craft.xmp.keywords"), "data-i18n-aria": "craft.xmp.keywords" });
+    for (const tag of x.keywords) {
+      list.append(h("li", {}, h("button", { type: "button", class: "craft-xmp-tag", title: T("craft.xmp.search_tag", { tag: `#${tag}` }), "data-i18n-title": "craft.xmp.search_tag", text: `#${tag}` })));
+    }
+    section.append(list);
+  }
+  return section;
+}
+const BEACH = { name: "spiaggia.jpg", xmp: "spiaggia.xmp" };
+function photoSheet(data) {
+  return [tabs(BEACH.name, "JPG"), h("div", { class: "proto-pane" }, h("div", { class: "media-surface", "data-surface": "media-image" },
+    mediaImage({ src: IMG.beach, label: BEACH.name, info: T("media.image.info", { format: "JPEG", width: 1500, height: 1000, size: "1.8 MiB" }), level: 52 }),
+    data ? photoData({ xmp: BEACH.xmp, ...data }) : null))];
+}
+const FULL = { rating: 4, label: "red", flag: "pick", keywords: KEYWORDS };
+const PHOTO = {
+  foto: () => photoSheet(FULL),
+  "foto-500": () => photoSheet({ ...FULL, keywords: MANY }),
+  "foto-vuoto": () => photoSheet({ rating: null, label: null, flag: null, keywords: [] }),
+  "foto-rotto": () => photoSheet({ broken: true }),
+  "foto-senza": () => photoSheet(null),
+};
+
+// ── La scheda di un RAW (`surface.ts`, profilo `raw`, T28) ──────────────
+const RAW = { name: "IMG_0398.CR3", kind: "craft.kind.raw", format: "CR3", bytes: 25_376_112, xmp: "IMG_0398.xmp" };
+const RAW_TALL = { ...RAW, name: "IMG_0412.CR3", bytes: 27_011_420, xmp: "IMG_0412.xmp" };
+const RAW_BARE = { ...RAW, name: "IMG_0413.CR3", bytes: 32_505_856, xmp: "IMG_0413.xmp" };
+function rawSheet(file, card) {
+  return [tabs(file.name, "CR3"), h("div", { class: "proto-pane" }, surface(...card))];
+}
+const RAWS = {
+  raw: () => rawSheet(RAW, [h("div", { class: "craft-card" },
+    mediaImage({ src: IMG.mountains, label: T("craft.figure.alt", { name: RAW.name }), info: T("media.image.info", { format: "JPEG", width: 1500, height: 1000, size: "1.1 MiB" }), level: 52 }),
+    infoLine(RAW),
+    photoData({ xmp: RAW.xmp, rating: 3, label: "blue", flag: null, keywords: ["montagna", "Dolomiti"] }))]),
+  "raw-girato": () => rawSheet(RAW_TALL, [h("div", { class: "craft-card" },
+    mediaImage({ src: IMG.lighthouseStored, label: T("craft.figure.alt", { name: RAW_TALL.name }), info: T("media.image.info", { format: "JPEG", width: 800, height: 1200, size: "1.3 MiB" }), level: 38, turned: true }),
+    infoLine(RAW_TALL),
+    photoData({ xmp: RAW_TALL.xmp, rating: 5, label: null, flag: "pick", keywords: ["faro", "Liguria"] }))]),
+  "raw-senza": () => rawSheet(RAW_BARE, [emptyBox(RAW_BARE, "craft.no_preview", null, ask("LightCraft")),
+    photoData({ xmp: RAW_BARE.xmp, rating: 2, label: null, flag: "reject", keywords: [] })]),
+};
+
+// ── PDF e documenti (T31) ───────────────────────────────────────────────
+function notices(lines) {
+  const box = h("div", { class: "sheet-notices" });
+  for (const line of lines) {
+    const row = h("div", { class: "sheet-notice", "data-tone": line.tone, "data-notice": line.id, role: line.tone === "danger" ? "alert" : "status" },
+      say("span", { class: "sheet-notice-text" }, line.key, line.args));
+    for (const action of line.actions) row.append(say("button", { type: "button", class: "link-button" }, action));
+    box.append(row);
+  }
+  return box;
+}
+const CONSENT_LINE = (app) => ({ id: "craft_consent", tone: "info", key: "craft.consent.notice", args: { app }, actions: ["craft.consent.yes", "craft.consent.no"] });
+function note(withPreview) {
+  const embed = withPreview
+    ? h("div", { class: "embed embed-media", "data-embed-page": "contratto-affitto.pdf", "data-vault-media": "loaded", "data-craft-doc": "Casa/contratto-affitto.pdf" },
+        h("figure", { class: "craft-figure", tabindex: "0", role: "link", "aria-label": T("craft.figure.alt", { name: "contratto-affitto.pdf" }), "data-i18n-aria": "craft.figure.alt" },
+          h("img", { class: "craft-figure-image craft-figure-page", alt: T("craft.figure.alt", { name: "contratto-affitto.pdf" }), src: IMG.pdfPage, width: "256", height: "362", decoding: "async" }),
+          h("figcaption", { text: "contratto-affitto.pdf" })))
+    : h("div", { class: "embed", "data-embed-page": "contratto-affitto.pdf", "data-vault-media": "loaded" },
+        h("a", { href: "#", class: "wikilink", "data-wikilink-page": "contratto-affitto.pdf", text: "contratto-affitto.pdf" }));
+  return [tabs("Affitto di via Roma", null), h("div", { class: "proto-pane" }, h("div", { class: "proto-doc" },
+    h("div", { class: "markdown-rendered" },
+      h("h1", { text: "Affitto di via Roma" }),
+      h("p", { text: "Firmato il 1° novembre: la caparra è di due mensilità, il primo affitto si paga entro il 5 dicembre. Qui sotto il contratto, così com'è arrivato dall'agenzia." }),
+      embed,
+      h("p", { text: "Da chiedere all'agenzia: chi paga la manutenzione della caldaia." }))))];
+}
+const DOCS = {
+  "nota-pdf": () => note(true),
+  "nota-pdf-senza": () => note(false),
+  "pdf-domanda": () => [tabs("contratto-affitto.pdf", "PDF"), notices([CONSENT_LINE("PdfCraft")]),
+    h("div", { class: "proto-pane" }, h("div", { class: "media-surface", "data-surface": "media-pdf" },
+      h("div", { class: "proto-pdf" }, h("img", { class: "proto-pdf-page", alt: "", src: IMG.pdfPage }))))],
+  "docx-due-righe": () => [tabs("relazione", "WORD"),
+    notices([
+      { id: "lend", tone: "info", key: "lend.notice", args: { app: "WordCraft" }, actions: ["lend.resume"] },
+      CONSENT_LINE("WordCraft"),
+    ]),
+    h("div", { class: "proto-pane" }, h("div", { class: "proto-doc" }, h("div", { class: "markdown-rendered" },
+      h("h1", { text: "Relazione sul trimestre" }),
+      h("p", { text: "Il trimestre chiude con le vendite in crescita del 12% rispetto allo stesso periodo dell'anno scorso, trainate dai negozi del nord." }),
+      h("p", { text: "I costi di spedizione sono saliti di due punti; la sezione 3 propone come rientrare entro marzo." }))))],
+};
+
+// ── L'albero (`panels/explorer.ts`, T26) ────────────────────────────────
+let entry = 0;
+function treeItem(row, extra) {
+  const name = row.querySelector(".row-name");
+  name.id = `voce-${++entry}`;
+  return h("li", { role: "treeitem", "aria-labelledby": name.id, tabindex: "-1", ...extra }, row);
+}
+function folder(name, kids) {
+  const row = h("div", { class: "tree-row folder" },
+    h("button", { type: "button", class: "chevron", tabindex: "-1", "aria-hidden": "true", "aria-expanded": "true", "aria-label": name, text: "▾" }),
+    icon("vault"),
+    h("span", { class: "row-name", text: name }));
+  const li = treeItem(row, { "aria-expanded": "true" });
+  li.append(h("ul", { class: "tree-children", role: "group" }, ...kids));
+  return li;
+}
+/// Una riga: un documento (`noteRow`: il nome senza estensione) o un file
+/// (`fileRow`: il nome intero). `thumb` è la miniatura, quando l'albero le
+/// mostra e il file ne ha una.
+/// L'orientamento di EXIF come trasformazione: lo fa il codice
+/// (`orientationTransform` di `editors/media/orientation.ts`, T28), non la
+/// pelle, come la vista dello zoom scrive già la sua. Una pelle di un altro
+/// tema non può dimenticarlo.
+const ORIENTATION = {
+  2: "scaleX(-1)", 3: "rotate(180deg)", 4: "rotate(180deg) scaleX(-1)",
+  5: "rotate(270deg) scaleX(-1)", 6: "rotate(90deg)", 7: "rotate(90deg) scaleX(-1)", 8: "rotate(270deg)",
+};
+function leaf(o) {
+  const cls = o.doc ? "tree-row note leaf" : "tree-row file leaf";
+  let iconEl;
+  if (o.thumb && TREE.thumbs) {
+    const thumb = h("img", { class: "tree-thumb", alt: "", src: o.thumb, decoding: "async" });
+    if (ORIENTATION[o.orientation]) {
+      thumb.style.transform = ORIENTATION[o.orientation];
+      thumb.style.imageOrientation = "none";
+    }
+    iconEl = h("span", { class: "row-icon", "aria-hidden": "true" }, thumb);
+  } else if (o.emoji) {
+    iconEl = h("span", { class: "row-icon", "aria-hidden": "true", text: o.emoji });
+  } else {
+    iconEl = icon(o.icon);
+  }
+  const row = h("div", { class: cls, "data-path": o.path }, iconEl, h("span", { class: "row-name", text: o.name }));
+  return treeItem(row, { "data-path": o.path, "aria-selected": o.current ? "true" : null });
+}
+const TREE = { thumbs: false, xmp: true, focus: null };
+function treeRows() {
+  const xmp = (o) => (TREE.xmp ? leaf(o) : null);
+  return [
+    folder("Foto 2026", [
+      xmp({ doc: true, path: "Foto 2026/IMG_0412.xmp", name: "IMG_0412", icon: "format-photo" }),
+      xmp({ doc: true, path: "Foto 2026/spiaggia.xmp", name: "spiaggia", icon: "format-photo" }),
+      leaf({ path: "Foto 2026/IMG_0412.CR3", name: "IMG_0412.CR3", icon: "format-photo", thumb: IMG.lighthouseStored, orientation: 6 }),
+      leaf({ path: "Foto 2026/IMG_0413.CR3", name: "IMG_0413.CR3", icon: "format-photo" }),
+      leaf({ path: "Foto 2026/spiaggia.jpg", name: "spiaggia.jpg", emoji: "🖼️" }),
+      h("li", { role: "none" }, h("button", { type: "button", class: "tree-row troncata", text: T("explorer.altre_voci", { n: 480 }), "data-i18n": "explorer.altre_voci" })),
+    ].filter(Boolean)),
+    folder("Progetti", [
+      leaf({ doc: true, path: "Progetti/copertina.pcraft", name: "copertina", icon: "format-photo", thumb: IMG.pcraft }),
+      leaf({ doc: true, path: "Progetti/logo-studio.vectorcraft", name: "logo-studio", icon: "format-drawing", thumb: IMG.drawing, current: true }),
+      leaf({ doc: true, path: "Progetti/nuova-sede.figcraft", name: "Un nome lunghissimo per il progetto della nuova sede di via Garibaldi", icon: "format-drawing", thumb: IMG.figcraft }),
+      leaf({ doc: true, path: "Progetti/bilancio.xlsx", name: "bilancio", icon: "format-sheet" }),
+      leaf({ doc: true, path: "Progetti/relazione.docx", name: "relazione", icon: "format-word", thumb: IMG.docxPage }),
+      leaf({ doc: true, path: "Progetti/bozza.odt", name: "bozza", icon: "format-odt" }),
+      leaf({ path: "Progetti/contratto-affitto.pdf", name: "contratto-affitto.pdf", emoji: "📕", thumb: IMG.pdfPage }),
+    ]),
+    leaf({ doc: true, path: "Affitto di via Roma.md", name: "Affitto di via Roma", icon: "notes" }),
+  ];
+}
+function tree(mode) {
+  TREE.thumbs = mode !== "albero";
+  TREE.xmp = mode !== "albero-xmp";
+  const list = h("ul", { class: "plain-list", role: "tree", "aria-label": "File" }, ...treeRows());
+  const panel = h("div", { class: "files-panel", "data-tree-thumbs": mode === "albero-grandi" ? "large" : null }, list);
+  const items = [...list.querySelectorAll('[role="treeitem"]')];
+  const target = mode === "albero-fuoco" ? items.find((li) => li.dataset.path === "Foto 2026/IMG_0412.CR3") : items.find((li) => li.getAttribute("aria-selected") === "true");
+  target.tabIndex = 0;
+  if (mode === "albero-fuoco") TREE.focus = target;
+  return [h("div", { class: "proto-split" },
+    h("aside", { class: "proto-drawer", "aria-label": "File" }, h("p", { class: "proto-drawer-title", text: "File" }), panel),
+    h("div", { class: "proto-paper" }))];
+}
+const TREES = Object.fromEntries(["albero", "albero-miniature", "albero-xmp", "albero-fuoco", "albero-grandi"].map((m) => [m, () => tree(m)]));
+
+// ── Le impostazioni (`panels/settings.ts`, `renderRow`, T19) ────────────
+function settingRow(spec, value, modified) {
+  const id = `setting-${spec.key}`;
+  const described = [];
+  const text = h("div", { class: "setting-text" }, h("label", { for: id, id: `${id}-label`, text: T(spec.label), "data-i18n": spec.label }));
+  if (spec.desc) {
+    text.append(h("div", { class: "muted setting-description", id: `${id}-desc`, text: T(spec.desc), "data-i18n": spec.desc }));
+    described.push(`${id}-desc`);
+  }
+  if (modified) {
+    text.append(h("div", { class: "setting-meta" },
+      h("span", { class: "setting-scope", "data-scope": "machine", "aria-hidden": "true" },
+        h("span", { class: "setting-scope-icon", html: ICONS.monitor }),
+        say("span", {}, "settings.scope.chip.machine")),
+      h("div", { class: "setting-default", text: T("settings.default", { value: spec.defaultText() }), "data-i18n": "settings.default" }),
+      say("button", { type: "button", class: "link-button setting-reset" }, "settings.reset")));
+  }
+  text.append(h("span", { class: "sr-only", id: `${id}-source`, text: modified ? T("settings.source.machine") : T("settings.source.default", { dove: T("settings.scope.machine") }) }));
+  described.push(`${id}-source`);
+  const field = spec.field(id, value);
+  for (const focusable of [field, ...field.querySelectorAll("input, select")]) {
+    if (focusable.matches("input, select")) focusable.setAttribute("aria-describedby", described.join(" "));
+  }
+  return h("div", { class: "setting-row", "data-setting-key": spec.key, "data-modified": modified ? "true" : null, "data-search": "" }, text, h("div", { class: "setting-control" }, field));
+}
+const SPECS = [
+  { key: "craft.editor-paths", label: "core.craft.editor_paths", desc: "core.craft.editor_paths.desc", defaultText: () => T("settings.nothing"),
+    field: (id, value) => (value.length
+      ? h("ul", { class: "setting-chips", id }, ...value.map((v) => h("li", { class: "setting-chip", text: v })))
+      : h("div", { class: "muted", id, text: T("settings.nothing"), "data-i18n": "settings.nothing" })) },
+  { key: "craft.cli-previews", label: "core.craft.cli_previews", desc: "core.craft.cli_previews.desc", defaultText: () => T("core.craft.cli_previews.ask"),
+    field: (id, value) => h("select", { class: "setting-select", id },
+      ...["ask", "on", "off"].map((v) => h("option", { value: v, selected: v === value, text: T(`core.craft.cli_previews.${v}`), "data-i18n": `core.craft.cli_previews.${v}` }))) },
+  { key: "craft.preview-max-mib", label: "core.craft.preview_max_mib", desc: "core.craft.preview_max_mib.desc", defaultText: () => "64",
+    field: (id, value) => h("input", { type: "number", class: "setting-number", id, value: String(value), min: "1", max: "4096", step: "any" }) },
+  { key: "craft.tree-thumbnails", label: "core.craft.tree_thumbnails", desc: "core.craft.tree_thumbnails.desc", defaultText: () => "spento",
+    field: (id, value) => h("input", { type: "checkbox", class: "setting-switch", role: "switch", id, checked: value }) },
+  { key: "craft.tree-show-xmp", label: "core.craft.tree_show_xmp", desc: "core.craft.tree_show_xmp.desc", defaultText: () => "acceso",
+    field: (id, value) => h("input", { type: "checkbox", class: "setting-switch", role: "switch", id, checked: value }) },
+];
+function settings(chosen) {
+  const values = chosen
+    ? [["vectorcraft=/opt/vectorcraft/bin/vectorcraft", "lightcraft-cli=/home/anna/.local/bin/lightcraft-cli"], "on", 256, true, false]
+    : [[], "ask", 64, false, true];
+  const defaults = [[], "ask", 64, false, true];
+  const card = h("div", { class: "settings-card" }, ...SPECS.map((spec, i) => settingRow(spec, values[i], JSON.stringify(values[i]) !== JSON.stringify(defaults[i]))));
+  const section = h("section", { class: "settings-section", id: "app-esterne", "aria-labelledby": "app-esterne-title" },
+    h("div", { class: "settings-section-head" }, h("h3", { class: "settings-section-title", id: "app-esterne-title", tabindex: "-1", text: T("core.group.external_apps"), "data-i18n": "core.group.external_apps" })),
+    card);
+  return [h("div", { class: "proto-settings settings-panel" }, h("div", { class: "settings-body" }, section))];
+}
+const SETTINGS = { impostazioni: () => settings(false), "impostazioni-scelte": () => settings(true) };
+
+// ── La linguetta (solo prototipo) ───────────────────────────────────────
+function tabs(name, tag) {
+  return h("div", { class: "proto-tabs", "aria-hidden": "true" },
+    h("span", { class: "proto-tab" }, h("span", { class: "proto-tab-name", text: name }), tag ? h("span", { class: "proto-tab-tag", text: tag }) : null));
+}
+
+// ── La barra del prototipo ──────────────────────────────────────────────
+const SCREENS = { ...CRAFT, ...PHOTO, ...RAWS, ...DOCS, ...TREES, ...SETTINGS };
+const LOG = {
+  domanda: "La prima volta che una scheda avrebbe bisogno di VectorCraft. «Sì» salva «Accese» e fa l'anteprima (il clic è il gesto); «No» salva «Spente».",
+  "domanda-fuoco": "La scheda aveva il fuoco: il primo pulsante lo prende. Invio e Spazio lo premono una volta ciascuno.",
+  prepara: "Aperto con un clic e le anteprime accese: la CLI lavora su una copia.",
+  pulsante: "Una scheda riaperta all'avvio, o da un link fub://, non avvia niente da sola.",
+  peso: "Un VectorCraft si legge intero: oltre il peso massimo niente anteprima. Uno ZIP (un PhotoCraft, un FigCraft) si legge a pezzi e non ha limite.",
+  fallita: "La CLI ha già provato con questa versione del file: Fub non riprova finché il file non cambia.",
+  "foto-500": "La riga va a capo fino a tre righe, poi scorre: la foto tiene il suo posto.",
+  "raw-girato": "Il JPEG dentro il RAW sta coricato sul disco; la vista dello zoom lo raddrizza col suo orientamento (6).",
+  "nota-pdf": "La prima pagina, se l'anteprima c'è già (dentro il file o fatta prima). Una nota non avvia mai un'app.",
+  "nota-pdf-senza": "Senza anteprima, il link di oggi.",
+  "pdf-domanda": "La domanda nella riga d'avviso, perché la scheda è la vista dei PDF di Fub.",
+  "albero-miniature": "Solo l'anteprima che il file ha già: l'albero non avvia mai un'app. Le immagini comuni restano con la loro icona (D-10).",
+  "albero-xmp": "Gli XMP spariscono dall'albero; la ricerca li trova, e la foto mostra i loro dati.",
+  "albero-grandi": "Variante: la colonna dell'icona si allarga a 24 px per tutte le righe.",
+  "impostazioni-scelte": "Le righe modificate hanno il punto d'accento, il predefinito e «Azzera».",
+};
+const stateSel = document.getElementById("proto-stato");
+const lightSel = document.getElementById("proto-luce");
+const widthSel = document.getElementById("proto-larghezza");
+const windowEl = document.getElementById("proto-window");
+const logEl = document.querySelector(".proto-log");
+function draw() {
+  const state = stateSel.value;
+  document.documentElement.dataset.luce = lightSel.value;
+  if (lightSel.value === "scura") document.documentElement.dataset.theme = "dark";
+  else delete document.documentElement.dataset.theme;
+  windowEl.dataset.larghezza = widthSel.value;
+  TREE.focus = null;
+  windowEl.replaceChildren(...SCREENS[state]());
+  logEl.textContent = LOG[state] || "";
+  location.hash = `stato=${state}&luce=${lightSel.value}&larghezza=${widthSel.value}`;
+  if (state === "domanda-fuoco") windowEl.querySelector(".craft-ask-answer").focus({ focusVisible: true });
+  if (TREE.focus) TREE.focus.focus({ focusVisible: true });
+}
+for (const sel of [stateSel, lightSel, widthSel]) sel.addEventListener("change", draw);
+const fromHash = new URLSearchParams(location.hash.slice(1));
+if (fromHash.get("stato") && SCREENS[fromHash.get("stato")]) stateSel.value = fromHash.get("stato");
+if (fromHash.get("luce")) lightSel.value = fromHash.get("luce");
+if (fromHash.get("larghezza")) widthSel.value = fromHash.get("larghezza");
+const stringsEl = document.getElementById("proto-strings");
+for (const [key, task, text] of NEW_STRINGS) stringsEl.append(h("tr", {}, h("td", {}, h("code", { text: key })), h("td", { text }), h("td", { text: task })));
+draw();
+</script>
+</body>
+</html>

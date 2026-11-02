@@ -59,6 +59,26 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N7 · Le risposte dell'utente a D-1…D-9: D-1 (b), le anteprime
+  fatte dalle app spente finché chi usa Fub non le accende, con la domanda
+  la prima volta («Chiedi la prima volta», non un permesso dei plugin), e
+  un'app parte solo dal core, per la shell principale, dopo un gesto, col
+  biglietto del job (T11, T12, T19, T23); D-5 (d), i dati dell'XMP anche
+  sulla foto e un'impostazione per nascondere gli `.xmp` dall'albero
+  (T24–T26); D-7 (d), le miniature nell'albero dietro un'impostazione
+  spenta, che non avviano mai un'app (T26); D-8 (c), per l'anteprima Fub
+  legge solo il pezzo che serve con le lease del kernel, senza porte nuove
+  nell'ABI, e i 64 MiB restano per ciò che va letto intero come impostazione
+  (T21, T22); D-9 (c), N7 comprende i RAW, PdfCraft e WordCraft (T27–T31) e
+  si chiude con la CI completa e la revisione (T32); il contratto
+  `CraftPreview` passa alla versione 2 in un task solo (T20), con `revision`
+  vuota per ciò che si legge a pezzi; il prototipo
+  `PLAN-ui/craft-anteprime.html` va approvato prima dei task che si vedono
+  (T18); D-10 nuova, il piano segue la (a) · avviare un programma è
+  un'azione e la decide chi usa Fub, non un plugin, un agente o un file
+  riaperto; un file grande non deve costare la sua lettura intera, e una
+  forma che cambia una volta sola non lascia la shell e l'host a parlare due
+  lingue.
 - 2026-11-02 · N7 · T15: la figura di un file Craft in una nota e nella
   finestrella al passaggio (`editors/craft/figure.ts`) chiede sempre
   `render: false`: un test in ognuno dei tre file lo controlla. Un embed da
