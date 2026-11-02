@@ -109,7 +109,12 @@ differenza è scritta qui.
 - D-2 · Due comandi nuovi fra la finestra e il programma: «scalda il motore di
   questo tipo» (al passaggio del puntatore su un file, all'apertura di una
   cartella) e «ho chiuso questo documento» (per svuotare subito le cache dei
-  documenti). Sono pronti su un branch a parte. Consiglio: sì.
+  documenti). Sono pronti su un branch a parte. Consiglio: sì. Un limite
+  noto: anche le letture fatte fuori da un documento aperto (l'anteprima
+  della ricerca con «più contesto») contano il documento come aperto, e
+  nessuno lo chiude; finché c'è, la cache dei documenti si svuota solo alla
+  chiusura del vault, come senza i due comandi. Si perde solo memoria, mai
+  dati.
 - D-3 · I comandi dei fogli che non sono nella barra si trovano nella
   tavolozza dei comandi, con una finestra dei parametri generata. Va bene così
   per ora, o li vuoi anche in un menu? Consiglio: tavolozza per ora; il menu
@@ -464,7 +469,7 @@ Fatto quando: test di conformità IPC verdi; test dell'host: scaldare costruisce
 il motore senza aprire file; chiuso l'ultimo documento le cache sono a zero;
 test del client sul ritardo del puntatore.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto sul branch `piano/k3-ipc-motori` (PR in bozza a parte); si unisce a K3 solo con il sì a D-2
 
 ## T9 · La misura del cancello
 
