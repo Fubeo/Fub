@@ -59,6 +59,11 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N4 · secondo merge di `piano/n3-logica-in-rust` (fino a N3
+  T7, il commit e i vettori delle toppe) dentro `piano/n4-inchiostro`;
+  PLAN.md resta quello di N4 e DECISIONS.md tiene le righe di tutti e due:
+  senza il merge la PR #298 era in conflitto con la sua base e la CI non
+  partiva.
 - 2026-11-02 · N3 T7 · il commit in Rust (`fub-canvas-core/src/commit.rs`:
   `Core`, `Committed{source,inverse,edit}`, `Edit::between/apply` ai confini
   di carattere, `CommitError` Stale/Invalid/Rejected/Unstable con
