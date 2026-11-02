@@ -551,7 +551,7 @@ src/editors/spatial/tools/gesti-vettori.test.ts` passa; con `UPDATE_GESTI=1`
 due volte di fila il diff di Git è vuoto; un vettore cambiato a mano lo fa
 fallire con il nome del vettore.
 Prova: scripts/check.sh --rapido; npm --prefix apps/client test -- src/editors/spatial/tools/gesti-vettori.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T4 · Il contratto del disegno
 
