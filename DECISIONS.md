@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N6 · T9: le schede portate sulla lavagna nascono in griglia
+  per righe (ogni colonna larga quanto la sua scheda più larga), ordinate
+  per nome e poi per percorso, agganciate a 8 px e mai sotto 40; il foglio
+  nasce 480×304 invece di 480×300 di D-11, perché 300 non è multiplo di 8;
+  un'immagine senza misura nasce 480×360 (4:3); un PDF largo 360 con
+  l'altezza della prima pagina (senza misura 360×480); un file Craft
+  320×160. DROP_SNAP e DROP_MIN_SIZE copiano le costanti di engine.ts (che
+  porta il DOM) e un test le tiene uguali. Perché: tutto ciò che nasce sta
+  sulla griglia della tela.
 - 2026-11-02 · N6 · T8: la scheda web non fa richieste da sé: mostra
   indirizzo e dominio, e l'anteprima solo con «Mostra l'anteprima» (una
   richiesta per clic); l'icona passa solo se è un data: di immagine raster

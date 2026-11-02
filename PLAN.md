@@ -905,7 +905,7 @@ Fatto quando: `drop-layout.test.ts` prova ordine, griglia, aggancio,
 gruppo, le misure per specie, l'immagine 4000×1000 → 480×120, e la tabella.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/drop-layout.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T10 · Le porte per portare dentro
 
