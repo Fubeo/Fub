@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K5 · Dopo T8: la CI era rossa su `fub-
+  app/tests/ipc_permissions.rs` perché `host/ipc.ts` chiamava i sei comandi
+  del disegno, che l'app registra solo con T19 (D-4). Le porte ora
+  rispondono `unserved` senza chiamare l'app, lo stesso rifiuto dell'host
+  senza il motore (prima l'app avrebbe dato un errore «comando sconosciuto»,
+  cioè motore «errore» e non «spento»); con T19 tornano `invoke`. Il test
+  non si tocca. Il ciclo rapido non l'aveva visto: `check-scope.mjs` ora
+  aggiunge i crate i cui test nominano un file del client cambiato.
 - 2026-11-02 · K5 · T5: chiuso con la fermata del piano. Nessun `svg2pdf`
   pubblicato usa `usvg` 0.48 (l'ultimo, 0.13.0, chiede ^0.45; anche `krilla-
   svg` 0.8.1 chiede ^0.47; letto da crates.io il 2026-11-02), quindi
