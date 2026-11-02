@@ -232,9 +232,12 @@ flowchart LR
     canvas["fub-format-canvas"]
     canvascore["fub-canvas-core"]
     canvasinkcodec["fub-ink-codec"]
+    features["fub-features"]
 
     canvas --> canvascore
     canvascore --> canvasinkcodec
+    features --> canvascore
+    features -.-> canvas
 ```
 
 Il quinto blocco è il codec dei tratti, `fub-ink-codec`, fra i disegni e il
@@ -280,9 +283,10 @@ crate del workspace: `fub-ink-codec`, con cui legge e controlla l'inchiostro
 dipende da `serde`, `serde_json` e `thiserror`, e non vede `fub-abi` né il
 Markdown, perché lo carica anche la WebView come modulo
 `wasm32-unknown-unknown`. Ha il modello di una `.canvas`, la sua lettura e
-quella dei suoi livelli d'inchiostro; la
-sua freccia in ingresso è quella di `fub-format-canvas`, che lo riespone con la
-stessa API. Chi altro può dipenderne è un elenco chiuso
+quella dei suoi livelli d'inchiostro; le sue frecce in ingresso sono quella di
+`fub-format-canvas`, che lo riespone con la stessa API, e quella di
+`fub-features`, facoltativa dietro la feature `lavagna`, per i comandi
+`canvas.apply` e `canvas.create`. Chi altro può dipenderne è un elenco chiuso
 (`dependency_invariant.rs`), e il giro completo di `scripts/check.sh` lo
 compila per quel bersaglio. Le regole stanno nel [formato della
 lavagna](../reference/canvas-format.md).

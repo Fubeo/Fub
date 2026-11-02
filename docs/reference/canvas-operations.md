@@ -4,7 +4,9 @@
 > e la loro inversa per l'annulla; le operazioni d'intento che si compilano
 > in toppe.
 > **Fonti autorevoli:** `crates/fub-canvas-core/src/patch.rs` e
-> `crates/fub-canvas-core/src/ops.rs`, i loro test in
+> `crates/fub-canvas-core/src/ops.rs`, il comando in
+> `crates/fub-features/src/lavagna/apply.rs` (test in
+> `crates/fub-features/tests/lavagna.rs`), i loro test in
 > `crates/fub-canvas-core/tests/patch.rs` e
 > `crates/fub-canvas-core/tests/op_vectors.rs`, i vettori in
 > `apps/client/src/__fixtures__/canvas-ops/` e la tela in
@@ -296,3 +298,61 @@ scritti a mano: `before`, `seed` facoltativo (0 se manca), `ops` e `expect`
 con `outcome` (`applied`, `rejected` o `malformed`) e, secondo il caso,
 `after`, `created` ed `error`. `crates/fub-canvas-core/tests/op_vectors.rs` li
 fa girare e controlla anche che l'inversa delle toppe ridia `before`.
+
+## Comandi
+
+`canvas.apply` («Applica operazioni alla lavagna») è il comando del
+componente Lavagna (`fub.lavagna`, cargo feature `lavagna` di `fub-features`)
+che porta una lista di operazioni in un file `.canvas` come **una modifica
+sola**: un passo d'anteprima, un passo d'annulla. Scrive un documento solo
+(`CommandScope::writing(CommandReach::Document)`).
+
+| Parametro | Tipo | |
+|---|---|---|
+| `doc` | documento, obbligatorio | il file `.canvas`; un documento di un altro formato è `BadArgs` |
+| `ops` | testo, obbligatorio | un array JSON di operazioni, come sopra; testo che non è un array di operazioni, o un array vuoto, è `BadArgs` |
+| `base` | testo | la revisione su cui valgono le operazioni; se il documento ne ha già un'altra è `Conflict` |
+| `seed` | testo | il seme degli id nuovi, un intero decimale da 0 a 2⁶⁴ − 1 (in stringa, perché un `u64` non sta in un numero JSON) |
+
+Senza `seed` il seme è l'FNV-1a a 64 bit della revisione corrente: l'anteprima
+e l'applicazione sulla stessa revisione danno gli stessi id. Due chiamate con
+la stessa `base` non si applicano tutte e due: la seconda trova la revisione
+scritta dalla prima ed è `Conflict`. Senza `base`, una scrittura avvenuta fra
+la lettura e la scrittura fa fallire il CAS dell'host, come per ogni modifica
+al testo.
+
+Il comando apre il sorgente con il nucleo (un file che le regole di lettura
+del [formato](canvas-format.md) non leggono è `BadArgs`), compila le
+operazioni e fa il commit; all'host consegna il tratto minimo cambiato. Gli
+errori hanno una frase loro in italiano e in inglese: ogni `OpError` è
+`BadArgs` e conta la posizione dell'operazione da uno; del commit, `Invalid`
+e `Rejected` sono `BadArgs`, `Stale` e `Unstable` (un difetto del nucleo, non
+degli argomenti) sono `Internal`.
+
+L'anteprima (`dry_run`) restituisce il piano con l'unica modifica e non
+scrive. L'applicazione restituisce l'annulla (l'inversa che l'host dà della
+modifica) e l'effetto `Custom` con namespace `fub.lavagna` e payload
+`{"created": [...], "revision": "..."}`: gli id nati, nell'ordine di
+`created`, e la revisione del file dopo. Operazioni che non cambiano un byte
+non scrivono e non lasciano un annulla; l'effetto dice la revisione corrente.
+
+`canvas.create` («Nuova lavagna», «New whiteboard») fa nascere una lavagna
+vuota e la apre, con le regole dei nomi di `drawing.create`. Scrive un
+documento solo e si annulla (`CommandScope::writing(CommandReach::Document)`).
+
+| Parametro | Tipo | |
+|---|---|---|
+| `name` | testo | il nome o il path; senza estensione riceve `.canvas`; assente, il primo nome libero di «Lavagna», «Lavagna 1», … («Whiteboard» in inglese) |
+| `folder` | testo | la cartella di un nome semplice (un path resta dov'è); se non c'è, nasce col file |
+
+Un nome già preso è `AlreadyExists`, anche nell'anteprima, e niente si
+sovrascrive; un nome con l'estensione di un altro formato, o che la regola dei
+nomi nuovi rifiuta (caratteri riservati, nomi di Windows, un punto in testa o
+in fondo), è `BadArgs` con la sua frase; un vault senza il formato delle
+lavagne è `BadArgs`. Il testo è il sorgente nuovo di una lavagna vuota come lo
+scrive il nucleo (R6: `{"nodes": [], "edges": []}` rientrato di due spazi e
+chiuso da `"\n"`), riletto dal nucleo prima di scrivere. L'anteprima nomina il
+file e non scrive; l'applicazione lo crea con `create_document` (che rifiuta
+un path preso nel frattempo) e risponde con `Navigate`. L'annulla è
+`note.trash` sul file: lo porta nel cestino anche se nel frattempo è cambiato,
+e dal cestino si ripristina com'era quando la creazione è stata annullata.

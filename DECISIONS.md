@@ -83,6 +83,41 @@ La più recente in cima: data · piano · decisione · perché.
   PLAN.md resta quello di N4 e DECISIONS.md tiene le righe di tutti e due:
   senza il merge la PR #298 era in conflitto con la sua base e la CI non
   partiva.
+- 2026-11-02 · N3 · T12: gli strumenti MCP fub_canvas_create e
+  fub_canvas_apply chiamano canvas.create e canvas.apply con gli id scritti
+  come costanti, come note.create, perché fub-cli non dipende da fub-
+  features; fub_canvas_apply risponde {doc, dry_run, outcome} in prova e
+  {doc, dry_run, created, revision} applicato, e check_read più check_write
+  valgono anche in prova (in sola lettura nemmeno la prova passa); l'MCP non
+  passa il seme, quindi gli id nuovi vengono dalla revisione. Se
+  fub_canvas_create crea un nome diverso da quello provato, lo dice invece
+  di tacerlo. Perché: un agente crea e riempie una lavagna con le stesse
+  regole di accesso degli altri strumenti.
+- 2026-11-02 · N3 · T11: canvas.create scrive come sorgente la lavagna vuota
+  del nucleo (patch_source su Canvas::default, riletta con Core::open prima
+  di scrivere), perché il nucleo non ha una funzione apposta; senza nome
+  prende il primo libero («Lavagna», «Lavagna 1», in inglese «Whiteboard»),
+  e un nome preso è un conflitto che non sovrascrive. Il codice dei nomi è
+  una copia di drawing.create, perché le feature non si importano fra loro;
+  l'annulla porta la lavagna nel cestino e richiede la feature commands,
+  come drawing.create. Perché: un file nuovo è già una lavagna che il nucleo
+  apre.
+- 2026-11-02 · N3 · T10: il componente «Lavagna» (fub.lavagna) porta
+  canvas.apply; il seme degli id usa l'Fnv1a del contratto; spegnere
+  fub.lavagna toglie solo canvas.apply, e il test fub-cli
+  spegnere_la_lavagna_dice_che_la_penna_non_serve_piu è stato aggiornato di
+  conseguenza (opzione a: dice con precisione che cosa sparisce, non è
+  indebolito). Resta da allineare l'ADR 0234, che mette ancora la Lavagna
+  fra i componenti senza bundle. Perché: la lavagna diventa un componente
+  che si scrive come gli altri, e un componente spento toglie solo ciò che
+  porta.
+- 2026-11-02 · N3 · T9: lo specchio a caso fra fub-canvas-core e la lavagna
+  TypeScript ha 2051 casi (1333 sorgenti, 718 prove con toppe) in una
+  fixture di 501 KB, un sorgente per riga con le sue prove per stare sotto i
+  512 KB. Ha trovato una divergenza (26 casi): in una toppa il TS trattava
+  un campo noto a null diversamente dal nucleo Rust; corretto il lato TS
+  secondo R7 (null vale come assente, sia nel dopo sia nel confronto del
+  prima), vettori 44 e 45.
 - 2026-11-02 · N3 T7 · il commit in Rust (`fub-canvas-core/src/commit.rs`:
   `Core`, `Committed{source,inverse,edit}`, `Edit::between/apply` ai confini
   di carattere, `CommitError` Stale/Invalid/Rejected/Unstable con
