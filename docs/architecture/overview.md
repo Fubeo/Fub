@@ -38,6 +38,7 @@ flowchart TD
     base["fub-format-base"]
     canvas["fub-format-canvas"]
     svg["fub-format-svg"]
+    craft["fub-format-craft"]
     scene["fub-scene"]
     ink["fub-ink"]
     componenti["fub-componenti"]
@@ -86,6 +87,7 @@ flowchart TD
     markdown --> sdk
     svg --> abi
     svg --> scene
+    craft --> abi
     scene --> ink
     wasmhost --> abi
     wasmhost --> host
@@ -108,6 +110,7 @@ flowchart TD
     importers -.-> markdown
     importers -.-> sdk
     svg -.-> sdk
+    craft -.-> sdk
     rich -.-> sdk
 ```
 
