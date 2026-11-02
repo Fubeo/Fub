@@ -3,11 +3,17 @@ import { describe, expect, it } from "vitest";
 import { parseCanvas, serializeCanvas } from "./model";
 import { applyOperation } from "../core/text-operation";
 import {
+  addStrokePatch,
   applyCanvasPatches,
   canvasCommitOutcome,
   commitCanvasPatches,
+  eraseStrokePatch,
+  eraseStrokePatches,
+  invertCanvasOperation,
   inverseCanvasPatches,
   removeNodePatch,
+  type CanvasPatch,
+  type StoredInkStroke,
   upsertEdgePatch,
   upsertNodePatch,
 } from "./operation";
@@ -216,5 +222,144 @@ describe("canvas operations", () => {
     expect(parseCanvas(committed.source).nodes.map((node) => node.id)).toEqual(["b", "a"]);
     expect(applyCanvasPatches(doc, inverseCanvasPatches([patch]))).toBe(true);
     expect(doc.nodes.map((node) => node.id)).toEqual(["a", "b"]);
+  });
+});
+
+const BRUSH = "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint";
+
+function stroke(id: string, anchor: StoredInkStroke["anchor"] = { kind: "card", width: 200, height: 120 }): StoredInkStroke {
+  return { id, tool: "pen", brush: BRUSH, color: "#0072b2", anchor, ink: "1 s100 cxy 100,100 10,0" };
+}
+
+function inkSource(strokes: readonly string[]): string {
+  return JSON.stringify({
+    nodes: [
+      { id: "n1", type: "text", x: 0, y: 0, width: 200, height: 120, text: "a",
+        "fub:ink": { v: 1, strokes: strokes.map((id) => stroke(id)) } },
+      { id: "n2", type: "text", x: 300, y: 0, width: 200, height: 120, text: "b" },
+    ],
+    edges: [],
+  });
+}
+
+function strokeIds(doc: ReturnType<typeof parseCanvas>, node = 0): string[] {
+  const layer = doc.nodes[node]["fub:ink"] as { strokes: StoredInkStroke[] } | undefined;
+  return layer ? layer.strokes.map((entry) => entry.id) : [];
+}
+
+describe("canvas ink patches", () => {
+  it("addStrokePatch mette il tratto in fondo, coi campi nell'ordine di scrittura", () => {
+    const doc = parseCanvas(inkSource(["s1", "s2"]));
+    const { ink, anchor, id, ...rest } = stroke("s3");
+    const patch = addStrokePatch(doc, { node: "n1" }, { ink, anchor, ...rest, id, "fub:x": 1 })!;
+    expect(patch).toMatchObject({ kind: "ink", layer: { node: "n1" }, at: 2, before: null });
+    expect(Object.keys(patch.after!)).toEqual(["id", "tool", "brush", "color", "anchor", "ink", "fub:x"]);
+    expect(commitCanvasPatches(doc, inkSource(["s1", "s2"]), [patch])).not.toBeNull();
+    expect(strokeIds(doc)).toEqual(["s1", "s2", "s3"]);
+  });
+
+  it("addStrokePatch fa nascere il livello e non scrive dove non può", () => {
+    const doc = parseCanvas(inkSource([]));
+    expect(addStrokePatch(doc, { node: "n2" }, stroke("s1"))).toMatchObject({ at: 0, before: null });
+    expect(addStrokePatch(doc, "board", stroke("s1", { kind: "free" }))).toMatchObject({ layer: "board", at: 0 });
+    expect(addStrokePatch(doc, { node: "manca" }, stroke("s1"))).toBeNull();
+    const full = parseCanvas(inkSource(["s1"]));
+    expect(addStrokePatch(full, { node: "n1" }, stroke("s1"))).toBeNull();
+    const foreign = parseCanvas(JSON.stringify({
+      nodes: [{ id: "n1", type: "text", x: 0, y: 0, width: 10, height: 10, text: "a", "fub:ink": { v: 2, strokes: [] } }],
+      edges: [],
+    }));
+    expect(addStrokePatch(foreign, { node: "n1" }, stroke("s1"))).toBeNull();
+    expect(eraseStrokePatch(foreign, { node: "n1" }, "s1")).toBeNull();
+  });
+
+  it("eraseStrokePatch toglie il tratto dalla sua posizione e l'annulla lo rimette", () => {
+    const before = inkSource(["s1", "s2", "s3"]);
+    const doc = parseCanvas(before);
+    const patch = eraseStrokePatch(doc, { node: "n1" }, "s2")!;
+    expect(patch).toMatchObject({ kind: "ink", layer: { node: "n1" }, at: 1, after: null, before: { id: "s2" } });
+    expect(eraseStrokePatch(doc, { node: "n1" }, "manca")).toBeNull();
+    expect(eraseStrokePatch(doc, { node: "n2" }, "s2")).toBeNull();
+    const committed = commitCanvasPatches(doc, before, [patch])!;
+    expect(strokeIds(doc)).toEqual(["s1", "s3"]);
+    expect(commitCanvasPatches(doc, committed.source, invertCanvasOperation(committed.operation).patches)?.source).toBe(before);
+    expect(strokeIds(doc)).toEqual(["s1", "s2", "s3"]);
+  });
+
+  it("una passata di gomma è un commit solo, e l'annulla rimette ogni tratto al suo posto", () => {
+    const before = inkSource(["s1", "s2", "s3", "s4"]);
+    const doc = parseCanvas(before);
+    const patches = eraseStrokePatches(doc, { node: "n1" }, ["s4", "s1", "s3"])!;
+    expect(patches.map((patch) => patch.at)).toEqual([3, 0, 1]);
+    expect(eraseStrokePatches(doc, { node: "n1" }, ["s1", "s1"])).toBeNull();
+    expect(eraseStrokePatches(doc, { node: "n1" }, [])).toEqual([]);
+    const committed = commitCanvasPatches(doc, before, patches)!;
+    expect(strokeIds(doc)).toEqual(["s2"]);
+    expect(commitCanvasPatches(doc, committed.source, invertCanvasOperation(committed.operation).patches)?.source).toBe(before);
+    expect(strokeIds(doc)).toEqual(["s1", "s2", "s3", "s4"]);
+  });
+
+  it("togliere tutti i tratti fa sparire la chiave, e l'annulla la rimette", () => {
+    const before = inkSource(["s1", "s2"]);
+    const doc = parseCanvas(before);
+    const committed = commitCanvasPatches(doc, before, eraseStrokePatches(doc, { node: "n1" }, ["s1", "s2"])!)!;
+    expect(Object.prototype.hasOwnProperty.call(doc.nodes[0], "fub:ink")).toBe(false);
+    expect(committed.source).not.toContain("fub:ink");
+    expect(commitCanvasPatches(doc, committed.source, invertCanvasOperation(committed.operation).patches)?.source).toBe(before);
+  });
+
+  it("l'inversa di aggiunte e tolte nello stesso livello le disfa in ordine inverso", () => {
+    const before = inkSource(["s1", "s2", "s3"]);
+    const doc = parseCanvas(before);
+    const erased = eraseStrokePatch(doc, { node: "n1" }, "s1")!;
+    const added = { kind: "ink" as const, layer: { node: "n1" }, at: 0, before: null, after: stroke("s4") };
+    const second = { kind: "ink" as const, layer: { node: "n1" }, at: 2, before: stroke("s3"), after: null };
+    const committed = commitCanvasPatches(doc, before, [erased, added, second])!;
+    expect(strokeIds(doc)).toEqual(["s4", "s2"]);
+    const inverse = inverseCanvasPatches(committed.operation.patches);
+    expect(inverse.map((patch) => patch.kind === "ink" && [patch.at, patch.before?.id ?? null, patch.after?.id ?? null]))
+      .toEqual([[2, null, "s3"], [0, "s4", null], [0, null, "s1"]]);
+    expect(commitCanvasPatches(doc, committed.source, inverse)?.source).toBe(before);
+  });
+
+  it("una toppa su una scheda tolta nel frattempo è stale e non cambia niente", () => {
+    const before = inkSource(["s1"]);
+    const doc = parseCanvas(before);
+    const patch = addStrokePatch(doc, { node: "n2" }, stroke("s9"))!;
+    const removed = commitCanvasPatches(doc, before, [removeNodePatch(doc, "n2")!])!;
+    const model = JSON.stringify(doc);
+    expect(canvasCommitOutcome(doc, removed.source, [patch])).toEqual({ outcome: "rejected", reason: "stale" });
+    expect(applyCanvasPatches(doc, [patch])).toBe(false);
+    expect(JSON.stringify(doc)).toBe(model);
+  });
+
+  it("il livello della radice passa nel modello, accanto agli altri campi della radice", () => {
+    const before = '{"nodes":[],"edges":[],"xRoot":{"a":1}}';
+    const doc = parseCanvas(before);
+    const keep = doc.xRoot;
+    const patch = addStrokePatch(doc, "board", stroke("s1", { kind: "free" }))!;
+    const committed = commitCanvasPatches(doc, before, [patch])!;
+    expect(doc.xRoot).toBe(keep);
+    expect(Object.keys(doc)).toEqual(["nodes", "edges", "xRoot", "fub:ink"]);
+    expect(parseCanvas(committed.source)).toEqual(doc);
+    expect(applyCanvasPatches(doc, inverseCanvasPatches([patch]))).toBe(true);
+    expect(Object.keys(doc)).toEqual(["nodes", "edges", "xRoot"]);
+  });
+
+  it("rifiuta come invalid una toppa ink che il nucleo non saprebbe leggere", () => {
+    const before = inkSource(["s1"]);
+    const doc = parseCanvas(before);
+    const bad = [
+      { kind: "ink", layer: { node: "n1" }, at: 1, before: null, after: { tool: "pen" } },
+      { kind: "ink", layer: { node: "n1" }, at: 1, before: null, after: { ...stroke("s2"), id: "" } },
+      { kind: "ink", layer: "radice", at: 1, before: null, after: stroke("s2") },
+      { kind: "ink", layer: { node: "n1", altro: 1 }, at: 1, before: null, after: stroke("s2") },
+      { kind: "ink", layer: { node: "n1" }, at: -1, before: null, after: stroke("s2") },
+      { kind: "ink", layer: { node: "n1" }, at: 0.5, before: null, after: stroke("s2") },
+      { kind: "sconosciuta" },
+    ] as unknown as CanvasPatch[];
+    for (const patch of bad) {
+      expect(canvasCommitOutcome(doc, before, [patch]), JSON.stringify(patch)).toEqual({ outcome: "rejected", reason: "invalid" });
+    }
   });
 });
