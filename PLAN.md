@@ -269,7 +269,7 @@ Fatto quando: test nei crate copiati (o nel modo che `vendor.mjs` prevede):
 carica, misura > 0, libera, misura 0, si ricarica e funziona;
 `node tools/vendor-craft/vendor.mjs gridcraft check` e `wordcraft check` verdi.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T4 · Il catalogo dei comandi e il test di copertura
 
