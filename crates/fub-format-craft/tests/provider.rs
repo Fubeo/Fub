@@ -178,3 +178,32 @@ fn un_file_illeggibile_dà_il_modello_vuoto() {
         }
     }
 }
+
+#[test]
+fn un_pcraft_dà_il_titolo_e_la_versione_del_manifesto() {
+    use std::io::{Cursor, Write};
+
+    use fub_format_craft::container::read_meta;
+    use fub_format_craft::provider::TITLE_KEY;
+    use zip::write::SimpleFileOptions;
+
+    let manifest = br#"{ "format_version": 3, "title": "Ritratto", "layers": [] }"#;
+    let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    writer
+        .start_file("manifest.json", SimpleFileOptions::default())
+        .unwrap();
+    writer.write_all(manifest).unwrap();
+    let file = writer.finish().unwrap().into_inner();
+
+    let doc = "Foto/ritratto.pcraft";
+    let model = parse(CraftApp::PhotoCraft, file.clone(), doc).unwrap();
+    conformance::the_model_matches_the_given_id(&model, &ParseContext::bare(doc));
+    assert_eq!(
+        model.frontmatter.0.get(TITLE_KEY),
+        Some(&serde_json::Value::String("Ritratto".into()))
+    );
+    // Il modello del documento non ha un posto per la versione: la porta il
+    // contenitore, da cui la legge l'anteprima.
+    let contents = read_meta(CraftApp::PhotoCraft, &file).unwrap();
+    assert_eq!(contents.format_version.as_deref(), Some("3"));
+}

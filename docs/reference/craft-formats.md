@@ -92,6 +92,56 @@ un campo mancante o di un altro tipo dà `null`, un campo in più si ignora.
 `UPDATE_MIRROR=1 cargo test -p fub-format-craft --test ts_preview` riscrive
 la fixture che tiene uguali i due lati.
 
+## Contenitori
+
+`container::read_meta` legge la versione, il titolo, il testo per la ricerca
+e il documento JSON; `container::embedded_preview` l'anteprima che il file
+porta, per la misura `small` o `large`.
+
+| Formato | Contenitore | Metadati | Anteprima |
+|---|---|---|---|
+| `.pcraft` | ZIP (STORE o Deflate) | `manifest.json`: versione da `format_version`, titolo da `title` o `name`; nessun testo | `thumb.png` per `small`, `composite/preview.png` per `large`, ciascuna con l'altra come riserva |
+| `.figcraft` | ZIP | `document.json`: versione da `format_version` o `version`, titolo da `title` o `name`, testo | `thumbnail.png` per le due misure |
+| `.vectorcraft` | JSON, gzip se comincia con `1f 8b`; dalla versione 4 i blob dopo `\n\0VCBLOBS\0` | come FigCraft | `/preview/data` in base64, con o senza il prefisso `data:…;base64,` |
+
+- La versione, numero o stringa, diventa una stringa; titolo e versione si
+  leggono solo da un oggetto in cima, e una stringa vuota non conta.
+- Il testo viene da ogni campo stringa `text`, `content` o `characters`, a
+  ogni profondità, uno per riga, tagliato a 64 KiB su un confine di
+  carattere.
+- Un JSON di VectorCraft finisce al primo separatore dei blob; un separatore
+  all'inizio lascia un JSON vuoto, che non si legge.
+- Le voci si cercano col nome esatto: `../manifest.json` o
+  `x/../thumb.png` non sono le voci del formato, e una cartella neanche.
+- Uno ZIP senza il suo JSON dà contenuti vuoti, non un errore. Un'anteprima
+  che manca, vuota, che non si decodifica o che non è un PNG (un JPEG, un
+  `IHDR` corto) è assente; se la voce che manca o non va ha una riserva, si
+  usa quella.
+- Un `.pcraft` che è una cartella non arriva come byte e non si legge.
+
+Gli errori sono `ContainerError`, senza testi: `TooLarge` (un limite),
+`NotZip` (uno ZIP rotto, troncato, o una voce che non si scompatta come
+dichiara), `NotJson`, `BadGzip` (gzip rotto o troncato) e `Missing`. Il
+provider li trasforma nel modello vuoto.
+
+I limiti dei contenitori si guardano prima di leggere:
+
+- un file oltre 64 MiB non si apre;
+- uno ZIP che dichiara, o ha, più di 10 000 voci non si legge: il conto
+  dichiarato dalla fine della directory centrale (anche ZIP64) si guarda
+  prima di aprirlo;
+- una voce si misura con la misura dichiarata prima di leggerla, e la
+  lettura ha comunque il tetto: 64 MiB per un JSON, 8 MiB per un'anteprima;
+  una voce dichiarata piccola che si scompatta grande si ferma alla misura
+  dichiarata, e il CRC che non torna la rende illeggibile;
+- uno gzip si scompatta al massimo fino a 64 MiB e un byte: oltre è
+  `TooLarge`;
+- una stringa `/preview/data` più lunga di quanto 8 MiB diventano in base64
+  si rifiuta senza decodificarla, e così un'anteprima decodificata oltre
+  8 MiB;
+- `serde_json` rifiuta un JSON annidato oltre 128 livelli, e il testo si
+  raccoglie con una pila, non con la ricorsione.
+
 ## Limiti
 
 | Che cosa | Limite |
