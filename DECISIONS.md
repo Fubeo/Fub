@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K5 · Le risposte dell'utente a D-1…D-13: tutte come le
+  consigliate tranne D-8, (c): senza motore il disegno usa gli strumenti
+  semplici di prima e il chip lo dice. Ne nascono D-14 (il motore come riga
+  sua, che si spegne: consigliata e seguita), Testo anche senza motore
+  (A17), i task T25–T30 (il prototipo prima dei task grafici, l'ultimo con
+  la CI completa e la revisione prima del merge) e il tetto
+  `librerie_doppie` alzato una volta sola, con `usvg` doppio · disegnare
+  deve restare possibile con un componente spento, e un motore di supporto
+  che `fub.draw` richiede non si potrebbe spegnere mai.
 - 2026-11-02 · K5 · Dopo T8: la CI era rossa su `fub-
   app/tests/ipc_permissions.rs` perché `host/ipc.ts` chiamava i sei comandi
   del disegno, che l'app registra solo con T19 (D-4). Le porte ora
