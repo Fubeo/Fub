@@ -59,6 +59,17 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K3 · T8 (branch `piano/k3-ipc-motori`, in attesa di D-2):
+  `Host::warm_engine` e `Host::document_closed` hanno nomi inglesi come il
+  resto di `fub-host`; l'host sa quali documenti ricchi sono aperti dalle
+  revisioni che ha dato alla shell (al più otto per documento) e dimentica la
+  prova a vuoto per revisione (`MotoreDocumenti::dimentica`, pubblica); il
+  client scalda dopo 300 ms di puntatore fermo e solo i tipi con un motore,
+  e avvisa la chiusura da `DocumentSessionCollection.close`. · La revisione è
+  già l'impronta dei byte con cui il motore ricorda la prova: niente disco da
+  rileggere. Limite noto: le letture fuori da una sessione (l'anteprima della
+  ricerca) contano come aperture senza chiusura, e allora la cache resta fino
+  alla chiusura del vault.
 - 2026-11-02 · K3 · `scripts/check.sh --rapido` fa girare i test di
   `fub-abi` anche quando il diff tocca soltanto documenti. · Un riquadro
   doppio nel grafo di `overview.md` è passato verde in locale e rosso in CI:
