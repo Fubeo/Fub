@@ -62,6 +62,8 @@ const E_OP_DUPLICATE: &str = "canvas.apply.e_op_duplicate";
 const E_OP_TOO_MANY_NODES: &str = "canvas.apply.e_op_too_many_nodes";
 const E_OP_TOO_MANY_EDGES: &str = "canvas.apply.e_op_too_many_edges";
 const E_OP_INVALID: &str = "canvas.apply.e_op_invalid";
+const E_OP_UNKNOWN_STROKE: &str = "canvas.apply.e_op_unknown_stroke";
+const E_OP_FOREIGN_LAYER: &str = "canvas.apply.e_op_foreign_layer";
 const E_COMMIT_STALE: &str = "canvas.apply.e_commit_stale";
 const E_COMMIT_INVALID: &str = "canvas.apply.e_commit_invalid";
 const E_COMMIT_REJECTED: &str = "canvas.apply.e_commit_rejected";
@@ -254,6 +256,16 @@ const STRINGS: &[(&str, &str, &str)] = &[
         "Operation {position}: {reason}",
     ),
     (
+        E_OP_UNKNOWN_STROKE,
+        "Operazione {position}: nell'inchiostro non c'è il tratto «{id}».",
+        "Operation {position}: there is no stroke \"{id}\" in the ink.",
+    ),
+    (
+        E_OP_FOREIGN_LAYER,
+        "Operazione {position}: questo inchiostro non è scritto da Fub, e Fub non lo modifica.",
+        "Operation {position}: this ink was not written by Fub, and Fub does not change it.",
+    ),
+    (
         E_COMMIT_STALE,
         "Le operazioni non corrispondono più alla lavagna {doc}: riprova.",
         "The operations no longer match the whiteboard {doc}: retry.",
@@ -404,6 +416,8 @@ mod tests {
             E_OP_TOO_MANY_NODES,
             E_OP_TOO_MANY_EDGES,
             E_OP_INVALID,
+            E_OP_UNKNOWN_STROKE,
+            E_OP_FOREIGN_LAYER,
             E_COMMIT_STALE,
             E_COMMIT_INVALID,
             E_COMMIT_REJECTED,
