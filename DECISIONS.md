@@ -59,6 +59,18 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N3 · T5: `patch_source` ritocca il sorgente con uno
+  scanner suo, più severo di quello TypeScript (rifiuta virgola finale e
+  valori vuoti, si ferma a 256 livelli, `SourceError::TooDeep`); gli archi
+  nuovi si scrivono nell'ordine di R10 (fromNode, fromSide, fromEnd,
+  toNode…), costruito in `edge_value` e non dall'ordine della struct; una
+  radice ricomposta senza `edges` lo riceve in fondo, come in TypeScript; un
+  array che non corrisponde al modello di prima si riscrive per intero. Le
+  schede si confrontano come struct e diventano JSON solo se cambiate: 2000
+  schede, una cambiata, ~0,8 ms in release (macchina carica). Il confronto
+  per valore è uno solo, `patch::same_value`, usato anche dal ritocco.
+  Perché: stessi byte di TypeScript dove TypeScript segue R1–R10; T7 porta
+  il TypeScript all'ordine R10 degli archi e lo specchio di T9 lo controlla.
 - 2026-11-02 · N3 · T6: `PatchError` ha una variante per ogni rifiuto
   (`Stale` con il soggetto, `AtOutOfRange`, `NodeHasEdges`,
   `MissingEndpoint`, `NotAPermutation`), tutte con la posizione della toppa,

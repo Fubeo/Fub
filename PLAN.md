@@ -485,7 +485,7 @@ Fatto quando: `tests/source_edit.rs` porta tutti i casi di
 attesi scritti a mano, e passa; per ognuno il testo di dopo, riletto, dà il
 modello di dopo.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T6 · Le toppe al modello
 
