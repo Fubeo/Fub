@@ -192,6 +192,39 @@ pub struct AffixDict {
     comments: Vec<String>,
 }
 
+impl Rule {
+    fn heap_bytes(&self) -> usize {
+        let cond: usize = self.cond.iter().map(|c| if let Cond::Set { chars, .. } = c { chars.len() * 4 } else { 0 }).sum();
+        self.strip.len() + self.add.len() + self.cond.len() * size_of::<Cond>() + cond + self.cond_text.len()
+    }
+}
+
+impl crate::slot::HeapBytes for AffixDict {
+    fn heap_bytes(&self) -> usize {
+        let rules = |r: &Vec<Rule>| r.capacity() * size_of::<Rule>() + r.iter().map(Rule::heap_bytes).sum::<usize>();
+        let groups = |k: &Box<str>, g: &Vec<SfxGroup>| {
+            k.len() + g.capacity() * size_of::<SfxGroup>() + g.iter().map(|g| g.strip.len() + g.rules.capacity() * 4).sum::<usize>()
+        };
+        self.words.capacity()
+            + self.offs.capacity() * 4
+            + self.flags.capacity() * 2
+            + self.sets.capacity() * 16
+            + self.table.capacity() * 4
+            + self.flag_chars.capacity() * 4
+            + rules(&self.prefixes)
+            + rules(&self.suffixes)
+            + crate::slot::map_bytes(&self.sfx_index, groups)
+            + self.try_chars.capacity()
+            + self.key.capacity()
+            + self.map.capacity() * size_of::<Vec<char>>()
+            + self.map.iter().map(|m| m.capacity() * 4).sum::<usize>()
+            + self.rep.capacity() * size_of::<(String, String)>()
+            + self.rep.iter().map(|(a, b)| a.capacity() + b.capacity()).sum::<usize>()
+            + self.comments.capacity() * size_of::<String>()
+            + self.comments.iter().map(String::capacity).sum::<usize>()
+    }
+}
+
 fn hash_str(s: &str) -> u64 {
     let mut h = FxHasher::default();
     h.write(s.as_bytes());

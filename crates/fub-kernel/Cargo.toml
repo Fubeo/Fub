@@ -27,7 +27,7 @@ tracing = { workspace = true }
 # una `extern "C"` scritta a mano — è la forma che la 0001 ha già rifiutato
 # per il conteggio dei nomi su Windows: un `unsafe` che non si può rileggere.
 [target.'cfg(unix)'.dependencies]
-libc = "0.2"
+libc = { workspace = true }
 
 # INVARIANTE: niente comrak/pulldown, wasmtime, tauri qui dentro. Il core non
 # sa cosa sia il markdown.

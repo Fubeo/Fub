@@ -1,0 +1,8007 @@
+{
+  "$generato": "File generato da crates/fub-format-xlsx/tests/ts_catalogo.rs, non modificare a mano; rigenera con UPDATE_MIRROR=1 cargo test -p fub-format-xlsx --test ts_catalogo",
+  "spazio": "fogli",
+  "comandi": [
+    {
+      "motore": "arrange.align",
+      "id": "fogli.arrange.align",
+      "titolo": "fogli.cmd.arrange.align",
+      "etichetta": "Align",
+      "posto": {
+        "scheda": "object",
+        "gruppo": "arrange"
+      },
+      "campi": [
+        {
+          "nome": "kind",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "chart",
+            "image",
+            "shape"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "ids",
+          "tipo": "json",
+          "facoltativo": false
+        },
+        {
+          "nome": "align",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "left",
+            "center",
+            "right",
+            "top",
+            "middle",
+            "bottom"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "arrange.bringForward",
+      "id": "fogli.arrange.bringForward",
+      "titolo": "fogli.cmd.arrange.bringForward",
+      "etichetta": "Bring Forward",
+      "posto": {
+        "scheda": "object",
+        "gruppo": "arrange"
+      },
+      "campi": [
+        {
+          "nome": "kind",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "chart",
+            "image",
+            "shape"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "id",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "toFront",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "arrange.group",
+      "id": "fogli.arrange.group",
+      "titolo": "fogli.cmd.arrange.group",
+      "etichetta": "Group",
+      "posto": {
+        "scheda": "object",
+        "gruppo": "arrange"
+      },
+      "campi": [
+        {
+          "nome": "kind",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "ids",
+          "tipo": "json",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "arrange.rotate",
+      "id": "fogli.arrange.rotate",
+      "titolo": "fogli.cmd.arrange.rotate",
+      "etichetta": "Rotate",
+      "posto": {
+        "scheda": "object",
+        "gruppo": "arrange"
+      },
+      "campi": [
+        {
+          "nome": "kind",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "shape"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "id",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "arrange.selectionPane",
+      "id": "fogli.arrange.selectionPane",
+      "titolo": "fogli.cmd.arrange.selectionPane",
+      "etichetta": "Selection Pane",
+      "posto": {
+        "scheda": "object",
+        "gruppo": "arrange"
+      },
+      "campi": []
+    },
+    {
+      "motore": "arrange.sendBackward",
+      "id": "fogli.arrange.sendBackward",
+      "titolo": "fogli.cmd.arrange.sendBackward",
+      "etichetta": "Send Backward",
+      "posto": {
+        "scheda": "object",
+        "gruppo": "arrange"
+      },
+      "campi": [
+        {
+          "nome": "kind",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "chart",
+            "image",
+            "shape"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "id",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "toBack",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "cell.get",
+      "id": "fogli.cell.get",
+      "titolo": "fogli.cmd.cell.get",
+      "etichetta": "Get Cell",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "cell.set",
+      "id": "fogli.cell.set",
+      "titolo": "fogli.cmd.cell.set",
+      "etichetta": "Enter Cell",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "input",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "array",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "cell.toggleCheckbox",
+      "id": "fogli.cell.toggleCheckbox",
+      "titolo": "fogli.cmd.cell.toggleCheckbox",
+      "etichetta": "Toggle Checkbox",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "chart.addElement",
+      "id": "fogli.chart.addElement",
+      "titolo": "fogli.cmd.chart.addElement",
+      "etichetta": "Add Chart Element",
+      "posto": {
+        "scheda": "chart",
+        "gruppo": "layouts"
+      },
+      "campi": [
+        {
+          "nome": "chart",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "element",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "title",
+            "legend",
+            "dataLabels",
+            "gridlines",
+            "axisTitles",
+            "smooth",
+            "trendline"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "position",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "bottom",
+            "top",
+            "left",
+            "right"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "series",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "type",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "linear",
+            "exponential",
+            "linearForecast",
+            "movingAverage",
+            "logarithmic",
+            "power",
+            "polynomial"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "order",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "period",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "forward",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "backward",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "displayEquation",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "displayRSquared",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "chart.changeColors",
+      "id": "fogli.chart.changeColors",
+      "titolo": "fogli.cmd.chart.changeColors",
+      "etichetta": "Change Colors",
+      "posto": {
+        "scheda": "chart",
+        "gruppo": "styles"
+      },
+      "campi": [
+        {
+          "nome": "chart",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "palette",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "colorful",
+            "monochrome",
+            "accent1",
+            "accent2",
+            "accent3",
+            "accent4",
+            "accent5",
+            "accent6"
+          ],
+          "aperta": false,
+          "unoFra": 0
+        },
+        {
+          "nome": "colors",
+          "tipo": "json",
+          "facoltativo": false,
+          "unoFra": 0
+        }
+      ]
+    },
+    {
+      "motore": "chart.changeType",
+      "id": "fogli.chart.changeType",
+      "titolo": "fogli.cmd.chart.changeType",
+      "etichetta": "Change Chart Type…",
+      "posto": {
+        "scheda": "chart",
+        "gruppo": "type"
+      },
+      "campi": [
+        {
+          "nome": "chart",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "type",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "subtype",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "chart.delete",
+      "id": "fogli.chart.delete",
+      "titolo": "fogli.cmd.chart.delete",
+      "etichetta": "Delete Chart",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "chart",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "chart.formatSelection",
+      "id": "fogli.chart.formatSelection",
+      "titolo": "fogli.cmd.chart.formatSelection",
+      "etichetta": "Format Selection",
+      "posto": {
+        "scheda": "object",
+        "gruppo": null
+      },
+      "campi": [
+        {
+          "nome": "chart",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "series",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "color",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "chart.move",
+      "id": "fogli.chart.move",
+      "titolo": "fogli.cmd.chart.move",
+      "etichetta": "Move Chart…",
+      "posto": {
+        "scheda": "chart",
+        "gruppo": null
+      },
+      "campi": [
+        {
+          "nome": "chart",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "at",
+          "tipo": "cella",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "chart.quickLayout",
+      "id": "fogli.chart.quickLayout",
+      "titolo": "fogli.cmd.chart.quickLayout",
+      "etichetta": "Quick Layout",
+      "posto": {
+        "scheda": "chart",
+        "gruppo": "layouts"
+      },
+      "campi": [
+        {
+          "nome": "chart",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "layout",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "chart.selectData",
+      "id": "fogli.chart.selectData",
+      "titolo": "fogli.cmd.chart.selectData",
+      "etichetta": "Select Data…",
+      "posto": {
+        "scheda": "chart",
+        "gruppo": "data"
+      },
+      "campi": [
+        {
+          "nome": "chart",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "byRows",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "categories",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "removeSeries",
+          "tipo": "json",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "chart.set",
+      "id": "fogli.chart.set",
+      "titolo": "fogli.cmd.chart.set",
+      "etichetta": "Chart Properties",
+      "posto": {
+        "scheda": "chart",
+        "gruppo": null
+      },
+      "campi": [
+        {
+          "nome": "chart",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "type",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "title",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "legend",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "none",
+            "bottom",
+            "top",
+            "left",
+            "right"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "dataLabels",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "gridlines",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "quartiles",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "exclusive",
+            "inclusive"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "style",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "xTitle",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "yTitle",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "at",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "dx",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "dy",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "chart.shapeFill",
+      "id": "fogli.chart.shapeFill",
+      "titolo": "fogli.cmd.chart.shapeFill",
+      "etichetta": "Shape Fill",
+      "posto": {
+        "scheda": "object",
+        "gruppo": "shape_styles"
+      },
+      "campi": [
+        {
+          "nome": "chart",
+          "tipo": "testo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "kind",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "shape"
+          ],
+          "aperta": false,
+          "unoFra": 0
+        },
+        {
+          "nome": "id",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "series",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "color",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "chart.shapeOutline",
+      "id": "fogli.chart.shapeOutline",
+      "titolo": "fogli.cmd.chart.shapeOutline",
+      "etichetta": "Shape Outline",
+      "posto": {
+        "scheda": "object",
+        "gruppo": "shape_styles"
+      },
+      "campi": [
+        {
+          "nome": "kind",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "shape"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "id",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "color",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "chart.switchRowColumn",
+      "id": "fogli.chart.switchRowColumn",
+      "titolo": "fogli.cmd.chart.switchRowColumn",
+      "etichetta": "Switch Row/Column",
+      "posto": {
+        "scheda": "chart",
+        "gruppo": "data"
+      },
+      "campi": [
+        {
+          "nome": "chart",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.advancedFilter",
+      "id": "fogli.data.advancedFilter",
+      "titolo": "fogli.cmd.data.advancedFilter",
+      "etichetta": "Advanced…",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "sort"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "criteria",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "copyTo",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "unique",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.analysisToolPak",
+      "id": "fogli.data.analysisToolPak",
+      "titolo": "fogli.cmd.data.analysisToolPak",
+      "etichetta": "Data Analysis…",
+      "posto": {
+        "scheda": "data",
+        "gruppo": null
+      },
+      "campi": [
+        {
+          "nome": "tool",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "anovaSingle",
+            "correlation",
+            "covariance",
+            "descriptive",
+            "exponentialSmoothing",
+            "fTest",
+            "histogram",
+            "movingAverage",
+            "rankPercentile",
+            "regression",
+            "tTestPaired",
+            "tTestEqual",
+            "tTestUnequal"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "output",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "newSheet",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "outputTo",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "range",
+            "newSheet"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "overwrite",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "labels",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "groupedBy",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "columns",
+            "rows"
+          ],
+          "aperta": false
+        }
+      ],
+      "aperto": true
+    },
+    {
+      "motore": "data.circleInvalid",
+      "id": "fogli.data.circleInvalid",
+      "titolo": "fogli.cmd.data.circleInvalid",
+      "etichetta": "Circle Invalid Data",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "tools"
+      },
+      "campi": []
+    },
+    {
+      "motore": "data.clearFilter",
+      "id": "fogli.data.clearFilter",
+      "titolo": "fogli.cmd.data.clearFilter",
+      "etichetta": "Clear",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "sort"
+      },
+      "campi": []
+    },
+    {
+      "motore": "data.consolidate",
+      "id": "fogli.data.consolidate",
+      "titolo": "fogli.cmd.data.consolidate",
+      "etichetta": "Consolidate…",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "tools"
+      },
+      "campi": [
+        {
+          "nome": "sources",
+          "tipo": "json",
+          "facoltativo": false
+        },
+        {
+          "nome": "destination",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "function",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "sum",
+            "count",
+            "countNums",
+            "average",
+            "max",
+            "min",
+            "product"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "topRow",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "leftColumn",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.dataTable",
+      "id": "fogli.data.dataTable",
+      "titolo": "fogli.cmd.data.dataTable",
+      "etichetta": "Data Table…",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "forecast"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": false
+        },
+        {
+          "nome": "rowInput",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "columnInput",
+          "tipo": "cella",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.filter",
+      "id": "fogli.data.filter",
+      "titolo": "fogli.cmd.data.filter",
+      "etichetta": "Filter",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "sort"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.filterBy",
+      "id": "fogli.data.filterBy",
+      "titolo": "fogli.cmd.data.filterBy",
+      "etichetta": "Filter Column",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "column",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "values",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "blanks",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "custom",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "top",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "aboveAverage",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "clear",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.flashFill",
+      "id": "fogli.data.flashFill",
+      "titolo": "fogli.cmd.data.flashFill",
+      "etichetta": "Flash Fill",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "tools"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.forecastSheet",
+      "id": "fogli.data.forecastSheet",
+      "titolo": "fogli.cmd.data.forecastSheet",
+      "etichetta": "Forecast Sheet",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "forecast"
+      },
+      "campi": [
+        {
+          "nome": "timeline",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "values",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "end",
+          "tipo": "testo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "periods",
+          "tipo": "numero",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "forecastStart",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "confidenceInterval",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "confidence",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "seasonality",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "fillMissing",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "interpolate",
+            "zeros"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "aggregate",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "average",
+            "count",
+            "counta",
+            "max",
+            "median",
+            "min",
+            "sum"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "statistics",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "chart",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "line",
+            "column"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "data.fromTableRange",
+      "id": "fogli.data.fromTableRange",
+      "titolo": "fogli.cmd.data.fromTableRange",
+      "etichetta": "From Table/Range",
+      "posto": {
+        "scheda": "data",
+        "gruppo": null
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.fromTextCsv",
+      "id": "fogli.data.fromTextCsv",
+      "titolo": "fogli.cmd.data.fromTextCsv",
+      "etichetta": "From Text/CSV",
+      "posto": {
+        "scheda": "data",
+        "gruppo": null
+      },
+      "campi": [
+        {
+          "nome": "path",
+          "tipo": "testo",
+          "facoltativo": false,
+          "unoFra": 0
+        },
+        {
+          "nome": "text",
+          "tipo": "testo",
+          "facoltativo": false,
+          "unoFra": 0
+        },
+        {
+          "nome": "delimiter",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "sheet",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.getData",
+      "id": "fogli.data.getData",
+      "titolo": "fogli.cmd.data.getData",
+      "etichetta": "Get Data",
+      "posto": {
+        "scheda": "data",
+        "gruppo": null
+      },
+      "campi": [
+        {
+          "nome": "path",
+          "tipo": "testo",
+          "facoltativo": false,
+          "unoFra": 0
+        },
+        {
+          "nome": "text",
+          "tipo": "testo",
+          "facoltativo": false,
+          "unoFra": 0
+        }
+      ]
+    },
+    {
+      "motore": "data.goalSeek",
+      "id": "fogli.data.goalSeek",
+      "titolo": "fogli.cmd.data.goalSeek",
+      "etichetta": "Goal Seek…",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "forecast"
+      },
+      "campi": [
+        {
+          "nome": "set",
+          "tipo": "cella",
+          "facoltativo": false
+        },
+        {
+          "nome": "to",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "changing",
+          "tipo": "cella",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "data.group",
+      "id": "fogli.data.group",
+      "titolo": "fogli.cmd.data.group",
+      "etichetta": "Group",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "outline"
+      },
+      "campi": [
+        {
+          "nome": "rows",
+          "tipo": "intervallo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "cols",
+          "tipo": "intervallo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "by",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "rows",
+            "cols"
+          ],
+          "aperta": false,
+          "unoFra": 0
+        },
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.hideDetail",
+      "id": "fogli.data.hideDetail",
+      "titolo": "fogli.cmd.data.hideDetail",
+      "etichetta": "Hide Detail",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "outline"
+      },
+      "campi": [
+        {
+          "nome": "rows",
+          "tipo": "intervallo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "cols",
+          "tipo": "intervallo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "by",
+          "tipo": "testo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "level",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.reapply",
+      "id": "fogli.data.reapply",
+      "titolo": "fogli.cmd.data.reapply",
+      "etichetta": "Reapply",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "sort"
+      },
+      "campi": []
+    },
+    {
+      "motore": "data.refreshAll",
+      "id": "fogli.data.refreshAll",
+      "titolo": "fogli.cmd.data.refreshAll",
+      "etichetta": "Refresh All",
+      "posto": {
+        "scheda": "data",
+        "gruppo": null
+      },
+      "campi": [
+        {
+          "nome": "replace",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.removeDuplicates",
+      "id": "fogli.data.removeDuplicates",
+      "titolo": "fogli.cmd.data.removeDuplicates",
+      "etichetta": "Remove Duplicates",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "tools"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "columns",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "header",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.scenarioAdd",
+      "id": "fogli.data.scenarioAdd",
+      "titolo": "fogli.cmd.data.scenarioAdd",
+      "etichetta": "Add Scenario",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "changing",
+          "tipo": "intervallo",
+          "facoltativo": false
+        },
+        {
+          "nome": "values",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "comment",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "replace",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.scenarioDelete",
+      "id": "fogli.data.scenarioDelete",
+      "titolo": "fogli.cmd.data.scenarioDelete",
+      "etichetta": "Delete Scenario",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "data.scenarioManager",
+      "id": "fogli.data.scenarioManager",
+      "titolo": "fogli.cmd.data.scenarioManager",
+      "etichetta": "Scenario Manager…",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "forecast"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.scenarioShow",
+      "id": "fogli.data.scenarioShow",
+      "titolo": "fogli.cmd.data.scenarioShow",
+      "etichetta": "Show Scenario",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "data.scenarioSummary",
+      "id": "fogli.data.scenarioSummary",
+      "titolo": "fogli.cmd.data.scenarioSummary",
+      "etichetta": "Scenario Summary",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "resultCells",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.showDetail",
+      "id": "fogli.data.showDetail",
+      "titolo": "fogli.cmd.data.showDetail",
+      "etichetta": "Show Detail",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "outline"
+      },
+      "campi": [
+        {
+          "nome": "rows",
+          "tipo": "intervallo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "cols",
+          "tipo": "intervallo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "by",
+          "tipo": "testo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "level",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.showLevels",
+      "id": "fogli.data.showLevels",
+      "titolo": "fogli.cmd.data.showLevels",
+      "etichetta": "Show Outline Levels",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "rows",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "cols",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.solver",
+      "id": "fogli.data.solver",
+      "titolo": "fogli.cmd.data.solver",
+      "etichetta": "Solver…",
+      "posto": {
+        "scheda": "data",
+        "gruppo": null
+      },
+      "campi": [
+        {
+          "nome": "objective",
+          "tipo": "cella",
+          "facoltativo": false
+        },
+        {
+          "nome": "goal",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "max",
+            "min",
+            "value"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "value",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "variables",
+          "tipo": "intervallo",
+          "facoltativo": false
+        },
+        {
+          "nome": "constraints",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "nonNegative",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "method",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "grg",
+            "simplex",
+            "evolutionary"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "populationSize",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "mutationRate",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "randomSeed",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "convergence",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "generationsWithoutImprovement",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "requireBounds",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "keep",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "saveModel",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "maxEvaluations",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "integerOptimality",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "saved",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "reports",
+          "tipo": "json",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.solverReport",
+      "id": "fogli.data.solverReport",
+      "titolo": "fogli.cmd.data.solverReport",
+      "etichetta": "Solver Reports",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "reports",
+          "tipo": "json",
+          "facoltativo": false
+        },
+        {
+          "nome": "values",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "original",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "message",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "model",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.sort",
+      "id": "fogli.data.sort",
+      "titolo": "fogli.cmd.data.sort",
+      "etichetta": "Sort…",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "sort"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "header",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "keys",
+          "tipo": "json",
+          "facoltativo": false
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "rows",
+            "columns"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "matchCase",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.sortAscending",
+      "id": "fogli.data.sortAscending",
+      "titolo": "fogli.cmd.data.sortAscending",
+      "etichetta": "Sort A to Z",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "sort"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "column",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.sortDescending",
+      "id": "fogli.data.sortDescending",
+      "titolo": "fogli.cmd.data.sortDescending",
+      "etichetta": "Sort Z to A",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "sort"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "column",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.subtotal",
+      "id": "fogli.data.subtotal",
+      "titolo": "fogli.cmd.data.subtotal",
+      "etichetta": "Subtotal",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "outline"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "groupBy",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "function",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "sum",
+            "count",
+            "average",
+            "max",
+            "min",
+            "product"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "columns",
+          "tipo": "json",
+          "facoltativo": false
+        },
+        {
+          "nome": "header",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.textToColumns",
+      "id": "fogli.data.textToColumns",
+      "titolo": "fogli.cmd.data.textToColumns",
+      "etichetta": "Text to Columns",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "tools"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "delimiters",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "other",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "fixedWidths",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "treatConsecutive",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "textQualifier",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "destination",
+          "tipo": "cella",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.ungroup",
+      "id": "fogli.data.ungroup",
+      "titolo": "fogli.cmd.data.ungroup",
+      "etichetta": "Ungroup",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "outline"
+      },
+      "campi": [
+        {
+          "nome": "rows",
+          "tipo": "intervallo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "cols",
+          "tipo": "intervallo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "by",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "rows",
+            "cols"
+          ],
+          "aperta": false,
+          "unoFra": 0
+        },
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "data.validate",
+      "id": "fogli.data.validate",
+      "titolo": "fogli.cmd.data.validate",
+      "etichetta": "Check Value Against Validation",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "input",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "data.validation",
+      "id": "fogli.data.validation",
+      "titolo": "fogli.cmd.data.validation",
+      "etichetta": "Data Validation…",
+      "posto": {
+        "scheda": "data",
+        "gruppo": "tools"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "type",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "any",
+            "whole",
+            "decimal",
+            "list",
+            "date",
+            "time",
+            "textLength",
+            "custom"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "operator",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "between",
+            "notBetween",
+            "equal",
+            "notEqual",
+            "greater",
+            "less",
+            "greaterOrEqual",
+            "lessOrEqual"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "formula1",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "formula2",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "ignoreBlank",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "dropdown",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "inputTitle",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "inputMessage",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "errorStyle",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "stop",
+            "warning",
+            "information"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "errorTitle",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "errorMessage",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "clear",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "document.inspect",
+      "id": "fogli.document.inspect",
+      "titolo": "fogli.cmd.document.inspect",
+      "etichetta": "Inspect Workbook",
+      "posto": null,
+      "campi": []
+    },
+    {
+      "motore": "draw.inkToShape",
+      "id": "fogli.draw.inkToShape",
+      "titolo": "fogli.cmd.draw.inkToShape",
+      "etichetta": "Ink to Shape",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "id",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "draw.stroke",
+      "id": "fogli.draw.stroke",
+      "titolo": "fogli.cmd.draw.stroke",
+      "etichetta": "Ink Stroke",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "points",
+          "tipo": "json",
+          "facoltativo": false
+        },
+        {
+          "nome": "color",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "edit.autoFill",
+      "id": "fogli.edit.autoFill",
+      "titolo": "fogli.cmd.edit.autoFill",
+      "etichetta": "AutoFill",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "source",
+          "tipo": "intervallo",
+          "facoltativo": false
+        },
+        {
+          "nome": "target",
+          "tipo": "intervallo",
+          "facoltativo": false
+        },
+        {
+          "nome": "mode",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "series",
+            "alternate",
+            "copy",
+            "formats",
+            "values",
+            "extend"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "edit.clearAll",
+      "id": "fogli.edit.clearAll",
+      "titolo": "fogli.cmd.edit.clearAll",
+      "etichetta": "Clear All",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "editing"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "edit.clearComments",
+      "id": "fogli.edit.clearComments",
+      "titolo": "fogli.cmd.edit.clearComments",
+      "etichetta": "Clear Comments and Notes",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "editing"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "edit.clearContents",
+      "id": "fogli.edit.clearContents",
+      "titolo": "fogli.cmd.edit.clearContents",
+      "etichetta": "Clear Contents",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "editing"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "edit.clearFormats",
+      "id": "fogli.edit.clearFormats",
+      "titolo": "fogli.cmd.edit.clearFormats",
+      "etichetta": "Clear Formats",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "editing"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "edit.clearHyperlinks",
+      "id": "fogli.edit.clearHyperlinks",
+      "titolo": "fogli.cmd.edit.clearHyperlinks",
+      "etichetta": "Clear Hyperlinks",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "editing"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "edit.fillDown",
+      "id": "fogli.edit.fillDown",
+      "titolo": "fogli.cmd.edit.fillDown",
+      "etichetta": "Fill Down",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "editing"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "edit.fillLeft",
+      "id": "fogli.edit.fillLeft",
+      "titolo": "fogli.cmd.edit.fillLeft",
+      "etichetta": "Fill Left",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "editing"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "edit.fillRight",
+      "id": "fogli.edit.fillRight",
+      "titolo": "fogli.cmd.edit.fillRight",
+      "etichetta": "Fill Right",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "editing"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "edit.fillSeries",
+      "id": "fogli.edit.fillSeries",
+      "titolo": "fogli.cmd.edit.fillSeries",
+      "etichetta": "Series…",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "editing"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "direction",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "columns",
+            "rows"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "type",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "linear",
+            "growth",
+            "date",
+            "autofill"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "step",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "stop",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "dateUnit",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "day",
+            "weekday",
+            "month",
+            "year"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "edit.fillUp",
+      "id": "fogli.edit.fillUp",
+      "titolo": "fogli.cmd.edit.fillUp",
+      "etichetta": "Fill Up",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "editing"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "edit.find",
+      "id": "fogli.edit.find",
+      "titolo": "fogli.cmd.edit.find",
+      "etichetta": "Find…",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "editing"
+      },
+      "campi": [
+        {
+          "nome": "what",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "matchCase",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "wholeCell",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "lookIn",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "formulas",
+            "values"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "byColumns",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "all",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "within",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "sheet",
+            "workbook"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "edit.flashFill",
+      "id": "fogli.edit.flashFill",
+      "titolo": "fogli.cmd.edit.flashFill",
+      "etichetta": "Flash Fill",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "editing"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "edit.goTo",
+      "id": "fogli.edit.goTo",
+      "titolo": "fogli.cmd.edit.goTo",
+      "etichetta": "Go To…",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "editing"
+      },
+      "campi": [
+        {
+          "nome": "reference",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "edit.goToSpecial",
+      "id": "fogli.edit.goToSpecial",
+      "titolo": "fogli.cmd.edit.goToSpecial",
+      "etichetta": "Go To Special…",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "editing"
+      },
+      "campi": [
+        {
+          "nome": "kind",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "blanks",
+            "constants",
+            "formulas",
+            "comments",
+            "lastCell",
+            "currentRegion",
+            "visible",
+            "conditionalFormats",
+            "dataValidation",
+            "errors",
+            "numbers",
+            "text"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "edit.redo",
+      "id": "fogli.edit.redo",
+      "titolo": "fogli.cmd.edit.redo",
+      "etichetta": "Redo",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "steps",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "edit.replace",
+      "id": "fogli.edit.replace",
+      "titolo": "fogli.cmd.edit.replace",
+      "etichetta": "Replace…",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "editing"
+      },
+      "campi": [
+        {
+          "nome": "what",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "with",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "matchCase",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "wholeCell",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "all",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "within",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "sheet",
+            "workbook"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "edit.selectAll",
+      "id": "fogli.edit.selectAll",
+      "titolo": "fogli.cmd.edit.selectAll",
+      "etichetta": "Select All",
+      "posto": null,
+      "campi": []
+    },
+    {
+      "motore": "edit.undo",
+      "id": "fogli.edit.undo",
+      "titolo": "fogli.cmd.edit.undo",
+      "etichetta": "Undo",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "steps",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "file.exportPdf",
+      "id": "fogli.file.exportPdf",
+      "titolo": "fogli.cmd.file.exportPdf",
+      "etichetta": "Export as PDF",
+      "posto": {
+        "scheda": "page",
+        "gruppo": "print"
+      },
+      "campi": [
+        {
+          "nome": "path",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "sheets",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "active",
+            "all"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "fitToPage",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "file.printPreview",
+      "id": "fogli.file.printPreview",
+      "titolo": "fogli.cmd.file.printPreview",
+      "etichetta": "Print Preview",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "page",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "sheets",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "active",
+            "all"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "fitToPage",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "file.properties",
+      "id": "fogli.file.properties",
+      "titolo": "fogli.cmd.file.properties",
+      "etichetta": "Properties",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "title",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "subject",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "author",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "company",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "keywords",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "description",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "formulas.autoSum",
+      "id": "fogli.formulas.autoSum",
+      "titolo": "fogli.cmd.formulas.autoSum",
+      "etichetta": "AutoSum",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "library"
+      },
+      "campi": [
+        {
+          "nome": "function",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "SUM",
+            "AVERAGE",
+            "COUNT",
+            "MAX",
+            "MIN"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "formulas.calculateNow",
+      "id": "fogli.formulas.calculateNow",
+      "titolo": "fogli.cmd.formulas.calculateNow",
+      "etichetta": "Calculate Now",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "calculation"
+      },
+      "campi": []
+    },
+    {
+      "motore": "formulas.calculateSheet",
+      "id": "fogli.formulas.calculateSheet",
+      "titolo": "fogli.cmd.formulas.calculateSheet",
+      "etichetta": "Calculate Sheet",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "calculation"
+      },
+      "campi": []
+    },
+    {
+      "motore": "formulas.calculationOptions",
+      "id": "fogli.formulas.calculationOptions",
+      "titolo": "fogli.cmd.formulas.calculationOptions",
+      "etichetta": "Calculation Options",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "calculation"
+      },
+      "campi": [
+        {
+          "nome": "mode",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "automatic",
+            "automaticExceptTables",
+            "manual"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "iterative",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "maxIterations",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "maxChange",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "formulas.convertToNumber",
+      "id": "fogli.formulas.convertToNumber",
+      "titolo": "fogli.cmd.formulas.convertToNumber",
+      "etichetta": "Convert to Number",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "formulas.createFromSelection",
+      "id": "fogli.formulas.createFromSelection",
+      "titolo": "fogli.cmd.formulas.createFromSelection",
+      "etichetta": "Create from Selection",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "names"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "top",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "left",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "bottom",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "right",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "replace",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "formulas.dateTime",
+      "id": "fogli.formulas.dateTime",
+      "titolo": "fogli.cmd.formulas.dateTime",
+      "etichetta": "Date & Time",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "library"
+      },
+      "campi": []
+    },
+    {
+      "motore": "formulas.defineName",
+      "id": "fogli.formulas.defineName",
+      "titolo": "fogli.cmd.formulas.defineName",
+      "etichetta": "Define Name…",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "names"
+      },
+      "campi": [
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "refersTo",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "scope",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "comment",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "oldName",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "oldScope",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "formulas.deleteName",
+      "id": "fogli.formulas.deleteName",
+      "titolo": "fogli.cmd.formulas.deleteName",
+      "etichetta": "Delete Name",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "scope",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "formulas.errorChecking",
+      "id": "fogli.formulas.errorChecking",
+      "titolo": "fogli.cmd.formulas.errorChecking",
+      "etichetta": "Error Checking",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "auditing"
+      },
+      "campi": []
+    },
+    {
+      "motore": "formulas.evaluate",
+      "id": "fogli.formulas.evaluate",
+      "titolo": "fogli.cmd.formulas.evaluate",
+      "etichetta": "Evaluate",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "formula",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "formulas.evaluateFormula",
+      "id": "fogli.formulas.evaluateFormula",
+      "titolo": "fogli.cmd.formulas.evaluateFormula",
+      "etichetta": "Evaluate Formula",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "auditing"
+      },
+      "campi": [
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "formula",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "formulas.financial",
+      "id": "fogli.formulas.financial",
+      "titolo": "fogli.cmd.formulas.financial",
+      "etichetta": "Financial",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "library"
+      },
+      "campi": []
+    },
+    {
+      "motore": "formulas.functions",
+      "id": "fogli.formulas.functions",
+      "titolo": "fogli.cmd.formulas.functions",
+      "etichetta": "List Functions",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "category",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "search",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "formulas.insertFunction",
+      "id": "fogli.formulas.insertFunction",
+      "titolo": "fogli.cmd.formulas.insertFunction",
+      "etichetta": "Insert Function…",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "library"
+      },
+      "campi": [
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "formulas.logical",
+      "id": "fogli.formulas.logical",
+      "titolo": "fogli.cmd.formulas.logical",
+      "etichetta": "Logical",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "library"
+      },
+      "campi": []
+    },
+    {
+      "motore": "formulas.lookupReference",
+      "id": "fogli.formulas.lookupReference",
+      "titolo": "fogli.cmd.formulas.lookupReference",
+      "etichetta": "Lookup & Reference",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "library"
+      },
+      "campi": []
+    },
+    {
+      "motore": "formulas.mathTrig",
+      "id": "fogli.formulas.mathTrig",
+      "titolo": "fogli.cmd.formulas.mathTrig",
+      "etichetta": "Math & Trig",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "library"
+      },
+      "campi": []
+    },
+    {
+      "motore": "formulas.moreFunctions",
+      "id": "fogli.formulas.moreFunctions",
+      "titolo": "fogli.cmd.formulas.moreFunctions",
+      "etichetta": "More Functions",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "library"
+      },
+      "campi": [
+        {
+          "nome": "category",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "Statistical",
+            "Engineering",
+            "Information",
+            "Database",
+            "Compatibility",
+            "Web",
+            "Cube"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "formulas.nameManager",
+      "id": "fogli.formulas.nameManager",
+      "titolo": "fogli.cmd.formulas.nameManager",
+      "etichetta": "Name Manager",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "names"
+      },
+      "campi": []
+    },
+    {
+      "motore": "formulas.recentlyUsed",
+      "id": "fogli.formulas.recentlyUsed",
+      "titolo": "fogli.cmd.formulas.recentlyUsed",
+      "etichetta": "Recently Used",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "library"
+      },
+      "campi": []
+    },
+    {
+      "motore": "formulas.removeArrows",
+      "id": "fogli.formulas.removeArrows",
+      "titolo": "fogli.cmd.formulas.removeArrows",
+      "etichetta": "Remove Arrows",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "auditing"
+      },
+      "campi": []
+    },
+    {
+      "motore": "formulas.selectDependents",
+      "id": "fogli.formulas.selectDependents",
+      "titolo": "fogli.cmd.formulas.selectDependents",
+      "etichetta": "Select Dependents",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "auditing"
+      },
+      "campi": [
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "all",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "formulas.selectPrecedents",
+      "id": "fogli.formulas.selectPrecedents",
+      "titolo": "fogli.cmd.formulas.selectPrecedents",
+      "etichetta": "Select Precedents",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "auditing"
+      },
+      "campi": [
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "all",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "formulas.showFormulas",
+      "id": "fogli.formulas.showFormulas",
+      "titolo": "fogli.cmd.formulas.showFormulas",
+      "etichetta": "Show Formulas",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "auditing"
+      },
+      "campi": [
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "formulas.text",
+      "id": "fogli.formulas.text",
+      "titolo": "fogli.cmd.formulas.text",
+      "etichetta": "Text",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "library"
+      },
+      "campi": []
+    },
+    {
+      "motore": "formulas.traceDependents",
+      "id": "fogli.formulas.traceDependents",
+      "titolo": "fogli.cmd.formulas.traceDependents",
+      "etichetta": "Trace Dependents",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "auditing"
+      },
+      "campi": [
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "formulas.tracePrecedents",
+      "id": "fogli.formulas.tracePrecedents",
+      "titolo": "fogli.cmd.formulas.tracePrecedents",
+      "etichetta": "Trace Precedents",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "auditing"
+      },
+      "campi": [
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "formulas.useInFormula",
+      "id": "fogli.formulas.useInFormula",
+      "titolo": "fogli.cmd.formulas.useInFormula",
+      "etichetta": "Use in Formula",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "names"
+      },
+      "campi": [
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "formulas.watchWindow",
+      "id": "fogli.formulas.watchWindow",
+      "titolo": "fogli.cmd.formulas.watchWindow",
+      "etichetta": "Watch Window",
+      "posto": {
+        "scheda": "formulas",
+        "gruppo": "auditing"
+      },
+      "campi": [
+        {
+          "nome": "add",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "remove",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.accounting",
+      "id": "fogli.home.accounting",
+      "titolo": "fogli.cmd.home.accounting",
+      "etichetta": "Accounting Number Format",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "number"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "symbol",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.alignBottom",
+      "id": "fogli.home.alignBottom",
+      "titolo": "fogli.cmd.home.alignBottom",
+      "etichetta": "Bottom Align",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "alignment"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.alignCenter",
+      "id": "fogli.home.alignCenter",
+      "titolo": "fogli.cmd.home.alignCenter",
+      "etichetta": "Center",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "alignment"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.alignLeft",
+      "id": "fogli.home.alignLeft",
+      "titolo": "fogli.cmd.home.alignLeft",
+      "etichetta": "Align Left",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "alignment"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.alignMiddle",
+      "id": "fogli.home.alignMiddle",
+      "titolo": "fogli.cmd.home.alignMiddle",
+      "etichetta": "Middle Align",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "alignment"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.alignRight",
+      "id": "fogli.home.alignRight",
+      "titolo": "fogli.cmd.home.alignRight",
+      "etichetta": "Align Right",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "alignment"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.alignTop",
+      "id": "fogli.home.alignTop",
+      "titolo": "fogli.cmd.home.alignTop",
+      "etichetta": "Top Align",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "alignment"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.autofitColumnWidth",
+      "id": "fogli.home.autofitColumnWidth",
+      "titolo": "fogli.cmd.home.autofitColumnWidth",
+      "etichetta": "AutoFit Column Width",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "cols",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.autofitRowHeight",
+      "id": "fogli.home.autofitRowHeight",
+      "titolo": "fogli.cmd.home.autofitRowHeight",
+      "etichetta": "AutoFit Row Height",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "rows",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.bold",
+      "id": "fogli.home.bold",
+      "titolo": "fogli.cmd.home.bold",
+      "etichetta": "Bold",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "font"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.borders",
+      "id": "fogli.home.borders",
+      "titolo": "fogli.cmd.home.borders",
+      "etichetta": "Borders",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "font"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "preset",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "bottom",
+            "top",
+            "left",
+            "right",
+            "none",
+            "all",
+            "outside",
+            "thickOutside",
+            "thickBottom",
+            "doubleBottom",
+            "topBottom",
+            "topThickBottom",
+            "topDoubleBottom",
+            "insideHorizontal",
+            "insideVertical",
+            "inside",
+            "diagonalDown",
+            "diagonalUp"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "style",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "thin",
+            "medium",
+            "thick",
+            "dashed",
+            "dotted",
+            "double",
+            "hair"
+          ],
+          "aperta": true
+        },
+        {
+          "nome": "color",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.cellStyle",
+      "id": "fogli.home.cellStyle",
+      "titolo": "fogli.cmd.home.cellStyle",
+      "etichetta": "Cell Styles",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "styles"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "name",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "Good",
+            "Bad",
+            "Neutral",
+            "Heading 1",
+            "Title",
+            "Total",
+            "Accent1",
+            "Normal"
+          ],
+          "aperta": true
+        }
+      ]
+    },
+    {
+      "motore": "home.clearRules",
+      "id": "fogli.home.clearRules",
+      "titolo": "fogli.cmd.home.clearRules",
+      "etichetta": "Clear Rules",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "styles"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "sheet",
+          "tipo": "sino",
+          "facoltativo": false,
+          "unoFra": 0
+        }
+      ]
+    },
+    {
+      "motore": "home.columnWidth",
+      "id": "fogli.home.columnWidth",
+      "titolo": "fogli.cmd.home.columnWidth",
+      "etichetta": "Column Width…",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "cols",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": false,
+          "unoFra": 0
+        },
+        {
+          "nome": "chars",
+          "tipo": "numero",
+          "facoltativo": false,
+          "unoFra": 0
+        }
+      ]
+    },
+    {
+      "motore": "home.comma",
+      "id": "fogli.home.comma",
+      "titolo": "fogli.cmd.home.comma",
+      "etichetta": "Comma Style",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "number"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.conditionalFormat",
+      "id": "fogli.home.conditionalFormat",
+      "titolo": "fogli.cmd.home.conditionalFormat",
+      "etichetta": "Conditional Formatting",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "styles"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "rule",
+          "tipo": "json",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "home.decreaseDecimal",
+      "id": "fogli.home.decreaseDecimal",
+      "titolo": "fogli.cmd.home.decreaseDecimal",
+      "etichetta": "Decrease Decimal",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "number"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.decreaseFontSize",
+      "id": "fogli.home.decreaseFontSize",
+      "titolo": "fogli.cmd.home.decreaseFontSize",
+      "etichetta": "Decrease Font Size",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "font"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.decreaseIndent",
+      "id": "fogli.home.decreaseIndent",
+      "titolo": "fogli.cmd.home.decreaseIndent",
+      "etichetta": "Decrease Indent",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "alignment"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.defaultWidth",
+      "id": "fogli.home.defaultWidth",
+      "titolo": "fogli.cmd.home.defaultWidth",
+      "etichetta": "Default Width…",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "home.deleteCells",
+      "id": "fogli.home.deleteCells",
+      "titolo": "fogli.cmd.home.deleteCells",
+      "etichetta": "Delete Cells…",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "shift",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "left",
+            "up",
+            "row",
+            "column"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "home.deleteColumns",
+      "id": "fogli.home.deleteColumns",
+      "titolo": "fogli.cmd.home.deleteColumns",
+      "etichetta": "Delete Sheet Columns",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "cols",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.deleteRows",
+      "id": "fogli.home.deleteRows",
+      "titolo": "fogli.cmd.home.deleteRows",
+      "etichetta": "Delete Sheet Rows",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "rows",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.deleteSheet",
+      "id": "fogli.home.deleteSheet",
+      "titolo": "fogli.cmd.home.deleteSheet",
+      "etichetta": "Delete Sheet",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.doubleUnderline",
+      "id": "fogli.home.doubleUnderline",
+      "titolo": "fogli.cmd.home.doubleUnderline",
+      "etichetta": "Double Underline",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "font"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.drawBorder",
+      "id": "fogli.home.drawBorder",
+      "titolo": "fogli.cmd.home.drawBorder",
+      "etichetta": "Draw Border",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "font"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": false
+        },
+        {
+          "nome": "edge",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "top",
+            "bottom",
+            "left",
+            "right",
+            "grid"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "style",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "color",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.fillColor",
+      "id": "fogli.home.fillColor",
+      "titolo": "fogli.cmd.home.fillColor",
+      "etichetta": "Fill Color",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "font"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "color",
+          "tipo": "json",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "home.fontColor",
+      "id": "fogli.home.fontColor",
+      "titolo": "fogli.cmd.home.fontColor",
+      "etichetta": "Font Color",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "font"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "color",
+          "tipo": "json",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "home.fontName",
+      "id": "fogli.home.fontName",
+      "titolo": "fogli.cmd.home.fontName",
+      "etichetta": "Font",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "font"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "home.fontSize",
+      "id": "fogli.home.fontSize",
+      "titolo": "fogli.cmd.home.fontSize",
+      "etichetta": "Font Size",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "font"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "size",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "home.formatAsTable",
+      "id": "fogli.home.formatAsTable",
+      "titolo": "fogli.cmd.home.formatAsTable",
+      "etichetta": "Format as Table",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "styles"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "style",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "header",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.formatCells",
+      "id": "fogli.home.formatCells",
+      "titolo": "fogli.cmd.home.formatCells",
+      "etichetta": "Format Cells…",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "style",
+          "tipo": "json",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "home.hideColumns",
+      "id": "fogli.home.hideColumns",
+      "titolo": "fogli.cmd.home.hideColumns",
+      "etichetta": "Hide Columns",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "cols",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.hideRows",
+      "id": "fogli.home.hideRows",
+      "titolo": "fogli.cmd.home.hideRows",
+      "etichetta": "Hide Rows",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "rows",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.increaseDecimal",
+      "id": "fogli.home.increaseDecimal",
+      "titolo": "fogli.cmd.home.increaseDecimal",
+      "etichetta": "Increase Decimal",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "number"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.increaseFontSize",
+      "id": "fogli.home.increaseFontSize",
+      "titolo": "fogli.cmd.home.increaseFontSize",
+      "etichetta": "Increase Font Size",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "font"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.increaseIndent",
+      "id": "fogli.home.increaseIndent",
+      "titolo": "fogli.cmd.home.increaseIndent",
+      "etichetta": "Increase Indent",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "alignment"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.insertCells",
+      "id": "fogli.home.insertCells",
+      "titolo": "fogli.cmd.home.insertCells",
+      "etichetta": "Insert Cells…",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "shift",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "right",
+            "down",
+            "row",
+            "column"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "home.insertColumns",
+      "id": "fogli.home.insertColumns",
+      "titolo": "fogli.cmd.home.insertColumns",
+      "etichetta": "Insert Sheet Columns",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "cols",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.insertCopiedCells",
+      "id": "fogli.home.insertCopiedCells",
+      "titolo": "fogli.cmd.home.insertCopiedCells",
+      "etichetta": "Insert Copied Cells",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "at",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "shift",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "down",
+            "right"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "home.insertRows",
+      "id": "fogli.home.insertRows",
+      "titolo": "fogli.cmd.home.insertRows",
+      "etichetta": "Insert Sheet Rows",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "rows",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "count",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.insertSheet",
+      "id": "fogli.home.insertSheet",
+      "titolo": "fogli.cmd.home.insertSheet",
+      "etichetta": "Insert Sheet",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "before",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.italic",
+      "id": "fogli.home.italic",
+      "titolo": "fogli.cmd.home.italic",
+      "etichetta": "Italic",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "font"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.justify",
+      "id": "fogli.home.justify",
+      "titolo": "fogli.cmd.home.justify",
+      "etichetta": "Justify",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "alignment"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.lockCell",
+      "id": "fogli.home.lockCell",
+      "titolo": "fogli.cmd.home.lockCell",
+      "etichetta": "Lock Cell",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.manageRules",
+      "id": "fogli.home.manageRules",
+      "titolo": "fogli.cmd.home.manageRules",
+      "etichetta": "Manage Rules…",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "styles"
+      },
+      "campi": [
+        {
+          "nome": "delete",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "moveUp",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "moveDown",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.mergeAcross",
+      "id": "fogli.home.mergeAcross",
+      "titolo": "fogli.cmd.home.mergeAcross",
+      "etichetta": "Merge Across",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "alignment"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.mergeCells",
+      "id": "fogli.home.mergeCells",
+      "titolo": "fogli.cmd.home.mergeCells",
+      "etichetta": "Merge Cells",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "alignment"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.mergeCenter",
+      "id": "fogli.home.mergeCenter",
+      "titolo": "fogli.cmd.home.mergeCenter",
+      "etichetta": "Merge & Center",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "alignment"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.newCellStyle",
+      "id": "fogli.home.newCellStyle",
+      "titolo": "fogli.cmd.home.newCellStyle",
+      "etichetta": "New Cell Style…",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "styles"
+      },
+      "campi": [
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "fromCell",
+          "tipo": "cella",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.numberFormat",
+      "id": "fogli.home.numberFormat",
+      "titolo": "fogli.cmd.home.numberFormat",
+      "etichetta": "Number Format",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "number"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "format",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "General",
+            "Number",
+            "Currency",
+            "Accounting",
+            "Short Date",
+            "Long Date",
+            "Time",
+            "Percentage",
+            "Fraction",
+            "Scientific",
+            "Text"
+          ],
+          "aperta": false,
+          "unoFra": 0
+        },
+        {
+          "nome": "code",
+          "tipo": "testo",
+          "facoltativo": false,
+          "unoFra": 0
+        }
+      ]
+    },
+    {
+      "motore": "home.orientation",
+      "id": "fogli.home.orientation",
+      "titolo": "fogli.cmd.home.orientation",
+      "etichetta": "Orientation",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "alignment"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "angle",
+          "tipo": "json",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "home.percent",
+      "id": "fogli.home.percent",
+      "titolo": "fogli.cmd.home.percent",
+      "etichetta": "Percent Style",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "number"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.rowHeight",
+      "id": "fogli.home.rowHeight",
+      "titolo": "fogli.cmd.home.rowHeight",
+      "etichetta": "Row Height…",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "rows",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": false,
+          "unoFra": 0
+        },
+        {
+          "nome": "points",
+          "tipo": "numero",
+          "facoltativo": false,
+          "unoFra": 0
+        }
+      ]
+    },
+    {
+      "motore": "home.shrinkToFit",
+      "id": "fogli.home.shrinkToFit",
+      "titolo": "fogli.cmd.home.shrinkToFit",
+      "etichetta": "Shrink to Fit",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.strikethrough",
+      "id": "fogli.home.strikethrough",
+      "titolo": "fogli.cmd.home.strikethrough",
+      "etichetta": "Strikethrough",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "font"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.subscript",
+      "id": "fogli.home.subscript",
+      "titolo": "fogli.cmd.home.subscript",
+      "etichetta": "Subscript",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "font"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.superscript",
+      "id": "fogli.home.superscript",
+      "titolo": "fogli.cmd.home.superscript",
+      "etichetta": "Superscript",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "font"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.underline",
+      "id": "fogli.home.underline",
+      "titolo": "fogli.cmd.home.underline",
+      "etichetta": "Underline",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "font"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "style",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "single",
+            "double",
+            "singleAccounting",
+            "doubleAccounting"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "home.unhideColumns",
+      "id": "fogli.home.unhideColumns",
+      "titolo": "fogli.cmd.home.unhideColumns",
+      "etichetta": "Unhide Columns",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "cols",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.unhideRows",
+      "id": "fogli.home.unhideRows",
+      "titolo": "fogli.cmd.home.unhideRows",
+      "etichetta": "Unhide Rows",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "rows",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.unmergeCells",
+      "id": "fogli.home.unmergeCells",
+      "titolo": "fogli.cmd.home.unmergeCells",
+      "etichetta": "Unmerge Cells",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "alignment"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "home.wrapText",
+      "id": "fogli.home.wrapText",
+      "titolo": "fogli.cmd.home.wrapText",
+      "etichetta": "Wrap Text",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "alignment"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "insert.chart",
+      "id": "fogli.insert.chart",
+      "titolo": "fogli.cmd.insert.chart",
+      "etichetta": "Insert Chart",
+      "posto": {
+        "scheda": "insert",
+        "gruppo": "charts"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "type",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "column",
+            "bar",
+            "line",
+            "pie",
+            "doughnut",
+            "area",
+            "scatter",
+            "bubble",
+            "radar",
+            "combo",
+            "histogram",
+            "waterfall",
+            "funnel",
+            "treemap",
+            "sunburst",
+            "boxWhisker",
+            "stock"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "subtype",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "clustered",
+            "stacked",
+            "stacked100",
+            "markers"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "title",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "at",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "insert.chartRecommendations",
+      "id": "fogli.insert.chartRecommendations",
+      "titolo": "fogli.cmd.insert.chartRecommendations",
+      "etichetta": "Chart Recommendations",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "insert.checkbox",
+      "id": "fogli.insert.checkbox",
+      "titolo": "fogli.cmd.insert.checkbox",
+      "etichetta": "Checkbox",
+      "posto": {
+        "scheda": "insert",
+        "gruppo": "controls"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "insert.icons",
+      "id": "fogli.insert.icons",
+      "titolo": "fogli.cmd.insert.icons",
+      "etichetta": "Icons",
+      "posto": {
+        "scheda": "insert",
+        "gruppo": "illustrations"
+      },
+      "campi": [
+        {
+          "nome": "name",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "chart",
+            "table",
+            "sum",
+            "filter",
+            "lock",
+            "comment",
+            "picture",
+            "book",
+            "folder",
+            "search",
+            "calc",
+            "check"
+          ],
+          "aperta": true
+        },
+        {
+          "nome": "at",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "size",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "color",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "insert.link",
+      "id": "fogli.insert.link",
+      "titolo": "fogli.cmd.insert.link",
+      "etichetta": "Link",
+      "posto": {
+        "scheda": "insert",
+        "gruppo": "links"
+      },
+      "campi": [
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "target",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "text",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "tooltip",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "remove",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "insert.picture",
+      "id": "fogli.insert.picture",
+      "titolo": "fogli.cmd.insert.picture",
+      "etichetta": "Picture",
+      "posto": {
+        "scheda": "insert",
+        "gruppo": "illustrations"
+      },
+      "campi": [
+        {
+          "nome": "path",
+          "tipo": "testo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "base64",
+          "tipo": "testo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "mime",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "at",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "alt",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "mode",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "moveOnly",
+            "moveAndSize",
+            "absolute"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "placement",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "cell",
+            "overCells"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "insert.pivotChart",
+      "id": "fogli.insert.pivotChart",
+      "titolo": "fogli.cmd.insert.pivotChart",
+      "etichetta": "PivotChart",
+      "posto": {
+        "scheda": "insert",
+        "gruppo": "charts"
+      },
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "type",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "column",
+            "bar",
+            "line",
+            "pie",
+            "area"
+          ],
+          "aperta": true
+        },
+        {
+          "nome": "subtype",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "title",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "at",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "insert.pivotTable",
+      "id": "fogli.insert.pivotTable",
+      "titolo": "fogli.cmd.insert.pivotTable",
+      "etichetta": "PivotTable",
+      "posto": {
+        "scheda": "insert",
+        "gruppo": "tables"
+      },
+      "campi": [
+        {
+          "nome": "source",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "destination",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "rows",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "columns",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "values",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "filters",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "replace",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "insert.recommendedCharts",
+      "id": "fogli.insert.recommendedCharts",
+      "titolo": "fogli.cmd.insert.recommendedCharts",
+      "etichetta": "Recommended Charts",
+      "posto": {
+        "scheda": "insert",
+        "gruppo": "charts"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "type",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "subtype",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "insert.recommendedPivotTables",
+      "id": "fogli.insert.recommendedPivotTables",
+      "titolo": "fogli.cmd.insert.recommendedPivotTables",
+      "etichetta": "Recommended PivotTables",
+      "posto": {
+        "scheda": "insert",
+        "gruppo": "tables"
+      },
+      "campi": [
+        {
+          "nome": "source",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "apply",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "destination",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "insert.shape",
+      "id": "fogli.insert.shape",
+      "titolo": "fogli.cmd.insert.shape",
+      "etichetta": "Shapes",
+      "posto": {
+        "scheda": "insert",
+        "gruppo": "illustrations"
+      },
+      "campi": [
+        {
+          "nome": "kind",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "rectangle",
+            "roundedRectangle",
+            "ellipse",
+            "triangle",
+            "line",
+            "arrow",
+            "textBox"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "at",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "text",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "fill",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "line",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "insert.slicer",
+      "id": "fogli.insert.slicer",
+      "titolo": "fogli.cmd.insert.slicer",
+      "etichetta": "Slicer",
+      "posto": {
+        "scheda": "insert",
+        "gruppo": null
+      },
+      "campi": [
+        {
+          "nome": "table",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "column",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "columns",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "at",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "insert.sparkline",
+      "id": "fogli.insert.sparkline",
+      "titolo": "fogli.cmd.insert.sparkline",
+      "etichetta": "Sparklines",
+      "posto": {
+        "scheda": "insert",
+        "gruppo": null
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": false
+        },
+        {
+          "nome": "location",
+          "tipo": "cella",
+          "facoltativo": false
+        },
+        {
+          "nome": "type",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "line",
+            "column",
+            "winLoss"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "markers",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "insert.symbol",
+      "id": "fogli.insert.symbol",
+      "titolo": "fogli.cmd.insert.symbol",
+      "etichetta": "Symbol",
+      "posto": {
+        "scheda": "insert",
+        "gruppo": "symbols"
+      },
+      "campi": [
+        {
+          "nome": "char",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "insert.table",
+      "id": "fogli.insert.table",
+      "titolo": "fogli.cmd.insert.table",
+      "etichetta": "Table",
+      "posto": {
+        "scheda": "insert",
+        "gruppo": "tables"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "header",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "style",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "insert.textBox",
+      "id": "fogli.insert.textBox",
+      "titolo": "fogli.cmd.insert.textBox",
+      "etichetta": "Text Box",
+      "posto": {
+        "scheda": "insert",
+        "gruppo": "text"
+      },
+      "campi": [
+        {
+          "nome": "at",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "text",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "object.delete",
+      "id": "fogli.object.delete",
+      "titolo": "fogli.cmd.object.delete",
+      "etichetta": "Delete Object",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "kind",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "chart",
+            "image",
+            "shape"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "id",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "object.move",
+      "id": "fogli.object.move",
+      "titolo": "fogli.cmd.object.move",
+      "etichetta": "Move Object",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "kind",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "chart",
+            "image",
+            "shape"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "id",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "at",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "dx",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "dy",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "object.setAnchorMode",
+      "id": "fogli.object.setAnchorMode",
+      "titolo": "fogli.cmd.object.setAnchorMode",
+      "etichetta": "Object Properties",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "kind",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "chart",
+            "image",
+            "shape"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "id",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "mode",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "moveAndSize",
+            "moveOnly",
+            "absolute"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "pageLayout.background",
+      "id": "fogli.pageLayout.background",
+      "titolo": "fogli.cmd.pageLayout.background",
+      "etichetta": "Background",
+      "posto": {
+        "scheda": "page",
+        "gruppo": "setup"
+      },
+      "campi": [
+        {
+          "nome": "path",
+          "tipo": "testo",
+          "facoltativo": true,
+          "unoFra": 0
+        },
+        {
+          "nome": "clear",
+          "tipo": "sino",
+          "facoltativo": true,
+          "unoFra": 0
+        }
+      ]
+    },
+    {
+      "motore": "pageLayout.breaks",
+      "id": "fogli.pageLayout.breaks",
+      "titolo": "fogli.cmd.pageLayout.breaks",
+      "etichetta": "Breaks",
+      "posto": {
+        "scheda": "page",
+        "gruppo": "setup"
+      },
+      "campi": [
+        {
+          "nome": "insert",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "remove",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "reset",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pageLayout.headerFooter",
+      "id": "fogli.pageLayout.headerFooter",
+      "titolo": "fogli.cmd.pageLayout.headerFooter",
+      "etichetta": "Header & Footer",
+      "posto": {
+        "scheda": "insert",
+        "gruppo": "text"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "header",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "footer",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "differentFirst",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "differentOddEven",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "firstHeader",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "firstFooter",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "evenHeader",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "evenFooter",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ],
+      "altreForme": [
+        [
+          {
+            "nome": "sheet",
+            "tipo": "foglio",
+            "facoltativo": true
+          },
+          {
+            "nome": "page",
+            "tipo": "scelta",
+            "facoltativo": true,
+            "valori": [
+              "odd",
+              "even",
+              "first"
+            ],
+            "aperta": false
+          },
+          {
+            "nome": "part",
+            "tipo": "scelta",
+            "facoltativo": false,
+            "valori": [
+              "header",
+              "footer"
+            ],
+            "aperta": false
+          },
+          {
+            "nome": "section",
+            "tipo": "scelta",
+            "facoltativo": false,
+            "valori": [
+              "left",
+              "center",
+              "right"
+            ],
+            "aperta": false
+          },
+          {
+            "nome": "text",
+            "tipo": "testo",
+            "facoltativo": false
+          }
+        ]
+      ]
+    },
+    {
+      "motore": "pageLayout.margins",
+      "id": "fogli.pageLayout.margins",
+      "titolo": "fogli.cmd.pageLayout.margins",
+      "etichetta": "Margins",
+      "posto": {
+        "scheda": "page",
+        "gruppo": "setup"
+      },
+      "campi": [
+        {
+          "nome": "preset",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "normal",
+            "wide",
+            "narrow"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "left",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "right",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "top",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "bottom",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "header",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "footer",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pageLayout.orientation",
+      "id": "fogli.pageLayout.orientation",
+      "titolo": "fogli.cmd.pageLayout.orientation",
+      "etichetta": "Orientation",
+      "posto": {
+        "scheda": "page",
+        "gruppo": "setup"
+      },
+      "campi": [
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "portrait",
+            "landscape"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "pageLayout.pageSetup",
+      "id": "fogli.pageLayout.pageSetup",
+      "titolo": "fogli.cmd.pageLayout.pageSetup",
+      "etichetta": "Page Setup…",
+      "posto": {
+        "scheda": "page",
+        "gruppo": "setup"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "orientation",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "portrait",
+            "landscape"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "paper",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "Letter",
+            "Legal",
+            "A4",
+            "A3",
+            "A5",
+            "A6",
+            "Tabloid",
+            "Executive",
+            "Ledger",
+            "B4",
+            "B5",
+            "B6",
+            "B4 (ISO)",
+            "B5 (ISO)",
+            "B6 (ISO)",
+            "Japanese Postcard",
+            "Japanese Double Postcard",
+            "Japanese Envelope #3",
+            "Japanese Envelope #4",
+            "Japanese Envelope Kaku #2",
+            "Japanese Envelope Kaku #3"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "margins",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "scale",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "fitWidth",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "fitHeight",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "fitToPage",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "centerH",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "centerV",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "gridlines",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "headings",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "header",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "footer",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "printArea",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "titleRows",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "titleCols",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "rowBreaks",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "colBreaks",
+          "tipo": "json",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pageLayout.printArea",
+      "id": "fogli.pageLayout.printArea",
+      "titolo": "fogli.cmd.pageLayout.printArea",
+      "etichetta": "Set Print Area",
+      "posto": {
+        "scheda": "page",
+        "gruppo": "setup"
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "clear",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pageLayout.printGridlines",
+      "id": "fogli.pageLayout.printGridlines",
+      "titolo": "fogli.cmd.pageLayout.printGridlines",
+      "etichetta": "Print Gridlines",
+      "posto": {
+        "scheda": "page",
+        "gruppo": "options"
+      },
+      "campi": [
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pageLayout.printHeadings",
+      "id": "fogli.pageLayout.printHeadings",
+      "titolo": "fogli.cmd.pageLayout.printHeadings",
+      "etichetta": "Print Headings",
+      "posto": {
+        "scheda": "page",
+        "gruppo": "options"
+      },
+      "campi": [
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pageLayout.printTitles",
+      "id": "fogli.pageLayout.printTitles",
+      "titolo": "fogli.cmd.pageLayout.printTitles",
+      "etichetta": "Print Titles",
+      "posto": {
+        "scheda": "page",
+        "gruppo": "setup"
+      },
+      "campi": [
+        {
+          "nome": "rows",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "cols",
+          "tipo": "intervallo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pageLayout.scaleToFit",
+      "id": "fogli.pageLayout.scaleToFit",
+      "titolo": "fogli.cmd.pageLayout.scaleToFit",
+      "etichetta": "Scale to Fit",
+      "posto": {
+        "scheda": "page",
+        "gruppo": null
+      },
+      "campi": [
+        {
+          "nome": "scale",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pageLayout.size",
+      "id": "fogli.pageLayout.size",
+      "titolo": "fogli.cmd.pageLayout.size",
+      "etichetta": "Size",
+      "posto": {
+        "scheda": "page",
+        "gruppo": "setup"
+      },
+      "campi": [
+        {
+          "nome": "paper",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "Letter",
+            "Legal",
+            "A4",
+            "A3",
+            "A5",
+            "A6",
+            "Tabloid",
+            "Executive",
+            "Ledger",
+            "B4",
+            "B5",
+            "B6",
+            "B4 (ISO)",
+            "B5 (ISO)",
+            "B6 (ISO)",
+            "Japanese Postcard",
+            "Japanese Double Postcard",
+            "Japanese Envelope #3",
+            "Japanese Envelope #4",
+            "Japanese Envelope Kaku #2",
+            "Japanese Envelope Kaku #3"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "pageLayout.theme",
+      "id": "fogli.pageLayout.theme",
+      "titolo": "fogli.cmd.pageLayout.theme",
+      "etichetta": "Themes",
+      "posto": {
+        "scheda": "page",
+        "gruppo": "themes"
+      },
+      "campi": [
+        {
+          "nome": "name",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "Craft",
+            "Slate",
+            "Meadow",
+            "Ember",
+            "Ocean",
+            "Orchid",
+            "Graphite"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "colors",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "majorFont",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "minorFont",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pageLayout.themeColors",
+      "id": "fogli.pageLayout.themeColors",
+      "titolo": "fogli.cmd.pageLayout.themeColors",
+      "etichetta": "Colors",
+      "posto": {
+        "scheda": "page",
+        "gruppo": "themes"
+      },
+      "campi": [
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": false,
+          "unoFra": 0
+        },
+        {
+          "nome": "colors",
+          "tipo": "json",
+          "facoltativo": false,
+          "unoFra": 0
+        }
+      ]
+    },
+    {
+      "motore": "pageLayout.themeEffects",
+      "id": "fogli.pageLayout.themeEffects",
+      "titolo": "fogli.cmd.pageLayout.themeEffects",
+      "etichetta": "Effects",
+      "posto": {
+        "scheda": "page",
+        "gruppo": "themes"
+      },
+      "campi": [
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "pageLayout.themeFonts",
+      "id": "fogli.pageLayout.themeFonts",
+      "titolo": "fogli.cmd.pageLayout.themeFonts",
+      "etichetta": "Fonts",
+      "posto": {
+        "scheda": "page",
+        "gruppo": "themes"
+      },
+      "campi": [
+        {
+          "nome": "major",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "minor",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "pivot.addField",
+      "id": "fogli.pivot.addField",
+      "titolo": "fogli.cmd.pivot.addField",
+      "etichetta": "Add Field",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "field",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "area",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "rows",
+            "columns",
+            "values",
+            "filters"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "func",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "sum",
+            "count",
+            "average",
+            "max",
+            "min",
+            "product",
+            "countNumbers",
+            "stdDev",
+            "stdDevP",
+            "var",
+            "varP"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "position",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "replace",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pivot.calculatedField",
+      "id": "fogli.pivot.calculatedField",
+      "titolo": "fogli.cmd.pivot.calculatedField",
+      "etichetta": "Calculated Field",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "formula",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "delete",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "values",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pivot.changeSource",
+      "id": "fogli.pivot.changeSource",
+      "titolo": "fogli.cmd.pivot.changeSource",
+      "etichetta": "Change Data Source",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "source",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "replace",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pivot.collapse",
+      "id": "fogli.pivot.collapse",
+      "titolo": "fogli.cmd.pivot.collapse",
+      "etichetta": "Expand/Collapse Field",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "field",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "items",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "collapse",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "replace",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pivot.delete",
+      "id": "fogli.pivot.delete",
+      "titolo": "fogli.cmd.pivot.delete",
+      "etichetta": "Delete PivotTable",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pivot.fieldList",
+      "id": "fogli.pivot.fieldList",
+      "titolo": "fogli.cmd.pivot.fieldList",
+      "etichetta": "Field List",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pivot.fields",
+      "id": "fogli.pivot.fields",
+      "titolo": "fogli.cmd.pivot.fields",
+      "etichetta": "PivotTable Fields",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pivot.filter",
+      "id": "fogli.pivot.filter",
+      "titolo": "fogli.cmd.pivot.filter",
+      "etichetta": "Filter Items",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "field",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "selected",
+          "tipo": "json",
+          "facoltativo": false
+        },
+        {
+          "nome": "replace",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pivot.grandTotals",
+      "id": "fogli.pivot.grandTotals",
+      "titolo": "fogli.cmd.pivot.grandTotals",
+      "etichetta": "Grand Totals",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "mode",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "off",
+            "on",
+            "rows",
+            "columns"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "rows",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "cols",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pivot.group",
+      "id": "fogli.pivot.group",
+      "titolo": "fogli.cmd.pivot.group",
+      "etichetta": "Group Field",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "field",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "by",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "years",
+            "quarters",
+            "months",
+            "days",
+            "none"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "replace",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pivot.layout",
+      "id": "fogli.pivot.layout",
+      "titolo": "fogli.cmd.pivot.layout",
+      "etichetta": "PivotTable Layout",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "layout",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "compact",
+            "outline",
+            "tabular"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "grandTotalsRows",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "grandTotalsCols",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "subtotals",
+          "tipo": "json",
+          "facoltativo": true
+        },
+        {
+          "nome": "style",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "showHeaders",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "replace",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pivot.list",
+      "id": "fogli.pivot.list",
+      "titolo": "fogli.cmd.pivot.list",
+      "etichetta": "PivotTables",
+      "posto": null,
+      "campi": []
+    },
+    {
+      "motore": "pivot.moveField",
+      "id": "fogli.pivot.moveField",
+      "titolo": "fogli.cmd.pivot.moveField",
+      "etichetta": "Move Field",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "field",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "from",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "rows",
+            "columns",
+            "values",
+            "filters"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "to",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "rows",
+            "columns",
+            "values",
+            "filters"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "position",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "replace",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pivot.refresh",
+      "id": "fogli.pivot.refresh",
+      "titolo": "fogli.cmd.pivot.refresh",
+      "etichetta": "Refresh",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "replace",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pivot.removeField",
+      "id": "fogli.pivot.removeField",
+      "titolo": "fogli.cmd.pivot.removeField",
+      "etichetta": "Remove Field",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "field",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "area",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "rows",
+            "columns",
+            "values",
+            "filters"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "replace",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pivot.reportLayout",
+      "id": "fogli.pivot.reportLayout",
+      "titolo": "fogli.cmd.pivot.reportLayout",
+      "etichetta": "Report Layout",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "layout",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "compact",
+            "outline",
+            "tabular"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "pivot.sort",
+      "id": "fogli.pivot.sort",
+      "titolo": "fogli.cmd.pivot.sort",
+      "etichetta": "Sort Field",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "field",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "order",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "asc",
+            "desc",
+            "none"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "replace",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "pivot.style",
+      "id": "fogli.pivot.style",
+      "titolo": "fogli.cmd.pivot.style",
+      "etichetta": "PivotTable Styles",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "style",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "pivot.subtotals",
+      "id": "fogli.pivot.subtotals",
+      "titolo": "fogli.cmd.pivot.subtotals",
+      "etichetta": "Subtotals",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "mode",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "none",
+            "top",
+            "bottom"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "pivot.valueSettings",
+      "id": "fogli.pivot.valueSettings",
+      "titolo": "fogli.cmd.pivot.valueSettings",
+      "etichetta": "Value Field Settings",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "pivot",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "field",
+          "tipo": "testo",
+          "facoltativo": false,
+          "unoFra": 0
+        },
+        {
+          "nome": "index",
+          "tipo": "numero",
+          "facoltativo": false,
+          "unoFra": 0
+        },
+        {
+          "nome": "func",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "showAs",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "normal",
+            "percentOfGrandTotal",
+            "percentOfColumnTotal",
+            "percentOfRowTotal",
+            "runningTotal",
+            "rank"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "numberFormat",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "replace",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "range.fill",
+      "id": "fogli.range.fill",
+      "titolo": "fogli.cmd.range.fill",
+      "etichetta": "Fill Range With Input",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "input",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "range.setValues",
+      "id": "fogli.range.setValues",
+      "titolo": "fogli.cmd.range.setValues",
+      "etichetta": "Set Values",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "values",
+          "tipo": "json",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "review.allowEditRanges",
+      "id": "fogli.review.allowEditRanges",
+      "titolo": "fogli.cmd.review.allowEditRanges",
+      "etichetta": "Allow Edit Ranges…",
+      "posto": {
+        "scheda": "review",
+        "gruppo": "protect"
+      },
+      "campi": [
+        {
+          "nome": "action",
+          "tipo": "scelta",
+          "facoltativo": true,
+          "valori": [
+            "list",
+            "add",
+            "modify",
+            "delete",
+            "unlock"
+          ],
+          "aperta": false
+        },
+        {
+          "nome": "title",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "password",
+          "tipo": "segreto",
+          "facoltativo": true
+        },
+        {
+          "nome": "newTitle",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "review.changeSpelling",
+      "id": "fogli.review.changeSpelling",
+      "titolo": "fogli.cmd.review.changeSpelling",
+      "etichetta": "Change",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": false
+        },
+        {
+          "nome": "word",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "to",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "all",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "review.checkAccessibility",
+      "id": "fogli.review.checkAccessibility",
+      "titolo": "fogli.cmd.review.checkAccessibility",
+      "etichetta": "Check Accessibility",
+      "posto": {
+        "scheda": "review",
+        "gruppo": null
+      },
+      "campi": []
+    },
+    {
+      "motore": "review.convertToComments",
+      "id": "fogli.review.convertToComments",
+      "titolo": "fogli.cmd.review.convertToComments",
+      "etichetta": "Convert to Comments",
+      "posto": {
+        "scheda": "review",
+        "gruppo": "notes"
+      },
+      "campi": []
+    },
+    {
+      "motore": "review.deleteComment",
+      "id": "fogli.review.deleteComment",
+      "titolo": "fogli.cmd.review.deleteComment",
+      "etichetta": "Delete Comment",
+      "posto": {
+        "scheda": "review",
+        "gruppo": "comments"
+      },
+      "campi": [
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "review.newComment",
+      "id": "fogli.review.newComment",
+      "titolo": "fogli.cmd.review.newComment",
+      "etichetta": "New Comment",
+      "posto": {
+        "scheda": "review",
+        "gruppo": "comments"
+      },
+      "campi": [
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "text",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "author",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "review.newNote",
+      "id": "fogli.review.newNote",
+      "titolo": "fogli.cmd.review.newNote",
+      "etichetta": "New Note",
+      "posto": {
+        "scheda": "review",
+        "gruppo": "notes"
+      },
+      "campi": [
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "text",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "author",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "review.nextComment",
+      "id": "fogli.review.nextComment",
+      "titolo": "fogli.cmd.review.nextComment",
+      "etichetta": "Next Comment",
+      "posto": {
+        "scheda": "review",
+        "gruppo": "comments"
+      },
+      "campi": []
+    },
+    {
+      "motore": "review.previousComment",
+      "id": "fogli.review.previousComment",
+      "titolo": "fogli.cmd.review.previousComment",
+      "etichetta": "Previous Comment",
+      "posto": {
+        "scheda": "review",
+        "gruppo": "comments"
+      },
+      "campi": []
+    },
+    {
+      "motore": "review.protectSheet",
+      "id": "fogli.review.protectSheet",
+      "titolo": "fogli.cmd.review.protectSheet",
+      "etichetta": "Protect Sheet…",
+      "posto": {
+        "scheda": "review",
+        "gruppo": "protect"
+      },
+      "campi": [
+        {
+          "nome": "password",
+          "tipo": "segreto",
+          "facoltativo": true
+        },
+        {
+          "nome": "formatCells",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "formatColumns",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "formatRows",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "insertRows",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "insertColumns",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "deleteRows",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "deleteColumns",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "sort",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "autofilter",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "review.protectWorkbook",
+      "id": "fogli.review.protectWorkbook",
+      "titolo": "fogli.cmd.review.protectWorkbook",
+      "etichetta": "Protect Workbook",
+      "posto": {
+        "scheda": "review",
+        "gruppo": "protect"
+      },
+      "campi": [
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "password",
+          "tipo": "segreto",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "review.replyComment",
+      "id": "fogli.review.replyComment",
+      "titolo": "fogli.cmd.review.replyComment",
+      "etichetta": "Reply",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "text",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "author",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "review.resolveComment",
+      "id": "fogli.review.resolveComment",
+      "titolo": "fogli.cmd.review.resolveComment",
+      "etichetta": "Resolve Thread",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "resolved",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "review.showNote",
+      "id": "fogli.review.showNote",
+      "titolo": "fogli.cmd.review.showNote",
+      "etichetta": "Show/Hide Note",
+      "posto": {
+        "scheda": "review",
+        "gruppo": "notes"
+      },
+      "campi": [
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "review.spelling",
+      "id": "fogli.review.spelling",
+      "titolo": "fogli.cmd.review.spelling",
+      "etichetta": "Spelling",
+      "posto": {
+        "scheda": "review",
+        "gruppo": null
+      },
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "review.thesaurus",
+      "id": "fogli.review.thesaurus",
+      "titolo": "fogli.cmd.review.thesaurus",
+      "etichetta": "Thesaurus",
+      "posto": {
+        "scheda": "review",
+        "gruppo": null
+      },
+      "campi": [
+        {
+          "nome": "word",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "review.unprotectSheet",
+      "id": "fogli.review.unprotectSheet",
+      "titolo": "fogli.cmd.review.unprotectSheet",
+      "etichetta": "Unprotect Sheet",
+      "posto": {
+        "scheda": "review",
+        "gruppo": "protect"
+      },
+      "campi": [
+        {
+          "nome": "password",
+          "tipo": "segreto",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "review.workbookStatistics",
+      "id": "fogli.review.workbookStatistics",
+      "titolo": "fogli.cmd.review.workbookStatistics",
+      "etichetta": "Workbook Statistics",
+      "posto": {
+        "scheda": "review",
+        "gruppo": null
+      },
+      "campi": []
+    },
+    {
+      "motore": "selection.column",
+      "id": "fogli.selection.column",
+      "titolo": "fogli.cmd.selection.column",
+      "etichetta": "Select Entire Column",
+      "posto": null,
+      "campi": []
+    },
+    {
+      "motore": "selection.currentRegion",
+      "id": "fogli.selection.currentRegion",
+      "titolo": "fogli.cmd.selection.currentRegion",
+      "etichetta": "Select Current Region",
+      "posto": null,
+      "campi": []
+    },
+    {
+      "motore": "selection.move",
+      "id": "fogli.selection.move",
+      "titolo": "fogli.cmd.selection.move",
+      "etichetta": "Move Selection",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "dr",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "dc",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "extend",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "jump",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "page",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "selection.next",
+      "id": "fogli.selection.next",
+      "titolo": "fogli.cmd.selection.next",
+      "etichetta": "Next Cell in Selection",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "forward",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "byRow",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "selection.row",
+      "id": "fogli.selection.row",
+      "titolo": "fogli.cmd.selection.row",
+      "etichetta": "Select Entire Row",
+      "posto": null,
+      "campi": []
+    },
+    {
+      "motore": "selection.set",
+      "id": "fogli.selection.set",
+      "titolo": "fogli.cmd.selection.set",
+      "etichetta": "Select",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": false
+        },
+        {
+          "nome": "active",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "selection.stats",
+      "id": "fogli.selection.stats",
+      "titolo": "fogli.cmd.selection.stats",
+      "etichetta": "Selection Statistics",
+      "posto": null,
+      "campi": []
+    },
+    {
+      "motore": "shape.setText",
+      "id": "fogli.shape.setText",
+      "titolo": "fogli.cmd.shape.setText",
+      "etichetta": "Edit Text Box",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "id",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "text",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "sheet.activate",
+      "id": "fogli.sheet.activate",
+      "titolo": "fogli.cmd.sheet.activate",
+      "etichetta": "Activate Sheet",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "sheet.hide",
+      "id": "fogli.sheet.hide",
+      "titolo": "fogli.cmd.sheet.hide",
+      "etichetta": "Hide Sheet",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "sheet.move",
+      "id": "fogli.sheet.move",
+      "titolo": "fogli.cmd.sheet.move",
+      "etichetta": "Move or Copy Sheet…",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "to",
+          "tipo": "numero",
+          "facoltativo": false
+        },
+        {
+          "nome": "copy",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "sheet.moveColumns",
+      "id": "fogli.sheet.moveColumns",
+      "titolo": "fogli.cmd.sheet.moveColumns",
+      "etichetta": "Move Columns",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "cols",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "before",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "sheet.next",
+      "id": "fogli.sheet.next",
+      "titolo": "fogli.cmd.sheet.next",
+      "etichetta": "Next Sheet",
+      "posto": null,
+      "campi": []
+    },
+    {
+      "motore": "sheet.previous",
+      "id": "fogli.sheet.previous",
+      "titolo": "fogli.cmd.sheet.previous",
+      "etichetta": "Previous Sheet",
+      "posto": null,
+      "campi": []
+    },
+    {
+      "motore": "sheet.read",
+      "id": "fogli.sheet.read",
+      "titolo": "fogli.cmd.sheet.read",
+      "etichetta": "Read Range",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": true
+        },
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "formulas",
+          "tipo": "sino",
+          "facoltativo": true
+        },
+        {
+          "nome": "formatted",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "sheet.rename",
+      "id": "fogli.sheet.rename",
+      "titolo": "fogli.cmd.sheet.rename",
+      "etichetta": "Rename Sheet",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "sheet.tabColor",
+      "id": "fogli.sheet.tabColor",
+      "titolo": "fogli.cmd.sheet.tabColor",
+      "etichetta": "Tab Color",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "color",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "sheet.unhide",
+      "id": "fogli.sheet.unhide",
+      "titolo": "fogli.cmd.sheet.unhide",
+      "etichetta": "Unhide Sheet…",
+      "posto": {
+        "scheda": "home",
+        "gruppo": "cells"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "slicer.clear",
+      "id": "fogli.slicer.clear",
+      "titolo": "fogli.cmd.slicer.clear",
+      "etichetta": "Clear Slicer Filter",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "slicer",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "slicer.delete",
+      "id": "fogli.slicer.delete",
+      "titolo": "fogli.cmd.slicer.delete",
+      "etichetta": "Delete Slicer",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "slicer",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "slicer.selectAll",
+      "id": "fogli.slicer.selectAll",
+      "titolo": "fogli.cmd.slicer.selectAll",
+      "etichetta": "Clear Slicer Filter",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "slicer",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "slicer.toggle",
+      "id": "fogli.slicer.toggle",
+      "titolo": "fogli.cmd.slicer.toggle",
+      "etichetta": "Toggle Slicer Value",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "slicer",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "value",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "multi",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "table.bandedColumns",
+      "id": "fogli.table.bandedColumns",
+      "titolo": "fogli.cmd.table.bandedColumns",
+      "etichetta": "Banded Columns",
+      "posto": {
+        "scheda": "table",
+        "gruppo": "options"
+      },
+      "campi": [
+        {
+          "nome": "table",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "table.bandedRows",
+      "id": "fogli.table.bandedRows",
+      "titolo": "fogli.cmd.table.bandedRows",
+      "etichetta": "Banded Rows",
+      "posto": {
+        "scheda": "table",
+        "gruppo": "options"
+      },
+      "campi": [
+        {
+          "nome": "table",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "table.convertToRange",
+      "id": "fogli.table.convertToRange",
+      "titolo": "fogli.cmd.table.convertToRange",
+      "etichetta": "Convert to Range",
+      "posto": {
+        "scheda": "table",
+        "gruppo": "tools"
+      },
+      "campi": [
+        {
+          "nome": "table",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "table.firstColumn",
+      "id": "fogli.table.firstColumn",
+      "titolo": "fogli.cmd.table.firstColumn",
+      "etichetta": "First Column",
+      "posto": {
+        "scheda": "table",
+        "gruppo": "options"
+      },
+      "campi": [
+        {
+          "nome": "table",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "table.headerRow",
+      "id": "fogli.table.headerRow",
+      "titolo": "fogli.cmd.table.headerRow",
+      "etichetta": "Header Row",
+      "posto": {
+        "scheda": "table",
+        "gruppo": "options"
+      },
+      "campi": [
+        {
+          "nome": "table",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "table.insertSlicer",
+      "id": "fogli.table.insertSlicer",
+      "titolo": "fogli.cmd.table.insertSlicer",
+      "etichetta": "Insert Slicer",
+      "posto": {
+        "scheda": "table",
+        "gruppo": "tools"
+      },
+      "campi": [
+        {
+          "nome": "table",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "column",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "columns",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "at",
+          "tipo": "cella",
+          "facoltativo": true
+        },
+        {
+          "nome": "width",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "height",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "table.lastColumn",
+      "id": "fogli.table.lastColumn",
+      "titolo": "fogli.cmd.table.lastColumn",
+      "etichetta": "Last Column",
+      "posto": {
+        "scheda": "table",
+        "gruppo": "options"
+      },
+      "campi": [
+        {
+          "nome": "table",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "table.removeDuplicates",
+      "id": "fogli.table.removeDuplicates",
+      "titolo": "fogli.cmd.table.removeDuplicates",
+      "etichetta": "Remove Duplicates",
+      "posto": {
+        "scheda": "table",
+        "gruppo": "tools"
+      },
+      "campi": [
+        {
+          "nome": "table",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "columns",
+          "tipo": "json",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "table.rename",
+      "id": "fogli.table.rename",
+      "titolo": "fogli.cmd.table.rename",
+      "etichetta": "Table Name",
+      "posto": {
+        "scheda": "table",
+        "gruppo": "properties"
+      },
+      "campi": [
+        {
+          "nome": "table",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "name",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "table.resize",
+      "id": "fogli.table.resize",
+      "titolo": "fogli.cmd.table.resize",
+      "etichetta": "Resize Table",
+      "posto": {
+        "scheda": "table",
+        "gruppo": "properties"
+      },
+      "campi": [
+        {
+          "nome": "table",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "range",
+          "tipo": "intervallo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "table.style",
+      "id": "fogli.table.style",
+      "titolo": "fogli.cmd.table.style",
+      "etichetta": "Table Styles",
+      "posto": {
+        "scheda": "table",
+        "gruppo": "styles"
+      },
+      "campi": [
+        {
+          "nome": "table",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "style",
+          "tipo": "testo",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "table.summarizePivot",
+      "id": "fogli.table.summarizePivot",
+      "titolo": "fogli.cmd.table.summarizePivot",
+      "etichetta": "Summarize with PivotTable",
+      "posto": {
+        "scheda": "table",
+        "gruppo": "tools"
+      },
+      "campi": [
+        {
+          "nome": "table",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "destination",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "table.totalFunction",
+      "id": "fogli.table.totalFunction",
+      "titolo": "fogli.cmd.table.totalFunction",
+      "etichetta": "Totals Function",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "table",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "column",
+          "tipo": "testo",
+          "facoltativo": false
+        },
+        {
+          "nome": "function",
+          "tipo": "scelta",
+          "facoltativo": false,
+          "valori": [
+            "sum",
+            "average",
+            "count",
+            "countNums",
+            "max",
+            "min",
+            "stdDev",
+            "var",
+            "none"
+          ],
+          "aperta": false
+        }
+      ]
+    },
+    {
+      "motore": "table.totalRow",
+      "id": "fogli.table.totalRow",
+      "titolo": "fogli.cmd.table.totalRow",
+      "etichetta": "Total Row",
+      "posto": {
+        "scheda": "table",
+        "gruppo": "options"
+      },
+      "campi": [
+        {
+          "nome": "table",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "view.customViews",
+      "id": "fogli.view.customViews",
+      "titolo": "fogli.cmd.view.customViews",
+      "etichetta": "Custom Views…",
+      "posto": {
+        "scheda": "view",
+        "gruppo": "views"
+      },
+      "campi": [
+        {
+          "nome": "save",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "show",
+          "tipo": "testo",
+          "facoltativo": true
+        },
+        {
+          "nome": "delete",
+          "tipo": "testo",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "view.freezeFirstColumn",
+      "id": "fogli.view.freezeFirstColumn",
+      "titolo": "fogli.cmd.view.freezeFirstColumn",
+      "etichetta": "Freeze First Column",
+      "posto": {
+        "scheda": "view",
+        "gruppo": "window"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "view.freezePanes",
+      "id": "fogli.view.freezePanes",
+      "titolo": "fogli.cmd.view.freezePanes",
+      "etichetta": "Freeze Panes",
+      "posto": {
+        "scheda": "view",
+        "gruppo": "window"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        },
+        {
+          "nome": "cell",
+          "tipo": "cella",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "view.freezeTopRow",
+      "id": "fogli.view.freezeTopRow",
+      "titolo": "fogli.cmd.view.freezeTopRow",
+      "etichetta": "Freeze Top Row",
+      "posto": {
+        "scheda": "view",
+        "gruppo": "window"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "view.gridlines",
+      "id": "fogli.view.gridlines",
+      "titolo": "fogli.cmd.view.gridlines",
+      "etichetta": "Gridlines",
+      "posto": {
+        "scheda": "view",
+        "gruppo": "show"
+      },
+      "campi": [
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "view.headings",
+      "id": "fogli.view.headings",
+      "titolo": "fogli.cmd.view.headings",
+      "etichetta": "Headings",
+      "posto": {
+        "scheda": "view",
+        "gruppo": "show"
+      },
+      "campi": [
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "view.normal",
+      "id": "fogli.view.normal",
+      "titolo": "fogli.cmd.view.normal",
+      "etichetta": "Normal",
+      "posto": {
+        "scheda": "view",
+        "gruppo": "views"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "view.pageBreakPreview",
+      "id": "fogli.view.pageBreakPreview",
+      "titolo": "fogli.cmd.view.pageBreakPreview",
+      "etichetta": "Page Break Preview",
+      "posto": {
+        "scheda": "view",
+        "gruppo": "views"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "view.pageLayout",
+      "id": "fogli.view.pageLayout",
+      "titolo": "fogli.cmd.view.pageLayout",
+      "etichetta": "Page Layout",
+      "posto": {
+        "scheda": "view",
+        "gruppo": "views"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "view.rightToLeft",
+      "id": "fogli.view.rightToLeft",
+      "titolo": "fogli.cmd.view.rightToLeft",
+      "etichetta": "Sheet Right-to-Left",
+      "posto": {
+        "scheda": "page",
+        "gruppo": "options"
+      },
+      "campi": [
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "view.showObjects",
+      "id": "fogli.view.showObjects",
+      "titolo": "fogli.cmd.view.showObjects",
+      "etichetta": "Show Objects",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "view.showZeros",
+      "id": "fogli.view.showZeros",
+      "titolo": "fogli.cmd.view.showZeros",
+      "etichetta": "Show Zeros",
+      "posto": null,
+      "campi": [
+        {
+          "nome": "on",
+          "tipo": "sino",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "view.split",
+      "id": "fogli.view.split",
+      "titolo": "fogli.cmd.view.split",
+      "etichetta": "Split",
+      "posto": {
+        "scheda": "view",
+        "gruppo": "window"
+      },
+      "campi": []
+    },
+    {
+      "motore": "view.unfreezePanes",
+      "id": "fogli.view.unfreezePanes",
+      "titolo": "fogli.cmd.view.unfreezePanes",
+      "etichetta": "Unfreeze Panes",
+      "posto": {
+        "scheda": "view",
+        "gruppo": "window"
+      },
+      "campi": [
+        {
+          "nome": "sheet",
+          "tipo": "foglio",
+          "facoltativo": true
+        }
+      ]
+    },
+    {
+      "motore": "view.zoom",
+      "id": "fogli.view.zoom",
+      "titolo": "fogli.cmd.view.zoom",
+      "etichetta": "Zoom",
+      "posto": {
+        "scheda": "view",
+        "gruppo": "zoom"
+      },
+      "campi": [
+        {
+          "nome": "percent",
+          "tipo": "numero",
+          "facoltativo": false
+        }
+      ]
+    },
+    {
+      "motore": "view.zoom100",
+      "id": "fogli.view.zoom100",
+      "titolo": "fogli.cmd.view.zoom100",
+      "etichetta": "100%",
+      "posto": {
+        "scheda": "view",
+        "gruppo": "zoom"
+      },
+      "campi": []
+    },
+    {
+      "motore": "view.zoomToSelection",
+      "id": "fogli.view.zoomToSelection",
+      "titolo": "fogli.cmd.view.zoomToSelection",
+      "etichetta": "Zoom to Selection",
+      "posto": {
+        "scheda": "view",
+        "gruppo": "zoom"
+      },
+      "campi": [
+        {
+          "nome": "viewWidth",
+          "tipo": "numero",
+          "facoltativo": true
+        },
+        {
+          "nome": "viewHeight",
+          "tipo": "numero",
+          "facoltativo": true
+        }
+      ]
+    }
+  ]
+}

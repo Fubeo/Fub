@@ -26,6 +26,17 @@ pub struct TrDict {
     max_suffix_len: usize,
 }
 
+impl crate::slot::HeapBytes for TrDict {
+    fn heap_bytes(&self) -> usize {
+        use crate::slot::map_bytes;
+        use std::mem::size_of;
+        let rule = |r: &TrSuffixRule| r.strip.len() + r.add.len() + r.cond.len();
+        map_bytes(&self.stems, |k, v| k.capacity() + v.len() * 2)
+            + map_bytes(&self.rules, |_, v| v.capacity() * size_of::<TrSuffixRule>() + v.iter().map(rule).sum::<usize>())
+            + map_bytes(&self.suffix_index, |k, v| k.capacity() + v.capacity() * 4)
+    }
+}
+
 impl TrDict {
     /// Returns true if empty (no dictionary loaded).
     pub fn is_empty(&self) -> bool {

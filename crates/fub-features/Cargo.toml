@@ -106,7 +106,7 @@ draw = [
     "dep:wuff",
 ]
 # Il correttore porta il motore di WordCraft, e nessun altro lo tira dentro.
-proof = ["dep:wordcraft-proof"]
+proof = ["dep:wordcraft-proof", "dep:fub-motori"]
 # I componenti che non sono moduli di questo crate: il codice sta in
 # `fub-host` (e nei formati che porta), qui c'è solo la loro riga della mappa
 # (`src/componenti.rs`). Sono marcatori senza dipendenze, e `fub-host` li
@@ -211,6 +211,8 @@ kurbo = { version = "0.13.1", optional = true }
 wuff = { version = "0.2.9", optional = true }
 # Dietro `proof`: ortografia e grammatica di WordCraft, vendorizzate.
 wordcraft-proof = { workspace = true, optional = true }
+# Dietro `proof`: i dizionari letti sono una cache del budget dei motori.
+fub-motori = { workspace = true, optional = true }
 # La facciata del log (§17.3). Non il collettore: quello sta nel kernel, e
 # questo crate il kernel non lo vede per invariante — che è esattamente il
 # motivo per cui `tracing` è diviso in due crate.

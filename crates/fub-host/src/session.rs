@@ -951,6 +951,17 @@ impl CloseClaim<'_> {
                 .expect("una pretesa di chiusura possiede la sessione")
                 .close(),
         );
+        // Ritirato il marker, se non resta un altro vault, aperto o in
+        // chiusura, nessun documento ha più bisogno delle cache dei motori:
+        // si svuotano. Se resta, o se la mappa non si legge, decide il budget.
+        let sessions = self.sessions;
+        drop(self);
+        let last = sessions
+            .read()
+            .is_ok_and(|sessions| sessions.slots.is_empty());
+        if last {
+            crate::rich::empty_engine_caches();
+        }
         errors
     }
 }

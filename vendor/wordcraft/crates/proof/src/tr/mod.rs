@@ -16,13 +16,13 @@ pub mod grammar;
 pub mod hyphen;
 pub mod suggest;
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 pub use dict::TrDict;
 pub use suggest::suggest;
 
 /// The Turkish dictionary: `None` until first use, then the installed one (or an empty one).
-static DICT: RwLock<Option<Arc<TrDict>>> = RwLock::new(None);
+static DICT: crate::slot::Slot<TrDict> = crate::slot::Slot::new();
 
 /// File names of a Turkish Hunspell dictionary.
 const NAMES: &[&str] = &["tr_TR", "tr-TR", "tr"];
@@ -30,12 +30,7 @@ const NAMES: &[&str] = &["tr_TR", "tr-TR", "tr"];
 /// The Turkish dictionary: the installed Hunspell `tr_TR` (read on first use), one given with
 /// [`install_dictionary`], or an empty one when none is available.
 pub fn dictionary() -> Arc<TrDict> {
-    if let Some(d) = DICT.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
-        return d.clone();
-    }
-    let loaded = Arc::new(load_installed());
-    let mut slot = DICT.write().unwrap_or_else(|e| e.into_inner());
-    slot.get_or_insert(loaded).clone()
+    DICT.get(load_installed)
 }
 
 fn load_installed() -> TrDict {
@@ -61,13 +56,26 @@ fn load_installed() -> TrDict {
 /// Use this Turkish dictionary from now on.
 pub fn install_dictionary(aff: &str, dic: &str) -> Result<(), String> {
     let d = TrDict::from_hunspell(aff, dic)?;
-    *DICT.write().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(d));
+    DICT.install(d);
     Ok(())
 }
 
 /// Reload the dictionary on next check.
 pub fn reload_dictionary() {
-    *DICT.write().unwrap_or_else(|e| e.into_inner()) = None;
+    DICT.forget();
+}
+
+/// Drop the dictionary read from disk (one given with [`install_dictionary`] stays), so it is read
+/// again on next use; a check running meanwhile finishes with the one it has. Returns its
+/// estimated bytes ([`loaded_dictionary_bytes`]), 0 when none was loaded.
+pub fn release_dictionary() -> usize {
+    DICT.release()
+}
+
+/// Estimated heap bytes of the dictionary read from disk (0 when none is loaded, or it was given
+/// with [`install_dictionary`]): the capacity of its tables and strings.
+pub fn loaded_dictionary_bytes() -> usize {
+    DICT.loaded_bytes()
 }
 
 /// The `.dic` file of the Hunspell `tr_TR` dictionary found in the dictionaries folder or the

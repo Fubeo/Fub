@@ -115,6 +115,25 @@ apertura, attesa dell'indicizzazione e lettura del documento, poi chiusura.
 completo esercitato da questo drill. Il drill storico di #7 documenta il
 comportamento legacy e resta distinto dalla verifica del protocollo globale #5.
 
+### Albero delle dipendenze
+
+Il [guard dei motori](../../.github/scripts/check-motori.mjs) legge l'albero
+di `fub-app` con `cargo tree`, solo gli archi normali, con tutte le feature e
+tutte le piattaforme, e pone due tetti a ciò che si installa.
+
+- Nessuna interfaccia di un'app Craft: `egui`, `eframe`, `egui-wgpu`,
+  `egui-winit`, `winit`, `rfd` e `accesskit_winit` fanno fallire il guard, con
+  la catena di chi li tira dentro. Fa eccezione `rfd` portato da
+  `tauri-plugin-dialog`, che apre i dialoghi di sistema della shell.
+- Le librerie presenti in due o più versioni non superano `librerie_doppie`
+  di [`budgets.json`](../reference/budgets.json). Il tetto si può soltanto
+  abbassare: quando il conto scende, il guard avvisa di scriverci il numero
+  nuovo.
+
+Un Cargo che non riesce a dare l'albero fa uscire il guard con 2, mai con un
+conto vuoto. `--self-test` prova il lettore su un albero finto; `--albero` e
+`--budgets` leggono l'albero e i tetti da file.
+
 
 ## Frontend
 

@@ -28,7 +28,7 @@ mod suggest;
 #[cfg(test)]
 pub(crate) mod test_dict;
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use crate::affix::AffixDict;
 
@@ -38,12 +38,7 @@ pub use suggest::suggest;
 /// disk (it then has no file of its own to report from [`installed_path`], even if a matching
 /// file also happens to exist): one lock, so a reload and an install can't interleave their two
 /// fields into an inconsistent combination.
-static DICT: RwLock<DictState> = RwLock::new(DictState { dict: None, in_memory: false });
-
-struct DictState {
-    dict: Option<Arc<AffixDict>>,
-    in_memory: bool,
-}
+static DICT: crate::slot::Slot<AffixDict> = crate::slot::Slot::new();
 
 /// File names of a Russian Hunspell dictionary.
 const NAMES: &[&str] = &["ru_RU", "ru-RU", "ru"];
@@ -52,13 +47,7 @@ const NAMES: &[&str] = &["ru_RU", "ru-RU", "ru"];
 /// [`install_dictionary`], or an empty one when none is available (Russian spelling is off then;
 /// see [`has_dictionary`]).
 pub fn dictionary() -> Arc<AffixDict> {
-    if let Some(d) = DICT.read().unwrap_or_else(|e| e.into_inner()).dict.as_ref() {
-        return d.clone();
-    }
-    let loaded = Arc::new(load_installed());
-    let mut slot = DICT.write().unwrap_or_else(|e| e.into_inner());
-    // Another thread (or an install) may have filled it meanwhile: that one wins.
-    slot.dict.get_or_insert(loaded).clone()
+    DICT.get(load_installed)
 }
 
 fn load_installed() -> AffixDict {
@@ -76,18 +65,27 @@ fn load_installed() -> AffixDict {
 /// for example one the user picked. On error the current dictionary stays.
 pub fn install_dictionary(aff: &str, dic: &str) -> Result<(), String> {
     let d = AffixDict::from_hunspell(aff, dic, &[])?;
-    let mut slot = DICT.write().unwrap_or_else(|e| e.into_inner());
-    slot.dict = Some(Arc::new(d));
-    slot.in_memory = true;
+    DICT.install(d);
     Ok(())
 }
 
 /// Forget the loaded dictionary, so the next check looks for an installed one again (after
 /// [`crate::hunspell::set_dictionary_dir`] or a dictionary was installed).
 pub fn reload_dictionary() {
-    let mut slot = DICT.write().unwrap_or_else(|e| e.into_inner());
-    slot.dict = None;
-    slot.in_memory = false;
+    DICT.forget();
+}
+
+/// Drop the dictionary read from disk (one given with [`install_dictionary`] stays), so it is read
+/// again on next use; a check running meanwhile finishes with the one it has. Returns its
+/// estimated bytes ([`loaded_dictionary_bytes`]), 0 when none was loaded.
+pub fn release_dictionary() -> usize {
+    DICT.release()
+}
+
+/// Estimated heap bytes of the dictionary read from disk (0 when none is loaded, or it was given
+/// with [`install_dictionary`]): the capacity of its tables and strings.
+pub fn loaded_dictionary_bytes() -> usize {
+    DICT.loaded_bytes()
 }
 
 /// The `.dic` file of the installed Russian dictionary, searching the dictionaries folder and
@@ -95,7 +93,7 @@ pub fn reload_dictionary() {
 /// none. A dictionary given with [`install_dictionary`] has no file and isn't reported, even if a
 /// matching file also happens to exist.
 pub fn installed_path() -> Option<std::path::PathBuf> {
-    if DICT.read().unwrap_or_else(|e| e.into_inner()).in_memory {
+    if DICT.in_memory() {
         return None;
     }
     crate::hunspell::find(NAMES).map(|(_, dic)| dic)

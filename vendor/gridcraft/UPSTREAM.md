@@ -38,7 +38,7 @@ L'interfaccia (`ui-egui`) e il server MCP (`mcp`) non sono copiati.
 | `crates/xlsx/` | `crates/xlsx/` | `0001` (`src/package.rs`, `src/ods.rs` e nove file di `src/tests/`); `0003` (`src/sheet_read.rs`); `0005` (`src/read.rs`, `src/passthrough.rs`, `src/write.rs`); `0006` (`src/array_formula.rs`, `src/fmla.rs`, `src/read.rs`, `src/sheet_write.rs`); `0007` (`src/array_formula.rs`, `src/csv.rs`, `src/drawing.rs`, `src/passthrough.rs`, `src/read.rs`, `src/sheet_read.rs`, `src/sheet_write.rs`, `src/styles.rs`, `src/write.rs`, `src/xls/mod.rs`, `src/xml.rs`); `0008` (`src/passthrough.rs`, `src/sheet_write.rs`); i test di `src/tests/` di ciascuna |
 | `crates/chart/` | `crates/chart/` | nessuna |
 | `crates/pdf/` | `crates/pdf/` | nessuna |
-| `crates/engine/` | `crates/engine/` | `0001` (`tests/chart_workbook_names.rs`); `0004` (`src/lib.rs`); `0007` (`src/cmd/` analysis, edit, extra, forecast, format, insert, solver e whatif, `src/fill.rs`, `src/io.rs`, `src/pivot.rs`); `0009` (`src/lib.rs`, `src/chart_svg.rs`); `0010` (`src/cmd/insert.rs`); `src/tests.rs` per `0004`, `0006`, `0007` e `0010` |
+| `crates/engine/` | `crates/engine/` | `0001` (`tests/chart_workbook_names.rs`); `0004` (`src/lib.rs`); `0007` (`src/cmd/` analysis, edit, extra, forecast, format, insert, solver e whatif, `src/fill.rs`, `src/io.rs`, `src/pivot.rs`); `0009` (`src/lib.rs`, `src/chart_svg.rs`); `0010` (`src/cmd/insert.rs`); `0011` (`src/cmd/spelling.rs`, `src/display.rs`, con i loro test); `src/tests.rs` per `0004`, `0006`, `0007` e `0010` |
 | `rustfmt.toml` | `rustfmt.toml` | nessuna |
 | `NOTICE` | `NOTICE` | nessuna |
 
@@ -149,7 +149,23 @@ Le patch di `patches/`, una per ragione:
   «Modifica nota» la casella letta dal file. In `engine/src/cmd/insert.rs` ora
   cambia soltanto il testo (e l'autore, se il comando lo nomina), come fa
   Modifica nota di Excel; una nota scritta su un commento lo sostituisce
-  ancora. In `engine/src/tests.rs` il test lo dice.
+  ancora. In `engine/src/tests.rs` il test lo dice;
+- `0011-cache-liberabili`: due cache globali del motore restavano in memoria
+  fino alla fine del processo, e Fub non poteva restituirne lo spazio quando
+  la memoria scarseggia. In `engine/src/cmd/spelling.rs` l'elenco delle
+  parole di sistema (`/usr/share/dict/words`, fino a due milioni di righe)
+  esce dal `OnceLock`: `spelling_dictionary_bytes()` ne stima i byte e
+  `release_spelling_dictionary()` lo libera, restituendo i byte liberati; il
+  primo controllo che segue lo rilegge. Chi lo sta usando ne tiene una copia
+  condivisa (`Arc`) e finisce con quella; un solo thread lo rilegge e gli
+  altri aspettano lui. Il dizionario dell'utente, nelle preferenze, non si
+  tocca. In `engine/src/display.rs` la cache dei formati numerici analizzati
+  diventa svuotabile: `number_format_cache_len()` e
+  `clear_number_format_cache()`, che restituisce le voci tolte. La stima dei
+  byte conta la tabella (un'entrata e un byte di controllo per bucket, con il
+  fattore di carico di 7/8) e la capacità di ogni stringa, non l'overhead
+  dell'allocatore. La cache per thread di `numfmt` (64 voci) resta com'è.
+  Ogni file ha i suoi test.
 
 ### Le patch per tipo
 
@@ -177,6 +193,7 @@ Ogni patch ha un tipo, che dice quando può uscire dalla pila:
 | `0008-viste-ed-estensioni` | UPSTREAM-BUGFIX | `corpus.rs`: `ogni_cartella_del_corpus_ha_la_sua_classe` (la cartella `viste-di-libreoffice`, che senza la patch diventa preservabile) | da proporre | quando `<sheetView>` e gli `<ext>` del documento restano |
 | `0009-svg-degli-oggetti` | UPSTREAM-API | `objects.rs` chiama `chart_svg` e `prims_svg` | da proporre: `chart_svg` pubblico | quando il modulo è pubblico |
 | `0010-modifica-di-note-e-commenti` | UPSTREAM-BUGFIX | `commands.rs`: `modificare_un_commento_tiene_le_risposte` | da proporre | quando «Modifica commento» tiene il thread |
+| `0011-cache-liberabili` | UPSTREAM-API | la pressione di memoria di Fub, che chiama `release_spelling_dictionary` e `clear_number_format_cache` (i suoi test arrivano con quel lavoro); per ora i test della patch in `spelling.rs` e `display.rs` | da proporre: il testo qui sotto | quando l'upstream ha un modo di liberare le due cache |
 
 Senza `0005` o `0009` `fub-format-xlsx` non compila, e senza `0008` o
 `0010` il test della tabella fallisce: lo si è provato togliendo ciascuna
@@ -187,6 +204,23 @@ applicano da sole su `v0.11.1`.
 
 Le patch da proporre non sono ancora issue né PR dell'upstream: aprirle è
 una scelta di chi mantiene Fub.
+
+Il testo da proporre per `0011`, in inglese per l'upstream:
+
+> **Let embedders release the engine's global caches.** The system word list
+> used by the spelling review (`/usr/share/dict/words`, up to two million
+> lines) and the parsed number-format cache live in process-wide statics
+> that are never freed. An embedder that runs under memory pressure (a
+> desktop app with many documents, a server with many sessions) has no way
+> to give that memory back. This adds, in `gridcraft-engine`:
+> `spelling_dictionary_bytes()` and `release_spelling_dictionary() -> usize`
+> (estimated heap bytes; the next spelling check reads the list again, and a
+> check already running keeps its shared copy), and
+> `number_format_cache_len()` / `clear_number_format_cache() -> usize`. The
+> word list moves from a `OnceLock` to an `RwLock<Option<Arc<_>>>` with a
+> loading mutex, so the list is read outside the lock and only once when
+> several threads need it at the same time. The user dictionary in the
+> preferences is not affected. Behaviour without a release is unchanged.
 
 Le dipendenze del workspace di questa cartella hanno, per quelle in comune con
 Fub, la stessa versione del `[workspace.dependencies]` di Fub, perché il grafo

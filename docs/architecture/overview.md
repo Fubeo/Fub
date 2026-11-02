@@ -160,7 +160,9 @@ vecchi: niente si ricalcola. Dal primo comando la sessione passa a
 `gridcraft-chart` e `gridcraft-pdf`), che ricalcola ciò che il comando
 raggiunge; il salvataggio resta l'innesto o riscrive la cartella con il codec
 dopo averla misurata. Da `gridcraft-chart` l'adattatore prende anche il
-disegno in SVG dei grafici, che porta alla shell con le finestre. Il terzo blocco è il seguito dello stesso grafo, con
+disegno in SVG dei grafici, che porta alla shell con le finestre. Il motore dei fogli
+nasce alla prima apertura dietro un `Pigro` di `fub-motori`, che è anche il
+posto delle sue cache. Il terzo blocco è il seguito dello stesso grafo, con
 l'adattatore e i crate di Fub da cui dipende.
 
 ```mermaid
@@ -172,6 +174,7 @@ flowchart LR
     abi["fub-abi"]
     markdown["fub-format-markdown"]
     sdk["fub-sdk"]
+    motori["fub-motori"]
     xlsx["fub-format-xlsx"]
     gcalc["gridcraft-calc"]
     gchart["gridcraft-chart"]
@@ -183,10 +186,12 @@ flowchart LR
     gmodel["gridcraft-model"]
     gpdf["gridcraft-pdf"]
     gxlsx["gridcraft-xlsx"]
+    motori["fub-motori"]
 
     host --> xlsx
     xlsx --> abi
     xlsx --> markdown
+    xlsx --> motori
     xlsx -.-> sdk
     xlsx --> gcalc
     xlsx --> gchart
@@ -250,6 +255,36 @@ cargo feature, da cui `fub-host` prende anche `uses`, `kind`, `group` e `ui` dei
 manifest. L'altra viene da `fub-cli`, che per `fub-cli componenti` e gli
 strumenti `fub_components*` usa i tipi del risolutore (`Stato`, `Perche`,
 `Errore`, `Effetto`), che `fub-host` non riesporta.
+
+`fub-motori`, lo strato dei motori, non ha frecce verso altri crate di Fub:
+dipende soltanto da `rayon`, `thiserror`, `tracing` e, su Linux con la glibc,
+`libc`. Dà la costruzione dei motori alla prima richiesta, il loro gruppo di
+thread, il budget comune delle cache e il registro dove ogni adattatore iscrive
+il suo motore, e il catalogo che fa dei comandi di un motore i comandi di Fub.
+Non nomina nessun motore: un adattatore che lo usa dipende da lui, mai il
+contrario. Le regole stanno in [Lo strato dei motori](motori.md). Le frecce in
+ingresso: `fub-format-xlsx`, che iscrive il motore dei fogli e ne importa il
+catalogo dei comandi; `fub-format-rich`, che iscrive il motore dei documenti e
+ne tiene le prove a vuoto nel budget; `fub-features`, dietro la feature
+`proof`, che iscrive nel budget i dizionari del correttore letti dal disco; e
+`fub-host`, che alla chiusura dell'ultimo vault svuota quelle cache e
+restituisce la memoria al sistema.
+
+```mermaid
+flowchart LR
+    %% @grafo-dipendenze
+    %% Il seguito del grafo: lo strato dei motori, senza frecce verso Fub, e
+    %% chi lo usa.
+
+    motori["fub-motori"]
+    rich["fub-format-rich"]
+    features["fub-features"]
+    host["fub-host"]
+
+    rich --> motori
+    features --> motori
+    host --> motori
+```
 
 `fub-scene`, il lettore delle scene di FubDraw, ha come sola freccia in uscita
 `fub-ink`: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché

@@ -59,6 +59,59 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K3 · T4: `importa` e `verifica_copertura` ricevono un
+  `Adattamento` dell'adattatore (posti dei menu, lessico dei nomi nudi dei
+  parametri, correzioni per comando) e restituiscono tutte le mancanze, non la
+  prima; `Modulo::da_schema` prende il lessico, differenza dal piano che lo
+  voleva dal solo schema. Il catalogo dei fogli ha 303 comandi, 43 non serviti
+  con il loro perché e 75 solo nella tavolozza. · Lo schema del motore scrive
+  spesso nomi nudi (`range`, `at`) senza tipo: senza lessico i campi
+  sarebbero tutti testo libero. I tipi del lessico vengono dal codice di
+  GridCraft; alcune scelte portano nomi del motore (il tema «Craft») che la
+  shell non deve mostrare così come sono.
+- 2026-11-02 · K3 · T5 e T6: il motore dei fogli conta le istanze aperte con
+  una `Presa` (cade l'ultima, si svuotano le sue cache); le cache dei documenti
+  (le prove a vuoto, `documenti.prove`, con la stima dei byte misurata sul
+  corpus) e i dizionari del correttore (`correttore.dizionari`) si svuotano
+  alla chiusura dell'ultimo vault, passando da `fub-host/src/rich.rs` e da
+  `fub_features::proof` senza nominare WordCraft · perché: chi chiude non deve
+  sapere quali motori ci sono. Rischi annotati: lo svuotamento dei fogli gira
+  sotto il lucchetto della superficie della griglia del kernel (toglierlo vuol
+  dire toccare `fub-kernel`/`fub-host`); svuotare i dizionari toglie anche la
+  sillabazione, che si ricostruisce alla prima richiesta.
+- 2026-11-02 · K3 · Il test di copertura dei comandi (T4): la regola sta in
+  `fub-motori` (`catalogo`, provata con specifiche finte in
+  `crates/fub-motori/tests/copertura.rs`), il test vero sul motore dei fogli
+  in `crates/fub-format-xlsx/tests/copertura.rs`; `fub-motori` non dipende
+  da nessun adattatore, nemmeno nei test (differenza dal piano, che diceva
+  una dev-dipendenza da `fub-format-xlsx`) · perché: ADR 0236, e ogni motore
+  che verrà usa la stessa regola dal suo adattatore.
+- 2026-11-02 · K3 · `check-motori.mjs` ammette `rfd` solo se lo porta
+  `tauri-plugin-dialog` (i dialoghi di sistema della shell di Fub, non
+  l'interfaccia di un motore); «librerie doppie» sono i nomi in due o più
+  versioni (45 con tutte le feature e tutte le piattaforme), non i 61 nomi di
+  `cargo tree -d`, che conta anche la stessa versione ripetuta · fonte:
+  report del coder di T2, accettato dall'orchestratore.
+- 2026-11-02 · K3 · Lavoro di notte senza l'utente: le domande del «Chiede
+  sempre» si raccolgono in `PLAN.md` (D-1…D-3) e intanto vale la scelta più
+  sicura e reversibile; i due IPC nuovi (scaldare, «documento chiuso») si
+  scrivono su un branch a parte, `piano/k3-ipc-motori`, e non entrano nel
+  branch del piano senza un sì; nessun merge · fonte: l'utente («voglio che
+  tu implementi più parti possibili durante la notte … segui il piano»).
+- 2026-11-02 · K3 · `fub-motori` non nomina nessun motore: dà `Pigro<T>`,
+  `Servizi`, `Budget`, `Cache`, il catalogo e un registro `Motori` dinamico in
+  cui ogni adattatore iscrive il suo motore («fogli», «documenti»); servizi e
+  registro unici nel processo · perché: solo gli adattatori nominano i motori
+  (`check-engine-boundary.mjs`, `GRIDCRAFT_OWNERS`, `WORDCRAFT_OWNERS`) e un
+  campo per motore farebbe un ciclo fra `fub-motori` e gli adattatori; ADR
+  0236.
+- 2026-11-02 · K3 · `rayon` (gruppo di thread dei motori, suo e con un nome)
+  e `libc` (`malloc_trim` su glibc) diretti in `fub-motori`: erano già
+  nell'albero, nessun crate nuovo · fonte: `Cargo.lock` (rayon 1.12 da
+  tantivy; libc 0.2 come in `fub-kernel`).
+- 2026-11-02 · K3 · Scheda grafica e archivio dei caratteri non entrano in K3:
+  nessun motore acceso li usa e `wgpu` sarebbe una dipendenza nuova; arrivano
+  col primo motore che li chiede · domanda D-1 per l'utente.
 - 2026-11-01 · regole · L'orchestratore e i coder decidono da soli il come
   tecnico, i formati interni, le dipendenze fra crate del workspace e i file
   legati al task; «Chiede sempre» resta per ciò che si vede, il contratto

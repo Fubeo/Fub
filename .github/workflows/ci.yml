@@ -85,6 +85,8 @@ jobs:
         run: node .github/scripts/check-host-workspace-boundary.mjs
       - name: soltanto gli adattatori nominano WordCraft e GridCraft nei sorgenti
         run: node .github/scripts/check-engine-boundary.mjs
+      - name: nessuna interfaccia delle app Craft in fub-app, librerie doppie sotto il tetto
+        run: node .github/scripts/check-motori.mjs --self-test && node .github/scripts/check-motori.mjs
       - name: la copia di WordCraft è l'upstream del lock più le patch di vendor/wordcraft/patches
         run: node tools/vendor-craft/vendor.mjs wordcraft check
       - name: la copia di GridCraft è l'upstream del lock più le patch di vendor/gridcraft/patches

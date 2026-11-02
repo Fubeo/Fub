@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "note": "I tetti dell'albero delle dipendenze di fub-app, cioè di ciò che si installa, controllati da .github/scripts/check-motori.mjs nel job invariants della CI. librerie_doppie: quante librerie compaiono in due o più versioni negli archi normali di cargo tree, con tutte le feature e tutte le piattaforme; la stessa versione compilata due volte non conta. Il tetto si può soltanto abbassare: se la guardia lo trova più alto del conto, avvisa di scriverci il numero nuovo; se un cambio lo supera, si allinea la versione nuova a una che c'è già invece di alzarlo.",
+  "librerie_doppie": 45
+}

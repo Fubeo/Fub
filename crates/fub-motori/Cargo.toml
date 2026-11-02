@@ -1,0 +1,22 @@
+[package]
+name = "fub-motori"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Lo strato dei motori: costruzione alla prima richiesta, gruppo di thread e budget delle cache. Non nomina nessun motore."
+
+# INVARIANTE (ADR 0236): niente adattatori, niente motori di terzi, niente
+# `fub-abi`. Sono gli adattatori (`fub-format-xlsx`, `fub-format-rich`) a
+# dipendere da qui e a iscrivere il loro motore nel registro.
+[dependencies]
+thiserror = { workspace = true }
+# Solo la facciata, come in `fub-kernel`: il panico di un lavoro si scrive nel log.
+tracing = { workspace = true }
+# Il gruppo di thread dei motori: uno suo, costruito alla prima richiesta.
+rayon = { workspace = true }
+
+# `malloc_trim(3)` esiste soltanto nella glibc: altrove «rendere la memoria al
+# sistema» non fa niente (ADR 0236, A6), e `libc` non serve.
+[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
+libc = { workspace = true }
