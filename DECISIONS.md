@@ -59,6 +59,17 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N7 · T15: la figura di un file Craft in una nota e nella
+  finestrella al passaggio (`editors/craft/figure.ts`) chiede sempre
+  `render: false`: un test in ognuno dei tre file lo controlla. Un embed da
+  solo nel paragrafo ha già la didascalia K10, come i disegni, quindi la
+  figura non ne aggiunge una seconda e il riquadro senza anteprima non
+  ripete il nome; la didascalia propria compare solo nella finestrella e in
+  un embed dentro una riga. Il clic nella nota apre il file con
+  `openWikilink` (se non riesce, `preview.open_failed`); nella finestrella
+  la figura non ha clic, come il resto. Niente CSS nuovo: il riquadro usa
+  `.image-missing`, l'immagine le regole delle immagini della nota. Perché:
+  un'anteprima in una nota non deve mai avviare un'app.
 - 2026-11-02 · N7 · T14: la scheda dei file Craft e degli XMP è in sola
   lettura (`editors/craft/`). Con l'anteprima si vede nella vista delle
   immagini con la riga dei dati sotto; senza, la riga dei dati sta dentro il

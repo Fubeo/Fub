@@ -1524,7 +1524,7 @@ src/editors/text/profiles/markdown/media.test.ts src/state/preview.dom.test.ts`
 passa; una foto del banco con una nota che incorpora un `.figcraft`.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/craft/figure.test.ts src/state/preview.dom.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T16 · Il sottomenu «Apri con un'altra app»
 
