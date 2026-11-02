@@ -19,7 +19,7 @@ Il core non dipende dal formato, dal toolkit desktop o dal motore WASM.
 
 ## Dipendenze del workspace Rust
 
-I tre diagrammi seguenti sono, insieme, la fotografia completa delle
+I quattro diagrammi seguenti sono, insieme, la fotografia completa delle
 dipendenze dichiarate fra i crate del workspace. Le frecce continue indicano
 dipendenze normali; quelle tratteggiate esistono soltanto in
 `[dev-dependencies]`. Un test confronta l'unione dei blocchi con
@@ -38,7 +38,6 @@ flowchart TD
     base["fub-format-base"]
     canvas["fub-format-canvas"]
     svg["fub-format-svg"]
-    craft["fub-format-craft"]
     scene["fub-scene"]
     ink["fub-ink"]
     componenti["fub-componenti"]
@@ -87,7 +86,6 @@ flowchart TD
     markdown --> sdk
     svg --> abi
     svg --> scene
-    craft --> abi
     scene --> ink
     wasmhost --> abi
     wasmhost --> host
@@ -110,7 +108,6 @@ flowchart TD
     importers -.-> markdown
     importers -.-> sdk
     svg -.-> sdk
-    craft -.-> sdk
     rich -.-> sdk
 ```
 
@@ -224,6 +221,23 @@ flowchart LR
     gxlsx --> gcore
     gxlsx --> gformula
     gxlsx --> gmodel
+```
+
+Il quarto blocco è `fub-format-craft`, che legge in sola lettura i
+[file delle app Craft](../reference/craft-formats.md): dipende soltanto dal
+contratto, e nessun altro crate lo usa ancora.
+
+```mermaid
+flowchart LR
+    %% @grafo-dipendenze
+    %% Il seguito del grafo: fub-format-craft.
+
+    abi["fub-abi"]
+    sdk["fub-sdk"]
+    craft["fub-format-craft"]
+
+    craft --> abi
+    craft -.-> sdk
 ```
 
 Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso
