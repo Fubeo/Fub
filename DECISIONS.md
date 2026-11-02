@@ -59,6 +59,20 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N6 · T10: le porte della lavagna stanno in `state/canvas-
+  intake.ts`. Dall'albero si tengono solo gli id che l'host conferma: una
+  domanda sola a `existingDocuments` per tutte le voci, e per i file che
+  l'indice dei documenti non conosce (immagini, PDF) una domanda
+  `vaultEntries` per cartella invece di un `resourceOpen` per file; una nota
+  non confermata si scarta. Dal computer ogni file passa da
+  `depositOrReuse`; le notifiche («N file già nel vault, uso quelli», e la
+  prima volta «Copiati in cartella/» con «Cambia cartella») dicono anche ciò
+  che è stato fatto prima di un errore. `revealSetting` sceglie la scheda
+  dalla chiave (permessi → Componenti, scorciatoie → Scorciatoie, il resto →
+  Impostazioni) e apre un eventuale `<details>`. Resta in `engine.ts` (fuori
+  da T10): se nessuna voce dell'albero è confermata e il trascinamento porta
+  anche `text/plain`, nasce una scheda di testo. Perché: un trascinamento è
+  un dato che chiunque può scrivere, e un file non si copia due volte.
 - 2026-11-02 · N6 · T7: la scheda di foglio legge solo le finestre di celle
   in vista (al massimo 256×128, scorrimento a righe e colonne intere), riusa
   paintCell e le classi del foglio, chiude la sessione da ferma e a destroy

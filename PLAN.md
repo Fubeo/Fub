@@ -955,7 +955,7 @@ volta c'è «Cambia cartella» e la seconda no; `settings.test.ts` prova
 `revealSetting` su una voce di un'altra scheda.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/canvas-intake.test.ts src/panels/settings.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T11 · La tela tiene le schede
 
