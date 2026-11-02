@@ -59,6 +59,19 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N6 · T7: la scheda di foglio legge solo le finestre di celle
+  in vista (al massimo 256×128, scorrimento a righe e colonne intere), riusa
+  paintCell e le classi del foglio, chiude la sessione da ferma e a destroy
+  una volta sola e non chiama mai applyGridBytes; Stale arriva come errore
+  "conflict" e si riprova una volta. La copia: in produzione
+  writeClipboardText scrive con navigator.clipboard, che non accetta
+  un'attesa, quindi la selezione si allarga solo su celle già lette e Ctrl+C
+  non scrive niente se ne trova una non letta (l'orchestratore ha rimandato
+  indietro la prima versione, che copiava vuote le celle mai lette). In v1
+  non mostra grafici, immagini, barre di dati, icone, commenti, riquadri
+  bloccati né lo zoom; il bordo d'accento e «Esc per uscire» li disegna la
+  tela (data-card-entered). Perché: una copia non deve mai contenere dati
+  diversi dal file.
 - 2026-11-02 · N6 · T9: le schede portate sulla lavagna nascono in griglia
   per righe (ogni colonna larga quanto la sua scheda più larga), ordinate
   per nome e poi per percorso, agganciate a 8 px e mai sotto 40; il foglio

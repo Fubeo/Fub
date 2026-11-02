@@ -843,7 +843,7 @@ sessione da ferma e a `destroy`, `Stale`, e che `applyGridBytes` non è mai
 chiamato.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/grid/card.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T8 · La scheda di pagina web
 
