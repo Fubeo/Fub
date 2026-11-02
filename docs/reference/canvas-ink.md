@@ -192,6 +192,30 @@ fissa, la prima che vale in quest'ordine:
 - **Il resto del file** non cambia: spostare o ridimensionare una scheda non
   scrive niente per l'inchiostro, e un tratto nuovo tocca solo il suo livello.
 
+## Obsidian
+
+Obsidian apre la stessa lavagna e non conosce i campi `fub:ink`.
+
+- **Che cosa si sa:** niente. Se Obsidian, quando riscrive il file, conserva
+  i livelli, li riordina o li perde lo dice soltanto una prova con Obsidian
+  vero, e finché non c'è l'[ADR 0238](../decisions/0238-inchiostro-sulla-lavagna.md)
+  resta proposta. Un riordino delle chiavi, o `640.0` al posto di `640`, non
+  conta: i livelli si confrontano per valore.
+- **Come si prova:** col kit in `tools/prova-obsidian/`
+  ([istruzioni](../../tools/prova-obsidian/README.md)). Si copia la lavagna di
+  prova in un vault di prova vuoto, la si apre in Obsidian, si sposta una
+  scheda e se ne ridimensiona un'altra, si salva e si lancia `confronta.mjs`
+  sul file di prima e su quello di dopo. Lo script dice, per ogni livello
+  (scheda per scheda, la radice e il `fub:ink` dell'arco), se c'è ancora, se
+  è uguale per valore o che cosa è cambiato, e se la scheda si è spostata o
+  ridimensionata; esce con 0 solo se ogni livello è intatto.
+- **Che cosa decide:** se ogni livello resta uguale per valore, la forma di
+  questa pagina resta l'unica copia dell'inchiostro (strada A). Se Obsidian
+  perde o cambia i livelli, anche solo sulle schede che sposta, la decisione
+  diventa A più una copia B: un SVG accanto alla lavagna, che gli altri
+  programmi sanno mostrare (fra le alternative dell'ADR 0238), scritto da Fub
+  in più; i campi `fub:ink` restano la fonte.
+
 ## Toppa e operazioni
 
 La toppa `ink`, che aggiunge, toglie o cambia un tratto con la sua inversa, e
