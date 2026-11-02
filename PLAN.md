@@ -623,7 +623,7 @@ che legge ogni `gesture` di `apps/client/src/__fixtures__/disegno-gesti/` e
 la deserializza in `DrawingGesture` senza errori; gli specchi di
 `ts_enums`, `ts_mirror` e `mirror.test.ts` sono verdi.
 Prova: scripts/check.sh --rapido; cargo test -p fub-abi --test drawing
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T5 · Le versioni in comune
 
