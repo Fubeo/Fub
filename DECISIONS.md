@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N7 T3 · `xmp.rs` legge `xmp:Rating`, `lc:label`, `lc:flag`
+  (pick, reject, none) e `dc:subject` dalle forme attributo ed elemento, con
+  un lettore XML ristretto: le entità non predefinite non si espandono mai e
+  il DOCTYPE si ignora, così un XMP ostile non gonfia la memoria; un voto
+  scritto "5.0" vale 5; l'URI dello spazio `lc:` e i valori di `lc:flag`
+  vengono dal piano e vanno confermati con un XMP vero di LightCraft, perché
+  nel repo non ce n'è uno.
 - 2026-11-02 · N7 T1 · il crate `fub-format-craft` con i quattro provider a
   byte in sola lettura, `CraftApp` (con `id()` ed `editor_name()` in più del
   piano) e il contratto `CraftPreview` v1 con la gemella TS `host/craft.ts`

@@ -733,7 +733,7 @@ Fatto quando: `cargo test -p fub-format-craft --test xmp` passa con tutti i
 casi limite, e un XMP con `dc:subject` «New York», «mare» dà i tag
 `New-York` e `mare` e il frontmatter `{ rating, label, flag, tags }`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-format-craft
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T4 · I file collegati
 
