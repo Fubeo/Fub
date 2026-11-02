@@ -59,6 +59,16 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N3 · T6: `PatchError` ha una variante per ogni rifiuto
+  (`Stale` con il soggetto, `AtOutOfRange`, `NodeHasEdges`,
+  `MissingEndpoint`, `NotAPermutation`), tutte con la posizione della toppa,
+  dove TypeScript dà solo `null`; `after: null` si legge solo da `null`;
+  `at` negativo o con la virgola è un errore di lettura (TypeScript lo
+  scarta nella bozza); `draft` non chiama `Canvas::validate`, come
+  `canvasDraft`: il modello di dopo lo controlla il commit (T7). Portate
+  anche `upsert_node_patch` e le sorelle, che servono a T8. Restano come in
+  TypeScript l'inversa di un inserimento senza `at` e l'arco rimesso in
+  fondo, fissati da un test. Perché: errori tipati e stessa forma JSON.
 - 2026-11-02 · N3 · T3: in Rust R2 è un solo visitor (`SafeInteger`) che
   porta il nome del campo nell'errore, R7 un `null_as_empty` su `nodes` ed
   `edges`; il nucleo espone `read::is_blank` (la regola di

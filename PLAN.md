@@ -518,7 +518,7 @@ Fatto quando: `tests/patch.rs` porta i casi di `operation.test.ts` più i casi
 limite e per ognuno controlla che l'inversa applicata dopo dia il modello di
 prima; passa.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T7 · Il commit e i vettori delle toppe
 
