@@ -59,6 +59,20 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N4 T9 · la lettura e la scrittura dei record nel client
+  (`editors/canvas/ink-record.ts`): `readInkLayers` nell'ordine dei vettori
+  di T5, `inkLayerWritable`, `defaultInkLook(zoom, pressure)` con la biro di
+  4 px dello schermo, `strokeRecord` coi rifiuti `full`, `failed`, `empty`,
+  `toDry` e `dryStroke` con la cache dei percorsi; `ink-vectors.test.ts`
+  legge i 28 vettori · lo strato chiama `look()` all'inizio del tratto: T12
+  deve applicare `joined` ai pezzi `continued`.
+- 2026-11-02 · N4 T7 · il kit della prova con Obsidian in
+  `tools/prova-obsidian/` (una lavagna con l'inchiostro, `confronta.mjs` che
+  confronta per valore prima e dopo, coi suoi test `node --test`) e la
+  sezione «Obsidian» in `canvas-ink.md`; si confronta anche il `fub:ink` di
+  un arco come prova sui campi sconosciuti; il test del kit non entra in CI,
+  si lancia a mano · i nomi dei menu di Obsidian nel README sono in inglese
+  e non verificati su un Obsidian vero.
 - 2026-11-02 · N4 · merge di `piano/n3-logica-in-rust` (fino a T8) dentro
   `piano/n4-inchiostro`, con un merge e non un rebase: PLAN.md resta quello
   di N4, DECISIONS.md e `docs/README.md` tengono le righe di tutti e due ·

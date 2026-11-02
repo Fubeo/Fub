@@ -790,7 +790,7 @@ Prova: scripts/check.sh --rapido; node --test
 tools/prova-obsidian/confronta.test.mjs; node
 tools/prova-obsidian/confronta.mjs tools/prova-obsidian/lavagna-di-prova.canvas
 tools/prova-obsidian/lavagna-di-prova.canvas
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T8 · L'inchiostro nel nucleo della lavagna
 
@@ -870,7 +870,7 @@ record scritto e riletto dà un tratto disegnabile con gli stessi punti entro
 l'errore della §5; un tratto oltre i limiti si rifiuta.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/ink-record.test.ts src/editors/canvas/ink-vectors.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T10 · La toppa e le operazioni in Rust
 
