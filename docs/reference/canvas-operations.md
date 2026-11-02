@@ -162,3 +162,133 @@ L'inversa rimette prima `a` in 0, poi `b` in 1.
 Due cose non tornano al loro posto. Una scheda tolta senza `at` torna in
 cima. Un arco tolto torna in fondo alla lista degli archi: le toppe degli
 archi non hanno `at`, e l'ordine degli archi non si vede sulla tela.
+
+## Operazioni
+
+Un agente o la sessione dal tablet non scrivono toppe: scrivono
+**operazioni d'intento** (`CanvasOp`, in `crates/fub-canvas-core/src/ops.rs`),
+come «sposta», «collega», «togli». `compile(canvas, ops, seed)` le traduce
+nelle toppe qui sopra e dà `Compiled { patches, created }`: le toppe, che si
+applicano con `draft` al modello di partenza e hanno la loro inversa, e gli
+id creati.
+
+Le operazioni si compilano in ordine, ognuna sul modello lasciato dalla
+precedente: si può aggiungere una scheda e subito spostarla, ma non collegare
+una scheda tolta prima. Valgono tutte o nessuna: con un errore non esce
+nessuna toppa. Il modello di dopo resta valido: ogni scheda e ogni arco che
+un'operazione mette passa le regole del [formato](canvas-format.md).
+
+Un'operazione è un oggetto JSON con il campo `op`. Un campo che l'operazione
+non conosce, o un numero con una frazione vera dove serve un intero, è un
+errore di lettura: un errore di battitura non diventa uno spostamento di zero.
+
+### `add_card`
+
+Aggiunge una scheda in cima all'ordine. `node` è una scheda come nel file,
+campi sconosciuti compresi; `id` è facoltativo (assente o `null`: lo dà il
+seme).
+
+```json
+{ "op": "add_card", "node": { "type": "text", "x": 0, "y": 0, "width": 260, "height": 120, "text": "Idea" } }
+```
+
+### `move`
+
+Sposta le schede `ids` di `dx`, `dy`. Le coordinate saturano a ±(2^53−1). Un
+gruppo si sposta da solo: le schede dentro restano dove sono, come sulla
+tela. Una lista vuota, o uno spostamento di zero, non dà toppe.
+
+```json
+{ "op": "move", "ids": ["f1"], "dx": 40, "dy": 0 }
+```
+
+### `resize`
+
+Dà alla scheda `id` le misure nuove: almeno 1, e una misura enorme satura a
+2^53−1.
+
+```json
+{ "op": "resize", "id": "f1", "width": 320, "height": 200 }
+```
+
+### `connect`
+
+Aggiunge un arco in fondo alla lista. `edge` è un arco come nel file; `id` è
+facoltativo come in `add_card`. Le due schede devono esserci; un arco da una
+scheda a sé stessa va bene.
+
+```json
+{ "op": "connect", "edge": { "fromNode": "a", "toNode": "b", "toEnd": "arrow" } }
+```
+
+### `remove`
+
+Toglie schede e archi. Gli archi che toccano una scheda tolta vanno via
+prima, nella stessa operazione, e un arco nominato e toccato va via una volta
+sola. L'`at` di ogni scheda tolta è la sua posizione all'inizio della serie
+di `remove-node` di cui fa parte, anche se la serie viene da più
+operazioni: così l'inversa rimette ogni scheda al suo posto.
+
+```json
+{ "op": "remove", "ids": ["b", "e1"] }
+```
+
+### `set`
+
+Cambia i campi di una scheda o di un arco. Un valore sostituisce quello di
+prima al suo posto, o va in fondo se è nuovo; `null` toglie il campo, noto o
+sconosciuto. `id`, e `type` di una scheda, non si cambiano.
+
+```json
+{ "op": "set", "id": "a", "fields": { "color": "4", "text": "nuovo", "fub:tag": null } }
+```
+
+### `reorder`
+
+Porta le schede `ids` in cima all'ordine, nell'ordine dato; le altre restano
+sotto nel loro ordine. Con tutti gli id, `ids` è l'ordine nuovo.
+
+```json
+{ "op": "reorder", "ids": ["b", "a"] }
+```
+
+### Gli id nuovi
+
+Un id nuovo viene dal seme del chiamante (`seed`, un intero a 64 bit senza
+segno): stesso seme e stesso modello, stessi id, così i vettori e l'annulla
+restano deterministici. Il generatore è SplitMix64: a ogni id
+
+```text
+state = state + 0x9E3779B97F4A7C15
+z = state
+z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9
+z = (z ^ (z >> 27)) * 0x94D049BB133111EB
+z = z ^ (z >> 31)
+```
+
+con l'aritmetica a 64 bit che si avvolge, e lo stato di partenza uguale al
+seme. L'id è `z` in sedici cifre esadecimali minuscole, come quelli di
+Obsidian: col seme 0 il primo è `e220a8397b1dcdaf`. Un giro di `compile` usa
+un solo generatore, e salta gli id presi: quelli di schede e archi del modello
+di partenza e ogni id entrato nel modello nello stesso giro. Un id dato a mano
+segue la stessa regola: se è preso, è `DuplicateId`. `created` dice, in
+ordine, gli id di ogni scheda e arco aggiunti, dati o generati.
+
+### Gli errori delle operazioni
+
+Ogni errore (`OpError`) dice quale operazione della lista non si compila
+(`index`, da zero).
+
+| Errore | Quando |
+|---|---|
+| `UnknownNode` | `move`, `resize` o `reorder` di un id che non è una scheda; un arco verso una scheda che non c'è |
+| `UnknownEdge` | `remove` o `set` di un id che non è né una scheda né un arco |
+| `DuplicateId` | un id dato che è già preso; un id ripetuto nella lista di `move`, `remove` o `reorder` |
+| `TooMany` | la lavagna avrebbe più di 100 000 schede o 200 000 archi |
+| `Invalid` | una scheda o un arco che il formato non accetta; `set` di `id` o `type`; un id che è sia una scheda sia un arco |
+
+I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file,
+scritti a mano: `before`, `seed` facoltativo (0 se manca), `ops` e `expect`
+con `outcome` (`applied`, `rejected` o `malformed`) e, secondo il caso,
+`after`, `created` ed `error`. `crates/fub-canvas-core/tests/op_vectors.rs` li
+fa girare e controlla anche che l'inversa delle toppe ridia `before`.

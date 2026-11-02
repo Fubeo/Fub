@@ -1,0 +1,27 @@
+{
+  "about": "Il cancello di N3: su una lavagna vuota un agente mette tre schede con i suoi id e le collega con due archi, i cui id vengono dal seme.",
+  "before": {},
+  "seed": 2026,
+  "ops": [
+    { "op": "add_card", "node": { "id": "obiettivo", "type": "text", "x": 0, "y": 0, "width": 260, "height": 120, "text": "# Obiettivo\nUna lavagna fatta da un agente" } },
+    { "op": "add_card", "node": { "id": "passo-1", "type": "text", "x": 360, "y": -100, "width": 240, "height": 100, "text": "Primo passo", "color": "4" } },
+    { "op": "add_card", "node": { "id": "passo-2", "type": "file", "x": 360, "y": 100, "width": 240, "height": 100, "file": "Note/Secondo passo.md" } },
+    { "op": "connect", "edge": { "fromNode": "obiettivo", "fromSide": "right", "toNode": "passo-1", "toSide": "left", "toEnd": "arrow" } },
+    { "op": "connect", "edge": { "fromNode": "obiettivo", "fromSide": "right", "toNode": "passo-2", "toSide": "left", "label": "poi" } }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "obiettivo", "type": "text", "x": 0, "y": 0, "width": 260, "height": 120, "text": "# Obiettivo\nUna lavagna fatta da un agente" },
+        { "id": "passo-1", "type": "text", "x": 360, "y": -100, "width": 240, "height": 100, "color": "4", "text": "Primo passo" },
+        { "id": "passo-2", "type": "file", "x": 360, "y": 100, "width": 240, "height": 100, "file": "Note/Secondo passo.md" }
+      ],
+      "edges": [
+        { "id": "db9c559891948d23", "fromNode": "obiettivo", "fromSide": "right", "toNode": "passo-1", "toSide": "left", "toEnd": "arrow" },
+        { "id": "78bc927ded35455d", "fromNode": "obiettivo", "fromSide": "right", "toNode": "passo-2", "toSide": "left", "label": "poi" }
+      ]
+    },
+    "created": ["obiettivo", "passo-1", "passo-2", "db9c559891948d23", "78bc927ded35455d"]
+  }
+}

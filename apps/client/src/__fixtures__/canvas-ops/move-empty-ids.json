@@ -1,0 +1,12 @@
+{
+  "about": "Uno spostamento senza schede, o di zero, non fa niente: nessuna toppa, il modello resta com'era.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }] },
+  "ops": [
+    { "op": "move", "ids": [], "dx": 10, "dy": 10 },
+    { "op": "move", "ids": ["a"], "dx": 0, "dy": -0 }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }] }
+  }
+}
