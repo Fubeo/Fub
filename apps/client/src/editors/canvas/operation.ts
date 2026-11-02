@@ -29,13 +29,27 @@ export function isCanvasOperation(operation: TextOperation | null): operation is
   return operation !== null && "kind" in operation && operation.kind === "canvas";
 }
 
-// Una copia con le chiavi nell'ordine in cui si scrivono (R10).
+// I campi noti facoltativi: in una toppa, come nel file, `null` vale come
+// assente (R7), e così li legge il nucleo Rust.
+const NODE_OPTIONAL = ["color", "text", "file", "subpath", "url", "label", "background", "backgroundStyle"] as const;
+const EDGE_OPTIONAL = ["fromSide", "fromEnd", "toSide", "toEnd", "color", "label"] as const;
+
+function withoutNulls<T extends object>(value: T, keys: readonly string[]): T {
+  const record = value as Record<string, unknown>;
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(record, key) && record[key] === null) delete record[key];
+  }
+  return value;
+}
+
+// Una copia con le chiavi nell'ordine in cui si scrivono (R10), senza i campi
+// noti a `null` (R7).
 function cloneNode(node: CanvasNode): CanvasNode {
-  return orderedCanvasNode(JSON.parse(JSON.stringify(node)) as CanvasNode);
+  return orderedCanvasNode(withoutNulls(JSON.parse(JSON.stringify(node)) as CanvasNode, NODE_OPTIONAL));
 }
 
 function cloneEdge(edge: CanvasEdge): CanvasEdge {
-  return orderedCanvasEdge(JSON.parse(JSON.stringify(edge)) as CanvasEdge);
+  return orderedCanvasEdge(withoutNulls(JSON.parse(JSON.stringify(edge)) as CanvasEdge, EDGE_OPTIONAL));
 }
 
 /** Uguali come valori JSON (R9): l'ordine delle chiavi non conta, come in `patch::same_value`. */
@@ -59,7 +73,7 @@ function canvasDraft(doc: CanvasDocument, patches: readonly CanvasPatch[]): Canv
       case "upsert-node": {
         const current = nodeById(draft, patch.after.id);
         if (patch.before === null ? current !== undefined
-          : !current || !sameValue(current, patch.before)) return null;
+          : !current || !sameValue(current, cloneNode(patch.before))) return null;
         const index = draft.nodes.findIndex((node) => node.id === patch.after.id);
         if (index >= 0) draft.nodes[index] = cloneNode(patch.after);
         else if (patch.at !== undefined && Number.isInteger(patch.at) && patch.at >= 0 && patch.at <= draft.nodes.length) {
@@ -70,7 +84,7 @@ function canvasDraft(doc: CanvasDocument, patches: readonly CanvasPatch[]): Canv
       }
       case "remove-node": {
         const current = nodeById(draft, patch.before.id);
-        if (!current || !sameValue(current, patch.before)
+        if (!current || !sameValue(current, cloneNode(patch.before))
           || draft.edges.some((edge) => edge.fromNode === current.id || edge.toNode === current.id)) return null;
         draft.nodes = draft.nodes.filter((node) => node.id !== current.id);
         break;
@@ -78,7 +92,7 @@ function canvasDraft(doc: CanvasDocument, patches: readonly CanvasPatch[]): Canv
       case "upsert-edge": {
         const current = edgeById(draft, patch.after.id);
         if (patch.before === null ? current !== undefined
-          : !current || !sameValue(current, patch.before)) return null;
+          : !current || !sameValue(current, cloneEdge(patch.before))) return null;
         if (!nodeById(draft, patch.after.fromNode) || !nodeById(draft, patch.after.toNode)) return null;
         const index = draft.edges.findIndex((edge) => edge.id === patch.after.id);
         if (index >= 0) draft.edges[index] = cloneEdge(patch.after);
@@ -87,7 +101,7 @@ function canvasDraft(doc: CanvasDocument, patches: readonly CanvasPatch[]): Canv
       }
       case "remove-edge": {
         const current = edgeById(draft, patch.before.id);
-        if (!current || !sameValue(current, patch.before)) return null;
+        if (!current || !sameValue(current, cloneEdge(patch.before))) return null;
         draft.edges = draft.edges.filter((edge) => edge.id !== current.id);
         break;
       }
