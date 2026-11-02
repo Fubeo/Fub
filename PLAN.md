@@ -1472,7 +1472,7 @@ e `cargo test -p fub-host --test componenti` passano; le foto del banco
 mostrano le quattro schede.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/craft src/state/craft-previews.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T15 · Le figure e l'anteprima al passaggio
 

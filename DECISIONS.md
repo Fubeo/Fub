@@ -59,6 +59,20 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N7 · T14: la scheda dei file Craft e degli XMP è in sola
+  lettura (`editors/craft/`). Con l'anteprima si vede nella vista delle
+  immagini con la riga dei dati sotto; senza, la riga dei dati sta dentro il
+  riquadro (niente riga doppia), con lo stato e il pulsante «Crea
+  l'anteprima con …». L'anteprima con `render: true` si chiede da sola una
+  volta per montaggio della scheda (D-1, prima opzione). Lo store
+  `state/craft-previews.ts` si monta da `desktop-shell.ts` come
+  `mountLinkCards` (un file fuori dal «Tocca», una riga). Il componente
+  spento si riconosce dall'errore `unknown_command` e mostra «Nessuna
+  superficie disponibile». Le etichette XMP sono tradotte (Red → «Rossa»);
+  il tetto di 64 MiB e la regola dei tag sono quelli di `xmp.rs`. Restano
+  fuori: la Struttura mostra lo schema della nota precedente su un file
+  Craft, e il toast generico dei job scrive l'id grezzo `craft.render`.
+  Perché: un file Craft si guarda in Fub e si cambia nella sua app.
 - 2026-11-02 · N7 · T7: il registro delle sette app Craft sta in
   `craft/editors.rs` e trova i programmi senza mai avviarne uno (un test lo
   controlla). `Env` ha in più `root` (`/` fuori dai test), per provare
