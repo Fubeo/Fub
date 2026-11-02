@@ -16,6 +16,10 @@ members = [
     "crates/fub-ink",
     # Il risolutore dei componenti (K1): puro, non dipende da nessun membro.
     "crates/fub-componenti",
+    # Lo strato dei motori (K3, ADR 0236): la costruzione alla prima richiesta,
+    # il gruppo di thread e il budget delle cache. Non nomina nessun motore e
+    # non dipende dagli adattatori: sono loro a iscriversi da lui.
+    "crates/fub-motori",
     "crates/fub-scene",
     "crates/fub-format-svg",
     "crates/fub-format-rich",
@@ -160,6 +164,7 @@ fub-format-canvas = { path = "crates/fub-format-canvas", version = "0.1.0" }
 fub-format-base = { path = "crates/fub-format-base", version = "0.1.0" }
 fub-ink = { path = "crates/fub-ink", version = "0.1.0" }
 fub-componenti = { path = "crates/fub-componenti", version = "0.1.0" }
+fub-motori = { path = "crates/fub-motori", version = "0.1.0" }
 fub-scene = { path = "crates/fub-scene", version = "0.1.0" }
 fub-format-svg = { path = "crates/fub-format-svg", version = "0.1.0" }
 fub-format-rich = { path = "crates/fub-format-rich", version = "0.1.0" }
@@ -205,6 +210,14 @@ image = { version = "0.25.10", default-features = false }
 # la prende, la versione è di qui.
 serde_yaml_ng = "0.10.0"
 ring = "0.17.14"
+# Il gruppo di thread dei motori (`fub-motori`, ADR 0236). Era già nell'albero,
+# 1.12.0, tirato da tantivy: prenderlo come dipendenza diretta non aggiunge un
+# crate. Il gruppo è uno suo, con un nome, e non quello globale, che usa tantivy.
+rayon = "1.12.0"
+# `access(2)` in `fub-kernel` e `malloc_trim(3)` in `fub-motori`. Già
+# nell'albero (0.2.189, da notify e da glib), e dipende dal solo `libc`
+# stesso: ogni crate lo prende dietro il proprio `cfg` di piattaforma.
+libc = "0.2"
 base64 = "0.22.1"
 uuid = { version = "1.24.0", features = ["v4"] }
 parking_lot = "0.12.5"

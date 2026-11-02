@@ -2292,6 +2292,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fub-motori"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "rayon",
+ "thiserror 2.0.19",
+ "tracing",
+]
+
+[[package]]
 name = "fub-scene"
 version = "0.1.0"
 dependencies = [
