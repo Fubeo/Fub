@@ -10,6 +10,11 @@
 //! - **`fub_invoke` parte in prova.** Restituisce il piano; per eseguire
 //!   serve `"apply": true`, e un comando che scrive si esegue soltanto se il
 //!   suo piano tocca documenti sotto le radici di scrittura.
+//! - **Le lavagne** (`fub_canvas_*`) passano dai comandi del componente
+//!   «Lavagna» (`canvas.create`, `canvas.apply`). A differenza di
+//!   `fub_invoke` non vogliono tutto il vault leggibile: le radici si
+//!   guardano sulla lavagna, e `fub_canvas_apply` vuole la `base` come
+//!   `fub_write` e parte in prova come `fub_invoke`.
 //! - **I componenti** (`fub_components*`) seguono le regole di
 //!   `fub-cli componenti` (`crate::componenti`): accendere e spegnere partono
 //!   in prova, e con `"apply": true` vogliono tutto il vault fra le radici
@@ -31,6 +36,11 @@ use crate::componenti::{Orfani, Vista, OPZIONI_MCP};
 use crate::local::{link_target, match_json, outcome_json, search_expr};
 
 const LIMIT_DEFAULT: u32 = 50;
+
+/// I comandi del componente «Lavagna» (`fub.lavagna`): ids del contratto,
+/// come `note.create`, perché la CLI non dipende da `fub-features`.
+const CANVAS_CREATE: &str = "canvas.create";
+const CANVAS_APPLY: &str = "canvas.apply";
 const LIMIT_MAX: u32 = 200;
 
 /// Lo schema di `limit` e `offset`, uguale per ogni strumento a pagine.
@@ -126,6 +136,39 @@ pub fn specs() -> Value {
                     "template": { "type": "string", "description": "Il modello da cui partire, al posto di text" },
                     "title": { "type": "string", "description": "Il titolo, con un modello" }
                 },
+                "additionalProperties": false
+            },
+            "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false }
+        },
+        {
+            "name": "fub_canvas_create",
+            "description": "Crea una lavagna nuova e vuota (.canvas). Senza name prende il primo nome libero; un nome già preso è un errore. Restituisce la lavagna e la sua revisione, la base di fub_canvas_apply.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "Nome o path della lavagna, per esempio Agente/piano o Agente/piano.canvas" },
+                    "folder": { "type": "string", "description": "La cartella di un nome semplice; senza, la radice del vault" }
+                },
+                "additionalProperties": false
+            },
+            "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false }
+        },
+        {
+            "name": "fub_canvas_apply",
+            "description": "Cambia una lavagna con una lista di operazioni, tutte insieme: add_card {node}, connect {edge}, move {ids, dx, dy}, resize {id, width, height}, set {id, fields}, remove {ids}, reorder {ids}. Le schede e gli archi senza id ne ricevono uno nuovo. Parte dalla revisione letta con fub_read o data da fub_canvas_create: se nel frattempo è cambiata torna un conflitto. Senza apply è una prova: restituisce il piano. Con \"apply\": true scrive e restituisce gli id creati e la revisione nuova.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "doc": { "type": "string", "description": "Path della lavagna nel vault, per esempio Agente/piano.canvas" },
+                    "ops": {
+                        "type": ["array", "string"],
+                        "items": { "type": "object" },
+                        "description": "Le operazioni, come lista o come testo JSON della lista, per esempio [{\"op\": \"add_card\", \"node\": {\"type\": \"text\", \"x\": 0, \"y\": 0, \"width\": 240, \"height\": 100, \"text\": \"Ciao\"}}]"
+                    },
+                    "base": { "type": "string", "description": "La revisione su cui si applica, da fub_read o fub_canvas_create" },
+                    "apply": { "type": "boolean", "default": false, "description": "Scrivi davvero invece di provare" }
+                },
+                "required": ["doc", "ops", "base"],
                 "additionalProperties": false
             },
             "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false }
@@ -230,6 +273,8 @@ pub fn call(c: &Connection, access: &Access, params: &Value) -> Result<Value, Rp
         "fub_read_model" => read_model(c, access, &args),
         "fub_write" => write(c, access, &args),
         "fub_create" => create(c, access, &args),
+        "fub_canvas_create" => canvas_create(c, access, &args),
+        "fub_canvas_apply" => canvas_apply(c, access, &args),
         "fub_commands" => commands(c, &args),
         "fub_invoke" => invoke(c, access, &args),
         "fub_components" => components(c, &args),
@@ -676,6 +721,100 @@ fn create(c: &Connection, access: &Access, args: &Value) -> Result<Value, Failur
         }
     };
     Ok(json!({ "doc": id.as_str(), "revision": revision.as_str() }))
+}
+
+/// `fub_canvas_create`: come `fub_create`, con `canvas.create` del
+/// componente «Lavagna». La prova nomina la lavagna che nascerebbe (nome
+/// libero, estensione, cartella), le radici la giudicano, poi si crea.
+fn canvas_create(c: &Connection, access: &Access, args: &Value) -> Result<Value, Failure> {
+    access.check_writer()?;
+    let mut command = json!({});
+    for key in ["name", "folder"] {
+        if let Some(value) = text_arg(args, key)? {
+            command[key] = json!(value);
+        }
+    }
+    let invoke = |mode| {
+        c.host
+            .invoke_user_command(c.vault_selector(), CANVAS_CREATE, command.clone(), mode)
+            .map_err(plugin)
+    };
+    let id = match invoke(InvokeMode::DryRun)?.effect {
+        CommandEffect::Plan(plan) => plan.docs.into_iter().next(),
+        _ => None,
+    }
+    .ok_or_else(|| Failure::local(format!("{CANVAS_CREATE} non ha nominato la lavagna")))?;
+    access.check_write(id.as_str())?;
+    // La lavagna che nasce è quella che `Navigate` apre: di solito la stessa
+    // della prova; se è un'altra, deve stare anche lei sotto le radici, ma a
+    // quel punto è già scritta, e lo si dice invece di tacerlo.
+    let id = match invoke(InvokeMode::Apply)?.effect {
+        CommandEffect::Navigate { doc } if doc != id => {
+            return Err(Failure::local(format!(
+                "{CANVAS_CREATE} ha creato `{}` invece di `{}`",
+                doc.as_str(),
+                id.as_str()
+            )))
+        }
+        _ => id,
+    };
+    let (_, revision) = c
+        .host
+        .read_document(c.vault_selector(), &id)
+        .map_err(plugin)?;
+    Ok(json!({ "doc": id.as_str(), "revision": revision.as_str() }))
+}
+
+/// `fub_canvas_apply`: le operazioni d'intento portate in una lavagna da
+/// `canvas.apply`, come una modifica sola. La `base` è obbligatoria come per
+/// `fub_write`; le radici si guardano sul documento, non su tutto il vault.
+fn canvas_apply(c: &Connection, access: &Access, args: &Value) -> Result<Value, Failure> {
+    let id = doc(args, "doc")?;
+    access.check_read(id.as_str())?;
+    access.check_write(id.as_str())?;
+    // Il comando le prende come testo (non c'è un parametro JSON): una lista
+    // si riscrive, un testo passa com'è e lo legge il comando.
+    let ops = match args.get("ops") {
+        None | Some(Value::Null) => return Err(Failure::bad_args("manca `ops`")),
+        Some(Value::String(text)) => text.clone(),
+        Some(list @ Value::Array(_)) => list.to_string(),
+        Some(_) => {
+            return Err(Failure::bad_args(
+                "`ops` è una lista di operazioni, o il suo testo JSON",
+            ))
+        }
+    };
+    let base = required(args, "base")?;
+    let apply = bool_arg(args, "apply")?;
+    let command = json!({ "doc": id.as_str(), "ops": ops, "base": base });
+    let mode = if apply {
+        InvokeMode::Apply
+    } else {
+        InvokeMode::DryRun
+    };
+    let outcome = c
+        .host
+        .invoke_user_command(c.vault_selector(), CANVAS_APPLY, command, mode)
+        .map_err(plugin)?;
+    if !apply {
+        return Ok(
+            json!({ "doc": id.as_str(), "dry_run": true, "outcome": outcome_json(&outcome) }),
+        );
+    }
+    // L'esito del comando: gli id nati e la revisione dopo.
+    let (created, revision) = match &outcome.effect {
+        CommandEffect::Custom { payload, .. } => (
+            payload.get("created").cloned(),
+            payload.get("revision").and_then(Value::as_str),
+        ),
+        _ => (None, None),
+    };
+    let (Some(created @ Value::Array(_)), Some(revision)) = (created, revision) else {
+        return Err(Failure::local(format!(
+            "{CANVAS_APPLY} non ha detto gli id creati e la revisione"
+        )));
+    };
+    Ok(json!({ "doc": id.as_str(), "dry_run": false, "created": created, "revision": revision }))
 }
 
 fn commands(c: &Connection, args: &Value) -> Result<Value, Failure> {
