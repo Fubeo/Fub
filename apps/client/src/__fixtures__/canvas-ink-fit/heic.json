@@ -1,0 +1,44 @@
+{
+  "name": "heic",
+  "description": "Una foto .heic è un'immagine.",
+  "card": {
+    "type": "file",
+    "file": "Foto/IMG_0001.heic"
+  },
+  "ref": {
+    "width": 300,
+    "height": 400
+  },
+  "size": {
+    "width": 600,
+    "height": 600
+  },
+  "expect": {
+    "mode": "scale",
+    "s": 1.5,
+    "x": 75,
+    "y": 0,
+    "points": [
+      {
+        "from": [
+          100,
+          200
+        ],
+        "to": [
+          225,
+          300
+        ]
+      },
+      {
+        "from": [
+          300,
+          400
+        ],
+        "to": [
+          525,
+          600
+        ]
+      }
+    ]
+  }
+}

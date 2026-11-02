@@ -2,12 +2,15 @@
 //
 // Un tratto ancorato a una scheda si disegna **dentro** l'elemento della
 // scheda (`paintCard`), in un SVG `canvas-ink-card` largo e alto
-// quanto lei. Dentro c'è un SVG annidato per ogni misura di riferimento, con il
-// `viewBox` di quella misura: i percorsi restano nelle unità in cui sono
-// scritti e il browser li porta alla misura di adesso. Così, quando la lavagna
-// sposta o ridimensiona una scheda cambiando solo posizione e misura
-// dell'elemento (`#renderLive`), l'inchiostro la segue senza ridisegnare
-// niente. L'inchiostro libero si disegna sullo stage (`paintBoard`), dopo le
+// quanto lei. Dentro c'è un SVG annidato per ogni misura di riferimento, e il
+// modo della scheda (`ink-fit.ts`) dice come segue la misura di adesso: con
+// `scale` (immagini e PDF) l'annidato è largo quanto la scheda, col `viewBox`
+// della misura di riferimento e `xMidYMid meet`, e il browser scala i percorsi
+// senza deformarli; con `fixed` è largo `W` e alto `H`, senza scala, e ciò che
+// esce dalla scheda si vede. I percorsi restano nelle unità in cui sono
+// scritti. Così, quando la lavagna sposta o ridimensiona una scheda cambiando
+// solo posizione e misura dell'elemento (`#renderLive`), l'inchiostro la segue
+// senza ridisegnare niente. L'inchiostro libero si disegna sullo stage (`paintBoard`), dopo le
 // schede, in coordinate della lavagna, come gli archi.
 //
 // Il colore è un valore del file e va come attributo `fill` (mai una
@@ -17,12 +20,13 @@
 // `InkPathCache` tiene i percorsi già calcolati per id, inchiostro e pennello,
 // e a ogni giro lascia andare quelli che non si disegnano più.
 
+import type { InkFitMode } from "./ink-fit";
+
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-/// Come l'inchiostro di una scheda segue la sua misura (D-9). `none` lo
-/// stira con la scheda; `xMinYMin meet` lo terrebbe in proporzione,
-/// ancorato in alto a sinistra.
-export const INK_ASPECT = "none";
+/// Il `preserveAspectRatio` del modo `scale`: lo stesso fattore nei due sensi,
+/// il minore, centrato. È la formula di `inkFit` detta al browser.
+export const INK_SCALE_ASPECT = "xMidYMid meet";
 
 /// L'opacità di un tratto preso dalla gomma: la stessa di `FADED_OPACITY` di
 /// `editors/spatial/painter/svg-dom.ts`, come attributo del percorso.
@@ -51,8 +55,9 @@ export interface DryStroke {
 }
 
 /// Disegna i tratti `strokes` dentro l'elemento della scheda `host`, nell'ordine
-/// (il primo sotto). Una lista vuota toglie l'inchiostro della scheda.
-export function paintCard(host: HTMLElement, strokes: readonly DryStroke[]): void {
+/// (il primo sotto), nel modo `mode` della scheda (`inkFitMode`). Una lista
+/// vuota toglie l'inchiostro della scheda.
+export function paintCard(host: HTMLElement, strokes: readonly DryStroke[], mode: InkFitMode): void {
   const svg = ownLayer(host, "canvas-ink-card", strokes.length > 0);
   if (!svg) return;
   setAttr(svg, "width", "100%");
@@ -69,12 +74,14 @@ export function paintCard(host: HTMLElement, strokes: readonly DryStroke[]): voi
     const run = runs[i]!;
     const nested = childAt(svg, i, "svg");
     const ref = run[0]!.ref;
-    setAttr(nested, "width", "100%");
-    setAttr(nested, "height", "100%");
     // Senza misura (un tratto libero dato a una scheda) le unità sono i pixel
-    // della scheda.
-    setAttr(nested, "viewBox", ref ? `0 0 ${ref.width} ${ref.height}` : null);
-    setAttr(nested, "preserveAspectRatio", ref ? INK_ASPECT : null);
+    // della scheda, in tutti e due i modi.
+    const fixed = ref !== null && mode === "fixed" ? ref : null;
+    const scaled = ref !== null && mode === "scale" ? ref : null;
+    setAttr(nested, "width", fixed ? String(fixed.width) : "100%");
+    setAttr(nested, "height", fixed ? String(fixed.height) : "100%");
+    setAttr(nested, "viewBox", scaled ? `0 0 ${scaled.width} ${scaled.height}` : null);
+    setAttr(nested, "preserveAspectRatio", scaled ? INK_SCALE_ASPECT : null);
     paintPaths(nested, run);
   }
   trim(svg, runs.length);

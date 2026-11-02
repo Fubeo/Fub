@@ -1,0 +1,34 @@
+{
+  "name": "canvas-file",
+  "description": "Un'altra lavagna dentro la scheda: l'inchiostro resta fermo.",
+  "card": {
+    "type": "file",
+    "file": "Mappe/altra.canvas"
+  },
+  "ref": {
+    "width": 300,
+    "height": 200
+  },
+  "size": {
+    "width": 600,
+    "height": 400
+  },
+  "expect": {
+    "mode": "fixed",
+    "s": 1,
+    "x": 0,
+    "y": 0,
+    "points": [
+      {
+        "from": [
+          150,
+          100
+        ],
+        "to": [
+          150,
+          100
+        ]
+      }
+    ]
+  }
+}

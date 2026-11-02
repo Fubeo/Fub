@@ -1,0 +1,44 @@
+{
+  "name": "png-uppercase",
+  "description": "L'estensione si confronta senza maiuscole: .PNG è un'immagine.",
+  "card": {
+    "type": "file",
+    "file": "Foto/SCAN.PNG"
+  },
+  "ref": {
+    "width": 100,
+    "height": 100
+  },
+  "size": {
+    "width": 300,
+    "height": 200
+  },
+  "expect": {
+    "mode": "scale",
+    "s": 2,
+    "x": 50,
+    "y": 0,
+    "points": [
+      {
+        "from": [
+          10,
+          10
+        ],
+        "to": [
+          70,
+          20
+        ]
+      },
+      {
+        "from": [
+          100,
+          100
+        ],
+        "to": [
+          250,
+          200
+        ]
+      }
+    ]
+  }
+}
