@@ -61,7 +61,7 @@ in quella Rust compilata in WebAssembly
 
 | Data | Sistema | Macchina | Pagina |
 |---|---|---|---|
-| 2026-11-02 | Debian 13, kernel 6.12 | AMD Ryzen 7 7730U, carica | [TypeScript contro WebAssembly](inchiostro-wasm-2026-11-02.md) |
+| 2026-11-02 | Debian 13, kernel 6.12 | AMD Ryzen 7 7730U, scarica | [TypeScript contro WebAssembly](inchiostro-wasm-2026-11-02.md) |
 
 ## Le librerie a runtime
 
