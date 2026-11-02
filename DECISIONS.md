@@ -59,6 +59,16 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K3 · Le risposte dell'utente a D-1…D-4 (e merge-k3,
+  ci-soglia): D-2 (c), T8 unito e una lettura conta come apertura solo con
+  la chiave di una sessione della shell, che la chiude in ogni uscita
+  (contratto IPC cambiato: T10, T11); D-3 (c), un menu «Comandi» vero per i
+  fogli, con il prototipo T12 da approvare prima di T13–T15, un posto e un
+  effetto per ogni comando; D-4 (a), K3 si chiude e la memoria della WebView
+  va in un piano a parte; il merge solo dopo la CI completa e la revisione
+  (T17); il limite di R1 non si alza · ogni cosa che apre un documento lo
+  deve chiudere, un comando che si trova solo con una scorciatoia è
+  nascosto, e un numero rosso non si nasconde alzando la soglia.
 - 2026-11-02 · K3 · T9: la misura del cancello prima (cb4213ec, codice di
   620f0acd) e dopo (c5851334) sulla stessa macchina, tre giri R1/S1/S6
   alternati per lato sotto Xvfb e i banchi; T8 non misurato. L'avvio e i
