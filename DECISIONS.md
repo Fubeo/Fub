@@ -59,6 +59,9 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N3 · ADR 0234 allineato: la lavagna non è più fra i
+  componenti senza bundle, perché da T10 è il bundle fub.lavagna. Perché:
+  l'ADR deve dire com'è fatto il codice.
 - 2026-11-02 · N3 · T12: gli strumenti MCP fub_canvas_create e
   fub_canvas_apply chiamano canvas.create e canvas.apply con gli id scritti
   come costanti, come note.create, perché fub-cli non dipende da fub-
