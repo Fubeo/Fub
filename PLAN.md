@@ -1004,7 +1004,7 @@ passa; `cargo test -p fub-abi --test a_named_rule_is_declared` passa con la
 riga nuova (e fallisce senza).
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --lib
 craft::editors; cargo test -p fub-abi --test a_named_rule_is_declared
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T8 · L'avvio dei programmi
 

@@ -59,6 +59,18 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N7 · T7: il registro delle sette app Craft sta in
+  `craft/editors.rs` e trova i programmi senza mai avviarne uno (un test lo
+  controlla). `Env` ha in più `root` (`/` fuori dai test), per provare
+  `/usr/bin` e `/Applications` su una cartella finta. `detect` dà una riga
+  per ognuna delle 7 app, con `How::Missing` per quelle che non trova. Una
+  riga di `craft.editor-paths` che punta a un file sparito non ferma la
+  ricerca: si passa ai posti standard. Per gli AppImage il nome va seguito
+  da `-`, `_` o `.` e deve finire in `.AppImage`; i `-cli` sono esclusi, e
+  fra più file vince il nome più grande in ordine di byte. La cache di 30 s
+  (`FindCache`) si rifà da sola quando cambiano l'ambiente o le righe. I
+  nomi dei campi di installed.json vanno confermati con un file vero.
+  Perché: «Apri con» deve sapere quali app ci sono senza lanciare niente.
 - 2026-11-02 · N7 · T6: il bundle fub.craft sta in fub-host dietro la
   feature `craft`, nel default, sul modello di LinkCardBundle; il comando
   craft.preview è in sola lettura e il job craft.render per ora risponde
