@@ -355,4 +355,4 @@ chiuso da `"\n"`), riletto dal nucleo prima di scrivere. L'anteprima nomina il
 file e non scrive; l'applicazione lo crea con `create_document` (che rifiuta
 un path preso nel frattempo) e risponde con `Navigate`. L'annulla è
 `note.trash` sul file: lo porta nel cestino anche se nel frattempo è cambiato,
-e dal cestino si ripristina com'era al momento dell'annulla.
+e dal cestino si ripristina com'era quando la creazione è stata annullata.
