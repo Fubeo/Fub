@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N6 · T2: la cache delle immagini ferme
+  (`editors/canvas/card-cache.ts`) ha un tipo suo, `CardCacheSnapshot`,
+  uguale per forma a quello del contratto di T1 senza importarlo; percorso e
+  parte restano chiavi separate (mai unite in una stringa); rimettere la
+  stessa immagine sotto la sua chiave non la chiude; un tetto negativo o NaN
+  vale 0, i byte 0, negativi o NaN contano 1. Il tetto di 64 MiB è un valore
+  di partenza.
 - 2026-11-01 · regole · L'orchestratore e i coder decidono da soli il come
   tecnico, i formati interni, le dipendenze fra crate del workspace e i file
   legati al task; «Chiede sempre» resta per ciò che si vede, il contratto

@@ -651,7 +651,7 @@ Fatto quando: `card-cache.test.ts` prova l'ordine di uscita, il tetto,
 chiusure).
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/card-cache.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T3 · Lo stesso file non si duplica
 
