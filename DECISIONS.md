@@ -59,6 +59,17 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N7 · T5: un file a byte che non sa riscriversi (provider
+  assente o `Ok(None)`) non ferma più la rinomina;
+  `invoke_prepared_link_rewrites` restituisce `PreparedLinkRewriteOutcome {
+  edits, unwritable_bytes }`, le righe «un file a byte non si riscrive, il
+  link punta ancora a …» passano per Parsed/Pending/Completed in
+  `stale_byte_links` e si aggiungono ai `rewrite_failures` solo in
+  `finish_*`, così l'intent di recupero si chiude; l'unione di note
+  (`PreparedLinkRetarget::edits`) invece si ferma ancora con l'errore di
+  prima · D-3 (a): la rinomina si fa e Fub avvisa; nell'unione non c'è una
+  rinomina già fatta a cui appendere l'avviso, e si cestinerebbe un file a
+  cui il link punta ancora.
 - 2026-11-02 · N7 T4 · `linked.rs` prende come file collegati i valori
   stringa dei campi `href`, `src`, `path`, `file`, `uri` e `link` a ogni
   profondità fino a 64 livelli, al massimo 1000 senza doppioni, ripuliti

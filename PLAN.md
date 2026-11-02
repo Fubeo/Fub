@@ -820,7 +820,7 @@ nuovo che fallisce prima del cambio (la rinomina si fermava) e passa dopo;
 gli altri test della rinomina non cambiano.
 Prova: scripts/check.sh --rapido; cargo test -p fub-kernel --test
 rename_and_events
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T6 · Il bundle `fub.craft`
 
