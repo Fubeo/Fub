@@ -1274,6 +1274,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
           text_kind: formatOf(id) === "xlsx" ? "grid_journal" : "source",
         }));
       },
+      warmEngine: (extension) => gate("warmEngine", [extension], Promise.resolve()),
+      documentClosed: (id, vault) => gate("documentClosed", named([id], vault), Promise.resolve()),
       resourceOpen: (id, vault) => gate("resourceOpen", [id, vault], Promise.resolve().then((): ResourceDescriptor => {
         const doc = docs.get(id);
         if (!doc) throw { kind: "not_found", message: `host fake: «${id}» non c'è` } satisfies PluginError;

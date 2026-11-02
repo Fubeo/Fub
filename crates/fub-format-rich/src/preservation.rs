@@ -428,6 +428,29 @@ impl Baselines {
         drop(dropped);
     }
 
+    /// Dimentica la prova di questa chiave, se si ricorda: il documento di
+    /// quei byte si è chiuso. Dà i byte stimati liberati.
+    pub(crate) fn forget(&self, key: &str) -> u64 {
+        let out: Vec<Remembered> = {
+            let mut state = self.state();
+            let mut out = Vec::new();
+            let mut kept = VecDeque::with_capacity(state.remembered.len());
+            for r in state.remembered.drain(..) {
+                if r.key == key {
+                    out.push(r);
+                } else {
+                    kept.push_back(r);
+                }
+            }
+            state.remembered = kept;
+            out
+        };
+        let freed = out.iter().map(Remembered::bytes).sum();
+        // La prova tolta cade qui, a lucchetto lasciato.
+        drop(out);
+        freed
+    }
+
     /// Quante prove si ricordano.
     pub(crate) fn len(&self) -> usize {
         self.state().remembered.len()

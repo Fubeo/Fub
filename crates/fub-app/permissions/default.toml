@@ -27,6 +27,8 @@ commands.allow = [
   "config_health",
   "recover_config",
   "read_document",
+  "warm_engine",
+  "document_closed",
   "list_grid_surfaces",
   "open_grid_bytes",
   "grid_bytes_window",

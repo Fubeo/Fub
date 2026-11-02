@@ -329,6 +329,23 @@ La forma della proiezione (revisioni, commenti, pagina, oggetti, inchiostri e
 disegni, blocchi chiusi, versioni e schema dei dati opachi) è in
 [Proiezione dei documenti di videoscrittura](rich-projection.md).
 
+## Motori dei formati
+
+Due comandi della finestra principale (`allow-shell`), che girano fuori dal
+thread principale e restituiscono `()`:
+
+- `warm_engine { extension }`: scalda in sottofondo il motore che apre
+  l'estensione (`"docx"`, `".XLSX"`), se un vault aperto ha un provider
+  attivo per lei. Un'estensione senza motore, sconosciuta o malformata non fa
+  niente e non è un errore. Non apre file.
+- `document_closed { id, vault? }`: la shell ha chiuso l'ultima sessione di
+  un documento ricco. L'host dimentica la sua prova a vuoto e, se non resta
+  aperto nessun documento ricco, svuota le cache dei documenti. `id` si valida
+  come per `read_document`; un vault non aperto o un documento non aperto non
+  fanno niente.
+
+Il ciclo di vita dei motori è in [Lo strato dei motori](../architecture/motori.md#scaldare-e-chiudere-un-documento).
+
 ## Cartelle di Excel
 
 Una cartella di `fub-format-xlsx` (formato `xlsx`, per `.xlsx`, `.xlsm`,

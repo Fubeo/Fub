@@ -511,6 +511,33 @@ async fn read_document(
     .await
 }
 
+/// Scalda in sottofondo il motore che apre questa estensione: la shell lo
+/// chiede quando il puntatore si ferma su un file o una cartella si apre.
+/// Un'estensione senza motore, o senza un provider attivo in un vault aperto,
+/// non fa niente e non è un errore (`Host::warm_engine`).
+#[tauri::command]
+async fn warm_engine(app: AppHandle, extension: String) -> Result<(), PluginError> {
+    off_main(app, move |host| {
+        host.warm_engine(&extension);
+        Ok(())
+    })
+    .await
+}
+
+/// La shell ha chiuso l'ultima sessione di un documento ricco: l'host lascia
+/// andare la sua prova, e le cache dei documenti quando non ne resta aperto
+/// nessuno (`Host::document_closed`). Il percorso si valida come per
+/// `read_document`.
+#[tauri::command]
+async fn document_closed(
+    app: AppHandle,
+    id: String,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    let id = doc_id(&id)?;
+    off_main(app, move |host| host.document_closed(vault.as_deref(), &id)).await
+}
+
 /// Apre un lease sui byte di una risorsa. Il label e l'origin provengono dalla
 /// finestra nativa, non dagli argomenti JavaScript.
 #[tauri::command]
@@ -2674,6 +2701,8 @@ pub fn run() {
             close_document_window,
             finish_main_close,
             read_document,
+            warm_engine,
+            document_closed,
             resource_open,
             resource_read_chunk,
             resource_close,
