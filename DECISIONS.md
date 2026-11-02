@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K3 · T9: la misura del cancello prima (cb4213ec, codice di
+  620f0acd) e dopo (c5851334) sulla stessa macchina, tre giri R1/S1/S6
+  alternati per lato sotto Xvfb e i banchi; T8 non misurato. L'avvio e i
+  banchi passano; gli obiettivi di R1 no, per la WebView: lo segno come
+  fatto perché il «Fatto quando» di T9 è la pagina col giudizio, e il
+  cancello va all'utente come D-4. In tempi.rs la lettura dopo un'altra
+  cartella chiusa costa 6–15% in più (malloc_trim di T5): annotato, non
+  abbassato nessun tetto.
 - 2026-11-02 · K3 · T7: i titoli dei 303 comandi e i nomi dei campi stanno
   in un catalogo dei testi a parte (`editors/grid/palette/strings.ts`),
   caricato col foglio, e non in `i18n/catalog.ts`, per non gonfiare i testi

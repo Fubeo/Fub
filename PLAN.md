@@ -120,6 +120,15 @@ differenza è scritta qui.
   per ora, o li vuoi anche in un menu? Consiglio: tavolozza per ora; il menu
   arriva con la modalità completa dei fogli.
 
+- D-4 · Il cancello di K3 non passa per intero: l'avvio e i banchi sì, gli
+  obiettivi di R1 no (pendenza dei giri fra 7,5 e 9,2 MiB per giro contro
+  l'obiettivo di 1; il residuo supera i 50 MiB in un giro su tre). Il
+  processo di Fub ora rende memoria (residuo da +7…+12 a −53…−61 MiB), ma
+  quasi tutto il residuo è della WebView, che K3 non tocca. Con le soglie
+  `ci` passa. Chiudo K3 così, con la memoria della WebView in un piano a
+  parte? Consiglio: sì; misure in `docs/misure/k3-motori-2026-11-02-server-
+  di-fub.md`.
+
 ## Cancello di K3
 
 | Fatto quando | Prova | Task |
@@ -490,4 +499,4 @@ Cosa fare:
 Fatto quando: la pagina con le tabelle prima/dopo e il giudizio sul cancello,
 con i numeri veri.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
