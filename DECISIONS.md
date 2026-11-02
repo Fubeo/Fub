@@ -59,6 +59,28 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N7 T4 · `linked.rs` prende come file collegati i valori
+  stringa dei campi `href`, `src`, `path`, `file`, `uri` e `link` a ogni
+  profondità fino a 64 livelli, al massimo 1000 senza doppioni, ripuliti
+  come un URL e senza la parte da `#` o `?`; in un file Craft un percorso
+  che comincia con `/` è del disco e si scarta come `C:` e gli schemi, a
+  differenza dei disegni SVG dove `/` è la radice del vault; il `%20` resta
+  scritto e lo decodifica il kernel; Fub non riscrive mai il file Craft
+  quando il file collegato si sposta; integrato dopo T2, perché i suoi test
+  vogliono il documento vero di `read_meta`.
+- 2026-11-02 · N7 T2 · `container.rs` legge i tre contenitori con un tetto a
+  ogni lettura: prima di aprire uno ZIP conta le voci che dichiara la fine
+  della directory centrale (anche ZIP64), poi ricontrolla quelle aperte,
+  così un file ostile di 64 MiB non fa leggere un milione di voci; una voce
+  che si dichiara piccola e si scompatta grande la ferma il crate zip (CRC,
+  NotZip) e dopo il `take`; fra le due anteprime di un `.pcraft` si passa
+  alla riserva anche quando la voce c'è ma non è un PNG o è troppo grande;
+  il base64 di `/preview/data` accetta il riempimento mancante e gli a capo
+  e ha il tetto sulla stringa e sul decodificato; titolo e versione vuoti
+  contano come assenti; il testo si raccoglie con una pila, non per
+  ricorsione; il documento di FigCraft e VectorCraft sta in `Contents.json`,
+  che serve ai file collegati di T4; il modello del documento non ha un
+  posto per la versione, che si legge da `read_meta`.
 - 2026-11-02 · N7 T3 · `xmp.rs` legge `xmp:Rating`, `lc:label`, `lc:flag`
   (pick, reject, none) e `dc:subject` dalle forme attributo ed elemento, con
   un lettore XML ristretto: le entità non predefinite non si espandono mai e

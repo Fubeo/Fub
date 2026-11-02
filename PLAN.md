@@ -670,7 +670,7 @@ Fatto quando: `cargo test -p fub-format-craft --test containers` copre ogni
 caso limite qui sopra, e `--test provider` dà per un `.pcraft` finto il
 titolo e la versione del manifesto.
 Prova: scripts/check.sh --rapido; cargo test -p fub-format-craft
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T3 · Gli XMP
 
@@ -772,7 +772,7 @@ Fatto quando: `cargo test -p fub-format-craft --test linked` passa con i
 casi limite; il modello di un disegno finto ha il `Link` verso
 `../Foto/mare.jpg`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-format-craft
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T5 · La rinomina con i file a byte
 
