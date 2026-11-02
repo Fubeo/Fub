@@ -320,7 +320,7 @@ Fatto quando: `copertura.rs` verde, e rosso se si aggiunge un comando di prova
 rosso con il file generato vecchio; test di `Modulo::da_schema` su ogni forma
 trovata.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T5 · GridCraft sul registro
 

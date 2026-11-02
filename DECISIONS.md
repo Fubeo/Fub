@@ -59,6 +59,16 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K3 · T4: `importa` e `verifica_copertura` ricevono un
+  `Adattamento` dell'adattatore (posti dei menu, lessico dei nomi nudi dei
+  parametri, correzioni per comando) e restituiscono tutte le mancanze, non la
+  prima; `Modulo::da_schema` prende il lessico, differenza dal piano che lo
+  voleva dal solo schema. Il catalogo dei fogli ha 303 comandi, 43 non serviti
+  con il loro perché e 75 solo nella tavolozza. · Lo schema del motore scrive
+  spesso nomi nudi (`range`, `at`) senza tipo: senza lessico i campi
+  sarebbero tutti testo libero. I tipi del lessico vengono dal codice di
+  GridCraft; alcune scelte portano nomi del motore (il tema «Craft») che la
+  shell non deve mostrare così come sono.
 - 2026-11-02 · K3 · T5 e T6: il motore dei fogli conta le istanze aperte con
   una `Presa` (cade l'ultima, si svuotano le sue cache); le cache dei documenti
   (le prove a vuoto, `documenti.prove`, con la stima dei byte misurata sul
