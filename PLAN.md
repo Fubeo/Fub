@@ -552,7 +552,7 @@ casi limite; `idle.test.ts` copre i due rami e la chiusura della
 DOM).
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/ink/quiet.test.ts src/ink/dom/idle.test.ts src/ink/boundary.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T3 · La scheda sotto il tratto
 
