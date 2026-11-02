@@ -664,7 +664,7 @@ Fatto quando: `cargo test -p fub-features --features draw` passa;
 sola; il file di misura ha i due conti. Oppure, se `svg2pdf` non c'è: il file di misura lo dice e il lock non
 è cambiato.
 Prova: scripts/check.sh --rapido; cargo test -p fub-features --features draw
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T6 · VectorCraft in `vendor/`
 

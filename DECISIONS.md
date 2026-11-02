@@ -59,6 +59,17 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K5 · T5: chiuso con la fermata del piano. Nessun `svg2pdf`
+  pubblicato usa `usvg` 0.48 (l'ultimo, 0.13.0, chiede ^0.45; anche `krilla-
+  svg` 0.8.1 chiede ^0.47; letto da crates.io il 2026-11-02), quindi
+  `Cargo.lock` e i `Cargo.toml` non cambiano e l'export resta com'è. Il file
+  di misura `docs/misure/disegno-versioni-2026-11.md` conta le librerie
+  doppie per nome (45 nomi, 109 versioni, prima e dopo uguali) e dice quali
+  resteranno doppie col motore (`usvg`, `svgtypes`, `roxmltree`, `tiny-skia-
+  path`, `imagesize`, `kurbo`; `skrifa` a tre versioni, `peniko` a due). D-3
+  resta aperta: l'opzione consigliata è tenere due `usvg`, 0.45 per l'export
+  e 0.48 per il motore. Perché: non si cambia l'export per una libreria che
+  non c'è.
 - 2026-11-02 · K5 · T12: i comandi di colore e spessore partono dai campi
   Contorno, Riempimento e Spessore del pannello delle proprietà
   (`changeField`), perché il pozzo colore della barra non tocca la selezione
