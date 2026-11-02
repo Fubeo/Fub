@@ -243,6 +243,24 @@ che la finestra darebbe, o dall'esito di un comando che chiede una finestra
 scritto nella finestra aperta. Formato celle dà soltanto ciò
 che è cambiato, e l'esempio del formato lo calcola il provider con `TEXT`.
 
+## I comandi nella tavolozza
+
+Con una cartella nel riquadro col fuoco, la tavolozza dei comandi (e il
+lanciatore dello Scrittoio) mostra ogni comando del catalogo che il motore
+serve, nel gruppo «Foglio», col titolo tradotto e la scheda della barra in cui
+lo si trova (`editors/grid/palette/`). La superficie li dà con
+`paletteCommands()` di `EditorSurface`. Un comando che il motore dice spento
+resta in elenco col suo motivo e non parte; in sola lettura lo sono tutti.
+
+Scelto, un comando si dà come lo darebbe la barra: con la finestra scritta a
+mano se ne ha una (`OWN_DIALOGS` in `palette/commands.ts`, controllata dai
+test contro la barra); altrimenti, se chiede un parametro obbligatorio, con
+una finestra costruita dai campi del catalogo (`palette/form.ts`), in cui una
+cella o un intervallo partono dalla selezione e un rifiuto del motore resta
+scritto dentro; altrimenti subito sulla selezione. I titoli e i nomi dei campi
+stanno in un catalogo dei testi a parte (`palette/strings.ts`), caricato con
+la superficie e non con la shell.
+
 ## Gli oggetti dei fogli
 
 Grafici, grafici sparkline, immagini e forme arrivano con le finestre che
@@ -318,6 +336,8 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 - `apps/client/src/editors/grid/dialogs/page.ts`
 - `apps/client/src/editors/grid/dialogs/notes.ts`
 - `apps/client/src/editors/grid/dialogs/protect.ts`
+- `apps/client/src/editors/grid/palette/commands.ts`
+- `apps/client/src/editors/grid/palette/form.ts`
 - `crates/fub-format-xlsx/src/grid.rs`
 - `crates/fub-format-xlsx/src/export.rs`
 - `crates/fub-format-xlsx/src/objects.rs`
