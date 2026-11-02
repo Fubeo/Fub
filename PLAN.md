@@ -745,7 +745,7 @@ Fatto quando: `cargo test -p fub-scene` passa senza toccare i suoi test;
 Prova: scripts/check.sh --rapido; cargo test -p fub-ink-codec -p fub-scene;
 cargo build -p fub-ink-codec --target wasm32-unknown-unknown; cargo test -p
 fub-abi --test dependency_invariant
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T7 · Il kit per la prova con Obsidian
 

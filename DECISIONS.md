@@ -59,6 +59,17 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N4 · T6: il codec dell'inchiostro in un crate suo,
+  `fub-ink-codec`, spostato con git mv; fub-scene lo riesporta e non dipende
+  più da fub-ink (`SCENE_ALLOWED_DIRECT=[fub-ink-codec, quick-xml, serde]`,
+  `INK_ALLOWED_DEPENDENTS=[fub-ink-codec, fub-format-rich]`,
+  `INK_CODEC_ALLOWED_DIRECT=[fub-ink]`, clienti `[fub-scene,
+  fub-canvas-core]`); in overview.md un quinto diagramma, perché il primo
+  era già a 20 nodi · la lavagna e il disegno leggono l'inchiostro dallo
+  stesso codec senza tirarsi dietro la scena. Nel check, fub-cli
+  `second_process_cannot_take_writer_and_sigint_exits_repl` è caduto per il
+  timeout di 10 s sotto carico e passa da solo (3 su 3); i commenti TS
+  dicono ancora «di fub-scene».
 - 2026-11-02 · N4 · secondo merge di `piano/n3-logica-in-rust` (fino a N3
   T7, il commit e i vettori delle toppe) dentro `piano/n4-inchiostro`;
   PLAN.md resta quello di N4 e DECISIONS.md tiene le righe di tutti e due:
