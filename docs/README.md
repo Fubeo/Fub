@@ -66,7 +66,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [Superfici dell'editor](architecture/editor-surfaces.md), la
   [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md)
   e la [superficie dei fogli](architecture/grid-surface.md)
-- [Inchiostro e strumenti](architecture/ink-and-tools.md)
+- [Inchiostro e strumenti](architecture/ink-and-tools.md) e
+  [il disegno sul motore](architecture/disegno.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md)
 
 ## Sviluppare

@@ -450,7 +450,7 @@ Fatto quando: `node .github/scripts/check-doc-links.mjs` e
 `node .github/scripts/check-doc-orphans.mjs` escono con 0 e la pagina nuova è
 raggiungibile da `docs/README.md`.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T2 · L'oracolo a pixel
 
