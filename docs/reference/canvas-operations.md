@@ -1,9 +1,13 @@
 # Operazioni sulla lavagna
 
 > **Ambito:** le toppe che cambiano il modello di una lavagna, i loro errori
-> e la loro inversa per l'annulla.
-> **Fonti autorevoli:** `crates/fub-canvas-core/src/patch.rs`, i suoi test in
-> `crates/fub-canvas-core/tests/patch.rs` e la tela in
+> e la loro inversa per l'annulla; le operazioni d'intento che si compilano
+> in toppe.
+> **Fonti autorevoli:** `crates/fub-canvas-core/src/patch.rs` e
+> `crates/fub-canvas-core/src/ops.rs`, i loro test in
+> `crates/fub-canvas-core/tests/patch.rs` e
+> `crates/fub-canvas-core/tests/op_vectors.rs`, i vettori in
+> `apps/client/src/__fixtures__/canvas-ops/` e la tela in
 > `apps/client/src/editors/canvas/operation.ts`.
 
 Questa pagina dice come si cambia una lavagna. Il modello (schede, archi e
