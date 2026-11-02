@@ -1,0 +1,11 @@
+{
+  "name": "null-dropped-on-rewrite",
+  "description": "R7: un null su un campo noto vale assente; sparisce quando la scheda si ricompone, resta in quella che non cambia",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"color\":null,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"label\":null,\"text\":\"due\"}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"uno"},"after":{"id":"a","type":"text","x":10,"y":0,"width":100,"height":50,"text":"uno"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":10,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"label\":null,\"text\":\"due\"}],\"edges\":[]}",
+    "undo": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"label\":null,\"text\":\"due\"}],\"edges\":[]}"
+  }
+}

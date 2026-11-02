@@ -1,0 +1,10 @@
+{
+  "name": "rejected-nested-duplicate",
+  "description": "R3: una chiave doppia dentro un campo sconosciuto di una scheda: rejected",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\",\"fub:ink\":{\"s\":1,\"s\":2}}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"uno","fub:ink":{"s":2}},"after":{"id":"a","type":"text","x":10,"y":0,"width":100,"height":50,"text":"uno","fub:ink":{"s":2}}}],
+  "expect": {
+    "outcome": "rejected",
+    "reason": "rejected"
+  }
+}

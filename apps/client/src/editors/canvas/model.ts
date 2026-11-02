@@ -122,7 +122,7 @@ function color(value: unknown, label: string): string {
 function optionalText(value: unknown, label: string, max: number): string | undefined {
   if (!present(value)) return undefined;
   if (typeof value !== "string") throw new TypeError(`${label} non è una stringa`);
-  if (UTF8.encode(value).length > max) {
+  if (max !== Infinity && UTF8.encode(value).length > max) {
     throw new RangeError(`${label} oltre il limite`);
   }
   return value;
@@ -147,33 +147,30 @@ function parseNode(entry: unknown, index: number): CanvasNode {
     throw new TypeError(`dimensioni nodo ${index + 1} non valide`);
   }
   if (present(node.color)) parsed.color = color(node.color, `colore nodo ${index + 1}`);
+  // Ogni campo di testo è una stringa; i limiti e le regole valgono solo per
+  // il campo del suo tipo, come in `CanvasNode::validate` in Rust: un `url`
+  // su una scheda di testo, o uno sfondo lungo, si conservano.
+  if (present(node.text)) parsed.text = optionalText(node.text, `testo nodo ${index + 1}`, Infinity);
+  if (present(node.file)) parsed.file = optionalText(node.file, `file nodo ${index + 1}`, Infinity);
+  if (present(node.subpath)) parsed.subpath = optionalText(node.subpath, `subpath nodo ${index + 1}`, Infinity);
+  if (present(node.url)) parsed.url = optionalText(node.url, `url nodo ${index + 1}`, Infinity);
+  if (present(node.label)) parsed.label = optionalText(node.label, `etichetta nodo ${index + 1}`, Infinity);
+  if (present(node.background)) parsed.background = optionalText(node.background, `sfondo nodo ${index + 1}`, Infinity);
   if (type === "text") {
-    if (typeof node.text !== "string") throw new TypeError(`testo nodo ${index + 1} mancante`);
-    parsed.text = optionalText(node.text, `testo nodo ${index + 1}`, 1_048_576);
-  } else if (present(node.text)) {
-    parsed.text = optionalText(node.text, `testo nodo ${index + 1}`, 1_048_576);
-  }
-  if (type === "file") {
-    if (typeof node.file !== "string" || !node.file) throw new TypeError(`file nodo ${index + 1} mancante`);
-    parsed.file = optionalText(node.file, `file nodo ${index + 1}`, 8192);
-    if (present(node.subpath)) {
-      if (typeof node.subpath !== "string" || !node.subpath.startsWith("#")) {
-        throw new TypeError(`subpath nodo ${index + 1} non valido`);
-      }
-      parsed.subpath = optionalText(node.subpath, `subpath nodo ${index + 1}`, 1024);
+    if (parsed.text === undefined) throw new TypeError(`testo nodo ${index + 1} mancante`);
+    optionalText(parsed.text, `testo nodo ${index + 1}`, 1_048_576);
+  } else if (type === "file") {
+    if (!parsed.file) throw new TypeError(`file nodo ${index + 1} mancante`);
+    optionalText(parsed.file, `file nodo ${index + 1}`, 8192);
+    if (parsed.subpath !== undefined && (!parsed.subpath.startsWith("#") || UTF8.encode(parsed.subpath).length > 1024)) {
+      throw new TypeError(`subpath nodo ${index + 1} non valido`);
     }
-  } else {
-    if (present(node.file)) parsed.file = optionalText(node.file, `file nodo ${index + 1}`, 8192);
-    if (present(node.subpath)) parsed.subpath = optionalText(node.subpath, `subpath nodo ${index + 1}`, 1024);
+  } else if (type === "link") {
+    if (!parsed.url) throw new TypeError(`url nodo ${index + 1} mancante`);
+    optionalText(parsed.url, `url nodo ${index + 1}`, 8192);
+  } else if (parsed.label !== undefined) {
+    optionalText(parsed.label, `etichetta nodo ${index + 1}`, 65_536);
   }
-  if (type === "link") {
-    if (typeof node.url !== "string" || !node.url) throw new TypeError(`url nodo ${index + 1} mancante`);
-    parsed.url = optionalText(node.url, `url nodo ${index + 1}`, 8192);
-  } else if (present(node.url)) {
-    parsed.url = optionalText(node.url, `url nodo ${index + 1}`, 8192);
-  }
-  if (present(node.label)) parsed.label = optionalText(node.label, `etichetta nodo ${index + 1}`, 65_536);
-  if (present(node.background)) parsed.background = optionalText(node.background, `sfondo nodo ${index + 1}`, 8192);
   // Qualunque stringa si conserva (R8): un valore che la tela non conosce si
   // disegna come assente, e lo schema dice solo ciò che Fub scrive.
   if (present(node.backgroundStyle)) {
@@ -255,6 +252,11 @@ export function parseCanvas(source: string): CanvasDocument {
     throw new SyntaxError("canvas JSON non valido");
   }
   rejectKnownDuplicates(duplicates);
+  return canvasFromValue(root);
+}
+
+/** The model of an already decoded JSON root, with every rule of the reader past the text. */
+function canvasFromValue(root: unknown): CanvasDocument {
   const obj = record(root, "canvas");
   const rawNodes = obj.nodes ?? [];
   const rawEdges = obj.edges ?? [];
@@ -269,6 +271,20 @@ export function parseCanvas(source: string): CanvasDocument {
   const edgeIds = new Set(edges.map((edge) => edge.id));
   if (edgeIds.size !== edges.length) throw new TypeError("id archi canvas duplicati");
   return { nodes, edges, ...splitExtra(obj, ROOT_KEYS) };
+}
+
+/**
+ * Whether a model is a valid canvas: the reader's rules on the values (ids,
+ * links, sizes, the limits of each node type), as `Canvas::validate` in Rust,
+ * without the limits of the text.
+ */
+export function isValidCanvas(doc: CanvasDocument): boolean {
+  try {
+    canvasFromValue(doc);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function serializeCanvas(doc: CanvasDocument): string {

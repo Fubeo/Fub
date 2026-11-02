@@ -1,0 +1,11 @@
+{
+  "name": "four-byte-chars",
+  "description": "Caratteri di quattro byte accanto al cambiamento",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"😀a😀\"}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"😀a😀"},"after":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"😀b😀"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"😀b😀\"}],\"edges\":[]}",
+    "undo": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"😀a😀\"}],\"edges\":[]}"
+  }
+}

@@ -1,4 +1,4 @@
-import type { CanvasDocument } from "./model";
+import type { CanvasDocument, CanvasEdge, CanvasNode } from "./model";
 
 interface JsonSpan {
   start: number;
@@ -197,6 +197,14 @@ export function canvasNodeAt(source: string, offset: number): number | null {
   return index < 0 ? null : index;
 }
 
+/**
+ * Two JSON values equal by value (R9, like `patch::same_value` in Rust): object
+ * keys in any order, array items in order, numbers as JavaScript sees them.
+ */
+export function sameCanvasValue(left: unknown, right: unknown): boolean {
+  return same(left, right);
+}
+
 function same(left: unknown, right: unknown): boolean {
   if (left === right) return true;
   if (Array.isArray(left) && Array.isArray(right)) {
@@ -218,6 +226,50 @@ export function sameCanvasModel(left: CanvasDocument, right: CanvasDocument): bo
   return same(left, right);
 }
 
+// L'ordine in cui si scrivono le chiavi note (R10), come `node_value` ed
+// `edge_value` in Rust; le sconosciute vengono dopo, nel loro ordine.
+const NODE_ORDER = [
+  "id", "type", "x", "y", "width", "height", "color", "text", "file", "subpath", "url", "label",
+  "background", "backgroundStyle",
+] as const;
+const EDGE_ORDER = ["id", "fromNode", "fromSide", "fromEnd", "toNode", "toSide", "toEnd", "color", "label"] as const;
+
+/**
+ * `value` with the known keys first, in `order`, then the others in their
+ * order. `Object.fromEntries` defines every key as an own property, even
+ * `__proto__`. JavaScript still enumerates index-like keys first, as the Rust
+ * writer does.
+ */
+function ordered<T extends object>(value: T, order: readonly string[]): T {
+  const record = value as Record<string, unknown>;
+  const entries: [string, unknown][] = [];
+  for (const key of order) {
+    if (Object.prototype.hasOwnProperty.call(record, key) && record[key] !== undefined) entries.push([key, record[key]]);
+  }
+  for (const [key, val] of Object.entries(record)) {
+    if (!order.includes(key)) entries.push([key, val]);
+  }
+  return Object.fromEntries(entries) as T;
+}
+
+/** A node with its keys in the order they are written (R10). */
+export function orderedCanvasNode(node: CanvasNode): CanvasNode {
+  return ordered(node, NODE_ORDER);
+}
+
+/** An edge with its keys in the order they are written (R10). */
+export function orderedCanvasEdge(edge: CanvasEdge): CanvasEdge {
+  return ordered(edge, EDGE_ORDER);
+}
+
+/** The canvas as it is written: `nodes`, `edges`, then the unknown root keys. */
+function orderedCanvas(doc: CanvasDocument): CanvasDocument {
+  return ordered(
+    { ...doc, nodes: doc.nodes.map(orderedCanvasNode), edges: doc.edges.map(orderedCanvasEdge) },
+    ["nodes", "edges"],
+  );
+}
+
 function encode(value: unknown): string {
   const encoded = JSON.stringify(value);
   if (encoded === undefined) throw new TypeError("canvas JSON value cannot be serialized");
@@ -236,6 +288,9 @@ function splice(source: string, span: JsonSpan, edits: readonly { span: JsonSpan
 
 /** Preserve source bytes for every unchanged JSON member, including unknown members. */
 export function patchCanvasSource(source: string, before: CanvasDocument, after: CanvasDocument): string {
+  // Le chiavi nuove si scrivono nell'ordine di R10, qualunque sia quello del
+  // modello: lo stesso testo che scrive il nucleo Rust.
+  after = orderedCanvas(after);
   if (isBlankCanvasSource(source)) {
     // Una tela vuota tiene il BOM e il terminatore che il file aveva già.
     const fresh = JSON.stringify(after, null, 2) + "\n";

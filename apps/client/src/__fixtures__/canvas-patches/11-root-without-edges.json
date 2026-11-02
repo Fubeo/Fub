@@ -1,0 +1,11 @@
+{
+  "name": "root-without-edges",
+  "description": "Una radice senza edges che si ricompone lo riceve in fondo, come in Rust",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}],\"fub:ink\":{\"v\":1}}",
+  "patches": [{"kind":"upsert-node","before":null,"after":{"id":"b","type":"text","x":200,"y":0,"width":100,"height":50,"text":"due"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"},{\"id\":\"b\",\"type\":\"text\",\"x\":200,\"y\":0,\"width\":100,\"height\":50,\"text\":\"due\"}],\"fub:ink\":{\"v\":1},\"edges\":[]}",
+    "undo": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}],\"fub:ink\":{\"v\":1},\"edges\":[]}"
+  }
+}
