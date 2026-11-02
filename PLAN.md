@@ -610,7 +610,7 @@ dependency_invariant` passa col crate nuovo; `cargo tree -p fub-format-craft
 -e normal` non mostra pacchetti che `Cargo.lock` non avesse già.
 Prova: scripts/check.sh --rapido; cargo test -p fub-format-craft; cd
 apps/client && npx vitest run src/host/craft.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T2 · I contenitori
 

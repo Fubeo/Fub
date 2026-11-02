@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N7 T1 · il crate `fub-format-craft` con i quattro provider a
+  byte in sola lettura, `CraftApp` (con `id()` ed `editor_name()` in più del
+  piano) e il contratto `CraftPreview` v1 con la gemella TS `host/craft.ts`
+  legata dalla fixture `craft-preview.json` (UPDATE_MIRROR=1); `revision` è
+  `fub_abi::Revision`, in JSON una stringa; il lettore TS accetta solo
+  `image/png`; le costanti dei limiti stanno in container, xmp e linked per
+  T2–T4; nel grafo di `overview.md` il crate ha un blocco suo, perché il
+  primo superava 20 nodi · i provider non sono ancora registrati: chi usa
+  Fub non vede niente finché non arriva il task che li monta.
 - 2026-11-01 · regole · L'orchestratore e i coder decidono da soli il come
   tecnico, i formati interni, le dipendenze fra crate del workspace e i file
   legati al task; «Chiede sempre» resta per ciò che si vede, il contratto
