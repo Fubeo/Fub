@@ -46,6 +46,11 @@ import type {
   CommandSpec,
   DraftInfo,
   DocumentWindowEvent,
+  DrawingCommandInfo,
+  DrawingCommandRequest,
+  DrawingGesture,
+  DrawingOpen,
+  DrawingOutcome,
   DocumentWindowRequest,
   GridBytesSession,
   GridBytesWindow,
@@ -88,6 +93,7 @@ import type {
 } from "./contract";
 import type { PrintArtifactOutcome, RevealOutcome, SaveArtifactOutcome } from "./ipc";
 import { mediaKindOfMime, mimeOrOctet } from "../editors/media/media-types";
+import { tryApplyOperation } from "../editors/core/text-operation";
 
 /// Una chiamata arrivata alla porta: quale, e con cosa.
 ///
@@ -153,6 +159,32 @@ export interface GridBytesFake {
   outcomes?: GridCommandOutcome[];
 }
 
+/// Il motore del disegno del finto (K5). Senza, come l'host senza il motore,
+/// ogni porta del disegno rifiuta con `unserved`; dato, il motore c'è: il
+/// finto tiene la copia di ogni istanza aperta (testo LF e revisione), la fa
+/// seguire ai `drawingSync` controllando che ogni differenza si applichi, e
+/// passa gesti e comandi alle risposte del banco. Le chiamate restano nel
+/// registro (`atGate("drawingGesture")`, …).
+export interface DrawingFake {
+  /// Ciò che `openDrawing` risponde; senza, un'istanza nuova alla revisione
+  /// 0 senza parti che restano come sono.
+  open?: (doc: string, text: string) => DrawingOpen;
+  /// L'esito di un gesto. Senza, un gesto lancia: il finto non sa disegnare.
+  gesto?: (gesture: DrawingGesture, copia: DrawingFakeCopy) => DrawingOutcome;
+  /// I comandi della selezione; senza, nessuno.
+  comandi?: (selection: string[], copia: DrawingFakeCopy) => DrawingCommandInfo[];
+  /// L'esito di un comando. Senza, un comando lancia.
+  comando?: (request: DrawingCommandRequest, copia: DrawingFakeCopy) => DrawingOutcome;
+}
+
+/// La copia di un disegno aperto nel motore finto, com'è adesso.
+export interface DrawingFakeCopy {
+  readonly instance: string;
+  readonly doc: string;
+  readonly text: string;
+  readonly revision: string;
+}
+
 export interface Options {
   /// I file del vault: path → testo. Le cartelle si deducono dai path, come
   /// sul disco.
@@ -176,6 +208,9 @@ export interface Options {
   installedPlugins?: InstalledPluginInfo[];
   installablePlugins?: Record<string, InstalledPluginInfo>;
   gridBytes?: GridBytesFake;
+  /// Il motore del disegno; senza, le porte del disegno rifiutano con
+  /// `unserved` (vedi `DrawingFake`).
+  drawing?: DrawingFake;
   /// Provider finti per le query custom, indicizzati dal namespace.
   customQueries?: Record<string, (query: unknown) => unknown>;
   /// I vault che la macchina ricorda (i recenti). `forgetVault` li toglie.
@@ -272,6 +307,9 @@ export interface FakeHost {
   /// dopo la fine. Un banco che la scrivesse proverebbe una shell per una rete
   /// che non esiste.
   liveEmit(session: string, events: LiveEvent[]): void;
+  /// La copia di un disegno aperto nel motore finto, o `undefined` se
+  /// l'istanza non c'è (mai aperta, o chiusa).
+  drawingCopy(instance: string): DrawingFakeCopy | undefined;
 }
 
 /// Una sessione live del finto: ciò che l'host vero tiene, senza la rete.
@@ -349,6 +387,18 @@ export function createFakeHost(options: Options = {}): FakeHost {
   );
   let gridBytesCommit = 0;
   let gridBytesOutcome = 0;
+  const drawing = options.drawing;
+  const drawingCopies = new Map<string, DrawingFakeCopy>();
+  let drawingInstances = 0;
+  /// Il motore spento, come l'host senza il componente.
+  const drawingUnserved = (): PluginError => ({ kind: "unserved", message: "host fake: il motore del disegno non c'è" });
+  /// La copia di un'istanza aperta, o il rifiuto dell'host per una chiusa.
+  const drawingCopyOf = (instance: string): DrawingFakeCopy => {
+    if (!drawing) throw drawingUnserved();
+    const copy = drawingCopies.get(instance);
+    if (!copy) throw { kind: "not_found", message: `host fake: il disegno «${instance}» non è aperto` } satisfies PluginError;
+    return copy;
+  };
   const docs = new Map<string, Document>();
   let known = [...(options.knownVaults ?? [])];
   const trash = new Map<string, Trashed>();
@@ -1402,6 +1452,61 @@ export function createFakeHost(options: Options = {}): FakeHost {
           throw { kind: "not_found", message: "host fake: grid session closed" } satisfies PluginError;
         }
       })),
+      openDrawing: (doc, text, vault) => gate("openDrawing", named([doc, text], vault), Promise.resolve().then(() => {
+        if (!drawing) throw drawingUnserved();
+        const opened = drawing.open?.(doc, text) ?? {
+          instance: `disegno-${++drawingInstances}`,
+          revision: "0",
+          mapped: 0,
+          unmapped: 0,
+          losses: [],
+        };
+        // La copia è il testo come arriva: il contratto lo vuole LF, ed è
+        // il banco a guardarlo (`drawingCopy`), non il finto a ripararlo.
+        drawingCopies.set(opened.instance, {
+          instance: opened.instance,
+          doc,
+          text,
+          revision: opened.revision,
+        });
+        return opened;
+      })),
+      drawingSync: (instance, sync, vault) => gate("drawingSync", named([instance, sync], vault), Promise.resolve().then(() => {
+        const copy = drawingCopyOf(instance);
+        let text: string;
+        if (sync.change.kind === "text") {
+          text = sync.change.value.text;
+        } else {
+          const { edits, length_before, length_after } = sync.change.value;
+          const applied = tryApplyOperation(copy.text, { beforeLength: length_before, afterLength: length_after, edits });
+          if (applied.kind !== "applied") {
+            throw { kind: "bad_args", message: `host fake: \`change.edits\` non si applica alla copia di «${instance}»` } satisfies PluginError;
+          }
+          text = applied.text;
+        }
+        drawingCopies.set(instance, { ...copy, text, revision: sync.revision });
+        return { revision: sync.revision };
+      })),
+      drawingGesture: (instance, gesture, vault) => gate("drawingGesture", named([instance, gesture], vault), Promise.resolve().then(() => {
+        const copy = drawingCopyOf(instance);
+        if (!drawing?.gesto) throw new Error("host fake: il motore finto non ha risposte per i gesti");
+        return drawing.gesto(gesture, copy);
+      })),
+      drawingCommands: (instance, selection, vault) => gate("drawingCommands", named([instance, selection], vault), Promise.resolve().then(() => {
+        const copy = drawingCopyOf(instance);
+        return drawing?.comandi?.(selection, copy) ?? [];
+      })),
+      drawingCommand: (instance, request, vault) => gate("drawingCommand", named([instance, request], vault), Promise.resolve().then(() => {
+        const copy = drawingCopyOf(instance);
+        if (!drawing?.comando) {
+          throw { kind: "bad_args", message: `host fake: il comando \`${request.id}\` non è servito` } satisfies PluginError;
+        }
+        return drawing.comando(request, copy);
+      })),
+      closeDrawing: (instance, vault) => gate("closeDrawing", named([instance], vault), Promise.resolve().then(() => {
+        drawingCopyOf(instance);
+        drawingCopies.delete(instance);
+      })),
       writeDocument: (id, source, base, vault) => {
         // Il guasto si chiede **prima** di posare i byte: `write` gira mentre
         // si compone l'argomento di `gate`, quindi una porta guasta che ci
@@ -1899,6 +2004,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       if (!live) throw new Error(`host fake: no live session ${JSON.stringify(session)}`);
       liveEmit(session, live, events);
     },
+    drawingCopy: (instance) => drawingCopies.get(instance),
   };
 }
 
