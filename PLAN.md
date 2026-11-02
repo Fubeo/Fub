@@ -831,7 +831,7 @@ nucleo compila per `wasm32-unknown-unknown`; l'invariante passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cargo build
 -p fub-canvas-core --target wasm32-unknown-unknown; cargo test -p fub-abi
 --test dependency_invariant
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T9 · I tratti nel client
 

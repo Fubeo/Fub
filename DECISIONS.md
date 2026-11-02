@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N4 · T8: l'inchiostro fub:ink sta in fub-canvas-core (modulo
+  ink), che ora dipende anche da fub-ink-codec; i campi noti di un tratto
+  sono Option<Value>, così un tratto non valido si conserva com'era e il suo
+  stato si calcola a parte (Drawn o Kept con il perché); la versione del
+  livello resta il Number del file (1.0 resta 1.0). Aggiunti
+  InkAnchor::card_of/to_value e InkLayer::is_bare per T10. Perché: leggere
+  l'inchiostro non deve mai riscrivere ciò che non si capisce, e 28 vettori
+  danno lo stesso esito del TypeScript.
 - 2026-11-02 · N4 · T6: il codec dell'inchiostro in un crate suo,
   `fub-ink-codec`, spostato con git mv; fub-scene lo riesporta e non dipende
   più da fub-ink (`SCENE_ALLOWED_DIRECT=[fub-ink-codec, quick-xml, serde]`,
