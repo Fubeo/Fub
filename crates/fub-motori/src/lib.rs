@@ -11,7 +11,10 @@
 //! - [`Cache`], la forma con cui una cache di un motore si fa contare e
 //!   svuotare dal budget;
 //! - [`Motori`], il registro dove ogni adattatore iscrive il suo motore
-//!   ([`Voce`]) con il suo spazio e le sue estensioni.
+//!   ([`Voce`]) con il suo spazio e le sue estensioni;
+//! - [`catalogo`], la traduzione dei comandi di un motore in comandi di Fub
+//!   ([`importa`]) e il controllo che nessuno si perda
+//!   ([`verifica_copertura`]), con il [`Modulo`] dei loro parametri.
 //!
 //! Le regole che valgono per tutto il crate:
 //!
@@ -24,15 +27,22 @@
 //! - **chiudere libera**: le cache si svuotano e la memoria torna al sistema
 //!   ([`rilascia_al_sistema`]).
 
+pub mod catalogo;
 mod lavori;
 mod memoria;
+pub mod modulo;
 mod pigro;
 pub mod pressione;
 mod registro;
 mod servizi;
 
+pub use catalogo::{
+    importa, verifica_copertura, Adattamento, ComandoFub, Copertura, Delega, Mancanza, Posto,
+    SpecMotore,
+};
 pub use lavori::Lavori;
 pub use memoria::{rilascia_al_sistema, Budget, Cache, Resoconto};
+pub use modulo::{Campo, ErroreSchema, Modulo, Tipo};
 pub use pigro::{Crea, Pigro};
 pub use pressione::Tetto;
 pub use registro::{Motori, StatoVoce, Voce};
