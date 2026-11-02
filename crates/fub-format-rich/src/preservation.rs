@@ -41,7 +41,8 @@
 //! salvataggio dopo un'apertura degli stessi byte non rifà la prova.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Instant;
 
 use wordcraft_doc::{Block, Document, Part, PartKind};
 
@@ -290,39 +291,199 @@ const REMEMBERED: usize = 8;
 /// Quanto pesano al più, in voci ([`Baseline::weight`]), le prove che si
 /// ricordano oltre all'ultima: circa 350 MB. Un documento da centomila
 /// paragrafi ne pesa da solo più di quattro milioni; l'ultima prova si
-/// ricorda comunque, perché è quella che il salvataggio cerca.
+/// ricorda comunque, perché è quella che il salvataggio cerca. Sopra queste
+/// due regole c'è il tetto del budget dei motori ([`crate::motore`]), che può
+/// togliere anche l'ultima.
 const REMEMBERED_WEIGHT: usize = 4_000_000;
 
-/// Le ultime prove a vuoto accettate, per impronta dei byte del file. Il
-/// writer è deterministico (lo prova il banco del corpus), quindi gli stessi
-/// byte danno la stessa prova: l'impronta fa da revisione, e una base cambiata
-/// ha un'impronta nuova. Il salvataggio, che di solito segue l'apertura degli
-/// stessi byte, non riscrive né reinventaria la base.
-static BASELINES: Mutex<VecDeque<(String, Arc<Baseline>)>> = Mutex::new(VecDeque::new());
+/// Quanti byte di memoria tiene una voce di [`Baseline::weight`], nella stima
+/// con cui le prove ricordate si contano nel budget dei motori. Con
+/// [`BYTES_PER_BASELINE`]: una prova di peso `p` conta
+/// `p × BYTES_PER_ENTRY + BYTES_PER_BASELINE` byte.
+///
+/// Misurata il 2026-11-02 (Linux, glibc, profilo release) con un allocatore
+/// che conta i byte vivi: la differenza dei byte vivi prima di un'apertura e
+/// dopo, con l'apertura lasciata cadere e la sola prova ricordata, a motore
+/// già scaldato da un'apertura degli stessi byte e svuotato. Sui documenti
+/// del corpus `tests/corpus/docx/`:
+///
+/// | documento | peso | byte vivi | byte per voce |
+/// |---|---:|---:|---:|
+/// | `libreoffice.docx` (8 KB, scritto da LibreOffice) | 1.569 | 313.202 | 199,6 |
+/// | `stili-elenchi-tabelle.docx` | 1.098 | 207.088 | 188,6 |
+/// | `segni-di-word.docx` | 543 | 106.083 | 195,4 |
+/// | generato da `segni-di-word.docx`, 2.000 paragrafi | 101.109 | 9.491.963 | 93,9 |
+/// | generato, 20.000 paragrafi | 1.007.109 | 94.935.803 | 94,3 |
+///
+/// Una voce costa circa 94 byte; i documenti piccoli hanno in più una parte
+/// fissa (le parti del pacchetto) fino a circa 165 KB. La stima arrotonda
+/// tutte e due in alto, perché contare un po' di più libera prima, e contare
+/// meno lascerebbe la memoria oltre il tetto: sta sopra ogni misura, dell'8%
+/// per il documento da 2.000 paragrafi e del 6% per quello da 20.000.
+pub(crate) const BYTES_PER_ENTRY: u64 = 100;
+
+/// La parte fissa della stima di una prova ricordata ([`BYTES_PER_ENTRY`]),
+/// chiave compresa.
+pub(crate) const BYTES_PER_BASELINE: u64 = 160 * 1024;
+
+/// Una prova ricordata, con la sua chiave e il suo peso.
+struct Remembered {
+    key: String,
+    baseline: Arc<Baseline>,
+    weight: usize,
+}
+
+impl Remembered {
+    fn bytes(&self) -> u64 {
+        bytes_of(self.weight)
+    }
+}
+
+/// I byte stimati di una prova di questo peso.
+fn bytes_of(weight: usize) -> u64 {
+    (weight as u64)
+        .saturating_mul(BYTES_PER_ENTRY)
+        .saturating_add(BYTES_PER_BASELINE)
+}
+
+/// Le ultime prove a vuoto accettate, per impronta dei byte del file: una
+/// cache del budget dei motori, che il motore dei documenti
+/// ([`crate::motore::MotoreDocumenti`]) tiene e iscrive.
+///
+/// Il writer è deterministico (lo prova il banco del corpus), quindi gli
+/// stessi byte danno la stessa prova: l'impronta fa da revisione, e una base
+/// cambiata ha un'impronta nuova. Il salvataggio, che di solito segue
+/// l'apertura degli stessi byte, non riscrive né reinventaria la base; se il
+/// budget l'ha tolta, la rifà: più lento, con gli stessi byte.
+///
+/// Il lucchetto copre soltanto l'elenco: una prova tolta cade dopo averlo
+/// lasciato, e niente sotto il lucchetto chiama codice di altri.
+pub(crate) struct Baselines {
+    state: Mutex<BaselinesState>,
+}
+
+struct BaselinesState {
+    /// Dalla più vecchia all'ultima.
+    remembered: VecDeque<Remembered>,
+    last_use: Instant,
+}
+
+impl Baselines {
+    pub(crate) fn new() -> Self {
+        Baselines {
+            state: Mutex::new(BaselinesState {
+                remembered: VecDeque::new(),
+                last_use: Instant::now(),
+            }),
+        }
+    }
+
+    // Sotto il lucchetto non si chiama codice di altri e non si lascia cadere
+    // una prova: un avvelenamento non lascia l'elenco a metà, e lo si
+    // riprende così com'è.
+    fn state(&self) -> std::sync::MutexGuard<'_, BaselinesState> {
+        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// La prova a vuoto accettata per questa chiave, se si ricorda.
+    pub(crate) fn find(&self, key: &str) -> Option<Arc<Baseline>> {
+        let mut state = self.state();
+        state.last_use = Instant::now();
+        state
+            .remembered
+            .iter()
+            .find(|r| r.key == key)
+            .map(|r| Arc::clone(&r.baseline))
+    }
+
+    /// Ricorda la prova a vuoto accettata per questa chiave: al più
+    /// [`REMEMBERED`], e quelle prima dell'ultima entro [`REMEMBERED_WEIGHT`].
+    pub(crate) fn remember(&self, key: String, baseline: Arc<Baseline>) {
+        // Il peso conta milioni di voci in un documento grande: fuori dal
+        // lucchetto.
+        let weight = baseline.weight();
+        let dropped: Vec<Remembered> = {
+            let mut state = self.state();
+            state.last_use = Instant::now();
+            let mut out: Vec<Remembered> = Vec::new();
+            let mut kept = VecDeque::with_capacity(state.remembered.len() + 1);
+            for r in state.remembered.drain(..) {
+                if r.key == key {
+                    out.push(r);
+                } else {
+                    kept.push_back(r);
+                }
+            }
+            kept.push_back(Remembered {
+                key,
+                baseline,
+                weight,
+            });
+            let weights: Vec<usize> = kept.iter().map(|r| r.weight).collect();
+            out.extend(kept.drain(..forgotten(&weights)));
+            state.remembered = kept;
+            out
+        };
+        // Le prove dimenticate cadono qui, a lucchetto lasciato.
+        drop(dropped);
+    }
+
+    /// Quante prove si ricordano.
+    pub(crate) fn len(&self) -> usize {
+        self.state().remembered.len()
+    }
+}
+
+impl fub_motori::Cache for Baselines {
+    fn nome(&self) -> &str {
+        "documenti.prove"
+    }
+
+    fn byte(&self) -> u64 {
+        self.state().remembered.iter().map(Remembered::bytes).sum()
+    }
+
+    /// Toglie le prove dalla più vecchia finché non ha liberato `quanto`:
+    /// anche l'ultima, se serve.
+    fn libera(&self, quanto: u64) -> u64 {
+        let mut freed = 0u64;
+        let out: Vec<Remembered> = {
+            let mut state = self.state();
+            let mut out = Vec::new();
+            while freed < quanto {
+                let Some(r) = state.remembered.pop_front() else {
+                    break;
+                };
+                freed += r.bytes();
+                out.push(r);
+            }
+            out
+        };
+        // Le prove tolte cadono qui, a lucchetto lasciato.
+        drop(out);
+        freed
+    }
+
+    fn ultimo_uso(&self) -> Instant {
+        self.state().last_use
+    }
+}
 
 /// La chiave con cui una base si ricorda.
 pub(crate) fn key(bytes: &[u8]) -> String {
     inventory::sha256(bytes)
 }
 
-/// La prova a vuoto accettata per questi byte, se si ricorda.
+/// La prova a vuoto accettata per questi byte, se il motore dei documenti del
+/// processo la ricorda.
 pub(crate) fn remembered(key: &str) -> Option<Arc<Baseline>> {
-    let baselines = BASELINES.lock().ok()?;
-    baselines
-        .iter()
-        .find(|(k, _)| k == key)
-        .map(|(_, baseline)| Arc::clone(baseline))
+    crate::motore::MotoreDocumenti::processo().remembered(key)
 }
 
-/// Ricorda la prova a vuoto accettata per questi byte.
+/// Ricorda nel motore dei documenti del processo la prova a vuoto accettata
+/// per questi byte.
 pub(crate) fn remember(key: String, baseline: Arc<Baseline>) {
-    let Ok(mut baselines) = BASELINES.lock() else {
-        return;
-    };
-    baselines.retain(|(k, _)| *k != key);
-    baselines.push_back((key, baseline));
-    let weights: Vec<usize> = baselines.iter().map(|(_, b)| b.weight()).collect();
-    baselines.drain(..forgotten(&weights));
+    crate::motore::MotoreDocumenti::processo().remember(key, baseline);
 }
 
 /// Quante prove, dalle più vecchie, si dimenticano, dati i pesi dalla più

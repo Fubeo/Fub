@@ -44,6 +44,7 @@ mod graft;
 mod inventory;
 mod missing;
 mod model;
+pub mod motore;
 mod odt;
 mod parallel;
 pub mod preservation;
@@ -103,17 +104,27 @@ impl Codec {
         }
     }
 
+    /// Le estensioni dei file del codec, senza punto.
+    pub fn extensions(self) -> &'static [&'static str] {
+        match self {
+            Codec::Docx => &["docx"],
+            Codec::Odt => &["odt"],
+            Codec::Rtf => &["rtf"],
+            Codec::Doc => &["doc", "dot"],
+        }
+    }
+
     fn descriptor(self) -> FormatDescriptor {
-        let (name, extensions): (&str, &[&str]) = match self {
-            Codec::Docx => ("Word", &["docx"]),
-            Codec::Odt => ("OpenDocument", &["odt"]),
-            Codec::Rtf => ("RTF", &["rtf"]),
-            Codec::Doc => ("Word 97-2003", &["doc", "dot"]),
+        let name = match self {
+            Codec::Docx => "Word",
+            Codec::Odt => "OpenDocument",
+            Codec::Rtf => "RTF",
+            Codec::Doc => "Word 97-2003",
         };
         FormatDescriptor {
             id: self.format_id().to_string(),
             name: name.to_string(),
-            extensions: extensions.iter().map(|e| e.to_string()).collect(),
+            extensions: self.extensions().iter().map(|e| e.to_string()).collect(),
             source: SourceKind::Bytes,
         }
     }
@@ -247,7 +258,10 @@ pub struct RichProvider {
 }
 
 impl RichProvider {
+    /// Il provider di questo codec. Il primo provider del processo iscrive il
+    /// motore dei documenti nel registro dei motori ([`motore`]), spento.
     pub fn new(codec: Codec) -> Self {
+        motore::MotoreDocumenti::processo();
         RichProvider { codec }
     }
 
