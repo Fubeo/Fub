@@ -5,6 +5,7 @@ import { api } from "../../host/ipc";
 import { openVaultRoot, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
 import type { GridDialogs, GridRibbon } from "../grid/ribbon/ribbon";
+import type { GridPalette } from "../grid/palette/commands";
 import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
 import { onEvent } from "../../state/kernel";
 import { PROOF_NS, type ProofPorts } from "./proof-ports";
@@ -378,6 +379,14 @@ export function createDocumentSurfaceRegistry(
         const looks = new MutationObserver(() => engine.setPaper(adaptedPaper(context.parent)));
         looks.observe(context.parent, { attributes: true, attributeFilter: ["class"] });
         engine.setPaper(adaptedPaper(context.parent));
+        // I comandi del catalogo nella tavolozza arrivano allo stesso modo.
+        let palette: GridPalette | null = null;
+        void import("../grid/palette/commands").then(
+          ({ mountGridPalette }) => {
+            if (!destroyed) palette = mountGridPalette(engine);
+          },
+          () => {},
+        );
         void import("../grid/ribbon/ribbon").then(
           ({ mountRibbon, mountGridDialogs }) => {
             if (destroyed) return;
@@ -417,6 +426,7 @@ export function createDocumentSurfaceRegistry(
           },
           contextMenu: (at) => gridContextMenu(menuHost, at),
           miniBar: () => gridMiniBar(menuHost),
+          paletteCommands: () => palette?.commands() ?? [],
           status: {
             counts: false,
             items: () => [{
@@ -435,6 +445,8 @@ export function createDocumentSurfaceRegistry(
             looks.disconnect();
             ribbon?.destroy();
             ribbon = null;
+            palette?.destroy();
+            palette = null;
             dialogs?.destroy();
             dialogs = null;
             waiting = null;

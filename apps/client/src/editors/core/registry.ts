@@ -438,7 +438,25 @@ export interface EditorSurface {
    * a sheet); without it the shell narrows the formatting bar.
    */
   miniBar?(): SurfaceMiniBar | null;
+  /**
+   * The commands this surface adds to the command palette while its pane has
+   * the focus (a sheet's catalog commands). Read each time the palette opens;
+   * an entry with `unavailable` is shown with that reason and not run.
+   */
+  paletteCommands?(): readonly SurfacePaletteCommand[];
   destroy(): void;
+}
+
+/** A command a surface offers to the command palette. */
+export interface SurfacePaletteCommand {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  /** The group the palette shows beside the title («Foglio»). */
+  readonly group: string;
+  /** Why it cannot run now, or `null` when it can. */
+  readonly unavailable: string | null;
+  run(): void;
 }
 
 /**

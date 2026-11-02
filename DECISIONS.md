@@ -59,6 +59,18 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K3 · T7: i titoli dei 303 comandi e i nomi dei campi stanno
+  in un catalogo dei testi a parte (`editors/grid/palette/strings.ts`),
+  caricato col foglio, e non in `i18n/catalog.ts`, per non gonfiare i testi
+  della shell; i valori delle scelte restano come li scrive il catalogo. La
+  finestra costruita dai campi serve ai 106 comandi con parametri
+  obbligatori e chiede solo la forma principale; i 197 senza partono subito
+  sulla selezione, come il pulsante della barra; quelli con una finestra
+  scritta a mano aprono quella. Un comando spento resta in elenco col motivo.
+  I comandi compaiono anche nel lanciatore dello Scrittoio. Limiti noti: i
+  comandi che leggono soltanto non mostrano il risultato; due comandi hanno
+  lo stesso titolo «Riempimento rapido» e si distinguono dalla scheda.
+
 - 2026-11-02 · K3 · T8 (branch `piano/k3-ipc-motori`, in attesa di D-2):
   `Host::warm_engine` e `Host::document_closed` hanno nomi inglesi come il
   resto di `fub-host`; l'host sa quali documenti ricchi sono aperti dalle

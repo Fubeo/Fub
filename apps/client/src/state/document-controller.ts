@@ -136,7 +136,7 @@ import {
 } from "./layout";
 import { createNote, handToSystem, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
 import { confirm } from "../platform/confirm";
-import { registerShellCommand } from "../ui/commands";
+import { registerShellCommand, type CommandEntry } from "../ui/commands";
 import { registerLiveCommands } from "../editors/spatial/live/commands";
 import { VECTOR_PROFILE } from "../editors/spatial/modes";
 import { EXPORT_COMMAND } from "../ui/shell-ids.generated";
@@ -541,6 +541,26 @@ function focusedAnchorSurface(): { doc: string; anchorHere: () => SurfaceAnchor 
   if (r?.shown?.k !== "doc" || !r.surface?.anchorHere) return null;
   const surface = r.surface;
   return { doc: r.shown.doc, anchorHere: () => surface.anchorHere?.() ?? null };
+}
+
+/// I comandi che la superficie del riquadro col fuoco aggiunge alla palette
+/// (i comandi del foglio), come voci della palette: nessuna se il riquadro
+/// non mostra un documento o la superficie non ne ha.
+export function focusedSurfaceCommands(): CommandEntry[] {
+  const r = panes.get(layout.focus);
+  if (r?.shown?.k !== "doc" || !r.surface?.paletteCommands) return [];
+  return r.surface.paletteCommands().map((command): CommandEntry => ({
+    id: command.id,
+    title: command.title,
+    description: command.description,
+    layer: "surface",
+    binding: null,
+    declared: null,
+    spec: null,
+    run: () => command.run(),
+    group: command.group,
+    unavailable: command.unavailable,
+  }));
 }
 
 /// Ctrl+F fuori dal testo apre la stessa barra che apre dentro: quella della
