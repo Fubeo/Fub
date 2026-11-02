@@ -89,6 +89,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   [proiezione dei documenti di videoscrittura](reference/rich-projection.md)
   e la [sessione live](reference/live-session.md)
 - [Il server MCP](reference/mcp-server.md)
+- [Le schede della lavagna](reference/canvas-cards.md): specie, schede vive e
+  ferme, il contratto dei renderer
 
 ## Vedere stato e direzione
 
