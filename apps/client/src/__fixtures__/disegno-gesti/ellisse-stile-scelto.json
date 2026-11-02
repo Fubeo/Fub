@@ -1,0 +1,76 @@
+{
+  "name": "ellisse-stile-scelto",
+  "description": "un'ellisse col colore e lo spessore scelti",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n  </g>\n</svg>\n",
+  "gesture": {
+    "tool": "ellipse",
+    "layer": null,
+    "selection": [],
+    "zoom": 1,
+    "snap": {
+      "grid": null,
+      "free": false
+    },
+    "style": {
+      "stroke": "#0072b2",
+      "width": 8,
+      "fill": null
+    },
+    "events": [
+      {
+        "kind": "down",
+        "x": 40,
+        "y": 40,
+        "pressure": 0.5,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      },
+      {
+        "kind": "drag",
+        "x": 140,
+        "y": 100,
+        "pressure": 0.5,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      },
+      {
+        "kind": "up",
+        "x": 140,
+        "y": 100,
+        "pressure": 0,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      }
+    ]
+  },
+  "expect": {
+    "ops": [
+      {
+        "op": "add",
+        "parent": "l1a2b3c4d",
+        "pos": {
+          "last": true
+        },
+        "elem": {
+          "tag": "ellipse",
+          "attrs": {
+            "id": "@1",
+            "cx": "90",
+            "cy": "70",
+            "rx": "50",
+            "ry": "30",
+            "fill": "none",
+            "stroke": "#0072b2",
+            "stroke-width": "8"
+          }
+        }
+      }
+    ],
+    "selection": [],
+    "refused": null,
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <ellipse id=\"@1\" cx=\"90\" cy=\"70\" rx=\"50\" ry=\"30\" fill=\"none\" stroke=\"#0072b2\" stroke-width=\"8\"/>\n  </g>\n</svg>\n"
+  }
+}

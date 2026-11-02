@@ -1,0 +1,76 @@
+{
+  "name": "controllo-coordinate-zoom",
+  "description": "lo stesso rettangolo con lo zoom al 200%: sullo schermo è grande il doppio, nella scena è lo stesso",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n  </g>\n</svg>\n",
+  "gesture": {
+    "tool": "rect",
+    "layer": null,
+    "selection": [],
+    "zoom": 2,
+    "snap": {
+      "grid": null,
+      "free": false
+    },
+    "style": {
+      "stroke": "#000000",
+      "width": 4,
+      "fill": null
+    },
+    "events": [
+      {
+        "kind": "down",
+        "x": 10,
+        "y": 10,
+        "pressure": 0.5,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      },
+      {
+        "kind": "drag",
+        "x": 60,
+        "y": 40,
+        "pressure": 0.5,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      },
+      {
+        "kind": "up",
+        "x": 60,
+        "y": 40,
+        "pressure": 0,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      }
+    ]
+  },
+  "expect": {
+    "ops": [
+      {
+        "op": "add",
+        "parent": "l1a2b3c4d",
+        "pos": {
+          "last": true
+        },
+        "elem": {
+          "tag": "rect",
+          "attrs": {
+            "id": "@1",
+            "x": "10",
+            "y": "10",
+            "width": "50",
+            "height": "30",
+            "fill": "none",
+            "stroke": "#000000",
+            "stroke-width": "4"
+          }
+        }
+      }
+    ],
+    "selection": [],
+    "refused": null,
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <rect id=\"@1\" x=\"10\" y=\"10\" width=\"50\" height=\"30\" fill=\"none\" stroke=\"#000000\" stroke-width=\"4\"/>\n  </g>\n</svg>\n"
+  }
+}

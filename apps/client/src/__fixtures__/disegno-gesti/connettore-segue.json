@@ -1,0 +1,83 @@
+{
+  "name": "connettore-segue",
+  "description": "spostando Alfa, il connettore agganciato al suo lato destro lo segue nello stesso passo",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <rect id=\"oa1a1a1a1\" x=\"40\" y=\"60\" width=\"60\" height=\"40\" fill=\"#e69f00\"><title>Alfa</title></rect>\n    <rect id=\"ob2b2b2b2\" x=\"240\" y=\"60\" width=\"60\" height=\"40\" fill=\"#e69f00\"><title>Beta</title></rect>\n    <path id=\"ok3k3k3k3\" fub:shape=\"connector\" fub:geom=\"straight 100 80 240 80\" fub:from=\"oa1a1a1a1 right\" fub:to=\"ob2b2b2b2 left\" d=\"M100 80 L240 80\" fill=\"none\" stroke=\"#000000\"/>\n  </g>\n</svg>\n",
+  "gesture": {
+    "tool": "select",
+    "layer": null,
+    "selection": [],
+    "zoom": 1,
+    "snap": {
+      "grid": null,
+      "free": false
+    },
+    "style": null,
+    "events": [
+      {
+        "kind": "down",
+        "x": 70,
+        "y": 80,
+        "pressure": 0.5,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      },
+      {
+        "kind": "drag",
+        "x": 75,
+        "y": 100,
+        "pressure": 0.5,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      },
+      {
+        "kind": "drag",
+        "x": 70,
+        "y": 120,
+        "pressure": 0.5,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      },
+      {
+        "kind": "up",
+        "x": 70,
+        "y": 120,
+        "pressure": 0,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      }
+    ]
+  },
+  "expect": {
+    "ops": [
+      {
+        "op": "batch",
+        "ops": [
+          {
+            "op": "set",
+            "id": "oa1a1a1a1",
+            "attrs": {
+              "transform": "matrix(1 0 0 1 0 40)"
+            }
+          },
+          {
+            "op": "set",
+            "id": "ok3k3k3k3",
+            "attrs": {
+              "fub:geom": "straight 100 120 240 80",
+              "d": "M100 120 L240 80"
+            }
+          }
+        ]
+      }
+    ],
+    "selection": [
+      "oa1a1a1a1"
+    ],
+    "refused": null,
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n    <rect id=\"oa1a1a1a1\" x=\"40\" y=\"60\" width=\"60\" height=\"40\" fill=\"#e69f00\" transform=\"matrix(1 0 0 1 0 40)\">\n      <title>Alfa</title>\n    </rect>\n    <rect id=\"ob2b2b2b2\" x=\"240\" y=\"60\" width=\"60\" height=\"40\" fill=\"#e69f00\"><title>Beta</title></rect>\n    <path id=\"ok3k3k3k3\" fub:shape=\"connector\" fub:geom=\"straight 100 120 240 80\" fub:from=\"oa1a1a1a1 right\" fub:to=\"ob2b2b2b2 left\" d=\"M100 120 L240 80\" fill=\"none\" stroke=\"#000000\"/>\n  </g>\n</svg>\n"
+  }
+}
