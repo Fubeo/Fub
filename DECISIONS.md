@@ -59,6 +59,16 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N3 · T12: gli strumenti MCP fub_canvas_create e
+  fub_canvas_apply chiamano canvas.create e canvas.apply con gli id scritti
+  come costanti, come note.create, perché fub-cli non dipende da fub-
+  features; fub_canvas_apply risponde {doc, dry_run, outcome} in prova e
+  {doc, dry_run, created, revision} applicato, e check_read più check_write
+  valgono anche in prova (in sola lettura nemmeno la prova passa); l'MCP non
+  passa il seme, quindi gli id nuovi vengono dalla revisione. Se
+  fub_canvas_create crea un nome diverso da quello provato, lo dice invece
+  di tacerlo. Perché: un agente crea e riempie una lavagna con le stesse
+  regole di accesso degli altri strumenti.
 - 2026-11-02 · N3 · T11: canvas.create scrive come sorgente la lavagna vuota
   del nucleo (patch_source su Canvas::default, riletta con Core::open prima
   di scrivere), perché il nucleo non ha una funzione apposta; senza nome

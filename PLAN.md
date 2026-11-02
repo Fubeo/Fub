@@ -735,7 +735,7 @@ che non è una lavagna; server in sola lettura.
 Fatto quando: `cargo test -p fub-cli --test mcp` passa col test del cancello
 e coi rifiuti dei casi limite.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T13 · La facciata WebAssembly `fub-canvas-wasm`
 
