@@ -59,6 +59,16 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K3 · T5 e T6: il motore dei fogli conta le istanze aperte con
+  una `Presa` (cade l'ultima, si svuotano le sue cache); le cache dei documenti
+  (le prove a vuoto, `documenti.prove`, con la stima dei byte misurata sul
+  corpus) e i dizionari del correttore (`correttore.dizionari`) si svuotano
+  alla chiusura dell'ultimo vault, passando da `fub-host/src/rich.rs` e da
+  `fub_features::proof` senza nominare WordCraft · perché: chi chiude non deve
+  sapere quali motori ci sono. Rischi annotati: lo svuotamento dei fogli gira
+  sotto il lucchetto della superficie della griglia del kernel (toglierlo vuol
+  dire toccare `fub-kernel`/`fub-host`); svuotare i dizionari toglie anche la
+  sillabazione, che si ricostruisce alla prima richiesta.
 - 2026-11-02 · K3 · Il test di copertura dei comandi (T4): la regola sta in
   `fub-motori` (`catalogo`, provata con specifiche finte in
   `crates/fub-motori/tests/copertura.rs`), il test vero sul motore dei fogli

@@ -358,7 +358,7 @@ byte; con due istanze, chiuderne una non svuota; il budget a tetto basso libera
 il dizionario; i test di oggi di `fub-format-xlsx` verdi senza cambiare le
 attese.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T6 · WordCraft sul registro
 
@@ -397,7 +397,7 @@ stessi byte di prima; i test di oggi (`corpus.rs`, `graft.rs` dove gira, i
 test di `preservation.rs`) verdi senza cambiare le attese; un test di
 `fub-host` che chiude il vault e trova le cache a zero.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T7 · I comandi dei fogli nella tavolozza
 
