@@ -127,7 +127,7 @@ numero). È il porto di `patchCanvasSource`
 
 Le regole dei byte nuovi:
 
-- **R6 · Scrivere è `JSON.stringify`.** L'escape solo per `"`, `\\` e i
+- **R6 · Scrivere è `JSON.stringify`.** L'escape solo per `"`, `\` e i
   controlli; `/`, i caratteri non ASCII, U+2028 e U+2029 restano come sono. I
   numeri come `Number.prototype.toString`, anche quelli dei campi
   sconosciuti, che si scrivono come li riscriverebbe JavaScript dopo averli
