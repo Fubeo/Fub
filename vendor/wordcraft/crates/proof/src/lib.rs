@@ -59,6 +59,7 @@ pub mod patterns;
 pub mod pl;
 pub mod pt;
 pub mod ru;
+mod slot;
 pub mod tr;
 pub mod vi;
 
@@ -157,6 +158,46 @@ pub fn set_dictionaries_folder(dir: Option<std::path::PathBuf>) {
     cs::reload_dictionary();
     id::reload_dictionary();
     DICTIONARY_GENERATION.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Estimated heap bytes of the Hunspell dictionaries read from disk so far, every language
+/// together: the capacity of their tables and strings, measured once when each is read. A
+/// dictionary given in memory (`install_dictionary`) isn't counted: [`release_dictionaries`]
+/// keeps it.
+pub fn loaded_dictionaries_bytes() -> usize {
+    pl::loaded_dictionary_bytes()
+        + pt::loaded_dictionary_bytes()
+        + it::loaded_dictionary_bytes()
+        + hr::loaded_dictionary_bytes()
+        + tr::loaded_dictionary_bytes()
+        + ru::loaded_dictionary_bytes()
+        + cs::loaded_dictionary_bytes()
+        + id::loaded_dictionary_bytes()
+}
+
+/// Drop the Hunspell dictionaries read from disk, every language's; each is read again on its next
+/// use, from the same search path, so results don't change. A check running on another thread
+/// finishes with the dictionary it has. The user dictionary and the ignored words are kept.
+/// Returns the estimated bytes released ([`loaded_dictionaries_bytes`]).
+pub fn release_dictionaries() -> usize {
+    pl::release_dictionary()
+        + pt::release_dictionary()
+        + it::release_dictionary()
+        + hr::release_dictionary()
+        + tr::release_dictionary()
+        + ru::release_dictionary()
+        + cs::release_dictionary()
+        + id::release_dictionary()
+}
+
+/// Estimated heap bytes of the hyphenation data decoded so far ([`hyphen::loaded_bytes`]).
+pub fn loaded_hyphenation_bytes() -> usize {
+    hyphen::loaded_bytes()
+}
+
+/// Drop the decoded hyphenation data, decoded again on next use ([`hyphen::release_hyphenation`]).
+pub fn release_hyphenation() -> usize {
+    hyphen::release_hyphenation()
 }
 
 /// Each language that reads an installed Hunspell dictionary, with the `.dic` file found for it
@@ -331,7 +372,7 @@ fn base_known(d: &dict::Dictionary, w: &str) -> bool {
 
 fn known_core(w: &str) -> bool {
     let d = dict::Dictionary::en_us();
-    if base_known(d, w) || COMMON.split(' ').any(|c| c == w) {
+    if base_known(&d, w) || COMMON.split(' ').any(|c| c == w) {
         return true;
     }
     if user_words().read().unwrap_or_else(|e| e.into_inner()).contains(w) || ignored_words().read().unwrap_or_else(|e| e.into_inner()).contains(w) {
@@ -360,7 +401,7 @@ fn known_core(w: &str) -> bool {
         {
             for a in adds {
                 let s = format!("{stem}{a}");
-                if base_known(d, &s) {
+                if base_known(&d, &s) {
                     return true;
                 }
             }
@@ -370,7 +411,7 @@ fn known_core(w: &str) -> bool {
                 && b.len() >= 3
                 && b.last() == b.get(b.len() - 2)
                 && let Some(s) = stem.get(..stem.len() - 1)
-                && base_known(d, s)
+                && base_known(&d, s)
             {
                 return true;
             }
@@ -380,7 +421,7 @@ fn known_core(w: &str) -> bool {
     for pre in ["un", "re", "non", "pre", "over", "under", "co", "mis"] {
         if let Some(rest) = w.strip_prefix(pre)
             && rest.len() >= 3
-            && base_known(d, rest)
+            && base_known(&d, rest)
         {
             return true;
         }
