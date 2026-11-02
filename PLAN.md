@@ -233,7 +233,7 @@ stampa i due numeri; con un `budgets.json` di prova a tetto più basso esce 1
 con l'elenco; con un albero finto che contiene `winit` esce 1 (se lo script
 accetta un albero da file per la prova, quella è la prova).
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T3 · Le patch che rendono liberabili le cache globali dei motori
 

@@ -59,6 +59,12 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K3 · `check-motori.mjs` ammette `rfd` solo se lo porta
+  `tauri-plugin-dialog` (i dialoghi di sistema della shell di Fub, non
+  l'interfaccia di un motore); «librerie doppie» sono i nomi in due o più
+  versioni (45 con tutte le feature e tutte le piattaforme), non i 61 nomi di
+  `cargo tree -d`, che conta anche la stessa versione ripetuta · fonte:
+  report del coder di T2, accettato dall'orchestratore.
 - 2026-11-02 · K3 · Lavoro di notte senza l'utente: le domande del «Chiede
   sempre» si raccolgono in `PLAN.md` (D-1…D-3) e intanto vale la scelta più
   sicura e reversibile; i due IPC nuovi (scaldare, «documento chiuso») si
