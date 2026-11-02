@@ -20,6 +20,7 @@ members = [
     "crates/fub-format-svg",
     "crates/fub-format-rich",
     "crates/fub-format-xlsx",
+    "crates/fub-format-craft",
     "crates/fub-importers",
     "crates/fub-features",
     "crates/fub-host",
@@ -162,6 +163,7 @@ fub-ink = { path = "crates/fub-ink", version = "0.1.0" }
 fub-componenti = { path = "crates/fub-componenti", version = "0.1.0" }
 fub-scene = { path = "crates/fub-scene", version = "0.1.0" }
 fub-format-svg = { path = "crates/fub-format-svg", version = "0.1.0" }
+fub-format-craft = { path = "crates/fub-format-craft", version = "0.1.0" }
 fub-format-rich = { path = "crates/fub-format-rich", version = "0.1.0" }
 fub-format-xlsx = { path = "crates/fub-format-xlsx", version = "0.1.0" }
 fub-importers = { path = "crates/fub-importers", version = "0.1.0" }

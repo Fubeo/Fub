@@ -2124,6 +2124,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "fub-format-craft"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "flate2",
+ "fub-abi",
+ "fub-sdk",
+ "quick-xml",
+ "serde",
+ "serde_json",
+ "zip",
+]
+
+[[package]]
 name = "fub-format-markdown"
 version = "0.1.0"
 dependencies = [
