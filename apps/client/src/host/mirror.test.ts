@@ -13,6 +13,25 @@ import type {
   DocPosition,
   DocumentMatch,
   DocumentSource,
+  DrawingChange,
+  DrawingCommandInfo,
+  DrawingCommandRequest,
+  DrawingEdit,
+  DrawingGesture,
+  DrawingLoss,
+  DrawingLossKind,
+  DrawingOpen,
+  DrawingOutcome,
+  DrawingPhase,
+  DrawingPointer,
+  DrawingPointerKind,
+  DrawingPreview,
+  DrawingRefusal,
+  DrawingSnap,
+  DrawingStyle,
+  DrawingSync,
+  DrawingSynced,
+  DrawingTool,
   EmbedContent,
   Failure,
   EventMask,
@@ -730,6 +749,39 @@ const RECORD_KEYS: Record<string, string[]> = {
     tables: true,
     objects: true,
   }),
+  // Il disegno sul motore (K5): la shell costruisce gesti, sync e comandi, e
+  // un campo dimenticato di qua è un errore di serde a runtime.
+  DrawingOpen: keysOf<DrawingOpen>({ instance: true, revision: true, mapped: true, unmapped: true, losses: true }),
+  DrawingLoss: keysOf<DrawingLoss>({ element: true, kind: true, detail: true }),
+  DrawingSync: keysOf<DrawingSync>({ revision: true, change: true }),
+  DrawingEdit: keysOf<DrawingEdit>({ from: true, to: true, deleted: true, inserted: true }),
+  DrawingSynced: keysOf<DrawingSynced>({ revision: true }),
+  DrawingPointer: keysOf<DrawingPointer>({ kind: true, x: true, y: true, pressure: true, shift: true, alt: true, cmd: true }),
+  DrawingSnap: keysOf<DrawingSnap>({ grid: true, free: true }),
+  DrawingStyle: keysOf<DrawingStyle>({ stroke: true, width: true, fill: true }),
+  DrawingGesture: keysOf<DrawingGesture>({
+    revision: true,
+    phase: true,
+    tool: true,
+    layer: true,
+    selection: true,
+    zoom: true,
+    snap: true,
+    style: true,
+    text: true,
+    events: true,
+  }),
+  DrawingPreview: keysOf<DrawingPreview>({ shape: true, matrix: true, marquee: true }),
+  DrawingOutcome: keysOf<DrawingOutcome>({
+    revision: true,
+    preview: true,
+    ops: true,
+    selection: true,
+    losses: true,
+    refused: true,
+  }),
+  DrawingCommandInfo: keysOf<DrawingCommandInfo>({ id: true, enabled: true }),
+  DrawingCommandRequest: keysOf<DrawingCommandRequest>({ revision: true, id: true, selection: true, value: true }),
   Span: keysOf<Span>({ start: true, end: true }),
   VersionRef: keysOf<VersionRef>({ ts: true, hash: true, size: true }),
   NeighborRef: keysOf<NeighborRef>({ doc: true, via: true, depth: true }),
@@ -1212,6 +1264,19 @@ describe("mirror TS↔Rust", () => {
       "SettingEntry",
       "ExportReport",
       "PluginError",
+      "DrawingOpen",
+      "DrawingLoss",
+      "DrawingSync",
+      "DrawingEdit",
+      "DrawingSynced",
+      "DrawingPointer",
+      "DrawingSnap",
+      "DrawingStyle",
+      "DrawingGesture",
+      "DrawingPreview",
+      "DrawingOutcome",
+      "DrawingCommandInfo",
+      "DrawingCommandRequest",
     ]) {
       expect(fixture[type], `manca il type ${type} nella fixture`).toBeTruthy();
       expect(fixture[type].length, `nessun campione per ${type}`).toBeGreaterThan(0);
@@ -1428,6 +1493,111 @@ describe("mirror TS↔Rust", () => {
         expect(["info", "warning", "error"]).toContain(note.level);
       }
     }
+  });
+
+  it("ogni forma del disegno prodotta da Rust è gestita dal mirror", () => {
+    const tool = (t: DrawingTool): string => {
+      switch (t) {
+        case "select":
+        case "rect":
+        case "ellipse":
+        case "line":
+        case "arrow":
+        case "text":
+          return t;
+        default:
+          return assertNever(t);
+      }
+    };
+    const phase = (p: DrawingPhase): string => {
+      switch (p) {
+        case "preview":
+        case "commit":
+        case "cancel":
+          return p;
+        default:
+          return assertNever(p);
+      }
+    };
+    const pointer = (k: DrawingPointerKind): string => {
+      switch (k) {
+        case "down":
+        case "drag":
+        case "up":
+        case "move":
+        case "double_click":
+          return k;
+        default:
+          return assertNever(k);
+      }
+    };
+    const loss = (k: DrawingLossKind): string => {
+      switch (k) {
+        case "unmapped":
+        case "approximated":
+        case "unsupported":
+          return k;
+        default:
+          return assertNever(k);
+      }
+    };
+    const refusal = (r: DrawingRefusal): string => {
+      switch (r) {
+        case "stale":
+        case "unmapped":
+        case "empty":
+        case "unsupported":
+        case "too_large":
+        case "closed":
+        case "not_ready":
+        case "locked":
+        case "hidden":
+          return r;
+        default:
+          return assertNever(r);
+      }
+    };
+    const change = (c: DrawingChange): string => {
+      switch (c.kind) {
+        case "edits":
+          expect(Object.keys(c.value).sort()).toEqual(["edits", "length_after", "length_before"]);
+          c.value.edits.forEach((e) => expect(Object.keys(e).sort()).toEqual(RECORD_KEYS.DrawingEdit));
+          return c.kind;
+        case "text":
+          expect(Object.keys(c.value)).toEqual(["text"]);
+          return c.kind;
+        default:
+          return assertNever(c);
+      }
+    };
+    const gestures = fixture["DrawingGesture"] as DrawingGesture[];
+    expect(new Set(gestures.map((g) => tool(g.tool)))).toEqual(new Set(["select", "rect", "ellipse", "line", "arrow", "text"]));
+    expect(new Set(gestures.map((g) => phase(g.phase)))).toEqual(new Set(["preview", "commit", "cancel"]));
+    const kinds = gestures.flatMap((g) => g.events.map((e) => pointer(e.kind)));
+    expect(new Set(kinds)).toEqual(new Set(["down", "drag", "up", "move", "double_click"]));
+    for (const g of gestures) {
+      expect(Object.keys(g.snap).sort()).toEqual(RECORD_KEYS.DrawingSnap);
+      if (g.style !== null) expect(Object.keys(g.style).sort()).toEqual(RECORD_KEYS.DrawingStyle);
+      for (const e of g.events) expect(Object.keys(e).sort()).toEqual(RECORD_KEYS.DrawingPointer);
+    }
+    const opened = fixture["DrawingOpen"] as DrawingOpen[];
+    expect(new Set(opened.flatMap((o) => o.losses.map((l) => loss(l.kind))))).toEqual(
+      new Set(["unmapped", "approximated", "unsupported"]),
+    );
+    const outcomes = fixture["DrawingOutcome"] as DrawingOutcome[];
+    expect(new Set(outcomes.flatMap((o) => (o.refused === null ? [] : [refusal(o.refused)])))).toEqual(
+      new Set(["stale", "unmapped", "empty", "unsupported", "too_large", "closed", "not_ready", "locked", "hidden"]),
+    );
+    const previews = outcomes.flatMap((o) => (o.preview === null ? [] : [o.preview]));
+    expect(previews.length).toBeGreaterThan(0);
+    for (const p of previews) {
+      expect(Object.keys(p).sort()).toEqual(RECORD_KEYS.DrawingPreview);
+      expect(p.matrix?.length).toBe(6);
+      expect(p.marquee?.length).toBe(4);
+    }
+    expect(outcomes.some((o) => typeof o.ops === "string")).toBe(true);
+    const syncs = fixture["DrawingSync"] as DrawingSync[];
+    expect(new Set(syncs.map((s) => change(s.change)))).toEqual(new Set(["edits", "text"]));
   });
 
   it("i valori della griglia sui byte hanno ogni forma del tipo TS", () => {
@@ -1752,6 +1922,13 @@ describe("mirror TS↔Rust", () => {
     for (const e of fixture.KernelEvent as KernelEvent[]) {
       if (e.type === "job_done") expect(typeof e.id).toBe("string");
       if (e.type === "batch_ended") expect(typeof e.batch).toBe("string");
+    }
+    // Le revisioni del disegno sono `u64`: il campione Rust è oltre 2^53.
+    for (const type of ["DrawingOpen", "DrawingSync", "DrawingSynced", "DrawingGesture", "DrawingOutcome", "DrawingCommandRequest"]) {
+      for (const sample of fixture[type] as { revision: unknown }[]) {
+        expect(typeof sample.revision, `${type}.revision`).toBe("string");
+        expect(BigInt(sample.revision as string) > BigInt(Number.MAX_SAFE_INTEGER)).toBe(true);
+      }
     }
   });
 });

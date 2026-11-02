@@ -2787,5 +2787,725 @@
       "kind": "io",
       "message": "disco pieno"
     }
+  ],
+  "DrawingOpen": [
+    {
+      "instance": "drawing-1",
+      "revision": "18446744073709551614",
+      "mapped": 12,
+      "unmapped": 1,
+      "losses": [
+        {
+          "element": "/svg/g[1]/foreignObject[1]",
+          "kind": "unmapped",
+          "detail": "foreignObject"
+        },
+        {
+          "element": "/svg/g[1]/foreignObject[1]",
+          "kind": "approximated",
+          "detail": "foreignObject"
+        },
+        {
+          "element": "/svg/g[1]/foreignObject[1]",
+          "kind": "unsupported",
+          "detail": "foreignObject"
+        }
+      ]
+    }
+  ],
+  "DrawingLoss": [
+    {
+      "element": "/svg/g[1]/foreignObject[1]",
+      "kind": "unmapped",
+      "detail": "foreignObject"
+    }
+  ],
+  "DrawingSync": [
+    {
+      "revision": "18446744073709551614",
+      "change": {
+        "kind": "edits",
+        "value": {
+          "edits": [
+            {
+              "from": 4,
+              "to": 5,
+              "deleted": "a",
+              "inserted": "bc"
+            }
+          ],
+          "length_before": 10,
+          "length_after": 11
+        }
+      }
+    },
+    {
+      "revision": "18446744073709551614",
+      "change": {
+        "kind": "text",
+        "value": {
+          "text": "<svg/>\n"
+        }
+      }
+    }
+  ],
+  "DrawingEdit": [
+    {
+      "from": 4,
+      "to": 5,
+      "deleted": "a",
+      "inserted": "bc"
+    }
+  ],
+  "DrawingSynced": [
+    {
+      "revision": "18446744073709551614"
+    }
+  ],
+  "DrawingPointer": [
+    {
+      "kind": "down",
+      "x": 10.0,
+      "y": 20.5,
+      "pressure": 0.5,
+      "shift": false,
+      "alt": false,
+      "cmd": false
+    },
+    {
+      "kind": "drag",
+      "x": 11.0,
+      "y": 20.5,
+      "pressure": 0.5,
+      "shift": true,
+      "alt": false,
+      "cmd": false
+    },
+    {
+      "kind": "move",
+      "x": 12.0,
+      "y": 20.5,
+      "pressure": 0.5,
+      "shift": false,
+      "alt": true,
+      "cmd": false
+    },
+    {
+      "kind": "double_click",
+      "x": 13.0,
+      "y": 20.5,
+      "pressure": 0.5,
+      "shift": false,
+      "alt": false,
+      "cmd": true
+    },
+    {
+      "kind": "up",
+      "x": 14.0,
+      "y": 20.5,
+      "pressure": 0.0,
+      "shift": false,
+      "alt": false,
+      "cmd": false
+    }
+  ],
+  "DrawingSnap": [
+    {
+      "grid": 10.0,
+      "free": true
+    },
+    {
+      "grid": null,
+      "free": false
+    }
+  ],
+  "DrawingStyle": [
+    {
+      "stroke": "#000000",
+      "width": 4.0,
+      "fill": "#ffffff"
+    }
+  ],
+  "DrawingGesture": [
+    {
+      "revision": "18446744073709551614",
+      "phase": "preview",
+      "tool": "select",
+      "layer": "l1a2b3c4d",
+      "selection": [
+        "oa1a1a1a1"
+      ],
+      "zoom": 1.5,
+      "snap": {
+        "grid": 10.0,
+        "free": true
+      },
+      "style": null,
+      "text": null,
+      "events": [
+        {
+          "kind": "down",
+          "x": 10.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": false,
+          "cmd": false
+        },
+        {
+          "kind": "drag",
+          "x": 11.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": true,
+          "alt": false,
+          "cmd": false
+        },
+        {
+          "kind": "move",
+          "x": 12.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": true,
+          "cmd": false
+        },
+        {
+          "kind": "double_click",
+          "x": 13.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": false,
+          "cmd": true
+        },
+        {
+          "kind": "up",
+          "x": 14.0,
+          "y": 20.5,
+          "pressure": 0.0,
+          "shift": false,
+          "alt": false,
+          "cmd": false
+        }
+      ]
+    },
+    {
+      "revision": "18446744073709551614",
+      "phase": "commit",
+      "tool": "rect",
+      "layer": null,
+      "selection": [],
+      "zoom": 1.5,
+      "snap": {
+        "grid": 10.0,
+        "free": true
+      },
+      "style": {
+        "stroke": "#000000",
+        "width": 4.0,
+        "fill": "#ffffff"
+      },
+      "text": null,
+      "events": [
+        {
+          "kind": "down",
+          "x": 10.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": false,
+          "cmd": false
+        },
+        {
+          "kind": "drag",
+          "x": 11.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": true,
+          "alt": false,
+          "cmd": false
+        },
+        {
+          "kind": "move",
+          "x": 12.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": true,
+          "cmd": false
+        },
+        {
+          "kind": "double_click",
+          "x": 13.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": false,
+          "cmd": true
+        },
+        {
+          "kind": "up",
+          "x": 14.0,
+          "y": 20.5,
+          "pressure": 0.0,
+          "shift": false,
+          "alt": false,
+          "cmd": false
+        }
+      ]
+    },
+    {
+      "revision": "18446744073709551614",
+      "phase": "cancel",
+      "tool": "ellipse",
+      "layer": "l1a2b3c4d",
+      "selection": [],
+      "zoom": 1.5,
+      "snap": {
+        "grid": 10.0,
+        "free": true
+      },
+      "style": {
+        "stroke": "#000000",
+        "width": 4.0,
+        "fill": "#ffffff"
+      },
+      "text": null,
+      "events": [
+        {
+          "kind": "down",
+          "x": 10.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": false,
+          "cmd": false
+        },
+        {
+          "kind": "drag",
+          "x": 11.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": true,
+          "alt": false,
+          "cmd": false
+        },
+        {
+          "kind": "move",
+          "x": 12.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": true,
+          "cmd": false
+        },
+        {
+          "kind": "double_click",
+          "x": 13.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": false,
+          "cmd": true
+        },
+        {
+          "kind": "up",
+          "x": 14.0,
+          "y": 20.5,
+          "pressure": 0.0,
+          "shift": false,
+          "alt": false,
+          "cmd": false
+        }
+      ]
+    },
+    {
+      "revision": "18446744073709551614",
+      "phase": "preview",
+      "tool": "line",
+      "layer": null,
+      "selection": [],
+      "zoom": 1.5,
+      "snap": {
+        "grid": 10.0,
+        "free": true
+      },
+      "style": {
+        "stroke": "#000000",
+        "width": 4.0,
+        "fill": "#ffffff"
+      },
+      "text": null,
+      "events": [
+        {
+          "kind": "down",
+          "x": 10.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": false,
+          "cmd": false
+        },
+        {
+          "kind": "drag",
+          "x": 11.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": true,
+          "alt": false,
+          "cmd": false
+        },
+        {
+          "kind": "move",
+          "x": 12.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": true,
+          "cmd": false
+        },
+        {
+          "kind": "double_click",
+          "x": 13.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": false,
+          "cmd": true
+        },
+        {
+          "kind": "up",
+          "x": 14.0,
+          "y": 20.5,
+          "pressure": 0.0,
+          "shift": false,
+          "alt": false,
+          "cmd": false
+        }
+      ]
+    },
+    {
+      "revision": "18446744073709551614",
+      "phase": "commit",
+      "tool": "arrow",
+      "layer": "l1a2b3c4d",
+      "selection": [],
+      "zoom": 1.5,
+      "snap": {
+        "grid": 10.0,
+        "free": true
+      },
+      "style": {
+        "stroke": "#000000",
+        "width": 4.0,
+        "fill": "#ffffff"
+      },
+      "text": null,
+      "events": [
+        {
+          "kind": "down",
+          "x": 10.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": false,
+          "cmd": false
+        },
+        {
+          "kind": "drag",
+          "x": 11.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": true,
+          "alt": false,
+          "cmd": false
+        },
+        {
+          "kind": "move",
+          "x": 12.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": true,
+          "cmd": false
+        },
+        {
+          "kind": "double_click",
+          "x": 13.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": false,
+          "cmd": true
+        },
+        {
+          "kind": "up",
+          "x": 14.0,
+          "y": 20.5,
+          "pressure": 0.0,
+          "shift": false,
+          "alt": false,
+          "cmd": false
+        }
+      ]
+    },
+    {
+      "revision": "18446744073709551614",
+      "phase": "cancel",
+      "tool": "text",
+      "layer": null,
+      "selection": [],
+      "zoom": 1.5,
+      "snap": {
+        "grid": 10.0,
+        "free": true
+      },
+      "style": {
+        "stroke": "#000000",
+        "width": 4.0,
+        "fill": "#ffffff"
+      },
+      "text": "Testo",
+      "events": [
+        {
+          "kind": "down",
+          "x": 10.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": false,
+          "cmd": false
+        },
+        {
+          "kind": "drag",
+          "x": 11.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": true,
+          "alt": false,
+          "cmd": false
+        },
+        {
+          "kind": "move",
+          "x": 12.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": true,
+          "cmd": false
+        },
+        {
+          "kind": "double_click",
+          "x": 13.0,
+          "y": 20.5,
+          "pressure": 0.5,
+          "shift": false,
+          "alt": false,
+          "cmd": true
+        },
+        {
+          "kind": "up",
+          "x": 14.0,
+          "y": 20.5,
+          "pressure": 0.0,
+          "shift": false,
+          "alt": false,
+          "cmd": false
+        }
+      ]
+    }
+  ],
+  "DrawingPreview": [
+    {
+      "shape": {
+        "tag": "rect",
+        "attrs": {
+          "id": "@1",
+          "x": "0"
+        }
+      },
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+        7.0,
+        5.0
+      ],
+      "marquee": [
+        0.0,
+        0.0,
+        10.0,
+        20.0
+      ]
+    },
+    {
+      "shape": null,
+      "matrix": null,
+      "marquee": null
+    }
+  ],
+  "DrawingOutcome": [
+    {
+      "revision": "18446744073709551614",
+      "preview": {
+        "shape": {
+          "tag": "rect",
+          "attrs": {
+            "id": "@1",
+            "x": "0"
+          }
+        },
+        "matrix": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          7.0,
+          5.0
+        ],
+        "marquee": [
+          0.0,
+          0.0,
+          10.0,
+          20.0
+        ]
+      },
+      "ops": null,
+      "selection": [
+        "oa1a1a1a1"
+      ],
+      "losses": [],
+      "refused": null
+    },
+    {
+      "revision": "18446744073709551614",
+      "preview": null,
+      "ops": "[{\"op\":\"set\",\"id\":\"oa1a1a1a1\",\"attrs\":{\"x\":\"7\"}}]",
+      "selection": [
+        "oa1a1a1a1"
+      ],
+      "losses": [
+        {
+          "element": "/svg/g[1]/foreignObject[1]",
+          "kind": "approximated",
+          "detail": "foreignObject"
+        }
+      ],
+      "refused": null
+    },
+    {
+      "revision": "18446744073709551614",
+      "preview": null,
+      "ops": null,
+      "selection": [],
+      "losses": [],
+      "refused": "stale"
+    },
+    {
+      "revision": "18446744073709551614",
+      "preview": null,
+      "ops": null,
+      "selection": [],
+      "losses": [],
+      "refused": "unmapped"
+    },
+    {
+      "revision": "18446744073709551614",
+      "preview": null,
+      "ops": null,
+      "selection": [],
+      "losses": [],
+      "refused": "empty"
+    },
+    {
+      "revision": "18446744073709551614",
+      "preview": null,
+      "ops": null,
+      "selection": [],
+      "losses": [],
+      "refused": "unsupported"
+    },
+    {
+      "revision": "18446744073709551614",
+      "preview": null,
+      "ops": null,
+      "selection": [],
+      "losses": [],
+      "refused": "too_large"
+    },
+    {
+      "revision": "18446744073709551614",
+      "preview": null,
+      "ops": null,
+      "selection": [],
+      "losses": [],
+      "refused": "closed"
+    },
+    {
+      "revision": "18446744073709551614",
+      "preview": null,
+      "ops": null,
+      "selection": [],
+      "losses": [],
+      "refused": "not_ready"
+    },
+    {
+      "revision": "18446744073709551614",
+      "preview": null,
+      "ops": null,
+      "selection": [],
+      "losses": [],
+      "refused": "locked"
+    },
+    {
+      "revision": "18446744073709551614",
+      "preview": null,
+      "ops": null,
+      "selection": [],
+      "losses": [],
+      "refused": "hidden"
+    }
+  ],
+  "DrawingCommandInfo": [
+    {
+      "id": "disegno.colore-tratto",
+      "enabled": true
+    },
+    {
+      "id": "disegno.colore-riempimento",
+      "enabled": false
+    },
+    {
+      "id": "disegno.spessore",
+      "enabled": true
+    }
+  ],
+  "DrawingCommandRequest": [
+    {
+      "revision": "18446744073709551614",
+      "id": "disegno.colore-tratto",
+      "selection": [
+        "oa1a1a1a1"
+      ],
+      "value": "#d55e00"
+    },
+    {
+      "revision": "18446744073709551614",
+      "id": "disegno.colore-riempimento",
+      "selection": [
+        "oa1a1a1a1"
+      ],
+      "value": null
+    },
+    {
+      "revision": "18446744073709551614",
+      "id": "disegno.spessore",
+      "selection": [
+        "oa1a1a1a1"
+      ],
+      "value": 2.5
+    }
   ]
 }
