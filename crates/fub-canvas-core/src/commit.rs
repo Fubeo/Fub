@@ -133,10 +133,12 @@ pub enum CommitError {
 impl CommitError {
     /// La ragione in una parola, la stessa che dà il TypeScript
     /// (`canvasCommitOutcome` in `operation.ts`) e che portano i vettori:
-    /// `stale`, `invalid`, `rejected` o `unstable`.
+    /// `stale`, `invalid`, `rejected` o `unstable`. Una toppa `ink` che
+    /// porterebbe a un livello d'inchiostro che Fub non scrive è `invalid`
+    /// anche se la ferma la bozza ([`PatchError::reason`]).
     pub fn reason(&self) -> &'static str {
         match self {
-            Self::Stale(_) => "stale",
+            Self::Stale(error) => error.reason(),
             Self::Invalid(_) => "invalid",
             Self::Rejected(_) => "rejected",
             Self::Unstable { .. } => "unstable",
