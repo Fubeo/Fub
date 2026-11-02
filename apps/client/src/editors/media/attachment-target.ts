@@ -135,6 +135,68 @@ export async function depositAttachment(
   throw new Error(t("errors.attachment.no_name", { name }));
 }
 
+/// La ricevuta di `depositOrReuse`: quella di una scrittura nuova, o il file
+/// che c'era già. Per un file riusato la revisione è quella del descrittore
+/// che `same` ha letto, `null` se `same` non la porta.
+export interface ReusableReceipt {
+  readonly id: string;
+  readonly revision: string | null;
+}
+
+/// La risposta di `same`: `false` se il file del vault ha altri byte; `true`,
+/// o la revisione del descrittore con cui l'ha letto, se ha gli stessi byte.
+export type SameFile = boolean | { readonly revision: string | null };
+
+/// Il deposito della lavagna (D-3, G2 di `lavagna.md`): prova gli stessi
+/// candidati di `depositAttachment` («foto.png», «foto 1.png», …) e, dove
+/// l'host risponde `already_exists`, chiede a `same` se il file che c'è ha
+/// gli stessi byte; se sì lo riusa invece di creare un doppione. Un `same` che
+/// risponde `false` o lancia passa al candidato dopo, come una collisione.
+/// Ogni altro errore dell'host (un nome che il vault rifiuta, l'I/O) risale.
+/// Le note e il registratore restano su `depositAttachment`.
+export async function depositOrReuse(
+  deposit: AttachmentDeposit,
+  originalName: string,
+  bytes: Uint8Array,
+  same: (id: string, bytes: Uint8Array) => Promise<SameFile>,
+): Promise<{ receipt: ReusableReceipt; reused: boolean }> {
+  const name = sanitizeFileName(originalName);
+  if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+    throw new Error(t("errors.attachment.too_large", { name }));
+  }
+  for (const candidate of attachmentCandidates(deposit, name)) {
+    try {
+      return { receipt: await deposit.write(candidate, bytes), reused: false };
+    } catch (error) {
+      if (!isAlreadyExists(error)) throw error;
+    }
+    const answer = await same(candidate, bytes).catch((): SameFile => false);
+    if (answer !== false) {
+      const revision = answer === true ? null : answer.revision;
+      return { receipt: { id: candidate, revision }, reused: true };
+    }
+  }
+  throw new Error(t("errors.attachment.no_name", { name }));
+}
+
+/// Il tetto di un allegato, lo stesso di `depositAttachment` e dell'host.
+const MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024;
+
+/// I path da proporre per `name`, nell'ordine di `depositAttachment`.
+function* attachmentCandidates(deposit: AttachmentDeposit, name: string): Generator<string> {
+  const { stem, ext } = splitFileName(name);
+  const folder = folderForNote(deposit.folder, deposit.fromDocument);
+  const atRoot = folder === "" && deposit.folder.trim().startsWith(".");
+  for (let n = 0; n <= 10_000; n++) {
+    const file = attachmentCandidate("", stem, ext, n);
+    yield atRoot ? sanitizeFileName(file) : attachmentTarget(folder, file);
+  }
+}
+
+function isAlreadyExists(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "kind" in error && error.kind === "already_exists";
+}
+
 /** Paste/drop files are deposited only after the user's actual gesture. */
 export async function depositFiles(
   files: FileList | readonly File[],
