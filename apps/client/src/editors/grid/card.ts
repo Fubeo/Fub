@@ -75,9 +75,11 @@ export const SHEET_CARD_COLUMN_HEADER = 28;
 /// `validateBytesWindow`.
 const MAX_WINDOW_ROWS = 256;
 const MAX_WINDOW_COLUMNS = 128;
-/// Le finestre tenute dopo lo scorrimento, per copiare una selezione che
-/// esce dalla vista.
+/// Le finestre tenute dopo lo scorrimento. Quelle che la selezione tocca si
+/// tengono prima delle altre, fino a `MAX_PINNED_WINDOWS`: la copia legge
+/// solo celle lette, e una selezione che perde le sue si toglie.
 const MAX_KEPT_WINDOWS = 8;
+const MAX_PINNED_WINDOWS = 32;
 /// Quante letture al più per coprire la vista: una riga alta o nascosta
 /// cambia quante righe servono, e la lettura dopo lo sa.
 const MAX_WINDOW_PASSES = 4;
@@ -207,7 +209,12 @@ class SheetCard implements CardView {
     if (!this.#entered || this.#destroyed || this.#mode !== "live") return false;
     const copy = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "c";
     if (!copy || !this.#selection) return false;
-    void writeClipboardText(this.#selectionTsv()).catch(() => {});
+    // Gli appunti della webview si scrivono solo dentro il gesto: la copia
+    // non aspetta l'host, quindi porta solo celle lette. Una selezione con
+    // celle non lette non c'è (`#pointerMove`, `#keep`); se ci fosse, non si
+    // copia niente piuttosto che celle vuote al posto di quelle vere.
+    const text = this.#selectionTsv();
+    if (text !== null) void writeClipboardText(text).catch(() => {});
     return true;
   }
 
@@ -263,7 +270,10 @@ class SheetCard implements CardView {
     this.#sheet = sheet.id;
     this.#top = Math.min(this.#top, Math.max(0, sheet.row_count - 1));
     this.#left = Math.min(this.#left, Math.max(0, sheet.column_count - 1));
+    // Le finestre di prima sono di un'altra sessione: la selezione, che ne
+    // copierebbe le celle, si toglie con loro.
     this.#windows = [];
+    this.#selection = null;
     await this.#load();
   }
 
@@ -393,8 +403,7 @@ class SheetCard implements CardView {
         const window = await this.#port.host.gridBytesWindow(opened.surface, opened.instance, request);
         if (!current()) return;
         validateBytesWindow(window, opened.session);
-        this.#windows = [...this.#windows.filter((kept) => kept.revision === window.revision && kept.sheet === window.sheet), window]
-          .slice(-MAX_KEPT_WINDOWS);
+        this.#keep(window);
       }
     } catch {
       if (!current()) return;
@@ -406,6 +415,50 @@ class SheetCard implements CardView {
     delete this.#root.dataset.cardStale;
     this.#layout();
     this.#paint();
+  }
+
+  /// Tiene la finestra nuova. Si lasciano prima le più vecchie che la
+  /// selezione non tocca (mentre si trascina, nessuna); oltre `MAX_PINNED_WINDOWS` anche le sue, e allora
+  /// una selezione con celle non più lette si toglie.
+  #keep(window: GridBytesWindow): void {
+    const kept = [...this.#windows.filter((each) => each.revision === window.revision && each.sheet === window.sheet), window];
+    const selected = this.#selectionRange(this.#cells().merges);
+    // Mentre si trascina, la selezione può arrivare su ogni finestra letta
+    // dall'ancora in qua: si tengono tutte, fino al limite.
+    const touches = (each: GridBytesWindow) => selected !== null && (this.#dragging
+      || each.row_start <= selected.rowEnd && each.row_start + each.rows.length - 1 >= selected.rowStart
+      && each.column_start <= selected.columnEnd && each.column_start + each.columns.length - 1 >= selected.columnStart);
+    while (kept.length > MAX_KEPT_WINDOWS) {
+      // La finestra appena letta resta sempre: è la vista.
+      const free = kept.findIndex((each, at) => at < kept.length - 1 && !touches(each));
+      if (free >= 0) kept.splice(free, 1);
+      else if (kept.length > MAX_PINNED_WINDOWS) kept.shift();
+      else break;
+    }
+    this.#windows = kept;
+    if (this.#selection) {
+      const range = this.#selectionRange(this.#cells().merges);
+      if (!range || !this.#read(range)) this.#selection = null;
+    }
+  }
+
+  /// Vera se ogni cella di `range` è in una finestra letta (anche in più
+  /// finestre insieme), riga per riga.
+  #read(range: GridRange): boolean {
+    const own = this.#windows.filter((window) => window.sheet === this.#sheet);
+    for (let row = range.rowStart; row <= range.rowEnd; row++) {
+      const spans = own
+        .filter((window) => window.row_start <= row && row < window.row_start + window.rows.length)
+        .map((window) => [window.column_start, window.column_start + window.columns.length - 1] as const)
+        .sort((a, b) => a[0] - b[0]);
+      let reached = range.columnStart - 1;
+      for (const [start, end] of spans) {
+        if (start > reached + 1) break;
+        reached = Math.max(reached, end);
+      }
+      if (reached < range.columnEnd) return false;
+    }
+    return true;
   }
 
   /// Vera se una finestra letta copre tutto `range`.
@@ -630,8 +683,12 @@ class SheetCard implements CardView {
     if (!cell) return;
     event.stopPropagation();
     event.preventDefault();
+    const next: Selection = { anchor: cell, focus: cell };
+    // Un'unione che comincia fuori dalle celle lette non si sceglie.
+    const range = this.#selectionRange(this.#cells().merges, next);
+    if (!range || !this.#read(range)) return;
     this.#dragging = true;
-    this.#selection = { anchor: cell, focus: cell };
+    this.#selection = next;
     this.#paint();
   }
 
@@ -646,13 +703,17 @@ class SheetCard implements CardView {
     event.stopPropagation();
     const focus = this.#selection.focus;
     if (focus.row === cell.row && focus.column === cell.column) return;
-    this.#selection = { anchor: this.#selection.anchor, focus: cell };
+    const next: Selection = { anchor: this.#selection.anchor, focus: cell };
+    // La selezione non va oltre le celle lette: ciò che si copia è sempre
+    // ciò che il file ha, mai una cella vuota al posto di una non letta.
+    const range = this.#selectionRange(this.#cells().merges, next);
+    if (!range || !this.#read(range)) return;
+    this.#selection = next;
     this.#paint();
   }
 
   /// La selezione come rettangolo, allargato alle unioni che tocca.
-  #selectionRange(merges: readonly GridMerge[]): GridRange | null {
-    const selection = this.#selection;
+  #selectionRange(merges: readonly GridMerge[], selection: Selection | null = this.#selection): GridRange | null {
     if (!selection) return null;
     return expandToMerges({
       rowStart: Math.min(selection.anchor.row, selection.focus.row),
@@ -664,10 +725,10 @@ class SheetCard implements CardView {
 
   /// Il testo delle celle scelte, come lo mostra il foglio, a tabulazioni.
   /// Una cella coperta da un'unione è vuota, come in Excel.
-  #selectionTsv(): string {
+  #selectionTsv(): string | null {
     const { cells, merges } = this.#cells();
     const range = this.#selectionRange(merges);
-    if (!range) return "";
+    if (!range || !this.#read(range)) return null;
     const rows: string[][] = [];
     for (let row = range.rowStart; row <= range.rowEnd; row++) {
       const line: string[] = [];

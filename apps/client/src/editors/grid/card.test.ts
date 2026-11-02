@@ -541,6 +541,69 @@ describe("la scheda di foglio", () => {
     expect(card.key!(copyKey())).toBe(false);
   });
 
+  it("la selezione che esce dalla vista copia solo celle lette, mai vuote al posto di quelle vere", async () => {
+    const b = bench({ sheets: [{ id: "s1", rows: 1_000, columns: 26 }] });
+    const card = b.mount("live");
+    await settle();
+    card.enter!();
+    const root = b.root();
+    pointer(cell(root, 0, 0), "pointerdown");
+    // Nove scatti di quattro righe: più finestre di quante se ne tengono di solito.
+    for (let step = 0; step < 9; step++) {
+      wheel(root, 4 * SHEET_CARD_ROW_HEIGHT);
+      await settle();
+    }
+    expect(b.grid.windows.length).toBeGreaterThan(9);
+    pointer(cell(root, 36, 1), "pointermove");
+    expect(card.key!(copyKey())).toBe(true);
+    await settle();
+    const expected = Array.from({ length: 37 }, (_, row) => `${display(row, 0)}\t${display(row, 1)}\n`).join("");
+    expect(clipboard).toEqual([expected]);
+  });
+
+  it("una selezione che perderebbe le sue celle lette si toglie, e Ctrl+C non copia niente", async () => {
+    const b = bench({ sheets: [{ id: "s1", rows: 1_000, columns: 26 }] });
+    const card = b.mount("live");
+    await settle();
+    card.enter!();
+    const root = b.root();
+    pointer(cell(root, 0, 0), "pointerdown");
+    pointer(cell(root, 3, 0), "pointermove");
+    // Lo scorrimento tiene le finestre della selezione fino al limite; oltre,
+    // la selezione si toglie invece di copiare celle vuote.
+    for (let step = 0; step < 40; step++) {
+      wheel(root, SHEET_CARD_ROW_HEIGHT);
+      await settle();
+      pointer(cell(root, step + 4, 0), "pointermove");
+    }
+    expect(root.querySelector(".grid-selection")).toBeNull();
+    expect(card.key!(copyKey())).toBe(false);
+    await settle();
+    expect(clipboard).toEqual([]);
+  });
+
+  it("la selezione non si allarga a un'unione che comincia fuori dalle celle lette", async () => {
+    const b = bench({ sheets: [{ id: "s1", rows: 1_000, columns: 26 }], merges: [{ row: 0, column: 0, rows: 60, columns: 1 }] });
+    const card = b.mount("live");
+    await settle();
+    card.enter!();
+    const root = b.root();
+    for (let step = 0; step < 12; step++) {
+      wheel(root, 4 * SHEET_CARD_ROW_HEIGHT);
+      await settle();
+    }
+    // La riga 0, dove l'unione comincia, non è più fra le finestre tenute.
+    expect(b.grid.windows.length).toBeGreaterThan(8);
+    pointer(cell(root, 48, 0), "pointerdown");
+    expect(root.querySelector(".grid-selection")).toBeNull();
+    expect(card.key!(copyKey())).toBe(false);
+    pointer(cell(root, 48, 1), "pointerdown");
+    pointer(cell(root, 49, 2), "pointermove");
+    expect(card.key!(copyKey())).toBe(true);
+    await settle();
+    expect(clipboard).toEqual([`${display(48, 1)}\t${display(48, 2)}\n${display(49, 1)}\t${display(49, 2)}\n`]);
+  });
+
   it("le celle unite si disegnano una volta e la selezione le prende intere", async () => {
     const b = bench({ merges: [{ row: 0, column: 1, rows: 2, columns: 2 }] });
     const card = b.mount("live");
