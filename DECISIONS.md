@@ -59,6 +59,19 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N3 · Le risposte dell'utente a D-1…D-8 e a merge-n3n4: le non
+  ovvie sono tre. D-5 (c): il testo di una scheda si registra a pause di
+  circa 250 ms, Esc registra invece di buttare (la D-10 nuova chiede
+  conferma), il testo ancora nel campo va nelle bozze, e il ritardo della
+  bozza diventa una cadenza per ogni documento (T16, T19). D-7 (c): Fub
+  riscrive conservando i null dei campi noti, gli array assenti e il posto
+  degli archi, l'annulla della tela torna ai byte di prima, e una lavagna
+  che non si riscrive senza perdere niente si apre in sola lettura (T20–T22;
+  i valori sconosciuti dei campi noti restano fuori, D-9). merge-n3n4 (b):
+  N3 entra in main solo finito, dopo la CI completa e una revisione riga per
+  riga (T23) · non perdere dati e non cambiare senza dirlo i file degli
+  altri programmi vengono prima della comodità, e N3 a metà in main
+  lascerebbe due copie della logica.
 - 2026-11-02 · N3 · T17: fatto con D-4 (a), solo la misura: il banco
   `tools/ink-wasm-banco/` (nessuna crate nuova nel lock) e `wasm.bench.ts`,
   che si salta senza il `.wasm`. Il primo giro era a macchina carica; la

@@ -11,24 +11,42 @@ un agente non la raggiunge e le regole di lettura di Rust e TypeScript non
 sono le stesse (prova 2).
 Fuori scope: le ancore e il formato `fub:ink` (N4); le operazioni
 `AddStrokes`/`EraseStrokes` (N4); togliere la copia TypeScript
-dell'inchiostro (qui si misura soltanto, T17); unificare `json_map.rs` di
+dell'inchiostro (D-4 (a): T17 l'ha misurata, e resta in TypeScript come vuole
+la decisione 0204; si riconsidera solo se cambia il modo in cui i dati passano
+fra la WebView e WebAssembly); aprire le lavagne con valori sconosciuti nei
+campi noti (D-9); unificare `json_map.rs` di
 `fub-format-canvas` col nucleo; un `ParamKind` JSON o una superficie «solo per
 gli agenti» nell'ABI dei comandi; la pagina di prodotto `product/lavagna.md`;
 i sottocomandi `fub canvas …` della CLI; bottoni nuovi nell'interfaccia
 oltre ai due comandi della tavolozza.
-Assunzioni: A1–A12 e il contratto R1–R10 qui sotto, decisi dal pianificatore
-il 2026-11-02 di notte (l'utente non poteva rispondere; le domande sono in
-«Domande per l'utente», e ogni task che dipende da una risposta costosa da
-disfare sta in un'ondata dopo).
-Ondate: T1 T2 | T3 T4 T6 | T5 T8 | T7 | T9 T10 | T11 | T12 | T13 | T14 | T15 | T16 T17 | T18
-Prototipo: nessuno. N3 non ha grafica nuova. Testi visibili nuovi: i titoli e
-le descrizioni dei due comandi (T10, T11), la riga «Lavagna» in Impostazioni →
-Componenti (T10), i messaggi d'errore dei comandi (T10, T11) e l'avviso se il
-nucleo non si carica (T16).
+Assunzioni: A1–A13 e il contratto R1–R10 qui sotto, decisi dal pianificatore
+il 2026-11-02 di notte; lo stesso giorno l'utente ha risposto a D-1…D-8 e a
+merge-n3n4 (le righe «Risposta» in «Domande per l'utente»). Le risposte
+confermano A1–A13, cambiano R7 e aggiungono R11 (D-7 (c)), e portano A14–A18,
+che l'orchestratore fa vedere all'utente prima di far partire T16.
+Ondate: T1 T2 | T3 T4 T6 | T5 T8 | T7 | T9 T10 | T11 | T12 | T13 | T14 | T15 | T16 T17 | T19 | T18 | T20 T21 | T22 | T23
+Prototipo: nessuno. N3 non ha grafica nuova: gli avvisi nuovi (T16, T22)
+usano il posto dell'avviso che la tela ha già nella sua barra
+(`canvas-intake-error`) e la sola lettura che c'è già (`setReadOnly`). Testi
+visibili nuovi: i titoli e le descrizioni dei due comandi (T10, T11), la riga
+«Lavagna» in Impostazioni → Componenti (T10), i messaggi d'errore dei comandi
+(T10, T11), l'avviso se il nucleo non si carica e quello di un testo di
+scheda oltre 1 MiB (T16), e l'avviso di una lavagna che si può guardare ma
+non cambiare (T22).
 
 ## Modifiche
 
-nessuna
+- 2026-11-02 · Le risposte dell'utente a D-1…D-8 e a merge-n3n4. T13–T16 e
+  T18 diventano pronti e si allargano: il ponte provato in andata e ritorno
+  (T13, T14), il test che tiene chiusa la CSP (T15), il testo della scheda
+  registrato a pause con Esc che registra (T16), l'elenco dei test tolti col
+  vettore che li sostituisce (T18). Task nuovi: T19 (il testo in corso nelle
+  bozze, D-5 (c)), T20–T22 (conservare ciò che Fub non tocca, D-7 (c)), T23
+  (la CI completa e la revisione, merge-n3n4 (b)). Cambiano R7 e il cancello
+  (righe nuove, e lo specchio passa al `.wasm`), si aggiungono R11, A14–A18
+  e le domande D-9 e D-10, che non bloccano · perché l'utente ha risposto ·
+  task toccati: T13, T14, T15, T16, T18, T19–T23; da rivedere T5, T6, T7,
+  T8, T9.
 
 ## Fonti
 
@@ -51,6 +69,9 @@ nessuna
 ## Domande per l'utente (raccolte, non bloccano)
 
 Il piano procede con la prima opzione di ognuna.
+L'utente ha risposto il 2026-11-02 a D-1…D-8 (la riga «Risposta» sotto
+ognuna) e a merge-n3n4 (in fondo). D-9 e D-10 sono nuove, nate dalle
+risposte, e non bloccano: il piano procede con la (a).
 
 - D-1 · Come parla la WebView col nucleo (T13, T14). (a) Consigliata:
   un'interfaccia C scritta a mano, JSON dentro e fuori, nessuna libreria
@@ -59,28 +80,41 @@ Il piano procede con la prima opzione di ognuna.
   `wasm-bindgen-cli` della stessa versione in ogni macchina e job che
   costruisce il client. Cambiare idea dopo T13 vuol dire riscrivere T13 e il
   caricatore di T14.
+  Risposta (2026-11-02): (a) — il ponte è scritto a mano, nessuna libreria
+  nuova, e T13 e T14 lo provano in andata e ritorno anche nei casi strani.
 - D-2 · Da dove viene il file `.wasm` (T14). (a) Consigliata: lo compila
   Vite dai sorgenti a ogni build; serve Rust col bersaglio
   `wasm32-unknown-unknown` dovunque si lanci `npm` (in locale e in ogni job
   della CI che costruisce o prova il client). (b) Un `.wasm` committato e una
   guardia che lo confronta coi sorgenti: niente Rust per chi lavora solo sul
   client, ma un binario nel repo. (c) Uno script separato prima di Vite.
+  Risposta (2026-11-02): (a) — Vite compila il `.wasm` dai sorgenti a ogni
+  build, quindi Rust e il bersaglio servono dovunque si costruisca il client.
 - D-3 · Sicurezza della WebView (T15, T16). (a) Consigliata: aggiungere solo
   `'wasm-unsafe-eval'` a `script-src` nella CSP di
   `crates/fub-app/tauri.conf.json` (permette di compilare WebAssembly, non di
   eseguire testo come JavaScript). (b) Niente WebAssembly nella WebView: N3 si
   ferma a T12 (comandi e MCP sì), la tela resta in TypeScript e le due copie
   restano tenute uguali dai vettori.
+  Risposta (2026-11-02): (a) — la CSP aggiunge solo `'wasm-unsafe-eval'` a
+  `script-src`, e un test di T15 fallisce se si apre qualcosa di più.
 - D-4 · L'inchiostro (T17). (a) Consigliata: in N3 solo la misura in
   `bench:ink`; la copia TypeScript resta, come vuole la decisione 0204 (niente
   WebAssembly a ogni evento del puntatore). (b) Portarlo ora, se la misura
   regge: va contro 0204 e va deciso con una decisione nuova.
+  Risposta (2026-11-02): (a) — l'inchiostro resta in TypeScript; T17 l'ha
+  misurato e basta.
 - D-5 · Il testo di una scheda (T16). Oggi ogni tasto premuto è una modifica
   salvata e un passo d'annulla. (a) Consigliata: la modifica si registra dopo
   una pausa di circa 250 ms, all'uscita dal campo, a Invio e a Esc; un
   «annulla» toglie una frase, non una lettera. (b) Solo all'uscita dal campo.
   In tutti e due i casi niente chiamata al nucleo per ogni tasto
   (`CLAUDE.md`: «No IPC or WASM per keystroke»).
+  Risposta (2026-11-02): (c) — come (a), e in più il testo ancora nel campo
+  finisce nelle bozze di recupero (T16 e il task nuovo T19). La descrizione
+  di «oggi» qui sopra non era esatta: l'annulla della tela toglie già tutta
+  la modifica di un campo in un passo, non una lettera, ed Esc oggi butta
+  via ciò che si è scritto nel campo (vedi D-10).
 - D-6 · Che cosa vede l'utente (T10, T11). (a) Consigliata: un componente
   «Lavagna» nuovo, con la sua riga in Impostazioni → Componenti (spegnerlo
   toglie i due comandi), e nella tavolozza «Nuova lavagna» e «Applica
@@ -88,6 +122,8 @@ Il piano procede con la prima opzione di ognuna.
   mostra tutti i comandi, e nasconderne uno vorrebbe un cambio dell'ABI). (b)
   I due comandi dentro il componente dei comandi delle note, senza riga
   nuova. Facile da cambiare dopo: si sposta un modulo.
+  Risposta (2026-11-02): (a) — la riga «Lavagna» tutta sua, com'è già
+  (T10).
 - D-7 · Che cosa si apre e come si riscrive (T2, T3). (a) Consigliata: le
   regole R1–R10 così come sono scritte: si aprono anche coordinate `1.0` o
   `1e2` e campi `null`, un file con solo il BOM è una lavagna vuota, i `null`
@@ -95,11 +131,43 @@ Il piano procede con la prima opzione di ognuna.
   rifiutati decimali veri, chiavi note doppie, surrogati spaiati. (b) Più
   severe (rifiutare `1.0` e i `null`). Facile da cambiare dopo: è codice di
   lettura, e i vettori dicono che cosa cambia.
+  Risposta (2026-11-02): (c) — si apre come in (a), e quando riscrive Fub
+  conserva esattamente ciò che non tocca, `null` dei campi noti compresi
+  (R7 cambia e si aggiunge R11; i task nuovi T20, T21, T22).
 - D-8 · Togliere il TypeScript (T18). (a) Consigliata: dopo la parità si
   tolgono `parseCanvas`, le toppe e il riscrittore TypeScript, e con loro i
   loro test, i cui casi devono essere prima nei vettori (togliere un test è
   una voce di «Chiede sempre»). (b) Tenere la copia TypeScript come seconda
   via, tenuta uguale dallo specchio.
+  Risposta (2026-11-02): (a) — la copia TypeScript si toglie, ma solo dopo
+  che ogni caso dei suoi test gira sui vettori comuni e passa (l'elenco è in
+  T18).
+- merge-n3n4 · Quando N3 (e poi N4) entra in main (domanda generale, fatta
+  dal coordinatore per N3 e N4). (a) Adesso, con le parti fatte. (b) Solo
+  quando N3 è finito; intanto N6 va avanti sopra i rami.
+  Risposta (2026-11-02): (b) — N3 entra in main solo quando tutti i suoi
+  task sono fatti, dopo la CI completa e una revisione riga per riga (T23);
+  N4 entra dopo, e N6 intanto va avanti sopra i rami di N3 e N4.
+- D-9 · Le lavagne con valori che Fub non conosce in un campo noto (nuova,
+  nata da D-7 (c)). Una scheda di un tipo che non è `text`, `file`, `link` o
+  `group` (per esempio di un plugin di Obsidian), un lato o una punta d'arco
+  sconosciuti, o un colore che non è da `"1"` a `"6"` né `#` con 3, 4, 6 o 8
+  cifre: oggi un file così non si apre sulla tela, né in Rust né in
+  TypeScript, e i comandi lo rifiutano. (a) Consigliata: un piano suo dopo N3,
+  che le apre e disegna quelle schede come «scheda che Fub non conosce», che
+  si sposta e si conserva byte per byte ma non si cambia: è grafica nuova
+  (prima un prototipo) e cambia il modello del nucleo, il formato che
+  leggono i comandi e l'MCP, quindi non va infilata in N3. (b) Dentro N3: un
+  prototipo in `PLAN-ui/` e due task nuovi prima di T23. (c) Come oggi, per
+  sempre. Non blocca niente: con (a) N3 non le tocca.
+- D-10 · Esc in una scheda (nuova: la descrizione di D-5 non era esatta).
+  Oggi Esc butta via ciò che si è scritto nel campo da quando si è aperto;
+  la risposta a D-5 dice che Esc registra. (a) Consigliata: Esc registra e
+  chiude, come dice la risposta: un Esc premuto per sbaglio non perde
+  niente, e per tornare indietro c'è «Annulla», una frase alla volta. (b)
+  Esc butta via ciò che si è scritto da quando il campo si è aperto, come
+  oggi, anche le frasi già registrate. Non blocca: T16 fa (a), e cambiare
+  dopo è una funzione di T16 e il suo test.
 
 ## Assunzioni
 
@@ -158,7 +226,33 @@ Il piano procede con la prima opzione di ognuna.
   come vuole il passo 12a, e non solo `fub_invoke`: `fub_invoke` vuole tutto
   il vault leggibile, questi controllano le radici documento per documento.
 
-## Il contratto di lettura e scrittura (R1–R10)
+Dalle risposte del 2026-11-02 (l'orchestratore le fa vedere all'utente prima
+di T16; A14 è la domanda D-10):
+
+- A14 · **Esc in una scheda registra e chiude** (D-5, D-10 (a)). Oggi Esc
+  butta via ciò che si è scritto nel campo.
+- A15 · **Invio.** In una scheda di testo Invio va a capo come oggi e
+  registra ciò che c'è fin lì; Ctrl+Invio (Cmd+Invio sul Mac) registra e
+  chiude, come oggi conferma. Negli altri campi (link, file, nome del gruppo)
+  Invio registra e chiude, come oggi.
+- A16 · **Un passo d'annulla per registrazione** (D-5): la pausa di circa
+  250 ms, l'uscita dal campo, Invio, Esc. Oggi il passo è uno solo per tutta
+  la modifica del campo. Con il campo aperto Ctrl+Z resta quello del campo
+  (del browser), come oggi.
+- A17 · **Quanto protegge la bozza** (D-5 (c)). Una chiusura ordinata (la
+  finestra, la scheda, il riquadro, un altro documento nello stesso
+  riquadro) registra il testo in sospeso prima: non si perde niente. Una
+  chiusura di colpo (Fub ucciso, la corrente che manca) perde al più ciò che
+  si è scritto nell'ultimo secondo (`DRAFT_MS`): scrivere sul disco a ogni
+  tasto vorrebbe una chiamata all'host per tasto, che `CLAUDE.md` vieta. Per
+  questo il ritardo della bozza smette di ripartire a ogni modifica e
+  diventa una cadenza, per tutti i documenti, note comprese (T19): oggi chi
+  scrive senza fermarsi non ha nessuna bozza sul disco finché non si ferma.
+- A18 · **Una lavagna che Fub non può riscrivere senza perdere niente** (una
+  chiave doppia, che il riscrittore rifiuta per R3) si apre in sola lettura e
+  lo dice (T22). Oggi si apre, e ogni gesto torna indietro senza un perché.
+
+## Il contratto di lettura e scrittura (R1–R11)
 
 La regola generale: Rust e TypeScript fanno la stessa cosa; nel dubbio si
 apre e si conserva; ogni caso qui sotto diventa un vettore scritto a mano.
@@ -185,8 +279,11 @@ apre e si conserva; ogni caso qui sotto diventa un vettore scritto a mano.
   stesso ordine delle chiavi di un oggetto JavaScript. Un sorgente nuovo è
   rientrato di due spazi e chiuso da `"\n"`, e tiene BOM e CRLF del file.
 - R7 · **`null`** su un campo noto facoltativo, e `"nodes": null` o
-  `"edges": null`, vogliono dire «assente». Quando Fub riscrive quella scheda,
-  il `null` sparisce.
+  `"edges": null`, vogliono dire «assente». Cambiata da D-7 (c), la fa T20:
+  il `null` resta dov'è, anche quando Fub riscrive quella scheda, finché quel
+  campo non prende un valore (allora il valore va al posto del `null`). Prima
+  diceva «quando Fub riscrive quella scheda, il `null` sparisce», ed è ciò
+  che il codice fa fino a T20 (il vettore 18).
 - R8 · **`backgroundStyle`** accetta qualunque stringa e la conserva; un
   valore che la tela non conosce si disegna come assente. Lo schema
   `canvas-v1.schema.json` resta com'è: dice ciò che Fub scrive.
@@ -200,6 +297,15 @@ apre e si conserva; ogni caso qui sotto diventa un vettore scritto a mano.
   campi sconosciuti nel loro ordine, poi la regola di JavaScript (le chiavi
   che sembrano indici vanno prima, in ordine crescente). Una chiave aggiunta
   a un oggetto che c'era va in fondo.
+- R11 · **Ciò che Fub non tocca resta byte per byte** (D-7 (c); T20, T21).
+  La grafia di ogni valore che non cambia (`1.0`, `1e2`, `-0`, gli escape di
+  una stringa), gli spazi, l'ordine delle chiavi, delle schede e degli archi,
+  i campi sconosciuti e i `null` restano com'erano, anche dentro una scheda
+  che si ricompone. Un `nodes` o un `edges` assente non si aggiunge finché
+  resta vuoto. Un arco tolto e rimesso dall'annulla torna al suo posto, come
+  una scheda. L'annulla della tela torna ai byte di prima, se il testo non è
+  cambiato da un'altra parte nel frattempo. Ciò che Fub cambia si scrive
+  secondo R6 e R10.
 
 ## Prove fatte
 
@@ -259,27 +365,69 @@ Il passo dice di scriverle in `piani/STATO.md`; il brief di stanotte dice qui.
 - `serde_json` legge male i decimali senza `float_roundtrip` (prova 3, A4).
 - Non esiste un `ParamKind` JSON: le operazioni passano come testo (A7).
 
+Trovate rileggendo il codice dopo le risposte del 2026-11-02 (vince il
+codice; ognuna ha il suo task):
+
+- D-5 descriveva male la tela: `#beginCardEdit` di `engine.ts` manda già il
+  testo alla sessione a ogni `input`, ma l'annulla raggruppa tutta la
+  modifica del campo in un passo solo; Esc (`finish(false)`) rimette il
+  testo di prima e non lascia un passo d'annulla (A14, A16, D-10).
+- Salvataggio e bozza sono ritardi che ripartono a ogni modifica
+  (`SAVE_MS` 400 ms, `DRAFT_MS` 1 s in `state/document-session.ts`): chi
+  scrive senza fermarsi non ha niente sul disco, né file né bozza, finché
+  non si ferma. Vale per ogni documento (A17, T19).
+- Le bozze di recupero coprono già il `.canvas` (sono per documento:
+  `saveDraft` → `fub-kernel`, `.fub/drafts/`), ma solo il testo della
+  sessione: dopo T16 il testo ancora nel campo non c'è (T19).
+- Il `null` di un campo noto sparisce quando la scheda si ricompone
+  (vettore 18), e una radice senza `edges` che si ricompone riceve
+  `"edges":[]` (vettore 11): D-7 (c) vuole il contrario (T20).
+- Le toppe degli archi non hanno `at`: l'annulla di un arco tolto lo rimette
+  in fondo (vettore 16), e `tests/op_vectors.rs` confronta gli archi senza
+  guardare l'ordine (T20).
+- L'annulla della tela applica le toppe inverse e non torna ai byte di prima
+  (vettori 12, 14, 22: una scheda rientrata torna compatta, `1e2` torna
+  `100`); l'annulla dei comandi (`Undo::of_edits` in `lavagna/apply.rs`)
+  invece sì (T21).
+- Una lavagna con una chiave sconosciuta doppia si apre (R3), ma il
+  riscrittore la rifiuta e ogni gesto torna indietro senza un avviso (T22).
+- Un tipo di scheda, un lato, una punta o un colore sconosciuti fanno
+  rifiutare tutto il file, in Rust e in TypeScript (D-9).
+- Il cancello chiedeva lo specchio di T9, e T18 lo toglieva: ora T18 lo
+  tiene contro il `.wasm`, dove la build a 32 bit può ancora divergere.
+- I vettori delle toppe partono sempre da un testo che si apre: le regole di
+  lettura non hanno vettori comuni, e i loro casi sono solo nei test
+  TypeScript che T18 toglie (T18 aggiunge `canvas-read/`).
+
 ## Cancello di N3
 
 | Fatto quando | Prova | Task |
 |---|---|---|
-| tutti i vettori passano in Rust e in TypeScript | `cargo test -p fub-canvas-core`; `cd apps/client && npx vitest run src/editors/canvas` (motore TypeScript e nucleo WebAssembly sugli stessi file) | T7, T8, T14 |
-| lo specchio a caso non trova divergenze | `cargo test -p fub-canvas-core --test ts_mirror` e `mirror.test.ts` | T9 |
+| tutti i vettori passano nel nucleo nativo e nel `.wasm` (fino a T18 anche nel TypeScript) | `cargo test -p fub-canvas-core`; `cd apps/client && npx vitest run src/editors/canvas` (gli stessi file per tutti) | T7, T8, T14, T18 |
+| lo specchio a caso non trova divergenze: fino a T18 fra Rust e TypeScript, poi fra il nucleo nativo e il `.wasm` | `cargo test -p fub-canvas-core --test ts_mirror` e `mirror.test.ts` (da T18 `wasm/mirror.test.ts`) | T9, T18 |
+| il ponte scritto a mano fa andare e tornare i dati in tutti i casi, anche quelli strani, e libera la memoria | `cargo test -p fub-canvas-wasm` (`tests/api.rs`, `tests/abi.rs`); `cd apps/client && npx vitest run src/editors/canvas/wasm` | T13, T14 |
 | un agente crea una lavagna, aggiunge schede e archi, e la shell la mostra uguale | `cargo test -p fub-cli --test mcp` (il testo scritto è quello del vettore `canvas-ops/agent-board.json`); il test della tela apre lo stesso testo e disegna le stesse schede negli stessi posti | T12, T16 |
 | la tela usa il nucleo, e il TypeScript della lavagna si toglie | `engine.ts` non importa più `model.ts`/`operation.ts`/`source-edit.ts` per leggere o scrivere; quei file non hanno più la logica | T16, T18 |
+| ogni test TypeScript tolto ha il vettore che fa i suoi casi, e quel vettore passa | la tabella «test tolti → vettore» nel rapporto di T18, controllata con `grep` sui file dei vettori, e `npx vitest run src/editors/canvas` | T18 |
+| la CSP permette di compilare WebAssembly e niente di più: eseguire testo come codice resta vietato | `cargo test -p fub-app --test platform_configs` (fallisce con `'unsafe-eval'` dovunque o con `'wasm-unsafe-eval'` fuori da `script-src`, per ogni piattaforma) | T15 |
 | la WebView carica il nucleo e i tempi reggono | la pagina in `docs/misure/` con dimensione, istanza e un commit a 50 e 2000 schede in Node e in WebKitGTK | T15 |
-| l'inchiostro in WebAssembly non è più lento di quello TypeScript | `npm run bench:ink`, la pagina in `docs/misure/`; l'esito decide solo se aprire la domanda D-4 (b) | T17 |
+| il testo che si sta scrivendo in una scheda è nelle bozze di recupero: una chiusura ordinata non perde niente, una di colpo al più l'ultimo secondo | `cd apps/client && npx vitest run src/state src/editors/canvas` e il test della shell che chiude la finestra durante la pausa | T16, T19 |
+| Fub riscrive una lavagna di un altro programma cambiando solo ciò che tocca, e l'annulla della tela torna ai byte di prima | i vettori nuovi di T20 in Rust e nel `.wasm`; il test di `canvas.apply` su una lavagna scritta come Obsidian; i test d'annulla di `engine.test.ts` | T20, T21 |
+| una lavagna che Fub non può riscrivere senza perdere niente si apre in sola lettura e lo dice | `engine.test.ts` con un sorgente a chiave doppia | T22 |
+| l'inchiostro in WebAssembly è misurato | `npm run bench:ink`, la pagina in `docs/misure/`; D-4 (a): l'inchiostro resta in TypeScript | T17 |
+| tutti i task sono fatti; la CI completa passa sulla PR non più in bozza (Linux, Windows, macOS, i banchi); la revisione riga per riga è fatta e ciò che ha trovato è corretto; l'utente dice sì al merge. N3 entra in main prima di N4 (merge-n3n4 (b)) | la PR #297 coi controlli verdi e il resoconto della revisione nel rapporto di T23 | T23 |
 
 ## Regole che valgono per ogni task
 
 - Vince il codice: se un percorso o una funzione non è come scritto qui, il
   coder lo dice nel suo rapporto e segue il codice.
-- Nessuna dipendenza esterna nuova (né `wasm-bindgen`, né `ryu-js`, né altro)
-  senza la risposta a D-1.
+- Nessuna dipendenza esterna nuova (né `wasm-bindgen`, né `ryu-js`, né
+  altro): D-1 (a).
 - Il nucleo non va in panico su un input: ogni errore è un `Result` con un
   enum di `thiserror`; niente `unwrap` o `expect` nei sorgenti di
   `fub-canvas-core` fuori dai test. `unsafe` solo in
-  `crates/fub-canvas-wasm/src/abi.rs`, con un commento `SAFETY` per blocco.
+  `crates/fub-canvas-wasm/src/abi.rs` e nel suo test
+  `crates/fub-canvas-wasm/tests/abi.rs`, con un commento `SAFETY` per blocco.
 - In `fub-features` nessun `PluginError` letterale nuovo:
   `check-error-literals.mjs` è un cricchetto. I messaggi passano da chiavi del
   catalogo (`Text::message`), in italiano e in inglese.
@@ -486,6 +634,8 @@ attesi scritti a mano, e passa; per ognuno il testo di dopo, riletto, dà il
 modello di dopo.
 Prova: scripts/check.sh --rapido
 Stato: [x] fatto
+  Da rivedere: T20 lo cambia (D-7 (c)): il `null` di un campo noto resta, e un
+  `nodes` o `edges` assente non si aggiunge finché resta vuoto.
 
 ## T6 · Le toppe al modello
 
@@ -519,6 +669,8 @@ limite e per ognuno controlla che l'inversa applicata dopo dia il modello di
 prima; passa.
 Prova: scripts/check.sh --rapido
 Stato: [x] fatto
+  Da rivedere: T20 lo cambia (D-7 (c)): anche le toppe degli archi hanno `at`,
+  e l'inversa rimette l'arco al suo posto.
 
 ## T7 · Il commit e i vettori delle toppe
 
@@ -562,6 +714,8 @@ cambiato di un byte fa fallire tutti e due.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas
 Stato: [x] fatto
+  Da rivedere: T20 lo cambia (D-7 (c)): i vettori 11 e 18 cambiano testo, e
+  se ne aggiungono altri.
 
 ## T8 · Le operazioni d'intento
 
@@ -599,6 +753,8 @@ Fatto quando: `cargo test -p fub-canvas-core --test op_vectors` passa su
 tutti i vettori.
 Prova: scripts/check.sh --rapido
 Stato: [x] fatto
+  Da rivedere: T20 lo cambia (D-7 (c)): `remove` e l'inversa tengono il posto
+  degli archi, e `tests/op_vectors.rs` li confronta in ordine.
 
 ## T9 · Lo specchio a caso fra Rust e TypeScript
 
@@ -632,6 +788,8 @@ in `ownership.md` dice chi è la copia autorevole.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core --test
 ts_mirror; cd apps/client && npx vitest run src/editors/canvas
 Stato: [x] fatto
+  Da rivedere: T18 lo cambia (D-8 (a)): lo specchio resta, ma contro il
+  `.wasm` invece che contro il TypeScript.
 
 ## T10 · Il componente «Lavagna» e `canvas.apply`
 
@@ -740,61 +898,96 @@ Stato: [x] fatto
 ## T13 · La facciata WebAssembly `fub-canvas-wasm`
 
 Perché: la WebView deve usare lo stesso nucleo; serve una porta stretta, con
-JSON dentro e fuori e poche chiamate per gesto.
+JSON dentro e fuori e poche chiamate per gesto. D-1 (a): il ponte è scritto a
+mano, e all'utente è promesso che lo provano test di andata e ritorno anche
+nei casi strani.
 Tocca: `crates/fub-canvas-wasm/` (nuovo: `Cargo.toml`, `src/lib.rs`,
-`src/api.rs`, `src/abi.rs`, `tests/api.rs`), `Cargo.toml`, `Cargo.lock`,
+`src/api.rs`, `src/abi.rs`, `tests/api.rs`, `tests/abi.rs`), `Cargo.toml`,
+`Cargo.lock`, `crates/fub-canvas-core/src/commit.rs` (solo `Core::preview`),
+`crates/fub-canvas-core/tests/patch_vectors.rs` (i controlli di `preview`),
 `crates/fub-abi/tests/dependency_invariant.rs`,
 `docs/architecture/overview.md` (diagramma), `docs/map/repo.md`,
 `docs/reference/canvas-operations.md` (sezione «WebAssembly»).
-Non toccare: `crates/fub-canvas-core/src/` (salvo errori), il client,
-`tools/varco-wasm`, `check-crate-type.mjs` (A5: niente `cdylib` nel
-manifesto).
-Dipende da: T7, T8; D-1 (costosa da disfare: per questo è in un'ondata dopo i
-comandi; se la risposta arriva prima può andare insieme a T12, l'unico con
-«Tocca» disgiunti: T10 e T11 toccano `Cargo.lock` o
-`canvas-operations.md`)
+Non toccare: il resto di `crates/fub-canvas-core/src/` (salvo errori, che si
+dicono nel rapporto), il client, `tools/varco-wasm`, `check-crate-type.mjs`
+(A5: niente `cdylib` nel manifesto).
+Dipende da: T7, T8; D-1 (a), risposta del 2026-11-02
 Cosa fare:
+- `Core::preview(&self, patches) -> Result<String, CommitError>` in
+  `commit.rs`: il testo che darebbe `commit`, senza cambiare `Core`. Serve
+  alle bozze di T19; `patch_vectors.rs` controlla che per ogni vettore
+  applicato `preview` dia il testo di `commit` e lasci `Core` com'era, e che
+  per ogni rifiutato dia lo stesso errore.
 - `src/api.rs`, sicuro e provato in nativo: una tabella di `Core` per
-  handle; `open`, `commit`, `compile` (`{ops, seed}`), `reset`, `node_at`,
-  `close`, ognuno da JSON UTF-8 a JSON UTF-8, con `{"error": {"code",
-  "message"}}` per gli errori.
-- `src/abi.rs`, l'unico `unsafe`: `fub_alloc(len)`, `fub_free(ptr, len)`,
-  `canvas_open(ptr, len) -> u32` (0 = errore), `canvas_commit(h, ptr, len) ->
-  i32`, `canvas_compile`, `canvas_reset`, `canvas_node_at(h, byte) -> i32`,
-  `canvas_close(h)`, `result_ptr()`, `result_len()`; un commento `SAFETY` per
-  blocco.
+  handle; `open`, `commit`, `preview`, `compile` (`{ops, seed}`), `reset`,
+  `node_at`, `close`, ognuno da JSON UTF-8 a JSON UTF-8, con `{"error":
+  {"code", "message"}}` per gli errori. Gli handle crescono e non si
+  riusano: un handle chiuso non arriva mai alla lavagna di un altro.
+- `src/abi.rs`, l'unico `unsafe`: `fub_alloc(len)` (0 se `len` passa il
+  limite d'ingresso o la memoria non basta: `try_reserve_exact`, mai un
+  panico), `fub_free(ptr, len)`, `canvas_open(ptr, len) -> u32` (0 =
+  errore), `canvas_commit(h, ptr, len) -> i32`, `canvas_preview`,
+  `canvas_compile`, `canvas_reset`, `canvas_node_at(h, byte) -> i32`,
+  `canvas_close(h)`, `result_ptr()`, `result_len()`; un commento `SAFETY`
+  per blocco. Il risultato vale fino alla chiamata dopo.
 - `commit` risponde col tratto cambiato in unità UTF-16 del vecchio
   sorgente (inizio, fine, testo), non col sorgente intero: con 1 MB di file
-  copiarlo a ogni gesto costerebbe (prova 1).
-- La sezione della pagina: le funzioni, il loro JSON, chi libera la memoria.
-Casi limite: un handle chiuso o mai aperto; JSON non UTF-8; un `len` zero;
-due lavagne aperte insieme; un panico (con `panic=abort` diventa una
-trappola: il chiamante deve rifare l'istanza, scritto nella pagina).
-Fatto quando: `cargo test -p fub-canvas-wasm` passa i vettori di T7 e T8
-attraverso `api.rs`; il comando di A5 produce un `.wasm` senza import
-(`wasm-objdump` se c'è, altrimenti il test di T14), e la sua dimensione è nel
-rapporto.
-Prova: scripts/check.sh --rapido; CARGO_TARGET_DIR=target/canvas-wasm
-CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true
-CARGO_PROFILE_RELEASE_PANIC=abort CARGO_PROFILE_RELEASE_STRIP=true cargo rustc
--p fub-canvas-wasm --lib --release --target wasm32-unknown-unknown
---crate-type cdylib
+  copiarlo a ogni gesto costerebbe (prova 1). `preview` risponde col testo
+  intero, perché la bozza lo vuole intero e la si scrive al più una volta al
+  secondo.
+- Il limite d'ingresso (almeno `MAX_SOURCE_BYTES`, perché una toppa porta
+  anche una scheda con 1 MiB di testo) è una costante scritta nella pagina.
+- La sezione della pagina: le funzioni, il loro JSON, chi alloca e chi
+  libera la memoria, quanto vive il risultato, i limiti, che cosa fa una
+  trappola. Non è un contratto pubblico: lo usano solo `wasm/core.ts` e il
+  `.wasm` della stessa build, e la pagina lo dice.
+Casi limite: un handle chiuso, mai aperto, 0 o `u32::MAX`; byte non UTF-8
+(`0xFF`, una sequenza di quattro byte tronca, un surrogato codificato `ED A0
+80`); JSON non valido, o valido ma della forma sbagliata; un `len` zero, con
+o senza puntatore nullo; due lavagne aperte insieme, e una chiusa mentre
+l'altra lavora; un risultato vuoto e uno più grande di una pagina di memoria
+(64 KiB); un panico (con `panic=abort` diventa una trappola: il chiamante
+deve rifare l'istanza, scritto nella pagina).
+Fatto quando: `cargo test -p fub-canvas-wasm` passa e prova, attraverso
+`api.rs` e attraverso le funzioni `extern "C"` di `abi.rs` chiamate in
+nativo (`tests/abi.rs`):
+- andata e ritorno: ogni vettore di `canvas-patches/` e `canvas-ops/` dà,
+  per le due vie, il testo, il tratto e l'errore attesi; il
+  tratto UTF-16 applicato al vecchio sorgente (come stringa UTF-16) dà il
+  sorgente nuovo, con caratteri ASCII, di due, tre e quattro byte, BOM e
+  CRLF;
+- input non valido: ogni caso limite qui sopra, salvo il panico voluto,
+  risponde con un errore JSON, e nessuno va in panico;
+- dimensioni: un sorgente di 16 MiB si apre e si cambia, uno di un byte in
+  più è un errore `limit`, un `fub_alloc` oltre il limite dà 0;
+- memoria liberata: con un allocatore che conta (il `#[global_allocator]` di
+  `tests/abi.rs`), dopo 10 000 giri di `open`, `commit`, `preview` e `close`
+  la memoria viva torna quella dopo il primo giro;
+- il comando di A5 produce un `.wasm` senza import (`wasm-objdump` se c'è,
+  altrimenti il test di T14), e la sua dimensione è nel rapporto.
+Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-wasm;
+CARGO_TARGET_DIR=target/canvas-wasm CARGO_PROFILE_RELEASE_OPT_LEVEL=s
+CARGO_PROFILE_RELEASE_LTO=true CARGO_PROFILE_RELEASE_PANIC=abort
+CARGO_PROFILE_RELEASE_STRIP=true cargo rustc -p fub-canvas-wasm --lib
+--release --target wasm32-unknown-unknown --crate-type cdylib
 Stato: [ ] da fare
 
 ## T14 · Il passo nella build di Vite
 
-Perché: la shell deve trovare il `.wasm` fatto dai sorgenti di oggi, in
-sviluppo, nei test e nella build.
+Perché: la shell deve trovare il `.wasm` fatto dai sorgenti di adesso, in
+sviluppo, nei test e nella build. D-2 (a): lo compila Vite a ogni build,
+così un `.wasm` vecchio non può esistere.
 Tocca: `apps/client/build/canvas-wasm.mjs` (nuovo),
 `apps/client/vite.config.ts`, `apps/client/vite.bench.config.ts`,
 `apps/client/src/editors/canvas/wasm/core.ts` (nuovo),
+`apps/client/src/editors/canvas/wasm/core.test.ts` (nuovo),
 `apps/client/src/editors/canvas/wasm/vectors.test.ts` (nuovo),
 `.github/workflows/ci.yml`, `.github/workflows/release.yml`,
 `.github/workflows/mobile.yml`, `scripts/check.sh`, `scripts/check-scope.mjs`,
-`CONTRIBUTING.md`.
+`CONTRIBUTING.md`, `CLAUDE.md` (solo la riga dei bersagli).
 Non toccare: `engine.ts` e `surface.ts` (sono di T16),
 `crates/fub-app/tauri.conf.json` (T15), i crate.
-Dipende da: T13; D-2 (costosa da disfare)
+Dipende da: T13; D-2 (a), risposta del 2026-11-02
 Cosa fare:
 - Un plugin di Vite: un modulo virtuale (`virtual:fub-canvas-wasm`) che
   lancia il comando di A5, osserva i sorgenti dei due crate, emette il
@@ -802,22 +995,38 @@ Cosa fare:
   mancano, un errore che dice il comando `rustup target add
   wasm32-unknown-unknown`. In tutte e due le config di Vite.
 - `wasm/core.ts`: carica il modulo una volta (`WebAssembly.instantiate`),
-  dà `openCore(text)` con `commit`, `compile`, `reset`, `nodeAt`, `close`;
-  rifà l'istanza dopo una trappola; rilegge le viste della memoria dopo ogni
-  chiamata (la memoria può crescere).
+  dà `openCore(text)` con `commit`, `preview`, `compile`, `reset`,
+  `nodeAt`, `close`; rifà l'istanza dopo una trappola; rilegge le viste
+  della memoria dopo ogni chiamata (la memoria può crescere); libera con
+  `fub_free` ogni buffer che alloca, anche quando la chiamata fallisce.
+- Un testo con un surrogato spaiato non va al nucleo: `TextEncoder` lo
+  cambierebbe in U+FFFD senza dirlo, e i tratti non tornerebbero più col
+  testo della sessione. `core.ts` lo controlla (`isWellFormed`, o una
+  regola equivalente dove manca) e risponde con un errore.
 - `wasm/vectors.test.ts`: le cartelle `canvas-patches/` e `canvas-ops/`
   attraverso il `.wasm`, stessi controlli di `vectors.test.ts`.
 - CI: Rust e `wasm32-unknown-unknown` in ogni job che lancia `npm test`,
   `npm run build`, il banco visivo o `bench:webview`; il job `changes` segna
   il client anche per `crates/fub-canvas-(core|wasm)/`; `check-scope.mjs`
   idem, e `check.sh` lancia allora `npx vitest run src/editors/canvas`.
-- `CONTRIBUTING.md`: il bersaglio da installare.
+- `CONTRIBUTING.md` e la riga dei bersagli di `CLAUDE.md` (oggi solo
+  `wasm32-wasip2`): il bersaglio `wasm32-unknown-unknown` da installare per
+  il client.
 Casi limite: due build di Vite insieme (stesso `CARGO_TARGET_DIR`: cargo
 mette il lucchetto); il server di sviluppo mentre si cambia un `.rs`; un
-`.wasm` vecchio in cache; il job `mobile` (stessa build).
+`.wasm` vecchio in cache; il job `mobile` (stessa build); un testo vuoto, uno
+di soli caratteri di quattro byte, uno con un surrogato spaiato; una
+chiamata dopo `close`.
 Fatto quando: `npm run build` produce il `.wasm` fra gli asset e ne stampa la
-dimensione; `wasm/vectors.test.ts` passa; senza il bersaglio, l'errore dice
-che cosa installare.
+dimensione; due build dagli stessi sorgenti danno lo stesso `.wasm` (stesso
+hash), e un `.rs` cambiato ne dà uno nuovo; `wasm/vectors.test.ts` passa;
+`wasm/core.test.ts` prova sul `.wasm` vero l'andata e il ritorno promessi da
+D-1 (a): il tratto UTF-16 di ogni commit, applicato alla stringa di prima, dà
+il testo di `preview` (ASCII, due, tre e quattro byte, BOM, CRLF); il
+surrogato spaiato è un errore e non un U+FFFD; dopo 10 000 giri di
+`openCore`, `commit` e `close` la memoria del modulo non è più grande che
+dopo il primo centinaio; senza il bersaglio, l'errore dice che cosa
+installare.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npx
 vitest run src/editors/canvas
 Stato: [ ] da fare
@@ -825,20 +1034,35 @@ Stato: [ ] da fare
 ## T15 · La CSP, la decisione e la misura
 
 Perché: la WebView deve poter compilare WebAssembly, la scelta va scritta, e
-i tempi vanno misurati dove girano davvero prima che la tela ci passi.
+i tempi vanno misurati dove girano davvero prima che la tela ci passi. D-3
+(a): si apre solo `'wasm-unsafe-eval'`, e all'utente è promesso un test che
+tiene vietato eseguire testo come codice.
 Tocca: `crates/fub-app/tauri.conf.json` (solo `csp`),
+`crates/fub-app/tests/platform_configs.rs`,
 `docs/reference/permissions-and-security.md`, `docs/decisions/0236-…md`
 (nuovo, numero secondo A12), `docs/decisions/README.md`,
 `apps/client/bench/webview/run.mjs`, `apps/client/bench/webview/budgets.json`,
 `docs/misure/lavagna-wasm-AAAA-MM-GG.md` (nuovo), `docs/misure/README.md`.
 Non toccare: `crates/fub-services/src/site_isolation.rs` (è la CSP dei siti
 pubblicati, un'altra cosa); le altre voci della CSP; il client.
-Dipende da: T14; D-3 (costosa da disfare)
+Dipende da: T14; D-3 (a), risposta del 2026-11-02
 Cosa fare:
 - `script-src 'self' 'wasm-unsafe-eval'`, nient'altro; la pagina della
   sicurezza dice perché e che cosa non permette.
+- Il test in `platform_configs.rs`, con `config_for` per ogni piattaforma
+  (Linux, Windows, macOS, Android, iOS) e anche per `devCsp` se c'è: legge
+  la CSP direttiva per direttiva e fallisce se `'unsafe-eval'` compare in
+  una direttiva qualsiasi, se `'wasm-unsafe-eval'` compare fuori da
+  `script-src`, o se `script-src` manca o non è esattamente `'self'
+  'wasm-unsafe-eval'` (niente `'unsafe-inline'`, `data:`, `blob:`, `*` o
+  altre origini). La funzione che controlla ha i suoi casi in negativo: una
+  CSP con `'unsafe-eval'` in `script-src`, una con `'wasm-unsafe-eval'` in
+  `default-src`, una senza `script-src`, una con `'UNSAFE-EVAL'` in
+  maiuscolo fra spazi doppi (le parole chiave della CSP non guardano le
+  maiuscole), e il controllo le rifiuta tutte.
 - La decisione: WebAssembly nella WebView per la lavagna, l'ABI C (D-1), la
-  build da Vite (D-2), la CSP; nel registro delle decisioni.
+  build da Vite (D-2), la CSP e il suo test (D-3); nel registro delle
+  decisioni.
 - Uno scenario nuovo in `bench:webview` (accanto a S1–S7, R1, T1, I1): apre
   una lavagna di 50 e una di 2000 schede, misura istanza, `open` e `commit`
   di uno spostamento; i tetti in `budgets.json` dopo la prima misura.
@@ -849,11 +1073,16 @@ Cosa fare:
 Casi limite: WebKitGTK di una distribuzione vecchia senza
 `'wasm-unsafe-eval'` (va scritto se lo si vede); la macchina carica (due giri
 uguali, si scrive il rumore); la WebView2 di Windows non misurata qui (si
-scrive).
-Fatto quando: la shell costruita carica il nucleo senza errori di CSP nella
+scrive); una config di piattaforma che un giorno ridefinisce `csp` (il test
+la prende, perché legge la config fusa).
+Fatto quando: `cargo test -p fub-app --test platform_configs` passa, e
+fallisce se nella CSP di una piattaforma qualsiasi compare `'unsafe-eval'` o
+se `'wasm-unsafe-eval'` compare fuori da `script-src` (lo provano i casi in
+negativo); la shell costruita carica il nucleo senza errori di CSP nella
 console; la pagina di misura ha i numeri di Node e di WebKitGTK (dal job
 `webview` della CI se in locale non si costruisce l'app).
-Prova: scripts/check.sh --rapido; cd apps/client && npm run bench:webview --
+Prova: scripts/check.sh --rapido; cargo test -p fub-app --test
+platform_configs; cd apps/client && npm run bench:webview --
 --only=<lo scenario nuovo> (con l'app costruita, come dice
 `docs/development/webview-measurements.md`)
 Stato: [ ] da fare
@@ -861,15 +1090,20 @@ Stato: [ ] da fare
 ## T16 · La tela usa il nucleo
 
 Perché: finché la tela scrive col suo TypeScript, Rust e WebView possono
-ancora divergere; da qui ogni modifica della tela passa dal nucleo.
+ancora divergere; da qui ogni modifica della tela passa dal nucleo. D-5 (c):
+il testo di una scheda si registra a pause, non a ogni tasto.
 Tocca: `apps/client/src/editors/canvas/engine.ts`,
 `apps/client/src/editors/canvas/surface.ts`,
 `apps/client/src/editors/canvas/engine.test.ts`,
 `apps/client/src/editors/canvas/wasm/core.ts`,
-`apps/client/src/i18n/catalog.ts`.
+`apps/client/src/i18n/catalog.ts`, `docs/architecture/editor-surfaces.md`
+(una sezione «La lavagna» nuova).
 Non toccare: `model.ts`, `operation.ts`, `source-edit.ts` (si svuotano in
-T18); i vettori; `bootstrap.ts`.
-Dipende da: T15; D-5 (si vede: il passo d'annulla del testo)
+T18); i vettori; `bootstrap.ts`; `apps/client/src/state/` (le bozze sono di
+T19).
+Dipende da: T15; D-5 (c), risposta del 2026-11-02. Le regole del campo sono
+A14–A16: l'orchestratore le fa vedere all'utente prima di far partire
+questo task (A14 è la domanda D-10).
 Cosa fare:
 - La superficie si monta come `mountVectorSurfaceLazily` di
   `apps/client/src/editors/spatial/lazy.ts`: tiene il testo finché il nucleo
@@ -878,23 +1112,55 @@ Cosa fare:
   a `commit` e usa il tratto cambiato per il testo nuovo e la
   `TextOperation`; l'annulla passa le toppe inverse dallo stesso `commit`;
   `revealSource` usa `nodeAt`; `close` quando la superficie si distrugge.
-- Il testo di una scheda (oggi `#commitLocal` a ogni `input`) si registra
-  dopo circa 250 ms di pausa, all'uscita dal campo, a Invio e a Esc (D-5).
+- Il testo di una scheda (oggi `#commitLocal` a ogni `input`) resta nel
+  campo e si registra (un `commit` al nucleo, una modifica alla sessione)
+  dopo una pausa di circa 250 ms (una costante, `CARD_PAUSE_MS`),
+  all'uscita dal campo, a Invio e a Esc, secondo A14 e A15. Ogni
+  registrazione è un passo d'annulla (A16); con il campo aperto Ctrl+Z
+  resta quello del campo.
+- Il testo in sospeso ha un posto solo nel motore (per esempio `#pending`:
+  la scheda, il campo, il testo) e si registra prima di ogni altra cosa che
+  tocca la lavagna o la chiude: un altro gesto della tela, `undo`, `redo`,
+  `setReadOnly`, `destroy`. A `syncDoc` si registra subito dopo, sul testo
+  nuovo (la regola dello `Stale` qui sotto). T19 lo fa vedere alla
+  sessione: va scritto in modo che basti esporlo.
+- Una registrazione che il nucleo rifiuta non butta il testo del campo. Se
+  il testo è cambiato da un'altra parte (`Stale`), il testo del campo si
+  registra sulla scheda com'è adesso; se la scheda non c'è più, si rimette
+  com'era col testo del campo, e un annulla la toglie. Se passa un limite
+  (`Invalid`: più di 1 MiB di testo), il campo resta aperto col testo e
+  l'avviso lo dice (chiave nuova nel catalogo, per esempio «Il testo di
+  questa scheda supera 1 MiB: accorcialo per salvarlo.»).
 - Se il nucleo non si carica: l'avviso (chiave nuova nel catalogo, per
   esempio «Questa lavagna non si può disegnare ora: il testo è nella vista
   Sorgente.») e la vista sorgente, come fa il caricamento pigro dei disegni.
 - `engine.test.ts`: lo stesso comportamento di prima attraverso il nucleo, e
   il test del cancello che apre il testo di `agent-board.json` e trova le
   stesse schede negli stessi posti.
+- La sezione «La lavagna» di `editor-surfaces.md`: la tela passa dal
+  nucleo, quando si registra il testo di una scheda, che cosa fa l'annulla.
 Casi limite: una modifica esterna mentre si scrive in una scheda; due
 superfici sulla stessa lavagna; chiudere la superficie durante il
-caricamento; una trappola del nucleo a metà gesto (si rifà l'istanza e si
-riapre dal testo della sessione); CRLF (gli offset della sessione sono a
-`\n`).
+caricamento; chiudere la scheda o il riquadro, o aprire un altro documento
+nel riquadro, durante la pausa; una trappola del nucleo a metà gesto (si
+rifà l'istanza e si riapre dal testo della sessione); una composizione
+dell'IME o un tasto morto (la pausa non scatta durante la composizione:
+conta dalla sua fine); un incolla di 2 MiB in una scheda (se poi si
+chiude il riquadro, è l'unico testo che non si salva: l'avviso l'ha già
+detto, e un test lo fissa); CRLF (gli offset
+della sessione sono a `\n`). Fino a T19 il testo in sospeso non è nelle
+bozze: per questo N3 entra in main solo con T19 fatto (merge-n3n4 (b)).
 Fatto quando: i test di `src/editors/canvas` passano col nucleo; la tela, nel
 banco con l'host finto, apre, sposta, collega, scrive e annulla come prima
 (foto del banco invariate, se ci sono); nessuna chiamata al nucleo per tasto
-(un test lo conta).
+(un test lo conta); con l'orologio finto, `engine.test.ts` prova che: dieci
+tasti a 100 ms l'uno dall'altro non registrano niente fino alla pausa, e poi
+una volta sola; due frasi con una pausa in mezzo sono due passi d'annulla;
+Esc, Invio, Ctrl+Invio, Cmd+Invio e l'uscita dal campo registrano come
+dicono A14 e A15; `destroy` durante la pausa registra prima, nel documento
+che il riquadro mostrava (il pannello stacca e distrugge la superficie prima
+di cambiare documento, in `show`), e `syncDoc` subito dopo sul testo nuovo;
+una registrazione `Stale` o `Invalid` non perde il testo del campo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
 Stato: [ ] da fare
@@ -934,34 +1200,348 @@ Stato: [x] fatto
 ## T18 · Il TypeScript della lavagna si toglie
 
 Perché: con la parità provata e la tela sul nucleo, la copia TypeScript della
-logica è solo un posto in più dove sbagliare.
+logica è solo un posto in più dove sbagliare. D-8 (a): si toglie, ma solo
+dopo che ogni caso dei suoi test gira sui vettori comuni e passa, e
+l'elenco lo dimostra.
 Tocca: `apps/client/src/editors/canvas/model.ts` (restano i tipi e
 `emptyCanvas` se serve al disegno), `operation.ts` (restano i tipi di
 `CanvasPatch` e i costruttori di toppe che la tela usa),
 `source-edit.ts` (si toglie), `source-edit.test.ts`, `operation.test.ts`,
-`model.test.ts`, `line-endings.test.ts`, `vectors.test.ts`, `mirror.test.ts`,
-`apps/client/src/__fixtures__/canvas-mirror.json`,
-`crates/fub-canvas-core/tests/ts_mirror.rs`, `docs/map/ownership.md`,
-`docs/reference/canvas-format.md` (sezione «Parità»).
-Non toccare: `wasm/vectors.test.ts` e le cartelle dei vettori (restano, e
-sono ora la prova); `engine.ts` salvo gli import; il disegno della tela.
-Dipende da: T16; D-8 (togliere test è «Chiede sempre»)
+`model.test.ts`, `line-endings.test.ts`, `vectors.test.ts`, `mirror.test.ts`
+(diventa `wasm/mirror.test.ts`), `wasm/vectors.test.ts`,
+`apps/client/src/__fixtures__/canvas-read/` (nuovo),
+`apps/client/src/__fixtures__/canvas-patches/` e `canvas-ops/` (solo file
+nuovi), `crates/fub-canvas-core/tests/read_vectors.rs` (nuovo),
+`crates/fub-canvas-core/tests/ts_mirror.rs` (il commento in testa),
+`docs/map/ownership.md`, `docs/reference/canvas-format.md` (sezione
+«Parità»).
+Non toccare: i file dei vettori che ci sono (un caso nuovo va in un file
+nuovo); `engine.ts` salvo gli import; il disegno della tela;
+`canvas-mirror.json` e il suo generatore, salvo il commento.
+Dipende da: T16, T19 (tutti e due toccano `engine.ts`: uno alla volta); D-8
+(a), risposta del 2026-11-02
 Cosa fare:
-- Prima di togliere un test, il rapporto elenca per ognuno il vettore che
-  copre i suoi casi; un caso che non c'è diventa un vettore nuovo.
+- Prima di togliere un test, la tabella «test tolti → vettore»: una riga per
+  ogni `it` e per ogni riga di un `it.each` di `model.test.ts`,
+  `operation.test.ts`, `source-edit.test.ts`, `line-endings.test.ts` e
+  `vectors.test.ts`, con il file, il nome del test, il vettore (o i
+  vettori) che fa gli stessi casi, e se il vettore c'era o è nuovo. Un caso
+  che non c'è diventa un vettore nuovo. La tabella va nel rapporto, e
+  l'orchestratore la copia sotto questo task prima di segnarlo fatto.
+- Le regole di lettura (R1–R5, R7, R8, i limiti per tipo) non hanno ancora
+  vettori: i vettori delle toppe partono da un testo che si apre. Per loro
+  `canvas-read/`, un file per caso: `name`, `description`, `source`, `expect
+  {outcome: "opened", nodes, edges}` oppure `{outcome: "rejected",
+  reason}`; li leggono `tests/read_vectors.rs` (con `Core::open`) e
+  `wasm/vectors.test.ts` (con `openCore`).
+- La prova «un vettore cambiato di un byte fallisce» di `vectors.test.ts`
+  passa a `wasm/vectors.test.ts`, e vale anche per `canvas-read/`.
+- Lo specchio resta, contro il `.wasm`: `mirror.test.ts` diventa
+  `wasm/mirror.test.ts` e pretende dal nucleo in WebAssembly le risposte che
+  la fixture porta dal nucleo nativo. La seconda copia è ora la build a 32
+  bit (`usize` di 32 bit, un altro allocatore), dove una divergenza resta
+  possibile; `ownership.md` e il commento di `ts_mirror.rs` lo dicono.
 - Tolta la logica: `parseCanvas`, `commitCanvasPatches`, `canvasDraft`,
   `applyCanvasPatches`, `inverseCanvasPatches`, `patchCanvasSource`,
-  `canvasNodeAt`, `sameCanvasModel`. Lo specchio non ha più una seconda
-  copia: si toglie, e `ownership.md` lo dice.
+  `canvasNodeAt`, `sameCanvasModel`.
 Casi limite: `editors/core/bootstrap.ts` e `editors/rich/surface.ts`
 importano da `surface.ts` e `engine.ts` della lavagna, che restano: non
-cambiano; un tipo di `model.ts` usato dal disegno resta; `npm run typecheck`
-deve restare verde.
-Fatto quando: `grep -rn "patchCanvasSource\|commitCanvasPatches\|parseCanvas"
-apps/client/src` non trova più definizioni; `wasm/vectors.test.ts` e i test
-della tela passano.
-Prova: scripts/check.sh --rapido; cd apps/client && npm run typecheck && npx
-vitest run src/editors/canvas
+cambiano; un tipo di `model.ts` usato dal disegno resta; un test che prova
+una cosa solo della tela (un tipo, `emptyCanvas`, un costruttore di toppe)
+resta in un file che resta, e nella tabella si scrive così; un caso che il
+nucleo fa diverso dal TypeScript (si scrive nel rapporto: se il nucleo segue
+R1–R11 il vettore dice ciò che fa il nucleo, altrimenti è un errore del
+nucleo, da correggere prima di togliere); `npm run typecheck` deve restare
+verde.
+Fatto quando: la tabella ha tante righe quanti sono i casi dei cinque file
+(il conto, fatto con un comando scritto nel rapporto, torna), ogni vettore
+che nomina esiste e passa in `cargo test -p fub-canvas-core` e in
+`wasm/vectors.test.ts`; `grep -rn
+"patchCanvasSource\|commitCanvasPatches\|parseCanvas" apps/client/src` non
+trova più definizioni; `wasm/mirror.test.ts`, `wasm/vectors.test.ts` e i test
+della tela passano; la prova del byte cambiato fallisce come deve su
+`canvas-patches/`, `canvas-ops/` e `canvas-read/`.
+Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
+apps/client && npm run typecheck && npx vitest run src/editors/canvas
+Stato: [ ] da fare
+
+## T19 · Il testo in corso di una scheda nelle bozze di recupero
+
+Perché: da T16 il testo che si scrive in una scheda resta nel campo fino
+alla pausa; D-5 (c) vuole che anche quello finisca nelle bozze di recupero,
+così una chiusura ordinata non perde niente e una chiusura di colpo perde al
+più l'ultimo secondo (A17).
+Tocca: `apps/client/src/state/document-session.ts`,
+`apps/client/src/state/document-session.test.ts`,
+`apps/client/src/state/document-controller.ts` (dove la superficie si
+registra alla sessione, `attachSurface`),
+`apps/client/src/editors/core/registry.ts` (`SurfaceBuffer`),
+`apps/client/src/editors/canvas/engine.ts`,
+`apps/client/src/editors/canvas/surface.ts`,
+`apps/client/src/editors/canvas/engine.test.ts`,
+`apps/client/src/shell.e2e.test.ts`, `docs/architecture/editor-surfaces.md`.
+Non toccare: `crates/fub-kernel/src/drafts.rs` e l'IPC delle bozze (il posto
+e il formato delle bozze non cambiano); `state/drafts.ts` (il recupero vale
+già per ogni documento); `SAVE_MS` e quando si salva; il nucleo.
+Dipende da: T16; D-5 (c), risposta del 2026-11-02
+Cosa fare:
+- Ciò che c'è già (letto nel codice): le bozze sono per documento, col testo
+  intero (`saveDraft` → `fub-host` → `fub-kernel`, `.fub/drafts/`), e il
+  recupero (`state/drafts.ts`, `restoreDraft`) vale per ogni documento,
+  anche un `.canvas`. Mancano due cose: la sessione non vede il testo che è
+  solo nel campo, e il ritardo della bozza riparte a ogni modifica.
+- La porta: `SurfaceBuffer` e `DocumentSurface` hanno due funzioni
+  facoltative, `pendingText(): string | null` (il testo intero del
+  documento col testo in sospeso dentro, fatto con `preview` di T13; `null`
+  se non c'è niente in sospeso) e `commitPending(): void` (registra subito,
+  come la fine della pausa). La tela avvisa la sessione a ogni cambio del
+  testo in sospeso (una notifica, nessuna chiamata al nucleo): la sessione
+  conta una generazione di bozza in più e arma il ritardo.
+- Il ritardo della bozza diventa una cadenza: `scheduleDraft` non riarma un
+  ritardo già armato, così mentre si scrive senza fermarsi parte una bozza
+  ogni `DRAFT_MS`. Vale per tutti i documenti (A17).
+- `#writeDraft` scrive `pendingText()` se una superficie ne ha uno, se no il
+  testo della sessione; scrive anche quando la sessione è pulita ma c'è un
+  testo in sospeso; `#bufferProtected` conta anche quello. Un salvataggio
+  riuscito non toglie la bozza se c'è ancora un testo in sospeso.
+- Un metodo privato solo della sessione (per esempio `#settlePending()`)
+  chiama `commitPending()` delle superfici in testa a ogni metodo che salva,
+  scrive la bozza, sostituisce il buffer o chiude la sessione. Con i nomi di
+  adesso: `flush`, `flushDraft`, `handleExternalChange`, `reloadIfClean`,
+  `forceReload`, `resolveConflict`, `saveKeepingMine`, `discardChanges`,
+  `restoreDraft`, `beginDeletion`, `delete`, `rename`, `suspend`, `close`;
+  e i metodi della collezione che ci arrivano (`flushPendingSave`,
+  `flushBeforeClose`, `release`, `renameKeepingBuffer`, `discardUnsaved`,
+  `handleExternalRemoval`) passano da lì. Così una modifica o una rimozione
+  esterna che arriva durante la pausa trova la sessione già sporca, e
+  diventa il conflitto di sempre invece di una ricarica.
+- Il pannello (`document-controller.ts`) chiama `commitPending()` prima di
+  `detachSurface` in ogni via che stacca una superficie (`show`,
+  `retryShow`, `failSurface`, la chiusura di un riquadro,
+  `resetDocumentsForVault`, la fine della vita del pannello): il testo
+  arriva alla sessione del documento che il riquadro mostra ancora, prima di
+  ogni flush. Da qui la registrazione dentro `destroy` di T16 è solo una
+  rete: un test fa vedere che, in ogni via, a `destroy` non resta niente in
+  sospeso.
+- `editor-surfaces.md`: la porta del testo in sospeso, la cadenza della
+  bozza e che cosa protegge (A17).
+Casi limite: due superfici della stessa lavagna con un testo in sospeso
+(prima si registrano tutte e due, poi si scrive la bozza del testo della
+sessione); `preview` che fallisce (`Stale` o `Invalid`: la bozza tiene
+l'ultimo testo che il nucleo accetta, e la cosa si scrive nel log); una
+bozza che fallisce sul disco (la chiusura lo sa già da `#bufferProtected`);
+la sessione sospesa o in cancellazione; una nota di qualche MiB scritta
+senza fermarsi (una bozza per volta: `#draftWork` non ne accoda una seconda
+uguale); una superficie distrutta fra la notifica e la bozza; il ritardo che
+scatta mentre il nucleo si sta caricando.
+Fatto quando: con l'orologio finto, l'host finto e la tela vera (il motore e
+il `.wasm`, non una superficie finta) attaccata alla sessione,
+`document-session.test.ts` (o un file nuovo accanto) prova che: tre secondi
+di tasti a 100 ms l'uno dall'altro in una scheda scrivono tre bozze, ognuna
+col testo del campo di quel momento, e nessuna scrittura del file; **Fub si
+chiude di colpo durante la pausa dei 250 ms**: si scrive «Ciao mondo» in una
+scheda, un tasto ogni 100 ms; a 1 s parte la bozza, e la pausa non è ancora
+finita; a 1,1 s la collezione si butta senza chiudere niente (Fub ucciso);
+una collezione nuova sullo stesso host finto offre la bozza con «Ciao
+mondo», e `restoreDraft` la rimette nella lavagna; ciò che si è scritto dopo
+l'ultima bozza è al più `DRAFT_MS` di tasti (il test lo misura); in una
+nota, scrivere senza fermarsi scrive una bozza al secondo.
+`shell.e2e.test.ts` prova che chiudere la finestra durante la pausa porta il
+testo della scheda al disco o alla bozza (come «l'ultima battuta va sul
+disco invece di sparire» per le note), e che una modifica esterna durante la
+pausa dà il conflitto e non perde il testo.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/state
+src/editors/canvas src/shell.e2e.test.ts
+Stato: [ ] da fare
+
+## T20 · Il nucleo conserva ciò che non tocca
+
+Perché: D-7 (c): Fub apre le lavagne degli altri programmi e, quando
+riscrive, conserva esattamente ciò che non tocca (R7 cambiata, R11). Il
+ritocco lo fa già per la grafia dei numeri, gli spazi, l'ordine e i campi
+sconosciuti; mancano i `null` dei campi noti, gli array assenti e il posto
+degli archi.
+Tocca: `crates/fub-canvas-core/src/source.rs`,
+`crates/fub-canvas-core/src/patch.rs`, `crates/fub-canvas-core/src/ops.rs`,
+`crates/fub-canvas-core/tests/source_edit.rs`,
+`crates/fub-canvas-core/tests/patch.rs`,
+`crates/fub-canvas-core/tests/op_vectors.rs`,
+`apps/client/src/__fixtures__/canvas-patches/` (i vettori 11 e 18, e file
+nuovi), `apps/client/src/__fixtures__/canvas-ops/` (file nuovi),
+`apps/client/src/editors/canvas/operation.ts` (solo `removeEdgePatch`, che
+passa `at`), `crates/fub-features/src/lavagna/` (solo un test),
+`docs/reference/canvas-format.md` (R7, «Scrittura»),
+`docs/reference/canvas-operations.md` (le toppe degli archi, «L'inversa»).
+Non toccare: le regole di lettura (`read.rs`); `js.rs`; `commit.rs`; i
+vettori che non cambiano per D-7 (c); `engine.ts` (l'annulla della tela è
+di T21).
+Dipende da: T18 (una copia sola da cambiare: il TypeScript non c'è più);
+D-7 (c), risposta del 2026-11-02
+Cosa fare:
+- `source.rs`: un campo noto facoltativo che nel sorgente è `null` e nel
+  modello di dopo è assente resta com'è (non conta come tolto, e la scheda
+  non si ricompone per lui); se prende un valore, il valore va al posto del
+  `null`. Un `nodes` o `edges` assente nel sorgente e vuoto nel modello di
+  dopo non si aggiunge; con la prima voce arriva in fondo, come oggi.
+- Le toppe degli archi hanno `at` facoltativo, come le schede:
+  `upsert-edge` nuovo e `remove-edge` lo portano, l'inversa di
+  `remove-edge` rimette l'arco in `at`, e `inverse` riordina gli `at` come
+  per le schede. Senza `at` tutto resta come prima (il vettore 16 non
+  cambia). È un campo nuovo nel JSON delle toppe: la pagina
+  `canvas-operations.md` lo dice, e i vettori sono la prova di conformità.
+- `ops.rs`: `remove` scrive l'`at` degli archi che toglie; `op_vectors.rs`
+  confronta gli archi in ordine (senza più `by_edge_id`).
+- I vettori 11 e 18 cambiano testo (il 18 diventa
+  `18-null-kept-on-rewrite.json`), con la ragione nel campo `description`.
+  Cambiare un vettore è cambiare un test: lo autorizza la risposta D-7 (c),
+  solo per questi due.
+  Almeno 12 vettori nuovi fra `canvas-patches/` e `canvas-ops/`: una
+  lavagna scritta come la scrive Obsidian (rientri di tabulazioni, campi
+  nell'ordine di Obsidian) con uno spostamento e un'aggiunta; `null` su
+  `color`, `label`, `background`, `subpath` in una scheda che si ricompone;
+  un `null` che prende un valore; `1.0`, `1e2`, `-0` e `1E1` in una scheda
+  che si ricompone per un altro campo; un numero sconosciuto `1.50` accanto;
+  le chiavi che sembrano indici in una scheda che si ricompone; un arco
+  tolto in mezzo e rimesso dall'annulla al suo posto; `edges` assente, una
+  scheda aggiunta e tolta; `"edges": null` con una scheda nuova; escape
+  scritti in un altro modo (`"\u00e9"`, `"\/"`) in un campo che non cambia.
+- Un test in `fub-features` (`lavagna/`): `canvas.apply` su una lavagna
+  scritta come Obsidian sposta una scheda e cambia solo i byte di quella
+  coordinata.
+- Le pagine: R7 e la «Scrittura» di `canvas-format.md` (anche la frase su
+  `nodes` ed `edges` che arrivano in fondo), «L'inversa» e la tabella delle
+  toppe di `canvas-operations.md`.
+Casi limite: un `null` su un campo obbligatorio (resta un errore di
+lettura, R7); un `null` di un campo che non vale per quel tipo (`url` su una
+scheda di testo); un arco col suo `at` oltre la fine; togliere una scheda e
+i suoi archi insieme, poi annullare (gli archi tornano nel loro ordine);
+`edges` assente e una scheda tolta; un file a una riga sola; CRLF; BOM.
+Fatto quando: `cargo test -p fub-canvas-core` e `wasm/vectors.test.ts`
+passano coi vettori nuovi e con i vettori 11 e 18 cambiati; ogni vettore
+nuovo ha il testo atteso scritto a mano, e il suo `description` dice quali
+byte cambiano e perché tutti gli altri restano; il test di `canvas.apply`
+passa; `node .github/scripts/check-doc-links.mjs` è verde.
+Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cargo test
+-p fub-features lavagna; cd apps/client && npx vitest run src/editors/canvas
+Stato: [ ] da fare
+
+## T21 · L'annulla della tela torna ai byte di prima
+
+Perché: D-7 (c): l'annulla della tela applica le toppe inverse, che
+riscrivono ciò che rimettono (una scheda rientrata torna compatta, `1e2`
+torna `100`, un `nodes` che non c'era o era `null` resta `[]`: vettori 12,
+14, 19, 22).
+L'annulla dei comandi (`Undo::of_edits`) torna già ai byte di prima; quello
+della tela deve fare lo stesso.
+Tocca: `apps/client/src/editors/canvas/engine.ts`,
+`apps/client/src/editors/canvas/engine.test.ts`,
+`docs/architecture/editor-surfaces.md` (la sezione «La lavagna»).
+Non toccare: il nucleo e i vettori (le toppe inverse restano giuste e
+restano la via quando il testo è cambiato); `state/`; `operation.ts`.
+Dipende da: T18, T19 (`engine.ts`, uno alla volta); D-7 (c), risposta del
+2026-11-02
+Cosa fare:
+- Ogni passo d'annulla tiene, oltre alle toppe, il tratto di testo che il
+  commit ha cambiato (inizio, fine, testo di prima, testo di dopo, come lo
+  dà `commit`) e la versione del testo dopo il passo (un contatore del
+  motore che cresce a ogni testo nuovo, anche da `syncDoc`).
+- Annulla e ripeti: se il testo di adesso è quello lasciato dal passo (la
+  versione torna), si rimette il tratto di prima con `reset` sul testo
+  esatto, e la `TextOperation` è quel tratto; se no, le toppe inverse come
+  oggi, che fondono il passo con ciò che è cambiato da un'altra parte. Un
+  `reset` costa una lettura intera (prova 1): va bene per un annulla, non
+  per ogni gesto.
+- La sessione e le altre superfici ricevono una modifica come le altre
+  (stessa `onChange`): niente cambia per loro.
+Casi limite: annullare dopo una modifica dalla vista Sorgente in un altro
+riquadro (via delle toppe); annulla, ripeti, annulla; il limite di
+`MAX_CANVAS_HISTORY` passi; un passo grande (togliere 1000 schede); un
+passo fatto prima di una `syncDoc` che non cambia il testo (la versione
+resta); CRLF e BOM; un passo di testo di una scheda (T16) annullato.
+Fatto quando: `engine.test.ts` prova, sui testi di partenza dei vettori 02,
+12, 14, 19 e 22 e su una lavagna scritta come Obsidian, che ogni gesto
+della tela (spostare, ridimensionare, togliere, aggiungere, collegare,
+scrivere in una scheda, cambiare colore, riordinare) seguito da un annulla
+ridà il testo di prima byte per byte, e un ripeti il testo di dopo; e che
+dopo una modifica da un'altra superficie l'annulla passa dalle toppe e dà
+il modello giusto.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/editors/canvas
+Stato: [ ] da fare
+
+## T22 · Una lavagna che Fub non può riscrivere si apre in sola lettura
+
+Perché: una lavagna con una chiave sconosciuta doppia si apre (R3), ma il
+riscrittore la rifiuta, perché riscriverla perderebbe uno dei due valori:
+oggi ogni gesto torna indietro senza un perché. D-7 (c) vuole che Fub non
+tolga niente; A18 vuole che lo dica.
+Tocca: `apps/client/src/editors/canvas/engine.ts`,
+`apps/client/src/editors/canvas/engine.test.ts`,
+`apps/client/src/i18n/catalog.ts`, `docs/reference/canvas-format.md`
+(R3).
+Non toccare: il nucleo e le sue regole (R3 resta: si apre, non si
+riscrive); `setReadOnly` del pannello e i suoi motivi (la sola lettura di
+questo caso è della tela, e si somma a quella del pannello); i comandi, che
+rispondono già con `canvas.apply.e_commit_rejected`.
+Dipende da: T20 (`canvas-format.md`), T21 (`engine.ts`); D-7 (c), risposta
+del 2026-11-02
+Cosa fare:
+- A ogni `setDoc` e a ogni `syncDoc` col testo intero, la tela chiede al
+  nucleo se il testo si può riscrivere (un `commit` di una lista vuota
+  risponde `rejected` con la ragione della chiave doppia); se no, la tela si
+  mette in sola lettura con lo stato che c'è già (i bottoni che cambiano
+  spenti) e l'avviso nel posto dell'avviso della barra
+  (`canvas-intake-error`), con una chiave nuova nel catalogo, in tutte le
+  lingue, per esempio «Questa lavagna si può guardare ma non cambiare: il
+  file ha lo stesso campo due volte, e riscriverlo ne perderebbe uno.».
+- Quando il testo torna riscrivibile (la chiave doppia tolta nella vista
+  Sorgente), la sola lettura e l'avviso se ne vanno da soli.
+- La pagina `canvas-format.md`, R3: che cosa fa la tela.
+Casi limite: la chiave doppia annidata in un campo sconosciuto; la chiave
+doppia tolta da un'altra superficie mentre la tela è aperta; un file con
+la chiave doppia e oltre il limite interattivo (vince l'avviso del limite:
+uno solo per volta); la sola lettura del pannello che arriva e se ne va
+mentre questa resta.
+Fatto quando: `engine.test.ts` prova, con il testo dei vettori 32 e 33, che
+la tela si apre, disegna le schede, non cambia niente a nessun gesto, mostra
+l'avviso con il suo ruolo `alert`, e che togliendo la chiave doppia torna a
+cambiare; il controllo delle chiavi del catalogo è verde.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/editors/canvas
+Stato: [ ] da fare
+
+## T23 · La CI completa e la revisione prima del merge
+
+Perché: merge-n3n4 (b): N3 entra in main solo quando è finito, dopo la CI
+completa (che sulla PR in bozza non gira tutta) e una revisione riga per
+riga; poi entra N4.
+Tocca: nessun file di prodotto in partenza; ciò che la CI o la revisione
+trovano, nei file dei task che l'hanno scritto.
+Non toccare: N4 e N6 (li riallinea il loro pianificatore); la storia del
+ramo (niente force-push senza chiedere).
+Dipende da: T13, T14, T15, T16, T18, T19, T20, T21, T22 (tutti i task)
+Cosa fare (lo fa l'orchestratore):
+- Segna la PR #297 pronta (non più in bozza), così parte la CI completa:
+  Linux, Windows, macOS, i banchi (visivo, `bench:webview`, `bench:ink`) e
+  i job del client col bersaglio WebAssembly di T14.
+- Legge ogni job, anche quelli verdi con avvisi; un job rosso o un avviso
+  nuovo diventa una correzione, con un coder se serve, e la CI riparte.
+- Fa la revisione riga per riga di tutto il diff di N3 contro main, con le
+  domande di sempre: perdita di dati, sicurezza (la CSP, l'`unsafe` del
+  ponte), contratti (le pagine di `docs/reference/`), test che provano la
+  frontiera vera, testi per l'utente, gergo vietato; corregge ciò che trova.
+- Controlla che ogni riga del cancello abbia la sua prova verde.
+- Chiede all'utente il merge, con il resoconto: che cosa c'è, che cosa è
+  cambiato per lui, che cosa resta fuori (D-9), la CI e la revisione.
+Casi limite: un job che fallisce per una ragione che non è di N3 (si scrive
+e si chiede); un conflitto con main nel frattempo (si riallinea il ramo e la
+CI riparte); WebView2 di Windows che rifiuta `'wasm-unsafe-eval'` (è un
+difetto di T15, non un avviso).
+Fatto quando: la PR #297 non è in bozza, tutti i controlli della CI completa
+sono verdi, il resoconto della revisione è nel rapporto con ogni punto
+corretto o motivato, ogni riga del cancello ha la sua prova, e l'utente ha
+detto sì al merge.
+Prova: gh pr checks 297; scripts/check.sh
 Stato: [ ] da fare
 
 ## Non verificato stanotte
@@ -976,3 +1556,12 @@ Stato: [ ] da fare
   codice; T3 lo fissa coi test.
 - Se uno scenario di `bench:webview` può ospitare la misura senza toccare
   il driver.
+- Che WebView2 di Windows e WKWebView di macOS e iOS accettino
+  `'wasm-unsafe-eval'` come WebKitGTK: non lo prova nessun test qui. T23
+  guarda se un job della CI carica la shell su quelle piattaforme, e se
+  nessuno lo fa lo dice all'utente prima del merge.
+- Quanto costa una bozza al secondo mentre si scrive in un documento di
+  qualche MiB (T19): non misurato; il test di T19 conta le bozze, non il
+  tempo.
+- Che cosa fa Obsidian con un `null` o un `edges` assente quando riscrive:
+  T20 conserva, e non lo imita.
