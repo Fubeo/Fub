@@ -186,7 +186,6 @@ flowchart LR
     gmodel["gridcraft-model"]
     gpdf["gridcraft-pdf"]
     gxlsx["gridcraft-xlsx"]
-    motori["fub-motori"]
 
     host --> xlsx
     xlsx --> abi
