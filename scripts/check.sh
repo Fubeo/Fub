@@ -141,6 +141,7 @@ client_checks() { # client_checks completo|rapido
 rust_guards() {
   run "confine host/workspace" node .github/scripts/check-host-workspace-boundary.mjs
   run "confine dei motori" node .github/scripts/check-engine-boundary.mjs
+  run "interfaccia e doppioni di fub-app" bash -c 'node .github/scripts/check-motori.mjs --self-test && node .github/scripts/check-motori.mjs'
   run "errori letterali" node .github/scripts/check-error-literals.mjs
   run "commenti di Rust" bash -c 'node .github/scripts/check-rust-comments.mjs --self-test && node .github/scripts/check-rust-comments.mjs'
   run "versioni in un posto solo" node .github/scripts/check-cargo-versions.mjs

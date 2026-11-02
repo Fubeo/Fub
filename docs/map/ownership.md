@@ -48,6 +48,7 @@
 | una feature Cargo è accesa solo da chi la usa | `crates/fub-features/src/inventory.rs` | `crates/fub-features/tests/cargo_features.rs` e `check-cargo-feature-default.mjs` |
 | una feature spenta non rompe il build | `crates/fub-features/` | la CI compila `--no-default-features` |
 | i motori di terzi si nominano dai soli adattatori | `crates/fub-format-rich/`, `crates/fub-format-xlsx/` | `.github/scripts/check-engine-boundary.mjs` |
+| nessuna interfaccia delle app Craft in `fub-app`, librerie doppie sotto il tetto | `docs/reference/budgets.json` | `.github/scripts/check-motori.mjs` |
 | la copia di un motore è derivata e verificata | `tools/vendor-craft/vendor.mjs` | `vendor.mjs check`, `verify-upstream`, `gate` |
 | i componenti WASM rispettano tempi e memoria | `crates/fub-wasm-host/src/limits.rs` | `crates/fub-wasm-host/tests/` |
 | i plugin installati si accendono e spengono per vault | `crates/fub-host/src/session.rs` | `crates/fub-kernel/tests/deactivation.rs` e `crates/fub-host/tests/draw_feature.rs` |

@@ -129,7 +129,7 @@ Le copie in `vendor/` sono derivati: upstream a un commit preciso più le
 patch numerate di `patches/`, con `upstream.lock` che ne conserva le impronte.
 L'interfaccia (`ui-egui`) e il server MCP dei due motori non sono copiati.
 
-## I sei confini che valgono sempre
+## I sette confini che valgono sempre
 
 | Confine | Presidio |
 |---|---|
@@ -139,3 +139,4 @@ L'interfaccia (`ui-egui`) e il server MCP dei due motori non sono copiati.
 | nella shell, solo `host/ipc.ts` e `host/dialog.ts` importano Tauri | `apps/client/src/host/no-tauri-outside-host.test.ts` |
 | CodeMirror resta in `editors/text/`, ProseMirror in `scrittura/` | `check-codemirror-boundary.mjs`, `check-prosemirror-boundary.mjs` |
 | i motori si nominano solo dai loro adattatori | `check-engine-boundary.mjs` |
+| `fub-app` non porta l'interfaccia di un'app Craft, e le librerie in due versioni non crescono | `check-motori.mjs`, tetto in `docs/reference/budgets.json` |
