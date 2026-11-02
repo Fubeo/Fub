@@ -254,8 +254,39 @@ sola: `libera` li lascia cadere tutti, e la parola dopo li rilegge.
 `fub-host` svuota le due cache e chiama `rilascia_al_sistema()` quando si
 chiude l'ultimo vault (`Host::close_vault` o `Host::close`), dopo aver
 ritirato lo slot della sessione e senza lucchetti tenuti. Con un altro vault
-aperto, o in chiusura, le cache restano al budget: l'host non sa quale vault
-abbia letto quale documento.
+aperto, o in chiusura, le cache restano al budget.
+
+## Scaldare e chiudere un documento
+
+La shell parla ai motori con due comandi, `warm_engine` e `document_closed`
+([contratto IPC](../reference/ipc-contract.md#motori-dei-formati)); l'host li
+compone in `crates/fub-host/src/engines.rs`.
+
+- `Host::warm_engine(estensione)` chiama `Motori::processo().scalda_per`
+  soltanto se un vault aperto ha un provider attivo per quell'estensione: un
+  formato registrato e, per una cartella di Excel, la superficie della
+  griglia del bundle `fub.xlsx`, che sparisce con il plugin spento.
+  Un'estensione senza motore, senza provider o malformata non fa niente. Le
+  custodie dei workspace si prendono sotto il prestito delle sessioni, i
+  workspace si leggono dopo, e `scalda_per` si chiama senza lucchetti. Un
+  motore già acceso, o in costruzione, non rifà niente (`Pigro::scalda`).
+- Ogni sessione di vault tiene i documenti ricchi che la shell ha letto, con
+  le ultime otto revisioni dei byte ricevute leggendo e salvando. La
+  revisione (`sha256:` più l'impronta) è la chiave della prova a vuoto:
+  `MotoreDocumenti::dimentica(&Revision)` la toglie senza rileggere il disco.
+- `Host::document_closed(vault, documento)` toglie il documento dalla sua
+  sessione, dimentica le prove delle sue revisioni che nessun documento
+  ancora aperto ha, e se non resta aperto nessun documento ricco in nessun
+  vault svuota la cache «documenti» e chiama `rilascia_al_sistema()`. I
+  dizionari del correttore restano al budget finché un vault è aperto. Un
+  vault non aperto, o un documento mai letto, non fa niente.
+
+La shell scalda dall'albero dei file (`panels/engine-warmup.ts`): quando il
+puntatore resta 300 ms sulla riga di un file con motore (Word, OpenDocument,
+RTF, Excel), o all'apertura di una cartella per i suoi file, una volta per
+estensione finché il vault resta lo stesso. `DocumentSessionCollection.close` manda
+`document_closed` quando la sessione di un documento ricco esce davvero; un
+errore non cambia la chiusura.
 
 ## Il catalogo dei comandi
 
@@ -324,3 +355,13 @@ mano: si rigenera con
   nel catalogo o ha il suo perché; un comando nuovo senza posto né perché fa
   fallire il test. `tests/ts_catalogo.rs`: il file della shell non è stantio
   e le sue schede e i suoi gruppi sono quelli della barra.
+- `crates/fub-host/tests/engines_warm.rs`: scaldare costruisce il motore dei
+  documenti senza aprire file, e una seconda volta non lo ricostruisce;
+  un'estensione senza motore o senza vault aperto non fa niente; con il
+  bundle `fub.xlsx` spento il motore dei fogli non si costruisce.
+- `crates/fub-host/tests/engines_document_closed.rs`: chiuso un documento la
+  sua prova si dimentica e le altre restano; con un documento ricco aperto
+  in un altro vault la cache non si svuota; chiuso l'ultimo è a zero.
+- `apps/client/src/panels/engine-warmup.test.ts` e
+  `state/document-session.test.ts`: il ritardo del puntatore, l'annullamento,
+  una chiamata per estensione, `document_closed` alla vera chiusura.

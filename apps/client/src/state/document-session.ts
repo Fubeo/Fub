@@ -81,7 +81,14 @@ export interface DocumentSessionApi {
   ): Promise<{ readonly revision: string }>;
   saveDraft(id: string, text: string, base: string | null, vault?: string | null): Promise<void>;
   discardDraft(id: string, vault?: string | null): Promise<void>;
+  /// L'ultima sessione di un documento ricco si è chiusa: l'host lascia
+  /// andare le sue cache. Facoltativa: chi non la dà non ha motori.
+  documentClosed?(id: string, vault?: string | null): Promise<void>;
 }
+
+/// I formati dei documenti ricchi (`fub-format-rich`), i soli di cui l'host
+/// tiene una prova a vuoto da lasciare andare alla chiusura.
+const RICH_FORMAT_IDS: ReadonlySet<string> = new Set(["docx", "odt", "rtf", "doc"]);
 
 export interface DocumentSurfaceDescriptor {
   readonly formatId: string | null;
@@ -1480,6 +1487,12 @@ export class DocumentSessionCollection implements DraftBufferStore {
     const dirty = session.dirty;
     if (!session.close()) return { kind: "active" };
     if (this.#sessions.get(session.id) === session) this.#sessions.delete(session.id);
+    // La sessione è uscita davvero: per un documento ricco l'host lo sa, e
+    // lascia andare le sue cache. Un errore non cambia la chiusura.
+    const formatId = this.#surfaceDescriptors.get(session)?.formatId;
+    if (formatId != null && RICH_FORMAT_IDS.has(formatId) && this.#api.documentClosed) {
+      void this.#api.documentClosed(session.id, ...vaultArg(this.#vaults.get(session) ?? null)).catch(() => {});
+    }
     return { kind: "closed", dirty };
   }
 

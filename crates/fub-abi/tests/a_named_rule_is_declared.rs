@@ -526,6 +526,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-host/src/engines.rs::extension",
+            (
+                Family::AsciiCase,
+                "piega l'estensione che la shell manda per scaldare un motore (K3) solo dopo averla \
+                 ridotta a lettere e cifre ASCII: su quell'alfabeto la piega ASCII e quella \
+                 full-Unicode del registro (`checked_extensions`) danno gli stessi byte, e la \
+                 sonda passa comunque da `format_of`, che piega di nuovo. Non decide un'identità \
+                 sua: sceglie solo se e quale motore scaldare.",
+            ),
+        ),
+        (
             "crates/fub-format-rich/src/odt/styles.rs::hex",
             (
                 Family::AsciiCase,

@@ -194,6 +194,15 @@ export const api = {
   // verità, e la seconda mente in silenzio.
   readDocument: (id: string, vault?: string | null) =>
     invoke<DocumentSource>("read_document", toVault({ id }, vault)),
+  // I motori dei formati (fogli, documenti) si costruiscono alla prima
+  // apertura. Scaldare quello di un'estensione lo prepara prima, in
+  // sottofondo: un'estensione senza motore non fa niente e non è un errore.
+  warmEngine: (extension: string) => invoke<void>("warm_engine", { extension }),
+  // La shell ha chiuso l'ultima sessione di un documento ricco: l'host lascia
+  // andare la sua prova a vuoto, e le cache dei documenti se non ne resta
+  // aperto nessuno.
+  documentClosed: (id: string, vault?: string | null) =>
+    invoke<void>("document_closed", toVault({ id }, vault)),
   resourceOpen: (id: string, vault: string | null = null) =>
     invoke<ResourceDescriptor>("resource_open", { id, vault }),
   resourceReadChunk: (handle: string, offset: number, len: number) =>

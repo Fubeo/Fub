@@ -1588,3 +1588,48 @@ describe("il giornale di una cartella di Excel", () => {
     expect(log).toEqual([]);
   });
 });
+
+describe("chiusura di un documento ricco", () => {
+  function richApi(): DocumentSessionApi & { documentClosed: ReturnType<typeof vi.fn> } {
+    return {
+      ...fakeApi(),
+      readDocument: vi.fn(async (id): Promise<DocumentSource> => ({
+        text: `${id}: proiezione`,
+        revision: "rev-1",
+        format_id: id.endsWith(".docx") ? "docx" : "markdown",
+        source_kind: "text",
+        text_kind: "source",
+      })),
+      documentClosed: vi.fn(async () => {}),
+    };
+  }
+
+  it("lo dice all'host quando la sessione esce davvero, e non prima", async () => {
+    const api = richApi();
+    const sessions = new DocumentSessionCollection(api, () => "/vault");
+    await sessions.read("Lettera.docx");
+    const intent = sessions.retain("Lettera.docx");
+
+    expect(await sessions.release("Lettera.docx")).toEqual({ kind: "active" });
+    expect(api.documentClosed).not.toHaveBeenCalled();
+
+    intent();
+    expect(await sessions.release("Lettera.docx")).toEqual({ kind: "closed", dirty: false });
+    expect(api.documentClosed).toHaveBeenCalledTimes(1);
+    expect(api.documentClosed).toHaveBeenCalledWith("Lettera.docx", "/vault");
+  });
+
+  it("non lo dice per una nota, e un errore dell'host non cambia la chiusura", async () => {
+    const api = richApi();
+    api.documentClosed.mockRejectedValue(new Error("host spento"));
+    const sessions = new DocumentSessionCollection(api, () => null);
+    await sessions.read("nota.md");
+    await sessions.read("Lettera.docx");
+
+    expect(await sessions.release("nota.md")).toEqual({ kind: "closed", dirty: false });
+    expect(api.documentClosed).not.toHaveBeenCalled();
+    expect(await sessions.release("Lettera.docx")).toEqual({ kind: "closed", dirty: false });
+    expect(api.documentClosed).toHaveBeenCalledWith("Lettera.docx");
+    expect(sessions.get("Lettera.docx")).toBeUndefined();
+  });
+});

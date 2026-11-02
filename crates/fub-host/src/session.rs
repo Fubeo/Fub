@@ -486,6 +486,9 @@ pub struct VaultSession {
     /// lo si tiene per il tempo di una `body`, mai per la durata di un job: chi
     /// chiude deve poterci passare mentre un export cammina il vault.
     registry: Custody<BundleRegistry>,
+    /// I documenti ricchi che la shell ha aperti in questo vault, con le
+    /// revisioni che ha ricevuto ([`crate::engines`]): cadono con la sessione.
+    open_rich: Arc<crate::engines::OpenRich>,
     /// Risorse preparate dalla `FormatSource`, vive quanto la sessione.
     _format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
     /// Diagnostica tipizzata prodotta dalla sorgente di startup per questa apertura.
@@ -774,6 +777,7 @@ impl<'a> OpeningTransaction<'a> {
             workspace: self.workspace.clone(),
             registry: self.registry.clone(),
             mounts: Custody::new("i mount esterni", mounts),
+            open_rich: Arc::default(),
             startup_diagnostics: std::mem::take(&mut self.startup_diagnostics),
             _format_resources: std::mem::take(&mut self.format_resources),
             unread,
@@ -874,8 +878,11 @@ impl From<fub_kernel::snapshot::SnapshotError> for SnapshotHostError {
 /// `Closing` resta nella mappa per tutta la durata del teardown: è il confine
 /// atomico che impedisce a un'apertura concorrente di montare una seconda
 /// sessione sulla stessa radice.
+///
+/// La sessione aperta sta in una `Box`: è grande, gli altri due stati sono un
+/// puntatore, e la mappa non deve pagare la sessione per ogni slot.
 enum SessionSlot {
-    Open(VaultSession),
+    Open(Box<VaultSession>),
     Closing(Arc<ClosingToken>),
     Applying(Arc<ApplyingToken>),
 }
@@ -2169,7 +2176,7 @@ impl Host {
                                     let (session, lease) = opening.into_session_with_lease();
                                     sessions
                                         .slots
-                                        .insert(root.clone(), SessionSlot::Open(session));
+                                        .insert(root.clone(), SessionSlot::Open(Box::new(session)));
                                     drop(lease);
                                     (Ok(info), None)
                                 }
@@ -2200,7 +2207,7 @@ impl Host {
                             let (session, lease) = opening.into_session_with_lease();
                             sessions
                                 .slots
-                                .insert(root.clone(), SessionSlot::Open(session));
+                                .insert(root.clone(), SessionSlot::Open(Box::new(session)));
                             drop(lease);
                             (Ok(info), None)
                         }
@@ -3185,7 +3192,7 @@ impl Host {
                     else {
                         unreachable!("lo slot verificato era aperto")
                     };
-                    session
+                    *session
                 }
                 SessionSlot::Closing(_) => return Err(closing_conflict(&root)),
                 SessionSlot::Applying(_) => return Err(applying_conflict(&root)),
@@ -3233,7 +3240,7 @@ impl Host {
                         else {
                             unreachable!("lo slot verificato era aperto")
                         };
-                        claimed.push((root.clone(), token, session));
+                        claimed.push((root.clone(), token, *session));
                     }
                 }
                 claimed
@@ -3393,7 +3400,10 @@ impl Host {
             Rich(crate::rich::Codec, Vec<u8>),
             Workbook(Vec<u8>),
         }
-        let (read, format) = self.read_workspace(vault, |workspace| {
+        // Il registro dei documenti ricchi aperti si prende dalla stessa
+        // sessione della lettura, e si usa fuori dal prestito.
+        let (read, format, open_rich) = self.in_session(vault, |session| {
+            let workspace = session.workspace.read()?;
             let format = workspace.format_of(id);
             let bytes = || workspace.read_source_bytes(id).map_err(PluginError::from);
             let read = match crate::rich::codec(format.as_ref()) {
@@ -3401,7 +3411,7 @@ impl Host {
                 None if crate::workbook::is_workbook(format.as_ref()) => Read::Workbook(bytes()?),
                 None => Read::Source(workspace.read_source(id).map_err(PluginError::from)?),
             };
-            Ok((read, format))
+            Ok((read, format, Arc::clone(&session.open_rich)))
         })?;
         match read {
             Read::Source(source) => {
@@ -3411,6 +3421,7 @@ impl Host {
             Read::Rich(codec, bytes) => {
                 let revision = Revision::of_bytes(&bytes);
                 let projection = crate::rich::open(codec, id, &bytes)?;
+                open_rich.read(id, &revision);
                 Ok((projection, revision, format))
             }
             // Il testo di una cartella è il suo giornale, vuoto finché la shell
@@ -3620,8 +3631,113 @@ impl Host {
         source: &str,
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
-        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
-        self.write_document_in(workspace, id, source, base)
+        let (workspace, open_rich) = self.with_session(vault, |session| {
+            (session.workspace.clone(), Arc::clone(&session.open_rich))
+        })?;
+        let revision = self.write_document_in(workspace, id, source, base)?;
+        // Un documento ricco aperto ha ora anche questi byte, e la loro prova.
+        open_rich.saved(id, &revision);
+        Ok(revision)
+    }
+
+    /// Scalda in sottofondo il motore che apre questa estensione (`"docx"`,
+    /// `".XLSX"`), se un vault aperto ha un provider attivo per lei: la shell
+    /// lo chiede quando il puntatore si ferma su un file o una cartella si
+    /// apre ([`crate::engines`]). Un motore già acceso, o già in costruzione,
+    /// non rifà niente. Non apre nessun file.
+    ///
+    /// Vero se un motore si sta preparando o è pronto. Un'estensione senza
+    /// motore, senza provider attivo o malformata dà falso, senza errore:
+    /// scaldare è un suggerimento, e non c'è niente da dire alla shell.
+    pub fn warm_engine(&self, extension: &str) -> bool {
+        let Some(extension) = crate::engines::extension(extension) else {
+            tracing::debug!(extension, "scaldare: non è un'estensione");
+            return false;
+        };
+        // Le custodie si prendono sotto il prestito delle sessioni; i
+        // workspace si leggono dopo averlo lasciato.
+        let workspaces: Vec<Custody<Workspace>> = self
+            .sessions
+            .read()
+            .map(|sessions| {
+                sessions
+                    .slots
+                    .values()
+                    .filter_map(|slot| match slot {
+                        SessionSlot::Open(session) => Some(session.workspace.clone()),
+                        SessionSlot::Closing(_) | SessionSlot::Applying(_) => None,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let served = workspaces.iter().any(|workspace| {
+            workspace
+                .read()
+                .is_ok_and(|workspace| crate::engines::serves(&workspace, &extension))
+        });
+        if !served {
+            tracing::debug!(%extension, "scaldare: nessun vault aperto ha un provider attivo");
+            return false;
+        }
+        // Fuori da ogni lucchetto dell'host: il registro prende la voce e la
+        // scalda, e la costruzione va sul gruppo di thread dei motori.
+        match fub_motori::Motori::processo().scalda_per(&extension) {
+            Ok(warming) => {
+                if !warming {
+                    tracing::debug!(%extension, "scaldare: nessun motore apre l'estensione");
+                }
+                warming
+            }
+            Err(error) => {
+                tracing::debug!(%extension, %error, "scaldare: il registro dei motori non risponde");
+                false
+            }
+        }
+    }
+
+    /// La shell ha chiuso l'ultima sessione di questo documento ricco.
+    ///
+    /// Si dimenticano le prove a vuoto dei byte che il documento aveva e che
+    /// nessun altro documento aperto ha; se non resta aperto nessun documento
+    /// ricco in nessun vault, si svuota la cache del motore dei documenti
+    /// ([`crate::engines`]). Un vault non aperto (o un nome che non si
+    /// risolve), o un documento che non era
+    /// aperto (non ricco, o mai letto), non fa niente e non è un errore. Il
+    /// percorso arriva già validato come [`DocId`]; il disco non si legge.
+    pub fn document_closed(&self, vault: Option<&str>, id: &DocId) -> Result<(), PluginError> {
+        let open_rich = match self.with_session(vault, |session| Arc::clone(&session.open_rich)) {
+            Ok(open_rich) => open_rich,
+            // Un vault che non è aperto, o un nome che non si risolve: non
+            // c'è niente di aperto da chiudere.
+            Err(PluginError::NotFound(_) | PluginError::Io(_)) => return Ok(()),
+            Err(error) => return Err(error),
+        };
+        let closed = open_rich.close(id);
+        if closed.is_empty() {
+            return Ok(());
+        }
+        // I registri di ogni vault aperto si prendono sotto il prestito delle
+        // sessioni, e si leggono dopo averlo lasciato.
+        let registers: Vec<Arc<crate::engines::OpenRich>> = {
+            let sessions = self.sessions.read()?;
+            sessions
+                .slots
+                .values()
+                .filter_map(|slot| match slot {
+                    SessionSlot::Open(session) => Some(Arc::clone(&session.open_rich)),
+                    SessionSlot::Closing(_) | SessionSlot::Applying(_) => None,
+                })
+                .collect()
+        };
+        let still_open: std::collections::BTreeSet<Revision> = registers
+            .iter()
+            .flat_map(|register| register.revisions())
+            .collect();
+        crate::engines::forget_proofs(&closed, &still_open);
+        if registers.iter().all(|register| register.is_empty()) {
+            crate::engines::empty_document_caches();
+        }
+        Ok(())
     }
 
     /// Deposita byte grezzi: creazione esclusiva oppure CAS della revisione raw.

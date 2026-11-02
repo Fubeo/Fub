@@ -113,6 +113,23 @@ impl MotoreDocumenti {
             .map_or(0, |acceso| acceso.prove.len())
     }
 
+    /// Dimentica la prova a vuoto dei byte di questa revisione, se la
+    /// ricorda: chi la chiama sa che nessun documento aperto ha più quei byte.
+    /// La revisione è quella che l'host dà ai byte del file
+    /// ([`fub_abi::Revision::of_bytes`]): la stessa impronta della chiave con
+    /// cui la prova si ricorda. Un motore spento non si accende, e una
+    /// revisione di un'altra forma non toglie niente. Dà i byte stimati
+    /// liberati.
+    pub fn dimentica(&self, revisione: &fub_abi::Revision) -> u64 {
+        let Some(chiave) = revisione.0.strip_prefix("sha256:") else {
+            return 0;
+        };
+        let Some(acceso) = self.acceso.se_acceso() else {
+            return 0;
+        };
+        acceso.prove.forget(chiave)
+    }
+
     /// La prova a vuoto accettata per questa chiave, se si ricorda. Un motore
     /// spento non si accende per dire che non la ricorda.
     pub(crate) fn remembered(&self, key: &str) -> Option<Arc<Baseline>> {
@@ -233,6 +250,30 @@ mod tests {
         assert!(motore.remembered("a").is_none());
         assert!(motore.remembered("b").is_some());
         assert_eq!(motore.servizi().memoria().usati(), una);
+    }
+
+    /// La revisione che l'host dà ai byte del file è la chiave della prova:
+    /// dimenticarla toglie quella prova e non le altre.
+    #[test]
+    fn dimenticare_una_revisione_toglie_la_sua_prova() {
+        let bytes = b"i byte di un documento";
+        let revisione = fub_abi::Revision::of_bytes(bytes);
+        assert_eq!(
+            revisione.0,
+            format!("sha256:{}", crate::preservation::key(bytes))
+        );
+        let motore = motore(u64::MAX);
+        assert_eq!(motore.dimentica(&revisione), 0);
+        assert!(!motore.acceso(), "dimenticare non accende il motore");
+        motore.remember(crate::preservation::key(bytes), prova());
+        motore.remember("altra".into(), prova());
+        let prima = motore.byte();
+        let liberati = motore.dimentica(&revisione);
+        assert!(liberati > 0);
+        assert_eq!(motore.byte(), prima - liberati);
+        assert_eq!(motore.prove_ricordate(), 1);
+        assert!(motore.remembered("altra").is_some());
+        assert_eq!(motore.dimentica(&fub_abi::Revision::new("fnv:1234")), 0);
     }
 
     /// Spento, il motore non si accende per cercare una prova.
