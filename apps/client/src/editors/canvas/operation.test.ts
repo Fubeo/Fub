@@ -4,6 +4,7 @@ import { parseCanvas, serializeCanvas } from "./model";
 import { applyOperation } from "../core/text-operation";
 import {
   applyCanvasPatches,
+  canvasCommitOutcome,
   commitCanvasPatches,
   inverseCanvasPatches,
   removeNodePatch,
@@ -46,6 +47,24 @@ describe("canvas model", () => {
     const committed = commitCanvasPatches(doc, text, [patch])!;
     expect(committed.source).toContain('"__proto__":{"own":true}');
     expect(committed.source).toContain('"constructor":{"keep":1}');
+  });
+
+  it("guarda i limiti di un campo solo sulla scheda del suo tipo, come il nucleo Rust", () => {
+    const doc = parseCanvas(JSON.stringify({
+      nodes: [{ id: "n", type: "text", x: 0, y: 0, width: 10, height: 10, text: "a",
+        subpath: "senza-cancelletto", url: "", background: "b".repeat(9000) }],
+      edges: [],
+    }));
+    expect(doc.nodes[0].subpath).toBe("senza-cancelletto");
+    expect(doc.nodes[0].background).toHaveLength(9000);
+    expect(() => parseCanvas(JSON.stringify({
+      nodes: [{ id: "n", type: "file", x: 0, y: 0, width: 10, height: 10, file: "a.md", subpath: "x" }],
+      edges: [],
+    }))).toThrow();
+    expect(() => parseCanvas(JSON.stringify({
+      nodes: [{ id: "n", type: "group", x: 0, y: 0, width: 10, height: 10, text: 5 }],
+      edges: [],
+    }))).toThrow();
   });
 
   it("rifiuta JSON corrotto, id duplicati e archi orfani senza indovinare", () => {
@@ -155,6 +174,38 @@ describe("canvas operations", () => {
     expect(second.source).toContain('\"root\": {\"escaped\":\"\\\\u00e9\"}');
     expect(parseCanvas(second.source).nodes[0].color).toBe("#aabbcc");
   });
+  it("confronta le preimmagini per valore, in qualunque ordine di chiavi (R9)", () => {
+    const doc = parseCanvas(source());
+    const { id, type, ...rest } = doc.nodes[0];
+    const reordered = { ...rest, type, id };
+    expect(upsertNodePatch(doc, reordered)).toBeNull();
+    const moved = { kind: "upsert-node" as const, before: reordered, after: { ...reordered, x: 4 } };
+    expect(commitCanvasPatches(doc, source(), [moved])?.source).toContain('"x":4');
+  });
+
+  it("scrive le chiavi di un nodo nuovo nell'ordine di R10", () => {
+    const doc = parseCanvas(source());
+    const after = { text: "t", height: 5, width: 5, y: 0, x: 0, type: "text" as const, id: "n3", xV: 1, color: "1" };
+    const committed = commitCanvasPatches(doc, source(), [upsertNodePatch(doc, after)!])!;
+    expect(committed.source).toContain('{"id":"n3","type":"text","x":0,"y":0,"width":5,"height":5,"color":"1","text":"t","xV":1}');
+  });
+
+  it("dice perché un commit è rifiutato, con le ragioni del nucleo Rust", () => {
+    const before = source();
+    const doc = parseCanvas(before);
+    const stale = { ...upsertNodePatch(doc, { ...doc.nodes[0], x: 1 })!, before: { ...doc.nodes[0], x: 99 } };
+    expect(canvasCommitOutcome(doc, before, [stale])).toEqual({ outcome: "rejected", reason: "stale" });
+    const invalid = upsertNodePatch(doc, { ...doc.nodes[0], width: 0 })!;
+    expect(canvasCommitOutcome(doc, before, [invalid])).toEqual({ outcome: "rejected", reason: "invalid" });
+    const repeated = '{"nodes":[{"id":"a","type":"text","x":0,"y":0,"width":10,"height":10,"text":"a"}],"edges":[],"k":1,"k":2}';
+    const other = parseCanvas(repeated);
+    const moved = upsertNodePatch(other, { ...other.nodes[0], x: 3 })!;
+    expect(canvasCommitOutcome(other, repeated, [moved])).toEqual({ outcome: "rejected", reason: "rejected" });
+    expect(other.nodes[0].x).toBe(0);
+    expect(canvasCommitOutcome(doc, before, [])).toMatchObject({ outcome: "applied", source: before });
+    expect(commitCanvasPatches(doc, before, [])).toBeNull();
+  });
+
   it("riordina card senza riemettere i byte ignoti di ciascuna", () => {
     const before = '{ "nodes": [ {"id":"a","type":"text","x":0,"y":0,"width":10,"height":10,"text":"a","future": { "escaped": "\\\\u0055" }}, {"id":"b","type":"text","x":20,"y":0,"width":10,"height":10,"text":"b"} ], "edges": [], "tail": [ 1,  2 ] }';
     const doc = parseCanvas(before);

@@ -1,0 +1,11 @@
+{
+  "name": "before-image-by-value",
+  "description": "R9 (da T6): l'immagine di prima si confronta come valore JSON, le chiavi in qualunque ordine e i numeri per valore",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\",\"fub:m\":{\"p\":1,\"q\":[1,2]}}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":{"text":"uno","fub:m":{"q":[1.0,2],"p":1.0},"height":50,"width":100,"y":0,"x":0,"type":"text","id":"a"},"after":{"id":"a","type":"text","x":30,"y":0,"width":100,"height":50,"text":"uno","fub:m":{"p":1,"q":[1,2]}}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":30,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\",\"fub:m\":{\"p\":1,\"q\":[1,2]}}],\"edges\":[]}",
+    "undo": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\",\"fub:m\":{\"p\":1,\"q\":[1,2]}}],\"edges\":[]}"
+  }
+}

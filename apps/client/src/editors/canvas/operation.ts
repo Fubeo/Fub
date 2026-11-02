@@ -4,8 +4,14 @@ import {
   operationFromText,
   type TextOperation,
 } from "../core/text-operation";
-import { parseCanvas, type CanvasDocument, type CanvasEdge, type CanvasNode } from "./model";
-import { patchCanvasSource, sameCanvasModel } from "./source-edit";
+import { isValidCanvas, parseCanvas, type CanvasDocument, type CanvasEdge, type CanvasNode } from "./model";
+import {
+  orderedCanvasEdge,
+  orderedCanvasNode,
+  patchCanvasSource,
+  sameCanvasModel,
+  sameCanvasValue,
+} from "./source-edit";
 
 export type CanvasPatch =
   | { readonly kind: "upsert-node"; readonly before: CanvasNode | null; readonly after: CanvasNode; readonly at?: number }
@@ -23,16 +29,18 @@ export function isCanvasOperation(operation: TextOperation | null): operation is
   return operation !== null && "kind" in operation && operation.kind === "canvas";
 }
 
+// Una copia con le chiavi nell'ordine in cui si scrivono (R10).
 function cloneNode(node: CanvasNode): CanvasNode {
-  return JSON.parse(JSON.stringify(node)) as CanvasNode;
+  return orderedCanvasNode(JSON.parse(JSON.stringify(node)) as CanvasNode);
 }
 
 function cloneEdge(edge: CanvasEdge): CanvasEdge {
-  return JSON.parse(JSON.stringify(edge)) as CanvasEdge;
+  return orderedCanvasEdge(JSON.parse(JSON.stringify(edge)) as CanvasEdge);
 }
 
+/** Uguali come valori JSON (R9): l'ordine delle chiavi non conta, come in `patch::same_value`. */
 function sameValue(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return sameCanvasValue(left, right);
 }
 
 function nodeById(doc: CanvasDocument, id: string): CanvasNode | undefined {
@@ -104,26 +112,61 @@ export function applyCanvasPatches(doc: CanvasDocument, patches: readonly Canvas
   return true;
 }
 
-export function commitCanvasPatches(
+/**
+ * Why a commit is refused, the same word as `CommitError::reason` in the Rust
+ * core: `stale` (a patch does not fit the model, or the model is not the
+ * source's), `invalid` (the canvas after the patches is not valid),
+ * `rejected` (the source cannot be patched, for example a repeated key) or
+ * `unstable` (the text written does not read back as the canvas after).
+ */
+export type CanvasCommitReason = "stale" | "invalid" | "rejected" | "unstable";
+
+export type CanvasCommitOutcome =
+  | { readonly outcome: "applied"; readonly source: string; readonly operation: CanvasOperation }
+  | { readonly outcome: "rejected"; readonly reason: CanvasCommitReason };
+
+/**
+ * Commit `patches` on `doc`, whose source is `beforeSource`: all of them or
+ * none. On success `doc` becomes the canvas after; on a refusal it stays as it
+ * was and the outcome says why, in the order the Rust core checks (the draft,
+ * its validity, the patch of the source, the reread). An empty list is a
+ * commit that changes nothing.
+ */
+export function canvasCommitOutcome(
   doc: CanvasDocument,
   beforeSource: string,
   patches: readonly CanvasPatch[],
-): { readonly source: string; readonly operation: CanvasOperation } | null {
-  if (!patches.length) return null;
+): CanvasCommitOutcome {
   const draft = canvasDraft(doc, patches);
-  if (!draft) return null;
+  if (!draft) return { outcome: "rejected", reason: "stale" };
+  let before: CanvasDocument;
+  try {
+    before = parseCanvas(beforeSource);
+  } catch {
+    return { outcome: "rejected", reason: "stale" };
+  }
+  if (!sameCanvasModel(before, doc)) return { outcome: "rejected", reason: "stale" };
+  // La validità della bozza si guarda solo quando qualcosa non va: un testo
+  // che si rilegge come la bozza dice già che è valida.
+  const refused = (reason: CanvasCommitReason): CanvasCommitOutcome => ({
+    outcome: "rejected",
+    reason: isValidCanvas(draft) ? reason : "invalid",
+  });
   let source: string;
   try {
-    const before = parseCanvas(beforeSource);
-    if (!sameCanvasModel(before, doc)) return null;
     source = patchCanvasSource(beforeSource, before, draft);
-    if (!sameCanvasModel(parseCanvas(source), draft)) return null;
   } catch {
-    return null;
+    return refused("rejected");
+  }
+  try {
+    if (!sameCanvasModel(parseCanvas(source), draft)) return refused("unstable");
+  } catch {
+    return refused("unstable");
   }
   doc.nodes = draft.nodes;
   doc.edges = draft.edges;
   return {
+    outcome: "applied",
     source,
     operation: {
       kind: "canvas",
@@ -157,6 +200,16 @@ export function commitCanvasPatches(
       ...operationFromText(lineFeeds(beforeSource), lineFeeds(source)),
     },
   };
+}
+
+export function commitCanvasPatches(
+  doc: CanvasDocument,
+  beforeSource: string,
+  patches: readonly CanvasPatch[],
+): { readonly source: string; readonly operation: CanvasOperation } | null {
+  if (!patches.length) return null;
+  const outcome = canvasCommitOutcome(doc, beforeSource, patches);
+  return outcome.outcome === "applied" ? { source: outcome.source, operation: outcome.operation } : null;
 }
 
 export function inverseCanvasPatches(patches: readonly CanvasPatch[]): CanvasPatch[] {

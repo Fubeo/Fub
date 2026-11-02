@@ -22,9 +22,15 @@ lavagna, scritto una volta sola:
   Ogni livello (la radice, ogni scheda, ogni arco) tiene in `extra` i campi
   che il modello non conosce, `fub:ink` compreso.
 - `read`: `parse(source)`, dal testo del file al modello validato.
-- `js`, `source`, `patch`, `commit`, `ops`: la scrittura come la fa
-  JavaScript, il ritocco del sorgente, le toppe con la loro inversa, il commit
-  e le operazioni d'intento. Arrivano con i task successivi di N3.
+- `js`, `source`, `patch`, `ops`: la scrittura come la fa JavaScript, il
+  ritocco del sorgente, le toppe con la loro inversa e le operazioni
+  d'intento.
+- `commit`: la lavagna aperta, `Core` (il sorgente e il suo modello), e
+  `Core::commit(toppe)`, tutte o nessuna. Dà il sorgente nuovo, le toppe
+  inverse per l'annulla e il tratto minimo cambiato (`Edit`: `start` ed `end`
+  in byte UTF-8 del sorgente di prima, mai a metà di un carattere). Un
+  rifiuto (`CommitError`) lascia `Core` com'era; i casi sono in
+  `crates/fub-canvas-core/tests/commit.rs`.
 
 Il nucleo è **puro**. Dipende soltanto da `serde`, `serde_json` e `thiserror`;
 non vede il contratto (`fub-abi`), il Markdown, il kernel né un toolkit, non fa
@@ -91,6 +97,11 @@ dubbio si apre e si conserva.
   campi sconosciuti; `{"nodes": null}` è una lavagna vuota, anche con `edges`
   assente. Quando Fub riscrive quella scheda, il `null` sparisce. Un campo
   obbligatorio `null` (`"x": null`) resta un errore.
+- **Limiti per tipo.** Ogni campo di testo noto è una stringa; le regole
+  valgono solo sulla scheda del suo tipo (`text` fino a 1 MiB su `text`,
+  `file` non vuoto fino a 8192 byte e `subpath` con `#` fino a 1024 byte su
+  `file`, `url` su `link`, `label` fino a 64 KiB su `group`). Un `subpath`
+  senza `#` su una scheda di testo, o uno sfondo lungo, si conservano.
 - **R8 · `backgroundStyle`.** Qualunque stringa si legge e si conserva:
   `"backgroundStyle": "tile"` resta `tile`; la tela disegna un valore che non
   conosce come assente. Lo schema `canvas-v1.schema.json` dice ciò che Fub
@@ -149,4 +160,31 @@ e non diventa un valore JSON.
 
 ## Parità
 
-Da scrivere.
+Il commit di Rust e quello di TypeScript (`commitCanvasPatches` in
+`apps/client/src/editors/canvas/operation.ts`) scrivono gli stessi byte e
+rifiutano con le stesse ragioni. Lo fissano i **vettori delle toppe** in
+`apps/client/src/__fixtures__/canvas-patches/`, che leggono tutti e due:
+`crates/fub-canvas-core/tests/patch_vectors.rs` contro `Core::commit` e
+`apps/client/src/editors/canvas/vectors.test.ts` contro
+`commitCanvasPatches`.
+
+Un vettore è un file `NN-nome.json`: `name` (il nome del file senza numero),
+`description`, `before` (il testo grezzo di prima), `patches` (le toppe come
+le scrive il TypeScript) ed `expect`:
+
+- `{"outcome": "applied", "text": …, "undo": …}`: il testo di dopo e quello
+  che danno le toppe inverse applicate al testo di dopo; senza `undo` è
+  `before`;
+- `{"outcome": "rejected", "reason": …}`: la ragione, una fra `stale` (una
+  toppa non torna con il modello), `invalid` (la lavagna di dopo non è
+  valida), `rejected` (il sorgente non si ritocca, per esempio una chiave
+  doppia) e `unstable` (il testo scritto non si rilegge come la lavagna di
+  dopo). `CommitError::reason` in Rust e `canvasCommitOutcome` in TypeScript
+  danno la stessa parola.
+
+Per aggiungerne uno si prende il numero dopo l'ultimo e si scrive l'atteso a
+mano, byte per byte: non si copia l'uscita di uno dei due lati. I due test
+falliscono con meno di 30 vettori, con un file che non si legge, con un
+numero che salta e con un atteso cambiato di un byte. Una lista vuota di
+toppe resta fuori: Rust la accetta come commit che non cambia nulla,
+`commitCanvasPatches` dà `null`.
