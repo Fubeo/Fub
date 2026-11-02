@@ -1,0 +1,10 @@
+{
+  "name": "ink-stale-before",
+  "description": "Un'immagine di prima che non torna (un altro colore): stale, il file non cambia",
+  "before": "{\"nodes\":[],\"edges\":[],\"fub:ink\":{\"v\":1,\"strokes\":[{\"id\":\"s1\",\"tool\":\"pen\",\"brush\":\"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\",\"color\":\"#0072b2\",\"anchor\":{\"kind\":\"free\"},\"ink\":\"1 s100 cxy 100,100 10,0\"}]}}",
+  "patches": [{"kind":"ink","layer":"board","at":0,"before":{"id":"s1","tool":"pen","brush":"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint","color":"#d55e00","anchor":{"kind":"free"},"ink":"1 s100 cxy 100,100 10,0"},"after":null}],
+  "expect": {
+    "outcome": "rejected",
+    "reason": "stale"
+  }
+}
