@@ -59,6 +59,21 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K5 · T12: i comandi di colore e spessore partono dai campi
+  Contorno, Riempimento e Spessore del pannello delle proprietà
+  (`changeField`), perché il pozzo colore della barra non tocca la selezione
+  e cambia solo lo stile dei gesti dopo, che arriva già al motore con
+  `DrawingGesture.style`. L'esito passa da `changeFromPanel` (la stessa
+  strada del pannello: sola lettura, lucchetto, rifiuto) e non da
+  `ctx.commit` diretto. Al motore vanno solo `#rrggbb`, il riempimento
+  «nessuno» come `null` e gli spessori ≥ 0 in unità della scena; il resto lo
+  scrive il pannello come prima. Un comando che `drawingCommands` non elenca
+  vale spento (`ctx.campiDelMotore` in `panel.ts`, una riga fuori dal
+  «Tocca»). Se il motore manca o smette di rispondere, il pannello scrive da
+  sé solo se disegno e selezione sono ancora quelli di partenza. Fra comandi
+  e gesti non c'è una fila comune: un comando lanciato mentre l'esito di un
+  gesto è in volo si calcola sulla copia senza quel gesto, e un rifiuto si
+  annuncia. Perché: senza motore la barra scrive come prima.
 - 2026-11-02 · K5 · T10: i gesti di select, rect, ellipse, line e arrow
   passano dal motore (`editors/spatial/motore/gesti.ts`) e ogni esito è un
   passo di annulla. L'opzione dell'editor è una porta `MotoreDelDisegno` che

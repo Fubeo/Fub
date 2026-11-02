@@ -1014,7 +1014,7 @@ src/editors/spatial/motore/colori.test.ts` passa: con il finto acceso un
 colore scelto manda la richiesta giusta e applica un `set` in un passo; con
 il finto spento `styling.ts` scrive come prima.
 Prova: scripts/check.sh --rapido; npm --prefix apps/client test -- src/editors/spatial/motore/colori.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T13 · Il componente «Motore del disegno»
 
