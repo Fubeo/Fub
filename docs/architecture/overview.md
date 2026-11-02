@@ -40,6 +40,7 @@ flowchart TD
     svg["fub-format-svg"]
     scene["fub-scene"]
     ink["fub-ink"]
+    inkcodec["fub-ink-codec"]
     componenti["fub-componenti"]
     rich["fub-format-rich"]
     importers["fub-importers"]
@@ -86,7 +87,8 @@ flowchart TD
     markdown --> sdk
     svg --> abi
     svg --> scene
-    scene --> ink
+    scene --> inkcodec
+    inkcodec --> ink
     wasmhost --> abi
     wasmhost --> host
     wasmhost --> kernel
@@ -248,11 +250,14 @@ di eventi per sessione.
 niente, nemmeno da `fub-abi`, perché deve poterlo usare ogni prodotto che
 raccoglie inchiostro e, un domani, un componente `wasm32-wasip2`. Lo
 verificano `dependency_invariant.rs` e la compilazione per quel bersaglio nella
-CI. Le frecce in ingresso sono quella di `fub-scene`, che ne usa il campione
-del tratto, e quella di `fub-format-rich`, che ne scrive e legge l'InkML
-dell'inchiostro dei documenti; chi altro può dipenderne è un elenco chiuso,
-deciso nell'[ADR 0204](../decisions/0204-nucleo-inchiostro.md) e allargato
-nell'[ADR 0226](../decisions/0226-inchiostro-e-disegni-nei-documenti.md).
+CI. Le frecce in ingresso sono quella di `fub-ink-codec`, che ne quantizza il
+campione del tratto, e quella di `fub-format-rich`, che ne scrive e legge
+l'InkML dell'inchiostro dei documenti; chi altro può dipenderne è un elenco
+chiuso, deciso nell'[ADR 0204](../decisions/0204-nucleo-inchiostro.md) e
+allargato nell'[ADR 0226](../decisions/0226-inchiostro-e-disegni-nei-documenti.md).
+`fub-ink-codec` è il codec di `fub:ink` e la grammatica di `fub:brush`: sta
+fuori da `fub-scene` perché lo usa anche il nucleo della lavagna, che non deve
+portarsi dietro il lettore XML dei disegni, e dipende soltanto da `fub-ink`.
 
 `fub-canvas-core`, il nucleo della lavagna, non ha frecce verso altri crate
 del workspace: dipende soltanto da `serde`, `serde_json` e `thiserror`, e non
@@ -275,7 +280,7 @@ strumenti `fub_components*` usa i tipi del risolutore (`Stato`, `Perche`,
 `Errore`, `Effetto`), che `fub-host` non riesporta.
 
 `fub-scene`, il lettore delle scene di FubDraw, ha come sola freccia in uscita
-`fub-ink`: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché
+`fub-ink-codec`, di cui riespone i tipi: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché
 deve poterlo usare anche un componente `wasm32-wasip2`. Lo verificano
 `dependency_invariant.rs` e la compilazione per quel bersaglio nella CI. Lo usa
 `fub-format-svg`, il provider del [formato della
