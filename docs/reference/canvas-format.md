@@ -49,7 +49,7 @@ dipendenze dirette:
 | `fub-features` | ammesso per i comandi della lavagna (bundle `fub.lavagna`, feature `lavagna`), che arrivano con N3. |
 | `fub-canvas-wasm` | ammesso per la facciata WebAssembly che la WebView caricherà, che arriva con N3. |
 
-Oggi il solo cliente è `fub-format-canvas`. Aggiungere un cliente all'elenco è
+Il solo cliente presente è `fub-format-canvas`. Aggiungere un cliente all'elenco è
 una decisione: si scrive qui e poi nel test.
 
 ### Come si prova
@@ -62,7 +62,7 @@ una decisione: si scrive qui e poi nel test.
 
 ## Lettura
 
-Oggi `parse` fa ciò che faceva `parse_canvas` prima del nucleo: rifiuta un
+`parse` fa ciò che faceva `parse_canvas` prima del nucleo: rifiuta un
 sorgente oltre `MAX_SOURCE_BYTES`, legge come lavagna vuota un sorgente di
 soli spazi, salta un BOM iniziale senza toglierlo dal file, e passa il modello
 a `Canvas::validate`.

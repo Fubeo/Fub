@@ -19,7 +19,7 @@ Il core non dipende dal formato, dal toolkit desktop o dal motore WASM.
 
 ## Dipendenze del workspace Rust
 
-I tre diagrammi seguenti sono, insieme, la fotografia completa delle
+I quattro diagrammi seguenti sono, insieme, la fotografia completa delle
 dipendenze dichiarate fra i crate del workspace. Le frecce continue indicano
 dipendenze normali; quelle tratteggiate esistono soltanto in
 `[dev-dependencies]`. Un test confronta l'unione dei blocchi con
@@ -37,7 +37,6 @@ flowchart TD
     markdown["fub-format-markdown"]
     base["fub-format-base"]
     canvas["fub-format-canvas"]
-    canvascore["fub-canvas-core"]
     svg["fub-format-svg"]
     scene["fub-scene"]
     ink["fub-ink"]
@@ -73,7 +72,6 @@ flowchart TD
     services --> abi
     base --> abi
     canvas --> abi
-    canvas --> canvascore
     canvas --> markdown
     rich --> abi
     rich --> markdown
@@ -223,6 +221,19 @@ flowchart LR
     gxlsx --> gcore
     gxlsx --> gformula
     gxlsx --> gmodel
+```
+
+Il quarto blocco è il nucleo della lavagna, `fub-canvas-core`, con chi lo usa.
+
+```mermaid
+flowchart LR
+    %% @grafo-dipendenze
+    %% Il seguito del grafo: il nucleo della lavagna e i suoi clienti.
+
+    canvas["fub-format-canvas"]
+    canvascore["fub-canvas-core"]
+
+    canvas --> canvascore
 ```
 
 Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso
