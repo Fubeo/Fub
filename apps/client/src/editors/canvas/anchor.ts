@@ -1,11 +1,12 @@
 import type { CanvasNode } from "./model";
 
 /**
- * Which card a stroke belongs to. Pure geometry on the canvas coordinates: no
- * DOM, no ink format. The ink layer (N4 T12) asks it once, when the pen lifts.
+ * A quale scheda appartiene un tratto. Solo geometria sulle coordinate della
+ * lavagna: niente DOM, niente formato dell'inchiostro. Lo strato d'inchiostro
+ * (N4 T12) lo chiede una volta, quando la penna si alza.
  */
 
-/** An axis-aligned box in canvas units; `width` and `height` are never negative. */
+/** Un riquadro allineato agli assi, in unità della lavagna; `width` e `height` non sono mai negativi. */
 export interface Bounds {
   readonly x: number;
   readonly y: number;
@@ -14,14 +15,14 @@ export interface Bounds {
 }
 
 /**
- * The box of `points` widened by half of `size` on every side, so a single
- * touch still has an area.
+ * Il riquadro di `points` allargato di metà `size` da ogni lato, così anche un
+ * tocco solo ha un'area.
  *
- * Never yields `NaN`: points with a non-finite coordinate are skipped, a
- * `size` that is not finite or is negative counts as 0, and with no usable
- * point the box is the empty one at the origin. Coordinates near the limits
- * of `number` may still overflow to an infinite width; `anchorAt` treats such
- * a box as free.
+ * Non dà mai `NaN`: i punti con una coordinata non finita si saltano, un
+ * `size` non finito o negativo vale 0, e senza punti validi il riquadro è
+ * quello vuoto nell'origine. Vicino ai limiti di `number` la larghezza può
+ * ancora traboccare in `Infinity`; `anchorAt` tratta quel riquadro come
+ * libero.
  */
 export function strokeBounds(points: Iterable<{ x: number; y: number }>, size: number): Bounds {
   let minX = Infinity;
@@ -43,22 +44,24 @@ export function strokeBounds(points: Iterable<{ x: number; y: number }>, size: n
 }
 
 /**
- * The card that owns a stroke whose box is `b`, or `null` for a free stroke.
+ * La scheda a cui appartiene il tratto di riquadro `b`, o `null` se il tratto
+ * è libero.
  *
- * Only the topmost card the box touches counts (the last one in `nodes`): ink
- * is drawn inside its card, so a stroke anchored under another card would be
- * partly hidden. That card owns the stroke when it contains the centre of `b`
- * (edges count as inside), holds at least half of the area of `b` and
- * `canHold` accepts it; otherwise the stroke is free, even if a card below
- * would have taken it.
+ * Conta solo la scheda più in alto che il riquadro tocca (l'ultima in
+ * `nodes`): l'inchiostro si disegna dentro la sua scheda, quindi un tratto
+ * ancorato sotto un'altra scheda resterebbe nascosto in parte. Il tratto è di
+ * quella scheda se lei contiene il centro di `b` (i bordi contano dentro), se
+ * dentro di lei sta almeno metà dell'area di `b` e se `canHold` la accetta;
+ * altrimenti il tratto è libero, anche se una scheda sotto lo avrebbe preso.
  *
- * The share of `b` inside a card is measured axis by axis (covered length over
- * the box length, multiplied), so huge cards never overflow an area into
- * `Infinity / Infinity`. An axis on which `b` has no length (a `size` of 0, a
- * straight stroke) is a point on that axis: it is covered entirely when the
- * point lies inside the card, edges included, and not at all otherwise. A box
- * with a non-finite or negative measure belongs to nobody. Cards with a
- * non-finite position or a size that is not finite and positive touch nothing.
+ * La parte di `b` dentro una scheda si misura asse per asse (la lunghezza
+ * coperta diviso la lunghezza del riquadro, poi moltiplicate), così una scheda
+ * enorme non fa mai traboccare un'area in `Infinity / Infinity`. Su un asse
+ * dove `b` non ha lunghezza (un `size` di 0, un tratto dritto) il riquadro è
+ * un punto: è coperto tutto se il punto sta dentro la scheda, bordi compresi,
+ * e per niente altrimenti. Un riquadro con una misura non finita o negativa
+ * non è di nessuno. Le schede con una posizione non finita, o una misura non
+ * finita o non positiva, non toccano niente.
  */
 export function anchorAt(
   nodes: readonly CanvasNode[],
@@ -95,7 +98,7 @@ function validCard(node: CanvasNode): boolean {
   );
 }
 
-/** The share, in [0, 1], of the segment `start..start+length` inside `cardStart..cardStart+cardLength`. */
+/** La parte, fra 0 e 1, del segmento `start..start+length` che sta dentro `cardStart..cardStart+cardLength`. */
 function coverage(start: number, length: number, cardStart: number, cardLength: number): number {
   if (length === 0) return within(start, cardStart, cardLength) ? 1 : 0;
   const overlap = Math.min(start + length, cardStart + cardLength) - Math.max(start, cardStart);
