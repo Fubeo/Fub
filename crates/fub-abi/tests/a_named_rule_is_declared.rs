@@ -481,6 +481,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-host/src/craft/editors.rs::opens",
+            (
+                Family::AsciiCase,
+                "dice se un'app Craft apre un'estensione (N7, «Apri con»): un `IMG.JPG` è un \
+                 `jpg` per PhotoCraft. Le estensioni della tabella sono ASCII e il sistema le \
+                 tratta così; non è il nome di una nota, di un tag o di un percorso, che si \
+                 confrontano con le loro regole.",
+            ),
+        ),
+        (
             "crates/fub-host/src/link_card.rs::card",
             (
                 Family::AsciiCase,
