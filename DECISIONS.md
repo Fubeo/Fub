@@ -80,6 +80,68 @@ La più recente in cima: data · piano · decisione · perché.
   fuori e una chiave per lavoro: il nucleo dell'inchiostro non usa globali
   del DOM (ADR 0204), i timer passano da una `Lifetime`, e due richieste per
   la stessa cosa ne fanno una.
+- 2026-11-02 · N3 T8 · operazioni d'intento (`ops.rs`): un id che non è né
+  scheda né arco in `remove`/`set` dà `UnknownEdge`; `set` vale anche sugli
+  archi; un id dato già preso o ripetuto in `ids` dà `DuplicateId`; `reorder
+  {ids}` porta in cima gli id dati, nell'ordine dato; gli id nuovi vengono
+  da SplitMix64 sul seme (`IdSource`, sedici cifre esadecimali); ogni scheda
+  e arco messi passano `Canvas::validate`; l'`at` delle `remove-node` è la
+  posizione all'inizio della serie, anche fra due operazioni; i vettori
+  hanno l'esito `malformed` per un'operazione che non si legge · così il
+  TypeScript (T14, T16) rifà lo stesso generatore e le stesse posizioni dai
+  vettori, e l'inversa rimette ogni scheda al suo posto.
+- 2026-11-02 · N3 · T5: `patch_source` ritocca il sorgente con uno
+  scanner suo, più severo di quello TypeScript (rifiuta virgola finale e
+  valori vuoti, si ferma a 256 livelli, `SourceError::TooDeep`); gli archi
+  nuovi si scrivono nell'ordine di R10 (fromNode, fromSide, fromEnd,
+  toNode…), costruito in `edge_value` e non dall'ordine della struct; una
+  radice ricomposta senza `edges` lo riceve in fondo, come in TypeScript; un
+  array che non corrisponde al modello di prima si riscrive per intero. Le
+  schede si confrontano come struct e diventano JSON solo se cambiate: 2000
+  schede, una cambiata, ~0,8 ms in release (macchina carica). Il confronto
+  per valore è uno solo, `patch::same_value`, usato anche dal ritocco.
+  Perché: stessi byte di TypeScript dove TypeScript segue R1–R10; T7 porta
+  il TypeScript all'ordine R10 degli archi e lo specchio di T9 lo controlla.
+- 2026-11-02 · N3 · T6: `PatchError` ha una variante per ogni rifiuto
+  (`Stale` con il soggetto, `AtOutOfRange`, `NodeHasEdges`,
+  `MissingEndpoint`, `NotAPermutation`), tutte con la posizione della toppa,
+  dove TypeScript dà solo `null`; `after: null` si legge solo da `null`;
+  `at` negativo o con la virgola è un errore di lettura (TypeScript lo
+  scarta nella bozza); `draft` non chiama `Canvas::validate`, come
+  `canvasDraft`: il modello di dopo lo controlla il commit (T7). Portate
+  anche `upsert_node_patch` e le sorelle, che servono a T8. Restano come in
+  TypeScript l'inversa di un inserimento senza `at` e l'arco rimesso in
+  fondo, fissati da un test. Perché: errori tipati e stessa forma JSON.
+- 2026-11-02 · N3 · T3: in Rust R2 è un solo visitor (`SafeInteger`) che
+  porta il nome del campo nell'errore, R7 un `null_as_empty` su `nodes` ed
+  `edges`; il nucleo espone `read::is_blank` (la regola di
+  `isBlankCanvasSource`) e `model::MAX_SAFE_INTEGER`, nessuna variante nuova
+  di `CanvasError`. R3, R4 e R5 li rifiutava già `serde_json`: i test li
+  fissano. Fuori da R1-R10 la validazione diverge ancora: TypeScript limita
+  `background` a 8192 byte e `subpath`/`url` su ogni scheda, Rust no e solo
+  sul loro tipo; per la regola «nel dubbio si apre» si allinea il
+  TypeScript a Rust in T7, e lo specchio di T9 lo controlla.
+
+- 2026-11-02 · N3 · T4: `js.rs` espone, oltre a `js_number`, `js_string`,
+  `encode` ed `encode_pretty`, anche `js_json_number`, `is_array_index` e
+  `js_entries` (l'ordine delle chiavi di JavaScript, che serve a T5 per
+  R10); `encode_pretty` non mette il `"\n"` finale, lo aggiunge chi scrive il
+  file; `js_number` su `NaN` e infiniti fa come `String(x)`. Il pareggio
+  esatto si cerca sull'espansione decimale solo quando è possibile
+  (`x = M·2^E` con `E = unit − 1`): in release un numero costava circa 2 µs,
+  ora 0,1-0,3; i test confrontano la strada veloce con l'espansione intera su
+  202 000 numeri, e fuori dal repo 400 000 numeri contro Node non danno
+  differenze.
+
+- 2026-11-02 · N3 · T1: `fub-canvas-core` ha un blocco suo nel grafo delle
+  dipendenze di `overview.md` (il quarto diagramma), perché il primo era già
+  a 20 riquadri; `read.rs` tiene il BOM e gli spazi come li leggeva
+  `fub-format-canvas` (le regole di R1-R8 sono di T3); il nucleo riesporta
+  `PresetColor` e `parse`, e `fub-format-canvas/src/model.rs` è un `pub use`
+  del nucleo più `FORMAT_ID` e `SCHEMA_VERSION`. Il controllo per
+  `wasm32-unknown-unknown` sta nel giro completo di `scripts/check.sh` e nel
+  job `invariants` della CI, che l'orchestratore ha aggiunto.
+
 - 2026-11-02 · N3 · T2: in TypeScript i controlli di R3, R4 e R5 stanno
   nello scanner di `source-edit.ts` (`inspectCanvasJson`), una passata sola
   sul testo dopo `JSON.parse`, e non in un reviver: misurato a 2000 schede,

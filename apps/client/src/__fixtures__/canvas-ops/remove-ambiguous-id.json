@@ -1,0 +1,12 @@
+{
+  "about": "Un id che è sia una scheda sia un arco (il formato lo permette) è ambiguo da togliere: Invalid.",
+  "before": {
+    "nodes": [
+      { "id": "x", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "x" },
+      { "id": "y", "type": "text", "x": 200, "y": 0, "width": 100, "height": 60, "text": "y" }
+    ],
+    "edges": [{ "id": "x", "fromNode": "x", "toNode": "y" }]
+  },
+  "ops": [{ "op": "remove", "ids": ["x"] }],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 0 } }
+}

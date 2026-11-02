@@ -2040,6 +2040,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fub-canvas-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+]
+
+[[package]]
 name = "fub-cli"
 version = "0.1.0"
 dependencies = [
@@ -2117,6 +2126,7 @@ name = "fub-format-canvas"
 version = "0.1.0"
 dependencies = [
  "fub-abi",
+ "fub-canvas-core",
  "fub-format-markdown",
  "serde",
  "serde_json",

@@ -19,7 +19,7 @@ Il core non dipende dal formato, dal toolkit desktop o dal motore WASM.
 
 ## Dipendenze del workspace Rust
 
-I tre diagrammi seguenti sono, insieme, la fotografia completa delle
+I quattro diagrammi seguenti sono, insieme, la fotografia completa delle
 dipendenze dichiarate fra i crate del workspace. Le frecce continue indicano
 dipendenze normali; quelle tratteggiate esistono soltanto in
 `[dev-dependencies]`. Un test confronta l'unione dei blocchi con
@@ -223,6 +223,19 @@ flowchart LR
     gxlsx --> gmodel
 ```
 
+Il quarto blocco è il nucleo della lavagna, `fub-canvas-core`, con chi lo usa.
+
+```mermaid
+flowchart LR
+    %% @grafo-dipendenze
+    %% Il seguito del grafo: il nucleo della lavagna e i suoi clienti.
+
+    canvas["fub-format-canvas"]
+    canvascore["fub-canvas-core"]
+
+    canvas --> canvascore
+```
+
 Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso
 `fub-app`, che adatta Tauri e IPC. `fub-host` compone provider e sessioni;
 `fub-wasm-host` dipende dall'host per montare bundle, ma l'host non dipende da
@@ -240,6 +253,16 @@ del tratto, e quella di `fub-format-rich`, che ne scrive e legge l'InkML
 dell'inchiostro dei documenti; chi altro può dipenderne è un elenco chiuso,
 deciso nell'[ADR 0204](../decisions/0204-nucleo-inchiostro.md) e allargato
 nell'[ADR 0226](../decisions/0226-inchiostro-e-disegni-nei-documenti.md).
+
+`fub-canvas-core`, il nucleo della lavagna, non ha frecce verso altri crate
+del workspace: dipende soltanto da `serde`, `serde_json` e `thiserror`, e non
+vede `fub-abi` né il Markdown, perché lo carica anche la WebView come modulo
+`wasm32-unknown-unknown`. Ha il modello di una `.canvas` e la sua lettura; la
+sua freccia in ingresso è quella di `fub-format-canvas`, che lo riespone con la
+stessa API. Chi altro può dipenderne è un elenco chiuso
+(`dependency_invariant.rs`), e il giro completo di `scripts/check.sh` lo
+compila per quel bersaglio. Le regole stanno nel [formato della
+lavagna](../reference/canvas-format.md).
 
 `fub-componenti`, il risolutore dei componenti, non ha frecce in uscita:
 dipende soltanto da `serde`, non vede `fub-abi`, e dice in un posto solo che

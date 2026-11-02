@@ -7,7 +7,8 @@
 
 Come una lavagna tiene l'inchiostro scritto sopra le sue schede e sul vuoto.
 Una lavagna è un file [JSON Canvas 1.0](https://jsoncanvas.org/spec/1.0/), lo
-stesso di Obsidian; l'inchiostro sta in campi in più, che un programma che non
+stesso di Obsidian, letto e scritto come dice il
+[formato della lavagna](canvas-format.md); l'inchiostro sta in campi in più, che un programma che non
 li conosce conserva o ignora. I punti di un tratto si scrivono con la stringa
 `fub:ink` dei disegni e il pennello con la grammatica di `fub:brush`
 ([formato della scena](scene-format.md), §5). Il perché di questa forma sta
@@ -195,8 +196,8 @@ fissa, la prima che vale in quest'ordine:
 
 La toppa `ink`, che aggiunge, toglie o cambia un tratto con la sua inversa, e
 le operazioni `add_strokes` ed `erase_strokes` stanno con le altre operazioni
-della lavagna, in `docs/reference/canvas-operations.md` (sezione
-«Inchiostro»).
+della lavagna, nelle [operazioni sulla lavagna](canvas-operations.md)
+(sezione «Inchiostro»).
 
 ## I vettori
 

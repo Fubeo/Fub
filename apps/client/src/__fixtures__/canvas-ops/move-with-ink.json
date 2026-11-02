@@ -1,0 +1,23 @@
+{
+  "about": "Spostare una scheda non tocca l'inchiostro: «fub:ink» è un campo sconosciuto e resta identico, sulla scheda e sulla radice (A11).",
+  "before": {
+    "nodes": [
+      { "id": "f1", "type": "file", "file": "voti.xlsx", "x": 0, "y": 0, "width": 640, "height": 420,
+        "fub:ink": { "v": 1, "strokes": [{ "id": "s1", "anchor": { "kind": "card", "u": 0.5, "v": 0.5 }, "pts": "AAAA" }] } }
+    ],
+    "edges": [],
+    "fub:ink": { "v": 1, "strokes": [{ "id": "s2", "anchor": { "kind": "free" }, "pts": "BBBB" }] }
+  },
+  "ops": [{ "op": "move", "ids": ["f1"], "dx": 40, "dy": 0 }],
+  "expect": {
+    "outcome": "applied",
+    "after": {
+      "nodes": [
+        { "id": "f1", "type": "file", "file": "voti.xlsx", "x": 40, "y": 0, "width": 640, "height": 420,
+          "fub:ink": { "v": 1, "strokes": [{ "id": "s1", "anchor": { "kind": "card", "u": 0.5, "v": 0.5 }, "pts": "AAAA" }] } }
+      ],
+      "edges": [],
+      "fub:ink": { "v": 1, "strokes": [{ "id": "s2", "anchor": { "kind": "free" }, "pts": "BBBB" }] }
+    }
+  }
+}
