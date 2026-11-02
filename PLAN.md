@@ -4,47 +4,78 @@ Branch: piano/n4-inchiostro
 Obiettivo: sulla lavagna la penna scrive sempre, sopra ogni scheda (nota,
 foglio, PDF, foto) e sul vuoto, senza attivare niente; il dito sposta e
 ingrandisce la lavagna; il mouse seleziona come oggi e scrive solo tenendo
-premuto D o con l'interruttore «Scrivi col mouse». L'inchiostro si salva nel
-`.canvas`, segue la scheda quando la sposti o la ridimensioni, si annulla
-tratto per tratto e non tocca mai il file della scheda.
+premuto D o con l'interruttore «Scrivi col mouse». Un menu sceglie penna,
+colore, spessore e gomma (quella che toglie il tratto intero e quella che
+taglia un pezzo). L'inchiostro si salva nel `.canvas` (dove resta lo decide
+la prova con Obsidian, T24), segue la scheda quando la sposti, cresce senza
+deformarsi con le immagini e i PDF che ridimensioni e resta fermo sulle
+altre schede, si annulla tratto per tratto e non tocca mai il file della
+scheda.
 Perché: l'inchiostro oggi c'è nei disegni e nelle note (`crates/fub-ink`,
 `apps/client/src/ink/`, `editors/spatial/`, `editors/rich/ink.ts`), ma la
 lavagna (`apps/client/src/editors/canvas/engine.ts`) non lo conosce: non
 distingue penna, dito e mouse, e il `.canvas` non ha un posto per i tratti.
 Fuori scope: le ancore di contenuto (celle di un foglio, pagina di un PDF,
 blocco di una nota: v2); le anteprime vive dei file nelle schede (oggi sono
-segnaposti); il bagnato nativo (N5); il menu di penne e colori sulla lavagna
-(N6); la gomma parziale e il lazo; PenQuiet per il grafo e l'indice; la copia
-SVG per gli altri programmi (strada B), salvo che la prova di Obsidian la
-renda necessaria; scrivere dentro un DOCX o un PDF (ADR 0226, P3); InkML; i
-sottocomandi della CLI; la CI (i coder non la toccano: CLAUDE.md); il vault
-vero.
+segnaposti: arrivano con N6); il bagnato nativo (N5); il lazo; un'operazione
+per gli agenti che taglia un tratto (`erase_strokes` toglie tratti interi:
+tagliare è un gesto della mano); PenQuiet per il grafo e l'indice; la copia
+SVG per gli altri programmi e il file accanto alla lavagna, salvo che la
+prova di Obsidian (T24) li renda necessari e l'utente li scelga (D-12);
+scrivere dentro un DOCX o un PDF (ADR 0226, P3); InkML; i sottocomandi della
+CLI; la CI (i coder non la toccano: CLAUDE.md; la CI completa la guarda
+l'orchestratore in T25); il vault vero.
 Assunzioni: A1–A16 e la forma del formato `fub:ink` qui sotto, decise dal
-pianificatore il 2026-11-02 di notte (l'utente non poteva rispondere). Le
-domande D-1…D-11 non bloccano: il piano segue la prima opzione di ognuna.
-T5, T6 e tutto ciò che ne discende seguono le risposte a D-1 e D-2, che sono
-costose da disfare: per questo stanno dall'ondata 2 in poi.
-Ondate: T1 T2 T3 | T4 T5 T6 | T7 T8 T9 | T10 | T11 | T12 | T13 | T14 | T15 T16
-Prototipo: nessuno stanotte. Le parti visibili (sezione «Che cosa si vede»)
-riusano pezzi che esistono; le scelte d'aspetto dell'utente sono D-5, D-9,
-D-11; il task grafico è nell'ultima ondata (T16).
+pianificatore il 2026-11-02 di notte. Il 2026-11-02 l'utente ha risposto a
+D-1…D-11 e a merge-n3n4 (la riga «Risposta» sotto ogni domanda): A11–A13
+cambiano, A17–A23 vengono dalle risposte; A19–A23 sono proposte del
+prototipo e valgono quando l'utente lo approva (T20).
+Ondate: T1 T2 T3 | T4 T5 T6 | T7 T8 T9 | T10 | T11 | T18 T20 | T19 | T17 | T12
+| T13 | T14 | T15 T22 | T16 | T21 | T23 | T25; T24 parte quando l'utente
+incolla l'uscita della prova con Obsidian (dopo T18, se T18 è in corso; mai
+insieme a T17 o T22, che toccano anche loro `canvas-ink.md`). Da
+T17 in poi il ramo contiene N3 finito fino a T22 (lo fonde l'orchestratore).
+Prototipo: `PLAN-ui/lavagna-penne.html` (T20): la barra con il menu della
+penna e «Scrivi col mouse», il menu aperto, le due righe delle Impostazioni.
+Approvato: non ancora (l'orchestratore lo mostra all'utente prima di T19,
+T22, T16 e T21).
 
 ## Modifiche
 
-nessuna
+- 2026-11-02 · la riga «Risposta» sotto ogni domanda; il prototipo
+  `PLAN-ui/lavagna-penne.html`; cancello, assunzioni, fuori scope, «Che cosa
+  si vede» e «Chi aspetta chi» rifatti; la domanda D-12, che vale solo se la
+  prova con Obsidian dice che l'inchiostro si perde · l'utente ha risposto a
+  D-1…D-11 e a merge-n3n4, e N3 ha cambiato T16 e aggiunto T19–T22 · nuovi
+  T17–T25; T4 e T5 da rivedere (li cambia T18); T12, T13, T14, T15 e T16
+  (da fare) riscritti dove le risposte o N3 li cambiano.
 
 ## Dal prototipo
 
-Nessun prototipo stanotte. Ogni parte visibile riusa un pezzo che c'è già;
-la tabella dice dove finisce e chi la fa.
+Il prototipo è `PLAN-ui/lavagna-penne.html` (T20). Ogni blocco `<style>` dice
+il file dove va; le classi nuove sono `canvas-ink-pen`,
+`canvas-ink-pen-chip`, `canvas-ink-pen-name`, `canvas-pen-popover`,
+`canvas-pen-menu`, `canvas-pen-section`, `canvas-pen-heading`,
+`canvas-pen-list`, `canvas-pen-item`, `canvas-pen-preview`,
+`canvas-pen-swatches`, `canvas-pen-swatch`, `canvas-pen-more`,
+`canvas-pen-note`: il coder le aggiunge all'anatomia
+(`theme/scrittoio/anatomia/editors.ts`). Il resto riusa pezzi che ci sono
+(`segmented`, `kit-popover`, il selettore dei colori del kit, le righe delle
+Impostazioni).
 
 | Pezzo | Destinazione | Task |
 |---|---|---|
 | La scia sotto la penna (bagnato) | `editors/canvas/ink-layer.ts`, con `StrokePreview` di `ink/tools/stroke.ts` | T4 |
 | Il tratto finito sulla scheda e sul vuoto (asciutto) | `editors/canvas/ink-paint.ts`, `structure.css` | T4, T12 |
+| Il tratto che cresce con l'immagine o il PDF e resta fermo sulle altre schede (non è nel prototipo: lo dicono D-9 (c) e A17) | `editors/canvas/ink-fit.ts` (nuovo), `ink-paint.ts` | T18 |
 | La gomma che sbiadisce il tratto | `ink-layer.ts`, `ink-paint.ts` (opacità 0,25 come `FADED_OPACITY` di `editors/spatial/painter/svg-dom.ts`) | T13 |
-| L'interruttore «Scrivi col mouse» | `#drawToolbar` in `engine.ts`, `skin/editors.css` | T16 |
-| Il cursore a croce mentre si scrive col mouse | `structure.css`, come `.rich-ink-veil` | T16 |
+| La gomma che taglia: il pezzo strofinato sbiadisce, i pezzi intorno restano | `editors/canvas/ink-erase.ts` (nuovo), `ink-paint.ts` | T22 |
+| L'interruttore «Scrivi col mouse», in testa alla barra, premuto con `--accent-wash` e `--accent` | `#drawToolbar` in `engine.ts`; il blocco `→ skin/editors.css` del prototipo | T16 |
+| Il cursore: croce per scrivere, `cell` per la gomma | il blocco `→ structure.css` del prototipo, come `.rich-ink-veil` | T16, T21 |
+| Il menu della penna: il pulsante col colore e il nome, il rialzo con Strumento, Tipo di penna, Colore, Spessore, La gomma cancella | `editors/canvas/pen-menu.ts` (nuovo), `#drawToolbar`; i blocchi `→ structure.css` e `→ skin/editors.css`; testi `canvas.ink.*` in `catalog.ts` | T21 |
+| L'anteprima di ogni penna nel menu | `inkPath` col pennello di `penBrush`, come `penPreview` di `editors/spatial/tools/editor/chrome/pen-options.ts` (nel prototipo è approssimata) | T21 |
+| «Altro colore…» | `colorWell` o `createColorPicker` di `kit/color/`, come la scheda «Disegna» dei documenti | T21 |
+| Le due righe «Ricorda se scrivi col mouse» e «Il dito sposta le schede» | lo schema e i testi in `crates/fub-features/src/lavagna.rs`; le righe le disegna `panels/settings.ts` | T19 |
 | Gli avvisi («tratto troppo lungo», «lavagna piena», «inchiostro di un'altra versione») | `#showIntakeError` dentro `canvas-intake-error`, testi in `catalog.ts` | T12 |
 | Il dito che sposta la lavagna, il pizzico, la testata che sposta la scheda | `engine.ts`, `editors/canvas/touch.ts` | T14 |
 
@@ -63,21 +94,40 @@ Nessun pezzo nuovo del kit: tutto è fatto con ciò che la shell ha già.
   durante il trascinamento, non solo alla fine. Se il tratto è sul vuoto o a
   cavallo di due schede, sta sopra tutte le schede, come una pellicola sulla
   lavagna.
-- **Il colore.** Biro blu (`#0072b2`, il blu della tavolozza Okabe–Ito che i
-  disegni hanno già), larga 4 pixel dello schermo allo zoom del momento
-  (D-5).
-- **La gomma.** Col retro della penna o col tasto laterale premuto, i tratti
-  toccati sbiadiscono mentre si passa (come la gomma dei disegni) e spariscono
-  quando si alza la penna; annulla li riporta tutti insieme.
+- **Ridimensionare.** Su una scheda d'immagine o PDF l'inchiostro cresce e
+  cala con la scheda, uguale nei due sensi e senza deformarsi, e resta sopra
+  lo stesso punto (D-9 c). Su tutte le altre schede (testo, nota, foglio,
+  gruppo, pagina web) resta fermo dov'era, della sua misura: se la scheda
+  si stringe, l'inchiostro che esce si vede ancora e si cancella.
+- **La penna e il colore.** In testa alla barra c'è il pulsante della penna:
+  un tondo del colore e il nome della penna («Sfera»). Apre un menu con lo
+  strumento (Penna, Evidenziatore, Gomma), il tipo di penna con
+  l'anteprima, gli otto colori della tavolozza e «Altro colore…», lo
+  spessore (Sottile, Medio, Spesso) e che cosa cancella la gomma. Di serie:
+  Sfera blu (`#0072b2`), Medio, cioè 4 pixel dello schermo allo zoom del
+  momento (D-5 b). Cambiare penna non cambia i tratti già scritti.
+- **La gomma.** Col retro della penna, col tasto laterale premuto o con lo
+  strumento Gomma. Di serie toglie il tratto intero: i tratti toccati
+  sbiadiscono mentre si passa (come la gomma dei disegni) e spariscono
+  quando si alza la penna. Con «Solo il pezzo» taglia il tratto dove passa:
+  il pezzo strofinato sbiadisce, i pezzi intorno restano come tratti nuovi
+  (D-6 b). Annulla riporta tutta la passata in un passo.
 - **Il mouse.** Fa quello che fa oggi (seleziona, sposta, collega). Nella
-  barra della lavagna c'è un pulsante di testo in più, «Scrivi col mouse»,
-  accanto agli altri: premuto ha lo sfondo color accento, come i pulsanti
-  premuti dei disegni; il suggerimento dice «Oppure tieni premuto D». Mentre
-  il mouse scrive, il cursore è una croce, come nell'inchiostro delle note.
+  barra, subito dopo la penna, c'è un pulsante di testo in più, «Scrivi col
+  mouse»: premuto ha lo sfondo color accento, come i pulsanti premuti dei
+  disegni (D-11 a); il suggerimento dice «Oppure tieni premuto D». Mentre il
+  mouse scrive, il cursore è una croce (con la Gomma, `cell`), come
+  nell'inchiostro delle note. Riaprendo una lavagna l'interruttore è spento,
+  salvo che nelle Impostazioni sia accesa «Ricorda se scrivi col mouse»
+  (D-4 c).
 - **Il dito.** Un dito sposta la lavagna, anche sopra le schede; due dita la
   ingrandiscono (pizzico); per spostare una scheda col dito si trascina la sua
   testata (la riga col titolo). Il palmo appoggiato mentre si scrive non fa
-  niente.
+  niente. Con «Il dito sposta le schede» accesa nelle Impostazioni, il dito
+  sposta la scheda che tocca e la lavagna solo sul vuoto (D-10 c).
+- **Le Impostazioni.** Nella sezione «Lavagna», due interruttori di questo
+  computer, di serie spenti: «Ricorda se scrivi col mouse» e «Il dito sposta
+  le schede».
 - **Gli avvisi.** Un tratto rifiutato (troppo lungo, lavagna piena, scheda con
   inchiostro di un'altra versione di Fub) scompare e la barra mostra il
   messaggio nella riga degli avvisi che la lavagna usa già per i file
@@ -100,6 +150,12 @@ Nessun pezzo nuovo del kit: tutto è fatto con ciò che la shell ha già.
   (T16).
 - Scritto su `piano/n3-logica-in-rust` @ `f5e2503a` (in N3: T2 fatto, T1 in
   corso). Ciò che N3 non ha ancora fatto è segnato «dopo N3 Tn».
+- Riallineato il 2026-11-02 al piano N3 @ `16e3ae76` (T16 registra il testo
+  delle schede a pause; T18 toglie la logica TypeScript; T19 il testo in
+  sospeso nelle bozze; T20 le toppe degli archi con `at`; T21 l'annulla che
+  torna ai byte; T22 la sola lettura; T23 la CI completa) e al piano N6
+  (`piano/n6-lavagna` @ `a6be320a`: la scheda di foglio è T7, la tela che
+  tiene le schede è T11).
 - Il codice letto: `crates/fub-ink` (ruoli, sessione, specchio
   `tests/ts_mirror.rs`), `apps/client/src/ink/` (input, adattatore, strumenti,
   penne), `editors/spatial/ink/codec.ts`, `crates/fub-scene/src/{ink,brush}.rs`
@@ -124,18 +180,43 @@ Nessun pezzo nuovo del kit: tutto è fatto con ciò che la shell ha già.
 | T9 · i tratti nel client | dopo T3, T4, T5 | nessuno | D-1, D-2, D-5 |
 | T10 · toppa e operazioni in Rust | dopo T8 | N3 T5, T6, T7, T8 | D-3 |
 | T11 · toppa nel client | dopo T9, T10 | N3 T7 (e N3 T14 se c'è) | D-3 |
-| T12 · la penna scrive | dopo T2, T4, T9, T11 | N3 T16 | D-5 |
-| T13 · gomma e D tenuto | dopo T12 | nessuno oltre N3 T16 | D-4, D-6 |
-| T14 · il dito | dopo T13 | nessuno oltre N3 T16 | D-10 |
-| T15 · la misura | dopo T14 | N3 T15 (il nome dello scenario) | D-7 |
-| T16 · l'interruttore e il cursore | dopo T13, T14 | nessuno oltre N3 T16 | D-4, D-11 |
+| T12 · la penna scrive | dopo T2, T4, T9, T11, T17, T18 | N3 T16, T19, T21, T22 (fusi con T17) | D-5 (data) |
+| T13 · gomma e D tenuto | dopo T12, T18 | come T12 | D-4, D-6 (date) |
+| T14 · il dito | dopo T13, T19 | come T12 | D-10 (data) |
+| T15 · la prima misura | dopo T14 | N3 T15 (il nome dello scenario) | D-7 (data) |
+| T16 · l'interruttore e il cursore | dopo T19, T20, T22 | come T12 | D-4, D-11 (date); il sì al prototipo |
+| T17 · l'inchiostro sul nucleo di N3 | dopo T11 | N3 fino a T22, fuso in questo ramo | nessuna |
+| T18 · la misura della scheda | subito | nessuno | D-9 (data) |
+| T19 · le impostazioni | dopo T20 | nessuno | D-4, D-10 (date); il sì al prototipo |
+| T20 · il prototipo | subito (la prima versione c'è) | nessuno | il sì dell'utente |
+| T21 · il menu delle penne | dopo T16, T19, T20, T22 | come T12 | D-5 (data); il sì al prototipo |
+| T22 · la gomma che taglia | dopo T14, T18, T20 | come T12 | D-6 (data); il sì al prototipo |
+| T23 · la seconda misura | dopo T15, T21 | nessuno | D-7 (data); in N6 la scheda di foglio viva dentro la lavagna (N6 T7, T11, T12, T13) |
+| T24 · dopo la prova con Obsidian | dopo T7, T18 | nessuno | l'uscita della prova (D-8); D-12 se l'inchiostro si perde |
+| T25 · la CI e la revisione | dopo tutti | N3 in `main` (N3 T23) | il sì al merge |
 
 Le ondate 1 e 2 non aspettano niente di N3 tranne T5 (la pagina di N3 T1).
-Le ondate dalla 4 in poi aspettano N3 fino a T16.
+T18, T19, T20 e T24 non aspettano N3. Da T17 in poi il ramo contiene N3
+fino a T22: l'orchestratore lo fonde quando N3 T22 è fatto, prima di far
+partire T17 (N3 T18 toglie le funzioni TypeScript che T11 aveva allargato:
+il conflitto si risolve tenendo la versione di N3, poi T17 sistema
+l'inchiostro). Se N3 T23 corregge ancora qualcosa, l'orchestratore rifonde
+prima di T25.
+**Un nodo con N6.** La seconda misura (T23) vuole la scheda di foglio vera
+dentro la lavagna, che arriva con N6 T11; ma N6 T11 oggi aspetta «N3 fino a
+T18 e N4 fino a T16 fusi in `main`», e N4 entra in `main` solo dopo T23
+(merge-n3n4 b). Per sciogliere il nodo, N6 T11 parte dal ramo di N4 con
+fatti tutti i task che toccano `engine.ts` (T12, T13, T14, T22, T16, T21)
+invece che da `main`, e T23 misura su quel ramo di N6. Lo decide
+l'orchestratore col pianificatore di N6: «N4 fino a T16» di N6 T11 diventa
+«N4 fino a T21». Senza questo accordo T23 non può partire e N4 non entra
+in `main`.
 
 ## Domande per l'utente (raccolte, non bloccano)
 
-Il piano procede con la prima opzione di ognuna.
+Il piano è andato avanti con la prima opzione di ognuna; il 2026-11-02
+l'utente ha risposto (la riga «Risposta» sotto ogni domanda). D-12 è nuova
+e si fa solo se la prova con Obsidian dice che l'inchiostro si perde.
 
 - D-1 · Dove si salva l'inchiostro (T5 e chi viene dopo). (a) Consigliata:
   campi `fub:ink` dentro il `.canvas`, sulla scheda e alla radice: un file
@@ -146,6 +227,8 @@ Il piano procede con la prima opzione di ognuna.
   sposta l'inchiostro. (c) A, più una copia B che Fub scrive per gli altri
   programmi: si decide dopo la prova di T7. Conseguenza: cambiare idea dopo
   T8 vuol dire riscrivere T5 e T8–T12.
+  Risposta (2026-11-02): (c) — si decide dopo la prova con Obsidian; fino ad
+  allora il codice tiene l'inchiostro nel `.canvas` (T24).
 - D-2 · Come si scrivono i punti (T5, T6). (a) Consigliata: la stessa stringa
   dei tratti dei disegni (§5 di `scene-format.md`), in unità della scheda
   alla misura che aveva quando si è scritto; il codice c'è già in Rust e in
@@ -154,15 +237,20 @@ Il piano procede con la prima opzione di ognuna.
   del passo: un codec nuovo in due lingue e file più lunghi, ma niente T6.
   Conseguenza: altri programmi leggeranno questo formato; cambiarlo dopo
   vuol dire una `v: 2` e una conversione dei file.
+  Risposta (2026-11-02): (a) — come i tratti dei disegni, come il piano.
 - D-3 · Cancellare una scheda che ha inchiostro (T10, T12). (a) Consigliata:
   l'inchiostro va via con la scheda; annulla riporta tutto in un passo. (b)
   L'inchiostro resta sulla lavagna dov'era, come inchiostro libero.
   Conseguenza: (b) chiede una conversione delle coordinate nella toppa di
   rimozione e vettori in più in T10.
+  Risposta (2026-11-02): (a) — l'inchiostro va via con la scheda, come il
+  piano.
 - D-4 · Scrivere col mouse (T13, T16). (a) Consigliata: l'interruttore nella
   barra, che riaprendo la lavagna torna spento, più D tenuto premuto. (b)
   L'interruttore ricordato (per lavagna o per tutto Fub). Conseguenza: (b) è
   una preferenza nuova da salvare e da mostrare in Impostazioni.
+  Risposta (2026-11-02): (c) — un'impostazione «ricorda Scrivi col mouse»,
+  di serie spenta; il tasto D resta (T19, T16).
 - D-5 · Penna, colore e spessore di serie (T9, T12). (a) Consigliata: la
   biro, blu `#0072b2` (il nero sparisce sul tema scuro), larga 4 pixel dello
   schermo allo zoom del momento; il menu delle penne arriva con N6. (b) Il
@@ -170,10 +258,16 @@ Il piano procede con la prima opzione di ognuna.
   in più). (c) Nero, come i disegni. Conseguenza: colore e spessore si
   scrivono in ogni tratto; cambiare la scelta dopo non cambia i tratti già
   scritti.
+  Risposta (2026-11-02): (b) — il menu di penne e colori già adesso, di
+  serie la biro blu da 4 pixel; prima il prototipo (T20), poi il menu
+  (T21); colore e spessore restano scritti in ogni tratto.
 - D-6 · La gomma (T13). (a) Consigliata: cancella il tratto intero che tocca,
   come la gomma a tratto dei disegni. (b) Anche la gomma che taglia un pezzo
   di tratto (il codice per tagliare c'è, `ink/tools/split.ts`). Conseguenza:
   (b) è un task in più e ogni passata crea tratti nuovi.
+  Risposta (2026-11-02): (b) — accanto alla gomma che toglie il tratto
+  intero, una che taglia solo il pezzo strofinato; un passaggio è un passo
+  di annulla (T22).
 - D-7 · La misura del cancello (T15). (a) Consigliata: le schede file oggi
   sono segnaposti (nessun foglio vivo), quindi la misura mette sotto la
   penna una scheda di testo con una tabella da 10 000 celle, una scheda
@@ -181,26 +275,57 @@ Il piano procede con la prima opzione di ognuna.
   nella misura quando arriva la sua anteprima. (b) Rinviare il cancello
   della latenza fino al foglio vivo. Conseguenza: (a) chiude N4 con un caso
   vicino a quello del passo ma non uguale; (b) lascia N4 aperto.
+  Risposta (2026-11-02): (c) — tutte e due: ora sul caso simile (T15), poi
+  sul foglio vero dentro la lavagna (T23); N4 si chiude solo con la
+  seconda.
 - D-8 · La prova con Obsidian (T7). (a) Consigliata: il kit di T7 (una
   lavagna di prova e uno script che confronta); l'utente apre la lavagna in
   Obsidian, sposta una scheda, salva, e lancia lo script: pochi minuti. (b)
   Scegliere A senza la prova. Conseguenza: senza la prova la voce del
   cancello «si sa che cosa succede ai campi» resta aperta.
+  Risposta (2026-11-02): (a) — la prova la fa l'utente col kit di T7 e
+  incolla l'uscita dello script (T24).
 - D-9 · Ridimensionare una scheda con inchiostro (T4). (a) Consigliata:
   l'inchiostro si stira con la scheda in larghezza e in altezza, così le
   annotazioni restano sopra le stesse parti (il tratto si deforma un po').
   (b) Scala uniforme: il tratto resta proporzionato ma può non arrivare più
   dove arrivava. Conseguenza: è un attributo della resa, il file non cambia:
   si può cambiare dopo senza costi.
+  Risposta (2026-11-02): (c) — dipende dalla scheda: su immagini e PDF
+  l'inchiostro scala con lo stesso fattore nei due sensi, ancorato alla
+  scheda; sulle altre resta fermo e non si deforma (T18). Il codice di
+  adesso stira (`INK_ASPECT = "none"` in `ink-paint.ts`).
 - D-10 · Il dito sopra una scheda (T14). (a) Consigliata: il dito sposta la
   lavagna ovunque, anche sopra le schede; per spostare una scheda col dito
   si trascina la sua testata; il pizzico ingrandisce. (b) Il dito sposta la
   scheda che tocca, come il mouse, e la lavagna solo sul vuoto. Conseguenza:
   con (b) il palmo o un dito appoggiato sposta schede per sbaglio.
+  Risposta (2026-11-02): (c) — di serie (a); un'impostazione per chi vuole
+  spostare col dito la scheda che tocca (T19, T14).
 - D-11 · L'aspetto dell'interruttore (T16). (a) Consigliata: un pulsante di
   testo «Scrivi col mouse» come gli altri della barra; premuto ha lo sfondo
   color accento. (b) Un'icona di penna (serve un'icona nel kit e un nome per
   i lettori di schermo). Conseguenza: solo aspetto, si cambia dopo con poco.
+  Risposta (2026-11-02): (a) — il pulsante con la scritta, colorato quando è
+  acceso, come il piano (T16).
+- merge-n3n4 · Quando N4 entra in `main`. (a) Appena i suoi task sono fatti,
+  come gli altri piani. (b) Solo dopo N3, a task tutti fatti, con la CI
+  completa (PR non in bozza: Windows, macOS, banchi) e una revisione riga
+  per riga. Conseguenza: (b) aggiunge un task finale e una voce al cancello.
+  Risposta (2026-11-02): (b) — dopo N3, con la CI completa e la revisione
+  riga per riga (T25).
+- D-12 · **Solo se la prova con Obsidian (T24) dice che l'inchiostro si
+  perde.** Dove lo si tiene allora. (a) Consigliata: resta nel `.canvas`,
+  Fub ne tiene una copia di riserva in `.fub/`; aprendo la lavagna, se
+  l'inchiostro di una scheda che c'è ancora (stesso id) o della radice è
+  sparito, lo dice e offre «Rimetti l'inchiostro», che si annulla. Un file
+  solo per gli altri programmi, niente conversione. (b) Un file a parte
+  accanto alla lavagna: Obsidian non lo tocca, ma i file sono due,
+  rinominare la lavagna li separa e serve una `v: 2` con la conversione.
+  (c) (a), più una copia SVG che gli altri programmi vedono come immagine:
+  due copie da tenere allineate. Conseguenza: qualunque scelta sono task
+  nuovi che il pianificatore scrive dopo la risposta; N4 non entra in
+  `main` prima.
 
 ## Assunzioni
 
@@ -237,14 +362,18 @@ Il piano procede con la prima opzione di ognuna.
 - A10 · **Dalla T12 il dito e il mouse non scrivono sulla lavagna** (dito
   `"navigate"`, mouse `"ignore"`): fanno esattamente quello che fanno oggi
   finché T13 (D tenuto, interruttore) e T14 (il dito) non li cambiano.
-- A11 · **La penna di serie** è quella di D-5 (a): biro, `#0072b2`, 4 pixel
-  dello schermo allo zoom del momento, scritti nel tratto in unità della
-  scheda (o della lavagna se libero).
-- A12 · **Il formato** è quello di D-1 (a) e D-2 (a), descritto qui sotto.
-  La decisione scritta da T5 resta in stato «proposta» finché l'utente non
-  risponde a D-1 e la prova di Obsidian (T7) non è fatta.
-- A13 · **La decisione nuova prende il primo numero libero** in
-  `docs/decisions/` (N3 T15 prende 0236; per N4 probabilmente 0237).
+- A11 · **La penna di serie** è quella di D-5 (b): la biro «Sfera», blu
+  `#0072b2` (`INK_PEN_COLOR` di `ink-record.ts`; il nero sparisce sul tema
+  scuro), spessore «Medio», 4 pixel dello schermo allo zoom del momento,
+  scritti nel tratto in unità della scheda (o della lavagna se libero). Il
+  menu per cambiarla è T21; prima di T21 si scrive solo con questa.
+- A12 · **Il formato** è quello di D-2 (a) descritto qui sotto, nel `.canvas`
+  come dice D-1 (c) finché la prova con Obsidian non è fatta (T24). La
+  decisione scritta da T5 resta «proposta» fino a T24, che la fa «accolta»
+  oppure apre D-12.
+- A13 · **La decisione di N4 è la 0238**
+  (`docs/decisions/0238-inchiostro-sulla-lavagna.md`, scritta da T5); i
+  task di N4 la aggiornano, non ne aprono un'altra.
 - A14 · **Testi nuovi** in `apps/client/src/i18n/catalog.ts`, in italiano e
   in inglese, senza il gergo di `apps/client/src/i18n/gergo.ts`.
 - A15 · **Ciò che Fub non sa disegnare si conserva e non si tocca**: un
@@ -252,6 +381,42 @@ Il piano procede con la prima opzione di ognuna.
   per byte e non si disegna; in un livello estraneo Fub non scrive.
 - A16 · **Lo scenario nuovo della misura non entra nella CI** (i coder non
   la toccano); se entrarci lo decide l'orchestratore.
+- A17 · **Ridimensionare dipende dalla scheda** (D-9 (c)). Il tipo si legge
+  con `mediaKindOfId` di `apps/client/src/editors/media/media-types.ts`
+  sull'id del file della scheda. Immagine e PDF: l'inchiostro scala con lo
+  stesso fattore nei due sensi, il minore fra larghezza nuova su larghezza
+  scritta e altezza nuova su altezza scritta, centrato nel riquadro della
+  scheda (`preserveAspectRatio="xMidYMid meet"`); lo spessore scala con lui.
+  Tutte le altre (testo, nota, foglio, gruppo, link, audio, video, tipo
+  sconosciuto): l'inchiostro resta alla misura in cui è stato scritto,
+  fermo nell'angolo in alto a sinistra, e se esce dalla scheda non si
+  taglia. Il file non cambia: è solo resa.
+- A18 · **Le due impostazioni nuove** (D-4 (c), D-10 (c)) sono della
+  feature `fub.lavagna`, valgono per questo computer (come quelle dei
+  disegni), sono interruttori e partono spente: `canvas.ink_mouse_remember`
+  «Ricorda se scrivi col mouse» e `canvas.finger_moves_card` «Il dito sposta
+  le schede». «Ricorda» tiene uno stato solo per tutte le lavagne del
+  computer.
+- A19 · **La scelta della penna si ricorda per computer** (proposta del
+  prototipo), nello stato di vista `canvas.pen`; penna ed evidenziatore
+  hanno ciascuno il proprio colore e spessore. La prima volta: Sfera, blu,
+  Medio; l'evidenziatore giallo `#f0e442`, Medio (16 pixel).
+- A20 · **La gomma di serie toglie il tratto intero** (proposta del
+  prototipo). La scelta «La gomma cancella» vale per il retro della penna,
+  per il suo tasto laterale e per lo strumento Gomma del menu. Quando taglia,
+  i pezzi tengono strumento, pennello, colore, ancora e i campi che Fub non
+  conosce del tratto di partenza; prendono id nuovi (`newNodeId("s")`) e
+  `at` spostato all'inizio del pezzo.
+- A21 · **«Gomma» è anche uno strumento del menu** (proposta del
+  prototipo), per il mouse e per le penne senza retro; il retro della penna
+  cancella sempre, qualunque strumento sia scelto.
+- A22 · **L'evidenziatore sulla lavagna** è trasparente a metà (l'opacità di
+  `penLook` di `ink/pens.ts`, 0,5) ma senza `multiply`, in tutti e due i
+  temi: sulle schede scure (`--doc-bg` `#151a21`) `multiply` lo farebbe
+  sparire (proposta del prototipo).
+- A23 · **Il nero sul tema scuro** (proposta del prototipo): il campione si
+  può scegliere e il suo nome dice «poco leggibile sul tema scuro»; il
+  tratto si salva com'è, senza cambiare colore col tema.
 
 ## Il formato `fub:ink`
 
@@ -289,8 +454,10 @@ _Lezione 4.canvas · schizzo_
 - **L'ancora**: `{"kind": "card", "width": W, "height": H}` è la misura della
   scheda quando il tratto si è scritto; i punti sono in unità della scheda a
   quella misura, con l'origine in alto a sinistra. Sposti la scheda: niente
-  cambia nel file. La ridimensioni: niente cambia nel file; la resa stira il
-  tratto da `W×H` alla misura di adesso (D-9). `{"kind": "free"}` vuol dire
+  cambia nel file. La ridimensioni: niente cambia nel file; la resa, su
+  immagini e PDF, scala il tratto da `W×H` alla misura di adesso con lo
+  stesso fattore nei due sensi; sulle altre schede lo lascia com'è (D-9 (c),
+  A17). `{"kind": "free"}` vuol dire
   punti in coordinate della lavagna. `card` vale solo in un livello di
   scheda, `free` solo alla radice; altrimenti il tratto non si disegna.
 - **Ordine dei campi in scrittura** (R10 di N3): `id`, `tool`, `at`, `brush`,
@@ -313,7 +480,8 @@ _Lezione 4.canvas · schizzo_
 - `fub:ink` su un arco, o dentro un tratto, è un campo sconosciuto come gli
   altri.
 - **Che cosa si disegna**: l'inchiostro di una scheda sopra il suo
-  contenuto, stirato con lei; l'inchiostro libero sopra tutte le schede.
+  contenuto, come dice A17 (scalato senza deformarsi su immagini e PDF,
+  fermo sulle altre); l'inchiostro libero sopra tutte le schede.
   Spostare o ridimensionare una scheda non scrive niente di nuovo nel file
   per l'inchiostro.
 
@@ -414,24 +582,62 @@ tratta.
 - **Il doppio clic sul vuoto crea una scheda di testo**: un doppio tocco di
   penna la creerebbe; T4 ferma `click` e `dblclick` dopo un tratto.
 
+Trovate il 2026-11-02, rileggendo il codice per le risposte:
+
+- **La resa di adesso stira**: `INK_ASPECT = "none"` in
+  `editors/canvas/ink-paint.ts` (T4, D-9 (a)). D-9 (c) la cambia: T18.
+- **Il tipo della scheda si calcola due volte in modo diverso**: `engine.ts`
+  (il ramo `case "file"` del disegno delle schede) ha una sua lista di
+  estensioni, `mediaKindOfId` di `editors/media/media-types.ts` un'altra (per
+  esempio `bmp`, `heic`, `tiff` sono immagini solo per la seconda). T12 fa
+  usare a tutte e due la stessa funzione, così la resa dell'inchiostro e
+  `data-media-kind` non si contraddicono.
+- **La pagina `docs/reference/canvas-ink.md`, sezione «Obsidian», decide già**
+  «A più una copia B» se Obsidian perde i livelli: contro D-1 (c), che
+  rimanda la scelta all'utente. T24 la corregge.
+- **La decisione è la 0238**, non la 0237 che il piano pensava (A13).
+- **Note e disegni hanno già le due gomme** (`rich.ink.whole` nel catalogo,
+  `draw.eraser.stroke` e `draw.eraser.precise`, `editors/spatial/tools/
+  erase-precise.ts`): T22 riusa `ink/tools/split.ts` come loro.
+- **La tavolozza parte nera** (`INK_DEFAULT_COLOR` in `ink/palette.ts`, per
+  note e disegni), la lavagna blu (`INK_PEN_COLOR` in
+  `editors/canvas/ink-record.ts`): T21 tiene il blu solo per la lavagna.
+- **L'evidenziatore dei disegni usa `multiply`** (`penLook` di
+  `ink/pens.ts`): sul fondo scuro delle schede non si vede; A22.
+- **La barra della lavagna si rifà a ogni disegno** (`bar.replaceChildren()`
+  in `#drawToolbar`): un menu aperto ancorato a un pulsante rifatto si
+  chiuderebbe da solo. T21 tiene vivi il pulsante della penna e
+  l'interruttore.
+- **La feature `fub.lavagna` non ha impostazioni** (`settings: None` in
+  `crates/fub-features/src/inventory.rs`): T19 gliele dà.
+- **T16 diceva «(D-6)» per l'interruttore ricordato**: è D-4.
+
 ## Cancello di N4
 
 | Fatto quando | Prova | Task |
 |---|---|---|
-| mentre si scrive sopra 10 000 celle e 2000 tratti, nessun fotogramma oltre 33 ms | lo scenario nuovo di `npm run bench:webview`, il campo `penFrameGap.max`, la pagina in `docs/misure/` | T15 |
-| spostare o ridimensionare una scheda sposta e scala il suo inchiostro | i vettori `canvas-ops/move-card-with-ink.json` e `resize-card-with-ink.json`; il test della tela che sposta e ridimensiona e legge la resa | T10, T12 |
-| annulla e ripeti funzionano per tratto e per passata di gomma | `engine-ink.test.ts` | T12, T13 |
-| il `.xlsx` sotto l'inchiostro ha lo stesso hash prima e dopo | il test della tela (nessuna scrittura fuori dal `.canvas`) e lo sha256 nel rapporto di T15 | T12, T15 |
-| si sa che cosa fa Obsidian ai campi `fub:ink`, e A o B è scelta | il kit di T7, lanciato dall'utente; la riga in DECISIONS.md e la decisione passa da «proposta» ad «accolta» | T7 e l'utente |
-| Rust e TypeScript leggono e cambiano l'inchiostro allo stesso modo | i vettori `canvas-ink/`, `canvas-patches/ink-*.json`, `canvas-ops/*ink*.json` passano in `cargo test -p fub-canvas-core` e in Vitest | T8, T9, T10, T11 |
+| prima misura: mentre si scrive sopra 10 000 celle, un `.xlsx` vero e 2000 tratti, si sa quanto dura il fotogramma più lungo (il caso simile, D-7 (c)); non chiude N4 | lo scenario nuovo di `npm run bench:webview`, il campo `penFrameGap.max`, la pagina in `docs/misure/` | T15 |
+| seconda misura: sopra il foglio vero dentro la lavagna, nessun fotogramma oltre 33 ms; chiude la voce | lo stesso scenario sul ramo con l'anteprima di N6, la pagina in `docs/misure/` | T23 |
+| spostare una scheda sposta il suo inchiostro; ridimensionarla lo scala senza deformarlo su immagini e PDF e lo lascia fermo sulle altre | i vettori `canvas-ops/move-card-with-ink.json`, `resize-card-with-ink.json` e `canvas-ink-fit/`; il test della tela che sposta, ridimensiona e legge la resa | T10, T12, T18 |
+| annulla e ripeti funzionano per tratto e per passata di gomma, anche quella che taglia | `engine-ink.test.ts` | T12, T13, T22 |
+| il `.xlsx` sotto l'inchiostro ha lo stesso hash prima e dopo | il test della tela (nessuna scrittura fuori dal `.canvas`) e lo sha256 nei rapporti delle due misure | T12, T15, T23 |
+| si sa che cosa fa Obsidian ai campi `fub:ink`, e il posto dell'inchiostro è deciso | il kit di T7, lanciato dall'utente; l'ADR 0238 «accolta», oppure la risposta a D-12 e i suoi task fatti; la riga in DECISIONS.md | T7, T24 e l'utente |
+| Rust e TypeScript leggono e cambiano l'inchiostro allo stesso modo, e dopo T17 le regole stanno in una copia sola (Rust, nel client per `.wasm`) | i vettori `canvas-ink/`, `canvas-patches/ink-*.json`, `canvas-ops/*ink*.json` in `cargo test -p fub-canvas-core` e in Vitest per `.wasm` | T8, T9, T10, T11, T17 |
+| le due impostazioni ci sono, si leggono in Impostazioni in italiano e in inglese e partono spente | i test di `fub-features` e `fub-host`, lo specchio nel client | T19, T14, T16 |
+| il menu della penna e «Scrivi col mouse» sono come il prototipo approvato, nei due temi | le schermate del banco accanto a `PLAN-ui/lavagna-penne.html` | T20, T16, T21 |
+| N3 è già in `main`, la CI completa è verde e la revisione riga per riga è fatta | `gh pr checks 298` sulla PR non in bozza (Linux, Windows, macOS, banchi) | T25 |
 
 ## Regole che valgono per ogni task
 
 - Vince il codice: se un percorso o una funzione non è come scritto qui, il
   coder lo dice nel suo rapporto e segue il codice.
 - I numeri di riga e i nomi privati di `engine.ts` (`#commitLocal`,
-  `#render`, `#keydown`, `#drawToolbar`, `#zoomAt`) sono quelli di oggi; N3
-  T16 cambia il motore: dopo, si cercano per nome e per ruolo.
+  `#render`, `#keydown`, `#drawToolbar`, `#zoomAt`) sono quelli scritti
+  quando il piano è nato; N3 T16, T19, T21 e T22 cambiano il motore: dopo,
+  si cercano per nome e per ruolo.
+- `engine.ts` lo cambia un task alla volta: N3 fino a T22 prima, poi in N4
+  T12 → T13 → T14 → T22 → T16 → T21. Due task che toccano `engine.ts` non
+  vanno in parallelo.
 - Nessuna dipendenza esterna nuova, né in Rust né in npm.
 - Il nucleo dell'inchiostro (`apps/client/src/ink/` fuori da `ink/dom/`) non
   usa globali del DOM e non conosce prodotti (ADR 0204 punto 3,
@@ -656,6 +862,7 @@ non tocca i percorsi; un tratto uguale non si ricalcola.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/ink-layer.test.ts src/editors/canvas/ink-paint.test.ts
 Stato: [x] fatto
+  Da rivedere: T18 lo cambia (D-9 (c)).
 
 ## T5 · La forma `fub:ink` e la decisione
 
@@ -703,6 +910,7 @@ Prova: scripts/check.sh --rapido; node -e "const fs = require('fs'), d =
 fs.readdirSync(d)) JSON.parse(JSON.parse(fs.readFileSync(d + f,
 'utf8')).source.replace(/^\uFEFF/, ''))"
 Stato: [x] fatto
+  Da rivedere: T18 lo cambia (D-9 (c)).
 
 ## T6 · Il crate `fub-ink-codec`
 
@@ -969,17 +1177,26 @@ Tocca: `apps/client/src/editors/canvas/engine.ts`,
 `apps/client/src/i18n/catalog.ts`, `docs/architecture/ink-and-tools.md`
 (sezione «Come lo usa la lavagna»).
 Non toccare: `engine.test.ts` (deve passare com'è), `surface.ts`,
-`ink-layer.ts`, `ink-paint.ts`, `ink-record.ts`, `operation.ts` salvo errori
-(si dice nel rapporto); la barra e gli stili (T16); la gomma (T13); il dito
-(T14).
-Dipende da: T2, T4, T9, T11; N3 T16
+`ink-layer.ts`, `ink-paint.ts`, `ink-fit.ts`, `ink-record.ts`,
+`operation.ts`, `wasm/` salvo errori (si dice nel rapporto); la barra e gli
+stili (T16, T21); la gomma (T13, T22); il dito (T14).
+Dipende da: T2, T4, T9, T11, T17, T18; N3 T16, T19, T21, T22 (tutti e
+quattro cambiano `engine.ts`: il ramo li contiene già, vedi «Chi aspetta
+chi»)
 Cosa fare:
 - La lavagna apre una `openLifetime()` quando nasce e la chiude in
   `destroy`, accanto al suo `AbortController`; dentro, `PenQuiet` con
   `idleSchedule` e lo strato di T4, che non si monta in sola lettura o se la
   lavagna è troppo grande (A8).
 - `#applyCamera` chiama `setCamera` dello strato; `#render` disegna
-  l'asciutto (`paintCard` per ogni scheda col suo livello, poi `paintBoard`).
+  l'asciutto (`paintCard` per ogni scheda col suo livello e il modo di T18,
+  poi `paintBoard`). Il tipo della scheda viene da `mediaKindOfId`
+  (`editors/media/media-types.ts`), e lo stesso valore va in
+  `data-media-kind`: la lista di estensioni scritta in `engine.ts` se ne va
+  (vedi «Differenze»), così resa e segnaposto non si contraddicono.
+- Lo stato dei livelli (quali tratti si disegnano, quali livelli sono
+  estranei) viene dal nucleo per `.wasm` (T17), una volta per testo nuovo
+  (`open`, `reset`, `commit`), non a ogni disegno.
 - Un tratto finito: `anchorAt(doc.nodes, strokeBounds(...), canHold)` (il
   livello della scheda non è estraneo), `strokeRecord`, `addStrokePatch`,
   poi `#commitLocal(patches, …, render = false)`: una chiamata al nucleo per
@@ -987,8 +1204,17 @@ Cosa fare:
   si chiama `settle(id)`.
 - Un tratto spezzato dall'adattatore si salva pezzo per pezzo, ma nella
   cronologia è un passo (A4).
-- Annulla e ripeti di passi fatti solo di toppe `ink` aggiornano solo lo
-  strato, senza `#render`; con una penna giù non fanno niente (A5).
+- Il testo in sospeso di una scheda (`#pending` di N3 T16) si registra prima
+  del tratto, come prima di ogni altro gesto: sono due passi di annulla, il
+  testo e poi il tratto. Il campo resta aperto col suo testo (A1).
+- Annulla e ripeti passano dalla via di N3 T21 (il tratto di testo esatto
+  se la versione torna, le toppe inverse se no); un passo fatto solo di
+  toppe `ink` ridisegna solo lo strato, senza `#render`; con una penna giù
+  annulla e ripeti non fanno niente (A5).
+- La sola lettura della tela di N3 T22 (testo che Fub non può riscrivere) va
+  e viene da sola: lo strato si smonta quando arriva e si rimonta quando se
+  ne va; un tratto in corso si annulla (la scia sparisce) e resta l'avviso
+  della sola lettura, senza un secondo avviso.
 - `syncDoc` (A9): modello e sorgente si aggiornano subito (il nucleo
   compreso); `#render()` passa da `quiet.defer("render", …)`.
 - Gli avvisi, con `#showIntakeError` e chiavi nuove in italiano e inglese:
@@ -1004,13 +1230,20 @@ libero); la lavagna chiusa a penna giù (il tratto si perde senza errori, la
 `Lifetime` chiude tutto); il commit rifiutato; il passo numero 101 della
 cronologia; due penne che finiscono nello stesso fotogramma; zoom molto
 piccolo e molto grande; duplicare (A6) e cancellare (D-3) una scheda con
-inchiostro; sola lettura.
+inchiostro; sola lettura del pannello e della tela (N3 T22), anche arrivata
+a penna giù; una penna che scrive sopra una scheda col campo aperto e il
+testo non ancora registrato; un'immagine `.heic` o `.bmp` (immagine per
+`mediaKindOfId`, scala); una scheda video (resta ferma).
 Fatto quando: `engine-ink.test.ts` (happy-dom, penna finta) prova che: un
 tratto è una toppa `ink`, una chiamata al nucleo e un passo; annulla e
-ripeti vanno per tratto; spostare e ridimensionare una scheda porta il suo
-inchiostro (stessi percorsi, misura nuova); `syncDoc` a penna giù ridisegna
-dopo; l'unica cosa scritta è il testo del `.canvas` (nessuna chiamata che
-scrive altri file); `engine.test.ts` passa invariato.
+ripeti vanno per tratto e ridanno il testo di prima byte per byte (N3
+T21); spostare una scheda porta il suo inchiostro; ridimensionare
+un'immagine o un PDF lo scala senza deformarlo e ridimensionare una nota lo
+lascia fermo (stessi percorsi, gli attributi di T18); il testo in sospeso e
+il tratto sono due passi; `syncDoc` a penna giù ridisegna dopo; la sola
+lettura di N3 T22 smonta lo strato e lo rimonta; l'unica cosa scritta è il
+testo del `.canvas` (nessuna chiamata che scrive altri file);
+`engine.test.ts` passa invariato.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
 Stato: [ ] da fare
@@ -1025,12 +1258,14 @@ Tocca: `apps/client/src/editors/canvas/engine.ts`,
 `apps/client/src/editors/canvas/ink-layer.test.ts`,
 `apps/client/src/editors/canvas/ink-paint.ts`.
 Non toccare: `apps/client/src/ink/` (`EraseSweep` si importa); `operation.ts`
-salvo errori (si dice nel rapporto); la barra e gli stili (T16); il dito
-(T14).
-Dipende da: T12; N3 T16
+e `ink-fit.ts` salvo errori (si dice nel rapporto); la barra e gli stili
+(T16, T21); il dito (T14); la gomma che taglia (T22).
+Dipende da: T12, T18
 Cosa fare:
 - La gomma (ruolo `Erase` o `Barrel` dell'adattatore): `EraseSweep` di
-  `ink/tools/sweep.ts` sui tratti disegnati, in coordinate della lavagna; i
+  `ink/tools/sweep.ts` sui tratti disegnati, in coordinate della lavagna
+  (i punti di un tratto di scheda passano dalla trasformazione di
+  `ink-fit.ts`, così la gomma prende il tratto dove si vede); i
   tratti presi si attenuano (opacità 0,25, come `FADED_OPACITY` di
   `editors/spatial/painter/svg-dom.ts`), con un attributo sul path,
   senza ridisegnare il resto.
@@ -1044,13 +1279,19 @@ Cosa fare:
   `visibilitychange` torna `"ignore"`. Un tratto di mouse già giù finisce
   normalmente.
 - `setInkMouse(on: boolean)` sulla lavagna, per l'interruttore di T16.
+- Questa è la gomma «Il tratto intero», quella di serie (A20); quella che
+  taglia arriva con T22.
+Dal prototipo: la gomma che sbiadisce il tratto (opacità 0,25), come il
+tratto d'esempio della pagina con «Il tratto intero».
 Casi limite: D in un campo di testo della scheda (scrive la lettera); D
 lasciato a metà tratto; la gomma su una scheda di un livello estraneo
 (niente si cancella); una passata che prende tratti di più livelli (più
 toppe, un passo); la gomma su un tratto conservato e non disegnato (non si
-vede, non si prende).
+vede, non si prende); la gomma su un'immagine ingrandita e su una nota
+rimpicciolita (prende il tratto dove si vede, non dove sarebbe stirato).
 Fatto quando: `engine-ink.test.ts` prova che la gomma cancella i tratti
-toccati in un passo e che l'annulla li rimette; che D tenuto fa scrivere il
+toccati in un passo e che l'annulla li rimette; che prende il tratto di
+un'immagine ridimensionata dove si vede; che D tenuto fa scrivere il
 mouse e D lasciato no; che D in un campo di testo non cambia niente;
 `engine.test.ts` passa invariato.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
@@ -1066,8 +1307,9 @@ Tocca: `apps/client/src/editors/canvas/engine.ts`,
 `apps/client/src/editors/canvas/touch.test.ts` (nuovo),
 `apps/client/src/editors/canvas/engine-touch.test.ts` (nuovo).
 Non toccare: `apps/client/src/graph/interaction.ts` (si imita, non si cambia);
-`ink-layer.ts` (il dito è già `navigate`); la barra e gli stili (T16).
-Dipende da: T13; N3 T16
+`ink-layer.ts` (il dito è già `navigate`); la barra e gli stili (T16, T21);
+`preferences.ts` salvo l'uso (è di T19).
+Dipende da: T13, T19
 Cosa fare:
 - `touch.ts`, puro: `pinchCamera(start, a0, b0, a1, b1)` che dà la camera
   nuova da due dita (centro e distanza), entro i limiti di zoom della
@@ -1078,13 +1320,20 @@ Cosa fare:
   pulsanti; due dita pizzicano usando `#zoomAt(clientX, clientY, factor)`; un
   tocco breve fa quello che fa un clic. Il palmo non fa niente (lo scarta già
   l'adattatore). Come `graph/interaction.ts` (righe 313–519).
+- Con l'impostazione «Il dito sposta le schede» accesa (T19, D-10 (c)): un
+  dito sopra una scheda la sposta come il mouse, e sul vuoto sposta la
+  lavagna; il pizzico resta. La lavagna legge l'impostazione da
+  `preferences.ts`; un cambio nelle Impostazioni vale dal tocco dopo, non a
+  metà di un trascinamento.
 Casi limite: dal pan al pizzico quando arriva il secondo dito; un dito che si
 alza a metà pizzico (resta il pan); la penna che si posa mentre un dito
 sposta (vince la penna, il dito si ferma); `pointercancel`; i limiti dello
-zoom; sola lettura (il dito sposta, niente schede trascinate).
-Fatto quando: `touch.test.ts` prova la camera del pizzico; 
+zoom; sola lettura (il dito sposta, niente schede trascinate, anche con
+l'impostazione accesa); l'impostazione cambiata a dito giù.
+Fatto quando: `touch.test.ts` prova la camera del pizzico;
 `engine-touch.test.ts` (happy-dom, dita finte) prova pan, pizzico, tocco
-sulla testata e penna che vince; `engine.test.ts` passa invariato.
+sulla testata e penna che vince, con l'impostazione spenta e accesa (accesa:
+il dito sopra una scheda la sposta); `engine.test.ts` passa invariato.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
 Stato: [ ] da fare
@@ -1092,7 +1341,9 @@ Stato: [ ] da fare
 ## T15 · La misura S8
 
 Perché: il cancello chiede nessun fotogramma oltre 33 ms mentre si scrive
-sopra un foglio grosso; i numeri si misurano, non si promettono.
+sopra un foglio grosso; i numeri si misurano, non si promettono. D-7 (c):
+questa è la prima misura, sul caso simile; la seconda, sul foglio vero
+dentro la lavagna, è T23, e solo quella chiude la voce.
 Tocca: `apps/client/bench/webview/run.mjs`,
 `apps/client/bench/webview/fixtures.mjs`,
 `apps/client/bench/webview/budgets.json` (solo `targets`),
@@ -1106,9 +1357,11 @@ Dipende da: T14; N3 T15
 Cosa fare:
 - In `fixtures.mjs`, `S8/Lezione.canvas`: una scheda con una tabella
   Markdown di 100 per 100 celle (il foglio vivo che il passo 12b chiede non
-  esiste: vedi «Differenze»), una scheda `S8/voti.xlsx` fatta con
-  `workbook()`, e 2000 tratti deterministici sulle schede e sulla lavagna,
-  scritti col piccolo codificatore della §5 dentro `fixtures.mjs`.
+  esiste ancora: vedi «Differenze»), una scheda `S8/voti.xlsx` fatta con
+  `workbook()` (un foglio vero di 100 per 100 celle, lo stesso che userà
+  T23), e 2000 tratti deterministici sulle schede, anche su quella del
+  `.xlsx`, e sulla lavagna, scritti col piccolo codificatore della §5
+  dentro `fixtures.mjs`.
 - In `run.mjs`, S8 nella lista di default di `--only` (riga 36) e
   nell'ordine degli scenari (verso la riga 559): dieci tratti di penna da
   300 ms sopra la tabella; se `report.input.pen.count` è 0 (il driver non
@@ -1118,14 +1371,22 @@ Cosa fare:
 - In `budgets.json`, solo in `targets`: `S8.penFrameGap.max: 33`.
 - Se lo scenario di N3 T15 ha già preso il nome S8, questo prende il primo
   nome libero, dappertutto (dati, chiavi, rapporto).
-- Tre giri; il rapporto dà il peggiore e dice che Xvfb disegna in software.
+- Tre giri; il rapporto dà il peggiore e dice che Xvfb disegna in software,
+  e che è il caso simile di D-7 (c): il foglio sotto la penna è una
+  tabella di testo, non il foglio vivo.
+- Lo scenario si scrive in modo che T23 lo rilanci uguale con l'anteprima
+  vera (stessi dati, stesse chiavi): solo il contenuto della scheda
+  `.xlsx` cambia.
 Casi limite: il driver che non manda `pointerType` `pen`; Xvfb più lento di
 una macchina vera (i numeri valgono come tetto, non come promessa); il
 primo giro più lento (il WebAssembly si carica); la scheda xlsx che non si
 apre in Xvfb (la misura va lo stesso, il rapporto lo dice).
 Fatto quando: `docs/misure/lavagna-inchiostro-AAAA-MM-GG.md` riporta i tre
 giri di S8 (fotogramma più lungo a penna, allo spostamento, path asciutti,
-hash uguale o no) e la pagina è nell'indice di `docs/misure/README.md`.
+hash uguale o no), dice che è la prima delle due misure, e la pagina è
+nell'indice di `docs/misure/README.md`. Un fotogramma oltre 33 ms qui non
+blocca: si scrive con dove va il tempo, e l'orchestratore decide se serve
+un task prima di T23.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run build && cd
 ../.. && cargo build --release --locked -p fub-app --features
 tauri/custom-protocol && cd apps/client && xvfb-run -a npm run bench:webview
@@ -1135,7 +1396,9 @@ Stato: [ ] da fare
 ## T16 · L'interruttore e il cursore
 
 Perché: col mouse si scrive anche senza tenere D, con un interruttore nella
-barra della lavagna; chi scrive vede che la lavagna è in modo penna.
+barra della lavagna; chi scrive vede che la lavagna è in modo penna. D-11
+(a): un pulsante con la scritta; D-4 (c): con l'impostazione accesa lo
+stato si ricorda.
 Tocca: `apps/client/src/editors/canvas/engine.ts`,
 `apps/client/src/editors/canvas/engine-ink.test.ts`,
 `apps/client/src/i18n/catalog.ts`,
@@ -1147,30 +1410,480 @@ theme:generate`), `apps/client/src/theme/scrittoio/structure.css`,
 `apps/client/src/theme/scrittoio/anatomia/editors.ts` solo se `npm run theme:verify`
 lo chiede.
 Non toccare: gli altri pulsanti della barra; i token del tema; le icone del
-kit; la gomma (T13); il dito (T14).
-Dipende da: T13, T14; N3 T16
+kit; la gomma (T13, T22); il dito (T14); il menu della penna (T21).
+Dipende da: T13, T14, T19, T20, T22 (`engine.ts`, uno alla volta); il
+prototipo approvato
 Cosa fare:
-- In `#drawToolbar` (verso la riga 441), dopo i pulsanti di zoom, un
-  pulsante `mk("ink-mouse", t("canvas.ink.mouse"), …)` con `aria-pressed`,
-  `title` da `canvas.ink.mouse_hint` («Oppure tieni premuto D»), che chiama
-  `setInkMouse`. Non si ricorda fra un'apertura e l'altra (D-6).
+- In `#drawToolbar`, dove lo mette il prototipo approvato (in testa alla
+  barra, dopo il posto del menu della penna di T21), un pulsante
+  `mk("ink-mouse", t("canvas.ink.mouse"), …)` con `aria-pressed`, `title` da
+  `canvas.ink.mouse_hint` («Oppure tieni premuto D»), che chiama
+  `setInkMouse`. Con l'impostazione «Ricorda se scrivi col mouse» spenta
+  (di serie) riaprendo la lavagna torna spento; accesa, lo stato si salva
+  nello stato di vista (`preferences.ts` di T19) e ogni lavagna del
+  computer si apre così (D-4 (c), A18).
 - `canvas.ink.mouse` e `canvas.ink.mouse_hint` in italiano e inglese.
 - Lo stile del pulsante premuto come `skin/draw.css` (riga 46):
   `.canvas-toolbar > button[aria-pressed="true"]` con `--accent-wash` e
   `--accent`; il cursore `crosshair` su `.canvas-viewport[data-ink="pen"]`,
-  come `.rich-ink-veil`.
+  come `.rich-ink-veil` (il cursore della gomma scelta dal menu è di T21).
 - La sezione «La lavagna» della prova a mano: penna, gomma, D,
   interruttore, dito, annulla.
 - Le foto dal banco (skill `banco`) nel rapporto, tema chiaro e scuro, col
-  pulsante spento e acceso e un tratto sopra una scheda.
+  pulsante spento e acceso e un tratto sopra una scheda, accanto alle stesse
+  viste di `PLAN-ui/lavagna-penne.html`.
+Dal prototipo: l'interruttore «Scrivi col mouse» (posto, testo, stato
+premuto), il blocco `→ skin/editors.css` del pulsante premuto, il cursore a
+croce del blocco `→ structure.css`; lo stato «Scrivi col mouse acceso» e
+«Sola lettura» della barra di stato della pagina.
 Casi limite: sola lettura (pulsante disabilitato); pulsante acceso e D
 tenuto insieme (D lasciato non lo spegne); il contrasto del pulsante premuto
 nel tema scuro; la barra stretta; il pulsante raggiunto con la tastiera; il
-lettore di schermo (nome e stato).
+lettore di schermo (nome e stato); l'impostazione accesa o spenta a
+lavagna aperta (vale dalla prossima apertura, lo stato di adesso resta);
+due lavagne aperte insieme con «ricorda» acceso.
 Fatto quando: il pulsante accende e spegne la scrittura col mouse (test);
-`npm run theme:verify` passa; le foto chiaro e scuro sono nel rapporto.
+con «ricorda» spento riaprendo torna spento, acceso torna com'era (test);
+`npm run theme:verify` passa; le foto chiaro e scuro sono nel rapporto e
+somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run theme:verify &&
 npx vitest run src/editors/canvas
+Stato: [ ] da fare
+
+## T17 · L'inchiostro sul nucleo finito di N3
+
+Perché: N3 T18 toglie la copia TypeScript delle regole della lavagna
+(`parseCanvas`, `canvasDraft`, `applyCanvasPatches`,
+`inverseCanvasPatches`), e T11 aveva messo la toppa `ink` proprio lì
+(`inkStep` in `operation.ts`). E il lettore dei livelli del client
+(`readInkLayers`, `inkLayerWritable` in `ink-record.ts`) è una seconda copia
+delle regole di `crates/fub-canvas-core/src/ink.rs` (`read_layers`). Dopo
+questo task le regole dell'inchiostro stanno solo in Rust, e il client le
+usa per `.wasm`, come tutte le altre della lavagna.
+Tocca: `apps/client/src/editors/canvas/operation.ts` (restano i tipi e i
+costruttori `addStrokePatch`, `eraseStrokePatch`, `eraseStrokePatches`),
+`apps/client/src/editors/canvas/ink-record.ts`, `ink-record.test.ts`,
+`ink-vectors.test.ts` (diventa `wasm/ink-vectors.test.ts`),
+`apps/client/src/editors/canvas/wasm/core.ts`, `wasm/core.test.ts`,
+`crates/fub-canvas-wasm/src/api.rs`, `src/abi.rs`, `tests/api.rs`,
+`tests/abi.rs`, `docs/reference/canvas-operations.md` (sezione
+«WebAssembly»), `docs/reference/canvas-ink.md` (sezione «I vettori»).
+Non toccare: `crates/fub-canvas-core/src/ink.rs` salvo errori (si dice nel
+rapporto); i vettori (`canvas-ink/`, `canvas-patches/ink-*.json`,
+`canvas-ops/*ink*.json`); `engine.ts` (T12); il disegno (`ink-paint.ts`,
+`ink-fit.ts`).
+Dipende da: T11; N3 T13, T14, T18, T19, T20, T21, T22 (N3 fino a T22, fuso
+in questo ramo dall'orchestratore)
+Cosa fare:
+- L'orchestratore fonde N3 (fino a T22) in un ramo di lavoro e lo dà al
+  coder così com'è: nei conflitti di `operation.ts` vince la versione di
+  N3 (la logica se ne va, `inkStep` con lei); restano i costruttori dei
+  tratti. Il ramo di N4 riceve la fusione e T17 insieme, verdi.
+- In `crates/fub-canvas-wasm`: `ink_layers(handle)` in `api.rs` e
+  `canvas_ink_layers(h) -> i32` in `abi.rs`, che rispondono con i livelli
+  di `read_layers` nella forma di `expect` dei vettori di `canvas-ink/`
+  (`layer`, `state`, `strokes` con `id`, `drawn` e `reason`); un commento
+  `SAFETY` come gli altri blocchi; la memoria come le altre chiamate.
+- In `wasm/core.ts`: `inkLayers()` sulla lavagna aperta. La tela la chiede
+  una volta per testo nuovo (dopo `open`, `reset`, `commit`), non a ogni
+  disegno.
+- `readInkLayers`, `readInkLayer` e `inkLayerWritable` se ne vanno; chi li
+  usava (i costruttori dei tratti, `toDry`) prende lo stato dal nucleo. Il
+  client tiene solo ciò che serve a disegnare: decodificare la stringa
+  `ink` col codec della §5 e fare il contorno.
+- `wasm/ink-vectors.test.ts`: i 28 vettori di `canvas-ink/` per `.wasm`; i
+  vettori `canvas-patches/ink-*.json` e `canvas-ops/*ink*.json` passano già
+  da `wasm/vectors.test.ts` di N3: il test ne controlla il numero, così uno
+  che sparisce si vede.
+- Le due pagine: la funzione nuova (JSON, chi libera la memoria) e che i
+  vettori dell'inchiostro si leggono per `.wasm`.
+Casi limite: un livello estraneo (il nucleo lo dice, il client non scrive);
+un tratto che il nucleo dice da non disegnare; il nucleo che dice
+«disegnabile» e il codec TypeScript che non sa decodificare (non si
+disegna, e un test sui 28 vettori vieta che succeda); il `.wasm` che non si
+carica (la tela mostra il testo come N3 T16, niente inchiostro); una
+trappola a metà (si rifà l'istanza, come N3 T14); handle chiuso.
+Fatto quando: `grep -rn "readInkLayers\|inkLayerWritable\|inkStep"
+apps/client/src` non trova più definizioni; `wasm/ink-vectors.test.ts`
+passa i 28 vettori per `.wasm`; `cargo test -p fub-canvas-wasm` prova
+`ink_layers` per le due vie (api e abi) su tutti i vettori di `canvas-ink/`
+e che dopo 10 000 giri la memoria viva torna quella del primo;
+`npm run typecheck` è verde.
+Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-wasm; cd
+apps/client && npm run typecheck && npx vitest run src/editors/canvas
+Stato: [ ] da fare
+
+## T18 · La misura della scheda e l'inchiostro
+
+Perché: D-9 (c): su immagini e PDF l'inchiostro scala con la scheda senza
+deformarsi; sulle altre resta fermo. Oggi si stira (`INK_ASPECT = "none"`
+in `ink-paint.ts`, T4). È una regola della resa che un altro programma deve
+poter rifare uguale: va nel riferimento, con vettori scritti a mano.
+Tocca: `apps/client/src/editors/canvas/ink-fit.ts` (nuovo),
+`ink-fit.test.ts` (nuovo), `apps/client/src/__fixtures__/canvas-ink-fit/`
+(nuovo, un file per caso), `apps/client/src/editors/canvas/ink-paint.ts`,
+`ink-paint.test.ts`, `docs/reference/canvas-ink.md` («L'ancora», «Come si
+disegna»), `docs/decisions/0238-inchiostro-sulla-lavagna.md` (punto 3 e
+conseguenze; resta «proposta»), `docs/architecture/ink-and-tools.md` (la
+riga dell'asciutto che nomina `INK_ASPECT`).
+Non toccare: `engine.ts` (lo collega T12); il formato e i vettori di
+`canvas-ink/` (il file non cambia); `ink-record.ts`; `media-types.ts` (si
+usa).
+Dipende da: T4, T5 (fatti); D-9 (c), risposta del 2026-11-02. Parte subito.
+Cosa fare:
+- `ink-fit.ts`, puro: `inkFitMode(node)` dà `"scale"` per una scheda
+  `file` il cui file è un'immagine o un PDF per `mediaKindOfId`
+  (estensione in minuscolo, senza `subpath`), `"fixed"` per tutte le altre
+  (A17); `inkFit(mode, ref, size)` dà fattore e spostamento: con `"scale"`
+  `s = min(w/W, h/H)`, `x = (w − W·s)/2`, `y = (h − H·s)/2`; con `"fixed"`
+  `s = 1`, `x = y = 0`.
+- I vettori `canvas-ink-fit/*.json`: `name`, `description`, la scheda
+  (`type`, `file`), `ref`, `size`, `expect` (`mode`, `s`, `x`, `y` e
+  qualche punto prima e dopo). Almeno: immagine allargata, allungata, con
+  le stesse proporzioni, rimpicciolita; PDF; `.PNG` maiuscolo; `.heic`;
+  nota `.md`, foglio `.xlsx`, testo, gruppo, link, audio, video, file senza
+  estensione; `ref` uguale a `size`.
+- `paintCard(host, strokes, mode)`: con `"scale"` l'SVG annidato è largo e
+  alto quanto la scheda, col `viewBox` della misura di riferimento e
+  `preserveAspectRatio="xMidYMid meet"` (lo spessore scala con lui); con
+  `"fixed"` è largo `W` e alto `H` nell'angolo in alto a sinistra, senza
+  scala, e ciò che esce dalla scheda si vede. Spostare e ridimensionare
+  continuano a non ridisegnare i percorsi. `INK_ASPECT` se ne va.
+- Il riferimento: la regola con la formula, i due modi, chi è «immagine» e
+  chi «PDF», e il rimando ai vettori; l'ADR: il punto 3 e la conseguenza
+  sul ridimensionamento non uniforme.
+Casi limite: una scheda di misura zero o non finita (niente `NaN`: `s = 0`
+non si vede); ridimensionare a un'altra proporzione e tornare (l'inchiostro
+torna uguale); un gruppo che contiene un'immagine (il gruppo è fermo,
+l'immagine scala); un file rinominato da `.png` a `.md` (il modo cambia, il
+file no); un tratto che esce dalla scheda; più misure di riferimento nella
+stessa scheda (ognuna col suo SVG annidato).
+Fatto quando: `ink-fit.test.ts` passa tutti i vettori di `canvas-ink-fit/`
+e ne controlla il numero; `ink-paint.test.ts` prova gli attributi dei due
+modi e che ridimensionare non riscrive i percorsi; `grep -rn INK_ASPECT
+apps/client/src` non trova niente; le pagine dicono la regola nuova.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/editors/canvas; cd ../.. && node .github/scripts/check-doc-links.mjs
+Stato: [ ] da fare
+
+## T19 · Le impostazioni della lavagna
+
+Perché: D-4 (c) e D-10 (c): due interruttori nuovi, «Ricorda se scrivi col
+mouse» e «Il dito sposta le schede», spenti di serie (A18). Oggi
+`fub.lavagna` non ha impostazioni (`settings: None` in `inventory.rs`).
+Tocca: `crates/fub-features/src/lavagna.rs` (le chiavi, `settings()`, le
+stringhe in italiano e inglese, i test), `crates/fub-features/src/inventory.rs`
+(`settings: Some(lavagna::settings)`),
+`crates/fub-host/tests/lavagna_feature.rs` (nuovo, come
+`draw_feature.rs`), `apps/client/src/editors/canvas/preferences.ts`
+(nuovo), `preferences.test.ts` (nuovo), `settings-mirror.test.ts` (nuovo,
+come `editors/spatial/draw-settings-mirror.test.ts`),
+`docs/architecture/ink-and-tools.md` (la parte della lavagna),
+`docs/map/dove-sta-x.md` (una riga).
+Non toccare: `engine.ts` (le leggono T14 e T16); `panels/settings.ts` (le
+righe le disegna da sé); `catalog.ts` del client (i testi delle
+impostazioni sono della feature).
+Dipende da: T20 (i nomi e le frasi sono quelli del prototipo approvato);
+D-4 (c), D-10 (c), risposte del 2026-11-02
+Cosa fare:
+- In `lavagna.rs`: le costanti `canvas.ink_mouse_remember` e
+  `canvas.finger_moves_card`; `settings()` con due `SettingKind::Toggle {
+  default: false }`, `.for_machine()`, `.describing(…)` e
+  `.grouped(…)` nel gruppo «Lavagna», come `draw.suggestions` in
+  `draw.rs`; nomi e descrizioni del prototipo, in italiano e inglese.
+- In `preferences.ts` del client: le due letture da `settings()` di
+  `host/query`, seguite con `onEvent("setting_changed")` come
+  `editors/spatial/preferences.ts`; l'ultima lettura resta qui e una
+  lavagna nuova parte da lì. Lo stato ricordato di «Scrivi col mouse» nello
+  stato di vista `canvas.ink_mouse` (`api.viewState`, `api.setViewState`),
+  uno per computer. Ogni ascolto ha un proprietario e si chiude.
+- I test: in Rust le due impostazioni, la macchina, spente, i testi nelle
+  due lingue; in `fub-host` che con la feature accesa ci sono e si scrivono
+  per la macchina, e spenta no; nel client lo specchio delle chiavi e le
+  letture (anche il cambio da `setting_changed`).
+- Le foto dal banco della sezione «Lavagna» di Impostazioni, chiaro e
+  scuro, accanto alle righe del prototipo.
+Dal prototipo: le due righe della sezione «Lavagna» (nomi, descrizioni,
+interruttori spenti), lo stato «Impostazioni» della pagina; le disegna
+`panels/settings.ts` come le altre, niente CSS nuovo.
+Casi limite: la feature `lavagna` spenta (`--no-default-features`); un
+valore non booleano scritto a mano nel file delle impostazioni (vale
+spento); il cambio da un'altra finestra; lo stato di vista che manca o è
+rotto (spento); l'interfaccia in inglese.
+Fatto quando: `cargo test -p fub-features` e il test di `fub-host` passano;
+`preferences.test.ts` e `settings-mirror.test.ts` passano; le foto della
+sezione sono nel rapporto e somigliano al prototipo.
+Prova: scripts/check.sh --rapido; cargo test -p fub-features; cargo test
+-p fub-host --test lavagna_feature; cd apps/client && npx vitest run
+src/editors/canvas
+Stato: [ ] da fare
+
+## T20 · Il prototipo delle penne
+
+Perché: D-5 (b): il menu delle penne arriva dopo che l'utente ha visto il
+prototipo e detto sì; le proposte A19–A23 valgono solo allora.
+Tocca: `PLAN-ui/lavagna-penne.html` (la riga «Approvato» in testa e ciò che
+l'utente chiede di cambiare), `PLAN.md` (la riga «Prototipo:», A19–A23 e la
+tabella «Dal prototipo» se cambiano), `DECISIONS.md` (una riga).
+Non toccare: il prodotto.
+Dipende da: niente; parte subito (la prima versione c'è).
+Cosa fare (lo fa l'orchestratore):
+- Pubblica la pagina come Artifact e la mostra all'utente con le sette note
+  «Da decidere guardando»; la barra di stato della pagina fa vedere ogni
+  stato (menu chiuso, Penna, Evidenziatore, Gomma, colore libero, Scrivi col
+  mouse acceso, sola lettura, Impostazioni), chiaro e scuro, piena e
+  700 px.
+- Ogni cambio chiesto va nella pagina, negli stessi blocchi `<style>` con la
+  loro destinazione; poi si ripubblica e si rimostra.
+- Al sì: la data nella testa della pagina («Approvato: AAAA-MM-GG») e nella
+  riga «Prototipo:» del piano, e la riga in DECISIONS.md. Se una nota
+  cambia, cambiano A19–A23 e, se tocca il lavoro, il pianificatore rivede
+  T16, T19 e T21.
+Casi limite: l'utente vuole un pezzo che chiede lavoro nuovo (un'icona nel
+kit): si chiede al pianificatore; l'utente dice no a una proposta: la sua
+assunzione cambia prima di T19.
+Fatto quando: la riga «Approvato» ha la data nella pagina e nel piano.
+Prova: grep -n "Approvato" PLAN-ui/lavagna-penne.html PLAN.md
+Stato: [ ] da fare
+
+## T21 · Il menu delle penne
+
+Perché: D-5 (b): penna, colore e spessore si scelgono sulla lavagna, e D-6
+(b) chiede di scegliere che cosa cancella la gomma; il prototipo approvato
+dice come.
+Tocca: `apps/client/src/editors/canvas/pen-menu.ts` (nuovo),
+`pen-menu.test.ts` (nuovo), `engine.ts` (`#drawToolbar`, lo strumento del
+tratto), `engine-ink.test.ts`, `ink-record.ts` (`defaultInkLook` diventa il
+look della scelta), `ink-layer.ts` e `ink-paint.ts` (l'opacità
+dell'evidenziatore), `preferences.ts` (lo stato di vista `canvas.pen`),
+`apps/client/src/i18n/catalog.ts` (`canvas.ink.*`),
+`apps/client/src/theme/scrittoio/skin/editors.css`,
+`apps/client/src/theme/scrittoio/structure.css`,
+`apps/client/src/theme/scrittoio/anatomia/editors.ts`, i derivati
+`apps/client/src/theme/scrittoio/skin.css` e
+`apps/client/theme/author/sample/skin.css` (con `npm run theme:generate`),
+`docs/development/ink-input-smoke-test.md` (sezione «La lavagna»),
+`docs/architecture/ink-and-tools.md` (la parte della lavagna).
+Non toccare: `apps/client/src/ink/` (si importano `PENS`, `penBrush`,
+`penLook`, `inkPath`, `INK_PALETTE`, `INK_WIDTHS`,
+`INK_HIGHLIGHTER_WIDTHS`); `editors/spatial/` (si imita `pen-options.ts`);
+`kit/color/` (si usa); i token del tema; il formato.
+Dipende da: T16, T19, T20 (approvato), T22
+Cosa fare:
+- `pen-menu.ts`: il pulsante della penna (`canvas-ink-pen`, il colore e il
+  nome, `aria-haspopup="dialog"`, `aria-label` come «Penna: Sfera, Blu,
+  Medio») in testa alla barra, e il rialzo `kit-popover
+  canvas-pen-popover` con le sezioni del prototipo: Strumento (Penna,
+  Evidenziatore, Gomma), Tipo di penna (le sei di `PENS`, con l'anteprima
+  disegnata da `inkPath` col pennello di `penBrush`, come `penPreview`),
+  Colore (gli otto di `INK_PALETTE` e «Altro colore…» col selettore del
+  kit), Spessore (Sottile, Medio, Spesso; per l'evidenziatore
+  `INK_HIGHLIGHTER_WIDTHS`), «La gomma cancella» (Il tratto intero, Solo il
+  pezzo, con `setInkEraser` di T22), la nota «Cambiare penna non cambia i
+  tratti già scritti.». La tastiera come il prototipo: Invio o Spazio
+  apre, le frecce si muovono, Esc chiude e rende il fuoco al pulsante.
+- La scelta (A19) si legge e si scrive nello stato di vista `canvas.pen`;
+  una scelta non valida o di una versione futura vale quella di serie,
+  senza errore. Il tratto nuovo prende `tool`, `brush` (`penBrush(pen,
+  px / zoom, pressione)`) e `color` dalla scelta. Prima della scelta, Sfera
+  blu Medio (A11).
+- L'evidenziatore (A22): opacità 0,5 senza `multiply`, nella scia e
+  nell'asciutto; si salva `tool: "highlighter"`.
+- Lo strumento Gomma (A21): il mouse (con D o con l'interruttore) e la
+  penna cancellano col modo scelto; il cursore `cell` su
+  `.canvas-viewport[data-ink="eraser"]`, come il prototipo. Il retro della
+  penna cancella sempre.
+- La barra si rifà a ogni disegno (`bar.replaceChildren()` in
+  `#drawToolbar`): il pulsante della penna e l'interruttore restano gli
+  stessi elementi fra un disegno e l'altro, così il rialzo aperto non si
+  stacca e non si chiude da solo.
+- Sola lettura: il pulsante è spento e il menu si chiude.
+- Le foto dal banco nel rapporto: chiaro e scuro, piena e 700 px, menu
+  chiuso e aperto su Penna, Evidenziatore e Gomma, accanto al prototipo.
+Dal prototipo: il pulsante della penna (`canvas-ink-pen`,
+`canvas-ink-pen-chip`, `canvas-ink-pen-name`) e il rialzo con le sue
+classi (`canvas-pen-popover`, `canvas-pen-menu`, `canvas-pen-section`,
+`canvas-pen-heading`, `canvas-pen-list`, `canvas-pen-item`,
+`canvas-pen-preview`, `canvas-pen-swatches`, `canvas-pen-swatch`,
+`canvas-pen-more`, `canvas-pen-note`), i blocchi `→ structure.css` e
+`→ skin/editors.css`, il cursore `cell`; gli stati Penna, Evidenziatore,
+Gomma e «Colore libero».
+Casi limite: il menu aperto quando arriva `syncDoc` o la sola lettura; una
+scelta a metà tratto (vale dal tratto dopo); un colore libero (il pulsante
+dice il codice); il nero sul tema scuro (A23); il lettore di schermo (nomi
+e stato di ogni scelta); la barra stretta (il pulsante resta visibile); due
+lavagne aperte (l'altra prende la scelta alla prossima apertura); lo stato
+di vista rotto.
+Fatto quando: `pen-menu.test.ts` prova apertura, tastiera, scelta e
+chiusura; `engine-ink.test.ts` prova che un tratto prende penna, colore e
+spessore scelti, che l'evidenziatore si salva col suo strumento e colore,
+che la Gomma del menu cancella col modo scelto, che riaprendo la lavagna la
+scelta torna e che una ridisegnata non chiude il menu; `npm run
+theme:verify` passa; le foto somigliano al prototipo.
+Prova: scripts/check.sh --rapido; cd apps/client && npm run theme:generate
+&& npm run theme:verify && npx vitest run src/editors/canvas
+Stato: [ ] da fare
+
+## T22 · La gomma che taglia
+
+Perché: D-6 (b): accanto alla gomma che toglie il tratto intero (T13), una
+che taglia solo il pezzo strofinato; i pezzi restano come tratti nuovi e un
+passaggio è un passo di annulla. Note e disegni lo fanno già con
+`ink/tools/split.ts` (`editors/spatial/tools/erase-precise.ts`).
+Tocca: `apps/client/src/editors/canvas/ink-erase.ts` (nuovo),
+`ink-erase.test.ts` (nuovo), `engine.ts`, `engine-ink.test.ts`,
+`ink-paint.ts` (il pezzo sbiadito durante la passata),
+`docs/reference/canvas-ink.md` (sezione «Scrittura»: una riga sui pezzi),
+`docs/architecture/ink-and-tools.md` (la parte della lavagna).
+Non toccare: `ink/tools/split.ts` (si usa); `editors/spatial/` (si imita);
+il nucleo e i vettori (le toppe sono quelle di T11: togli e aggiungi); la
+barra (T21).
+Dipende da: T14 (`engine.ts`, uno alla volta), T18, T20 (il pezzo che
+sbiadisce è nel prototipo)
+Cosa fare:
+- `ink-erase.ts`, puro: per un tratto, il percorso della gomma portato in
+  unità del tratto (con `ink-fit.ts`) e il raggio, `splitInk` e `cutBrush`
+  danno i pezzi; ogni pezzo diventa un record coi campi del tratto di
+  partenza (A20), un id nuovo (`newNodeId("s")`), `at` spostato all'inizio
+  del pezzo se c'era, e la stringa `ink` del pezzo.
+- Nella lavagna `setInkEraser(mode)`, `"stroke"` o `"piece"`, di serie
+  `"stroke"`. Con `"piece"` la passata sbiadisce solo il pezzo strofinato;
+  alla fine un commit: per ogni tratto toccato una `eraseStrokePatch` e
+  una `addStrokePatch` per pezzo, i pezzi al posto del tratto e nel suo
+  ordine. Un tratto coperto tutto se ne va senza pezzi.
+- Un commit rifiutato dal nucleo (troppo grande: `canvas.ink.full`, o
+  altro) non cambia niente: il tratto torna com'era e l'avviso lo dice.
+Dal prototipo: il tratto d'esempio con «Solo il pezzo» (il pezzo
+strofinato sbiadisce, i pezzi intorno restano).
+Casi limite: la pressione (ogni pezzo tiene quella dei suoi campioni); una
+passata che fa 1000 pezzi (un commit, un passo); più schede in una passata
+(più livelli, un passo); un livello estraneo (non si taglia); un tratto non
+disegnato (non si vede, non si taglia); il tratto di un'immagine
+ridimensionata (taglia dove si vede); un pezzo di un campione solo; la
+passata annullata (`onCancel`); il file che coi pezzi passerebbe i 16 MiB
+(rifiuto, niente perso); campi sconosciuti nel tratto (passano ai pezzi).
+Fatto quando: `ink-erase.test.ts` prova i pezzi (campi, id nuovi, `at`,
+pressione) su tratti scritti a mano; `engine-ink.test.ts` prova che una
+passata taglia ed è un passo, che l'annulla ridà il testo di prima byte per
+byte, che 1000 pezzi sono un commit, che il rifiuto non cambia niente;
+`engine.test.ts` passa invariato.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/editors/canvas src/ink
+Stato: [ ] da fare
+
+## T23 · La seconda misura sul foglio vero
+
+Perché: D-7 (c): N4 si chiude solo con la misura sopra il foglio vero
+dentro la lavagna; T15 ha misurato il caso simile.
+Tocca: `apps/client/bench/webview/run.mjs`,
+`apps/client/bench/webview/fixtures.mjs` (solo se lo scenario lo chiede),
+`docs/misure/lavagna-inchiostro-foglio-AAAA-MM-GG.md` (nuovo, con la data
+del giorno), `docs/misure/README.md`.
+Non toccare: `.github/workflows/ci.yml`; `budgets.json` (la meta di 33 ms è
+di T15); il prodotto (un fotogramma lento si scrive con dove va il tempo,
+non si corregge qui); gli altri scenari.
+Dipende da: T15, T21; in N6 la scheda di foglio viva dentro la lavagna
+(N6 T7, T11, T12, T13: vedi «Un nodo con N6»)
+Cosa fare:
+- Sul ramo di N6 che contiene N4 e la scheda di foglio viva, lo scenario di
+  T15 rilanciato com'è: aspetta che la scheda `voti.xlsx` sia viva
+  (`[data-card-kind=sheet][data-card-mode=live]`, come N6 T20) prima della
+  penna; dieci tratti sopra le celle, lo spostamento, lo sha256 del
+  `.xlsx` prima e dopo.
+- Tre giri; il rapporto dà il peggiore, dice il ramo e il commit, e mette
+  il numero accanto a quello di T15.
+- La pagina dice se la voce del cancello è chiusa (nessun fotogramma oltre
+  33 ms) o no; se no, dove va il tempo, e l'orchestratore chiede al
+  pianificatore un task prima di T25.
+Casi limite: la scheda che non diventa viva in Xvfb (la misura non vale: si
+dice, non si chiude); il driver senza penna (il mouse con D, come T15);
+il primo giro più lento.
+Fatto quando: la pagina in `docs/misure/` riporta i tre giri sopra il
+foglio vivo e l'hash, ed è nell'indice; la riga del cancello «seconda
+misura» ha la sua prova.
+Prova: cd apps/client && npm run build && cd ../.. && cargo build
+--release --locked -p fub-app --features tauri/custom-protocol && cd
+apps/client && xvfb-run -a npm run bench:webview -- --only=S8
+--budgets=targets --native-driver=/usr/bin/WebKitWebDriver
+Stato: [ ] da fare
+
+## T24 · Il posto dell'inchiostro dopo la prova con Obsidian
+
+Perché: D-1 (c) e D-8 (a): l'utente fa la prova col kit di T7 e incolla
+l'uscita di `confronta.mjs`; da lì si decide se l'inchiostro resta solo nel
+`.canvas`. Oggi `docs/reference/canvas-ink.md` («Obsidian») dice già «A
+più una copia B» se i livelli si perdono: è una scelta che D-1 (c) lascia
+all'utente.
+Tocca: `docs/decisions/0238-inchiostro-sulla-lavagna.md`,
+`docs/reference/canvas-ink.md` (sezione «Obsidian»), `DECISIONS.md`;
+`PLAN.md` solo se servono i task di D-12.
+Non toccare: il codice; il kit di T7 (se l'uscita mostra un suo errore, è
+un task a parte).
+Dipende da: T7, T18 (tutti e due toccano `canvas-ink.md`); l'uscita della
+prova incollata dall'utente
+Cosa fare (lo fa l'orchestratore, o un coder con l'uscita in mano):
+- Ogni livello intatto (le schede, anche quelle spostate e ridimensionate,
+  la radice e i livelli estranei; uscita 0): l'ADR 0238 passa ad «accolta»,
+  con la versione di Obsidian e la data della prova; la sezione «Obsidian»
+  dice che cosa si è visto e toglie la frase sulla copia B; una riga in
+  DECISIONS.md.
+- Un livello `PERSO` o `CAMBIATO` su una scheda, sulla radice o su un
+  livello estraneo: l'ADR resta «proposta», l'orchestratore fa all'utente
+  la domanda D-12 con l'uscita, e il pianificatore scrive i task
+  dell'opzione scelta. N4 non entra in `main` prima che siano fatti.
+- Solo il `fub:ink` dell'arco cambia o sparisce: si scrive nella sezione
+  (è un campo sconosciuto, Fub non ci scrive), il resto come il primo caso.
+- L'uscita 2 (file non trovati o non validi): la prova si rifà.
+Casi limite: un riordino delle chiavi o `640.0` al posto di `640` (non
+contano: si confronta per valore); Obsidian che riscrive solo le schede
+toccate; «PERSO, la scheda non c'è più» perché l'utente ha tolto una
+scheda (non è inchiostro perso: si chiede); un'uscita incollata a metà (si
+chiede di nuovo).
+Fatto quando: l'ADR è «accolta» con la sezione «Obsidian» aggiornata,
+oppure D-12 ha la risposta e i suoi task sono nel piano; la riga è in
+DECISIONS.md.
+Prova: node .github/scripts/check-doc-links.mjs; grep -n "Stato"
+docs/decisions/0238-inchiostro-sulla-lavagna.md
+Stato: [ ] da fare
+
+## T25 · La CI completa e la revisione prima del merge
+
+Perché: merge-n3n4 (b): N4 entra in `main` solo dopo N3, a task tutti fatti,
+dopo la CI completa (che sulla PR in bozza non gira tutta) e una revisione
+riga per riga.
+Tocca: nessun file di prodotto in partenza; ciò che la CI o la revisione
+trovano, nei file dei task che l'hanno scritto.
+Non toccare: N3 e N6 (li segue il loro orchestratore); la storia del ramo
+(niente force-push senza chiedere).
+Dipende da: tutti i task, T23 e T24 compresi; N3 in `main` (N3 T23 fatto e
+fuso)
+Cosa fare (lo fa l'orchestratore):
+- Dopo il merge di N3, porta la base della PR #298 da
+  `piano/n3-logica-in-rust` a `main` (`gh api -X PATCH
+  repos/Fubeo/Fub/pulls/298 -f base=main`, perché `gh pr edit` qui
+  fallisce) e riallinea il ramo; se N3 T23 ha cambiato qualcosa dopo la
+  fusione di T17, rifonde prima.
+- Segna la PR pronta, così parte la CI completa: Linux, Windows, macOS, i
+  banchi (visivo, `bench:webview`, `bench:ink`).
+- Legge ogni job, anche i verdi con avvisi; un job rosso o un avviso nuovo
+  diventa una correzione, con un coder se serve, e la CI riparte.
+- La revisione riga per riga di tutto il diff di N4 contro `main`:
+  perdita di dati (l'inchiostro e il `.xlsx` sotto), contratti (le pagine
+  `canvas-ink.md` e `canvas-operations.md` e i loro vettori), test che
+  provano la frontiera vera, testi per l'utente, gergo vietato, ascoltatori
+  senza proprietario; corregge ciò che trova.
+- Controlla che ogni riga del cancello abbia la sua prova verde.
+- Chiede all'utente il merge, con il resoconto: che cosa c'è, che cosa
+  cambia per lui, che cosa resta fuori, la CI e la revisione.
+Casi limite: un job che fallisce per una ragione che non è di N4 (si scrive
+e si chiede); un conflitto con `main` nel frattempo (si riallinea e la CI
+riparte); un banco visivo che cambia per il menu nuovo (la base viene dal
+runner, mai rifatta qui).
+Fatto quando: la PR #298 ha base `main` e non è in bozza, tutti i controlli
+della CI completa sono verdi, il resoconto della revisione è nel rapporto
+con ogni punto corretto o motivato, ogni riga del cancello ha la sua prova,
+e l'utente ha detto sì al merge.
+Prova: gh pr checks 298; scripts/check.sh
 Stato: [ ] da fare
 
 ## Non verificato stanotte
@@ -1203,3 +1916,20 @@ Stato: [ ] da fare
 - L'invariante del nucleo l'ho letta su `piano/n3-logica-in-rust` @ 2acb9ae7;
   in questa copia non c'è ancora, come `docs/reference/canvas-format.md` e
   `docs/reference/canvas-operations.md`, che arrivano con N3 T1 e N3 T6.
+
+Aggiunto il 2026-11-02, con le risposte:
+
+- Che cosa fa Obsidian: l'utente non ha ancora incollato l'uscita della
+  prova (T24); D-12 si fa solo se l'inchiostro si perde.
+- La regola di A17 scala l'inchiostro sul riquadro intero della scheda.
+  Quando N6 disegnerà immagini e PDF nella scheda (sotto la testata; il PDF
+  adattato alla larghezza), il contenuto potrebbe non stare nello stesso
+  riquadro: la regola si cambierà solo in `ink-fit.ts` e nei suoi vettori,
+  senza toccare il file. Lo deve dire N6 (T5, T6, T19).
+- Audio e video restano fermi come le note: la risposta a D-9 parla solo di
+  immagini e PDF.
+- Quanto si vede l'evidenziatore trasparente a metà senza `multiply` sulle
+  schede chiare e scure: lo dice il prototipo (T20) e le foto di T21.
+- L'accordo con N6 su T11 («Un nodo con N6»): senza, T23 non parte.
+- I nomi `ink_layers` e `canvas_ink_layers` della facciata di N3: N3 T13 non
+  è ancora fatto, i nomi seguono i suoi.

@@ -59,6 +59,16 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N4 · Le risposte dell'utente a D-1…D-11: il posto
+  dell'inchiostro si decide dopo la prova con Obsidian (fino ad allora il
+  `.canvas`; D-12 se si perde); il menu delle penne e la gomma che taglia
+  già in N4, dopo il prototipo; due impostazioni spente di serie (ricorda
+  «Scrivi col mouse», il dito sposta le schede); su immagini e PDF
+  l'inchiostro scala senza deformarsi, sulle altre schede resta fermo; due
+  misure, la seconda sul foglio vero con N6; N4 in `main` solo dopo N3, con
+  la CI completa · D-1, D-4–D-7, D-9, D-10 e merge-n3n4 sono diverse dalla
+  prima opzione con cui il piano era andato avanti: task nuovi T17–T25, T4
+  e T5 da rivedere.
 - 2026-11-02 · N4 · T11: la toppa ink nel client sta in `operation.ts`, con
   i costruttori dei tratti e `eraseStrokePatches` per la gomma; i vettori di
   T10 passano anche dal lato della shell. `operation.ts` e `ink-record.ts`
