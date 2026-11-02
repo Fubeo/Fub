@@ -59,6 +59,19 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K5 · T8: la sessione del motore nel client
+  (`editors/spatial/motore/sessione.ts`) segue la `DocumentSession` come
+  superficie `motore-disegno:<n>` (un id per sessione, come `live:<n>`, così
+  due sessioni sullo stesso documento non si rimpiazzano) e non origina mai
+  modifiche. Le sei porte di `host/ipc.ts` usano i nomi della D-4
+  (`open_drawing`…`close_drawing`), ancora da confermare: l'host le avrà con
+  T19. Le richieste vanno in fila con un tempo limite di 10 s; a uno `stale`
+  si rimanda il testo intero (in LF) e si riprova una volta, anche per
+  `drawing_command`; qualunque errore o tempo scaduto ferma la sessione come
+  `{ perche: "errore" }`, la stacca dal documento e chiude l'istanza come
+  può. Il finto `DrawingFake` tiene la sua copia e controlla che ogni
+  differenza si applichi. Perché: il client deve essere pronto prima del
+  motore, e un motore che non risponde non deve bloccare il disegno.
 - 2026-11-02 · K5 · T4: il contratto del disegno in fub-abi ha limiti
   espliciti (20 MiB di testo, 100 000 eventi per gesto, 10 000 operazioni, 8
   MiB di operazioni, 50 000 perdite) e un validate() per ogni messaggio; gli
