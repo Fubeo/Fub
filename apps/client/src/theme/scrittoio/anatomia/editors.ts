@@ -12,6 +12,8 @@ export const EDITORS: PartAnatomy = {
     { name: "text-editor-search", layers: { "cm-searchMatch": "segno", "cm-searchMatch-selected": "segno" }, states: SELECTABLE, hooks: ["cm-panels", "cm-panels-top", "cm-panels-bottom", "cm-panel", "cm-search", "cm-textfield", "cm-button", "cm-searchMatch", "cm-searchMatch-selected"] },
     { name: "text-editor-tooltip", states: [S("rest"), S("selected")], hooks: ["cm-tooltip", "cm-tooltip-arrow", "cm-tooltip-autocomplete", "cm-completionMatchedText", "cm-completionDetail", "cm-completionInfo"] },
     { name: "surface-fallback", states: [S("rest"), S("focused")], hooks: ["document-surface-error", "document-surface-viewer", "media-surface"] },
+    // Il file di un componente spento (K2): nome, dimensione, «Accendi …».
+    { name: "surface-file-only", states: [S("rest"), S("focused")], hooks: ["document-surface-file-only", "file-only-title", "file-only-name", "file-only-size", "file-only-note", "file-only-actions", "file-only-problem"] },
     // Le celle sono contenuto con l'aspetto del file: la pelle ne veste i segni
     // dalla riga (`.grid-row .selected`), non dalla cella. Le intestazioni e la
     // vista sono cornice, l'editor della cella è un segno.

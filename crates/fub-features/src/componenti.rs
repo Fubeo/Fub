@@ -15,14 +15,24 @@
 //!
 //! # Righe che non sono bundle
 //!
-//! Lavagna, Penna, Dizionari e i due motori sono componenti senza un bundle
-//! loro (`bundle: false`): li richiede o li usa qualcun altro, e in K1 sono
-//! sempre dentro il binario. I loro id sono quelli dell'ADR, e nel manifest di
-//! chi li richiede non compaiono: vedi [`SOLO_DELLA_MAPPA`].
+//! Lavagna, PDF, Penna, Dizionari e i due motori sono componenti senza un
+//! bundle loro (`bundle: false`): sono sempre dentro il binario. Penna,
+//! Dizionari e i motori li richiede o li usa qualcun altro; Lavagna e PDF si
+//! spengono a mano, e il loro stato sta nelle chiavi `components.*` del vault
+//! (`fub_host::componenti`), non in `plugins.disabled`. I loro id sono quelli
+//! dell'ADR, e nel manifest di chi li richiede non compaiono: vedi
+//! [`SOLO_DELLA_MAPPA`].
+//!
+//! # Profili
+//!
+//! [`profili`] sono scelte già fatte sopra questa mappa: un nome e i
+//! componenti che accende. Un profilo che nomina componenti che non esistono
+//! ancora ([`DefProfilo::arriva_con`]) è «più avanti»: si mostra, e non si
+//! applica.
 
 use fub_abi::text::StringCatalog;
 use fub_abi::{ComponentKind, Delivery};
-use fub_componenti::{Componente, ErroreMappa, Mappa};
+use fub_componenti::{Componente, ErroreMappa, Mappa, Profilo};
 
 /// Ciò che l'host monta sempre: non si spegne (A6). In K1 «Note» ne fa parte.
 pub const NUCLEO: [&str; 3] = ["fub.core", "fub.maintenance", "fub.markdown"];
@@ -148,6 +158,13 @@ impl Riga {
     pub fn senza_bundle(mut self) -> Self {
         self.bundle = false;
         self
+    }
+
+    /// La chiave del catalogo con la descrizione: `component.<nome>.description`,
+    /// accanto a quella del nome.
+    pub fn descrizione(&self) -> String {
+        let radice = self.nome.strip_suffix(".name").unwrap_or(self.nome);
+        format!("{radice}.description")
     }
 
     /// I `requires` che vanno nel manifest: quelli della riga senza
@@ -279,6 +296,7 @@ pub fn righe() -> Vec<Riga> {
         #[cfg(feature = "draw")]
         Riga::servizio("fub.draw", "component.draw.name")
             .group("disegnare")
+            .ui(&["editors/spatial"])
             .cargo_feature("draw"),
         // Documenti e Fogli: il bundle e il codec stanno in `fub-host`.
         #[cfg(feature = "rich")]
@@ -295,14 +313,22 @@ pub fn righe() -> Vec<Riga> {
             .uses(&["fub.penna"])
             .ui(&["editors/grid"])
             .cargo_feature("xlsx"),
-        // Oggi sempre compilata nel client, e senza bundle. Il motore
-        // vettoriale che la porterà non esiste ancora: quando ci sarà, sarà
-        // una riga di supporto che questa richiede.
+        // Sempre compilata nel client, e senza bundle: spenta, l'host non
+        // registra il formato `.canvas`. Il motore vettoriale che la porterà
+        // non esiste ancora: quando ci sarà, sarà una riga di supporto che
+        // questa richiede.
         Riga::modalita("fub.lavagna", "component.lavagna.name")
             .group("pensare")
             .requires(&["fub.penna"])
             .uses(&["fub.rich", "fub.xlsx"])
             .ui(&["editors/canvas"])
+            .senza_bundle(),
+        // Il visore dei PDF del client (pdfjs, profilo `media-pdf`): senza
+        // bundle, e nell'host non c'è niente da spegnere.
+        Riga::modalita("fub.pdf", "component.pdf.name")
+            .group("leggere")
+            .requires(&["fub.penna"])
+            .ui(&["editors/media"])
             .senza_bundle(),
         // Di supporto: accesi quando qualcuno li richiede.
         Riga::motore("fub.penna", "component.penna.name")
@@ -358,17 +384,243 @@ pub fn mappa() -> Mappa {
         .unwrap_or_else(|errore| panic!("la mappa dei componenti non si costruisce: {errore}"))
 }
 
-/// I nomi dei componenti, in tutte le lingue (A10). Le chiavi ci sono anche per
-/// le righe che questa build non compila: il catalogo è uno solo.
+/// I gruppi della pagina dei componenti, nell'ordine in cui si disegnano. Una
+/// riga che non ne dice uno sta in `altro`, il gruppo di serie di [`Riga`].
+pub const GRUPPI: [&str; 8] = [
+    "scrivere",
+    "leggere",
+    "pensare",
+    "disegnare",
+    "ufficio",
+    "foto",
+    "altro",
+    "supporto",
+];
+
+/// La chiave del catalogo con il nome di un gruppo: `component.group.<g>.name`.
+pub fn nome_del_gruppo(gruppo: &str) -> String {
+    format!("component.group.{gruppo}.name")
+}
+
+/// I gruppi che questa build disegna: quelli di [`GRUPPI`] con almeno una
+/// riga, nel loro ordine.
+pub fn gruppi() -> Vec<&'static str> {
+    let righe = righe();
+    GRUPPI
+        .into_iter()
+        .filter(|gruppo| righe.iter().any(|riga| riga.gruppo == *gruppo))
+        .collect()
+}
+
+/// I nomi e le descrizioni dei componenti, i nomi dei gruppi e dei profili, in
+/// tutte le lingue (A10). Le chiavi ci sono anche per le righe che questa
+/// build non compila: il catalogo è uno solo.
 pub fn catalog() -> Vec<StringCatalog> {
     let mut it = StringCatalog::new("it");
     let mut en = StringCatalog::new("en");
-    for (nome, it_nome, en_nome) in NOMI {
+    for (nome, it_nome, en_nome) in NOMI
+        .iter()
+        .chain(DESCRIZIONI)
+        .chain(NOMI_DEI_GRUPPI)
+        .chain(NOMI_DEI_PROFILI)
+    {
         it = it.with(*nome, *it_nome);
         en = en.with(*nome, *en_nome);
     }
     vec![it, en]
 }
+
+/// I nomi dei gruppi: chiave, italiano, inglese.
+const NOMI_DEI_GRUPPI: &[(&str, &str, &str)] = &[
+    ("component.group.scrivere.name", "Scrivere", "Write"),
+    ("component.group.leggere.name", "Leggere", "Read"),
+    ("component.group.pensare.name", "Pensare", "Think"),
+    ("component.group.disegnare.name", "Disegnare", "Draw"),
+    ("component.group.ufficio.name", "Ufficio", "Office"),
+    ("component.group.foto.name", "Foto", "Photos"),
+    ("component.group.altro.name", "Altro", "Other"),
+    ("component.group.supporto.name", "Di supporto", "Support"),
+];
+
+/// Che cosa fa ogni componente per chi usa Fub, in una frase: chiave,
+/// italiano, inglese.
+const DESCRIZIONI: &[(&str, &str, &str)] = &[
+    (
+        "component.core.description",
+        "Il vault, i suoi file e le impostazioni.",
+        "The vault, its files and the settings.",
+    ),
+    (
+        "component.maintenance.description",
+        "Rifare l'indice e raccogliere ciò che serve per chiedere aiuto.",
+        "Rebuild the index and gather what you need to ask for help.",
+    ),
+    (
+        "component.markdown.description",
+        "L'editor Markdown: Live, Blocchi e il menu «/».",
+        "The Markdown editor: Live, Blocks and the “/” menu.",
+    ),
+    (
+        "component.search.description",
+        "Trovare una parola in tutte le note.",
+        "Find a word in every note.",
+    ),
+    (
+        "component.versioning.description",
+        "Le versioni passate di ogni file, da riprendere quando serve.",
+        "Past versions of every file, to bring back when needed.",
+    ),
+    (
+        "component.backlinks.description",
+        "Le note che portano a quella che stai leggendo.",
+        "The notes that link to the one you are reading.",
+    ),
+    (
+        "component.outline.description",
+        "I titoli della nota, per saltare da una parte all'altra.",
+        "The headings of the note, to jump from one part to another.",
+    ),
+    (
+        "component.tags.description",
+        "Tutti i tag del vault, e le note che li portano.",
+        "Every tag in the vault, and the notes that carry it.",
+    ),
+    (
+        "component.properties.description",
+        "Le proprietà in testa alla nota, da leggere e cambiare.",
+        "The properties at the top of a note, to read and change.",
+    ),
+    (
+        "component.template.description",
+        "Modelli di nota, la nota del giorno, la data e l'ora.",
+        "Note templates, the daily note, the date and the time.",
+    ),
+    (
+        "component.queries.description",
+        "Le ricerche salvate, da rifare con un clic.",
+        "Saved searches, to run again with one click.",
+    ),
+    (
+        "component.dashboard.description",
+        "Il vault in numeri: note, tag, file e collegamenti rotti.",
+        "The vault in numbers: notes, tags, files and broken links.",
+    ),
+    (
+        "component.backup.description",
+        "Copie delle note da cui ripartire.",
+        "Copies of your notes to start again from.",
+    ),
+    (
+        "component.trash.description",
+        "Le note eliminate, da recuperare o togliere per sempre.",
+        "Deleted notes, to bring back or remove for good.",
+    ),
+    (
+        "component.stats.description",
+        "Parole, caratteri e tempo di lettura della nota.",
+        "Words, characters and reading time of the note.",
+    ),
+    (
+        "component.graph.description",
+        "I collegamenti fra le note, in una mappa.",
+        "The links between notes, on a map.",
+    ),
+    (
+        "component.commands.description",
+        "Le azioni che trovi nella palette dei comandi.",
+        "The actions you find in the command palette.",
+    ),
+    (
+        "component.blocks.description",
+        "Diagrammi, formule ed evidenziato dentro le note.",
+        "Diagrams, formulas and highlights inside notes.",
+    ),
+    (
+        "component.base.description",
+        "Tabelle che raccolgono le note per proprietà.",
+        "Tables that gather notes by their properties.",
+    ),
+    (
+        "component.formatting.description",
+        "I pulsanti per grassetto, elenchi e titoli, senza ricordare i simboli.",
+        "Buttons for bold, lists and headings, without remembering the symbols.",
+    ),
+    (
+        "component.proof.description",
+        "L'ortografia mentre scrivi.",
+        "Spelling as you write.",
+    ),
+    (
+        "component.draw.description",
+        "I file SVG: penna, forme, frecce, testo.",
+        "SVG files: pen, shapes, arrows, text.",
+    ),
+    (
+        "component.rich.description",
+        "I file Word e OpenDocument, semplici o completi.",
+        "Word and OpenDocument files, simple or complete.",
+    ),
+    (
+        "component.xlsx.description",
+        "I file Excel e OpenDocument, semplici o completi.",
+        "Excel and OpenDocument files, simple or complete.",
+    ),
+    (
+        "component.lavagna.description",
+        "Schede, fili e inchiostro sopra qualsiasi cosa.",
+        "Cards, threads and ink over anything.",
+    ),
+    (
+        "component.pdf.description",
+        "Leggere, cercare, evidenziare, annotare a penna.",
+        "Read, search, highlight, annotate with a pen.",
+    ),
+    (
+        "component.penna.description",
+        "Pressione, palmo, scia a bassa latenza, tratti.",
+        "Pressure, palm, low-latency trail, strokes.",
+    ),
+    (
+        "component.dizionari.description",
+        "Le lingue del correttore.",
+        "The languages of the spell checker.",
+    ),
+    (
+        "component.motore-documenti.description",
+        "Impaginazione e comandi dei documenti.",
+        "Page layout and commands for documents.",
+    ),
+    (
+        "component.motore-fogli.description",
+        "Formule, calcolo e comandi dei fogli.",
+        "Formulas, calculation and commands for spreadsheets.",
+    ),
+    (
+        "component.importers.description",
+        "Portare in Fub le note di Evernote, OneNote, Tomboy e altri.",
+        "Bring in notes from Evernote, OneNote, Tomboy and others.",
+    ),
+    (
+        "component.linkcard.description",
+        "Un link da solo diventa una scheda con titolo e icona, quando lo chiedi.",
+        "A link on its own becomes a card with title and icon, when you ask.",
+    ),
+    (
+        "component.updates.description",
+        "Sapere se c'è una versione nuova di Fub, solo quando lo chiedi.",
+        "Find out whether a new version of Fub is out, only when you ask.",
+    ),
+    (
+        "component.publish.description",
+        "Mettere le note su un sito.",
+        "Put your notes on a website.",
+    ),
+    (
+        "component.sync.description",
+        "Le stesse note su più dispositivi, cifrate.",
+        "The same notes on several devices, encrypted.",
+    ),
+];
 
 /// Chiave, italiano, inglese.
 const NOMI: &[(&str, &str, &str)] = &[
@@ -401,6 +653,7 @@ const NOMI: &[(&str, &str, &str)] = &[
     ("component.rich.name", "Documenti", "Documents"),
     ("component.xlsx.name", "Fogli", "Spreadsheets"),
     ("component.lavagna.name", "Lavagna", "Whiteboard"),
+    ("component.pdf.name", "PDF", "PDF"),
     ("component.penna.name", "Penna", "Pen"),
     ("component.dizionari.name", "Dizionari", "Dictionaries"),
     (
@@ -422,4 +675,129 @@ const NOMI: &[(&str, &str, &str)] = &[
     ("component.updates.name", "Aggiornamenti", "Updates"),
     ("component.publish.name", "Pubblicazione", "Publishing"),
     ("component.sync.name", "Sincronizzazione", "Sync"),
+];
+
+/// Un profilo: un nome e i componenti che accende (A4).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DefProfilo {
+    /// Il nome che sta in `components.profile`.
+    pub nome: &'static str,
+    /// La chiave del catalogo con il nome da mostrare.
+    pub etichetta: &'static str,
+    /// I componenti di questa build che il profilo sceglie.
+    pub componenti: Vec<&'static str>,
+    /// I componenti che il profilo vuole e che non esistono ancora: se ce
+    /// n'è uno, il profilo è «più avanti» e non si applica.
+    pub arriva_con: Vec<&'static str>,
+}
+
+impl DefProfilo {
+    /// Se il profilo aspetta componenti che non ci sono ancora.
+    pub fn piu_avanti(&self) -> bool {
+        !self.arriva_con.is_empty()
+    }
+
+    /// Il profilo per il risolutore.
+    pub fn profilo(&self) -> Profilo {
+        Profilo {
+            nome: self.nome.to_string(),
+            componenti: self.componenti.iter().map(|id| id.to_string()).collect(),
+        }
+    }
+}
+
+/// I gruppi che un profilo non tocca, tranne «Tutto»: le righe senza gruppo
+/// (aggiornamenti, pubblicazione, sincronizzazione) e i disegni.
+pub const GRUPPI_FUORI_DAI_PROFILI: &[&str] = &["altro", "disegnare"];
+
+/// Il nome del profilo che accende tutto.
+pub const PROFILO_TUTTO: &str = "tutto";
+
+/// I profili, nell'ordine in cui si mostrano.
+pub fn profili() -> Vec<DefProfilo> {
+    let righe = righe();
+    let note: Vec<&'static str> = righe
+        .iter()
+        .filter(|riga| {
+            riga.id == "fub.markdown"
+                || (riga.gruppo == "scrivere" && !["fub.graph", "fub.proof"].contains(&riga.id))
+        })
+        .map(|riga| riga.id)
+        .collect();
+    let di_questa_build = |ids: &[&'static str]| -> Vec<&'static str> {
+        ids.iter()
+            .copied()
+            .filter(|id| righe.iter().any(|riga| riga.id == *id))
+            .collect()
+    };
+    let con_le_note = |altri: &[&'static str]| -> Vec<&'static str> {
+        let mut ids = note.clone();
+        ids.extend(di_questa_build(altri));
+        ids
+    };
+    let profilo = |nome, etichetta, componenti, arriva_con: &[&'static str]| DefProfilo {
+        nome,
+        etichetta,
+        componenti,
+        arriva_con: arriva_con.to_vec(),
+    };
+    vec![
+        profilo("solo-note", "profile.solo-note.name", note.clone(), &[]),
+        profilo(
+            "solo-pdf",
+            "profile.solo-pdf.name",
+            di_questa_build(&["fub.pdf"]),
+            &["fub.pdf-completo"],
+        ),
+        profilo(
+            "studio",
+            "profile.studio.name",
+            con_le_note(&[
+                "fub.graph",
+                "fub.proof",
+                "fub.pdf",
+                "fub.lavagna",
+                "fub.rich",
+                "fub.xlsx",
+            ]),
+            &[],
+        ),
+        profilo(
+            "grafica",
+            "profile.grafica.name",
+            con_le_note(&["fub.lavagna"]),
+            &["fub.disegno-completo", "fub.foto"],
+        ),
+        profilo(
+            "fotografia",
+            "profile.fotografia.name",
+            note.clone(),
+            &["fub.libreria-foto", "fub.foto"],
+        ),
+        profilo(
+            PROFILO_TUTTO,
+            "profile.tutto.name",
+            righe
+                .iter()
+                .filter(|riga| riga.gruppo != "supporto")
+                .map(|riga| riga.id)
+                .collect(),
+            &[],
+        ),
+    ]
+}
+
+/// Il profilo che si chiama `nome`, se c'è.
+pub fn profilo(nome: &str) -> Option<DefProfilo> {
+    profili().into_iter().find(|profilo| profilo.nome == nome)
+}
+
+/// I nomi dei profili: chiave, italiano, inglese.
+const NOMI_DEI_PROFILI: &[(&str, &str, &str)] = &[
+    ("profile.solo-note.name", "Solo note", "Notes only"),
+    ("profile.studio.name", "Studio", "Study"),
+    ("profile.tutto.name", "Tutto", "Everything"),
+    ("profile.solo-pdf.name", "Solo PDF", "PDF only"),
+    ("profile.grafica.name", "Grafica", "Graphics"),
+    ("profile.fotografia.name", "Fotografia", "Photography"),
 ];

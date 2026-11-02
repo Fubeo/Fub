@@ -792,5 +792,364 @@
     "cycle",
     "limit",
     "read-only"
+  ],
+  "ComponentsMap": [
+    {
+      "gruppi": [
+        {
+          "id": "pensare",
+          "nome": "Pensare"
+        }
+      ],
+      "righe": [
+        {
+          "id": "fub.lavagna",
+          "nome": "Lavagna",
+          "gruppo": "pensare",
+          "bundle": false,
+          "acceso": true,
+          "perche": "Scelto",
+          "richiesto_da": [],
+          "descrizione": "Schede, fili e inchiostro sopra qualsiasi cosa.",
+          "tipo": "mode",
+          "ui": [
+            "editors/canvas"
+          ],
+          "richiede": [
+            "fub.penna"
+          ],
+          "usa": [
+            "fub.rich"
+          ]
+        }
+      ],
+      "stato": {
+        "scelti": [
+          "fub.lavagna"
+        ],
+        "in_attesa": [
+          "fub.properties"
+        ]
+      },
+      "profilo": "studio",
+      "profili": [
+        {
+          "nome": "grafica",
+          "etichetta": "Grafica",
+          "componenti": [
+            "fub.markdown",
+            "fub.lavagna"
+          ],
+          "arriva_con": [
+            "fub.foto"
+          ],
+          "piu_avanti": true
+        }
+      ],
+      "mancanti": [
+        {
+          "chiave": "components.off",
+          "id": "fub.vecchio"
+        }
+      ]
+    },
+    {
+      "gruppi": [],
+      "righe": [],
+      "stato": {
+        "scelti": [],
+        "in_attesa": []
+      },
+      "profilo": null,
+      "profili": [],
+      "mancanti": []
+    }
+  ],
+  "ComponentRow": [
+    {
+      "id": "fub.lavagna",
+      "nome": "Lavagna",
+      "gruppo": "pensare",
+      "bundle": false,
+      "acceso": true,
+      "perche": "Scelto",
+      "richiesto_da": [],
+      "descrizione": "Schede, fili e inchiostro sopra qualsiasi cosa.",
+      "tipo": "mode",
+      "ui": [
+        "editors/canvas"
+      ],
+      "richiede": [
+        "fub.penna"
+      ],
+      "usa": [
+        "fub.rich"
+      ]
+    }
+  ],
+  "ComponentGroup": [
+    {
+      "id": "pensare",
+      "nome": "Pensare"
+    }
+  ],
+  "ComponentProfile": [
+    {
+      "nome": "grafica",
+      "etichetta": "Grafica",
+      "componenti": [
+        "fub.markdown",
+        "fub.lavagna"
+      ],
+      "arriva_con": [
+        "fub.foto"
+      ],
+      "piu_avanti": true
+    }
+  ],
+  "ComponentState": [
+    {
+      "scelti": [
+        "fub.lavagna"
+      ],
+      "in_attesa": [
+        "fub.properties"
+      ]
+    }
+  ],
+  "ComponentMissing": [
+    {
+      "chiave": "components.off",
+      "id": "fub.vecchio"
+    }
+  ],
+  "ComponentWhy": [
+    "Nucleo",
+    "Scelto",
+    {
+      "RichiestoDa": [
+        "fub.lavagna",
+        "fub.pdf"
+      ]
+    },
+    "InAttesa",
+    "Spento",
+    "Sconosciuto"
+  ],
+  "ComponentOrphans": [
+    "chiedi",
+    "togli",
+    "tieni"
+  ],
+  "ComponentAction": [
+    {
+      "azione": "accendi",
+      "id": "fub.template"
+    },
+    {
+      "azione": "spegni",
+      "id": "fub.properties",
+      "anche_questi": true,
+      "orfani": "togli"
+    },
+    {
+      "azione": "rispondi",
+      "orfani": "tieni",
+      "ids": [
+        "fub.properties"
+      ]
+    },
+    {
+      "azione": "profilo",
+      "nome": "studio"
+    }
+  ],
+  "ComponentEffect": [
+    {
+      "accesi_anche": [
+        "fub.properties"
+      ],
+      "spenti_anche": [
+        "fub.base"
+      ],
+      "orfani": [
+        "fub.penna"
+      ],
+      "mancanti": [
+        [
+          "fub.lavagna",
+          "fub.vecchio"
+        ]
+      ]
+    }
+  ],
+  "ComponentWrite": [
+    {
+      "id": "fub.template",
+      "acceso": true,
+      "bundle": true
+    }
+  ],
+  "ComponentOutcome": [
+    {
+      "azione": {
+        "azione": "accendi",
+        "id": "fub.template"
+      },
+      "effetto": {
+        "accesi_anche": [
+          "fub.properties"
+        ],
+        "spenti_anche": [
+          "fub.base"
+        ],
+        "orfani": [
+          "fub.penna"
+        ],
+        "mancanti": [
+          [
+            "fub.lavagna",
+            "fub.vecchio"
+          ]
+        ]
+      },
+      "scritture": [
+        {
+          "id": "fub.template",
+          "acceso": true,
+          "bundle": true
+        }
+      ],
+      "chiavi": [
+        "components.profile"
+      ],
+      "stato": {
+        "scelti": [
+          "fub.lavagna"
+        ],
+        "in_attesa": [
+          "fub.properties"
+        ]
+      },
+      "applicato": true,
+      "avvisi": [
+        {
+          "kind": "io",
+          "message": "disk full"
+        }
+      ]
+    }
+  ],
+  "ComponentRefusal": [
+    {
+      "rifiuto": "sconosciuto",
+      "id": "fub.inesistente"
+    },
+    {
+      "rifiuto": "nucleo",
+      "id": "fub.core"
+    },
+    {
+      "rifiuto": "richiesto",
+      "id": "fub.penna",
+      "da": [
+        "fub.lavagna",
+        "fub.pdf"
+      ]
+    },
+    {
+      "rifiuto": "profilo_sconosciuto",
+      "nome": "cucina"
+    },
+    {
+      "rifiuto": "profilo_piu_avanti",
+      "nome": "solo-pdf",
+      "arriva_con": [
+        "fub.pdf-completo"
+      ]
+    }
+  ],
+  "ComponentsApplied": [
+    {
+      "risposta": "esito",
+      "azione": {
+        "azione": "accendi",
+        "id": "fub.template"
+      },
+      "effetto": {
+        "accesi_anche": [
+          "fub.properties"
+        ],
+        "spenti_anche": [
+          "fub.base"
+        ],
+        "orfani": [
+          "fub.penna"
+        ],
+        "mancanti": [
+          [
+            "fub.lavagna",
+            "fub.vecchio"
+          ]
+        ]
+      },
+      "scritture": [
+        {
+          "id": "fub.template",
+          "acceso": true,
+          "bundle": true
+        }
+      ],
+      "chiavi": [
+        "components.profile"
+      ],
+      "stato": {
+        "scelti": [
+          "fub.lavagna"
+        ],
+        "in_attesa": [
+          "fub.properties"
+        ]
+      },
+      "applicato": true,
+      "avvisi": [
+        {
+          "kind": "io",
+          "message": "disk full"
+        }
+      ]
+    },
+    {
+      "risposta": "rifiuto",
+      "rifiuto": "sconosciuto",
+      "id": "fub.inesistente"
+    },
+    {
+      "risposta": "rifiuto",
+      "rifiuto": "nucleo",
+      "id": "fub.core"
+    },
+    {
+      "risposta": "rifiuto",
+      "rifiuto": "richiesto",
+      "id": "fub.penna",
+      "da": [
+        "fub.lavagna",
+        "fub.pdf"
+      ]
+    },
+    {
+      "risposta": "rifiuto",
+      "rifiuto": "profilo_sconosciuto",
+      "nome": "cucina"
+    },
+    {
+      "risposta": "rifiuto",
+      "rifiuto": "profilo_piu_avanti",
+      "nome": "solo-pdf",
+      "arriva_con": [
+        "fub.pdf-completo"
+      ]
+    }
   ]
 }

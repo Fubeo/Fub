@@ -63,7 +63,7 @@ CLI (`bad_args`, `not_found`, `denied`, `conflict`, `unavailable`, `local`).
 | `fub_create` | nota nuova, con un testo o da un modello | `note.create`, `note.from_template` | sì |
 | `fub_commands` | i comandi, con argomenti e se scrivono | `commands` | no |
 | `fub_invoke` | esegue un comando, in prova se non si chiede `apply` | `invoke_user_command` | con `apply` |
-| `fub_components` | i componenti: acceso o spento, perché (`core`, `chosen`, `required`, `off`), nome e chi lo richiede | `query_index(Settings)` | no |
+| `fub_components` | i componenti: acceso o spento, perché (`core`, `chosen`, `required`, `pending`, `off`), nome e chi lo richiede | `query_index(Settings)` | no |
 | `fub_components_why` | perché `id` è acceso, o che è spento | `query_index(Settings)` | no |
 | `fub_components_enable` | accende `id` e ciò senza cui non funziona, in prova se non si chiede `apply` | `set_plugin_enabled` | con `apply` |
 | `fub_components_disable` | spegne `id`; `also_dependents` spegne anche chi lo richiede, `orphans` (`"remove"` o `"keep"`) decide di ciò che non serve più; in prova se non si chiede `apply` | `set_plugin_enabled` | con `apply` |
@@ -110,8 +110,10 @@ risorse, né come bersaglio di un link risolto.
   Con radici di lettura più strette del vault, `fub_invoke` è rifiutato,
   perché un comando raggiunge il vault intero.
 - I componenti seguono le regole di `fub-cli componenti`: lo stato è
-  `plugins.disabled`, chi è acceso lo decide la mappa dei componenti, e si
-  scrive soltanto per i bundle. Senza `"apply": true` accendere e spegnere
+  `plugins.disabled` per i bundle più le chiavi `components.*` del vault (le
+  righe senza bundle spente, come la lavagna e il PDF; i componenti tenuti;
+  quelli in attesa, `pending`), chi è acceso lo decide la mappa dei
+  componenti, e lo scrive l'host. Senza `"apply": true` accendere e spegnere
   restituiscono l'effetto (`also_enabled`, `also_disabled`, `orphans`,
   `writes`) e non cambiano niente. Con `apply` vogliono tutto il vault
   fra le radici di scrittura, come un comando che non dice quali note tocca:

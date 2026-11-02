@@ -94,6 +94,8 @@ commands.allow = [
   "set_installed_plugin_consent",
   "remove_installed_plugin",
   "set_plugin_enabled",
+  "components_map",
+  "components_apply",
   "known_vaults",
   "set_vault_favorite",
   "set_vault_look",

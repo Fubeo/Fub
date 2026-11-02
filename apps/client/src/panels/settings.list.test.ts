@@ -29,7 +29,7 @@ vi.mock("../host/ipc", () => ({
 
 vi.mock("../host/query", () => ({ settings: async () => fake.entries }));
 vi.mock("../state/kernel", () => ({ onEvent: vi.fn() }));
-vi.mock("../ui/commands", () => ({ allCommands: () => [], keybindingKey: (id: string) => id }));
+vi.mock("../ui/commands", () => ({ allCommands: () => [], keybindingKey: (id: string) => id, newKinds: () => ["note"] }));
 vi.mock("../ui/permissions", () => ({
   TRUST_LABELS: {},
   isPermissionKey: () => false,

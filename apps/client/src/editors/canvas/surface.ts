@@ -18,18 +18,24 @@ import { CanvasEngine, type CanvasChange, type CanvasEngineOptions } from "./eng
 import { t } from "../../i18n/strings";
 import type { EditorChange, TextOperation } from "../core/text-operation";
 import type { VaultFontPort } from "../spatial/fonts/vault";
-import { mountPdfSurfaceLazily, mountVectorSurfaceLazily } from "../spatial/lazy";
-import { PDF_PROFILE, VECTOR_PROFILE } from "../spatial/modes";
+import { mountDrawingSurface } from "../spatial/lazy";
+import {
+  CANVAS_FAMILY,
+  CANVAS_FORMAT,
+  CANVAS_OWNER,
+  CANVAS_PROFILE,
+  CANVAS_SOURCE_PROFILE,
+  FUBANN_FORMAT,
+  PDF_PROFILE,
+  SVG_FORMAT,
+  VECTOR_PROFILE,
+} from "../core/component-surfaces";
 import type { PdfPorts } from "../spatial/pdf/surface";
 import type { Lifetime } from "../../ui/lifetime";
 
-export const CANVAS_OWNER = "fub.shell.canvas";
-export const CANVAS_FAMILY = "canvas" as const;
-export const CANVAS_PROFILE = "canvas";
-export const CANVAS_SOURCE_PROFILE = "source";
-export const CANVAS_FORMAT = "canvas";
-export const SVG_FORMAT = "svg";
-export const FUBANN_FORMAT = "fubann";
+// I descrittori stanno in un modulo leggero, che la shell legge all'avvio
+// senza caricare la lavagna.
+export { CANVAS_FAMILY, CANVAS_FORMAT, CANVAS_OWNER, CANVAS_PROFILE, CANVAS_SOURCE_PROFILE, FUBANN_FORMAT, SVG_FORMAT };
 
 export interface CanvasSurfaceCallbacks {
   /** A drawing's change is a plain text operation; a board's is a `CanvasOperation`. */
@@ -122,38 +128,8 @@ export function mountCanvasSurface(
     throw new Error(`canvas surface profile ${profile} is not registered`);
   }
   context.parent.replaceChildren();
-  if (profile === VECTOR_PROFILE) {
-    // I collegamenti di un disegno sono percorsi relativi al disegno: la shell
-    // li risolve da lì, come quelli di una nota.
-    const openPath = callbacks.onOpenPath;
-    const pickLink = callbacks.onPickDrawingLink;
-    const shellCommand = callbacks.shellCommand;
-    const images = callbacks.drawingImages;
-    const pickImage = images?.pick;
-    return mountVectorSurfaceLazily(context, {
-      onChange: (change) => callbacks.onChange(context.paneId, change),
-      onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
-      onOpenPath: openPath === undefined ? undefined : async (path) => {
-        await openPath(path, context.documentId);
-      },
-      onPickLink: pickLink === undefined ? undefined : (current) => pickLink(context.documentId, current),
-      // Le immagini, come i collegamenti, si risolvono dal disegno.
-      images: images === undefined ? undefined : {
-        url: (path, life) => images.url(path, context.documentId, life),
-        read: (path, limit) => images.read(path, context.documentId, limit),
-        pick: pickImage === undefined ? undefined : () => pickImage(context.documentId),
-      },
-      vaultFonts: callbacks.drawingFonts,
-      // «Esporta» apre la finestra dello Scrittoio.
-      onExport: shellCommand === undefined ? undefined : () => shellCommand("shell.doc.export"),
-    });
-  }
-  if (profile === PDF_PROFILE) {
-    return mountPdfSurfaceLazily(context, {
-      onChange: (change) => callbacks.onChange(context.paneId, change),
-      onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
-      pdf: callbacks.pdf,
-    });
+  if (profile === VECTOR_PROFILE || profile === PDF_PROFILE) {
+    return mountDrawingSurface(profile, context, callbacks);
   }
   const host = document.createElement("div");
   host.className = "canvas-surface-host";

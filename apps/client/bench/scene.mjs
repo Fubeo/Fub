@@ -184,7 +184,12 @@ export const SCENE = onPage("shell", [
     prepare: async (page) => {
       await page.click("#open-settings");
       await page.click('#settings-tabs button[data-tab="components"]');
-      await page.waitForSelector("#settings-body");
+      // La pagina «Componenti» è a schermo quando ha i profili e le righe
+      // della mappa letta.
+      await page.waitForSelector('#settings-body .components-profile[aria-pressed="true"]');
+      await page.waitForSelector("#settings-body .components-row");
+      // E il riquadro «Fub con questi componenti», che si disegna dalla stessa mappa.
+      await page.waitForSelector("#settings-body .components-preview:not([hidden]) .components-weight");
     },
   },
   {
@@ -310,6 +315,15 @@ export const SCENE = onPage("shell", [
     title: "La finestra senza vault: il benvenuto",
     query: "vault=vuoto",
     prepare: async () => {},
+  },
+  {
+    id: "new-vault-profile",
+    title: "Il vault nuovo: come lo userai, con «Studio» già scelto",
+    query: "vault=nuovo",
+    prepare: async (page) => {
+      await page.click("#onboarding-create");
+      await page.waitForSelector('#onboarding-profile .components-profile[aria-pressed="true"]');
+    },
   },
   {
     id: "grid-workbook",

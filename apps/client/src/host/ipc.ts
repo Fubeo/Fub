@@ -12,6 +12,9 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
   BundleInfo,
+  ComponentAction,
+  ComponentsApplied,
+  ComponentsMap,
   InstalledPluginInfo,
   CommandOutcome,
   CommandSpec,
@@ -414,6 +417,15 @@ export const api = {
   // può ramificare.
   setPluginEnabled: (id: string, enabled: boolean) =>
     invoke<PluginError[]>("set_plugin_enabled", { id, enabled }),
+  // La pagina «Componenti» (A7): la mappa con lo stato del vault, e la scelta.
+  // `apply` assente è una prova: dice che cosa cambierebbe e non scrive. Un
+  // rifiuto (`{ risposta: "rifiuto" }`) è una risposta, non un errore; l'errore
+  // resta per il vault non aperto. Non passa dalle porte generiche: lo stato
+  // dei componenti lo cambia solo la shell, come `set_plugin_enabled`.
+  componentsMap: (vault?: string | null) =>
+    invoke<ComponentsMap>("components_map", { vault: vault ?? null }),
+  componentsApply: (azione: ComponentAction, apply?: boolean, vault?: string | null) =>
+    invoke<ComponentsApplied>("components_apply", { vault: vault ?? null, azione, apply: apply ?? null }),
   // L'inventario installato è macchina, quindi resta leggibile anche senza un
   // guest montato. `vault` serve soltanto a riferire lo stato runtime.
   listInstalledPlugins: (vault?: string) =>

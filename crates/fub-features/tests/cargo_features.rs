@@ -185,6 +185,7 @@ const SENZA_FEATURE: &[(&str, &str)] = &[
     ("fub.markdown", "il nucleo: le note sono sempre compilate"),
     ("fub.importers", "l'importazione è sempre montata dall'host"),
     ("fub.lavagna", "la lavagna è sempre compilata nel client"),
+    ("fub.pdf", "il visore dei PDF è sempre compilato nel client"),
     (
         "fub.penna",
         "l'inchiostro è una libreria dei formati, sempre compilata",

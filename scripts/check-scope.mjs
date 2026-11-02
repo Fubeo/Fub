@@ -3,7 +3,9 @@
 //
 // Legge i file cambiati (uno per riga, da stdin) e stampa righe `chiave=valore`:
 //   crates=  i crate del workspace toccati più quelli che li usano, anche solo
-//            nei test (un cambio a `fub-abi` riguarda chiunque lo importi);
+//            nei test (un cambio a `fub-abi` riguarda chiunque lo importi), e
+//            quelli il cui codice nomina per percorso un file cambiato fuori
+//            dai crate (le guardie di `fub-abi` che leggono il client);
 //   all=1    quando cambia qualcosa che vale per tutto il workspace;
 //   client=1 / docs=1 / github=1 / vendor=1  le altre aree toccate;
 //   tauri=   i crate che dipendono da Tauri, per saltarli dove mancano le
@@ -66,6 +68,34 @@ while (queue.length) {
       affected.add(u);
       queue.push(u);
     }
+  }
+}
+
+// Un file fuori dai crate (il client, le doc) che il codice Rust di un crate
+// nomina per percorso: quel crate lo legge nei suoi test, che vanno rifatti.
+// Chi lo usa no: il file non cambia la sua API.
+const outside = files.filter((f) => !owner(f));
+if (outside.length) {
+  const rsFiles = (dir) => {
+    const out = [];
+    const walk = (d) => {
+      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+        if (e.name === "target" || e.name === "node_modules") continue;
+        const full = path.join(d, e.name);
+        if (e.isDirectory()) walk(full);
+        else if (e.name.endsWith(".rs")) out.push(full);
+      }
+    };
+    walk(dir);
+    return out;
+  };
+  for (const p of pkgs) {
+    if (p.dir === "" || affected.has(p.name)) continue;
+    const dir = path.join(root, p.dir);
+    if (rsFiles(dir).some((f) => {
+      const source = fs.readFileSync(f, "utf8");
+      return outside.some((changed) => source.includes(`"${changed}"`));
+    })) affected.add(p.name);
   }
 }
 

@@ -292,6 +292,12 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("list_themes", Why::AppSurface),
     ("read_theme", Why::AppSurface),
     ("set_plugin_enabled", Why::AppSurface),
+    // La pagina «Componenti» (A7): lo stato dei componenti non è
+    // `program_writable`, come `plugins.disabled` — un componente non deve
+    // poter spegnere gli altri — quindi non passa dalle porte generiche, e la
+    // scelta la applica solo la shell, come `set_plugin_enabled`.
+    ("components_map", Why::AppSurface),
+    ("components_apply", Why::AppSurface),
     // Inventario macchina e decisioni persistenti non appartengono al registro
     // di un vault. Queste porte restano sottili e delegano al manager installato.
     ("list_installed_plugins", Why::AppSurface),

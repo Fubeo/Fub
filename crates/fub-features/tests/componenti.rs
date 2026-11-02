@@ -156,3 +156,141 @@ fn ogni_feature_ufficiale_e_una_riga() {
         "ogni feature ufficiale delle note richiede le note"
     );
 }
+
+/// Ogni id di un profilo è una riga della mappa, oppure sta nel suo «arriva
+/// con…», che lo rende «più avanti»: un profilo non nomina niente a caso.
+#[test]
+fn ogni_id_dei_profili_esiste_o_e_piu_avanti() {
+    let mappa = componenti::mappa();
+    let profili = componenti::profili();
+    let mut nomi = BTreeSet::new();
+    for profilo in &profili {
+        assert!(nomi.insert(profilo.nome), "«{}» due volte", profilo.nome);
+        assert_eq!(profilo.etichetta, format!("profile.{}.name", profilo.nome));
+        for id in &profilo.componenti {
+            assert!(
+                mappa.componente(id).is_some(),
+                "«{}» sceglie «{id}», che la mappa non ha",
+                profilo.nome
+            );
+        }
+        for id in &profilo.arriva_con {
+            assert!(
+                mappa.componente(id).is_none(),
+                "«{}» aspetta «{id}», che c'è già",
+                profilo.nome
+            );
+        }
+    }
+    let piu_avanti: BTreeSet<&str> = profili
+        .iter()
+        .filter(|profilo| profilo.piu_avanti())
+        .map(|profilo| profilo.nome)
+        .collect();
+    assert_eq!(
+        piu_avanti,
+        BTreeSet::from(["solo-pdf", "grafica", "fotografia"])
+    );
+}
+
+/// «Studio» accende anche ciò che i suoi componenti richiedono: la penna per
+/// lavagna e PDF, i motori per documenti e fogli.
+#[test]
+fn studio_accende_la_penna_e_i_motori() {
+    let mappa = componenti::mappa();
+    let studio = componenti::profilo("studio").expect("il profilo «Studio»");
+    let (stato, _) = mappa.applica_profilo(&Default::default(), &studio.profilo());
+    let attivi = mappa.attivi(&stato);
+    for id in ["fub.penna", "fub.lavagna", "fub.pdf"] {
+        assert!(attivi.contains(id), "«{id}» con «Studio»");
+    }
+    // Grafo e correttore sono righe solo nelle build che li compilano.
+    #[cfg(feature = "graph")]
+    assert!(attivi.contains("fub.graph"));
+    #[cfg(feature = "proof")]
+    assert!(attivi.contains("fub.proof"));
+    #[cfg(feature = "rich")]
+    assert!(attivi.contains("fub.motore-documenti"));
+    #[cfg(feature = "xlsx")]
+    assert!(attivi.contains("fub.motore-fogli"));
+}
+
+/// «Solo note» sono le note e il gruppo `scrivere`, senza grafo e correttore;
+/// un profilo che non è «Tutto» non nomina i gruppi che lascia stare.
+#[test]
+fn solo_note_e_i_gruppi_che_un_profilo_non_tocca() {
+    let note = componenti::profilo("solo-note").unwrap();
+    assert!(note.componenti.contains(&"fub.markdown"));
+    assert!(!note.componenti.contains(&"fub.graph"));
+    assert!(!note.componenti.contains(&"fub.proof"));
+    for profilo in componenti::profili() {
+        let tutto = profilo.nome == componenti::PROFILO_TUTTO;
+        for id in &profilo.componenti {
+            let riga = componenti::riga(id).unwrap();
+            assert_ne!(riga.gruppo, "supporto", "«{}» sceglie «{id}»", profilo.nome);
+            if !tutto {
+                assert!(
+                    !componenti::GRUPPI_FUORI_DAI_PROFILI.contains(&riga.gruppo),
+                    "«{}» tocca «{id}»",
+                    profilo.nome
+                );
+            }
+        }
+    }
+    let tutto = componenti::profilo(componenti::PROFILO_TUTTO).unwrap();
+    for riga in componenti::righe() {
+        assert_eq!(
+            tutto.componenti.contains(&riga.id),
+            riga.gruppo != "supporto",
+            "«Tutto» e «{}»",
+            riga.id
+        );
+    }
+}
+
+#[test]
+fn i_gruppi_sono_quelli_con_almeno_una_riga() {
+    let righe = componenti::righe();
+    let gruppi = componenti::gruppi();
+    for riga in &righe {
+        assert!(
+            componenti::GRUPPI.contains(&riga.gruppo),
+            "«{}» sta nel gruppo «{}», che la pagina non ha",
+            riga.id,
+            riga.gruppo
+        );
+        assert!(gruppi.contains(&riga.gruppo), "«{}»", riga.gruppo);
+    }
+    for gruppo in &gruppi {
+        assert!(
+            righe.iter().any(|riga| riga.gruppo == *gruppo),
+            "«{gruppo}» non ha righe e si disegnerebbe vuoto"
+        );
+    }
+    let ordine: Vec<&str> = componenti::GRUPPI
+        .into_iter()
+        .filter(|gruppo| gruppi.contains(gruppo))
+        .collect();
+    assert_eq!(gruppi, ordine, "i gruppi, nell'ordine della pagina");
+    // In questa build nessuna riga è una foto: il gruppo non compare.
+    assert!(!gruppi.contains(&"foto"), "{gruppi:?}");
+}
+
+/// Le righe con un editor dicono quale: la pagina lo carica da lì.
+#[test]
+fn le_righe_con_un_editor_dicono_quale() {
+    let attese: &[(&str, &[&str])] = &[
+        ("fub.pdf", &["editors/media"]),
+        ("fub.lavagna", &["editors/canvas"]),
+        #[cfg(feature = "rich")]
+        ("fub.rich", &["editors/rich"]),
+        #[cfg(feature = "xlsx")]
+        ("fub.xlsx", &["editors/grid"]),
+        #[cfg(feature = "draw")]
+        ("fub.draw", &["editors/spatial"]),
+    ];
+    for (id, ui) in attese {
+        let riga = componenti::riga(id).unwrap_or_else(|| panic!("«{id}» è una riga"));
+        assert_eq!(riga.ui, *ui, "«{id}»");
+    }
+}

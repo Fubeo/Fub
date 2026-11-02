@@ -139,6 +139,17 @@ pub enum Call {
         key: String,
         value: SettingValue,
     },
+    /// La mappa dei componenti e il loro stato ([`Host::components`]).
+    Components {
+        vault: Option<String>,
+    },
+    /// Applica una scelta sui componenti, o la prova senza `apply`
+    /// ([`Host::apply_components`]).
+    ApplyComponents {
+        vault: Option<String>,
+        azione: crate::componenti::Azione,
+        apply: bool,
+    },
     ResetSetting {
         vault: Option<String>,
         key: String,
@@ -239,6 +250,12 @@ pub fn answer(host: &Host, call: Call) -> Result<Value, PluginError> {
         Call::SetPluginEnabled { vault, id, enabled } => {
             to_value(host.set_plugin_enabled(vault.as_deref(), &id, enabled)?)
         }
+        Call::Components { vault } => to_value(host.components(vault.as_deref())?),
+        Call::ApplyComponents {
+            vault,
+            azione,
+            apply,
+        } => to_value(host.apply_components(vault.as_deref(), azione, apply)?),
         Call::SetSetting { vault, key, value } => {
             to_value(host.set_setting_for_user(vault.as_deref(), &key, value)?)
         }

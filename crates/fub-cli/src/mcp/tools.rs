@@ -788,7 +788,7 @@ fn components_apply(
 
 fn components_enable(c: &Connection, access: &Access, args: &Value) -> Result<Value, Failure> {
     let id = required(args, "id")?;
-    components_apply(c, access, args, |vista| vista.accendi(id, &OPZIONI_MCP))
+    components_apply(c, access, args, |vista| vista.accendi(c, id, &OPZIONI_MCP))
 }
 
 fn components_disable(c: &Connection, access: &Access, args: &Value) -> Result<Value, Failure> {
@@ -801,6 +801,6 @@ fn components_disable(c: &Connection, access: &Access, args: &Value) -> Result<V
         Some(_) => return Err(Failure::bad_args("`orphans` è \"remove\" o \"keep\"")),
     };
     components_apply(c, access, args, |vista| {
-        vista.spegni(id, also, orfani, &OPZIONI_MCP)
+        vista.spegni(c, id, also, orfani, &OPZIONI_MCP)
     })
 }

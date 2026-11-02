@@ -1,4 +1,4 @@
-import { searchForWorkspaceRoot } from "vite";
+import { searchForWorkspaceRoot, type Rollup } from "vite";
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
@@ -27,6 +27,100 @@ function withoutComments(css: string): string {
     }
   }
   return out.replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, "\n\n");
+}
+
+/// Il file del build con i chunk che ogni pagina carica all'avvio: sta in
+/// `dist/`, accanto a ciò che descrive, e non nel repository.
+const STARTUP_FILE = "startup-chunks.json";
+
+/// Il file del build con i chunk di ogni pezzo di `NOT_AT_STARTUP`, all'avvio
+/// o no, con i moduli che li portano: il banco WebView (C1) controlla che
+/// nessuno arrivi nella WebView vera, all'avvio o aprendo una nota.
+const SWITCHABLE_FILE = "switchable-chunks.json";
+
+/// Ciò che un componente spento non deve portare nella WebView, e che quindi
+/// non si carica all'avvio di nessuna pagina: il lettore PDF, la lavagna, i
+/// disegni, i documenti e i fogli arrivano soltanto con un `import()` quando il loro componente è
+/// acceso e si apre un loro file (piano K2, D-1).
+const NOT_AT_STARTUP: readonly { readonly what: string; readonly chunk?: RegExp; readonly module?: RegExp }[] = [
+  { what: "pdfjs", module: /\/node_modules\/pdfjs-dist\// },
+  { what: "editors/canvas", module: /\/src\/editors\/canvas\// },
+  { what: "drawing-*", chunk: /^drawing-/ },
+  { what: "editors/spatial", module: /\/src\/editors\/spatial\// },
+  { what: "editors/rich", module: /\/src\/editors\/rich\// },
+  { what: "editors/grid", module: /\/src\/editors\/grid\// },
+];
+
+/// Un id di modulo detto a partire dal client: `src/...` o `node_modules/...`.
+function shortId(id: string): string {
+  const clean = id.replace(/\?.*$/, "");
+  const at = clean.search(/\/(src|node_modules)\//);
+  return at >= 0 ? clean.slice(at + 1) : clean;
+}
+
+/// Scrive l'insieme dei chunk di ogni pagina che si carica all'avvio (gli
+/// import statici a partire dalla pagina, non gli `import()`), e si ferma se
+/// dentro c'è qualcosa di `NOT_AT_STARTUP`: nomina il chunk, la catena dalla
+/// pagina e il primo modulo fuori dal pezzo vietato che lo importa.
+function reportStartup(context: Rollup.PluginContext, bundle: Rollup.OutputBundle): void {
+  const startup: Record<string, { file: string; chunks: { file: string; name: string; bytes: number }[] }> = {};
+  const problems: string[] = [];
+  for (const entry of Object.values(bundle)) {
+    if (entry.type !== "chunk" || !entry.isEntry) continue;
+    // In ampiezza, così la catena che si stampa è la più corta.
+    const via = new Map<string, string | null>([[entry.fileName, null]]);
+    const queue = [entry.fileName];
+    for (let i = 0; i < queue.length; i++) {
+      const chunk = bundle[queue[i]!];
+      if (chunk?.type !== "chunk") continue;
+      for (const next of chunk.imports) {
+        if (via.has(next) || bundle[next]?.type !== "chunk") continue;
+        via.set(next, queue[i]!);
+        queue.push(next);
+      }
+    }
+    const chunks = queue.map((file) => bundle[file]).filter((chunk): chunk is Rollup.OutputChunk => chunk?.type === "chunk");
+    startup[entry.name] = {
+      file: entry.fileName,
+      chunks: chunks.map((chunk) => ({ file: chunk.fileName, name: chunk.name, bytes: Buffer.byteLength(chunk.code, "utf8") })),
+    };
+    for (const chunk of chunks) {
+      for (const rule of NOT_AT_STARTUP) {
+        const modules = Object.keys(chunk.modules).filter((id) => rule.module?.test(id));
+        if (!rule.chunk?.test(chunk.name) && modules.length === 0) continue;
+        const chain: string[] = [];
+        for (let file: string | null | undefined = chunk.fileName; file; file = via.get(file)) chain.unshift(file);
+        // Chi lo tira dentro: un modulo che importa staticamente un modulo
+        // del pezzo vietato senza esserne parte.
+        let culprit = "";
+        for (const id of modules.length ? modules : Object.keys(chunk.modules)) {
+          const importer = context.getModuleInfo(id)?.importers.find((other) => !rule.module?.test(other));
+          if (importer) {
+            culprit = `, importato da ${shortId(importer)} (${shortId(id)})`;
+            break;
+          }
+        }
+        problems.push(`${entry.name}: il chunk ${chunk.fileName} si carica all'avvio e contiene ${rule.what}${culprit}; catena: ${chain.join(" → ")}`);
+      }
+    }
+  }
+  context.emitFile({ type: "asset", fileName: STARTUP_FILE, source: `${JSON.stringify(startup, null, 2)}\n` });
+  // Per ogni pezzo, i chunk che lo contengono e i moduli suoi che ci stanno:
+  // il banco li nomina quando uno arriva nella WebView.
+  const switchable: Record<string, Record<string, string[]>> = {};
+  for (const rule of NOT_AT_STARTUP) {
+    const files: Record<string, string[]> = {};
+    for (const chunk of Object.values(bundle)) {
+      if (chunk.type !== "chunk") continue;
+      const modules = Object.keys(chunk.modules).filter((id) => rule.module?.test(id)).map(shortId).sort();
+      if (rule.chunk?.test(chunk.name) || modules.length) files[chunk.fileName] = modules;
+    }
+    switchable[rule.what] = Object.fromEntries(Object.entries(files).sort(([a], [b]) => a.localeCompare(b)));
+  }
+  context.emitFile({ type: "asset", fileName: SWITCHABLE_FILE, source: `${JSON.stringify(switchable, null, 2)}\n` });
+  if (problems.length) {
+    context.error(`un componente che si può spegnere arriva all'avvio:\n${problems.join("\n")}`);
+  }
 }
 
 // Config allineata a Tauri: porta fissa 1420, niente clear screen.
@@ -62,6 +156,7 @@ export default defineConfig({
         for (const chunk of Object.values(bundle)) {
           if (chunk.type === "chunk" && chunk.isEntry) visit(chunk.fileName);
         }
+        reportStartup(this, bundle);
         // Vero se dal chunk `from` si arriva, per import statici, a un chunk
         // che si chiama `name`.
         const reaches = (from: string, name: string): boolean => {

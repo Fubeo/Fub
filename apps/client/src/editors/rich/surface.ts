@@ -25,12 +25,13 @@ import { closeContextMenu } from "../../ui/menu";
 import { focusZone } from "../../ui/a11y";
 import type { DrawingImagePort } from "../canvas/surface";
 import { relativeRef } from "../../rules/mirrored";
+import { RICH_FAMILY, RICH_FORMATS, RICH_OWNER, RICH_PROFILE } from "../core/component-surfaces";
 import { adaptedPaper, shownLook, type Look } from "../../theme/content-look";
 import type { Paper } from "../../theme/adapt";
 
-export const RICH_OWNER = "fub.shell.rich";
-export const RICH_FAMILY = "rich";
-export const RICH_PROFILE = "document";
+// Proprietario, famiglia, profilo e formati stanno nel modulo leggero dei
+// descrittori, che la shell legge all'avvio senza caricare i documenti.
+export { RICH_FAMILY, RICH_FORMATS, RICH_OWNER, RICH_PROFILE };
 /// Le modalità del documento, come in Word: Pagina (il foglio del file),
 /// Scrittura (la colonna della nota, vestita dal tema) e Lettura (la carta,
 /// senza barra e senza cursore). Pagina conserva l'id di quando era l'unica.
@@ -40,14 +41,6 @@ export const RICH_READING_MODE = "reading";
 /// Sotto questa larghezza (px) la vista è stretta: la carta le sta dentro, e
 /// il pannello del documento è un foglio che sale dal basso.
 export const NARROW_PX = 600;
-/// I formati che questa superficie apre, con il loro profilo. Se un documento
-/// si scrive lo dice la sua proiezione (`readonly`), non il formato.
-export const RICH_FORMATS: Readonly<Record<string, string>> = {
-  docx: RICH_PROFILE,
-  odt: RICH_PROFILE,
-  rtf: RICH_PROFILE,
-  doc: RICH_PROFILE,
-};
 
 /// I formati che scrivono commenti nuovi e registrano le modifiche: il codec
 /// ODT non li scrive ancora.

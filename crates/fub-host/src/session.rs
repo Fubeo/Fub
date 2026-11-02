@@ -3329,6 +3329,84 @@ impl Host {
         self.with_session(vault, f)?
     }
 
+    /// La radice canonica della sessione di `vault` (`None`: la corrente).
+    pub(crate) fn session_root(&self, vault: Option<&str>) -> Result<Utf8PathBuf, PluginError> {
+        self.with_session(vault, |session| session.root.clone())
+    }
+
+    /// Il valore di alcune chiavi del vault, e da dove viene ciascuno: per
+    /// chi deve sapere se una chiave sta davvero nel file (`crate::componenti`).
+    pub(crate) fn settings_with_source(
+        &self,
+        vault: Option<&str>,
+        keys: &[&str],
+    ) -> Result<
+        Vec<(
+            fub_abi::settings::SettingValue,
+            fub_abi::settings::SettingSource,
+        )>,
+        PluginError,
+    > {
+        self.read_workspace(vault, |workspace| {
+            keys.iter()
+                .map(|key| workspace.setting_source(key))
+                .collect()
+        })
+    }
+
+    /// Scrive (`Some`) o azzera (`None`) chiavi del vault per conto
+    /// dell'utente, in un turno solo. Solo per chiavi che non sono di
+    /// macchina e non sono scorciatoie: chi le ha (`crate::componenti`) lo sa.
+    pub(crate) fn write_vault_settings(
+        &self,
+        vault: Option<&str>,
+        writes: Vec<(&str, Option<fub_abi::settings::SettingValue>)>,
+    ) -> Result<(), PluginError> {
+        self.write_workspace(vault, |workspace| {
+            for (key, value) in writes {
+                match value {
+                    Some(value) => workspace.set_setting(key, value)?,
+                    None => workspace.reset_setting(key)?,
+                }
+            }
+            Ok(())
+        })
+    }
+
+    /// Chiude e riapre il vault di `root` (canonica), per ciò che si decide
+    /// solo montando: i formati registrati, come la lavagna. Il lease di
+    /// scrittura resta di questo processo fra la chiusura e la riapertura,
+    /// come per lo snapshot; il corrente resta quello di prima.
+    ///
+    /// **E lo dice a chi guarda.** La chiusura esce dal ponte come
+    /// `VaultClosed`; il `VaultOpened` della riapertura invece no, perché il
+    /// kernel lo emette durante la scansione, prima che il ponte nuovo si
+    /// abboni (è voluto: l'apertura non è un temporale di eventi). Senza un
+    /// secondo avviso la shell vedrebbe un vault chiuso e mai riaperto: qui
+    /// lo si emette sul bus del vault riaperto, che lo porta soltanto agli
+    /// abbonati (il ponte, cioè `fub://event`) e non agli handler dei plugin,
+    /// che il loro `VaultOpened` l'hanno già ricevuto dal kernel. Vale per
+    /// ogni strada che arriva qui: `components_apply` dell'app e il canale di
+    /// controllo (CLI, MCP).
+    pub(crate) fn remount(&self, root: &Utf8Path) -> Result<Vec<PluginError>, PluginError> {
+        let current = self.current();
+        let _writer = self.writer_lease(root)?;
+        let faults = self.close_vault(root)?;
+        self.open(root)?;
+        self.read_workspace(Some(root.as_str()), |workspace| {
+            workspace
+                .bus()
+                .emit(Notice::of(fub_abi::Event::VaultOpened {
+                    root: workspace.root().to_string(),
+                }));
+            Ok(())
+        })?;
+        if let Some(current) = current.filter(|current| current != root) {
+            self.set_current(&current)?;
+        }
+        Ok(faults)
+    }
+
     /// Esegue una lettura breve sul workspace selezionato. La custodia non
     /// attraversa questa porta: i consumer dell'host ricevono operazioni, non
     /// l'oggetto monolitico che le implementa.
@@ -4197,6 +4275,24 @@ impl Host {
                 error
             })?;
         Ok(os_trash_outcome(receipt))
+    }
+
+    /// **La lingua di chi guarda** il vault `vault`: le sue `locale.*` sopra la
+    /// lingua del sistema (`Workspace::locale`), o la sola lingua del sistema
+    /// se il vault non c'è.
+    ///
+    /// Serve ai testi che l'host scrive da sé con un catalogo che non è di un
+    /// bundle montato — i nomi della mappa dei componenti
+    /// ([`crate::componenti::Testi`]). A differenza di
+    /// [`localize_core`](Self::localize_core) **aspetta** il workspace: chi la
+    /// chiama ha appena letto il vault e non sta dentro un `mount.*`, e un nome
+    /// che esce nella lingua sbagliata perché un altro scriveva sarebbe un
+    /// cambio di lingua a caso.
+    pub fn speaking_locale(&self, vault: Option<&str>) -> fub_abi::locale::Locale {
+        self.with_session(vault, |session| session.workspace.clone())
+            .ok()
+            .and_then(|workspace| workspace.read().ok().map(|ws| ws.locale()))
+            .unwrap_or_else(|| self.system_locale.get())
     }
 
     /// Un valore dell'host nella lingua di chi guarda, col catalogo del core.

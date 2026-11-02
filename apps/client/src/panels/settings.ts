@@ -81,6 +81,7 @@ import {
   themeCatalog,
 } from "../theme/theme";
 import { setTooltip } from "../ui/tooltip";
+import { mountComponentsPage, type ComponentsPage } from "./components-page";
 import { enterSurface, exitSurface } from "../ui/motion";
 import { icon } from "../ui/icons";
 import { SOURCE_URL, checkMessage, mountUpdateCheck, type UpdateChecker } from "./about";
@@ -439,9 +440,42 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
   });
   if (typeof stopSetting === "function") lifetime.add(stopSetting);
   // Chiudere il vault mentre il pannello è aperto lascerebbe un form che parla
-  // di un vault che non c'è: le impostazioni sono per-vault.
-  const stopVault = onEvent("vault_closed", () => close());
+  // di un vault che non c'è: le impostazioni sono per-vault. Ma una scelta della
+  // pagina «Componenti» che accende o spegne un formato (la lavagna) rimonta il
+  // vault: `vault_closed` e subito `vault_opened` dello stesso `root`. Quella
+  // non è una chiusura, e il pannello resta dov'è; per saperlo si aspetta un
+  // momento prima di chiudere. Un altro vault che si apre chiude subito.
+  let closing: { root: string; timer: ReturnType<typeof setTimeout> } | null = null;
+  const stopClosing = () => {
+    if (closing) clearTimeout(closing.timer);
+    closing = null;
+  };
+  const stopVault = onEvent("vault_closed", (event) => {
+    stopClosing();
+    if (lifetime.closed) return;
+    if (!release) {
+      close();
+      return;
+    }
+    const timer = setTimeout(() => {
+      closing = null;
+      if (!lifetime.closed) close();
+    }, VAULT_REMOUNT_GRACE_MS);
+    closing = { root: event.root, timer };
+  });
   if (typeof stopVault === "function") lifetime.add(stopVault);
+  const stopReopen = onEvent("vault_opened", (event) => {
+    const pending = closing;
+    if (!pending || lifetime.closed) return;
+    stopClosing();
+    if (event.root !== pending.root) close();
+  });
+  if (typeof stopReopen === "function") lifetime.add(stopReopen);
+  lifetime.add(stopClosing);
+  componentsPage = mountComponentsPage(lifetime, {
+    visible: () => !lifetime.closed && !panelEl.hidden && tab === "components",
+    reloadProvider: () => settingsHooks.reloadProvider(),
+  });
   lifetime.add(() => {
     cancelCssSnippetsPreview();
     race.cancel();
@@ -453,6 +487,12 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
 }
 
 let mountedTeardown: Teardown | null = null;
+/// La pagina «Componenti»: vive quanto il pannello, così la sua ricerca e il suo
+/// avviso non si ricostruiscono a ogni ridisegno della scheda.
+let componentsPage: ComponentsPage;
+/// Quanto il pannello aspetta, dopo un `vault_closed`, il `vault_opened` dello
+/// stesso vault che dice «era un rimontaggio».
+const VAULT_REMOUNT_GRACE_MS = 2000;
 let settingsLifetime: Lifetime | null = null;
 /// Il controllo degli aggiornamenti della scheda «Informazioni»: vive quanto il
 /// pannello, e il suo esito ridisegna la scheda se è quella aperta.
@@ -489,6 +529,7 @@ function close(): void {
   cancelCssSnippetsPreview();
   void cancelThemePreview();
   componentsGeneration++;
+  componentsPage?.reset();
   pendingRows.clear();
   rowErrors.clear();
   openDetails.clear();
@@ -550,7 +591,11 @@ async function render(): Promise<void> {
   // Sostituire tutto il corpo lo accorcia per un istante: lo scroll si rimette
   // a mano dov'era, e torna in cima solo quando cambia la scheda.
   const scrollTop = scrollEl.scrollTop;
+  // Il fuoco dentro il corpo resta dov'era se il suo controllo sopravvive al
+  // ridisegno (la pagina «Componenti» è sempre la stessa).
+  const focused = bodyEl.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
   bodyEl.replaceChildren(...nodes);
+  if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
   scrollEl.scrollTop = renderedTab === tab ? scrollTop : 0;
   renderedTab = tab;
   syncToolbar();
@@ -2234,6 +2279,7 @@ async function renderComponents(): Promise<HTMLElement[]> {
     settings(),
     Promise.resolve().then(() => api.pluginBudgetSnapshot()),
     Promise.resolve().then(() => api.pluginLimitedMode()),
+    componentsPage.show(),
   ]);
   const installed = installedResult.status === "fulfilled" ? installedResult.value : [];
   const bundles = bundleResult.status === "fulfilled" ? bundleResult.value : [];
@@ -2252,7 +2298,6 @@ async function renderComponents(): Promise<HTMLElement[]> {
   // contenuto, e non deve pesare quanto i componenti.
   const notes = document.createElement("div");
   notes.className = "settings-note";
-  notes.append(row("muted", t("settings.components_hint")));
   const status = document.createElement("div");
   status.className = "settings-status";
   status.setAttribute("aria-label", t("settings.components.runtime"));
@@ -2275,7 +2320,7 @@ async function renderComponents(): Promise<HTMLElement[]> {
     status.append(row("setting-source", t("settings.read_failed", { reason: errorText(entryResult.reason) })));
   }
   notes.append(status);
-  const nodes: HTMLElement[] = [notes];
+  const nodes: HTMLElement[] = [componentsPage.element, notes];
   let index = 0;
 
   const add = sectionBlock(t("settings.components.add"), index++, { card: false });
@@ -2285,9 +2330,10 @@ async function renderComponents(): Promise<HTMLElement[]> {
   add.body.append(installCard, renderCatalogSearch(installed));
   nodes.push(add.section);
 
-  if (native.length > 0) {
-    const bundled = sectionBlock(t("settings.components.bundled"), index++, { card: false });
-    for (const bundle of native) bundled.body.append(renderComponent(bundle, forKey));
+  const guarded = native.filter((bundle) => rows(bundle).length > 0);
+  if (guarded.length > 0) {
+    const bundled = sectionBlock(t("settings.components.bundled_permissions"), index++, { card: false });
+    for (const bundle of guarded) bundled.body.append(renderBundlePermissions(bundle, forKey));
     nodes.push(bundled.section);
   }
 
@@ -2513,37 +2559,21 @@ function permissionDetails(
   return details;
 }
 
-/// Un componente distribuito con Fub conserva il proprio interruttore runtime e
-/// le preferenze granulari dei permessi. Il percorso installato sotto è
-/// separato: l'autorità persistita è l'identità dell'installazione.
-function renderComponent(bundle: BundleInfo, forKey: EntryMap): HTMLElement {
+/// I permessi di un componente distribuito con Fub. Acceso e spento si
+/// decidono nella pagina «Componenti» qui sopra (`components_apply`): qui
+/// restano soltanto le preferenze granulari dei permessi, che sono sicurezza e
+/// non scelta di che cosa usare.
+function renderBundlePermissions(bundle: BundleInfo, forKey: EntryMap): HTMLElement {
   const card = document.createElement("div");
   card.className = "settings-card settings-component";
-  const el = document.createElement("div");
-  el.className = "setting-row";
+  card.dataset.bundlePermissions = bundle.id;
   const text = document.createElement("div");
   text.className = "setting-text";
-  const label = document.createElement("label");
+  const label = document.createElement("span");
+  label.className = "setting-label";
   label.textContent = bundle.name;
-  label.htmlFor = `bundle-${bundle.id}`;
   text.append(label, row("muted", `${bundle.id} · ${t(TRUST_LABELS[bundle.trust])}`));
-  const input = switchInput(`bundle-${bundle.id}`, bundle.mounted);
-  const pendingKey = `bundle:${bundle.id}`;
-  input.disabled = pendingComponents.has(pendingKey);
-  input.addEventListener("change", () => {
-    beginComponentAction(
-      pendingKey,
-      [card],
-      () => api.setPluginEnabled(bundle.id, input.checked),
-      "settings.component_not_changed",
-    );
-  });
-  const control = document.createElement("div");
-  control.className = "setting-control";
-  control.append(input);
-  el.append(text, control);
-  card.append(el);
-
+  card.append(text);
   const hints = [t("settings.permissions.hint")];
   if (!bundle.mounted) hints.push(t("settings.permissions.off_hint"));
   card.append(permissionDetails(`bundle:${bundle.id}`, rows(bundle), hints, (permission) => renderPermission(permission, forKey.get(permission.key))));
