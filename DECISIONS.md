@@ -59,6 +59,19 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K5 · T4: il contratto del disegno in fub-abi ha limiti
+  espliciti (20 MiB di testo, 100 000 eventi per gesto, 10 000 operazioni, 8
+  MiB di operazioni, 50 000 perdite) e un validate() per ogni messaggio; gli
+  specchi TS sono controllati da ts_mirror e mirror.test.ts. Perché: un
+  messaggio fuori misura si rifiuta al confine, prima del motore.
+- 2026-11-02 · K5 · T2: l'oracolo a pixel sta in fub-testkit dietro la
+  feature `pixel`, fuori dal default e in FUORI_DAL_DEFAULT; resvg diventa
+  dipendenza di workspace e il banco lo prende con il solo `text` (niente
+  raster, niente caratteri di sistema); l'altezza viene da width/height
+  dell'SVG, con tetto di 8192 px, sfondo bianco opaco e famiglie generiche
+  sulla prima faccia. Ho aggiunto io in ci.yml clippy e nextest con
+  `--features pixel`. Perché: il confronto è identico su ogni macchina e chi
+  usa il banco per il kernel non compila un rasterizzatore.
 - 2026-11-02 · K5 · T3: i vettori dei gesti (49) sono registrati dagli
   strumenti TypeScript così come sono; la loro forma sta in una pagina
   nuova, docs/reference/scene-gestures.md, e il §10 di scene-operations.md è
