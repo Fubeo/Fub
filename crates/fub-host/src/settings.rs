@@ -275,6 +275,17 @@ pub const FILES_LEGACY_FOLDER_PAGES: &str = "files.legacy-folder-pages";
 /// `unique`, `capture`. Di macchina, e vuota di default: un vault arrivato da
 /// fuori non può decidere che un link del browser scriva in silenzio.
 pub const URI_ALLOWED: &str = "uri.allowed";
+/// Dove sono le app Craft quando Fub non le trova da solo: una riga
+/// `id=percorso` (`vectorcraft=/opt/vc/vectorcraft`) o `id-cli=percorso` per
+/// la riga di comando. Di **macchina**: i percorsi dei programmi sono di
+/// questo computer e non viaggiano col vault. Le legge
+/// `craft::editors::detect`.
+#[cfg(feature = "craft")]
+pub const CRAFT_EDITOR_PATHS: &str = "craft.editor-paths";
+/// Fub avvia la riga di comando di un'app Craft per fare l'anteprima di un
+/// file che non ne ha una. Di macchina, accesa di default.
+#[cfg(feature = "craft")]
+pub const CRAFT_CLI_PREVIEWS: &str = "craft.cli-previews";
 /// Come nasce un link a una nota trascinata o copiata: wikilink (`[[Nota]]`)
 /// o link Markdown (`[Nota](Nota.md)`), che leggono anche gli altri programmi.
 pub const FILES_LINK_STYLE: &str = "files.link-style";
@@ -543,6 +554,8 @@ pub fn core_settings() -> Vec<SettingSpec> {
     settings.extend(service_settings());
     settings.extend(live_settings());
     settings.extend(viewer_settings());
+    #[cfg(feature = "craft")]
+    settings.extend(craft_settings());
     // **Le famiglie del kernel, tutte, e non una a una.** Quelle righe erano
     // quattro `extend` scritti a mano — `locale`, `journal`, `properties`,
     // `ignore` — e ogni chiave del kernel sta là dove sta chi la legge (§11.1):
@@ -1108,6 +1121,29 @@ pub fn setting_requires_reopen(key: &str) -> bool {
     matches!(key, CHROME_FRAME | CHROME_SCHEMA)
 }
 
+/// Le app Craft (N7): dove sono i loro programmi e se Fub può avviarne la
+/// riga di comando per le anteprime. Tutte e due di macchina, nel gruppo «App
+/// esterne».
+#[cfg(feature = "craft")]
+fn craft_settings() -> Vec<SettingSpec> {
+    vec![
+        SettingSpec::new(
+            CRAFT_EDITOR_PATHS,
+            Text::key(C_CRAFT_EDITOR_PATHS),
+            SettingKind::List {
+                default: Vec::new(),
+            },
+        )
+        .describing(Text::key(C_CRAFT_EDITOR_PATHS_DESC))
+        .grouped(Text::key(C_GROUP_EXTERNAL_APPS))
+        .for_machine(),
+        SettingSpec::toggle(CRAFT_CLI_PREVIEWS, Text::key(C_CRAFT_CLI_PREVIEWS), true)
+            .describing(Text::key(C_CRAFT_CLI_PREVIEWS_DESC))
+            .grouped(Text::key(C_GROUP_EXTERNAL_APPS))
+            .for_machine(),
+    ]
+}
+
 #[cfg(feature = "http-client")]
 fn service_settings() -> Vec<SettingSpec> {
     vec![
@@ -1306,6 +1342,11 @@ const C_FILES_LEGACY_FOLDER_PAGES: &str = "core.files_legacy_folder_pages";
 const C_FILES_LEGACY_FOLDER_PAGES_DESC: &str = "core.files_legacy_folder_pages.desc";
 const C_URI_ALLOWED: &str = "core.uri_allowed";
 const C_URI_ALLOWED_DESC: &str = "core.uri_allowed.desc";
+const C_GROUP_EXTERNAL_APPS: &str = "core.group.external_apps";
+const C_CRAFT_EDITOR_PATHS: &str = "core.craft.editor_paths";
+const C_CRAFT_EDITOR_PATHS_DESC: &str = "core.craft.editor_paths.desc";
+const C_CRAFT_CLI_PREVIEWS: &str = "core.craft.cli_previews";
+const C_CRAFT_CLI_PREVIEWS_DESC: &str = "core.craft.cli_previews.desc";
 const C_FILES_LINK_STYLE: &str = "core.files_link_style";
 const C_FILES_LINK_STYLE_DESC: &str = "core.files_link_style.desc";
 const C_FILES_LINK_WIKI: &str = "core.files_link_style.wiki";
@@ -1824,6 +1865,17 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_FILES_LEGACY_FOLDER_PAGES_DESC,
             "Oltre a Cartella/_index.md, apre come pagina della cartella anche Cartella/Cartella.md e Cartella/index.md, come Obsidian. Nessun file cambia nome.",
+        )
+        .with(C_GROUP_EXTERNAL_APPS, "App esterne")
+        .with(C_CRAFT_EDITOR_PATHS, "Dove sono le app Craft")
+        .with(
+            C_CRAFT_EDITOR_PATHS_DESC,
+            "Una riga per programma, come vectorcraft=/opt/vc/vectorcraft, o vectorcraft-cli=… per la riga di comando. Il percorso intero vince su quello che Fub trova da solo. Vale su questo computer.",
+        )
+        .with(C_CRAFT_CLI_PREVIEWS, "Anteprime con le app Craft")
+        .with(
+            C_CRAFT_CLI_PREVIEWS_DESC,
+            "Fub avvia la CLI dell'app per fare l'anteprima di un file che non ne ha una. Vale su questo computer.",
         )
         .with(C_URI_ALLOWED, "Collegamenti fub:// che scrivono senza chiedere")
         .with(
@@ -2393,6 +2445,17 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_FILES_LEGACY_FOLDER_PAGES_DESC,
             "Besides Folder/_index.md, opens Folder/Folder.md and Folder/index.md as the folder page too, like Obsidian. No file is renamed.",
+        )
+        .with(C_GROUP_EXTERNAL_APPS, "External apps")
+        .with(C_CRAFT_EDITOR_PATHS, "Where the Craft apps are")
+        .with(
+            C_CRAFT_EDITOR_PATHS_DESC,
+            "One line per program, like vectorcraft=/opt/vc/vectorcraft, or vectorcraft-cli=… for the command line. The full path wins over what Fub finds on its own. Applies on this computer.",
+        )
+        .with(C_CRAFT_CLI_PREVIEWS, "Previews with the Craft apps")
+        .with(
+            C_CRAFT_CLI_PREVIEWS_DESC,
+            "Fub starts the app's CLI to make the preview of a file that has none. Applies on this computer.",
         )
         .with(C_URI_ALLOWED, "fub:// links that write without asking")
         .with(

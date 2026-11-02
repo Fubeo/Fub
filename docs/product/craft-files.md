@@ -62,3 +62,60 @@ c'è niente da annullare.
 
 Unire due note è diverso: se un file Craft punta alla nota che si toglierebbe,
 l'unione non parte, perché il link resterebbe verso un file che non c'è più.
+
+## Quali app trova Fub
+
+Fub conosce sette app Craft: VectorCraft, PhotoCraft, LightCraft, PdfCraft,
+FigCraft, GridCraft e WordCraft, ognuna con i tipi di file che apre (un
+`.pcraft` o un `IMG.JPG` per PhotoCraft, un `.figcraft` per FigCraft). Per
+sapere dove sono installate guarda soltanto se i loro programmi ci sono: non
+ne avvia nessuno e non chiede niente in rete.
+
+Le cerca in quest'ordine, e il primo posto in cui c'è il programma vince:
+
+1. l'impostazione **Dove sono le app Craft**, nel gruppo «App esterne»;
+2. l'elenco del launcher di ArtCraft, `artcraft-launcher/installed.json`
+   nella cartella dei dati locali (`~/.local/share` su Linux,
+   `~/Library/Application Support` su macOS, `%LOCALAPPDATA%` su Windows);
+3. i posti di ogni sistema:
+   - Linux: `/usr/bin`, `~/.local/bin`, un AppImage in `~/Applications` o
+     `~/AppImages` il cui nome comincia col nome dell'app scritto così
+     (`VectorCraft-2.1.AppImage`, `vectorcraft-2.1.AppImage`), e il Flatpak
+     `ai.storyteller.vectorcraft`, dell'utente o del sistema;
+   - macOS: `VectorCraft.app` in `/Applications` o in `~/Applications`;
+   - Windows: `ArtCraft\VectorCraft\vectorcraft.exe` sotto
+     `%LOCALAPPDATA%\Programs` o sotto `Program Files`.
+
+VectorCraft, PhotoCraft e FigCraft hanno anche un programma a riga di comando
+(`vectorcraft-cli`), che serve per le anteprime: Fub lo cerca accanto
+all'app trovata e in `~/.local/bin`. Il `PATH` del sistema non conta: un
+programma che sta solo lì Fub non lo vede, e va scritto nell'impostazione.
+
+Un programma conta solo se è un file che si può eseguire (o una cartella
+`.app` su macOS). Un AppImage scaricato e mai reso eseguibile non conta.
+
+### Dire a Fub dove sta un'app
+
+Nell'impostazione **Dove sono le app Craft** si scrive una riga per programma,
+con l'id dell'app, un `=` e il percorso intero:
+
+```text
+vectorcraft=/opt/VectorCraft/vectorcraft
+vectorcraft-cli=/opt/VectorCraft/vectorcraft-cli
+```
+
+Una riga senza `=`, con un'app che Fub non conosce o con un percorso che non
+comincia dalla radice del disco non vale. Se due righe nominano lo stesso
+programma vale l'ultima. Una riga che punta a un file che non c'è non ferma
+la ricerca: Fub prova i posti di sempre. L'impostazione è di questo computer
+e non viaggia col vault.
+
+Fub rifà la ricerca ogni 30 secondi al più, e subito quando l'impostazione
+cambia.
+
+### «Non installata»
+
+Un'app è **Non installata** quando Fub non ha trovato il suo programma in
+nessuno dei posti qui sopra. Fub non sa dire se l'app è davvero assente o se
+sta in un posto suo: in tutti e due i casi basta scrivere il percorso in
+**Dove sono le app Craft**.
