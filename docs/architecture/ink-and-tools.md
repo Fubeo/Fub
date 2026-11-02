@@ -101,8 +101,13 @@ Le regole che la sessione garantisce:
 ignorato. La punta della penna disegna; la penna girata (`button` 5) e il
 tasto laterale (`button` 2) fanno anch'essi un tratto, coi ruoli `erase` e
 `barrel`, che `StrokeStart.role` porta a chi disegna. Ogni tratto vive finché
-è premuto il suo bit di `buttons` (1, 32, 2). Il mouse disegna col tasto
-principale.
+è premuto il suo bit di `buttons` (1, 32, 2). Il tasto centrale del mouse
+muove la vista; il principale segue la politica del mouse, che sceglie il
+prodotto (`mouse` nella configurazione, `setMousePolicy` mentre vive): `ink`,
+quella di serie, disegna, `ignore` lo lascia a chi sta sotto, per esempio a
+una lavagna dove il mouse seleziona. Vale dal prossimo appoggio: un tratto
+in corso finisce com'è. Un tipo di puntatore sconosciuto (`""`) segue il
+mouse: un driver che manda la penna così, con `ignore`, non scrive.
 Un dito non disegna mentre una penna tocca lo schermo o è sospesa: è il palmo, e
 un suo tratto già cominciato si annulla quando la penna arriva. Con due dita
 giù il gesto è di navigazione. Altrimenti decide la politica del tocco
@@ -269,6 +274,49 @@ FubDraw è il primo consumatore e non il proprietario.
 
 Restano del prodotto il livello di destinazione, gli id, gli annunci per lo screen reader, il passo di annulla e il formato della scena.
 
+## Lo strato della lavagna
+
+`editors/canvas/ink-layer.ts` (`mountInkLayer`) porta la penna sulla lavagna
+(`.canvas`). Attacca `attachInkInput` al viewport con il dito `navigate` e il
+mouse `ignore`: i loro eventi restano alla lavagna, che li usa come prima.
+
+- **Chi ferma l'evento.** Un ascoltatore `pointerdown` in cattura sul
+  viewport, registrato dopo l'adattatore, legge il ruolo appena deciso
+  (`roleOf`). Se il puntatore scrive o cancella (`ink`, `erase`, `barrel`), o
+  è una penna, chiama `stopImmediatePropagation()` e `preventDefault()`:
+  `stopPropagation` da solo non basterebbe quando il bersaglio è il viewport
+  stesso. La lavagna non seleziona, non sposta, non prende il fuoco e non
+  seleziona testo; la penna scrive anche sulla testata, sulla maniglia e su
+  una scheda in modifica, il cui campo resta com'è. Il `click` e il
+  `dblclick` del puntatore (`detail` > 0) dopo un tratto, fino al
+  `pointerdown` seguente, si fermano allo stesso modo: il doppio tocco della
+  penna non crea una scheda.
+- **La scia.** Un `<svg class="canvas-ink-wet">` nel viewport, fuori dallo
+  stage, con la trasformazione della camera (`setCamera`); un percorso per
+  tratto, rifatto con `StrokePreview` in `onSettled`. Il tratto finito va a
+  `onStroke` in coordinate della lavagna, con pennello, colore e strumento
+  letti all'inizio (`look`); la scia resta finché la lavagna non chiama
+  `settle(id)` nello stesso giro in cui aggiunge l'asciutto. Un tratto
+  annullato (palmo, cattura persa, finestra nascosta) toglie subito la scia.
+  La sessione fa un tratto alla volta: una seconda penna non scrive e non
+  arriva alla lavagna.
+- **L'asciutto.** `editors/canvas/ink-paint.ts`: `paintCard` mette nella
+  scheda un `<svg class="canvas-ink-card">` largo e alto quanto lei, con un
+  `<svg>` per ogni misura di riferimento (`viewBox`, `preserveAspectRatio`
+  di `INK_ASPECT`, D-9); spostare o ridimensionare la scheda porta
+  l'inchiostro senza ridisegnarlo. `paintBoard` disegna l'inchiostro libero
+  sullo stage dopo le schede. Ridisegnare tratti uguali tiene i percorsi;
+  `InkPathCache` tiene i contorni per id, inchiostro e pennello e lascia
+  andare a ogni giro (`sweep`) quelli non più chiesti.
+- **Il silenzio della penna.** Ogni tratto chiama `quiet.enter()` all'inizio
+  e `quiet.leave()` una volta sola alla fine o all'annullamento. `PenQuiet`
+  (`ink/quiet.ts`) rimanda per chiave il lavoro pesante (`defer("render",
+  …)`): con una penna giù resta in coda e una richiesta nuova prende il posto
+  della vecchia; all'ultimo `leave` la coda va una volta allo scheduler di
+  `ink/dom/idle.ts`, che la fa girare quando il thread è libero
+  (`requestIdleCallback` con un `timeout`, altrimenti `setTimeout(0)`). Una
+  penna che torna giù prima annulla la consegna.
+
 ## Confini e verifica
 
 | Regola | Chi la verifica |
@@ -283,6 +331,8 @@ Restano del prodotto il livello di destinazione, gli id, gli annunci per lo scre
 | con l'albero dei riquadri la gomma prende ciò che prenderebbe la scansione | `tools/box-tree.test.ts`, `tools/hit.test.ts` |
 | la gomma non riprova ciò che ha già segnato | `ink/tools/sweep.test.ts`, `tools/hit.test.ts` |
 | un ridisegno per evento | `ink/dom/pointer-adapter.test.ts` |
+| la penna della lavagna non arriva alla lavagna; il mouse sì | `editors/canvas/ink-layer.test.ts` |
+| l'inchiostro di una scheda la segue senza ridisegnare | `editors/canvas/ink-paint.test.ts` |
 | un puntatore fermo resta fermo nella scena se la vista si muove | `ink/dom/pointer-adapter.test.ts`, `tools/editor.test.ts` |
 
 Il percorso caldo ha due banchi:

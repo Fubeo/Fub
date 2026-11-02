@@ -169,6 +169,8 @@ fn operation(error: OpError) -> PluginError {
             vec![Arg::text("limit", limit.to_string())],
         ),
         OpError::Invalid { reason, .. } => (E_OP_INVALID, vec![Arg::text("reason", reason)]),
+        OpError::UnknownStroke { id, .. } => (E_OP_UNKNOWN_STROKE, vec![Arg::text("id", id)]),
+        OpError::ForeignLayer { .. } => (E_OP_FOREIGN_LAYER, Vec::new()),
     };
     args.insert(0, position);
     PluginError::BadArgs(Text::message(key, args))
@@ -244,5 +246,19 @@ mod tests {
             panic!("troppi archi è un argomento sbagliato");
         };
         assert_eq!(key(&text), Some(E_OP_TOO_MANY_EDGES));
+        let PluginError::BadArgs(text) = operation(OpError::UnknownStroke {
+            index: 1,
+            id: "s9".into(),
+        }) else {
+            panic!("un tratto che non c'è è un argomento sbagliato");
+        };
+        assert_eq!(key(&text), Some(E_OP_UNKNOWN_STROKE));
+        let PluginError::BadArgs(text) = operation(OpError::ForeignLayer {
+            index: 0,
+            layer: fub_canvas_core::ink::LayerRef::Board,
+        }) else {
+            panic!("un inchiostro estraneo è un argomento sbagliato");
+        };
+        assert_eq!(key(&text), Some(E_OP_FOREIGN_LAYER));
     }
 }

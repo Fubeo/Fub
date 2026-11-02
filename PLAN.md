@@ -1,978 +1,1205 @@
-# Piano: N3 · La logica della lavagna scende in Rust
+# Piano: N4 · L'inchiostro su tutto
 
-Branch: piano/n3-logica-in-rust
-Obiettivo: ogni modifica a una lavagna (`.canvas`) passa da un nucleo Rust
-solo, che gira nell'host (comandi, CLI, MCP), nei test e nella WebView come
-WebAssembly; un agente crea e cambia una lavagna con `fub_canvas_create` e
-`fub_canvas_apply`, e la shell la mostra uguale.
-Perché: oggi la logica della lavagna (leggere, cambiare, riscrivere il
-sorgente) vive solo in TypeScript (`apps/client/src/editors/canvas/`), quindi
-un agente non la raggiunge e le regole di lettura di Rust e TypeScript non
-sono le stesse (prova 2).
-Fuori scope: le ancore e il formato `fub:ink` (N4); le operazioni
-`AddStrokes`/`EraseStrokes` (N4); togliere la copia TypeScript
-dell'inchiostro (qui si misura soltanto, T17); unificare `json_map.rs` di
-`fub-format-canvas` col nucleo; un `ParamKind` JSON o una superficie «solo per
-gli agenti» nell'ABI dei comandi; la pagina di prodotto `product/lavagna.md`;
-i sottocomandi `fub canvas …` della CLI; bottoni nuovi nell'interfaccia
-oltre ai due comandi della tavolozza.
-Assunzioni: A1–A12 e il contratto R1–R10 qui sotto, decisi dal pianificatore
-il 2026-11-02 di notte (l'utente non poteva rispondere; le domande sono in
-«Domande per l'utente», e ogni task che dipende da una risposta costosa da
-disfare sta in un'ondata dopo).
-Ondate: T1 T2 | T3 T4 T6 | T5 T8 | T7 | T9 T10 | T11 | T12 | T13 | T14 | T15 | T16 T17 | T18
-Prototipo: nessuno. N3 non ha grafica nuova. Testi visibili nuovi: i titoli e
-le descrizioni dei due comandi (T10, T11), la riga «Lavagna» in Impostazioni →
-Componenti (T10), i messaggi d'errore dei comandi (T10, T11) e l'avviso se il
-nucleo non si carica (T16).
+Branch: piano/n4-inchiostro
+Obiettivo: sulla lavagna la penna scrive sempre, sopra ogni scheda (nota,
+foglio, PDF, foto) e sul vuoto, senza attivare niente; il dito sposta e
+ingrandisce la lavagna; il mouse seleziona come oggi e scrive solo tenendo
+premuto D o con l'interruttore «Scrivi col mouse». L'inchiostro si salva nel
+`.canvas`, segue la scheda quando la sposti o la ridimensioni, si annulla
+tratto per tratto e non tocca mai il file della scheda.
+Perché: l'inchiostro oggi c'è nei disegni e nelle note (`crates/fub-ink`,
+`apps/client/src/ink/`, `editors/spatial/`, `editors/rich/ink.ts`), ma la
+lavagna (`apps/client/src/editors/canvas/engine.ts`) non lo conosce: non
+distingue penna, dito e mouse, e il `.canvas` non ha un posto per i tratti.
+Fuori scope: le ancore di contenuto (celle di un foglio, pagina di un PDF,
+blocco di una nota: v2); le anteprime vive dei file nelle schede (oggi sono
+segnaposti); il bagnato nativo (N5); il menu di penne e colori sulla lavagna
+(N6); la gomma parziale e il lazo; PenQuiet per il grafo e l'indice; la copia
+SVG per gli altri programmi (strada B), salvo che la prova di Obsidian la
+renda necessaria; scrivere dentro un DOCX o un PDF (ADR 0226, P3); InkML; i
+sottocomandi della CLI; la CI (i coder non la toccano: CLAUDE.md); il vault
+vero.
+Assunzioni: A1–A16 e la forma del formato `fub:ink` qui sotto, decise dal
+pianificatore il 2026-11-02 di notte (l'utente non poteva rispondere). Le
+domande D-1…D-11 non bloccano: il piano segue la prima opzione di ognuna.
+T5, T6 e tutto ciò che ne discende seguono le risposte a D-1 e D-2, che sono
+costose da disfare: per questo stanno dall'ondata 2 in poi.
+Ondate: T1 T2 T3 | T4 T5 T6 | T7 T8 T9 | T10 | T11 | T12 | T13 | T14 | T15 T16
+Prototipo: nessuno stanotte. Le parti visibili (sezione «Che cosa si vede»)
+riusano pezzi che esistono; le scelte d'aspetto dell'utente sono D-5, D-9,
+D-11; il task grafico è nell'ultima ondata (T16).
 
 ## Modifiche
 
 nessuna
 
+## Dal prototipo
+
+Nessun prototipo stanotte. Ogni parte visibile riusa un pezzo che c'è già;
+la tabella dice dove finisce e chi la fa.
+
+| Pezzo | Destinazione | Task |
+|---|---|---|
+| La scia sotto la penna (bagnato) | `editors/canvas/ink-layer.ts`, con `StrokePreview` di `ink/tools/stroke.ts` | T4 |
+| Il tratto finito sulla scheda e sul vuoto (asciutto) | `editors/canvas/ink-paint.ts`, `structure.css` | T4, T12 |
+| La gomma che sbiadisce il tratto | `ink-layer.ts`, `ink-paint.ts` (opacità 0,25 come `FADED_OPACITY` di `editors/spatial/painter/svg-dom.ts`) | T13 |
+| L'interruttore «Scrivi col mouse» | `#drawToolbar` in `engine.ts`, `skin/editors.css` | T16 |
+| Il cursore a croce mentre si scrive col mouse | `structure.css`, come `.rich-ink-veil` | T16 |
+| Gli avvisi («tratto troppo lungo», «lavagna piena», «inchiostro di un'altra versione») | `#showIntakeError` dentro `canvas-intake-error`, testi in `catalog.ts` | T12 |
+| Il dito che sposta la lavagna, il pizzico, la testata che sposta la scheda | `engine.ts`, `editors/canvas/touch.ts` | T14 |
+
+## Che cosa si vede
+
+Nessun pezzo nuovo del kit: tutto è fatto con ciò che la shell ha già.
+
+- **La scia.** Mentre la penna è giù, sotto la punta appare il tratto che si
+  allarga e si stringe con la pressione: è la stessa anteprima dei disegni
+  (`StrokePreview`), disegnata in un livello SVG sopra la lavagna e sotto la
+  barra. Non sa che cosa c'è sotto.
+- **Il tratto asciutto.** Quando la penna si alza, la scia lascia il posto al
+  tratto vero nello stesso fotogramma. Se il tratto è sopra una scheda, sta
+  sopra il suo contenuto (testo, segnaposto del file, gruppo) e si muove con
+  lei: trascinando la scheda o tirandone l'angolo, l'inchiostro la segue già
+  durante il trascinamento, non solo alla fine. Se il tratto è sul vuoto o a
+  cavallo di due schede, sta sopra tutte le schede, come una pellicola sulla
+  lavagna.
+- **Il colore.** Biro blu (`#0072b2`, il blu della tavolozza Okabe–Ito che i
+  disegni hanno già), larga 4 pixel dello schermo allo zoom del momento
+  (D-5).
+- **La gomma.** Col retro della penna o col tasto laterale premuto, i tratti
+  toccati sbiadiscono mentre si passa (come la gomma dei disegni) e spariscono
+  quando si alza la penna; annulla li riporta tutti insieme.
+- **Il mouse.** Fa quello che fa oggi (seleziona, sposta, collega). Nella
+  barra della lavagna c'è un pulsante di testo in più, «Scrivi col mouse»,
+  accanto agli altri: premuto ha lo sfondo color accento, come i pulsanti
+  premuti dei disegni; il suggerimento dice «Oppure tieni premuto D». Mentre
+  il mouse scrive, il cursore è una croce, come nell'inchiostro delle note.
+- **Il dito.** Un dito sposta la lavagna, anche sopra le schede; due dita la
+  ingrandiscono (pizzico); per spostare una scheda col dito si trascina la sua
+  testata (la riga col titolo). Il palmo appoggiato mentre si scrive non fa
+  niente.
+- **Gli avvisi.** Un tratto rifiutato (troppo lungo, lavagna piena, scheda con
+  inchiostro di un'altra versione di Fub) scompare e la barra mostra il
+  messaggio nella riga degli avvisi che la lavagna usa già per i file
+  rifiutati (`canvas-intake-error`).
+- **Un caso da sapere.** Se il corpo di una scheda di testo scorre,
+  l'inchiostro resta sulla cornice della scheda e non scorre col testo: le
+  ancore al contenuto sono la v2 (fuori scope).
+
 ## Fonti
 
-- Il passo 12a dei «Piani di Fub» (N3) e, per ciò che N4 e N6 si aspettano,
-  il passo 12b (ancore, `fub:ink`). I coder non li leggono: qui c'è ciò che
-  serve, e dove il codice dice altro vince il codice (sezione «Differenze»).
-- Il codice di oggi: `crates/fub-format-canvas/src/{model,parse}.rs`,
-  `apps/client/src/editors/canvas/{model,operation,source-edit,engine}.ts`,
-  il metodo dello specchio dell'inchiostro (`crates/fub-ink/tests/ts_mirror.rs`
-  e `apps/client/src/ink/__fixtures__/ink-samples.json`) e quello dei vettori
-  della scena (`crates/fub-scene/tests/ops_vectors.rs`,
-  `apps/client/src/editors/spatial/scene/vectors.test.ts`,
-  `apps/client/src/__fixtures__/scene-ops/`).
-- I comandi: `crates/fub-features/src/commands.rs` (lettura, `EditRequest`,
-  `PlannedEdit`, `Undo::of_edits`) e `crates/fub-features/src/draw/create.rs`
-  (nome libero, `create_document`, `Navigate`, annulla nel cestino).
-- L'MCP: `crates/fub-cli/src/mcp/tools.rs` e `access.rs`.
-- Scritto su main @ 620f0acd (2026-11-02).
+- I passi 12b (N4) e 12a (N3) dei «Piani di Fub», le regole e i rischi
+  (`01-regole-e-decisioni.md`, `03-rischi-e-domande.md`). I coder non li
+  leggono: qui c'è ciò che serve, e dove il codice dice altro vince il codice
+  (sezione «Differenze dal passo 12b»).
+- Il piano N3 (`PLAN.md` sul branch `piano/n3-logica-in-rust`, che questo
+  file sostituisce in questa copia): A1 (toppe con l'immagine di prima), A10
+  (id dal seme), A11 (`fub:ink` campo sconosciuto), il contratto R1–R10 (R6
+  scrivere come `JSON.stringify`, R9 confronto per valore, R10 ordine dei
+  campi), `CanvasOp`, la facciata WebAssembly (T13, T14) e la tela sul nucleo
+  (T16).
+- Scritto su `piano/n3-logica-in-rust` @ `f5e2503a` (in N3: T2 fatto, T1 in
+  corso). Ciò che N3 non ha ancora fatto è segnato «dopo N3 Tn».
+- Il codice letto: `crates/fub-ink` (ruoli, sessione, specchio
+  `tests/ts_mirror.rs`), `apps/client/src/ink/` (input, adattatore, strumenti,
+  penne), `editors/spatial/ink/codec.ts`, `crates/fub-scene/src/{ink,brush}.rs`
+  e la §5 di `docs/reference/scene-format.md`, `editors/canvas/`
+  (`engine.ts`, `operation.ts`, `model.ts`, `source-edit.ts`),
+  `graph/interaction.ts` (il pizzico), `ui/lifetime.ts`,
+  `crates/fub-abi/tests/dependency_invariant.rs`, ADR 0204 e 0226,
+  `bench/webview/`, `docs/misure/`.
+
+## Chi aspetta chi
+
+| Task N4 | Parte subito? Dopo quali task di N4 | Aspetta in N3 | Aspetta una risposta |
+|---|---|---|---|
+| T1 · il mouse che non scrive | subito | nessuno | nessuna |
+| T2 · PenQuiet | subito | nessuno | nessuna |
+| T3 · la scheda sotto il tratto | subito | nessuno | nessuna |
+| T4 · lo strato d'inchiostro | dopo T1, T2 | nessuno | D-9 (una riga) |
+| T5 · la forma `fub:ink` | subito, a risposte date | N3 T1 (crea `docs/reference/canvas-format.md`) | D-1, D-2 |
+| T6 · il crate `fub-ink-codec` | subito, a risposta data | nessuno | D-2 |
+| T7 · il kit per Obsidian | dopo T5 | nessuno | D-1, D-8 |
+| T8 · l'inchiostro nel nucleo | dopo T5, T6 | N3 T1, N3 T3 | D-1, D-2 |
+| T9 · i tratti nel client | dopo T3, T4, T5 | nessuno | D-1, D-2, D-5 |
+| T10 · toppa e operazioni in Rust | dopo T8 | N3 T5, T6, T7, T8 | D-3 |
+| T11 · toppa nel client | dopo T9, T10 | N3 T7 (e N3 T14 se c'è) | D-3 |
+| T12 · la penna scrive | dopo T2, T4, T9, T11 | N3 T16 | D-5 |
+| T13 · gomma e D tenuto | dopo T12 | nessuno oltre N3 T16 | D-4, D-6 |
+| T14 · il dito | dopo T13 | nessuno oltre N3 T16 | D-10 |
+| T15 · la misura | dopo T14 | N3 T15 (il nome dello scenario) | D-7 |
+| T16 · l'interruttore e il cursore | dopo T13, T14 | nessuno oltre N3 T16 | D-4, D-11 |
+
+Le ondate 1 e 2 non aspettano niente di N3 tranne T5 (la pagina di N3 T1).
+Le ondate dalla 4 in poi aspettano N3 fino a T16.
 
 ## Domande per l'utente (raccolte, non bloccano)
 
 Il piano procede con la prima opzione di ognuna.
 
-- D-1 · Come parla la WebView col nucleo (T13, T14). (a) Consigliata:
-  un'interfaccia C scritta a mano, JSON dentro e fuori, nessuna libreria
-  nuova: la prova 1 dà 56 KB compressi e nessun import. (b) `wasm-bindgen`
-  come nel passo 12a: più comodo da scrivere, ma è una dipendenza nuova, più
-  `wasm-bindgen-cli` della stessa versione in ogni macchina e job che
-  costruisce il client. Cambiare idea dopo T13 vuol dire riscrivere T13 e il
-  caricatore di T14.
-- D-2 · Da dove viene il file `.wasm` (T14). (a) Consigliata: lo compila
-  Vite dai sorgenti a ogni build; serve Rust col bersaglio
-  `wasm32-unknown-unknown` dovunque si lanci `npm` (in locale e in ogni job
-  della CI che costruisce o prova il client). (b) Un `.wasm` committato e una
-  guardia che lo confronta coi sorgenti: niente Rust per chi lavora solo sul
-  client, ma un binario nel repo. (c) Uno script separato prima di Vite.
-- D-3 · Sicurezza della WebView (T15, T16). (a) Consigliata: aggiungere solo
-  `'wasm-unsafe-eval'` a `script-src` nella CSP di
-  `crates/fub-app/tauri.conf.json` (permette di compilare WebAssembly, non di
-  eseguire testo come JavaScript). (b) Niente WebAssembly nella WebView: N3 si
-  ferma a T12 (comandi e MCP sì), la tela resta in TypeScript e le due copie
-  restano tenute uguali dai vettori.
-- D-4 · L'inchiostro (T17). (a) Consigliata: in N3 solo la misura in
-  `bench:ink`; la copia TypeScript resta, come vuole la decisione 0204 (niente
-  WebAssembly a ogni evento del puntatore). (b) Portarlo ora, se la misura
-  regge: va contro 0204 e va deciso con una decisione nuova.
-- D-5 · Il testo di una scheda (T16). Oggi ogni tasto premuto è una modifica
-  salvata e un passo d'annulla. (a) Consigliata: la modifica si registra dopo
-  una pausa di circa 250 ms, all'uscita dal campo, a Invio e a Esc; un
-  «annulla» toglie una frase, non una lettera. (b) Solo all'uscita dal campo.
-  In tutti e due i casi niente chiamata al nucleo per ogni tasto
-  (`CLAUDE.md`: «No IPC or WASM per keystroke»).
-- D-6 · Che cosa vede l'utente (T10, T11). (a) Consigliata: un componente
-  «Lavagna» nuovo, con la sua riga in Impostazioni → Componenti (spegnerlo
-  toglie i due comandi), e nella tavolozza «Nuova lavagna» e «Applica
-  operazioni alla lavagna» (il secondo chiede un testo JSON: la tavolozza
-  mostra tutti i comandi, e nasconderne uno vorrebbe un cambio dell'ABI). (b)
-  I due comandi dentro il componente dei comandi delle note, senza riga
-  nuova. Facile da cambiare dopo: si sposta un modulo.
-- D-7 · Che cosa si apre e come si riscrive (T2, T3). (a) Consigliata: le
-  regole R1–R10 così come sono scritte: si aprono anche coordinate `1.0` o
-  `1e2` e campi `null`, un file con solo il BOM è una lavagna vuota, i `null`
-  dei campi noti spariscono quando Fub riscrive quella scheda; restano
-  rifiutati decimali veri, chiavi note doppie, surrogati spaiati. (b) Più
-  severe (rifiutare `1.0` e i `null`). Facile da cambiare dopo: è codice di
-  lettura, e i vettori dicono che cosa cambia.
-- D-8 · Togliere il TypeScript (T18). (a) Consigliata: dopo la parità si
-  tolgono `parseCanvas`, le toppe e il riscrittore TypeScript, e con loro i
-  loro test, i cui casi devono essere prima nei vettori (togliere un test è
-  una voce di «Chiede sempre»). (b) Tenere la copia TypeScript come seconda
-  via, tenuta uguale dallo specchio.
+- D-1 · Dove si salva l'inchiostro (T5 e chi viene dopo). (a) Consigliata:
+  campi `fub:ink` dentro il `.canvas`, sulla scheda e alla radice: un file
+  solo, un'ancora per tratto, e il modello della lavagna li conserva già
+  (A11 di N3). Obsidian non li vede; se, riscrivendo il file, li perde, lo
+  dice il kit di T7. (b) Un SVG accanto, come scheda `file`: Obsidian lo
+  vede come immagine ferma, ma i file sono due e spostare una scheda non
+  sposta l'inchiostro. (c) A, più una copia B che Fub scrive per gli altri
+  programmi: si decide dopo la prova di T7. Conseguenza: cambiare idea dopo
+  T8 vuol dire riscrivere T5 e T8–T12.
+- D-2 · Come si scrivono i punti (T5, T6). (a) Consigliata: la stessa stringa
+  dei tratti dei disegni (§5 di `scene-format.md`), in unità della scheda
+  alla misura che aveva quando si è scritto; il codice c'è già in Rust e in
+  TypeScript ed è circa il 40% più corto del base64 del passo (prova 3).
+  Richiede T6 (il codec in un crate piccolo). (b) Il base64 di numeri `f32`
+  del passo: un codec nuovo in due lingue e file più lunghi, ma niente T6.
+  Conseguenza: altri programmi leggeranno questo formato; cambiarlo dopo
+  vuol dire una `v: 2` e una conversione dei file.
+- D-3 · Cancellare una scheda che ha inchiostro (T10, T12). (a) Consigliata:
+  l'inchiostro va via con la scheda; annulla riporta tutto in un passo. (b)
+  L'inchiostro resta sulla lavagna dov'era, come inchiostro libero.
+  Conseguenza: (b) chiede una conversione delle coordinate nella toppa di
+  rimozione e vettori in più in T10.
+- D-4 · Scrivere col mouse (T13, T16). (a) Consigliata: l'interruttore nella
+  barra, che riaprendo la lavagna torna spento, più D tenuto premuto. (b)
+  L'interruttore ricordato (per lavagna o per tutto Fub). Conseguenza: (b) è
+  una preferenza nuova da salvare e da mostrare in Impostazioni.
+- D-5 · Penna, colore e spessore di serie (T9, T12). (a) Consigliata: la
+  biro, blu `#0072b2` (il nero sparisce sul tema scuro), larga 4 pixel dello
+  schermo allo zoom del momento; il menu delle penne arriva con N6. (b) Il
+  menu di penne e colori dei disegni già ora sulla lavagna (un task grafico
+  in più). (c) Nero, come i disegni. Conseguenza: colore e spessore si
+  scrivono in ogni tratto; cambiare la scelta dopo non cambia i tratti già
+  scritti.
+- D-6 · La gomma (T13). (a) Consigliata: cancella il tratto intero che tocca,
+  come la gomma a tratto dei disegni. (b) Anche la gomma che taglia un pezzo
+  di tratto (il codice per tagliare c'è, `ink/tools/split.ts`). Conseguenza:
+  (b) è un task in più e ogni passata crea tratti nuovi.
+- D-7 · La misura del cancello (T15). (a) Consigliata: le schede file oggi
+  sono segnaposti (nessun foglio vivo), quindi la misura mette sotto la
+  penna una scheda di testo con una tabella da 10 000 celle, una scheda
+  `.xlsx` vera per l'hash e 2000 tratti già scritti; il foglio vivo entra
+  nella misura quando arriva la sua anteprima. (b) Rinviare il cancello
+  della latenza fino al foglio vivo. Conseguenza: (a) chiude N4 con un caso
+  vicino a quello del passo ma non uguale; (b) lascia N4 aperto.
+- D-8 · La prova con Obsidian (T7). (a) Consigliata: il kit di T7 (una
+  lavagna di prova e uno script che confronta); l'utente apre la lavagna in
+  Obsidian, sposta una scheda, salva, e lancia lo script: pochi minuti. (b)
+  Scegliere A senza la prova. Conseguenza: senza la prova la voce del
+  cancello «si sa che cosa succede ai campi» resta aperta.
+- D-9 · Ridimensionare una scheda con inchiostro (T4). (a) Consigliata:
+  l'inchiostro si stira con la scheda in larghezza e in altezza, così le
+  annotazioni restano sopra le stesse parti (il tratto si deforma un po').
+  (b) Scala uniforme: il tratto resta proporzionato ma può non arrivare più
+  dove arrivava. Conseguenza: è un attributo della resa, il file non cambia:
+  si può cambiare dopo senza costi.
+- D-10 · Il dito sopra una scheda (T14). (a) Consigliata: il dito sposta la
+  lavagna ovunque, anche sopra le schede; per spostare una scheda col dito
+  si trascina la sua testata; il pizzico ingrandisce. (b) Il dito sposta la
+  scheda che tocca, come il mouse, e la lavagna solo sul vuoto. Conseguenza:
+  con (b) il palmo o un dito appoggiato sposta schede per sbaglio.
+- D-11 · L'aspetto dell'interruttore (T16). (a) Consigliata: un pulsante di
+  testo «Scrivi col mouse» come gli altri della barra; premuto ha lo sfondo
+  color accento. (b) Un'icona di penna (serve un'icona nel kit e un nome per
+  i lettori di schermo). Conseguenza: solo aspetto, si cambia dopo con poco.
 
 ## Assunzioni
 
-- A1 · **Due livelli di operazioni.** Il TypeScript di oggi non ha operazioni
-  d'intento: ha toppe con l'immagine di prima (`CanvasPatch` in
-  `operation.ts`: `upsert-node`, `remove-node`, `upsert-edge`, `remove-edge`,
-  `reorder`). Il nucleo le porta come sono, con la stessa forma JSON, e sopra
-  aggiunge le operazioni d'intento del passo 12a (`CanvasOp`), che si
-  compilano in toppe. L'inversa si calcola sulle toppe, non sulle operazioni.
-- A2 · **Il sorgente si ritocca, non si riscrive.** Come `patchCanvasSource`
-  di oggi: si cambiano solo i valori e gli oggetti toccati, il resto del file
-  resta byte per byte. Il `source()` del passo 12a, che serializza tutto,
-  perderebbe la forma del file.
-- A3 · **Il nucleo è piccolo.** `fub-canvas-core` dipende solo da `serde`,
-  `serde_json` (con `float_roundtrip`) e `thiserror`. Niente `fub-abi`,
-  niente Markdown: il BOM lo gestisce da sé.
-- A4 · **`float_roundtrip` vale per tutto il grafo.** Le feature di Cargo si
-  uniscono: dove c'è il nucleo, ogni `serde_json` legge i decimali esatti (un
-  po' più lento). La prova 3 dice perché serve.
-- A5 · **La facciata WebAssembly è un membro `rlib`.** Il `.wasm` si fa con
-  `cargo rustc -p fub-canvas-wasm --lib --release --target
-  wasm32-unknown-unknown --crate-type cdylib`, con le opzioni di profilo da
-  variabili d'ambiente (`CARGO_PROFILE_RELEASE_OPT_LEVEL=s`, `LTO=true`,
-  `PANIC=abort`, `STRIP=true`, `CODEGEN_UNITS=1`) e un `CARGO_TARGET_DIR`
-  suo (`target/canvas-wasm`). Così niente profilo nuovo nella radice e niente
-  `cdylib` nel manifesto (`check-crate-type.mjs` resta com'è).
-- A6 · **Il nucleo resta in memoria.** Si carica alla prima lavagna aperta e
-  resta; ogni lavagna aperta ha la sua istanza logica (un handle). La prova 1
-  dice che aprire da capo a ogni gesto costerebbe troppo.
-- A7 · **Il componente.** Bundle `fub.lavagna`, feature di Cargo `lavagna`
-  nel `default` di `fub-features` (con `dep:fub-canvas-core` opzionale),
-  modulo `crates/fub-features/src/lavagna.rs` con `lavagna/`. Le operazioni
-  arrivano al comando come parametro `Text` con dentro JSON, perché non esiste
-  un `ParamKind` JSON.
-- A8 · **I vettori scritti a mano** stanno accanto a quelli della scena:
-  `apps/client/src/__fixtures__/canvas-patches/` (toppe sul testo) e
-  `apps/client/src/__fixtures__/canvas-ops/` (operazioni sul modello). Sono
-  oracoli: non li genera il codice che verificano.
-- A9 · **Lo specchio generato.** `crates/fub-canvas-core/tests/ts_mirror.rs`
-  genera `apps/client/src/__fixtures__/canvas-mirror.json` (con
-  `UPDATE_MIRROR=1`, come l'inchiostro), e
-  `apps/client/src/editors/canvas/mirror.test.ts` lo fa girare in TypeScript.
-- A10 · **Gli id nuovi** delle operazioni d'intento vengono da un seme del
-  chiamante: 16 cifre esadecimali come quelli di Obsidian, saltando quelli già
-  presi. Stesso seme, stesso id: i vettori e l'annulla restano deterministici.
-  Gli id che crea la tela (`newNodeId` di `operation.ts`) restano quelli di
-  oggi.
-- A11 · **`fub:ink` è un campo sconosciuto.** In N3 si conserva come ogni
-  campo che il nucleo non conosce (sulla radice e sulle schede). Spostare una
-  scheda non tocca l'inchiostro: con le ancore relative di N4 si muoverà da
-  sé. Il vettore `move-with-ink.json` del passo 12a lo prova già.
-- A12 · **La decisione nuova** (WebAssembly nella WebView, la CSP, l'ABI C)
-  prende il primo numero libero in `docs/decisions/` al momento del merge
-  (oggi 0236; altri piani di stanotte potrebbero prenderlo prima).
-- A13 · **Strumenti MCP propri.** `fub_canvas_create` e `fub_canvas_apply`
-  come vuole il passo 12a, e non solo `fub_invoke`: `fub_invoke` vuole tutto
-  il vault leggibile, questi controllano le radici documento per documento.
+- A1 · **La penna scrive sempre**, anche sopra una scheda di testo aperta in
+  modifica: il campo non si chiude e non riceve il tratto, che è della
+  lavagna (regola 5 del passo).
+- A2 · **Un gruppo è una scheda** per l'ancora: chi scrive sul vuoto di un
+  gruppo scrive sul gruppo. I figli stanno sopra il gruppo nell'ordine delle
+  schede, quindi chi scrive su un figlio scrive sul figlio.
+- A3 · **Conta solo la scheda più in alto che il tratto tocca** (l'ultima
+  nell'array `nodes` fra quelle che intersecano il riquadro del tratto). Il
+  tratto le appartiene se lei contiene il centro del riquadro, se almeno
+  metà del riquadro sta dentro di lei e se il suo livello non è estraneo;
+  altrimenti è libero. Il motivo: l'inchiostro di una scheda si disegna
+  dentro di lei, quindi un tratto ancorato a una scheda che sta sotto
+  un'altra finirebbe nascosto in parte (differenza dal passo).
+- A4 · **Ogni tratto è un passo di annulla**; un tratto che l'adattatore
+  spezza (`split`) o continua (`continued`) resta un passo solo. Una passata
+  di gomma è un passo, anche se cancella dieci tratti.
+- A5 · **Mentre una penna è giù, annulla e ripeti non fanno niente.**
+- A6 · **Duplicare una scheda copia il suo inchiostro.** Gli id dei tratti
+  sono unici nel livello, non nella lavagna: la copia tiene gli stessi id.
+- A7 · **Gli agenti** possono aggiungere e cancellare tratti con le
+  operazioni `add_strokes` ed `erase_strokes` quando N3 dà `canvas.apply`
+  (N3 T10, T12); N4 non aggiunge comandi.
+- A8 · **Sola lettura e lavagna troppo grande**: lo strato d'inchiostro non
+  si monta (la penna non scrive); l'inchiostro asciutto si vede dove si
+  vedono le schede.
+- A9 · **Una modifica da fuori mentre una penna è giù** (`syncDoc`): modello
+  e sorgente si aggiornano subito, il ridisegno aspetta che la penna si alzi
+  (PenQuiet, chiave `"render"`); il tratto in corso non si perde; la scheda
+  si sceglie sul documento del momento in cui la penna si alza; se la scheda
+  non c'è più il tratto diventa libero.
+- A10 · **Dalla T12 il dito e il mouse non scrivono sulla lavagna** (dito
+  `"navigate"`, mouse `"ignore"`): fanno esattamente quello che fanno oggi
+  finché T13 (D tenuto, interruttore) e T14 (il dito) non li cambiano.
+- A11 · **La penna di serie** è quella di D-5 (a): biro, `#0072b2`, 4 pixel
+  dello schermo allo zoom del momento, scritti nel tratto in unità della
+  scheda (o della lavagna se libero).
+- A12 · **Il formato** è quello di D-1 (a) e D-2 (a), descritto qui sotto.
+  La decisione scritta da T5 resta in stato «proposta» finché l'utente non
+  risponde a D-1 e la prova di Obsidian (T7) non è fatta.
+- A13 · **La decisione nuova prende il primo numero libero** in
+  `docs/decisions/` (N3 T15 prende 0236; per N4 probabilmente 0237).
+- A14 · **Testi nuovi** in `apps/client/src/i18n/catalog.ts`, in italiano e
+  in inglese, senza il gergo di `apps/client/src/i18n/gergo.ts`.
+- A15 · **Ciò che Fub non sa disegnare si conserva e non si tocca**: un
+  tratto con strumento, colore, pennello o punti non validi si conserva byte
+  per byte e non si disegna; in un livello estraneo Fub non scrive.
+- A16 · **Lo scenario nuovo della misura non entra nella CI** (i coder non
+  la toccano); se entrarci lo decide l'orchestratore.
 
-## Il contratto di lettura e scrittura (R1–R10)
+## Il formato `fub:ink`
 
-La regola generale: Rust e TypeScript fanno la stessa cosa; nel dubbio si
-apre e si conserva; ogni caso qui sotto diventa un vettore scritto a mano.
+    {
+      "nodes": [
+        { "id": "f1", "type": "file", "file": "Corsi/Statistica/voti.xlsx",
+          "x": 0, "y": 0, "width": 640, "height": 420,
+          "fub:ink": { "v": 1, "strokes": [
+            { "id": "s-mh0k2q1x-4f9a-1", "tool": "pen",
+              "at": "2026-11-02T09:20:31.250Z",
+              "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": { "kind": "card", "width": 640, "height": 420 },
+              "ink": "1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8" } ] } },
+        { "id": "n2", "type": "text", "text": "Perché la media è così bassa?",
+          "x": 700, "y": 40, "width": 280, "height": 90 }
+      ],
+      "edges": [],
+      "fub:ink": { "v": 1, "strokes": [
+        { "id": "s-mh0k2r7c-0b1e-2", "tool": "pen", "brush": "pf1 …",
+          "color": "#0072b2", "anchor": { "kind": "free" }, "ink": "1 s100 cxypt …" } ] }
+    }
 
-- R1 · **Vuoto** è: un BOM facoltativo, poi solo spazi JSON (spazio, `\t`,
-  `\n`, `\r`). Una lavagna vuota. Oggi Rust usa `trim()` di Unicode (U+0085
-  conta come spazio) e TypeScript `trim()` di JavaScript (il solo BOM conta
-  come vuoto): tutti e due cambiano.
-- R2 · **Numeri dei campi noti** (`x`, `y`, `width`, `height`): valori interi
-  entro ±(2^53−1), quindi `1.0`, `1e2` e `-0` vanno bene; una frazione vera o
-  un valore più grande è un errore. `width` e `height` almeno 1, come oggi.
-- R3 · **Chiavi doppie.** Una chiave nota doppia sulla radice, in una scheda
-  o in un arco è un errore. Una chiave sconosciuta doppia tiene l'ultimo
-  valore nella posizione della prima (come `JSON.parse`). Il riscrittore
-  rifiuta un sorgente con chiavi doppie a qualunque profondità (come oggi).
-- R4 · **Un surrogato spaiato** (`"\ud800"`), in una chiave o in un valore, è
-  un errore.
-- R5 · **Un numero fuori dal campo di un `f64`** (`1e400`) è un errore,
-  dovunque sia.
-- R6 · **Scrivere è `JSON.stringify`.** Lo stesso escape (solo `"`, `\\`, i
-  controlli; `/` e i caratteri non ASCII restano come sono), lo stesso numero
-  di `Number.prototype.toString` (anche per i numeri dei campi sconosciuti,
-  che si scrivono come li riscriverebbe JavaScript dopo averli letti), lo
-  stesso ordine delle chiavi di un oggetto JavaScript. Un sorgente nuovo è
-  rientrato di due spazi e chiuso da `"\n"`, e tiene BOM e CRLF del file.
-- R7 · **`null`** su un campo noto facoltativo, e `"nodes": null` o
-  `"edges": null`, vogliono dire «assente». Quando Fub riscrive quella scheda,
-  il `null` sparisce.
-- R8 · **`backgroundStyle`** accetta qualunque stringa e la conserva; un
-  valore che la tela non conosce si disegna come assente. Lo schema
-  `canvas-v1.schema.json` resta com'è: dice ciò che Fub scrive.
-- R9 · **L'immagine di prima** di una toppa si confronta come valore JSON: le
-  chiavi in qualunque ordine, i numeri per valore. Oggi `sameValue` di
-  `operation.ts` confronta `JSON.stringify` e quindi l'ordine: cambia.
-- R10 · **Ordine dei campi** di una scheda o di un arco scritti per intero:
-  quello della struct Rust (id, type, x, y, width, height, color, text, file,
-  subpath, url, label, background, backgroundStyle; per gli archi id,
-  fromNode, fromSide, fromEnd, toNode, toSide, toEnd, color, label), poi i
-  campi sconosciuti nel loro ordine, poi la regola di JavaScript (le chiavi
-  che sembrano indici vanno prima, in ordine crescente). Una chiave aggiunta
-  a un oggetto che c'era va in fondo.
+_Lezione 4.canvas · schizzo_
+
+- **Il livello**: l'oggetto `{"v": 1, "strokes": [...]}` sotto la chiave
+  `fub:ink` di una scheda (di ogni tipo, gruppi compresi) o della radice. Gli
+  altri campi del livello si conservano.
+- **Il tratto**: `id` (unico nel livello; i nuovi come
+  `newNodeId("s")` di `operation.ts`), `tool` (`"pen"` o `"highlighter"`),
+  `at` facoltativo (ISO, come `fub:at` dei disegni), `brush` (la grammatica
+  di `fub:brush`, §5 di `scene-format.md`, con `pen=`), `color`
+  (`#rrggbb`), `anchor`, `ink` (la stringa `fub:ink` della §5: versione,
+  scala, canali, campioni). I campi sconosciuti si conservano.
+- **L'ancora**: `{"kind": "card", "width": W, "height": H}` è la misura della
+  scheda quando il tratto si è scritto; i punti sono in unità della scheda a
+  quella misura, con l'origine in alto a sinistra. Sposti la scheda: niente
+  cambia nel file. La ridimensioni: niente cambia nel file; la resa stira il
+  tratto da `W×H` alla misura di adesso (D-9). `{"kind": "free"}` vuol dire
+  punti in coordinate della lavagna. `card` vale solo in un livello di
+  scheda, `free` solo alla radice; altrimenti il tratto non si disegna.
+- **Ordine dei campi in scrittura** (R10 di N3): `id`, `tool`, `at`, `brush`,
+  `color`, `anchor`, `ink`, poi gli sconosciuti nell'ordine in cui erano;
+  nell'ancora `kind`, `width`, `height`.
+- **Livello estraneo**: `v` diverso da 1, `strokes` che non è un array, un
+  tratto senza `id` stringa o due tratti con lo stesso `id`. Si conserva byte
+  per byte, non si disegna, Fub non ci scrive: la penna su quella scheda
+  scrive inchiostro libero; se è estraneo il livello della radice, un tratto
+  libero si rifiuta con un avviso (`canvas.ink.foreign`).
+- **Tratto che non si disegna**: `tool`, `anchor`, `color`, `brush` o `ink`
+  non validi, o oltre i limiti. Si conserva, non si disegna, la gomma non lo
+  vede.
+- **Limiti**: quelli della §5 per ogni tratto (10 000 campioni, 512 KiB della
+  stringa `ink`), e i 16 MiB del file (`MAX_CANVAS_SOURCE_BYTES`). Un tratto
+  nuovo che li supera si rifiuta con un avviso (`canvas.ink.full`).
+- **L'ultimo tratto tolto**: se il livello resta esattamente
+  `{"v": 1, "strokes": []}` la chiave sparisce; annulla la rimette in fondo
+  alla scheda (per R9 il modello è lo stesso).
+- `fub:ink` su un arco, o dentro un tratto, è un campo sconosciuto come gli
+  altri.
+- **Che cosa si disegna**: l'inchiostro di una scheda sopra il suo
+  contenuto, stirato con lei; l'inchiostro libero sopra tutte le schede.
+  Spostare o ridimensionare una scheda non scrive niente di nuovo nel file
+  per l'inchiostro.
+
+## La toppa e le operazioni
+
+- **`LayerRef`**: `"board"` per la radice, `{"node": "<id>"}` per una scheda
+  (una stringa sola sarebbe ambigua con una scheda di id `"board"`).
+- **La toppa** `{"kind": "ink", "layer": LayerRef, "at": n, "before":
+  tratto|null, "after": tratto|null}`: aggiunge (`before` nullo), toglie
+  (`after` nullo) o cambia il tratto alla posizione `at` dell'array
+  `strokes`. L'inversa scambia `before` e `after`. Un'immagine di prima che
+  non torna (R9) o una scheda che non c'è è `Stale`; un livello estraneo è
+  `Invalid`. La prima toppa crea il livello; l'ultimo tratto tolto lo toglie
+  secondo la regola qui sopra.
+- **Le operazioni d'intento** (le `CanvasOp` di N3 T8):
+  `add_strokes {layer, strokes}` (un `id` mancante lo dà il seme, A10 di N3)
+  ed `erase_strokes {layer, ids}`, compilate in toppe `ink`; errori nuovi
+  `UnknownStroke` e `ForeignLayer` oltre a `UnknownNode`, `DuplicateId`,
+  `Invalid`. `move` e `resize` non toccano l'inchiostro; `remove` porta via
+  l'inchiostro della scheda (D-3 a).
+- **Perché una toppa sua e non `upsert-node`**: un tratto su una scheda con
+  2000 tratti, scritto come `upsert-node`, metterebbe due copie del livello
+  intero in ogni passo di annulla (la cronologia tiene 100 passi,
+  `MAX_CANVAS_HISTORY`). Spostare quella scheda resta un `upsert-node` che
+  porta il livello intero: T10 misura quanti byte sono.
 
 ## Prove fatte
 
-Fuori dal repo, sotto `~/.cache/fub-k1/tmp/n3`, e poi cancellate.
+Stanotte, fuori dal repo sotto `/home/fubeo/.cache/fub-k1/tmp/n4`, e poi
+cancellate.
 
-1. **Il modello compila a `wasm32-unknown-unknown` senza `wasm-bindgen`**,
-   con un'interfaccia `extern "C"` scritta a mano: build in circa 5 s; con
-   `opt-level` s/z, LTO, `panic=abort` e `strip`, circa 147 KB (56 KB
-   compressi), nessun import, istanza in circa 6 ms in Node. Con 2000 schede
-   (944 KB), leggere, spostare e riscrivere da capo in WebAssembly costa
-   13,5–19,5 ms contro 4–6 ms del TypeScript: il nucleo deve restare in
-   memoria e ritoccare, non rileggere tutto (A2, A6).
-2. **Le letture divergono oggi.** `1.0`/`1e2` nelle coordinate: TypeScript
-   apre, Rust no. Interi oltre 2^53: Rust esatto, TypeScript arrotonda. Chiave
-   nota doppia: Rust errore, TypeScript tiene l'ultima. Chiave sconosciuta
-   doppia: tutti e due tengono l'ultima. Solo il BOM: TypeScript vuoto, Rust
-   errore. Solo U+0085: Rust vuoto, TypeScript errore. Surrogato spaiato:
-   TypeScript apre, Rust no. `null` e `"nodes": null`: TypeScript assente,
-   Rust errore su `nodes` (dedotto dal codice, non provato). Il serializzatore
-   del modello Rust toglie `edges` vuoto. Da qui R1–R10.
-3. **`serde_json` senza `float_roundtrip`** legge male 592 947 numeri a caso
-   su 1 999 009; con la feature, nessuno.
-4. **`Number.prototype.toString` in Rust**: le cifre più corte di `{:e}`
-   sbagliano 32 numeri su 299 928, tutti pareggi esatti; scegliendo nel
-   pareggio la cifra pari, decisa sull'espansione esatta
-   (`format!("{:.1100e}", x)`), nessuno. Non serve `ryu-js`.
-5. **Le stranezze di JavaScript** da imitare: le chiavi che sembrano indici
-   vanno prima in ordine crescente; `-0` si scrive `0`; `1e21` si scrive
-   `1e+21`; `__proto__` è una chiave come le altre.
+1. `crates/fub-scene/src/ink.rs` e `brush.rs`, copiati in un crate con la
+   sola dipendenza `fub-ink`, compilano per `wasm32-unknown-unknown` e i loro
+   tre test d'unità passano. Usano solo `std` e `fub_ink` (`Sample`,
+   `MAX_SAMPLES`). Quindi T6 è uno spostamento, non una riscrittura.
+2. `fub-ink` da solo compila per `wasm32-unknown-unknown`.
+3. I `pts` dell'esempio del passo, decodificati, sono in unità (61, 21…), non
+   fra 0 e 1: le `u`, `v` del passo non bastano a rimettere un tratto in
+   una scheda ridimensionata. La stessa traccia scritta nella stringa della
+   §5 (scala 100) è circa il 40% più corta del base64 di `f32`, con un errore
+   massimo di 0,005 unità.
+4. `node --test <cartella>/` in Node 22 non trova i file e fallisce: le
+   prove di questo piano nominano il file del test.
+5. Lettura del codice, non prova: `patchCanvasSource`
+   (`editors/canvas/source-edit.ts`) accoppia per `id` ogni array i cui
+   elementi hanno tutti un `id` stringa, a ogni profondità; aggiungere un
+   tratto riscrive solo il tratto nuovo. Il ritocco Rust di N3 T5 promette
+   l'accoppiamento per gli array di schede e archi: T10 controlla con un
+   test gli array annidati e, se serve, lo estende.
 
-## Differenze dal passo 12a
+## Differenze dal passo 12b
 
-Il passo dice di scriverle in `piani/STATO.md`; il brief di stanotte dice qui.
+Vince il codice; queste sono le differenze trovate e come il piano le
+tratta.
 
-- Le operazioni TypeScript di oggi sono toppe con l'immagine di prima, non
-  operazioni d'intento: il nucleo porta le toppe e ci mette sopra `CanvasOp`
-  (A1). L'inversa del vettore del passo (`inverse: [move -40]`) diventa una
-  lista di toppe.
-- Il passo riscrive tutto il file (`source()`); il codice di oggi ritocca il
-  sorgente (A2), e così resta.
-- `fub-format-canvas` dipende da `fub-abi` e dal Markdown: il modello si
-  stacca in un crate suo, non si sposta il crate intero.
-- `wasm-bindgen` è una dipendenza nuova («Chiede sempre»): il piano usa
-  un'interfaccia C (D-1, prova 1).
-- La CSP della WebView (`script-src 'self'`) non lascia compilare
-  WebAssembly (D-3), e i job `npm` della CI non hanno Rust (D-2).
-- La decisione 0204 e `CLAUDE.md` vietano WebAssembly a ogni evento del
-  puntatore e a ogni tasto: l'inchiostro qui si misura soltanto (D-4), e il
-  testo delle schede, che oggi salva a ogni tasto, si raggruppa (D-5).
-- `fub_invoke` vuole tutto il vault leggibile: servono strumenti MCP propri
-  (A13).
-- Le ancore e `InkLayer` (`pub mod ink` nello schizzo) sono di N4.
-- Le fixture del passo (`fixtures/canvas-ops/`) vanno dove stanno quelle
-  della scena (A8).
-- La riga `fub.lavagna` della mappa dei componenti è `senza_bundle`, e non
-  esiste un comando che crea una lavagna: T10 e T11 li fanno.
-- `serde_json` legge male i decimali senza `float_roundtrip` (prova 3, A4).
-- Non esiste un `ParamKind` JSON: le operazioni passano come testo (A7).
+- **Nessun foglio vivo nelle schede.** Le schede `file` sono segnaposti
+  (`canvas-media-placeholder`, anche le immagini: «IMAGE · percorso»), e
+  `#render` ridisegna tutte le schede a ogni cambio. «Un foglio da 10 000
+  celle sotto la penna» oggi non esiste: T15 misura con una tabella di
+  10 000 celle in una scheda di testo (D-7).
+- **Lo scenario S5 è sul disegno**, non sulla lavagna, ed è solo fra le
+  mete di `bench/webview/budgets.json`, non nella CI: T15 aggiunge uno
+  scenario nuovo (S8 o il primo nome libero dopo N3 T15).
+- **Il formato dei punti.** Il passo propone base64 di quadruple `f32`; il
+  codice ha già la stringa `fub:ink` della §5 dei disegni, in Rust e in
+  TypeScript, con lo stesso nome e un'altra grammatica (D-2). E `f32` non è
+  «senza perdite» rispetto ai `f64` della pipeline.
+- **L'ancora `u`, `v` del solo centro non basta**: i punti sono in unità, e
+  per scalare un tratto con la scheda serve la misura che la scheda aveva.
+  L'ancora v1 è `{"kind": "card", "width", "height"}`.
+- **`anchorAt` del passo** sceglie la scheda più alta che contiene il centro;
+  il piano guarda solo la scheda più alta che il tratto tocca (A3).
+- **`pen`, `color`, `size` del passo** diventano `tool`, `brush` (con
+  `pen=` e `size=`) e `color`, come nei disegni.
+- **`openWetTrail` e `ink/wet` non esistono** (sono N5): il bagnato è
+  `StrokePreview` in un SVG della lavagna.
+- **`board.camera.toCanvas`, `board.commit`, `board.cards` non esistono**: la
+  lavagna è `CanvasEngine` (`#screenToWorld`, `#commitLocal` con toppe).
+- **Il mouse oggi disegna** in `fub-ink` (tasto principale = inchiostro) e non
+  c'è un modo per dirgli di no: T1 aggiunge la regola del mouse.
+- **L'adattatore non ferma l'evento**: la lavagna riceverebbe anche lei il
+  `pointerdown` della penna (selezione, trascinamento, doppio tocco che crea
+  una scheda di testo con `#dblclick`): T4 lo ferma.
+- **Nessun dito né pizzico nella lavagna**: c'è solo in
+  `graph/interaction.ts`; T14 lo porta.
+- **PenQuiet dello schizzo** non ha chiave (il commento la promette), usa
+  `setTimeout` senza proprietario (`check-listeners.mjs` lo vieta) e un
+  globale del DOM nel nucleo dell'inchiostro (ADR 0204 punto 3 lo vieta):
+  T2 lo scrive puro, con lo scheduler passato da fuori.
+- **`AddStrokes`/`EraseStrokes` di 12a** diventano operazioni d'intento
+  compilate in toppe `ink`, come tutte le `CanvasOp` di N3.
+- **Il nucleo della lavagna di N3 non può dipendere da nessun membro del
+  workspace** (`the_canvas_core_stands_alone`): per leggere l'inchiostro
+  serve un'eccezione nominata per `fub-ink-codec` e `fub-ink` (T6, T8).
+- **Il vettore `move-with-ink.json` di N3** (con `pts` finti) resta valido:
+  i tratti si conservano e non si disegnano, perché il loro `ink` non è
+  valido.
+- **Il doppio clic sul vuoto crea una scheda di testo**: un doppio tocco di
+  penna la creerebbe; T4 ferma `click` e `dblclick` dopo un tratto.
 
-## Cancello di N3
+## Cancello di N4
 
 | Fatto quando | Prova | Task |
 |---|---|---|
-| tutti i vettori passano in Rust e in TypeScript | `cargo test -p fub-canvas-core`; `cd apps/client && npx vitest run src/editors/canvas` (motore TypeScript e nucleo WebAssembly sugli stessi file) | T7, T8, T14 |
-| lo specchio a caso non trova divergenze | `cargo test -p fub-canvas-core --test ts_mirror` e `mirror.test.ts` | T9 |
-| un agente crea una lavagna, aggiunge schede e archi, e la shell la mostra uguale | `cargo test -p fub-cli --test mcp` (il testo scritto è quello del vettore `canvas-ops/agent-board.json`); il test della tela apre lo stesso testo e disegna le stesse schede negli stessi posti | T12, T16 |
-| la tela usa il nucleo, e il TypeScript della lavagna si toglie | `engine.ts` non importa più `model.ts`/`operation.ts`/`source-edit.ts` per leggere o scrivere; quei file non hanno più la logica | T16, T18 |
-| la WebView carica il nucleo e i tempi reggono | la pagina in `docs/misure/` con dimensione, istanza e un commit a 50 e 2000 schede in Node e in WebKitGTK | T15 |
-| l'inchiostro in WebAssembly non è più lento di quello TypeScript | `npm run bench:ink`, la pagina in `docs/misure/`; l'esito decide solo se aprire la domanda D-4 (b) | T17 |
+| mentre si scrive sopra 10 000 celle e 2000 tratti, nessun fotogramma oltre 33 ms | lo scenario nuovo di `npm run bench:webview`, il campo `penFrameGap.max`, la pagina in `docs/misure/` | T15 |
+| spostare o ridimensionare una scheda sposta e scala il suo inchiostro | i vettori `canvas-ops/move-card-with-ink.json` e `resize-card-with-ink.json`; il test della tela che sposta e ridimensiona e legge la resa | T10, T12 |
+| annulla e ripeti funzionano per tratto e per passata di gomma | `engine-ink.test.ts` | T12, T13 |
+| il `.xlsx` sotto l'inchiostro ha lo stesso hash prima e dopo | il test della tela (nessuna scrittura fuori dal `.canvas`) e lo sha256 nel rapporto di T15 | T12, T15 |
+| si sa che cosa fa Obsidian ai campi `fub:ink`, e A o B è scelta | il kit di T7, lanciato dall'utente; la riga in DECISIONS.md e la decisione passa da «proposta» ad «accolta» | T7 e l'utente |
+| Rust e TypeScript leggono e cambiano l'inchiostro allo stesso modo | i vettori `canvas-ink/`, `canvas-patches/ink-*.json`, `canvas-ops/*ink*.json` passano in `cargo test -p fub-canvas-core` e in Vitest | T8, T9, T10, T11 |
 
 ## Regole che valgono per ogni task
 
 - Vince il codice: se un percorso o una funzione non è come scritto qui, il
   coder lo dice nel suo rapporto e segue il codice.
-- Nessuna dipendenza esterna nuova (né `wasm-bindgen`, né `ryu-js`, né altro)
-  senza la risposta a D-1.
-- Il nucleo non va in panico su un input: ogni errore è un `Result` con un
-  enum di `thiserror`; niente `unwrap` o `expect` nei sorgenti di
-  `fub-canvas-core` fuori dai test. `unsafe` solo in
-  `crates/fub-canvas-wasm/src/abi.rs`, con un commento `SAFETY` per blocco.
-- In `fub-features` nessun `PluginError` letterale nuovo:
-  `check-error-literals.mjs` è un cricchetto. I messaggi passano da chiavi del
-  catalogo (`Text::message`), in italiano e in inglese.
-- Testi della shell in `apps/client/src/i18n/catalog.ts`, con la chiave in
-  tutte le lingue; il gergo vietato di `apps/client/src/i18n/gergo.ts` resta
-  fuori (niente «WebAssembly», «JSON» o «nucleo» nei testi per l'utente se
-  non nel comando per esperti di T10).
-- I vettori sono scritti a mano e non generati dal codice che verificano;
-  lo specchio di T9 è l'unico generato, ed è Rust che lo scrive.
+- I numeri di riga e i nomi privati di `engine.ts` (`#commitLocal`,
+  `#render`, `#keydown`, `#drawToolbar`, `#zoomAt`) sono quelli di oggi; N3
+  T16 cambia il motore: dopo, si cercano per nome e per ruolo.
+- Nessuna dipendenza esterna nuova, né in Rust né in npm.
+- Il nucleo dell'inchiostro (`apps/client/src/ink/` fuori da `ink/dom/`) non
+  usa globali del DOM e non conosce prodotti (ADR 0204 punto 3,
+  `ink/boundary.test.ts`).
+- Ascoltatori e timer passano da una `Lifetime` (`ui/lifetime.ts`):
+  `check-listeners.mjs` vieta `window.addEventListener` e i timer non
+  cancellati.
+- Il TypeScript degli editor non scrive `var(--ruolo)`
+  (`check-inline-theme.mjs`); il colore di un tratto è un valore del file e
+  va come attributo `fill`.
+- Niente `unwrap` o `expect` nei sorgenti Rust fuori dai test; ogni errore è
+  un `Result` con un enum di `thiserror` dove il crate lo usa già.
+- I vettori sono scritti a mano, non generati dal codice che verificano.
+- Testi della shell in `catalog.ts`, con la chiave in tutte le lingue.
 - Le pagine di `docs/` sono in italiano e restano nei limiti di
-  `check-doc-size.mjs` (riferimento 550 righe, decisione 180,
-  `docs/README.md` 150); una pagina nuova è linkata da `docs/README.md`.
+  `check-doc-size.mjs` (architettura 450 righe, riferimento 550, decisione
+  180, `docs/README.md` e `docs/decisions/README.md` 150);
+  `docs/architecture/editor-surfaces.md` è già a 449: non si tocca. Una pagina
+  nuova è linkata da `docs/README.md`.
 - Non scrivere numeri non misurati.
-- Quando cambia `Cargo.toml` o `Cargo.lock` della radice (T1, T10, T13),
+- Quando cambia `Cargo.toml` o `Cargo.lock` della radice (T6, T8),
   `scripts/check.sh --rapido` controlla tutto il workspace: è lento, è giusto.
 - Mai il vault vero (`~/.cache/fub-live/`), mai `~/Progetti/Fub`.
 
-## T1 · Il crate `fub-canvas-core` col modello spostato
+## T1 · Il mouse che non scrive
 
-Perché: il modello deve vivere in un posto puro che il formato, i comandi e
-la WebView usano tutti; oggi è dentro `fub-format-canvas`, che dipende da
-`fub-abi` e dal Markdown.
-Tocca: `crates/fub-canvas-core/` (nuovo: `Cargo.toml`, `src/lib.rs`,
-`src/model.rs`, `src/read.rs`, e vuoti con il solo commento di modulo
-`src/js.rs`, `src/source.rs`, `src/patch.rs`, `src/commit.rs`, `src/ops.rs`),
-`crates/fub-format-canvas/src/model.rs`, `crates/fub-format-canvas/src/parse.rs`
-(solo `parse_canvas`), `crates/fub-format-canvas/src/lib.rs`,
-`crates/fub-format-canvas/Cargo.toml`, `Cargo.toml`, `Cargo.lock`,
-`crates/fub-abi/tests/dependency_invariant.rs`,
-`docs/architecture/overview.md`, `docs/map/repo.md`,
-`docs/map/dove-sta-x.md`, `docs/getting-started/repository-tour.md`,
-`docs/architecture/components-and-boundaries.md`,
-`docs/reference/canvas-format.md` (nuovo), `docs/README.md`,
-`scripts/check.sh`, `.github/workflows/ci.yml`.
-Non toccare: `crates/fub-format-canvas/src/serialize.rs`,
-`json_map.rs`, `rewrite.rs`, `render.rs`, il resto di `parse.rs`
-(`parse_document`); le regole di lettura (sono di T3); il client.
-Dipende da: nessuno
+Perché: regola 1 del passo: sulla lavagna il mouse seleziona, e scrive solo
+con D tenuto o con l'interruttore. Oggi in `fub-ink` il tasto principale del
+mouse è sempre inchiostro e non c'è un modo per dirgli di no.
+Tocca: `crates/fub-ink/src/roles.rs`, `crates/fub-ink/src/session.rs`,
+`crates/fub-ink/src/lib.rs`, `crates/fub-ink/tests/session.rs`,
+`crates/fub-ink/tests/ts_mirror.rs`,
+`apps/client/src/ink/__fixtures__/ink-samples.json` (rigenerato),
+`apps/client/src/ink/input/roles.ts`, `apps/client/src/ink/input/roles.test.ts`,
+`apps/client/src/ink/input/session.ts`,
+`apps/client/src/ink/input/session.test.ts`,
+`apps/client/src/ink/mirror.test.ts`,
+`apps/client/src/ink/dom/pointer-adapter.ts`,
+`apps/client/src/ink/dom/pointer-adapter.test.ts`,
+`docs/architecture/ink-and-tools.md` (sezione «Chi disegna»).
+Non toccare: gli editor (`editors/rich`, `editors/spatial`, `editors/canvas`):
+il valore di serie resta «il mouse scrive» e nessun prodotto cambia;
+`crates/fub-ink/benches/pipeline.rs` (costruisce la configurazione con `..`);
+il resto di `ink-and-tools.md`.
+Dipende da: —
 Cosa fare:
-- Spostare in `fub-canvas-core::model` tutto `model.rs` tranne `FORMAT_ID` e
-  `SCHEMA_VERSION`, che restano in `fub-format-canvas` (sono del formato);
-  `fub-format-canvas/src/model.rs` diventa quelle due costanti più
-  `pub use fub_canvas_core::model::*`, e la API pubblica del crate non cambia.
-- `fub_canvas_core::read::parse(source) -> Result<Canvas, CanvasError>` con il
-  comportamento di oggi (limite di dimensione, vuoto, BOM saltato da sé,
-  `validate`); `parse_canvas` lo chiama. Nessuna regola nuova qui.
-- `Cargo.toml` del nucleo: `serde`, `serde_json` con `float_roundtrip`,
-  `thiserror`, tutti `workspace = true`; membro e voce in
-  `[workspace.dependencies]` della radice, accanto a `fub-format-canvas`.
-- `the_canvas_core_stands_alone` in `dependency_invariant.rs`, sul modello di
-  `the_ink_core_stands_alone`: dipendenze dirette solo quelle tre; lo usano
-  solo `fub-format-canvas`, `fub-features` e `fub-canvas-wasm`. Il crate nel
-  diagramma `@grafo-dipendenze` di `overview.md` e nelle mappe.
-- `cargo check -p fub-canvas-core --target wasm32-unknown-unknown --locked`
-  nel giro completo di `scripts/check.sh` (accanto ai controlli `wasip2` di
-  scena e inchiostro, saltato se il bersaglio manca) e nel job `invariants`
-  di `ci.yml`, dopo `rustup target add wasm32-unknown-unknown`.
-- `docs/reference/canvas-format.md`: che cosa è il nucleo, chi lo usa, le
-  sezioni «Lettura», «Scrittura», «Parità» ancora da riempire (T3, T5, T7).
-Casi limite: `float_roundtrip` cambia la lettura dei decimali in tutto il
-grafo (A4): se un test d'istantanea di un altro crate cambia di un'ultima
-cifra, si aggiorna e lo si dice; `fub-host` e i test di
-`fub-format-canvas` (`canvas_roundtrip.rs`, `linear_parse.rs`) devono
-passare senza toccarli.
-Fatto quando: `cargo test -p fub-format-canvas` e `cargo test -p fub-abi
---test dependency_invariant` passano; il controllo `wasm32-unknown-unknown`
-passa; `fub-canvas-core` non dipende da `fub-abi` (`cargo tree -p
-fub-canvas-core -e normal --depth 1`).
-Prova: scripts/check.sh --rapido; cargo check -p fub-canvas-core --target
-wasm32-unknown-unknown --locked
+- Rust: `pub enum MousePolicy { Ink, Ignore }` in `roles.rs`, con `Default`
+  = `Ink`; il campo `mouse` in `RoleContext`; in `classify_pointer`, per
+  `PointerKind::Mouse` con `Ignore`: tasto principale `Ignore`, centrale
+  `Navigate` (come oggi), gli altri `Ignore`. Riesportato in `lib.rs`.
+- `SessionConfig { mouse, .. }` (di serie `Ink`) e
+  `Session::set_mouse_policy`, come `set_touch_policy`: vale per i tratti che
+  cominciano dopo.
+- `tests/ts_mirror.rs`: i casi dei ruoli girano con le due regole del mouse;
+  il fixture si rigenera con `UPDATE_MIRROR=1 cargo test -p fub-ink --test
+  ts_mirror`.
+- TypeScript: `MousePolicy = "ink" | "ignore"`, `RoleContext.mouse`,
+  `classifyPointer` (nel ramo `default`, che copre il mouse e il tipo `""`),
+  `SessionConfig.mouse?` (di serie `"ink"`), `Session.setMousePolicy`;
+  `mirror.test.ts` legge la regola dal fixture; l'adattatore prende
+  l'opzione `mouse?` e dà `InkInput.setMousePolicy`.
+- «Chi disegna»: una frase sulla regola del mouse e su chi la sceglie (il
+  prodotto).
+Casi limite: cambiare regola mentre un tratto di mouse è in corso (il tratto
+finisce com'è); il tipo `""` segue la regola del mouse (lo si scrive nella
+pagina: un driver che manda la penna come `""` con `"ignore"` non scrive);
+il tasto centrale resta `Navigate` con tutte e due le regole; penna e dito
+non cambiano con nessuna delle due.
+Fatto quando: con `"ignore"` il tasto principale del mouse dà `ignore` in
+Rust e in TypeScript e il fixture rigenerato contiene i casi; con la regola
+di serie niente cambia: i test di oggi passano, toccati solo dove
+costruiscono un `RoleContext`.
+Prova: scripts/check.sh --rapido; cargo test -p fub-ink; cd apps/client &&
+npx vitest run src/ink
 Stato: [x] fatto
 
-## T2 · Le regole di lettura in TypeScript
+## T2 · PenQuiet
 
-Perché: il TypeScript deve leggere come leggerà il nucleo (R1–R10), così i
-vettori di T7 hanno un solo esito giusto.
-Tocca: `apps/client/src/editors/canvas/model.ts`,
-`apps/client/src/editors/canvas/model.test.ts` (nuovo),
-`apps/client/src/editors/canvas/source-edit.ts`,
-`apps/client/src/editors/canvas/source-edit.test.ts`.
-Non toccare: `operation.ts` (la R9 è di T7), `engine.ts` (la R8 non lo
-cambia: `dataset.backgroundStyle` prende la stringa così com'è), il Rust.
-Dipende da: nessuno
+Perché: mentre una penna è giù il lavoro pesante (ridisegnare la lavagna
+dopo una modifica da fuori) deve aspettare. Lo schizzo del passo non ha la
+chiave che promette, usa un `setTimeout` senza proprietario e un globale del
+DOM nel nucleo dell'inchiostro.
+Tocca: `apps/client/src/ink/quiet.ts` (nuovo),
+`apps/client/src/ink/quiet.test.ts` (nuovo),
+`apps/client/src/ink/dom/idle.ts` (nuovo),
+`apps/client/src/ink/dom/idle.test.ts` (nuovo).
+Non toccare: `docs/architecture/ink-and-tools.md` (la sezione su PenQuiet la
+scrive T4, che tocca la pagina dopo T1); `engine.ts`;
+`ink/boundary.test.ts` (se il file nuovo lo fa fallire, si corregge il file
+nuovo).
+Dipende da: —
 Cosa fare:
-- R1: vuoto = BOM facoltativo più spazi JSON, non `trim()`.
-- R2: `Number.isSafeInteger` per `x`, `y`, `width`, `height`.
-- R3: una variante dello scanner di `source-edit.ts` (oggi `scanJson` lancia
-  «duplicate canvas JSON key» a qualunque profondità) che dice dove sta la
-  chiave doppia; `parseCanvas` rifiuta una chiave nota doppia su radice,
-  scheda o arco e accetta le altre; il riscrittore continua a rifiutare tutto.
-- R4: rifiutare le stringhe con surrogati spaiati, chiavi comprese, con
-  un'espressione regolare (il `tsconfig` ha `lib` ES2021, quindi niente
-  `String.prototype.isWellFormed`).
-- R7: `null` sui campi noti facoltativi e su `nodes`/`edges` è assente.
-- R8: `backgroundStyle` qualunque stringa.
-- Un test per regola in `model.test.ts`, coi casi della prova 2.
-Casi limite: un file di solo BOM; `"x": -0`; `"x": 9007199254740992`; una
-chiave nota doppia dentro un campo sconosciuto (va bene); un BOM seguito da
-CRLF.
-Fatto quando: `model.test.ts` ha un test per R1, R2, R3, R4, R7, R8 che
-fallisce sul codice di prima e passa dopo; i test della cartella passano.
+- `export type Schedule = (run: () => void) => () => void;` (dà la funzione
+  che annulla).
+- `class PenQuiet { constructor(schedule: Schedule); get active(): boolean;
+  enter(); leave(); defer(key: string, work: () => void); dispose() }`.
+- `enter`/`leave` contati; un `leave` di troppo non va sotto zero.
+- `defer`: senza penna giù il lavoro gira subito; con la penna giù va in coda
+  per chiave, e una seconda richiesta con la stessa chiave prende il posto
+  della prima.
+- All'ultimo `leave` la coda si consegna allo scheduler una volta; se una
+  penna torna giù prima che giri, la consegna si annulla e la coda aspetta il
+  `leave` dopo.
+- Un lavoro che lancia non ferma gli altri: girano tutti, poi si rilancia il
+  primo errore.
+- `dispose`: annulla la consegna e svuota la coda; dopo, niente fa niente.
+- `ink/dom/idle.ts`: `idleSchedule(owner: Lifetime, timeoutMs = 100):
+  Schedule`, con `requestIdleCallback` letto da `globalThis` (WebKitGTK può
+  non averlo) e altrimenti `setTimeout(run, 0)`; ogni richiesta si cancella
+  col suo annulla e alla chiusura della `Lifetime`.
+Casi limite: `leave` senza `enter`; `defer` chiamato da un lavoro che sta
+girando; `enter` chiamato da un lavoro; la stessa chiave con lavori
+diversi; `dispose` con una consegna in volo; `Lifetime` chiusa prima che la
+consegna giri; ambiente senza `requestIdleCallback`.
+Fatto quando: `quiet.test.ts`, con uno scheduler finto a mano, copre tutti i
+casi limite; `idle.test.ts` copre i due rami e la chiusura della
+`Lifetime`; `ink/boundary.test.ts` passa (`quiet.ts` non usa globali del
+DOM).
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
-src/editors/canvas
+src/ink/quiet.test.ts src/ink/dom/idle.test.ts src/ink/boundary.test.ts
 Stato: [x] fatto
 
-## T3 · Le regole di lettura in Rust
+## T3 · La scheda sotto il tratto
 
-Perché: le stesse regole di T2, nel nucleo, così Rust e TypeScript aprono gli
-stessi file.
-Tocca: `crates/fub-canvas-core/src/read.rs`, `src/model.rs` (solo gli
-attributi di serde e i deserializzatori dei campi), `crates/fub-canvas-core/tests/read_rules.rs`
-(nuovo), `docs/reference/canvas-format.md` (sezione «Lettura»).
-Non toccare: `fub-format-canvas` (prende le regole da sé tramite
-`parse_canvas`), `js.rs`, `patch.rs`, il client.
-Dipende da: T1
+Perché: ogni tratto sa a chi appartiene (regola 6 e le ancore del passo); la
+scelta è una funzione pura che non dipende dal formato.
+Tocca: `apps/client/src/editors/canvas/anchor.ts` (nuovo),
+`apps/client/src/editors/canvas/anchor.test.ts` (nuovo).
+Non toccare: `engine.ts`, `model.ts`, `operation.ts`; il formato (T5).
+Dipende da: —
 Cosa fare:
-- R1: vuoto = BOM facoltativo più spazi JSON.
-- R2: un deserializzatore per `x`, `y`, `width`, `height` che accetta un
-  intero o un `f64` senza parte frazionaria entro ±(2^53−1), e dà un errore
-  che nomina il campo.
-- R3: con `preserve_order` la mappa dei campi sconosciuti tiene già l'ultimo
-  valore nella posizione del primo: un test lo fissa; le chiavi note doppie
-  restano un errore di serde.
-- R4 e R5: un test per ciascuno (oggi `serde_json` li rifiuta già: si
-  controlla e si fissa).
-- R7: `nodes` e `edges` `null` come assenti (`deserialize_with`), e un test
-  che un campo facoltativo `null` è `None`.
-- La sezione «Lettura» della pagina: le regole R1–R5, R7, R8 con un esempio
-  ciascuna.
-Casi limite: `"x": 1e2`, `"x": 1.5`, `"x": 9007199254740992`, `"x": -0`;
-U+0085 da solo; un BOM da solo; `"nodes": null` con `"edges"` assente.
-Fatto quando: `tests/read_rules.rs` ha un test per regola con i casi della
-prova 2, e passa; `cargo test -p fub-format-canvas` passa ancora.
-Prova: scripts/check.sh --rapido
+- `interface Bounds { x; y; width; height }`;
+  `strokeBounds(points: Iterable<{ x: number; y: number }>, size: number):
+  Bounds`, il riquadro dei punti allargato di metà spessore da ogni lato (un
+  tocco solo ha comunque un'area).
+- `anchorAt(nodes: readonly CanvasNode[], b: Bounds, canHold: (node:
+  CanvasNode) => boolean): CanvasNode | null` secondo A3: fra le schede che
+  intersecano `b` conta solo l'ultima dell'array (la più in alto); è sua se
+  contiene il centro di `b`, se almeno metà dell'area di `b` sta dentro di
+  lei e se `canHold(node)`; altrimenti `null` (tratto libero).
+- Le schede con misure non finite o non positive non intersecano niente.
+Casi limite: il centro esattamente sul bordo (i bordi contano dentro); metà
+esatta (0,5 basta); un tratto di un punto solo; un gruppo sotto un figlio;
+due schede uguali sovrapposte (vince l'ultima); coordinate oltre 2^53;
+`canHold` falso sulla più alta mentre una sotto andrebbe bene (resta
+libero).
+Fatto quando: `anchor.test.ts` ha un caso con l'attesa scritta a mano per
+ogni caso limite e passa; il file non importa niente del DOM.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/editors/canvas/anchor.test.ts
 Stato: [x] fatto
 
-## T4 · Il codificatore come `JSON.stringify`
+## T4 · Lo strato d'inchiostro della lavagna
 
-Perché: quando il nucleo scrive un valore nel sorgente deve scrivere gli
-stessi byte che scriverebbe il TypeScript (R6), o i due sorgenti divergono.
-Tocca: `crates/fub-canvas-core/src/js.rs`,
-`crates/fub-canvas-core/tests/js_encoder.rs` (nuovo).
-Non toccare: `read.rs`, `patch.rs`, `source.rs`; la documentazione (la
-scrive T5 nella sezione «Scrittura»).
-Dipende da: T1
+Perché: serve un pezzo che prenda la penna sopra la lavagna, disegni la scia,
+fermi l'evento prima che la lavagna lo usi per selezionare o spostare, e
+disegni i tratti asciutti in modo che seguano la scheda anche durante il
+trascinamento. Senza il formato: riceve tratti già pronti da disegnare.
+Tocca: `apps/client/src/editors/canvas/ink-layer.ts` (nuovo),
+`apps/client/src/editors/canvas/ink-layer.test.ts` (nuovo),
+`apps/client/src/editors/canvas/ink-paint.ts` (nuovo),
+`apps/client/src/editors/canvas/ink-paint.test.ts` (nuovo),
+`apps/client/src/theme/scrittoio/structure.css`,
+`docs/architecture/ink-and-tools.md` (una sezione nuova, «Lo strato della
+lavagna»).
+Non toccare: `engine.ts` (lo collega T12); `apps/client/src/ink/` (T1 e T2
+sono fatti); `theme/scrittoio/skin/` (T16); il formato (T5, T9).
+Dipende da: T1, T2
 Cosa fare:
-- `js_number(f64) -> String` come `Number.prototype.toString`: le cifre più
-  corte (`{:e}`), il pareggio esatto deciso verso la cifra pari
-  sull'espansione esatta (`format!("{:.1100e}")`, prova 4); forma
-  esponenziale da `1e21` in su e sotto `1e-6` (`1e+21`, `1e-7`); `-0` → `0`.
-- Ogni numero di un `serde_json::Value` si scrive come lo scriverebbe
-  JavaScript dopo averlo letto: un intero oltre 2^53 passa da `f64` (stesso
-  arrotondamento di `as f64`).
-- `js_string(&str)` con gli escape di `JSON.stringify` (i controlli sotto
-  0x20 come `\b \f \n \r \t` o `\u00xx` minuscolo; niente escape per `/`,
-  non ASCII, U+2028, U+2029).
-- `encode(&Value) -> String` compatto come `JSON.stringify(value)`, con
-  l'ordine delle chiavi di JavaScript (prima le chiavi che sembrano indici,
-  da `"0"` a `"4294967294"` senza zeri in testa, in ordine crescente, poi le
-  altre nell'ordine di inserimento); `encode_pretty` come
-  `JSON.stringify(value, null, 2)`.
-Casi limite: `5e-324`, `f64::MAX`, `0.1`, `1e21`, `123e-20`; la chiave `"01"`
-(non è un indice), `"4294967295"` (non è un indice), `"__proto__"`; una
-stringa vuota; un oggetto vuoto (`{}` anche nel rientrato).
-Fatto quando: `tests/js_encoder.rs` confronta coi valori scritti a mano di
-`JSON.stringify` (presi da Node e incollati nel test, con un commento che lo
-dice) almeno 40 numeri, tutti i casi limite e 10 oggetti, e passa.
-Prova: scripts/check.sh --rapido
+- `mountInkLayer(options, owner: Lifetime): InkLayer`. Le opzioni:
+  `viewport`, `toWorld(clientX, clientY)`, `look()` (pennello, colore e
+  strumento di adesso), `quiet: PenQuiet`, `onStroke(stroke)` (il tratto
+  finito: l'id della scia, i campioni in coordinate della lavagna, il
+  pennello e il colore), `onCancel?(id)`, `onErase?(id, points)` e
+  `onEraseEnd?(id)` (le usa T13; qui si provano con un finto).
+- Dentro: `attachInkInput(viewport, …, owner)` con `touch: "navigate"` e
+  `mouse: "ignore"`; `onStart` chiama `quiet.enter()`, la fine e
+  l'annullamento `quiet.leave()`.
+- Un ascoltatore `pointerdown` in cattura sul viewport, registrato dopo
+  `attachInkInput`: se `input.roleOf(pointerId)` è `ink`, `erase` o
+  `barrel` chiama `stopPropagation()` e `preventDefault()`, così la lavagna
+  non seleziona, non sposta, non prende il fuoco e non seleziona testo. Il
+  `click` e il `dblclick` che arrivano dopo un tratto, prima del
+  `pointerdown` seguente, si fermano allo stesso modo (il doppio tocco della
+  penna non crea una scheda).
+- La scia: `<svg class="canvas-ink-wet">` nel viewport, fuori dallo stage,
+  con la trasformazione della camera (`setCamera(x, y, zoom)`, che T12
+  chiama da `#applyCamera`); un percorso per tratto con `StrokePreview` di
+  `ink/tools/stroke.ts`. `settle(id)` toglie la scia di un tratto (T12 la
+  chiama nello stesso giro in cui aggiunge l'asciutto).
+- `ink-paint.ts`: `DryStroke { id; path; fill; ref: { width; height } |
+  null; faded? }` (`path` in unità della misura di riferimento, `ref` nullo
+  per l'inchiostro libero). `paintCard(host, strokes)` mette nell'elemento
+  della scheda un `<svg class="canvas-ink-card">` largo e alto 100%, con
+  dentro un `<svg>` per ogni misura di riferimento (`viewBox="0 0 W H"`,
+  100%, `preserveAspectRatio="none"` per D-9 a; per D-9 b basta
+  `"xMinYMin meet"`), un `<path>` per tratto con `fill` come attributo. Così
+  `#renderLive`, che durante trascinamento e ridimensionamento cambia solo
+  posizione e misura dell'elemento, porta l'inchiostro con sé senza
+  ridisegnare. `paintBoard(stage, strokes)`: `<svg class="canvas-ink-board">`
+  dopo le schede, in coordinate della lavagna, come `canvas-edges`. Una cache
+  dei percorsi per `id` + `ink` + `brush`, che a ogni giro lascia andare ciò
+  che non si disegna più.
+- `structure.css`: posizione, `overflow: visible`, `pointer-events: none` per
+  i tre SVG; nessun colore (viene dal tratto).
+- La sezione «Lo strato della lavagna»: chi ferma l'evento e perché, la scia
+  e l'asciutto, PenQuiet e il suo scheduler.
+Casi limite: la penna sulla testata, sulla maniglia o su `[data-connect]` di
+una scheda (scrive: A1); la penna su una scheda di testo in modifica (il
+campo resta com'è); un tratto annullato dall'adattatore (palmo, perdita della
+cattura, finestra nascosta: la scia sparisce e `quiet.leave()` arriva una
+volta); due penne insieme (due scie); `setCamera` durante un tratto; un
+`pointerdown` sul viewport stesso e uno su una scheda (tutti e due
+fermati); il mouse con `"ignore"` (arriva alla lavagna, nessuna scia).
+Fatto quando: in happy-dom, una penna finta sul viewport fa apparire la scia
+in `.canvas-ink-wet`, `onStroke` riceve i campioni in coordinate della
+lavagna, e un ascoltatore a bolla sul viewport (come quello della lavagna)
+non riceve né `pointerdown` né `click` né `dblclick`; il mouse arriva
+all'ascoltatore e non fa scia; `paintCard` con due misure di riferimento
+crea due SVG annidati coi `viewBox` giusti; cambiare la misura dell'elemento
+non tocca i percorsi; un tratto uguale non si ricalcola.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/editors/canvas/ink-layer.test.ts src/editors/canvas/ink-paint.test.ts
 Stato: [x] fatto
 
-## T5 · Il ritocco del sorgente in Rust
+## T5 · La forma `fub:ink` e la decisione
 
-Perché: è il cuore di A2: dato il sorgente, il modello di prima e quello di
-dopo, cambiare solo ciò che è cambiato, come `patchCanvasSource`.
-Tocca: `crates/fub-canvas-core/src/source.rs`,
-`crates/fub-canvas-core/tests/source_edit.rs` (nuovo),
-`docs/reference/canvas-format.md` (sezione «Scrittura»).
-Non toccare: `apps/client/src/editors/canvas/source-edit.ts` (le correzioni
-TypeScript sono di T7), `js.rs` salvo errori trovati (si dice nel rapporto),
-`patch.rs`, `ops.rs`.
-Dipende da: T3, T4
+Perché: il formato è una forma condivisa (Rust, TypeScript, Obsidian, altri
+programmi); va scritto e provato con vettori prima di chi lo usa.
+Tocca: `docs/reference/canvas-ink.md` (nuovo),
+`docs/decisions/NNNN-inchiostro-sulla-lavagna.md` (nuovo; NNNN è il primo
+numero libero, probabilmente 0237), `docs/decisions/README.md`,
+`docs/README.md` (un link fra i contratti),
+`docs/reference/canvas-format.md` (un rimando; esiste dopo N3 T1),
+`apps/client/src/__fixtures__/canvas-ink/` (nuovo).
+Non toccare: il codice; `DECISIONS.md` (la riga c'è già); le pagine di N3
+oltre al rimando.
+Dipende da: N3 T1; le risposte a D-1 e D-2 (o la raccomandazione)
 Cosa fare:
-- Il porto di `source-edit.ts`: lo scanner con gli intervalli in byte UTF-8
-  (spazi JSON soltanto, non `/\s/`; chiavi doppie a qualunque profondità
-  rifiutate), `patch_source(source, before, after) -> Result<String,
-  SourceError>`, `node_at(source, byte_offset) -> Option<usize>` (il porto di
-  `canvasNodeAt`, ma in byte: la tela ha già l'offset in byte).
-- Sorgente vuoto: un testo nuovo rientrato (`encode_pretty`) più `"\n"`, che
-  tiene BOM e CRLF.
-- Un oggetto con tutti i campi tenuti e nessuno nuovo: si cambiano solo i
-  valori; altrimenti si ricompone con prefisso, separatore e suffisso
-  trovati, i campi assenti cadono, quelli nuovi vanno in fondo come
-  `"chiave":valore` compatti (R10).
-- Gli array di schede e archi si accoppiano per id; le voci nuove si scrivono
-  compatte, nell'ordine di R10.
-- La sezione «Scrittura» della pagina: R6, R7 (il `null` che sparisce), R10.
-Casi limite: CRLF; un file a una riga sola; una scheda in mezzo tolta; la
-prima e l'ultima tolte (le virgole); `nodes` assente e poi una scheda nuova;
-caratteri di quattro byte in un testo; un campo sconosciuto annidato che
-cambia; chiavi doppie annidate (rifiuto).
-Fatto quando: `tests/source_edit.rs` porta tutti i casi di
-`source-edit.test.ts` e `line-endings.test.ts` più i casi limite, con i testi
-attesi scritti a mano, e passa; per ognuno il testo di dopo, riletto, dà il
-modello di dopo.
-Prova: scripts/check.sh --rapido
+- `canvas-ink.md`: il livello, il tratto, l'ancora, l'ordine dei campi, il
+  livello estraneo, il tratto che non si disegna, i limiti, l'ultimo tratto
+  tolto, come si stira (le regole della sezione «Il formato `fub:ink`» di
+  questo piano); un esempio completo; dove stanno i vettori. La toppa e le
+  operazioni le scrive T10 in `canvas-operations.md`: qui un rimando.
+- La decisione, in stato «proposta»: il contesto (passo 12b, A11 di N3), la
+  scelta (A con la stringa della §5 e la misura di riferimento), le
+  alternative (B, base64 di `f32`, `u`/`v`), le conseguenze (T6,
+  l'eccezione nel nucleo, la prova di Obsidian). Passa ad «accolta» quando
+  l'utente risponde a D-1 e la prova di T7 è fatta.
+- Almeno 20 vettori, uno per file: `{name, description, source, expect:
+  {layers: [{layer, state: "ok"|"foreign", strokes: [{id, drawn, reason?}]}]}}`
+  con `source` il testo grezzo del `.canvas` e `reason` una parola fissa
+  (`tool`, `anchor`, `color`, `brush`, `ink`). Coprono: livello vuoto, radice
+  e scheda insieme, gruppo, ogni ragione, `v: 2`, `strokes` non array, id
+  doppio, id mancante, `card` alla radice, `free` su una scheda, colore a tre
+  cifre, campi sconosciuti nel livello e nel tratto, `fub:ink` su un arco,
+  un `at` che non è una data (il tratto si disegna, `at` si conserva), BOM e
+  CRLF.
+Casi limite: i limiti di dimensione si provano nei test d'unità di T8 e T9,
+non nei vettori (un vettore da 512 KiB non sta nel repo); misure scritte
+come `640.0` (R9: si confrontano per valore); due livelli estranei nello
+stesso file.
+Fatto quando: la pagina e la decisione esistono, sono linkate da
+`docs/README.md` e `docs/decisions/README.md`, e `check-doc-size` e
+`check-prose` passano; ogni vettore si legge come JSON e il suo `source`
+anche.
+Prova: scripts/check.sh --rapido; node -e "const fs = require('fs'), d =
+'apps/client/src/__fixtures__/canvas-ink/'; for (const f of
+fs.readdirSync(d)) JSON.parse(JSON.parse(fs.readFileSync(d + f,
+'utf8')).source.replace(/^\uFEFF/, ''))"
 Stato: [x] fatto
 
-## T6 · Le toppe al modello
+## T6 · Il crate `fub-ink-codec`
 
-Perché: le toppe di `operation.ts` sono la forma con cui la tela, l'annulla e
-(da T8) le operazioni d'intento cambiano una lavagna; devono esistere una
-volta, in Rust, con la stessa forma JSON.
+Perché: il nucleo della lavagna (N3) non può dipendere da `fub-scene`, che
+porta con sé il lettore XML dei disegni; il codec dei tratti (§5) e la
+grammatica dei pennelli invece servono a tutti e due. La prova 1 dice che si
+spostano senza riscriverli.
+Tocca: `crates/fub-ink-codec/` (nuovo: `Cargo.toml`, `src/lib.rs`, e
+`src/ink.rs`, `src/brush.rs` spostati con `git mv` da `crates/fub-scene/src/`),
+`crates/fub-scene/Cargo.toml`, `crates/fub-scene/src/lib.rs`, `Cargo.toml`
+(radice: membro e `[workspace.dependencies]`), `Cargo.lock`,
+`crates/fub-abi/tests/dependency_invariant.rs`,
+`docs/decisions/0204-nucleo-inchiostro.md` (punto 2),
+`docs/reference/scene-format-pens.md` (riga 7),
+`docs/architecture/overview.md`, `docs/map/repo.md`.
+Non toccare: `crates/fub-scene/src/classify.rs` e `export.rs` (con le
+riesportazioni non cambiano); i test di `crates/fub-scene/tests/`, che
+devono passare così come sono; `crates/fub-ink`; il client.
+Dipende da: la risposta a D-2 (con D-2 b il task non si fa)
+Cosa fare:
+- Il crate con la sola dipendenza `fub-ink`; `ink.rs` (quantizzazione
+  compresa) e `brush.rs` interi, coi loro test d'unità.
+- `fub-scene`: `pub use fub_ink_codec::ink;` al posto di `pub mod ink;` e
+  `use fub_ink_codec::brush;` al posto di `mod brush;`; le riesportazioni di
+  `lib.rs` restano: l'API pubblica di `fub-scene` non cambia.
+- `dependency_invariant.rs`: `fub-ink-codec` in `SCENE_ALLOWED_DIRECT` e in
+  `INK_ALLOWED_DEPENDENTS`; un test nuovo `the_ink_codec_stands_alone`
+  (dipende solo da `fub-ink`; i suoi clienti sono `fub-scene` e, da T8,
+  `fub-canvas-core`), col messaggio che rimanda alla 0204.
+- La 0204, punto 2: il crate nuovo fra i clienti, con il perché.
+Casi limite: un plugin prende `fub-scene` per revisione Git e lo compila per
+`wasm32-wasip2`: il crate nuovo sta nello stesso repo e non ha codice di
+piattaforma; N3 T1 e N3 T13 toccano anche `dependency_invariant.rs` (alla
+fusione si tengono tutte le liste); `check-cargo-versions` vuole la
+dipendenza in `[workspace.dependencies]`; i link `crate::` nei commenti dei
+file spostati.
+Fatto quando: `cargo test -p fub-scene` passa senza toccare i suoi test;
+`cargo test -p fub-ink-codec` passa; il crate compila per
+`wasm32-unknown-unknown`; il test nuovo dell'invariante passa.
+Prova: scripts/check.sh --rapido; cargo test -p fub-ink-codec -p fub-scene;
+cargo build -p fub-ink-codec --target wasm32-unknown-unknown; cargo test -p
+fub-abi --test dependency_invariant
+Stato: [x] fatto
+
+## T7 · Il kit per la prova con Obsidian
+
+Perché: il cancello chiede di sapere che cosa fa Obsidian ai campi
+`fub:ink`; Obsidian non c'è su questa macchina e un coder non può aprirlo.
+Il kit fa sì che all'utente bastino pochi minuti (D-8).
+Tocca: `tools/prova-obsidian/README.md` (nuovo),
+`tools/prova-obsidian/lavagna-di-prova.canvas` (nuovo),
+`tools/prova-obsidian/confronta.mjs` (nuovo),
+`tools/prova-obsidian/confronta.test.mjs` (nuovo),
+`docs/reference/canvas-ink.md` (sezione «Obsidian»), `docs/map/repo.md`
+(una riga per la cartella).
+Non toccare: la shell; il vault vero; il formato (se il kit trova un buco si
+dice nel rapporto); `DECISIONS.md`; `scripts/check.sh` e la CI (il kit è
+una prova a mano: il suo test si lancia a mano).
+Dipende da: T5
+Cosa fare:
+- La lavagna di prova: una scheda di testo, una `file`, un gruppo, ognuna
+  con un livello valido; un livello alla radice; un livello estraneo
+  (`v: 2`); un campo sconosciuto in un tratto; `fub:ink` su un arco. I
+  tratti veri, presi dai vettori di T5.
+- `node tools/prova-obsidian/confronta.mjs <prima.canvas> <dopo.canvas>`:
+  per ogni livello (per id della scheda, e la radice) dice se c'è ancora, se
+  è uguale per valore, se è cambiato e dove, e se la scheda si è spostata o
+  ridimensionata. Esce con 0 se ogni livello c'è ed è uguale per valore, 1
+  se no, 2 se un file non si legge. Solo `node:fs`, niente dipendenze.
+- Il README, in italiano e in pochi passi: copiare la lavagna in un vault
+  di prova (mai quello vero), aprirla in Obsidian, spostare una scheda,
+  ridimensionarne un'altra, salvare, lanciare lo script, incollare l'uscita
+  nella risposta a D-8.
+- `confronta.test.mjs` con `node:test`, coi file temporanei sotto
+  `os.tmpdir()`: file uguali (0), livello perso (1), livello cambiato (1),
+  scheda spostata col livello intatto (0, e lo dice), file illeggibile (2).
+- La sezione «Obsidian»: che cosa si sa (niente, finché l'utente non prova),
+  come si prova, che cosa decide (A resta; oppure A più una copia B).
+Casi limite: Obsidian riordina le chiavi o riscrive `640` come `640.0`
+(uguale per valore: 0); toglie il livello solo dalle schede che sposta;
+toglie una scheda; il file con BOM.
+Fatto quando: il test passa; lo script sulla lavagna di prova contro se
+stessa esce con 0.
+Prova: scripts/check.sh --rapido; node --test
+tools/prova-obsidian/confronta.test.mjs; node
+tools/prova-obsidian/confronta.mjs tools/prova-obsidian/lavagna-di-prova.canvas
+tools/prova-obsidian/lavagna-di-prova.canvas
+Stato: [x] fatto
+
+## T8 · L'inchiostro nel nucleo della lavagna
+
+Perché: il nucleo Rust di N3 è l'autorità sulla lavagna (host, CLI, MCP,
+WebView); deve sapere leggere e controllare l'inchiostro come la shell.
+Tocca: `crates/fub-canvas-core/src/ink.rs` (nuovo),
+`crates/fub-canvas-core/src/lib.rs`, `crates/fub-canvas-core/Cargo.toml`,
+`crates/fub-canvas-core/tests/ink_vectors.rs` (nuovo), `Cargo.lock`,
+`crates/fub-abi/tests/dependency_invariant.rs`,
+`docs/reference/canvas-format.md` (sezione «Chi lo usa»),
+`docs/architecture/overview.md`. Il crate e la pagina esistono dopo N3 T1.
+Non toccare: `patch.rs`, `ops.rs`, `commit.rs`, `source.rs` (T10);
+`crates/fub-format-canvas`; il client; `docs/reference/canvas-ink.md` (un
+errore della pagina si dice nel rapporto).
+Dipende da: T5, T6; N3 T1, N3 T3
+Cosa fare:
+- `LayerRef` (serde: `"board"` oppure `{"node": id}`), `InkLayer`,
+  `InkStroke` (i campi noti più quelli sconosciuti, come il resto del
+  modello), lo stato del livello (`Ok`, `Foreign`) e del tratto (disegnato,
+  oppure conservato con la ragione).
+- `read_layers(&Canvas)` (tutti i livelli col loro stato) e
+  `layer(&Canvas, &LayerRef)`; i controlli con `fub_ink_codec::ink` (la
+  stringa) e `fub_ink_codec::brush` (il pennello) e i loro limiti.
+- Il giro lettura e scrittura non perde niente (A11 di N3).
+- `dependency_invariant.rs`: `fub-ink-codec` in `CANVAS_CORE_ALLOWED_DIRECT`
+  e un'eccezione nominata nella chiusura di `the_canvas_core_stands_alone`
+  per `fub-ink-codec` e `fub-ink`, gli unici membri del workspace ammessi;
+  `fub-canvas-core` fra i clienti nel test di T6.
+- `tests/ink_vectors.rs` legge `apps/client/src/__fixtures__/canvas-ink/`
+  come `patch_vectors.rs` di N3 T7 legge i suoi.
+- I limiti nei test d'unità: 10 001 campioni, stringa oltre 512 KiB.
+Casi limite: misure scritte `640.0` o `6.4e2`; `width` o `height` zero o
+negative (non si disegna, ragione `anchor`); colore con cifre maiuscole
+(valido, si riscrive com'era); `at` che non è una data (il tratto si
+disegna, `at` si conserva); un livello su un arco (campo sconosciuto).
+Fatto quando: `tests/ink_vectors.rs` passa su tutti i vettori di T5; il
+nucleo compila per `wasm32-unknown-unknown`; l'invariante passa.
+Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cargo build
+-p fub-canvas-core --target wasm32-unknown-unknown; cargo test -p fub-abi
+--test dependency_invariant
+Stato: [x] fatto
+
+## T9 · I tratti nel client
+
+Perché: la shell deve leggere i livelli come il nucleo, e trasformare un
+tratto finito nel record da salvare; sono le stesse regole di T8, in
+TypeScript, sugli stessi vettori.
+Tocca: `apps/client/src/editors/canvas/ink-record.ts` (nuovo),
+`apps/client/src/editors/canvas/ink-record.test.ts` (nuovo),
+`apps/client/src/editors/canvas/ink-vectors.test.ts` (nuovo).
+Non toccare: `engine.ts`; `operation.ts` (T11); `model.ts`;
+`editors/spatial/ink/codec.ts` e `ink/` (si importano); `ink-layer.ts` e
+`ink-paint.ts` salvo il tipo `DryStroke` se non basta (si dice nel
+rapporto).
+Dipende da: T3, T4, T5
+Cosa fare:
+- `readInkLayers(doc: CanvasDocument)`: per ogni livello lo stato, per ogni
+  tratto disegnato o conservato con la ragione (le stesse parole dei
+  vettori), e i tratti disegnabili già decodificati.
+- `strokeRecord(stroke, holder: CanvasNode | null, look, now)`: porta i
+  campioni in unità della scheda (o lascia quelle della lavagna se il tratto
+  è libero) come fa il disegno, con `buildStroke` di `ink/tools/stroke.ts` e
+  la matrice dalla lavagna alla scheda, poi `encodeInk`
+  (`editors/spatial/ink/codec.ts`); lo spessore è 4 pixel dello schermo
+  diviso lo zoom (A11); l'ancora prende la misura della scheda di adesso;
+  l'id è `newNodeId("s")`. Oltre i limiti (`INK_MAX_SAMPLES`,
+  `INK_MAX_BYTES`) dà un rifiuto, non un'eccezione.
+- `toDry(record)`: il `DryStroke` di T4, col percorso di `inkPath`
+  (`ink/outline.ts`, dopo `decodeInk` e `inkToQuantized` di `codec.ts`).
+- `ink-vectors.test.ts`: gli stessi vettori di T5 con `import.meta.glob`,
+  contro `readInkLayers`.
+Casi limite: un tratto che l'adattatore ha spezzato (più record, uno per
+pezzo); zoom molto piccolo e molto grande; una scheda a coordinate negative;
+il mouse senza pressione; un tratto di un punto solo.
+Fatto quando: `ink-vectors.test.ts` passa sugli stessi vettori di T8; un
+record scritto e riletto dà un tratto disegnabile con gli stessi punti entro
+l'errore della §5; un tratto oltre i limiti si rifiuta.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/editors/canvas/ink-record.test.ts src/editors/canvas/ink-vectors.test.ts
+Stato: [x] fatto
+
+## T10 · La toppa e le operazioni in Rust
+
+Perché: ogni tratto è un passo di annulla, e un agente deve poter aggiungere
+e cancellare tratti; la toppa `ink` e le due operazioni vivono nel nucleo,
+coi vettori che il client riusa in T11.
 Tocca: `crates/fub-canvas-core/src/patch.rs`,
-`crates/fub-canvas-core/tests/patch.rs` (nuovo),
-`docs/reference/canvas-operations.md` (nuovo), `docs/README.md` (un link).
-Non toccare: `operation.ts` (la R9 è di T7), `source.rs`, `js.rs`, `read.rs`.
-Dipende da: T1
+`crates/fub-canvas-core/src/ops.rs`, `crates/fub-canvas-core/src/source.rs`
+(solo se il test dice che gli array annidati non si accoppiano per id),
+`crates/fub-canvas-core/tests/ink_patch.rs` (nuovo),
+`apps/client/src/__fixtures__/canvas-patches/` (vettori nuovi `ink-*.json`),
+`apps/client/src/__fixtures__/canvas-ops/` (vettori nuovi coi nomi della
+lista qui sotto), `docs/reference/canvas-operations.md` (sezione
+«Inchiostro»). File e cartelle esistono dopo N3 T5–T8.
+Non toccare: `ink.rs` (T8) e `commit.rs` salvo errori (si dice nel
+rapporto); il client (T11); i vettori di N3 (`move-with-ink.json` resta
+com'è).
+Dipende da: T8; N3 T5, N3 T6, N3 T7, N3 T8
 Cosa fare:
-- `CanvasPatch`, con `#[serde(tag = "kind", rename_all = "kebab-case")]` e i
-  campi di oggi: `upsert-node {before: nodo|null, after, at?}`,
-  `remove-node {before, after: null, at?}`, `upsert-edge {before|null,
-  after}`, `remove-edge {before, after: null}`, `reorder {before: [id],
-  after: [id]}`; la stessa forma JSON di `CanvasPatch` in TypeScript.
-- `draft(canvas, patches) -> Result<Canvas, PatchError>` (il porto di
-  `canvasDraft`: un'immagine di prima che non torna è `Stale`, R9 compresa),
-  `apply`, `inverse(patches)` (il porto di `inverseCanvasPatches`, con il
-  riordino degli `at`).
-- `same_value(a, b)` come valori JSON (R9): chiavi in qualunque ordine,
-  numeri per valore.
-- `docs/reference/canvas-operations.md`: le toppe, i loro errori, l'inversa,
-  con un esempio JSON ciascuna; il link in `docs/README.md` fra i contratti.
-Casi limite: una toppa che non cambia niente; due toppe sulla stessa scheda;
-`at` oltre la fine; togliere una scheda e i suoi archi nello stesso giro;
-`reorder` con un id che non c'è; un id ripetuto in `reorder`.
-Fatto quando: `tests/patch.rs` porta i casi di `operation.test.ts` più i casi
-limite e per ognuno controlla che l'inversa applicata dopo dia il modello di
-prima; passa.
-Prova: scripts/check.sh --rapido
+- `CanvasPatch::Ink { layer, at, before, after }` in `patch.rs`, con
+  `draft`, `apply`, `inverse` e il confronto per valore (R9); `Stale` e
+  `Invalid` come nella sezione «La toppa e le operazioni»; il livello nasce
+  con la prima toppa e la chiave sparisce secondo la regola dell'ultimo
+  tratto.
+- `CanvasOp::AddStrokes` ed `EraseStrokes` in `ops.rs`, compilate in toppe
+  `ink`; id dal seme (A10 di N3); gli errori nuovi `UnknownStroke` e
+  `ForeignLayer`. `remove` porta via l'inchiostro con la scheda (D-3 a).
+- `tests/ink_patch.rs`: un tratto aggiunto a una scheda con 2000 tratti
+  cambia nel sorgente solo il tratto nuovo (`Committed.edit` di N3 T7 è
+  piccolo); se non è così, `source.rs` impara ad accoppiare per id gli
+  array annidati, come `patchCanvasSource`.
+- La misura in byte, nel rapporto: la toppa di spostamento di una scheda
+  con 2000 tratti, e i byte che cambiano nel sorgente per un tratto nuovo.
+- Almeno 12 vettori `canvas-patches/ink-*.json`, nella forma di N3 T7:
+  aggiungere alla radice; aggiungere a una scheda senza livello (nasce) e con
+  livello; togliere l'ultimo tratto (la chiave sparisce) e la sua inversa;
+  togliere l'ultimo tratto di un livello con campi in più (la chiave resta);
+  cambiare un tratto; immagine di prima che non torna; scheda che non c'è;
+  livello estraneo; `at` oltre la fine; due toppe sullo stesso livello; un
+  tratto con campi sconosciuti; CRLF e BOM.
+- Almeno 8 vettori `canvas-ops/`, nella forma di N3 T8:
+  `add-strokes-board.json`, `add-strokes-card.json`,
+  `add-strokes-seed-id.json`, `erase-strokes.json`,
+  `erase-strokes-unknown.json`, `add-strokes-foreign.json`,
+  `move-card-with-ink.json`, `resize-card-with-ink.json`,
+  `remove-card-with-ink.json`.
+- La sezione «Inchiostro» di `canvas-operations.md`, con un esempio per la
+  toppa e per ogni operazione.
+Casi limite: `erase_strokes` con un id ripetuto; `add_strokes` con un id già
+preso (`DuplicateId`); la toppa su un gruppo; l'annulla di «togli l'ultimo
+tratto» (il livello torna in fondo ai campi della scheda, R10).
+Fatto quando: `cargo test -p fub-canvas-core` passa (vettori delle toppe,
+delle operazioni e `ink_patch.rs`); il rapporto dà le due misure in byte.
+Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core
 Stato: [x] fatto
 
-## T7 · Il commit e i vettori delle toppe
+## T11 · La toppa nel client
 
-Perché: il nucleo deve fare ciò che fa `commitCanvasPatches` (toppe →
-sorgente nuovo verificato), e i vettori devono dire che Rust e TypeScript
-danno gli stessi byte.
-Tocca: `crates/fub-canvas-core/src/commit.rs`,
-`crates/fub-canvas-core/tests/patch_vectors.rs` (nuovo),
-`apps/client/src/__fixtures__/canvas-patches/` (nuovo),
-`apps/client/src/editors/canvas/vectors.test.ts` (nuovo),
-`apps/client/src/editors/canvas/operation.ts`,
-`apps/client/src/editors/canvas/operation.test.ts`,
-`apps/client/src/editors/canvas/source-edit.ts`,
-`docs/reference/canvas-format.md` (sezione «Parità»).
-Non toccare: `engine.ts`; `model.ts` (fatto in T2); `ops.rs`.
-Dipende da: T2, T5, T6
+Perché: la tela costruisce la toppa di un tratto e la manda al nucleo; il
+tipo e i costruttori stanno in `operation.ts`, e i vettori di T10 devono
+passare anche dal lato della shell.
+Tocca: `apps/client/src/editors/canvas/operation.ts`,
+`apps/client/src/editors/canvas/operation.test.ts`; e solo se elencano i file
+a mano invece di leggere la cartella, `editors/canvas/vectors.test.ts`
+(N3 T7) e `editors/canvas/wasm/vectors.test.ts` (N3 T14).
+Non toccare: `engine.ts` (T12); `source-edit.ts` salvo errori (si dice nel
+rapporto); i vettori di T10 (un vettore che fallisce in TypeScript si
+corregge in TypeScript, non nel vettore).
+Dipende da: T9, T10; N3 T7 (e N3 T14, se è fatto)
 Cosa fare:
-- `Core { open(source), canvas(), source(), commit(&[CanvasPatch]) ->
-  Result<Committed, CommitError>, reset(source) }`; `Committed { source,
-  inverse, edit }` dove `edit` è il tratto minimo cambiato (inizio e fine in
-  byte del vecchio sorgente, testo nuovo), per i comandi. `CommitError`:
-  `Stale`, `Invalid` (il modello di dopo non è valido), `Rejected` (il
-  ritocco rifiuta il sorgente), `Unstable` (il testo di dopo, riletto, non dà
-  il modello di dopo). Un errore lascia `Core` com'era.
-- Almeno 30 vettori, uno per file, nella forma di `scene-ops`: `name`,
-  `description`, `before` (testo grezzo), `patches`, `expect {outcome,
-  text?, undo?, reason?}`, dove `undo` è il testo dopo l'inversa; coprono
-  R1–R10, CRLF, BOM, i casi limite di T5 e T6.
-- `patch_vectors.rs` li legge come `crates/fub-scene/tests/ops_vectors.rs`;
-  `vectors.test.ts` con `import.meta.glob` come quello della scena, contro
-  `commitCanvasPatches`.
-- TypeScript allineato: `sameValue` secondo R9, l'ordine dei campi di R10 in
-  `source-edit.ts` e dove `operation.ts` costruisce una scheda.
-- La sezione «Parità»: dove stanno i vettori, come se ne aggiunge uno.
-Casi limite: un vettore rifiutato da tutti e due con la stessa ragione; un
-vettore dove il TypeScript di oggi dava un altro testo (va scritto nel
-rapporto e corretto in TypeScript, non nel vettore).
-Fatto quando: la stessa cartella di vettori passa in `cargo test -p
-fub-canvas-core --test patch_vectors` e in `vectors.test.ts`; un vettore
-cambiato di un byte fa fallire tutti e due.
-Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
-apps/client && npx vitest run src/editors/canvas
+- Il tipo della toppa `ink` nell'unione `CanvasPatch`, `LayerRef` e il tipo
+  del tratto salvato.
+- `addStrokePatch(doc, layer, record)` (in fondo all'array) ed
+  `eraseStrokePatch(doc, layer, id)`.
+- Se N3 T18 non ha ancora tolto la logica TypeScript (`canvasDraft`,
+  `applyCanvasPatches`, `inverseCanvasPatches`, `commitCanvasPatches`), la
+  toppa `ink` anche lì, così i vettori passano contro il TypeScript; se l'ha
+  tolta, solo tipi e costruttori, e i vettori passano dal WebAssembly (N3
+  T14).
+Casi limite: la toppa su una scheda tolta nel frattempo (`Stale`); più toppe
+`ink` nello stesso commit (una passata di gomma); l'inversa di una lista con
+aggiunte e tolte nello stesso livello (l'ordine degli `at`).
+Fatto quando: `npx vitest run src/editors/canvas` passa coi vettori `ink-*`;
+i due costruttori hanno test.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/editors/canvas
 Stato: [x] fatto
 
-## T8 · Le operazioni d'intento
+## T12 · La penna scrive sulla lavagna
 
-Perché: un agente e la sessione dal tablet non pensano in toppe con
-l'immagine di prima ma in «sposta», «collega», «togli»: `CanvasOp` del passo
-12a, compilata in toppe.
-Tocca: `crates/fub-canvas-core/src/ops.rs`,
-`crates/fub-canvas-core/tests/op_vectors.rs` (nuovo),
-`apps/client/src/__fixtures__/canvas-ops/` (nuovo),
-`docs/reference/canvas-operations.md` (sezione «Operazioni»).
-Non toccare: `patch.rs` salvo errori (si dice nel rapporto), `commit.rs`,
-`source.rs`, il client, `docs/README.md`.
-Dipende da: T6
-Cosa fare:
-- `CanvasOp` con `#[serde(tag = "op", rename_all = "snake_case")]`:
-  `add_card {node}` (id facoltativo), `move {ids, dx, dy}`, `resize {id,
-  width, height}`, `connect {edge}` (id facoltativo), `remove {ids}` (schede
-  o archi; gli archi che toccano una scheda tolta vanno via prima), `set {id,
-  fields}` (un campo `null` lo toglie), `reorder {ids}`.
-- `compile(canvas, ops, seed) -> Result<Compiled, OpError>`, `Compiled
-  {patches, created}`; `OpError`: `UnknownNode`, `UnknownEdge`, `DuplicateId`,
-  `TooMany`, `Invalid`. Gli id nuovi secondo A10.
-- Coordinate e misure saturano a ±(2^53−1); spostare un gruppo non sposta le
-  schede dentro (come oggi la tela).
-- Almeno 20 vettori sul modello: `before`, `seed?`, `ops`, `expect {outcome,
-  after?, created?, error?}`; fra questi `move-with-ink.json` del passo 12a
-  (A11) e `agent-board.json` (lavagna vuota, tre schede, due archi) per il
-  cancello. Il test controlla anche che l'inversa delle toppe ridia `before`.
-- La sezione «Operazioni» della pagina, con un esempio per operazione.
-Casi limite: `move` con `ids` vuoto o con un id ripetuto; `remove` di un id
-che è sia scheda sia arco (errore); `connect` verso una scheda tolta nello
-stesso giro; `set` di `id` o `type` (errore); un seme che genera un id già
-preso; 100 001 schede (`TooMany`).
-Fatto quando: `cargo test -p fub-canvas-core --test op_vectors` passa su
-tutti i vettori.
-Prova: scripts/check.sh --rapido
-Stato: [x] fatto
-
-## T9 · Lo specchio a caso fra Rust e TypeScript
-
-Perché: i vettori scritti a mano coprono i casi pensati; lo specchio, come
-quello dell'inchiostro, trova quelli che nessuno ha pensato.
-Tocca: `crates/fub-canvas-core/tests/ts_mirror.rs` (nuovo),
-`apps/client/src/__fixtures__/canvas-mirror.json` (nuovo),
-`apps/client/src/editors/canvas/mirror.test.ts` (nuovo),
-`docs/map/ownership.md` (una riga, accanto a quella dell'inchiostro); per le
-sole divergenze trovate, `crates/fub-canvas-core/src/` e
-`apps/client/src/editors/canvas/{model,operation,source-edit}.ts`.
-Non toccare: i vettori scritti a mano (se lo specchio trova un caso, lo si
-aggiunge come vettore nuovo, non si cambia uno vecchio); `fub-features`;
-`engine.ts`.
-Dipende da: T7
-Cosa fare:
-- Come `crates/fub-ink/tests/ts_mirror.rs`: un generatore con seme fisso (un
-  generatore congruenziale scritto lì, niente `rand`) fa sorgenti (rientri,
-  CRLF, BOM, campi sconosciuti annidati, numeri strani, Unicode), toppe e il
-  testo atteso dal nucleo; il file si rigenera con `UPDATE_MIRROR=1 cargo test
-  -p fub-canvas-core --test ts_mirror`, e senza la variabile il test fallisce
-  se il file è vecchio.
-- `mirror.test.ts` legge il file e controlla che `parseCanvas` e
-  `commitCanvasPatches` diano lo stesso esito, byte per byte.
-- Ogni divergenza: un vettore scritto a mano in `canvas-patches/`, poi la
-  correzione dalla parte sbagliata secondo R1–R10.
-Casi limite: il file sotto 512 KB; numeri ai bordi (2^53, `5e-324`, pareggi
-della prova 4); chiavi che sembrano indici.
-Fatto quando: lo specchio con almeno 2000 casi passa in tutti e due; la riga
-in `ownership.md` dice chi è la copia autorevole.
-Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core --test
-ts_mirror; cd apps/client && npx vitest run src/editors/canvas
-Stato: [x] fatto
-
-## T10 · Il componente «Lavagna» e `canvas.apply`
-
-Perché: perché l'host, la CLI e l'MCP cambino una lavagna serve un comando
-`canvas.*` in un `CommandProvider` (N2), nel componente `fub.lavagna`.
-Tocca: `crates/fub-features/src/lavagna.rs` (nuovo),
-`crates/fub-features/src/lavagna/apply.rs` (nuovo),
-`crates/fub-features/src/lib.rs`, `crates/fub-features/src/inventory.rs`,
-`crates/fub-features/src/componenti.rs`, `crates/fub-features/Cargo.toml`,
-`crates/fub-host/Cargo.toml`, `Cargo.lock`,
-`crates/fub-features/tests/cargo_features.rs`,
-`crates/fub-features/tests/componenti.rs`,
-`crates/fub-features/tests/catalogs.rs`,
-`docs/reference/canvas-operations.md` (sezione «Comandi»).
-Non toccare: `crates/fub-componenti/tests/mappa_del_piano.rs`, il nucleo
-(salvo errori, detti nel rapporto), `fub-cli`, il client.
-Dipende da: T7, T8; D-6 (facile da disfare: per questo il task non aspetta)
-Cosa fare:
-- Feature `lavagna = ["dep:fub-canvas-core"]` nel `default`;
-  `#[cfg(feature = "lavagna")] pub mod lavagna;`; la voce in `inventory.rs`
-  come quella di `draw` (`commands`, `catalog`); in `componenti.rs` la riga
-  `fub.lavagna` perde `.senza_bundle()`, prende `.cargo_feature("lavagna")`
-  e il commento cambia; `SENZA_FEATURE` di `cargo_features.rs` perde la sua
-  voce; `fub-host`: `lavagna` in `official-features` e `lavagna =
-  ["fub-features/lavagna"]`.
-- `canvas.apply {doc: Document, ops: Text (JSON: un array di CanvasOp),
-  base: Text facoltativo, seed: Text facoltativo}`;
-  `CommandScope::writing(CommandReach::Document)`, reversibile. Legge il documento, con `base`
-  diverso dalla revisione di oggi risponde col conflitto; `Core::open`,
-  `compile`, `commit`; un `TextEdit` dal tratto minimo.
-- `DryRun`: `CommandEffect::Plan(CommandPlan::of_edits(…))` con il
-  `PlannedEdit`; `Apply`:
-  `apply_edit`, poi `Undo::of_edits` con l'inversa, e `CommandEffect::Custom
-  { ns: "fub.lavagna", payload: {created, revision} }`, come i comandi di
-  `commands.rs`.
-- Titolo «Applica operazioni alla lavagna» / «Apply operations to the
-  whiteboard»; ogni `OpError` e `CommitError` ha la sua chiave in italiano e
-  in inglese.
-Casi limite: `ops` non JSON o vuoto; un documento che non è `.canvas`; un
-documento che non si legge con R1–R10; due `canvas.apply` sulla stessa
-revisione (il secondo è in conflitto); `fub-features` senza feature e con la
-sola `lavagna`.
-Fatto quando: un test in `fub-features` fa `canvas.apply` su una lavagna in
-un vault di prova, controlla il testo, poi l'annulla e ritrova i byte di
-prima; `ogni_feature_ufficiale_e_una_riga` passa; `cargo check -p
-fub-features --no-default-features --features lavagna` passa.
-Prova: scripts/check.sh --rapido; cargo check -p fub-features
---no-default-features --features lavagna; cargo test -p fub-cli --test
-componenti
-Stato: [x] fatto
-
-## T11 · `canvas.create`
-
-Perché: oggi una lavagna nuova nasce solo dalla shell; il cancello vuole che
-la crei anche un agente.
-Tocca: `crates/fub-features/src/lavagna/create.rs` (nuovo),
-`crates/fub-features/src/lavagna.rs`, `crates/fub-features/tests/catalogs.rs`,
-`docs/reference/canvas-operations.md` (sezione «Comandi»).
-Non toccare: `crates/fub-features/src/draw/create.rs` (è il modello da
-copiare, non da cambiare), `inventory.rs`, `componenti.rs`, `fub-cli`.
-Dipende da: T10
-Cosa fare:
-- `canvas.create {name: Text facoltativo, folder: Text facoltativo}` sul
-  modello di `drawing.create`: nome libero della famiglia «Lavagna» /
-  «Whiteboard», estensione `.canvas` aggiunta se manca, gli stessi errori di
-  conflitto e di nome, `create_document` col sorgente vuoto del nucleo (R6),
-  `CommandEffect::Navigate`, annulla che porta il file nel cestino.
-- Titolo «Nuova lavagna» / «New whiteboard», descrizione in tutte e due le
-  lingue.
-Casi limite: nome già preso; nome con `.canvas` già scritto; cartella che non
-c'è; nome con caratteri vietati; annulla dopo che il file è stato cambiato.
-Fatto quando: un test crea due lavagne senza nome (la seconda prende il nome
-libero dopo), legge un sorgente che il nucleo apre, e annulla.
-Prova: scripts/check.sh --rapido
-Stato: [x] fatto
-
-## T12 · Gli strumenti MCP `fub_canvas_create` e `fub_canvas_apply`
-
-Perché: è il cancello: un agente crea una lavagna e ci mette schede e archi.
-Tocca: `crates/fub-cli/src/mcp/tools.rs`, `crates/fub-cli/src/mcp.rs`
-(`INSTRUCTIONS`), `crates/fub-cli/src/cli.rs` (solo il testo d'aiuto di
-`mcp`), `crates/fub-cli/tests/mcp.rs`, `docs/reference/mcp-server.md`.
-Non toccare: `access.rs` (le funzioni ci sono già), `fub-features`, gli
-altri strumenti.
-Dipende da: T10, T11
-Cosa fare:
-- `fub_canvas_create {name?, folder?}`: come `create`: `check_writer`, prova
-  di `canvas.create`, `check_write` sul documento nominato, poi `Apply`;
-  risponde `{doc, revision}`.
-- `fub_canvas_apply {doc, ops, base, apply?}`: `base` obbligatoria come in
-  `write`; `check_read` e `check_write` sul documento (non serve tutto il
-  vault, A13); `ops` come array JSON o come stringa; senza `apply` il piano,
-  con `apply: true` l'esito con `created` e la revisione nuova.
-- In `specs()` dopo `fub_create`; il test della lista degli strumenti, la
-  tabella di `mcp-server.md`, la sezione «Non ancora» che oggi li annuncia.
-- Il test del cancello: crea, applica `agent-board.json` di T8, rilegge, e il
-  testo è quello atteso.
-Casi limite: radici di scrittura che non coprono la cartella; `base` vecchia
-(conflitto, niente scrittura); `ops` non valido (`bad_args`); un documento
-che non è una lavagna; server in sola lettura.
-Fatto quando: `cargo test -p fub-cli --test mcp` passa col test del cancello
-e coi rifiuti dei casi limite.
-Prova: scripts/check.sh --rapido
-Stato: [x] fatto
-
-## T13 · La facciata WebAssembly `fub-canvas-wasm`
-
-Perché: la WebView deve usare lo stesso nucleo; serve una porta stretta, con
-JSON dentro e fuori e poche chiamate per gesto.
-Tocca: `crates/fub-canvas-wasm/` (nuovo: `Cargo.toml`, `src/lib.rs`,
-`src/api.rs`, `src/abi.rs`, `tests/api.rs`), `Cargo.toml`, `Cargo.lock`,
-`crates/fub-abi/tests/dependency_invariant.rs`,
-`docs/architecture/overview.md` (diagramma), `docs/map/repo.md`,
-`docs/reference/canvas-operations.md` (sezione «WebAssembly»).
-Non toccare: `crates/fub-canvas-core/src/` (salvo errori), il client,
-`tools/varco-wasm`, `check-crate-type.mjs` (A5: niente `cdylib` nel
-manifesto).
-Dipende da: T7, T8; D-1 (costosa da disfare: per questo è in un'ondata dopo i
-comandi; se la risposta arriva prima può andare insieme a T12, l'unico con
-«Tocca» disgiunti: T10 e T11 toccano `Cargo.lock` o
-`canvas-operations.md`)
-Cosa fare:
-- `src/api.rs`, sicuro e provato in nativo: una tabella di `Core` per
-  handle; `open`, `commit`, `compile` (`{ops, seed}`), `reset`, `node_at`,
-  `close`, ognuno da JSON UTF-8 a JSON UTF-8, con `{"error": {"code",
-  "message"}}` per gli errori.
-- `src/abi.rs`, l'unico `unsafe`: `fub_alloc(len)`, `fub_free(ptr, len)`,
-  `canvas_open(ptr, len) -> u32` (0 = errore), `canvas_commit(h, ptr, len) ->
-  i32`, `canvas_compile`, `canvas_reset`, `canvas_node_at(h, byte) -> i32`,
-  `canvas_close(h)`, `result_ptr()`, `result_len()`; un commento `SAFETY` per
-  blocco.
-- `commit` risponde col tratto cambiato in unità UTF-16 del vecchio
-  sorgente (inizio, fine, testo), non col sorgente intero: con 1 MB di file
-  copiarlo a ogni gesto costerebbe (prova 1).
-- La sezione della pagina: le funzioni, il loro JSON, chi libera la memoria.
-Casi limite: un handle chiuso o mai aperto; JSON non UTF-8; un `len` zero;
-due lavagne aperte insieme; un panico (con `panic=abort` diventa una
-trappola: il chiamante deve rifare l'istanza, scritto nella pagina).
-Fatto quando: `cargo test -p fub-canvas-wasm` passa i vettori di T7 e T8
-attraverso `api.rs`; il comando di A5 produce un `.wasm` senza import
-(`wasm-objdump` se c'è, altrimenti il test di T14), e la sua dimensione è nel
-rapporto.
-Prova: scripts/check.sh --rapido; CARGO_TARGET_DIR=target/canvas-wasm
-CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true
-CARGO_PROFILE_RELEASE_PANIC=abort CARGO_PROFILE_RELEASE_STRIP=true cargo rustc
--p fub-canvas-wasm --lib --release --target wasm32-unknown-unknown
---crate-type cdylib
-Stato: [ ] da fare
-
-## T14 · Il passo nella build di Vite
-
-Perché: la shell deve trovare il `.wasm` fatto dai sorgenti di oggi, in
-sviluppo, nei test e nella build.
-Tocca: `apps/client/build/canvas-wasm.mjs` (nuovo),
-`apps/client/vite.config.ts`, `apps/client/vite.bench.config.ts`,
-`apps/client/src/editors/canvas/wasm/core.ts` (nuovo),
-`apps/client/src/editors/canvas/wasm/vectors.test.ts` (nuovo),
-`.github/workflows/ci.yml`, `.github/workflows/release.yml`,
-`.github/workflows/mobile.yml`, `scripts/check.sh`, `scripts/check-scope.mjs`,
-`CONTRIBUTING.md`.
-Non toccare: `engine.ts` e `surface.ts` (sono di T16),
-`crates/fub-app/tauri.conf.json` (T15), i crate.
-Dipende da: T13; D-2 (costosa da disfare)
-Cosa fare:
-- Un plugin di Vite: un modulo virtuale (`virtual:fub-canvas-wasm`) che
-  lancia il comando di A5, osserva i sorgenti dei due crate, emette il
-  `.wasm` come asset e ne stampa la dimensione; se `cargo` o il bersaglio
-  mancano, un errore che dice il comando `rustup target add
-  wasm32-unknown-unknown`. In tutte e due le config di Vite.
-- `wasm/core.ts`: carica il modulo una volta (`WebAssembly.instantiate`),
-  dà `openCore(text)` con `commit`, `compile`, `reset`, `nodeAt`, `close`;
-  rifà l'istanza dopo una trappola; rilegge le viste della memoria dopo ogni
-  chiamata (la memoria può crescere).
-- `wasm/vectors.test.ts`: le cartelle `canvas-patches/` e `canvas-ops/`
-  attraverso il `.wasm`, stessi controlli di `vectors.test.ts`.
-- CI: Rust e `wasm32-unknown-unknown` in ogni job che lancia `npm test`,
-  `npm run build`, il banco visivo o `bench:webview`; il job `changes` segna
-  il client anche per `crates/fub-canvas-(core|wasm)/`; `check-scope.mjs`
-  idem, e `check.sh` lancia allora `npx vitest run src/editors/canvas`.
-- `CONTRIBUTING.md`: il bersaglio da installare.
-Casi limite: due build di Vite insieme (stesso `CARGO_TARGET_DIR`: cargo
-mette il lucchetto); il server di sviluppo mentre si cambia un `.rs`; un
-`.wasm` vecchio in cache; il job `mobile` (stessa build).
-Fatto quando: `npm run build` produce il `.wasm` fra gli asset e ne stampa la
-dimensione; `wasm/vectors.test.ts` passa; senza il bersaglio, l'errore dice
-che cosa installare.
-Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npx
-vitest run src/editors/canvas
-Stato: [ ] da fare
-
-## T15 · La CSP, la decisione e la misura
-
-Perché: la WebView deve poter compilare WebAssembly, la scelta va scritta, e
-i tempi vanno misurati dove girano davvero prima che la tela ci passi.
-Tocca: `crates/fub-app/tauri.conf.json` (solo `csp`),
-`docs/reference/permissions-and-security.md`, `docs/decisions/0236-…md`
-(nuovo, numero secondo A12), `docs/decisions/README.md`,
-`apps/client/bench/webview/run.mjs`, `apps/client/bench/webview/budgets.json`,
-`docs/misure/lavagna-wasm-AAAA-MM-GG.md` (nuovo), `docs/misure/README.md`.
-Non toccare: `crates/fub-services/src/site_isolation.rs` (è la CSP dei siti
-pubblicati, un'altra cosa); le altre voci della CSP; il client.
-Dipende da: T14; D-3 (costosa da disfare)
-Cosa fare:
-- `script-src 'self' 'wasm-unsafe-eval'`, nient'altro; la pagina della
-  sicurezza dice perché e che cosa non permette.
-- La decisione: WebAssembly nella WebView per la lavagna, l'ABI C (D-1), la
-  build da Vite (D-2), la CSP; nel registro delle decisioni.
-- Uno scenario nuovo in `bench:webview` (accanto a S1–S7, R1, T1, I1): apre
-  una lavagna di 50 e una di 2000 schede, misura istanza, `open` e `commit`
-  di uno spostamento; i tetti in `budgets.json` dopo la prima misura.
-- La pagina di misura: dimensione (grezza e compressa), istanza, `open` e
-  `commit` a 50 e 2000 schede, in Node e in WebKitGTK, macchina e versioni;
-  la riga nel `README` delle misure, in una tabella nuova «Il nucleo della
-  lavagna».
-Casi limite: WebKitGTK di una distribuzione vecchia senza
-`'wasm-unsafe-eval'` (va scritto se lo si vede); la macchina carica (due giri
-uguali, si scrive il rumore); la WebView2 di Windows non misurata qui (si
-scrive).
-Fatto quando: la shell costruita carica il nucleo senza errori di CSP nella
-console; la pagina di misura ha i numeri di Node e di WebKitGTK (dal job
-`webview` della CI se in locale non si costruisce l'app).
-Prova: scripts/check.sh --rapido; cd apps/client && npm run bench:webview --
---only=<lo scenario nuovo> (con l'app costruita, come dice
-`docs/development/webview-measurements.md`)
-Stato: [ ] da fare
-
-## T16 · La tela usa il nucleo
-
-Perché: finché la tela scrive col suo TypeScript, Rust e WebView possono
-ancora divergere; da qui ogni modifica della tela passa dal nucleo.
+Perché: è il cuore di N4: la penna scrive, il tratto si salva nel `.canvas`
+con un passo di annulla, segue la scheda, e niente rallenta mentre si
+scrive.
 Tocca: `apps/client/src/editors/canvas/engine.ts`,
-`apps/client/src/editors/canvas/surface.ts`,
-`apps/client/src/editors/canvas/engine.test.ts`,
-`apps/client/src/editors/canvas/wasm/core.ts`,
-`apps/client/src/i18n/catalog.ts`.
-Non toccare: `model.ts`, `operation.ts`, `source-edit.ts` (si svuotano in
-T18); i vettori; `bootstrap.ts`.
-Dipende da: T15; D-5 (si vede: il passo d'annulla del testo)
+`apps/client/src/editors/canvas/engine-ink.test.ts` (nuovo),
+`apps/client/src/i18n/catalog.ts`, `docs/architecture/ink-and-tools.md`
+(sezione «Come lo usa la lavagna»).
+Non toccare: `engine.test.ts` (deve passare com'è), `surface.ts`,
+`ink-layer.ts`, `ink-paint.ts`, `ink-record.ts`, `operation.ts` salvo errori
+(si dice nel rapporto); la barra e gli stili (T16); la gomma (T13); il dito
+(T14).
+Dipende da: T2, T4, T9, T11; N3 T16
 Cosa fare:
-- La superficie si monta come `mountVectorSurfaceLazily` di
-  `apps/client/src/editors/spatial/lazy.ts`: tiene il testo finché il nucleo
-  non è pronto (prima lavagna aperta, poi resta, A6), poi crea la tela.
-- `setDoc` e `syncDoc` aprono o fanno `reset`; `#commitLocal` passa le toppe
-  a `commit` e usa il tratto cambiato per il testo nuovo e la
-  `TextOperation`; l'annulla passa le toppe inverse dallo stesso `commit`;
-  `revealSource` usa `nodeAt`; `close` quando la superficie si distrugge.
-- Il testo di una scheda (oggi `#commitLocal` a ogni `input`) si registra
-  dopo circa 250 ms di pausa, all'uscita dal campo, a Invio e a Esc (D-5).
-- Se il nucleo non si carica: l'avviso (chiave nuova nel catalogo, per
-  esempio «Questa lavagna non si può disegnare ora: il testo è nella vista
-  Sorgente.») e la vista sorgente, come fa il caricamento pigro dei disegni.
-- `engine.test.ts`: lo stesso comportamento di prima attraverso il nucleo, e
-  il test del cancello che apre il testo di `agent-board.json` e trova le
-  stesse schede negli stessi posti.
-Casi limite: una modifica esterna mentre si scrive in una scheda; due
-superfici sulla stessa lavagna; chiudere la superficie durante il
-caricamento; una trappola del nucleo a metà gesto (si rifà l'istanza e si
-riapre dal testo della sessione); CRLF (gli offset della sessione sono a
-`\n`).
-Fatto quando: i test di `src/editors/canvas` passano col nucleo; la tela, nel
-banco con l'host finto, apre, sposta, collega, scrive e annulla come prima
-(foto del banco invariate, se ci sono); nessuna chiamata al nucleo per tasto
-(un test lo conta).
+- La lavagna apre una `openLifetime()` quando nasce e la chiude in
+  `destroy`, accanto al suo `AbortController`; dentro, `PenQuiet` con
+  `idleSchedule` e lo strato di T4, che non si monta in sola lettura o se la
+  lavagna è troppo grande (A8).
+- `#applyCamera` chiama `setCamera` dello strato; `#render` disegna
+  l'asciutto (`paintCard` per ogni scheda col suo livello, poi `paintBoard`).
+- Un tratto finito: `anchorAt(doc.nodes, strokeBounds(...), canHold)` (il
+  livello della scheda non è estraneo), `strokeRecord`, `addStrokePatch`,
+  poi `#commitLocal(patches, …, render = false)`: una chiamata al nucleo per
+  tratto. Nello stesso giro si aggiunge l'asciutto del solo livello toccato e
+  si chiama `settle(id)`.
+- Un tratto spezzato dall'adattatore si salva pezzo per pezzo, ma nella
+  cronologia è un passo (A4).
+- Annulla e ripeti di passi fatti solo di toppe `ink` aggiornano solo lo
+  strato, senza `#render`; con una penna giù non fanno niente (A5).
+- `syncDoc` (A9): modello e sorgente si aggiornano subito (il nucleo
+  compreso); `#render()` passa da `quiet.defer("render", …)`.
+- Gli avvisi, con `#showIntakeError` e chiavi nuove in italiano e inglese:
+  `canvas.ink.full` (tratto oltre i limiti, file oltre 16 MiB),
+  `canvas.ink.foreign` (livello della radice estraneo),
+  `canvas.ink.refused` (il nucleo rifiuta il commit). La scia sparisce.
+- Gomma e tasto laterale, fino a T13: niente scia e niente gesto della
+  lavagna.
+- La sezione «Come lo usa la lavagna»: chi decide la scheda, il passo di
+  annulla, la modifica da fuori a penna giù.
+Casi limite: la scheda tolta da fuori mentre la penna è giù (il tratto va
+libero); la lavagna chiusa a penna giù (il tratto si perde senza errori, la
+`Lifetime` chiude tutto); il commit rifiutato; il passo numero 101 della
+cronologia; due penne che finiscono nello stesso fotogramma; zoom molto
+piccolo e molto grande; duplicare (A6) e cancellare (D-3) una scheda con
+inchiostro; sola lettura.
+Fatto quando: `engine-ink.test.ts` (happy-dom, penna finta) prova che: un
+tratto è una toppa `ink`, una chiamata al nucleo e un passo; annulla e
+ripeti vanno per tratto; spostare e ridimensionare una scheda porta il suo
+inchiostro (stessi percorsi, misura nuova); `syncDoc` a penna giù ridisegna
+dopo; l'unica cosa scritta è il testo del `.canvas` (nessuna chiamata che
+scrive altri file); `engine.test.ts` passa invariato.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
 Stato: [ ] da fare
 
-## T17 · L'inchiostro in WebAssembly: solo la misura
+## T13 · La gomma e il tasto D
 
-Perché: il passo 12a vuole sapere se l'inchiostro in WebAssembly regge
-`bench:ink` prima di togliere la copia TypeScript; la decisione 0204 vieta di
-farlo senza una decisione nuova, quindi qui si misura e basta.
-Tocca: `tools/ink-wasm-banco/` (nuovo: `Cargo.toml` con un `[workspace]`
-suo, `src/lib.rs`, `Cargo.lock`), `apps/client/src/ink/wasm.bench.ts`
-(nuovo), `.gitignore` (il `target/` del banco),
-`docs/misure/inchiostro-wasm-AAAA-MM-GG.md` (nuovo), `docs/misure/README.md`.
-Non toccare: `crates/fub-ink/` (nemmeno per un `cdylib`), il `Cargo.toml`
-della radice, `apps/client/src/ink/` fuori dal file nuovo,
-`apps/client/bench/vitest.ink.config.mjs` (prende già `src/ink/**/*.bench.ts`).
-Dipende da: D-4; nessun task (può partire con T16)
+Perché: il retro della penna e il tasto laterale cancellano (regola 2), e
+col mouse si scrive tenendo premuto D (regola 1).
+Tocca: `apps/client/src/editors/canvas/engine.ts`,
+`apps/client/src/editors/canvas/engine-ink.test.ts`,
+`apps/client/src/editors/canvas/ink-layer.ts`,
+`apps/client/src/editors/canvas/ink-layer.test.ts`,
+`apps/client/src/editors/canvas/ink-paint.ts`.
+Non toccare: `apps/client/src/ink/` (`EraseSweep` si importa); `operation.ts`
+salvo errori (si dice nel rapporto); la barra e gli stili (T16); il dito
+(T14).
+Dipende da: T12; N3 T16
 Cosa fare:
-- Un pacchetto fuori dal workspace che dipende da `crates/fub-ink` per
-  percorso ed espone con un'interfaccia C le stesse funzioni che misura
-  `apps/client/src/ink/pipeline.bench.ts`.
-- `wasm.bench.ts`: gli stessi casi di `pipeline.bench.ts`, sul `.wasm`
-  costruito a mano (il comando scritto in testa al file); se il `.wasm` manca
-  il banco si salta e lo dice.
-- La pagina: TypeScript contro WebAssembly, per caso, con la macchina; la
-  conclusione dice solo se la condizione del passo 12a è vera, non che cosa
-  fare.
-Casi limite: la prima chiamata (istanza) contata a parte; il costo di
-copiare i punti dentro e fuori; la macchina carica (due giri).
-Fatto quando: `npm run bench:ink` stampa le due colonne e la pagina ha i
-numeri.
-Prova: scripts/check.sh --rapido; cargo build --manifest-path
-tools/ink-wasm-banco/Cargo.toml --release --target wasm32-unknown-unknown;
-cd apps/client && npm run bench:ink
+- La gomma (ruolo `Erase` o `Barrel` dell'adattatore): `EraseSweep` di
+  `ink/tools/sweep.ts` sui tratti disegnati, in coordinate della lavagna; i
+  tratti presi si attenuano (opacità 0,25, come `FADED_OPACITY` di
+  `editors/spatial/painter/svg-dom.ts`), con un attributo sul path,
+  senza ridisegnare il resto.
+- Alla fine della passata, un commit con una `eraseStrokePatch` per tratto:
+  un passo di annulla. Nessun tratto preso: nessun commit. Passata annullata
+  (`onCancel`): i tratti tornano normali.
+- Il tasto D in `#keydown` (oggi gestisce solo z, y, a, d, +, -, 0 con Ctrl
+  o Cmd): D senza modificatori, non ripetuto, fuori dai campi di testo,
+  porta il mouse a `"ink"` e mette `data-ink="pen"` sul viewport; al
+  rilascio, alla perdita del fuoco (`lifetime.listen(window, "blur")`) e a
+  `visibilitychange` torna `"ignore"`. Un tratto di mouse già giù finisce
+  normalmente.
+- `setInkMouse(on: boolean)` sulla lavagna, per l'interruttore di T16.
+Casi limite: D in un campo di testo della scheda (scrive la lettera); D
+lasciato a metà tratto; la gomma su una scheda di un livello estraneo
+(niente si cancella); una passata che prende tratti di più livelli (più
+toppe, un passo); la gomma su un tratto conservato e non disegnato (non si
+vede, non si prende).
+Fatto quando: `engine-ink.test.ts` prova che la gomma cancella i tratti
+toccati in un passo e che l'annulla li rimette; che D tenuto fa scrivere il
+mouse e D lasciato no; che D in un campo di testo non cambia niente;
+`engine.test.ts` passa invariato.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/editors/canvas
 Stato: [ ] da fare
 
-## T18 · Il TypeScript della lavagna si toglie
+## T14 · Il dito sposta e ingrandisce
 
-Perché: con la parità provata e la tela sul nucleo, la copia TypeScript della
-logica è solo un posto in più dove sbagliare.
-Tocca: `apps/client/src/editors/canvas/model.ts` (restano i tipi e
-`emptyCanvas` se serve al disegno), `operation.ts` (restano i tipi di
-`CanvasPatch` e i costruttori di toppe che la tela usa),
-`source-edit.ts` (si toglie), `source-edit.test.ts`, `operation.test.ts`,
-`model.test.ts`, `line-endings.test.ts`, `vectors.test.ts`, `mirror.test.ts`,
-`apps/client/src/__fixtures__/canvas-mirror.json`,
-`crates/fub-canvas-core/tests/ts_mirror.rs`, `docs/map/ownership.md`,
-`docs/reference/canvas-format.md` (sezione «Parità»).
-Non toccare: `wasm/vectors.test.ts` e le cartelle dei vettori (restano, e
-sono ora la prova); `engine.ts` salvo gli import; il disegno della tela.
-Dipende da: T16; D-8 (togliere test è «Chiede sempre»)
+Perché: sul tablet il dito sposta e ingrandisce la lavagna (regola 1); oggi
+la lavagna non ha pizzico, e il dito trascina le schede come il mouse.
+Tocca: `apps/client/src/editors/canvas/engine.ts`,
+`apps/client/src/editors/canvas/touch.ts` (nuovo),
+`apps/client/src/editors/canvas/touch.test.ts` (nuovo),
+`apps/client/src/editors/canvas/engine-touch.test.ts` (nuovo).
+Non toccare: `apps/client/src/graph/interaction.ts` (si imita, non si cambia);
+`ink-layer.ts` (il dito è già `navigate`); la barra e gli stili (T16).
+Dipende da: T13; N3 T16
 Cosa fare:
-- Prima di togliere un test, il rapporto elenca per ognuno il vettore che
-  copre i suoi casi; un caso che non c'è diventa un vettore nuovo.
-- Tolta la logica: `parseCanvas`, `commitCanvasPatches`, `canvasDraft`,
-  `applyCanvasPatches`, `inverseCanvasPatches`, `patchCanvasSource`,
-  `canvasNodeAt`, `sameCanvasModel`. Lo specchio non ha più una seconda
-  copia: si toglie, e `ownership.md` lo dice.
-Casi limite: `editors/core/bootstrap.ts` e `editors/rich/surface.ts`
-importano da `surface.ts` e `engine.ts` della lavagna, che restano: non
-cambiano; un tipo di `model.ts` usato dal disegno resta; `npm run typecheck`
-deve restare verde.
-Fatto quando: `grep -rn "patchCanvasSource\|commitCanvasPatches\|parseCanvas"
-apps/client/src` non trova più definizioni; `wasm/vectors.test.ts` e i test
-della tela passano.
-Prova: scripts/check.sh --rapido; cd apps/client && npm run typecheck && npx
-vitest run src/editors/canvas
+- `touch.ts`, puro: `pinchCamera(start, a0, b0, a1, b1)` che dà la camera
+  nuova da due dita (centro e distanza), entro i limiti di zoom della
+  lavagna; e la soglia del tocco breve.
+- Nella lavagna, `pointerType === "touch"`: un dito sposta la vista ovunque,
+  tranne sulla testata della scheda (`canvas-node-handle`, che sposta la
+  scheda), sulle maniglie di ridimensionamento, su `[data-connect]` e sui
+  pulsanti; due dita pizzicano usando `#zoomAt(clientX, clientY, factor)`; un
+  tocco breve fa quello che fa un clic. Il palmo non fa niente (lo scarta già
+  l'adattatore). Come `graph/interaction.ts` (righe 313–519).
+Casi limite: dal pan al pizzico quando arriva il secondo dito; un dito che si
+alza a metà pizzico (resta il pan); la penna che si posa mentre un dito
+sposta (vince la penna, il dito si ferma); `pointercancel`; i limiti dello
+zoom; sola lettura (il dito sposta, niente schede trascinate).
+Fatto quando: `touch.test.ts` prova la camera del pizzico; 
+`engine-touch.test.ts` (happy-dom, dita finte) prova pan, pizzico, tocco
+sulla testata e penna che vince; `engine.test.ts` passa invariato.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/editors/canvas
+Stato: [ ] da fare
+
+## T15 · La misura S8
+
+Perché: il cancello chiede nessun fotogramma oltre 33 ms mentre si scrive
+sopra un foglio grosso; i numeri si misurano, non si promettono.
+Tocca: `apps/client/bench/webview/run.mjs`,
+`apps/client/bench/webview/fixtures.mjs`,
+`apps/client/bench/webview/budgets.json` (solo `targets`),
+`docs/development/webview-measurements.md`,
+`docs/misure/lavagna-inchiostro-AAAA-MM-GG.md` (nuovo, con la data del
+giorno), `docs/misure/README.md`.
+Non toccare: `.github/workflows/ci.yml`; il prodotto (un fotogramma lento si
+dice nel rapporto, con dove va il tempo, non si corregge qui); gli scenari
+S1–S7.
+Dipende da: T14; N3 T15
+Cosa fare:
+- In `fixtures.mjs`, `S8/Lezione.canvas`: una scheda con una tabella
+  Markdown di 100 per 100 celle (il foglio vivo che il passo 12b chiede non
+  esiste: vedi «Differenze»), una scheda `S8/voti.xlsx` fatta con
+  `workbook()`, e 2000 tratti deterministici sulle schede e sulla lavagna,
+  scritti col piccolo codificatore della §5 dentro `fixtures.mjs`.
+- In `run.mjs`, S8 nella lista di default di `--only` (riga 36) e
+  nell'ordine degli scenari (verso la riga 559): dieci tratti di penna da
+  300 ms sopra la tabella; se `report.input.pen.count` è 0 (il driver non
+  manda la penna), il mouse con D tenuto, e il rapporto lo dice. Poi lo
+  spostamento della scheda coi suoi tratti (`S8.moveFrameGap.max`, senza
+  tetto); il conto dei path asciutti; lo sha256 di `voti.xlsx` prima e dopo.
+- In `budgets.json`, solo in `targets`: `S8.penFrameGap.max: 33`.
+- Se lo scenario di N3 T15 ha già preso il nome S8, questo prende il primo
+  nome libero, dappertutto (dati, chiavi, rapporto).
+- Tre giri; il rapporto dà il peggiore e dice che Xvfb disegna in software.
+Casi limite: il driver che non manda `pointerType` `pen`; Xvfb più lento di
+una macchina vera (i numeri valgono come tetto, non come promessa); il
+primo giro più lento (il WebAssembly si carica); la scheda xlsx che non si
+apre in Xvfb (la misura va lo stesso, il rapporto lo dice).
+Fatto quando: `docs/misure/lavagna-inchiostro-AAAA-MM-GG.md` riporta i tre
+giri di S8 (fotogramma più lungo a penna, allo spostamento, path asciutti,
+hash uguale o no) e la pagina è nell'indice di `docs/misure/README.md`.
+Prova: scripts/check.sh --rapido; cd apps/client && npm run build && cd
+../.. && cargo build --release --locked -p fub-app --features
+tauri/custom-protocol && cd apps/client && xvfb-run -a npm run bench:webview
+-- --only=S8 --budgets=targets --native-driver=/usr/bin/WebKitWebDriver
+Stato: [ ] da fare
+
+## T16 · L'interruttore e il cursore
+
+Perché: col mouse si scrive anche senza tenere D, con un interruttore nella
+barra della lavagna; chi scrive vede che la lavagna è in modo penna.
+Tocca: `apps/client/src/editors/canvas/engine.ts`,
+`apps/client/src/editors/canvas/engine-ink.test.ts`,
+`apps/client/src/i18n/catalog.ts`,
+`apps/client/src/theme/scrittoio/skin/editors.css`,
+`apps/client/src/theme/scrittoio/skin.css` e
+`apps/client/theme/author/sample/skin.css` (derivati, con `npm run
+theme:generate`), `apps/client/src/theme/scrittoio/structure.css`,
+`docs/development/ink-input-smoke-test.md` (sezione «La lavagna»), e
+`apps/client/src/theme/scrittoio/anatomia/editors.ts` solo se `npm run theme:verify`
+lo chiede.
+Non toccare: gli altri pulsanti della barra; i token del tema; le icone del
+kit; la gomma (T13); il dito (T14).
+Dipende da: T13, T14; N3 T16
+Cosa fare:
+- In `#drawToolbar` (verso la riga 441), dopo i pulsanti di zoom, un
+  pulsante `mk("ink-mouse", t("canvas.ink.mouse"), …)` con `aria-pressed`,
+  `title` da `canvas.ink.mouse_hint` («Oppure tieni premuto D»), che chiama
+  `setInkMouse`. Non si ricorda fra un'apertura e l'altra (D-6).
+- `canvas.ink.mouse` e `canvas.ink.mouse_hint` in italiano e inglese.
+- Lo stile del pulsante premuto come `skin/draw.css` (riga 46):
+  `.canvas-toolbar > button[aria-pressed="true"]` con `--accent-wash` e
+  `--accent`; il cursore `crosshair` su `.canvas-viewport[data-ink="pen"]`,
+  come `.rich-ink-veil`.
+- La sezione «La lavagna» della prova a mano: penna, gomma, D,
+  interruttore, dito, annulla.
+- Le foto dal banco (skill `banco`) nel rapporto, tema chiaro e scuro, col
+  pulsante spento e acceso e un tratto sopra una scheda.
+Casi limite: sola lettura (pulsante disabilitato); pulsante acceso e D
+tenuto insieme (D lasciato non lo spegne); il contrasto del pulsante premuto
+nel tema scuro; la barra stretta; il pulsante raggiunto con la tastiera; il
+lettore di schermo (nome e stato).
+Fatto quando: il pulsante accende e spegne la scrittura col mouse (test);
+`npm run theme:verify` passa; le foto chiaro e scuro sono nel rapporto.
+Prova: scripts/check.sh --rapido; cd apps/client && npm run theme:verify &&
+npx vitest run src/editors/canvas
 Stato: [ ] da fare
 
 ## Non verificato stanotte
 
-- I tempi di WebAssembly in WebKitGTK e in WebView2 (solo Node, prova 1): li
-  misura T15.
-- La dimensione del nucleo intero (operazioni, ritocco, `float_roundtrip`):
-  stima 200–300 KB grezzi, la stampa T14.
-- Che cosa fa Obsidian con `1.0`, i campi `null` e un file vuoto.
-- Il confronto con `bench:ink` (T17).
-- Il comportamento esatto di Rust su `"nodes": null` e `"-0"`: dedotto dal
-  codice; T3 lo fissa coi test.
-- Se uno scenario di `bench:webview` può ospitare la misura senza toccare
-  il driver.
+- Obsidian: non c'è su questa macchina; che cosa fa ai campi `fub:ink` lo
+  dice solo la prova di D-8 col kit di T7.
+- La latenza vera nella WebView e su un tablet: le prove di stanotte sono
+  in happy-dom e in Node; S8 di T15 misura sotto Xvfb, in software.
+- Se WebKitWebDriver manda `pointerType` `pen`: T15 ha il ripiego col mouse
+  e D.
+- Quanto costano `#render` e un commit con 2000 tratti sulla lavagna: lo
+  dicono T10 (byte) e T15 (tempo).
+- Le dimensioni vere dei file con molti tratti e la memoria delle toppe di
+  spostamento: le stime sono nella «Prove fatte», la misura in T10.
+- Che `source.rs` di N3 T5 accoppi per id gli array annidati: T10 lo prova
+  e, se no, lo insegna.
+- Il doppio tocco e il `dblclick` nelle WebView vere (la lavagna crea una
+  scheda al doppio clic: un doppio tocco del dito non deve crearla per
+  sbaglio).
+- Quanto happy-dom è fedele per la penna e la cattura del puntatore.
+- Il plugin che prende `fub-scene` da una revisione Git dopo che T6 ne
+  sposta il codificatore.
+- Il contrasto del blu `#0072b2` (il colore di default di D-5) sul tema
+  scuro.
+- Che, in WebKitGTK, `stopPropagation` nell'ascoltatore in cattura del
+  viewport fermi anche l'ascoltatore a bolla dello stesso viewport quando la
+  penna cade sul viewport vuoto: lo standard di oggi dice di sì, i motori
+  più vecchi no. T4 lo prova in happy-dom; nella WebView vera lo vede la
+  prova a mano di T16.
+- L'invariante del nucleo l'ho letta su `piano/n3-logica-in-rust` @ 2acb9ae7;
+  in questa copia non c'è ancora, come `docs/reference/canvas-format.md` e
+  `docs/reference/canvas-operations.md`, che arrivano con N3 T1 e N3 T6.

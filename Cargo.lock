@@ -2043,6 +2043,7 @@ dependencies = [
 name = "fub-canvas-core"
 version = "0.1.0"
 dependencies = [
+ "fub-ink-codec",
  "serde",
  "serde_json",
  "thiserror 2.0.19",
@@ -2264,6 +2265,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fub-ink-codec"
+version = "0.1.0"
+dependencies = [
+ "fub-ink",
+]
+
+[[package]]
 name = "fub-kernel"
 version = "0.1.0"
 dependencies = [
@@ -2307,7 +2315,7 @@ dependencies = [
 name = "fub-scene"
 version = "0.1.0"
 dependencies = [
- "fub-ink",
+ "fub-ink-codec",
  "quick-xml",
  "serde",
  "serde_json",

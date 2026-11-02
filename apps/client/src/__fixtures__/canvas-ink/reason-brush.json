@@ -1,0 +1,44 @@
+{
+  "name": "reason-brush",
+  "description": "Un pennello che non comincia con pf1 o nib1, con un valore fuori dall'intervallo, con una chiave nota ripetuta, vuoto o assente: ragione brush.",
+  "source": "{\n  \"nodes\": [],\n  \"edges\": [],\n  \"fub:ink\": { \"v\": 1, \"strokes\": [\n    { \"id\": \"s-1\", \"tool\": \"pen\", \"brush\": \"pf2 size=3\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s100 cxy 4000,2500 120,40 95,-10\" },\n    { \"id\": \"s-2\", \"tool\": \"pen\", \"brush\": \"pf1 thinning=2\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s100 cxy 4000,2500 120,40 95,-10\" },\n    { \"id\": \"s-3\", \"tool\": \"pen\", \"brush\": \"pf1 size=3 size=4\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s100 cxy 4000,2500 120,40 95,-10\" },\n    { \"id\": \"s-4\", \"tool\": \"pen\", \"brush\": \"\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s100 cxy 4000,2500 120,40 95,-10\" },\n    { \"id\": \"s-5\", \"tool\": \"pen\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s100 cxy 4000,2500 120,40 95,-10\" },\n    { \"id\": \"s-6\", \"tool\": \"pen\", \"brush\": \"pf1 size=4\", \"color\": \"#0072b2\", \"anchor\": { \"kind\": \"free\" }, \"ink\": \"1 s100 cxy 4000,2500 120,40 95,-10\" }\n  ] }\n}\n",
+  "expect": {
+    "layers": [
+      {
+        "layer": "board",
+        "state": "ok",
+        "strokes": [
+          {
+            "id": "s-1",
+            "drawn": false,
+            "reason": "brush"
+          },
+          {
+            "id": "s-2",
+            "drawn": false,
+            "reason": "brush"
+          },
+          {
+            "id": "s-3",
+            "drawn": false,
+            "reason": "brush"
+          },
+          {
+            "id": "s-4",
+            "drawn": false,
+            "reason": "brush"
+          },
+          {
+            "id": "s-5",
+            "drawn": false,
+            "reason": "brush"
+          },
+          {
+            "id": "s-6",
+            "drawn": true
+          }
+        ]
+      }
+    ]
+  }
+}

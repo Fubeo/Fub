@@ -2673,6 +2673,34 @@ body {
   overflow: visible;
 }
 
+/* L'inchiostro della lavagna: la scia sopra lo stage, l'asciutto dentro la
+   scheda e sullo stage. Il colore è del tratto (`fill`), non del tema. */
+.canvas-ink-wet,
+.canvas-ink-board {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-ink-wet {
+  transform-origin: 0 0;
+}
+
+.canvas-ink-card {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.canvas-ink-card > svg {
+  overflow: visible;
+}
+
 .canvas-node {
   position: absolute;
   top: 0;

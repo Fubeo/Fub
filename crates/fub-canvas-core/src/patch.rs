@@ -1,6 +1,6 @@
 //! Le toppe sul modello (`upsert-node`, `remove-node`, `upsert-edge`,
-//! `remove-edge`, `reorder`), ognuna con l'immagine di prima, e la loro
-//! inversa.
+//! `remove-edge`, `reorder`, `ink`), ognuna con l'immagine di prima, e la
+//! loro inversa.
 //!
 //! È il porto di `apps/client/src/editors/canvas/operation.ts`: la stessa
 //! forma JSON di `CanvasPatch`, la stessa bozza (`canvasDraft`) e la stessa
@@ -12,6 +12,13 @@
 //! La bozza controlla la struttura (immagini di prima, posizioni, archi che
 //! puntano a schede che ci sono, permutazioni); non chiama
 //! [`Canvas::validate`]: un modello di dopo non valido lo rifiuta il commit.
+//!
+//! La toppa `ink` aggiunge, toglie o cambia un tratto in un livello
+//! d'inchiostro (`fub:ink`, [`crate::ink`]) di una scheda o della radice: il
+//! livello nasce con la prima toppa, e se resta esattamente
+//! `{"v": 1, "strokes": []}` la chiave sparisce. Un livello estraneo non si
+//! tocca: è [`PatchError::ForeignLayer`], che il commit dà come `invalid`
+//! ([`PatchError::reason`]).
 
 use std::collections::HashMap;
 use std::fmt;
@@ -20,6 +27,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Number, Value};
 use thiserror::Error;
 
+use crate::ink::{ForeignLayer, InkLayer, InkStroke, LayerRef, INK_KEY};
 use crate::model::{Canvas, CanvasEdge, CanvasNode};
 
 /// Il `null` obbligatorio di `after` nelle toppe che tolgono qualcosa.
@@ -101,6 +109,16 @@ pub enum CanvasPatch {
         before: Vec<String>,
         after: Vec<String>,
     },
+    /// Cambia un tratto alla posizione `at` del livello `layer`: lo aggiunge
+    /// (`before` è `null`, `at` può essere la fine), lo toglie (`after` è
+    /// `null`) o lo sostituisce. Il livello che non c'è nasce vuoto; quello
+    /// che resta esattamente `{"v": 1, "strokes": []}` sparisce.
+    Ink {
+        layer: LayerRef,
+        at: usize,
+        before: Option<InkStroke>,
+        after: Option<InkStroke>,
+    },
 }
 
 /// Che cosa non tornava in una toppa `Stale`.
@@ -110,6 +128,24 @@ pub enum Subject {
     Edge(String),
     /// L'ordine delle schede di un `reorder`.
     Order,
+    /// Il tratto `id` alla posizione di una toppa `ink`, nel livello
+    /// `layer`.
+    Stroke {
+        layer: LayerRef,
+        id: String,
+    },
+}
+
+/// Il livello per un messaggio d'errore: `board` o `node "id"`.
+struct LayerName<'a>(&'a LayerRef);
+
+impl fmt::Display for LayerName<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            LayerRef::Board => formatter.write_str("board"),
+            LayerRef::Node(id) => write!(formatter, "node {id:?}"),
+        }
+    }
 }
 
 impl fmt::Display for Subject {
@@ -118,6 +154,9 @@ impl fmt::Display for Subject {
             Self::Node(id) => write!(formatter, "node {id:?}"),
             Self::Edge(id) => write!(formatter, "edge {id:?}"),
             Self::Order => formatter.write_str("node order"),
+            Self::Stroke { layer, id } => {
+                write!(formatter, "ink stroke {id:?} of the {}", LayerName(layer))
+            }
         }
     }
 }
@@ -151,6 +190,63 @@ pub enum PatchError {
     /// un id che non c'è, uno ripetuto o uno mancante.
     #[error("canvas patch {index}: the new order is not a permutation of the nodes")]
     NotAPermutation { index: usize },
+    /// L'`at` di una toppa `ink` che aggiunge un tratto è oltre la fine dei
+    /// tratti del livello.
+    #[error(
+        "canvas patch {index}: position {at} is past the end of the {len} ink strokes of the {}",
+        LayerName(layer)
+    )]
+    InkAtOutOfRange {
+        index: usize,
+        layer: LayerRef,
+        at: usize,
+        len: usize,
+    },
+    /// Il livello d'inchiostro è estraneo (`reason` dice perché): Fub non ci
+    /// scrive.
+    #[error(
+        "canvas patch {index}: the ink layer of the {} is foreign ({reason})",
+        LayerName(layer)
+    )]
+    ForeignLayer {
+        index: usize,
+        layer: LayerRef,
+        reason: ForeignLayer,
+    },
+    /// Il tratto di dopo ha l'id di un altro tratto del livello: il livello
+    /// diventerebbe estraneo.
+    #[error(
+        "canvas patch {index}: the {} already has an ink stroke {id:?}",
+        LayerName(layer)
+    )]
+    DuplicateStroke {
+        index: usize,
+        layer: LayerRef,
+        id: String,
+    },
+    /// Una toppa `ink` con `before` e `after` tutti e due `null`.
+    #[error("canvas patch {index}: an ink patch needs a stroke before or after")]
+    EmptyInk { index: usize },
+}
+
+impl PatchError {
+    /// La ragione in una parola, quella di `CommitError::reason`: `invalid`
+    /// per una toppa che porterebbe a un livello d'inchiostro che Fub non
+    /// scrive (estraneo, con due tratti dello stesso id, senza tratto),
+    /// `stale` per tutto il resto.
+    pub fn reason(&self) -> &'static str {
+        match self {
+            Self::ForeignLayer { .. } | Self::DuplicateStroke { .. } | Self::EmptyInk { .. } => {
+                "invalid"
+            }
+            Self::Stale { .. }
+            | Self::AtOutOfRange { .. }
+            | Self::NodeHasEdges { .. }
+            | Self::MissingEndpoint { .. }
+            | Self::NotAPermutation { .. }
+            | Self::InkAtOutOfRange { .. } => "stale",
+        }
+    }
 }
 
 /// Due valori JSON uguali per valore (R9): le chiavi di un oggetto in
@@ -414,6 +510,120 @@ fn step(draft: &mut Canvas, index: usize, patch: &CanvasPatch) -> Result<(), Pat
                 .collect();
             draft.nodes = nodes;
         }
+        CanvasPatch::Ink {
+            layer,
+            at,
+            before,
+            after,
+        } => ink_step(draft, index, layer, *at, before.as_ref(), after.as_ref())?,
+    }
+    Ok(())
+}
+
+/// I campi di chi tiene il livello `layer`: la radice o la prima scheda con
+/// quell'id (come `node_position`). `None` se la scheda non c'è.
+fn ink_holder<'a>(canvas: &'a mut Canvas, layer: &LayerRef) -> Option<&'a mut Map<String, Value>> {
+    match layer {
+        LayerRef::Board => Some(&mut canvas.extra),
+        LayerRef::Node(id) => {
+            let position = node_position(canvas, id)?;
+            canvas.nodes.get_mut(position).map(|node| &mut node.extra)
+        }
+    }
+}
+
+/// Due tratti uguali come valori JSON (R9).
+pub fn same_stroke(left: &InkStroke, right: &InkStroke) -> bool {
+    same_value(&left.to_value(), &right.to_value())
+}
+
+fn ink_step(
+    draft: &mut Canvas,
+    index: usize,
+    layer: &LayerRef,
+    at: usize,
+    before: Option<&InkStroke>,
+    after: Option<&InkStroke>,
+) -> Result<(), PatchError> {
+    if before.is_none() && after.is_none() {
+        return Err(PatchError::EmptyInk { index });
+    }
+    let Some(fields) = ink_holder(draft, layer) else {
+        let id = match layer {
+            LayerRef::Node(id) => id.as_str(),
+            LayerRef::Board => "",
+        };
+        return Err(stale_node(index, id));
+    };
+    let mut ink = match fields.get(INK_KEY) {
+        None => InkLayer::default(),
+        Some(value) => InkLayer::from_value(value).map_err(|reason| PatchError::ForeignLayer {
+            index,
+            layer: layer.clone(),
+            reason,
+        })?,
+    };
+    let len = ink.strokes.len();
+    match before {
+        None if at > len => {
+            return Err(PatchError::InkAtOutOfRange {
+                index,
+                layer: layer.clone(),
+                at,
+                len,
+            })
+        }
+        Some(before)
+            if !ink
+                .strokes
+                .get(at)
+                .is_some_and(|current| same_stroke(current, before)) =>
+        {
+            return Err(PatchError::Stale {
+                index,
+                subject: Subject::Stroke {
+                    layer: layer.clone(),
+                    id: before.id.clone(),
+                },
+            });
+        }
+        None | Some(_) => {}
+    }
+    if let Some(after) = after {
+        // Il posto che il tratto prende: con `before` quello del tratto di
+        // prima, che non conta come doppione.
+        let replaced = before.map(|_| at);
+        let taken = ink
+            .strokes
+            .iter()
+            .enumerate()
+            .any(|(position, stroke)| Some(position) != replaced && stroke.id == after.id);
+        if taken {
+            return Err(PatchError::DuplicateStroke {
+                index,
+                layer: layer.clone(),
+                id: after.id.clone(),
+            });
+        }
+    }
+    match (before, after) {
+        (None, Some(after)) => ink.strokes.insert(at, after.clone()),
+        (Some(_), Some(after)) => {
+            if let Some(slot) = ink.strokes.get_mut(at) {
+                *slot = after.clone();
+            }
+        }
+        (Some(_), None) => {
+            ink.strokes.remove(at);
+        }
+        (None, None) => return Err(PatchError::EmptyInk { index }),
+    }
+    if ink.is_bare() {
+        // `shift_remove`: gli altri campi restano nel loro ordine.
+        fields.shift_remove(INK_KEY);
+    } else {
+        // Una chiave che c'è resta al suo posto; una nuova va in fondo.
+        fields.insert(INK_KEY.to_owned(), ink.to_value());
     }
     Ok(())
 }
@@ -502,6 +712,17 @@ fn invert(patch: &CanvasPatch) -> CanvasPatch {
             after: before.clone(),
         },
         CanvasPatch::Reorder { before, after } => CanvasPatch::Reorder {
+            before: after.clone(),
+            after: before.clone(),
+        },
+        CanvasPatch::Ink {
+            layer,
+            at,
+            before,
+            after,
+        } => CanvasPatch::Ink {
+            layer: layer.clone(),
+            at: *at,
             before: after.clone(),
             after: before.clone(),
         },

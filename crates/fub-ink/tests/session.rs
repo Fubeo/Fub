@@ -9,8 +9,9 @@ mod common;
 
 use common::*;
 use fub_ink::{
-    CancelReason, ConfigError, Effect, FinishedStroke, PenCurve, PointerKind, PointerRole, Sample,
-    Session, SessionConfig, StabilizerConfig, MAX_SAMPLES,
+    classify_pointer, CancelReason, ConfigError, Effect, FinishedStroke, MousePolicy, PenCurve,
+    PointerKind, PointerRole, RoleContext, Sample, Session, SessionConfig, StabilizerConfig,
+    TouchPolicy, MAX_SAMPLES,
 };
 
 fn close(a: f64, b: f64) -> bool {
@@ -374,6 +375,73 @@ fn la_politica_del_tocco_decide_per_un_dito_solo() {
     assert_eq!(done[1].start.kind, PointerKind::Pen);
     assert_eq!(role(&script, &trace, 5, 44), Some(PointerRole::Ignore));
     assert_eq!(role(&script, &trace, 8, 45), Some(PointerRole::Navigate));
+}
+
+#[test]
+fn con_la_politica_ignore_il_mouse_non_disegna_e_gli_altri_si() {
+    let script = scenario("mouse_policy_ignore_leaves_the_mouse_alone");
+    let trace = run(&script);
+    // Il tasto principale: nessun tratto, nessuna cattura.
+    assert_eq!(role(&script, &trace, 0, 110), Some(PointerRole::Ignore));
+    assert!(trace.effects[..3].iter().all(Vec::is_empty));
+    // Il centrale muove la vista come sempre.
+    assert_eq!(role(&script, &trace, 3, 111), Some(PointerRole::Navigate));
+    // Il dito e la penna disegnano.
+    let kinds: Vec<PointerKind> = ends(&trace).iter().map(|d| d.start.kind).collect();
+    assert_eq!(kinds, [PointerKind::Touch, PointerKind::Pen]);
+}
+
+#[test]
+fn la_politica_del_mouse_vale_dal_prossimo_appoggio() {
+    let script = scenario("mouse_policy_changes_from_the_next_stroke");
+    let trace = run(&script);
+    // Il tratto cominciato con `Ink` finisce com'è, con tutti i suoi campioni.
+    let done = ends(&trace);
+    assert_eq!(done.len(), 2, "il primo tratto e l'ultimo");
+    assert_eq!(xs(&done[0].samples), [0.0, 4.0, 8.0]);
+    assert!(cancels(&trace).is_empty());
+    // Con `Ignore` il mouse non disegna; tornato `Ink`, disegna di nuovo.
+    assert_eq!(role(&script, &trace, 5, 114), Some(PointerRole::Ignore));
+    assert!(trace.effects[5..8].iter().all(Vec::is_empty));
+    assert_eq!(done[1].start.kind, PointerKind::Mouse);
+    assert_eq!(starts(&trace), 2);
+}
+
+#[test]
+fn la_politica_di_serie_del_mouse_e_quella_di_sempre() {
+    assert_eq!(SessionConfig::default().mouse, MousePolicy::Ink);
+    // La tabella dei ruoli di prima della politica del mouse, scritta a mano:
+    // con `Ink` ogni puntatore ha il ruolo che aveva.
+    let quiet = RoleContext {
+        touch: TouchPolicy::Auto,
+        mouse: MousePolicy::default(),
+        pen_seen: false,
+        pen_near: false,
+        touches_down: 0,
+    };
+    let table = [
+        (PointerKind::Mouse, 0, PointerRole::Ink),
+        (PointerKind::Mouse, 1, PointerRole::Navigate),
+        (PointerKind::Mouse, 2, PointerRole::Ignore),
+        (PointerKind::Mouse, 3, PointerRole::Ignore),
+        (PointerKind::Mouse, 5, PointerRole::Ignore),
+        (PointerKind::Pen, 0, PointerRole::Ink),
+        (PointerKind::Pen, 1, PointerRole::Ignore),
+        (PointerKind::Pen, 2, PointerRole::Barrel),
+        (PointerKind::Pen, 3, PointerRole::Ignore),
+        (PointerKind::Pen, 5, PointerRole::Erase),
+        (PointerKind::Touch, 0, PointerRole::Ink),
+    ];
+    for (kind, button, want) in table {
+        assert_eq!(
+            classify_pointer(kind, button, &quiet),
+            want,
+            "{kind:?} {button}"
+        );
+    }
+    // E una sessione di serie disegna col tasto principale del mouse.
+    let trace = run_named("device_change");
+    assert_eq!(ends(&trace)[0].start.kind, PointerKind::Mouse);
 }
 
 #[test]

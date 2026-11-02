@@ -30,8 +30,8 @@
 //!   campioni.
 //! - **La penna preme.** Una penna appoggiata con pressione 0 non disegna
 //!   finché non preme; una penna sospesa non disegna mai. Il mouse disegna col
-//!   tasto principale, senza canale di pressione: il pennello la simula. Lo
-//!   stesso per il dito.
+//!   tasto principale, senza canale di pressione: il pennello la simula (con
+//!   [`MousePolicy::Ignore`] il mouse non disegna). Lo stesso per il dito.
 //! - **La penna ha tre tratti.** La punta fa il tratto dell'inchiostro, la
 //!   gomma della penna girata e il tasto laterale fanno il loro, che
 //!   [`StrokeStart::role`] distingue: chi disegna decide che cosa farne. Ogni
@@ -65,7 +65,7 @@ use std::fmt;
 
 use crate::pointer::{PointerKind, PointerSample};
 use crate::pressure::PenCurve;
-use crate::roles::{classify_pointer, PointerRole, RoleContext, TouchPolicy};
+use crate::roles::{classify_pointer, MousePolicy, PointerRole, RoleContext, TouchPolicy};
 use crate::sample::{Sample, MAX_SAMPLES};
 use crate::stabilizer::{Stabilizer, StabilizerConfig};
 use crate::tilt::{pen_angles, reports_tilt, PenAngles};
@@ -160,6 +160,8 @@ pub enum Effect {
 pub struct SessionConfig {
     /// Che cosa fa un dito quando nessuna penna è vicina.
     pub touch: TouchPolicy,
+    /// Che cosa fa il tasto principale del mouse.
+    pub mouse: MousePolicy,
     /// Campioni per tratto prima di dividerlo, da 2 a [`MAX_SAMPLES`].
     pub max_samples: usize,
     /// La curva della pressione della penna; senza, la pressione è com'è.
@@ -172,6 +174,7 @@ impl Default for SessionConfig {
     fn default() -> SessionConfig {
         SessionConfig {
             touch: TouchPolicy::Auto,
+            mouse: MousePolicy::Ink,
             max_samples: MAX_SAMPLES,
             curve: None,
             stabilizer: StabilizerConfig::default(),
@@ -230,6 +233,7 @@ struct Stroke {
 pub struct Session {
     max_samples: usize,
     touch: TouchPolicy,
+    mouse: MousePolicy,
     curve: Option<PenCurve>,
     stabilizer: StabilizerConfig,
     /// I puntatori giù su questa superficie, col loro ruolo.
@@ -269,6 +273,7 @@ impl Session {
         Ok(Session {
             max_samples: config.max_samples,
             touch: config.touch,
+            mouse: config.mouse,
             curve: config.curve,
             stabilizer: config.stabilizer,
             pointers: BTreeMap::new(),
@@ -312,6 +317,12 @@ impl Session {
         self.touch = policy;
     }
 
+    /// Che cosa fa il tasto principale del mouse dal prossimo appoggio: un
+    /// tratto già cominciato finisce com'è.
+    pub fn set_mouse_policy(&mut self, policy: MousePolicy) {
+        self.mouse = policy;
+    }
+
     /// La curva della pressione per i campioni da adesso.
     pub fn set_curve(&mut self, curve: Option<PenCurve>) {
         self.curve = curve;
@@ -348,6 +359,7 @@ impl Session {
             event.button,
             &RoleContext {
                 touch: self.touch,
+                mouse: self.mouse,
                 pen_seen: self.pen_seen,
                 pen_near: self.pen_near(),
                 touches_down: self.touches_down(),

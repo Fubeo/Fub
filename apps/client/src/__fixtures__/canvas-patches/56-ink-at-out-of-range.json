@@ -1,0 +1,10 @@
+{
+  "name": "ink-at-out-of-range",
+  "description": "Un tratto nuovo in una posizione oltre la fine dei tratti: stale",
+  "before": "{\"nodes\":[],\"edges\":[],\"fub:ink\":{\"v\":1,\"strokes\":[{\"id\":\"s1\",\"tool\":\"pen\",\"brush\":\"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\",\"color\":\"#0072b2\",\"anchor\":{\"kind\":\"free\"},\"ink\":\"1 s100 cxy 100,100 10,0\"}]}}",
+  "patches": [{"kind":"ink","layer":"board","at":2,"before":null,"after":{"id":"s2","tool":"pen","brush":"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint","color":"#0072b2","anchor":{"kind":"free"},"ink":"1 s100 cxy 100,100 10,0"}}],
+  "expect": {
+    "outcome": "rejected",
+    "reason": "stale"
+  }
+}

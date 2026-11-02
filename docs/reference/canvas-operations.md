@@ -34,6 +34,9 @@ chiave e nello stesso ordine.
 | `upsert-edge` | l'arco com'era, o `null` | l'arco nuovo | no |
 | `remove-edge` | l'arco com'era | `null` | no |
 | `reorder` | gli id delle schede, in ordine | gli stessi, nel nuovo ordine | no |
+| `ink` | il tratto com'era, o `null` | il tratto nuovo, o `null` | sì, nei tratti |
+
+La toppa `ink` è descritta nella sezione [Inchiostro](#inchiostro).
 
 `at` è una posizione nella lista delle schede, che è anche la profondità: la
 prima scheda sta sotto tutte le altre.
@@ -124,6 +127,14 @@ Ogni errore (`PatchError`) dice quale toppa della lista non si applica
 | `NodeHasEdges` | si toglie una scheda che ha ancora un arco |
 | `MissingEndpoint` | un arco collega una scheda che non c'è |
 | `NotAPermutation` | in `reorder`, `after` ha un id che non c'è, uno ripetuto o ne manca uno |
+| `InkAtOutOfRange` | in `ink` che aggiunge, `at` oltre la fine dei tratti del livello |
+| `ForeignLayer` | in `ink`, il livello è estraneo |
+| `DuplicateStroke` | in `ink`, il tratto di dopo ha l'id di un altro tratto del livello |
+| `EmptyInk` | in `ink`, `before` e `after` sono tutti e due `null` |
+
+Il commit dà una ragione in una parola (`PatchError::reason`): `invalid` per
+`ForeignLayer`, `DuplicateStroke` ed `EmptyInk`, che porterebbero a un
+livello che Fub non scrive; `stale` per tutti gli altri.
 
 Una toppa scritta male non arriva nemmeno alla copia: è un errore di
 lettura. Sono scritte male, per esempio, un `kind` sconosciuto, un `after`
@@ -152,6 +163,7 @@ inverso. Applicata dopo la lista, ridà il modello di prima.
 | `upsert-edge` con `before` uguale a `null` | `remove-edge` |
 | `remove-edge` | `upsert-edge` con `before` uguale a `null` |
 | `reorder` | `reorder` con `before` e `after` scambiati |
+| `ink` | `ink` con `before` e `after` scambiati e lo stesso `at` |
 
 Gli `at` di una lista di `remove-node` sono le posizioni nel modello di
 partenza. Per questo l'inversa riordina le schede da rimettere che stanno
@@ -278,7 +290,9 @@ Obsidian: col seme 0 il primo è `e220a8397b1dcdaf`. Un giro di `compile` usa
 un solo generatore, e salta gli id presi: quelli di schede e archi del modello
 di partenza e ogni id entrato nel modello nello stesso giro. Un id dato a mano
 segue la stessa regola: se è preso, è `DuplicateId`. `created` dice, in
-ordine, gli id di ogni scheda e arco aggiunti, dati o generati.
+ordine, gli id di ogni scheda, arco e tratto aggiunti, dati o generati. Gli
+id dei tratti sono unici nel livello: un id generato per un tratto salta
+quelli del suo livello.
 
 ### Gli errori delle operazioni
 
@@ -291,13 +305,85 @@ Ogni errore (`OpError`) dice quale operazione della lista non si compila
 | `UnknownEdge` | `remove` o `set` di un id che non è né una scheda né un arco |
 | `DuplicateId` | un id dato che è già preso; un id ripetuto nella lista di `move`, `remove` o `reorder` |
 | `TooMany` | la lavagna avrebbe più di 100 000 schede o 200 000 archi |
-| `Invalid` | una scheda o un arco che il formato non accetta; `set` di `id` o `type`; un id che è sia una scheda sia un arco |
+| `Invalid` | una scheda o un arco che il formato non accetta; `set` di `id` o `type`; un id che è sia una scheda sia un arco; un tratto che non si disegnerebbe |
+| `UnknownStroke` | `erase_strokes` di un id che non è un tratto del livello |
+| `ForeignLayer` | `add_strokes` o `erase_strokes` su un livello estraneo |
 
 I vettori stanno in `apps/client/src/__fixtures__/canvas-ops/`, uno per file,
 scritti a mano: `before`, `seed` facoltativo (0 se manca), `ops` e `expect`
 con `outcome` (`applied`, `rejected` o `malformed`) e, secondo il caso,
 `after`, `created` ed `error`. `crates/fub-canvas-core/tests/op_vectors.rs` li
 fa girare e controlla anche che l'inversa delle toppe ridia `before`.
+
+## Inchiostro
+
+L'inchiostro di una lavagna sta nei livelli `fub:ink` delle schede e della
+radice; il formato è nell'[inchiostro della lavagna](canvas-ink.md). Un
+livello si indica con `"board"` (la radice) o `{"node": "<id>"}` (una scheda
+di ogni tipo, gruppi compresi).
+
+### La toppa `ink`
+
+`{"kind": "ink", "layer", "at", "before", "after"}` aggiunge (`before`
+uguale a `null`), toglie (`after` uguale a `null`) o cambia il tratto alla
+posizione `at` dei tratti del livello. Un tratto è scritto come nel file, e
+si confronta per valore come le schede. Un tratto nuovo può andare alla fine
+(`at` uguale al numero dei tratti), non oltre.
+
+```json
+{ "kind": "ink", "layer": { "node": "f1" }, "at": 0, "before": null,
+  "after": { "id": "s1", "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+             "color": "#0072b2", "anchor": { "kind": "card", "width": 640, "height": 420 },
+             "ink": "1 s100 cxy 100,100 10,0" } }
+```
+
+- **Il livello nasce** con la prima toppa: una scheda senza `fub:ink` lo
+  prende in fondo ai suoi campi.
+- **L'ultimo tratto tolto**: se il livello resta esattamente
+  `{"v": 1, "strokes": []}`, la chiave sparisce; l'annulla la rimette in
+  fondo ai campi della scheda. Un livello con altri campi resta, vuoto.
+- **Un livello estraneo** non si tocca (`ForeignLayer`, ragione `invalid`).
+  Una scheda che non c'è o un'immagine di prima che non torna sono `Stale`.
+- Il sorgente si ritocca tratto per tratto: gli array di oggetti con `id` si
+  accoppiano per id a ogni profondità, quindi un tratto nuovo su una scheda
+  con 2000 tratti aggiunge al file solo quel tratto e il separatore
+  (`tests/ink_patch.rs`).
+- Spostare o ridimensionare una scheda resta un `upsert-node`: il file cambia
+  solo in `x`, `y`, `width` o `height`, ma la toppa porta il livello intero,
+  prima e dopo.
+
+### `add_strokes`
+
+Aggiunge i tratti `strokes` in fondo al livello `layer`, nell'ordine dato:
+una toppa `ink` per tratto. Ogni tratto è come nel file, campi sconosciuti
+compresi; `id` è facoltativo (assente o `null`: lo dà il seme, saltando gli
+id del livello). Un tratto che non si disegnerebbe in quel livello (per
+esempio un'ancora `free` su una scheda) è `Invalid`; un id che il livello ha
+già è `DuplicateId`; una scheda che non c'è è `UnknownNode`.
+
+```json
+{ "op": "add_strokes", "layer": "board",
+  "strokes": [{ "tool": "pen", "brush": "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+                "color": "#0072b2", "anchor": { "kind": "free" }, "ink": "1 s100 cxy 4000,2500 120,40 95,-10" }] }
+```
+
+### `erase_strokes`
+
+Cancella dal livello `layer` i tratti `ids`, in un ordine qualunque: una
+toppa `ink` per tratto, con la posizione che il tratto ha dopo le
+cancellazioni prima di lui, così l'inversa li rimette tutti al loro posto.
+Un id che non c'è è `UnknownStroke`, uno ripetuto `DuplicateId`. Un tratto
+che Fub non sa disegnare si conserva e non si cancella: `Invalid`.
+
+```json
+{ "op": "erase_strokes", "layer": { "node": "f1" }, "ids": ["s1", "s3"] }
+```
+
+`move` e `resize` non toccano l'inchiostro: i punti di una scheda sono in
+unità della scheda, e la resa li stira alla misura di adesso. `remove` porta
+via l'inchiostro della scheda con lei, e l'annulla lo rimette. I vettori
+sono `apps/client/src/__fixtures__/canvas-patches/*-ink-*.json` e
+`canvas-ops/*strokes*.json`, `canvas-ops/*-card-with-ink.json`.
 
 ## Comandi
 
