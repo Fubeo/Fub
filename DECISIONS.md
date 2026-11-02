@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K5 · T3: i vettori dei gesti (49) sono registrati dagli
+  strumenti TypeScript così come sono; la loro forma sta in una pagina
+  nuova, docs/reference/scene-gestures.md, e il §10 di scene-operations.md è
+  un rimando, perché quella pagina era al tetto delle righe. `refused` ha
+  due valori in più del piano, `locked` e `hidden`, perché gli strumenti
+  rifiutano già quei due casi; il vettore ridimensiona-estraneo registra che
+  un elemento estraneo si ridimensiona già, non solo si sposta: il motore
+  lo rifà o lo scrive nel .tsv.
 - 2026-11-02 · K5 · T1: l'ADR 0239 «Il disegno passa dal motore vettoriale,
   e il file lo scrive il client» (stato proposta, ambito contratto) e la
   pagina docs/architecture/disegno.md; le domande D-1…D-13 stanno nell'ADR
