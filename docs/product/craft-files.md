@@ -41,3 +41,24 @@ livelli di profondità.
 Quando il file collegato si sposta o cambia nome, Fub non cambia il file
 Craft: il documento resta com'è e il suo link punta ancora al percorso
 vecchio, finché l'app che lo ha scritto non lo aggiorna.
+
+## Rinominare
+
+Rinominare o spostare un file a cui puntano dei file Craft riesce sempre: il
+file cambia nome e le note che lo nominano si aggiornano come per ogni altra
+rinomina. I file Craft no: Fub non li scrive mai, quindi restano con gli
+stessi byte e il loro link punta ancora al nome vecchio.
+
+Alla fine della rinomina Fub lo dice, con una riga per ogni file Craft rimasto
+indietro: `Disegni/logo.vectorcraft: un file a byte non si riscrive, il link
+punta ancora a Foto/mare.jpg`. Lo stesso vale quando si rinomina il file Craft
+stesso e dentro c'è un link a sé, e quando si sposta una cartella intera: ogni
+file Craft che punta a un file spostato ha la sua riga.
+
+Il file Craft si ripara aprendolo nella sua app, che ritrova il file col nome
+nuovo o lo fa scegliere di nuovo. Annullare la rinomina riporta il file e le
+note al nome di prima, e con loro il link del file Craft torna giusto: lì non
+c'è niente da annullare.
+
+Unire due note è diverso: se un file Craft punta alla nota che si toglierebbe,
+l'unione non parte, perché il link resterebbe verso un file che non c'è più.
