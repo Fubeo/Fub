@@ -59,6 +59,11 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K3 · `scripts/check.sh --rapido` fa girare i test di
+  `fub-abi` anche quando il diff tocca soltanto documenti. · Un riquadro
+  doppio nel grafo di `overview.md` è passato verde in locale e rosso in CI:
+  `dependency_invariant` legge i documenti ma girava solo se cambiava un
+  crate.
 - 2026-11-02 · K3 · T4: `importa` e `verifica_copertura` ricevono un
   `Adattamento` dell'adattatore (posti dei menu, lessico dei nomi nudi dei
   parametri, correzioni per comando) e restituiscono tutte le mancanze, non la

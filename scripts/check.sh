@@ -222,7 +222,17 @@ if [ "$MODE" = rapido ]; then
   fi
 
   if [ "$(val client)" = 1 ] || [ "$WANT_CLIENT" = 1 ]; then client_checks rapido; fi
-  if [ "$(val docs)" = 1 ]; then doc_guards; fi
+  if [ "$(val docs)" = 1 ]; then
+    doc_guards
+    # I test di fub-abi leggono anche i documenti (il grafo delle dipendenze
+    # di overview.md, le regole nominate): un diff di soli documenti li fa
+    # girare, se non sono già fra i crate toccati.
+    case " $CRATES " in
+      *" fub-abi "*) ;;
+      *) [ -n "$CRATES_ARG" ] || [ "$(val all)" = 1 ] \
+           || run "test di fub-abi (leggono i documenti)" tests -p fub-abi ;;
+    esac
+  fi
   if [ "$(val github)" = 1 ]; then
     run "action pin a commit" node .github/scripts/check-actions-pinned.mjs
     [ "$(val docs)" = 1 ] || run "ciclo locale = CI" bash -c 'node .github/scripts/check-locale-loop.mjs --self-test && node .github/scripts/check-locale-loop.mjs'
