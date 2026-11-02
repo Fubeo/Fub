@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N6 · T6: la scheda PDF disegna la pagina in un canvas fuori
+  dal DOM e la copia in quello visibile (la cache chiude le immagini che
+  scarta), larga scheda × zoom × densità, al più 2× la scheda; la parte in
+  cache è snapshotPart("page-N", larghezza); la pagina di partenza viene da
+  #page con pdfPageFromFragment di pdf-view.ts; PgSu/PgGiù/Home/Fine senza
+  modificatori; un PDF rotto o cifrato dice «Non riesco a mostrare…». Da
+  decidere in T12/T13: un cambio di zoom ridisegna solo se la tela chiama
+  resize() o setMode. Perché: una scheda ferma resta leggibile senza tenere
+  aperto il motore PDF.
 - 2026-11-02 · N6 · T5: la scheda d'immagine riduce alla misura della scheda
   con una sola decodifica (per JPEG, WebP e BMP la larghezza si legge
   dall'intestazione), tiene in cache la parte `whole@<larghezza>` come dice

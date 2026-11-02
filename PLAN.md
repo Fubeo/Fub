@@ -799,7 +799,7 @@ partenza, PgSu/PgGiù, la cache, la chiusura del motore da fermo, il
 file mancante, la risposta tardiva dopo `destroy`.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/cards/pdf.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T7 · La scheda di foglio
 
