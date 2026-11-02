@@ -222,15 +222,18 @@ if [ "$MODE" = rapido ]; then
   fi
 
   if [ "$(val client)" = 1 ] || [ "$WANT_CLIENT" = 1 ]; then client_checks rapido; fi
-  if [ "$(val docs)" = 1 ]; then
-    doc_guards
-    # I test di fub-abi leggono anche i documenti (il grafo delle dipendenze
-    # di overview.md, le regole nominate): un diff di soli documenti li fa
-    # girare, se non sono già fra i crate toccati.
+  if [ "$(val docs)" = 1 ]; then doc_guards; fi
+  # I test di fub-abi leggono i sorgenti di tutti i crate (il censimento delle
+  # regole dei nomi, la tabella degli escape, le forme normalizzate) e i
+  # documenti (il grafo delle dipendenze di overview.md): un diff che tocca un
+  # altro crate o soli documenti li fa girare, se non sono già fra i crate
+  # toccati. Nessuno usa fub-abi come dev-dependency per questi test, quindi
+  # «chi li usa» non li raggiunge.
+  if [ "$(val docs)" = 1 ] || [ -n "$CRATES" ]; then
     case " $CRATES " in
       *" fub-abi "*) ;;
       *) [ -n "$CRATES_ARG" ] || [ "$(val all)" = 1 ] \
-           || run "test di fub-abi (leggono i documenti)" tests -p fub-abi ;;
+           || run "test di fub-abi (leggono sorgenti e documenti)" tests -p fub-abi ;;
     esac
   fi
   if [ "$(val github)" = 1 ]; then
