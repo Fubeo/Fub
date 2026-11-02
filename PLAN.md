@@ -706,7 +706,7 @@ c'è; nome con caratteri vietati; annulla dopo che il file è stato cambiato.
 Fatto quando: un test crea due lavagne senza nome (la seconda prende il nome
 libero dopo), legge un sorgente che il nucleo apre, e annulla.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T12 · Gli strumenti MCP `fub_canvas_create` e `fub_canvas_apply`
 

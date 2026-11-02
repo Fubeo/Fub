@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N3 · T11: canvas.create scrive come sorgente la lavagna vuota
+  del nucleo (patch_source su Canvas::default, riletta con Core::open prima
+  di scrivere), perché il nucleo non ha una funzione apposta; senza nome
+  prende il primo libero («Lavagna», «Lavagna 1», in inglese «Whiteboard»),
+  e un nome preso è un conflitto che non sovrascrive. Il codice dei nomi è
+  una copia di drawing.create, perché le feature non si importano fra loro;
+  l'annulla porta la lavagna nel cestino e richiede la feature commands,
+  come drawing.create. Perché: un file nuovo è già una lavagna che il nucleo
+  apre.
 - 2026-11-02 · N3 · T10: il componente «Lavagna» (fub.lavagna) porta
   canvas.apply; il seme degli id usa l'Fnv1a del contratto; spegnere
   fub.lavagna toglie solo canvas.apply, e il test fub-cli
