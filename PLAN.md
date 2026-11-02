@@ -685,7 +685,7 @@ risponde `already_exists` e un `same` finto; le prove di oggi delle note
 passano senza cambiare.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/media/attachment-target.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T4 · La scheda di nota
 
@@ -725,7 +725,7 @@ stato vivo, errore, file mancante, cambio del file da fermo e da vivo, e
 che dopo `destroy` nessuna risposta tardiva scrive nel DOM.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/cards/note.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T5 · La scheda d'immagine
 
@@ -760,7 +760,7 @@ Fatto quando: `image.test.ts` prova la riduzione (larghezza chiesta a
 `<img>`, il tetto, il file mancante, la revoca dell'URL a `destroy`.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/cards/image.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T6 · La scheda PDF
 

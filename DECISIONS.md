@@ -59,6 +59,26 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N6 · T5: la scheda d'immagine riduce alla misura della scheda
+  con una sola decodifica (per JPEG, WebP e BMP la larghezza si legge
+  dall'intestazione), tiene in cache la parte `whole@<larghezza>` come dice
+  canvas-cards.md, mostra l'SVG solo come <img> da blob (mai svg o script
+  nel DOM) e, dipinto, lo tiene in cache come canvas; oltre 64 MiB, HEIC e
+  AVIF dicono «Non riesco a mostrare…» con «Apri». Rischio: il canvas della
+  scheda è una copia del bitmap in cache, quindi la memoria per scheda viva
+  raddoppia; lo stile delle classi nuove spetta a T12/T22. Perché: una foto
+  grande non pesa sulla tela più della sua scheda.
+- 2026-11-02 · N6 · T4: la scheda di nota non rende da sé ma chiede alla
+  shell (NoteCardPort.show, più watch e un open facoltativo per «Apri»);
+  ogni accensione rifà la resa, una scheda ferma non tiene ascoltatori e
+  mostra la resa di prima inerte, un contatore di generazione scarta le
+  risposte tardive; lo stato sta in data-card-state; `#A#B` mostra la
+  sezione più interna. Perché: la tela non importa l'editor di testo e la
+  scheda legge senza mai scrivere il file.
+- 2026-11-02 · N6 · T3: depositOrReuse riusa un file già depositato con gli
+  stessi byte (ricevuta ReusableReceipt, esito SameFile) invece di
+  duplicarlo. Perché: incollare due volte la stessa immagine non riempie il
+  vault di copie.
 - 2026-11-02 · N6 · T1: il contratto delle schede
   (`editors/canvas/cards.ts`, `docs/reference/canvas-cards.md`). PenQuiet
   non c'è ancora in main: `cards.ts` ha un tipo strutturale suo, `CardQuiet
