@@ -37,8 +37,9 @@ insieme a T17 o T22, che toccano anche loro `canvas-ink.md`). Da
 T17 in poi il ramo contiene N3 finito fino a T22 (lo fonde l'orchestratore).
 Prototipo: `PLAN-ui/lavagna-penne.html` (T20): la barra con il menu della
 penna e «Scrivi col mouse», il menu aperto, le due righe delle Impostazioni.
-Approvato: non ancora (l'orchestratore lo mostra all'utente prima di T19,
-T22, T16 e T21).
+Approvato: 2026-11-02, con una modifica dell'utente: lo spessore si sceglie
+con un cursore e non con tre pulsanti (la pagina è alla versione 2, dove
+sulla lavagna finta si scrive davvero per provare le penne).
 
 ## Modifiche
 
@@ -103,9 +104,9 @@ Nessun pezzo nuovo del kit: tutto è fatto con ciò che la shell ha già.
   un tondo del colore e il nome della penna («Sfera»). Apre un menu con lo
   strumento (Penna, Evidenziatore, Gomma), il tipo di penna con
   l'anteprima, gli otto colori della tavolozza e «Altro colore…», lo
-  spessore (Sottile, Medio, Spesso) e che cosa cancella la gomma. Di serie:
-  Sfera blu (`#0072b2`), Medio, cioè 4 pixel dello schermo allo zoom del
-  momento (D-5 b). Cambiare penna non cambia i tratti già scritti.
+  spessore con un cursore (la penna da 0,5 a 20 pixel a mezzo pixel,
+  l'evidenziatore da 4 a 48) e che cosa cancella la gomma. Di serie: Sfera
+  blu (`#0072b2`), 4 pixel dello schermo allo zoom del momento (D-5 b). Cambiare penna non cambia i tratti già scritti.
 - **La gomma.** Col retro della penna, col tasto laterale premuto o con lo
   strumento Gomma. Di serie toglie il tratto intero: i tratti toccati
   sbiadiscono mentre si passa (come la gomma dei disegni) e spariscono
@@ -364,7 +365,7 @@ e si fa solo se la prova con Obsidian dice che l'inchiostro si perde.
   finché T13 (D tenuto, interruttore) e T14 (il dito) non li cambiano.
 - A11 · **La penna di serie** è quella di D-5 (b): la biro «Sfera», blu
   `#0072b2` (`INK_PEN_COLOR` di `ink-record.ts`; il nero sparisce sul tema
-  scuro), spessore «Medio», 4 pixel dello schermo allo zoom del momento,
+  scuro), spessore 4 pixel dello schermo allo zoom del momento,
   scritti nel tratto in unità della scheda (o della lavagna se libero). Il
   menu per cambiarla è T21; prima di T21 si scrive solo con questa.
 - A12 · **Il formato** è quello di D-2 (a) descritto qui sotto, nel `.canvas`
@@ -400,7 +401,9 @@ e si fa solo se la prova con Obsidian dice che l'inchiostro si perde.
 - A19 · **La scelta della penna si ricorda per computer** (proposta del
   prototipo), nello stato di vista `canvas.pen`; penna ed evidenziatore
   hanno ciascuno il proprio colore e spessore. La prima volta: Sfera, blu,
-  Medio; l'evidenziatore giallo `#f0e442`, Medio (16 pixel).
+  4 pixel; l'evidenziatore giallo `#f0e442`, 16 pixel. Lo spessore è un
+  numero (pixel dello schermo, con il passo del cursore): uno fuori
+  dall'intervallo si riporta al bordo, uno non valido vale quello di serie.
 - A20 · **La gomma di serie toglie il tratto intero** (proposta del
   prototipo). La scelta «La gomma cancella» vale per il retro della penna,
   per il suo tasto laterale e per lo strumento Gomma del menu. Quando taglia,
@@ -1644,7 +1647,7 @@ kit): si chiede al pianificatore; l'utente dice no a una proposta: la sua
 assunzione cambia prima di T19.
 Fatto quando: la riga «Approvato» ha la data nella pagina e nel piano.
 Prova: grep -n "Approvato" PLAN-ui/lavagna-penne.html PLAN.md
-Stato: [ ] da fare
+Stato: [x] fatto (approvato il 2026-11-02, con lo spessore a cursore)
 
 ## T21 · Il menu delle penne
 
@@ -1672,13 +1675,17 @@ Dipende da: T16, T19, T20 (approvato), T22
 Cosa fare:
 - `pen-menu.ts`: il pulsante della penna (`canvas-ink-pen`, il colore e il
   nome, `aria-haspopup="dialog"`, `aria-label` come «Penna: Sfera, Blu,
-  Medio») in testa alla barra, e il rialzo `kit-popover
+  4 px») in testa alla barra, e il rialzo `kit-popover
   canvas-pen-popover` con le sezioni del prototipo: Strumento (Penna,
   Evidenziatore, Gomma), Tipo di penna (le sei di `PENS`, con l'anteprima
   disegnata da `inkPath` col pennello di `penBrush`, come `penPreview`),
   Colore (gli otto di `INK_PALETTE` e «Altro colore…» col selettore del
-  kit), Spessore (Sottile, Medio, Spesso; per l'evidenziatore
-  `INK_HIGHLIGHTER_WIDTHS`), «La gomma cancella» (Il tratto intero, Solo il
+  kit), Spessore con un cursore (`input type="range"` col suo `<label>`,
+  il valore in pixel in un `<output>` accanto, `aria-valuetext` «4 pixel»,
+  e sotto l'anteprima del tratto vero su carta: la penna da 0,5 a 20 a
+  passi di 0,5, l'evidenziatore da 4 a 48 a passi di 1; l'utente l'ha
+  chiesto al posto dei tre pulsanti Sottile, Medio, Spesso, che restano
+  nei disegni e nei documenti), «La gomma cancella» (Il tratto intero, Solo il
   pezzo, con `setInkEraser` di T22), la nota «Cambiare penna non cambia i
   tratti già scritti.». La tastiera come il prototipo: Invio o Spazio
   apre, le frecce si muovono, Esc chiude e rende il fuoco al pulsante.
@@ -1686,7 +1693,7 @@ Cosa fare:
   una scelta non valida o di una versione futura vale quella di serie,
   senza errore. Il tratto nuovo prende `tool`, `brush` (`penBrush(pen,
   px / zoom, pressione)`) e `color` dalla scelta. Prima della scelta, Sfera
-  blu Medio (A11).
+  blu da 4 pixel (A11).
 - L'evidenziatore (A22): opacità 0,5 senza `multiply`, nella scia e
   nell'asciutto; si salva `tool: "highlighter"`.
 - Lo strumento Gomma (A21): il mouse (con D o con l'interruttore) e la
@@ -1705,7 +1712,9 @@ Dal prototipo: il pulsante della penna (`canvas-ink-pen`,
 classi (`canvas-pen-popover`, `canvas-pen-menu`, `canvas-pen-section`,
 `canvas-pen-heading`, `canvas-pen-list`, `canvas-pen-item`,
 `canvas-pen-preview`, `canvas-pen-swatches`, `canvas-pen-swatch`,
-`canvas-pen-more`, `canvas-pen-note`), i blocchi `→ structure.css` e
+`canvas-pen-more`, `canvas-pen-note`, `canvas-pen-width-head`,
+`canvas-pen-width`, `canvas-pen-width-value`, `canvas-pen-width-preview`),
+i blocchi `→ structure.css` e
 `→ skin/editors.css`, il cursore `cell`; gli stati Penna, Evidenziatore,
 Gomma e «Colore libero».
 Casi limite: il menu aperto quando arriva `syncDoc` o la sola lettura; una

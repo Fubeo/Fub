@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N4 · T20: l'utente approva il prototipo delle penne con una
+  modifica: lo spessore si sceglie con un cursore (la penna da 0,5 a 20
+  pixel, l'evidenziatore da 4 a 48), non con Sottile, Medio e Spesso;
+  A19–A23 valgono; nei disegni e nei documenti restano i tre spessori finché
+  l'utente non dice altro · l'ha chiesto guardando il prototipo, e un
+  cursore dà più scelta; il prototipo ora fa anche scrivere col mouse,
+  perché l'utente voleva provare le penne e non solo guardarle.
 - 2026-11-02 · N4 · Le risposte dell'utente a D-1…D-11: il posto
   dell'inchiostro si decide dopo la prova con Obsidian (fino ad allora il
   `.canvas`; D-12 se si perde); il menu delle penne e la gomma che taglia
