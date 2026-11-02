@@ -200,7 +200,7 @@ usata e si ferma sotto il tetto; una `Weak` morta sparisce; parser di PSI e di
 `meminfo` sui campioni; il diagramma di `overview.md` e `dependency_invariant`
 verdi.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T2 · La guardia `check-motori.mjs`
 

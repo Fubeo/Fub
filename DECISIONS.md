@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · K3 · Il test di copertura dei comandi (T4): la regola sta in
+  `fub-motori` (`catalogo`, provata con specifiche finte in
+  `crates/fub-motori/tests/copertura.rs`), il test vero sul motore dei fogli
+  in `crates/fub-format-xlsx/tests/copertura.rs`; `fub-motori` non dipende
+  da nessun adattatore, nemmeno nei test (differenza dal piano, che diceva
+  una dev-dipendenza da `fub-format-xlsx`) · perché: ADR 0236, e ogni motore
+  che verrà usa la stessa regola dal suo adattatore.
 - 2026-11-02 · K3 · `check-motori.mjs` ammette `rfd` solo se lo porta
   `tauri-plugin-dialog` (i dialoghi di sistema della shell di Fub, non
   l'interfaccia di un motore); «librerie doppie» sono i nomi in due o più
