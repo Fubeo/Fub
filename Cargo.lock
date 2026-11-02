@@ -2185,6 +2185,7 @@ dependencies = [
  "cfb 0.15.0",
  "fub-abi",
  "fub-format-markdown",
+ "fub-motori",
  "fub-sdk",
  "gridcraft-calc",
  "gridcraft-chart",
@@ -2197,6 +2198,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "thiserror 2.0.19",
+ "tracing",
  "zip",
 ]
 

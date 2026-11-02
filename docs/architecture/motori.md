@@ -193,6 +193,36 @@ qualunque maiuscola), `voce(spazio)` (o `MotoreSconosciuto`) ed `elenco()`,
 con spazio, acceso e byte di ogni motore. Non tiene lucchetti mentre chiama
 una voce.
 
+## I fogli
+
+`fub-format-xlsx` porta GridCraft (`src/motore.rs`):
+
+- `MotoreFogli` sta dietro un `Pigro`. Costruirlo prepara il catalogo dei
+  comandi della facciata e l'elenco delle funzioni di GridCraft; la prima
+  apertura di una cartella lo prende, crearsi il provider no.
+- `Fogli::processo()` tiene il `Pigro`, i servizi del processo e il conto
+  delle istanze aperte, e si iscrive in `Motori::processo()` con lo spazio
+  «fogli» e le estensioni `xlsx`, `xlsm`, `xltx`, `xltm` la prima volta che
+  un `XlsxGridProvider` si crea, una volta sola per processo.
+- Le cache nel budget sono due, una per processo come i dati di GridCraft che
+  contano: `fogli.ortografia`, il dizionario dell'ortografia (i suoi byte
+  stimati da GridCraft), e `fogli.formati`, i formati dei numeri letti (le
+  voci contate per difetto: la voce della tabella, senza il testo del codice).
+  Il loro `ultimo_uso` è l'ultimo comando della barra che le raggiunge: ogni
+  comando per i formati, `review.spelling`, `review.changeSpelling` e
+  `review.thesaurus` per il dizionario. Dopo un comando che le fa crescere si
+  chiama `rispetta()`.
+- Il conto è delle istanze, non delle chiusure: ogni istanza aperta tiene una
+  presa sul motore. Chiusa un'istanza qualsiasi si chiama `rispetta()`; quando
+  cade l'ultima presa (`close`, `shutdown`, il provider che cade) le cache si
+  svuotano e si chiama `rilascia_al_sistema()`. Il motore resta acceso
+  finché il registro non lo libera. Il salvataggio di `fub-host` apre e
+  chiude un'istanza sua: con un foglio aperto non svuota niente.
+
+Il provider non ha lucchetti suoi: l'istanza esce dall'elenco, poi si
+chiamano le cache. Il kernel chiama il provider sotto il lucchetto della sua
+superficie della griglia, come per ogni altra chiamata della griglia.
+
 ## Il motore dei documenti
 
 `fub-format-rich` (`src/motore.rs`) iscrive `MotoreDocumenti` con lo spazio
@@ -238,6 +268,10 @@ abbia letto quale documento.
 - `crates/fub-motori/tests/registro.rs`: iscrizione, `scalda_per`, iscrizioni
   doppie; servizi e registro del processo; nome e numero dei thread; un panico
   in un lavoro.
+- `crates/fub-format-xlsx/tests/motore.rs`: il provider non costruisce il
+  motore e la prima apertura sì; chiusa l'ultima istanza le cache sono a zero
+  byte; due istanze, il salvataggio e `shutdown`; il dizionario mai caricato;
+  il budget a tetto basso che libera il dizionario; l'iscrizione nel registro.
 - `crates/fub-format-rich/tests/motore.rs` e i test in `src/motore.rs`:
   l'iscrizione con spazio ed estensioni; i byte di una prova ricordata; un
   budget a tetto basso che la toglie e il salvataggio dopo con gli stessi

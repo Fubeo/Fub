@@ -160,7 +160,9 @@ vecchi: niente si ricalcola. Dal primo comando la sessione passa a
 `gridcraft-chart` e `gridcraft-pdf`), che ricalcola ciò che il comando
 raggiunge; il salvataggio resta l'innesto o riscrive la cartella con il codec
 dopo averla misurata. Da `gridcraft-chart` l'adattatore prende anche il
-disegno in SVG dei grafici, che porta alla shell con le finestre. Il terzo blocco è il seguito dello stesso grafo, con
+disegno in SVG dei grafici, che porta alla shell con le finestre. Il motore dei fogli
+nasce alla prima apertura dietro un `Pigro` di `fub-motori`, che è anche il
+posto delle sue cache. Il terzo blocco è il seguito dello stesso grafo, con
 l'adattatore e i crate di Fub da cui dipende.
 
 ```mermaid
@@ -183,10 +185,12 @@ flowchart LR
     gmodel["gridcraft-model"]
     gpdf["gridcraft-pdf"]
     gxlsx["gridcraft-xlsx"]
+    motori["fub-motori"]
 
     host --> xlsx
     xlsx --> abi
     xlsx --> markdown
+    xlsx --> motori
     xlsx -.-> sdk
     xlsx --> gcalc
     xlsx --> gchart
