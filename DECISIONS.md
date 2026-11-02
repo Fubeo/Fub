@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N3 · T1: `fub-canvas-core` ha un blocco suo nel grafo delle
+  dipendenze di `overview.md` (il quarto diagramma), perché il primo era già
+  a 20 riquadri; `read.rs` tiene il BOM e gli spazi come li leggeva
+  `fub-format-canvas` (le regole di R1-R8 sono di T3); il nucleo riesporta
+  `PresetColor` e `parse`, e `fub-format-canvas/src/model.rs` è un `pub use`
+  del nucleo più `FORMAT_ID` e `SCHEMA_VERSION`. Il controllo per
+  `wasm32-unknown-unknown` sta nel giro completo di `scripts/check.sh` e nel
+  job `invariants` della CI, che l'orchestratore ha aggiunto.
+
 - 2026-11-02 · N3 · T2: in TypeScript i controlli di R3, R4 e R5 stanno
   nello scanner di `source-edit.ts` (`inspectCanvasJson`), una passata sola
   sul testo dopo `JSON.parse`, e non in un reviver: misurato a 2000 schede,

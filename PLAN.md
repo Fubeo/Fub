@@ -350,7 +350,7 @@ passa; `fub-canvas-core` non dipende da `fub-abi` (`cargo tree -p
 fub-canvas-core -e normal --depth 1`).
 Prova: scripts/check.sh --rapido; cargo check -p fub-canvas-core --target
 wasm32-unknown-unknown --locked
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T2 · Le regole di lettura in TypeScript
 
