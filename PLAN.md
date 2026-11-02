@@ -448,7 +448,7 @@ Fatto quando: `tests/js_encoder.rs` confronta coi valori scritti a mano di
 `JSON.stringify` (presi da Node e incollati nel test, con un commento che lo
 dice) almeno 40 numeri, tutti i casi limite e 10 oggetti, e passa.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T5 · Il ritocco del sorgente in Rust
 

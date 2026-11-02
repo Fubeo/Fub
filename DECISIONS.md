@@ -59,6 +59,17 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N3 · T4: `js.rs` espone, oltre a `js_number`, `js_string`,
+  `encode` ed `encode_pretty`, anche `js_json_number`, `is_array_index` e
+  `js_entries` (l'ordine delle chiavi di JavaScript, che serve a T5 per
+  R10); `encode_pretty` non mette il `"\n"` finale, lo aggiunge chi scrive il
+  file; `js_number` su `NaN` e infiniti fa come `String(x)`. Il pareggio
+  esatto si cerca sull'espansione decimale solo quando è possibile
+  (`x = M·2^E` con `E = unit − 1`): in release un numero costava circa 2 µs,
+  ora 0,1-0,3; i test confrontano la strada veloce con l'espansione intera su
+  202 000 numeri, e fuori dal repo 400 000 numeri contro Node non danno
+  differenze.
+
 - 2026-11-02 · N3 · T1: `fub-canvas-core` ha un blocco suo nel grafo delle
   dipendenze di `overview.md` (il quarto diagramma), perché il primo era già
   a 20 riquadri; `read.rs` tiene il BOM e gli spazi come li leggeva
