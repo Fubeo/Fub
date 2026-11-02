@@ -146,6 +146,13 @@ export type PrintArtifactOutcome = { status: "opened" } | { status: "no_viewer" 
 /** How a vault entry went to the system: taken, no program took it, or a program that opening would run. */
 export type RevealOutcome = { status: "opened" } | { status: "no_opener" } | { status: "executable" };
 
+/// Le porte del disegno prima che l'app registri i suoi comandi (K5 T19,
+/// D-4): lo stesso rifiuto dell'host senza il motore.
+function drawingNotInApp<T>(): Promise<T> {
+  const error: PluginError = { kind: "unserved", message: "il motore del disegno non è ancora nell'app" };
+  return Promise.reject(error);
+}
+
 /// Il vault a cui una chiamata si rivolge, quando chi chiama lo sa (FUB-001).
 ///
 /// Senza `vault` l'host risponde con il vault **corrente**, e «corrente» cambia
@@ -249,20 +256,25 @@ export const api = {
   // Il disegno sul motore (K5): il motore tiene una copia del disegno che
   // segue il testo della `DocumentSession` e risponde ai gesti con operazioni
   // di scena che il client applica (`editors/spatial/motore/sessione.ts`).
-  // Senza il motore l'host rifiuta con `unserved`. Il vault in coda, come
-  // `revealInSystem`: la copia è del vault che ha aperto il disegno.
-  openDrawing: (doc: string, text: string, vault?: string | null) =>
-    invoke<DrawingOpen>("open_drawing", toVault({ doc, text }, vault)),
-  drawingSync: (instance: string, sync: DrawingSync, vault?: string | null) =>
-    invoke<DrawingSynced>("drawing_sync", toVault({ instance, sync }, vault)),
-  drawingGesture: (instance: string, gesture: DrawingGesture, vault?: string | null) =>
-    invoke<DrawingOutcome>("drawing_gesture", toVault({ instance, gesture }, vault)),
-  drawingCommands: (instance: string, selection: string[], vault?: string | null) =>
-    invoke<DrawingCommandInfo[]>("drawing_commands", toVault({ instance, selection }, vault)),
-  drawingCommand: (instance: string, request: DrawingCommandRequest, vault?: string | null) =>
-    invoke<DrawingOutcome>("drawing_command", toVault({ instance, request }, vault)),
-  closeDrawing: (instance: string, vault?: string | null) =>
-    invoke<void>("close_drawing", toVault({ instance }, vault)),
+  // Senza il motore l'host rifiuta con `unserved`. I sei comandi dell'app
+  // (`open_drawing`, `drawing_sync`, `drawing_gesture`, `drawing_commands`,
+  // `drawing_command`, `close_drawing`) arrivano con K5 T19, dopo il sì a
+  // D-4: fino ad allora le porte rispondono `unserved` senza chiamare un
+  // comando che l'app non registra (`fub-app/tests/ipc_permissions.rs`), e la
+  // sessione dà il motore spento. Con T19 ogni porta torna un `invoke` con il
+  // vault in coda, come `revealInSystem`.
+  openDrawing: (_doc: string, _text: string, _vault?: string | null) =>
+    drawingNotInApp<DrawingOpen>(),
+  drawingSync: (_instance: string, _sync: DrawingSync, _vault?: string | null) =>
+    drawingNotInApp<DrawingSynced>(),
+  drawingGesture: (_instance: string, _gesture: DrawingGesture, _vault?: string | null) =>
+    drawingNotInApp<DrawingOutcome>(),
+  drawingCommands: (_instance: string, _selection: string[], _vault?: string | null) =>
+    drawingNotInApp<DrawingCommandInfo[]>(),
+  drawingCommand: (_instance: string, _request: DrawingCommandRequest, _vault?: string | null) =>
+    drawingNotInApp<DrawingOutcome>(),
+  closeDrawing: (_instance: string, _vault?: string | null) =>
+    drawingNotInApp<void>(),
   // `base` dice **da cosa si parte**, e non ha un default (§23.11, decisione
   // 0092): `descends_from` = «scrivi solo se il file è ancora quello», e un
   // `PluginError` di specie `conflict` vuol dire che non lo era e che **non è

@@ -69,6 +69,44 @@ while (queue.length) {
   }
 }
 
+// I test che leggono un file del client (le porte di `host/ipc.ts` in
+// `fub-app/tests/ipc_permissions.rs`, gli specchi TS dei tipi): il crate li
+// nomina con il percorso sotto `apps/client/src/`. Un diff che tocca quel file
+// fa girare i test di quel crate, non quelli di chi lo usa, perché il crate non
+// cambia. Chi legge una cartella intera del client senza nominare il file non
+// si vede: lo copre il ciclo completo.
+const clientFiles = files
+  .filter((f) => f.startsWith("apps/client/src/"))
+  .map((f) => f.slice("apps/client/src/".length));
+if (clientFiles.length) {
+  const rsFiles = (dir) => {
+    const out = [];
+    const walk = (d) => {
+      let entries;
+      try {
+        entries = fs.readdirSync(d, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const e of entries) {
+        const full = path.join(d, e.name);
+        if (e.isDirectory()) walk(full);
+        else if (e.name.endsWith(".rs")) out.push(full);
+      }
+    };
+    for (const sub of ["src", "tests"]) walk(path.join(root, dir, sub));
+    return out;
+  };
+  for (const p of pkgs) {
+    if (p.dir === "" || affected.has(p.name)) continue;
+    const reads = rsFiles(p.dir).some((file) => {
+      const text = fs.readFileSync(file, "utf8");
+      return clientFiles.some((c) => text.includes(`"${c}"`) || text.includes(`/${c}"`));
+    });
+    if (reads) affected.add(p.name);
+  }
+}
+
 const tauri = pkgs.filter((p) => p.deps.some((d) => d.name === "tauri")).map((p) => p.name);
 
 console.log(`crates=${[...affected].sort().join(" ")}`);

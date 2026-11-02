@@ -159,7 +159,10 @@ Dal lato del client le sei porte sono `openDrawing`, `drawingSync`,
 `host/ipc.ts`, con il vault in coda; le usa soltanto la sessione del motore
 (`editors/spatial/motore/sessione.ts`), che tiene la copia allineata alla
 `DocumentSession`, manda le richieste in fila con un tempo limite di 10 s e,
-a un `stale`, rimanda il testo intero e riprova una volta.
+a un `stale`, rimanda il testo intero e riprova una volta. Finché l'app non
+registra i sei comandi (T19), le porte di `host/ipc.ts` rispondono
+`unserved` senza chiamare l'app, come l'host senza il motore: la sessione dà
+il motore spento e gli strumenti del disegno fanno da sé.
 
 Ogni richiesta passa da `validate()` prima di arrivare al motore, e un
 rifiuto è `BadArgs` col nome del campo. Il testo è al massimo di 20 MiB,
