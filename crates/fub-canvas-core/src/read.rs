@@ -11,9 +11,10 @@ const BOM: char = '\u{feff}';
 
 /// Legge e valida una `.canvas`.
 ///
-/// Un sorgente più grande di [`MAX_SOURCE_BYTES`] è un errore; un sorgente di
-/// soli spazi è una lavagna vuota; un BOM iniziale si salta; il resto deve
-/// essere un oggetto JSON Canvas che passa [`Canvas::validate`].
+/// Un sorgente più grande di [`MAX_SOURCE_BYTES`] è un errore; un sorgente
+/// vuoto ([`is_blank`]) è una lavagna vuota; un BOM iniziale si salta; il resto
+/// deve essere un oggetto JSON Canvas che passa [`Canvas::validate`]. Le regole
+/// di lettura (R1–R5, R7, R8) sono in `docs/reference/canvas-format.md`.
 pub fn parse(source: &str) -> Result<Canvas, CanvasError> {
     if source.len() > MAX_SOURCE_BYTES {
         return Err(CanvasError::Limit {
@@ -21,13 +22,29 @@ pub fn parse(source: &str) -> Result<Canvas, CanvasError> {
             limit: MAX_SOURCE_BYTES,
         });
     }
-    if source.trim().is_empty() {
+    if is_blank(source) {
         return Ok(Canvas::default());
     }
-    let body = source.strip_prefix(BOM).unwrap_or(source);
+    let body = skip_bom(source);
     let canvas: Canvas = serde_json::from_str(body)?;
     canvas.validate()?;
     Ok(canvas)
+}
+
+/// Una lavagna vuota (R1): un BOM facoltativo, poi solo spazi JSON (RFC 8259
+/// §2: spazio, `\t`, `\n`, `\r`). Non `str::trim`, che conta come spazio
+/// anche U+0085 o U+00A0: un sorgente così non è vuoto, e la lettura JSON lo
+/// rifiuta. È la regola di `isBlankCanvasSource` del lettore TypeScript.
+pub fn is_blank(source: &str) -> bool {
+    skip_bom(source)
+        .bytes()
+        .all(|byte| matches!(byte, b' ' | b'\t' | b'\n' | b'\r'))
+}
+
+/// Il sorgente senza il BOM iniziale, se c'è. Solo il primo: un BOM dopo è un
+/// carattere come gli altri.
+fn skip_bom(source: &str) -> &str {
+    source.strip_prefix(BOM).unwrap_or(source)
 }
 
 #[cfg(test)]

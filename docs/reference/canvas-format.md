@@ -62,13 +62,39 @@ una decisione: si scrive qui e poi nel test.
 
 ## Lettura
 
-`parse` fa ciò che faceva `parse_canvas` prima del nucleo: rifiuta un
-sorgente oltre `MAX_SOURCE_BYTES`, legge come lavagna vuota un sorgente di
-soli spazi, salta un BOM iniziale senza toglierlo dal file, e passa il modello
-a `Canvas::validate`.
+`parse` rifiuta un sorgente oltre `MAX_SOURCE_BYTES`, salta un BOM iniziale
+senza toglierlo dal file e passa il modello a `Canvas::validate`. Rust e
+TypeScript (`parseCanvas` in `apps/client/src/editors/canvas/model.ts`)
+leggono con le stesse regole, così aprono e rifiutano gli stessi file; ogni
+regola ha i suoi casi in `crates/fub-canvas-core/tests/read_rules.rs`. Nel
+dubbio si apre e si conserva.
 
-Le regole di lettura che Rust e TypeScript condividono sono ancora da
-scrivere.
+- **R1 · Vuoto.** Un BOM facoltativo, poi solo spazi JSON (spazio, `\t`,
+  `\n`, `\r`): una lavagna vuota (`read::is_blank`). `"\u{feff}"` da solo è
+  vuoto; `"\u{85}"` da solo no, ed è un errore di lettura.
+- **R2 · Numeri dei campi noti.** `x`, `y`, `width` e `height` sono interi
+  entro ±(2^53−1) (`model::MAX_SAFE_INTEGER`), comunque scritti: `"x": 1e2`
+  vale 100, `"x": 1.0` vale 1, `"x": -0` vale 0. `"x": 1.5` e
+  `"x": 9007199254740992` sono errori che nominano il campo. `width` e
+  `height` almeno 1.
+- **R3 · Chiavi doppie.** Una chiave nota doppia sulla radice, in una scheda o
+  in un arco è un errore: `{"nodes":[],"nodes":[]}`. Una chiave sconosciuta
+  doppia tiene l'ultimo valore nella posizione della prima, come
+  `JSON.parse`: `"k":1,"z":2,"k":3` dà `k` = 3, poi `z`.
+- **R4 · Surrogati spaiati.** `"\ud800"`, in una chiave o in un valore, è un
+  errore; una coppia intera (`"\ud83d\ude00"`) è un carattere come gli altri.
+- **R5 · Numeri fuori campo.** Un numero che un `f64` non tiene è un errore
+  dovunque sia, anche in un campo sconosciuto: `{"fub:ink":1e400}`. Un numero
+  che si arrotonda a zero (`1e-400`) si legge 0.
+- **R7 · `null` è assente.** `"color": null`, `"label": null` e ogni altro
+  campo noto facoltativo `null` valgono come assenti, e non finiscono fra i
+  campi sconosciuti; `{"nodes": null}` è una lavagna vuota, anche con `edges`
+  assente. Quando Fub riscrive quella scheda, il `null` sparisce. Un campo
+  obbligatorio `null` (`"x": null`) resta un errore.
+- **R8 · `backgroundStyle`.** Qualunque stringa si legge e si conserva:
+  `"backgroundStyle": "tile"` resta `tile`; la tela disegna un valore che non
+  conosce come assente. Lo schema `canvas-v1.schema.json` dice ciò che Fub
+  scrive, non ciò che legge, e non cambia.
 
 ## Scrittura
 

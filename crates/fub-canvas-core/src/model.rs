@@ -10,8 +10,10 @@
 //! provider (`fub-format-canvas`), non del modello.
 
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 
-use serde::{Deserialize, Serialize};
+use serde::de::{self, Visitor};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
@@ -25,9 +27,19 @@ pub const MAX_LABEL_BYTES: usize = 65_536;
 /// Tela persistita: nodi + archi + membri radice sconosciuti.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Canvas {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// `"nodes": null` vale come assente (R7).
+    #[serde(
+        default,
+        deserialize_with = "null_as_empty",
+        skip_serializing_if = "Vec::is_empty"
+    )]
     pub nodes: Vec<CanvasNode>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// `"edges": null` vale come assente (R7).
+    #[serde(
+        default,
+        deserialize_with = "null_as_empty",
+        skip_serializing_if = "Vec::is_empty"
+    )]
     pub edges: Vec<CanvasEdge>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
@@ -39,9 +51,15 @@ pub struct CanvasNode {
     pub id: String,
     #[serde(rename = "type")]
     pub node_type: CanvasNodeType,
+    /// Le coordinate e le misure sono interi entro ±(2^53−1), scritti anche
+    /// come `1.0` o `1e2` (R2).
+    #[serde(deserialize_with = "integer_x")]
     pub x: i64,
+    #[serde(deserialize_with = "integer_y")]
     pub y: i64,
+    #[serde(deserialize_with = "integer_width")]
     pub width: i64,
+    #[serde(deserialize_with = "integer_height")]
     pub height: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<CanvasColor>,
@@ -66,6 +84,94 @@ pub struct CanvasNode {
     pub background_style: Option<String>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
+}
+
+/// Il più grande intero che un `f64` (e quindi JavaScript) tiene esatto:
+/// `Number.MAX_SAFE_INTEGER`, 2^53−1.
+pub const MAX_SAFE_INTEGER: i64 = (1 << 53) - 1;
+
+/// `null` o assente: una lista vuota (R7). Il `null` non si ricorda: quando Fub
+/// riscrive la lavagna, la chiave sparisce o torna come lista.
+fn null_as_empty<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Option::<Vec<T>>::deserialize(deserializer)?.unwrap_or_default())
+}
+
+/// Legge un campo intero di una scheda (R2): un intero JSON, o un numero con
+/// la virgola o l'esponente senza parte frazionaria (`1.0`, `1e2`, `-0`),
+/// entro ±[`MAX_SAFE_INTEGER`]. Come `Number.isSafeInteger` del lettore
+/// TypeScript; `-0` diventa `0`. L'errore nomina il campo.
+struct SafeInteger(&'static str);
+
+impl SafeInteger {
+    fn check<E: de::Error>(&self, value: i128) -> Result<i64, E> {
+        if (-i128::from(MAX_SAFE_INTEGER)..=i128::from(MAX_SAFE_INTEGER)).contains(&value) {
+            // Entro ±(2^53−1) il valore sta in un `i64`.
+            i64::try_from(value).map_err(|_| self.out_of_range())
+        } else {
+            Err(self.out_of_range())
+        }
+    }
+
+    fn out_of_range<E: de::Error>(&self) -> E {
+        E::custom(format_args!(
+            "node `{}` must be an integer within ±{MAX_SAFE_INTEGER}",
+            self.0
+        ))
+    }
+}
+
+impl Visitor<'_> for SafeInteger {
+    type Value = i64;
+
+    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "an integer within ±{MAX_SAFE_INTEGER} for node `{}`",
+            self.0
+        )
+    }
+
+    fn visit_i64<E: de::Error>(self, value: i64) -> Result<i64, E> {
+        self.check(i128::from(value))
+    }
+
+    fn visit_u64<E: de::Error>(self, value: u64) -> Result<i64, E> {
+        self.check(i128::from(value))
+    }
+
+    fn visit_f64<E: de::Error>(self, value: f64) -> Result<i64, E> {
+        // Un `f64` finito senza parte frazionaria entro ±2^53 è esatto: il
+        // cast non arrotonda. Ciò che resta fuori (frazioni, valori grandi,
+        // non finiti) è un errore che nomina il campo.
+        let bound = MAX_SAFE_INTEGER as f64;
+        if value.is_finite() && value.fract() == 0.0 && value.abs() <= bound {
+            #[allow(clippy::cast_possible_truncation)]
+            let integer = value as i64;
+            Ok(integer)
+        } else {
+            Err(self.out_of_range())
+        }
+    }
+}
+
+fn integer_x<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i64, D::Error> {
+    deserializer.deserialize_any(SafeInteger("x"))
+}
+
+fn integer_y<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i64, D::Error> {
+    deserializer.deserialize_any(SafeInteger("y"))
+}
+
+fn integer_width<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i64, D::Error> {
+    deserializer.deserialize_any(SafeInteger("width"))
+}
+
+fn integer_height<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i64, D::Error> {
+    deserializer.deserialize_any(SafeInteger("height"))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
