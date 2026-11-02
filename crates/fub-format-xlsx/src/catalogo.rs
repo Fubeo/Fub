@@ -16,7 +16,7 @@
 use fub_motori::{importa, Adattamento, ComandoFub, Mancanza, Posto, SpecMotore, Tipo};
 use gridcraft_engine::{command_specs, find_command, CommandSpec};
 
-use crate::commands::{composed, not_served_entries, served, why_not_served};
+use crate::commands::{is_composed_command, not_served_entries, served, why_not_served};
 
 /// Lo spazio dei comandi della cartella.
 pub const SPAZIO: &str = "fogli";
@@ -332,7 +332,7 @@ pub fn comandi() -> Result<Vec<ComandoFub>, Vec<Mancanza>> {
 pub fn importa_da(specifiche: &[SpecMotore]) -> Result<Vec<ComandoFub>, Vec<Mancanza>> {
     let servite: Vec<SpecMotore> = specifiche
         .iter()
-        .filter(|spec| served(&spec.id) && !composed(&spec.id))
+        .filter(|spec| served(&spec.id) && !is_composed_command(&spec.id))
         .cloned()
         .collect();
     importa(SPAZIO, &servite, &ADATTAMENTO)

@@ -163,7 +163,7 @@ pub(crate) fn not_served_entries() -> (Vec<&'static str>, Vec<&'static str>) {
 }
 
 /// Se `id` è un comando composto di Fub, fuori dal catalogo della facciata.
-pub(crate) fn composed(id: &str) -> bool {
+pub(crate) fn is_composed_command(id: &str) -> bool {
     COMPOSED.iter().any(|(composed, ..)| *composed == id)
 }
 
