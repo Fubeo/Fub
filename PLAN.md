@@ -872,7 +872,7 @@ scheda non fa richieste da sé e che «Mostra l'anteprima» chiama `request`
 una volta.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas/cards/web.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T9 · Dove nascono le schede
 

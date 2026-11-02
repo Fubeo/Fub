@@ -59,6 +59,17 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N6 · T8: la scheda web non fa richieste da sé: mostra
+  indirizzo e dominio, e l'anteprima solo con «Mostra l'anteprima» (una
+  richiesta per clic); l'icona passa solo se è un data: di immagine raster
+  (la regola di safeIcon delle note, perché isAllowedLink ammetterebbe icone
+  http che farebbero rete); un'anteprima fallita resta sobria, col motivo
+  nel suggerimento e il pulsante per riprovare; un indirizzo non valido non
+  ha pulsanti. Tutte le schede dicono lo stato in data-card-state e la
+  specie in data-card-kind (allineate dall'orchestratore: l'immagine usava
+  data-state). Manca una chiave «Scarico l'anteprima…»: per ora «Apro…».
+  Perché: una lavagna aperta non contatta nessun sito senza che lo si
+  chieda.
 - 2026-11-02 · N6 · T6: la scheda PDF disegna la pagina in un canvas fuori
   dal DOM e la copia in quello visibile (la cache chiude le immagini che
   scarta), larga scheda × zoom × densità, al più 2× la scheda; la parte in
