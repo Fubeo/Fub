@@ -28,8 +28,9 @@ use serde_json::{Map, Number, Value};
 /// Il più grande indice di array di JavaScript: 2^32 − 2.
 const MAX_ARRAY_INDEX: u64 = 4_294_967_294;
 
-/// Le cifre di un `f64` finito: con 1100 decimali dopo la prima cifra
-/// l'espansione è esatta (un `f64` ha al più 767 cifre significative).
+/// La strada lenta dei test: con 1100 decimali dopo la prima cifra
+/// l'espansione di un `f64` finito è esatta (al più 767 cifre significative).
+#[cfg(test)]
 const EXACT_DIGITS: usize = 1100;
 
 /// Scrive `x` come `Number.prototype.toString` (ECMA-262 `Number::toString`
@@ -65,14 +66,36 @@ pub fn js_number(x: f64) -> String {
 ///
 /// `{:e}` di Rust dà già le cifre più corte che si rileggono uguali e, fra
 /// queste, le più vicine; nel pareggio esatto però non sceglie la cifra pari
-/// come vuole ECMA-262. Il pareggio si riconosce sull'espansione esatta
-/// (`{:.1100e}`) e si risolve qui.
+/// come vuole ECMA-262. Il pareggio si riconosce sull'espansione esatta e si
+/// risolve qui; [`tie_precision`] dice, senza espandere, quando non può
+/// esserci.
 fn shortest_digits(x: f64) -> (Vec<u8>, i32) {
+    shortest_digits_with(x, Expansion::WhenNeeded)
+}
+
+/// Quando si calcola l'espansione esatta. `Always` è la strada lenta di
+/// riferimento, che i test confrontano con quella veloce.
+#[derive(Clone, Copy)]
+enum Expansion {
+    WhenNeeded,
+    #[cfg(test)]
+    Always,
+}
+
+fn shortest_digits_with(x: f64, expansion: Expansion) -> (Vec<u8>, i32) {
     let (digits, exponent) = split_scientific(&format!("{x:e}"));
-    let (exact, exact_exponent) = split_scientific(&format!("{x:.EXACT_DIGITS$e}"));
     // L'ultima cifra tenuta vale 10^unit; il pareggio c'è quando la parte
     // esatta sotto quella cifra è proprio mezza unità: 5 seguito da zeri.
     let unit = i64::from(exponent) - digits.len() as i64 + 1;
+    let precision = match expansion {
+        Expansion::WhenNeeded => match tie_precision(x, exponent, unit) {
+            Some(precision) => precision,
+            None => return (digits, exponent),
+        },
+        #[cfg(test)]
+        Expansion::Always => EXACT_DIGITS,
+    };
+    let (exact, exact_exponent) = split_scientific(&format!("{x:.precision$e}"));
     let half = i64::from(exact_exponent) - (unit - 1);
     let Ok(half) = usize::try_from(half) else {
         return (digits, exponent);
@@ -97,6 +120,43 @@ fn shortest_digits(x: f64) -> (Vec<u8>, i32) {
         }
     }
     (digits, exponent)
+}
+
+/// Le cifre dopo la prima che bastano per l'espansione esatta di `x`
+/// (finito, positivo), o `None` se un pareggio all'unità 10^unit è
+/// impossibile e l'espansione non serve.
+///
+/// Si scompone `x = M · 2^E` con `M` dispari (i subnormali partono da
+/// `E = −1074`). Un pareggio vuole che la parte esatta sotto l'unità sia
+/// `5 · 10^(unit − 1)`, quindi che 2 divida `x` esattamente `unit − 1` volte,
+/// cioè `E = unit − 1`:
+/// - `E < 0`: `x = M · 5^(−E) / 10^(−E)` con `M · 5^(−E)` dispari, quindi
+///   l'esatto finisce a 10^E con una cifra dispari; il pareggio vuole che
+///   finisca con il 5 a 10^(unit − 1).
+/// - `E ≥ 0`: `x` è un intero e `x ≡ 5 · 10^(unit − 1) (mod 10^unit)` vuole
+///   che 2 divida `x` proprio `unit − 1` volte.
+///
+/// Se `E = unit − 1` bastano le cifre fino a 10^min(E, 0): `exponent − E`
+/// (o `exponent` per un intero) dopo la prima, perché la prima cifra esatta
+/// non sta mai sopra 10^exponent. Il caso è raro: la gran parte dei numeri
+/// non si espande.
+fn tie_precision(x: f64, exponent: i32, unit: i64) -> Option<usize> {
+    let bits = x.to_bits();
+    let biased = i64::try_from((bits >> 52) & 0x7ff).unwrap_or(0);
+    let fraction = bits & ((1_u64 << 52) - 1);
+    let (mantissa, binary_exponent) = if biased == 0 {
+        (fraction, -1074_i64)
+    } else {
+        (fraction | (1_u64 << 52), biased - 1075)
+    };
+    if mantissa == 0 {
+        return None;
+    }
+    let binary_exponent = binary_exponent + i64::from(mantissa.trailing_zeros());
+    if unit - 1 != binary_exponent {
+        return None;
+    }
+    usize::try_from(i64::from(exponent) - binary_exponent.min(0)).ok()
 }
 
 /// `digits × 10^(exponent − len + 1)` si rilegge come `x`?
@@ -328,5 +388,111 @@ fn newline(out: &mut String, indent: Option<&str>, depth: usize) {
         for _ in 0..depth {
             out.push_str(indent);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{shortest_digits_with, Expansion};
+
+    /// xorshift64: un generatore deterministico scritto a mano, così il test
+    /// non dipende da un crate e ogni giro vede gli stessi numeri.
+    struct XorShift(u64);
+
+    impl XorShift {
+        fn next(&mut self) -> u64 {
+            let mut s = self.0;
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            self.0 = s;
+            s
+        }
+    }
+
+    /// Confronta le due strade su `x` se è finito e positivo; dice se l'ha
+    /// contato.
+    fn same_digits(x: f64) -> usize {
+        if !(x.is_finite() && x > 0.0) {
+            return 0;
+        }
+        assert_eq!(
+            shortest_digits_with(x, Expansion::WhenNeeded),
+            shortest_digits_with(x, Expansion::Always),
+            "{x:e} ({:#018x})",
+            x.to_bits()
+        );
+        1
+    }
+
+    // Quattro test e non uno, così girano in parallelo: in tutto più di
+    // 200 000 numeri, ognuno anche con l'espansione intera (la strada lenta).
+
+    #[test]
+    fn fast_path_matches_on_integers() {
+        let mut rng = XorShift(0x9e37_79b9_7f4a_7c15);
+        let mut count = 0;
+        // Interi piccoli e grandi, fino oltre 2^53.
+        for i in 1..=25_500_u64 {
+            count += same_digits(i as f64);
+            count += same_digits((rng.next() >> (rng.next() % 64)) as f64);
+        }
+        for x in [9_007_199_254_740_991.0, 9_007_199_254_740_992.0, f64::MAX] {
+            count += same_digits(x);
+        }
+        assert!(count >= 50_000, "{count}");
+    }
+
+    #[test]
+    fn fast_path_matches_on_small_decimals() {
+        let mut rng = XorShift(0x2545_f491_4f6c_dd1d);
+        let mut count = 0;
+        // Centesimi, millesimi, ottavi, binari, terzi.
+        for _ in 0..50_000 {
+            let n = (rng.next() % 10_000_000) as f64 + 1.0;
+            let d = [10.0, 100.0, 1000.0, 8.0, 16.0, 1024.0, 3.0][(rng.next() % 7) as usize];
+            count += same_digits(n / d);
+        }
+        assert!(count >= 50_000, "{count}");
+    }
+
+    #[test]
+    fn fast_path_matches_on_the_whole_bit_space() {
+        let mut rng = XorShift(0xd1b5_4a32_d192_ed03);
+        let mut count = 0;
+        // Normali, subnormali, enormi: i bit a caso, senza segno.
+        for _ in 0..52_000 {
+            count += same_digits(f64::from_bits(rng.next() & !(1_u64 << 63)));
+        }
+        for x in [5e-324, f64::MIN_POSITIVE] {
+            count += same_digits(x);
+        }
+        assert!(count >= 50_000, "{count}");
+    }
+
+    #[test]
+    fn fast_path_matches_on_ties() {
+        let mut rng = XorShift(0x8cb9_2ba7_2f3d_8dd7);
+        let mut count = 0;
+        // (k + ½) · 2^e ha l'ultima cifra binaria a 2^(e−1): le cifre più
+        // corte cadono spesso a metà fra due candidati.
+        for _ in 0..50_000 {
+            let k = (rng.next() % (1 << 20)) as f64 + 0.5;
+            let e = (rng.next() % 140) as i32 - 70;
+            count += same_digits(k * 2_f64.powi(e));
+        }
+        // I pareggi noti (vedi `tests/js_encoder.rs`).
+        for x in [
+            0.7534866333007812,
+            17.767898559570312,
+            196181128186770.12,
+            12.569839477539062,
+            0.5,
+            1.5,
+            2.5,
+        ] {
+            count += same_digits(x);
+        }
+        assert!(count >= 50_000, "{count}");
     }
 }
