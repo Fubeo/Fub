@@ -59,6 +59,21 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N6 · Le risposte dell'utente a D-1…D-19 (e merge-n3n4,
+  ci-soglia): la v1 intera di `lavagna.md` (gli estratti di PDF aspettano
+  PdfCraft); i file trascinati vanno dove dice un'impostazione della
+  lavagna, che di serie segue quella delle note; «già nel vault» vuol dire
+  lo stesso contenuto ovunque, con l'impronta come dato derivato, i byte
+  provati uno per uno e dei limiti, e nel dubbio si copia; la pagina del PDF
+  sta nello stato della vista; l'inchiostro si attacca alla pagina e alla
+  cella; si scrive dentro le schede, sulla stessa sessione del riquadro; S9
+  nasce accanto a S3; i sei colori e in più ogni colore esatto; il CSV
+  aspetta il motore dei fogli (D-20); la rotella ha un'impostazione;
+  Ctrl+clic apre un link; il foglio nasce 480×300; N6 va avanti sopra il
+  ramo di N4 e si fonde dopo N3 e N4, con la CI completa e la revisione
+  (T90). Restano D-20, D-21 e D-22 · l'utente ha risposto, e dove la
+  risposta lasciava la scelta il piano ha preso la strada più sicura: nessun
+  byte perso, nessun formato rotto, Obsidian vede la stessa lavagna.
 - 2026-11-02 · N6 · T10: le porte della lavagna stanno in `state/canvas-
   intake.ts`. Dall'albero si tengono solo gli id che l'host conferma: una
   domanda sola a `existingDocuments` per tutte le voci, e per i file che
