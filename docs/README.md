@@ -88,6 +88,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [Le annotazioni PDF](reference/annotation-format.md), la
   [proiezione dei documenti di videoscrittura](reference/rich-projection.md)
   e la [sessione live](reference/live-session.md)
+- [L'inchiostro della lavagna](reference/canvas-ink.md), i campi `fub:ink`
+  di un `.canvas`
 - [Il server MCP](reference/mcp-server.md)
 
 ## Vedere stato e direzione
