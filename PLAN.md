@@ -561,7 +561,7 @@ fub-canvas-core --test patch_vectors` e in `vectors.test.ts`; un vettore
 cambiato di un byte fa fallire tutti e due.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npx vitest run src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T8 · Le operazioni d'intento
 

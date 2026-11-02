@@ -59,6 +59,18 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-02 · N3 T7 · il commit in Rust (`fub-canvas-core/src/commit.rs`:
+  `Core`, `Committed{source,inverse,edit}`, `Edit::between/apply` ai confini
+  di carattere, `CommitError` Stale/Invalid/Rejected/Unstable con
+  `reason()`) e 43 vettori in `apps/client/src/__fixtures__/canvas-patches/`
+  letti da Rust e da TS; in TS `canvasCommitOutcome` accanto a
+  `commitCanvasPatches`, che non cambia; `parseNode` di `model.ts` allineato
+  a Rust (limiti solo per il campo del tipo della scheda, niente limite
+  sullo sfondo) · i due lati devono dare gli stessi byte; rischi: il TS ora
+  scrive i campi nuovi nell'ordine di Rust (stesso valore, byte diversi),
+  un'immagine con le chiavi in un altro ordine e uno sfondo di 9000 byte ora
+  si aprono; manca un vettore «unstable»; una lista di toppe vuota fa in
+  Rust un commit che non cambia niente, in TS dà null.
 - 2026-11-02 · N3 T8 · operazioni d'intento (`ops.rs`): un id che non è né
   scheda né arco in `remove`/`set` dà `UnknownEdge`; `set` vale anche sugli
   archi; un id dato già preso o ripetuto in `ids` dà `DuplicateId`; `reorder
