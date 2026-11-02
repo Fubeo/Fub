@@ -585,12 +585,13 @@ const SCENE_FORBIDDEN: &[&str] = &["fub-abi", "fub-kernel", "tauri", "wasmtime"]
 /// Le dipendenze normali che `fub-scene` può dichiarare. Elenco chiuso, come
 /// quello di `fub-abi` e `fub-kernel`.
 ///
-/// `fub-ink` è il nucleo dell'inchiostro: il campione del tratto che il codec
-/// di `fub:ink` quantizza è un tipo suo. È puro e senza dipendenze
-/// (`the_ink_core_stands_alone`), quindi un componente `wasm32-wasip2` che
-/// prenda `fub-scene` via Git prende anche lui dalla stessa `rev`, e non porta
-/// con sé il contratto né il kernel.
-const SCENE_ALLOWED_DIRECT: &[&str] = &["fub-ink", "quick-xml", "serde"];
+/// `fub-ink-codec` è il codec di `fub:ink` e la grammatica di `fub:brush`, che
+/// stanno fuori dal lettore perché li usa anche la lavagna; dipende soltanto
+/// dal nucleo dell'inchiostro (`the_ink_codec_stands_alone`), che non dipende
+/// da niente (`the_ink_core_stands_alone`). Un componente `wasm32-wasip2` che
+/// prenda `fub-scene` via Git prende i due crate dalla stessa `rev`, e non
+/// porta con sé il contratto né il kernel.
+const SCENE_ALLOWED_DIRECT: &[&str] = &["fub-ink-codec", "quick-xml", "serde"];
 
 /// Il lettore delle scene sta da solo.
 ///
@@ -680,8 +681,78 @@ fn the_ink_core_stands_alone() {
     );
 }
 
-/// Chi può dipendere dal nucleo dell'inchiostro. Elenco chiuso.
-const INK_ALLOWED_DEPENDENTS: &[&str] = &["fub-scene", "fub-format-rich"];
+/// Chi può dipendere dal nucleo dell'inchiostro. Elenco chiuso: il codec dei
+/// tratti, che ne quantizza il campione, e i documenti, che ne scrivono
+/// l'InkML (ADR 0226). `fub-scene` prende il campione dal codec.
+const INK_ALLOWED_DEPENDENTS: &[&str] = &["fub-ink-codec", "fub-format-rich"];
+
+/// Il codec dei tratti sta da solo.
+///
+/// `fub-ink-codec` è il codec di `fub:ink` e la grammatica di `fub:brush` (§5
+/// del formato della scena). Li usano due lettori che non devono conoscersi:
+/// i disegni (`fub-scene`) e il nucleo della lavagna, che scrive gli stessi
+/// tratti in una `.canvas` e compila per `wasm32-unknown-unknown`. Per questo
+/// il codec non è in `fub-scene`, che porta con sé il lettore XML, e dipende
+/// soltanto dal nucleo dell'inchiostro, di cui quantizza il campione: se
+/// prendesse un'altra dipendenza, la pagherebbero in byte la WebView e il
+/// plugin `wasm32-wasip2` che prende `fub-scene` via Git.
+///
+/// Le dipendenze di sviluppo sono fuori: non finiscono in nessun binario.
+#[test]
+fn the_ink_codec_stands_alone() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
+
+    let direct = graph.direct("fub-ink-codec");
+    let expected: BTreeSet<&str> = INK_CODEC_ALLOWED_DIRECT.iter().copied().collect();
+    assert!(
+        direct.iter().all(|d| expected.contains(d)),
+        "`fub-ink-codec` dichiara {direct:?} fra le dipendenze normali, ma può\n\
+         dipendere soltanto da {INK_CODEC_ALLOWED_DIRECT:?}. Il codec dei tratti\n\
+         lo usano i disegni e la lavagna, che compila per la WebView: se serve un\n\
+         tipo, va nel nucleo dell'inchiostro. Vedi il punto 2 di\n\
+         docs/decisions/0204-nucleo-inchiostro.md."
+    );
+
+    // Il nucleo non dipende da niente: la chiusura intera del codec è il
+    // nucleo e basta, e un crate arrivato per via transitiva si vede qui.
+    let trespassers: Vec<&str> = graph
+        .closure("fub-ink-codec")
+        .into_iter()
+        .filter(|n| !expected.contains(n))
+        .collect();
+    assert!(
+        trespassers.is_empty(),
+        "`fub-ink-codec` raggiunge {trespassers:?} fra le dipendenze normali. Il\n\
+         codec dei tratti non vede il contratto, il kernel, un formato, un\n\
+         lettore XML né altro oltre al nucleo dell'inchiostro. Vedi il punto 2\n\
+         di docs/decisions/0204-nucleo-inchiostro.md."
+    );
+
+    let members = graph.members();
+
+    let dependents: Vec<&str> = members
+        .iter()
+        .copied()
+        .filter(|m| *m != "fub-ink-codec" && graph.direct(m).contains("fub-ink-codec"))
+        .collect();
+    assert!(
+        dependents
+            .iter()
+            .all(|m| INK_CODEC_ALLOWED_DEPENDENTS.contains(m)),
+        "{dependents:?} dipendono da `fub-ink-codec`, ma solo\n\
+         {INK_CODEC_ALLOWED_DEPENDENTS:?} possono. Aggiungere un cliente del codec\n\
+         dei tratti è una decisione: scrivila nel punto 2 di\n\
+         docs/decisions/0204-nucleo-inchiostro.md e poi qui."
+    );
+}
+
+/// La sola dipendenza normale del codec dei tratti: il nucleo dell'inchiostro.
+const INK_CODEC_ALLOWED_DIRECT: &[&str] = &["fub-ink"];
+
+/// Chi può dipendere dal codec dei tratti. Elenco chiuso: i disegni e il
+/// nucleo della lavagna, per l'inchiostro delle schede di una `.canvas`.
+const INK_CODEC_ALLOWED_DEPENDENTS: &[&str] = &["fub-scene", "fub-canvas-core"];
 
 /// Il nucleo della lavagna sta da solo.
 ///
