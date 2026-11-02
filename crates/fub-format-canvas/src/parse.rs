@@ -30,28 +30,17 @@ use fub_abi::model::{
     Block, DocId, DocumentModel, Frontmatter, Heading, HeadingSlugs, Link, LinkTarget, Span, Tag,
 };
 use fub_abi::options::{syntax, OptionMap};
-use fub_abi::rules::{path as rules_path, tag, text_policy};
+use fub_abi::rules::{path as rules_path, tag};
 use fub_abi::{FormatError, FormatProvider};
 
 use super::json_map::{canvas_literals, decoded_to_raw, literals_by_path};
 use super::json_map::{CanvasField, LiteralPath, MappedLiteral};
-use super::model::{Canvas, CanvasError, CanvasNodeType, MAX_SOURCE_BYTES};
+use super::model::{Canvas, CanvasError, CanvasNodeType};
 
+/// Legge e valida una `.canvas`: è la lettura del nucleo
+/// ([`fub_canvas_core::read::parse`]), che salta il BOM da sé.
 pub fn parse_canvas(source: &str) -> Result<Canvas, CanvasError> {
-    if source.len() > MAX_SOURCE_BYTES {
-        return Err(CanvasError::Limit {
-            what: "source bytes",
-            limit: MAX_SOURCE_BYTES,
-        });
-    }
-    if source.trim().is_empty() {
-        return Ok(Canvas::default());
-    }
-    // Un BOM iniziale si salta e non si toglie (RFC 8259 §8.1): serde non lo
-    // accetta, e la sorgente resta quella del file (#97).
-    let canvas: Canvas = serde_json::from_str(text_policy::strip_bom(source))?;
-    canvas.validate()?;
-    Ok(canvas)
+    fub_canvas_core::read::parse(source)
 }
 
 pub fn parse_document(source: &str, ctx: &ParseContext) -> Result<DocumentModel, FormatError> {

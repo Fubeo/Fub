@@ -683,6 +683,77 @@ fn the_ink_core_stands_alone() {
 /// Chi può dipendere dal nucleo dell'inchiostro. Elenco chiuso.
 const INK_ALLOWED_DEPENDENTS: &[&str] = &["fub-scene", "fub-format-rich"];
 
+/// Il nucleo della lavagna sta da solo.
+///
+/// `fub-canvas-core` è il modello di una `.canvas` e la sua lettura, e ha tre
+/// clienti: il provider del formato accanto al kernel, i comandi della
+/// lavagna e la facciata WebAssembly che la WebView carica. Il terzo è quello
+/// che detta la forma: un modulo `wasm32-unknown-unknown` non può portarsi
+/// dietro il contratto, il Markdown, il kernel o un toolkit, e ogni byte in più
+/// lo paga chi apre una lavagna. Per questo le dirette sono un elenco chiuso
+/// (`serde`, `serde_json`, `thiserror`) e la chiusura non contiene nessun
+/// membro del workspace né una famiglia proibita. Il giro completo di
+/// `scripts/check.sh` lo compila per quel bersaglio; questa rete dice il
+/// perché prima del linker.
+///
+/// Le dipendenze di sviluppo sono fuori: non finiscono nel modulo.
+#[test]
+fn the_canvas_core_stands_alone() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
+
+    let allowed: BTreeSet<&str> = CANVAS_CORE_ALLOWED_DIRECT.iter().copied().collect();
+    let extra: Vec<&str> = graph
+        .direct("fub-canvas-core")
+        .into_iter()
+        .filter(|d| !allowed.contains(d))
+        .collect();
+    assert!(
+        extra.is_empty(),
+        "`fub-canvas-core` dichiara {extra:?} fra le dipendenze normali, che non\n\
+         sono nell'elenco delle sue dirette ({CANVAS_CORE_ALLOWED_DIRECT:?}). Il\n\
+         nucleo della lavagna compila per `wasm32-unknown-unknown` e finisce nella\n\
+         WebView: se serve un tipo, va nel nucleo; se serve un prodotto, è il\n\
+         prodotto che dipende dal nucleo."
+    );
+
+    let members = graph.members();
+    let trespassers: Vec<&str> = graph
+        .closure("fub-canvas-core")
+        .into_iter()
+        .filter(|n| members.contains(n) || forbidden(n))
+        .collect();
+    assert!(
+        trespassers.is_empty(),
+        "`fub-canvas-core` raggiunge {trespassers:?} fra le dipendenze normali.\n\
+         Il nucleo della lavagna non vede il contratto, il Markdown, il kernel,\n\
+         il toolkit dell'app né un altro membro del workspace."
+    );
+
+    let dependents: Vec<&str> = members
+        .iter()
+        .copied()
+        .filter(|m| *m != "fub-canvas-core" && graph.direct(m).contains("fub-canvas-core"))
+        .collect();
+    assert!(
+        dependents
+            .iter()
+            .all(|m| CANVAS_CORE_ALLOWED_DEPENDENTS.contains(m)),
+        "{dependents:?} dipendono da `fub-canvas-core`, ma solo\n\
+         {CANVAS_CORE_ALLOWED_DEPENDENTS:?} possono. Aggiungere un cliente del\n\
+         nucleo della lavagna è una decisione: scrivila in\n\
+         docs/reference/canvas-format.md e poi qui."
+    );
+}
+
+/// Le sole dipendenze normali dirette del nucleo della lavagna. Elenco chiuso.
+const CANVAS_CORE_ALLOWED_DIRECT: &[&str] = &["serde", "serde_json", "thiserror"];
+
+/// Chi può dipendere dal nucleo della lavagna. Elenco chiuso: il formato, i
+/// comandi della lavagna e la facciata WebAssembly.
+const CANVAS_CORE_ALLOWED_DEPENDENTS: &[&str] =
+    &["fub-format-canvas", "fub-features", "fub-canvas-wasm"];
+
 /// La sessione live sta **fuori dal core**: `fub-live` non vede il contratto,
 /// il kernel, il montaggio né il toolkit (ADR 0205).
 ///

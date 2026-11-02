@@ -37,6 +37,7 @@ flowchart TD
     markdown["fub-format-markdown"]
     base["fub-format-base"]
     canvas["fub-format-canvas"]
+    canvascore["fub-canvas-core"]
     svg["fub-format-svg"]
     scene["fub-scene"]
     ink["fub-ink"]
@@ -72,6 +73,7 @@ flowchart TD
     services --> abi
     base --> abi
     canvas --> abi
+    canvas --> canvascore
     canvas --> markdown
     rich --> abi
     rich --> markdown
@@ -240,6 +242,16 @@ del tratto, e quella di `fub-format-rich`, che ne scrive e legge l'InkML
 dell'inchiostro dei documenti; chi altro può dipenderne è un elenco chiuso,
 deciso nell'[ADR 0204](../decisions/0204-nucleo-inchiostro.md) e allargato
 nell'[ADR 0226](../decisions/0226-inchiostro-e-disegni-nei-documenti.md).
+
+`fub-canvas-core`, il nucleo della lavagna, non ha frecce verso altri crate
+del workspace: dipende soltanto da `serde`, `serde_json` e `thiserror`, e non
+vede `fub-abi` né il Markdown, perché lo carica anche la WebView come modulo
+`wasm32-unknown-unknown`. Ha il modello di una `.canvas` e la sua lettura; la
+sua freccia in ingresso è quella di `fub-format-canvas`, che lo riespone con la
+stessa API. Chi altro può dipenderne è un elenco chiuso
+(`dependency_invariant.rs`), e il giro completo di `scripts/check.sh` lo
+compila per quel bersaglio. Le regole stanno nel [formato della
+lavagna](../reference/canvas-format.md).
 
 `fub-componenti`, il risolutore dei componenti, non ha frecce in uscita:
 dipende soltanto da `serde`, non vede `fub-abi`, e dice in un posto solo che
