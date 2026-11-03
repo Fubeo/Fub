@@ -49,11 +49,12 @@ was needed or an unverified architectural change.
 - Never work on `main` directly: each change gets its own branch and a PR
   against `main`. Pushing your branch and opening the PR are part of the work
   (in the plan workflow, only the orchestrator does it).
-  **Merging a PR needs the maintainer's explicit OK.** If `gh` isn't
-  authenticated, ask.
+  **Merging a PR needs the maintainer's explicit OK.** The one standing
+  exception is `/orchestra-auto`, which merges a finished plan under the
+  rules of its skill. If `gh` isn't authenticated, ask.
 - No subagents, workflows or parallel sessions unless the maintainer allows them
   for that task; then they are read-only. The one standing exception is the
-  plan workflow below, whose coders write in their own worktrees.
+  plan workflow below, whose coders and planners write in their own worktrees.
 - Work only inside the repository. Don't install
   system packages or change system settings: give the exact command and why it
   is needed.
@@ -136,7 +137,8 @@ Larger work goes through three roles and one file.
 | Role | Model, effort | Does |
 |---|---|---|
 | planner, `/pianifica` | Opus, xhigh, its own session | thinks, asks, prototypes graphic work, writes and pushes `PLAN.md` |
-| orchestrator, `/orchestra` | Opus, high, its own session | runs 2-3 coders, reviews, integrates, pushes, asks the maintainer |
+| orchestrator, `/orchestra` | Opus, high, its own session | runs up to 2 subagents (coders and planners), reviews, integrates, pushes, asks the maintainer |
+| unattended orchestrator, `/orchestra-auto` | Opus, high, its own session | the same while the maintainer is away: decides on the Fub dossier, writes every choice down, merges a plan only when it is finished and the full CI is green, leaves a report |
 | coder, `.claude/agents/coder.md` | Opus, medium, subagent | one task in its own worktree, closes on `scripts/check.sh --rapido` |
 
 - `PLAN.md` (and `PLAN-ui/` for the prototype) on the branch `piano/<slug>` is
@@ -144,6 +146,11 @@ Larger work goes through three roles and one file.
   sessions only points at a pushed commit of it; the file is what counts.
 - `DECISIONS.md` says what the orchestrator decides alone and what it asks, and
   logs the choices made during the work for the next plan.
+- Anything relatively complex to design (a prototype, new tasks) goes to a
+  planner: the `/pianifica` session, or a planner subagent (Opus, xhigh)
+  launched by the orchestrator. Every planner reads
+  [`.claude/skills/pianifica/fub.md`](.claude/skills/pianifica/fub.md) first:
+  what Fub is, how it looks, how it chooses.
 - Coders never push, open PRs, touch CI or start agents. Only the orchestrator
   pushes, once per integrated task, to a draft PR, and waits for CI in the
   background.

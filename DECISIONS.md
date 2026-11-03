@@ -49,7 +49,8 @@ registro.
 - una dipendenza esterna nuova o una licenza;
 - cambiare «Fatto quando» o «Fuori scope», saltare o rinviare un task;
 - disattivare, saltare o mettere in quarantena un test;
-- il merge.
+- il merge (salvo `/orchestra-auto`, che unisce un piano finito alle
+  condizioni della sua skill).
 
 Quando chiede: le domande di un momento tutte insieme, solo quelle la cui
 risposta cambia davvero il risultato, con la conseguenza pratica di ogni
@@ -59,6 +60,29 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · regole · /orchestra-auto unisce in main da solo un piano
+  finito: tutti i task fatti, check.sh completo verde, PR pronta, CI
+  completa verde (un rosso che c'è anche su main per la stessa causa, con
+  una issue aperta, non blocca), niente «da confermare» né domande aperte,
+  ramo aggiornato con main; poi cancella il ramo e il worktree, e aggiorna
+  l'app sulla 1432 con un pull solo in avanti. Un piano con un cambio di
+  contratto pubblico non confermato non si unisce. · Perché: il manutentore
+  preferisce trovare il lavoro in main e non una pila di rami; nel caso
+  peggiore si torna indietro con un revert, che però non riporta indietro i
+  file già scritti in un formato nuovo.
+- 2026-11-03 · regole · Il lavoro relativamente complesso da disegnare (un
+  prototipo, task nuovi) va sempre a un pianificatore, la sessione
+  /pianifica o un pianificatore subagente (Opus, xhigh) lanciato
+  dall'orchestratore, e ogni pianificatore legge prima
+  .claude/skills/pianifica/fub.md, che dice che cos'è Fub, come appare e
+  come sceglie. Al massimo 2 subagenti insieme, coder e pianificatori. Nasce
+  /orchestra-auto, l'orchestratore che lavora mentre il manutentore è via
+  (di notte o di giorno): decide sul dossier e scrive ogni scelta (A-auto-N,
+  «(auto)»), approva in automatico i prototipi nuovi ma non quelli già
+  commentati, non unisce, non agisce fuori dal repository e lascia un
+  resoconto. · Perché: l'ha chiesto il manutentore, per avere progetti
+  sempre nello stile di Fub e poter lasciare lavorare i piani quando vuole,
+  senza scelte casuali.
 - 2026-11-01 · regole · L'orchestratore e i coder decidono da soli il come
   tecnico, i formati interni, le dipendenze fra crate del workspace e i file
   legati al task; «Chiede sempre» resta per ciò che si vede, il contratto
