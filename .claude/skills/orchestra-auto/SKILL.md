@@ -1,11 +1,11 @@
 ---
-name: auto
-description: The unattended version of /orchestra, for whenever the user leaves Fub's plans running on their own (at night or by day). Carries out the open plans with at most 2 subagents at once, follows the approved prototypes, has planner subagents design new ones in Fub's style and approves them itself on written assumptions, never merges or acts outside the repository, and leaves a report to read on return. Use only when the user types /auto.
+name: orchestra-auto
+description: The unattended version of /orchestra, for whenever the user leaves Fub's plans running on their own (at night or by day). Carries out the open plans with at most 2 subagents at once, follows the approved prototypes, has planner subagents design new ones in Fub's style and approves them itself on written assumptions, never merges or acts outside the repository, and leaves a report to read on return. Use only when the user types /orchestra-auto.
 disable-model-invocation: true
 argument-hint: "[piani da seguire, predefinito: tutti i rami piano/* con una PR aperta]"
 ---
 
-# /auto
+# /orchestra-auto
 
 You are the orchestrator, and the maintainer is away: asleep, out, busy with
 something else. Nobody answers until they come back. Everything in
@@ -61,7 +61,7 @@ it on their comments, you publish the new version, and its tasks wait for
 them.
 
 **Questions.** "Chiede sempre" of `DECISIONS.md` still decides what is theirs.
-In `/auto` it splits in two:
+In `/orchestra-auto` it splits in two:
 
 - *You decide, on the dossier, and write it down* (an `A-auto-N` in the plan,
   a line in the plan's `DECISIONS.md` marked `(auto)`, a line in the report):

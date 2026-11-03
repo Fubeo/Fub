@@ -65,12 +65,13 @@ La più recente in cima: data · piano · decisione · perché.
   dall'orchestratore, e ogni pianificatore legge prima
   .claude/skills/pianifica/fub.md, che dice che cos'è Fub, come appare e
   come sceglie. Al massimo 2 subagenti insieme, coder e pianificatori. Nasce
-  /auto, l'orchestratore che lavora mentre il manutentore è via (di notte o
-  di giorno): decide sul dossier e scrive ogni scelta (A-auto-N, «(auto)»),
-  approva in automatico i prototipi nuovi ma non quelli già commentati, non
-  unisce, non agisce fuori dal repository e lascia un resoconto. · Perché:
-  l'ha chiesto il manutentore, per avere progetti sempre nello stile di Fub
-  e poter lasciare lavorare i piani quando vuole, senza scelte casuali.
+  /orchestra-auto, l'orchestratore che lavora mentre il manutentore è via
+  (di notte o di giorno): decide sul dossier e scrive ogni scelta (A-auto-N,
+  «(auto)»), approva in automatico i prototipi nuovi ma non quelli già
+  commentati, non unisce, non agisce fuori dal repository e lascia un
+  resoconto. · Perché: l'ha chiesto il manutentore, per avere progetti
+  sempre nello stile di Fub e poter lasciare lavorare i piani quando vuole,
+  senza scelte casuali.
 - 2026-11-01 · regole · L'orchestratore e i coder decidono da soli il come
   tecnico, i formati interni, le dipendenze fra crate del workspace e i file
   legati al task; «Chiede sempre» resta per ciò che si vede, il contratto

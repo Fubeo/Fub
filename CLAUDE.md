@@ -137,7 +137,7 @@ Larger work goes through three roles and one file.
 |---|---|---|
 | planner, `/pianifica` | Opus, xhigh, its own session | thinks, asks, prototypes graphic work, writes and pushes `PLAN.md` |
 | orchestrator, `/orchestra` | Opus, high, its own session | runs up to 2 subagents (coders and planners), reviews, integrates, pushes, asks the maintainer |
-| unattended orchestrator, `/auto` | Opus, high, its own session | the same while the maintainer is away: decides on the Fub dossier, writes every choice down, never merges, leaves a report |
+| unattended orchestrator, `/orchestra-auto` | Opus, high, its own session | the same while the maintainer is away: decides on the Fub dossier, writes every choice down, never merges, leaves a report |
 | coder, `.claude/agents/coder.md` | Opus, medium, subagent | one task in its own worktree, closes on `scripts/check.sh --rapido` |
 
 - `PLAN.md` (and `PLAN-ui/` for the prototype) on the branch `piano/<slug>` is

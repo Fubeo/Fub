@@ -1,7 +1,7 @@
 # Fub, what it is and how it looks
 
 Give this page to every planner before it designs anything: the `/pianifica`
-session, a planner subagent launched by `/orchestra` or `/auto`, a
+session, a planner subagent launched by `/orchestra` or `/orchestra-auto`, a
 prototype. A plan or a prototype that doesn't feel like Fub is not finished,
 however correct it is. This page points at the sources; when it and a source
 disagree, the source wins (code and tests first, as `CLAUDE.md` says).
@@ -101,8 +101,8 @@ And the code that is already the style: `apps/client/src/kit/`, `src/ui/menu.ts`
 
 ## Choosing like Fub
 
-When a choice is yours (a planner's assumption, an `/auto` decision), prefer, in
-this order:
+When a choice is yours (a planner's assumption, an `/orchestra-auto`
+decision), prefer, in this order:
 
 1. the option that loses nothing and can be undone;
 2. the one that keeps files open and compatible with other programs;
