@@ -2214,7 +2214,7 @@ la foto del banco del gruppo «App esterne» somiglia al prototipo, in chiaro e
 in scuro.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test
 craft_settings
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 14a0947d
 
 ## T20 · Il contratto 2
 
