@@ -59,6 +59,17 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- Orchestratore, T1 e T2 integrati. T1: il censimento scrive «solo host» per
+  le porte che nessun componente può chiedere. T2: un Policy guadagna
+  denies_undo, perché annullare può riscrivere qualunque file e quindi
+  chiede tutti i permessi di scrittura oltre a fub:run-command; nell'elenco
+  dei comandi un valore che non è una stringa chiude tutto (meglio negare
+  che indovinare), mentre null, booleano, assente o vuoto vuol dire nessun
+  elenco. Alla revisione ho trovato che JobHost (i comandi lanciati da un
+  job) non guardava l'elenco: ora Guard e JobHost passano dagli stessi
+  authorize_command e authorize_undo in fub-kernel, con un test che falliva
+  senza (a0488e53). La soglia degli errori letterali di fub-host scende a
+  376 (664f9fe0).
 - A1: il 2026-11-03 l'utente ha approvato il prototipo `PLAN-
   ui/ricette.html` e confermato tutte le risposte consigliate, (a) per
   D1-D10 («confermo tutto delle ricette, mi sembra un'ottima implementazione
