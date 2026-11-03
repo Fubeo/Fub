@@ -811,4 +811,8 @@ export class DocumentSurfaceRegistry {
 export interface SurfaceCallbacks {
   onChange(paneId: string, change: EditorChange): void;
   onSelectionChange(paneId: string): void;
+  /// Una superficie montata che scopre dopo, da sola, di non poter tenere il
+  /// testo (una lavagna rotta che arriva mentre il nucleo si carica): il
+  /// riquadro passa alla superficie d'errore, come quando `setDoc` lancia.
+  onFail?(paneId: string, error: unknown): void;
 }

@@ -1040,13 +1040,14 @@ describe("la superficie della tela: il nucleo arriva quando serve", () => {
     vi.resetModules();
   });
 
-  function mount(module: SurfaceModule) {
+  function mount(module: SurfaceModule, onFail?: (paneId: string, error: unknown) => void) {
     const parent = document.createElement("div");
     document.body.append(parent);
     const changes: unknown[] = [];
     const surface = module.mountCanvasSurface("canvas", { paneId: "p", documentId: "board.canvas", parent }, {
       onChange: (_pane, change) => changes.push(change),
       onSelectionChange: () => {},
+      onFail,
     });
     return { parent, surface, changes };
   }
@@ -1057,10 +1058,26 @@ describe("la superficie della tela: il nucleo arriva quando serve", () => {
     surface.buffer!.setDoc(canvasSource());
     expect(parent.querySelector(".canvas-viewport")).toBeNull();
     expect(surface.buffer!.getDoc()).toBe(canvasSource());
-    expect(() => surface.buffer!.setDoc("{rotto")).toThrow();
-    expect(surface.buffer!.getDoc()).toBe(canvasSource());
     release.resolve();
     await vi.waitFor(() => expect(parent.querySelectorAll(".canvas-node")).toHaveLength(4));
+    surface.destroy();
+  });
+
+  it("un testo che non è una lavagna, tenuto mentre il nucleo si carica, lo dice alla shell con onFail", async () => {
+    const module = await lazySurface();
+    const onFail = vi.fn();
+    const { parent, surface } = mount(module, onFail);
+    surface.buffer!.setDoc(canvasSource());
+    // Anche un testo arrivato da un altro riquadro durante il caricamento.
+    surface.buffer!.syncDoc("{rotto");
+    expect(onFail).not.toHaveBeenCalled();
+    release.resolve();
+    await vi.waitFor(() => expect(onFail).toHaveBeenCalledTimes(1));
+    expect(onFail.mock.calls[0]![0]).toBe("p");
+    expect(onFail.mock.calls[0]![1]).toBeInstanceOf(Error);
+    // Il motore fatto a metà non resta: niente tela, niente schede.
+    expect(parent.querySelector(".canvas-viewport")).toBeNull();
+    expect(parent.querySelector(".canvas-node")).toBeNull();
     surface.destroy();
   });
 

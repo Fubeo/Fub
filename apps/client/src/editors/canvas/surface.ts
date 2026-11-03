@@ -40,6 +40,8 @@ export interface CanvasSurfaceCallbacks {
   /** A drawing's change is a plain text operation; a board's is a `CanvasOperation`. */
   readonly onChange: (paneId: string, change: CanvasChange | EditorChange) => void;
   readonly onSelectionChange: (paneId: string) => void;
+  /** The board's text turned out not to be a board after the core loaded: the shell shows its error surface. */
+  readonly onFail?: (paneId: string, error: unknown) => void;
   readonly onOpenWikilink?: CanvasEngineOptions["onOpenWikilink"];
   readonly onOpenPath?: CanvasEngineOptions["onOpenPath"];
   readonly onCreateNote?: CanvasEngineOptions["onCreateNote"];
@@ -208,7 +210,7 @@ export function mountCanvasSurface(
     try {
       if (held !== null) mounted.setDoc(held);
     } catch (error) {
-      fail(error);
+      broken(error);
       return;
     }
     if (heldReadOnly) mounted.setReadOnly(true);
@@ -219,6 +221,16 @@ export function mountCanvasSurface(
       notify(t("document.reveal_unavailable", { doc: docTitle(context.documentId) }), "info");
     }
     heldReveal = null;
+  };
+  // Il testo tenuto durante il caricamento non è una lavagna: lo stesso esito
+  // di un `setDoc` che lancia, la superficie d'errore della shell. Il motore
+  // fatto a metà se ne va prima; senza chi ascolta resta l'avviso.
+  const broken = (error: unknown): void => {
+    if (destroyed) return;
+    engine?.destroy();
+    engine = null;
+    if (callbacks.onFail) callbacks.onFail(context.paneId, error);
+    else fail(error);
   };
   const fail = (error: unknown): void => {
     if (destroyed) return;
@@ -268,7 +280,8 @@ export function mountCanvasSurface(
         source.textContent = canvasSourceFallback(text);
         if (engine) return engine.setDoc(text);
         // Mentre il nucleo si carica il testo si tiene: se non è una lavagna,
-        // lo dice `settle`, come per i disegni (`spatial/lazy.ts`).
+        // `settle` lo dice alla shell (`onFail`), che mostra la superficie
+        // d'errore come per un `setDoc` che lancia.
         held = text;
       },
       syncDoc: (update: { readonly text: string; readonly operation: TextOperation | null } | string): void => {

@@ -784,6 +784,10 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     onSelectionChange: (paneId) => {
       if (layout.focus === paneId) scheduleContext();
     },
+    onFail: (paneId, error) => {
+      const r = panes.get(paneId);
+      if (r?.shown?.k === "doc") failSurface(r, r.shown.doc, error);
+    },
     onOpenWikilink: (page, heading, block) =>
       openWikilink(page, heading ?? undefined, block ?? undefined),
     onOpenWikilinkBeside: async (page, heading, block) => {
