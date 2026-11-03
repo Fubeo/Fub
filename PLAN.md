@@ -375,6 +375,11 @@ ognuna); D-14 è nuova, nata dalla risposta a D-8.
   meno memoria e meno codice in esecuzione), e di serie fa la cosa più
   completa. Il piano va avanti con (a); T13, T24 e T29 aspettano la
   risposta, T26 la scrive nell'ADR.
+  Risposta (2026-11-03): (a) — il Motore del disegno è una riga sua in
+  «Disegnare», accesa di serie, con il suo interruttore (T13, T24, T28,
+  T29). Il repository `Fubeo/vectorcraft`: l'utente ha detto sì a crearlo
+  come copia di `storytold/vectorcraft`; il classificatore ha negato il
+  comando all'orchestratore, quindi lo lancia l'utente.
 
 ## Differenze dal passo 13 e dal codice
 

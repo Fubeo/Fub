@@ -59,6 +59,11 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · K5 · D-14 (a): il Motore del disegno ha un interruttore suo
+  in «Disegnare», acceso di serie; il repository Fubeo/vectorcraft si crea
+  come fork di storytold/vectorcraft, come WordCraft e GridCraft (l'utente
+  ha detto sì; il comando lo lancia lui, perché all'orchestratore è negato)
+  · le consigliate, accettate dall'utente («ci sto»).
 - 2026-11-02 · K5 · Le risposte dell'utente a D-1…D-13: tutte come le
   consigliate tranne D-8, (c): senza motore il disegno usa gli strumenti
   semplici di prima e il chip lo dice. Ne nascono D-14 (il motore come riga
