@@ -1174,7 +1174,7 @@ di cambiare documento, in `show`), e `syncDoc` subito dopo sul testo nuovo;
 una registrazione `Stale` o `Invalid` non perde il testo del campo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base cc9a383b
 
 ## T17 · L'inchiostro in WebAssembly: solo la misura
 
