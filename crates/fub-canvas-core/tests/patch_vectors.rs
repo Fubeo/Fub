@@ -1,12 +1,12 @@
 //! I vettori delle toppe sul testo, scritti a mano
 //! (`apps/client/src/__fixtures__/canvas-patches/`): la stessa cartella che
-//! `apps/client/src/editors/canvas/vectors.test.ts` fa girare contro
-//! `commitCanvasPatches`. Ogni vettore dà il testo grezzo di prima, le toppe
+//! `apps/client/src/editors/canvas/wasm/vectors.test.ts` fa girare contro lo
+//! stesso nucleo compilato in WebAssembly. Ogni vettore dà il testo grezzo di prima, le toppe
 //! e l'esito: per un commit riuscito il testo di dopo e quello dell'annulla
 //! (le toppe inverse applicate al testo di dopo; se manca, è quello di prima),
-//! per un rifiuto la ragione (`CommitError::reason`). Così Rust e TypeScript
-//! danno gli stessi byte e le stesse ragioni (`docs/reference/canvas-format.md`
-//! § «Parità»). Per ogni vettore `Core::preview` dà il testo, o la ragione,
+//! per un rifiuto la ragione (`CommitError::reason`). Così la build nativa e
+//! quella a 32 bit danno gli stessi byte e le stesse ragioni
+//! (`docs/reference/canvas-format.md` § «Parità»). Per ogni vettore `Core::preview` dà il testo, o la ragione,
 //! di `commit`, e lascia la lavagna com'era.
 
 use std::path::PathBuf;

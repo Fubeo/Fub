@@ -15,7 +15,6 @@ import type {
   SurfaceMountContext,
 } from "../core/registry";
 import { CanvasEngine, type CanvasChange, type CanvasEngineOptions } from "./engine";
-import { parseCanvas } from "./model";
 import { canvasCoreLoaded, canvasCoreReady } from "./wasm/core";
 import { t } from "../../i18n/strings";
 import { errorText } from "../../host/errors";
@@ -268,18 +267,14 @@ export function mountCanvasSurface(
       setDoc: (text: string): void => {
         source.textContent = canvasSourceFallback(text);
         if (engine) return engine.setDoc(text);
-        // Mentre il nucleo si carica, un testo che non è una lavagna lo si dice
-        // subito, come farebbe la tela.
-        parseCanvas(text);
+        // Mentre il nucleo si carica il testo si tiene: se non è una lavagna,
+        // lo dice `settle`, come per i disegni (`spatial/lazy.ts`).
         held = text;
       },
       syncDoc: (update: { readonly text: string; readonly operation: TextOperation | null } | string): void => {
         const text = typeof update === "string" ? update : update.text;
         if (engine) engine.syncDoc(update);
-        else {
-          parseCanvas(text);
-          held = text;
-        }
+        else held = text;
         source.textContent = canvasSourceFallback(text);
       },
       getDoc: (): string => engine?.getDoc() ?? held ?? "",

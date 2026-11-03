@@ -1,0 +1,20 @@
+{
+  "name": "r2-minus-zero",
+  "description": "R2: -0 è un intero, e vale 0",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":-0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\"}]}",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 10,
+        "height": 10,
+        "text": "t"
+      }
+    ],
+    "edges": []
+  }
+}

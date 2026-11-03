@@ -4,18 +4,41 @@ import type { SurfaceMenuItem } from "../core/editor-menu";
 import { renderMarkdown } from "../text/profiles/markdown/render";
 import { mountMarkdown } from "../text/profiles/markdown/mount";
 import { CARD_PAUSE_MS, CanvasEngine, type CanvasChange, type CanvasCorePort, type CanvasEngineOptions } from "./engine";
-import { parseCanvas } from "./model";
-import { applyOperation, lineFeeds } from "../core/text-operation";
+import type { CanvasDocument } from "./model";
+import { applyOperation, lineFeeds, operationFromText } from "../core/text-operation";
 import { t } from "../../i18n/strings";
 import agentBoard from "../../__fixtures__/canvas-ops/agent-board.json";
 import { DocumentSessionCollection, type DocumentSessionApi } from "../../state/document-session";
-import { commitCanvasPatches, upsertNodePatch, type CanvasOperation } from "./operation";
+import { upsertNodePatch, type CanvasOperation, type CanvasPatch } from "./operation";
 import { CanvasCoreError, canvasCoreReady, openCore, openCoreNow, type CanvasCore, type CanvasIntentOp } from "./wasm/core";
 
 // Il nucleo si carica una volta: dopo, la tela si apre subito.
 beforeAll(async () => {
   await canvasCoreReady();
 });
+
+/** La lavagna di un testo come la legge il nucleo. */
+function readCanvas(text: string): CanvasDocument {
+  const core = openCoreNow(text);
+  if (!core) throw new Error("il nucleo non è carico");
+  try {
+    return core.model();
+  } finally {
+    core.close();
+  }
+}
+
+/** Il commit del nucleo come lo manda una superficie: il testo di dopo e l'operazione sul testo a `\n`. */
+function commitOnCore(before: string, patches: readonly CanvasPatch[]): { text: string; operation: CanvasOperation } {
+  const core = openCoreNow(before);
+  if (!core) throw new Error("il nucleo non è carico");
+  try {
+    const text = core.preview(patches);
+    return { text, operation: { kind: "canvas", patches, ...operationFromText(lineFeeds(before), lineFeeds(text)) } };
+  } finally {
+    core.close();
+  }
+}
 
 function canvasSource(): string {
   return JSON.stringify({
@@ -85,16 +108,16 @@ describe("CanvasEngine", () => {
     items[0]!.run!();
     expect(opened).toContainEqual({ path: "/allegati/foto.png" });
     (items[1]!.items as readonly SurfaceMenuItem[]).find((item) => item.id === "canvas.color.4")!.run!();
-    expect(parseCanvas(changes[changes.length - 1]!.text).nodes.find((node) => node.id === "f")!.color).toBe("4");
+    expect(readCanvas(changes[changes.length - 1]!.text).nodes.find((node) => node.id === "f")!.color).toBe("4");
 
     pointing.mockReturnValue(host.querySelector(".canvas-viewport"));
     const empty = engine.contextMenu({ x: 300, y: 300 })!;
     pointing.mockRestore();
     expect(empty.target.kind).toBe("empty");
     const add = (empty.context as readonly SurfaceMenuItem[]).find((item) => item.id === "canvas.add")!;
-    const before = parseCanvas(engine.getDoc()).nodes.length;
+    const before = readCanvas(engine.getDoc()).nodes.length;
     (add.items as readonly SurfaceMenuItem[]).find((item) => item.id === "canvas.add.text")!.run!();
-    expect(parseCanvas(engine.getDoc()).nodes.length).toBe(before + 1);
+    expect(readCanvas(engine.getDoc()).nodes.length).toBe(before + 1);
     engine.destroy();
   });
 
@@ -143,12 +166,12 @@ describe("CanvasEngine", () => {
     viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
     expect(changes.length).toBe(1);
     expect(applyOperation(canvasSource(), changes[0].operation)).toBe(engine.getDoc());
-    const doc = parseCanvas(engine.getDoc());
+    const doc = readCanvas(engine.getDoc());
     expect(doc.nodes[0].x).toBe(48);
     expect(engine.undo()).toBe(true);
-    expect(parseCanvas(engine.getDoc()).nodes[0].x).toBe(40);
+    expect(readCanvas(engine.getDoc()).nodes[0].x).toBe(40);
     expect(engine.redo()).toBe(true);
-    expect(parseCanvas(engine.getDoc()).nodes[0].x).toBe(48);
+    expect(readCanvas(engine.getDoc()).nodes[0].x).toBe(48);
     engine.destroy();
   });
 
@@ -193,7 +216,7 @@ describe("CanvasEngine", () => {
     });
     host.querySelector<HTMLButtonElement>(".canvas-file-link")!.click();
     expect(open).toHaveBeenCalledWith("/Notes/nota.md#Sezione", "Boards/board.canvas");
-    expect(parseCanvas(engine.getDoc()).nodes[0]).toMatchObject({
+    expect(readCanvas(engine.getDoc()).nodes[0]).toMatchObject({
       file: "Notes/nota.md", subpath: "#Sezione",
     });
     engine.destroy();
@@ -220,7 +243,7 @@ describe("CanvasEngine", () => {
       expect(changes).toHaveLength(0);
       vi.advanceTimersByTime(CARD_PAUSE_MS);
       expect(changes).toHaveLength(1);
-      expect(parseCanvas(engine.getDoc()).nodes[0].text).toBe(input.value);
+      expect(readCanvas(engine.getDoc()).nodes[0].text).toBe(input.value);
       expect(applyOperation(canvasSource(), changes[0].operation)).toBe(engine.getDoc());
       engine.setReadOnly(true);
       expect(host.querySelector(".canvas-text-editor")).toBeNull();
@@ -228,7 +251,7 @@ describe("CanvasEngine", () => {
       expect(engine.undo()).toBe(false);
       engine.setReadOnly(false);
       expect(engine.undo()).toBe(true);
-      expect(parseCanvas(engine.getDoc()).nodes[0].text).toBe("vedi [[Altra]] e #tag");
+      expect(readCanvas(engine.getDoc()).nodes[0].text).toBe("vedi [[Altra]] e #tag");
       engine.destroy();
     } finally {
       vi.useRealTimers();
@@ -240,11 +263,11 @@ describe("CanvasEngine", () => {
     withExtra.xRoot = { keep: true };
     (withExtra.nodes as Array<Record<string, unknown>>)[0].xVendor = 7;
     engine.setDoc(JSON.stringify(withExtra));
-    const doc = parseCanvas(engine.getDoc()) as unknown as Record<string, unknown>;
+    const doc = readCanvas(engine.getDoc()) as unknown as Record<string, unknown>;
     expect(doc.xRoot).toEqual({ keep: true });
     expect((doc.nodes as Array<Record<string, unknown>>)[0].xVendor).toBe(7);
     engine.syncDoc(engine.getDoc());
-    const again = parseCanvas(engine.getDoc()) as unknown as Record<string, unknown>;
+    const again = readCanvas(engine.getDoc()) as unknown as Record<string, unknown>;
     expect(again.xRoot).toEqual({ keep: true });
     engine.destroy();
   });
@@ -268,24 +291,22 @@ describe("CanvasEngine", () => {
     remote.nodes[0].x = 112;
     remote.xRoot = { keep: true };
     engine.syncDoc({ text: JSON.stringify(remote), operation: changes[0].operation });
-    expect(parseCanvas(engine.getDoc()).nodes[0].x).toBe(112);
+    expect(readCanvas(engine.getDoc()).nodes[0].x).toBe(112);
     expect(engine.undo()).toBe(false);
-    expect(parseCanvas(engine.getDoc()).xRoot).toEqual({ keep: true });
+    expect(readCanvas(engine.getDoc()).xRoot).toEqual({ keep: true });
     engine.destroy();
   });
 
   it("non applica patch Canvas disallineate a una sorgente remota valida", () => {
     const before = canvasSource();
     const { engine } = mounted(before);
-    const doc = parseCanvas(before);
-    const changed = commitCanvasPatches(doc, before, [
-      upsertNodePatch(doc, { ...doc.nodes[0], x: 48 })!,
-    ])!;
-    const unrelated = parseCanvas(before);
+    const doc = readCanvas(before);
+    const changed = commitOnCore(before, [upsertNodePatch(doc, { ...doc.nodes[0], x: 48 })!]);
+    const unrelated = readCanvas(before);
     const wrong = upsertNodePatch(unrelated, { ...unrelated.nodes[1], x: 408 })!;
     const wrongOperation: CanvasOperation = { ...changed.operation, patches: [wrong] };
-    engine.syncDoc({ text: changed.source, operation: wrongOperation });
-    expect(parseCanvas(engine.getDoc()).nodes.map((node) => node.x)).toEqual([48, 400, 40, 400]);
+    engine.syncDoc({ text: changed.text, operation: wrongOperation });
+    expect(readCanvas(engine.getDoc()).nodes.map((node) => node.x)).toEqual([48, 400, 40, 400]);
     engine.destroy();
   });
 
@@ -311,9 +332,9 @@ describe("CanvasEngine", () => {
     host.querySelector<HTMLButtonElement>('[data-canvas-action="left"]')!.click();
     expect(changes).toHaveLength(1);
     expect(changes[0].operation.patches.length).toBeGreaterThan(1);
-    expect(parseCanvas(engine.getDoc()).nodes.map((node) => node.x)).toEqual([40, 40, 40, 40]);
+    expect(readCanvas(engine.getDoc()).nodes.map((node) => node.x)).toEqual([40, 40, 40, 40]);
     expect(engine.undo()).toBe(true);
-    expect(parseCanvas(engine.getDoc()).nodes.map((node) => node.x)).toEqual([40, 400, 40, 400]);
+    expect(readCanvas(engine.getDoc()).nodes.map((node) => node.x)).toEqual([40, 400, 40, 400]);
     engine.destroy();
   });
 
@@ -372,10 +393,10 @@ describe("CanvasEngine", () => {
       key: "a", ctrlKey: true, bubbles: true,
     }));
     host.querySelector<HTMLButtonElement>('[data-canvas-action="distribute-x"]')!.click();
-    expect(parseCanvas(engine.getDoc()).nodes.map((node) => node.x)).toEqual([0, 200, 400]);
+    expect(readCanvas(engine.getDoc()).nodes.map((node) => node.x)).toEqual([0, 200, 400]);
     expect(changes[0].operation.patches).toHaveLength(1);
     expect(engine.undo()).toBe(true);
-    expect(parseCanvas(engine.getDoc()).nodes.map((node) => node.x)).toEqual([0, 80, 400]);
+    expect(readCanvas(engine.getDoc()).nodes.map((node) => node.x)).toEqual([0, 80, 400]);
     engine.destroy();
   });
 
@@ -386,17 +407,17 @@ describe("CanvasEngine", () => {
     const color = host.querySelector<HTMLSelectElement>('select[data-canvas-field="node-color"]')!;
     color.value = "2";
     color.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(parseCanvas(engine.getDoc()).nodes[0].color).toBe("2");
+    expect(readCanvas(engine.getDoc()).nodes[0].color).toBe("2");
     const custom = host.querySelector<HTMLSelectElement>('select[data-canvas-field="node-color"]')!;
     custom.value = "custom";
     custom.dispatchEvent(new Event("change", { bubbles: true }));
     const hex = host.querySelector<HTMLInputElement>('input[data-canvas-field="node-color-hex"]')!;
     hex.value = "#aabbcc";
     hex.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(parseCanvas(engine.getDoc()).nodes[0].color).toBe("#aabbcc");
+    expect(readCanvas(engine.getDoc()).nodes[0].color).toBe("#aabbcc");
     expect(changes).toHaveLength(2);
     expect(engine.undo()).toBe(true);
-    expect(parseCanvas(engine.getDoc()).nodes[0].color).toBe("2");
+    expect(readCanvas(engine.getDoc()).nodes[0].color).toBe("2");
     engine.destroy();
   });
 
@@ -416,13 +437,13 @@ describe("CanvasEngine", () => {
     );
     viewport.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 7, clientX: 26, clientY: 10 }));
     viewport.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 7, clientX: 26, clientY: 10 }));
-    const doc = parseCanvas(engine.getDoc());
+    const doc = readCanvas(engine.getDoc());
     expect(doc.nodes.map((node) => node.x)).toEqual([16, 56, 600]);
     expect(doc.vendor).toEqual({ preserve: true });
     expect(changes).toHaveLength(1);
     expect(changes[0].operation.patches).toHaveLength(2);
     expect(engine.undo()).toBe(true);
-    expect(parseCanvas(engine.getDoc()).nodes.map((node) => node.x)).toEqual([0, 40, 600]);
+    expect(readCanvas(engine.getDoc()).nodes.map((node) => node.x)).toEqual([0, 40, 600]);
     engine.destroy();
   });
 
@@ -439,12 +460,12 @@ describe("CanvasEngine", () => {
     } });
     host.querySelector(".canvas-viewport")!.dispatchEvent(clipboard);
     await vi.waitFor(() => expect(deposit).toHaveBeenCalledWith([file], "board.canvas"));
-    await vi.waitFor(() => expect(parseCanvas(engine.getDoc()).nodes.filter((node) => node.file === "attachments/photo.png")).toHaveLength(1));
+    await vi.waitFor(() => expect(readCanvas(engine.getDoc()).nodes.filter((node) => node.file === "attachments/photo.png")).toHaveLength(1));
     expect(host.querySelector(".canvas-media-placeholder")?.textContent).toContain("IMAGE");
     expect(host.querySelector("img,audio,video,iframe")).toBeNull();
     host.querySelector<HTMLButtonElement>(".canvas-convert-note")!.click();
     await vi.waitFor(() => expect(create).toHaveBeenCalledWith("vedi [[Altra]] e #tag"));
-    await vi.waitFor(() => expect(parseCanvas(engine.getDoc()).nodes[0]).toMatchObject({ type: "file", file: "Notes/new.md" }));
+    await vi.waitFor(() => expect(readCanvas(engine.getDoc()).nodes[0]).toMatchObject({ type: "file", file: "Notes/new.md" }));
     expect(changes[changes.length - 1]?.operation.patches[0]).toMatchObject({ kind: "upsert-node" });
     engine.destroy();
   });
@@ -460,7 +481,7 @@ describe("CanvasEngine", () => {
     });
     host.querySelector(".canvas-viewport")!.dispatchEvent(drop);
     await vi.waitFor(() => expect(resolvePaths).toHaveBeenCalledWith(drop.dataTransfer, "board.canvas"));
-    await vi.waitFor(() => expect(parseCanvas(engine.getDoc()).nodes
+    await vi.waitFor(() => expect(readCanvas(engine.getDoc()).nodes
       .filter((node) => node.file?.startsWith("Notes/")).map((node) => node.file)).toEqual(["Notes/one.md", "Notes/two.md"]));
     expect(deposit).not.toHaveBeenCalled();
     engine.destroy();
@@ -474,7 +495,7 @@ describe("CanvasEngine", () => {
     const answers: Array<string | null> = [null, "../fuori.md", "Cartella/scelta.pdf"];
     const pick = vi.fn(async () => answers.shift() ?? null);
     const { engine, host } = mounted(canvasSource(), { onPickFile: pick });
-    const files = () => parseCanvas(engine.getDoc()).nodes.filter((node) => node.type === "file").map((node) => node.file);
+    const files = () => readCanvas(engine.getDoc()).nodes.filter((node) => node.type === "file").map((node) => node.file);
     for (let attempt = 1; attempt <= 3; attempt++) {
       host.querySelector<HTMLButtonElement>('[data-canvas-action="add-file"]')!.click();
       await vi.waitFor(() => expect(pick).toHaveBeenCalledTimes(attempt));
@@ -500,8 +521,8 @@ describe("CanvasEngine", () => {
     release(["attachments/late.png"]);
     await Promise.resolve();
     await Promise.resolve();
-    expect(parseCanvas(engine.getDoc()).nodes).toHaveLength(4);
-    expect(parseCanvas(engine.getDoc()).nodes[0].text).toBe("Remote version");
+    expect(readCanvas(engine.getDoc()).nodes).toHaveLength(4);
+    expect(readCanvas(engine.getDoc()).nodes[0].text).toBe("Remote version");
     engine.destroy();
   });
 
@@ -536,13 +557,13 @@ describe("CanvasEngine", () => {
     const color = host.querySelector<HTMLSelectElement>('select[data-canvas-field="edge-color"]')!;
     color.value = "6";
     color.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(parseCanvas(engine.getDoc()).edges[0]).toMatchObject({
+    expect(readCanvas(engine.getDoc()).edges[0]).toMatchObject({
       label: "nuova relazione", toNode: "w", fromSide: "bottom", color: "6",
     });
     expect(changes).toHaveLength(4);
     expect(changes.every((change) => change.operation.patches[0].kind === "upsert-edge")).toBe(true);
     expect(engine.undo()).toBe(true);
-    expect(parseCanvas(engine.getDoc()).edges[0].color).toBeUndefined();
+    expect(readCanvas(engine.getDoc()).edges[0].color).toBeUndefined();
     engine.destroy();
   });
 
@@ -570,15 +591,15 @@ describe("CanvasEngine", () => {
     try {
       const sessions = new DocumentSessionCollection(api);
       await sessions.read("board.canvas");
-      const doc = parseCanvas(original);
+      const doc = readCanvas(original);
       const moved = upsertNodePatch(doc, { ...doc.nodes[0], x: 88 })!;
-      const committed = commitCanvasPatches(doc, original, [moved])!;
-      const edit = { text: committed.source, operation: committed.operation };
+      const committed = commitOnCore(original, [moved]);
+      const edit = { text: committed.text, operation: committed.operation };
       expect(sessions.acceptSurfaceChange("board.canvas", "canvas-a", edit)).toEqual({ kind: "accepted" });
       await sessions.flush("board.canvas");
-      expect(sessions.inspect("board.canvas")).toMatchObject({ text: committed.source, result: "conflitto", dirty: true });
+      expect(sessions.inspect("board.canvas")).toMatchObject({ text: committed.text, result: "conflitto", dirty: true });
       expect(sessions.acceptSurfaceChange("board.canvas", "canvas-b", edit)).toEqual({
-        kind: "realigned", text: committed.source,
+        kind: "realigned", text: committed.text,
       });
       expect((await sessions.resolveConflict("board.canvas", "theirs")).kind).toBe("discarded");
       expect(sessions.inspect("board.canvas")).toMatchObject({ text: original, dirty: false });
@@ -632,7 +653,7 @@ function press(input: HTMLElement, key: string, init: KeyboardEventInit = {}): K
 }
 
 function cardText(engine: CanvasEngine, id = "t"): string | undefined {
-  return parseCanvas(engine.getDoc()).nodes.find((node) => node.id === id)?.text;
+  return readCanvas(engine.getDoc()).nodes.find((node) => node.id === id)?.text;
 }
 
 describe("CanvasEngine: il testo di una scheda", () => {
@@ -724,7 +745,7 @@ describe("CanvasEngine: il testo di una scheda", () => {
     type(input, "Idee nuove");
     expect(press(input, "Enter").defaultPrevented).toBe(true);
     expect(changes).toHaveLength(1);
-    expect(parseCanvas(engine.getDoc()).nodes.find((node) => node.id === "g")?.label).toBe("Idee nuove");
+    expect(readCanvas(engine.getDoc()).nodes.find((node) => node.id === "g")?.label).toBe("Idee nuove");
     expect(host.querySelector(".canvas-field-editor")).toBeNull();
     input = openField(host, "t");
     type(input, "Uscendo");
@@ -756,9 +777,9 @@ describe("CanvasEngine: il testo di una scheda", () => {
     host.querySelector<HTMLButtonElement>('[data-canvas-action="add-text"]')!.click();
     expect(changes).toHaveLength(2);
     expect(cardText(engine)).toBe("Prima del gesto");
-    expect(parseCanvas(engine.getDoc()).nodes).toHaveLength(5);
+    expect(readCanvas(engine.getDoc()).nodes).toHaveLength(5);
     expect(engine.undo()).toBe(true);
-    expect(parseCanvas(engine.getDoc()).nodes).toHaveLength(4);
+    expect(readCanvas(engine.getDoc()).nodes).toHaveLength(4);
     expect(cardText(engine)).toBe("Prima del gesto");
     engine.destroy();
   });
@@ -770,7 +791,7 @@ describe("CanvasEngine: il testo di una scheda", () => {
     type(input, "Prima di chiudere");
     engine.destroy();
     expect(changes).toHaveLength(1);
-    expect(parseCanvas(changes[0].text).nodes[0].text).toBe("Prima di chiudere");
+    expect(readCanvas(changes[0].text).nodes[0].text).toBe("Prima di chiudere");
     vi.advanceTimersByTime(CARD_PAUSE_MS);
     expect(changes).toHaveLength(1);
   });
@@ -782,8 +803,8 @@ describe("CanvasEngine: il testo di una scheda", () => {
     type(input, "Nel primo");
     engine.setDoc(JSON.stringify({ nodes: [], edges: [] }));
     expect(changes).toHaveLength(1);
-    expect(parseCanvas(changes[0].text).nodes[0].text).toBe("Nel primo");
-    expect(parseCanvas(engine.getDoc()).nodes).toHaveLength(0);
+    expect(readCanvas(changes[0].text).nodes[0].text).toBe("Nel primo");
+    expect(readCanvas(engine.getDoc()).nodes).toHaveLength(0);
     expect(engine.undo()).toBe(false);
     engine.destroy();
   });
@@ -801,7 +822,7 @@ describe("CanvasEngine: il testo di una scheda", () => {
     expect(host.querySelector(".canvas-text-editor")).toBe(input);
     await Promise.resolve();
     expect(changes).toHaveLength(1);
-    const after = parseCanvas(engine.getDoc());
+    const after = readCanvas(engine.getDoc());
     expect(after.nodes[0]).toMatchObject({ x: 112, text: "Mentre scrivo" });
     expect(after.nodes[1].x).toBe(500);
     expect(applyOperation(JSON.stringify(remote), changes[0].operation)).toBe(engine.getDoc());
@@ -823,7 +844,7 @@ describe("CanvasEngine: il testo di una scheda", () => {
     input.dispatchEvent(new FocusEvent("blur"));
     expect(engine.undo()).toBe(true);
     expect(cardText(engine)).toBeUndefined();
-    expect(parseCanvas(engine.getDoc()).nodes).toHaveLength(3);
+    expect(readCanvas(engine.getDoc()).nodes).toHaveLength(3);
     engine.destroy();
   });
 
@@ -891,7 +912,7 @@ describe("CanvasEngine: il testo di una scheda", () => {
     b.engine.syncDoc({ text: a.changes[0].text, operation: a.changes[0].operation });
     await Promise.resolve();
     expect(b.changes).toHaveLength(1);
-    const both = parseCanvas(b.engine.getDoc());
+    const both = readCanvas(b.engine.getDoc());
     expect(both.nodes.find((node) => node.id === "t")?.text).toBe("Da A");
     expect(both.nodes.find((node) => node.id === "g")?.label).toBe("Da B");
     expect(b.host.querySelector(".canvas-field-editor")).toBe(inputB);
@@ -966,7 +987,7 @@ describe("CanvasEngine: il testo di una scheda", () => {
     expect(calls.length).toBe(before);
     const whole = engine.pendingText()!;
     expect(calls.slice(before)).toEqual(["preview"]);
-    expect(parseCanvas(whole).nodes.find((node) => node.id === "t")!.text).toBe("Ciao mondo");
+    expect(readCanvas(whole).nodes.find((node) => node.id === "t")!.text).toBe("Ciao mondo");
     // Il testo intero non tocca la lavagna.
     expect(cardText(engine)).toBe("vedi [[Altra]] e #tag");
     expect(changes).toHaveLength(0);

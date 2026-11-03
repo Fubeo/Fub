@@ -1,9 +1,12 @@
-// I vettori scritti a mano attraverso il `.wasm` vero: le toppe sul testo
+// I vettori scritti a mano attraverso il `.wasm` vero: la lettura
+// (`src/__fixtures__/canvas-read/`), le toppe sul testo
 // (`src/__fixtures__/canvas-patches/`) e le operazioni sul modello
 // (`src/__fixtures__/canvas-ops/`), le stesse cartelle che
-// `crates/fub-canvas-wasm/tests/` fa girare in nativo e `../vectors.test.ts`
-// contro il TypeScript. Gli stessi controlli: il testo di `preview`, il tratto
-// UTF-16 di `commit` applicato al testo di prima, l'annulla; per un rifiuto la
+// `crates/fub-canvas-core/tests/` e `crates/fub-canvas-wasm/tests/` fanno
+// girare in nativo. Il nucleo nativo e questa build a 32 bit sono le due copie
+// che i vettori tengono d'accordo. Gli stessi controlli: il modello di
+// `openCore` o la ragione del rifiuto; il testo di `preview`, il tratto UTF-16
+// di `commit` applicato al testo di prima, l'annulla; per un rifiuto la
 // ragione, e la lavagna che non cambia.
 //
 // I file si leggono grezzi (`?raw`): l'import JSON di Vite farebbe di una
@@ -12,8 +15,15 @@ import { describe, expect, it } from "vitest";
 import type { CanvasPatch } from "../operation";
 import { CanvasCoreError, openCore, type CanvasCore, type CanvasIntentOp, type CanvasSourceEdit } from "./core";
 
+const MIN_READ_VECTORS = 60;
 const MIN_PATCH_VECTORS = 30;
 const MIN_OP_VECTORS = 20;
+
+const readFiles = import.meta.glob("../../../__fixtures__/canvas-read/*", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
 
 const patchFiles = import.meta.glob("../../../__fixtures__/canvas-patches/*", {
   query: "?raw",
@@ -26,6 +36,19 @@ const opFiles = import.meta.glob("../../../__fixtures__/canvas-ops/*", {
   import: "default",
   eager: true,
 }) as Record<string, string>;
+
+interface ReadVector {
+  readonly name: string;
+  readonly description: string;
+  readonly source: string;
+  readonly expect: {
+    readonly outcome: "opened" | "rejected";
+    readonly nodes?: readonly unknown[];
+    readonly edges?: readonly unknown[];
+    readonly extra?: Readonly<Record<string, unknown>>;
+    readonly reason?: string;
+  };
+}
 
 interface PatchVector {
   readonly name: string;
@@ -85,6 +108,26 @@ function failure(work: () => unknown): CanvasCoreError | null {
 
 function show(value: unknown): string {
   return JSON.stringify(value);
+}
+
+/** Fa girare un vettore della lettura: il modello che `openCore` dà, o la ragione del rifiuto. */
+async function runRead(vector: ReadVector): Promise<string | null> {
+  let core: CanvasCore;
+  try {
+    core = await openCore(vector.source);
+  } catch (error) {
+    if (!(error instanceof CanvasCoreError)) return `errore inatteso: ${String(error)}`;
+    if (vector.expect.outcome !== "rejected") return `non si apre: ${error.code} ${error.message}`;
+    return error.code === vector.expect.reason ? null : `ragione ${error.code}, attesa ${String(vector.expect.reason)}`;
+  }
+  try {
+    if (vector.expect.outcome !== "opened") return vector.expect.outcome === "rejected" ? "si apre" : `esito ${String(vector.expect.outcome)} sconosciuto`;
+    const model = core.model();
+    const expected = { ...vector.expect.extra, nodes: vector.expect.nodes, edges: vector.expect.edges };
+    return show(normalize(model)) === show(normalize(expected)) ? null : `modello\n  dato:   ${show(model)}\n  atteso: ${show(expected)}`;
+  } finally {
+    core.close();
+  }
 }
 
 /** Fa girare un vettore delle toppe: una stringa dice dove il `.wasm` non dà ciò che il vettore si aspetta. */
@@ -187,6 +230,12 @@ function normalize(value: unknown): unknown {
 
 describe("i vettori attraverso il .wasm", () => {
   it("le cartelle tengono i vettori", () => {
+    const reads = read<ReadVector>(readFiles);
+    expect(reads.length).toBeGreaterThanOrEqual(MIN_READ_VECTORS);
+    reads.forEach(([file, vector], index) => {
+      expect(file).toBe(`${String(index + 1).padStart(2, "0")}-${vector.name}.json`);
+      expect(vector.description, file).toBeTruthy();
+    });
     const patches = read<PatchVector>(patchFiles);
     expect(patches.length).toBeGreaterThanOrEqual(MIN_PATCH_VECTORS);
     patches.forEach(([file, vector], index) => {
@@ -196,6 +245,15 @@ describe("i vettori attraverso il .wasm", () => {
     const ops = read<OpVector>(opFiles);
     expect(ops.length).toBeGreaterThanOrEqual(MIN_OP_VECTORS);
     for (const [file, vector] of ops) expect(vector.about, file).toBeTruthy();
+  });
+
+  it("ogni vettore della lettura dà il modello o la ragione attesi", async () => {
+    const failures: string[] = [];
+    for (const [file, vector] of read<ReadVector>(readFiles)) {
+      const error = await runRead(vector);
+      if (error !== null) failures.push(`${file}: ${error}`);
+    }
+    expect(failures.join("\n")).toBe("");
   });
 
   it("ogni vettore delle toppe dà il testo, il tratto e la ragione attesi", async () => {
@@ -223,6 +281,15 @@ describe("i vettori attraverso il .wasm", () => {
 
   it("un vettore cambiato di un byte fallisce", async () => {
     let mutated = 0;
+    for (const [file, vector] of read<ReadVector>(readFiles)) {
+      // Un valore di una scheda cambiato, una scheda in più, o la ragione cambiata.
+      const [first, ...rest] = (vector.expect.nodes ?? []) as Record<string, unknown>[];
+      const expect_ = vector.expect.outcome === "rejected"
+        ? { ...vector.expect, reason: `${String(vector.expect.reason)}x` }
+        : { ...vector.expect, nodes: first ? [{ ...first, x: Number(first.x) + 1 }, ...rest] : [{ id: "x" }] };
+      expect(await runRead({ ...vector, expect: expect_ }), file).not.toBeNull();
+      mutated++;
+    }
     for (const [file, vector] of read<PatchVector>(patchFiles)) {
       for (const key of ["text", "undo", "reason"] as const) {
         const original = vector.expect[key];
@@ -238,6 +305,6 @@ describe("i vettori attraverso il .wasm", () => {
       expect(await runOps(changed), `${file}: created`).not.toBeNull();
       mutated++;
     }
-    expect(mutated).toBeGreaterThanOrEqual(MIN_PATCH_VECTORS);
+    expect(mutated).toBeGreaterThanOrEqual(MIN_READ_VECTORS + MIN_PATCH_VECTORS);
   });
 });

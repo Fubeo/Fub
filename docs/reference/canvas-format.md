@@ -69,11 +69,10 @@ una decisione: si scrive qui e poi nel test.
 ## Lettura
 
 `parse` rifiuta un sorgente oltre `MAX_SOURCE_BYTES`, salta un BOM iniziale
-senza toglierlo dal file e passa il modello a `Canvas::validate`. Rust e
-TypeScript (`parseCanvas` in `apps/client/src/editors/canvas/model.ts`)
-leggono con le stesse regole, così aprono e rifiutano gli stessi file; ogni
-regola ha i suoi casi in `crates/fub-canvas-core/tests/read_rules.rs`. Nel
-dubbio si apre e si conserva.
+senza toglierlo dal file e passa il modello a `Canvas::validate`. La tela
+legge con lo stesso codice, compilato in WebAssembly (vedi «Parità»); ogni
+regola ha i suoi casi in `crates/fub-canvas-core/tests/read_rules.rs` e nei
+vettori della lettura. Nel dubbio si apre e si conserva.
 
 - **R1 · Vuoto.** Un BOM facoltativo, poi solo spazi JSON (spazio, `\t`,
   `\n`, `\r`): una lavagna vuota (`read::is_blank`). `"\u{feff}"` da solo è
@@ -113,9 +112,7 @@ Il sorgente si ritocca, non si riscrive: `source::patch_source(sorgente,
 prima, dopo)` cambia solo i valori e gli oggetti che passano dal modello di
 prima a quello di dopo, e il resto del file resta byte per byte (spazi, a
 capo, ordine delle chiavi, campi sconosciuti, il modo in cui è scritto un
-numero). È il porto di `patchCanvasSource`
-(`apps/client/src/editors/canvas/source-edit.ts`); i casi sono in
-`crates/fub-canvas-core/tests/source_edit.rs`.
+numero). I casi sono in `crates/fub-canvas-core/tests/source_edit.rs`.
 
 - **Lo scanner** legge il sorgente una volta, in byte UTF-8: conta come
   spazio solo lo spazio JSON, lascia un BOM iniziale fuori dalla radice e
@@ -160,15 +157,31 @@ e non diventa un valore JSON.
 
 ## Parità
 
-Il commit di Rust e quello di TypeScript (`commitCanvasPatches` in
-`apps/client/src/editors/canvas/operation.ts`) scrivono gli stessi byte e
-rifiutano con le stesse ragioni. Lo fissano i **vettori delle toppe** in
-`apps/client/src/__fixtures__/canvas-patches/`, che leggono tutti e due:
-`crates/fub-canvas-core/tests/patch_vectors.rs` contro `Core::commit` e
-`apps/client/src/editors/canvas/vectors.test.ts` contro
-`commitCanvasPatches`.
+Le regole di lettura e scrittura sono scritte una volta, in
+`crates/fub-canvas-core`, e girano in due build: quella nativa e quella a 32
+bit in WebAssembly (`crates/fub-canvas-wasm`) che la tela usa. La seconda ha
+un `usize` a 32 bit e un altro allocatore, quindi una divergenza resta
+possibile; la cercano tre prove che leggono le stesse fixture da tutti e due
+i lati:
 
-Un vettore è un file `NN-nome.json`: `name` (il nome del file senza numero),
+- i **vettori della lettura** in `apps/client/src/__fixtures__/canvas-read/`:
+  `crates/fub-canvas-core/tests/read_vectors.rs` contro `Core::open` e
+  `apps/client/src/editors/canvas/wasm/vectors.test.ts` contro `openCore`;
+- i **vettori delle toppe** in `apps/client/src/__fixtures__/canvas-patches/`:
+  `crates/fub-canvas-core/tests/patch_vectors.rs` contro `Core::commit` e lo
+  stesso `wasm/vectors.test.ts` contro `commit` e `preview` del `.wasm`;
+- lo **specchio a caso** `canvas-mirror.json`, che
+  `crates/fub-canvas-core/tests/ts_mirror.rs` genera dal nucleo nativo e
+  `apps/client/src/editors/canvas/wasm/mirror.test.ts` rifà sul `.wasm`.
+
+Un vettore della lettura è un file `NN-nome.json`: `name`, `description`,
+`source` (il testo grezzo) ed `expect`, che è
+`{"outcome": "opened", "nodes": …, "edges": …, "extra": …}` (le schede, gli
+archi e, se ci sono, i campi sconosciuti della radice, confrontati senza
+badare all'ordine delle chiavi) oppure `{"outcome": "rejected", "reason": …}`
+con `limit` per un limite di dimensione e `source` per ogni altro rifiuto.
+
+Un vettore delle toppe è un file `NN-nome.json`: `name` (il nome del file senza numero),
 `description`, `before` (il testo grezzo di prima), `patches` (le toppe come
 le scrive il TypeScript) ed `expect`:
 
@@ -179,12 +192,14 @@ le scrive il TypeScript) ed `expect`:
   toppa non torna con il modello), `invalid` (la lavagna di dopo non è
   valida), `rejected` (il sorgente non si ritocca, per esempio una chiave
   doppia) e `unstable` (il testo scritto non si rilegge come la lavagna di
-  dopo). `CommitError::reason` in Rust e `canvasCommitOutcome` in TypeScript
-  danno la stessa parola.
+  dopo). `CommitError::reason` dà la parola, e il `.wasm` la mette nel
+  `code` dell'errore.
 
 Per aggiungerne uno si prende il numero dopo l'ultimo e si scrive l'atteso a
-mano, byte per byte: non si copia l'uscita di uno dei due lati. I due test
-falliscono con meno di 30 vettori, con un file che non si legge, con un
-numero che salta e con un atteso cambiato di un byte. Una lista vuota di
-toppe resta fuori: Rust la accetta come commit che non cambia nulla,
-`commitCanvasPatches` dà `null`.
+mano, byte per byte: non si copia l'uscita di una delle due build. I test
+falliscono con meno vettori del minimo (60 della lettura, 30 delle toppe),
+con un file che non si legge, con un numero che salta e con un atteso
+cambiato di un byte, in tutte e due le cartelle. Una lista vuota di toppe
+resta fuori dai vettori: `Core::commit` la accetta e non cambia nulla,
+tranne su un sorgente vuoto, dove scrive la lavagna vuota per intero; la tela
+non la manda mai.

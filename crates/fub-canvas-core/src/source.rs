@@ -1,8 +1,8 @@
 //! Il sorgente di una `.canvas` si ritocca, non si riscrive: si cambiano solo
 //! i valori e gli oggetti toccati, il resto del file resta byte per byte.
 //!
-//! È il porto di `patchCanvasSource` e `canvasNodeAt`
-//! (`apps/client/src/editors/canvas/source-edit.ts`). Le regole di scrittura
+//! È l'unica copia di queste regole: la tela la usa compilata in WebAssembly
+//! (`crates/fub-canvas-wasm`). Le regole di scrittura
 //! (R6, R7, R10) sono in `docs/reference/canvas-format.md` § «Scrittura».
 //!
 //! - **Lo scanner** legge il sorgente una volta e ne tiene gli intervalli in
@@ -460,7 +460,7 @@ impl<'a> Scanner<'a> {
 
 // --- Il ritocco -----------------------------------------------------------
 //
-// L'algoritmo è uno, quello di `patchCanvasSource`, su due rappresentazioni:
+// L'algoritmo è uno, su due rappresentazioni:
 // i valori JSON per i campi sconosciuti, e i tipi del modello per la radice,
 // le schede e gli archi. Così una scheda uguale prima e dopo si confronta
 // come struct, senza diventare un valore JSON: su una lavagna grande con una

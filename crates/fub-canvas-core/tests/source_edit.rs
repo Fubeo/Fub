@@ -1,6 +1,5 @@
-//! Il ritocco del sorgente (`source::patch_source`, `source::node_at`): i casi
-//! di `apps/client/src/editors/canvas/source-edit.test.ts` e
-//! `line-endings.test.ts`, più i casi limite del task T5 del piano N3. I testi
+//! Il ritocco del sorgente (`source::patch_source`, `source::node_at`): lo
+//! scanner, i terminatori di riga e il BOM, più i casi limite. I testi
 //! attesi sono scritti a mano; per ognuno il testo di dopo, riletto con
 //! `parse`, dà il modello di dopo (`patched`).
 
@@ -47,7 +46,7 @@ fn text_node(id: &str, x: i64, y: i64, width: i64, height: i64, text: &str) -> C
     )
 }
 
-// --- source-edit.test.ts ---------------------------------------------------
+// --- Lo scanner e le schede -----------------------------------------------
 
 #[test]
 fn node_at_finds_the_card_whose_source_object_holds_the_offset() {
@@ -199,7 +198,7 @@ fn the_null_of_a_known_field_goes_when_its_card_is_rewritten_and_stays_elsewhere
     check(&source, |c| c.nodes[0].x = 5, &expected);
 }
 
-// --- line-endings.test.ts --------------------------------------------------
+// --- Terminatori di riga e BOM --------------------------------------------
 
 const LF: &str = "{\n  \"nodes\": [\n    {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":100,\"text\":\"uno\"},\n    {\"id\":\"b\",\"type\":\"text\",\"x\":300,\"y\":0,\"width\":200,\"height\":100,\"text\":\"due\"}\n  ],\n  \"edges\": [\n    {\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"b\"}\n  ]\n}\n";
 
@@ -303,7 +302,7 @@ fn crlf_and_bom_boards_keep_endings_and_bom_and_undo_returns_to_the_model_before
     }
 }
 
-// --- I casi limite di T5 ---------------------------------------------------
+// --- I casi limite ---------------------------------------------------------
 
 #[test]
 fn a_one_line_file_keeps_its_comma_separator() {

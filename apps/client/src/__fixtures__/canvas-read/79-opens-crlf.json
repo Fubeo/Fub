@@ -1,0 +1,35 @@
+{
+  "name": "opens-crlf",
+  "description": "La lavagna di due schede e un arco, scritta su più righe (crlf), si apre",
+  "source": "{\r\n  \"nodes\": [\r\n    {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":100,\"text\":\"uno\"},\r\n    {\"id\":\"b\",\"type\":\"text\",\"x\":300,\"y\":0,\"width\":200,\"height\":100,\"text\":\"due\"}\r\n  ],\r\n  \"edges\": [\r\n    {\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"b\"}\r\n  ]\r\n}\r\n",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 200,
+        "height": 100,
+        "text": "uno"
+      },
+      {
+        "id": "b",
+        "type": "text",
+        "x": 300,
+        "y": 0,
+        "width": 200,
+        "height": 100,
+        "text": "due"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e",
+        "fromNode": "a",
+        "toNode": "b"
+      }
+    ]
+  }
+}

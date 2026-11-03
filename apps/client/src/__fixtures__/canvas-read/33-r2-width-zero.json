@@ -1,0 +1,9 @@
+{
+  "name": "r2-width-zero",
+  "description": "R2: width e height restano almeno 1",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":0,\"height\":10,\"text\":\"t\"}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

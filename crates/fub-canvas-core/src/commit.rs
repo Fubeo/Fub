@@ -2,9 +2,9 @@
 //! al sorgente nuovo, riletto e verificato, con l'inversa per l'annulla; tutte
 //! le toppe o nessuna.
 //!
-//! È il porto di `commitCanvasPatches`
-//! (`apps/client/src/editors/canvas/operation.ts`). [`Core`] tiene il
-//! sorgente e il modello che ne viene; [`Core::commit`] fa, in quest'ordine:
+//! La tela lo usa compilato in WebAssembly (`crates/fub-canvas-wasm`).
+//! [`Core`] tiene il sorgente e il modello che ne viene; [`Core::commit`] fa,
+//! in quest'ordine:
 //!
 //! 1. la bozza delle toppe su una copia del modello ([`patch::draft`]): una
 //!    toppa che non torna è [`CommitError::Stale`];

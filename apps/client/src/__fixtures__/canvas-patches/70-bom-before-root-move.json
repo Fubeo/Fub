@@ -1,0 +1,10 @@
+{
+  "name": "bom-before-root-move",
+  "description": "Il BOM resta fuori dalla radice quando una scheda si sposta",
+  "before": "\ufeff{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\"}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"a","type":"text","x":0,"y":0,"width":10,"height":10,"text":"t"},"after":{"id":"a","type":"text","x":5,"y":0,"width":10,"height":10,"text":"t"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "\ufeff{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":5,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\"}],\"edges\":[]}"
+  }
+}

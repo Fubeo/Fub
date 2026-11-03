@@ -10,8 +10,7 @@ import type { DocumentSource, DraftInfo } from "../host/contract";
 import type { EditorSurface } from "../editors/core/registry";
 import { CARD_PAUSE_MS } from "../editors/canvas/engine";
 import { mountCanvasSurface } from "../editors/canvas/surface";
-import { parseCanvas } from "../editors/canvas/model";
-import { canvasCoreReady } from "../editors/canvas/wasm/core";
+import { canvasCoreReady, openCoreNow } from "../editors/canvas/wasm/core";
 
 const BOARD = "board.canvas";
 
@@ -123,7 +122,13 @@ function type(input: HTMLTextAreaElement, value: string): void {
 }
 
 function cardOf(text: string, id = "t"): string | undefined {
-  return parseCanvas(text).nodes.find((node) => node.id === id)?.text;
+  const core = openCoreNow(text);
+  if (!core) throw new Error("il nucleo non è carico");
+  try {
+    return core.model().nodes.find((node) => node.id === id)?.text;
+  } finally {
+    core.close();
+  }
 }
 
 beforeAll(async () => {

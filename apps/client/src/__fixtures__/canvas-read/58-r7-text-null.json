@@ -1,0 +1,9 @@
+{
+  "name": "r7-text-null",
+  "description": "R7: text a null su una scheda di testo è come mancante",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":null}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}
