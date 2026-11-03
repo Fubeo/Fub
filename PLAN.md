@@ -246,6 +246,14 @@ differenza è scritta qui.
   note; la barra ritirata, con il filetto sotto la fila delle schede
   (consiglio: con, perché separa la fila dalla griglia quando il vassoio non
   c'è) o senza.
+  Risposta (2026-11-03): (b), la variante B con i nomi dei gruppi, ma più
+  discreti: in grigio, messi in modo meno evidente, eleganti. Il prototipo
+  non è ancora approvato: «la direzione» piace, «il riquadro» e
+  l'impostazione anche, ma è «la stessa grafica di prima, stondata un
+  pochino», con «troppo spazio bianco sotto», senza «un reale miglioramento
+  identitario», e l'organizzazione della barra è «una copia rispetto a
+  Excel». L'utente vuole «qualcosa di nuovo, qualcosa di più bello», con le
+  animazioni predisposte. Il prototipo si rifà una terza volta.
 
 ## Cancello di K3
 

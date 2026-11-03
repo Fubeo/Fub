@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · K3 · D-5 (b): i nomi dei gruppi sulla barra dei fogli
+  restano, ma discreti (grigi, poco evidenti, eleganti); il prototipo
+  rifatto non è approvato e si rifà una terza volta, con un'organizzazione
+  della barra nuova invece di quella di Excel, più identità di Fub, meno
+  spazio vuoto sotto e le animazioni predisposte · parole dell'utente («mi
+  piace la variante B con i nomi … un po' più discreti … in un grigio»,
+  «l'organizzazione della barra mi sembra proprio una copia rispetto a
+  Excel. vorrei qualcosa di nuovo, qualcosa di più bello … predisposte anche
+  le animazioni»).
 - 2026-11-03 · K3 · T10: l'utente dà l'OK al cambio dell'IPC (read_document
   e write_document con open?, document_closed con {open}, al più 1024 chiavi
   per vault) · parole dell'utente («ok»): le letture semplici non tengono
