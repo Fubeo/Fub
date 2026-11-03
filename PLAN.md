@@ -1403,7 +1403,7 @@ i casi qui sopra, e il test del sonno finisce in meno di 25 s con il tempo e
 in meno di un secondo con l'annullamento.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --lib
 craft::launch
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base bcfdb225
 
 ## T9 · Il canale di controllo
 
