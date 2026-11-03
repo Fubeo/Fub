@@ -2,7 +2,7 @@
 //! eseguibili da chi implementa il contratto.
 //!
 //! È la differenza fra «il contratto è documentato» e «il contratto è
-//! verificabile da chi lo implementa». Sono ventotto funzioni [conta: conformance-functions],
+//! verificabile da chi lo implementa». Sono trentacinque funzioni [conta: conformance-functions],
 //! ed è quel numero che [decisione 0054] una volta scrisse come «otto» quando
 //! erano già quattordici: d'ora in poi conta la guardia del §16.8, non chi
 //! scrive la frase.
@@ -37,8 +37,9 @@
 //! perde»: è un indice che **mente**, ed è una condizione che si può
 //! nominare.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
+use fub_abi::command::{CommandSpec, InvokeMode, ParamKind};
 use fub_abi::edit::Revision;
 use fub_abi::error::FormatError;
 use fub_abi::event::{Event, Notice};
@@ -50,7 +51,12 @@ use fub_abi::model::{
     canonical_anchor, heading_slugs, Block, DocId, DocumentModel, Heading, Inline, Link,
     LinkTarget, Span, Tag,
 };
-use fub_abi::traits::{EventHandler, IndexProvider, IndexQuery, ReadApi, ViewProvider};
+use fub_abi::rules::ids::{self, Owner};
+use fub_abi::rules::keys;
+use fub_abi::settings::SettingValue;
+use fub_abi::traits::{
+    CommandProvider, EventHandler, IndexProvider, IndexQuery, ReadApi, TrashEntry, ViewProvider,
+};
 use fub_abi::{
     grid_bytes_revision, FormatProvider, GridBytesProvider, GridJournal, PluginError,
     GRID_BYTES_PROTOCOL_VERSION,
@@ -441,6 +447,375 @@ pub fn handle_vault_closed_is_graceful<H: EventHandler + ?Sized>(handler: &mut H
              È l'ultimo giro sincrono in cui il vault è ancora quello di prima:\n\
              chi lo rifiuta perde ciò che non aveva reso durevole, e la chiusura\n\
              non si annulla."
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CommandProvider
+// ---------------------------------------------------------------------------
+
+/// Tutte le proprietà di un [`CommandProvider`] verificabili senza sapere che
+/// cosa i suoi comandi fanno. Va in panico con un messaggio che nomina la
+/// proprietà violata e il comando che la viola.
+///
+/// `owner` è chi registrerà il provider, cioè la domanda che il registro fa a
+/// ogni id: [`Owner::Core`] per una feature ufficiale, `Owner::Plugin(id)` per
+/// un componente o una ricetta (`Owner::Plugin("recipe.archivia")`).
+///
+/// `host` è il banco su cui i comandi girano: chi chiama lo semina come serve
+/// ai suoi comandi (un documento attivo, una selezione), perché un comando che
+/// trova il banco vuoto si ferma prima di arrivare dove scriverebbe. La suite
+/// non lo cambia, e alla fine è com'era.
+///
+/// Chiama in ordine:
+/// [`command_ids_are_distinct_and_namespaced`],
+/// [`params_are_unique_and_choices_have_options`], [`keybindings_parse`],
+/// [`an_unknown_command_is_unknown`], [`a_dry_run_does_not_write`] e
+/// [`a_read_only_command_does_not_write`].
+///
+/// Rende i comandi che non ha potuto provare fino in fondo, perché chiedono
+/// qualcosa che [`MemoryHost`] non ha (un servizio di un altro bundle, un
+/// comando altrui da comporre), e li scrive anche sullo standard error: un
+/// comando saltato non è un comando provato, e chi legge l'esito deve poterlo
+/// sapere senza indovinarlo dal verde.
+pub fn a_command_provider_respects_the_contract<C: CommandProvider + ?Sized>(
+    provider: &mut C,
+    host: &mut MemoryHost,
+    owner: Owner<'_>,
+) -> Vec<SkippedCommand> {
+    command_ids_are_distinct_and_namespaced(provider, owner);
+    params_are_unique_and_choices_have_options(provider);
+    keybindings_parse(provider);
+    an_unknown_command_is_unknown(provider, host);
+    let mut skipped = a_dry_run_does_not_write(provider, host);
+    skipped.extend(a_read_only_command_does_not_write(provider, host));
+    for s in &skipped {
+        eprintln!("conformità dei comandi: {s}");
+    }
+    skipped
+}
+
+/// Un comando che la suite non ha potuto provare fino in fondo, e perché.
+///
+/// Il comando ha girato e non ha scritto niente (quello resta asserito), ma si
+/// è fermato su una porta che [`MemoryHost`] non serve: ciò che avrebbe fatto
+/// dopo si prova col kernel vero.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SkippedCommand {
+    /// L'id del comando.
+    pub command: String,
+    /// In quale modo girava e su che cosa si è fermato, in prosa.
+    pub why: String,
+}
+
+impl std::fmt::Display for SkippedCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "`{}` saltato: {}", self.command, self.why)
+    }
+}
+
+/// *«Identità stabile, con cui si invoca.»* E di chi la registra.
+///
+/// Due comandi con lo stesso id non sono due comandi: il registro ne tiene uno
+/// e l'altro sparisce, con la sua scorciatoia e le macro che lo nominano. E un
+/// id fuori dal proprio namespace non si registra affatto
+/// ([`fub_abi::rules::ids::check`]), che vuol dire un provider intero che non
+/// monta: meglio saperlo qui che dall'utente.
+pub fn command_ids_are_distinct_and_namespaced<C: CommandProvider + ?Sized>(
+    provider: &C,
+    owner: Owner<'_>,
+) {
+    let mut seen = BTreeSet::new();
+    for spec in provider.commands() {
+        assert!(
+            seen.insert(spec.id.clone()),
+            "il comando `{}` è dichiarato due volte.\n\
+             L'id è ciò con cui si invoca: il registro ne terrebbe uno solo, e\n\
+             l'altro sparirebbe con la sua scorciatoia e le macro che lo nominano.",
+            spec.id
+        );
+        if let Err(fault) = ids::check(&spec.id, owner) {
+            panic!(
+                "il comando `{}` non si può registrare: {fault}.\n\
+                 Il registro chiede la stessa cosa per ogni id, e un provider con un\n\
+                 id sbagliato non monta affatto.",
+                spec.id
+            );
+        }
+    }
+}
+
+/// *«Gli argomenti, nell'ordine in cui ha senso chiederli.»* Ognuno una volta,
+/// e una scelta con qualcosa da scegliere.
+///
+/// Gli argomenti arrivano come un oggetto JSON, quindi due parametri con lo
+/// stesso nome sono una chiave sola: chi chiede il secondo sovrascrive il
+/// primo. Una scelta senza opzioni non accetta nessun valore, e un parametro
+/// obbligatorio così rende il comando impossibile da invocare; due opzioni con
+/// lo stesso valore sono due righe che il comando non sa distinguere.
+pub fn params_are_unique_and_choices_have_options<C: CommandProvider + ?Sized>(provider: &C) {
+    for spec in provider.commands() {
+        let mut names = BTreeSet::new();
+        for param in &spec.params {
+            assert!(
+                !param.name.trim().is_empty(),
+                "il comando `{}` ha un parametro senza nome: negli argomenti non\n\
+                 avrebbe una chiave con cui arrivare.",
+                spec.id
+            );
+            assert!(
+                names.insert(param.name.as_str()),
+                "il comando `{}` dichiara due volte il parametro `{}`.\n\
+                 Gli argomenti sono un oggetto JSON: il secondo sovrascriverebbe il\n\
+                 primo.",
+                spec.id,
+                param.name
+            );
+            if let ParamKind::Choice(choices) = &param.kind {
+                assert!(
+                    !choices.is_empty(),
+                    "il parametro `{}` del comando `{}` è una scelta senza opzioni:\n\
+                     non accetta nessun valore.",
+                    param.name,
+                    spec.id
+                );
+                let mut values = BTreeSet::new();
+                for choice in choices {
+                    assert!(
+                        values.insert(choice.value.as_str()),
+                        "il parametro `{}` del comando `{}` offre due volte il valore\n\
+                         `{}`: sono due righe che il comando non sa distinguere.",
+                        param.name,
+                        spec.id,
+                        choice.value
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// *«La forma è una regola dichiarata e non un esempio da imitare.»*
+///
+/// Chi scrive una scorciatoia che [`fub_abi::rules::keys`] non legge non riceve
+/// un tasto diverso: non ne riceve nessuno, e non lo sa. È lo stesso lettore
+/// che usano il registro dei tasti e la copia della shell.
+pub fn keybindings_parse<C: CommandProvider + ?Sized>(provider: &C) {
+    for spec in provider.commands() {
+        if let Some(binding) = &spec.keybinding {
+            assert!(
+                keys::chords(binding).is_some(),
+                "la scorciatoia `{binding}` del comando `{}` non è una scorciatoia\n\
+                 che Fub sa premere (vedi `fub_abi::rules::keys`): il comando non\n\
+                 riceverebbe nessun tasto. Nessuna scorciatoia si dice con `None`.",
+                spec.id
+            );
+        }
+    }
+}
+
+/// *«Un id ignoto è [`PluginError::UnknownCommand`].»*
+///
+/// È la risposta da cui il kernel distingue «non è mio» da «è mio e non è
+/// andato»: un provider che a un id che non ha dichiarato risponde altro, o
+/// peggio esegue qualcosa, fa dire all'utente una ragione falsa. In tutti e
+/// due i modi, e senza scrivere niente.
+pub fn an_unknown_command_is_unknown<C: CommandProvider + ?Sized>(
+    provider: &C,
+    host: &mut MemoryHost,
+) {
+    let declared: BTreeSet<String> = provider.commands().into_iter().map(|s| s.id).collect();
+    let mut unknown = String::from("conformita.nessuno-mi-ha-dichiarato");
+    while declared.contains(&unknown) {
+        unknown.push('-');
+    }
+    for mode in [InvokeMode::DryRun, InvokeMode::Apply] {
+        let before = Footprint::of(host);
+        let answer = provider.invoke(&unknown, serde_json::json!({}), mode, host);
+        assert!(
+            matches!(answer, Err(PluginError::UnknownCommand(_))),
+            "`invoke(\"{unknown}\")` in {mode:?}, un id che il provider non\n\
+             dichiara, ha risposto {answer:?} invece di `UnknownCommand`.\n\
+             È da quella risposta che il kernel distingue «non è mio» da «è mio\n\
+             e non è andato»."
+        );
+        before.unchanged(&Footprint::of(host), &unknown, mode, &answer);
+    }
+}
+
+/// *«L'host presta un `HostApi` in sola lettura: non è una richiesta di buona
+/// condotta, è una garanzia.»* Qui è la prova che il comando non ci conta.
+///
+/// Ogni comando che si può invocare senza argomenti (nessun parametro
+/// obbligatorio) gira in `DryRun` e lascia il banco uguale. Un errore va bene
+/// (un documento che non c'è, un contesto vuoto): una simulazione che si ferma
+/// non ha scritto niente, e solo questo si guarda. Nell'app il kernel
+/// rifiuterebbe la scrittura; qui [`MemoryHost`] la lascia passare, perché è
+/// così che si vede chi l'ha tentata.
+///
+/// Rende i comandi che si sono fermati su una porta che il banco non ha.
+pub fn a_dry_run_does_not_write<C: CommandProvider + ?Sized>(
+    provider: &C,
+    host: &mut MemoryHost,
+) -> Vec<SkippedCommand> {
+    provider
+        .commands()
+        .iter()
+        .filter(|spec| invocable_without_args(spec))
+        .filter_map(|spec| runs_without_writing(provider, host, spec, InvokeMode::DryRun))
+        .collect()
+}
+
+/// *«[`writes`](fub_abi::command::CommandScope::writes) è l'unico campo che
+/// l'host fa rispettare.»* E il comando che si dichiara di sola lettura non
+/// deve accorgersene.
+///
+/// Ogni comando con `writes == false` e senza parametri obbligatori gira in
+/// `Apply` e lascia il banco uguale. Dichiarare `writes: false` decide che
+/// cosa la shell chiede prima di invocarlo (niente conferma, niente voce nella
+/// pila dell'annulla): un comando che poi scrive lo fa alle spalle di chi lo
+/// ha lanciato, e nell'app riceve un rifiuto che non si aspettava.
+///
+/// Rende i comandi che si sono fermati su una porta che il banco non ha.
+pub fn a_read_only_command_does_not_write<C: CommandProvider + ?Sized>(
+    provider: &C,
+    host: &mut MemoryHost,
+) -> Vec<SkippedCommand> {
+    provider
+        .commands()
+        .iter()
+        .filter(|spec| !spec.scope.writes && invocable_without_args(spec))
+        .filter_map(|spec| runs_without_writing(provider, host, spec, InvokeMode::Apply))
+        .collect()
+}
+
+fn invocable_without_args(spec: &CommandSpec) -> bool {
+    !spec.params.iter().any(|p| p.required)
+}
+
+/// Invoca `spec` in `mode` con argomenti vuoti, asserisce che il banco non è
+/// cambiato e dice se il comando si è fermato su una porta che il banco non ha.
+fn runs_without_writing<C: CommandProvider + ?Sized>(
+    provider: &C,
+    host: &mut MemoryHost,
+    spec: &CommandSpec,
+    mode: InvokeMode,
+) -> Option<SkippedCommand> {
+    let before = Footprint::of(host);
+    let answer = provider.invoke(&spec.id, serde_json::json!({}), mode, host);
+    before.unchanged(&Footprint::of(host), &spec.id, mode, &answer);
+    let why = match &answer {
+        Err(PluginError::UnknownCommand(other)) if other.to_string() == spec.id => panic!(
+            "il comando `{}`, che il provider dichiara, in {mode:?} ha risposto\n\
+             `UnknownCommand` su sé stesso: un id fra quelli di `commands()` non è\n\
+             ignoto.",
+            spec.id
+        ),
+        Err(PluginError::UnknownCommand(other)) => format!(
+            "in {mode:?} compone `{other}`, un comando che MemoryHost non ha (non ha \
+             un registro dei comandi)"
+        ),
+        Err(PluginError::Unserved(why)) => {
+            format!("in {mode:?} chiede qualcosa che MemoryHost non serve: {why}")
+        }
+        _ => return None,
+    };
+    Some(SkippedCommand {
+        command: spec.id.clone(),
+        why,
+    })
+}
+
+/// Ciò che un comando lascerebbe dietro di sé in [`MemoryHost`]: le stesse
+/// famiglie che il `ReadOnly` del kernel nega a un comando simulato o di sola
+/// lettura, per quanto il banco le registra.
+///
+/// Gli eventi e i job no: il banco non li tiene, e cambiarlo non è di questa
+/// suite. Le letture e l'orologio nemmeno: leggere non è scrivere.
+#[derive(Debug, PartialEq)]
+struct Footprint {
+    documents: BTreeMap<String, Vec<u8>>,
+    trash: BTreeMap<String, (TrashEntry, Vec<u8>)>,
+    data: BTreeMap<String, Vec<u8>>,
+    cache: BTreeMap<String, Vec<u8>>,
+    /// Il conto delle scritture: vede anche chi riscrive gli stessi byte.
+    writes: BTreeMap<String, (usize, usize)>,
+    settings: BTreeMap<String, Option<SettingValue>>,
+    view_state: BTreeMap<(String, String), serde_json::Value>,
+    /// Una richiesta di rete è un effetto fuori dall'host: anche un `GET`.
+    network_requests: usize,
+}
+
+impl Footprint {
+    fn of(host: &MemoryHost) -> Self {
+        Footprint {
+            documents: host.docs.lock().unwrap().clone(),
+            trash: host.trash.lock().unwrap().clone(),
+            data: host.blobs.lock().unwrap().clone(),
+            cache: host.cache_blobs.lock().unwrap().clone(),
+            writes: host.writes.lock().unwrap().clone(),
+            settings: host
+                .settings
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|(k, (_, v))| (k.clone(), v.clone()))
+                .collect(),
+            view_state: host.view_state.lock().unwrap().clone(),
+            network_requests: host.requests.lock().unwrap().len(),
+        }
+    }
+
+    fn unchanged<T: std::fmt::Debug>(
+        &self,
+        after: &Footprint,
+        command: &str,
+        mode: InvokeMode,
+        answer: &T,
+    ) {
+        if self == after {
+            return;
+        }
+        let mut changed = Vec::new();
+        if self.documents != after.documents {
+            changed.push("i documenti");
+        }
+        if self.trash != after.trash {
+            changed.push("il cestino");
+        }
+        if self.data != after.data || self.writes != after.writes {
+            changed.push("lo spazio dati");
+        }
+        if self.cache != after.cache {
+            changed.push("la cache");
+        }
+        if self.settings != after.settings {
+            changed.push("le impostazioni");
+        }
+        if self.view_state != after.view_state {
+            changed.push("lo stato di vista");
+        }
+        if self.network_requests != after.network_requests {
+            changed.push("la rete");
+        }
+        let why = match mode {
+            InvokeMode::DryRun => {
+                "una simulazione non scrive: nell'app il kernel presta un host in sola\n\
+                 lettura e la scrittura sarebbe rifiutata, e il piano del dry-run\n\
+                 direbbe il falso"
+            }
+            InvokeMode::Apply => {
+                "il comando si dichiara di sola lettura (`writes: false`): la shell lo\n\
+                 lancia senza conferma e senza voce nell'annulla, e nell'app il kernel\n\
+                 rifiuterebbe la scrittura"
+            }
+        };
+        panic!(
+            "il comando `{command}` in {mode:?} ha cambiato {} del banco.\n\
+             Ha risposto {answer:?}.\n\
+             {why}.",
+            changed.join(", ")
         );
     }
 }
@@ -1590,5 +1965,355 @@ mod tests {
         // arriva, ed è `batch-ended` a dire che l'indice si è mosso.
         let handler = IndexSenzaBatch;
         redrawing_or_reacting_on_index_updated_declares_batch_ended(&handler);
+    }
+
+    // -----------------------------------------------------------------------
+    // CommandProvider
+    // -----------------------------------------------------------------------
+
+    use fub_abi::command::{Choice, CommandOutcome, CommandScope, ParamSpec};
+    use fub_abi::edit::WriteBase;
+    use fub_abi::model::DocId;
+
+    type Act = fn(&str, InvokeMode, &mut dyn HostApi) -> Result<CommandOutcome, PluginError>;
+
+    /// Un provider di comandi finto: dichiara `specs`, risponde
+    /// `UnknownCommand` a ogni altro id e per i suoi fa `act`.
+    struct Finto {
+        specs: Vec<CommandSpec>,
+        act: Act,
+    }
+
+    impl Finto {
+        fn new(specs: Vec<CommandSpec>, act: Act) -> Self {
+            Finto { specs, act }
+        }
+    }
+
+    impl CommandProvider for Finto {
+        fn commands(&self) -> Vec<CommandSpec> {
+            self.specs.clone()
+        }
+
+        fn invoke(
+            &self,
+            command: &str,
+            _args: serde_json::Value,
+            mode: InvokeMode,
+            host: &mut dyn HostApi,
+        ) -> Result<CommandOutcome, PluginError> {
+            if !self.specs.iter().any(|s| s.id == command) {
+                return Err(PluginError::UnknownCommand(command.into()));
+            }
+            (self.act)(command, mode, host)
+        }
+    }
+
+    fn fatto(_: &str, _: InvokeMode, _: &mut dyn HostApi) -> Result<CommandOutcome, PluginError> {
+        Ok(CommandOutcome::done())
+    }
+
+    /// Scrive sempre, anche quando simula: il difetto che la suite cerca.
+    fn scrive_sempre(
+        _: &str,
+        _: InvokeMode,
+        host: &mut dyn HostApi,
+    ) -> Result<CommandOutcome, PluginError> {
+        host.write_document(&DocId::new("scritto.md"), "ciao", WriteBase::Dictated)?;
+        Ok(CommandOutcome::done())
+    }
+
+    fn scrivente(id: &str) -> CommandSpec {
+        CommandSpec {
+            scope: CommandScope::writing(fub_abi::command::CommandReach::Document),
+            ..CommandSpec::new(id, id)
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "è dichiarato due volte")]
+    fn due_comandi_con_lo_stesso_id_non_rispettano_il_contratto() {
+        let provider = Finto::new(
+            vec![
+                CommandSpec::new("note.archivia", "Archivia"),
+                CommandSpec::new("note.archivia", "Archivia di nuovo"),
+            ],
+            fatto,
+        );
+        command_ids_are_distinct_and_namespaced(&provider, Owner::Core);
+    }
+
+    #[test]
+    #[should_panic(expected = "non si può registrare")]
+    fn una_ricetta_che_nomina_un_id_nudo_non_si_registra() {
+        let provider = Finto::new(vec![CommandSpec::new("archivia", "Archivia")], fatto);
+        command_ids_are_distinct_and_namespaced(&provider, Owner::Plugin("recipe.archivia"));
+    }
+
+    #[test]
+    fn una_ricetta_nel_suo_namespace_rispetta_il_contratto() {
+        let mut provider = Finto::new(
+            vec![CommandSpec::new("recipe.archivia:archivia", "Archivia")],
+            fatto,
+        );
+        let skipped = a_command_provider_respects_the_contract(
+            &mut provider,
+            &mut MemoryHost::new(),
+            Owner::Plugin("recipe.archivia"),
+        );
+        assert!(skipped.is_empty(), "{skipped:?}");
+    }
+
+    #[test]
+    fn un_provider_senza_comandi_rispetta_il_contratto() {
+        let mut provider = Finto::new(Vec::new(), fatto);
+        let skipped = a_command_provider_respects_the_contract(
+            &mut provider,
+            &mut MemoryHost::new(),
+            Owner::Core,
+        );
+        assert!(skipped.is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "dichiara due volte il parametro `nota`")]
+    fn due_parametri_con_lo_stesso_nome_non_rispettano_il_contratto() {
+        let mut spec = CommandSpec::new("note.archivia", "Archivia");
+        spec.params = vec![
+            ParamSpec::new("nota", "Nota", ParamKind::Document),
+            ParamSpec::new("nota", "Altra nota", ParamKind::Text),
+        ];
+        params_are_unique_and_choices_have_options(&Finto::new(vec![spec], fatto));
+    }
+
+    #[test]
+    #[should_panic(expected = "è una scelta senza opzioni")]
+    fn una_scelta_vuota_non_rispetta_il_contratto() {
+        let mut spec = CommandSpec::new("note.archivia", "Archivia");
+        spec.params = vec![ParamSpec::new(
+            "dove",
+            "Dove",
+            ParamKind::Choice(Vec::new()),
+        )];
+        params_are_unique_and_choices_have_options(&Finto::new(vec![spec], fatto));
+    }
+
+    #[test]
+    #[should_panic(expected = "offre due volte il valore")]
+    fn una_scelta_con_due_valori_uguali_non_rispetta_il_contratto() {
+        let mut spec = CommandSpec::new("note.archivia", "Archivia");
+        spec.params = vec![ParamSpec::new(
+            "dove",
+            "Dove",
+            ParamKind::Choice(vec![Choice::new("a", "A"), Choice::new("a", "Ancora A")]),
+        )];
+        params_are_unique_and_choices_have_options(&Finto::new(vec![spec], fatto));
+    }
+
+    #[test]
+    #[should_panic(expected = "non è una scorciatoia")]
+    fn una_scorciatoia_illeggibile_non_rispetta_il_contratto() {
+        let mut spec = CommandSpec::new("note.archivia", "Archivia");
+        spec.keybinding = Some("Meta-k".into());
+        keybindings_parse(&Finto::new(vec![spec], fatto));
+    }
+
+    #[test]
+    fn una_scorciatoia_a_due_accordi_si_legge() {
+        let mut spec = CommandSpec::new("note.archivia", "Archivia");
+        spec.keybinding = Some("Mod-k d".into());
+        keybindings_parse(&Finto::new(vec![spec], fatto));
+    }
+
+    /// Risponde a ogni id, anche a quelli che non dichiara.
+    struct RispondeATutto;
+
+    impl CommandProvider for RispondeATutto {
+        fn commands(&self) -> Vec<CommandSpec> {
+            vec![CommandSpec::new("note.archivia", "Archivia")]
+        }
+
+        fn invoke(
+            &self,
+            _command: &str,
+            _args: serde_json::Value,
+            _mode: InvokeMode,
+            _host: &mut dyn HostApi,
+        ) -> Result<CommandOutcome, PluginError> {
+            Ok(CommandOutcome::done())
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "invece di `UnknownCommand`")]
+    fn un_provider_che_esegue_un_id_ignoto_non_rispetta_il_contratto() {
+        an_unknown_command_is_unknown(&RispondeATutto, &mut MemoryHost::new());
+    }
+
+    #[test]
+    #[should_panic(expected = "in DryRun ha cambiato i documenti")]
+    fn una_simulazione_che_scrive_non_rispetta_il_contratto() {
+        let provider = Finto::new(vec![scrivente("note.archivia")], scrive_sempre);
+        a_dry_run_does_not_write(&provider, &mut MemoryHost::new());
+    }
+
+    #[test]
+    fn un_comando_che_scrive_solo_in_apply_rispetta_il_contratto() {
+        fn scrive_se_applica(
+            _: &str,
+            mode: InvokeMode,
+            host: &mut dyn HostApi,
+        ) -> Result<CommandOutcome, PluginError> {
+            if mode.is_dry_run() {
+                return Ok(CommandOutcome::done());
+            }
+            scrive_sempre("", mode, host)
+        }
+        let mut provider = Finto::new(vec![scrivente("note.archivia")], scrive_se_applica);
+        a_command_provider_respects_the_contract(
+            &mut provider,
+            &mut MemoryHost::new(),
+            Owner::Core,
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "in Apply ha cambiato i documenti")]
+    fn un_comando_di_sola_lettura_che_scrive_non_rispetta_il_contratto() {
+        fn scrive_se_applica(
+            _: &str,
+            mode: InvokeMode,
+            host: &mut dyn HostApi,
+        ) -> Result<CommandOutcome, PluginError> {
+            if mode.is_dry_run() {
+                return Ok(CommandOutcome::done());
+            }
+            scrive_sempre("", mode, host)
+        }
+        // Dichiara `writes: false`, e scrive lo stesso.
+        let provider = Finto::new(
+            vec![CommandSpec::new("note.archivia", "Archivia")],
+            scrive_se_applica,
+        );
+        a_read_only_command_does_not_write(&provider, &mut MemoryHost::new());
+    }
+
+    #[test]
+    #[should_panic(expected = "ha cambiato le impostazioni")]
+    fn una_simulazione_che_cambia_un_impostazione_non_rispetta_il_contratto() {
+        use fub_abi::settings::{SettingKind, SettingSpec};
+        fn spegne(
+            _: &str,
+            _: InvokeMode,
+            host: &mut dyn HostApi,
+        ) -> Result<CommandOutcome, PluginError> {
+            host.set_setting("archivia.attiva", SettingValue::Toggle(false))?;
+            Ok(CommandOutcome::done())
+        }
+        let mut host = MemoryHost::new().with_setting(
+            SettingSpec::new(
+                "archivia.attiva",
+                "Attiva",
+                SettingKind::Toggle { default: true },
+            )
+            .program_writable(),
+        );
+        let provider = Finto::new(vec![scrivente("note.archivia")], spegne);
+        a_dry_run_does_not_write(&provider, &mut host);
+    }
+
+    #[test]
+    fn una_simulazione_su_un_documento_che_non_ce_non_e_una_scrittura() {
+        fn legge_l_attivo(
+            _: &str,
+            _: InvokeMode,
+            host: &mut dyn HostApi,
+        ) -> Result<CommandOutcome, PluginError> {
+            host.read_document(&DocId::new("manca.md"))?;
+            Ok(CommandOutcome::done())
+        }
+        let mut provider = Finto::new(vec![scrivente("note.archivia")], legge_l_attivo);
+        let skipped = a_command_provider_respects_the_contract(
+            &mut provider,
+            &mut MemoryHost::new(),
+            Owner::Core,
+        );
+        assert!(
+            skipped.is_empty(),
+            "un errore vero non è un salto: {skipped:?}"
+        );
+    }
+
+    #[test]
+    fn un_comando_che_legge_l_orologio_non_scrive() {
+        fn legge_l_ora(
+            _: &str,
+            _: InvokeMode,
+            host: &mut dyn HostApi,
+        ) -> Result<CommandOutcome, PluginError> {
+            let _ = host.now_unix_millis();
+            Ok(CommandOutcome::done())
+        }
+        let mut provider = Finto::new(vec![CommandSpec::new("note.oggi", "Oggi")], legge_l_ora);
+        let mut host = MemoryHost::new();
+        let skipped =
+            a_command_provider_respects_the_contract(&mut provider, &mut host, Owner::Core);
+        assert!(skipped.is_empty());
+    }
+
+    #[test]
+    fn un_comando_che_vuole_un_servizio_altrui_e_saltato_e_detto() {
+        fn chiama(
+            _: &str,
+            _: InvokeMode,
+            host: &mut dyn HostApi,
+        ) -> Result<CommandOutcome, PluginError> {
+            host.call_service("com.acme.calendario:eventi", "oggi", serde_json::json!({}))?;
+            Ok(CommandOutcome::done())
+        }
+        let mut provider = Finto::new(vec![CommandSpec::new("note.agenda", "Agenda")], chiama);
+        let skipped = a_command_provider_respects_the_contract(
+            &mut provider,
+            &mut MemoryHost::new(),
+            Owner::Core,
+        );
+        // Una volta in DryRun e una in Apply, perché è di sola lettura.
+        assert_eq!(skipped.len(), 2, "{skipped:?}");
+        assert!(skipped.iter().all(|s| s.command == "note.agenda"));
+        assert!(
+            skipped[0]
+                .to_string()
+                .contains("com.acme.calendario:eventi"),
+            "il messaggio nomina il servizio che mancava: {}",
+            skipped[0]
+        );
+    }
+
+    #[test]
+    fn un_comando_che_ne_compone_un_altro_e_saltato_e_detto() {
+        fn compone(
+            _: &str,
+            _: InvokeMode,
+            host: &mut dyn HostApi,
+        ) -> Result<CommandOutcome, PluginError> {
+            host.run_command("note.rename", serde_json::json!({}))
+        }
+        let mut provider = Finto::new(vec![scrivente("recipe.archivia:archivia")], compone);
+        let skipped = a_command_provider_respects_the_contract(
+            &mut provider,
+            &mut MemoryHost::new(),
+            Owner::Plugin("recipe.archivia"),
+        );
+        assert_eq!(skipped.len(), 1, "{skipped:?}");
+        assert!(skipped[0].why.contains("`note.rename`"), "{}", skipped[0]);
+    }
+
+    #[test]
+    fn un_comando_con_un_parametro_obbligatorio_non_si_invoca_a_vuoto() {
+        let mut spec = scrivente("note.archivia");
+        spec.params = vec![ParamSpec::new("nota", "Nota", ParamKind::Document).required()];
+        let provider = Finto::new(vec![spec], scrive_sempre);
+        // Senza argomenti non si può chiamare: la suite non lo prova a vuoto.
+        assert!(a_dry_run_does_not_write(&provider, &mut MemoryHost::new()).is_empty());
     }
 }
