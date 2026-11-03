@@ -267,7 +267,7 @@ fn ask(host: &Host, root: &Utf8Path, doc: &str) -> Result<CraftPreview, PluginEr
 /// un timeout di nextest: uno stallo si vede qui, come errore del test.
 #[test]
 fn a_preview_while_another_thread_writes_does_not_stall() {
-    let (_dir, root) = vault(&[
+    let (dir, root) = vault(&[
         ("Disegni/logo.vectorcraft", vectorcraft()),
         ("Disegni/mobile.vectorcraft", vectorcraft()),
         ("Foto/a.CR3", b"RAW finto".to_vec()),
@@ -293,16 +293,24 @@ fn a_preview_while_another_thread_writes_does_not_stall() {
     let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let writer = {
         let (host, root, stop) = (host.clone(), root.clone(), stop.clone());
+        // Accanto al vault, sullo stesso filesystem, perché il rename regga.
+        let outside = tempfile::tempdir_in(dir.path().parent().unwrap()).unwrap();
         std::thread::spawn(move || {
             let mut i = 0u32;
             while !stop.load(std::sync::atomic::Ordering::Acquire) {
                 let id = DocId::new(format!("Scritti/n{i}.bin"));
                 host.write_document_bytes(Some(root.as_str()), &id, b"nuovo", None)
                     .unwrap();
-                // Il file dell'anteprima cambia da fuori: peso nuovo a ogni giro.
+                // Il file dell'anteprima cambia da fuori, come lo salva un'app:
+                // un file nuovo rinominato sopra, con un peso nuovo a ogni giro.
+                // Un `fs::write` lo tronca prima di scriverlo, e chi lo legge
+                // in quell'istante vede un file vuoto o a metà, ma intero per
+                // il kernel: `unreadable`, non byte misti.
                 let mut moving = vectorcraft();
                 moving.extend(std::iter::repeat_n(b' ', (i % 7) as usize));
-                std::fs::write(root.join("Disegni/mobile.vectorcraft"), moving).unwrap();
+                let next = outside.path().join("mobile.vectorcraft");
+                std::fs::write(&next, moving).unwrap();
+                std::fs::rename(&next, root.join("Disegni/mobile.vectorcraft")).unwrap();
                 i += 1;
             }
             i
