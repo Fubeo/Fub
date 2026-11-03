@@ -214,7 +214,14 @@ export class CanvasEngine {
   #selection: string[] = [];
   #edgeSelection: string[] = [];
   #camera: Viewport = { x: 0, y: 0, zoom: 1 };
-  #readOnly = false;
+  /** La sola lettura del pannello (`setReadOnly`): i suoi motivi sono del pannello. */
+  #panelReadOnly = false;
+  /**
+   * La sola lettura della tela: il nucleo apre il testo ma non lo sa
+   * riscrivere senza perdere qualcosa (una chiave doppia, R3). Si somma a
+   * quella del pannello e se ne va da sola quando il testo torna riscrivibile.
+   */
+  #unwritable = false;
   #undo: CanvasStep[] = [];
   #redo: CanvasStep[] = [];
   /**
@@ -302,6 +309,11 @@ export class CanvasEngine {
     // Il testo in sospeso è del documento di prima: si registra lì.
     this.#closeField(true);
     const document = this.#open(source);
+    // Un documento nuovo: la risposta di prima era dell'altro testo.
+    if (this.#unwritable) {
+      this.#unwritable = false;
+      this.#root.dataset.readOnly = String(this.#readOnly);
+    }
     this.#epoch++;
     this.#cancelGestures();
     this.#source = source;
@@ -316,6 +328,7 @@ export class CanvasEngine {
       void this.#revive();
       return;
     }
+    this.#checkWritable();
     this.#fitCamera(false);
     this.#render();
   }
@@ -333,13 +346,16 @@ export class CanvasEngine {
     this.#epoch++;
     this.#intakeError = "";
     // Lo stesso testo (l'eco di un commit di qui) lascia valida la via del tratto.
-    if (source !== this.#source) this.#version = ++this.#versions;
+    const changed = source !== this.#source;
+    if (changed) this.#version = ++this.#versions;
     this.#source = source;
     if (!document) {
       void this.#revive();
       return;
     }
     this.#doc = document;
+    // Lo stesso testo si riscrive come prima: la domanda serve solo a un testo nuovo.
+    if (changed) this.#checkWritable();
     this.#pruneSelection();
     this.#render();
     // Fuori dalla consegna che ci ha portato il testo: la sessione la sta
@@ -389,9 +405,49 @@ export class CanvasEngine {
     // l'avviso l'ha già detto.
     this.#closeField(readOnly);
     this.#cancelGestures();
-    this.#readOnly = readOnly;
-    this.#root.dataset.readOnly = String(readOnly);
+    this.#panelReadOnly = readOnly;
+    this.#root.dataset.readOnly = String(this.#readOnly);
     this.#render();
+  }
+
+  /** In sola lettura per il pannello o per la tela: nessun gesto cambia il testo. */
+  get #readOnly(): boolean {
+    return this.#panelReadOnly || this.#unwritable;
+  }
+
+  /**
+   * Chiede al nucleo se il testo di adesso si riscrive: un'anteprima senza
+   * toppe passa dallo stesso ritocco di ogni commit, e un testo che il
+   * ritocco rifiuta (una chiave doppia, anche annidata in un campo
+   * sconosciuto) risponde `rejected`. Allora la tela resta da guardare: il
+   * campo aperto si chiude come per la sola lettura del pannello, e l'avviso
+   * della barra dice perché. Un nucleo assente o morto non risponde: la
+   * risposta di prima resta finché `#revive` non riapre il testo.
+   */
+  #checkWritable(): void {
+    const core = this.#core;
+    if (!core) return;
+    let unwritable: boolean;
+    try {
+      core.preview([]);
+      unwritable = false;
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return;
+      }
+      if (!(error instanceof CanvasCoreError)) throw error;
+      unwritable = error.code === "rejected";
+    }
+    if (unwritable === this.#unwritable) return;
+    if (unwritable) {
+      this.#unwritable = true;
+      this.#closeField(true);
+      this.#cancelGestures();
+    } else {
+      this.#unwritable = false;
+    }
+    this.#root.dataset.readOnly = String(this.#readOnly);
   }
 
   setTheme(theme: Theme): void {
@@ -543,6 +599,7 @@ export class CanvasEngine {
     }
     const first = this.#doc === null;
     this.#doc = document;
+    this.#checkWritable();
     this.#pruneSelection();
     if (first) this.#fitCamera(false);
     this.#render();
@@ -1022,11 +1079,15 @@ export class CanvasEngine {
       const rect = this.#viewport.getBoundingClientRect();
       this.#zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1 / 1.2);
     }, false, false);
-    if (this.#intakeError) {
+    // Un avviso solo, nel suo posto: quello dell'ultimo gesto, o la sola
+    // lettura della tela. Una scena oltre il limite ha già il suo, nella tela.
+    const notice = this.#intakeError
+      || (this.#unwritable && !this.#isSceneOversized() ? t("canvas.unwritable") : "");
+    if (notice) {
       const error = document.createElement("output");
       error.setAttribute("role", "alert");
       error.className = "canvas-intake-error";
-      error.textContent = this.#intakeError;
+      error.textContent = notice;
       bar.append(error);
     }
   }

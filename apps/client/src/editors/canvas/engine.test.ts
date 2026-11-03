@@ -13,6 +13,8 @@ import rootWithoutNodes from "../../__fixtures__/canvas-patches/12-root-without-
 import prettyNode from "../../__fixtures__/canvas-patches/14-remove-pretty-node-undo-compacts.json";
 import nodesNull from "../../__fixtures__/canvas-patches/19-nodes-null.json";
 import knownNumberForms from "../../__fixtures__/canvas-patches/22-known-number-forms.json";
+import duplicateUnknownKey from "../../__fixtures__/canvas-patches/32-rejected-duplicate-unknown-key.json";
+import nestedDuplicate from "../../__fixtures__/canvas-patches/33-rejected-nested-duplicate.json";
 import { DocumentSessionCollection, type DocumentSessionApi } from "../../state/document-session";
 import { upsertNodePatch, type CanvasOperation, type CanvasPatch } from "./operation";
 import { CanvasCoreError, canvasCoreReady, openCore, openCoreNow, type CanvasCore, type CanvasIntentOp } from "./wasm/core";
@@ -1362,5 +1364,219 @@ describe("CanvasEngine: l'annulla torna ai byte di prima", () => {
     expect(b.engine.undo()).toBe(false);
     a.engine.destroy();
     b.engine.destroy();
+  });
+});
+
+describe("CanvasEngine: una lavagna che il nucleo apre ma non riscrive (R3)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** Il testo del vettore senza la chiave doppia: la stessa lavagna, riscrivibile. */
+  const fixed: Readonly<Record<string, string>> = {
+    [duplicateUnknownKey.before]: duplicateUnknownKey.before.replace(',"fub:k":1', ""),
+    [nestedDuplicate.before]: nestedDuplicate.before.replace('"s":1,', ""),
+  };
+
+  const starts: ReadonlyArray<readonly [string, string]> = [
+    ["vettore 32 (una chiave sconosciuta doppia sulla radice)", duplicateUnknownKey.before],
+    ["vettore 33 (una chiave doppia dentro un campo sconosciuto di una scheda)", nestedDuplicate.before],
+  ];
+
+  function viewportOf(host: HTMLElement): HTMLElement {
+    return host.querySelector<HTMLElement>(".canvas-viewport")!;
+  }
+
+  function nodeEl(host: HTMLElement, id: string): HTMLElement {
+    return host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!;
+  }
+
+  function select(host: HTMLElement, id: string): void {
+    nodeEl(host, id).dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 3, clientX: 0, clientY: 0 }));
+    viewportOf(host).dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 3, clientX: 0, clientY: 0 }));
+  }
+
+  function button(host: HTMLElement, name: string): HTMLButtonElement {
+    return host.querySelector<HTMLButtonElement>(`[data-canvas-action="${name}"]`)!;
+  }
+
+  function notices(host: HTMLElement): Element[] {
+    return [...host.querySelectorAll(".canvas-intake-error")];
+  }
+
+  function expectUnwritable(host: HTMLElement): void {
+    const shown = notices(host);
+    expect(shown).toHaveLength(1);
+    expect(shown[0]!.getAttribute("role")).toBe("alert");
+    expect(shown[0]!.textContent).toBe(t("canvas.unwritable"));
+    for (const name of ["add-text", "add-link", "add-group", "duplicate", "delete", "bring-front", "send-back"]) {
+      expect(button(host, name).disabled, name).toBe(true);
+    }
+    // Guardare resta: la camera non cambia il testo.
+    expect(button(host, "zoom-in").disabled).toBe(false);
+    expect(button(host, "fit").disabled).toBe(false);
+  }
+
+  /** Ogni gesto che cambierebbe la lavagna, provato sulla scheda `a`. */
+  function tryEveryGesture(engine: CanvasEngine, host: HTMLElement): void {
+    const viewport = viewportOf(host);
+    for (const name of ["add-text", "add-link", "add-group"]) button(host, name).click();
+    select(host, "a");
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
+    for (const name of ["duplicate", "delete", "bring-front", "send-back"]) button(host, name).click();
+    // Trascinare la scheda.
+    nodeEl(host, "a").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 4, clientX: 0, clientY: 0 }));
+    viewport.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 4, clientX: 80, clientY: 40 }));
+    viewport.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 4, clientX: 80, clientY: 40 }));
+    // Ridimensionare: in sola lettura la maniglia non c'è.
+    expect(host.querySelector('[data-resize="a"]')).toBeNull();
+    // Collegare, verso il vuoto.
+    host.querySelector<HTMLElement>('[data-connect="a"]')?.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 9, clientX: 0, clientY: 0 }),
+    );
+    vi.spyOn(document, "elementFromPoint").mockReturnValue(viewport);
+    viewport.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 9, clientX: 400, clientY: 300 }));
+    vi.restoreAllMocks();
+    // Scrivere: il doppio clic non apre il campo.
+    nodeEl(host, "a").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    expect(host.querySelector(".canvas-text-editor, .canvas-field-editor")).toBeNull();
+    // Il menu: i gesti che cambiano sono spenti, e anche chiamati non cambiano niente.
+    vi.spyOn(document, "elementFromPoint").mockReturnValue(nodeEl(host, "a"));
+    const menu = engine.contextMenu({ x: 10, y: 10 })!;
+    vi.restoreAllMocks();
+    const items = menu.context as readonly SurfaceMenuItem[];
+    for (const id of ["canvas.duplicate", "canvas.delete"]) {
+      const item = items.find((entry) => entry.id === id)!;
+      expect(item.enabled, id).toBe(false);
+      item.run?.();
+    }
+    const color = items.find((item) => item.id === "canvas.color");
+    (color?.items as readonly SurfaceMenuItem[] | undefined)?.find((item) => item.id === "canvas.color.2")?.run?.();
+    expect(engine.undo()).toBe(false);
+    expect(engine.redo()).toBe(false);
+  }
+
+  for (const [name, start] of starts) {
+    it(`${name}: si apre e disegna le schede, nessun gesto la cambia, l'avviso dice perché; senza la chiave doppia torna a cambiare`, () => {
+      const { engine, host, changes } = mounted(start);
+      expect(host.querySelectorAll(".canvas-node")).toHaveLength(1);
+      expect(nodeEl(host, "a").textContent).toContain("uno");
+      expectUnwritable(host);
+      tryEveryGesture(engine, host);
+      expect(changes).toHaveLength(0);
+      expect(engine.getDoc()).toBe(start);
+      expectUnwritable(host);
+
+      // La chiave doppia tolta da un'altra superficie (la vista Sorgente).
+      const writable = fixed[start]!;
+      expect(writable).not.toBe(start);
+      engine.syncDoc({ text: writable, operation: operationFromText(start, writable) });
+      expect(notices(host)).toHaveLength(0);
+      expect(button(host, "add-text").disabled).toBe(false);
+      select(host, "a");
+      viewportOf(host).dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      expect(changes).toHaveLength(1);
+      expect(readCanvas(engine.getDoc()).nodes[0]!.x).toBe(8);
+      expect(applyOperation(writable, changes[0]!.operation)).toBe(engine.getDoc());
+
+      // E rimessa: di nuovo da guardare, e l'annulla non passa.
+      engine.syncDoc(start);
+      expectUnwritable(host);
+      expect(engine.undo()).toBe(false);
+      expect(engine.getDoc()).toBe(start);
+      engine.destroy();
+    });
+  }
+
+  it("aprire con setDoc un testo riscrivibile toglie la sola lettura del testo di prima", () => {
+    const { engine, host, changes } = mounted(duplicateUnknownKey.before);
+    expectUnwritable(host);
+    engine.setDoc(fixed[duplicateUnknownKey.before]!);
+    expect(notices(host)).toHaveLength(0);
+    button(host, "add-text").click();
+    expect(changes).toHaveLength(1);
+    engine.setDoc(nestedDuplicate.before);
+    expectUnwritable(host);
+    engine.destroy();
+  });
+
+  it("la sola lettura del pannello arriva e se ne va: quella della tela resta finché c'è la chiave doppia", () => {
+    const { engine, host, changes } = mounted(nestedDuplicate.before);
+    engine.setReadOnly(true);
+    expectUnwritable(host);
+    engine.setReadOnly(false);
+    expectUnwritable(host);
+    tryEveryGesture(engine, host);
+    expect(changes).toHaveLength(0);
+    // La chiave doppia se ne va col pannello ancora in sola lettura: l'avviso
+    // della tela sparisce, ma i gesti restano spenti per il pannello.
+    engine.setReadOnly(true);
+    const writable = fixed[nestedDuplicate.before]!;
+    engine.syncDoc(writable);
+    expect(notices(host)).toHaveLength(0);
+    expect(button(host, "add-text").disabled).toBe(true);
+    engine.setReadOnly(false);
+    expect(button(host, "add-text").disabled).toBe(false);
+    button(host, "add-text").click();
+    expect(changes).toHaveLength(1);
+    engine.destroy();
+  });
+
+  it("il campo aperto quando arriva da fuori un testo con la chiave doppia si chiude, come per il pannello", () => {
+    const writable = fixed[duplicateUnknownKey.before]!;
+    const { engine, host, changes } = mounted(writable);
+    nodeEl(host, "a").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    const input = host.querySelector<HTMLTextAreaElement>(".canvas-text-editor")!;
+    expect(input).not.toBeNull();
+    input.value = "non registrato";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    engine.syncDoc(duplicateUnknownKey.before);
+    expect(host.querySelector(".canvas-text-editor")).toBeNull();
+    expect(engine.hasPending).toBe(false);
+    expectUnwritable(host);
+    expect(changes).toHaveLength(0);
+    expect(engine.getDoc()).toBe(duplicateUnknownKey.before);
+    engine.destroy();
+  });
+
+  it("oltre il limite interattivo vince l'avviso del limite: uno solo per volta", () => {
+    const board = JSON.stringify({
+      nodes: Array.from({ length: 2_001 }, (_, index) => ({
+        id: `n${index}`, type: "text", x: index * 8, y: 0, width: 100, height: 60, text: "card",
+      })),
+      edges: [],
+    });
+    const source = `${board.slice(0, -1)},"fub:k":1,"fub:k":2}`;
+    const { engine, host, changes } = mounted(source);
+    expect(host.querySelector(".canvas-viewport")?.getAttribute("data-canvas-protocol")).toBe("source-fallback");
+    expect(host.querySelector(".canvas-large-fallback")?.textContent).toBe(t("canvas.too_large"));
+    expect(notices(host)).toHaveLength(0);
+    button(host, "add-text").click();
+    expect(changes).toHaveLength(0);
+    // Sotto il limite, la stessa chiave doppia: torna l'avviso della tela.
+    const small = `${JSON.stringify({ nodes: [{ id: "a", type: "text", x: 0, y: 0, width: 100, height: 50, text: "uno" }], edges: [] }).slice(0, -1)},"fub:k":1,"fub:k":2}`;
+    engine.syncDoc(small);
+    expect(host.querySelector(".canvas-large-fallback")).toBeNull();
+    expectUnwritable(host);
+    engine.destroy();
+  });
+
+  it("col nucleo che arriva dopo, la tela si apre già in sola lettura", async () => {
+    let loaded = false;
+    const port: CanvasCorePort = {
+      openNow: (text) => (loaded ? openCoreNow(text) : null),
+      ready: async () => {
+        await canvasCoreReady();
+        loaded = true;
+      },
+    };
+    const { engine, host, changes } = mounted(nestedDuplicate.before, { core: port });
+    expect(host.querySelectorAll(".canvas-node")).toHaveLength(0);
+    await vi.waitFor(() => expect(host.querySelectorAll(".canvas-node")).toHaveLength(1));
+    expectUnwritable(host);
+    tryEveryGesture(engine, host);
+    expect(changes).toHaveLength(0);
+    engine.destroy();
   });
 });

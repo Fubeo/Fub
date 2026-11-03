@@ -85,7 +85,19 @@ vettori della lettura. Nel dubbio si apre e si conserva.
 - **R3 · Chiavi doppie.** Una chiave nota doppia sulla radice, in una scheda o
   in un arco è un errore: `{"nodes":[],"nodes":[]}`. Una chiave sconosciuta
   doppia tiene l'ultimo valore nella posizione della prima, come
-  `JSON.parse`: `"k":1,"z":2,"k":3` dà `k` = 3, poi `z`.
+  `JSON.parse`: `"k":1,"z":2,"k":3` dà `k` = 3, poi `z`. Una lavagna così
+  si apre ma non si riscrive (lo scanner di «Scrittura» la rifiuta, perché
+  riscriverla perderebbe uno dei due valori): a ogni `setDoc` e a ogni
+  `syncDoc` con un testo nuovo la tela chiede al nucleo un'anteprima senza
+  toppe (`Core::preview`), e se risponde `rejected` resta da guardare. I
+  gesti che cambiano sono spenti, un campo aperto si chiude come per la sola
+  lettura del pannello, e l'avviso della barra (`canvas-intake-error`, ruolo
+  `alert`, chiave `canvas.unwritable`) dice perché. Questa sola lettura si
+  somma a quella del pannello (`setReadOnly`) e se ne va da sola quando il
+  testo torna riscrivibile, per esempio con la chiave doppia tolta nella
+  vista Sorgente. Una scena oltre il limite interattivo mostra solo il suo
+  avviso. I test sono in `apps/client/src/editors/canvas/engine.test.ts`,
+  coi testi dei vettori 32 e 33 delle toppe.
 - **R4 · Surrogati spaiati.** `"\ud800"`, in una chiave o in un valore, è un
   errore; una coppia intera (`"\ud83d\ude00"`) è un carattere come gli altri.
 - **R5 · Numeri fuori campo.** Un numero che un `f64` non tiene è un errore
@@ -213,4 +225,5 @@ con un file che non si legge, con un numero che salta e con un atteso
 cambiato di un byte, in tutte e due le cartelle. Una lista vuota di toppe
 resta fuori dai vettori: `Core::commit` la accetta e non cambia nulla,
 tranne su un sorgente vuoto, dove scrive la lavagna vuota per intero; la tela
-non la manda mai.
+non la manda mai a `commit`, solo a `preview` per sapere se il testo si
+riscrive (R3).
