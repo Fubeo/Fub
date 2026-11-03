@@ -365,7 +365,7 @@ La WebView usa lo stesso nucleo attraverso `fub-canvas-wasm`: un modulo
 `wasm32-unknown-unknown` con un'interfaccia C scritta a mano, senza librerie
 di collegamento, testo e JSON UTF-8 dentro e fuori. **Non è un contratto
 pubblico**: lo usano solo il caricatore della shell,
-`apps/client/src/editors/canvas/wasm/core.ts` (arriva con T14), e il `.wasm`
+`apps/client/src/editors/canvas/wasm/core.ts`, e il `.wasm`
 fatto dagli stessi sorgenti nella stessa build; le due parti cambiano
 insieme.
 
@@ -471,3 +471,34 @@ stessi controlli (ogni vettore di `canvas-patches/` e `canvas-ops/`, il
 tratto UTF-16 con caratteri di uno, due, tre e quattro byte, BOM e CRLF, ogni
 ingresso sbagliato, gli handle, 16 MiB e un byte in più, un risultato più
 grande di 64 KiB) e, in `abi.rs`, la memoria viva uguale dopo 10 000 giri.
+
+### Nella shell
+
+Il plugin di Vite `apps/client/build/canvas-wasm.mjs`, in `vite.config.ts` e
+in `vite.bench.config.ts`, fa il modulo con il comando qui sopra (più
+`--locked`, con `CARGO_TARGET_DIR=target/canvas-wasm` dalla radice del
+repository) e lo dà come modulo virtuale `virtual:fub-canvas-wasm`
+(`canvasWasmHash`, `loadCanvasWasm()`):
+
+- `npm run build` lo emette fra gli asset (`assets/fub-canvas-<hash>.wasm`) e
+  ne stampa la dimensione; gli stessi sorgenti danno gli stessi byte.
+- `npm run dev` lo serve da `__fub-canvas-wasm/<hash>.wasm`, guarda i
+  sorgenti dei due crate, il loro `Cargo.toml` e `Cargo.lock`, e a ogni
+  cambio rifà il modulo e ricarica la pagina.
+- Sotto Vitest i byte si leggono dal file che cargo ha appena fatto.
+
+Non c'è ripiego su un `.wasm` di prima: senza cargo o senza il target la
+build si ferma, e l'errore dice che cosa installare (`rustup target add
+wasm32-unknown-unknown`).
+
+`core.ts` compila il modulo una volta e dà `openCore(testo)`, una
+`CanvasCore` per lavagna con `model`, `reset`, `commit`, `preview`,
+`compile`, `nodeAt` e `close`. Rilegge le viste della memoria dopo ogni
+chiamata e libera ogni ingresso con `fub_free`, anche quando la chiamata
+fallisce. Un testo con un surrogato spaiato è un errore `utf8` prima di
+arrivare al modulo, mai un U+FFFD. Gli errori sono `CanvasCoreError` con i
+`code` della tabella, più `trap` (l'istanza è morta: ogni lavagna aperta su
+di lei risponde `trap`, e il prossimo `openCore` fa un'istanza nuova) e `load`
+(il modulo non si carica; il prossimo `openCore` riprova). `close` si può
+ripetere; dopo `close` ogni altra chiamata risponde `handle`. I test sono
+`wasm/core.test.ts` e `wasm/vectors.test.ts`, sul `.wasm` vero.

@@ -221,6 +221,15 @@ if [ "$MODE" = rapido ]; then
   fi
 
   if [ "$(val client)" = 1 ] || [ "$WANT_CLIENT" = 1 ]; then client_checks rapido; fi
+  # Il client compila il nucleo della lavagna in `.wasm` (`apps/client/build/canvas-wasm.mjs`):
+  # un cambio ai due crate si prova anche dalla parte di TypeScript.
+  if [ "$(val canvaswasm)" = 1 ]; then
+    if has_target wasm32-unknown-unknown; then
+      run "la lavagna attraverso il .wasm" bash -c 'cd apps/client && npx vitest run src/editors/canvas build'
+    else
+      skip "la lavagna attraverso il .wasm" "target mancante: rustup target add wasm32-unknown-unknown"
+    fi
+  fi
   if [ "$(val docs)" = 1 ]; then doc_guards; fi
   if [ "$(val github)" = 1 ]; then
     run "action pin a commit" node .github/scripts/check-actions-pinned.mjs
