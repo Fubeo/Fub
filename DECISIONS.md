@@ -59,6 +59,17 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- Celle dei fogli, il movimento dei segni (richiesta dell'utente: «un po'
+  glitchata», «la velocizzerei leggermente»). Nel prototipo il velo usciva
+  dal bordo durante la corsa, un tasto tenuto giù ripartiva ogni volta da
+  fermo, l'anello e il velo sparivano di colpo e la molla snap rimbalzava di
+  2 px. Scelto: una sola geometria di dieci numeri per tutti i pezzi, una
+  molla per numero con la velocità che si conserva, l'anello e il velo
+  sempre presenti che crescono dal bordo, e due molle della griglia smorzate
+  al punto critico, GLIDE 1400/75 e SLIDE 700/53, in cima a grid-motion.ts,
+  al posto di snap e soft: circa il 30 % più svelte e senza rimbalzo.
+  moto/spring.ts non cambia. Misurato con le sonde: 0 fotogrammi col velo
+  fuori dal bordo, stato finale uguale con e senza movimento.
 - Griglia-celle · piano nuovo, scritto dal pianificatore di K3 il 2026-11-03
   sulla richiesta dell'utente di portare le celle dei fogli al livello della
   barra: 16 difetti misurati, otto task (T1 | T2 | T3 | T4 T7 | T5 | T6 |

@@ -2612,7 +2612,7 @@ body {
       </ul>
       <h2>Il movimento</h2>
       <ul>
-        <li>Le costanti sono quelle della barra, cioè di <code>moto/spring.ts</code>: <i>snap</i> 560/38 per i segni, <i>soft</i> 300/30 per le colonne che scivolano e le maniglie, 90 ms per una cosa che compare, 140 ms per una che esce, 12 ms fra un valore e l'altro (al massimo 8).</li>
+        <li>Le molle sono della griglia e non rimbalzano: <i>GLIDE</i> 1400/75 per i segni, <i>SLIDE</i> 700/53 per le colonne che scivolano e le maniglie (<code>moto/spring.ts</code> non cambia). Tutti i pezzi di un segno vengono da una sola geometria, quindi il velo e l'anello non escono mai dal bordo, e un tasto tenuto giù scorre senza scatti. Dalla barra restano 90 ms per una cosa che compare, 140 ms per una che esce, 12 ms fra un valore e l'altro (al massimo 8).</li>
         <li><b>Movimento ridotto</b>: niente scivola. I segni saltano, le colonne saltano, le formiche stanno ferme; restano le dissolvenze di 90 ms, come nella barra, e il battito della copia, che è solo una dissolvenza.</li>
         <li>Nel prototipo le corse le fa una copia di <code>run</code> della barra; nel codice vero le fa <code>editors/grid/grid-motion.ts</code> con <code>animate</code>, <code>flip</code> e <code>stagger</code> di <code>moto/</code> (T3).</li>
       </ul>
@@ -2678,22 +2678,34 @@ body {
   const ENTER_SCALE = 0.96; // le maniglie del tocco lungo, come una sezione che compare nella barra
   const ANTS_STEP = 8; // un passo delle formiche, il periodo del loro tratteggio
   const ANTS_MS = 320; // il tempo di un passo
+  // Le molle della griglia: un po' più svelte di `snap` e `soft` della barra,
+  // e smorzate in modo critico. Su una griglia un segno che passa il
+  // bersaglio e torna indietro si legge come un difetto, non come un rimbalzo.
+  // `GLIDE` porta i segni (al 90 % in circa 105 ms, fermo in 250), `SLIDE` le
+  // colonne che scivolano e le maniglie del tocco lungo (al 90 % in 150 ms).
+  const GLIDE = { stiffness: 1400, damping: 75 };
+  const SLIDE = { stiffness: 700, damping: 53 };
 
-  /// L'avanzamento 0 → 1 di una molla, un valore ogni `SAMPLE_MS`.
-  function sampleSpring(spring) {
-    const STEP_S = 1 / 480;
+  const STEP_S = 1 / 480;
+  /// Avanza `state` ({ x, v }, v al secondo) verso `target` di `seconds`, a
+  /// passi non più lunghi di `STEP_S`: è `advanceSpring` di `moto/spring.ts`.
+  function advanceSpring(spring, state, target, seconds) {
+    let steps = Math.max(1, Math.ceil(seconds / STEP_S - 1e-9));
+    const h = seconds / steps;
+    while (steps-- > 0) {
+      state.v += (-spring.stiffness * (state.x - target) - spring.damping * state.v) * h;
+      state.x += state.v * h;
+    }
+  }
+  /// L'avanzamento 0 → 1 di una molla, un valore ogni `SAMPLE_MS`; `v0` è la
+  /// velocità di partenza, in avanzamento al secondo.
+  function sampleSpring(spring, v0 = 0) {
     const precision = 0.001;
-    const state = { x: 0, v: 0 };
+    const state = { x: 0, v: v0 };
     const values = [0];
     const last = Math.round(SPRING_MAX_MS / SAMPLE_MS);
     for (let index = 1; index <= last; index++) {
-      const seconds = SAMPLE_MS / 1000;
-      let steps = Math.max(1, Math.ceil(seconds / STEP_S - 1e-9));
-      const h = seconds / steps;
-      while (steps-- > 0) {
-        state.v += (-spring.stiffness * (state.x - 1) - spring.damping * state.v) * h;
-        state.x += state.v * h;
-      }
+      advanceSpring(spring, state, 1, SAMPLE_MS / 1000);
       if (index === last || (Math.abs(state.x - 1) < precision && Math.abs(state.v) < precision * 20)) {
         values.push(1);
         break;
@@ -2714,7 +2726,22 @@ body {
     }
   }
   const reduced = () => look.movimento.value === "ridotto";
-  const flights = new Map();
+  const flights = new Map(); // elemento → { motion, from, values }
+  const lawOf = (spring) => (typeof spring === "string" ? SPRINGS[spring] : spring);
+  const onlyMoves = (from) => !!from && Object.keys(from).every((k) => k === "x" || k === "y");
+  /// L'avanzamento di una corsa a molla adesso, e la sua velocità al secondo.
+  function progressOf(flight) {
+    const { values, motion } = flight;
+    const last = values.length - 1;
+    const t = Math.max(0, Number(motion.currentTime ?? 0)) / SAMPLE_MS;
+    if (t >= last) return { p: 1, dp: 0 };
+    const k = Math.floor(t);
+    return { p: values[k] + (values[k + 1] - values[k]) * (t - k), dp: ((values[k + 1] - values[k]) / SAMPLE_MS) * 1000 };
+  }
+  function halt(el) {
+    flights.get(el)?.motion.cancel();
+    flights.delete(el);
+  }
   /// La posa a un avanzamento `p` fra `from` (0) e il riposo (1).
   function pose(from, p) {
     const k = 1 - p;
@@ -2729,13 +2756,18 @@ body {
   }
   /// Porta `target` da `from` al riposo: con una molla, o in `duration` ms.
   /// Ridotto: niente, o una dissolvenza di `DURATION.state` se lo si chiede.
-  function run(target, { from, spring = "soft", duration, easing: curve = "linear", delay = 0, whenReduced = "none" }) {
-    flights.get(target)?.cancel();
+  /// Una corsa di sola posizione che ne interrompe un'altra parte da dove
+  /// l'elemento si vede, con la sua velocità: ciò che restava della corsa
+  /// vecchia si somma alla nuova, invece di sparire in un salto.
+  function run(target, { from, spring = SLIDE, duration, easing: curve = "linear", delay = 0, whenReduced = "none" }) {
+    const old = flights.get(target);
+    old?.motion.cancel();
     flights.delete(target);
     if (still > 0) return null;
     let frames;
     let time;
     let easing = "linear";
+    let values = null;
     if (reduced()) {
       if (whenReduced !== "fade") return null;
       frames = [{ opacity: 0 }, { opacity: 1 }];
@@ -2745,14 +2777,25 @@ body {
       time = duration;
       easing = curve;
     } else {
-      const values = sampleSpring(SPRINGS[spring]);
+      let v0 = 0;
+      if (old?.values && onlyMoves(from) && onlyMoves(old.from)) {
+        const { p, dp } = progressOf(old);
+        const ox = old.from.x ?? 0;
+        const oy = old.from.y ?? 0;
+        from = { x: (from.x ?? 0) + ox * (1 - p), y: (from.y ?? 0) + oy * (1 - p) };
+        const axis = Math.abs(from.x) >= Math.abs(from.y) ? "x" : "y";
+        const speed = -(axis === "x" ? ox : oy) * dp;
+        if (Math.abs(from[axis]) > 0.5) v0 = -speed / from[axis];
+      }
+      values = sampleSpring(lawOf(spring), v0);
       frames = values.map((p) => pose(from, p));
       time = (values.length - 1) * SAMPLE_MS;
     }
     const motion = target.animate(frames, { duration: time, delay, easing, fill: "backwards" });
-    flights.set(target, motion);
+    const flight = { motion, from, values };
+    flights.set(target, flight);
     const done = () => {
-      if (flights.get(target) === motion) flights.delete(target);
+      if (flights.get(target) === flight) flights.delete(target);
     };
     motion.finished.then(done, done);
     return motion;
@@ -3220,27 +3263,39 @@ body {
       { name: `${prefix}-right`, cls: `${cls} v`, x: b.R - t, y: b.T - 1, w: t, h: b.B - b.T + 1, ...extra },
     ];
   }
-  function marksParts() {
+  /// I numeri dei segni che scivolano, in coordinate della griglia: il
+  /// rettangolo (`bL`…`bB`), la cella attiva (`aL`…`aB`) e l'angolo del
+  /// quadratino (`hR`, `hB`). Sono questi dieci numeri a correre, non i pezzi:
+  /// ogni pezzo si disegna da loro in ogni fotogramma, così i lati, l'anello,
+  /// il velo, le fasce e il quadratino restano attaccati anche quando un gesto
+  /// nuovo arriva a metà corsa.
+  function marksGeometry() {
+    const b = boxOf(range());
+    const a = boxOf({ r0: sel.active.r, c0: sel.active.c, r1: sel.active.r, c1: sel.active.c });
+    const hb = fill ? boxOf(fill.target) : b;
+    return [b.L, b.T, b.R, b.B, a.L, a.T, a.R, a.B, hb.R, hb.B];
+  }
+  function marksParts(G = marksGeometry()) {
+    const [bL, bT, bR, bB, aL, aT, aR, aB, hR, hB] = G;
+    const b = { L: bL, T: bT, R: bR, B: bB };
+    const a = { L: aL, T: aT, R: aR, B: aB };
     const g = range();
-    const b = boxOf(g);
     const lone = g.r0 === g.r1 && g.c0 === g.c1;
     const parts = [];
     // Sul tratteggio di una copia o di un taglio il bordo pieno lo coprirebbe.
     if (!(clip && sameRange(clip.range, g))) parts.push(...edges("rect", "edge", b, 2));
-    if (!lone) {
-      const a = boxOf({ r0: sel.active.r, c0: sel.active.c, r1: sel.active.r, c1: sel.active.c });
-      parts.push(...edges("ring", "ring", a, 1));
-      parts.push(
-        { name: "veil-top", cls: "veil", x: b.L, y: b.T, w: b.R - b.L, h: a.T - b.T },
-        { name: "veil-bottom", cls: "veil", x: b.L, y: a.B, w: b.R - b.L, h: b.B - a.B },
-        { name: "veil-left", cls: "veil", x: b.L, y: a.T, w: a.L - b.L, h: a.B - a.T },
-        { name: "veil-right", cls: "veil", x: a.R, y: a.T, w: b.R - a.R, h: a.B - a.T },
-      );
-    }
-    if (!editor && !touchMode() && !fill?.waiting) {
-      const hb = fill ? boxOf(fill.target) : b;
-      parts.push({ name: "handle", cls: "handle", x: hb.R - 5, y: hb.B - 5, w: 8, h: 8 });
-    }
+    // L'anello e il velo si disegnano anche su una cella sola, dove l'anello
+    // sta sotto il bordo e il velo è vuoto: allargando la selezione escono dal
+    // bordo, stringendola ci rientrano, invece di comparire e sparire di colpo.
+    const grown = [
+      ...edges("ring", "ring", a, 1),
+      { name: "veil-top", cls: "veil", x: b.L, y: b.T, w: b.R - b.L, h: a.T - b.T },
+      { name: "veil-bottom", cls: "veil", x: b.L, y: a.B, w: b.R - b.L, h: b.B - a.B },
+      { name: "veil-left", cls: "veil", x: b.L, y: a.T, w: a.L - b.L, h: a.B - a.T },
+      { name: "veil-right", cls: "veil", x: a.R, y: a.T, w: b.R - a.R, h: a.B - a.T },
+    ];
+    for (const p of grown) parts.push({ ...p, grows: true, rest: !lone });
+    if (!editor && !touchMode() && !fill?.waiting) parts.push({ name: "handle", cls: "handle", x: hR - 5, y: hB - 5, w: 8, h: 8 });
     parts.push({ name: "band-col", cls: "band-col", x: b.L, y: 0, w: b.R - b.L, h: HEAD_H, layers: ["top", "corner"] });
     parts.push({ name: "band-row", cls: "band-row", x: 0, y: b.T, w: HEAD_W, h: b.B - b.T, layers: ["left", "corner"] });
     if (clip && (clip.cut || look.copia.value !== "battito")) parts.push(...edges("clip", clip.cut ? "cut" : "copy", boxOf(clip.range), 2, { glide: false }));
@@ -3255,27 +3310,80 @@ body {
   }
   /// Il pezzo `p` tagliato alla zona di `layer`, nelle coordinate del livello.
   /// I lati si fermano un pixel prima del filo del blocco, le fasce delle
-  /// intestazioni al bordo della zona.
-  function clipRect(layer, p) {
+  /// intestazioni al bordo della zona. Fuori dalla zona non c'è (`null`);
+  /// `loose`, per i fotogrammi di una corsa, lo schiaccia invece in una riga
+  /// vuota sul bordo della zona, da cui entra o in cui esce.
+  function clipRect(layer, p, loose = false) {
     const band = p.cls.startsWith("band");
     const yMax = band ? TH : TH - 1;
     const xMax = band ? LW() : LW() - 1;
-    const x1 = p.x;
+    const capY = layer === "top" || layer === "corner" ? yMax : Infinity;
+    const capX = layer === "left" || layer === "corner" ? xMax : Infinity;
+    const floorY = layer === "left" ? TH : -Infinity;
+    let x1 = p.x;
     let y1 = p.y;
-    let x2 = p.x + p.w;
-    let y2 = p.y + p.h;
-    if (layer === "top" || layer === "corner") y2 = Math.min(y2, yMax);
-    if (layer === "left" || layer === "corner") x2 = Math.min(x2, xMax);
-    if (layer === "left") y1 = Math.max(y1, TH);
+    let x2 = p.x + Math.max(0, p.w);
+    let y2 = p.y + Math.max(0, p.h);
+    if (loose) {
+      const fitY = (y) => Math.min(capY, Math.max(floorY, y));
+      x1 = Math.min(capX, x1);
+      x2 = Math.min(capX, x2);
+      y1 = fitY(y1);
+      y2 = fitY(y2);
+      return { x: x1, y: layer === "left" ? y1 - TH : y1, w: x2 - x1, h: y2 - y1 };
+    }
+    x2 = Math.min(x2, capX);
+    y2 = Math.min(y2, capY);
+    y1 = Math.max(y1, floorY);
     if (x2 <= x1 || y2 <= y1) return null;
     return { x: x1, y: layer === "left" ? y1 - TH : y1, w: x2 - x1, h: y2 - y1 };
   }
-  const sameRect = (a, b) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
-  /// Mette i segni dove la selezione dice. Un pezzo che c'era scivola dalla
-  /// sua posa di adesso (anche a metà corsa) a quella nuova con la molla
-  /// *snap*; uno nuovo compare in `DURATION.state`; uno che non serve più
+  // La corsa della geometria: i campioni dei dieci numeri, uno ogni
+  // `SAMPLE_MS` da `t0` (l'orologio delle animazioni), e le animazioni dei
+  // pezzi, che partono tutte in quell'istante.
+  let geo = null; // { samples, t0, motions }
+  const leaving = new Map(); // id → l'animazione con cui l'anello o il velo rientrano
+  const clock = () => document.timeline.currentTime ?? performance.now();
+  /// Dove si vedono adesso i dieci numeri, e a che velocità (px al secondo).
+  function geoNow() {
+    if (!geo) return null;
+    const { samples, t0 } = geo;
+    const last = samples.length - 1;
+    const t = Math.max(0, (clock() - t0) / SAMPLE_MS);
+    if (t >= last) return { x: samples[last], v: samples[last].map(() => 0) };
+    const k = Math.floor(t);
+    const a = samples[k];
+    const b = samples[k + 1];
+    return { x: a.map((x, i) => x + (b[i] - x) * (t - k)), v: a.map((x, i) => ((b[i] - x) / SAMPLE_MS) * 1000) };
+  }
+  /// I campioni dei dieci numeri da `from` (con la velocità `velocity`) a `to`,
+  /// una molla per numero; l'ultimo campione è esattamente `to`.
+  function sampleGeometry(spring, from, velocity, to) {
+    const states = from.map((x, i) => ({ x, v: velocity[i] }));
+    const samples = [from.slice()];
+    const last = Math.round(SPRING_MAX_MS / SAMPLE_MS);
+    for (let index = 1; index <= last; index++) {
+      states.forEach((state, i) => advanceSpring(spring, state, to[i], SAMPLE_MS / 1000));
+      if (index === last || states.every((state, i) => Math.abs(state.x - to[i]) < 0.1 && Math.abs(state.v) < 3)) {
+        samples.push(to.slice());
+        break;
+      }
+      samples.push(states.map((state) => state.x));
+    }
+    return samples;
+  }
+  function stopGeometry() {
+    for (const m of geo?.motions ?? []) m.cancel();
+    leaving.clear();
+    geo = null;
+  }
+  /// Mette i segni dove la selezione dice. I pezzi che scivolano corrono
+  /// tutti insieme dalla geometria che si vede adesso (anche a metà corsa, con
+  /// la sua velocità) a quella nuova, con la molla `spring`; un pezzo nuovo
+  /// che non esce dal bordo compare in `DURATION.state`; l'anello e il velo
+  /// che non servono più rientrano nel bordo e poi si nascondono; il resto
   /// sparisce subito.
-  function updateMarks({ glide = true } = {}) {
+  function updateMarks({ glide = true, spring = GLIDE } = {}) {
     syncHeaders();
     syncFormula();
     if (!nuova()) {
@@ -3283,23 +3391,70 @@ body {
       return;
     }
     if (!dom) return;
+    const to = marksGeometry();
+    const seen = geoNow();
+    for (const m of geo?.motions ?? []) m.cancel();
+    leaving.clear();
+    const moving =
+      glide &&
+      glideWhileDragging() &&
+      still === 0 &&
+      !reduced() &&
+      !!seen &&
+      seen.x.some((x, i) => Math.abs(x - to[i]) > 0.1 || Math.abs(seen.v[i]) > 3);
+    const samples = moving ? sampleGeometry(spring, seen.x, seen.v, to) : [to];
+    const t0 = clock();
+    geo = { samples, t0, motions: [] };
+    const named = samples.map((G) => new Map(marksParts(G).map((p) => [p.name, p])));
     const next = new Map();
-    for (const p of marksParts())
-      for (const layer of p.layers ?? LAYERS) {
-        const r = clipRect(layer, p);
-        if (r) next.set(`${layer}:${p.name}`, { layer, p, r });
+    for (const p of named[named.length - 1].values())
+      for (const layer of p.layers ?? LAYERS) next.set(`${layer}:${p.name}`, { layer, p, r: p.rest === false ? null : clipRect(layer, p) });
+    /// Le pose di un pezzo, fotogramma per fotogramma, rispetto al suo riposo `S`.
+    const travel = (id, layer, S) => {
+      const name = id.slice(id.indexOf(":") + 1);
+      let idle = true;
+      const frames = named.map((parts) => {
+        const R = clipRect(layer, parts.get(name), true);
+        const dx = R.x - S.x;
+        const dy = R.y - S.y;
+        const sx = R.w / S.w;
+        const sy = R.h / S.h;
+        if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01 || Math.abs(sx - 1) > 1e-4 || Math.abs(sy - 1) > 1e-4) idle = false;
+        return { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` };
+      });
+      return idle ? null : frames;
+    };
+    const play = (el, frames, exit) => {
+      const m = el.animate(frames, { duration: (frames.length - 1) * SAMPLE_MS, fill: exit ? "forwards" : "none" });
+      m.startTime = t0;
+      geo.motions.push(m);
+      return m;
+    };
+    for (const id of new Set([...shownMarks.keys(), ...next.keys()])) {
+      const n = next.get(id);
+      const was = shownMarks.get(id);
+      if (!n?.r) {
+        if (!was) continue;
+        const el = pool.get(id);
+        const frames = moving && n?.p.grows ? travel(id, n.layer, was) : null;
+        if (frames) {
+          // Rientra nel bordo dal suo posto di prima, poi si nasconde.
+          const m = play(el, frames, true);
+          leaving.set(id, m);
+          m.onfinish = () => {
+            if (leaving.get(id) !== m) return;
+            leaving.delete(id);
+            el.hidden = true;
+            shownMarks.delete(id);
+            m.cancel();
+          };
+          continue;
+        }
+        halt(el);
+        el.hidden = true;
+        shownMarks.delete(id);
+        continue;
       }
-    for (const id of [...shownMarks.keys()]) {
-      if (next.has(id)) continue;
-      const el = pool.get(id);
-      flights.get(el)?.cancel();
-      flights.delete(el);
-      el.hidden = true;
-      shownMarks.delete(id);
-    }
-    const layerBox = {};
-    const moves = [];
-    for (const [id, n] of next) {
       let el = pool.get(id);
       if (!el) {
         el = div();
@@ -3310,28 +3465,16 @@ body {
       el.className = `grid-mark ${n.p.cls}`;
       if (n.p.cls.startsWith("ants") && !el.firstChild) el.append(div("grid-ants"));
       if (n.p.handle) el.dataset.handle = n.p.handle;
-      const was = shownMarks.get(id);
-      let from = null;
-      if (was && glide && glideWhileDragging() && n.p.glide !== false && !sameRect(was, n.r)) {
-        layerBox[n.layer] ??= dom.layers[n.layer].getBoundingClientRect();
-        const lb = layerBox[n.layer];
-        const eb = el.getBoundingClientRect();
-        from = { x: eb.left - lb.left, y: eb.top - lb.top, w: eb.width, h: eb.height };
-      }
-      moves.push({ id, el, n, was, from });
-    }
-    for (const { id, el, n, was, from } of moves) {
       place(el, n.r);
       shownMarks.set(id, n.r);
+      const frames = moving && n.p.glide !== false && (was || n.p.grows) ? travel(id, n.layer, n.r) : null;
       if (!was) {
         el.hidden = false;
-        if (n.p.appear === "soft") run(el, { from: { scale: ENTER_SCALE, opacity: 0 }, spring: "soft", whenReduced: "fade" });
+        if (frames) play(el, frames, false);
+        else if (n.p.appear === "soft") run(el, { from: { scale: ENTER_SCALE, opacity: 0 }, spring: SLIDE, whenReduced: "fade" });
         else run(el, { from: { opacity: 0 }, duration: DURATION.state, whenReduced: "fade" });
-      } else if (from) {
-        run(el, { from: { x: from.x - n.r.x, y: from.y - n.r.y, scaleX: from.w / n.r.w, scaleY: from.h / n.r.h }, spring: "snap" });
-      } else if (!glideWhileDragging() || !glide) {
-        flights.get(el)?.cancel();
-        flights.delete(el);
+      } else if (frames) {
+        play(el, frames, false);
       }
     }
   }
@@ -4182,8 +4325,8 @@ body {
     }
     widths[index] = w;
     layoutColumns();
-    for (const el of movers) run(el, { from: { x: -delta }, spring: "soft" });
-    updateMarks();
+    for (const el of movers) run(el, { from: { x: -delta }, spring: SLIDE });
+    updateMarks({ spring: SLIDE });
   }
 
   // ── Riempimento ─────────────────────────────────────────────────────────
@@ -4305,6 +4448,7 @@ body {
     rawShown.clear();
     widths = [...BASE_WIDTHS];
     measure();
+    stopGeometry();
     pool.clear();
     shownMarks.clear();
     rowMap.clear();

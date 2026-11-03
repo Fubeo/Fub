@@ -22,6 +22,9 @@ motore; un difetto a parte, per cui l'orchestratore apre un'issue); l'aspetto
 griglia delle tabelle Markdown (`tabella/`), che ha la sua.
 Assunzioni: B1–B6 qui sotto, prese dal pianificatore col prototipo; le
 domande D-1…D-6 le rimettono all'utente, e nessuna blocca il primo task.
+L'utente ha visto il prototipo: le celle vanno bene e «per il resto
+funziona tutto»; ha chiesto un movimento senza scatti e un po' più svelto,
+che è quello di B5, B6 e T3. Le D-1…D-6 restano aperte.
 Ondate: T1 | T2 | T3 | T4 T7 | T5 | T6 | T8 (tutti toccano
 `editors/grid/engine.ts`: T4 e T7 ne toccano parti diverse, la cella aperta
 e il puntatore, e possono girare insieme; T5 e T6 toccano tutti e due la
@@ -105,7 +108,7 @@ le larghezze fisse e righe alte uguali: il codice usa `#columns.offsets` e
 | script `renderRows`: un riquadro di margine sopra e sotto, le righe che restano, aggiunte e tolte solo ai bordi, rifatte solo a un salto | `editors/grid/engine.ts` (`#render`, `#renderedIndices`) | T2 |
 | script `pool` e `shownMarks`: i pezzi di ogni segno ci sono sempre, per zona e per nome; una freccia li sposta | `editors/grid/marks.ts`, `engine.ts` | T3 |
 | CSS `→ skin/editors.css (T3: i segni)`: `--grid-mark` (`--paper-caret` sulla carta del file, `--accent` con l'aspetto adattato), i lati del rettangolo (`edge`, 2 px: uno sul filo, uno dentro), l'anello della cella attiva (`ring`), il velo (`veil`), le fasce delle intestazioni (`band-col`, `band-row`), il quadratino (`handle`), i fili del blocco (`freeze`), i colori forzati | `theme/scrittoio/skin/editors.css`, nella sezione «Il foglio di calcolo», al posto di `.grid-selection` e `.grid-fill-handle` | T3 |
-| script `run`, le costanti in cima (`ENTER_SCALE`, `ANTS_STEP`, `ANTS_MS`) e le corse dei segni (molla `snap`) | `editors/grid/grid-motion.ts` (nuovo), con `animate`, `flip`, `stagger` ed `enter` di `moto/` | T3 |
+| script `run`, le costanti in cima (`ENTER_SCALE`, `ANTS_STEP`, `ANTS_MS`) `GLIDE`, `SLIDE`), la geometria unica dei segni (`marksGeometry`, `sampleGeometry`, `updateMarks`) e le corse | `editors/grid/grid-motion.ts` (nuovo), con `advanceSpring`, `animate`, `flip`, `stagger` ed `enter` di `moto/` | T3 |
 | CSS `→ structure.css e skin/editors.css (T4: la cella aperta)`: `.grid-cell-editor`, `-frame`, `-text`, la crescita a colonne intere e l'andare a capo (`wraps`) | `structure.css` e `skin/editors.css` | T4 |
 | script `placeEditor`: la cella aperta nel livello «lift» della sua zona, la misura a colonne intere fino al bordo del riquadro, poi a capo | `editors/grid/engine.ts` (`#startEditing`, `#positionEditor`) | T4 |
 | script «La risposta del foglio»: il numero a destra subito, la formula tenue fino al valore, la larghezza subito, il ritorno scivolando con l'avviso | `editors/grid/engine.ts` (`#showWritten`, il bordo tirato), `grid-motion.ts` | T5 |
@@ -152,9 +155,12 @@ dell'anatomia; il verso (`h`, `v`) e il lato possono stare in un attributo
   aprono la cella, un tocco lungo (`LONG_PRESS_MS`) mette le due maniglie
   per allargare la selezione; trascinare col dito scorre e basta. (D-4)
 - B5 · La selezione scivola anche mentre si trascina col puntatore, con la
-  stessa molla `snap` dei tasti. (D-5)
-- B6 · Le costanti sono quelle della barra: `SPRINGS.snap` (560/38) per i
-  segni, `soft` (300/30) per le colonne che scivolano e le maniglie,
+  stessa molla `GLIDE` dei tasti. (D-5)
+- B6 · Le molle sono della griglia, smorzate al punto critico perché un
+  bordo che rimbalza si legge come un difetto: `GLIDE` (1400/75, al 90 % in
+  circa 105 ms) per i segni, `SLIDE` (700/53, al 90 % in circa 150 ms) per
+  le colonne che scivolano e le maniglie, in cima a `grid-motion.ts`;
+  `moto/spring.ts` non cambia. Dalla barra restano
   `DURATION.state` (90 ms) per ciò che compare, `DURATION.swap` (140 ms) per
   ciò che esce, `STAGGER_MS` (12) e `STAGGER_MAX` (8) fra i valori che
   arrivano. Le costanti nuove, in cima a `grid-motion.ts` e col nome del
@@ -413,9 +419,17 @@ Cosa fare:
   la carta, non `--sheet`. I colori forzati usano `Highlight`.
 - Il movimento, in `editors/grid/grid-motion.ts`, il solo modulo della
   griglia che fa partire corse: i pezzi vanno dalla posa di prima a quella
-  nuova con `flip` (o `animate` col `from`) e la molla `snap`; un gesto nuovo
-  a metà corsa riparte da posa e velocità correnti. Con «ridotto» i segni
-  saltano. Il modulo prende il `Lifetime` della griglia e lo smontaggio
+  nuova come una sola geometria (i dieci numeri del prototipo: il
+  rettangolo, la cella attiva e il quadratino), con una molla `GLIDE` per
+  numero campionata con `advanceSpring` di `moto/`; ogni pezzo (lati,
+  anello, velo, fasce, quadratino, maniglie) si ricava da quella geometria a
+  ogni campione e la sua corsa sono fotogrammi di `transform` sul suo
+  rettangolo fermo, partiti tutti nello stesso istante: nessun pezzo esce
+  dal bordo durante la corsa. Un gesto nuovo a metà corsa riparte da posa e
+  velocità correnti di ogni numero, anche col tasto tenuto giù. L'anello e
+  il velo ci sono sempre: con una cella sola sono a misura del bordo, e
+  crescono da lì o ci rientrano invece di comparire e sparire. Con
+  «ridotto» i segni saltano. Il modulo prende il `Lifetime` della griglia e lo smontaggio
   ferma tutto (`halt`).
 - `bench/motion.test.ts`: `../src/editors/grid/**/*.ts` entra nell'elenco
   dei sorgenti, e `grid-motion.ts` ha le sue coreografie in
@@ -540,7 +554,7 @@ Cosa fare:
   sempre, anche se l'anteprima era diversa.
 - Il bordo tirato: al rilascio la larghezza (o l'altezza) nuova vale subito
   nelle misure della griglia, come anteprima; le colonne dopo scivolano al
-  posto nuovo (`flip`, molla `soft`). Se il foglio dice di no, la misura
+  posto nuovo (`flip`, molla `SLIDE`, con la velocità della corsa di prima). Se il foglio dice di no, la misura
   torna com'era scivolando e l'avviso dice perché (le frasi di oggi). Ogni
   anteprima ha il suo numero: una risposta che arriva dopo un altro gesto
   sullo stesso bordo non lo annulla.
@@ -658,7 +672,7 @@ Cosa fare:
   tocco lungo (`LONG_PRESS_MS`, fermo entro `TAP_MOVE`) sceglie e mette due
   maniglie agli angoli della selezione, che si tirano per allargarla. Le
   maniglie non riempiono: al telefono il riempimento resta dal menu.
-- Le maniglie compaiono con `enter` da `ENTER_SCALE` (molla `soft`) e
+- Le maniglie compaiono con `enter` da `ENTER_SCALE` (molla `SLIDE`) e
   seguono la selezione con i pezzi di T3; un tocco altrove le toglie.
 - Coreografie in `motion-rules.mjs`: il tocco lungo (le maniglie che
   compaiono) e la maniglia tirata.
