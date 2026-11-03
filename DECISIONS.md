@@ -59,6 +59,11 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · N6 · le risposte dell'utente alle domande nuove: D-20 (a), i
+  CSV in un piano suo che finisce con T88; D-21 (a), il titolo sopra la
+  scheda, come Obsidian (da rivedere sul prototipo T25; N4 lo usa per il
+  riquadro dell'inchiostro); D-22 (a), lazo e forme adesso sull'inchiostro
+  di N4 · le consigliate, accettate dall'utente («ci sto»).
 - 2026-11-02 · N6 · Le risposte dell'utente a D-1…D-19 (e merge-n3n4,
   ci-soglia): la v1 intera di `lavagna.md` (gli estratti di PDF aspettano
   PdfCraft); i file trascinati vanno dove dice un'impostazione della

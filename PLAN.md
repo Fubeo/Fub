@@ -519,6 +519,8 @@ risposte, e i task che le aspettano lo dicono.
   lavoro del motore dei fogli che serve a tutto Fub, non solo alla lavagna;
   con (a) un CSV sulla lavagna resta una scheda di file finché quel piano
   non c'è.
+  Risposta (2026-11-03): (a) — un piano suo, «I CSV nel motore dei fogli»,
+  che finisce con T88; N6 si chiude solo con T88 fatto.
 - D-21 · Dove sta il titolo di una scheda di file (T39, si decide guardando
   il prototipo T25). (a) Consigliata: sopra la scheda, fuori dal suo
   rettangolo, come fa Obsidian; la scheda è tutta contenuto, e l'inchiostro
@@ -530,6 +532,9 @@ risposte, e i task che le aspettano lo dicono.
   e gli altri non conoscono; con (c) chi usa la tastiera o la penna non
   vede il nome. N4 aspetta questa risposta per il riquadro dell'inchiostro
   (la sua nota per N6 su T5, T6, T19).
+  Risposta (2026-11-03): (a) — il titolo sopra la scheda, fuori dal suo
+  rettangolo, come Obsidian; l'utente lo rivede nel prototipo T25. Da dire a
+  N4 (riquadro dell'inchiostro).
 - D-22 · Gli strumenti di disegno della lavagna: lazo, spostare l'inchiostro,
   forme dal tratto, linea dritta e righello (E2, F5, F6, F7; T86, T87).
   `lavagna.md` dice che sono un sottoinsieme del motore del disegno (K5);
@@ -544,6 +549,9 @@ risposte, e i task che le aspettano lo dicono.
   diventerebbero elementi del motore, che un `.canvas` non sa tenere senza
   un campo nuovo; con (a) e (c) si fanno ora, e restano tratti che Obsidian
   conserva come il resto dell'inchiostro.
+  Risposta (2026-11-03): (a) — lazo, forme e righello adesso,
+  sull'inchiostro di N4 e sui pezzi che Fub ha già; nessun formato nuovo, N6
+  non aspetta K5.
 
 Le altre domande aperte di `lavagna.md` entrano con D-1 (b): il piano segue
 il consiglio di `lavagna.md` per ognuna (A-25). La rotella e il link sono
