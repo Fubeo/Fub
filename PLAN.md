@@ -1670,7 +1670,7 @@ catalogs` passa con i casi qui sopra; dopo i test nessun pid scritto dagli
 script è ancora vivo (`kill -0` dal test; mai `pgrep -f`);
 `node .github/scripts/check-error-literals.mjs` passa senza cambiare soglie.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test craft_cli
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 43454451
 
 ## T12 · L'IPC
 
@@ -2687,7 +2687,7 @@ src/state/craft-photos.test.ts src/editors/media` passa; le foto del banco
 somigliano al prototipo, in chiaro e in scuro.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/craft/photo-data.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 43454451
 
 ## T26 · L'albero: le miniature e gli XMP nascosti
 
