@@ -74,10 +74,14 @@ fn scaldare_costruisce_il_motore_senza_aprire_file() {
         fub_format_rich::blank(Codec::Docx).unwrap(),
     )
     .unwrap();
-    host.read_document(None, &DocId::new("Lettera.docx"))
-        .expect("reads the document");
+    host.open_document_with_format(
+        None,
+        &DocId::new("Lettera.docx"),
+        &fub_host::OpenKey::parse("lettera").unwrap(),
+    )
+    .expect("opens the document");
     let ricordate = documenti.prove_ricordate();
-    assert!(ricordate > 0, "leggere ricorda la prova a vuoto");
+    assert!(ricordate > 0, "aprire ricorda la prova a vuoto");
     assert!(host.warm_engine("docx"));
     assert!(
         host.warm_engine("odt"),
