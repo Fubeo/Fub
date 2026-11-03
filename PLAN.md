@@ -694,7 +694,7 @@ pieno e uno senza resta com'è; in `permissions.test.ts` un permesso con elenco
 mostra l'elenco e uno malformato dice «nessuno»; `npm run typecheck` e
 `npm test` verdi.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 5286c4f5
 
 ## T7 · L'esecuzione, l'annullamento e la prova di una ricetta
 
