@@ -1627,7 +1627,7 @@ sezione sono nel rapporto e somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cargo test -p fub-features; cargo test
 -p fub-host --test lavagna_feature; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder · base fb1179a5
+Stato: [x] fatto
 
 ## T20 · Il prototipo delle penne
 
