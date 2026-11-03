@@ -726,7 +726,10 @@ IPC verdi con le forme nuove; il test del fake (un'apertura conta, una
 chiusura scala). `ipc-contract.md` descrive lettura semplice e apertura;
 `node .github/scripts/check-doc-links.mjs` verde.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base ac0e8882
+  Risposta (2026-11-03): l'utente dà l'OK al cambio dell'IPC (`read_document`
+  e `write_document` con `open?`, `document_closed` con `{open}`, al più 1024
+  chiavi per vault).
 
 ## T11 · Ogni documento che la shell apre si chiude
 
@@ -906,6 +909,7 @@ con uno script e scrive nel resoconto ogni differenza col suo perché); i test
 del client verdi.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare
+  Aspetta: il sì dell'utente al prototipo rifatto di T12 e la risposta a D-5.
 
 ## T14 · Il menu «Comandi» dei fogli
 
@@ -996,6 +1000,7 @@ del menu, chiara e scura, piena e stretta, corrispondono al prototipo con la
 barra nuova.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare
+  Aspetta: il sì dell'utente al prototipo rifatto di T12 e la risposta a D-5.
 
 ## T15 · Il risultato dei comandi che leggono, e i perché in italiano
 
@@ -1081,6 +1086,7 @@ lettura sono spenti soltanto i `cambia`; `engine.test.ts`: in sola lettura
 stretta, corrispondono al prototipo.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare
+  Aspetta: il sì dell'utente al prototipo rifatto di T12 e la risposta a D-5.
 
 ## T16 · La misura con i documenti che si chiudono
 
@@ -1253,6 +1259,7 @@ trova invariate le scene dei documenti e delle tabelle (`document-*`,
 e `bench:a11y` verdi.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare
+  Aspetta: il sì dell'utente al prototipo rifatto di T12 e la risposta a D-5.
 
 Dopo K3, non in K3: lo stesso stile passa alla barra dei documenti, a quella
 delle tabelle e alle altre modalità spostando queste regole da
