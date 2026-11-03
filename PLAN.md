@@ -1519,7 +1519,7 @@ l'avviso con il suo ruolo `alert`, e che togliendo la chiave doppia torna a
 cambiare; il controllo delle chiavi del catalogo è verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base f0e7c3b3
 
 ## T23 · La CI completa e la revisione prima del merge
 
