@@ -59,6 +59,24 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- T27 (0284ab88, d8562abf): il coder si è fermato sul filo in
+  `craft/preview.rs` (in «Non toccare» per non scontrarsi con T19 e T24, e
+  nessun task lo possedeva). L'orchestratore l'ha applicato (una decina di
+  righe in `ranged_preview`: un RAW passa da `raw::read_from`, `Stale`
+  riprova, ogni altro errore torna alla via dell'host), perché nessun task
+  in corso tocca quel file. Il test vecchio
+  `a_raw_photo_is_a_subject_from_its_extension` aspettava `absent` per un
+  `.CR3` di 9 byte che non è un RAW: ora è `unreadable`, come vuole il piano
+  (un `.CR3` che non è un RAW). Differenze dal piano: `JpegRange` ha anche
+  `width` e `height`; costanti in più `MAX_BOXES` (10 000) e
+  `MAX_CANDIDATES` (64); un JPEG senza perdita (SOF C3, C7, CB, CF) si
+  scarta perché sono dati del sensore, un JPEG progressivo si tiene;
+  l'orientamento di un RAF viene dall'EXIF del suo JPEG; un ORF dà `absent`
+  (le sue anteprime stanno nella MakerNote, che non si legge); il test delle
+  «70 000 voci» usa 65 535 e 1001 perché il conteggio è un u16; il cammino
+  dei segmenti JPEG ricalca `jpeg::size` perché `jpeg.rs` non si tocca.
+  Rischio: provato solo su file costruiti nei test, non su RAW di fotocamere
+  vere (resta per T32 e per le prove a mano).
 - T24 (a62ce774): craft.photo ha un suo elenco paginato della cartella,
   perché `Folder` sta in preview.rs, che è di T27 (quando T27 lo tocca, le
   due letture si possono unire). Una foto senza XMP dà `photo.missing`
