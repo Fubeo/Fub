@@ -706,7 +706,7 @@ fn runs_without_writing<C: CommandProvider + ?Sized>(
     let answer = provider.invoke(&spec.id, serde_json::json!({}), mode, host);
     before.unchanged(&Footprint::of(host), &spec.id, mode, &answer);
     let why = match &answer {
-        Err(PluginError::UnknownCommand(other)) if other.to_string() == spec.id => panic!(
+        Err(PluginError::UnknownCommand(other)) if *other == spec.id => panic!(
             "il comando `{}`, che il provider dichiara, in {mode:?} ha risposto\n\
              `UnknownCommand` su sé stesso: un id fra quelli di `commands()` non è\n\
              ignoto.",
