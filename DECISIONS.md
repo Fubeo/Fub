@@ -59,6 +59,10 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · N4 · D-13 (a), nuova: il cursore dello spessore anche nei
+  disegni e nei documenti, non solo sulla lavagna; il task lo scrive il
+  pianificatore · parole dell'utente («si»): la stessa penna si usa allo
+  stesso modo in tutta Fub.
 - 2026-11-03 · N4 · terzo merge di `piano/n3-logica-in-rust` (fino a N3 T17
   e alla fusione di main con #303, `async-executor` 1.14.1) dentro
   `piano/n4-inchiostro`; PLAN.md resta quello di N4 e DECISIONS.md tiene le

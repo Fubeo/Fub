@@ -327,6 +327,14 @@ e si fa solo se la prova con Obsidian dice che l'inchiostro si perde.
   due copie da tenere allineate. Conseguenza: qualunque scelta sono task
   nuovi che il pianificatore scrive dopo la risposta; N4 non entra in
   `main` prima.
+- D-13 · Il cursore dello spessore anche nei disegni e nei documenti (nuova,
+  dall'orchestratore, 2026-11-03, dopo il sì al prototipo di T20). Sulla
+  lavagna lo spessore si sceglie con un cursore (T21); nei disegni e nei
+  documenti restano i tre pulsanti Sottile, Medio, Spesso. (a) Consigliata:
+  lo stesso cursore anche lì, perché la stessa penna non si comporti in due
+  modi. (b) Lì restano i tre pulsanti.
+  Risposta (2026-11-03): (a) — il cursore dello spessore anche nei disegni e
+  nei documenti; il task lo scrive il pianificatore.
 
 ## Assunzioni
 
