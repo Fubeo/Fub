@@ -1174,7 +1174,7 @@ di cambiare documento, in `show`), e `syncDoc` subito dopo sul testo nuovo;
 una registrazione `Stale` o `Invalid` non perde il testo del campo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder · base cc9a383b
+Stato: [x] fatto · 7592cc3a · check --rapido 18/19: rossi solo theme/runtime e grid/engine a tempo (5 s), verdi da soli (88/88)
 
 ## T17 · L'inchiostro in WebAssembly: solo la misura
 

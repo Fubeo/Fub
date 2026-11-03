@@ -59,6 +59,23 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- T16 (7592cc3a): la tela usa il nucleo. Il campo di una scheda resta aperto
+  attraverso `syncDoc` e il suo testo in sospeso si registra subito dopo,
+  sulla scheda com'è nel testo nuovo; Invio in una scheda di testo registra
+  all'input che segue (l'a capo); `setReadOnly(true)` chiude il campo; la
+  seconda trappola di fila mostra l'avviso e non riprova fino al testo dopo.
+  Durante il caricamento pigro la superficie usa ancora `parseCanvas` per
+  dire subito che un testo non è una lavagna: T18, che toglie il modello
+  TypeScript, lo sostituisce. Chiave nuova `canvas.card_invalid` accanto a
+  `canvas.card_too_long` e `canvas.core_unavailable`. La porta del nucleo è
+  iniettabile (`CanvasEngineOptions.core`) per i test che contano le
+  chiamate; `registry.test.ts` carica il nucleo in un `beforeAll`. La tela
+  non manda mai una lista vuota a `Core::commit` (risponde `request`), così
+  il rischio di T14 non si presenta. Resta: un intero oltre 2^53 in un campo
+  sconosciuto si arrotonda passando dal JavaScript; a 700 px la barra degli
+  strumenti della tela esce a destra (già così sulla base). Il banco apre un
+  `.canvas` solo dal lanciatore: l'host finto lo elenca senza visualizzatore
+  (già così).
 - 2026-11-03 · N3 · T15 integrato (d3c348be la CSP, il test e la decisione
   0237; 4b45dbd0 lo scenario L1; 8adf925e la misura). La CSP apre solo
   `'wasm-unsafe-eval'` in `script-src`; il test di `platform_configs.rs`
