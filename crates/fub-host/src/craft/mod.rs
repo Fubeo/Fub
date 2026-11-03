@@ -4,8 +4,10 @@
 //! `mount.rs` da `fub_format_craft::providers()` anche col componente spento:
 //! la ricerca, i backlink e i tag restano. Il bundle aggiunge ciò che si vede
 //! accanto: il comando [`PREVIEW_COMMAND`], in sola lettura, che risponde col
-//! `CraftPreview` del documento nell'effetto `Custom` con `ns = fub.craft`, e
-//! il job [`RENDER_JOB`], che farà l'anteprima con la riga di comando dell'app.
+//! `CraftPreview` del documento nell'effetto `Custom` con `ns = fub.craft`; il
+//! comando [`PHOTO_COMMAND`], in sola lettura anche lui, che risponde col
+//! `PhotoSidecar` di una foto ([`photo`]: l'XMP accanto e ciò che dice); e il
+//! job [`RENDER_JOB`], che farà l'anteprima con la riga di comando dell'app.
 //!
 //! Il contratto è in `fub_format_craft::contract`; come si legge l'anteprima,
 //! e la cache che la tiene, sono in [`preview`]; le letture a pezzi dalle
@@ -28,7 +30,7 @@ use fub_abi::command::{
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{HostApi, Plugin};
 use fub_abi::{CommandProvider, PluginError, PluginManifest};
-use fub_format_craft::{PreviewSize, BUNDLE_NS, PREVIEW_COMMAND, RENDER_JOB};
+use fub_format_craft::{PreviewSize, BUNDLE_NS, PHOTO_COMMAND, PREVIEW_COMMAND, RENDER_JOB};
 
 /// Id del bundle: lo stesso spazio dei nomi dell'effetto del comando.
 pub const CRAFT_ID: &str = BUNDLE_NS;
@@ -67,6 +69,14 @@ fn catalog() -> Vec<StringCatalog> {
             "cmd.preview.render.desc",
             "Non conta più: il comando non avvia mai l'app che farebbe l'anteprima.",
         )
+        .with("cmd.photo", "Dati della foto")
+        .with(
+            "cmd.photo.desc",
+            "Mostra l'XMP che sta accanto a una foto: voto, etichetta, scelta e parole chiave.",
+        )
+        .with("cmd.photo.doc", "Foto")
+        .with("cmd.photo.doc.desc", "La foto del vault.")
+        .with("photo.missing", "`{doc}` non è nel vault.")
         .with("not_craft", "`{doc}` non è un file delle app Craft.")
         .with("bad_size", "`{size}` non è una misura: piccola o grande.")
         .with("changing", "Il file cambia mentre lo si legge: riprova fra poco.")
@@ -94,6 +104,14 @@ fn catalog() -> Vec<StringCatalog> {
             "cmd.preview.render.desc",
             "No longer used: the command never starts the app that would make the preview.",
         )
+        .with("cmd.photo", "Photo details")
+        .with(
+            "cmd.photo.desc",
+            "Shows the XMP next to a photo: rating, label, flag and keywords.",
+        )
+        .with("cmd.photo.doc", "Photo")
+        .with("cmd.photo.doc.desc", "The photo in the vault.")
+        .with("photo.missing", "`{doc}` is not in the vault.")
         .with("not_craft", "`{doc}` is not a Craft app file.")
         .with("bad_size", "`{size}` is not a size: small or large.")
         .with("changing", "The file keeps changing while it is read: try again shortly.")
@@ -156,31 +174,41 @@ pub struct CraftCommands {
 
 impl CommandProvider for CraftCommands {
     fn commands(&self) -> Vec<CommandSpec> {
-        vec![CommandSpec::new(PREVIEW_COMMAND, Text::key("cmd.preview"))
-            .describing(Text::key("cmd.preview.desc"))
-            .with_param(
-                ParamSpec::new("doc", Text::key("cmd.preview.doc"), ParamKind::Document)
-                    .describing(Text::key("cmd.preview.doc.desc"))
-                    .required(),
-            )
-            .with_param(
-                ParamSpec::new(
-                    "size",
-                    Text::key("cmd.preview.size"),
-                    ParamKind::Choice(vec![
-                        Choice::new("small", Text::key("cmd.preview.size.small")),
-                        Choice::new("large", Text::key("cmd.preview.size.large")),
-                    ]),
+        vec![
+            CommandSpec::new(PREVIEW_COMMAND, Text::key("cmd.preview"))
+                .describing(Text::key("cmd.preview.desc"))
+                .with_param(
+                    ParamSpec::new("doc", Text::key("cmd.preview.doc"), ParamKind::Document)
+                        .describing(Text::key("cmd.preview.doc.desc"))
+                        .required(),
                 )
-                .describing(Text::key("cmd.preview.size.desc")),
-            )
-            // Dichiarato perché chi parla la forma della versione 1 non sia
-            // rifiutato; `invoke` non lo legge.
-            .with_param(
-                ParamSpec::new("render", Text::key("cmd.preview.render"), ParamKind::Bool)
-                    .describing(Text::key("cmd.preview.render.desc")),
-            )
-            .with_scope(CommandScope::read_only())]
+                .with_param(
+                    ParamSpec::new(
+                        "size",
+                        Text::key("cmd.preview.size"),
+                        ParamKind::Choice(vec![
+                            Choice::new("small", Text::key("cmd.preview.size.small")),
+                            Choice::new("large", Text::key("cmd.preview.size.large")),
+                        ]),
+                    )
+                    .describing(Text::key("cmd.preview.size.desc")),
+                )
+                // Dichiarato perché chi parla la forma della versione 1 non sia
+                // rifiutato; `invoke` non lo legge.
+                .with_param(
+                    ParamSpec::new("render", Text::key("cmd.preview.render"), ParamKind::Bool)
+                        .describing(Text::key("cmd.preview.render.desc")),
+                )
+                .with_scope(CommandScope::read_only()),
+            CommandSpec::new(PHOTO_COMMAND, Text::key("cmd.photo"))
+                .describing(Text::key("cmd.photo.desc"))
+                .with_param(
+                    ParamSpec::new("doc", Text::key("cmd.photo.doc"), ParamKind::Document)
+                        .describing(Text::key("cmd.photo.doc.desc"))
+                        .required(),
+                )
+                .with_scope(CommandScope::read_only()),
+        ]
     }
 
     fn invoke(
@@ -190,6 +218,16 @@ impl CommandProvider for CraftCommands {
         _mode: fub_abi::command::InvokeMode,
         host: &mut dyn HostApi,
     ) -> Result<CommandOutcome, PluginError> {
+        if command == PHOTO_COMMAND {
+            let args = Args::new(&args);
+            let Some(doc) = args.document("doc") else {
+                return Err(PluginError::BadArgs(Text::message(
+                    "photo.missing",
+                    vec![Arg::text("doc", "")],
+                )));
+            };
+            return custom(&photo::photo(&*host, &doc)?);
+        }
         if command != PREVIEW_COMMAND {
             return Err(PluginError::UnknownCommand(command.to_string().into()));
         }
@@ -205,13 +243,19 @@ impl CommandProvider for CraftCommands {
         // dichiarato) si ignora.
         let size = size_of(args.text("size"))?;
         let preview = preview::preview(host, self.ranged.as_ref(), &doc, size)?;
-        let payload = serde_json::to_value(&preview)
-            .map_err(|error| PluginError::Internal(error.to_string().into()))?;
-        Ok(CommandOutcome::done().with_effect(CommandEffect::Custom {
-            ns: CRAFT_ID.to_string(),
-            payload,
-        }))
+        custom(&preview)
     }
+}
+
+/// L'esito di un comando del bundle: `value` nell'effetto `Custom` con
+/// `ns = fub.craft`.
+fn custom(value: &impl serde::Serialize) -> Result<CommandOutcome, PluginError> {
+    let payload = serde_json::to_value(value)
+        .map_err(|error| PluginError::Internal(error.to_string().into()))?;
+    Ok(CommandOutcome::done().with_effect(CommandEffect::Custom {
+        ns: CRAFT_ID.to_string(),
+        payload,
+    }))
 }
 
 pub struct CraftPlugin;

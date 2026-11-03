@@ -101,7 +101,8 @@ senza estensione, o con un'estensione che nessun soggetto ha, è un
 
 Il contratto ha anche `PhotoSidecar`, la risposta del comando
 `craft.photo { doc }`: per una foto, l'XMP che le sta accanto e i suoi dati,
-in sola lettura. L'host non registra ancora il comando; la forma è questa:
+in sola lettura (come si trova l'XMP è in
+[XMP accanto alle foto](xmp-sidecars.md)). La forma è questa:
 
 ```json
 {

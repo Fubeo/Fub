@@ -2,14 +2,15 @@
 
 > **Ambito:** gli XMP che LightCraft scrive accanto a una foto, e ciò che Fub
 > ne legge.
-> **Fonti autorevoli:** `crates/fub-format-craft/src/xmp.rs`.
+> **Fonti autorevoli:** `crates/fub-format-craft/src/xmp.rs`,
+> `crates/fub-host/src/craft/photo.rs`.
 
 LightCraft tiene voto, etichetta di colore, scelta e parole chiave di una
 foto in un file XMP accanto a lei (`IMG_0001.CR3.xmp` o `IMG_0001.xmp`).
 Questa pagina dice quali di quei campi Fub legge, come diventano proprietà e
-tag del vault, come si trova la foto a cui l'XMP appartiene e che cosa Fub
-non tocca mai: l'id del formato e i limiti sono in
-[Formati dei file Craft](craft-formats.md).
+tag del vault, come si trova la foto a cui l'XMP appartiene, come una foto
+trova il suo XMP e che cosa Fub non tocca mai: l'id del formato e i limiti
+sono in [Formati dei file Craft](craft-formats.md).
 
 ## Che cosa si legge
 
@@ -72,6 +73,35 @@ fra le foto.
 «Modifica in PhotoCraft» crea accanto alla foto una copia di nome
 `IMG_0001-Edit.psd` (`xmp::edit_copy_of`): il gambo della foto, `-Edit` e
 l'estensione `.psd`.
+
+## Dalla foto all'XMP
+
+Il comando `craft.photo { doc }` del bundle `fub.craft`, in sola lettura,
+fa la strada al contrario: parte dalla foto e cerca il suo XMP. I nomi
+possibili sono due (`xmp::sidecar_candidates`), così come sono scritti, con
+le cartelle:
+
+1. il nome intero più `.xmp`: `IMG_0001.CR3` → `IMG_0001.CR3.xmp`;
+2. il nome senza l'ultima estensione più `.xmp`: `IMG_0001.xmp`.
+
+Un nome senza estensione (`IMG`, `.nascosto`) ha solo il primo; un nome che
+è già un `.xmp` non è il suo stesso XMP. Conta solo un file nella cartella
+della foto: un XMP in un'altra cartella no, e nemmeno una cartella che si
+chiama come un candidato. Il primo candidato che si legge vince, quindi
+`IMG.xmp` accanto a `IMG.jpg` e a `IMG.CR3` vale per tutte e due, finché
+una delle due non ha il suo `IMG.jpg.xmp` o `IMG.CR3.xmp`. Un gambo con un
+punto è un caso a parte: per la foto `a.b.jpg` il secondo candidato è
+`a.b.xmp`, che letto dall'XMP indica esattamente `a.b`.
+
+La foto vede la risposta `PhotoSidecar` di
+[Formati dei file Craft](craft-formats.md): `xmp`, il nome dell'XMP trovato;
+`meta`, ciò che dice (voto, etichetta, scelta e parole chiave, come in
+«Che cosa si legge»); `edits`, la copia `-Edit.psd` della foto, se c'è. Il
+comando non guarda se il documento è una foto: un file senza XMP accanto
+risponde `xmp: null`, come un documento che è già un XMP. Un XMP rotto, o
+sopra 8 MiB (che non si legge affatto), dà il suo nome e `meta: null`. Un
+documento che il vault non ha è un errore `not_found`. Col componente
+spento il comando non c'è.
 
 ## Che cosa Fub non tocca mai
 
