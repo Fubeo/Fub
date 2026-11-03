@@ -3,11 +3,16 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SurfaceMenuItem } from "../core/editor-menu";
 import { renderMarkdown } from "../text/profiles/markdown/render";
 import { mountMarkdown } from "../text/profiles/markdown/mount";
-import { CARD_PAUSE_MS, CanvasEngine, type CanvasChange, type CanvasCorePort, type CanvasEngineOptions } from "./engine";
+import { CARD_PAUSE_MS, CanvasEngine, MAX_CANVAS_HISTORY, type CanvasChange, type CanvasCorePort, type CanvasEngineOptions } from "./engine";
 import type { CanvasDocument } from "./model";
 import { applyOperation, lineFeeds, operationFromText } from "../core/text-operation";
 import { t } from "../../i18n/strings";
 import agentBoard from "../../__fixtures__/canvas-ops/agent-board.json";
+import blankBomCrlf from "../../__fixtures__/canvas-patches/02-blank-bom-crlf.json";
+import rootWithoutNodes from "../../__fixtures__/canvas-patches/12-root-without-nodes.json";
+import prettyNode from "../../__fixtures__/canvas-patches/14-remove-pretty-node-undo-compacts.json";
+import nodesNull from "../../__fixtures__/canvas-patches/19-nodes-null.json";
+import knownNumberForms from "../../__fixtures__/canvas-patches/22-known-number-forms.json";
 import { DocumentSessionCollection, type DocumentSessionApi } from "../../state/document-session";
 import { upsertNodePatch, type CanvasOperation, type CanvasPatch } from "./operation";
 import { CanvasCoreError, canvasCoreReady, openCore, openCoreNow, type CanvasCore, type CanvasIntentOp } from "./wasm/core";
@@ -1103,5 +1108,259 @@ describe("la superficie della tela: il nucleo arriva quando serve", () => {
     surface.setMode("canvas");
     expect(pre.hidden).toBe(false);
     surface.destroy();
+  });
+});
+
+describe("CanvasEngine: l'annulla torna ai byte di prima", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** Una lavagna scritta come la scrive Obsidian: tabulazioni, `text` prima di `x`, i lati degli archi. */
+  function obsidianBoard(): string {
+    return JSON.stringify({
+      nodes: [
+        { id: "8a1f0c2d9e3b4a5f", type: "text", text: "# Idea\n\nUna nota *breve*.", x: -340, y: -120, width: 250, height: 160, color: "4" },
+        { id: "b7c2e91f04d6a3e8", type: "file", file: "Note/Progetto.md", x: 20, y: -100, width: 400, height: 400 },
+        { id: "c3d4e5f6a7b8c9d0", type: "group", x: -380, y: 120, width: 300, height: 200, label: "Gruppo" },
+      ],
+      edges: [
+        { id: "e0f1a2b3c4d5e6f7", fromNode: "8a1f0c2d9e3b4a5f", fromSide: "right", toNode: "b7c2e91f04d6a3e8", toSide: "left" },
+      ],
+    }, null, "\t");
+  }
+
+  const starts: ReadonlyArray<readonly [string, string]> = [
+    ["vettore 02 (BOM e CRLF, vuota)", blankBomCrlf.before],
+    ["vettore 12 (senza nodes)", rootWithoutNodes.before],
+    ["vettore 14 (una scheda rientrata)", prettyNode.before],
+    ["vettore 19 (nodes ed edges null)", nodesNull.before],
+    ["vettore 22 (1.0, 1e2, -0, 1E1)", knownNumberForms.before],
+    ["Obsidian", obsidianBoard()],
+    ["Obsidian con BOM e CRLF", `﻿${obsidianBoard().replace(/\n/g, "\r\n")}`],
+  ];
+
+  function viewportOf(host: HTMLElement): HTMLElement {
+    return host.querySelector<HTMLElement>(".canvas-viewport")!;
+  }
+
+  function nodeEl(host: HTMLElement, id: string): HTMLElement {
+    return host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!;
+  }
+
+  function select(host: HTMLElement, id: string): void {
+    nodeEl(host, id).dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 3, clientX: 0, clientY: 0 }));
+    viewportOf(host).dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 3, clientX: 0, clientY: 0 }));
+  }
+
+  function action(host: HTMLElement, name: string): void {
+    host.querySelector<HTMLButtonElement>(`[data-canvas-action="${name}"]`)!.click();
+  }
+
+  function ids(engine: CanvasEngine): string[] {
+    return readCanvas(engine.getDoc()).nodes.map((node) => node.id);
+  }
+
+  type Gesture = readonly [string, (engine: CanvasEngine, host: HTMLElement) => void];
+
+  /** I gesti della tela, sulle schede di adesso: le prime due, che nei testi pieni sono quelle di partenza. */
+  const gestures: readonly Gesture[] = [
+    ["aggiungere", (_engine, host) => action(host, "add-text")],
+    ["aggiungere", (_engine, host) => action(host, "add-group")],
+    ["spostare", (engine, host) => {
+      select(host, ids(engine)[0]!);
+      viewportOf(host).dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    }],
+    ["ridimensionare", (engine, host) => {
+      const id = ids(engine)[0]!;
+      host.querySelector<HTMLElement>(`[data-resize="${id}"]`)!.dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 5, clientX: 0, clientY: 0 }),
+      );
+      viewportOf(host).dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 5, clientX: 48, clientY: 32 }));
+      viewportOf(host).dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 5, clientX: 48, clientY: 32 }));
+    }],
+    ["scrivere in una scheda", (engine, host) => {
+      const doc = readCanvas(engine.getDoc());
+      const card = doc.nodes.find((node) => node.type === "text") ?? doc.nodes[0]!;
+      const input = openField(host, card.id);
+      type(input, `${input.value} e poi «altro»`);
+      press(input, "Escape");
+    }],
+    ["cambiare colore", (engine, host) => {
+      const id = ids(engine)[1]!;
+      vi.spyOn(document, "elementFromPoint").mockReturnValue(nodeEl(host, id));
+      const menu = engine.contextMenu({ x: 10, y: 10 })!;
+      const color = (menu.context as readonly SurfaceMenuItem[]).find((item) => item.id === "canvas.color")!;
+      (color.items as readonly SurfaceMenuItem[]).find((item) => item.id === "canvas.color.2")!.run!();
+      vi.restoreAllMocks();
+    }],
+    ["collegare", (engine, host) => {
+      const [from, to] = ids(engine);
+      vi.spyOn(document, "elementFromPoint").mockReturnValue(nodeEl(host, to!));
+      host.querySelector<HTMLElement>(`[data-connect="${from}"]`)!.dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 9, clientX: 0, clientY: 0 }),
+      );
+      viewportOf(host).dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 9, clientX: 50, clientY: 50 }));
+      vi.restoreAllMocks();
+    }],
+    ["riordinare", (engine, host) => {
+      select(host, ids(engine)[0]!);
+      action(host, "bring-front");
+    }],
+    ["togliere", (engine, host) => {
+      select(host, ids(engine)[0]!);
+      action(host, "delete");
+    }],
+  ];
+
+  /** Ogni modifica mandata alla sessione porta dal testo di prima a quello di dopo (sui `\n`). */
+  function expectConsistent(changes: readonly CanvasChange[], from: string): void {
+    let text = from;
+    for (const change of changes) {
+      expect(applyOperation(lineFeeds(text), change.operation)).toBe(lineFeeds(change.text));
+      text = change.text;
+    }
+  }
+
+  for (const [name, start] of starts) {
+    it(`${name}: ogni gesto, annullato, ridà il testo di prima byte per byte, e ripetuto quello di dopo`, () => {
+      const { engine, host, changes } = mounted(start);
+      const texts = [start];
+      for (const [gesture, run] of gestures) {
+        const before = engine.getDoc();
+        const count = changes.length;
+        run(engine, host);
+        expect(changes.length, gesture).toBe(count + 1);
+        const after = engine.getDoc();
+        expect(after, gesture).not.toBe(before);
+        expect(engine.undo(), gesture).toBe(true);
+        expect(engine.getDoc(), gesture).toBe(before);
+        expect(changes[changes.length - 1]!.origin).toBe("undo");
+        expect(engine.redo(), gesture).toBe(true);
+        expect(engine.getDoc(), gesture).toBe(after);
+        expect(changes[changes.length - 1]!.origin).toBe("redo");
+        texts.push(after);
+      }
+      // E tutta la storia, all'indietro e poi in avanti.
+      for (let index = texts.length - 2; index >= 0; index--) {
+        expect(engine.undo()).toBe(true);
+        expect(engine.getDoc()).toBe(texts[index]);
+      }
+      expect(engine.undo()).toBe(false);
+      for (let index = 1; index < texts.length; index++) {
+        expect(engine.redo()).toBe(true);
+        expect(engine.getDoc()).toBe(texts[index]);
+      }
+      expectConsistent(changes, start);
+      engine.destroy();
+    });
+  }
+
+  it("annulla, ripeti, annulla: di nuovo il testo di prima", () => {
+    const { engine, host } = mounted(prettyNode.before);
+    select(host, "a");
+    action(host, "delete");
+    const after = engine.getDoc();
+    expect(engine.undo()).toBe(true);
+    expect(engine.redo()).toBe(true);
+    expect(engine.getDoc()).toBe(after);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(prettyNode.before);
+    engine.destroy();
+  });
+
+  it("un testo da un'altra superficie in mezzo: l'annulla passa dalle toppe e tiene l'altra modifica", () => {
+    const start = obsidianBoard();
+    const { engine, host, changes } = mounted(start);
+    select(host, "8a1f0c2d9e3b4a5f");
+    viewportOf(host).dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    expect(readCanvas(engine.getDoc()).nodes[0]!.x).toBe(-332);
+    // La vista Sorgente di un altro riquadro cambia l'etichetta del gruppo.
+    const moved = engine.getDoc();
+    const edited = moved.replace('"label": "Gruppo"', '"label": "Altro"');
+    expect(edited).not.toBe(moved);
+    engine.syncDoc({ text: edited, operation: { ...operationFromText(moved, edited) } });
+    const synced = changes.length;
+    expect(engine.undo()).toBe(true);
+    expect(changes).toHaveLength(synced + 1);
+    const doc = readCanvas(engine.getDoc());
+    expect(doc.nodes[0]!.x).toBe(-340);
+    expect(doc.nodes.find((node) => node.id === "c3d4e5f6a7b8c9d0")!.label).toBe("Altro");
+    expect(engine.getDoc()).not.toBe(start);
+    expect(applyOperation(edited, changes[changes.length - 1]!.operation)).toBe(engine.getDoc());
+    // Il ripeti rifà lo spostamento; l'annulla dopo torna ai byte che il primo annulla ha lasciato.
+    const undone = engine.getDoc();
+    expect(engine.redo()).toBe(true);
+    expect(readCanvas(engine.getDoc()).nodes[0]!.x).toBe(-332);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(undone);
+    engine.destroy();
+  });
+
+  it("una syncDoc che non cambia il testo lascia l'annulla ai byte di prima", () => {
+    const { engine, host, changes } = mounted(prettyNode.before);
+    select(host, "a");
+    action(host, "delete");
+    // L'eco della propria modifica, com'è quando la sessione la riconsegna.
+    engine.syncDoc({ text: changes[0]!.text, operation: changes[0]!.operation });
+    expect(engine.undo()).toBe(true);
+    // Le toppe inverse la rimetterebbero compatta (vettore 14): qui torna rientrata.
+    expect(engine.getDoc()).toBe(prettyNode.before);
+    expect(engine.getDoc()).not.toBe(prettyNode.expect.undo);
+    engine.destroy();
+  });
+
+  it(`il limite di ${MAX_CANVAS_HISTORY} passi: i più vecchi escono, gli altri tornano ai byte`, () => {
+    const { engine, host } = mounted(knownNumberForms.before);
+    select(host, "a");
+    const texts = [engine.getDoc()];
+    for (let step = 0; step < MAX_CANVAS_HISTORY + 1; step++) {
+      viewportOf(host).dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+      texts.push(engine.getDoc());
+    }
+    for (let step = 0; step < MAX_CANVAS_HISTORY; step++) {
+      expect(engine.undo()).toBe(true);
+      expect(engine.getDoc()).toBe(texts[texts.length - 2 - step]);
+    }
+    expect(engine.undo()).toBe(false);
+    expect(engine.getDoc()).toBe(texts[1]);
+    engine.destroy();
+  });
+
+  it("un passo grande: togliere 1000 schede e annullare ridà il testo intero", () => {
+    const nodes = Array.from({ length: 1000 }, (_, index) => ({
+      id: `n${index}`, type: "text", text: `scheda ${index}`, x: (index % 40) * 300, y: Math.floor(index / 40) * 200, width: 250, height: 1.6e2,
+    }));
+    const start = JSON.stringify({ nodes, edges: [{ id: "e", fromNode: "n0", toNode: "n1" }] }, null, "\t");
+    // Senza la resa Markdown delle schede: qui conta il testo, non il disegno di 1000 schede.
+    const { engine, host, changes } = mounted(start, { renderMarkdownForCard: undefined });
+    viewportOf(host).dispatchEvent(new KeyboardEvent("keydown", { key: "a", ctrlKey: true, bubbles: true }));
+    action(host, "delete");
+    expect(changes).toHaveLength(1);
+    const after = engine.getDoc();
+    expect(readCanvas(after).nodes).toHaveLength(0);
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe(start);
+    expect(engine.redo()).toBe(true);
+    expect(engine.getDoc()).toBe(after);
+    expectConsistent(changes, start);
+    engine.destroy();
+  }, 30_000);
+
+  it("due superfici: l'annulla dell'una arriva all'altra come ogni modifica, e non entra nella sua storia", () => {
+    const a = mounted(prettyNode.before);
+    const b = mounted(prettyNode.before);
+    select(a.host, "a");
+    action(a.host, "delete");
+    b.engine.syncDoc({ text: a.changes[0]!.text, operation: a.changes[0]!.operation });
+    expect(a.engine.undo()).toBe(true);
+    const undo = a.changes[1]!;
+    expect(undo.operation.kind).toBe("canvas");
+    expect(applyOperation(a.changes[0]!.text, undo.operation)).toBe(prettyNode.before);
+    b.engine.syncDoc({ text: undo.text, operation: undo.operation });
+    expect(b.engine.getDoc()).toBe(prettyNode.before);
+    expect(b.engine.undo()).toBe(false);
+    a.engine.destroy();
+    b.engine.destroy();
   });
 });

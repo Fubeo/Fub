@@ -406,13 +406,13 @@ shell (`apps/client/src/editors/spatial/tools/editor/vault-images.ts`).
 
 `CanvasEngine` (`editors/canvas/engine.ts`) disegna il modello che il nucleo
 della tela (`canvas/wasm/core.ts`) dà a ogni `reset` e `commit`. Un gesto passa
-le sue toppe al nucleo, il testo nuovo è il tratto cambiato e l'annulla ripassa
-le toppe inverse dello stesso commit. Il nucleo si carica alla prima lavagna
-aperta e poi resta; una trappola riapre la lavagna su un'istanza nuova dal
-testo della sessione. Il testo di una scheda resta nel campo e si registra (un
-commit, un passo d'annulla) dopo 250 ms di pausa, all'uscita, con Invio, con
-Esc e prima di ogni altro gesto; se il nucleo lo rifiuta resta nel campo con un
-avviso. Intanto è già nella [bozza](frontend-and-ipc.md#il-testo-in-sospeso);
+le sue toppe al nucleo e il testo nuovo è il tratto cambiato. Annulla e ripeti
+rimettono il tratto di prima byte per byte con un `reset` se la versione del
+testo (un contatore del motore) è quella lasciata dal passo, se no le toppe
+inverse. Il nucleo si carica alla prima lavagna e poi resta; una trappola la
+riapre su un'istanza nuova dal testo della sessione. Il testo di una scheda si
+registra a 250 ms di pausa, all'uscita, con Invio o Esc e prima di ogni gesto;
+se il nucleo lo rifiuta resta nel campo con un avviso. È già nella [bozza](frontend-and-ipc.md#il-testo-in-sospeso);
 le toppe sono nelle [operazioni della lavagna](../reference/canvas-operations.md).
 
 ### La griglia

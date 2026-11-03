@@ -81,6 +81,30 @@ interface CardEditor {
   recordOnInput: boolean;
 }
 
+/**
+ * Un passo d'annulla (o di ripeti). Due vie per farlo: se il testo è ancora
+ * quello che il passo ha lasciato (`version`), si rimette il tratto `removed`
+ * al posto di `inserted`, byte per byte, e il testo torna alla sua versione di
+ * prima (`restores`); se no si passano `patches` al nucleo, che le fonde con
+ * ciò che è cambiato da un'altra parte.
+ */
+interface CanvasStep {
+  /** Le toppe che fanno questo passo sul modello di adesso. */
+  readonly patches: CanvasPatch[];
+  /** Le toppe che disfano questo passo: valgono sul testo che il passo rimette. */
+  readonly back: CanvasPatch[];
+  /** Dove comincia il tratto, in unità UTF-16. */
+  readonly start: number;
+  /** Il tratto del testo di adesso che il passo toglie. */
+  readonly inserted: string;
+  /** Il tratto che il passo rimette al suo posto. */
+  readonly removed: string;
+  /** La versione del testo che il passo ha lasciato: se è ancora quella, la via è il tratto. */
+  readonly version: number;
+  /** La versione del testo che il passo rimette. */
+  readonly restores: number;
+}
+
 /** Il testo del campo non ancora registrato: la scheda com'era, il campo, il testo. */
 interface PendingText {
   card: CanvasNode;
@@ -191,8 +215,17 @@ export class CanvasEngine {
   #edgeSelection: string[] = [];
   #camera: Viewport = { x: 0, y: 0, zoom: 1 };
   #readOnly = false;
-  #undo: CanvasPatch[][] = [];
-  #redo: CanvasPatch[][] = [];
+  #undo: CanvasStep[] = [];
+  #redo: CanvasStep[] = [];
+  /**
+   * La versione del testo di adesso. Un testo nuovo (un gesto, un annulla
+   * passato dalle toppe, `setDoc`, una `syncDoc` che cambia il testo) ne
+   * prende una mai usata da `#versions`; l'annulla e il ripeti che rimettono
+   * un tratto byte per byte ridanno al testo la versione che aveva. Una
+   * versione dice sempre un testo solo.
+   */
+  #version = 0;
+  #versions = 0;
   #markdownTeardowns = new Map<string, () => void>();
   #destroyed = false;
   #intakeError = "";
@@ -272,6 +305,7 @@ export class CanvasEngine {
     this.#epoch++;
     this.#cancelGestures();
     this.#source = source;
+    this.#version = ++this.#versions;
     this.#doc = document;
     this.#intakeError = "";
     this.#selection = [];
@@ -298,6 +332,8 @@ export class CanvasEngine {
     this.#cancelGestures();
     this.#epoch++;
     this.#intakeError = "";
+    // Lo stesso testo (l'eco di un commit di qui) lascia valida la via del tratto.
+    if (source !== this.#source) this.#version = ++this.#versions;
     this.#source = source;
     if (!document) {
       void this.#revive();
@@ -372,26 +408,31 @@ export class CanvasEngine {
     if (!this.#editor) this.#render();
   }
 
-  /** Annulla l'ultimo passo: le toppe inverse che il nucleo ha dato al suo commit. */
+  /**
+   * Annulla l'ultimo passo: il testo di prima byte per byte se nessuno l'ha
+   * cambiato nel frattempo, se no le toppe inverse che il nucleo ha dato al
+   * suo commit.
+   */
   undo(): boolean {
     if (!this.#closeField(false)) return false;
     this.#render();
-    const inverse = this.#undo.pop();
-    if (!inverse || !this.#doc) return false;
-    if (this.#commitLocal(inverse, "undo", (again) => this.#redo.push(again)) !== true) {
-      this.#undo.push(inverse);
+    const step = this.#undo.pop();
+    if (!step || !this.#doc) return false;
+    if (this.#replay(step, "undo", (again) => this.#redo.push(again)) !== true) {
+      this.#undo.push(step);
       return false;
     }
     return true;
   }
 
+  /** Rifà il passo annullato, con le stesse due vie dell'annulla. */
   redo(): boolean {
     if (!this.#closeField(false)) return false;
     this.#render();
-    const patches = this.#redo.pop();
-    if (!patches || !this.#doc) return false;
-    if (this.#commitLocal(patches, "redo", (inverse) => this.#pushUndo(inverse, false)) !== true) {
-      this.#redo.push(patches);
+    const step = this.#redo.pop();
+    if (!step || !this.#doc) return false;
+    if (this.#replay(step, "redo", (again) => this.#pushUndo(again, false)) !== true) {
+      this.#redo.push(step);
       return false;
     }
     return true;
@@ -514,14 +555,15 @@ export class CanvasEngine {
 
   /**
    * Passa le toppe al nucleo: tutte o nessuna. Il testo nuovo è il tratto che
-   * il nucleo ha cambiato; `record` riceve le toppe inverse dello stesso commit
-   * prima che la sessione sappia della modifica (che può tornare qui con un
-   * `syncDoc`). Il codice del rifiuto, se il nucleo rifiuta.
+   * il nucleo ha cambiato; `record` riceve il passo che lo disfa (le toppe
+   * inverse dello stesso commit e il tratto di prima) prima che la sessione
+   * sappia della modifica (che può tornare qui con un `syncDoc`). Il codice
+   * del rifiuto, se il nucleo rifiuta.
    */
   #commitLocal(
     patches: readonly CanvasPatch[],
     origin: EditorChangeOrigin,
-    record: ((inverse: CanvasPatch[]) => void) | null,
+    record: ((step: CanvasStep) => void) | null,
     render = true,
   ): true | CanvasCoreErrorCode {
     // Mai una lista vuota: su un sorgente vuoto il nucleo riscriverebbe tutto.
@@ -542,17 +584,81 @@ export class CanvasEngine {
       throw error;
     }
     this.#traps = 0;
-    const after = before.slice(0, committed.edit.start) + committed.edit.text + before.slice(committed.edit.end);
+    const { edit } = committed;
+    const after = before.slice(0, edit.start) + edit.text + before.slice(edit.end);
+    const restores = this.#version;
     this.#source = after;
+    this.#version = ++this.#versions;
     this.#doc = this.#coreModel() ?? this.#doc;
     const operation: CanvasOperation = {
       kind: "canvas",
-      patches: JSON.parse(JSON.stringify(patches)) as CanvasPatch[],
-      ...sourceOperation(before, after, committed.edit),
+      patches: copyPatches(patches),
+      ...sourceOperation(before, after, edit),
     };
-    record?.(committed.inverse);
+    record?.({
+      patches: committed.inverse,
+      back: copyPatches(patches),
+      start: edit.start,
+      inserted: edit.text,
+      removed: before.slice(edit.start, edit.end),
+      version: this.#version,
+      restores,
+    });
     this.#pruneSelection();
     if (render) this.#render();
+    this.#options.onChange({ text: after, operation, origin });
+    return true;
+  }
+
+  /**
+   * Fa un passo d'annulla o di ripeti. Se il testo è quello che il passo ha
+   * lasciato, rimette il suo tratto con un `reset` sul testo esatto (una
+   * lettura intera: va bene per un annulla, non per ogni gesto); se no passa
+   * le sue toppe al nucleo. `record` riceve il passo opposto.
+   */
+  #replay(step: CanvasStep, origin: "undo" | "redo", record: (step: CanvasStep) => void): true | CanvasCoreErrorCode {
+    const before = this.#source;
+    const end = step.start + step.inserted.length;
+    if (step.version !== this.#version || before.slice(step.start, end) !== step.inserted) {
+      return this.#commitLocal(step.patches, origin, record);
+    }
+    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return "rejected";
+    const core = this.#core;
+    if (!core) return "trap";
+    const after = before.slice(0, step.start) + step.removed + before.slice(end);
+    let document: CanvasDocument;
+    try {
+      document = core.reset(after);
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return "trap";
+      }
+      // Il nucleo non riapre il testo di prima (non dovrebbe mai): restano le toppe.
+      if (error instanceof CanvasCoreError) return this.#commitLocal(step.patches, origin, record);
+      throw error;
+    }
+    this.#traps = 0;
+    this.#source = after;
+    this.#version = step.restores;
+    this.#doc = document;
+    const edit: CanvasSourceEdit = { start: step.start, end, text: step.removed };
+    const operation: CanvasOperation = {
+      kind: "canvas",
+      patches: copyPatches(step.patches),
+      ...sourceOperation(before, after, edit),
+    };
+    record({
+      patches: step.back,
+      back: step.patches,
+      start: step.start,
+      inserted: step.removed,
+      removed: step.inserted,
+      version: step.restores,
+      restores: step.version,
+    });
+    this.#pruneSelection();
+    this.#render();
     this.#options.onChange({ text: after, operation, origin });
     return true;
   }
@@ -560,11 +666,11 @@ export class CanvasEngine {
   /** Un gesto della tela: prima il testo in sospeso, poi le sue toppe, un passo d'annulla. */
   #commit(patches: readonly CanvasPatch[], origin: EditorChangeOrigin): boolean {
     this.#recordPending();
-    return this.#commitLocal(patches, origin, (inverse) => this.#pushUndo(inverse, true)) === true;
+    return this.#commitLocal(patches, origin, (step) => this.#pushUndo(step, true)) === true;
   }
 
-  #pushUndo(inverse: CanvasPatch[], fresh: boolean): void {
-    this.#undo.push(inverse);
+  #pushUndo(step: CanvasStep, fresh: boolean): void {
+    this.#undo.push(step);
     if (this.#undo.length > MAX_CANVAS_HISTORY) this.#undo.shift();
     if (fresh) this.#redo = [];
   }
@@ -595,9 +701,9 @@ export class CanvasEngine {
         this.#setPending(null);
         return true;
       }
-      code = this.#commitLocal([patch], "input", (inverse) => {
+      code = this.#commitLocal([patch], "input", (step) => {
         this.#setPending(null);
-        this.#pushUndo(inverse, true);
+        this.#pushUndo(step, true);
       });
       // Il testo è cambiato da un'altra parte: si riprova sulla scheda di adesso.
       const fresh = code === "stale" ? this.#coreModel() : null;
@@ -2087,6 +2193,11 @@ export class CanvasEngine {
     if (node.type === "text") input.setSelectionRange(input.value.length, input.value.length);
     else input.select();
   }
+}
+
+/** Una copia delle toppe, che chi le ha date può ancora cambiare. */
+function copyPatches(patches: readonly CanvasPatch[]): CanvasPatch[] {
+  return JSON.parse(JSON.stringify(patches)) as CanvasPatch[];
 }
 
 /** Una trappola o un'istanza persa: il nucleo va riaperto. */
