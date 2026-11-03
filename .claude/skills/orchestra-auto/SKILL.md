@@ -152,8 +152,8 @@ come back. First what changes for the person using Fub, then:
 2. **Scelto da me, da rivedere:** every `A-auto-N` and `(auto)` decision, each
    with the alternative and how to change it; the prototypes approved
    automatically, with their links.
-3. **Aspetta te:** the contract changes to confirm, the plans not merged and why,
-   the questions of the second kind, each with options and your
+3. **Aspetta te:** the contract changes to confirm, the plans not merged and
+   why, the questions of the second kind, each with options and your
    recommendation first; the commands only the maintainer can run.
 4. **Controlli:** the checks run, the ones not run and why, the reds and the
    flaky tests with their issue.
