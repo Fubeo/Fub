@@ -59,6 +59,12 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · N7 · T9 integrato (d331e67f): Framing è lo stesso tipo di
+  Protocol di T7, Channel::new restituisce io::Result perché il token può
+  mancare, Channel::for_control decide con un match esaustivo su Auth,
+  l'autenticazione è {method: auth, params: {token}} scritta solo in
+  auth_request · il formato non è documentato dalle app, così si cambia in
+  un punto solo; T10 prende il token da Channel::token.
 - 2026-11-03 · N7 · T8: l'avvio sta in `craft/launch.rs`; il gruppo di una
   CLI si ferma con `rustix::process::kill_process_group` (la feature
   `process` di rustix, che cap-primitives accendeva già: nessun crate nuovo

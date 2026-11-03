@@ -1455,7 +1455,7 @@ qui sopra; i test di `control.rs` (`cargo test -p fub-host --lib control`)
 passano invariati.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --lib
 craft::channel
-Stato: [~] in corso · coder · base f2a40b7e
+Stato: [x] fatto · d331e67f · check --rapido verde tranne 5 test di fub-host a tempo (watcher_factory_lock, lifecycle_teardown_lock) caduti con carico 35, verdi da soli (11 su 11)
 
 ## T10 · «Apri con» nell'host
 
