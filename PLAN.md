@@ -2818,7 +2818,7 @@ lungo 0.
 Fatto quando: `cargo test -p fub-format-craft --test raw` e `cargo test -p
 fub-host --test craft_ranged` passano.
 Prova: scripts/check.sh --rapido; cargo test -p fub-format-craft --test raw
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 80baf137
 
 ## T28 · La scheda di un RAW
 
