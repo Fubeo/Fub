@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · N3 · le risposte dell'utente alle domande nuove: D-9 (b), le
+  lavagne con valori sconosciuti in un campo noto si aprono dentro N3 (un
+  prototipo e due task prima di T23, li scrive il pianificatore); D-10 (a),
+  Esc registra e chiude; A14–A18 approvate; la riga di CLAUDE.md di T14
+  approvata · D-9 (b) è il consiglio dell'orchestratore contro quello del
+  pianificatore (a): N3 cambia già il modello della lavagna, e un file
+  dell'utente che non si apre è il difetto più grave.
 - 2026-11-02 · N3 · Le risposte dell'utente a D-1…D-8 e a merge-n3n4: le non
   ovvie sono tre. D-5 (c): il testo di una scheda si registra a pause di
   circa 250 ms, Esc registra invece di buttare (la D-10 nuova chiede

@@ -160,6 +160,10 @@ risposte, e non bloccano: il piano procede con la (a).
   leggono i comandi e l'MCP, quindi non va infilata in N3. (b) Dentro N3: un
   prototipo in `PLAN-ui/` e due task nuovi prima di T23. (c) Come oggi, per
   sempre. Non blocca niente: con (a) N3 non le tocca.
+  Risposta (2026-11-03): (b) — dentro N3: un prototipo in `PLAN-ui/` e due
+  task prima di T23, scritti dal pianificatore; N3 entra in main con le
+  lavagne che hanno valori sconosciuti in un campo noto aperte e conservate
+  byte per byte.
 - D-10 · Esc in una scheda (nuova: la descrizione di D-5 non era esatta).
   Oggi Esc butta via ciò che si è scritto nel campo da quando si è aperto;
   la risposta a D-5 dice che Esc registra. (a) Consigliata: Esc registra e
@@ -168,6 +172,8 @@ risposte, e non bloccano: il piano procede con la (a).
   Esc butta via ciò che si è scritto da quando il campo si è aperto, come
   oggi, anche le frasi già registrate. Non blocca: T16 fa (a), e cambiare
   dopo è una funzione di T16 e il suo test.
+  Risposta (2026-11-03): (a) — Esc registra e chiude; per tornare indietro
+  c'è «Annulla» (A14, T16).
 
 ## Assunzioni
 
@@ -251,6 +257,8 @@ di T16; A14 è la domanda D-10):
 - A18 · **Una lavagna che Fub non può riscrivere senza perdere niente** (una
   chiave doppia, che il riscrittore rifiuta per R3) si apre in sola lettura e
   lo dice (T22). Oggi si apre, e ogni gesto torna indietro senza un perché.
+  Risposta (2026-11-03): A14–A18 approvate dall'utente il 2026-11-03 («ci
+  sto»): T16 parte quando tocca a lui.
 
 ## Il contratto di lettura e scrittura (R1–R11)
 
@@ -1030,6 +1038,9 @@ installare.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npx
 vitest run src/editors/canvas
 Stato: [ ] da fare
+  Risposta (2026-11-03): l'utente approva la riga di `CLAUDE.md` e di
+  `CONTRIBUTING.md` con il bersaglio `wasm32-unknown-unknown`. La parte di
+  `.github/workflows/ci.yml` la fa l'orchestratore, non il coder.
 
 ## T15 · La CSP, la decisione e la misura
 
