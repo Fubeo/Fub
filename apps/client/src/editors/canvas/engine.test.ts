@@ -1,13 +1,21 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SurfaceMenuItem } from "../core/editor-menu";
 import { renderMarkdown } from "../text/profiles/markdown/render";
 import { mountMarkdown } from "../text/profiles/markdown/mount";
-import { CanvasEngine, type CanvasChange, type CanvasEngineOptions } from "./engine";
+import { CARD_PAUSE_MS, CanvasEngine, type CanvasChange, type CanvasCorePort, type CanvasEngineOptions } from "./engine";
 import { parseCanvas } from "./model";
-import { applyOperation } from "../core/text-operation";
+import { applyOperation, lineFeeds } from "../core/text-operation";
+import { t } from "../../i18n/strings";
+import agentBoard from "../../__fixtures__/canvas-ops/agent-board.json";
 import { DocumentSessionCollection, type DocumentSessionApi } from "../../state/document-session";
 import { commitCanvasPatches, upsertNodePatch, type CanvasOperation } from "./operation";
+import { CanvasCoreError, canvasCoreReady, openCore, openCoreNow, type CanvasCore, type CanvasIntentOp } from "./wasm/core";
+
+// Il nucleo si carica una volta: dopo, la tela si apre subito.
+beforeAll(async () => {
+  await canvasCoreReady();
+});
 
 function canvasSource(): string {
   return JSON.stringify({
@@ -203,23 +211,28 @@ describe("CanvasEngine", () => {
     engine.destroy();
   });
 
-  it("propaga subito la digitazione, congela il campo e annulla l'edit come gruppo", () => {
-    const { engine, host, changes } = mounted();
-    const card = host.querySelector<HTMLElement>('.canvas-node[data-node="t"]')!;
-    card.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
-    const input = host.querySelector<HTMLTextAreaElement>(".canvas-text-editor")!;
-    input.value = "Testo non ancora confermato dal blur";
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    expect(parseCanvas(engine.getDoc()).nodes[0].text).toBe(input.value);
-    expect(applyOperation(canvasSource(), changes[0].operation)).toBe(engine.getDoc());
-    engine.setReadOnly(true);
-    expect(host.querySelector(".canvas-text-editor")).toBeNull();
-    expect(host.querySelector<HTMLButtonElement>('[data-canvas-action="zoom-in"]')?.disabled).toBe(false);
-    expect(engine.undo()).toBe(false);
-    engine.setReadOnly(false);
-    expect(engine.undo()).toBe(true);
-    expect(parseCanvas(engine.getDoc()).nodes[0].text).toBe("vedi [[Altra]] e #tag");
-    engine.destroy();
+  it("registra la digitazione alla pausa, chiude il campo in sola lettura e annulla il passo", () => {
+    vi.useFakeTimers();
+    try {
+      const { engine, host, changes } = mounted();
+      const input = openField(host, "t");
+      type(input, "Testo non ancora confermato dal blur");
+      expect(changes).toHaveLength(0);
+      vi.advanceTimersByTime(CARD_PAUSE_MS);
+      expect(changes).toHaveLength(1);
+      expect(parseCanvas(engine.getDoc()).nodes[0].text).toBe(input.value);
+      expect(applyOperation(canvasSource(), changes[0].operation)).toBe(engine.getDoc());
+      engine.setReadOnly(true);
+      expect(host.querySelector(".canvas-text-editor")).toBeNull();
+      expect(host.querySelector<HTMLButtonElement>('[data-canvas-action="zoom-in"]')?.disabled).toBe(false);
+      expect(engine.undo()).toBe(false);
+      engine.setReadOnly(false);
+      expect(engine.undo()).toBe(true);
+      expect(parseCanvas(engine.getDoc()).nodes[0].text).toBe("vedi [[Altra]] e #tag");
+      engine.destroy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it("conserva i campi non interpretati attraverso setDoc/syncDoc", () => {
     const { engine } = mounted();
@@ -572,5 +585,441 @@ describe("CanvasEngine", () => {
     } finally {
       timer.mockRestore();
     }
+  });
+});
+
+/** Il nucleo vero, con il conto delle chiamate che gli arrivano. */
+function countingCore(): { port: CanvasCorePort; calls: string[] } {
+  const calls: string[] = [];
+  const wrap = (core: CanvasCore): CanvasCore => new Proxy(core, {
+    get(target, key, receiver) {
+      const value = Reflect.get(target, key, receiver) as unknown;
+      if (typeof value !== "function") return value;
+      return (...args: unknown[]) => {
+        calls.push(String(key));
+        return (value as (...a: unknown[]) => unknown).apply(target, args);
+      };
+    },
+  });
+  return {
+    calls,
+    port: {
+      openNow: (text) => {
+        calls.push("open");
+        const core = openCoreNow(text);
+        return core ? wrap(core) : null;
+      },
+      ready: canvasCoreReady,
+    },
+  };
+}
+
+function openField(host: HTMLElement, id: string): HTMLInputElement | HTMLTextAreaElement {
+  host.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!
+    .dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+  return host.querySelector<HTMLInputElement | HTMLTextAreaElement>(".canvas-text-editor, .canvas-field-editor")!;
+}
+
+function type(input: HTMLInputElement | HTMLTextAreaElement, value: string): void {
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function press(input: HTMLElement, key: string, init: KeyboardEventInit = {}): KeyboardEvent {
+  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init });
+  input.dispatchEvent(event);
+  return event;
+}
+
+function cardText(engine: CanvasEngine, id = "t"): string | undefined {
+  return parseCanvas(engine.getDoc()).nodes.find((node) => node.id === id)?.text;
+}
+
+describe("CanvasEngine: il testo di una scheda", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("dieci tasti a 100 ms l'uno dall'altro: un solo commit, e nessuna chiamata al nucleo per tasto", () => {
+    vi.useFakeTimers();
+    const { port, calls } = countingCore();
+    const { engine, host, changes } = mounted(canvasSource(), { core: port });
+    const input = openField(host, "t");
+    const before = calls.length;
+    for (let key = 1; key <= 10; key++) {
+      type(input, `${input.value}${key % 10}`);
+      vi.advanceTimersByTime(100);
+      expect(calls.length).toBe(before);
+    }
+    expect(changes).toHaveLength(0);
+    vi.advanceTimersByTime(CARD_PAUSE_MS);
+    expect(changes).toHaveLength(1);
+    expect(calls.slice(before).filter((call) => call === "commit")).toHaveLength(1);
+    expect(cardText(engine)).toBe("vedi [[Altra]] e #tag1234567890");
+    engine.destroy();
+  });
+
+  it("due frasi con una pausa in mezzo sono due passi d'annulla", () => {
+    vi.useFakeTimers();
+    const { engine, host, changes } = mounted();
+    const input = openField(host, "t");
+    type(input, "Prima");
+    vi.advanceTimersByTime(CARD_PAUSE_MS);
+    type(input, "Prima. Seconda");
+    vi.advanceTimersByTime(CARD_PAUSE_MS);
+    expect(changes).toHaveLength(2);
+    input.blur();
+    expect(engine.undo()).toBe(true);
+    expect(cardText(engine)).toBe("Prima");
+    expect(engine.undo()).toBe(true);
+    expect(cardText(engine)).toBe("vedi [[Altra]] e #tag");
+    expect(engine.redo()).toBe(true);
+    expect(cardText(engine)).toBe("Prima");
+    engine.destroy();
+  });
+
+  it("Esc registra e chiude (A14)", () => {
+    vi.useFakeTimers();
+    const { engine, host, changes } = mounted();
+    const input = openField(host, "t");
+    type(input, "Con Esc");
+    press(input, "Escape");
+    expect(changes).toHaveLength(1);
+    expect(cardText(engine)).toBe("Con Esc");
+    expect(host.querySelector(".canvas-text-editor")).toBeNull();
+    vi.advanceTimersByTime(CARD_PAUSE_MS);
+    expect(changes).toHaveLength(1);
+    engine.destroy();
+  });
+
+  it("Invio in una scheda di testo va a capo e registra; Ctrl+Invio e Cmd+Invio registrano e chiudono (A15)", () => {
+    vi.useFakeTimers();
+    const { engine, host, changes } = mounted();
+    let input = openField(host, "t");
+    type(input, "Riga");
+    const enter = press(input, "Enter");
+    expect(enter.defaultPrevented).toBe(false);
+    type(input, "Riga\n");
+    expect(changes).toHaveLength(1);
+    expect(cardText(engine)).toBe("Riga\n");
+    expect(host.querySelector(".canvas-text-editor")).toBe(input);
+    type(input, "Riga\ndue");
+    expect(press(input, "Enter", { ctrlKey: true }).defaultPrevented).toBe(true);
+    expect(changes).toHaveLength(2);
+    expect(cardText(engine)).toBe("Riga\ndue");
+    expect(host.querySelector(".canvas-text-editor")).toBeNull();
+    input = openField(host, "t");
+    type(input, "Riga\ndue\ntre");
+    press(input, "Enter", { metaKey: true });
+    expect(changes).toHaveLength(3);
+    expect(cardText(engine)).toBe("Riga\ndue\ntre");
+    expect(host.querySelector(".canvas-text-editor")).toBeNull();
+    engine.destroy();
+  });
+
+  it("Invio in un altro campo registra e chiude; l'uscita dal campo registra (A15)", () => {
+    vi.useFakeTimers();
+    const { engine, host, changes } = mounted();
+    let input = openField(host, "g");
+    type(input, "Idee nuove");
+    expect(press(input, "Enter").defaultPrevented).toBe(true);
+    expect(changes).toHaveLength(1);
+    expect(parseCanvas(engine.getDoc()).nodes.find((node) => node.id === "g")?.label).toBe("Idee nuove");
+    expect(host.querySelector(".canvas-field-editor")).toBeNull();
+    input = openField(host, "t");
+    type(input, "Uscendo");
+    input.dispatchEvent(new FocusEvent("blur"));
+    expect(changes).toHaveLength(2);
+    expect(cardText(engine)).toBe("Uscendo");
+    expect(host.querySelector(".canvas-text-editor")).toBeNull();
+    engine.destroy();
+  });
+
+  it("col campo aperto Ctrl+Z è del campo, non della tela (A16)", () => {
+    vi.useFakeTimers();
+    const { engine, host, changes } = mounted();
+    const input = openField(host, "t");
+    type(input, "Scritto");
+    vi.advanceTimersByTime(CARD_PAUSE_MS);
+    const undo = press(input, "z", { ctrlKey: true });
+    expect(undo.defaultPrevented).toBe(false);
+    expect(changes).toHaveLength(1);
+    expect(cardText(engine)).toBe("Scritto");
+    engine.destroy();
+  });
+
+  it("un gesto sulla tela registra prima il testo in sospeso", () => {
+    vi.useFakeTimers();
+    const { engine, host, changes } = mounted();
+    const input = openField(host, "t");
+    type(input, "Prima del gesto");
+    host.querySelector<HTMLButtonElement>('[data-canvas-action="add-text"]')!.click();
+    expect(changes).toHaveLength(2);
+    expect(cardText(engine)).toBe("Prima del gesto");
+    expect(parseCanvas(engine.getDoc()).nodes).toHaveLength(5);
+    expect(engine.undo()).toBe(true);
+    expect(parseCanvas(engine.getDoc()).nodes).toHaveLength(4);
+    expect(cardText(engine)).toBe("Prima del gesto");
+    engine.destroy();
+  });
+
+  it("chiudere il riquadro durante la pausa registra prima", () => {
+    vi.useFakeTimers();
+    const { engine, host, changes } = mounted();
+    const input = openField(host, "t");
+    type(input, "Prima di chiudere");
+    engine.destroy();
+    expect(changes).toHaveLength(1);
+    expect(parseCanvas(changes[0].text).nodes[0].text).toBe("Prima di chiudere");
+    vi.advanceTimersByTime(CARD_PAUSE_MS);
+    expect(changes).toHaveLength(1);
+  });
+
+  it("aprire un altro documento durante la pausa registra il testo in quello di prima", () => {
+    vi.useFakeTimers();
+    const { engine, host, changes } = mounted();
+    const input = openField(host, "t");
+    type(input, "Nel primo");
+    engine.setDoc(JSON.stringify({ nodes: [], edges: [] }));
+    expect(changes).toHaveLength(1);
+    expect(parseCanvas(changes[0].text).nodes[0].text).toBe("Nel primo");
+    expect(parseCanvas(engine.getDoc()).nodes).toHaveLength(0);
+    expect(engine.undo()).toBe(false);
+    engine.destroy();
+  });
+
+  it("un cambio da fuori mentre si scrive: il testo si registra subito dopo, sul testo nuovo", async () => {
+    vi.useFakeTimers();
+    const { engine, host, changes } = mounted();
+    const input = openField(host, "t");
+    type(input, "Mentre scrivo");
+    const remote = JSON.parse(canvasSource()) as { nodes: Array<Record<string, unknown>> };
+    remote.nodes[0].x = 112;
+    remote.nodes[1].x = 500;
+    engine.syncDoc({ text: JSON.stringify(remote), operation: null });
+    expect(changes).toHaveLength(0);
+    expect(host.querySelector(".canvas-text-editor")).toBe(input);
+    await Promise.resolve();
+    expect(changes).toHaveLength(1);
+    const after = parseCanvas(engine.getDoc());
+    expect(after.nodes[0]).toMatchObject({ x: 112, text: "Mentre scrivo" });
+    expect(after.nodes[1].x).toBe(500);
+    expect(applyOperation(JSON.stringify(remote), changes[0].operation)).toBe(engine.getDoc());
+    engine.destroy();
+  });
+
+  it("se la scheda sparisce mentre si scrive torna col testo del campo, e un annulla la toglie", async () => {
+    vi.useFakeTimers();
+    const { engine, host, changes } = mounted();
+    const input = openField(host, "t");
+    type(input, "Non lo perdo");
+    const remote = JSON.parse(canvasSource()) as { nodes: Array<Record<string, unknown>>; edges: unknown[] };
+    remote.nodes.shift();
+    remote.edges = [];
+    engine.syncDoc(JSON.stringify(remote));
+    await Promise.resolve();
+    expect(changes).toHaveLength(1);
+    expect(cardText(engine)).toBe("Non lo perdo");
+    input.dispatchEvent(new FocusEvent("blur"));
+    expect(engine.undo()).toBe(true);
+    expect(cardText(engine)).toBeUndefined();
+    expect(parseCanvas(engine.getDoc()).nodes).toHaveLength(3);
+    engine.destroy();
+  });
+
+  it("un testo oltre 1 MiB: il campo resta aperto col suo testo e l'avviso lo dice; chiudere il riquadro lo perde", () => {
+    vi.useFakeTimers();
+    const { engine, host, changes } = mounted();
+    const input = openField(host, "t");
+    const huge = "x".repeat(2 * 1_048_576);
+    type(input, huge);
+    vi.advanceTimersByTime(CARD_PAUSE_MS);
+    expect(changes).toHaveLength(0);
+    expect(host.querySelector(".canvas-text-editor")).toBe(input);
+    expect(input.value).toBe(huge);
+    expect(host.querySelector(".canvas-intake-error")?.textContent).toBe(t("canvas.card_too_long"));
+    press(input, "Escape");
+    expect(host.querySelector(".canvas-text-editor")).toBe(input);
+    expect(engine.undo()).toBe(false);
+    // Il caso fissato: un incolla di 2 MiB e poi il riquadro chiuso, quel testo si perde.
+    engine.destroy();
+    expect(changes).toHaveLength(0);
+  });
+
+  it("durante la composizione la pausa non corre: conta dalla fine", () => {
+    vi.useFakeTimers();
+    const { engine, host, changes } = mounted();
+    const input = openField(host, "t");
+    input.dispatchEvent(new CompositionEvent("compositionstart"));
+    type(input, "にほ");
+    vi.advanceTimersByTime(1000);
+    type(input, "日本");
+    vi.advanceTimersByTime(1000);
+    expect(changes).toHaveLength(0);
+    input.dispatchEvent(new CompositionEvent("compositionend"));
+    vi.advanceTimersByTime(CARD_PAUSE_MS - 1);
+    expect(changes).toHaveLength(0);
+    vi.advanceTimersByTime(1);
+    expect(changes).toHaveLength(1);
+    expect(cardText(engine)).toBe("日本");
+    engine.destroy();
+  });
+
+  it("con i CRLF la TextOperation conta sui \\n", () => {
+    vi.useFakeTimers();
+    const source = JSON.stringify(JSON.parse(canvasSource()), null, "\t").replace(/\n/g, "\r\n");
+    const { engine, host, changes } = mounted(source);
+    const input = openField(host, "t");
+    type(input, "Con i CR");
+    vi.advanceTimersByTime(CARD_PAUSE_MS);
+    expect(changes).toHaveLength(1);
+    expect(engine.getDoc()).toContain("\r\n");
+    expect(applyOperation(lineFeeds(source), changes[0].operation)).toBe(lineFeeds(engine.getDoc()));
+    engine.destroy();
+  });
+
+  it("due superfici sulla stessa tela: il testo dell'una arriva all'altra e il campo aperto resta", async () => {
+    vi.useFakeTimers();
+    const a = mounted();
+    const b = mounted();
+    const input = openField(a.host, "t");
+    type(input, "Da A");
+    vi.advanceTimersByTime(CARD_PAUSE_MS);
+    expect(a.changes).toHaveLength(1);
+    const inputB = openField(b.host, "g");
+    type(inputB, "Da B");
+    b.engine.syncDoc({ text: a.changes[0].text, operation: a.changes[0].operation });
+    await Promise.resolve();
+    expect(b.changes).toHaveLength(1);
+    const both = parseCanvas(b.engine.getDoc());
+    expect(both.nodes.find((node) => node.id === "t")?.text).toBe("Da A");
+    expect(both.nodes.find((node) => node.id === "g")?.label).toBe("Da B");
+    expect(b.host.querySelector(".canvas-field-editor")).toBe(inputB);
+    a.engine.destroy();
+    b.engine.destroy();
+  });
+
+  it("una trappola nel nucleo: la tela si riapre su un'istanza nuova dal testo, e il testo in sospeso si registra", async () => {
+    const real = countingCore();
+    let trap = true;
+    const port: CanvasCorePort = {
+      openNow: (text) => {
+        const core = real.port.openNow(text);
+        if (!core) return null;
+        return new Proxy(core, {
+          get(target, key, receiver) {
+            if (key === "commit" && trap) {
+              return () => {
+                trap = false;
+                throw new CanvasCoreError("trap", "unreachable");
+              };
+            }
+            return Reflect.get(target, key, receiver) as unknown;
+          },
+        });
+      },
+      ready: canvasCoreReady,
+    };
+    const { engine, host, changes } = mounted(canvasSource(), { core: port });
+    const input = openField(host, "t");
+    type(input, "Dopo la trappola");
+    press(input, "Escape");
+    expect(changes).toHaveLength(0);
+    await vi.waitFor(() => expect(changes).toHaveLength(1));
+    expect(real.calls.filter((call) => call === "open")).toHaveLength(2);
+    expect(cardText(engine)).toBe("Dopo la trappola");
+    engine.destroy();
+  });
+
+  it("il cancello: la tela dell'agente si apre con le stesse schede negli stessi posti", async () => {
+    const vector = agentBoard as unknown as { before: unknown; seed: number; ops: CanvasIntentOp[]; expect: { after: { nodes: Array<{ id: string; x: number; y: number; width: number; height: number }> } } };
+    const before = JSON.stringify(vector.before);
+    const core = await openCore(before);
+    const compiled = core.compile(vector.ops, vector.seed);
+    const { edit } = core.commit(compiled.patches);
+    core.close();
+    const text = before.slice(0, edit.start) + edit.text + before.slice(edit.end);
+    const { engine, host } = mounted(text);
+    const cards = [...host.querySelectorAll<HTMLElement>(".canvas-node")];
+    expect(cards.map((card) => card.dataset.node)).toEqual(vector.expect.after.nodes.map((node) => node.id));
+    for (const node of vector.expect.after.nodes) {
+      const card = host.querySelector<HTMLElement>(`.canvas-node[data-node="${node.id}"]`)!;
+      expect(card.style.transform).toBe(`translate(${node.x}px, ${node.y}px)`);
+      expect(card.style.width).toBe(`${node.width}px`);
+      expect(card.style.height).toBe(`${node.height}px`);
+    }
+    expect(host.querySelector<HTMLElement>(".canvas-viewport")!.dataset.canvasEdges).toBe("2");
+    engine.destroy();
+  });
+});
+
+describe("la superficie della tela: il nucleo arriva quando serve", () => {
+  type SurfaceModule = typeof import("./surface");
+  let release: { resolve: () => void; reject: (error: unknown) => void };
+
+  async function lazySurface(): Promise<SurfaceModule> {
+    vi.resetModules();
+    const waiting = new Promise<void>((resolve, reject) => {
+      release = { resolve, reject };
+    });
+    vi.doMock("./wasm/core", async (importOriginal) => {
+      const real = await importOriginal<typeof import("./wasm/core")>();
+      // Il caricamento vero, ma soltanto quando il test lo lascia andare.
+      return { ...real, canvasCoreLoaded: () => false, canvasCoreReady: () => waiting.then(real.canvasCoreReady) };
+    });
+    return import("./surface");
+  }
+
+  afterEach(() => {
+    vi.doUnmock("./wasm/core");
+    vi.resetModules();
+  });
+
+  function mount(module: SurfaceModule) {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const changes: unknown[] = [];
+    const surface = module.mountCanvasSurface("canvas", { paneId: "p", documentId: "board.canvas", parent }, {
+      onChange: (_pane, change) => changes.push(change),
+      onSelectionChange: () => {},
+    });
+    return { parent, surface, changes };
+  }
+
+  it("tiene il testo finché il nucleo non c'è, poi monta la tela con quel testo", async () => {
+    const module = await lazySurface();
+    const { parent, surface } = mount(module);
+    surface.buffer!.setDoc(canvasSource());
+    expect(parent.querySelector(".canvas-viewport")).toBeNull();
+    expect(surface.buffer!.getDoc()).toBe(canvasSource());
+    expect(() => surface.buffer!.setDoc("{rotto")).toThrow();
+    expect(surface.buffer!.getDoc()).toBe(canvasSource());
+    release.resolve();
+    await vi.waitFor(() => expect(parent.querySelectorAll(".canvas-node")).toHaveLength(4));
+    surface.destroy();
+  });
+
+  it("chiusa durante il caricamento, non monta niente", async () => {
+    const module = await lazySurface();
+    const { parent, surface } = mount(module);
+    surface.buffer!.setDoc(canvasSource());
+    surface.destroy();
+    release.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(parent.querySelector(".canvas-viewport")).toBeNull();
+  });
+
+  it("se il nucleo non si carica lo dice, e il testo resta in vista", async () => {
+    const module = await lazySurface();
+    const { parent, surface } = mount(module);
+    surface.buffer!.setDoc(canvasSource());
+    release.reject(new Error("niente"));
+    await vi.waitFor(() => expect(parent.querySelector(".vector-notice-text")?.textContent).toBe(t("canvas.core_unavailable")));
+    const pre = parent.querySelector<HTMLElement>(".canvas-source")!;
+    expect(pre.hidden).toBe(false);
+    expect(pre.textContent).toBe(canvasSource());
+    surface.setMode("canvas");
+    expect(pre.hidden).toBe(false);
+    surface.destroy();
   });
 });

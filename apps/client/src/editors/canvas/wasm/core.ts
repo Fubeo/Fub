@@ -140,6 +140,19 @@ export interface CanvasCoreRuntimeOptions {
 export interface CanvasCoreRuntime {
   /** Apre una lavagna dal suo testo; carica il modulo la prima volta, e dopo una trappola fa un'istanza nuova. */
   openCore(text: string): Promise<CanvasCore>;
+  /**
+   * Carica il modulo e fa l'istanza, senza aprire niente; rifiuta con un
+   * errore `load` se il modulo non si carica.
+   */
+  ready(): Promise<void>;
+  /**
+   * Apre una lavagna subito sull'istanza viva, con gli stessi errori di
+   * `openCore`; `null` se non c'è un'istanza viva (prima del caricamento o
+   * dopo una trappola: allora serve `ready`).
+   */
+  openCoreNow(text: string): CanvasCore | null;
+  /** Se c'è un'istanza viva, e `openCoreNow` apre senza aspettare. */
+  loaded(): boolean;
   /** I byte della memoria dell'istanza viva, `null` se non ce n'è una. */
   memoryBytes(): number | null;
 }
@@ -282,15 +295,28 @@ export function createCanvasCoreRuntime(options: CanvasCoreRuntimeOptions): Canv
     }
   }
 
+  function openOn(target: Instance, source: Uint8Array): CanvasCore {
+    const answer = invoke(target, source, (ptr, len) => target.exports.canvas_open(ptr, len));
+    const handle = answer.status >>> 0;
+    if (handle === 0) throw failure(answer.bytes);
+    const opened = parseJson(answer.bytes) as { handle: number; canvas: CanvasDocument };
+    return new Core(target, handle, opened.canvas, invoke);
+  }
+
   return {
     async openCore(text: string): Promise<CanvasCore> {
       const source = encodeText(text);
-      const target = await instance();
-      const answer = invoke(target, source, (ptr, len) => target.exports.canvas_open(ptr, len));
-      const handle = answer.status >>> 0;
-      if (handle === 0) throw failure(answer.bytes);
-      const opened = parseJson(answer.bytes) as { handle: number; canvas: CanvasDocument };
-      return new Core(target, handle, opened.canvas, invoke);
+      return openOn(await instance(), source);
+    },
+    async ready(): Promise<void> {
+      await instance();
+    },
+    openCoreNow(text: string): CanvasCore | null {
+      const source = encodeText(text);
+      return live ? openOn(live, source) : null;
+    },
+    loaded(): boolean {
+      return live !== null;
     },
     memoryBytes(): number | null {
       return live ? live.exports.memory.buffer.byteLength : null;
@@ -429,6 +455,15 @@ const runtime = createCanvasCoreRuntime({ load: loadCanvasWasm });
 
 /** Apre una lavagna nel nucleo condiviso dalla shell. */
 export const openCore: (text: string) => Promise<CanvasCore> = (text) => runtime.openCore(text);
+
+/** Carica il nucleo condiviso; rifiuta con un errore `load`. */
+export const canvasCoreReady: () => Promise<void> = () => runtime.ready();
+
+/** Apre una lavagna subito nel nucleo condiviso, `null` se non è (più) carico. */
+export const openCoreNow: (text: string) => CanvasCore | null = (text) => runtime.openCoreNow(text);
+
+/** Se il nucleo condiviso è carico. */
+export const canvasCoreLoaded: () => boolean = () => runtime.loaded();
 
 /** I byte della memoria del nucleo condiviso, `null` prima che si carichi o dopo una trappola. */
 export const canvasCoreMemoryBytes: () => number | null = () => runtime.memoryBytes();
