@@ -404,16 +404,16 @@ shell (`apps/client/src/editors/spatial/tools/editor/vault-images.ts`).
 
 ### La lavagna
 
-`CanvasEngine` (`apps/client/src/editors/canvas/engine.ts`) disegna il modello
-che il nucleo della tela (`canvas/wasm/core.ts`) dà a ogni `reset` e `commit`.
-Un gesto passa le sue toppe al nucleo, il testo nuovo è il tratto cambiato e
-l'annulla ripassa le toppe inverse dello stesso commit. Il nucleo si carica
-alla prima lavagna aperta e poi resta; una trappola riapre la lavagna su
-un'istanza nuova dal testo della sessione. Il testo di una scheda resta nel
-campo e si registra (un commit, un passo d'annulla) dopo 250 ms di pausa,
-all'uscita, con Invio, con Esc e prima di ogni altro gesto; se il nucleo lo
-rifiuta resta nel campo con un avviso. Le toppe sono descritte nelle
-[operazioni della lavagna](../reference/canvas-operations.md).
+`CanvasEngine` (`editors/canvas/engine.ts`) disegna il modello che il nucleo
+della tela (`canvas/wasm/core.ts`) dà a ogni `reset` e `commit`. Un gesto passa
+le sue toppe al nucleo, il testo nuovo è il tratto cambiato e l'annulla ripassa
+le toppe inverse dello stesso commit. Il nucleo si carica alla prima lavagna
+aperta e poi resta; una trappola riapre la lavagna su un'istanza nuova dal
+testo della sessione. Il testo di una scheda resta nel campo e si registra (un
+commit, un passo d'annulla) dopo 250 ms di pausa, all'uscita, con Invio, con
+Esc e prima di ogni altro gesto; se il nucleo lo rifiuta resta nel campo con un
+avviso. Intanto è già nella [bozza](frontend-and-ipc.md#il-testo-in-sospeso);
+le toppe sono nelle [operazioni della lavagna](../reference/canvas-operations.md).
 
 ### La griglia
 

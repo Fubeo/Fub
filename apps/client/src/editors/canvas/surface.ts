@@ -168,6 +168,8 @@ export function mountCanvasSurface(
   source.tabIndex = 0;
   source.setAttribute("role", "document");
   context.parent.append(host, source);
+  // Chi ascolta il testo in sospeso delle schede: la sessione, tramite il controller.
+  const pendingWatchers = new Set<(pending: boolean) => void>();
   const createEngine = (): CanvasEngine => new CanvasEngine(host, {
     surfaceId: context.paneId,
     formatId: context.formatId,
@@ -182,6 +184,9 @@ export function mountCanvasSurface(
     media: callbacks.media,
     attachments: callbacks.attachments,
     renderMarkdownForCard: callbacks.renderMarkdownForCard,
+    onPendingChange: (pending) => {
+      for (const watcher of [...pendingWatchers]) watcher(pending);
+    },
   });
   // La tela usa il nucleo, che si carica alla prima lavagna aperta e poi
   // resta. Finché non c'è la superficie tiene ciò che la shell le dice, e lo
@@ -278,6 +283,12 @@ export function mountCanvasSurface(
         source.textContent = canvasSourceFallback(text);
       },
       getDoc: (): string => engine?.getDoc() ?? held ?? "",
+      pendingText: (): string | null => engine?.pendingText() ?? null,
+      commitPending: (): void => engine?.commitPending(),
+      watchPending: (listener: (pending: boolean) => void): (() => void) => {
+        pendingWatchers.add(listener);
+        return () => pendingWatchers.delete(listener);
+      },
     },
     focus: (): void => {
       if (mode === "source") source.focus();
@@ -315,6 +326,7 @@ export function mountCanvasSurface(
       destroyed = true;
       engine?.destroy();
       engine = null;
+      pendingWatchers.clear();
     },
   };
   surface.setMode(mode);

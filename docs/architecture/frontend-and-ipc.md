@@ -146,6 +146,27 @@ La `DocumentSession` è l'autorità della shell per il testo in memoria e per la
 scrittura del documento aperto; il core resta l'autorità del file persistente e
 della revisione verificata dalla scrittura.
 
+La bozza di recupero ha una cadenza, non un debounce: la prima modifica arma
+un timer di un secondo (`DRAFT_MS`) che le battute successive non riarmano,
+così chi scrive senza pause perde al più un secondo se il processo muore. Il
+salvataggio resta un debounce sulla pausa.
+
+### Il testo in sospeso
+
+Una superficie può tenere testo che non è ancora nel buffer della sessione,
+come il campo di una scheda della lavagna. Lo dichiara con una porta
+facoltativa del `SurfaceBuffer` (`editors/core/registry.ts`): `watchPending`
+avvisa quando c'è o non c'è più testo in sospeso, `pendingText` dà il testo
+del documento con quel testo già dentro (per la lavagna una `preview` del
+nucleo, senza commit) e `commitPending` lo registra. La sessione tiene
+l'elenco delle superfici con testo in sospeso: la prima battuta arma la bozza
+come un buffer sporco, e la bozza scrive `pendingText`. Prima di ogni passo
+che legge o sostituisce il buffer (flush, chiusura, rilascio, ricarica, cambio
+da fuori, conflitto, recupero, rinomina, cancellazione) la sessione chiede
+`commitPending`, e il controller lo chiede prima di staccare una superficie:
+nessuna superficie si distrugge con testo in sospeso. Se l'anteprima non
+riesce, la bozza tiene l'ultimo testo accettato e la console lo dice.
+
 Ogni sessione fissa alla nascita il vault in cui il documento è stato letto e lo
 nomina (`vault`) in ogni lettura, scrittura, bozza e scarto di bozza: il vault
 corrente dell'host cambia quando se ne apre un altro, e non decide dove scrive

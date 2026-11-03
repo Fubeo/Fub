@@ -116,6 +116,11 @@ export interface CanvasEngineOptions {
    * sintassi che il vault dà al Markdown delle card (`EMBEDDED_GRAMMAR`);
    * assenti finché la superficie non le ha ricevute.
    */
+  /**
+   * Il testo in sospeso di una scheda è cambiato: `true` se ne resta. Nessun
+   * lavoro in più: chi ascolta chiede `pendingText` quando gli serve.
+   */
+  readonly onPendingChange?: (pending: boolean) => void;
   readonly renderMarkdownForCard?: (
     nodeId: string,
     text: string,
@@ -587,11 +592,11 @@ export class CanvasEngine {
       next[pending.field] = pending.text;
       const patch = upsertNodePatch(doc, next);
       if (!patch) {
-        this.#pending = null;
+        this.#setPending(null);
         return true;
       }
       code = this.#commitLocal([patch], "input", (inverse) => {
-        this.#pending = null;
+        this.#setPending(null);
         this.#pushUndo(inverse, true);
       });
       // Il testo è cambiato da un'altra parte: si riprova sulla scheda di adesso.
@@ -619,7 +624,7 @@ export class CanvasEngine {
   #closeField(force: boolean): boolean {
     const recorded = this.#recordPending();
     if (!recorded && !force) return false;
-    this.#pending = null;
+    this.#setPending(null);
     const editor = this.#editor;
     if (!editor) return true;
     this.#editor = null;
@@ -633,6 +638,61 @@ export class CanvasEngine {
     if (!this.#closeField(false)) return;
     this.#render();
     if (focus) this.#viewport.focus();
+  }
+
+  #setPending(next: PendingText | null): void {
+    const had = this.#pending !== null;
+    this.#pending = next;
+    // Ogni tasto conta: la sessione arma la bozza su ogni cambio, non solo sul primo.
+    if (next || had) this.#options.onPendingChange?.(next !== null);
+  }
+
+  /**
+   * Il testo intero del documento col testo in sospeso dentro, come lo
+   * scriverebbe il commit, senza cambiare la lavagna; `null` se non c'è testo
+   * in sospeso o il nucleo non lo prende (allora vale l'ultimo testo accettato,
+   * e lo si annota nel registro).
+   */
+  pendingText(): string | null {
+    const pending = this.#pending;
+    if (!pending || this.#destroyed || !this.#doc) return null;
+    const core = this.#core;
+    if (!core) return null;
+    let doc: CanvasDocument = this.#doc;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const current = doc.nodes.find((node) => node.id === pending.card.id);
+      const next = { ...(current ?? pending.card) };
+      next[pending.field] = pending.text;
+      const patch = upsertNodePatch(doc, next);
+      // Il campo dice ciò che la lavagna ha già.
+      if (!patch) return this.#source;
+      try {
+        return core.preview([patch]);
+      } catch (error) {
+        if (lostCore(error)) {
+          this.#lose();
+          return null;
+        }
+        if (!(error instanceof CanvasCoreError)) throw error;
+        const fresh = error.code === "stale" && attempt === 0 ? this.#coreModel() : null;
+        if (!fresh) {
+          console.warn(`canvas: il testo in sospeso non entra nella bozza (${error.code})`);
+          return null;
+        }
+        doc = fresh;
+      }
+    }
+    return null;
+  }
+
+  /** Registra adesso il testo in sospeso, come alla fine della pausa. */
+  commitPending(): void {
+    if (!this.#destroyed) this.#recordPending();
+  }
+
+  /** Se c'è testo di una scheda non ancora registrato. */
+  get hasPending(): boolean {
+    return this.#pending !== null;
   }
 
   #schedulePause(): void {
@@ -1978,7 +2038,7 @@ export class CanvasEngine {
     const signal = lifetime.signal;
     const hold = (): void => {
       const card = this.#doc?.nodes.find((candidate) => candidate.id === node.id) ?? this.#pending?.card ?? node;
-      this.#pending = { card, field, text: input.value };
+      this.#setPending({ card, field, text: input.value });
     };
     // Il testo resta qui finché non c'è una pausa: niente commit per tasto.
     input.addEventListener("input", () => {

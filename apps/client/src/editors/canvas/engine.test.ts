@@ -951,6 +951,50 @@ describe("CanvasEngine: il testo di una scheda", () => {
     expect(host.querySelector<HTMLElement>(".canvas-viewport")!.dataset.canvasEdges).toBe("2");
     engine.destroy();
   });
+
+  it("il testo tenuto: un avviso per tasto senza nucleo, il testo intero solo a richiesta, il commit adesso", () => {
+    vi.useFakeTimers();
+    const { port, calls } = countingCore();
+    const seen: boolean[] = [];
+    const { engine, host, changes } = mounted(canvasSource(), { core: port, onPendingChange: (pending) => seen.push(pending) });
+    const input = openField(host, "t");
+    expect(engine.pendingText()).toBeNull();
+    const before = calls.length;
+    type(input, "Ciao");
+    type(input, "Ciao mondo");
+    expect(seen).toEqual([true, true]);
+    expect(calls.length).toBe(before);
+    const whole = engine.pendingText()!;
+    expect(calls.slice(before)).toEqual(["preview"]);
+    expect(parseCanvas(whole).nodes.find((node) => node.id === "t")!.text).toBe("Ciao mondo");
+    // Il testo intero non tocca la lavagna.
+    expect(cardText(engine)).toBe("vedi [[Altra]] e #tag");
+    expect(changes).toHaveLength(0);
+    engine.commitPending();
+    expect(seen).toEqual([true, true, false]);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]!.text).toBe(whole);
+    expect(engine.hasPending).toBe(false);
+    expect(engine.pendingText()).toBeNull();
+    vi.advanceTimersByTime(CARD_PAUSE_MS);
+    expect(changes).toHaveLength(1);
+    engine.destroy();
+  });
+
+  it("il testo tenuto che il nucleo non prende: niente testo intero, e il registro lo dice", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { engine, host } = mounted();
+      const input = openField(host, "t");
+      type(input, "x".repeat(1_048_577));
+      expect(engine.pendingText()).toBeNull();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("invalid"));
+      expect(cardText(engine)).toBe("vedi [[Altra]] e #tag");
+      engine.destroy();
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 describe("la superficie della tela: il nucleo arriva quando serve", () => {
