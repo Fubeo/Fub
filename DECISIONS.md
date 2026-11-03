@@ -59,6 +59,22 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · N3 · T15 integrato (d3c348be la CSP, il test e la decisione
+  0237; 4b45dbd0 lo scenario L1; 8adf925e la misura). La CSP apre solo
+  `'wasm-unsafe-eval'` in `script-src`; il test di `platform_configs.rs`
+  legge la config fusa di ogni piattaforma e `devCsp`, con 16 casi in
+  negativo (anche `script-src-elem`/`-attr` e una direttiva doppia). L1 in
+  `bench:webview` fallisce con un messaggio chiaro su un errore di CSP;
+  l'orchestratore l'ha messo nel job `webview` (57f11a32, solo il nome del
+  passo e `--only`: il nome del job resta, perché lo cita il cancello del
+  rilascio). Misure: modulo 449,5 KiB grezzi, 164 182 B gzip (contro i ~56
+  KB della prova 1 del piano), commit su 2000 schede 5–8 ms al p95 in Node e
+  in WebKitGTK 2.54; soglie ci di L1 provvisorie (3× il peggiore locale,
+  minimo 10 ms), da ritarare a 1,5× il peggiore del runner dopo il primo
+  giro (T23). Da sapere su server-di-fub: con sccache un cambio della sola
+  `tauri.conf.json` non ricompila `generate_context!` e il binario tiene la
+  CSP vecchia; per provarla si tocca `crates/fub-app/src/lib.rs` o si
+  compila senza sccache.
 - 2026-11-03 · N3 · le risposte dell'utente alle domande nuove: D-9 (b), le
   lavagne con valori sconosciuti in un campo noto si aprono dentro N3 (un
   prototipo e due task prima di T23, li scrive il pianificatore); D-10 (a),
