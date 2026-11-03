@@ -270,7 +270,8 @@ fn a_raw_photo_is_a_subject_from_its_extension() {
     assert_eq!(out.info.app, PreviewSubject::Raw);
     assert_eq!(out.info.editor, "LightCraft");
     assert_eq!(out.info.bytes, b"RAW finto".len() as u64);
-    assert_eq!(out.missing, Some(Missing::Absent));
+    // «RAW finto» non è un RAW: il lettore a pezzi (T27) lo dice illeggibile.
+    assert_eq!(out.missing, Some(Missing::Unreadable));
     assert!(out.image.is_none() && out.render.is_none() && !out.queued);
     // Un allegato senza soggetto resta rifiutato.
     let error = ask(&host, &root, "Foto/IMG_0001-Edit.psd", "small").unwrap_err();
