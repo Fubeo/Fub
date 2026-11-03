@@ -1363,7 +1363,7 @@ disco invece di sparire» per le note), e che una modifica esterna durante la
 pausa dà il conflitto e non perde il testo.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/state
 src/editors/canvas src/shell.e2e.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 1b02213a
 
 ## T20 · Il nucleo conserva ciò che non tocca
 
