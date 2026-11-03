@@ -87,7 +87,13 @@ import type {
   LiveStatus,
   LiveWriterStatus,
 } from "./contract";
-import type { PrintArtifactOutcome, RevealOutcome, SaveArtifactOutcome } from "./ipc";
+import type {
+  ExternalEditor,
+  OpenedWith,
+  PrintArtifactOutcome,
+  RevealOutcome,
+  SaveArtifactOutcome,
+} from "./ipc";
 import { mediaKindOfMime, mimeOrOctet } from "../editors/media/media-types";
 import {
   CRAFT_BUNDLE_NS,
@@ -209,6 +215,17 @@ export interface Options {
   printArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<PrintArtifactOutcome>;
   /// Il sistema che riceve una voce del vault. Senza, la porta non è servita.
   revealInSystem?: (path: string, open: boolean) => Promise<RevealOutcome>;
+  /// Le app Craft della macchina per «Apri con» (`doc` è `null` quando la
+  /// shell le chiede tutte). Senza, la porta non è servita, come quella di
+  /// un'app vecchia che non ha il comando.
+  externalEditors?: (doc: string | null) => Promise<ExternalEditor[]>;
+  /// L'app Craft che riceve una voce del vault. Senza, la porta non è servita.
+  openWith?: (path: string, editor: string, page: number | null) => Promise<OpenedWith>;
+  /// L'anteprima fatta dalla CLI dopo un gesto. Senza, la porta non è
+  /// servita. Servita o no, ogni chiamata resta in `atGate("craftRender")`:
+  /// è da lì che i test della shell provano che una via senza gesto non la
+  /// chiama mai.
+  craftRender?: (doc: string, size: CraftPreviewSize) => Promise<CraftPreview>;
   /// La rete della macchina per la sessione live. Senza, le porte `live*` non
   /// sono servite; con zero indirizzi è un PC fuori da una rete locale, che
   /// l'app rifiuta con `unserved`.
@@ -1502,6 +1519,18 @@ export function createFakeHost(options: Options = {}): FakeHost {
         options.revealInSystem
           ? gate("revealInSystem", [path, open], options.revealInSystem(path, open))
           : unavailable("revealInSystem", [path, open]),
+      externalEditors: (doc) =>
+        options.externalEditors
+          ? gate("externalEditors", [doc], options.externalEditors(doc))
+          : unavailable("externalEditors", [doc]),
+      openWith: (path, editor, page) =>
+        options.openWith
+          ? gate("openWith", [path, editor, page ?? null], options.openWith(path, editor, page ?? null))
+          : unavailable("openWith", [path, editor, page ?? null]),
+      craftRender: (doc, size) =>
+        options.craftRender
+          ? gate("craftRender", [doc, size], options.craftRender(doc, size))
+          : unavailable("craftRender", [doc, size]),
       listGridSurfaces: () => gate("listGridSurfaces", [], Promise.resolve(gridBytes ? [gridBytes.surface] : [])),
       // L'host legge i byte da sé: il finto controlla soltanto che il
       // documento ci sia e che la revisione da cui la shell parte sia ancora
