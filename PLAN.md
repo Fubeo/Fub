@@ -1543,7 +1543,7 @@ senza l'opzione, il riquadro di sempre; i test del tema
 `theme/forced-colors.test.ts`), `npm run theme:verify`, `npm run typecheck`
 e `bench:a11y` verdi.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 06e054c8
 
 ## T19 · Il movimento della barra dei fogli
 
