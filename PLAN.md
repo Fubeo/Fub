@@ -1795,7 +1795,7 @@ l'app aperta (`running` sempre `false`).
 Fatto quando: `cargo test -p fub-cli --test mcp` e i test di `control.rs`
 (`cargo test -p fub-host --lib control`) passano.
 Prova: scripts/check.sh --rapido; cargo test -p fub-cli --test mcp
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base be00d5f7
 
 ## T14 · La scheda Craft e XMP
 
@@ -2983,7 +2983,7 @@ Fatto quando: `cargo test -p fub-format-craft --test office` e `cargo test -p
 fub-host --test craft_ranged` passano.
 Prova: scripts/check.sh --rapido; cargo test -p fub-format-craft --test
 office
-Stato: [~] in corso · coder · base 9790d2ef
+Stato: [x] fatto · b8131b11 · check --rapido 21/22: rosso solo fub-kernel crossed_moves_take_the_locks_in_one_order (attesa di 30 s scaduta con carico 60, kernel non toccato), verde da solo 3 volte
 
 ## T31 · PDF e documenti nella shell
 

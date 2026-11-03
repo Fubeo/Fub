@@ -59,6 +59,25 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- N7 T30 (b8131b11, dal coder 22ae7bf3): un `.docx` o un `.odt` dà la
+  miniatura che porta dentro, letta a pezzi (la coda dello ZIP,
+  `_rels/.rels` fino a 64 KiB, la voce della miniatura fino a 8 MiB), senza
+  revisione e senza cache; un PDF, un `.rtf` o un `.doc` restano `absent`.
+  Differenze dal piano: errori `OfficeError { NotZip, TooLarge,
+  BadRelationships }`; conta solo la prima relazione miniatura; rifiutati
+  `TargetMode=External` e i bersagli con segmenti vuoti, `.`, `..` o `\\`;
+  una miniatura oltre 8 MiB o in EMF/WMF è `absent`, relazioni rotte o
+  troppo grandi `unreadable`, come un docx cifrato; il tipo di pacchetto lo
+  dicono le voci e non l'estensione; l'apertura dello ZIP ripete la sequenza
+  di `zip_preview` perché `container.rs` è cambiato solo nella visibilità
+  (anche `zip_tail.rs` e `craft_files.rs`, fuori dal Tocca); nuova regola di
+  case-fold ASCII `office.rs::is_package_extension` in
+  `a_named_rule_is_declared.rs`; sulla via dell'host senza lease i documenti
+  restano `absent`, come i RAW. Rischi:
+  `mounting_external_path_does_not_take_workspace_lock` (3 s) e
+  `crossed_moves_take_the_locks_in_one_order` (30 s) sono caduti sotto
+  carico e possono cadere in CI; nessuna prova con un docx salvato da Word
+  vero, solo pacchetti fatti nei test.
 - N7 T11 (9790d2ef): le anteprime con la CLI dopo un gesto, col biglietto.
   Differenze dal piano: `Host::craft_render` accoda con `Host::spawn_job`
   (l'esito arriva con `JobDone`) ed è dietro `#[cfg(feature = "craft")]`,
