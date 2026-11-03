@@ -62,6 +62,7 @@ import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { LIVE_DOC, liveCase } from "./live-fixture";
+import { PHOTO_CRAFT, photoCase, photoResources } from "./photo-fixture";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import {
   generateGraphFixture as graphFixture,
@@ -254,6 +255,11 @@ const RICH_DOCS: Readonly<Record<string, { doc: string; text: string }>> = {
   closed: { doc: "Documenti/Chiuso.docx", text: RICH_CLOSED.source },
 };
 const RICH_DOC = RICH_DOCS[params.get("rich") ?? ""] ?? null;
+
+/// La foto delle scene `photo-*` (`?photo=xmp|senza`), col bundle `fub.craft`
+/// acceso: la riga dei dati di LightCraft sotto la foto. Soltanto le sue
+/// scene la hanno.
+const PHOTO = photoCase(params.get("photo"));
 
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
 const DRAWING = CONNECTORS !== null
@@ -1093,7 +1099,7 @@ const options: Options = {
     // La nota della Live, per le scene che la chiedono.
     ...(LIVE === null ? {} : { [LIVE_DOC]: LIVE.text }),
   },
-  resources: RESOURCES,
+  resources: PHOTO === null ? RESOURCES : { ...RESOURCES, ...photoResources(PHOTO) },
   root: ROOT,
   view: VIEWS,
   commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS],
@@ -1109,6 +1115,7 @@ const options: Options = {
     } as GridBytesFake,
   }),
   ...(DRAWING === null ? {} : { draw: true }),
+  ...(PHOTO === null ? {} : { craft: PHOTO_CRAFT }),
 };
 
 const host = createFakeHost(options);

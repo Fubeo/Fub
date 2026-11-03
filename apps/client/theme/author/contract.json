@@ -1177,6 +1177,10 @@
     "craft-xmp-edits",
     "craft-xmp-link",
     "craft-xmp-note",
+    "photo-data",
+    "photo-data-line",
+    "photo-data-tags",
+    "photo-data-open",
     "media-recorder",
     "web-viewer-bar",
     "web-viewer-address",
@@ -2667,6 +2671,10 @@
     "craft-xmp-edits": "cornice",
     "craft-xmp-link": "cornice",
     "craft-xmp-note": "cornice",
+    "photo-data": "cornice",
+    "photo-data-line": "cornice",
+    "photo-data-tags": "cornice",
+    "photo-data-open": "cornice",
     "media-recorder": "cornice",
     "web-viewer-bar": "cornice",
     "web-viewer-address": "cornice",
@@ -5776,6 +5784,23 @@
       ]
     },
     {
+      "name": "photo-data",
+      "part": "media",
+      "hooks": [
+        "photo-data",
+        "photo-data-line",
+        "photo-data-tags",
+        "photo-data-open"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
       "name": "media-recorder",
       "part": "media",
       "hooks": [
@@ -8354,10 +8379,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1488,
+    "hooks": 1492,
     "state_names": 7,
-    "assigned_states": 720,
-    "components": 215,
+    "assigned_states": 725,
+    "components": 216,
     "preference_tokens": 186
   }
 }

@@ -881,6 +881,44 @@
   text-align: center;
 }
 
+/* I dati di LightCraft sotto una foto o un RAW: una riga sottovoce come
+   quella dei dati di un file Craft, con le stelle, l'etichetta e i tag della
+   scheda dell'XMP. Le parole chiave vanno a capo fino a tre righe, poi
+   scorrono: la foto tiene il suo posto. */
+.photo-data {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 var(--space-5) var(--space-5);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.photo-data-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2) var(--space-6);
+}
+.photo-data-open {
+  font-weight: var(--weight-medium);
+}
+/* Tre righe di tag (la riga è il corpo per l'interlinea, più il padding del
+   tag) e il loro stacco; il padding lascia intero l'anello del fuoco, che lo
+   scorrimento taglierebbe. */
+.photo-data-tags {
+  justify-content: center;
+  max-width: 48rem;
+  max-height: calc(3 * var(--text-sm) * (var(--leading-normal) + 0.2) + 2 * var(--space-2) + 2 * var(--focus-ring-width) + 2px);
+  padding: calc(var(--focus-ring-width) + 1px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
 /* ── Il registratore ─────────────────────────────────────────────────────── */
 
 /* Sta nella testata del foglio, fra i comandi: una riga sola, piccola. Il

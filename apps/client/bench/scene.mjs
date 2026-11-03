@@ -163,6 +163,22 @@ export const SCENE = onPage("shell", [
       await page.$eval('.setting-row[data-setting-key="craft.editor-paths"]', (row) => row.scrollIntoView({ block: "start" }));
     },
   },
+  // **I dati sulla foto**: una foto aperta col suo XMP di LightCraft accanto
+  // (`?photo=xmp`, vedi `photo-fixture.ts`), con la riga di stelle,
+  // etichetta, scelta e parole chiave sotto; e la stessa foto senza XMP, che
+  // non ha la riga né il suo posto.
+  {
+    id: "photo-xmp",
+    title: "Una foto col suo XMP: i dati di LightCraft sotto la foto",
+    query: "photo=xmp",
+    prepare: (page) => openPhoto(page, true),
+  },
+  {
+    id: "photo-senza-xmp",
+    title: "Una foto senza XMP: niente riga sotto la foto",
+    query: "photo=senza",
+    prepare: (page) => openPhoto(page, false),
+  },
   {
     id: "prefs-appearance",
     title: "Le preferenze: carattere, accento e spazio dell'interfaccia, coi controlli dello Scrittoio",
@@ -1174,6 +1190,18 @@ async function openDrawing(page) {
   );
   await page.evaluate(() => document.fonts.ready);
   await page.focus(".draw-editor .draw-surface");
+}
+
+/// Apre la foto delle scene `photo-*` e aspetta che sia disegnata, e con
+/// `withData` anche la riga dei dati di LightCraft.
+async function openPhoto(page, withData) {
+  await openFolder(page, "Foto");
+  await page.click('#file-list .tree-row[data-path="Foto/spiaggia.jpg"]');
+  await page.waitForFunction(() => {
+    const image = document.querySelector(".pane.focus .media-surface img");
+    return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0;
+  });
+  if (withData) await page.waitForSelector(".pane.focus .photo-data .photo-data-open");
 }
 
 /// Apre la cartella di Excel della scena `grid-workbook` e aspetta che la

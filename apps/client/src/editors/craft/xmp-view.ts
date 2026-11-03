@@ -14,7 +14,7 @@ import { craftInfoText, fileName, type CraftSurfaceDeps } from "./index";
 
 /// Le cinque etichette come le scrive LightCraft, col colore del contenuto che
 /// le dipinge. Un'altra etichetta si mostra com'è, senza colore.
-const LABEL_COLORS: Readonly<Record<string, string>> = {
+export const LABEL_COLORS: Readonly<Record<string, string>> = {
   Red: "red",
   Yellow: "yellow",
   Green: "green",
@@ -22,7 +22,7 @@ const LABEL_COLORS: Readonly<Record<string, string>> = {
   Purple: "purple",
 };
 
-const COLOR_NAMES: Readonly<Record<string, Key>> = {
+export const COLOR_NAMES: Readonly<Record<string, Key>> = {
   red: "craft.xmp.color.red",
   yellow: "craft.xmp.color.yellow",
   green: "craft.xmp.color.green",

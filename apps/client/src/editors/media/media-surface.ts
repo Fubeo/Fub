@@ -31,6 +31,10 @@ export interface MediaSurfaceDeps {
   /// «Annota» sul PDF: crea o apre le sue annotazioni. `available` dice se il
   /// kernel ha il comando, cioè se il vault serve le annotazioni.
   annotate?: { available(): boolean; run(pdf: string): Promise<void> };
+  /// I dati di LightCraft sotto una foto (N7): mostra in fondo a `root` la
+  /// riga dell'XMP accanto a `doc`, finché `life` è vivo. Senza, la foto è
+  /// sola; con, la riga arriva dopo la foto, che non la aspetta.
+  photoData?: { show(root: HTMLElement, doc: string, life: Lifetime): void };
 }
 
 const MEDIA_MODES: SurfaceMode[] = [
@@ -115,13 +119,26 @@ export function mountMediaSurface(
         mounted = await mountBytes(descriptor, bytes, life, deps, root, context.documentId);
       }
       status.remove();
+      showPhotoData();
     } catch (error) {
       if (!active) return;
       status.textContent = error instanceof Error ? error.message : t("viewer.unavailable");
+      // Una foto che la vista non sa mostrare (un TIFF, un HEIC) ha la sua
+      // frase, e sotto i dati del suo XMP.
+      showPhotoData();
     } finally {
       if (pendingPort === port) pendingPort = null;
       await port?.close().catch(() => {});
     }
+  }
+
+  // La riga dei dati di LightCraft, dopo la foto o dopo la frase che dice
+  // perché non si vede: soltanto per una foto, e una volta.
+  let photoShown = false;
+  function showPhotoData(): void {
+    if (photoShown || !active || profile !== "media-image" || !deps.photoData) return;
+    photoShown = true;
+    deps.photoData.show(root, pdfIdWithoutFragment(context.documentId), life);
   }
 
   void load().catch(() => {});

@@ -78,3 +78,57 @@ describe("il menu del visualizzatore", () => {
     surface.destroy();
   });
 });
+
+describe("i dati della foto", () => {
+  it("sotto un'immagine, dopo la foto, una volta, con l'id senza frammento", async () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const shown: string[] = [];
+    const deps: MediaSurfaceDeps = {
+      ...depsFor("foto.jpg", "image/png", png(4, 3)),
+      photoData: {
+        show: (root, doc) => {
+          shown.push(doc);
+          const row = document.createElement("section");
+          row.className = "photo-data";
+          root.append(row);
+        },
+      },
+    };
+    const surface = mountMediaSurface("media-image", { paneId: "p", documentId: "foto.jpg", parent }, deps);
+    await vi.waitFor(() => expect(parent.querySelector(".photo-data")).not.toBeNull());
+    expect(shown).toEqual(["foto.jpg"]);
+    const root = parent.querySelector(".photo-data")!.parentElement!;
+    expect(root.lastElementChild?.className).toBe("photo-data");
+    expect(root.querySelector(".zoom-view")).not.toBeNull();
+    surface.destroy();
+  });
+
+  it("anche sotto la frase di una foto che non si apre", async () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const shown: string[] = [];
+    const base = depsFor("foto.heic", "image/heic", new Uint8Array(4));
+    const deps: MediaSurfaceDeps = {
+      ...base,
+      transport: { ...base.transport, open: async () => Promise.reject(new Error("non si apre")) },
+      photoData: { show: (_root, doc) => void shown.push(doc) },
+    };
+    const surface = mountMediaSurface("media-image", { paneId: "p", documentId: "foto.heic", parent }, deps);
+    await vi.waitFor(() => expect(shown).toEqual(["foto.heic"]));
+    expect(parent.textContent).toContain("non si apre");
+    surface.destroy();
+  });
+
+  it("non sotto un audio", async () => {
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("maybe");
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const shown: string[] = [];
+    const deps: MediaSurfaceDeps = { ...depsFor("voce.mp3", "audio/mpeg", new Uint8Array(8)), photoData: { show: (_r, doc) => void shown.push(doc) } };
+    const surface = mountMediaSurface("media-audio", { paneId: "p", documentId: "voce.mp3", parent }, deps);
+    await vi.waitFor(() => expect(parent.querySelector("audio")).not.toBeNull());
+    expect(shown).toEqual([]);
+    surface.destroy();
+  });
+});

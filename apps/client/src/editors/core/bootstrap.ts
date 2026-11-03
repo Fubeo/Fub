@@ -21,6 +21,7 @@ import { mountMediaSurface, profileForKind, type MediaSurfaceDeps } from "../med
 import { mediaKindOfId, mimeOfId } from "../media/media-types";
 import { mountSvgSurface, SVG_PROFILE } from "../text/profiles/svg";
 import { CRAFT_FAMILY, CRAFT_FORMATS, CRAFT_OWNER, CRAFT_PROFILE, XMP_PROFILE, mountCraftSurface } from "../craft/index";
+import { showPhotoData } from "../craft/photo-data";
 import { makePdfJsLoader, pdfIdWithoutFragment, type PdfJsModule } from "../media/pdf-view";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { CanvasAttachmentPort, CanvasMediaPort } from "../canvas/engine";
@@ -535,7 +536,18 @@ export function createDocumentSurfaceRegistry(
     factory: {
       mount(profile, context) {
         return options.media
-          ? mountMediaSurface(profile, context, { ...options.media, pdfLoader: options.media.pdfLoader ?? loadPdf })
+          ? mountMediaSurface(profile, context, {
+            ...options.media,
+            pdfLoader: options.media.pdfLoader ?? loadPdf,
+            // I dati di LightCraft sotto la foto, solo col componente «File
+            // delle app Craft» acceso: spento, il kernel non elenca
+            // `craft.photo` e la foto non chiede niente; acceso dopo, la riga
+            // arriva da sola (`state/craft-photos.ts`).
+            photoData: options.media.photoData ?? {
+              show: (root, doc, life) =>
+                showPhotoData(root, doc, { onOpenDocument: options.onOpenDocument, onSearchTag: options.onSearchTag }, life),
+            },
+          })
           : staticSurface("viewer", profile, context, "viewer.unavailable");
       },
     },

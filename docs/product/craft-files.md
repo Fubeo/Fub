@@ -67,6 +67,36 @@ scheda. La stessa figura dieci volte nella stessa nota fa una domanda sola. Un
 file che non c'è più resta un embed non risolto; con il componente `fub.craft`
 spento resta il riquadro col nome e l'app.
 
+## Una foto
+
+Una foto aperta in una scheda (un JPG, un PNG, un TIFF) mostra sotto di sé i
+dati di LightCraft, quando ha un XMP accanto: le stelle del voto, l'etichetta
+col suo colore, la scelta («Scelta» o «Scartata»), «Apri l'XMP» e le parole
+chiave come tag. Un clic su un tag lo cerca nel vault, come un tag di una
+nota; «Apri l'XMP» apre l'XMP nella sua scheda. La riga si legge soltanto:
+voto, etichetta e parole chiave si cambiano in LightCraft.
+
+Fub cerca l'XMP nella cartella della foto, con la regola dei
+[sidecar XMP](../reference/xmp-sidecars.md): prima `IMG_0001.jpg.xmp`, poi
+`IMG_0001.xmp`, coi nomi così come sono scritti.
+
+- Una foto senza XMP non ha la riga, e nemmeno il suo posto.
+- Un XMP che non dice niente lo dice: «L'XMP non ha voto, etichetta, scelta
+  né parole chiave».
+- Un XMP che non si legge, rotto o troppo grande, dice «I dati dell'XMP non si
+  leggono».
+- In tutti e due i casi resta «Apri l'XMP».
+- Un campo che manca non lascia il suo posto.
+- Un voto di -1 si legge «Scartata».
+- Un'etichetta che non è uno dei cinque colori si mostra com'è scritta.
+- Una foto che la scheda non sa mostrare, come un HEIC, ha la sua frase e
+  sotto la riga.
+
+La riga arriva dopo la foto, e segue l'XMP: quando LightCraft lo salva, o lo
+crea accanto a una foto aperta, la riga si aggiorna da sola, in ogni riquadro
+che mostra la foto. Con il componente `fub.craft` spento la foto non ha la
+riga, e Fub non chiede niente.
+
 ## File collegati
 
 Un file piazzato in un documento Craft, come una foto messa in un disegno di
