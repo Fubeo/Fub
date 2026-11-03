@@ -4,8 +4,9 @@
 //! un file cambiato fra due pezzi è `Stale`; la memoria delle revisioni non
 //! si fida di peso e data; il vault chiuso spegne un file aperto; un
 //! `craft.preview` mentre un altro thread scrive nel vault non si ferma; una
-//! foto RAW dà il JPEG che porta dentro, letto a pezzi; e nessun byte dei
-//! file cambia.
+//! foto RAW dà il JPEG che porta dentro, letto a pezzi, e un `.docx` di
+//! 300 MiB la sua miniatura; un PDF è `absent`; e nessun byte dei file
+//! cambia.
 
 #![cfg(feature = "craft")]
 
@@ -578,12 +579,23 @@ fn crc_of(bytes: &[u8]) -> u32 {
 /// sul disco non ci sono (un file sparso), poi `thumb.png`, il manifesto, la
 /// directory centrale e la fine.
 fn sparse_pcraft(path: &Utf8Path, hole: u64, thumb: &[u8]) -> u64 {
-    use std::io::Write;
     let manifest = br#"{"format_version":5}"#;
+    sparse_zip(
+        path,
+        ("layers/0.bin", hole),
+        &[("thumb.png", thumb), ("manifest.json", manifest)],
+    )
+}
+
+/// Uno ZIP scritto a mano in `path`: la voce STORE `hole.0` di `hole.1` byte
+/// che sul disco non ci sono (un file sparso), poi le voci STORE `entries`,
+/// la directory centrale e la fine. Il peso del file.
+fn sparse_zip(path: &Utf8Path, hole: (&str, u64), entries: &[(&str, &[u8])]) -> u64 {
+    use std::io::Write;
     let mut file = std::fs::File::create(path).unwrap();
     let mut at = 0u64;
     let mut central = Vec::new();
-    let mut entries = 0u16;
+    let mut count = 0u16;
     let mut entry = |file: &mut std::fs::File, name: &str, data: &[u8], hole: u64| {
         let size = u32::try_from(data.len() as u64 + hole).unwrap();
         let crc = if hole > 0 { 0 } else { crc_of(data) };
@@ -609,15 +621,16 @@ fn sparse_pcraft(path: &Utf8Path, hole: u64, thumb: &[u8]) -> u64 {
         central.extend_from_slice(name.as_bytes());
         at += local.len() as u64 + hole;
         file.seek(SeekFrom::Start(at)).unwrap();
-        entries += 1;
+        count += 1;
     };
-    entry(&mut file, "layers/0.bin", b"", hole);
-    entry(&mut file, "thumb.png", thumb, 0);
-    entry(&mut file, "manifest.json", manifest, 0);
+    entry(&mut file, hole.0, b"", hole.1);
+    for (name, data) in entries {
+        entry(&mut file, name, data, 0);
+    }
     let mut tail = central.clone();
     tail.extend_from_slice(b"PK\x05\x06\0\0\0\0");
-    tail.extend_from_slice(&entries.to_le_bytes());
-    tail.extend_from_slice(&entries.to_le_bytes());
+    tail.extend_from_slice(&count.to_le_bytes());
+    tail.extend_from_slice(&count.to_le_bytes());
     tail.extend_from_slice(&(central.len() as u32).to_le_bytes());
     tail.extend_from_slice(&u32::try_from(at).unwrap().to_le_bytes());
     tail.extend_from_slice(&0u16.to_le_bytes());
@@ -764,4 +777,104 @@ fn a_broken_an_empty_or_a_foreign_zip_is_unreadable() {
         assert_eq!(preview.origin, PreviewOrigin::None, "{doc}");
         assert_eq!(preview.revision, None, "{doc}");
     }
+}
+
+/// Le relazioni di un `.docx` che portano alla miniatura `target`.
+fn docx_rels(target: &str) -> Vec<u8> {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="{}" Target="{target}"/></Relationships>"#,
+        fub_format_craft::office::OOXML_THUMBNAIL_TYPE
+    )
+    .into_bytes()
+}
+
+/// Un `.docx` sparso di 300 MiB in `path`: un'immagine enorme che sul disco
+/// non c'è, poi le relazioni, la miniatura e il documento. Il peso del file.
+fn sparse_docx(path: &Utf8Path, thumbnail: &[u8]) -> u64 {
+    let rels = docx_rels("/docProps/thumbnail.png");
+    sparse_zip(
+        path,
+        ("word/media/grande.bin", 300 * MIB),
+        &[
+            ("_rels/.rels", &rels),
+            ("docProps/thumbnail.png", thumbnail),
+            ("word/document.xml", b"<w:document/>"),
+        ],
+    )
+}
+
+#[test]
+fn a_sparse_300_mib_docx_gives_its_thumbnail_read_in_pieces() {
+    let (_dir, root) = vault(&[]);
+    let path = root.join("Documenti/Relazione.docx");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let len = sparse_docx(&path, &png(96, 128));
+    let before = std::fs::metadata(&path).unwrap();
+    let host = Host::without_watcher();
+    host.open(&root).unwrap();
+    host.wait_indexed(Some(root.as_str())).unwrap();
+    for size in ["small", "large"] {
+        let preview = ask_sized(&host, &root, "Documenti/Relazione.docx", size).unwrap();
+        let image = preview
+            .image
+            .unwrap_or_else(|| panic!("{size}: {:?}", preview.missing));
+        assert_eq!(image.media_type, "image/png", "{size}");
+        assert_eq!((image.width, image.height), (96, 128), "{size}");
+        assert_eq!(preview.origin, PreviewOrigin::File, "{size}");
+        assert_eq!(preview.missing, None, "{size}");
+        // Senza tutti i byte non c'è revisione, e niente cache.
+        assert_eq!(preview.revision, None, "{size}");
+        assert_eq!(preview.info.bytes, len, "{size}");
+        assert_eq!(preview.info.app, PreviewSubject::Document, "{size}");
+        assert_eq!(preview.info.editor, "WordCraft", "{size}");
+    }
+    let after = std::fs::metadata(&path).unwrap();
+    assert_eq!(after.len(), before.len());
+    assert_eq!(after.modified().unwrap(), before.modified().unwrap());
+
+    let (_ws, ranged) = workspace(&root);
+    let mut file = ranged
+        .open(&DocId::new("Documenti/Relazione.docx"))
+        .unwrap();
+    let found = fub_format_craft::office::embedded_thumbnail(&mut file, len).unwrap();
+    assert!(found.is_some());
+    // La coda, la directory, le relazioni e la miniatura: non il file.
+    assert!(file.bytes_read() < MIB, "{}", file.bytes_read());
+}
+
+/// Un PDF non porta una miniatura che Fub legga: `absent`, e la fa l'app
+/// esterna. Un `.docx` cifrato è un contenitore CFB, non uno ZIP:
+/// `unreadable`. Mai un errore.
+#[test]
+fn a_pdf_is_absent_and_an_encrypted_docx_unreadable() {
+    let cfb = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1, 0, 0, 0, 0].repeat(64);
+    let (_dir, root) = vault(&[
+        (
+            "Carte/a.pdf",
+            b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n1 0 obj\n<<>>\nendobj\n%%EOF\n".to_vec(),
+        ),
+        ("Carte/cifrato.docx", cfb),
+    ]);
+    let host = Host::without_watcher();
+    host.open(&root).unwrap();
+    host.wait_indexed(Some(root.as_str())).unwrap();
+
+    let pdf = ask(&host, &root, "Carte/a.pdf").unwrap();
+    assert_eq!(pdf.missing, Some(Missing::Absent));
+    assert!(pdf.image.is_none());
+    assert_eq!(pdf.origin, PreviewOrigin::None);
+    assert_eq!(pdf.revision, None);
+    assert_eq!(pdf.info.app, PreviewSubject::Pdf);
+    assert_eq!(pdf.info.editor, "PdfCraft");
+    let json = serde_json::to_value(&pdf).unwrap();
+    assert_eq!(json["info"]["app"], "pdf");
+    assert_eq!(json["missing"], "absent");
+
+    let encrypted = ask(&host, &root, "Carte/cifrato.docx").unwrap();
+    assert_eq!(encrypted.missing, Some(Missing::Unreadable));
+    assert!(encrypted.image.is_none());
+    assert_eq!(encrypted.revision, None);
+    assert_eq!(encrypted.info.app, PreviewSubject::Document);
+    assert_eq!(encrypted.info.editor, "WordCraft");
 }

@@ -41,14 +41,11 @@ pub(super) fn read_from<R: Read + Seek>(
     size: PreviewSize,
 ) -> io::Result<()> {
     preview.revision = None;
-    let mut watched = Watched {
-        inner: reader,
-        error: None,
-    };
+    let mut watched = Watched::new(reader);
     // Uno ZIP letto a pezzi non ha un peso massimo: il tetto vale solo per il
     // JSON di un `.vectorcraft`, che qui non passa.
     let found = embedded_preview_from(app, &mut watched, len, size, u64::MAX);
-    if let Some(error) = watched.error {
+    if let Some(error) = watched.into_error() {
         return Err(error);
     }
     apply(preview, found, u64::MAX);
@@ -86,13 +83,23 @@ fn apply(preview: &mut CraftPreview, found: Result<Embedded, ContainerError>, ma
 }
 
 /// Un lettore che ricorda il suo primo errore: il contenitore lo traduce nel
-/// suo, e chi chiama deve poter ancora riconoscere un file cambiato.
-struct Watched<'a, R> {
+/// suo, e chi chiama deve poter ancora riconoscere un file cambiato. Lo usa
+/// anche [`super::documents`].
+pub(super) struct Watched<'a, R> {
     inner: &'a mut R,
     error: Option<io::Error>,
 }
 
-impl<R> Watched<'_, R> {
+impl<'a, R> Watched<'a, R> {
+    pub(super) fn new(inner: &'a mut R) -> Self {
+        Watched { inner, error: None }
+    }
+
+    /// Il primo errore di lettura, se c'è stato.
+    pub(super) fn into_error(self) -> Option<io::Error> {
+        self.error
+    }
+
     fn keep<T>(&mut self, result: io::Result<T>) -> io::Result<T> {
         result.map_err(|error| {
             let copy = io::Error::new(error.kind(), "lettura a pezzi");

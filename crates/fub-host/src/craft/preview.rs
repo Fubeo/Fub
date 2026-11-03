@@ -21,11 +21,12 @@
 //! cambiato fra due pezzi si rilegge con una lease nuova, al più [`ATTEMPTS`]
 //! volte. Un `.pcraft` o un `.figcraft` si legge a pezzi, la coda dello ZIP e
 //! le voci che servono, qualunque sia il suo peso; una foto RAW solo le sue
-//! strutture e il JPEG; un PDF o un documento non si leggono affatto: queste
-//! risposte non hanno revisione e non vanno in cache. Quando la lease non si
-//! apre (un supporto senza identità o timbro di cambiamento, un host senza
-//! lettore come quello dei test) si torna alla via dell'host: la revisione da
-//! `document_revision`, il peso dall'anagrafe, i byte da
+//! strutture e il JPEG; un `.docx` o un `.odt` la coda dello ZIP, le
+//! relazioni e la miniatura; un PDF, un `.rtf` o un `.doc` non si leggono
+//! affatto: queste risposte non hanno revisione e non vanno in cache. Quando
+//! la lease non si apre (un supporto senza identità o timbro di cambiamento,
+//! un host senza lettore come quello dei test) si torna alla via dell'host:
+//! la revisione da `document_revision`, il peso dall'anagrafe, i byte da
 //! `read_document_bytes`, riletta la revisione dopo i byte.
 //!
 //! Qui si scrive in cache solo un'anteprima con l'immagine del file (`origin:
@@ -174,8 +175,17 @@ fn ranged_preview(
                 Err(_) => return Ok(None),
             }
         }
+        if subject == PreviewSubject::Document && documents::is_package(doc) {
+            // Un `.docx` o un `.odt`: la coda dello ZIP, le relazioni e la
+            // miniatura, a pezzi.
+            match documents::read_from(&mut preview, &mut file, bytes) {
+                Ok(()) => return Ok(Some(preview)),
+                Err(error) if super::ranged::is_stale(&error) => continue,
+                Err(_) => return Ok(None),
+            }
+        }
         let Some(app) = app_of(subject, &mut preview) else {
-            // Un PDF, un documento: nessun byte letto, quindi nessuna
+            // Un PDF, un `.rtf`, un `.doc`: nessun byte letto, quindi nessuna
             // revisione e niente cache.
             return Ok(Some(preview));
         };
