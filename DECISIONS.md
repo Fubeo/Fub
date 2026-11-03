@@ -59,6 +59,23 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- N3 T22 (6d5fb197, dal coder ed4d8c1c): una lavagna con una chiave doppia
+  si apre in sola lettura con l'avviso `canvas.unwritable` (IT ed EN, le
+  sole lingue del catalogo) e torna scrivibile da sola quando la chiave se
+  ne va. Differenze dal piano: la domanda al nucleo è `preview([])` e non
+  `commit([])` (stessi passi, non tocca la lavagna e tiene la regola di T16
+  «mai una lista vuota a commit»); la sola lettura è `#unwritable` sommata a
+  `#panelReadOnly` in un getter `#readOnly`; l'avviso si calcola in
+  `#drawToolbar` (prima l'avviso dell'ultimo gesto, se no
+  `canvas.unwritable`, mai oltre il limite interattivo); `syncDoc` chiede al
+  nucleo solo se il testo è cambiato. Aspetta: l'avviso sta in fondo alla
+  barra, che va oltre lo schermo anche a 1280 px, quindi senza scorrerla non
+  si vede (vale già per gli avvisi di prima); spostarlo cambia la pelle o il
+  layout, fuori dal Tocca: chiesto all'utente (all'inizio della barra, una
+  striscia sopra la lavagna, o com'è). Rischi: un testo con la chiave doppia
+  che arriva da un'altra superficie mentre si scrive in una scheda chiude il
+  campo e quel testo si perde, come con `setReadOnly` del pannello; ogni
+  testo nuovo costa una `preview` in più nel nucleo, non misurata.
 - N3 T21 (b652f0c1, dal coder cbdc32cf): annulla e ripeti della tela
   rimettono il tratto di prima byte per byte con un `reset` quando il testo
   è ancora quello lasciato dal passo; se no passano le toppe inverse al

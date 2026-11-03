@@ -1519,7 +1519,7 @@ l'avviso con il suo ruolo `alert`, e che togliendo la chiave doppia torna a
 cambiare; il controllo delle chiavi del catalogo è verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder · base f0e7c3b3
+Stato: [x] fatto · 6d5fb197 · check --rapido 18/19: rosso solo «vitest dei file cambiati» per grid/engine e theme/runtime a tempo sotto carico, verdi da soli (88 su 88)
 
 ## T23 · La CI completa e la revisione prima del merge
 
