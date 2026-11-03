@@ -29,13 +29,13 @@
 //
 // # Cosa questo modulo non fa
 //
-// Non **restringe** un parametro. L'allowlist di `fub:network` si mostra e non
-// si edita, e la ragione non è la fretta: in `Granted::new` un elenco vuoto
+// Non **restringe** un parametro. Gli elenchi — gli host di `fub:network`, le
+// cartelle dei permessi sul vault, i comandi di `fub:run-command` — si mostrano
+// e non si editano, e la ragione non è la fretta: in `Granted::new` un elenco vuoto
 // significa *qualunque host* (è la regola uniforme di `OptionMap` — presente =
-// acceso, il valore è il parametro), quindi una UI che lasciasse togliere gli
-// host uno per uno trasformerebbe «nessuno» in «tutti» proprio al gesto in cui
-// qualcuno sta cercando di chiudere. Restringere è una domanda seconda, ed è la
-// stessa che la casella del §7.1 pone per i prefissi di path.
+// acceso, il valore è il parametro), quindi una UI che lasciasse togliere le
+// voci una per una trasformerebbe «nessuno» in «tutti» proprio al gesto in cui
+// qualcuno sta cercando di chiudere. Restringere è una domanda seconda.
 import type { BundleInfo, Trust } from "../host/contract";
 import { t, type Key } from "../i18n/strings";
 
@@ -199,19 +199,100 @@ function row(bundle: BundleInfo, permission: string, value: unknown, known: bool
 /// componente che parla con un servizio e uno che può mandare le note
 /// dell'utente ovunque, e la 0097 ha lasciato quella differenza fuori dal
 /// cancello **apposta**, delegandola «alla frase che l'utente legge accettando».
-/// Questa è quella frase.
+/// Questa è quella frase, e vale per ogni elenco che il `Guard` applica:
 ///
-/// Gli altri parametri che il contratto prevede — i prefissi di path di
-/// `read-vault`, `write-vault` ed `external-fs` — **non si dicono**, e non è una
-/// dimenticanza: oggi nessuno li onora (è la casella del §7.1), quindi
-/// mostrarli sarebbe scrivere una promessa che l'app non mantiene. È lo stesso
-/// criterio con cui non si mostra un interruttore che non fa niente.
+/// - gli host di `fub:network`;
+/// - le cartelle di `read-vault`, `write-vault`, `read-drafts`, `read-session`
+///   e `read-selection`, che il `Guard` onora su ogni porta dei documenti
+///   (`path_allowlist` in `crates/fub-kernel/src/host/guard.rs`);
+/// - i comandi di `fub:run-command` (`command_allowlist`, stesso file).
+///
+/// Le letture sono **le stesse del `Guard`**, perché una frase che dicesse una
+/// cosa diversa da quella che il recinto fa sarebbe peggio di nessuna frase:
+/// assente, booleano, `null` o elenco vuoto è *nessun elenco*; un elenco di
+/// stringhe è quell'elenco; tutto il resto — una stringa al posto
+/// dell'elenco, un numero, un elenco con dentro una non-stringa — è un elenco
+/// scritto male, che il `Guard` chiude e che qui si dice «nessuno». La rete è
+/// meno severa in un punto, ed è il suo `Guard` a esserlo: le non-stringhe di
+/// un elenco di host si scartano e restano le altre.
+///
+/// Senza elenco, le cartelle e i comandi non aggiungono niente alla frase del
+/// permesso, che dice già «tutte le tue note» e «i comandi di Fub»; la rete sì,
+/// perché «può connettersi a internet» non dice verso dove.
+///
+/// `external-fs` porta dei prefissi nel contratto, ma nessuno li onora: non si
+/// dicono, perché mostrarli sarebbe scrivere una promessa che l'app non
+/// mantiene. È lo stesso criterio con cui non si mostra un interruttore che
+/// non fa niente.
 export function detailOf(permission: string, value: unknown): string | null {
-  if (permission !== "fub:network") return null;
-  const host = Array.isArray(value)
-    ? value.filter((h): h is string => typeof h === "string")
-    : [];
-  return host.length === 0
-    ? t("permission.network.anywhere")
-    : t("permission.network.only", { hosts: host.join(", ") });
+  if (permission === "fub:network") return networkDetail(value);
+  if (permission === "fub:run-command") {
+    const commands = strictList(value);
+    if (commands === "unrestricted") return null;
+    if (commands === "malformed") return t("permission.commands.none");
+    return t("permission.commands.only", { commands: shortened(commands, "permission.commands.more") });
+  }
+  if ((FOLDER_SCOPED as readonly string[]).includes(permission)) {
+    const folders = strictList(value);
+    if (folders === "unrestricted") return null;
+    if (folders === "malformed") return t("permission.folders.none");
+    return t("permission.folders.only", {
+      folders: shortened(folders.map(folderName), "permission.folders.more"),
+    });
+  }
+  return null;
+}
+
+/// I permessi i cui elenchi di cartelle il `Guard` onora: è il `match` di
+/// `Granted::new` su `path_allowlist`.
+const FOLDER_SCOPED = [
+  "fub:read-vault",
+  "fub:write-vault",
+  "fub:read-drafts",
+  "fub:read-session",
+  "fub:read-selection",
+] as const satisfies readonly Permission[];
+
+/// Quante voci di un elenco si scrivono per intero. Oltre, le ultime diventano
+/// «e altri N»: una frase di cinquanta comandi non la legge nessuno, e il
+/// numero dice quanto è largo il recinto meglio della coda dei nomi.
+export const LIST_SHOWN = 6;
+
+/// Un elenco come lo legge `command_allowlist` (e `path_allowlist`): le tre
+/// letture del `Guard`.
+function strictList(value: unknown): "unrestricted" | "malformed" | string[] {
+  if (value === undefined || value === null || typeof value === "boolean") return "unrestricted";
+  if (!Array.isArray(value)) return "malformed";
+  if (value.length === 0) return "unrestricted";
+  return value.every((v): v is string => typeof v === "string") ? value : "malformed";
+}
+
+function networkDetail(value: unknown): string {
+  if (value === undefined || value === null || typeof value === "boolean") {
+    return t("permission.network.anywhere");
+  }
+  if (!Array.isArray(value)) return t("permission.network.none");
+  if (value.length === 0) return t("permission.network.anywhere");
+  const hosts = value.filter((h): h is string => typeof h === "string");
+  return hosts.length === 0
+    ? t("permission.network.none")
+    : t("permission.network.only", { hosts: shortened(hosts, "permission.network.more") });
+}
+
+/// Una cartella come la confronta il `Guard` (`folders::normalized`: senza le
+/// barre ai lati), e la radice detta a parole: `""` o `"/"` è tutto il vault.
+function folderName(folder: string): string {
+  const name = folder.replace(/^\/+|\/+$/g, "");
+  return name === "" ? t("permission.folders.root") : name;
+}
+
+/// Le voci di un elenco, accorciato a [`LIST_SHOWN`]. Chi resta fuori è
+/// sempre almeno due: «e altri 1» al posto di un nome non accorcia niente.
+function shortened(
+  items: readonly string[],
+  more: "permission.network.more" | "permission.folders.more" | "permission.commands.more",
+): string {
+  if (items.length <= LIST_SHOWN) return items.join(", ");
+  const shown = items.slice(0, LIST_SHOWN - 1);
+  return `${shown.join(", ")} ${t(more, { n: items.length - shown.length })}`;
 }
