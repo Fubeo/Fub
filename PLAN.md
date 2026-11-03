@@ -1434,7 +1434,7 @@ byte cambiano e perché tutti gli altri restano; il test di `canvas.apply`
 passa; `node .github/scripts/check-doc-links.mjs` è verde.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cargo test
 -p fub-features lavagna; cd apps/client && npx vitest run src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 40e837db
 
 ## T21 · L'annulla della tela torna ai byte di prima
 
