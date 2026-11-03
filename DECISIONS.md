@@ -59,6 +59,12 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · N6 · merge di piano/n4-inchiostro (509772da) in
+  piano/n6-lavagna, come chiede A-15 prima di T11: PLAN.md resta quello di
+  N6, DECISIONS.md tiene le voci dei due rami in ordine di data, PLAN-
+  ui/lavagna-penne.html resta solo su N4; la PR #302 ora punta a
+  piano/n4-inchiostro. · Perché: T11, T73 e gli altri task che usano fub-
+  canvas-core e fub:ink hanno bisogno della base di N4.
 - 2026-11-03 · N6 · le risposte dell'utente alle domande nuove: D-20 (a), i
   CSV in un piano suo che finisce con T88; D-21 (a), il titolo sopra la
   scheda, come Obsidian (da rivedere sul prototipo T25; N4 lo usa per il
