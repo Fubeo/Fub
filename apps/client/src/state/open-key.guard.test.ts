@@ -81,7 +81,9 @@ describe("la chiave di apertura ha un solo proprietario", () => {
     expect(owner.some((call) => call.includes(".writeDocument("))).toBe(true);
   });
 
-  it("nessun altro modulo apre, chiude o scrive sotto una chiave", () => {
+  // Analizzare tutti i sorgenti col compilatore costa qualche secondo, e sotto
+  // il giro completo dei banchi supera il tetto di default.
+  it("nessun altro modulo apre, chiude o scrive sotto una chiave", { timeout: 30_000 }, () => {
     const offenders = APP.filter(([path]) => path !== OWNER).flatMap(([path, source]) => keyedCalls(path, source));
     expect(offenders).toEqual([]);
   });
