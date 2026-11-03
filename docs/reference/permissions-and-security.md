@@ -264,6 +264,21 @@ non è UTF-8 si ferma prima di connettersi. Il token non compare nel `Debug`
 del canale, gli errori non hanno testo e le risposte non si tengono, così un
 token ripetuto dall'app non finisce in un log.
 
+### Chi avvia un'app Craft
+
+Un'anteprima fatta dalla riga di comando di un'app Craft parte soltanto dal
+core, con `Host::craft_render`, che la shell principale chiama dopo un gesto
+dell'utente e con `craft.cli-previews` a `on`: una scelta di macchina che un
+programma non scrive (`PermissionDenied`). `craft_render` dà al job
+`craft.render` un biglietto casuale legato a vault, documento e misura, buono
+una volta sola e per 60 s; il job senza un biglietto buono non avvia niente.
+Un plugin, l'MCP, il canale di controllo e `fub_invoke` arrivano al job
+soltanto per nome, senza biglietto, e un plugin non può nemmeno metterlo in
+coda, perché il job non è suo. Il biglietto non va nel log né nell'esito.
+L'app riceve soltanto una copia del documento in una cartella privata 0700,
+che si cancella sempre (vedi
+[Anteprime con la CLI](craft-formats.md#anteprime-con-la-cli)).
+
 ## Supply chain
 
 - sorgenti delle dipendenze limitate dalla policy;

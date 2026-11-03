@@ -1884,6 +1884,16 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with("host.open_with.missing", "{path} non c'è più nel vault.")
         .with("host.open_with.launch_failed", "{app} non si è avviata.")
+        .with("host.craft_render.off", "Le anteprime dei file Craft sono spente in questo vault.")
+        .with(
+            "host.craft_render.no_consent",
+            "Fub non usa le app Craft per le anteprime: si permette nelle impostazioni.",
+        )
+        .with("host.craft_render.no_cli", "Fub non trova il programma a riga di comando dell'app.")
+        .with(
+            "host.craft_render.over_limit",
+            "Il file supera il peso massimo per un'anteprima fatta dall'app.",
+        )
         .with(
             "host.mobile.shared_path",
             "La cartella condivisa non ha un percorso utilizzabile.",
@@ -2474,6 +2484,16 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with("host.open_with.missing", "{path} is no longer in the vault.")
         .with("host.open_with.launch_failed", "{app} did not start.")
+        .with("host.craft_render.off", "Craft file previews are off in this vault.")
+        .with(
+            "host.craft_render.no_consent",
+            "Fub does not use the Craft apps for previews: allow it in the settings.",
+        )
+        .with("host.craft_render.no_cli", "Fub cannot find the app's command-line program.")
+        .with(
+            "host.craft_render.over_limit",
+            "The file is over the maximum size for a preview made by the app.",
+        )
         .with(
             "host.mobile.shared_path",
             "The shared folder has no usable path.",

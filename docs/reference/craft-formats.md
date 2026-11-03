@@ -87,7 +87,7 @@ Per un XMP `data-embed-kind` vale `craft-xmp`.
 | `info.photo` | per un XMP, la foto a cui appartiene, o `null` |
 | `info.edits` | le copie `-Edit.psd` della foto che esistono |
 | `info.xmp` | `null` o `{ "rating", "label", "flag", "keywords" }`, con `flag` `pick` o `reject` |
-| `render` | `null`, o `{ "app": "VectorCraft", "consent": "ask" }` quando l'anteprima manca, l'app che sa farla è installata e il file non supera il peso massimo; `consent` (`ask`, `on`, `off`) è il valore di `craft.cli-previews` |
+| `render` | `null`, o `{ "app": "VectorCraft", "consent": "ask" }` quando l'anteprima manca, la CLI dell'app che sa farla è installata, il file non supera il peso massimo e la stessa revisione non è già fallita; `consent` (`ask`, `on`, `off`) è il valore di `craft.cli-previews` |
 
 `PreviewSubject` è separato da `CraftApp`, che resta la famiglia dei quattro
 provider. Un file con un formato Craft ha il soggetto del suo formato; gli
@@ -172,8 +172,62 @@ comando non c'è, e ricerca, backlink e tag restano.
 - La cache è ricostruibile: cancellarla non perde niente, l'anteprima si
   rilegge dal file. Una revisione nuova è una chiave nuova, e le voci vecchie
   restano finché la cache del bundle non si pulisce.
-- Il job `craft.render` risponde che nessuna app installata può fare
-  l'anteprima (`unserved`).
+- Un'anteprima fatta dalla CLI (vedi «Anteprime con la CLI») sta in cache
+  come le altre, con `origin: cli`, e la risposta dopo viene da lì.
+
+## Anteprime con la CLI
+
+Quando un file non ha un'anteprima, l'app che lo apre può farla dalla sua
+riga di comando: `convert {in} {out} --scale 0.25` per VectorCraft (senza
+`--scale` per `large`), `convert {in} {out}` per PhotoCraft, `render {in} -o
+{out}` per FigCraft (`craft::render::cli_args`). XMP, RAW, PDF e documenti
+non hanno una CLI. Il programma si trova come in «Apri con», con le righe
+`vectorcraft-cli=…`, `photocraft-cli=…` e `figcraft-cli=…` di
+`craft.editor-paths`.
+
+- **Quando parte.** Soltanto dopo un gesto dell'utente nella shell
+  principale, che chiama `Host::craft_render(vault, doc, size)`, e soltanto
+  con `craft.cli-previews` a `on`. L'ordine dei controlli: con la feature o
+  il componente `fub.craft` spenti `host.craft_render.off`; senza il
+  consenso `host.craft_render.no_consent` (`permission_denied`); con
+  un'anteprima che c'è già, o con `missing` `unreadable` o `failed`, la
+  risposta di `craft.preview`; senza il programma `host.craft_render.no_cli`
+  (`not_found`); oltre il peso massimo `host.craft_render.over_limit`.
+  Altrimenti un biglietto e il job `craft.render { doc, size, ticket }` in
+  coda per quel vault, e la risposta col `CraftPreview` e `queued: true`.
+  Due gesti per lo stesso documento e la stessa misura mentre uno lavora
+  avviano una CLI sola: il secondo risponde `queued: true` senza un biglietto
+  nuovo.
+- **Il biglietto.** Un valore casuale di 32 byte, legato a vault, documento
+  e misura, buono una volta sola e per 60 s, in una tabella del processo (al
+  più 256). Il job lo consuma prima di ogni altra cosa; uno che manca, è
+  inventato, già usato, di un altro documento o di un'altra misura, scaduto
+  o di un vault chiuso è `unserved` con `render.no_ticket`, e non parte
+  niente. Il biglietto non va nel log né nell'esito del job. Per questo
+  `craft.preview`, un altro componente, l'MCP e il canale di controllo, che
+  arrivano al job soltanto per nome, non avviano mai una CLI.
+- **Che cosa vede l'app.** Il job guarda di nuovo il consenso e il peso, poi
+  copia il documento a pezzi dalla lease (al più il peso massimo, mai il
+  file intero in memoria) in una cartella privata nuova
+  (`fub-craft-render-*` nella cartella temporanea, 0700 su unix), come
+  `in.vectorcraft`, `in.pcraft` o `in.figcraft`. La CLI riceve i percorsi
+  assoluti della copia e di `out.png` nella stessa cartella, come argomenti
+  separati, e non vede mai il file del vault. Gira coi limiti di
+  `craft::launch` (20 s, 64 KiB di uscita, il gruppo di processi chiuso alla
+  fine) e si ferma quando il job si annulla o il consenso si spegne. La
+  cartella si cancella sempre, anche dopo un errore o un annullamento.
+- **L'immagine.** `out.png` vale se è un file regolare (non un link, non una
+  cartella), di al più 16 MiB, e un PNG con misure lecite. Allora l'esito è
+  un `CraftPreview` con `origin: cli`, scritto in cache per la revisione
+  presa all'inizio; se il file è cambiato nel frattempo l'esito c'è ma la
+  cache no. Un errore (programma che non parte, tempo scaduto, uscita non
+  zero, PNG cattivo) è un `CraftPreview` con `origin: none`, `missing:
+  "failed"` e `render: null`, con la chiave `render.*` del catalogo del
+  bundle nel log del job; la coppia (revisione, misura) resta «già provata»
+  e `craft.preview` risponde `failed` finché il file non cambia o Fub non
+  riparte. Un errore della cartella temporanea non segna il file.
+- **Dove va.** L'esito del job arriva alla shell con `Event::JobDone`; la
+  cache è quella di «Anteprima e cache».
 
 ### Letture a pezzi
 

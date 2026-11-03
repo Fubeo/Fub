@@ -28,9 +28,12 @@
 //! `document_revision`, il peso dall'anagrafe, i byte da
 //! `read_document_bytes`, riletta la revisione dopo i byte.
 //!
-//! Si scrive in cache solo un'anteprima con l'immagine del file (`origin:
+//! Qui si scrive in cache solo un'anteprima con l'immagine del file (`origin:
 //! file`) e con una revisione: una scrittura che non riesce, o che chi chiama
-//! non può fare, non toglie l'anteprima. Un `.vectorcraft` oltre il peso di
+//! non può fare, non toglie l'anteprima. Quella fatta dalla CLI la scrive il
+//! job ([`super::render`]) alla stessa chiave; un file senza anteprima la
+//! trova lì, oppure riceve l'offerta `render` (vedi [`offer`]): leggere non
+//! avvia mai niente. Un `.vectorcraft` oltre il peso di
 //! `craft.preview-max-mib` ([`super::consent::max_bytes`]), o un XMP oltre
 //! [`MAX_FILE_BYTES`], non si legge: è `missing: over_limit` col peso
 //! massimo, il peso del file e nessuna revisione. Per la via dell'host vale lo
@@ -43,7 +46,7 @@ use fub_abi::{PluginError, Revision};
 use fub_format_craft::container::MAX_FILE_BYTES;
 use fub_format_craft::{
     cache_key, CraftApp, CraftPreview, Missing, PreviewInfo, PreviewOrigin, PreviewSize,
-    PreviewSubject, PREVIEW_VERSION,
+    PreviewSubject, RenderOffer, PREVIEW_VERSION,
 };
 
 use super::ranged::{Ranged, RangedError};
@@ -78,12 +81,71 @@ pub fn preview(
             vec![Arg::text("doc", doc.as_str())],
         ))
     })?;
+    let mut found = None;
     if let Some(ranged) = ranged {
-        if let Some(preview) = ranged_preview(host, ranged, doc, size, subject)? {
-            return Ok(preview);
-        }
+        found = ranged_preview(host, ranged, doc, size, subject)?;
     }
-    hosted_preview(host, doc, size, subject)
+    let preview = match found {
+        Some(preview) => preview,
+        None => hosted_preview(host, doc, size, subject)?,
+    };
+    Ok(offer(&*host, ranged, doc, size, preview))
+}
+
+/// Quando il file non ha un'anteprima: quella che la CLI ha già fatto per la
+/// stessa revisione (dalla cache), il «già provato», o l'offerta di farla.
+///
+/// Solo per un soggetto la cui app ha una CLI che Fub sa usare e trova. Oltre
+/// il peso massimo di `craft.preview-max-mib` è `missing: over_limit` senza
+/// offerta. L'offerta porta il consenso com'è, anche `off`, perché la scheda
+/// sappia quale app direbbe «spente»; qui non si avvia mai niente.
+fn offer(
+    host: &dyn HostApi,
+    ranged: Option<&Ranged>,
+    doc: &DocId,
+    size: PreviewSize,
+    mut preview: CraftPreview,
+) -> CraftPreview {
+    if preview.image.is_some() || preview.missing != Some(Missing::Absent) {
+        return preview;
+    }
+    let subject = preview.info.app;
+    if super::render::cli_of(host, subject).is_none() {
+        return preview;
+    }
+    let max = super::consent::max_bytes(host);
+    if preview.info.bytes > max {
+        over_limit(&mut preview, max);
+        return preview;
+    }
+    let revision = match (&preview.revision, ranged) {
+        (Some(revision), _) => Some(revision.clone()),
+        (None, Some(ranged)) => match ranged.revision(doc, max) {
+            Ok(revision) => Some(revision),
+            Err(RangedError::OverLimit { .. }) => {
+                over_limit(&mut preview, max);
+                return preview;
+            }
+            Err(_) => None,
+        },
+        (None, None) => host.document_revision(doc).ok(),
+    };
+    let Some(revision) = revision else {
+        return preview;
+    };
+    if let Some(cached) = cached(host, doc, &revision, size) {
+        return cached;
+    }
+    if super::render::already_tried(&revision, size) {
+        preview.missing = Some(Missing::Failed);
+        preview.render = None;
+        return preview;
+    }
+    preview.render = Some(RenderOffer {
+        app: subject.editor_name().to_string(),
+        consent: super::consent::current(host),
+    });
+    preview
 }
 
 /// L'anteprima letta a pezzi; `None` quando la lease non si apre o il kernel

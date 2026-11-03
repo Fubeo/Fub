@@ -7,7 +7,8 @@
 //! `CraftPreview` del documento nell'effetto `Custom` con `ns = fub.craft`; il
 //! comando [`PHOTO_COMMAND`], in sola lettura anche lui, che risponde col
 //! `PhotoSidecar` di una foto ([`photo`]: l'XMP accanto e ciò che dice); e il
-//! job [`RENDER_JOB`], che farà l'anteprima con la riga di comando dell'app.
+//! job [`RENDER_JOB`], che fa l'anteprima con la riga di comando dell'app
+//! soltanto col biglietto di `Host::craft_render` ([`render`]).
 //!
 //! Il contratto è in `fub_format_craft::contract`; come si legge l'anteprima,
 //! e la cache che la tiene, sono in [`preview`]; le letture a pezzi dalle
@@ -83,7 +84,17 @@ fn catalog() -> Vec<StringCatalog> {
         .with(
             "render.no_cli",
             "Nessuna app Craft installata può fare l'anteprima.",
-        );
+        )
+        .with("render.no_ticket", "L'anteprima con l'app parte solo da un gesto in Fub.")
+        .with("render.timed_out", "L'app ci ha messo troppo a fare l'anteprima: fermata.")
+        .with("render.failed", "L'app non è riuscita a fare l'anteprima.")
+        .with("render.denied", "Fub non può avviare l'app che fa l'anteprima.")
+        .with("render.io", "Il sistema non ha lasciato partire l'app che fa l'anteprima.")
+        .with("render.bad_png", "L'app non ha scritto un'immagine PNG.")
+        .with("render.too_big", "L'immagine scritta dall'app supera i 16 MiB.")
+        .with("render.copy", "La copia del file per l'app non si scrive nella cartella temporanea.")
+        .with("render.cancelled", "L'anteprima con l'app è stata fermata.")
+        .with("render.changed", "Il file è cambiato mentre l'app faceva l'anteprima.");
     let en = StringCatalog::new("en")
         .with("cmd.preview", "Craft file preview")
         .with(
@@ -118,7 +129,17 @@ fn catalog() -> Vec<StringCatalog> {
         .with(
             "render.no_cli",
             "No installed Craft app can make the preview.",
-        );
+        )
+        .with("render.no_ticket", "The app makes a preview only after a gesture in Fub.")
+        .with("render.timed_out", "The app took too long to make the preview: stopped.")
+        .with("render.failed", "The app could not make the preview.")
+        .with("render.denied", "Fub cannot start the app that makes the preview.")
+        .with("render.io", "The system did not let the app that makes the preview start.")
+        .with("render.bad_png", "The app did not write a PNG image.")
+        .with("render.too_big", "The image the app wrote is larger than 16 MiB.")
+        .with("render.copy", "The copy of the file for the app cannot be written to the temporary folder.")
+        .with("render.cancelled", "The preview with the app was stopped.")
+        .with("render.changed", "The file changed while the app was making the preview.");
     vec![it, en]
 }
 
@@ -142,7 +163,14 @@ impl crate::registry::Bundle for CraftBundle {
         // bundle non prende mai il lucchetto del workspace. Senza lettore le
         // anteprime passano dall'host, come un supporto senza lease.
         let ranged = match registrar.craft_reader() {
-            Ok(reader) => Some(ranged::Ranged::new(reader)),
+            Ok(reader) => {
+                let root = reader.root().to_owned();
+                let ranged = ranged::Ranged::new(reader);
+                // Il job delle anteprime con la CLI legge da qui, col
+                // biglietto che `Host::craft_render` gli dà.
+                render::remember_reader(root, ranged.clone());
+                Some(ranged)
+            }
             Err(error) => {
                 tracing::warn!(%error, "fub.craft: niente letture a pezzi, le anteprime passano dall'host");
                 None
@@ -276,14 +304,16 @@ impl Plugin for CraftPlugin {
     fn run_job(
         &self,
         job: &str,
-        _payload: serde_json::Value,
-        _host: &mut dyn HostApi,
+        payload: serde_json::Value,
+        host: &mut dyn HostApi,
     ) -> Result<serde_json::Value, PluginError> {
         if job != RENDER_JOB {
             return Err(PluginError::UnknownJob(job.to_string().into()));
         }
-        // La riga di comando delle app non c'è ancora: il job lo dice e basta.
-        Err(PluginError::Unserved(Text::key("render.no_cli")))
+        // Senza il biglietto di `Host::craft_render` non parte niente.
+        let preview = render::run(&payload, host)?;
+        serde_json::to_value(&preview)
+            .map_err(|error| PluginError::Internal(error.to_string().into()))
     }
 }
 
@@ -302,12 +332,16 @@ mod tests {
     }
 
     #[test]
-    fn the_job_says_there_is_no_command_line() {
+    fn the_job_without_a_ticket_starts_nothing() {
         let mut host = fub_sdk::testing::MemoryHost::new();
         let error = CraftPlugin
             .run_job(RENDER_JOB, serde_json::json!({}), &mut host)
             .unwrap_err();
-        assert!(matches!(error, PluginError::Unserved(_)), "{error:?}");
+        assert!(
+            matches!(&error, PluginError::Unserved(text)
+                if text.as_message().is_some_and(|m| m.key == "render.no_ticket")),
+            "{error:?}"
+        );
         let error = CraftPlugin
             .run_job("altro", serde_json::json!({}), &mut host)
             .unwrap_err();

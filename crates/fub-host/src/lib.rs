@@ -96,6 +96,8 @@ pub mod control;
 /// un file con la sua cache.
 #[cfg(feature = "craft")]
 pub mod craft;
+/// L'anteprima di un file Craft fatta dalla CLI dell'app, dopo un gesto.
+pub mod craft_render;
 mod custody;
 mod export_folder;
 pub mod format_source;
