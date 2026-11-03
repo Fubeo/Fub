@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- T24 (a62ce774): craft.photo ha un suo elenco paginato della cartella,
+  perché `Folder` sta in preview.rs, che è di T27 (quando T27 lo tocca, le
+  due letture si possono unire). Una foto senza XMP dà `photo.missing`
+  (NotFound); le chiavi del catalogo sono `cmd.photo` e `cmd.photo.doc`. Un
+  XMP troppo grande conta come rotto e una lettura fallita passa al
+  candidato dopo; un documento `.xmp` si riconosce da `CraftApp::Xmp` e ha
+  modifiche vuote. Rischio accettato e provato da un test: `a.b.jpg` prende
+  `a.b.xmp` come secondo candidato, mentre l'anteprima di quell'XMP punta ad
+  «a.b» (asimmetria scritta in `docs/reference/xmp-sidecars.md`).
 - 2026-11-03 · N7 · T19 integrato (3bda61f1). `craft.cli-previews` è una
   scelta ask/on/off di macchina e non `program_writable` (un bundle riceve
   `PermissionDenied`, un vault importato non la cambia); i valori vecchi
