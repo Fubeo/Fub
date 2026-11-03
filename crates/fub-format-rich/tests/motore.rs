@@ -11,7 +11,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use fub_format_rich::motore::{self, MotoreDocumenti};
 use fub_format_rich::projection::{Block, Inline, Projection};
-use fub_format_rich::{open, save, Codec, RichProvider, Saved};
+use fub_format_rich::{open, open_unremembered, save, Codec, RichProvider, Saved};
 use fub_motori::{Budget, ErroreMotore, Motori, Tetto, Voce};
 
 static UNA_ALLA_VOLTA: Mutex<()> = Mutex::new(());
@@ -179,5 +179,42 @@ fn spento_il_motore_il_budget_dimentica_la_cache() {
     open(Codec::Docx, &bytes).expect("si apre");
     assert!(motore.acceso());
     assert_eq!(motore.prove_ricordate(), 1);
+    motore.svuota();
+}
+
+/// L'apertura che non ricorda dà la stessa proiezione di quella che ricorda,
+/// con le stesse parti chiuse e la stessa sola lettura, e non lascia nessuna
+/// prova nel motore: né in un documento che si scrive, né in uno in sola
+/// lettura.
+#[test]
+fn l_apertura_che_non_ricorda_da_la_stessa_proiezione_e_nessuna_prova() {
+    let _una = una_alla_volta();
+    let motore = MotoreDocumenti::processo();
+    for name in [
+        "libreoffice.docx",
+        "stili-elenchi-tabelle.docx",
+        "commenti.docx",
+        "libreoffice-revisioni.docx",
+    ] {
+        let bytes = corpus(name);
+        motore.svuota();
+        let prima = motore.prove_ricordate();
+        let senza = open_unremembered(Codec::Docx, &bytes).expect("si apre");
+        assert_eq!(
+            motore.prove_ricordate(),
+            prima,
+            "{name}: nessuna prova ricordata"
+        );
+        let con = open(Codec::Docx, &bytes).expect("si apre");
+        assert_eq!(senza, con, "{name}: la stessa proiezione");
+    }
+    // L'ultima apertura che ricorda ha lasciato la sua prova (se il documento
+    // si scrive); l'apertura che non ricorda non la tocca.
+    let bytes = corpus("libreoffice.docx");
+    open(Codec::Docx, &bytes).expect("si apre");
+    let ricordate = motore.prove_ricordate();
+    assert!(ricordate >= 1);
+    open_unremembered(Codec::Docx, &bytes).expect("si apre");
+    assert_eq!(motore.prove_ricordate(), ricordate);
     motore.svuota();
 }

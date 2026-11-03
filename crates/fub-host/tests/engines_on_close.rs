@@ -1,7 +1,7 @@
 //! **Chiuso l'ultimo vault, le cache dei motori sono vuote.**
 //!
-//! Leggere un `.docx` lascia nel motore dei documenti la prova a vuoto
-//! accettata, e controllare l'ortografia italiana lascia in memoria il
+//! Aprire un `.docx` sotto una chiave lascia nel motore dei documenti la
+//! prova a vuoto accettata, e controllare l'ortografia italiana lascia in memoria il
 //! dizionario della macchina. Con un altro vault ancora aperto le cache
 //! restano al budget dei motori; chiuso l'ultimo, l'host le svuota.
 //!
@@ -15,7 +15,7 @@ use fub_abi::model::DocId;
 use fub_abi::traits::{IndexQuery, IndexResult};
 use fub_format_rich::motore::MotoreDocumenti;
 use fub_format_rich::Codec;
-use fub_host::Host;
+use fub_host::{Host, OpenKey};
 use fub_motori::Voce;
 use serde_json::json;
 
@@ -71,11 +71,12 @@ fn chiuso_l_ultimo_vault_le_cache_dei_motori_sono_vuote() {
     let primo = Vault::with_docx(&host);
     let secondo = Vault::with_docx(&host);
 
-    host.read_document(Some(primo.root.as_str()), &DocId::new("Lettera.docx"))
-        .expect("reads the document");
+    let key = OpenKey::parse("sessione").unwrap();
+    host.open_document_with_format(Some(primo.root.as_str()), &DocId::new("Lettera.docx"), &key)
+        .expect("opens the document");
     check_italian(&host, &primo);
     let documenti = motore.byte();
-    assert!(documenti > 0, "la prova a vuoto letta si conta");
+    assert!(documenti > 0, "la prova a vuoto aperta si conta");
     let dizionari = fub_features::proof::dictionary_bytes();
     assert!(dizionari > 0, "il dizionario letto si conta");
 
@@ -93,8 +94,8 @@ fn chiuso_l_ultimo_vault_le_cache_dei_motori_sono_vuote() {
     // Riaperto un vault, i documenti si leggono di nuovo, e chiudere tutto
     // (lo spegnimento dell'app) le svuota allo stesso modo.
     let terzo = Vault::with_docx(&host);
-    host.read_document(Some(terzo.root.as_str()), &DocId::new("Lettera.docx"))
-        .expect("reads the document");
+    host.open_document_with_format(Some(terzo.root.as_str()), &DocId::new("Lettera.docx"), &key)
+        .expect("opens the document");
     check_italian(&host, &terzo);
     assert!(motore.byte() > 0);
     assert!(host.close().is_empty());

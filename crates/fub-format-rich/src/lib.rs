@@ -54,7 +54,7 @@ pub mod session;
 mod stories;
 mod unproject;
 
-pub use session::{blank, open, save, Opened, ReadOnly, Saved};
+pub use session::{blank, open, open_unremembered, save, Opened, ReadOnly, Saved};
 
 /// L'id del formato Word.
 pub const DOCX_FORMAT_ID: &str = "docx";

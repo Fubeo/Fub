@@ -44,7 +44,7 @@ use fub_abi::{
     GridBytesSession, GridBytesWindow, GridCommandOutcome, GridCommandRequest, GridCommandState,
     GridSelection, Notice, PluginError,
 };
-use fub_host::{doc_id, document_text, Delivery, DocumentText, EventSink, Host};
+use fub_host::{doc_id, document_text, Delivery, DocumentText, EventSink, Host, OpenKey};
 use fub_wasm_host::catalog::{CatalogEntry, CatalogError, CatalogTrust, SignedFeed};
 use fub_wasm_host::installed::Consent;
 use fub_wasm_host::managed::{InstalledOperation, InstalledPluginManager, InstalledShutdown};
@@ -486,15 +486,31 @@ where
         .map_err(|error| unfinished("document", error))?
 }
 
+/// La chiave di apertura facoltativa di `read_document` e `write_document`:
+/// assente o `null` è una lettura o una scrittura semplice, e una chiave
+/// malformata è `BadArgs` prima di toccare il disco (`OpenKey::parse`).
+fn open_key(open: Option<&str>) -> Result<Option<OpenKey>, PluginError> {
+    open.map(OpenKey::parse).transpose()
+}
+
+/// Legge un documento. Senza `open` è una lettura semplice: la stessa
+/// proiezione e la stessa revisione, ma il documento non conta come aperto.
+/// Con `open`, la chiave di una sessione della shell, la revisione letta
+/// resta segnata sotto la chiave finché `document_closed` non la chiude.
 #[tauri::command]
 async fn read_document(
     app: AppHandle,
     id: String,
     vault: Option<String>,
+    open: Option<String>,
 ) -> Result<DocumentSource, PluginError> {
     let id = doc_id(&id)?;
+    let key = open_key(open.as_deref())?;
     off_main(app, move |host| {
-        let (text, revision, format) = host.read_document_with_format(vault.as_deref(), &id)?;
+        let (text, revision, format) = match &key {
+            Some(key) => host.open_document_with_format(vault.as_deref(), &id, key)?,
+            None => host.read_document_with_format(vault.as_deref(), &id)?,
+        };
         let format_id = format.as_ref().map(|known| known.descriptor.id.clone());
         let text_kind = document_text(format.as_ref());
         let source_kind = format
@@ -524,18 +540,22 @@ async fn warm_engine(app: AppHandle, extension: String) -> Result<(), PluginErro
     .await
 }
 
-/// La shell ha chiuso l'ultima sessione di un documento ricco: l'host lascia
-/// andare la sua prova, e le cache dei documenti quando non ne resta aperto
-/// nessuno (`Host::document_closed`). Il percorso si valida come per
-/// `read_document`.
+/// La shell ha chiuso la sessione con questa chiave di apertura: l'host
+/// dimentica le prove delle sue revisioni che nessun'altra chiave tiene, e le
+/// cache dei documenti quando non resta aperta nessuna chiave
+/// (`Host::document_closed`). Una chiave sconosciuta o già chiusa, o un vault
+/// non aperto, non sono un errore; una chiave malformata è `BadArgs`.
 #[tauri::command]
 async fn document_closed(
     app: AppHandle,
-    id: String,
+    open: String,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    let id = doc_id(&id)?;
-    off_main(app, move |host| host.document_closed(vault.as_deref(), &id)).await
+    let key = OpenKey::parse(&open)?;
+    off_main(app, move |host| {
+        host.document_closed(vault.as_deref(), &key)
+    })
+    .await
 }
 
 /// Apre un lease sui byte di una risorsa. Il label e l'origin provengono dalla
@@ -797,6 +817,11 @@ fn close_grid_bytes(
 /// Fino alla decisione 0092 era un `Option<String>` col default `null`, e il
 /// default voleva dire «sovrascrivi comunque»: la guardia si perdeva
 /// **omettendola**, che è il modo in cui una guardia non protegge nessuno.
+///
+/// `open` è la chiave di apertura della sessione che scrive: con la chiave,
+/// la revisione sovrascritta e quella nuova restano segnate sotto la chiave,
+/// che si apre se non lo era; senza, le prove che il salvataggio ha lasciato
+/// e che nessuna chiave tiene si dimenticano subito.
 #[tauri::command]
 async fn write_document(
     app: AppHandle,
@@ -804,11 +829,16 @@ async fn write_document(
     source: String,
     base: WriteBase,
     vault: Option<String>,
+    open: Option<String>,
 ) -> Result<String, PluginError> {
     let id = doc_id(&id)?;
+    let key = open_key(open.as_deref())?;
     off_main(app, move |host| {
-        host.write_document(vault.as_deref(), &id, &source, base)
-            .map(|revision| revision.0)
+        match &key {
+            Some(key) => host.write_open_document(vault.as_deref(), &id, &source, base, key),
+            None => host.write_document(vault.as_deref(), &id, &source, base),
+        }
+        .map(|revision| revision.0)
     })
     .await
 }
@@ -2903,6 +2933,20 @@ mod installed_ipc_tests {
         }
         let missing = config.with_file_name("assente");
         assert!(!limited_startup(Some(missing.as_path())).enabled);
+    }
+
+    /// `open` assente o `null` è una lettura semplice; una chiave malformata
+    /// è `BadArgs` prima che il comando tocchi l'host.
+    #[test]
+    fn the_open_key_is_optional_and_checked() {
+        assert!(open_key(None).unwrap().is_none());
+        assert_eq!(
+            open_key(Some("sessione-1")).unwrap().unwrap().as_str(),
+            "sessione-1"
+        );
+        for bad in ["", "a/b", "../x", "a b"] {
+            assert!(matches!(open_key(Some(bad)), Err(PluginError::BadArgs(_))));
+        }
     }
 
     #[test]

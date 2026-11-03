@@ -138,6 +138,7 @@ pub mod web_clip;
 mod workbook;
 extern crate self as fub_host;
 pub use custody::Custody;
+pub use engines::OpenKey;
 /// La mappa dei componenti (K1): le righe e il risolutore stanno in
 /// `fub-features`, da cui `mount` costruisce i manifest.
 pub use fub_features::componenti;

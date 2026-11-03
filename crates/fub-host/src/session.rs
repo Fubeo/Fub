@@ -70,6 +70,7 @@ use fub_kernel::{
 use crate::automation::VaultWriterLock;
 use crate::config::{config_dir, machine_settings_path, vault_registry_path, view_states_path};
 use crate::custody::Custody;
+use crate::engines::OpenKey;
 use crate::jobs::{
     drain_events, finish_events, run_detached_rebuild_index, with_event_drain, JobHost,
 };
@@ -929,6 +930,30 @@ impl Drop for ApplyClaim<'_> {
     }
 }
 
+/// Ciò che una scrittura di un documento di videoscrittura lascia a chi
+/// l'ha chiesta ([`crate::engines`]).
+#[derive(Default)]
+struct RichWrite {
+    /// Il documento è di videoscrittura: la revisione dei byte che la
+    /// scrittura copre, `None` se il file non c'era.
+    overwritten: Option<Option<Revision>>,
+    /// Le revisioni di cui il codec può aver ricordato la prova a vuoto, anche
+    /// se il salvataggio è fallito.
+    left: Vec<Revision>,
+}
+
+/// I registri delle chiavi di apertura dei vault aperti.
+fn open_registers(sessions: &Sessions) -> Vec<Arc<crate::engines::OpenRich>> {
+    sessions
+        .slots
+        .values()
+        .filter_map(|slot| match slot {
+            SessionSlot::Open(session) => Some(Arc::clone(&session.open_rich)),
+            SessionSlot::Closing(_) | SessionSlot::Applying(_) => None,
+        })
+        .collect()
+}
+
 /// Possesso esclusivo del teardown di una sessione.
 ///
 /// Il marker viene ritirato da `Drop`, quindi anche un panic proveniente da un
@@ -952,6 +977,7 @@ impl CloseClaim<'_> {
 
     fn close(mut self) -> Vec<PluginError> {
         let mut errors: Vec<_> = self.revoke_resources().err().into_iter().collect();
+        // Le chiavi di apertura del vault cadono con la sessione.
         errors.extend(
             self.session
                 .take()
@@ -3384,16 +3410,47 @@ impl Host {
     fn session_workspace(&self, vault: Option<&str>) -> Result<Custody<Workspace>, PluginError> {
         self.with_session(vault, |session| session.workspace.clone())
     }
-    /// Sorgente, revisione e formato dalla stessa fotografia del workspace.
+    /// Sorgente, revisione e formato dalla stessa fotografia del workspace:
+    /// una **lettura semplice**.
     ///
     /// Per un documento di videoscrittura la sorgente è la sua proiezione, per
     /// una cartella di Excel il suo giornale vuoto; la revisione è quella dei
     /// byte del file ([`crate::rich`], [`crate::workbook`]): i byte si leggono
-    /// nella fotografia, la proiezione si calcola fuori.
+    /// nella fotografia, la proiezione si calcola fuori. Il documento non
+    /// conta come aperto, e la prova a vuoto della proiezione non resta
+    /// ricordata ([`crate::engines`]): è la lettura dell'anteprima, della CLI,
+    /// della cattura e dei lavori. Chi lo tiene aperto per salvarlo lo apre
+    /// con [`Host::open_document_with_format`].
     pub fn read_document_with_format(
         &self,
         vault: Option<&str>,
         id: &DocId,
+    ) -> Result<(String, Revision, Option<DocumentFormat>), PluginError> {
+        self.read_document_as(vault, id, None)
+    }
+
+    /// **Apre** un documento sotto la chiave di apertura di una sessione della
+    /// shell: la stessa proiezione, la stessa revisione e lo stesso formato di
+    /// [`Host::read_document_with_format`], ma un documento di videoscrittura
+    /// conta come aperto, la sua revisione si segna sotto la chiave e la prova
+    /// a vuoto dei suoi byte resta ricordata per il salvataggio, finché la
+    /// shell non chiude la chiave ([`Host::document_closed`]). Un documento
+    /// che non è di videoscrittura si legge e non segna niente; una lettura
+    /// che fallisce non apre la chiave.
+    pub fn open_document_with_format(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+        key: &OpenKey,
+    ) -> Result<(String, Revision, Option<DocumentFormat>), PluginError> {
+        self.read_document_as(vault, id, Some(key))
+    }
+
+    fn read_document_as(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+        key: Option<&OpenKey>,
     ) -> Result<(String, Revision, Option<DocumentFormat>), PluginError> {
         enum Read {
             Source(String),
@@ -3420,8 +3477,25 @@ impl Host {
             }
             Read::Rich(codec, bytes) => {
                 let revision = Revision::of_bytes(&bytes);
-                let projection = crate::rich::open(codec, id, &bytes)?;
-                open_rich.read(id, &revision);
+                let Some(key) = key else {
+                    let projection =
+                        crate::rich::open(codec, id, &bytes, crate::rich::Opening::Plain)?;
+                    return Ok((projection, revision, format));
+                };
+                let opened = crate::rich::open(codec, id, &bytes, crate::rich::Opening::Kept);
+                drop(bytes);
+                let projection = match opened {
+                    Ok(projection) => projection,
+                    Err(error) => {
+                        // La chiave non si apre: una prova che l'apertura
+                        // avesse ricordato prima di fallire non resta senza
+                        // chi la tiene.
+                        self.forget_unheld(&[revision]);
+                        return Err(error);
+                    }
+                };
+                let closed = open_rich.hold(key, std::slice::from_ref(&revision));
+                self.forget_unheld(&closed);
                 Ok((projection, revision, format))
             }
             // Il testo di una cartella è il suo giornale, vuoto finché la shell
@@ -3624,6 +3698,13 @@ impl Host {
         self.with_grid_bytes(vault, surface, |provider| provider.close(instance))
     }
 
+    /// Scrive un documento intero da `source`, dichiarando da che cosa parte.
+    ///
+    /// Senza chiave di apertura: le prove a vuoto che il salvataggio di un
+    /// documento di videoscrittura ha lasciato nel motore, e che nessuna
+    /// chiave aperta tiene, si dimenticano subito ([`crate::engines`]). È la
+    /// scrittura della CLI, della cattura e dei lavori; la shell, che tiene il
+    /// documento aperto, scrive con [`Host::write_open_document`].
     pub fn write_document(
         &self,
         vault: Option<&str>,
@@ -3631,13 +3712,68 @@ impl Host {
         source: &str,
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
+        self.write_document_as(vault, id, source, base, None)
+    }
+
+    /// [`Host::write_document`] sotto la chiave di apertura di una sessione
+    /// della shell: per un documento di videoscrittura, la revisione dei byte
+    /// sovrascritti e quella dei byte nuovi si segnano sotto la chiave, che si
+    /// apre se non lo era (una sessione nuova può scrivere prima di leggere).
+    /// Una scrittura che fallisce non apre la chiave, e non lascia prove che
+    /// nessuna chiave tiene.
+    pub fn write_open_document(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+        source: &str,
+        base: WriteBase,
+        key: &OpenKey,
+    ) -> Result<Revision, PluginError> {
+        self.write_document_as(vault, id, source, base, Some(key))
+    }
+
+    fn write_document_as(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+        source: &str,
+        base: WriteBase,
+        key: Option<&OpenKey>,
+    ) -> Result<Revision, PluginError> {
         let (workspace, open_rich) = self.with_session(vault, |session| {
             (session.workspace.clone(), Arc::clone(&session.open_rich))
         })?;
-        let revision = self.write_document_in(workspace, id, source, base)?;
-        // Un documento ricco aperto ha ora anche questi byte, e la loro prova.
-        open_rich.saved(id, &revision);
-        Ok(revision)
+        let mut trace = RichWrite::default();
+        let written = self.write_document_in(workspace, id, source, base, &mut trace);
+        if let (Ok(revision), Some(key), Some(overwritten)) = (&written, key, &trace.overwritten) {
+            // Sotto la chiave, i byte sovrascritti e quelli nuovi: la prova
+            // dei primi l'ha fatta il salvataggio, quella dei secondi la farà
+            // il prossimo.
+            let mut held: Vec<Revision> = overwritten.iter().cloned().collect();
+            held.push(revision.clone());
+            trace.left.extend(open_rich.hold(key, &held));
+        }
+        self.forget_unheld(&trace.left);
+        written
+    }
+
+    /// Dimentica le prove a vuoto di queste revisioni che nessuna chiave
+    /// aperta, in nessun vault, tiene ([`crate::engines`]). I registri si
+    /// prendono sotto il prestito delle sessioni, e si leggono e si
+    /// dimenticano dopo averlo lasciato. Vero se non resta aperta nessuna
+    /// chiave in nessun vault.
+    fn forget_unheld(&self, left: &[Revision]) -> bool {
+        let registers = self.open_registers();
+        crate::engines::forget_proofs(left, &registers);
+        registers.iter().all(|register| register.is_empty())
+    }
+
+    /// I registri delle chiavi di ogni vault aperto.
+    fn open_registers(&self) -> Vec<Arc<crate::engines::OpenRich>> {
+        self.sessions
+            .read()
+            .map(|sessions| open_registers(&sessions))
+            .unwrap_or_default()
     }
 
     /// Scalda in sottofondo il motore che apre questa estensione (`"docx"`,
@@ -3695,16 +3831,15 @@ impl Host {
         }
     }
 
-    /// La shell ha chiuso l'ultima sessione di questo documento ricco.
+    /// La shell ha chiuso la sessione di documento della chiave `key`.
     ///
-    /// Si dimenticano le prove a vuoto dei byte che il documento aveva e che
-    /// nessun altro documento aperto ha; se non resta aperto nessun documento
-    /// ricco in nessun vault, si svuota la cache del motore dei documenti
-    /// ([`crate::engines`]). Un vault non aperto (o un nome che non si
-    /// risolve), o un documento che non era
-    /// aperto (non ricco, o mai letto), non fa niente e non è un errore. Il
-    /// percorso arriva già validato come [`DocId`]; il disco non si legge.
-    pub fn document_closed(&self, vault: Option<&str>, id: &DocId) -> Result<(), PluginError> {
+    /// La chiave si toglie, e si dimenticano le prove a vuoto delle sue
+    /// revisioni che nessun'altra chiave aperta, in nessun vault, tiene; se
+    /// non resta aperta nessuna chiave in nessun vault, si svuota la cache del
+    /// motore dei documenti ([`crate::engines`]). Una chiave sconosciuta, già
+    /// chiusa o di un vault non aperto (o di un nome che non si risolve) non
+    /// fa niente e non è un errore. Il disco non si legge.
+    pub fn document_closed(&self, vault: Option<&str>, key: &OpenKey) -> Result<(), PluginError> {
         let open_rich = match self.with_session(vault, |session| Arc::clone(&session.open_rich)) {
             Ok(open_rich) => open_rich,
             // Un vault che non è aperto, o un nome che non si risolve: non
@@ -3712,32 +3847,20 @@ impl Host {
             Err(PluginError::NotFound(_) | PluginError::Io(_)) => return Ok(()),
             Err(error) => return Err(error),
         };
-        let closed = open_rich.close(id);
-        if closed.is_empty() {
+        let Some(closed) = open_rich.close(key) else {
             return Ok(());
-        }
-        // I registri di ogni vault aperto si prendono sotto il prestito delle
-        // sessioni, e si leggono dopo averlo lasciato.
-        let registers: Vec<Arc<crate::engines::OpenRich>> = {
-            let sessions = self.sessions.read()?;
-            sessions
-                .slots
-                .values()
-                .filter_map(|slot| match slot {
-                    SessionSlot::Open(session) => Some(Arc::clone(&session.open_rich)),
-                    SessionSlot::Closing(_) | SessionSlot::Applying(_) => None,
-                })
-                .collect()
         };
-        let still_open: std::collections::BTreeSet<Revision> = registers
-            .iter()
-            .flat_map(|register| register.revisions())
-            .collect();
-        crate::engines::forget_proofs(&closed, &still_open);
-        if registers.iter().all(|register| register.is_empty()) {
+        if self.forget_unheld(&closed) {
             crate::engines::empty_document_caches();
         }
         Ok(())
+    }
+
+    /// Quante chiavi di apertura sono aperte nel vault (`None`: il corrente).
+    /// Un vault non aperto non ne ha.
+    pub fn open_keys(&self, vault: Option<&str>) -> usize {
+        self.with_session(vault, |session| session.open_rich.len())
+            .unwrap_or(0)
     }
 
     /// Deposita byte grezzi: creazione esclusiva oppure CAS della revisione raw.
@@ -3759,6 +3882,11 @@ impl Host {
     /// shell ha lavorato si leggono e si confrontano con la base, il codec
     /// salva fuori dal lucchetto, e i byte nuovi passano dal CAS della stessa
     /// revisione. Una proiezione che descrive il file com'è non scrive niente.
+    ///
+    /// `trace` dice che il documento è di videoscrittura, quali byte si sono
+    /// sovrascritti e di quali revisioni il codec può aver ricordato la prova,
+    /// anche quando il salvataggio fallisce: chi scrive le dimentica se nessuna
+    /// chiave le tiene ([`crate::engines`]).
     fn write_rich_in(
         &self,
         workspace: &Custody<Workspace>,
@@ -3766,6 +3894,7 @@ impl Host {
         id: &DocId,
         source: &str,
         base: WriteBase,
+        trace: &mut RichWrite,
     ) -> Result<Revision, PluginError> {
         let _turn = workspace.write_turn();
         let current = {
@@ -3773,6 +3902,7 @@ impl Host {
             fub_kernel::error::optional(ws.read_source_bytes(id)).map_err(PluginError::from)?
         };
         let revision = current.as_deref().map(Revision::of_bytes);
+        trace.overwritten = Some(revision.clone());
         if let Some(want) = base.expected() {
             if revision.as_ref() != Some(want) {
                 return Err(PluginError::from(fub_kernel::KernelError::Stale(
@@ -3780,8 +3910,9 @@ impl Host {
                 )));
             }
         }
+        trace.left.extend(revision.iter().cloned());
         let bytes = match current.as_deref() {
-            None => crate::rich::create(codec, id, source)?,
+            None => crate::rich::create(codec, id, source, &mut trace.left)?,
             Some(current) => match crate::rich::save(codec, id, current, source)? {
                 crate::rich::Save::Unchanged => return Ok(Revision::of_bytes(current)),
                 crate::rich::Save::Bytes(bytes) => bytes,
@@ -3887,11 +4018,12 @@ impl Host {
         id: &DocId,
         source: &str,
         base: WriteBase,
+        trace: &mut RichWrite,
     ) -> Result<Revision, PluginError> {
         let _turn = workspace.write_turn();
         let format = workspace.read()?.format_of(id);
         if let Some(codec) = crate::rich::codec(format.as_ref()) {
-            return self.write_rich_in(&workspace, codec, id, source, base);
+            return self.write_rich_in(&workspace, codec, id, source, base, trace);
         }
         // Il testo di una cartella è il suo giornale, e scriverlo è innestarlo.
         if crate::workbook::is_workbook(format.as_ref()) {

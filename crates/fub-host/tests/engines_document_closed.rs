@@ -1,10 +1,9 @@
-//! **Chiuso l'ultimo documento ricco, la cache dei documenti è a zero.**
+//! **Chiusa l'ultima chiave di apertura, la cache dei documenti è a zero.**
 //!
-//! Leggere un `.docx` lascia nel motore dei documenti la prova a vuoto dei
-//! suoi byte. Quando la shell chiude l'ultima sessione di un documento, l'host
-//! dimentica la sua prova; quando non resta aperto nessun documento ricco, in
-//! nessun vault, svuota la cache. Finché un altro documento ricco è aperto, la
-//! sua prova resta.
+//! Aprire un `.docx` sotto una chiave lascia nel motore dei documenti la prova
+//! a vuoto dei suoi byte. Quando la shell chiude la chiave, l'host dimentica
+//! la sua prova; quando non resta aperta nessuna chiave, in nessun vault,
+//! svuota la cache. Finché un'altra chiave è aperta, la sua prova resta.
 //!
 //! È un eseguibile a parte: le cache sono del processo, e gli altri test
 //! dell'host le riempirebbero e le svuoterebbero mentre questo le guarda.
@@ -17,7 +16,7 @@ use fub_abi::model::DocId;
 use fub_format_rich::motore::MotoreDocumenti;
 use fub_format_rich::projection::{Block, Inline, Layout, Look, Projection, Role};
 use fub_format_rich::Codec;
-use fub_host::Host;
+use fub_host::{Host, OpenKey};
 use fub_motori::Voce;
 
 /// Un `.docx` con questo paragrafo, scritto dal codec stesso: due testi
@@ -82,15 +81,20 @@ impl Vault {
         Some(self.root.as_str())
     }
 
-    fn read(&self, host: &Host, name: &str) -> Revision {
-        host.read_document(self.name(), &DocId::new(name))
-            .expect("reads the document")
+    /// Apre il documento sotto la chiave `key`.
+    fn open_as(&self, host: &Host, name: &str, key: &str) -> Revision {
+        host.open_document_with_format(self.name(), &DocId::new(name), &open_key(key))
+            .expect("opens the document")
             .1
     }
 }
 
+fn open_key(raw: &str) -> OpenKey {
+    OpenKey::parse(raw).expect("a well-formed key")
+}
+
 #[test]
-fn chiuso_l_ultimo_documento_le_cache_dei_documenti_sono_a_zero() {
+fn chiusa_l_ultima_chiave_le_cache_dei_documenti_sono_a_zero() {
     let config = tempfile::tempdir().expect("config");
     let host = Host::without_watcher()
         .with_config_dir(&Utf8PathBuf::from_path_buf(config.path().to_path_buf()).unwrap());
@@ -107,39 +111,50 @@ fn chiuso_l_ultimo_documento_le_cache_dei_documenti_sono_a_zero() {
     // Scrivere i file di prova ha già ricordato la prova del documento
     // vuoto: si parte da una cache vuota.
     motore.svuota();
-    primo.read(&host, "Lettera.docx");
-    primo.read(&host, "Verbale.docx");
-    secondo.read(&host, "Bozza.docx");
-    assert_eq!(motore.prove_ricordate(), 3, "una prova per documento letto");
+    primo.open_as(&host, "Lettera.docx", "lettera");
+    primo.open_as(&host, "Verbale.docx", "verbale");
+    secondo.open_as(&host, "Bozza.docx", "bozza");
+    assert_eq!(
+        motore.prove_ricordate(),
+        3,
+        "una prova per documento aperto"
+    );
 
-    // Un documento mai letto, una nota, un vault che non è aperto: niente.
-    host.document_closed(primo.name(), &DocId::new("Altro.docx"))
+    // Una chiave mai aperta, una nota aperta sotto una chiave, un vault che
+    // non è aperto: niente.
+    primo.open_as(&host, "Nota.md", "nota");
+    assert_eq!(
+        host.open_keys(primo.name()),
+        2,
+        "una nota non apre la chiave"
+    );
+    host.document_closed(primo.name(), &open_key("altra"))
         .expect("not an error");
-    host.document_closed(primo.name(), &DocId::new("Nota.md"))
+    host.document_closed(primo.name(), &open_key("nota"))
         .expect("not an error");
-    host.document_closed(Some("/non/aperto"), &DocId::new("Lettera.docx"))
+    host.document_closed(Some("/non/aperto"), &open_key("lettera"))
         .expect("not an error");
     assert_eq!(motore.prove_ricordate(), 3);
 
     // Chiuso un documento, la sua prova si dimentica e le altre restano.
     let prima = motore.byte();
-    host.document_closed(primo.name(), &DocId::new("Lettera.docx"))
+    host.document_closed(primo.name(), &open_key("lettera"))
         .expect("closes");
     assert_eq!(motore.prove_ricordate(), 2);
     assert!(motore.byte() > 0 && motore.byte() < prima);
     // Chiuderlo di nuovo non toglie altro.
-    host.document_closed(primo.name(), &DocId::new("Lettera.docx"))
+    host.document_closed(primo.name(), &open_key("lettera"))
         .expect("closes");
     assert_eq!(motore.prove_ricordate(), 2);
 
-    // Un documento ricco resta aperto nell'altro vault: la cache non si svuota.
-    host.document_closed(primo.name(), &DocId::new("Verbale.docx"))
+    // Una chiave resta aperta nell'altro vault: la cache non si svuota.
+    host.document_closed(primo.name(), &open_key("verbale"))
         .expect("closes");
     assert_eq!(motore.prove_ricordate(), 1);
     assert!(motore.byte() > 0, "la prova del documento aperto resta");
 
     // Chiuso l'ultimo, la cache dei documenti è a zero.
-    host.document_closed(secondo.name(), &DocId::new("Bozza.docx"))
+    host.document_closed(secondo.name(), &open_key("bozza"))
         .expect("closes");
     assert_eq!(motore.prove_ricordate(), 0);
     assert_eq!(motore.byte(), 0);
@@ -151,18 +166,18 @@ fn chiuso_l_ultimo_documento_le_cache_dei_documenti_sono_a_zero() {
         primo.root.join("Copia.docx"),
     )
     .unwrap();
-    let verbale = primo.read(&host, "Verbale.docx");
-    let copia = primo.read(&host, "Copia.docx");
+    let verbale = primo.open_as(&host, "Verbale.docx", "verbale");
+    let copia = primo.open_as(&host, "Copia.docx", "copia");
     assert_eq!(verbale, copia);
     assert_eq!(motore.prove_ricordate(), 1);
-    host.document_closed(primo.name(), &DocId::new("Copia.docx"))
+    host.document_closed(primo.name(), &open_key("copia"))
         .expect("closes");
     assert_eq!(
         motore.prove_ricordate(),
         1,
         "il verbale aperto ha gli stessi byte"
     );
-    host.document_closed(primo.name(), &DocId::new("Verbale.docx"))
+    host.document_closed(primo.name(), &open_key("verbale"))
         .expect("closes");
     assert_eq!(motore.byte(), 0);
 

@@ -318,6 +318,32 @@ passa dalle stesse porte dei documenti, senza una porta in più:
 - `save_draft` conserva la proiezione come testo del buffer, come per ogni
   altro documento.
 
+Leggere un documento non lo apre. `read_document { id, vault? }` è una
+**lettura semplice** (l'anteprima, una ricerca, la CLI, un lavoro): la stessa
+proiezione, la stessa revisione e lo stesso `format_id` di un'apertura, ma
+l'host non tiene niente. Una sessione della shell apre il documento sotto la
+sua **chiave di apertura**, un campo `open` facoltativo:
+
+- `read_document { id, vault?, open? }`: con `open`, la revisione letta
+  resta segnata sotto la chiave, e il motore dei documenti ricorda la prova
+  a vuoto dei suoi byte, che il salvataggio dopo non rifà;
+- `write_document { id, source, base, vault?, open? }`: con `open`, la
+  revisione sovrascritta e quella nuova restano segnate sotto la chiave, che
+  si apre se non lo era; senza, le prove che il salvataggio ha lasciato e che
+  nessuna chiave tiene si dimenticano subito;
+- `document_closed { open, vault? }` chiude la chiave (vedi
+  [Motori dei formati](#motori-dei-formati)).
+
+Una chiave ha da 1 a 64 caratteri fra lettere ASCII, cifre, `-` e `_`; una
+chiave malformata è `BadArgs` prima che l'host legga il disco, e `open: null`
+vale come assente. Una chiave tiene le ultime otto revisioni che ha letto o
+scritto, anche di documenti diversi (una sessione rinominata tiene la stessa
+chiave). Un vault tiene al massimo 1024 chiavi: oltre, si chiude quella usata
+meno di recente, con le sue prove, e l'host lo scrive nel log. Le chiavi di un
+vault cadono quando il vault si chiude. Una nota, una cartella di Excel o un
+PDF aperti sotto una chiave si leggono e non segnano niente; senza la feature
+`rich` la chiave si valida e si ignora.
+
 `read_document` e `write_document` girano fuori dal thread principale
 dell'app, per ogni formato: aprire e salvare un `.docx` legge, proietta e
 misura il pacchetto, e la finestra non si ferma ad aspettarli. L'ordine delle
@@ -338,10 +364,12 @@ thread principale e restituiscono `()`:
   l'estensione (`"docx"`, `".XLSX"`), se un vault aperto ha un provider
   attivo per lei. Un'estensione senza motore, sconosciuta o malformata non fa
   niente e non è un errore. Non apre file.
-- `document_closed { id, vault? }`: la shell ha chiuso l'ultima sessione di
-  un documento ricco. L'host dimentica la sua prova a vuoto e, se non resta
-  aperto nessun documento ricco, svuota le cache dei documenti. `id` si valida
-  come per `read_document`; un vault non aperto o un documento non aperto non
+- `document_closed { open, vault? }`: la shell ha chiuso la sessione con
+  questa chiave di apertura. L'host la toglie e dimentica le prove a vuoto
+  delle sue revisioni che nessun'altra chiave aperta tiene, in nessun vault;
+  se non resta aperta nessuna chiave, svuota le cache dei documenti e
+  restituisce al sistema la memoria libera. Una chiave malformata è
+  `BadArgs`; una chiave sconosciuta o già chiusa, o un vault non aperto, non
   fanno niente.
 
 Il ciclo di vita dei motori è in [Lo strato dei motori](../architecture/motori.md#scaldare-e-chiudere-un-documento).
