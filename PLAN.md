@@ -1434,7 +1434,7 @@ byte cambiano e perché tutti gli altri restano; il test di `canvas.apply`
 passa; `node .github/scripts/check-doc-links.mjs` è verde.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cargo test
 -p fub-features lavagna; cd apps/client && npx vitest run src/editors/canvas
-Stato: [~] in corso · coder · base 40e837db
+Stato: [x] fatto · 1c3c37c0 · check --rapido 32/33: rosso solo «vitest dei file cambiati» per ui/views e live.e2e a tempo sotto carico, verdi da soli (34 su 34)
 
 ## T21 · L'annulla della tela torna ai byte di prima
 

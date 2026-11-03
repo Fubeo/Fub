@@ -59,6 +59,19 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- N3 T20 (1c3c37c0, dal coder f42acbcb): la riscrittura di una lavagna tiene
+  i null dei campi noti, non aggiunge gli array `nodes`/`edges` assenti e le
+  toppe dei collegamenti portano `at`; spostare una scheda di Obsidian
+  cambia solo i byte della coordinata (test in `fub-
+  features/src/lavagna/apply.rs`). Differenze dal piano: il coder ha
+  rigenerato `canvas-mirror.json` con UPDATE_MIRROR, che la nota diceva di
+  non toccare ma è un file derivato (25 casi cambiati, verificati uno per
+  uno: solo collegamenti, null e tratti più piccoli); `operation.test.ts`
+  ora ha `at: 0`; una scheda ricomposta tiene i byte dei campi che non
+  cambiano; il vettore 18 è diventato `18-null-kept-on-rewrite.json`.
+  Rischio: un null che prende un valore e poi si annulla sparisce del tutto
+  (vettori 74 e 86), scritto nella pagina del formato; i casi del null
+  richiesto e di BOM+CRLF su una riga stanno in `source_edit.rs`.
 - 2026-11-03 · N3 T18 · Il TypeScript della lavagna è tolto (model.ts resta
   solo tipi; parseCanvas, serializeCanvas, isValidCanvas, emptyCanvas,
   isCanvasOperation, source-edit.ts e i loro test via): i 101 casi tolti
