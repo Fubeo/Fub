@@ -59,6 +59,10 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · n7-file-craft · L'aiuto di «fub help mcp» elenca fub_preview,
+  fub_external_editors e fub_open_with già dopo T13 (non in T16, come diceva
+  la voce sotto) · T16 non tocca fub-cli; aiuto e strumenti devono dire la
+  stessa cosa.
 - 2026-11-03 · n7-file-craft · T13: sopra gli 8 MiB fub_preview risponde
   missing:"absent" invece di troncare, e l'aiuto di cli.rs non elenca ancora
   gli strumenti nuovi · un'anteprima tagliata sembrerebbe vera; l'aiuto lo
