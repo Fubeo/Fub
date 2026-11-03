@@ -1057,10 +1057,22 @@ describe("la superficie della tela: il nucleo arriva quando serve", () => {
     surface.buffer!.setDoc(canvasSource());
     expect(parent.querySelector(".canvas-viewport")).toBeNull();
     expect(surface.buffer!.getDoc()).toBe(canvasSource());
-    expect(() => surface.buffer!.setDoc("{rotto")).toThrow();
-    expect(surface.buffer!.getDoc()).toBe(canvasSource());
     release.resolve();
     await vi.waitFor(() => expect(parent.querySelectorAll(".canvas-node")).toHaveLength(4));
+    surface.destroy();
+  });
+
+  it("un testo che non è una lavagna, dato mentre il nucleo si carica, finisce nella vista Sorgente con l'avviso", async () => {
+    const module = await lazySurface();
+    const { parent, surface } = mount(module);
+    expect(() => surface.buffer!.setDoc("{rotto")).not.toThrow();
+    expect(surface.buffer!.getDoc()).toBe("{rotto");
+    release.resolve();
+    await vi.waitFor(() => expect(parent.querySelector(".vector-notice-text")?.textContent).toBe(t("canvas.core_unavailable")));
+    expect(parent.querySelector(".canvas-viewport")).toBeNull();
+    expect(parent.querySelector<HTMLElement>(".canvas-source")?.hidden).toBe(false);
+    expect(parent.querySelector(".canvas-source")?.textContent).toContain("{rotto");
+    expect(surface.buffer!.getDoc()).toBe("{rotto");
     surface.destroy();
   });
 
