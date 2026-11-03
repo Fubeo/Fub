@@ -491,7 +491,10 @@ repository) e lo dà come modulo virtuale `virtual:fub-canvas-wasm`
 - `npm run dev` lo serve da `__fub-canvas-wasm/<hash>.wasm`, guarda i
   sorgenti dei due crate, il loro `Cargo.toml` e `Cargo.lock`, e a ogni
   cambio rifà il modulo e ricarica la pagina.
-- Sotto Vitest i byte si leggono dal file che cargo ha appena fatto.
+- Sotto Vitest il modulo si compila una volta prima che partano i file di
+  prova (`build/canvas-wasm.global-setup.mjs`), così una build fredda non
+  scade dentro il tempo massimo di una prova; poi i byte si leggono dal file
+  che cargo ha fatto.
 
 Non c'è ripiego su un `.wasm` di prima: senza cargo o senza il target la
 build si ferma, e l'errore dice che cosa installare (`rustup target add

@@ -289,5 +289,8 @@ export default defineConfig({
     // senza questa riga i presidi che guardano del testo passerebbero o
     // fallirebbero a seconda del locale della macchina che li lancia.
     setupFiles: ["./src/test-setup.ts"],
+    // Il nucleo della lavagna si compila prima delle prove, non dentro il
+    // tempo massimo della prima che lo importa: il perché sta nel file.
+    globalSetup: ["./build/canvas-wasm.global-setup.mjs"],
   },
 });

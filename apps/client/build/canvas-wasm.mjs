@@ -17,7 +17,8 @@
 // - `vite` (sviluppo, banco): compila alla prima richiesta, serve i byte da
 //   `/__fub-canvas-wasm/<hash>.wasm` e osserva i sorgenti dei due crate: un
 //   `.rs` cambiato ricompila e ricarica la pagina.
-// - Vitest: compila alla prima richiesta e legge il file dal disco.
+// - Vitest: compila prima delle prove (`canvas-wasm.global-setup.mjs`), poi
+//   legge il file dal disco.
 //
 // Serve `cargo` nel PATH con il bersaglio `wasm32-unknown-unknown`; senza,
 // l'errore dice che cosa installare.
