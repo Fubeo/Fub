@@ -59,6 +59,12 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · K3 · il prototipo di T12 non è approvato: la barra
+  multifunzione dei fogli va ridisegnata nello stile di Fub (moderno,
+  minimale, stondato) invece che come Excel; si comincia dai fogli, e i
+  documenti e le altre modalità la riprenderanno più avanti, quindi in K3 la
+  barra degli altri editor non cambia · parole dell'utente; il menu
+  «Comandi» resta, con la barra nuova.
 - 2026-11-02 · K3 · Le risposte dell'utente a D-1…D-4 (e merge-k3,
   ci-soglia): D-2 (c), T8 unito e una lettura conta come apertura solo con
   la chiave di una sessione della shell, che la chiude in ogni uscita

@@ -784,6 +784,12 @@ nel menu; l'utente ha detto sì.
 Prova: aprire `PLAN-ui/menu-comandi-fogli.html` in un browser (con
 Playwright: nessun errore nella console)
 Stato: [x] fatto, aspetta il sì dell'utente
+  Risposta (2026-11-03): non ancora approvato. L'utente: «il prototipo mi
+  piace abbastanza, ma mi sembra troppo simile a excel e a tutti gli altri
+  editor simili. vorrei che la barra multifunzione assumesse caratteristiche
+  più in linea con lo stile moderno, minimale e stondato di Fub» e «più avanti
+  riproporremo il design anche in docs e su altre modalità, ma partiamo da
+  fogli». Il prototipo si rifà con la barra dei fogli nello stile di Fub.
 
 ## T13 · Un posto e un effetto per ogni comando dei fogli
 
