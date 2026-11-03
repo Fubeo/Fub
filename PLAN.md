@@ -2214,7 +2214,7 @@ la foto del banco del gruppo «App esterne» somiglia al prototipo, in chiaro e
 in scuro.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test
 craft_settings
-Stato: [~] in corso · coder · base 14a0947d
+Stato: [x] fatto · 3bda61f1 · check --rapido 29/31: rossi le 2 baseline di settings-external-apps (dal runner, T32) e the_instance_and_the_turn sotto carico (da solo verde, 2,8 s)
 
 ## T20 · Il contratto 2
 

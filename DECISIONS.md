@@ -59,6 +59,21 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · N7 · T19 integrato (3bda61f1). `craft.cli-previews` è una
+  scelta ask/on/off di macchina e non `program_writable` (un bundle riceve
+  `PermissionDenied`, un vault importato non la cambia); i valori vecchi
+  (true, false, "forse") valgono `ask` per la regola di risoluzione del
+  kernel, senza migrazione, e il valore salvato resta com'è.
+  `consent::current` e `consent::max_bytes` per T11 e T22. Allargato a `fub-
+  cli/src/login.rs`: `config --set` prende la specie dallo schema (prima
+  `on` diventava un interruttore e la scelta veniva rifiutata), con un test
+  unitario e uno e2e. Restano: le 2 baseline della scena `settings-external-
+  apps` (chiara e scura) vanno prese dal runner in T32, e fino ad allora
+  `bench/scene.test.ts` resta rosso in locale e in CI; `cargo test -p fub-
+  host --no-default-features` non compila già alla base (import di
+  fub_features), da guardare in T32; `fub-wasm-
+  host::the_instance_and_the_turn::an_index_feed_and_a_job…` è caduto dopo
+  353 s sotto il carico di tre build ed è verde da solo.
 - 2026-11-03 · N7 · T21 integrato (921de8db il lettore nel kernel, 30038ed9
   le anteprime a pezzi, 14a0947d lo scrittore di fuori). Il kernel ha
   `ResourceReader` (`Workspace::resource_reader()`): apre e legge le lease
