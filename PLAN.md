@@ -1478,7 +1478,7 @@ dopo una modifica da un'altra superficie l'annulla passa dalle toppe e dà
 il modello giusto.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/canvas
-Stato: [~] in corso · coder · base 1c3c37c0
+Stato: [x] fatto · b652f0c1 · check --rapido verde (19 passi)
 
 ## T22 · Una lavagna che Fub non può riscrivere si apre in sola lettura
 

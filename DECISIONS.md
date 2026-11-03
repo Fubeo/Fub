@@ -59,6 +59,20 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- N3 T21 (b652f0c1, dal coder cbdc32cf): annulla e ripeti della tela
+  rimettono il tratto di prima byte per byte con un `reset` quando il testo
+  è ancora quello lasciato dal passo; se no passano le toppe inverse al
+  nucleo, come prima. Differenze dal piano: la versione non è un contatore
+  che cresce soltanto: ogni testo nuovo (gesto, annulla per toppe, `setDoc`,
+  `syncDoc` che cambia il testo) prende un numero mai usato, mentre un
+  annulla o ripeti a byte ridà al testo il numero che aveva (ogni passo
+  tiene `version` e `restores`), se no dopo annulla e ripeti la storia più
+  vecchia ricadeva sulle toppe; il passo tiene anche le toppe dirette
+  (`back`) per il passo opposto, perché un `reset` non dà inverse; oltre
+  alla versione si controlla che il tratto sia davvero nel testo, e se
+  `reset` rifiuta restano le toppe. Controprova del coder: forzando la via
+  delle toppe cadono 11 test su 13. Rischio: un passo grande tiene in
+  memoria il testo tolto, al massimo 100 passi e senza limite di byte.
 - N3 T20 (1c3c37c0, dal coder f42acbcb): la riscrittura di una lavagna tiene
   i null dei campi noti, non aggiunge gli array `nodes`/`edges` assenti e le
   toppe dei collegamenti portano `at`; spostare una scheda di Obsidian
