@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- Griglia-celle · piano nuovo, scritto dal pianificatore di K3 il 2026-11-03
+  sulla richiesta dell'utente di portare le celle dei fogli al livello della
+  barra: 16 difetti misurati, otto task (T1 | T2 | T3 | T4 T7 | T5 | T6 |
+  T8), prototipo PLAN-ui/celle-griglia.html. Il ramo nasce da
+  piano/k3-motori @ 06e054c8 per avere la barra e il prototipo di K3
+  accanto; il primo task parte solo dopo che T19 di K3 è integrato, e allora
+  piano/k3-motori si unisce in questo ramo tenendo il PLAN.md della griglia
+  (il PLAN.md di K3 resta su piano/k3-motori). Le domande D-1…D-6 sono
+  all'utente; i default B1–B6 valgono finché non risponde.
 - K3 · D-7 (il foglietto chiuso della variante C): l'utente ha scelto
   l'ibrida il 2026-11-03, due o più chiusi a pila alti 38 px, uno rimasto
   solo a tessera alta quanto la barra (80 px). Il pianificatore l'ha scritta
