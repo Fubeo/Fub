@@ -1862,6 +1862,7 @@ DECISIONS.md.
 Prova: node .github/scripts/check-doc-links.mjs; grep -n "Stato"
 docs/decisions/0238-inchiostro-sulla-lavagna.md
 Stato: [ ] da fare
+Aspetta: l'uscita della prova con Obsidian (il kit di T7), che incolla l'utente.
 
 ## T25 · La CI completa e la revisione prima del merge
 
