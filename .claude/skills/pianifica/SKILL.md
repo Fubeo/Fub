@@ -17,6 +17,9 @@ The request is `$ARGUMENTS`, or what the user said before calling you.
 
 ## 1. Understand
 
+Read [fub.md](fub.md) first: what Fub is, how it looks and how it chooses. A
+plan or a prototype that doesn't feel like Fub is not finished.
+
 Restate the goal in three lines: what changes for the person using Fub, and
 why. Write down every assumption you are making, explicitly.
 

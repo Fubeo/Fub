@@ -4,6 +4,9 @@ Read this when the work changes what people see. The prototype is the screen
 built in code before the real work, to look at and to reuse: a coder moves its
 pieces into the real files, they don't redraw it.
 
+Its look follows [fub.md](fub.md) («How Fub looks» and the approved pages
+listed there).
+
 ## Where it lives
 
 - One page per screen: `PLAN-ui/<schermata>.html`, committed with `PLAN.md` on

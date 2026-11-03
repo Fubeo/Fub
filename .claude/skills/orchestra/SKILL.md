@@ -1,6 +1,6 @@
 ---
 name: orchestra
-description: Carry out an approved PLAN.md with 2-3 parallel coder subagents, each in its own worktree; review and integrate their work, push once per integrated task and wait for CI in the background. Use in the implementation session (Opus, effort high) when the user types /orchestra or the planner session hands over a plan.
+description: Carry out an approved PLAN.md with up to 2 parallel subagents (coders in their own worktrees, planner subagents for what still has to be designed); review and integrate their work, push once per integrated task and wait for CI in the background. Use in the implementation session (Opus, effort high) when the user types /orchestra or the planner session hands over a plan.
 disable-model-invocation: true
 argument-hint: "[percorso del piano, predefinito PLAN.md]"
 ---
@@ -34,10 +34,11 @@ user merges.
 
 ## Loop
 
-1. **Slots, not waves.** Keep up to 3 coders running. A task is ready when its
-   `Stato` is `[ ]` and every task in `Dipende da` is `[x]`. Never run two tasks
-   whose `Tocca` overlap, or two tasks in the same crate, unless the plan says
-   they are independent. Prefer the task that unblocks the most others.
+1. **Slots, not waves.** Keep up to 2 subagents running, coders and planners
+   together (the maintainer's limit). A task is ready when its `Stato` is `[ ]`
+   and every task in `Dipende da` is `[x]`. Never run two tasks whose `Tocca`
+   overlap, or two tasks in the same crate, unless the plan says they are
+   independent. Prefer the task that unblocks the most others.
 2. **Brief.** For each ready task call the Agent tool with
    `subagent_type: "coder"`, `isolation: "worktree"`, `run_in_background: true`
    and a prompt built from [brief.md](brief.md). Put in it only that task's
@@ -83,6 +84,30 @@ user merges.
 - Read the plan by section. Don't re-read files you have already read unless
   they changed.
 - Messages to the user: what happened, what you need. No narration.
+
+## Planner subagents
+
+When something relatively complex has to be designed before coders can build
+it (a prototype, a reworked prototype after the user's comments, new tasks for
+an answer, a gap the planner session can't fill), don't design it yourself and
+don't hand it to a coder: launch a **planner subagent** (general-purpose, Opus,
+effort xhigh, in the background, counted in the 2 slots) on the plan's
+worktree. Its brief has:
+
+- the goal and the user's words, verbatim, when there are any;
+- [`pianifica/SKILL.md`](../pianifica/SKILL.md),
+  [`prototipo.md`](../pianifica/prototipo.md) and
+  [the Fub dossier](../pianifica/fub.md), to read before anything else;
+- the approved prototypes it must stay consistent with;
+- what it may touch: the plan worktree and its own folder; no commit, push,
+  PR, publishing or agents;
+- the report you want back: what changes for the person, the choices and why,
+  where the photos are, the open doubts.
+
+It leaves its changes uncommitted. You review them against the dossier (read
+the page whole, look at the photos in both lights and at 700 px), commit them
+on the plan branch, publish the prototype as an Artifact and show it to the
+user, who approves it. Its tasks wait for that approval.
 
 ## Planner
 
