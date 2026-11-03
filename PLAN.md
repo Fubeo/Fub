@@ -13,12 +13,14 @@ Fuori scope: PdfCraft, VectorCraft, PhotoCraft, LightCraft (P1, K5, K7, K8);
 la scheda grafica e l'archivio comune dei caratteri (A3, D-1: arrivano con il
 primo motore che li usa, i caratteri con il disegno di K5); i processi a parte
 per JavaScript dei PDF, OCR e IA (regola 7, arrivano con chi li usa); le
-modalità complete; rifare a mano la barra dei fogli (T18 ne cambia soltanto
-l'aspetto: non i comandi, non il DOM); un menu «Comandi» nella barra dei
-documenti (A9: i loro comandi sono del client); il nuovo stile nella barra dei
-documenti, in quella delle tabelle e nelle altre modalità (dopo K3: vedi la
-fine di T18); la memoria della WebView (D-4: un piano a parte, vedi «Il piano
-dopo» in fondo); le descrizioni
+modalità complete; rifare a mano la barra dei fogli (T18 ne cambia l'aspetto
+e, con un'opzione del kit che passano solo i fogli, il modo in cui si apre un
+gruppo raccolto; T19 la fa muovere; i comandi, i testi e le lettere di Alt
+restano quelli); un menu «Comandi» nella barra dei
+documenti (A9: i loro comandi sono del client); il nuovo stile e il
+movimento nella barra dei documenti, in quella delle tabelle e nelle altre
+modalità (dopo K3: vedi la fine di T19); la memoria della WebView (D-4: un
+piano a parte, vedi «Il piano dopo» in fondo); le descrizioni
 delle funzioni dei fogli in italiano (il motore le dà in inglese, anche nella
 finestra «Inserisci funzione» che c'è già: un difetto a parte, per cui
 l'orchestratore apre un'issue).
@@ -26,15 +28,23 @@ Assunzioni: A1–A10 qui sotto, decise dall'orchestratore il 2026-11-02 di notte
 (l'utente non poteva rispondere). L'utente ha risposto il 2026-11-02 (D-1…D-4,
 più il merge e la soglia della CI): A3 resta, A8 e A10 cambiano.
 Ondate: T1 T2 T3 | T4 T5 T6 | T7 T8 | T9 T12 | T10 T13 T18 | T11 T14 | T15 |
-T16 | T17 (T13, T14, T15 e T18 partono solo dopo il sì dell'utente al
+T16 T19 | T17 (T13, T14, T15, T18 e T19 partono solo dopo il sì dell'utente al
 prototipo di T12; T11 e T13 non girano insieme, perché toccano tutte e due
 `docs/architecture/motori.md`; T18 va prima di T14, perché tutti e due
-toccano `structure.css`, `skin/editors.css`, l'anatomia e il banco, e la
-pillola «Comandi» di T14 sta sulla barra di T18)
-Prototipo: `PLAN-ui/menu-comandi-fogli.html` (T12 e T18), fatto il
+toccano `kit/ribbon/ribbon.ts`, `structure.css`, `skin/editors.css`,
+l'anatomia e il banco, e il gettone «Comandi» di T14 sta sulla barra di T18;
+T19 va dopo T14 e T15, perché tocca `kit/ribbon/ribbon.ts` ed
+`editors/grid/ribbon/ribbon.ts` come loro, e gira accanto a T16, che tocca
+soltanto `docs/misure/`)
+Prototipo: `PLAN-ui/menu-comandi-fogli.html` (T12, T18 e T19), fatto il
 2026-11-02, rifatto il 2026-11-03 con la barra dei fogli nello stile di Fub
-(due varianti, A e B, e il confronto «Barra: nuova / di prima»); approvato: —
-(aspetta il sì dell'utente; l'orchestratore scrive qui la data).
+(due varianti, A e B, e il confronto «Barra: nuova / di prima»), rifatto una
+terza volta il 2026-11-03 (le sezioni in un pozzetto, i gruppi come foglietti
+sul vassoio col nome piccolo e grigio, una sola taglia di pulsanti, il
+foglietto raccolto che si apre sul posto, il movimento con «Movimento: sì /
+ridotto»; tre varianti: C, consigliata, con i foglietti sollevati, A con la
+carta sotto i foglietti e B senza); approvato: — (aspetta il sì
+dell'utente; l'orchestratore scrive qui la data).
 La finestra dei parametri di T7 è fatta con i pezzi del kit e non ha un
 prototipo.
 
@@ -59,6 +69,25 @@ prototipo.
   prototipo; nella tabella «Dal prototipo» gli hook di T15 sono quattro
   (`grid-result` e `grid-result-dialog` non li veste la pelle) · nessuna
   risposta nuova · T14, T15 e T17 da rivedere, T18 nuovo.
+- 2026-11-03 · il secondo commento dell'utente (la risposta a D-5: B con i
+  nomi, ma discreti; «la stessa grafica di prima, stondata un pochino»,
+  «troppo spazio bianco sotto», l'organizzazione «una copia rispetto a
+  Excel», le animazioni predisposte): il prototipo è rifatto una terza volta
+  con un'organizzazione nuova (le sezioni in un pozzetto, i gruppi come
+  foglietti sul vassoio col nome piccolo e grigio, una sola taglia di
+  pulsanti, il foglietto raccolto che si apre sul posto, la barra alta 128 px
+  invece di 135) e con il movimento, in tre varianti per la carta dei
+  foglietti (C, aggiunta durante il lavoro su richiesta del coordinatore: i
+  foglietti sollevati; A con la carta sotto; B senza); T18 riscritto (non
+  cambia più soltanto l'aspetto: tocca il kit con un'opzione che passano
+  solo i fogli); task nuovo T19 (il movimento della barra dei fogli);
+  domanda nuova D-6 (la carta sotto i foglietti); cambiano T12 (una riga
+  nello «Stato»), T14 (il gettone «Comandi», gli hook `grid-ribbon-quick` e
+  `grid-ribbon-label`), T13 e T15 (soltanto la riga «Aspetta»), T17 (dipende
+  da T19), il cancello, le ondate, il fuori scope, la riga del prototipo, la
+  tabella «Dal prototipo» (l'hook `grid-ribbon-split-large` non serve più) e
+  la riga «Dopo K3», che passa in fondo a T19 · nessuna risposta nuova · T13,
+  T14, T15 e T17 da rivedere, T18 riscritto, T19 nuovo.
 
 ## Dal prototipo
 
@@ -69,9 +98,15 @@ nuovo; quelli «solo prototipo» restano lì. I token vengono da
 `foundation.css`, come dice la guida del prototipo: è lì che stanno).
 Le regole marcate `data-barra="prima"` sono il CSS della barra di adesso,
 copiato per il confronto «Barra: nuova / di prima»: non vanno in nessun file.
-I blocchi marcati `data-variante="b"` vanno nel codice solo se D-5 sceglie B.
-Per un riscontro, lo script del pianificatore ha scritto i due file come
-saranno dopo T18 in `/home/fubeo/.cache/fub-k1/tmp/k3-barra/lavoro/dopo-T18/`
+Il blocco di T18 da solo è la variante A (la carta sotto i foglietti). I
+blocchi marcati `data-variante="c"` (i foglietti sollevati) e
+`data-variante="b"` (senza la carta) si aggiungono dopo di lui, e va nel
+codice soltanto quello della variante che sceglie D-6. Lo script della
+pagina è del prototipo: il movimento che mostra lo scrive T19 con `moto/`,
+con le stesse molle, gli stessi tempi e le costanti con lo stesso nome. Per
+un riscontro, lo script del pianificatore ha scritto i due file come saranno
+dopo T18, T14 e T15, per ogni variante (`editors-a.css`, `-b`, `-c`,
+`structure-a.css`, `-b`, `-c`), in `/home/fubeo/.cache/fub-k1/tmp/k3-barra2/lavoro/dopo-T18/`
 (fuori dal repo, se c'è ancora; la fonte resta il prototipo).
 
 | Pezzo | Destinazione | Task |
@@ -84,21 +119,26 @@ saranno dopo T18 in `/home/fubeo/.cache/fub-k1/tmp/k3-barra/lavoro/dopo-T18/`
 | la ricerca completa: percorso, accese prima e spente dopo col perché, nessun tetto, il piede | `apps/client/src/ui/menu.ts` | T14 |
 | CSS `→ structure.css`: `.grid-ribbon-quick` | `apps/client/src/theme/scrittoio/structure.css` | T14 |
 | CSS `→ structure.css`: `.grid-result-table`, `.grid-result-ref` | `apps/client/src/theme/scrittoio/structure.css` | T15 |
-| CSS `→ skin/editors.css (T14, nello stile della barra di T18)`: `.grid-ribbon-quick`, con la sua regola per il foglio sotto i 900 px | `apps/client/src/theme/scrittoio/skin/editors.css`, dopo le regole della barra di T18 | T14 |
+| CSS `→ skin/editors.css (T14, nello stile della barra di T18)`: `.grid-ribbon-quick`, il gettone «Comandi», con la sua regola per il foglio sotto i 560 px | `apps/client/src/theme/scrittoio/skin/editors.css`, dopo le regole della barra di T18 | T14 |
 | CSS `→ skin/editors.css`: `.grid-result-*` | `apps/client/src/theme/scrittoio/skin/editors.css` | T15 |
-| hook nuovo `grid-ribbon-quick` (voce `grid-ribbon`) | `apps/client/src/theme/scrittoio/anatomia/editors.ts` | T14 |
+| hook nuovi `grid-ribbon-quick` e `grid-ribbon-label` (voce `grid-ribbon`; il nome del gettone si toglie sotto i 560 px) | `apps/client/src/theme/scrittoio/anatomia/editors.ts` | T14 |
 | hook nuovi `grid-result-table`, `grid-result-key`, `grid-result-number`, `grid-result-ref` (le classi che la pelle veste; `grid-result-dialog` resta una classe del DOM senza hook, perché la pelle non la veste e il test dell'anatomia vuole che classi e hook coincidano) | `apps/client/src/theme/scrittoio/anatomia/editors.ts` | T15 |
 | testi `fogli.menu.*` (anche `fogli.menu.tab.*`, `fogli.menu.group.*`, `fogli.menu.more_colors`) e `fogli.motivo.context.*` | `apps/client/src/editors/grid/palette/strings.ts` | T14 |
 | testi `fogli.motivo.*` dei perché del motore e `fogli.result.*` | `apps/client/src/editors/grid/palette/strings.ts` | T15 |
 | la finestra del risultato: caricamento, tabella, riferimenti che portano alla cella, «Copia», errore con «Riprova» | `apps/client/src/editors/grid/risultato.ts` (nuovo) | T15 |
 | gli stati per il banco: menu aperto, ricerca, sola lettura, schede contestuali | `apps/client/bench/scene.mjs` | T14 |
 | gli stati per il banco: risultato, risultato lungo, errore | `apps/client/bench/scene.mjs` | T15 |
-| CSS `→ structure.css (T18)`: la geometria della barra dei fogli, tutta in selettori `.grid-ribbon-…`; dalle liste che oggi uniscono `.rich-ribbon-…` e `.grid-ribbon-…` si tolgono i selettori `.grid-ribbon-…` | `apps/client/src/theme/scrittoio/structure.css`, al posto della sezione «La barra multifunzione del foglio» | T18 |
-| CSS `→ skin/editors.css (T18)`: la pelle della barra dei fogli (le schede a pillola col velo che scorre, il vassoio, i fili corti, i pulsanti, i pulsanti divisi, le schede per la selezione, i campi, le lettere di Alt, la tavolozza, la barra ritirata, i colori forzati, il foglio sotto i 900 px); dalle liste condivise si tolgono i selettori `.grid-ribbon-…` | `apps/client/src/theme/scrittoio/skin/editors.css`, nella sezione «La barra multifunzione: le schede su un filetto…» | T18 |
-| CSS `→ structure.css (T18, solo con la variante B)` e `→ skin/editors.css (T18, solo con la variante B)`: i nomi dei gruppi sopra i comandi | gli stessi due file, dopo i blocchi di T18 (solo se D-5 dice B) | T18 |
-| hook nuovi `grid-ribbon-split-large` e `kit-tab-indicator` (voce `grid-ribbon`, accanto a `kit-tabs` e `kit-tab`) | `apps/client/src/theme/scrittoio/anatomia/editors.ts` | T18 |
+| CSS `→ structure.css (T18)`: la geometria della barra dei fogli, tutta in selettori `.grid-ribbon-…` (il pozzetto delle sezioni, il vassoio, i foglietti su due righe di 28 px, il foglietto raccolto, `data-dense`), più la formula, la vista e le schede dei fogli sopra il vassoio (`position` e `z-index`); dalle liste che oggi uniscono `.rich-ribbon-…` e `.grid-ribbon-…` si tolgono i selettori `.grid-ribbon-…` | `apps/client/src/theme/scrittoio/structure.css`, al posto della sezione «La barra multifunzione del foglio» | T18 |
+| CSS `→ skin/editors.css (T18)`: la pelle della barra dei fogli (il pozzetto col gettone d'accento che scorre, le sezioni per la selezione col puntino, il vassoio, i foglietti con la carta e il nome grigio, i gettoni, i pulsanti divisi, i campi, le lettere di Alt, la tavolozza, la barra ritirata col filetto, il fondo `--sheet` della formula e della vista, i colori forzati, il foglio sotto i 900 px); dalle liste condivise si tolgono i selettori `.grid-ribbon-…` | `apps/client/src/theme/scrittoio/skin/editors.css`, nella sezione «La barra multifunzione: le schede su un filetto…» | T18 |
+| CSS `→ skin/editors.css (T18, solo con la variante B)`: i foglietti senza la carta, divisi soltanto dallo spazio | lo stesso file, dopo il blocco di T18 (solo se D-6 dice B) | T18 |
+| CSS `→ skin/editors.css (T18, solo con la variante C)`: i foglietti sollevati, tondi da ogni lato, con l'ombra fatta coi veli `--overlay-hover` e `--overlay-active`, il foglietto aperto sul posto un gradino più su (`[data-open="true"]`), la luce scura (`:root[data-theme="dark"]`, più chiari e un filo di luce in alto) e il contrasto alto (`:root[data-contrast="high"]`, un anello di `--border`) | lo stesso file, dopo il blocco di T18 (solo se D-6 dice C) | T18 |
+| il gruppo raccolto che si apre sul posto (`aria-expanded`, `aria-controls`, Invio, Spazio, ↓, Esc, la sua lettera di Alt), il foglietto aperto che resta (segnato con `data-open="true"`), `data-dense` sul pannello: un'opzione del kit | `apps/client/src/kit/ribbon/ribbon.ts` (`RibbonOptions`), `editors/grid/ribbon/ribbon.ts` (passa l'opzione) | T18 |
+| hook nuovo `kit-tab-indicator` (voce `grid-ribbon`, accanto a `kit-tabs` e `kit-tab`) | `apps/client/src/theme/scrittoio/anatomia/editors.ts` | T18 |
 | la pelle montata | `apps/client/src/theme/scrittoio/skin.css` (`npm run theme:generate`, mai a mano) | T18 |
-| gli stati per il banco della barra: a riposo, 700 px con la scheda della tabella, le lettere di Alt, un gruppo raccolto aperto, la tavolozza dei colori, la barra ritirata, un nome di tabella lunghissimo, sola lettura | `apps/client/bench/scene.mjs`, e se serve `apps/client/bench/fake-ipc.ts` | T18 |
+| gli stati per il banco della barra: a riposo, 700 px con la scheda della tabella, le lettere di Alt, un foglietto raccolto aperto sul posto, la tavolozza dei colori, la barra ritirata, un nome di tabella lunghissimo, sola lettura | `apps/client/bench/scene.mjs`, e se serve `apps/client/bench/fake-ipc.ts` | T18 |
+| il movimento della barra (le corse di «Movimento: sì» e di «Ridotto»; le costanti `TAB_TRAVEL`, `FOLD_TRAVEL`, `ENTER_SCALE`, e `LIFT_TRAVEL` solo con la variante C) | `apps/client/src/kit/ribbon/ribbon-motion.ts` (nuovo), acceso da un'opzione del kit che passa `editors/grid/ribbon/ribbon.ts` | T19 |
+| la tenda segue il bordo di sopra e il foglietto della variante C parte più su (`edge: "top"` e `lift` di `flipEls` nello script) | `apps/client/src/moto/flip.ts` (due campi nuovi di `FlipOptions`, di serie spenti) | T19 |
+| le coreografie della barra dei fogli | `apps/client/bench/motion-rules.mjs` | T19 |
 
 ## Fonti
 
@@ -239,7 +279,7 @@ differenza è scritta qui.
   impostazione. Consiglio: (a) adesso. La barra respira e i comandi parlano
   da soli; un'impostazione è un contratto dell'host (`fub-host`
   `settings.rs`, l'IPC, le preferenze), e conviene disegnarla una volta sola
-  per tutte le barre quando lo stile passa al kit (vedi la fine di T18), non
+  per tutte le barre quando lo stile passa al kit (vedi la fine di T19), non
   per i soli fogli. Due dettagli da guardare nel prototipo: il filo fra i
   gruppi, alto 40 px nel colore dei bordi (consiglio: questo, il più
   quieto) o corto, 16 px, e più scuro come nella barra di formato delle
@@ -254,6 +294,26 @@ differenza è scritta qui.
   identitario», e l'organizzazione della barra è «una copia rispetto a
   Excel». L'utente vuole «qualcosa di nuovo, qualcosa di più bello», con le
   animazioni predisposte. Il prototipo si rifà una terza volta.
+- D-6 · La carta sotto i foglietti (T18; nel prototipo, «Variante»). Nella
+  barra rifatta i gruppi sono foglietti sul vassoio, col nome piccolo e
+  grigio. La loro carta: (c) la variante C, i foglietti sollevati: tondi da
+  ogni lato, un filo d'inchiostro tutt'attorno e un'ombra di contatto corta,
+  un gradino sotto i fogli della scrivania; il foglietto che si apre sul
+  posto sale di un gradino e si posa; nella luce scura sono un poco più
+  chiari del vassoio, con un filo di luce in alto; (a) la variante A, la
+  carta con un orlo sotto soltanto; (b) la variante B, niente carta: i
+  gruppi divisi soltanto dallo spazio e dal nome. Consiglio: (c). È il
+  pannello rialzato che Fub usa già; si legge tondo da ogni lato anche
+  nella luce scura, dove A quasi sparisce; dice quale foglietto si è
+  aperto. Costa poco: nessun token nuovo (l'ombra è fatta coi veli
+  `--overlay-hover` e `--overlay-active`, perché `--shadow-1` è la carta dei
+  fogli e il vassoio taglierebbe il suo alone di 20 px), due selettori sulla
+  radice nella pelle (`:root[data-theme="dark"]`, che `skin/media.css` usa
+  già, e `:root[data-contrast="high"]`, il primo) e l'attributo
+  `data-open="true"` sul foglietto aperto, che il kit mette comunque. B
+  toglie una cornice ma i gruppi si confondono quando la barra è piena. Non
+  blocca: T18 parte con la variante che l'utente sceglie guardando il
+  prototipo, e senza risposta con (c).
 
 ## Cancello di K3
 
@@ -267,7 +327,8 @@ differenza è scritta qui.
 | ogni documento che la shell apre si chiude; una lettura che non apre non conta | test dell'host (`crates/fub-host/tests/engines_open.rs`): cento letture semplici di cento documenti lasciano zero aperture e zero prove ricordate; test del client: l'anteprima della ricerca su cento file non apre niente, e ogni uscita di una sessione chiude la sua chiave | T10, T11 |
 | nessuna interfaccia di un'app Craft in Fub, librerie doppie sotto il tetto | `node .github/scripts/check-motori.mjs` nella CI | T2 |
 | niente all'avvio | test: dopo l'apertura di un vault nessun motore è costruito; il primo `.xlsx` aperto costruisce solo «fogli» | T1, T5 |
-| la barra dei fogli ha lo stile di Fub; la barra dei documenti e quella delle tabelle restano com'erano | le foto del banco della barra dei fogli (`grid-*` e le scene nuove di T18), chiara e scura, confrontate col prototipo; nella CI nessuna baseline delle scene dei documenti e delle tabelle cambia (`document-*`, `window-document`, `mobile-document*`, `live-14-tabella-attiva`, `slash-05-tabella`); `bench:a11y`, `theme:verify` e i test del tema verdi | T18 |
+| la barra dei fogli ha lo stile di Fub e il gruppo raccolto si apre sul posto; la barra dei documenti e quella delle tabelle restano com'erano | le foto del banco della barra dei fogli (`grid-*` e le scene nuove di T18), chiara e scura, piena e 700 px, confrontate col prototipo con la variante scelta in D-6; `kit/ribbon/ribbon.test.ts` (il gruppo sul posto con l'opzione, il riquadro senza); nella CI nessuna baseline delle scene dei documenti e delle tabelle cambia (`document-*`, `window-document`, `mobile-document*`, `live-14-tabella-attiva`, `slash-05-tabella`); `bench:a11y`, `theme:verify` e i test del tema verdi | T18 |
+| la barra dei fogli si muove con `moto/`, e con il movimento ridotto quasi si ferma | `npm run bench:motion` con le coreografie della barra (stato finale uguale con e senza movimento, solo `transform` e `opacity`, si torna indietro a metà, il ritiro entro 140 ms); `bench/motion.test.ts` (nessun file che muove fuori dall'elenco); `moto/flip.test.ts` (`edge` e `lift`); `kit/ribbon/ribbon-motion.test.ts` (ridotto, smontaggio); `check-listeners` | T19 |
 | K3 passa la CI completa e una revisione riga per riga prima del merge | la PR #295 segnata pronta: tutti i job verdi su Linux, Windows e macOS, banchi compresi (salvo `R1.giri.pendenza.MiB`, spiegato); la revisione scritta nella PR; il sì dell'utente al merge | T17 |
 
 ## Regole che valgono per ogni task
@@ -850,6 +911,12 @@ Stato: [x] fatto, aspetta il sì dell'utente
   Rifatto (2026-11-03): la barra dei fogli nello stile di Fub, varianti A e B
   e il confronto «Barra: nuova / di prima»; il menu non cambia. La barra la
   porta T18, la variante la sceglie D-5; aspetta di nuovo il sì dell'utente.
+  Rifatto una terza volta (2026-11-03), dopo la risposta a D-5: la barra con
+  le sezioni in un pozzetto, i gruppi come foglietti col nome piccolo e
+  grigio, il foglietto raccolto che si apre sul posto, il movimento; il menu
+  non cambia, «Comandi» diventa un gettone. La barra la porta T18, il
+  movimento T19, la carta dei foglietti la sceglie D-6 (non blocca); aspetta
+  di nuovo il sì dell'utente.
 
 ## T13 · Un posto e un effetto per ogni comando dei fogli
 
@@ -917,7 +984,7 @@ con uno script e scrive nel resoconto ogni differenza col suo perché); i test
 del client verdi.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare
-  Aspetta: il sì dell'utente al prototipo rifatto di T12 e la risposta a D-5.
+  Aspetta: il sì dell'utente al prototipo rifatto una terza volta di T12.
 
 ## T14 · Il menu «Comandi» dei fogli
 
@@ -934,14 +1001,17 @@ nella fila `quick`), `editors/grid/palette/strings.ts` (`fogli.menu.*`,
 `fogli.motivo.context.*`), `editors/grid/palette/palette.test.ts` (la
 copertura), `apps/client/src/theme/scrittoio/structure.css`,
 `theme/scrittoio/skin/editors.css`, `theme/scrittoio/anatomia/editors.ts`
-(l'hook `grid-ribbon-quick`), `apps/client/bench/scene.mjs` (gli stati del
-menu), `docs/architecture/grid-surface.md` («La barra multifunzione», «I
+(gli hook `grid-ribbon-quick` e `grid-ribbon-label`),
+`apps/client/bench/scene.mjs` (gli stati del menu),
+`docs/architecture/grid-surface.md` («La barra multifunzione», «I
 comandi nella tavolozza», «Dove si trova»).
 Non toccare: `ribbon/tabs.ts` e `ribbon/strings.ts` (il menu legge la barra,
 non la cambia); `dialogs/`; il JSON generato (T13); `engine.ts` e
 `palette/commands.ts` (T15); la barra dei documenti (`editors/rich/`); le
 regole della barra dei fogli di T18 (il blocco di `.grid-ribbon-quick` si
-aggiunge dopo di loro, non le cambia).
+aggiunge dopo di loro, non le cambia); il foglietto che si apre sul posto
+(T18); il movimento della barra (T19: il menu arriva già come ogni menu di
+Fub, con `ui/menu.ts`).
 Dipende da: T12 (il sì dell'utente), T13, T18
 Cosa fare:
 - Il pulsante «Comandi» (`fogli.menu.button`, titolo `fogli.menu.label`) è
@@ -974,24 +1044,28 @@ Cosa fare:
   catalogo esiste nella barra o fra quelli soltanto del menu.
 - I testi in italiano e in inglese (`catalog(IT, { en: EN })`) con le chiavi
   del prototipo; il CSS e l'hook dal prototipo; gli stati del menu nel banco.
-- Il CSS è quello «nella barra nuova» del prototipo: «Comandi» è una pillola
-  piena (`--overlay-hover`, `--radius-pill`), staccata dalle schede da un
-  filo corto; aperta prende il velo d'accento (`--accent-wash`). Il blocco di
-  `skin/editors.css` sta dopo le regole di T18, con la sua regola per il
-  foglio sotto i 900 px (`@container sheet`). Il blocco «solo prototipo»
-  dell'accesso rapido sulla barra di prima resta nel prototipo.
+- Il CSS è quello «nella barra nuova» del prototipo: «Comandi» è un gettone
+  pieno prima del pozzetto delle sezioni, alto quanto lui e col suo velo
+  (`--overlay-hover`, `--radius-control`, il nome in `--weight-medium`);
+  aperto prende il velo d'accento (`--accent-wash`, il testo `--accent`).
+  In un foglio sotto i 560 px (`@container sheet`) resta col suo disegno e
+  la freccina, e il nome (`.grid-ribbon-label`) si toglie: lo dicono il
+  suggerimento e il nome accessibile. Il blocco di `skin/editors.css` sta
+  dopo le regole di T18. Il blocco «solo prototipo» dell'accesso rapido
+  sulla barra di prima resta nel prototipo.
 - Gli stati del menu nel banco riusano ciò che T18 ha messo nel banco: la
   scheda della tabella, il nome lunghissimo, la sola lettura.
 Dal prototipo: il pulsante e la fila `quick`, l'albero (`MENU`), la ricerca
-completa, il CSS di `.grid-ribbon-quick`, l'hook `grid-ribbon-quick`, i testi
-`fogli.menu.*` e `fogli.motivo.context.*`, gli stati del banco (la tabella
-«Dal prototipo»).
+completa, il CSS di `.grid-ribbon-quick`, gli hook `grid-ribbon-quick` e
+`grid-ribbon-label`, i testi `fogli.menu.*` e `fogli.motivo.context.*`, gli
+stati del banco (la tabella «Dal prototipo»).
 Casi limite: la cartella si chiude a menu aperto (il menu si chiude, nessun
 comando parte); un comando che si accende a menu aperto; un nome di tabella
 lunghissimo (i puntini, il nome intero nel titolo); 700 px (il terzo livello
-si apre a sinistra, come fa già `placeCascade`; la pillola «Comandi» e tutte
-le schede, anche quella della tabella, stanno nella fila); una ricerca che trova
-centinaia di voci («a»: si scorre, la tastiera arriva in fondo); una ricerca
+si apre a sinistra, come fa già `placeCascade`; il gettone «Comandi» e
+tutte le sezioni, anche quella della tabella, stanno nella fila); un foglio
+sotto i 560 px (il gettone senza il nome); una ricerca che trova centinaia
+di voci («a»: si scorre, la tastiera arriva in fondo); una ricerca
 senza risultati; due comandi con lo stesso titolo («Riempimento rapido»: li
 distingue il percorso); un comando in più posti (compare in tutti);
 `home.accounting`, che si raggiunge dalla parte grande del pulsante diviso;
@@ -1008,7 +1082,8 @@ del menu, chiara e scura, piena e stretta, corrispondono al prototipo con la
 barra nuova.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare
-  Aspetta: il sì dell'utente al prototipo rifatto di T12 e la risposta a D-5.
+  Aspetta: il sì dell'utente al prototipo rifatto una terza volta di T12 (D-6
+  non lo blocca: il gettone «Comandi» è lo stesso con ogni variante).
 
 ## T15 · Il risultato dei comandi che leggono, e i perché in italiano
 
@@ -1094,7 +1169,7 @@ lettura sono spenti soltanto i `cambia`; `engine.test.ts`: in sola lettura
 stretta, corrispondono al prototipo.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare
-  Aspetta: il sì dell'utente al prototipo rifatto di T12 e la risposta a D-5.
+  Aspetta: il sì dell'utente al prototipo rifatto una terza volta di T12.
 
 ## T16 · La misura con i documenti che si chiudono
 
@@ -1138,7 +1213,7 @@ all'orchestratore.
 Non toccare: i limiti di `apps/client/bench/webview/budgets.json` (nessuno si
 alza: ci-soglia (a)); i task fatti (un difetto in un task fatto si corregge
 con un task nuovo).
-Dipende da: T10, T11, T13, T14, T15, T16, T18
+Dipende da: T10, T11, T13, T14, T15, T16, T18, T19
 Cosa fare (lo fa l'orchestratore, non un coder):
 - `gh pr ready 295`: parte la CI completa (Linux, Windows, macOS, i banchi
   del client).
@@ -1148,8 +1223,10 @@ Cosa fare (lo fa l'orchestratore, non un coder):
   issue, prima si apre l'issue. L'unico rosso ammesso è
   `R1.giri.pendenza.MiB` della WebView, con il rimando a «Il piano dopo».
 - Le foto del banco delle scene nuove (T7, T14, T15, T18) e delle scene
-  `grid-*` che T18 cambia dal runner, confrontate col prototipo; le baseline
-  delle scene dei documenti e delle tabelle restano le stesse (T18).
+  `grid-*` che T18 cambia dal runner, confrontate col prototipo con la
+  variante scelta in D-6; le baseline delle scene dei documenti e delle
+  tabelle restano le stesse (T18). Il banco del movimento (`bench:motion`)
+  è verde con le coreografie della barra dei fogli (T19).
 - La revisione riga per riga del diff di K3 contro `main`
   (`git diff origin/main...piano/k3-motori`): correttezza, nessuna perdita di
   dati, nessun lucchetto tenuto mentre si chiama un motore, ogni
@@ -1175,106 +1252,280 @@ Stato: [ ] da fare
 Perché: l'utente trova la barra dei fogli «troppo simile a excel e a tutti
 gli altri editor simili» e la vuole «più in linea con lo stile moderno,
 minimale e stondato di Fub», cominciando dai fogli (T12, risposta del
-2026-11-03). Cambia soltanto l'aspetto: i comandi, i ruoli, l'ordine del
-fuoco e le lettere di Alt restano quelli.
-Tocca: `apps/client/src/theme/scrittoio/structure.css` (la sezione «La barra
+2026-11-03). Al secondo commento (la risposta a D-5) vuole i nomi dei gruppi,
+ma discreti, meno bianco sotto e un'organizzazione che non sia «una copia
+rispetto a Excel». La barra cambia aspetto e, soltanto nei fogli, il modo in
+cui si apre un gruppo raccolto: sul posto, non in un riquadro. I comandi, i
+testi, i ruoli, l'ordine del fuoco e le lettere di Alt restano quelli.
+Tocca: `apps/client/src/kit/ribbon/ribbon.ts` (un'opzione nuova di
+`RibbonOptions` e il gruppo raccolto che si apre sul posto),
+`kit/ribbon/ribbon.test.ts`, `editors/grid/ribbon/ribbon.ts` (passa
+l'opzione), `theme/scrittoio/structure.css` (la sezione «La barra
 multifunzione del foglio»), `theme/scrittoio/skin/editors.css` (la sezione
 «La barra multifunzione: le schede su un filetto…»),
 `theme/scrittoio/skin.css` (solo con `npm run theme:generate`),
-`theme/scrittoio/anatomia/editors.ts` (gli hook `grid-ribbon-split-large` e
-`kit-tab-indicator`), `apps/client/bench/scene.mjs` (le scene della barra),
+`theme/scrittoio/anatomia/editors.ts` (l'hook `kit-tab-indicator`),
+`apps/client/bench/scene.mjs` (le scene della barra),
 `apps/client/bench/fake-ipc.ts` (solo per la tabella e la sola lettura, che
 il finto della cartella non ha), `docs/architecture/grid-surface.md` («La
-barra multifunzione»).
-Non toccare: `editors/rich/` e `tabella/` (le loro barre restano com'erano);
-le regole `.rich-ribbon-…` di `structure.css` e `skin/editors.css` (perdono
-soltanto i selettori `.grid-ribbon-…` delle liste che oggi condividono);
-`kit/ribbon/*.ts` e `kit/tabs.ts`; `editors/grid/ribbon/` (il DOM, i testi,
-`tabs.ts`); i token (`sheet-*.css`); `src/__fixtures__/xlsx-grid.json`
-(generato da `crates/fub-format-xlsx/tests/ts_grid.rs`); le baseline del
-banco (arrivano dal runner, T17); il CSS di T14 e di T15.
-Dipende da: T12 (il sì dell'utente al prototipo rifatto, e D-5)
+barra multifunzione»), `docs/architecture/frontend-and-ipc.md` (la riga di
+`kit/ribbon/`).
+Non toccare: `editors/rich/` e `tabella/` (le loro barre non passano
+l'opzione e restano com'erano); le regole `.rich-ribbon-…` di
+`structure.css` e `skin/editors.css` (perdono soltanto i selettori
+`.grid-ribbon-…` delle liste che oggi condividono); nel kit, ciò che fa senza
+l'opzione (il riquadro del gruppo raccolto, `showPopover`, la mini-barra, il
+tasto destro); `kit/tabs.ts` (l'evidenza scorre già con `moto/`);
+`editors/grid/ribbon/` tranne il passaggio dell'opzione (il DOM, i testi,
+`tabs.ts`); i token (`sheet-*.css`: nessun token nuovo);
+`src/__fixtures__/xlsx-grid.json` (generato da
+`crates/fub-format-xlsx/tests/ts_grid.rs`); le baseline del banco (arrivano
+dal runner, T17); il CSS di T14 e di T15; il movimento e `moto/` (T19: dopo
+T18 ogni cambio della barra è istantaneo).
+Dipende da: T12 (il sì dell'utente al prototipo rifatto una terza volta; la
+carta dei foglietti la sceglie D-6, che non blocca)
 Cosa fare:
+- Il kit. `RibbonOptions` prende un campo nuovo, `openInPlace?: boolean`
+  (commento: il gruppo raccolto si apre sul posto, nella barra, invece che
+  in un riquadro). Lo passa soltanto `editors/grid/ribbon/ribbon.ts`. Con
+  l'opzione:
+  - il pulsante del gruppo raccolto (`group-toggle`) non ha `aria-haspopup`;
+    ha `aria-expanded` e `aria-controls`, che nomina il corpo del gruppo (il
+    corpo prende un id col prefisso, la scheda e il gruppo);
+  - un clic, Invio, Spazio, ↓ e la sua lettera di Alt aprono il gruppo sul
+    posto: il corpo resta nel gruppo, il gruppo prende `data-open="true"` e il
+    pulsante `aria-expanded="true"`; il fuoco va al primo comando; dalla
+    lettera di Alt si vedono subito le lettere dei suoi comandi;
+  - `fit()` tiene aperto il gruppo aperto e raccoglie gli altri da destra (o
+    nell'ordine `fold`, se una scheda lo dichiara); se la fila non ci sta
+    ancora, il pannello prende `data-dense="true"` e i gettoni perdono il
+    nome (lo fa il CSS; il nome resta nel suggerimento e nel nome
+    accessibile);
+  - un gruppo aperto alla volta: aprirne un altro richiude il primo; Esc nel
+    gruppo aperto lo richiude e porta il fuoco al suo pulsante, un secondo
+    Esc torna alla griglia, come fa già; cambiare sezione lo richiude;
+  - aprire e richiudere chiamano `fit()` subito, non `scheduleFit()` (che
+    aspetta un fotogramma): così T19 misura prima e dopo nello stesso giro.
+  Senza l'opzione tutto resta com'è: il riquadro e `aria-haspopup="dialog"`.
 - In `structure.css` e in `skin/editors.css`, dalle liste che uniscono
   `.rich-ribbon-…` e `.grid-ribbon-…` si tolgono i selettori
   `.grid-ribbon-…`: le regole dei documenti restano carattere per carattere.
   Al loro posto, nella stessa sezione, i blocchi «→ structure.css (T18…)» e
-  «→ skin/editors.css (T18…)» del prototipo; i blocchi della variante B solo
-  se D-5 la sceglie.
-- Ciò che si vede. Le schede sono pillole; la scelta è il velo d'accento
-  (`.kit-tab-indicator`, che `kit/tabs.ts` già sposta con `moto/`) e scorre
-  da una scheda all'altra; sotto le schede non c'è più il filetto. I comandi
-  stanno su un vassoio stondato (`--sheet-2`), i gruppi si separano con un
-  filo corto. I pulsanti sono quelli della barra di formato delle note (alti
-  28 px, stondati, un velo al passaggio, il velo d'accento quando sono
-  accesi; le icone grandi a 24 px). Un pulsante diviso è un pezzo solo con
-  due bocche. Le schede per la selezione hanno l'accento e un punto, e
-  stanno un passo più in là. I campi sono quelli del kit (il bordo
-  `--outline`, l'alone del fuoco, i puntini su un nome lungo). Le lettere di
-  Alt sono pastiglie scure e tonde (`--sheet` su `--text`, la coppia di
-  contrasto che c'è già, rovesciata). La tavolozza ha i titoli in
-  maiuscoletto e i campioni stondati.
+  «→ skin/editors.css (T18…)» del prototipo, e dopo quest'ultimo il blocco
+  della variante che sceglie D-6 (`data-variante="c"` o `data-variante="b"`;
+  la variante A non ne ha).
+- Ciò che si vede. Le sezioni stanno in un pozzetto a segmenti, come le
+  scelte di Impostazioni (`.segmented`); la scelta è un gettone d'accento
+  (`.kit-tab-indicator`, che `kit/tabs.ts` già sposta) dentro il pozzetto, e
+  sotto non c'è più il filetto. Le sezioni per la selezione si aggiungono in
+  fondo al pozzetto con un puntino d'accento; un nome lungo finisce coi
+  puntini. I comandi stanno su un vassoio stondato (`--sheet-2`) che li
+  abbraccia; sopra, ogni gruppo è un foglietto (`--bg-elev`,
+  `--radius-control`) col nome in alto a sinistra, piccolo, grigio e scritto
+  normale; niente righe fra i gruppi. Una sola taglia: ogni comando è alto
+  28 px, il pulsante grande diventa un gettone su una riga (disegno, nome,
+  freccina) e tutto sta su due righe; la barra è alta 128 px invece di 135, e
+  sotto il vassoio restano 4 px prima della formula. Il gruppo raccolto è un
+  pulsante col disegno del gruppo, alto quanto le due righe. I campi sono
+  quelli del kit; le lettere di Alt sono pastiglie scure e tonde (`--sheet`
+  su `--text`); la tavolozza ha i titoli piccoli in grigio e i campioni
+  stondati. Ritirata, resta la fila col pozzetto e un filetto sotto.
+- La formula, la griglia e le schede dei fogli stanno sopra la barra
+  (`.grid-formula-bar` e `.grid-sheets` con `position: relative` e
+  `z-index: 2`, `.grid-viewport` con `z-index: 1`) e la formula e la griglia
+  hanno il fondo `--sheet`: è il posto della tenda di T19, e da fermi non
+  cambia niente.
 - In un foglio sotto i 900 px (`@container sheet`: il contenitore è
-  `.pane-editor`) le schede si stringono, e con loro, di un passo, i margini
-  della fila e del vassoio, che restano allineati: a 700 px ci stanno tutte,
-  anche quella della selezione. Con la barra di adesso, a 700 px, una scheda
-  esce dalla fila. Le regole del foglio stretto vanno dopo quelle che
-  cambiano (una query del contenitore non pesa di più), come nel prototipo.
-- Gli hook nuovi nella voce `grid-ribbon` di `anatomia/editors.ts`:
-  `grid-ribbon-split-large` (la classe c'è già nel DOM del kit e in
-  `structure.css`) e `kit-tab-indicator` (è già in `anatomia/kit.ts`: la
-  voce lo nomina come nomina già `kit-tabs` e `kit-tab`, e l'unione degli
-  hook resta senza doppioni). Poi `npm run theme:generate`.
-- Il banco: le scene `grid-*` cambiano foto. Scene nuove della barra: 700 px
-  con la scheda della tabella e un nome di tabella lunghissimo; le lettere di
-  Alt; un gruppo raccolto e il suo riquadro; la tavolozza dei colori; la
-  barra ritirata; la sola lettura. Il finto della cartella (`?workbook=1`,
-  `xlsx-grid.json`) non ha tabelle né la sola lettura: le scene li ottengono
-  in `bench/fake-ipc.ts` (una copia della finestra con una tabella, dietro un
-  parametro della query), senza toccare il JSON generato. T14 le riusa per
-  gli stati del menu.
-- In `grid-surface.md`, «La barra multifunzione»: l'aspetto in una frase (le
-  schede a pillola, il vassoio, i fili corti) e il foglio stretto, dove le
-  schede si stringono.
+  `.pane-editor`) si stringono di un passo i margini della testata, i
+  segmenti e il vassoio, che restano allineati: a 700 px le sezioni ci stanno
+  tutte, anche quella della selezione, e nel vassoio il primo foglietto resta
+  aperto e gli altri si raccolgono. Le regole del foglio stretto vanno dopo
+  quelle che cambiano (una query del contenitore non pesa di più), come nel
+  prototipo.
+- L'hook nuovo nella voce `grid-ribbon` di `anatomia/editors.ts`:
+  `kit-tab-indicator` (è già in `anatomia/kit.ts`: la voce lo nomina come
+  nomina già `kit-tabs` e `kit-tab`, e l'unione degli hook resta senza
+  doppioni). Il blocco della pelle di T18 non nomina altre classi nuove
+  (`.grid-ribbon-label` arriva col blocco di T14); `.grid-ribbon-group-toggle`
+  e `data-dense` li nomina soltanto `structure.css`, che non chiede hook. Poi
+  `npm run theme:generate`.
+- Il banco: le scene `grid-*` cambiano foto. Scene nuove della barra: a
+  riposo; 700 px con la sezione della tabella e un nome di tabella
+  lunghissimo; le lettere di Alt; un foglietto raccolto aperto sul posto; la
+  tavolozza dei colori; la barra ritirata; la sola lettura. Il finto della
+  cartella (`?workbook=1`, `xlsx-grid.json`) non ha tabelle né la sola
+  lettura: le scene li ottengono in `bench/fake-ipc.ts` (una copia della
+  finestra con una tabella, dietro un parametro della query), senza toccare
+  il JSON generato. T14 le riusa per gli stati del menu.
+- In `grid-surface.md`, «La barra multifunzione»: l'aspetto in una frase (il
+  pozzetto delle sezioni, il vassoio, i foglietti col nome grigio) e il
+  gruppo raccolto, che nei fogli si apre sul posto mentre gli altri si
+  raccolgono, al posto di «si raccolgono da destra in un pulsante che li apre
+  in un riquadro». In `frontend-and-ipc.md`, la riga di `kit/ribbon/` dice
+  l'opzione: con lei il gruppo raccolto si apre sul posto.
 Dal prototipo: i blocchi «→ structure.css (T18…)» e «→ skin/editors.css
-(T18…)», quelli della variante B se D-5 la sceglie, gli hook, gli stati del
-banco (la tabella «Dal prototipo»). Il confronto «Barra: nuova / di prima»
-mostra le due barre negli stessi stati.
-Casi limite: 700 px con la scheda della tabella accesa (tutte le schede
-nella fila, nessuna tagliata); un nome di tabella lunghissimo (i puntini nel
-campo del nome); la sola lettura (i comandi spenti si riconoscono, il perché
-nel suggerimento); i token ad alto contrasto (`sheet-light-high.css`,
-`sheet-dark-high.css`); i colori forzati (la scheda scelta la segna il
-contorno del kit, il vassoio e i fili diventano bordi); Alt e F10 (le
-pastiglie non escono dalla barra); la barra ritirata (Ctrl+F1, il pulsante
-in fondo alla fila); un gruppo raccolto e il suo riquadro; la tavolozza; un
-foglio appena sotto e appena sopra i 900 px; una finestra documento
-(`document/window.ts` dà lo stesso contenitore `sheet`); il movimento
-ridotto e il livello calmo (il velo arriva al suo posto senza scorrere: lo
-decide `moto/`).
+(T18…)», il blocco della variante che sceglie D-6, il gruppo che si apre sul
+posto, l'hook, gli stati del banco (la tabella «Dal prototipo»). Il confronto
+«Barra: nuova / di prima» mostra le due barre negli stessi stati; lo script
+della pagina resta nel prototipo.
+Casi limite: 700 px con la sezione della tabella accesa (tutte le sezioni nel
+pozzetto, nessuna tagliata; un foglietto aperto e gli altri raccolti); un
+nome di tabella lunghissimo (i puntini nella sezione e nel campo del nome);
+un foglietto che da solo non ci sta (`data-dense`: i gettoni senza nome);
+una larghezza nuova che fa posto a tutti (nessun foglietto raccolto, e
+`data-open` se ne va); la lettera di Alt di un foglietto raccolto (si apre e
+mostra le lettere dei suoi comandi); Esc, un altro foglietto aperto, una
+sezione cambiata; la sola lettura (i comandi spenti si riconoscono, il
+perché nel suggerimento); i token ad alto contrasto
+(`sheet-light-high.css`, `sheet-dark-high.css`); i colori forzati (la
+scelta la segna il contorno del kit, il pozzetto, il vassoio e i foglietti
+diventano bordi); Alt e F10 (le pastiglie non escono dalla barra); la barra
+ritirata (Ctrl+F1, il pulsante in fondo alla fila, il doppio clic su una
+sezione) e la sbirciata; la tavolozza; un foglio appena sotto e appena sopra
+i 900 px; una finestra documento (`shells/scrittoio/document/window.ts` dà
+lo stesso contenitore `sheet`); ciò che si apre dentro la griglia (il campo della
+cella, i suggerimenti della formula, il tasto destro, gli oggetti) resta
+sopra, ora che `.grid-viewport` ha un `z-index`; la barra dei documenti e
+quella delle tabelle con un gruppo raccolto (il riquadro di sempre).
 Fatto quando: le foto del banco della barra (le scene `grid-*` e quelle
 nuove), chiara e scura, piena e 700 px, corrispondono al prototipo con la
-barra nuova; la barra dei documenti e quella delle tabelle non cambiano: le
-regole che nominano `.rich-ribbon-…` sono le stesse prima e dopo, tolti i
-selettori `.grid-ribbon-…`, e ogni selettore nuovo comincia da
-`.grid-ribbon` (una prova scritta nel rapporto), e nella CI `bench:verify`
-trova invariate le scene dei documenti e delle tabelle (`document-*`,
-`window-document`, `mobile-document*`, `live-14-tabella-attiva`,
-`slash-05-tabella`), senza baseline nuove per loro; i test del tema
+barra nuova e la variante scelta; la barra dei documenti e quella delle
+tabelle non cambiano: le regole che nominano `.rich-ribbon-…` sono le stesse
+prima e dopo, tolti i selettori `.grid-ribbon-…`, e ogni selettore nuovo
+comincia da `.grid-ribbon`, salvo `.grid-formula-bar`, `.grid-viewport` e
+`.grid-sheets` (il piano e il fondo per la tenda) e, con la variante C, i
+due selettori sulla radice (una prova scritta nel rapporto), e nella CI
+`bench:verify` trova invariate le scene dei documenti e delle tabelle
+(`document-*`, `window-document`, `mobile-document*`,
+`live-14-tabella-attiva`, `slash-05-tabella`), senza baseline nuove per
+loro; `kit/ribbon/ribbon.test.ts` prova il gruppo che si apre sul posto
+(`aria-expanded`, `aria-controls`, niente `aria-haspopup`, Invio, ↓, la
+lettera di Alt, Esc, `data-open`, `data-dense`, un gruppo alla volta) e,
+senza l'opzione, il riquadro di sempre; i test del tema
 (`theme/scrittoio/anatomia.test.ts`, `theme/skin.test.ts`,
 `theme/structure.test.ts`, `theme/contrast.test.ts`,
 `theme/forced-colors.test.ts`), `npm run theme:verify`, `npm run typecheck`
 e `bench:a11y` verdi.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare
-  Aspetta: il sì dell'utente al prototipo rifatto di T12 e la risposta a D-5.
+  Aspetta: il sì dell'utente al prototipo rifatto una terza volta di T12.
 
-Dopo K3, non in K3: lo stesso stile passa alla barra dei documenti, a quella
-delle tabelle e alle altre modalità spostando queste regole da
-`.grid-ribbon-…` al kit (`kit/ribbon/`: una pelle sola per ogni barra del
-kit, con selettori che non dipendono dal prefisso); con quel passo arriva,
-se serve, l'impostazione dei nomi dei gruppi (D-5 (c)), una volta sola per
-tutte le barre.
+## T19 · Il movimento della barra dei fogli
+
+Perché: l'utente vuole le animazioni «predisposte» (la risposta a D-5). Il
+prototipo mostra quali movimenti, con «Movimento: sì / ridotto». Li fa
+`moto/`, come ogni movimento di Fub: niente transizioni CSS (dentro
+`.pane-editor` le spegne `skin/motion.css`), niente timer sparsi.
+Tocca: `apps/client/src/kit/ribbon/ribbon-motion.ts` e
+`kit/ribbon/ribbon-motion.test.ts` (nuovi), `kit/ribbon/ribbon.ts`
+(un'opzione nuova di `RibbonOptions` e le chiamate al movimento),
+`editors/grid/ribbon/ribbon.ts` (passa l'opzione),
+`moto/flip.ts` e `moto/flip.test.ts` (due campi nuovi di `FlipOptions`),
+`theme/scrittoio/structure.css` e `skin/editors.css` (solo se servono, per
+gli avvisi, accanto alle regole di T18), `apps/client/bench/motion-rules.mjs`
+(le coreografie), `docs/architecture/grid-surface.md` («La barra
+multifunzione»).
+Non toccare: le costanti di `moto/spring.ts` (`SPRINGS`, `DURATION`,
+`PRESS_SCALE`, `STAGGER_MS`, `STAGGER_MAX`) e `moto/level.ts`; `kit/tabs.ts`
+(l'evidenza scorre già); `ui/menu.ts` (il menu «Comandi» arriva come ogni
+menu di Fub); il CSS di T14 e di T15; le barre dei documenti e delle tabelle
+(non passano l'opzione); le baseline del banco.
+Dipende da: T18, T14, T15 (toccano gli stessi file)
+Cosa fare:
+- Il movimento sta in un modulo solo, `kit/ribbon/ribbon-motion.ts`, acceso
+  da un'opzione nuova di `RibbonOptions` (`motion?: boolean`), che passa
+  soltanto `editors/grid/ribbon/ribbon.ts`. Il modulo riceve gli elementi
+  della barra e il `Lifetime` della barra: ogni corsa vive in lui, e quando
+  la barra si smonta non resta niente (`check-listeners`). Lo stato cambia
+  sempre prima e il movimento lo segue: lo stato finale, con il movimento e
+  senza, è lo stesso al pixel.
+- Le costanti stanno in cima al modulo, con il nome del prototipo:
+  `TAB_TRAVEL` (8 px), `FOLD_TRAVEL` (6 px), `ENTER_SCALE` (0,96),
+  `LIFT_TRAVEL` (2 px, solo con la variante C). Molle e tempi sono quelli di
+  `moto/` (`SPRINGS.snap`, `soft`, `wide`; `DURATION.state`, `swap`;
+  `STAGGER_MS`, `STAGGER_MAX`).
+- `moto/flip.ts`: due campi nuovi di `FlipOptions`, di serie spenti, e
+  `flip.test.ts` li prova. `edge: "top"` misura lo spostamento dal bordo di
+  sopra invece che dal centro (la formula e la griglia cambiano altezza
+  mentre salgono); `lift`, un elemento e quanti px più su parte (la barra
+  gli passa il foglietto e `LIFT_TRAVEL`: `moto/` non conosce le costanti
+  della barra). Senza i due campi `flip` fa ciò che fa già.
+- I movimenti, come nel prototipo:
+  - sezione: l'evidenza scivola (già in `kit/tabs.ts`); i foglietti della
+    sezione nuova entrano uno dopo l'altro (`stagger`), da `TAB_TRAVEL` px
+    nel verso della sezione, con l'opacità, molla `soft`;
+  - ritiro (Ctrl+F1, il pulsante, il doppio clic su una sezione): lo stato
+    cambia prima; il vassoio resta fermo e svanisce come immagine
+    (`prepareExit` e `exitGhost`, l'immagine dentro `.grid-ribbon`, in
+    `DURATION.swap`), mentre la formula e la griglia gli salgono sopra
+    (`flip` con `edge: "top"`, `DURATION.swap` ed `easing: "ease-out"`):
+    tutto entro i 140 ms di ogni uscita di Fub;
+  - riapertura e sbirciata: la formula e la griglia scendono (`flip` con
+    `edge: "top"`, molla `wide`) e il vassoio riappare (`enter`, molla
+    `wide`, `whenReduced: "fade"`); se si riapre a metà del ritiro, tutto
+    torna indietro da dov'è;
+  - fisarmonica: aprire o richiudere un foglietto fa scivolare gli altri al
+    posto nuovo (`flip` con `scale: false`, molla `snap`); il contenuto del
+    foglietto aperto scende da `FOLD_TRAVEL` px, molla `soft`;
+  - solo con la variante C: il foglietto che si apre sta nella stessa corsa
+    con `lift`: l'ombra cresce subito (il CSS di T18) e lui si posa con la
+    molla `snap`; al passaggio del puntatore o del fuoco non si alza;
+  - premere: i pulsanti della barra usano `pressable` del kit
+    (`kit/press.ts`: giù al 97 %, su con la molla `snap`);
+  - la sezione per la selezione che compare: opacità e scala da
+    `ENTER_SCALE` (`enter`, molla `soft`);
+  - lettere di Alt: dissolvenza di `DURATION.state` (90 ms).
+- Ridotto e calmo li decide `moto/`: con «ridotto» ogni corsa salta e il
+  vassoio che torna appare soltanto in una dissolvenza; con la variante C
+  cambia soltanto l'ombra; il livello calmo ammorbidisce le molle da sé.
+- Gli avvisi sotto la barra (`.grid-notice`, `.grid-draft-notice`, fra la
+  barra e la formula in `engine.ts`) salgono e scendono con la tenda: entrano
+  nella stessa corsa e prendono il piano e il fondo della formula, con le
+  regole accanto a quelle di T18. Se non si può, il ritiro con un avviso in
+  vista cambia stato senza la tenda, e il rapporto lo dice.
+- Le coreografie in `bench/motion-rules.mjs`, con
+  `sources: ["src/kit/ribbon/ribbon-motion.ts"]`: il cambio di sezione; il
+  ritiro e la riapertura (`exit: true`); la fisarmonica a 700 px (aprire e
+  richiudere un foglietto); la sezione della tabella che compare. Così
+  `motion.test.ts` resta verde (ogni file di `src/kit` che fa partire una
+  corsa ha la sua coreografia, `UNCOVERED` resta vuoto).
+- In `grid-surface.md`, «La barra multifunzione»: una frase sul movimento e
+  sul suo padrone (`ribbon-motion.ts`, acceso solo dai fogli).
+Dal prototipo: le corse di «Movimento: sì» e di «Ridotto», le costanti
+`TAB_TRAVEL`, `FOLD_TRAVEL`, `ENTER_SCALE` e `LIFT_TRAVEL`, la tenda col
+bordo di sopra (`edge` di `flipEls` nello script), le coreografie (la
+tabella «Dal prototipo»). Lo script del prototipo non si copia: le corse si
+scrivono con `moto/`.
+Casi limite: un gesto nuovo a metà corsa (un'altra sezione, Ctrl+F1 due
+volte di fila, Esc mentre il foglietto si apre): si riparte da posa e
+velocità correnti, niente torna da zero; nel ripiego il foglietto che si
+apre passa per un attimo sotto il vicino di destra, che si dipinge dopo di
+lui (come nel prototipo: un cassetto che esce; nessuno `z-index` durante la
+corsa); il ritiro con il menu «Comandi» o la tavolozza aperti; la
+sbirciata che si chiude da sola (un clic fuori); la barra smontata a metà
+corsa (una finestra chiusa, una cartella cambiata); un foglio sotto i
+900 px; una finestra documento; il movimento ridotto del sistema e quello
+scelto in Fub; il livello calmo; i colori forzati; le varianti A e B
+(niente `lift`); un avviso in vista.
+Fatto quando: `npm run bench:motion` è verde con le coreografie nuove (stato
+finale uguale con e senza movimento, niente di vivo a corsa finita, solo
+`transform` e `opacity`, si torna indietro a metà, il ritiro entro 140 ms);
+`motion.test.ts` è verde; `flip.test.ts` prova `edge` e `lift` e che senza di
+loro niente cambia; `kit/ribbon/ribbon-motion.test.ts` prova che con
+«ridotto» non parte nessuna corsa (salvo la dissolvenza del vassoio) e che
+lo smontaggio non lascia niente; `check-listeners` e `npm run typecheck`
+verdi.
+Prova: scripts/check.sh --rapido
+Stato: [ ] da fare
+  Aspetta: il sì dell'utente al prototipo rifatto una terza volta di T12.
+
+Dopo K3, non in K3: lo stesso stile e lo stesso movimento passano alla barra
+dei documenti, a quella delle tabelle e alle altre modalità, spostando le
+regole da `.grid-ribbon-…` al kit (`kit/ribbon/`: una pelle sola per ogni
+barra del kit, con selettori che non dipendono dal prefisso) e accendendo le
+due opzioni di T18 e T19 per tutti; con quel passo arriva, se serve,
+l'impostazione dei nomi dei gruppi (D-5 (c)), una volta sola per tutte le
+barre.
 
 ## Il piano dopo: la memoria della WebView
 
