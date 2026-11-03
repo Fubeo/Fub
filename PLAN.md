@@ -1037,7 +1037,7 @@ dopo il primo centinaio; senza il bersaglio, l'errore dice che cosa
 installare.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npx
 vitest run src/editors/canvas
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base f65a60a3
   Risposta (2026-11-03): l'utente approva la riga di `CLAUDE.md` e di
   `CONTRIBUTING.md` con il bersaglio `wasm32-unknown-unknown`. La parte di
   `.github/workflows/ci.yml` la fa l'orchestratore, non il coder.
