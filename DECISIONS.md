@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · K3 · risposta dell'utente al terzo prototipo della barra: la
+  variante C (i riquadri sollevati) e le animazioni piacciono («stupenda»,
+  l'apertura sul posto di Allineamento e Carattere «bellissima e comoda»,
+  anche pensando al telefono). D-6 = C; A e B non piacciono e restano come sono, senza altro lavoro. Un solo difetto di C, che blocca
+  l'approvazione del gruppo chiuso: il gruppo ripiegato (nome sopra, icona e
+  freccia sotto, tanto spazio vuoto, proporzioni sbilanciate) è «grezzo» e
+  va ridisegnato dal pianificatore prima di T18. Chiesto anche di
+  pianificare le celle della griglia (oggi sulla 1432 ci sono difetti di
+  disegno e animazioni povere) allo stesso livello della barra.
 - 2026-11-03 · K3 · T11 integrato (95cd097e..1cfcca49): ogni DocumentSession
   ha una chiave di apertura, fatta prima della lettura e chiusa da un'uscita
   sola (#release), e tutte le letture e scritture della sessione la passano;
