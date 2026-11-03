@@ -425,7 +425,7 @@ impl Drop for ControlServer {
     }
 }
 
-fn fresh_token() -> std::io::Result<String> {
+pub(crate) fn fresh_token() -> std::io::Result<String> {
     use ring::rand::SecureRandom;
     let mut bytes = [0u8; 32];
     ring::rand::SystemRandom::new()
