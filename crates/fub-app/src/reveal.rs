@@ -3,7 +3,8 @@
 //!
 //! La voce arriva come percorso relativo alla radice del vault, e resta dentro
 //! il vault: niente `..`, niente percorsi assoluti, e un collegamento che porta
-//! fuori si riconosce dopo averlo seguito. Il programma si chiama con il
+//! fuori si riconosce dopo averlo seguito (`fub_host::vault_path`, la stessa
+//! regola di «Apri con» un'app Craft). Il programma si chiama con il
 //! percorso come argomento, mai attraverso una shell (`print.rs`).
 //!
 //! Mostrare apre il file manager sulla cartella della voce, con la voce
@@ -16,11 +17,11 @@
 //! (`.desktop`, `.exe`, `.app`, …), si mostra e non si apre, perché aprirlo
 //! vorrebbe dire eseguirlo.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 
-use fub_abi::text::{Arg, Text};
 use fub_abi::PluginError;
+use fub_host::vault_path::inside;
 
 use crate::print::{launched, opener};
 
@@ -65,51 +66,6 @@ fn outcome(taken: bool) -> RevealOutcome {
     } else {
         RevealOutcome::NoOpener
     }
-}
-
-/// Il percorso sul disco della voce `relative`, se è dentro `root` e c'è.
-fn inside(root: &Path, relative: &str) -> Result<PathBuf, PluginError> {
-    let refused = || {
-        PluginError::PermissionDenied(Text::message(
-            "host.reveal.outside",
-            vec![Arg::text("path", relative)],
-        ))
-    };
-    let mut path = root.to_path_buf();
-    for part in relative.split('/').filter(|part| !part.is_empty()) {
-        if matches!(part, "." | "..") || part.contains(['\\', ':']) {
-            return Err(refused());
-        }
-        path.push(part);
-    }
-    let found = path
-        .canonicalize()
-        .map_err(|_| PluginError::NotFound(relative.to_string().into()))?;
-    let root = root.canonicalize().map_err(|error| {
-        PluginError::Io(Text::message(
-            "host.reveal.root",
-            vec![Arg::text("reason", error.to_string())],
-        ))
-    })?;
-    if !found.starts_with(&root) {
-        return Err(refused());
-    }
-    Ok(plain(found))
-}
-
-/// Il percorso come lo legge chi lo riceve: su Windows `canonicalize` dà la
-/// forma `\\?\C:\…`, che `explorer.exe` non apre.
-fn plain(path: PathBuf) -> PathBuf {
-    if cfg!(windows) {
-        let text = path.to_string_lossy();
-        if let Some(rest) = text
-            .strip_prefix(r"\\?\")
-            .filter(|rest| !rest.starts_with("UNC\\"))
-        {
-            return PathBuf::from(rest);
-        }
-    }
-    path
 }
 
 /// Vero se aprire `path` vorrebbe dire eseguirlo.
@@ -208,44 +164,6 @@ fn file_uri(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn an_entry_stays_inside_the_vault() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join("vault");
-        std::fs::create_dir_all(root.join("cartella")).unwrap();
-        std::fs::write(root.join("cartella/nota.md"), "x").unwrap();
-        std::fs::write(dir.path().join("fuori.md"), "x").unwrap();
-        let found = inside(&root, "cartella/nota.md").unwrap();
-        assert!(found.ends_with("cartella/nota.md"), "{found:?}");
-        assert!(inside(&root, "").is_ok(), "the root itself");
-        for escape in [
-            "../fuori.md",
-            "cartella/../../fuori.md",
-            "./nota.md",
-            "a\\b",
-        ] {
-            assert!(
-                matches!(inside(&root, escape), Err(PluginError::PermissionDenied(_))),
-                "{escape}"
-            );
-        }
-        assert!(matches!(
-            inside(&root, "manca.md"),
-            Err(PluginError::NotFound(_))
-        ));
-        #[cfg(unix)]
-        {
-            std::os::unix::fs::symlink(dir.path().join("fuori.md"), root.join("ponte.md")).unwrap();
-            assert!(
-                matches!(
-                    inside(&root, "ponte.md"),
-                    Err(PluginError::PermissionDenied(_))
-                ),
-                "a link that leads out is outside"
-            );
-        }
-    }
 
     #[test]
     fn a_program_is_shown_and_not_opened() {

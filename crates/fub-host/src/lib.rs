@@ -110,6 +110,8 @@ pub mod mount;
 #[cfg(feature = "http-client")]
 pub mod net;
 pub mod obsidian_import;
+/// «Apri con»: quali app Craft aprono un file del vault, e aprirlo con una.
+pub mod open_with;
 #[cfg(feature = "http-client")]
 pub mod publish;
 mod query;
@@ -130,6 +132,7 @@ pub mod theme;
 #[cfg(feature = "http-client")]
 pub mod updates;
 pub mod uri_inbox;
+pub mod vault_path;
 pub mod vaults;
 /// **Chi aspetta cosa** fra il turno di scrittura e l'istanza di un componente
 /// (FUB-019): il grafo che lascia cedere a chi sta dentro il guest.

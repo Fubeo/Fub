@@ -1780,6 +1780,18 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.reveal.outside", "{path} è fuori dal vault.")
         .with("host.reveal.root", "La cartella del vault non si legge: {reason}")
         .with(
+            "host.open_with.off",
+            "Le app Craft sono spente in questo vault: accendi il componente Craft.",
+        )
+        .with("host.open_with.unknown_editor", "«{editor}» non è un'app che Fub conosce.")
+        .with("host.open_with.wrong_kind", "{app} non apre {path}.")
+        .with(
+            "host.open_with.not_installed",
+            "{app} non è installata su questo computer.",
+        )
+        .with("host.open_with.missing", "{path} non c'è più nel vault.")
+        .with("host.open_with.launch_failed", "{app} non si è avviata.")
+        .with(
             "host.mobile.shared_path",
             "La cartella condivisa non ha un percorso utilizzabile.",
         )
@@ -2336,6 +2348,18 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.viewer.not_open", "The web viewer is not open.")
         .with("host.reveal.outside", "{path} is outside the vault.")
         .with("host.reveal.root", "The vault folder cannot be read: {reason}")
+        .with(
+            "host.open_with.off",
+            "The Craft apps are off in this vault: turn on the Craft component.",
+        )
+        .with("host.open_with.unknown_editor", "“{editor}” is not an app Fub knows.")
+        .with("host.open_with.wrong_kind", "{app} does not open {path}.")
+        .with(
+            "host.open_with.not_installed",
+            "{app} is not installed on this computer.",
+        )
+        .with("host.open_with.missing", "{path} is no longer in the vault.")
+        .with("host.open_with.launch_failed", "{app} did not start.")
         .with(
             "host.mobile.shared_path",
             "The shared folder has no usable path.",

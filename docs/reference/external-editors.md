@@ -2,7 +2,8 @@
 
 > **Ambito:** le app Craft che Fub conosce, i file che aprono e come Fub le
 > avvia.
-> **Fonti autorevoli:** `crates/fub-format-craft/src/apps.rs`.
+> **Fonti autorevoli:** `crates/fub-format-craft/src/apps.rs`,
+> `crates/fub-host/src/craft/open_with.rs`.
 
 I file Craft si modificano nelle loro app: VectorCraft, PhotoCraft,
 FigCraft e LightCraft, più PdfCraft, GridCraft e WordCraft per gli altri
@@ -57,3 +58,56 @@ aspetta: annullare il job ferma il gruppo. Se Fub esce mentre il job aspetta,
 nessuno la ferma più e la CLI, che ha un gruppo suo, arriva in fondo da sola.
 Su Windows il tempo e l'annullamento fermano solo il processo della CLI, non
 i processi che ha avviato lei.
+
+## Apri con
+
+«Apri con» chiede due cose all'host, le stesse per il menu della shell, per
+l'MCP e per il prestito di un documento (`crates/fub-host/src/open_with.rs`):
+quali app aprono un file (`Host::external_editors`) e aprirlo con una
+(`Host::open_with`). Col componente `fub.craft` spento, o senza la feature
+`craft`, nessuna app apre niente. Senza un documento la lista ha tutte e sette
+le app, perché la shell sappia se ce n'è almeno una installata.
+
+Un file arriva all'app in uno di tre modi, provati in quest'ordine
+(`crates/fub-host/src/craft/open_with.rs`):
+
+1. **Già aperta** (`in_running`): l'app l'ha avviata Fub, non è uscita e ha un
+   canale col token che Fub le ha dato; il file passa dal canale. Se il
+   canale non risponde si passa al modo dopo.
+2. **Passato alla finestra** (`forwarded`): l'app tiene una finestra sola su
+   questo sistema (PhotoCraft e PdfCraft su Linux e Windows); Fub la avvia
+   col file e lei lo passa alla finestra che ha già, se c'è.
+3. **Processo nuovo** (`new_process`): ogni altra app parte col file.
+
+«Già aperta» vuol dire «avviata da Fub e non ancora uscita»: Fub tiene un
+registro delle app che ha avviato, una voce per app col processo dell'ultimo
+avvio, che cade quando quel processo esce. Un'app aperta dal sistema o dalla
+persona Fub non la vede.
+
+Fub non parla con un canale senza token: un canale senza autenticazione lo
+può usare qualunque programma della macchina, e la «chiave» di WordCraft ha
+un formato che nessuno ha documentato. Nessuna delle sette app ha ancora un
+canale con un token e una porta nota, quindi il primo modo non scatta mai
+con loro.
+
+Il programma riceve il percorso canonico e assoluto del file, come un
+argomento solo: un nome che comincia con `-` non diventa un'opzione, uno con
+gli spazi resta intero, e un vault su un disco montato altrove arriva col
+percorso vero. Un Flatpak parte con `flatpak run ai.storyteller.<id> <file>`
+(`flatpak` in `/usr/bin` o `/bin`), un pacchetto di macOS con `open -a`.
+PdfCraft riceve la pagina, `--page N`, prima del file (su macOS dopo
+`--args`); le altre app ignorano la pagina.
+
+Ogni rifiuto ha la sua chiave nel catalogo del core:
+
+| Chiave | Quando |
+|---|---|
+| `host.open_with.off` | il componente `fub.craft` è spento |
+| `host.open_with.unknown_editor` | l'app non è fra le sette |
+| `host.open_with.wrong_kind` | l'app non apre quell'estensione |
+| `host.open_with.not_installed` | l'app non si trova su questo computer |
+| `host.reveal.outside` | il percorso esce dal vault |
+| `host.open_with.missing` | il file non c'è più |
+| `host.open_with.launch_failed` | il programma non è partito |
+
+Gli errori dicono il nome dell'app, mai il percorso del programma.
