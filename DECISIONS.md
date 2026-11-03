@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · K3 · T10 integrato (d94cd18f..ed10cc56): le letture semplici
+  non aprono un documento nel motore, solo una chiave di apertura (OpenKey)
+  lo tiene aperto; quando le chiavi sono troppe si chiude quella usata meno
+  di recente (LRU) e non la più vecchia, perché un documento appena
+  riguardato non deve perdere la sua prova; Host::open_keys esiste per i
+  test e per l'host finto; la pagina motori.md la aggiorna T11 · il piano
+  diceva «la più vecchia», ma con l'LRU un documento in uso non si richiude
+  sotto le mani.
 - 2026-11-03 · K3 · D-5 (b): i nomi dei gruppi sulla barra dei fogli
   restano, ma discreti (grigi, poco evidenti, eleganti); il prototipo
   rifatto non è approvato e si rifà una terza volta, con un'organizzazione

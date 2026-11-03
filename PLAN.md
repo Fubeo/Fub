@@ -734,7 +734,7 @@ IPC verdi con le forme nuove; il test del fake (un'apertura conta, una
 chiusura scala). `ipc-contract.md` descrive lettura semplice e apertura;
 `node .github/scripts/check-doc-links.mjs` verde.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base ac0e8882
+Stato: [x] fatto · ed10cc56 · check --rapido verde tranne un test a tempo di grid/engine.test.ts (carico 20), verde da solo; al primo giro anche headless::close_a_vault… (verde 5 volte da solo) e un test di fub-wasm-host, verdi al secondo
   Risposta (2026-11-03): l'utente dà l'OK al cambio dell'IPC (`read_document`
   e `write_document` con `open?`, `document_closed` con `{open}`, al più 1024
   chiavi per vault).
