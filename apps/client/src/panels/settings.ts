@@ -304,6 +304,16 @@ function settleRadioGroup(group: HTMLElement): void {
 }
 
 function selectTab(next: SettingsTab, focus: boolean): void {
+  const owner = settingsLifetime;
+  void changeTab(next).then(() => {
+    if (!focus || owner?.closed || owner !== settingsLifetime) return;
+    tabButtons().find((button) => button.dataset.tab === next)?.focus();
+  });
+}
+
+/// Passa alla scheda `next` e la disegna: lascia l'anteprima del tema se si
+/// esce dalla configurazione, e la riga tenuta in vista non vale più.
+function changeTab(next: SettingsTab): Promise<void> {
   if (tab === "settings" && next !== "settings") {
     void cancelThemePreview();
     cancelCssSnippetsPreview();
@@ -312,11 +322,53 @@ function selectTab(next: SettingsTab, focus: boolean): void {
   pinnedRow = null;
   componentsGeneration++;
   syncToolbar();
+  return render();
+}
+
+/// **Apre le Impostazioni su una voce** (`files.attachment-folder` per
+/// «Cambia cartella» della lavagna): le apre come `#open-settings`, sceglie la
+/// scheda dove la voce sta, la tiene in vista anche sotto un filtro
+/// (`pinnedRow`), la scorre in vista e dà il fuoco al suo campo. Una chiave che
+/// il vault non ha apre le Impostazioni e basta; con le Impostazioni già
+/// aperte cambia soltanto scheda e riga.
+export async function revealSetting(key: string): Promise<void> {
   const owner = settingsLifetime;
-  void render().then(() => {
-    if (!focus || owner?.closed || owner !== settingsLifetime) return;
-    tabButtons().find((button) => button.dataset.tab === next)?.focus();
-  });
+  if (!owner || owner.closed) return;
+  const entries = await settings().catch((): SettingEntry[] => []);
+  if (owner.closed || owner !== settingsLifetime) return;
+  const where = entries.some((entry) => entry.spec.key === key) ? tabOfSetting(key) : null;
+  if (!release) {
+    // Chiuse: la scheda giusta si sceglie prima di aprire, così il primo
+    // disegno è già quello (l'anteprima del tema è caduta con la chiusura).
+    if (where !== null && where !== tab) {
+      tab = where;
+      componentsGeneration++;
+    }
+    if (where !== null) pinnedRow = key;
+    await open();
+  } else if (where !== null && where !== tab) {
+    await changeTab(where);
+  }
+  if (where === null || owner.closed || owner !== settingsLifetime || tab !== where) return;
+  pinnedRow = key;
+  applyFilter();
+  const item = bodyEl.querySelector<HTMLElement>(`[data-setting-key="${CSS.escape(key)}"]`);
+  if (!item) return;
+  const details = item.closest("details");
+  if (details) details.open = true;
+  item.scrollIntoView?.({ block: "center", behavior: reducedMotion() ? "auto" : "smooth" });
+  const field = item.querySelector<HTMLElement>(`[id="setting-${CSS.escape(key)}"]`)
+    ?? item.querySelector<HTMLElement>("input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])");
+  field?.focus({ preventScroll: true });
+}
+
+/// La scheda che disegna la voce `key`: i permessi stanno coi componenti, le
+/// scorciatoie nella loro scheda, il resto nella configurazione (lo stesso
+/// conto di `renderForm`).
+function tabOfSetting(key: string): SettingsTab {
+  if (isPermissionKey(key)) return "components";
+  if (allCommands().some((command) => keybindingKey(command.id) === key)) return "shortcuts";
+  return "settings";
 }
 
 export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {

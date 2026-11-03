@@ -59,6 +59,118 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · N6 · le risposte dell'utente alle domande nuove: D-20 (a), i
+  CSV in un piano suo che finisce con T88; D-21 (a), il titolo sopra la
+  scheda, come Obsidian (da rivedere sul prototipo T25; N4 lo usa per il
+  riquadro dell'inchiostro); D-22 (a), lazo e forme adesso sull'inchiostro
+  di N4 · le consigliate, accettate dall'utente («ci sto»).
+- 2026-11-02 · N6 · Le risposte dell'utente a D-1…D-19 (e merge-n3n4,
+  ci-soglia): la v1 intera di `lavagna.md` (gli estratti di PDF aspettano
+  PdfCraft); i file trascinati vanno dove dice un'impostazione della
+  lavagna, che di serie segue quella delle note; «già nel vault» vuol dire
+  lo stesso contenuto ovunque, con l'impronta come dato derivato, i byte
+  provati uno per uno e dei limiti, e nel dubbio si copia; la pagina del PDF
+  sta nello stato della vista; l'inchiostro si attacca alla pagina e alla
+  cella; si scrive dentro le schede, sulla stessa sessione del riquadro; S9
+  nasce accanto a S3; i sei colori e in più ogni colore esatto; il CSV
+  aspetta il motore dei fogli (D-20); la rotella ha un'impostazione;
+  Ctrl+clic apre un link; il foglio nasce 480×300; N6 va avanti sopra il
+  ramo di N4 e si fonde dopo N3 e N4, con la CI completa e la revisione
+  (T90). Restano D-20, D-21 e D-22 · l'utente ha risposto, e dove la
+  risposta lasciava la scelta il piano ha preso la strada più sicura: nessun
+  byte perso, nessun formato rotto, Obsidian vede la stessa lavagna.
+- 2026-11-02 · N6 · T10: le porte della lavagna stanno in `state/canvas-
+  intake.ts`. Dall'albero si tengono solo gli id che l'host conferma: una
+  domanda sola a `existingDocuments` per tutte le voci, e per i file che
+  l'indice dei documenti non conosce (immagini, PDF) una domanda
+  `vaultEntries` per cartella invece di un `resourceOpen` per file; una nota
+  non confermata si scarta. Dal computer ogni file passa da
+  `depositOrReuse`; le notifiche («N file già nel vault, uso quelli», e la
+  prima volta «Copiati in cartella/» con «Cambia cartella») dicono anche ciò
+  che è stato fatto prima di un errore. `revealSetting` sceglie la scheda
+  dalla chiave (permessi → Componenti, scorciatoie → Scorciatoie, il resto →
+  Impostazioni) e apre un eventuale `<details>`. Resta in `engine.ts` (fuori
+  da T10): se nessuna voce dell'albero è confermata e il trascinamento porta
+  anche `text/plain`, nasce una scheda di testo. Perché: un trascinamento è
+  un dato che chiunque può scrivere, e un file non si copia due volte.
+- 2026-11-02 · N6 · T7: la scheda di foglio legge solo le finestre di celle
+  in vista (al massimo 256×128, scorrimento a righe e colonne intere), riusa
+  paintCell e le classi del foglio, chiude la sessione da ferma e a destroy
+  una volta sola e non chiama mai applyGridBytes; Stale arriva come errore
+  "conflict" e si riprova una volta. La copia: in produzione
+  writeClipboardText scrive con navigator.clipboard, che non accetta
+  un'attesa, quindi la selezione si allarga solo su celle già lette e Ctrl+C
+  non scrive niente se ne trova una non letta (l'orchestratore ha rimandato
+  indietro la prima versione, che copiava vuote le celle mai lette). In v1
+  non mostra grafici, immagini, barre di dati, icone, commenti, riquadri
+  bloccati né lo zoom; il bordo d'accento e «Esc per uscire» li disegna la
+  tela (data-card-entered). Perché: una copia non deve mai contenere dati
+  diversi dal file.
+- 2026-11-02 · N6 · T9: le schede portate sulla lavagna nascono in griglia
+  per righe (ogni colonna larga quanto la sua scheda più larga), ordinate
+  per nome e poi per percorso, agganciate a 8 px e mai sotto 40; il foglio
+  nasce 480×304 invece di 480×300 di D-11, perché 300 non è multiplo di 8;
+  un'immagine senza misura nasce 480×360 (4:3); un PDF largo 360 con
+  l'altezza della prima pagina (senza misura 360×480); un file Craft
+  320×160. DROP_SNAP e DROP_MIN_SIZE copiano le costanti di engine.ts (che
+  porta il DOM) e un test le tiene uguali. Perché: tutto ciò che nasce sta
+  sulla griglia della tela.
+- 2026-11-02 · N6 · T8: la scheda web non fa richieste da sé: mostra
+  indirizzo e dominio, e l'anteprima solo con «Mostra l'anteprima» (una
+  richiesta per clic); l'icona passa solo se è un data: di immagine raster
+  (la regola di safeIcon delle note, perché isAllowedLink ammetterebbe icone
+  http che farebbero rete); un'anteprima fallita resta sobria, col motivo
+  nel suggerimento e il pulsante per riprovare; un indirizzo non valido non
+  ha pulsanti. Tutte le schede dicono lo stato in data-card-state e la
+  specie in data-card-kind (allineate dall'orchestratore: l'immagine usava
+  data-state). Manca una chiave «Scarico l'anteprima…»: per ora «Apro…».
+  Perché: una lavagna aperta non contatta nessun sito senza che lo si
+  chieda.
+- 2026-11-02 · N6 · T6: la scheda PDF disegna la pagina in un canvas fuori
+  dal DOM e la copia in quello visibile (la cache chiude le immagini che
+  scarta), larga scheda × zoom × densità, al più 2× la scheda; la parte in
+  cache è snapshotPart("page-N", larghezza); la pagina di partenza viene da
+  #page con pdfPageFromFragment di pdf-view.ts; PgSu/PgGiù/Home/Fine senza
+  modificatori; un PDF rotto o cifrato dice «Non riesco a mostrare…». Da
+  decidere in T12/T13: un cambio di zoom ridisegna solo se la tela chiama
+  resize() o setMode. Perché: una scheda ferma resta leggibile senza tenere
+  aperto il motore PDF.
+- 2026-11-02 · N6 · T5: la scheda d'immagine riduce alla misura della scheda
+  con una sola decodifica (per JPEG, WebP e BMP la larghezza si legge
+  dall'intestazione), tiene in cache la parte `whole@<larghezza>` come dice
+  canvas-cards.md, mostra l'SVG solo come <img> da blob (mai svg o script
+  nel DOM) e, dipinto, lo tiene in cache come canvas; oltre 64 MiB, HEIC e
+  AVIF dicono «Non riesco a mostrare…» con «Apri». Rischio: il canvas della
+  scheda è una copia del bitmap in cache, quindi la memoria per scheda viva
+  raddoppia; lo stile delle classi nuove spetta a T12/T22. Perché: una foto
+  grande non pesa sulla tela più della sua scheda.
+- 2026-11-02 · N6 · T4: la scheda di nota non rende da sé ma chiede alla
+  shell (NoteCardPort.show, più watch e un open facoltativo per «Apri»);
+  ogni accensione rifà la resa, una scheda ferma non tiene ascoltatori e
+  mostra la resa di prima inerte, un contatore di generazione scarta le
+  risposte tardive; lo stato sta in data-card-state; `#A#B` mostra la
+  sezione più interna. Perché: la tela non importa l'editor di testo e la
+  scheda legge senza mai scrivere il file.
+- 2026-11-02 · N6 · T3: depositOrReuse riusa un file già depositato con gli
+  stessi byte (ricevuta ReusableReceipt, esito SameFile) invece di
+  duplicarlo. Perché: incollare due volte la stessa immagine non riempie il
+  vault di copie.
+- 2026-11-02 · N6 · T1: il contratto delle schede
+  (`editors/canvas/cards.ts`, `docs/reference/canvas-cards.md`). PenQuiet
+  non c'è ancora in main: `cards.ts` ha un tipo strutturale suo, `CardQuiet
+  { defer(key, work) }`, con la chiave `cards`. `snapshotPart` dà sempre
+  `prefisso@larghezza` (multiplo di 32, minimo 32). «Più vicine al centro»
+  si misura dal centro della vista al punto più vicino della scheda; se un
+  `setMode` lancia, le altre schede cambiano lo stesso e l'errore esce alla
+  fine; lo stesso renderer che nomina due volte una specie non è un
+  doppione.
+- 2026-11-02 · N6 · T2: la cache delle immagini ferme
+  (`editors/canvas/card-cache.ts`) ha un tipo suo, `CardCacheSnapshot`,
+  uguale per forma a quello del contratto di T1 senza importarlo; percorso e
+  parte restano chiavi separate (mai unite in una stringa); rimettere la
+  stessa immagine sotto la sua chiave non la chiude; un tetto negativo o NaN
+  vale 0, i byte 0, negativi o NaN contano 1. Il tetto di 64 MiB è un valore
+  di partenza.
 - 2026-11-01 · regole · L'orchestratore e i coder decidono da soli il come
   tecnico, i formati interni, le dipendenze fra crate del workspace e i file
   legati al task; «Chiede sempre» resta per ciò che si vede, il contratto

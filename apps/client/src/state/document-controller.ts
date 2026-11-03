@@ -56,7 +56,7 @@ import { openResourcePort, type ResourceTransport } from "../editors/media/resou
 import { vaultImageSource } from "../editors/text/profiles/markdown/media";
 import { renderMarkdown } from "../editors/text/profiles/markdown/render";
 import { blockIds, type BlockOption } from "../editors/text/profiles/markdown/completions";
-import { depositAttachment, depositFiles, DEFAULT_ATTACHMENT_FOLDER, relativeUrl, type AttachmentDeposit } from "../editors/media/attachment-target";
+import { depositFiles, DEFAULT_ATTACHMENT_FOLDER, relativeUrl, type AttachmentDeposit } from "../editors/media/attachment-target";
 import { createViewStateCrashDeposit } from "../editors/media/recorder-store";
 import { mountRecorderSurface } from "../editors/media/recorder-surface";
 import { printDocument } from "../editors/media/print-view";
@@ -74,13 +74,15 @@ import { linkCardView, requestLinkCard } from "./link-cards";
 import type { Theme } from "../theme/theme";
 import { contentLookPreference, markLook, resolveLook, type Look } from "../theme/content-look";
 import { api } from "../host/ipc";
-import { WITHOUT_PAGE, documentOutline, matchingDocuments, notesByName, renderPrint, resolvedReference, searchExpression, settings, vaultEntries, vaultTags } from "../host/query";
+import { WITHOUT_PAGE, documentOutline, existingDocuments, matchingDocuments, notesByName, renderPrint, resolvedReference, searchExpression, settings, vaultEntries, vaultTags } from "../host/query";
 import { theseDocuments, type PaneMode, type SyntaxForm, type VaultEntry, type ViewContext } from "../host/contract";
 import { existingRecentNotes } from "./recent";
 import { linkPreference, markdownDestination, wikiPathCandidates, type LinkFormat, type LinkPreference } from "./note-links";
 import { onEvent } from "./kernel";
 import { drawingFonts } from "./drawing-fonts";
-import { emit, on, state } from "./store";
+import { emit, on, readState, state, writeState } from "./store";
+import { depositCanvasFiles, resolveCanvasPaths } from "./canvas-intake";
+import { revealSetting } from "../panels/settings";
 import { CASE_KEY, caseOf, toRecover } from "./drafts";
 import { addSheetNotice, clearAllRemovedNotices, clearSheetNotices, dismissSheetNotice, moveSheetNotices, setLimitedMode, setRemovedNotice } from "./sheet-notices";
 import { syntaxForms, unsavedDrafts } from "../host/query";
@@ -849,15 +851,24 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     },
     canvasAttachments: {
       expandFiles: droppedFiles,
-      deposit: async (files, documentId) => {
-        const deposit = await attachmentDeposit(documentId);
-        const paths: string[] = [];
-        for (const file of files) {
-          if (file.size > 64 * 1024 * 1024) throw new Error(t("errors.attachment.too_large", { name: file.name }));
-          const saved = await depositAttachment(deposit, file.name, new Uint8Array(await file.arrayBuffer()));
-          paths.push(saved.receipt.id);
-        }
-        return paths;
+      // Dall'albero: solo gli id che il vault conferma (G1).
+      resolvePaths: (data) => resolveCanvasPaths(data, {
+        existingDocuments,
+        folderEntries: async (folder) => new Set((await vaultEntries(WITHOUT_PAGE, undefined, { path: folder, descendants: false })).items.map((entry) => entry.id)),
+      }),
+      // Dal computer: una copia sola per file, e lo stesso file si riusa (G2).
+      deposit: (files, documentId) => {
+        // Il vault in cui si deposita, preso prima di aspettare: le letture
+        // per riconoscere un doppione vanno allo stesso.
+        const vault = openVaultRoot();
+        return depositCanvasFiles(files, documentId, {
+          deposit: attachmentDeposit,
+          open: (id) => openResourcePort(mediaTransport, id, vault),
+          notify,
+          readState,
+          writeState,
+          changeFolder: () => revealSetting("files.attachment-folder"),
+        });
       },
     },
     onSearchTag: (tag) => deps.searchTag(tag),
