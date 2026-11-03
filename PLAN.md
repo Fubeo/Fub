@@ -2474,7 +2474,7 @@ test -p fub-host --test craft_ranged --test craft` passano, e il `.pcraft` di
 1 GiB dà l'anteprima leggendo meno di 1 MiB.
 Prova: scripts/check.sh --rapido; cargo test -p fub-format-craft --test
 containers
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base a80ae1fb
 
 ## T23 · La domanda e il gesto nella shell
 
