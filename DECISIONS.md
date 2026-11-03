@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- K3 · D-7 (il foglietto chiuso della variante C): l'utente ha scelto
+  l'ibrida il 2026-11-03, due o più chiusi a pila alti 38 px, uno rimasto
+  solo a tessera alta quanto la barra (80 px). Il pianificatore l'ha scritta
+  in T18, nella tabella «Dal prototipo» e nel Cancello; pila, tessera e
+  dorso restano nel prototipo solo per confronto. Le varianti A e B non
+  cambiano. Il piano delle celle della griglia (16 difetti misurati) è un
+  piano a parte, piano/griglia-celle, perché tocca gli stessi file di T14,
+  T15, T18 e T19.
 - 2026-11-03 · K3 · risposta dell'utente al terzo prototipo della barra: la
   variante C (i riquadri sollevati) e le animazioni piacciono («stupenda»,
   l'apertura sul posto di Allineamento e Carattere «bellissima e comoda»,

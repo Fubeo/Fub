@@ -3314,9 +3314,10 @@ input[type="radio"]:not([role="switch"]):checked:disabled {
 .grid-ribbon-group-toggle .grid-ribbon-label { display: none; }
 .grid-ribbon-group-toggle .grid-ribbon-chevron { transform: rotate(-90deg); }
 /* Quando lo spazio manca, prima i pulsanti piccoli perdono il nome; se non
-   basta, lo perdono anche i gettoni del foglietto aperto. */
+   basta, lo perdono anche i gettoni del foglietto aperto (quelli del suo
+   contenuto: il pulsante di un foglietto chiuso tiene il suo nome). */
 .grid-ribbon-panel[data-compact="true"] .grid-ribbon-small .grid-ribbon-label,
-.grid-ribbon-panel[data-dense="true"] .grid-ribbon-large .grid-ribbon-label { display: none; }
+.grid-ribbon-panel[data-dense="true"] .grid-ribbon-group-body .grid-ribbon-large .grid-ribbon-label { display: none; }
 .grid-ribbon-keytip {
   position: absolute;
   left: 50%;
@@ -3729,6 +3730,290 @@ input[type="radio"]:not([role="switch"]):checked:disabled {
   }
 }
 </style>
+<style data-barra="nuova" data-variante="c">
+/* → structure.css (T18, con la variante C: il foglietto chiuso è tutto
+   pulsante; si aggiunge al blocco della geometria, dopo di lui) */
+/* Il foglietto chiuso non ha più il nome sopra e un pulsante vuoto sotto: il
+   pulsante è il foglietto, e il nome ci sta dentro. Come sta dentro lo dice
+   il blocco della forma scelta (qui sotto, una delle tre). */
+.grid-ribbon-group[data-collapsed="true"] > .grid-ribbon-group-label {
+  display: none;
+}
+.grid-ribbon-group-toggle {
+  flex: 1 1 auto;
+  height: auto;
+}
+.grid-ribbon-group-toggle .grid-ribbon-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Al telefono nemmeno coi foglietti tutti chiusi la sezione ci sta sempre:
+   allora il vassoio scorre sotto il dito, senza barra di scorrimento, e il
+   foglietto che si apre si porta in vista. */
+.grid-ribbon-toolbar {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+</style>
+<style data-barra="nuova" data-variante="c">
+/* → skin/editors.css (T18, con la variante C: il foglietto chiuso; dopo la
+   regola di `.grid-ribbon-large`, che il pulsante del foglietto chiuso
+   sovrascrive) */
+/* Il pulsante riempie il foglietto: il velo del passaggio copre tutta la sua
+   carta, col raggio della carta. */
+.grid-ribbon-group[data-collapsed="true"] {
+  padding: 0;
+}
+.grid-ribbon-group-toggle {
+  border-radius: var(--radius-control);
+  color: var(--text);
+}
+</style>
+<style data-barra="nuova" data-variante="c" data-chiuso="ibrida">
+/* → structure.css (T18, variante C, il foglietto chiuso «ibrido», deciso: due
+   chiusi per colonna «a pila», ognuno su una riga; quello che resta solo
+   nella sua colonna è alto quanto un foglietto aperto, «a tessera»; al posto
+   delle regole del vassoio a righe) */
+/* Il vassoio è una griglia di due file che si riempie per colonne: un
+   foglietto aperto le prende tutte e due, uno chiuso una sola, e due chiusi
+   di fila stanno uno sopra l'altro, larghi uguali. L'ordine resta quello della
+   sezione: niente `dense`. */
+.grid-ribbon-toolbar {
+  display: grid;
+  grid-auto-columns: max-content;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, auto);
+}
+.grid-ribbon-group {
+  grid-row: span 2;
+}
+.grid-ribbon-group[data-collapsed="true"] {
+  grid-row: span 1;
+}
+/* L'ultimo chiuso di una fila dispari resta solo nella sua colonna (il kit
+   lo segna con `data-alone`): prende tutte e due le file. */
+.grid-ribbon-group[data-collapsed="true"][data-alone="true"] {
+  grid-row: span 2;
+}
+/* Due a pila: il disegno, il nome accanto e la freccina. */
+.grid-ribbon-group-toggle {
+  justify-content: flex-start;
+}
+/* Un nome lunghissimo («Visualizzazioni cartella di lavoro») finisce coi
+   puntini: quello intero è il nome del pulsante e il suo suggerimento. */
+.grid-ribbon-group-toggle .grid-ribbon-label {
+  max-width: 10em;
+}
+.grid-ribbon-group-toggle .grid-ribbon-chevron {
+  margin-inline-start: auto;
+}
+/* Uno solo: il disegno in un tondo e il nome sotto, in mezzo al foglietto;
+   il nome va a capo una volta, in due righe pari, e uno più lungo finisce
+   coi puntini. */
+.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle {
+  flex-direction: column;
+  justify-content: center;
+  white-space: normal;
+}
+.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle > svg {
+  box-sizing: content-box;
+  padding: 6px;
+}
+.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle .grid-ribbon-label {
+  display: -webkit-box;
+  max-width: 7em;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-align: center;
+  text-wrap: balance;
+}
+.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle .grid-ribbon-chevron {
+  display: none;
+}
+</style>
+<style data-barra="nuova" data-variante="c" data-chiuso="ibrida">
+/* → skin/editors.css (T18, variante C, «ibrido», deciso) */
+/* Due a pila: ognuno è alto metà di un foglietto aperto, e i due, col passo
+   del vassoio fra loro, sono alti quanto lui ((80 − 4) / 2). Il disegno, il
+   nome e la freccina come in un gettone; la freccina, grigia, dice «si apre
+   qui». */
+.grid-ribbon-group[data-collapsed="true"] {
+  min-height: 38px;
+}
+.grid-ribbon-group-toggle {
+  gap: var(--space-3);
+  padding: 0 var(--space-3) 0 var(--space-4);
+}
+.grid-ribbon-group-toggle .grid-ribbon-chevron {
+  color: var(--muted);
+}
+/* Uno solo: alto quanto un foglietto aperto (80), anche quando i foglietti
+   sono tutti chiusi e nessuno dà l'altezza al vassoio, e largo almeno 48 px
+   come una tessera. */
+.grid-ribbon-group[data-collapsed="true"][data-alone="true"] {
+  min-height: 80px;
+}
+.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle {
+  gap: var(--space-2);
+  min-width: 48px;
+  padding: var(--space-2) var(--space-4);
+}
+.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle > svg {
+  border-radius: var(--radius-pill);
+  background: var(--overlay-hover);
+}
+.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle .grid-ribbon-label {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 14px;
+}
+.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle:hover .grid-ribbon-label {
+  color: var(--text);
+}
+</style>
+<style data-barra="nuova" data-variante="c" data-chiuso="pila">
+/* → structure.css (T18, variante C, il foglietto chiuso «a pila»: due chiusi
+   per colonna, ognuno su una riga; al posto delle regole del vassoio a
+   righe) */
+/* Il vassoio è una griglia di due file che si riempie per colonne: un
+   foglietto aperto le prende tutte e due, uno chiuso una sola, e due chiusi
+   di fila stanno uno sopra l'altro, larghi uguali. L'ordine resta quello della
+   sezione: niente `dense`. */
+.grid-ribbon-toolbar {
+  display: grid;
+  grid-auto-columns: max-content;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, auto);
+}
+.grid-ribbon-group {
+  grid-row: span 2;
+}
+.grid-ribbon-group[data-collapsed="true"] {
+  grid-row: span 1;
+}
+/* L'ultimo chiuso di una fila dispari resta solo nella sua colonna (il kit
+   lo segna con `data-alone`): sta in mezzo, non in alto con un buco sotto. */
+.grid-ribbon-group[data-collapsed="true"][data-alone="true"] {
+  grid-row: span 2;
+  align-self: center;
+}
+.grid-ribbon-group-toggle {
+  justify-content: flex-start;
+}
+/* Un nome lunghissimo («Visualizzazioni cartella di lavoro») finisce coi
+   puntini: quello intero è il nome del pulsante e il suo suggerimento. */
+.grid-ribbon-group-toggle .grid-ribbon-label {
+  max-width: 10em;
+}
+.grid-ribbon-group-toggle .grid-ribbon-chevron {
+  margin-inline-start: auto;
+}
+</style>
+<style data-barra="nuova" data-variante="c" data-chiuso="pila">
+/* → skin/editors.css (T18, variante C, «a pila») */
+/* Un chiuso è alto metà di un foglietto aperto: due, col passo del vassoio
+   fra loro, sono alti quanto lui ((80 − 4) / 2). Il disegno, il nome e la
+   freccina come in un gettone; la freccina, grigia, dice «si apre qui». */
+.grid-ribbon-group[data-collapsed="true"] {
+  min-height: 38px;
+}
+.grid-ribbon-group-toggle {
+  gap: var(--space-3);
+  padding: 0 var(--space-3) 0 var(--space-4);
+}
+.grid-ribbon-group-toggle .grid-ribbon-chevron {
+  color: var(--muted);
+}
+</style>
+<style data-barra="nuova" data-variante="c" data-chiuso="tessera">
+/* → structure.css (T18, variante C, il foglietto chiuso «a tessera»: il
+   disegno in un tondo e il nome sotto, in mezzo al foglietto) */
+.grid-ribbon-group-toggle {
+  flex-direction: column;
+  justify-content: center;
+  white-space: normal;
+}
+.grid-ribbon-group-toggle > svg {
+  box-sizing: content-box;
+  padding: 6px;
+}
+/* Il nome va a capo una volta, in due righe pari; un nome più lungo finisce
+   coi puntini. */
+.grid-ribbon-group-toggle .grid-ribbon-label {
+  display: -webkit-box;
+  max-width: 7em;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-align: center;
+  text-wrap: balance;
+}
+.grid-ribbon-group-toggle .grid-ribbon-chevron {
+  display: none;
+}
+</style>
+<style data-barra="nuova" data-variante="c" data-chiuso="tessera">
+/* → skin/editors.css (T18, variante C, «a tessera») */
+/* Alta quanto un foglietto aperto (il nome 16, due file 28 col passo 2, la
+   carta 2 sopra e 4 sotto: 80), anche quando i foglietti sono tutti chiusi e
+   nessuno dà l'altezza al vassoio: il vassoio non cambia mai altezza. */
+.grid-ribbon-group[data-collapsed="true"] {
+  min-height: 80px;
+}
+/* Una tessera è larga almeno 48 px, così «Stili» e «Celle» non restano
+   tanto più strette di «Numeri» e «Modifica» e la fila sembra di pezzi
+   pari; con 56 la Home al telefono non ci starebbe più (sei tessere in 390). */
+.grid-ribbon-group-toggle {
+  gap: var(--space-2);
+  min-width: 48px;
+  padding: var(--space-2) var(--space-4);
+}
+.grid-ribbon-group-toggle > svg {
+  border-radius: var(--radius-pill);
+  background: var(--overlay-hover);
+}
+.grid-ribbon-group-toggle .grid-ribbon-label {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 14px;
+}
+.grid-ribbon-group-toggle:hover .grid-ribbon-label {
+  color: var(--text);
+}
+</style>
+<style data-barra="nuova" data-variante="c" data-chiuso="dorso">
+/* → structure.css (T18, variante C, il foglietto chiuso «a dorso»: stretto,
+   col nome in piedi che si legge dal basso, come sul dorso di un libro) */
+.grid-ribbon-group-toggle {
+  justify-content: center;
+  width: 28px;
+}
+.grid-ribbon-group-toggle > svg,
+.grid-ribbon-group-toggle .grid-ribbon-chevron {
+  display: none;
+}
+.grid-ribbon-group-toggle .grid-ribbon-label {
+  max-height: 64px;
+  writing-mode: vertical-rl;
+  rotate: 180deg;
+}
+</style>
+<style data-barra="nuova" data-variante="c" data-chiuso="dorso">
+/* → skin/editors.css (T18, variante C, «a dorso») */
+/* Alto quanto un foglietto aperto, come la tessera. */
+.grid-ribbon-group[data-collapsed="true"] {
+  min-height: 80px;
+}
+.grid-ribbon-group-toggle {
+  padding: var(--space-4) 0;
+}
+.grid-ribbon-group-toggle .grid-ribbon-label {
+  font-size: var(--text-xs);
+  line-height: 16px;
+}
+</style>
 <style>
 /* → structure.css (nuovo, accanto a `.rich-ribbon-quick`; T14 e T15) */
 .grid-ribbon-quick { display: flex; flex: none; align-items: center; }
@@ -3961,6 +4246,10 @@ body {
 .proto-window[data-larghezza="stretta"] {
   width: 700px;
 }
+/* Un telefono in piedi, come le scene `mobile-*` del banco (390 px). */
+.proto-window[data-larghezza="telefono"] {
+  width: 390px;
+}
 /* solo prototipo: come `.grid-formula-bar` e `.grid-viewport` nei blocchi
    di T18, sopra la barra e col fondo del foglio */
 .proto-formula {
@@ -4093,9 +4382,18 @@ body {
   <div class="proto-field">
     <label for="proto-variante" data-i18n="(solo prototipo)">Variante</label>
     <select id="proto-variante">
-      <option value="c">C, consigliata: i foglietti sollevati</option>
-      <option value="a">A: i foglietti su carta</option>
-      <option value="b">B: senza carta, solo lo spazio</option>
+      <option value="c">C, decisa: i foglietti sollevati</option>
+      <option value="a">A, scartata: i foglietti su carta</option>
+      <option value="b">B, scartata: senza carta, solo lo spazio</option>
+    </select>
+  </div>
+  <div class="proto-field">
+    <label for="proto-chiuso" data-i18n="(solo prototipo)">Gruppo chiuso</label>
+    <select id="proto-chiuso">
+      <option value="ibrida">Ibrida, decisa: due a pila, uno solo alto a tessera</option>
+      <option value="tessera">A tessera: il disegno in un tondo, il nome sotto</option>
+      <option value="pila">A pila: due per colonna, il nome accanto</option>
+      <option value="dorso">A dorso: il nome in piedi, come su un libro</option>
     </select>
   </div>
   <div class="proto-field">
@@ -4112,6 +4410,7 @@ body {
     <select id="proto-larghezza">
       <option value="piena">Piena</option>
       <option value="stretta">700 px</option>
+      <option value="telefono">Telefono, 390 px</option>
     </select>
   </div>
   <div class="proto-field">
@@ -4130,7 +4429,7 @@ body {
         <li>«Comandi» è un gettone pieno prima del pozzetto: aperto prende il velo d'accento. Il menu è quello di Fub e non cambia.</li>
         <li>Il riquadro resta: un vassoio stondato, un tono sotto la carta. Sopra ci sono i gruppi come <b>foglietti</b>: piccole schede stondate, divise dallo spazio e non da righe, col nome in alto a sinistra, piccolo e grigio, scritto normale.</li>
         <li>Una sola taglia: ogni comando è alto 28. Il pulsante grande di Office, icona sopra e nome sotto, diventa un gettone su una riga (icona, nome, freccina); tutto sta su due righe.</li>
-        <li>Quando manca spazio, un foglietto si chiude a fisarmonica: resta il pulsante col suo disegno, alto quanto le due righe. Un clic, Invio o ↓ lo apre sul posto, dentro il vassoio, e gli altri gli fanno posto chiudendosi da destra; Esc lo richiude. Non si apre un riquadro staccato.</li>
+        <li>Quando manca spazio, un foglietto si chiude a fisarmonica. Con C diventa tutto un pulsante, alto quanto un foglietto aperto, nella forma decisa, l’ibrida (sotto, «Il foglietto chiuso, deciso»). Un clic, Invio o ↓ lo apre sul posto, dentro il vassoio, e gli altri gli fanno posto chiudendosi da destra; Esc lo richiude. Non si apre un riquadro staccato. Se il vassoio non basta, come al telefono, scorre di lato e porta in vista il foglietto aperto.</li>
         <li>Se nemmeno così ci sta, i gettoni del foglietto aperto perdono il nome e restano col disegno.</li>
         <li>Il vassoio abbraccia i comandi: la barra è alta 128 invece di 135, e sotto il vassoio restano 4 px prima della barra della formula.</li>
         <li>Le sezioni per la selezione (tabella, grafico, oggetto) si aggiungono in fondo al pozzetto, con un puntino d'accento; il nome lungo finisce coi puntini.</li>
@@ -4141,17 +4440,22 @@ body {
       <ul>
         <li>Sezione: l'evidenza scivola (molla <code>snap</code>) e i foglietti della sezione nuova entrano uno dopo l'altro, 12 ms l'uno, da 8 px nel verso della sezione (molla <code>soft</code>). Si vede con un clic su un'altra sezione.</li>
         <li>Ritiro con Ctrl+F1, col pulsante a destra o con un doppio clic su una sezione: il vassoio resta fermo e svanisce, e la formula con la griglia gli salgono sopra come una tenda, in 140 ms come ogni uscita di Fub. Alla riapertura scendono e lo scoprono, mentre lui riappare (molla <code>wide</code>); se si riapre a metà del ritiro, tutto torna indietro da dov'è. Formula e griglia stanno sopra il vassoio e hanno il fondo del foglio: non si vede mai una cosa attraverso l'altra. Con la barra ritirata, un clic su una sezione mostra il vassoio nello stesso modo.</li>
-        <li>Fisarmonica: i foglietti scivolano al loro posto nuovo senza deformarsi (molla <code>snap</code>) e il contenuto di quello aperto scende da 6 px. Si vede a 700 px, con un clic su un foglietto chiuso.</li>
+        <li>Fisarmonica: i foglietti scivolano al loro posto nuovo senza deformarsi (molla <code>snap</code>) e il contenuto di quello aperto scende da 6 px. Si vede a 700 px o al telefono, con un clic su un foglietto chiuso.</li>
         <li>Solo con C: il foglietto che si apre sul posto si alza di un gradino. La sua ombra cresce subito e lui parte 2 px più su, poi si posa con la molla <code>snap</code>; con «Ridotto» cambia soltanto l'ombra. Al passaggio del puntatore o del fuoco non si alza: la barra si attraversa di continuo, e i foglietti ballerebbero.</li>
         <li>Premere: il pulsante scende subito al 97 % e risale con la molla <code>snap</code>, come gli altri pulsanti di Fub.</li>
         <li>«Comandi» e i suoi sottomenu arrivano con 90 ms di dissolvenza, come ogni menu di Fub.</li>
         <li>La sezione per la selezione che compare: dissolvenza e scala da 0,96 (molla <code>soft</code>). Si vede passando da «A riposo» a «Con una tabella dal nome lungo».</li>
         <li>Lettere di Alt: 90 ms di dissolvenza.</li>
       </ul>
-      <h2>Da decidere guardando</h2>
-      <ol>
-        <li>La carta dei foglietti. C li solleva: cartoncini tondi da ogni lato, con un filo d'inchiostro attorno e un'ombra di contatto corta, un gradino sotto i fogli della scrivania; nella luce scura sono un poco più chiari del vassoio e hanno un filo di luce in alto. A li mette su carta con un orlo sotto soltanto. B li lascia sul vassoio, divisi solo dallo spazio e dal nome. Consiglio C: è il pannello rialzato che Fub usa già, si legge tondo da ogni lato e anche nella luce scura, dove A quasi sparisce, e dice quale foglietto si è aperto. Non è troppo: niente alone, l'ombra è di 1 o 2 px contro i 20 dei fogli.</li>
-      </ol>
+      <h2>Il foglietto chiuso, deciso</h2>
+      <p>Solo per C (la carta è decisa: C). Prima era il nome in alto e, sotto, un pulsante col solo disegno in un angolo: troppo vuoto e sbilanciato. Ora è un pulsante intero, sollevato come i foglietti aperti, con le stesse molle, e la forma decisa è l'<b>ibrida</b>:</p>
+      <ul>
+        <li>Due chiusi di fila stanno <b>a pila</b> nella stessa colonna, uno sopra l'altro: ognuno col disegno, il nome accanto e una freccina grigia, alto metà di un foglietto aperto.</li>
+        <li>Il chiuso che resta <b>solo</b> nella sua colonna (l'ultimo di una fila dispari, o uno fra due foglietti aperti) non resta piccolo a metà altezza: è alto quanto un foglietto aperto, <b>a tessera</b>, col disegno in un tondo chiaro e il nome sotto, in due righe al massimo. Il kit lo segna con <code>data-alone</code>.</li>
+        <li>Si vede a piena larghezza («Modifica», solo), a 700 px («Stili» e «Celle» a pila, «Modifica» alta, con lo stato «Un gruppo chiuso, aperto sul posto»; in Dati «Struttura» da sola) e al telefono (in Layout di pagina «Imposta pagina» e «Stampa» a pila, «Opzioni del foglio» alta; in Inserisci sei a pila e «Testo» alta in fondo al vassoio).</li>
+        <li>Rispetto alla tessera, a 700 px resta aperto un foglietto in più in Inserisci e lo stesso numero altrove; al telefono il vassoio di Inserisci scorre di 54 px invece di 90, e in Dati resta aperto «Ordina e filtra». Con «Numeri» aperto a 700 px «Carattere» resta aperto: niente buco a destra come con la pila.</li>
+      </ul>
+      <p>Le altre tre forme restano in «Gruppo chiuso» per confronto e non vanno nel codice: <b>a tessera</b> (tutti alti, il nome sotto), <b>a pila</b> (tutti a metà altezza, anche quello solo, che sta in mezzo) e <b>a dorso</b> (una costola di 28 px col nome in piedi).</p>
     </div>
   </details>
   <p class="proto-log" role="status" aria-live="polite"></p>
@@ -5049,6 +5353,28 @@ const CONTESTUALI = [{"id":"table","l":"Struttura tabella","kt":"JT"},{"id":"cha
     g.dataset.collapsed = String(on);
     g.querySelector(":scope > .grid-ribbon-group-toggle").hidden = !on;
   }
+  /// Barra nuova: l'ultimo chiuso di una fila dispari di chiusi (nell'ordine
+  /// della sezione) ha `data-alone`: resta solo nella sua colonna, e nella
+  /// forma ibrida diventa alto, a tessera (nella forma «a pila» sta in mezzo).
+  function markAlone(groups) {
+    let run = [];
+    const close = () => {
+      run.forEach((g, i) => {
+        if (run.length % 2 === 1 && i === run.length - 1) g.dataset.alone = "true";
+        else delete g.dataset.alone;
+      });
+      run = [];
+    };
+    for (const g of groups) {
+      if (g.hidden) continue;
+      if (g.dataset.collapsed === "true") run.push(g);
+      else {
+        delete g.dataset.alone;
+        close();
+      }
+    }
+    close();
+  }
   function fit() {
     if (collapsed && !peeking) return;
     const panel = panelOf(selected);
@@ -5059,12 +5385,14 @@ const CONTESTUALI = [{"id":"table","l":"Struttura tabella","kt":"JT"},{"id":"cha
     if (isNew()) panel.dataset.dense = "false";
     else delete panel.dataset.dense;
     for (const g of groups) collapseGroup(g, false);
+    markAlone(groups);
     if (!overflows()) return;
     panel.dataset.compact = "true";
     for (const g of groups.filter((x) => !x.hidden).reverse()) {
       if (!overflows()) break;
       if (g === pinned) continue;
       collapseGroup(g, true);
+      markAlone(groups);
     }
     if (isNew() && overflows()) panel.dataset.dense = "true";
   }
@@ -5081,6 +5409,8 @@ const CONTESTUALI = [{"id":"table","l":"Struttura tabella","kt":"JT"},{"id":"cha
     flipEls(others, () => {
       pin(g);
       fit();
+      // Al telefono il vassoio scorre: il foglietto aperto si porta in vista.
+      g.scrollIntoView({ block: "nearest", inline: "nearest" });
     }, { spring: "snap", lift });
     run(g.querySelector(":scope > .grid-ribbon-group-body"), { from: { y: -FOLD_TRAVEL, opacity: 0 }, spring: "soft" });
     if (focus) controlsOf(g)[0]?.focus();
@@ -5537,6 +5867,7 @@ const CONTESTUALI = [{"id":"table","l":"Struttura tabella","kt":"JT"},{"id":"cha
   const look = {
     barra: document.getElementById("proto-barra"),
     variante: document.getElementById("proto-variante"),
+    chiuso: document.getElementById("proto-chiuso"),
     luce: document.getElementById("proto-luce"),
     larghezza: document.getElementById("proto-larghezza"),
     movimento: document.getElementById("proto-movimento"),
@@ -5546,6 +5877,8 @@ const CONTESTUALI = [{"id":"table","l":"Struttura tabella","kt":"JT"},{"id":"cha
     const barra = look.barra.value;
     const variante = look.variante.value;
     look.variante.disabled = barra !== "nuova";
+    // La forma del foglietto chiuso si sceglie solo nella variante C.
+    look.chiuso.disabled = barra !== "nuova" || variante !== "c";
     // Barra nuova: il pulsante di un foglietto chiuso apre il contenuto sul
     // posto, quindi è un «mostra e nascondi» e non apre un riquadro.
     for (const g of ribbon.querySelectorAll(".grid-ribbon-group-toggle")) {
@@ -5560,7 +5893,10 @@ const CONTESTUALI = [{"id":"table","l":"Struttura tabella","kt":"JT"},{"id":"cha
     }
     if (barra !== "nuova") pin(null);
     for (const s of document.querySelectorAll("style[data-barra]")) {
-      const on = s.dataset.barra === barra && (!s.dataset.variante || s.dataset.variante === variante);
+      const on =
+        s.dataset.barra === barra &&
+        (!s.dataset.variante || s.dataset.variante === variante) &&
+        (!s.dataset.chiuso || s.dataset.chiuso === look.chiuso.value);
       s.media = on ? "all" : "not all";
     }
     document.documentElement.dataset.luce = look.luce.value;
@@ -5698,7 +6034,7 @@ const CONTESTUALI = [{"id":"table","l":"Struttura tabella","kt":"JT"},{"id":"cha
     });
   window.addEventListener("resize", again);
 
-  // Lo stato dall'indirizzo (#stato=menu&luce=scura&larghezza=stretta&barra=prima&variante=b&movimento=ridotto), per le foto.
+  // Lo stato dall'indirizzo (#stato=menu&luce=scura&larghezza=stretta&barra=prima&variante=b&chiuso=tessera&movimento=ridotto), per le foto.
   const asked = new URLSearchParams(location.hash.slice(1));
   for (const [key, select] of Object.entries(look)) if (asked.get(key)) select.value = asked.get(key);
   applyLook();

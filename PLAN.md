@@ -28,8 +28,8 @@ Assunzioni: A1–A10 qui sotto, decise dall'orchestratore il 2026-11-02 di notte
 (l'utente non poteva rispondere). L'utente ha risposto il 2026-11-02 (D-1…D-4,
 più il merge e la soglia della CI): A3 resta, A8 e A10 cambiano.
 Ondate: T1 T2 T3 | T4 T5 T6 | T7 T8 | T9 T12 | T10 T13 T18 | T11 T14 | T15 |
-T16 T19 | T17 (T13, T14, T15, T18 e T19 partono solo dopo il sì dell'utente al
-prototipo di T12; T11 e T13 non girano insieme, perché toccano tutte e due
+T16 T19 | T17 (T13, T14, T15, T18 e T19 partono dopo il sì dell'utente al
+prototipo di T12, arrivato il 2026-11-03; T11 e T13 non girano insieme, perché toccano tutte e due
 `docs/architecture/motori.md`; T18 va prima di T14, perché tutti e due
 toccano `kit/ribbon/ribbon.ts`, `structure.css`, `skin/editors.css`,
 l'anatomia e il banco, e il gettone «Comandi» di T14 sta sulla barra di T18;
@@ -43,8 +43,13 @@ terza volta il 2026-11-03 (le sezioni in un pozzetto, i gruppi come foglietti
 sul vassoio col nome piccolo e grigio, una sola taglia di pulsanti, il
 foglietto raccolto che si apre sul posto, il movimento con «Movimento: sì /
 ridotto»; tre varianti: C, consigliata, con i foglietti sollevati, A con la
-carta sotto i foglietti e B senza); approvato: — (aspetta il sì
-dell'utente; l'orchestratore scrive qui la data).
+carta sotto i foglietti e B senza), rifatto una quarta volta il 2026-11-03
+soltanto nel foglietto chiuso della variante C (tre forme in «Gruppo
+chiuso»: la tessera, consigliata, la pila e il dorso; la larghezza
+«Telefono, 390 px»), e lo stesso giorno, dopo la risposta a D-7, con la
+forma ibrida, decisa (due chiusi a pila, e quello che resta solo alto, a
+tessera; le altre tre restano per confronto); approvato il 2026-11-03,
+tutto tranne il foglietto chiuso, che D-7 ha deciso dopo (l'ibrida).
 La finestra dei parametri di T7 è fatta con i pezzi del kit e non ha un
 prototipo.
 
@@ -88,6 +93,34 @@ prototipo.
   tabella «Dal prototipo» (l'hook `grid-ribbon-split-large` non serve più) e
   la riga «Dopo K3», che passa in fondo a T19 · nessuna risposta nuova · T13,
   T14, T15 e T17 da rivedere, T18 riscritto, T19 nuovo.
+- 2026-11-03 · la risposta dell'utente al terzo prototipo («la nuova grafica
+  è stupenda», «per il resto davvero un lavoro eccellente», ma il foglietto
+  chiuso è «estremamente grezzo»: il nome sopra e il disegno sotto, con
+  «tutto quello spazio bianco», «non molto bilanciato»): il prototipo è
+  approvato tranne il foglietto chiuso, rifatto una quarta volta soltanto per
+  la variante C in tre forme (tessera, pila, dorso), con la larghezza del
+  telefono; A e B non vanno nel codice; domanda nuova D-7 (la forma del
+  foglietto chiuso); cambiano T18 (soltanto C, il foglietto chiuso, l'hook
+  `grid-ribbon-group-toggle`, il vassoio che scorre di lato al telefono, le
+  scene del telefono, il nome che il foglietto chiuso tiene anche con
+  `data-dense`), T19 (niente più A e B, la fisarmonica al telefono), T12,
+  T13, T14 e T15 (soltanto le righe dello «Stato»), T17 e il cancello (la
+  variante C e D-7), le ondate, la riga del prototipo e la tabella «Dal
+  prototipo». Le celle della griglia, che l'utente vuole «al livello della
+  barra», vanno in un piano a parte, non in K3 · D-6 (c) · T18 e T19 da
+  rivedere.
+- 2026-11-03 · la risposta a D-7 (il quarto prototipo): l'utente vuole
+  un'ibrida fra la pila e la tessera, «a pila quando ce ne sono due, mentre
+  nell'altro modo, quindi grande, quindi alto, che occupa tutta l'altezza,
+  quando rimane uno da solo», perché «non mi piace quando rimane a pila uno
+  singolo, che occupa poco spazio». Il prototipo prende la forma ibrida
+  (`data-chiuso="ibrida"`, la prima di «Gruppo chiuso»); la pila, la
+  tessera e il dorso restano lì per confronto e non vanno nel codice.
+  Cambiano T18 (i blocchi dell'ibrida, `data-alone` sempre, l'hook
+  `grid-ribbon-chevron`, i foglietti aperti a 700 px e al telefono, i casi
+  limite), T19 (il chiuso che cambia forma nella fisarmonica), T12 (lo
+  «Stato»), T17 e il cancello (la forma), D-7, la riga del prototipo e la
+  tabella «Dal prototipo» · D-7 (l'ibrida) · T18 e T19 da rivedere.
 
 ## Dal prototipo
 
@@ -99,14 +132,18 @@ nuovo; quelli «solo prototipo» restano lì. I token vengono da
 Le regole marcate `data-barra="prima"` sono il CSS della barra di adesso,
 copiato per il confronto «Barra: nuova / di prima»: non vanno in nessun file.
 Il blocco di T18 da solo è la variante A (la carta sotto i foglietti). I
-blocchi marcati `data-variante="c"` (i foglietti sollevati) e
-`data-variante="b"` (senza la carta) si aggiungono dopo di lui, e va nel
-codice soltanto quello della variante che sceglie D-6. Lo script della
+blocchi marcati `data-variante="c"` (i foglietti sollevati) si aggiungono
+dopo di lui: D-6 ha scelto C, e i blocchi `data-variante="b"` non vanno nel
+codice. Fra i blocchi di C, quelli marcati anche `data-chiuso` sono le quattro
+forme del foglietto chiuso: va nel codice soltanto l'ibrida, che ha deciso
+D-7 (`data-chiuso="ibrida"`); la pila, la tessera e il dorso restano nella
+pagina per confronto. Lo script della
 pagina è del prototipo: il movimento che mostra lo scrive T19 con `moto/`,
 con le stesse molle, gli stessi tempi e le costanti con lo stesso nome. Per
 un riscontro, lo script del pianificatore ha scritto i due file come saranno
-dopo T18, T14 e T15, per ogni variante (`editors-a.css`, `-b`, `-c`,
-`structure-a.css`, `-b`, `-c`), in `/home/fubeo/.cache/fub-k1/tmp/k3-barra2/lavoro/dopo-T18/`
+dopo T18, T14 e T15, per ogni variante e forma (`editors-c-ibrida.css` e
+`structure-c-ibrida.css` sono quelli che contano; `-c-tessera`, `-c-pila`,
+`-c-dorso`, A e B per confronto), in `/home/fubeo/.cache/fub-k1/tmp/k3-barra2/lavoro/dopo-T18/`
 (fuori dal repo, se c'è ancora; la fonte resta il prototipo).
 
 | Pezzo | Destinazione | Task |
@@ -130,13 +167,14 @@ dopo T18, T14 e T15, per ogni variante (`editors-a.css`, `-b`, `-c`,
 | gli stati per il banco: risultato, risultato lungo, errore | `apps/client/bench/scene.mjs` | T15 |
 | CSS `→ structure.css (T18)`: la geometria della barra dei fogli, tutta in selettori `.grid-ribbon-…` (il pozzetto delle sezioni, il vassoio, i foglietti su due righe di 28 px, il foglietto raccolto, `data-dense`), più la formula, la vista e le schede dei fogli sopra il vassoio (`position` e `z-index`); dalle liste che oggi uniscono `.rich-ribbon-…` e `.grid-ribbon-…` si tolgono i selettori `.grid-ribbon-…` | `apps/client/src/theme/scrittoio/structure.css`, al posto della sezione «La barra multifunzione del foglio» | T18 |
 | CSS `→ skin/editors.css (T18)`: la pelle della barra dei fogli (il pozzetto col gettone d'accento che scorre, le sezioni per la selezione col puntino, il vassoio, i foglietti con la carta e il nome grigio, i gettoni, i pulsanti divisi, i campi, le lettere di Alt, la tavolozza, la barra ritirata col filetto, il fondo `--sheet` della formula e della vista, i colori forzati, il foglio sotto i 900 px); dalle liste condivise si tolgono i selettori `.grid-ribbon-…` | `apps/client/src/theme/scrittoio/skin/editors.css`, nella sezione «La barra multifunzione: le schede su un filetto…» | T18 |
-| CSS `→ skin/editors.css (T18, solo con la variante B)`: i foglietti senza la carta, divisi soltanto dallo spazio | lo stesso file, dopo il blocco di T18 (solo se D-6 dice B) | T18 |
-| CSS `→ skin/editors.css (T18, solo con la variante C)`: i foglietti sollevati, tondi da ogni lato, con l'ombra fatta coi veli `--overlay-hover` e `--overlay-active`, il foglietto aperto sul posto un gradino più su (`[data-open="true"]`), la luce scura (`:root[data-theme="dark"]`, più chiari e un filo di luce in alto) e il contrasto alto (`:root[data-contrast="high"]`, un anello di `--border`) | lo stesso file, dopo il blocco di T18 (solo se D-6 dice C) | T18 |
-| il gruppo raccolto che si apre sul posto (`aria-expanded`, `aria-controls`, Invio, Spazio, ↓, Esc, la sua lettera di Alt), il foglietto aperto che resta (segnato con `data-open="true"`), `data-dense` sul pannello: un'opzione del kit | `apps/client/src/kit/ribbon/ribbon.ts` (`RibbonOptions`), `editors/grid/ribbon/ribbon.ts` (passa l'opzione) | T18 |
-| hook nuovo `kit-tab-indicator` (voce `grid-ribbon`, accanto a `kit-tabs` e `kit-tab`) | `apps/client/src/theme/scrittoio/anatomia/editors.ts` | T18 |
+| CSS `→ skin/editors.css (T18, solo con la variante C)`: i foglietti sollevati, tondi da ogni lato, con l'ombra fatta coi veli `--overlay-hover` e `--overlay-active`, il foglietto aperto sul posto un gradino più su (`[data-open="true"]`), la luce scura (`:root[data-theme="dark"]`, più chiari e un filo di luce in alto) e il contrasto alto (`:root[data-contrast="high"]`, un anello di `--border`) | lo stesso file, dopo il blocco di T18 (D-6 (c)) | T18 |
+| CSS `→ structure.css (T18, con la variante C: il foglietto chiuso…)` e `→ skin/editors.css (T18, con la variante C: il foglietto chiuso…)`: il foglietto chiuso è tutto il suo pulsante (il nome sopra se ne va, il pulsante prende il foglietto e tiene il nome); il vassoio scorre di lato quando non basta | `structure.css` e `skin/editors.css`, dopo i blocchi di C | T18 |
+| CSS `→ structure.css (T18, variante C, il foglietto chiuso «ibrido», deciso…)` e `→ skin/editors.css (T18, variante C, «ibrido», deciso)`: il vassoio a due righe; due chiusi per colonna «a pila» (alti 38 px, il disegno, il nome accanto e la freccina grigia); il chiuso che resta solo nella sua colonna (`data-alone`) alto 80 px «a tessera» (il disegno in un tondo, il nome sotto in due righe al massimo, largo almeno 48 px, senza freccina). I blocchi `data-chiuso="pila"`, `"tessera"` e `"dorso"` non vanno nel codice | gli stessi file, dopo i blocchi del foglietto chiuso | T18 |
+| il gruppo raccolto che si apre sul posto (`aria-expanded`, `aria-controls`, Invio, Spazio, ↓, Esc, la sua lettera di Alt), il foglietto aperto che resta (segnato con `data-open="true"`) e che si porta in vista quando il vassoio scorre (`unfold` nello script), `data-dense` sul pannello: un'opzione del kit; il segno `data-alone` sull'ultimo chiuso di una fila dispari (`markAlone` nello script), che l'ibrida fa alto | `apps/client/src/kit/ribbon/ribbon.ts` (`RibbonOptions`), `editors/grid/ribbon/ribbon.ts` (passa l'opzione) | T18 |
+| hook nuovi `kit-tab-indicator` (voce `grid-ribbon`, accanto a `kit-tabs` e `kit-tab`) e `grid-ribbon-group-toggle` (la pelle del foglietto chiuso lo nomina) e `grid-ribbon-chevron` (la freccina dei chiusi a pila, una classe che il kit già mette) | `apps/client/src/theme/scrittoio/anatomia/editors.ts` | T18 |
 | la pelle montata | `apps/client/src/theme/scrittoio/skin.css` (`npm run theme:generate`, mai a mano) | T18 |
-| gli stati per il banco della barra: a riposo, 700 px con la scheda della tabella, le lettere di Alt, un foglietto raccolto aperto sul posto, la tavolozza dei colori, la barra ritirata, un nome di tabella lunghissimo, sola lettura | `apps/client/bench/scene.mjs`, e se serve `apps/client/bench/fake-ipc.ts` | T18 |
-| il movimento della barra (le corse di «Movimento: sì» e di «Ridotto»; le costanti `TAB_TRAVEL`, `FOLD_TRAVEL`, `ENTER_SCALE`, e `LIFT_TRAVEL` solo con la variante C) | `apps/client/src/kit/ribbon/ribbon-motion.ts` (nuovo), acceso da un'opzione del kit che passa `editors/grid/ribbon/ribbon.ts` | T19 |
+| gli stati per il banco della barra: a riposo, 700 px con la scheda della tabella, le lettere di Alt, un foglietto raccolto aperto sul posto, la tavolozza dei colori, la barra ritirata, un nome di tabella lunghissimo, sola lettura; al telefono (390 px, «Telefono» nel prototipo) a riposo e con un foglietto aperto sul posto | `apps/client/bench/scene.mjs`, e se serve `apps/client/bench/fake-ipc.ts` | T18 |
+| il movimento della barra (le corse di «Movimento: sì» e di «Ridotto»; le costanti `TAB_TRAVEL`, `FOLD_TRAVEL`, `ENTER_SCALE` e `LIFT_TRAVEL`) | `apps/client/src/kit/ribbon/ribbon-motion.ts` (nuovo), acceso da un'opzione del kit che passa `editors/grid/ribbon/ribbon.ts` | T19 |
 | la tenda segue il bordo di sopra e il foglietto della variante C parte più su (`edge: "top"` e `lift` di `flipEls` nello script) | `apps/client/src/moto/flip.ts` (due campi nuovi di `FlipOptions`, di serie spenti) | T19 |
 | le coreografie della barra dei fogli | `apps/client/bench/motion-rules.mjs` | T19 |
 
@@ -314,6 +352,49 @@ differenza è scritta qui.
   toglie una cornice ma i gruppi si confondono quando la barra è piena. Non
   blocca: T18 parte con la variante che l'utente sceglie guardando il
   prototipo, e senza risposta con (c).
+  Risposta (2026-11-03): (c), la variante C; A e B non piacciono e non si
+  toccano più. Il resto del terzo prototipo è approvato («la nuova grafica è
+  stupenda», «per il resto davvero un lavoro eccellente», e soprattutto la
+  fisarmonica, «bellissima da vedere e molto comoda da usare, soprattutto in
+  un'ottica di app per smartphone»). Non il foglietto chiuso: «estremamente
+  grezzo», il nome sopra e il disegno sotto, con «tutto quello spazio
+  bianco», «non molto bilanciato a livello di proporzioni». Lo rifà il
+  quarto prototipo: D-7.
+- D-7 · Il foglietto chiuso (T18 e T19; nel prototipo, «Gruppo chiuso», solo
+  con la variante C). In tutte e tre le forme il foglietto chiuso è tutto un
+  pulsante, sollevato come gli aperti, con le stesse molle; il nome sopra se
+  ne va. (a) A tessera: il disegno in un tondo chiaro e il nome sotto, in
+  mezzo al foglietto, su due righe al massimo, come le icone di un telefono;
+  (b) a pila: due chiusi uno sopra l'altro, ognuno col disegno, il nome
+  accanto e una freccina; (c) a dorso: una costola di 28 px col nome in
+  piedi, che si legge dal basso. Consiglio: (a). Occupa la stessa larghezza
+  di prima: a 700 px restano aperti gli stessi foglietti (Home 2 su 6,
+  Inserisci 2 su 7, Dati 3 su 4); al telefono la Home sta tutta in sei
+  tessere senza scorrere, e la fisarmonica resta quella che è piaciuta. La
+  pila non lascia vuoti dentro il pulsante, ma un chiuso col nome accanto è
+  più largo: a 700 px con «Numeri» aperto si chiude anche «Carattere» e a
+  destra resta un buco di 200 px; si legge per colonne, e il kit deve segnare
+  l'ultimo chiuso di una fila dispari. Il dorso tiene aperti più foglietti a
+  700 px, ma il nome si legge piegando la testa, i nomi lunghi si tagliano
+  («Imposta pagina», «Opzioni del foglio») e al telefono lascia spazio vuoto.
+  Non blocca: T18 parte con la forma che l'utente sceglie, e senza risposta
+  con (a); cambiarla dopo tocca soltanto i blocchi `data-chiuso` del CSS (e,
+  per la pila, il segno `data-alone` del kit).
+  Risposta (2026-11-03): un'ibrida fra (b) e (a): «a pila quando ce ne sono
+  due, mentre nell'altro modo, quindi grande, quindi alto, che occupa tutta
+  l'altezza, quando rimane uno da solo … non mi piace quando rimane a pila
+  uno singolo, che occupa poco spazio». Nel prototipo è «Ibrida, decisa», la
+  prima di «Gruppo chiuso» (`data-chiuso="ibrida"`): i chiusi stanno due per
+  colonna, a pila, ognuno col disegno, il nome accanto e la freccina; quello
+  che resta solo nella sua colonna (`data-alone`, l'ultimo di una fila
+  dispari di chiusi) è alto come un foglietto aperto, 80 px, a tessera, col
+  disegno nel tondo e il nome sotto. «Grande, alto» è la tessera e non il
+  dorso, che è stretto. Rispetto alla tessera, a 700 px resta aperto un
+  foglietto in più in Inserisci (3 su 7) e, con «Numeri» aperto, «Carattere»
+  resta aperto; al telefono la Home sta in tre colonne di due senza
+  scorrere, Inserisci scorre di 54 px invece che di 90 e Dati tiene aperto
+  un foglietto. La pila, la tessera e il dorso restano nel prototipo per
+  confronto e non vanno nel codice; il kit segna sempre `data-alone`.
 
 ## Cancello di K3
 
@@ -327,7 +408,7 @@ differenza è scritta qui.
 | ogni documento che la shell apre si chiude; una lettura che non apre non conta | test dell'host (`crates/fub-host/tests/engines_open.rs`): cento letture semplici di cento documenti lasciano zero aperture e zero prove ricordate; test del client: l'anteprima della ricerca su cento file non apre niente, e ogni uscita di una sessione chiude la sua chiave | T10, T11 |
 | nessuna interfaccia di un'app Craft in Fub, librerie doppie sotto il tetto | `node .github/scripts/check-motori.mjs` nella CI | T2 |
 | niente all'avvio | test: dopo l'apertura di un vault nessun motore è costruito; il primo `.xlsx` aperto costruisce solo «fogli» | T1, T5 |
-| la barra dei fogli ha lo stile di Fub e il gruppo raccolto si apre sul posto; la barra dei documenti e quella delle tabelle restano com'erano | le foto del banco della barra dei fogli (`grid-*` e le scene nuove di T18), chiara e scura, piena e 700 px, confrontate col prototipo con la variante scelta in D-6; `kit/ribbon/ribbon.test.ts` (il gruppo sul posto con l'opzione, il riquadro senza); nella CI nessuna baseline delle scene dei documenti e delle tabelle cambia (`document-*`, `window-document`, `mobile-document*`, `live-14-tabella-attiva`, `slash-05-tabella`); `bench:a11y`, `theme:verify` e i test del tema verdi | T18 |
+| la barra dei fogli ha lo stile di Fub e il gruppo raccolto si apre sul posto; la barra dei documenti e quella delle tabelle restano com'erano | le foto del banco della barra dei fogli (`grid-*` e le scene nuove di T18), chiara e scura, piena, 700 px e telefono, confrontate col prototipo con la variante C (D-6 (c)) e il foglietto chiuso ibrido (D-7); `kit/ribbon/ribbon.test.ts` (il gruppo sul posto con l'opzione, il riquadro senza); nella CI nessuna baseline delle scene dei documenti e delle tabelle cambia (`document-*`, `window-document`, `mobile-document*`, `live-14-tabella-attiva`, `slash-05-tabella`); `bench:a11y`, `theme:verify` e i test del tema verdi | T18 |
 | la barra dei fogli si muove con `moto/`, e con il movimento ridotto quasi si ferma | `npm run bench:motion` con le coreografie della barra (stato finale uguale con e senza movimento, solo `transform` e `opacity`, si torna indietro a metà, il ritiro entro 140 ms); `bench/motion.test.ts` (nessun file che muove fuori dall'elenco); `moto/flip.test.ts` (`edge` e `lift`); `kit/ribbon/ribbon-motion.test.ts` (ridotto, smontaggio); `check-listeners` | T19 |
 | K3 passa la CI completa e una revisione riga per riga prima del merge | la PR #295 segnata pronta: tutti i job verdi su Linux, Windows e macOS, banchi compresi (salvo `R1.giri.pendenza.MiB`, spiegato); la revisione scritta nella PR; il sì dell'utente al merge | T17 |
 
@@ -901,7 +982,8 @@ stati, nelle due luci e alle due larghezze; il conto dice 303 comandi su 303
 nel menu; l'utente ha detto sì.
 Prova: aprire `PLAN-ui/menu-comandi-fogli.html` in un browser (con
 Playwright: nessun errore nella console)
-Stato: [x] fatto, aspetta il sì dell'utente
+Stato: [x] fatto, approvato il 2026-11-03 (il foglietto chiuso: l'ibrida,
+  D-7)
   Risposta (2026-11-03): non ancora approvato. L'utente: «il prototipo mi
   piace abbastanza, ma mi sembra troppo simile a excel e a tutti gli altri
   editor simili. vorrei che la barra multifunzione assumesse caratteristiche
@@ -917,6 +999,13 @@ Stato: [x] fatto, aspetta il sì dell'utente
   non cambia, «Comandi» diventa un gettone. La barra la porta T18, il
   movimento T19, la carta dei foglietti la sceglie D-6 (non blocca); aspetta
   di nuovo il sì dell'utente.
+  Risposta (2026-11-03): approvato, tranne il foglietto chiuso, e D-6 (c).
+  Rifatto una quarta volta (2026-11-03), soltanto il foglietto chiuso della
+  variante C: tre forme in «Gruppo chiuso» (D-7) e la larghezza «Telefono,
+  390 px»; A e B restano nella pagina com'erano, segnate «scartata».
+  Risposta (2026-11-03) a D-7: l'ibrida fra la pila e la tessera. Il
+  prototipo la prende come forma decisa, la prima di «Gruppo chiuso»; la
+  pila, la tessera e il dorso restano per confronto.
 
 ## T13 · Un posto e un effetto per ogni comando dei fogli
 
@@ -984,7 +1073,6 @@ con uno script e scrive nel resoconto ogni differenza col suo perché); i test
 del client verdi.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare
-  Aspetta: il sì dell'utente al prototipo rifatto una terza volta di T12.
 
 ## T14 · Il menu «Comandi» dei fogli
 
@@ -1082,8 +1170,6 @@ del menu, chiara e scura, piena e stretta, corrispondono al prototipo con la
 barra nuova.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare
-  Aspetta: il sì dell'utente al prototipo rifatto una terza volta di T12 (D-6
-  non lo blocca: il gettone «Comandi» è lo stesso con ogni variante).
 
 ## T15 · Il risultato dei comandi che leggono, e i perché in italiano
 
@@ -1169,7 +1255,6 @@ lettura sono spenti soltanto i `cambia`; `engine.test.ts`: in sola lettura
 stretta, corrispondono al prototipo.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare
-  Aspetta: il sì dell'utente al prototipo rifatto una terza volta di T12.
 
 ## T16 · La misura con i documenti che si chiudono
 
@@ -1224,7 +1309,7 @@ Cosa fare (lo fa l'orchestratore, non un coder):
   `R1.giri.pendenza.MiB` della WebView, con il rimando a «Il piano dopo».
 - Le foto del banco delle scene nuove (T7, T14, T15, T18) e delle scene
   `grid-*` che T18 cambia dal runner, confrontate col prototipo con la
-  variante scelta in D-6; le baseline delle scene dei documenti e delle
+  variante C e il foglietto chiuso ibrido (D-7); le baseline delle scene dei documenti e delle
   tabelle restano le stesse (T18). Il banco del movimento (`bench:motion`)
   è verde con le coreografie della barra dei fogli (T19).
 - La revisione riga per riga del diff di K3 contro `main`
@@ -1254,7 +1339,9 @@ gli altri editor simili» e la vuole «più in linea con lo stile moderno,
 minimale e stondato di Fub», cominciando dai fogli (T12, risposta del
 2026-11-03). Al secondo commento (la risposta a D-5) vuole i nomi dei gruppi,
 ma discreti, meno bianco sotto e un'organizzazione che non sia «una copia
-rispetto a Excel». La barra cambia aspetto e, soltanto nei fogli, il modo in
+rispetto a Excel». Al terzo prototipo dice sì a tutto (D-6 (c)), tranne il
+foglietto chiuso, «estremamente grezzo» e troppo vuoto: per lui D-7 sceglie
+un'ibrida, due chiusi a pila e quello che resta solo alto, a tessera. La barra cambia aspetto e, soltanto nei fogli, il modo in
 cui si apre un gruppo raccolto: sul posto, non in un riquadro. I comandi, i
 testi, i ruoli, l'ordine del fuoco e le lettere di Alt restano quelli.
 Tocca: `apps/client/src/kit/ribbon/ribbon.ts` (un'opzione nuova di
@@ -1264,7 +1351,8 @@ l'opzione), `theme/scrittoio/structure.css` (la sezione «La barra
 multifunzione del foglio»), `theme/scrittoio/skin/editors.css` (la sezione
 «La barra multifunzione: le schede su un filetto…»),
 `theme/scrittoio/skin.css` (solo con `npm run theme:generate`),
-`theme/scrittoio/anatomia/editors.ts` (l'hook `kit-tab-indicator`),
+`theme/scrittoio/anatomia/editors.ts` (gli hook `kit-tab-indicator` e
+`grid-ribbon-group-toggle`),
 `apps/client/bench/scene.mjs` (le scene della barra),
 `apps/client/bench/fake-ipc.ts` (solo per la tabella e la sola lettura, che
 il finto della cartella non ha), `docs/architecture/grid-surface.md` («La
@@ -1282,8 +1370,8 @@ tasto destro); `kit/tabs.ts` (l'evidenza scorre già con `moto/`);
 `crates/fub-format-xlsx/tests/ts_grid.rs`); le baseline del banco (arrivano
 dal runner, T17); il CSS di T14 e di T15; il movimento e `moto/` (T19: dopo
 T18 ogni cambio della barra è istantaneo).
-Dipende da: T12 (il sì dell'utente al prototipo rifatto una terza volta; la
-carta dei foglietti la sceglie D-6, che non blocca)
+Dipende da: T12 (approvato il 2026-11-03; la variante è C, D-6 (c); il
+foglietto chiuso è l'ibrida, D-7)
 Cosa fare:
 - Il kit. `RibbonOptions` prende un campo nuovo, `openInPlace?: boolean`
   (commento: il gruppo raccolto si apre sul posto, nella barra, invece che
@@ -1305,15 +1393,32 @@ Cosa fare:
     gruppo aperto lo richiude e porta il fuoco al suo pulsante, un secondo
     Esc torna alla griglia, come fa già; cambiare sezione lo richiude;
   - aprire e richiudere chiamano `fit()` subito, non `scheduleFit()` (che
-    aspetta un fotogramma): così T19 misura prima e dopo nello stesso giro.
+    aspetta un fotogramma): così T19 misura prima e dopo nello stesso giro;
+  - quando nemmeno coi gettoni senza nome la fila ci sta (al telefono), il
+    vassoio scorre di lato (il CSS di C: `overflow-x: auto`, senza barra di
+    scorrimento); il foglietto che si apre, dopo `fit()`, si porta in vista
+    (`scrollIntoView({ block: "nearest", inline: "nearest" })`, senza
+    `behavior: "smooth"`: lo scorrimento sta nella stessa misura del
+    movimento di T19);
+  - il foglietto chiuso tiene il suo nome anche con `data-dense`: la regola
+    che toglie i nomi vale soltanto dentro `.grid-ribbon-group-body`;
+  - `fit()` segna con `data-alone="true"` l'ultimo chiuso di una fila
+    dispari di chiusi (`markAlone` nello script: le file seguono l'ordine
+    della sezione, un foglietto aperto le spezza e i nascosti non contano),
+    dopo ogni chiusura, e toglie il segno dagli altri; con l'ibrida è il
+    chiuso che si fa alto.
   Senza l'opzione tutto resta com'è: il riquadro e `aria-haspopup="dialog"`.
 - In `structure.css` e in `skin/editors.css`, dalle liste che uniscono
   `.rich-ribbon-…` e `.grid-ribbon-…` si tolgono i selettori
   `.grid-ribbon-…`: le regole dei documenti restano carattere per carattere.
   Al loro posto, nella stessa sezione, i blocchi «→ structure.css (T18…)» e
-  «→ skin/editors.css (T18…)» del prototipo, e dopo quest'ultimo il blocco
-  della variante che sceglie D-6 (`data-variante="c"` o `data-variante="b"`;
-  la variante A non ne ha).
+  «→ skin/editors.css (T18…)» del prototipo, e dopo di loro, nell'ordine
+  della pagina, i blocchi della variante C (`data-variante="c"`, D-6 (c)):
+  quelli senza `data-chiuso` e, di quelli con `data-chiuso`, soltanto la
+  forma che ha deciso D-7, `data-chiuso="ibrida"`. I blocchi di B e delle
+  altre forme (la pila, la tessera, il dorso) non vanno nel codice. Il
+  riscontro è in `dopo-T18/structure-c-ibrida.css` e
+  `editors-c-ibrida.css` (vedi «Dal prototipo»).
 - Ciò che si vede. Le sezioni stanno in un pozzetto a segmenti, come le
   scelte di Impostazioni (`.segmented`); la scelta è un gettone d'accento
   (`.kit-tab-indicator`, che `kit/tabs.ts` già sposta) dentro il pozzetto, e
@@ -1325,8 +1430,16 @@ Cosa fare:
   normale; niente righe fra i gruppi. Una sola taglia: ogni comando è alto
   28 px, il pulsante grande diventa un gettone su una riga (disegno, nome,
   freccina) e tutto sta su due righe; la barra è alta 128 px invece di 135, e
-  sotto il vassoio restano 4 px prima della formula. Il gruppo raccolto è un
-  pulsante col disegno del gruppo, alto quanto le due righe. I campi sono
+  sotto il vassoio restano 4 px prima della formula. Il foglietto chiuso è
+  tutto il suo pulsante, sollevato come gli aperti; il nome sopra se ne va.
+  I chiusi stanno due per colonna, a pila: alti 38 px, col disegno, il nome
+  accanto (10em al massimo, poi i puntini) e una freccina grigia
+  (`--muted`). Quello che resta solo nella sua colonna (`data-alone`) è
+  alto come gli aperti, 80 px, a tessera: il disegno in un tondo
+  (`--overlay-hover`, `--radius-pill`) e il nome, piccolo e grigio
+  (`--text-xs`, `--muted`), sotto, in mezzo, su due righe al massimo e poi
+  coi puntini, senza freccina; una tessera è larga almeno 48 px. Il vassoio
+  resta alto 88 px in ogni stato, anche quando sono tutti chiusi. I campi sono
   quelli del kit; le lettere di Alt sono pastiglie scure e tonde (`--sheet`
   su `--text`); la tavolozza ha i titoli piccoli in grigio e i campioni
   stondati. Ritirata, resta la fila col pozzetto e un filetto sotto.
@@ -1342,17 +1455,21 @@ Cosa fare:
   aperto e gli altri si raccolgono. Le regole del foglio stretto vanno dopo
   quelle che cambiano (una query del contenitore non pesa di più), come nel
   prototipo.
-- L'hook nuovo nella voce `grid-ribbon` di `anatomia/editors.ts`:
+- Gli hook nuovi nella voce `grid-ribbon` di `anatomia/editors.ts`:
   `kit-tab-indicator` (è già in `anatomia/kit.ts`: la voce lo nomina come
   nomina già `kit-tabs` e `kit-tab`, e l'unione degli hook resta senza
-  doppioni). Il blocco della pelle di T18 non nomina altre classi nuove
-  (`.grid-ribbon-label` arriva col blocco di T14); `.grid-ribbon-group-toggle`
-  e `data-dense` li nomina soltanto `structure.css`, che non chiede hook. Poi
-  `npm run theme:generate`.
+  doppioni) e `grid-ribbon-group-toggle`, che ora nomina anche la pelle del
+  foglietto chiuso, e `grid-ribbon-chevron` (la freccina dei chiusi a pila;
+  la classe la mette già il kit). La pelle di T18 non nomina altre classi
+  nuove (`.grid-ribbon-label` arriva col blocco di T14); `data-dense` lo
+  nomina soltanto `structure.css`, e `data-alone` anche la pelle, come
+  `data-open`: sono attributi, e non chiedono hook. Poi `npm run theme:generate`.
 - Il banco: le scene `grid-*` cambiano foto. Scene nuove della barra: a
   riposo; 700 px con la sezione della tabella e un nome di tabella
   lunghissimo; le lettere di Alt; un foglietto raccolto aperto sul posto; la
-  tavolozza dei colori; la barra ritirata; la sola lettura. Il finto della
+  tavolozza dei colori; la barra ritirata; la sola lettura; al telefono
+  (390 px, la misura `PHONE` delle scene `mobile-*`), a riposo e con un
+  foglietto aperto sul posto. Il finto della
   cartella (`?workbook=1`, `xlsx-grid.json`) non ha tabelle né la sola
   lettura: le scene li ottengono in `bench/fake-ipc.ts` (una copia della
   finestra con una tabella, dietro un parametro della query), senza toccare
@@ -1364,14 +1481,24 @@ Cosa fare:
   in un riquadro». In `frontend-and-ipc.md`, la riga di `kit/ribbon/` dice
   l'opzione: con lei il gruppo raccolto si apre sul posto.
 Dal prototipo: i blocchi «→ structure.css (T18…)» e «→ skin/editors.css
-(T18…)», il blocco della variante che sceglie D-6, il gruppo che si apre sul
-posto, l'hook, gli stati del banco (la tabella «Dal prototipo»). Il confronto
+(T18…)», i blocchi della variante C e dell'ibrida di D-7, il gruppo
+che si apre sul posto, gli hook, gli stati del banco (la tabella «Dal
+prototipo»). Il confronto
 «Barra: nuova / di prima» mostra le due barre negli stessi stati; lo script
 della pagina resta nel prototipo.
 Casi limite: 700 px con la sezione della tabella accesa (tutte le sezioni nel
 pozzetto, nessuna tagliata; un foglietto aperto e gli altri raccolti); un
 nome di tabella lunghissimo (i puntini nella sezione e nel campo del nome);
-un foglietto che da solo non ci sta (`data-dense`: i gettoni senza nome);
+un foglietto che da solo non ci sta (`data-dense`: i gettoni senza nome, i
+foglietti chiusi col nome); il telefono (la Home in tre colonne di due
+chiusi a pila, senza scorrere; Inserisci scorre di lato, e il foglietto
+aperto in fondo si porta in vista); tutti i foglietti chiusi (il vassoio non
+si abbassa); tre chiusi di fila (due a pila, il terzo alto) e un chiuso solo
+fra due aperti (alto); un chiuso solo che smette di esserlo quando un altro
+si chiude accanto a lui (torna a pila); un nome
+lungo su due righe («Libreria di funzioni») e uno più lungo ancora coi
+puntini («Visualizzazioni cartella di lavoro», intero nel suggerimento e nel
+nome accessibile);
 una larghezza nuova che fa posto a tutti (nessun foglietto raccolto, e
 `data-open` se ne va); la lettera di Alt di un foglietto raccolto (si apre e
 mostra le lettere dei suoi comandi); Esc, un altro foglietto aperto, una
@@ -1388,8 +1515,15 @@ cella, i suggerimenti della formula, il tasto destro, gli oggetti) resta
 sopra, ora che `.grid-viewport` ha un `z-index`; la barra dei documenti e
 quella delle tabelle con un gruppo raccolto (il riquadro di sempre).
 Fatto quando: le foto del banco della barra (le scene `grid-*` e quelle
-nuove), chiara e scura, piena e 700 px, corrispondono al prototipo con la
-barra nuova e la variante scelta; la barra dei documenti e quella delle
+nuove), chiara e scura, piena, 700 px e telefono, corrispondono al
+prototipo con la barra nuova, la variante C e il foglietto chiuso ibrido
+di D-7; i foglietti aperti sono quelli del prototipo (a 700 px: Home 2 su 6,
+Inserisci 3 su 7, Layout di pagina 2 su 4, Formule 0 su 4, Dati 3 su 4,
+Revisione 3 su 3, Visualizza 2 su 4; a piena larghezza Home 5 su 6 e le
+altre tutti; al telefono la Home senza scorrere, Layout di pagina 1 su 4,
+Dati 1 su 4, Revisione 2 su 3, Inserisci che scorre di 54 px), il chiuso
+solo nella sua colonna è alto 80 px e quelli a pila 38, e il vassoio è alto
+88 px in ogni stato, scritti nel rapporto; la barra dei documenti e quella delle
 tabelle non cambiano: le regole che nominano `.rich-ribbon-…` sono le stesse
 prima e dopo, tolti i selettori `.grid-ribbon-…`, e ogni selettore nuovo
 comincia da `.grid-ribbon`, salvo `.grid-formula-bar`, `.grid-viewport` e
@@ -1400,7 +1534,9 @@ due selettori sulla radice (una prova scritta nel rapporto), e nella CI
 `live-14-tabella-attiva`, `slash-05-tabella`), senza baseline nuove per
 loro; `kit/ribbon/ribbon.test.ts` prova il gruppo che si apre sul posto
 (`aria-expanded`, `aria-controls`, niente `aria-haspopup`, Invio, ↓, la
-lettera di Alt, Esc, `data-open`, `data-dense`, un gruppo alla volta) e,
+lettera di Alt, Esc, `data-open`, `data-dense`, un gruppo alla volta, il
+foglietto aperto che si porta in vista, `data-alone` sull'ultimo chiuso di
+una fila dispari e su nessun altro) e,
 senza l'opzione, il riquadro di sempre; i test del tema
 (`theme/scrittoio/anatomia.test.ts`, `theme/skin.test.ts`,
 `theme/structure.test.ts`, `theme/contrast.test.ts`,
@@ -1408,7 +1544,6 @@ senza l'opzione, il riquadro di sempre; i test del tema
 e `bench:a11y` verdi.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare
-  Aspetta: il sì dell'utente al prototipo rifatto una terza volta di T12.
 
 ## T19 · Il movimento della barra dei fogli
 
@@ -1441,7 +1576,7 @@ Cosa fare:
   senza, è lo stesso al pixel.
 - Le costanti stanno in cima al modulo, con il nome del prototipo:
   `TAB_TRAVEL` (8 px), `FOLD_TRAVEL` (6 px), `ENTER_SCALE` (0,96),
-  `LIFT_TRAVEL` (2 px, solo con la variante C). Molle e tempi sono quelli di
+  `LIFT_TRAVEL` (2 px). Molle e tempi sono quelli di
   `moto/` (`SPRINGS.snap`, `soft`, `wide`; `DURATION.state`, `swap`;
   `STAGGER_MS`, `STAGGER_MAX`).
 - `moto/flip.ts`: due campi nuovi di `FlipOptions`, di serie spenti, e
@@ -1466,18 +1601,27 @@ Cosa fare:
     torna indietro da dov'è;
   - fisarmonica: aprire o richiudere un foglietto fa scivolare gli altri al
     posto nuovo (`flip` con `scale: false`, molla `snap`); il contenuto del
-    foglietto aperto scende da `FOLD_TRAVEL` px, molla `soft`;
-  - solo con la variante C: il foglietto che si apre sta nella stessa corsa
-    con `lift`: l'ombra cresce subito (il CSS di T18) e lui si posa con la
-    molla `snap`; al passaggio del puntatore o del fuoco non si alza;
+    foglietto aperto scende da `FOLD_TRAVEL` px, molla `soft`. Al telefono
+    il vassoio che scorre per portare in vista il foglietto aperto (T18)
+    scorre dentro la stessa misura: `flip` misura prima, il kit apre, chiama
+    `fit()` e scorre, `flip` misura dopo, e i foglietti partono da dove si
+    vedevano (niente `behavior: "smooth"`, niente seconda corsa). Il
+    chiuso che si apre non ha una corsa sua: il suo pulsante se ne va con
+    lo stato, e il foglietto aperto prende il suo posto scivolando; un
+    chiuso che diventa solo nella sua colonna (o smette di esserlo) cambia
+    forma con lo stato, alto o a pila, e scivola al posto nuovo con gli
+    altri (`flip` con `scale: false`: la misura nuova c'è subito);
+  - il foglietto che si apre sta nella stessa corsa con `lift`: l'ombra
+    cresce subito (il CSS di T18) e lui si posa con la molla `snap`; al
+    passaggio del puntatore o del fuoco non si alza;
   - premere: i pulsanti della barra usano `pressable` del kit
     (`kit/press.ts`: giù al 97 %, su con la molla `snap`);
   - la sezione per la selezione che compare: opacità e scala da
     `ENTER_SCALE` (`enter`, molla `soft`);
   - lettere di Alt: dissolvenza di `DURATION.state` (90 ms).
 - Ridotto e calmo li decide `moto/`: con «ridotto» ogni corsa salta e il
-  vassoio che torna appare soltanto in una dissolvenza; con la variante C
-  cambia soltanto l'ombra; il livello calmo ammorbidisce le molle da sé.
+  vassoio che torna appare soltanto in una dissolvenza; il foglietto che si
+  apre cambia soltanto l'ombra; il livello calmo ammorbidisce le molle da sé.
 - Gli avvisi sotto la barra (`.grid-notice`, `.grid-draft-notice`, fra la
   barra e la formula in `engine.ts`) salgono e scendono con la tenda: entrano
   nella stessa corsa e prendono il piano e il fondo della formula, con le
@@ -1485,8 +1629,9 @@ Cosa fare:
   vista cambia stato senza la tenda, e il rapporto lo dice.
 - Le coreografie in `bench/motion-rules.mjs`, con
   `sources: ["src/kit/ribbon/ribbon-motion.ts"]`: il cambio di sezione; il
-  ritiro e la riapertura (`exit: true`); la fisarmonica a 700 px (aprire e
-  richiudere un foglietto); la sezione della tabella che compare. Così
+  ritiro e la riapertura (`exit: true`); la fisarmonica a 700 px e al
+  telefono (aprire e richiudere un foglietto; al telefono quello in fondo,
+  che fa scorrere il vassoio); la sezione della tabella che compare. Così
   `motion.test.ts` resta verde (ogni file di `src/kit` che fa partire una
   corsa ha la sua coreografia, `UNCOVERED` resta vuoto).
 - In `grid-surface.md`, «La barra multifunzione»: una frase sul movimento e
@@ -1504,9 +1649,10 @@ lui (come nel prototipo: un cassetto che esce; nessuno `z-index` durante la
 corsa); il ritiro con il menu «Comandi» o la tavolozza aperti; la
 sbirciata che si chiude da sola (un clic fuori); la barra smontata a metà
 corsa (una finestra chiusa, una cartella cambiata); un foglio sotto i
-900 px; una finestra documento; il movimento ridotto del sistema e quello
-scelto in Fub; il livello calmo; i colori forzati; le varianti A e B
-(niente `lift`); un avviso in vista.
+900 px; una finestra documento; il telefono (il vassoio che scorre mentre i
+foglietti scivolano, un dito che lo fa scorrere a metà corsa); il movimento
+ridotto del sistema e quello scelto in Fub; il livello calmo; i colori
+forzati; un avviso in vista.
 Fatto quando: `npm run bench:motion` è verde con le coreografie nuove (stato
 finale uguale con e senza movimento, niente di vivo a corsa finita, solo
 `transform` e `opacity`, si torna indietro a metà, il ritiro entro 140 ms);
@@ -1517,7 +1663,6 @@ lo smontaggio non lascia niente; `check-listeners` e `npm run typecheck`
 verdi.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare
-  Aspetta: il sì dell'utente al prototipo rifatto una terza volta di T12.
 
 Dopo K3, non in K3: lo stesso stile e lo stesso movimento passano alla barra
 dei documenti, a quella delle tabelle e alle altre modalità, spostando le
