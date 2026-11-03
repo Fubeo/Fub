@@ -1544,7 +1544,7 @@ e `cargo test -p fub-app --lib reveal` passano;
 soglie.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test
 craft_open_with
-Stato: [~] in corso · coder · base 1c3ed3df
+Stato: [x] fatto · 279c1859 · check --rapido verde
 
 ## T11 · Le anteprime con la CLI, dopo un gesto
 

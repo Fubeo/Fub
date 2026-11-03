@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · N7 · T10 integrato (279c1859): Started.channel è
+  Option<Arc<Channel>> e si usa fuori dal lucchetto del registro; gli errori
+  sono off=Unserved, unknown_editor e wrong_kind=BadArgs, not_installed e
+  missing=NotFound, launch_failed=Io; su macOS la pagina va dopo --args di
+  open; senza il programma flatpak l'errore è launch_failed; sul canale page
+  si ignora · InRunning non scatta con nessuna delle sette app (nessuna ha
+  un canale col token, D-2) ed è provato solo con un editor di prova nei
+  test unitari.
 - 2026-11-03 · N7 · T20 integrato (ecf05750 lo spostamento, 1c3ed3df la
   forma 2): il parametro render resta dichiarato e invoke lo ignora, perché
   senza la dichiarazione l'host rifiuterebbe una domanda della versione 1;
