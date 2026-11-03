@@ -15,12 +15,21 @@
 //! soggetto: [`craft_files`] per i disegni, le immagini e i progetti, [`xmp`]
 //! per un XMP, [`raw`] e [`documents`] per gli altri.
 //!
+//! Il file si legge con le lease del kernel ([`super::ranged`]): il peso viene
+//! dalla lease, i byte di un file Craft da [`Ranged::read_all`], che calcola la
+//! revisione sugli stessi pezzi; un file cambiato fra due pezzi si rilegge con
+//! una lease nuova, al più [`ATTEMPTS`] volte. Una foto RAW, un PDF o un
+//! documento non si leggono affatto: la risposta non ha revisione e non va in
+//! cache. Quando la lease non si apre (un supporto senza identità o timbro di
+//! cambiamento, un host senza lettore come quello dei test) si torna alla via
+//! dell'host: la revisione da `document_revision`, il peso dall'anagrafe, i
+//! byte da `read_document_bytes`, riletta la revisione dopo i byte.
+//!
 //! Si scrive in cache solo un'anteprima con l'immagine del file (`origin:
-//! file`) e con una revisione, e solo se la revisione non è cambiata mentre si
-//! leggeva: una scrittura che non riesce, o che chi chiama non può fare, non
-//! toglie l'anteprima. Un file Craft oltre [`MAX_FILE_BYTES`] non si legge: è
-//! `missing: over_limit` col peso massimo e il solo peso che l'anagrafe
-//! conosce.
+//! file`) e con una revisione: una scrittura che non riesce, o che chi chiama
+//! non può fare, non toglie l'anteprima. Un file Craft oltre
+//! [`MAX_FILE_BYTES`] non si legge: è `missing: over_limit` col peso massimo,
+//! il peso del file e nessuna revisione.
 
 use fub_abi::model::DocId;
 use fub_abi::text::{Arg, Text};
@@ -31,6 +40,8 @@ use fub_format_craft::{
     cache_key, CraftApp, CraftPreview, Missing, PreviewInfo, PreviewOrigin, PreviewSize,
     PreviewSubject, PREVIEW_VERSION,
 };
+
+use super::ranged::{Ranged, RangedError};
 
 mod craft_files;
 mod documents;
@@ -44,11 +55,15 @@ const LISTING_PAGE: u32 = 500;
 
 /// L'anteprima di `doc` alla misura `size`.
 ///
-/// Un documento di nessun soggetto è [`PluginError::BadArgs`] con la chiave
-/// `not_craft` del catalogo del bundle; un documento che non c'è, o che
-/// sparisce mentre lo si legge, è l'errore dell'host.
+/// Con `ranged` il file si legge a pezzi dalle lease del kernel; senza, o
+/// quando la lease non si apre, dall'host. Un documento di nessun soggetto è
+/// [`PluginError::BadArgs`] con la chiave `not_craft` del catalogo del
+/// bundle; un documento che non c'è, o che sparisce mentre lo si legge, è
+/// l'errore dell'host; un file che cambia a ogni lettura è
+/// [`PluginError::Conflict`] con la chiave `changing`.
 pub fn preview(
     host: &mut dyn HostApi,
+    ranged: Option<&Ranged>,
     doc: &DocId,
     size: PreviewSize,
 ) -> Result<CraftPreview, PluginError> {
@@ -58,6 +73,68 @@ pub fn preview(
             vec![Arg::text("doc", doc.as_str())],
         ))
     })?;
+    if let Some(ranged) = ranged {
+        if let Some(preview) = ranged_preview(host, ranged, doc, size, subject)? {
+            return Ok(preview);
+        }
+    }
+    hosted_preview(host, doc, size, subject)
+}
+
+/// L'anteprima letta a pezzi; `None` quando la lease non si apre o il kernel
+/// rifiuta un pezzo per una ragione che non è un file cambiato: allora
+/// risponde la via dell'host, con i suoi errori.
+fn ranged_preview(
+    host: &mut dyn HostApi,
+    ranged: &Ranged,
+    doc: &DocId,
+    size: PreviewSize,
+    subject: PreviewSubject,
+) -> Result<Option<CraftPreview>, PluginError> {
+    for _ in 0..ATTEMPTS {
+        let mut file = match ranged.open(doc) {
+            Ok(file) => file,
+            Err(RangedError::Stale) => continue,
+            Err(_) => return Ok(None),
+        };
+        let bytes = file.len();
+        let mut preview = empty(doc, None, size, subject, bytes);
+        let Some(app) = app_of(subject, &mut preview) else {
+            // Una foto RAW, un PDF, un documento: nessun byte letto, quindi
+            // nessuna revisione e niente cache.
+            return Ok(Some(preview));
+        };
+        if bytes > MAX_FILE_BYTES as u64 {
+            over_limit(&mut preview);
+            return Ok(Some(preview));
+        }
+        let whole = match file.read_whole(MAX_FILE_BYTES as u64) {
+            Ok(whole) => whole,
+            Err(RangedError::Stale) => continue,
+            Err(RangedError::OverLimit { .. }) => {
+                over_limit(&mut preview);
+                return Ok(Some(preview));
+            }
+            Err(RangedError::Kernel(_)) => return Ok(None),
+        };
+        if let Some(cached) = cached(&*host, doc, &whole.revision, size) {
+            return Ok(Some(cached));
+        }
+        preview.revision = Some(whole.revision);
+        fill(&*host, doc, &mut preview, app, &whole.bytes, size)?;
+        store(host, &preview, size);
+        return Ok(Some(preview));
+    }
+    Err(PluginError::Conflict(Text::key("changing")))
+}
+
+/// La via dell'host: la revisione prima e dopo i byte.
+fn hosted_preview(
+    host: &mut dyn HostApi,
+    doc: &DocId,
+    size: PreviewSize,
+    subject: PreviewSubject,
+) -> Result<CraftPreview, PluginError> {
     let mut last = None;
     for _ in 0..ATTEMPTS {
         let revision = host.document_revision(doc)?;
@@ -72,17 +149,22 @@ pub fn preview(
             last = Some(preview);
             continue;
         }
-        if preview.origin == PreviewOrigin::File {
-            if let (Some(revision), Ok(bytes)) = (&preview.revision, serde_json::to_vec(&preview)) {
-                // Una cache che non si scrive non toglie l'anteprima: la
-                // prossima volta si rilegge il file.
-                let _ = host.cache_write(&cache_key(&revision.0, size), &bytes);
-            }
-        }
+        store(host, &preview, size);
         return Ok(preview);
     }
     // Un file che cambia a ogni lettura: si dà l'ultima, senza cache.
     last.ok_or_else(|| PluginError::Conflict(Text::key("changing")))
+}
+
+/// In cache un'anteprima con l'immagine del file e una revisione.
+fn store(host: &mut dyn HostApi, preview: &CraftPreview, size: PreviewSize) {
+    if preview.origin == PreviewOrigin::File {
+        if let (Some(revision), Ok(bytes)) = (&preview.revision, serde_json::to_vec(preview)) {
+            // Una cache che non si scrive non toglie l'anteprima: la
+            // prossima volta si rilegge il file.
+            let _ = host.cache_write(&cache_key(&revision.0, size), &bytes);
+        }
+    }
 }
 
 /// Il soggetto di `doc`: dal formato, se è di un provider Craft, o
@@ -123,7 +205,7 @@ fn cached(
 /// file non ne ha una, finché il lettore del soggetto non dice altro.
 fn empty(
     doc: &DocId,
-    revision: &Revision,
+    revision: Option<&Revision>,
     size: PreviewSize,
     subject: PreviewSubject,
     bytes: u64,
@@ -131,7 +213,7 @@ fn empty(
     CraftPreview {
         version: PREVIEW_VERSION,
         doc: doc.as_str().to_string(),
-        revision: Some(revision.clone()),
+        revision: revision.cloned(),
         size,
         origin: PreviewOrigin::None,
         queued: false,
@@ -151,7 +233,53 @@ fn empty(
     }
 }
 
-/// L'anteprima di `doc` col lettore del suo soggetto.
+/// L'app dei byte di un soggetto Craft; per una foto RAW, un PDF o un
+/// documento `None`, con `preview` già completa dal lettore del soggetto.
+fn app_of(subject: PreviewSubject, preview: &mut CraftPreview) -> Option<CraftApp> {
+    match subject {
+        PreviewSubject::Raw => {
+            raw::read(preview);
+            None
+        }
+        PreviewSubject::Pdf | PreviewSubject::Document => {
+            documents::read(preview);
+            None
+        }
+        PreviewSubject::VectorCraft => Some(CraftApp::VectorCraft),
+        PreviewSubject::PhotoCraft => Some(CraftApp::PhotoCraft),
+        PreviewSubject::FigCraft => Some(CraftApp::FigCraft),
+        PreviewSubject::Xmp => Some(CraftApp::Xmp),
+    }
+}
+
+/// D-8: un file troppo grande non si apre nemmeno.
+fn over_limit(preview: &mut CraftPreview) {
+    preview.missing = Some(Missing::OverLimit);
+    preview.limit_bytes = Some(MAX_FILE_BYTES as u64);
+}
+
+/// Completa `preview` coi byte interi del file. Solo un XMP chiede
+/// all'anagrafe la sua cartella, per la foto e le copie accanto.
+fn fill(
+    host: &dyn HostApi,
+    doc: &DocId,
+    preview: &mut CraftPreview,
+    app: CraftApp,
+    bytes: &[u8],
+    size: PreviewSize,
+) -> Result<(), PluginError> {
+    preview.info.bytes = bytes.len() as u64;
+    if app == CraftApp::Xmp {
+        let folder = Folder::read(host, doc)?;
+        xmp::read(preview, doc, bytes, &folder);
+    } else {
+        craft_files::read(preview, app, bytes, size);
+    }
+    Ok(())
+}
+
+/// L'anteprima di `doc` per la via dell'host: il peso dall'anagrafe, i byte
+/// da `read_document_bytes`.
 fn read(
     host: &dyn HostApi,
     doc: &DocId,
@@ -161,25 +289,18 @@ fn read(
     folder: &Folder,
 ) -> Result<CraftPreview, PluginError> {
     let declared = folder.size_of(doc);
-    let mut preview = empty(doc, revision, size, subject, declared.unwrap_or_default());
-    let app = match subject {
-        PreviewSubject::Raw => {
-            raw::read(&mut preview);
-            return Ok(preview);
-        }
-        PreviewSubject::Pdf | PreviewSubject::Document => {
-            documents::read(&mut preview);
-            return Ok(preview);
-        }
-        PreviewSubject::VectorCraft => CraftApp::VectorCraft,
-        PreviewSubject::PhotoCraft => CraftApp::PhotoCraft,
-        PreviewSubject::FigCraft => CraftApp::FigCraft,
-        PreviewSubject::Xmp => CraftApp::Xmp,
+    let mut preview = empty(
+        doc,
+        Some(revision),
+        size,
+        subject,
+        declared.unwrap_or_default(),
+    );
+    let Some(app) = app_of(subject, &mut preview) else {
+        return Ok(preview);
     };
     if declared.is_some_and(|bytes| bytes > MAX_FILE_BYTES as u64) {
-        // D-8: un file troppo grande non si apre nemmeno.
-        preview.missing = Some(Missing::OverLimit);
-        preview.limit_bytes = Some(MAX_FILE_BYTES as u64);
+        over_limit(&mut preview);
         return Ok(preview);
     }
     let bytes = host.read_document_bytes(doc)?;
@@ -286,7 +407,7 @@ mod tests {
     fn the_second_call_answers_from_the_cache() {
         let mut host = host_with("Disegni/logo.vectorcraft", &vectorcraft(true));
         let doc = DocId::new("Disegni/logo.vectorcraft");
-        let first = preview(&mut host, &doc, PreviewSize::Small).unwrap();
+        let first = preview(&mut host, None, &doc, PreviewSize::Small).unwrap();
         assert_eq!(first.origin, PreviewOrigin::File);
         assert_eq!(first.missing, None);
         assert_eq!(first.info.format_version.as_deref(), Some("4"));
@@ -297,7 +418,7 @@ mod tests {
         // Il doppio prende la revisione rileggendo i byte: la seconda volta
         // è quella lettura sola, e la risposta viene dalla cache.
         let reads = host.reads_on(doc.as_str()).0;
-        let second = preview(&mut host, &doc, PreviewSize::Small).unwrap();
+        let second = preview(&mut host, None, &doc, PreviewSize::Small).unwrap();
         assert_eq!(second, first);
         assert_eq!(
             host.reads_on(doc.as_str()).0,
@@ -315,7 +436,7 @@ mod tests {
         let revision = host.document_revision(&doc).unwrap();
         let key = cache_key(&revision.0, PreviewSize::Large);
         host.cache_write(&key, b"{rotta").unwrap();
-        let fresh = preview(&mut host, &doc, PreviewSize::Large).unwrap();
+        let fresh = preview(&mut host, None, &doc, PreviewSize::Large).unwrap();
         assert_eq!(fresh.origin, PreviewOrigin::File);
         for tamper in [
             |p: &mut CraftPreview| p.version = 1,
@@ -327,7 +448,7 @@ mod tests {
             tamper(&mut foreign);
             host.cache_write(&key, &serde_json::to_vec(&foreign).unwrap())
                 .unwrap();
-            let again = preview(&mut host, &doc, PreviewSize::Large).unwrap();
+            let again = preview(&mut host, None, &doc, PreviewSize::Large).unwrap();
             assert_eq!(again.info.format_version.as_deref(), Some("4"));
         }
     }
@@ -338,7 +459,7 @@ mod tests {
         let doc = DocId::new("logo.vectorcraft");
         let revision = host.document_revision(&doc).unwrap();
         host.denies_write(&cache_key(&revision.0, PreviewSize::Small));
-        let out = preview(&mut host, &doc, PreviewSize::Small).unwrap();
+        let out = preview(&mut host, None, &doc, PreviewSize::Small).unwrap();
         assert_eq!(out.origin, PreviewOrigin::File);
     }
 
@@ -346,7 +467,7 @@ mod tests {
     fn without_a_preview_nothing_is_cached() {
         let mut host = host_with("vuoto.vectorcraft", &vectorcraft(false));
         let doc = DocId::new("vuoto.vectorcraft");
-        let out = preview(&mut host, &doc, PreviewSize::Small).unwrap();
+        let out = preview(&mut host, None, &doc, PreviewSize::Small).unwrap();
         assert_eq!(out.origin, PreviewOrigin::None);
         assert!(out.image.is_none() && out.render.is_none() && !out.queued);
         assert_eq!(out.missing, Some(Missing::Absent));
@@ -379,7 +500,7 @@ mod tests {
             ),
         ] {
             let doc = DocId::new(doc);
-            let out = preview(&mut host, &doc, PreviewSize::Small).unwrap();
+            let out = preview(&mut host, None, &doc, PreviewSize::Small).unwrap();
             assert_eq!(out.info.app, subject, "{doc}");
             assert_eq!(out.info.editor, editor, "{doc}");
             assert_eq!(out.missing, Some(Missing::Absent), "{doc}");
@@ -398,7 +519,8 @@ mod tests {
     fn a_name_without_an_extension_has_no_subject() {
         for name in ["LEGGIMI", "Libri/.pdf", "Foto/IMG.cr", "Foto/IMG.xmp.bak"] {
             let mut host = MemoryHost::new().with_binary_document(name, b"x");
-            let error = preview(&mut host, &DocId::new(name), PreviewSize::Small).unwrap_err();
+            let error =
+                preview(&mut host, None, &DocId::new(name), PreviewSize::Small).unwrap_err();
             assert!(
                 matches!(error, PluginError::BadArgs(_)),
                 "{name}: {error:?}"
@@ -411,6 +533,7 @@ mod tests {
         let mut host = host_with("Foto/IMG_0001.xmp", b"<x:xmpmeta/>");
         let out = preview(
             &mut host,
+            None,
             &DocId::new("Foto/IMG_0001.xmp"),
             PreviewSize::Small,
         )
@@ -422,7 +545,13 @@ mod tests {
     #[test]
     fn a_broken_file_is_unreadable_and_a_huge_one_over_limit() {
         let mut host = host_with("rotto.pcraft", b"non sono uno zip");
-        let out = preview(&mut host, &DocId::new("rotto.pcraft"), PreviewSize::Small).unwrap();
+        let out = preview(
+            &mut host,
+            None,
+            &DocId::new("rotto.pcraft"),
+            PreviewSize::Small,
+        )
+        .unwrap();
         assert_eq!(out.missing, Some(Missing::Unreadable));
         assert_eq!(out.limit_bytes, None);
 
@@ -430,7 +559,7 @@ mod tests {
         let mut host = host_with("enorme.vectorcraft", &huge);
         let doc = DocId::new("enorme.vectorcraft");
         let reads = host.reads_on(doc.as_str()).0;
-        let out = preview(&mut host, &doc, PreviewSize::Small).unwrap();
+        let out = preview(&mut host, None, &doc, PreviewSize::Small).unwrap();
         assert_eq!(out.missing, Some(Missing::OverLimit));
         assert_eq!(out.limit_bytes, Some(MAX_FILE_BYTES as u64));
         assert_eq!(out.info.bytes, huge.len() as u64);
@@ -442,7 +571,8 @@ mod tests {
     #[test]
     fn a_document_that_is_not_craft_is_refused_with_a_key() {
         let mut host = MemoryHost::new().with_document("Nota.md", "# Nota\n");
-        let error = preview(&mut host, &DocId::new("Nota.md"), PreviewSize::Small).unwrap_err();
+        let error =
+            preview(&mut host, None, &DocId::new("Nota.md"), PreviewSize::Small).unwrap_err();
         assert!(
             matches!(&error, PluginError::BadArgs(text)
                 if text.as_message().is_some_and(|m| m.key == "not_craft")),

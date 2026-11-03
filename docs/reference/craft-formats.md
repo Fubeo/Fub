@@ -146,17 +146,19 @@ comando non c'è, e ricerca, backlink e tag restano.
   ripete `doc`, `revision` e `size`; una rotta, di un'altra versione o di un
   altro documento vale assente, e l'anteprima si rifà.
 - Un RAW, un PDF o un documento non si legge: la risposta è `origin: none`
-  con `missing: "absent"`.
+  con `missing: "absent"`, e `revision: null` quando il peso viene dalla
+  lease (vedi «Letture a pezzi»).
 - Altrimenti si leggono i byte: l'anteprima nel file dà `origin: file`, e
   senza `origin: none` con `missing: "absent"`, o `"unreadable"` se il file
   non si legge. Per un XMP `info.xmp` viene da `xmp::read`, la foto
   dai figli diretti della sua cartella (il nome esatto, o per il solo gambo
   il primo in ordine di id con un'altra estensione, confrontando i nomi come
   sono scritti) e `info.edits` dalla copia `-Edit.psd` della foto, se c'è.
-- Un file oltre 64 MiB, col peso che dice l'anagrafe, non si legge: è
-  `origin: none` con `missing: "over_limit"` e `limit_bytes`.
-- Si scrive in cache solo un'anteprima con `origin` `file` o `cli`, e solo se
-  la revisione è la stessa prima e dopo la lettura. La scrive chi ha il
+- Un file oltre 64 MiB, col peso della lease (o, senza lease, quello che
+  dice l'anagrafe), non si legge: è `origin: none` con `missing:
+  "over_limit"`, `limit_bytes` e, dalla lease, `revision: null`.
+- Si scrive in cache solo un'anteprima con `origin` `file` o `cli` e con una
+  revisione dei byte letti. La scrive chi ha il
   permesso di scrivere i dati del bundle: il comando, che è in sola lettura,
   la legge ma non la scrive, perché il kernel nega le scritture a un comando
   di sola lettura; una scrittura che non riesce non toglie l'anteprima.
@@ -165,6 +167,41 @@ comando non c'è, e ricerca, backlink e tag restano.
   restano finché la cache del bundle non si pulisce.
 - Il job `craft.render` risponde che nessuna app installata può fare
   l'anteprima (`unserved`).
+
+### Letture a pezzi
+
+Il bundle legge i file con le lease del kernel, le stesse del protocollo
+`fub-asset:`, senza una porta nell'ABI: quando si registra prende il
+`ResourceReader` del vault (`Registrar::craft_reader`, una superficie del
+solo `fub.craft`), e dentro un comando non prende mai il lucchetto del
+workspace (`crates/fub-host/src/craft/ranged.rs`).
+
+- Che cosa si legge a pezzi: tutto ciò che il bundle legge di un file. Il
+  peso viene dalla lease (`stat.size`), non dall'elenco della cartella; un
+  file Craft si legge intero con `read_all`, a pezzi di 256 KiB, fino a
+  64 MiB (oltre è `over_limit` senza leggere un byte), e la revisione si
+  calcola sugli stessi pezzi con `RevisionHasher`: è quella di
+  `document_revision`. `RangedFile` dà `Read + Seek` sopra una lease, con gli
+  offset `u64` (un file oltre 4 GiB si legge dove serve) e i byte letti
+  contati.
+- Come Fub si accorge di un file cambiato: il kernel ricontrolla peso,
+  data, identità del file e timbro di cambiamento prima e dopo ogni pezzo.
+  Un file riscritto, sostituito da uno dello stesso peso e della stessa data
+  o cancellato fra due pezzi è `Stale`, mai byte di due versioni; il comando
+  riprova con una lease nuova, al più tre volte, poi è un `conflict` con la
+  chiave `changing`. Chiuso il vault, ogni lettore si spegne e il pezzo dopo
+  è un errore.
+- La revisione senza i byte (`ranged::revision`) si legge a pezzi fino a
+  64 MiB e si ricorda per `(radice, documento)`, al più 4096 voci (piena, la
+  memoria si svuota), finché una lease nuova ha la stessa identità, lo stesso
+  peso e data e lo stesso timbro di cambiamento: riscrivere un file con lo
+  stesso peso e rimettergli la data cambia il timbro, e la revisione si
+  rifà.
+- Che cosa si legge ancora intero, e dall'host: quando la lease non si apre
+  (un supporto senza identità o timbro di cambiamento) il comando torna a
+  `document_revision`, al peso dell'anagrafe e a `read_document_bytes` fino a
+  64 MiB, con la revisione riletta dopo i byte. Il JSON di un `.vectorcraft`
+  e la voce di uno ZIP si leggono dai byte interi del file.
 
 ## Contenitori
 

@@ -8,7 +8,8 @@
 //! il job [`RENDER_JOB`], che farà l'anteprima con la riga di comando dell'app.
 //!
 //! Il contratto è in `fub_format_craft::contract`; come si legge l'anteprima,
-//! e la cache che la tiene, sono in [`preview`]. Fub non scrive mai un file
+//! e la cache che la tiene, sono in [`preview`]; le letture a pezzi dalle
+//! lease del kernel in [`ranged`]. Fub non scrive mai un file
 //! Craft: il bundle legge e basta.
 
 pub mod channel;
@@ -119,7 +120,17 @@ impl crate::registry::Bundle for CraftBundle {
     }
 
     fn register(&self, registrar: &mut crate::registry::Registrar<'_>) -> Vec<String> {
-        match registrar.register_command_provider(Box::new(CraftCommands)) {
+        // Il lettore delle lease si prende qui, una volta: dentro un comando il
+        // bundle non prende mai il lucchetto del workspace. Senza lettore le
+        // anteprime passano dall'host, come un supporto senza lease.
+        let ranged = match registrar.craft_reader() {
+            Ok(reader) => Some(ranged::Ranged::new(reader)),
+            Err(error) => {
+                tracing::warn!(%error, "fub.craft: niente letture a pezzi, le anteprime passano dall'host");
+                None
+            }
+        };
+        match registrar.register_command_provider(Box::new(CraftCommands { ranged })) {
             Ok(()) => Vec::new(),
             Err(error) => vec![format!("craft commands NOT registered: {error}")],
         }
@@ -138,7 +149,10 @@ fn size_of(raw: Option<&str>) -> Result<PreviewSize, PluginError> {
     }
 }
 
-pub struct CraftCommands;
+/// I comandi del bundle, col lettore a pezzi del vault su cui è montato.
+pub struct CraftCommands {
+    ranged: Option<ranged::Ranged>,
+}
 
 impl CommandProvider for CraftCommands {
     fn commands(&self) -> Vec<CommandSpec> {
@@ -190,7 +204,7 @@ impl CommandProvider for CraftCommands {
         // `render` nella domanda (la forma della versione 1, ancora
         // dichiarato) si ignora.
         let size = size_of(args.text("size"))?;
-        let preview = preview::preview(host, &doc, size)?;
+        let preview = preview::preview(host, self.ranged.as_ref(), &doc, size)?;
         let payload = serde_json::to_value(&preview)
             .map_err(|error| PluginError::Internal(error.to_string().into()))?;
         Ok(CommandOutcome::done().with_effect(CommandEffect::Custom {
