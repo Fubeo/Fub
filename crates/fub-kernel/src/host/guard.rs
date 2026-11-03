@@ -881,12 +881,7 @@ impl<H, P: Policy> Guard<H, P> {
     /// `Ok` se la famiglia è concessa, altrimenti il rifiuto che nomina ciò che
     /// si stava facendo **e** perché non si è potuto.
     fn check(&self, cap: Capability, what: impl FnOnce() -> String) -> Result<(), PluginError> {
-        match self.policy.denies(cap) {
-            None => Ok(()),
-            Some(why) => Err(PluginError::PermissionDenied(
-                format!("{}: {why}", what()).into(),
-            )),
-        }
+        refuse(self.policy.denies(cap), what)
     }
 
     fn allows(&self, cap: Capability) -> bool {
@@ -904,6 +899,20 @@ impl<H, P: Policy> Guard<H, P> {
 
     fn allows_path(&self, cap: Capability, path: &str) -> bool {
         self.allows(cap) && self.policy.denies_path(cap, path).is_none()
+    }
+}
+
+/// Il rifiuto di un cancello: ciò che si stava facendo, poi perché no.
+///
+/// Una forma sola per i cancelli che rispondono con una ragione (famiglia,
+/// comando, annullamento), così il messaggio si legge uguale da qualunque
+/// recinto arrivi.
+fn refuse(why: Option<String>, what: impl FnOnce() -> String) -> Result<(), PluginError> {
+    match why {
+        None => Ok(()),
+        Some(why) => Err(PluginError::PermissionDenied(
+            format!("{}: {why}", what()).into(),
+        )),
     }
 }
 
@@ -1541,11 +1550,9 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
         // `fub:run-command` affatto legge «non hai dichiarato il permesso», non
         // «il tuo elenco non lo nomina». Un comando nominato che non esiste
         // passa di qui e lo dice l'host (`UnknownCommand`), come senza elenco.
-        if let Some(why) = self.policy.denies_command(command) {
-            return Err(PluginError::PermissionDenied(
-                format!("invoking `{command}`: {why}").into(),
-            ));
-        }
+        refuse(self.policy.denies_command(command), || {
+            format!("invoking `{command}`")
+        })?;
         self.inner.run_command(command, args)
     }
 
@@ -1589,11 +1596,7 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
         // stessa ragione delle cartelle qui sotto: i passi che rigioca sono
         // comandi che il `Guard` non vede, e un recinto che non può provare la
         // copertura fallisce chiuso.
-        if let Some(why) = self.policy.denies_undo() {
-            return Err(PluginError::PermissionDenied(
-                format!("undoing: {why}").into(),
-            ));
-        }
+        refuse(self.policy.denies_undo(), || "undoing".into())?;
         for cap in Capability::ALL.into_iter().filter(|c| c.writes_the_vault()) {
             self.check(cap, || "undoing".into())?;
         }
