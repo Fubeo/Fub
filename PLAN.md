@@ -1274,7 +1274,7 @@ della tela passano; la prova del byte cambiato fallisce come deve su
 `canvas-patches/`, `canvas-ops/` e `canvas-read/`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core; cd
 apps/client && npm run typecheck && npx vitest run src/editors/canvas
-Stato: [~] in corso · coder · base 944f306c
+Stato: [x] fatto · 3be6626d..1a87587e · check --rapido 32/33: rosso solo ui/views.test.ts a tempo (5 s) sotto carico, verde da solo (30/30)
 
 ## T19 · Il testo in corso di una scheda nelle bozze di recupero
 

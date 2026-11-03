@@ -59,6 +59,24 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · N3 T18 · Il TypeScript della lavagna è tolto (model.ts resta
+  solo tipi; parseCanvas, serializeCanvas, isValidCanvas, emptyCanvas,
+  isCanvasOperation, source-edit.ts e i loro test via): i 101 casi tolti
+  sono diventati vettori canvas-read/01–81 e canvas-patches/46–70, letti da
+  Rust (tests/read_vectors.rs) e dal mirror wasm; la tabella caso → vettore
+  è nel resoconto del coder. Una lavagna rotta tenuta mentre il nucleo si
+  carica passa alla superficie d'errore per un canale onFail
+  (SurfaceCallbacks → document-controller.failSurface), toccando
+  editors/canvas/surface.ts; due e2e aspettano con waitFor la superficie
+  d'errore e controllano che nel frattempo non si veda niente di
+  modificabile. Scartato un ready?() nel registro: rallenterebbe l'apertura
+  di una lavagna buona e toglierebbe il riquadro aria-busy. I vettori di
+  lettura hanno un campo extra. Rischi rimasti: commit([]) arriva al nucleo,
+  che su una sorgente vuota scrive la lavagna intera (il motore non lo manda
+  mai; scritto in canvas-format.md e wasm/core.test.ts); i disegni
+  (spatial/lazy.ts) mostrano ancora avviso più toast invece della superficie
+  d'errore; il messaggio di panic di ts_mirror.rs nomina ancora il vecchio
+  mirror.test.ts · perché la regola del formato vive una volta sola, in Rust
 - N3 T19 (orchestratore): `settlePending()` è pubblico invece di
   `#settlePending`, perché anche i metodi della collezione (release,
   discardUnsaved, handleExternalRemoval, il congedo) lo chiamano prima di
