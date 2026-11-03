@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · N7 · il prototipo delle anteprime (T18) è approvato così
+  com'è, con le sei scelte da decidere guardando come le propone (le due
+  risposte con lo stesso peso, le miniature da 16 px, la tendina, le parole
+  chiave su tre righe che poi scorrono, la riga dei dati senza etichette
+  scritte, il PDF con filo e ombra); D-10 (a), le cinque cose restano fuori
+  · parole dell'utente («si, mi piace» e «si»); T19, T23, T25, T26, T28 e
+  T31 possono partire quando tocca a loro.
 - 2026-11-02 · N7 · Le risposte dell'utente a D-1…D-9: D-1 (b), le anteprime
   fatte dalle app spente finché chi usa Fub non le accende, con la domanda
   la prima volta («Chiedi la prima volta», non un permesso dei plugin), e

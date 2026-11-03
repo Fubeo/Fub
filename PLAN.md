@@ -33,11 +33,12 @@ Assunzioni: A1–A17 qui sotto. A1–A12 le ha decise il pianificatore il
 risposta è sotto ogni domanda) e A13–A17 vengono dalle risposte. D-10 è
 nuova e non blocca: il piano segue la sua (a).
 Ondate: T1 | T2 T3 T4 | T5 T6 | T7 T14 | T15 (fatti) | T18 T8 T9 T20 | T10 T21 | T19 T24 T27 | T11 T22 T25 | T12 T30 | T13 T23 T29 | T16 T28 T31 | T17 T26 | T32
-Prototipo: `PLAN-ui/craft-anteprime.html`, per le parti nuove che le risposte
-portano (la domanda sulle anteprime, i dati sulla foto, la scheda di un RAW,
-il PDF nella nota, l'albero, le impostazioni nuove); scritto dal pianificatore
-il 2026-11-03, da approvare (T18). Le parti di T14–T17 non hanno prototipo:
-riusano pezzi che ci sono.
+Prototipo: `PLAN-ui/craft-anteprime.html`, per le parti nuove che le
+risposte portano (la domanda sulle anteprime, i dati sulla foto, la scheda
+di un RAW, il PDF nella nota, l'albero, le impostazioni nuove); scritto dal
+pianificatore il 2026-11-03. Approvato: 2026-11-03 (T18), così com'è, con le
+sei scelte «da decidere guardando» come le propone la pagina. Le parti di
+T14–T17 non hanno prototipo: riusano pezzi che ci sono.
 
 ## Modifiche
 
@@ -385,6 +386,8 @@ Il 2026-11-02 l'utente ha risposto: la risposta è sotto ogni domanda. D-10
   con (b) una cosa che sembra un file si rinomina e si cestina come una
   cartella; con (c) cambia il kernel per tutti i formati, e più memoria a
   ogni indicizzazione.
+  Risposta (2026-11-03): (a) — le cinque cose restano fuori da N7, ognuna
+  per il piano di chi ne è padrone.
 
 ## Assunzioni
 
@@ -2121,7 +2124,7 @@ non si allarga T26); l'utente dice no a un pezzo (la sua parte del task
 grafico aspetta la nuova versione, il resto va avanti).
 Fatto quando: la riga «Approvato» ha la data nella pagina e nel piano.
 Prova: grep -n "Approvato" PLAN-ui/craft-anteprime.html PLAN.md
-Stato: [ ] da fare
+Stato: [x] fatto (approvato dall'utente il 2026-11-03)
 
 ## T19 · Le impostazioni nuove e il consenso
 
