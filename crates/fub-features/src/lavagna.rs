@@ -13,6 +13,16 @@
 //! L'editor della lavagna sta nel client (`editors/canvas`): questo modulo è
 //! la strada per chi la cambia senza vederla, cioè la palette, la riga di
 //! comando e un agente.
+//!
+//! # Le impostazioni
+//!
+//! [`settings`] dichiara due interruttori della macchina, nel gruppo
+//! «Lavagna», spenti di serie: [`CANVAS_INK_MOUSE_REMEMBER_KEY`] fa ricordare
+//! a ogni lavagna del computer se «Scrivi col mouse» era acceso, e
+//! [`CANVAS_FINGER_MOVES_CARD_KEY`] lascia al dito spostare la scheda che
+//! tocca. Li legge l'editor della lavagna (`editors/canvas/preferences.ts`
+//! nel client), che li segue dal vivo; il test del client
+//! `editors/canvas/settings-mirror.test.ts` confronta i nomi.
 
 mod apply;
 mod create;
@@ -21,6 +31,7 @@ use fub_abi::command::{
     CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode, ParamKind, ParamSpec,
 };
 use fub_abi::error::PluginError;
+use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::text::{StringCatalog, Text};
 use fub_abi::traits::{CommandProvider, HostApi};
 
@@ -35,6 +46,14 @@ pub const CANVAS_CREATE: &str = "canvas.create";
 
 /// Il namespace dell'effetto che dice che cosa ha fatto `canvas.apply`.
 pub const LAVAGNA_NS: &str = LAVAGNA_ID;
+
+/// L'impostazione «Ricorda se scrivi col mouse»: accesa, ogni lavagna del
+/// computer si apre con «Scrivi col mouse» come l'ha lasciato l'ultima.
+pub const CANVAS_INK_MOUSE_REMEMBER_KEY: &str = "canvas.ink_mouse_remember";
+
+/// L'impostazione «Il dito sposta le schede»: accesa, il dito sposta la
+/// scheda che tocca, e la lavagna solo dove non ci sono schede.
+pub const CANVAS_FINGER_MOVES_CARD_KEY: &str = "canvas.finger_moves_card";
 
 const DOC: &str = "doc";
 const OPS: &str = "ops";
@@ -87,6 +106,40 @@ const E_NAME_DEVICE: &str = "canvas.create.e_name_device";
 const E_NAME_TRAILING_DOT: &str = "canvas.create.e_name_trailing_dot";
 const E_NAME_HIDDEN: &str = "canvas.create.e_name_hidden";
 const E_NAME_TOO_LONG: &str = "canvas.create.e_name_too_long";
+
+const S_GROUP: &str = "s_group";
+const S_INK_MOUSE_REMEMBER: &str = "s_ink_mouse_remember";
+const S_INK_MOUSE_REMEMBER_DESC: &str = "s_ink_mouse_remember_desc";
+const S_FINGER_MOVES_CARD: &str = "s_finger_moves_card";
+const S_FINGER_MOVES_CARD_DESC: &str = "s_finger_moves_card_desc";
+
+/// Lo schema delle impostazioni della lavagna: due interruttori spenti.
+///
+/// Sono della **macchina**, come i suggerimenti dei disegni: dicono come si
+/// scrive e si tocca su questo computer (un mouse, uno schermo touch), non
+/// che cosa contiene il vault, e su un vault condiviso non cambiano le mani
+/// degli altri. Li scrive chi usa Fub dalle Impostazioni; non
+/// `program_writable`.
+pub fn settings() -> Vec<SettingSpec> {
+    vec![
+        SettingSpec::new(
+            CANVAS_INK_MOUSE_REMEMBER_KEY,
+            Text::key(S_INK_MOUSE_REMEMBER),
+            SettingKind::Toggle { default: false },
+        )
+        .describing(Text::key(S_INK_MOUSE_REMEMBER_DESC))
+        .grouped(Text::key(S_GROUP))
+        .for_machine(),
+        SettingSpec::new(
+            CANVAS_FINGER_MOVES_CARD_KEY,
+            Text::key(S_FINGER_MOVES_CARD),
+            SettingKind::Toggle { default: false },
+        )
+        .describing(Text::key(S_FINGER_MOVES_CARD_DESC))
+        .grouped(Text::key(S_GROUP))
+        .for_machine(),
+    ]
+}
 
 /// I comandi della lavagna.
 pub struct LavagnaCommands;
@@ -376,6 +429,27 @@ const STRINGS: &[(&str, &str, &str)] = &[
         "La lavagna non può chiamarsi «{doc}»: «{segment}» è troppo lungo (il massimo è {max} byte).",
         "The whiteboard cannot be called «{doc}»: «{segment}» is too long (at most {max} bytes).",
     ),
+    (S_GROUP, "Lavagna", "Whiteboard"),
+    (
+        S_INK_MOUSE_REMEMBER,
+        "Ricorda se scrivi col mouse",
+        "Remember whether you write with the mouse",
+    ),
+    (
+        S_INK_MOUSE_REMEMBER_DESC,
+        "Riaprendo una lavagna, l'interruttore «Scrivi col mouse» resta come l'hai lasciato. Spenta, la lavagna si apre sempre con l'interruttore spento. Il tasto D funziona sempre.",
+        "When you reopen a whiteboard, the «Write with the mouse» switch stays as you left it. Off, the whiteboard always opens with the switch off. The D key always works.",
+    ),
+    (
+        S_FINGER_MOVES_CARD,
+        "Il dito sposta le schede",
+        "A finger moves the cards",
+    ),
+    (
+        S_FINGER_MOVES_CARD_DESC,
+        "Sullo schermo touch il dito sposta la scheda che tocca, e la lavagna solo dove non ci sono schede. Spenta, il dito sposta sempre la lavagna e una scheda si sposta dalla sua testata. Due dita ingrandiscono sempre.",
+        "On a touch screen a finger moves the card it touches, and the whiteboard only where there are no cards. Off, a finger always moves the whiteboard and a card moves by its header. Two fingers always zoom.",
+    ),
 ];
 
 /// Le stringhe del componente.
@@ -439,6 +513,11 @@ mod tests {
             E_NAME_TRAILING_DOT,
             E_NAME_HIDDEN,
             E_NAME_TOO_LONG,
+            S_GROUP,
+            S_INK_MOUSE_REMEMBER,
+            S_INK_MOUSE_REMEMBER_DESC,
+            S_FINGER_MOVES_CARD,
+            S_FINGER_MOVES_CARD_DESC,
         ];
         for catalog in &catalogs {
             for key in keys {
@@ -451,5 +530,87 @@ mod tests {
         }
         assert_eq!(catalogs.len(), 2);
         assert_eq!(catalogs[0].entries.len(), STRINGS.len());
+    }
+
+    /// `text` com'è detto in `language`, col catalogo del componente.
+    fn said(text: &Text, language: &str) -> String {
+        let catalogs = catalog();
+        let locale = fub_abi::locale::Locale {
+            language: language.to_string(),
+            ..fub_abi::locale::Locale::default()
+        };
+        fub_abi::text::Strings::new(&catalogs, "it", &locale).render(text)
+    }
+
+    #[test]
+    fn le_impostazioni_sono_due_interruttori_spenti_della_macchina() {
+        use fub_abi::settings::{SettingScope, SettingValue};
+        let specs = settings();
+        let keys: Vec<_> = specs.iter().map(|spec| spec.key.as_str()).collect();
+        assert_eq!(
+            keys,
+            ["canvas.ink_mouse_remember", "canvas.finger_moves_card"]
+        );
+        assert_eq!(
+            keys,
+            [CANVAS_INK_MOUSE_REMEMBER_KEY, CANVAS_FINGER_MOVES_CARD_KEY]
+        );
+        for spec in &specs {
+            assert_eq!(spec.scope, SettingScope::Machine, "{}", spec.key);
+            assert!(!spec.program_writable, "{}", spec.key);
+            assert_eq!(
+                spec.kind,
+                SettingKind::Toggle { default: false },
+                "{}",
+                spec.key
+            );
+            assert_eq!(
+                spec.kind.default_value(),
+                SettingValue::Toggle(false),
+                "{}",
+                spec.key
+            );
+            // Un interruttore prende un interruttore e nient'altro.
+            assert!(spec.kind.rejects(&SettingValue::Toggle(true)).is_none());
+            assert!(spec
+                .kind
+                .rejects(&SettingValue::Text("sì".into()))
+                .is_some());
+        }
+    }
+
+    #[test]
+    fn le_impostazioni_parlano_italiano_e_inglese() {
+        let specs = settings();
+        for spec in &specs {
+            for (language, group) in [("it", "Lavagna"), ("en", "Whiteboard")] {
+                assert_eq!(said(&spec.group, language), group, "{}", spec.key);
+                for text in [&spec.label, &spec.description] {
+                    let line = said(text, language);
+                    assert!(
+                        !line.is_empty() && !line.starts_with("s_"),
+                        "{} in {language}: «{line}»",
+                        spec.key
+                    );
+                }
+            }
+        }
+        // Le parole del prototipo approvato (PLAN-ui/lavagna-penne.html).
+        assert_eq!(said(&specs[0].label, "it"), "Ricorda se scrivi col mouse");
+        assert_eq!(said(&specs[1].label, "it"), "Il dito sposta le schede");
+        assert_eq!(
+            said(&specs[0].label, "en"),
+            "Remember whether you write with the mouse"
+        );
+        assert_eq!(said(&specs[1].label, "en"), "A finger moves the cards");
+        let it = said(&specs[0].description, "it");
+        assert!(it.contains("«Scrivi col mouse»"), "{it}");
+        assert!(it.contains("Il tasto D funziona sempre."), "{it}");
+        let en = said(&specs[0].description, "en");
+        assert!(en.contains("«Write with the mouse»"), "{en}");
+        let it = said(&specs[1].description, "it");
+        assert!(it.contains("Due dita ingrandiscono sempre."), "{it}");
+        let en = said(&specs[1].description, "en");
+        assert!(en.contains("Two fingers always zoom."), "{en}");
     }
 }

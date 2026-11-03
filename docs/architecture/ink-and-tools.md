@@ -318,6 +318,15 @@ mouse `ignore`: i loro eventi restano alla lavagna, che li usa come prima.
   `ink/dom/idle.ts`, che la fa girare quando il thread è libero
   (`requestIdleCallback` con un `timeout`, altrimenti `setTimeout(0)`). Una
   penna che torna giù prima annulla la consegna.
+- **Le preferenze.** `editors/canvas/preferences.ts` legge i due
+  interruttori della macchina di `fub.lavagna` (`lavagna.rs`), spenti di
+  serie: `canvas.ink_mouse_remember` («Ricorda se scrivi col mouse») e
+  `canvas.finger_moves_card` («Il dito sposta le schede»). `watchPreferences`
+  li segue con `setting_changed` e torna il disposer; un valore che non è un
+  interruttore vale spento. L'ultimo «Scrivi col mouse» è lo stato di vista
+  `canvas.ink_mouse`, uno per computer: `saveInkMouse` lo scrive a ogni
+  cambio, `readInkMouse` lo ridà solo con «Ricorda» acceso, altrimenti
+  spento.
 
 ## Confini e verifica
 
@@ -335,6 +344,7 @@ mouse `ignore`: i loro eventi restano alla lavagna, che li usa come prima.
 | un ridisegno per evento | `ink/dom/pointer-adapter.test.ts` |
 | la penna della lavagna non arriva alla lavagna; il mouse sì | `editors/canvas/ink-layer.test.ts` |
 | l'inchiostro di una scheda la segue senza ridisegnare | `editors/canvas/ink-paint.test.ts` |
+| Rust e client nominano uguale le impostazioni della lavagna | `editors/canvas/settings-mirror.test.ts`, `fub-host/tests/lavagna_feature.rs` |
 | un puntatore fermo resta fermo nella scena se la vista si muove | `ink/dom/pointer-adapter.test.ts`, `tools/editor.test.ts` |
 
 Il percorso caldo ha due banchi:
