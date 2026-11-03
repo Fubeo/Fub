@@ -1738,7 +1738,7 @@ Fatto quando: `cargo test -p fub-app --test lean_ipc --test ipc_permissions
 npx vitest run src/host/mirror.test.ts` passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-app --test lean_ipc
 --test ipc_permissions --test ts_mirror_app
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base f1c256b0
 
 ## T13 · Gli strumenti MCP
 
