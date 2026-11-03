@@ -59,6 +59,11 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · K3 · T10: l'utente dà l'OK al cambio dell'IPC (read_document
+  e write_document con open?, document_closed con {open}, al più 1024 chiavi
+  per vault) · parole dell'utente («ok»): le letture semplici non tengono
+  più aperti i documenti; la riga nel piano la scrive l'orchestratore quando
+  il pianificatore della barra ha finito.
 - 2026-11-03 · K3 · il prototipo di T12 non è approvato: la barra
   multifunzione dei fogli va ridisegnata nello stile di Fub (moderno,
   minimale, stondato) invece che come Excel; si comincia dai fogli, e i
