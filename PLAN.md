@@ -767,7 +767,7 @@ Fatto quando: un test in `vaults.rs` scrive e rilegge l'impronta, e un file
 senza il campo si legge; `cargo test -p fub-app --test ts_mirror_app` verde con
 la fixture rigenerata; `npm run typecheck` verde.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base dc9dee5e
 
 ## T9 · L'host trova, adotta, scarta e prova le ricette
 
