@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- Orchestratore, CI di #297 (client in OOM): la causa è la prima build
+  fredda del nucleo WebAssembly dentro il tempo massimo della prima prova
+  (shell.e2e): con target/canvas-wasm vuoto le prove scadevano una dopo
+  l'altra e la memoria cresceva. Riprodotto in locale (16 prove scadute a
+  freddo). Correzione: un globalSetup di Vitest (build/canvas-wasm.global-
+  setup.mjs) compila il modulo una volta prima delle prove; se cargo manca
+  la suite parte lo stesso e falliscono solo le prove della lavagna, col
+  messaggio del plugin. A freddo dopo la correzione: 117/117, compilazione
+  23 s, memoria massima come su main (circa 1,4 GB). Commit d2783ebf.
 - N3 T22 (6d5fb197, dal coder ed4d8c1c): una lavagna con una chiave doppia
   si apre in sola lettura con l'avviso `canvas.unwritable` (IT ed EN, le
   sole lingue del catalogo) e torna scrivibile da sola quando la chiave se
