@@ -1738,7 +1738,7 @@ Fatto quando: `cargo test -p fub-app --test lean_ipc --test ipc_permissions
 npx vitest run src/host/mirror.test.ts` passa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-app --test lean_ipc
 --test ipc_permissions --test ts_mirror_app
-Stato: [~] in corso · coder · base f1c256b0
+Stato: [x] fatto · 5973ae8e, 491edb83, 2f4b6bab, c01ca38d · check --rapido 30/31: rossi solo 2 test di the_instance_and_the_turn sotto carico, verdi da soli (5 su 5)
 
 ## T13 · Gli strumenti MCP
 
@@ -1795,7 +1795,7 @@ l'app aperta (`running` sempre `false`).
 Fatto quando: `cargo test -p fub-cli --test mcp` e i test di `control.rs`
 (`cargo test -p fub-host --lib control`) passano.
 Prova: scripts/check.sh --rapido; cargo test -p fub-cli --test mcp
-Stato: [~] in corso · coder · base be00d5f7
+Stato: [x] fatto · 85bbb4d1 · stesso check di T12
 
 ## T14 · La scheda Craft e XMP
 

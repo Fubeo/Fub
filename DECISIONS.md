@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · n7-file-craft · T13: sopra gli 8 MiB fub_preview risponde
+  missing:"absent" invece di troncare, e l'aiuto di cli.rs non elenca ancora
+  gli strumenti nuovi · un'anteprima tagliata sembrerebbe vera; l'aiuto lo
+  aggiorna T16 insieme alla pagina degli strumenti.
+- 2026-11-03 · n7-file-craft · T12: fub-app prende CraftPreview e
+  PreviewSize da fub_host::craft_render (riesportate sotto la feature craft)
+  e non dipende da fub-format-craft · la colla IPC non deve conoscere i
+  crate dei formati (strati di dependency_invariant);
+  docs/architecture/overview.md torna com'era.
 - N7 T30 (b8131b11, dal coder 22ae7bf3): un `.docx` o un `.odt` dà la
   miniatura che porta dentro, letta a pezzi (la coda dello ZIP,
   `_rels/.rels` fino a 64 KiB, la voce della miniatura fino a 8 MiB), senza
