@@ -254,6 +254,47 @@ I limiti dei contenitori si guardano prima di leggere:
 - `serde_json` rifiuta un JSON annidato oltre 128 livelli, e il testo si
   raccoglie con una pila, non con la ricorsione.
 
+## I RAW
+
+`raw::embedded_jpegs` (`crates/fub-format-craft/src/raw.rs`) trova i JPEG
+che la fotocamera mette dentro una foto RAW, leggendo da un `Read + Seek`
+solo le strutture del file; `raw::read_jpeg` legge poi il JPEG scelto. Il
+file non si legge mai intero, e i dati del sensore restano dove sono.
+
+| Forma | Firma | Dove sono i JPEG | Orientamento |
+|---|---|---|---|
+| TIFF (CR2, NEF, ARW, DNG) | `II*\0` o `MM\0*` | IFD0, la catena degli IFD seguenti e i SubIFD (tag `0x014A`): `JPEGInterchangeFormat` (`0x0201`/`0x0202`), o un'unica striscia (`0x0111`/`0x0117`) con compressione 6 o 7 | tag `0x0112` di IFD0 |
+| ORF | `IIRO` o `MMOR` | come un TIFF | come un TIFF |
+| RW2 | `IIU\0` | come un TIFF, più il tag `0x002E` | come un TIFF |
+| CR3 | `ftyp` con la marca `crx ` | `THMB` nella `uuid` di Canon dentro `moov`, `PRVW` nella `uuid` `eaf42b5e-…` in cima | `0x0112` dell'IFD0 in `CMT1` |
+| RAF | `FUJIFILMCCD-RAW ` | offset e lunghezza big endian ai byte 84 e 88 | l'EXIF (`APP1`) del JPEG |
+
+- Un candidato vale se comincia con `FF D8`, sta dentro il file (e, nel
+  CR3, dentro la sua scatola), è lungo fra 1 byte e 8 MiB e un `SOF` con
+  lati non nulli si trova scorrendo i segmenti. Un `SOF` senza perdita
+  (`C3`, `C7`, `CB`, `CF`) sono i dati del sensore e non vale; un JPEG
+  progressivo sì. Un candidato che non vale si salta, e due uguali sono uno.
+- `large` prende il più grande per area, poi per byte; `small` il più
+  piccolo largo almeno 256 pixel, e se nessuno lo è il più grande.
+- Le anteprime di un ORF stanno nella MakerNote, che non si legge: un ORF
+  non ne ha. Un orientamento fuori da 1–8, o che manca, vale 1.
+- Gli errori sono `RawError`, senza testi: `NotRaw` (nessuna firma nota,
+  anche un file vuoto o un MP4), `Malformed` (un IFD visitato due volte, un
+  IFD o una scatola fuori dal file, una scatola di misura 0 o più grande di
+  chi la contiene), `TooLarge` (un limite) e `Io`, l'errore del lettore, che
+  torna intero a chi chiama.
+
+I limiti si guardano prima di leggere, e ciascuno ha la sua costante:
+
+- al più 16 IFD visitati, compresi i SubIFD (`MAX_IFDS`), e una voce che
+  dichiara più di 16 SubIFD è `TooLarge`;
+- al più 1000 voci per IFD (`MAX_IFD_ENTRIES`), contate prima di leggerle;
+- al più 8 livelli di scatole (`MAX_BOX_DEPTH`) e 10 000 scatole
+  (`MAX_BOXES`) in un CR3;
+- al più 64 candidati diversi (`MAX_CANDIDATES`);
+- un JPEG oltre 8 MiB (`MAX_JPEG_BYTES`) non si prende, e `read_jpeg` non lo
+  legge.
+
 ## Limiti
 
 | Che cosa | Limite |
@@ -265,6 +306,11 @@ I limiti dei contenitori si guardano prima di leggere:
 | File collegati per documento | 1000 |
 | Un XMP | 8 MiB |
 | Parole chiave di un XMP | 500 |
+| Un JPEG dentro un RAW | 8 MiB |
+| IFD visitati in un RAW TIFF | 16 |
+| Voci di un IFD | 1000 |
+| Livelli e scatole di un CR3 | 8 e 10 000 |
+| JPEG candidati in un RAW | 64 |
 
 Le misure si controllano prima di leggere, ogni lettura ha un tetto, e
 nessuna allocazione la decide un numero scritto nel file.
