@@ -107,8 +107,10 @@ flate2 = "1.1.9"
 quick-xml = "0.41.0"
 # Open-no-follow flags for theme bundle descriptors on Unix. The host keeps
 # these platform bits behind its target dependency; no path-based read relies
-# on a preflight stat.
-rustix = { version = "1", default-features = false, features = ["fs"] }
+# on a preflight stat. `process` serve a `craft/launch.rs` per fermare
+# l'intero gruppo di una CLI scaduta (`kill_process_group`): la accendeva già
+# cap-primitives, quindi non entra codice nuovo nell'albero.
+rustix = { version = "1", default-features = false, features = ["fs", "process"] }
 # Il vocabolario del log (§17.3, decisione 0062). **Era già nell'albero** —
 # 0.1.44, tirato da tauri — e prenderlo come dipendenza diretta non aggiunge un
 # crate: aggiunge un nome che descrive una cosa che c'era. Il collettore invece
