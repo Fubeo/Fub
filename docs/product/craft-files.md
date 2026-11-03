@@ -169,3 +169,45 @@ Un'app è **Non installata** quando Fub non ha trovato il suo programma in
 nessuno dei posti qui sopra. Fub non sa dire se l'app è davvero assente o se
 sta in un posto suo: in tutti e due i casi basta scrivere il percorso in
 **Dove sono le app Craft**.
+
+## Le impostazioni
+
+Il gruppo **App esterne** delle impostazioni tiene cinque voci. Sono tutte di
+questo computer: non viaggiano col vault, e un vault importato che le porta
+nel suo `.fub/settings.json` non cambia niente.
+
+| Impostazione | Chiave | Di partenza |
+|---|---|---|
+| Dove sono le app Craft | `craft.editor-paths` | vuota |
+| Anteprime fatte dalle app | `craft.cli-previews` | Chiedi la prima volta |
+| Peso massimo da leggere per un'anteprima (MiB) | `craft.preview-max-mib` | 64 |
+| Miniature nell'albero | `craft.tree-thumbnails` | spenta |
+| Mostra i file XMP nell'albero | `craft.tree-show-xmp` | accesa |
+
+- **Dove sono le app Craft**: vedi [Dire a Fub dove sta un'app](#dire-a-fub-dove-sta-unapp).
+- **Anteprime fatte dalle app**: quando un file non ha un'anteprima, Fub può
+  farla fare al programma a riga di comando dell'app che lo apre, su una
+  copia del file e solo quando il file lo apri tu. Le scelte sono tre:
+  **Chiedi la prima volta** (`ask`), **Accese** (`on`) e **Spente** (`off`).
+  Con «Chiedi la prima volta» la prima scheda che avrebbe bisogno di un'app
+  lo domanda: «Sì» salva «Accese», «No» salva «Spente», e la domanda non
+  torna. Un valore che Fub non riconosce, compreso l'interruttore delle
+  versioni di prima, vale «Chiedi la prima volta», e il file delle
+  impostazioni resta com'è. Azzerare la voce torna a chiedere.
+- **Peso massimo da leggere per un'anteprima**: da 1 a 4096 MiB. Un file che
+  va letto intero per l'anteprima (un VectorCraft) e pesa di più resta senza.
+  I file che si leggono a pezzi (uno ZIP come un PhotoCraft o un FigCraft)
+  non hanno limite. Fub rilegge il peso a ogni anteprima, quindi un valore
+  cambiato vale dalla prossima.
+- **Miniature nell'albero**: accanto al nome di un file Craft, di un RAW, di
+  un PDF o di un documento, la piccola anteprima che il file ha già. L'albero
+  non avvia mai un'app.
+- **Mostra i file XMP nell'albero**: spenta, gli XMP spariscono dall'albero;
+  la ricerca li trova e la foto mostra i loro dati.
+
+Le cambia chi usa Fub: dalle impostazioni, o dalla CLI di Fub nel suo
+terminale, per esempio `fub-cli config --set craft.cli-previews=on`. La CLI
+scrive il valore con la specie che lo schema dichiara, quindi `on` e `off`
+sono le parole della scelta. Un plugin, un bundle o un comando del registro
+non possono dare il consenso alle anteprime: la chiave non è scrivibile da
+un programma, e la scrittura riceve `PermissionDenied`.

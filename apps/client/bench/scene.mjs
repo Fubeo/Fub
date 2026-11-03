@@ -154,6 +154,16 @@ export const SCENE = onPage("shell", [
     },
   },
   {
+    id: "settings-external-apps",
+    title: "Le preferenze: il gruppo «App esterne», con le anteprime fatte dalle app, il peso massimo e l'albero",
+    query: "craft=1",
+    prepare: async (page) => {
+      await page.click("#open-settings");
+      await page.waitForSelector('#settings-body .setting-row[data-setting-key="craft.tree-show-xmp"]');
+      await page.$eval('.setting-row[data-setting-key="craft.editor-paths"]', (row) => row.scrollIntoView({ block: "start" }));
+    },
+  },
+  {
     id: "prefs-appearance",
     title: "Le preferenze: carattere, accento e spazio dell'interfaccia, coi controlli dello Scrittoio",
     prepare: async (page) => {

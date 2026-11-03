@@ -682,6 +682,89 @@ const DRAW_WORKSPACE: readonly SettingEntry[] = [
   },
 ];
 
+/// Il gruppo «App esterne» con le cinque impostazioni della feature `craft`,
+/// i testi del catalogo vero (`fub-host/src/settings.rs`). Solo con
+/// `?craft=1`, così le altre scene delle preferenze restano come sono.
+const CRAFT_SETTINGS: readonly SettingEntry[] = params.get("craft") === "1" ? [
+  {
+    spec: {
+      key: "craft.editor-paths",
+      label: "Dove sono le app Craft",
+      description:
+        "Una riga per programma, come vectorcraft=/opt/vc/vectorcraft, o vectorcraft-cli=… per la riga di comando. Il percorso intero vince su quello che Fub trova da solo.",
+      group: "App esterne",
+      scope: "machine",
+      kind: { kind: "list", default: [] },
+      program_writable: false,
+    },
+    value: [],
+    source: "default",
+  },
+  {
+    spec: {
+      key: "craft.cli-previews",
+      label: "Anteprime fatte dalle app",
+      description:
+        "Fub fa fare l'anteprima di un file che non ne ha una all'app che lo apre, su una copia, solo quando apri il file tu.",
+      group: "App esterne",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "ask",
+        options: [
+          { value: "ask", label: "Chiedi la prima volta" },
+          { value: "on", label: "Accese" },
+          { value: "off", label: "Spente" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "ask",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "craft.preview-max-mib",
+      label: "Peso massimo da leggere per un'anteprima (MiB)",
+      description:
+        "Un file che va letto intero per l'anteprima e pesa di più resta senza: i file che si leggono a pezzi non hanno limite.",
+      group: "App esterne",
+      scope: "machine",
+      kind: { kind: "number", default: 64, min: 1, max: 4096 },
+      program_writable: false,
+    },
+    value: 64,
+    source: "default",
+  },
+  {
+    spec: {
+      key: "craft.tree-thumbnails",
+      label: "Miniature nell'albero",
+      description:
+        "Accanto al nome di un file Craft, di un RAW, di un PDF o di un documento, la piccola anteprima che il file ha già. L'albero non avvia mai un'app.",
+      group: "App esterne",
+      scope: "machine",
+      kind: { kind: "toggle", default: false },
+      program_writable: false,
+    },
+    value: false,
+    source: "default",
+  },
+  {
+    spec: {
+      key: "craft.tree-show-xmp",
+      label: "Mostra i file XMP nell'albero",
+      description: "Spento, gli XMP spariscono dall'albero: la ricerca li trova e la foto mostra i loro dati.",
+      group: "App esterne",
+      scope: "machine",
+      kind: { kind: "toggle", default: true },
+      program_writable: false,
+    },
+    value: true,
+    source: "default",
+  },
+] : [];
+
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
 ///
 /// `satisfies` è deliberato: queste fixture attraversano lo stesso confine
@@ -1014,7 +1097,7 @@ const options: Options = {
   root: ROOT,
   view: VIEWS,
   commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS],
-  settings: DRAWING === null ? SETTINGS : [...SETTINGS, ...DRAW_WORKSPACE],
+  settings: [...SETTINGS, ...(DRAWING === null ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(WORKBOOK_DOC === null ? {} : {
     // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.
