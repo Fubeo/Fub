@@ -29,7 +29,10 @@ pub(super) fn read_from<R: Read + Seek>(
     let found = match embedded_jpegs(reader, len) {
         Ok(found) => found,
         Err(RawError::Io(error)) => return Err(error),
-        Err(_) => return Ok(unreadable(preview)),
+        Err(_) => {
+            unreadable(preview);
+            return Ok(());
+        }
     };
     let Some(range) = found.pick(size) else {
         preview.image = None;
@@ -40,7 +43,10 @@ pub(super) fn read_from<R: Read + Seek>(
     let bytes = match read_jpeg(reader, &range) {
         Ok(bytes) => bytes,
         Err(RawError::Io(error)) => return Err(error),
-        Err(_) => return Ok(unreadable(preview)),
+        Err(_) => {
+            unreadable(preview);
+            return Ok(());
+        }
     };
     match PreviewImage::from_jpeg(&bytes, found.orientation) {
         Some(image) => {
