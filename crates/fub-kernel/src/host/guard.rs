@@ -312,6 +312,29 @@ pub trait Policy: Send + Sync {
     fn denies_host(&self, _host: &str) -> Option<String> {
         None
     }
+
+    /// La ragione per cui questo comando è fuori dal recinto, o `None`.
+    ///
+    /// È il recinto di [`permission::RUN_COMMAND`]: la famiglia
+    /// [`Capability::Commands`] dice *se* si possono invocare comandi, questa
+    /// risposta dice *quali*. Gli id si confrontano interi, come stringhe: non
+    /// hanno né la semantica dei prefissi dei path né quella dei sottodomini
+    /// degli host.
+    fn denies_command(&self, _command: &str) -> Option<String> {
+        None
+    }
+
+    /// La ragione per cui questa politica non può lasciar rigiocare un
+    /// annullamento, o `None`.
+    ///
+    /// Sta accanto a [`Policy::denies_command`] e non dentro: un annullamento
+    /// non nomina il comando che disfa — la pila è privata del kernel — quindi
+    /// un recinto di comandi non può provarne la copertura, e la sola risposta
+    /// onesta che ha è *no*. Chiederlo con un id inventato al posto del
+    /// comando sarebbe un sentinella che un elenco potrebbe nominare per caso.
+    fn denies_undo(&self) -> Option<String> {
+        None
+    }
 }
 
 /// Due politiche insieme: nega chi nega per primo.
@@ -335,6 +358,16 @@ impl<A: Policy, B: Policy> Policy for (A, B) {
         self.0
             .denies_host(host)
             .or_else(|| self.1.denies_host(host))
+    }
+
+    fn denies_command(&self, command: &str) -> Option<String> {
+        self.0
+            .denies_command(command)
+            .or_else(|| self.1.denies_command(command))
+    }
+
+    fn denies_undo(&self) -> Option<String> {
+        self.0.denies_undo().or_else(|| self.1.denies_undo())
     }
 }
 
@@ -467,6 +500,23 @@ pub struct Granted {
     /// Un `Arc` perché [`Granted`] si clona a ogni prestito, e l'elenco è dello
     /// stesso manifest per tutta la vita del montaggio.
     network: Option<Arc<[Box<str>]>>,
+    /// I comandi che `fub:run-command` consente di invocare, se ne ha
+    /// nominati.
+    ///
+    /// Le stesse tre letture di `network`, per la stessa ragione: `None` = il
+    /// permesso c'è senza parametro, cioè *qualunque comando*; `Some(elenco)` =
+    /// quei comandi e nessun altro; `Some(vuoto)` = un parametro che c'è e non è
+    /// un elenco di stringhe, cioè **nessun** comando. Più severa di `network`
+    /// in un punto: un elenco con dentro una non-stringa non tiene le stringhe
+    /// che ha, chiude tutto, come gli elenchi di cartelle. Un elenco a metà
+    /// leggibile è un manifest scritto male, e da un manifest scritto male non
+    /// si indovina che cosa volesse permettere.
+    ///
+    /// Gli id non si normalizzano: niente `trim`, niente minuscole, niente `*`.
+    /// Un id di comando è un nome esatto del registro, e un `" note.trash"` che
+    /// combaciasse con `note.trash` sarebbe un recinto che decide da sé che
+    /// cosa intendeva chi l'ha scritto.
+    commands: Option<Arc<[Box<str>]>>,
     /// Prefissi di documento per le letture, o `None` senza parametro.
     read_paths: Option<Arc<[Box<str>]>>,
     /// Prefissi di documento per le scritture, o `None` senza parametro.
@@ -560,6 +610,7 @@ impl Granted {
             // Un parametro che non è un elenco: recinto che non nomina nessuno.
             Some(_) => Some(Arc::from([])),
         };
+        let commands = command_allowlist(permissions);
         let read_paths = path_allowlist(permissions, permission::READ_VAULT);
         let write_paths = path_allowlist(permissions, permission::WRITE_VAULT);
         let draft_paths = path_allowlist(permissions, permission::READ_DRAFTS);
@@ -569,6 +620,7 @@ impl Granted {
             plugin: Arc::from(plugin),
             allowed,
             network,
+            commands,
             read_paths,
             write_paths,
             draft_paths,
@@ -588,6 +640,7 @@ impl Granted {
             plugin: Arc::from(plugin),
             allowed: CapabilitySet::default(),
             network: None,
+            commands: None,
             read_paths: None,
             write_paths: None,
             draft_paths: None,
@@ -616,6 +669,30 @@ fn normalized_host(host: &str) -> Box<str> {
         .trim_end_matches('.')
         .to_ascii_lowercase()
         .into_boxed_str()
+}
+
+/// Legge l'elenco di `fub:run-command`: le tre letture del campo
+/// [`Granted::commands`](Granted).
+///
+/// Si legge il valore **grezzo**, come per `network` e per le cartelle, perché
+/// `as_strings` confonderebbe l'assente con il malformato.
+fn command_allowlist(permissions: &PluginPermissions) -> Option<Arc<[Box<str>]>> {
+    match permissions.granted.get(permission::RUN_COMMAND) {
+        // Assente, o acceso senza parametro: qualunque comando.
+        None | Some(serde_json::Value::Bool(_)) | Some(serde_json::Value::Null) => None,
+        // Un elenco vuoto non restringe: la regola uniforme della mappa.
+        Some(serde_json::Value::Array(items)) if items.is_empty() => None,
+        Some(serde_json::Value::Array(items)) if items.iter().all(|v| v.is_string()) => Some(
+            items
+                .iter()
+                .filter_map(|v| v.as_str())
+                .map(Box::from)
+                .collect(),
+        ),
+        // Una stringa, un numero, un oggetto, un elenco con una non-stringa:
+        // un recinto che non nomina nessuno.
+        Some(_) => Some(Arc::from([])),
+    }
 }
 
 /// Legge un elenco di prefissi: assente o vuoto significa vault intero.
@@ -702,6 +779,33 @@ impl Policy for Granted {
                 allowed.join("`, `")
             )),
         }
+    }
+
+    fn denies_command(&self, command: &str) -> Option<String> {
+        match &self.commands {
+            None => None,
+            Some(allowed) if allowed.iter().any(|id| &**id == command) => None,
+            Some(allowed) if allowed.is_empty() => Some(format!(
+                "il parametro di `{}` di `{}` non è un elenco di comandi, e finché non lo è non ne invoca nessuno: `{command}` compreso",
+                permission::RUN_COMMAND,
+                self.plugin
+            )),
+            Some(_) => Some(format!(
+                "`{}` non nomina `{command}` in `{}`",
+                self.plugin,
+                permission::RUN_COMMAND
+            )),
+        }
+    }
+
+    fn denies_undo(&self) -> Option<String> {
+        self.commands.as_ref().map(|_| {
+            format!(
+                "`{}` ha un elenco in `{}`, e un annullamento rigioca comandi che il recinto non vede",
+                self.plugin,
+                permission::RUN_COMMAND
+            )
+        })
     }
 
     fn denies(&self, cap: Capability) -> Option<String> {
@@ -1433,6 +1537,15 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
         args: serde_json::Value,
     ) -> Result<CommandOutcome, PluginError> {
         self.check(Capability::Commands, || format!("invoking `{command}`"))?;
+        // Il secondo cancello viene dopo la famiglia: chi non ha
+        // `fub:run-command` affatto legge «non hai dichiarato il permesso», non
+        // «il tuo elenco non lo nomina». Un comando nominato che non esiste
+        // passa di qui e lo dice l'host (`UnknownCommand`), come senza elenco.
+        if let Some(why) = self.policy.denies_command(command) {
+            return Err(PluginError::PermissionDenied(
+                format!("invoking `{command}`: {why}").into(),
+            ));
+        }
         self.inner.run_command(command, args)
     }
 
@@ -1472,6 +1585,15 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
         // L'undo non nomina un documento: uno scope di path non può quindi
         // provarne la copertura e deve fallire chiuso prima di avviare il replay.
         self.check(Capability::Commands, || "undoing".into())?;
+        // Un elenco in `fub:run-command` chiude anche l'annullamento, per la
+        // stessa ragione delle cartelle qui sotto: i passi che rigioca sono
+        // comandi che il `Guard` non vede, e un recinto che non può provare la
+        // copertura fallisce chiuso.
+        if let Some(why) = self.policy.denies_undo() {
+            return Err(PluginError::PermissionDenied(
+                format!("undoing: {why}").into(),
+            ));
+        }
         for cap in Capability::ALL.into_iter().filter(|c| c.writes_the_vault()) {
             self.check(cap, || "undoing".into())?;
         }
@@ -2836,5 +2958,264 @@ mod tests {
             granted.denies(Capability::Drafts).is_some(),
             "but not drafts: they were the same checkbox in the same manifest"
         );
+    }
+
+    /// Un host che conosce due comandi e ricorda quali ha eseguito: ciò che si
+    /// prova è il recinto di `fub:run-command`, e un nome in `ran` è un comando
+    /// arrivato **oltre** il `Guard`.
+    #[derive(Default)]
+    struct RunsCommands {
+        ran: Vec<String>,
+    }
+
+    impl RunsCommands {
+        const KNOWN: [&'static str; 2] = ["note.rename", "note.trash"];
+    }
+
+    impl HostCommands for RunsCommands {
+        fn run_command(
+            &mut self,
+            command: &str,
+            _args: serde_json::Value,
+        ) -> Result<CommandOutcome, PluginError> {
+            if !Self::KNOWN.contains(&command) {
+                return Err(PluginError::UnknownCommand(fub_abi::text::Text::Literal(
+                    command.to_owned(),
+                )));
+            }
+            self.ran.push(command.to_owned());
+            Ok(CommandOutcome::done())
+        }
+
+        fn undo_last(&mut self) -> Result<Option<Undone>, PluginError> {
+            unreachable!("the command benches do not undo")
+        }
+    }
+
+    /// `fub:run-command` con questo parametro, più `write-vault` perché
+    /// l'annullamento lo chiede comunque.
+    fn with_commands(value: serde_json::Value) -> Granted {
+        let mut permissions =
+            PluginPermissions::of(&[permission::RUN_COMMAND, permission::WRITE_VAULT]);
+        permissions.granted.set(permission::RUN_COMMAND, value);
+        Granted::new("recipe.archivia", &permissions, Trust::Community)
+    }
+
+    fn invoke(guard: &mut Guard<RunsCommands, Granted>, command: &str) -> Result<(), PluginError> {
+        guard
+            .run_command(command, serde_json::Value::Null)
+            .map(|_| ())
+    }
+
+    /// **L'elenco è vero**: passano i comandi che nomina, e soltanto quelli.
+    #[test]
+    fn a_command_list_lets_through_only_the_commands_it_names() {
+        let mut guard = Guard::new(
+            RunsCommands::default(),
+            with_commands(serde_json::json!(["note.rename"])),
+        );
+
+        invoke(&mut guard, "note.rename").expect("a named command passes");
+        let err = invoke(&mut guard, "note.trash").expect_err("an unnamed one does not");
+
+        assert!(matches!(err, PluginError::PermissionDenied(_)), "{err}");
+        let message = err.message().to_string();
+        assert!(
+            message.contains("`recipe.archivia` non nomina `note.trash` in `fub:run-command`"),
+            "it names the plugin, the command and the permission: {message}"
+        );
+        assert_eq!(guard.inner.ran, ["note.rename"], "the denied one never ran");
+    }
+
+    /// Senza parametro, con `true` o con un elenco vuoto, `fub:run-command` è
+    /// *qualunque comando*: la regola uniforme della mappa, come prima
+    /// dell'elenco. (`null` e `false` spengono il permesso: risponde la
+    /// famiglia, non l'elenco.)
+    #[test]
+    fn without_a_list_every_command_passes() {
+        let bare = Granted::new(
+            "p",
+            &PluginPermissions::of(&[permission::RUN_COMMAND]),
+            Trust::Community,
+        );
+        let policies = [
+            bare,
+            with_commands(serde_json::json!(true)),
+            with_commands(serde_json::json!([])),
+        ];
+        for policy in policies {
+            let mut guard = Guard::new(RunsCommands::default(), policy);
+            invoke(&mut guard, "note.rename").expect("no list, every command");
+            invoke(&mut guard, "note.trash").expect("no list, every command");
+            assert_eq!(guard.inner.ran, ["note.rename", "note.trash"]);
+        }
+    }
+
+    /// Un plugin `Core` senza parametro resta com'è: tutto passa.
+    #[test]
+    fn a_core_plugin_without_a_list_is_unchanged() {
+        let policy = Granted::new(
+            "fub.core",
+            &PluginPermissions::of(&[permission::RUN_COMMAND]),
+            Trust::Core,
+        );
+        let mut guard = Guard::new(RunsCommands::default(), policy);
+        invoke(&mut guard, "note.trash").expect("core, no list");
+    }
+
+    /// **Un parametro illeggibile non nomina nessun comando.** `"note.trash"`
+    /// come stringa invece che come elenco è il refuso che intende restringere:
+    /// se aprisse a tutto lo farebbe in silenzio.
+    #[test]
+    fn a_malformed_command_list_fences_every_command_out() {
+        for wrong in [
+            serde_json::json!("note.trash"),
+            serde_json::json!(7),
+            serde_json::json!({ "run": "note.trash" }),
+            // Una non-stringa guasta l'elenco intero: le stringhe accanto non
+            // valgono, come negli elenchi di cartelle.
+            serde_json::json!(["note.trash", 1]),
+        ] {
+            let mut guard = Guard::new(RunsCommands::default(), with_commands(wrong.clone()));
+            for command in ["note.trash", "note.rename"] {
+                let err =
+                    invoke(&mut guard, command).expect_err("a malformed parameter grants nothing");
+                assert!(
+                    matches!(err, PluginError::PermissionDenied(_)),
+                    "{wrong}: {err}"
+                );
+                assert!(
+                    err.message()
+                        .to_string()
+                        .contains("non è un elenco di comandi"),
+                    "it sends you to the manifest ({wrong}): {err}"
+                );
+            }
+            assert!(guard.inner.ran.is_empty(), "nothing ran ({wrong})");
+        }
+    }
+
+    /// Il confronto è esatto: niente `trim`, niente prefissi, niente `*`. Un id
+    /// ripetuto non cambia niente.
+    #[test]
+    fn a_command_list_matches_whole_ids_only() {
+        let mut guard = Guard::new(
+            RunsCommands::default(),
+            with_commands(serde_json::json!([
+                " note.trash",
+                "note.*",
+                "note.",
+                "note.rename",
+                "note.rename"
+            ])),
+        );
+
+        invoke(&mut guard, "note.rename").expect("named, even twice");
+        let err = invoke(&mut guard, "note.trash")
+            .expect_err("neither a padded id, a star nor a prefix names `note.trash`");
+        assert!(matches!(err, PluginError::PermissionDenied(_)), "{err}");
+        assert_eq!(guard.inner.ran, ["note.rename"]);
+    }
+
+    /// Un comando che l'elenco nomina e che non esiste resta `UnknownCommand`:
+    /// il recinto non inventa un rifiuto per ciò che l'host non conosce.
+    #[test]
+    fn a_named_command_that_does_not_exist_is_still_unknown() {
+        let mut guard = Guard::new(
+            RunsCommands::default(),
+            with_commands(serde_json::json!(["note.archive"])),
+        );
+        let err = invoke(&mut guard, "note.archive").expect_err("nobody registered it");
+        assert!(matches!(err, PluginError::UnknownCommand(_)), "{err}");
+    }
+
+    /// Prima la famiglia, poi l'elenco: chi non ha dichiarato `fub:run-command`
+    /// legge che manca il permesso, non che il suo elenco non nomina il comando.
+    #[test]
+    fn without_the_permission_the_family_answers_first() {
+        let policy = Granted::new("p", &PluginPermissions::of(&[]), Trust::Community);
+        let mut guard = Guard::new(RunsCommands::default(), policy);
+        let err = invoke(&mut guard, "note.trash").expect_err("no permission");
+        assert!(
+            err.message()
+                .to_string()
+                .contains("non ha dichiarato il permesso"),
+            "{err}"
+        );
+    }
+
+    /// `ReadOnly` non ha un recinto di comandi: la simulazione di una macro
+    /// continua a invocare, e l'host sottostante gira in `DryRun`.
+    #[test]
+    fn read_only_does_not_fence_commands() {
+        let policy = ReadOnly { why: "simulating" };
+        assert!(policy.denies_command("note.trash").is_none());
+        assert!(policy.denies_undo().is_none());
+    }
+
+    /// **Con un elenco l'annullamento è rifiutato**, prima che l'host tocchi la
+    /// pila: i passi che rigiocherebbe sono comandi che il `Guard` non vede.
+    #[test]
+    fn a_command_list_refuses_undo() {
+        for list in [
+            serde_json::json!(["note.rename"]),
+            serde_json::json!("note.rename"),
+        ] {
+            let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let mut guard = Guard::new(
+                CountsUndoes(std::sync::Arc::clone(&calls)),
+                with_commands(list.clone()),
+            );
+
+            let err = guard
+                .undo_last()
+                .expect_err("a listed plugin cannot replay what it cannot see");
+
+            assert!(
+                matches!(err, PluginError::PermissionDenied(_)),
+                "{list}: {err}"
+            );
+            assert!(
+                err.message().to_string().contains("fub:run-command"),
+                "it names the permission ({list}): {err}"
+            );
+            assert_eq!(
+                calls.load(std::sync::atomic::Ordering::SeqCst),
+                0,
+                "the gate runs before the wrapped host can pop or replay ({list})"
+            );
+        }
+    }
+
+    /// Senza elenco l'annullamento resta quello di prima.
+    #[test]
+    fn without_a_list_undo_is_unchanged() {
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut guard = Guard::new(
+            CountsUndoes(std::sync::Arc::clone(&calls)),
+            Granted::new(
+                "p",
+                &PluginPermissions::of(&[permission::RUN_COMMAND, permission::WRITE_VAULT]),
+                Trust::Community,
+            ),
+        );
+
+        let undone = guard.undo_last().expect("no list, undo as before");
+
+        assert!(undone.is_some());
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    /// La coppia di politiche inoltra i due recinti nuovi: nega chi nega per
+    /// primo, come per gli host.
+    #[test]
+    fn a_policy_pair_forwards_the_command_fence() {
+        let pair = (
+            ReadOnly { why: "simulating" },
+            with_commands(serde_json::json!(["note.rename"])),
+        );
+        assert!(pair.denies_command("note.rename").is_none());
+        assert!(pair.denies_command("note.trash").is_some());
+        assert!(pair.denies_undo().is_some());
     }
 }
