@@ -2983,7 +2983,7 @@ Fatto quando: `cargo test -p fub-format-craft --test office` e `cargo test -p
 fub-host --test craft_ranged` passano.
 Prova: scripts/check.sh --rapido; cargo test -p fub-format-craft --test
 office
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 9790d2ef
 
 ## T31 · PDF e documenti nella shell
 
