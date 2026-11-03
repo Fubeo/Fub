@@ -2621,7 +2621,7 @@ il vault chiuso.
 Fatto quando: `cargo test -p fub-format-craft --test xmp` e `cargo test -p
 fub-host --test craft` passano.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test craft
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 3bda61f1
 
 ## T25 · I dati sulla foto
 
