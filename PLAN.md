@@ -576,7 +576,7 @@ Fatto quando: `cargo test -p fub-features --test command_conformance` e
 fa fallire `command_ids_are_distinct_and_namespaced` (test negativo in
 `fub-sdk`).
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base a0488e53 + questo Stato
+Stato: [x] fatto · 4964222e, d069b4d0 (clippy) · check --rapido 22/22 sull'integrazione
 
 ## T4 · Il componente «Ricette» e `recipes.new`
 

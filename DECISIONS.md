@@ -59,6 +59,17 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- T3 (orchestratore, revisione): `a_command_provider_respects_the_contract`
+  e le due regole di scrittura rendono `Vec<SkippedCommand>`, aggiunta alla
+  firma del piano, e i comandi saltati si stampano su stderr. Si salta
+  quando la risposta è `Unserved` o `UnknownCommand` di un altro id (un
+  comando composto); `UnknownCommand` del proprio id è un errore. Le scelte
+  vietano anche valori doppi e nomi vuoti. Il confronto di stato legge i
+  campi di MemoryHost dal modulo figlio, senza cambiare MemoryHost. Eventi e
+  job non si vedono, perché MemoryHost non li registra: è un limite noto
+  della prova. Su main si saltano property.keys.migrate e note.folder_page.
+  Il clippy `cmp_owned` è corretto in integrazione (d069b4d0) · fonte:
+  report del coder e revisione
 - Orchestratore, T1 e T2 integrati. T1: il censimento scrive «solo host» per
   le porte che nessun componente può chiedere. T2: un Policy guadagna
   denies_undo, perché annullare può riscrivere qualunque file e quindi
