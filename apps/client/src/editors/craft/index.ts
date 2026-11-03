@@ -97,7 +97,10 @@ export function mountCraftSurface(profile: string, context: SurfaceMountContext,
   };
 }
 
-const KIND_KEYS: Readonly<Record<CraftPreviewInfo["app"], Key>> = {
+/// La specie di ogni soggetto che il catalogo sa dire; un soggetto senza
+/// frase (una foto RAW, un PDF, un documento: le frasi arrivano coi task che
+/// li mostrano) si dice col nome dell'app.
+const KIND_KEYS: Readonly<Partial<Record<CraftPreviewInfo["app"], Key>>> = {
   vectorcraft: "craft.kind.vectorcraft",
   photocraft: "craft.kind.photocraft",
   figcraft: "craft.kind.figcraft",
@@ -113,7 +116,8 @@ export function fileName(doc: string): string {
 /// nome dell'app si mostra come il bundle lo scrive, anche se il catalogo non
 /// lo conosce.
 export function craftInfoText(info: CraftPreviewInfo): string {
-  const parts = [t(KIND_KEYS[info.app], { app: info.editor })];
+  const key = KIND_KEYS[info.app];
+  const parts = [key ? t(key, { app: info.editor }) : info.editor];
   if (info.format_version !== null) parts.push(t("craft.info.version", { version: info.format_version }));
   parts.push(formatBytes(info.bytes));
   return parts.join(" · ");

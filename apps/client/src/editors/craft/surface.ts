@@ -5,10 +5,11 @@
 // e la barra di una foto) e sotto la riga dei dati, cioè l'app, la versione
 // del formato se il file la dice, il peso. Senza: un riquadro col nome del
 // file e la riga dei dati, con ciò che succede all'anteprima («Preparo
-// l'anteprima…», «File troppo grande per l'anteprima») e, se un'app installata
-// sa farla, il pulsante «Crea l'anteprima con …». Aprendo la scheda, se l'app
-// c'è e l'anteprima manca, la si chiede da sola una volta (D-1). Un XMP si
-// disegna con `xmp-view.ts`.
+// l'anteprima…», «File troppo grande per l'anteprima»: la frase viene da
+// `missing`, il perché che il bundle dice) e, se un'app installata sa farla,
+// il pulsante «Crea l'anteprima con …». `craft.preview` non avvia mai
+// l'app: il pulsante richiede l'anteprima e basta, finché il biglietto di
+// `craft_render` non c'è (T11, T23). Un XMP si disegna con `xmp-view.ts`.
 //
 // Tutto ciò che la scheda accende vive nella `Lifetime` della superficie: una
 // risposta che arriva a scheda chiusa si scarta.
@@ -23,23 +24,15 @@ import { decodeImage, mountImageView } from "../media/image-view";
 import { CRAFT_PROFILE, craftInfoText, fileName, type CraftSurfaceDeps } from "./index";
 import { mountXmpView } from "./xmp-view";
 
-/// Oltre questo peso il bundle non legge il file e non dà anteprima né
-/// metadati (D-8): il gemello di `container::MAX_FILE_BYTES` di
-/// `fub-format-craft`.
-export const CRAFT_MAX_FILE_BYTES = 64 * 1024 * 1024;
-
-/// Il file è troppo grande perché il bundle lo legga.
-export function tooLarge(preview: CraftPreview): boolean {
-  return preview.image === null && preview.info.bytes > CRAFT_MAX_FILE_BYTES;
-}
-
-/// L'anteprima manca e un'app installata può farla: c'è il pulsante.
+/// L'anteprima manca e un'app installata può farla: c'è il pulsante. Il
+/// bundle non offre l'app per un file oltre il peso massimo; la scheda lo
+/// rispetta anche se l'offerta arrivasse.
 export function offersRender(preview: CraftPreview): boolean {
-  return preview.image === null && !preview.queued && preview.render !== null && !tooLarge(preview);
+  return preview.image === null && !preview.queued && preview.render !== null && preview.missing !== "over_limit";
 }
 
-/// I byte del PNG che l'anteprima porta in base64.
-function pngBytes(data: string): Uint8Array {
+/// I byte dell'immagine che l'anteprima porta in base64.
+function imageBytes(data: string): Uint8Array {
   const binary = atob(data);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
@@ -61,8 +54,11 @@ function signature(answer: CraftPreviewAnswer): string {
     preview.revision,
     preview.origin,
     preview.queued,
-    preview.image ? `${preview.image.width}x${preview.image.height}:${preview.image.data.length}` : "",
-    preview.render?.app ?? "",
+    preview.image
+      ? `${preview.image.media_type}:${preview.image.width}x${preview.image.height}:${preview.image.orientation}:${preview.image.data.length}`
+      : "",
+    preview.missing ?? "",
+    preview.render ? `${preview.render.app}:${preview.render.consent}` : "",
     answer.renderError === null ? "" : errorText(answer.renderError),
   ].join("\u0000");
 }
@@ -82,7 +78,6 @@ export function mountCraftContent(
   /// accontenta di una risposta più vecchia.
   let revision = context.revision;
   let ticket = 0;
-  let autoAsked = false;
   let drawn: string | null = null;
   let shown: CraftPreviewAnswer | null = null;
   /// La frase della riga di stato, quando la scheda mostra soltanto quella.
@@ -110,19 +105,12 @@ export function mountCraftContent(
     replace(line);
   }
 
-  function load(render: boolean, force = false): void {
+  function load(force = false): void {
     const mine = ++ticket;
-    previewOf(doc, "large", { render, ...(revision === undefined ? {} : { revision }) }).then(
+    previewOf(doc, "large", revision === undefined ? {} : { revision }).then(
       (answer) => {
         if (life.closed || mine !== ticket || !answer) return;
         revision = undefined;
-        // D-1: la prima volta che la scheda vede un'anteprima che l'app può
-        // fare, la chiede; intanto non mostra il pulsante per un istante.
-        if (!autoAsked && profile === CRAFT_PROFILE && offersRender(answer.preview)) {
-          autoAsked = true;
-          load(true);
-          return;
-        }
         draw(answer, force);
       },
       (error: unknown) => {
@@ -162,9 +150,16 @@ export function mountCraftContent(
 
   function drawImage(preview: CraftPreview): void {
     const image = preview.image!;
-    const bytes = pngBytes(image.data);
+    const bytes = imageBytes(image.data);
     const decoded = decodeImage(
-      { handle: "", id: doc, len: bytes.byteLength, mime: "image/png", kind: "image", revision: preview.revision },
+      {
+        handle: "",
+        id: doc,
+        len: bytes.byteLength,
+        mime: image.media_type,
+        kind: "image",
+        revision: preview.revision,
+      },
       bytes,
     );
     const card = document.createElement("div");
@@ -191,8 +186,8 @@ export function mountCraftContent(
     own.listen(button, "click", () => {
       if (button.disabled) return;
       button.disabled = true;
-      // Ridisegnata comunque: se l'app non l'ha presa, il pulsante torna.
-      load(true, true);
+      // Ridisegnata comunque: senza un'anteprima nuova, il pulsante torna.
+      load(true);
     });
     box.append(button);
   }
@@ -200,9 +195,11 @@ export function mountCraftContent(
   function stateText(answer: CraftPreviewAnswer, broken: string | null): string {
     const preview = answer.preview;
     if (broken !== null) return t("craft.failed", { reason: broken });
-    if (tooLarge(preview)) return t("craft.too_large");
     if (preview.queued) return t("craft.queued");
     if (answer.renderError !== null) return t("craft.render_failed", { reason: errorText(answer.renderError) });
+    // Le frasi di `unreadable` e `failed` arrivano coi task che le mostrano:
+    // fino ad allora la scheda dice ciò che diceva.
+    if (preview.missing === "over_limit") return t("craft.too_large");
     return t("craft.no_preview");
   }
 
@@ -213,11 +210,11 @@ export function mountCraftContent(
   // Un'anteprima arrivata da un job, un documento cambiato, il vault che
   // cambia: si richiede, e la risposta tenuta risponde subito se c'è.
   watchCraftPreviews(life, (changed) => {
-    if (changed === "" || changed === doc) load(false);
+    if (changed === "" || changed === doc) load();
   });
   life.add(onLanguage(() => {
     if (shown) draw(shown, true);
     else if (said && root.firstElementChild) root.firstElementChild.textContent = said();
   }));
-  load(false);
+  load();
 }

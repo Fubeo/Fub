@@ -501,6 +501,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-format-craft/src/contract.rs::of_extension",
+            (
+                Family::AsciiCase,
+                "dice il soggetto dell'anteprima di un file che non ha un provider Craft (N7, \
+                 il contratto 2): un `IMG_0001.CR3` è una foto RAW come un `.cr3`. Le estensioni \
+                 della tabella sono ASCII e il sistema le tratta così, come `editors.rs::opens`; \
+                 non è il nome di una nota, di un tag o di un percorso, che si confrontano con le \
+                 loro regole.",
+            ),
+        ),
+        (
             "crates/fub-host/src/link_card.rs::card",
             (
                 Family::AsciiCase,

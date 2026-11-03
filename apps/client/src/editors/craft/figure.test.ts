@@ -3,8 +3,8 @@
 // La figura di un file Craft dentro una nota (N7) contro l'host finto: con
 // l'anteprima e senza, un XMP coi suoi dati, il segnaposto che non è di un
 // file Craft, il nome ostile, la stessa figura dieci volte, la nota chiusa
-// prima della risposta, il componente spento. In nessun caso la figura chiede
-// `render: true`: una nota non avvia mai l'app.
+// prima della risposta, il componente spento, un JPEG. In nessun caso la
+// figura chiede di fare l'anteprima: una nota non avvia mai l'app.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeCraft, FakeHost } from "../../host/fake";
 import type { CraftPreviewImage } from "../../host/craft";
@@ -38,7 +38,7 @@ function png(width: number, height: number): CraftPreviewImage {
   const view = new DataView(bytes.buffer);
   view.setUint32(16, width);
   view.setUint32(20, height);
-  return { media_type: "image/png", data: btoa(String.fromCharCode(...bytes)), width, height };
+  return { media_type: "image/png", data: btoa(String.fromCharCode(...bytes)), width, height, orientation: 1 };
 }
 
 const LOGO = "Disegni/logo.vectorcraft";
@@ -79,24 +79,26 @@ function slot(container: HTMLElement, page = "logo.vectorcraft"): HTMLElement {
   return span;
 }
 
-/// Le domande a `craft.preview`: nessuna con `render: true`.
+/// Le domande a `craft.preview`: soltanto `doc` e `size`, mai `render`.
 function previewAsks(host: FakeHost): Array<Record<string, unknown>> {
   const asks = host.atGate("invokeCommand")
     .map((call) => call.args as unknown[])
     .filter((args) => args[0] === "craft.preview")
     .map((args) => args[1] as Record<string, unknown>);
-  for (const ask of asks) expect(ask.render).toBe(false);
+  for (const ask of asks) expect(Object.keys(ask).sort()).toEqual(["doc", "size"]);
   return asks;
 }
 
-const urls = { made: [] as string[], revoked: [] as string[] };
+const urls = { made: [] as string[], revoked: [] as string[], types: [] as string[] };
 
 beforeEach(() => {
   box.host = null;
   urls.made = [];
   urls.revoked = [];
+  urls.types = [];
   let next = 0;
-  vi.spyOn(URL, "createObjectURL").mockImplementation(() => {
+  vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+    urls.types.push((blob as Blob).type);
     const url = `blob:figura-${++next}`;
     urls.made.push(url);
     return url;
@@ -152,7 +154,7 @@ describe("il segnaposto di un file Craft", () => {
 describe("la figura nella nota", () => {
   it("con l'anteprima del file: l'immagine da un blob, col nome sotto, e un clic la apre", async () => {
     const { figure, host, container, openLifetime } = await boot({
-      docs: { [LOGO]: { image: png(8, 6), render: { app: "VectorCraft", done: png(2, 2) } } },
+      docs: { [LOGO]: { image: png(8, 6), render: { app: "VectorCraft" } } },
     });
     const life = openLifetime();
     const opened: string[] = [];
@@ -170,14 +172,14 @@ describe("la figura nella nota", () => {
     embed.querySelector<HTMLElement>("figure")!.click();
     await settle();
     expect(opened).toEqual([LOGO]);
-    expect(previewAsks(host)).toEqual([{ doc: LOGO, size: "small", render: false }]);
+    expect(previewAsks(host)).toEqual([{ doc: LOGO, size: "small" }]);
     life.close();
     expect(urls.revoked).toEqual(["blob:figura-1"]);
   });
 
   it("senza anteprima: il riquadro col nome e l'app, anche quando l'app saprebbe farla", async () => {
     const { figure, host, container, openLifetime } = await boot({
-      docs: { [LOGO]: { info: { format_version: "4" }, render: { app: "VectorCraft", done: png(2, 2) } } },
+      docs: { [LOGO]: { info: { format_version: "4" }, render: { app: "VectorCraft" } } },
     });
     const embed = slot(container);
     await figure.showEmbeddedCraft(container, embed, figure.craftPlaceholder(placeholderHtml(LOGO))!, openLifetime());
@@ -242,7 +244,18 @@ describe("la figura nella nota", () => {
     previewAsks(host);
   });
 
-  it("un file cambiato si richiede con render: false e mostra l'anteprima nuova", async () => {
+  it("un JPEG si mostra come un PNG, col suo tipo nel blob", async () => {
+    const image: CraftPreviewImage = { ...png(8, 6), media_type: "image/jpeg", data: btoa("\xff\xd8\xff\xd9"), orientation: 6 };
+    const { figure, container, openLifetime } = await boot({ docs: { [LOGO]: { image } } });
+    const embed = slot(container);
+    await figure.showEmbeddedCraft(container, embed, figure.craftPlaceholder(placeholderHtml(LOGO))!, openLifetime());
+    const img = embed.querySelector<HTMLImageElement>("figure.craft-figure > img")!;
+    expect(img.getAttribute("src")).toBe("blob:figura-1");
+    expect([img.getAttribute("width"), img.getAttribute("height")]).toEqual(["8", "6"]);
+    expect(urls.types).toEqual(["image/jpeg"]);
+  });
+
+  it("un file cambiato si richiede senza render e mostra l'anteprima nuova", async () => {
     const { figure, host, container, openLifetime } = await boot({ docs: { [LOGO]: { image: png(8, 6) } } });
     const embed = slot(container);
     await figure.showEmbeddedCraft(container, embed, figure.craftPlaceholder(placeholderHtml(LOGO))!, openLifetime());

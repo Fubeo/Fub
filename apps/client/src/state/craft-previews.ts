@@ -3,12 +3,13 @@
 // figura nella nota e l'anteprima al passaggio `small`.
 //
 // Si tiene una risposta per documento e misura, con la revisione che dice; una
-// domanda sola in volo per documento, misura e `render`. Con `render: true` il
-// bundle può mettere in coda il job `craft.render`: la risposta dice `queued`,
-// e l'anteprima nuova arriva col `job_done` del job, che si tiene come una
-// risposta e si annuncia a chi guarda. Un documento che cambia, si sposta o
-// sparisce perde le sue risposte, e chi guarda lo sa e richiede; il vault che
-// si chiude o cambia le fa dimenticare tutte.
+// domanda sola in volo per documento e misura. `craft.preview` non avvia mai
+// niente: l'anteprima che fa l'app arriva col `job_done` del job
+// `craft.render`, che si tiene come una risposta e si annuncia a chi guarda.
+// Una risposta senza revisione (Fub ha letto solo dei pezzi del file) vale
+// come appena letta. Un documento che cambia, si sposta o sparisce perde le
+// sue risposte, e chi guarda lo sa e richiede; il vault che si chiude o
+// cambia le fa dimenticare tutte.
 //
 // Il modello è `state/link-cards.ts`: il montaggio ascolta il kernel per la
 // finestra, chi mostra un'anteprima si iscrive con la sua `Lifetime`.
@@ -31,7 +32,7 @@ import { on, openVaultRoot, vaultArg } from "./store";
 export interface CraftPreviewAnswer {
   readonly preview: CraftPreview;
   /// L'errore del job `craft.render` che questa anteprima aspettava, se è
-  /// finito male: la scheda lo dice e rimette il pulsante.
+  /// finito male: la scheda lo dice.
   readonly renderError: unknown;
 }
 
@@ -47,10 +48,6 @@ let generation = 0;
 /// Quante volte ogni documento ha perso le sue risposte: una domanda partita
 /// prima che il documento cambiasse non porta la revisione vecchia dopo.
 let epochs = new Map<string, number>();
-/// Le domande con `render: true` in volo, con l'errore di un job finito male
-/// prima che la loro risposta arrivasse: il job può finire prima, e il suo
-/// errore non nomina il documento.
-let renderAsks = new Map<string, { error: unknown } | null>();
 
 function keyOf(doc: string, size: CraftPreviewSize): string {
   return `${doc}\u0000${size}`;
@@ -99,61 +96,44 @@ function keep(preview: CraftPreview, renderError: unknown = null): CraftPreviewA
   return answer;
 }
 
-/// Una risposta che basta a chi chiede: della revisione che vuole (se ne
-/// vuole una) e, se chiede di fare l'anteprima, già con l'immagine o già in
-/// coda.
-function satisfies(answer: CraftPreviewAnswer, render: boolean, revision: string | undefined): boolean {
-  if (revision !== undefined && answer.preview.revision !== revision) return false;
-  if (!render) return true;
-  const preview = answer.preview;
-  return preview.image !== null || preview.queued || preview.render === null;
+/// Una risposta che basta a chi chiede: della revisione che vuole, se ne
+/// vuole una. Una risposta senza revisione è stata letta adesso, e vale per
+/// ogni revisione.
+function satisfies(answer: CraftPreviewAnswer, revision: string | undefined): boolean {
+  return revision === undefined || answer.preview.revision === null || answer.preview.revision === revision;
 }
 
-async function ask(doc: string, size: CraftPreviewSize, render: boolean): Promise<CraftPreviewAnswer | null> {
+async function ask(doc: string, size: CraftPreviewSize): Promise<CraftPreviewAnswer | null> {
   const vault = openVaultRoot();
   const asked = generation;
   const epoch = epochs.get(doc) ?? 0;
   if (!vault) return null;
-  const key = keyOf(doc, size);
-  if (render) renderAsks.set(key, null);
-  let outcome: CommandOutcome;
-  let early: { error: unknown } | null = null;
-  try {
-    outcome = await api.invokeCommand(CRAFT_PREVIEW_COMMAND, { doc, size, render }, "apply", ...vaultArg(vault));
-  } finally {
-    if (render) {
-      early = renderAsks.get(key) ?? null;
-      renderAsks.delete(key);
-    }
-  }
+  const outcome = await api.invokeCommand(CRAFT_PREVIEW_COMMAND, { doc, size }, "apply", ...vaultArg(vault));
   if (asked !== generation) return null;
-  if (epoch !== (epochs.get(doc) ?? 0)) return previewOf(doc, size, { render });
+  if (epoch !== (epochs.get(doc) ?? 0)) return previewOf(doc, size);
   const preview = readPreviewOutcome(outcome);
   // Una risposta che non è un'anteprima di questo documento è un host che
   // parla un'altra lingua: non si tiene.
   if (!preview || preview.doc !== doc || preview.size !== size) throw new Error(`craft.preview: risposta senza anteprima per ${doc}`);
-  if (early && preview.queued && !preview.image) return keep({ ...preview, queued: false }, early.error);
   return keep(preview);
 }
 
 /// L'anteprima di `doc` alla misura `size`: quella tenuta, se basta, o una
-/// domanda a `craft.preview`. Con `render` chiede di farla all'app quando il
-/// file non ne ha una; con `revision` non si accontenta di una risposta di
-/// un'altra revisione. `null` se nel frattempo il vault è cambiato: la
-/// risposta non è più di nessuno. Un guasto del comando rifiuta la promessa,
-/// e non si tiene.
+/// domanda a `craft.preview`, che non avvia mai l'app. Con `revision` non si
+/// accontenta di una risposta di un'altra revisione. `null` se nel frattempo
+/// il vault è cambiato: la risposta non è più di nessuno. Un guasto del
+/// comando rifiuta la promessa, e non si tiene.
 export function previewOf(
   doc: string,
   size: CraftPreviewSize,
-  options: { render?: boolean; revision?: string } = {},
+  options: { revision?: string } = {},
 ): Promise<CraftPreviewAnswer | null> {
-  const render = options.render === true;
-  const seen = known.get(keyOf(doc, size));
-  if (seen && satisfies(seen, render, options.revision)) return Promise.resolve(seen);
-  const flight = `${keyOf(doc, size)}\u0000${render ? "render" : "read"}`;
+  const flight = keyOf(doc, size);
+  const seen = known.get(flight);
+  if (seen && satisfies(seen, options.revision)) return Promise.resolve(seen);
   const pending = inFlight.get(flight);
   if (pending) return pending;
-  const asking = ask(doc, size, render).finally(() => {
+  const asking = ask(doc, size).finally(() => {
     if (inFlight.get(flight) === asking) inFlight.delete(flight);
   });
   inFlight.set(flight, asking);
@@ -193,7 +173,6 @@ function clear(): void {
   generation++;
   inFlight = new Map();
   epochs = new Map();
-  renderAsks = new Map();
   if (known.size === 0) return;
   known = new Map();
   announce("");
@@ -231,7 +210,6 @@ function heard(notice: KernelNotice): void {
   }
   // Un errore non dice il documento: vale per ogni anteprima che aspettava.
   const waiting = new Set<string>();
-  for (const key of renderAsks.keys()) renderAsks.set(key, { error: done.error });
   for (const [key, answer] of known) {
     if (!answer.preview.queued || answer.preview.image) continue;
     known.set(key, { preview: { ...answer.preview, queued: false }, renderError: done.error });

@@ -2,12 +2,12 @@
 //
 // Le anteprime dei file Craft contro l'host finto: una risposta per documento
 // e misura, una domanda sola in volo, il job `craft.render` che porta
-// l'immagine dopo la risposta «in coda», e le risposte che si dimenticano
+// l'immagine quando finisce, e le risposte che si dimenticano
 // quando il documento o il vault cambiano. Ogni caso riparte da moduli nuovi,
 // perché il modulo ricorda le risposte.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeCraft, FakeHost } from "../host/fake";
-import type { CraftPreviewImage } from "../host/craft";
+import type { CraftPreview, CraftPreviewImage } from "../host/craft";
 
 const box = vi.hoisted(() => ({ host: null as FakeHost | null }));
 
@@ -39,7 +39,13 @@ function png(width: number, height: number): CraftPreviewImage {
   const view = new DataView(bytes.buffer);
   view.setUint32(16, width);
   view.setUint32(20, height);
-  return { media_type: "image/png", data: btoa(String.fromCharCode(...bytes)), width, height };
+  return { media_type: "image/png", data: btoa(String.fromCharCode(...bytes)), width, height, orientation: 1 };
+}
+
+/// L'anteprima che il job `craft.render` consegna per `preview`: l'immagine
+/// fatta dall'app.
+function rendered(preview: CraftPreview, image: CraftPreviewImage): CraftPreview {
+  return { ...preview, origin: "cli", image, missing: null, render: null };
 }
 
 const LOGO = "Disegni/logo.vectorcraft";
@@ -78,7 +84,8 @@ describe("le anteprime dei file Craft", () => {
     expect(first?.preview.origin).toBe("file");
     expect(first?.preview.image?.width).toBe(4);
     expect(first?.preview.info.format_version).toBe("4");
-    expect(asked(host)).toEqual([["craft.preview", { doc: LOGO, size: "large", render: false }, "apply", "/vault"]]);
+    // Soltanto `doc` e `size`: la shell non chiede mai di fare l'anteprima.
+    expect(asked(host)).toEqual([["craft.preview", { doc: LOGO, size: "large" }, "apply", "/vault"]]);
     expect(await previews.previewOf(LOGO, "large")).toBe(first);
     // Un'altra misura è un'altra risposta.
     await previews.previewOf(LOGO, "small");
@@ -96,47 +103,51 @@ describe("le anteprime dei file Craft", () => {
     expect(asked(host)).toHaveLength(1);
   });
 
-  it("render: true mette in coda il job, e il job_done porta l'immagine a chi aspetta", async () => {
-    const { host, previews, heard } = await boot({ docs: { [LOGO]: { render: { app: "VectorCraft", done: png(8, 8) } } } });
+  it("un job_done di craft.render porta l'immagine, e chi richiede la trova senza chiedere", async () => {
+    const { host, previews, heard } = await boot({ docs: { [LOGO]: { render: { app: "VectorCraft", consent: "ask" } } } });
     const plain = await previews.previewOf(LOGO, "large");
-    expect(plain?.preview.render).toEqual({ app: "VectorCraft" });
+    expect(plain?.preview.render).toEqual({ app: "VectorCraft", consent: "ask" });
     expect(plain?.preview.queued).toBe(false);
-    const queued = await previews.previewOf(LOGO, "large", { render: true });
-    // Il job può arrivare prima della risposta: allora l'immagine resta.
-    expect(queued?.preview.queued || queued?.preview.image !== null).toBe(true);
+    expect(plain?.preview.missing).toBe("absent");
+    host.emit({ type: "job_done", id: "j1", job: "craft.render", result: { Ok: rendered(plain!.preview, png(8, 8)) } });
     await settle();
     expect(heard).toContain(LOGO);
     const done = previews.peekPreview(LOGO, "large");
     expect(done?.preview.origin).toBe("cli");
     expect(done?.preview.image?.width).toBe(8);
-    // Chi richiede trova l'immagine senza chiedere di nuovo.
     const calls = asked(host).length;
-    expect((await previews.previewOf(LOGO, "large", { render: true }))?.preview.image?.width).toBe(8);
+    expect((await previews.previewOf(LOGO, "large"))?.preview.image?.width).toBe(8);
     expect(asked(host)).toHaveLength(calls);
   });
 
   it("un job_done di un altro documento non tocca questo", async () => {
-    const { host, previews, heard } = await boot({ docs: { [SCHIZZO]: { render: { app: "VectorCraft", done: png(2, 2) } } } });
+    const { host, previews, heard } = await boot({});
     await previews.previewOf(LOGO, "large");
-    await previews.previewOf(SCHIZZO, "large", { render: true });
+    const other = await previews.previewOf(SCHIZZO, "large");
+    host.emit({ type: "job_done", id: "j1", job: "craft.render", result: { Ok: rendered(other!.preview, png(2, 2)) } });
     await settle();
     expect(heard).toEqual([SCHIZZO]);
     expect(previews.peekPreview(LOGO, "large")?.preview.image).toBeNull();
     expect(asked(host)).toHaveLength(2);
   });
 
-  it("un job finito male lo dicono le anteprime che aspettavano", async () => {
+  it("un job finito male non tocca un'anteprima che non aspettava", async () => {
     const error = { kind: "unserved" as const, message: "Nessuna app Craft installata può fare l'anteprima." };
-    const { previews } = await boot({ docs: { [LOGO]: { render: { app: "VectorCraft", done: error } } } });
-    // Il finto finisce il job prima che la risposta arrivi: l'errore aspetta
-    // la risposta e la toglie dalla coda.
-    const answer = await previews.previewOf(LOGO, "large", { render: true });
+    const { host, previews, heard } = await boot({});
+    const before = await previews.previewOf(LOGO, "large");
+    host.emit({ type: "job_done", id: "j1", job: "craft.render", result: { Err: error } });
     await settle();
-    expect(answer?.preview.queued).toBe(false);
-    expect(answer?.renderError).toEqual(error);
-    const after = previews.peekPreview(LOGO, "large");
-    expect(after?.preview.queued).toBe(false);
-    expect(after?.renderError).toEqual(error);
+    expect(heard).toEqual([]);
+    expect(previews.peekPreview(LOGO, "large")).toBe(before);
+    expect(before?.renderError).toBeNull();
+  });
+
+  it("una risposta senza revisione vale per ogni revisione chiesta", async () => {
+    const { host, previews } = await boot({ docs: { [LOGO]: { revision: null } } });
+    const first = await previews.previewOf(LOGO, "large");
+    expect(first?.preview.revision).toBeNull();
+    expect(await previews.previewOf(LOGO, "large", { revision: "qualunque" })).toBe(first);
+    expect(asked(host)).toHaveLength(1);
   });
 
   it("un documento che cambia perde le sue risposte e lo dice; la domanda dopo legge la revisione nuova", async () => {
@@ -153,7 +164,7 @@ describe("le anteprime dei file Craft", () => {
   it("una revisione diversa da quella chiesta non basta", async () => {
     const { host, previews } = await boot({});
     const first = await previews.previewOf(LOGO, "large");
-    await previews.previewOf(LOGO, "large", { revision: first!.preview.revision });
+    await previews.previewOf(LOGO, "large", { revision: first!.preview.revision! });
     expect(asked(host)).toHaveLength(1);
     await previews.previewOf(LOGO, "large", { revision: "altra" });
     expect(asked(host)).toHaveLength(2);

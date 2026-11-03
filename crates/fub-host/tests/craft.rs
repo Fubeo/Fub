@@ -20,7 +20,9 @@ use fub_abi::model::DocId;
 use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fub_abi::traits::{EntryKind, Excerpts, IndexQuery, IndexResult, Page, PropertySelect};
 use fub_abi::PluginError;
-use fub_format_craft::{cache_key, CraftPreview, PreviewOrigin, PreviewSize, PREVIEW_COMMAND};
+use fub_format_craft::{
+    cache_key, CraftPreview, Missing, PreviewOrigin, PreviewSize, PreviewSubject, PREVIEW_COMMAND,
+};
 use fub_host::Host;
 
 /// Un PNG minimo: firma, `IHDR` (il CRC non conta per le misure) e `IEND`.
@@ -122,10 +124,18 @@ fn opened(root: &Utf8Path) -> Host {
 }
 
 fn ask(host: &Host, root: &Utf8Path, doc: &str, size: &str) -> Result<CraftPreview, PluginError> {
+    ask_with(host, root, serde_json::json!({ "doc": doc, "size": size }))
+}
+
+fn ask_with(
+    host: &Host,
+    root: &Utf8Path,
+    args: serde_json::Value,
+) -> Result<CraftPreview, PluginError> {
     let outcome = host.invoke_user_command(
         Some(root.as_str()),
         PREVIEW_COMMAND,
-        serde_json::json!({ "doc": doc, "size": size }),
+        args,
         InvokeMode::Apply,
     )?;
     match outcome.effect {
@@ -169,8 +179,10 @@ fn every_craft_file_has_its_preview_small_and_large_and_nothing_is_written() {
             assert_eq!(out.info.format_version.as_deref(), version, "{doc}");
             assert_eq!(out.info.bytes, before[doc].len() as u64);
             assert!(!out.queued && out.render.is_none());
+            assert_eq!(out.missing, None);
             let image = out.image.expect("l'immagine del file");
             assert_eq!(image.media_type, "image/png");
+            assert_eq!(image.orientation, 1);
             assert_eq!((image.width, image.height), (width, height), "{doc} {size}");
             // La seconda chiamata dà la stessa anteprima.
             let again = ask(&host, &root, doc, size).unwrap();
@@ -182,6 +194,7 @@ fn every_craft_file_has_its_preview_small_and_large_and_nothing_is_written() {
         let out = ask(&host, &root, "Disegni/bozza.vectorcraft", size).unwrap();
         assert_eq!(out.origin, PreviewOrigin::None);
         assert!(out.image.is_none() && out.render.is_none() && !out.queued);
+        assert_eq!(out.missing, Some(Missing::Absent));
         assert_eq!(out.info.editor, "VectorCraft");
     }
     assert_eq!(bytes_of(&root), before, "Fub non scrive i file Craft");
@@ -201,7 +214,7 @@ fn the_cache_answers_when_it_matches_and_is_ignored_otherwise() {
     let host = opened(&root);
     let doc = "Disegni/logo.vectorcraft";
     let fresh = ask(&host, &root, doc, "large").unwrap();
-    let key = cache_key(&fresh.revision.0, PreviewSize::Large);
+    let key = cache_key(&fresh.revision.as_ref().unwrap().0, PreviewSize::Large);
     let path = cache_dir(&root).join(&key);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
 
@@ -212,9 +225,10 @@ fn the_cache_answers_when_it_matches_and_is_ignored_otherwise() {
     let out = ask(&host, &root, doc, "large").unwrap();
     assert_eq!(out.info.format_version.as_deref(), Some("dalla cache"));
 
-    // Rotta, di un'altra versione o di un altro documento: vale assente.
+    // Rotta, della versione 1 o di un altro documento: vale assente, e si
+    // rifà dal file.
     let mut other_version = planted.clone();
-    other_version.version = 2;
+    other_version.version = 1;
     let mut other_doc = planted.clone();
     other_doc.doc = "Disegni/bozza.vectorcraft".into();
     for bytes in [
@@ -227,6 +241,38 @@ fn the_cache_answers_when_it_matches_and_is_ignored_otherwise() {
         assert_eq!(out.info.format_version.as_deref(), Some("4"));
         assert_eq!(out.origin, PreviewOrigin::File);
     }
+}
+
+#[test]
+fn a_render_in_the_request_changes_nothing() {
+    let (_dir, root) = vault(&[]);
+    let host = opened(&root);
+    for doc in ["Disegni/bozza.vectorcraft", "Disegni/logo.vectorcraft"] {
+        let plain = ask(&host, &root, doc, "small").unwrap();
+        let with_render = ask_with(
+            &host,
+            &root,
+            serde_json::json!({ "doc": doc, "size": "small", "render": true }),
+        )
+        .unwrap();
+        assert_eq!(with_render, plain, "{doc}");
+        assert!(!with_render.queued && with_render.render.is_none());
+    }
+}
+
+#[test]
+fn a_raw_photo_is_a_subject_from_its_extension() {
+    let (_dir, root) = vault(&[]);
+    let host = opened(&root);
+    let out = ask(&host, &root, "Foto/IMG_0001.CR3", "large").unwrap();
+    assert_eq!(out.info.app, PreviewSubject::Raw);
+    assert_eq!(out.info.editor, "LightCraft");
+    assert_eq!(out.info.bytes, b"RAW finto".len() as u64);
+    assert_eq!(out.missing, Some(Missing::Absent));
+    assert!(out.image.is_none() && out.render.is_none() && !out.queued);
+    // Un allegato senza soggetto resta rifiutato.
+    let error = ask(&host, &root, "Foto/IMG_0001-Edit.psd", "small").unwrap_err();
+    assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
 }
 
 #[test]

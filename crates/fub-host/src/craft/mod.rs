@@ -12,10 +12,14 @@
 //! Craft: il bundle legge e basta.
 
 pub mod channel;
+pub mod consent;
 pub mod editors;
 pub mod launch;
 pub mod open_with;
+pub mod photo;
 pub mod preview;
+pub mod ranged;
+pub mod render;
 
 use fub_abi::command::{
     Args, Choice, CommandEffect, CommandOutcome, CommandScope, CommandSpec, ParamKind, ParamSpec,
@@ -60,7 +64,7 @@ fn catalog() -> Vec<StringCatalog> {
         .with("cmd.preview.render", "Crea l'anteprima")
         .with(
             "cmd.preview.render.desc",
-            "Se il file non ne ha una, la fa fare all'app installata.",
+            "Non conta più: il comando non avvia mai l'app che farebbe l'anteprima.",
         )
         .with("not_craft", "`{doc}` non è un file delle app Craft.")
         .with("bad_size", "`{size}` non è una misura: piccola o grande.")
@@ -87,7 +91,7 @@ fn catalog() -> Vec<StringCatalog> {
         .with("cmd.preview.render", "Make the preview")
         .with(
             "cmd.preview.render.desc",
-            "If the file has none, asks the installed app to make it.",
+            "No longer used: the command never starts the app that would make the preview.",
         )
         .with("not_craft", "`{doc}` is not a Craft app file.")
         .with("bad_size", "`{size}` is not a size: small or large.")
@@ -156,6 +160,8 @@ impl CommandProvider for CraftCommands {
                 )
                 .describing(Text::key("cmd.preview.size.desc")),
             )
+            // Dichiarato perché chi parla la forma della versione 1 non sia
+            // rifiutato; `invoke` non lo legge.
             .with_param(
                 ParamSpec::new("render", Text::key("cmd.preview.render"), ParamKind::Bool)
                     .describing(Text::key("cmd.preview.render.desc")),
@@ -180,10 +186,10 @@ impl CommandProvider for CraftCommands {
                 vec![Arg::text("doc", "")],
             )));
         };
+        // Soltanto `doc` e `size`: il comando non avvia mai niente, e un
+        // `render` nella domanda (la forma della versione 1, ancora
+        // dichiarato) si ignora.
         let size = size_of(args.text("size"))?;
-        // `render` accoderà il job quando la riga di comando ci sarà: senza,
-        // l'anteprima che manca resta `origin: none` e `render: null`.
-        let _render = args.flag("render", false);
         let preview = preview::preview(host, &doc, size)?;
         let payload = serde_json::to_value(&preview)
             .map_err(|error| PluginError::Internal(error.to_string().into()))?;

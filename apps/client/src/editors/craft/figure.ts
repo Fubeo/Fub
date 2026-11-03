@@ -6,15 +6,16 @@
 // nome nella didascalia; qui il segnaposto diventa ciò che si vede, come la
 // figura dei disegni (`showEmbeddedDrawing`): con l'anteprima piccola che il
 // file porta, un'immagine con il nome sotto; senza, il riquadro col nome e
-// l'app, e per un XMP i suoi dati principali. L'anteprima si chiede sempre
-// con `render: false`: una nota non avvia mai l'app che la farebbe. Il
-// segnaposto non entra mai nella nota: il suo markup si legge e si butta.
+// l'app, e per un XMP i suoi dati principali. Un JPEG (la foto di un RAW) si
+// mostra come un PNG. `craft.preview` non avvia mai l'app che farebbe
+// l'anteprima, e una nota non la chiede. Il segnaposto non entra mai nella
+// nota: il suo markup si legge e si butta.
 //
 // Tutto ciò che la figura accende (l'URL `blob:` dell'immagine, gli
 // ascoltatori, l'ascolto delle anteprime) vive nella `Lifetime` della resa:
 // una risposta che arriva a nota chiusa si scarta.
 
-import type { CraftApp, CraftPreview, CraftXmpInfo } from "../../host/craft";
+import type { CraftPreview, CraftPreviewImage, CraftPreviewSubject, CraftXmpInfo } from "../../host/craft";
 import { t, type Key } from "../../i18n/strings";
 import { previewOf, watchCraftPreviews, type CraftPreviewAnswer } from "../../state/craft-previews";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
@@ -23,11 +24,15 @@ import { embedOwnText, embedSize } from "../text/profiles/markdown/media";
 import { craftInfoText, fileName } from "./index";
 import { ratingText } from "./xmp-view";
 
+/// Le famiglie dei quattro provider di `fub-format-craft`, le sole che hanno
+/// un segnaposto.
+export type CraftPlaceholderApp = Extract<CraftPreviewSubject, "vectorcraft" | "photocraft" | "figcraft" | "xmp">;
+
 /// Il segnaposto di un file Craft: il documento, la sua famiglia e il nome
 /// della didascalia.
 export interface CraftPlaceholder {
   readonly doc: string;
-  readonly app: CraftApp;
+  readonly app: CraftPlaceholderApp;
   readonly name: string;
 }
 
@@ -37,26 +42,26 @@ export interface CraftPlaceholder {
 export interface CraftFigureDeps {
   readonly open?: (doc: string) => void | Promise<void>;
   readonly previews?: {
-    previewOf(doc: string, size: "small", options: { render: false }): Promise<CraftPreviewAnswer | null>;
+    previewOf(doc: string, size: "small"): Promise<CraftPreviewAnswer | null>;
     watch(lifetime: Lifetime, watcher: (doc: string) => void): void;
   };
 }
 
 const STORE: NonNullable<CraftFigureDeps["previews"]> = {
-  previewOf: (doc, size, options) => previewOf(doc, size, options),
+  previewOf: (doc, size) => previewOf(doc, size),
   watch: watchCraftPreviews,
 };
 
 /// Il nome di ogni app quando il bundle non ha ancora risposto, o non
 /// risponde (il componente spento): lo stesso di `CraftApp::editor_name`.
-const EDITORS: Readonly<Record<CraftApp, string>> = {
+const EDITORS: Readonly<Record<CraftPlaceholderApp, string>> = {
   vectorcraft: "VectorCraft",
   photocraft: "PhotoCraft",
   figcraft: "FigCraft",
   xmp: "LightCraft",
 };
 
-const KIND_KEYS: Readonly<Record<CraftApp, Key>> = {
+const KIND_KEYS: Readonly<Record<CraftPlaceholderApp, Key>> = {
   vectorcraft: "craft.kind.vectorcraft",
   photocraft: "craft.kind.photocraft",
   figcraft: "craft.kind.figcraft",
@@ -73,7 +78,7 @@ const LABEL_KEYS: Readonly<Record<string, Key>> = {
   Purple: "craft.xmp.color.purple",
 };
 
-function isApp(value: string | null): value is CraftApp {
+function isApp(value: string | null): value is CraftPlaceholderApp {
   return value !== null && Object.prototype.hasOwnProperty.call(EDITORS, value);
 }
 
@@ -116,13 +121,14 @@ function boxText(placeholder: CraftPlaceholder, label: string | null, preview: C
   return parts.join(" · ");
 }
 
-/// I byte del PNG che l'anteprima porta in base64; `null` se non si legge.
-function pngBlob(data: string): Blob | null {
+/// I byte dell'immagine che l'anteprima porta in base64, col suo tipo (PNG o
+/// JPEG); `null` se non si legge.
+function imageBlob(image: CraftPreviewImage): Blob | null {
   try {
-    const binary = atob(data);
+    const binary = atob(image.data);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return new Blob([bytes], { type: "image/png" });
+    return new Blob([bytes], { type: image.media_type });
   } catch {
     return null;
   }
@@ -182,7 +188,7 @@ export async function showEmbeddedCraft(
     drawn = openLifetime();
     const preview = answer?.preview ?? null;
     const image = preview?.image ?? null;
-    const blob = image && placeholder.app !== "xmp" ? pngBlob(image.data) : null;
+    const blob = image && placeholder.app !== "xmp" ? imageBlob(image) : null;
     if (image && blob) {
       const url = URL.createObjectURL(blob);
       drawn.add(() => URL.revokeObjectURL(url));
@@ -227,7 +233,7 @@ export async function showEmbeddedCraft(
   const ask = async (): Promise<void> => {
     const mine = ++asked;
     // Il componente spento o un guasto: resta il riquadro col nome.
-    const answer = await previews.previewOf(placeholder.doc, "small", { render: false }).catch(() => null);
+    const answer = await previews.previewOf(placeholder.doc, "small").catch(() => null);
     if (life.closed || mine !== asked) return;
     draw(answer, true);
   };

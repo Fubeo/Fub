@@ -12,8 +12,8 @@ LightCraft lasciano nel vault, senza il motore delle app e senza mai
 scriverli: i metadati, il testo per la ricerca, i file collegati e
 l'anteprima che il file porta. Le [app esterne](external-editors.md) li
 aprono e li modificano; gli XMP hanno la [loro pagina](xmp-sidecars.md).
-L'host non monta ancora il crate: i provider e il contratto ci sono, il
-comando e il job no.
+Con la feature `craft`, `fub-host` monta il crate e ci mette accanto il
+comando `craft.preview` e il job `craft.render`.
 
 ## Id ed estensioni
 
@@ -45,18 +45,23 @@ Per un XMP `data-embed-kind` vale `craft-xmp`.
 
 ```json
 {
-  "version": 1,
-  "doc": "Disegni/logo.vectorcraft",
-  "revision": "sha256:…",
-  "size": "small",
+  "version": 2,
+  "doc": "Foto/IMG_0001.CR3",
+  "revision": null,
+  "size": "large",
   "origin": "file",
   "queued": false,
-  "image": { "media_type": "image/png", "data": "<base64>", "width": 256, "height": 180 },
+  "image": {
+    "media_type": "image/jpeg", "data": "<base64>",
+    "width": 1620, "height": 1080, "orientation": 6
+  },
+  "missing": null,
+  "limit_bytes": null,
   "info": {
-    "app": "vectorcraft",
-    "editor": "VectorCraft",
-    "format_version": "4",
-    "bytes": 182344,
+    "app": "raw",
+    "editor": "LightCraft",
+    "format_version": null,
+    "bytes": 31457280,
     "photo": null,
     "edits": [],
     "xmp": null
@@ -67,51 +72,89 @@ Per un XMP `data-embed-kind` vale `craft-xmp`.
 
 | Campo | Valori |
 |---|---|
-| `version` | sempre `1`; una forma di un'altra versione non si legge |
-| `size` | `small` (la figura nella nota, l'anteprima al passaggio) o `large` (la scheda) |
+| `version` | sempre `2`; una forma di un'altra versione non si legge |
+| `revision` | la revisione dei byte da cui l'anteprima è nata, o `null` quando Fub ne ha letto solo dei pezzi: una risposta senza revisione non va in cache e per la shell vale come appena letta |
+| `size` | `small` (la figura nella nota, l'anteprima al passaggio, l'albero) o `large` (la scheda) |
 | `origin` | `file` (era nel file), `cli` (l'ha fatta l'app), `none` (non c'è) |
-| `queued` | `true` se la risposta ha messo in coda il job `craft.render` |
-| `image` | `null` o il PNG in base64; `width` e `height` vengono dall'intestazione `IHDR` del PNG |
-| `info.app` | `vectorcraft`, `photocraft`, `figcraft` o `xmp` |
-| `info.editor` | il nome da mostrare dell'editor esterno |
+| `queued` | `true` solo nella risposta che ha messo in coda il job `craft.render`; `craft.preview` non mette mai in coda niente |
+| `image` | `null` o l'immagine in base64: `media_type` `image/png` o `image/jpeg`; `width` e `height` dall'immagine (l'`IHDR` del PNG, il segmento `SOF` del JPEG); `orientation` l'orientamento EXIF da 1 a 8 che la shell applica, 1 per «così com'è» |
+| `missing` | `null` quando `image` c'è; altrimenti `absent` (il file non ne ha una), `over_limit` (andrebbe letto intero e supera il peso massimo), `unreadable` (il file è rotto o non è del formato che dice), `failed` (l'app ha provato per questa revisione e non ci è riuscita) |
+| `limit_bytes` | `null`, o il peso massimo in byte, solo con `missing: "over_limit"` |
+| `info.app` | il soggetto (`PreviewSubject`): `vectorcraft`, `photocraft`, `figcraft`, `xmp`, `raw`, `pdf` o `document` |
+| `info.editor` | il nome da mostrare dell'app che apre il soggetto |
 | `info.format_version` | la versione scritta nel file, come stringa, o `null` |
 | `info.bytes` | il peso del file |
 | `info.photo` | per un XMP, la foto a cui appartiene, o `null` |
 | `info.edits` | le copie `-Edit.psd` della foto che esistono |
 | `info.xmp` | `null` o `{ "rating", "label", "flag", "keywords" }`, con `flag` `pick` o `reject` |
-| `render` | `null`, o `{ "app": "VectorCraft" }` quando l'app che può fare l'anteprima che manca è installata |
+| `render` | `null`, o `{ "app": "VectorCraft", "consent": "ask" }` quando l'anteprima manca, l'app che sa farla è installata e il file non supera il peso massimo; `consent` (`ask`, `on`, `off`) è il valore di `craft.cli-previews` |
 
-I nomi del contratto sono costanti del crate: il comando `craft.preview`
-(`PREVIEW_COMMAND`), il job `craft.render` (`RENDER_JOB`) e lo spazio dei
-nomi `fub.craft` (`BUNDLE_NS`). La chiave della cache di un'anteprima è
+`PreviewSubject` è separato da `CraftApp`, che resta la famiglia dei quattro
+provider. Un file con un formato Craft ha il soggetto del suo formato; gli
+altri lo prendono dall'estensione, confrontata senza badare alle maiuscole
+(`IMG_0001.CR3`): `raw` per `cr3`, `cr2`, `nef`, `arw`, `raf`, `dng`, `orf`
+e `rw2` (LightCraft), `pdf` per `pdf` (PdfCraft), `document` per `docx`,
+`odt`, `rtf` e `doc` (WordCraft). Un `.pdf` col suo provider resta di quel
+provider per la ricerca, e il soggetto `pdf` vale per l'anteprima. Un file
+senza estensione, o con un'estensione che nessun soggetto ha, è un
+`bad_args`.
+
+Il contratto ha anche `PhotoSidecar`, la risposta del comando
+`craft.photo { doc }`: per una foto, l'XMP che le sta accanto e i suoi dati,
+in sola lettura. L'host non registra ancora il comando; la forma è questa:
+
+```json
+{
+  "version": 2, "doc": "Foto/IMG_0001.CR3", "xmp": "Foto/IMG_0001.CR3.xmp",
+  "meta": { "rating": 4, "label": "Rosso", "flag": "pick", "keywords": ["mare"] },
+  "edits": ["Foto/IMG_0001-Edit.psd"]
+}
+```
+
+`xmp` e `meta` sono `null` per una foto senza XMP.
+
+I nomi del contratto sono costanti del crate: i comandi `craft.preview`
+(`PREVIEW_COMMAND`) e `craft.photo` (`PHOTO_COMMAND`), il job
+`craft.render` (`RENDER_JOB`) e lo spazio dei nomi `fub.craft`
+(`BUNDLE_NS`). La chiave della cache di un'anteprima è
 `previews/{:016x}.json`, con l'FNV-1a a 64 bit di `"{revision}\0{size}"`
-(`cache_key`).
+(`cache_key`). `jpeg::size` legge le misure di un JPEG: `FF D8`, poi i
+segmenti fino al primo `SOF` (da `C0` a `CF`, tranne `C4`, `C8` e `CC`),
+ogni lunghezza controllata contro i byte, al più 1000 segmenti; misure a
+zero o oltre 65 535 non valgono.
 
-`readCraftPreview` in `apps/client/src/host/craft.ts` controlla ogni campo:
-un campo mancante o di un altro tipo dà `null`, un campo in più si ignora.
+`readCraftPreview` e `readPhotoSidecar` in `apps/client/src/host/craft.ts`
+controllano ogni campo: un campo mancante o di un altro tipo, un
+`orientation` fuori da 1–8, un `limit_bytes` senza `over_limit` danno
+`null`, un campo in più si ignora.
 `UPDATE_MIRROR=1 cargo test -p fub-format-craft --test ts_preview` riscrive
-la fixture che tiene uguali i due lati.
+la fixture che tiene uguali i due lati, con un esempio per ogni soggetto,
+ogni `missing` e ogni `consent`.
 
 ## Anteprima e cache
 
 Il bundle `fub.craft` (`crates/fub-host/src/craft/`, feature `craft`)
-risponde al comando `craft.preview` (`{ "doc", "size", "render" }`, in sola
-lettura) con un `CraftPreview` nell'effetto `Custom` con `ns` `fub.craft`.
-`size` assente vale `small`; un documento che non è un file Craft è un
-`bad_args`. I formati non dipendono dal bundle: col componente spento il
+risponde al comando `craft.preview` (`{ "doc", "size" }`, in sola lettura)
+con un `CraftPreview` nell'effetto `Custom` con `ns` `fub.craft`. `size`
+assente vale `small`; un documento senza soggetto è un `bad_args`. Il
+comando non avvia mai niente: un `render` nella domanda (la forma della
+versione 1) è ancora dichiarato, e si ignora. I formati non dipendono dal bundle: col componente spento il
 comando non c'è, e ricerca, backlink e tag restano.
 
 - La cache sta in `.fub/data/plugins/fub.craft/previews/*.json`, alla chiave
-  `cache_key(revision, size)`. Una voce vale se si legge, è della versione 1 e
+  `cache_key(revision, size)`. Una voce vale se si legge, è della versione 2 e
   ripete `doc`, `revision` e `size`; una rotta, di un'altra versione o di un
-  altro documento vale assente.
+  altro documento vale assente, e l'anteprima si rifà.
+- Un RAW, un PDF o un documento non si legge: la risposta è `origin: none`
+  con `missing: "absent"`.
 - Altrimenti si leggono i byte: l'anteprima nel file dà `origin: file`, e
-  senza `origin: none`. Per un XMP `info.xmp` viene da `xmp::read`, la foto
+  senza `origin: none` con `missing: "absent"`, o `"unreadable"` se il file
+  non si legge. Per un XMP `info.xmp` viene da `xmp::read`, la foto
   dai figli diretti della sua cartella (il nome esatto, o per il solo gambo
   il primo in ordine di id con un'altra estensione, confrontando i nomi come
   sono scritti) e `info.edits` dalla copia `-Edit.psd` della foto, se c'è.
 - Un file oltre 64 MiB, col peso che dice l'anagrafe, non si legge: è
-  `origin: none`.
+  `origin: none` con `missing: "over_limit"` e `limit_bytes`.
 - Si scrive in cache solo un'anteprima con `origin` `file` o `cli`, e solo se
   la revisione è la stessa prima e dopo la lettura. La scrive chi ha il
   permesso di scrivere i dati del bundle: il comando, che è in sola lettura,

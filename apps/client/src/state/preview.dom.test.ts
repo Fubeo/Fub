@@ -76,19 +76,21 @@ describe("l'anteprima al passaggio su un file Craft", () => {
 
   function preview(image: boolean): CraftPreview {
     return {
-      version: 1,
+      version: 2,
       doc: LOGO,
       revision: "r1",
       size: "small",
       origin: image ? "file" : "none",
       queued: false,
-      image: image ? { media_type: "image/png", data: PNG, width: 40, height: 30 } : null,
+      image: image ? { media_type: "image/png", data: PNG, width: 40, height: 30, orientation: 1 } : null,
+      missing: image ? null : "absent",
+      limit_bytes: null,
       info: { app: "vectorcraft", editor: "VectorCraft", format_version: null, bytes: 2048, photo: null, edits: [], xmp: null },
-      render: image ? null : { app: "VectorCraft" },
+      render: image ? null : { app: "VectorCraft", consent: "ask" },
     };
   }
 
-  it("il passaggio su [[logo.vectorcraft]] mostra la figura con render: false, e la chiusura libera il blob", async () => {
+  it("il passaggio su [[logo.vectorcraft]] mostra la figura senza chiedere di farla, e la chiusura libera il blob", async () => {
     fake.preview = preview(true);
     fake.resolve.mockResolvedValue({ doc: LOGO });
     fake.render.mockResolvedValue({ doc_id: LOGO, html: FIGURE, parts: [] });
@@ -111,7 +113,7 @@ describe("l'anteprima al passaggio su un file Craft", () => {
     // Il segnaposto del provider non entra nella scheda.
     expect(document.querySelector(".link-preview .fub-craft")).toBeNull();
     expect(fake.render).toHaveBeenCalledWith(LOGO, null, null);
-    expect(fake.asks).toEqual([{ doc: LOGO, size: "small", options: { render: false } }]);
+    expect(fake.asks).toEqual([{ doc: LOGO, size: "small", options: undefined }]);
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     expect(document.querySelector(".link-preview")).toBeNull();
     expect(revoked).toEqual(["blob:logo"]);
@@ -127,7 +129,7 @@ describe("l'anteprima al passaggio su un file Craft", () => {
     await vi.waitFor(() => expect(box.querySelector(".craft-figure-box")).not.toBeNull());
     expect(box.querySelector(".craft-figure-box")!.textContent).toContain("logo.vectorcraft");
     expect(box.querySelector("img")).toBeNull();
-    expect(fake.asks.map((ask) => ask.options)).toEqual([{ render: false }]);
+    expect(fake.asks.map((ask) => ask.options)).toEqual([undefined]);
   });
 
   it("un'altra nota dopo la figura torna HTML, e la figura vecchia non resta", async () => {
@@ -144,6 +146,6 @@ describe("l'anteprima al passaggio su un file Craft", () => {
     await showStickyPreview("Altra.md", box);
     expect(box.textContent).toBe("altro testo");
     expect(revoked).toEqual(["blob:logo"]);
-    for (const ask of fake.asks) expect(ask.options).toEqual({ render: false });
+    for (const ask of fake.asks) expect(ask.options).toBeUndefined();
   });
 });

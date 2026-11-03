@@ -18,15 +18,19 @@
 pub mod apps;
 pub mod container;
 pub mod contract;
+pub mod jpeg;
 pub mod linked;
+pub mod office;
 pub mod provider;
+pub mod raw;
 pub mod xmp;
 
 pub use apps::{
     CraftApp, FIGCRAFT_FORMAT_ID, PHOTOCRAFT_FORMAT_ID, VECTORCRAFT_FORMAT_ID, XMP_FORMAT_ID,
 };
 pub use contract::{
-    cache_key, CraftPreview, PreviewImage, PreviewInfo, PreviewOrigin, PreviewSize, RenderOffer,
-    XmpInfo, BUNDLE_NS, PREVIEW_COMMAND, PREVIEW_VERSION, RENDER_JOB,
+    cache_key, CraftPreview, Missing, PhotoSidecar, PreviewImage, PreviewInfo, PreviewOrigin,
+    PreviewSize, PreviewSubject, RenderConsent, RenderOffer, XmpInfo, BUNDLE_NS, JPEG_MEDIA_TYPE,
+    PHOTO_COMMAND, PNG_MEDIA_TYPE, PREVIEW_COMMAND, PREVIEW_VERSION, RENDER_JOB,
 };
 pub use provider::{providers, CraftProvider};

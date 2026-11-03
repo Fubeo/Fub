@@ -582,15 +582,17 @@ describe("i file Craft dentro una nota", () => {
 
   function preview(image: boolean): CraftPreview {
     return {
-      version: 1,
+      version: 2,
       doc: LOGO,
       revision: "r1",
       size: "small",
       origin: image ? "file" : "none",
       queued: false,
-      image: image ? { media_type: "image/png", data: PNG, width: 40, height: 30 } : null,
+      image: image ? { media_type: "image/png", data: PNG, width: 40, height: 30, orientation: 1 } : null,
+      missing: image ? null : "absent",
+      limit_bytes: null,
       info: { app: "vectorcraft", editor: "VectorCraft", format_version: null, bytes: 2048, photo: null, edits: [], xmp: null },
-      render: image ? null : { app: "VectorCraft" },
+      render: image ? null : { app: "VectorCraft", consent: "ask" },
     };
   }
 
@@ -607,7 +609,7 @@ describe("i file Craft dentro una nota", () => {
     document.body.replaceChildren();
     vi.restoreAllMocks();
     // Nessuna figura ha chiesto all'app di fare l'anteprima.
-    for (const ask of craft.asks) expect(ask.options).toEqual({ render: false });
+    for (const ask of craft.asks) expect(ask.options).toBeUndefined();
   });
 
   function note(markup: string, embeds: ReturnType<typeof resources>, opened: string[] = []): HTMLElement {
@@ -628,7 +630,7 @@ describe("i file Craft dentro una nota", () => {
     const root = note('<p><span class="embed" data-embed-page="logo.vectorcraft">logo.vectorcraft</span></p>', embeds, opened);
     await vi.waitFor(() => expect(root.querySelector("figure.craft-figure img")).not.toBeNull());
     expect(craft.figures).toEqual([LOGO]);
-    expect(craft.asks).toEqual([{ doc: LOGO, size: "small", options: { render: false } }]);
+    expect(craft.asks).toEqual([{ doc: LOGO, size: "small", options: undefined }]);
     expect(root.querySelector<HTMLImageElement>("figure.craft-figure img")!.getAttribute("src")).toBe("blob:logo");
     // Il segnaposto del provider non entra nella nota.
     expect(root.querySelector(".fub-craft")).toBeNull();

@@ -92,12 +92,13 @@ import {
   CRAFT_BUNDLE_NS,
   CRAFT_PREVIEW_COMMAND,
   CRAFT_PREVIEW_VERSION,
-  CRAFT_RENDER_JOB,
-  type CraftApp,
+  type CraftMissing,
   type CraftPreview,
   type CraftPreviewImage,
   type CraftPreviewInfo,
   type CraftPreviewSize,
+  type CraftPreviewSubject,
+  type CraftRenderConsent,
 } from "./craft";
 
 /// Una chiamata arrivata alla porta: quale, e con cosa.
@@ -233,16 +234,21 @@ export interface FakeCraftDoc {
   info?: Partial<CraftPreviewInfo>;
   /// L'immagine che il file porta (`origin: file`), per tutte e due le misure.
   image?: CraftPreviewImage | null;
-  /// L'app installata che può fare l'anteprima che manca. `render: true`
-  /// mette in coda il job `craft.render`, e `done` è ciò che il job consegna
-  /// subito dopo la risposta: l'immagine fatta dall'app, un errore, o niente
-  /// (`null`: il job resta in coda finché il banco non manda il suo
-  /// `job_done`).
-  render?: { app: string; done: CraftPreviewImage | PluginError | null };
+  /// Perché l'immagine manca, quando manca; di serie `absent`. Con
+  /// `over_limit`, `limit_bytes` è il limite che la risposta dice.
+  missing?: CraftMissing;
+  limit_bytes?: number;
+  /// `null`: Fub ha letto solo dei pezzi del file, e la risposta non ha
+  /// revisione. Di serie quella del documento.
+  revision?: null;
+  /// L'app installata che può fare l'anteprima che manca, col consenso (di
+  /// serie `ask`). `craft.preview` non avvia mai niente: l'anteprima fatta
+  /// dall'app la porta un `job_done` di `craft.render`, che manda il banco.
+  render?: { app: string; consent?: CraftRenderConsent };
 }
 
 /// L'app di un file Craft dall'estensione, come i formati di `fub-format-craft`.
-const CRAFT_FAKE_APPS: Readonly<Record<string, { app: CraftApp; editor: string }>> = {
+const CRAFT_FAKE_APPS: Readonly<Record<string, { app: CraftPreviewSubject; editor: string }>> = {
   vectorcraft: { app: "vectorcraft", editor: "VectorCraft" },
   pcraft: { app: "photocraft", editor: "PhotoCraft" },
   figcraft: { app: "figcraft", editor: "FigCraft" },
@@ -1020,12 +1026,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// della palette usano per provare che un comando che non scrive non
   /// flussa — e un host finto che non lo sapesse eseguire lancerebbe al posto
   /// di rispondere.
-  /// Le anteprime fatte dal job finto, per documento e revisione: la prossima
-  /// domanda le trova, come la cache del bundle.
-  const craftRendered = new Map<string, CraftPreviewImage>();
-
   /// L'anteprima del bundle finto per `doc` alla misura `size`.
-  function craftPreview(doc: string, size: CraftPreviewSize, render: boolean): CraftPreview {
+  function craftPreview(doc: string, size: CraftPreviewSize): CraftPreview {
     const extension = craftExtensionOf(doc);
     const stored = docs.get(doc);
     if (!options.craft || !extension) {
@@ -1044,36 +1046,21 @@ export function createFakeHost(options: Options = {}): FakeHost {
       xmp: null,
       ...known.info,
     };
-    const rendered = craftRendered.get(`${doc}\u0000${stored.revision}`) ?? null;
-    const image = known.image ?? rendered;
-    const preview: CraftPreview = {
+    const image = known.image ?? null;
+    const missing = image ? null : (known.missing ?? "absent");
+    return {
       version: CRAFT_PREVIEW_VERSION,
       doc,
-      revision: stored.revision,
+      revision: known.revision === null ? null : stored.revision,
       size,
-      origin: known.image ? "file" : rendered ? "cli" : "none",
+      origin: image ? "file" : "none",
       queued: false,
-      image: image ?? null,
+      image,
+      missing,
+      limit_bytes: missing === "over_limit" ? (known.limit_bytes ?? 64 * 1024 * 1024) : null,
       info,
-      render: image || !known.render ? null : { app: known.render.app },
+      render: image || !known.render ? null : { app: known.render.app, consent: known.render.consent ?? "ask" },
     };
-    if (!render || !preview.render || !known.render) return preview;
-    // Il job in coda: la risposta lo dice, il `job_done` arriva dopo.
-    nextJob += 1;
-    const job = `craft-${nextJob}`;
-    const done = known.render.done;
-    const revision = stored.revision;
-    if (done !== null) {
-      void Promise.resolve().then(() => {
-        if ("kind" in done && "message" in done) {
-          emit({ type: "job_done", id: job, job: CRAFT_RENDER_JOB, result: { Err: done } });
-          return;
-        }
-        craftRendered.set(`${doc}\u0000${revision}`, done as CraftPreviewImage);
-        emit({ type: "job_done", id: job, job: CRAFT_RENDER_JOB, result: { Ok: craftPreview(doc, size, false) } });
-      });
-    }
-    return { ...preview, queued: true };
   }
 
   function command(id: string, args: Record<string, unknown> | null, mode: InvokeMode) {
@@ -1083,7 +1070,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
           throw { kind: "unknown_command", message: id } satisfies PluginError;
         }
         const size = args?.size === "large" ? "large" : "small";
-        const preview = craftPreview(String(args?.doc), size, args?.render === true);
+        const preview = craftPreview(String(args?.doc), size);
         return { notify: null, effect: { kind: "custom" as const, ns: CRAFT_BUNDLE_NS, payload: preview }, undo: null, partial: null };
       }
       case "search.open":
