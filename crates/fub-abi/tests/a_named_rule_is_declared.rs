@@ -491,6 +491,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-host/src/craft/launch.rs::is_fub_variable",
+            (
+                Family::AsciiCase,
+                "riconosce le variabili d'ambiente di Fub (`FUB_*`) da togliere all'ambiente di \
+                 un'app Craft avviata (N7, l'avvio): su Windows i nomi delle variabili non \
+                 distinguono il maiuscolo e il sistema li piega in ASCII, su unix il confronto \
+                 è esatto. Non è il nome di una nota, di un tag o di un percorso.",
+            ),
+        ),
+        (
             "crates/fub-host/src/link_card.rs::card",
             (
                 Family::AsciiCase,
