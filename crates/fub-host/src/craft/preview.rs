@@ -22,10 +22,11 @@
 //! volte. Un `.pcraft` o un `.figcraft` si legge a pezzi, la coda dello ZIP e
 //! le voci che servono, qualunque sia il suo peso; una foto RAW solo le sue
 //! strutture e il JPEG; un PDF o un documento non si leggono affatto: queste
-//! risposte non hanno revisione e non vanno in cache. Quando la lease non si apre (un supporto senza identità o timbro di
-//! cambiamento, un host senza lettore come quello dei test) si torna alla via
-//! dell'host: la revisione da `document_revision`, il peso dall'anagrafe, i
-//! byte da `read_document_bytes`, riletta la revisione dopo i byte.
+//! risposte non hanno revisione e non vanno in cache. Quando la lease non si
+//! apre (un supporto senza identità o timbro di cambiamento, un host senza
+//! lettore come quello dei test) si torna alla via dell'host: la revisione da
+//! `document_revision`, il peso dall'anagrafe, i byte da
+//! `read_document_bytes`, riletta la revisione dopo i byte.
 //!
 //! Si scrive in cache solo un'anteprima con l'immagine del file (`origin:
 //! file`) e con una revisione: una scrittura che non riesce, o che chi chiama
