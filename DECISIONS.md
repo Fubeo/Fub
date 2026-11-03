@@ -59,6 +59,18 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · N7 · T8: l'avvio sta in `craft/launch.rs`; il gruppo di una
+  CLI si ferma con `rustix::process::kill_process_group` (la feature
+  `process` di rustix, che cap-primitives accendeva già: nessun crate nuovo
+  e Cargo.lock uguale), anche dopo un'uscita normale; il registro delle
+  uscite è `on_exit(pid, callback)` più `running(pid)`; un programma con un
+  percorso non assoluto è `NotFound`, mai una ricerca nel PATH; un'uscita da
+  segnale è `Failed(-segnale)`; il filtro `FUB_` su Windows non distingue il
+  maiuscolo (la sua voce in `a_named_rule_is_declared`). Restano scritti
+  nella pagina: su Windows il tempo ferma solo la CLI e non i suoi figli
+  (servirebbe un job object, cioè windows-sys, una dipendenza nuova), e una
+  CLI lasciata da Fub che esce arriva in fondo da sola · un programma
+  esterno non passa mai da una shell e non lascia processi dietro di sé.
 - 2026-11-03 · N7 · il prototipo delle anteprime (T18) è approvato così
   com'è, con le sei scelte da decidere guardando come le propone (le due
   risposte con lo stesso peso, le miniature da 16 px, la tendina, le parole
