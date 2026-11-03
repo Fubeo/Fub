@@ -2723,6 +2723,75 @@ pub struct PreparedResourceOpen {
     id: DocId,
 }
 
+/// Il lettore delle lease di un vault, da tenere fuori dal workspace.
+///
+/// È la forma durevole di [`PreparedResourceOpen`] e
+/// [`PreparedResourceRead`]: tiene il [`Vault`](crate::vault::Vault) clonato,
+/// come `prepare_resource_open` lo clona a ogni apertura, e **non** il
+/// lucchetto del workspace. Chi lo tiene apre e legge a pezzi senza prendere
+/// la custodia, cioè anche da dentro un comando o un job che ha già il suo
+/// `HostApi`.
+///
+/// Le recinzioni sono quelle delle due `prepare_*`, con le stesse funzioni:
+/// [`valid_doc_id`] e `transfer::resource_open_on` all'apertura, il controllo
+/// della radice di `check_resource_lease` e `transfer::resource_read_at` a
+/// ogni pezzo (stat, identità e timbro prima e dopo, `Stale` se uno cambia).
+///
+/// Chiuso il vault ([`Workspace::prepare_close`]), il lettore non apre e non
+/// legge più: il pezzo dopo è un errore `Io` di specie `NotConnected`, mai un
+/// byte di un vault che non c'è più.
+#[derive(Clone)]
+pub struct ResourceReader {
+    vault: crate::vault::Vault,
+    open: Arc<AtomicBool>,
+}
+
+impl ResourceReader {
+    /// Una lease su `id`, come [`Workspace::open_resource`].
+    pub fn open(&self, id: &DocId) -> Result<ResourceLease> {
+        self.check_open()?;
+        crate::transfer::resource_open_on(&self.vault, &valid_doc_id(id.as_str())?)
+    }
+
+    /// Al più `len` byte da `offset` della lease, come
+    /// [`Workspace::read_resource`]: una lease di un altro vault è
+    /// `OutsideVault`, un file cambiato dall'apertura è `Stale`.
+    pub fn read_at(&self, lease: &ResourceLease, offset: u64, len: usize) -> Result<Vec<u8>> {
+        self.check_open()?;
+        check_lease_root(self.vault.root(), lease)?;
+        crate::transfer::resource_read_at(self.vault.storage().as_ref(), lease, offset, len)
+    }
+
+    /// La radice canonica del vault che il lettore serve.
+    pub fn root(&self) -> &Utf8Path {
+        self.vault.root()
+    }
+
+    fn check_open(&self) -> Result<()> {
+        if self.open.load(Ordering::Acquire) {
+            return Ok(());
+        }
+        Err(KernelError::Io {
+            path: self.vault.root().to_owned(),
+            source: std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "il vault è chiuso: il lettore delle risorse non legge più",
+            ),
+        })
+    }
+}
+
+/// Il controllo della radice di una lease: una lease aperta su un altro vault
+/// non si legge da questo.
+fn check_lease_root(root: &Utf8Path, lease: &ResourceLease) -> Result<()> {
+    if lease.root != *root {
+        return Err(KernelError::OutsideVault(
+            lease.root.join(lease.path.as_str()),
+        ));
+    }
+    Ok(())
+}
+
 /// Lettura bounded su lease condivisa: non copia path o buffer dell'allegato.
 pub struct PreparedResourceRead {
     storage: Arc<dyn crate::storage::VaultStorage>,
@@ -3520,6 +3589,11 @@ pub struct Workspace {
     /// esattamente la frase che li riguarda tutti insieme. Serve a una cosa
     /// sola: chiudere due volte non è chiudere due volte.
     closed: bool,
+    /// Vale `true` finché il vault è aperto: lo leggono i [`ResourceReader`]
+    /// dati fuori, che non hanno il workspace e devono smettere quando si
+    /// chiude. Lo spegne [`prepare_close`](Workspace::prepare_close), insieme a
+    /// `closed`.
+    resource_readers_open: Arc<AtomicBool>,
     /// *Com'è configurato questo vault* (§11.1): gli schemi che i plugin
     /// dichiarano nel manifest, i valori dei due livelli, e la precedenza.
     ///
@@ -4069,6 +4143,7 @@ impl Workspace {
             clock: Arc::new(crate::time::SystemClock),
             sources: Shelter::new(OpenSources::default()),
             closed: false,
+            resource_readers_open: Arc::new(AtomicBool::new(true)),
             settings,
             view_states: ViewStates::in_memory(),
             organization,
@@ -4725,6 +4800,7 @@ impl Workspace {
             return None;
         }
         self.closed = true;
+        self.resource_readers_open.store(false, Ordering::Release);
 
         let root = self.docs.vault.root().to_string();
         self.as_actor(Actor::Kernel, |ws| {
@@ -6356,12 +6432,16 @@ impl Workspace {
     }
 
     fn check_resource_lease(&self, lease: &ResourceLease) -> Result<()> {
-        if lease.root != *self.docs.vault.root() {
-            return Err(KernelError::OutsideVault(
-                lease.root.join(lease.path.as_str()),
-            ));
+        check_lease_root(self.docs.vault.root(), lease)
+    }
+
+    /// Il lettore delle lease di questo vault, da tenere fuori dal lucchetto
+    /// (vedi [`ResourceReader`]). Smette di leggere quando il vault si chiude.
+    pub fn resource_reader(&self) -> ResourceReader {
+        ResourceReader {
+            vault: self.docs.vault.clone(),
+            open: Arc::clone(&self.resource_readers_open),
         }
-        Ok(())
     }
 
     pub fn prepare_resource_read(
