@@ -495,7 +495,7 @@ il primo fallisce con un messaggio che nomina la riga (provalo e rimetti a
 posto); `node .github/scripts/check-doc-links.mjs`, `check-doc-orphans.mjs` e
 `check-doc-size.mjs` sono verdi.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 1a5adb97
 
 ## T2 · L'elenco dei comandi di `fub:run-command`
 
@@ -538,7 +538,7 @@ elenco → solo quei comandi passano; senza parametro → tutti; `"note.trash"`
 come stringa → nessuno; elenco → `undo_last` rifiutato; senza elenco →
 `undo_last` come oggi. `cargo test -p fub-kernel` verde.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 1a5adb97
 
 ## T3 · La conformità dei comandi in `fub-sdk`
 
