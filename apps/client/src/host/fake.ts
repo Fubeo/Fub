@@ -45,6 +45,7 @@ import type {
   InstalledPluginInfo,
   CommandSpec,
   DraftInfo,
+  DocumentSource,
   DocumentWindowEvent,
   DocumentWindowRequest,
   GridBytesSession,
@@ -219,6 +220,10 @@ export interface FakeHost {
   calls: Call[];
   /// Le chiamate a **quella** porta, in ordine.
   atGate(gate: string): Call[];
+  /// Le chiavi di apertura che tengono un documento di videoscrittura in
+  /// questo vault (`openDocument`, `writeDocument` con `open`), finché
+  /// `documentClosed` non le chiude.
+  openKeys(vault?: string | null): number;
   /// Rinomina un file **senza che la shell l'abbia chiesto**: è il `mv` da
   /// terminale, l'altra applicazione, il sync. Il file si muove e l'evento
   /// arriva, che è l'ordine in cui le due cose succedono davvero.
@@ -438,6 +443,18 @@ export function createFakeHost(options: Options = {}): FakeHost {
     return null;
   }
 
+  /// Ciò che `readDocument` e `openDocument` rispondono.
+  function sourceOf(id: string, doc: Document): DocumentSource {
+    return {
+      // Una cartella si apre col giornale vuoto: i byte sono suoi.
+      text: formatOf(id) === "xlsx" ? "" : doc.text,
+      revision: doc.revision,
+      format_id: formatOf(id),
+      source_kind: sourceKindOf(id),
+      text_kind: formatOf(id) === "xlsx" ? "grid_journal" : "source",
+    };
+  }
+
   /// Come il registro dei formati dell'host: un documento di videoscrittura il
   /// provider lo vuole a byte, e la shell ne riceve la proiezione
   /// (`fub-format-rich`).
@@ -459,6 +476,23 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// di sempre, e un banco che vuole provare «questa scrittura ha nominato il
   /// suo vault» lo legge dall'ultimo argomento (FUB-001).
   const named = (args: unknown[], vault?: string | null): unknown[] => (vault ? [...args, vault] : args);
+
+  // Le chiavi di apertura, per vault, come le tiene l'host: una chiave conta
+  // quando apre o scrive un documento di videoscrittura, e cade con
+  // `documentClosed`. Una nota o una cartella aperte sotto la chiave non
+  // segnano niente. Una chiave malformata è `bad_args`, come nell'host.
+  const openKeys = new Map<string, Set<string>>();
+  const OPEN_KEY = /^[A-Za-z0-9_-]{1,64}$/;
+  const badKey = (open: string): PluginError => ({
+    kind: "bad_args",
+    message: `host fake: la chiave di apertura «${open}» non è valida`,
+  });
+  const holdKey = (id: string, open: string, vault?: string | null) => {
+    if (!RICH_FAKE_FORMATS.has(formatOf(id) ?? "")) return;
+    const keys = openKeys.get(vault ?? "") ?? new Set<string>();
+    keys.add(open);
+    openKeys.set(vault ?? "", keys);
+  };
 
   function gate<T>(name: string, args: unknown[], result: T): T {
     calls.push({ gate: name, args });
@@ -1265,17 +1299,21 @@ export function createFakeHost(options: Options = {}): FakeHost {
       readDocument: (id, vault) => {
         const doc = docs.get(id);
         if (!doc) return gate("readDocument", named([id], vault), Promise.reject(new Error(`«${id}» non c'è`)));
-        return gate("readDocument", named([id], vault), Promise.resolve({
-          // Una cartella si apre col giornale vuoto: i byte sono suoi.
-          text: formatOf(id) === "xlsx" ? "" : doc.text,
-          revision: doc.revision,
-          format_id: formatOf(id),
-          source_kind: sourceKindOf(id),
-          text_kind: formatOf(id) === "xlsx" ? "grid_journal" : "source",
-        }));
+        return gate("readDocument", named([id], vault), Promise.resolve(sourceOf(id, doc)));
+      },
+      openDocument: (id, open, vault) => {
+        if (!OPEN_KEY.test(open)) return gate("openDocument", named([id, open], vault), Promise.reject(badKey(open)));
+        const doc = docs.get(id);
+        if (!doc) return gate("openDocument", named([id, open], vault), Promise.reject(new Error(`«${id}» non c'è`)));
+        holdKey(id, open, vault);
+        return gate("openDocument", named([id, open], vault), Promise.resolve(sourceOf(id, doc)));
       },
       warmEngine: (extension) => gate("warmEngine", [extension], Promise.resolve()),
-      documentClosed: (id, vault) => gate("documentClosed", named([id], vault), Promise.resolve()),
+      documentClosed: (open, vault) => {
+        if (!OPEN_KEY.test(open)) return gate("documentClosed", named([open], vault), Promise.reject(badKey(open)));
+        openKeys.get(vault ?? "")?.delete(open);
+        return gate("documentClosed", named([open], vault), Promise.resolve());
+      },
       resourceOpen: (id, vault) => gate("resourceOpen", [id, vault], Promise.resolve().then((): ResourceDescriptor => {
         const doc = docs.get(id);
         if (!doc) throw { kind: "not_found", message: `host fake: «${id}» non c'è` } satisfies PluginError;
@@ -1404,7 +1442,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
           throw { kind: "not_found", message: "host fake: grid session closed" } satisfies PluginError;
         }
       })),
-      writeDocument: (id, source, base, vault) => {
+      writeDocument: (id, source, base, vault, open) => {
+        if (open !== undefined && !OPEN_KEY.test(open)) {
+          return gate("writeDocument", named([id, source, base], vault), Promise.reject(badKey(open)));
+        }
         // Il guasto si chiede **prima** di posare i byte: `write` gira mentre
         // si compone l'argomento di `gate`, quindi una porta guasta che ci
         // passasse dentro risponderebbe «no» avendo già scritto.
@@ -1445,7 +1486,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
             Promise.reject(conflict),
           );
         }
-        return gate("writeDocument", named([id, source, base], vault), Promise.resolve(write(id, source)));
+        const written = write(id, source);
+        if (open !== undefined) holdKey(id, open, vault);
+        return gate("writeDocument", named([id, source, base], vault), Promise.resolve(written));
       },
       // La rete di sicurezza del §15.2: il testo che non si è salvato. Il
       // finto non ha un crash buffer — registra e basta — perché ciò che i
@@ -1837,6 +1880,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
 
   return {
     module,
+    openKeys: (vault) => openKeys.get(vault ?? "")?.size ?? 0,
     renameFromOutside: (from, to) => {
       const before = docs.get(from);
       if (!before) throw new Error(`host fake: «${from}» non esiste`);
