@@ -2049,6 +2049,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fub-canvas-wasm"
+version = "0.1.0"
+dependencies = [
+ "fub-canvas-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "fub-cli"
 version = "0.1.0"
 dependencies = [

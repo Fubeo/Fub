@@ -15,6 +15,10 @@ members = [
     # Il nucleo della lavagna (N3): il modello e la lettura di una `.canvas`.
     # Puro: lo usano il formato, i comandi e la WebView.
     "crates/fub-canvas-core",
+    # La facciata WebAssembly del nucleo (N3): la WebView la carica come
+    # `.wasm`, fatto con `cargo rustc --crate-type cdylib` (il manifesto resta
+    # `rlib`).
+    "crates/fub-canvas-wasm",
     "crates/fub-format-base",
     "crates/fub-ink",
     # Il risolutore dei componenti (K1): puro, non dipende da nessun membro.
