@@ -71,8 +71,7 @@ fn same(left: &Value, right: &Value) -> bool {
         }
         (Value::Object(a), Value::Object(b)) => {
             a.len() == b.len()
-                && a
-                    .iter()
+                && a.iter()
                     .all(|(key, value)| b.get(key).is_some_and(|other| same(value, other)))
         }
         _ => left == right,
@@ -175,7 +174,10 @@ fn a_vector_changed_by_one_byte_fails() {
                 }
             }
         }
-        assert!(run(&changed).is_err(), "{file}: il vettore cambiato passa ancora");
+        assert!(
+            run(&changed).is_err(),
+            "{file}: il vettore cambiato passa ancora"
+        );
         mutated += 1;
     }
     assert!(mutated >= MIN_VECTORS);
