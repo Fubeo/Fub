@@ -35,6 +35,8 @@ const CHANGES: Record<string, Change> = {
 async function session(original: string): Promise<DocumentSessionCollection> {
   const api: DocumentSessionApi = {
     readDocument: async () => ({ text: original, revision: "rev-1", format_id: "canvas", source_kind: "text", text_kind: "source" }),
+    openDocument: async () => ({ text: original, revision: "rev-1", format_id: "canvas", source_kind: "text", text_kind: "source" }),
+    documentClosed: async () => {},
     writeDocument: async () => ({ revision: "rev-2" }) as never,
     resourceWrite: async () => { throw new Error("non a byte"); },
     saveDraft: async () => {},
