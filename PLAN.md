@@ -1553,7 +1553,7 @@ sono verdi, il resoconto della revisione è nel rapporto con ogni punto
 corretto o motivato, ogni riga del cancello ha la sua prova, e l'utente ha
 detto sì al merge.
 Prova: gh pr checks 297; scripts/check.sh
-Stato: [ ] da fare
+Stato: [~] in corso · orchestratore · PR #297 pronta, CI completa
 
 ## Non verificato stanotte
 
