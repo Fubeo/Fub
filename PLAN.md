@@ -1670,7 +1670,7 @@ catalogs` passa con i casi qui sopra; dopo i test nessun pid scritto dagli
 script è ancora vivo (`kill -0` dal test; mai `pgrep -f`);
 `node .github/scripts/check-error-literals.mjs` passa senza cambiare soglie.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test craft_cli
-Stato: [~] in corso · coder · base 43454451
+Stato: [x] fatto · 9790d2ef · check verde 21/21
 
 ## T12 · L'IPC
 

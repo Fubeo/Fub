@@ -59,6 +59,25 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- N7 T11 (9790d2ef): le anteprime con la CLI dopo un gesto, col biglietto.
+  Differenze dal piano: `Host::craft_render` accoda con `Host::spawn_job`
+  (l'esito arriva con `JobDone`) ed è dietro `#[cfg(feature = "craft")]`,
+  perché `CraftPreview` e `PreviewSize` vivono in `fub-format-craft`, che è
+  facoltativo: senza la feature il metodo non c'è (il piano lo voleva sempre
+  compilato con `host.craft_render.off`); T12 e T23 lo chiamano sotto la
+  stessa feature. I biglietti usati, scaduti, di un altro doc o misura, di
+  un vault chiuso e il consenso ritirato si provano negli unit test di
+  `craft/render.rs` (il biglietto non esce mai); i biglietti di un vault
+  chiuso cadono alla riapertura e quando il lettore risulta chiuso; un
+  errore di copia o I/O non segna «già provato»; l'offerta `render` vuole la
+  CLI trovata e la revisione non già fallita. L'annullamento passa dal
+  `JobHost` che smette di servire (il consenso letto dal job non risulta più
+  `on`). Rischi: i test di tempo scaduto e annullamento allungano
+  `craft_cli` di circa 25 s; `craft::open_with::tests::channel::a_single_ins
+  tance_app_is_forwarded_on_its_systems` è caduto sotto carico nel check del
+  coder (non toccato, verde da solo); `craft::launch::tests` cade in
+  parallelo e passa con un thread solo, dalla base. Niente prova con una CLI
+  vera.
 - N7 T25 (a7b9223c): i dati dell'XMP di LightCraft sotto la foto. Differenze
   dal piano: acceso o spento si legge dal kernel (`craft.photo` fra i
   comandi), bootstrap passa sempre `photoData`; tre file fuori da «Tocca»
