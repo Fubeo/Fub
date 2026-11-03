@@ -1,12 +1,13 @@
 //! Gli XMP di LightCraft: voto, etichetta, scelta e parole chiave letti in
 //! attributi e in elementi, il modello che ne viene, i nomi della foto e della
-//! copia `-Edit.psd`, e l'XML ostile.
+//! copia `-Edit.psd`, gli XMP che possono stare accanto a una foto, e l'XML
+//! ostile.
 
 use fub_abi::model::Span;
 use fub_abi::ParseContext;
 use fub_format_craft::xmp::{
-    document_model, edit_copy_of, photo_candidates, read, Flag, PhotoMatch, PhotoMeta, XmpError,
-    MAX_KEYWORDS, MAX_XMP_BYTES, MAX_XMP_DEPTH,
+    document_model, edit_copy_of, photo_candidates, read, sidecar_candidates, Flag, PhotoMatch,
+    PhotoMeta, XmpError, MAX_KEYWORDS, MAX_XMP_BYTES, MAX_XMP_DEPTH,
 };
 use serde_json::json;
 
@@ -408,4 +409,57 @@ fn edit_copies() {
     assert_eq!(edit_copy_of("IMG_0001.CR3"), "IMG_0001-Edit.psd");
     assert_eq!(edit_copy_of("Foto/IMG_0001.jpeg"), "Foto/IMG_0001-Edit.psd");
     assert_eq!(edit_copy_of("Foto/v1.2/IMG"), "Foto/v1.2/IMG-Edit.psd");
+}
+
+#[test]
+fn sidecar_names() {
+    // Prima il nome intero, poi il gambo: così come sono scritti.
+    assert_eq!(
+        sidecar_candidates("IMG_0001.CR3"),
+        ["IMG_0001.CR3.xmp", "IMG_0001.xmp"]
+    );
+    assert_eq!(sidecar_candidates("a.b.jpg"), ["a.b.jpg.xmp", "a.b.xmp"]);
+    assert_eq!(
+        sidecar_candidates("Foto/IMG.jpg"),
+        ["Foto/IMG.jpg.xmp", "Foto/IMG.xmp"]
+    );
+    assert_eq!(
+        sidecar_candidates("Foto/IMG_0002.cr3"),
+        ["Foto/IMG_0002.cr3.xmp", "Foto/IMG_0002.xmp"]
+    );
+    // Un punto in una cartella non è un'estensione.
+    assert_eq!(sidecar_candidates("Foto/v1.2/IMG"), ["Foto/v1.2/IMG.xmp"]);
+    // Senza estensione, o nascosto: soltanto il nome intero.
+    assert_eq!(sidecar_candidates("senza"), ["senza.xmp"]);
+    assert_eq!(sidecar_candidates(".nascosto"), [".nascosto.xmp"]);
+    assert_eq!(sidecar_candidates("Foto/.nascosto"), ["Foto/.nascosto.xmp"]);
+    // Un `.xmp` non è il suo stesso XMP.
+    assert_eq!(sidecar_candidates("IMG.xmp"), ["IMG.xmp.xmp"]);
+    // Nessun nome, nessun candidato.
+    assert!(sidecar_candidates("").is_empty());
+    assert!(sidecar_candidates("Foto/").is_empty());
+}
+
+#[test]
+fn sidecar_names_read_back_to_their_photo() {
+    for photo in ["IMG_0001.CR3", "Foto/2026.10/IMG.NEF"] {
+        let candidates = sidecar_candidates(photo);
+        assert_eq!(
+            photo_candidates(&candidates[0]),
+            PhotoMatch::Exact(photo.to_string()),
+            "{photo}"
+        );
+        let stem = photo.rsplit_once('.').unwrap().0;
+        assert_eq!(
+            photo_candidates(&candidates[1]),
+            PhotoMatch::Stem(stem.to_string()),
+            "{photo}"
+        );
+    }
+    // Un gambo con un punto: dall'XMP `a.b.xmp` la foto sarebbe esattamente
+    // `a.b`, ma per la foto `a.b.jpg` quell'XMP resta il secondo candidato.
+    assert_eq!(
+        photo_candidates(&sidecar_candidates("a.b.jpg")[1]),
+        PhotoMatch::Exact("a.b".to_string())
+    );
 }

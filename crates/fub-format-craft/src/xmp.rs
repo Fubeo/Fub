@@ -334,6 +334,29 @@ pub fn photo_candidates(xmp_name: &str) -> PhotoMatch {
     }
 }
 
+/// Gli XMP che possono stare accanto a `photo`, nell'ordine in cui valgono:
+/// prima il nome intero più `.xmp` (`IMG_0001.CR3` → `IMG_0001.CR3.xmp`),
+/// poi il nome senza l'ultima estensione più `.xmp` (`IMG_0001.xmp`). Sono le
+/// due forme di [`photo_candidates`], lette al contrario: le cartelle restano
+/// e i nomi sono così come sono scritti, senza piegare il caso.
+///
+/// Un nome senza estensione (`IMG`, `.nascosto`) ha soltanto la prima forma;
+/// un nome vuoto, o che finisce con `/`, nessuna. Un nome che è già un `.xmp`
+/// non è il suo stesso XMP: la seconda forma, che lo ripeterebbe, non c'è.
+pub fn sidecar_candidates(photo: &str) -> Vec<String> {
+    if photo.is_empty() || photo.ends_with('/') {
+        return Vec::new();
+    }
+    let mut out = vec![format!("{photo}.xmp")];
+    if let Some((stem, _)) = split_extension(photo) {
+        let stem_form = format!("{stem}.xmp");
+        if stem_form != photo {
+            out.push(stem_form);
+        }
+    }
+    out
+}
+
 /// Il nome della copia che PhotoCraft crea con «Modifica in PhotoCraft»:
 /// `IMG_0001.CR3` → `IMG_0001-Edit.psd`. Le cartelle restano; un nome senza
 /// estensione prende solo il suffisso.
