@@ -3,8 +3,9 @@
 //! La revisione di un file letto intero è la stessa di `document_revision`;
 //! un file cambiato fra due pezzi è `Stale`; la memoria delle revisioni non
 //! si fida di peso e data; il vault chiuso spegne un file aperto; un
-//! `craft.preview` mentre un altro thread scrive nel vault non si ferma; e
-//! nessun byte dei file cambia.
+//! `craft.preview` mentre un altro thread scrive nel vault non si ferma; una
+//! foto RAW dà il JPEG che porta dentro, letto a pezzi; e nessun byte dei
+//! file cambia.
 
 #![cfg(feature = "craft")]
 
@@ -15,7 +16,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::command::{CommandEffect, InvokeMode};
 use fub_abi::model::DocId;
 use fub_abi::PluginError;
-use fub_format_craft::{CraftPreview, PreviewOrigin, PREVIEW_COMMAND};
+use fub_format_craft::{CraftPreview, Missing, PreviewOrigin, PreviewSubject, PREVIEW_COMMAND};
 use fub_host::craft::ranged::{is_stale, Ranged, RangedError, CHUNK_BYTES};
 use fub_host::Host;
 use fub_kernel::{FormatRegistry, Workspace};
@@ -247,10 +248,19 @@ fn vectorcraft() -> Vec<u8> {
 }
 
 fn ask(host: &Host, root: &Utf8Path, doc: &str) -> Result<CraftPreview, PluginError> {
+    ask_sized(host, root, doc, "small")
+}
+
+fn ask_sized(
+    host: &Host,
+    root: &Utf8Path,
+    doc: &str,
+    size: &str,
+) -> Result<CraftPreview, PluginError> {
     let outcome = host.invoke_user_command(
         Some(root.as_str()),
         PREVIEW_COMMAND,
-        serde_json::json!({ "doc": doc, "size": "small" }),
+        serde_json::json!({ "doc": doc, "size": size }),
         InvokeMode::Apply,
     )?;
     match outcome.effect {
@@ -284,8 +294,8 @@ fn a_preview_while_another_thread_writes_does_not_stall() {
         hasher.update(&before);
         hasher.finish()
     };
-    // Il comando passa davvero dalle lease: una foto RAW non si legge, e la
-    // risposta non ha revisione (dall'host l'avrebbe).
+    // Il comando passa davvero dalle lease: una foto RAW finta non ha
+    // un'anteprima, e la risposta non ha revisione (dall'host l'avrebbe).
     let raw = ask(&host, &root, "Foto/a.CR3").unwrap();
     assert_eq!(raw.revision, None);
     assert_eq!(raw.info.bytes, b"RAW finto".len() as u64);
@@ -356,4 +366,178 @@ fn a_preview_while_another_thread_writes_does_not_stall() {
         "Fub non scrive i file Craft"
     );
     assert_eq!(std::fs::read(root.join("Foto/a.CR3")).unwrap(), photo);
+}
+
+// --- Le foto RAW ------------------------------------------------------------
+
+fn segment(marker: u8, payload: &[u8]) -> Vec<u8> {
+    let mut out = vec![0xFF, marker];
+    out.extend_from_slice(&u16::try_from(payload.len() + 2).unwrap().to_be_bytes());
+    out.extend_from_slice(payload);
+    out
+}
+
+/// Un JPEG base minimo di `width`×`height`, lungo almeno `pad` byte di dati.
+fn jpeg(width: u16, height: u16, pad: usize) -> Vec<u8> {
+    let mut sof = vec![8];
+    sof.extend_from_slice(&height.to_be_bytes());
+    sof.extend_from_slice(&width.to_be_bytes());
+    sof.extend_from_slice(&[1, 1, 0x11, 0]);
+    let mut out = vec![0xFF, 0xD8];
+    out.extend_from_slice(&segment(0xC0, &sof));
+    out.extend_from_slice(&segment(0xDA, &[1, 1, 0, 0, 63, 0]));
+    out.extend(std::iter::repeat_n(0x55, pad));
+    out.extend_from_slice(&[0xFF, 0xD9]);
+    out
+}
+
+/// Un NEF finto: IFD0 con l'orientamento 6 e il JPEG grande, IFD1 con la
+/// miniatura, poi i "dati del sensore". Il JPEG grande sta oltre il primo
+/// pezzo, perché lo si legga davvero a pezzi.
+fn nef(big: &[u8], thumb: &[u8]) -> Vec<u8> {
+    let big_at = CHUNK_BYTES as u32 + 4096;
+    let thumb_at = 512u32;
+    let entry = |tag: u16, kind: u16, value: u32| {
+        let mut out = tag.to_be_bytes().to_vec();
+        out.extend_from_slice(&kind.to_be_bytes());
+        out.extend_from_slice(&1u32.to_be_bytes());
+        if kind == 3 {
+            out.extend_from_slice(&u16::try_from(value).unwrap().to_be_bytes());
+            out.extend_from_slice(&[0, 0]);
+        } else {
+            out.extend_from_slice(&value.to_be_bytes());
+        }
+        out
+    };
+    let mut bytes = b"MM\0\x2a\0\0\0\x08".to_vec();
+    bytes.extend_from_slice(&3u16.to_be_bytes());
+    bytes.extend(entry(0x0112, 3, 6));
+    bytes.extend(entry(0x0201, 4, big_at));
+    bytes.extend(entry(0x0202, 4, big.len() as u32));
+    bytes.extend_from_slice(&100u32.to_be_bytes());
+    bytes.resize(100, 0);
+    bytes.extend_from_slice(&2u16.to_be_bytes());
+    bytes.extend(entry(0x0201, 4, thumb_at));
+    bytes.extend(entry(0x0202, 4, thumb.len() as u32));
+    bytes.extend_from_slice(&0u32.to_be_bytes());
+    bytes.resize(thumb_at as usize, 0);
+    bytes.extend_from_slice(thumb);
+    bytes.extend(pattern(big_at as usize - bytes.len()));
+    bytes.extend_from_slice(big);
+    bytes.extend(pattern(CHUNK_BYTES * 3));
+    bytes
+}
+
+fn bmff(kind: &[u8; 4], payload: &[u8]) -> Vec<u8> {
+    let mut out = u32::try_from(payload.len() + 8)
+        .unwrap()
+        .to_be_bytes()
+        .to_vec();
+    out.extend_from_slice(kind);
+    out.extend_from_slice(payload);
+    out
+}
+
+/// `THMB` o `PRVW`: 8 byte loro, la lunghezza del JPEG, 4 byte, il JPEG.
+fn cr3_jpeg_box(kind: &[u8; 4], jpeg: &[u8]) -> Vec<u8> {
+    let mut payload = vec![0u8; 8];
+    payload.extend_from_slice(&u32::try_from(jpeg.len()).unwrap().to_be_bytes());
+    payload.extend_from_slice(&[0, 0, 0, 0]);
+    payload.extend_from_slice(jpeg);
+    bmff(kind, &payload)
+}
+
+/// Un CR3 finto: `ftyp crx `, `moov` con la `uuid` di Canon (`CMT1` con
+/// l'orientamento 6 e `THMB`), la `uuid` di `PRVW`, un `mdat`.
+fn cr3(big: &[u8], thumb: &[u8]) -> Vec<u8> {
+    use fub_format_craft::raw::{CR3_CANON_UUID, CR3_PREVIEW_UUID};
+    let mut cmt1 = b"II\x2a\0\x08\0\0\0".to_vec();
+    cmt1.extend_from_slice(&1u16.to_le_bytes());
+    cmt1.extend_from_slice(&0x0112u16.to_le_bytes());
+    cmt1.extend_from_slice(&3u16.to_le_bytes());
+    cmt1.extend_from_slice(&1u32.to_le_bytes());
+    cmt1.extend_from_slice(&[6, 0, 0, 0]);
+    cmt1.extend_from_slice(&0u32.to_le_bytes());
+    let mut canon = CR3_CANON_UUID.to_vec();
+    canon.extend(bmff(b"CMT1", &cmt1));
+    canon.extend(cr3_jpeg_box(b"THMB", thumb));
+    let moov = bmff(b"moov", &bmff(b"uuid", &canon));
+    let mut prvw = CR3_PREVIEW_UUID.to_vec();
+    prvw.extend_from_slice(&[0, 0, 0, 0, 0, 0, 0, 1]);
+    prvw.extend(cr3_jpeg_box(b"PRVW", big));
+    let mut ftyp = b"crx ".to_vec();
+    ftyp.extend_from_slice(&[0, 0, 0, 1]);
+    ftyp.extend_from_slice(b"crx isom");
+    [
+        bmff(b"ftyp", &ftyp),
+        moov,
+        bmff(b"uuid", &prvw),
+        bmff(b"mdat", &pattern(CHUNK_BYTES * 3)),
+    ]
+    .concat()
+}
+
+/// `craft.preview` di una foto RAW, `small` e `large`: il JPEG dentro il
+/// file, con l'orientamento del file, senza revisione e senza toccare un
+/// byte.
+#[test]
+fn a_raw_photo_gives_the_jpeg_inside_it_read_in_pieces() {
+    use base64::Engine as _;
+    let big = jpeg(1620, 1080, 64 * 1024);
+    let thumb = jpeg(160, 120, 256);
+    let (_dir, root) = vault(&[
+        ("Foto/a.NEF", nef(&big, &thumb)),
+        ("Foto/b.CR3", cr3(&big, &thumb)),
+    ]);
+    let before = [
+        std::fs::read(root.join("Foto/a.NEF")).unwrap(),
+        std::fs::read(root.join("Foto/b.CR3")).unwrap(),
+    ];
+    let host = Host::without_watcher();
+    host.open(&root).unwrap();
+    host.wait_indexed(Some(root.as_str())).unwrap();
+    for doc in ["Foto/a.NEF", "Foto/b.CR3"] {
+        for size in ["small", "large"] {
+            let preview = ask_sized(&host, &root, doc, size).unwrap();
+            let image = preview
+                .image
+                .unwrap_or_else(|| panic!("{doc} {size}: {:?}", preview.missing));
+            assert_eq!(image.media_type, "image/jpeg", "{doc} {size}");
+            // Nessuno dei due è stretto meno di 256 tranne la miniatura:
+            // anche `small` prende il JPEG grande.
+            assert_eq!(
+                (image.width, image.height, image.orientation),
+                (1620, 1080, 6),
+                "{doc} {size}"
+            );
+            assert_eq!(
+                image.data,
+                base64::engine::general_purpose::STANDARD.encode(&big),
+                "{doc} {size}"
+            );
+            assert_eq!(preview.origin, PreviewOrigin::File, "{doc} {size}");
+            assert_eq!(preview.missing, None, "{doc} {size}");
+            assert_eq!(preview.revision, None, "{doc} {size}");
+            assert_eq!(preview.info.app, PreviewSubject::Raw, "{doc}");
+            assert_eq!(preview.info.editor, "LightCraft", "{doc}");
+        }
+    }
+    assert_eq!(std::fs::read(root.join("Foto/a.NEF")).unwrap(), before[0]);
+    assert_eq!(std::fs::read(root.join("Foto/b.CR3")).unwrap(), before[1]);
+}
+
+/// Un RAW rotto è `unreadable`, uno senza JPEG `absent`: mai un errore.
+#[test]
+fn a_broken_raw_is_unreadable_and_one_without_a_jpeg_absent() {
+    let empty = b"II\x2a\0\x08\0\0\0\0\0\0\0\0\0".to_vec();
+    let looped = b"II\x2a\0\x08\0\0\0\0\0\x08\0\0\0".to_vec();
+    let (_dir, root) = vault(&[("Foto/vuoto.DNG", empty), ("Foto/anello.DNG", looped)]);
+    let host = Host::without_watcher();
+    host.open(&root).unwrap();
+    host.wait_indexed(Some(root.as_str())).unwrap();
+    let absent = ask(&host, &root, "Foto/vuoto.DNG").unwrap();
+    assert_eq!(absent.missing, Some(Missing::Absent));
+    let broken = ask(&host, &root, "Foto/anello.DNG").unwrap();
+    assert_eq!(broken.missing, Some(Missing::Unreadable));
+    assert!(broken.image.is_none());
 }

@@ -99,9 +99,17 @@ fn ranged_preview(
         };
         let bytes = file.len();
         let mut preview = empty(doc, None, size, subject, bytes);
+        if subject == PreviewSubject::Raw {
+            // Una foto RAW: le strutture del file e il JPEG scelto, a pezzi.
+            match raw::read_from(&mut preview, &mut file, bytes, size) {
+                Ok(()) => return Ok(Some(preview)),
+                Err(error) if super::ranged::is_stale(&error) => continue,
+                Err(_) => return Ok(None),
+            }
+        }
         let Some(app) = app_of(subject, &mut preview) else {
-            // Una foto RAW, un PDF, un documento: nessun byte letto, quindi
-            // nessuna revisione e niente cache.
+            // Un PDF, un documento: nessun byte letto, quindi nessuna
+            // revisione e niente cache.
             return Ok(Some(preview));
         };
         if bytes > MAX_FILE_BYTES as u64 {

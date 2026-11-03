@@ -146,9 +146,14 @@ comando non c'è, e ricerca, backlink e tag restano.
   `cache_key(revision, size)`. Una voce vale se si legge, è della versione 2 e
   ripete `doc`, `revision` e `size`; una rotta, di un'altra versione o di un
   altro documento vale assente, e l'anteprima si rifà.
-- Un RAW, un PDF o un documento non si legge: la risposta è `origin: none`
-  con `missing: "absent"`, e `revision: null` quando il peso viene dalla
-  lease (vedi «Letture a pezzi»).
+- Una foto RAW, con la lease, dà il JPEG che porta dentro (vedi «I RAW»):
+  si leggono a pezzi solo le strutture del file e il JPEG scelto per la
+  misura, e la risposta è `origin: file` con `revision: null`; senza JPEG è
+  `missing: "absent"`, con un file rotto `"unreadable"`. Senza lease un RAW
+  non si legge, ed è `"absent"`.
+- Un PDF o un documento non si legge: la risposta è `origin: none` con
+  `missing: "absent"`, e `revision: null` quando il peso viene dalla lease
+  (vedi «Letture a pezzi»).
 - Altrimenti si leggono i byte: l'anteprima nel file dà `origin: file`, e
   senza `origin: none` con `missing: "absent"`, o `"unreadable"` se il file
   non si legge. Per un XMP `info.xmp` viene da `xmp::read`, la foto

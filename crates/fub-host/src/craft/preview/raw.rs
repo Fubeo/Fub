@@ -16,9 +16,6 @@ pub(super) fn read(preview: &mut CraftPreview) {
 /// le strutture del file e il JPEG scelto per `size`. La revisione resta
 /// `None`: senza tutti i byte non se ne sa l'impronta. Un errore di lettura
 /// torna a chi chiama, che sa se il file è cambiato nel frattempo.
-// `ranged_preview` (craft/preview.rs) la chiamerà quando il filo del lettore
-// a pezzi arriva lì; finché non c'è, la usano solo i test.
-#[cfg_attr(not(test), allow(dead_code))]
 pub(super) fn read_from<R: Read + Seek>(
     preview: &mut CraftPreview,
     reader: &mut R,
