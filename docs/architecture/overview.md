@@ -225,10 +225,8 @@ flowchart LR
 
 Il quarto blocco è `fub-format-craft`, che legge in sola lettura i
 [file delle app Craft](../reference/craft-formats.md): dipende soltanto dal
-contratto. Lo monta `fub-host`, che ne registra i formati e il bundle
-`fub.craft` (feature `craft`); `fub-app` ne prende soltanto le forme
-dell'anteprima, `CraftPreview` e `PreviewSize`, che il comando IPC
-`craft_render` riceve e restituisce.
+contratto, e lo usa soltanto `fub-host`, che ne monta i formati e il bundle
+`fub.craft` (feature `craft`).
 
 ```mermaid
 flowchart LR
@@ -237,11 +235,9 @@ flowchart LR
 
     abi["fub-abi"]
     sdk["fub-sdk"]
-    app["fub-app"]
     host["fub-host"]
     craft["fub-format-craft"]
 
-    app --> craft
     host --> craft
     craft --> abi
     craft -.-> sdk

@@ -2031,8 +2031,8 @@ async fn craft_render(
     app: AppHandle,
     vault: Option<String>,
     doc: String,
-    size: fub_format_craft::PreviewSize,
-) -> Result<fub_format_craft::CraftPreview, PluginError> {
+    size: fub_host::craft_render::PreviewSize,
+) -> Result<fub_host::craft_render::CraftPreview, PluginError> {
     guard_main_shell(&window, "render previews with an external editor")?;
     craft_off_main(app, vault, "craft render", move |host, vault| {
         host.craft_render(vault, &doc, size)

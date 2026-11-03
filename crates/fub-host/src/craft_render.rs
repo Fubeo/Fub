@@ -12,6 +12,12 @@
 //! dell'anteprima vive in `fub-format-craft`. Le regole sono in
 //! `docs/reference/craft-formats.md`.
 
+/// Le forme che [`Host::craft_render`] riceve e restituisce, per chi lo chiama
+/// attraverso l'host (il comando IPC `craft_render` di `fub-app`): la colla non
+/// dipende dal crate dei formati.
+#[cfg(feature = "craft")]
+pub use fub_format_craft::{CraftPreview, PreviewSize};
+
 #[cfg(feature = "craft")]
 mod with_craft {
     use std::time::Instant;
