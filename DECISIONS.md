@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · N7 · T20 integrato (ecf05750 lo spostamento, 1c3ed3df la
+  forma 2): il parametro render resta dichiarato e invoke lo ignora, perché
+  senza la dichiarazione l'host rifiuterebbe una domanda della versione 1;
+  craft.preview non avvia mai l'app, quindi la shell non chiede più
+  l'anteprima da sola e il pulsante richiede soltanto; unreadable e failed
+  mostrano craft.no_preview finché le frasi non arrivano in catalog.ts; un
+  file che comincia col punto (.pdf) non ha soggetto · le foto T14/T15 sono
+  15 su 16 uguali, xmp-dark-1280 cambia 10 pixel dell'angolo arrotondato di
+  1–2 livelli, contenuto identico.
 - 2026-11-03 · N7 · T9 integrato (d331e67f): Framing è lo stesso tipo di
   Protocol di T7, Channel::new restituisce io::Result perché il token può
   mancare, Channel::for_control decide con un match esaustivo su Auth,

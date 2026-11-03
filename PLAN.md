@@ -2321,7 +2321,7 @@ src/state/craft-previews.test.ts` passa; la fixture è rigenerata e
 committata; le foto del banco di T14 e T15 sono uguali a prima.
 Prova: scripts/check.sh --rapido; cargo test -p fub-format-craft --test
 ts_preview; cd apps/client && npx vitest run src/host/craft.test.ts
-Stato: [~] in corso · coder · base f2a40b7e
+Stato: [x] fatto · 1c3ed3df · check --rapido verde tranne 2 test di fub-host a tempo (lifecycle_teardown_drop::incomplete_teardown…, concurrency::a_before_write… #292) caduti sotto carico, verdi da soli tre volte
 
 ## T21 · Le letture a pezzi nel core
 
