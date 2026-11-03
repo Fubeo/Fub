@@ -59,6 +59,18 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- N3 T19 (orchestratore): `settlePending()` è pubblico invece di
+  `#settlePending`, perché anche i metodi della collezione (release,
+  discardUnsaved, handleExternalRemoval, il congedo) lo chiamano prima di
+  leggere `dirty`. La porta ha anche `watchPending`, un'iscrizione col suo
+  disposer, per check-listeners. La descrizione della porta e della cadenza
+  sta in frontend-and-ipc.md («Il testo in sospeso») perché editor-
+  surfaces.md era al limite delle 450 righe: lì c'è un rimando. `written()`
+  usa il documento mostrato dal riquadro, perché durante un cambio di tab il
+  testo registrato allo stacco è del documento di prima. Un salvataggio
+  riuscito con testo ancora in sospeso tiene la bozza e la riscrive sulla
+  base nuova. Ho rimesso al suo posto il commento di `renderMarkdownForCard`
+  (f56444dc).
 - T16 (7592cc3a): la tela usa il nucleo. Il campo di una scheda resta aperto
   attraverso `syncDoc` e il suo testo in sospeso si registra subito dopo,
   sulla scheda com'è nel testo nuovo; Invio in una scheda di testo registra
