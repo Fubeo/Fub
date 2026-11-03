@@ -1550,9 +1550,77 @@ mod tests {
     use super::{
         enter_instance, is_supported_format_export, resolve_format_indices,
         select_supported_export, unsupported_versioned_export, wasi_random_bytes,
-        wasi_random_interface, FORMAT_EXPORT, FORMAT_INTERFACE, WASI_RANDOM_LIMIT,
+        wasi_random_interface, EXPORTS_UNSERVED, FORMAT_EXPORT, FORMAT_INTERFACE,
+        WASI_RANDOM_LIMIT,
     };
+    use std::collections::BTreeSet;
     use std::sync::Mutex;
+
+    /// La pagina del censimento delle porte: la sua seconda tabella elenca gli
+    /// export WIT che questo host non serve.
+    const CENSIMENTO: &str = include_str!("../../../docs/reference/censimento-delle-porte.md");
+
+    /// Le interfacce della tabella 2 del censimento, lette fra i suoi commenti.
+    fn export_del_censimento() -> Vec<String> {
+        const INIZIO: &str = "<!-- censimento:export:inizio -->";
+        const FINE: &str = "<!-- censimento:export:fine -->";
+        let inizio = CENSIMENTO
+            .find(INIZIO)
+            .unwrap_or_else(|| panic!("la pagina del censimento non ha il commento «{INIZIO}»"));
+        let fine = CENSIMENTO
+            .find(FINE)
+            .unwrap_or_else(|| panic!("la pagina del censimento non ha il commento «{FINE}»"));
+        assert!(inizio < fine, "«{INIZIO}» deve stare prima di «{FINE}»");
+        let mut interfacce = Vec::new();
+        let mut intestazione = false;
+        for riga in CENSIMENTO[inizio + INIZIO.len()..fine].lines() {
+            let riga = riga.trim();
+            let Some(corpo) = riga.strip_prefix('|') else {
+                continue;
+            };
+            let prima = corpo
+                .split('|')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .trim_matches('`');
+            if !intestazione {
+                assert_eq!(
+                    prima, "interfaccia",
+                    "la tabella 2 del censimento comincia con «| interfaccia | chi la userebbe |»"
+                );
+                intestazione = true;
+                continue;
+            }
+            if !prima.is_empty() && prima.chars().all(|c| matches!(c, '-' | ':' | ' ')) {
+                continue;
+            }
+            interfacce.push(prima.trim().to_string());
+        }
+        interfacce
+    }
+
+    /// La tabella 2 di `docs/reference/censimento-delle-porte.md` è
+    /// [`EXPORTS_UNSERVED`]: un export che l'host comincia a servire esce
+    /// dalla pagina, uno che smette di servire ci entra.
+    #[test]
+    fn il_censimento_conosce_gli_export_non_serviti() {
+        let pagina = export_del_censimento();
+        let nella_pagina: BTreeSet<&str> = pagina.iter().map(String::as_str).collect();
+        assert_eq!(
+            nella_pagina.len(),
+            pagina.len(),
+            "la tabella 2 del censimento ripete un'interfaccia: {pagina:?}"
+        );
+        let nel_codice: BTreeSet<&str> = EXPORTS_UNSERVED.iter().copied().collect();
+        let mancano: Vec<&str> = nel_codice.difference(&nella_pagina).copied().collect();
+        let avanzano: Vec<&str> = nella_pagina.difference(&nel_codice).copied().collect();
+        assert!(
+            mancano.is_empty() && avanzano.is_empty(),
+            "la tabella 2 di docs/reference/censimento-delle-porte.md non è EXPORTS_UNSERVED: \
+             aggiungi {mancano:?}, togli {avanzano:?}"
+        );
+    }
 
     /// `wasi:random` dà la lunghezza chiesta e byte che cambiano: prima dava
     /// sempre gli stessi otto, a qualunque lunghezza (I70).

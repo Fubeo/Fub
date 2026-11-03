@@ -89,6 +89,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
   [proiezione dei documenti di videoscrittura](reference/rich-projection.md)
   e la [sessione live](reference/live-session.md)
 - [Il server MCP](reference/mcp-server.md)
+- [Il censimento delle porte](reference/censimento-delle-porte.md): che cosa
+  un componente di terzi può rifare delle funzioni ufficiali
 
 ## Vedere stato e direzione
 
