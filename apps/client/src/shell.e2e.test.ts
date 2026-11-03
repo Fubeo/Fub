@@ -3283,7 +3283,11 @@ describe("i riquadri dopo un'attesa", () => {
     await start({ ...VAULT, "lavagna.canvas": "{rotto" });
     const { openDocument } = await import("./panels/document");
     await openDocument("lavagna.canvas");
-    await settle();
+    // Nell'attesa del nucleo il riquadro non mostra una tela da modificare.
+    expect(document.querySelector(".canvas-viewport")).toBeNull();
+    expect(document.querySelectorAll(".canvas-node")).toHaveLength(0);
+    // Senza parser TypeScript il testo rotto lo dice il nucleo, appena è caricato.
+    await waitFor("la superficie d'errore al posto della lavagna rotta", () => errorSurfaces().length === 1);
 
     expect(errorSurfaces()).toHaveLength(1);
     expect(errorSurfaces()[0]!.textContent).not.toBe("");
