@@ -384,8 +384,10 @@ export function installPanel(ctx: EditorContext): void {
     const units = ctx.selection.length === 0 || model === null ? [] : selectedUnits();
     const swatches = model === null ? [] : documentSwatches(model);
     const facts = units.length === 0 ? null : (reading.facts ??= selectionFacts(units));
+    // Con il motore del disegno, i campi dei comandi che lui adesso non sa
+    // fare si mostrano disattivati (`motore/colori.ts`).
     panel.update(
-      propertiesView({
+      ctx.campiDelMotore(propertiesView({
         features: ctx.features,
         unit,
         editable: canEdit,
@@ -398,7 +400,7 @@ export function installPanel(ctx: EditorContext): void {
         recent: ctx.recentColors,
         paper: model === null ? null : paperColor(model),
         fonts: { families: [], notes: drawingFonts.fontNotes(), shown: drawingFonts.shown },
-      }),
+      })),
     );
   }
   ctx.syncProperties = syncProperties;

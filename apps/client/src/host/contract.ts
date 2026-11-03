@@ -24,6 +24,11 @@ import type {
   CommandSurface,
   ContextKind,
   DocChange,
+  DrawingLossKind,
+  DrawingPhase,
+  DrawingPointerKind,
+  DrawingRefusal,
+  DrawingTool,
   EntryKind,
   Excerpts,
   Gate,
@@ -1609,6 +1614,157 @@ export interface GridBytesWindow {
   tables: GridTable[];
   /** Gli oggetti che toccano la finestra, anche quelli ancorati fuori. */
   objects: GridObject[];
+}
+
+// ---------------------------------------------------------------------------
+// Il disegno sul motore (rispecchia `fub_abi::drawing`, K5)
+// ---------------------------------------------------------------------------
+//
+// Il client resta lo scrittore del file: il motore del disegno tiene una copia
+// che segue il testo della `DocumentSession` (`DrawingSync`), ci fa girare i
+// suoi strumenti con i campioni della penna (`DrawingGesture`) e risponde con
+// le operazioni di scena da applicare in un passo di annullamento
+// (`DrawingOutcome.ops`). Le revisioni sono `u64` e viaggiano come stringhe.
+// I comandi IPC che le portano arrivano con T19 (`docs/reference/ipc-contract.md`).
+
+/** Il testo di un disegno, al più (`fub_scene::MAX_EDIT_BYTES`). */
+export const MAX_DRAWING_TEXT_BYTES = 20 * 1024 * 1024;
+/** Gli eventi di una sola richiesta di gesto, al più. */
+export const MAX_GESTURE_EVENTS = 100_000;
+/** Le operazioni di un esito, e gli id di una selezione, al più (`MAX_BATCH`). */
+export const MAX_DRAWING_OPS = 10_000;
+/** Il JSON delle operazioni di un esito, al più (`MAX_OP_BYTES`). */
+export const MAX_DRAWING_OPS_BYTES = 8 * 1024 * 1024;
+/** Le parti che il motore non sa modificare, elencate al più. */
+export const MAX_DRAWING_LOSSES = 50_000;
+/** Un colore dello stile, al più. */
+export const MAX_DRAWING_COLOR_BYTES = 64;
+
+/** Colore del tratto: `value` è il colore. */
+export const DRAWING_COMMAND_STROKE_COLOR = "disegno.colore-tratto";
+/** Colore del riempimento: `value` è il colore, o `null` per nessuno. */
+export const DRAWING_COMMAND_FILL_COLOR = "disegno.colore-riempimento";
+/** Spessore del tratto: `value` è un numero, zero o più. */
+export const DRAWING_COMMAND_WIDTH = "disegno.spessore";
+
+// Che specie di parte resta com'è; la fase, lo strumento e la specie di un
+// evento del gesto; perché un gesto non ha fatto niente (`locked` e `hidden`
+// sono il livello bloccato o nascosto, come negli strumenti di oggi).
+export type {
+  DrawingLossKind,
+  DrawingPhase,
+  DrawingPointerKind,
+  DrawingRefusal,
+  DrawingTool,
+} from "./enums.generated";
+
+/** Una parte del disegno che il motore non sa modificare. */
+export interface DrawingLoss {
+  /** L'id dell'elemento, o il suo percorso se non ne ha uno. */
+  element: string;
+  kind: DrawingLossKind;
+  detail: string;
+}
+
+/** Il disegno aperto nel motore. */
+export interface DrawingOpen {
+  instance: string;
+  revision: string;
+  mapped: number;
+  unmapped: number;
+  losses: DrawingLoss[];
+}
+
+/** Un intervallo sostituito, in unità UTF-16 sul testo LF (come `TextEdit`). */
+export interface DrawingEdit {
+  from: number;
+  to: number;
+  deleted: string;
+  inserted: string;
+}
+
+/** La differenza dal testo della copia, o il testo intero. */
+export type DrawingChange =
+  | { kind: "edits"; value: { edits: DrawingEdit[]; length_before: number; length_after: number } }
+  | { kind: "text"; value: { text: string } };
+
+export interface DrawingSync {
+  revision: string;
+  change: DrawingChange;
+}
+
+export interface DrawingSynced {
+  revision: string;
+}
+
+/** Un campione della penna, in coordinate di scena. */
+export interface DrawingPointer {
+  kind: DrawingPointerKind;
+  x: number;
+  y: number;
+  /** Da 0 a 1; 0 al rilascio. */
+  pressure: number;
+  shift: boolean;
+  alt: boolean;
+  /** Ctrl su Windows e Linux, ⌘ su macOS. */
+  cmd: boolean;
+}
+
+/** La griglia magnetica: `grid` è il passo (`null` se spenta), `free` Ctrl/⌘ tenuto. */
+export interface DrawingSnap {
+  grid: number | null;
+  free: boolean;
+}
+
+export interface DrawingStyle {
+  stroke: string;
+  width: number;
+  fill: string | null;
+}
+
+/** Una richiesta di gesto: gli eventi nuovi dall'ultima dello stesso gesto. */
+export interface DrawingGesture {
+  revision: string;
+  phase: DrawingPhase;
+  tool: DrawingTool;
+  layer: string | null;
+  selection: string[];
+  zoom: number;
+  snap: DrawingSnap;
+  style: DrawingStyle | null;
+  /** La riga del testo nuovo, solo per `text`. */
+  text: string | null;
+  events: DrawingPointer[];
+}
+
+/** L'anteprima del gesto: la forma nuova (un `Elem` della scena), la matrice
+ *  della selezione `[a, b, c, d, e, f]`, il riquadro `[x, y, larghezza, altezza]`. */
+export interface DrawingPreview {
+  shape: unknown | null;
+  matrix: [number, number, number, number, number, number] | null;
+  marquee: [number, number, number, number] | null;
+}
+
+export interface DrawingOutcome {
+  revision: string;
+  preview: DrawingPreview | null;
+  /** Il JSON di un array di operazioni di scena, per `parseWireOp`. */
+  ops: string | null;
+  selection: string[];
+  losses: DrawingLoss[];
+  refused: DrawingRefusal | null;
+}
+
+export interface DrawingCommandInfo {
+  id: string;
+  enabled: boolean;
+}
+
+export interface DrawingCommandRequest {
+  revision: string;
+  id: string;
+  selection: string[];
+  value: unknown;
 }
 
 // **Da cosa parte** una scrittura intera (rispecchia `fub_abi::edit::WriteBase`).

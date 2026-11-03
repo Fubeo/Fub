@@ -63,6 +63,14 @@ const FUORI_DAL_DEFAULT = new Map([
     "job test, passo «l'export dei disegni, con la feature `draw` delle feature»; " +
       "clippy nel job fmt",
   ],
+  // L'oracolo a pixel dei disegni (il cancello di K5): porta un
+  // rasterizzatore, e il banco del kernel lo prenderebbe in ogni crate che
+  // ne fa un test senza usarlo.
+  [
+    "crates/fub-testkit/Cargo.toml#pixel",
+    "job test, passo «l'oracolo a pixel, con la feature `pixel` del banco»; " +
+      "clippy nel job fmt",
+  ],
 ]);
 
 /**

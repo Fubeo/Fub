@@ -177,6 +177,8 @@ jobs:
         run: cargo clippy -p fub-host --no-default-features --features notify-watcher,http-client,official-features,rich --all-targets -- -D warnings
       - name: clippy con la feature `draw` delle feature (FUORI_DAL_DEFAULT)
         run: cargo clippy -p fub-features --features draw --all-targets -- -D warnings
+      - name: clippy con la feature `pixel` del banco (FUORI_DAL_DEFAULT)
+        run: cargo clippy -p fub-testkit --features pixel --all-targets -- -D warnings
       - name: Il ramo Windows del kernel, compilato da qui
         run: cargo check -p fub-kernel --all-targets --target x86_64-pc-windows-msvc
 
@@ -263,6 +265,8 @@ jobs:
         run: cargo nextest run -p fub-host --no-default-features --features notify-watcher,http-client,official-features,rich --no-fail-fast --profile ci
       - name: «Nuovo disegno» e l'export dei disegni, con la feature `draw` delle feature (FUORI_DAL_DEFAULT)
         run: cargo nextest run -p fub-features --features draw --no-fail-fast --profile ci
+      - name: l'oracolo a pixel, con la feature `pixel` del banco (FUORI_DAL_DEFAULT)
+        run: cargo nextest run -p fub-testkit --features pixel --no-fail-fast --profile ci
       - name: i test dei motori di WordCraft, nel workspace loro e con il loro lock
         env:
           CARGO_TARGET_DIR: target/wordcraft

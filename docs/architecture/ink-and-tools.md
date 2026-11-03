@@ -269,6 +269,38 @@ FubDraw è il primo consumatore e non il proprietario.
 
 Restano del prodotto il livello di destinazione, gli id, gli annunci per lo screen reader, il passo di annulla e il formato della scena.
 
+### Gli strumenti sul motore
+
+La selezione (spostare, ridimensionare, ruotare, il riquadro) e le forme
+(rettangolo, ellisse, linea, freccia) passano dal motore del disegno quando
+c'è (`motore/gesti.ts`, opzione `motore` di `createDrawEditor`). L'inchiostro
+non ci passa: la penna, l'evidenziatore e la gomma restano qui, sul percorso
+di sopra, e non chiamano mai l'IPC durante il tratto; la sessione
+(`motore/sessione.ts`) porta alla copia del motore solo ciò che scrivono.
+
+- `gesture-begin.ts` chiede prima `motoreBegin`: se il motore manca (host
+  senza motore, disegno su un foglio PDF, dentro un gruppo isolato) risponde
+  `null` e lo strumento TypeScript fa da sé.
+- I campioni dell'adattatore diventano eventi `down`, `drag`, `up`; a ogni
+  fotogramma, se la richiesta di prima è tornata, parte un'anteprima con gli
+  eventi nuovi. L'esito si disegna coi segni dell'editor: la forma sullo strato
+  sopra la scena, la selezione trasformata come bozza del pittore, il
+  riquadro, le maniglie.
+- Al rilascio parte il `commit`, a pezzi di `MAX_GESTURE_EVENTS` eventi. Le
+  operazioni dell'esito passano tutte per `parseWireOp` e diventano un passo
+  di annulla; se una non vale non si scrive niente, lo si dice e lo si scrive
+  in console. Un rifiuto (`locked`, `hidden`, `empty`…) si dice con le frasi
+  dell'editor.
+- Un gesto annullato (un pizzico, il puntatore perso) manda `cancel` e
+  rimette la selezione. Il doppio clic che entra in un gruppo resta del
+  client.
+- Il motore che si sta ancora aprendo si aspetta fino a 2 s
+  (`ATTESA_APERTURA_MS`); se non arriva, il gesto non scrive niente.
+
+Il test (`motore/gesti.test.ts`) rigioca i vettori dei gesti
+(`__fixtures__/disegno-gesti/`) col motore finto dell'host, che risponde le
+loro operazioni: il testo dopo il gesto è quello del vettore, in un passo.
+
 ## Confini e verifica
 
 | Regola | Chi la verifica |

@@ -2334,6 +2334,7 @@ dependencies = [
  "camino",
  "fub-abi",
  "fub-kernel",
+ "resvg",
  "serde_json",
  "tempfile",
 ]

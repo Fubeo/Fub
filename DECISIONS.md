@@ -59,6 +59,108 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · K5 · D-14 (a): il Motore del disegno ha un interruttore suo
+  in «Disegnare», acceso di serie; il repository Fubeo/vectorcraft si crea
+  come fork di storytold/vectorcraft, come WordCraft e GridCraft (l'utente
+  ha detto sì; il comando lo lancia lui, perché all'orchestratore è negato)
+  · le consigliate, accettate dall'utente («ci sto»).
+- 2026-11-02 · K5 · Le risposte dell'utente a D-1…D-13: tutte come le
+  consigliate tranne D-8, (c): senza motore il disegno usa gli strumenti
+  semplici di prima e il chip lo dice. Ne nascono D-14 (il motore come riga
+  sua, che si spegne: consigliata e seguita), Testo anche senza motore
+  (A17), i task T25–T30 (il prototipo prima dei task grafici, l'ultimo con
+  la CI completa e la revisione prima del merge) e il tetto
+  `librerie_doppie` alzato una volta sola, con `usvg` doppio · disegnare
+  deve restare possibile con un componente spento, e un motore di supporto
+  che `fub.draw` richiede non si potrebbe spegnere mai.
+- 2026-11-02 · K5 · Dopo T8: la CI era rossa su `fub-
+  app/tests/ipc_permissions.rs` perché `host/ipc.ts` chiamava i sei comandi
+  del disegno, che l'app registra solo con T19 (D-4). Le porte ora
+  rispondono `unserved` senza chiamare l'app, lo stesso rifiuto dell'host
+  senza il motore (prima l'app avrebbe dato un errore «comando sconosciuto»,
+  cioè motore «errore» e non «spento»); con T19 tornano `invoke`. Il test
+  non si tocca. Il ciclo rapido non l'aveva visto: `check-scope.mjs` ora
+  aggiunge i crate i cui test nominano un file del client cambiato.
+- 2026-11-02 · K5 · T5: chiuso con la fermata del piano. Nessun `svg2pdf`
+  pubblicato usa `usvg` 0.48 (l'ultimo, 0.13.0, chiede ^0.45; anche `krilla-
+  svg` 0.8.1 chiede ^0.47; letto da crates.io il 2026-11-02), quindi
+  `Cargo.lock` e i `Cargo.toml` non cambiano e l'export resta com'è. Il file
+  di misura `docs/misure/disegno-versioni-2026-11.md` conta le librerie
+  doppie per nome (45 nomi, 109 versioni, prima e dopo uguali) e dice quali
+  resteranno doppie col motore (`usvg`, `svgtypes`, `roxmltree`, `tiny-skia-
+  path`, `imagesize`, `kurbo`; `skrifa` a tre versioni, `peniko` a due). D-3
+  resta aperta: l'opzione consigliata è tenere due `usvg`, 0.45 per l'export
+  e 0.48 per il motore. Perché: non si cambia l'export per una libreria che
+  non c'è.
+- 2026-11-02 · K5 · T12: i comandi di colore e spessore partono dai campi
+  Contorno, Riempimento e Spessore del pannello delle proprietà
+  (`changeField`), perché il pozzo colore della barra non tocca la selezione
+  e cambia solo lo stile dei gesti dopo, che arriva già al motore con
+  `DrawingGesture.style`. L'esito passa da `changeFromPanel` (la stessa
+  strada del pannello: sola lettura, lucchetto, rifiuto) e non da
+  `ctx.commit` diretto. Al motore vanno solo `#rrggbb`, il riempimento
+  «nessuno» come `null` e gli spessori ≥ 0 in unità della scena; il resto lo
+  scrive il pannello come prima. Un comando che `drawingCommands` non elenca
+  vale spento (`ctx.campiDelMotore` in `panel.ts`, una riga fuori dal
+  «Tocca»). Se il motore manca o smette di rispondere, il pannello scrive da
+  sé solo se disegno e selezione sono ancora quelli di partenza. Fra comandi
+  e gesti non c'è una fila comune: un comando lanciato mentre l'esito di un
+  gesto è in volo si calcola sulla copia senza quel gesto, e un rifiuto si
+  annuncia. Perché: senza motore la barra scrive come prima.
+- 2026-11-02 · K5 · T10: i gesti di select, rect, ellipse, line e arrow
+  passano dal motore (`editors/spatial/motore/gesti.ts`) e ogni esito è un
+  passo di annulla. L'opzione dell'editor è una porta `MotoreDelDisegno` che
+  può essere ancora «in apertura» (non la `SessioneMotore` del piano): la
+  superficie la passa subito, un gesto aspetta l'apertura fino a 2 s e poi
+  non scrive niente; con il motore assente, o se l'apertura fallisce, fanno
+  gli strumenti TypeScript come prima, in silenzio. Il motore non si usa sui
+  fogli PDF né dentro un gruppo isolato; il doppio clic resta del client; il
+  movimento senza tasto premuto non si manda. I connettori seguono con
+  l'hook `follow` del motore della scena dentro il commit, quindi
+  `followConnectors` non si chiama a mano. Toccati anche `marks.ts` e
+  `stroke-shapes.ts` (maniglie e lazo dall'anteprima del motore). I motivi
+  dei rifiuti usano le chiavi che ci sono, fino a T21. Perché: senza motore
+  niente deve cambiare, e con il motore un gesto è un solo passo.
+- 2026-11-02 · K5 · T8: la sessione del motore nel client
+  (`editors/spatial/motore/sessione.ts`) segue la `DocumentSession` come
+  superficie `motore-disegno:<n>` (un id per sessione, come `live:<n>`, così
+  due sessioni sullo stesso documento non si rimpiazzano) e non origina mai
+  modifiche. Le sei porte di `host/ipc.ts` usano i nomi della D-4
+  (`open_drawing`…`close_drawing`), ancora da confermare: l'host le avrà con
+  T19. Le richieste vanno in fila con un tempo limite di 10 s; a uno `stale`
+  si rimanda il testo intero (in LF) e si riprova una volta, anche per
+  `drawing_command`; qualunque errore o tempo scaduto ferma la sessione come
+  `{ perche: "errore" }`, la stacca dal documento e chiude l'istanza come
+  può. Il finto `DrawingFake` tiene la sua copia e controlla che ogni
+  differenza si applichi. Perché: il client deve essere pronto prima del
+  motore, e un motore che non risponde non deve bloccare il disegno.
+- 2026-11-02 · K5 · T4: il contratto del disegno in fub-abi ha limiti
+  espliciti (20 MiB di testo, 100 000 eventi per gesto, 10 000 operazioni, 8
+  MiB di operazioni, 50 000 perdite) e un validate() per ogni messaggio; gli
+  specchi TS sono controllati da ts_mirror e mirror.test.ts. Perché: un
+  messaggio fuori misura si rifiuta al confine, prima del motore.
+- 2026-11-02 · K5 · T2: l'oracolo a pixel sta in fub-testkit dietro la
+  feature `pixel`, fuori dal default e in FUORI_DAL_DEFAULT; resvg diventa
+  dipendenza di workspace e il banco lo prende con il solo `text` (niente
+  raster, niente caratteri di sistema); l'altezza viene da width/height
+  dell'SVG, con tetto di 8192 px, sfondo bianco opaco e famiglie generiche
+  sulla prima faccia. Ho aggiunto io in ci.yml clippy e nextest con
+  `--features pixel`. Perché: il confronto è identico su ogni macchina e chi
+  usa il banco per il kernel non compila un rasterizzatore.
+- 2026-11-02 · K5 · T3: i vettori dei gesti (49) sono registrati dagli
+  strumenti TypeScript così come sono; la loro forma sta in una pagina
+  nuova, docs/reference/scene-gestures.md, e il §10 di scene-operations.md è
+  un rimando, perché quella pagina era al tetto delle righe. `refused` ha
+  due valori in più del piano, `locked` e `hidden`, perché gli strumenti
+  rifiutano già quei due casi; il vettore ridimensiona-estraneo registra che
+  un elemento estraneo si ridimensiona già, non solo si sposta: il motore
+  lo rifà o lo scrive nel .tsv.
+- 2026-11-02 · K5 · T1: l'ADR 0239 «Il disegno passa dal motore vettoriale,
+  e il file lo scrive il client» (stato proposta, ambito contratto) e la
+  pagina docs/architecture/disegno.md; le domande D-1…D-13 stanno nell'ADR
+  come «Da decidere»; ciò che non esiste ancora è nominato come percorso in
+  codice con «(arriva con T…)» · il numero 0239 segue 0236–0238 di K3, N3 e
+  N4, e si rinumera alla fusione se serve.
 - 2026-11-01 · regole · L'orchestratore e i coder decidono da soli il come
   tecnico, i formati interni, le dipendenze fra crate del workspace e i file
   legati al task; «Chiede sempre» resta per ciò che si vede, il contratto

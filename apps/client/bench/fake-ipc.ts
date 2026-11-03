@@ -1026,6 +1026,9 @@ const options: Options = {
     } as GridBytesFake,
   }),
   ...(DRAWING === null ? {} : { draw: true }),
+  // Il motore del disegno (`drawing`) non c'è: le porte del disegno
+  // rispondono `unserved` come l'host senza il componente, e gli strumenti
+  // del disegno restano quelli del client.
 };
 
 const host = createFakeHost(options);

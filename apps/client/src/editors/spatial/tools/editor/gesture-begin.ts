@@ -118,6 +118,9 @@ export function installGestureBegin(ctx: EditorContext): void {
       case "line":
       case "arrow":
       case "cover": {
+        // Con il motore del disegno, la forma la calcola lui.
+        const motore = ctx.motoreBegin(base);
+        if (motore !== null) return motore;
         const ids = newIds();
         const to = target(ids);
         if (to === null) return { ...base, kind: "refused" };
@@ -128,7 +131,9 @@ export function installGestureBegin(ctx: EditorContext): void {
         return eraseGesture(base);
       case "note":
         return { ...base, kind: "note", at: null };
-      case "select":
+      case "select": {
+        const motore = ctx.motoreBegin(base);
+        if (motore !== null) return motore;
         return {
           ...base,
           kind: "select",
@@ -145,6 +150,7 @@ export function installGestureBegin(ctx: EditorContext): void {
           angle: 0,
           lines: null,
         };
+      }
     }
   };
   ctx.begin = begin;

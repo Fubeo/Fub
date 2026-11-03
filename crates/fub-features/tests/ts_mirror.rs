@@ -66,6 +66,13 @@ use fub_abi::ui::{
     UiNode, UiOption, UiValue, ViewUpdate,
 };
 use fub_abi::{
+    DrawingChange, DrawingCommandInfo, DrawingCommandRequest, DrawingEdit, DrawingGesture,
+    DrawingLoss, DrawingLossKind, DrawingOpen, DrawingOutcome, DrawingPhase, DrawingPointer,
+    DrawingPointerKind, DrawingPreview, DrawingRefusal, DrawingSnap, DrawingStyle, DrawingSync,
+    DrawingSynced, DrawingTool, DRAWING_COMMAND_FILL_COLOR, DRAWING_COMMAND_STROKE_COLOR,
+    DRAWING_COMMAND_WIDTH,
+};
+use fub_abi::{
     GridBook, GridBytesCell, GridBytesSession, GridBytesWindow, GridCalculation, GridCommand,
     GridCommandOutcome, GridCommandRequest, GridCommandState, GridComment, GridCommentReply,
     GridDataBar, GridDialog, GridIcon, GridJournal, GridLink, GridMedia, GridMerge, GridNotice,
@@ -1666,6 +1673,198 @@ fn grid_journal_samples() -> Vec<Value> {
 }
 
 /// La fixture attesa, costruita dai tipi Rust.
+/// I campioni del disegno (`fub_abi::drawing`): ogni record, le due forme di
+/// `DrawingChange`, ogni specie di evento, ogni strumento, ogni rifiuto e un
+/// esito con l'anteprima e uno con le operazioni. Le revisioni sono `u64`
+/// oltre 2^53 apposta: viaggiano come stringhe.
+fn drawing_samples() -> Value {
+    let revision = u64::MAX - 1;
+    let loss = |kind| DrawingLoss {
+        element: "/svg/g[1]/foreignObject[1]".into(),
+        kind,
+        detail: "foreignObject".into(),
+    };
+    let kinds = [
+        DrawingPointerKind::Down,
+        DrawingPointerKind::Drag,
+        DrawingPointerKind::Move,
+        DrawingPointerKind::DoubleClick,
+        DrawingPointerKind::Up,
+    ];
+    let pointers: Vec<DrawingPointer> = kinds
+        .into_iter()
+        .enumerate()
+        .map(|(the, kind)| DrawingPointer {
+            kind,
+            x: 10.0 + the as f64,
+            y: 20.5,
+            pressure: if kind == DrawingPointerKind::Up {
+                0.0
+            } else {
+                0.5
+            },
+            shift: the == 1,
+            alt: the == 2,
+            cmd: the == 3,
+        })
+        .collect();
+    let snap = DrawingSnap {
+        grid: Some(10.0),
+        free: true,
+    };
+    let style = DrawingStyle {
+        stroke: "#000000".into(),
+        width: 4.0,
+        fill: Some("#ffffff".into()),
+    };
+    let tools = [
+        DrawingTool::Select,
+        DrawingTool::Rect,
+        DrawingTool::Ellipse,
+        DrawingTool::Line,
+        DrawingTool::Arrow,
+        DrawingTool::Text,
+    ];
+    let phases = [
+        DrawingPhase::Preview,
+        DrawingPhase::Commit,
+        DrawingPhase::Cancel,
+    ];
+    let gestures: Vec<Value> = tools
+        .into_iter()
+        .enumerate()
+        .map(|(the, tool)| {
+            to_value(DrawingGesture {
+                revision,
+                phase: phases[the % phases.len()],
+                tool,
+                layer: (the % 2 == 0).then(|| "l1a2b3c4d".into()),
+                selection: if tool == DrawingTool::Select {
+                    vec!["oa1a1a1a1".into()]
+                } else {
+                    Vec::new()
+                },
+                zoom: 1.5,
+                snap,
+                style: (tool != DrawingTool::Select).then(|| style.clone()),
+                text: (tool == DrawingTool::Text).then(|| "Testo".into()),
+                events: pointers.clone(),
+            })
+        })
+        .collect();
+    let edit = DrawingEdit {
+        from: 4,
+        to: 5,
+        deleted: "a".into(),
+        inserted: "bc".into(),
+    };
+    let preview = DrawingPreview {
+        shape: Some(json!({"tag": "rect", "attrs": {"id": "@1", "x": "0"}})),
+        matrix: Some([1.0, 0.0, 0.0, 1.0, 7.0, 5.0]),
+        marquee: Some([0.0, 0.0, 10.0, 20.0]),
+    };
+    let refusals = [
+        DrawingRefusal::Stale,
+        DrawingRefusal::Unmapped,
+        DrawingRefusal::Empty,
+        DrawingRefusal::Unsupported,
+        DrawingRefusal::TooLarge,
+        DrawingRefusal::Closed,
+        DrawingRefusal::NotReady,
+        DrawingRefusal::Locked,
+        DrawingRefusal::Hidden,
+    ];
+    let mut outcomes = vec![
+        to_value(DrawingOutcome {
+            revision,
+            preview: Some(preview.clone()),
+            ops: None,
+            selection: vec!["oa1a1a1a1".into()],
+            losses: Vec::new(),
+            refused: None,
+        }),
+        to_value(DrawingOutcome {
+            revision,
+            preview: None,
+            ops: Some(r#"[{"op":"set","id":"oa1a1a1a1","attrs":{"x":"7"}}]"#.into()),
+            selection: vec!["oa1a1a1a1".into()],
+            losses: vec![loss(DrawingLossKind::Approximated)],
+            refused: None,
+        }),
+    ];
+    outcomes.extend(refusals.into_iter().map(|refused| {
+        to_value(DrawingOutcome {
+            revision,
+            preview: None,
+            ops: None,
+            selection: Vec::new(),
+            losses: Vec::new(),
+            refused: Some(refused),
+        })
+    }));
+    json!({
+        "DrawingOpen": [to_value(DrawingOpen {
+            instance: "drawing-1".into(),
+            revision,
+            mapped: 12,
+            unmapped: 1,
+            losses: vec![
+                loss(DrawingLossKind::Unmapped),
+                loss(DrawingLossKind::Approximated),
+                loss(DrawingLossKind::Unsupported),
+            ],
+        })],
+        "DrawingLoss": [to_value(loss(DrawingLossKind::Unmapped))],
+        "DrawingSync": [
+            to_value(DrawingSync {
+                revision,
+                change: DrawingChange::Edits {
+                    edits: vec![edit.clone()],
+                    length_before: 10,
+                    length_after: 11,
+                },
+            }),
+            to_value(DrawingSync {
+                revision,
+                change: DrawingChange::Text { text: "<svg/>\n".into() },
+            }),
+        ],
+        "DrawingEdit": [to_value(edit)],
+        "DrawingSynced": [to_value(DrawingSynced { revision })],
+        "DrawingPointer": pointers.into_iter().map(to_value).collect::<Vec<_>>(),
+        "DrawingSnap": [to_value(snap), to_value(DrawingSnap::default())],
+        "DrawingStyle": [to_value(style)],
+        "DrawingGesture": gestures,
+        "DrawingPreview": [to_value(preview), to_value(DrawingPreview::default())],
+        "DrawingOutcome": outcomes,
+        "DrawingCommandInfo": [
+            to_value(DrawingCommandInfo { id: DRAWING_COMMAND_STROKE_COLOR.into(), enabled: true }),
+            to_value(DrawingCommandInfo { id: DRAWING_COMMAND_FILL_COLOR.into(), enabled: false }),
+            to_value(DrawingCommandInfo { id: DRAWING_COMMAND_WIDTH.into(), enabled: true }),
+        ],
+        "DrawingCommandRequest": [
+            to_value(DrawingCommandRequest {
+                revision,
+                id: DRAWING_COMMAND_STROKE_COLOR.into(),
+                selection: vec!["oa1a1a1a1".into()],
+                value: json!("#d55e00"),
+            }),
+            to_value(DrawingCommandRequest {
+                revision,
+                id: DRAWING_COMMAND_FILL_COLOR.into(),
+                selection: vec!["oa1a1a1a1".into()],
+                value: Value::Null,
+            }),
+            to_value(DrawingCommandRequest {
+                revision,
+                id: DRAWING_COMMAND_WIDTH.into(),
+                selection: vec!["oa1a1a1a1".into()],
+                value: json!(2.5),
+            }),
+        ],
+    })
+}
+
 fn expected() -> Value {
     // Un errore concreto per provare che anche `PluginError` (dentro `JobDone`)
     // ha una forma che il lato TS può trattare come opaca.
@@ -1674,7 +1873,7 @@ fn expected() -> Value {
     let (grid_notice, grid_bytes_session, grid_bytes_window, grid_bytes_cells) =
         grid_bytes_samples();
     let (grid_selection, grid_command_request, grid_command_outcome) = grid_command_samples();
-    json!({
+    let mut fixture = json!({
         "GridSelection": [grid_selection],
         "GridCommandState": grid_catalog().into_iter().map(to_value).collect::<Vec<_>>(),
         "GridCommandRequest": [grid_command_request],
@@ -2021,7 +2220,17 @@ fn expected() -> Value {
             to_value(PluginError::NotFound("Fantasma.md".into())),
             to_value(PluginError::Io("disco pieno".into())),
         ],
-    })
+    });
+    // Il disegno (K5): i suoi tipi entrano accanto agli altri, con il nome del
+    // tipo come chiave.
+    let Value::Object(drawing) = drawing_samples() else {
+        unreachable!("i campioni del disegno sono un oggetto")
+    };
+    fixture
+        .as_object_mut()
+        .expect("la fixture è un oggetto")
+        .extend(drawing);
+    fixture
 }
 
 fn fixture_path() -> std::path::PathBuf {

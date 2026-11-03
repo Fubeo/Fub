@@ -1,0 +1,55 @@
+{
+  "name": "rettangolo-sotto-misura-minima",
+  "description": "un rettangolo più piccolo di MIN_SHAPE_PX sullo schermo non scrive niente",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n  </g>\n</svg>\n",
+  "gesture": {
+    "tool": "rect",
+    "layer": null,
+    "selection": [],
+    "zoom": 1,
+    "snap": {
+      "grid": null,
+      "free": false
+    },
+    "style": {
+      "stroke": "#000000",
+      "width": 4,
+      "fill": null
+    },
+    "events": [
+      {
+        "kind": "down",
+        "x": 40,
+        "y": 40,
+        "pressure": 0.5,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      },
+      {
+        "kind": "drag",
+        "x": 42,
+        "y": 42,
+        "pressure": 0.5,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      },
+      {
+        "kind": "up",
+        "x": 42,
+        "y": 42,
+        "pressure": 0,
+        "shift": false,
+        "alt": false,
+        "cmd": false
+      }
+    ]
+  },
+  "expect": {
+    "ops": null,
+    "selection": [],
+    "refused": "empty",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"400\" height=\"300\" fill=\"#ffffff\"/>\n  <g id=\"l1a2b3c4d\" fub:layer=\"Livello 1\">\n  </g>\n</svg>\n"
+  }
+}

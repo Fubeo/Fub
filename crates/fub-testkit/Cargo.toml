@@ -18,3 +18,20 @@ fub-abi = { workspace = true }
 fub-kernel = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
+# L'oracolo a pixel (`fub_testkit::pixel`): disegna un SVG con i soli
+# caratteri passati, uguale su ogni macchina. Solo il testo: le immagini
+# raster non servono a confrontare due disegni della stessa scena, e senza
+# `system-fonts` i caratteri del sistema non entrano.
+resvg = { workspace = true, features = ["text"], optional = true }
+
+# Fuori dal `default`, e dichiarata in `FUORI_DAL_DEFAULT` di
+# `.github/scripts/check-cargo-feature-default.mjs` con il passo di CI che la
+# compila: chi prende il banco per un test del kernel non deve compilare un
+# rasterizzatore che non usa.
+[features]
+default = []
+pixel = ["dep:resvg"]
+
+[[test]]
+name = "pixel"
+required-features = ["pixel"]

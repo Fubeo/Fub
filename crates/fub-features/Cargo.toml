@@ -150,14 +150,14 @@ tantivy = { version = "0.26", optional = true, default-features = false, feature
     "stemmer",
 ] }
 regex = { workspace = true, optional = true }
-# Dietro `draw`, e solo lì. `resvg` senza i default, che sono `system-fonts` e
+# Dietro `draw`, e solo lì. `resvg` senza i default (lo dice la radice), che sono `system-fonts` e
 # `memmap-fonts`: i caratteri sono quelli di Fub, incorporati, e nient'altro.
 # Restano il testo e la decodifica delle immagini raster, incorporate come
 # `data:` o lette dal vault. `fontdb` sa comunque leggere dal disco, perché `svg2pdf` lo prende
 # con le sue feature di serie e le feature si sommano: che non lo faccia lo
 # garantisce il codice, che costruisce il database dai soli byte incorporati, e
 # lo prova un test.
-resvg = { version = "0.45.1", default-features = false, features = ["text", "raster-images"], optional = true }
+resvg = { workspace = true, features = ["text", "raster-images"], optional = true }
 svg2pdf = { version = "0.13.0", optional = true }
 # L'encoder del PNG: quello di `tiny-skia` non scrive né la risoluzione
 # (`pHYs`) né il titolo (`iTXt`). È la stessa 0.18 che `image` porta già.
