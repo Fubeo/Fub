@@ -270,23 +270,65 @@ compone in `crates/fub-host/src/engines.rs`.
   custodie dei workspace si prendono sotto il prestito delle sessioni, i
   workspace si leggono dopo, e `scalda_per` si chiama senza lucchetti. Un
   motore già acceso, o in costruzione, non rifà niente (`Pigro::scalda`).
-- Ogni sessione di vault tiene i documenti ricchi che la shell ha letto, con
-  le ultime otto revisioni dei byte ricevute leggendo e salvando. La
-  revisione (`sha256:` più l'impronta) è la chiave della prova a vuoto:
+- Leggere un documento non lo apre. `read_document` senza chiave è una
+  lettura semplice: l'host risponde e non tiene niente. Con una **chiave di
+  apertura** (`open`, da 1 a 64 caratteri fra lettere ASCII, cifre, `-` e
+  `_`) la sessione di vault segna sotto la chiave le revisioni dei byte che
+  legge e che `write_document` con la stessa chiave sovrascrive e scrive,
+  fino alle ultime otto per chiave, anche di documenti diversi. La revisione
+  (`sha256:` più l'impronta) è la chiave della prova a vuoto:
   `MotoreDocumenti::dimentica(&Revision)` la toglie senza rileggere il disco.
-- `Host::document_closed(vault, documento)` toglie il documento dalla sua
-  sessione, dimentica le prove delle sue revisioni che nessun documento
-  ancora aperto ha, e se non resta aperto nessun documento ricco in nessun
-  vault svuota la cache «documenti» e chiama `rilascia_al_sistema()`. I
-  dizionari del correttore restano al budget finché un vault è aperto. Un
-  vault non aperto, o un documento mai letto, non fa niente.
+  Una scrittura senza chiave dimentica subito le prove che nessuna chiave
+  tiene. Una nota, una cartella di Excel o un PDF aperti sotto una chiave si
+  leggono e non segnano niente.
+- Un vault tiene al massimo 1024 chiavi: oltre, si chiude quella usata meno
+  di recente, con le sue prove, e l'host lo scrive nel log. Le chiavi di un
+  vault cadono quando il vault si chiude.
+- `Host::document_closed(vault, chiave)` toglie la chiave dalla sua sessione,
+  dimentica le prove delle sue revisioni che nessun'altra chiave aperta tiene,
+  in nessun vault, e se non resta aperta nessuna chiave svuota la cache
+  «documenti» e chiama `rilascia_al_sistema()`. I dizionari del correttore
+  restano al budget finché un vault è aperto. Una chiave malformata è
+  `BadArgs`; una chiave sconosciuta o già chiusa, o un vault non aperto, non
+  fanno niente.
 
 La shell scalda dall'albero dei file (`panels/engine-warmup.ts`): quando il
 puntatore resta 300 ms sulla riga di un file con motore (Word, OpenDocument,
 RTF, Excel), o all'apertura di una cartella per i suoi file, una volta per
-estensione finché il vault resta lo stesso. `DocumentSessionCollection.close` manda
-`document_closed` quando la sessione di un documento ricco esce davvero; un
-errore non cambia la chiusura.
+estensione finché il vault resta lo stesso.
+
+Nella shell apre soltanto una `DocumentSession`
+(`apps/client/src/state/document-session.ts`), e una sessione ha una chiave
+sola:
+
+- la crea `DocumentSessionCollection`, con `crypto.randomUUID()` o, dove
+  manca, sedici byte di `crypto.getRandomValues` in esadecimale, e la tiene
+  accanto al vault della sessione. `read(id)` la crea prima di leggere e la
+  passa a `openDocument`; una sessione nata senza lettura (una bozza
+  ripristinata, un documento nuovo) ne crea una sua;
+- ogni lettura e ogni scrittura della sessione passa la chiave
+  (`openDocument`, `writeDocument(…, open)`), per ogni formato: l'host decide
+  quali documenti segnano;
+- due riquadri sullo stesso documento condividono la sessione, e la chiave;
+  una rinomina tiene la chiave;
+- l'uscita è una sola, e chiude la chiave una volta: la chiusura della
+  sessione, la chiusura di tutte (anche al cambio di vault), una
+  cancellazione confermata, il file tolto da fuori, una sessione non più
+  aperta sostituita da una nuova, un errore che toglie la sessione. Un errore
+  dell'host non cambia la chiusura;
+- una lettura che non diventa una sessione (ne è nata un'altra nel
+  frattempo, il vault o l'identità del documento sono cambiati, la lettura è
+  fallita) chiude subito la sua chiave, e una lettura o un salvataggio che
+  finiscono dopo l'uscita della sessione la richiudono, perché l'host può
+  averla segnata di nuovo.
+
+Chi legge e basta (l'anteprima di «più contesto» nella ricerca, un pannello,
+un lavoro) usa `readDocument` e non tiene chiavi. Un presidio
+(`state/open-key.guard.test.ts`) vieta `openDocument`, `documentClosed` e
+`writeDocument` con la chiave fuori da `state/document-session.ts`. Le chiavi
+di una finestra ricaricata restano nell'host finché il vault non si chiude o
+il tetto delle 1024 non le fa cadere: la shell nuova non le conosce e non le
+chiude.
 
 ## Il catalogo dei comandi
 
