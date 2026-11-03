@@ -6,7 +6,8 @@
 //! (le toppe inverse applicate al testo di dopo; se manca, è quello di prima),
 //! per un rifiuto la ragione (`CommitError::reason`). Così Rust e TypeScript
 //! danno gli stessi byte e le stesse ragioni (`docs/reference/canvas-format.md`
-//! § «Parità»).
+//! § «Parità»). Per ogni vettore `Core::preview` dà il testo, o la ragione,
+//! di `commit`, e lascia la lavagna com'era.
 
 use std::path::PathBuf;
 
@@ -60,7 +61,31 @@ fn run(vector: &Value) -> Result<(), String> {
     let patches: Vec<CanvasPatch> = serde_json::from_value(vector["patches"].clone())
         .map_err(|error| format!("le toppe non si leggono: {error}"))?;
     let mut core = Core::open(before).map_err(|error| format!("before non si apre: {error}"))?;
+    // `preview` dà il testo (o la ragione) di `commit` e lascia la lavagna
+    // com'era: si chiede prima del commit, e la lavagna deve restare quella.
+    let preview = core.preview(&patches);
+    if core.source() != before {
+        return Err("preview ha cambiato la lavagna".into());
+    }
     let outcome = core.commit(&patches);
+    match (&preview, &outcome) {
+        (Ok(text), Ok(committed)) if *text != committed.source => {
+            return Err(format!(
+                "preview dà un altro testo\n  preview: {text:?}\n  commit:  {:?}",
+                committed.source
+            ));
+        }
+        (Err(seen), Err(error))
+            if seen.reason() != error.reason() || seen.to_string() != error.to_string() =>
+        {
+            return Err(format!(
+                "preview rifiuta con «{seen}», commit con «{error}»"
+            ));
+        }
+        (Ok(_), Err(error)) => return Err(format!("preview passa, commit rifiuta: {error}")),
+        (Err(error), Ok(_)) => return Err(format!("preview rifiuta, commit passa: {error}")),
+        _ => {}
+    }
     match text(vector, "/expect/outcome") {
         Some("applied") => {
             let committed = outcome.map_err(|error| format!("rifiutato: {error}"))?;

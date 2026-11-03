@@ -16,7 +16,8 @@
 //! 4. la rilettura del testo di dopo ([`parse`]), che deve dare il modello di
 //!    dopo come valore JSON (R9): altrimenti [`CommitError::Unstable`].
 //!
-//! Un errore lascia [`Core`] com'era. I vettori di
+//! Un errore lascia [`Core`] com'era. [`Core::preview`] fa gli stessi passi
+//! e dà lo stesso testo (o lo stesso errore) senza cambiare [`Core`]. I vettori di
 //! `apps/client/src/__fixtures__/canvas-patches/` fissano gli stessi byte e
 //! le stesse ragioni in Rust e in TypeScript
 //! (`docs/reference/canvas-format.md` § «Parità»).
@@ -175,15 +176,7 @@ impl Core {
     /// lavagna resta com'era. Una lista vuota è un commit che non cambia
     /// nulla.
     pub fn commit(&mut self, patches: &[CanvasPatch]) -> Result<Committed, CommitError> {
-        let draft = patch::draft(&self.canvas, patches)?;
-        draft.validate().map_err(CommitError::Invalid)?;
-        let source = patch_source(&self.source, &self.canvas, &draft)?;
-        let reread = parse(&source).map_err(|error| CommitError::Unstable {
-            reread: Some(error),
-        })?;
-        if !same_canvas(&reread, &draft) {
-            return Err(CommitError::Unstable { reread: None });
-        }
+        let (source, reread) = self.written(patches)?;
         let edit = Edit::between(&self.source, &source);
         // Il modello che si tiene è quello del testo: uguale alla bozza come
         // valore JSON, e letto con le stesse regole di un file aperto.
@@ -194,6 +187,29 @@ impl Core {
             inverse: patch::inverse(patches),
             edit,
         })
+    }
+
+    /// Il sorgente che darebbe [`Core::commit`] con le stesse toppe, senza
+    /// cambiare la lavagna: stessi passi, stesso testo, stesso errore. Serve
+    /// alle bozze di recupero, che vogliono il testo intero di una modifica
+    /// non ancora registrata.
+    pub fn preview(&self, patches: &[CanvasPatch]) -> Result<String, CommitError> {
+        self.written(patches).map(|(source, _)| source)
+    }
+
+    /// I passi 1–4 del commit: il sorgente di dopo e il modello riletto da
+    /// lui, senza toccare la lavagna.
+    fn written(&self, patches: &[CanvasPatch]) -> Result<(String, Canvas), CommitError> {
+        let draft = patch::draft(&self.canvas, patches)?;
+        draft.validate().map_err(CommitError::Invalid)?;
+        let source = patch_source(&self.source, &self.canvas, &draft)?;
+        let reread = parse(&source).map_err(|error| CommitError::Unstable {
+            reread: Some(error),
+        })?;
+        if !same_canvas(&reread, &draft) {
+            return Err(CommitError::Unstable { reread: None });
+        }
+        Ok((source, reread))
     }
 }
 
