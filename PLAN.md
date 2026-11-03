@@ -2409,7 +2409,7 @@ Fatto quando: `cargo test -p fub-kernel --test resource_reader` e `cargo test
 -p fub-host --test craft_ranged --test craft` passano; `cargo test -p
 fub-host --lib resources` passa invariato.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test craft_ranged
-Stato: [~] in corso · coder · base 769c4a54
+Stato: [x] fatto · 14a0947d · check --rapido verde (22 passi, 13m36s)
 
 ## T22 · Le anteprime lette a pezzi
 

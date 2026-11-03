@@ -59,6 +59,18 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · N7 · T21 integrato (921de8db il lettore nel kernel, 30038ed9
+  le anteprime a pezzi, 14a0947d lo scrittore di fuori). Il kernel ha
+  `ResourceReader` (`Workspace::resource_reader()`): apre e legge le lease
+  fuori dal lucchetto del workspace, con un `AtomicBool` che `prepare_close`
+  spegne; fub-host lo passa ai comandi Craft con `Registrar::craft_reader()`
+  (pub(crate), solo con la feature `craft`). Differenze dal piano:
+  `mount.rs` non toccato; i percorsi delle lease rispondono `revision: null`
+  per RAW, PDF, documenti e file oltre il limite; senza lettore si ricade
+  sul percorso dell'host; il caso /etc/passwd tolto (la / iniziale si
+  toglie). Rischi: il lettore non passa dal Guard di `HostApi` (A14, come
+  `fub-asset:`): va ricordato nella revisione di T32; la ricaduta è provata
+  solo con MemoryHost; `ranged::revision` resta inutilizzato fino a T11.
 - 2026-11-03 · N7 · T10 integrato (279c1859): Started.channel è
   Option<Arc<Channel>> e si usa fuori dal lucchetto del registro; gli errori
   sono off=Unserved, unknown_editor e wrong_kind=BadArgs, not_installed e
