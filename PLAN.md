@@ -798,7 +798,7 @@ del client chiama `openDocument` o `documentClosed`, né passa `open` a
 chiamate e non la parola, perché `"documentClosed"` è anche un motivo di fine
 della sessione dal vivo, `LiveEndReason`). `npm run typecheck` verde; `node .github/scripts/check-doc-links.mjs` verde.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base ff09f815
+Stato: [x] fatto · 1cfcca49 · check --rapido verde (20 passi, 4m22s)
 
 ## T12 · Il prototipo del menu «Comandi» dei fogli
 

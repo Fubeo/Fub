@@ -59,6 +59,17 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · K3 · T11 integrato (95cd097e..1cfcca49): ogni DocumentSession
+  ha una chiave di apertura, fatta prima della lettura e chiusa da un'uscita
+  sola (#release), e tutte le letture e scritture della sessione la passano;
+  RICH_FORMAT_IDS è tolto; un presidio sull'AST di TypeScript vieta
+  openDocument, documentClosed e la scrittura con chiave fuori dalle
+  sessioni; fuori da «Tocca» il coder ha aggiornato sei helper dei banchi e
+  tre e2e, perché documentClosed è ora obbligatorio nell'API, senza
+  indebolire asserzioni · dopo un ricaricamento della finestra le chiavi
+  vecchie restano nell'host fino alla chiusura del vault o al tetto di 1024:
+  è scritto in motori.md, e non serve codice perché il tetto LRU le
+  richiude.
 - 2026-11-03 · K3 · T10 integrato (d94cd18f..ed10cc56): le letture semplici
   non aprono un documento nel motore, solo una chiave di apertura (OpenKey)
   lo tiene aperto; quando le chiavi sono troppe si chiude quella usata meno
