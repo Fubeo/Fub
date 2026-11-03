@@ -57,7 +57,7 @@ jobs:
         run: |
           if [ "$EVENT" != "pull_request" ]; then
             echo "client=true" >> "$GITHUB_OUTPUT"
-          elif git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE '^(apps/client/|\.github/workflows/ci\.yml$)'; then
+          elif git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE '^(apps/client/|crates/fub-canvas-(core|wasm)/|\.github/workflows/ci\.yml$)'; then
             echo "client=true" >> "$GITHUB_OUTPUT"
           else
             echo "client=false" >> "$GITHUB_OUTPUT"
@@ -336,6 +336,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      # Il nucleo della lavagna: Vite lo compila in .wasm a ogni build e
+      # Vitest lo usa (N3 T14).
+      - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
+        with:
+          targets: wasm32-unknown-unknown
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22.12.0
@@ -587,6 +592,8 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
+        with:
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           cache-on-failure: true
