@@ -1455,7 +1455,7 @@ qui sopra; i test di `control.rs` (`cargo test -p fub-host --lib control`)
 passano invariati.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --lib
 craft::channel
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base f2a40b7e
 
 ## T10 · «Apri con» nell'host
 
@@ -2321,7 +2321,7 @@ src/state/craft-previews.test.ts` passa; la fixture è rigenerata e
 committata; le foto del banco di T14 e T15 sono uguali a prima.
 Prova: scripts/check.sh --rapido; cargo test -p fub-format-craft --test
 ts_preview; cd apps/client && npx vitest run src/host/craft.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base f2a40b7e
 
 ## T21 · Le letture a pezzi nel core
 
