@@ -110,17 +110,17 @@ export interface CanvasEngineOptions {
   readonly attachments?: CanvasAttachmentPort;
   readonly theme?: Theme;
   /**
+   * Il testo in sospeso di una scheda è cambiato: `true` se ne resta. Nessun
+   * lavoro in più: chi ascolta chiede `pendingText` quando gli serve.
+   */
+  readonly onPendingChange?: (pending: boolean) => void;
+  /**
    * Resa markdown reale di una card testo (stesso `renderMarkdown` della
    * lettura, con `mountMarkdown` per sanitizzazione/embed). Assente = testo
    * non interattivo: nessun secondo parser né scanner locale. `forms` sono le
    * sintassi che il vault dà al Markdown delle card (`EMBEDDED_GRAMMAR`);
    * assenti finché la superficie non le ha ricevute.
    */
-  /**
-   * Il testo in sospeso di una scheda è cambiato: `true` se ne resta. Nessun
-   * lavoro in più: chi ascolta chiede `pendingText` quando gli serve.
-   */
-  readonly onPendingChange?: (pending: boolean) => void;
   readonly renderMarkdownForCard?: (
     nodeId: string,
     text: string,
