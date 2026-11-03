@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · A1 · Le aggiunte dichiarative (le ricette: note che compongono
+  comandi che si annullano) vengono prima del laboratorio WASM; una ricetta
+  si accende soltanto dalla persona, nell'app, per macchina e per impronta, e
+  il `Guard` la limita ai comandi che nomina · perché un'AI le scrive giuste al
+  primo colpo, Fub le controlla tutte prima che girino, si annullano con un
+  solo Annulla e non serve nessun cambio ad ABI, WIT o IPC esistenti
+  (proposta del pianificatore, in attesa delle risposte D1-D10).
 - 2026-11-01 · regole · L'orchestratore e i coder decidono da soli il come
   tecnico, i formati interni, le dipendenze fra crate del workspace e i file
   legati al task; «Chiede sempre» resta per ciò che si vede, il contratto
