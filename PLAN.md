@@ -29,15 +29,18 @@ K2 e K3 (che tocca `session.rs`) in main prima di T9; i piani N3, N4, N6 e N7
 in main o ribasati prima di T4 e di T9 (toccano `inventory.rs`,
 `componenti.rs`, `registry.rs`, `mcp/tools.rs`).
 Ondate: T1 T2 | T3 T4 | T5 T6 | T7 T8 | T9 | T10 T11 | T12 | T13
-Prototipo: `PLAN-ui/ricette.html`, non ancora approvato: va mostrato
-all'utente (CSS già passato dal sanitizer, vedi «Dal prototipo»); il piano per
-chi non è tecnico è `PLAN-ui/a1-piano.html`.
+Prototipo: `PLAN-ui/ricette.html`, approvato dall'utente il 2026-11-03 (CSS
+già passato dal sanitizer, vedi «Dal prototipo»); il piano per chi non è
+tecnico è `PLAN-ui/a1-piano.html`.
 
 ## Modifiche
 
 nessuna
 
 ## Domande per l'utente
+
+Risposte: il 2026-11-03 l'utente ha confermato tutte le risposte consigliate,
+(a) per D1-D10; i quattro cancelli (D4, D1, D9, D2) sono aperti.
 
 Il piano va avanti con la risposta consigliata (la prima) come assunzione.
 Quattro risposte vanno date prima del task che le fissa in un modo difficile

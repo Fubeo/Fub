@@ -59,6 +59,11 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- A1: il 2026-11-03 l'utente ha approvato il prototipo `PLAN-
+  ui/ricette.html` e confermato tutte le risposte consigliate, (a) per
+  D1-D10 («confermo tutto delle ricette, mi sembra un'ottima implementazione
+  della mia idea»): i cancelli di T2 (D4), T4 (D1, D9) e T8 (D2) sono
+  aperti, T12 può partire quando le sue dipendenze sono fatte.
 - 2026-11-03 · A1 · Le aggiunte dichiarative (le ricette: note che compongono
   comandi che si annullano) vengono prima del laboratorio WASM; una ricetta
   si accende soltanto dalla persona, nell'app, per macchina e per impronta, e
