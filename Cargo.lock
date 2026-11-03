@@ -2019,6 +2019,7 @@ version = "0.1.0"
 dependencies = [
  "camino",
  "fub-abi",
+ "fub-format-craft",
  "fub-host",
  "fub-kernel",
  "fub-live",

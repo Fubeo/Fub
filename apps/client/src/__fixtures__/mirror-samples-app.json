@@ -121,6 +121,51 @@
       "text_kind": "grid_journal"
     }
   ],
+  "ExternalEditor": [
+    {
+      "id": "vectorcraft",
+      "name": "VectorCraft",
+      "opens": [
+        "vectorcraft",
+        "svg"
+      ],
+      "installed": true,
+      "running": false
+    },
+    {
+      "id": "pdfcraft",
+      "name": "PdfCraft",
+      "opens": [
+        "pdf"
+      ],
+      "installed": false,
+      "running": false
+    },
+    {
+      "id": "photocraft",
+      "name": "PhotoCraft",
+      "opens": [
+        "pcraft",
+        "psd"
+      ],
+      "installed": true,
+      "running": true
+    }
+  ],
+  "OpenedWith": [
+    {
+      "editor": "lightcraft",
+      "how": "forwarded"
+    },
+    {
+      "editor": "photocraft",
+      "how": "in_running"
+    },
+    {
+      "editor": "vectorcraft",
+      "how": "new_process"
+    }
+  ],
   "BundleInfo": [
     {
       "id": "fub.versioning",

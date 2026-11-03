@@ -23,6 +23,7 @@ use fub_app_lib::{
     BundleInfo, DemoClosed, DocumentSource, EmbedContent, InstalledPluginInfo, LiveAddress,
     LiveStart, LiveStarted, OpenVaults, ThemeInfo, ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
 };
+use fub_host::open_with::{ExternalEditor, OpenHow, OpenedWith};
 use fub_host::registry::BundleKind;
 use fub_host::support::{
     ConfigFileKind, ConfigReport, ConfigStatus, DemoOpened, DiagnosticSummary, ExportConsent,
@@ -156,6 +157,48 @@ fn expected() -> Value {
                 format_id: Some("xlsx".into()),
                 source_kind: SourceKind::Bytes,
                 text_kind: DocumentText::GridJournal,
+            }),
+        ],
+        // «Apri con» un'app Craft: una installata, una che Fub non ha
+        // trovato e una che Fub ha avviato ed è ancora aperta, perché il menu
+        // della shell distingue le tre righe.
+        "ExternalEditor": [
+            to_value(ExternalEditor {
+                id: "vectorcraft".into(),
+                name: "VectorCraft".into(),
+                opens: vec!["vectorcraft".into(), "svg".into()],
+                installed: true,
+                running: false,
+            }),
+            to_value(ExternalEditor {
+                id: "pdfcraft".into(),
+                name: "PdfCraft".into(),
+                opens: vec!["pdf".into()],
+                installed: false,
+                running: false,
+            }),
+            to_value(ExternalEditor {
+                id: "photocraft".into(),
+                name: "PhotoCraft".into(),
+                opens: vec!["pcraft".into(), "psd".into()],
+                installed: true,
+                running: true,
+            }),
+        ],
+        // I tre modi in cui il file arriva all'app: la shell dice una frase
+        // diversa per ciascuno.
+        "OpenedWith": [
+            to_value(OpenedWith {
+                editor: "lightcraft".into(),
+                how: OpenHow::Forwarded,
+            }),
+            to_value(OpenedWith {
+                editor: "photocraft".into(),
+                how: OpenHow::InRunning,
+            }),
+            to_value(OpenedWith {
+                editor: "vectorcraft".into(),
+                how: OpenHow::NewProcess,
             }),
         ],
         // I componenti che questo host sa montare (§11.1): il campione ne ha

@@ -51,6 +51,11 @@ fub-kernel = { workspace = true }
 # `features = [...]` above does now.
 fub-host = { workspace = true, features = ["official-features"] }
 fub-wasm-host = { workspace = true }
+# Il contratto dell'anteprima Craft (`CraftPreview`, `PreviewSize`), che il
+# comando `craft_render` riceve e restituisce: un crate di forme e lettori a
+# byte, senza host né toolkit. Il montaggio resta di `fub-host`, che lo
+# compone con la sua feature `craft`.
+fub-format-craft = { workspace = true }
 # La sessione live (ADR 0205): l'app la compone sul runtime di Tauri, che è lo
 # stesso `tokio`, e la affaccia alla shell con i comandi `live_*`. `rt` serve a
 # chiudere le sessioni tutte insieme, `sync` a contare le chiusure in corso e
