@@ -402,6 +402,8 @@ mod rich {
     fn letture_che_non_aprono_e_due_vault() {
         let _una = una_alla_volta();
         let (_config, host) = host();
+        // Senza la feature `xlsx` non si aggiunge la cartella di Excel.
+        #[cfg_attr(not(feature = "xlsx"), allow(unused_mut))]
         let mut files = vec![
             ("Lettera.docx", docx("Cara Anna.")),
             ("Rotto.docx", b"PK\x03\x04 non un docx".to_vec()),
