@@ -1,0 +1,54 @@
+{
+  "name": "pdf",
+  "description": "Un PDF scala come un'immagine: il fattore minore, centrato.",
+  "card": {
+    "type": "file",
+    "file": "Corsi/dispensa.pdf"
+  },
+  "ref": {
+    "width": 600,
+    "height": 800
+  },
+  "size": {
+    "width": 300,
+    "height": 300
+  },
+  "expect": {
+    "mode": "scale",
+    "s": 0.375,
+    "x": 37.5,
+    "y": 0,
+    "points": [
+      {
+        "from": [
+          0,
+          0
+        ],
+        "to": [
+          37.5,
+          0
+        ]
+      },
+      {
+        "from": [
+          600,
+          800
+        ],
+        "to": [
+          262.5,
+          300
+        ]
+      },
+      {
+        "from": [
+          160,
+          80
+        ],
+        "to": [
+          97.5,
+          30
+        ]
+      }
+    ]
+  }
+}

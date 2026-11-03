@@ -2040,6 +2040,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fub-canvas-core"
+version = "0.1.0"
+dependencies = [
+ "fub-ink-codec",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+]
+
+[[package]]
 name = "fub-cli"
 version = "0.1.0"
 dependencies = [
@@ -2069,8 +2079,10 @@ dependencies = [
  "camino",
  "flate2",
  "fub-abi",
+ "fub-canvas-core",
  "fub-componenti",
  "fub-format-base",
+ "fub-format-canvas",
  "fub-format-markdown",
  "fub-format-svg",
  "fub-kernel",
@@ -2117,6 +2129,7 @@ name = "fub-format-canvas"
 version = "0.1.0"
 dependencies = [
  "fub-abi",
+ "fub-canvas-core",
  "fub-format-markdown",
  "serde",
  "serde_json",
@@ -2252,6 +2265,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fub-ink-codec"
+version = "0.1.0"
+dependencies = [
+ "fub-ink",
+]
+
+[[package]]
 name = "fub-kernel"
 version = "0.1.0"
 dependencies = [
@@ -2295,7 +2315,7 @@ dependencies = [
 name = "fub-scene"
 version = "0.1.0"
 dependencies = [
- "fub-ink",
+ "fub-ink-codec",
  "quick-xml",
  "serde",
  "serde_json",

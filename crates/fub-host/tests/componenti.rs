@@ -75,6 +75,7 @@ fn before() -> BTreeSet<&'static str> {
         ("fub.commands", cfg!(feature = "commands")),
         ("fub.blocks", cfg!(feature = "blocks")),
         ("fub.draw", cfg!(feature = "draw")),
+        ("fub.lavagna", cfg!(feature = "lavagna")),
         ("fub.sync", cfg!(feature = "http-client")),
         ("fub.publish", cfg!(feature = "http-client")),
         ("fub.updates", cfg!(feature = "http-client")),

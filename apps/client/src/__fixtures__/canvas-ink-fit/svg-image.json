@@ -1,0 +1,44 @@
+{
+  "name": "svg-image",
+  "description": "Un file .svg è un'immagine.",
+  "card": {
+    "type": "file",
+    "file": "Schemi/circuito.svg"
+  },
+  "ref": {
+    "width": 100,
+    "height": 50
+  },
+  "size": {
+    "width": 100,
+    "height": 100
+  },
+  "expect": {
+    "mode": "scale",
+    "s": 1,
+    "x": 0,
+    "y": 25,
+    "points": [
+      {
+        "from": [
+          20,
+          10
+        ],
+        "to": [
+          20,
+          35
+        ]
+      },
+      {
+        "from": [
+          100,
+          50
+        ],
+        "to": [
+          100,
+          75
+        ]
+      }
+    ]
+  }
+}

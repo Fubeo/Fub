@@ -247,6 +247,8 @@ fn inizializzazione_elenco_e_errori_del_protocollo() {
             "fub_read_model",
             "fub_write",
             "fub_create",
+            "fub_canvas_create",
+            "fub_canvas_apply",
             "fub_commands",
             "fub_invoke",
             "fub_components",
@@ -437,6 +439,11 @@ fn senza_radice_di_scrittura_ogni_strumento_che_scrive_e_rifiutato() {
             json!({ "doc": "Agente/bozza.md", "text": "x", "base": base }),
         ),
         ("fub_create", json!({ "name": "Agente/nuova.md" })),
+        ("fub_canvas_create", json!({ "name": "Agente/tela" })),
+        (
+            "fub_canvas_apply",
+            json!({ "doc": "Agente/tela.canvas", "ops": [{ "op": "remove", "ids": ["a"] }], "base": base, "apply": true }),
+        ),
         (
             "fub_invoke",
             json!({ "command": "note.create", "args": { "name": "Agente/nuova.md" }, "apply": true }),
@@ -463,6 +470,7 @@ fn senza_radice_di_scrittura_ogni_strumento_che_scrive_e_rifiutato() {
     );
     assert_eq!(plan["dry_run"], true);
     assert!(!f.vault.join("Agente/nuova.md").exists());
+    assert!(!f.vault.join("Agente/tela.canvas").exists());
     assert_eq!(
         std::fs::read_to_string(f.vault.join("Agente/bozza.md")).unwrap(),
         "# Bozza\n"
@@ -807,5 +815,223 @@ fn con_l_app_aperta_l_mcp_passa_da_lei() {
     assert_eq!(
         host.read_document(None, &id).unwrap().0,
         "# Bozza\n\ndall'agente\n"
+    );
+}
+
+/// Il vettore del cancello di N3, letto dove lo leggono il nucleo e la tela:
+/// `apps/client/src/__fixtures__/canvas-ops/agent-board.json`.
+fn agent_board() -> Value {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/client/src/__fixtures__/canvas-ops/agent-board.json");
+    serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap()
+}
+
+/// Il sorgente di una lavagna vuota, come la scrive Fub (R6 di
+/// `canvas-format.md`): rientrato di due spazi e chiuso da `"\n"`.
+const EMPTY_CANVAS: &str = "{\n  \"nodes\": [],\n  \"edges\": []\n}\n";
+
+/// Il cancello: un agente crea una lavagna, ci mette le schede e gli archi di
+/// `agent-board.json` e, riletta, la lavagna è il testo atteso del vettore.
+#[test]
+fn il_cancello_della_lavagna() {
+    let f = fixture();
+    let mut server = writer(&f);
+    let board = agent_board();
+    assert_eq!(
+        board["before"],
+        json!({}),
+        "il cancello parte da una lavagna vuota"
+    );
+
+    let made = server.ok(
+        "fub_canvas_create",
+        json!({ "name": "piano", "folder": "Agente" }),
+    );
+    assert_eq!(made["doc"], "Agente/piano.canvas");
+    let path = f.vault.join("Agente/piano.canvas");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), EMPTY_CANVAS);
+    let read = server.ok("fub_read", json!({ "doc": "Agente/piano.canvas" }));
+    assert_eq!(read["revision"], made["revision"]);
+
+    // Senza apply è una prova: il piano, e il file non cambia.
+    let ops = board["ops"].clone();
+    let dry = server.ok(
+        "fub_canvas_apply",
+        json!({ "doc": "Agente/piano.canvas", "ops": ops, "base": made["revision"] }),
+    );
+    assert_eq!(dry["dry_run"], true);
+    assert!(dry["outcome"].to_string().contains("Agente/piano.canvas"));
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), EMPTY_CANVAS);
+
+    let done = server.ok(
+        "fub_canvas_apply",
+        json!({ "doc": "Agente/piano.canvas", "ops": ops, "base": made["revision"], "apply": true }),
+    );
+    assert_eq!(done["dry_run"], false);
+    assert_eq!(done["doc"], "Agente/piano.canvas");
+    // Le schede tengono i loro id; gli archi ricevono id nuovi, di 16 cifre
+    // esadecimali. Il seme del vettore non passa dall'MCP: gli id degli
+    // archi vengono dalla revisione, e il testo si confronta con quelli.
+    let created: Vec<String> = done["created"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|id| id.as_str().unwrap().to_string())
+        .collect();
+    let expected_created = board["expect"]["created"].as_array().unwrap();
+    assert_eq!(created.len(), expected_created.len());
+    assert_eq!(created[..3], ["obiettivo", "passo-1", "passo-2"]);
+    for id in &created[3..] {
+        assert!(
+            id.len() == 16 && id.bytes().all(|b| b.is_ascii_hexdigit()),
+            "{id}"
+        );
+    }
+    let mut after = board["expect"]["after"].clone();
+    for (edge, id) in after["edges"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .zip(&created[3..])
+    {
+        edge["id"] = json!(id);
+    }
+    // Il sorgente si ritocca, non si riscrive (A2 del piano N3): la forma
+    // della lavagna vuota resta, e schede e archi entrano nelle sue liste
+    // come li scrive `JSON.stringify`, uno dopo l'altro.
+    let compact = |list: &Value| {
+        list.as_array()
+            .unwrap()
+            .iter()
+            .map(|item| serde_json::to_string(item).unwrap())
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    let expected = format!(
+        "{{\n  \"nodes\": [{}],\n  \"edges\": [{}]\n}}\n",
+        compact(&after["nodes"]),
+        compact(&after["edges"])
+    );
+
+    let reread = server.ok("fub_read", json!({ "doc": "Agente/piano.canvas" }));
+    assert_eq!(reread["text"], expected.as_str());
+    let model: Value = serde_json::from_str(reread["text"].as_str().unwrap()).unwrap();
+    assert_eq!(model, after);
+    assert_eq!(reread["revision"], done["revision"]);
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), expected);
+
+    // Le operazioni anche come testo JSON, sulla revisione nuova.
+    let moved = server.ok(
+        "fub_canvas_apply",
+        json!({
+            "doc": "Agente/piano.canvas",
+            "ops": r#"[{"op": "move", "ids": ["passo-1"], "dx": 10, "dy": 0}]"#,
+            "base": done["revision"],
+            "apply": true
+        }),
+    );
+    assert_eq!(moved["created"], json!([]));
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert_eq!(text, expected.replacen("\"x\":360", "\"x\":370", 1));
+}
+
+/// I rifiuti di `fub_canvas_create` e `fub_canvas_apply`: radici che non
+/// coprono la cartella, una base vecchia, operazioni sbagliate, un documento
+/// che non è una lavagna. Nessuno scrive un byte.
+#[test]
+fn le_lavagne_rifiutano_senza_scrivere() {
+    let f = fixture();
+    std::fs::write(f.vault.join("Note/tela.canvas"), EMPTY_CANVAS).unwrap();
+    let mut server = writer(&f);
+
+    // Le radici di scrittura non coprono Note.
+    let denied = server.refused(
+        "fub_canvas_create",
+        json!({ "name": "piano", "folder": "Note" }),
+    );
+    assert!(denied.starts_with("denied:"), "{denied}");
+    assert!(!f.vault.join("Note/piano.canvas").exists());
+    let denied = server.refused("fub_canvas_create", json!({ "name": "Note/piano.canvas" }));
+    assert!(denied.starts_with("denied:"), "{denied}");
+    let note = server.ok("fub_read", json!({ "doc": "Note/tela.canvas" }));
+    let denied = server.refused(
+        "fub_canvas_apply",
+        json!({ "doc": "Note/tela.canvas", "ops": [{ "op": "add_card", "node": { "type": "text", "x": 0, "y": 0, "width": 10, "height": 10, "text": "x" } }], "base": note["revision"], "apply": true }),
+    );
+    assert!(denied.starts_with("denied:"), "{denied}");
+    assert_eq!(
+        std::fs::read_to_string(f.vault.join("Note/tela.canvas")).unwrap(),
+        EMPTY_CANVAS
+    );
+
+    // Un nome preso è un conflitto, non una sovrascrittura.
+    let made = server.ok("fub_canvas_create", json!({ "name": "Agente/tela" }));
+    assert_eq!(made["doc"], "Agente/tela.canvas");
+    let taken = server.refused("fub_canvas_create", json!({ "name": "Agente/tela" }));
+    assert!(taken.starts_with("conflict"), "{taken}");
+    // Senza nome, il primo libero.
+    let free = server.ok("fub_canvas_create", json!({ "folder": "Agente" }));
+    assert!(
+        free["doc"]
+            .as_str()
+            .is_some_and(|doc| doc.starts_with("Agente/") && doc.ends_with(".canvas")),
+        "{free}"
+    );
+
+    let path = f.vault.join("Agente/tela.canvas");
+    let card = json!([{ "op": "add_card", "node": { "id": "uno", "type": "text", "x": 0, "y": 0, "width": 10, "height": 10, "text": "x" } }]);
+    let first = server.ok(
+        "fub_canvas_apply",
+        json!({ "doc": "Agente/tela.canvas", "ops": card, "base": made["revision"], "apply": true }),
+    );
+    let written = std::fs::read_to_string(&path).unwrap();
+    // Una base vecchia è un conflitto, e la lavagna resta com'è.
+    let stale = server.refused(
+        "fub_canvas_apply",
+        json!({ "doc": "Agente/tela.canvas", "ops": [{ "op": "remove", "ids": ["uno"] }], "base": made["revision"], "apply": true }),
+    );
+    assert!(stale.starts_with("conflict:"), "{stale}");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), written);
+
+    // Operazioni sbagliate: argomenti sbagliati.
+    let base = first["revision"].clone();
+    for ops in [
+        json!("non json"),
+        json!([]),
+        json!([{ "op": "vola" }]),
+        json!(3),
+        json!({ "op": "remove", "ids": ["uno"] }),
+        json!([{ "op": "remove", "ids": ["nessuno"] }]),
+    ] {
+        let bad = server.refused(
+            "fub_canvas_apply",
+            json!({ "doc": "Agente/tela.canvas", "ops": ops, "base": base, "apply": true }),
+        );
+        assert!(bad.starts_with("bad_args:"), "{ops}: {bad}");
+    }
+    assert!(server
+        .refused(
+            "fub_canvas_apply",
+            json!({ "doc": "Agente/tela.canvas", "base": base })
+        )
+        .contains("manca `ops`"));
+    assert!(server
+        .refused(
+            "fub_canvas_apply",
+            json!({ "doc": "Agente/tela.canvas", "ops": card })
+        )
+        .contains("manca `base`"));
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), written);
+
+    // Una nota non è una lavagna.
+    let bozza = server.ok("fub_read", json!({ "doc": "Agente/bozza.md" }));
+    let not_canvas = server.refused(
+        "fub_canvas_apply",
+        json!({ "doc": "Agente/bozza.md", "ops": card, "base": bozza["revision"], "apply": true }),
+    );
+    assert!(not_canvas.starts_with("bad_args:"), "{not_canvas}");
+    assert_eq!(
+        std::fs::read_to_string(f.vault.join("Agente/bozza.md")).unwrap(),
+        "# Bozza\n"
     );
 }

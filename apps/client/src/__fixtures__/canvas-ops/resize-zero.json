@@ -1,0 +1,6 @@
+{
+  "about": "Una misura sotto 1 è Invalid, come nel file.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }] },
+  "ops": [{ "op": "resize", "id": "a", "width": 100, "height": 0 }],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 0 } }
+}

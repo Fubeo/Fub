@@ -272,6 +272,12 @@ else
       cargo check -p fub-scene --target wasm32-wasip2 --all-targets --locked &&
       cargo check -p fub-ink --target wasm32-wasip2 --all-targets --locked'
   fi
+  # Il nucleo della lavagna lo carica la WebView come modulo WebAssembly.
+  if has_target wasm32-unknown-unknown; then
+    run "fub-canvas-core per wasm32-unknown-unknown" cargo check -p fub-canvas-core --target wasm32-unknown-unknown --locked
+  else
+    skip "fub-canvas-core per wasm32-unknown-unknown" "target mancante: rustup target add wasm32-unknown-unknown"
+  fi
   if [ "$NEXTEST" = 1 ]; then
     run "cargo nextest run --workspace --no-fail-fast" cargo nextest run --workspace $EXCLUDE --no-fail-fast --profile ci
   else

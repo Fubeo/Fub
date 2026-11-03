@@ -17,6 +17,7 @@ flowchart LR
     MARKDOWN --> SDK
     CANVAS["fub-format-canvas"] --> ABI
     CANVAS --> MARKDOWN
+    CANVAS --> CANVASCORE["fub-canvas-core"]
     BASE["fub-format-base"] --> ABI
     INK["fub-ink"]
     SCENE["fub-scene"] --> INK
@@ -87,7 +88,8 @@ flowchart LR
 | `fub-sdk` | API comoda per autori e host in memoria | composition root dell'app |
 | `fub-testkit` | fixture e integrazione host/kernel | dipendenze di produzione |
 | `fub-format-markdown` | parse, render, serialize e transfer Markdown | risoluzione dei path del vault |
-| `fub-format-canvas` | JSON Canvas: modello con i campi ignoti conservati, `DocumentModel`, HTML statico e riscrittura dei link; il Markdown delle card lo analizza e lo disegna il provider Markdown | host, storage, Tauri, Wasmtime |
+| `fub-format-canvas` | JSON Canvas: riespone il modello del nucleo, `DocumentModel`, HTML statico e riscrittura dei link; il Markdown delle card lo analizza e lo disegna il provider Markdown | host, storage, Tauri, Wasmtime |
+| `fub-canvas-core` | il nucleo della lavagna, puro: il modello di una `.canvas` con i campi ignoti conservati e la sua lettura; compila per `wasm32-unknown-unknown` ([formato](../reference/canvas-format.md)) | `fub-abi`, Markdown, qualunque altro crate del workspace, Tauri, Wasmtime, I/O |
 | `fub-format-base` | definizioni `.base`: modello YAML persistito, limiti e valutatore di formule | selezione delle righe, che resta del core (`query_index`) |
 | `fub-ink` | il nucleo dell'inchiostro, puro: campione del puntatore, ruoli (il palmo), curva della pressione, inclinazione, stabilizzatore e ciclo di vita del tratto, come riduttore di campioni in effetti; è la copia che fa fede del nucleo TypeScript di `apps/client/src/ink/` | DOM, Tauri, kernel, formati su disco, strumenti o interfaccia di un prodotto |
 | `apps/client/src/ink/` | la copia TypeScript del nucleo dell'inchiostro, per il percorso caldo, e l'adattatore del browser (`dom/`); il formato dei campioni e del pennello, la geometria dei campioni e gli strumenti: penna, evidenziatore e gomma, con il loro registro; vedi [Inchiostro e strumenti](ink-and-tools.md) | prodotti (FubDraw, shell, stato), formati su disco, Tauri, CodeMirror, globali del DOM nel nucleo |
@@ -113,6 +115,8 @@ flowchart LR
 - `fub-host` → Tauri;
 - `fub-scene` → qualunque crate del workspace tranne `fub-ink`;
 - `fub-ink` → qualunque crate del workspace, Tauri, Wasmtime o un prodotto;
+- `fub-canvas-core` → qualunque crate del workspace, Tauri, Wasmtime o una
+  dipendenza diversa da `serde`, `serde_json` e `thiserror`;
 - `fub-live` → `fub-abi`, `fub-kernel`, `fub-host` o Tauri;
 - qualunque crate diverso da `fub-wasm-host` → Wasmtime;
 - dipendenza normale → `fub-testkit`;
@@ -192,7 +196,7 @@ indipendenti.
 | desktop | `crates/fub-app/src/lib.rs` |
 | Markdown | `crates/fub-format-markdown/src/` |
 | foglio | `crates/fub-format-xlsx/src/`, `apps/client/src/editors/grid/` |
-| lavagna e base | `crates/fub-format-canvas/src/`, `crates/fub-format-base/src/` |
+| lavagna e base | `crates/fub-canvas-core/src/`, `crates/fub-format-canvas/src/`, `crates/fub-format-base/src/` |
 | disegni | `crates/fub-scene/src/`, `crates/fub-format-svg/src/`, `crates/fub-features/src/draw.rs`, `crates/fub-features/src/draw/` |
 | feature | `crates/fub-features/src/` |
 | codice di terzi vendorizzato | `vendor/` (provenienza in `UPSTREAM.md`) |

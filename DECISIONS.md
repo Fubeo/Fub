@@ -64,6 +64,15 @@ La più recente in cima: data · piano · decisione · perché.
   scheda, come Obsidian (da rivedere sul prototipo T25; N4 lo usa per il
   riquadro dell'inchiostro); D-22 (a), lazo e forme adesso sull'inchiostro
   di N4 · le consigliate, accettate dall'utente («ci sto»).
+- 2026-11-03 · N4 · D-13 (a), nuova: il cursore dello spessore anche nei
+  disegni e nei documenti, non solo sulla lavagna; il task lo scrive il
+  pianificatore · parole dell'utente («si»): la stessa penna si usa allo
+  stesso modo in tutta Fub.
+- 2026-11-03 · N4 · terzo merge di `piano/n3-logica-in-rust` (fino a N3 T17
+  e alla fusione di main con #303, `async-executor` 1.14.1) dentro
+  `piano/n4-inchiostro`; PLAN.md resta quello di N4 e DECISIONS.md tiene le
+  righe di tutti e due · senza main la versione ritirata 1.14.0 teneva rosso
+  il controllo delle librerie, e N4 riceve main solo attraverso N3.
 - 2026-11-02 · N6 · Le risposte dell'utente a D-1…D-19 (e merge-n3n4,
   ci-soglia): la v1 intera di `lavagna.md` (gli estratti di PDF aspettano
   PdfCraft); i file trascinati vanno dove dice un'impostazione della
@@ -171,6 +180,278 @@ La più recente in cima: data · piano · decisione · perché.
   stessa immagine sotto la sua chiave non la chiude; un tetto negativo o NaN
   vale 0, i byte 0, negativi o NaN contano 1. Il tetto di 64 MiB è un valore
   di partenza.
+- 2026-11-02 · N4 · T20: l'utente approva il prototipo delle penne con una
+  modifica: lo spessore si sceglie con un cursore (la penna da 0,5 a 20
+  pixel, l'evidenziatore da 4 a 48), non con Sottile, Medio e Spesso;
+  A19–A23 valgono; nei disegni e nei documenti restano i tre spessori finché
+  l'utente non dice altro · l'ha chiesto guardando il prototipo, e un
+  cursore dà più scelta; il prototipo ora fa anche scrivere col mouse,
+  perché l'utente voleva provare le penne e non solo guardarle.
+- 2026-11-02 · N4 · Le risposte dell'utente a D-1…D-11: il posto
+  dell'inchiostro si decide dopo la prova con Obsidian (fino ad allora il
+  `.canvas`; D-12 se si perde); il menu delle penne e la gomma che taglia
+  già in N4, dopo il prototipo; due impostazioni spente di serie (ricorda
+  «Scrivi col mouse», il dito sposta le schede); su immagini e PDF
+  l'inchiostro scala senza deformarsi, sulle altre schede resta fermo; due
+  misure, la seconda sul foglio vero con N6; N4 in `main` solo dopo N3, con
+  la CI completa · D-1, D-4–D-7, D-9, D-10 e merge-n3n4 sono diverse dalla
+  prima opzione con cui il piano era andato avanti: task nuovi T17–T25, T4
+  e T5 da rivedere.
+- 2026-11-02 · N4 · T11: la toppa ink nel client sta in `operation.ts`, con
+  i costruttori dei tratti e `eraseStrokePatches` per la gomma; i vettori di
+  T10 passano anche dal lato della shell. `operation.ts` e `ink-record.ts`
+  si importano a vicenda, ma usano i valori dell'altro solo dentro le
+  funzioni, mai al caricamento del modulo, quindi il ciclo non rompe
+  l'ordine ESM. Perché: la tela e il nucleo devono costruire la stessa
+  toppa.
+- 2026-11-02 · N4 · T10: la toppa `ink` e le operazioni
+  `add_strokes`/`erase_strokes` stanno nel nucleo; l'id di un tratto nuovo
+  nasce dal seme dell'operazione, così due giri con lo stesso seme danno lo
+  stesso file. Due errori nuovi, `E_OP_UNKNOWN_STROKE` ed
+  `E_OP_FOREIGN_LAYER`, con le frasi anche in `fub-features` (lavagna.rs e
+  lavagna/apply.rs), che altrimenti non compilava. `source.rs` non si tocca:
+  il test prova che gli array annidati si accoppiano già per id. I vettori
+  ink sono numerati 46–62, dopo il 45 di N3, per non avere doppioni dopo la
+  fusione. Misura: su una scheda con 2000 tratti spostare la scheda dà una
+  toppa d'annulla di circa 6 MB mentre il file cambia di 1 byte; un tratto
+  nuovo aggiunge circa 1,5 KB al file. Perché: un agente deve poter
+  aggiungere e cancellare tratti con la stessa strada dell'annulla.
+- 2026-11-02 · N4 · T8: l'inchiostro fub:ink sta in fub-canvas-core (modulo
+  ink), che ora dipende anche da fub-ink-codec; i campi noti di un tratto
+  sono Option<Value>, così un tratto non valido si conserva com'era e il suo
+  stato si calcola a parte (Drawn o Kept con il perché); la versione del
+  livello resta il Number del file (1.0 resta 1.0). Aggiunti
+  InkAnchor::card_of/to_value e InkLayer::is_bare per T10. Perché: leggere
+  l'inchiostro non deve mai riscrivere ciò che non si capisce, e 28 vettori
+  danno lo stesso esito del TypeScript.
+- 2026-11-02 · N4 · T6: il codec dell'inchiostro in un crate suo,
+  `fub-ink-codec`, spostato con git mv; fub-scene lo riesporta e non dipende
+  più da fub-ink (`SCENE_ALLOWED_DIRECT=[fub-ink-codec, quick-xml, serde]`,
+  `INK_ALLOWED_DEPENDENTS=[fub-ink-codec, fub-format-rich]`,
+  `INK_CODEC_ALLOWED_DIRECT=[fub-ink]`, clienti `[fub-scene,
+  fub-canvas-core]`); in overview.md un quinto diagramma, perché il primo
+  era già a 20 nodi · la lavagna e il disegno leggono l'inchiostro dallo
+  stesso codec senza tirarsi dietro la scena. Nel check, fub-cli
+  `second_process_cannot_take_writer_and_sigint_exits_repl` è caduto per il
+  timeout di 10 s sotto carico e passa da solo (3 su 3); i commenti TS
+  dicono ancora «di fub-scene».
+- 2026-11-02 · N4 · secondo merge di `piano/n3-logica-in-rust` (fino a N3
+  T7, il commit e i vettori delle toppe) dentro `piano/n4-inchiostro`;
+  PLAN.md resta quello di N4 e DECISIONS.md tiene le righe di tutti e due:
+  senza il merge la PR #298 era in conflitto con la sua base e la CI non
+  partiva.
+- 2026-11-02 · N3 · Le risposte dell'utente a D-1…D-8 e a merge-n3n4: le non
+  ovvie sono tre. D-5 (c): il testo di una scheda si registra a pause di
+  circa 250 ms, Esc registra invece di buttare (la D-10 nuova chiede
+  conferma), il testo ancora nel campo va nelle bozze, e il ritardo della
+  bozza diventa una cadenza per ogni documento (T16, T19). D-7 (c): Fub
+  riscrive conservando i null dei campi noti, gli array assenti e il posto
+  degli archi, l'annulla della tela torna ai byte di prima, e una lavagna
+  che non si riscrive senza perdere niente si apre in sola lettura (T20–T22;
+  i valori sconosciuti dei campi noti restano fuori, D-9). merge-n3n4 (b):
+  N3 entra in main solo finito, dopo la CI completa e una revisione riga per
+  riga (T23) · non perdere dati e non cambiare senza dirlo i file degli
+  altri programmi vengono prima della comodità, e N3 a metà in main
+  lascerebbe due copie della logica.
+- 2026-11-02 · N3 · T17: fatto con D-4 (a), solo la misura: il banco
+  `tools/ink-wasm-banco/` (nessuna crate nuova nel lock) e `wasm.bench.ts`,
+  che si salta senza il `.wasm`. Il primo giro era a macchina carica; la
+  pagina tiene i tre giri rifatti con il carico sotto 2,5. La condizione del
+  passo 12a non è vera per intero: un evento per chiamata, il WebAssembly è
+  4,3 volte più lento col mouse e il 16% con lo stabilizzatore, pari con la
+  penna; il riduttore da solo è pari o più veloce. La pagina non dice che
+  cosa fare: resta all'utente con D-4.
+- 2026-11-02 · N3 · ADR 0234 allineato: la lavagna non è più fra i
+  componenti senza bundle, perché da T10 è il bundle fub.lavagna. Perché:
+  l'ADR deve dire com'è fatto il codice.
+- 2026-11-02 · N3 · T12: gli strumenti MCP fub_canvas_create e
+  fub_canvas_apply chiamano canvas.create e canvas.apply con gli id scritti
+  come costanti, come note.create, perché fub-cli non dipende da fub-
+  features; fub_canvas_apply risponde {doc, dry_run, outcome} in prova e
+  {doc, dry_run, created, revision} applicato, e check_read più check_write
+  valgono anche in prova (in sola lettura nemmeno la prova passa); l'MCP non
+  passa il seme, quindi gli id nuovi vengono dalla revisione. Se
+  fub_canvas_create crea un nome diverso da quello provato, lo dice invece
+  di tacerlo. Perché: un agente crea e riempie una lavagna con le stesse
+  regole di accesso degli altri strumenti.
+- 2026-11-02 · N3 · T11: canvas.create scrive come sorgente la lavagna vuota
+  del nucleo (patch_source su Canvas::default, riletta con Core::open prima
+  di scrivere), perché il nucleo non ha una funzione apposta; senza nome
+  prende il primo libero («Lavagna», «Lavagna 1», in inglese «Whiteboard»),
+  e un nome preso è un conflitto che non sovrascrive. Il codice dei nomi è
+  una copia di drawing.create, perché le feature non si importano fra loro;
+  l'annulla porta la lavagna nel cestino e richiede la feature commands,
+  come drawing.create. Perché: un file nuovo è già una lavagna che il nucleo
+  apre.
+- 2026-11-02 · N3 · T10: il componente «Lavagna» (fub.lavagna) porta
+  canvas.apply; il seme degli id usa l'Fnv1a del contratto; spegnere
+  fub.lavagna toglie solo canvas.apply, e il test fub-cli
+  spegnere_la_lavagna_dice_che_la_penna_non_serve_piu è stato aggiornato di
+  conseguenza (opzione a: dice con precisione che cosa sparisce, non è
+  indebolito). Resta da allineare l'ADR 0234, che mette ancora la Lavagna
+  fra i componenti senza bundle. Perché: la lavagna diventa un componente
+  che si scrive come gli altri, e un componente spento toglie solo ciò che
+  porta.
+- 2026-11-02 · N3 · T9: lo specchio a caso fra fub-canvas-core e la lavagna
+  TypeScript ha 2051 casi (1333 sorgenti, 718 prove con toppe) in una
+  fixture di 501 KB, un sorgente per riga con le sue prove per stare sotto i
+  512 KB. Ha trovato una divergenza (26 casi): in una toppa il TS trattava
+  un campo noto a null diversamente dal nucleo Rust; corretto il lato TS
+  secondo R7 (null vale come assente, sia nel dopo sia nel confronto del
+  prima), vettori 44 e 45.
+- 2026-11-02 · N3 T7 · il commit in Rust (`fub-canvas-core/src/commit.rs`:
+  `Core`, `Committed{source,inverse,edit}`, `Edit::between/apply` ai confini
+  di carattere, `CommitError` Stale/Invalid/Rejected/Unstable con
+  `reason()`) e 43 vettori in `apps/client/src/__fixtures__/canvas-patches/`
+  letti da Rust e da TS; in TS `canvasCommitOutcome` accanto a
+  `commitCanvasPatches`, che non cambia; `parseNode` di `model.ts` allineato
+  a Rust (limiti solo per il campo del tipo della scheda, niente limite
+  sullo sfondo) · i due lati devono dare gli stessi byte; rischi: il TS ora
+  scrive i campi nuovi nell'ordine di Rust (stesso valore, byte diversi),
+  un'immagine con le chiavi in un altro ordine e uno sfondo di 9000 byte ora
+  si aprono; manca un vettore «unstable»; una lista di toppe vuota fa in
+  Rust un commit che non cambia niente, in TS dà null.
+- 2026-11-02 · N4 T9 · la lettura e la scrittura dei record nel client
+  (`editors/canvas/ink-record.ts`): `readInkLayers` nell'ordine dei vettori
+  di T5, `inkLayerWritable`, `defaultInkLook(zoom, pressure)` con la biro di
+  4 px dello schermo, `strokeRecord` coi rifiuti `full`, `failed`, `empty`,
+  `toDry` e `dryStroke` con la cache dei percorsi; `ink-vectors.test.ts`
+  legge i 28 vettori · lo strato chiama `look()` all'inizio del tratto: T12
+  deve applicare `joined` ai pezzi `continued`.
+- 2026-11-02 · N4 T7 · il kit della prova con Obsidian in
+  `tools/prova-obsidian/` (una lavagna con l'inchiostro, `confronta.mjs` che
+  confronta per valore prima e dopo, coi suoi test `node --test`) e la
+  sezione «Obsidian» in `canvas-ink.md`; si confronta anche il `fub:ink` di
+  un arco come prova sui campi sconosciuti; il test del kit non entra in CI,
+  si lancia a mano · i nomi dei menu di Obsidian nel README sono in inglese
+  e non verificati su un Obsidian vero.
+- 2026-11-02 · N4 · merge di `piano/n3-logica-in-rust` (fino a T8) dentro
+  `piano/n4-inchiostro`, con un merge e non un rebase: PLAN.md resta quello
+  di N4, DECISIONS.md e `docs/README.md` tengono le righe di tutti e due ·
+  senza, la PR #298 era in conflitto con la sua base e la CI non partiva; va
+  rifatto quando N3 cambia di nuovo PLAN.md o DECISIONS.md.
+- 2026-11-02 · N4 T5 · la forma `fub:ink` in `docs/reference/canvas-ink.md`
+  con 28 vettori, uno per file, in
+  `apps/client/src/__fixtures__/canvas-ink/`; ADR 0238 «proposta» (0236 è di
+  K3, 0237 di N3 T15); le ragioni si guardano nell'ordine tool, anchor,
+  color, brush, ink; un canale sconosciuto vale `ink`; id vuoto, tratto non
+  oggetto, `fub:ink` non oggetto o `v` assente fanno il livello estraneo,
+  con `strokes: []`; i livelli nell'ordine di `nodes`, poi la radice; i
+  campi sconosciuti dell'ancora restano dopo kind, width, height · T8 in
+  Rust e T9 in TypeScript leggono gli stessi vettori e devono dire le stesse
+  ragioni.
+- 2026-11-02 · N4 T4 · lo strato d'inchiostro
+  (`editors/canvas/ink-layer.ts`, `ink-paint.ts`): una penna alla volta,
+  perché la sessione fa un tratto alla volta (la seconda è fermata e
+  ignorata); i suoi eventi si fermano con `stopImmediatePropagation` prima
+  della lavagna, i click solo con `detail > 0`; un SVG annidato per ogni
+  gruppo consecutivo di tratti con la stessa misura; `InkPathCache` con
+  `sweep()`; `INK_ASPECT = "none"` (D-9 a); `data-ink-stroke` sui tratti per
+  la gomma di T13 · la lavagna non vede mai un tratto come un trascinamento;
+  rischio: l'SVG sta in `inset: 0` e un bordo vero della scheda (T16) lo
+  sposterebbe.
+- 2026-11-02 · N4 T3 · la scheda sotto il tratto
+  (`editors/canvas/anchor.ts`): solo geometria sulle coordinate della
+  lavagna, il riquadro del tratto allargato di metà spessore, nessun `NaN`
+  (punti non finiti saltati, riquadro che trabocca = tratto libero) · lo
+  chiede lo strato una volta sola, quando la penna si alza.
+- 2026-11-02 · N4 T1 · la politica del mouse in `fub-ink` (`roles.rs`,
+  `setMousePolicy`): `ink` di serie, `ignore` lascia il tasto principale a
+  chi sta sotto; vale dal prossimo appoggio; un puntatore di tipo
+  sconosciuto segue il mouse · la regola di serie resta com'era per i
+  disegni, e la lavagna può tenere il mouse per selezionare.
+- 2026-11-02 · N4 T2 · `PenQuiet` (`ink/quiet.ts`) con la coda per chiave letta viva mentre gira (un `defer` da un lavoro toglie il vecchio della stessa chiave e gira subito; un `enter` da un lavoro ferma il giro), `dispose` azzera il conto; `idleSchedule` (`ink/dom/idle.ts`) usa la `Lifetime` di `ui/lifetime.ts` con un solo smontaggio per tutte le richieste in attesa · così un lavoro vecchio non gira mai dopo uno nuovo della stessa chiave, e una lavagna aperta a lungo non accumula smontaggi; più errori nello stesso giro: si rilancia il primo e gli altri si perdono, come in `dom/pointer-adapter.ts`.
+- 2026-11-02 · N4 · piano: il formato `fub:ink` sulla lavagna (campi nel
+  `.canvas`, strada A, con la stringa dei punti della §5 dei disegni e la
+  misura della scheda al momento del tratto) è un'assunzione del
+  pianificatore, scritta di notte: l'utente la conferma (D-1, D-2) prima
+  dell'ondata 2, perché altri programmi leggeranno il file e cambiarlo dopo
+  vuol dire una `v: 2` e una conversione.
+- 2026-11-02 · N4 · piano: il codice dei punti e dei pennelli (`ink.rs`,
+  `brush.rs` di `fub-scene`) passa in un crate piccolo, `fub-ink-codec`, che
+  dipende solo da `fub-ink`; il nucleo della lavagna lo usa con
+  un'eccezione nominata nell'invariante delle dipendenze: il nucleo non può
+  portarsi dietro il lettore XML dei disegni, e una seconda copia del codec
+  sarebbe una divergenza da tenere d'occhio per sempre.
+- 2026-11-02 · N4 · piano: ogni tratto è una toppa `ink` sul suo livello
+  (`LayerRef`: la lavagna o una scheda), non un `upsert-node` della scheda
+  intera: con 2000 tratti l'annulla terrebbe due copie della scheda intera
+  per ogni tratto (la misura dei byte la fa T10).
+- 2026-11-02 · N4 · piano: `PenQuiet` è puro, con lo scheduler passato da
+  fuori e una chiave per lavoro: il nucleo dell'inchiostro non usa globali
+  del DOM (ADR 0204), i timer passano da una `Lifetime`, e due richieste per
+  la stessa cosa ne fanno una.
+- 2026-11-02 · N3 T8 · operazioni d'intento (`ops.rs`): un id che non è né
+  scheda né arco in `remove`/`set` dà `UnknownEdge`; `set` vale anche sugli
+  archi; un id dato già preso o ripetuto in `ids` dà `DuplicateId`; `reorder
+  {ids}` porta in cima gli id dati, nell'ordine dato; gli id nuovi vengono
+  da SplitMix64 sul seme (`IdSource`, sedici cifre esadecimali); ogni scheda
+  e arco messi passano `Canvas::validate`; l'`at` delle `remove-node` è la
+  posizione all'inizio della serie, anche fra due operazioni; i vettori
+  hanno l'esito `malformed` per un'operazione che non si legge · così il
+  TypeScript (T14, T16) rifà lo stesso generatore e le stesse posizioni dai
+  vettori, e l'inversa rimette ogni scheda al suo posto.
+- 2026-11-02 · N3 · T5: `patch_source` ritocca il sorgente con uno
+  scanner suo, più severo di quello TypeScript (rifiuta virgola finale e
+  valori vuoti, si ferma a 256 livelli, `SourceError::TooDeep`); gli archi
+  nuovi si scrivono nell'ordine di R10 (fromNode, fromSide, fromEnd,
+  toNode…), costruito in `edge_value` e non dall'ordine della struct; una
+  radice ricomposta senza `edges` lo riceve in fondo, come in TypeScript; un
+  array che non corrisponde al modello di prima si riscrive per intero. Le
+  schede si confrontano come struct e diventano JSON solo se cambiate: 2000
+  schede, una cambiata, ~0,8 ms in release (macchina carica). Il confronto
+  per valore è uno solo, `patch::same_value`, usato anche dal ritocco.
+  Perché: stessi byte di TypeScript dove TypeScript segue R1–R10; T7 porta
+  il TypeScript all'ordine R10 degli archi e lo specchio di T9 lo controlla.
+- 2026-11-02 · N3 · T6: `PatchError` ha una variante per ogni rifiuto
+  (`Stale` con il soggetto, `AtOutOfRange`, `NodeHasEdges`,
+  `MissingEndpoint`, `NotAPermutation`), tutte con la posizione della toppa,
+  dove TypeScript dà solo `null`; `after: null` si legge solo da `null`;
+  `at` negativo o con la virgola è un errore di lettura (TypeScript lo
+  scarta nella bozza); `draft` non chiama `Canvas::validate`, come
+  `canvasDraft`: il modello di dopo lo controlla il commit (T7). Portate
+  anche `upsert_node_patch` e le sorelle, che servono a T8. Restano come in
+  TypeScript l'inversa di un inserimento senza `at` e l'arco rimesso in
+  fondo, fissati da un test. Perché: errori tipati e stessa forma JSON.
+- 2026-11-02 · N3 · T3: in Rust R2 è un solo visitor (`SafeInteger`) che
+  porta il nome del campo nell'errore, R7 un `null_as_empty` su `nodes` ed
+  `edges`; il nucleo espone `read::is_blank` (la regola di
+  `isBlankCanvasSource`) e `model::MAX_SAFE_INTEGER`, nessuna variante nuova
+  di `CanvasError`. R3, R4 e R5 li rifiutava già `serde_json`: i test li
+  fissano. Fuori da R1-R10 la validazione diverge ancora: TypeScript limita
+  `background` a 8192 byte e `subpath`/`url` su ogni scheda, Rust no e solo
+  sul loro tipo; per la regola «nel dubbio si apre» si allinea il
+  TypeScript a Rust in T7, e lo specchio di T9 lo controlla.
+
+- 2026-11-02 · N3 · T4: `js.rs` espone, oltre a `js_number`, `js_string`,
+  `encode` ed `encode_pretty`, anche `js_json_number`, `is_array_index` e
+  `js_entries` (l'ordine delle chiavi di JavaScript, che serve a T5 per
+  R10); `encode_pretty` non mette il `"\n"` finale, lo aggiunge chi scrive il
+  file; `js_number` su `NaN` e infiniti fa come `String(x)`. Il pareggio
+  esatto si cerca sull'espansione decimale solo quando è possibile
+  (`x = M·2^E` con `E = unit − 1`): in release un numero costava circa 2 µs,
+  ora 0,1-0,3; i test confrontano la strada veloce con l'espansione intera su
+  202 000 numeri, e fuori dal repo 400 000 numeri contro Node non danno
+  differenze.
+
+- 2026-11-02 · N3 · T1: `fub-canvas-core` ha un blocco suo nel grafo delle
+  dipendenze di `overview.md` (il quarto diagramma), perché il primo era già
+  a 20 riquadri; `read.rs` tiene il BOM e gli spazi come li leggeva
+  `fub-format-canvas` (le regole di R1-R8 sono di T3); il nucleo riesporta
+  `PresetColor` e `parse`, e `fub-format-canvas/src/model.rs` è un `pub use`
+  del nucleo più `FORMAT_ID` e `SCHEMA_VERSION`. Il controllo per
+  `wasm32-unknown-unknown` sta nel giro completo di `scripts/check.sh` e nel
+  job `invariants` della CI, che l'orchestratore ha aggiunto.
+
+- 2026-11-02 · N3 · T2: in TypeScript i controlli di R3, R4 e R5 stanno
+  nello scanner di `source-edit.ts` (`inspectCanvasJson`), una passata sola
+  sul testo dopo `JSON.parse`, e non in un reviver: misurato a 2000 schede,
+  il reviver portava la lettura da circa 17 a 23 ms, lo scanner la lascia a
+  13-14. La regola del vuoto (`isBlankCanvasSource`) è una sola, per il
+  lettore e per il riscrittore. `backgroundStyle` è qualunque stringa senza
+  limite suo (resta quello di 16 MiB del file), come in Rust; `-0` si legge
+  `0`, come un intero Rust.
+
 - 2026-11-01 · regole · L'orchestratore e i coder decidono da soli il come
   tecnico, i formati interni, le dipendenze fra crate del workspace e i file
   legati al task; «Chiede sempre» resta per ciò che si vede, il contratto

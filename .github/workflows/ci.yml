@@ -81,6 +81,10 @@ jobs:
         run: cargo test -p fub-abi --test wit_additivity
       - name: invarianti di dipendenza (abi/kernel agnostici, features senza kernel)
         run: cargo test -p fub-abi --test dependency_invariant
+      - name: il nucleo della lavagna compila per la WebView (wasm32-unknown-unknown)
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo check -p fub-canvas-core --target wasm32-unknown-unknown --locked
       - name: la shell raggiunge il workspace solo dalle porte strette dell'host
         run: node .github/scripts/check-host-workspace-boundary.mjs
       - name: soltanto gli adattatori nominano WordCraft e GridCraft nei sorgenti

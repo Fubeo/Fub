@@ -1,0 +1,21 @@
+{
+  "name": "bom-and-crlf",
+  "description": "Un file con il BOM e gli a capo CRLF, rientrato con le tabulazioni: si legge come gli altri.",
+  "source": "﻿{\r\n\t\"nodes\":[\r\n\t\t{\"id\":\"n1\",\"type\":\"text\",\"text\":\"Riga uno\\r\\nRiga due\",\"x\":0,\"y\":0,\"width\":300,\"height\":200,\"fub:ink\":{\"v\":1,\"strokes\":[\r\n\t\t\t{\"id\":\"s-1\",\"tool\":\"pen\",\"brush\":\"pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint\",\"color\":\"#0072b2\",\"anchor\":{\"kind\":\"card\",\"width\":300,\"height\":200},\"ink\":\"1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8\"}\r\n\t\t]}}\r\n\t],\r\n\t\"edges\":[]\r\n}\r\n",
+  "expect": {
+    "layers": [
+      {
+        "layer": {
+          "node": "n1"
+        },
+        "state": "ok",
+        "strokes": [
+          {
+            "id": "s-1",
+            "drawn": true
+          }
+        ]
+      }
+    ]
+  }
+}

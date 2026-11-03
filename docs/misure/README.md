@@ -52,6 +52,17 @@ contate e revisione.
 |---|---|---|
 | 2026-10-31 | PhotoCraft `b1cfff9` | [Gli strumenti dentro l'interfaccia](photocraft-strumenti-2026-10-31.md) |
 
+## L'inchiostro in WebAssembly
+
+La misura di N3 (T17): il riduttore dell'inchiostro nella copia TypeScript e
+in quella Rust compilata in WebAssembly
+([`tools/ink-wasm-banco`](../../tools/ink-wasm-banco/Cargo.toml)), con
+`npm run bench:ink`.
+
+| Data | Sistema | Macchina | Pagina |
+|---|---|---|---|
+| 2026-11-02 | Debian 13, kernel 6.12 | AMD Ryzen 7 7730U, scarica | [TypeScript contro WebAssembly](inchiostro-wasm-2026-11-02.md) |
+
 ## Le librerie a runtime
 
 La prova del livello 3 del piano dei componenti
