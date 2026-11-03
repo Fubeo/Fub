@@ -151,9 +151,13 @@ comando non c'è, e ricerca, backlink e tag restano.
   misura, e la risposta è `origin: file` con `revision: null`; senza JPEG è
   `missing: "absent"`, con un file rotto `"unreadable"`. Senza lease un RAW
   non si legge, ed è `"absent"`.
-- Un PDF o un documento non si legge: la risposta è `origin: none` con
-  `missing: "absent"`, e `revision: null` quando il peso viene dalla lease
-  (vedi «Letture a pezzi»).
+- Di un `.docx` o di un `.odt`, con la lease, si leggono a pezzi la coda
+  dello ZIP, le relazioni e la miniatura (vedi «PDF e documenti»): con la
+  miniatura `origin: file`, senza `missing: "absent"`, con un file che non è
+  uno ZIP `"unreadable"`, sempre con `revision: null`. Un PDF, un `.rtf` o
+  un `.doc`, e un documento senza lease, non si leggono: la risposta è
+  `origin: none` con `missing: "absent"`, e `revision: null` quando il peso
+  viene dalla lease (vedi «Letture a pezzi»).
 - Altrimenti si leggono i byte: l'anteprima nel file dà `origin: file`, e
   senza `origin: none` con `missing: "absent"`, o `"unreadable"` se il file
   non si legge. Per un XMP `info.xmp` viene da `xmp::read`, la foto
@@ -248,6 +252,7 @@ workspace (`crates/fub-host/src/craft/ranged.rs`).
   | `.pcraft`, `.figcraft` | la coda (al più 65 557 byte), la directory centrale e le sole voci che servono: l'anteprima e il JSON della versione (`manifest.json` o `document.json`) | nessun peso massimo del file; directory centrale 4 MiB, 10 000 voci, anteprima 8 MiB, JSON della versione 1 MiB |
   | `.vectorcraft` | il file intero con `read_all`, poi il JSON fino al separatore dei blob | `craft.preview-max-mib` (di partenza 64 MiB) |
   | XMP | il file intero con `read_all` | 64 MiB |
+  | `.docx`, `.odt` | la coda, la directory centrale, le relazioni del pacchetto e la miniatura | nessun peso massimo del file; directory e voci come un `.pcraft`, relazioni 64 KiB, miniatura 8 MiB |
 
 - Uno ZIP letto a pezzi (`container::embedded_preview_from`) ha
   `revision: null` e non entra in cache: senza tutti i byte non se ne sa
@@ -375,6 +380,44 @@ I limiti si guardano prima di leggere, e ciascuno ha la sua costante:
 - un JPEG oltre 8 MiB (`MAX_JPEG_BYTES`) non si prende, e `read_jpeg` non lo
   legge.
 
+## PDF e documenti
+
+`office::embedded_thumbnail` (`crates/fub-format-craft/src/office.rs`) dà
+la miniatura che un `.docx` o un `.odt` porta dentro di sé, leggendo da un
+`Read + Seek` come uno ZIP di un file Craft: la coda e la directory
+centrale con gli stessi tetti, poi al più tre voci.
+
+| Pacchetto | Dove sta la miniatura |
+|---|---|
+| OOXML | `_rels/.rels` (al più 64 KiB scompattate), la prima `Relationship` di tipo `http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail`, poi la voce del suo `Target` |
+| ODF | `Thumbnails/thumbnail.png` |
+
+- Il tipo di pacchetto lo dicono le voci che ci sono, non l'estensione né il
+  `mimetype`: un `.odt` con un `mimetype` sbagliato si legge lo stesso.
+  Prima OOXML, poi ODF.
+- Il `Target` è solo il nome di una voce dello ZIP: si toglie una `/` in
+  testa (`/docProps/thumbnail.jpeg`), e un nome vuoto, con una `\` o con un
+  segmento vuoto, `.` o `..` (`../../x`) si rifiuta. Una relazione con
+  `TargetMode="External"` non vale. Conta solo la prima relazione del tipo.
+- La miniatura vale se è un PNG o un JPEG (orientamento 1), di al più
+  8 MiB, con le misure prese dall'intestazione. Un EMF o un WMF si scarta:
+  la WebView non li mostra.
+- Una miniatura che manca, dichiarata e assente, vuota, di un altro formato,
+  oltre 8 MiB, che non si legge o con un bersaglio rifiutato dà `Ok(None)`,
+  cioè `missing: "absent"`. Gli errori sono `OfficeError`, senza testi:
+  `NotZip` (un documento cifrato, che è un contenitore CFB, un `.doc` o un
+  `.rtf` rinominati), `TooLarge` (la directory o le relazioni oltre il loro
+  tetto, anche 10 000 relazioni) e `BadRelationships` (un XML rotto); tutti
+  danno `missing: "unreadable"`.
+- `craft.preview` legge così un `.docx` o un `.odt` solo con la lease, a
+  pezzi, e con `revision: null`: niente cache. Un errore del lettore torna a
+  chi chiama, e un file cambiato fra due pezzi si rilegge. `info.app` è
+  `document` con `info.editor` `WordCraft`, e un `.pdf` è `pdf` con
+  `PdfCraft`.
+- Un PDF, un `.rtf` e un `.doc` non portano una miniatura che Fub sappia
+  leggere: sono `missing: "absent"`, senza leggere un byte, e l'anteprima la
+  fa l'app esterna.
+
 ## Limiti
 
 | Che cosa | Limite |
@@ -391,6 +434,8 @@ I limiti si guardano prima di leggere, e ciascuno ha la sua costante:
 | Voci di un IFD | 1000 |
 | Livelli e scatole di un CR3 | 8 e 10 000 |
 | JPEG candidati in un RAW | 64 |
+| Relazioni di un `.docx` | 64 KiB |
+| Miniatura di un documento | 8 MiB |
 
 Le misure si controllano prima di leggere, ogni lettura ha un tetto, e
 nessuna allocazione la decide un numero scritto nel file.
