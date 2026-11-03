@@ -942,6 +942,40 @@ pub fn authorize_path<P: Policy>(
     Ok(())
 }
 
+/// **Chi può invocare quale comando**: la regola unica di `run_command`, per
+/// [`Guard`] e per ogni host che invoca fuori dal suo prestito (`JobHost`).
+///
+/// Due cancelli, in quest'ordine: la famiglia [`Capability::Commands`], poi
+/// l'elenco di [`permission::RUN_COMMAND`]. Chi non ha il permesso affatto
+/// legge «non hai dichiarato il permesso», non «il tuo elenco non lo nomina».
+/// Un comando nominato che non esiste passa di qui e lo dice l'host
+/// (`UnknownCommand`), come senza elenco.
+pub fn authorize_command<P: Policy>(policy: &P, command: &str) -> Result<(), PluginError> {
+    let what = || format!("invoking `{command}`");
+    refuse(policy.denies(Capability::Commands), what)?;
+    refuse(policy.denies_command(command), what)
+}
+
+/// **Chi può annullare**: la regola unica di `undo_last`, per [`Guard`] e per
+/// ogni host che annulla fuori dal suo prestito (`JobHost`).
+///
+/// Annullare è invocare e scrivere insieme, e la voce in cima alla pila non la
+/// vede chi chiede: si chiedono quindi la famiglia dei comandi, nessun elenco
+/// in [`permission::RUN_COMMAND`] (i passi rigiocati sono comandi che il
+/// recinto non vede, e un recinto che non può provare la copertura fallisce
+/// chiuso), **tutte** le famiglie che scrivono il vault e il vault intero
+/// come scope di path. Le ragioni sono nel commento di
+/// [`Guard::undo_last`](HostCommands::undo_last).
+pub fn authorize_undo<P: Policy>(policy: &P) -> Result<(), PluginError> {
+    let what = || "undoing".to_string();
+    refuse(policy.denies(Capability::Commands), what)?;
+    refuse(policy.denies_undo(), what)?;
+    for cap in Capability::ALL.into_iter().filter(|c| c.writes_the_vault()) {
+        refuse(policy.denies(cap), what)?;
+    }
+    authorize_path(policy, Capability::VaultWrite, "", what)
+}
+
 /// **Chi può ripristinare cosa**: la regola unica di `restore_document`, per
 /// [`Guard`] e per ogni host che ripristina fuori dal suo prestito
 /// (`JobHost`).
@@ -1545,14 +1579,7 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
         command: &str,
         args: serde_json::Value,
     ) -> Result<CommandOutcome, PluginError> {
-        self.check(Capability::Commands, || format!("invoking `{command}`"))?;
-        // Il secondo cancello viene dopo la famiglia: chi non ha
-        // `fub:run-command` affatto legge «non hai dichiarato il permesso», non
-        // «il tuo elenco non lo nomina». Un comando nominato che non esiste
-        // passa di qui e lo dice l'host (`UnknownCommand`), come senza elenco.
-        refuse(self.policy.denies_command(command), || {
-            format!("invoking `{command}`")
-        })?;
+        authorize_command(&self.policy, command)?;
         self.inner.run_command(command, args)
     }
 
@@ -1591,18 +1618,7 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
         // cancello la eredita senza che nessuno se ne debba ricordare.
         // L'undo non nomina un documento: uno scope di path non può quindi
         // provarne la copertura e deve fallire chiuso prima di avviare il replay.
-        self.check(Capability::Commands, || "undoing".into())?;
-        // Un elenco in `fub:run-command` chiude anche l'annullamento, per la
-        // stessa ragione delle cartelle qui sotto: i passi che rigioca sono
-        // comandi che il `Guard` non vede, e un recinto che non può provare la
-        // copertura fallisce chiuso.
-        refuse(self.policy.denies_undo(), || "undoing".into())?;
-        for cap in Capability::ALL.into_iter().filter(|c| c.writes_the_vault()) {
-            self.check(cap, || "undoing".into())?;
-        }
-        authorize_path(&self.policy, Capability::VaultWrite, "", || {
-            "undoing".into()
-        })?;
+        authorize_undo(&self.policy)?;
         self.inner.undo_last()
     }
 }

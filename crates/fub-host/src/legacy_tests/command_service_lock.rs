@@ -380,6 +380,65 @@ fn undeclared_and_ungranted_job_hosts_do_not_invoke_commands() {
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 
+/// L'elenco di `fub:run-command` vale anche per un job: `JobHost` invoca e
+/// annulla fuori dal prestito del `Guard`, e senza la stessa regola un plugin
+/// col recinto lo scavalcherebbe passando da un job.
+#[test]
+fn a_job_host_keeps_the_command_list_of_its_caller() {
+    let vault = vault();
+    let (_host, workspace) = open(&vault);
+    let calls = Arc::new(AtomicUsize::new(0));
+    {
+        let mut ws = workspace.write().expect("the vault is alive");
+        ws.register_core_feature(COMMAND_OWNER, "Audit command boundary")
+            .expect("command owner declares");
+        ws.register_command_provider(COMMAND_OWNER, Box::new(CountingProvider(calls.clone())))
+            .expect("command provider registers");
+    }
+    let declare = |caller: &str, list: serde_json::Value| {
+        let mut permissions = fub_abi::traits::PluginPermissions::of(&[
+            permission::RUN_COMMAND,
+            permission::WRITE_VAULT,
+        ]);
+        permissions.granted.set(permission::RUN_COMMAND, list);
+        let mut ws = workspace.write().expect("the vault is alive");
+        ws.register_plugin(
+            PluginManifest::new(caller, "Audit boundary caller").granting(permissions),
+            Trust::Community,
+        )
+        .expect("caller declares its command list");
+    };
+
+    declare(CALLER, serde_json::json!(["other.command"]));
+    let mut job = JobHost::new(workspace.clone(), CALLER);
+    let denied = job.run_command(COMMAND, serde_json::Value::Null);
+    assert!(
+        matches!(&denied, Err(PluginError::PermissionDenied(message))
+            if message.to_string().contains(permission::RUN_COMMAND)
+                && message.to_string().contains(COMMAND)),
+        "an unnamed command is denied on the job path too: {denied:?}"
+    );
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        0,
+        "it never reached the provider"
+    );
+    let undo = job.undo_last();
+    assert!(
+        matches!(&undo, Err(PluginError::PermissionDenied(message))
+            if message.to_string().contains("undoing")
+                && message.to_string().contains(permission::RUN_COMMAND)),
+        "a command list closes the job undo too: {undo:?}"
+    );
+
+    let named = "fub.audit-boundary-named";
+    declare(named, serde_json::json!([COMMAND]));
+    let mut job = JobHost::new(workspace.clone(), named);
+    job.run_command(COMMAND, serde_json::Value::Null)
+        .expect("a named command passes on the job path");
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
 #[test]
 fn undeclared_and_ungranted_job_hosts_do_not_invoke_services() {
     let vault = vault();

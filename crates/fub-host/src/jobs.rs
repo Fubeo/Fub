@@ -77,8 +77,8 @@ use fub_abi::transfer::{
 };
 use fub_abi::{Event, PluginError};
 use fub_kernel::host::{
-    authorize_export, authorize_import, authorize_path, authorize_restore, Capability, Guard,
-    Policy,
+    authorize_command, authorize_export, authorize_import, authorize_path, authorize_restore,
+    authorize_undo, Capability, Guard, Policy,
 };
 use fub_kernel::transfer::{MemorySink, PLUGIN_EXPORT_LIMIT};
 use fub_kernel::workspace::{
@@ -1507,7 +1507,12 @@ impl HostCommands for JobHost {
         args: serde_json::Value,
     ) -> Result<CommandOutcome, PluginError> {
         self.stopped()?;
-        self.authorize_caller(Capability::Commands, || format!("invoking `{command}`"))?;
+        // La stessa regola del `Guard`, elenco di `fub:run-command` compreso:
+        // un job non è una scorciatoia attorno al recinto dei comandi.
+        authorize_command(
+            &self.workspace.read()?.granted_policy(&self.plugin),
+            command,
+        )?;
         let workspace = self.workspace.clone();
         let _turn = self.turn(&workspace)?;
         let mut prepared = {
@@ -1559,19 +1564,7 @@ impl HostCommands for JobHost {
 
         {
             let ws = workspace.read()?;
-            let policy = ws.granted_policy(&self.plugin);
-            for capability in std::iter::once(Capability::Commands).chain(
-                Capability::ALL
-                    .into_iter()
-                    .filter(|cap| cap.writes_the_vault()),
-            ) {
-                if let Some(why) = policy.denies(capability) {
-                    return Err(PluginError::PermissionDenied(
-                        format!("undoing: {why}").into(),
-                    ));
-                }
-            }
-            authorize_path(&policy, Capability::VaultWrite, "", || "undoing".into())?;
+            authorize_undo(&ws.granted_policy(&self.plugin))?;
         }
         if self.mode.is_dry_run() {
             return Err(PluginError::PermissionDenied(

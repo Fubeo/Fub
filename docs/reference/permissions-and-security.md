@@ -62,7 +62,9 @@ parametro, facoltativo, è l'elenco degli id che il bundle può invocare:
 ```
 
 Il `Guard` legge il valore una volta, quando monta il bundle, e lo applica a
-ogni invocazione, per i componenti nativi e WASM allo stesso modo:
+ogni invocazione, per i componenti nativi e WASM allo stesso modo. Un job
+che invoca o annulla fuori dal prestito del `Guard` (`JobHost`) applica la
+stessa regola, `authorize_command` e `authorize_undo` del kernel:
 
 | Valore | Comandi consentiti |
 |---|---|
