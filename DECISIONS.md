@@ -59,6 +59,17 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-03 · N7 · T22 (fd595ce4, cb2bd25e): l'orchestratore ha permesso al
+  coder di toccare `craft/preview.rs` (`limit_of`, `over_limit(limit)`,
+  `fill(limit)`), perché il tetto per formato vive lì e nessun altro task lo
+  possiede ora. `embedded_preview_from` restituisce `Embedded`; il nuovo
+  `zip_tail.rs` legge la coda dello ZIP con un budget (`Budgeted`). La
+  versione di FigCraft si legge da `document.json` con un tetto di 1 MiB;
+  uno ZIP sulla via dell'host senza lease ha un tetto di 64 MiB. Toccata una
+  riga di `product/craft-files.md`. La prova da 1 GiB dura circa 33 s;
+  `Stale` è provato solo da un test unitario. L'orchestratore ha rimesso a
+  misura un commento troppo lungo (cb2bd25e). Check d'integrazione
+  `--rapido` verde (21 passi).
 - T27 (0284ab88, d8562abf): il coder si è fermato sul filo in
   `craft/preview.rs` (in «Non toccare» per non scontrarsi con T19 e T24, e
   nessun task lo possedeva). L'orchestratore l'ha applicato (una decina di
