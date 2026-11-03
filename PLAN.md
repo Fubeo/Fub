@@ -978,7 +978,7 @@ CARGO_TARGET_DIR=target/canvas-wasm CARGO_PROFILE_RELEASE_OPT_LEVEL=s
 CARGO_PROFILE_RELEASE_LTO=true CARGO_PROFILE_RELEASE_PANIC=abort
 CARGO_PROFILE_RELEASE_STRIP=true cargo rustc -p fub-canvas-wasm --lib
 --release --target wasm32-unknown-unknown --crate-type cdylib
-Stato: [~] in corso · coder · base 1a89de09
+Stato: [x] fatto
 
 ## T14 · Il passo nella build di Vite
 
