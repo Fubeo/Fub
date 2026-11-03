@@ -160,9 +160,10 @@ comando non c'è, e ricerca, backlink e tag restano.
   dai figli diretti della sua cartella (il nome esatto, o per il solo gambo
   il primo in ordine di id con un'altra estensione, confrontando i nomi come
   sono scritti) e `info.edits` dalla copia `-Edit.psd` della foto, se c'è.
-- Un file oltre 64 MiB, col peso della lease (o, senza lease, quello che
-  dice l'anagrafe), non si legge: è `origin: none` con `missing:
-  "over_limit"`, `limit_bytes` e, dalla lease, `revision: null`.
+- Un file da leggere intero oltre il suo limite (vedi «Letture a pezzi»),
+  col peso della lease (o, senza lease, quello che dice l'anagrafe), non si
+  legge: è `origin: none` con `missing: "over_limit"`, `limit_bytes` e, dalla
+  lease, `revision: null`.
 - Si scrive in cache solo un'anteprima con `origin` `file` o `cli` e con una
   revisione dei byte letti. La scrive chi ha il
   permesso di scrivere i dati del bundle: il comando, che è in sola lettura,
@@ -183,13 +184,31 @@ solo `fub.craft`), e dentro un comando non prende mai il lucchetto del
 workspace (`crates/fub-host/src/craft/ranged.rs`).
 
 - Che cosa si legge a pezzi: tutto ciò che il bundle legge di un file. Il
-  peso viene dalla lease (`stat.size`), non dall'elenco della cartella; un
-  file Craft si legge intero con `read_all`, a pezzi di 256 KiB, fino a
-  64 MiB (oltre è `over_limit` senza leggere un byte), e la revisione si
-  calcola sugli stessi pezzi con `RevisionHasher`: è quella di
-  `document_revision`. `RangedFile` dà `Read + Seek` sopra una lease, con gli
+  peso viene dalla lease (`stat.size`), non dall'elenco della cartella.
+  `RangedFile` dà `Read + Seek` sopra una lease, a pezzi di 256 KiB, con gli
   offset `u64` (un file oltre 4 GiB si legge dove serve) e i byte letti
-  contati.
+  contati. Per formato:
+
+  | Formato | Che cosa si legge | Limite |
+  |---|---|---|
+  | `.pcraft`, `.figcraft` | la coda (al più 65 557 byte), la directory centrale e le sole voci che servono: l'anteprima e il JSON della versione (`manifest.json` o `document.json`) | nessun peso massimo del file; directory centrale 4 MiB, 10 000 voci, anteprima 8 MiB, JSON della versione 1 MiB |
+  | `.vectorcraft` | il file intero con `read_all`, poi il JSON fino al separatore dei blob | `craft.preview-max-mib` (di partenza 64 MiB) |
+  | XMP | il file intero con `read_all` | 64 MiB |
+
+- Uno ZIP letto a pezzi (`container::embedded_preview_from`) ha
+  `revision: null` e non entra in cache: senza tutti i byte non se ne sa
+  l'impronta. La coda si guarda prima di darla a `zip`: ogni fine della
+  directory centrale che `zip` potrebbe scegliere, anche una finta dentro un
+  commento, e la sua fine ZIP64; una directory oltre 4 MiB o 10 000 voci è
+  `TooLarge`, una che esce dal file `NotZip`. Ogni voce si misura prima di
+  leggerla, e i byte che `zip` legge hanno un tetto riarmato prima di
+  aprire l'archivio e prima di ogni voce. Uno ZIP rotto è `unreadable`.
+- Un file letto intero (un `.vectorcraft`, un XMP) oltre il suo limite è
+  `over_limit` con `limit_bytes`, senza leggere un byte; sotto, la revisione
+  si calcola sugli stessi pezzi con `RevisionHasher` (è quella di
+  `document_revision`) e l'anteprima entra in cache. Di un `.vectorcraft`
+  si scompatta al più il limite più il separatore: un JSON più lungo prima
+  dei blob è `over_limit`.
 - Come Fub si accorge di un file cambiato: il kernel ricontrolla peso,
   data, identità del file e timbro di cambiamento prima e dopo ogni pezzo.
   Un file riscritto, sostituito da uno dello stesso peso e della stessa data
@@ -207,7 +226,8 @@ workspace (`crates/fub-host/src/craft/ranged.rs`).
   (un supporto senza identità o timbro di cambiamento) il comando torna a
   `document_revision`, al peso dell'anagrafe e a `read_document_bytes` fino a
   64 MiB, con la revisione riletta dopo i byte. Il JSON di un `.vectorcraft`
-  e la voce di uno ZIP si leggono dai byte interi del file.
+  e la voce di uno ZIP si leggono allora dai byte interi del file, e uno ZIP
+  dall'host resta entro 64 MiB.
 
 ## Contenitori
 
@@ -243,7 +263,8 @@ provider li trasforma nel modello vuoto.
 
 I limiti dei contenitori si guardano prima di leggere:
 
-- un file oltre 64 MiB non si apre;
+- un file oltre 64 MiB non si apre, tranne uno ZIP letto a pezzi da
+  `embedded_preview_from`, che ha i limiti di «Letture a pezzi»;
 - uno ZIP che dichiara, o ha, più di 10 000 voci non si legge: il conto
   dichiarato dalla fine della directory centrale (anche ZIP64) si guarda
   prima di aprirlo;

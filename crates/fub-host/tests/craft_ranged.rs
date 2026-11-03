@@ -541,3 +541,227 @@ fn a_broken_raw_is_unreadable_and_one_without_a_jpeg_absent() {
     assert_eq!(broken.missing, Some(Missing::Unreadable));
     assert!(broken.image.is_none());
 }
+
+// --- Le anteprime lette a pezzi ------------------------------------------------
+
+/// Un PNG minimo di `width` × `height`: firma, `IHDR`, `IEND`.
+fn png(width: u32, height: u32) -> Vec<u8> {
+    let mut png = vec![0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'];
+    png.extend_from_slice(&13u32.to_be_bytes());
+    png.extend_from_slice(b"IHDR");
+    png.extend_from_slice(&width.to_be_bytes());
+    png.extend_from_slice(&height.to_be_bytes());
+    png.extend_from_slice(&[8, 6, 0, 0, 0, 0, 0, 0, 0]);
+    png.extend_from_slice(&0u32.to_be_bytes());
+    png.extend_from_slice(b"IEND");
+    png.extend_from_slice(&[0, 0, 0, 0]);
+    png
+}
+
+/// Il CRC-32 dello ZIP, bit per bit: pochi byte, nessuna dipendenza.
+fn crc_of(bytes: &[u8]) -> u32 {
+    let mut crc = u32::MAX;
+    for byte in bytes {
+        crc ^= u32::from(*byte);
+        for _ in 0..8 {
+            crc = if crc & 1 == 1 {
+                (crc >> 1) ^ 0xEDB8_8320
+            } else {
+                crc >> 1
+            };
+        }
+    }
+    !crc
+}
+
+/// Un `.pcraft` scritto a mano in `path`: una voce STORE di `hole` byte che
+/// sul disco non ci sono (un file sparso), poi `thumb.png`, il manifesto, la
+/// directory centrale e la fine.
+fn sparse_pcraft(path: &Utf8Path, hole: u64, thumb: &[u8]) -> u64 {
+    use std::io::Write;
+    let manifest = br#"{"format_version":5}"#;
+    let mut file = std::fs::File::create(path).unwrap();
+    let mut at = 0u64;
+    let mut central = Vec::new();
+    let mut entries = 0u16;
+    let mut entry = |file: &mut std::fs::File, name: &str, data: &[u8], hole: u64| {
+        let size = u32::try_from(data.len() as u64 + hole).unwrap();
+        let crc = if hole > 0 { 0 } else { crc_of(data) };
+        let mut fixed = Vec::new();
+        for half in [20u16, 0, 0, 0, 0x21] {
+            fixed.extend_from_slice(&half.to_le_bytes());
+        }
+        for word in [crc, size, size] {
+            fixed.extend_from_slice(&word.to_le_bytes());
+        }
+        fixed.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        let mut local = b"PK\x03\x04".to_vec();
+        local.extend_from_slice(&fixed);
+        local.extend_from_slice(&0u16.to_le_bytes());
+        local.extend_from_slice(name.as_bytes());
+        local.extend_from_slice(data);
+        file.write_all(&local).unwrap();
+        central.extend_from_slice(b"PK\x01\x02");
+        central.extend_from_slice(&20u16.to_le_bytes());
+        central.extend_from_slice(&fixed);
+        central.extend_from_slice(&[0; 12]);
+        central.extend_from_slice(&u32::try_from(at).unwrap().to_le_bytes());
+        central.extend_from_slice(name.as_bytes());
+        at += local.len() as u64 + hole;
+        file.seek(SeekFrom::Start(at)).unwrap();
+        entries += 1;
+    };
+    entry(&mut file, "layers/0.bin", b"", hole);
+    entry(&mut file, "thumb.png", thumb, 0);
+    entry(&mut file, "manifest.json", manifest, 0);
+    let mut tail = central.clone();
+    tail.extend_from_slice(b"PK\x05\x06\0\0\0\0");
+    tail.extend_from_slice(&entries.to_le_bytes());
+    tail.extend_from_slice(&entries.to_le_bytes());
+    tail.extend_from_slice(&(central.len() as u32).to_le_bytes());
+    tail.extend_from_slice(&u32::try_from(at).unwrap().to_le_bytes());
+    tail.extend_from_slice(&0u16.to_le_bytes());
+    file.write_all(&tail).unwrap();
+    at + tail.len() as u64
+}
+
+/// Un host coi suoi settaggi di macchina in `config`, e `craft.preview-max-mib`
+/// a `mib`.
+fn host_with_limit(config: &Utf8Path, mib: f64) -> Host {
+    let host = Host::without_watcher().with_config_dir(config);
+    host.set_setting_for_user(
+        None,
+        fub_host::settings::CRAFT_PREVIEW_MAX_MIB,
+        fub_abi::settings::SettingValue::Number(mib),
+    )
+    .unwrap();
+    host
+}
+
+fn config_dir() -> (tempfile::TempDir, Utf8PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+    (dir, path)
+}
+
+const GIB: u64 = 1024 * 1024 * 1024;
+const MIB: u64 = 1024 * 1024;
+
+#[test]
+fn a_one_gib_pcraft_gives_its_thumb_with_a_one_mib_limit() {
+    let (_dir, root) = vault(&[]);
+    let path = root.join("Foto/enorme.pcraft");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let len = sparse_pcraft(&path, GIB, &png(64, 48));
+    let before = std::fs::metadata(&path).unwrap();
+    let (_config_dir, config) = config_dir();
+    let host = host_with_limit(&config, 1.0);
+    host.open(&root).unwrap();
+    host.wait_indexed(Some(root.as_str())).unwrap();
+    for size in ["small", "large"] {
+        let preview = ask_sized(&host, &root, "Foto/enorme.pcraft", size).unwrap();
+        let image = preview
+            .image
+            .unwrap_or_else(|| panic!("{size}: {:?}", preview.missing));
+        assert_eq!((image.width, image.height), (64, 48), "{size}");
+        assert_eq!(preview.origin, PreviewOrigin::File, "{size}");
+        assert_eq!(preview.missing, None, "{size}");
+        assert_eq!(preview.limit_bytes, None, "{size}");
+        // Senza tutti i byte non c'è revisione, e niente cache.
+        assert_eq!(preview.revision, None, "{size}");
+        assert_eq!(preview.info.bytes, len, "{size}");
+        assert_eq!(preview.info.format_version.as_deref(), Some("5"), "{size}");
+    }
+    let after = std::fs::metadata(&path).unwrap();
+    assert_eq!(after.len(), before.len());
+    assert_eq!(after.modified().unwrap(), before.modified().unwrap());
+}
+
+#[test]
+fn the_one_gib_pcraft_is_read_in_under_one_mib() {
+    let (_dir, root) = vault(&[]);
+    let path = root.join("enorme.pcraft");
+    let len = sparse_pcraft(&path, GIB, &png(64, 48));
+    let (_ws, ranged) = workspace(&root);
+    let mut file = ranged.open(&DocId::new("enorme.pcraft")).unwrap();
+    let found = fub_format_craft::container::embedded_preview_from(
+        fub_format_craft::CraftApp::PhotoCraft,
+        &mut file,
+        len,
+        fub_format_craft::PreviewSize::Small,
+        u64::MAX,
+    )
+    .unwrap();
+    assert!(found.png.unwrap().is_some());
+    // I pezzi del kernel sono di 256 KiB: la coda e le voci, non il file.
+    assert!(file.bytes_read() < MIB, "{}", file.bytes_read());
+}
+
+/// Un `.vectorcraft` di 2 MiB: il JSON con l'anteprima e un riempimento.
+fn heavy_vectorcraft() -> Vec<u8> {
+    let mut bytes = vectorcraft();
+    bytes.truncate(bytes.len() - 1);
+    bytes.extend_from_slice(br#","pad":""#);
+    let fill = 2 * MIB as usize - bytes.len() - 2;
+    bytes.extend(std::iter::repeat_n(b'a', fill));
+    bytes.extend_from_slice(b"\"}");
+    assert_eq!(bytes.len() as u64, 2 * MIB);
+    bytes
+}
+
+#[test]
+fn a_two_mib_vectorcraft_is_over_a_one_mib_limit_and_read_under_64() {
+    let file = heavy_vectorcraft();
+    let (_dir, root) = vault(&[("Disegni/pesante.vectorcraft", file.clone())]);
+    let (_config_dir, config) = config_dir();
+
+    let host = host_with_limit(&config, 1.0);
+    host.open(&root).unwrap();
+    host.wait_indexed(Some(root.as_str())).unwrap();
+    let over = ask(&host, &root, "Disegni/pesante.vectorcraft").unwrap();
+    assert_eq!(over.missing, Some(Missing::OverLimit));
+    assert_eq!(over.limit_bytes, Some(1_048_576));
+    assert_eq!(over.info.bytes, 2 * MIB);
+    assert_eq!(over.revision, None);
+    assert!(over.image.is_none());
+    drop(host);
+
+    let host = host_with_limit(&config, 64.0);
+    host.open(&root).unwrap();
+    host.wait_indexed(Some(root.as_str())).unwrap();
+    let read = ask(&host, &root, "Disegni/pesante.vectorcraft").unwrap();
+    assert_eq!(read.missing, None);
+    assert_eq!(read.origin, PreviewOrigin::File);
+    let image = read.image.unwrap();
+    assert_eq!((image.width, image.height), (64, 32));
+    // Letto intero: la revisione del kernel, come in T21.
+    let kernel = {
+        let mut hasher = fub_abi::RevisionHasher::new();
+        hasher.update(&file);
+        hasher.finish()
+    };
+    assert_eq!(read.revision, Some(kernel));
+    assert_eq!(read.info.format_version.as_deref(), Some("4"));
+    assert_eq!(
+        std::fs::read(root.join("Disegni/pesante.vectorcraft")).unwrap(),
+        file
+    );
+}
+
+#[test]
+fn a_broken_an_empty_or_a_foreign_zip_is_unreadable() {
+    let (_dir, root) = vault(&[
+        ("rotto.pcraft", b"non sono uno zip".to_vec()),
+        ("vuoto.pcraft", Vec::new()),
+        ("rotto.figcraft", b"PK\x05\x06".to_vec()),
+    ]);
+    let host = Host::without_watcher();
+    host.open(&root).unwrap();
+    host.wait_indexed(Some(root.as_str())).unwrap();
+    for doc in ["rotto.pcraft", "vuoto.pcraft", "rotto.figcraft"] {
+        let preview = ask(&host, &root, doc).unwrap();
+        assert_eq!(preview.missing, Some(Missing::Unreadable), "{doc}");
+        assert_eq!(preview.origin, PreviewOrigin::None, "{doc}");
+        assert_eq!(preview.revision, None, "{doc}");
+    }
+}

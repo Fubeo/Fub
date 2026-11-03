@@ -16,20 +16,24 @@
 //! per un XMP, [`raw`] e [`documents`] per gli altri.
 //!
 //! Il file si legge con le lease del kernel ([`super::ranged`]): il peso viene
-//! dalla lease, i byte di un file Craft da [`Ranged::read_all`], che calcola la
-//! revisione sugli stessi pezzi; un file cambiato fra due pezzi si rilegge con
-//! una lease nuova, al più [`ATTEMPTS`] volte. Una foto RAW, un PDF o un
-//! documento non si leggono affatto: la risposta non ha revisione e non va in
-//! cache. Quando la lease non si apre (un supporto senza identità o timbro di
+//! dalla lease, i byte di un `.vectorcraft` o di un XMP da
+//! [`Ranged::read_all`], che calcola la revisione sugli stessi pezzi; un file
+//! cambiato fra due pezzi si rilegge con una lease nuova, al più [`ATTEMPTS`]
+//! volte. Un `.pcraft` o un `.figcraft` si legge a pezzi, la coda dello ZIP e
+//! le voci che servono, qualunque sia il suo peso; una foto RAW solo le sue
+//! strutture e il JPEG; un PDF o un documento non si leggono affatto: queste
+//! risposte non hanno revisione e non vanno in cache. Quando la lease non si apre (un supporto senza identità o timbro di
 //! cambiamento, un host senza lettore come quello dei test) si torna alla via
 //! dell'host: la revisione da `document_revision`, il peso dall'anagrafe, i
 //! byte da `read_document_bytes`, riletta la revisione dopo i byte.
 //!
 //! Si scrive in cache solo un'anteprima con l'immagine del file (`origin:
 //! file`) e con una revisione: una scrittura che non riesce, o che chi chiama
-//! non può fare, non toglie l'anteprima. Un file Craft oltre
-//! [`MAX_FILE_BYTES`] non si legge: è `missing: over_limit` col peso massimo,
-//! il peso del file e nessuna revisione.
+//! non può fare, non toglie l'anteprima. Un `.vectorcraft` oltre il peso di
+//! `craft.preview-max-mib` ([`super::consent::max_bytes`]), o un XMP oltre
+//! [`MAX_FILE_BYTES`], non si legge: è `missing: over_limit` col peso
+//! massimo, il peso del file e nessuna revisione. Per la via dell'host vale lo
+//! stesso anche per uno ZIP oltre [`MAX_FILE_BYTES`], che lì si legge intero.
 
 use fub_abi::model::DocId;
 use fub_abi::text::{Arg, Text};
@@ -112,15 +116,24 @@ fn ranged_preview(
             // revisione e niente cache.
             return Ok(Some(preview));
         };
-        if bytes > MAX_FILE_BYTES as u64 {
-            over_limit(&mut preview);
+        if matches!(app, CraftApp::PhotoCraft | CraftApp::FigCraft) {
+            // Uno ZIP: la coda, la directory e le voci che servono, a pezzi.
+            match craft_files::read_from(&mut preview, app, &mut file, bytes, size) {
+                Ok(()) => return Ok(Some(preview)),
+                Err(error) if super::ranged::is_stale(&error) => continue,
+                Err(_) => return Ok(None),
+            }
+        }
+        let limit = limit_of(&*host, app);
+        if bytes > limit {
+            over_limit(&mut preview, limit);
             return Ok(Some(preview));
         }
-        let whole = match file.read_whole(MAX_FILE_BYTES as u64) {
+        let whole = match file.read_whole(limit) {
             Ok(whole) => whole,
             Err(RangedError::Stale) => continue,
             Err(RangedError::OverLimit { .. }) => {
-                over_limit(&mut preview);
+                over_limit(&mut preview, limit);
                 return Ok(Some(preview));
             }
             Err(RangedError::Kernel(_)) => return Ok(None),
@@ -129,7 +142,7 @@ fn ranged_preview(
             return Ok(Some(cached));
         }
         preview.revision = Some(whole.revision);
-        fill(&*host, doc, &mut preview, app, &whole.bytes, size)?;
+        fill(&*host, doc, &mut preview, app, &whole.bytes, size, limit)?;
         store(host, &preview, size);
         return Ok(Some(preview));
     }
@@ -260,10 +273,19 @@ fn app_of(subject: PreviewSubject, preview: &mut CraftPreview) -> Option<CraftAp
     }
 }
 
+/// Il peso massimo di un file che si legge intero: per un `.vectorcraft`
+/// quello di `craft.preview-max-mib`, per gli altri [`MAX_FILE_BYTES`].
+fn limit_of(host: &dyn HostApi, app: CraftApp) -> u64 {
+    match app {
+        CraftApp::VectorCraft => super::consent::max_bytes(host),
+        _ => MAX_FILE_BYTES as u64,
+    }
+}
+
 /// D-8: un file troppo grande non si apre nemmeno.
-fn over_limit(preview: &mut CraftPreview) {
+fn over_limit(preview: &mut CraftPreview, limit: u64) {
     preview.missing = Some(Missing::OverLimit);
-    preview.limit_bytes = Some(MAX_FILE_BYTES as u64);
+    preview.limit_bytes = Some(limit);
 }
 
 /// Completa `preview` coi byte interi del file. Solo un XMP chiede
@@ -275,13 +297,14 @@ fn fill(
     app: CraftApp,
     bytes: &[u8],
     size: PreviewSize,
+    limit: u64,
 ) -> Result<(), PluginError> {
     preview.info.bytes = bytes.len() as u64;
     if app == CraftApp::Xmp {
         let folder = Folder::read(host, doc)?;
         xmp::read(preview, doc, bytes, &folder);
     } else {
-        craft_files::read(preview, app, bytes, size);
+        craft_files::read(preview, app, bytes, size, limit);
     }
     Ok(())
 }
@@ -307,8 +330,9 @@ fn read(
     let Some(app) = app_of(subject, &mut preview) else {
         return Ok(preview);
     };
-    if declared.is_some_and(|bytes| bytes > MAX_FILE_BYTES as u64) {
-        over_limit(&mut preview);
+    let limit = limit_of(host, app);
+    if declared.is_some_and(|bytes| bytes > limit) {
+        over_limit(&mut preview, limit);
         return Ok(preview);
     }
     let bytes = host.read_document_bytes(doc)?;
@@ -316,7 +340,7 @@ fn read(
     if app == CraftApp::Xmp {
         xmp::read(&mut preview, doc, &bytes, folder);
     } else {
-        craft_files::read(&mut preview, app, &bytes, size);
+        craft_files::read(&mut preview, app, &bytes, size, limit);
     }
     Ok(preview)
 }

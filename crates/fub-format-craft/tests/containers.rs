@@ -6,15 +6,19 @@
 //! Deflate), gli gzip con `flate2`, il base64 con `base64` e un PNG minimo
 //! scritto a mano.
 
-use std::io::{Cursor, Write};
+use std::fs::File;
+use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
-use flate2::write::GzEncoder;
-use flate2::{Compression, Crc};
+use flate2::write::{DeflateEncoder, GzEncoder};
+use flate2::{Compress, Compression, Crc, FlushCompress};
 use fub_format_craft::container::{
-    embedded_preview, read_meta, ContainerError, Contents, Png, MAX_FILE_BYTES, MAX_PREVIEW_BYTES,
-    MAX_TEXT_BYTES, MAX_ZIP_ENTRIES, PNG_SIGNATURE,
+    embedded_preview, embedded_preview_from, read_meta, ContainerError, Contents, Embedded, Png,
+    MAX_CENTRAL_DIRECTORY_BYTES, MAX_FILE_BYTES, MAX_MANIFEST_BYTES, MAX_PREVIEW_BYTES,
+    MAX_TEXT_BYTES, MAX_ZIP_ENTRIES, PNG_SIGNATURE, VECTORCRAFT_BLOBS,
 };
 use fub_format_craft::{CraftApp, PreviewSize};
 use serde_json::json;
@@ -781,4 +785,611 @@ fn un_xmp_non_è_un_contenitore() {
     for size in SIZES {
         assert_eq!(embedded_preview(CraftApp::Xmp, &file, size), Ok(None));
     }
+}
+
+// --- Letture a pezzi ---------------------------------------------------------
+//
+// `embedded_preview_from` legge da un `Read + Seek`: i file grandi sono sparsi
+// (`set_len` e `seek` oltre la fine) in una cartella temporanea, e un lettore
+// conta i byte che il contenitore chiede.
+
+/// Un lettore che conta i byte dati.
+struct Counting<R> {
+    inner: R,
+    read: u64,
+}
+
+impl<R> Counting<R> {
+    fn new(inner: R) -> Self {
+        Counting { inner, read: 0 }
+    }
+}
+
+impl<R: Read> Read for Counting<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let got = self.inner.read(buf)?;
+        self.read += got as u64;
+        Ok(got)
+    }
+}
+
+impl<R: Seek> Seek for Counting<R> {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        self.inner.seek(pos)
+    }
+}
+
+/// Una cartella temporanea che si toglie da sola.
+struct Scratch(PathBuf);
+
+impl Scratch {
+    fn new(tag: &str) -> Scratch {
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let dir =
+            std::env::temp_dir().join(format!("fub-containers-{}-{tag}-{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        Scratch(dir)
+    }
+
+    fn file(&self, name: &str) -> (PathBuf, File) {
+        let path = self.0.join(name);
+        let file = File::options()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&path)
+            .unwrap();
+        (path, file)
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+const MIB: u64 = 1024 * 1024;
+const GIB: u64 = 1024 * MIB;
+
+/// Uno ZIP scritto a mano: le intestazioni locali, la directory centrale e
+/// la fine, classica o ZIP64, coi CRC veri. Una voce può essere sparsa: la
+/// sua intestazione e poi un buco della misura dichiarata.
+struct RawZip<W> {
+    out: W,
+    at: u64,
+    central: Vec<u8>,
+    count: u64,
+}
+
+struct Tail {
+    entries: u64,
+    size: u64,
+    offset: u64,
+    /// Dove comincia ciò che viene dopo la directory.
+    end: u64,
+}
+
+impl<W: Write + Seek> RawZip<W> {
+    fn new(out: W) -> Self {
+        RawZip {
+            out,
+            at: 0,
+            central: Vec::new(),
+            count: 0,
+        }
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        self.out.write_all(bytes).unwrap();
+        self.at += bytes.len() as u64;
+    }
+
+    /// Una voce: `data` sono i byte scritti (compressi se `method` è 8),
+    /// `hole` un buco dopo di loro, `declared` la misura scompattata.
+    #[allow(clippy::too_many_arguments)]
+    fn entry_with(
+        &mut self,
+        name: &str,
+        method: u16,
+        crc: u32,
+        data: &[u8],
+        hole: u64,
+        declared: u32,
+        comment: &[u8],
+    ) {
+        let offset = u32::try_from(self.at).unwrap();
+        let compressed = u32::try_from(data.len() as u64 + hole).unwrap();
+        let mut fixed = Vec::new();
+        fixed.extend_from_slice(&20u16.to_le_bytes());
+        fixed.extend_from_slice(&0u16.to_le_bytes());
+        fixed.extend_from_slice(&method.to_le_bytes());
+        fixed.extend_from_slice(&0u16.to_le_bytes());
+        fixed.extend_from_slice(&0x21u16.to_le_bytes());
+        fixed.extend_from_slice(&crc.to_le_bytes());
+        fixed.extend_from_slice(&compressed.to_le_bytes());
+        fixed.extend_from_slice(&declared.to_le_bytes());
+        fixed.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        let mut local = b"PK\x03\x04".to_vec();
+        local.extend_from_slice(&fixed);
+        local.extend_from_slice(&0u16.to_le_bytes());
+        local.extend_from_slice(name.as_bytes());
+        self.write(&local);
+        self.write(data);
+        if hole > 0 {
+            self.at += hole;
+            self.out.seek(SeekFrom::Start(self.at)).unwrap();
+        }
+        let central = &mut self.central;
+        central.extend_from_slice(b"PK\x01\x02");
+        central.extend_from_slice(&20u16.to_le_bytes());
+        central.extend_from_slice(&fixed);
+        central.extend_from_slice(&0u16.to_le_bytes());
+        central.extend_from_slice(&(comment.len() as u16).to_le_bytes());
+        central.extend_from_slice(&[0; 8]);
+        central.extend_from_slice(&offset.to_le_bytes());
+        central.extend_from_slice(name.as_bytes());
+        central.extend_from_slice(comment);
+        self.count += 1;
+    }
+
+    fn stored(&mut self, name: &str, bytes: &[u8]) {
+        let len = u32::try_from(bytes.len()).unwrap();
+        self.entry_with(name, 0, crc_of(bytes), bytes, 0, len, b"");
+    }
+
+    fn deflated(&mut self, name: &str, bytes: &[u8]) {
+        let mut encoder = DeflateEncoder::new(Vec::new(), Compression::fast());
+        encoder.write_all(bytes).unwrap();
+        let compressed = encoder.finish().unwrap();
+        let len = u32::try_from(bytes.len()).unwrap();
+        self.entry_with(name, 8, crc_of(bytes), &compressed, 0, len, b"");
+    }
+
+    /// Una voce STORE di `len` byte a zero, che sul disco non ci sono.
+    fn sparse(&mut self, name: &str, len: u64) {
+        let declared = u32::try_from(len).unwrap();
+        self.entry_with(name, 0, 0, b"", len, declared, b"");
+    }
+
+    /// La directory centrale, senza la fine.
+    fn directory(&mut self) -> Tail {
+        let offset = self.at;
+        let central = std::mem::take(&mut self.central);
+        self.write(&central);
+        Tail {
+            entries: self.count,
+            size: central.len() as u64,
+            offset,
+            end: self.at,
+        }
+    }
+
+    /// La directory e la fine classica col commento `comment`.
+    fn finish(mut self, comment: &[u8]) -> W {
+        let tail = self.directory();
+        let eocd = eocd(
+            tail.entries as u16,
+            tail.size as u32,
+            tail.offset as u32,
+            comment,
+        );
+        self.write(&eocd);
+        self.out
+    }
+
+    /// La directory, la fine ZIP64 (che dichiara `entries` voci), il
+    /// localizzatore e la fine classica coi campi al massimo.
+    fn finish_zip64(mut self, entries: u64) -> W {
+        let tail = self.directory();
+        let mut record = b"PK\x06\x06".to_vec();
+        record.extend_from_slice(&44u64.to_le_bytes());
+        record.extend_from_slice(&45u16.to_le_bytes());
+        record.extend_from_slice(&45u16.to_le_bytes());
+        record.extend_from_slice(&[0; 8]);
+        record.extend_from_slice(&entries.to_le_bytes());
+        record.extend_from_slice(&entries.to_le_bytes());
+        record.extend_from_slice(&tail.size.to_le_bytes());
+        record.extend_from_slice(&tail.offset.to_le_bytes());
+        self.write(&record);
+        let mut locator = b"PK\x06\x07".to_vec();
+        locator.extend_from_slice(&0u32.to_le_bytes());
+        locator.extend_from_slice(&tail.end.to_le_bytes());
+        locator.extend_from_slice(&1u32.to_le_bytes());
+        self.write(&locator);
+        self.write(&eocd(u16::MAX, u32::MAX, u32::MAX, b""));
+        self.out
+    }
+}
+
+fn crc_of(bytes: &[u8]) -> u32 {
+    let mut crc = Crc::new();
+    crc.update(bytes);
+    crc.sum()
+}
+
+/// La fine classica della directory centrale.
+fn eocd(entries: u16, size: u32, offset: u32, comment: &[u8]) -> Vec<u8> {
+    let mut out = b"PK\x05\x06".to_vec();
+    out.extend_from_slice(&[0; 4]);
+    out.extend_from_slice(&entries.to_le_bytes());
+    out.extend_from_slice(&entries.to_le_bytes());
+    out.extend_from_slice(&size.to_le_bytes());
+    out.extend_from_slice(&offset.to_le_bytes());
+    out.extend_from_slice(&(comment.len() as u16).to_le_bytes());
+    out.extend_from_slice(comment);
+    out
+}
+
+fn manifest(version: u32) -> Vec<u8> {
+    json_bytes(&json!({ "format_version": version, "title": "a pezzi" }))
+}
+
+/// Un piccolo `.pcraft` scritto a mano.
+fn small_pcraft(comment: &[u8]) -> Vec<u8> {
+    let mut zip = RawZip::new(Cursor::new(Vec::new()));
+    zip.stored("thumb.png", &png(4, 3));
+    zip.stored("manifest.json", &manifest(3));
+    zip.finish(comment).into_inner()
+}
+
+fn from_bytes(
+    app: CraftApp,
+    bytes: &[u8],
+    size: PreviewSize,
+    max: u64,
+) -> (Result<Embedded, ContainerError>, u64) {
+    let mut reader = Counting::new(Cursor::new(bytes));
+    let found = embedded_preview_from(app, &mut reader, bytes.len() as u64, size, max);
+    (found, reader.read)
+}
+
+fn measures(found: &Result<Embedded, ContainerError>) -> Option<(u32, u32)> {
+    let png = found.as_ref().ok()?.png.as_ref().ok()?.as_ref()?;
+    Some((png.width, png.height))
+}
+
+/// Uno stream deflate che si scompatta in `mib` MiB di zeri: un pezzo di
+/// 1 MiB compresso e chiuso su un confine di byte, ripetuto. Ogni copia si
+/// riferisce solo a zeri già scritti, quindi lo stream resta valido.
+fn deflate_of_zeros(mib: usize) -> Vec<u8> {
+    let zeros = vec![0u8; MIB as usize];
+    let mut compress = Compress::new(Compression::best(), false);
+    let mut piece = Vec::with_capacity(MIB as usize);
+    compress
+        .compress_vec(&zeros, &mut piece, FlushCompress::Sync)
+        .unwrap();
+    assert_eq!(compress.total_in(), MIB);
+    let mut out = Vec::with_capacity(piece.len() * mib + 64);
+    for _ in 0..mib {
+        out.extend_from_slice(&piece);
+    }
+    let mut end = Vec::with_capacity(64);
+    compress
+        .compress_vec(&[], &mut end, FlushCompress::Finish)
+        .unwrap();
+    out.extend_from_slice(&end);
+    out
+}
+
+#[test]
+fn un_pcraft_di_1_gib_dà_l_anteprima_leggendo_meno_di_1_mib() {
+    let scratch = Scratch::new("pcraft");
+    let (_, file) = scratch.file("enorme.pcraft");
+    let mut zip = RawZip::new(file);
+    zip.sparse("layers/0.bin", GIB);
+    zip.stored("thumb.png", &png(64, 48));
+    zip.stored("manifest.json", &manifest(5));
+    let mut file = zip.finish(b"");
+    let len = file.seek(SeekFrom::End(0)).unwrap();
+    assert!(len > GIB, "{len}");
+    let before = file.metadata().unwrap().modified().unwrap();
+    for size in SIZES {
+        let mut reader = Counting::new(&mut file);
+        let found =
+            embedded_preview_from(CraftApp::PhotoCraft, &mut reader, len, size, u64::MAX).unwrap();
+        assert_eq!(found.format_version, Ok(Some("5".into())));
+        let png = found.png.unwrap().unwrap();
+        assert_eq!((png.width, png.height), (64, 48));
+        assert!(reader.read < MIB, "{size:?}: {} byte letti", reader.read);
+    }
+    // Il file non si tocca: stesso peso, stessa data.
+    assert_eq!(file.seek(SeekFrom::End(0)).unwrap(), len);
+    assert_eq!(file.metadata().unwrap().modified().unwrap(), before);
+}
+
+#[test]
+fn una_directory_centrale_oltre_4_mib_si_ferma_prima_di_zip() {
+    // Al tetto la coda passa, e decide `zip`: qui la directory sono zeri.
+    let mut at_limit = vec![0u8; MAX_CENTRAL_DIRECTORY_BYTES as usize + 16];
+    at_limit.extend(eocd(1, MAX_CENTRAL_DIRECTORY_BYTES as u32, 0, b""));
+    let (found, _) = from_bytes(CraftApp::PhotoCraft, &at_limit, PreviewSize::Small, 0);
+    assert_eq!(found, Err(ContainerError::NotZip));
+
+    // 5 MiB dichiarati: nessun byte oltre la coda.
+    let mut over = vec![0u8; 6 * MIB as usize];
+    over.extend(eocd(1, 5 * MIB as u32, 0, b""));
+    let (found, read) = from_bytes(CraftApp::PhotoCraft, &over, PreviewSize::Small, 0);
+    assert_eq!(found, Err(ContainerError::TooLarge));
+    assert!(read <= 65_557, "{read}");
+
+    let mut over = vec![0u8; MAX_CENTRAL_DIRECTORY_BYTES as usize + 16];
+    over.extend(eocd(1, MAX_CENTRAL_DIRECTORY_BYTES as u32 + 1, 0, b""));
+    let (found, _) = from_bytes(CraftApp::FigCraft, &over, PreviewSize::Large, 0);
+    assert_eq!(found, Err(ContainerError::TooLarge));
+}
+
+#[test]
+fn diecimila_e_una_voci_si_fermano_prima_di_zip() {
+    let at_limit = many_entries(MAX_ZIP_ENTRIES);
+    let (found, _) = from_bytes(CraftApp::PhotoCraft, &at_limit, PreviewSize::Small, 0);
+    assert_eq!(found.unwrap().png, Ok(None));
+    let over = many_entries(MAX_ZIP_ENTRIES + 1);
+    for app in ZIPPED {
+        let (found, read) = from_bytes(app, &over, PreviewSize::Small, 0);
+        assert_eq!(found, Err(ContainerError::TooLarge), "{app:?}");
+        assert!(read <= 65_557, "{app:?}: {read}");
+    }
+}
+
+#[test]
+fn una_fine_che_punta_fuori_dal_file_non_è_uno_zip() {
+    let good = small_pcraft(b"");
+    let eocd_at = good.len() - 22;
+    for (field, value) in [(16, u32::MAX - 1), (16, good.len() as u32), (12, 1_000_000)] {
+        let mut bad = good.clone();
+        bad[eocd_at + field..eocd_at + field + 4].copy_from_slice(&value.to_le_bytes());
+        let (found, read) = from_bytes(CraftApp::PhotoCraft, &bad, PreviewSize::Small, 0);
+        assert_eq!(found, Err(ContainerError::NotZip), "{field}={value}");
+        assert!(read <= good.len() as u64, "{read}");
+    }
+}
+
+#[test]
+fn una_fine_finta_nel_commento_si_guarda_anche_lei() {
+    // Il commento porta una fine che dichiara 5 MiB di directory: `zip`
+    // potrebbe sceglierla, quindi ferma il file prima di aprirlo.
+    let fake = eocd(1, 5 * MIB as u32, 0, b"");
+    let file = small_pcraft(&fake);
+    let (found, read) = from_bytes(CraftApp::PhotoCraft, &file, PreviewSize::Small, 0);
+    assert_eq!(found, Err(ContainerError::TooLarge));
+    assert!(read <= file.len() as u64, "{read}");
+
+    // Una fine finta il cui commento esce dal file non si sceglie: resta la
+    // vera, e l'anteprima c'è.
+    let mut fake = eocd(1, 5 * MIB as u32, 0, b"");
+    fake[20..22].copy_from_slice(&1000u16.to_le_bytes());
+    let file = small_pcraft(&fake);
+    let (found, _) = from_bytes(CraftApp::PhotoCraft, &file, PreviewSize::Small, 0);
+    assert_eq!(measures(&found), Some((4, 3)));
+}
+
+#[test]
+fn uno_zip64_si_legge_e_le_sue_voci_si_contano() {
+    let build = |entries: u64| {
+        let mut zip = RawZip::new(Cursor::new(Vec::new()));
+        zip.stored("thumbnail.png", &png(7, 5));
+        zip.stored("document.json", &json_bytes(&json!({ "version": "2.1" })));
+        zip.finish_zip64(entries).into_inner()
+    };
+    let file = build(2);
+    let (found, _) = from_bytes(CraftApp::FigCraft, &file, PreviewSize::Small, 0);
+    assert_eq!(measures(&found), Some((7, 5)));
+    assert_eq!(found.unwrap().format_version, Ok(Some("2.1".into())));
+
+    let (found, read) = from_bytes(
+        CraftApp::FigCraft,
+        &build(MAX_ZIP_ENTRIES as u64 + 1),
+        PreviewSize::Small,
+        0,
+    );
+    assert_eq!(found, Err(ContainerError::TooLarge));
+    assert!(read < 70_000, "{read}");
+
+    // Un localizzatore che punta dopo sé stesso non è uno ZIP.
+    let mut bad = build(2);
+    let locator = bad.len() - 22 - 20;
+    let after = (bad.len() as u64).to_le_bytes();
+    bad[locator + 8..locator + 16].copy_from_slice(&after);
+    let (found, _) = from_bytes(CraftApp::FigCraft, &bad, PreviewSize::Small, 0);
+    assert_eq!(found, Err(ContainerError::NotZip));
+}
+
+#[test]
+fn una_directory_dichiarata_corta_ma_lunga_si_ferma_al_tetto_dei_byte() {
+    // La fine dice 46 byte; le voci portano commenti di 64 KiB, per 6 MiB.
+    let mut zip = RawZip::new(Cursor::new(Vec::new()));
+    let comment = vec![b'c'; u16::MAX as usize];
+    for index in 0..100 {
+        zip.entry_with(&format!("v{index}"), 0, 0, b"", 0, 0, &comment);
+    }
+    let tail = zip.directory();
+    let mut bytes = zip.out.into_inner();
+    bytes.extend(eocd(100, 46, tail.offset as u32, b""));
+    let (found, read) = from_bytes(CraftApp::PhotoCraft, &bytes, PreviewSize::Small, 0);
+    assert_eq!(found, Err(ContainerError::TooLarge));
+    assert!(read < MIB, "{read}");
+}
+
+#[test]
+fn un_anteprima_deflate_ha_il_tetto_di_8_mib() {
+    let mut at_limit = png(9, 9);
+    at_limit.resize(MAX_PREVIEW_BYTES, 0);
+    let mut over = at_limit.clone();
+    over.push(0);
+    for (thumb, expected) in [
+        (at_limit, Ok(Some((9, 9)))),
+        (over, Err(ContainerError::TooLarge)),
+    ] {
+        let mut zip = RawZip::new(Cursor::new(Vec::new()));
+        zip.deflated("thumb.png", &thumb);
+        let file = zip.finish(b"").into_inner();
+        let (found, _) = from_bytes(CraftApp::PhotoCraft, &file, PreviewSize::Small, 0);
+        let got = found
+            .unwrap()
+            .png
+            .map(|png| png.map(|png| (png.width, png.height)));
+        assert_eq!(got, expected);
+    }
+}
+
+#[test]
+fn una_voce_di_1_kib_che_si_scompatta_in_1_gib_si_ferma() {
+    let bomb = deflate_of_zeros(1024);
+    assert!(bomb.len() < 2 * MIB as usize, "{}", bomb.len());
+    let mut zip = RawZip::new(Cursor::new(Vec::new()));
+    zip.entry_with("thumb.png", 8, 0, &bomb, 0, 1024, b"");
+    let file = zip.finish(b"").into_inner();
+    let (found, read) = from_bytes(CraftApp::PhotoCraft, &file, PreviewSize::Small, 0);
+    assert!(found.unwrap().png.is_err());
+    assert!(read < 2 * MIB, "{read}");
+}
+
+#[test]
+fn senza_thumb_la_misura_grande_prende_il_composito() {
+    let mut zip = RawZip::new(Cursor::new(Vec::new()));
+    zip.stored("composite/preview.png", &png(800, 600));
+    let file = zip.finish(b"").into_inner();
+    for size in SIZES {
+        let (found, _) = from_bytes(CraftApp::PhotoCraft, &file, size, 0);
+        assert_eq!(measures(&found), Some((800, 600)), "{size:?}");
+        // Senza manifesto la versione non si sa, e non è un errore.
+        assert_eq!(found.unwrap().format_version, Ok(None));
+    }
+}
+
+#[test]
+fn il_manifesto_ha_il_tetto_di_1_mib() {
+    let padded = |len: usize| {
+        let mut bytes = br#"{"format_version":7,"pad":""#.to_vec();
+        let pad = len - bytes.len() - 2;
+        bytes.extend(std::iter::repeat_n(b'a', pad));
+        bytes.extend_from_slice(b"\"}");
+        assert_eq!(bytes.len(), len);
+        bytes
+    };
+    for (len, expected) in [
+        (MAX_MANIFEST_BYTES, Some("7".to_string())),
+        (MAX_MANIFEST_BYTES + 1, None),
+    ] {
+        let mut zip = RawZip::new(Cursor::new(Vec::new()));
+        zip.stored("thumb.png", &png(4, 3));
+        zip.stored("manifest.json", &padded(len));
+        let file = zip.finish(b"").into_inner();
+        let (found, _) = from_bytes(CraftApp::PhotoCraft, &file, PreviewSize::Small, 0);
+        assert_eq!(measures(&found), Some((4, 3)));
+        assert_eq!(found.unwrap().format_version, Ok(expected), "{len}");
+    }
+    // Un manifesto rotto si dice: la versione è un errore, l'anteprima resta.
+    let mut zip = RawZip::new(Cursor::new(Vec::new()));
+    zip.stored("thumb.png", &png(4, 3));
+    zip.stored("manifest.json", b"{rotto");
+    let file = zip.finish(b"").into_inner();
+    let (found, _) = from_bytes(CraftApp::PhotoCraft, &file, PreviewSize::Small, 0);
+    assert_eq!(measures(&found), Some((4, 3)));
+    assert_eq!(found.unwrap().format_version, Err(ContainerError::NotJson));
+}
+
+#[test]
+fn un_pcraft_vuoto_o_troppo_corto_non_è_uno_zip() {
+    for bytes in [&b""[..], b"PK\x05\x06", b"non sono uno zip"] {
+        for app in ZIPPED {
+            let (found, _) = from_bytes(app, bytes, PreviewSize::Small, 0);
+            assert_eq!(found, Err(ContainerError::NotZip), "{app:?} {bytes:?}");
+        }
+    }
+}
+
+#[test]
+fn un_vectorcraft_con_100_mib_di_blob_legge_solo_il_json() {
+    let scratch = Scratch::new("vectorcraft");
+    let (_, mut file) = scratch.file("blob.vectorcraft");
+    let data = STANDARD.encode(png(12, 10));
+    let json = vectorcraft_with_preview(&data);
+    file.write_all(&json).unwrap();
+    file.write_all(VECTORCRAFT_BLOBS).unwrap();
+    let len = (json.len() + VECTORCRAFT_BLOBS.len()) as u64 + 100 * MIB;
+    file.set_len(len).unwrap();
+    let mut reader = Counting::new(&mut file);
+    let found = embedded_preview_from(
+        CraftApp::VectorCraft,
+        &mut reader,
+        len,
+        PreviewSize::Small,
+        GIB,
+    )
+    .unwrap();
+    assert_eq!(found.format_version, Ok(Some("4".into())));
+    let png = found.png.unwrap().unwrap();
+    assert_eq!((png.width, png.height), (12, 10));
+    // Il JSON e al più un pezzo di 64 KiB dopo il separatore.
+    assert!(
+        reader.read <= json.len() as u64 + 64 * 1024,
+        "{}",
+        reader.read
+    );
+}
+
+#[test]
+fn il_json_di_vectorcraft_prima_dei_blob_ha_il_tetto_concesso() {
+    let json = json_bytes(&json!({ "format_version": 4, "pad": "x".repeat(2000) }));
+    let max = json.len() as u64;
+    let mut with_blobs = json.clone();
+    with_blobs.extend_from_slice(VECTORCRAFT_BLOBS);
+    with_blobs.extend_from_slice(&[7; 5000]);
+    for bytes in [&json, &with_blobs] {
+        let (found, _) = from_bytes(CraftApp::VectorCraft, bytes, PreviewSize::Small, max);
+        assert_eq!(found.unwrap().format_version, Ok(Some("4".into())));
+        let (found, _) = from_bytes(CraftApp::VectorCraft, bytes, PreviewSize::Small, max - 1);
+        assert_eq!(found, Err(ContainerError::OverLimit));
+    }
+    // Lo stesso tetto vale dopo lo gzip, e anche sui byte compressi.
+    let packed = gzip(&with_blobs);
+    let (found, _) = from_bytes(CraftApp::VectorCraft, &packed, PreviewSize::Small, max);
+    assert_eq!(found.unwrap().format_version, Ok(Some("4".into())));
+    let (found, _) = from_bytes(CraftApp::VectorCraft, &packed, PreviewSize::Small, max - 1);
+    assert_eq!(found, Err(ContainerError::OverLimit));
+    let (found, _) = from_bytes(CraftApp::VectorCraft, &packed, PreviewSize::Small, 20);
+    assert_eq!(found, Err(ContainerError::OverLimit));
+}
+
+#[test]
+fn il_separatore_a_cavallo_di_due_pezzi_si_trova() {
+    for at in [
+        64 * 1024 - 3,
+        64 * 1024,
+        64 * 1024 - VECTORCRAFT_BLOBS.len(),
+    ] {
+        let head = br#"{"format_version":4,"pad":""#;
+        let mut bytes = head.to_vec();
+        bytes.extend(std::iter::repeat_n(b'a', at - head.len() - 2));
+        bytes.extend_from_slice(b"\"}");
+        assert_eq!(bytes.len(), at);
+        bytes.extend_from_slice(VECTORCRAFT_BLOBS);
+        bytes.extend_from_slice(b"non JSON");
+        let (found, _) = from_bytes(CraftApp::VectorCraft, &bytes, PreviewSize::Small, GIB);
+        assert_eq!(found.unwrap().format_version, Ok(Some("4".into())), "{at}");
+    }
+}
+
+#[test]
+fn uno_gzip_di_1_mib_che_diventa_1_gib_si_ferma_al_tetto() {
+    let mut bomb = vec![0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 0xff];
+    bomb.extend(deflate_of_zeros(1024));
+    bomb.extend_from_slice(&[0; 8]);
+    assert!(bomb.len() < 2 * MIB as usize, "{}", bomb.len());
+    let (found, read) = from_bytes(
+        CraftApp::VectorCraft,
+        &bomb,
+        PreviewSize::Small,
+        MAX_FILE_BYTES as u64,
+    );
+    assert_eq!(found, Err(ContainerError::OverLimit));
+    assert!(read < bomb.len() as u64, "{read}");
+    assert_eq!(
+        embedded_preview(CraftApp::VectorCraft, &bomb, PreviewSize::Small),
+        Err(ContainerError::TooLarge)
+    );
 }

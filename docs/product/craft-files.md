@@ -31,7 +31,8 @@ lettura.
   la scheda dice perché e mostra il pulsante «Crea l'anteprima con …», che la
   richiede una volta. Senza app installata dice «Il file non porta
   un'anteprima», senza pulsante.
-- **Troppo grande.** Un file oltre 64 MiB non si legge: la scheda dice «File
+- **Troppo grande.** Un file da leggere intero oltre il peso massimo (vedi
+  **Le impostazioni**) non si legge: la scheda dice «File
   troppo grande per l'anteprima» e non offre il pulsante.
 
 Quando il file cambia sul disco la scheda lo rilegge da sola. Il nome di
