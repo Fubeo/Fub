@@ -12,7 +12,7 @@
 //! che usa anche
 //! [`PreviewImage::from_png`](crate::contract::PreviewImage::from_png).
 
-mod zip_tail;
+pub(crate) mod zip_tail;
 
 use std::io::{Cursor, Read, Seek, SeekFrom};
 
@@ -307,10 +307,10 @@ type Archive<'a> = ZipArchive<Cursor<&'a [u8]>>;
 
 /// I byte in più che `zip` può leggere oltre la directory dichiarata per
 /// aprire l'archivio: la coda, cercata anche due volte, e la fine ZIP64.
-const OPEN_SLACK: u64 = 4 * EOCD_SEARCH as u64 + 128 * 1024;
+pub(crate) const OPEN_SLACK: u64 = 4 * EOCD_SEARCH as u64 + 128 * 1024;
 /// I byte in più che `zip` può leggere oltre il doppio del tetto di una voce:
 /// l'intestazione locale con nome e campo extra, e il buffer dello deflate.
-const ENTRY_SLACK: u64 = 30 + 2 * u16::MAX as u64 + 256 * 1024;
+pub(crate) const ENTRY_SLACK: u64 = 30 + 2 * u16::MAX as u64 + 256 * 1024;
 
 /// Lo ZIP letto a pezzi: la coda, poi l'archivio con un tetto sui byte, poi
 /// la prima anteprima di `names` e la versione dal JSON `manifest`.
@@ -358,7 +358,7 @@ fn zip_preview<R: Read + Seek>(
 
 /// `error`, o [`ContainerError::TooLarge`] se il tetto di `budget` lo ha
 /// causato.
-fn over_budget(budget: &Budget, error: ContainerError) -> ContainerError {
+pub(crate) fn over_budget(budget: &Budget, error: ContainerError) -> ContainerError {
     if budget.exhausted() {
         ContainerError::TooLarge
     } else {
@@ -435,7 +435,7 @@ fn zip64_entries(bytes: &[u8], eocd: usize) -> Option<u64> {
 /// lettura ha comunque il tetto, perché una voce può dichiararsi piccola e
 /// scompattarsi grande. Il nome si confronta così com'è scritto: una voce
 /// `../manifest.json` non è il manifesto.
-fn read_entry<R: Read + Seek>(
+pub(crate) fn read_entry<R: Read + Seek>(
     archive: &mut ZipArchive<R>,
     name: &str,
     limit: usize,

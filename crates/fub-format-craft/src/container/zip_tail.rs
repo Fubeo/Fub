@@ -33,7 +33,7 @@ const ZIP64_EOCD_MAX: u64 = ZIP64_EOCD_LEN + 64 * 1024;
 
 /// Ciò che la coda dichiara, per chi arma il tetto di [`Budgeted`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct Tail {
+pub(crate) struct Tail {
     /// La directory centrale più grande dichiarata fra le fini possibili.
     pub central_directory: u64,
 }
@@ -48,7 +48,7 @@ struct Directory {
 }
 
 /// Guarda la coda di uno ZIP lungo `len` prima di aprirlo.
-pub(super) fn check<R: Read + Seek>(reader: &mut R, len: u64) -> Result<Tail, ContainerError> {
+pub(crate) fn check<R: Read + Seek>(reader: &mut R, len: u64) -> Result<Tail, ContainerError> {
     if len < EOCD_LEN as u64 {
         return Err(ContainerError::NotZip);
     }
@@ -188,7 +188,7 @@ fn le64(bytes: &[u8], at: usize) -> Result<u64, ContainerError> {
 
 /// Quanti byte restano a [`Budgeted`], e se un pezzo è stato rifiutato.
 #[derive(Clone, Default)]
-pub(super) struct Budget(Rc<BudgetState>);
+pub(crate) struct Budget(Rc<BudgetState>);
 
 #[derive(Default)]
 struct BudgetState {
@@ -198,26 +198,26 @@ struct BudgetState {
 
 impl Budget {
     /// Riarma il tetto a `bytes`, e dimentica un rifiuto di prima.
-    pub(super) fn arm(&self, bytes: u64) {
+    pub(crate) fn arm(&self, bytes: u64) {
         self.0.left.set(bytes);
         self.0.exhausted.set(false);
     }
 
     /// Un pezzo è stato rifiutato perché il tetto era finito.
-    pub(super) fn exhausted(&self) -> bool {
+    pub(crate) fn exhausted(&self) -> bool {
         self.0.exhausted.get()
     }
 }
 
 /// Un lettore che non dà più dei byte che il suo [`Budget`] lascia: oltre è
 /// un `io::Error`, e il budget lo ricorda.
-pub(super) struct Budgeted<R> {
+pub(crate) struct Budgeted<R> {
     inner: R,
     budget: Budget,
 }
 
 impl<R> Budgeted<R> {
-    pub(super) fn new(inner: R, budget: Budget) -> Self {
+    pub(crate) fn new(inner: R, budget: Budget) -> Self {
         Budgeted { inner, budget }
     }
 }

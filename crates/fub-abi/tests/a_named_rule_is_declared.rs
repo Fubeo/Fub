@@ -512,6 +512,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-format-craft/src/office.rs::is_package_extension",
+            (
+                Family::AsciiCase,
+                "dice se un documento è un pacchetto ZIP da cui leggere la miniatura (N7, le \
+                 anteprime dei documenti): un `RELAZIONE.DOCX` è un `.docx`, come per \
+                 `contract.rs::of_extension`, che lo ha già detto un documento. Le estensioni \
+                 della tabella sono ASCII; non è il nome di una nota, di un tag o di un \
+                 percorso.",
+            ),
+        ),
+        (
             "crates/fub-host/src/link_card.rs::card",
             (
                 Family::AsciiCase,
