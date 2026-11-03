@@ -784,14 +784,39 @@ export function closeSlashPalette(owner: HTMLElement): void {
 ///
 /// `prefill` è ciò che chi lo lancia sa già, come testo per nome di parametro
 /// (la cartella dove si crea, per esempio): lo riceve il modulo proprio del
-/// comando, se ne ha uno, e altrimenti riempie i campi del modulo generico.
+/// comando, se ne ha uno, e altrimenti riempie i campi del modulo generico. Il
+/// documento aperto si aggiunge da sé, con [`withActiveDoc`].
 export function startCommand(entry: CommandEntry, host: PaletteHost, prefill: Readonly<Record<string, string>> = {}) {
   if (entry.run) {
     runShellCommand(entry, host);
     return;
   }
-  if (openOwnForm(entry, prefill)) return;
-  start(entry, openOverlay(), host, prefill);
+  const known = withActiveDoc(entry.spec, prefill, slashContextDoc());
+  if (openOwnForm(entry, known)) return;
+  start(entry, openOverlay(), host, known);
+}
+
+/// Il prefill con **la nota aperta** nel parametro `doc`, quando il comando ne
+/// chiede uno di tipo `document` e chi lo lancia non l'ha già dato.
+///
+/// È la stessa regola di `slashArgs` per il menu «/», con la stessa fonte
+/// (`slashContextDoc`): chi lancia «Rinomina nota» o una ricetta dalla palette
+/// la lancia quasi sempre sulla nota che sta guardando, e un campo vuoto gli
+/// chiederebbe di riscrivere a memoria un path che la shell conosce già. A
+/// differenza del menu «/», qui il valore è una **proposta**: finisce in un
+/// campo che resta modificabile, e il comando parte solo da lì.
+///
+/// Non guarda il formato della nota: se il comando chiede un `document` e la
+/// nota aperta è un PDF, la propone lo stesso. Che cosa un comando accetti lo
+/// dice la sua spec, quando gira, non la palette indovinando prima.
+export function withActiveDoc(
+  spec: CommandSpec | null,
+  prefill: Readonly<Record<string, string>>,
+  doc: string | null,
+): Readonly<Record<string, string>> {
+  if (!doc || spec === null || "doc" in prefill) return prefill;
+  const asksDoc = spec.params.some((param) => param.name === "doc" && param.kind.kind === "document");
+  return asksDoc ? { ...prefill, doc } : prefill;
 }
 
 /// Il comando ha un modulo proprio? Allora la palette si chiude, se era
@@ -1028,13 +1053,15 @@ function start(entry: CommandEntry, box: HTMLElement, host: PaletteHost, prefill
     runShellCommand(entry, host);
     return;
   }
-  if (openOwnForm(entry, prefill)) return;
+  // Dalla lista della palette nessuno ha dato un prefill: la nota aperta sì.
+  const known = withActiveDoc(entry.spec, prefill, slashContextDoc());
+  if (openOwnForm(entry, known)) return;
   const spec = entry.spec!;
   if (spec.params.length === 0) {
     void execute(spec, {}, box, host);
     return;
   }
-  renderForm(spec, box, host, prefill);
+  renderForm(spec, box, host, known);
 }
 
 function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost, prefill: Readonly<Record<string, string>> = {}) {
