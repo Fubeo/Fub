@@ -1096,7 +1096,7 @@ Prova: scripts/check.sh --rapido; cargo test -p fub-app --test
 platform_configs; cd apps/client && npm run bench:webview --
 --only=<lo scenario nuovo> (con l'app costruita, come dice
 `docs/development/webview-measurements.md`)
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base a1329299
 
 ## T16 · La tela usa il nucleo
 
