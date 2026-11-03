@@ -2257,8 +2257,9 @@ export interface BundleInfo {
   mounted: boolean;
   // La famiglia decide quale gesto la riga offre: un componente si accende, un
   // tema si applica. Non è deducibile da `mounted`, perché anche uno spento
-  // deve restare classificabile.
-  kind: "component" | "theme";
+  // deve restare classificabile. Una ricetta (`recipe`) è una nota che compone
+  // comandi: non è un componente, e l'elenco dei componenti non la mostra.
+  kind: "component" | "theme" | "recipe";
   // Quanto l'host si fida di chi lo ha prodotto. Non è una decorazione accanto
   // ai permessi: «può leggere le mie note» non vuol dire la stessa cosa detto
   // di una feature di questo repo e di un componente arrivato da fuori.
@@ -2349,6 +2350,11 @@ export interface KnownVault {
   // cosa gli ha risposto. Sta qui perché il mirror è il contratto intero e un
   // campo taciuto è un campo che il giorno che serve nessuno sa esserci.
   keys_seen: Record<string, string>;
+  // Le ricette adottate su questa macchina per questo vault, id della ricetta →
+  // impronta del testo acceso. Assente quando non ce n'è nessuna (Rust non
+  // serializza l'elenco vuoto), e assente anche nei file scritti da un Fub che
+  // non conosceva le ricette: chi legge lo tratta come vuoto.
+  recipes_adopted?: Record<string, string>;
 }
 
 // Che rapporto ha questo vault con il disco (rispecchia

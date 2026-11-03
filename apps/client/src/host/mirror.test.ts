@@ -916,18 +916,6 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     skin: true,
     assets: true,
   }),
-  // La chiave resta il nome del tipo RUST (`fub_host::VaultEntry`), che è
-  // ciò che la fixture gemella scrive; di qua si chiama `KnownVault` perché
-  // l'anagrafe del §14.1 porta lo stesso nome dal contratto (vedi
-  // `contract.ts`).
-  VaultEntry: keysOf<KnownVault>({
-    root: true,
-    name: true,
-    icon: true,
-    favorite: true,
-    last_opened: true,
-    keys_seen: true,
-  }),
   DemoOpened: keysOf<DemoOpened>({ root: true, previous: true }),
   DemoClosed: keysOf<DemoClosed>({ errors: true, current: true }),
   DiagnosticSummary: keysOf<DiagnosticSummary>({ kind: true, help: true }),
@@ -976,6 +964,22 @@ const APP_OPTIONAL_KEYS = {
       "id", "name", "mounted", "kind", "trust", "permissions",
       "installation", "version", "enabled", "consent", "runtime_known", "revoked",
     ],
+  },
+  // La chiave resta il nome del tipo RUST (`fub_host::VaultEntry`), che è
+  // ciò che la fixture gemella scrive; di qua si chiama `KnownVault` perché
+  // l'anagrafe del §14.1 porta lo stesso nome dal contratto (vedi
+  // `contract.ts`). `recipes_adopted` manca quando è vuoto.
+  VaultEntry: {
+    all: keysOf<Required<KnownVault>>({
+      root: true,
+      name: true,
+      icon: true,
+      favorite: true,
+      last_opened: true,
+      keys_seen: true,
+      recipes_adopted: true,
+    }),
+    required: ["root", "name", "icon", "favorite", "last_opened", "keys_seen"],
   },
   // Senza indirizzo la sessione ascolta su quello della rotta predefinita.
   LiveStart: {
@@ -1575,6 +1579,19 @@ describe("mirror TS↔Rust", () => {
         for (const key of required) expect(keys, `${type}.${key} missing`).toContain(key);
       }
     }
+  });
+
+  it("ogni famiglia di bundle della fixture è una del mirror, ricette comprese", () => {
+    // Un `kind` che Rust serializza e il mirror non nomina sarebbe una riga che
+    // la shell non sa classificare: l'elenco qui sotto è l'unione di
+    // `BundleInfo["kind"]`, e il `satisfies` lo tiene esaustivo.
+    const kinds = { component: true, theme: true, recipe: true } satisfies Record<BundleInfo["kind"], true>;
+    const seen = (appFixture.BundleInfo as BundleInfo[]).map((b) => b.kind);
+    for (const kind of seen) expect(Object.keys(kinds)).toContain(kind);
+    expect(seen).toContain("recipe");
+    const vaults = appFixture.VaultEntry as KnownVault[];
+    expect(vaults.some((v) => v.recipes_adopted !== undefined)).toBe(true);
+    expect(vaults.some((v) => v.recipes_adopted === undefined)).toBe(true);
   });
 
   it("il supporto serializzato conserva azioni, versioni future e campi sensibili tipizzati", () => {

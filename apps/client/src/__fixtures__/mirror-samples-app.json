@@ -150,6 +150,16 @@
         ],
         "fub:read-vault": true
       }
+    },
+    {
+      "id": "ricetta.archivia",
+      "name": "Archivia con la data",
+      "mounted": false,
+      "kind": "recipe",
+      "trust": "community",
+      "permissions": {
+        "fub:run-command": true
+      }
     }
   ],
   "ThemeInfo": [
@@ -228,6 +238,9 @@
       "last_opened": 1700000000000,
       "keys_seen": {
         "keys.note.create": "Mod-Alt-k"
+      },
+      "recipes_adopted": {
+        "ricetta.archivia": "b3a1"
       }
     },
     {
