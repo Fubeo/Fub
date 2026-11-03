@@ -59,6 +59,16 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- Celle dei fogli, secondo giro sul movimento (l'utente: «per una frazione
+  di secondo viene selezionata una porzione maggiore»). Causa: quando la
+  selezione passava la riga o la colonna bloccata, i lati e le fasce della
+  zona nuova comparivano già alla misura finale (in dissolvenza) mentre il
+  resto scivolava ancora, e uscendo sparivano di colpo. Scelto: ogni pezzo
+  che compare o se ne va durante una corsa corre con gli altri dalla stessa
+  geometria, uscendo dal filo del blocco o rientrandoci. Sonda su 21 gesti
+  (clic, Maiusc, frecce svelte, trascinamenti, pagine, Home, oltre il
+  blocco) a 1280 e 390 px: 0 fotogrammi con un pezzo fuori dal bordo; stato
+  finale uguale con e senza movimento.
 - Celle dei fogli, il movimento dei segni (richiesta dell'utente: «un po'
   glitchata», «la velocizzerei leggermente»). Nel prototipo il velo usciva
   dal bordo durante la corsa, un tasto tenuto giù ripartiva ogni volta da

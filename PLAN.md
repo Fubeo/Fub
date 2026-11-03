@@ -425,8 +425,11 @@ Cosa fare:
   anello, velo, fasce, quadratino, maniglie) si ricava da quella geometria a
   ogni campione e la sua corsa sono fotogrammi di `transform` sul suo
   rettangolo fermo, partiti tutti nello stesso istante: nessun pezzo esce
-  dal bordo durante la corsa. Un gesto nuovo a metà corsa riparte da posa e
-  velocità correnti di ogni numero, anche col tasto tenuto giù. L'anello e
+  dal bordo durante la corsa. Anche un pezzo che entra in un'altra zona
+  (un lato o una fascia che passa il filo del blocco) esce dal filo invece
+  di comparire già grande, e uno che ne esce ci rientra. Un gesto nuovo a
+  metà corsa riparte da posa e velocità correnti di ogni numero, anche col
+  tasto tenuto giù. L'anello e
   il velo ci sono sempre: con una cella sola sono a misura del bordo, e
   crescono da lì o ci rientrano invece di comparire e sparire. Con
   «ridotto» i segni saltano. Il modulo prende il `Lifetime` della griglia e lo smontaggio

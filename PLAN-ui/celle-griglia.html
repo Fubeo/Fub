@@ -3379,10 +3379,10 @@ body {
   }
   /// Mette i segni dove la selezione dice. I pezzi che scivolano corrono
   /// tutti insieme dalla geometria che si vede adesso (anche a metà corsa, con
-  /// la sua velocità) a quella nuova, con la molla `spring`; un pezzo nuovo
-  /// che non esce dal bordo compare in `DURATION.state`; l'anello e il velo
-  /// che non servono più rientrano nel bordo e poi si nascondono; il resto
-  /// sparisce subito.
+  /// la sua velocità) a quella nuova, con la molla `spring`: anche quelli che
+  /// compaiono (escono dal bordo o dal filo del blocco) e quelli che non
+  /// servono più (ci rientrano, poi si nascondono). Senza corsa un pezzo
+  /// nuovo compare in `DURATION.state` e uno che non serve sparisce subito.
   function updateMarks({ glide = true, spring = GLIDE } = {}) {
     syncHeaders();
     syncFormula();
@@ -3413,15 +3413,18 @@ body {
     const travel = (id, layer, S) => {
       const name = id.slice(id.indexOf(":") + 1);
       let idle = true;
-      const frames = named.map((parts) => {
-        const R = clipRect(layer, parts.get(name), true);
+      const frames = [];
+      for (const parts of named) {
+        const p = parts.get(name);
+        if (!p) return null;
+        const R = clipRect(layer, p, true);
         const dx = R.x - S.x;
         const dy = R.y - S.y;
         const sx = R.w / S.w;
         const sy = R.h / S.h;
         if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01 || Math.abs(sx - 1) > 1e-4 || Math.abs(sy - 1) > 1e-4) idle = false;
-        return { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` };
-      });
+        frames.push({ transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` });
+      }
       return idle ? null : frames;
     };
     const play = (el, frames, exit) => {
@@ -3436,9 +3439,10 @@ body {
       if (!n?.r) {
         if (!was) continue;
         const el = pool.get(id);
-        const frames = moving && n?.p.grows ? travel(id, n.layer, was) : null;
+        const frames = moving && n && n.p.glide !== false ? travel(id, n.layer, was) : null;
         if (frames) {
-          // Rientra nel bordo dal suo posto di prima, poi si nasconde.
+          // Rientra nel bordo (o nel filo del blocco) dal suo posto di prima,
+          // poi si nasconde.
           const m = play(el, frames, true);
           leaving.set(id, m);
           m.onfinish = () => {
@@ -3467,7 +3471,10 @@ body {
       if (n.p.handle) el.dataset.handle = n.p.handle;
       place(el, n.r);
       shownMarks.set(id, n.r);
-      const frames = moving && n.p.glide !== false && (was || n.p.grows) ? travel(id, n.layer, n.r) : null;
+      // Anche un pezzo nuovo corre: l'anello e il velo escono dal bordo, un
+      // lato o una fascia che entra in una zona bloccata esce dal filo del
+      // blocco, insieme agli altri pezzi invece di comparire già grande.
+      const frames = moving && n.p.glide !== false ? travel(id, n.layer, n.r) : null;
       if (!was) {
         el.hidden = false;
         if (frames) play(el, frames, false);
