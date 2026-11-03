@@ -245,4 +245,35 @@ mod tests {
         };
         assert_eq!(key(&text), Some(E_OP_TOO_MANY_EDGES));
     }
+
+    /// Una lavagna come la scrive Obsidian: tab, campi nel suo ordine (il
+    /// testo prima delle coordinate), `null` su campi che Fub legge assenti,
+    /// escape scritti a modo suo e niente a capo in fondo.
+    const OBSIDIAN: &str = "{\n\t\"nodes\":[\n\t\t{\"id\":\"6f1d2a\",\"type\":\"text\",\"text\":\"caff\\u00e9 \\/ [[Nota]]\",\"x\":-120,\"y\":-60,\"width\":250,\"height\":60,\"color\":null},\n\t\t{\"id\":\"9c0b7e\",\"type\":\"file\",\"file\":\"Nota.md\",\"x\":200,\"y\":-60,\"width\":400,\"height\":400,\"subpath\":null}\n\t],\n\t\"edges\":[\n\t\t{\"id\":\"e71a\",\"fromNode\":\"6f1d2a\",\"fromSide\":\"right\",\"toNode\":\"9c0b7e\",\"toSide\":\"left\"}\n\t]\n}";
+
+    #[test]
+    fn spostare_una_scheda_di_obsidian_cambia_solo_i_byte_della_coordinata() {
+        use fub_abi::format::{DocumentFormat, FormatCapabilities, FormatDescriptor};
+        use fub_abi::traits::VaultRead;
+        use fub_sdk::testing::MemoryHost;
+
+        let mut host = MemoryHost::new()
+            .with_format(
+                "canvas",
+                DocumentFormat {
+                    descriptor: FormatDescriptor::text(CANVAS_FORMAT, "Canvas", &["canvas"]),
+                    capabilities: FormatCapabilities::default(),
+                },
+            )
+            .with_document("Idee.canvas", OBSIDIAN);
+        let ops = json!([{ "op": "move", "ids": ["6f1d2a"], "dx": 80, "dy": 0 }]).to_string();
+        let args = json!({ "doc": "Idee.canvas", "ops": ops });
+        canvas_apply(Args::new(&args), InvokeMode::Apply, &mut host)
+            .expect("lo spostamento si applica");
+
+        let after = host
+            .read_document(&DocId::new("Idee.canvas"))
+            .expect("la lavagna si legge");
+        assert_eq!(after, OBSIDIAN.replacen("\"x\":-120", "\"x\":-40", 1));
+    }
 }

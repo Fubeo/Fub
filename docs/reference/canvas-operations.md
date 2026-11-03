@@ -33,12 +33,13 @@ chiave e nello stesso ordine.
 |---|---|---|---|
 | `upsert-node` | la scheda com'era, o `null` | la scheda nuova | facoltativo |
 | `remove-node` | la scheda com'era | `null` | facoltativo |
-| `upsert-edge` | l'arco com'era, o `null` | l'arco nuovo | no |
-| `remove-edge` | l'arco com'era | `null` | no |
+| `upsert-edge` | l'arco com'era, o `null` | l'arco nuovo | facoltativo |
+| `remove-edge` | l'arco com'era | `null` | facoltativo |
 | `reorder` | gli id delle schede, in ordine | gli stessi, nel nuovo ordine | no |
 
-`at` è una posizione nella lista delle schede, che è anche la profondità: la
-prima scheda sta sotto tutte le altre.
+Nelle toppe delle schede `at` è una posizione nella lista delle schede, che è
+anche la profondità: la prima scheda sta sotto tutte le altre. Nelle toppe
+degli archi è una posizione nella lista degli archi.
 
 ### Mettere una scheda
 
@@ -65,8 +66,11 @@ la posizione che aveva, e serve all'inversa per rimetterla lì.
 
 ### Mettere e togliere un arco
 
-Un arco nuovo va in fondo alla lista degli archi. Le due schede che collega
-devono esserci, anche se sono nuove nella stessa lista di toppe.
+Un arco nuovo va in `at`, o in fondo alla lista degli archi se `at` manca.
+Con `before` l'arco c'è e cambia al suo posto; `at` allora non conta. Le due
+schede che collega devono esserci, anche se sono nuove nella stessa lista di
+toppe. In `remove-edge` `at` è la posizione che l'arco aveva, e serve
+all'inversa per rimetterlo lì.
 
 ```json
 { "kind": "upsert-edge", "before": null,
@@ -76,7 +80,7 @@ devono esserci, anche se sono nuove nella stessa lista di toppe.
 ```json
 { "kind": "remove-edge",
   "before": { "id": "e1", "fromNode": "n1", "toNode": "n2", "toEnd": "arrow" },
-  "after": null }
+  "after": null, "at": 0 }
 ```
 
 ### Riordinare
@@ -122,7 +126,7 @@ Ogni errore (`PatchError`) dice quale toppa della lista non si applica
 | Errore | Quando |
 |---|---|
 | `Stale` | l'immagine di prima non torna: la scheda o l'arco è cambiato, manca, o c'è già quando `before` è `null`; per `reorder`, l'ordine di adesso non è `before` |
-| `AtOutOfRange` | `at` oltre la fine della lista delle schede |
+| `AtOutOfRange` | `at` oltre la fine della lista delle schede, o di quella degli archi per una toppa di un arco (`list` dice quale) |
 | `NodeHasEdges` | si toglie una scheda che ha ancora un arco |
 | `MissingEndpoint` | un arco collega una scheda che non c'è |
 | `NotAPermutation` | in `reorder`, `after` ha un id che non c'è, uno ripetuto o ne manca uno |
@@ -151,14 +155,16 @@ inverso. Applicata dopo la lista, ridà il modello di prima.
 | `upsert-node` con `before` uguale a `null` | `remove-node` senza `at` |
 | `remove-node` | `upsert-node` con `before` uguale a `null` e lo stesso `at` |
 | `upsert-edge` con `before` | `upsert-edge` con `before` e `after` scambiati |
-| `upsert-edge` con `before` uguale a `null` | `remove-edge` |
-| `remove-edge` | `upsert-edge` con `before` uguale a `null` |
+| `upsert-edge` con `before` uguale a `null` | `remove-edge` senza `at` |
+| `remove-edge` | `upsert-edge` con `before` uguale a `null` e lo stesso `at` |
 | `reorder` | `reorder` con `before` e `after` scambiati |
 
-Gli `at` di una lista di `remove-node` sono le posizioni nel modello di
-partenza. Per questo l'inversa riordina le schede da rimettere che stanno
-vicine nella lista: prima l'`at` più basso, quelle senza `at` per ultime. Così
-ogni scheda torna al suo posto.
+Gli `at` di una lista di `remove-node`, e quelli di una lista di
+`remove-edge`, sono le posizioni nel modello di partenza. Per questo l'inversa
+riordina le voci da rimettere che stanno vicine nella lista e sono della
+stessa lista (schede con schede, archi con archi): prima l'`at` più basso,
+quelle senza `at` per ultime. Così ogni scheda e ogni arco tornano al loro
+posto, e un arco non torna mai prima delle schede che collega.
 
 ```json
 [{ "kind": "remove-node", "before": { "id": "b", "type": "text", "x": 0, "y": 0, "width": 10, "height": 10, "text": "b" }, "after": null, "at": 1 },
@@ -167,9 +173,8 @@ ogni scheda torna al suo posto.
 
 L'inversa rimette prima `a` in 0, poi `b` in 1.
 
-Due cose non tornano al loro posto. Una scheda tolta senza `at` torna in
-cima. Un arco tolto torna in fondo alla lista degli archi: le toppe degli
-archi non hanno `at`, e l'ordine degli archi non si vede sulla tela.
+Una voce tolta senza `at` non torna al suo posto: una scheda torna in cima,
+un arco in fondo alla lista degli archi.
 
 ## Operazioni
 
@@ -234,8 +239,9 @@ scheda a sé stessa va bene.
 Toglie schede e archi. Gli archi che toccano una scheda tolta vanno via
 prima, nella stessa operazione, e un arco nominato e toccato va via una volta
 sola. L'`at` di ogni scheda tolta è la sua posizione all'inizio della serie
-di `remove-node` di cui fa parte, anche se la serie viene da più
-operazioni: così l'inversa rimette ogni scheda al suo posto.
+di `remove-node` di cui fa parte, e quello di ogni arco tolto la sua
+posizione all'inizio della serie di `remove-edge`, anche se la serie viene
+da più operazioni: così l'inversa rimette schede e archi al loro posto.
 
 ```json
 { "op": "remove", "ids": ["b", "e1"] }

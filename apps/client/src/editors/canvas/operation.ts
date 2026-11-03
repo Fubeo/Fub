@@ -9,8 +9,8 @@ import type { CanvasDocument, CanvasEdge, CanvasNode } from "./model";
 export type CanvasPatch =
   | { readonly kind: "upsert-node"; readonly before: CanvasNode | null; readonly after: CanvasNode; readonly at?: number }
   | { readonly kind: "remove-node"; readonly before: CanvasNode; readonly after: null; readonly at?: number }
-  | { readonly kind: "upsert-edge"; readonly before: CanvasEdge | null; readonly after: CanvasEdge }
-  | { readonly kind: "remove-edge"; readonly before: CanvasEdge; readonly after: null }
+  | { readonly kind: "upsert-edge"; readonly before: CanvasEdge | null; readonly after: CanvasEdge; readonly at?: number }
+  | { readonly kind: "remove-edge"; readonly before: CanvasEdge; readonly after: null; readonly at?: number }
   | { readonly kind: "reorder"; readonly before: readonly string[]; readonly after: readonly string[] };
 
 export interface CanvasOperation extends TextOperation {
@@ -130,8 +130,9 @@ export function upsertEdgePatch(
   };
 }
 
+/** `at` è la posizione dell'arco in `doc`: l'annulla lo rimette lì (R11). */
 export function removeEdgePatch(doc: CanvasDocument, id: string): Extract<CanvasPatch, { kind: "remove-edge" }> | null {
-  const before = edgeById(doc, id);
-  if (!before) return null;
-  return { kind: "remove-edge", before: cloneEdge(before), after: null };
+  const at = doc.edges.findIndex((edge) => edge.id === id);
+  if (at < 0) return null;
+  return { kind: "remove-edge", before: cloneEdge(doc.edges[at]!), after: null, at };
 }

@@ -58,11 +58,6 @@ fn same_canvas(left: &Canvas, right: &Canvas) -> bool {
     same_value(&left, &right)
 }
 
-fn by_edge_id(mut canvas: Canvas) -> Canvas {
-    canvas.edges.sort_by(|left, right| left.id.cmp(&right.id));
-    canvas
-}
-
 /// L'errore come lo scrive un vettore.
 fn describe(error: &OpError) -> Value {
     match error {
@@ -143,11 +138,10 @@ fn check(name: &str, vector: &Value) -> String {
                 .unwrap_or_else(|e| panic!("{name}: il modello di dopo non è valido: {e}"));
             let back = draft(&after, &inverse(&patches))
                 .unwrap_or_else(|e| panic!("{name}: l'inversa non si applica: {e}"));
-            // Un arco tolto torna in fondo alla lista (le toppe degli archi
-            // non hanno `at`, e l'ordine degli archi non si vede): per
-            // l'inversa gli archi si confrontano a prescindere dall'ordine.
+            // Un arco tolto torna al suo posto (`at`, R11): l'inversa ridà
+            // `before` con gli archi nel loro ordine.
             assert!(
-                same_canvas(&by_edge_id(back.clone()), &by_edge_id(before.clone())),
+                same_canvas(&back, &before),
                 "{name}: l'inversa non ridà `before`:\n{}",
                 serde_json::to_string_pretty(&back).unwrap_or_default(),
             );

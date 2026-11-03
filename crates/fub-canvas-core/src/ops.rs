@@ -30,9 +30,7 @@ use thiserror::Error;
 use crate::model::{
     Canvas, CanvasEdge, CanvasError, CanvasNode, MAX_EDGES, MAX_NODES, MAX_SAFE_INTEGER,
 };
-use crate::patch::{
-    self, remove_edge_patch, upsert_edge_patch, upsert_node_patch, CanvasPatch, Null,
-};
+use crate::patch::{self, upsert_edge_patch, upsert_node_patch, CanvasPatch, Null};
 
 /// Un'operazione d'intento. La forma JSON ha il campo `op` per primo, in
 /// `snake_case`; un campo che l'operazione non conosce è un errore di
@@ -181,6 +179,9 @@ struct Compiler {
     /// Le posizioni delle schede all'inizio della serie di `remove-node` in
     /// corso (vedi [`Compiler::remove`]).
     run_start: Option<HashMap<String, usize>>,
+    /// Le posizioni degli archi all'inizio della serie di `remove-edge` in
+    /// corso, come `run_start` per le schede.
+    edge_run_start: Option<HashMap<String, usize>>,
 }
 
 impl Compiler {
@@ -198,6 +199,7 @@ impl Compiler {
             taken,
             ids: IdSource::new(seed),
             run_start: None,
+            edge_run_start: None,
         }
     }
 
@@ -225,6 +227,12 @@ impl Compiler {
             .is_some_and(|patch| matches!(patch, CanvasPatch::RemoveNode { .. }))
         {
             self.run_start = None;
+        }
+        if !patches
+            .last()
+            .is_some_and(|patch| matches!(patch, CanvasPatch::RemoveEdge { .. }))
+        {
+            self.edge_run_start = None;
         }
         self.patches.extend(patches);
         Ok(())
@@ -361,6 +369,7 @@ impl Compiler {
         Ok(vec![CanvasPatch::UpsertEdge {
             before: None,
             after: edge,
+            at: None,
         }])
     }
 
@@ -371,7 +380,9 @@ impl Compiler {
     /// L'`at` di ogni `remove-node` è la posizione della scheda all'inizio
     /// della serie di `remove-node` in cui cade, anche se la serie viene da
     /// più operazioni: [`patch::inverse`] rimette le schede di una serie per
-    /// `at` crescente, e così ognuna torna al suo posto.
+    /// `at` crescente, e così ognuna torna al suo posto. Gli archi fanno lo
+    /// stesso con la serie di `remove-edge`: una serie continua da
+    /// un'operazione `remove` che ha tolto solo archi.
     fn remove(&mut self, index: usize, ids: &[String]) -> Result<Vec<CanvasPatch>, OpError> {
         distinct(index, ids)?;
         let mut nodes = Vec::new();
@@ -392,9 +403,7 @@ impl Compiler {
             }
         }
         let gone: HashSet<&str> = nodes.iter().copied().collect();
-        // Dall'ultimo al primo: l'inversa li rimette in fondo alla lista in
-        // ordine inverso, cioè in quello di prima.
-        let mut patches: Vec<CanvasPatch> = self
+        let doomed: Vec<&CanvasEdge> = self
             .working
             .edges
             .iter()
@@ -404,8 +413,41 @@ impl Compiler {
                     || gone.contains(edge.from_node.as_str())
                     || gone.contains(edge.to_node.as_str())
             })
-            .filter_map(|edge| remove_edge_patch(&self.working, &edge.id))
             .collect();
+        let continues_edge_run = self
+            .patches
+            .last()
+            .is_some_and(|patch| matches!(patch, CanvasPatch::RemoveEdge { .. }));
+        if !doomed.is_empty() && (!continues_edge_run || self.edge_run_start.is_none()) {
+            self.edge_run_start = Some(
+                self.working
+                    .edges
+                    .iter()
+                    .enumerate()
+                    .map(|(position, edge)| (edge.id.clone(), position))
+                    .collect(),
+            );
+        }
+        // Dall'ultimo al primo, ognuno con la sua posizione all'inizio della
+        // serie: l'inversa li rimette per `at` crescente.
+        let mut patches = Vec::with_capacity(doomed.len() + nodes.len());
+        for edge in doomed {
+            let at = self
+                .edge_run_start
+                .as_ref()
+                .and_then(|positions| positions.get(&edge.id).copied());
+            if at.is_none() {
+                return Err(OpError::Invalid {
+                    index,
+                    reason: format!("edge {:?} has no position to restore", edge.id),
+                });
+            }
+            patches.push(CanvasPatch::RemoveEdge {
+                before: edge.clone(),
+                after: Null,
+                at,
+            });
+        }
         if nodes.is_empty() {
             return Ok(patches);
         }

@@ -50,11 +50,11 @@ describe("i costruttori delle toppe", () => {
     expect(JSON.stringify(patch.after)).toContain('"constructor":{"keep":1},"__proto__":{"own":true}');
   });
 
-  it("togliere una scheda dice dove stava; un id che non c'è non fa toppa", () => {
+  it("togliere una scheda o un arco dice dove stava; un id che non c'è non fa toppa", () => {
     const doc = board();
     expect(removeNodePatch(doc, "n2")).toEqual({ kind: "remove-node", before: doc.nodes[1], after: null, at: 1 });
     expect(removeNodePatch(doc, "manca")).toBeNull();
-    expect(removeEdgePatch(doc, "e1")).toEqual({ kind: "remove-edge", before: doc.edges[0], after: null });
+    expect(removeEdgePatch(doc, "e1")).toEqual({ kind: "remove-edge", before: doc.edges[0], after: null, at: 0 });
     expect(removeEdgePatch(doc, "manca")).toBeNull();
   });
 

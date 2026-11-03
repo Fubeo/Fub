@@ -94,8 +94,9 @@ vettori della lettura. Nel dubbio si apre e si conserva.
 - **R7 · `null` è assente.** `"color": null`, `"label": null` e ogni altro
   campo noto facoltativo `null` valgono come assenti, e non finiscono fra i
   campi sconosciuti; `{"nodes": null}` è una lavagna vuota, anche con `edges`
-  assente. Quando Fub riscrive quella scheda, il `null` sparisce. Un campo
-  obbligatorio `null` (`"x": null`) resta un errore.
+  assente. Il `null` resta nel file finché il campo resta assente (vedi R7
+  in «Scrittura»). Un campo obbligatorio `null` (`"x": null`) resta un
+  errore.
 - **Limiti per tipo.** Ogni campo di testo noto è una stringa; le regole
   valgono solo sulla scheda del suo tipo (`text` fino a 1 MiB su `text`,
   `file` non vuoto fino a 8192 byte e `subpath` con `#` fino a 1024 byte su
@@ -124,11 +125,12 @@ numero). I casi sono in `crates/fub-canvas-core/tests/source_edit.rs`.
 - **Un oggetto** che tiene tutti i campi del sorgente e non ne aggiunge
   cambia solo i valori. Altrimenti si ricompone con il prefisso, il
   separatore (`,` se aveva un campo solo) e il suffisso che aveva: i campi
-  tolti cadono, quelli nuovi vanno in fondo come `"chiave":valore` compatti.
+  tolti cadono, quelli nuovi vanno in fondo come `"chiave":valore` compatti,
+  e un campo che resta con lo stesso valore tiene i suoi byte (`1.0`, `1e2`,
+  `"\u00e9"` non si riscrivono).
 - **`nodes` ed `edges`** si accoppiano per id: una voce rimasta tiene il suo
-  testo anche se si sposta, una voce nuova si scrive compatta, un array che
-  si svuota diventa `[]`. Il modello ha sempre `nodes` ed `edges`: una radice
-  che si ricompone e non li aveva li riceve in fondo, come in TypeScript.
+  testo anche se si sposta, una voce nuova si scrive compatta con il
+  separatore che la lista già usa, un array che si svuota diventa `[]`.
 - **Un sorgente vuoto** (R1) diventa la lavagna scritta per intero, rientrata
   di due spazi e chiusa da `"\n"`; tiene il BOM e, se il file ne aveva, i
   terminatori CRLF.
@@ -140,9 +142,18 @@ Le regole dei byte nuovi:
   numeri come `Number.prototype.toString`, anche quelli dei campi
   sconosciuti, che si scrivono come li riscriverebbe JavaScript dopo averli
   letti (`1.50` riscritto è `1.5`). Il codificatore è `js.rs`.
-- **R7 · Il `null` sparisce.** Un `"color": null` vale assente: quando Fub
-  ricompone quella scheda il campo cade; in una scheda che non cambia resta.
+- **R7 · Il `null` resta.** Un `"color": null` vale assente, e finché il
+  campo resta assente il `null` resta dov'è, con i suoi byte: non conta come
+  un campo tolto e la scheda non si ricompone per lui. Vale per ogni campo
+  noto facoltativo, anche per uno che il tipo della scheda non usa (`"url":
+  null` su una scheda di testo). Se il campo prende un valore, il valore va
+  al posto del `null`; se poi l'annulla lo toglie, il campo va via del
+  tutto, perché il modello non distingue un `null` da un campo che non c'è.
   `"edges": null` resta finché gli archi non cambiano.
+- **R11 · `nodes` ed `edges` assenti.** Una radice che non ha `nodes` o
+  `edges` non li riceve finché il modello di dopo li ha vuoti: una scheda
+  aggiunta e poi tolta lascia il file com'era. Con la prima voce l'array
+  arriva in fondo alla radice.
 - **R10 · L'ordine dei campi** di una scheda o di un arco scritti per intero:
   per le schede `id`, `type`, `x`, `y`, `width`, `height`, `color`, `text`,
   `file`, `subpath`, `url`, `label`, `background`, `backgroundStyle`; per gli
