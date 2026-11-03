@@ -2687,7 +2687,7 @@ src/state/craft-photos.test.ts src/editors/media` passa; le foto del banco
 somigliano al prototipo, in chiaro e in scuro.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/craft/photo-data.test.ts
-Stato: [~] in corso · coder · base 43454451
+Stato: [x] fatto · a7b9223c · check 18/19 (scene.test aspetta le baseline dal runner; grid/engine a tempo e block-id con l'albero a metà sotto carico, verdi da soli)
 
 ## T26 · L'albero: le miniature e gli XMP nascosti
 

@@ -59,6 +59,21 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- N7 T25 (a7b9223c): i dati dell'XMP di LightCraft sotto la foto. Differenze
+  dal piano: acceso o spento si legge dal kernel (`craft.photo` fra i
+  comandi), bootstrap passa sempre `photoData`; tre file fuori da «Tocca»
+  (desktop-shell.ts per mountCraftPhotos, bench/fake-ipc.ts con
+  `?photo=xmp|senza`, bench/photo-fixture.ts); `LABEL_COLORS` e
+  `COLOR_NAMES` esportati da xmp-view.ts; la domanda parte dopo che la foto
+  è disegnata (o dopo la frase d'errore di TIFF/HEIC); craft-photos ascolta
+  anche gli eventi `entry_*` (una foto è una risorsa); il fake host elenca
+  `craft.preview` e `craft.photo` col componente acceso; il voto -1 mostra
+  «Scartata». Rischi: i RAW non contano come foto (`isPhotoDoc`), T28 deve
+  allargarlo; il fake host copia la regola dei candidati XMP; le baseline
+  delle 2 scene nuove vengono dal runner; niente prova sull'host vero. Nel
+  check, block-id.test (seme fisso) è caduto sotto carico: il campo si
+  calcola con l'albero a metà e `ensureSyntaxTree` dopo non lo ricalcola;
+  verde da solo, non è di T25.
 - 2026-11-03 · N7 · T22 (fd595ce4, cb2bd25e): l'orchestratore ha permesso al
   coder di toccare `craft/preview.rs` (`limit_of`, `over_limit(limit)`,
   `fill(limit)`), perché il tetto per formato vive lì e nessun altro task lo
