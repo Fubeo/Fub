@@ -59,6 +59,19 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- T6 (orchestratore, revisione): la nota aperta entra nel campo `doc` con
+  `withActiveDoc`, usata sia da `startCommand` sia da `start` (la scelta
+  dalla lista passa da `start`); è una proposta in un campo modificabile e
+  non guarda il formato. Gli elenchi si dicono per i cinque permessi su cui
+  il Guard applica `path_allowlist` (read-vault, write-vault, read-drafts,
+  read-session, read-selection) e per `fub:run-command` con l'id esatto del
+  comando; `external-fs` resta muto. Le letture sono quelle del Guard: un
+  elenco scritto male si dice «nessuno»; per la rete prima diceva «qualunque
+  indirizzo», al contrario del Guard
+  (`a_malformed_allowlist_fences_everything_out`), ed è corretto. Oltre sei
+  voci, «e altri N». `overflow-wrap: anywhere` sulla riga dell'elenco,
+  nessuna classe nuova; T12 rigenererà skin.css dopo di questo · fonte:
+  report del coder, revisione e foto del banco
 - T3 (orchestratore, revisione): `a_command_provider_respects_the_contract`
   e le due regole di scrittura rendono `Vec<SkippedCommand>`, aggiunta alla
   firma del piano, e i comandi saltati si stampano su stderr. Si salta

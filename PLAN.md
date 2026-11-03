@@ -694,7 +694,7 @@ pieno e uno senza resta com'è; in `permissions.test.ts` un permesso con elenco
 mostra l'elenco e uno malformato dice «nessuno»; `npm run typecheck` e
 `npm test` verdi.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base 5286c4f5
+Stato: [x] fatto · 9eacb237, dc9dee5e · check --rapido 11/12 sull'integrazione: rosso solo Vitest per due instabili noti (grid/engine, theme/runtime), verdi rilanciati da soli (88/88)
 
 ## T7 · L'esecuzione, l'annullamento e la prova di una ricetta
 
