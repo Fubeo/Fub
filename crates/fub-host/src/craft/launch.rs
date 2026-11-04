@@ -933,13 +933,18 @@ mod tests {
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
-        let mut child = thread::spawn(move || {
+        // Il thread resta vivo finché la CLI non ha scritto il suo pid: così
+        // la morte arriva solo dopo, e solo perché il thread è uscito.
+        let pid_file = scripts.path("pid");
+        let (mut child, pid) = thread::spawn(move || {
             own_group(&mut command);
-            command.spawn().expect("avviata")
+            let child = command.spawn().expect("avviata");
+            let pid = read_pid(&pid_file);
+            assert!(!gone(pid), "la CLI è morta prima che il thread uscisse");
+            (child, pid)
         })
         .join()
         .expect("il thread");
-        let pid = read_pid(&scripts.path("pid"));
         assert_gone(pid);
         let status = child.wait().expect("raccolta");
         use std::os::unix::process::ExitStatusExt;
