@@ -51,6 +51,13 @@ export interface SurfaceMountContext {
   readonly revision?: string;
   /** Detail of a rejected document, displayed only by the inert error surface. */
   readonly errorReason?: string;
+  /**
+   * The mount was born from a user gesture that opened the document (a click
+   * or Enter on a tree row, a search result, a link in a note). Absent means
+   * `false`: a remount, a restored tab or a tab that only takes focus never
+   * carries it.
+   */
+  readonly gesture?: boolean;
 }
 
 /** A selected range, in UTF-8 bytes of the document source, with its text. */

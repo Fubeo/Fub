@@ -10714,6 +10714,74 @@ button.draw-isolation-crumb:hover {
   cursor: default;
 }
 
+/* La domanda sulle anteprime fatte dalle app (T23), nel riquadro al posto del
+   pulsante: un filo la stacca da ciò che dice il file. Le due risposte pesano
+   uguale, perché è una scelta e non un invito. */
+.craft-ask {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--border);
+}
+.craft-ask-text {
+  max-width: 30rem;
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-base);
+}
+.craft-ask-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3) var(--space-4);
+}
+.craft-ask-answer {
+  padding: var(--space-3) var(--space-6);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.craft-ask-answer:hover,
+.craft-ask-answer:focus-visible {
+  background: var(--accent-wash);
+  color: var(--accent-soft);
+}
+.craft-ask-answer:active {
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+}
+.craft-ask-answer:disabled {
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.4;
+  cursor: default;
+}
+.craft-ask-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+/* Spente: una riga in grafite, col collegamento alle impostazioni. */
+.craft-off {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
 /* La scheda di un XMP: i campi scorrono, la riga su LightCraft resta in
    fondo. Le parole chiave sono i tag della nota e vanno a capo: mai uno
    scorrimento di lato. */

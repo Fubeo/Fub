@@ -157,10 +157,10 @@ describe("la figura nella nota", () => {
       docs: { [LOGO]: { image: png(8, 6), render: { app: "VectorCraft" } } },
     });
     const life = openLifetime();
-    const opened: string[] = [];
+    const opened: Array<[string, unknown]> = [];
     const embed = slot(container);
     await figure.showEmbeddedCraft(container, embed, figure.craftPlaceholder(placeholderHtml(LOGO))!, life, {
-      open: (doc) => { opened.push(doc); },
+      open: (doc, options) => { opened.push([doc, options]); },
     });
     const img = embed.querySelector<HTMLImageElement>("figure.craft-figure > img")!;
     expect(img.getAttribute("src")).toBe("blob:figura-1");
@@ -171,15 +171,17 @@ describe("la figura nella nota", () => {
     expect(embed.classList.contains("embed-media")).toBe(true);
     embed.querySelector<HTMLElement>("figure")!.click();
     await settle();
-    expect(opened).toEqual([LOGO]);
+    // Il clic è un gesto: la scheda che nasce lo porta. La figura no.
+    expect(opened).toEqual([[LOGO, { gesture: true }]]);
     expect(previewAsks(host)).toEqual([{ doc: LOGO, size: "small" }]);
+    expect(host.atGate("craftRender")).toHaveLength(0);
     life.close();
     expect(urls.revoked).toEqual(["blob:figura-1"]);
   });
 
   it("senza anteprima: il riquadro col nome e l'app, anche quando l'app saprebbe farla", async () => {
     const { figure, host, container, openLifetime } = await boot({
-      docs: { [LOGO]: { info: { format_version: "4" }, render: { app: "VectorCraft" } } },
+      docs: { [LOGO]: { info: { format_version: "4" }, render: { app: "VectorCraft", consent: "on" } } },
     });
     const embed = slot(container);
     await figure.showEmbeddedCraft(container, embed, figure.craftPlaceholder(placeholderHtml(LOGO))!, openLifetime());
@@ -191,6 +193,7 @@ describe("la figura nella nota", () => {
     expect(urls.made).toEqual([]);
     expect(previewAsks(host)).toHaveLength(1);
     expect(host.atGate("invokeCommand").length).toBe(1);
+    expect(host.atGate("craftRender")).toHaveLength(0);
   });
 
   it("l'alias del link è il nome della figura", async () => {

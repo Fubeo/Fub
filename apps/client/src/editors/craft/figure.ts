@@ -8,7 +8,8 @@
 // file porta, un'immagine con il nome sotto; senza, il riquadro col nome e
 // l'app, e per un XMP i suoi dati principali. Un JPEG (la foto di un RAW) si
 // mostra come un PNG. `craft.preview` non avvia mai l'app che farebbe
-// l'anteprima, e una nota non la chiede. Il segnaposto non entra mai nella
+// l'anteprima, e una nota non la chiede: il clic sulla figura apre la scheda
+// con il gesto, ed è la scheda che decide (T23). Il segnaposto non entra mai nella
 // nota: il suo markup si legge e si butta.
 //
 // Tutto ciò che la figura accende (l'URL `blob:` dell'immagine, gli
@@ -38,9 +39,12 @@ export interface CraftPlaceholder {
 
 /// Ciò che la figura chiede alla shell. Di serie le anteprime sono quelle di
 /// `state/craft-previews.ts`; senza `open` la figura non si apre con un clic
-/// (la stampa).
+/// (la stampa, l'anteprima al passaggio).
 export interface CraftFigureDeps {
-  readonly open?: (doc: string) => void | Promise<void>;
+  /// Apre il file nella sua scheda. Lo chiama soltanto un clic o Invio sulla
+  /// figura, cioè un gesto: la scheda che nasce può chiedere l'anteprima
+  /// all'app. La figura non la chiede mai (`renderPreview` non è qui).
+  readonly open?: (doc: string, options: { gesture: true }) => void | Promise<void>;
   readonly previews?: {
     previewOf(doc: string, size: "small"): Promise<CraftPreviewAnswer | null>;
     watch(lifetime: Lifetime, watcher: (doc: string) => void): void;
@@ -175,7 +179,7 @@ export async function showEmbeddedCraft(
     const go = (event: Event) => {
       event.preventDefault();
       event.stopPropagation();
-      void Promise.resolve().then(() => open(placeholder.doc)).catch(() => {});
+      void Promise.resolve().then(() => open(placeholder.doc, { gesture: true })).catch(() => {});
     };
     drawn.listen(element, "click", go);
     drawn.listen(element, "keydown", (event) => {

@@ -3,11 +3,13 @@
 // Le anteprime dei file Craft contro l'host finto: una risposta per documento
 // e misura, una domanda sola in volo, il job `craft.render` che porta
 // l'immagine quando finisce, e le risposte che si dimenticano
-// quando il documento o il vault cambiano. Ogni caso riparte da moduli nuovi,
+// quando il documento, il vault o il consenso cambiano. `renderPreview`, la
+// sola che chiede l'anteprima all'app: una richiesta per chiave, la risposta
+// in coda tenuta, `no_consent` che fa richiedere. Ogni caso riparte da moduli nuovi,
 // perché il modulo ricorda le risposte.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeCraft, FakeHost } from "../host/fake";
-import type { CraftPreview, CraftPreviewImage } from "../host/craft";
+import type { CraftPreview, CraftPreviewImage, CraftPreviewSize } from "../host/craft";
 
 const box = vi.hoisted(() => ({ host: null as FakeHost | null }));
 
@@ -52,8 +54,8 @@ const LOGO = "Disegni/logo.vectorcraft";
 const SCHIZZO = "Disegni/schizzo.vectorcraft";
 const BYTES = { bytes: new Uint8Array([0x7b, 0x7d, 0xff]), mime: "application/octet-stream" };
 
-async function boot(craft: FakeCraft) {
-  const host = createFakeHost({ resources: { [LOGO]: BYTES, [SCHIZZO]: BYTES }, craft });
+async function boot(craft: FakeCraft, craftRender?: (doc: string, size: CraftPreviewSize) => Promise<CraftPreview>) {
+  const host = createFakeHost({ resources: { [LOGO]: BYTES, [SCHIZZO]: BYTES }, craft, ...(craftRender ? { craftRender } : {}) });
   box.host = host;
   vi.resetModules();
   const store = await import("./store");
@@ -67,6 +69,18 @@ async function boot(craft: FakeCraft) {
   const heard: string[] = [];
   previews.watchCraftPreviews(life, (doc) => heard.push(doc));
   return { host, previews, life, heard, store };
+}
+
+function renders(host: FakeHost): unknown[] {
+  return host.atGate("craftRender").map((call) => call.args);
+}
+
+/// `craft_render` del finto: la risposta di `craft.preview` in coda.
+function queuing(host: () => FakeHost) {
+  return async (doc: string, size: CraftPreviewSize): Promise<CraftPreview> => {
+    const outcome = await host().module.api.invokeCommand("craft.preview", { doc, size });
+    return { ...(outcome.effect as { payload: CraftPreview }).payload, queued: true };
+  };
 }
 
 function asked(host: FakeHost): unknown[] {
@@ -206,5 +220,100 @@ describe("le anteprime dei file Craft", () => {
     host.writeFromOutside(LOGO, "{}");
     await settle();
     expect(heard).toEqual([]);
+  });
+});
+
+describe("renderPreview", () => {
+  const ON = { docs: { [LOGO]: { render: { app: "VectorCraft", consent: "on" as const } } } };
+
+  it("previewOf non chiama mai craft_render; renderPreview una volta, e tiene la risposta in coda", async () => {
+    const { host, previews, heard } = await boot(ON, queuing(() => box.host!));
+    await previews.previewOf(LOGO, "large");
+    await previews.previewOf(LOGO, "small");
+    expect(renders(host)).toEqual([]);
+    const answer = await previews.renderPreview(LOGO, "large");
+    expect(answer?.preview.queued).toBe(true);
+    expect(renders(host)).toEqual([[LOGO, "large"]]);
+    expect(previews.peekPreview(LOGO, "large")).toBe(answer);
+    expect(heard).toContain(LOGO);
+    // Una risposta in coda non ne fa partire un'altra, e `previewOf` la trova.
+    expect(await previews.renderPreview(LOGO, "large")).toBe(answer);
+    expect(await previews.previewOf(LOGO, "large")).toBe(answer);
+    expect(renders(host)).toHaveLength(1);
+  });
+
+  it("due richieste insieme (due riquadri) fanno una chiamata sola", async () => {
+    const { host, previews } = await boot(ON, queuing(() => box.host!));
+    const [a, b] = await Promise.all([previews.renderPreview(LOGO, "large"), previews.renderPreview(LOGO, "large")]);
+    expect(a).toBe(b);
+    expect(renders(host)).toHaveLength(1);
+  });
+
+  it("la risposta di craft.preview della stessa revisione non copre quella in coda; il job_done porta l'immagine", async () => {
+    const { host, previews } = await boot(ON, queuing(() => box.host!));
+    const queued = await previews.renderPreview(LOGO, "large");
+    host.writeFromOutside(SCHIZZO, "{}");
+    await settle();
+    expect(previews.peekPreview(LOGO, "large")).toBe(queued);
+    host.emit({ type: "job_done", id: "j1", job: "craft.render", result: { Ok: rendered(queued!.preview, png(8, 8)) } });
+    await settle();
+    expect(previews.peekPreview(LOGO, "large")?.preview.image?.width).toBe(8);
+  });
+
+  it("no_consent rifiuta e fa dimenticare le risposte: chi guarda richiede", async () => {
+    const denied = { kind: "permission_denied", message: "Le anteprime fatte dalle app sono spente" };
+    const { host, previews, heard } = await boot(ON, () => Promise.reject(denied));
+    await previews.previewOf(LOGO, "large");
+    heard.length = 0;
+    await expect(previews.renderPreview(LOGO, "large")).rejects.toEqual(denied);
+    expect(previews.peekPreview(LOGO, "large")).toBeNull();
+    expect(heard).toEqual([""]);
+    expect(renders(host)).toHaveLength(1);
+  });
+
+  it("un altro rifiuto (nessuna CLI) non tocca le risposte", async () => {
+    const missing = { kind: "not_found", message: "nessuna CLI" };
+    const { previews } = await boot(ON, () => Promise.reject(missing));
+    const before = await previews.previewOf(LOGO, "large");
+    await expect(previews.renderPreview(LOGO, "large")).rejects.toEqual(missing);
+    expect(previews.peekPreview(LOGO, "large")).toBe(before);
+  });
+
+  it("il consenso che cambia fa dimenticare le risposte, tranne quelle in coda", async () => {
+    const { host, previews, heard } = await boot(
+      { docs: { [LOGO]: { render: { app: "VectorCraft", consent: "on" } }, [SCHIZZO]: { render: { app: "VectorCraft" } } } },
+      queuing(() => box.host!),
+    );
+    const queued = await previews.renderPreview(LOGO, "large");
+    await previews.previewOf(SCHIZZO, "large");
+    heard.length = 0;
+    host.emit({ type: "setting_changed", key: "craft.cli-previews", scope: "machine" });
+    await settle();
+    expect(heard).toEqual([""]);
+    expect(previews.peekPreview(SCHIZZO, "large")).toBeNull();
+    expect(previews.peekPreview(LOGO, "large")).toBe(queued);
+    // Un'altra impostazione non tocca niente.
+    await previews.previewOf(SCHIZZO, "large");
+    heard.length = 0;
+    host.emit({ type: "setting_changed", key: "craft.editor-paths", scope: "machine" });
+    await settle();
+    expect(heard).toEqual([]);
+    expect(previews.peekPreview(SCHIZZO, "large")).not.toBeNull();
+  });
+
+  it("il vault che cambia mentre la richiesta è in volo: la risposta non entra", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const queue = queuing(() => box.host!);
+    const { host, previews } = await boot(ON, async (doc, size) => {
+      await gate;
+      return queue(doc, size);
+    });
+    const pending = previews.renderPreview(LOGO, "large");
+    host.emit({ type: "vault_closed", root: "/vault" });
+    await settle();
+    release();
+    expect(await pending).toBeNull();
+    expect(previews.peekPreview(LOGO, "large")).toBeNull();
   });
 });

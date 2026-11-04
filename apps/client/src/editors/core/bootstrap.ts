@@ -50,6 +50,9 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onImportRemoteImage?: (url: string, from: string) => Promise<string | null>;
   readonly onOpenDocument: (doc: string) => void | Promise<void>;
   readonly onSearchTag: (tag: string) => void;
+  /// Apre le impostazioni sul gruppo della riga `key` (la scheda di un file
+  /// Craft, per il consenso e il peso massimo).
+  readonly onOpenSettings?: (key: string) => void;
   /// Rinomina una pagina dal titolo della testata dei Blocchi: `null` se è
   /// andata, altrimenti la frase che dice perché no.
   readonly onRenamePage?: (doc: string, name: string) => Promise<string | null>;
@@ -459,6 +462,7 @@ export function createDocumentSurfaceRegistry(
         return mountCraftSurface(profile, context, {
           onOpenDocument: options.onOpenDocument,
           onSearchTag: options.onSearchTag,
+          ...(options.onOpenSettings ? { onOpenSettings: options.onOpenSettings } : {}),
         });
       },
     },

@@ -483,6 +483,28 @@ async function open(): Promise<void> {
   await render();
 }
 
+/// Apre le impostazioni sulla sezione che contiene la riga `key`, come chi
+/// sceglie quella sezione dall'indice: la scheda «Impostazioni», la sezione
+/// in cima e il fuoco sul suo titolo. La usa la scheda di un file Craft per
+/// portare al gruppo «App esterne». Una riga che non c'è (il componente
+/// spento) apre le impostazioni e basta.
+export async function openSettingsAt(key: string): Promise<void> {
+  const owner = settingsLifetime;
+  if (!owner || owner.closed) return;
+  if (tab !== "settings") {
+    tab = "settings";
+    pinnedRow = null;
+    componentsGeneration++;
+    syncToolbar();
+  }
+  if (release) await render();
+  else await open();
+  if (owner.closed || owner !== settingsLifetime) return;
+  const row = bodyEl.querySelector<HTMLElement>(`[data-setting-key="${CSS.escape(key)}"]`);
+  const section = row?.closest<HTMLElement>(".settings-section");
+  if (section?.id) jumpTo(section.id);
+}
+
 function close(): void {
   release?.();
   race.cancel();

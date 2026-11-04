@@ -691,7 +691,7 @@ function createRow(name: string): HTMLElement {
     rememberSearch(searchInputEl.value);
     void createNote(name)
       .then((doc) => {
-        if (doc) void openDocument(doc);
+        if (doc) void openDocument(doc, { gesture: true });
       })
       .catch((e: unknown) => notify(errorText(e), "guasto"));
   });
@@ -716,7 +716,7 @@ function openAt(el: HTMLElement, doc: string, byteOffset?: number): void {
     // «r», «ri», «riu». Ciò che vale la pena ricordare è il testo che ha
     // prodotto un'apertura, cioè una ricerca **conclusa** (0086).
     rememberSearch(searchInputEl.value);
-    void openDocument(doc).then(() => {
+    void openDocument(doc, { gesture: true }).then(() => {
       if (byteOffset !== undefined) return reveal(doc, { span: { start: byteOffset, end: byteOffset } });
     });
   });

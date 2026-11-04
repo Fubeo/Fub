@@ -5,11 +5,15 @@
 // e la barra di una foto) e sotto la riga dei dati, cioè l'app, la versione
 // del formato se il file la dice, il peso. Senza: un riquadro col nome del
 // file e la riga dei dati, con ciò che succede all'anteprima («Preparo
-// l'anteprima…», «File troppo grande per l'anteprima»: la frase viene da
+// l'anteprima…», «Il file non si legge: forse è rotto»: la frase viene da
 // `missing`, il perché che il bundle dice) e, se un'app installata sa farla,
-// il pulsante «Crea l'anteprima con …». `craft.preview` non avvia mai
-// l'app: il pulsante richiede l'anteprima e basta, finché il biglietto di
-// `craft_render` non c'è (T11, T23). Un XMP si disegna con `xmp-view.ts`.
+// ciò che il consenso dice (`consent.ts`): la domanda, la riga «spente» o il
+// pulsante «Crea l'anteprima con …». `craft.preview` non avvia mai l'app:
+// la chiede soltanto `renderPreview`, dopo un gesto. La scheda nata da un
+// gesto (`context.gesture`) col consenso acceso la chiede una volta al
+// montaggio; ogni altra scheda (riaperta all'avvio, rimontata, aperta da un
+// link `fub://` o da una vista) mostra il pulsante (T23). Un XMP si disegna
+// con `xmp-view.ts`.
 //
 // Tutto ciò che la scheda accende vive nella `Lifetime` della superficie: una
 // risposta che arriva a scheda chiusa si scarta.
@@ -19,7 +23,8 @@ import type { CraftPreview } from "../../host/craft";
 import { asPluginError, errorText } from "../../host/errors";
 import { onLanguage, t } from "../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
-import { previewOf, watchCraftPreviews, type CraftPreviewAnswer } from "../../state/craft-previews";
+import { previewOf, renderPreview, watchCraftPreviews, type CraftPreviewAnswer } from "../../state/craft-previews";
+import { mountConsent, settingsLink } from "./consent";
 import { decodeImage, mountImageView } from "../media/image-view";
 import { CRAFT_PROFILE, craftInfoText, fileName, type CraftSurfaceDeps } from "./index";
 import { mountXmpView } from "./xmp-view";
@@ -29,6 +34,16 @@ import { mountXmpView } from "./xmp-view";
 /// rispetta anche se l'offerta arrivasse.
 export function offersRender(preview: CraftPreview): boolean {
   return preview.image === null && !preview.queued && preview.render !== null && preview.missing !== "over_limit";
+}
+
+/// L'impostazione del peso massimo, di T19: la frase di `over_limit` ci
+/// rimanda.
+const CRAFT_MAX_SETTING = "craft.preview-max-mib";
+
+/// Il peso massimo come lo dice l'impostazione: i MiB interi, uno spazio che
+/// non va a capo e «MiB» («64 MiB», non il «64.0 MiB» di `formatBytes`).
+export function limitText(bytes: number | null): string {
+  return bytes === null ? "\u2014" : `${Math.floor(bytes / 1048576)}\u00a0MiB`;
 }
 
 /// I byte dell'immagine che l'anteprima porta in base64.
@@ -83,6 +98,9 @@ export function mountCraftContent(
   /// La frase della riga di stato, quando la scheda mostra soltanto quella.
   let said: (() => string) | null = null;
   let drawing: Lifetime | null = null;
+  /// Il gesto che ha fatto nascere la scheda: vale per la prima risposta e
+  /// poi si spegne, così un ridisegno non chiede di nuovo.
+  let gesture = context.gesture === true;
   life.add(() => {
     drawing?.close();
     drawing = null;
@@ -123,7 +141,31 @@ export function mountCraftContent(
     );
   }
 
+  /// Chiede l'anteprima all'app: il gesto c'è (la scheda nata da un gesto, il
+  /// pulsante, il «Sì»). La risposta in coda ridisegna; un rifiuto lo dice,
+  /// e `no_consent` fa richiedere (torna la domanda o la riga «spente»).
+  function render(): void {
+    const mine = ++ticket;
+    renderPreview(doc, "large").then(
+      (answer) => {
+        if (life.closed || mine !== ticket || !answer) return;
+        draw(answer, true);
+      },
+      (error: unknown) => {
+        if (life.closed || mine !== ticket) return;
+        if (asPluginError(error)?.kind === "permission_denied") {
+          load(true);
+          return;
+        }
+        if (shown) draw({ preview: shown.preview, renderError: error }, true);
+        else status(() => t("craft.render_failed", { reason: errorText(error) }));
+      },
+    );
+  }
+
   function draw(answer: CraftPreviewAnswer, force = false): void {
+    const born = gesture;
+    gesture = false;
     const sign = signature(answer);
     if (!force && sign === drawn) return;
     drawn = sign;
@@ -146,6 +188,7 @@ export function mountCraftContent(
       }
     }
     drawEmpty(answer, null);
+    if (born && offersRender(preview) && preview.render!.consent === "on") render();
   }
 
   function drawImage(preview: CraftPreview): void {
@@ -177,19 +220,17 @@ export function mountCraftContent(
     const state = paragraph("craft-empty-state", stateText(answer, broken));
     state.setAttribute("role", "status");
     box.append(state);
+    // Il fuoco era nella scheda: dopo il ridisegno lo prende il primo
+    // pulsante della domanda, e mai lo si ruba da fuori.
+    const focused = root.contains(document.activeElement);
     const own = replace(box);
+    if (broken === null && !preview.queued && answer.renderError === null && preview.missing === "over_limit") {
+      const link = settingsLink(CRAFT_MAX_SETTING, deps.onOpenSettings, own);
+      if (link) box.append(link);
+    }
     if (!offersRender(preview)) return;
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "craft-render";
-    button.textContent = t("craft.render", { app: preview.render!.app });
-    own.listen(button, "click", () => {
-      if (button.disabled) return;
-      button.disabled = true;
-      // Ridisegnata comunque: senza un'anteprima nuova, il pulsante torna.
-      load(true);
-    });
-    box.append(button);
+    mountConsent(box, preview.render!, { render, openSettings: deps.onOpenSettings, focused }, own);
+    if (focused && !root.contains(document.activeElement)) root.focus({ preventScroll: true });
   }
 
   function stateText(answer: CraftPreviewAnswer, broken: string | null): string {
@@ -197,10 +238,16 @@ export function mountCraftContent(
     if (broken !== null) return t("craft.failed", { reason: broken });
     if (preview.queued) return t("craft.queued");
     if (answer.renderError !== null) return t("craft.render_failed", { reason: errorText(answer.renderError) });
-    // Le frasi di `unreadable` e `failed` arrivano coi task che le mostrano:
-    // fino ad allora la scheda dice ciò che diceva.
-    if (preview.missing === "over_limit") return t("craft.too_large");
-    return t("craft.no_preview");
+    switch (preview.missing) {
+      case "over_limit":
+        return t("craft.over_limit", { limit: limitText(preview.limit_bytes) });
+      case "unreadable":
+        return t("craft.unreadable");
+      case "failed":
+        return t("craft.cli_failed", { app: preview.render?.app ?? preview.info.editor });
+      default:
+        return t("craft.no_preview");
+    }
   }
 
   const loading = paragraph("craft-status", t("craft.loading"));

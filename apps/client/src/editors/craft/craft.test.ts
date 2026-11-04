@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 //
 // La scheda dei file Craft e degli XMP (N7) contro l'host finto: ogni forma
-// della risposta di `craft.preview` (ogni `missing`, un JPEG, la revisione
-// nulla), il pulsante che non avvia niente, il `job_done` che porta
+// della risposta di `craft.preview` (ogni `missing` con la sua frase, un
+// JPEG, la revisione nulla), il pulsante, il `job_done` che porta
 // l'immagine, la revisione che cambia, la
 // risposta che arriva a scheda chiusa, il componente spento, e la vista XMP
 // con ogni campo e con ogni campo assente.
@@ -135,22 +135,25 @@ describe("la scheda di un file Craft", () => {
     expect(previewCalls(host).every((args) => !("render" in args))).toBe(true);
   });
 
-  it("con l'app installata c'è il pulsante, e la scheda non chiede mai di fare l'anteprima", async () => {
-    const { host, parent } = await mount(LOGO, craft({ render: { app: "VectorCraft" } }));
+  it("con l'app installata e il consenso acceso c'è il pulsante, e senza gesto la scheda non chiede l'anteprima", async () => {
+    const { host, parent } = await mount(LOGO, craft({ render: { app: "VectorCraft", consent: "on" } }));
     await until(() => parent.querySelector(".craft-render") !== null);
     expect(text(parent, ".craft-empty-state")).toBe("Il file non porta un'anteprima");
     const button = parent.querySelector<HTMLButtonElement>(".craft-render")!;
     expect(button.textContent).toBe("Crea l'anteprima con VectorCraft");
-    // Il pulsante resta com'è finché il biglietto di craft_render non c'è:
-    // richiede l'anteprima, e torna.
+    expect(host.atGate("craftRender")).toHaveLength(0);
+    // Il pulsante è un gesto: una richiesta a craft_render, anche con due
+    // clic. Senza la porta servita, il rifiuto si dice e il pulsante torna.
     button.click();
     button.click();
     await until(() => parent.querySelector<HTMLButtonElement>(".craft-render")?.disabled === false);
+    expect(host.atGate("craftRender").map((call) => call.args)).toEqual([[LOGO, "large"]]);
+    expect(text(parent, ".craft-empty-state")).toMatch(/^L'anteprima non è riuscita: /);
     expect(previewCalls(host).every((args) => !("render" in args))).toBe(true);
   });
 
   it("il job_done porta l'immagine nella scheda", async () => {
-    const { host, parent } = await mount(LOGO, craft({ render: { app: "VectorCraft" } }));
+    const { host, parent } = await mount(LOGO, craft({ render: { app: "VectorCraft", consent: "on" } }));
     await until(() => parent.querySelector(".craft-render") !== null);
     const mine = ((await host.module.api.invokeCommand("craft.preview", { doc: LOGO, size: "large" })).effect as { payload: object }).payload;
     host.emit({ type: "job_done", id: "j", job: "craft.render", result: { Ok: { ...mine, image: png(64, 32), origin: "cli", missing: null, render: null } } });
@@ -159,7 +162,7 @@ describe("la scheda di un file Craft", () => {
   });
 
   it("un job finito male o di un altro documento non tocca la scheda", async () => {
-    const { host, parent } = await mount(LOGO, craft({ render: { app: "VectorCraft" } }));
+    const { host, parent } = await mount(LOGO, craft({ render: { app: "VectorCraft", consent: "on" } }));
     await until(() => parent.querySelector(".craft-render") !== null);
     const other = ((await host.module.api.invokeCommand("craft.preview", { doc: XMP, size: "large" })).effect as { payload: object }).payload;
     host.emit({ type: "job_done", id: "j", job: "craft.render", result: { Ok: { ...other, image: png(2, 2), origin: "cli" } } });
@@ -170,22 +173,25 @@ describe("la scheda di un file Craft", () => {
     expect(parent.querySelector(".craft-render")).not.toBeNull();
   });
 
-  it("over_limit dice che è troppo grande, senza pulsante; il peso da solo non lo dice", async () => {
-    const big = await mount(LOGO, craft({ missing: "over_limit", info: { bytes: 64 * 1024 * 1024 + 1 }, render: { app: "VectorCraft" } }));
+  it("over_limit dice il peso massimo in MiB interi, senza pulsante; il peso da solo non lo dice", async () => {
+    const big = await mount(LOGO, craft({ missing: "over_limit", limit_bytes: 64 * 1024 * 1024 + 5000, info: { bytes: 64 * 1024 * 1024 + 1 }, render: { app: "VectorCraft", consent: "on" } }));
     await until(() => big.parent.querySelector(".craft-empty") !== null);
-    expect(text(big.parent, ".craft-empty-state")).toBe("File troppo grande per l'anteprima");
+    expect(text(big.parent, ".craft-empty-state")).toBe("Il file pesa più del massimo da leggere per un'anteprima (64\u00a0MiB)");
     expect(big.parent.querySelector(".craft-render")).toBeNull();
+    expect(big.parent.querySelector(".craft-ask")).toBeNull();
     // La shell non rifà il conto del peso: lo dice `missing`.
     const heavy = await mount(LOGO, craft({ info: { bytes: 64 * 1024 * 1024 + 1 } }));
     await until(() => heavy.parent.querySelector(".craft-empty") !== null);
     expect(text(heavy.parent, ".craft-empty-state")).toBe("Il file non porta un'anteprima");
   });
 
-  it("unreadable e failed dicono ancora che l'anteprima non c'è", async () => {
+  it("unreadable e failed hanno la loro frase", async () => {
+    const said = { unreadable: "Il file non si legge: forse è rotto", failed: "VectorCraft non è riuscita a fare l'anteprima" };
     for (const missing of ["unreadable", "failed"] as const) {
       const { parent } = await mount(LOGO, craft({ missing }));
       await until(() => parent.querySelector(".craft-empty") !== null);
-      expect(text(parent, ".craft-empty-state"), missing).toBe("Il file non porta un'anteprima");
+      expect(text(parent, ".craft-empty-state"), missing).toBe(said[missing]);
+      expect(parent.querySelector(".craft-render, .craft-ask"), missing).toBeNull();
     }
   });
 

@@ -182,6 +182,9 @@ export interface DocumentDeps {
   /// Esegue un comando come la tastiera e la palette: per i pulsanti della
   /// barra di formattazione che non sono azioni dell'editor.
   runCommand(id: string): void;
+  /// Apre le impostazioni sul gruppo della riga `key`: la scheda di un file
+  /// Craft ci rimanda per il consenso e il peso massimo.
+  openSettings?(key: string): void;
 }
 
 /// I tre elementi di un riquadro che il controller tiene. Glieli dà la vista
@@ -784,8 +787,9 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     onSelectionChange: (paneId) => {
       if (layout.focus === paneId) scheduleContext();
     },
+    // Il clic su un link è un gesto: la scheda che nasce lo sa (T23).
     onOpenWikilink: (page, heading, block) =>
-      openWikilink(page, heading ?? undefined, block ?? undefined),
+      openWikilink(page, heading ?? undefined, block ?? undefined, undefined, { gesture: true }),
     onOpenWikilinkBeside: async (page, heading, block) => {
       const target = await resolvedReference({ kind: "wiki", value: { page, heading, block } }, activeDoc() ?? undefined);
       if (!target) throw new Error(t("preview.target_missing"));
@@ -805,7 +809,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     onOpenPath: async (path, from) => {
       const target = await resolvedReference({ kind: "path", value: path }, from ?? activeDoc() ?? undefined);
       if (!target) throw new Error(t("preview.target_missing"));
-      await openDocument(target.doc);
+      await openDocument(target.doc, { gesture: true });
       if (target.at) await reveal(target.doc, { span: target.at.span });
     },
     onImportRemoteImage: importRemoteImage,
@@ -833,11 +837,11 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     drawingFonts,
     renderCanvasMarkdown: (_nodeId, text, host, documentId, forms) => mountMarkdown(host, renderMarkdown(text, forms).html, {
       documentId,
-      openWikilink: (page, heading, block) => openWikilink(page, heading, block),
+      openWikilink: (page, heading, block) => openWikilink(page, heading, block, undefined, { gesture: true }),
       openPath: async (path, from) => {
         const target = await resolvedReference({ kind: "path", value: path }, from ?? documentId);
         if (!target) throw new Error(t("preview.target_missing"));
-        await openDocument(target.doc);
+        await openDocument(target.doc, { gesture: true });
         if (target.at) await reveal(target.doc, { span: target.at.span });
       },
       searchTag: (tag) => deps.searchTag(tag),
@@ -881,6 +885,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       watch: (changed) => on("link-cards", changed),
     },
     runShellCommand: (id) => deps.runCommand(id),
+    ...(deps.openSettings ? { onOpenSettings: (key: string) => deps.openSettings?.(key) } : {}),
     requestMode: (paneId, mode) => {
       if (layout.focus !== paneId) focusPane(paneId);
       void setMode(mode);
@@ -2045,6 +2050,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   if (!tab) {
     return;
   }
+  const gesture = takeGesture(r.id, tab.doc);
 
   // Un file che nessun formato del vault gestisce e che il registro sa
   // mostrare dai byte (un'immagine, un PDF) non ha una sorgente UTF-8: la
@@ -2058,7 +2064,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     tab = forgetOverride(r, tab);
     const surface = surfaceRegistry.mount(
       { formatId: null, sourceKind: "bytes", documentId: tab.doc },
-      { paneId: r.id, documentId: tab.doc, parent: r.editorEl },
+      { paneId: r.id, documentId: tab.doc, parent: r.editorEl, ...(gesture ? { gesture } : {}) },
     );
     r.surface = surface;
     surface.setMode("view");
@@ -2110,6 +2116,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
         parent: r.editorEl,
         formatId: source.formatId,
         revision: source.revision,
+        ...(gesture ? { gesture } : {}),
       },
     );
   } catch (error) {
@@ -2212,12 +2219,13 @@ async function followRemote(target: NavigateTarget, from: string): Promise<void>
       return;
     }
     if (target.kind === "wikilink") {
-      await openWikilink(target.page, target.heading ?? undefined, target.block ?? undefined, from);
+      // Il clic su un link nella finestra staccata è un gesto come qui.
+      await openWikilink(target.page, target.heading ?? undefined, target.block ?? undefined, from, { gesture: true });
       return;
     }
     const resolved = await resolvedReference({ kind: "path", value: target.path }, from);
     if (!resolved) throw new Error(t("preview.target_missing"));
-    await openDocument(resolved.doc);
+    await openDocument(resolved.doc, { gesture: true });
     if (resolved.at) await reveal(resolved.doc, { span: resolved.at.span });
   } catch (error) {
     const page = target.kind === "wikilink" ? target.page : target.kind === "path" ? target.path : target.tag;
@@ -2600,7 +2608,28 @@ async function refreshLimitedMode(): Promise<void> {
 // --- aprire e chiudere ------------------------------------------------------
 
 /// Apre un documento nel riquadro col fuoco.
-export async function openDocument(id: string): Promise<void> {
+/// Come si apre un documento. `gesture`: l'apertura nasce da un gesto di chi
+/// usa Fub (un clic o Invio su una riga dell'albero, un risultato della
+/// ricerca, il passaggio veloce, un link o una figura in una nota). Lo vede
+/// soltanto il montaggio che l'apertura fa nascere (`SurfaceMountContext`).
+export interface OpenOptions {
+  readonly gesture?: boolean;
+}
+
+/// Il documento che l'apertura in corso con un gesto farà nascere in un
+/// riquadro: `show` lo prende al montaggio, `openDocument` lo toglie quando
+/// ha finito. Vive quanto quell'apertura, mai come «l'ultimo gesto».
+const gestureBirths = new Map<string, string>();
+
+/// Il gesto per la scheda di `doc` che nasce adesso nel riquadro `pane`, preso
+/// una volta sola: un rimontaggio dopo non lo trova.
+function takeGesture(pane: string, doc: string): boolean {
+  if (gestureBirths.get(pane) !== doc) return false;
+  gestureBirths.delete(pane);
+  return true;
+}
+
+export async function openDocument(id: string, options: OpenOptions = {}): Promise<void> {
   // Reserve the target before entering the shared flush queue. Otherwise the
   // last-tab release can close the owner while this opening is still waiting
   // for that same queue.
@@ -2612,8 +2641,18 @@ export async function openDocument(id: string): Promise<void> {
       // lasciando: costa zero quando sono puliti, ed è la regola già scritta per le
       // azioni di view.
       await documentSessions.flushPendingSave();
-      openIn(layout.focus, id);
-      await synchronize();
+      const pane = layout.focus;
+      // Il gesto va soltanto alla scheda che questa apertura fa nascere: un
+      // documento che è già una scheda del riquadro prende il fuoco, e basta.
+      const born = options.gesture === true
+        && !(layout.panes[pane]?.tabs ?? []).some((tab) => tab.k === "doc" && tab.doc === id);
+      if (born) gestureBirths.set(pane, id);
+      openIn(pane, id);
+      try {
+        await synchronize();
+      } finally {
+        if (born && gestureBirths.get(pane) === id) gestureBirths.delete(pane);
+      }
       // Il contesto si pubblica DOPO aver caricato il buffer: prima, lo span della
       // selezione sarebbe quello del documento precedente.
       await publishContext();
@@ -2722,13 +2761,14 @@ export async function openWikilink(
   heading?: string,
   block?: string,
   from?: string,
+  options: OpenOptions = {},
 ): Promise<void> {
   const target = await resolvedReference(
     { kind: "wiki", value: { page, heading: heading ?? null, block: block ?? null } },
     from ?? activeDoc() ?? undefined,
   );
   if (target) {
-    await openDocument(target.doc);
+    await openDocument(target.doc, options);
     // Il punto può non esserci — un heading rinominato, un `^abc` cancellato —
     // e allora resta la nota aperta in cima: è il degrado dichiarato di
     // `ResolvedRef.at`, non un caso da nascondere.

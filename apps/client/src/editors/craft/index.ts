@@ -42,6 +42,9 @@ export interface CraftSurfaceDeps {
   readonly onOpenDocument: (doc: string) => void | Promise<void>;
   /// Cerca un tag, come un clic su un tag della nota.
   readonly onSearchTag: (tag: string) => void;
+  /// Apre le impostazioni sul gruppo della riga `key`: «App esterne» per il
+  /// consenso e il peso massimo. Senza, la scheda non offre il link.
+  readonly onOpenSettings?: (key: string) => void;
 }
 
 /// Monta la scheda di un file Craft o di un XMP dentro `context.parent`.

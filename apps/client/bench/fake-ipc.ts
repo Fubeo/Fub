@@ -63,6 +63,8 @@ import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./con
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { LIVE_DOC, liveCase } from "./live-fixture";
 import { PHOTO_CRAFT, photoCase, photoResources } from "./photo-fixture";
+import { craftSceneCase, craftSceneCraft, craftSceneRender, craftSceneResources } from "./craft-fixture";
+import type { CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import {
   generateGraphFixture as graphFixture,
@@ -260,6 +262,12 @@ const RICH_DOC = RICH_DOCS[params.get("rich") ?? ""] ?? null;
 /// acceso: la riga dei dati di LightCraft sotto la foto. Soltanto le sue
 /// scene la hanno.
 const PHOTO = photoCase(params.get("photo"));
+
+/// Il disegno delle scene `craft-*` (`?craft-scheda=<caso>`, vedi
+/// `craft-fixture.ts`): la scheda di un file Craft senza anteprima, con la
+/// domanda, la riga «spente», «Preparo l'anteprima…» o la frase di `missing`.
+const CRAFT_SCENE = craftSceneCase(params.get("craft-scheda"));
+if (CRAFT_SCENE !== null && PHOTO !== null) throw new RangeError("craft-scheda is a vault of its own");
 
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
 const DRAWING = CONNECTORS !== null
@@ -1099,7 +1107,11 @@ const options: Options = {
     // La nota della Live, per le scene che la chiedono.
     ...(LIVE === null ? {} : { [LIVE_DOC]: LIVE.text }),
   },
-  resources: PHOTO === null ? RESOURCES : { ...RESOURCES, ...photoResources(PHOTO) },
+  resources: {
+    ...RESOURCES,
+    ...(PHOTO === null ? {} : photoResources(PHOTO)),
+    ...(CRAFT_SCENE === null ? {} : craftSceneResources()),
+  },
   root: ROOT,
   view: VIEWS,
   commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS],
@@ -1116,6 +1128,11 @@ const options: Options = {
   }),
   ...(DRAWING === null ? {} : { draw: true }),
   ...(PHOTO === null ? {} : { craft: PHOTO_CRAFT }),
+  ...(CRAFT_SCENE === null ? {} : {
+    craft: craftSceneCraft(CRAFT_SCENE),
+    craftRender: craftSceneRender(async (doc, size) =>
+      ((await host.module.api.invokeCommand("craft.preview", { doc, size })).effect as { payload: CraftPreview }).payload),
+  }),
 };
 
 const host = createFakeHost(options);

@@ -9,7 +9,14 @@
 // Una risposta senza revisione (Fub ha letto solo dei pezzi del file) vale
 // come appena letta. Un documento che cambia, si sposta o sparisce perde le
 // sue risposte, e chi guarda lo sa e richiede; il vault che si chiude o
-// cambia le fa dimenticare tutte.
+// cambia le fa dimenticare tutte, e così il consenso (`craft.cli-previews`)
+// che cambia, perché ogni risposta lo porta con sé (`render.consent`).
+//
+// L'anteprima fatta dall'app si chiede soltanto con `renderPreview`, cioè
+// con `craft_render` (T12), e soltanto dopo un gesto: la scheda nata da un
+// gesto col consenso acceso, il pulsante, il «Sì» della domanda (T23). La
+// risposta (`queued`) si tiene come quella di `previewOf`; due richieste per
+// lo stesso documento e la stessa misura ne fanno partire una.
 //
 // Il modello è `state/link-cards.ts`: il montaggio ascolta il kernel per la
 // finestra, chi mostra un'anteprima si iscrive con la sua `Lifetime`.
@@ -24,6 +31,7 @@ import {
   type CraftPreview,
   type CraftPreviewSize,
 } from "../host/craft";
+import { isErrorKind } from "../host/errors";
 import type { Lifetime } from "../ui/lifetime";
 import { onAnyEvent } from "./kernel";
 import { on, openVaultRoot, vaultArg } from "./store";
@@ -41,6 +49,8 @@ type Watcher = (doc: string) => void;
 
 let known = new Map<string, CraftPreviewAnswer>();
 let inFlight = new Map<string, Promise<CraftPreviewAnswer | null>>();
+/// Le richieste a `craft_render` in volo, per documento e misura.
+let rendering = new Map<string, Promise<CraftPreviewAnswer | null>>();
 const watchers = new Set<Watcher>();
 /// Le domande partite con il vault di adesso: una risposta di un altro vault
 /// non entra.
@@ -48,6 +58,12 @@ let generation = 0;
 /// Quante volte ogni documento ha perso le sue risposte: una domanda partita
 /// prima che il documento cambiasse non porta la revisione vecchia dopo.
 let epochs = new Map<string, number>();
+/// Quante volte il consenso è cambiato: una risposta chiesta prima porta il
+/// consenso vecchio, e non si tiene.
+let consents = 0;
+
+/// L'impostazione del consenso, di T19.
+export const CRAFT_CONSENT_SETTING = "craft.cli-previews";
 
 function keyOf(doc: string, size: CraftPreviewSize): string {
   return `${doc}\u0000${size}`;
@@ -90,7 +106,13 @@ function announce(doc: string): void {
 function keep(preview: CraftPreview, renderError: unknown = null): CraftPreviewAnswer {
   const key = keyOf(preview.doc, preview.size);
   const before = known.get(key);
-  if (before && before.preview.revision === preview.revision && before.preview.image && !preview.image) return before;
+  if (before && before.preview.revision === preview.revision && !preview.image) {
+    if (before.preview.image) return before;
+    // Una richiesta a `craft_render` è in coda: la risposta di
+    // `craft.preview` della stessa revisione non lo sa, e non la copre. Il
+    // `job_done` porta l'immagine o l'errore.
+    if (before.preview.queued && !preview.queued && renderError === null) return before;
+  }
   const answer: CraftPreviewAnswer = { preview, renderError };
   known.set(key, answer);
   return answer;
@@ -107,10 +129,11 @@ async function ask(doc: string, size: CraftPreviewSize): Promise<CraftPreviewAns
   const vault = openVaultRoot();
   const asked = generation;
   const epoch = epochs.get(doc) ?? 0;
+  const consent = consents;
   if (!vault) return null;
   const outcome = await api.invokeCommand(CRAFT_PREVIEW_COMMAND, { doc, size }, "apply", ...vaultArg(vault));
   if (asked !== generation) return null;
-  if (epoch !== (epochs.get(doc) ?? 0)) return previewOf(doc, size);
+  if (epoch !== (epochs.get(doc) ?? 0) || consent !== consents) return previewOf(doc, size);
   const preview = readPreviewOutcome(outcome);
   // Una risposta che non è un'anteprima di questo documento è un host che
   // parla un'altra lingua: non si tiene.
@@ -140,6 +163,51 @@ export function previewOf(
   return asking;
 }
 
+async function render(doc: string, size: CraftPreviewSize): Promise<CraftPreviewAnswer | null> {
+  const vault = openVaultRoot();
+  const asked = generation;
+  const epoch = epochs.get(doc) ?? 0;
+  if (!vault) return null;
+  let preview: CraftPreview;
+  try {
+    preview = await api.craftRender(doc, size, ...vaultArg(vault));
+  } catch (error) {
+    // `no_consent`: il consenso è cambiato da quando la scheda l'ha letto.
+    // Le risposte tenute lo dicono vecchio; si dimenticano, e chi guarda
+    // richiede e trova la domanda o la riga «spente».
+    if (asked === generation && isErrorKind(error, "permission_denied")) reconsent();
+    throw error;
+  }
+  if (asked !== generation) return null;
+  // Il documento è cambiato nel frattempo: la risposta è di byte che non ci
+  // sono più, e vale ciò che `craft.preview` dice adesso.
+  if (epoch !== (epochs.get(doc) ?? 0)) return previewOf(doc, size);
+  if (preview.doc !== doc || preview.size !== size) throw new Error(`craft.render: risposta senza anteprima per ${doc}`);
+  const answer = keep(preview);
+  announce(doc);
+  return answer;
+}
+
+/// Chiede l'anteprima di `doc` alla misura `size` all'app, con
+/// `craft_render`: soltanto dopo un gesto. La risposta si tiene come quella
+/// di `previewOf` (di solito `queued`, e l'immagine arriva col `job_done`) e
+/// si annuncia a chi guarda. Una richiesta già in volo, o una risposta già in
+/// coda senza immagine, non ne fa partire un'altra. `null` se nel frattempo
+/// il vault è cambiato. Un rifiuto (`no_consent`, nessuna CLI, il componente
+/// spento) rifiuta la promessa; `no_consent` fa dimenticare le risposte.
+export function renderPreview(doc: string, size: CraftPreviewSize): Promise<CraftPreviewAnswer | null> {
+  const flight = keyOf(doc, size);
+  const pending = rendering.get(flight);
+  if (pending) return pending;
+  const seen = known.get(flight);
+  if (seen && seen.preview.queued && !seen.preview.image) return Promise.resolve(seen);
+  const asking = render(doc, size).finally(() => {
+    if (rendering.get(flight) === asking) rendering.delete(flight);
+  });
+  rendering.set(flight, asking);
+  return asking;
+}
+
 /// La risposta tenuta per `doc` e `size`, senza chiedere niente.
 export function peekPreview(doc: string, size: CraftPreviewSize): CraftPreviewAnswer | null {
   return known.get(keyOf(doc, size)) ?? null;
@@ -166,12 +234,39 @@ function forget(doc: string): void {
   for (const key of [...inFlight.keys()]) {
     if (key.slice(0, key.indexOf("\u0000")) === doc) inFlight.delete(key);
   }
+  for (const key of [...rendering.keys()]) {
+    if (key.slice(0, key.indexOf("\u0000")) === doc) rendering.delete(key);
+  }
   if (dropped) announce(doc);
+}
+
+/// Il consenso è cambiato: ogni risposta tenuta porta quello vecchio. Si
+/// dimenticano e chi guarda richiede. Restano quelle in coda: il job è
+/// partito, e il suo esito arriva col `job_done` qualunque sia il consenso
+/// adesso; così restano le richieste a `craft_render` in volo.
+/// Il consenso è stato appena scritto da questa shell («No» della domanda):
+/// le risposte tenute non lo dicono ancora. Lo stesso giro del
+/// `setting_changed` che arriverà, e che allora non trova più niente.
+export function forgetConsent(): void {
+  reconsent();
+}
+
+function reconsent(): void {
+  consents++;
+  inFlight = new Map();
+  let dropped = false;
+  for (const [key, answer] of [...known]) {
+    if (answer.preview.queued && !answer.preview.image) continue;
+    known.delete(key);
+    dropped = true;
+  }
+  if (dropped) announce("");
 }
 
 function clear(): void {
   generation++;
   inFlight = new Map();
+  rendering = new Map();
   epochs = new Map();
   if (known.size === 0) return;
   known = new Map();
@@ -192,6 +287,9 @@ function heard(notice: KernelNotice): void {
     case "document_renamed":
       forget(event.from);
       forget(event.to);
+      return;
+    case "setting_changed":
+      if (event.key === CRAFT_CONSENT_SETTING) reconsent();
       return;
     case "job_done":
       break;

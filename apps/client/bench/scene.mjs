@@ -179,6 +179,23 @@ export const SCENE = onPage("shell", [
     query: "photo=senza",
     prepare: (page) => openPhoto(page, false),
   },
+  // **La scheda di un file Craft senza anteprima** (`?craft-scheda=<caso>`,
+  // vedi `craft-fixture.ts`), aperta con un clic nell'albero come le
+  // schermate T23 del prototipo: la domanda sulle anteprime fatte dalle app,
+  // la riga «spente», l'app che prepara l'anteprima e le frasi di `missing`.
+  ...[
+    ["craft-domanda", "domanda", "La scheda di un file Craft: la domanda sulle anteprime fatte dalle app", ".craft-ask"],
+    ["craft-spente", "spente", "La scheda di un file Craft: le anteprime fatte dalle app spente, col link alle impostazioni", ".craft-off"],
+    ["craft-prepara", "prepara", "La scheda di un file Craft aperta con un clic, anteprime accese: l'app prepara l'anteprima", ".craft-empty-state"],
+    ["craft-peso", "peso", "La scheda di un file Craft oltre il peso massimo, col link alle impostazioni", ".craft-empty > .link-button"],
+    ["craft-rotto", "rotto", "La scheda di un file Craft che non si legge", ".craft-empty-state"],
+    ["craft-fallita", "fallita", "La scheda di un file Craft di cui l'app non è riuscita a fare l'anteprima", ".craft-empty-state"],
+  ].map(([id, kind, title, ready]) => ({
+    id,
+    title,
+    query: `craft-scheda=${kind}`,
+    prepare: (page) => openCraft(page, ready, kind === "prepara" ? "Preparo l'anteprima…" : null),
+  })),
   {
     id: "prefs-appearance",
     title: "Le preferenze: carattere, accento e spazio dell'interfaccia, coi controlli dello Scrittoio",
@@ -1202,6 +1219,17 @@ async function openPhoto(page, withData) {
     return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0;
   });
   if (withData) await page.waitForSelector(".pane.focus .photo-data .photo-data-open");
+}
+
+/// Apre il disegno delle scene `craft-*` con un clic nell'albero (un gesto) e
+/// aspetta `ready` nella scheda, e con `said` la frase dello stato.
+async function openCraft(page, ready, said) {
+  await openFolder(page, "Disegni");
+  await page.click('#file-list .tree-row[data-path="Disegni/logo-studio.vectorcraft"]');
+  await page.waitForSelector(`.pane.focus ${ready}`);
+  if (said !== null) {
+    await page.waitForFunction((text) => document.querySelector(".pane.focus .craft-empty-state")?.textContent === text, said);
+  }
 }
 
 /// Apre la cartella di Excel della scena `grid-workbook` e aspetta che la

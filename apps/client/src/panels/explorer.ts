@@ -875,7 +875,7 @@ function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
   name.textContent = pageName(id);
   row.appendChild(name);
 
-  row.addEventListener("click", () => void openDocument(id));
+  row.addEventListener("click", () => void openDocument(id, { gesture: true }));
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     noteMenu(e, row, id);
@@ -913,7 +913,7 @@ function fileRow(id: string): HTMLElement {
   // importandolo: la finestra lo prepara, e niente si scrive prima di
   // «Importa».
   row.addEventListener("click", () => {
-    if (canShowFile(id)) void openDocument(id);
+    if (canShowFile(id)) void openDocument(id, { gesture: true });
     else if (!(canImportFile(id) && importDrawing({ kind: "vault", path: id }))) notify(t("explorer.no_viewer", { name: childName(id) }), "info");
   });
   row.addEventListener("contextmenu", (e) => {
@@ -1016,7 +1016,7 @@ function fileMenu(at: MouseEvent, row: HTMLElement, id: string): void {
     ...(canImportFile(id) ? [{ label: t("explorer.import_drawing"), run: () => void importDrawing({ kind: "vault", path: id }) }] : []),
     ...(shown
       ? [
-          { label: t("explorer.open"), run: () => void openDocument(id) },
+          { label: t("explorer.open"), run: () => void openDocument(id, { gesture: true }) },
           { label: t("explorer.open_beside"), run: () => void openDocumentBeside(id, "row") },
         ]
       : []),

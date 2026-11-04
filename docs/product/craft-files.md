@@ -25,15 +25,16 @@ lettura.
   di quale app, la versione del formato se il file la dice, il peso
   («Disegno di VectorCraft · formato 4 · 178.1 KiB»).
 - **Senza anteprima.** Un riquadro col nome del file e la stessa riga dei
-  dati. Se un'app installata sa fare l'anteprima, la scheda gliela chiede da
-  sola la prima volta che si apre e intanto dice «Preparo l'anteprima…»;
-  quando l'app finisce, l'immagine entra nella scheda. Se l'app non ce la fa,
-  la scheda dice perché e mostra il pulsante «Crea l'anteprima con …», che la
-  richiede una volta. Senza app installata dice «Il file non porta
-  un'anteprima», senza pulsante.
+  dati, con la frase che dice perché manca: «Il file non porta
+  un'anteprima», «Il file non si legge: forse è rotto», oppure «VectorCraft
+  non è riuscita a fare l'anteprima» quando l'app ci ha provato. Se un'app
+  installata sa fare l'anteprima, sotto c'è ciò che dice
+  [Le anteprime fatte dalle app](#le-anteprime-fatte-dalle-app).
 - **Troppo grande.** Un file da leggere intero oltre il peso massimo (vedi
-  **Le impostazioni**) non si legge: la scheda dice «File
-  troppo grande per l'anteprima» e non offre il pulsante.
+  **Le impostazioni**) non si legge: la scheda dice «Il file pesa più del
+  massimo da leggere per un'anteprima (64 MiB)», col peso in MiB interi, e
+  il link «Apri le impostazioni» porta alla voce del peso. Non offre il
+  pulsante.
 
 Quando il file cambia sul disco la scheda lo rilegge da sola. Il nome di
 un'app che Fub non conosce si mostra come il file lo scrive. Con il
@@ -52,6 +53,35 @@ degli XMP: Fub non li cambia.
 Nell'albero dei file un disegno o un progetto ha l'icona dei disegni, un
 `.pcraft` o un XMP quella delle foto.
 
+## Le anteprime fatte dalle app
+
+Quando un file non porta un'anteprima e un'app installata sa farla, Fub può
+farla fare al suo programma a riga di comando, su una copia del file. Lo fa
+soltanto dopo un gesto di chi usa Fub, e ciò che la scheda mostra dipende
+dalla voce **Anteprime fatte dalle app** (vedi **Le impostazioni**):
+
+- **Chiedi la prima volta.** La scheda fa la domanda: «Fub può far fare
+  l'anteprima a VectorCraft, che lavora su una copia del file. Vuoi che lo
+  faccia per i file che apri?», con «Sì, accendi» e «No, lasciale spente».
+  «Sì» salva «Accese» e chiede subito l'anteprima; «No» salva «Spente». Se
+  la voce non si salva, la domanda resta, dice perché e non parte niente.
+- **Accese.** Una scheda aperta con un gesto chiede l'anteprima da sola, una
+  volta, e intanto dice «Preparo l'anteprima…»; quando l'app finisce,
+  l'immagine entra nella scheda. Ogni altra scheda mostra il pulsante «Crea
+  l'anteprima con VectorCraft», che la chiede una volta.
+- **Spente.** La scheda dice «Le anteprime fatte dalle app sono spente», col
+  link «Apri le impostazioni» al gruppo **App esterne**.
+
+I gesti sono il clic o Invio su un file nell'albero, «Apri» dal suo menu, un
+risultato della ricerca o del selettore rapido, il clic su un link o su una
+figura in una nota. Una scheda riaperta all'avvio, aperta da `fub://open` o
+da una vista di un plugin, una scheda che torna in primo piano o si rimonta
+non chiedono niente: mostrano il pulsante. Due riquadri sullo stesso file
+fanno una richiesta sola. Se il consenso cambia altrove mentre la scheda è
+aperta, la scheda si ridisegna con ciò che vale adesso; se l'host rifiuta la
+richiesta perché il consenso non c'è più, torna la domanda o la riga
+«spente».
+
 ## Nelle note
 
 `![[logo.vectorcraft]]` in una nota mostra l'anteprima che il file porta, in
@@ -62,8 +92,8 @@ l'app e i dati del file e la frase «Nessuna anteprima»; un XMP incorporato è
 sempre un riquadro, con il voto, l'etichetta e la scelta che dice. Lo stesso
 si vede passando col puntatore su `[[logo.vectorcraft]]`.
 
-Una nota non avvia mai l'app che sa fare l'anteprima: la chiede soltanto la
-scheda. La stessa figura dieci volte nella stessa nota fa una domanda sola. Un
+Una nota non avvia mai l'app che sa fare l'anteprima, nemmeno con le
+anteprime accese: la chiede soltanto la scheda, dopo un gesto. La stessa figura dieci volte nella stessa nota fa una domanda sola. Un
 file che non c'è più resta un embed non risolto; con il componente `fub.craft`
 spento resta il riquadro col nome e l'app.
 
@@ -251,9 +281,9 @@ nel suo `.fub/settings.json` non cambia niente.
   farla fare al programma a riga di comando dell'app che lo apre, su una
   copia del file e solo quando il file lo apri tu. Le scelte sono tre:
   **Chiedi la prima volta** (`ask`), **Accese** (`on`) e **Spente** (`off`).
-  Con «Chiedi la prima volta» la prima scheda che avrebbe bisogno di un'app
-  lo domanda: «Sì» salva «Accese», «No» salva «Spente», e la domanda non
-  torna. Un valore che Fub non riconosce, compreso l'interruttore delle
+  Con «Chiedi la prima volta» la scheda che avrebbe bisogno di un'app lo
+  domanda: «Sì» salva «Accese», «No» salva «Spente», e la domanda non torna
+  (vedi [Le anteprime fatte dalle app](#le-anteprime-fatte-dalle-app)). Un valore che Fub non riconosce, compreso l'interruttore delle
   versioni di prima, vale «Chiedi la prima volta», e il file delle
   impostazioni resta com'è. Azzerare la voce torna a chiedere.
 - **Peso massimo da leggere per un'anteprima**: da 1 a 4096 MiB. Un file che
