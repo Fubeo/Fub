@@ -927,7 +927,7 @@ Fatto quando:
 - quella di `draw-open` ha la colonna come `?stato=disegno`;
 - le altre scene non cambiano, perché nessun altro DOM ha ancora le classi.
 Prova: scripts/check.sh --rapido
-Stato: [x] fatto · (commit qui sotto). Differenze dal testo, decise sul codice:
+Stato: [x] fatto · 68f48788. Differenze dal testo, decise sul codice:
 - `bench/kit.html` e `bench/scene.mjs`, fuori da «Tocca»: il catalogo non aveva più posto nei 1280×800 della foto, quindi `kit` e `kit-focus` hanno una finestra di 1280×960 (`KIT_WINDOW`), e la cornice ha due classi sue (`cella-in-piedi`, perché la colonna non si stiri, e `fila-stretta`, 360 px, perché l'ultimo foglietto vada in «…»). Le altre scene del kit tengono 1280×800 e la loro foto non cambia;
 - il prototipo dice che col dito i 44 px «li danno già» le regole `pointer: coarse`, ma per `kit-options-more` nessuna regola li dava (prima aveva `--control-h`, 32): `structure.css` aggiunge `@media (pointer: coarse)` coi 44 per `kit-bar-button` e `kit-options-more`;
 - le regole di `kit-rail` e `kit-options` di `skin/kit.css` non sono state scavalcate: si sono spostate nella sezione nuova, fuse col blocco del prototipo (il filo fra i gruppi è `display: none`, il raggio delle caselle è `--radius-chip`, la forma della riga di `kit-options` è passata a `structure.css`);
