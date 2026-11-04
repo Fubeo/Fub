@@ -59,6 +59,11 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · caricamento T2 · tolto da «Fatto quando» il limite di 25 ms
+  fra due fotogrammi con la CPU rallentata 4×. Su server-di-fub, senza
+  scheda grafica, il primo fotogramma ne prende 50–67 e la pulizia 67–83;
+  alla domanda l'utente ha scelto «Lasciar perdere». Restano le foto della
+  cascata e `bench:motion`.
 - 2026-11-04 · caricamento · prototipo approvato dall'utente: attesa «scia» e
   passaggio «cascata» (le regioni dell'app entrano in ordine di lettura con la
   molla `elastic` di `moto`, 30 ms l'una dall'altra); il passaggio «si posa»

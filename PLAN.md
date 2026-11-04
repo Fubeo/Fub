@@ -531,12 +531,9 @@ Fatto quando:
   sparito; a 1000 ms ogni regione al suo posto, con `opacity` 1 e nessun
   `transform` (entro 1 px dal rettangolo misurato prima della consegna);
 - con `prefers-reduced-motion`, la dissolvenza di 90 ms e nessun `transform`;
-- con la CPU rallentata 4× (CDP `Emulation.setCPUThrottlingRate`), nessun
-  intervallo fra due `requestAnimationFrame` sopra 25 ms da 40 ms prima a
-  1100 ms dopo l'inizio del passaggio (come `proto/misura.mjs`);
 - le foto e le misure sono nel resoconto del coder.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · codice integrato (1f1ab3e2), in attesa della scelta sul criterio dei 25 ms a CPU 4×
+Stato: [x] fatto · 1f1ab3e2 · il criterio dei 25 ms a CPU 4× è tolto (scelta dell'utente, 2026-11-04)
 
 ## T4 · La guardia del lampo e le scene del banco
 
