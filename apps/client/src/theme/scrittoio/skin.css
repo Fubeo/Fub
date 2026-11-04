@@ -2914,6 +2914,18 @@ kbd,
 [role="treeitem"][aria-selected="true"] > .tree-row > .row-icon > svg {
   color: var(--accent);
 }
+/* La miniatura (T26): l'anteprima che il file ha già, nella colonna
+   dell'icona e alla sua misura, ritagliata al quadrato; il filo la stacca dal
+   fondo della riga accesa. L'orientamento di un RAW non sta qui: lo scrive il
+   codice sull'immagine (T28). */
+.tree-thumb {
+  display: block;
+  width: var(--drawer-icon);
+  height: var(--drawer-icon);
+  border-radius: var(--radius-xs);
+  box-shadow: 0 0 0 1px var(--border);
+  object-fit: cover;
+}
 /* Una nota senza icona tiene la colonna con un foglietto: contorno grafite,
    l'angolo piegato. È disegnato, non un carattere, così prende il colore
    della riga corrente. */

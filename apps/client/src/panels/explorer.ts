@@ -40,7 +40,9 @@ import {
   type FolderContent,
 } from "../rules/organizer";
 import { $ } from "../ui/dom";
-import { FORMAT_ICON, formatKindOf } from "../ui/format-kind";
+import { FORMAT_ICON, formatKindOf, formatTagOf } from "../ui/format-kind";
+import { craftServed } from "../state/craft-previews";
+import { mountTreeThumbnails, type TreeThumbnails } from "../state/tree-thumbnails";
 import { iconEl } from "../ui/icons";
 import { pickIcon, showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/menu";
 import { selectInspectorTab } from "../ui/views";
@@ -157,9 +159,13 @@ let lastSignature = "";
 
 export function mountExplorer(lifetime: Lifetime): void {
   treeLife = lifetime;
+  thumbnails = mountTreeThumbnails(lifetime);
   lifetime.add(() => {
     treeLife = null;
     treeMotion = null;
+    thumbnails = null;
+    showXmp = true;
+    treeThumbs = false;
   });
   lifetime.listen($("#new-note"), "click", () => void newNote());
   // Il titolo del pannello è la radice di ciò che si vede (il vault o lo
@@ -333,6 +339,9 @@ export function mountExplorer(lifetime: Lifetime): void {
   // ne va. Un albero con delle note non ha niente da ridisegnare.
   lifetime.add(on("commands", () => {
     if (fileListEl.querySelector(".tree-empty") !== null) renderFileList();
+    // Le miniature le serve il componente «File delle app Craft»: acceso o
+    // spento, lo dice l'elenco dei comandi.
+    else paintThumbnails();
   }));
   lifetime.add(on("active-doc", markActive));
   // «Mostra la nota aperta»: cambiando nota l'albero segue, senza aprire il
@@ -355,9 +364,28 @@ export function mountExplorer(lifetime: Lifetime): void {
     await refreshFromKernel(true);
   });
   void readLegacyPages();
+  // Gli XMP e le miniature nell'albero (T26): cambiano soltanto ciò che si
+  // disegna, e l'albero si ridisegna senza chiedere niente al kernel.
+  const craftTreeReads = new Race();
+  const readCraftTree = () => craftTreeReads.last(async (expected) => {
+    const entries = await expected(settings().catch(() => null));
+    if (!entries) return;
+    const toggle = (key: string, fallback: boolean): boolean => {
+      const value = entries.find((entry) => entry.spec.key === key)?.value;
+      return typeof value === "boolean" ? value : fallback;
+    };
+    const xmp = toggle(CRAFT_TREE_SHOW_XMP, true);
+    const thumbs = toggle(CRAFT_TREE_THUMBNAILS, false);
+    if (xmp === showXmp && thumbs === treeThumbs) return;
+    showXmp = xmp;
+    treeThumbs = thumbs;
+    renderFileList();
+  });
+  void readCraftTree();
   lifetime.add(onEvent("setting_changed", (event) => {
     if (event.key === FILES_AUTO_REVEAL) void readAutoReveal();
     if (event.key === FILES_LEGACY_FOLDER_PAGES) void readLegacyPages();
+    if (event.key === CRAFT_TREE_SHOW_XMP || event.key === CRAFT_TREE_THUMBNAILS) void readCraftTree();
   }));
   lifetime.add(on("active-doc", () => { if (autoReveal) void followActive(); }));
 
@@ -529,6 +557,7 @@ function renderFileList(): void {
     ? fileListEl.querySelector<HTMLElement>(`.tree-row[draggable="true"][data-path="${CSS.escape(drag.path)}"]`)
     : null;
   fileListEl.innerHTML = "";
+  hiddenXmp = 0;
   renderChildren(state.activeSpace ?? "", fileListEl);
   if (held && drag) {
     fileListEl
@@ -536,7 +565,8 @@ function renderFileList(): void {
       ?.replaceWith(held);
   }
   // Un vault (o uno spazio) senza niente dentro lo dice, e offre il primo gesto.
-  if (fileListEl.childElementCount === 0 && state.vaultRoot !== "" && children(state.activeSpace ?? "")) {
+  // Gli XMP nascosti non fanno vuoto un vault che ha soltanto quelli.
+  if (fileListEl.childElementCount === 0 && hiddenXmp === 0 && state.vaultRoot !== "" && children(state.activeSpace ?? "")) {
     const li = document.createElement("li");
     li.setAttribute("role", "none");
     li.className = "tree-empty";
@@ -565,6 +595,7 @@ function renderFileList(): void {
   selection?.repaint();
   treeMotion?.settle();
   treeMotion = null;
+  paintThumbnails();
   if (toRestore !== undefined) {
     const row = entry(toRestore);
     const control = onChevron
@@ -785,6 +816,7 @@ function renderChildren(path: string, ul: HTMLElement): void {
   const folderNoteId = folderNoteOf(node, state.handledExtensions, legacyPages);
   for (const id of node.notes) {
     if (id === folderNoteId) continue;
+    if (hidesXmp(id)) continue;
     const li = document.createElement("li");
     const row = noteRow(id, { draggable: true });
     li.appendChild(row);
@@ -795,6 +827,7 @@ function renderChildren(path: string, ul: HTMLElement): void {
     ul.appendChild(li);
   }
   for (const id of node.files) {
+    if (hidesXmp(id)) continue;
     const li = document.createElement("li");
     const row = fileRow(id);
     li.appendChild(row);
@@ -862,7 +895,11 @@ function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
   // L'icona data dall'esplora vince; altrimenti quella della pagina (`icon:`).
   const icon = state.meta.icons[id] ?? pageIcon(id);
   const kind = formatKindOf(id);
-  if (icon) row.appendChild(rowIcon(icon));
+  if (icon) {
+    row.appendChild(rowIcon(icon));
+    // L'icona scelta vince anche sulla miniatura.
+    row.dataset.ownIcon = "";
+  }
   // Un documento che non è una nota dice il suo formato: un Word, un ODT e
   // una nota non hanno la stessa icona, perché non si fanno le stesse cose.
   else if (kind && kind !== "note") row.appendChild(rowIcon(null, FORMAT_ICON[kind]));
@@ -902,8 +939,9 @@ function fileRow(id: string): HTMLElement {
   row.dataset.path = id;
   setTooltip(row, id);
   const kind = mediaKindOfId(id);
-  // Un SVG è anche un disegno, e si apre nel suo editor.
-  row.appendChild(formatKindOf(id) === "drawing" ? rowIcon(null, FORMAT_ICON.drawing) : rowIcon(FILE_ICONS[kind]));
+  // Un SVG è anche un disegno, e si apre nel suo editor; un RAW è una foto.
+  const format = formatKindOf(id);
+  row.appendChild(format === "drawing" || format === "photo" ? rowIcon(null, FORMAT_ICON[format]) : rowIcon(FILE_ICONS[kind]));
   const name = document.createElement("span");
   name.className = "row-name";
   name.textContent = childName(id);
@@ -1406,8 +1444,35 @@ const FILES_AUTO_REVEAL = "files.auto-reveal";
 const FILES_CONFIRM_TRASH = "files.confirm-trash";
 const FILES_LEGACY_FOLDER_PAGES = "files.legacy-folder-pages";
 
+const CRAFT_TREE_SHOW_XMP = "craft.tree-show-xmp";
+const CRAFT_TREE_THUMBNAILS = "craft.tree-thumbnails";
+
 /// Vero se la macchina vuole che l'albero segua la nota aperta.
 let autoReveal = false;
+/// Falso se la macchina nasconde gli XMP dall'albero (`craft.tree-show-xmp`):
+/// la ricerca, il selettore rapido, i backlink e i tag li trovano ancora.
+let showXmp = true;
+/// Vero se la macchina vuole le miniature nell'albero (`craft.tree-thumbnails`).
+let treeThumbs = false;
+/// Le miniature dell'albero, vive finché il pannello è montato.
+let thumbnails: TreeThumbnails | null = null;
+/// Quanti XMP l'ultimo disegno ha lasciato fuori.
+let hiddenXmp = 0;
+
+/// Un XMP che l'albero non disegna; lo conta.
+function hidesXmp(id: string): boolean {
+  if (showXmp || formatTagOf(id) !== "XMP") return false;
+  hiddenXmp += 1;
+  return true;
+}
+
+/// Dà alle righe disegnate le loro miniature, o le spegne. Senza il
+/// componente `fub.craft` nessuno sa dirle.
+function paintThumbnails(): void {
+  if (!thumbnails) return;
+  if (treeThumbs && craftServed()) thumbnails.paint(fileListEl);
+  else thumbnails.reset();
+}
 /// Vero se il vault riconosce anche `X/X` e `X/index` come pagina di `X`.
 let legacyPages = false;
 
