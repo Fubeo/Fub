@@ -456,6 +456,7 @@ export function createDocumentSurfaceRegistry(
         return mountCanvasSurface(profile, context, {
           onChange: options.onChange,
           onSelectionChange: options.onSelectionChange,
+          onFail: options.onFail,
           onOpenWikilink: options.onOpenWikilink,
           onOpenPath: options.onOpenPath,
           onCreateNote: options.onCreateCanvasNote,

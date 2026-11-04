@@ -1,0 +1,10 @@
+{
+  "name": "edges-null-with-new-card",
+  "description": "R7: \"edges\":null vale assente e il modello di dopo non ha archi: il null resta; cambia solo l'interno di nodes, che riceve la scheda nuova",
+  "before": "{\"nodes\":[],\"edges\":null}",
+  "patches": [{"kind":"upsert-node","before":null,"after":{"id":"c","type":"text","x":0,"y":100,"width":100,"height":50,"text":"c"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"c\",\"type\":\"text\",\"x\":0,\"y\":100,\"width\":100,\"height\":50,\"text\":\"c\"}],\"edges\":null}"
+  }
+}

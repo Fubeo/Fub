@@ -1,0 +1,9 @@
+{
+  "name": "r4-low-escaped-value",
+  "description": "R4: un surrogato basso spaiato, con escape, in un valore",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\",\"label\":\"x\\udc00\"}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

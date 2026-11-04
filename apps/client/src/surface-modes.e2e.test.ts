@@ -257,6 +257,8 @@ describe("i comandi delle modalità seguono il ruolo dichiarato", () => {
     ];
     for (const [doc, expected] of cases) {
       await open(doc);
+      // Senza parser TypeScript il testo rotto lo dice il nucleo, appena è caricato.
+      if (doc === "rotta.canvas") await waitFor("la superficie d'errore della tela rotta", () => paneMode() === "error");
       expect(await offered(MODE_COMMANDS), doc).toEqual(expected);
     }
     expect(paneMode(), "la superficie finta è montata").toBe("draw");

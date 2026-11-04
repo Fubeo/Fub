@@ -3,12 +3,8 @@ import type { SyntaxForm } from "../../host/contract";
 import { t, onLanguage, type Key } from "../../i18n/strings";
 import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem } from "../core/editor-menu";
 import { writeClipboardText } from "../../platform/clipboard";
-import { lineFeeds, tryApplyOperation, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
+import { lineFeeds, operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
 import {
-  applyCanvasPatches,
-  commitCanvasPatches,
-  inverseCanvasPatches,
-  isCanvasOperation,
   newNodeId,
   removeEdgePatch,
   removeNodePatch,
@@ -17,13 +13,24 @@ import {
   type CanvasOperation,
   type CanvasPatch,
 } from "./operation";
-import { parseCanvas, type CanvasDocument, type CanvasEdge, type CanvasNode } from "./model";
-import { canvasNodeAt } from "./source-edit";
-import { byteToCharIndex } from "../../rules/offsets";
+import type { CanvasDocument, CanvasEdge, CanvasNode } from "./model";
+import {
+  CanvasCoreError,
+  canvasCoreReady,
+  openCoreNow,
+  type CanvasCore,
+  type CanvasCoreErrorCode,
+  type CanvasSourceEdit,
+} from "./wasm/core";
 
 export const CANVAS_SNAP = 8;
 export const CANVAS_MIN_SIZE = 40;
 export const MAX_CANVAS_HISTORY = 100;
+/** La pausa dopo l'ultimo tasto in una scheda, prima che il suo testo si registri. */
+export const CARD_PAUSE_MS = 250;
+/** Il testo più lungo di una scheda, in byte UTF-8: oltre, il nucleo rifiuta la lavagna (`invalid`). */
+const MAX_CARD_TEXT_BYTES = 1_048_576;
+const utf8 = new TextEncoder();
 const MAX_INTERACTIVE_NODES = 2_000;
 const MAX_INTERACTIVE_EDGES = 4_000;
 
@@ -47,8 +54,68 @@ export interface CanvasAttachmentPort {
   readonly expandFiles?: (data: DataTransfer) => Promise<readonly File[]>;
 }
 
+/**
+ * Dove la tela apre le sue lavagne: per difetto il nucleo condiviso della
+ * shell (`wasm/core.ts`). `openNow` apre subito, o dà `null` se il nucleo non
+ * è carico; `ready` lo carica.
+ */
+export interface CanvasCorePort {
+  readonly openNow: (text: string) => CanvasCore | null;
+  readonly ready: () => Promise<void>;
+}
+
+const SHARED_CORE: CanvasCorePort = { openNow: openCoreNow, ready: canvasCoreReady };
+
+type CardField = "text" | "label" | "url" | "file";
+
+/** Il campo aperto su una scheda. */
+interface CardEditor {
+  readonly id: string;
+  readonly field: CardField;
+  readonly input: HTMLInputElement | HTMLTextAreaElement;
+  readonly article: HTMLElement;
+  readonly lifetime: AbortController;
+  /** Una composizione dell'IME o un tasto morto in corso: la pausa aspetta la sua fine. */
+  composing: boolean;
+  /** Invio in una scheda di testo: l'a capo che arriva si registra subito. */
+  recordOnInput: boolean;
+}
+
+/**
+ * Un passo d'annulla (o di ripeti). Due vie per farlo: se il testo è ancora
+ * quello che il passo ha lasciato (`version`), si rimette il tratto `removed`
+ * al posto di `inserted`, byte per byte, e il testo torna alla sua versione di
+ * prima (`restores`); se no si passano `patches` al nucleo, che le fonde con
+ * ciò che è cambiato da un'altra parte.
+ */
+interface CanvasStep {
+  /** Le toppe che fanno questo passo sul modello di adesso. */
+  readonly patches: CanvasPatch[];
+  /** Le toppe che disfano questo passo: valgono sul testo che il passo rimette. */
+  readonly back: CanvasPatch[];
+  /** Dove comincia il tratto, in unità UTF-16. */
+  readonly start: number;
+  /** Il tratto del testo di adesso che il passo toglie. */
+  readonly inserted: string;
+  /** Il tratto che il passo rimette al suo posto. */
+  readonly removed: string;
+  /** La versione del testo che il passo ha lasciato: se è ancora quella, la via è il tratto. */
+  readonly version: number;
+  /** La versione del testo che il passo rimette. */
+  readonly restores: number;
+}
+
+/** Il testo del campo non ancora registrato: la scheda com'era, il campo, il testo. */
+interface PendingText {
+  card: CanvasNode;
+  readonly field: CardField;
+  text: string;
+}
+
 export interface CanvasEngineOptions {
   readonly surfaceId: string;
+  /** Il nucleo che apre le lavagne; i test ne passano uno che conta le chiamate. */
+  readonly core?: CanvasCorePort;
   readonly formatId?: string | null;
   readonly revision?: string;
   readonly onChange: (change: CanvasChange) => void;
@@ -66,6 +133,11 @@ export interface CanvasEngineOptions {
   readonly media?: CanvasMediaPort;
   readonly attachments?: CanvasAttachmentPort;
   readonly theme?: Theme;
+  /**
+   * Il testo in sospeso di una scheda è cambiato: `true` se ne resta. Nessun
+   * lavoro in più: chi ascolta chiede `pendingText` quando gli serve.
+   */
+  readonly onPendingChange?: (pending: boolean) => void;
   /**
    * Resa markdown reale di una card testo (stesso `renderMarkdown` della
    * lettura, con `mountMarkdown` per sanitizzazione/embed). Assente = testo
@@ -142,9 +214,25 @@ export class CanvasEngine {
   #selection: string[] = [];
   #edgeSelection: string[] = [];
   #camera: Viewport = { x: 0, y: 0, zoom: 1 };
-  #readOnly = false;
-  #undo: CanvasPatch[][] = [];
-  #redo: CanvasPatch[][] = [];
+  /** La sola lettura del pannello (`setReadOnly`): i suoi motivi sono del pannello. */
+  #panelReadOnly = false;
+  /**
+   * La sola lettura della tela: il nucleo apre il testo ma non lo sa
+   * riscrivere senza perdere qualcosa (una chiave doppia, R3). Si somma a
+   * quella del pannello e se ne va da sola quando il testo torna riscrivibile.
+   */
+  #unwritable = false;
+  #undo: CanvasStep[] = [];
+  #redo: CanvasStep[] = [];
+  /**
+   * La versione del testo di adesso. Un testo nuovo (un gesto, un annulla
+   * passato dalle toppe, `setDoc`, una `syncDoc` che cambia il testo) ne
+   * prende una mai usata da `#versions`; l'annulla e il ripeti che rimettono
+   * un tratto byte per byte ridanno al testo la versione che aveva. Una
+   * versione dice sempre un testo solo.
+   */
+  #version = 0;
+  #versions = 0;
   #markdownTeardowns = new Map<string, () => void>();
   #destroyed = false;
   #intakeError = "";
@@ -152,10 +240,21 @@ export class CanvasEngine {
   #resize: { pointerId: number; id: string; startX: number; startY: number; width: number; height: number } | null = null;
   #pan: { pointerId: number; startX: number; startY: number; camX: number; camY: number } | null = null;
   #connect: { pointerId: number; from: string; edgeId?: string; endpoint?: "from" | "to" } | null = null;
-  #finishEditing: ((save: boolean) => void) | null = null;
+  readonly #port: CanvasCorePort;
+  /** La lavagna aperta nel nucleo; `null` prima di aprirla o dopo una trappola. */
+  #core: CanvasCore | null = null;
+  /** Il giro di riapertura dopo una trappola: uno più nuovo rende vecchi gli altri. */
+  #revival = 0;
+  /** Le trappole di fila senza un commit riuscito in mezzo. */
+  #traps = 0;
+  #editor: CardEditor | null = null;
+  /** L'unico posto del testo di una scheda non ancora registrato. */
+  #pending: PendingText | null = null;
+  #pauseTimer: ReturnType<typeof setTimeout> | undefined = undefined;
 
   constructor(parent: HTMLElement, options: CanvasEngineOptions) {
     this.#options = options;
+    this.#port = options.core ?? SHARED_CORE;
     this.#root = document.createElement("div");
     this.#root.className = "canvas-surface";
     this.#toolbar = document.createElement("div");
@@ -201,42 +300,69 @@ export class CanvasEngine {
     this.#drawToolbar();
   }
 
+  /**
+   * Apre il testo `source` nel nucleo, da capo: la storia dell'annulla
+   * ricomincia. Un testo che il nucleo non apre lancia, e la tela resta com'era.
+   */
   setDoc(source: string): void {
     if (this.#destroyed) return;
-    const document = parseCanvas(source);
+    // Il testo in sospeso è del documento di prima: si registra lì.
+    this.#closeField(true);
+    const document = this.#open(source);
+    // Un documento nuovo: la risposta di prima era dell'altro testo.
+    if (this.#unwritable) {
+      this.#unwritable = false;
+      this.#root.dataset.readOnly = String(this.#readOnly);
+    }
     this.#epoch++;
-    this.#finishEditing?.(true);
     this.#cancelGestures();
     this.#source = source;
+    this.#version = ++this.#versions;
     this.#doc = document;
     this.#intakeError = "";
     this.#selection = [];
     this.#edgeSelection = [];
     this.#undo = [];
     this.#redo = [];
+    if (!document) {
+      void this.#revive();
+      return;
+    }
+    this.#checkWritable();
     this.#fitCamera(false);
     this.#render();
   }
 
+  /**
+   * Il testo cambiato da un'altra parte (un'altra superficie, un altro
+   * programma). Il campo aperto resta aperto, e il suo testo in sospeso si
+   * registra subito dopo, sulla scheda com'è nel testo nuovo.
+   */
   syncDoc(update: { readonly text: string; readonly operation: TextOperation | null } | string): void {
     if (this.#destroyed) return;
-    this.#finishEditing?.(true);
-    this.#cancelGestures();
     const source = typeof update === "string" ? update : update.text;
-    const parsed = parseCanvas(source);
+    const document = this.#open(source);
+    this.#cancelGestures();
     this.#epoch++;
     this.#intakeError = "";
-    const operation = typeof update === "string" ? null : update.operation;
-    // Gli offset sono sul testo a `\n`, come li conta la sessione.
-    const verified = operation ? tryApplyOperation(lineFeeds(this.#source), operation) : null;
-    const patched = operation && isCanvasOperation(operation) && this.#doc
-      && verified?.kind === "applied" && verified.text === lineFeeds(source)
-      && applyCanvasPatches(this.#doc, operation.patches)
-      && JSON.stringify(this.#doc) === JSON.stringify(parsed);
+    // Lo stesso testo (l'eco di un commit di qui) lascia valida la via del tratto.
+    const changed = source !== this.#source;
+    if (changed) this.#version = ++this.#versions;
     this.#source = source;
-    if (!patched) this.#doc = parsed;
+    if (!document) {
+      void this.#revive();
+      return;
+    }
+    this.#doc = document;
+    // Lo stesso testo si riscrive come prima: la domanda serve solo a un testo nuovo.
+    if (changed) this.#checkWritable();
     this.#pruneSelection();
     this.#render();
+    // Fuori dalla consegna che ci ha portato il testo: la sessione la sta
+    // ancora facendo agli altri riquadri.
+    if (this.#pending) queueMicrotask(() => {
+      if (!this.#destroyed) this.#recordPending();
+    });
   }
 
   getDoc(): string {
@@ -253,11 +379,17 @@ export class CanvasEngine {
    * when the offset is outside every card, or the scene is too large to draw.
    */
   revealSource(byteOffset: number): boolean {
-    if (this.#destroyed || !this.#doc || this.#isSceneOversized()) return false;
-    const index = canvasNodeAt(this.#source, byteToCharIndex(this.#source, byteOffset));
+    if (this.#destroyed || !this.#doc || !this.#core || this.#isSceneOversized()) return false;
+    let index: number | null;
+    try {
+      index = this.#core.nodeAt(byteOffset);
+    } catch (error) {
+      if (lostCore(error)) this.#lose();
+      return false;
+    }
     const node = index === null ? undefined : this.#doc.nodes[index];
     if (!node) return false;
-    this.#finishEditing?.(true);
+    this.#closeField(false);
     this.#cancelGestures();
     this.#selection = [node.id];
     this.#edgeSelection = [];
@@ -269,11 +401,53 @@ export class CanvasEngine {
   }
 
   setReadOnly(readOnly: boolean): void {
-    this.#finishEditing?.(true);
+    // In sola lettura il campo si chiude comunque: ciò che non si registra
+    // l'avviso l'ha già detto.
+    this.#closeField(readOnly);
     this.#cancelGestures();
-    this.#readOnly = readOnly;
-    this.#root.dataset.readOnly = String(readOnly);
+    this.#panelReadOnly = readOnly;
+    this.#root.dataset.readOnly = String(this.#readOnly);
     this.#render();
+  }
+
+  /** In sola lettura per il pannello o per la tela: nessun gesto cambia il testo. */
+  get #readOnly(): boolean {
+    return this.#panelReadOnly || this.#unwritable;
+  }
+
+  /**
+   * Chiede al nucleo se il testo di adesso si riscrive: un'anteprima senza
+   * toppe passa dallo stesso ritocco di ogni commit, e un testo che il
+   * ritocco rifiuta (una chiave doppia, anche annidata in un campo
+   * sconosciuto) risponde `rejected`. Allora la tela resta da guardare: il
+   * campo aperto si chiude come per la sola lettura del pannello, e l'avviso
+   * della barra dice perché. Un nucleo assente o morto non risponde: la
+   * risposta di prima resta finché `#revive` non riapre il testo.
+   */
+  #checkWritable(): void {
+    const core = this.#core;
+    if (!core) return;
+    let unwritable: boolean;
+    try {
+      core.preview([]);
+      unwritable = false;
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return;
+      }
+      if (!(error instanceof CanvasCoreError)) throw error;
+      unwritable = error.code === "rejected";
+    }
+    if (unwritable === this.#unwritable) return;
+    if (unwritable) {
+      this.#unwritable = true;
+      this.#closeField(true);
+      this.#cancelGestures();
+    } else {
+      this.#unwritable = false;
+    }
+    this.#root.dataset.readOnly = String(this.#readOnly);
   }
 
   setTheme(theme: Theme): void {
@@ -287,38 +461,48 @@ export class CanvasEngine {
    */
   setSyntaxForms(forms: readonly SyntaxForm[]): void {
     this.#forms = forms;
-    if (!this.#finishEditing) this.#render();
+    if (!this.#editor) this.#render();
   }
 
+  /**
+   * Annulla l'ultimo passo: il testo di prima byte per byte se nessuno l'ha
+   * cambiato nel frattempo, se no le toppe inverse che il nucleo ha dato al
+   * suo commit.
+   */
   undo(): boolean {
-    this.#finishEditing?.(true);
-    const patches = this.#undo.pop();
-    if (!patches || !this.#doc) return false;
-    const inverse = inverseCanvasPatches(patches);
-    if (!this.#commitLocal(inverse, "undo", false)) {
-      this.#undo.push(patches);
+    if (!this.#closeField(false)) return false;
+    this.#render();
+    const step = this.#undo.pop();
+    if (!step || !this.#doc) return false;
+    if (this.#replay(step, "undo", (again) => this.#redo.push(again)) !== true) {
+      this.#undo.push(step);
       return false;
     }
-    this.#redo.push(patches);
     return true;
   }
 
+  /** Rifà il passo annullato, con le stesse due vie dell'annulla. */
   redo(): boolean {
-    this.#finishEditing?.(true);
-    const patches = this.#redo.pop();
-    if (!patches || !this.#doc) return false;
-    if (!this.#commitLocal(patches, "redo", false)) {
-      this.#redo.push(patches);
+    if (!this.#closeField(false)) return false;
+    this.#render();
+    const step = this.#redo.pop();
+    if (!step || !this.#doc) return false;
+    if (this.#replay(step, "redo", (again) => this.#pushUndo(again, false)) !== true) {
+      this.#redo.push(step);
       return false;
     }
-    this.#undo.push(patches);
     return true;
   }
 
   destroy(): void {
     if (this.#destroyed) return;
-    this.#finishEditing?.(true);
+    // Il testo in sospeso va nel documento che il riquadro mostrava.
+    this.#closeField(true);
     this.#destroyed = true;
+    clearTimeout(this.#pauseTimer);
+    this.#pauseTimer = undefined;
+    this.#revival++;
+    this.#dropCore();
     for (const teardown of this.#markdownTeardowns.values()) teardown();
     this.#markdownTeardowns.clear();
     this.#stopLanguage();
@@ -331,25 +515,361 @@ export class CanvasEngine {
       || this.#doc.edges.length > MAX_INTERACTIVE_EDGES);
   }
 
-  #commitLocal(patches: readonly CanvasPatch[], origin: EditorChangeOrigin, recordHistory: boolean, render = true): boolean {
-    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized() || !patches.length) return false;
-    const beforeSource = this.#source;
-    const committed = commitCanvasPatches(this.#doc, beforeSource, patches);
-    if (!committed) return false;
-    this.#source = committed.source;
-    if (recordHistory) {
-      this.#undo.push([...patches]);
-      if (this.#undo.length > MAX_CANVAS_HISTORY) this.#undo.shift();
-      this.#redo = [];
+  // --- il nucleo --------------------------------------------------------------
+
+  /**
+   * Il modello del testo `text` nel nucleo: `reset` della lavagna aperta, o
+   * una lavagna nuova. `null` se il nucleo non è carico o è morto (allora
+   * serve `#revive`); un testo che il nucleo rifiuta lancia.
+   */
+  #open(text: string): CanvasDocument | null {
+    if (this.#core) {
+      try {
+        return this.#core.reset(text);
+      } catch (error) {
+        if (!lostCore(error)) throw error;
+        this.#dropCore();
+      }
     }
+    let core: CanvasCore | null;
+    try {
+      core = this.#port.openNow(text);
+    } catch (error) {
+      if (lostCore(error)) return null;
+      throw error;
+    }
+    if (!core) return null;
+    this.#core = core;
+    return core.model();
+  }
+
+  /** Il modello del nucleo; `null` se non c'è o se è appena morto (allora si riapre). */
+  #coreModel(): CanvasDocument | null {
+    const core = this.#core;
+    if (!core) return null;
+    try {
+      return core.model();
+    } catch (error) {
+      if (!lostCore(error)) throw error;
+      this.#lose();
+      return null;
+    }
+  }
+
+  #dropCore(): void {
+    const core = this.#core;
+    this.#core = null;
+    try {
+      core?.close();
+    } catch {
+      // Un'istanza morta ha già perso le sue lavagne.
+    }
+  }
+
+  /** Una trappola: la lavagna si riapre su un'istanza nuova, dal testo della sessione. */
+  #lose(): void {
+    this.#dropCore();
+    this.#traps += 1;
+    // Due di fila: lo si dice, e si riprova soltanto al prossimo testo.
+    if (this.#traps > 1) {
+      this.#coreUnavailable();
+      return;
+    }
+    void this.#revive();
+  }
+
+  async #revive(): Promise<void> {
+    const revival = ++this.#revival;
+    try {
+      await this.#port.ready();
+    } catch {
+      if (!this.#destroyed && revival === this.#revival) this.#coreUnavailable();
+      return;
+    }
+    if (this.#destroyed || revival !== this.#revival || this.#core) return;
+    let document: CanvasDocument | null;
+    try {
+      document = this.#open(this.#source);
+    } catch {
+      document = null;
+    }
+    if (!document) {
+      this.#coreUnavailable();
+      return;
+    }
+    const first = this.#doc === null;
+    this.#doc = document;
+    this.#checkWritable();
+    this.#pruneSelection();
+    if (first) this.#fitCamera(false);
+    this.#render();
+    if (this.#pending) this.#recordPending();
+  }
+
+  #coreUnavailable(): void {
+    this.#showNotice(t("canvas.core_unavailable"));
+  }
+
+  /**
+   * Passa le toppe al nucleo: tutte o nessuna. Il testo nuovo è il tratto che
+   * il nucleo ha cambiato; `record` riceve il passo che lo disfa (le toppe
+   * inverse dello stesso commit e il tratto di prima) prima che la sessione
+   * sappia della modifica (che può tornare qui con un `syncDoc`). Il codice
+   * del rifiuto, se il nucleo rifiuta.
+   */
+  #commitLocal(
+    patches: readonly CanvasPatch[],
+    origin: EditorChangeOrigin,
+    record: ((step: CanvasStep) => void) | null,
+    render = true,
+  ): true | CanvasCoreErrorCode {
+    // Mai una lista vuota: su un sorgente vuoto il nucleo riscriverebbe tutto.
+    if (!patches.length) return "request";
+    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return "rejected";
+    const core = this.#core;
+    if (!core) return "trap";
+    const before = this.#source;
+    let committed: { readonly edit: CanvasSourceEdit; readonly inverse: CanvasPatch[] };
+    try {
+      committed = core.commit(patches);
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return "trap";
+      }
+      if (error instanceof CanvasCoreError) return error.code;
+      throw error;
+    }
+    this.#traps = 0;
+    const { edit } = committed;
+    const after = before.slice(0, edit.start) + edit.text + before.slice(edit.end);
+    const restores = this.#version;
+    this.#source = after;
+    this.#version = ++this.#versions;
+    this.#doc = this.#coreModel() ?? this.#doc;
+    const operation: CanvasOperation = {
+      kind: "canvas",
+      patches: copyPatches(patches),
+      ...sourceOperation(before, after, edit),
+    };
+    record?.({
+      patches: committed.inverse,
+      back: copyPatches(patches),
+      start: edit.start,
+      inserted: edit.text,
+      removed: before.slice(edit.start, edit.end),
+      version: this.#version,
+      restores,
+    });
     this.#pruneSelection();
     if (render) this.#render();
-    this.#options.onChange({ text: committed.source, operation: committed.operation, origin });
+    this.#options.onChange({ text: after, operation, origin });
     return true;
   }
 
+  /**
+   * Fa un passo d'annulla o di ripeti. Se il testo è quello che il passo ha
+   * lasciato, rimette il suo tratto con un `reset` sul testo esatto (una
+   * lettura intera: va bene per un annulla, non per ogni gesto); se no passa
+   * le sue toppe al nucleo. `record` riceve il passo opposto.
+   */
+  #replay(step: CanvasStep, origin: "undo" | "redo", record: (step: CanvasStep) => void): true | CanvasCoreErrorCode {
+    const before = this.#source;
+    const end = step.start + step.inserted.length;
+    if (step.version !== this.#version || before.slice(step.start, end) !== step.inserted) {
+      return this.#commitLocal(step.patches, origin, record);
+    }
+    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return "rejected";
+    const core = this.#core;
+    if (!core) return "trap";
+    const after = before.slice(0, step.start) + step.removed + before.slice(end);
+    let document: CanvasDocument;
+    try {
+      document = core.reset(after);
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return "trap";
+      }
+      // Il nucleo non riapre il testo di prima (non dovrebbe mai): restano le toppe.
+      if (error instanceof CanvasCoreError) return this.#commitLocal(step.patches, origin, record);
+      throw error;
+    }
+    this.#traps = 0;
+    this.#source = after;
+    this.#version = step.restores;
+    this.#doc = document;
+    const edit: CanvasSourceEdit = { start: step.start, end, text: step.removed };
+    const operation: CanvasOperation = {
+      kind: "canvas",
+      patches: copyPatches(step.patches),
+      ...sourceOperation(before, after, edit),
+    };
+    record({
+      patches: step.back,
+      back: step.patches,
+      start: step.start,
+      inserted: step.removed,
+      removed: step.inserted,
+      version: step.restores,
+      restores: step.version,
+    });
+    this.#pruneSelection();
+    this.#render();
+    this.#options.onChange({ text: after, operation, origin });
+    return true;
+  }
+
+  /** Un gesto della tela: prima il testo in sospeso, poi le sue toppe, un passo d'annulla. */
   #commit(patches: readonly CanvasPatch[], origin: EditorChangeOrigin): boolean {
-    return this.#commitLocal(patches, origin, true);
+    this.#recordPending();
+    return this.#commitLocal(patches, origin, (step) => this.#pushUndo(step, true)) === true;
+  }
+
+  #pushUndo(step: CanvasStep, fresh: boolean): void {
+    this.#undo.push(step);
+    if (this.#undo.length > MAX_CANVAS_HISTORY) this.#undo.shift();
+    if (fresh) this.#redo = [];
+  }
+
+  // --- il testo di una scheda ---------------------------------------------------
+
+  /**
+   * Registra il testo in sospeso: un commit, una modifica alla sessione, un
+   * passo d'annulla. `false` se resta da registrare (il nucleo l'ha rifiutato:
+   * il testo resta nel campo, e l'avviso dice perché).
+   */
+  #recordPending(): boolean {
+    clearTimeout(this.#pauseTimer);
+    this.#pauseTimer = undefined;
+    const pending = this.#pending;
+    if (!pending) return true;
+    if (!this.#doc || this.#readOnly || this.#destroyed) return false;
+    let code = "rejected" as true | CanvasCoreErrorCode;
+    for (let attempt = 0; attempt < 2 && code !== true; attempt++) {
+      const doc: CanvasDocument = this.#doc;
+      // La scheda com'è adesso; se non c'è più, com'era, col testo del campo.
+      const current = doc.nodes.find((node) => node.id === pending.card.id);
+      if (current) pending.card = current;
+      const next = { ...pending.card };
+      next[pending.field] = pending.text;
+      const patch = upsertNodePatch(doc, next);
+      if (!patch) {
+        this.#setPending(null);
+        return true;
+      }
+      code = this.#commitLocal([patch], "input", (step) => {
+        this.#setPending(null);
+        this.#pushUndo(step, true);
+      });
+      // Il testo è cambiato da un'altra parte: si riprova sulla scheda di adesso.
+      const fresh = code === "stale" ? this.#coreModel() : null;
+      if (!fresh) break;
+      this.#doc = fresh;
+    }
+    if (code === true) {
+      if (this.#intakeError) this.#showNotice("");
+      return true;
+    }
+    if (code === "invalid" || code === "limit") {
+      this.#showNotice(t(pending.field === "text" && utf8.encode(pending.text).length > MAX_CARD_TEXT_BYTES
+        ? "canvas.card_too_long" : "canvas.card_invalid"));
+    }
+    return false;
+  }
+
+  /**
+   * Chiude il campo aperto, dopo averne registrato il testo. Se il nucleo lo
+   * rifiuta il campo resta aperto col suo testo, a meno di `force` (la
+   * superficie si chiude, o diventa di sola lettura): allora quel testo si
+   * perde, e l'avviso l'ha già detto.
+   */
+  #closeField(force: boolean): boolean {
+    const recorded = this.#recordPending();
+    if (!recorded && !force) return false;
+    this.#setPending(null);
+    const editor = this.#editor;
+    if (!editor) return true;
+    this.#editor = null;
+    editor.lifetime.abort();
+    editor.input.disabled = true;
+    return true;
+  }
+
+  /** Esc, Invio, l'uscita dal campo: registra e chiude. */
+  #leaveField(focus: boolean): void {
+    if (!this.#closeField(false)) return;
+    this.#render();
+    if (focus) this.#viewport.focus();
+  }
+
+  #setPending(next: PendingText | null): void {
+    const had = this.#pending !== null;
+    this.#pending = next;
+    // Ogni tasto conta: la sessione arma la bozza su ogni cambio, non solo sul primo.
+    if (next || had) this.#options.onPendingChange?.(next !== null);
+  }
+
+  /**
+   * Il testo intero del documento col testo in sospeso dentro, come lo
+   * scriverebbe il commit, senza cambiare la lavagna; `null` se non c'è testo
+   * in sospeso o il nucleo non lo prende (allora vale l'ultimo testo accettato,
+   * e lo si annota nel registro).
+   */
+  pendingText(): string | null {
+    const pending = this.#pending;
+    if (!pending || this.#destroyed || !this.#doc) return null;
+    const core = this.#core;
+    if (!core) return null;
+    let doc: CanvasDocument = this.#doc;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const current = doc.nodes.find((node) => node.id === pending.card.id);
+      const next = { ...(current ?? pending.card) };
+      next[pending.field] = pending.text;
+      const patch = upsertNodePatch(doc, next);
+      // Il campo dice ciò che la lavagna ha già.
+      if (!patch) return this.#source;
+      try {
+        return core.preview([patch]);
+      } catch (error) {
+        if (lostCore(error)) {
+          this.#lose();
+          return null;
+        }
+        if (!(error instanceof CanvasCoreError)) throw error;
+        const fresh = error.code === "stale" && attempt === 0 ? this.#coreModel() : null;
+        if (!fresh) {
+          console.warn(`canvas: il testo in sospeso non entra nella bozza (${error.code})`);
+          return null;
+        }
+        doc = fresh;
+      }
+    }
+    return null;
+  }
+
+  /** Registra adesso il testo in sospeso, come alla fine della pausa. */
+  commitPending(): void {
+    if (!this.#destroyed) this.#recordPending();
+  }
+
+  /** Se c'è testo di una scheda non ancora registrato. */
+  get hasPending(): boolean {
+    return this.#pending !== null;
+  }
+
+  #schedulePause(): void {
+    clearTimeout(this.#pauseTimer);
+    this.#pauseTimer = setTimeout(() => {
+      this.#pauseTimer = undefined;
+      this.#recordPending();
+    }, CARD_PAUSE_MS);
+  }
+
+  #showNotice(text: string): void {
+    if (this.#destroyed || this.#intakeError === text) return;
+    this.#intakeError = text;
+    this.#drawToolbar();
   }
 
   #pruneSelection(): void {
@@ -449,6 +969,7 @@ export class CanvasEngine {
       button.disabled = disabled || (mutates && (this.#readOnly || this.#isSceneOversized()));
       button.addEventListener("click", (e) => {
         e.preventDefault();
+        this.#recordPending();
         run();
         this.#viewport.focus();
       });
@@ -558,11 +1079,15 @@ export class CanvasEngine {
       const rect = this.#viewport.getBoundingClientRect();
       this.#zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1 / 1.2);
     }, false, false);
-    if (this.#intakeError) {
+    // Un avviso solo, nel suo posto: quello dell'ultimo gesto, o la sola
+    // lettura della tela. Una scena oltre il limite ha già il suo, nella tela.
+    const notice = this.#intakeError
+      || (this.#unwritable && !this.#isSceneOversized() ? t("canvas.unwritable") : "");
+    if (notice) {
       const error = document.createElement("output");
       error.setAttribute("role", "alert");
       error.className = "canvas-intake-error";
-      error.textContent = this.#intakeError;
+      error.textContent = notice;
       bar.append(error);
     }
   }
@@ -1030,6 +1555,8 @@ export class CanvasEngine {
   }
 
   #pointerDown(event: PointerEvent): void {
+    // Prima di ogni gesto, il testo in sospeso (non i clic dentro il campo).
+    if (!(event.target instanceof Node && this.#editor?.input.contains(event.target))) this.#recordPending();
     if (event.button === 1 || event.ctrlKey || event.metaKey || event.altKey) {
       this.#pan = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, camX: this.#camera.x, camY: this.#camera.y };
       this.#viewport.setPointerCapture?.(event.pointerId);
@@ -1199,17 +1726,23 @@ export class CanvasEngine {
     this.#resize = null;
     this.#pan = null;
     this.#connect = null;
-    if (active && this.#doc) {
-      this.#doc = parseCanvas(this.#source);
+    // Il gesto aveva mosso il modello in mano: torna quello del nucleo.
+    const model = active && this.#doc ? this.#coreModel() : null;
+    if (model) {
+      this.#doc = model;
       this.#render();
     }
   }
 
   #commitFromSource(origin: EditorChangeOrigin): void {
     if (!this.#doc) return;
-    // Ricostruisce le patch confrontando live vs sorgente: preimmagini vere,
+    // Ricostruisce le patch confrontando live vs nucleo: preimmagini vere,
     // mai snap del live come before.
-    const before = parseCanvas(this.#source);
+    const before = this.#coreModel();
+    if (!before) {
+      this.#render();
+      return;
+    }
     const patches: CanvasPatch[] = [];
     const beforeNodes = new Map(before.nodes.map((n) => [n.id, n]));
     const liveNodes = new Map(this.#doc.nodes.map((n) => [n.id, n]));
@@ -1262,6 +1795,7 @@ export class CanvasEngine {
 
   #keydown(event: KeyboardEvent): void {
     if (!this.#doc || event.defaultPrevented || this.#isSceneOversized()) return;
+    this.#recordPending();
     const modifier = event.ctrlKey || event.metaKey;
     if (modifier && event.key.toLowerCase() === "z") {
       event.preventDefault();
@@ -1383,11 +1917,11 @@ export class CanvasEngine {
     this.#markdownTeardowns.clear();
     this.#applyCamera();
     this.#drawToolbar();
-    this.#stage.replaceChildren();
     this.#viewport.dataset.canvasNodes = String(this.#doc.nodes.length);
     this.#viewport.dataset.canvasEdges = String(this.#doc.edges.length);
     if (this.#isSceneOversized()) {
       this.#edgeLayer.replaceChildren();
+      this.#stage.replaceChildren();
       const fallback = document.createElement("p");
       fallback.className = "canvas-large-fallback";
       fallback.textContent = t("canvas.too_large");
@@ -1396,9 +1930,21 @@ export class CanvasEngine {
       return;
     }
     this.#drawEdges();
+    // La scheda col campo aperto resta quella: spostarla toglierebbe il fuoco
+    // al campo. Le altre le si mettono attorno.
+    const kept = this.#editor && this.#editor.article.parentElement === this.#stage ? this.#editor : null;
+    for (const child of [...this.#stage.children]) if (child !== kept?.article) child.remove();
+    let after = false;
     // Z-order = ordine array: primo sotto, ultimo sopra (come da spec).
     for (const node of this.#doc.nodes) {
-      this.#stage.append(this.#nodeEl(node));
+      if (kept && node.id === kept.id) {
+        after = true;
+        refreshCard(kept.article, node, this.#selection.includes(node.id));
+      } else if (kept && !after) {
+        this.#stage.insertBefore(this.#nodeEl(node), kept.article);
+      } else {
+        this.#stage.append(this.#nodeEl(node));
+      }
     }
     this.#viewport.dataset.canvasProtocol = "source";
   }
@@ -1635,76 +2181,115 @@ export class CanvasEngine {
     return body;
   }
 
-  #beginCardEdit(node: CanvasNode): void {
+  #beginCardEdit(target: CanvasNode): void {
     if (this.#readOnly || !this.#doc) return;
-    if (this.#finishEditing) {
-      this.#finishEditing(true);
+    const node = this.#doc.nodes.find((candidate) => candidate.id === target.id);
+    if (!node) return;
+    if (this.#editor) {
+      if (this.#editor.id === node.id) return;
+      // Il testo dell'altra scheda si registra prima; se non si può, resta lì.
+      if (!this.#closeField(false)) return;
       this.#render();
     }
-    const body = this.#stage.querySelector<HTMLElement>(`[data-node="${CSS.escape(node.id)}"] .canvas-card-body`);
-    if (!body) return;
-    const field = node.type === "text" ? "text" : node.type === "group" ? "label" : node.type === "link" ? "url" : "file";
-    const initial = node[field];
+    const article = this.#stage.querySelector<HTMLElement>(`[data-node="${CSS.escape(node.id)}"]`);
+    const body = article?.querySelector<HTMLElement>(".canvas-card-body");
+    if (!article || !body) return;
+    const field: CardField = node.type === "text" ? "text" : node.type === "group" ? "label" : node.type === "link" ? "url" : "file";
     const input = node.type === "text" ? document.createElement("textarea") : document.createElement("input");
     input.className = node.type === "text" ? "canvas-text-editor" : "canvas-field-editor";
-    input.value = initial ?? "";
+    input.value = node[field] ?? "";
     input.setAttribute("aria-label", t("canvas.edit_text", { id: node.id }));
     const lifetime = new AbortController();
-    let finished = false;
-    const applyValue = (value: string | undefined): void => {
-      const current = this.#doc?.nodes.find((candidate) => candidate.id === node.id);
-      if (!current || !this.#doc) return;
-      const next = { ...current };
-      if (value === undefined) delete next[field];
-      else next[field] = value;
-      const patch = upsertNodePatch(this.#doc, next);
-      if (patch && this.#commitLocal([patch], "input", false, false)) this.#redo = [];
+    const editor: CardEditor = { id: node.id, field, input, article, lifetime, composing: false, recordOnInput: false };
+    this.#editor = editor;
+    const signal = lifetime.signal;
+    const hold = (): void => {
+      const card = this.#doc?.nodes.find((candidate) => candidate.id === node.id) ?? this.#pending?.card ?? node;
+      this.#setPending({ card, field, text: input.value });
     };
-    const finish = (save: boolean): void => {
-      if (finished) return;
-      finished = true;
-      this.#finishEditing = null;
-      lifetime.abort();
-      if (!save) {
-        applyValue(initial);
-      } else {
-        const current = this.#doc?.nodes.find((candidate) => candidate.id === node.id);
-        if (current && this.#doc) {
-          const before = { ...current };
-          if (initial === undefined) delete before[field];
-          else before[field] = initial;
-          const inverse = upsertNodePatch(this.#doc, before);
-          if (inverse) {
-            this.#undo.push(inverseCanvasPatches([inverse]));
-            if (this.#undo.length > MAX_CANVAS_HISTORY) this.#undo.shift();
-          }
-        }
+    // Il testo resta qui finché non c'è una pausa: niente commit per tasto.
+    input.addEventListener("input", () => {
+      hold();
+      if (editor.composing) return;
+      if (editor.recordOnInput) {
+        editor.recordOnInput = false;
+        this.#recordPending();
+        return;
       }
-      input.disabled = true;
-    };
-    this.#finishEditing = finish;
-    // L'input entra subito nella sessione condivisa, non soltanto al blur.
-    // Il DOM del campo resta vivo; la history Canvas raggruppa l'intera edit.
-    input.addEventListener("input", () => applyValue(input.value), { signal: lifetime.signal });
+      this.#schedulePause();
+    }, { signal });
+    // Durante la composizione (IME) la pausa non corre: conta dalla fine.
+    input.addEventListener("compositionstart", () => {
+      editor.composing = true;
+      clearTimeout(this.#pauseTimer);
+      this.#pauseTimer = undefined;
+    }, { signal });
+    input.addEventListener("compositionend", () => {
+      editor.composing = false;
+      hold();
+      this.#schedulePause();
+    }, { signal });
     input.addEventListener("keydown", (event) => {
       if (!(event instanceof KeyboardEvent)) return;
+      // Col campo aperto i tasti, Ctrl+Z compreso, sono del campo.
       event.stopPropagation();
-      if (event.key === "Escape" || (event.key === "Enter" && (node.type !== "text" || event.ctrlKey || event.metaKey))) {
+      editor.recordOnInput = false;
+      if (event.isComposing || editor.composing) return;
+      if (event.key === "Escape") {
         event.preventDefault();
-        finish(event.key !== "Escape");
-        this.#render();
-        this.#viewport.focus();
+        this.#leaveField(true);
+      } else if (event.key === "Enter") {
+        if (field === "text" && !event.ctrlKey && !event.metaKey) {
+          // L'a capo entra nel campo, e con lui il testo si registra.
+          editor.recordOnInput = true;
+          return;
+        }
+        event.preventDefault();
+        this.#leaveField(true);
       }
-    }, { signal: lifetime.signal });
-    input.addEventListener("blur", () => {
-      finish(true);
-      this.#render();
-    }, { signal: lifetime.signal });
+    }, { signal });
+    input.addEventListener("blur", () => this.#leaveField(false), { signal });
     body.replaceChildren(input);
     input.focus();
     if (node.type === "text") input.setSelectionRange(input.value.length, input.value.length);
     else input.select();
   }
+}
+
+/** Una copia delle toppe, che chi le ha date può ancora cambiare. */
+function copyPatches(patches: readonly CanvasPatch[]): CanvasPatch[] {
+  return JSON.parse(JSON.stringify(patches)) as CanvasPatch[];
+}
+
+/** Una trappola o un'istanza persa: il nucleo va riaperto. */
+function lostCore(error: unknown): boolean {
+  return error instanceof CanvasCoreError && (error.code === "trap" || error.code === "handle");
+}
+
+/**
+ * La modifica al testo che il nucleo ha fatto, come `TextOperation`: il tratto
+ * cambiato così com'è, o, con dei CR nel testo, la differenza contata sui `\n`.
+ */
+function sourceOperation(before: string, after: string, edit: CanvasSourceEdit): Pick<TextOperation, "beforeLength" | "afterLength" | "edits"> {
+  if (before.includes("\r") || after.includes("\r")) {
+    return operationFromText(lineFeeds(before), lineFeeds(after));
+  }
+  const deleted = before.slice(edit.start, edit.end);
+  if (deleted === edit.text) return { beforeLength: before.length, afterLength: after.length, edits: [] };
+  return {
+    beforeLength: before.length,
+    afterLength: after.length,
+    edits: [{ from: edit.start, to: edit.end, deleted, inserted: edit.text }],
+  };
+}
+
+/** Aggiorna la scheda col campo aperto senza toglierla dalla scena. */
+function refreshCard(article: HTMLElement, node: CanvasNode, selected: boolean): void {
+  article.style.transform = `translate(${node.x}px, ${node.y}px)`;
+  article.style.width = `${node.width}px`;
+  article.style.height = `${node.height}px`;
+  article.style.background = nodeFill(node.color);
+  article.classList.toggle("selected", selected);
 }
 
 function nodeTitle(node: CanvasNode): string {

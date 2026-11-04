@@ -1,0 +1,11 @@
+{
+  "about": "Una scheda senza id prende il primo id del seme: sedici cifre esadecimali minuscole (SplitMix64 col seme 1).",
+  "before": {},
+  "seed": 1,
+  "ops": [{ "op": "add_card", "node": { "type": "text", "x": 10, "y": 20, "width": 200, "height": 80, "text": "ciao" } }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [{ "id": "910a2dec89025cc1", "type": "text", "x": 10, "y": 20, "width": 200, "height": 80, "text": "ciao" }] },
+    "created": ["910a2dec89025cc1"]
+  }
+}

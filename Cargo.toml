@@ -12,6 +12,13 @@ members = [
     "crates/fub-testkit",
     "crates/fub-format-markdown",
     "crates/fub-format-canvas",
+    # Il nucleo della lavagna (N3): il modello e la lettura di una `.canvas`.
+    # Puro: lo usano il formato, i comandi e la WebView.
+    "crates/fub-canvas-core",
+    # La facciata WebAssembly del nucleo (N3): la WebView la carica come
+    # `.wasm`, fatto con `cargo rustc --crate-type cdylib` (il manifesto resta
+    # `rlib`).
+    "crates/fub-canvas-wasm",
     "crates/fub-format-base",
     "crates/fub-ink",
     # Il risolutore dei componenti (K1): puro, non dipende da nessun membro.
@@ -157,6 +164,7 @@ fub-sdk = { path = "crates/fub-sdk", version = "0.1.0" }
 fub-testkit = { path = "crates/fub-testkit", version = "0.1.0" }
 fub-format-markdown = { path = "crates/fub-format-markdown", version = "0.1.0" }
 fub-format-canvas = { path = "crates/fub-format-canvas", version = "0.1.0" }
+fub-canvas-core = { path = "crates/fub-canvas-core", version = "0.1.0" }
 fub-format-base = { path = "crates/fub-format-base", version = "0.1.0" }
 fub-ink = { path = "crates/fub-ink", version = "0.1.0" }
 fub-componenti = { path = "crates/fub-componenti", version = "0.1.0" }

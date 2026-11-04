@@ -146,6 +146,33 @@ La Content Security Policy impedisce script remoti, iframe e oggetti non
 previsti. Il rendering non deve creare HTML attivo da una stringa del vault o
 del plugin senza sanitizzazione e una decisione esplicita.
 
+La CSP sta in `crates/fub-app/tauri.conf.json` (`app.security.csp`) e vale per
+ogni piattaforma. `script-src` è `'self' 'wasm-unsafe-eval'`, e nient'altro:
+
+- `'self'`: gli script vengono soltanto dagli asset dell'app;
+- `'wasm-unsafe-eval'`: la WebView può compilare e istanziare un modulo
+  WebAssembly, che la shell prende anche lui dagli asset dell'app. Serve al
+  nucleo della lavagna, che nella shell gira come WebAssembly
+  ([ADR 0237](../decisions/0237-la-lavagna-in-webassembly-nella-webview.md),
+  [il modulo](canvas-operations.md#webassembly)).
+
+`'wasm-unsafe-eval'` non permette di eseguire testo come JavaScript: `eval`,
+`new Function` e un timer con una stringa restano vietati, perché
+`'unsafe-eval'` non c'è. Per gli script non ci sono nemmeno `'unsafe-inline'`,
+`data:`, `blob:`, `*` o un'altra origine.
+`crates/fub-app/tests/platform_configs.rs` lo controlla sulla config fusa di
+Linux, Windows, macOS, Android e iOS, e su `devCsp` se c'è, direttiva per
+direttiva e senza guardare le maiuscole: fallisce se `'unsafe-eval'` compare
+in una direttiva qualsiasi, se `'wasm-unsafe-eval'` compare fuori da
+`script-src`, se `script-src` manca, compare due volte o non è esattamente
+`'self' 'wasm-unsafe-eval'`, o se `script-src-elem` o `script-src-attr` lo
+scavalcano. Tauri, quando serve gli asset, aggiunge a `script-src` i nonce e
+gli hash dei propri script; il controllo guarda la config, cioè ciò che si
+scrive a mano.
+
+Una WebView che non conosce `'wasm-unsafe-eval'` non compila il modulo: la
+lavagna non si cambia, e non c'è un ripiego in TypeScript.
+
 ### Immagini remote
 
 Un'immagine con un indirizzo remoto non si carica mai da sola: il sanitizzatore

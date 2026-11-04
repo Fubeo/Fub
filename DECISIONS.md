@@ -59,6 +59,279 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- CI di PR #297 (orchestratore): i job dei banchi (visual, a11y, graph,
+  benches) non avevano il toolchain Rust col bersaglio wasm32-unknown-
+  unknown, e Vite non poteva compilare il nucleo della lavagna quando
+  serviva la pagina: la shell del banco non partiva. Aggiunto lo stesso
+  passo del job client. Nella stessa corsa la WebView vera è caduta solo su
+  S1 per GTK che non si inizializza sotto Xvfb (tao event_loop), con tutte
+  le altre misure, L1 compreso, sotto soglia: non è di N3 · fonte: log dei
+  job 126262963796, 126262963801, 126262963812, 126262963882, 126262787875
+- Orchestratore, CI di #297 (client in OOM): la causa è la prima build
+  fredda del nucleo WebAssembly dentro il tempo massimo della prima prova
+  (shell.e2e): con target/canvas-wasm vuoto le prove scadevano una dopo
+  l'altra e la memoria cresceva. Riprodotto in locale (16 prove scadute a
+  freddo). Correzione: un globalSetup di Vitest (build/canvas-wasm.global-
+  setup.mjs) compila il modulo una volta prima delle prove; se cargo manca
+  la suite parte lo stesso e falliscono solo le prove della lavagna, col
+  messaggio del plugin. A freddo dopo la correzione: 117/117, compilazione
+  23 s, memoria massima come su main (circa 1,4 GB). Commit d2783ebf.
+- N3 T22 (6d5fb197, dal coder ed4d8c1c): una lavagna con una chiave doppia
+  si apre in sola lettura con l'avviso `canvas.unwritable` (IT ed EN, le
+  sole lingue del catalogo) e torna scrivibile da sola quando la chiave se
+  ne va. Differenze dal piano: la domanda al nucleo è `preview([])` e non
+  `commit([])` (stessi passi, non tocca la lavagna e tiene la regola di T16
+  «mai una lista vuota a commit»); la sola lettura è `#unwritable` sommata a
+  `#panelReadOnly` in un getter `#readOnly`; l'avviso si calcola in
+  `#drawToolbar` (prima l'avviso dell'ultimo gesto, se no
+  `canvas.unwritable`, mai oltre il limite interattivo); `syncDoc` chiede al
+  nucleo solo se il testo è cambiato. Aspetta: l'avviso sta in fondo alla
+  barra, che va oltre lo schermo anche a 1280 px, quindi senza scorrerla non
+  si vede (vale già per gli avvisi di prima); spostarlo cambia la pelle o il
+  layout, fuori dal Tocca: chiesto all'utente (all'inizio della barra, una
+  striscia sopra la lavagna, o com'è). Rischi: un testo con la chiave doppia
+  che arriva da un'altra superficie mentre si scrive in una scheda chiude il
+  campo e quel testo si perde, come con `setReadOnly` del pannello; ogni
+  testo nuovo costa una `preview` in più nel nucleo, non misurata.
+- N3 T21 (b652f0c1, dal coder cbdc32cf): annulla e ripeti della tela
+  rimettono il tratto di prima byte per byte con un `reset` quando il testo
+  è ancora quello lasciato dal passo; se no passano le toppe inverse al
+  nucleo, come prima. Differenze dal piano: la versione non è un contatore
+  che cresce soltanto: ogni testo nuovo (gesto, annulla per toppe, `setDoc`,
+  `syncDoc` che cambia il testo) prende un numero mai usato, mentre un
+  annulla o ripeti a byte ridà al testo il numero che aveva (ogni passo
+  tiene `version` e `restores`), se no dopo annulla e ripeti la storia più
+  vecchia ricadeva sulle toppe; il passo tiene anche le toppe dirette
+  (`back`) per il passo opposto, perché un `reset` non dà inverse; oltre
+  alla versione si controlla che il tratto sia davvero nel testo, e se
+  `reset` rifiuta restano le toppe. Controprova del coder: forzando la via
+  delle toppe cadono 11 test su 13. Rischio: un passo grande tiene in
+  memoria il testo tolto, al massimo 100 passi e senza limite di byte.
+- N3 T20 (1c3c37c0, dal coder f42acbcb): la riscrittura di una lavagna tiene
+  i null dei campi noti, non aggiunge gli array `nodes`/`edges` assenti e le
+  toppe dei collegamenti portano `at`; spostare una scheda di Obsidian
+  cambia solo i byte della coordinata (test in `fub-
+  features/src/lavagna/apply.rs`). Differenze dal piano: il coder ha
+  rigenerato `canvas-mirror.json` con UPDATE_MIRROR, che la nota diceva di
+  non toccare ma è un file derivato (25 casi cambiati, verificati uno per
+  uno: solo collegamenti, null e tratti più piccoli); `operation.test.ts`
+  ora ha `at: 0`; una scheda ricomposta tiene i byte dei campi che non
+  cambiano; il vettore 18 è diventato `18-null-kept-on-rewrite.json`.
+  Rischio: un null che prende un valore e poi si annulla sparisce del tutto
+  (vettori 74 e 86), scritto nella pagina del formato; i casi del null
+  richiesto e di BOM+CRLF su una riga stanno in `source_edit.rs`.
+- 2026-11-03 · N3 T18 · Il TypeScript della lavagna è tolto (model.ts resta
+  solo tipi; parseCanvas, serializeCanvas, isValidCanvas, emptyCanvas,
+  isCanvasOperation, source-edit.ts e i loro test via): i 101 casi tolti
+  sono diventati vettori canvas-read/01–81 e canvas-patches/46–70, letti da
+  Rust (tests/read_vectors.rs) e dal mirror wasm; la tabella caso → vettore
+  è nel resoconto del coder. Una lavagna rotta tenuta mentre il nucleo si
+  carica passa alla superficie d'errore per un canale onFail
+  (SurfaceCallbacks → document-controller.failSurface), toccando
+  editors/canvas/surface.ts; due e2e aspettano con waitFor la superficie
+  d'errore e controllano che nel frattempo non si veda niente di
+  modificabile. Scartato un ready?() nel registro: rallenterebbe l'apertura
+  di una lavagna buona e toglierebbe il riquadro aria-busy. I vettori di
+  lettura hanno un campo extra. Rischi rimasti: commit([]) arriva al nucleo,
+  che su una sorgente vuota scrive la lavagna intera (il motore non lo manda
+  mai; scritto in canvas-format.md e wasm/core.test.ts); i disegni
+  (spatial/lazy.ts) mostrano ancora avviso più toast invece della superficie
+  d'errore; il messaggio di panic di ts_mirror.rs nomina ancora il vecchio
+  mirror.test.ts · perché la regola del formato vive una volta sola, in Rust
+- N3 T19 (orchestratore): `settlePending()` è pubblico invece di
+  `#settlePending`, perché anche i metodi della collezione (release,
+  discardUnsaved, handleExternalRemoval, il congedo) lo chiamano prima di
+  leggere `dirty`. La porta ha anche `watchPending`, un'iscrizione col suo
+  disposer, per check-listeners. La descrizione della porta e della cadenza
+  sta in frontend-and-ipc.md («Il testo in sospeso») perché editor-
+  surfaces.md era al limite delle 450 righe: lì c'è un rimando. `written()`
+  usa il documento mostrato dal riquadro, perché durante un cambio di tab il
+  testo registrato allo stacco è del documento di prima. Un salvataggio
+  riuscito con testo ancora in sospeso tiene la bozza e la riscrive sulla
+  base nuova. Ho rimesso al suo posto il commento di `renderMarkdownForCard`
+  (f56444dc).
+- T16 (7592cc3a): la tela usa il nucleo. Il campo di una scheda resta aperto
+  attraverso `syncDoc` e il suo testo in sospeso si registra subito dopo,
+  sulla scheda com'è nel testo nuovo; Invio in una scheda di testo registra
+  all'input che segue (l'a capo); `setReadOnly(true)` chiude il campo; la
+  seconda trappola di fila mostra l'avviso e non riprova fino al testo dopo.
+  Durante il caricamento pigro la superficie usa ancora `parseCanvas` per
+  dire subito che un testo non è una lavagna: T18, che toglie il modello
+  TypeScript, lo sostituisce. Chiave nuova `canvas.card_invalid` accanto a
+  `canvas.card_too_long` e `canvas.core_unavailable`. La porta del nucleo è
+  iniettabile (`CanvasEngineOptions.core`) per i test che contano le
+  chiamate; `registry.test.ts` carica il nucleo in un `beforeAll`. La tela
+  non manda mai una lista vuota a `Core::commit` (risponde `request`), così
+  il rischio di T14 non si presenta. Resta: un intero oltre 2^53 in un campo
+  sconosciuto si arrotonda passando dal JavaScript; a 700 px la barra degli
+  strumenti della tela esce a destra (già così sulla base). Il banco apre un
+  `.canvas` solo dal lanciatore: l'host finto lo elenca senza visualizzatore
+  (già così).
+- 2026-11-03 · N3 · T15 integrato (d3c348be la CSP, il test e la decisione
+  0237; 4b45dbd0 lo scenario L1; 8adf925e la misura). La CSP apre solo
+  `'wasm-unsafe-eval'` in `script-src`; il test di `platform_configs.rs`
+  legge la config fusa di ogni piattaforma e `devCsp`, con 16 casi in
+  negativo (anche `script-src-elem`/`-attr` e una direttiva doppia). L1 in
+  `bench:webview` fallisce con un messaggio chiaro su un errore di CSP;
+  l'orchestratore l'ha messo nel job `webview` (57f11a32, solo il nome del
+  passo e `--only`: il nome del job resta, perché lo cita il cancello del
+  rilascio). Misure: modulo 449,5 KiB grezzi, 164 182 B gzip (contro i ~56
+  KB della prova 1 del piano), commit su 2000 schede 5–8 ms al p95 in Node e
+  in WebKitGTK 2.54; soglie ci di L1 provvisorie (3× il peggiore locale,
+  minimo 10 ms), da ritarare a 1,5× il peggiore del runner dopo il primo
+  giro (T23). Da sapere su server-di-fub: con sccache un cambio della sola
+  `tauri.conf.json` non ricompila `generate_context!` e il binario tiene la
+  CSP vecchia; per provarla si tocca `crates/fub-app/src/lib.rs` o si
+  compila senza sccache.
+- 2026-11-03 · N3 · le risposte dell'utente alle domande nuove: D-9 (b), le
+  lavagne con valori sconosciuti in un campo noto si aprono dentro N3 (un
+  prototipo e due task prima di T23, li scrive il pianificatore); D-10 (a),
+  Esc registra e chiude; A14–A18 approvate; la riga di CLAUDE.md di T14
+  approvata · D-9 (b) è il consiglio dell'orchestratore contro quello del
+  pianificatore (a): N3 cambia già il modello della lavagna, e un file
+  dell'utente che non si apre è il difetto più grave.
+- 2026-11-02 · N3 · Le risposte dell'utente a D-1…D-8 e a merge-n3n4: le non
+  ovvie sono tre. D-5 (c): il testo di una scheda si registra a pause di
+  circa 250 ms, Esc registra invece di buttare (la D-10 nuova chiede
+  conferma), il testo ancora nel campo va nelle bozze, e il ritardo della
+  bozza diventa una cadenza per ogni documento (T16, T19). D-7 (c): Fub
+  riscrive conservando i null dei campi noti, gli array assenti e il posto
+  degli archi, l'annulla della tela torna ai byte di prima, e una lavagna
+  che non si riscrive senza perdere niente si apre in sola lettura (T20–T22;
+  i valori sconosciuti dei campi noti restano fuori, D-9). merge-n3n4 (b):
+  N3 entra in main solo finito, dopo la CI completa e una revisione riga per
+  riga (T23) · non perdere dati e non cambiare senza dirlo i file degli
+  altri programmi vengono prima della comodità, e N3 a metà in main
+  lascerebbe due copie della logica.
+- 2026-11-02 · N3 · T17: fatto con D-4 (a), solo la misura: il banco
+  `tools/ink-wasm-banco/` (nessuna crate nuova nel lock) e `wasm.bench.ts`,
+  che si salta senza il `.wasm`. Il primo giro era a macchina carica; la
+  pagina tiene i tre giri rifatti con il carico sotto 2,5. La condizione del
+  passo 12a non è vera per intero: un evento per chiamata, il WebAssembly è
+  4,3 volte più lento col mouse e il 16% con lo stabilizzatore, pari con la
+  penna; il riduttore da solo è pari o più veloce. La pagina non dice che
+  cosa fare: resta all'utente con D-4.
+- 2026-11-02 · N3 · ADR 0234 allineato: la lavagna non è più fra i
+  componenti senza bundle, perché da T10 è il bundle fub.lavagna. Perché:
+  l'ADR deve dire com'è fatto il codice.
+- 2026-11-02 · N3 · T12: gli strumenti MCP fub_canvas_create e
+  fub_canvas_apply chiamano canvas.create e canvas.apply con gli id scritti
+  come costanti, come note.create, perché fub-cli non dipende da fub-
+  features; fub_canvas_apply risponde {doc, dry_run, outcome} in prova e
+  {doc, dry_run, created, revision} applicato, e check_read più check_write
+  valgono anche in prova (in sola lettura nemmeno la prova passa); l'MCP non
+  passa il seme, quindi gli id nuovi vengono dalla revisione. Se
+  fub_canvas_create crea un nome diverso da quello provato, lo dice invece
+  di tacerlo. Perché: un agente crea e riempie una lavagna con le stesse
+  regole di accesso degli altri strumenti.
+- 2026-11-02 · N3 · T11: canvas.create scrive come sorgente la lavagna vuota
+  del nucleo (patch_source su Canvas::default, riletta con Core::open prima
+  di scrivere), perché il nucleo non ha una funzione apposta; senza nome
+  prende il primo libero («Lavagna», «Lavagna 1», in inglese «Whiteboard»),
+  e un nome preso è un conflitto che non sovrascrive. Il codice dei nomi è
+  una copia di drawing.create, perché le feature non si importano fra loro;
+  l'annulla porta la lavagna nel cestino e richiede la feature commands,
+  come drawing.create. Perché: un file nuovo è già una lavagna che il nucleo
+  apre.
+- 2026-11-02 · N3 · T10: il componente «Lavagna» (fub.lavagna) porta
+  canvas.apply; il seme degli id usa l'Fnv1a del contratto; spegnere
+  fub.lavagna toglie solo canvas.apply, e il test fub-cli
+  spegnere_la_lavagna_dice_che_la_penna_non_serve_piu è stato aggiornato di
+  conseguenza (opzione a: dice con precisione che cosa sparisce, non è
+  indebolito). Resta da allineare l'ADR 0234, che mette ancora la Lavagna
+  fra i componenti senza bundle. Perché: la lavagna diventa un componente
+  che si scrive come gli altri, e un componente spento toglie solo ciò che
+  porta.
+- 2026-11-02 · N3 · T9: lo specchio a caso fra fub-canvas-core e la lavagna
+  TypeScript ha 2051 casi (1333 sorgenti, 718 prove con toppe) in una
+  fixture di 501 KB, un sorgente per riga con le sue prove per stare sotto i
+  512 KB. Ha trovato una divergenza (26 casi): in una toppa il TS trattava
+  un campo noto a null diversamente dal nucleo Rust; corretto il lato TS
+  secondo R7 (null vale come assente, sia nel dopo sia nel confronto del
+  prima), vettori 44 e 45.
+- 2026-11-02 · N3 T7 · il commit in Rust (`fub-canvas-core/src/commit.rs`:
+  `Core`, `Committed{source,inverse,edit}`, `Edit::between/apply` ai confini
+  di carattere, `CommitError` Stale/Invalid/Rejected/Unstable con
+  `reason()`) e 43 vettori in `apps/client/src/__fixtures__/canvas-patches/`
+  letti da Rust e da TS; in TS `canvasCommitOutcome` accanto a
+  `commitCanvasPatches`, che non cambia; `parseNode` di `model.ts` allineato
+  a Rust (limiti solo per il campo del tipo della scheda, niente limite
+  sullo sfondo) · i due lati devono dare gli stessi byte; rischi: il TS ora
+  scrive i campi nuovi nell'ordine di Rust (stesso valore, byte diversi),
+  un'immagine con le chiavi in un altro ordine e uno sfondo di 9000 byte ora
+  si aprono; manca un vettore «unstable»; una lista di toppe vuota fa in
+  Rust un commit che non cambia niente, in TS dà null.
+- 2026-11-02 · N3 T8 · operazioni d'intento (`ops.rs`): un id che non è né
+  scheda né arco in `remove`/`set` dà `UnknownEdge`; `set` vale anche sugli
+  archi; un id dato già preso o ripetuto in `ids` dà `DuplicateId`; `reorder
+  {ids}` porta in cima gli id dati, nell'ordine dato; gli id nuovi vengono
+  da SplitMix64 sul seme (`IdSource`, sedici cifre esadecimali); ogni scheda
+  e arco messi passano `Canvas::validate`; l'`at` delle `remove-node` è la
+  posizione all'inizio della serie, anche fra due operazioni; i vettori
+  hanno l'esito `malformed` per un'operazione che non si legge · così il
+  TypeScript (T14, T16) rifà lo stesso generatore e le stesse posizioni dai
+  vettori, e l'inversa rimette ogni scheda al suo posto.
+- 2026-11-02 · N3 · T5: `patch_source` ritocca il sorgente con uno
+  scanner suo, più severo di quello TypeScript (rifiuta virgola finale e
+  valori vuoti, si ferma a 256 livelli, `SourceError::TooDeep`); gli archi
+  nuovi si scrivono nell'ordine di R10 (fromNode, fromSide, fromEnd,
+  toNode…), costruito in `edge_value` e non dall'ordine della struct; una
+  radice ricomposta senza `edges` lo riceve in fondo, come in TypeScript; un
+  array che non corrisponde al modello di prima si riscrive per intero. Le
+  schede si confrontano come struct e diventano JSON solo se cambiate: 2000
+  schede, una cambiata, ~0,8 ms in release (macchina carica). Il confronto
+  per valore è uno solo, `patch::same_value`, usato anche dal ritocco.
+  Perché: stessi byte di TypeScript dove TypeScript segue R1–R10; T7 porta
+  il TypeScript all'ordine R10 degli archi e lo specchio di T9 lo controlla.
+- 2026-11-02 · N3 · T6: `PatchError` ha una variante per ogni rifiuto
+  (`Stale` con il soggetto, `AtOutOfRange`, `NodeHasEdges`,
+  `MissingEndpoint`, `NotAPermutation`), tutte con la posizione della toppa,
+  dove TypeScript dà solo `null`; `after: null` si legge solo da `null`;
+  `at` negativo o con la virgola è un errore di lettura (TypeScript lo
+  scarta nella bozza); `draft` non chiama `Canvas::validate`, come
+  `canvasDraft`: il modello di dopo lo controlla il commit (T7). Portate
+  anche `upsert_node_patch` e le sorelle, che servono a T8. Restano come in
+  TypeScript l'inversa di un inserimento senza `at` e l'arco rimesso in
+  fondo, fissati da un test. Perché: errori tipati e stessa forma JSON.
+- 2026-11-02 · N3 · T3: in Rust R2 è un solo visitor (`SafeInteger`) che
+  porta il nome del campo nell'errore, R7 un `null_as_empty` su `nodes` ed
+  `edges`; il nucleo espone `read::is_blank` (la regola di
+  `isBlankCanvasSource`) e `model::MAX_SAFE_INTEGER`, nessuna variante nuova
+  di `CanvasError`. R3, R4 e R5 li rifiutava già `serde_json`: i test li
+  fissano. Fuori da R1-R10 la validazione diverge ancora: TypeScript limita
+  `background` a 8192 byte e `subpath`/`url` su ogni scheda, Rust no e solo
+  sul loro tipo; per la regola «nel dubbio si apre» si allinea il
+  TypeScript a Rust in T7, e lo specchio di T9 lo controlla.
+
+- 2026-11-02 · N3 · T4: `js.rs` espone, oltre a `js_number`, `js_string`,
+  `encode` ed `encode_pretty`, anche `js_json_number`, `is_array_index` e
+  `js_entries` (l'ordine delle chiavi di JavaScript, che serve a T5 per
+  R10); `encode_pretty` non mette il `"\n"` finale, lo aggiunge chi scrive il
+  file; `js_number` su `NaN` e infiniti fa come `String(x)`. Il pareggio
+  esatto si cerca sull'espansione decimale solo quando è possibile
+  (`x = M·2^E` con `E = unit − 1`): in release un numero costava circa 2 µs,
+  ora 0,1-0,3; i test confrontano la strada veloce con l'espansione intera su
+  202 000 numeri, e fuori dal repo 400 000 numeri contro Node non danno
+  differenze.
+
+- 2026-11-02 · N3 · T1: `fub-canvas-core` ha un blocco suo nel grafo delle
+  dipendenze di `overview.md` (il quarto diagramma), perché il primo era già
+  a 20 riquadri; `read.rs` tiene il BOM e gli spazi come li leggeva
+  `fub-format-canvas` (le regole di R1-R8 sono di T3); il nucleo riesporta
+  `PresetColor` e `parse`, e `fub-format-canvas/src/model.rs` è un `pub use`
+  del nucleo più `FORMAT_ID` e `SCHEMA_VERSION`. Il controllo per
+  `wasm32-unknown-unknown` sta nel giro completo di `scripts/check.sh` e nel
+  job `invariants` della CI, che l'orchestratore ha aggiunto.
+
+- 2026-11-02 · N3 · T2: in TypeScript i controlli di R3, R4 e R5 stanno
+  nello scanner di `source-edit.ts` (`inspectCanvasJson`), una passata sola
+  sul testo dopo `JSON.parse`, e non in un reviver: misurato a 2000 schede,
+  il reviver portava la lettura da circa 17 a 23 ms, lo scanner la lascia a
+  13-14. La regola del vuoto (`isBlankCanvasSource`) è una sola, per il
+  lettore e per il riscrittore. `backgroundStyle` è qualunque stringa senza
+  limite suo (resta quello di 16 MiB del file), come in Rust; `-0` si legge
+  `0`, come un intero Rust.
+
 - 2026-11-01 · regole · L'orchestratore e i coder decidono da soli il come
   tecnico, i formati interni, le dipendenze fra crate del workspace e i file
   legati al task; «Chiede sempre» resta per ciò che si vede, il contratto

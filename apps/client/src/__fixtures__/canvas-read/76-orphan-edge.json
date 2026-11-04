@@ -1,0 +1,9 @@
+{
+  "name": "orphan-edge",
+  "description": "Un arco verso una scheda che non c'è",
+  "source": "{\"nodes\":[{\"id\":\"n\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"a\"}],\"edges\":[{\"id\":\"e\",\"fromNode\":\"n\",\"toNode\":\"missing\"}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

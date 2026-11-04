@@ -4,7 +4,8 @@
 > risorse, radici dell'automazione e regole di scrittura.
 > **Fonti autorevoli:** `crates/fub-cli/src/mcp.rs`,
 > `crates/fub-cli/src/mcp/tools.rs`, `crates/fub-cli/src/mcp/access.rs`,
-> `crates/fub-cli/src/componenti.rs` e le prove in
+> `crates/fub-cli/src/componenti.rs`, i comandi `canvas.*` di
+> `crates/fub-features/src/lavagna.rs` e le prove in
 > `crates/fub-cli/tests/mcp.rs`.
 
 Un agente usa Fub come usa le app Craft: cerca, legge, collega, scrive e
@@ -61,6 +62,8 @@ CLI (`bad_args`, `not_found`, `denied`, `conflict`, `unavailable`, `local`).
 | `fub_read_model` | il modello strutturato | `read_model` | no |
 | `fub_write` | riscrive da una revisione | `write_document(DescendsFrom)` | sì |
 | `fub_create` | nota nuova, con un testo o da un modello | `note.create`, `note.from_template` | sì |
+| `fub_canvas_create` | lavagna nuova e vuota; `name` e `folder` facoltativi | `canvas.create` | sì |
+| `fub_canvas_apply` | operazioni su una lavagna da una revisione, in prova se non si chiede `apply` | `canvas.apply` | con `apply` |
 | `fub_commands` | i comandi, con argomenti e se scrivono | `commands` | no |
 | `fub_invoke` | esegue un comando, in prova se non si chiede `apply` | `invoke_user_command` | con `apply` |
 | `fub_components` | i componenti: acceso o spento, perché (`core`, `chosen`, `required`, `off`), nome e chi lo richiede | `query_index(Settings)` | no |
@@ -103,6 +106,23 @@ risorse, né come bersaglio di un link risolto.
   (estensione e cartella comprese) lo sceglie `note.create`; con un testo la
   nota nasce già scritta, in un passo solo, così anche una lavagna `.canvas`
   nasce valida.
+- `fub_canvas_create` fa nascere una lavagna vuota con `canvas.create`, come
+  `fub_create` una nota: la prova nomina la lavagna (il primo nome libero
+  senza `name`, `.canvas` aggiunto, `folder` per un nome semplice), le radici
+  di scrittura la giudicano, e un nome preso è un `conflict`. Risponde
+  `{doc, revision}`.
+- `fub_canvas_apply` porta in una lavagna una lista di operazioni
+  (`add_card`, `connect`, `move`, `resize`, `set`, `remove`, `reorder`; la
+  forma sta in [Operazioni sulla lavagna](canvas-operations.md)) come una
+  modifica sola, con `canvas.apply`. `ops` è la lista o il suo testo JSON; `base` è
+  obbligatoria come per `fub_write`, e una revisione superata è un
+  `conflict`. Vuole la lavagna fra le radici di lettura e di scrittura, non
+  tutto il vault come `fub_invoke`. Senza `"apply": true` risponde col piano
+  (`dry_run: true`, `outcome`) e non scrive; con `apply` risponde
+  `{doc, dry_run: false, created, revision}`: gli id delle schede e degli
+  archi aggiunti, dati o nuovi, e la revisione dopo. Operazioni che non si
+  leggono o non si applicano, e un documento che non è una lavagna, sono
+  `bad_args`.
 - `fub_invoke` senza `"apply": true` restituisce il piano e non scrive.
   Con `apply`, un comando che scrive si esegue soltanto se tutte le note del
   suo piano stanno sotto le radici di scrittura; un comando che non dice
@@ -127,7 +147,5 @@ risorse, né come bersaglio di un link risolto.
 
 ## Non ancora
 
-`fub_open_with` (aprire un file in un'app Craft) e gli strumenti della
-lavagna (`fub_canvas_*`) arrivano coi comandi che li servono. Finché non ci
-sono, una lavagna si scrive come file `.canvas` con `fub_create` e
-`fub_write`.
+`fub_open_with` (aprire un file in un'app Craft) arriva col comando che lo
+serve.

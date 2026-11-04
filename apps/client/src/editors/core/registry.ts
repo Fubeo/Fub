@@ -126,6 +126,20 @@ export interface SurfaceBuffer {
   setDoc(text: string): void;
   syncDoc(update: DocumentUpdate | string): void;
   getDoc(): string;
+  /**
+   * The whole document with the text this surface still holds back (a board
+   * card being typed, before its pause) inside; `null` when nothing is held
+   * back. It reaches the recovery drafts, never the file.
+   */
+  pendingText?(): string | null;
+  /** Records the held-back text now, as the end of its pause would. */
+  commitPending?(): void;
+  /**
+   * Calls `listener` each time the held-back text changes, with whether some
+   * is left. The call does no other work: the session asks `pendingText` only
+   * when it writes a draft. The returned disposer stops the calls.
+   */
+  watchPending?(listener: (pending: boolean) => void): () => void;
 }
 
 /**
@@ -797,4 +811,8 @@ export class DocumentSurfaceRegistry {
 export interface SurfaceCallbacks {
   onChange(paneId: string, change: EditorChange): void;
   onSelectionChange(paneId: string): void;
+  /// Una superficie montata che scopre dopo, da sola, di non poter tenere il
+  /// testo (una lavagna rotta che arriva mentre il nucleo si carica): il
+  /// riquadro passa alla superficie d'errore, come quando `setDoc` lancia.
+  onFail?(paneId: string, error: unknown): void;
 }
