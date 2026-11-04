@@ -4,6 +4,7 @@
 // shell e la serie le ha già dichiarate l'ingresso (`entrypoints/
 // mobile.ts`), che per questo importa il modulo in modo dinamico.
 // Sopra la cornice comune monta ciò che è del telefono.
+import { consegna } from "../../../avvio/consegna";
 import { startup as shellStartup } from "../../../desktop-shell";
 import { openLifetime, type Teardown } from "../../../ui/lifetime";
 import { mountShellCommands } from "../commands";
@@ -25,6 +26,8 @@ export async function composeScrittoioMobile(): Promise<Teardown> {
   mountLauncher(lifetime);
   mountSheets(lifetime);
   mountMobileFrame(lifetime);
+  // Come in `bootstrap.ts`: lo strato d'avvio lascia il posto alla cornice.
+  await consegna();
   return () => {
     lifetime.close();
     teardownShell();

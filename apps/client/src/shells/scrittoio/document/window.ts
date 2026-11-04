@@ -12,6 +12,7 @@
 // conosce lo stato del salvataggio — lo possiede la sessione, di là dal ponte —
 // ma sa se è collegata, se la finestra principale sta salvando, se qualcosa è
 // rimasto in sospeso.
+import { consegna } from "../../../avvio/consegna";
 import { TextEngine } from "../../../editors/text/engine";
 import { textProfileExtensions } from "../../../editors/text/profiles/by-id";
 import { errorText } from "../../../host/errors";
@@ -100,6 +101,8 @@ export function bootDocumentWindow(series: SeriesFallback): void {
   };
   if (!request || !root || !sheet || !state || !choices || !keep || !discard) {
     invalid();
+    // La serie è montata: la frase si vede vestita, e lo strato d'avvio se ne va.
+    void consegna();
     return;
   }
   keep.textContent = t("windows.keep_local");
@@ -159,6 +162,7 @@ export function bootDocumentWindow(series: SeriesFallback): void {
   });
   if (!extensions) {
     invalid();
+    void consegna();
     return;
   }
   const editor = new TextEngine(host, {
@@ -216,4 +220,7 @@ export function bootDocumentWindow(series: SeriesFallback): void {
     if (bridge.dispose()) editor.destroy();
     page.close();
   }, { once: true });
+  // La finestra è montata. Il tema rispecchiato dal ponte può non arrivare
+  // mai: non si aspetta, e quando arriva cambia i colori sotto.
+  void consegna();
 }

@@ -6,6 +6,7 @@
 // cornice ha attorno; trova per id i manici che `index.html` le lascia.
 import "../../theme/scrittoio/structure.css";
 import "./declare";
+import { consegna } from "../../avvio/consegna";
 import { startup as shellStartup } from "../../desktop-shell";
 import { openLifetime, type Teardown } from "../../ui/lifetime";
 import { mountShellCommands } from "./commands";
@@ -19,7 +20,7 @@ import { mountStageMotion } from "./stage-motion";
 import { mountViewsMotion } from "./views-motion";
 import { mountThemeSettingsSource } from "./theme-settings-source";
 
-export const startup: Promise<Teardown> = shellStartup.then((teardownShell) => {
+export const startup: Promise<Teardown> = shellStartup.then(async (teardownShell) => {
   const lifetime = openLifetime();
   mountMotion(lifetime);
   mountViewsMotion(lifetime);
@@ -34,6 +35,9 @@ export const startup: Promise<Teardown> = shellStartup.then((teardownShell) => {
   // Prima la sorgente, poi la schermata che le chiede le voci.
   mountThemeSettingsSource(lifetime);
   mountPreferences(lifetime);
+  // La fine vera dell'avvio: la cornice è montata, lo strato d'avvio lascia il
+  // posto all'app, e solo dopo `startup` si risolve.
+  await consegna();
   return () => {
     lifetime.close();
     teardownShell();
