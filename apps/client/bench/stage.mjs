@@ -186,7 +186,21 @@ export async function openPage(browser, light, { clock = true } = {}) {
   // Prima di ogni navigazione: si installa come script d'avvio, quindi la
   // pagina nasce già con l'ora ferma. Dopo il `goto` sarebbe tardi — chi legge
   // l'orologio lo legge montandosi.
-  if (clock) await page.clock.setFixedTime(MOMENT);
+  if (clock) {
+    await page.clock.setFixedTime(MOMENT);
+    // L'orologio finto di Playwright tiene anche `performance.now()`, e lo
+    // tiene **per contesto**: non riparte a ogni navigazione come in un
+    // browser vero. Il fotografo e il controllo d'accessibilità usano una
+    // pagina sola per luce, quindi alla decima scena la pagina nascerebbe
+    // «vecchia» di minuti, e lo strato d'avvio (`public/avvio/stati.js`, che
+    // conta da `performance.now()`) passerebbe subito all'attesa lunga e al
+    // guasto per tempo. Si riporta lo zero all'inizio di ogni documento.
+    await page.addInitScript(() => {
+      const now = performance.now.bind(performance);
+      const start = now();
+      performance.now = () => now() - start;
+    });
+  }
   return page;
 }
 
