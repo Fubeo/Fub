@@ -16,10 +16,12 @@
 //!
 //! Il job copia il documento, a pezzi e al più per il peso massimo, in una
 //! cartella privata nuova sotto la cartella temporanea (0700 su unix): l'app
-//! non vede mai il file del vault. Avvia la CLI con [`cli_args`], guarda
-//! `out.png` (niente link, niente cartelle, al più [`MAX_PNG_BYTES`]), e con
-//! un PNG buono risponde `origin: cli` e scrive la cache per la revisione
-//! della copia. Un errore è `missing: failed`, e la coppia (revisione,
+//! non vede mai il file del vault, e la copia si chiama sempre `in.` più
+//! l'estensione ([`input_name`]), mai col nome del file. Avvia la CLI con
+//! [`cli_args`], guarda `out.png` (niente link, niente cartelle, al più
+//! [`MAX_IMAGE_BYTES`]), e con un PNG o un JPEG buono, riconosciuto dalla
+//! firma, risponde `origin: cli` e scrive la cache per la revisione della
+//! copia. Un errore è `missing: failed`, e la coppia (revisione,
 //! misura) va nell'insieme «già provato» che `craft.preview` legge: la stessa
 //! revisione non si riprova finché il file non cambia o Fub non riparte. La
 //! cartella si cancella sempre.
@@ -51,7 +53,7 @@ use super::ranged::{self, Ranged, RangedError};
 /// Quanto vale un biglietto dopo che è stato dato.
 pub const TICKET_LIFE: Duration = Duration::from_secs(60);
 /// Il peso massimo dell'immagine che la CLI scrive.
-pub const MAX_PNG_BYTES: u64 = 16 * 1024 * 1024;
+pub const MAX_IMAGE_BYTES: u64 = 16 * 1024 * 1024;
 /// I byte copiati per volta nella cartella privata.
 const COPY_CHUNK: usize = 64 * 1024;
 /// I biglietti aperti che la tabella tiene; oltre, il più vecchio si butta.
@@ -62,8 +64,13 @@ const TRIED_KEPT: usize = 4096;
 pub const PRIVATE_PREFIX: &str = "fub-craft-render-";
 
 /// Gli argomenti della CLI che fa l'anteprima di `subject` alla misura
-/// `size`, con `input` e `output` assoluti e separati. `None` per un soggetto
-/// la cui app non ha una CLI che Fub sa usare.
+/// `size`, con `input` e `output` assoluti e separati (la tabella «Le app che
+/// Fub conosce» del piano N7). `None` per un soggetto la cui app non ha una
+/// CLI che Fub sa usare.
+///
+/// LightCraft sviluppa la foto RAW al lato lungo di 512 o 2048 pixel; PdfCraft
+/// disegna solo la prima pagina, a 36 o 144 dpi; WordCraft solo la prima
+/// pagina, a metà o a grandezza piena.
 pub fn cli_args(
     subject: PreviewSubject,
     size: PreviewSize,
@@ -81,22 +88,80 @@ pub fn cli_args(
         }
         PreviewSubject::PhotoCraft => Some(vec!["convert".into(), input, output]),
         PreviewSubject::FigCraft => Some(vec!["render".into(), input, "-o".into(), output]),
-        PreviewSubject::Xmp
-        | PreviewSubject::Raw
-        | PreviewSubject::Pdf
-        | PreviewSubject::Document => None,
+        PreviewSubject::Raw => {
+            let side = match size {
+                PreviewSize::Small => "512",
+                PreviewSize::Large => "2048",
+            };
+            Some(vec![
+                "render".into(),
+                input,
+                "-o".into(),
+                output,
+                "--size".into(),
+                side.into(),
+            ])
+        }
+        PreviewSubject::Pdf => {
+            let dpi = match size {
+                PreviewSize::Small => "36",
+                PreviewSize::Large => "144",
+            };
+            Some(vec![
+                "render".into(),
+                input,
+                "--page".into(),
+                "1".into(),
+                "--dpi".into(),
+                dpi.into(),
+                "--out".into(),
+                output,
+            ])
+        }
+        PreviewSubject::Document => {
+            let scale = match size {
+                PreviewSize::Small => "0.5",
+                PreviewSize::Large => "1",
+            };
+            Some(vec![
+                "render".into(),
+                input,
+                output,
+                "--page".into(),
+                "1".into(),
+                "--scale".into(),
+                scale.into(),
+            ])
+        }
+        PreviewSubject::Xmp => None,
     }
 }
 
-/// L'estensione della copia: quella canonica del formato, mai il nome del
-/// file del vault.
-fn input_extension(subject: PreviewSubject) -> Option<&'static str> {
-    match subject {
-        PreviewSubject::VectorCraft => Some("vectorcraft"),
-        PreviewSubject::PhotoCraft => Some("pcraft"),
-        PreviewSubject::FigCraft => Some("figcraft"),
-        _ => None,
-    }
+/// Il nome della copia nella cartella privata: `in.` più l'estensione, mai
+/// il nome del file del vault (uno che comincia con `-` non arriva mai alla
+/// CLI). Per i formati dei provider Craft l'estensione è quella canonica; per
+/// una foto RAW, un PDF o un documento è quella del nome così come è scritta
+/// (`in.CR3`), perché l'app riconosce il formato dal nome, e solo se è una
+/// delle estensioni del soggetto: Fub non piega il caso.
+fn input_name(subject: PreviewSubject, doc: &DocId) -> Option<String> {
+    let extension = match subject {
+        PreviewSubject::VectorCraft => "vectorcraft",
+        PreviewSubject::PhotoCraft => "pcraft",
+        PreviewSubject::FigCraft => "figcraft",
+        PreviewSubject::Xmp => return None,
+        PreviewSubject::Raw | PreviewSubject::Pdf | PreviewSubject::Document => {
+            let name = doc.as_str().rsplit('/').next().unwrap_or_default();
+            match name.rsplit_once('.') {
+                Some((stem, ext))
+                    if !stem.is_empty() && PreviewSubject::of_extension(ext) == Some(subject) =>
+                {
+                    ext
+                }
+                _ => return None,
+            }
+        }
+    };
+    Some(format!("in.{extension}"))
 }
 
 /// Il programma a riga di comando dell'app di `subject`, se Fub lo trova
@@ -381,7 +446,7 @@ enum Failure {
     Denied,
     Failed,
     Io,
-    BadPng,
+    BadImage,
     TooBig,
     Copy,
 }
@@ -394,7 +459,7 @@ impl Failure {
             Failure::Denied => "render.denied",
             Failure::Failed => "render.failed",
             Failure::Io => "render.io",
-            Failure::BadPng => "render.bad_png",
+            Failure::BadImage => "render.bad_png",
             Failure::TooBig => "render.too_big",
             Failure::Copy => "render.copy",
         }
@@ -464,15 +529,14 @@ fn render(
         return Ok(base);
     }
     let subject = base.info.app;
-    let (Some(program), Some(extension)) = (cli_of(&*host, subject), input_extension(subject))
-    else {
+    let (Some(program), Some(name)) = (cli_of(&*host, subject), input_name(subject, doc)) else {
         return Ok(failed(base, None, size, Failure::NoCli));
     };
     let max = consent::max_bytes(&*host);
     let Ok(private) = Private::new() else {
         return Ok(failed(base, None, size, Failure::Copy));
     };
-    let input = private.path().join(format!("in.{extension}"));
+    let input = private.path().join(name);
     let output = private.path().join("out.png");
     let start = match copy(ranged, doc, &input, max) {
         Ok(start) => start,
@@ -502,7 +566,7 @@ fn render(
         }
         Err(error) => return Ok(failed(base, Some(start), size, Failure::of_launch(error))),
     }
-    let image = match read_png(&output) {
+    let image = match read_image(&output) {
         Ok(image) => image,
         Err(failure) => return Ok(failed(base, Some(start), size, failure)),
     };
@@ -612,29 +676,43 @@ fn copy(ranged: &Ranged, doc: &DocId, input: &Path, max: u64) -> Result<Revision
     Ok(hasher.finish())
 }
 
+/// La firma di un PNG.
+const PNG_SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
+/// L'inizio di un JPEG: SOI e il primo marcatore.
+const JPEG_SIGNATURE: &[u8] = &[0xFF, 0xD8, 0xFF];
+
 /// L'immagine che la CLI ha scritto: un file vero (mai un link o una
-/// cartella), al più [`MAX_PNG_BYTES`], un PNG con misure lecite.
-fn read_png(output: &Path) -> Result<PreviewImage, Failure> {
-    let meta = std::fs::symlink_metadata(output).map_err(|_| Failure::BadPng)?;
+/// cartella), al più [`MAX_IMAGE_BYTES`], un PNG o un JPEG riconosciuto dalla
+/// firma (non dal nome) e con misure lecite. Un JPEG vale così com'è
+/// (orientamento 1): l'app lo scrive già girato.
+fn read_image(output: &Path) -> Result<PreviewImage, Failure> {
+    let meta = std::fs::symlink_metadata(output).map_err(|_| Failure::BadImage)?;
     if !meta.file_type().is_file() {
-        return Err(Failure::BadPng);
+        return Err(Failure::BadImage);
     }
-    if meta.len() > MAX_PNG_BYTES {
+    if meta.len() > MAX_IMAGE_BYTES {
         return Err(Failure::TooBig);
     }
-    let file = std::fs::File::open(output).map_err(|_| Failure::BadPng)?;
-    let opened = file.metadata().map_err(|_| Failure::BadPng)?;
+    let file = std::fs::File::open(output).map_err(|_| Failure::BadImage)?;
+    let opened = file.metadata().map_err(|_| Failure::BadImage)?;
     if !opened.is_file() {
-        return Err(Failure::BadPng);
+        return Err(Failure::BadImage);
     }
     let mut bytes = Vec::new();
-    file.take(MAX_PNG_BYTES + 1)
+    file.take(MAX_IMAGE_BYTES + 1)
         .read_to_end(&mut bytes)
-        .map_err(|_| Failure::BadPng)?;
-    if bytes.len() as u64 > MAX_PNG_BYTES {
+        .map_err(|_| Failure::BadImage)?;
+    if bytes.len() as u64 > MAX_IMAGE_BYTES {
         return Err(Failure::TooBig);
     }
-    PreviewImage::from_png(&bytes).ok_or(Failure::BadPng)
+    let image = if bytes.starts_with(PNG_SIGNATURE) {
+        PreviewImage::from_png(&bytes)
+    } else if bytes.starts_with(JPEG_SIGNATURE) {
+        PreviewImage::from_jpeg(&bytes, 1)
+    } else {
+        None
+    };
+    image.ok_or(Failure::BadImage)
 }
 
 /// La cartella privata di un job: si cancella sempre quando il job la lascia,
@@ -815,14 +893,65 @@ mod tests {
             args(PreviewSubject::FigCraft, PreviewSize::Large),
             ["render", "/t/in", "-o", "/t/out.png"]
         );
-        for subject in [
-            PreviewSubject::Xmp,
-            PreviewSubject::Raw,
-            PreviewSubject::Pdf,
-            PreviewSubject::Document,
-        ] {
-            assert!(cli_args(subject, SMALL, input, output).is_none());
-        }
+        assert_eq!(
+            args(PreviewSubject::Raw, SMALL),
+            ["render", "/t/in", "-o", "/t/out.png", "--size", "512"]
+        );
+        assert_eq!(
+            args(PreviewSubject::Raw, PreviewSize::Large),
+            ["render", "/t/in", "-o", "/t/out.png", "--size", "2048"]
+        );
+        assert_eq!(
+            args(PreviewSubject::Pdf, SMALL),
+            [
+                "render",
+                "/t/in",
+                "--page",
+                "1",
+                "--dpi",
+                "36",
+                "--out",
+                "/t/out.png"
+            ]
+        );
+        assert_eq!(
+            args(PreviewSubject::Pdf, PreviewSize::Large),
+            [
+                "render",
+                "/t/in",
+                "--page",
+                "1",
+                "--dpi",
+                "144",
+                "--out",
+                "/t/out.png"
+            ]
+        );
+        assert_eq!(
+            args(PreviewSubject::Document, SMALL),
+            [
+                "render",
+                "/t/in",
+                "/t/out.png",
+                "--page",
+                "1",
+                "--scale",
+                "0.5"
+            ]
+        );
+        assert_eq!(
+            args(PreviewSubject::Document, PreviewSize::Large),
+            [
+                "render",
+                "/t/in",
+                "/t/out.png",
+                "--page",
+                "1",
+                "--scale",
+                "1"
+            ]
+        );
+        assert!(cli_args(PreviewSubject::Xmp, SMALL, input, output).is_none());
     }
 
     #[test]
@@ -858,16 +987,111 @@ mod tests {
         assert!(!path.exists());
     }
 
+    fn png(width: u32, height: u32) -> Vec<u8> {
+        let mut out = PNG_SIGNATURE.to_vec();
+        out.extend_from_slice(&13u32.to_be_bytes());
+        out.extend_from_slice(b"IHDR");
+        out.extend_from_slice(&width.to_be_bytes());
+        out.extend_from_slice(&height.to_be_bytes());
+        out.extend_from_slice(&[8, 6, 0, 0, 0, 0, 0, 0, 0]);
+        out.extend_from_slice(&0u32.to_be_bytes());
+        out.extend_from_slice(b"IEND");
+        out.extend_from_slice(&[0, 0, 0, 0]);
+        out
+    }
+
+    /// Un JPEG minimo: SOI, SOF0 con le misure, SOS, EOI.
+    fn jpeg(width: u16, height: u16) -> Vec<u8> {
+        let mut out = vec![0xFF, 0xD8, 0xFF, 0xC0, 0, 11, 8];
+        out.extend_from_slice(&height.to_be_bytes());
+        out.extend_from_slice(&width.to_be_bytes());
+        out.extend_from_slice(&[1, 1, 0x11, 0]);
+        out.extend_from_slice(&[0xFF, 0xDA, 0, 8, 1, 1, 0, 0, 63, 0]);
+        out.extend_from_slice(&[0x55; 16]);
+        out.extend_from_slice(&[0xFF, 0xD9]);
+        out
+    }
+
     #[test]
-    fn the_image_must_be_a_small_real_png() {
+    fn the_image_must_be_a_small_real_png_or_jpeg() {
         let dir = tempfile::tempdir().unwrap();
         let out = dir.path().join("out.png");
-        assert_eq!(read_png(&out).unwrap_err(), Failure::BadPng, "manca");
+        assert_eq!(read_image(&out).unwrap_err(), Failure::BadImage, "manca");
         std::fs::write(&out, b"non sono un png").unwrap();
-        assert_eq!(read_png(&out).unwrap_err(), Failure::BadPng);
+        assert_eq!(read_image(&out).unwrap_err(), Failure::BadImage);
+        std::fs::write(&out, png(32, 16)).unwrap();
+        let image = read_image(&out).unwrap();
+        assert_eq!(
+            (image.media_type.as_str(), image.width, image.height),
+            ("image/png", 32, 16)
+        );
+        // Un JPEG in `out.png`: conta la firma, non il nome.
+        std::fs::write(&out, jpeg(300, 200)).unwrap();
+        let image = read_image(&out).unwrap();
+        assert_eq!(
+            (image.media_type.as_str(), image.width, image.height),
+            ("image/jpeg", 300, 200)
+        );
+        assert_eq!(image.orientation, 1);
+        // Una firma giusta senza misure lecite non è un'immagine.
+        std::fs::write(&out, &jpeg(300, 200)[..4]).unwrap();
+        assert_eq!(read_image(&out).unwrap_err(), Failure::BadImage);
+        std::fs::write(&out, &png(32, 16)[..12]).unwrap();
+        assert_eq!(read_image(&out).unwrap_err(), Failure::BadImage);
         std::fs::remove_file(&out).unwrap();
         std::fs::create_dir(&out).unwrap();
-        assert_eq!(read_png(&out).unwrap_err(), Failure::BadPng, "una cartella");
+        assert_eq!(
+            read_image(&out).unwrap_err(),
+            Failure::BadImage,
+            "una cartella"
+        );
+    }
+
+    #[test]
+    fn the_copy_is_always_named_in_with_the_extension_as_written() {
+        let name = |subject, doc: &str| input_name(subject, &DocId::new(doc));
+        assert_eq!(
+            name(PreviewSubject::VectorCraft, "a/-x.vectorcraft").as_deref(),
+            Some("in.vectorcraft")
+        );
+        assert_eq!(
+            name(PreviewSubject::PhotoCraft, "-rm -rf.pcraft").as_deref(),
+            Some("in.pcraft")
+        );
+        assert_eq!(
+            name(PreviewSubject::FigCraft, "b.figcraft").as_deref(),
+            Some("in.figcraft")
+        );
+        assert_eq!(
+            name(PreviewSubject::Raw, "Foto/IMG_0001.CR3").as_deref(),
+            Some("in.CR3")
+        );
+        assert_eq!(
+            name(PreviewSubject::Raw, "Foto/-IMG.nef").as_deref(),
+            Some("in.nef")
+        );
+        assert_eq!(
+            name(PreviewSubject::Pdf, "Libri/--help.pdf").as_deref(),
+            Some("in.pdf")
+        );
+        assert_eq!(
+            name(PreviewSubject::Document, "Lettere/vecchia.doc").as_deref(),
+            Some("in.doc")
+        );
+        assert_eq!(
+            name(PreviewSubject::Document, "Lettere/nuova.Docx").as_deref(),
+            Some("in.Docx")
+        );
+        // Un nome che non è del soggetto, senza estensione o solo estensione.
+        for (subject, doc) in [
+            (PreviewSubject::Raw, "Foto/IMG_0001.jpg"),
+            (PreviewSubject::Pdf, "Libri/manuale.docx"),
+            (PreviewSubject::Document, "Lettere/senza"),
+            (PreviewSubject::Pdf, ".pdf"),
+            (PreviewSubject::Xmp, "Foto/IMG_0001.xmp"),
+        ] {
+            assert_eq!(name(subject, doc), None, "{doc}");
+        }
     }
 
     /// Il consenso ritirato fra la domanda e il job: col biglietto buono e la

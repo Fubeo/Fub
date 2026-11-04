@@ -1,10 +1,12 @@
-//! Le anteprime con la CLI di un'app Craft, dopo un gesto (N7, T11):
+//! Le anteprime con la CLI di un'app Craft, dopo un gesto (N7, T11 e T29):
 //! `Host::craft_render` e il job `craft.render` col suo biglietto.
 //!
-//! `vectorcraft-cli` è uno script `/bin/sh` (`fub-craft-test-*`, in una
+//! La CLI (`vectorcraft-cli`, `lightcraft-cli`, `pdfcraft-cli` o
+//! `wordcraft-cli`) è uno script `/bin/sh` (`fub-craft-test-*`, in una
 //! cartella del test) indicato da `craft.editor-paths`: conta le sue chiamate,
-//! scrive il suo pid e il percorso del file che riceve, e fa quello che il
-//! caso vuole (un PNG, niente, un link, troppi byte, aspetta). Alla fine di
+//! scrive il suo pid, i suoi argomenti e il percorso del file che riceve, e fa
+//! quello che il caso vuole (un PNG, un JPEG, niente, un link, troppi byte,
+//! aspetta). Alla fine di
 //! ogni caso nessun pid scritto è vivo (`kill -0`) e la cartella privata non
 //! c'è più. Nessun test avvia un'app vera.
 //!
@@ -54,6 +56,18 @@ fn png(width: u32, height: u32) -> Vec<u8> {
     out
 }
 
+/// Un JPEG minimo: SOI, SOF0 con le misure, SOS, EOI.
+fn jpeg(width: u16, height: u16) -> Vec<u8> {
+    let mut out = vec![0xFF, 0xD8, 0xFF, 0xC0, 0, 11, 8];
+    out.extend_from_slice(&height.to_be_bytes());
+    out.extend_from_slice(&width.to_be_bytes());
+    out.extend_from_slice(&[1, 1, 0x11, 0]);
+    out.extend_from_slice(&[0xFF, 0xDA, 0, 8, 1, 1, 0, 0, 63, 0]);
+    out.extend_from_slice(&[0x55; 16]);
+    out.extend_from_slice(&[0xFF, 0xD9]);
+    out
+}
+
 /// Lo script di un caso, nella sua cartella: `calls` ha una riga per
 /// chiamata, `pids` i pid, `input` il file ricevuto.
 struct Script {
@@ -69,14 +83,18 @@ impl Script {
             .tempdir_in(env!("CARGO_TARGET_TMPDIR"))
             .unwrap();
         std::fs::write(dir.path().join("good.png"), png(32, 16)).unwrap();
+        std::fs::write(dir.path().join("good.jpg"), jpeg(300, 200)).unwrap();
         let path = dir.path().join("fub-craft-test-cli.sh");
+        // L'uscita è l'argomento che finisce in `/out.png`, dovunque sia.
         let text = format!(
             "#!/bin/sh\n\
              d=$(dirname \"$0\")\n\
              echo $$ >> \"$d/pids\"\n\
              echo x >> \"$d/calls\"\n\
              printf '%s\\n' \"$2\" > \"$d/input\"\n\
-             out=\"$3\"\n\
+             printf '%s\\n' \"$@\" > \"$d/args\"\n\
+             out=\n\
+             for a in \"$@\"; do case \"$a\" in */out.png) out=\"$a\";; esac; done\n\
              {body}\n"
         );
         std::fs::write(&path, text).unwrap();
@@ -86,6 +104,19 @@ impl Script {
 
     fn good() -> Script {
         Script::new("cat \"$d/good.png\" > \"$out\"")
+    }
+
+    fn jpeg() -> Script {
+        Script::new("cat \"$d/good.jpg\" > \"$out\"")
+    }
+
+    /// Gli argomenti dell'ultima chiamata.
+    fn args(&self) -> Vec<String> {
+        std::fs::read_to_string(self.file("args"))
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_owned)
+            .collect()
     }
 
     fn file(&self, name: &str) -> PathBuf {
@@ -181,6 +212,11 @@ impl Vault {
     }
 
     fn with(script: &Script, files: &[(&str, Vec<u8>)], consent: &str) -> Vault {
+        Vault::with_cli(script, "vectorcraft-cli", files, consent)
+    }
+
+    /// Un vault in cui `script` è la CLI `cli` (`lightcraft-cli`…).
+    fn with_cli(script: &Script, cli: &str, files: &[(&str, Vec<u8>)], consent: &str) -> Vault {
         let dir = tempfile::tempdir().unwrap();
         let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
         for (path, bytes) in files {
@@ -194,7 +230,7 @@ impl Vault {
         host.set_setting_for_user(
             Some(root.as_str()),
             CRAFT_EDITOR_PATHS,
-            SettingValue::List(vec![format!("vectorcraft-cli={}", script.path.display())]),
+            SettingValue::List(vec![format!("{cli}={}", script.path.display())]),
         )
         .unwrap();
         let vault = Vault {
@@ -236,8 +272,11 @@ impl Vault {
     }
 
     fn render(&self, doc: &str) -> Result<CraftPreview, PluginError> {
-        self.host
-            .craft_render(self.vault(), doc, PreviewSize::Small)
+        self.render_at(doc, PreviewSize::Small)
+    }
+
+    fn render_at(&self, doc: &str, size: PreviewSize) -> Result<CraftPreview, PluginError> {
+        self.host.craft_render(self.vault(), doc, size)
     }
 
     fn bytes(&self, doc: &str) -> Vec<u8> {
@@ -380,6 +419,7 @@ fn with_consent_one_gesture_makes_one_preview_and_the_cache_answers_after() {
 /// Un bundle che prova ad arrivare alla CLI senza il gesto.
 struct Probe {
     seen: Arc<Mutex<Vec<Result<(), PluginError>>>>,
+    doc: String,
 }
 
 const PROBE_ID: &str = "demo.craft-render";
@@ -399,6 +439,7 @@ impl Bundle for Probe {
     fn plugin(&self) -> Box<dyn Plugin> {
         Box::new(ProbePlugin {
             seen: Arc::clone(&self.seen),
+            doc: self.doc.clone(),
         })
     }
 
@@ -409,6 +450,7 @@ impl Bundle for Probe {
 
 struct ProbePlugin {
     seen: Arc<Mutex<Vec<Result<(), PluginError>>>>,
+    doc: String,
 }
 
 impl Plugin for ProbePlugin {
@@ -421,14 +463,14 @@ impl Plugin for ProbePlugin {
         seen.push(
             host.run_command(
                 PREVIEW_COMMAND,
-                serde_json::json!({ "doc": DRAWING, "size": "small", "render": true }),
+                serde_json::json!({ "doc": self.doc, "size": "small", "render": true }),
             )
             .map(|_| ()),
         );
         seen.push(
             host.spawn_job(JobSpec {
                 job: RENDER_JOB.into(),
-                payload: serde_json::json!({ "doc": DRAWING, "size": "small" }),
+                payload: serde_json::json!({ "doc": self.doc, "size": "small" }),
             })
             .map(|_| ()),
         );
@@ -446,22 +488,35 @@ fn no_way_without_the_gesture_starts_the_cli() {
     let _serial = serial();
     let script = Script::good();
     let vault = Vault::new(&script, "senza gesto", "on");
-    let before = vault.bytes(DRAWING);
+    no_way_without_the_gesture(&vault, &script, DRAWING, "VectorCraft");
+}
+
+/// Con il consenso acceso e la CLI trovata, nessuna via senza il gesto avvia
+/// la CLI di `doc`: `craft.preview` con `render`, il job chiamato per nome
+/// (come `Call::InvokeJob` o `fub_invoke`) con un biglietto assente o
+/// inventato, un componente di terzi con i permessi di comandi e impostazioni.
+fn no_way_without_the_gesture(vault: &Vault, script: &Script, doc: &str, app: &str) {
+    let before = vault.bytes(doc);
 
     // `craft.preview` resta in sola lettura, anche se gli si chiede di più.
     let preview = vault.preview_with(serde_json::json!({
-        "doc": DRAWING, "size": "small", "render": true,
+        "doc": doc, "size": "small", "render": true,
     }));
-    assert!(!preview.queued);
-    assert!(preview.render.is_some());
+    assert!(!preview.queued, "{doc}");
+    assert_eq!(
+        preview.render.as_ref().map(|offer| offer.app.as_str()),
+        Some(app),
+        "{doc}"
+    );
 
     // Il job chiamato per nome, come `Call::InvokeJob` o `fub_invoke`.
     for payload in [
-        serde_json::json!({ "doc": DRAWING, "size": "small" }),
-        serde_json::json!({ "doc": DRAWING, "size": "small", "ticket": "" }),
-        serde_json::json!({ "doc": DRAWING, "size": "small", "ticket": "inventato" }),
-        serde_json::json!({ "doc": DRAWING, "size": "small", "ticket": "0".repeat(64) }),
-        serde_json::json!({ "doc": DRAWING, "size": "grande", "ticket": "x" }),
+        serde_json::json!({ "doc": doc, "size": "small" }),
+        serde_json::json!({ "doc": doc, "size": "small", "ticket": "" }),
+        serde_json::json!({ "doc": doc, "size": "small", "ticket": "inventato" }),
+        serde_json::json!({ "doc": doc, "size": "small", "ticket": "0".repeat(64) }),
+        serde_json::json!({ "doc": doc, "size": "large", "ticket": "0".repeat(64) }),
+        serde_json::json!({ "doc": doc, "size": "grande", "ticket": "x" }),
     ] {
         let error = vault
             .host
@@ -479,6 +534,7 @@ fn no_way_without_the_gesture_starts_the_cli() {
             vault.vault(),
             Arc::new(Probe {
                 seen: Arc::clone(&seen),
+                doc: doc.to_owned(),
             }),
         )
         .unwrap();
@@ -515,8 +571,8 @@ fn no_way_without_the_gesture_starts_the_cli() {
     vault.host.unmount_bundle(vault.vault(), PROBE_ID).unwrap();
 
     std::thread::sleep(Duration::from_millis(300));
-    assert_eq!(script.calls(), 0);
-    assert_eq!(vault.bytes(DRAWING), before);
+    assert_eq!(script.calls(), 0, "{doc}");
+    assert_eq!(vault.bytes(doc), before, "{doc}");
 }
 
 #[test]
@@ -709,4 +765,332 @@ fn with_fub_craft_off_the_gesture_is_off() {
         .unwrap_err();
     assert_eq!(key_of(&error), "host.craft_render.off");
     assert_eq!(script.calls(), 0);
+}
+
+// ---------------------------------------------------------------------------
+// LightCraft, PdfCraft e WordCraft (T29).
+// ---------------------------------------------------------------------------
+
+/// Un RAW (un TIFF `II`) senza nessun JPEG dentro: un IFD vuoto. `case` lo
+/// rende diverso per ogni caso, perché il «già provato» va per revisione.
+fn raw_without_jpeg(case: &str) -> Vec<u8> {
+    let mut out = b"II\x2a\0\x08\0\0\0\0\0\0\0\0\0".to_vec();
+    out.extend_from_slice(case.as_bytes());
+    out
+}
+
+/// Un RAW con il JPEG della fotocamera nell'IFD0.
+fn raw_with_jpeg() -> Vec<u8> {
+    let inside = jpeg(1620, 1080);
+    let entry = |tag: u16, value: u32| {
+        let mut out = tag.to_le_bytes().to_vec();
+        out.extend_from_slice(&4u16.to_le_bytes());
+        out.extend_from_slice(&1u32.to_le_bytes());
+        out.extend_from_slice(&value.to_le_bytes());
+        out
+    };
+    let mut out = b"II\x2a\0\x08\0\0\0".to_vec();
+    out.extend_from_slice(&2u16.to_le_bytes());
+    out.extend(entry(0x0201, 64));
+    out.extend(entry(0x0202, u32::try_from(inside.len()).unwrap()));
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out.resize(64, 0);
+    out.extend_from_slice(&inside);
+    out
+}
+
+fn pdf(case: &str) -> Vec<u8> {
+    format!("%PDF-1.7\n% {case}\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n").into_bytes()
+}
+
+/// Un `.docx` con o senza la miniatura che le relazioni indicano.
+fn docx(case: &str, thumbnail: bool) -> Vec<u8> {
+    use std::io::Write as _;
+    let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let options = zip::write::SimpleFileOptions::default();
+    writer.start_file("[Content_Types].xml", options).unwrap();
+    writer
+        .write_all(br#"<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>"#)
+        .unwrap();
+    writer.start_file("_rels/.rels", options).unwrap();
+    let thumb = if thumbnail {
+        r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail" Target="docProps/thumbnail.png"/>"#
+    } else {
+        ""
+    };
+    writer
+        .write_all(
+            format!(
+                r#"<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>{thumb}</Relationships>"#
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+    writer.start_file("word/document.xml", options).unwrap();
+    writer.write_all(case.as_bytes()).unwrap();
+    if thumbnail {
+        writer
+            .start_file("docProps/thumbnail.png", options)
+            .unwrap();
+        writer.write_all(&png(60, 80)).unwrap();
+    }
+    writer.finish().unwrap().into_inner()
+}
+
+/// Gli argomenti attesi, con la cartella privata del caso.
+fn expected(script: &Script, args: &[&str]) -> Vec<String> {
+    let private = script.private_dir();
+    args.iter()
+        .map(|arg| match *arg {
+            "{out}" => private.join("out.png").display().to_string(),
+            other if other.starts_with("in.") => private.join(other).display().to_string(),
+            other => other.to_owned(),
+        })
+        .collect()
+}
+
+/// Il gesto su `doc` alla misura `size`, fino all'esito del job.
+fn render_through(vault: &Vault, doc: &str, size: PreviewSize) -> CraftPreview {
+    let events = vault.events();
+    let queued = vault.render_at(doc, size).unwrap();
+    assert!(queued.queued, "{doc}: {queued:?}");
+    render_done(&events).unwrap()
+}
+
+#[test]
+fn lightcraft_develops_a_raw_without_a_jpeg_and_never_a_jpg() {
+    let _serial = serial();
+    let script = Script::good();
+    let vault = Vault::with_cli(
+        &script,
+        "lightcraft-cli",
+        &[
+            ("Foto/IMG_0001.cr3", raw_without_jpeg("grande")),
+            ("Foto/IMG_0002.CR3", raw_without_jpeg("piccola")),
+            ("Foto/IMG_0003.nef", raw_with_jpeg()),
+            ("Foto/IMG_0004.jpg", jpeg(640, 480)),
+        ],
+        "on",
+    );
+    let before = vault.bytes("Foto/IMG_0001.cr3");
+    let offer = vault.preview("Foto/IMG_0001.cr3").render.expect("offered");
+    assert_eq!(offer.app, "LightCraft");
+    assert_eq!(offer.consent, RenderConsent::On);
+
+    let done = render_through(&vault, "Foto/IMG_0001.cr3", PreviewSize::Large);
+    assert_eq!(done.origin, PreviewOrigin::Cli, "{done:?}");
+    assert_eq!(done.missing, None);
+    let image = done.image.expect("the CLI image");
+    assert_eq!((image.width, image.height), (32, 16));
+    assert_eq!(
+        script.args(),
+        expected(
+            &script,
+            &["render", "in.cr3", "-o", "{out}", "--size", "2048"]
+        )
+    );
+    script.all_gone();
+    assert_eq!(script.calls(), 1);
+    assert_eq!(vault.bytes("Foto/IMG_0001.cr3"), before);
+
+    // L'estensione così come è scritta, e la misura piccola.
+    render_through(&vault, "Foto/IMG_0002.CR3", PreviewSize::Small);
+    assert_eq!(
+        script.args(),
+        expected(
+            &script,
+            &["render", "in.CR3", "-o", "{out}", "--size", "512"]
+        )
+    );
+    script.all_gone();
+    assert_eq!(script.calls(), 2);
+
+    // Un RAW col suo JPEG risponde con quello, senza CLI.
+    let inside = vault.render("Foto/IMG_0003.nef").unwrap();
+    assert!(!inside.queued);
+    assert_eq!(inside.origin, PreviewOrigin::File);
+    assert!(inside.image.is_some());
+    // Un `.jpg` la WebView lo mostra: non è un soggetto dell'anteprima.
+    assert!(vault.render("Foto/IMG_0004.jpg").is_err());
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(script.calls(), 2);
+}
+
+#[test]
+fn without_lightcraft_there_is_no_offer_and_no_question() {
+    let _serial = serial();
+    let script = Script::good();
+    // Lo script è la CLI di un'altra app: LightCraft non c'è.
+    let vault = Vault::with_cli(
+        &script,
+        "vectorcraft-cli",
+        &[("Foto/IMG_0001.CR3", raw_without_jpeg("senza LightCraft"))],
+        "on",
+    );
+    let preview = vault.preview("Foto/IMG_0001.CR3");
+    assert_eq!(preview.missing, Some(Missing::Absent));
+    assert!(preview.render.is_none(), "{preview:?}");
+    let error = vault.render("Foto/IMG_0001.CR3").unwrap_err();
+    assert_eq!(key_of(&error), "host.craft_render.no_cli");
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(script.calls(), 0);
+}
+
+#[test]
+fn pdfcraft_draws_the_first_page_and_a_jpeg_is_good() {
+    let _serial = serial();
+    let script = Script::jpeg();
+    // Un nome che comincia con `-` non arriva mai alla CLI.
+    let doc = "Libri/-manuale.pdf";
+    let vault = Vault::with_cli(
+        &script,
+        "pdfcraft-cli",
+        &[(doc, pdf("cinquecento pagine"))],
+        "on",
+    );
+    assert_eq!(
+        vault.preview(doc).render.map(|offer| offer.app),
+        Some("PdfCraft".to_owned())
+    );
+    let done = render_through(&vault, doc, PreviewSize::Small);
+    assert_eq!(done.origin, PreviewOrigin::Cli, "{done:?}");
+    let image = done.image.expect("the CLI image");
+    assert_eq!(image.media_type, "image/jpeg");
+    assert_eq!(
+        (image.width, image.height, image.orientation),
+        (300, 200, 1)
+    );
+    assert_eq!(
+        script.args(),
+        expected(
+            &script,
+            &["render", "in.pdf", "--page", "1", "--dpi", "36", "--out", "{out}"]
+        )
+    );
+    script.all_gone();
+    // La cache risponde dopo, senza un'altra CLI.
+    let cached = vault.preview(doc);
+    assert_eq!(cached.origin, PreviewOrigin::Cli);
+    assert_eq!(
+        cached.image.map(|image| image.media_type),
+        Some("image/jpeg".into())
+    );
+    assert_eq!(script.calls(), 1);
+}
+
+#[test]
+fn an_encrypted_pdf_fails_once_and_the_same_revision_does_not_start_again() {
+    let _serial = serial();
+    let script = Script::new("echo 'il PDF è cifrato' >&2\nexit 1");
+    let doc = "Libri/cifrato.pdf";
+    let vault = Vault::with_cli(&script, "pdfcraft-cli", &[(doc, pdf("cifrato"))], "on");
+    let done = render_through(&vault, doc, PreviewSize::Large);
+    assert_eq!(done.missing, Some(Missing::Failed), "{done:?}");
+    assert_eq!(
+        script.args(),
+        expected(
+            &script,
+            &["render", "in.pdf", "--page", "1", "--dpi", "144", "--out", "{out}"]
+        )
+    );
+    script.all_gone();
+    let after = vault.preview_with(serde_json::json!({ "doc": doc, "size": "large" }));
+    assert_eq!(after.missing, Some(Missing::Failed));
+    assert!(after.render.is_none());
+    let again = vault.render_at(doc, PreviewSize::Large).unwrap();
+    assert!(!again.queued);
+    assert_eq!(again.missing, Some(Missing::Failed));
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(script.calls(), 1);
+}
+
+#[test]
+fn wordcraft_only_for_a_document_without_a_thumbnail() {
+    let _serial = serial();
+    let script = Script::good();
+    let vault = Vault::with_cli(
+        &script,
+        "wordcraft-cli",
+        &[
+            ("Lettere/con.docx", docx("con miniatura", true)),
+            ("Lettere/senza.docx", docx("senza miniatura", false)),
+            (
+                "Lettere/vecchia.doc",
+                b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1 un .doc vecchio".to_vec(),
+            ),
+        ],
+        "on",
+    );
+    // Con la miniatura: quella, e lo script resta a 0.
+    let thumb = vault.render("Lettere/con.docx").unwrap();
+    assert!(!thumb.queued);
+    assert_eq!(thumb.origin, PreviewOrigin::File);
+    assert_eq!(
+        thumb.image.map(|image| (image.width, image.height)),
+        Some((60, 80))
+    );
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(script.calls(), 0);
+
+    // Senza: WordCraft.
+    assert_eq!(
+        vault
+            .preview("Lettere/senza.docx")
+            .render
+            .map(|offer| offer.app),
+        Some("WordCraft".to_owned())
+    );
+    let done = render_through(&vault, "Lettere/senza.docx", PreviewSize::Small);
+    assert_eq!(done.origin, PreviewOrigin::Cli, "{done:?}");
+    assert_eq!(
+        script.args(),
+        expected(
+            &script,
+            &["render", "in.docx", "{out}", "--page", "1", "--scale", "0.5"]
+        )
+    );
+    script.all_gone();
+
+    // Un `.doc` vecchio: Fub non ne legge niente, la fa WordCraft.
+    let done = render_through(&vault, "Lettere/vecchia.doc", PreviewSize::Large);
+    assert_eq!(done.origin, PreviewOrigin::Cli, "{done:?}");
+    assert_eq!(
+        script.args(),
+        expected(
+            &script,
+            &["render", "in.doc", "{out}", "--page", "1", "--scale", "1"]
+        )
+    );
+    script.all_gone();
+    assert_eq!(script.calls(), 2);
+}
+
+#[test]
+fn no_way_without_the_gesture_starts_the_three_new_clis() {
+    let _serial = serial();
+    let cases = [
+        (
+            "lightcraft-cli",
+            "Foto/IMG_0001.CR3",
+            raw_without_jpeg("senza gesto"),
+            "LightCraft",
+        ),
+        (
+            "pdfcraft-cli",
+            "Libri/manuale.pdf",
+            pdf("senza gesto"),
+            "PdfCraft",
+        ),
+        (
+            "wordcraft-cli",
+            "Lettere/lettera.docx",
+            docx("senza gesto", false),
+            "WordCraft",
+        ),
+    ];
+    for (cli, doc, bytes, app) in cases {
+        let script = Script::good();
+        let vault = Vault::with_cli(&script, cli, &[(doc, bytes)], "on");
+        no_way_without_the_gesture(&vault, &script, doc, app);
+    }
 }

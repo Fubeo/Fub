@@ -182,12 +182,25 @@ comando non c'è, e ricerca, backlink e tag restano.
 ## Anteprime con la CLI
 
 Quando un file non ha un'anteprima, l'app che lo apre può farla dalla sua
-riga di comando: `convert {in} {out} --scale 0.25` per VectorCraft (senza
-`--scale` per `large`), `convert {in} {out}` per PhotoCraft, `render {in} -o
-{out}` per FigCraft (`craft::render::cli_args`). XMP, RAW, PDF e documenti
-non hanno una CLI. Il programma si trova come in «Apri con», con le righe
-`vectorcraft-cli=…`, `photocraft-cli=…` e `figcraft-cli=…` di
-`craft.editor-paths`.
+riga di comando (`craft::render::cli_args`):
+
+| Soggetto | App | Argomenti `small` | Per `large` |
+|---|---|---|---|
+| `vectorcraft` | VectorCraft | `convert {in} {out} --scale 0.25` | senza `--scale` |
+| `photocraft` | PhotoCraft | `convert {in} {out}` | gli stessi |
+| `figcraft` | FigCraft | `render {in} -o {out}` | gli stessi |
+| `raw` | LightCraft | `render {in} -o {out} --size 512` | `--size 2048` |
+| `pdf` | PdfCraft | `render {in} --page 1 --dpi 36 --out {out}` | `--dpi 144` |
+| `document` | WordCraft | `render {in} {out} --page 1 --scale 0.5` | `--scale 1` |
+
+Un XMP non ha una CLI. LightCraft serve solo a un RAW senza un JPEG dentro
+(mai a un `.jpg`, che non è un soggetto: la WebView lo mostra), PdfCraft a
+ogni PDF (solo la prima pagina, anche di un libro di 500), WordCraft a un
+documento senza miniatura (un `.docx` o un `.odt` che non la porta, un
+`.rtf`, un `.doc`): l'offerta c'è solo con `missing: "absent"`. Il programma
+si trova come in «Apri con», con le righe `<id>-cli=…` di
+`craft.editor-paths` (`lightcraft-cli=…`, `pdfcraft-cli=…`…); un'app senza
+il suo programma non dà né offerta né domanda.
 
 - **Quando parte.** Soltanto dopo un gesto dell'utente nella shell
   principale, che chiama `Host::craft_render(vault, doc, size)`, e soltanto
@@ -213,21 +226,27 @@ non hanno una CLI. Il programma si trova come in «Apri con», con le righe
 - **Che cosa vede l'app.** Il job guarda di nuovo il consenso e il peso, poi
   copia il documento a pezzi dalla lease (al più il peso massimo, mai il
   file intero in memoria) in una cartella privata nuova
-  (`fub-craft-render-*` nella cartella temporanea, 0700 su unix), come
-  `in.vectorcraft`, `in.pcraft` o `in.figcraft`. La CLI riceve i percorsi
+  (`fub-craft-render-*` nella cartella temporanea, 0700 su unix), sempre
+  come `in.` più l'estensione: `in.vectorcraft`, `in.pcraft` o
+  `in.figcraft` per i formati Craft, e per un RAW, un PDF o un documento
+  l'estensione del nome così come è scritta (`in.CR3`, `in.pdf`), perché
+  l'app riconosce il formato dal nome; Fub non piega il caso, e un nome che
+  comincia con `-` non arriva mai alla CLI. La CLI riceve i percorsi
   assoluti della copia e di `out.png` nella stessa cartella, come argomenti
   separati, e non vede mai il file del vault. Gira coi limiti di
   `craft::launch` (20 s, 64 KiB di uscita, il gruppo di processi chiuso alla
   fine) e si ferma quando il job si annulla o il consenso si spegne. La
   cartella si cancella sempre, anche dopo un errore o un annullamento.
 - **L'immagine.** `out.png` vale se è un file regolare (non un link, non una
-  cartella), di al più 16 MiB, e un PNG con misure lecite. Allora l'esito è
+  cartella), di al più 16 MiB, e un PNG o un JPEG, riconosciuto dalla firma
+  e non dal nome, con misure lecite (`PreviewImage::from_png` o
+  `from_jpeg`, un JPEG con orientamento 1). Allora l'esito è
   un `CraftPreview` con `origin: cli`, scritto in cache per la revisione
   presa all'inizio; se il file è cambiato nel frattempo l'esito c'è ma la
   cache no. Un errore (programma che non parte, tempo scaduto, uscita non
-  zero, PNG cattivo) è un `CraftPreview` con `origin: none`, `missing:
-  "failed"` e `render: null`, con la chiave `render.*` del catalogo del
-  bundle nel log del job; la coppia (revisione, misura) resta «già provata»
+  zero, un PDF cifrato che la CLI rifiuta, un'immagine cattiva) è un
+  `CraftPreview` con `origin: none`, `missing: "failed"` e `render: null`,
+  con la chiave `render.*` del catalogo del bundle nel log del job; la coppia (revisione, misura) resta «già provata»
   e `craft.preview` risponde `failed` finché il file non cambia o Fub non
   riparte. Un errore della cartella temporanea non segna il file.
 - **Dove va.** L'esito del job arriva alla shell con `Event::JobDone`; la

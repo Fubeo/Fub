@@ -193,9 +193,14 @@ Le cerca in quest'ordine, e il primo posto in cui c'è il programma vince:
    - Windows: `ArtCraft\VectorCraft\vectorcraft.exe` sotto
      `%LOCALAPPDATA%\Programs` o sotto `Program Files`.
 
-VectorCraft, PhotoCraft e FigCraft hanno anche un programma a riga di comando
-(`vectorcraft-cli`), che serve per le anteprime: Fub lo cerca accanto
-all'app trovata e in `~/.local/bin`. Il `PATH` del sistema non conta: un
+Sei app hanno anche un programma a riga di comando (`vectorcraft-cli`,
+`lightcraft-cli`…) che fa le anteprime dei file che non ne portano una:
+VectorCraft, PhotoCraft e FigCraft per i loro file, LightCraft per una foto
+RAW senza il JPEG della fotocamera, PdfCraft per la prima pagina di un PDF,
+WordCraft per un documento senza miniatura. GridCraft non fa anteprime. Fub
+cerca il programma accanto all'app trovata e in `~/.local/bin`, e lo avvia
+soltanto quando apri il file e con **Anteprime fatte dalle app** accese
+(vedi **Le impostazioni**). Il `PATH` del sistema non conta: un
 programma che sta solo lì Fub non lo vede, e va scritto nell'impostazione.
 
 Un programma conta solo se è un file che si può eseguire (o una cartella

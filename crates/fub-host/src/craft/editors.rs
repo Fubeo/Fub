@@ -164,7 +164,7 @@ pub const EDITORS: &[Editor] = &[
             "cr3", "cr2", "nef", "arw", "raf", "dng", "orf", "rw2", "heic", "jpg", "jpeg",
         ],
         gui: "lightcraft",
-        cli: None,
+        cli: Some("lightcraft-cli"),
         single_instance: &[],
         control: NO_CHANNEL,
     },
@@ -173,7 +173,7 @@ pub const EDITORS: &[Editor] = &[
         name: "PdfCraft",
         opens: &["pdf"],
         gui: "pdfcraft",
-        cli: None,
+        cli: Some("pdfcraft-cli"),
         single_instance: &[Os::Linux, Os::Windows],
         control: Control {
             method: Some("ui.open"),
@@ -212,7 +212,7 @@ pub const EDITORS: &[Editor] = &[
         name: "WordCraft",
         opens: &["docx", "odt", "rtf", "doc"],
         gui: "wordcraft",
-        cli: None,
+        cli: Some("wordcraft-cli"),
         single_instance: &[],
         control: Control {
             method: Some("engine.execute"),
@@ -884,7 +884,14 @@ mod tests {
             .collect();
         assert_eq!(
             with_cli,
-            BTreeSet::from(["vectorcraft", "photocraft", "figcraft"])
+            BTreeSet::from([
+                "vectorcraft",
+                "photocraft",
+                "lightcraft",
+                "pdfcraft",
+                "figcraft",
+                "wordcraft",
+            ])
         );
     }
 
@@ -990,10 +997,10 @@ mod tests {
         assert_eq!(fig.gui, None);
         assert_eq!(fig.cli, Some(local_cli));
         // Un'app senza riga di comando non ne cerca una.
-        program(&home.join(".local/bin/lightcraft"));
-        program(&home.join(".local/bin/lightcraft-cli"));
-        let light = detect(&env, &[]);
-        assert_eq!(found(&light, "lightcraft").cli, None);
+        program(&home.join(".local/bin/gridcraft"));
+        program(&home.join(".local/bin/gridcraft-cli"));
+        let grid = detect(&env, &[]);
+        assert_eq!(found(&grid, "gridcraft").cli, None);
     }
 
     #[cfg(unix)]
@@ -1140,7 +1147,7 @@ mod tests {
                 "figcraft=relative/figcraft",
                 &format!("{}", dir.path().join("opt/a/photocraft").display()),
                 &format!("unknown={}", first.display()),
-                &format!("lightcraft-cli={}", first.display()),
+                &format!("gridcraft-cli={}", first.display()),
                 "",
                 "=",
             ]),
@@ -1152,8 +1159,8 @@ mod tests {
         let photo = found(&all, "photocraft");
         assert_eq!(photo.gui, Some(Launch::Program(last)));
         assert_eq!(found(&all, "figcraft").gui, None);
-        assert_eq!(found(&all, "lightcraft").cli, None);
-        assert_eq!(found(&all, "lightcraft").gui, None);
+        assert_eq!(found(&all, "gridcraft").cli, None);
+        assert_eq!(found(&all, "gridcraft").gui, None);
     }
 
     #[test]
