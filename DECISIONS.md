@@ -59,6 +59,11 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · k3-motori · T18, al telefono i bottoni della barra dei fogli
+  restano a 44 px, la regola della shell mobile, e non 38/88 come nel
+  prototipo; la risposta dell'utente: «i tasti ok a 44px» · perché: la
+  misura del tocco vale per tutta la shell mobile, e un'eccezione solo per
+  la barra la romperebbe.
 - K3 T15, le differenze accettate: in sola lettura un esito con modifiche si
   scarta e il provider riparte dal giornale confermato
   (`#openWorkbook(#confirmedJournal)`), invece di applicarlo;

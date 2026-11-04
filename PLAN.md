@@ -1523,7 +1523,9 @@ Revisione 3 su 3, Visualizza 2 su 4; a piena larghezza Home 5 su 6 e le
 altre tutti; al telefono la Home senza scorrere, Layout di pagina 1 su 4,
 Dati 1 su 4, Revisione 2 su 3, Inserisci che scorre di 54 px), il chiuso
 solo nella sua colonna è alto 80 px e quelli a pila 38, e il vassoio è alto
-88 px in ogni stato, scritti nel rapporto; la barra dei documenti e quella delle
+88 px in ogni stato, scritti nel rapporto (al telefono i bottoni tengono i
+44 px della shell mobile: chiusi a pila 44, vassoio 100, Dati 0 su 4; la
+risposta dell'utente del 2026-11-04); la barra dei documenti e quella delle
 tabelle non cambiano: le regole che nominano `.rich-ribbon-…` sono le stesse
 prima e dopo, tolti i selettori `.grid-ribbon-…`, e ogni selettore nuovo
 comincia da `.grid-ribbon`, salvo `.grid-formula-bar`, `.grid-viewport` e
@@ -1543,7 +1545,7 @@ senza l'opzione, il riquadro di sempre; i test del tema
 `theme/forced-colors.test.ts`), `npm run theme:verify`, `npm run typecheck`
 e `bench:a11y` verdi.
 Prova: scripts/check.sh --rapido
-Stato: [~] integrato · 3c583a48..bb5ad39b · check --rapido 19/20 (rosso solo scene.test: le baseline delle 9 scene nuove dal runner, T17) · al telefono 44/100 px invece di 38/88 e Dati 0/4 per i 44 px dei bottoni della shell mobile: la scelta (tenerli o un'eccezione per la barra) è chiesta all'utente
+Stato: [~] integrato · 3c583a48..bb5ad39b · check --rapido 19/20 (rosso solo scene.test: le baseline delle 9 scene nuove dal runner, T17) · al telefono 44/100 px invece di 38/88 e Dati 0/4 per i 44 px dei bottoni della shell mobile: l'utente li tiene (2026-11-04: «i tasti ok a 44px»)
 
 ## T19 · Il movimento della barra dei fogli
 
