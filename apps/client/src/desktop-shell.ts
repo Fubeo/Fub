@@ -71,7 +71,7 @@ import { applySlashSettings } from "./panels/slash/prefs";
 import { mountStrings, onLanguage, resolvedLanguage, t, type Key } from "./i18n/strings";
 import { mountSplitter } from "./kit";
 import { mountActivity } from "./panels/activity";
-import { mountSettings } from "./panels/settings";
+import { mountSettings, openSettingsAt } from "./panels/settings";
 import { currentTheme, mountTheme } from "./theme/theme";
 import { onContentLookChange } from "./theme/content-look";
 import { focusedContextMode, focusedModeId } from "./state/document-controller";
@@ -90,8 +90,11 @@ import { drainDocumentWindows, openCurrentInNewWindow } from "./state/document-w
 import { mountExplorer } from "./panels/explorer";
 import { mountPageIcons } from "./state/page-icons";
 import { mountPeople } from "./state/people";
+import { mountExternalEditors } from "./state/external-editors";
 import { mountDates } from "./state/dates";
 import { mountLinkCards } from "./state/link-cards";
+import { mountCraftPreviews } from "./state/craft-previews";
+import { mountCraftPhotos } from "./state/craft-photos";
 import { closeInDocumentSearch, mountDocSearch } from "./panels/doc-search";
 import { mountGraph } from "./panels/graph";
 import { mountQuickSwitcher } from "./panels/quick-switcher";
@@ -819,6 +822,7 @@ async function init(): Promise<Teardown> {
       const entry = allCommands().find((e) => e.id === id);
       if (entry) startCommand(entry, paletteHost);
     },
+    openSettings: (key) => void openSettingsAt(key),
   });
 
   // Subito dopo il pannello del documento, perché è il suo testo che protegge, e
@@ -847,6 +851,10 @@ async function init(): Promise<Teardown> {
   mountPeople(pageWindowLifetime);
   mountDates(pageWindowLifetime);
   mountLinkCards(pageWindowLifetime);
+  mountCraftPreviews(pageWindowLifetime);
+  // Le app Craft installate, per il sottomenu «Apri con un'altra app».
+  mountExternalEditors(pageWindowLifetime);
+  mountCraftPhotos(pageWindowLifetime);
   mountExplorer(pageWindowLifetime);
   mountLinkPreview(pageWindowLifetime);
   mountBookmarksPanel(pageWindowLifetime);
@@ -871,14 +879,15 @@ async function init(): Promise<Teardown> {
       const added = splitPane(parent, "row");
       if (!added) return;
       try {
-        await openDocument(doc);
+        await openDocument(doc, { gesture: true });
       } catch (error) {
         closePane(added);
         throw error;
       }
       return;
     }
-    await openDocument(doc);
+    // Scegliere nel passaggio veloce è un gesto: la scheda che nasce lo sa.
+    await openDocument(doc, { gesture: true });
   }));
   pageWindowLifetime.add(closeCommandPalette);
   pageWindowLifetime.add(closeInDocumentSearch);

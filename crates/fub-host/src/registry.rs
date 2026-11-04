@@ -250,6 +250,21 @@ impl Registrar<'_> {
             .map_err(|error| PluginError::Internal(error.to_string().into()))?
     }
 
+    /// Il lettore delle lease con cui `fub.craft` legge le anteprime a pezzi.
+    ///
+    /// Resta una superficie di `fub.craft` sola, come `search_data_dir`: il
+    /// lettore tiene il vault e non il lucchetto del workspace, e un accesso
+    /// generico darebbe a ogni bundle nativo una via per leggere il vault
+    /// accanto a `HostApi`. Le recinzioni sono quelle del kernel
+    /// (`ResourceReader`), le stesse del protocollo `fub-asset:`.
+    #[cfg(feature = "craft")]
+    pub(crate) fn craft_reader(
+        &self,
+    ) -> Result<fub_kernel::workspace::ResourceReader, PluginError> {
+        self.with_read(|workspace| workspace.resource_reader())
+            .map_err(|error| PluginError::Internal(error.to_string().into()))
+    }
+
     pub fn setting(&self, key: &str) -> Result<SettingValue, PluginError> {
         self.with_read(|workspace| workspace.setting(key))
             .map_err(|error| PluginError::Internal(error.to_string().into()))?

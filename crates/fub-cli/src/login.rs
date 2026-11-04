@@ -297,6 +297,19 @@ pub fn config(
     print: impl Fn(&serde_json::Value),
 ) -> Result<(), Failure> {
     if !args.set.is_empty() {
+        // Lo schema dice la specie di ogni chiave: senza, `on` diventava un
+        // interruttore anche per una scelta come `craft.cli-previews`, e lo
+        // schema lo rifiutava. Se l'elenco non si legge si indovina come
+        // prima, e il rifiuto, se c'è, resta dello schema.
+        let kinds: std::collections::BTreeMap<String, fub_abi::settings::SettingKind> =
+            query_settings(connection)
+                .map(|entries| {
+                    entries
+                        .into_iter()
+                        .map(|entry| (entry.spec.key, entry.spec.kind))
+                        .collect()
+                })
+                .unwrap_or_default();
         for pair in &args.set {
             let (key, value) = pair
                 .split_once('=')
@@ -304,7 +317,10 @@ pub fn config(
             if key.trim().is_empty() {
                 return Err(Failure::bad_args("--set con chiave vuota"));
             }
-            let parsed = parse_setting_value(value)?;
+            let parsed = match kinds.get(key.trim()) {
+                Some(kind) => setting_value_for(kind, value)?,
+                None => parse_setting_value(value)?,
+            };
             if global.dry_run {
                 print(&envelope_ok(
                     serde_json::json!({ "key": key.trim(), "would_set": parsed, "dry_run": true }),
@@ -394,6 +410,28 @@ fn query_settings(connection: &Connection) -> Result<Vec<fub_abi::SettingEntry>,
     }
 }
 
+/// Il valore di `--set` per una chiave di cui lo schema dice la specie: un
+/// testo o una scelta restano la parola scritta, un elenco si divide sulle
+/// virgole anche quando ha un elemento solo; per gli interruttori e i numeri
+/// vale la lettura di [`parse_setting_value`].
+fn setting_value_for(
+    kind: &fub_abi::settings::SettingKind,
+    raw: &str,
+) -> Result<fub_abi::SettingValue, Failure> {
+    use fub_abi::settings::SettingKind;
+    match kind {
+        SettingKind::Text { .. } => Ok(fub_abi::SettingValue::Text(raw.to_string())),
+        SettingKind::Choice { .. } => Ok(fub_abi::SettingValue::Text(raw.trim().to_string())),
+        SettingKind::List { .. } => Ok(fub_abi::SettingValue::List(
+            raw.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect(),
+        )),
+        SettingKind::Toggle { .. } | SettingKind::Number { .. } => parse_setting_value(raw),
+    }
+}
+
 fn parse_setting_value(raw: &str) -> Result<fub_abi::SettingValue, Failure> {
     let trimmed = raw.trim();
     if trimmed.eq_ignore_ascii_case("true") || trimmed.eq_ignore_ascii_case("on") || trimmed == "1"
@@ -432,6 +470,44 @@ fn parse_setting_value(raw: &str) -> Result<fub_abi::SettingValue, Failure> {
 #[cfg(test)]
 mod tests {
     use super::account_exists;
+
+    /// La specie dello schema vince sull'indovinare: `on` di una scelta resta
+    /// la parola, `1` di un testo resta testo, un elenco di uno è un elenco.
+    #[test]
+    fn the_schema_kind_decides_the_value_of_set() {
+        use super::setting_value_for;
+        use fub_abi::settings::SettingKind;
+        use fub_abi::SettingValue;
+        let choice = SettingKind::Choice {
+            default: "ask".into(),
+            options: Vec::new(),
+        };
+        let value = |kind: &SettingKind, raw: &str| setting_value_for(kind, raw).ok();
+        assert_eq!(value(&choice, "on"), Some(SettingValue::Text("on".into())));
+        assert_eq!(
+            value(&choice, " off "),
+            Some(SettingValue::Text("off".into()))
+        );
+        let text = SettingKind::Text {
+            default: String::new(),
+        };
+        assert_eq!(value(&text, "1"), Some(SettingValue::Text("1".into())));
+        let list = SettingKind::List {
+            default: Vec::new(),
+        };
+        assert_eq!(
+            value(&list, "fub.graph"),
+            Some(SettingValue::List(vec!["fub.graph".into()]))
+        );
+        let toggle = SettingKind::Toggle { default: false };
+        assert_eq!(value(&toggle, "on"), Some(SettingValue::Toggle(true)));
+        let number = SettingKind::Number {
+            default: 64.0,
+            min: Some(1.0),
+            max: Some(4096.0),
+        };
+        assert_eq!(value(&number, "128"), Some(SettingValue::Number(128.0)));
+    }
 
     /// La registrazione di un account che c'è già porta al login; il ramo
     /// decide su status e codice, non sul testo (I73). Un `413`, che la CLI

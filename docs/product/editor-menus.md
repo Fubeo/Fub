@@ -159,6 +159,26 @@ file e la scheda dei collegamenti dell'ispettore. Il tasto destro su una nota
 della scelta multipla apre il menu della scelta; fuori dalla scelta vale il
 menu della nota.
 
+### Apri con un'altra app
+
+Senza app Craft installate «Apri con un'altra app» passa il file all'app
+predefinita del sistema. Con almeno una installata (Fub lo chiede all'host
+all'apertura del vault, e di nuovo quando cambia `craft.editor-paths` o si
+accende o spegne il componente «File delle app Craft») la voce diventa un
+sottomenu ▸: per prima «L'app predefinita del sistema», poi le app Craft che
+aprono quel file, nell'ordine della
+[tabella delle app](../reference/external-editors.md), chieste all'host
+quando il sottomenu si apre. Un'app che apre il file ma non è installata si
+vede spenta con la riga «Non installata»; una che Fub ha avviato e che non è
+uscita porta la riga «Già aperta», e la scelta le passa il file. Un file che
+nessuna app Craft apre (una nota, un file senza estensione) ha il sottomenu
+con la sola app di sistema. Un'apertura che non riesce dice la frase
+dell'host. Vale nel menu della nota (dentro Organizza ▸), in quello di un
+altro file e in quello di un'immagine, di un PDF, di un audio o di un video
+aperti; col dito il sottomenu si apre al posto del menu, con la voce per
+tornare. Scegliere un'app Craft per un documento che ha una scheda aperta lo
+presta all'app ([Il prestito](craft-files.md#il-prestito)).
+
 Il disegno ha i suoi menu ([Disegni, selezione](drawing-selection.md)); la
 griglia delle tabelle in Live ha il suo
 ([Editor e anteprima](editor-and-preview.md#tabelle-in-live)).
