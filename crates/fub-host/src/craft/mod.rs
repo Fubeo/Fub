@@ -254,7 +254,7 @@ impl CommandProvider for CraftCommands {
                     vec![Arg::text("doc", "")],
                 )));
             };
-            return custom(&photo::photo(&*host, &doc)?);
+            return custom(&photo::photo(&*host, self.ranged.as_ref(), &doc)?);
         }
         if command != PREVIEW_COMMAND {
             return Err(PluginError::UnknownCommand(command.to_string().into()));

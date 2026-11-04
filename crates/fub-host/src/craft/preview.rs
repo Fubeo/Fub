@@ -36,7 +36,7 @@
 //! trova lì, oppure riceve l'offerta `render` (vedi [`offer`]): leggere non
 //! avvia mai niente. Un `.vectorcraft` oltre il peso di
 //! `craft.preview-max-mib` ([`super::consent::max_bytes`]), o un XMP oltre
-//! [`MAX_FILE_BYTES`], non si legge: è `missing: over_limit` col peso
+//! [`MAX_XMP_BYTES`], non si legge: è `missing: over_limit` col peso
 //! massimo, il peso del file e nessuna revisione. Per la via dell'host vale lo
 //! stesso anche per uno ZIP oltre [`MAX_FILE_BYTES`], che lì si legge intero.
 
@@ -45,6 +45,7 @@ use fub_abi::text::{Arg, Text};
 use fub_abi::traits::{FolderScope, HostApi, IndexQuery, IndexResult, Page, VaultEntry};
 use fub_abi::{PluginError, Revision};
 use fub_format_craft::container::MAX_FILE_BYTES;
+use fub_format_craft::xmp::MAX_XMP_BYTES;
 use fub_format_craft::{
     cache_key, CraftApp, CraftPreview, Missing, PreviewInfo, PreviewOrigin, PreviewSize,
     PreviewSubject, RenderOffer, PREVIEW_VERSION,
@@ -358,10 +359,12 @@ fn app_of(subject: PreviewSubject, preview: &mut CraftPreview) -> Option<CraftAp
 }
 
 /// Il peso massimo di un file che si legge intero: per un `.vectorcraft`
-/// quello di `craft.preview-max-mib`, per gli altri [`MAX_FILE_BYTES`].
+/// quello di `craft.preview-max-mib`, per un XMP [`MAX_XMP_BYTES`], per gli
+/// altri [`MAX_FILE_BYTES`].
 fn limit_of(host: &dyn HostApi, app: CraftApp) -> u64 {
     match app {
         CraftApp::VectorCraft => super::consent::max_bytes(host),
+        CraftApp::Xmp => MAX_XMP_BYTES as u64,
         _ => MAX_FILE_BYTES as u64,
     }
 }
@@ -421,6 +424,11 @@ fn read(
     }
     let bytes = host.read_document_bytes(doc)?;
     preview.info.bytes = bytes.len() as u64;
+    if app == CraftApp::Xmp && bytes.len() as u64 > limit {
+        // Cresciuto dopo l'anagrafe: il tetto vale per i byte veri.
+        over_limit(&mut preview, limit);
+        return Ok(preview);
+    }
     if app == CraftApp::Xmp {
         xmp::read(&mut preview, doc, &bytes, folder);
     } else {
@@ -764,6 +772,15 @@ mod tests {
         // Sotto la soglia la revisione si calcola come prima: il «già
         // provato» e la cache valgono già alla prima domanda.
         assert_eq!(ranged.bytes_read(), 4 * 1024 * 1024);
+    }
+
+    #[test]
+    fn an_xmp_over_its_own_cap_is_over_limit() {
+        let mut host = host_with("Foto/IMG.xmp", &vec![b' '; MAX_XMP_BYTES + 1]);
+        let doc = DocId::new("Foto/IMG.xmp");
+        let out = preview(&mut host, None, &doc, PreviewSize::Small).unwrap();
+        assert_eq!(out.missing, Some(Missing::OverLimit));
+        assert_eq!(out.limit_bytes, Some(MAX_XMP_BYTES as u64));
     }
 
     #[test]
