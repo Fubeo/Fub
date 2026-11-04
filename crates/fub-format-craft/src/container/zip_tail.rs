@@ -3,7 +3,8 @@
 //! [`check`] legge al più gli ultimi [`EOCD_SEARCH`] byte del file (la fine
 //! della directory centrale più il commento più lungo) e ogni fine che `zip`
 //! potrebbe scegliere: una firma `PK\x05\x06` i cui 22 byte fissi e il cui
-//! commento stanno nel file, anche dentro il commento di un'altra. Di ognuna,
+//! commento stanno nel file, anche dentro il commento di un'altra, al più
+//! [`MAX_EOCD_CANDIDATES`] (oltre è [`ContainerError::TooLarge`]). Di ognuna,
 //! e della sua fine ZIP64 se la dichiara, guarda le voci, la misura e la
 //! posizione della directory: oltre [`MAX_ZIP_ENTRIES`] voci o
 //! [`MAX_CENTRAL_DIRECTORY_BYTES`] è [`ContainerError::TooLarge`], una
@@ -30,6 +31,10 @@ const ZIP64_EOCD_LEN: u64 = 56;
 /// La fine ZIP64 più lunga che si accetta, settore estensibile compreso: `zip`
 /// la legge tutta, quindi la distanza dal localizzatore non la decide il file.
 const ZIP64_EOCD_MAX: u64 = ZIP64_EOCD_LEN + 64 * 1024;
+/// Le fini possibili che si guardano al più: uno ZIP vero ne ha una, poche se
+/// un commento ne contiene altre. Oltre, la coda è ostile e ogni fine
+/// costerebbe due letture in più (localizzatore e fine ZIP64).
+pub(crate) const MAX_EOCD_CANDIDATES: usize = 32;
 
 /// Ciò che la coda dichiara, per chi arma il tetto di [`Budgeted`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -57,6 +62,7 @@ pub(crate) fn check<R: Read + Seek>(reader: &mut R, len: u64) -> Result<Tail, Co
     // Al più 65 557 byte: una costante, non un numero del file.
     let tail = read_at(reader, from, tail_len)?;
     let mut largest: Option<u64> = None;
+    let mut candidates = 0usize;
     for at in 0..=tail.len().saturating_sub(EOCD_LEN) {
         let Some(fixed) = tail.get(at..at + EOCD_LEN) else {
             break;
@@ -69,6 +75,10 @@ pub(crate) fn check<R: Read + Seek>(reader: &mut R, len: u64) -> Result<Tail, Co
         // Come `zip`: una fine il cui commento esce dal file non si sceglie.
         if eocd + EOCD_LEN as u64 + comment > len {
             continue;
+        }
+        candidates += 1;
+        if candidates > MAX_EOCD_CANDIDATES {
+            return Err(ContainerError::TooLarge);
         }
         let Some(directory) = directory_of(reader, fixed, eocd)? else {
             continue;

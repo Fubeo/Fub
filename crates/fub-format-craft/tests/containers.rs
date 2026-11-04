@@ -1393,3 +1393,21 @@ fn uno_gzip_di_1_mib_che_diventa_1_gib_si_ferma_al_tetto() {
         Err(ContainerError::TooLarge)
     );
 }
+
+#[test]
+fn una_coda_piena_di_fini_zip64_si_ferma_alle_prime() {
+    // Ogni fine dichiara ZIP64 e ha il suo localizzatore, che punta 56 byte
+    // prima, dove non c'è la firma: senza tetto, ognuna costerebbe due letture.
+    let mut bytes = vec![0u8; 64];
+    while bytes.len() < 64 + u16::MAX as usize {
+        let locator_at = bytes.len() as u64;
+        bytes.extend_from_slice(b"PK\x06\x07");
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+        bytes.extend_from_slice(&(locator_at - 56).to_le_bytes());
+        bytes.extend_from_slice(&1u32.to_le_bytes());
+        bytes.extend(eocd(u16::MAX, 0, 0, b""));
+    }
+    let (found, read) = from_bytes(CraftApp::PhotoCraft, &bytes, PreviewSize::Small, 0);
+    assert_eq!(found, Err(ContainerError::TooLarge));
+    assert!(read <= 22 + u64::from(u16::MAX) + 16 * 1024, "{read}");
+}
