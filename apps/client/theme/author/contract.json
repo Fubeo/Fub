@@ -751,6 +751,9 @@
     "grid-ribbon-field-label",
     "grid-ribbon-keytip",
     "grid-ribbon-contextual",
+    "grid-ribbon-group-toggle",
+    "grid-ribbon-chevron",
+    "grid-ribbon-label",
     "grid-ribbon-popup-group",
     "grid-ribbon-palette",
     "grid-ribbon-palette-empty",
@@ -2219,6 +2222,9 @@
     "grid-ribbon-field-label": "cornice",
     "grid-ribbon-keytip": "cornice",
     "grid-ribbon-contextual": "cornice",
+    "grid-ribbon-group-toggle": "cornice",
+    "grid-ribbon-chevron": "cornice",
+    "grid-ribbon-label": "cornice",
     "grid-ribbon-popup-group": "cornice",
     "grid-ribbon-palette": "cornice",
     "grid-ribbon-palette-empty": "cornice",
@@ -4970,8 +4976,12 @@
         "grid-ribbon-field-label",
         "grid-ribbon-keytip",
         "grid-ribbon-contextual",
+        "grid-ribbon-group-toggle",
+        "grid-ribbon-chevron",
+        "grid-ribbon-label",
         "kit-tabs",
-        "kit-tab"
+        "kit-tab",
+        "kit-tab-indicator"
       ],
       "states": [
         "rest",
@@ -8262,7 +8272,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1466,
+    "hooks": 1469,
     "state_names": 7,
     "assigned_states": 710,
     "components": 213,
