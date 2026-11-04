@@ -2108,7 +2108,8 @@ button.primary:disabled,
    lato, la colonna ferma che scorre solo in giù, l'angolo che non scorre.
    Ogni livello taglia ciò che esce dalla sua zona; le fasce opache coprono
    ciò che le scorre sotto. Il livello «lift» di una zona porta la cella
-   aperta, che può uscire dalla zona. */
+   aperta e i segni di un angolo (il quadratino, le maniglie del tocco), che
+   possono uscire dalla zona; per il corpo è il suo livello. */
 .grid-marks-body {
   position: relative;
   z-index: 1;
@@ -2190,13 +2191,14 @@ button.primary:disabled,
   width: 100%;
   height: calc(100% + 8px);
 }
+/* Le maniglie del tocco non prendono il puntatore: la presa è un cerchio
+   attorno al loro angolo (`gripAt`), anche dove una fascia ferma ne copre
+   metà. */
 .grid-mark.touch {
   z-index: 3;
   width: 14px;
   height: 14px;
   transform-origin: 50% 50%;
-  pointer-events: auto;
-  touch-action: none;
 }
 </style>
 <style data-griglia="nuova">
@@ -2567,8 +2569,16 @@ body {
   <div class="proto-field">
     <label for="proto-puntatore" data-i18n="(solo prototipo)">Selezione col puntatore</label>
     <select id="proto-puntatore">
-      <option value="scivola">Scivola, come coi tasti (consigliato)</option>
-      <option value="salta">Salta mentre si trascina</option>
+      <option value="segue">Segue il puntatore: cresce scivolando, cala subito (consigliato)</option>
+      <option value="scivola">Scivola sempre, come coi tasti</option>
+      <option value="salta">Salta col puntatore, scivola coi tasti</option>
+    </select>
+  </div>
+  <div class="proto-field">
+    <label for="proto-filo" data-i18n="(solo prototipo)">Maniglie sul filo del blocco</label>
+    <select id="proto-filo">
+      <option value="coperte">Scorrono sotto la fascia ferma, come le celle (consigliato)</option>
+      <option value="sopra">Intere sopra la fascia ferma</option>
     </select>
   </div>
   <div class="proto-field">
@@ -2604,7 +2614,7 @@ body {
         <li><b>Le fasce ferme stanno ferme da sole.</b> La riga delle intestazioni, le righe bloccate, le intestazioni delle righe e le colonne bloccate sono <code>sticky</code> nel piano: non c'è più uno script che le rimette a posto a ogni fotogramma, quindi non saltano.</li>
         <li><b>I segni stanno nella zona dove cadono.</b> Il corpo, la testa, la colonna ferma e l'angolo hanno ognuno il suo livello. Un intervallo che passa la riga bloccata ha la sua parte ferma in alto e quella che scorre sotto, e non copre mai le intestazioni né la colonna bloccata.</li>
         <li><b>Un solo rettangolo, simmetrico.</b> Ogni lato copre il filo della griglia e un pixel dentro. Con più celle, la cella attiva ha un anello sottile e il resto un velo. Il colore è l'inchiostro del cursore della carta (6,3:1 sul bianco in ogni luce), non l'accento del tema, che nelle luci scure è chiaro.</li>
-        <li><b>I segni restano e scivolano.</b> I pezzi del rettangolo, del velo e delle intestazioni ci sono sempre: una freccia li sposta, non li ricrea. Vanno dalla cella di prima a quella nuova con la molla <i>snap</i>.</li>
+        <li><b>I segni restano e scivolano.</b> I pezzi del rettangolo, del velo e delle intestazioni ci sono sempre: una freccia li sposta, non li ricrea. Vanno dalla cella di prima a quella nuova con la molla <i>GLIDE</i>.</li>
         <li><b>La cella aperta è la cella.</b> Stesso carattere, stessa carta, stesso posto del testo: aprirla non sposta niente. Cresce a destra a colonne intere fin dove il riquadro lo permette, poi va a capo e cresce in giù. La cornice compare in 90 ms.</li>
         <li><b>Si vede subito ciò che si scrive.</b> Un numero va a destra appena lo si conferma; una formula resta com'è scritta, tenue, finché il foglio non dà il valore, che compare con una dissolvenza. Una colonna tirata prende subito la larghezza, e le colonne dopo scivolano. Se il foglio dice di no, tutto torna indietro scivolando e la riga in alto dice perché.</li>
         <li><b>Riempimento, copia e incolla.</b> Il contorno del riempimento resta finché il foglio non risponde, e mentre aspetta le formiche camminano; poi i valori arrivano uno dopo l'altro. Una copia lascia un tratteggio largo e un battito, un taglio un tratteggio fitto. Incollare mostra subito i valori.</li>
@@ -2612,9 +2622,12 @@ body {
       </ul>
       <h2>Il movimento</h2>
       <ul>
-        <li>Le molle sono della griglia e non rimbalzano: <i>GLIDE</i> 1400/75 per i segni, <i>SLIDE</i> 700/53 per le colonne che scivolano e le maniglie (<code>moto/spring.ts</code> non cambia). Tutti i pezzi di un segno vengono da una sola geometria, quindi il velo e l'anello non escono mai dal bordo, e un tasto tenuto giù scorre senza scatti. Dalla barra restano 90 ms per una cosa che compare, 140 ms per una che esce, 12 ms fra un valore e l'altro (al massimo 8).</li>
+        <li>Le molle sono della griglia e non rimbalzano: <i>GLIDE</i> 1400/75 per i segni, <i>SLIDE</i> 700/53 per le colonne che scivolano e le maniglie (<code>moto/spring.ts</code> non cambia). Dalla barra restano 90 ms per una cosa che compare, 140 ms per una che esce, 12 ms fra un valore e l'altro (al massimo 8).</li>
+        <li><b>Un solo motore.</b> Dieci numeri (il rettangolo, la cella attiva, l'angolo del quadratino) e, a ogni fotogramma, tutti i pezzi di tutte le zone disegnati da quei numeri: i lati, l'anello, il velo, le fasce e il quadratino non possono separarsi. Il puntatore cambia solo dove vanno i numeri; il passo si fa una volta per fotogramma, quindi un mouse a 1000 Hz e uno a 60 danno lo stesso moto. Un numero non torna mai indietro e non passa mai il suo bersaglio, e la cella attiva resta dentro il rettangolo.</li>
+        <li><b>Col puntatore</b> (D-7, scelta «Selezione col puntatore»): la selezione cresce scivolando e cala subito, e un clic salta alla cella. Così non mostra mai una cella che il puntatore non ha scelto, né per un fotogramma un'area più grande. Coi tasti tutto scivola. Le altre due scelte: «Scivola sempre» (anche quando cala, quindi per un attimo resta più grande) e «Salta col puntatore» (identica alla scelta in ogni fotogramma, senza moto col mouse).</li>
+        <li><b>Le maniglie sul filo del blocco</b> (D-8, scelta «Maniglie sul filo del blocco»): il quadratino e le maniglie del tocco sono un pezzo solo, intero, nel livello della zona del loro angolo. Sul filo di una colonna o di una riga bloccata la fascia ferma ne copre la parte che le passa sotto, come copre le celle, e scorrendo spariscono sotto la fascia insieme alla loro cella; la presa è un cerchio attorno all'angolo, intera anche dove la fascia copre metà maniglia. L'altra scelta: «Intere sopra la fascia», che le sposta lo script a ogni scorrimento (un fotogramma dopo le celle) e, quando l'angolo passa sotto la fascia, le riporta giù di colpo.</li>
         <li><b>Movimento ridotto</b>: niente scivola. I segni saltano, le colonne saltano, le formiche stanno ferme; restano le dissolvenze di 90 ms, come nella barra, e il battito della copia, che è solo una dissolvenza.</li>
-        <li>Nel prototipo le corse le fa una copia di <code>run</code> della barra; nel codice vero le fa <code>editors/grid/grid-motion.ts</code> con <code>animate</code>, <code>flip</code> e <code>stagger</code> di <code>moto/</code> (T3).</li>
+        <li>Nel prototipo le corse le fa una copia di <code>run</code> della barra e i segni un ciclo di <code>requestAnimationFrame</code>; nel codice vero le fa <code>editors/grid/grid-motion.ts</code> con <code>animate</code>, <code>flip</code> e <code>stagger</code> di <code>moto/</code>, e i segni un ascoltatore di <code>onFrame</code> con <code>advanceSpring</code> (T3).</li>
       </ul>
       <h2>Che cosa non c'è nel prototipo</h2>
       <ul>
@@ -2629,8 +2642,9 @@ body {
         <li>La cella aperta che cresce copre le celle accanto anche quando non sono vuote (come Excel)?</li>
         <li>Mostrare subito una larghezza o un numero prima che il foglio risponda, e tornare indietro se dice di no?</li>
         <li>Al telefono, il tocco lungo per le maniglie va bene?</li>
-        <li>La selezione che scivola anche mentre si trascina col puntatore, e a quella velocità?</li>
+        <li>Col puntatore la selezione cresce scivolando e cala subito (D-7): va bene, o la vuoi sempre scivolante, o a scatti col mouse? E la velocità (D-5)?</li>
         <li>Le formiche che camminano mentre il foglio risponde a un riempimento?</li>
+        <li>Sul filo del blocco, una maniglia che la fascia ferma copre a metà (D-8) va bene, o la vuoi intera sopra la fascia?</li>
       </ol>
     </div>
   </details>
@@ -2662,8 +2676,9 @@ body {
   // copiate qui con i loro nomi come nel prototipo della barra, e il passo
   // della molla è quello di `sampleSpring`. Nel codice vero le corse le fanno
   // `animate`, `flip` e `stagger` di `moto/`, chiamate da
-  // `editors/grid/grid-motion.ts` (T3); il livello «calmo» lo decide
-  // `moto/level.ts` e qui non c'è.
+  // `editors/grid/grid-motion.ts` (T3), e i segni li porta lì un ascoltatore
+  // di `onFrame` con `advanceSpring` (vedi «Il motore dei segni»); il livello
+  // «calmo» lo decide `moto/level.ts` e qui non c'è.
   const SPRINGS = {
     snap: { stiffness: 560, damping: 38 },
     soft: { stiffness: 300, damping: 30 },
@@ -2679,8 +2694,9 @@ body {
   const ANTS_STEP = 8; // un passo delle formiche, il periodo del loro tratteggio
   const ANTS_MS = 320; // il tempo di un passo
   // Le molle della griglia: un po' più svelte di `snap` e `soft` della barra,
-  // e smorzate in modo critico. Su una griglia un segno che passa il
-  // bersaglio e torna indietro si legge come un difetto, non come un rimbalzo.
+  // e appena sovrasmorzate (radici 35 e 40 al secondo per `GLIDE`, 25 e 28
+  // per `SLIDE`). Su una griglia un segno che passa il bersaglio e torna
+  // indietro si legge come un difetto, non come un rimbalzo.
   // `GLIDE` porta i segni (al 90 % in circa 105 ms, fermo in 250), `SLIDE` le
   // colonne che scivolano e le maniglie del tocco lungo (al 90 % in 150 ms).
   const GLIDE = { stiffness: 1400, damping: 75 };
@@ -2830,6 +2846,7 @@ body {
   const WORKBOOK_SCALE = 1.4;
   const RESIZE_SLOP = 4;
   const FILL_SLOP = 6;
+  const GRIP_R = 9; // la presa di una maniglia del tocco: il cerchio e il suo bordo
   const TAP_MOVE = 8;
   const LONG_PRESS_MS = 450;
   const DOUBLE_TAP_MS = 300;
@@ -2980,6 +2997,7 @@ body {
     risponde: $("proto-risponde"),
     copia: $("proto-copia"),
     puntatore: $("proto-puntatore"),
+    filo: $("proto-filo"),
     luce: $("proto-luce"),
     larghezza: $("proto-larghezza"),
     movimento: $("proto-movimento"),
@@ -2987,7 +3005,6 @@ body {
   const mode = () => look.griglia.value;
   const nuova = () => mode() === "nuova";
   const touchMode = () => nuova() && (look.larghezza.value === "telefono" || lastPointer === "touch");
-  const glideWhileDragging = () => !(drag && look.puntatore.value === "salta");
   function div(className) {
     const el = document.createElement("div");
     if (className) el.className = className;
@@ -3295,19 +3312,57 @@ body {
       { name: "veil-right", cls: "veil", x: a.R, y: a.T, w: b.R - a.R, h: a.B - a.T },
     ];
     for (const p of grown) parts.push({ ...p, grows: true, rest: !lone });
-    if (!editor && !touchMode() && !fill?.waiting) parts.push({ name: "handle", cls: "handle", x: hR - 5, y: hB - 5, w: 8, h: 8 });
+    if (!editor && !touchMode() && !fill?.waiting) parts.push({ name: "handle", cls: "handle", x: hR - 5, y: hB - 5, w: 8, h: 8, corner: [hR, hB, false] });
     parts.push({ name: "band-col", cls: "band-col", x: b.L, y: 0, w: b.R - b.L, h: HEAD_H, layers: ["top", "corner"] });
     parts.push({ name: "band-row", cls: "band-row", x: 0, y: b.T, w: HEAD_W, h: b.B - b.T, layers: ["left", "corner"] });
     if (clip && (clip.cut || look.copia.value !== "battito")) parts.push(...edges("clip", clip.cut ? "cut" : "copy", boxOf(clip.range), 2, { glide: false }));
     if (fill && !sameRange(fill.source, fill.target)) parts.push(...edges("fill", "ants", boxOf(fill.target), 2, { glide: false }));
     if (handles && nuova()) {
       parts.push(
-        { name: "touch-a", cls: "touch", x: b.L - 8, y: b.T - 8, w: 14, h: 14, handle: "a", appear: "soft" },
-        { name: "touch-b", cls: "touch", x: b.R - 8, y: b.B - 8, w: 14, h: 14, handle: "b", appear: "soft" },
+        { name: "touch-a", cls: "touch", x: b.L - 8, y: b.T - 8, w: 14, h: 14, handle: "a", appear: "soft", mid: true, corner: [b.L, b.T, true] },
+        { name: "touch-b", cls: "touch", x: b.R - 8, y: b.B - 8, w: 14, h: 14, handle: "b", appear: "soft", mid: true, corner: [b.R, b.B, false] },
       );
     }
     return parts;
   }
+  /// La zona di un angolo della griglia. Un angolo che apre il rettangolo
+  /// (`start`: in alto a sinistra) sta nella zona della cella dopo di lui, uno
+  /// che lo chiude in quella della cella prima: sul filo del blocco, l'angolo
+  /// di B2 è del corpo, quello in basso a destra di A1 è dell'angolo fermo.
+  function cornerZone(x, y, start) {
+    const fx = start ? x < LW() : x <= LW();
+    const fy = start ? y < TH : y <= TH;
+    return fx && fy ? "corner" : fy ? "top" : fx ? "left" : "body";
+  }
+  /// Dove si vede, nel riquadro, l'angolo (x, y) della griglia; `null` se sta
+  /// sotto una fascia ferma.
+  function cornerSeen(x, y, start) {
+    const zone = cornerZone(x, y, start);
+    const sx = zone === "left" || zone === "corner" ? x : x - viewport.scrollLeft;
+    const sy = zone === "top" || zone === "corner" ? y : y - viewport.scrollTop;
+    if ((zone === "body" || zone === "top") && sx < LW() - 0.5) return null;
+    if ((zone === "body" || zone === "left") && sy < TH - 0.5) return null;
+    return { x: sx, y: sy, zone };
+  }
+  /// Il pezzo `p` intero, nelle coordinate del livello di `layer`.
+  const wholeRect = (layer, p) => ({ x: p.x, y: layer === "left" ? p.y - TH : p.y, w: p.w, h: p.h });
+  /// Il livello di un pezzo d'angolo, e di quanto spostarlo dalle coordinate
+  /// della griglia: il livello «lift» della zona del suo angolo, che scorre
+  /// con lui, così una fascia ferma copre la parte che le passa sotto. Con
+  /// «Maniglie sul filo: intere sopra la fascia» (D-8, solo prototipo) un
+  /// pezzo che tocca una fascia ferma, finché il suo angolo si vede, sale nel
+  /// livello di quella fascia, spostato a mano di quanto il corpo è scorso:
+  /// lo sposta il gestore di `scroll`, quindi resta indietro di un fotogramma
+  /// rispetto alle celle, e quando l'angolo passa sotto la fascia torna giù.
+  function pointSpot([x, y, start]) {
+    const zone = cornerZone(x, y, start);
+    const s = look.filo.value === "sopra" ? cornerSeen(x, y, start) : null;
+    if (!s) return { layer: zone, dx: 0, dy: 0 };
+    const fx = zone === "left" || zone === "corner" || s.x - 1 - GRIP_R < LW();
+    const fy = zone === "top" || zone === "corner" || s.y - 1 - GRIP_R < TH;
+    return { layer: fx && fy ? "corner" : fy ? "top" : fx ? "left" : "body", dx: fx ? s.x - x : 0, dy: fy ? s.y - y : 0 };
+  }
+  const pointRect = (layer, o, at) => wholeRect(layer, { x: o.x + at.dx, y: o.y + at.dy, w: o.w, h: o.h });
   /// Il pezzo `p` tagliato alla zona di `layer`, nelle coordinate del livello.
   /// I lati si fermano un pixel prima del filo del blocco, le fasce delle
   /// intestazioni al bordo della zona. Fuori dalla zona non c'è (`null`);
@@ -3338,52 +3393,257 @@ body {
     if (x2 <= x1 || y2 <= y1) return null;
     return { x: x1, y: layer === "left" ? y1 - TH : y1, w: x2 - x1, h: y2 - y1 };
   }
-  // La corsa della geometria: i campioni dei dieci numeri, uno ogni
-  // `SAMPLE_MS` da `t0` (l'orologio delle animazioni), e le animazioni dei
-  // pezzi, che partono tutte in quell'istante.
-  let geo = null; // { samples, t0, motions }
-  const leaving = new Map(); // id → l'animazione con cui l'anello o il velo rientrano
-  const clock = () => document.timeline.currentTime ?? performance.now();
-  /// Dove si vedono adesso i dieci numeri, e a che velocità (px al secondo).
-  function geoNow() {
-    if (!geo) return null;
-    const { samples, t0 } = geo;
-    const last = samples.length - 1;
-    const t = Math.max(0, (clock() - t0) / SAMPLE_MS);
-    if (t >= last) return { x: samples[last], v: samples[last].map(() => 0) };
-    const k = Math.floor(t);
-    const a = samples[k];
-    const b = samples[k + 1];
-    return { x: a.map((x, i) => x + (b[i] - x) * (t - k)), v: a.map((x, i) => ((b[i] - x) / SAMPLE_MS) * 1000) };
-  }
-  /// I campioni dei dieci numeri da `from` (con la velocità `velocity`) a `to`,
-  /// una molla per numero; l'ultimo campione è esattamente `to`.
-  function sampleGeometry(spring, from, velocity, to) {
-    const states = from.map((x, i) => ({ x, v: velocity[i] }));
-    const samples = [from.slice()];
-    const last = Math.round(SPRING_MAX_MS / SAMPLE_MS);
-    for (let index = 1; index <= last; index++) {
-      states.forEach((state, i) => advanceSpring(spring, state, to[i], SAMPLE_MS / 1000));
-      if (index === last || states.every((state, i) => Math.abs(state.x - to[i]) < 0.1 && Math.abs(state.v) < 3)) {
-        samples.push(to.slice());
-        break;
+  // ── Il motore dei segni ─────────────────────────────────────────────────
+  // Un solo motore porta i dieci numeri e a ogni fotogramma disegna da loro
+  // tutti i pezzi di tutti i livelli, con un `transform` dal loro posto di
+  // riposo: i pezzi non possono non essere d'accordo, perché vengono dagli
+  // stessi numeri nello stesso istante. Gli eventi cambiano solo il bersaglio
+  // (`want`); le regole e il passo della molla si applicano una volta per
+  // fotogramma, col tempo passato da quello prima, quindi quanti eventi
+  // arrivano in un fotogramma non cambia il moto. Nel codice vero il
+  // fotogramma è un ascoltatore di `onFrame` (`moto/ticker.ts`) e il passo è
+  // `advanceSpring` di `moto/spring.ts`.
+  //
+  // Le regole, per ognuno dei numeri:
+  // - non torna mai indietro: una velocità che porta lontano dal bersaglio
+  //   (un bersaglio nuovo dall'altra parte) si azzera;
+  // - non passa mai il bersaglio: la velocità verso il bersaglio non supera
+  //   la radice lenta della molla per la distanza che manca, e da lì una
+  //   molla sovrasmorzata arriva senza passarlo (se il passo numerico lo
+  //   passasse, il numero si ferma sul bersaglio);
+  // - la cella attiva sta sempre dentro il rettangolo: su un lato dove ne
+  //   esce, si sposta l'uno o l'altro, sempre verso il proprio bersaglio;
+  // - il quadratino sta sull'angolo del rettangolo, o su quello del
+  //   riempimento mentre lo si tira.
+  // Col puntatore, nel modo «segue» (D-7), la cella attiva salta, un lato del
+  // rettangolo che cala salta e uno che cresce scivola: la selezione non
+  // mostra mai una cella che il puntatore non ha scelto.
+  const REST_PX = 0.1; // fermo: a meno di un decimo di pixel…
+  const REST_SPEED = 2; // …e sotto i 2 px al secondo
+  const POP_REST = 0.001; // la comparsa morbida finisce come `sampleSpring`
+  /// La radice lenta della molla (1/s): sotto questa velocità per pixel che
+  /// manca, una molla sovrasmorzata arriva senza passare il bersaglio.
+  /// `GLIDE` 35, `SLIDE` 25.
+  const slowRoot = (s) => (s.damping - Math.sqrt(Math.max(0, s.damping * s.damping - 4 * s.stiffness))) / 2;
+  let want = null; // { G, spring, pointer, fill }: dove vanno i segni
+  let view = null; // { x, v }: dove si vedono adesso, e a che velocità (px al secondo)
+  let beatId = 0;
+  let lastBeat = 0;
+  const pops = new Map(); // maniglia del tocco → { x, v }: la comparsa morbida, da 0 a 1
+  const drawnStyle = new Map(); // elemento → l'ultimo stile scritto
+  // [numero del rettangolo, numero della cella attiva, +1 se il rettangolo sta prima]
+  const SIDES = [
+    [0, 4, 1],
+    [1, 5, 1],
+    [2, 6, -1],
+    [3, 7, -1],
+  ];
+  /// La cella attiva dentro il rettangolo. Su un lato dove la cella attiva
+  /// esce, il rettangolo la raggiunge se il suo bersaglio sta oltre di lei;
+  /// altrimenti è la cella attiva a fermarsi sul lato.
+  function contain(G) {
+    const { x, v } = view;
+    for (const [b, a, s] of SIDES) {
+      if ((x[a] - x[b]) * s >= 0) continue;
+      if ((x[a] - G[b]) * s >= 0) {
+        x[b] = x[a];
+        v[b] = v[a];
+      } else {
+        x[a] = x[b];
+        v[a] = v[b];
       }
-      samples.push(states.map((state) => state.x));
     }
-    return samples;
   }
-  function stopGeometry() {
-    for (const m of geo?.motions ?? []) m.cancel();
-    leaving.clear();
-    geo = null;
+  const atTarget = () => view.x.every((x, i) => x === want.G[i]) && view.v.every((v) => v === 0);
+  /// Un passo di `dt` secondi: le regole sul bersaglio, la molla, il
+  /// contenimento. Dice se tutti i numeri sono arrivati.
+  function step(dt) {
+    const { G, spring, pointer } = want;
+    const { x, v } = view;
+    if (pointer) {
+      for (let i = 4; i < 8; i++) {
+        x[i] = G[i];
+        v[i] = 0;
+      }
+      for (let i = 0; i < 4; i++) {
+        const grows = i < 2 ? G[i] < x[i] : G[i] > x[i];
+        if (!grows) {
+          x[i] = G[i];
+          v[i] = 0;
+        }
+      }
+      contain(G);
+    }
+    const slow = slowRoot(spring);
+    const s = { x: 0, v: 0 };
+    for (let i = 0; i < 8; i++) {
+      const d = x[i] - G[i];
+      if (d === 0) {
+        v[i] = 0;
+        continue;
+      }
+      if (v[i] * d > 0) v[i] = 0;
+      if (Math.abs(v[i]) > slow * Math.abs(d)) v[i] = -Math.sign(d) * slow * Math.abs(d);
+      s.x = x[i];
+      s.v = v[i];
+      if (dt > 0) advanceSpring(spring, s, G[i], dt);
+      if ((s.x - G[i]) * d <= 0 || (Math.abs(s.x - G[i]) < REST_PX && Math.abs(s.v) < REST_SPEED)) {
+        s.x = G[i];
+        s.v = 0;
+      }
+      x[i] = s.x;
+      v[i] = s.v;
+    }
+    contain(G);
+    for (const [h, b] of [
+      [8, 2],
+      [9, 3],
+    ]) {
+      x[h] = want.fill ? G[h] : x[b];
+      v[h] = want.fill ? 0 : v[b];
+    }
+    return atTarget();
   }
-  /// Mette i segni dove la selezione dice. I pezzi che scivolano corrono
-  /// tutti insieme dalla geometria che si vede adesso (anche a metà corsa, con
-  /// la sua velocità) a quella nuova, con la molla `spring`: anche quelli che
-  /// compaiono (escono dal bordo o dal filo del blocco) e quelli che non
-  /// servono più (ci rientrano, poi si nascondono). Senza corsa un pezzo
-  /// nuovo compare in `DURATION.state` e uno che non serve sparisce subito.
-  function updateMarks({ glide = true, spring = GLIDE } = {}) {
+  function beat(time) {
+    beatId = 0;
+    if (!want || !view || !dom) return;
+    const dt = Math.min(100, Math.max(0, time - lastBeat)) / 1000;
+    lastBeat = time;
+    const moving = !step(dt);
+    for (const [el, p] of pops) {
+      if (dt > 0) advanceSpring(SLIDE, p, 1, dt);
+      if (Math.abs(1 - p.x) < POP_REST && Math.abs(p.v) < POP_REST * 20) pops.delete(el);
+    }
+    draw();
+    if (moving || pops.size) beatId = requestAnimationFrame(beat);
+  }
+  function startBeat() {
+    if (beatId) return;
+    lastBeat = performance.now();
+    beatId = requestAnimationFrame(beat);
+  }
+  function stopMarks() {
+    if (beatId) cancelAnimationFrame(beatId);
+    beatId = 0;
+    want = null;
+    view = null;
+    pops.clear();
+    drawnStyle.clear();
+  }
+  /// Porta `el`, messo nel rettangolo `base`, a vedersi nel rettangolo `img`.
+  /// Scrive solo ciò che cambia.
+  function style(el, base, img, mid, opacity) {
+    const sx = img.w / base.w;
+    const sy = img.h / base.h;
+    const ox = mid ? base.w / 2 : 0;
+    const oy = mid ? base.h / 2 : 0;
+    const tx = img.x - base.x - ox * (1 - sx);
+    const ty = img.y - base.y - oy * (1 - sy);
+    const same = Math.abs(tx) < 1e-3 && Math.abs(ty) < 1e-3 && Math.abs(sx - 1) < 1e-6 && Math.abs(sy - 1) < 1e-6;
+    const box = `${base.x} ${base.y} ${base.w} ${base.h}`;
+    const tf = same ? "" : `translate(${tx}px, ${ty}px) scale(${sx}, ${sy})`;
+    const op = opacity === null ? "" : String(opacity);
+    let last = drawnStyle.get(el);
+    if (!last) drawnStyle.set(el, (last = {}));
+    if (last.box !== box) {
+      place(el, base);
+      last.box = box;
+    }
+    if (last.tf !== tf) {
+      el.style.transform = tf;
+      last.tf = tf;
+    }
+    if (last.op !== op) {
+      el.style.opacity = op;
+      last.op = op;
+    }
+    if (el.hidden) el.hidden = false;
+  }
+  /// Disegna ogni pezzo in ogni livello dove cade, dalla geometria che si
+  /// vede. Un pezzo col suo riposo sta lì, e un `transform` lo porta dove i
+  /// numeri dicono; uno senza riposo (l'anello e il velo su una cella sola,
+  /// un pezzo che esce da un livello) resta nel posto che aveva e si nasconde
+  /// quando i numeri arrivano; uno senza riposo che non si vedeva non compare.
+  /// I pezzi che non scivolano (tratteggi e formiche) stanno al loro riposo.
+  /// Un pezzo che segna un angolo (il quadratino, le maniglie del tocco) non
+  /// si taglia: sta intero nel livello «lift» della zona del suo angolo (il
+  /// corpo per il corpo), che non taglia, quindi passa sopra le zone sotto la
+  /// sua e le fasce ferme sopra la sua lo coprono, come gli altri segni. Se
+  /// l'angolo passa in un'altra zona, il pezzo cambia livello nello stesso
+  /// fotogramma, senza ricomparire.
+  /// Un pezzo che compare al suo riposo si dissolve dentro in
+  /// `DURATION.state`; le maniglie del tocco crescono da `ENTER_SCALE` con la
+  /// molla `SLIDE`; un pezzo che non serve più sparisce subito.
+  function draw() {
+    const G = want.G;
+    const resting = view.x.every((x, i) => x === G[i]);
+    const seen = new Map(marksParts(view.x).map((p) => [p.name, p]));
+    const next = new Set();
+    for (const p of marksParts(G)) {
+      const q = seen.get(p.name) ?? p;
+      const point = !!p.corner;
+      const sp = point ? pointSpot(p.corner) : null;
+      const sq = point ? pointSpot(q.corner) : null;
+      for (const layer of point ? [sq.layer] : (p.layers ?? LAYERS)) {
+        const id = `${layer}:${p.name}`;
+        const T = p.rest === false ? null : point ? (sp.layer === layer ? pointRect(layer, p, sp) : null) : clipRect(layer, p);
+        const was = shownMarks.get(id);
+        const fixed = p.glide === false || resting;
+        const R = fixed ? T : point ? pointRect(layer, q, sq) : clipRect(layer, q, true);
+        const base = fixed ? T : (T ?? was ?? (point ? R : null));
+        if (!base) continue;
+        next.add(id);
+        let el = pool.get(id);
+        if (!el) {
+          el = div();
+          el.hidden = true;
+          (point ? dom.lifts : dom.layers)[layer].append(el);
+          pool.set(id, el);
+        }
+        const cls = `grid-mark ${p.cls}`;
+        if (el.className !== cls) el.className = cls;
+        if (p.cls.startsWith("ants") && !el.firstChild) el.append(div("grid-ants"));
+        if (p.handle) el.dataset.handle = p.handle;
+        // un pezzo d'angolo che arriva da un altro livello non ricompare: si
+        // porta dietro la sua comparsa
+        const from = point && !was ? LAYERS.find((l) => l !== layer && shownMarks.has(`${l}:${p.name}`)) : undefined;
+        if (from) {
+          const pop0 = pops.get(pool.get(`${from}:${p.name}`));
+          if (pop0) pops.set(el, pop0);
+        } else if (!was) {
+          if (p.appear === "soft") {
+            if (reduced()) run(el, { from: { opacity: 0 }, duration: DURATION.state, whenReduced: "fade" });
+            else if (still === 0) pops.set(el, { x: 0, v: 0 });
+          } else if (R === base || (R.x === base.x && R.y === base.y && R.w === base.w && R.h === base.h)) {
+            run(el, { from: { opacity: 0 }, duration: DURATION.state, whenReduced: "fade" });
+          }
+        }
+        const pop = pops.get(el);
+        let img = R;
+        if (pop) {
+          const k = ENTER_SCALE + (1 - ENTER_SCALE) * pop.x;
+          img = { x: R.x + (R.w * (1 - k)) / 2, y: R.y + (R.h * (1 - k)) / 2, w: R.w * k, h: R.h * k };
+        }
+        style(el, base, img, !!p.mid, pop ? Math.min(1, Math.max(0, pop.x)) : null);
+        shownMarks.set(id, base);
+      }
+    }
+    for (const id of [...shownMarks.keys()]) {
+      if (next.has(id)) continue;
+      const el = pool.get(id);
+      halt(el);
+      pops.delete(el);
+      el.hidden = true;
+      shownMarks.delete(id);
+    }
+  }
+  /// Mette i segni dove la selezione dice. Coi tasti (e coi comandi) tutti i
+  /// numeri scivolano con la molla `spring`; col puntatore (`pointer`) come
+  /// dice la scelta «Selezione col puntatore» (D-7). Senza corsa (`glide`
+  /// falso, movimento ridotto, gli stati della barra) i segni saltano.
+  /// Disegna subito i pezzi alla geometria che si vede: chi compare o sparisce
+  /// lo fa adesso, chi scivola parte dal fotogramma dopo.
+  function updateMarks({ glide = true, spring = GLIDE, pointer = false } = {}) {
     syncHeaders();
     syncFormula();
     if (!nuova()) {
@@ -3391,99 +3651,12 @@ body {
       return;
     }
     if (!dom) return;
-    const to = marksGeometry();
-    const seen = geoNow();
-    for (const m of geo?.motions ?? []) m.cancel();
-    leaving.clear();
-    const moving =
-      glide &&
-      glideWhileDragging() &&
-      still === 0 &&
-      !reduced() &&
-      !!seen &&
-      seen.x.some((x, i) => Math.abs(x - to[i]) > 0.1 || Math.abs(seen.v[i]) > 3);
-    const samples = moving ? sampleGeometry(spring, seen.x, seen.v, to) : [to];
-    const t0 = clock();
-    geo = { samples, t0, motions: [] };
-    const named = samples.map((G) => new Map(marksParts(G).map((p) => [p.name, p])));
-    const next = new Map();
-    for (const p of named[named.length - 1].values())
-      for (const layer of p.layers ?? LAYERS) next.set(`${layer}:${p.name}`, { layer, p, r: p.rest === false ? null : clipRect(layer, p) });
-    /// Le pose di un pezzo, fotogramma per fotogramma, rispetto al suo riposo `S`.
-    const travel = (id, layer, S) => {
-      const name = id.slice(id.indexOf(":") + 1);
-      let idle = true;
-      const frames = [];
-      for (const parts of named) {
-        const p = parts.get(name);
-        if (!p) return null;
-        const R = clipRect(layer, p, true);
-        const dx = R.x - S.x;
-        const dy = R.y - S.y;
-        const sx = R.w / S.w;
-        const sy = R.h / S.h;
-        if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01 || Math.abs(sx - 1) > 1e-4 || Math.abs(sy - 1) > 1e-4) idle = false;
-        frames.push({ transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` });
-      }
-      return idle ? null : frames;
-    };
-    const play = (el, frames, exit) => {
-      const m = el.animate(frames, { duration: (frames.length - 1) * SAMPLE_MS, fill: exit ? "forwards" : "none" });
-      m.startTime = t0;
-      geo.motions.push(m);
-      return m;
-    };
-    for (const id of new Set([...shownMarks.keys(), ...next.keys()])) {
-      const n = next.get(id);
-      const was = shownMarks.get(id);
-      if (!n?.r) {
-        if (!was) continue;
-        const el = pool.get(id);
-        const frames = moving && n && n.p.glide !== false ? travel(id, n.layer, was) : null;
-        if (frames) {
-          // Rientra nel bordo (o nel filo del blocco) dal suo posto di prima,
-          // poi si nasconde.
-          const m = play(el, frames, true);
-          leaving.set(id, m);
-          m.onfinish = () => {
-            if (leaving.get(id) !== m) return;
-            leaving.delete(id);
-            el.hidden = true;
-            shownMarks.delete(id);
-            m.cancel();
-          };
-          continue;
-        }
-        halt(el);
-        el.hidden = true;
-        shownMarks.delete(id);
-        continue;
-      }
-      let el = pool.get(id);
-      if (!el) {
-        el = div();
-        el.hidden = true;
-        dom.layers[n.layer].append(el);
-        pool.set(id, el);
-      }
-      el.className = `grid-mark ${n.p.cls}`;
-      if (n.p.cls.startsWith("ants") && !el.firstChild) el.append(div("grid-ants"));
-      if (n.p.handle) el.dataset.handle = n.p.handle;
-      place(el, n.r);
-      shownMarks.set(id, n.r);
-      // Anche un pezzo nuovo corre: l'anello e il velo escono dal bordo, un
-      // lato o una fascia che entra in una zona bloccata esce dal filo del
-      // blocco, insieme agli altri pezzi invece di comparire già grande.
-      const frames = moving && n.p.glide !== false ? travel(id, n.layer, n.r) : null;
-      if (!was) {
-        el.hidden = false;
-        if (frames) play(el, frames, false);
-        else if (n.p.appear === "soft") run(el, { from: { scale: ENTER_SCALE, opacity: 0 }, spring: SLIDE, whenReduced: "fade" });
-        else run(el, { from: { opacity: 0 }, duration: DURATION.state, whenReduced: "fade" });
-      } else if (frames) {
-        play(el, frames, false);
-      }
-    }
+    const G = marksGeometry();
+    const how = pointer ? look.puntatore.value : "scivola";
+    want = { G, spring, pointer: how === "segue", fill: !!fill };
+    if (!glide || how === "salta" || still > 0 || reduced() || !view) view = { x: G.slice(), v: G.map(() => 0) };
+    draw();
+    if (!atTarget() || pops.size) startBeat();
   }
   /// I pezzi visibili il cui nome comincia con `prefix`.
   const marksNamed = (prefix) => [...shownMarks.keys()].filter((id) => id.split(":")[1].startsWith(prefix)).map((id) => pool.get(id));
@@ -4054,6 +4227,12 @@ body {
     if (nuova()) {
       renderRows();
       if (resize) drawResize();
+      // Scorrendo mentre si trascina, sotto il puntatore fermo passa
+      // un'altra cella: la selezione la segue come se si fosse mosso.
+      if (drag?.x !== undefined) dragTo({ clientX: drag.x, clientY: drag.y });
+      // D-8 «intere sopra la fascia»: i pezzi d'angolo saliti nel livello
+      // fermo li sposta lo script
+      if (look.filo.value === "sopra" && dom && want && view) draw();
     } else scheduleOggi();
   });
   window.addEventListener("resize", () => {
@@ -4075,12 +4254,12 @@ body {
     const x = vx < LW() ? vx : vx + v.scrollLeft;
     const y = vy < TH ? vy : vy + v.scrollTop;
     if (clampToGrid) return { kind: "cell", r: rowAt(Math.max(HEAD_H, y)), c: colAt(Math.max(HEAD_W, x)) };
-    // Il quadratino di riempimento, nel punto dove si vede.
+    // Il quadratino di riempimento, nel punto dove si vede, e non sotto una
+    // fascia ferma.
     if (!touchMode() && !editor) {
       const b = boxOf(range());
-      const hx = b.R - 1 < LW() ? b.R - 1 : b.R - 1 - v.scrollLeft;
-      const hy = b.B - 1 < TH ? b.B - 1 : b.B - 1 - v.scrollTop;
-      if (Math.abs(vx - hx) <= FILL_SLOP && Math.abs(vy - hy) <= FILL_SLOP) return { kind: "fill" };
+      const h = cornerSeen(b.R, b.B, false);
+      if (h && Math.abs(vx - (h.x - 1)) <= FILL_SLOP && Math.abs(vy - (h.y - 1)) <= FILL_SLOP) return { kind: "fill" };
     }
     if (vy < HEAD_H) {
       if (vx < HEAD_W) return { kind: "corner" };
@@ -4095,6 +4274,24 @@ body {
     if (vx < HEAD_W) return { kind: "row", r };
     return { kind: "cell", r, c: colAt(x) };
   }
+  /// La maniglia del tocco sotto il punto (`"a"`, `"b"` o `null`): dentro il
+  /// cerchio attorno al suo angolo, come si vede adesso, anche dove una fascia
+  /// ferma ne copre una parte; non se l'angolo stesso sta sotto la fascia.
+  function gripAt(e) {
+    if (!handles || !nuova() || !dom) return null;
+    const box = viewport.getBoundingClientRect();
+    const vx = e.clientX - box.left - viewport.clientLeft;
+    const vy = e.clientY - box.top - viewport.clientTop;
+    const V = view ? view.x : marksGeometry();
+    for (const [h, x, y, start] of [
+      ["b", V[2], V[3], false],
+      ["a", V[0], V[1], true],
+    ]) {
+      const s = cornerSeen(x, y, start);
+      if (s && Math.hypot(vx - (s.x - 1), vy - (s.y - 1)) <= GRIP_R) return h;
+    }
+    return null;
+  }
   const touchy = (e) => nuova() && (e.pointerType === "touch" || (e.pointerType === "mouse" && look.larghezza.value === "telefono"));
   viewport.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
@@ -4102,12 +4299,12 @@ body {
     if (editor && editor.el.contains(e.target)) return;
     if (editor) commitEditor(null);
     viewport.focus({ preventScroll: true });
-    const grip = e.target.closest?.(".grid-mark.touch");
-    if (grip && nuova()) {
+    const grip = gripAt(e);
+    if (grip) {
       e.preventDefault();
       const g = range();
-      const fixed = grip.dataset.handle === "b" ? { r: g.r0, c: g.c0 } : { r: g.r1, c: g.c1 };
-      drag = { kind: "handle", fixed };
+      const fixed = grip === "b" ? { r: g.r0, c: g.c0 } : { r: g.r1, c: g.c1 };
+      drag = { kind: "handle", fixed, x: e.clientX, y: e.clientY };
       viewport.setPointerCapture(e.pointerId);
       return;
     }
@@ -4122,7 +4319,7 @@ body {
         if (h.kind === "cell") {
           if (!inRange(range(), h.r, h.c)) setSel({ r: h.r, c: h.c });
           handles = true;
-          updateMarks();
+          updateMarks({ pointer: true });
           log("Tocco lungo: le due maniglie allargano la selezione.");
         }
       }, LONG_PRESS_MS);
@@ -4139,29 +4336,56 @@ body {
     } else if (h.kind === "fill") {
       e.preventDefault();
       fill = { source: range(), target: range(), waiting: false };
-      drag = { kind: "fill" };
+      drag = { kind: "fill", x: e.clientX, y: e.clientY };
       viewport.classList.add("filling");
       viewport.setPointerCapture(e.pointerId);
-      updateMarks();
+      updateMarks({ pointer: true });
     } else if (h.kind === "corner") {
       setSel({ r: 0, c: 0 }, { r: ROWS - 1, c: COLS - 1 });
-      updateMarks();
+      updateMarks({ pointer: true });
     } else if (h.kind === "col") {
       setSel({ r: 0, c: h.c }, { r: ROWS - 1, c: h.c });
-      updateMarks();
+      updateMarks({ pointer: true });
     } else if (h.kind === "row") {
       setSel({ r: h.r, c: 0 }, { r: h.r, c: COLS - 1 });
-      updateMarks();
+      updateMarks({ pointer: true });
     } else {
       e.preventDefault();
       if (e.shiftKey) sel.focus = { r: h.r, c: h.c };
       else setSel({ r: h.r, c: h.c });
       handles = false;
-      drag = { kind: "select" };
+      drag = { kind: "select", x: e.clientX, y: e.clientY };
       viewport.setPointerCapture(e.pointerId);
-      updateMarks();
+      updateMarks({ pointer: true });
     }
   });
+  /// La selezione, una maniglia o il riempimento tirati fino al punto `e`:
+  /// un evento del puntatore, o l'ultimo punto dopo uno scorrimento.
+  function dragTo(e) {
+    drag.x = e.clientX;
+    drag.y = e.clientY;
+    const h = hit(e, { clampToGrid: true });
+    if (drag.kind === "select") {
+      if (sel.focus.r === h.r && sel.focus.c === h.c) return;
+      sel.focus = { r: h.r, c: h.c };
+      updateMarks({ pointer: true });
+    } else if (drag.kind === "handle") {
+      if (sel.focus.r === h.r && sel.focus.c === h.c) return;
+      setSel(drag.fixed, { r: h.r, c: h.c }, sel.active);
+      if (!inRange(range(), sel.active.r, sel.active.c)) sel.active = { r: range().r0, c: range().c0 };
+      updateMarks({ pointer: true });
+    } else if (drag.kind === "fill") {
+      const s = fill.source;
+      const down = h.r > s.r1 ? h.r - s.r1 : h.r < s.r0 ? h.r - s.r0 : 0;
+      const right = h.c > s.c1 ? h.c - s.c1 : h.c < s.c0 ? h.c - s.c0 : 0;
+      let target = { ...s };
+      if (down !== 0 && Math.abs(down) >= Math.abs(right)) target = { ...s, r0: Math.min(s.r0, h.r), r1: Math.max(s.r1, h.r) };
+      else if (right !== 0) target = { ...s, c0: Math.min(s.c0, h.c), c1: Math.max(s.c1, h.c) };
+      if (sameRange(target, fill.target)) return;
+      fill.target = target;
+      updateMarks({ pointer: true });
+    }
+  }
   viewport.addEventListener("pointermove", (e) => {
     if (!drag) {
       if (e.pointerType === "mouse" && !touchy(e)) {
@@ -4188,30 +4412,13 @@ body {
       drawResize();
       return;
     }
-    const h = hit(e, { clampToGrid: true });
-    if (drag.kind === "select") {
-      if (sel.focus.r === h.r && sel.focus.c === h.c) return;
-      sel.focus = { r: h.r, c: h.c };
-      updateMarks();
-    } else if (drag.kind === "handle") {
-      if (sel.focus.r === h.r && sel.focus.c === h.c) return;
-      setSel(drag.fixed, { r: h.r, c: h.c }, sel.active);
-      if (!inRange(range(), sel.active.r, sel.active.c)) sel.active = { r: range().r0, c: range().c0 };
-      updateMarks();
-    } else if (drag.kind === "fill") {
-      const s = fill.source;
-      const down = h.r > s.r1 ? h.r - s.r1 : h.r < s.r0 ? h.r - s.r0 : 0;
-      const right = h.c > s.c1 ? h.c - s.c1 : h.c < s.c0 ? h.c - s.c0 : 0;
-      let target = { ...s };
-      if (down !== 0 && Math.abs(down) >= Math.abs(right)) target = { ...s, r0: Math.min(s.r0, h.r), r1: Math.max(s.r1, h.r) };
-      else if (right !== 0) target = { ...s, c0: Math.min(s.c0, h.c), c1: Math.max(s.c1, h.c) };
-      if (sameRange(target, fill.target)) return;
-      fill.target = target;
-      updateMarks();
-    }
+    dragTo(e);
   });
   function endDrag(e, cancelled) {
     if (!drag) return;
+    // Il rilascio conta come l'ultimo spostamento: la selezione finisce
+    // sotto il punto dove il puntatore si è alzato.
+    if (!cancelled && drag.x !== undefined && nuova()) dragTo(e);
     const d = drag;
     drag = null;
     if (viewport.hasPointerCapture?.(e.pointerId)) viewport.releasePointerCapture(e.pointerId);
@@ -4229,21 +4436,31 @@ body {
           lastTap = { t: now, r: h.r, c: h.c };
           handles = false;
           setSel({ r: h.r, c: h.c });
-          updateMarks();
+          updateMarks({ pointer: true });
         }
       } else if (h.kind === "col") {
         setSel({ r: 0, c: h.c }, { r: ROWS - 1, c: h.c });
-        updateMarks();
+        updateMarks({ pointer: true });
       } else if (h.kind === "row") {
         setSel({ r: h.r, c: 0 }, { r: h.r, c: COLS - 1 });
-        updateMarks();
+        updateMarks({ pointer: true });
       }
       return;
     }
     if (d.kind === "resize") finishResize();
     else if (d.kind === "fill") finishFill();
-    else updateMarks();
+    else updateMarks({ pointer: true });
   }
+  // Su un tocco vero, chi decide se il foglio scorre è l'elemento toccato
+  // (`touch-action`); la presa di una maniglia invece è geometrica, quindi la
+  // si ferma qui: un dito sulla maniglia la tira, non fa scorrere il foglio.
+  viewport.addEventListener(
+    "touchstart",
+    (e) => {
+      if (e.touches.length === 1 && gripAt(e.touches[0])) e.preventDefault();
+    },
+    { passive: false },
+  );
   viewport.addEventListener("pointerup", (e) => endDrag(e, false));
   viewport.addEventListener("pointercancel", (e) => endDrag(e, true));
   viewport.addEventListener("dblclick", (e) => {
@@ -4455,7 +4672,7 @@ body {
     rawShown.clear();
     widths = [...BASE_WIDTHS];
     measure();
-    stopGeometry();
+    stopMarks();
     pool.clear();
     shownMarks.clear();
     rowMap.clear();
@@ -4539,8 +4756,17 @@ body {
   look.stato.addEventListener("change", () => setState(look.stato.value));
   for (const name of ["griglia", "larghezza"]) look[name].addEventListener("change", () => setState(look.stato.value));
   look.luce.addEventListener("change", applyLook);
+  look.filo.addEventListener("change", () => {
+    if (nuova() && dom && want && view) draw();
+  });
   look.movimento.addEventListener("change", () => {
     if (fill?.waiting) startAnts();
+    // Col movimento ridotto una corsa in volo arriva subito.
+    if (reduced() && nuova() && want && dom) {
+      view = { x: want.G.slice(), v: want.G.map(() => 0) };
+      pops.clear();
+      draw();
+    }
   });
 
   // Solo per le sonde: lo stato della griglia senza leggere il DOM.
