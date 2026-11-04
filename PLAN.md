@@ -3129,7 +3129,7 @@ Fatto quando: la PR #299 è pronta e ogni job è verde (un rosso che c'è
 uguale su `main` è scritto, col run di `main`); la revisione è scritta nella
 PR; nessun task resta aperto; l'utente ha detto sì al merge.
 Prova: gh pr checks 299
-Stato: [~] in corso · orchestratore · CI completa e revisione
+Stato: [~] in corso · orchestratore · CI completa verde su 4828fddf (run 41837280615), revisione nella PR: manca il sì al merge
 
 ## T33 · I tetti dei file ostili e il turno dell'anteprima
 
