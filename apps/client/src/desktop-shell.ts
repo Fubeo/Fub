@@ -90,6 +90,7 @@ import { drainDocumentWindows, openCurrentInNewWindow } from "./state/document-w
 import { mountExplorer } from "./panels/explorer";
 import { mountPageIcons } from "./state/page-icons";
 import { mountPeople } from "./state/people";
+import { mountExternalEditors } from "./state/external-editors";
 import { mountDates } from "./state/dates";
 import { mountLinkCards } from "./state/link-cards";
 import { mountCraftPreviews } from "./state/craft-previews";
@@ -850,6 +851,8 @@ async function init(): Promise<Teardown> {
   mountDates(pageWindowLifetime);
   mountLinkCards(pageWindowLifetime);
   mountCraftPreviews(pageWindowLifetime);
+  // Le app Craft installate, per il sottomenu «Apri con un'altra app».
+  mountExternalEditors(pageWindowLifetime);
   mountCraftPhotos(pageWindowLifetime);
   mountExplorer(pageWindowLifetime);
   mountLinkPreview(pageWindowLifetime);

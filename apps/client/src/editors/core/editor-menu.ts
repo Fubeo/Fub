@@ -77,6 +77,10 @@ export interface SurfaceMenuItem {
   readonly checked?: boolean;
   /// Un sottomenu.
   readonly items?: readonly SurfaceMenuEntry[];
+  /// Un sottomenu preparato quando si apre, per voci che si chiedono
+  /// all'host in quel momento («Apri con un'altra app»): il menu mostra
+  /// l'attesa. Vale quando `items` non c'è.
+  readonly load?: () => Promise<readonly SurfaceMenuEntry[]>;
   readonly run?: () => void;
   /// Un comando della palette da eseguire dopo `run`, o al suo posto: «Modifica
   /// qui» porta il cursore e poi chiede alla shell di cambiare modalità.

@@ -58,6 +58,7 @@ import {
   displayBinding,
 } from "../ui/commands";
 import { VAULT_EXPORT } from "../ui/vault-export";
+import { openWithEntry } from "./open-with";
 import { DEFAULT_ATTACHMENT_FOLDER } from "../editors/media/attachment-target";
 import { IMPORT_PREPARE } from "../ui/note-import";
 import { showPanel } from "./sidebar";
@@ -996,7 +997,7 @@ function noteMenu(at: MouseEvent, row: HTMLElement, id: string): void {
         ...folderPageAction(id),
         ...reorder,
         { separator: true, label: t("explorer.reveal_system"), run: () => void handToSystem(id, false) },
-        { label: t("explorer.open_system"), run: () => void handToSystem(id, true) },
+        openWithEntry(id, { system: () => void handToSystem(id, true) }),
       ],
     },
     { separator: true, label: t("explorer.trash"), hint: displayBinding("Delete"), danger: true, run: () => void trashWithConfirm(id) },
@@ -1019,7 +1020,7 @@ function fileMenu(at: MouseEvent, row: HTMLElement, id: string): void {
           { label: t("explorer.open_beside"), run: () => void openDocumentBeside(id, "row") },
         ]
       : []),
-    { label: t("explorer.open_system"), run: () => void handToSystem(id, true) },
+    openWithEntry(id, { system: () => void handToSystem(id, true) }),
     { separator: true, label: t("explorer.rename"), hint: "F2", run: () => renameEntry(id, row) },
     { label: t("explorer.move"), run: () => void pickMoveFolder(id) },
     copyItems(id, t("explorer.copy.file_short")),

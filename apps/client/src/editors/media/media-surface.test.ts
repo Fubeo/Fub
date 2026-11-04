@@ -65,6 +65,44 @@ describe("il menu del visualizzatore", () => {
     surface.destroy();
   });
 
+  it("con un'app Craft installata, «Apri con un'altra app» è il sottomenu con l'app di sistema per prima", async () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const opened: string[] = [];
+    const deps: MediaSurfaceDeps & { external: string[] } = {
+      ...depsFor("foto.png", "image/png", png(4, 3)),
+      openWith: {
+        installed: () => true,
+        editors: async () => [
+          { id: "photocraft", name: "PhotoCraft", opens: ["png"], installed: true, running: false },
+          { id: "lightcraft", name: "LightCraft", opens: ["png"], installed: false, running: false },
+        ],
+        open: async (doc, editor) => {
+          opened.push(`${editor}:${doc}`);
+          return { editor, how: "new_process" };
+        },
+      },
+    };
+    const surface = mountMediaSurface("media-image", { paneId: "p", documentId: "foto.png", parent }, deps);
+    await vi.waitFor(() => expect(parent.querySelector(".zoom-view")).not.toBeNull());
+    vi.spyOn(document, "elementFromPoint").mockReturnValue(parent.querySelector("img"));
+    const open = surface.contextMenu!({ x: 1, y: 1 })!.tail![0] as SurfaceMenuItem;
+    expect(open.id).toBe("media.open_external");
+    expect(open.label).toBe("Apri con un'altra app");
+    expect(open.run).toBeUndefined();
+    const items = (await open.load!()) as readonly SurfaceMenuItem[];
+    expect(items.map((item) => [item.id, item.label, item.enabled, item.description])).toEqual([
+      ["media.open_with.system", "L'app predefinita del sistema", undefined, undefined],
+      ["media.open_with.photocraft", "PhotoCraft", undefined, undefined],
+      ["media.open_with.lightcraft", "LightCraft", false, "Non installata"],
+    ]);
+    items[0]!.run!();
+    expect(deps.external).toEqual(["foto.png"]);
+    items[1]!.run!();
+    await vi.waitFor(() => expect(opened).toEqual(["photocraft:foto.png"]));
+    surface.destroy();
+  });
+
   it("sul lettore lascia il menu del sistema", async () => {
     vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("maybe");
     const parent = document.createElement("div");
