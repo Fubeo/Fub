@@ -6,6 +6,7 @@
 // Sopra la cornice comune monta ciò che è del telefono.
 import { consegna } from "../../../avvio/consegna";
 import { startup as shellStartup } from "../../../desktop-shell";
+import { themeChoices, whenThemeSettled } from "../../../theme/theme";
 import { openLifetime, type Teardown } from "../../../ui/lifetime";
 import { mountShellCommands } from "../commands";
 import { mountConfirm } from "../confirm";
@@ -27,7 +28,7 @@ export async function composeScrittoioMobile(): Promise<Teardown> {
   mountSheets(lifetime);
   mountMobileFrame(lifetime);
   // Come in `bootstrap.ts`: lo strato d'avvio lascia il posto alla cornice.
-  await consegna();
+  await consegna({ tema: { definitivo: whenThemeSettled, scelte: themeChoices }, vita: lifetime });
   return () => {
     lifetime.close();
     teardownShell();

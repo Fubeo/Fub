@@ -157,6 +157,35 @@ let warn: (theme: Theme) => void = () => {};
 let settingEntries: readonly SettingEntry[] = [];
 let mountedOptions: ThemeOptions = { themeId: SERIES_THEME_ID, themeName: "", options: [] };
 
+/// La prima lettura delle impostazioni di questo montaggio è stata applicata:
+/// da qui il tema montato è quello scelto (anche dal catalogo, se c'è), non più
+/// quello della cache del primo fotogramma. Lo aspetta la consegna dello strato
+/// d'avvio (`avvio/consegna.ts`), che ne legge i colori.
+let themeSettled = false;
+let settledWaiters: (() => void)[] = [];
+
+function settleTheme(): void {
+  themeSettled = true;
+  const waiting = settledWaiters;
+  settledWaiters = [];
+  for (const resolve of waiting) resolve();
+}
+
+/// Si risolve quando il tema è quello definitivo dell'avvio: la prima lettura
+/// delle impostazioni e del catalogo è applicata, comunque sia andata. Chi non
+/// può aspettare a lungo la mette in gara con un tempo suo.
+export function whenThemeSettled(): Promise<void> {
+  if (themeSettled) return Promise.resolve();
+  return new Promise((resolve) => settledWaiters.push(resolve));
+}
+
+/// Le scelte di luce e di contrasto, non il loro risultato: `""` è «come il
+/// sistema». Le salva lo strato d'avvio, che le risolve da sé al prossimo
+/// avvio con le regole di `effectiveTheme` ed `effectiveContrast`.
+export function themeChoices(): { readonly light: Theme | ""; readonly contrast: string } {
+  return { light: themeChoice, contrast: contrastChoice };
+}
+
 /** Le scelte del tema montato, col valore che vale adesso. */
 export interface ThemeOptions {
   readonly themeId: string;
@@ -654,5 +683,9 @@ export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void)
   }
   lifetime.add(onEvent("setting_changed", () => void reread()));
   lifetime.add(on("vault", () => void reread()));
-  void reread();
+  themeSettled = false;
+  const epoch = catalogEpoch;
+  void reread().finally(() => {
+    if (epoch === catalogEpoch) settleTheme();
+  });
 }

@@ -221,6 +221,8 @@ export function bootDocumentWindow(series: SeriesFallback): void {
     page.close();
   }, { once: true });
   // La finestra è montata. Il tema rispecchiato dal ponte può non arrivare
-  // mai: non si aspetta, e quando arriva cambia i colori sotto.
-  void consegna();
+  // mai: non si aspetta, e quando arriva cambia i colori sotto. Per questo la
+  // consegna non riceve un tema, e non salva i colori della serie come se
+  // fossero quelli scelti.
+  void consegna({ vita: page });
 }

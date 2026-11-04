@@ -8,6 +8,7 @@ import "../../theme/scrittoio/structure.css";
 import "./declare";
 import { consegna } from "../../avvio/consegna";
 import { startup as shellStartup } from "../../desktop-shell";
+import { themeChoices, whenThemeSettled } from "../../theme/theme";
 import { openLifetime, type Teardown } from "../../ui/lifetime";
 import { mountShellCommands } from "./commands";
 import { mountConfirm } from "./confirm";
@@ -36,8 +37,9 @@ export const startup: Promise<Teardown> = shellStartup.then(async (teardownShell
   mountThemeSettingsSource(lifetime);
   mountPreferences(lifetime);
   // La fine vera dell'avvio: la cornice è montata, lo strato d'avvio lascia il
-  // posto all'app, e solo dopo `startup` si risolve.
-  await consegna();
+  // posto all'app, e solo dopo `startup` si risolve. Se la shell è caduta lo
+  // strato resta, col guasto e Riprova.
+  await consegna({ tema: { definitivo: whenThemeSettled, scelte: themeChoices }, vita: lifetime });
   return () => {
     lifetime.close();
     teardownShell();
