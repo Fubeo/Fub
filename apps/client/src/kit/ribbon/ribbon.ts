@@ -39,6 +39,7 @@ import {
   type KitControl,
   type MenuControl,
   type MenuEntry,
+  type MenuSession,
   type Params,
   type RibbonColumn,
   type RibbonGroup,
@@ -151,8 +152,9 @@ export interface RibbonOptions<V, K extends string, X extends ExtraControl<V, K>
   openDialog(id: string, params: string, anchor: HTMLElement): void;
   /// L'accordo del comando `id`, per il suggerimento e `aria-keyshortcuts`.
   chord?(id: string): ButtonChord | null;
-  /// I pulsanti accanto alle schede, sempre a portata (Annulla, Ripeti).
-  readonly quick?: readonly ButtonControl<V, K>[];
+  /// I pulsanti accanto alle schede, sempre a portata (Annulla, Ripeti), e
+  /// i menu che stanno con loro (tutti i comandi).
+  readonly quick?: readonly (ButtonControl<V, K> | MenuControl<V, K>)[];
   /// Scrive il testo di una voce `write`.
   write?(text: string): void;
   /// L'azione della shell `action`, se la shell la offre adesso.
@@ -619,11 +621,49 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   function menuItem(control: MenuControl<V, K>, group: RibbonGroup<C, K>): Item {
     const el = wrap(control);
     let view: V | null = null;
+    // Il menu che si apre da sé, finché è aperto, e se l'ha aperto il
+    // puntatore: un clic comincia con `pointerdown`, la tastiera no.
+    let session: MenuSession<V> | null = null;
+    let pointer = false;
+    const openOwn = (anchor: HTMLElement, open: NonNullable<MenuControl<V, K>["open"]>): void => {
+      // Premuto di nuovo, si chiude.
+      if (session !== null) {
+        closeContextMenu();
+        return;
+      }
+      closePopover();
+      endPeek();
+      closeContextMenu();
+      menuTicket++;
+      const how = pointer;
+      pointer = false;
+      anchor.setAttribute("aria-expanded", "true");
+      menuOpen = true;
+      let mine = true;
+      const opened = open(anchor, view ?? options.view(), {
+        pointer: how,
+        closed: () => {
+          if (!mine) return;
+          mine = false;
+          session = null;
+          menuOpen = false;
+          anchor.setAttribute("aria-expanded", "false");
+        },
+      });
+      if (mine) session = opened;
+    };
     const press = button(
       control,
       () => t(control.label),
-      (anchor) => openMenu(anchor, control.items(view ?? options.view())),
+      (anchor) => {
+        if (control.open) openOwn(anchor, control.open);
+        else openMenu(anchor, control.items(view ?? options.view()));
+      },
     );
+    if (control.open) {
+      life.listen(press, "pointerdown", () => (pointer = true));
+      life.listen(press, "keydown", () => (pointer = false));
+    }
     press.setAttribute("aria-haspopup", "menu");
     press.setAttribute("aria-expanded", "false");
     press.append(chevron());
@@ -636,6 +676,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
       update(next) {
         view = next;
         availability(press, undefined, t(control.label));
+        session?.update(next);
       },
       activate: () => press.click(),
       relabel: () => {},
@@ -854,6 +895,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     if (kit.kind === "button" && kit.shell && !options.shell?.(kit.shell)) return false;
     if (kit.kind !== "menu") return served((control as { readonly id: string }).id);
     if (kit.requires) return kit.requires.every(served);
+    if (kit.open) return true;
     const items = kit.items(view);
     return !(items instanceof Promise) && items.some(entryServed);
   }
@@ -1084,7 +1126,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   // ── I pulsanti accanto alle schede ────────────────────────────────────
   const quickGroup: RibbonGroup<C, K> = { id: "quick", label: (options.quick?.[0]?.label ?? "") as K, icon: "", keytip: "", columns: options.quick ?? [] };
   const quickItems: Item[] = (options.quick ?? []).map((control) => {
-    const one = buttonItem(control, quickGroup);
+    const one = control.kind === "menu" ? menuItem(control, quickGroup) : buttonItem(control, quickGroup);
     quickBar.append(one.wrap);
     return one;
   });

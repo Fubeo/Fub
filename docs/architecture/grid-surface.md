@@ -236,6 +236,26 @@ pulsante, un secondo Esc torna alla griglia, e una scheda cambiata o una
 larghezza che basta a tutti lo richiudono. Il testo della barra è in un
 catalogo suo (`strings.ts`), in italiano e in inglese.
 
+Il primo pulsante della fila dell'accesso rapido, prima delle schede, è
+«Comandi» (`editors/grid/menu-comandi.ts`): un gettone pieno, con
+`aria-haspopup="menu"` e `aria-expanded`, che clic, Invio, Spazio, ↓ o Alt e
+poi C aprono, ed Esc richiude rendendogli il fuoco. Apre un menu di Fub
+(`ui/menu.ts`) con tutti i comandi della cartella, nell'ordine delle schede
+del catalogo: in ogni gruppo prima i controlli della barra, con le loro voci,
+spunte e scelte, poi «Altri comandi del gruppo», quelli del catalogo che la
+barra non mostra, dati come li dà la tavolozza. Le schede contestuali
+(tabella, grafico, oggetto, tabella pivot) stanno sotto «Per ciò che hai
+selezionato»: accese col nome di ciò che è selezionato («Tabella «Vendite»»),
+altrimenti coi controlli della barra spenti e il perché
+(`fogli.motivo.context.*`). Una voce spenta dice il suo motivo: la sola
+lettura per i comandi che cambiano, il contesto che manca, o quello del
+motore. Lo stato si legge all'apertura e, a menu aperto, ogni rilettura della
+barra aggiorna le voci; la cartella che non dà più comandi chiude il menu.
+Scrivendo si cerca in tutte le voci, anche nei sottomenu chiusi, col
+percorso, senza tetto (l'opzione `fullSearch` del menu): prima le accese,
+poi le spente col perché, e il piede conta le voci. Sotto i 560 px del foglio
+il gettone perde il nome, che resta nel suggerimento e nel nome accessibile.
+
 Il tasto destro sceglie come Excel: fuori dalla selezione sceglie la cella,
 la riga o la colonna sotto il puntatore, dentro la lascia. `ribbon/context.ts`
 dichiara le voci per cella, intestazione di riga e di colonna, angolo,
@@ -275,6 +295,12 @@ cella o un intervallo partono dalla selezione e un rifiuto del motore resta
 scritto dentro; altrimenti subito sulla selezione. I titoli e i nomi dei campi
 stanno in un catalogo dei testi a parte (`palette/strings.ts`), caricato con
 la superficie e non con la shell.
+
+Gli stessi comandi stanno nel menu «Comandi» della barra. Il test di
+copertura (`palette/palette.test.ts`) vuole che ogni comando del catalogo si
+trovi nel suo albero e che ogni scheda e gruppo che il menu mostra abbia un
+nome, nella barra o fra quelli del solo menu (`fogli.menu.tab.*`,
+`fogli.menu.group.*`).
 
 ## Gli oggetti dei fogli
 
@@ -346,6 +372,7 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 - `apps/client/src/editors/grid/ribbon/ribbon.ts`
 - `apps/client/src/kit/ribbon/ribbon.ts`
 - `apps/client/src/editors/grid/ribbon/tabs.ts`
+- `apps/client/src/editors/grid/menu-comandi.ts`
 - `apps/client/src/editors/grid/dialogs/host.ts`
 - `apps/client/src/editors/grid/dialogs/catalog.ts`
 - `apps/client/src/editors/grid/dialogs/page.ts`

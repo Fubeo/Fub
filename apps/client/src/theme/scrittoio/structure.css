@@ -2281,6 +2281,8 @@ body {
 .grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle .grid-ribbon-chevron {
   display: none;
 }
+/* La fila dell'accesso rapido, prima delle sezioni: il gettone «Comandi». */
+.grid-ribbon-quick { display: flex; flex: none; align-items: center; }
 
 /* Le finestre del foglio (`editors/grid/dialogs/`): una colonna di campi, il
    nome a sinistra e il controllo a destra. Le finestre larghe (Formato celle,

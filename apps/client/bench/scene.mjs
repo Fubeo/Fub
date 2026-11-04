@@ -465,6 +465,65 @@ export const SCENE = onPage("shell", [
     viewport: SHEET_FULL,
     prepare: (page) => openRibbon(page, "full"),
   },
+  // **Il menu «Comandi» dei fogli**, sulle cartelle delle scene della barra:
+  // aperto, con una ricerca che non trova niente, la scheda della tabella
+  // spenta senza tabella e accesa dentro quella dal nome lunghissimo, la sola
+  // lettura, e il gettone senza il nome in un foglio sotto i 560 px.
+  {
+    id: "grid-commands",
+    title: "Il menu «Comandi» dei fogli aperto",
+    query: "workbook=1",
+    viewport: SHEET_FULL,
+    prepare: async (page) => {
+      await openRibbon(page, "full");
+      await openCommands(page, ["Home", "Carattere"]);
+    },
+  },
+  // La ricerca senza risultati: con delle voci trovate lo Spazio scrive nella
+  // ricerca (la regola dei menu che cercano), e il banco dell'accessibilità
+  // vuole che lo Spazio sulla voce col fuoco la scelga.
+  {
+    id: "grid-commands-search",
+    title: "Il menu «Comandi» dei fogli con una ricerca che non trova niente",
+    query: "workbook=1",
+    viewport: SHEET_FULL,
+    prepare: async (page) => {
+      await openRibbon(page, "full");
+      await openCommands(page);
+      await page.keyboard.type("zzqx");
+      await page.waitForSelector("#context-menu .menu-empty");
+    },
+  },
+  {
+    id: "grid-commands-context-off",
+    title: "Il menu «Comandi» dei fogli: la scheda della tabella spenta, senza una tabella",
+    query: "workbook=1",
+    viewport: SHEET_FULL,
+    prepare: async (page) => {
+      await openRibbon(page, "full");
+      await openCommands(page, ["Struttura tabella"]);
+    },
+  },
+  {
+    id: "grid-commands-table",
+    title: "Il menu «Comandi» dei fogli a 700 px, dentro una tabella dal nome lunghissimo",
+    query: "workbook=1&grid=table",
+    viewport: SHEET_700,
+    prepare: async (page) => {
+      await openRibbon(page, 700);
+      await openCommands(page, ["Struttura tabella", "Stili tabella"]);
+    },
+  },
+  {
+    id: "grid-commands-readonly",
+    title: "Il menu «Comandi» dei fogli in sola lettura",
+    query: "workbook=1&grid=readonly",
+    viewport: SHEET_FULL,
+    prepare: async (page) => {
+      await openRibbon(page, "full");
+      await openCommands(page, ["Home"]);
+    },
+  },
   // **Il disegno**: il disegno dei connettori (`?connectors=6`, vedi
   // `fake-ipc.ts`), aperto e guardato com'è prima che l'impianto nuovo lo
   // rifaccia, largo e stretto. Le scene della colonna, dell'ispettore, del
@@ -1324,6 +1383,19 @@ async function openRibbon(page, width) {
   // La barra si raccoglie al fotogramma dopo la misura del foglio.
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await page.focus('.pane.focus .grid-surface [role="gridcell"][aria-selected="true"], .pane.focus .grid-surface [role="grid"]');
+}
+
+/// Apre il menu «Comandi» della barra dei fogli e, se c'è, la strada di
+/// sottomenu `path`, una voce dopo l'altra.
+async function openCommands(page, path = []) {
+  await page.click(".pane.focus .grid-ribbon-quick .grid-ribbon-button");
+  await page.waitForSelector("#context-menu .menu-items [role^=menuitem]");
+  for (const label of path) {
+    const row = page.locator(".context-menu .menu-items [role^=menuitem]", { has: page.locator(".menu-label", { hasText: new RegExp(`^${label}$`) }) }).last();
+    await row.click();
+    await page.waitForSelector(`.context-submenu[aria-label="${label}"]`);
+  }
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 }
 
 /// Il centro di una cella della griglia, per riga e colonna da zero, quando

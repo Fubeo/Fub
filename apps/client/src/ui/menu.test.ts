@@ -433,6 +433,16 @@ describe("un menu aperto da un pulsante", () => {
     expect([menu.style.top, menu.style.maxHeight]).toEqual(["8px", "288px"]);
   });
 
+  it("se cerca dappertutto, sotto tiene l'altezza del posto anche quando ci sta", () => {
+    window_(1024, 768);
+    size = [160, 120];
+    const anchor = button(100, 200);
+    showContextMenu(anchor, [{ label: "Una", run: () => {} }], { search: true, fullSearch: true });
+    const menu = document.getElementById("context-menu")!;
+    // Sotto 768 - 8 - (224 + 4) = 532: una ricerca che trova di più scorre lì.
+    expect([menu.style.top, menu.style.maxHeight]).toEqual(["228px", "532px"]);
+  });
+
   it("vicino al bordo destro si allinea al lato destro del pulsante", () => {
     window_(400, 768);
     size = [160, 120];
@@ -862,5 +872,144 @@ describe("il moto del menu", () => {
     setMotionPreference("reduced");
     showContextMenu(clickEvent(), [{ label: "Apri", run: () => {} }]);
     expect(driver.plays.filter((p) => p.el.id === "context-menu")).toHaveLength(0);
+  });
+});
+
+describe("il menu che cerca dappertutto", () => {
+  const key = (target: EventTarget, name: string): KeyboardEvent => {
+    const e = new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true });
+    target.dispatchEvent(e);
+    return e;
+  };
+  const type = (text: string): void => {
+    for (const ch of text) key(document.activeElement ?? document.body, ch);
+  };
+  const rows = (): HTMLButtonElement[] => [...document.querySelectorAll<HTMLButtonElement>("#context-menu .menu-items [role^=menuitem]")];
+  const labels = (): string[] => rows().map((b) => b.querySelector(".menu-label")!.textContent!);
+  const many = (n: number) => Array.from({ length: n }, (_, i) => ({ label: `Voce a${i}`, run: () => {} }));
+  let trigger: HTMLButtonElement;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    document.body.replaceChildren();
+    trigger = document.createElement("button");
+    document.body.appendChild(trigger);
+  });
+
+  afterEach(() => {
+    closeContextMenu();
+    vi.useRealTimers();
+  });
+
+  it("senza l'opzione, la ricerca resta col suo tetto e salta le voci spente", () => {
+    showContextMenu(clickEvent(), [...many(20), { label: "Voce spenta", disabled: true }], { pointer: false });
+    type("voce");
+    expect(rows()).toHaveLength(9);
+    expect(labels()).not.toContain("Voce spenta");
+  });
+
+  it("trova tutte le voci, anche cento, e il piede le conta", () => {
+    showContextMenu(trigger, many(120), { search: true, fullSearch: true, pointer: false });
+    type("a");
+    expect(rows()).toHaveLength(120);
+    expect(document.querySelector("#context-menu .menu-foot")!.textContent).toContain("120 voci");
+  });
+
+  it("le spente vengono dopo le accese, col loro perché, e il percorso distingue i nomi uguali", () => {
+    showContextMenu(
+      trigger,
+      [
+        { label: "Home", items: [{ label: "Bordi", disabled: true, description: "Prima seleziona una cella" }, { label: "Copia", run: () => {} }] },
+        { label: "Tabella", items: [{ label: "Bordi", run: () => {} }] },
+      ],
+      { search: true, fullSearch: true, reachDisabled: true, pointer: false },
+    );
+    type("bordi");
+    expect(labels()).toEqual(["Bordi", "Bordi"]);
+    const [on, off] = rows();
+    expect(on!.querySelector(".menu-path")!.textContent).toBe("Tabella ›");
+    expect(off!.querySelector(".menu-path")!.textContent).toBe("Home ›");
+    expect(off!.getAttribute("aria-disabled")).toBe("true");
+    expect(off!.querySelector(".menu-description")!.textContent).toBe("Prima seleziona una cella");
+  });
+
+  it("trova nei sottomenu preparati quando servono, anche annidati", async () => {
+    showContextMenu(
+      trigger,
+      [{ label: "Formule", items: [{ label: "Funzioni", items: async () => [{ label: "SOMMA", run: () => {} }] }] }],
+      { search: true, fullSearch: true, pointer: false },
+    );
+    type("som");
+    await vi.waitFor(() => expect(labels()).toEqual(["SOMMA"]));
+    expect(rows()[0]!.querySelector(".menu-path")!.textContent).toBe("Formule › Funzioni ›");
+  });
+
+  it("senza risultati dice che non c'è niente, senza il rimando agli altri comandi", () => {
+    const off = registerMenuSearch({ hint: () => "Ctrl+Maiusc+P", run: () => {} });
+    showContextMenu(trigger, many(3), { search: true, fullSearch: true, pointer: false });
+    type("zz");
+    expect(rows()).toHaveLength(0);
+    expect(document.querySelector("#context-menu .menu-empty")!.textContent).toBe("Niente qui");
+    off();
+  });
+
+  it("le voci spente si raggiungono con le frecce e non si attivano", () => {
+    const run = vi.fn();
+    showContextMenu(trigger, [{ label: "Prima", run: () => {} }, { label: "Spenta", disabled: true, run }, { label: "Terza", run: () => {} }], {
+      reachDisabled: true,
+      pointer: false,
+    });
+    const [, off] = rows();
+    key(document.activeElement!, "ArrowDown");
+    expect(document.activeElement).toBe(off);
+    expect(key(off!, "Enter").defaultPrevented).toBe(true);
+    off!.click();
+    expect(run).not.toHaveBeenCalled();
+    expect(document.getElementById("context-menu")).not.toBeNull();
+  });
+
+  it("una lettera scritta in un sottomenu cerca dal menu principale", async () => {
+    showContextMenu(trigger, [{ label: "Home", items: [{ label: "Copia", run: () => {} }] }, { label: "Incolla", run: () => {} }], {
+      search: true,
+      fullSearch: true,
+      pointer: false,
+    });
+    key(document.activeElement!, "ArrowRight");
+    await vi.waitFor(() => expect(document.querySelector(".context-submenu")).not.toBeNull());
+    type("inc");
+    expect(document.querySelector(".context-submenu")).toBeNull();
+    expect(labels()).toEqual(["Incolla"]);
+  });
+
+  it("le voci cambiano a menu aperto: il fuoco e il sottomenu restano dove stavano", async () => {
+    const tree = (enabled: boolean) => [
+      { label: "Prima", run: () => {} },
+      { label: "Home", items: [{ label: "Copia", run: () => {} }, { label: "Incolla", disabled: !enabled, run: () => {} }] },
+    ];
+    const menu = showContextMenu(trigger, tree(false), { search: true, fullSearch: true, reachDisabled: true, pointer: false });
+    key(document.activeElement!, "ArrowDown");
+    key(document.activeElement!, "ArrowRight");
+    await vi.waitFor(() => expect(document.querySelector(".context-submenu")).not.toBeNull());
+    key(document.activeElement!, "ArrowDown");
+    const sub = (): HTMLButtonElement[] => [...document.querySelectorAll<HTMLButtonElement>(".context-submenu [role=menuitem]")];
+    expect(sub()[1]!.getAttribute("aria-disabled")).toBe("true");
+    menu.update(tree(true));
+    expect(document.querySelectorAll(".context-submenu")).toHaveLength(1);
+    expect(sub()[1]!.hasAttribute("aria-disabled")).toBe(false);
+    expect(document.activeElement).toBe(sub()[1]);
+    expect(rows()[1]!.getAttribute("aria-expanded")).toBe("true");
+    // ← torna alla voce ridisegnata.
+    key(document.activeElement!, "ArrowLeft");
+    expect(document.activeElement).toBe(rows()[1]);
+  });
+
+  it("le voci cambiano mentre si cerca: la ricerca si rifà", () => {
+    const menu = showContextMenu(trigger, [{ label: "Copia", disabled: true, description: "No" }], { search: true, fullSearch: true, reachDisabled: true, pointer: false });
+    type("cop");
+    expect(rows()[0]!.getAttribute("aria-disabled")).toBe("true");
+    menu.update([{ label: "Copia", run: () => {} }]);
+    expect(labels()).toEqual(["Copia"]);
+    expect(rows()[0]!.hasAttribute("aria-disabled")).toBe(false);
+    expect(document.activeElement).toBe(rows()[0]);
   });
 });

@@ -4,7 +4,9 @@
 // parte (la barra, il tasto destro, una scorciatoia, la tavolozza).
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GridCommandState } from "../../../host/contract";
+import { closeContextMenu, type MenuItem } from "../../../ui/menu";
 import { DIALOGS } from "../dialogs/catalog";
+import { commandMenuItems, type CommandMenuHost } from "../menu-comandi";
 import { contextEntries } from "../ribbon/context";
 import { RIBBON_TABS, groupControls, type MenuEntry, type RibbonControl, type RibbonView } from "../ribbon/tabs";
 import { shortcutCommand, shortcutDialog } from "../shortcuts";
@@ -270,5 +272,41 @@ describe("la copertura dei comandi del catalogo", () => {
       }
     }
   });
+  it("ogni comando del catalogo sta nel menu «Comandi», e ogni sua scheda e gruppo ha un nome", async () => {
+    const engine = engineWith(ALL_ON);
+    const host: CommandMenuHost = {
+      engine: { ...engine, writeFormula: () => true },
+      palette: () => mountGridPalette(engine).commands(),
+      contextShown: () => false,
+      cellStyleName: (name) => name,
+    };
+    const seen = new Set<string>();
+    const walk = async (items: readonly MenuItem[]): Promise<void> => {
+      for (const item of items) {
+        if (!item.items) continue;
+        await walk(typeof item.items === "function" ? await item.items() : item.items);
+      }
+    };
+    const root = commandMenuItems(VIEW, host, document.createElement("button"), seen);
+    await walk(root);
+    closeContextMenu();
+    const missing = CATALOG_COMMANDS.filter((command) => !seen.has(command.motore)).map((command) => command.motore);
+    expect(missing, "comandi che il menu «Comandi» non ha").toEqual([]);
+    for (const tab of root) {
+      expect(tab.label.startsWith("fogli."), tab.label).toBe(false);
+      for (const group of Array.isArray(tab.items) ? tab.items : []) expect(group.label.startsWith("fogli."), `${tab.label} › ${group.label}`).toBe(false);
+    }
+    for (const language of ["it", "en"]) {
+      const table = fogliStrings.catalogFor(language);
+      for (const tab of CATALOG_TABS) {
+        const ribbon = RIBBON_TABS.find((candidate) => candidate.id === tab.id);
+        if (!ribbon) expect(table[`fogli.menu.tab.${tab.id}` as keyof typeof table], `${language}: la scheda ${tab.id}`).toBeTruthy();
+        for (const group of tab.gruppi) {
+          if (ribbon?.groups.some((candidate) => candidate.id === group.id)) continue;
+          if (!CATALOG_COMMANDS.some((command) => command.posto.scheda === tab.id && command.posto.gruppo === group.id)) continue;
+          expect(table[`fogli.menu.group.${tab.id}.${group.id}` as keyof typeof table], `${language}: il gruppo ${tab.id}.${group.id}`).toBeTruthy();
+        }
+      }
+    }
+  });
 });
-

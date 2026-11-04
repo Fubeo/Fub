@@ -15,6 +15,7 @@ import { readResult } from "../dialogs/result";
 import type { GridBook, GridCellStyle, GridCommandState, GridObject, GridSheetView, GridTable } from "../../../host/contract";
 import { labelButton, setPressed } from "../../../kit";
 import { mountRibbon as mountKitRibbon, type RibbonItem, type RibbonParts } from "../../../kit/ribbon/ribbon";
+import type { MenuControl as KitMenuControl } from "../../../kit/ribbon/types";
 import { onLanguage } from "../../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { closeContextMenu } from "../../../ui/menu";
@@ -35,6 +36,9 @@ import {
 } from "./palette";
 import { t, type RibbonKey } from "./strings";
 import { contextEntries, MINI_CONTROLS, type GridMenuTarget } from "./context";
+import { openCommandMenu, STANDARD_NAMES } from "../menu-comandi";
+import { mountGridPalette, type PaletteEngine } from "../palette/commands";
+import { t as fogliT } from "../palette/strings";
 import type { SurfaceMenuItem } from "../../core/editor-menu";
 import {
   RIBBON_TABS,
@@ -44,7 +48,6 @@ import {
   type Params,
   type RibbonControl,
   type RibbonGroup,
-  type RibbonTab,
   type RibbonView,
 } from "./tabs";
 
@@ -74,6 +77,12 @@ export interface RibbonEngine {
   query(id: string, params?: string): Promise<string | null>;
   writeFormula(text: string): boolean;
   focus(): void;
+  /// Ciò che il menu «Comandi» chiede in più, per dare i comandi che la barra
+  /// non ha come li dà la tavolozza: la griglia lo ha tutto.
+  writable?(): boolean;
+  run?: PaletteEngine["run"];
+  selectionRefs?: PaletteEngine["selectionRefs"];
+  sheetNames?: PaletteEngine["sheetNames"];
 }
 
 export interface GridRibbon {
@@ -94,6 +103,10 @@ export interface GridRibbon {
 
 type Item = RibbonItem<RibbonView, RibbonControl, RibbonKey>;
 type Parts = RibbonParts<RibbonView, RibbonKey>;
+/// Le chiavi della barra, più il nome del menu «Comandi», che sta con le
+/// stringhe dei comandi dei fogli.
+type MenuKey = RibbonKey | "fogli.menu.button";
+type MenuControl = KitMenuControl<RibbonView, MenuKey>;
 
 /// Il nome di uno stile di cella come lo dice Excel nella lingua della shell:
 /// il provider lo conosce col nome inglese del file.
@@ -126,7 +139,7 @@ function tableAt(tables: readonly GridTable[], at: { readonly row: number; reado
 
 /// Se una scheda contestuale ha il suo contesto: la tabella quando la
 /// selezione è di celle, il grafico o l'oggetto quando è selezionato.
-function contextShown(context: NonNullable<RibbonTab["contextual"]>, view: RibbonView): boolean {
+function contextShown(context: string, view: RibbonView): boolean {
   switch (context) {
     case "table":
       return view.table !== null && view.object === null;
@@ -134,6 +147,9 @@ function contextShown(context: NonNullable<RibbonTab["contextual"]>, view: Ribbo
       return view.object?.kind === "chart";
     case "object":
       return view.object !== null && (view.object.kind === "chart" || view.object.kind === "image" || view.object.kind === "shape");
+    default:
+      // La tabella pivot non ha ancora una vista: il suo contesto non c'è.
+      return false;
   }
 }
 
@@ -158,7 +174,48 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     };
   }
 
-  const ribbon = mountKitRibbon<RibbonView, RibbonKey, GridExtraControl>({
+  // I comandi che la barra non ha, nel menu «Comandi», si danno come li dà la
+  // tavolozza: con una sua istanza, che vive quanto la barra.
+  const palette = mountGridPalette({
+    commands: () => engine.commands(),
+    writable: () => engine.writable?.() ?? true,
+    command: (id, params) => engine.command(id, params),
+    run: (id, params) => engine.run?.(id, params) ?? Promise.reject(new Error(`run: ${id}`)),
+    openDialog: (id, params) => engine.openDialog(id, params),
+    selectionRefs: () => engine.selectionRefs?.() ?? { sheet: "", range: "", active: "" },
+    sheetNames: () => engine.sheetNames?.() ?? [],
+    book: () => engine.book(),
+    focus: () => engine.focus(),
+  });
+  // I pezzi della barra, per aprire la tavolozza intera di un colore dal menu.
+  let ribbonParts: Parts | null = null;
+  const commandsMenu: MenuControl = {
+    kind: "menu",
+    label: "fogli.menu.button",
+    keytip: "C",
+    icon: "outline",
+    size: "small",
+    labelled: true,
+    items: () => [],
+    open: (anchor, view, how) =>
+      openCommandMenu(anchor, view, how, {
+        engine,
+        palette: () => palette.commands(),
+        contextShown,
+        cellStyleName,
+        moreColors: (control, at, current) => {
+          if (!ribbonParts || !(at instanceof HTMLButtonElement)) return;
+          const parts = ribbonParts;
+          const paramsOf = (color: RibbonColor | "auto" | "none"): Params => ({
+            ...control.params?.(current),
+            color: control.hex && typeof color !== "string" ? resolve(color, current.theme) : color,
+          });
+          openPalette(parts, at, control, current.theme, (color) => parts.give(control.id, paramsOf(color)));
+        },
+      }),
+  };
+
+  const ribbon = mountKitRibbon<RibbonView, MenuKey, GridExtraControl>({
     host: engine.ribbonHost(),
     prefix: "grid-ribbon",
     menuPrefix: "grid.menu.",
@@ -174,19 +231,32 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
       unavailable: (label, reason) => t("ribbon.unavailable", { label, reason }),
       empty: () => t("ribbon.menu.empty"),
       mini: () => t("ribbon.context.mini"),
+      quick: () => fogliT("fogli.menu.quick"),
     },
-    t: (key) => t(key),
+    t: (key) => (key === "fogli.menu.button" ? fogliT(key) : t(key)),
+    quick: [commandsMenu],
     commands: () => engine.commands(),
     commandable: () => engine.commandable(),
     view: readView,
-    contextShown: (context, view) => contextShown(context as NonNullable<RibbonTab["contextual"]>, view),
+    contextShown,
     command: (id, params) => engine.command(id, params),
     openDialog: (id, params) => engine.openDialog(id, params),
     write: (text) => engine.writeFormula(text),
     shell: (action) => (action === "exportPdf" ? (engine.pdfExport?.() ?? null) : null),
     focus: () => engine.focus(),
     languages: onLanguage,
-    extra: (control, group, parts) => (control.kind === "color" ? colorItem(control, group, parts) : galleryItem(control, group, parts)),
+    // Il menu «Comandi» allarga le chiavi della barra soltanto per il suo
+    // nome: i gruppi e i pezzi delle specie della griglia restano coi loro.
+    extra: (control, group, parts) => {
+      const own = parts as unknown as Parts;
+      const at = group as unknown as RibbonGroup;
+      ribbonParts = own;
+      return (control.kind === "color" ? colorItem(control, at, own) : galleryItem(control, at, own)) as unknown as RibbonItem<
+        RibbonView,
+        RibbonControl | MenuControl,
+        MenuKey
+      >;
+    },
   });
 
   return {
@@ -197,6 +267,7 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     mountMini: ribbon.mountMini,
     destroy() {
       ribbon.destroy();
+      palette.destroy();
       releaseIcons();
     },
   };
@@ -339,18 +410,6 @@ function openPalette(
   grid.append(...cells);
   const standard = document.createElement("div");
   standard.className = "grid-ribbon-palette-grid";
-  const STANDARD_NAMES: readonly RibbonKey[] = [
-    "ribbon.color.dark_red",
-    "ribbon.color.red",
-    "ribbon.color.orange",
-    "ribbon.color.yellow",
-    "ribbon.color.light_green",
-    "ribbon.color.green",
-    "ribbon.color.light_blue",
-    "ribbon.color.blue",
-    "ribbon.color.dark_blue",
-    "ribbon.color.purple",
-  ];
   const extra = STANDARD_COLORS.map((hex, at) => swatch(hex, t(STANDARD_NAMES[at]!), pick(hex), local));
   standard.append(...extra);
   cells.push(...extra);

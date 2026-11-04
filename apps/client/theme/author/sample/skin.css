@@ -7876,6 +7876,38 @@ kbd,
 .grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle:hover .grid-ribbon-label {
   color: var(--text);
 }
+/* «Comandi» apre la fila: un gettone pieno accanto al pozzetto delle sezioni,
+   alto quanto lui e col suo stesso velo, la porta di tutti i comandi. Aperto
+   prende il velo d'accento, come la voce di un menu che ha aperto il suo
+   sottomenu. */
+.grid-ribbon-quick {
+  gap: var(--space-1);
+}
+.grid-ribbon-quick .grid-ribbon-button {
+  padding: 0 var(--space-4) 0 var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--overlay-hover);
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.grid-ribbon-quick .grid-ribbon-button:hover:not([aria-disabled="true"]) {
+  background: var(--overlay-active);
+}
+.grid-ribbon-quick .grid-ribbon-button[aria-expanded="true"],
+.grid-ribbon-quick .grid-ribbon-button[aria-expanded="true"]:hover {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+/* Sotto i 560 px «Comandi» resta col suo disegno e la freccina: il nome
+   sta nel suggerimento e nel nome accessibile. */
+@container sheet (max-width: 560px) {
+  .grid-ribbon-quick .grid-ribbon-button {
+    padding: 0 var(--space-2);
+  }
+  .grid-ribbon-quick .grid-ribbon-label {
+    display: none;
+  }
+}
 
 
 /* Le finestre del foglio: i campi stretti come nelle finestre di Excel, le
