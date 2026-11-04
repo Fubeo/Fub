@@ -20,8 +20,9 @@
 //! contro il file e contro il contenitore che li dichiara, con somme che non
 //! traboccano, e ogni cammino ha un tetto con nome ([`MAX_IFDS`],
 //! [`MAX_IFD_ENTRIES`], [`MAX_BOX_DEPTH`], [`MAX_BOXES`],
-//! [`MAX_CANDIDATES`]). Nessuna allocazione la decide un numero del file oltre
-//! un tetto: si alloca al più un IFD di [`MAX_IFD_ENTRIES`] voci, un segmento
+//! [`MAX_CANDIDATES`] offset diversi, ognuno guardato una volta sola), e
+//! tutto il cammino legge al più [`MAX_STRUCTURE_BYTES`]. Nessuna allocazione
+//! la decide un numero del file oltre un tetto: si alloca al più un IFD di [`MAX_IFD_ENTRIES`] voci, un segmento
 //! `APP1` (che non supera 64 KiB) e il JPEG scelto, che non supera
 //! [`MAX_JPEG_BYTES`].
 //!
@@ -35,6 +36,7 @@
 use std::collections::{BTreeSet, VecDeque};
 use std::io::{self, Cursor, Read, Seek, SeekFrom};
 
+use crate::container::zip_tail::{Budget, Budgeted};
 use crate::container::MAX_PREVIEW_BYTES;
 use crate::contract::PreviewSize;
 use crate::jpeg::MAX_SEGMENTS;
@@ -48,8 +50,14 @@ pub const MAX_IFD_ENTRIES: usize = 1000;
 pub const MAX_BOX_DEPTH: usize = 8;
 /// Le scatole al più che si guardano in un CR3, tutti i livelli insieme.
 pub const MAX_BOXES: usize = 10_000;
-/// I candidati diversi al più di un file.
+/// Gli offset diversi dei candidati al più di un file: oltre, il file non
+/// dà anteprime anche se nessuno di essi vale.
 pub const MAX_CANDIDATES: usize = 64;
+/// I byte che si leggono di tutto il file per trovare i candidati: IFD,
+/// scatole e intestazioni dei JPEG, fino al loro `SOF`. Oltre è
+/// [`RawError::TooLarge`]; i byte del JPEG scelto, letti da [`read_jpeg`],
+/// non contano.
+pub const MAX_STRUCTURE_BYTES: u64 = 2 * 1024 * 1024;
 /// Il JPEG più grande che si prende dal file.
 pub const MAX_JPEG_BYTES: u64 = MAX_PREVIEW_BYTES as u64;
 /// La larghezza minima di un'anteprima `small`.
@@ -167,6 +175,17 @@ impl From<io::Error> for RawError {
 /// pezzi: l'intestazione, gli IFD o le scatole, e l'intestazione di ogni
 /// candidato fino al suo `SOF`.
 pub fn embedded_jpegs<R: Read + Seek>(reader: &mut R, len: u64) -> Result<RawPreviews, RawError> {
+    let budget = Budget::default();
+    budget.arm(MAX_STRUCTURE_BYTES);
+    let mut budgeted = Budgeted::new(&mut *reader, budget.clone());
+    match previews_of(&mut budgeted, len) {
+        // Ogni errore dopo il tetto è il tetto: il file chiede troppo lavoro.
+        Err(_) if budget.exhausted() => Err(RawError::TooLarge),
+        outcome => outcome,
+    }
+}
+
+fn previews_of<R: Read + Seek>(reader: &mut R, len: u64) -> Result<RawPreviews, RawError> {
     let mut head = [0u8; 16];
     let have = usize::try_from(len.min(16)).unwrap_or(16);
     read_at(reader, 0, &mut head[..have])?;
@@ -181,21 +200,21 @@ pub fn embedded_jpegs<R: Read + Seek>(reader: &mut R, len: u64) -> Result<RawPre
     } else {
         return Err(RawError::NotRaw);
     };
+    // Un offset si guarda una volta sola, il primo che lo dichiara vince; e
+    // oltre [`MAX_CANDIDATES`] offset diversi non se ne guarda nessuno.
+    let mut offsets = BTreeSet::new();
+    let spans: Vec<Span> = spans
+        .into_iter()
+        .filter(|span| offsets.insert(span.offset))
+        .collect();
+    if spans.len() > MAX_CANDIDATES {
+        return Err(RawError::TooLarge);
+    }
     let mut candidates: Vec<JpegRange> = Vec::new();
     for span in spans {
-        let Some(range) = check_jpeg(reader, span)? else {
-            continue;
-        };
-        if candidates
-            .iter()
-            .any(|seen| seen.offset == range.offset && seen.len == range.len)
-        {
-            continue;
+        if let Some(range) = check_jpeg(reader, span)? {
+            candidates.push(range);
         }
-        if candidates.len() >= MAX_CANDIDATES {
-            return Err(RawError::TooLarge);
-        }
-        candidates.push(range);
     }
     let orientation = match orientation {
         Orientation::Known(value) => value,

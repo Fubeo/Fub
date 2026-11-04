@@ -10,7 +10,7 @@ use std::io::{self, Cursor, Read, Seek, SeekFrom};
 use fub_format_craft::raw::{
     embedded_jpegs, read_jpeg, JpegRange, RawError, RawPreviews, CR3_CANON_UUID, CR3_PREVIEW_UUID,
     MAX_BOXES, MAX_BOX_DEPTH, MAX_CANDIDATES, MAX_IFDS, MAX_IFD_ENTRIES, MAX_JPEG_BYTES,
-    RAF_SIGNATURE, SMALL_MIN_WIDTH,
+    MAX_STRUCTURE_BYTES, RAF_SIGNATURE, SMALL_MIN_WIDTH,
 };
 use fub_format_craft::PreviewSize;
 
@@ -914,4 +914,86 @@ fn an_empty_or_unknown_file_is_not_a_raw() {
         previews(b"II\x2a\0\0\0\0\0"),
         Err(RawError::Malformed)
     ));
+}
+
+// --- Il lavoro di un file ostile ----------------------------------------------
+
+/// Un JPEG che non arriva mai al `SOF`: `SOI` e `segments` segmenti `APP0`
+/// vuoti, tutti da camminare prima di arrendersi.
+fn app_chain(segments: usize) -> Vec<u8> {
+    let mut out = vec![0xFF, 0xD8];
+    for _ in 0..segments {
+        out.extend_from_slice(&segment(0xE0, &[]));
+    }
+    out
+}
+
+#[test]
+fn an_rw2_with_sixteen_thousand_entries_on_one_offset_checks_it_once() {
+    let chain = app_chain(1000);
+    let preview = jpeg(1280, 960);
+    let ifd_len = 2 + 12 * MAX_IFD_ENTRIES as u32 + 4;
+    let chain_at = 8 + ifd_len * MAX_IFDS as u32;
+    let preview_at = chain_at + chain.len() as u32;
+    let mut tiff = Tiff::new(Endian::Ii, 0x0055, 8);
+    for index in 0..MAX_IFDS as u32 {
+        let at = 8 + index * ifd_len;
+        let last = index + 1 == MAX_IFDS as u32;
+        let mut fields = vec![(0x002E, UNDEFINED, chain.len() as u32, chain_at); MAX_IFD_ENTRIES];
+        if last {
+            // Fra sedicimila voci uguali, l'anteprima vera si trova lo stesso.
+            fields[MAX_IFD_ENTRIES - 1] = (0x002E, UNDEFINED, preview.len() as u32, preview_at);
+        }
+        let next = if last { 0 } else { at + ifd_len };
+        tiff.ifd(at, &fields, next);
+    }
+    let bytes = tiff
+        .bytes(chain_at, &chain)
+        .bytes(preview_at, &preview)
+        .build();
+    let len = bytes.len() as u64;
+    let mut file = Sparse::new(len, vec![(0, bytes)]);
+    let found = embedded_jpegs(&mut file, len).unwrap();
+    assert_eq!(sizes(&found), vec![(1280, 960)]);
+    // Gli IFD si leggono tutti (192 KiB); la catena una volta sola.
+    assert!(file.read <= 256 * 1024, "letti {} byte", file.read);
+}
+
+#[test]
+fn a_cr3_with_ten_thousand_thmb_boxes_ends_at_once() {
+    let chain = app_chain(100);
+    let mut bytes = ftyp(b"crx ");
+    for _ in 0..MAX_BOXES - 2 {
+        bytes.extend_from_slice(&cr3_jpeg_box(b"THMB", &chain));
+    }
+    let len = bytes.len() as u64;
+    let mut file = Sparse::new(len, vec![(0, bytes)]);
+    assert!(matches!(
+        embedded_jpegs(&mut file, len),
+        Err(RawError::TooLarge)
+    ));
+    // Le intestazioni delle scatole, non i JPEG dentro.
+    assert!(file.read <= 256 * 1024, "letti {} byte", file.read);
+}
+
+#[test]
+fn the_whole_file_has_a_byte_budget() {
+    // Un candidato di 8 MiB fatti di riempimento `FF`: il cammino lo
+    // leggerebbe tutto, un byte alla volta.
+    let mut fill = vec![0xFF; MAX_JPEG_BYTES as usize];
+    fill[1] = 0xD8;
+    let head = Tiff::new(Endian::Ii, 42, 8)
+        .ifd(8, &jif(4096, &fill), 0)
+        .build();
+    let len = 4096 + MAX_JPEG_BYTES;
+    let mut file = Sparse::new(len, vec![(0, head), (4096, fill)]);
+    assert!(matches!(
+        embedded_jpegs(&mut file, len),
+        Err(RawError::TooLarge)
+    ));
+    assert!(
+        file.read <= MAX_STRUCTURE_BYTES + 64 * 1024,
+        "letti {} byte",
+        file.read
+    );
 }
