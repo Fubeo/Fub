@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- CI di PR #297 (orchestratore): i job dei banchi (visual, a11y, graph,
+  benches) non avevano il toolchain Rust col bersaglio wasm32-unknown-
+  unknown, e Vite non poteva compilare il nucleo della lavagna quando
+  serviva la pagina: la shell del banco non partiva. Aggiunto lo stesso
+  passo del job client. Nella stessa corsa la WebView vera è caduta solo su
+  S1 per GTK che non si inizializza sotto Xvfb (tao event_loop), con tutte
+  le altre misure, L1 compreso, sotto soglia: non è di N3 · fonte: log dei
+  job 126262963796, 126262963801, 126262963812, 126262963882, 126262787875
 - Orchestratore, CI di #297 (client in OOM): la causa è la prima build
   fredda del nucleo WebAssembly dentro il tempo massimo della prima prova
   (shell.e2e): con target/canvas-wasm vuoto le prove scadevano una dopo
