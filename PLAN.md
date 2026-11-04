@@ -2024,7 +2024,7 @@ src/state/external-editors.test.ts src/ui/menu-budget.test.ts src/ui/menu.test.t
 passa; una foto del banco del sottomenu aperto su un `.pcraft`.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/panels/open-with.test.ts src/ui/menu-budget.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 5ba65a33
 
 ## T17 · Il prestito
 
