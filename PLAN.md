@@ -3274,7 +3274,7 @@ Fatto quando: i test nuovi di `mount`/figura, `open-with`, `lend`,
 `photo-data` passano e falliscono senza la correzione; `npm run typecheck`
 verde; `npm run bench:a11y` pulito sulle scene PDF in tutte e due le luci.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base e309abd3
+Stato: [x] fatto · 41b867d0 · check --rapido 10/11 sull'integrazione: rosso solo Vitest per scene.test «ci sono tutte» (baseline dal runner in T32) e due instabili noti (theme/runtime, grid/engine), verdi rilanciati da soli (88/88)
 
 ## Non verificato stanotte
 
