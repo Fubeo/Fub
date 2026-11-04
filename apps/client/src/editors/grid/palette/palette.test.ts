@@ -8,7 +8,7 @@ import { DIALOGS } from "../dialogs/catalog";
 import { contextEntries } from "../ribbon/context";
 import { RIBBON_TABS, groupControls, type MenuEntry, type RibbonControl, type RibbonView } from "../ribbon/tabs";
 import { shortcutCommand, shortcutDialog } from "../shortcuts";
-import { CATALOG_COMMANDS, OWN_DIALOGS, mountGridPalette, type PaletteEngine } from "./commands";
+import { CATALOG_COMMANDS, CATALOG_TABS, OWN_DIALOGS, mountGridPalette, type PaletteEngine } from "./commands";
 import { fogliStrings } from "./strings";
 
 const VIEW: RibbonView = {
@@ -141,7 +141,9 @@ describe("le voci dei fogli nella tavolozza", () => {
     expect(entries).toHaveLength(CATALOG_COMMANDS.length);
     const bold = entries.find((entry) => entry.id === "fogli.home.bold")!;
     expect(bold).toMatchObject({ title: "Grassetto", group: "Foglio", description: "Scheda Home della barra", unavailable: null });
-    expect(entries.find((entry) => entry.id === "fogli.cell.get")!.description).toBe("Comando del foglio di calcolo");
+    // Una scheda o un gruppo soltanto del menu non sono nella barra.
+    expect(entries.find((entry) => entry.id === "fogli.pivot.list")!.description).toBe("Comando del foglio di calcolo");
+    expect(entries.find((entry) => entry.id === "fogli.selection.set")!.description).toBe("Comando del foglio di calcolo");
     palette.destroy();
   });
 
@@ -242,6 +244,21 @@ describe("la copertura dei comandi del catalogo", () => {
     }
     console.info(`Comandi dei fogli: ${CATALOG_COMMANDS.length}, di cui ${onlyPalette.length} solo nella tavolozza.`);
     expect(onlyPalette.length).toBeGreaterThan(0);
+  });
+
+  it("ogni posto è una scheda e un gruppo del menu, e ogni scheda della barra ha il suo nome", () => {
+    for (const command of CATALOG_COMMANDS) {
+      const tab = CATALOG_TABS.find((candidate) => candidate.id === command.posto.scheda);
+      expect(tab, `${command.motore}: la scheda ${command.posto.scheda} non c'è`).toBeDefined();
+      expect(tab!.gruppi.some((group) => group.id === command.posto.gruppo), `${command.motore}: il gruppo ${command.posto.gruppo} non c'è`).toBe(true);
+      expect(["cambia", "legge", "mostra"]).toContain(command.effetto);
+    }
+    for (const language of ["it", "en"]) {
+      const table = fogliStrings.catalogFor(language);
+      for (const tab of CATALOG_TABS.filter((candidate) => !candidate.solo)) {
+        expect(table[`fogli.palette.tab.${tab.id}` as keyof typeof table], `${language}: la scheda ${tab.id}`).toBeTruthy();
+      }
+    }
   });
 
   it("ogni titolo e ogni campo hanno un testo in ogni lingua", () => {

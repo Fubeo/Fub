@@ -2,9 +2,10 @@
 //
 // Ogni comando del catalogo (`catalogo.generated.json`) che la sessione della
 // cartella serve diventa una voce della tavolozza: il titolo tradotto, il
-// gruppo «Foglio», la scheda della barra in cui lo si trova. Se il motore lo
-// dice spento (`GridEngine.commands`) la voce resta, col motivo; in sola
-// lettura lo sono tutti, con un motivo solo. Senza una cartella col fuoco non
+// gruppo «Foglio», la scheda della barra in cui lo si trova (se il gruppo del
+// suo posto è nella barra). Se il motore lo dice spento
+// (`GridEngine.commands`) la voce resta, col motivo; in sola lettura lo sono
+// tutti, con un motivo solo. Senza una cartella col fuoco non
 // c'è nessuna voce: le chiede alla superficie del riquadro col fuoco la shell.
 //
 // Si danno come li dà la barra: la finestra scritta a mano se il comando ne
@@ -20,6 +21,18 @@ import { t, type FogliKey } from "./strings";
 
 /// I comandi del catalogo, nell'ordine in cui li scrive.
 export const CATALOG_COMMANDS: readonly CatalogCommand[] = (catalogo as { comandi: readonly CatalogCommand[] }).comandi;
+
+/// Una scheda del menu dei fogli: i suoi gruppi, `solo` se la barra non la
+/// mostra, e la scheda contestuale (`table`, `chart`, `object`, `pivot`).
+export interface CatalogTab {
+  readonly id: string;
+  readonly solo: boolean;
+  readonly contesto: string | null;
+  readonly gruppi: readonly { readonly id: string; readonly solo: boolean }[];
+}
+
+/// Le schede e i gruppi del menu, nell'ordine del menu.
+export const CATALOG_TABS: readonly CatalogTab[] = (catalogo as { schede: readonly CatalogTab[] }).schede;
 
 /// Una voce della tavolozza (`SurfacePaletteCommand` della superficie).
 export interface GridPaletteCommand {
@@ -93,10 +106,14 @@ export function commandTitle(command: CatalogCommand): string {
   return t(command.titolo as FogliKey);
 }
 
-/// Dove lo si trova nella barra, o che è un comando del foglio.
+/// Dove lo si trova nella barra, o che è un comando del foglio: la scheda
+/// se la barra mostra la scheda e il gruppo del suo posto.
 export function commandDescription(command: CatalogCommand): string {
-  if (!command.posto) return t("fogli.palette.only_here");
-  return t("fogli.palette.in_tab", { tab: t(`fogli.palette.tab.${command.posto.scheda}` as FogliKey) });
+  const { scheda, gruppo } = command.posto;
+  const tab = CATALOG_TABS.find((candidate) => candidate.id === scheda);
+  const onBar = tab !== undefined && !tab.solo && tab.gruppi.some((group) => group.id === gruppo && !group.solo);
+  if (!onBar) return t("fogli.palette.only_here");
+  return t("fogli.palette.in_tab", { tab: t(`fogli.palette.tab.${scheda}` as FogliKey) });
 }
 
 export interface GridPalette {

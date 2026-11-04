@@ -4,158 +4,448 @@
 //! I comandi che la modalità a comandi serve ([`crate::commands`]) passano
 //! da [`fub_motori::importa`] con lo spazio [`SPAZIO`]: l'id diventa
 //! `fogli.«id»`, il titolo la chiave `fogli.cmd.«id»`, il menu di GridCraft
-//! una scheda e un gruppo della barra dei fogli ([`ADATTAMENTO`]), lo schema
-//! dei parametri un [`fub_motori::Modulo`]. Gli altri hanno il loro perché
-//! ([`perche_non_servito`]), e il test `copertura` controlla che nessuno si
-//! perda.
+//! (o l'id stesso) una scheda e un gruppo del menu dei fogli
+//! ([`ADATTAMENTO`]), ciò che GridCraft dice del comando il suo effetto
+//! sulla cartella, lo schema dei parametri un [`fub_motori::Modulo`]. Gli
+//! altri hanno il loro perché ([`perche_non_servito`]), e il test
+//! `copertura` controlla che nessuno si perda e che ogni gruppo del menu
+//! abbia un comando.
 //!
-//! Le schede e i gruppi sono quelli della barra dei fogli della shell
-//! (`apps/client/src/editors/grid/ribbon/tabs.ts`): il test `ts_catalogo`
-//! controlla che ci siano.
+//! Le schede e i gruppi ([`SCHEDE`]) sono quelli della barra dei fogli della
+//! shell (`apps/client/src/editors/grid/ribbon/tabs.ts`), più quelli che ci
+//! sono soltanto nel menu: il test `ts_catalogo` controlla gli uni e il posto
+//! dei comandi che la barra mostra; il test `effetto` fa girare ogni comando
+//! che non cambia la cartella e guarda che davvero non la cambi.
 
-use fub_motori::{importa, Adattamento, ComandoFub, Mancanza, Posto, SpecMotore, Tipo};
+use fub_motori::{
+    importa, Adattamento, ComandoFub, Effetto, Gruppo, Mancanza, Posto, Scheda, SpecMotore, Tipo,
+};
 use gridcraft_engine::{command_specs, find_command, CommandSpec};
 
-use crate::commands::{is_composed_command, not_served_entries, served, why_not_served};
+use crate::commands::{
+    edits, is_composed_command, not_served_entries, served, why_not_served, REDO, UNDO,
+};
 
 /// Lo spazio dei comandi della cartella.
 pub const SPAZIO: &str = "fogli";
 
-const fn barra(scheda: &'static str, gruppo: &'static str) -> Posto {
-    Posto::Barra {
-        scheda,
-        gruppo: Some(gruppo),
-    }
+const fn posto(scheda: &'static str, gruppo: &'static str) -> Posto {
+    Posto { scheda, gruppo }
 }
 
-const fn scheda(scheda: &'static str) -> Posto {
-    Posto::Barra {
-        scheda,
-        gruppo: None,
-    }
+/// Un gruppo della barra dei fogli, che il menu ripete.
+const fn gruppo(id: &'static str) -> Gruppo {
+    Gruppo { id, solo: false }
 }
 
-const TAVOLOZZA: Posto = Posto::Tavolozza;
+/// Un gruppo soltanto del menu, per i comandi che la barra non ha.
+const fn solo(id: &'static str) -> Gruppo {
+    Gruppo { id, solo: true }
+}
 
-/// Ogni percorso del menu di GridCraft dei comandi serviti, con il suo
-/// posto nella barra dei fogli. Le schede contestuali di GridCraft vanno in
-/// quelle di Fub (`chart`, `table`, `object`); quelle che Fub non ha (le
-/// tabelle pivot, il disegno a mano, il menu «File» ed «Edit» di GridCraft)
-/// restano nella tavolozza.
+/// Le schede e i gruppi del menu «Comandi» dei fogli, nell'ordine del menu.
+/// Quelli che non sono `solo` sono le schede e i gruppi della barra dei
+/// fogli (`apps/client/src/editors/grid/ribbon/tabs.ts`, il test
+/// `ts_catalogo` lo controlla); quelli `solo` ci sono soltanto nel menu, per
+/// i comandi che la barra non ha. Le schede con un `contesto` compaiono
+/// quando la selezione è una tabella, un grafico, un oggetto o una tabella
+/// pivot.
+pub const SCHEDE: &[Scheda] = &[
+    Scheda {
+        id: "file",
+        solo: true,
+        contesto: None,
+        gruppi: &[solo("info")],
+    },
+    Scheda {
+        id: "home",
+        solo: false,
+        contesto: None,
+        gruppi: &[
+            solo("undo"),
+            gruppo("font"),
+            gruppo("alignment"),
+            gruppo("number"),
+            gruppo("styles"),
+            gruppo("cells"),
+            gruppo("editing"),
+            solo("selection"),
+        ],
+    },
+    Scheda {
+        id: "insert",
+        solo: false,
+        contesto: None,
+        gruppi: &[
+            gruppo("tables"),
+            gruppo("illustrations"),
+            gruppo("charts"),
+            solo("sparklines"),
+            solo("filters"),
+            gruppo("controls"),
+            gruppo("symbols"),
+            gruppo("links"),
+            gruppo("text"),
+        ],
+    },
+    Scheda {
+        id: "draw",
+        solo: true,
+        contesto: None,
+        gruppi: &[solo("pen")],
+    },
+    Scheda {
+        id: "page",
+        solo: false,
+        contesto: None,
+        gruppi: &[
+            gruppo("themes"),
+            gruppo("setup"),
+            solo("scale"),
+            gruppo("print"),
+            gruppo("options"),
+        ],
+    },
+    Scheda {
+        id: "formulas",
+        solo: false,
+        contesto: None,
+        gruppi: &[
+            gruppo("library"),
+            gruppo("names"),
+            gruppo("auditing"),
+            gruppo("calculation"),
+        ],
+    },
+    Scheda {
+        id: "data",
+        solo: false,
+        contesto: None,
+        gruppi: &[
+            solo("get"),
+            solo("queries"),
+            gruppo("sort"),
+            solo("slicers"),
+            gruppo("tools"),
+            gruppo("forecast"),
+            gruppo("outline"),
+            solo("analysis"),
+        ],
+    },
+    Scheda {
+        id: "review",
+        solo: false,
+        contesto: None,
+        gruppi: &[
+            solo("proofing"),
+            solo("accessibility"),
+            gruppo("comments"),
+            gruppo("notes"),
+            gruppo("protect"),
+        ],
+    },
+    Scheda {
+        id: "view",
+        solo: false,
+        contesto: None,
+        gruppi: &[
+            gruppo("views"),
+            gruppo("show"),
+            gruppo("zoom"),
+            gruppo("window"),
+        ],
+    },
+    Scheda {
+        id: "table",
+        solo: false,
+        contesto: Some("table"),
+        gruppi: &[
+            gruppo("properties"),
+            gruppo("tools"),
+            gruppo("options"),
+            gruppo("styles"),
+        ],
+    },
+    Scheda {
+        id: "chart",
+        solo: false,
+        contesto: Some("chart"),
+        gruppi: &[
+            gruppo("layouts"),
+            gruppo("styles"),
+            gruppo("data"),
+            gruppo("type"),
+            solo("location"),
+        ],
+    },
+    Scheda {
+        id: "object",
+        solo: false,
+        contesto: Some("object"),
+        gruppi: &[solo("selection"), gruppo("shape_styles"), gruppo("arrange")],
+    },
+    Scheda {
+        id: "pivot",
+        solo: true,
+        contesto: Some("pivot"),
+        gruppi: &[solo("tables"), solo("fields"), solo("layout")],
+    },
+];
+
+/// Ogni percorso del menu di GridCraft dei comandi serviti, con il suo posto
+/// nel menu dei fogli: il gruppo dove la barra mostra i comandi di quel
+/// percorso, o quello dove il menu mette i comandi che la barra non ha.
 const POSTI: &[(&[&str], Posto)] = &[
-    (&["Chart Design"], scheda("chart")),
+    (&["Chart Design"], posto("chart", "layouts")),
     (
         &["Chart Design", "Chart Layouts"],
-        barra("chart", "layouts"),
+        posto("chart", "layouts"),
     ),
-    (&["Chart Design", "Chart Styles"], barra("chart", "styles")),
-    (&["Chart Design", "Data"], barra("chart", "data")),
-    (&["Chart Design", "Location"], scheda("chart")),
-    (&["Chart Design", "Type"], barra("chart", "type")),
-    (&["Data", "Analysis"], scheda("data")),
-    (&["Data", "Data Tools"], barra("data", "tools")),
+    (&["Chart Design", "Chart Styles"], posto("chart", "styles")),
+    (&["Chart Design", "Data"], posto("chart", "data")),
+    (&["Chart Design", "Location"], posto("chart", "location")),
+    (&["Chart Design", "Type"], posto("chart", "type")),
+    (&["Data", "Analysis"], posto("data", "analysis")),
+    (&["Data", "Data Tools"], posto("data", "tools")),
     (
         &["Data", "Data Tools", "Data Validation"],
-        barra("data", "tools"),
+        posto("data", "tools"),
     ),
-    (&["Data", "Forecast"], barra("data", "forecast")),
+    (&["Data", "Forecast"], posto("data", "forecast")),
     (
         &["Data", "Forecast", "What-If Analysis"],
-        barra("data", "forecast"),
+        posto("data", "forecast"),
     ),
-    (&["Data", "Get & Transform Data"], scheda("data")),
-    (&["Data", "Outline"], barra("data", "outline")),
-    (&["Data", "Queries & Connections"], scheda("data")),
-    (&["Data", "Sort & Filter"], barra("data", "sort")),
-    (&["Draw", "Convert"], TAVOLOZZA),
-    (&["Edit"], TAVOLOZZA),
-    (&["File"], TAVOLOZZA),
-    (&["File", "Export"], barra("page", "print")),
-    (&["Format", "Current Selection"], scheda("object")),
-    (&["Format", "Shape Styles"], barra("object", "shape_styles")),
+    (&["Data", "Get & Transform Data"], posto("data", "get")),
+    (&["Data", "Outline"], posto("data", "outline")),
+    (&["Data", "Queries & Connections"], posto("data", "queries")),
+    (&["Data", "Sort & Filter"], posto("data", "sort")),
+    (&["Draw", "Convert"], posto("draw", "pen")),
+    (&["Edit"], posto("home", "undo")),
+    (&["File"], posto("file", "info")),
+    (&["File", "Export"], posto("page", "print")),
+    (
+        &["Format", "Current Selection"],
+        posto("object", "selection"),
+    ),
+    (&["Format", "Shape Styles"], posto("object", "shape_styles")),
     (
         &["Formulas", "Calculation"],
-        barra("formulas", "calculation"),
+        posto("formulas", "calculation"),
     ),
-    (&["Formulas", "Defined Names"], barra("formulas", "names")),
+    (&["Formulas", "Defined Names"], posto("formulas", "names")),
     (
         &["Formulas", "Formula Auditing"],
-        barra("formulas", "auditing"),
+        posto("formulas", "auditing"),
     ),
     (
         &["Formulas", "Function Library"],
-        barra("formulas", "library"),
+        posto("formulas", "library"),
     ),
-    (&["Home", "Alignment"], barra("home", "alignment")),
-    (&["Home", "Cells", "Delete"], barra("home", "cells")),
-    (&["Home", "Cells", "Format"], barra("home", "cells")),
+    (&["Home", "Alignment"], posto("home", "alignment")),
+    (&["Home", "Cells", "Delete"], posto("home", "cells")),
+    (&["Home", "Cells", "Format"], posto("home", "cells")),
     (
         &["Home", "Cells", "Format", "Hide & Unhide"],
-        barra("home", "cells"),
+        posto("home", "cells"),
     ),
-    (&["Home", "Cells", "Insert"], barra("home", "cells")),
-    (&["Home", "Editing", "Clear"], barra("home", "editing")),
-    (&["Home", "Editing", "Fill"], barra("home", "editing")),
+    (&["Home", "Cells", "Insert"], posto("home", "cells")),
+    (&["Home", "Editing", "Clear"], posto("home", "editing")),
+    (&["Home", "Editing", "Fill"], posto("home", "editing")),
     (
         &["Home", "Editing", "Find & Select"],
-        barra("home", "editing"),
+        posto("home", "editing"),
     ),
-    (&["Home", "Font"], barra("home", "font")),
-    (&["Home", "Number"], barra("home", "number")),
-    (&["Home", "Styles"], barra("home", "styles")),
+    (&["Home", "Font"], posto("home", "font")),
+    (&["Home", "Number"], posto("home", "number")),
+    (&["Home", "Styles"], posto("home", "styles")),
     (
         &["Home", "Styles", "Conditional Formatting"],
-        barra("home", "styles"),
+        posto("home", "styles"),
     ),
-    (&["Insert", "Cell Controls"], barra("insert", "controls")),
-    (&["Insert", "Charts"], barra("insert", "charts")),
-    (&["Insert", "Filters"], scheda("insert")),
+    (&["Insert", "Cell Controls"], posto("insert", "controls")),
+    (&["Insert", "Charts"], posto("insert", "charts")),
+    (&["Insert", "Filters"], posto("insert", "filters")),
     (
         &["Insert", "Illustrations"],
-        barra("insert", "illustrations"),
+        posto("insert", "illustrations"),
     ),
-    (&["Insert", "Links"], barra("insert", "links")),
-    (&["Insert", "Sparklines"], scheda("insert")),
-    (&["Insert", "Symbols"], barra("insert", "symbols")),
-    (&["Insert", "Tables"], barra("insert", "tables")),
-    (&["Insert", "Text"], barra("insert", "text")),
-    (&["Page Layout", "Arrange"], barra("object", "arrange")),
-    (&["Page Layout", "Page Setup"], barra("page", "setup")),
+    (&["Insert", "Links"], posto("insert", "links")),
+    (&["Insert", "Sparklines"], posto("insert", "sparklines")),
+    (&["Insert", "Symbols"], posto("insert", "symbols")),
+    (&["Insert", "Tables"], posto("insert", "tables")),
+    (&["Insert", "Text"], posto("insert", "text")),
+    (&["Page Layout", "Arrange"], posto("object", "arrange")),
+    (&["Page Layout", "Page Setup"], posto("page", "setup")),
     (
         &["Page Layout", "Page Setup", "Print Area"],
-        barra("page", "setup"),
+        posto("page", "setup"),
     ),
-    (&["Page Layout", "Scale to Fit"], scheda("page")),
-    (&["Page Layout", "Sheet Options"], barra("page", "options")),
-    (&["Page Layout", "Themes"], barra("page", "themes")),
-    (&["PivotTable Analyze", "Actions"], TAVOLOZZA),
-    (&["PivotTable Analyze", "Active Field"], TAVOLOZZA),
-    (&["PivotTable Analyze", "Calculations"], TAVOLOZZA),
-    (&["PivotTable Analyze", "Data"], TAVOLOZZA),
-    (&["PivotTable Analyze", "Group"], TAVOLOZZA),
-    (&["PivotTable Analyze", "Show"], TAVOLOZZA),
-    (&["PivotTable Design", "Layout"], TAVOLOZZA),
-    (&["PivotTable Design", "PivotTable Styles"], TAVOLOZZA),
-    (&["Review", "Accessibility"], scheda("review")),
-    (&["Review", "Comments"], barra("review", "comments")),
-    (&["Review", "Notes"], barra("review", "notes")),
-    (&["Review", "Proofing"], scheda("review")),
-    (&["Review", "Protect"], barra("review", "protect")),
+    (&["Page Layout", "Scale to Fit"], posto("page", "scale")),
+    (&["Page Layout", "Sheet Options"], posto("page", "options")),
+    (&["Page Layout", "Themes"], posto("page", "themes")),
+    (&["PivotTable Analyze", "Actions"], posto("pivot", "tables")),
+    (
+        &["PivotTable Analyze", "Active Field"],
+        posto("pivot", "fields"),
+    ),
+    (
+        &["PivotTable Analyze", "Calculations"],
+        posto("pivot", "fields"),
+    ),
+    (&["PivotTable Analyze", "Data"], posto("pivot", "tables")),
+    (&["PivotTable Analyze", "Group"], posto("pivot", "fields")),
+    (&["PivotTable Analyze", "Show"], posto("pivot", "fields")),
+    (&["PivotTable Design", "Layout"], posto("pivot", "layout")),
+    (
+        &["PivotTable Design", "PivotTable Styles"],
+        posto("pivot", "tables"),
+    ),
+    (
+        &["Review", "Accessibility"],
+        posto("review", "accessibility"),
+    ),
+    (&["Review", "Comments"], posto("review", "comments")),
+    (&["Review", "Notes"], posto("review", "notes")),
+    (&["Review", "Proofing"], posto("review", "proofing")),
+    (&["Review", "Protect"], posto("review", "protect")),
     (
         &["Table Design", "Properties"],
-        barra("table", "properties"),
+        posto("table", "properties"),
     ),
-    (&["Table Design", "Tools"], barra("table", "tools")),
-    (&["Table", "Properties"], barra("table", "properties")),
-    (&["Table", "Table Style Options"], barra("table", "options")),
-    (&["Table", "Table Styles"], barra("table", "styles")),
-    (&["Table", "Tools"], barra("table", "tools")),
-    (&["View", "Show"], barra("view", "show")),
-    (&["View", "Window"], barra("view", "window")),
-    (&["View", "Window", "Freeze Panes"], barra("view", "window")),
-    (&["View", "Workbook Views"], barra("view", "views")),
-    (&["View", "Zoom"], barra("view", "zoom")),
+    (&["Table Design", "Tools"], posto("table", "tools")),
+    (&["Table", "Properties"], posto("table", "properties")),
+    (&["Table", "Table Style Options"], posto("table", "options")),
+    (&["Table", "Table Styles"], posto("table", "styles")),
+    (&["Table", "Tools"], posto("table", "tools")),
+    (&["View", "Show"], posto("page", "options")),
+    (&["View", "Window"], posto("view", "window")),
+    (&["View", "Window", "Freeze Panes"], posto("view", "window")),
+    (&["View", "Workbook Views"], posto("view", "views")),
+    (&["View", "Zoom"], posto("view", "zoom")),
 ];
+
+/// Il posto di un comando preciso, che vale prima del suo percorso.
+const POSTI_DEL_COMANDO: &[(&str, Posto)] = &[
+    // I comandi senza un menu in GridCraft: una riga per id.
+    ("document.inspect", posto("file", "info")),
+    ("home.shrinkToFit", posto("home", "alignment")),
+    ("sheet.activate", posto("home", "cells")),
+    ("sheet.moveColumns", posto("home", "cells")),
+    ("sheet.next", posto("home", "cells")),
+    ("sheet.previous", posto("home", "cells")),
+    ("cell.get", posto("home", "editing")),
+    ("cell.set", posto("home", "editing")),
+    ("edit.autoFill", posto("home", "editing")),
+    ("range.fill", posto("home", "editing")),
+    ("range.setValues", posto("home", "editing")),
+    ("sheet.read", posto("home", "editing")),
+    ("selection.column", posto("home", "selection")),
+    ("selection.currentRegion", posto("home", "selection")),
+    ("selection.move", posto("home", "selection")),
+    ("selection.next", posto("home", "selection")),
+    ("selection.row", posto("home", "selection")),
+    ("selection.set", posto("home", "selection")),
+    ("selection.stats", posto("home", "selection")),
+    ("insert.chartRecommendations", posto("insert", "charts")),
+    ("cell.toggleCheckbox", posto("insert", "controls")),
+    ("draw.stroke", posto("draw", "pen")),
+    ("formulas.functions", posto("formulas", "library")),
+    ("formulas.deleteName", posto("formulas", "names")),
+    ("formulas.convertToNumber", posto("formulas", "auditing")),
+    ("formulas.evaluate", posto("formulas", "calculation")),
+    ("data.filterBy", posto("data", "sort")),
+    ("slicer.clear", posto("data", "slicers")),
+    ("slicer.delete", posto("data", "slicers")),
+    ("slicer.selectAll", posto("data", "slicers")),
+    ("slicer.toggle", posto("data", "slicers")),
+    ("data.validate", posto("data", "tools")),
+    ("data.scenarioAdd", posto("data", "forecast")),
+    ("data.scenarioDelete", posto("data", "forecast")),
+    ("data.scenarioShow", posto("data", "forecast")),
+    ("data.scenarioSummary", posto("data", "forecast")),
+    ("data.showLevels", posto("data", "outline")),
+    ("data.solverReport", posto("data", "analysis")),
+    ("review.changeSpelling", posto("review", "proofing")),
+    ("review.replyComment", posto("review", "comments")),
+    ("review.resolveComment", posto("review", "comments")),
+    ("view.showObjects", posto("view", "show")),
+    ("view.showZeros", posto("view", "show")),
+    ("table.totalFunction", posto("table", "options")),
+    ("shape.setText", posto("object", "selection")),
+    ("chart.delete", posto("object", "arrange")),
+    ("object.delete", posto("object", "arrange")),
+    ("object.move", posto("object", "arrange")),
+    ("object.setAnchorMode", posto("object", "arrange")),
+    ("pivot.list", posto("pivot", "tables")),
+    ("pivot.addField", posto("pivot", "fields")),
+    ("pivot.fields", posto("pivot", "fields")),
+    ("pivot.filter", posto("pivot", "fields")),
+    ("pivot.moveField", posto("pivot", "fields")),
+    ("pivot.removeField", posto("pivot", "fields")),
+    ("pivot.sort", posto("pivot", "fields")),
+    // I comandi che la barra mostra in un gruppo diverso da quello del loro
+    // percorso: se la barra li mostra in più posti, il primo nell'ordine
+    // della barra (il menu li mostra in tutti).
+    ("home.formatCells", posto("home", "font")),
+    ("review.protectSheet", posto("home", "cells")),
+    ("data.clearFilter", posto("home", "editing")),
+    ("data.filter", posto("home", "editing")),
+    ("data.reapply", posto("home", "editing")),
+    ("data.sort", posto("home", "editing")),
+    ("data.sortAscending", posto("home", "editing")),
+    ("data.sortDescending", posto("home", "editing")),
+    ("formulas.autoSum", posto("home", "editing")),
+    ("edit.selectAll", posto("home", "selection")),
+    ("file.printPreview", posto("page", "print")),
+];
+
+/// I comandi che cambiano la cartella anche se GridCraft non li segna
+/// annullabili: entrano nel giornale e il file salvato li porta. Un comando
+/// che la regola direbbe «mostra» o «legge» e che pure scrive nel giornale va
+/// qui, con il perché; i test di `tests/effetto.rs` lo provano.
+const CAMBIANO: &[(&str, &str)] = &[
+    ("view.normal", "la vista del foglio si salva con il file"),
+    (
+        "view.pageLayout",
+        "la vista del foglio si salva con il file",
+    ),
+    (
+        "view.pageBreakPreview",
+        "la vista del foglio si salva con il file",
+    ),
+    (
+        "view.split",
+        "la divisione entra nel giornale: GridCraft la tiene come riquadri bloccati",
+    ),
+    (
+        "view.customViews",
+        "salvare o togliere una vista personalizzata entra nel giornale",
+    ),
+    (
+        "formulas.watchWindow",
+        "aggiungere o togliere una cella osservata entra nel giornale",
+    ),
+];
+
+/// L'effetto del comando sulla cartella. `Cambia` se il comando cambia la
+/// cartella (annullabile o composto, [`crate::commands`]), se è annulla o
+/// ripeti, o se è in [`CAMBIANO`]; `Legge` se GridCraft non lo scrive nel
+/// giornale (una domanda al motore); `Mostra` per gli altri, che cambiano
+/// soltanto la selezione, il foglio attivo o la vista.
+fn effetto(comando: &CommandSpec) -> Effetto {
+    if comando.id == UNDO
+        || comando.id == REDO
+        || edits(comando.id)
+        || CAMBIANO.iter().any(|(id, _)| *id == comando.id)
+    {
+        Effetto::Cambia
+    } else if !comando.journal {
+        Effetto::Legge
+    } else {
+        Effetto::Mostra
+    }
+}
 
 /// I nomi che gli schemi di GridCraft usano senza valore, con il loro tipo:
 /// il tipo viene da come il comando legge il parametro.
@@ -284,9 +574,11 @@ const NOMI_DEL_COMANDO: &[(&str, &[(&str, Tipo)])] = &[
     ),
 ];
 
-/// Ciò che l'adattatore sa di GridCraft: i posti e il lessico.
+/// Ciò che l'adattatore sa di GridCraft: le schede, i posti e il lessico.
 pub const ADATTAMENTO: Adattamento<'static> = Adattamento {
+    schede: SCHEDE,
     posti: POSTI,
+    posti_del_comando: POSTI_DEL_COMANDO,
     nomi: NOMI,
     nomi_del_comando: NOMI_DEL_COMANDO,
 };
@@ -297,6 +589,7 @@ fn spec(comando: &CommandSpec) -> SpecMotore {
         etichetta: comando.label.to_owned(),
         menu: comando.menu.iter().map(|voce| (*voce).to_owned()).collect(),
         parametri: comando.params.to_owned(),
+        effetto: effetto(comando),
     }
 }
 

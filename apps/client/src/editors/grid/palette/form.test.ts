@@ -14,7 +14,8 @@ const COMMAND: CatalogCommand = {
   id: "fogli.prova.comando",
   titolo: "fogli.cmd.prova.comando",
   etichetta: "Prova",
-  posto: null,
+  posto: { scheda: "home", gruppo: "cells" },
+  effetto: "cambia",
   campi: [
     field("range", "intervallo"),
     field("cell", "cella", true),

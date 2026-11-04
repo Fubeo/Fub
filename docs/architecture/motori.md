@@ -340,10 +340,17 @@ comando:
 - l'id in Fub è `<spazio>.<id del motore>` (`fogli.home.bold`), il titolo è la
   chiave `<spazio>.cmd.<id del motore>` dei testi di Fub, e se il comando è
   abilitato lo dice il motore (`Delega::Motore`);
-- il posto viene dalla tabella `Adattamento::posti` dell'adattatore, che lega
-  un percorso intero dei menu a una scheda e un gruppo della barra
-  (`Posto::Barra`) o alla sola tavolozza (`Posto::Tavolozza`); un comando senza
-  menu va nella tavolozza;
+- il posto (`Posto { scheda, gruppo }`) è sempre pieno: viene dalla riga del
+  comando in `Adattamento::posti_del_comando`, se c'è, se no dalla tabella
+  `Adattamento::posti`, che lega un percorso intero dei menu a una scheda e un
+  gruppo. Ogni posto nomina una scheda e un gruppo dell'elenco
+  `Adattamento::schede` (`Scheda` e `Gruppo`), nell'ordine del menu: `solo`
+  segna una scheda o un gruppo che c'è soltanto nel menu e non nella barra, e
+  `contesto` la scheda contestuale (per i fogli `table`, `chart`, `object` e
+  `pivot`). Un comando senza menu nel motore ha bisogno di una riga per id;
+- l'effetto (`Effetto`) lo decide l'adattatore: `Cambia` se il comando cambia
+  la cartella, `Legge` se chiede soltanto qualcosa al motore, `Mostra` se
+  cambia soltanto la selezione, il foglio attivo o la vista;
 - i parametri diventano un `Modulo` di `Campo` tipati (testo, numero, sì/no,
   cella, intervallo, foglio, scelta, …): i nomi nudi prendono il tipo dal
   lessico dell'adattatore (`Adattamento::nomi`), che un comando può
@@ -351,11 +358,29 @@ comando:
 
 `importa` non si ferma al primo problema: restituisce tutte le `Mancanza`
 (id doppio o non valido, etichetta vuota, percorso che la tabella non conosce,
-schema che non si legge). `verifica_copertura(motore, catalogo, perche)`
-confronta l'elenco intero del motore con il catalogo: ogni comando del motore
-o è nel catalogo o ha un perché, non vuoto, per cui Fub non lo serve; nessun
-comando è tutte e due le cose, e il catalogo non ha comandi che il motore non
-ha. Se va bene dà i conti (`Copertura`).
+comando senza menu e senza riga, posto fuori dall'elenco, scheda o gruppo
+doppi, scheda senza gruppi, schema che non si legge).
+`verifica_copertura(motore, catalogo, schede, perche)` confronta l'elenco
+intero del motore con il catalogo: ogni comando del motore o è nel catalogo o
+ha un perché, non vuoto, per cui Fub non lo serve; nessun comando è tutte e
+due le cose, il catalogo non ha comandi che il motore non ha, e ogni gruppo
+dell'elenco ha almeno un comando. Se va bene dà i conti (`Copertura`: i
+comandi, i non serviti e i comandi per scheda).
+
+Nei fogli le schede e i gruppi sono quelli del menu dei comandi: le schede
+della barra più `file`, `draw` e `pivot`. Un comando che la barra
+(`apps/client/src/editors/grid/ribbon/tabs.ts`) mostra ha il posto dove la
+barra lo mostra per primo, e `tests/ts_catalogo.rs` lo controlla. L'effetto
+viene da `CommandSpec`: `Cambia` per un comando annullabile o composto
+(`commands::edits`), per annulla e ripeti e per quelli della lista `CAMBIANO`
+(le viste del foglio, la divisione, le viste personalizzate, le celle
+osservate: GridCraft li scrive nel giornale senza farli annullabili); `Legge`
+per un comando che GridCraft non scrive nel giornale; `Mostra` per gli altri.
+`tests/effetto.rs` dà ogni comando `Legge` e `Mostra`, con i parametri di
+partenza dello schema, a una cartella con dati, formule, un nome, uno
+scenario, una tabella pivot, un grafico e un commento, e controlla che vada a
+buon fine senza scrivere nel giornale; i comandi di `CAMBIANO` invece ci
+scrivono.
 
 L'adattatore dei fogli tiene la sua tabella in
 `crates/fub-format-xlsx/src/catalogo.rs` e i perché dei comandi non serviti in
@@ -394,9 +419,13 @@ mano: si rigenera con
 - `crates/fub-motori/tests/copertura.rs`: `importa` e `verifica_copertura` su
   un motore finto, con ogni `Mancanza` e i conti.
 - `crates/fub-format-xlsx/tests/copertura.rs`: ogni comando di GridCraft è
-  nel catalogo o ha il suo perché; un comando nuovo senza posto né perché fa
-  fallire il test. `tests/ts_catalogo.rs`: il file della shell non è stantio
-  e le sue schede e i suoi gruppi sono quelli della barra.
+  nel catalogo o ha il suo perché; ogni comando ha scheda e gruppo
+  dell'elenco e ogni gruppo ha un comando; un comando nuovo senza posto né
+  perché fa fallire il test. `tests/ts_catalogo.rs`: il file della shell non è
+  stantio, le sue schede e i suoi gruppi sono quelli della barra, e un comando
+  della barra ha il posto dove la barra lo mostra. `tests/effetto.rs`: i
+  comandi `Legge` e `Mostra` non scrivono nel giornale, quelli di `CAMBIANO`
+  sì.
 - `crates/fub-host/tests/engines_warm.rs`: scaldare costruisce il motore dei
   documenti senza aprire file, e una seconda volta non lo ricostruisce;
   un'estensione senza motore o senza vault aperto non fa niente; con il
