@@ -2759,7 +2759,7 @@ src/panels` passa; le foto del banco somigliano al prototipo, in chiaro e in
 scuro.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/panels/explorer-craft.test.ts
-Stato: [~] in corso · coder · base 977dc88b
+Stato: [x] fatto · 5c6f0a7c..ae0bc4d7 · check --rapido 18/19 sull'integrazione: rosso solo Vitest per scene.test «ci sono tutte» (baseline dal runner in T32) e grid/engine (instabile noto), verde rilanciato da solo con explorer-craft (92/92)
 
 ## T27 · I RAW: l'anteprima dentro il file
 
@@ -3109,7 +3109,7 @@ Fatto quando: la PR #299 è pronta e ogni job è verde (un rosso che c'è
 uguale su `main` è scritto, col run di `main`); la revisione è scritta nella
 PR; nessun task resta aperto; l'utente ha detto sì al merge.
 Prova: gh pr checks 299
-Stato: [ ] da fare
+Stato: [~] in corso · orchestratore · CI completa e revisione
 
 ## Non verificato stanotte
 

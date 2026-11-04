@@ -59,6 +59,16 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · N7 · T26 è entrato con questi scarti presi da me: una nota
+  con un'icona scelta da chi scrive tiene l'icona e non prende la miniatura
+  (`data-own-icon`); le miniature compaiono solo se `craftServed()`, cioè
+  col componente acceso; la miniatura resta in memoria finché la riga è
+  nell'albero (niente richiesta di nuovo a ogni ridisegno); l'osservatore
+  guarda 64 px oltre la vista; il decoder base64 è locale in `state/tree-
+  thumbnails.ts` perché quello di `figure.ts` è privato; tocca anche
+  `bench/fake-ipc.ts` (`?albero=`), `bench/raw-fixture.ts` (un `export`) e i
+  derivati del tema con l'hook `tree-thumb`. Un vault con soli XMP nascosti
+  non mostra il richiamo del vault vuoto.
 - 2026-11-04 · N7 · T31 è entrato con quattro scarti dal piano, presi da me:
   tocca anche `ui/link-preview.ts` e `markdown/mount.ts`
   (`hydrateVaultMedia` riceve un sesto parametro `open`), perché la figura
