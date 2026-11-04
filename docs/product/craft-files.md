@@ -51,7 +51,22 @@ con ⌘S o sempre se nelle sue preferenze è accesa la scrittura automatica
 degli XMP: Fub non li cambia.
 
 Nell'albero dei file un disegno o un progetto ha l'icona dei disegni, un
-`.pcraft` o un XMP quella delle foto.
+`.pcraft`, un XMP o un RAW quella delle foto. Con «Miniature nell'albero»
+acceso (è spento all'inizio, nel gruppo «App esterne» delle impostazioni), un
+file Craft, un RAW, un PDF o un documento di Word mostra al posto dell'icona
+la piccola anteprima che il file ha già, ritagliata alla misura dell'icona; un
+RAW la mostra dritta, secondo l'orientamento della foto. L'albero la chiede
+soltanto per le righe in vista, poche alla volta, e non avvia mai un'app: un
+file senza anteprima tiene la sua icona, e una nota con un'icona scelta tiene
+quella. Un nome lungo si taglia, la miniatura no. Con il componente «File
+delle app Craft» spento non ci sono miniature.
+
+«Mostra i file XMP nell'albero» (acceso all'inizio) spento, gli XMP spariscono
+dall'albero e basta: la ricerca, il passaggio veloce, i collegamenti e i tag
+li trovano ancora, la scheda della foto mostra i loro dati, e una cartella che
+ha soltanto XMP resta nell'albero. L'interruttore vale anche col componente
+spento, perché è dell'albero. Un cambio dei due interruttori ridisegna
+l'albero aperto.
 
 ## Le anteprime fatte dalle app
 
