@@ -59,6 +59,10 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · scrittoio-2 · il menu delle modalità è il B, la spunta blu a
+  destra con le scorciatoie in pastiglie (T10 porta il blocco `menu-b` in
+  `skin/menus.css`) · parole dell'utente: «al momento preferisco la spunta
+  blu a destra».
 - 2026-11-04 · scrittoio-2 · la barra dei fogli diventa lo standard in `kit/` e
   `skin/kit.css` (`kit-bar`, `kit-ribbon`, `kit-rail`, `kit/toolbar-keys.ts`), e
   le baseline si rifanno una volta sola alla fine: T24 svuota `bench/baseline/`

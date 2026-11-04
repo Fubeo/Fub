@@ -13,7 +13,7 @@ Fuori scope:
 - la colonna degli strumenti del disegno, che è di K5 (qui c'è solo la proposta);
 - la WebView vera, Windows e macOS, che si vedono solo in CI.
 Assunzioni:
-- Valgono le risposte raccomandate (A) a D1–D9 e alle due scelte «da decidere guardando» (menu A, titolo 600), finché l'utente non dice altro.
+- Il menu delle modalità è il B, la spunta blu a destra (scelta dell'utente, 2026-11-04). Valgono le risposte raccomandate (A) a D1–D9 e il titolo a 600, finché l'utente non dice altro.
 - Valgono le «Decisioni già prese» del documento dell'utente, tranne l'eccezione di D2.
 - Si apre una PR bozza sola. T1 parte subito; nessun task grafico parte prima dell'OK al prototipo. Al massimo due task insieme.
 - Differenze volute dalla bozza dell'utente:
@@ -78,8 +78,9 @@ Nel prototipo le due varianti si accendono con le caselle in alto, oppure con
 `?menu=menu-b` e `?titolo=titolo-500`.
 
 1. Il menu delle modalità:
-   - A (raccomandata): il punto a sinistra e la scorciatoia scritta per esteso;
+   - A: il punto a sinistra e la scorciatoia scritta per esteso;
    - B: la spunta blu a destra e le scorciatoie in pastiglie, come nel mockup.
+   - Risposta (2026-11-04): B, «al momento preferisco la spunta blu a destra».
    - Il CSS di B è nel blocco `data-variante="menu-b"` e andrebbe in `skin/menus.css` (T10).
 2. Il peso del titolo della nota:
    - 600 (raccomandato), pieno come nel mockup;
@@ -257,7 +258,7 @@ Le righe sono quelle di `PLAN-ui/scrittoio-2.html` al momento della consegna.
 | telefono: «Si scrive» (2077–2081) | `mobile.css` | T4 |
 | telefono: la pastiglia H1 nascosta (2082–2089) | `mobile.css` | T11 |
 | 18 px e 58 caratteri (2090–2100) | `theme/scrittoio/series.ts`, `recipe.ts`, `state/zoom.ts`, `crates/fub-host/src/settings.rs` | T11 |
-| variante `menu-b` (2101–2135), solo se scelta | `skin/menus.css` | T10 |
+| variante `menu-b` (2101–2135), scelta | `skin/menus.css` | T10 |
 | variante `titolo-500` (2136–2144), solo se scelta | `skin/document.css` | T11 |
 | icone delle modalità e del cassetto (2146–2157) | `apps/client/src/ui/icons.ts` | T2 |
 | figure monocrome (2158–2170) | `ui/icons.ts` | T14 |
@@ -562,7 +563,7 @@ Cosa fare:
 - Copiare i blocchi del prototipo nei loro file: `skin/graph.css` (righe 1949–1959), `skin/menus.css` (1960–1971), `skin/launcher.css` (1972–1981), `skin/settings.css` (2007–2033), `skin/welcome.css` (2034–2043).
 - Togliere le regole vecchie che mettono maiuscolo e spaziatura sulle stesse etichette, invece di scavalcarle.
 - Ogni classe dei blocchi è già un gancio del suo pezzo; se una manca, entra nell'anatomia.
-- Se l'utente sceglie il menu B («da decidere guardando»), il blocco `data-variante="menu-b"` (righe 2101–2135) va in `skin/menus.css` in questo task.
+- Il menu è il B (scelta dell'utente, 2026-11-04): il blocco `data-variante="menu-b"` (righe 2101–2135) va in `skin/menus.css` in questo task, senza il prefisso della variante.
 - `docs/`: nessuna pagina descrive queste etichette.
 Dal prototipo: le righe sopra; gli stati `impostazioni`, `componenti`, `grafo`, `zero` e `vuoto` (il benvenuto con «Vault recenti»).
 Casi limite: un'etichetta lunga in inglese; il contrasto alto; la densità compatta; le impostazioni a 700 px; i menu del tasto destro con un'intestazione; il pannello «/» con l'anteprima.
