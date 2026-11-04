@@ -195,29 +195,31 @@ struct Conn {
 
 impl Conn {
     /// Il loopback, prima IPv4 e poi IPv6: un'app può ascoltare su uno solo.
+    ///
+    /// Una connessione che non riesce è sempre [`ChannelError::Unreachable`],
+    /// anche quando scade: sul loopback un'app che ascolta accetta subito, e
+    /// Windows, davanti a una porta chiusa, ritenta per circa due secondi
+    /// invece di rifiutare, così la connessione scade dove Linux e macOS
+    /// dicono «rifiutata». [`ChannelError::TimedOut`] resta per un'app che ha
+    /// accettato e non risponde.
     fn connect(port: u16) -> Result<Conn, ChannelError> {
         let addrs = [
             SocketAddr::from((Ipv4Addr::LOCALHOST, port)),
             SocketAddr::from((Ipv6Addr::LOCALHOST, port)),
         ];
-        let mut failure = ChannelError::Unreachable;
         for addr in addrs {
-            match TcpStream::connect_timeout(&addr, CONNECT_TIME) {
-                Ok(stream) => {
-                    stream
-                        .set_write_timeout(Some(REPLY_TIME))
-                        .map_err(|_| ChannelError::Unreachable)?;
-                    // Le richieste sono piccole: partono subito.
-                    let _ = stream.set_nodelay(true);
-                    return Ok(Conn {
-                        reader: BufReader::new(stream),
-                    });
-                }
-                Err(error) if timed_out(&error) => failure = ChannelError::TimedOut,
-                Err(_) => {}
+            if let Ok(stream) = TcpStream::connect_timeout(&addr, CONNECT_TIME) {
+                stream
+                    .set_write_timeout(Some(REPLY_TIME))
+                    .map_err(|_| ChannelError::Unreachable)?;
+                // Le richieste sono piccole: partono subito.
+                let _ = stream.set_nodelay(true);
+                return Ok(Conn {
+                    reader: BufReader::new(stream),
+                });
             }
         }
-        Err(failure)
+        Err(ChannelError::Unreachable)
     }
 
     fn send(&mut self, line: &[u8]) -> Result<(), ChannelError> {
@@ -541,7 +543,14 @@ mod tests {
         let channel = Channel::new(port, Framing::Line).expect("canale");
         let started = Instant::now();
         assert_eq!(channel.open(&file()), Err(ChannelError::Unreachable));
-        assert!(started.elapsed() < CONNECT_TIME, "{:?}", started.elapsed());
+        // Linux e macOS rifiutano subito; Windows ritenta finché scade il
+        // tempo di connessione, una volta per indirizzo.
+        let bound = if cfg!(windows) {
+            CONNECT_TIME * 2 + Duration::from_secs(1)
+        } else {
+            CONNECT_TIME
+        };
+        assert!(started.elapsed() < bound, "{:?}", started.elapsed());
     }
 
     #[cfg(unix)]

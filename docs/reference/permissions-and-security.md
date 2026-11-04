@@ -254,8 +254,11 @@ autenticazione lo potrebbe usare qualunque programma della macchina, e un
 `match` esaustivo nel codice obbliga ogni autenticazione nuova a decidere.
 
 L'indirizzo è sempre il loopback, `127.0.0.1` e poi `::1`, costruito da Fub e
-mai risolto da un nome. La connessione aspetta al più 1 s, ogni risposta al
-più 2 s in tutto, anche se arriva un byte alla volta. Una richiesta è un
+mai risolto da un nome. La connessione aspetta al più 1 s per indirizzo, ogni
+risposta al più 2 s in tutto, anche se arriva un byte alla volta. Una
+connessione che non riesce, anche scadendo, vuol dire che nessuna app ascolta:
+sul loopback un'app accetta subito, e Windows davanti a una porta chiusa
+ritenta finché il tempo scade invece di rifiutare. Una richiesta è un
 oggetto JSON per riga: prima l'autenticazione, poi il comando che apre il
 file (`app.open`, o `ui.open` in JSON-RPC 2.0, dove la risposta deve ripetere
 l'`id`). Una risposta è al più 64 KiB; una più lunga, non JSON o con un altro
