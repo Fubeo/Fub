@@ -240,6 +240,35 @@ describe("la barra di un riquadro", () => {
     expect(document.activeElement).toBe(bold);
   });
 
+  it("← e → girano ai capi, Fine va all'ultimo, e i pulsanti spenti si saltano", async () => {
+    const fake = fakeActions(["markdown.bold", "markdown.italic", "markdown.table"]);
+    const { bar } = mount(surfaceWith(fake.actions));
+    bar.update(SPECS);
+    fake.set("markdown.italic", { enabled: false, active: false });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    const at = (id: string) => bar.element.querySelector<HTMLButtonElement>(`[data-command="${id}"]`)!;
+    const bold = at("markdown.bold");
+    const italic = at("markdown.italic");
+    const reachable = buttons(bar).filter((button) => !button.disabled && !button.closest("[hidden]"));
+    const last = reachable[reachable.length - 1]!;
+    expect(italic.disabled).toBe(true);
+    expect(reachable.filter((button) => button.tabIndex === 0)).toHaveLength(1);
+    const press = (on: HTMLElement, key: string) =>
+      on.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    bold.focus();
+    press(bold, "ArrowRight");
+    expect(document.activeElement, "lo spento si salta").not.toBe(italic);
+    expect(document.activeElement).toBe(reachable[reachable.indexOf(bold) + 1]);
+    press(document.activeElement as HTMLElement, "End");
+    expect(document.activeElement).toBe(last);
+    press(last, "ArrowRight");
+    expect(document.activeElement, "dopo l'ultimo si torna al primo").toBe(reachable[0]);
+    press(reachable[0]!, "ArrowLeft");
+    expect(document.activeElement, "prima del primo si va all'ultimo").toBe(last);
+    expect(last.tabIndex).toBe(0);
+    expect(reachable.filter((button) => button.tabIndex === 0)).toHaveLength(1);
+  });
+
   it("lo stile del paragrafo dice lo stile corrente e apre il menu dei titoli", () => {
     const fake = fakeActions(["markdown.paragraph", "markdown.heading.1", "markdown.heading.2"]);
     fake.set("markdown.heading.2", { enabled: true, active: true });

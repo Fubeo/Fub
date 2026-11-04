@@ -3641,6 +3641,20 @@ describe("la modalità di ogni famiglia di superfici", () => {
     expect(current.getAttribute("aria-expanded")).toBe("false");
   });
 
+  it("con due riquadri aperti, `shell.mode.source` cambia solo quello a fuoco", async () => {
+    await start(VAULT);
+    await twoPanes();
+    const modes = () => [...document.querySelectorAll<HTMLElement>(".pane")].map((pane) => pane.dataset.mode);
+    const focused = () => [...document.querySelectorAll<HTMLElement>(".pane")].findIndex((pane) => pane.classList.contains("focus"));
+    expect(modes()).toEqual(["live_preview", "live_preview"]);
+    expect(focused()).toBe(1);
+    const registry = await import("./ui/commands");
+    await registry.allCommands().find((entry) => entry.id === "shell.mode.source")!.run!();
+    await settle();
+    expect(modes()).toEqual(["live_preview", "source"]);
+    expect(focused()).toBe(1);
+  });
+
   it("una nota in Sorgente non fa aprire la tela seguente come JSON", async () => {
     await start({ ...VAULT, "lavagna.canvas": BOARD });
     const { openDocument } = await import("./panels/document");

@@ -19,6 +19,9 @@ const world = vi.hoisted(() => ({
   language: "it",
   tab: null as { k: string } | null,
   pane: undefined as unknown,
+  /// I riquadri per id, quando il test ne apre più d'uno.
+  panes: null as Map<string, unknown> | null,
+  layout: { focus: "p1" },
   zoomed: [] as number[],
   tooltips: new Map<Element, string>(),
 }));
@@ -42,7 +45,7 @@ vi.mock("../../../i18n/strings", () => ({
   },
 }));
 vi.mock("../../../state/document-controller", () => ({
-  paneOf: () => world.pane,
+  paneOf: (id: string) => (world.panes ? world.panes.get(id) : world.pane),
   selectedMode: (pane: { mode?: { label(): string } } | undefined) => pane?.mode,
 }));
 vi.mock("../../../state/document-session", () => ({
@@ -62,7 +65,7 @@ vi.mock("../../../state/kernel", () => ({
 }));
 vi.mock("../../../state/layout", () => ({
   activeTab: () => world.tab,
-  layout: { focus: "p1" },
+  layout: world.layout,
 }));
 vi.mock("../../../state/zoom", () => ({
   zoomBy: (delta: number) => {
@@ -120,6 +123,8 @@ beforeEach(() => {
   world.language = "it";
   world.tab = null;
   world.pane = undefined;
+  world.panes = null;
+  world.layout.focus = "p1";
   world.zoomed = [];
   world.tooltips.clear();
   state.vaultRoot = "/casa/vault";
@@ -260,6 +265,52 @@ describe("la modalità", () => {
     el("p1").dataset.mode = "source";
     await settle();
     expect(el("status-mode").textContent).toBe("Sorgente");
+  });
+
+  it("con due riquadri dice quella del riquadro a fuoco, e cambia quando il fuoco passa", () => {
+    world.tab = { k: "doc" };
+    world.panes = new Map([
+      ["p1", surface(4, "Live")],
+      ["p2", surface(3, "Sorgente")],
+    ]);
+    mountStatusBand(life);
+    expect(el("status-mode").textContent).toBe("Live");
+    world.layout.focus = "p2";
+    emit("layout");
+    expect(el("status-mode").textContent).toBe("Sorgente");
+    world.layout.focus = "p1";
+    emit("layout");
+    expect(el("status-mode").textContent).toBe("Live");
+  });
+
+  it("una superficie con una modalità sola, come un'immagine, non la dice", () => {
+    world.tab = { k: "doc" };
+    world.panes = new Map([
+      ["p1", surface(4, "Live")],
+      ["p2", surface(1, "Immagine")],
+    ]);
+    mountStatusBand(life);
+    expect(el("status-mode").hidden).toBe(false);
+    world.layout.focus = "p2";
+    emit("layout");
+    expect(el("status-mode").hidden).toBe(true);
+    expect(el("status-mode").textContent).toBe("");
+  });
+
+  it("il fuoco su un riquadro vuoto non dice niente, e tornato sulla nota la ridice", () => {
+    world.tab = { k: "doc" };
+    world.panes = new Map([["p1", surface(4, "Live")], ["p2", { surface: null }]]);
+    mountStatusBand(life);
+    expect(el("status-mode").textContent).toBe("Live");
+    world.layout.focus = "p2";
+    world.tab = null;
+    emit("layout");
+    expect(el("status-mode").hidden).toBe(true);
+    world.layout.focus = "p1";
+    world.tab = { k: "doc" };
+    emit("layout");
+    expect(el("status-mode").hidden).toBe(false);
+    expect(el("status-mode").textContent).toBe("Live");
   });
 });
 
