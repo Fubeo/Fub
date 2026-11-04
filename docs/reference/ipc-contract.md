@@ -175,6 +175,12 @@ La shell riceve forme per:
 Gli enum senza payload sono generati. Le union con payload mantengono un
 discriminante stabile.
 
+`BundleInfo.kind` dice la famiglia di un bundle: `component`, `theme` o
+`recipe`. Una ricetta non è un componente, e l'elenco dei componenti non la
+mostra. `KnownVault`, il record di `known_vaults`, porta `recipes_adopted`: id
+della ricetta → impronta del testo acceso su questa macchina. Il campo manca
+quando non c'è nessuna ricetta adottata, e chi legge lo tratta come vuoto.
+
 ## `u64`
 
 JSON usa numeri IEEE-754. Un `u64` che rappresenta identità, hash o revisione

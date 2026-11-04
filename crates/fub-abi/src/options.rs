@@ -422,6 +422,20 @@ pub mod permission {
     /// legittimamente volere l'uno senza l'altro — una macro che compone
     /// comandi altrui non scrive niente di suo, e un formattatore che riscrive
     /// una nota non ha motivo di invocare nessuno.
+    ///
+    /// Parametro: l'elenco degli id dei comandi che si possono invocare, come
+    /// l'allowlist di [`NETWORK`] per gli host. Le letture sono tre, e il
+    /// `Guard` del kernel è il solo posto che le applica:
+    ///
+    /// - assente, `true` o elenco vuoto: **qualunque** comando;
+    /// - elenco di sole stringhe: **quei** comandi, a confronto esatto (niente
+    ///   prefissi, niente `*`, niente spazi tolti);
+    /// - qualunque altro valore (una stringa, un numero, un oggetto, un elenco
+    ///   con una non-stringa): **nessun** comando, perché un parametro scritto
+    ///   male non deve aprire a tutto.
+    ///
+    /// Con un elenco anche l'annullamento è rifiutato: rigioca comandi che
+    /// l'elenco non nomina e che il `Guard` non vede.
     pub const RUN_COMMAND: &str = "fub:run-command";
     /// Chiamare i servizi offerti da altri plugin
     /// ([`HostServices::call_service`](crate::traits::HostServices::call_service)).

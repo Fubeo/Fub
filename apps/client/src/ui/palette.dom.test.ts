@@ -292,6 +292,64 @@ describe("il modulo proprio di un comando", () => {
   });
 });
 
+describe("la nota aperta nel modulo generico (D10)", () => {
+  function rename(): CommandSpec {
+    return {
+      ...command("note.rename", "Rinomina nota"),
+      params: [
+        { name: "doc", title: "Nota", description: "", kind: { kind: "document" }, required: true },
+        { name: "to", title: "Nuovo path", description: "", kind: { kind: "text" }, required: true },
+      ],
+    };
+  }
+
+  function field(overlay: HTMLElement, title: string): HTMLInputElement {
+    return [...overlay.querySelectorAll<HTMLInputElement>("form input")].find(
+      (input) => input.closest("label")?.querySelector(".palette-label")?.textContent?.startsWith(title),
+    )!;
+  }
+
+  afterEach(() => {
+    state.currentDoc = null;
+  });
+
+  it("scelto dalla palette, un comando con `doc` si apre col campo pieno e modificabile", async () => {
+    state.currentDoc = "Progetti/Piano.md";
+    const { overlay, input } = await openPalette([rename()]);
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    const doc = field(overlay, "Nota");
+    expect(doc.value).toBe("Progetti/Piano.md");
+    expect(doc.disabled).toBe(false);
+    expect(doc.readOnly).toBe(false);
+    expect(field(overlay, "Nuovo path").value).toBe("");
+
+    doc.value = "Altro.md";
+    field(overlay, "Nuovo path").value = "Archivio/Altro.md";
+    overlay.querySelector<HTMLFormElement>("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    await vi.waitFor(() =>
+      expect(fake.invokeCommand).toHaveBeenCalledWith(
+        "note.rename",
+        expect.objectContaining({ doc: "Altro.md", to: "Archivio/Altro.md" }),
+        "apply",
+      ),
+    );
+  });
+
+  it("senza una nota aperta il campo resta vuoto", async () => {
+    const { overlay, input } = await openPalette([rename()]);
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(field(overlay, "Nota").value).toBe("");
+  });
+
+  it("una scorciatoia col suo `doc` non lo perde per la nota aperta", () => {
+    state.currentDoc = "Progetti/Piano.md";
+    state.commandSpecs = [rename()];
+    const entry = allCommands().find((e) => e.id === "note.rename")!;
+    startCommand(entry, host, { doc: "Scelta.md" });
+    expect(field(document.getElementById("command-palette")!, "Nota").value).toBe("Scelta.md");
+  });
+});
+
 describe("consegnare l'esito di un comando", () => {
   it("avvisa, ricorda il comando e passa l'effetto alla shell: lo stesso giro della palette", async () => {
     const effect = { kind: "navigate" as const, doc: "Schemi/Disegno.svg" };

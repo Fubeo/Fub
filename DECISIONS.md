@@ -59,6 +59,62 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- T8 (orchestratore, revisione): `VaultEntry` attraversa già l'IPC con
+  `known_vaults`, quindi `recipes_adopted` compare anche in `KnownVault`
+  come campo facoltativo (Rust non scrive l'elenco vuoto); è la conseguenza
+  diretta del campo che il piano nomina, non una porta nuova, e la dicono
+  `ipc-contract.md` e `mirror.test.ts`. `forget_recipe` passa da `mutate`,
+  così un vault sconosciuto non nasce in cima ai recenti; `adopt_recipe`
+  passa da `update` e una seconda adozione sostituisce l'impronta. Nessun
+  lettore dedicato: si legge da `list()`, T9 ne aggiunge uno se gli serve.
+  `fake.ts` non cambia · fonte: report del coder e revisione
+- T6 (orchestratore, revisione): la nota aperta entra nel campo `doc` con
+  `withActiveDoc`, usata sia da `startCommand` sia da `start` (la scelta
+  dalla lista passa da `start`); è una proposta in un campo modificabile e
+  non guarda il formato. Gli elenchi si dicono per i cinque permessi su cui
+  il Guard applica `path_allowlist` (read-vault, write-vault, read-drafts,
+  read-session, read-selection) e per `fub:run-command` con l'id esatto del
+  comando; `external-fs` resta muto. Le letture sono quelle del Guard: un
+  elenco scritto male si dice «nessuno»; per la rete prima diceva «qualunque
+  indirizzo», al contrario del Guard
+  (`a_malformed_allowlist_fences_everything_out`), ed è corretto. Oltre sei
+  voci, «e altri N». `overflow-wrap: anywhere` sulla riga dell'elenco,
+  nessuna classe nuova; T12 rigenererà skin.css dopo di questo · fonte:
+  report del coder, revisione e foto del banco
+- T3 (orchestratore, revisione): `a_command_provider_respects_the_contract`
+  e le due regole di scrittura rendono `Vec<SkippedCommand>`, aggiunta alla
+  firma del piano, e i comandi saltati si stampano su stderr. Si salta
+  quando la risposta è `Unserved` o `UnknownCommand` di un altro id (un
+  comando composto); `UnknownCommand` del proprio id è un errore. Le scelte
+  vietano anche valori doppi e nomi vuoti. Il confronto di stato legge i
+  campi di MemoryHost dal modulo figlio, senza cambiare MemoryHost. Eventi e
+  job non si vedono, perché MemoryHost non li registra: è un limite noto
+  della prova. Su main si saltano property.keys.migrate e note.folder_page.
+  Il clippy `cmp_owned` è corretto in integrazione (d069b4d0) · fonte:
+  report del coder e revisione
+- Orchestratore, T1 e T2 integrati. T1: il censimento scrive «solo host» per
+  le porte che nessun componente può chiedere. T2: un Policy guadagna
+  denies_undo, perché annullare può riscrivere qualunque file e quindi
+  chiede tutti i permessi di scrittura oltre a fub:run-command; nell'elenco
+  dei comandi un valore che non è una stringa chiude tutto (meglio negare
+  che indovinare), mentre null, booleano, assente o vuoto vuol dire nessun
+  elenco. Alla revisione ho trovato che JobHost (i comandi lanciati da un
+  job) non guardava l'elenco: ora Guard e JobHost passano dagli stessi
+  authorize_command e authorize_undo in fub-kernel, con un test che falliva
+  senza (a0488e53). La soglia degli errori letterali di fub-host scende a
+  376 (664f9fe0).
+- A1: il 2026-11-03 l'utente ha approvato il prototipo `PLAN-
+  ui/ricette.html` e confermato tutte le risposte consigliate, (a) per
+  D1-D10 («confermo tutto delle ricette, mi sembra un'ottima implementazione
+  della mia idea»): i cancelli di T2 (D4), T4 (D1, D9) e T8 (D2) sono
+  aperti, T12 può partire quando le sue dipendenze sono fatte.
+- 2026-11-03 · A1 · Le aggiunte dichiarative (le ricette: note che compongono
+  comandi che si annullano) vengono prima del laboratorio WASM; una ricetta
+  si accende soltanto dalla persona, nell'app, per macchina e per impronta, e
+  il `Guard` la limita ai comandi che nomina · perché un'AI le scrive giuste al
+  primo colpo, Fub le controlla tutte prima che girino, si annullano con un
+  solo Annulla e non serve nessun cambio ad ABI, WIT o IPC esistenti
+  (proposta del pianificatore, in attesa delle risposte D1-D10).
 - 2026-11-01 · regole · L'orchestratore e i coder decidono da soli il come
   tecnico, i formati interni, le dipendenze fra crate del workspace e i file
   legati al task; «Chiede sempre» resta per ciò che si vede, il contratto

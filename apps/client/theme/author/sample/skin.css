@@ -17144,6 +17144,13 @@ h6.ui-heading {
   font-weight: var(--weight-regular);
 }
 
+/* L'elenco che il permesso applica (cartelle, comandi, indirizzi) va a capo
+   anche dentro un nome lunghissimo: tagliarlo nasconderebbe proprio ciò che si
+   sta concedendo. */
+.setting-permission > .setting-text > .setting-source {
+  overflow-wrap: anywhere;
+}
+
 .setting-component-note {
   padding-top: var(--space-5);
   padding-bottom: var(--space-5);

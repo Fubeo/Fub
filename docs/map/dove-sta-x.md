@@ -25,6 +25,7 @@
 | la proiezione dei documenti ricchi | `docs/reference/rich-projection.md` |
 | il protocollo della sessione live | `docs/reference/live-session.md` |
 | gli strumenti del server MCP | `docs/reference/mcp-server.md` |
+| le porte di ogni funzione ufficiale, e che cosa si rifà da fuori | `docs/reference/censimento-delle-porte.md` |
 | la cattura del clipper | `apps/clipper/capture-v1.schema.json` |
 | il layout su disco di `.fub/` | `docs/reference/on-disk-layout.md` |
 

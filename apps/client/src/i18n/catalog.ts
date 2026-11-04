@@ -1497,6 +1497,18 @@ export const IT = { // --- la scocca -------------------------------------------
 // l'utente legge accettando»: è questa.
 "permission.network.anywhere": "verso qualunque indirizzo",
 "permission.network.only": "solo verso: {hosts}",
+// Gli elenchi che il recinto applica, detti come li applica. Un elenco scritto
+// male non concede niente, e la frase lo dice invece di tacerlo: chi accetta
+// deve sapere che il componente, così com'è, non potrà farlo.
+"permission.network.none": "verso nessun indirizzo, perché l'elenco è scritto male",
+"permission.network.more": "e altri {n}",
+"permission.folders.only": "solo nelle cartelle: {folders}",
+"permission.folders.root": "tutto il vault",
+"permission.folders.none": "in nessuna cartella, perché l'elenco è scritto male",
+"permission.folders.more": "e altre {n}",
+"permission.commands.only": "solo questi comandi: {commands}",
+"permission.commands.none": "nessun comando, perché l'elenco è scritto male",
+"permission.commands.more": "e altri {n}",
 // Di chi ci si sta fidando, che è l'altra metà della domanda: «può leggere le
 // tue note» non vuol dire la stessa cosa detto di una feature di Fub e di un
 // componente arrivato da fuori.
@@ -4476,6 +4488,15 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "This version of Fub does not know this permission: it grants nothing, and there is nothing to deny.",
 "permission.network.anywhere": "to any address",
 "permission.network.only": "only to: {hosts}",
+"permission.network.none": "to no address, because the list is badly written",
+"permission.network.more": "and {n} more",
+"permission.folders.only": "only in the folders: {folders}",
+"permission.folders.root": "the whole vault",
+"permission.folders.none": "in no folder, because the list is badly written",
+"permission.folders.more": "and {n} more",
+"permission.commands.only": "only these commands: {commands}",
+"permission.commands.none": "no command, because the list is badly written",
+"permission.commands.more": "and {n} more",
 "trust.core": "Part of Fub",
 "trust.verified": "Verified",
 "trust.community": "From the community",

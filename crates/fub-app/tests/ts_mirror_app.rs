@@ -187,6 +187,17 @@ fn expected() -> Value {
                     .on(permission::READ_VAULT)
                     .with(permission::NETWORK, json!(["api.acme.com"])),
             }),
+            // Una ricetta: la terza famiglia, che la shell non
+            // elenca fra i componenti. Il permesso che porta è quello di chi
+            // compone comandi altrui.
+            to_value(BundleInfo {
+                id: "ricetta.archivia".into(),
+                name: "Archivia con la data".into(),
+                mounted: false,
+                kind: BundleKind::Recipe,
+                trust: Trust::Community,
+                permissions: PluginPermissions::of(&[permission::RUN_COMMAND]).granted,
+            }),
         ],
         "ThemeInfo": [to_value(ThemeInfo {
             manifest: fub_abi::theme::ThemeManifest {
@@ -246,8 +257,9 @@ fn expected() -> Value {
         // Il registro dei vault (§11.1): quello appuntato con la sua icona e un
         // recente nudo, perché i campi opzionali hanno due forme e il mirror
         // deve reggerle entrambe. Il primo porta anche una scorciatoia già
-        // guardata (§23.13), che è l'unico campo del registro a non descrivere
-        // il vault ma cosa questa macchina ha visto di lui.
+        // guardata (§23.13) e una ricetta adottata: i due campi del registro
+        // che non descrivono il vault ma cosa questa macchina ha deciso di lui.
+        // Il secondo non porta ricette, e il campo vuoto non si serializza.
         "VaultEntry": [
             to_value(VaultEntry {
                 root: "/vault".into(),
@@ -258,6 +270,9 @@ fn expected() -> Value {
                 keys_seen: [("keys.note.create".to_string(), "Mod-Alt-k".to_string())]
                     .into_iter()
                     .collect(),
+                recipes_adopted: [("ricetta.archivia".to_string(), "b3a1".to_string())]
+                    .into_iter()
+                    .collect(),
             }),
             to_value(VaultEntry {
                 root: "/altro".into(),
@@ -266,6 +281,7 @@ fn expected() -> Value {
                 favorite: false,
                 last_opened: 1_699_000_000_000,
                 keys_seen: Default::default(),
+                recipes_adopted: Default::default(),
             }),
         ],
         // Comandi locali dell'app: serializzazione reale dei record di supporto,

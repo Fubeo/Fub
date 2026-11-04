@@ -52,6 +52,32 @@ copie divergenti delle regole.
 
 L'elenco esatto delle funzioni vive nel contratto.
 
+## Elenco dei comandi
+
+`fub:run-command` consente di invocare i comandi del registro. Il suo
+parametro, facoltativo, è l'elenco degli id che il bundle può invocare:
+
+```json
+{ "fub:run-command": ["note.property.set", "note.rename"] }
+```
+
+Il `Guard` legge il valore una volta, quando monta il bundle, e lo applica a
+ogni invocazione, per i componenti nativi e WASM allo stesso modo. Un job
+che invoca o annulla fuori dal prestito del `Guard` (`JobHost`) applica la
+stessa regola, `authorize_command` e `authorize_undo` del kernel:
+
+| Valore | Comandi consentiti |
+|---|---|
+| assente, `true` o `[]` | tutti |
+| elenco di stringhe | soltanto quelli, a confronto esatto: niente prefissi, niente `*`, niente spazi tolti |
+| stringa, numero, oggetto o elenco con una non-stringa | nessuno |
+
+L'ultima riga chiude il recinto su un manifest scritto male: `"note.trash"`
+al posto di `["note.trash"]` non permette niente invece di permettere tutto.
+Un comando fuori dall'elenco dà `permission_denied`; un comando nominato ma
+non registrato dà `unknown_command`, come senza elenco. Con un elenco anche
+l'annullamento è rifiutato, perché rigioca comandi che il `Guard` non vede.
+
 ## Path fence
 
 Ogni path del vault viene canonicalizzato e verificato contro la radice.

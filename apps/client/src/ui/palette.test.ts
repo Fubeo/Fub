@@ -10,6 +10,7 @@ import {
   planLines,
   scopeLabel,
   viewEntries,
+  withActiveDoc,
 } from "./palette";
 import type { CommandEntry } from "./commands";
 import { slashPlace } from "./palette";
@@ -233,6 +234,52 @@ describe("gli argomenti che la palette costruisce", () => {
 
 // Le scorciatoie non si provano più qui: riconoscere un accordo è del registro
 // dei comandi, che è l'unico posto che li vede tutti (`commands.test.ts`).
+
+describe("la nota aperta come proposta (D10)", () => {
+  // «Rinomina nota» o una ricetta lanciate dalla palette lavorano quasi sempre
+  // sulla nota che si sta guardando: il campo `doc` la propone, come il menu
+  // «/» la mette da sé. Resta una proposta: chi ha già dato `doc` vince.
+  const rename = spec({
+    id: "note.rename",
+    params: [param("doc", { kind: "document" }, true), param("to", { kind: "text" }, true)],
+  });
+
+  it("un comando con `doc` di tipo documento si apre col campo pieno", () => {
+    expect(withActiveDoc(rename, {}, "Progetti/Piano.md")).toEqual({ doc: "Progetti/Piano.md" });
+    expect(withActiveDoc(rename, { to: "Archivio/Piano.md" }, "Progetti/Piano.md")).toEqual({
+      to: "Archivio/Piano.md",
+      doc: "Progetti/Piano.md",
+    });
+  });
+
+  it("uno senza `doc` resta com'è", () => {
+    const create = spec({ params: [param("folder", { kind: "text" })] });
+    const prefill = { folder: "Schemi" };
+    expect(withActiveDoc(create, prefill, "Progetti/Piano.md")).toBe(prefill);
+    // Il nome solo non basta: un `doc` che non è un documento non è la nota.
+    const text = spec({ params: [param("doc", { kind: "text" })] });
+    expect(withActiveDoc(text, {}, "Progetti/Piano.md")).toEqual({});
+    // E un `document` con un altro nome non è il bersaglio del comando.
+    const target = spec({ params: [param("target", { kind: "document" })] });
+    expect(withActiveDoc(target, {}, "Progetti/Piano.md")).toEqual({});
+    // Un comando di shell non ha spec.
+    expect(withActiveDoc(null, {}, "Progetti/Piano.md")).toEqual({});
+  });
+
+  it("senza una nota aperta il campo resta vuoto, come prima", () => {
+    expect(withActiveDoc(rename, {}, null)).toEqual({});
+    expect(withActiveDoc(rename, {}, "")).toEqual({});
+  });
+
+  it("il `doc` di chi lancia vince sulla nota aperta, anche vuoto", () => {
+    expect(withActiveDoc(rename, { doc: "Altro.md" }, "Progetti/Piano.md")).toEqual({ doc: "Altro.md" });
+    expect(withActiveDoc(rename, { doc: "" }, "Progetti/Piano.md")).toEqual({ doc: "" });
+  });
+
+  it("propone anche una nota che non è Markdown: decide la spec", () => {
+    expect(withActiveDoc(rename, {}, "Allegati/Fattura.pdf")).toEqual({ doc: "Allegati/Fattura.pdf" });
+  });
+});
 
 describe("il piano che si guarda prima di approvarlo", () => {
   it("una riga per nota, col numero di modifiche", () => {

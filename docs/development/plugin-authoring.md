@@ -45,6 +45,16 @@ registrazione e crearne un'altra.
 
 Non chiamare API Tauri e non importare dettagli privati della shell.
 
+La prova di contratto sta in `fub_sdk::testing::conformance`, una funzione per
+trait: `an_index_respects_the_contract`, `a_view_respects_the_contract`,
+`an_event_handler_respects_the_contract`, `a_format_respects_the_contract`,
+`a_grid_bytes_provider_supports_the_lifecycle` e
+`a_command_provider_respects_the_contract(provider, &mut MemoryHost, owner)`,
+che controlla id distinti e nel namespace di `owner`, parametri e scelte,
+scorciatoie, `UnknownCommand` per un id ignoto e che né un `DryRun` né un
+comando con `writes: false` scrivano, e rende i comandi saltati perché
+`MemoryHost` non ha un servizio o un comando da comporre.
+
 Per un `FormatProvider`, la porta corrente è `FormatSource`: l'host lo prepara
 prima di costruire il `Workspace`, lo registra prima della costruzione e
 conserva le risorse preparate per la sessione, rilasciandole anche in caso di
