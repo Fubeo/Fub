@@ -3274,7 +3274,7 @@ Fatto quando: i test nuovi di `mount`/figura, `open-with`, `lend`,
 `photo-data` passano e falliscono senza la correzione; `npm run typecheck`
 verde; `npm run bench:a11y` pulito sulle scene PDF in tutte e due le luci.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base da fissare
+Stato: [~] in corso · coder · base e309abd3
 
 ## Non verificato stanotte
 
