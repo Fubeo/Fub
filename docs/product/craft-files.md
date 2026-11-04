@@ -144,6 +144,32 @@ c'è niente da annullare.
 Unire due note è diverso: se un file Craft punta alla nota che si toglierebbe,
 l'unione non parte, perché il link resterebbe verso un file che non c'è più.
 
+## Il prestito
+
+Scegliere un'app Craft in «Apri con un'altra app» per un documento che ha
+una scheda aperta in Fub è un **prestito**: il documento passa all'app, e
+Fub smette di scriverlo. Prima di passarlo Fub salva le modifiche che
+aspettavano. Se il salvataggio non riesce l'app non si apre, e l'avviso lo
+dice: «Non ho potuto salvare: «Lettera.docx» non si apre in WordCraft.».
+
+Finché il prestito dura, ogni scheda del documento, in ogni riquadro, è in
+sola lettura e porta la riga «Aperto in WordCraft. Fub non lo modifica
+finché non lo riprendi.» con il pulsante **Riprendi qui**. Ciò che l'app
+salva arriva sul disco, e la scheda lo ricarica come ogni cambio fatto da
+fuori, senza conflitto: in Fub non c'è niente di non salvato. Un file che
+Fub mostra già in sola lettura (un foglio `.xlsx`) prende la riga e resta
+com'era. Se il documento cambia nome, il prestito segue il nome nuovo.
+
+Il prestito finisce con **Riprendi qui**, con la chiusura dell'ultima scheda
+del documento e con la chiusura del vault. Fub non sa quando l'app si
+chiude, né se il file è ancora aperto lì: riprendere è un gesto di chi usa
+Fub, e chi riprende un documento che l'app sta ancora modificando può
+ritrovarsi con due versioni che si scavalcano.
+
+Non c'è prestito con l'app predefinita del sistema, per un file che non ha
+una scheda aperta, e per le immagini, i PDF, l'audio e i video, che Fub
+mostra senza mai scriverli.
+
 ## Quali app trova Fub
 
 Fub conosce sette app Craft: VectorCraft, PhotoCraft, LightCraft, PdfCraft,

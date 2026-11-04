@@ -173,9 +173,11 @@ vede spenta con la riga «Non installata»; una che Fub ha avviato e che non è
 uscita porta la riga «Già aperta», e la scelta le passa il file. Un file che
 nessuna app Craft apre (una nota, un file senza estensione) ha il sottomenu
 con la sola app di sistema. Un'apertura che non riesce dice la frase
-dell'host. Vale nel menu della nota (dentro Organizza ▸) e in quello di un
-altro file; col dito il sottomenu si apre al posto del menu, con la voce per
-tornare.
+dell'host. Vale nel menu della nota (dentro Organizza ▸), in quello di un
+altro file e in quello di un'immagine, di un PDF, di un audio o di un video
+aperti; col dito il sottomenu si apre al posto del menu, con la voce per
+tornare. Scegliere un'app Craft per un documento che ha una scheda aperta lo
+presta all'app ([Il prestito](craft-files.md#il-prestito)).
 
 Il disegno ha i suoi menu ([Disegni, selezione](drawing-selection.md)); la
 griglia delle tabelle in Live ha il suo
