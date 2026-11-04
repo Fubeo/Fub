@@ -1285,7 +1285,7 @@ Fatto quando: la pagina ha i numeri nuovi con il modo di lancio; «Non
 misurato» non nomina più T8; `node .github/scripts/check-doc-links.mjs`
 verde.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base 3c7b4f5d
+Stato: [x] fatto · f04e17c0 · check --rapido verde (10 passi) + check-doc-links; R1 3 giri per lato: l'app scende di 13–29 MiB chiudendo tutto, la pendenza della WebView resta sopra 1 MiB per giro (giudizio invariato)
 
 ## T17 · La CI completa e la revisione prima del merge
 
