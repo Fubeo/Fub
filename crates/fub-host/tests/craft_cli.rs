@@ -1172,3 +1172,35 @@ fn no_way_without_the_gesture_starts_the_three_new_clis() {
         no_way_without_the_gesture(&vault, &script, doc, app);
     }
 }
+
+#[test]
+fn mounting_takes_the_private_folders_left_by_a_fub_that_died() {
+    let _serial = serial();
+    // Le cartelle stanno nella cartella temporanea vera del processo, con un
+    // nome di questo test: il montaggio guarda soltanto lì.
+    let temp = std::env::temp_dir();
+    let unique = format!("{}-{}", std::process::id(), line!());
+    let make = |name: &str, age: Duration| {
+        let path = temp.join(format!("fub-craft-render-{name}-{unique}"));
+        std::fs::create_dir(&path).unwrap();
+        std::fs::write(path.join("in.pdf"), b"%PDF").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let modified = std::time::SystemTime::now() - age;
+        std::fs::File::open(&path)
+            .unwrap()
+            .set_modified(modified)
+            .unwrap();
+        path
+    };
+    let left = make("lasciata", Duration::from_secs(3 * 60 * 60));
+    let fresh = make("viva", Duration::ZERO);
+
+    let dir = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+    let host = Host::without_watcher();
+    host.open(&root).unwrap();
+
+    assert!(!left.exists(), "{left:?}");
+    assert!(fresh.exists(), "a job's folder that is still young stays");
+    std::fs::remove_dir_all(&fresh).unwrap();
+}

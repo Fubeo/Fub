@@ -219,12 +219,34 @@ fn detach(command: &mut Command) {
 }
 
 /// Una CLI sta nel suo gruppo, perché il tempo scaduto la fermi insieme ai
-/// figli; su Windows senza finestra della console.
+/// figli; su Linux muore anche col thread di Fub che l'ha avviata, quindi con
+/// Fub uscito di colpo; su Windows senza finestra della console.
 fn own_group(command: &mut Command) {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
         command.process_group(0);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::process::CommandExt;
+        let parent = rustix::process::getpid();
+        // SAFETY: la chiusura gira nel figlio fra `fork` ed `exec` e chiama
+        // soltanto `prctl` e `getppid`, due chiamate di sistema dirette senza
+        // allocazioni né lucchetti, sicure dopo un `fork`.
+        unsafe {
+            command.pre_exec(move || {
+                rustix::process::set_parent_process_death_signal(Some(
+                    rustix::process::Signal::KILL,
+                ))?;
+                // Fub uscito prima della riga sopra: il segnale non arriverebbe
+                // più, e la CLI non parte.
+                if rustix::process::getppid() != Some(parent) {
+                    return Err(std::io::Error::from(std::io::ErrorKind::Other));
+                }
+                Ok(())
+            });
+        }
     }
     #[cfg(windows)]
     {
@@ -287,8 +309,8 @@ fn run_command(
         stop(&mut child);
         Err(LaunchError::Io)
     };
-    // Dopo l'uscita restano i figli del figlio: fanno parte della CLI.
-    stop_group(&child);
+    // I figli del figlio rimasti dopo l'uscita li ha già fermati chi l'ha
+    // raccolta (`watch`, `stop`), prima della raccolta.
 
     let started = readers.iter().filter(|reader| reader.is_some()).count();
     let deadline = Instant::now() + DRAIN_GRACE;
@@ -327,10 +349,18 @@ fn watch(
     let start = Instant::now();
     let mut pause = POLL_MIN;
     loop {
-        match child.try_wait() {
-            Ok(Some(status)) => return exit_outcome(status),
-            Ok(None) => {}
-            Err(_) => {
+        match exited(child) {
+            Ok(true) => {
+                // Il capo è uscito ma non è raccolto: il suo id è ancora
+                // riservato, e il segnale al gruppo va soltanto alla CLI.
+                stop_group(child);
+                return match child.wait() {
+                    Ok(status) => exit_outcome(status),
+                    Err(_) => Err(LaunchError::Io),
+                };
+            }
+            Ok(false) => {}
+            Err(()) => {
                 stop(child);
                 return Err(LaunchError::Io);
             }
@@ -346,6 +376,34 @@ fn watch(
         }
         thread::sleep(pause.min(limits.time - elapsed));
         pause = (pause * 2).min(POLL_MAX);
+    }
+}
+
+/// Vero se il figlio è uscito, **senza raccoglierlo** su unix (`waitid` con
+/// `WNOWAIT`): il pid resta suo finché non lo si aspetta. Altrove lo
+/// raccoglie `try_wait`, e [`stop_group`] non fa niente.
+fn exited(child: &mut Child) -> Result<bool, ()> {
+    #[cfg(unix)]
+    {
+        use rustix::process::{waitid, Pid, WaitId, WaitIdOptions};
+        let Some(pid) = i32::try_from(child.id()).ok().and_then(Pid::from_raw) else {
+            return Err(());
+        };
+        let options = WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT;
+        loop {
+            match waitid(WaitId::Pid(pid), options) {
+                Ok(found) => return Ok(found.is_some()),
+                Err(rustix::io::Errno::INTR) => {}
+                Err(_) => return Err(()),
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        child
+            .try_wait()
+            .map(|status| status.is_some())
+            .map_err(|_| ())
     }
 }
 
@@ -840,6 +898,52 @@ mod tests {
             start.elapsed()
         );
         assert_gone(read_pid(&scripts.path("orfano")));
+    }
+
+    #[test]
+    fn the_group_is_stopped_before_the_exit_is_collected() {
+        // `watch` da solo: chi raccoglie l'uscita ha già fermato il gruppo,
+        // così il segnale non arriva mai a un id passato a un altro processo.
+        let scripts = Scripts::new();
+        let leaves = scripts.script("lascia", "sleep 60 &\necho $! > \"$1\"\nexit 0");
+        let mut command =
+            base_command(&leaves, &[scripts.arg("orfano")], std::env::vars_os()).expect("comando");
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        own_group(&mut command);
+        let mut child = command.spawn().expect("avviata");
+        let status = watch(&mut child, &CliLimits::default(), &never).expect("esce con zero");
+        assert!(status.success());
+        assert_gone(read_pid(&scripts.path("orfano")));
+        assert!(child.try_wait().expect("raccolta").is_some());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_cli_dies_with_the_thread_that_started_it() {
+        // `PR_SET_PDEATHSIG` guarda il thread che ha avviato la CLI: quando
+        // esce, la CLI riceve `SIGKILL`. Qui il thread esce senza aspettarla.
+        let scripts = Scripts::new();
+        let cli = scripts.script("dorme", "echo $$ > \"$1\"\nsleep 60");
+        let mut command =
+            base_command(&cli, &[scripts.arg("pid")], std::env::vars_os()).expect("comando");
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        let mut child = thread::spawn(move || {
+            own_group(&mut command);
+            command.spawn().expect("avviata")
+        })
+        .join()
+        .expect("il thread");
+        let pid = read_pid(&scripts.path("pid"));
+        assert_gone(pid);
+        let status = child.wait().expect("raccolta");
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(status.signal(), Some(9));
     }
 
     #[test]

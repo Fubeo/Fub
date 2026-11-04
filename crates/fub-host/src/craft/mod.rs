@@ -169,6 +169,9 @@ impl crate::registry::Bundle for CraftBundle {
                 // Il job delle anteprime con la CLI legge da qui, col
                 // biglietto che `Host::craft_render` gli dà.
                 render::remember_reader(root, ranged.clone());
+                // Le cartelle private che un Fub uscito di colpo ha lasciato
+                // nella cartella temporanea: soltanto le sue, e ferme.
+                render::sweep_left_behind(&std::env::temp_dir(), std::time::SystemTime::now());
                 Some(ranged)
             }
             Err(error) => {

@@ -62,6 +62,10 @@ const TICKETS_KEPT: usize = 256;
 const TRIED_KEPT: usize = 4096;
 /// Il prefisso della cartella privata di un job.
 pub const PRIVATE_PREFIX: &str = "fub-craft-render-";
+/// Dopo quanto una cartella privata ferma si dà per lasciata da un Fub uscito
+/// di colpo. Un job vivo la tocca ben più spesso: la CLI ha
+/// [`launch::CLI_TIME`] al più, e la copia la scrive mentre la fa.
+pub const LEFT_AFTER: Duration = Duration::from_secs(60 * 60);
 
 /// Gli argomenti della CLI che fa l'anteprima di `subject` alla misura
 /// `size`, con `input` e `output` assoluti e separati (la tabella «Le app che
@@ -731,6 +735,71 @@ fn read_image(output: &Path) -> Result<PreviewImage, Failure> {
     image.ok_or(Failure::BadImage)
 }
 
+/// Toglie da `temp` le cartelle private che un Fub uscito di colpo ha
+/// lasciato, e dice quante. Soltanto le cartelle vere (mai un link) col
+/// prefisso [`PRIVATE_PREFIX`], di questo utente, coi permessi 0700 e ferme da
+/// più di [`LEFT_AFTER`]: quella di un job vivo, di questo Fub o di un altro,
+/// è più giovane. Su un sistema senza i permessi unix non toglie niente.
+pub(crate) fn sweep_left_behind(temp: &Path, now: std::time::SystemTime) -> usize {
+    let Ok(entries) = std::fs::read_dir(temp) else {
+        return 0;
+    };
+    let mut removed = 0;
+    for entry in entries.flatten() {
+        let named = entry
+            .file_name()
+            .to_str()
+            .is_some_and(|name| name.starts_with(PRIVATE_PREFIX));
+        if !named {
+            continue;
+        }
+        let path = entry.path();
+        let Ok(meta) = std::fs::symlink_metadata(&path) else {
+            continue;
+        };
+        if !left_behind(&meta, now) {
+            continue;
+        }
+        // `remove_dir_all` non segue i link, nemmeno dentro la cartella.
+        match std::fs::remove_dir_all(&path) {
+            Ok(()) => removed += 1,
+            Err(error) => {
+                tracing::warn!(%error, "fub.craft: una cartella privata lasciata non si cancella");
+            }
+        }
+    }
+    if removed > 0 {
+        tracing::info!(
+            removed,
+            "fub.craft: tolte le cartelle private lasciate da un Fub uscito di colpo"
+        );
+    }
+    removed
+}
+
+/// Vero per una cartella privata di questo utente, 0700, ferma da più di
+/// [`LEFT_AFTER`]. `meta` viene da `symlink_metadata`: un link non è una
+/// cartella.
+fn left_behind(meta: &std::fs::Metadata, now: std::time::SystemTime) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt as _;
+        let ours = meta.uid() == rustix::process::geteuid().as_raw();
+        let private = meta.mode() & 0o7777 == 0o700;
+        let old = meta
+            .modified()
+            .ok()
+            .and_then(|modified| now.duration_since(modified).ok())
+            .is_some_and(|age| age > LEFT_AFTER);
+        meta.file_type().is_dir() && ours && private && old
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (meta, now);
+        false
+    }
+}
+
 /// La cartella privata di un job: si cancella sempre quando il job la lascia,
 /// anche dopo un errore o un annullamento.
 struct Private(Option<tempfile::TempDir>);
@@ -1026,6 +1095,55 @@ mod tests {
         out.extend_from_slice(&[0x55; 16]);
         out.extend_from_slice(&[0xFF, 0xD9]);
         out
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_sweep_takes_only_old_private_folders_of_this_user() {
+        use std::os::unix::fs::PermissionsExt as _;
+        use std::time::SystemTime;
+
+        let temp = tempfile::tempdir().unwrap();
+        let now = SystemTime::now();
+        let old = now - 2 * LEFT_AFTER;
+        let folder = |name: &str, mode: u32, age: SystemTime| {
+            let path = temp.path().join(name);
+            std::fs::create_dir(&path).unwrap();
+            std::fs::write(path.join("in.pdf"), b"%PDF").unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+            std::fs::File::open(&path)
+                .unwrap()
+                .set_modified(age)
+                .unwrap();
+            path
+        };
+        let left = folder("fub-craft-render-vecchia", 0o700, old);
+        let fresh = folder("fub-craft-render-nuova", 0o700, now);
+        let open = folder("fub-craft-render-aperta", 0o755, old);
+        let other = folder("altra-vecchia", 0o700, old);
+        let target = folder("bersaglio", 0o700, old);
+        let link = temp.path().join("fub-craft-render-link");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        let plain = temp.path().join("fub-craft-render-file");
+        std::fs::write(&plain, b"x").unwrap();
+        std::fs::set_permissions(&plain, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::File::open(&plain)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+
+        assert_eq!(sweep_left_behind(temp.path(), now), 1);
+        assert!(!left.exists(), "lasciata da un Fub uscito di colpo");
+        for kept in [&fresh, &open, &other, &target, &plain] {
+            assert!(kept.exists(), "{kept:?}");
+        }
+        assert!(
+            target.join("in.pdf").exists(),
+            "il bersaglio del link resta intero"
+        );
+        assert!(link.symlink_metadata().is_ok(), "il link resta");
+        // Una cartella temporanea che non c'è non è un errore.
+        assert_eq!(sweep_left_behind(&temp.path().join("manca"), now), 0);
     }
 
     #[test]
