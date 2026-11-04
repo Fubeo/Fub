@@ -2024,7 +2024,7 @@ src/state/external-editors.test.ts src/ui/menu-budget.test.ts src/ui/menu.test.t
 passa; una foto del banco del sottomenu aperto su un `.pcraft`.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/panels/open-with.test.ts src/ui/menu-budget.test.ts
-Stato: [~] in corso · coder · base 5ba65a33
+Stato: [x] fatto · b8a20bf1 · check --rapido verde tranne scene.test atteso (baseline dal runner in T32); runtime, grid/engine, block-id rossi sotto carico e verdi da soli
 
 ## T17 · Il prestito
 
@@ -2083,7 +2083,7 @@ prova la cancellazione in sospeso, l'altro motivo del sola lettura); una
 foto del banco della riga «Aperto in WordCraft · Riprendi qui».
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/lend.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base b8a20bf1
 
 ## T18 · Il prototipo delle anteprime
 

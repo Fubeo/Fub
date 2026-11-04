@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- T16 integrata (b8a20bf1). Scostamenti dal piano, decisi dall'orchestratore
+  perché non toccano contratti: le voci del sottomenu usano
+  `description`/`disabled` già esistenti in SurfaceMenuItem invece di
+  `hint`/`enabled:false`; SurfaceMenuItem ha un campo additivo `load?` per
+  caricare le scelte quando il sottomenu si apre (solo TypeScript, nessun
+  IPC). Nel visore dei media la voce «Apri con» c'è ma in produzione non
+  compare perché document-controller non passa `openExternal`: il
+  collegamento passa a T17, che tocca lo stesso controller.
 - 2026-11-03 · n7-file-craft · L'aiuto di «fub help mcp» elenca fub_preview,
   fub_external_editors e fub_open_with già dopo T13 (non in T16, come diceva
   la voce sotto) · T16 non tocca fub-cli; aiuto e strumenti devono dire la
