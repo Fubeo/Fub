@@ -59,6 +59,17 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · Scrittoio 2 · il telefono è approvato per ora con la A, il
+  tondo in basso a destra, scelta dall'orchestratore perché era la
+  raccomandata e l'utente non ha scelto fra le due; la B esce dal prototipo.
+  Il telefono si rifà a fondo in un piano successivo · parole dell'utente:
+  «Per ora do l'ok, la aggiustiamo più avanti, ma è sicuramente da modificare
+  pesantemente». Lo stesso giorno, tre richieste che entrano nel piano:
+  l'ombra del foglio morbida, visibile ai fianchi e sfumata sotto (T27, nuovo,
+  ruoli `--shadow-sheet` e `--shadow-sheet-focus`); il vassoio delle barre
+  meno staccato dalla carta, `--bar-tray` a #f8fafc di giorno e #1a1f27 di
+  notte (T16); le sezioni della barra a schede come le schede dell'ispettore
+  (T20, T21). Sono eccezioni dichiarate alla «tavolozza intatta».
 - 2026-11-04 · Scrittoio 2 · le risposte dell'utente: D1–D9 tutte A, titolo a
   600, «Figure» prima di «Emoji», prototipo del computer approvato. Il
   telefono è in revisione su sua richiesta: foglio da bordo a bordo,
