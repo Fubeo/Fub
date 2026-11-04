@@ -65,6 +65,12 @@ T14–T17 non hanno prototipo: riusano pezzi che ci sono.
   scrittore durante `craft.preview`, l'errore non tipizzato di
   `craft_render`, il tetto degli XMP, «Apri con» su una cartella, la CLI
   orfana); T32 aspetta anche T33.
+- 2026-11-04, dalla CI completa e dalla revisione riga per riga di T32 (la
+  parte del client): task nuovo T34 (il clic su una figura che può creare
+  una nota, la scheda che si scrive mentre l'app sta per prendere il
+  prestito, il fuoco perso nella domanda, i tre difetti del visore PDF che la
+  scena `pdf-domanda` trova, quattro difetti minori di stato e pulizia); T32
+  aspetta anche T34.
 
 ## Dal prototipo
 
@@ -256,6 +262,7 @@ quale risposta il task segue, o quale aspetta ancora.
 | T30 · le anteprime dei documenti | T20, T21, T22 | D-9 (c) |
 | T31 · PDF e documenti nella shell | T18, T23, T29, T30 | D-1 (b), D-9 (c) |
 | T33 · i tetti dei file ostili e il turno dell'anteprima | T1–T31 | nessuna |
+| T34 · il clic sulla figura, il prestito, il fuoco e il visore PDF | T1–T31 | nessuna |
 | T32 · la CI completa e la revisione | tutti gli altri | nessuna |
 
 T5 non usa niente di T1–T4: aspetta T4 solo perché scrive nella stessa
@@ -3085,7 +3092,7 @@ all'orchestratore.
 Non toccare: i limiti di `apps/client/bench/webview/budgets.json` (nessuno si
 alza); i task fatti (un difetto in un task fatto si corregge con un task
 nuovo).
-Dipende da: tutti gli altri task (T1–T31, T33)
+Dipende da: tutti gli altri task (T1–T31, T33, T34)
 Cosa fare (lo fa l'orchestratore, non un coder):
 - `gh pr ready 299`: parte la CI completa (Linux, Windows, macOS, i banchi
   del client).
@@ -3188,6 +3195,86 @@ Fatto quando: `cargo test -p fub-format-craft` e `cargo test -p fub-host
 passano con le prove nuove, che falliscono senza la correzione.
 Prova: scripts/check.sh --rapido
 Stato: [~] in corso · coder · base cd18886b
+
+## T34 · Il clic sulla figura, il prestito, il fuoco e il visore PDF
+
+Perché: la CI completa di T32 ha trovato tre difetti del visore PDF (già in
+main, scoperti dalla prima scena che lo apre, `pdf-domanda`), e la
+revisione riga per riga del client ha trovato un clic che può scrivere nel
+vault, una finestra in cui la scheda si scrive mentre l'app esterna sta per
+prendere il prestito, il fuoco perso dalla domanda sulle anteprime e quattro
+difetti di stato e pulizia. Nessuno cambia il contratto.
+Tocca: `apps/client/src/editors/text/profiles/markdown/mount.ts` (`opener`)
+e chi gli passa l'apertura (`state/document-controller.ts`),
+`panels/open-with.ts`, `state/lend.ts`, `state/document-controller.ts`
+(`heldReadOnly` e i suoi pari), `editors/craft/consent.ts`,
+`editors/craft/surface.ts`, `editors/media/pdf-view.ts`,
+`state/craft-previews.ts`, `state/tree-thumbnails.ts`,
+`editors/craft/photo-data.ts`, i loro test, il CSS del fuoco della pagina
+PDF (`theme/scrittoio/skin/media.css` e i derivati rigenerati se serve),
+`i18n/catalog.ts` per le chiavi nuove.
+Non toccare: Rust (T33 lavora lì in parallelo); il contratto
+`CraftPreview` e il mirror TS; `bench/a11y.mjs` e le regole del banco
+(niente scena tolta o regola spenta); le baseline.
+Dipende da: T1–T31
+Cosa fare:
+- Il clic su una figura (un file Craft, un PDF) in una nota: `opener` in
+  `mount.ts` passa oggi da `openWikilink`, che per un bersaglio che non
+  risolve crea una nota (`createNote`, `document-controller.ts` ~2828). Una
+  figura apre il suo documento con il gesto (`openDocument(doc, { gesture:
+  true })`, come `onOpenPath`) e, se il file non c'è più, lo dice con un
+  avviso e non crea niente. Prova: un test in cui la figura punta a un file
+  rinominato fuori da Fub: clic ed Invio non creano nessun file (il fake
+  host non riceve `create_*`) e mostrano l'avviso.
+- Il prestito (`open-with.ts` `lendingHost.open`, `lend.ts`): fra
+  `reserveLend` e `commit` le schede del documento sono ancora modificabili,
+  e ciò che si scrive mentre l'app parte può essere salvato dopo che l'app
+  ha letto il file. Una prenotazione aperta conta come un prestito per la
+  sola lettura (`heldReadOnly` e le righe che chiamano `setReadOnly` con
+  `lentTo`): le schede vanno in sola lettura prima di `flush`, e tornano
+  scrivibili se la prenotazione si annulla (l'app non parte, il salvataggio
+  fallisce). Prova: un test che scrive durante l'attesa di `host.open` e
+  trova la scheda in sola lettura, e uno in cui `host.open` fallisce e la
+  scheda torna scrivibile.
+- Il fuoco nella domanda sulle anteprime (`consent.ts` ~361 e ~392):
+  disabilitare il pulsante che ha il fuoco lo manda a `<body>`, e
+  `surface.ts` ~245 non lo rende più. Il fuoco resta nella superficie (o
+  `aria-disabled` con un'attesa, o la superficie ricorda di averlo avuto
+  prima di spegnere il pulsante). Prova: Invio su «Sì, accendi» e su «Crea
+  l'anteprima» lascia `document.activeElement` dentro la superficie.
+- Il visore PDF (`pdf-view.ts` ~357): `.media-pdf-page` scorre e tiene solo
+  canvas, Chromium lo rende raggiungibile con Tab ma con `tabIndex` -1, e il
+  banco trova «arrivato su nessun elemento». La pagina si raggiunge con Tab
+  (`tabIndex = 0`), ha un nome accessibile (la pagina n di N, una chiave del
+  catalogo) e un anello di fuoco visibile in tutte e due le luci; la
+  casella di ricerca ha il suo nome accessibile (`aria-label`). Prova:
+  `npm run bench:a11y` pulito su `pdf-domanda`, `nota-pdf` e
+  `nota-pdf-senza` in tutte e due le luci, più un test del visore.
+- `craft-previews.ts` ~338 (`heard`): un `job_done` di un render partito
+  prima di un `forget` non si prende come attuale; si accetta solo se c'è
+  una richiesta in corso per quella chiave nell'epoca attuale o se la
+  revisione combacia. Prova: render, `forget`, poi `job_done` vecchio: la
+  figura non lo mostra.
+- `surface.ts` ~156 (`render`): non divide il biglietto con `load`; un
+  ricaricamento durante il render non deve lasciare il pulsante spento senza
+  errore. Prova: render che fallisce mentre arriva un ricaricamento: il
+  pulsante torna e l'errore si vede.
+- `tree-thumbnails.ts` ~190 (`clear`/`reset`): spegnere e riaccendere le
+  miniature con una richiesta in volo non lascia la riga senza miniatura
+  (`asking` si pulisce, o la riga visibile si rimette in coda). Prova.
+- `photo-data.ts` ~146: ogni `draw()` aggiunge un `row.close()` alla vita
+  della superficie; si registra una volta sola o in una vita figlia per
+  ridisegno. Prova: dieci ridisegni, una sola chiusura registrata.
+Casi limite: una figura che punta a un file che c'è (si apre come prima);
+un prestito che riesce (la scheda resta in sola lettura col prestito, come
+prima); un PDF di una pagina; le miniature spente con nessuna richiesta in
+volo.
+Fatto quando: i test nuovi di `mount`/figura, `open-with`, `lend`,
+`consent`, `surface`, `pdf-view`, `craft-previews`, `tree-thumbnails` e
+`photo-data` passano e falliscono senza la correzione; `npm run typecheck`
+verde; `npm run bench:a11y` pulito sulle scene PDF in tutte e due le luci.
+Prova: scripts/check.sh --rapido
+Stato: [~] in corso · coder · base da fissare
 
 ## Non verificato stanotte
 

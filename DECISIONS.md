@@ -59,6 +59,24 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- N7 T32, la revisione riga per riga del client (un revisore in sola lettura
+  sul diff di apps/client/src): otto difetti, verificati da me i due più
+  seri leggendo il codice. (1) Il clic su una figura passa da
+  `openWikilink`, che per un bersaglio che non risolve crea una nota: un
+  clic poteva scrivere nel vault. (2) Fra `reserveLend` e `commit` del
+  prestito la scheda resta scrivibile. Gli altri: il fuoco perso nella
+  domanda sulle anteprime, un `job_done` vecchio preso per attuale, il
+  biglietto condiviso fra render e load in `surface.ts`, `asking` non pulito
+  nelle miniature, i `row.close()` che si accumulano in `photo-data.ts`.
+  Diventano T34 con i tre difetti del visore PDF; la causa del percorso Tab
+  interrotto è la pagina PDF che scorre e che Chromium rende raggiungibile
+  con `tabIndex` -1. Il visore PDF è codice di main: si corregge qui perché
+  la scena nuova di N7 lo prova e il banco lo vuole verde, non per allargare
+  il piano. Lasciati fuori, perché minori e senza un caso che fallisca:
+  `figure.ts` che ignora un annuncio vuoto, e l'errore tradotto di `open-
+  with.ts` (`new Error(t("lend.save_failed"))`) che nessuno distingue per
+  tipo. Le lingue diverse da IT/EN del catalogo non le ha guardate il
+  revisore: il test del catalogo le conta.
 - N7 T32, la CI completa su ceee30de (run 41776318335): rossi quattro
   lavori, ognuno con la sua causa. (1) Windows: `crates/fub-
   cli/tests/mcp.rs` (T-MCP, 85bbb4d1) usava
