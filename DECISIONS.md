@@ -59,6 +59,24 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- N7 T28 (1d0f8949, 6660e5f4): un RAW va al profilo `media-raw` della
+  famiglia `viewer` (il registro ha un solo legame per i byte), che monta la
+  superficie di `editors/craft` col profilo `raw`; `selectSourceProfile` lo
+  sceglie solo se `craft.preview` è nell'elenco dei comandi, altrimenti il
+  RAW resta senza vista. Alla revisione l'orchestratore ha trovato che
+  l'elenco arriva dopo l'apertura del vault, quindi una scheda RAW
+  ripristinata all'avvio restava sulla via del testo: la correzione
+  (6660e5f4) aggiunge `Pane.bytes` e `commandsChanged` in `state/document-
+  controller.ts`, che su `on("commands")` rimonta senza gesto solo i
+  riquadri il cui legame coi byte è cambiato (e riprova quelli rimasti senza
+  tab mostrata), con `craft-raw.e2e.test.ts` che fallisce senza.
+  `state/craft-photos.ts` e `editors/craft/index.ts` toccati fuori dai Tocca
+  (identità della superficie, riga «Foto RAW · CR3 · peso»). Con il JPEG la
+  scheda non chiama mai `craftRender`. Da guardare in T32: in `crates/fub-
+  host/src/craft/preview.rs`, senza prestito, `hosted_preview` → `raw::read`
+  dà absent e `offer()` propone LightCraft anche per un RAW col JPEG (il job
+  ricontrolla e la CLI non parte); la linguetta mostra il nome senza la
+  sigla CR3, che sta nell'intestazione.
 - N7 T23 (6a50629f): il gesto vive in `gestureBirths` per riquadro, solo per
   la durata dell'apertura che fa nascere la scheda; passano il gesto
   l'albero (clic, Invio, «Apri»), la ricerca, il passaggio veloce, i link e

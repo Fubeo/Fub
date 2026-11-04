@@ -2895,7 +2895,7 @@ src/ui/format-kind.test.ts src/editors/media` passa; le foto del banco
 somigliano al prototipo, in chiaro e in scuro.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/media/orientation.test.ts src/editors/media/zoom-view.test.ts
-Stato: [~] in corso · coder · base 6a50629f
+Stato: [x] fatto · 1d0f8949 + 6660e5f4 · check --rapido verde (19 passi, 3m41s, la correzione); prima del rimando 18 su 19 con i soli rossi noti
 
 ## T29 · Le CLI di LightCraft, PdfCraft e WordCraft
 
@@ -3064,7 +3064,7 @@ src/state/preview.dom.test.ts src/panels/document.test.ts src/editors/craft`
 passa; le foto del banco somigliano al prototipo, in chiaro e in scuro.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/panels/document.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base e232eb7f (1d0f8949 + la correzione di T28)
 
 ## T32 · La CI completa e la revisione prima del merge
 
