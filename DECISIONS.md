@@ -59,6 +59,18 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · N7 · T31 è entrato con quattro scarti dal piano, presi da me:
+  tocca anche `ui/link-preview.ts` e `markdown/mount.ts`
+  (`hydrateVaultMedia` riceve un sesto parametro `open`), perché la figura
+  di un PDF o di un documento nella nota passa da lì; `craftServed()` in
+  `state/craft-previews.ts` chiede `craft.preview` solo se il componente lo
+  serve, altrimenti l'apertura di un PDF senza componente rompeva le
+  annotazioni (annotations.e2e); la scena del prestito del banco usa un
+  `.docx` invece del PDF; `craft-subjects.test.ts` gira in node, non nel
+  DOM. `noticeLinesOf` passa da `action` ad `actions` (lista di uno per la
+  riga del prestito di T17). T26 parte sulla base 977dc88b con le miniature
+  da 16 px del prototipo approvato, quindi senza `--tree-thumb` né la regola
+  da 24 px.
 - N7 T28 (1d0f8949, 6660e5f4): un RAW va al profilo `media-raw` della
   famiglia `viewer` (il registro ha un solo legame per i byte), che monta la
   superficie di `editors/craft` col profilo `raw`; `selectSourceProfile` lo

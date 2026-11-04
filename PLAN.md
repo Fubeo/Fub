@@ -2759,7 +2759,7 @@ src/panels` passa; le foto del banco somigliano al prototipo, in chiaro e in
 scuro.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/panels/explorer-craft.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 977dc88b
 
 ## T27 · I RAW: l'anteprima dentro il file
 
@@ -3064,7 +3064,7 @@ src/state/preview.dom.test.ts src/panels/document.test.ts src/editors/craft`
 passa; le foto del banco somigliano al prototipo, in chiaro e in scuro.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/panels/document.test.ts
-Stato: [~] in corso · coder · base e232eb7f (1d0f8949 + la correzione di T28)
+Stato: [x] fatto · 977dc88b · check --rapido 18/19 sull'integrazione: rosso solo Vitest per scene.test «ci sono tutte» (baseline dal runner in T32) e tre instabili noti (theme/runtime, grid/engine, block-id), verdi rilanciati da soli (89/89)
 
 ## T32 · La CI completa e la revisione prima del merge
 
