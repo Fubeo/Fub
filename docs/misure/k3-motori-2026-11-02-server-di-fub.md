@@ -3,7 +3,8 @@
 Questa pagina conserva le misure del cancello di K3, lo strato dei motori:
 la memoria dopo «chiudi tutto» (R1), l'avvio a freddo (S6) e i banchi di
 fogli e documenti, prima e dopo K3, sulla stessa macchina e con lo stesso
-modo di lancio.
+modo di lancio. La sezione del 2026-11-04 aggiunge R1 e le prove dei
+motori con i documenti che la shell chiude (T8, T10, T11).
 
 > **Per chi:** chi decide se K3 chiude il suo cancello e chi rifà la misura
 > dopo un altro motore.
@@ -28,7 +29,8 @@ passa sugli obiettivi di R1.
   vuoto: cambiano soltanto documenti);
 - **dopo**: `c5851334`, il ramo `piano/k3-motori` con T1–T7. T8 (scaldare e
   «documento chiuso», ramo a parte `piano/k3-ipc-motori`, PR #296) **non è
-  misurato**;
+  misurato** qui: lo misura
+  [la sezione del 2026-11-04](#2026-11-04-i-documenti-che-si-chiudono);
 - 2026-11-02, dalle 15:35 alle 17:40, misurato dal coder di T9;
 - stessa build per i due lati: `npm ci && npm run build`, poi
   `cargo build --release --locked -p fub-app --features tauri/custom-protocol`;
@@ -258,9 +260,124 @@ lati. `cargo bloat` non è installato: il peso per crate non c'è.
   [misura di K0](motori-2026-10-31-linux-ryzen.md) sulla stessa macchina
   (10,5 ms): non è un effetto di K3, ed è da rivedere a parte.
 
+## 2026-11-04: i documenti che si chiudono
+
+La misura di sopra non ha T8: senza «documento chiuso» la cache dei
+documenti si svuotava soltanto alla chiusura del vault. Questa sezione
+rifà R1 e le prove dei motori con T8, T10 e T11, cioè con la shell che dice
+all'host quando una sessione di documento finisce.
+
+- **nuovo**: `3c7b4f5d`, il ramo `piano/k3-motori` con T1–T15 e T18;
+- **dopo di T9**: `c5851334`, lo stesso lato «dopo» della misura di sopra,
+  rimisurato nelle stesse ore per un confronto onesto;
+- 2026-11-04, dalle 09:26 alle 10:42, misurato dal coder di T16, sulla
+  stessa macchina (`server-di-fub`, WebKitGTK 2.54.0, Xvfb `1280x800x24`);
+- stessa build per i due lati: `npm ci && npm run build`, poi
+  `cargo build --release --locked -p fub-app --features tauri/custom-protocol`;
+  Rust 1.95.0, Node 22.23.3.
+
+### Che cosa misura R1 con i documenti chiusi
+
+R1 apre `Documento.docx` (un `.docx` del corpus, nell'editor dei documenti)
+come quarto dei sette file e poi chiude tutte le schede. Con T11 chiudere
+la scheda chiude la sessione del documento, che manda `document_closed`
+all'host; chiuso l'ultimo documento, l'host svuota la cache dei documenti e
+chiama `malloc_trim` (`crates/fub-host/src/rich.rs`). R1 quindi misura già
+il residuo con il documento chiuso dal client, senza cambiare lo scenario:
+è la lettura «chiuse» dopo «chiudi tutto».
+
+### R1
+
+Comando, dalla cartella `apps/client/` di ogni lato (è
+`npm run bench:webview` con le opzioni di T9; la porta 4474 tiene libere
+quelle del banco):
+
+```bash
+xvfb-run -a -s "-screen 0 1280x800x24 -maxclients 2048" node bench/webview/run.mjs \
+  --only=R1 --budgets=targets --driver=$HOME/.cargo/bin/tauri-driver \
+  --native-driver=/usr/bin/WebKitWebDriver --port=4474 --out=DIR
+```
+
+Tre giri per lato, alternati (dopo di T9, nuovo, dopo di T9, …), ognuno
+partito con il carico a un minuto sotto 3. PSS in MiB, colonne come nella
+tabella di sopra; il carico è quello all'inizio e alla fine del giro.
+
+| Giro | Inizio, carico 1/5/15 min | Fine, carico | Vuota (app · WebView) | Residuo | App | WebView | Pendenza giri | App | WebView | Residuo 60 s dopo i giri | App |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| dopo di T9 1 | 09:26, 0,91 / 0,43 / 0,27 | 09:36, 0,59 / 0,86 / 0,63 | 1111,2 (433,6 · 635,7) | −65,2 | −62,4 | −2,0 | 11,70 | 0,08 | 11,61 | −37,9 | −86,7 |
+| dopo di T9 2 | 09:47, 2,73 / 5,26 / 3,24 | 09:57, 0,80 / 1,85 / 2,31 | 1130,0 (415,8 · 671,8) | 169,4 | −60,6 | 230,9 | 9,43 | 0,30 | 9,12 | 22,7 | −79,1 |
+| dopo di T9 3 | 10:07, 0,78 / 1,35 / 1,84 | 10:17, 0,33 / 0,95 / 1,43 | 1017,8 (410,1 · 565,5) | 222,1 | −82,5 | 305,5 | 10,76 | 2,16 | 8,60 | 26,9 | −87,4 |
+| nuovo 1 | 09:36, 0,59 / 0,86 / 0,63 | 09:46, 4,86 / 6,04 / 3,30 | 1103,8 (440,8 · 621,2) | −20,4 | −74,4 | 54,9 | 0,34 | −7,47 | 9,41 | −28,6 | −131,1 |
+| nuovo 2 | 09:57, 0,80 / 1,85 / 2,31 | 10:07, 0,78 / 1,35 / 1,84 | 1091,7 (423,6 · 625,8) | −53,7 | −104,9 | 52,1 | 14,09 | 0,03 | 14,06 | 48,6 | −103,3 |
+| nuovo 3 | 10:17, 0,33 / 0,95 / 1,43 | 10:27, 0,75 / 1,22 / 1,34 | 1139,7 (440,2 · 655,3) | −73,5 | −87,4 | 14,8 | 6,79 | 0,15 | 6,64 | −85,0 | −83,8 |
+
+Il processo di rete resta fra −0,9 e −0,8 MiB in tutti i giri. Alla fine
+di «nuovo 1» il carico è salito a 4,86 per il lavoro di un'altra copia
+sulla stessa macchina; il giro dopo è partito con il carico a un minuto
+sotto 3, gli altri sotto 1.
+
+Il passo che conta è «chiudi tutto», dall'ultimo file aperto (l'immagine)
+alla lettura «chiuse», nel processo dell'app:
+
+| Giro | App con i sette file aperti | App dopo «chiudi tutto» | Differenza | All'apertura di `Documento.docx` |
+|---|---|---|---|---|
+| dopo di T9 1 | 371,9 | 371,2 | −0,7 | +3,7 |
+| dopo di T9 2 | 355,9 | 355,2 | −0,7 | +3,4 |
+| dopo di T9 3 | 328,4 | 327,7 | −0,7 | +2,4 |
+| nuovo 1 | 380,2 | 366,8 | −13,4 | +4,1 |
+| nuovo 2 | 345,1 | 318,7 | −26,4 | +2,8 |
+| nuovo 3 | 381,5 | 352,8 | −28,7 | +2,9 |
+
+Che cosa ne viene:
+
+- **Chiudere il documento rende memoria.** Senza T8 «chiudi tutto» lascia
+  l'app dov'era (−0,7 MiB in tutti e tre i giri); con T8–T11 l'app scende
+  di 13–29 MiB. È più di quanto il documento aveva preso all'apertura
+  (2,8–4,1 MiB): come per i fogli, il `malloc_trim` dopo l'ultimo documento
+  chiuso rende al sistema anche la memoria libera che l'allocatore teneva
+  da prima.
+- **Il residuo dell'app scende ancora**: da −82,5…−60,6 MiB sul lato di T9
+  a −104,9…−74,4 sul nuovo. I giri «dopo di T9» stanno vicino ai numeri
+  «dopo» della misura di sopra (da −61,0 a −52,7), con un giro più basso.
+- **La pendenza dell'app resta vicina a zero**: 0,03 e 0,15 MiB per giro in
+  due giri nuovi, contro 0,08–2,16 per il lato di T9. Il −7,47 di «nuovo 1»
+  viene da un solo salto: nell'ottavo giro l'app scende da 368,6 a 309,6 MiB
+  e lì resta. La misura non dice che cosa l'abbia liberato.
+- **La WebView decide ancora il totale.** Il suo residuo va da −2,0 a
+  305,5 MiB sul lato di T9 e da 14,8 a 54,9 sul nuovo, la sua pendenza da
+  8,6 a 11,6 e da 6,6 a 14,1. Il residuo totale sta sotto i 50 MiB in tre
+  giri nuovi su tre (in uno su tre sul lato di T9), ma la pendenza totale
+  supera 1 MiB per giro in due giri nuovi su tre, e tre giri non
+  distinguono un cambiamento della WebView dal suo rumore.
+
+Il giudizio di R1 in cima non cambia: il cancello resta **non passa** sugli
+obiettivi, per la pendenza della WebView.
+
+### Le prove dei motori dopo «chiudi tutto»
+
+Lo stesso comando di [Le prove dei motori da soli](#le-prove-dei-motori-da-soli),
+con `--solo fogli,documenti --giri 3` e una cartella di compilazione per
+lato. Un giro per lato per compilare, poi quattro giri per lato alternati,
+dalle 10:41 alle 10:42, carico a un minuto fra 2,04 e 2,58 (scende dalla
+compilazione appena finita). `tools/motori-prova` e `vendor/` sono uguali
+fra `c5851334` e `3c7b4f5d`: la prova collega il motore a Fub da solo,
+senza lo strato dei motori, e quindi senza T8.
+
+| Prova | Lato | Senza simboli | Prima apertura, ms | Tutto chiuso, MiB | Dopo `malloc_trim`, MiB | Residuo, MiB |
+|---|---|---|---|---|---|---|
+| fogli, `Tabella.xlsx` | dopo di T9 | 6,5 MiB | 1,2 | 5,7–5,8 | 5,5 | 2,1–2,3 |
+| fogli, `Tabella.xlsx` | nuovo | 6,5 MiB | 1,1–1,2 | 5,7–5,8 | 5,5 | 2,1–2,3 |
+| documenti, `Documento.docx` | dopo di T9 | 34,2 MiB | 13,1–15,3 | 30,1–30,6 | 22,0–22,4 | 17,0–17,6 |
+| documenti, `Documento.docx` | nuovo | 34,2 MiB | 13,3–14,4 | 30,5–30,7 | 22,4–22,6 | 17,5–17,7 |
+
+Le prove non cambiano, come ci si aspetta: T8 agisce nell'host, che la
+prova non usa. La prima apertura di `Documento.docx` resta sopra
+l'obiettivo di 11 ms, come nella misura di sopra.
+
 ## I tetti
 
-Nessun tetto abbassato:
+Nessun tetto abbassato, nemmeno con la misura del 2026-11-04 (gli stessi
+pesi):
 
 - `tools/motori-prova/budgets.json`: fogli 6,5 MiB contro un tetto di 7,
   documenti 34,2 contro 35, librerie uguali; i tetti sono già il numero
@@ -271,9 +388,11 @@ Nessun tetto abbassato:
 
 ## Non misurato
 
-- T8, scaldare e «documento chiuso» (ramo `piano/k3-ipc-motori`): non unito.
-- La memoria con un documento ricco aperto e chiuso dal client: senza T8 la
-  cache dei documenti si svuota soltanto alla chiusura del vault, che R1 non
-  fa.
+- Lo scaldare del motore (`warm_engine`): R1 apre i file dal selettore
+  rapido e non ne misura a parte né il tempo né la memoria.
+- Le chiavi di apertura che restano nell'host dopo una finestra ricaricata,
+  fino alla chiusura del vault o al tetto di 1024 (vedi
+  [Scaldare e chiudere un documento](../architecture/motori.md#scaldare-e-chiudere-un-documento)):
+  R1 non ricarica la finestra.
 - macOS, Windows, mobile: R1 legge `/proc`, soltanto Linux.
 - Una macchina con scheda grafica.
