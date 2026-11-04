@@ -811,6 +811,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       else emit("reveal-path", id);
     },
     onOpenDocument: (doc) => openDocument(doc),
+    onOpenFigure: openFigure,
     onOpenPath: async (path, from) => {
       const target = await resolvedReference({ kind: "path", value: path }, from ?? activeDoc() ?? undefined);
       if (!target) throw new Error(t("preview.target_missing"));
@@ -843,6 +844,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     renderCanvasMarkdown: (_nodeId, text, host, documentId, forms) => mountMarkdown(host, renderMarkdown(text, forms).html, {
       documentId,
       openWikilink: (page, heading, block) => openWikilink(page, heading, block, undefined, { gesture: true }),
+      openFigure,
       openPath: async (path, from) => {
         const target = await resolvedReference({ kind: "path", value: path }, from ?? documentId);
         if (!target) throw new Error(t("preview.target_missing"));
@@ -2830,6 +2832,16 @@ export async function openWikilink(
   if (!page) return;
   const created = await createNote(page);
   if (created) await openDocument(created);
+}
+
+/// Il clic su una figura di una nota (un file Craft, un PDF): apre il suo
+/// documento col gesto, come un link a un percorso. A differenza di
+/// `openWikilink` non crea mai niente: se il file non c'è più (rinominato o
+/// tolto fuori da Fub) è un errore, e chi ha cliccato lo dice con un avviso.
+export async function openFigure(doc: string): Promise<void> {
+  const target = await resolvedReference({ kind: "wiki", value: { page: doc, heading: null, block: null } }, doc);
+  if (!target) throw new Error(t("preview.target_missing"));
+  await openDocument(target.doc, { gesture: true });
 }
 
 // --- salvataggio ------------------------------------------------------------

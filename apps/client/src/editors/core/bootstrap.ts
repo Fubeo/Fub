@@ -44,6 +44,9 @@ import {
 export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onOpenWikilink: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
   readonly onOpenPath: (path: string, from?: string) => void | Promise<void>;
+  /// Il clic su una figura di una nota (un file Craft, un PDF): apre il suo
+  /// documento col gesto e non crea mai una nota.
+  readonly onOpenFigure?: (doc: string) => void | Promise<void>;
   /// «Apri a lato» dal menu di un wikilink: la nota in un riquadro accanto.
   readonly onOpenWikilinkBeside?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
   /// Un file nominato da una nota aperto con un'altra app o mostrato
@@ -258,6 +261,7 @@ export function createDocumentSurfaceRegistry(
             onSelectionChange: () => options.onSelectionChange(context.paneId),
             onOpenWikilink: options.onOpenWikilink,
             onOpenPath: options.onOpenPath,
+            ...(options.onOpenFigure ? { onOpenFigure: options.onOpenFigure } : {}),
             onOpenWikilinkBeside: options.onOpenWikilinkBeside,
             onOpenDocument: options.onOpenDocument,
             onShowFile: options.onShowFile,

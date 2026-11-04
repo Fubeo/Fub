@@ -31,6 +31,12 @@ export interface MarkdownMountOptions {
   readonly resources?: MarkdownResources;
   readonly openWikilink?: (page: string, heading?: string, block?: string) => void | Promise<void>;
   readonly openPath?: (path: string, from?: string) => void | Promise<void>;
+  /**
+   * Opens the document a figure shows (a Craft file, a PDF) with the gesture.
+   * Unlike `openWikilink` it never creates a note: a file that is gone is a
+   * failure the figure reports. Without it a figure opens nothing (print).
+   */
+  readonly openFigure?: (doc: string) => void | Promise<void>;
   readonly navigateFragment?: (id: string) => boolean;
   readonly searchTag?: (tag: string) => void;
   /** UTF-16 offset of the task symbol in the current, LF-normalized buffer. */
@@ -510,11 +516,12 @@ async function hydrateEmbeds(
 
 /// Apre la scheda di un documento dal clic su una figura (un file Craft, un
 /// PDF), e dice da sé se non ci riesce; `undefined` dove la nota non apre
-/// niente (la stampa).
+/// niente (la stampa). Non passa da `openWikilink`: un bersaglio che non
+/// risolve là crea una nota, e un clic su una figura non scrive nel vault.
 function opener(options: MarkdownMountOptions, life: Lifetime): ((doc: string) => Promise<void>) | undefined {
-  const openWikilink = options.openWikilink;
-  if (!openWikilink) return undefined;
-  return (doc) => Promise.resolve().then(() => openWikilink(doc)).catch((error: unknown) => {
+  const openFigure = options.openFigure;
+  if (!openFigure) return undefined;
+  return (doc) => Promise.resolve().then(() => openFigure(doc)).catch((error: unknown) => {
     if (!life.closed) notify(t("preview.open_failed", { page: doc, reason: errorText(error) }), "guasto");
   });
 }

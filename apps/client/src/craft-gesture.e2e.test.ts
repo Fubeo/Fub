@@ -74,10 +74,10 @@ async function quiet(): Promise<void> {
 
 /// La shell vera su un vault con una nota e un file Craft che VectorCraft,
 /// col consenso acceso, saprebbe fare.
-async function start(layout: unknown = null): Promise<FakeHost> {
+async function start(layout: unknown = null, file: Record<string, string> = {}): Promise<FakeHost> {
   vi.resetModules();
   const host: FakeHost = createFakeHost({
-    file: { "Benvenuto.md": "# Benvenuto\n" },
+    file: { "Benvenuto.md": "# Benvenuto\n", ...file },
     resources: { [LOGO]: BYTES },
     craft: { docs: { [LOGO]: { render: { app: "VectorCraft", consent: "on" } } } },
     craftRender: async (doc: string, size: CraftPreviewSize): Promise<CraftPreview> => {
@@ -156,5 +156,63 @@ describe("il gesto nella shell", () => {
     await quiet();
     expect(document.querySelector(".craft-render")).not.toBeNull();
     expect(renders(again)).toBe(0);
+  });
+});
+
+/// La nota che mostra il file Craft come figura. Il renderer del fake non
+/// conosce i segnaposto del provider Craft: `render_embed` risponde qui come
+/// il kernel vero, col segnaposto che la nota trasforma nella figura.
+const NOTA = "Nota.md";
+const FIGURE = `<figure class="fub-craft" data-embed-kind="craft" data-embed-doc="${LOGO}" data-craft-app="vectorcraft">`
+  + "<figcaption>logo.vectorcraft</figcaption></figure>";
+
+async function withFigure(): Promise<FakeHost> {
+  const host = await start(null, { [NOTA]: "# Nota\n\n![[logo.vectorcraft]]\n" });
+  const api = host.module.api as unknown as Record<string, (...args: unknown[]) => unknown>;
+  const query = api.queryIndex.bind(api);
+  api.queryIndex = (q: unknown, ...rest: unknown[]) => {
+    const asked = q as { kind?: string; page?: string };
+    if (asked.kind === "render_embed" && asked.page === "logo.vectorcraft") {
+      return Promise.resolve({ kind: "render_embed", value: { doc_id: LOGO, html: FIGURE, parts: [] } });
+    }
+    return query(q, ...rest);
+  };
+  await open(NOTA);
+  await waitFor("la figura si può aprire", () => figure() !== null);
+  return host;
+}
+
+const figure = () => document.querySelector<HTMLElement>('.markdown-rendered [data-craft-doc] [role="link"]');
+const created = (host: FakeHost) =>
+  host.calls.filter((call) => /^create/i.test(call.gate) || (call.gate === "invokeCommand" && /create/.test(String(call.args[0]))));
+
+describe("la figura nella nota", () => {
+  it("una figura che punta a un file che c'è apre la sua scheda col gesto", async () => {
+    const host = await withFigure();
+    figure()!.click();
+    await waitFor("la scheda del file Craft", () => craftTabs() === 1 || document.querySelector(".craft-empty-state") !== null);
+    await quiet();
+    expect(renders(host)).toBe(1);
+    expect(created(host)).toEqual([]);
+  });
+
+  it("il file rinominato fuori da Fub: clic e Invio non creano niente e lo dicono", async () => {
+    const host = await withFigure();
+    const { clearHistory, recentNotices } = await import("./ui/notify");
+    clearHistory();
+    const before = Object.keys(host.files()).sort();
+    // La figura è già disegnata: il file cambia nome dietro la nota.
+    host.renameFromOutside(LOGO, "Disegni/marchio.vectorcraft");
+    // La nota ridisegna la figura col nome di prima: è ancora lì da cliccare.
+    await quiet();
+    await waitFor("la figura ridisegnata", () => figure() !== null);
+    const link = figure()!;
+    link.click();
+    link.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await quiet();
+    expect(created(host)).toEqual([]);
+    await waitFor("l'avviso", () => recentNotices().some((notice) => notice.text.startsWith("Non riesco ad aprire «Disegni/logo.vectorcraft»")));
+    expect(Object.keys(host.files()).sort()).toEqual(before.map((id) => (id === LOGO ? "Disegni/marchio.vectorcraft" : id)).sort());
+    expect(renders(host)).toBe(0);
   });
 });

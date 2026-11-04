@@ -621,7 +621,10 @@ describe("i file Craft dentro una nota", () => {
     disposers.push(mountMarkdown(root, markup, {
       documentId: "Nota.md",
       resources: embeds.value,
-      openWikilink: (page) => { opened.push(page); },
+      // La figura passa da `openFigure`, mai dal wikilink: un wikilink che non
+      // risolve crea una nota, e un clic su una figura non scrive nel vault.
+      openWikilink: (page) => { opened.push(`wikilink:${page}`); },
+      openFigure: (doc) => { opened.push(doc); },
     }));
     return root;
   }
