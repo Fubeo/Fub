@@ -201,9 +201,10 @@ describe("la riga viva sotto la foto", () => {
     const window = lifetime.openLifetime();
     photos.mountCraftPhotos(window);
     const life = lifetime.openLifetime();
+    const add = vi.spyOn(life, "add");
     view.showPhotoData(root, FOTO, deps, life);
     await settle();
-    return { host, craft, life };
+    return { host, craft, life, add };
   }
 
   it("un XMP che cambia mentre la foto è aperta aggiorna la riga", async () => {
@@ -239,5 +240,18 @@ describe("la riga viva sotto la foto", () => {
     host.writeFromOutside(XMP, "<x:xmpmeta/>");
     await settle();
     expect(root.querySelector(".photo-data")).toBeNull();
+  });
+
+  it("dieci ridisegni registrano una sola chiusura nella vita della superficie", async () => {
+    const { host, craft, add } = await live(true);
+    const before = add.mock.calls.length;
+    for (let rating = 0; rating < 10; rating += 1) {
+      craft.docs[XMP]!.info = { xmp: meta({ rating: rating % 5 }) };
+      host.writeFromOutside(XMP, "<x:xmpmeta/>");
+      await settle();
+      await settle();
+    }
+    expect(root.querySelectorAll(".photo-data")).toHaveLength(1);
+    expect(add.mock.calls.length).toBe(before);
   });
 });

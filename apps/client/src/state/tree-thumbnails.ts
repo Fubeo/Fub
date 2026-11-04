@@ -152,9 +152,11 @@ export function mountTreeThumbnails(lifetime: Lifetime): TreeThumbnails {
       const blob = image ? imageBlob(image) : null;
       known.set(doc, image && blob ? { url: URL.createObjectURL(blob), orientation: image.orientation, raw: isRawPhoto(doc) } : null);
       paintDoc(doc);
-    } else if (visible.has(doc) && asked === epoch) {
-      // Il documento è cambiato mentre la domanda volava: vale ciò che
-      // `craft.preview` dice adesso.
+    } else if (visible.has(doc)) {
+      // Il documento è cambiato mentre la domanda volava, o le miniature
+      // si sono spente e riaccese: vale ciò che `craft.preview` dice
+      // adesso. La riga in vista non ha richiesto niente, perché la domanda
+      // era ancora in volo (`want`).
       waiting.add(doc);
     }
     pump();

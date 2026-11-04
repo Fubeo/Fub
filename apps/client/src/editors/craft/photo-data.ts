@@ -144,7 +144,6 @@ export function showPhotoData(root: HTMLElement, doc: string, deps: PhotoDataDep
     last = sidecar;
     if (!sidecar || life.closed) return;
     const row = openLifetime();
-    life.add(() => row.close());
     shown = row;
     mountPhotoData(root, sidecar, deps, row);
   }
@@ -161,6 +160,12 @@ export function showPhotoData(root: HTMLElement, doc: string, deps: PhotoDataDep
     );
   }
 
+  // Una sola chiusura nella vita della superficie, per la riga di adesso:
+  // ogni ridisegno chiude la sua da sé.
+  life.add(() => {
+    shown?.close();
+    shown = null;
+  });
   watchPhoto(doc, life, refresh);
   life.add(onLanguage(() => draw(last)));
   life.add(() => {

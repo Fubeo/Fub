@@ -415,6 +415,36 @@ describe("le miniature nell'albero", () => {
     await waitFor("le miniature di nuovo", () => thumb(VECTOR) !== null);
   });
 
+  it("spente e riaccese con una domanda in volo, la riga ha lo stesso la sua miniatura", async () => {
+    const host = await start({ thumbs: true, hold: true });
+    await openFolder("Progetti");
+    await waitFor("le prime domande", () => asked.length === 2);
+    const flying = asked.map((entry) => entry.doc);
+    await host.module.api.setSetting("craft.tree-thumbnails", false);
+    await quiet();
+    await host.module.api.setSetting("craft.tree-thumbnails", true);
+    await quiet();
+    await drain();
+    for (const doc of flying.filter((each) => imageOf(each) !== null)) {
+      await waitFor(`la miniatura di ${doc}`, () => thumb(doc) !== null);
+    }
+    expect(flying.some((doc) => imageOf(doc) !== null)).toBe(true);
+  });
+
+  it("spente senza nessuna domanda in volo, e riaccese, ridipingono senza chiedere due volte", async () => {
+    const host = await start({ thumbs: true });
+    await openFolder("Progetti");
+    await waitFor("la miniatura", () => thumb(VECTOR) !== null);
+    await quiet();
+    const before = askedDocs().filter((doc) => doc === VECTOR).length;
+    await host.module.api.setSetting("craft.tree-thumbnails", false);
+    await waitFor("le icone", () => thumb(VECTOR) === null);
+    await quiet();
+    expect(askedDocs().filter((doc) => doc === VECTOR)).toHaveLength(before);
+    await host.module.api.setSetting("craft.tree-thumbnails", true);
+    await waitFor("le miniature di nuovo", () => thumb(VECTOR) !== null);
+  });
+
   it("la chiusura dell'albero rilascia ogni immagine", async () => {
     await start({ thumbs: true });
     await openFolder("Progetti");
