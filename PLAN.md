@@ -1072,7 +1072,7 @@ coppie id → scheda e gruppo di `MENU` nel prototipo (il coder lo controlla
 con uno script e scrive nel resoconto ogni differenza col suo perché); i test
 del client verdi.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base bb5ad39b
 
 ## T14 · Il menu «Comandi» dei fogli
 
@@ -1543,7 +1543,7 @@ senza l'opzione, il riquadro di sempre; i test del tema
 `theme/forced-colors.test.ts`), `npm run theme:verify`, `npm run typecheck`
 e `bench:a11y` verdi.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base 06e054c8
+Stato: [~] integrato · 3c583a48..bb5ad39b · check --rapido 19/20 (rosso solo scene.test: le baseline delle 9 scene nuove dal runner, T17) · al telefono 44/100 px invece di 38/88 e Dati 0/4 per i 44 px dei bottoni della shell mobile: la scelta (tenerli o un'eccezione per la barra) è chiesta all'utente
 
 ## T19 · Il movimento della barra dei fogli
 

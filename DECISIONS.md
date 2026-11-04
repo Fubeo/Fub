@@ -59,6 +59,17 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · K3 · T18 integrato con i bottoni a 44 px al telefono. La
+  shell mobile impone ai bottoni almeno 44×44 (`mobile.css`), e il prototipo
+  non ne teneva conto: al telefono i gruppi chiusi impilati sono alti 44
+  invece di 38, il vassoio 100 invece di 88, Dati ha 0 gruppi aperti su 4
+  invece di 1, Inserisci scorre di 61 invece di 54. Perché: abbassare un
+  bersaglio del dito sotto il minimo della shell è una scelta di
+  accessibilità e cambia il «Fatto quando», quindi è dell'utente; finché non
+  risponde resta la regola della shell, che non tocca il resto del lavoro
+  (un'eccezione sarebbe solo CSS dentro `.grid-ribbon`). Le baseline delle 9
+  scene nuove arrivano dal runner con T17; fino ad allora `bench/scene.test`
+  «ci sono tutte» resta rosso.
 - K3 · D-7 (il foglietto chiuso della variante C): l'utente ha scelto
   l'ibrida il 2026-11-03, due o più chiusi a pila alti 38 px, uno rimasto
   solo a tessera alta quanto la barra (80 px). Il pianificatore l'ha scritta
