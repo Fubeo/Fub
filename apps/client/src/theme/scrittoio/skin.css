@@ -10530,6 +10530,12 @@ button.draw-isolation-crumb:hover {
   text-align: center;
   scrollbar-width: thin;
 }
+/* Il piano si raggiunge con Tab: l'anello sta dentro il suo bordo, dove il
+   foglio non lo taglia. */
+.media-pdf-page:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(var(--focus-ring-width) * -2);
+}
 .media-pdf-page canvas {
   display: block;
   margin: 0 auto;
