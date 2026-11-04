@@ -1072,7 +1072,7 @@ coppie id → scheda e gruppo di `MENU` nel prototipo (il coder lo controlla
 con uno script e scrive nel resoconto ogni differenza col suo perché); i test
 del client verdi.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base bb5ad39b
+Stato: [x] fatto · 4f244e0d · check --rapido verde (34 passi, 18m22s)
 
 ## T14 · Il menu «Comandi» dei fogli
 
@@ -1169,7 +1169,7 @@ run theme:verify` e `bench:a11y` verdi con gli stati nuovi; le foto del banco
 del menu, chiara e scura, piena e stretta, corrispondono al prototipo con la
 barra nuova.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 4f244e0d
 
 ## T15 · Il risultato dei comandi che leggono, e i perché in italiano
 

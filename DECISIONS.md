@@ -59,6 +59,20 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- K3 T13 integrata (4f244e0d). Gli effetti sono 250 cambia, 31 legge, 22
+  mostra (il prototipo ne dice 250/29/24, il piano 249/29/24).
+  L'orchestratore tiene la regola del piano, provata da effetto.rs, al posto
+  dei conti: view.normal, view.split, view.customViews e
+  formulas.watchWindow scrivono nel giornale e passano fra i Cambia (il
+  prototipo li dice mostra o legge); insert.chartRecommendations,
+  data.scenarioManager e file.printPreview (legge) e file.exportPdf (mostra)
+  lasciano commit.edit vuoto e restano accesi in sola lettura (il prototipo
+  li dice cambia). La tavolozza scrive «Scheda X della barra» solo se la
+  barra mostra la scheda e il gruppo del posto, altrimenti «Comando del
+  foglio di calcolo»: file, draw e pivot non hanno testi della barra, e i
+  testi del menu sono di T14. Toccati in più palette/form.ts e form.test.ts,
+  dove sta il tipo CatalogCommand. Rischio: l'effetto vale per comando, non
+  per parametri.
 - 2026-11-04 · K3 · T18 integrato con i bottoni a 44 px al telefono. La
   shell mobile impone ai bottoni almeno 44×44 (`mobile.css`), e il prototipo
   non ne teneva conto: al telefono i gruppi chiusi impilati sono alti 44
