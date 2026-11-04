@@ -195,7 +195,8 @@ cadono dentro di lui), `#app` è `inert` e nessun bottone dell'app si vede con
 l'aspetto nativo. Poi rilascia il modulo e, ad avvio finito, verifica che non
 restino `.avvio`, `#avvio-stile`, `data-avvio-*` né `--avvio-*` e che `#app`
 sia vivo. Esce diverso da zero nominando la pagina, il caso e il controllo
-caduto: senza il foglio dello strato in una pagina cade.
+caduto: senza il foglio dello strato in una pagina cade. In CI gira nel job
+del banco visivo, dopo le scene.
 
 Il banco del moto (`npm run bench:motion`) misura le coreografie dello
 Scrittoio nel browser: lo stato d'arrivo coincide con quello a moto ridotto,

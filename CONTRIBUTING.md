@@ -86,6 +86,7 @@ npm run typecheck
 npm test
 npm run build
 npm run bench:grid
+npm run bench:lampo
 node .github/scripts/check-host-workspace-boundary.mjs
 node .github/scripts/check-error-literals.mjs
 node .github/scripts/check-rust-comments.mjs
