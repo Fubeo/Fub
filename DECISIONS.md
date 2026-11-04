@@ -59,6 +59,20 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · caricamento (orchestratore) · lo stile dello strato d'avvio
+  esce dai tre HTML: `<link id="avvio-stile">` verso `public/avvio/avvio.css`,
+  e il `<noscript>` carica `public/avvio/senza-js.css`. Il piano lo voleva in
+  linea, contando su `style-src 'unsafe-inline'`, ma Tauri mette un nonce a
+  ogni `<style>` delle pagine e lo aggiunge a `style-src`, e con un nonce la
+  WebView ignora `'unsafe-inline'`: i sei `<style>` che CodeMirror aggiunge a
+  pagina avviata erano rifiutati (senza foglio) e gli editor dell'app vera
+  restavano senza stile. Lo ha mostrato S7 di `bench:webview`, rosso da T1 in
+  tutte le corse (la maniglia a y≈38.200: `.cm-scroller` alto quanto la nota),
+  riprodotto su server-di-fub; il banco Chromium passa da Vite e non ha la CSP
+  di Tauri. `pagine.test.ts` ora tiene le pagine senza `<style>` né script in
+  linea. `R1.giri.pendenza` sopra soglia nelle stesse corse non è del piano:
+  su main va da 3,6 a 56,8 MiB (run 41809459543, 41538788842, 41325487648).
+
 - 2026-11-04 · caricamento T4 · perimetro allargato dall'orchestratore per due
   difetti di T1 trovati dalle scene: col moto ridotto il guasto e l'attesa
   sono visibili subito e solo l'opacità dissolve (prima `visibility` arrivava
