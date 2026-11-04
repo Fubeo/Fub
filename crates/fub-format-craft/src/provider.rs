@@ -14,7 +14,7 @@ use fub_abi::{
 };
 
 use crate::apps::CraftApp;
-use crate::{container, linked, xmp};
+use crate::{container, xmp};
 
 /// La chiave del frontmatter in cui sta il titolo che il file dice.
 pub const TITLE_KEY: &str = "title";
@@ -61,17 +61,16 @@ impl CraftProvider {
                 .insert(TITLE_KEY.to_owned(), serde_json::Value::String(title));
         }
         model.text = contents.text;
-        if let Some(json) = &contents.json {
-            model.links = linked::collect(json)
-                .into_iter()
-                .map(|path| Link {
-                    target: LinkTarget::Path(path),
-                    embed: true,
-                    span: Span::EMPTY,
-                    context: None,
-                })
-                .collect();
-        }
+        model.links = contents
+            .links
+            .into_iter()
+            .map(|path| Link {
+                target: LinkTarget::Path(path),
+                embed: true,
+                span: Span::EMPTY,
+                context: None,
+            })
+            .collect();
         model
     }
 }

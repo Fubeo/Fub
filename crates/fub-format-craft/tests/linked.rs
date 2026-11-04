@@ -256,3 +256,32 @@ fn il_provider_dà_i_collegati_di_un_progetto_di_figcraft() {
         [embed("Immagini/a.png"), embed("Immagini/b.png")]
     );
 }
+
+#[test]
+fn il_provider_legge_i_collegati_dal_testo_con_le_stesse_regole() {
+    // Il provider non costruisce il documento: legge i collegati mentre
+    // attraversa il testo. Livelli, tetto e doppioni sono quelli di `collect`.
+    let layers: Vec<Value> = (0..=MAX_LINKS)
+        .map(|n| json!({ "src": format!("foto-{n}.png"), "child": [{ "href": "foto-0.png" }] }))
+        .collect();
+    let documents = [
+        nested(64),
+        nested(65),
+        nested_arrays(64),
+        nested_arrays(65),
+        json!({ "layers": layers }),
+        json!([{ "src": "a.png" }, [{ "file": "b.png" }], { "uri": 3, "link": "/disco.png" }]),
+    ];
+    for document in documents {
+        let text = serde_json::to_vec(&document).unwrap();
+        let expected: Vec<Link> = collect(&document).iter().map(|p| embed(p)).collect();
+        let drawing = model(CraftApp::VectorCraft, "logo.vectorcraft", text.clone());
+        assert_eq!(drawing.links, expected);
+        let project = model(
+            CraftApp::FigCraft,
+            "sito.figcraft",
+            figcraft_zip(std::str::from_utf8(&text).unwrap()),
+        );
+        assert_eq!(project.links, expected);
+    }
+}

@@ -136,7 +136,7 @@ fn il_manifesto_di_photocraft_dà_versione_e_titolo() {
                 format_version: Some("3".into()),
                 title: Some("Ritratto".into()),
                 text: String::new(),
-                json: Some(manifest),
+                links: Vec::new(),
             }
         );
     }
@@ -281,10 +281,9 @@ fn il_documento_di_figcraft_dà_versione_titolo_e_testo() {
         let contents = read_meta(CraftApp::FigCraft, &file).unwrap();
         assert_eq!(contents.format_version.as_deref(), Some("2"));
         assert_eq!(contents.title.as_deref(), Some("Sito"));
-        // Le chiavi di un oggetto vengono in ordine alfabetico (`serde_json`
-        // senza `preserve_order`); gli elementi di una lista nel loro ordine.
+        // Il testo viene nell'ordine del file.
         assert_eq!(contents.text, "Benvenuti\nChi siamo\nContatti, è facile");
-        assert_eq!(contents.json, Some(document.clone()));
+        assert_eq!(contents.links, Vec::<String>::new());
         for size in SIZES {
             assert_eq!(preview(CraftApp::FigCraft, &file, size), Some((320, 200)));
         }
@@ -338,7 +337,7 @@ fn vectorcraft_in_chiaro_in_gzip_e_con_i_blob() {
                 format_version: Some("4".into()),
                 title: Some("Logo".into()),
                 text: "ACME\nsottotitolo".into(),
-                json: Some(document.clone()),
+                links: Vec::new(),
             }
         );
     }
@@ -499,7 +498,7 @@ fn un_json_valido_che_non_è_un_oggetto() {
             format_version: None,
             title: None,
             text: "uno\ndue".into(),
-            json: Some(list.clone()),
+            links: Vec::new(),
         }
     );
     let file = zip_of(&[("document.json", &json_bytes(&list), DEFLATE)]);
@@ -509,7 +508,7 @@ fn un_json_valido_che_non_è_un_oggetto() {
         assert_eq!(
             read_meta(CraftApp::PhotoCraft, &file),
             Ok(Contents {
-                json: Some(scalar.clone()),
+                links: Vec::new(),
                 ..Contents::default()
             })
         );

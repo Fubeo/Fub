@@ -46,7 +46,7 @@ pub fn collect(doc: &Value) -> Vec<String> {
 /// schema `nome:` (`file:`, `data:`, `http:`, `https:`, e anche `C:`, che ha
 /// la forma di uno schema di una lettera). Il resto si tiene com'è scritto,
 /// `%20` compreso: il kernel lo decodifica quando risolve il link.
-fn relative_path(raw: &str) -> Option<String> {
+pub(crate) fn relative_path(raw: &str) -> Option<String> {
     let url: String = raw
         .trim_matches(|c: char| c <= ' ')
         .chars()
@@ -75,14 +75,14 @@ fn has_scheme(url: &str) -> bool {
 
 /// I percorsi trovati, nell'ordine, e quelli già visti.
 #[derive(Default)]
-struct Found {
-    paths: Vec<String>,
+pub(crate) struct Found {
+    pub(crate) paths: Vec<String>,
     seen: HashSet<String>,
 }
 
 impl Found {
     /// Aggiunge `path` se è nuovo; `Break` quando il tetto è pieno.
-    fn push(&mut self, path: String) -> ControlFlow<()> {
+    pub(crate) fn push(&mut self, path: String) -> ControlFlow<()> {
         if !self.seen.contains(&path) {
             self.seen.insert(path.clone());
             self.paths.push(path);

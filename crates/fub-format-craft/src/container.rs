@@ -6,12 +6,13 @@
 //! lettura ha un tetto, e nessuna allocazione la decide un numero scritto nel
 //! file.
 //!
-//! [`read_meta`] dà i metadati, il testo e il documento; [`embedded_preview`]
+//! [`read_meta`] dà i metadati, il testo e i file collegati; [`embedded_preview`]
 //! l'anteprima che il file porta, e [`embedded_preview_from`] la stessa letta
 //! a pezzi da un `Read + Seek`; [`Png`] e [`png_size`] le misure di un PNG,
 //! che usa anche
 //! [`PreviewImage::from_png`](crate::contract::PreviewImage::from_png).
 
+mod fields;
 pub(crate) mod zip_tail;
 
 use std::io::{Cursor, Read, Seek, SeekFrom};
@@ -20,11 +21,11 @@ use base64::alphabet;
 use base64::engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig};
 use base64::Engine;
 use flate2::read::GzDecoder;
-use serde_json::Value;
 use zip::read::{ArchiveOffset, Config};
 use zip::result::ZipError;
 use zip::ZipArchive;
 
+use fields::{Failure, Fields, Preview, Want};
 use zip_tail::{Budget, Budgeted};
 
 use crate::apps::CraftApp;
@@ -56,9 +57,9 @@ pub struct Contents {
     pub title: Option<String>,
     /// I testi del documento, uno per riga, per la ricerca.
     pub text: String,
-    /// Il documento JSON, che [`linked::collect`](crate::linked::collect)
-    /// attraversa per i file collegati.
-    pub json: Option<serde_json::Value>,
+    /// I file collegati che il documento nomina, con le regole di
+    /// [`linked::collect`](crate::linked::collect).
+    pub links: Vec<String>,
 }
 
 /// Perché un contenitore non si legge. Senza testi: la frase per chi guarda
@@ -134,12 +135,17 @@ pub fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
 /// I metadati, il testo e il documento di un file Craft.
 ///
 /// - PhotoCraft: lo ZIP con `manifest.json`; la versione da `format_version`
-///   e il titolo da `title` o `name`. Il manifesto è il documento.
+///   e il titolo da `title` o `name`; i file collegati dal manifesto.
 /// - FigCraft: lo ZIP con `document.json`; la versione da `format_version` o
 ///   `version`, il titolo da `title` o `name`, il testo da ogni campo stringa
 ///   `text`, `content` o `characters`.
 /// - VectorCraft: il JSON, scompattato se è gzip e tagliato prima dei blob;
 ///   versione, titolo e testo come FigCraft.
+///
+/// Del JSON si leggono al più i primi [`MAX_META_JSON_BYTES`]: un documento
+/// più lungo dà ciò che porta prima del taglio, se fin lì è valido. Nessun
+/// documento intero si costruisce in memoria: si tengono solo i campi che
+/// servono.
 ///
 /// Uno ZIP senza il suo JSON dà i contenuti vuoti, non un errore; un JSON
 /// valido che non è un oggetto non ha titolo né versione. Un XMP non è un
@@ -148,29 +154,9 @@ pub fn read_meta(app: CraftApp, bytes: &[u8]) -> Result<Contents, ContainerError
     check_file_size(bytes)?;
     match app {
         CraftApp::Xmp => Ok(Contents::default()),
-        CraftApp::PhotoCraft => {
-            let mut archive = open_zip(bytes)?;
-            let Some(manifest) = read_entry(&mut archive, PHOTOCRAFT_MANIFEST, MAX_FILE_BYTES)?
-            else {
-                return Ok(Contents::default());
-            };
-            let json = parse_json(&manifest)?;
-            Ok(Contents {
-                format_version: version_of(&json, &["format_version"]),
-                title: title_of(&json),
-                text: String::new(),
-                json: Some(json),
-            })
-        }
-        CraftApp::FigCraft => {
-            let mut archive = open_zip(bytes)?;
-            let Some(document) = read_entry(&mut archive, FIGCRAFT_DOCUMENT, MAX_FILE_BYTES)?
-            else {
-                return Ok(Contents::default());
-            };
-            Ok(document_contents(parse_json(&document)?))
-        }
-        CraftApp::VectorCraft => Ok(document_contents(vectorcraft_json(bytes)?)),
+        CraftApp::PhotoCraft => entry_meta(bytes, PHOTOCRAFT_MANIFEST, MANIFEST_META),
+        CraftApp::FigCraft => entry_meta(bytes, FIGCRAFT_DOCUMENT, DOCUMENT_META),
+        CraftApp::VectorCraft => vectorcraft_meta(bytes),
     }
 }
 
@@ -244,7 +230,7 @@ pub fn embedded_preview_from<R: Read + Seek>(
                 len,
                 &order,
                 PHOTOCRAFT_MANIFEST,
-                &["format_version"],
+                MANIFEST_META.version_keys,
             )
         }
         CraftApp::FigCraft => zip_preview(
@@ -255,10 +241,10 @@ pub fn embedded_preview_from<R: Read + Seek>(
             &VERSION_KEYS,
         ),
         CraftApp::VectorCraft => {
-            let json = vectorcraft_json_from(reader, max_bytes)?;
+            let mut fields = vectorcraft_fields_from(reader, max_bytes)?;
             Ok(Embedded {
-                format_version: Ok(version_of(&json, &VERSION_KEYS)),
-                png: vectorcraft_preview(&json),
+                format_version: Ok(fields.version()),
+                png: vectorcraft_preview(fields.preview()),
             })
         }
     }
@@ -291,6 +277,37 @@ const TITLE_KEYS: [&str; 2] = ["title", "name"];
 const VERSION_KEYS: [&str; 2] = ["format_version", "version"];
 /// I campi stringa che sono testo del documento, a ogni profondità.
 const TEXT_KEYS: [&str; 3] = ["text", "content", "characters"];
+/// I byte di JSON al più che [`read_meta`] legge: un tetto suo, più basso
+/// del file intero.
+pub const MAX_META_JSON_BYTES: usize = 16 * 1024 * 1024;
+
+/// Ciò che [`read_meta`] prende dal manifesto di un `.pcraft`.
+const MANIFEST_META: Want = Want {
+    version_keys: &["format_version"],
+    title: true,
+    text: false,
+    links: true,
+    preview: false,
+};
+/// Ciò che [`read_meta`] prende dal documento di FigCraft e VectorCraft.
+const DOCUMENT_META: Want = Want {
+    version_keys: &VERSION_KEYS,
+    title: true,
+    text: true,
+    links: true,
+    preview: false,
+};
+
+/// Solo la versione, dai campi `keys`.
+const fn version_only(keys: &'static [&'static str]) -> Want {
+    Want {
+        version_keys: keys,
+        title: false,
+        text: false,
+        links: false,
+        preview: false,
+    }
+}
 
 /// La fine della directory centrale di uno ZIP: la firma e i 22 byte fissi.
 const EOCD_SIGNATURE: [u8; 4] = [b'P', b'K', 0x05, 0x06];
@@ -319,7 +336,7 @@ fn zip_preview<R: Read + Seek>(
     len: u64,
     names: &[&str],
     manifest: &str,
-    version_keys: &[&str],
+    version_keys: &'static [&'static str],
 ) -> Result<Embedded, ContainerError> {
     let tail = zip_tail::check(reader, len)?;
     let budget = Budget::default();
@@ -344,7 +361,9 @@ fn zip_preview<R: Read + Seek>(
     };
     let png = first_png(names, |name| entry(name, MAX_PREVIEW_BYTES));
     let format_version = match entry(manifest, MAX_MANIFEST_BYTES) {
-        Ok(Some(bytes)) => parse_json(&bytes).map(|json| version_of(&json, version_keys)),
+        Ok(Some(bytes)) => fields::from_slice(&bytes, version_only(version_keys))
+            .map(|mut fields| fields.version())
+            .map_err(|_| ContainerError::NotJson),
         Ok(None) => Ok(None),
         // Un documento grande non è un errore: la versione resta da sapere.
         Err(ContainerError::TooLarge) => Ok(None),
@@ -487,46 +506,76 @@ fn first_png(
     failure.map_or(Ok(None), Err)
 }
 
-fn parse_json(bytes: &[u8]) -> Result<Value, ContainerError> {
-    serde_json::from_slice(bytes).map_err(|_| ContainerError::NotJson)
+/// I contenuti dal JSON nella voce `name` di uno ZIP: al più i primi
+/// [`MAX_META_JSON_BYTES`], letti dalla voce senza copiarla. Una voce che
+/// dichiara più di [`MAX_FILE_BYTES`] non si legge; una che non si scompatta
+/// o il cui CRC non torna non è uno ZIP.
+fn entry_meta(bytes: &[u8], name: &str, want: Want) -> Result<Contents, ContainerError> {
+    let mut archive = open_zip(bytes)?;
+    let mut entry = match archive.by_name(name) {
+        Ok(entry) => entry,
+        Err(ZipError::FileNotFound) => return Ok(Contents::default()),
+        Err(_) => return Err(ContainerError::NotZip),
+    };
+    if entry.is_dir() {
+        return Ok(Contents::default());
+    }
+    if entry.size() > MAX_FILE_BYTES as u64 {
+        return Err(ContainerError::TooLarge);
+    }
+    match fields::from_prefix(&mut entry, want, MAX_META_JSON_BYTES as u64) {
+        Ok(fields) => Ok(contents_of(fields)),
+        Err(Failure::Read) => Err(ContainerError::NotZip),
+        Err(Failure::Json) => Err(ContainerError::NotJson),
+    }
 }
 
-/// Il JSON di un `.vectorcraft`: scompattato con un tetto se comincia come
-/// uno gzip, e tagliato al primo [`VECTORCRAFT_BLOBS`].
-fn vectorcraft_json(bytes: &[u8]) -> Result<Value, ContainerError> {
-    let inflated;
-    let raw = if bytes.starts_with(&GZIP_MAGIC) {
-        let mut out = Vec::new();
-        GzDecoder::new(bytes)
-            .take(MAX_FILE_BYTES as u64 + 1)
-            .read_to_end(&mut out)
-            .map_err(|_| ContainerError::BadGzip)?;
-        if out.len() > MAX_FILE_BYTES {
-            return Err(ContainerError::TooLarge);
-        }
-        inflated = out;
-        inflated.as_slice()
+/// I contenuti di un `.vectorcraft` in memoria: il JSON, scompattato se
+/// comincia come uno gzip e tagliato al primo [`VECTORCRAFT_BLOBS`], al più
+/// [`MAX_FILE_BYTES`] (oltre è [`ContainerError::TooLarge`]), di cui si
+/// leggono i primi [`MAX_META_JSON_BYTES`].
+fn vectorcraft_meta(bytes: &[u8]) -> Result<Contents, ContainerError> {
+    let gzip = bytes.starts_with(&GZIP_MAGIC);
+    let source: Box<dyn Read + '_> = if gzip {
+        Box::new(GzDecoder::new(bytes))
     } else {
-        bytes
+        Box::new(bytes)
     };
-    let json = match find(raw, VECTORCRAFT_BLOBS) {
-        Some(at) => raw.get(..at).unwrap_or_default(),
-        None => raw,
-    };
-    parse_json(json)
+    let mut json = UntilBlobs::new(source, MAX_FILE_BYTES as u64);
+    let parsed = fields::from_prefix(&mut json, DOCUMENT_META, MAX_META_JSON_BYTES as u64);
+    // Lo gzip e il tetto contano prima del JSON, come quando si scompattava
+    // tutto prima di leggerlo.
+    json.drain();
+    if json.failed {
+        return Err(ContainerError::BadGzip);
+    }
+    if json.over {
+        return Err(ContainerError::TooLarge);
+    }
+    parsed.map(contents_of).map_err(|_| ContainerError::NotJson)
 }
 
-/// Il pezzo che [`vectorcraft_json_from`] legge alla volta.
+fn contents_of(mut fields: Fields) -> Contents {
+    Contents {
+        format_version: fields.version(),
+        title: fields.title(),
+        text: fields.text(),
+        links: fields.links(),
+    }
+}
+
+/// Il pezzo che [`UntilBlobs`] legge alla volta.
 const VECTORCRAFT_CHUNK: usize = 64 * 1024;
 
-/// Il JSON di un `.vectorcraft` letto da `reader`: dall'inizio fino al primo
+/// I campi di un `.vectorcraft` letto da `reader`: dall'inizio fino al primo
 /// [`VECTORCRAFT_BLOBS`] o alla fine, scompattato se comincia come uno gzip.
 /// I byte compressi letti e il JSON hanno lo stesso tetto `max`: oltre è
-/// [`ContainerError::OverLimit`].
-fn vectorcraft_json_from<R: Read + Seek>(
+/// [`ContainerError::OverLimit`]. Il JSON passa dal lettore al visitatore a
+/// pezzi: in memoria resta un pezzo, non il file.
+fn vectorcraft_fields_from<R: Read + Seek>(
     reader: &mut R,
     max: u64,
-) -> Result<Value, ContainerError> {
+) -> Result<Fields, ContainerError> {
     reader
         .seek(SeekFrom::Start(0))
         .map_err(|_| ContainerError::NotJson)?;
@@ -542,65 +591,149 @@ fn vectorcraft_json_from<R: Read + Seek>(
     }
     let start = head.get(..got).unwrap_or_default();
     let source = Cursor::new(start).chain(reader);
-    let json = if start == GZIP_MAGIC {
-        let mut inflate = GzDecoder::new(source.take(max));
-        match until_blobs(&mut inflate, max) {
-            Ok(json) => json,
-            // Lo gzip si rompe dove il tetto lo ha tagliato.
-            Err(Some(_)) if inflate.get_ref().limit() == 0 => {
-                return Err(ContainerError::OverLimit)
-            }
-            Err(Some(_)) => return Err(ContainerError::BadGzip),
-            Err(None) => return Err(ContainerError::OverLimit),
-        }
-    } else {
-        match until_blobs(
-            &mut source.take(max.saturating_add(VECTORCRAFT_BLOBS.len() as u64)),
-            max,
-        ) {
-            Ok(json) => json,
-            Err(Some(_)) => return Err(ContainerError::NotJson),
-            Err(None) => return Err(ContainerError::OverLimit),
-        }
+    let want = Want {
+        preview: true,
+        ..version_only(&VERSION_KEYS)
     };
-    parse_json(&json)
+    if start == GZIP_MAGIC {
+        let mut json = UntilBlobs::new(GzDecoder::new(source.take(max)), max);
+        let parsed = fields::from_reader(&mut json, want);
+        json.drain();
+        if json.failed {
+            // Lo gzip si rompe dove il tetto lo ha tagliato.
+            return Err(if json.inner.get_ref().limit() == 0 {
+                ContainerError::OverLimit
+            } else {
+                ContainerError::BadGzip
+            });
+        }
+        if json.over {
+            return Err(ContainerError::OverLimit);
+        }
+        parsed.map_err(|_| ContainerError::NotJson)
+    } else {
+        let mut json = UntilBlobs::new(
+            source.take(max.saturating_add(VECTORCRAFT_BLOBS.len() as u64)),
+            max,
+        );
+        let parsed = fields::from_reader(&mut json, want);
+        json.drain();
+        if json.over {
+            return Err(ContainerError::OverLimit);
+        }
+        parsed.map_err(|_| ContainerError::NotJson)
+    }
 }
 
-/// I byte di `reader` fino al primo [`VECTORCRAFT_BLOBS`] o alla fine, al più
-/// `max`: `Err(None)` oltre il tetto, `Err(Some(_))` per un errore di lettura.
-/// Il separatore si cerca anche a cavallo di due pezzi.
-fn until_blobs<R: Read>(reader: &mut R, max: u64) -> Result<Vec<u8>, Option<std::io::Error>> {
-    let cap = usize::try_from(max)
-        .unwrap_or(usize::MAX)
-        .saturating_add(VECTORCRAFT_BLOBS.len());
-    let mut out = Vec::new();
-    let mut chunk = vec![0u8; VECTORCRAFT_CHUNK];
-    loop {
-        let room = cap.saturating_sub(out.len()).min(chunk.len());
-        if room == 0 {
-            return Err(None);
-        }
-        let buf = chunk.get_mut(..room).unwrap_or_default();
-        let got = match reader.read(buf) {
-            Ok(0) => break,
-            Ok(got) => got,
-            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
-            Err(error) => return Err(Some(error)),
-        };
-        let from = out.len().saturating_sub(VECTORCRAFT_BLOBS.len() - 1);
-        out.extend_from_slice(buf.get(..got).unwrap_or_default());
-        if let Some(at) = out
-            .get(from..)
-            .and_then(|tail| find(tail, VECTORCRAFT_BLOBS))
-        {
-            out.truncate(from + at);
-            break;
+/// Un lettore che dà i byte di `inner` fino al primo [`VECTORCRAFT_BLOBS`] o
+/// alla fine, al più `max`: oltre è un errore e `over` lo ricorda; un errore
+/// di `inner` lo ricorda `failed`. Il separatore si cerca anche a cavallo di
+/// due pezzi: gli ultimi byte di un pezzo, che possono esserne l'inizio, si
+/// tengono finché il pezzo dopo non lo dice.
+struct UntilBlobs<R> {
+    inner: R,
+    max: u64,
+    chunk: Vec<u8>,
+    /// I byte letti e non ancora dati: `chunk[start..end]`.
+    start: usize,
+    end: usize,
+    given: u64,
+    /// Il separatore o la fine di `inner` sono arrivati: ciò che resta nel
+    /// pezzo si dà tutto.
+    done: bool,
+    over: bool,
+    failed: bool,
+}
+
+impl<R: Read> UntilBlobs<R> {
+    fn new(inner: R, max: u64) -> Self {
+        UntilBlobs {
+            inner,
+            max,
+            chunk: vec![0u8; VECTORCRAFT_CHUNK],
+            start: 0,
+            end: 0,
+            given: 0,
+            done: false,
+            over: false,
+            failed: false,
         }
     }
-    if out.len() as u64 > max {
-        return Err(None);
+
+    /// Legge fino alla fine senza tenere niente: dice se il JSON supera il
+    /// tetto o se `inner` si rompe più avanti.
+    fn drain(&mut self) {
+        let mut sink = [0u8; 4096];
+        while !self.over && !self.failed {
+            match self.read(&mut sink) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+        }
     }
-    Ok(out)
+}
+
+impl<R: Read> Read for UntilBlobs<R> {
+    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+        let hold = VECTORCRAFT_BLOBS.len() - 1;
+        loop {
+            if self.over || self.failed {
+                return Err(std::io::Error::other("lettura del JSON fermata"));
+            }
+            let pending = self.end - self.start;
+            let ready = if self.done {
+                pending
+            } else {
+                pending.saturating_sub(hold)
+            };
+            if ready > 0 {
+                if self.given.saturating_add(ready as u64) > self.max {
+                    self.over = true;
+                    continue;
+                }
+                let n = ready.min(out.len());
+                let (Some(to), Some(from)) =
+                    (out.get_mut(..n), self.chunk.get(self.start..self.start + n))
+                else {
+                    return Ok(0);
+                };
+                to.copy_from_slice(from);
+                self.start += n;
+                self.given += n as u64;
+                return Ok(n);
+            }
+            if self.done {
+                return Ok(0);
+            }
+            // Quel che resta (meno di un separatore) va in testa al pezzo.
+            self.chunk.copy_within(self.start..self.end, 0);
+            self.end = pending;
+            self.start = 0;
+            let room = self.chunk.get_mut(self.end..).unwrap_or_default();
+            let got = match self.inner.read(room) {
+                Ok(got) => got,
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(error) => {
+                    self.failed = true;
+                    return Err(error);
+                }
+            };
+            if got == 0 {
+                self.done = true;
+                continue;
+            }
+            let from = self.end;
+            self.end += got;
+            if let Some(at) = self
+                .chunk
+                .get(from.saturating_sub(hold)..self.end)
+                .and_then(|tail| find(tail, VECTORCRAFT_BLOBS))
+            {
+                self.end = from.saturating_sub(hold) + at;
+                self.done = true;
+            }
+        }
+    }
 }
 
 /// Dove comincia la prima copia di `needle` in `haystack`.
@@ -617,22 +750,14 @@ fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     None
 }
 
-/// L'anteprima in `/preview/data` di un `.vectorcraft`.
-fn vectorcraft_preview(json: &Value) -> Result<Option<Png>, ContainerError> {
-    let Some(data) = json
-        .pointer(VECTORCRAFT_PREVIEW_POINTER)
-        .and_then(Value::as_str)
-    else {
-        return Ok(None);
+/// L'anteprima di un `.vectorcraft`, dal base64 che il JSON porta in
+/// `/preview/data`: il tetto sulla stringa l'ha già guardato chi l'ha letta.
+fn vectorcraft_preview(preview: Preview) -> Result<Option<Png>, ContainerError> {
+    let encoded = match preview {
+        Preview::Absent => return Ok(None),
+        Preview::TooLarge => return Err(ContainerError::TooLarge),
+        Preview::Encoded(encoded) => encoded,
     };
-    let Some(encoded) = strip_data_url(data) else {
-        return Ok(None);
-    };
-    // Il tetto si guarda sulla stringa, prima di decodificare: gli spazi
-    // contano, così nessuna stringa più lunga del tetto si copia.
-    if encoded.len() > MAX_PREVIEW_BASE64 {
-        return Err(ContainerError::TooLarge);
-    }
     let compact: String = encoded
         .chars()
         .filter(|c| !c.is_ascii_whitespace())
@@ -657,86 +782,14 @@ fn vectorcraft_preview(json: &Value) -> Result<Option<Png>, ContainerError> {
 
 /// Il base64 di `data`: tolto il prefisso `data:…;base64,` se c'è. Un URL
 /// `data:` che non è in base64 non dà niente. Il prefisso si confronta così
-/// com'è scritto.
+/// com'è scritto. Il tetto si guarda sulla stringa, prima di decodificare:
+/// gli spazi contano, così nessuna stringa più lunga del tetto si copia.
 fn strip_data_url(data: &str) -> Option<&str> {
     if !data.starts_with("data:") {
         return Some(data);
     }
     let (head, encoded) = data.split_once(',')?;
     head.ends_with(";base64").then_some(encoded)
-}
-
-/// Versione, titolo e testo di un documento FigCraft o VectorCraft.
-fn document_contents(json: Value) -> Contents {
-    Contents {
-        format_version: version_of(&json, &VERSION_KEYS),
-        title: title_of(&json),
-        text: collect_text(&json),
-        json: Some(json),
-    }
-}
-
-/// La versione dal primo dei campi `keys` dell'oggetto in cima che è un
-/// numero o una stringa non vuota, sempre come stringa.
-fn version_of(json: &Value, keys: &[&str]) -> Option<String> {
-    let object = json.as_object()?;
-    keys.iter().find_map(|key| match object.get(*key)? {
-        Value::Number(number) => Some(number.to_string()),
-        Value::String(text) if !text.trim().is_empty() => Some(text.clone()),
-        _ => None,
-    })
-}
-
-/// Il titolo da `title` o `name` dell'oggetto in cima, se è una stringa non
-/// vuota.
-fn title_of(json: &Value) -> Option<String> {
-    let object = json.as_object()?;
-    TITLE_KEYS.iter().find_map(|key| match object.get(*key)? {
-        Value::String(text) if !text.trim().is_empty() => Some(text.clone()),
-        _ => None,
-    })
-}
-
-/// I testi del documento: ogni campo stringa di [`TEXT_KEYS`], a ogni
-/// profondità e nell'ordine del documento, uno per riga, fino a
-/// [`MAX_TEXT_BYTES`] tagliati su un confine di carattere. La visita usa una
-/// pila e non la ricorsione, e si ferma quando il tetto è passato.
-fn collect_text(json: &Value) -> String {
-    let mut text = String::new();
-    let mut pending: Vec<(Option<&str>, &Value)> = vec![(None, json)];
-    while let Some((key, value)) = pending.pop() {
-        match value {
-            Value::String(found) if key.is_some_and(|key| TEXT_KEYS.contains(&key)) => {
-                if found.is_empty() {
-                    continue;
-                }
-                if !text.is_empty() {
-                    text.push('\n');
-                }
-                text.push_str(found);
-                if text.len() > MAX_TEXT_BYTES {
-                    break;
-                }
-            }
-            Value::Object(map) => pending.extend(
-                map.iter()
-                    .rev()
-                    .map(|(key, child)| (Some(key.as_str()), child)),
-            ),
-            Value::Array(items) => pending.extend(items.iter().rev().map(|item| (None, item))),
-            _ => {}
-        }
-    }
-    if text.len() > MAX_TEXT_BYTES {
-        let mut cut = MAX_TEXT_BYTES;
-        while !text.is_char_boundary(cut) {
-            cut -= 1;
-        }
-        text.truncate(cut);
-        let kept = text.trim_end_matches('\n').len();
-        text.truncate(kept);
-    }
-    text
 }
 
 #[cfg(test)]
