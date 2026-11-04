@@ -551,6 +551,18 @@ fn render(
         Err(Copied::Gone(error)) => return Err(error),
         Err(Copied::Disk) => return Ok(failed(base, None, size, Failure::Copy)),
     };
+    // Per un file oltre `MAX_FILE_BYTES` la domanda non ha guardato la
+    // revisione: cache e «già provato» si guardano qui, sulla copia.
+    if let Some(cached) = super::preview::cached(&*host, doc, &start, size) {
+        return Ok(cached);
+    }
+    if already_tried(&start, size) {
+        let mut preview = base;
+        preview.revision = Some(start);
+        preview.missing = Some(Missing::Failed);
+        preview.render = None;
+        return Ok(preview);
+    }
     let Some(args) = cli_args(subject, size, &input, &output) else {
         return Ok(failed(base, Some(start), size, Failure::NoCli));
     };
@@ -673,7 +685,11 @@ fn copy(ranged: &Ranged, doc: &DocId, input: &Path, max: u64) -> Result<Revision
         out.write_all(&buffer[..read]).map_err(|_| Copied::Disk)?;
     }
     out.flush().map_err(|_| Copied::Disk)?;
-    Ok(hasher.finish())
+    let revision = hasher.finish();
+    // I pezzi sono tutti della stessa lease: la revisione vale per lei, e la
+    // prossima domanda la trova senza rileggere il file.
+    file.remember(&revision);
+    Ok(revision)
 }
 
 /// La firma di un PNG.

@@ -100,6 +100,11 @@ pub fn preview(
 /// il peso massimo di `craft.preview-max-mib` è `missing: over_limit` senza
 /// offerta. L'offerta porta il consenso com'è, anche `off`, perché la scheda
 /// sappia quale app direbbe «spente»; qui non si avvia mai niente.
+///
+/// La revisione, per la cache e il «già provato», si legge a pezzi solo per
+/// un file fino a [`MAX_FILE_BYTES`]; oltre vale quella ricordata, e senza
+/// l'offerta parte comunque: la revisione la calcola il job `craft.render`,
+/// che guarda lui cache e «già provato».
 fn offer(
     host: &dyn HostApi,
     ranged: Option<&Ranged>,
@@ -119,8 +124,13 @@ fn offer(
         over_limit(&mut preview, max);
         return preview;
     }
+    // Il comando tiene il turno dello scrittore: un file oltre
+    // `MAX_FILE_BYTES` non si legge intero qui. Vale la revisione già
+    // ricordata; altrimenti l'offerta parte senza, e la calcola il job.
+    let deferred = preview.info.bytes > MAX_FILE_BYTES as u64;
     let revision = match (&preview.revision, ranged) {
         (Some(revision), _) => Some(revision.clone()),
+        (None, Some(ranged)) if deferred => ranged.remembered(doc),
         (None, Some(ranged)) => match ranged.revision(doc, max) {
             Ok(revision) => Some(revision),
             Err(RangedError::OverLimit { .. }) => {
@@ -131,15 +141,16 @@ fn offer(
         },
         (None, None) => host.document_revision(doc).ok(),
     };
-    let Some(revision) = revision else {
-        return preview;
-    };
-    if let Some(cached) = cached(host, doc, &revision, size) {
-        return cached;
-    }
-    if super::render::already_tried(&revision, size) {
-        preview.missing = Some(Missing::Failed);
-        preview.render = None;
+    if let Some(revision) = &revision {
+        if let Some(cached) = cached(host, doc, revision, size) {
+            return cached;
+        }
+        if super::render::already_tried(revision, size) {
+            preview.missing = Some(Missing::Failed);
+            preview.render = None;
+            return preview;
+        }
+    } else if !(deferred && ranged.is_some()) {
         return preview;
     }
     preview.render = Some(RenderOffer {
@@ -280,7 +291,7 @@ fn subject_of(host: &dyn HostApi, doc: &DocId) -> Option<PreviewSubject> {
 
 /// La voce in cache, se si legge, è di questa versione e ripete documento,
 /// revisione e misura.
-fn cached(
+pub(super) fn cached(
     host: &dyn HostApi,
     doc: &DocId,
     revision: &Revision,
@@ -671,6 +682,88 @@ mod tests {
         assert_eq!(out.origin, PreviewOrigin::None);
         // Solo le due letture della revisione: i byte non si aprono.
         assert_eq!(host.reads_on(doc.as_str()).0, reads + 2);
+    }
+
+    fn core_spec(key: &str) -> fub_abi::settings::SettingSpec {
+        crate::settings::core_settings()
+            .into_iter()
+            .find(|spec| spec.key == key)
+            .expect("la chiave è fra le impostazioni del core")
+    }
+
+    /// Un PDF di `len` byte (un buco dopo l'intestazione) in un vault vero,
+    /// col suo lettore a pezzi, e un host con `pdfcraft-cli` trovato e
+    /// `craft.preview-max-mib` a 256.
+    fn big_pdf(len: u64) -> (tempfile::TempDir, fub_kernel::Workspace, Ranged, MemoryHost) {
+        use fub_abi::settings::SettingValue;
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = tempfile::tempdir().unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(dir.path().join("vault")).unwrap();
+        std::fs::create_dir_all(root.join("Libri")).unwrap();
+        let mut file = std::fs::File::create(root.join("Libri/grande.pdf")).unwrap();
+        std::io::Write::write_all(&mut file, b"%PDF-1.7\n").unwrap();
+        file.set_len(len).unwrap();
+        let cli = dir.path().join("pdfcraft-cli");
+        std::fs::write(&cli, "#!/bin/sh\nexit 1\n").unwrap();
+        std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let ws = fub_kernel::Workspace::new(&root, fub_kernel::FormatRegistry::new()).unwrap();
+        let ranged = Ranged::new(ws.resource_reader());
+        let host = MemoryHost::new()
+            .with_value(
+                core_spec(crate::settings::CRAFT_EDITOR_PATHS),
+                SettingValue::List(vec![format!("pdfcraft-cli={}", cli.display())]),
+            )
+            .with_value(
+                core_spec(crate::settings::CRAFT_PREVIEW_MAX_MIB),
+                SettingValue::Number(256.0),
+            )
+            .with_setting(core_spec(crate::settings::CRAFT_CLI_PREVIEWS));
+        (dir, ws, ranged, host)
+    }
+
+    #[test]
+    fn a_pdf_over_the_threshold_gets_the_offer_without_being_read() {
+        let len = MAX_FILE_BYTES as u64 + 8 * 1024 * 1024;
+        let (_dir, _ws, ranged, mut host) = big_pdf(len);
+        let doc = DocId::new("Libri/grande.pdf");
+        let out = preview(&mut host, Some(&ranged), &doc, PreviewSize::Small).unwrap();
+        assert_eq!(out.missing, Some(Missing::Absent));
+        assert!(out.render.is_some(), "l'offerta c'è");
+        assert_eq!(out.revision, None);
+        assert_eq!(out.info.bytes, len);
+        // Nessun pezzo: la revisione di un file oltre la soglia non si
+        // calcola dentro il comando.
+        assert_eq!(ranged.bytes_read(), 0);
+
+        // Il job la calcola fuori dal comando e la CLI scrive in cache.
+        let revision = ranged.revision(&doc, 256 * 1024 * 1024).unwrap();
+        let read = ranged.bytes_read();
+        assert_eq!(read, len);
+        let mut done = out.clone();
+        done.origin = PreviewOrigin::Cli;
+        done.missing = None;
+        done.render = None;
+        done.revision = Some(revision.clone());
+        host.cache_write(
+            &cache_key(&revision.0, PreviewSize::Small),
+            &serde_json::to_vec(&done).unwrap(),
+        )
+        .unwrap();
+        // La revisione ricordata trova la cache, senza rileggere.
+        let again = preview(&mut host, Some(&ranged), &doc, PreviewSize::Small).unwrap();
+        assert_eq!(again, done);
+        assert_eq!(ranged.bytes_read(), read);
+    }
+
+    #[test]
+    fn a_pdf_under_the_threshold_still_finds_its_revision() {
+        let (_dir, _ws, ranged, mut host) = big_pdf(4 * 1024 * 1024);
+        let doc = DocId::new("Libri/grande.pdf");
+        let out = preview(&mut host, Some(&ranged), &doc, PreviewSize::Small).unwrap();
+        assert!(out.render.is_some());
+        // Sotto la soglia la revisione si calcola come prima: il «già
+        // provato» e la cache valgono già alla prima domanda.
+        assert_eq!(ranged.bytes_read(), 4 * 1024 * 1024);
     }
 
     #[test]

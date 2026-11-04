@@ -23,7 +23,8 @@
 
 use std::collections::HashMap;
 use std::io::{self, Read, Seek, SeekFrom};
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use camino::Utf8PathBuf;
 use fub_abi::model::DocId;
@@ -95,18 +96,38 @@ pub struct Whole {
 #[derive(Clone)]
 pub struct Ranged {
     reader: ResourceReader,
+    /// I byte chiesti al kernel da ogni file aperto da qui, anche dalle
+    /// copie di questo lettore.
+    read: Arc<AtomicU64>,
 }
 
 impl Ranged {
     pub fn new(reader: ResourceReader) -> Self {
-        Ranged { reader }
+        Ranged {
+            reader,
+            read: Arc::new(AtomicU64::new(0)),
+        }
     }
 
     /// Una lease su `doc`: il peso viene da lì (`lease.stat.size`), non
     /// dall'elenco della cartella.
     pub fn open(&self, doc: &DocId) -> Result<RangedFile<'_>, RangedError> {
         let lease = self.reader.open(doc)?;
-        Ok(RangedFile::new(&self.reader, lease))
+        let mut file = RangedFile::new(&self.reader, lease);
+        file.total = Some(Arc::clone(&self.read));
+        Ok(file)
+    }
+
+    /// I byte chiesti al kernel dai file aperti con questo lettore e con le
+    /// sue copie.
+    pub fn bytes_read(&self) -> u64 {
+        self.read.load(Ordering::Relaxed)
+    }
+
+    /// La revisione di `doc` se è ricordata per la lease di adesso, senza
+    /// leggere niente; `None` anche quando la lease non si apre.
+    pub fn remembered(&self, doc: &DocId) -> Option<Revision> {
+        remembered(&self.open(doc).ok()?.lease)
     }
 
     /// Il file intero, a pezzi, fino a `max` byte: oltre è
@@ -142,6 +163,7 @@ pub struct RangedFile<'a> {
     window: Vec<u8>,
     window_start: u64,
     read: u64,
+    total: Option<Arc<AtomicU64>>,
 }
 
 impl<'a> RangedFile<'a> {
@@ -153,6 +175,7 @@ impl<'a> RangedFile<'a> {
             window: Vec::new(),
             window_start: 0,
             read: 0,
+            total: None,
         }
     }
 
@@ -180,6 +203,9 @@ impl<'a> RangedFile<'a> {
         let want = usize::try_from(left).map_or(CHUNK_BYTES, |left| left.min(CHUNK_BYTES));
         let bytes = self.reader.read_at(&self.lease, offset, want)?;
         self.read = self.read.saturating_add(bytes.len() as u64);
+        if let Some(total) = &self.total {
+            total.fetch_add(bytes.len() as u64, Ordering::Relaxed);
+        }
         if bytes.is_empty() && want > 0 {
             // La lease dice che i byte ci sono e il disco non li dà: il file
             // è cambiato in un modo che lo stat non ha visto.
@@ -220,6 +246,13 @@ impl<'a> RangedFile<'a> {
         let revision = hasher.finish();
         remember(&self.lease, &revision);
         Ok(revision)
+    }
+
+    /// Ricorda `revision` per la lease di questo file: chi l'ha calcolata
+    /// sui byte letti da qui la rende a [`Ranged::revision`] e a
+    /// [`Ranged::remembered`] finché il file non cambia.
+    pub fn remember(&self, revision: &Revision) {
+        remember(&self.lease, revision);
     }
 
     fn check_limit(&self, max: u64) -> Result<u64, RangedError> {

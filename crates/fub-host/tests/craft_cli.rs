@@ -978,6 +978,84 @@ fn pdfcraft_draws_the_first_page_and_a_jpeg_is_good() {
     assert_eq!(script.calls(), 1);
 }
 
+/// Un PDF oltre `MAX_FILE_BYTES`: l'intestazione, un buco, la fine.
+fn sparse_pdf(path: &Utf8Path, len: u64) {
+    use std::io::{Seek as _, SeekFrom, Write as _};
+    let mut file = std::fs::File::create(path).unwrap();
+    file.write_all(&pdf("grande")).unwrap();
+    file.seek(SeekFrom::Start(len - 6)).unwrap();
+    file.write_all(b"%%EOF\n").unwrap();
+    assert_eq!(file.metadata().unwrap().len(), len);
+}
+
+#[test]
+fn a_pdf_over_the_threshold_is_offered_rendered_and_then_cached() {
+    let _serial = serial();
+    let script = Script::jpeg();
+    let doc = "Libri/grande.pdf";
+    let vault = Vault::with_cli(&script, "pdfcraft-cli", &[(doc, pdf("piccolo"))], "on");
+    vault
+        .host
+        .set_setting_for_user(
+            vault.vault(),
+            CRAFT_PREVIEW_MAX_MIB,
+            SettingValue::Number(256.0),
+        )
+        .unwrap();
+    let len = fub_format_craft::container::MAX_FILE_BYTES as u64 + 8 * 1024 * 1024;
+    sparse_pdf(&vault.root.join(doc), len);
+
+    let offered = vault.preview(doc);
+    assert_eq!(offered.info.bytes, len);
+    assert_eq!(offered.revision, None);
+    assert_eq!(
+        offered.render.map(|offer| offer.app),
+        Some("PdfCraft".to_owned())
+    );
+    let done = render_through(&vault, doc, PreviewSize::Small);
+    assert_eq!(done.origin, PreviewOrigin::Cli, "{done:?}");
+    assert!(done.revision.is_some());
+    script.all_gone();
+    // La revisione l'ha calcolata il job: la domanda dopo trova la cache.
+    let cached = vault.preview(doc);
+    assert_eq!(cached.origin, PreviewOrigin::Cli);
+    assert_eq!(cached.revision, done.revision);
+    assert_eq!(script.calls(), 1);
+}
+
+#[test]
+fn a_pdf_over_the_threshold_that_fails_does_not_start_again() {
+    let _serial = serial();
+    let script = Script::new("exit 1");
+    let doc = "Libri/grande-rotto.pdf";
+    let vault = Vault::with_cli(&script, "pdfcraft-cli", &[(doc, pdf("rotto"))], "on");
+    vault
+        .host
+        .set_setting_for_user(
+            vault.vault(),
+            CRAFT_PREVIEW_MAX_MIB,
+            SettingValue::Number(256.0),
+        )
+        .unwrap();
+    sparse_pdf(
+        &vault.root.join(doc),
+        fub_format_craft::container::MAX_FILE_BYTES as u64 + 1024 * 1024,
+    );
+    assert!(vault.preview(doc).render.is_some());
+    let done = render_through(&vault, doc, PreviewSize::Small);
+    assert_eq!(done.missing, Some(Missing::Failed), "{done:?}");
+    script.all_gone();
+    // Il job ha ricordato la revisione della copia: la domanda dopo sa che
+    // è già stata provata, e il gesto non parte.
+    let after = vault.preview(doc);
+    assert_eq!(after.missing, Some(Missing::Failed));
+    assert!(after.render.is_none());
+    let again = vault.render(doc).unwrap();
+    assert!(!again.queued);
+    std::thread::sleep(Duration::from_millis(200));
+    assert_eq!(script.calls(), 1);
+}
+
 #[test]
 fn an_encrypted_pdf_fails_once_and_the_same_revision_does_not_start_again() {
     let _serial = serial();
