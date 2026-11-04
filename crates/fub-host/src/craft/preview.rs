@@ -704,7 +704,6 @@ mod tests {
     /// `craft.preview-max-mib` a 256.
     fn big_pdf(len: u64) -> (tempfile::TempDir, fub_kernel::Workspace, Ranged, MemoryHost) {
         use fub_abi::settings::SettingValue;
-        use std::os::unix::fs::PermissionsExt as _;
         let dir = tempfile::tempdir().unwrap();
         let root = camino::Utf8PathBuf::from_path_buf(dir.path().join("vault")).unwrap();
         std::fs::create_dir_all(root.join("Libri")).unwrap();
@@ -713,7 +712,13 @@ mod tests {
         file.set_len(len).unwrap();
         let cli = dir.path().join("pdfcraft-cli");
         std::fs::write(&cli, "#!/bin/sh\nexit 1\n").unwrap();
-        std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // Su Windows ogni file trovato conta come programma; altrove serve il
+        // bit di esecuzione.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
         let ws = fub_kernel::Workspace::new(&root, fub_kernel::FormatRegistry::new()).unwrap();
         let ranged = Ranged::new(ws.resource_reader());
         let host = MemoryHost::new()
