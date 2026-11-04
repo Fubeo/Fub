@@ -107,7 +107,7 @@ Ogni rifiuto ha la sua chiave nel catalogo del core:
 | `host.open_with.wrong_kind` | l'app non apre quell'estensione |
 | `host.open_with.not_installed` | l'app non si trova su questo computer |
 | `host.reveal.outside` | il percorso esce dal vault |
-| `host.open_with.missing` | il file non c'è più |
+| `host.open_with.missing` | il file non c'è più, il percorso è vuoto o porta a una cartella |
 | `host.open_with.launch_failed` | il programma non è partito |
 
 Gli errori dicono il nome dell'app, mai il percorso del programma.

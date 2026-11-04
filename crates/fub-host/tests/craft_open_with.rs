@@ -399,6 +399,27 @@ fn every_refusal_says_its_key() {
 }
 
 #[test]
+fn an_empty_path_or_a_folder_is_missing_and_starts_nothing() {
+    let (_dir, root) = vault(&[]);
+    let folder = "Disegni/cartella.vectorcraft";
+    std::fs::create_dir_all(root.join(folder)).unwrap();
+    let host = opened(&root);
+    let vault = Some(root.as_str());
+    for path in ["", folder, "Disegni/cartella.vectorcraft/"] {
+        let error = host
+            .open_with(vault, path, "vectorcraft", None)
+            .unwrap_err();
+        assert_eq!(
+            key_of(&error),
+            "host.open_with.missing",
+            "{path:?}: {error:?}"
+        );
+    }
+    assert!(!on_disk(&root, "Disegni/cartella.vectorcraft.args").exists());
+    assert!(!host.external_editors(vault, Some(folder)).unwrap()[0].running);
+}
+
+#[test]
 fn with_fub_craft_off_there_are_no_editors_and_nothing_opens() {
     let (_dir, root) = vault(&["fub.craft"]);
     let host = opened(&root);

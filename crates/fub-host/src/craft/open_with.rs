@@ -184,6 +184,9 @@ pub(crate) fn open_with(
             vec![Arg::text("editor", editor)],
         )));
     };
+    if path.is_empty() {
+        return Err(missing(path));
+    }
     if !editors::opens(editor, extension_of(path)) {
         return Err(PluginError::BadArgs(Text::message(
             "host.open_with.wrong_kind",
@@ -203,28 +206,49 @@ pub(crate) fn open_with(
     let root = host.root(vault)?;
     let file =
         crate::vault_path::inside(root.as_std_path(), path).map_err(|error| match error {
-            PluginError::NotFound(_) => PluginError::NotFound(Text::message(
-                "host.open_with.missing",
-                vec![Arg::text("path", path)],
-            )),
+            PluginError::NotFound(_) => missing(path),
             other => other,
         })?;
-    let how = open_file(registry(), editor, &launch, &file, page, Os::current())?;
+    let how = open_file(
+        registry(),
+        editor,
+        &launch,
+        path,
+        &file,
+        page,
+        Os::current(),
+    )?;
     Ok(OpenedWith {
         editor: editor.id.to_string(),
         how,
     })
 }
 
-/// I punti 3, 4 e 5: il canale dell'app aperta, o un avvio col file.
+/// Un percorso del vault che non porta a un file: non c'è, è vuoto, è una
+/// cartella.
+fn missing(path: &str) -> PluginError {
+    PluginError::NotFound(Text::message(
+        "host.open_with.missing",
+        vec![Arg::text("path", path)],
+    ))
+}
+
+/// I punti 3, 4 e 5: il canale dell'app aperta, o un avvio col file. `path` è
+/// il percorso del vault, `file` quello sul disco; un percorso vuoto o che non
+/// porta a un file (una cartella chiamata `x.vectorcraft`) non arriva né al
+/// canale né all'app.
 fn open_file(
     registry: &'static Registry,
     editor: &Editor,
     launch: &Launch,
+    path: &str,
     file: &Path,
     page: Option<u32>,
     os: Os,
 ) -> Result<OpenHow, PluginError> {
+    if path.is_empty() || !file.is_file() {
+        return Err(missing(path));
+    }
     if let Some(channel) = registry.channel(editor.id) {
         // Un canale che non risponde non è un errore per chi ha chiesto: il
         // file si passa all'app col suo programma, come se non ci fosse.
@@ -443,7 +467,16 @@ mod tests {
             let launch = Launch::Program(program.clone());
 
             // Il primo avvio: un processo nuovo, senza canale.
-            let how = open_file(registry, &PROVA, &launch, &file, None, Os::Linux).unwrap();
+            let how = open_file(
+                registry,
+                &PROVA,
+                &launch,
+                "carta.prova",
+                &file,
+                None,
+                Os::Linux,
+            )
+            .unwrap();
             assert_eq!(how, OpenHow::NewProcess);
             assert!(registry.running("prova"));
             let pid = registry.apps().get("prova").unwrap().pid;
@@ -468,7 +501,16 @@ mod tests {
             let channel = Channel::for_control(&PROVA.control, port).unwrap().unwrap();
             let token = channel.token().to_string();
             registry.apps().get_mut("prova").unwrap().channel = Some(Arc::new(channel));
-            let how = open_file(registry, &PROVA, &launch, &file, None, Os::Linux).unwrap();
+            let how = open_file(
+                registry,
+                &PROVA,
+                &launch,
+                "carta.prova",
+                &file,
+                None,
+                Os::Linux,
+            )
+            .unwrap();
             assert_eq!(how, OpenHow::InRunning);
             let lines = server.join().unwrap();
             assert!(lines[0].contains(&token), "the token goes first");
@@ -482,7 +524,16 @@ mod tests {
             drop(closed);
             registry.apps().get_mut("prova").unwrap().channel =
                 Some(Arc::new(Channel::new(dead, Framing::Line).unwrap()));
-            let how = open_file(registry, &PROVA, &launch, &file, None, Os::Linux).unwrap();
+            let how = open_file(
+                registry,
+                &PROVA,
+                &launch,
+                "carta.prova",
+                &file,
+                None,
+                Os::Linux,
+            )
+            .unwrap();
             assert_eq!(how, OpenHow::NewProcess);
             let second = registry.apps().get("prova").unwrap().pid;
             assert_ne!(second, pid);
@@ -498,13 +549,17 @@ mod tests {
 
         #[test]
         fn an_app_that_fails_to_start_says_its_name_and_not_its_program() {
+            let dir = tempfile::tempdir().unwrap();
+            let file = dir.path().join("carta.prova");
+            std::fs::write(&file, "x").unwrap();
             let registry = leaked();
             let launch = Launch::Program(PathBuf::from("/manca/del/tutto/prova"));
             let error = open_file(
                 registry,
                 &PROVA,
                 &launch,
-                Path::new("/v/carta.prova"),
+                "carta.prova",
+                &file,
                 None,
                 Os::Linux,
             )
@@ -533,10 +588,28 @@ mod tests {
             };
             let registry = leaked();
             let launch = Launch::Program(program);
-            let how = open_file(registry, &single, &launch, &file, None, Os::Linux).unwrap();
+            let how = open_file(
+                registry,
+                &single,
+                &launch,
+                "carta.prova",
+                &file,
+                None,
+                Os::Linux,
+            )
+            .unwrap();
             assert_eq!(how, OpenHow::Forwarded);
             let first = registry.apps().get("prova").unwrap().pid;
-            let how = open_file(registry, &single, &launch, &file, None, Os::MacOs).unwrap();
+            let how = open_file(
+                registry,
+                &single,
+                &launch,
+                "carta.prova",
+                &file,
+                None,
+                Os::MacOs,
+            )
+            .unwrap();
             assert_eq!(how, OpenHow::NewProcess);
             let second = registry.apps().get("prova").unwrap().pid;
             wait_until("the apps exit", || {
