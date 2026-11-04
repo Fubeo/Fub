@@ -59,6 +59,25 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- N7 T32, la CI completa su ceee30de (run 41776318335): rossi quattro
+  lavori, ognuno con la sua causa. (1) Windows: `crates/fub-
+  cli/tests/mcp.rs` (T-MCP, 85bbb4d1) usava
+  `std::os::unix::fs::PermissionsExt` senza cfg; corretto dall'orchestratore
+  come parte di T32 (solo un test, nessun comportamento): la sezione Craft
+  del file sta in un modulo `#[cfg(unix)]`, come i test Craft di `fub-host`
+  (`craft_cli.rs`, `craft_open_with.rs` hanno `#![cfg(all(unix, feature =
+  "craft"))]`), perché le app finte sono script `/bin/sh`. (2) contrasto e
+  tastiera, in tutte e due le luci: la scena nuova `pdf-domanda` è la prima
+  che apre il visore PDF (`editors/media/pdf-view.ts`, già in main e non
+  toccato da N7) e ne trova tre difetti: `.media-pdf-page` scorre ma non si
+  raggiunge con Tab, la casella di ricerca non ha nome accessibile, e il
+  percorso Tab finisce su nessun elemento. Diventano un task (T34) e non si
+  tolgono dalla scena: nascondere la scena sarebbe indebolire un test. (3)
+  banco visivo: 36 foto senza baseline (le scene nuove di T14–T31), nessuna
+  differenza sulle 240 che c'erano; le baseline si prendono dal runner
+  sull'ultimo giro, dopo T33 e T34, guardate una per una contro il
+  prototipo. (4) client: solo `bench/scene.test` «ci sono tutte», che segue
+  il (3). macOS e Ubuntu verdi.
 - 2026-11-04 · N7 · La revisione Rust di T32 (un revisore in sola lettura)
   ha trovato difetti medi e bassi, nessuno alto: il RAW ostile senza budget
   di lavoro, il JSON intero in `Value`, la coda ZIP, l'XMP letto fino a 64
