@@ -59,6 +59,11 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · caricamento · prototipo approvato dall'utente: attesa «scia» e
+  passaggio «cascata» (le regioni dell'app entrano in ordine di lettura con la
+  molla `elastic` di `moto`, 30 ms l'una dall'altra); il passaggio «si posa»
+  resta solo nel prototipo · l'utente trovava il primo passaggio «troppo
+  noioso» e ha voluto un effetto elastico in linea con lo stile di Fub.
 - 2026-11-04 · caricamento · lo strato d'avvio sta in linea nei tre HTML (uno
   `<style>` uguale, due script classici in `public/avvio/`, una cache
   `fub.avvio` sua) e lo consegna la shell con `moto` a finestra e vault

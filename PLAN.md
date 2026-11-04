@@ -16,17 +16,19 @@ montato tre volte e il longtask di 564 ms nello sviluppo (da aprire come issue:
 non cambiano ciò che si vede, una volta coperto); riordinare l'avvio perché la
 cornice dello Scrittoio compaia prima del vault (domanda 1); un contratto nuovo
 del host per l'avanzamento (domanda 2).
-Assunzioni: le consigliate delle «Domande per l'utente» qui sotto, finché
-l'utente non risponde: la schermata resta finché la shell e il vault sono
-pronti (domanda 1, A); mostra solo le fasi che la shell conosce già, senza IPC
-nuovo (domanda 2, A); il passaggio è «si posa» (prototipo, nota 1, A: il
-marchio vola sul bottone del menu e vi si posa con la molla elastica, l'app
-sotto prende un respiro); l'attesa è la «scia» (prototipo, nota 2, A). Le tre pagine portano lo stesso
+Assunzioni: le consigliate delle «Domande per l'utente» qui sotto, accettate
+dall'utente con il prototipo: la schermata resta finché la shell e il vault
+sono pronti (domanda 1, A); mostra solo le fasi che la shell conosce già,
+senza IPC nuovo (domanda 2, A). Scelte dell'utente sul prototipo: il passaggio
+è la «cascata» (nota 1, B: lo strato sfuma e le regioni dell'app entrano in
+ordine di lettura, ciascuna con un piccolo rimbalzo elastico); l'attesa è la
+«scia» (nota 2, A). Le tre pagine portano lo stesso
 strato in linea: chi ne cambia una cambia le altre due (un test lo pretende).
 Ondate: T1 T3 | T2 | T4
-Prototipo: PLAN-ui/caricamento.html, da approvare (passaggio all'app rifatto
-il 2026-11-04 su richiesta dell'utente: nota 1, A «si posa» e B «cascata» con
-le molle vere di `moto`; «Rivedi», nello stato «Passaggio all'app», lo rifà)
+Prototipo: PLAN-ui/caricamento.html, Approvato: 2026-11-04 (attesa A «scia»,
+passaggio B «cascata»; la A del passaggio, «si posa», resta nel prototipo solo
+per confronto e non va nel codice; «Rivedi», nello stato «Passaggio all'app»,
+lo rifà)
 
 ## Modifiche
 
@@ -144,11 +146,9 @@ default della finestra (bianco), perché `crates/fub-app/tauri.conf.json` e
   4. se no, lascia il marchio visibile almeno 400 ms, poi rende l'app viva
      (via `inert`, il fuoco al suo posto, lo strato senza puntatore) e solo
      dopo anima, così l'app risponde dal primo fotogramma del passaggio:
-     - **A, «si posa»**: il marchio vola sul bottone del menu con la molla
-       `snap` e intanto si stringe alla sua misura con la molla `elastic`
-       (va un poco oltre e torna); l'app sotto respira da 0,98 con `elastic`;
-     - **B, «cascata»**: lo strato sfuma in 90 ms e le regioni dell'app
-       entrano in ordine di lettura, 30 ms l'una dall'altra, con `elastic`;
+     - la **cascata**: lo strato sfuma in 90 ms, il marchio cala a 0,94, e le
+       regioni dell'app entrano in ordine di lettura, 30 ms l'una dall'altra,
+       ciascuna con la molla `elastic` (un piccolo rimbalzo);
      - con moto ridotto, una sola dissolvenza di 90 ms;
   5. toglie lo strato e il resto.
 
@@ -159,11 +159,12 @@ default della finestra (bianco), perché `crates/fub-app/tauri.conf.json` e
 | primo blocco `<style>` (marcato `→ apps/client/index.html…`), con i due `@font-face` del commento al posto di quelli del blocco «solo prototipo» | `<style id="avvio-stile">` nel `<head>` di `apps/client/index.html`, `mobile.html`, `document.html` | T1 |
 | blocco `#proto-senza-js` (la regola, non l'attributo `media`) | `<noscript><style>…</style></noscript>` nel `<head>` delle tre pagine | T1 |
 | markup di `#avvio.avvio` (velo, colonna, il posto `.avvio-posto` col marchio dentro, info con attesa/lento/guasto, frase senza JS, annuncio) | primo figlio di `<body>`, prima dello skip-link, nelle tre pagine | T1 |
-| scia A e passi B: la sola scia A va nel codice; i passi restano nel prototipo finché l'utente non sceglie B | — | T1 |
+| scia A e passi B: la sola scia A va nel codice (scelta dell'utente); i passi restano nel prototipo | — | T1 |
 | la logica di `applica()` (attributi, testi, nome, didascalie) | `apps/client/public/avvio/luce.js`, `stati.js` | T1 |
-| `consegna()` (A «si posa», B «cascata», ridotto) e le tabelle `CASCATA` | `apps/client/src/avvio/consegna.ts`, sopra `moto` (`animate` con `spring: "snap"` ed `"elastic"`, `duration: DURATION.state`/`swap`, `pseudo: "::after"`, `delay`) | T2 |
+| `consegna()`, i soli rami B «cascata» e ridotto, e le tabelle `CASCATA`; il ramo A «si posa» non va nel codice | `apps/client/src/avvio/consegna.ts`, sopra `moto` (`animate` con `spring: "snap"` per il marchio ed `"elastic"` per le regioni, `duration: DURATION.state`, `delay`) | T2 |
 | `campiona()` e `anima()` del prototipo | nessuna: sono la copia di `sampleSpring` e di `animate`, che T2 usa direttamente | — |
-| regole `.avvio[data-consegna]{pointer-events:none}` e `:root[data-avvio="posa"] .brand-mark{opacity:0}` | già nel blocco in linea (T1); le usa T2 | T1, T2 |
+| regola `.avvio[data-consegna]{pointer-events:none}` | già nel blocco in linea (T1); la usa T2 | T1, T2 |
+| regola `:root[data-avvio="posa"] .brand-mark{opacity:0}` | nessuna: serve solo al passaggio A, che non va nel codice; T1 la toglie dal blocco che copia | — |
 | `.proto-app` e i suoi pezzi, `.proto-toppa`, `.proto-marchio-vero`, foto dell'app, barra, note, palco | solo prototipo: non vanno nel codice (i pezzi stanno per `#topbar`, `#rail`, `#sidebar`, `#panes`, `#right-pane`, `#status-band`, la copia per `#brand-menu .brand-mark`) | — |
 | gli stati da fotografare | `apps/client/bench/scene.mjs` | T4 |
 
@@ -219,8 +220,8 @@ Cosa fare:
      `<script defer src="/avvio/stati.js"></script>`.
 - Il markup di `#avvio.avvio` come primo figlio di `<body>`, uguale nelle tre
   pagine, con `data-i18n` sui testi e i testi italiani di ripiego.
-  - In `document.html` il volo non c'è (manca `#brand-menu`): la consegna è
-    la B di T2, con `#document-window` al posto delle regioni.
+  - In `document.html` non ci sono regioni: nella cascata di T2 entra
+    `#document-window`.
   - `.avvio-annuncio` ha `role="status"`, ed è vuoto finché il marchio non
     entra.
 - `luce.js`, IIFE senza globali e senza `import`:
@@ -275,7 +276,7 @@ Cosa fare:
 - **La consegna minima**, perché nessuno stato intermedio del ramo lasci lo
   strato sopra l'app. Senza di essa lo strato coprirebbe tutto e `#app`
   resterebbe inerte negli e2e, che iniettano il `<body>` di `index.html`.
-  - `src/avvio/consegna.ts` esporta `consegna({ volo })`, che per ora fa solo
+  - `src/avvio/consegna.ts` esporta `consegna()`, che per ora fa solo
     i passi 6 e 8 di T2 (app viva, fuoco e pulizia), subito e senza
     animazione;
   - non fa niente se `.avvio` non c'è;
@@ -389,7 +390,7 @@ Cosa fare:
   - `fase(f, nome?)`, che scrive `data-fase` e `data-nome`;
   - `pronta()`, che scrive `data-pronta`;
   - `fallito(motivo)`, che manda l'evento `avvio:guasto`;
-  - `consegna({ volo })`.
+  - `consegna()`.
 - `desktop-shell.ts`:
   - `fase("finestra")` all'inizio di `init()`;
   - `fase("vault", nome)` prima di `openInitialVault`, col nome che userebbe
@@ -403,9 +404,9 @@ Cosa fare:
 - I punti di chiamata li mette T1, e T2 li tiene; ecco quali sono. La consegna
   si chiama alla fine vera dell'avvio, perché `startup` si risolva dopo:
   - in `shells/scrittoio/bootstrap.ts`: `startup` diventa la promessa della
-    composizione seguita da `await consegna({ volo: true })`;
+    composizione seguita da `await consegna()`;
   - lo stesso in `mobile/compose.ts`;
-  - in `document/window.ts`: `consegna({ volo: false })` alla fine di
+  - in `document/window.ts`: `consegna()` alla fine di
     `bootDocumentWindow`, anche nel ramo di `invalid()`, perché lì la serie
     (`mountSeriesFallback`) è già montata. Il tema rispecchiato dal ponte può
     non arrivare mai, quindi non si aspetta: quando arriva, cambia i colori
@@ -437,35 +438,21 @@ Cosa fare:
      - **moto ridotto** (`motionLevel() === "reduced"` o `data-avvio-moto`):
        lo strato sfuma in `DURATION.state` (90 ms), lineare; il marchio vero
        resta visibile;
-     - **A, «si posa»**, come `consegna()` del prototipo:
-       1. misura `#brand-menu .brand-mark` (rettangolo bersaglio) e
-          `.avvio-marchio` prima di muovere qualcosa;
-       2. le info sfumano in `DURATION.state`, lineare; il velo in
-          `DURATION.swap` (140 ms) con l'uscita (`ease-out`,
-          `[0, 0, 0.58, 1]`); l'ombra `::after` del marchio in
-          `DURATION.state` (`pseudo: "::after"`);
-       3. `#app` (o `#document-window`) respira da `scale: 0.98` a 1 con
-          `spring: "elastic"` (la scala d'entrata del lanciatore);
-       4. `data-avvio="posa"` su `<html>` nasconde il marchio vero;
-       5. `.avvio-posto` trasla, centro su centro, fino al bersaglio con
-          `spring: "snap"`; intanto `.avvio-marchio` scala a lato del
-          bersaglio / 56 con `spring: "elastic"`: scende sotto la misura
-          (circa 23 px contro 28 verso i 170 ms), torna su e si ferma
-          identico al marchio vero (raggio 16 × 0,5 = 8, glifo 38 × 0,5 = 19);
-       6. quando tutti e due i `finished` arrivano, toglie `data-avvio` e
-          sfuma il marchio dello strato sopra quello vero in
-          `DURATION.state` (copre il glifo e il raggio diversi del telefono);
-     - **B, «cascata»**, o `volo: false`, o un bersaglio senza rettangolo:
-       - lo strato sfuma in `DURATION.state`, lineare; il marchio scala a
-         0,94 con `spring: "snap"` (`ENTER_SCALE` del dialogo);
+     - la **cascata**, come il ramo B di `consegna()` del prototipo (la
+       scelta dell'utente):
+       - lo strato sfuma in `DURATION.state` (90 ms), lineare; intanto il
+         marchio dello strato scala a 0,94 con `spring: "snap"`
+         (`ENTER_SCALE` del dialogo);
        - le regioni presenti e con un rettangolo entrano in ordine di
          lettura con `spring: "elastic"`, da `opacity: 0` e una posa,
          sfasate di `FAN_EACH` (30 ms, `stagger({ each: 30 })`):
          `#topbar` y −8, `#rail` x −8 (sul telefono, in basso, y +8),
          `#sidebar` x −12, `#panes` y +16 e scala 0,98, `#right-pane` x +12,
-         `#status-band` y +8;
+         `#status-band` y +8; una regione assente o senza rettangolo
+         (nascosta in una finestra stretta) si salta senza buchi nel
+         ritmo;
        - in `document.html` non ci sono regioni: entra `#document-window`
-         come `#panes`.
+         con la posa di `#panes`.
      - Il livello calmo lo gestisce `moto` (`springFor`: molle critiche),
        senza rami in `consegna.ts`.
   8. pulizia, quando le animazioni dello strato finiscono:
@@ -482,11 +469,11 @@ Cosa fare:
   - al primo fotogramma del passaggio (prima di qualunque `finished`):
     niente `inert` né `aria-busy`, `.avvio[data-consegna]`, il fuoco già al
     suo posto;
-  - A: `animate` riceve `spring: "snap"` per `.avvio-posto`, `"elastic"` per
-    `.avvio-marchio` e `#app`, e il bersaglio misurato; B: `"elastic"` per
-    ogni regione presente con `delay` 0, 30, 60…; ridotto: una sola
-    dissolvenza di 90 ms;
-  - `volo: false` o `#brand-menu` senza rettangolo: B;
+  - cascata: `animate` riceve `spring: "snap"` per `.avvio-marchio` e
+    `"elastic"` per ogni regione presente, con `delay` 0, 30, 60… senza buchi
+    per le regioni assenti; ridotto: una sola dissolvenza di 90 ms e nessun
+    `transform`;
+  - in `document.html`: entra solo `#document-window`;
   - dopo la consegna: niente `.avvio`, niente `data-avvio*` su `<html>`,
     nessuna animazione viva (`document.getAnimations()` vuoto), e
     `fub.avvio` scritto e valido;
@@ -501,7 +488,8 @@ Cosa fare:
   - perché il suo CSS ha un `@keyframes` (la scia) pur fuori dalla regola
     «la pelle non ha fotogrammi chiave» (riga ~240): non è pelle, gira prima
     dei moduli e se ne va alla consegna.
-Dal prototipo: `consegna()` (A, B, ridotto) e le pose di `CASCATA`.
+Dal prototipo: `consegna()`, i soli rami B e ridotto, e le pose di
+`CASCATA`; il ramo A resta nel prototipo per confronto.
 `campiona()` e `anima()` del prototipo sono solo la copia di `sampleSpring` e
 di `animate`, per mostrare le molle vere in una pagina sola: T2 usa `moto`.
 Casi limite:
@@ -515,16 +503,16 @@ Casi limite:
   c'è.
 - Il guasto per tempo e poi l'avvio che finisce: la consegna avviene.
 - Il guasto della shell: lo strato resta, Riprova ricarica.
-- Il telefono: il volo va sul marchio della barra mobile (44 px, raggio
-  12,6, glifo 30); la scala è 44/56 e la sfumatura finale copre il raggio e
-  il glifo diversi.
-- `#brand-menu` nascosto (finestra stretta) o senza rettangolo: B.
-- `.brand-mark` ha una transizione CSS su `transform`: la consegna anima solo
-  il marchio dello strato, mai quello vero, che cambia solo `opacity` per la
-  regola in linea.
-- Il respiro di `#app` è una `scale` sotto cui c'è CodeMirror: le misure di
-  CodeMirror fatte durante i ~300 ms del respiro si rifanno da sole
-  (`requestMeasure`); il coder lo verifica aprendo una nota col cursore.
+- Il telefono: le regioni sono la barra, i fogli e la colonna in basso, che
+  entra da y +8.
+- Una regione nascosta (il lato chiuso, l'ispettore in una finestra stretta)
+  o senza rettangolo: si salta, e le altre tengono il ritmo di 30 ms.
+- `#panes` entra con una `scale` sotto cui c'è CodeMirror: le misure di
+  CodeMirror fatte durante l'entrata si rifanno da sole (`requestMeasure`);
+  il coder lo verifica aprendo una nota col cursore.
+- Le regioni animate sono quelle vere dell'app: a entrata finita non resta
+  `fill` né `transform` su di loro, così il layout e le transizioni CSS che
+  già hanno non cambiano.
 - Un clic durante il passaggio va all'app (lo strato non prende il
   puntatore); un tasto va al fuoco già dato.
 - La pagina ricaricata a metà passaggio: con `lifetime`, niente animazioni
@@ -536,11 +524,12 @@ Fatto quando:
 - gli e2e esistenti (`src/*.e2e.test.ts`) restano verdi senza tempi in più;
 - `npm run bench:motion` è verde;
 - sul banco (`npm run bench -- --port 1448 --strictPort`), aprendo
-  `index.html` e `mobile.html` in tutte e due le luci, le foto di A a 0, 120,
-  220 e 1000 ms dall'inizio del passaggio (animazioni ferme con
-  `currentTime`, come `proto/foto.mjs`) mostrano: a 120 ms il marchio sotto
-  la misura del bersaglio, a 220 ms di nuovo vicino, a 1000 ms nessuno strato
-  e `#brand-menu .brand-mark` entro 1 px dal rettangolo misurato al passo 7.1;
+  `index.html` e `mobile.html` in tutte e due le luci, le foto della cascata
+  a 0, 60, 150 e 1000 ms dall'inizio del passaggio (animazioni ferme con
+  `currentTime`, come `proto/foto.mjs`) mostrano: a 60 ms `#topbar` già in
+  movimento e `#status-band` ancora alla sua posa; a 150 ms lo strato
+  sparito; a 1000 ms ogni regione al suo posto, con `opacity` 1 e nessun
+  `transform` (entro 1 px dal rettangolo misurato prima della consegna);
 - con `prefers-reduced-motion`, la dissolvenza di 90 ms e nessun `transform`;
 - con la CPU rallentata 4× (CDP `Emulation.setCPUThrottlingRate`), nessun
   intervallo fra due `requestAnimationFrame` sopra 25 ms da 40 ms prima a

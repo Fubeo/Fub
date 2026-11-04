@@ -693,7 +693,8 @@ body {
   <h1>La schermata di avvio di Fub</h1>
   <p>Il palco qui sotto è la finestra di Fub prima che l'app sia pronta. Sotto lo strato c'è una foto dell'app vera, che si vede solo nel passaggio. La barra cambia stato, luce, contrasto, movimento e larghezza.</p>
   <details class="proto-note" open>
-    <summary>Da decidere guardando</summary>
+    <summary>Scelte e note</summary>
+    <p><b>Approvato: 2026-11-04.</b> L'utente ha scelto l'attesa A, «scia», e il passaggio B, «cascata». La A del passaggio resta qui solo per confronto e non va nel codice.</p>
     <ol>
       <li><b>Il passaggio all'app.</b> In tutte e due l'app risponde dal primo fotogramma: lo strato non prende più i clic e il fuoco è già al suo posto. A (consigliata), «si posa»: l'app sotto prende un respiro, da 0,98 alla sua misura con la molla elastica di moto, mentre il marchio vola nell'angolo con la molla snap e intanto si stringe alla misura del bottone del menu con la molla elastica: va un poco oltre, torna, e si posa al posto di quello vero. B, «cascata»: lo strato sfuma in 90 ms e le regioni dell'app entrano in ordine di lettura (barra, colonna, lato, foglio, ispettore, stato), 30 ms l'una dall'altra, ciascuna con un piccolo rimbalzo elastico. Con «riduci movimento» entrambe diventano una sola dissolvenza di 90 ms.</li>
       <li><b>Che cosa dice l'attesa.</b> A (consigliata): la fase in una riga e una scia che scorre su un filo. B: la fase e tre punti, uno per fase (pagina, finestra, vault), che si accendono.</li>
@@ -734,12 +735,12 @@ body {
   </fieldset>
   <fieldset class="proto-gruppo">
     <legend>Passaggio</legend>
-    <input type="radio" name="passaggio" id="p-a" value="A" checked><label for="p-a">A · si posa</label>
-    <input type="radio" name="passaggio" id="p-b" value="B"><label for="p-b">B · cascata</label>
+    <input type="radio" name="passaggio" id="p-b" value="B" checked><label for="p-b">B · cascata (scelta)</label>
+    <input type="radio" name="passaggio" id="p-a" value="A"><label for="p-a">A · si posa</label>
   </fieldset>
   <fieldset class="proto-gruppo">
     <legend>Attesa</legend>
-    <input type="radio" name="attesa" id="a-a" value="A" checked><label for="a-a">A · scia</label>
+    <input type="radio" name="attesa" id="a-a" value="A" checked><label for="a-a">A · scia (scelta)</label>
     <input type="radio" name="attesa" id="a-b" value="B"><label for="a-b">B · passi</label>
   </fieldset>
   <fieldset class="proto-gruppo">
