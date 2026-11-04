@@ -91,8 +91,9 @@ vettori della lettura. Nel dubbio si apre e si conserva.
   `syncDoc` con un testo nuovo la tela chiede al nucleo un'anteprima senza
   toppe (`Core::preview`), e se risponde `rejected` resta da guardare. I
   gesti che cambiano sono spenti, un campo aperto si chiude come per la sola
-  lettura del pannello, e l'avviso della barra (`canvas-intake-error`, ruolo
-  `alert`, chiave `canvas.unwritable`) dice perché. Questa sola lettura si
+  lettura del pannello, e l'avviso all'inizio della barra
+  (`canvas-intake-error`, ruolo `alert`, chiave `canvas.unwritable`) dice
+  perché. Questa sola lettura si
   somma a quella del pannello (`setReadOnly`) e se ne va da sola quando il
   testo torna riscrivibile, per esempio con la chiave doppia tolta nella
   vista Sorgente. Una scena oltre il limite interattivo mostra solo il suo
