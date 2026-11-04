@@ -102,6 +102,10 @@ export function mountCraftContent(
   /// accontenta di una risposta più vecchia.
   let revision = context.revision;
   let ticket = 0;
+  /// Il biglietto di `render`, separato da quello di `load`: un
+  /// ricaricamento mentre il render vola non ne scarta l'esito, e il
+  /// pulsante non resta spento senza errore.
+  let renderTicket = 0;
   let drawn: string | null = null;
   let shown: CraftPreviewAnswer | null = null;
   /// La frase della riga di stato, quando la scheda mostra soltanto quella.
@@ -116,11 +120,19 @@ export function mountCraftContent(
   });
 
   function replace(...nodes: Node[]): Lifetime {
+    // Il fuoco era nella scheda: il ridisegno toglie il nodo che l'aveva, e
+    // senza questa riga andrebbe a `<body>`. Mai lo si ruba da fuori.
+    const focused = root.contains(document.activeElement);
     drawing?.close();
     drawing = openLifetime();
     root.removeAttribute("aria-busy");
     root.replaceChildren(...nodes);
+    if (focused && !root.contains(document.activeElement)) holdFocus();
     return drawing;
+  }
+
+  function holdFocus(): void {
+    root.focus({ preventScroll: true });
   }
 
   function status(text: () => string): void {
@@ -154,14 +166,14 @@ export function mountCraftContent(
   /// pulsante, il «Sì»). La risposta in coda ridisegna; un rifiuto lo dice,
   /// e `no_consent` fa richiedere (torna la domanda o la riga «spente»).
   function render(): void {
-    const mine = ++ticket;
+    const mine = ++renderTicket;
     renderPreview(doc, "large").then(
       (answer) => {
-        if (life.closed || mine !== ticket || !answer) return;
+        if (life.closed || mine !== renderTicket || !answer) return;
         draw(answer, true);
       },
       (error: unknown) => {
-        if (life.closed || mine !== ticket) return;
+        if (life.closed || mine !== renderTicket) return;
         if (asPluginError(error)?.kind === "permission_denied") {
           load(true);
           return;
@@ -251,8 +263,7 @@ export function mountCraftContent(
     // I dati dell'XMP di un RAW stanno sotto il riquadro anche senza JPEG.
     if (profile === RAW_PROFILE) showPhotoData(root, doc, deps, own);
     if (!offersRender(preview)) return;
-    mountConsent(box, preview.render!, { render, openSettings: deps.onOpenSettings, focused }, own);
-    if (focused && !root.contains(document.activeElement)) root.focus({ preventScroll: true });
+    mountConsent(box, preview.render!, { render, openSettings: deps.onOpenSettings, focused, holdFocus }, own);
   }
 
   function stateText(answer: CraftPreviewAnswer, broken: string | null): string {

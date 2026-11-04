@@ -388,6 +388,95 @@ describe("la domanda", () => {
   });
 });
 
+describe("il fuoco nella domanda", () => {
+  /// Ciò che fa Chromium: un pulsante col fuoco che si spegne lo perde, e il
+  /// fuoco va a `<body>`. `happy-dom` lo lascerebbe dov'è.
+  function blurOnDisable(): () => void {
+    const proto = HTMLButtonElement.prototype;
+    const own = Object.getOwnPropertyDescriptor(proto, "disabled")!;
+    Object.defineProperty(proto, "disabled", {
+      configurable: true,
+      get(this: HTMLButtonElement) {
+        return own.get!.call(this) as boolean;
+      },
+      set(this: HTMLButtonElement, value: boolean) {
+        own.set!.call(this, value);
+        if (value && document.activeElement === this) this.blur();
+      },
+    });
+    return () => Object.defineProperty(proto, "disabled", own);
+  }
+
+  const inside = (parent: HTMLElement) => document.activeElement !== document.body && parent.contains(document.activeElement);
+
+  it("Invio su «Sì, accendi» lascia il fuoco nella scheda; un salvataggio fallito lo rende al pulsante", async () => {
+    const restore = blurOnDisable();
+    try {
+      const booted = await boot("ask");
+      const { parent } = tab(booted, true);
+      await until(() => yes(parent) !== null);
+      yes(parent)!.focus();
+      booted.failNext = { error: { kind: "io", message: "disco pieno" } };
+      const release = booted.hold();
+      yes(parent)!.click();
+      expect(inside(parent)).toBe(true);
+      await until(() => parent.querySelector<HTMLElement>(".craft-ask .setting-error")?.hidden === false);
+      expect(document.activeElement).toBe(yes(parent));
+      yes(parent)!.click();
+      expect(inside(parent)).toBe(true);
+      await until(() => renders(booted.host).length === 1);
+      expect(inside(parent)).toBe(true);
+      release();
+      await until(() => text(parent, ".craft-empty-state") === "Preparo l'anteprima…");
+      await quiet();
+      expect(inside(parent)).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it("Invio su «Crea l'anteprima» lascia il fuoco nella scheda", async () => {
+    const restore = blurOnDisable();
+    try {
+      const booted = await boot("on");
+      const { parent } = tab(booted, false);
+      await until(() => parent.querySelector(".craft-render") !== null);
+      const button = parent.querySelector<HTMLButtonElement>(".craft-render")!;
+      button.focus();
+      const release = booted.hold();
+      button.click();
+      expect(inside(parent)).toBe(true);
+      release();
+      await until(() => text(parent, ".craft-empty-state") === "Preparo l'anteprima…");
+      await quiet();
+      expect(inside(parent)).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it("un render che fallisce mentre arriva un ricaricamento: il pulsante torna e l'errore si vede", async () => {
+    const booted = await boot("on");
+    const { parent } = tab(booted, false);
+    await until(() => parent.querySelector(".craft-render") !== null);
+    let fail: (error: unknown) => void = () => {};
+    const api = booted.host.module.api as unknown as Record<string, unknown>;
+    api.craftRender = () => new Promise((_resolve, reject) => { fail = reject; });
+    parent.querySelector<HTMLButtonElement>(".craft-render")!.click();
+    await quiet();
+    expect(parent.querySelector<HTMLButtonElement>(".craft-render")!.disabled).toBe(true);
+    // Un altro documento cambia: la scheda richiede la sua risposta, che è
+    // la stessa, mentre il render vola ancora.
+    booted.host.emit({ type: "vault_opened", root: "/vault" } as never);
+    await quiet();
+    fail({ kind: "not_found", message: "nessuna CLI" });
+    await until(() => parent.querySelector<HTMLButtonElement>(".craft-render")?.disabled === false);
+    await quiet();
+    expect(text(parent, ".craft-empty-state")).toMatch(/^L'anteprima non è riuscita: .*nessuna CLI/);
+    expect(parent.querySelector<HTMLButtonElement>(".craft-render")!.disabled).toBe(false);
+  });
+});
+
 describe("le frasi di missing", () => {
   it("over_limit col link al peso massimo; failed col nome dell'app", async () => {
     const booted = await boot("on");

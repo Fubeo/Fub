@@ -27,6 +27,18 @@ export interface ConsentDeps {
   readonly openSettings?: (key: string) => void;
   /// La scheda aveva il fuoco: allora lo prende il primo pulsante.
   readonly focused: boolean;
+  /// Tiene il fuoco nella scheda: un pulsante che si spegne col fuoco lo
+  /// manderebbe a `<body>` (Chromium). Senza, il fuoco resta al browser.
+  readonly holdFocus?: () => void;
+}
+
+/// Spegne `node`; se aveva il fuoco, prima lo passa alla scheda. Vero se lo
+/// aveva.
+function switchOff(node: HTMLButtonElement, deps: ConsentDeps): boolean {
+  const had = document.activeElement === node;
+  if (had) deps.holdFocus?.();
+  node.disabled = true;
+  return had;
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] {
@@ -70,7 +82,7 @@ export function mountConsent(root: HTMLElement, offer: CraftRenderOffer, deps: C
       const render = button("craft-render", t("craft.render", { app: offer.app }));
       life.listen(render, "click", () => {
         if (render.disabled) return;
-        render.disabled = true;
+        switchOff(render, deps);
         deps.render();
       });
       root.append(render);
@@ -100,8 +112,10 @@ function ask(root: HTMLElement, offer: CraftRenderOffer, deps: ConsentDeps, life
   async function answer(value: "on" | "off"): Promise<void> {
     if (pending || life.closed) return;
     pending = true;
-    yes.disabled = true;
-    no.disabled = true;
+    const pressed = value === "on" ? yes : no;
+    const hadYes = switchOff(yes, deps);
+    const hadNo = switchOff(no, deps);
+    const had = hadYes || hadNo;
     error.hidden = true;
     try {
       await api.setSetting(CRAFT_CONSENT_SETTING, value);
@@ -112,6 +126,10 @@ function ask(root: HTMLElement, offer: CraftRenderOffer, deps: ConsentDeps, life
       no.disabled = false;
       error.textContent = errorText(failure);
       error.hidden = false;
+      // Il fuoco era sul pulsante e la scheda l'ha tenuto: torna lì, se nel
+      // frattempo nessuno l'ha portato altrove.
+      const now = document.activeElement;
+      if (had && (now === null || now === document.body || now.contains(region))) pressed.focus();
       return;
     }
     if (life.closed) return;
