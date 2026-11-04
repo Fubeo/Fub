@@ -156,4 +156,30 @@ describe("il chip dello stato", () => {
     chip.destroy();
     expect(chip.element.isConnected).toBe(false);
   });
+
+  it("i quattro stati danno il loro testo e il loro `data-standing`, e `follow(null)` toglie il chip", () => {
+    const chip = createStandingChip();
+    document.body.append(chip.element);
+    const from = source(null);
+    chip.follow(from.standing);
+    const button = chip.element.querySelector<HTMLButtonElement>(".pane-standing-chip")!;
+    const word = chip.element.querySelector<HTMLElement>(".pane-standing-text")!;
+    const kinds: Array<[SurfaceStandingState["kind"], string]> = [
+      ["writes", "Si scrive"],
+      ["closed", "2 parti chiuse"],
+      ["body", "Solo il testo"],
+      ["readonly", "Sola lettura"],
+    ];
+    for (const [kind, text] of kinds) {
+      from.set({ kind, text, title: `${text}, per esteso`, body: "", recording: false });
+      expect(chip.element.hidden, kind).toBe(false);
+      expect(chip.element.dataset.standing).toBe(kind);
+      expect(word.textContent).toBe(text);
+      expect(button.getAttribute("aria-label")).toBe(t("document.standing.label", { state: text }));
+    }
+    chip.follow(null);
+    expect(chip.element.hidden).toBe(true);
+    expect(from.listeners.size).toBe(0);
+    chip.destroy();
+  });
 });

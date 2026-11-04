@@ -3632,13 +3632,27 @@ describe("la modalità di ogni famiglia di superfici", () => {
     current.click();
     expect(current.getAttribute("aria-expanded")).toBe("true");
     const radios = [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
-    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Sorgente", "Live", "Blocchi", "Lettura"]);
+    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Live", "Blocchi", "Sorgente", "Lettura"]);
     expect(radios.filter((item) => item.getAttribute("aria-checked") === "true")).toHaveLength(1);
-    radios[0]!.click();
+    radios.find((item) => item.querySelector(".menu-label")?.textContent === "Sorgente")!.click();
     await settle();
     expect(paneMode()).toBe("source");
     expect(current.textContent).toBe("Sorgente");
     expect(current.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("con due riquadri aperti, `shell.mode.source` cambia solo quello a fuoco", async () => {
+    await start(VAULT);
+    await twoPanes();
+    const modes = () => [...document.querySelectorAll<HTMLElement>(".pane")].map((pane) => pane.dataset.mode);
+    const focused = () => [...document.querySelectorAll<HTMLElement>(".pane")].findIndex((pane) => pane.classList.contains("focus"));
+    expect(modes()).toEqual(["live_preview", "live_preview"]);
+    expect(focused()).toBe(1);
+    const registry = await import("./ui/commands");
+    await registry.allCommands().find((entry) => entry.id === "shell.mode.source")!.run!();
+    await settle();
+    expect(modes()).toEqual(["live_preview", "source"]);
+    expect(focused()).toBe(1);
   });
 
   it("una nota in Sorgente non fa aprire la tela seguente come JSON", async () => {

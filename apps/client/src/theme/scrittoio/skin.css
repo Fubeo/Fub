@@ -1232,141 +1232,6 @@ kbd,
   font-size: var(--text-sm);
 }
 
-/* La colonna degli strumenti: caselle quadrate a gruppi, separati da un filo;
-   lo strumento scelto ha il fondo tenue dell'accento, non un bordo. */
-.kit-rail {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2);
-}
-.kit-rail[data-orientation="horizontal"] {
-  flex-direction: row;
-}
-.kit-rail-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-.kit-rail[data-orientation="horizontal"] .kit-rail-group {
-  flex-direction: row;
-}
-.kit-rail-rule {
-  align-self: stretch;
-  border-top: 1px solid var(--outline);
-}
-.kit-rail[data-orientation="horizontal"] .kit-rail-rule {
-  border-top: none;
-  border-left: 1px solid var(--outline);
-}
-.kit-rail-slot {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.kit-rail[data-size="large"] .kit-rail-slot {
-  width: 44px;
-  height: 44px;
-}
-.kit-rail-slot:hover {
-  background: var(--overlay-hover);
-  color: var(--text);
-}
-.kit-rail-slot:active {
-  background: var(--overlay-active);
-}
-.kit-rail-slot[aria-pressed="true"],
-.kit-rail-slot[aria-pressed="true"]:hover {
-  background: var(--accent-wash);
-  color: var(--accent);
-}
-.kit-rail-slot:focus-visible {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
-  outline-offset: 0;
-}
-/* Nella colonna le icone sono da 20 px, sulla stessa griglia di 24. */
-.kit-rail-icon {
-  display: inline-flex;
-}
-.kit-rail-icon svg {
-  width: 20px;
-  height: 20px;
-}
-.kit-rail-corner {
-  border-top: 4px solid transparent;
-  border-right: 4px solid currentColor;
-  opacity: 0.6;
-}
-.kit-rail-flyout {
-  padding: var(--space-2);
-}
-.kit-rail-flyout-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-width: 180px;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  font-size: var(--text-sm);
-}
-.kit-rail-flyout-label {
-  flex: 1;
-}
-.kit-rail-flyout-keys {
-  color: var(--muted);
-  font-size: var(--text-xs);
-}
-
-/* La barra delle opzioni: una riga che non va a capo; ciò che non ci sta va
-   in «…». */
-.kit-options {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-.kit-options-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-}
-.kit-options-more {
-  height: var(--control-h);
-  padding: 0 var(--space-3);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-}
-.kit-options-more:hover {
-  background: var(--overlay-hover);
-}
-.kit-options-more:focus-visible {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
-  outline-offset: 0;
-}
-.kit-options-overflow {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-4);
-}
-
 .kit-field-icon {
   display: inline-flex;
   grid-row: 1;
@@ -1550,6 +1415,256 @@ kbd,
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -1px;
   border-radius: var(--radius-xs);
+}
+
+/* ── Barra in una fila e colonna ─────────────────────────────────────────── */
+
+/* ── La barra in una fila: la pelle (`kit-bar`) ──────────────────────────────
+   Gli stessi valori della barra a schede qui sopra (il vassoio, i foglietti,
+   i pulsanti), scritti una volta sola sulle classi del kit: il kit non
+   conosce gli editor, e ogni barra li prende mettendo le classi e togliendo
+   le sue regole vecchie. La bolla della selezione resta una bolla: i suoi
+   pulsanti sono questi, ma non sta in un vassoio. */
+.kit-bar {
+  gap: var(--space-2);
+  margin: 0 var(--space-4) var(--space-2);
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sheet);
+  background: var(--bar-tray, var(--sheet-2));
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+@container sheet (max-width: 900px) {
+  .kit-bar {
+    margin: 0 var(--space-3) var(--space-2);
+  }
+}
+/* Un foglietto è un cartoncino sul vassoio, come nella barra a schede. */
+.kit-bar .kit-bar-group {
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--overlay-hover), 0 1px 2px var(--overlay-active);
+}
+:root[data-theme="dark"] .kit-bar .kit-bar-group {
+  background: var(--bg-elev);
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-hover);
+}
+:root[data-contrast="high"] .kit-bar .kit-bar-group {
+  box-shadow: 0 0 0 1px var(--border);
+}
+@media (forced-colors: active) {
+  .kit-bar,
+  .kit-bar .kit-bar-group {
+    border: 1px solid CanvasText;
+  }
+}
+/* La fila del kit dentro un vassoio non ha fondo suo: il vassoio ce l'ha già. */
+.kit-bar > .kit-options,
+.kit-bar .kit-options-row {
+  gap: var(--space-2);
+  padding: 0;
+  background: transparent;
+}
+
+/* I pulsanti: grafite a riposo, un velo al passaggio, il velo d'accento
+   quando sono accesi. */
+.kit-bar-button,
+.kit-options-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-tight);
+  cursor: pointer;
+}
+.kit-bar-button:hover:not(:disabled, [aria-disabled="true"]),
+.kit-bar-button[aria-expanded="true"],
+.kit-options-more:hover,
+.kit-options-more[aria-expanded="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-bar-button:active:not(:disabled, [aria-disabled="true"]) {
+  background: var(--overlay-active);
+}
+.kit-bar-button[aria-pressed="true"],
+.kit-bar-button[aria-checked="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.kit-bar-button:disabled,
+.kit-bar-button[aria-disabled="true"] {
+  background: transparent;
+  opacity: 0.4;
+  cursor: default;
+}
+.kit-bar-button:focus-visible,
+.kit-options-more:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.kit-bar-button > svg,
+.kit-options-more > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+/* I campi sono quelli della barra a schede. */
+.kit-bar-field {
+  height: 28px;
+  margin: 0;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: var(--sheet);
+  color: var(--text);
+  font: inherit;
+  text-overflow: ellipsis;
+}
+.kit-bar-field:hover:not(:disabled) {
+  border-color: var(--text);
+}
+.kit-bar-field:focus-visible {
+  border-color: var(--focus-ring);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+  box-shadow: 0 0 0 4px var(--accent-veil);
+}
+
+/* La barra delle opzioni (`kit/options-bar.ts`): una riga che non va a capo,
+   e ciò che non ci sta va in «…». La forma della riga sta in `structure.css`;
+   il «…» è un pulsante della fila, qui sopra. */
+.kit-options {
+  gap: var(--space-2);
+}
+.kit-options-row {
+  gap: var(--space-3);
+}
+.kit-options-overflow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+/* ── La colonna degli strumenti (`kit/tool-rail.ts`) ─────────────────────────
+   La stessa barra in piedi: il vassoio stondato, i gruppi come foglietti,
+   niente filo fra i gruppi. Le caselle tengono le loro misure (32, 44 col dito
+   o in `data-size="large"`); lo strumento scelto ha il fondo tenue
+   dell'accento, non un bordo. */
+.kit-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 var(--space-2) var(--space-4);
+  padding: var(--space-2);
+  border-radius: var(--radius-sheet);
+  background: var(--bar-tray, var(--sheet-2));
+}
+.kit-rail[data-orientation="horizontal"] {
+  flex-direction: row;
+}
+.kit-rail-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--overlay-hover), 0 1px 2px var(--overlay-active);
+}
+:root[data-theme="dark"] .kit-rail-group {
+  background: var(--bg-elev);
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-hover);
+}
+:root[data-contrast="high"] .kit-rail-group {
+  box-shadow: 0 0 0 1px var(--border);
+}
+.kit-rail[data-orientation="horizontal"] .kit-rail-group {
+  flex-direction: row;
+}
+.kit-rail-rule {
+  display: none;
+}
+.kit-rail-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.kit-rail[data-size="large"] .kit-rail-slot {
+  width: 44px;
+  height: 44px;
+}
+.kit-rail-slot:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-rail-slot:active {
+  background: var(--overlay-active);
+}
+.kit-rail-slot[aria-pressed="true"],
+.kit-rail-slot[aria-pressed="true"]:hover {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.kit-rail-slot:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+/* Nella colonna le icone sono da 20 px, sulla stessa griglia di 24. */
+.kit-rail-icon {
+  display: inline-flex;
+}
+.kit-rail-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.kit-rail-corner {
+  border-top: 4px solid transparent;
+  border-right: 4px solid currentColor;
+  opacity: 0.6;
+}
+.kit-rail-flyout {
+  padding: var(--space-2);
+}
+.kit-rail-flyout-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 180px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.kit-rail-flyout-label {
+  flex: 1;
+}
+.kit-rail-flyout-keys {
+  color: var(--muted);
+  font-size: var(--text-xs);
 }
 
 /* ── Garanzie ────────────────────────────────────────────────────────────── */

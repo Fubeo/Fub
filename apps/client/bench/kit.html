@@ -95,6 +95,15 @@
       .cella-larga {
         flex: 1 1 0;
       }
+      /* Una cella che non stira il campione: la colonna degli strumenti è larga
+         quanto le sue caselle. */
+      .cella-in-piedi {
+        align-items: flex-start;
+      }
+      /* Una fila più stretta della barra che porta: ciò che avanza va in «…». */
+      .fila-stretta {
+        width: 360px;
+      }
       /* La tavola degli stati: una riga per variante, una colonna per stato. */
       .stati {
         display: grid;

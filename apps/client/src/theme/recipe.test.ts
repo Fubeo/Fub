@@ -109,7 +109,7 @@ describe("i ruoli facoltativi: i segni sulle due carte", () => {
     // 26 segni e carte, più i sei colori degli autori su ognuna delle due, la
     // scrivania del disegno, i sei segni della Live e dei Blocchi e i nove
     // colori del contenuto col loro fondo.
-    expect(OPTIONAL_ROLES.length).toBe(39 + 6 + 18);
+    expect(OPTIONAL_ROLES.length).toBe(39 + 6 + 18 + 1);
     expect(roles().filter((role) => OPTIONAL_ROLES.includes(role))).toEqual([]);
     expect(roles()).toHaveLength(154);
   });

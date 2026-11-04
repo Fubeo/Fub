@@ -68,6 +68,14 @@ export const KIT: PartAnatomy = {
       states: [S("rest"), S("hover"), S("focused")],
       hooks: ["kit-options", "kit-options-row", "kit-options-more", "kit-options-overflow"],
     },
+    // La barra in una fila: il vassoio, i foglietti, i pulsanti e i campi. Le
+    // classi le mette chi costruisce la barra (la barra di formato, la testa
+    // del disegno, la barra del PDF).
+    {
+      name: "kit-bar",
+      states: SELECTABLE,
+      hooks: ["kit-bar", "kit-bar-group", "kit-bar-button", "kit-bar-field"],
+    },
     { name: "kit-field-clear", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["kit-field-clear"] },
     // La riga attiva è `hover`: la porta il puntatore o la portano le frecce.
     // `selected` è la scelta dichiarata, che resta mentre l'attiva si muove.

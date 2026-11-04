@@ -1414,6 +1414,58 @@ body {
   opacity: 1;
 }
 
+/* ── La barra in una fila (`kit-bar`) ────────────────────────────────────────
+   La stessa barra della barra a schede quando sta in una fila sola: il
+   vassoio (`kit-bar`), i foglietti senza nome (`kit-bar-group`), gli stessi
+   pulsanti (`kit-bar-button`) e campi (`kit-bar-field`). Le classi le mette
+   chi costruisce la barra: la barra di formato delle note, la testa del
+   disegno, la barra del PDF. Lo scorrimento resta di ciascuna: la barra di
+   formato taglia e manda il resto in «…». La lavagna segue il piano N6. */
+.kit-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+}
+.kit-bar-group {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+/* La fila del kit (`kit/options-bar.ts`) dentro un vassoio: una riga sola, e
+   ciò che non ci sta va in «…» (`kit-options-more`). */
+.kit-options {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+.kit-options-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* Col mouse i pulsanti della fila sono alti 28, come nella barra a schede; col
+   dito sono bersagli da 44. */
+@media (pointer: fine) {
+  .kit-bar-button,
+  .kit-options-more {
+    min-width: 28px;
+    min-height: 28px;
+    height: 28px;
+  }
+}
+@media (pointer: coarse) {
+  .kit-bar-button,
+  .kit-options-more {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
 /* ── Le superfici degli editor: geometria che nessun tema decide ─────────── */
 
 .grid-surface {

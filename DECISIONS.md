@@ -59,6 +59,49 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · Scrittoio 2 · le cinque domande di gusto: l'ombra resta
+  quella di T27 ma la linguetta accesa la condivide, con la sagoma fusa col
+  foglio; di notte nessun filo chiaro; le sezioni a 13 px (12 sotto i 900);
+  la sezione scelta col nome a 600, con un doppio invisibile che tiene ferma
+  la fila; il vassoio della barra a una riga e della colonna degli strumenti
+  resta da decidere · parole dell'utente: «Deve sembrare fuso con il foglio
+  anche per l'ombra». Il «sì» alla terza domanda («13 px, 12 sugli schermi
+  stretti, o sempre 12?») l'orchestratore lo legge come la prima delle due.
+- 2026-11-04 · Scrittoio 2 · T1: la voce del menu delle modalità deve portare
+  il fuoco al suo riquadro prima di `setMode` (nota in T2), perché dove il
+  clic non dà il fuoco al bottone il menu rende il fuoco all'editor dell'altro
+  riquadro · visto in jsdom scrivendo T1; nessun file di produzione cambia in
+  T1, la correzione va con T2, che riscrive quel menu.
+- 2026-11-04 · Scrittoio 2 · il telefono è approvato per ora con la A, il
+  tondo in basso a destra, scelta dall'orchestratore perché era la
+  raccomandata e l'utente non ha scelto fra le due; la B esce dal prototipo.
+  Il telefono si rifà a fondo in un piano successivo · parole dell'utente:
+  «Per ora do l'ok, la aggiustiamo più avanti, ma è sicuramente da modificare
+  pesantemente». Lo stesso giorno, tre richieste che entrano nel piano:
+  l'ombra del foglio morbida, visibile ai fianchi e sfumata sotto (T27, nuovo,
+  ruoli `--shadow-sheet` e `--shadow-sheet-focus`); il vassoio delle barre
+  meno staccato dalla carta, `--bar-tray` a #f8fafc di giorno e #1a1f27 di
+  notte (T16); le sezioni della barra a schede come le schede dell'ispettore
+  (T20, T21). Sono eccezioni dichiarate alla «tavolozza intatta».
+- 2026-11-04 · Scrittoio 2 · le risposte dell'utente: D1–D9 tutte A, titolo a
+  600, «Figure» prima di «Emoji», prototipo del computer approvato. Il
+  telefono è in revisione su sua richiesta: foglio da bordo a bordo,
+  «Salvato» e la modalità come icone, il bottone della modalità in basso a
+  destra sulla riga di Annulla e Ripeti, niente marchio in alto a sinistra.
+  La lavagna segue il prototipo di N6 anche sul computer («il discorso del
+  Canvas che fosse meglio nel prototipo originale è vero anche per il
+  computer»): T23 fa solo l'icona della modalità.
+- 2026-11-04 · scrittoio-2 · il menu delle modalità è il B, la spunta blu a
+  destra con le scorciatoie in pastiglie (T10 porta il blocco `menu-b` in
+  `skin/menus.css`) · parole dell'utente: «al momento preferisco la spunta
+  blu a destra».
+- 2026-11-04 · scrittoio-2 · la barra dei fogli diventa lo standard in `kit/` e
+  `skin/kit.css` (`kit-bar`, `kit-ribbon`, `kit-rail`, `kit/toolbar-keys.ts`), e
+  le baseline si rifanno una volta sola alla fine: T24 svuota `bench/baseline/`
+  e T25 la riempie dal runner · la forma va scritta una volta nel proprietario
+  e ogni barra la adotta, e `bench/scene.test.ts` vuole tutte le baseline o
+  nessuna; il menu delle modalità nasce in `state/mode-menu.ts` e non in
+  `document-controller.ts`, perché quel file lo sta cambiando N6.
 - CI di PR #297 (orchestratore): i job dei banchi (visual, a11y, graph,
   benches) non avevano il toolchain Rust col bersaglio wasm32-unknown-
   unknown, e Vite non poteva compilare il nucleo della lavagna quando

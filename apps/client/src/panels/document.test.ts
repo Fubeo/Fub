@@ -235,6 +235,12 @@ describe("il ricongiungimento delle bozze orfane", () => {
 // vera, contro l'host finto.
 const CONSENT = "craft.cli-previews";
 const GUIDA = "Manuali/guida.pdf";
+const FOTO = "Foto/mare.png";
+/// Un PNG di un pixel: l'immagine ha una modalità sola.
+const PNG = Uint8Array.from(
+  atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="),
+  (c) => c.charCodeAt(0),
+);
 
 const consentSetting = (value: CraftRenderConsent): SettingEntry => ({
   spec: {
@@ -284,7 +290,11 @@ async function waitFor(thing: string, cond: () => boolean, within = 3000): Promi
 
 /// La shell vera col PDF e un Word nel vault, il consenso `consent`, e
 /// `craft_render` che risponde «in coda» come il backend.
-async function start(consent: CraftRenderConsent, app: string | null = "PdfCraft"): Promise<FakeHost> {
+async function start(
+  consent: CraftRenderConsent,
+  app: string | null = "PdfCraft",
+  more: Record<string, string> = {},
+): Promise<FakeHost> {
   vi.resetModules();
   box.consent = consent;
   box.app = app;
@@ -303,8 +313,11 @@ async function start(consent: CraftRenderConsent, app: string | null = "PdfCraft
     render: { app: "PdfCraft", consent: box.consent },
   });
   const host = createFakeHost({
-    file: { "Benvenuto.md": "# Benvenuto\n", "Lettera.docx": rich("ciao") },
-    resources: { [GUIDA]: { bytes: new TextEncoder().encode("test"), mime: "application/pdf" } },
+    file: { "Benvenuto.md": "# Benvenuto\n", "Lettera.docx": rich("ciao"), ...more },
+    resources: {
+      [GUIDA]: { bytes: new TextEncoder().encode("test"), mime: "application/pdf" },
+      [FOTO]: { bytes: PNG, mime: "image/png" },
+    },
     craft: { docs: {} },
     craftRender,
     settings: [consentSetting(consent)],
@@ -489,5 +502,158 @@ describe("il gesto che apre un PDF fa fare l'anteprima (T31)", () => {
     await open(GUIDA, true);
     await waitFor("la riga della domanda", () => consentRows().length === 1);
     expect(renders(host)).toEqual([]);
+  });
+});
+
+// Ciò che le fasi dopo spostano (la modalità, la testata) e non deve cambiare
+// di significato: fissato qui prima di toccarlo (Scrittoio 2, T1).
+describe("la testata del riquadro, prima di Scrittoio 2", () => {
+  const NOTA = "Progetti/Fub/Diario.md";
+  const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
+  const toolbarOf = (pane: HTMLElement) => pane.querySelector<HTMLElement>(".pane-toolbar")!;
+  const currentOf = (pane: HTMLElement) => toolbarOf(pane).querySelector<HTMLButtonElement>(":scope > .pane-mode-current")!;
+  const radios = () => [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
+  const labelOf = (item: Element) => item.querySelector(".menu-label")?.textContent ?? "";
+
+  beforeEach(() => {
+    activeStop?.();
+    activeStop = null;
+    document.body.innerHTML = "";
+    localStorage.clear();
+  });
+
+  afterEach(async () => {
+    const menu = await import("../ui/menu");
+    menu.closeContextMenu();
+  });
+
+  it("il bottone della modalità elenca le modalità della superficie e ne segna una sola", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n\nUna riga.\n" });
+    await open(NOTA);
+    const { t } = await import("../i18n/strings");
+    const pane = panes()[0]!;
+    const current = currentOf(pane);
+    expect(current.hidden).toBe(false);
+    expect(current.getAttribute("aria-haspopup")).toBe("menu");
+    current.click();
+    await settle();
+    expect(current.getAttribute("aria-expanded")).toBe("true");
+    // L'ordine non si fissa: Scrittoio 2 (T2) lo cambia.
+    expect(new Set(radios().map(labelOf))).toEqual(new Set(["Live", "Blocchi", "Sorgente", "Lettura"]));
+    const checked = radios().filter((item) => item.getAttribute("aria-checked") === "true");
+    expect(checked.map(labelOf)).toEqual(["Live"]);
+    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Live" }));
+  });
+
+  it("la voce scelta cambia la modalità del suo riquadro, non quella dell'altro", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n\nUna riga.\n" });
+    await open(NOTA);
+    const { openDocumentBeside } = await import("./document");
+    await openDocumentBeside("Benvenuto.md", "row");
+    await settle();
+    await waitFor("due riquadri con la nota", () => panes().length === 2 && panes().every((p) => p.dataset.mode === "live_preview"));
+    const [left, right] = panes();
+    // Il menu del riquadro **senza** fuoco: il clic lo porta a fuoco e cambia lui.
+    const layout = await import("../state/layout");
+    expect(layout.layout.focus).toBe(right!.dataset.pane);
+    // Come il clic vero in Chromium e WebKitGTK: il bottone prende il fuoco
+    // prima del clic, e il menu, chiudendosi, glielo rende.
+    currentOf(left!).focus();
+    currentOf(left!).click();
+    expect(layout.layout.focus).toBe(left!.dataset.pane);
+    await settle();
+    radios().find((item) => labelOf(item) === "Sorgente")!.click();
+    await waitFor("il riquadro di sinistra in Sorgente", () => left!.dataset.mode === "source");
+    expect(right!.dataset.mode).toBe("live_preview");
+    expect(currentOf(left!).getAttribute("aria-expanded")).toBe("false");
+    expect(currentOf(left!).textContent).toBe("Sorgente");
+    expect(currentOf(right!).textContent).toBe("Live");
+  });
+
+  it("il bottone della modalità ha la figura e il nome della modalità accesa, e il suggerimento (T2)", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n\nUna riga.\n" });
+    await open(NOTA);
+    const { t } = await import("../i18n/strings");
+    const { icon } = await import("../ui/icons");
+    const current = currentOf(panes()[0]!);
+    const figure = () => current.querySelector(":scope > svg")?.innerHTML;
+    const name = () => current.querySelector(":scope > .pane-mode-name")?.textContent;
+    const tooltip = () => {
+      current.dispatchEvent(new FocusEvent("focus"));
+      return document.getElementById(current.getAttribute("aria-describedby") ?? "")?.textContent;
+    };
+    const drawn = (which: string) => new DOMParser().parseFromString(icon(which), "image/svg+xml").documentElement.innerHTML;
+    expect(figure()).toBe(drawn("pen"));
+    expect(name()).toBe("Live");
+    expect(tooltip()).toBe("Live");
+    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Live" }));
+    const svg = current.querySelector(":scope > svg");
+    // Ridisegnare la testata senza cambiare modalità non riscrive la figura.
+    const { synchronize } = await import("./document");
+    await synchronize();
+    expect(current.querySelector(":scope > svg")).toBe(svg);
+    current.click();
+    await settle();
+    radios().find((item) => labelOf(item) === "Blocchi")!.click();
+    await waitFor("la nota in Blocchi", () => panes()[0]!.dataset.mode === "blocks");
+    expect(figure()).toBe(drawn("blocks"));
+    expect(name()).toBe("Blocchi");
+    expect(tooltip()).toBe("Blocchi");
+    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Blocchi" }));
+  });
+
+  it("le briciole: le cartelle con `data-folder`, poi il nome", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n" });
+    await open(NOTA);
+    const crumbs = toolbarOf(panes()[0]!).querySelector<HTMLElement>(":scope > .muted")!;
+    expect(crumbs.dataset.path).toBe(NOTA);
+    expect([...crumbs.querySelectorAll<HTMLElement>("[data-folder]")].map((f) => [f.dataset.folder, f.textContent])).toEqual([
+      ["Progetti", "Progetti"],
+      ["Progetti/Fub", "Fub"],
+    ]);
+    expect(crumbs.lastChild?.textContent).toBe("Diario.md");
+    expect(crumbs.textContent).toBe(NOTA);
+    // Una nota alla radice non ha cartelle.
+    await open("Benvenuto.md");
+    expect(crumbs.querySelectorAll("[data-folder]")).toHaveLength(0);
+    expect(crumbs.textContent).toBe("Benvenuto.md");
+  });
+
+  it("il menu «…» di una nota ha le voci di oggi", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n" });
+    await open(NOTA);
+    const { t } = await import("../i18n/strings");
+    const menu = toolbarOf(panes()[0]!).querySelector<HTMLButtonElement>("[data-pane-menu]")!;
+    expect(menu.textContent).toBe("…");
+    expect(menu.getAttribute("aria-label")).toBe(t("document.pane.menu"));
+    menu.click();
+    await settle();
+    expect([...document.querySelectorAll("#context-menu .menu-label")].map((l) => l.textContent)).toEqual([
+      t("pane.menu.split_right"),
+      t("pane.menu.split_down"),
+      t("pane.print"),
+      t("pane.slides"),
+      t("pane.recorder.open"),
+      t("pane.menu.close_tab"),
+      t("pane.menu.close_pane"),
+    ]);
+  });
+
+  it("una superficie con una modalità sola non ha il bottone, e un riquadro vuoto nemmeno", async () => {
+    await start("off", null);
+    await open(FOTO);
+    const pane = panes()[0]!;
+    await waitFor("l'immagine montata", () => pane.dataset.mode !== undefined && currentOf(pane).hidden);
+    expect(toolbarOf(pane).querySelector<HTMLElement>(":scope > .segmented")!.hidden).toBe(true);
+    const registry = await import("../ui/commands");
+    // Si chiudono l'immagine e la nota di benvenuto: il riquadro resta vuoto.
+    const close = registry.allCommands().find((entry) => entry.id === "shell.tab.close")!;
+    for (let i = 0; i < 4 && toolbarOf(pane).querySelector(":scope > .muted")!.textContent !== ""; i += 1) {
+      await close.run!();
+      await settle();
+    }
+    expect(toolbarOf(pane).querySelector(":scope > .muted")!.textContent).toBe("");
+    expect(currentOf(pane).hidden).toBe(true);
+    expect(toolbarOf(pane).querySelector<HTMLElement>(":scope > .pane-nav")!.hidden).toBe(true);
   });
 });

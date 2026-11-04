@@ -72,6 +72,8 @@ const FAILURES = {
 
 /// Un telefono in piedi: la finestra delle scene di `mobile.html`.
 const PHONE = { width: 390, height: 844 };
+/// Il catalogo del kit intero, fino alla barra in una fila e alla colonna.
+const KIT_WINDOW = { width: 1280, height: 960 };
 /// Una finestra documento appena aperta.
 const DOCUMENT_WINDOW = { width: 900, height: 700 };
 
@@ -874,6 +876,7 @@ export const SCENE = onPage("shell", [
     {
       id: "kit",
       title: "Il kit: ogni primitiva nei suoi stati",
+      viewport: KIT_WINDOW,
       prepare: async () => {},
     },
     {
@@ -903,6 +906,7 @@ export const SCENE = onPage("shell", [
     {
       id: "kit-focus",
       title: "Il kit: il fuoco vero da tastiera, e la scheda che ne esce",
+      viewport: KIT_WINDOW,
       prepare: async (page) => {
         // Da tastiera, perché l'anello sia quello di `:focus-visible` e non il
         // gemello che la pagina tiene fermo: quattro Tab portano al rimando.
