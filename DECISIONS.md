@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · griglia-celle · D-7, la selezione col puntatore: «scivola»,
+  la risposta dell'utente («in celle dei fogli voglio selezione del
+  puntatore -> scivola sempre»). Il puntatore usa le regole dei tasti; B5,
+  T3 (regole del passo, prove, «Fatto quando» di g3-mouse-fitto) e la scelta
+  del prototipo cambiano di conseguenza · perché: l'utente preferisce il
+  moto di prima anche se un lato che cala mostra per un attimo qualche cella
+  non scelta.
 - 2026-11-04 · Celle dei fogli · terzo giro sul movimento, D-7 e D-8
   (l'utente: «un po' glitchata… la velocizzerei leggermente», «per una
   frazione di secondo… una porzione maggiore di superficie», «glitcha e esce

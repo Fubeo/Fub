@@ -27,10 +27,11 @@ funziona tutto»; ha chiesto un movimento senza scatti e un po' più svelto,
 che è quello di B5, B6 e T3. Poi, provandolo col mouse: «per una frazione
 di secondo la selezione cambia e viene selezionata tipo una porzione
 maggiore di superficie», e ancora «glitcha e esce dal normale funzionamento
-e seleziona male il tutto». Quindi la selezione non mostra mai, nemmeno per
-un fotogramma, una cella che il puntatore non ha scelto, i suoi pezzi sono
-sempre lo stesso rettangolo, e finisce esattamente sulla cella sotto il
-puntatore: il motore unico dei segni di T3 e il modo «segue» di B5 (D-7).
+e seleziona male il tutto». Quindi i pezzi della selezione sono sempre lo
+stesso rettangolo, nessuno resta indietro o si stacca, e la selezione
+finisce esattamente sulla cella sotto il puntatore: il motore unico dei
+segni di T3. Fra i tre modi del prototipo l'utente ha scelto «scivola»
+(D-7): col puntatore la selezione scivola come coi tasti (B5).
 Anche il quadratino e le maniglie del tocco sono sempre un pezzo solo,
 intero: mai spezzati sul filo del blocco né lasciati sul filo dopo uno
 scorrimento (B7, D-8). Le D-1…D-8 restano aperte.
@@ -167,16 +168,17 @@ dell'anatomia; il verso (`h`, `v`) e il lato possono stare in un attributo
 - B4 · Al telefono un tocco sceglie, due tocchi entro `DOUBLE_TAP_MS`
   aprono la cella, un tocco lungo (`LONG_PRESS_MS`) mette le due maniglie
   per allargare la selezione; trascinare col dito scorre e basta. (D-4)
-- B5 · Coi tasti (frecce, Maiusc+frecce, Ctrl+frecce, pagine, Home) e coi
-  comandi la selezione scivola con la molla `GLIDE`. Col puntatore la
-  selezione segue il puntatore (il modo «segue», D-7): la cella attiva e un
-  lato del rettangolo che cala vanno al loro posto nel fotogramma stesso, un
-  lato che cresce scivola con `GLIDE`; quindi un clic su una cella salta, e
-  Maiusc+clic o un trascinamento allargano scivolando. Mentre si trascina
-  avanti e indietro la selezione mostra solo celle scelte, al più qualcuna
-  in meno per il tempo che il lato nuovo ci mette ad arrivare, mai una di
-  più; e finisce sulla cella sotto il puntatore, anche quando la griglia
-  scorre sotto il puntatore fermo e al rilascio. (D-5, D-7)
+- B5 · Coi tasti (frecce, Maiusc+frecce, Ctrl+frecce, pagine, Home), coi
+  comandi e col puntatore la selezione scivola con la molla `GLIDE` (il
+  modo «scivola», la risposta dell'utente a D-7): la cella attiva e ogni
+  lato del rettangolo, che cresca o che cali, vanno al loro posto
+  scivolando, anche dopo un clic su una cella. Mentre si trascina avanti e
+  indietro i pezzi restano un rettangolo solo e la cella attiva ci sta
+  dentro; un lato che cala ci mette un attimo ad arrivare, e intanto la
+  selezione mostra per un attimo qualche cella non scelta (nelle sonde a
+  1280 px fino a 507 px), come l'utente ha scelto. Finisce sulla cella
+  sotto il puntatore, anche quando la griglia scorre sotto il puntatore
+  fermo e al rilascio. (D-5, D-7)
 - B6 · Le molle sono della griglia, appena sovrasmorzate perché un bordo
   che rimbalza si legge come un difetto: `GLIDE` (1400/75, le radici 35 e
   40 al secondo, al 90 % in circa 105 ms) per i segni, `SLIDE` (700/53, le
@@ -236,6 +238,9 @@ dell'anatomia; il verso (`h`, `v`) e il lato possono stare in un attributo
     sonde a 1280 px fino a 507 px di troppo): è la «porzione maggiore» che
     l'utente ha visto.
 
+  Risposta (2026-11-04, l'utente): «in celle dei fogli voglio selezione
+  del puntatore -> scivola sempre». Il modo «scivola»: B5 e T3 lo dicono.
+
 - D-8 · Il quadratino e le maniglie del tocco sul filo di una colonna o di
   una riga bloccata (B7). Nel prototipo: «Maniglie sul filo del blocco».
   Prima ogni maniglia si tagliava per zona come un lato: sul filo diventava
@@ -254,10 +259,9 @@ dell'anatomia; il verso (`h`, `v`) e il lato possono stare in un attributo
     fotogramma dietro le celle, e quando l'angolo passa sotto la fascia
     torna giù di colpo.
 
-Una risposta diversa da B1–B5, B7, D-7 o D-8 cambia soltanto il task che la
-nomina (T1, T3, T4, T5, T6 o T7), non l'ordine: con «salta» in T3 un
-aggiornamento dal puntatore porta subito i numeri al bersaglio, con
-«scivola» il puntatore usa le regole dei tasti; con «sopra» in T3 un segno
+Una risposta diversa da B1–B5, B7 o D-8 cambia soltanto il task che la
+nomina (T1, T3, T4, T5, T6 o T7), non l'ordine (D-7 ha la risposta, e T3
+la dice già): con «sopra» in T3 un segno
 d'angolo che si vede sale nel livello della fascia che lo coprirebbe e il
 gestore di `scroll` lo ridisegna (nel prototipo `pointSpot` e
 `pointRect`).
@@ -270,7 +274,7 @@ gestore di `scroll` lo ridisegna (nel prototipo `pointSpot` e
 | le fasce ferme stanno ferme | `bench:grid` G1: lo scorrimento di lato filmato, la colonna bloccata e le intestazioni delle righe uguali in ogni fotogramma (oggi 12 su 25 diversi) | T1 |
 | un intervallo che passa il blocco ha l'altezza giusta e non copre mai una cella bloccata né un'intestazione | `bench:grid` G1, `marks.test.ts` | T1 |
 | i segni restano e scivolano; il rettangolo è simmetrico; i segni si leggono in ogni luce | `bench:grid` G3: zero nodi aggiunti o tolti per freccia, i quattro lati uguali e alla stessa distanza dai fili, contrasto dei segni ≥ 3:1 sulla carta nelle quattro luci; `npm run bench:motion` | T3 |
-| trascinando col mouse vero la selezione non mostra mai una cella non scelta, i suoi pezzi sono sempre un rettangolo solo, e finisce sotto il puntatore | `bench:grid` G3 `g3-mouse-fitto` (mouse a 1000 Hz, più eventi per fotogramma, avanti e indietro dentro e fuori dal blocco, con la CPU normale e rallentata 4×): in ogni fotogramma zero pezzi in disaccordo, zero numeri oltre il bersaglio o all'indietro, zero fotogrammi più grandi della scelta, la cella attiva dentro, alla fine la cella sotto il puntatore; `grid-motion.test.ts` con eventi fitti | T3 |
+| trascinando col mouse vero la selezione scivola senza salti, i suoi pezzi sono sempre un rettangolo solo, e finisce sotto il puntatore | `bench:grid` G3 `g3-mouse-fitto` (mouse a 1000 Hz, più eventi per fotogramma, avanti e indietro dentro e fuori dal blocco, con la CPU normale e rallentata 4×): in ogni fotogramma zero pezzi in disaccordo, zero numeri oltre il bersaglio o all'indietro, la cella attiva dentro, alla fine la cella sotto il puntatore; `grid-motion.test.ts` con eventi fitti | T3 |
 | la cella aperta è la cella | `bench:grid` G4: zero px di scostamento del testo all'apertura, lo stesso carattere della cella, la cella aperta più larga della cella con un testo lungo, il fondo della carta nella luce scura con il testo ≥ 4,5:1 | T4 |
 | ciò che si scrive o si tira si vede subito, e un no torna indietro | `bench:grid` G5: il numero a destra nel primo fotogramma dopo Invio, la larghezza nel primo fotogramma dopo il rilascio, l'etichetta della misura dentro il riquadro, il ritorno e l'avviso con un no | T5 |
 | il riempimento resta finché il foglio risponde; la copia e il taglio hanno il loro segno; l'incolla si vede subito | `bench:grid` G6 | T6 |
@@ -486,8 +490,8 @@ Stato: [ ] da fare
 ## T3 · I segni che restano e scivolano
 
 Perché: i difetti 4, 5 e 15, e il movimento che l'utente chiede: senza
-scatti, un po' più svelto, e mai «una porzione maggiore» né una selezione
-sbagliata (le «Assunzioni»). Oggi un segno che si sposta è un nodo nuovo, il
+scatti, un po' più svelto, e mai una selezione a pezzi o sbagliata (le
+«Assunzioni»; col puntatore il modo «scivola», D-7). Oggi un segno che si sposta è un nodo nuovo, il
 rettangolo non è simmetrico, e nelle luci scure l'accento chiaro sulla carta
 bianca quasi non si vede.
 Tocca: `editors/grid/marks.ts` e `marks.test.ts`, `editors/grid/engine.ts`
@@ -539,11 +543,9 @@ Cosa fare:
   velocità quando il bersaglio cambia. Niente fotogrammi WAAPI (`animate`,
   `flip`) per i segni che scivolano: corse cancellate e ripianificate a ogni
   cambio di cella erano la causa dei salti (`DECISIONS.md`).
-- Le regole del passo, nell'ordine:
-  1. col puntatore, nel modo «segue» (B5, D-7), la cella attiva va al
-     bersaglio, e così ogni lato del rettangolo che cala; un lato che cresce
-     scivola; poi il contenimento (3);
-  2. per ognuno degli otto numeri del rettangolo e della cella attiva: una
+- Le regole del passo, nell'ordine, uguali per il puntatore, i tasti e i
+  comandi (il modo «scivola», D-7):
+  1. per ognuno degli otto numeri del rettangolo e della cella attiva: una
      velocità che porta lontano dal bersaglio si azzera (un bersaglio nuovo
      dall'altra parte non fa mai tornare indietro); quella verso il
      bersaglio non supera la radice lenta della molla per la distanza che
@@ -551,15 +553,14 @@ Cosa fare:
      molla sovrasmorzata arriva senza passarlo; dopo il passo, un numero che
      avrebbe passato il bersaglio, o fermo per `springAtRest` a `REST_PX`,
      sta esattamente sul bersaglio con velocità zero;
-  3. il contenimento: su un lato dove la cella attiva esce dal rettangolo,
+  2. il contenimento: su un lato dove la cella attiva esce dal rettangolo,
      il rettangolo la raggiunge se il suo bersaglio sta oltre di lei,
      altrimenti la cella attiva si ferma sul lato;
-  4. il quadratino sta sull'angolo del rettangolo, o salta all'angolo del
+  3. il quadratino sta sull'angolo del rettangolo, o salta all'angolo del
      riempimento mentre lo si tira.
-  Coi tasti e coi comandi valgono da 2 a 4 (il modo «scivola»). Quindi ogni
-  numero va al bersaglio senza superarlo e senza tornare indietro, la cella
-  attiva sta sempre dentro, e col puntatore il rettangolo non è mai più
-  grande della scelta. Un gesto nuovo a metà corsa riparte dalla posa e
+  Quindi ogni numero va al bersaglio senza superarlo e senza tornare
+  indietro e la cella attiva sta sempre dentro; col puntatore un lato che
+  cala ci mette un attimo ad arrivare (B5). Un gesto nuovo a metà corsa riparte dalla posa e
   dalla velocità correnti, anche col tasto tenuto giù.
 - Il disegno (`draw`): ogni pezzo d'area (i lati, l'anello, il velo, le
   fasce delle intestazioni), in ogni livello dove cade, sta fermo nel suo
@@ -597,8 +598,7 @@ Cosa fare:
   cambio di foglio, una selezione rimessa dall'host), il livello «ridotto»
   di `motionLevel()` o un motore `instant`, come in `springValue` (non si
   iscrive nessun ascoltatore; «ridotto» acceso a metà corsa porta `view` al
-  bersaglio al primo aggiornamento o fotogramma e ridisegna) e, col modo
-  «salta» di D-7, il puntatore. Nel livello calmo la molla è
+  bersaglio al primo aggiornamento o fotogramma e ridisegna). Nel livello calmo la molla è
   `springFor(…, calm)`, che per `GLIDE` e `SLIDE` non cambia (sono già
   sovrasmorzate). Il modulo prende il `Lifetime` della griglia: lo
   smontaggio toglie l'ascoltatore e ferma le dissolvenze (`halt`).
@@ -608,8 +608,7 @@ Cosa fare:
   un'altra cella), e `#endDrag` col commit lo rifà al punto del `pointerup`
   prima di chiudere: la selezione finisce sempre sulla cella sotto il
   puntatore. Oggi lo rilegge solo lo scorrimento automatico, non la rotella
-  né il rilascio. Ogni aggiornamento dal puntatore lo dice al motore
-  (`pointer`), i tasti e i comandi no.
+  né il rilascio. Il motore non distingue il puntatore dai tasti (D-7).
 - `bench/motion.test.ts`: `../src/editors/grid/**/*.ts` entra nell'elenco
   dei sorgenti, e `STARTS` prende anche `onFrame(` (oggi non lo cerca, e un
   moto per fotogramma passerebbe senza coreografia; fuori da `moto/` non lo
@@ -628,18 +627,16 @@ Cosa fare:
   casuali con un seme fisso (trascinamenti avanti e indietro con salti di
   molte celle, clic e Maiusc+clic, intestazioni, frecce, Ctrl+frecce e
   pagine), da 1 a 20 eventi per fotogramma, fotogrammi regolari e
-  irregolari (16,7 ms e 33–100 ms), nei modi «segue», «scivola» e «salta»,
-  con `GLIDE` e `SLIDE`. In ogni fotogramma: nessun numero oltre il
+  irregolari (16,7 ms e 33–100 ms), col puntatore e coi tasti, con `GLIDE`
+  e `SLIDE`. In ogni fotogramma: nessun numero oltre il
   bersaglio né più lontano di prima; la cella attiva dentro il rettangolo;
-  il quadratino sull'angolo; col puntatore in «segue» il rettangolo dentro
-  la scelta, in «salta» uguale. A gesto finito tutti i numeri sono
+  il quadratino sull'angolo. A gesto finito tutti i numeri sono
   esattamente sul bersaglio e l'ascoltatore non c'è più. La stessa linea
   del tempo con tutti gli eventi o con solo l'ultimo di ogni fotogramma dà
   lo stesso moto, numero per numero. Con «ridotto» nessun ascoltatore si
   iscrive (`frameListeners()`), e lo smontaggio non lascia niente. Il test
-  deve fallire se si tolgono l'azzeramento della velocità all'indietro o il
-  salto dei lati che calano (le due regole che le sonde hanno visto
-  mancare). Un caso col filo: un trascinamento da B5 ad A5 e ritorno, e il
+  deve fallire se si toglie l'azzeramento della velocità all'indietro (la
+  regola che le sonde hanno visto mancare). Un caso col filo: un trascinamento da B5 ad A5 e ritorno, e il
   livello del quadratino che cambia nel fotogramma stesso in cui il suo
   angolo passa il filo.
 - In `bench/grid-gestures.mjs`, sigla G3: `g3-frecce-senza-nodi` (cinque
@@ -660,8 +657,7 @@ Cosa fare:
   prima del dipinto, il rettangolo di ogni pezzo visibile di ogni livello in
   coordinate della griglia, e il bersaglio. In ogni fotogramma: tutti i
   pezzi danno lo stesso rettangolo (entro 0,5 px), nessun lato oltre il
-  bersaglio o all'indietro, il velo e l'anello dentro il bordo, mai più
-  grande della scelta col puntatore, e ogni segno d'angolo un pezzo solo,
+  bersaglio o all'indietro, il velo e l'anello dentro il bordo, e ogni segno d'angolo un pezzo solo,
   intero (8×8 il quadratino), nel livello della zona del suo angolo
   (tagliati per zona, nelle sonde erano divisi o tagliati da 464 a 1586
   fotogrammi per giro); a gesto finito la selezione è la cella sotto il
@@ -693,11 +689,11 @@ solo `transform` e `opacity`, niente di vivo a corsa finita, si torna
 indietro a metà); `motion.test.ts` verde con la griglia nell'elenco e
 `onFrame` in `STARTS`; `g3-mouse-fitto` vede zero fotogrammi con pezzi in
 disaccordo, numeri oltre il bersaglio o all'indietro, il velo fuori dal
-bordo o, col puntatore, più grandi della scelta, né segni d'angolo divisi o
+bordo, né segni d'angolo divisi o
 tagliati, e la cella sotto il puntatore a ogni gesto finito, nei quattro
 giri (1280 e 390 px, CPU 1× e 4×); `grid-motion.test.ts` verde con le prove
-qui sopra (eventi fitti, «ridotto», smontaggio), e rosso se si toglie una
-delle due regole; d45 verde; `check-listeners`, `npm run typecheck` e
+qui sopra (eventi fitti, «ridotto», smontaggio), e rosso senza
+l'azzeramento della velocità all'indietro; d45 verde; `check-listeners`, `npm run typecheck` e
 `theme:verify` verdi.
 Prova: scripts/check.sh --rapido, poi `npm run bench:grid` e
 `npm run bench:motion`

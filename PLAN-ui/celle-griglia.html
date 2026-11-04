@@ -2569,8 +2569,8 @@ body {
   <div class="proto-field">
     <label for="proto-puntatore" data-i18n="(solo prototipo)">Selezione col puntatore</label>
     <select id="proto-puntatore">
-      <option value="segue">Segue il puntatore: cresce scivolando, cala subito (consigliato)</option>
-      <option value="scivola">Scivola sempre, come coi tasti</option>
+      <option value="scivola" selected>Scivola sempre, come coi tasti (scelta dall'utente)</option>
+      <option value="segue">Segue il puntatore: cresce scivolando, cala subito</option>
       <option value="salta">Salta col puntatore, scivola coi tasti</option>
     </select>
   </div>
@@ -2624,7 +2624,7 @@ body {
       <ul>
         <li>Le molle sono della griglia e non rimbalzano: <i>GLIDE</i> 1400/75 per i segni, <i>SLIDE</i> 700/53 per le colonne che scivolano e le maniglie (<code>moto/spring.ts</code> non cambia). Dalla barra restano 90 ms per una cosa che compare, 140 ms per una che esce, 12 ms fra un valore e l'altro (al massimo 8).</li>
         <li><b>Un solo motore.</b> Dieci numeri (il rettangolo, la cella attiva, l'angolo del quadratino) e, a ogni fotogramma, tutti i pezzi di tutte le zone disegnati da quei numeri: i lati, l'anello, il velo, le fasce e il quadratino non possono separarsi. Il puntatore cambia solo dove vanno i numeri; il passo si fa una volta per fotogramma, quindi un mouse a 1000 Hz e uno a 60 danno lo stesso moto. Un numero non torna mai indietro e non passa mai il suo bersaglio, e la cella attiva resta dentro il rettangolo.</li>
-        <li><b>Col puntatore</b> (D-7, scelta «Selezione col puntatore»): la selezione cresce scivolando e cala subito, e un clic salta alla cella. Così non mostra mai una cella che il puntatore non ha scelto, né per un fotogramma un'area più grande. Coi tasti tutto scivola. Le altre due scelte: «Scivola sempre» (anche quando cala, quindi per un attimo resta più grande) e «Salta col puntatore» (identica alla scelta in ogni fotogramma, senza moto col mouse).</li>
+        <li><b>Col puntatore</b> (D-7, scelta «Selezione col puntatore», risposta dell'utente il 2026-11-04: «scivola sempre»): la selezione scivola come coi tasti, anche quando cala, quindi per un attimo resta più grande della scelta. Le altre due scelte restano da guardare: «Segue il puntatore» (cresce scivolando e cala subito) e «Salta col puntatore» (identica alla scelta in ogni fotogramma, senza moto col mouse).</li>
         <li><b>Le maniglie sul filo del blocco</b> (D-8, scelta «Maniglie sul filo del blocco»): il quadratino e le maniglie del tocco sono un pezzo solo, intero, nel livello della zona del loro angolo. Sul filo di una colonna o di una riga bloccata la fascia ferma ne copre la parte che le passa sotto, come copre le celle, e scorrendo spariscono sotto la fascia insieme alla loro cella; la presa è un cerchio attorno all'angolo, intera anche dove la fascia copre metà maniglia. L'altra scelta: «Intere sopra la fascia», che le sposta lo script a ogni scorrimento (un fotogramma dopo le celle) e, quando l'angolo passa sotto la fascia, le riporta giù di colpo.</li>
         <li><b>Movimento ridotto</b>: niente scivola. I segni saltano, le colonne saltano, le formiche stanno ferme; restano le dissolvenze di 90 ms, come nella barra, e il battito della copia, che è solo una dissolvenza.</li>
         <li>Nel prototipo le corse le fa una copia di <code>run</code> della barra e i segni un ciclo di <code>requestAnimationFrame</code>; nel codice vero le fa <code>editors/grid/grid-motion.ts</code> con <code>animate</code>, <code>flip</code> e <code>stagger</code> di <code>moto/</code>, e i segni un ascoltatore di <code>onFrame</code> con <code>advanceSpring</code> (T3).</li>
@@ -2642,7 +2642,7 @@ body {
         <li>La cella aperta che cresce copre le celle accanto anche quando non sono vuote (come Excel)?</li>
         <li>Mostrare subito una larghezza o un numero prima che il foglio risponda, e tornare indietro se dice di no?</li>
         <li>Al telefono, il tocco lungo per le maniglie va bene?</li>
-        <li>Col puntatore la selezione cresce scivolando e cala subito (D-7): va bene, o la vuoi sempre scivolante, o a scatti col mouse? E la velocità (D-5)?</li>
+        <li>La velocità della selezione (D-5)? (Col puntatore scivola sempre: D-7 ha la risposta.)</li>
         <li>Le formiche che camminano mentre il foglio risponde a un riempimento?</li>
         <li>Sul filo del blocco, una maniglia che la fascia ferma copre a metà (D-8) va bene, o la vuoi intera sopra la fascia?</li>
       </ol>
