@@ -764,6 +764,36 @@ export const SCENE = onPage("shell", [
       await page.waitForSelector(".pane.focus .sheet-thread-item:focus-visible");
     },
   },
+  // **Lo strato d'avvio** (`.avvio`, nelle tre pagine): ciò che si vede prima
+  // dell'app. Il fake lo ferma a uno stato dalla query (`avvio=…` in
+  // `fake-ipc.ts`), e la scena dichiara la sua condizione d'arrivo perché
+  // l'avvio non finisce mai (attesa) o finisce nel guasto: `data-bench` non
+  // dice niente su di loro. La scia la ferma il palco (`QUIET`).
+  {
+    id: "avvio-attesa",
+    title: "L'avvio: il marchio, la riga del vault che si apre, la scia",
+    query: "avvio=attesa",
+    ready: () => document.querySelector('.avvio[data-stato="attesa"][data-fase="vault"]') !== null,
+    prepare: async () => {},
+  },
+  {
+    id: "avvio-lento",
+    title: "L'avvio che si allunga: «Ci vuole più del solito.»",
+    query: "avvio=attesa",
+    // Lo dice `stati.js` a 10 s: una condizione, non un tempo.
+    ready: () => document.querySelector('.avvio[data-stato="lento"]') !== null,
+    readyTimeout: 15_000,
+    prepare: async () => {},
+  },
+  {
+    id: "avvio-guasto",
+    title: "L'avvio caduto: il motivo, Riprova col fuoco, Copia i dettagli",
+    query: "avvio=guasto",
+    ready: () =>
+      document.querySelector('.avvio[data-stato="guasto"]') !== null &&
+      document.activeElement?.id === "avvio-riprova",
+    prepare: async () => {},
+  },
 ]).concat(
   // **Il kit** (`bench/kit.html`): le primitive di `src/kit/` vestite dalla
   // stessa serie. Stanno in questo elenco perché sono la stessa pelle e le
@@ -912,6 +942,14 @@ export const SCENE = onPage("shell", [
         await page.click('#views-ribbon .rail-btn[data-panel="files"]');
         await page.waitForSelector("#sidebar-scrim:not([hidden])");
       },
+    },
+    {
+      id: "avvio-telefono",
+      title: "L'avvio sul telefono: il marchio e la riga del vault",
+      query: "avvio=attesa",
+      viewport: PHONE,
+      ready: () => document.querySelector('.avvio[data-stato="attesa"][data-fase="vault"]') !== null,
+      prepare: async () => {},
     },
   ]),
   // **La finestra documento** (`document.html`): un foglio solo, in

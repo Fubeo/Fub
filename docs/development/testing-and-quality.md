@@ -178,6 +178,25 @@ esaminato il diff; non va promosso a baseline. Un cambiamento intenzionale
 richiede invece revisione del foglio, spiegazione delle scene coinvolte e
 rigenerazione nell'ambiente Ubuntu validato.
 
+Lo strato d'avvio ha quattro scene: `avvio-attesa` (il marchio e la riga del
+vault che si apre), `avvio-lento` («Ci vuole più del solito.», a 10 s),
+`avvio-guasto` (il motivo, col fuoco su Riprova) e `avvio-telefono` (l'attesa
+su `mobile.html`). Il fake del banco ferma l'avvio dalla query: `avvio=attesa`
+trattiene `openVault`, `avvio=guasto` fa cadere `initialVault`. Una scena che
+non arriva a `data-bench="ready"` dichiara la sua condizione d'arrivo
+(`ready`), e il palco ferma la scia (`.avvio-scia`) prima dello scatto.
+
+La guardia del lampo (`npm run bench:lampo`, `-- --port <n> --strictPort` per
+un'altra porta) trattiene il modulo d'ingresso di `index.html` e di
+`mobile.html` e guarda la pagina com'è prima di ogni modulo, in luce scura,
+chiara e con una cache `fub.avvio` chiara su un sistema scuro: il fondo di
+`<html>` è pieno e della luce attesa, `.avvio` copre la finestra (nove punti
+cadono dentro di lui), `#app` è `inert` e nessun bottone dell'app si vede con
+l'aspetto nativo. Poi rilascia il modulo e, ad avvio finito, verifica che non
+restino `.avvio`, `#avvio-stile`, `data-avvio-*` né `--avvio-*` e che `#app`
+sia vivo. Esce diverso da zero nominando la pagina, il caso e il controllo
+caduto: senza lo stile in linea di una pagina cade.
+
 Il banco del moto (`npm run bench:motion`) misura le coreografie dello
 Scrittoio nel browser: lo stato d'arrivo coincide con quello a moto ridotto,
 non resta nessuna animazione viva, i fotogrammi chiave toccano soltanto
