@@ -1,6 +1,6 @@
 // Lo strato d'avvio, prima parte: la luce.
 //
-// Gira sincrono nel <head>, subito dopo lo stile in linea e prima di ogni
+// Gira sincrono nel <head>, subito dopo il foglio dello strato e prima di ogni
 // modulo: decide luce, contrasto e moto con le stesse regole del tema vero
 // (`effectiveTheme` ed `effectiveContrast` di src/theme/theme.ts, la
 // preferenza di moto di src/theme/reduced-motion.ts) e le scrive su <html>

@@ -216,9 +216,11 @@ strumenti stanno in due cassetti. Le pagine `index.html`, `mobile.html` e
 `document.html` ne portano il markup, e `main.ts` avvia
 `shells/scrittoio/bootstrap.ts`. Non esiste una seconda shell da selezionare.
 
-Le tre pagine si aprono sotto lo **strato d'avvio** (`.avvio`), in linea
-perché dipinga prima dei moduli: `public/avvio/luce.js` sceglie luce,
-contrasto, moto e colori, `stati.js` i tempi. Il fondo c'è dal primo
+Le tre pagine si aprono sotto lo **strato d'avvio** (`.avvio`), nel `<head>`
+prima dei moduli perché dipinga subito: il foglio `public/avvio/avvio.css`
+(un file e non un `<style>`, per la CSP: vedi
+[Permessi e sicurezza](../reference/permissions-and-security.md)),
+`luce.js` sceglie luce, contrasto, moto e colori, `stati.js` i tempi. Il fondo c'è dal primo
 fotogramma, il marchio entra a 120 ms (1 s al più), la fase (`data-fase`) a
 2 s, l'avvio è lento a 10 s e un guasto con Riprova a 30 s; sotto, l'app è
 `inert` e `aria-busy`. Lo consegna `avvio/consegna.ts` a fine avvio

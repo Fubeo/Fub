@@ -7,8 +7,8 @@
 //
 // Le foto del banco (`photos.mjs`) si scattano ad avvio finito: il lampo — la
 // pagina bianca, l'HTML nudo coi bottoni nativi fra il primo disegno e il tema
-// montato dal JS — non lo vedono mai. Lo toglie lo strato d'avvio (lo stile in
-// linea `#avvio-stile` e `.avvio` nelle pagine, `public/avvio/luce.js`), e senza
+// montato dal JS — non lo vedono mai. Lo toglie lo strato d'avvio (il foglio
+// `#avvio-stile` e `.avvio` nelle pagine, `public/avvio/luce.js`), e senza
 // una prova automatica torna al primo `index.html` che cambia.
 //
 // # Come guarda
@@ -32,7 +32,7 @@
 // Le pagine sono `index.html` e `mobile.html`.
 //
 // Esce diverso da zero, con una riga per ogni controllo caduto che dice pagina,
-// caso e controllo. Togliere lo stile in linea da una pagina lo fa cadere.
+// caso e controllo. Togliere il foglio dello strato da una pagina lo fa cadere.
 import { openStage, openPage, WINDOW } from "./stage.mjs";
 
 /// La finestra del telefono, come le scene di `mobile.html` (`scene.mjs`).
