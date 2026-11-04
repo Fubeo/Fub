@@ -39,8 +39,9 @@ nate dalle risposte e dai consigli di `lavagna.md` per le sue domande
 aperte. N6 va avanti sopra il ramo di N4, non sopra `main` (A-15). Restano
 tre domande nuove, D-20, D-21 e D-22: i task che le aspettano lo dicono.
 Ondate: T1 T2 T3 | T4 T5 T6 | T7 T8 T9 | T10 | T11 T25 | T26 T29 | T27 T12 | T28 T13 | T30 T14 | T24 T31 | T15 T20 | T33 T16 | T32 T19 | T48 T73 | T34 T37 | T17 | T40 T47 | T39 T21 | T38 | T41 | T42 | T43 | T44 | T35 T46 | T53 | T36 | T54 | T49 | T50 | T45 | T51 | T52 | T55 | T56 T65 | T57 | T58 T68 | T59 | T60 | T61 | T62 | T63 | T64 | T66 | T67 | T69 | T70 | T71 | T72 | T74 | T75 | T76 | T77 | T78 | T22 | T86 | T87 | T89 | T23 | T18 | T79 | T80 T88 | T81 | T82 | T83 | T84 | T85 | T90
-Prototipo: quattro pagine, nessuna ancora approvata.
-`PLAN-ui/lavagna-schede.html` (T25): fatta il 2026-11-04, approvato: —.
+Prototipo: quattro pagine; approvata la prima (T25).
+`PLAN-ui/lavagna-schede.html` (T25): fatta il 2026-11-04, Approvato: 2026-11-04,
+con le varianti consigliate.
 `PLAN-ui/lavagna-impianto.html` (T26), `PLAN-ui/lavagna-modifica.html`
 (T27), `PLAN-ui/lavagna-estratti.html` (T28): da fare. Ognuna la
 costruisce un coder con `.claude/skills/pianifica/prototipo.md` e la fa
@@ -65,7 +66,7 @@ grafico che ne dipende parte prima della riga «Approvato» (A-26).
 
 ## Dal prototipo
 
-La pagina di T25 c'è e aspetta il sì; quelle di T26–T28 non ci sono
+La pagina di T25 è approvata (2026-11-04); quelle di T26–T28 non ci sono
 ancora. Ogni parte visibile riusa un pezzo che c'è già; la tabella dice
 dove finisce e chi la fa. I task fino a T21 usano le classi di oggi e la
 sola struttura che serve a funzionare (`structure.css`); l'aspetto vero
@@ -96,8 +97,8 @@ pagina usa, una riga per pezzo, con il file e il task.
 | Il selettore, la scheda-estratto, il lettore, le fonti, il ritaglio di un'immagine | `editors/canvas/parts-picker.ts`, `excerpt.ts`, `reader.ts`, `sources.ts`, `crop.ts` (nuovi) | T28, T74–T78, T80–T85 |
 | La pagina di prodotto | `docs/product/lavagna.md` (nuovo) | T23 |
 
-Le classi nuove di `PLAN-ui/lavagna-schede.html` (T25, in attesa del sì:
-valgono quando la pagina è approvata; se l'utente cambia una scelta, si
+Le classi nuove di `PLAN-ui/lavagna-schede.html` (T25, approvata il
+2026-11-04 con le varianti consigliate; se l'utente cambia una scelta, si
 correggono qui). Ogni blocco `<style>` della pagina dice il suo file; il CSS
 nuovo passa da `sanitizeThemeCss`. Ogni classe va anche negli agganci di
 `anatomia/editors.ts`.
@@ -2031,7 +2032,7 @@ pianificatore lo riscrive prima che parta); una regola che
 Fatto quando: la pagina c'è, passa la prova di `sanitizeThemeCss`, e ha
 «Approvato» con la data nella pagina e nel piano; D-21 ha la risposta.
 Prova: grep -n "Approvato" PLAN-ui/lavagna-schede.html PLAN.md
-Stato: [~] in corso · pianificatore (prototipo) · base 12c13922
+Stato: [x] fatto
 
 ## T26 · Il prototipo dell'impianto
 

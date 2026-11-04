@@ -59,6 +59,12 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · N6 · prototipo T25 (`PLAN-ui/lavagna-schede.html`)
+  approvato con le varianti consigliate: titolo sopra la scheda (D-21 (a)
+  confermata), gemelle con la luce calda, «Esc per uscire» nella testata,
+  nomi delle impostazioni come frasi, notifica col percorso, colori come
+  oggi (il filo non prende il colore) · parole dell'utente: «preferisco
+  quella del piano originale. Mi piace il piano in schede della lavagna».
 - 2026-11-03 · N6 · merge di piano/n4-inchiostro (509772da) in
   piano/n6-lavagna, come chiede A-15 prima di T11: PLAN.md resta quello di
   N6, DECISIONS.md tiene le voci dei due rami in ordine di data, PLAN-
