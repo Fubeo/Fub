@@ -2083,7 +2083,7 @@ prova la cancellazione in sospeso, l'altro motivo del sola lettura); una
 foto del banco della riga «Aperto in WordCraft · Riprendi qui».
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/state/lend.test.ts
-Stato: [~] in corso · coder · base b8a20bf1
+Stato: [x] fatto · cecb7d85..f9853a5d · check --rapido verde tranne scene.test atteso (baseline dal runner in T32); runtime e grid/engine rossi sotto carico e verdi da soli
 
 ## T18 · Il prototipo delle anteprime
 
@@ -2940,7 +2940,7 @@ Fatto quando: `cargo test -p fub-host --test craft_cli --lib craft::editors`
 passa; dopo i test nessun pid scritto dagli script è vivo (`kill -0`, mai
 `pgrep -f`).
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test craft_cli
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 55bd1d1f
 
 ## T30 · Le anteprime dei documenti
 

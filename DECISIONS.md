@@ -59,6 +59,20 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- N7 T17 integrata (cecb7d85..f9853a5d). Decisioni dell'orchestratore, senza
+  contratti toccati: lend.ts esporta anche la prenotazione (reserveLend, che
+  segue la rinomina e muore con il vault, così una risposta vecchia di
+  openWith non presta), la porta LendGate che il controller registra e
+  mountLends; open-with.ts avvolge l'host in lendingHost senza toccare
+  external-editors.ts. Si presta solo un documento con una scheda aperta che
+  non mostra soli byte (immagini, PDF, media no: lì c'è il solo openWith).
+  Il visore media ora riceve openExternal = handToSystem(id, true), così la
+  voce «Apri con» di T16 compare anche lì. Toccati in più panels/open-
+  with.test.ts e docs/product/editor-menus.md. Resta, fuori da N7: durante
+  il prestito (come già con una cancellazione in sospeso) il bollino della
+  barra dei documenti dice «Si scrive» e la barra Home sembra attiva, perché
+  lo stato del bollino guarda il formato e non il sola lettura della
+  sessione (editors/rich/standing.ts); da segnalare all'utente.
 - T16 integrata (b8a20bf1). Scostamenti dal piano, decisi dall'orchestratore
   perché non toccano contratti: le voci del sottomenu usano
   `description`/`disabled` già esistenti in SurfaceMenuItem invece di
