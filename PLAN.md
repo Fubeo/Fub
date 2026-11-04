@@ -1285,7 +1285,7 @@ Fatto quando: la pagina ha i numeri nuovi con il modo di lancio; «Non
 misurato» non nomina più T8; `node .github/scripts/check-doc-links.mjs`
 verde.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 3c7b4f5d
 
 ## T17 · La CI completa e la revisione prima del merge
 
