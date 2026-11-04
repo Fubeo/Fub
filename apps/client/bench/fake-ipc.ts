@@ -240,6 +240,43 @@ globalThis.__fubLiveBench = Object.freeze({
 /// `fub-format-xlsx` produce davvero (`tests/ts_grid.rs`).
 const WORKBOOK_DOC = params.get("workbook") === "1" ? "Dati/Conti.xlsx" : null;
 
+/// Gli stati della barra dei fogli che la cartella generata non ha
+/// (`?grid=table|readonly`, insieme a `?workbook=1`): una copia delle sue
+/// finestre con una tabella dal nome lunghissimo sulla cella scelta, che
+/// accende la sezione della tabella, oppure una copia della sessione coi
+/// comandi che cambiano la cartella spenti, con il perché. Il JSON resta
+/// quello che `fub-format-xlsx` produce.
+const GRID_CASE = params.get("grid");
+const BENCH_TABLE = {
+  name: "Riepilogo_trimestrale_delle_spese_di_rappresentanza_2026",
+  row: 0,
+  column: 0,
+  rows: 6,
+  columns: 4,
+  header_row: true,
+  totals_row: false,
+  banded_rows: true,
+  banded_columns: false,
+  first_column: false,
+  last_column: false,
+  filter_button: true,
+  style: "TableStyleMedium2",
+};
+/// In sola lettura restano accesi soltanto i comandi che guardano.
+const LOOKING = /^(file|selection|view)\.|^edit\.(selectAll|goTo|goToSpecial|find)$/;
+function benchWindow<W extends { readonly sheet: string; readonly tables: readonly unknown[] }>(window: W): W {
+  return GRID_CASE === "table" && window.sheet === XLSX_GRID.session.active
+    ? { ...window, tables: [...window.tables, BENCH_TABLE] }
+    : window;
+}
+const BENCH_SESSION = GRID_CASE === "readonly"
+  ? {
+    ...XLSX_GRID.session,
+    commands: XLSX_GRID.session.commands.map((command) =>
+      LOOKING.test(command.id) ? command : { ...command, enabled: false, reason: "La cartella è aperta in sola lettura." }),
+  }
+  : XLSX_GRID.session;
+
 /// Il documento di videoscrittura delle scene `document-*` (`?rich=…`), con
 /// la proiezione che `fub-format-rich` dà davvero del file: quella con un po'
 /// di tutto (`tests/ts_projection.rs`), oppure un `.odt`, uno pieno di
@@ -1020,8 +1057,8 @@ const options: Options = {
     // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.
     gridBytes: {
       surface: XLSX_GRID.surface,
-      session: XLSX_GRID.session,
-      windows: [...XLSX_GRID.windows, XLSX_GRID.edit.window],
+      session: BENCH_SESSION,
+      windows: [...XLSX_GRID.windows, XLSX_GRID.edit.window].map(benchWindow),
       commits: [XLSX_GRID.edit.commit],
     } as GridBytesFake,
   }),

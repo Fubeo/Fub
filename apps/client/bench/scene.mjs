@@ -72,6 +72,12 @@ const FAILURES = {
 
 /// Un telefono in piedi: la finestra delle scene di `mobile.html`.
 const PHONE = { width: 390, height: 844 };
+/// La finestra in cui, con l'albero aperto e l'ispettore chiuso, il foglio è
+/// largo 700 px: la misura «700 px» del prototipo della barra dei fogli.
+const SHEET_700 = { width: 1016, height: 800 };
+/// La finestra in cui, senza l'albero e l'ispettore, il foglio è largo
+/// 1248 px: la misura «piena» del prototipo.
+const SHEET_FULL = { width: 1308, height: 800 };
 /// Una finestra documento appena aperta.
 const DOCUMENT_WINDOW = { width: 900, height: 700 };
 
@@ -383,6 +389,81 @@ export const SCENE = onPage("shell", [
       await runScrittoioCommand(page, "Grafici sparkline");
       await page.waitForSelector(".grid-command-dialog .grid-command-form");
     },
+  },
+  // **La barra dei fogli**, sulla stessa cartella: a riposo nel foglio pieno
+  // (l'albero e l'ispettore chiusi), stretta a 700 px con la sezione di una
+  // tabella dal nome lunghissimo (`?grid=table`, vedi `fake-ipc.ts`), le
+  // lettere di Alt, un foglietto raccolto aperto sul posto, la tavolozza dei
+  // colori, la barra ritirata e la sola lettura (`?grid=readonly`). Il
+  // telefono ha le sue due scene, fra quelle di `mobile.html`.
+  {
+    id: "grid-ribbon",
+    title: "La barra dei fogli a riposo, nel foglio pieno",
+    query: "workbook=1",
+    viewport: SHEET_FULL,
+    prepare: (page) => openRibbon(page, "full"),
+  },
+  {
+    id: "grid-ribbon-table",
+    title: "La barra dei fogli a 700 px, nella sezione di una tabella dal nome lunghissimo",
+    query: "workbook=1&grid=table",
+    viewport: SHEET_700,
+    prepare: async (page) => {
+      await openRibbon(page, 700);
+      await page.click('.pane.focus .grid-ribbon .kit-tab[data-tab="table"]');
+      await page.waitForSelector('.pane.focus .grid-ribbon-panel[data-tab="table"]:not([hidden])');
+    },
+  },
+  {
+    id: "grid-ribbon-keytips",
+    title: "La barra dei fogli con le lettere di Alt",
+    query: "workbook=1",
+    viewport: SHEET_FULL,
+    prepare: async (page) => {
+      await openRibbon(page, "full");
+      await page.keyboard.press("Alt");
+      await page.waitForSelector(".pane.focus .grid-ribbon-keytip");
+    },
+  },
+  {
+    id: "grid-ribbon-open",
+    title: "La barra dei fogli a 700 px, col foglietto «Numeri» aperto sul posto",
+    query: "workbook=1",
+    viewport: SHEET_700,
+    prepare: async (page) => {
+      await openRibbon(page, 700);
+      await page.click('.pane.focus .grid-ribbon [data-group="number"] .grid-ribbon-group-toggle');
+      await page.waitForSelector('.pane.focus .grid-ribbon [data-group="number"][data-open="true"]');
+    },
+  },
+  {
+    id: "grid-ribbon-palette",
+    title: "La barra dei fogli con la tavolozza del colore di riempimento",
+    query: "workbook=1",
+    viewport: SHEET_FULL,
+    prepare: async (page) => {
+      await openRibbon(page, "full");
+      await page.click('.pane.focus .grid-ribbon [aria-label="Altri colori: Colore riempimento"]');
+      await page.waitForSelector(".grid-ribbon-palette");
+    },
+  },
+  {
+    id: "grid-ribbon-collapsed",
+    title: "La barra dei fogli ritirata, con le sole sezioni",
+    query: "workbook=1",
+    viewport: SHEET_FULL,
+    prepare: async (page) => {
+      await openRibbon(page, "full");
+      await page.click('.pane.focus .grid-ribbon [aria-label="Comprimi la barra multifunzione"]');
+      await page.waitForSelector('.pane.focus .grid-ribbon[data-collapsed="true"]');
+    },
+  },
+  {
+    id: "grid-ribbon-readonly",
+    title: "La barra dei fogli in sola lettura: i comandi che cambiano la cartella spenti",
+    query: "workbook=1&grid=readonly",
+    viewport: SHEET_FULL,
+    prepare: (page) => openRibbon(page, "full"),
   },
   // **Il disegno**: il disegno dei connettori (`?connectors=6`, vedi
   // `fake-ipc.ts`), aperto e guardato com'è prima che l'impianto nuovo lo
@@ -882,6 +963,26 @@ export const SCENE = onPage("shell", [
         await page.waitForSelector(".rich-side-comments .rich-side-comment");
       },
     },
+    // La barra dei fogli in piedi: la Home in tre colonne di due foglietti
+    // chiusi, e uno di loro aperto sul posto.
+    {
+      id: "mobile-grid-ribbon",
+      title: "Il telefono: la barra dei fogli a riposo",
+      query: "workbook=1",
+      viewport: PHONE,
+      prepare: (page) => openRibbon(page, "phone"),
+    },
+    {
+      id: "mobile-grid-ribbon-open",
+      title: "Il telefono: la barra dei fogli col foglietto «Allineamento» aperto sul posto",
+      query: "workbook=1",
+      viewport: PHONE,
+      prepare: async (page) => {
+        await openRibbon(page, "phone");
+        await page.click('.pane.focus .grid-ribbon [data-group="alignment"] .grid-ribbon-group-toggle');
+        await page.waitForSelector('.pane.focus .grid-ribbon [data-group="alignment"][data-open="true"]');
+      },
+    },
     {
       id: "mobile-launcher",
       title: "Il telefono: il lanciatore, dalla pillola",
@@ -1137,6 +1238,12 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
 /// In una finestra stretta l'albero sta nel cassetto: lo si apre, e dopo la
 /// scelta lo si richiude, perché la foto è del documento.
 async function openRichDocument(page, path) {
+  await openFromTree(page, path, ".pane.focus .rich-surface .ProseMirror");
+}
+
+/// Apre `path` dall'albero e aspetta `ready`. In una finestra stretta l'albero
+/// è un cassetto: lo apre prima e lo richiude dopo.
+async function openFromTree(page, path, ready) {
   const compact = await page.evaluate(() => document.querySelector("#layout")?.classList.contains("layout-compact") ?? false);
   if (compact) {
     await page.click('#views-ribbon .rail-btn[data-panel="files"]');
@@ -1144,7 +1251,7 @@ async function openRichDocument(page, path) {
   }
   await openFolder(page, path.slice(0, path.lastIndexOf("/")));
   await page.click(`#file-list .tree-row[data-path="${path}"]`);
-  await page.waitForSelector(".pane.focus .rich-surface .ProseMirror");
+  await page.waitForSelector(ready);
   if (compact && await page.isVisible("#sidebar-scrim")) {
     // In alto a destra: in una finestra stretta il cassetto copre il centro,
     // e su un telefono sale dal basso.
@@ -1190,6 +1297,33 @@ async function openWorkbook(page) {
     return grid?.getAttribute("data-grid-protocol") === "v2"
       && (grid?.querySelectorAll('[role="gridcell"]').length ?? 0) > 0;
   });
+}
+
+/// Apre la cartella per le scene della barra dei fogli, col foglio largo
+/// `width` px, oppure senza l'albero e l'ispettore (`"full"`, 1248 px nella
+/// finestra `SHEET_FULL`) o quanto lascia il telefono (`"phone"`), e aspetta che la barra abbia raccolto i suoi foglietti.
+async function openRibbon(page, width) {
+  await openFromTree(page, "Dati/Conti.xlsx", '.pane.focus .grid-surface[data-grid-protocol="v2"] [role="gridcell"]');
+  if (await page.isVisible('#toggle-inspector[aria-pressed="true"]')) {
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="false"]');
+  }
+  const tree = '#rail .rail-btn[aria-label="L\'albero del vault"]';
+  if (width === "full" && await page.isVisible(`${tree}[aria-pressed="true"]`)) {
+    const before = await page.evaluate(() => document.querySelector(".pane.focus .pane-editor").getBoundingClientRect().width);
+    await page.click(tree);
+    await page.waitForFunction(
+      (narrow) => document.querySelector(".pane.focus .pane-editor").getBoundingClientRect().width > narrow,
+      before,
+    );
+  }
+  await page.waitForSelector(".pane.focus .grid-ribbon .grid-ribbon-panel:not([hidden])");
+  const sheet = await page.evaluate(() => document.querySelector(".pane.focus .pane-editor")?.getBoundingClientRect().width ?? 0);
+  const expected = width === "full" ? 1248 : width;
+  if (typeof expected === "number" && Math.round(sheet) !== expected) throw new Error(`il foglio è largo ${sheet} px, non ${expected}`);
+  // La barra si raccoglie al fotogramma dopo la misura del foglio.
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await page.focus('.pane.focus .grid-surface [role="gridcell"][aria-selected="true"], .pane.focus .grid-surface [role="grid"]');
 }
 
 /// Il centro di una cella della griglia, per riga e colonna da zero, quando
