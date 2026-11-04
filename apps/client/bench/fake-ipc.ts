@@ -73,6 +73,11 @@ import {
   pdfScenePreview,
   pdfSceneResources,
   PDF_SCENE_WORDCRAFT,
+  treeSceneCase,
+  treeSceneFiles,
+  treeScenePreview,
+  treeSceneResources,
+  treeSceneSetting,
 } from "./craft-fixture";
 import { rawSceneCase, rawSceneCraft, rawScenePreview, rawSceneResources } from "./raw-fixture";
 import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
@@ -291,6 +296,14 @@ if (RAW_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null)) throw new Ra
 /// con la domanda sulle anteprime, il Word prestato con la domanda.
 const PDF_SCENE = pdfSceneCase(params.get("pdf-scena"));
 if (PDF_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null || RAW_SCENE !== null)) throw new RangeError("pdf-scena is a vault of its own");
+
+/// L'albero delle scene T26 (`?albero=miniature|xmp`, vedi
+/// `craft-fixture.ts`): le cartelle «Foto 2026» e «Progetti» con le miniature
+/// accese, e gli XMP mostrati o nascosti.
+const TREE_SCENE = treeSceneCase(params.get("albero"));
+if (TREE_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null || RAW_SCENE !== null || PDF_SCENE !== null)) {
+  throw new RangeError("albero is a vault of its own");
+}
 
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
 const DRAWING = CONNECTORS !== null
@@ -722,7 +735,7 @@ const DRAW_WORKSPACE: readonly SettingEntry[] = [
 /// Il gruppo «App esterne» con le cinque impostazioni della feature `craft`,
 /// i testi del catalogo vero (`fub-host/src/settings.rs`). Solo con
 /// `?craft=1`, così le altre scene delle preferenze restano come sono.
-const CRAFT_SETTINGS: readonly SettingEntry[] = params.get("craft") === "1" ? [
+const CRAFT_SETTING_ENTRIES: readonly SettingEntry[] = [
   {
     spec: {
       key: "craft.editor-paths",
@@ -800,7 +813,14 @@ const CRAFT_SETTINGS: readonly SettingEntry[] = params.get("craft") === "1" ? [
     value: true,
     source: "default",
   },
-] : [];
+];
+const CRAFT_SETTINGS: readonly SettingEntry[] = params.get("craft") === "1" || TREE_SCENE !== null
+  ? CRAFT_SETTING_ENTRIES.map((entry) => {
+    // La scena dell'albero accende le miniature, e nasconde gli XMP se lo chiede.
+    const value = TREE_SCENE === null ? null : treeSceneSetting(TREE_SCENE, entry.spec.key);
+    return value === null ? entry : { ...entry, value, source: "machine" as const };
+  })
+  : [];
 
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
 ///
@@ -1130,6 +1150,7 @@ const options: Options = {
     // La nota della Live, per le scene che la chiedono.
     ...(LIVE === null ? {} : { [LIVE_DOC]: LIVE.text }),
     ...(PDF_SCENE === null ? {} : pdfSceneFiles(PDF_SCENE)),
+    ...(TREE_SCENE === null ? {} : treeSceneFiles()),
   },
   resources: {
     ...RESOURCES,
@@ -1137,6 +1158,7 @@ const options: Options = {
     ...(CRAFT_SCENE === null ? {} : craftSceneResources()),
     ...(RAW_SCENE === null ? {} : rawSceneResources(RAW_SCENE)),
     ...(PDF_SCENE === null ? {} : pdfSceneResources()),
+    ...(TREE_SCENE === null ? {} : treeSceneResources()),
   },
   root: ROOT,
   view: VIEWS,
@@ -1166,6 +1188,8 @@ const options: Options = {
     externalEditors: async (doc: string | null) => (doc === null || doc.endsWith(".docx") ? [PDF_SCENE_WORDCRAFT] : []),
     openWith: async (_path: string, editor: string) => ({ editor, how: "new_process" as const }),
   }),
+  // Il bundle `fub.craft` acceso: le miniature le dice `treeScenePreview`.
+  ...(TREE_SCENE === null ? {} : { craft: { docs: {} } }),
 };
 
 const host = createFakeHost(options);
@@ -1367,6 +1391,11 @@ export const api: typeof host.module.api = {
     if (PDF_SCENE !== null && id === CRAFT_PREVIEW_COMMAND && typeof doc === "string") {
       const size = (args as { size?: unknown }).size === "large" ? "large" : "small";
       const payload = pdfScenePreview(PDF_SCENE, doc, size);
+      if (payload !== null) return { notify: null, effect: { kind: "custom", ns: CRAFT_BUNDLE_NS, payload }, undo: null, partial: null };
+    }
+    // Le miniature dell'albero delle scene T26: il finto non sa leggere i file.
+    if (TREE_SCENE !== null && id === CRAFT_PREVIEW_COMMAND && typeof doc === "string") {
+      const payload = treeScenePreview(doc, (args as { size?: unknown }).size === "large" ? "large" : "small");
       if (payload !== null) return { notify: null, effect: { kind: "custom", ns: CRAFT_BUNDLE_NS, payload }, undo: null, partial: null };
     }
     return behind.invokeCommand(id, args, ...rest);

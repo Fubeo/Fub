@@ -239,6 +239,19 @@ export const SCENE = onPage("shell", [
     query: "pdf-scena=due-righe",
     prepare: openLentDocx,
   },
+  // **L'albero con le miniature** (`?albero=<caso>`, vedi `craft-fixture.ts`),
+  // come i modi `albero-miniature` e `albero-xmp` del prototipo: le cartelle
+  // «Foto 2026» e «Progetti» aperte, le miniature accese, gli XMP mostrati o
+  // nascosti. In una finestra stretta l'albero resta nel cassetto aperto.
+  ...[
+    ["albero-miniature", "miniature", "L'albero con le miniature: l'anteprima che il file ha già, al posto dell'icona"],
+    ["albero-xmp", "xmp", "L'albero con le miniature e gli XMP nascosti"],
+  ].map(([id, kind, title]) => ({
+    id,
+    title,
+    query: `albero=${kind}`,
+    prepare: openThumbTree,
+  })),
   {
     id: "prefs-appearance",
     title: "Le preferenze: carattere, accento e spazio dell'interfaccia, coi controlli dello Scrittoio",
@@ -1340,6 +1353,28 @@ async function fromTreeDrawer(page, open) {
     await page.click("#sidebar-scrim", { position: { x: scrim.width - 80, y: 8 } });
     await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
   }
+}
+
+/// Le miniature che l'albero delle scene `albero-*` mostra: il RAW girato, i
+/// tre file Craft, il Word e il PDF.
+const TREE_THUMBS = 6;
+
+/// Apre le cartelle dell'albero delle scene `albero-*` e aspetta che tutte le
+/// miniature siano dipinte. In una finestra stretta apre il cassetto e lo
+/// lascia aperto: la scena è l'albero.
+async function openThumbTree(page) {
+  const compact = await page.evaluate(() => document.querySelector("#layout")?.classList.contains("layout-compact") ?? false);
+  if (compact) {
+    await page.click('#views-ribbon .rail-btn[data-panel="files"]');
+    await page.waitForSelector("#sidebar-scrim:not([hidden])");
+  }
+  await openFolder(page, "Foto 2026");
+  await openFolder(page, "Progetti");
+  await page.waitForFunction((count) => {
+    const thumbs = [...document.querySelectorAll("#file-list img.tree-thumb")];
+    return thumbs.length === count && thumbs.every((img) => img.complete && img.naturalWidth > 0);
+  }, TREE_THUMBS);
+  await page.mouse.move(0, 0);
 }
 
 /// Apre il Word della scena `docx-due-righe`, lo presta a WordCraft dal menu
