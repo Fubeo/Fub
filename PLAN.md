@@ -3194,7 +3194,7 @@ Fatto quando: `cargo test -p fub-format-craft` e `cargo test -p fub-host
 --test craft --test craft_cli --test craft_ranged --test craft_open_with`
 passano con le prove nuove, che falliscono senza la correzione.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base cd18886b
+Stato: [x] fatto · 1e104305 · check --rapido verde tranne legacy_tests::concurrency::a_before_write_error_aborts… caduto sotto carico, verde da solo 3 su 3
 
 ## T34 · Il clic sulla figura, il prestito, il fuoco e il visore PDF
 

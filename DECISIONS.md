@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- T33 integrata (fino a 1e104305). Differenze accettate: un RAW con più di
+  64 intervalli distinti è TooLarge; le chiavi JSON doppie contano una per
+  una; Contents.json sostituito dai link; la pulizia delle cartelle private
+  lasciate (prefisso fub-craft-render-, di questo utente, 0700, ferme da più
+  di 1 h, mai un link) gira al montaggio e solo su unix, perché senza
+  permessi unix non si può dire di chi è una cartella; la CLI delle
+  anteprime muore con Fub solo su Linux (PR_SET_PDEATHSIG, legato al thread
+  che l'avvia: lo stesso thread la aspetta fino alla fine, le app staccate
+  non lo hanno); waitid NOWAIT esclude OpenBSD, che Fub non costruisce.
 - CI completa su 1ba7a3c6 (run 41779586263), le cause rosse: (1) Windows,
   craft::channel a_closed_port_is_unreachable_at_once dava TimedOut perché
   Windows ritenta circa 2 s una porta chiusa invece di rifiutare; deciso che
