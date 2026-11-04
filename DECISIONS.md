@@ -59,6 +59,21 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- K3 T14 (e3b8afc0): il menu «Comandi» è `editors/grid/menu-comandi.ts`
+  (`openCommandMenu`) agganciato alla fila `quick` della barra; i comandi
+  che la barra non ha passano da una seconda istanza della tavolozza
+  (`mountGridPalette` dentro `ribbon/ribbon.ts`, vive quanto la barra).
+  `ui/menu.ts` ha tre opzioni nuove (`label`, `fullSearch`,
+  `reachDisabled`); la ricerca piena tiene l'altezza del posto e scorre.
+  Scarti dal prototipo: il tooltip del gettone è «Comandi» e «Tutti i
+  comandi del foglio» è l'aria-label del menu; l'icona è `outline` perché
+  `ribbon/icons.ts` era fuori dai Tocca (da rivedere in T17 col prototipo);
+  la scena `grid-commands-search` usa una ricerca senza risultati perché con
+  testo lo Spazio scrive nella ricerca e la regola tastiera dell'a11y la
+  boccerebbe; nessuna scena sotto 560 px (scene.test vuole finestre ≥ 800
+  px; il gettone senza nome lo mostra `mobile-grid-ribbon`). Restano: il
+  piede del menu non resta fisso in fondo nelle ricerche lunghe; le baseline
+  delle scene nuove e di `mobile-grid-ribbon` dal runner (T17).
 - K3 T13, dopo la CI di 8493f177: effetto.rs cadeva sul runner perché
   review.spelling chiede l'elenco di parole del sistema
   (/usr/share/dict/words), che il runner non ha, e GridCraft rifiuta il

@@ -1169,7 +1169,7 @@ run theme:verify` e `bench:a11y` verdi con gli stati nuovi; le foto del banco
 del menu, chiara e scura, piena e stretta, corrispondono al prototipo con la
 barra nuova.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base 4f244e0d
+Stato: [x] fatto · e3b8afc0 · check --rapido 19 passi su 20 verdi; rossi solo scene.test «ci sono tutte» (atteso fino a T17) e i flaky theme/runtime, grid/engine, verdi da soli; bench:a11y 272/272
 
 ## T15 · Il risultato dei comandi che leggono, e i perché in italiano
 
@@ -1254,7 +1254,7 @@ lettura sono spenti soltanto i `cambia`; `engine.test.ts`: in sola lettura
 `bench:a11y` verde; le foto del banco del risultato, chiara e scura, piena e
 stretta, corrispondono al prototipo.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base e3b8afc0
 
 ## T16 · La misura con i documenti che si chiudono
 
