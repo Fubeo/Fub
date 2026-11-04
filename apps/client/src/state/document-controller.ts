@@ -135,6 +135,7 @@ import {
   type Tab,
 } from "./layout";
 import { createNote, handToSystem, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
+import { lentDocuments, lentTo, mountLends, onLendChanged, provideLendGate, renameLend, unlend } from "./lend";
 import { confirm } from "../platform/confirm";
 import { registerShellCommand } from "../ui/commands";
 import { registerLiveCommands } from "../editors/spatial/live/commands";
@@ -643,8 +644,7 @@ async function noteReference(from: string, doc: string, preference: LinkPreferen
 /// Gli allegati depositati entrano nel documento come rimandi: come si
 /// scrivono lo decide la superficie, nella sintassi del suo formato.
 function insertAttachmentLinks(r: Pane, doc: string, links: readonly string[]): void {
-  if (r.shown?.k !== "doc" || r.shown.doc !== doc || !r.surface?.insertReferences ||
-      closeDraining || documentSessions.isDeletionPending(doc)) return;
+  if (r.shown?.k !== "doc" || r.shown.doc !== doc || !r.surface?.insertReferences || heldReadOnly(doc)) return;
   const references = links.map((link): SurfaceReference => ({ kind: "attachment", link }));
   if (!r.surface.insertReferences(references)) {
     throw new Error(t("errors.document.no_editor"));
@@ -665,12 +665,12 @@ function mountDocumentAttachments(r: Pane, doc: string): void {
     if (!life.closed) notify(t("document.attachment_failed", { reason: errorText(error) }), "guasto");
   };
   const accept = (files: readonly File[]) => {
-    if (life.closed || r.surface !== surface || closeDraining || documentSessions.isDeletionPending(doc)) {
+    if (life.closed || r.surface !== surface || heldReadOnly(doc)) {
       fail(new Error("The document is read-only or no longer open"));
       return;
     }
     void attachmentDeposit(doc).then((target) => {
-      if (!life.closed && r.surface === surface && !closeDraining && !documentSessions.isDeletionPending(doc)) {
+      if (!life.closed && r.surface === surface && !heldReadOnly(doc)) {
         return depositFiles(files, target, insert);
       }
     }).catch(fail);
@@ -962,6 +962,9 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     media: {
       transport: mediaTransport,
       assetUrl: api.assetUrl,
+      // «Apri con un'altra app» sull'immagine o sul PDF mostrato, come
+      // nell'albero: l'app del sistema, e con un'app Craft il sottomenu.
+      openExternal: (id) => handToSystem(id, true),
       copyText: writeClipboardText,
       // Il comando del kernel, come dalla palette: crea le annotazioni accanto
       // al PDF, o apre quelle che ci sono.
@@ -1014,6 +1017,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       });
     }),
   );
+  mountDocumentLends(lifetime);
   for (const event of ["index_updated", "batch_ended"] as const) {
     lifetime.add(onEvent(event, () => {
       for (const r of panes.values()) {
@@ -1068,9 +1072,11 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     if (outcome.kind !== "collision") {
       moveSheetNotices(from, to);
       renameInDocumentCaches(from, to);
+      // Il prestito segue il file col nome nuovo, come le schede qui sotto.
+      renameLend(from, to);
       // The layout still names the old path until `rename` below runs. Keep
       // those editors read-only across that tiny migration window.
-      setReadOnlyForDocument(from, documentSessions.isDeletionPending(to));
+      setReadOnlyForDocument(from, documentSessions.isDeletionPending(to) || lentTo(to) !== null);
       rename(from, to);
     }
   };
@@ -1952,10 +1958,19 @@ function drawPaneConflict(doc: string): void {
   }
 }
 
+/// Le schede di `doc` sono in sola lettura per una cancellazione in sospeso
+/// (`readOnly`, che chi chiama legge dalla sessione col nome giusto), per la
+/// chiusura in corso o perché il documento è in prestito a un'app Craft.
 function setReadOnlyForDocument(doc: string, readOnly: boolean): void {
   for (const paneId of panesWithDoc(doc)) {
-    panes.get(paneId)?.surface?.setReadOnly?.(readOnly || closeDraining);
+    panes.get(paneId)?.surface?.setReadOnly?.(readOnly || closeDraining || lentTo(doc) !== null);
   }
+}
+
+/// Perché una scheda di `doc` non accetta modifiche: la chiusura in corso,
+/// una cancellazione in sospeso, o il prestito a un'app Craft (T17).
+function heldReadOnly(doc: string): boolean {
+  return closeDraining || documentSessions.isDeletionPending(doc) || lentTo(doc) !== null;
 }
 
 /** Ferma gli input locali prima del drain delle finestre e del salvataggio. */
@@ -1963,7 +1978,7 @@ export function freezeDocumentSurfaces(frozen: boolean): void {
   closeDraining = frozen;
   for (const [paneId, pane] of panes) {
     const doc = activeDoc(paneId);
-    if (doc) pane.surface?.setReadOnly?.(frozen || documentSessions.isDeletionPending(doc));
+    if (doc) pane.surface?.setReadOnly?.(frozen || documentSessions.isDeletionPending(doc) || lentTo(doc) !== null);
   }
 }
 
@@ -2120,7 +2135,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     showSurfaceError(r, tab.doc, error);
     return;
   }
-  surface.setReadOnly?.(closeDraining || documentSessions.isDeletionPending(tab.doc));
+  surface.setReadOnly?.(heldReadOnly(tab.doc));
   // Il contenuto è a posto: da qui la sessione può raggiungere questo
   // riquadro come superficie, finché non mostra altro.
   attachSurface(r, tab.doc);
@@ -2274,7 +2289,7 @@ function attachSurface(r: Pane, doc: string): void {
     id: surface.surfaceId,
     sync: (update) => applySurfaceUpdate(r, doc, update),
   });
-  surface.setReadOnly?.(closeDraining || documentSessions.isDeletionPending(doc));
+  surface.setReadOnly?.(heldReadOnly(doc));
 }
 
 function detachSurface(r: Pane): void {
@@ -2659,6 +2674,28 @@ export function closeDocument(id: string | null = state.currentDoc): void {
 /// Il documento è aperto in **qualche** riquadro?
 export function isOpen(id: string): boolean {
   return panesWithDoc(id).length > 0;
+}
+
+/// Il prestito (T17) visto dalle schede. Una scheda aperta che mostra il
+/// documento si può prestare; un'immagine o un PDF che il visore mostra dai
+/// byte no: Fub non li scrive, e non c'è niente da tenere fermo. Le schede di
+/// un documento prestato sono in sola lettura (`heldReadOnly`), la riga
+/// «Aperto in {app}» la disegna `panels/document.ts`, e il prestito finisce
+/// quando si chiude l'ultima scheda del documento, comunque si chiuda.
+function mountDocumentLends(lifetime: Lifetime): void {
+  mountLends(lifetime);
+  lifetime.add(provideLendGate({
+    lendable: (doc) => isOpen(doc) && (handledByVault(doc) || !surfaceRegistry.showsBytes(doc)),
+    flush: flushPendingSave,
+  }));
+  lifetime.add(onLendChanged((doc) => {
+    setReadOnlyForDocument(doc, documentSessions.isDeletionPending(doc));
+    redrawTabs(doc);
+    drawPaneConflict(doc);
+  }));
+  lifetime.add(on("layout", () => {
+    for (const doc of lentDocuments()) if (!isOpen(doc)) unlend(doc);
+  }));
 }
 
 /// Risolve un wikilink e lo apre; se non risolve, crea la nota che manca col

@@ -18,6 +18,7 @@ import { iconEl } from "../ui/icons";
 import { api } from "../host/ipc";
 import { emit, on, state } from "../state/store";
 import { documentSessions } from "../state/document-session";
+import { lentTo, unlend } from "../state/lend";
 import { openDocument as openRecreated } from "../state/document-controller";
 import { clearRemovedNotice, dismissSheetNotice, limitedMode, removedNoticeOf, sheetNoticesOf, type SheetNoticeKind } from "../state/sheet-notices";
 import {
@@ -1377,6 +1378,17 @@ function noticeLinesOf(doc: string): SheetLine[] {
   }
   if (documentSessions.isDeletionPending(doc)) {
     lines.push({ id: "read_only", tone: "warning", text: t("notice.read_only", { doc: name }) });
+  }
+  // Il prestito a un'app Craft (T17): «Riprendi qui» lo finisce, e la scheda
+  // torna modificabile se nient'altro la tiene ferma.
+  const app = lentTo(doc);
+  if (app !== null) {
+    lines.push({
+      id: "lent",
+      tone: "info",
+      text: t("lend.notice", { app }),
+      action: { label: t("lend.resume"), run: () => unlend(doc) },
+    });
   }
   for (const notice of sheetNoticesOf(doc)) {
     const detail = notice.detail ? t(notice.detail) : "";

@@ -19,6 +19,7 @@ vi.mock("../state/store", async (original) => ({
 
 import { openWithEntry } from "./open-with";
 import type { OpenWithHost } from "../state/external-editors";
+import { forgetLends, lentTo, renameLend, type LendGate } from "../state/lend";
 
 const editor = (id: string, name: string, opens: string[], installed: boolean, running = false): ExternalEditor =>
   ({ id, name, opens, installed, running });
@@ -54,6 +55,7 @@ async function itemsOf(entry: MenuItem): Promise<readonly MenuItem[]> {
 beforeEach(() => {
   world.notified.length = 0;
   world.vault = "/vault";
+  forgetLends();
 });
 
 describe("openWithEntry", () => {
@@ -133,5 +135,126 @@ describe("openWithEntry", () => {
     await vi.waitFor(() => expect(world.notified).toHaveLength(1));
     expect(world.notified[0]!.tone).toBe("guasto");
     expect(world.notified[0]!.text).toContain("Il vault è chiuso.");
+  });
+});
+
+const WORDCRAFT = editor("wordcraft", "WordCraft", ["docx"], true);
+
+/// Chi tiene le schede, finto: `open` sono i documenti con una scheda,
+/// `unsaved` quelli che il salvataggio lascia indietro; `steps` ricorda
+/// l'ordine di salvataggio e apertura.
+function gateWith(open: string[], unsaved: string[] = []) {
+  const steps: string[] = [];
+  let duringFlush: (() => void) | null = null;
+  const gate: LendGate = {
+    lendable: (doc) => open.includes(doc),
+    flush: async () => {
+      steps.push("flush");
+      duringFlush?.();
+      return [...unsaved];
+    },
+  };
+  return { gate, steps, open, onFlush: (run: () => void) => void (duringFlush = run) };
+}
+
+/// Sceglie `app` nel sottomenu di `doc` e aspetta che la scelta finisca.
+async function choose(doc: string, app: string, host: OpenWithHost, gate: LendGate | null): Promise<void> {
+  const items = await itemsOf(openWithEntry(doc, { system: () => {}, host, lending: () => gate }));
+  const item = items.find((each) => each.label === app);
+  if (!item) throw new Error(`nel sottomenu non c'è ${app}`);
+  item.run!();
+  for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  await new Promise((r) => setTimeout(r, 0));
+}
+
+describe("il prestito da «Apri con»", () => {
+  it("salva prima di aprire, e presta all'app col suo nome", async () => {
+    const { gate, steps } = gateWith(["Lettera.docx"]);
+    const { host, opened } = hostWith(true, [WORDCRAFT], async (_doc, id) => {
+      steps.push("open");
+      return { editor: id, how: "new_process" };
+    });
+    await choose("Lettera.docx", "WordCraft", host, gate);
+    expect(steps).toEqual(["flush", "open"]);
+    expect(opened.map((each) => each.doc)).toEqual(["Lettera.docx"]);
+    expect(lentTo("Lettera.docx")).toBe("WordCraft");
+    expect(world.notified).toEqual([]);
+  });
+
+  it("un salvataggio fallito non apre l'app, non presta, e lo dice una volta", async () => {
+    const { gate } = gateWith(["Lettera.docx"], ["Lettera.docx"]);
+    const { host, opened } = hostWith(true, [WORDCRAFT]);
+    await choose("Lettera.docx", "WordCraft", host, gate);
+    expect(opened).toEqual([]);
+    expect(lentTo("Lettera.docx")).toBeNull();
+    expect(world.notified).toEqual([{ text: "Non ho potuto salvare: «Lettera.docx» non si apre in WordCraft.", tone: "guasto" }]);
+  });
+
+  it("un altro documento rimasto da salvare non ferma il prestito", async () => {
+    const { gate } = gateWith(["Lettera.docx"], ["Altro.md"]);
+    const { host } = hostWith(true, [WORDCRAFT]);
+    await choose("Lettera.docx", "WordCraft", host, gate);
+    expect(lentTo("Lettera.docx")).toBe("WordCraft");
+  });
+
+  it("un'app che non parte non presta", async () => {
+    const { gate } = gateWith(["Lettera.docx"]);
+    const { host } = hostWith(true, [WORDCRAFT], async () => Promise.reject(new Error("WordCraft non parte.")));
+    await choose("Lettera.docx", "WordCraft", host, gate);
+    expect(lentTo("Lettera.docx")).toBeNull();
+    expect(world.notified.map((each) => each.text)).toEqual(["WordCraft non parte."]);
+  });
+
+  it("senza scheda, o senza chi tiene le schede, si apre e basta", async () => {
+    const { gate, steps } = gateWith([]);
+    const { host, opened } = hostWith(true, [WORDCRAFT]);
+    await choose("Lettera.docx", "WordCraft", host, gate);
+    await choose("Lettera.docx", "WordCraft", host, null);
+    expect(steps).toEqual([]);
+    expect(opened).toHaveLength(2);
+    expect(lentTo("Lettera.docx")).toBeNull();
+  });
+
+  it("l'app del sistema non presta", async () => {
+    const { gate, steps } = gateWith(["Lettera.docx"]);
+    const { host } = hostWith(true, [WORDCRAFT]);
+    const system = vi.fn();
+    const items = await itemsOf(openWithEntry("Lettera.docx", { system, host, lending: () => gate }));
+    items[0]!.run!();
+    expect(system).toHaveBeenCalledTimes(1);
+    expect(steps).toEqual([]);
+    expect(lentTo("Lettera.docx")).toBeNull();
+  });
+
+  it("rinominato durante il salvataggio, apre e presta il nome nuovo", async () => {
+    const tabs = gateWith(["Lettera.docx"]);
+    tabs.onFlush(() => {
+      tabs.open.splice(0, 1, "Nuova.docx");
+      renameLend("Lettera.docx", "Nuova.docx");
+    });
+    const { host, opened } = hostWith(true, [WORDCRAFT]);
+    await choose("Lettera.docx", "WordCraft", host, tabs.gate);
+    expect(opened.map((each) => each.doc)).toEqual(["Nuova.docx"]);
+    expect(lentTo("Nuova.docx")).toBe("WordCraft");
+    expect(lentTo("Lettera.docx")).toBeNull();
+  });
+
+  it("una risposta arrivata dopo la chiusura della scheda o del vault non presta", async () => {
+    const tabs = gateWith(["Lettera.docx"]);
+    const closing = hostWith(true, [WORDCRAFT], async (_doc, id) => {
+      tabs.open.length = 0;
+      return { editor: id, how: "new_process" };
+    });
+    await choose("Lettera.docx", "WordCraft", closing.host, tabs.gate);
+    expect(closing.opened).toHaveLength(1);
+    expect(lentTo("Lettera.docx")).toBeNull();
+
+    tabs.open.push("Lettera.docx");
+    const vaultGone = hostWith(true, [WORDCRAFT], async (_doc, id) => {
+      forgetLends();
+      return { editor: id, how: "new_process" };
+    });
+    await choose("Lettera.docx", "WordCraft", vaultGone.host, tabs.gate);
+    expect(lentTo("Lettera.docx")).toBeNull();
   });
 });
