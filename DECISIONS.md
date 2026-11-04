@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · caricamento · piano concluso. `bench:lampo` entra in CI nel
+  job del banco visivo e in `ci-required`. Il controllo completo locale è
+  verde salvo le otto baseline `avvio-*`, che arrivano dal runner, e quattro
+  test a tempo (`runtime`, `engine`, `diagnostics`, `tips`) scaduti sotto
+  carico e verdi da soli. Il rosso di «i test del workspace» nella corsa
+  41910733616 era il runner senza spazio su disco: rifatto, verde.
+
 - 2026-11-04 · caricamento (orchestratore) · lo stile dello strato d'avvio
   esce dai tre HTML: `<link id="avvio-stile">` verso `public/avvio/avvio.css`,
   e il `<noscript>` carica `public/avvio/senza-js.css`. Il piano lo voleva in
