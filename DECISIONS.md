@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · scrittoio-2 · la barra dei fogli diventa lo standard in `kit/` e
+  `skin/kit.css` (`kit-bar`, `kit-ribbon`, `kit-rail`, `kit/toolbar-keys.ts`), e
+  le baseline si rifanno una volta sola alla fine: T24 svuota `bench/baseline/`
+  e T25 la riempie dal runner · la forma va scritta una volta nel proprietario
+  e ogni barra la adotta, e `bench/scene.test.ts` vuole tutte le baseline o
+  nessuna; il menu delle modalità nasce in `state/mode-menu.ts` e non in
+  `document-controller.ts`, perché quel file lo sta cambiando N6.
 - CI di PR #297 (orchestratore): i job dei banchi (visual, a11y, graph,
   benches) non avevano il toolchain Rust col bersaglio wasm32-unknown-
   unknown, e Vite non poteva compilare il nucleo della lavagna quando
