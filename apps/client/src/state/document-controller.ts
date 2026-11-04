@@ -2271,12 +2271,19 @@ async function followRemote(target: NavigateTarget, from: string): Promise<void>
       await openWikilink(target.page, target.heading ?? undefined, target.block ?? undefined, from, { gesture: true });
       return;
     }
+    if (target.kind === "figure") {
+      await openFigure(target.doc);
+      return;
+    }
     const resolved = await resolvedReference({ kind: "path", value: target.path }, from);
     if (!resolved) throw new Error(t("preview.target_missing"));
     await openDocument(resolved.doc, { gesture: true });
     if (resolved.at) await reveal(resolved.doc, { span: resolved.at.span });
   } catch (error) {
-    const page = target.kind === "wikilink" ? target.page : target.kind === "path" ? target.path : target.tag;
+    const page = target.kind === "wikilink" ? target.page
+      : target.kind === "path" ? target.path
+      : target.kind === "figure" ? target.doc
+      : target.tag;
     notify(t("preview.open_failed", { page, reason: errorText(error) }), "guasto");
   }
 }

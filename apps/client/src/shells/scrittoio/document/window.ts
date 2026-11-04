@@ -156,6 +156,7 @@ export function bootDocumentWindow(series: SeriesFallback): void {
     openWikilink: (page, heading, block) => bridge.navigate({ kind: "wikilink", page, heading, block }),
     openPath: (target) => bridge.navigate({ kind: "path", path: target }),
     searchTag: (tag) => bridge.navigate({ kind: "tag", tag }),
+    openFigure: (doc) => bridge.navigate({ kind: "figure", doc }),
   });
   if (!extensions) {
     invalid();
