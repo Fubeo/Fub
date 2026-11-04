@@ -59,6 +59,18 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- CI completa su 1ba7a3c6 (run 41779586263), le cause rosse: (1) Windows,
+  craft::channel a_closed_port_is_unreachable_at_once dava TimedOut perché
+  Windows ritenta circa 2 s una porta chiusa invece di rifiutare; deciso che
+  sul loopback una connessione che non riesce è sempre Unreachable (TimedOut
+  solo per un'app che ha accettato e tace), il test su Windows ammette
+  2×CONNECT_TIME+1 s, Linux e macOS restano «subito»; pagina permissions-
+  and-security aggiornata. (2) Windows, session::snapshot_command_tests con
+  os error 32 (file in uso) sullo spostamento della radice: codice che N7
+  non tocca, trattato come instabile di Windows, da riguardare se torna. (3)
+  banchi del movimento, rich-review-list 1 prova su 5 (37 px): verde nella
+  run precedente, instabile. (4) scene.test, banco visivo e a11y: attesi, li
+  chiudono T34 e le baseline di T32.
 - N7 T32, la revisione riga per riga del client (un revisore in sola lettura
   sul diff di apps/client/src): otto difetti, verificati da me i due più
   seri leggendo il codice. (1) Il clic su una figura passa da
