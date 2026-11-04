@@ -1409,6 +1409,8 @@ describe("CanvasEngine: una lavagna che il nucleo apre ma non riscrive (R3)", ()
     expect(shown).toHaveLength(1);
     expect(shown[0]!.getAttribute("role")).toBe("alert");
     expect(shown[0]!.textContent).toBe(t("canvas.unwritable"));
+    // All'inizio della barra, dove si legge senza scorrere.
+    expect(shown[0]!.parentElement?.firstElementChild).toBe(shown[0]);
     for (const name of ["add-text", "add-link", "add-group", "duplicate", "delete", "bring-front", "send-back"]) {
       expect(button(host, name).disabled, name).toBe(true);
     }

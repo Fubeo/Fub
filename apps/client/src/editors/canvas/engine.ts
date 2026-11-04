@@ -1079,8 +1079,9 @@ export class CanvasEngine {
       const rect = this.#viewport.getBoundingClientRect();
       this.#zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1 / 1.2);
     }, false, false);
-    // Un avviso solo, nel suo posto: quello dell'ultimo gesto, o la sola
-    // lettura della tela. Una scena oltre il limite ha già il suo, nella tela.
+    // Un avviso solo, nel suo posto all'inizio della barra, dove si legge
+    // senza scorrere: quello dell'ultimo gesto, o la sola lettura della tela.
+    // Una scena oltre il limite ha già il suo, nella tela.
     const notice = this.#intakeError
       || (this.#unwritable && !this.#isSceneOversized() ? t("canvas.unwritable") : "");
     if (notice) {
@@ -1088,7 +1089,7 @@ export class CanvasEngine {
       error.setAttribute("role", "alert");
       error.className = "canvas-intake-error";
       error.textContent = notice;
-      bar.append(error);
+      bar.prepend(error);
     }
   }
 
