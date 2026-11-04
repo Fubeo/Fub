@@ -364,7 +364,7 @@ Fatto quando:
   `cargo tauri dev` o il banco WebView di `CLAUDE_DEVICE.md`), senza lampo
   bianco.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base aebbbf60
+Stato: [x] fatto
 
 ## T2 · La consegna all'app
 
@@ -536,7 +536,7 @@ Fatto quando:
   1100 ms dopo l'inizio del passaggio (come `proto/misura.mjs`);
 - le foto e le misure sono nel resoconto del coder.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base bfd350cc
 
 ## T4 · La guardia del lampo e le scene del banco
 
