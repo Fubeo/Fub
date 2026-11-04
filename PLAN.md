@@ -767,7 +767,7 @@ Fatto quando: un test in `vaults.rs` scrive e rilegge l'impronta, e un file
 senza il campo si legge; `cargo test -p fub-app --test ts_mirror_app` verde con
 la fixture rigenerata; `npm run typecheck` verde.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base dc9dee5e
+Stato: [x] fatto · 020af9e8, 4159323e, 4323d9ca · check --rapido 30/31 sull'integrazione: rosso solo un test a tempo di grid/engine (instabile noto), verde rilanciato da solo con mirror.test.ts (103/103)
 
 ## T9 · L'host trova, adotta, scarta e prova le ricette
 

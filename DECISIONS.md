@@ -59,6 +59,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- T8 (orchestratore, revisione): `VaultEntry` attraversa già l'IPC con
+  `known_vaults`, quindi `recipes_adopted` compare anche in `KnownVault`
+  come campo facoltativo (Rust non scrive l'elenco vuoto); è la conseguenza
+  diretta del campo che il piano nomina, non una porta nuova, e la dicono
+  `ipc-contract.md` e `mirror.test.ts`. `forget_recipe` passa da `mutate`,
+  così un vault sconosciuto non nasce in cima ai recenti; `adopt_recipe`
+  passa da `update` e una seconda adozione sostituisce l'impronta. Nessun
+  lettore dedicato: si legge da `list()`, T9 ne aggiunge uno se gli serve.
+  `fake.ts` non cambia · fonte: report del coder e revisione
 - T6 (orchestratore, revisione): la nota aperta entra nel campo `doc` con
   `withActiveDoc`, usata sia da `startCommand` sia da `start` (la scelta
   dalla lista passa da `start`); è una proposta in un campo modificabile e
