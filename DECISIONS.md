@@ -59,6 +59,18 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- N7 T29 integrata (e31e9b9b). Decisioni dell'orchestratore, senza contratti
+  toccati: la copia si chiama in.<estensione così come è scritta> solo se
+  PreviewSubject::of_extension la riconosce come del soggetto (input_name al
+  posto di input_extension), senza regole nuove; read_png diventa read_image
+  (PNG o JPEG dalla firma), MAX_PNG_BYTES diventa MAX_IMAGE_BYTES,
+  Failure::BadPng diventa BadImage, la chiave render.bad_png resta con il
+  testo «PNG o JPEG» nel catalogo del bundle; il file d'uscita resta out.png
+  anche per un JPEG. Non verificati su app vere: gli argomenti delle tre CLI
+  (dal passo 12c e dalle misure large) e l'orientamento di un JPEG scritto
+  dalla CLI (preso come 1). La via senza lease di preview.rs offrirebbe
+  LightCraft anche per un RAW col JPEG, ma il job ricontrolla con la lease e
+  la CLI non parte: da guardare in T28 o T32.
 - N7 T17 integrata (cecb7d85..f9853a5d). Decisioni dell'orchestratore, senza
   contratti toccati: lend.ts esporta anche la prenotazione (reserveLend, che
   segue la rinomina e muore con il vault, così una risposta vecchia di

@@ -2577,7 +2577,7 @@ src/state/craft-previews.test.ts` passa con i casi qui sopra; le foto del
 banco somigliano al prototipo, in chiaro e in scuro.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/craft/consent.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base cc8bf621
 
 ## T24 · La foto e il suo XMP nell'host
 
@@ -2940,7 +2940,7 @@ Fatto quando: `cargo test -p fub-host --test craft_cli --lib craft::editors`
 passa; dopo i test nessun pid scritto dagli script è vivo (`kill -0`, mai
 `pgrep -f`).
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test craft_cli
-Stato: [~] in corso · coder · base 55bd1d1f
+Stato: [x] fatto · e31e9b9b · check --rapido verde (21 passi, 8m54s)
 
 ## T30 · Le anteprime dei documenti
 
