@@ -438,7 +438,7 @@ Fatto quando:
 - `document.test.ts` vede l'icona, il nome e il suggerimento del bottone della testata, e `editors/core/surface-looks.test.ts` passa;
 - i test di T1 restano verdi (tranne l'ordine, che qui cambia apposta) e l'e2e vede Live, Blocchi, Sorgente, Lettura.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · e7630eef · differenze: il menu e `icon` sono descritti in `docs/architecture/frontend-and-ipc.md` («Menu delle modalità») e non in `editor-surfaces.md`, che è a 450 righe, il limite di `check-doc-size`; le modalità del documento salgono a livello di modulo (`RICH_MODES`) perché il test le legga; `split` lo registra la cornice (`shells/scrittoio/icons.ts`), quindi fuori dalla cornice il Diviso ha la penna del ruolo; il suggerimento del bottone è il nome della modalità; `ui/icons.test.ts` conta 51 icone invece di 43. `check.sh --rapido`: rossi solo `theme/runtime.test.ts` e `editors/grid/engine.test.ts` per tempo scaduto sotto carico, verdi da soli; al primo giro anche `markdown/block-id.test.ts` (passo 253), verde da solo e al secondo giro
 
 ## T3 · La modalità si sceglie dalla banda
 
