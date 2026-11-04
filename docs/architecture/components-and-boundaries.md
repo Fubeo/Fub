@@ -23,7 +23,6 @@ flowchart LR
     SCENE["fub-scene"] --> INK
     SVG["fub-format-svg"] --> ABI
     SVG --> SCENE
-    CRAFT["fub-format-craft"] --> ABI
     IMPORTERS["fub-importers"] --> ABI
     FEATURES["fub-features"] --> ABI
     FEATURES -. "feature base" .-> BASE
@@ -76,6 +75,16 @@ flowchart LR
     XLSX --> ABI["fub-abi"]
     XLSX --> GXLSX["gridcraft-xlsx"]
     GXLSX --> GMODEL["gridcraft-model"]
+```
+
+Anche i file delle app Craft stanno dietro una feature dell'host, `craft`, ma
+senza codice copiato: `fub-format-craft` legge i formati da sé e dipende solo da
+`fub-abi`:
+
+```mermaid
+flowchart LR
+    HOST["fub-host"] -. "feature craft" .-> CRAFT["fub-format-craft"]
+    CRAFT --> ABI["fub-abi"]
 ```
 
 ## Tabella dei componenti
