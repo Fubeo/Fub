@@ -2007,7 +2007,7 @@ pianificatore lo riscrive prima che parta); una regola che
 Fatto quando: la pagina c'è, passa la prova di `sanitizeThemeCss`, e ha
 «Approvato» con la data nella pagina e nel piano; D-21 ha la risposta.
 Prova: grep -n "Approvato" PLAN-ui/lavagna-schede.html PLAN.md
-Stato: [ ] da fare
+Stato: [~] in corso · pianificatore (prototipo) · base 12c13922
 
 ## T26 · Il prototipo dell'impianto
 
