@@ -19,7 +19,7 @@ vi.mock("../state/store", async (original) => ({
 
 import { openWithEntry } from "./open-with";
 import type { OpenWithHost } from "../state/external-editors";
-import { forgetLends, lentTo, renameLend, type LendGate } from "../state/lend";
+import { forgetLends, lendHeld, lentTo, onLendChanged, renameLend, type LendGate } from "../state/lend";
 
 const editor = (id: string, name: string, opens: string[], installed: boolean, running = false): ExternalEditor =>
   ({ id, name, opens, installed, running });
@@ -195,6 +195,25 @@ describe("il prestito da «Apri con»", () => {
     const { host } = hostWith(true, [WORDCRAFT]);
     await choose("Lettera.docx", "WordCraft", host, gate);
     expect(lentTo("Lettera.docx")).toBe("WordCraft");
+  });
+
+  it("la prenotazione tiene la sola lettura dal salvataggio all'app, e se l'app non parte la lascia", async () => {
+    const tabs = gateWith(["Lettera.docx"]);
+    const held: string[] = [];
+    const seen: string[] = [];
+    const stop = onLendChanged((doc) => seen.push(doc));
+    tabs.onFlush(() => held.push(`flush:${lendHeld("Lettera.docx")}`));
+    const { host } = hostWith(true, [WORDCRAFT], async () => {
+      held.push(`open:${lendHeld("Lettera.docx")}`);
+      throw new Error("WordCraft non parte.");
+    });
+    await choose("Lettera.docx", "WordCraft", host, tabs.gate);
+    stop();
+    expect(held).toEqual(["flush:true", "open:true"]);
+    expect(lendHeld("Lettera.docx")).toBe(false);
+    expect(lentTo("Lettera.docx")).toBeNull();
+    // Chi tiene le schede lo sa due volte: la prenotazione, e la sua fine.
+    expect(seen).toEqual(["Lettera.docx", "Lettera.docx"]);
   });
 
   it("un'app che non parte non presta", async () => {

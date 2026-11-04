@@ -135,7 +135,7 @@ import {
   type Tab,
 } from "./layout";
 import { createNote, handToSystem, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
-import { lentDocuments, lentTo, mountLends, onLendChanged, provideLendGate, renameLend, unlend } from "./lend";
+import { lendHeld, lentDocuments, mountLends, onLendChanged, provideLendGate, renameLend, unlend } from "./lend";
 import { confirm } from "../platform/confirm";
 import { registerShellCommand } from "../ui/commands";
 import { registerLiveCommands } from "../editors/spatial/live/commands";
@@ -1087,7 +1087,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       renameLend(from, to);
       // The layout still names the old path until `rename` below runs. Keep
       // those editors read-only across that tiny migration window.
-      setReadOnlyForDocument(from, documentSessions.isDeletionPending(to) || lentTo(to) !== null);
+      setReadOnlyForDocument(from, documentSessions.isDeletionPending(to) || lendHeld(to));
       rename(from, to);
     }
   };
@@ -1972,17 +1972,19 @@ function drawPaneConflict(doc: string): void {
 
 /// Le schede di `doc` sono in sola lettura per una cancellazione in sospeso
 /// (`readOnly`, che chi chiama legge dalla sessione col nome giusto), per la
-/// chiusura in corso o perché il documento è in prestito a un'app Craft.
+/// chiusura in corso o perché il documento è in prestito a un'app Craft, o
+/// sta per esserlo (`lendHeld`: la prenotazione conta già).
 function setReadOnlyForDocument(doc: string, readOnly: boolean): void {
   for (const paneId of panesWithDoc(doc)) {
-    panes.get(paneId)?.surface?.setReadOnly?.(readOnly || closeDraining || lentTo(doc) !== null);
+    panes.get(paneId)?.surface?.setReadOnly?.(readOnly || closeDraining || lendHeld(doc));
   }
 }
 
 /// Perché una scheda di `doc` non accetta modifiche: la chiusura in corso,
-/// una cancellazione in sospeso, o il prestito a un'app Craft (T17).
+/// una cancellazione in sospeso, o il prestito a un'app Craft (T17), anche
+/// soltanto prenotato.
 function heldReadOnly(doc: string): boolean {
-  return closeDraining || documentSessions.isDeletionPending(doc) || lentTo(doc) !== null;
+  return closeDraining || documentSessions.isDeletionPending(doc) || lendHeld(doc);
 }
 
 /** Ferma gli input locali prima del drain delle finestre e del salvataggio. */
@@ -1990,7 +1992,7 @@ export function freezeDocumentSurfaces(frozen: boolean): void {
   closeDraining = frozen;
   for (const [paneId, pane] of panes) {
     const doc = activeDoc(paneId);
-    if (doc) pane.surface?.setReadOnly?.(frozen || documentSessions.isDeletionPending(doc) || lentTo(doc) !== null);
+    if (doc) pane.surface?.setReadOnly?.(frozen || documentSessions.isDeletionPending(doc) || lendHeld(doc));
   }
 }
 

@@ -72,6 +72,16 @@ export function lentTo(doc: string): string | null {
   return lent.get(doc) ?? null;
 }
 
+/// `doc` è in prestito, o un prestito è prenotato e l'app sta per aprirlo:
+/// in tutti e due i casi le sue schede sono in sola lettura, così niente si
+/// scrive dopo che l'app ha letto il file. La riga «Aperto in {app}» la
+/// porta soltanto il prestito (`lentTo`).
+export function lendHeld(doc: string): boolean {
+  if (lent.has(doc)) return true;
+  for (const reservation of reservations) if (reservation.doc === doc) return true;
+  return false;
+}
+
 /// I documenti in prestito.
 export function lentDocuments(): string[] {
   return [...lent.keys()];
@@ -87,13 +97,18 @@ export function onLendChanged(listener: Listener): Teardown {
 /// Il documento ha cambiato nome: il prestito, e le prenotazioni, lo seguono.
 export function renameLend(from: string, to: string): void {
   if (from === to) return;
+  let moved = false;
   for (const reservation of reservations) {
-    if (reservation.doc === from) reservation.doc = to;
+    if (reservation.doc !== from) continue;
+    reservation.doc = to;
+    moved = true;
   }
   const app = lent.get(from);
-  if (app === undefined) return;
-  lent.delete(from);
-  lent.set(to, app);
+  if (app !== undefined) {
+    lent.delete(from);
+    lent.set(to, app);
+  }
+  if (app === undefined && !moved) return;
   changed(from);
   changed(to);
 }
@@ -101,8 +116,8 @@ export function renameLend(from: string, to: string): void {
 /// Dimentica ogni prestito e ogni prenotazione: il vault si è chiuso, o ne
 /// è arrivato un altro.
 export function forgetLends(): void {
+  const docs = new Set([...lent.keys(), ...[...reservations].map((reservation) => reservation.doc)]);
   reservations.clear();
-  const docs = [...lent.keys()];
   lent.clear();
   for (const doc of docs) changed(doc);
 }
@@ -110,21 +125,34 @@ export function forgetLends(): void {
 /// Prenota il prestito di `doc` prima di chiedere all'app di aprirlo: la
 /// risposta arriva dopo un'attesa in cui il documento può cambiare nome o il
 /// vault chiudersi. `lendable` dice se il documento ha ancora una scheda.
+/// Da qui le schede del documento sono in sola lettura (`lendHeld`), prima
+/// del salvataggio; tornano scrivibili se la prenotazione si lascia.
 export function reserveLend(doc: string, lendable: (doc: string) => boolean): LendReservation {
   const entry = { doc };
   reservations.add(entry);
+  changed(doc);
   return {
     get doc() {
       return entry.doc;
     },
     commit(app: string): boolean {
       const alive = reservations.delete(entry);
-      if (!alive || !lendable(entry.doc)) return false;
+      if (!alive) return false;
+      if (!lendable(entry.doc)) {
+        changed(entry.doc);
+        return false;
+      }
+      if (lent.get(entry.doc) === app) {
+        // Già prestato alla stessa app: `lend` non avviserebbe, e la sola
+        // lettura resta quella del prestito.
+        changed(entry.doc);
+        return true;
+      }
       lend(entry.doc, app);
       return true;
     },
     cancel(): void {
-      reservations.delete(entry);
+      if (reservations.delete(entry)) changed(entry.doc);
     },
   };
 }

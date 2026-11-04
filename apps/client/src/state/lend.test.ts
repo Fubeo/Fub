@@ -267,6 +267,53 @@ describe("un Word prestato a WordCraft", () => {
     expect(editable()).toBe(true);
   });
 
+  it("mentre l'app sta per aprire il file la scheda è già in sola lettura, dal salvataggio in poi", async () => {
+    const host = await start();
+    await open("Lettera.docx");
+    await waitFor("il Word è modificabile", editable);
+    const save = host.throttle("writeDocument");
+    await queueEdit("Lettera.docx", rich("ciao mondo"));
+    const launch = host.throttle("openWith");
+    await openWithFromTree("Lettera.docx", "WordCraft");
+    // Il salvataggio prima del prestito è in volo: si scrive già in sola
+    // lettura, così niente arriva dopo che l'app ha letto il file.
+    await waitFor("il salvataggio in volo", () => host.atGate("writeDocument").length === 1);
+    await waitFor("il Word è in sola lettura durante il salvataggio", readOnly);
+    save();
+    await waitFor("WordCraft è in volo", () => host.atGate("openWith").length === 1);
+    await settle();
+    expect(readOnly()).toBe(true);
+    const lend = await import("./lend");
+    // La prenotazione non è ancora un prestito: niente riga «Aperto in».
+    expect(lend.lentTo("Lettera.docx")).toBeNull();
+    expect(lentRows()).toHaveLength(0);
+    launch();
+    await waitFor("il prestito", () => lend.lentTo("Lettera.docx") === "WordCraft");
+    await settle();
+    expect(readOnly()).toBe(true);
+    expect(host.files()["Lettera.docx"]).toBe(rich("ciao mondo"));
+  });
+
+  it("l'app che non parte rende la scheda scrivibile", async () => {
+    const host = await start();
+    await open("Lettera.docx");
+    await waitFor("il Word è modificabile", editable);
+    let fail: (error: unknown) => void = () => {};
+    let asked = 0;
+    (host.module.api as unknown as Record<string, unknown>).openWith = () => {
+      asked += 1;
+      return new Promise((_resolve, reject) => { fail = reject; });
+    };
+    await openWithFromTree("Lettera.docx", "WordCraft");
+    await waitFor("WordCraft è in volo", () => asked === 1);
+    await waitFor("il Word è in sola lettura durante l'attesa", readOnly);
+    fail(new Error("WordCraft non parte"));
+    await waitFor("il Word torna modificabile", editable);
+    const lend = await import("./lend");
+    expect(lend.lentTo("Lettera.docx")).toBeNull();
+    expect(lend.lendHeld("Lettera.docx")).toBe(false);
+  });
+
   it("chiudere la scheda finisce il prestito, e la scheda riaperta è modificabile", async () => {
     const host = await start();
     await open("Lettera.docx");
