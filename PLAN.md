@@ -311,7 +311,7 @@ Fatto quando:
   rallentata, il primo disegno è il fondo scuro e non c'è nessun bottone
   nativo; a shell pronta lo strato se ne va (foto nel resoconto del coder).
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 7cd3d776
 
 ## T3 · Il fondo della finestra nativa
 
