@@ -97,6 +97,30 @@ describe("lo strato d'avvio nelle tre pagine", () => {
     expect(annuncio.textContent).toBe("");
   });
 
+  it("lo strato è una regione col nome dal catalogo (axe «region»), e i suoi testi ci stanno dentro", () => {
+    for (const [nome, html] of Object.entries(PAGINE)) {
+      const avvio = parse(html).querySelector(".avvio")!;
+      expect(avvio.getAttribute("role"), nome).toBe("region");
+      const etichetta = avvio.querySelector(`#${avvio.getAttribute("aria-labelledby")}`)!;
+      expect(etichetta.getAttribute("data-i18n"), nome).toBe("app.avvio.regione");
+      expect(etichetta.hasAttribute("hidden"), nome).toBe(true);
+      // stati.js cerca l'annuncio per classe: l'etichetta non deve prenderne il posto.
+      expect(avvio.querySelector(".avvio-annuncio")!.id, nome).toBe("avvio-annuncio");
+    }
+  });
+
+  it("col moto ridotto ciò che compare è visibile subito: il fuoco su Riprova non trova un bottone nascosto", () => {
+    const stile = strato(desktop).stile.replace(/\s+/g, " ");
+    for (const prefisso of ["", ':root[data-avvio-moto="ridotto"] ']) {
+      const regola = `${prefisso}.avvio[data-stato="guasto"] .avvio-guasto { transition: opacity 90ms linear; }`;
+      expect(stile, prefisso || "@media").toContain(regola);
+      // Viene dopo la regola che ritarda visibility, a pari specificità.
+      const ritardo = stile.indexOf(`${prefisso}.avvio[data-stato] .avvio-lento { transition: opacity 90ms linear, visibility 0s linear 90ms; }`);
+      expect(ritardo, prefisso || "@media").toBeGreaterThan(-1);
+      expect(stile.indexOf(regola)).toBeGreaterThan(ritardo);
+    }
+  });
+
   it("l'app è inerte sotto lo strato, e solo lei", () => {
     for (const [nome, html] of Object.entries(PAGINE)) {
       const doc = parse(html);

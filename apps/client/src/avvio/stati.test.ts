@@ -162,6 +162,7 @@ describe("stati.js", () => {
     const avvio = strato();
     expect(avvio.querySelector("#avvio-riprova")!.textContent).toBe(EN["app.retry"]);
     expect(avvio.querySelector(".avvio-lento-testo")!.textContent).toBe(EN["app.avvio.lento"]);
+    expect(avvio.querySelector("#avvio-regione")!.textContent).toBe(EN["app.avvio.regione"]);
     vi.advanceTimersByTime(30_000);
     expect(avvio.querySelector(".avvio-motivo")!.textContent).toBe(
       expand(EN["app.avvio.motivo.tempo"], { phase: EN["app.startup_phase.page"] }),

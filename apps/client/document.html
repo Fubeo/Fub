@@ -388,6 +388,14 @@
         .avvio[data-stato] .avvio-lento {
           transition: opacity 90ms linear, visibility 0s linear 90ms;
         }
+        /* Ciò che compare è visibile subito: solo l'opacità dissolve, così il
+           fuoco su Riprova arriva a un bottone che c'è già. */
+        .avvio[data-stato="attesa"] .avvio-attesa,
+        .avvio[data-stato="lento"] .avvio-attesa,
+        .avvio[data-stato="lento"] .avvio-attesa .avvio-lento,
+        .avvio[data-stato="guasto"] .avvio-guasto {
+          transition: opacity 90ms linear;
+        }
         .avvio-scia {
           inset: 0;
           width: auto;
@@ -406,6 +414,12 @@
       :root[data-avvio-moto="ridotto"] .avvio[data-stato] .avvio-pannello,
       :root[data-avvio-moto="ridotto"] .avvio[data-stato] .avvio-lento {
         transition: opacity 90ms linear, visibility 0s linear 90ms;
+      }
+      :root[data-avvio-moto="ridotto"] .avvio[data-stato="attesa"] .avvio-attesa,
+      :root[data-avvio-moto="ridotto"] .avvio[data-stato="lento"] .avvio-attesa,
+      :root[data-avvio-moto="ridotto"] .avvio[data-stato="lento"] .avvio-attesa .avvio-lento,
+      :root[data-avvio-moto="ridotto"] .avvio[data-stato="guasto"] .avvio-guasto {
+        transition: opacity 90ms linear;
       }
       :root[data-avvio-moto="ridotto"] .avvio-scia {
         inset: 0;
@@ -445,7 +459,8 @@
          consegna (src/avvio/consegna.ts), che lo toglie e rende viva l'app.
          I tempi, i testi salvati e il guasto li tiene /avvio/stati.js; la
          fase e il nome li scrive l'avvio su data-fase e data-nome. -->
-    <div id="avvio" class="avvio" data-stato="avvio">
+    <div id="avvio" class="avvio" data-stato="avvio" role="region" aria-labelledby="avvio-regione">
+      <span id="avvio-regione" data-i18n="app.avvio.regione" hidden>Avvio di Fub</span>
       <div class="avvio-velo"></div>
       <div class="avvio-colonna">
         <div class="avvio-posto">

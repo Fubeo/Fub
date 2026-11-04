@@ -36,6 +36,7 @@
     "app.avvio.copia": "Copia i dettagli",
     "app.avvio.copiato": "Dettagli copiati",
     "app.avvio.senza_js": "Fub ha bisogno di JavaScript per partire.",
+    "app.avvio.regione": "Avvio di Fub",
     "app.retry": "Riprova",
     "app.startup_phase.page": "il caricamento della pagina",
     "app.startup_phase.shell": "l'avvio della finestra",

@@ -53,6 +53,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "app.avvio.copia": "Copia i dettagli",
 "app.avvio.copiato": "Dettagli copiati",
 "app.avvio.senza_js": "Fub ha bisogno di JavaScript per partire.",
+"app.avvio.regione": "Avvio di Fub",
 // I collegamenti `fub://` che arrivano dal sistema (`ui/incoming-links.ts`).
 "incoming.invalid": "Un collegamento fub:// non si apre: {why}",
 "incoming.unknown_vault": "Un collegamento fub:// chiede il vault «{vault}», che Fub non conosce: aprilo una volta da Fub e riprova.",
@@ -3110,6 +3111,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "app.avvio.copia": "Copy the details",
 "app.avvio.copiato": "Details copied",
 "app.avvio.senza_js": "Fub needs JavaScript to start.",
+"app.avvio.regione": "Fub startup",
 "incoming.invalid": "A fub:// link does not open: {why}",
 "incoming.unknown_vault": "A fub:// link asks for the vault “{vault}”, which Fub does not know: open it once from Fub and try again.",
 "incoming.switch.title": "Open another vault?",
