@@ -4,18 +4,19 @@ Branch: piano/scrittoio-2
 Obiettivo: in ogni editor di Fub (note, documenti Word e ODT, fogli, lavagna, disegni, SVG, Craft, PDF, immagini e audio) la persona trova la stessa cornice quieta del mockup. La modalità si sceglie dalla banda in basso; la testata del foglio dice solo dove sei e se è salvato; cassetto e ispettore parlano a voce bassa; il testo da leggere è più grande; tutte le barre degli strumenti hanno la forma della barra dei fogli (la lavagna segue il piano N6). Sul telefono il foglio va da un bordo all'altro, «Salvato» e la modalità sono icone, e la modalità sta in basso a destra, alla stessa altezza di Annulla e Ripeti.
 Perché: oggi la testata porta quattro tasti che pesano più del contenuto, e ogni editor ha una barra disegnata a modo suo, così la persona reimpara la forma a ogni formato. Il documento dell'utente del 2026-11-04 chiede la pagina Benvenuto ridisegnata; il brief la allarga a tutti gli editor, con la barra dei fogli come standard.
 Fuori scope:
-- la tavolozza e i colori, che restano quelli di oggi (l'unica eccezione è la misura del testo, D2);
+- la tavolozza e i colori, che restano quelli di oggi; le eccezioni sono la misura del testo (D2) e tre ruoli facoltativi nuovi della ricetta, chiesti dall'utente il 2026-11-04: il vassoio delle barre `--bar-tray` (T16) e l'ombra del foglio `--shadow-sheet` e `--shadow-sheet-focus` (T27);
 - contratti nuovi: IPC, WIT, `fub-abi`, formati su disco;
 - il ritmo dei paragrafi, la scrittura di `Ctrl+O`, il colore del gettone del vault, il tasto «/» del filtro, i sottotitoli tenui, h5 e h6;
 - la lavagna oltre la cornice comune: la sua barra, le opzioni, la colonna, la banda e la tela (col suo contrasto, ~4,2:1) sono del piano N6 (`lavagna-schede.html`, T22 e T49–T52), che vince; qui la lavagna prende la cornice e l'icona della modalità (T23);
 - la striscia del foglio scuro della griglia (griglia T2);
 - il docx a 700 px e il movimento della barra dei fogli (K3 T19);
 - la colonna degli strumenti del disegno, che è di K5 (qui c'è solo la proposta);
-- la WebView vera, Windows e macOS, che si vedono solo in CI.
+- la WebView vera, Windows e macOS, che si vedono solo in CI;
+- il telefono ridisegnato da capo: l'utente lo vuole cambiare a fondo («Comunque la GUI del telefono non mi piace proprio. Per ora do l'ok, la aggiustiamo più avanti, ma è sicuramente da modificare pesantemente»), e lo fa un piano successivo. Qui le righe del telefono restano piccole: quelle approvate per ora, e nessuna parte nuova.
 Assunzioni:
-- Risposte dell'utente (2026-11-04): A a D1–D9; il titolo della nota a 600; nel selettore dell'icona «Figure» prima di «Emoji»; il menu delle modalità è il B, la spunta blu a destra.
-- Valgono le «Decisioni già prese» del documento dell'utente, tranne l'eccezione di D2.
-- Si apre una PR bozza sola (D9). T1 parte subito. Il prototipo del computer è approvato (2026-11-04); quello del telefono è in revisione: T3, T5 e T7, che portano le parti nuove del telefono, partono dopo il suo OK. T4 e T11 hanno righe del telefono che la revisione non cambia. Al massimo due task insieme.
+- Risposte dell'utente (2026-11-04): A a D1–D9; il titolo della nota a 600; nel selettore dell'icona «Figure» prima di «Emoji»; il menu delle modalità è il B, la spunta blu a destra; il telefono è approvato per ora con la A, il tondo in basso a destra. Lo stesso giorno l'utente ha chiesto l'ombra del foglio morbida e visibile ai fianchi (T27), il vassoio delle barre meno grigio in giorno e notte (T16, T20) e le sezioni della barra a schede come le schede dell'ispettore (T20, T21).
+- Valgono le «Decisioni già prese» del documento dell'utente, tranne le eccezioni di D2 e dei tre ruoli nuovi (sopra).
+- Si apre una PR bozza sola (D9). T1 e T16 partono subito. Il prototipo è approvato (2026-11-04): il computer per intero, il telefono per ora, con la A; nessun task aspetta più un OK. Al massimo due task insieme.
 - Differenze volute dalla bozza dell'utente:
   - (a) il menu delle modalità nasce in `state/mode-menu.ts` e non in `state/document-controller.ts`, che N6 sta cambiando;
   - (b) le stringhe nuove della shell vanno in `src/i18n/catalog.ts`, in italiano e in inglese; `bench/fake-english.ts` traduce solo i testi dell'host finto e cambia solo in T13;
@@ -23,10 +24,38 @@ Assunzioni:
   - (d) `#status-standing` nasce in JS dentro `status-band.ts`, non in `index.html`;
   - (e) il titolo della nota pesa 600 e non 500. Risposta (2026-11-04): 600;
   - (f) le scorciatoie del menu si leggono da `allCommands()` e `displayBinding`, che rispettano le scorciatoie cambiate dalla persona, e non da `ui/shell-keys.generated.ts`.
-Ondate: T1 T16 | T2 T11 | T5 T10 | T3 T6 | T7 T17 | T4 T8 | T18 T20 | T9 T19 | T14 T21 | T12 T22 | T13 T23 | T15 | T24 | T25 | T26
-Prototipo: `PLAN-ui/scrittoio-2.html`. Il computer è approvato (2026-11-04); il telefono è in revisione (gli stati `tel-*` e la variante `?telefono=tel-b`), e T3, T5 e T7 aspettano il suo OK. T1 può partire subito.
+Ondate: T1 T16 | T2 T11 | T5 T10 | T3 T6 | T7 T17 | T4 T8 | T18 T20 | T9 T19 | T14 T21 | T12 T22 | T13 T23 | T15 T27 | T24 | T25 | T26
+Prototipo: `PLAN-ui/scrittoio-2.html`. Il computer è approvato (2026-11-04); il telefono è approvato per ora (2026-11-04), con la A, e la variante B è uscita. Le caselle «Rimetti com'era» (o `?prima=ombra,vassoio,sezioni`) rimettono l'ombra del foglio, il vassoio e le sezioni di oggi, per il confronto.
 
 ## Modifiche
+
+- 2026-11-04 · l'ombra del foglio, il vassoio più chiaro, le sezioni come
+  l'ispettore e il telefono approvato per ora · task toccati: T3, T11, T16,
+  T20, T21, T24, T27 (nuovo); le righe del prototipo cambiano in tutti i task
+  grafici.
+  - L'ombra («In questo momento è praticamente un rettangolo perfetto, la
+    parte bassa dell'ombra, e non si vede l'ombra laterale»): la taglia
+    `#panes`, che ha `overflow: hidden`. T27, nuovo, allarga la scrivania di
+    20 px verso i vicini che stanno dentro la finestra e restituisce la stessa
+    misura in padding, così i fogli non si muovono; il foglio prende un'ombra
+    a tre strati che si vede ai fianchi. Sul telefono in piedi l'ombra non
+    c'è, sdraiato si vede solo ai fianchi. T27 gira con T15, dopo T17.
+  - Il vassoio («vorrei che questo sfondo grigio fosse meno grigio, cioè che
+    ci fosse meno stacco tra il bianco e quello sfondo. lo stesso vale per la
+    versione scura, meno differenza di colore»): è il ruolo nuovo
+    `--bar-tray`, che nasce con T16, il primo a usarlo; T20 lo porta alla
+    barra a schede. Di notte i foglietti prendono la carta alzata e un filo,
+    così restano staccati.
+  - Le sezioni («vorrei anche che il selettore di tab dell'editor docx fosse
+    più simile al selettore di collegamenti, struttura ecc. della sidebar»):
+    la sezione scelta è un foglietto di carta alzata, come le schede
+    dell'ispettore, nella barra a schede comune ai fogli e ai documenti (T20);
+    il documento la vede quando T21 toglie le sue regole `.rich-ribbon-*`.
+  - Il telefono («Per ora do l'ok, la aggiustiamo più avanti, ma è
+    sicuramente da modificare pesantemente»): la A è approvata per ora, la
+    variante B esce dal prototipo e da T3, e il ridisegno va in un piano
+    successivo (Fuori scope). T3, T5 e T7 non aspettano più.
+  - T11 lascia i ruoli nuovi a T16 e T27; T24 aspetta anche T27.
 
 - 2026-11-04 · le risposte dell'utente e il telefono rivisto · task toccati:
   T2, T3, T5, T7, T10, T11, T14, T17, T21, T23, T24; le righe del prototipo
@@ -114,23 +143,24 @@ dire che cosa si è scartato.
 
 ## Da decidere guardando
 
-Nel prototipo la variante che resta si accende con la casella in alto, oppure
-con `?telefono=tel-b`.
+Le tre domande hanno la risposta. Nel prototipo le caselle «Rimetti com'era»
+(o `?prima=ombra,vassoio,sezioni`) mostrano com'erano l'ombra del foglio, il
+vassoio e le sezioni, per il confronto: quelle varianti non vanno nel codice.
 
 1. Il menu delle modalità:
    - A: il punto a sinistra e la scorciatoia scritta per esteso;
    - B: la spunta blu a destra e le scorciatoie in pastiglie, come nel mockup.
    - Risposta (2026-11-04): B, «al momento preferisco la spunta blu a destra».
-   - Il CSS di B è già dentro il blocco di `skin/menus.css` (righe 1962–2003, T10): non c'è più un blocco a parte.
+   - Il CSS di B è già dentro il blocco di `skin/menus.css` (righe 2096–2137, T10): non c'è più un blocco a parte.
 2. Il peso del titolo della nota:
    - 600 (raccomandato), pieno come nel mockup;
    - 500, come scritto nella bozza.
    - Risposta (2026-11-04): 600. Il blocco `titolo-500` è uscito dal prototipo.
 3. Il bottone della modalità sul telefono, in piedi:
    - A (raccomandata): un tondo alto un dito in basso a destra, sopra la carta; mentre si scrive diventa piatto e chiude la fila della barra di formato, dopo Annulla e Ripeti, anche sopra la tastiera. In pratica il pollice lo trova sempre allo stesso angolo, e la carta non perde righe; il tondo può coprire la fine dell'ultima riga visibile, finché non si scorre.
-   - B (`?telefono=tel-b`): una fila fissa in fondo, alta un dito, che c'è sempre; il bottone ne tiene l'ultima casella e la barra di formato sale nella stessa fila. In pratica niente galleggia sul testo e niente si muove, ma il foglio perde una riga anche quando non si scrive.
+   - B: una fila fissa in fondo, alta un dito, che c'è sempre; il bottone ne tiene l'ultima casella e la barra di formato sale nella stessa fila. In pratica niente galleggia sul testo e niente si muove, ma il foglio perde una riga anche quando non si scrive.
    - Sdraiato tutte e due usano il tondo, all'angolo della carta.
-   - Con B, T3 copia anche le righe 2236–2266.
+   - Risposta (2026-11-04): A, per ora («Per ora do l'ok, la aggiustiamo più avanti, ma è sicuramente da modificare pesantemente»). B è scartata ed è uscita dal prototipo; il telefono si rifà in un piano successivo.
    - Task: T3.
 
 ## Domande per l'orchestratore
@@ -153,16 +183,16 @@ o le decide secondo `DECISIONS.md`. Nessuna blocca questo piano.
 | Editor | Che cosa vede la persona | Task |
 |---|---|---|
 | Note (Markdown) | - in basso a destra «✎ Live ⌃» apre Live, Blocchi, Sorgente, poi la Lettura, con le scorciatoie<br>- la testata ha le briciole (vault › cartelle › nota), «✓ Salvato» e «…»<br>- la riga dei dati sotto il titolo<br>- il testo a 18 px su 58 caratteri, il titolo 40/46, H2 25/32<br>- i punti degli elenchi in grafite, il filo dei link a metà forza, citazione e richiamo neutri<br>- la barra di formato nella fila di serie; la Struttura con la tacca blu e «In entrata» | T2, T3, T5, T11, T12, T13, T17 |
-| Documenti Word e ODT | - Pagina, Scrittura e Lettura nella banda, con le loro icone<br>- «Si scrive» passa dalla testata alla banda, mentre gli altri stati (sola lettura, chiuso) restano in testata<br>- la barra a schede prende le classi del kit, e un gruppo raccolto si apre sul posto | T2, T4, T5, T20, T21 |
-| Fogli di calcolo | - la barra dei fogli è l'origine dello standard: si vede come oggi, ma la sua forma passa a `kit-ribbon-*`<br>- testata e banda come le note | T5, T20 |
+| Documenti Word e ODT | - Pagina, Scrittura e Lettura nella banda, con le loro icone<br>- «Si scrive» passa dalla testata alla banda, mentre gli altri stati (sola lettura, chiuso) restano in testata<br>- la barra a schede prende le classi del kit, e un gruppo raccolto si apre sul posto<br>- il vassoio della barra è più vicino alla carta, e la sezione scelta è un foglietto come le schede dell'ispettore | T2, T4, T5, T16, T20, T21 |
+| Fogli di calcolo | - la barra dei fogli è l'origine dello standard: la sua forma passa a `kit-ribbon-*`, il vassoio si avvicina alla carta e la sezione scelta è un foglietto come le schede dell'ispettore<br>- testata e banda come le note | T5, T16, T20 |
 | Lavagna | - la cornice comune: testata, linguette, banda con la modalità<br>- la modalità con l'icona `layout-dashboard`<br>- la barra, le opzioni, la colonna e la tela sono quelle del piano N6 (`lavagna-schede.html`) | T2, T3, T5, T23 |
 | Disegni | - Disegno (o Annota) e Lettura nella banda<br>- la testa del disegno nella fila di serie; la colonna degli strumenti prende la pelle `kit-rail` | T2, T3, T22 |
 | SVG come testo | Diviso, Sorgente e poi Anteprima nella banda; Diviso con l'icona `split` | T2, T3 |
 | File Craft | - senza anteprima, un foglietto sollevato al posto del riquadro tratteggiato<br>- le risposte sono pulsanti del kit | T19 (dopo N7) |
 | PDF | - la barra di serie in cima, coi gruppi e la lente<br>- «Pagina N di M» nella banda<br>- «Apri con un'altra app» e «Copia il link alla pagina» in «…» | T18 (dopo N7) |
 | Immagini e audio | solo la cornice comune: testata, linguette con la figura del formato, banda | T5, T6 |
-| La shell | - la pillola diventa «Cerca o esegui un comando»<br>- i bottoni premuti del binario e della barra del titolo sono foglietti sollevati<br>- il cassetto: «Note» con ordina e nuova nota a icona, il filtro pieno con la lente, «Appuntate», «Tutte le note N», i conteggi e il gallone sottile<br>- l'ispettore a 264 px, con le schede in pozzetto e «● Segue la nota»<br>- impostazioni, componenti, avvio rapido, grafo e benvenuto con le etichette in tondo<br>- le figure accanto alle emoji nel selettore dell'icona | T7, T8, T9, T10, T14, T15 |
-| Telefono | - in piedi il foglio va da un bordo all'altro, senza scrivania ai fianchi né angoli tondi<br>- la testata tiene il nome, «Salvato» come spunta e «…»; un errore o un conflitto restano scritti<br>- la modalità è un'icona in un tondo in basso a destra; mentre si scrive chiude la fila della barra di formato, dopo Annulla e Ripeti, anche sopra la tastiera<br>- in piedi il marchio non c'è: la pillola, col nome della nota, parte dal bordo; sdraiato il marchio resta<br>- «Si scrive» sta in «…» | T2, T3, T4, T5, T7 |
+| La shell | - la pillola diventa «Cerca o esegui un comando»<br>- i bottoni premuti del binario e della barra del titolo sono foglietti sollevati<br>- il cassetto: «Note» con ordina e nuova nota a icona, il filtro pieno con la lente, «Appuntate», «Tutte le note N», i conteggi e il gallone sottile<br>- l'ispettore a 264 px, con le schede in pozzetto e «● Segue la nota»<br>- impostazioni, componenti, avvio rapido, grafo e benvenuto con le etichette in tondo<br>- le figure accanto alle emoji nel selettore dell'icona<br>- il foglio ha un'ombra morbida a strati, che si vede ai fianchi e sfuma sotto, in giorno e notte | T7, T8, T9, T10, T14, T15, T27 |
+| Telefono | - in piedi il foglio va da un bordo all'altro, senza scrivania ai fianchi né angoli tondi<br>- la testata tiene il nome, «Salvato» come spunta e «…»; un errore o un conflitto restano scritti<br>- la modalità è un'icona in un tondo in basso a destra; mentre si scrive chiude la fila della barra di formato, dopo Annulla e Ripeti, anche sopra la tastiera<br>- in piedi il marchio non c'è: la pillola, col nome della nota, parte dal bordo; sdraiato il marchio resta<br>- «Si scrive» sta in «…»<br>- in piedi il foglio non ha ombra, perché tocca i bordi; sdraiato l'ombra si vede solo ai fianchi | T2, T3, T4, T5, T7, T27 |
 
 ## Lo standard delle barre
 
@@ -176,7 +206,7 @@ tutte scritte una volta nel proprietario.
 | barra in una fila | `kit-bar`, `kit-bar-group`, `kit-bar-button`, `kit-bar-field`; per il troppo `kit-options` e `kit-options-more` (`kit/options-bar.ts`) | barra di formato delle note, testa del disegno, PDF (la lavagna segue N6) | classi sul DOM che c'è, frecce in `kit/toolbar-keys.ts` (nuovo), forma e pelle come sopra |
 | colonna | `kit-rail` (`kit/tool-rail.ts`) | colonna degli strumenti del disegno | `theme/scrittoio/skin/kit.css` |
 
-- **Barra a schede:** è il vassoio un tono sotto la carta, coi foglietti che hanno un nome. I pulsanti sono alti 28, il velo d'accento segna ciò che è acceso, e i gruppi si raccolgono quando manca spazio. T20 fa emettere al kit `kit-ribbon-<parte>` accanto a `<prefisso>-<parte>`; ai fogli e ai documenti restano solo i pezzi loro (tavolozza, galleria, campioni, «Comandi», formula, schede).
+- **Barra a schede:** è il vassoio mezzo tono sotto la carta (il ruolo `--bar-tray`, che nasce con T16), coi foglietti che hanno un nome; di notte i foglietti sono di carta alzata, con un filo. I pulsanti sono alti 28, il velo d'accento segna ciò che è acceso, e i gruppi si raccolgono quando manca spazio. Le sezioni sono le schede dell'ispettore: un pozzetto, e la scelta è un foglietto di carta alzata che scorre. T20 fa emettere al kit `kit-ribbon-<parte>` accanto a `<prefisso>-<parte>`; ai fogli e ai documenti restano solo i pezzi loro (tavolozza, galleria, campioni, «Comandi», formula, schede).
 - **Barra in una fila:** lo stesso vassoio e gli stessi pulsanti, su una riga. Ciò che non ci sta va in «…», oppure scorre di lato dove oggi scorre. Le frecce sono le stesse dappertutto: un solo punto di Tab per barra, frecce sinistra e destra, Home ed End.
 - **Colonna:** la stessa pelle, in verticale.
 - **Come la adotta un editor:** mette le classi sul DOM che ha già, toglie le sue regole di forma e di pelle che le duplicano, e tiene solo ciò che è suo.
@@ -191,10 +221,10 @@ di prova in testa e la fase delle barre prima della chiusura.
 |---|---|---|
 | 0 · I test che fissano oggi | T1 | menu delle modalità, banda, «Si scrive», frecce della barra di formato, briciole |
 | 1 · La modalità dalla banda, la testata | T2, T3, T4, T5 | il menu in un posto solo, la voce «Live» della banda, «Si scrive» nella banda, la testata con le briciole |
-| 2 · La pelle della cornice e del cassetto | T6, T7, T8, T9, T10 | linguette, pillola e pulsanti premuti, cassetto, ispettore, impostazioni e affini |
+| 2 · La pelle della cornice e del cassetto | T6, T7, T8, T9, T10, T27 | linguette, pillola e pulsanti premuti, cassetto, ispettore, impostazioni e affini; l'ombra del foglio (T27 gira dopo T17, che tocca i suoi stessi file) |
 | 3 · La tipografia del foglio | T11 | 18/58, titoli, elenchi, link, citazione, richiamo |
 | 4 · Le novità | T12, T13, T14, T15 | riga dei dati, «In entrata», figure, vault del banco |
-| 5 · Lo standard delle barre | T16–T23 | kit-bar e kit-rail, barra di formato, PDF, Craft, kit-ribbon, barra del documento, testa del disegno, l'icona della lavagna |
+| 5 · Lo standard delle barre | T16–T23 | kit-bar e kit-rail col vassoio più chiaro, barra di formato, PDF, Craft, kit-ribbon con le sezioni come l'ispettore, barra del documento, testa del disegno, l'icona della lavagna |
 | 6 · Banco e chiusura | T24, T25, T26 | scene nuove, baseline dal runner, CI completa e rilettura |
 
 ## Come si incastra coi piani in corso
@@ -272,50 +302,58 @@ Le righe sono quelle di `PLAN-ui/scrittoio-2.html` al momento della consegna.
 
 | Pezzo | Destinazione | Task |
 |---|---|---|
-| ispettore a 264, schede in cima, righe degli elenchi (178–181, 190–213) | `apps/client/src/theme/scrittoio/structure.css` | T9 |
-| la modalità fuori dalla testata (182–189) | `structure.css` | T3 |
-| la banda stretta (214–225) | `structure.css` | T4 |
-| la forma della barra a schede (227–506) | `structure.css` | T20 |
-| la forma della barra in una fila (508–551) | `structure.css` | T16 |
-| la galleria degli stili del documento (553–561) | `structure.css` | T21 |
-| la pelle della barra a schede (565–922) | `theme/scrittoio/skin/kit.css` | T20 |
-| la pelle della fila e della colonna (924–1075) | `skin/kit.css` | T16 |
-| il pulsante premuto e la pillola (1079–1123) | `skin/frame.css` | T7 |
-| l'ispettore (1125–1171) | `skin/frame.css` | T9 |
-| la modalità nella banda (1173–1199) | `skin/frame.css` | T3 |
-| «Si scrive» nella banda (1200–1218) | `skin/frame.css` | T4 |
-| spazi, titolo del cassetto, etichette di sezione (1222–1360) | `skin/drawers.css` | T8 |
-| il selettore dell'icona (1362–1404) | `skin/drawers.css` | T14 |
-| filtro, righe, conti, gallone (1408–1476) | `skin/tree.css` | T8 |
-| la testata del foglio (1480–1527) | `skin/sheets.css` | T5 |
-| linguette e scrivania (1529–1554) | `skin/sheets.css` | T6 |
-| titoli, elenchi, link, citazione, richiamo (1558–1680) | `skin/document.css` | T11 |
-| la riga dei dati (1682–1722) | `skin/document.css` | T12 |
-| il PDF e il contatore delle diapositive (1726–1771) | `skin/media.css` | T18 |
-| i file Craft (1773–1830) | `skin/media.css` | T19 |
-| la struttura e le sezioni delle viste (1834–1876, 1938–1947) | `skin/nodes.css` | T9 |
-| «In entrata» e l'icona della voce (1878–1936) | `skin/nodes.css` | T13 |
-| il grafo (1951–1958) | `skin/graph.css` | T10 |
-| il menu delle modalità, B compreso (1962–2003) | `skin/menus.css` | T10 |
-| l'avvio rapido (2007–2013) | `skin/launcher.css` | T10 |
-| «Salvato» con la spunta (2017–2041) | `skin/centres.css` | T5 |
-| le impostazioni (2045–2068) | `skin/settings.css` | T10 |
-| il benvenuto (2072–2078) | `skin/welcome.css` | T10 |
-| telefono: la testata (2082–2093) | `apps/client/src/shells/scrittoio/mobile/mobile.css` | T5 |
-| telefono: «Si scrive» (2094–2098) | `mobile.css` | T4 |
-| telefono: la pastiglia H1 nascosta (2099–2105) | `mobile.css` | T11 |
-| telefono in piedi: l'involucro `@media (max-width: 599px)` (2107 e 2146), con dentro le tre righe sotto | `mobile.css` | T5 |
-| telefono in piedi: il foglio da un bordo all'altro (2108–2118) | `mobile.css` | T5 |
-| telefono in piedi: senza il marchio (2120–2131) | `mobile.css`, dentro l'involucro | T7 |
-| telefono in piedi: «Salvato» in figura (2133–2145) | `mobile.css` | T5 |
-| telefono: la modalità nel tondo in basso a destra, il pulsante dei commenti alla sua sinistra (2148–2196) | `mobile.css` | T3 |
-| telefono in piedi: la modalità piatta nella fila della barra di formato (2198–2221) | `mobile.css` | T3 |
-| 18 px e 58 caratteri (2224–2231) | `theme/scrittoio/series.ts`, `recipe.ts`, `state/zoom.ts`, `crates/fub-host/src/settings.rs` | T11 |
-| variante `tel-b` (2236–2266), solo se scelta | `mobile.css`, dopo 2198–2221 | T3 |
-| icone delle modalità e del cassetto (2270–2281) | `apps/client/src/ui/icons.ts` | T2 |
-| figure monocrome (2282–2294, senza `star`, che la cornice ha già) | `ui/icons.ts` | T14 |
+| ispettore a 264, schede in cima, righe degli elenchi (180–183, 192–215) | `apps/client/src/theme/scrittoio/structure.css` | T9 |
+| la modalità fuori dalla testata (184–191) | `structure.css` | T3 |
+| la banda stretta (216–227) | `structure.css` | T4 |
+| la scrivania che lascia uscire l'ombra del foglio (228–275) | `structure.css` | T27 |
+| la forma della barra a schede (277–556) | `structure.css` | T20 |
+| la forma della barra in una fila (558–601) | `structure.css` | T16 |
+| la galleria degli stili del documento (603–611) | `structure.css` | T21 |
+| la pelle della barra a schede (615–972) | `theme/scrittoio/skin/kit.css` | T20 |
+| il vassoio più chiaro della barra a schede (974–1000) | `skin/kit.css`, fuso nella pelle sopra | T20 |
+| le sezioni come le schede dell'ispettore (1002–1042) | `skin/kit.css`, fuso nella pelle sopra | T20 |
+| la pelle della fila e della colonna, già sul vassoio `--bar-tray` (1044–1195) | `skin/kit.css` | T16 |
+| il pulsante premuto e la pillola (1199–1243) | `skin/frame.css` | T7 |
+| l'ispettore (1245–1291) | `skin/frame.css` | T9 |
+| la modalità nella banda (1293–1319) | `skin/frame.css` | T3 |
+| «Si scrive» nella banda (1320–1338) | `skin/frame.css` | T4 |
+| spazi, titolo del cassetto, etichette di sezione (1342–1480) | `skin/drawers.css` | T8 |
+| il selettore dell'icona (1482–1524) | `skin/drawers.css` | T14 |
+| filtro, righe, conti, gallone (1528–1596) | `skin/tree.css` | T8 |
+| la testata del foglio (1600–1647) | `skin/sheets.css` | T5 |
+| linguette e scrivania (1649–1674) | `skin/sheets.css` | T6 |
+| l'ombra del foglio (1676–1688) | `skin/sheets.css` | T27 |
+| titoli, elenchi, link, citazione, richiamo (1692–1814) | `skin/document.css` | T11 |
+| la riga dei dati (1816–1856) | `skin/document.css` | T12 |
+| il PDF e il contatore delle diapositive (1860–1905) | `skin/media.css` | T18 |
+| i file Craft (1907–1964) | `skin/media.css` | T19 |
+| la struttura e le sezioni delle viste (1968–2010, 2072–2081) | `skin/nodes.css` | T9 |
+| «In entrata» e l'icona della voce (2012–2070) | `skin/nodes.css` | T13 |
+| il grafo (2085–2092) | `skin/graph.css` | T10 |
+| il menu delle modalità, B compreso (2096–2137) | `skin/menus.css` | T10 |
+| l'avvio rapido (2141–2147) | `skin/launcher.css` | T10 |
+| «Salvato» con la spunta (2151–2175) | `skin/centres.css` | T5 |
+| le impostazioni (2179–2202) | `skin/settings.css` | T10 |
+| il benvenuto (2206–2212) | `skin/welcome.css` | T10 |
+| telefono: la testata (2216–2227) | `apps/client/src/shells/scrittoio/mobile/mobile.css` | T5 |
+| telefono: «Si scrive» (2228–2232) | `mobile.css` | T4 |
+| telefono: la pastiglia H1 nascosta (2233–2239) | `mobile.css` | T11 |
+| telefono in piedi: l'involucro `@media (max-width: 599px)` (2241 e 2280), con dentro le tre righe sotto | `mobile.css` | T5 |
+| telefono in piedi: il foglio da un bordo all'altro (2242–2252) | `mobile.css` | T5 |
+| telefono in piedi: senza il marchio (2254–2265) | `mobile.css`, dentro l'involucro | T7 |
+| telefono in piedi: «Salvato» in figura (2267–2279) | `mobile.css` | T5 |
+| telefono: la modalità nel tondo in basso a destra, il pulsante dei commenti alla sua sinistra (2282–2330) | `mobile.css` | T3 |
+| telefono in piedi: la modalità piatta nella fila della barra di formato (2332–2355) | `mobile.css` | T3 |
+| telefono: l'ombra del foglio, nessuna in piedi e solo ai fianchi sdraiato (2357–2375) | `mobile.css` | T27 |
+| 18 px e 58 caratteri (2378–2385) | `theme/scrittoio/series.ts`, `recipe.ts`, `state/zoom.ts`, `crates/fub-host/src/settings.rs` | T11 |
+| i ruoli nuovi della ricetta (2388–2415) | `theme/scrittoio/recipe.ts` | T16 (`--bar-tray`), T27 (`--shadow-sheet`, `--shadow-sheet-focus`) |
+| icone delle modalità e del cassetto (2482–2493) | `apps/client/src/ui/icons.ts` | T2 |
+| figure monocrome (2494–2506, senza `star`, che la cornice ha già) | `ui/icons.ts` | T14 |
 | testi nuovi | `apps/client/src/i18n/catalog.ts` | T5, T7, T8, T9, T12, T14, T18 |
 | gli stati da fotografare | `apps/client/bench/scene.mjs` | T24 |
+
+Le varianti «com'era» (righe 2418–2479, `data-variante="prima-*"`) servono
+solo al confronto e non vanno nel codice.
 
 ## T1 · I test che fissano il comportamento di oggi
 
@@ -371,7 +409,7 @@ Cosa fare:
 - `document.test.ts`: il bottone ha l'icona della modalità accesa, il nome nello `span` e il suggerimento, e li cambia quando la modalità cambia.
 - `shell.e2e.test.ts` (intorno alle righe 3626–3644): l'ordine diventa Live, Blocchi, Sorgente, Lettura.
 - `docs/architecture/editor-surfaces.md` dice di `icon` e dell'ordine del menu.
-Dal prototipo: le icone delle modalità e del cassetto (righe 2270–2281, in `ui/icons.ts`: le otto sopra; `check`, `dots` e `plus` ci sono già nella cornice); il menu aperto dello stato `nota` per l'ordine, le icone e le scorciatoie.
+Dal prototipo: le icone delle modalità e del cassetto (righe 2482–2493, in `ui/icons.ts`: le otto sopra; `check`, `dots` e `plus` ci sono già nella cornice); il menu aperto dello stato `nota` per l'ordine, le icone e le scorciatoie.
 Casi limite:
 - una superficie con una modalità sola: nessun menu;
 - la lavagna: le modalità che le dà N6 (oggi Lavagna e Sorgente, senza separatore); la sua icona arriva con T23, e fino ad allora vale quella del ruolo;
@@ -407,19 +445,18 @@ Cosa fare:
   - resta nascosto se la superficie a fuoco ha una modalità sola o se non c'è un documento.
 - Clic, Invio, Spazio e ↑ chiamano `openModeMenu(button, focusedPaneId)`. Gli ascoltatori passano da `lifetime.listen`. Alla chiusura il fuoco torna al bottone.
 - `structure.css`:
-  - la testata non mostra più `.pane-toolbar > .segmented`, e il bottone del foglio non si vede (righe 182–189 del prototipo);
+  - la testata non mostra più `.pane-toolbar > .segmented`, e il bottone del foglio non si vede (righe 184–191 del prototipo);
   - escono le regole che diventano inutili: quella dei segmenti con `order: 2` (righe 908–913, e il commento sopra perde «poi il selettore») e quella del bottone con il suo `@container sheet-head (max-width: 440px)` (righe 920–937).
 - `mobile.css`, dove la banda non c'è (in piedi, e sdraiato sotto i 500 px di altezza):
-  - il bottone è un tondo alto un dito all'angolo basso a destra della carta, con la sola icona; il pulsante dei commenti del documento si sposta alla sua sinistra (righe 2148–2196);
-  - in piedi, mentre si scrive, diventa piatto e chiude la fila della barra di formato, dopo Annulla e Ripeti, anche sopra la tastiera (righe 2198–2221);
-  - la regola che nasconde la barra di formato quando non si scrive (riga 333, `.pane:not(:has(.cm-focused)) > .format-bar…`) prende anche `:not(:has(> .pane-mode-current[aria-expanded="true"]))` sul foglio: col suo menu aperto la barra resta, e il bottone non salta. Aprire il menu porta il fuoco fuori dal testo, e la tastiera si chiude;
-  - con la variante B, se l'utente la sceglie, anche le righe 2236–2266 dopo quelle sopra.
+  - il bottone è un tondo alto un dito all'angolo basso a destra della carta, con la sola icona; il pulsante dei commenti del documento si sposta alla sua sinistra (righe 2282–2330);
+  - in piedi, mentre si scrive, diventa piatto e chiude la fila della barra di formato, dopo Annulla e Ripeti, anche sopra la tastiera (righe 2332–2355);
+  - la regola che nasconde la barra di formato quando non si scrive (riga 333, `.pane:not(:has(.cm-focused)) > .format-bar…`) prende anche `:not(:has(> .pane-mode-current[aria-expanded="true"]))` sul foglio: col suo menu aperto la barra resta, e il bottone non salta. Aprire il menu porta il fuoco fuori dal testo, e la tastiera si chiude.
 - I clic del banco che cercavano i segmenti della testata (si nascondono, e Playwright non clicca ciò che non si vede): `bench/scene.mjs` righe 249, 258, 432–434 e 1088–1091, `bench/interaction.mjs` riga 217.
   - Un aiuto solo, in `scene.mjs`: se `#status-mode` si vede lo clicca, se no clicca `.pane.focus > .pane-mode-current`; poi `#context-menu [role="menuitemradio"]` col nome della modalità. `interaction.mjs` fa lo stesso.
 - `shell.e2e.test.ts`, riga 3626: il bottone è `.pane.focus > .pane-mode-current`. I test jsdom che cercano i segmenti (righe 1165, 1209, 3620, 3628) restano come sono.
 - `surface-modes.e2e.test.ts`: sul computer la modalità si cambia da `#status-mode`.
 - `docs/product/editor-and-preview.md`, sezione «Modalità»: il commutatore è la voce della banda per il riquadro a fuoco; sul telefono, dove la banda non c'è, è il tondo in basso a destra, che mentre si scrive sta nella fila della barra di formato.
-Dal prototipo: `structure.css` 182–189; `skin/frame.css` 1173–1199; `mobile.css` 2148–2196 e 2198–2221 (con B anche 2236–2266); gli stati `nota` (il menu aperto), `documento` (la banda dice «Pagina»), `tel-nota`, `tel-ferma`, `tel-tastiera`, `tel-sdraiato`, `tel-doc` e `tel-foglio`.
+Dal prototipo: `structure.css` 184–191; `skin/frame.css` 1293–1319; `mobile.css` 2282–2330 e 2332–2355; gli stati `nota` (il menu aperto), `documento` (la banda dice «Pagina»), `tel-nota`, `tel-ferma`, `tel-tastiera`, `tel-sdraiato`, `tel-doc` e `tel-foglio`.
 Casi limite:
 - nessun documento aperto (il benvenuto): la voce della banda e il tondo sono nascosti;
 - un'immagine, un PDF o un foglio di calcolo (una modalità sola): nascosti; `tel-foglio` non ha il tondo;
@@ -457,16 +494,16 @@ Cosa fare:
   - la banda emette il segnale nuovo `standing-open` dello store, con l'ancora come argomento, e `document.ts` lo ascolta e apre la spiegazione del riquadro a fuoco.
 - `structure.css`:
   - sul computer la testata nasconde `.pane-standing[data-standing="writes"]`;
-  - sotto gli 800 px la banda nasconde `[data-surface-item="language"]` (righe 214–225 del prototipo).
+  - sotto gli 800 px la banda nasconde `[data-surface-item="language"]` (righe 216–227 del prototipo).
 - Telefono:
-  - `mobile.css` nasconde il chip `writes` (righe 2094–2098);
+  - `mobile.css` nasconde il chip `writes` (righe 2228–2232);
   - il menu «…» della testata prende in cima la voce «Si scrive», che apre la stessa spiegazione;
   - gli altri tipi restano dove sono.
 - Le pagine di `docs/`:
   - `docs/product/word-documents.md`, il paragrafo del chip: «Si scrive» lo dice la banda;
   - `docs/product/editor-and-preview.md`;
   - `docs/architecture/editor-surfaces.md`, la parte sullo stato della superficie.
-Dal prototipo: `structure.css` 214–225; `skin/frame.css` 1200–1218; `mobile.css` 2094–2098; gli stati `documento`, `sola-lettura` e `tel-doc`.
+Dal prototipo: `structure.css` 216–227; `skin/frame.css` 1320–1338; `mobile.css` 2228–2232; gli stati `documento`, `sola-lettura` e `tel-doc`.
 Casi limite:
 - il tipo cambia con la spiegazione aperta (il file diventa di sola lettura): la banda si spegne, la spiegazione si chiude e il chip compare in testata;
 - due riquadri con tipi diversi: la banda segue il fuoco;
@@ -498,11 +535,11 @@ Cosa fare:
 - `skin/centres.css`: `.save-state` prende la spunta del prototipo. Il selettore ripete `.save-state.sheet-save`, come nel prototipo: al telefono `sheets/sheets.css` si carica dopo la pelle (struttura, `mobile.css`, pelle, `launcher.css`, poi `sheets/sheets.css`) e il suo `display: block` vincerebbe a parità di peso.
 - `save-state.ts`, `sync()` (righe 116–131): il bottone prende col `setTooltip` la parola dello stato («Salvato», «Salvataggio…», …), scritta solo quando cambia. Sul telefono la parola non si vede, e il suggerimento la ridice. `save-state.test.ts` lo controlla.
 - `mobile.css`:
-  - la testata del telefono (righe 2082–2093);
-  - in coda, l'involucro `@media (max-width: 599px)` (righe 2107 e 2146) con dentro il foglio da un bordo all'altro (`--sheet-gap: 0px` su `#panes` e gli angoli vivi, righe 2108–2118) e «Salvato» in figura (righe 2133–2145): la spunta, o il punto di ciò che è in sospeso, in un bottone alto e largo un dito; «Errore» e «Conflitto» restano scritti in rosso. T7 aggiunge poi dentro lo stesso involucro le righe 2120–2131.
+  - la testata del telefono (righe 2216–2227);
+  - in coda, l'involucro `@media (max-width: 599px)` (righe 2241 e 2280) con dentro il foglio da un bordo all'altro (`--sheet-gap: 0px` su `#panes` e gli angoli vivi, righe 2242–2252) e «Salvato» in figura (righe 2267–2279): la spunta, o il punto di ciò che è in sospeso, in un bottone alto e largo un dito; «Errore» e «Conflitto» restano scritti in rosso. T7 aggiunge poi dentro lo stesso involucro le righe 2254–2265.
 - `shell.e2e.test.ts` (intorno alle righe 612–631): le attese sulla testata si riscrivono per briciole, «Salvato» e «…».
 - `docs/product/editor-and-preview.md`: com'è fatta la testata, che il formato sta nella linguetta e che sul telefono in piedi il foglio prende tutta la larghezza e «Salvato» è la spunta.
-Dal prototipo: `skin/sheets.css` 1480–1527; `skin/centres.css` 2017–2041; `mobile.css` 2082–2093, 2107–2118, 2133–2146; gli stati `nota`, `documento`, `tel-nota`, `tel-ferma` e `tel-foglio`.
+Dal prototipo: `skin/sheets.css` 1600–1647; `skin/centres.css` 2151–2175; `mobile.css` 2216–2227, 2241–2252, 2267–2280; gli stati `nota`, `documento`, `tel-nota`, `tel-ferma` e `tel-foglio`.
 Casi limite:
 - una nota alla radice: solo il vault e il nome;
 - un percorso lunghissimo: le cartelle si stringono, il nome resta intero;
@@ -530,9 +567,9 @@ Tocca: `apps/client/src/theme/scrittoio/skin/sheets.css`, `apps/client/src/theme
 Non toccare: `apps/client/src/shells/scrittoio/sheets/tab-strip.ts` e `apps/client/src/shells/scrittoio/sheets/desk.ts` (solo pelle); le regole della testata che T5 ha messo nello stesso file.
 Dipende da: T5
 Cosa fare:
-- Copiare le righe 1529–1554 del prototipo in `skin/sheets.css`, accanto alle regole di `.tab` e `.sheet-desk-label` che sostituiscono, togliendo quelle che diventano inutili.
+- Copiare le righe 1649–1674 del prototipo in `skin/sheets.css`, accanto alle regole di `.tab` e `.sheet-desk-label` che sostituiscono, togliendo quelle che diventano inutili.
 - `.tab-format` entra nei ganci di `anatomia/sheets.ts`.
-Dal prototipo: `skin/sheets.css` 1529–1554; gli stati `nota` e `documento`.
+Dal prototipo: `skin/sheets.css` 1649–1674; gli stati `nota` e `documento`.
 Casi limite: molte linguette (la scena `tabs`); un nome lunghissimo; una linguetta senza figura di formato; la linguetta trascinata; il fuoco da tastiera; il contrasto alto.
 Fatto quando: la foto di `live-01-panoramica`, `tabs` e `desk`, in giorno e notte, sta accanto a `?stato=nota` e `?stato=documento` (le linguette e l'etichetta della scrivania), e `npx vitest run src/theme/scrittoio` passa.
 Prova: scripts/check.sh --rapido
@@ -555,14 +592,14 @@ Cosa fare:
 - In `mobile.html` cambia solo il testo scritto.
 - `pill.ts`: con `data-pill="command"` la pillola non scrive più la cartella né il nome, e dice sempre `frame.pill.empty`, con l'etichetta `frame.pill`. Senza l'attributo (il telefono) fa quello che fa oggi.
 - `pill.test.ts`, intorno alla riga 57: il computer dice sempre il campo dei comandi, il telefono il nome.
-- `skin/frame.css`: il pulsante premuto della barra del titolo e del binario (righe 1079–1096) e la pillola (righe 1098–1123).
+- `skin/frame.css`: il pulsante premuto della barra del titolo e del binario (righe 1199–1216) e la pillola (righe 1218–1243).
 - Il telefono in piedi senza il marchio:
-  - `mobile.css`, dentro l'involucro `@media (max-width: 599px)` di T5: `#brand-menu` non si vede (righe 2120–2131), e la pillola parte dal bordo. Il bottone resta nel DOM, perché lo cercano `brand-menu.ts` e i test. La griglia della barra (`auto minmax(0, 1fr) auto`, `mobile.css` 180) non cambia: `#titlebar-left` resta la prima colonna, vuota, e tiene solo il suo `padding` (`skin/frame.css` 19–22), che diventa il margine della pillola; il prototipo lo mostra così;
+  - `mobile.css`, dentro l'involucro `@media (max-width: 599px)` di T5: `#brand-menu` non si vede (righe 2254–2265), e la pillola parte dal bordo. Il bottone resta nel DOM, perché lo cercano `brand-menu.ts` e i test. La griglia della barra (`auto minmax(0, 1fr) auto`, `mobile.css` 180) non cambia: `#titlebar-left` resta la prima colonna, vuota, e tiene solo il suo `padding` (`skin/frame.css` 19–22), che diventa il margine della pillola; il prototipo lo mostra così;
   - prima di nasconderlo si controlla che ogni voce del menu del marchio abbia un'altra strada sul telefono in piedi: un comando del lanciatore (la pillola), la barra inferiore o il gesto indietro. Si guardano tutte, comprese quelle che nascono dalle viste e dalle creazioni (per esempio «Importa disegno…»), il vault, l'aiuto e la luce. Se una manca, il marchio resta e il report dice quale;
   - `brand-menu.ts`: un ascoltatore di `matchMedia("(max-width: 599px)")`, passato da `lifetime.listen`, chiude il menu se è aperto quando il telefono si raddrizza e porta il fuoco alla pillola; e `settleFocus` (riga 29), quando il marchio non si vede, ripiega sulla pillola invece che sul marchio. Così il fuoco non resta mai su un marchio nascosto e non cade sul `body`; `brand-menu.test.ts` lo controlla;
   - i commenti di `mobile.css` che dicono «nel menu del marchio» (righe 176–179 e 265–268) dicono che in piedi le stesse voci stanno nel lanciatore e nella barra inferiore; quello del telefono sdraiato (righe 147–149) resta vero, perché sdraiato il marchio c'è.
 - `docs/`: nessuna pagina cita il testo della pillola (cercato con `grep`), e nessuna descrive la barra del titolo del telefono, quindi niente da cambiare; il report lo segnala come lacuna.
-Dal prototipo: `skin/frame.css` 1079–1123; `mobile.css` 2120–2131; gli stati `nota`, `vuoto`, `tel-nota` e `tel-sdraiato`.
+Dal prototipo: `skin/frame.css` 1199–1243; `mobile.css` 2254–2265; gli stati `nota`, `vuoto`, `tel-nota` e `tel-sdraiato`.
 Casi limite:
 - nessun documento aperto;
 - la scorciatoia cambiata dalla persona: il `kbd` la segue;
@@ -595,7 +632,7 @@ Cosa fare:
 - `explorer-filter.ts`: il filtro mostra la lente dentro il campo pieno. Il comportamento non cambia.
 - `explorer.dom.test.ts`: i conteggi (anche lo zero), «Tutte le note N», il menu dell'ordinamento che cambia `state.explorerSort`.
 - `docs/product/explorer-and-folders.md`: i conteggi e il bottone dell'ordinamento.
-Dal prototipo: `skin/drawers.css` 1222–1360; `skin/tree.css` 1408–1476; gli stati `nota` e `ricerca`.
+Dal prototipo: `skin/drawers.css` 1342–1480; `skin/tree.css` 1528–1596; gli stati `nota` e `ricerca`.
 Casi limite:
 - un vault senza note: «Tutte le note» senza numero;
 - una cartella vuota: niente numero;
@@ -622,12 +659,12 @@ Cosa fare:
 - La larghezza:
   - `--inspector-w` passa da 300 a 264 **sulla riga che c'è**, nel primo blocco `:root` di `structure.css` (riga 48), e non in un `:root` nuovo in coda;
   - in `measures.ts` la riga diventa `["inspector-w", 264, 216]`, come il cassetto. `measures.test.ts` legge il primo `:root` e vuole il passo 0 uguale alla struttura: un `:root` aggiunto in coda lo lascerebbe verde con la larghezza vera diversa, e al passo 1 l'ispettore tornerebbe largo.
-- `structure.css`: `.inspector-tabs` sale in cima (`order: -1`) e le regole di `.ui-list-item`, `.ui-tree-label` e `.ui-tree-label > span` (righe 190–213 del prototipo) entrano accanto alle regole dell'albero.
+- `structure.css`: `.inspector-tabs` sale in cima (`order: -1`) e le regole di `.ui-list-item`, `.ui-tree-label` e `.ui-tree-label > span` (righe 192–215 del prototipo) entrano accanto alle regole dell'albero.
 - `ui/node.ts` toglie gli stili in linea di quelle tre righe, sia dove la riga nasce sia dove si riusa (intorno alle righe 378–390, 762–770 e 886–900): ora li scrive la struttura, e la pelle li può cambiare. `node.test.ts` controlla che non ci sia più l'attributo `style`.
 - `ui/views.ts`, `drawFollows`: col documento la riga dice «Segue la nota» (chiave nuova `inspector.follows_doc`, «Follows the note» in inglese), e il nome della nota va nel tooltip con il testo di oggi (`inspector.follows`). Senza documento resta `inspector.follows_none`. `views.test.ts` lo controlla.
-- La pelle: `skin/frame.css` righe 1125–1171 (le schede in pozzetto, il titolo, il punto blu); `skin/nodes.css` righe 1834–1876 e 1938–1947 (la struttura col filo e la tacca blu, le sezioni in tondo).
+- La pelle: `skin/frame.css` righe 1245–1291 (le schede in pozzetto, il titolo, il punto blu); `skin/nodes.css` righe 1968–2010 e 2072–2081 (la struttura col filo e la tacca blu, le sezioni in tondo).
 - `docs/`: nessuna pagina dice la larghezza dell'ispettore o «Segue:» (cercato con `grep`), e i limiti del divisore non cambiano: niente da cambiare.
-Dal prototipo: `structure.css` 178–181 (il valore, da scrivere sulla riga che c'è) e 190–213; `skin/frame.css` 1125–1171; `skin/nodes.css` 1834–1876 e 1938–1947; lo stato `nota` (l'ispettore sulla Struttura).
+Dal prototipo: `structure.css` 180–183 (il valore, da scrivere sulla riga che c'è) e 192–215; `skin/frame.css` 1245–1291; `skin/nodes.css` 1968–2010 e 2072–2081; lo stato `nota` (l'ispettore sulla Struttura).
 Casi limite:
 - la persona ha già una larghezza salvata: resta quella;
 - lo spazio dell'interfaccia al passo 4: 216, mai sotto `--inspector-min`;
@@ -651,10 +688,10 @@ Tocca: `apps/client/src/theme/scrittoio/skin/settings.css`, `apps/client/src/the
 Non toccare: il DOM delle impostazioni e dei componenti (`apps/client/src/panels/settings*.ts`), che K2 e A1 cambiano; i segmenti delle impostazioni, che restano il velo d'accento.
 Dipende da: nessuno (aspetta K2 in `main`)
 Cosa fare:
-- Copiare i blocchi del prototipo nei loro file: `skin/graph.css` (righe 1951–1958), `skin/menus.css` (1962–2003), `skin/launcher.css` (2007–2013), `skin/settings.css` (2045–2068), `skin/welcome.css` (2072–2078).
+- Copiare i blocchi del prototipo nei loro file: `skin/graph.css` (righe 2085–2092), `skin/menus.css` (2096–2137), `skin/launcher.css` (2141–2147), `skin/settings.css` (2179–2202), `skin/welcome.css` (2206–2212).
 - Togliere le regole vecchie che mettono maiuscolo e spaziatura sulle stesse etichette, invece di scavalcarle.
 - Ogni classe dei blocchi è già un gancio del suo pezzo; se una manca, entra nell'anatomia.
-- Il menu è il B (scelta dell'utente, 2026-11-04): le sue regole sono già dentro le righe 1962–2003, senza prefisso di variante, e non c'è un altro blocco da copiare.
+- Il menu è il B (scelta dell'utente, 2026-11-04): le sue regole sono già dentro le righe 2096–2137, senza prefisso di variante, e non c'è un altro blocco da copiare.
 - `docs/`: nessuna pagina descrive queste etichette.
 Dal prototipo: le righe sopra; gli stati `impostazioni`, `componenti`, `grafo`, `zero` e `vuoto` (il benvenuto con «Vault recenti»).
 Casi limite: un'etichetta lunga in inglese; il contrasto alto; la densità compatta; le impostazioni a 700 px; i menu del tasto destro con un'intestazione; il pannello «/» con l'anteprima.
@@ -666,7 +703,7 @@ Stato: [ ] da fare
 
 Perché: il mockup legge a 18 px su righe da 58 caratteri, con titoli pieni, punti in grafite, link a metà forza e citazione e richiamo neutri.
 Tocca: `apps/client/src/theme/scrittoio/series.ts`, `apps/client/src/state/zoom.ts`, `apps/client/src/theme/preferences.test.ts`, `apps/client/src/theme/typography.test.ts`, `apps/client/src/state/zoom.dom.test.ts`, `apps/client/src/theme/scrittoio/recipe.ts`, `apps/client/bench/fake-ipc.ts`, `crates/fub-host/src/settings.rs`, `apps/client/src/theme/scrittoio/skin/document.css`, `apps/client/src/theme/scrittoio/anatomia/document.ts`, `apps/client/src/shells/scrittoio/mobile/mobile.css`, `docs/architecture/frontend-and-ipc.md`
-Non toccare: gli altri gettoni di `recipe.ts` (la tavolozza resta com'è: cambiano solo `--text-reading` e `--content-width`); `crates/fub-host/src/legacy_tests/switches.rs` (si fa girare, non si cambia); `obsidian_import.rs`; l'ADR 0208, che resta com'è; i valori che la persona ha già scelto in Aspetto.
+Non toccare: gli altri gettoni di `recipe.ts` (la tavolozza resta com'è: cambiano solo `--text-reading` e `--content-width`; il ruolo `--bar-tray` è di T16, le ombre del foglio di T27); `crates/fub-host/src/legacy_tests/switches.rs` (si fa girare, non si cambia); `obsidian_import.rs`; l'ADR 0208, che resta com'è; i valori che la persona ha già scelto in Aspetto.
 Dipende da: nessuno
 Cosa fare:
 - I predefiniti, uguali in TS e in Rust:
@@ -676,11 +713,11 @@ Cosa fare:
   - `recipe.ts` (righe 536 e 544): `text-reading` 17px → 18px e `content-width` 68ch → 58ch, poi `npm run theme:generate`;
   - `bench/fake-ipc.ts` (intorno alle righe 489, 492, 515 e 518): gli stessi predefiniti.
 - I test che li dicono: `preferences.test.ts` (riga 31), `typography.test.ts`, `zoom.dom.test.ts` (righe 35 e 46).
-- `skin/document.css`: le righe 1558–1680 del prototipo (titolo 2,22 em e H2 1,39 em, pieni; i punti degli elenchi in grafite; il filo dei link a metà forza; citazione e richiamo neutri). Le classi nuove (`cm-fub-bullet`, `cm-fub-bullet-task`) entrano in `anatomia/document.ts`.
-- `mobile.css`: le righe 2099–2105 (sul telefono la pastiglia `H1` non si vede).
+- `skin/document.css`: le righe 1692–1814 del prototipo (titolo 2,22 em e H2 1,39 em, pieni; i punti degli elenchi in grafite; il filo dei link a metà forza; citazione e richiamo neutri). Le classi nuove (`cm-fub-bullet`, `cm-fub-bullet-task`) entrano in `anatomia/document.ts`.
+- `mobile.css`: le righe 2233–2239 (sul telefono la pastiglia `H1` non si vede).
 - Il titolo pesa 600 (risposta dell'utente, 2026-11-04), com'è già nelle righe sopra.
 - `docs/architecture/frontend-and-ipc.md`, il paragrafo sui predefiniti dell'aspetto (intorno alla riga 249): corpo 18 px e giustezza 58 caratteri. `docs/product/editor-and-preview.md` (riga 53) resta vera così com'è.
-Dal prototipo: `skin/document.css` 1558–1680; `mobile.css` 2099–2105; il blocco `series.ts` 2224–2231; gli stati `nota` e `tel-nota`.
+Dal prototipo: `skin/document.css` 1692–1814; `mobile.css` 2233–2239; il blocco `series.ts` 2378–2385; gli stati `nota` e `tel-nota`.
 Casi limite:
 - chi ha scelto 17 o 68 in Aspetto: tiene il suo valore (è una scelta salvata, non il predefinito);
 - lo zoom del testo ai capi (12 e 28);
@@ -725,9 +762,9 @@ Cosa fare:
   - `bootstrap.ts` passa alla superficie la lettura dei dati, così l'editor non chiama l'host da sé.
 - Il clic su «3 collegamenti» apre la scheda Collegamenti dell'ispettore; il clic su un'etichetta cerca quell'etichetta, come il clic su un tag nel testo.
 - `bench/fake-ipc.ts`: la nota Benvenuto risponde con due etichette e tre collegamenti, come il prototipo.
-- La pelle: `skin/document.css` righe 1682–1722; i ganci `note-facts`, `note-fact`, `note-fact-tags` e `note-tag` in `anatomia/document.ts`.
+- La pelle: `skin/document.css` righe 1816–1856; i ganci `note-facts`, `note-fact`, `note-fact-tags` e `note-tag` in `anatomia/document.ts`.
 - `docs/product/editor-and-preview.md`: la riga dei dati, in quali modalità c'è e da dove legge.
-Dal prototipo: `skin/document.css` 1682–1722; gli stati `nota` e `tel-nota`.
+Dal prototipo: `skin/document.css` 1816–1856; gli stati `nota` e `tel-nota`.
 Casi limite:
 - una nota senza etichette né collegamenti: solo «Modificata»;
 - una nota nuova, mai salvata;
@@ -763,9 +800,9 @@ Cosa fare:
 - `backlinks.rs`: «Entranti» diventa «In entrata» e «Uscenti» «In uscita», anche nei conteggi e nella banda (righe 429, 430, 457, 458 e 466); l'inglese resta «Incoming» e «Outgoing». I test della feature seguono.
 - `ui/node.ts`: un `list_item` con `drag` di tipo documento prende in testa `span.ui-list-item-icon` con l'icona della nota (quella della pagina, o la figura del formato). Vale anche per le righe dei Collegamenti, e il contratto non cambia.
 - `bench/fake-ipc.ts` (intorno alla riga 861) e `bench/fake-english.ts` (righe 130–131): le stesse parole, e la Struttura di Benvenuto con tre note in entrata, come il prototipo.
-- La pelle: `skin/nodes.css` righe 1878–1936; il gancio `ui-list-item-icon` in `anatomia/nodes.ts`.
+- La pelle: `skin/nodes.css` righe 2012–2070; il gancio `ui-list-item-icon` in `anatomia/nodes.ts`.
 - `docs/product/search-links-and-graph.md` (righe 75 e 226): le parole nuove e la sezione sotto la Struttura.
-Dal prototipo: `skin/nodes.css` 1878–1936; lo stato `nota` (l'ispettore).
+Dal prototipo: `skin/nodes.css` 2012–2070; lo stato `nota` (l'ispettore).
 Casi limite:
 - nessuna nota in entrata: nessuna sezione;
 - esattamente 5: niente «e altri»;
@@ -790,7 +827,7 @@ Tocca: `apps/client/src/ui/menu.ts`, `apps/client/src/ui/menu.test.ts`, `apps/cl
 Non toccare: il tipo del campo `icons` (resta `String`) e il formato di `.fub/workspace.json` (lo schema resta 1); i comandi del kernel che scrivono l'icona; le emoji già scelte, che si mostrano come oggi.
 Dipende da: T8
 Cosa fare:
-- `ui/icons.ts`: le undici figure del prototipo (righe 2282–2294, tranne `star` alla riga 2285, che la cornice ha già: vedi «Le icone del prototipo»): `book`, `calendar`, `flag`, `bulb`, `inbox`, `archive`, `image`, `heart`, `briefcase`, `people`, `music`.
+- `ui/icons.ts`: le undici figure del prototipo (righe 2494–2506, tranne `star` alla riga 2497, che la cornice ha già: vedi «Le icone del prototipo»): `book`, `calendar`, `flag`, `bulb`, `inbox`, `archive`, `image`, `heart`, `briefcase`, `people`, `music`.
 - `ui/page-mark.ts` (nuovo) è il solo posto che sa leggere un valore d'icona:
   - `fub:<nome>` con un nome noto è una figura, disegnata con `icon(nome)`;
   - ogni altro testo breve è un'emoji o una lettera, come oggi;
@@ -803,14 +840,14 @@ Cosa fare:
   - `document.ts`: la linguetta e la testata;
   - `livepreview.ts`: l'icona accanto ai wikilink;
   - `blocks/page.ts`: l'icona della testata della pagina, scritta nel frontmatter come `icon: fub:book`.
-- La pelle: `skin/drawers.css` righe 1362–1404; i ganci `icon-picker-title` e `icon-grid--figures` in `anatomia/drawers.ts`.
+- La pelle: `skin/drawers.css` righe 1482–1524; i ganci `icon-picker-title` e `icon-grid--figures` in `anatomia/drawers.ts`.
 - Il catalogo: i titoli dei due gruppi e il nome di ogni figura (per il lettore di schermo), in italiano e in inglese.
 - `crates/fub-abi/src/organization.rs`: il commento di `icons` dice «emoji o `fub:<nome>`»; il tipo non cambia.
 - Le pagine di `docs/`:
   - `docs/reference/on-disk-layout.md`, la riga di `.fub/workspace.json`: l'icona è un'emoji o `fub:<nome>`, e una versione di prima mostra il testo;
   - `docs/product/explorer-and-folders.md`: il selettore con le figure;
   - `docs/product/editor-blocks.md`, «La testata della pagina»: `icon: fub:book`.
-Dal prototipo: `skin/drawers.css` 1362–1404; `ui/icons.ts` 2282–2294 (senza `star`); gli stati `icone` e `icone-emoji`.
+Dal prototipo: `skin/drawers.css` 1482–1524; `ui/icons.ts` 2494–2506 (senza `star`); gli stati `icone` e `icone-emoji`.
 Casi limite:
 - `fub:` con un nome sconosciuto (scritto a mano, o da una versione futura): niente figura, e nessun errore;
 - `fub:book` aperto da una versione di Fub di prima: si vede il testo (D7);
@@ -846,25 +883,32 @@ Stato: [ ] da fare
 ## T16 · La barra in una fila e la colonna, nel kit
 
 Perché: lo standard va scritto una volta nel proprietario, il kit, prima che una barra lo adotti; così ogni editor mette le classi e toglie le sue regole, invece di ridisegnare la stessa barra.
-Tocca: `apps/client/src/theme/scrittoio/structure.css`, `apps/client/src/theme/scrittoio/skin/kit.css`, `apps/client/src/theme/scrittoio/anatomia/kit.ts`, `apps/client/bench/kit.ts`, `docs/architecture/frontend-and-ipc.md`
-Non toccare: il comportamento di `apps/client/src/kit/options-bar.ts` e `apps/client/src/kit/tool-rail.ts`; `apps/client/src/kit/ribbon/` (T20); le barre degli editor (T17–T23); `apps/client/src/editors/spatial/tools/editor/chrome/rail.ts` (K5).
+Tocca: `apps/client/src/theme/scrittoio/recipe.ts`, `apps/client/src/theme/scrittoio/profile.ts`, `apps/client/src/theme/recipe.test.ts`, `apps/client/src/theme/scrittoio/structure.css`, `apps/client/src/theme/scrittoio/skin/kit.css`, `apps/client/src/theme/scrittoio/anatomia/kit.ts`, `apps/client/bench/kit.ts`, `docs/architecture/frontend-and-ipc.md`
+Non toccare: gli altri ruoli della ricetta (nasce solo `--bar-tray`; `--sheet-2` resta com'è, perché lo usano anche i campi e la fila delle linguette); il comportamento di `apps/client/src/kit/options-bar.ts` e `apps/client/src/kit/tool-rail.ts`; `apps/client/src/kit/ribbon/` (T20); le barre degli editor (T17–T23); `apps/client/src/editors/spatial/tools/editor/chrome/rail.ts` (K5).
 Dipende da: nessuno
 Cosa fare:
-- `structure.css`: le righe 508–551 del prototipo (la forma della fila: vassoio, foglietti, pulsanti, campo, «…»), accanto alle regole di `kit-options`.
-- `skin/kit.css`: le righe 924–1075 in una sezione nuova «Barra in una fila e colonna», prima di «Garanzie». Le regole di `kit-rail` e `kit-options` che ci sono già e che il blocco rifà si tolgono, non si scavalcano.
+- Il vassoio delle barre è un ruolo facoltativo nuovo della ricetta, `--bar-tray` (l'utente, 2026-11-04: «vorrei che questo sfondo grigio fosse meno grigio, cioè che ci fosse meno stacco tra il bianco e quello sfondo. lo stesso vale per la versione scura, meno differenza di colore»):
+  - `recipe.ts`: la voce `"bar-tray"` nella tavolozza, accanto a `sheet-2`, vale `high ? sheet2 : toHex(day ? lch(0.984, 0.004, paper) : lch(0.238, 0.017, paper))`: `#f8fafc` di giorno, a metà fra la carta e `--sheet-2`, e `#1a1f27` di notte, un passo sotto `--sheet-2`; col contrasto alto resta `--sheet-2`, com'è oggi. Il nome entra nell'elenco di `OPTIONAL_ROLES` (riga 586), se no diventerebbe un ruolo obbligatorio e ogni tema `theme-2` di oggi verrebbe rifiutato. Poi `npm run theme:generate` (i fogli generati e `theme/author/`);
+  - `profile.ts`, `THEME_2_OPTIONAL_PAIRS`: `["text", "bar-tray", AA, …]`, `["muted", "bar-tray", AA, …]` e `["outline", "bar-tray", UI, …]`, come le coppie di `sheet-2`. Nel prototipo danno di giorno 15,78, 6,12 e 3,50, di notte 13,47, 6,69 e 3,88;
+  - `recipe.test.ts` (riga 112): il conto dei ruoli facoltativi diventa `39 + 6 + 18 + 1`; i ruoli obbligatori restano 154;
+  - la pelle lo legge sempre col ripiego, `var(--bar-tray, var(--sheet-2))`: un tema `theme-2` che non lo dichiara resta com'è oggi;
+  - `docs/`: nessuna pagina elenca i ruoli uno per uno (cercato con `grep`); il conto e l'elenco stanno in `theme/author/`, che si rigenera.
+- `structure.css`: le righe 558–601 del prototipo (la forma della fila: vassoio, foglietti, pulsanti, campo, «…»), accanto alle regole di `kit-options`.
+- `skin/kit.css`: le righe 1044–1195, già sul vassoio `--bar-tray`, in una sezione nuova «Barra in una fila e colonna», prima di «Garanzie». Le regole di `kit-rail` e `kit-options` che ci sono già e che il blocco rifà si tolgono, non si scavalcano.
 - `anatomia/kit.ts`: un pezzo nuovo `kit-bar` coi ganci `kit-bar`, `kit-bar-group`, `kit-bar-button` e `kit-bar-field`; `kit-rail` e `kit-options` tengono i loro. `anatomia.test.ts` vuole che le classi della pelle e i ganci coincidano nei due versi.
 - `bench/kit.ts`: una sezione «Barra in una fila», con una `kit-bar` di tre foglietti (un pulsante acceso, uno spento, un campo e «…» di `kit-options`) e una `kit-rail` di `createToolRail` con due gruppi, negli stati forzati della pagina (passaggio, pressione, fuoco).
 - `docs/architecture/frontend-and-ipc.md`, il paragrafo su `kit/` (intorno alla riga 226): le tre forme e dove vivono, come in «Lo standard delle barre» qui sopra.
-Dal prototipo: `structure.css` 508–551; `skin/kit.css` 924–1075; lo stato `barra` (la barra di formato vestita di `kit-bar`) e `disegno` (la colonna).
+Dal prototipo: `structure.css` 558–601; `skin/kit.css` 1044–1195; `recipe.ts` 2388–2415 (solo `--bar-tray`); lo stato `barra` (la barra di formato vestita di `kit-bar`) e `disegno` (la colonna).
 Casi limite:
 - la colonna del disegno usa già `kit-rail` (`chrome/rail.ts`): cambia aspetto qui, e la foto di `draw-open` va guardata;
 - pulsante acceso e spento insieme;
 - il campo nella fila, col fuoco;
 - le tre densità dell'aspetto e la compattezza (`gate.test.ts` le prova tutte);
-- il contrasto alto e `forced-colors`;
+- il contrasto alto e `forced-colors`; col contrasto alto `--bar-tray` è `--sheet-2`, com'è oggi;
+- un tema `theme-2` che non dichiara `--bar-tray`: il ripiego `--sheet-2`;
 - la bolla della selezione resta una bolla, senza vassoio.
 Fatto quando:
-- `anatomia.test.ts`, `gate.test.ts` e `npm run theme:verify` passano;
+- `anatomia.test.ts`, `gate.test.ts`, `recipe.test.ts` e `npm run theme:verify` passano, e `npm run bench:a11y` resta verde (il contrasto sul vassoio nuovo);
 - la foto di `kit` e `kit-focus`, in giorno e notte, mostra la sezione nuova, con la fila uguale alla barra di `?stato=barra`;
 - quella di `draw-open` ha la colonna come `?stato=disegno`;
 - le altre scene non cambiano, perché nessun altro DOM ha ancora le classi.
@@ -899,7 +943,7 @@ Cosa fare:
 - `docs/`:
   - `frontend-and-ipc.md`: `kit/toolbar-keys.ts`;
   - `editor-surfaces.md` (intorno alla riga 164) ed `editor-and-preview.md` (intorno alla riga 442): la barra di formato veste il kit.
-Dal prototipo: `structure.css` 508–551 e `skin/kit.css` 924–1075, entrati con T16; gli stati `barra`, `barra-700` e `tel-tastiera`.
+Dal prototipo: `structure.css` 558–601 e `skin/kit.css` 1044–1195, entrati con T16; gli stati `barra`, `barra-700` e `tel-tastiera`.
 Casi limite:
 - una barra con un gruppo solo;
 - tutti i pulsanti spenti (sola lettura): la barra non c'è, come oggi;
@@ -935,9 +979,9 @@ Cosa fare:
   - le frecce sono quelle di `rovingToolbar` (T17): un solo punto di Tab.
 - `media-surface.ts` dà alla banda la voce `{ id: "page" }` con «Pagina N di M» (`SurfaceStatus`, `registry.ts`), aggiornata quando la pagina cambia. Il `p[role=status]` del visore resta per il caricamento e gli errori, e per il lettore di schermo.
 - Il catalogo, in italiano e in inglese: `media.pdf.toolbar` («Strumenti del PDF»), `media.pdf.more` («Altre azioni del PDF»), `media.pdf.previous` e `media.pdf.next` («Pagina precedente» e «Pagina successiva»: oggi i due pulsanti dicono solo «‹» e «›» e non hanno un nome). Le altre parole ci sono già (`media.pdf.*`, `media.open_external`).
-- La pelle: `skin/media.css` righe 1726–1771, comprese le diapositive (`.slide-status`, «3 / 12» in tondo); si tolgono le regole di `.media-pdf-toolbar` e dei suoi figli (righe 384–456 di `main`: la pillola sospesa che va a capo). I ganci `media-pdf-group` e `media-pdf-search` entrano in `anatomia/media.ts`.
+- La pelle: `skin/media.css` righe 1860–1905, comprese le diapositive (`.slide-status`, «3 / 12» in tondo); si tolgono le regole di `.media-pdf-toolbar` e dei suoi figli (righe 384–456 di `main`: la pillola sospesa che va a capo). I ganci `media-pdf-group` e `media-pdf-search` entrano in `anatomia/media.ts`.
 - `docs/product/pdf-annotations.md`: la barra, «…» e la pagina nella banda.
-Dal prototipo: `skin/media.css` 1726–1771; le figure della sonda `pdfBarra`; gli stati `pdf` e `pdf-700`.
+Dal prototipo: `skin/media.css` 1860–1905; le figure della sonda `pdfBarra`; gli stati `pdf` e `pdf-700`.
 Casi limite:
 - un PDF di una pagina: precedente e successiva spente;
 - un PDF senza sommario: niente elenco;
@@ -963,10 +1007,10 @@ Tocca: `apps/client/src/theme/scrittoio/skin/media.css`, `apps/client/src/theme/
 Non toccare: il DOM e il comportamento di `apps/client/src/editors/craft/consent.ts` e di `apps/client/src/editors/craft/surface.ts` (arrivano con N7); le parole della domanda; la scelta salvata.
 Dipende da: T18 (aspetta N7 in `main`)
 Cosa fare:
-- `skin/media.css`: le righe 1773–1830 del prototipo (`craft-card`, `craft-empty`, `craft-empty-name`, `craft-ask`, `craft-ask-answer`, `craft-render`), al posto delle regole di N7 che rifanno, compreso il bordo tratteggiato.
+- `skin/media.css`: le righe 1907–1964 del prototipo (`craft-card`, `craft-empty`, `craft-empty-name`, `craft-ask`, `craft-ask-answer`, `craft-render`), al posto delle regole di N7 che rifanno, compreso il bordo tratteggiato.
 - `anatomia/media.ts`: `craft-ask` e `craft-ask-answer` entrano nei ganci di `craft-card`, se N7 non li ha già messi.
 - `docs/`: nessuna pagina descrive l'aspetto della scheda.
-Dal prototipo: `skin/media.css` 1773–1830; gli stati `craft` e `craft-700`.
+Dal prototipo: `skin/media.css` 1907–1964; gli stati `craft` e `craft-700`.
 Casi limite: un nome di file lunghissimo; la domanda e la sua risposta; «Preparo l'anteprima…»; l'anteprima fallita; le anteprime spente (`.craft-off`, col link alle impostazioni); il file oltre il peso massimo; il file che non si legge; il contrasto alto e `forced-colors` (il bordo torna); due schede Craft affiancate.
 Fatto quando:
 - `anatomia.test.ts` passa;
@@ -987,12 +1031,17 @@ Cosa fare:
   - ogni pezzo prende `kit-ribbon-<parte>` accanto a `<prefisso>-<parte>`, nello stesso punto in cui oggi nasce la classe (`cls`, intorno alla riga 207);
   - dove `cls` serve anche a cercare un elemento, si cerca ancora con la classe del prefisso.
 - `ribbon.test.ts`: ogni pezzo porta le due classi, coi prefissi `grid-ribbon` e `rich-ribbon`.
-- `structure.css`: le righe 227–506 del prototipo; si tolgono le regole `.grid-ribbon-<parte>` che il blocco rifà, e restano quelle delle parti solo dei fogli.
-- `skin/kit.css`: le righe 565–922 in una sezione «Barra a schede»; in `skin/editors.css` (la sezione «Il foglio di calcolo») si tolgono le regole `.grid-ribbon-<parte>` che il blocco rifà.
+- `structure.css`: le righe 277–556 del prototipo; si tolgono le regole `.grid-ribbon-<parte>` che il blocco rifà, e restano quelle delle parti solo dei fogli.
+- `skin/kit.css`: le righe 615–972 in una sezione «Barra a schede»; in `skin/editors.css` (la sezione «Il foglio di calcolo») si tolgono le regole `.grid-ribbon-<parte>` che il blocco rifà.
+- Nella stessa sezione, il vassoio più chiaro (righe 974–1000) e le sezioni come le schede dell'ispettore (righe 1002–1042), scelte dell'utente del 2026-11-04 (il vassoio: «meno stacco tra il bianco e quello sfondo», anche di notte; le sezioni: «vorrei anche che il selettore di tab dell'editor docx fosse più simile al selettore di collegamenti, struttura ecc. della sidebar»):
+  - si fondono nelle regole ricavate sopra: una regola per selettore e un valore per proprietà, nessuna regola che ne scavalca un'altra dello stesso file;
+  - il vassoio è `var(--bar-tray, var(--sheet-2))`, il ruolo di T16 (senza il ruolo resta quello di oggi); di notte i foglietti sono `--bg-elev` col filo di luce in cima e un filo attorno, e quello aperto sul posto sale di un gradino; col contrasto alto resta il bordo pieno di oggi;
+  - le sezioni sono il pozzetto delle schede dell'ispettore: segmenti alti 26, il nome in `--text-base` (in `--text-sm` quando il foglio è sotto i 900 px), in grafite; la scelta è un foglietto `--bg-elev` col nome in inchiostro, che scorre (`.kit-tab-indicator`), e il peso non cambia, così la fila non si allarga; le sezioni contestuali tengono l'accento; di giorno il pozzetto è il velo di oggi, di notte `--bg-hover`;
+  - i ruoli (`tablist`, `tab`), le frecce e il fuoco della fila non cambiano: è solo pelle, comune ai fogli e ai documenti.
 - I ganci: i `kit-ribbon-*` in un pezzo nuovo di `anatomia/kit.ts`; quelli `grid-ribbon-*` che non hanno più regole escono da `anatomia/editors.ts`.
 - Il blocco del prototipo è ricavato dalle regole `.grid-ribbon-*` di `main` a `3f4f3731`, con lo stesso testo e la stessa specificità. Se K3 o griglia le hanno cambiate, il blocco si rifà dalle regole nuove con lo stesso cambio di nome, e il report dice che cosa è cambiato.
 - `docs/architecture/grid-surface.md`: la forma della barra sta nel kit, e ai fogli restano le loro parti.
-Dal prototipo: `structure.css` 227–506; `skin/kit.css` 565–922; gli stati `foglio`, `caricamento`, `errore`, `molti` e `tel-foglio`.
+Dal prototipo: `structure.css` 277–556; `skin/kit.css` 615–972, 974–1000 e 1002–1042; gli stati `foglio`, `caricamento`, `errore`, `molti` e `tel-foglio`, e `documento` e `documento-700` per il vassoio e le sezioni; le caselle «Il vassoio delle barre» e «Le sezioni della barra» di «Rimetti com'era», per il prima e il dopo.
 Casi limite:
 - la barra del documento prende subito le regole `kit-ribbon-*`: la foto di `document-docx` va guardata anche qui, e le differenze che restano sono di T21;
 - i gruppi raccolti a 700 px, aperti sul posto;
@@ -1000,10 +1049,13 @@ Casi limite:
 - i suggerimenti dei tasti (`keytip`);
 - il telefono (`mobile-grid-ribbon`);
 - la barra chiusa e aperta;
-- l'ordine della cascata: le regole del kit vengono prima di quelle dei fogli, così una regola sola dei fogli vince ancora.
+- l'ordine della cascata: le regole del kit vengono prima di quelle dei fogli, così una regola sola dei fogli vince ancora;
+- le sezioni a 700 px: ci stanno tutte, quella della selezione compresa;
+- `forced-colors`: la sezione scelta resta col contorno del kit (`.kit-tab[aria-selected]`).
 Fatto quando:
-- `ribbon.test.ts`, `anatomia.test.ts` e `npm run theme:verify` passano;
-- la foto di `grid-workbook`, `grid-result-loading`, `grid-result-error`, `grid-result-many` e `mobile-grid-ribbon`, in giorno e notte, a 1280 e a 700, sta accanto agli stati `foglio`, `caricamento`, `errore`, `molti` e `tel-foglio`, e la barra dei fogli non perde niente rispetto a oggi.
+- `ribbon.test.ts`, `anatomia.test.ts` e `npm run theme:verify` passano, e `npm run bench:a11y` resta verde (il contrasto delle sezioni e del vassoio);
+- la foto di `grid-workbook`, `grid-result-loading`, `grid-result-error`, `grid-result-many` e `mobile-grid-ribbon`, in giorno e notte, a 1280 e a 700, sta accanto agli stati `foglio`, `caricamento`, `errore`, `molti` e `tel-foglio`, e la barra dei fogli non perde niente rispetto a oggi: il vassoio è quello più chiaro e la sezione scelta è il foglietto, come nel prototipo;
+- la foto di `document-docx` e `document-docx-narrow` si guarda: le differenze che restano sul vassoio e sulle sezioni del documento sono di T21.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare
 
@@ -1017,20 +1069,23 @@ Cosa fare:
 - `rich/ribbon.ts` passa `openInPlace: true` al kit, come fa la barra dei fogli in K3; il riquadro sospeso di oggi non si apre più per un gruppo raccolto.
 - `ribbon.test.ts`: a 700 px un gruppo raccolto si apre sul posto, Esc lo chiude e il fuoco torna al suo bottone.
 - `skin/editors.css` (la sezione dei documenti di videoscrittura) e `structure.css`: si tolgono le regole `.rich-ribbon-<parte>` che `kit-ribbon-*` rifà; restano la galleria degli stili, i campioni e le parti del documento.
-- `structure.css`: la galleria degli stili, righe 553–561 del prototipo (`rich-ribbon-styles`, `rich-ribbon-style`).
+  - Fra queste ci sono quelle che oggi danno al documento il vassoio e le sezioni (`skin/editors.css` 687–726 di `main`: `.rich-ribbon-tabs.kit-tabs`, le sue `.kit-tab`, la contestuale e `.rich-ribbon-toolbar`, in comune con `.grid-ribbon-*`, che T20 toglie). Tolte quelle, il documento prende il vassoio più chiaro e le sezioni come l'ispettore di T20, che l'utente ha chiesto proprio sul docx.
+- `structure.css`: la galleria degli stili, righe 603–611 del prototipo (`rich-ribbon-styles`, `rich-ribbon-style`).
 - I ganci `rich-ribbon-*` che non hanno più regole escono da `anatomia/editors.ts`.
 - `docs/product/word-documents.md` e `docs/architecture/rich-surface-and-proofing.md`: la barra veste il kit, e il gruppo raccolto si apre sul posto.
-Dal prototipo: `structure.css` 553–561; gli stati `documento`, `documento-700`, `sola-lettura` e `tel-doc`.
+Dal prototipo: `structure.css` 603–611; gli stati `documento`, `documento-700`, `sola-lettura` e `tel-doc`.
 Casi limite:
 - il documento in sola lettura (`document-readonly`): la barra resta com'è oggi, cambia solo la veste;
 - la scheda contestuale della tabella (`tabella/ribbon.ts`);
 - un gruppo raccolto aperto quando la finestra si allarga: fa come nei fogli con K3;
 - la galleria degli stili con un nome lungo;
 - la modalità Lettura, che nasconde la barra;
+- le sezioni contestuali della tabella tengono l'accento, come nei fogli;
 - il telefono (`mobile-document`, stato `tel-doc`): la barra raccolta non copre il tondo della modalità (T3), e il pulsante dei commenti gli sta a sinistra, sulla stessa riga (`mobile.css`, la regola di `.rich-side-open` di T3).
 Fatto quando:
 - `ribbon.test.ts` e `anatomia.test.ts` passano;
-- la foto di `document-docx`, `document-docx-narrow`, `document-readonly` e `mobile-document`, in giorno e notte, sta accanto agli stati `documento`, `documento-700`, `sola-lettura` e `tel-doc`.
+- la foto di `document-docx`, `document-docx-narrow`, `document-readonly` e `mobile-document`, in giorno e notte, sta accanto agli stati `documento`, `documento-700`, `sola-lettura` e `tel-doc`: il vassoio più chiaro e la sezione scelta come le schede dell'ispettore, uguali a quelle dei fogli;
+- `npm run bench:a11y` resta verde.
 Prova: scripts/check.sh --rapido
 Stato: [ ] da fare
 
@@ -1089,7 +1144,7 @@ Stato: [ ] da fare
 Perché: ciò che il piano cambia deve restare fotografato, compreso ciò che oggi non ha una scena (il menu delle modalità, la barra di formato sul computer, le figure, la nota a 700 px).
 Tocca: `apps/client/bench/scene.mjs`, `apps/client/bench/a11y.mjs`, `apps/client/bench/scene.test.ts`, `apps/client/bench/baseline/` (tutte le PNG, con `git rm`), `docs/development/testing-and-quality.md`
 Non toccare: le scene degli altri piani; `apps/client/bench/photos.mjs`; `.github/workflows/ci.yml`.
-Dipende da: T3–T23
+Dipende da: T3–T23, T27
 Cosa fare:
 - Le scene nuove in `scene.mjs`, ognuna con titolo e `prepare`:
   - `banda-modalita`: la nota col menu delle modalità aperto dalla banda (stato `nota`);
@@ -1159,6 +1214,48 @@ Fatto quando:
 Prova: scripts/check.sh --rapido, poi `scripts/check.sh`
 Stato: [ ] da fare
 
+## T27 · L'ombra del foglio
+
+Perché: l'utente, 2026-11-04: «Riguardo lo scrittoio… aggiustare l'ombra relativa allo spazio di lavoro, perché non è granché. In questo momento è praticamente un rettangolo perfetto, la parte bassa dell'ombra, e non si vede l'ombra laterale». L'ombra la taglia `#panes`, che ha `overflow: hidden`: ai fianchi finisce a filo del foglio, sotto dopo 8 px, e resta un rettangolo. Il foglio deve sembrare appoggiato sulla scrivania, con un'ombra morbida a strati che si vede ai fianchi, in giorno e notte.
+Tocca: `apps/client/src/theme/scrittoio/recipe.ts`, `apps/client/src/theme/recipe.test.ts`, `apps/client/src/theme/scrittoio/structure.css`, `apps/client/src/theme/scrittoio/skin/sheets.css`, `apps/client/src/theme/scrittoio/skin/motion.css`, `apps/client/src/shells/scrittoio/mobile/mobile.css`
+Non toccare: `overflow: hidden` di `#panes`, che resta; `--sheet-gap` e la posizione dei fogli; gli altri livelli d'ombra (`--shadow-1`…`--shadow-4`), che usano menu, cassetti e foglietti; `state/shell-geometry.ts` e i divisori; `--bar-tray` (T16).
+Dipende da: T5, T6, T17 (dopo di loro su `structure.css`, `skin/sheets.css` e `mobile.css`)
+Cosa fare:
+- `structure.css`, `#panes` (righe 589–607 di `main`): la scrivania si allarga di `--sheet-reach` (20 px) verso i vicini che stanno dentro la finestra (il cassetto o il binario a sinistra, la banda sotto, l'ispettore agganciato a destra) con un margine negativo, e restituisce la stessa misura in padding: i fogli restano dove sono, e l'ombra ha spazio per sfumare.
+  - Verso il bordo della finestra non si allarga mai, perché a destra e sotto l'eccedenza renderebbe `#app` scorrevole: a destra solo con l'ispettore agganciato, sotto niente quando la banda è spenta (`#app[data-status-off]`).
+  - La fascia in più non prende i clic: `pointer-events: none` su `#panes` e `auto` sui suoi figli, così il cassetto, l'ispettore, la banda e i divisori sotto l'ombra restano vivi.
+  - Niente fascia nel benvenuto (`#app[data-welcome]`), che non ha fogli, e nella modalità concentrata (`#app[data-focus-mode]`), che non ha vicini.
+  - `.pane` prende `z-index: var(--z-sheet)`, così la sua ombra cade sull'ispettore, che viene dopo nel DOM e la coprirebbe; divisori, cassetti e menu restano sopra.
+  - Le regole si fondono in quelle di `#panes` che ci sono (la riga di base, il padding senza cassetto, quello con l'ispettore agganciato): nessuna regola nuova in coda che scavalca la vecchia. Le regole di `#panes` del benvenuto e della concentrazione (righe 1202, 1206 e 1390 di `main`) restano e si guardano con la fascia.
+- `recipe.ts`: due ruoli facoltativi nuovi nella tavolozza, accanto a `shadow-1`…`shadow-4`, e nell'elenco di `OPTIONAL_ROLES`:
+  - `shadow-sheet`, il foglio a riposo: tre strati, il contatto, una penombra corta e una lunga, e le due larghe con lo spread negativo, così l'ombra scende sotto il foglio e si vede ai fianchi senza salire sopra la linguetta. Di giorno l'inchiostro di `shadow()`, `0 1px 2px` all'8 %, `0 2px 8px -1px` all'8 % e `0 8px 16px -6px` al 14 %; di notte il nero, al 40, 45 e 60 %, perché la scrivania è già quasi nera;
+  - `shadow-sheet-focus`, il foglio a fuoco: lo stesso disegno un passo più fondo, `0 1px 3px`, `0 3px 10px -1px` e `0 10px 20px -6px`, di giorno al 9, 10 e 18 %, di notte al 45, 50 e 66 %;
+  - col contrasto alto gli stessi valori; niente filo di luce, che sotto il 10 % non si vede e sopra è un bordo che si interrompe alla linguetta;
+  - poi `npm run theme:generate` (i fogli generati e `theme/author/`).
+- `recipe.test.ts` (riga 112): il conto dei ruoli facoltativi diventa `39 + 6 + 18 + 3`, con `--bar-tray` di T16; i ruoli obbligatori restano 154.
+- `skin/sheets.css` (righe 10–17 di `main`): `.pane::before` prende `var(--shadow-sheet, var(--shadow-1))` e `.pane.focus::before` `var(--shadow-sheet-focus, var(--shadow-2))`, così un tema che non li dichiara tiene le ombre di oggi.
+- `skin/motion.css` (righe 28–32 di `main`): la sagoma del foglio che si chiude (`.sheet-ghost::before`) prende l'ombra a riposo, `var(--shadow-sheet, var(--shadow-1))`.
+- `mobile.css`: in piedi (sotto i 600 px) niente fascia e niente ombra, perché la carta va da un bordo all'altro (T5) e non c'è scrivania dove cadere; sdraiato (sotto i 500 px di altezza) niente fascia in basso, perché la banda non c'è e sotto c'è il bordo dello schermo: l'ombra si vede ai fianchi.
+- `docs/`: nessuna pagina descrive l'ombra del foglio né elenca i ruoli uno per uno (cercato con `grep`); il conto e l'elenco stanno in `theme/author/`, che si rigenera.
+Dal prototipo: `structure.css` 228–275; `skin/sheets.css` 1676–1688; `mobile.css` 2357–2375; `recipe.ts` 2388–2415 (solo le due ombre); gli stati `nota`, `documento`, `foglio`, `vuoto`, `molti`, `tel-nota` e `tel-sdraiato`; la casella «L'ombra del foglio» di «Rimetti com'era», per il prima e il dopo.
+Casi limite:
+- due fogli affiancati (`nota-tre-modi`): le ombre si incontrano nello spazio di 8 px, e la coda più lunga passa di circa 2 px sotto il vicino;
+- la finestra stretta (`compact`), il cassetto nascosto, il solo binario;
+- l'ispettore sospeso e l'ispettore chiuso;
+- i clic e il trascinamento dei divisori dentro la fascia arrivano al cassetto, all'ispettore e alla banda;
+- nessuno scorrimento in più: `scrollWidth` e `scrollHeight` di `#app` e di `#layout` restano quelli di oggi;
+- il benvenuto, la concentrazione, la banda spenta;
+- la linguetta accesa, che non ha rilievo: l'ombra non le sale sopra;
+- la sagoma del foglio che si chiude e la linguetta trascinata (`tab-drop`);
+- il telefono in piedi e sdraiato;
+- il contrasto alto.
+Fatto quando:
+- `npx vitest run src/theme/recipe.test.ts src/theme/scrittoio src/shells/scrittoio/stage-motion.test.ts src/shells/scrittoio/sheets/tab-drop.test.ts` e `npm run theme:verify` passano;
+- le foto delle scene della scrivania, `live-01-panoramica`, `tabs`, `desk`, `empty`, `nota-tre-modi`, `concentration`, `mobile-startup` e `mobile-landscape`, in giorno e notte, stanno accanto a `?stato=nota`, `?stato=documento`, `?stato=vuoto`, `?stato=tel-nota` e `?stato=tel-sdraiato`: l'ombra si vede ai fianchi e sfuma sotto, e i `getBoundingClientRect()` dei `.pane` sono quelli di prima del task; le baseline di queste scene le rifà T25 dal runner;
+- una sonda del banco clicca nei 20 px accanto al foglio e arriva al cassetto, all'ispettore e alla banda, e trascina il divisore del cassetto.
+Prova: scripts/check.sh --rapido
+Stato: [ ] da fare
+
 ## Non verificato da qui
 
 - Nel prototipo l'ispettore e la banda degli stati `documento`, `disegno` e `pdf` mostrano ancora il contenuto di Benvenuto, perché le scene di partenza lo hanno: la foto vera dirà il contenuto giusto.
@@ -1174,3 +1271,7 @@ Stato: [ ] da fare
 - Telefono: se ogni voce del menu del marchio ha un'altra strada in piedi lo controlla T7 sul codice; il prototipo mostra solo la barra senza il marchio.
 - Telefono: il tondo della modalità può coprire l'ultima parola di una riga lunga a riposo; nella foto di `mobile-startup` si vede se il margine basta (T3).
 - Telefono: la barra a schede del documento raccolta (T21) e la barra in una fila sopra la tastiera (T17) sono fotografate nel prototipo con la pelle nuova, non col DOM vero.
+- L'ombra fra due fogli affiancati: nel prototipo la coda più lunga passa di circa 2 px sotto il vicino; la foto di `nota-tre-modi` dirà se si vede (T27).
+- L'ombra del foglio nella WebView vera: il prototipo e il banco la disegnano in Chromium; WebKitGTK, Windows e macOS si vedono solo in CI e a mano (T26).
+- Il contrasto alto dei ruoli nuovi: il prototipo lo mostra coi suoi gettoni; i fogli veri del contrasto alto li provano `recipe.test.ts` e il banco dell'accessibilità (T16, T27).
+- Il vassoio e le sezioni del documento: nel prototipo hanno già la pelle nuova; nel codice arrivano solo con T21, quando escono le regole `.rich-ribbon-*`.

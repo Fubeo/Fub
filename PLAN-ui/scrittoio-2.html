@@ -12,8 +12,10 @@
   destinazione (in ordine: structure.css, la pelle secondo skin/order.ts,
   mobile.css). Il DOM nuovo (la banda, la testata, la riga dei dati…) è già
   nella cattura: è quello che i task costruiscono. Il computer è approvato
-  (2026-11-04); il telefono è in revisione. La lavagna segue il piano N6
-  (lavagna-schede.html): qui non ha stati suoi.
+  (2026-11-04); il telefono è approvato per ora (2026-11-04), e un piano
+  successivo lo rifà. «Com'era» rimette sopra tutto le regole di oggi
+  dell'ombra del foglio, del vassoio e delle sezioni, per il confronto. La
+  lavagna segue il piano N6 (lavagna-schede.html): qui non ha stati suoi.
 -->
 <style>
 /* La pagina del prototipo, fuori dallo schermo. */
@@ -222,6 +224,54 @@ code { font-size: 12.5px; }
   #status-band [data-surface-item="language"] {
     display: none;
   }
+}
+/* ── L'ombra del foglio esce dalla scrivania ─────────────────────────────────
+   `#panes` taglia ciò che esce (`overflow: hidden`): l'ombra della carta finiva
+   contro il suo bordo, a sinistra e a destra a filo del foglio e sotto dopo
+   8 px, ed era un rettangolo. La scrivania si allarga di `--sheet-reach` verso
+   i vicini che stanno dentro la finestra (il cassetto o il binario a sinistra,
+   l'ispettore agganciato a destra, la banda sotto) e restituisce la stessa
+   misura in padding: i fogli restano dove sono, la scatola esterna non cambia
+   (il flex non va a capo in modo diverso) e l'ombra ha spazio per sfumare.
+   Verso il bordo della finestra non si allarga mai: l'eccedenza positiva
+   renderebbe `#app` scorrevole da programma. La fascia in più non prende i
+   clic (`pointer-events`): il cassetto, l'ispettore e la banda sotto l'ombra
+   restano vivi. */
+#panes {
+  --sheet-reach: 20px;
+  --reach-l: var(--sheet-reach);
+  --reach-r: 0px;
+  --reach-b: var(--sheet-reach);
+  height: calc(100% + var(--reach-b));
+  margin: 0 calc(-1 * var(--reach-r)) calc(-1 * var(--reach-b)) calc(-1 * var(--reach-l));
+  padding: 0 calc(var(--sheet-gap) + var(--reach-r)) calc(var(--sheet-gap) + var(--reach-b)) var(--reach-l);
+  pointer-events: none;
+}
+#panes > * {
+  pointer-events: auto;
+}
+#layout:not(:has(> #sidebar:not([hidden]))) > #panes,
+#layout.layout-compact > #panes {
+  padding-left: calc(var(--sheet-gap) + var(--reach-l));
+}
+#layout:has(> #right-pane:not([hidden])):not(.layout-compact):not(.layout-inspector-overlay) > #panes {
+  --reach-r: var(--sheet-reach);
+  padding-right: var(--reach-r);
+}
+/* Il benvenuto non ha fogli, la modalità concentrata non ha vicini: niente
+   fascia. Senza la banda di stato, sotto c'è il bordo della finestra. */
+#app[data-welcome] #panes,
+#app[data-focus-mode] #panes {
+  --sheet-reach: 0px;
+}
+#app[data-status-off] #panes {
+  --reach-b: 0px;
+}
+/* Il foglio sta sopra i vicini, perché la sua ombra cada su di loro e non
+   sotto: l'ispettore viene dopo nel DOM e la coprirebbe. Divisori (2),
+   cassetti e menu (40 e oltre) restano sopra. */
+.pane {
+  z-index: var(--z-sheet);
 }
 
 /* ── La barra degli strumenti di serie: la forma ───────────────────────────
@@ -921,6 +971,76 @@ code { font-size: 12.5px; }
   gap: var(--space-1);
 }
 
+/* ── Il vassoio più chiaro ───────────────────────────────────────────────────
+   Il vassoio dei comandi si avvicina ai foglietti: di giorno sta a metà fra
+   `--sheet-2` e la carta, di notte un passo sotto `--sheet-2`. È un ruolo
+   suo (`--bar-tray`), perché `--sheet-2` lo usano anche i campi e la fila
+   delle linguette; la barra in una fila e la colonna lo prendono anche loro
+   (più sotto), così i vassoi restano uno. I foglietti si staccano ancora: di
+   giorno col filo e l'ombra di contatto di sempre, di notte con la carta
+   alzata (`--bg-elev`), il filo di luce in cima e un filo attorno; la carta
+   schiarita verso il testo resta solo a quello aperto sul posto, che sale
+   ancora di un gradino. Col contrasto alto il filo di notte
+   si ferma e resta il bordo pieno attorno a ogni foglietto, come oggi; la
+   carta è quella alzata, come nelle altre due barre. */
+.kit-ribbon-toolbar {
+  background: var(--bar-tray, var(--sheet-2));
+}
+:root[data-theme="dark"] .kit-ribbon-group {
+  background: var(--bg-elev);
+}
+:root[data-theme="dark"] .kit-ribbon-group[data-open="true"] {
+  background: color-mix(in oklab, var(--bg-elev) 95%, var(--text));
+}
+:root[data-theme="dark"]:not([data-contrast="high"]) .kit-ribbon-group {
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-hover);
+}
+:root[data-theme="dark"]:not([data-contrast="high"]) .kit-ribbon-group[data-open="true"] {
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-active);
+}
+
+/* ── Le sezioni come le schede dell'ispettore ────────────────────────────────
+   La fila delle sezioni è il pozzetto delle schede dell'ispettore e degli
+   spazi del cassetto: segmenti alti 26, il nome in grafite, la scelta è un
+   foglietto di carta alzata col nome in inchiostro, che scorre. Di giorno il
+   pozzetto resta il velo sulla carta (il `--bg-hover` della scrivania, sulla
+   carta, sarebbe un grigio pieno); di notte è `--bg-hover`, un incavo, perché
+   un velo chiaro avrebbe il tono del foglietto. Il foglietto ha l'ombra di
+   contatto dei foglietti del vassoio e non `--shadow-1`: la fila scorre e
+   taglierebbe un alone lungo. Le sezioni per la selezione tengono l'accento e
+   il punto. Il peso non cambia con la scelta: la fila non si allarga. In
+   colori forzati resta il contorno del kit (`.kit-tab[aria-selected]`). */
+.kit-ribbon-tabs .kit-tab {
+  min-height: 26px;
+  font-size: var(--text-base);
+}
+.kit-ribbon-tabs .kit-tab:not([aria-selected="true"]):hover {
+  background: var(--overlay-hover);
+}
+.kit-ribbon-tabs .kit-tab[aria-selected="true"] {
+  color: var(--text);
+}
+.kit-ribbon-tabs .kit-ribbon-contextual[aria-selected="true"] {
+  color: var(--accent);
+}
+.kit-ribbon-tabs > .kit-tab-indicator {
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--overlay-hover), 0 1px 2px var(--overlay-active);
+}
+:root[data-theme="dark"] .kit-ribbon-tabs.kit-tabs {
+  background: var(--bg-hover);
+}
+:root[data-theme="dark"] .kit-ribbon-tabs > .kit-tab-indicator {
+  box-shadow: inset 0 1px 0 var(--overlay-hover);
+}
+/* Nel foglio stretto il nome torna di un passo più piccolo: a 700 px le
+   sezioni ci stanno tutte, quella della selezione compresa. */
+@container sheet (max-width: 900px) {
+  .kit-ribbon-tabs .kit-tab {
+    font-size: var(--text-sm);
+  }
+}
+
 /* ── La barra in una fila: la pelle (`kit-bar`) ──────────────────────────────
    Gli stessi valori della barra a schede qui sopra (il vassoio, i foglietti,
    i pulsanti), scritti una volta sola sulle classi del kit: il kit non
@@ -933,7 +1053,7 @@ code { font-size: 12.5px; }
   padding: var(--space-2);
   border: 0;
   border-radius: var(--radius-sheet);
-  background: var(--sheet-2);
+  background: var(--bar-tray, var(--sheet-2));
   color: var(--muted);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
@@ -953,8 +1073,8 @@ code { font-size: 12.5px; }
   box-shadow: 0 0 0 1px var(--overlay-hover), 0 1px 2px var(--overlay-active);
 }
 :root[data-theme="dark"] .kit-bar .kit-bar-group {
-  background: color-mix(in oklab, var(--bg-elev) 95%, var(--text));
-  box-shadow: inset 0 1px 0 var(--overlay-active);
+  background: var(--bg-elev);
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-hover);
 }
 :root[data-contrast="high"] .kit-bar .kit-bar-group {
   box-shadow: 0 0 0 1px var(--border);
@@ -1052,7 +1172,7 @@ code { font-size: 12.5px; }
 .kit-rail {
   margin: var(--space-2) 0 var(--space-2) var(--space-4);
   border-radius: var(--radius-sheet);
-  background: var(--sheet-2);
+  background: var(--bar-tray, var(--sheet-2));
 }
 .kit-rail-group {
   padding: var(--space-1);
@@ -1061,8 +1181,8 @@ code { font-size: 12.5px; }
   box-shadow: 0 0 0 1px var(--overlay-hover), 0 1px 2px var(--overlay-active);
 }
 :root[data-theme="dark"] .kit-rail-group {
-  background: color-mix(in oklab, var(--bg-elev) 95%, var(--text));
-  box-shadow: inset 0 1px 0 var(--overlay-active);
+  background: var(--bg-elev);
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-hover);
 }
 :root[data-contrast="high"] .kit-rail-group {
   box-shadow: 0 0 0 1px var(--border);
@@ -1551,6 +1671,20 @@ code { font-size: 12.5px; }
   font-size: var(--text-sm);
   letter-spacing: 0;
   text-transform: none;
+}
+
+/* ── L'ombra del foglio ───────────────────────────────────────────────────────
+   Un foglio appoggiato sulla scrivania: un contatto stretto, una penombra
+   corta ai fianchi e una lunga sotto. I due strati larghi hanno lo spread
+   negativo, così l'ombra scende e non sale sopra la carta, dove la linguetta
+   accesa la attraversa senza rilievo. Col fuoco lo stesso disegno, un passo
+   più fondo. I valori sono ruoli della ricetta; un tema che non li ha tiene
+   le ombre di sempre. */
+.pane::before {
+  box-shadow: var(--shadow-sheet, var(--shadow-1));
+}
+.pane.focus::before {
+  box-shadow: var(--shadow-sheet-focus, var(--shadow-2));
 }
 </style>
 <style media="not all" data-destinazione="theme/scrittoio/skin/document.css" data-posto="pelle">
@@ -2219,6 +2353,26 @@ code { font-size: 12.5px; }
     background: var(--accent-wash);
   }
 }
+
+/* ── L'ombra del foglio al telefono ─────────────────────────────────────────
+   In piedi la carta va da un bordo all'altro e tocca la barra di sotto: non
+   c'è scrivania dove l'ombra possa cadere, e non se ne disegna. Sdraiato la
+   banda di stato non c'è e sotto il foglio c'è il bordo dello schermo: la
+   scrivania non si allarga in basso, ai fianchi sì, come sul computer. */
+@media (max-width: 599px) {
+  :root[data-client-shell="mobile"] #panes {
+    --sheet-reach: 0px;
+  }
+  :root[data-client-shell="mobile"] .pane::before,
+  :root[data-client-shell="mobile"] .pane.focus::before {
+    box-shadow: none;
+  }
+}
+@media (min-width: 600px) and (max-height: 500px) {
+  :root[data-client-shell="mobile"] #panes {
+    --reach-b: 0px;
+  }
+}
 </style>
 <style media="not all" data-destinazione="theme/scrittoio/series.ts" data-posto="serie">
 /* → theme/scrittoio/series.ts: defaults.body 17 → 18 e defaults.measure
@@ -2230,39 +2384,97 @@ code { font-size: 12.5px; }
   --content-width: 58ch;
 }
 </style>
+<style media="not all" data-destinazione="theme/scrittoio/recipe.ts" data-posto="serie">
+/* → theme/scrittoio/recipe.ts: tre ruoli facoltativi nuovi (`OPTIONAL_ROLES`),
+   con questi valori nei quattro fogli generati. Non è pelle: è la ricetta, e
+   la pelle li legge con un ripiego (`var(--shadow-sheet, var(--shadow-1))`),
+   così un tema `theme-2` che non li dichiara resta com'è oggi.
+   - `--shadow-sheet`, `--shadow-sheet-focus`: l'ombra del foglio a riposo e
+     col fuoco. Tre strati, dal contatto al lontano; i due larghi hanno lo
+     spread negativo, così l'ombra scende sotto il foglio e si vede ai fianchi
+     senza salire sopra la linguetta, che di suo non ha rilievo.
+     Di giorno l'inchiostro di `shadow()`, di notte il nero, più fondo perché
+     la scrivania è già quasi nera. Niente filo di luce: a meno del 10 % ha il
+     tono della carta e non si vede, dal 10 % in su è un bordo che corre fino
+     alla linguetta e lì si interrompe.
+   - `--bar-tray`: il vassoio delle barre (a schede, in una fila, la colonna),
+     a metà fra la carta e `--sheet-2` di giorno; di notte un passo sotto
+     `--sheet-2`. Contrasto alto: lo stesso valore di `--sheet-2`, come oggi. */
+:root {
+  --shadow-sheet: 0 1px 2px rgb(24 28 44 / 8%), 0 2px 8px -1px rgb(24 28 44 / 8%), 0 8px 16px -6px rgb(24 28 44 / 14%);
+  --shadow-sheet-focus: 0 1px 3px rgb(24 28 44 / 9%), 0 3px 10px -1px rgb(24 28 44 / 10%), 0 10px 20px -6px rgb(24 28 44 / 18%);
+  --bar-tray: #f8fafc;
+}
+:root[data-theme="dark"] {
+  --shadow-sheet: 0 1px 2px rgb(0 0 0 / 40%), 0 2px 8px -1px rgb(0 0 0 / 45%), 0 8px 16px -6px rgb(0 0 0 / 60%);
+  --shadow-sheet-focus: 0 1px 3px rgb(0 0 0 / 45%), 0 3px 10px -1px rgb(0 0 0 / 50%), 0 10px 20px -6px rgb(0 0 0 / 66%);
+  --bar-tray: #1a1f27;
+}
+:root[data-contrast="high"] {
+  --bar-tray: var(--sheet-2);
+}
+</style>
 <!-- Le varianti delle scelte da decidere guardando: si montano dopo il CSS nuovo. -->
-<style media="not all" data-variante="tel-b" data-posto="telefono">
-/* → shells/scrittoio/mobile/mobile.css (variante) */
-/* La variante B: la fila di sotto c'è sempre, anche quando non si scrive, e
-   il bottone ne tiene l'ultima casella. Non si muove mai e niente galleggia
-   sul testo; costa al foglio una riga alta un dito. Mentre si scrive la barra
-   di formato sale nella stessa fila. Sdraiato resta il tondo della A: una
-   riga in più costerebbe troppo all'altezza. */
-@media (max-width: 599px) {
-  :root[data-client-shell="mobile"] .pane:has(> .pane-mode-current:not([hidden])) > [role="tabpanel"] {
-    margin-block-end: var(--touch);
-    box-shadow: 0 1px 0 var(--border);
-  }
-  :root[data-client-shell="mobile"] .pane:has(> .pane-mode-current:not([hidden])) > .format-bar {
-    margin-block-start: calc(-1 * var(--touch));
-  }
-  :root[data-client-shell="mobile"] .pane > .pane-mode-current:not([hidden]) {
-    right: 0;
-    bottom: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-  :root[data-client-shell="mobile"] .pane > .pane-mode-current:not([hidden]):hover {
-    background: var(--overlay-hover);
-  }
-  :root[data-client-shell="mobile"] .pane > .pane-mode-current[aria-expanded="true"] {
-    background: var(--accent-wash);
-  }
-  :root[data-client-shell="mobile"] .pane:has(> .pane-mode-current:not([hidden])) .rich-surface > .rich-side-open {
-    right: var(--space-6);
-  }
+<style media="not all" data-variante="prima-ombra" data-posto="prima">
+/* com'era (prima-ombra): non va nel codice */
+/* Com'era: la scrivania non si allarga e l'ombra è quella della carta. */
+#panes {
+  --sheet-reach: 0px;
+}
+.pane {
+  z-index: auto;
+}
+.pane::before {
+  box-shadow: var(--shadow-1);
+}
+.pane.focus::before {
+  box-shadow: var(--shadow-2);
+}
+</style>
+<style media="not all" data-variante="prima-vassoio" data-posto="prima">
+/* com'era (prima-vassoio): non va nel codice */
+/* Com'era: il vassoio `--sheet-2`, i foglietti di notte schiariti a mano. */
+.kit-ribbon-toolbar,
+.kit-bar,
+.kit-rail {
+  background: var(--sheet-2);
+}
+:root[data-theme="dark"]:not([data-contrast="high"]) .kit-bar .kit-bar-group,
+:root[data-theme="dark"]:not([data-contrast="high"]) .kit-rail-group {
+  background: color-mix(in oklab, var(--bg-elev) 95%, var(--text));
+  box-shadow: inset 0 1px 0 var(--overlay-active);
+}
+:root[data-theme="dark"]:not([data-contrast="high"]) .kit-ribbon-group {
+  background: color-mix(in oklab, var(--bg-elev) 95%, var(--text));
+  box-shadow: inset 0 1px 0 var(--overlay-active);
+}
+:root[data-theme="dark"]:not([data-contrast="high"]) .kit-ribbon-group[data-open="true"] {
+  background: color-mix(in oklab, var(--bg-elev) 90%, var(--text));
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-hover);
+}
+</style>
+<style media="not all" data-variante="prima-sezioni" data-posto="prima">
+/* com'era (prima-sezioni): non va nel codice */
+/* Com'era: segmenti alti 24 in corpo 12, la scelta col velo d'accento. */
+.kit-ribbon-tabs .kit-tab {
+  min-height: 24px;
+  font-size: var(--text-sm);
+}
+.kit-ribbon-tabs .kit-tab:not([aria-selected="true"]):hover {
+  background: transparent;
+}
+.kit-ribbon-tabs .kit-tab[aria-selected="true"] {
+  color: var(--accent);
+}
+.kit-ribbon-tabs > .kit-tab-indicator {
+  background: var(--accent-wash);
+  box-shadow: none;
+}
+:root[data-theme="dark"] .kit-ribbon-tabs.kit-tabs {
+  background: var(--overlay-hover);
+}
+:root[data-theme="dark"] .kit-ribbon-tabs > .kit-tab-indicator {
+  box-shadow: none;
 }
 </style>
 <!-- → ui/icons.ts: le figure nuove (testo, non eseguito). -->
@@ -2351,14 +2563,15 @@ code { font-size: 12.5px; }
 </header>
 <main>
   <section class="proto-decidere" aria-labelledby="decidere-titolo">
-    <h2 id="decidere-titolo">Da decidere guardando</h2>
-    <p>Il computer è approvato (2026-11-04: il menu col segno a destra e le scorciatoie in tasti, il titolo a 600). Il telefono è in revisione: resta una scelta, la consigliata per prima. Si vede negli stati del gruppo «Telefono».</p>
+    <h2 id="decidere-titolo">Com'era</h2>
+    <p>Il computer è approvato (2026-11-04: il menu col segno a destra e le scorciatoie in tasti, il titolo a 600). Il telefono è approvato per ora (2026-11-04), col tondo in basso a destra: un piano successivo lo rifà da capo. Le ultime tre correzioni si confrontano con com'erano: accese, lo schermo torna alle regole di oggi.</p>
     <div class="proto-scelte">
       <fieldset class="proto-scelta">
-        <legend>Telefono · Il bottone della modalità quando non si scrive</legend>
+        <legend>Rimetti com'era</legend>
         <span class="proto-seg">
-          <input type="radio" name="telefono" id="telefono-a" value="" checked><label for="telefono-a">A · un tondo in basso a destra sopra la carta; mentre si scrive chiude la fila della barra (consigliata)</label>
-          <input type="radio" name="telefono" id="telefono-b" value="tel-b"><label for="telefono-b">B · una fila fissa in fondo al foglio, il bottone nell'ultima casella; la barra di formato sale nella stessa fila</label>
+          <input type="checkbox" name="prima" id="prima-ombra" value="ombra"><label for="prima-ombra">L'ombra del foglio (T27)</label>
+          <input type="checkbox" name="prima" id="prima-vassoio" value="vassoio"><label for="prima-vassoio">Il vassoio delle barre (T16, T20)</label>
+          <input type="checkbox" name="prima" id="prima-sezioni" value="sezioni"><label for="prima-sezioni">Le sezioni della barra (T20)</label>
         </span>
       </fieldset>
     </div>
@@ -2413,6 +2626,7 @@ code { font-size: 12.5px; }
           <li><code>theme/scrittoio/skin/welcome.css</code></li>
           <li><code>shells/scrittoio/mobile/mobile.css</code></li>
           <li><code>theme/scrittoio/series.ts</code></li>
+          <li><code>theme/scrittoio/recipe.ts</code></li>
     </ul>
   </details>
 </main>
@@ -2426,7 +2640,7 @@ code { font-size: 12.5px; }
   let dati = null;
   const testi = [];
   const fontUrl = new Map();
-  const scelto = { stato: "nota", luce: "light", larghezza: "piena", fuoco: false, telefono: "" };
+  const scelto = { stato: "nota", luce: "light", larghezza: "piena", fuoco: false, prima: new Set() };
 
   const tok = (s, kind) => s.split(kind === "h" ? /(?<=>)/ : /(?<=})/);
   function testo(i) {
@@ -2485,21 +2699,23 @@ code { font-size: 12.5px; }
     // Il CSS nuovo va dove andrà nel codice: structure.css subito dopo il suo
     // foglio, la pelle (e i valori di serie) dopo la pelle, mobile.css dopo il suo.
     const nuovo = { struttura: blocco('style[data-posto="struttura"]'), pelle: blocco('style[data-posto="pelle"]:not([data-variante])'), telefono: blocco('style[data-posto="telefono"]:not([data-variante])'), serie: blocco('style[data-posto="serie"]') };
-    const varianti = [scelto.telefono].filter(Boolean).map((v) => blocco(`style[data-variante="${v}"]`)).join("\n");
+    const prima = [...scelto.prima].map((v) => blocco(`style[data-variante="prima-${v}"]`)).join("\n");
     let head = '<meta charset="utf-8">';
     let messi = { struttura: false, pelle: false, telefono: false };
     for (const [label, media, i] of cap.c) {
       head += stile(conFont(testo(i)), label).replace("<style", media ? `<style media="${media}"` : "<style");
       if (label === "src/theme/scrittoio/structure.css") (head += stile(nuovo.struttura, "nuovo:struttura")), (messi.struttura = true);
       if (label === "fub:pelle") (head += stile(nuovo.pelle, "nuovo:pelle")), (messi.pelle = true);
-      if (label === "src/shells/scrittoio/mobile/mobile.css") (head += stile(nuovo.telefono + "\n" + varianti, "nuovo:telefono")), (messi.telefono = true);
+      if (label === "src/shells/scrittoio/mobile/mobile.css") (head += stile(nuovo.telefono, "nuovo:telefono")), (messi.telefono = true);
     }
     if (!messi.struttura) head += stile(nuovo.struttura, "nuovo:struttura");
     if (!messi.pelle) head += stile(nuovo.pelle, "nuovo:pelle");
-    if (!messi.telefono) head += stile(nuovo.telefono + "\n" + varianti, "nuovo:telefono");
+    if (!messi.telefono) head += stile(nuovo.telefono, "nuovo:telefono");
     // I valori di serie del corpo e della misura vengono dopo le preferenze, come
     // farebbe series.ts cambiato (le preferenze di partenza ne derivano).
     head += stile(nuovo.serie, "nuovo:serie");
+    // «Com'era», sopra tutto.
+    if (prima) head += stile(prima, "com'era");
     return `<!doctype html><html${attr(cap.a)}><head>${head}<title>${cap.t.replace(/</g, "&lt;")}</title></head><body${attr(cap.ba)}>${testo(cap.b)}</body></html>`;
   }
   function ripristina(doc) {
@@ -2522,6 +2738,23 @@ code { font-size: 12.5px; }
     });
     scorri(doc);
     return Promise.all(tele);
+  }
+  // Il segno delle schede lo mette il kit, misurando la scheda scelta
+  // (`kit/tabs.ts`, `place`): qui lo si rimisura, perché il CSS nuovo ne
+  // cambia le misure e la cattura ha quelle di prima.
+  function segni(doc) {
+    for (const ind of doc.querySelectorAll(".kit-tab-indicator:not([hidden])")) {
+      const fila = ind.parentElement;
+      const scelta = fila.querySelector(':scope > .kit-tab[aria-selected="true"]');
+      if (!scelta) continue;
+      if (fila.getAttribute("aria-orientation") === "vertical") {
+        ind.style.top = `${scelta.offsetTop}px`;
+        ind.style.height = `${scelta.offsetHeight}px`;
+      } else {
+        ind.style.left = `${scelta.offsetLeft}px`;
+        ind.style.width = `${scelta.offsetWidth}px`;
+      }
+    }
   }
   function scorri(doc) {
     for (const el of doc.querySelectorAll("[data-proto-scroll]")) {
@@ -2567,6 +2800,7 @@ code { font-size: 12.5px; }
       const doc = frame.contentDocument;
       if (!doc) return;
       Promise.all([ripristina(doc), doc.fonts.ready]).then(() => {
+        segni(doc);
         scorri(doc);
         requestAnimationFrame(() => {
           metti_fuoco(doc);
@@ -2582,7 +2816,7 @@ code { font-size: 12.5px; }
   $("proto-stato").addEventListener("change", (e) => ((scelto.stato = e.target.value), mostra()));
   for (const r of document.querySelectorAll('input[name="luce"]')) r.addEventListener("change", (e) => ((scelto.luce = e.target.value), mostra()));
   for (const r of document.querySelectorAll('input[name="larghezza"]')) r.addEventListener("change", (e) => ((scelto.larghezza = e.target.value), mostra()));
-  for (const r of document.querySelectorAll('input[name="telefono"]')) r.addEventListener("change", (e) => ((scelto.telefono = e.target.value), mostra()));
+  for (const c of document.querySelectorAll('input[name="prima"]')) c.addEventListener("change", (e) => (e.target.checked ? scelto.prima.add(e.target.value) : scelto.prima.delete(e.target.value), mostra()));
   $("proto-fuoco").addEventListener("click", (e) => {
     scelto.fuoco = !scelto.fuoco;
     e.currentTarget.setAttribute("aria-pressed", String(scelto.fuoco));
@@ -2595,11 +2829,11 @@ code { font-size: 12.5px; }
   if (q.get("stato") && STATI.some((x) => x.id === q.get("stato"))) scelto.stato = q.get("stato");
   if (q.get("luce") === "dark") scelto.luce = "dark";
   if (q.get("larghezza") === "700") scelto.larghezza = "700";
-  if (q.get("telefono") === "tel-b") scelto.telefono = "tel-b";
+  for (const v of (q.get("prima") ?? "").split(",")) if (["ombra", "vassoio", "sezioni"].includes(v)) scelto.prima.add(v);
   $("proto-stato").value = scelto.stato;
   $("luce-notte").checked = scelto.luce === "dark";
   $("larghezza-700").checked = scelto.larghezza === "700";
-  $("telefono-b").checked = scelto.telefono === "tel-b";
+  for (const v of scelto.prima) $(`prima-${v}`).checked = true;
   carica().then(mostra);
 })();
 </script>
