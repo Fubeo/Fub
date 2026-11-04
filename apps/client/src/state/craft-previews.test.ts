@@ -9,9 +9,14 @@
 // perché il modulo ricorda le risposte.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeCraft, FakeHost } from "../host/fake";
-import type { CraftPreview, CraftPreviewImage, CraftPreviewSize } from "../host/craft";
+import type { CraftPreview, CraftPreviewImage, CraftPreviewSize, CraftRenderConsent } from "../host/craft";
 
-const box = vi.hoisted(() => ({ host: null as FakeHost | null }));
+const box = vi.hoisted(() => ({
+  host: null as FakeHost | null,
+  /// Risponde al posto del finto, che conosce soltanto i file Craft: la
+  /// risposta di `craft.preview` per un PDF (T31). `undefined` lascia fare al finto.
+  preview: null as ((doc: string, size: string) => unknown) | null,
+}));
 
 vi.mock("../host/ipc", () => {
   const now = () => {
@@ -22,8 +27,16 @@ vi.mock("../host/ipc", () => {
     api: new Proxy(
       {},
       {
-        get: (_t, name: string) => (...args: unknown[]) =>
-          (now().api as unknown as Record<string, (...a: unknown[]) => unknown>)[name](...args),
+        get: (_t, name: string) => (...args: unknown[]) => {
+          if (name === "invokeCommand" && args[0] === "craft.preview" && box.preview) {
+            const { doc, size } = args[1] as { doc: string; size: string };
+            const payload = box.preview(doc, size);
+            if (payload !== undefined) {
+              return Promise.resolve({ notify: null, effect: { kind: "custom", ns: "fub.craft", payload }, undo: null, partial: null });
+            }
+          }
+          return (now().api as unknown as Record<string, (...a: unknown[]) => unknown>)[name](...args);
+        },
       },
     ),
     onKernelEvent: (handler: (n: unknown) => void) => now().onKernelEvent(handler as never),
@@ -315,5 +328,91 @@ describe("renderPreview", () => {
     release();
     expect(await pending).toBeNull();
     expect(previews.peekPreview(LOGO, "large")).toBeNull();
+  });
+});
+
+describe("i PDF e i documenti, di cui l'anteprima la fa un'app (T31)", () => {
+  const GUIDA = "Manuali/guida.pdf";
+
+  /// L'anteprima di un PDF che manca, con l'app installata e il consenso
+  /// `consent`; `image` la dà già fatta.
+  function pdfPreview(doc: string, size: CraftPreviewSize, consent: CraftRenderConsent, image: CraftPreviewImage | null = null): CraftPreview {
+    return {
+      version: 2,
+      doc,
+      revision: "r1",
+      size,
+      origin: image ? "file" : "none",
+      queued: false,
+      image,
+      missing: image ? null : "absent",
+      limit_bytes: null,
+      info: { app: "pdf", editor: "PdfCraft", format_version: null, bytes: 4, photo: null, edits: [], xmp: null },
+      render: image ? null : { app: "PdfCraft", consent },
+    };
+  }
+
+  beforeEach(() => {
+    box.preview = null;
+  });
+
+  async function bootPdf(answer: (doc: string, size: CraftPreviewSize) => CraftPreview | undefined) {
+    const asks: string[] = [];
+    box.preview = (doc, size) => {
+      const preview = answer(doc, size as CraftPreviewSize);
+      if (preview) asks.push(`${doc}:${size}`);
+      return preview;
+    };
+    const booted = await boot({ docs: {} }, async (doc, size) => ({ ...answer(doc, size)!, queued: true }));
+    // Ciò che il montaggio della shell copia dal kernel: il componente acceso.
+    booted.store.state.commandSpecs = await booted.host.module.api.listCommands();
+    return { ...booted, asks };
+  }
+
+  it("renderOnOpen col consenso acceso e l'anteprima che manca: craft_render una volta, piccola", async () => {
+    const { host, previews, asks } = await bootPdf((doc, size) => pdfPreview(doc, size, "on"));
+    await previews.renderOnOpen(GUIDA);
+    await previews.renderOnOpen(GUIDA);
+    expect(asks).toEqual([`${GUIDA}:small`]);
+    expect(renders(host)).toEqual([[GUIDA, "small"]]);
+  });
+
+  it("renderOnOpen non chiede niente all'app col consenso da chiedere o spento, con l'immagine, o per un altro file", async () => {
+    for (const consent of ["ask", "off"] as const) {
+      const { host, previews } = await bootPdf((doc, size) => pdfPreview(doc, size, consent));
+      await previews.renderOnOpen(GUIDA);
+      expect(renders(host), consent).toEqual([]);
+    }
+    const withImage = await bootPdf((doc, size) => pdfPreview(doc, size, "on", png(181, 256)));
+    await withImage.previews.renderOnOpen(GUIDA);
+    expect(renders(withImage.host)).toEqual([]);
+    const other = await bootPdf((doc, size) => pdfPreview(doc, size, "on"));
+    await other.previews.renderOnOpen(LOGO);
+    expect(other.asks).toEqual([]);
+    expect(renders(other.host)).toEqual([]);
+  });
+
+  it("renderOnOpen col componente fub.craft spento non chiede niente, nemmeno l'anteprima", async () => {
+    const { host, previews, asks, store } = await bootPdf((doc, size) => pdfPreview(doc, size, "on"));
+    store.state.commandSpecs = [];
+    await previews.renderOnOpen(GUIDA);
+    expect(asks).toEqual([]);
+    expect(renders(host)).toEqual([]);
+  });
+
+  it("lo stesso PDF dieci volte in una nota: una domanda sola", async () => {
+    const { previews, asks } = await bootPdf((doc, size) => pdfPreview(doc, size, "ask"));
+    const answers = await Promise.all(Array.from({ length: 10 }, () => previews.previewOf(GUIDA, "small")));
+    expect(asks).toEqual([`${GUIDA}:small`]);
+    expect(new Set(answers).size).toBe(1);
+  });
+
+  it("renderOnOpen tiene per sé un guasto di craft.preview o di craft_render", async () => {
+    const failing = await bootPdf(() => undefined);
+    box.preview = () => {
+      throw new Error("craft.preview è caduto");
+    };
+    await expect(failing.previews.renderOnOpen(GUIDA)).resolves.toBeUndefined();
+    expect(renders(failing.host)).toEqual([]);
   });
 });

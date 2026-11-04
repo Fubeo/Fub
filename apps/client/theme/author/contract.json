@@ -567,6 +567,8 @@
     "cm-fub-image-size",
     "cm-fub-image-dialog",
     "cm-fub-image-shares",
+    "craft-figure",
+    "craft-figure-page",
     "embed",
     "embed-cycle",
     "embed-too-deep",
@@ -2067,6 +2069,8 @@
     "cm-fub-image-size": "contenuto",
     "cm-fub-image-dialog": "contenuto",
     "cm-fub-image-shares": "contenuto",
+    "craft-figure": "contenuto",
+    "craft-figure-page": "contenuto",
     "embed": "contenuto",
     "embed-cycle": "contenuto",
     "embed-too-deep": "contenuto",
@@ -4617,7 +4621,9 @@
         "cm-fub-image-handle",
         "cm-fub-image-size",
         "cm-fub-image-dialog",
-        "cm-fub-image-shares"
+        "cm-fub-image-shares",
+        "craft-figure",
+        "craft-figure-page"
       ],
       "states": [
         "rest"
@@ -8410,7 +8416,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 63,
-    "hooks": 1498,
+    "hooks": 1500,
     "state_names": 7,
     "assigned_states": 730,
     "components": 217,

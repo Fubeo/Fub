@@ -16,6 +16,7 @@
 //   smonta. Un link che non si risolve non apre niente.
 import { resolvedReference, settings } from "../host/query";
 import { onEvent } from "../state/kernel";
+import { appPreviewSubject, previewOf } from "../state/craft-previews";
 import { cancelScheduledPreview, hidePreview, schedulePreview } from "../state/preview";
 import { state } from "../state/store";
 import type { Lifetime } from "./lifetime";
@@ -124,9 +125,15 @@ export function mountLinkPreview(life: Lifetime): void {
       : null;
     if (mine !== generation || !resolved || !link.isConnected) return;
     // Solo un documento ha una resa da mostrare: un allegato nominato da un
-    // wikilink si apre, non si trasclude in una scheda di testo.
+    // wikilink si apre, non si trasclude in una scheda di testo. Un PDF di
+    // cui un'app ha fatto l'anteprima piccola (T31) mostra la sua prima
+    // pagina; la domanda non avvia mai l'app.
     const extension = resolved.doc.slice(resolved.doc.lastIndexOf(".") + 1).toLowerCase();
-    if (!state.handledExtensions.includes(extension)) return;
+    if (!state.handledExtensions.includes(extension)) {
+      if (appPreviewSubject(resolved.doc) === null) return;
+      const answer = await previewOf(resolved.doc, "small").catch(() => null);
+      if (mine !== generation || !answer?.preview.image || !link.isConnected) return;
+    }
     const rect = link.getBoundingClientRect();
     const popover = document.createElement("div");
     popover.className = "link-preview";

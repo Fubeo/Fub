@@ -29,6 +29,7 @@ vi.mock("./craft-previews", () => ({
     return fake.preview ? { preview: fake.preview, renderError: null } : null;
   },
   watchCraftPreviews: () => {},
+  appPreviewSubject: (doc: string) => /\.pdf$/i.test(doc) ? "pdf" : /\.(docx|odt|rtf|doc)$/i.test(doc) ? "document" : null,
 }));
 
 import { hidePreview, previewStateForTest, showStickyPreview } from "./preview";
@@ -147,5 +148,104 @@ describe("l'anteprima al passaggio su un file Craft", () => {
     expect(box.textContent).toBe("altro testo");
     expect(revoked).toEqual(["blob:logo"]);
     for (const ask of fake.asks) expect(ask.options).toBeUndefined();
+  });
+});
+
+describe("l'anteprima al passaggio su un PDF o un documento", () => {
+  const GUIDA = "Manuali/guida.pdf";
+  const PNG = btoa(String.fromCharCode(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a));
+
+  function preview(doc: string, image: boolean): CraftPreview {
+    const app = doc.endsWith(".pdf") ? "pdf" : "document";
+    return {
+      version: 2,
+      doc,
+      revision: "r1",
+      size: "small",
+      origin: image ? "file" : "none",
+      queued: false,
+      image: image ? { media_type: "image/png", data: PNG, width: 181, height: 256, orientation: 1 } : null,
+      missing: image ? null : "absent",
+      limit_bytes: null,
+      info: { app, editor: app === "pdf" ? "PdfCraft" : "WordCraft", format_version: null, bytes: 4096, photo: null, edits: [], xmp: null },
+      render: image ? null : { app: app === "pdf" ? "PdfCraft" : "WordCraft", consent: "ask" },
+    };
+  }
+
+  function hover(page: string): void {
+    const link = document.createElement("a");
+    link.className = "wikilink";
+    link.dataset.wikilinkPage = page;
+    link.textContent = page;
+    document.body.append(link);
+    link.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, ctrlKey: true }));
+  }
+
+  it("il passaggio su [[guida.pdf]] con l'anteprima mostra la prima pagina col nome, senza farla fare", async () => {
+    fake.preview = preview(GUIDA, true);
+    fake.resolve.mockResolvedValue({ doc: GUIDA });
+    fake.render.mockResolvedValue({ doc_id: GUIDA, html: "guida.pdf", parts: [] });
+    vi.spyOn(URL, "createObjectURL").mockImplementation(() => "blob:guida");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const life = openLifetime();
+    mountLinkPreview(life);
+    hover("guida.pdf");
+    await vi.waitFor(() => expect(document.querySelector(".link-preview figure.craft-figure img")).not.toBeNull());
+    const shown = document.querySelector<HTMLImageElement>(".link-preview figure.craft-figure img")!;
+    expect(shown.classList.contains("craft-figure-page")).toBe(true);
+    expect(shown.getAttribute("src")).toBe("blob:guida");
+    expect(document.querySelector(".link-preview figcaption")!.textContent).toBe("guida.pdf");
+    // Lo store finto non ha `renderPreview`: una richiesta all'app getterebbe.
+    // Le domande sono tutte `craft.preview` piccole (lo store vero ne fa una).
+    expect(fake.asks.length).toBeGreaterThan(0);
+    for (const ask of fake.asks) expect(ask).toEqual({ doc: GUIDA, size: "small", options: undefined });
+    life.close();
+  });
+
+  it("senza anteprima il passaggio su [[guida.pdf]] non apre niente, come un allegato", async () => {
+    fake.preview = preview(GUIDA, false);
+    fake.resolve.mockResolvedValue({ doc: GUIDA });
+    const life = openLifetime();
+    mountLinkPreview(life);
+    hover("guida.pdf");
+    await vi.waitFor(() => expect(fake.asks).toHaveLength(1));
+    await new Promise((accept) => setTimeout(accept, 10));
+    expect(document.querySelector(".link-preview")).toBeNull();
+    expect(fake.render).not.toHaveBeenCalled();
+    life.close();
+  });
+
+  it("senza anteprima il passaggio su un PDF mostra ciò che il canale dati rende", async () => {
+    fake.preview = preview(GUIDA, false);
+    fake.render.mockResolvedValue({ doc_id: GUIDA, html: "la resa del PDF", parts: [] });
+    const box = document.createElement("div");
+    document.body.append(box);
+    await showStickyPreview(GUIDA, box);
+    expect(box.textContent).toBe("la resa del PDF");
+    expect(box.querySelector("figure")).toBeNull();
+  });
+
+  it("un documento di Word con l'anteprima è la stessa figura", async () => {
+    const LETTERA = "Lettere/Lettera.DOCX";
+    fake.preview = preview(LETTERA, true);
+    fake.render.mockResolvedValue({ doc_id: LETTERA, html: "il testo", parts: [] });
+    vi.spyOn(URL, "createObjectURL").mockImplementation(() => "blob:lettera");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const box = document.createElement("div");
+    document.body.append(box);
+    await showStickyPreview(LETTERA, box);
+    await vi.waitFor(() => expect(box.querySelector("figure.craft-figure img.craft-figure-page")).not.toBeNull());
+    expect(box.querySelector("figcaption")!.textContent).toBe("Lettera.DOCX");
+  });
+
+  it("un guasto della resa con l'anteprima mostra comunque la figura", async () => {
+    fake.preview = preview(GUIDA, true);
+    fake.render.mockRejectedValue(new Error("formato non supportato"));
+    vi.spyOn(URL, "createObjectURL").mockImplementation(() => "blob:guida");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const box = document.createElement("div");
+    document.body.append(box);
+    await showStickyPreview(GUIDA, box);
+    await vi.waitFor(() => expect(box.querySelector("figure.craft-figure img")).not.toBeNull());
   });
 });

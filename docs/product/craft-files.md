@@ -97,6 +97,45 @@ anteprime accese: la chiede soltanto la scheda, dopo un gesto. La stessa figura 
 file che non c'è più resta un embed non risolto; con il componente `fub.craft`
 spento resta il riquadro col nome e l'app.
 
+## PDF e documenti
+
+Un PDF o un documento Word si apre nella vista di Fub, la stessa di sempre;
+PdfCraft e WordCraft servono solo a farne l'anteprima, la prima pagina
+come immagine. L'anteprima serve all'albero, alle note e al passaggio del
+puntatore.
+
+- **Nella nota.** `![[contratto.pdf]]` senza `#page=` mostra la prima pagina
+  come figura, con il filo e l'ombra di un foglio e il nome del file sotto,
+  quando l'anteprima c'è; un clic apre il PDF nella sua scheda. Senza
+  anteprima, con `#page=N` o con un PDF che l'app non ha saputo leggere
+  (protetto o rovinato), resta il link al file. Un `.docx` incorporato
+  mostra il suo testo, come prima. La figura è larga quanto la sua
+  immagine, mai più della colonna, e il nome sta sotto di lei. Se il PDF
+  cambia, la figura si rifà con la revisione nuova.
+- **Col puntatore.** Il passaggio su `[[contratto.pdf]]` o su
+  `[[relazione.docx]]` mostra la stessa pagina, quando l'anteprima c'è;
+  altrimenti ciò che mostra per ogni file.
+- **Aprendo.** Un PDF o un documento aperto con un gesto, con le anteprime
+  **Accese**, fa fare a PdfCraft o a WordCraft l'anteprima che manca, una
+  volta e in sottofondo: la scheda non aspetta e non mostra niente. Una
+  scheda riaperta o rimontata non chiede niente. Una nota non avvia mai
+  l'app, nemmeno qui: lo stesso PDF dieci volte nella stessa nota fa una
+  domanda sola al vault, e nessuna all'app.
+- **La domanda.** Con **Chiedi la prima volta**, l'app installata e
+  l'anteprima che manca, la scheda porta nella riga d'avviso «Fub può far
+  fare l'anteprima di questo file a PdfCraft, che lavora su una copia.
+  Accendo le anteprime fatte dalle app?» con «Sì, accendi» e «No, lasciale
+  spente». «Sì» salva «Accese» e chiede subito l'anteprima, perché il clic
+  è il gesto; «No» salva «Spente». La riga sparisce da ogni scheda appena
+  il consenso cambia, anche quando la risposta arriva da un altro riquadro
+  o dalle impostazioni. Senza l'app, con le anteprime **Spente** o con il
+  componente `fub.craft` spento, la riga non c'è, e aprire il file non
+  chiede niente.
+
+Un documento prestato a WordCraft (vedi **Il prestito**) con la domanda
+ancora aperta porta due righe, prima quella del prestito e poi la domanda,
+ognuna con le sue azioni.
+
 ## Una foto
 
 Una foto aperta in una scheda (un JPG, un PNG, un TIFF) mostra sotto di sé i

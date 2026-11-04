@@ -26,6 +26,7 @@ const craft = vi.hoisted(() => ({
   asks: [] as Array<{ doc: string; size: string; options: unknown }>,
   preview: null as CraftPreview | null,
   figures: [] as string[],
+  render: vi.fn(),
 }));
 vi.mock("../../../../state/craft-previews", () => ({
   previewOf: async (doc: string, size: string, options: unknown) => {
@@ -34,6 +35,7 @@ vi.mock("../../../../state/craft-previews", () => ({
     return { preview: { ...craft.preview, doc }, renderError: null };
   },
   watchCraftPreviews: () => {},
+  renderPreview: craft.render,
 }));
 vi.mock("../../../craft/figure", async (original) => {
   const real = await original<typeof import("../../../craft/figure")>();
@@ -696,6 +698,107 @@ describe("i file Craft dentro una nota", () => {
     const root = note('<span class="embed" data-embed-page="logo.vectorcraft">logo.vectorcraft</span>', embeds);
     await vi.waitFor(() => expect(root.querySelector(".embed.unresolved")).not.toBeNull());
     expect(craft.figures).toEqual([]);
+    expect(craft.asks).toEqual([]);
+  });
+});
+
+describe("i PDF dentro una nota (T31)", () => {
+  const GUIDA = "Manuali/guida.pdf";
+  const PNG = btoa(String.fromCharCode(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a));
+
+  function preview(image: boolean): CraftPreview {
+    return {
+      version: 2,
+      doc: GUIDA,
+      revision: "r1",
+      size: "small",
+      origin: image ? "file" : "none",
+      queued: false,
+      image: image ? { media_type: "image/png", data: PNG, width: 181, height: 256, orientation: 1 } : null,
+      missing: image ? null : "absent",
+      limit_bytes: null,
+      info: { app: "pdf", editor: "PdfCraft", format_version: null, bytes: 8192, photo: null, edits: [], xmp: null },
+      render: image ? null : { app: "PdfCraft", consent: "on" },
+    };
+  }
+
+  beforeEach(() => {
+    craft.asks = [];
+    craft.figures = [];
+    craft.render.mockReset();
+    craft.preview = preview(true);
+    vi.spyOn(URL, "createObjectURL").mockImplementation(() => "blob:guida");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    // La nota non chiede mai all'app di fare l'anteprima.
+    expect(craft.render).not.toHaveBeenCalled();
+  });
+
+  it("`![[guida.pdf]]` con l'anteprima è la figura della prima pagina col nome, senza collegamento né lease", async () => {
+    const root = html('<p><span class="embed" data-embed-page="guida.pdf">guida.pdf</span></p>');
+    const { media, opened } = port({ "guida.pdf": GUIDA });
+    const asked: string[] = [];
+    await hydrateVaultMedia(root, "Nota.md", same, openLifetime(), media, (doc) => { asked.push(doc); });
+    const img = root.querySelector<HTMLImageElement>(".embed figure.craft-figure img")!;
+    expect(img).not.toBeNull();
+    expect(img.className).toBe("craft-figure-image craft-figure-page");
+    expect(img.getAttribute("src")).toBe("blob:guida");
+    expect(img.getAttribute("width")).toBe("181");
+    expect(root.querySelector("figcaption")!.textContent).toBe("guida.pdf");
+    expect(root.querySelector("a.wikilink")).toBeNull();
+    expect(opened).toEqual([]);
+    expect(craft.figures).toEqual([GUIDA]);
+    expect(craft.asks).toEqual([{ doc: GUIDA, size: "small", options: undefined }]);
+    // Il clic apre il PDF (con il gesto: lo dice chi passa `open`).
+    root.querySelector<HTMLElement>("figure.craft-figure")!.click();
+    await vi.waitFor(() => expect(asked).toEqual([GUIDA]));
+    root.querySelector<HTMLElement>("figure.craft-figure")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await vi.waitFor(() => expect(asked).toEqual([GUIDA, GUIDA]));
+  });
+
+  it("con una pagina scelta (`#page=3`) resta il collegamento, e non si chiede niente", async () => {
+    const root = html('<span class="embed" data-embed-page="guida.pdf" data-embed-heading="page=3">guida.pdf#page=3</span>');
+    const { media } = port({ "guida.pdf": GUIDA });
+    await hydrateVaultMedia(root, "Nota.md", same, openLifetime(), media);
+    expect(root.querySelector<HTMLElement>(".embed a.wikilink")?.dataset.wikilinkPage).toBe("guida.pdf");
+    expect(root.querySelector("figure")).toBeNull();
+    expect(craft.asks).toEqual([]);
+  });
+
+  it("senza anteprima (il PDF protetto, l'app che non c'è) resta il collegamento", async () => {
+    craft.preview = preview(false);
+    const root = html('<span class="embed" data-embed-page="guida.pdf">guida.pdf</span>');
+    const { media } = port({ "guida.pdf": GUIDA });
+    await hydrateVaultMedia(root, "Nota.md", same, openLifetime(), media);
+    expect(root.querySelector<HTMLElement>(".embed a.wikilink")?.dataset.wikilinkPage).toBe("guida.pdf");
+    expect(root.querySelector("img, .craft-figure-box")).toBeNull();
+    expect(root.querySelector<HTMLElement>(".embed")!.dataset.vaultMedia).toBe("loaded");
+  });
+
+  it("un guasto della domanda lascia il collegamento", async () => {
+    craft.preview = null;
+    const root = html('<span class="embed" data-embed-page="guida.pdf">guida.pdf</span>');
+    const { media } = port({ "guida.pdf": GUIDA });
+    await hydrateVaultMedia(root, "Nota.md", same, openLifetime(), media);
+    expect(root.querySelector(".embed a.wikilink")).not.toBeNull();
+  });
+
+  it("un PDF che non si risolve resta il collegamento, senza domande", async () => {
+    const root = html('<span class="embed" data-embed-page="altro.pdf">altro.pdf</span>');
+    const { media } = port({});
+    await hydrateVaultMedia(root, "Nota.md", same, openLifetime(), media);
+    expect(root.querySelector(".embed a.wikilink")).not.toBeNull();
+    expect(craft.asks).toEqual([]);
+  });
+
+  it("un documento di Word incorporato non passa di qui: resta il suo testo", async () => {
+    const root = html('<span class="embed" data-embed-page="lettera.docx">lettera.docx</span>');
+    const { media, asked } = port({ "lettera.docx": "lettera.docx" });
+    await hydrateVaultMedia(root, "Nota.md", same, openLifetime(), media);
+    expect(root.querySelector(".embed")!.textContent).toBe("lettera.docx");
+    expect(asked).toEqual([]);
     expect(craft.asks).toEqual([]);
   });
 });

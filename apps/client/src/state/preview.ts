@@ -10,7 +10,9 @@
 // la scheda resta finché Invio/Escape/click-fuori; downgrade mai implicito.
 // Un file Craft (N7) torna dal canale dati come il segnaposto del suo
 // formato: la scheda mostra la sua figura (`editors/craft/figure.ts`) con
-// l'anteprima piccola, chiesta sempre senza avviare l'app.
+// l'anteprima piccola, chiesta sempre senza avviare l'app. Un PDF o un
+// documento di Word di cui un'app ha fatto l'anteprima (T31) mostra la stessa
+// figura, con la prima pagina; senza, ciò che il canale dati rende.
 import { renderEmbed } from "../host/query";
 import { setSanitizedHtml } from "../ui/sanitize";
 import { errorText } from "../host/errors";
@@ -22,6 +24,7 @@ import { notify } from "../ui/notify";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 import type { EmbedContent } from "../host/contract";
 import { craftPlaceholder, showEmbeddedCraft } from "../editors/craft/figure";
+import { appPreviewSubject, previewOf } from "./craft-previews";
 
 const HOVER_MS = 350;
 
@@ -63,6 +66,38 @@ function mountEl(box: HTMLElement): HTMLElement {
   return current.el;
 }
 
+/// Ciò che la scheda mostra di un documento: la resa del canale dati o il suo
+/// guasto, e se c'è l'anteprima di un PDF o di un documento.
+type Shown = ({ content: EmbedContent } | { error: string }) & { page: boolean };
+
+/// La resa di `doc` e, per un PDF o un documento, se un'app ne ha fatto
+/// l'anteprima piccola: le due domande partono insieme, e nessuna avvia
+/// l'app.
+function ask(doc: string): Promise<Shown> {
+  const subject = appPreviewSubject(doc);
+  return Promise.all([
+    renderEmbed(doc, null, null)
+      .then((content) => ({ content }))
+      .catch((error: unknown) => ({ error: errorText(error) })),
+    subject === null
+      ? false
+      : previewOf(doc, "small").then((answer) => answer?.preview.image != null, () => false),
+  ]).then(([shown, page]) => ({ ...shown, page }));
+}
+
+/// La figura della prima pagina di un PDF o di un documento; se l'anteprima
+/// sparisce (il file cambiato), `without`.
+function paintPage(current: PreviewOwner, el: HTMLElement, doc: string, without: () => HTMLElement): void {
+  current.life.close();
+  current.life = openLifetime();
+  const subject = appPreviewSubject(doc);
+  if (subject === null) return;
+  const slot = document.createElement("div");
+  slot.className = "embed";
+  el.replaceChildren(slot);
+  void showEmbeddedCraft(el, slot, { doc, app: subject, name: doc.split("/").pop() || doc }, current.life, { withoutImage: without });
+}
+
 /// Mette in `el` la resa di `content`: l'HTML sanitizzato, o, per il
 /// segnaposto di un file Craft, la sua figura con l'anteprima piccola (mai
 /// fatta dall'app: `render: false`). Ciò che la resa di prima aveva acceso
@@ -98,14 +133,17 @@ export async function showPreviewForCurrent(sticky: boolean): Promise<void> {
   current.sticky = sticky;
   current.life.close();
   el.textContent = doc;
-  const shown = await current.race.last((expected) =>
-    expected(
-      renderEmbed(doc, null, null)
-        .then((content) => ({ content }))
-        .catch((error: unknown) => ({ error: errorText(error) })),
-    ),
-  );
+  const shown = await current.race.last((expected) => expected(ask(doc)));
   if (!current.alive || !shown || current.for !== doc || current.el !== el) return;
+  if (shown.page) {
+    paintPage(current, el, doc, () => {
+      const rest = document.createElement("div");
+      if ("error" in shown) rest.textContent = doc;
+      else setSanitizedHtml(rest, shown.content.html);
+      return rest;
+    });
+    return;
+  }
   if ("error" in shown) {
     notify(t("preview.embed_failed", { reason: shown.error }), "guasto");
     hidePreview();
@@ -139,14 +177,19 @@ async function showPreviewIn(doc: string, box: HTMLElement, sticky: boolean): Pr
   current.sticky = sticky;
   el.setAttribute("aria-label", doc);
   current.life.close();
-  const shown = await current.race.last((expected) =>
-    expected(
-      renderEmbed(doc, null, null)
-        .then((content) => ({ content }))
-        .catch((error: unknown) => ({ error: errorText(error) })),
-    ),
-  );
+  const shown = await current.race.last((expected) => expected(ask(doc)));
   if (!current.alive || !shown || current.for !== doc || current.el !== el) return;
+  if (shown.page) {
+    paintPage(current, el, doc, () => {
+      const rest = document.createElement("div");
+      if ("error" in shown) {
+        rest.textContent = t("search.unavailable");
+        rest.title = shown.error;
+      } else setSanitizedHtml(rest, shown.content.html);
+      return rest;
+    });
+    return;
+  }
   if ("error" in shown) {
     el.textContent = t("search.unavailable");
     el.title = shown.error;

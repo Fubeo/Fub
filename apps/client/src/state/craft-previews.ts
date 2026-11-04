@@ -32,9 +32,10 @@ import {
   type CraftPreviewSize,
 } from "../host/craft";
 import { isErrorKind } from "../host/errors";
+import { mediaKindOfId } from "../editors/media/media-types";
 import type { Lifetime } from "../ui/lifetime";
 import { onAnyEvent } from "./kernel";
-import { on, openVaultRoot, vaultArg } from "./store";
+import { on, openVaultRoot, state, vaultArg } from "./store";
 
 /// Ciò che si sa dell'anteprima di un documento a una misura.
 export interface CraftPreviewAnswer {
@@ -206,6 +207,44 @@ export function renderPreview(doc: string, size: CraftPreviewSize): Promise<Craf
   });
   rendering.set(flight, asking);
   return asking;
+}
+
+/// Le estensioni dei documenti di cui un'app (WordCraft) fa l'anteprima:
+/// `DOCUMENT_EXTENSIONS` in `crates/fub-format-craft/src/contract.rs`, che un
+/// test tiene allineate.
+export const DOCUMENT_EXTENSIONS: readonly string[] = ["docx", "odt", "rtf", "doc"];
+
+/// Un PDF o un documento di Word, di cui l'anteprima la fa un'app (PdfCraft,
+/// WordCraft); `null` per ogni altro file. Dall'estensione, in qualunque
+/// maiuscola.
+export function appPreviewSubject(doc: string): "pdf" | "document" | null {
+  const path = doc.split("#")[0]!;
+  if (mediaKindOfId(path) === "pdf") return "pdf";
+  const base = path.split("/").pop() ?? "";
+  const point = base.lastIndexOf(".");
+  if (point <= 0) return null;
+  return DOCUMENT_EXTENSIONS.includes(base.slice(point + 1).toLowerCase()) ? "document" : null;
+}
+
+/// Il componente «File delle app Craft» serve il vault: il kernel elenca
+/// `craft.preview`. Spento, la scheda di un PDF o di un documento non chiede
+/// anteprime a nessuno.
+export function craftServed(): boolean {
+  return state.commandSpecs.some((spec) => spec.id === CRAFT_PREVIEW_COMMAND);
+}
+
+/// Un PDF o un documento appena aperto con un gesto: se non ha l'anteprima
+/// `small` e il consenso è acceso, la chiede all'app in sottofondo, così la
+/// nota che lo incorpora e l'anteprima al passaggio la trovano. La scheda non
+/// aspetta e non mostra niente; un guasto resta qui. Con il componente
+/// `fub.craft` spento non chiede niente.
+export async function renderOnOpen(doc: string): Promise<void> {
+  if (appPreviewSubject(doc) === null || !craftServed()) return;
+  const answer = await previewOf(doc, "small").catch(() => null);
+  if (!answer) return;
+  const { preview } = answer;
+  if (preview.image || preview.queued || preview.render?.consent !== "on") return;
+  await renderPreview(doc, "small").catch(() => null);
 }
 
 /// La risposta tenuta per `doc` e `size`, senza chiedere niente.

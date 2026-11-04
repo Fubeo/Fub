@@ -63,7 +63,17 @@ import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./con
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { LIVE_DOC, liveCase } from "./live-fixture";
 import { PHOTO_CRAFT, photoCase, photoResources } from "./photo-fixture";
-import { craftSceneCase, craftSceneCraft, craftSceneRender, craftSceneResources } from "./craft-fixture";
+import {
+  craftSceneCase,
+  craftSceneCraft,
+  craftSceneRender,
+  craftSceneResources,
+  pdfSceneCase,
+  pdfSceneFiles,
+  pdfScenePreview,
+  pdfSceneResources,
+  PDF_SCENE_WORDCRAFT,
+} from "./craft-fixture";
 import { rawSceneCase, rawSceneCraft, rawScenePreview, rawSceneResources } from "./raw-fixture";
 import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
@@ -275,6 +285,12 @@ if (CRAFT_SCENE !== null && PHOTO !== null) throw new RangeError("craft-scheda i
 /// o girato, o senza JPEG con la domanda di LightCraft.
 const RAW_SCENE = rawSceneCase(params.get("raw-scheda"));
 if (RAW_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null)) throw new RangeError("raw-scheda is a vault of its own");
+
+/// Il PDF e il Word delle scene T31 (`?pdf-scena=nota|nota-senza|domanda|due-righe`,
+/// vedi `craft-fixture.ts`): la nota che incorpora il PDF, la scheda del PDF
+/// con la domanda sulle anteprime, il Word prestato con la domanda.
+const PDF_SCENE = pdfSceneCase(params.get("pdf-scena"));
+if (PDF_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null || RAW_SCENE !== null)) throw new RangeError("pdf-scena is a vault of its own");
 
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
 const DRAWING = CONNECTORS !== null
@@ -1113,12 +1129,14 @@ const options: Options = {
     ...(RICH_DOC === null ? {} : { [RICH_DOC.doc]: RICH_DOC.text }),
     // La nota della Live, per le scene che la chiedono.
     ...(LIVE === null ? {} : { [LIVE_DOC]: LIVE.text }),
+    ...(PDF_SCENE === null ? {} : pdfSceneFiles(PDF_SCENE)),
   },
   resources: {
     ...RESOURCES,
     ...(PHOTO === null ? {} : photoResources(PHOTO)),
     ...(CRAFT_SCENE === null ? {} : craftSceneResources()),
     ...(RAW_SCENE === null ? {} : rawSceneResources(RAW_SCENE)),
+    ...(PDF_SCENE === null ? {} : pdfSceneResources()),
   },
   root: ROOT,
   view: VIEWS,
@@ -1142,6 +1160,12 @@ const options: Options = {
       ((await host.module.api.invokeCommand("craft.preview", { doc, size })).effect as { payload: CraftPreview }).payload),
   }),
   ...(RAW_SCENE === null ? {} : { craft: rawSceneCraft(RAW_SCENE) }),
+  ...(PDF_SCENE === null ? {} : {
+    // Il bundle `fub.craft` acceso, e WordCraft installata per il prestito.
+    craft: { docs: {} },
+    externalEditors: async (doc: string | null) => (doc === null || doc.endsWith(".docx") ? [PDF_SCENE_WORDCRAFT] : []),
+    openWith: async (_path: string, editor: string) => ({ editor, how: "new_process" as const }),
+  }),
 };
 
 const host = createFakeHost(options);
@@ -1337,6 +1361,12 @@ export const api: typeof host.module.api = {
     if (RAW_SCENE !== null && id === CRAFT_PREVIEW_COMMAND && typeof doc === "string") {
       const size = (args as { size?: unknown }).size === "large" ? "large" : "small";
       const payload = rawScenePreview(RAW_SCENE, doc, size);
+      if (payload !== null) return { notify: null, effect: { kind: "custom", ns: CRAFT_BUNDLE_NS, payload }, undo: null, partial: null };
+    }
+    // L'anteprima del PDF o del Word delle scene T31: il finto non li sa leggere.
+    if (PDF_SCENE !== null && id === CRAFT_PREVIEW_COMMAND && typeof doc === "string") {
+      const size = (args as { size?: unknown }).size === "large" ? "large" : "small";
+      const payload = pdfScenePreview(PDF_SCENE, doc, size);
       if (payload !== null) return { notify: null, effect: { kind: "custom", ns: CRAFT_BUNDLE_NS, payload }, undo: null, partial: null };
     }
     return behind.invokeCommand(id, args, ...rest);

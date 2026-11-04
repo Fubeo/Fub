@@ -270,3 +270,71 @@ describe("la figura nella nota", () => {
     expect(urls.revoked).toEqual(["blob:figura-1"]);
   });
 });
+
+describe("la figura di un PDF o di un documento (T31)", () => {
+  const GUIDA = "Manuali/guida.pdf";
+
+  /// Lo store delle anteprime in mano al test: risponde ciò che `answers`
+  /// dice adesso, e `announce` è il documento cambiato.
+  function previews(answers: Array<CraftPreviewImage | null>) {
+    const watchers: Array<(doc: string) => void> = [];
+    let asked = 0;
+    return {
+      deps: {
+        previewOf: async (doc: string) => {
+          const image = answers[Math.min(asked++, answers.length - 1)] ?? null;
+          return {
+            preview: {
+              version: 2 as const, doc, revision: `r${asked}`, size: "small" as const, origin: image ? "file" as const : "none" as const,
+              queued: false, image, missing: image ? null : "absent" as const, limit_bytes: null,
+              info: { app: "pdf" as const, editor: "PdfCraft", format_version: null, bytes: 10, photo: null, edits: [], xmp: null },
+              render: image ? null : { app: "PdfCraft", consent: "on" as const },
+            },
+            renderError: null,
+          };
+        },
+        watch: (_life: unknown, watcher: (doc: string) => void) => { watchers.push(watcher); },
+      },
+      announce: (doc: string) => { for (const watcher of watchers) watcher(doc); },
+      asked: () => asked,
+    };
+  }
+
+  it("con l'anteprima è la prima pagina, un foglio col nome sotto, e un clic la apre col gesto", async () => {
+    const { figure, container, openLifetime } = await boot({});
+    const store = previews([png(181, 256)]);
+    const opened: Array<[string, unknown]> = [];
+    const embed = slot(container, "guida.pdf");
+    await figure.showEmbeddedCraft(container, embed, { doc: GUIDA, app: "pdf", name: "guida.pdf" }, openLifetime(), {
+      previews: store.deps,
+      withoutImage: () => document.createElement("a"),
+      open: (doc, options) => { opened.push([doc, options]); },
+    });
+    const img = embed.querySelector<HTMLImageElement>("figure.craft-figure > img")!;
+    expect(img.className).toBe("craft-figure-image craft-figure-page");
+    expect(embed.querySelector("figcaption")!.textContent).toBe("guida.pdf");
+    embed.querySelector<HTMLElement>("figure")!.click();
+    await settle();
+    expect(opened).toEqual([[GUIDA, { gesture: true }]]);
+  });
+
+  it("senza anteprima mostra ciò che chi chiama dà, e un PDF cambiato rifà la figura con la revisione nuova", async () => {
+    const { figure, container, openLifetime } = await boot({});
+    const store = previews([null, png(181, 256)]);
+    const embed = slot(container, "guida.pdf");
+    const link = (): HTMLElement => Object.assign(document.createElement("a"), { className: "wikilink", textContent: "guida.pdf" });
+    await figure.showEmbeddedCraft(container, embed, { doc: GUIDA, app: "pdf", name: "guida.pdf" }, openLifetime(), {
+      previews: store.deps,
+      withoutImage: link,
+    });
+    expect(embed.querySelector("a.wikilink")!.textContent).toBe("guida.pdf");
+    expect(embed.querySelector(".craft-figure-box, img")).toBeNull();
+    expect(embed.dataset.vaultMedia).toBe("loaded");
+    store.announce("Altro.pdf");
+    store.announce(GUIDA);
+    for (let round = 0; round < 20 && !embed.querySelector("img"); round++) await settle();
+    expect(store.asked()).toBe(2);
+    expect(embed.querySelector("img.craft-figure-page")).not.toBeNull();
+    expect(embed.querySelector("a.wikilink")).toBeNull();
+  });
+});

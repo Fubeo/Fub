@@ -482,12 +482,8 @@ async function hydrateEmbeds(
     // scheda. L'app non parte mai da una nota.
     const craft = craftPlaceholder(content.html);
     if (craft && craft.doc === content.doc_id) {
-      const openWikilink = options.openWikilink;
-      await showEmbeddedCraft(container, slot, craft, life, openWikilink ? {
-        open: (doc) => Promise.resolve().then(() => openWikilink(doc)).catch((error: unknown) => {
-          if (!life.closed) notify(t("preview.open_failed", { page: doc, reason: errorText(error) }), "guasto");
-        }),
-      } : {});
+      const open = opener(options, life);
+      await showEmbeddedCraft(container, slot, craft, life, open ? { open } : {});
       return;
     }
     // Embedded offsets never mutate the containing note.
@@ -507,9 +503,20 @@ async function hydrateEmbeds(
     container.dispatchEvent(new Event("markdown-resize", { bubbles: true }));
     await Promise.all([
       hydrateEmbeds(slot, new Set([...chain, identity]), memo, expected, embeddedOptions, life),
-      hydrateVaultMedia(slot, content.doc_id, expected, life),
+      hydrateVaultMedia(slot, content.doc_id, expected, life, undefined, opener(embeddedOptions, life)),
     ]);
   }));
+}
+
+/// Apre la scheda di un documento dal clic su una figura (un file Craft, un
+/// PDF), e dice da sé se non ci riesce; `undefined` dove la nota non apre
+/// niente (la stampa).
+function opener(options: MarkdownMountOptions, life: Lifetime): ((doc: string) => Promise<void>) | undefined {
+  const openWikilink = options.openWikilink;
+  if (!openWikilink) return undefined;
+  return (doc) => Promise.resolve().then(() => openWikilink(doc)).catch((error: unknown) => {
+    if (!life.closed) notify(t("preview.open_failed", { page: doc, reason: errorText(error) }), "guasto");
+  });
 }
 
 /** Shared Live/Reading mount: sanitization precedes every component and fetch. */
@@ -586,7 +593,7 @@ export function mountMarkdown(
         ...(documentId && (hasEmbeds || hasImages)
           ? [
             hydrateEmbeds(container, new Set([JSON.stringify([documentId, null, null])]), new Map(), expected, options, mountedLife),
-            hydrateVaultMedia(container, documentId, expected, mountedLife),
+            hydrateVaultMedia(container, documentId, expected, mountedLife, undefined, opener(options, mountedLife)),
           ]
           : []),
         ...queries.map(({ block, query }) => fillQueryBlock(block, query, expected, mountedLife)),

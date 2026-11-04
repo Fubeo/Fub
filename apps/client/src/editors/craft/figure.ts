@@ -12,6 +12,12 @@
 // con il gesto, ed è la scheda che decide (T23). Il segnaposto non entra mai nella
 // nota: il suo markup si legge e si butta.
 //
+// Un PDF o un documento di Word incorporato (`![[guida.pdf]]`) diventa la
+// stessa figura quando un'app ne ha fatto l'anteprima (T31): la prima pagina,
+// un foglio col filo e l'ombra, e il nome sotto. Senza anteprima resta ciò
+// che la nota mostrava prima (il collegamento del PDF), che chi chiama passa
+// come `withoutImage`.
+//
 // Tutto ciò che la figura accende (l'URL `blob:` dell'immagine, gli
 // ascoltatori, l'ascolto delle anteprime) vive nella `Lifetime` della resa:
 // una risposta che arriva a nota chiusa si scarta.
@@ -29,11 +35,15 @@ import { ratingText } from "./xmp-view";
 /// un segnaposto.
 export type CraftPlaceholderApp = Extract<CraftPreviewSubject, "vectorcraft" | "photocraft" | "figcraft" | "xmp">;
 
+/// Ciò che può diventare una figura: un file Craft, o un PDF o un documento
+/// di cui un'app fa l'anteprima (T31).
+export type CraftFigureSubject = CraftPlaceholderApp | Extract<CraftPreviewSubject, "pdf" | "document">;
+
 /// Il segnaposto di un file Craft: il documento, la sua famiglia e il nome
 /// della didascalia.
 export interface CraftPlaceholder {
   readonly doc: string;
-  readonly app: CraftPlaceholderApp;
+  readonly app: CraftFigureSubject;
   readonly name: string;
 }
 
@@ -49,6 +59,9 @@ export interface CraftFigureDeps {
     previewOf(doc: string, size: "small"): Promise<CraftPreviewAnswer | null>;
     watch(lifetime: Lifetime, watcher: (doc: string) => void): void;
   };
+  /// Ciò che la figura mostra finché non c'è un'immagine, al posto del
+  /// riquadro col nome: il collegamento di un PDF incorporato (T31).
+  readonly withoutImage?: () => HTMLElement;
 }
 
 const STORE: NonNullable<CraftFigureDeps["previews"]> = {
@@ -58,12 +71,22 @@ const STORE: NonNullable<CraftFigureDeps["previews"]> = {
 
 /// Il nome di ogni app quando il bundle non ha ancora risposto, o non
 /// risponde (il componente spento): lo stesso di `CraftApp::editor_name`.
-const EDITORS: Readonly<Record<CraftPlaceholderApp, string>> = {
+const EDITORS: Readonly<Record<CraftFigureSubject, string>> = {
   vectorcraft: "VectorCraft",
   photocraft: "PhotoCraft",
   figcraft: "FigCraft",
   xmp: "LightCraft",
+  pdf: "PdfCraft",
+  document: "WordCraft",
 };
+
+/// Le famiglie che hanno un segnaposto del provider.
+const PLACEHOLDER_APPS: readonly CraftPlaceholderApp[] = ["vectorcraft", "photocraft", "figcraft", "xmp"];
+
+/// Le figure che sono la prima pagina di un foglio.
+function isPage(app: CraftFigureSubject): boolean {
+  return app === "pdf" || app === "document";
+}
 
 const KIND_KEYS: Readonly<Record<CraftPlaceholderApp, Key>> = {
   vectorcraft: "craft.kind.vectorcraft",
@@ -83,7 +106,7 @@ const LABEL_KEYS: Readonly<Record<string, Key>> = {
 };
 
 function isApp(value: string | null): value is CraftPlaceholderApp {
-  return value !== null && Object.prototype.hasOwnProperty.call(EDITORS, value);
+  return value !== null && (PLACEHOLDER_APPS as readonly string[]).includes(value);
 }
 
 /// Il segnaposto con cui il provider di un file Craft rende un documento,
@@ -120,7 +143,8 @@ function xmpParts(xmp: CraftXmpInfo | null): string[] {
 function boxText(placeholder: CraftPlaceholder, label: string | null, preview: CraftPreview | null, settled: boolean): string {
   const parts = label === null ? [] : [label];
   if (preview) parts.push(craftInfoText(preview.info), ...xmpParts(preview.info.xmp));
-  else parts.push(t(KIND_KEYS[placeholder.app], { app: EDITORS[placeholder.app] }));
+  else if (isApp(placeholder.app)) parts.push(t(KIND_KEYS[placeholder.app], { app: EDITORS[placeholder.app] }));
+  else parts.push(EDITORS[placeholder.app]);
   if (settled && placeholder.app !== "xmp") parts.push(t("craft.figure.no_preview"));
   return parts.join(" · ");
 }
@@ -204,7 +228,7 @@ export async function showEmbeddedCraft(
       img.setAttribute("width", size?.width ?? String(image.width));
       if (size?.height) img.setAttribute("height", size.height);
       else if (!size) img.setAttribute("height", String(image.height));
-      img.className = "craft-figure-image";
+      img.className = isPage(placeholder.app) ? "craft-figure-image craft-figure-page" : "craft-figure-image";
       let shown: HTMLElement = img;
       if (!captioned(slot)) {
         const figure = document.createElement("figure");
@@ -217,6 +241,9 @@ export async function showEmbeddedCraft(
       openable(shown, t("craft.figure.alt", { name: label }));
       slot.dataset.vaultMedia = "loaded";
       slot.replaceChildren(shown);
+    } else if (deps.withoutImage) {
+      slot.dataset.vaultMedia = "loaded";
+      slot.replaceChildren(deps.withoutImage());
     } else {
       const box = document.createElement("span");
       box.className = "image-missing craft-figure-box";

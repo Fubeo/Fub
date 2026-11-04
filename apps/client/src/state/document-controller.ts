@@ -153,6 +153,7 @@ import { noteTargets } from "../editors/text/profiles/markdown/kinds";
 import type { SelectionBox } from "../editors/core/editor-actions";
 import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
 import { errorText } from "../host/errors";
+import { renderOnOpen } from "./craft-previews";
 import { writeChrome } from "./machine-chrome";
 import { onLanguage, t } from "../i18n/strings";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
@@ -2691,6 +2692,9 @@ export async function openDocument(id: string, options: OpenOptions = {}): Promi
         && !(layout.panes[pane]?.tabs ?? []).some((tab) => tab.k === "doc" && tab.doc === id);
       if (born) gestureBirths.set(pane, id);
       openIn(pane, id);
+      // Un PDF o un documento nato da un gesto, col consenso acceso: l'app ne
+      // fa l'anteprima in sottofondo, per la nota e il passaggio (T31).
+      if (born) void renderOnOpen(id);
       try {
         await synchronize();
       } finally {

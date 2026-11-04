@@ -210,6 +210,35 @@ export const SCENE = onPage("shell", [
     query: `raw-scheda=${kind}`,
     prepare: (page) => openRaw(page, `Foto/${name}`, kind !== "senza"),
   })),
+  // **PDF e documenti** (`?pdf-scena=<caso>`, vedi `craft-fixture.ts`),
+  // come le schermate T31 del prototipo: la nota col contratto in PDF, con la
+  // prima pagina o col link; il PDF aperto con la domanda sulle anteprime
+  // nella riga d'avviso; un Word prestato a WordCraft, con la riga del
+  // prestito e la domanda.
+  {
+    id: "nota-pdf",
+    title: "Una nota con un PDF che ha l'anteprima: la prima pagina, il nome sotto",
+    query: "pdf-scena=nota",
+    prepare: (page) => openPdfNote(page, true),
+  },
+  {
+    id: "nota-pdf-senza",
+    title: "La stessa nota, il PDF senza anteprima: il link",
+    query: "pdf-scena=nota-senza",
+    prepare: (page) => openPdfNote(page, false),
+  },
+  {
+    id: "pdf-domanda",
+    title: "Il PDF aperto: la domanda sulle anteprime nella riga d'avviso",
+    query: "pdf-scena=domanda",
+    prepare: openPdfQuestion,
+  },
+  {
+    id: "docx-due-righe",
+    title: "Un Word prestato a WordCraft: la riga del prestito e la domanda, ognuna con le sue azioni",
+    query: "pdf-scena=due-righe",
+    prepare: openLentDocx,
+  },
   {
     id: "prefs-appearance",
     title: "Le preferenze: carattere, accento e spazio dell'interfaccia, coi controlli dello Scrittoio",
@@ -1260,6 +1289,75 @@ async function openRaw(page, doc, withImage) {
     await page.waitForSelector(".pane.focus .craft-ask");
   }
   await page.waitForSelector(".pane.focus .photo-data .photo-data-open");
+}
+
+/// Apre la nota col PDF delle scene `nota-pdf*` e aspetta la prima pagina
+/// disegnata (`withPreview`) o il link.
+async function openPdfNote(page, withPreview) {
+  await fromTreeDrawer(page, () => openNote(page, "Casa/Affitto di via Roma.md"));
+  if (withPreview) {
+    // Lo slot dell'incorporamento ha già la sua didascalia: l'immagine ci
+    // entra da sola, senza un `figure` suo.
+    await page.waitForFunction(() => {
+      const image = document.querySelector(".pane.focus img.craft-figure-page");
+      return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0;
+    });
+  } else {
+    await page.waitForSelector('.pane.focus [data-vault-media="loaded"] a.wikilink');
+  }
+  await page.mouse.move(0, 0);
+}
+
+/// Apre il PDF della scena `pdf-domanda` con un clic nell'albero e aspetta
+/// la pagina disegnata e la riga della domanda.
+async function openPdfQuestion(page) {
+  await fromTreeDrawer(page, async () => {
+    await openFolder(page, "Casa");
+    await page.click('#file-list .tree-row[data-path="Casa/contratto-affitto.pdf"]');
+    await page.waitForSelector('.pane.focus .sheet-notice[data-notice="craft_consent"]');
+  });
+  // La pagina è disegnata quando la riga di stato conta le pagine.
+  await page.waitForFunction(() => {
+    const pdf = document.querySelector(".pane.focus .media-pdf");
+    return /\d/.test(pdf?.querySelector('[role="status"]')?.textContent ?? "")
+      && (pdf?.querySelector(".media-pdf-page canvas")?.width ?? 0) > 0;
+  });
+  await page.mouse.move(0, 0);
+}
+
+/// Fa `open` con l'albero a portata: in una finestra stretta l'albero sta nel
+/// cassetto, che si apre prima e si chiude dopo, come in `openRichDocument`.
+async function fromTreeDrawer(page, open) {
+  const compact = await page.evaluate(() => document.querySelector("#layout")?.classList.contains("layout-compact") ?? false);
+  if (compact) {
+    await page.click('#views-ribbon .rail-btn[data-panel="files"]');
+    await page.waitForSelector("#sidebar-scrim:not([hidden])");
+  }
+  await open();
+  if (compact && await page.isVisible("#sidebar-scrim")) {
+    // Non sul bordo destro: lì il puntatore fa affacciare l'ispettore.
+    const scrim = await page.locator("#sidebar-scrim").boundingBox();
+    await page.click("#sidebar-scrim", { position: { x: scrim.width - 80, y: 8 } });
+    await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
+  }
+}
+
+/// Apre il Word della scena `docx-due-righe`, lo presta a WordCraft dal menu
+/// dell'albero e aspetta le due righe.
+async function openLentDocx(page) {
+  const path = "Documenti/relazione.docx";
+  await fromTreeDrawer(page, async () => {
+    await openFolder(page, "Documenti");
+    await page.click(`#file-list .tree-row[data-path="${path}"]`);
+    await page.waitForSelector(".pane.focus .rich-surface .ProseMirror");
+    await page.click(`#file-list li[data-path="${path}"] > .tree-row`, { button: "right" });
+    await page.click('#context-menu button:has-text("Organizza")');
+    await page.click('.context-submenu button:has-text("Apri con un\'altra app")');
+    await page.click('.context-submenu >> nth=1 >> button:has-text("WordCraft")');
+    await page.waitForSelector('.pane.focus .sheet-notice[data-notice="lent"]');
+  });
+  await page.waitForSelector('.pane.focus .sheet-notice[data-notice="craft_consent"]');
+  await page.mouse.move(0, 0);
 }
 
 /// Apre la cartella di Excel della scena `grid-workbook` e aspetta che la
