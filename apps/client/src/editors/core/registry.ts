@@ -41,6 +41,12 @@ export interface SurfaceMode {
    * the theme's paper (`adattato`). Every mode declares it.
    */
   readonly looks: readonly Look[];
+  /**
+   * The figure of the mode in the mode menu and on the pane's button: a name
+   * `icon()` of `ui/icons.ts` can draw. Without it, or when the set doesn't
+   * know the name, the mode takes the figure of its role (`state/mode-menu.ts`).
+   */
+  readonly icon?: string;
 }
 
 export interface SurfaceMountContext {

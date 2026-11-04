@@ -13,6 +13,8 @@
 import { promptText } from "../ui/dialogs";
 import { openCompare } from "../ui/compare";
 import { pageIcon } from "../state/page-icons";
+import { modeIcon, openModeMenu } from "../state/mode-menu";
+import type { SurfaceMode } from "../editors/core/registry";
 import { FORMAT_ICON, formatKindOf, formatNameOf, formatTagOf } from "../ui/format-kind";
 import { iconEl } from "../ui/icons";
 import { api } from "../host/ipc";
@@ -1049,17 +1051,9 @@ function drawToolbar(r: Pane): void {
     current.className = "pane-mode-current";
     current.setAttribute("aria-haspopup", "menu");
     current.setAttribute("aria-expanded", "false");
-    current.addEventListener("click", () => {
-      focusPane(r.id);
-      const active = selectedMode(r);
-      current.setAttribute("aria-expanded", "true");
-      showContextMenu(current, (r.surface?.modes ?? []).map((mode) => ({
-        label: mode.label(),
-        choice: "radio" as const,
-        checked: active?.id === mode.id,
-        run: () => void setMode(mode.id),
-      })), { onClose: () => current.setAttribute("aria-expanded", "false") });
-    });
+    // Il menu è quello di tutti (`state/mode-menu.ts`): stesso ordine, stesse
+    // icone, le scorciatoie della persona.
+    current.addEventListener("click", () => openModeMenu(current, r.id));
     const menu = document.createElement("button");
     menu.type = "button";
     menu.dataset.paneMenu = "";
@@ -1110,8 +1104,7 @@ function drawToolbar(r: Pane): void {
   const active = selectedMode(r);
   group.hidden = modes.length <= 1;
   current.hidden = group.hidden;
-  current.textContent = active?.label() ?? "";
-  current.setAttribute("aria-label", t("document.toolbar.mode_current", { mode: active?.label() ?? "" }));
+  drawModeCurrent(current, active);
   while (group.children.length > modes.length) group.lastElementChild!.remove();
   modes.forEach((mode, index) => {
     let button = group.children[index] as HTMLButtonElement | undefined;
@@ -1134,6 +1127,24 @@ function drawToolbar(r: Pane): void {
   // entrambe sono appena state decise.
   frameOf(r).formatBar.update(state.commandSpecs);
   frameOf(r).selectionBubble.update(state.commandSpecs);
+}
+
+/// Il bottone della modalità accesa: la sua figura e il suo nome. La figura
+/// si riscrive solo quando cambia, il nome a ogni giro (la lingua può essere
+/// cambiata nel frattempo).
+function drawModeCurrent(current: HTMLButtonElement, active: SurfaceMode | undefined): void {
+  const figure = active ? modeIcon(active) : "";
+  if (current.dataset.icon !== figure || !current.querySelector(":scope > .pane-mode-name")) {
+    const name = document.createElement("span");
+    name.className = "pane-mode-name";
+    const glyph = figure ? iconEl(figure) : null;
+    current.replaceChildren(...(glyph ? [glyph] : []), name);
+    current.dataset.icon = figure;
+  }
+  const label = active?.label() ?? "";
+  current.querySelector(":scope > .pane-mode-name")!.textContent = label;
+  current.setAttribute("aria-label", t("document.toolbar.mode_current", { mode: label }));
+  setTooltip(current, label);
 }
 
 /// Porta lo stato del documento a fuoco — `#pane-status`: il salvataggio e

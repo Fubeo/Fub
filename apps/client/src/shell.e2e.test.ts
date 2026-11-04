@@ -3632,9 +3632,9 @@ describe("la modalità di ogni famiglia di superfici", () => {
     current.click();
     expect(current.getAttribute("aria-expanded")).toBe("true");
     const radios = [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
-    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Sorgente", "Live", "Blocchi", "Lettura"]);
+    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Live", "Blocchi", "Sorgente", "Lettura"]);
     expect(radios.filter((item) => item.getAttribute("aria-checked") === "true")).toHaveLength(1);
-    radios[0]!.click();
+    radios.find((item) => item.querySelector(".menu-label")?.textContent === "Sorgente")!.click();
     await settle();
     expect(paneMode()).toBe("source");
     expect(current.textContent).toBe("Sorgente");

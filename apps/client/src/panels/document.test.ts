@@ -570,6 +570,38 @@ describe("la testata del riquadro, prima di Scrittoio 2", () => {
     expect(currentOf(right!).textContent).toBe("Live");
   });
 
+  it("il bottone della modalità ha la figura e il nome della modalità accesa, e il suggerimento (T2)", async () => {
+    await start("off", null, { [NOTA]: "# Diario\n\nUna riga.\n" });
+    await open(NOTA);
+    const { t } = await import("../i18n/strings");
+    const { icon } = await import("../ui/icons");
+    const current = currentOf(panes()[0]!);
+    const figure = () => current.querySelector(":scope > svg")?.innerHTML;
+    const name = () => current.querySelector(":scope > .pane-mode-name")?.textContent;
+    const tooltip = () => {
+      current.dispatchEvent(new FocusEvent("focus"));
+      return document.getElementById(current.getAttribute("aria-describedby") ?? "")?.textContent;
+    };
+    const drawn = (which: string) => new DOMParser().parseFromString(icon(which), "image/svg+xml").documentElement.innerHTML;
+    expect(figure()).toBe(drawn("pen"));
+    expect(name()).toBe("Live");
+    expect(tooltip()).toBe("Live");
+    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Live" }));
+    const svg = current.querySelector(":scope > svg");
+    // Ridisegnare la testata senza cambiare modalità non riscrive la figura.
+    const { synchronize } = await import("./document");
+    await synchronize();
+    expect(current.querySelector(":scope > svg")).toBe(svg);
+    current.click();
+    await settle();
+    radios().find((item) => labelOf(item) === "Blocchi")!.click();
+    await waitFor("la nota in Blocchi", () => panes()[0]!.dataset.mode === "blocks");
+    expect(figure()).toBe(drawn("blocks"));
+    expect(name()).toBe("Blocchi");
+    expect(tooltip()).toBe("Blocchi");
+    expect(current.getAttribute("aria-label")).toBe(t("document.toolbar.mode_current", { mode: "Blocchi" }));
+  });
+
   it("le briciole: le cartelle con `data-folder`, poi il nome", async () => {
     await start("off", null, { [NOTA]: "# Diario\n" });
     await open(NOTA);

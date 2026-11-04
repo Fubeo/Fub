@@ -284,6 +284,17 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   da ciò che si scrive dopo (`editor.slash` lo spegne); con una selezione il
   menu «/» ha il suo campo. Entrambi passano per l'interfaccia della
   superficie testuale, mai per oggetti CodeMirror.
+- **Menu delle modalità.** Il bottone della testata del riquadro mostra la
+  figura e il nome della modalità accesa e apre il menu delle modalità, uno
+  solo (`state/mode-menu.ts`). L'ordine segue il ruolo: le modalità
+  `live_preview` come la superficie le dichiara, il sorgente, una riga, la
+  lettura; una nota dà Live, Blocchi, Sorgente e Lettura. La figura è la
+  `icon` della `SurfaceMode` se `ui/icons.ts` la sa disegnare, sennò quella
+  del ruolo (penna, codice, occhio). La scorciatoia è quella del comando che
+  porta alla modalità, anche se la persona l'ha cambiata: `shell.mode.blocks`
+  per i Blocchi, il comando del ruolo per la prima modalità di quel ruolo,
+  nessuna per le altre. Il menu dà il fuoco al suo riquadro all'apertura e di
+  nuovo alla scelta, perché chiudendosi rende il fuoco a chi l'aveva.
 - **Tasto destro negli editor.** Un solo ascoltatore sul riquadro
   (`panels/document.ts`) chiede alla superficie il suo `contextMenu(at)` e lo
   compone in `panels/editor-menu.ts` con le stesse sezioni, nello stesso
