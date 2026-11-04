@@ -211,7 +211,9 @@ il suo programma non dà né offerta né domanda.
   risposta di `craft.preview`; senza il programma `host.craft_render.no_cli`
   (`not_found`); oltre il peso massimo `host.craft_render.over_limit`.
   Altrimenti un biglietto e il job `craft.render { doc, size, ticket }` in
-  coda per quel vault, e la risposta col `CraftPreview` e `queued: true`.
+  coda per quel vault, e la risposta col `CraftPreview` e `queued: true`; un
+  biglietto che non nasce è `host.craft_render.ticket` (`io`), col dettaglio
+  soltanto nel log.
   Due gesti per lo stesso documento e la stessa misura mentre uno lavora
   avviano una CLI sola: il secondo risponde `queued: true` senza un biglietto
   nuovo.

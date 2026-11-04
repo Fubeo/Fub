@@ -39,6 +39,13 @@ mod with_craft {
         PluginError::Unserved(Text::key(key))
     }
 
+    /// Il biglietto non nasce (manca il caso del sistema): un errore tipato con
+    /// la sua chiave; il dettaglio va soltanto nel tracing.
+    fn ticket_refused(error: &std::io::Error) -> PluginError {
+        tracing::warn!(%error, "fub.craft: il biglietto dell'anteprima non nasce");
+        PluginError::Io(Text::key("host.craft_render.ticket"))
+    }
+
     impl Host {
         /// Fa l'anteprima di `doc` con la CLI della sua app, se serve e se
         /// l'utente l'ha permesso. Risponde subito: col `CraftPreview` di
@@ -106,7 +113,7 @@ mod with_craft {
                 Ok(ticket) => ticket,
                 Err(error) => {
                     render::abandon(&binding);
-                    return Err(PluginError::Io(error.to_string().into()));
+                    return Err(ticket_refused(&error));
                 }
             };
             let payload = serde_json::json!({
@@ -140,6 +147,33 @@ mod with_craft {
                 CommandEffect::Custom { payload, .. } => serde_json::from_value(payload)
                     .map_err(|error| PluginError::Internal(error.to_string().into())),
                 _ => Err(refused("host.craft_render.off")),
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use fub_abi::text::Text;
+        use fub_abi::PluginError;
+
+        use crate::settings::core_catalog;
+
+        #[test]
+        fn a_ticket_that_is_not_born_is_a_typed_error_with_its_key() {
+            let error = std::io::Error::other("getrandom: dettaglio interno");
+            let refused = super::ticket_refused(&error);
+            assert_eq!(
+                refused,
+                PluginError::Io(Text::key("host.craft_render.ticket"))
+            );
+            for locale in ["it", "en"] {
+                let catalog = core_catalog()
+                    .into_iter()
+                    .find(|catalog| catalog.locale == locale);
+                let has = catalog.is_some_and(|catalog| {
+                    catalog.entries.contains_key("host.craft_render.ticket")
+                });
+                assert!(has, "manca host.craft_render.ticket in {locale}");
             }
         }
     }

@@ -1890,6 +1890,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "Fub non usa le app Craft per le anteprime: si permette nelle impostazioni.",
         )
         .with("host.craft_render.no_cli", "Fub non trova il programma a riga di comando dell'app.")
+        .with("host.craft_render.ticket", "Fub non è riuscito a preparare l'anteprima: riprova.")
         .with(
             "host.craft_render.over_limit",
             "Il file supera il peso massimo per un'anteprima fatta dall'app.",
@@ -2490,6 +2491,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "Fub does not use the Craft apps for previews: allow it in the settings.",
         )
         .with("host.craft_render.no_cli", "Fub cannot find the app's command-line program.")
+        .with("host.craft_render.ticket", "Fub could not prepare the preview: try again.")
         .with(
             "host.craft_render.over_limit",
             "The file is over the maximum size for a preview made by the app.",
