@@ -39,11 +39,12 @@ nate dalle risposte e dai consigli di `lavagna.md` per le sue domande
 aperte. N6 va avanti sopra il ramo di N4, non sopra `main` (A-15). Restano
 tre domande nuove, D-20, D-21 e D-22: i task che le aspettano lo dicono.
 Ondate: T1 T2 T3 | T4 T5 T6 | T7 T8 T9 | T10 | T11 T25 | T26 T29 | T27 T12 | T28 T13 | T30 T14 | T24 T31 | T15 T20 | T33 T16 | T32 T19 | T48 T73 | T34 T37 | T17 | T40 T47 | T39 T21 | T38 | T41 | T42 | T43 | T44 | T35 T46 | T53 | T36 | T54 | T49 | T50 | T45 | T51 | T52 | T55 | T56 T65 | T57 | T58 T68 | T59 | T60 | T61 | T62 | T63 | T64 | T66 | T67 | T69 | T70 | T71 | T72 | T74 | T75 | T76 | T77 | T78 | T22 | T86 | T87 | T89 | T23 | T18 | T79 | T80 T88 | T81 | T82 | T83 | T84 | T85 | T90
-Prototipo: quattro pagine da fare, nessuna ancora approvata:
-`PLAN-ui/lavagna-schede.html` (T25), `PLAN-ui/lavagna-impianto.html` (T26),
-`PLAN-ui/lavagna-modifica.html` (T27), `PLAN-ui/lavagna-estratti.html`
-(T28). Ognuna la costruisce un coder con `.claude/skills/pianifica/prototipo.md`
-e la fa vedere l'orchestratore all'utente, finché non dice sì; nessun task
+Prototipo: quattro pagine, nessuna ancora approvata.
+`PLAN-ui/lavagna-schede.html` (T25): fatta il 2026-11-04, approvato: —.
+`PLAN-ui/lavagna-impianto.html` (T26), `PLAN-ui/lavagna-modifica.html`
+(T27), `PLAN-ui/lavagna-estratti.html` (T28): da fare. Ognuna la
+costruisce un coder con `.claude/skills/pianifica/prototipo.md` e la fa
+vedere l'orchestratore all'utente, finché non dice sì; nessun task
 grafico che ne dipende parte prima della riga «Approvato» (A-26).
 
 ## Modifiche
@@ -64,13 +65,13 @@ grafico che ne dipende parte prima della riga «Approvato» (A-26).
 
 ## Dal prototipo
 
-I quattro prototipi (T25–T28) non ci sono ancora. Ogni parte visibile riusa
-un pezzo che c'è già; la tabella dice dove finisce e chi la fa. I task fino
-a T21 usano le classi di oggi e la sola struttura che serve a funzionare
-(`structure.css`); l'aspetto vero lo danno i task che dipendono dal loro
-prototipo. Quando un prototipo è approvato, l'orchestratore (T25–T28)
-aggiunge qui le classi nuove che la pagina usa, una riga per pezzo, con il
-file e il task.
+La pagina di T25 c'è e aspetta il sì; quelle di T26–T28 non ci sono
+ancora. Ogni parte visibile riusa un pezzo che c'è già; la tabella dice
+dove finisce e chi la fa. I task fino a T21 usano le classi di oggi e la
+sola struttura che serve a funzionare (`structure.css`); l'aspetto vero
+lo danno i task che dipendono dal loro prototipo. Quando un prototipo è
+approvato, l'orchestratore (T25–T28) aggiunge qui le classi nuove che la
+pagina usa, una riga per pezzo, con il file e il task.
 
 | Pezzo | Destinazione | Task |
 |---|---|---|
@@ -94,6 +95,29 @@ file e il task.
 | La modifica dentro le schede, «Apri a lato per questo» | `state/card-editors.ts` (nuovo), `editors/canvas/cards/*.ts`, `editors/grid/card.ts` | T27, T41–T45 |
 | Il selettore, la scheda-estratto, il lettore, le fonti, il ritaglio di un'immagine | `editors/canvas/parts-picker.ts`, `excerpt.ts`, `reader.ts`, `sources.ts`, `crop.ts` (nuovi) | T28, T74–T78, T80–T85 |
 | La pagina di prodotto | `docs/product/lavagna.md` (nuovo) | T23 |
+
+Le classi nuove di `PLAN-ui/lavagna-schede.html` (T25, in attesa del sì:
+valgono quando la pagina è approvata; se l'utente cambia una scelta, si
+correggono qui). Ogni blocco `<style>` della pagina dice il suo file; il CSS
+nuovo passa da `sanitizeThemeCss`. Ogni classe va anche negli agganci di
+`anatomia/editors.ts`.
+
+| Pezzo | Destinazione | Task |
+|---|---|---|
+| Specie e modo della scheda: `data-card-kind`, `data-card-mode` (`snapshot`, `live`), il nome «Scheda di {kind}, {name}» | `engine.ts` (`#nodeEl`), i renderer di `cards/*.ts` | T11, T13, T61 |
+| Le schede di oggi nel tema: `canvas-card-note`, `-note-content`, `-image`, `-picture`, `-pdf`, `-pdf-page`, `-pdf-status`, `-pdf-previous`, `-pdf-next`, `-sheet`, `-web`, `-web-title`, `-web-description`, `-web-site`, `-web-host`, `-web-domain`, `-web-actions`, `-web-preview`, `canvas-node-file`, `canvas-node-link`, `canvas-node-title`, `canvas-edge` (il codice le ha, il tema no) | `skin/editors.css`, `anatomia/editors.ts` | T22 |
+| La scheda di file (CSV, audio): `canvas-media-placeholder` col tipo e il percorso, «Apri» | `skin/editors.css` | T22 |
+| Il titolo sopra (D-21 (a)): la testata di `canvas-node-file` e `canvas-node-link` fuori dal bordo; il contenuto isolato (`isolation`) sotto le maniglie | `structure.css`, `skin/editors.css` | T39 |
+| La testata: `canvas-node-cites` («↩ 2»), `canvas-node-twins` («×2»), le gemelle illuminate `data-card-twin` | `engine.ts`, `structure.css`, `skin/editors.css` | T22 |
+| La scheda attiva: `data-card-active`, `canvas-exit-hint` («Esc per uscire») al posto di → | `engine.ts`, `structure.css`, `skin/editors.css` | T14, T22 |
+| Il fantasma del rilascio: `canvas-drop-ghost`, `canvas-drop-ghost-group`, `canvas-drop-ghost-name` | `engine.ts`, `structure.css`, `skin/editors.css` | T15, T22 |
+| File mancante: `canvas-card-missing`, `canvas-card-missing-actions` (con `data-card-state="missing"`) | `cards/*.ts`, `structure.css`, `skin/editors.css` | T16, T22 |
+| La scheda Craft: `canvas-card-craft`, `canvas-card-craft-actions` («Apri», «Apri con…») | `cards/craft.ts`, `structure.css`, `skin/editors.css` | T18 |
+| I colori: `data-canvas-color` (1–6, i nove nomi delle note, `custom`), `--canvas-paper`, `--canvas-color`, l'anello sopra foto, PDF, Craft e foglio; il pallino `menu-swatch` del menu | `editors/canvas/colors.ts`, `engine.ts` (via lo stile in linea), `structure.css`, `skin/editors.css`, `skin/menus.css` | T47 |
+| Da lontano: `canvas-node-far`, `data-card-detail` (`far`, `block`), `--canvas-zoom` | `editors/canvas/lod.ts`, `structure.css`, `skin/editors.css` | T54 |
+| Le maniglie: `canvas-resize` con `data-corner` | `engine.ts`, `structure.css`, `skin/editors.css` | T66 |
+| I quattro punti e il filo al passaggio: `canvas-port` con `data-side`, `canvas-edge` con `data-hover` | `engine.ts`, `structure.css`, `skin/editors.css` | T67 |
+| L'etichetta «Si attacca a…»: `canvas-ink-label` (`data-free` se il tratto resta libero), la scheda bersaglio `data-ink-target` | `engine.ts`, `structure.css`, `skin/editors.css` | T69 |
 
 ## Che cosa si vede
 
