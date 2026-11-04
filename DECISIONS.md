@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- K3 T13, dopo la CI di 8493f177: effetto.rs cadeva sul runner perché
+  review.spelling chiede l'elenco di parole del sistema
+  (/usr/share/dict/words), che il runner non ha, e GridCraft rifiuta il
+  controllo prima di toccare la cartella. L'orchestratore accetta quel solo
+  rifiuto, per i comandi review.*, come «non provato» (lo stampa); con
+  l'elenco il comando gira e la prova vale. Provato in locale nei due modi
+  (con l'elenco, e con l'elenco coperto in uno spazio dei nomi).
 - K3 T13 integrata (4f244e0d). Gli effetti sono 250 cambia, 31 legge, 22
   mostra (il prototipo ne dice 250/29/24, il piano 249/29/24).
   L'orchestratore tiene la regola del piano, provata da effetto.rs, al posto
