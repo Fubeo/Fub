@@ -42,6 +42,7 @@ default = [
     "engine-documents",
     "engine-sheets",
     "http-client",
+    "lavagna",
     "craft",
 ]
 search = ["dep:tantivy", "dep:regex"]
@@ -106,6 +107,10 @@ draw = [
     "dep:kurbo",
     "dep:wuff",
 ]
+# La lavagna: il comando `canvas.apply`, che porta in un `.canvas` le
+# operazioni del suo nucleo. Il nucleo è puro (`serde`, `serde_json`,
+# `thiserror`) e nessun'altra feature lo tira dentro.
+lavagna = ["dep:fub-canvas-core"]
 # Il correttore porta il motore di WordCraft, e nessun altro lo tira dentro.
 proof = ["dep:wordcraft-proof"]
 # I componenti che non sono moduli di questo crate: il codice sta in
@@ -139,6 +144,9 @@ fub-format-base = { workspace = true, optional = true }
 # formato è una libreria del contratto e non porta il kernel.
 fub-format-svg = { workspace = true, optional = true }
 serde_json = { workspace = true }
+# Dietro `lavagna`: il modello, le operazioni e il commit di una `.canvas`.
+# Come i formati qui sopra è una libreria pura, e non porta il kernel.
+fub-canvas-core = { workspace = true, optional = true }
 # Dietro `properties`: stessa crate/versione del provider markdown, usata solo
 # per riscrivere la mappa del frontmatter (mai `FormatProvider::serialize`).
 serde_yaml_ng = { workspace = true, optional = true }
@@ -236,6 +244,8 @@ fub-sdk = { workspace = true }
 # Il banco del lato host, per i test end-to-end che montano il kernel (§16.2).
 fub-testkit = { workspace = true }
 fub-format-markdown.workspace = true
+# Il formato delle lavagne, per i test end-to-end di `canvas.apply`.
+fub-format-canvas.workspace = true
 tempfile = { workspace = true }
 # I test dell'export dei disegni confrontano i PDF per struttura, e per leggerne
 # i flussi devono decomprimerli.

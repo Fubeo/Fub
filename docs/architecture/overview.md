@@ -223,7 +223,8 @@ flowchart LR
     gxlsx --> gmodel
 ```
 
-Il quarto blocco è `fub-format-craft`, che legge in sola lettura i
+Il quarto blocco è il nucleo della lavagna, `fub-canvas-core`, con chi lo usa.
+Il quinto blocco è `fub-format-craft`, che legge in sola lettura i
 [file delle app Craft](../reference/craft-formats.md): dipende soltanto dal
 contratto, e lo usa soltanto `fub-host`, che ne monta i formati e il bundle
 `fub.craft` (feature `craft`).
@@ -231,7 +232,19 @@ contratto, e lo usa soltanto `fub-host`, che ne monta i formati e il bundle
 ```mermaid
 flowchart LR
     %% @grafo-dipendenze
-    %% Il seguito del grafo: fub-format-craft.
+    %% Il seguito del grafo: il nucleo della lavagna e i suoi clienti.
+
+    canvas["fub-format-canvas"]
+    canvascore["fub-canvas-core"]
+    canvaswasm["fub-canvas-wasm"]
+    features["fub-features"]
+
+    canvas --> canvascore
+    canvaswasm --> canvascore
+    features --> canvascore
+    features -.-> canvas
+
+    %% E fub-format-craft.
 
     abi["fub-abi"]
     sdk["fub-sdk"]
@@ -260,6 +273,25 @@ del tratto, e quella di `fub-format-rich`, che ne scrive e legge l'InkML
 dell'inchiostro dei documenti; chi altro può dipenderne è un elenco chiuso,
 deciso nell'[ADR 0204](../decisions/0204-nucleo-inchiostro.md) e allargato
 nell'[ADR 0226](../decisions/0226-inchiostro-e-disegni-nei-documenti.md).
+
+`fub-canvas-core`, il nucleo della lavagna, non ha frecce verso altri crate
+del workspace: dipende soltanto da `serde`, `serde_json` e `thiserror`, e non
+vede `fub-abi` né il Markdown, perché lo carica anche la WebView come modulo
+`wasm32-unknown-unknown`. Ha il modello di una `.canvas` e la sua lettura; le
+sue frecce in ingresso sono quella di `fub-format-canvas`, che lo riespone con
+la stessa API, quella di `fub-features`, facoltativa dietro la feature
+`lavagna`, per il comando `canvas.apply`, e quella di `fub-canvas-wasm`, la
+facciata che la WebView carica come `.wasm`. Chi altro può dipenderne è un
+elenco chiuso (`dependency_invariant.rs`), e il giro completo di
+`scripts/check.sh` lo compila per quel bersaglio. Le regole stanno nel
+[formato della lavagna](../reference/canvas-format.md).
+
+`fub-canvas-wasm` mette il nucleo dietro un'interfaccia C scritta a mano, senza
+librerie di collegamento: dipende solo dal nucleo, da `serde` e da
+`serde_json`, e nessun crate dipende da lui. Il manifesto resta `rlib`; il
+modulo si fa con `cargo rustc --crate-type cdylib`. Le funzioni e la memoria
+stanno in [Operazioni sulla
+lavagna](../reference/canvas-operations.md#webassembly).
 
 `fub-componenti`, il risolutore dei componenti, non ha frecce in uscita:
 dipende soltanto da `serde`, non vede `fub-abi`, e dice in un posto solo che

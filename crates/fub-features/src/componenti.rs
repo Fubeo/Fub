@@ -15,9 +15,9 @@
 //!
 //! # Righe che non sono bundle
 //!
-//! Lavagna, Penna, Dizionari e i due motori sono componenti senza un bundle
-//! loro (`bundle: false`): li richiede o li usa qualcun altro, e in K1 sono
-//! sempre dentro il binario. I loro id sono quelli dell'ADR, e nel manifest di
+//! Penna, Dizionari e i due motori sono componenti senza un bundle loro
+//! (`bundle: false`): li richiede o li usa qualcun altro, e in K1 sono sempre
+//! dentro il binario. I loro id sono quelli dell'ADR, e nel manifest di
 //! chi li richiede non compaiono: vedi [`SOLO_DELLA_MAPPA`].
 
 use fub_abi::text::StringCatalog;
@@ -302,15 +302,15 @@ pub fn righe() -> Vec<Riga> {
             .uses(&["fub.penna"])
             .ui(&["editors/grid"])
             .cargo_feature("xlsx"),
-        // Oggi sempre compilata nel client, e senza bundle. Il motore
-        // vettoriale che la porterà non esiste ancora: quando ci sarà, sarà
-        // una riga di supporto che questa richiede.
+        // Il bundle porta `canvas.apply`, che cambia una `.canvas` con le
+        // operazioni del nucleo (`fub-canvas-core`); l'editor sta nel client.
+        #[cfg(feature = "lavagna")]
         Riga::modalita("fub.lavagna", "component.lavagna.name")
             .group("pensare")
             .requires(&["fub.penna"])
             .uses(&["fub.rich", "fub.xlsx"])
             .ui(&["editors/canvas"])
-            .senza_bundle(),
+            .cargo_feature("lavagna"),
         // Di supporto: accesi quando qualcuno li richiede.
         Riga::motore("fub.penna", "component.penna.name")
             .group("supporto")

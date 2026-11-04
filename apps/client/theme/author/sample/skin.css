@@ -7798,7 +7798,7 @@ kbd,
   width: 9rem;
 }
 .canvas-intake-error {
-  margin-left: var(--space-4);
+  margin-inline-end: var(--space-4);
   color: var(--danger);
   font-size: var(--text-sm);
 }

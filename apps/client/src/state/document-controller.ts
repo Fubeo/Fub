@@ -792,6 +792,10 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     onSelectionChange: (paneId) => {
       if (layout.focus === paneId) scheduleContext();
     },
+    onFail: (paneId, error) => {
+      const r = panes.get(paneId);
+      if (r?.shown?.k === "doc") failSurface(r, r.shown.doc, error);
+    },
     // Il clic su un link è un gesto: la scheda che nasce lo sa (T23).
     onOpenWikilink: (page, heading, block) =>
       openWikilink(page, heading ?? undefined, block ?? undefined, undefined, { gesture: true }),
@@ -2348,14 +2352,30 @@ function failSurface(r: Pane, doc: string, error: unknown): void {
 function attachSurface(r: Pane, doc: string): void {
   const surface = r.surface;
   if (!surface) return;
+  const buffer = surface.buffer;
   r.disposeSurface = documentSessions.attachSurface(doc, {
     id: surface.surfaceId,
     sync: (update) => applySurfaceUpdate(r, doc, update),
+    // Il testo che la superficie tiene ancora (una scheda prima della pausa):
+    // la sessione lo mette in bozza e lo fa registrare prima di leggere il buffer.
+    pendingText: buffer?.pendingText ? () => buffer.pendingText?.() ?? null : undefined,
+    commitPending: buffer?.commitPending ? () => buffer.commitPending?.() : undefined,
+    watchPending: buffer?.watchPending ? (listener) => buffer.watchPending!(listener) : undefined,
   });
   surface.setReadOnly?.(heldReadOnly(doc));
 }
 
+/// Prima di staccarsi la superficie registra il testo che tiene ancora: va alla
+/// sessione del documento che il riquadro mostra, finché è attaccata. La
+/// registrazione nella `destroy` della superficie resta soltanto una rete.
 function detachSurface(r: Pane): void {
+  if (r.disposeSurface) {
+    try {
+      r.surface?.buffer?.commitPending?.();
+    } catch (error) {
+      console.error(error);
+    }
+  }
   r.disposeSurface?.();
   r.disposeSurface = null;
 }
@@ -2868,7 +2888,10 @@ export async function openFigure(doc: string): Promise<void> {
 /// resta sua e annullabile. Soltanto se le due modifiche si toccano vince il
 /// testo autorevole, senza coprire la battuta arrivata altrove.
 function written(paneId: string, change: EditorChange): void {
-  const doc = activeDoc(paneId);
+  // Il documento che il riquadro mostra: durante un cambio di tab la scheda
+  // attiva è già l'altra, e il testo registrato allo stacco è di questo.
+  const shown = panes.get(paneId)?.shown;
+  const doc = shown?.k === "doc" ? shown.doc : activeDoc(paneId);
   if (!doc) return;
   const outcome = documentSessions.acceptSurfaceChange(doc, paneId, change);
   if (outcome.kind !== "realigned") return;

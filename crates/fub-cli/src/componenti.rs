@@ -9,7 +9,7 @@
 //! - **Che cosa è acceso lo decide il risolutore** (`fub_componenti`) sulla
 //!   mappa di questa build (`fub_host::componenti`).
 //! - **Si scrive soltanto con `set_plugin_enabled`**, e soltanto per le righe
-//!   che sono bundle: le altre (Lavagna, Penna, Dizionari, i motori) cambiano
+//!   che sono bundle: le altre (Penna, Dizionari, i motori) cambiano
 //!   solo che cosa si dice, perché in K1 nient'altro le legge. Gli id che
 //!   `plugins.disabled` nomina e la mappa non ha più non accendono niente e
 //!   restano dove sono: `set_plugin_enabled` tocca soltanto l'id che riceve.
@@ -645,7 +645,7 @@ mod tests {
         let esito = vista
             .spegni("fub.lavagna", false, Orfani::Chiedi, &OPZIONI_CLI)
             .unwrap();
-        assert!(esito.scritture.is_empty(), "la lavagna non è un bundle");
+        assert_eq!(esito.scritture, [("fub.lavagna".to_string(), false)]);
         assert!(
             esito
                 .messaggio()

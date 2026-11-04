@@ -1,0 +1,24 @@
+{
+  "name": "unknown-fields-every-level",
+  "description": "I campi sconosciuti si conservano a ogni livello",
+  "source": "{\"nodes\":[{\"id\":\"n\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"a\",\"xVendor\":1}],\"edges\":[],\"xRoot\":true}",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [
+      {
+        "id": "n",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 10,
+        "height": 10,
+        "text": "a",
+        "xVendor": 1
+      }
+    ],
+    "edges": [],
+    "extra": {
+      "xRoot": true
+    }
+  }
+}

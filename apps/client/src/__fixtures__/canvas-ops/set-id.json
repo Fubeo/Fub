@@ -1,0 +1,6 @@
+{
+  "about": "L'id di una scheda non si cambia con set: Invalid.",
+  "before": { "nodes": [{ "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }] },
+  "ops": [{ "op": "set", "id": "a", "fields": { "id": "b" } }],
+  "expect": { "outcome": "rejected", "error": { "kind": "Invalid", "index": 0 } }
+}

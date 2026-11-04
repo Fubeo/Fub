@@ -184,7 +184,6 @@ const SENZA_FEATURE: &[(&str, &str)] = &[
     ),
     ("fub.markdown", "il nucleo: le note sono sempre compilate"),
     ("fub.importers", "l'importazione è sempre montata dall'host"),
-    ("fub.lavagna", "la lavagna è sempre compilata nel client"),
     (
         "fub.penna",
         "l'inchiostro è una libreria dei formati, sempre compilata",
@@ -336,7 +335,8 @@ fn fub_host_inoltra_ogni_feature_componente() {
     feature = "engine-documents",
     feature = "engine-sheets",
     feature = "http-client",
-    feature = "craft"
+    feature = "lavagna",
+    feature = "craft",
 ))]
 fn with_all_the_feature_the_two_lists_coincide() {
     // Una feature fuori dal default c'è nella mappa solo se questa build l'ha

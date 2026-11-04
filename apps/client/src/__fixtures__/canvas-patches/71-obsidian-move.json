@@ -1,0 +1,10 @@
+{
+  "name": "obsidian-move",
+  "description": "Una lavagna scritta da Obsidian (tab, campi nell'ordine di Obsidian, testo prima delle coordinate) e una scheda spostata: cambiano solo i byte di \"x\", da -120 a -40; rientri, ordine dei campi e le altre righe restano com'erano",
+  "before": "{\n\t\"nodes\":[\n\t\t{\"id\":\"6f1d2a\",\"type\":\"text\",\"text\":\"# Idea\\n\\nvedi [[Nota]]\",\"x\":-120,\"y\":-60,\"width\":250,\"height\":60,\"color\":\"4\"},\n\t\t{\"id\":\"9c0b7e\",\"type\":\"file\",\"file\":\"Nota.md\",\"x\":200,\"y\":-60,\"width\":400,\"height\":400}\n\t],\n\t\"edges\":[\n\t\t{\"id\":\"e71a\",\"fromNode\":\"6f1d2a\",\"fromSide\":\"right\",\"toNode\":\"9c0b7e\",\"toSide\":\"left\"}\n\t]\n}",
+  "patches": [{"kind":"upsert-node","before":{"id":"6f1d2a","type":"text","x":-120,"y":-60,"width":250,"height":60,"color":"4","text":"# Idea\n\nvedi [[Nota]]"},"after":{"id":"6f1d2a","type":"text","x":-40,"y":-60,"width":250,"height":60,"color":"4","text":"# Idea\n\nvedi [[Nota]]"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\n\t\"nodes\":[\n\t\t{\"id\":\"6f1d2a\",\"type\":\"text\",\"text\":\"# Idea\\n\\nvedi [[Nota]]\",\"x\":-40,\"y\":-60,\"width\":250,\"height\":60,\"color\":\"4\"},\n\t\t{\"id\":\"9c0b7e\",\"type\":\"file\",\"file\":\"Nota.md\",\"x\":200,\"y\":-60,\"width\":400,\"height\":400}\n\t],\n\t\"edges\":[\n\t\t{\"id\":\"e71a\",\"fromNode\":\"6f1d2a\",\"fromSide\":\"right\",\"toNode\":\"9c0b7e\",\"toSide\":\"left\"}\n\t]\n}"
+  }
+}

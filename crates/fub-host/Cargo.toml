@@ -190,6 +190,7 @@ official-features = [
     "base",
     "formatting",
     "proof",
+    "lavagna",
 ]
 search = ["fub-features/search"]
 versioning = ["fub-features/versioning"]
@@ -209,6 +210,7 @@ blocks = ["fub-features/blocks"]
 base = ["fub-features/base"]
 formatting = ["fub-features/formatting"]
 proof = ["fub-features/proof"]
+lavagna = ["fub-features/lavagna"]
 
 # Il formato `svg` delle scene di FubDraw (ADR 0203), e con lui l'export dei
 # disegni in PNG, JPEG, SVG e PDF (`fub.draw` in `fub-features`): un export di

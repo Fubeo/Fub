@@ -1,0 +1,9 @@
+{
+  "name": "r2-2p53-x",
+  "description": "R2: 2^53 in x non è un intero sicuro",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":9007199254740992,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\"}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}
