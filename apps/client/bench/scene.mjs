@@ -196,6 +196,20 @@ export const SCENE = onPage("shell", [
     query: `craft-scheda=${kind}`,
     prepare: (page) => openCraft(page, ready, kind === "prepara" ? "Preparo l'anteprima…" : null),
   })),
+  // **La scheda di un RAW** (`?raw-scheda=<caso>`, vedi `raw-fixture.ts`),
+  // aperta con un clic nell'albero come le schermate T28 del prototipo: il
+  // JPEG che il RAW ha dentro, dritto o scattato in verticale (orientamento
+  // 6), coi dati dell'XMP sotto; e un RAW senza JPEG, con la domanda.
+  ...[
+    ["raw", "dritto", "La scheda di un RAW: il JPEG che ha dentro, coi dati dell'XMP sotto", "IMG_0398.CR3"],
+    ["raw-girato", "girato", "La scheda di un RAW scattato in verticale: il JPEG raddrizzato dall'orientamento", "IMG_0412.CR3"],
+    ["raw-senza", "senza", "La scheda di un RAW senza JPEG dentro: la domanda di LightCraft, coi dati dell'XMP", "IMG_0413.CR3"],
+  ].map(([id, kind, title, name]) => ({
+    id,
+    title,
+    query: `raw-scheda=${kind}`,
+    prepare: (page) => openRaw(page, `Foto/${name}`, kind !== "senza"),
+  })),
   {
     id: "prefs-appearance",
     title: "Le preferenze: carattere, accento e spazio dell'interfaccia, coi controlli dello Scrittoio",
@@ -1230,6 +1244,22 @@ async function openCraft(page, ready, said) {
   if (said !== null) {
     await page.waitForFunction((text) => document.querySelector(".pane.focus .craft-empty-state")?.textContent === text, said);
   }
+}
+
+/// Apre il RAW delle scene `raw-*` con un clic nell'albero e aspetta il JPEG
+/// disegnato (`withImage`) o la domanda, e la riga dei dati dell'XMP.
+async function openRaw(page, doc, withImage) {
+  await openFolder(page, "Foto");
+  await page.click(`#file-list .tree-row[data-path="${doc}"]`);
+  if (withImage) {
+    await page.waitForFunction(() => {
+      const image = document.querySelector(".pane.focus .craft-card img");
+      return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0;
+    });
+  } else {
+    await page.waitForSelector(".pane.focus .craft-ask");
+  }
+  await page.waitForSelector(".pane.focus .photo-data .photo-data-open");
 }
 
 /// Apre la cartella di Excel della scena `grid-workbook` e aspetta che la

@@ -127,6 +127,23 @@ crea accanto a una foto aperta, la riga si aggiorna da sola, in ogni riquadro
 che mostra la foto. Con il componente `fub.craft` spento la foto non ha la
 riga, e Fub non chiede niente.
 
+## Un RAW
+
+Una foto RAW (CR3, CR2, NEF, ARW, RAF, DNG, ORF, RW2) si apre in una scheda
+come una foto: il JPEG che la fotocamera ha scritto dentro il file, con lo
+zoom, «Adatta», «1:1», il giro e lo sfondo. Il JPEG si mostra dritto: una foto
+scattata in verticale sta coricata nel file, e Fub la raddrizza col suo
+orientamento, specchio compreso. La misura sotto il JPEG è quella della foto
+dritta. Sotto c'è «Foto RAW», il formato e il peso del file, per esempio «Foto
+RAW · CR3 · 25.8 MiB», e la riga dei dati di LightCraft quando il RAW ha un
+XMP accanto (vedi **Una foto**).
+
+Con il JPEG dentro, la scheda non avvia mai LightCraft. Un RAW senza JPEG ha
+la scheda di un file Craft senza anteprima: la domanda sulle anteprime fatte
+dalle app con LightCraft, o il pulsante per farla, come in **Le anteprime
+fatte dalle app**, e sotto la riga dell'XMP. Con il componente `fub.craft`
+spento un RAW resta un file che Fub non sa aprire.
+
 ## File collegati
 
 Un file piazzato in un documento Craft, come una foto messa in un disegno di

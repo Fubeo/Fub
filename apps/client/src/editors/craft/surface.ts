@@ -15,6 +15,14 @@
 // link `fub://` o da una vista) mostra il pulsante (T23). Un XMP si disegna
 // con `xmp-view.ts`.
 //
+// Una foto RAW (profilo `raw`) è la stessa scheda: il JPEG che il RAW ha
+// dentro, nella vista dello zoom che parte con l'orientamento dell'anteprima
+// (la foto si vede dritta, e la riga dello zoom dice le misure dritte), sotto
+// la riga dei dati («Foto RAW · CR3 · 24.2 MiB») e i dati del suo XMP
+// (`photo-data.ts`); senza JPEG, il riquadro con la domanda o il pulsante di
+// LightCraft, e i dati dell'XMP sotto. La scheda non chiede mai l'anteprima
+// all'app quando il JPEG c'è.
+//
 // Tutto ciò che la scheda accende vive nella `Lifetime` della superficie: una
 // risposta che arriva a scheda chiusa si scarta.
 
@@ -26,8 +34,9 @@ import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { previewOf, renderPreview, watchCraftPreviews, type CraftPreviewAnswer } from "../../state/craft-previews";
 import { mountConsent, settingsLink } from "./consent";
 import { decodeImage, mountImageView } from "../media/image-view";
-import { CRAFT_PROFILE, craftInfoText, fileName, type CraftSurfaceDeps } from "./index";
+import { RAW_PROFILE, XMP_PROFILE, craftInfoText, fileName, type CraftSurfaceDeps } from "./index";
 import { mountXmpView } from "./xmp-view";
+import { showPhotoData } from "./photo-data";
 
 /// L'anteprima manca e un'app installata può farla: c'è il pulsante. Il
 /// bundle non offre l'app per un file oltre il peso massimo; la scheda lo
@@ -172,7 +181,7 @@ export function mountCraftContent(
     shown = answer;
     said = null;
     const preview = answer.preview;
-    if (profile !== CRAFT_PROFILE) {
+    if (profile === XMP_PROFILE) {
       const view = mountXmpView(preview, deps, openLifetime());
       replace(view.element).add(() => view.destroy());
       return;
@@ -194,6 +203,7 @@ export function mountCraftContent(
   function drawImage(preview: CraftPreview): void {
     const image = preview.image!;
     const bytes = imageBytes(image.data);
+    const raw = profile === RAW_PROFILE;
     const decoded = decodeImage(
       {
         handle: "",
@@ -208,15 +218,25 @@ export function mountCraftContent(
     const card = document.createElement("div");
     card.className = "craft-card";
     const own = replace(card);
-    const view = mountImageView(decoded, t("craft.figure.alt", { name }), own);
-    card.append(view.element, paragraph("craft-info", craftInfoText(preview.info)));
+    // Un JPEG non dice le sue misure nella firma: le dice l'anteprima. Il
+    // JPEG di un RAW si mostra con l'orientamento che il RAW scrive.
+    const view = raw
+      ? mountImageView(
+        { ...decoded, width: decoded.width ?? image.width, height: decoded.height ?? image.height },
+        t("craft.figure.alt", { name }),
+        own,
+        image.orientation,
+      )
+      : mountImageView(decoded, t("craft.figure.alt", { name }), own);
+    card.append(view.element, paragraph("craft-info", craftInfoText(preview.info, doc)));
+    if (raw) showPhotoData(card, doc, deps, own);
   }
 
   function drawEmpty(answer: CraftPreviewAnswer, broken: string | null): void {
     const preview = answer.preview;
     const box = document.createElement("div");
     box.className = "craft-empty";
-    box.append(paragraph("craft-empty-name", name), paragraph("craft-info", craftInfoText(preview.info)));
+    box.append(paragraph("craft-empty-name", name), paragraph("craft-info", craftInfoText(preview.info, doc)));
     const state = paragraph("craft-empty-state", stateText(answer, broken));
     state.setAttribute("role", "status");
     box.append(state);
@@ -228,6 +248,8 @@ export function mountCraftContent(
       const link = settingsLink(CRAFT_MAX_SETTING, deps.onOpenSettings, own);
       if (link) box.append(link);
     }
+    // I dati dell'XMP di un RAW stanno sotto il riquadro anche senza JPEG.
+    if (profile === RAW_PROFILE) showPhotoData(root, doc, deps, own);
     if (!offersRender(preview)) return;
     mountConsent(box, preview.render!, { render, openSettings: deps.onOpenSettings, focused }, own);
     if (focused && !root.contains(document.activeElement)) root.focus({ preventScroll: true });

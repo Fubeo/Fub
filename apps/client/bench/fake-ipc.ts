@@ -64,7 +64,8 @@ import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { LIVE_DOC, liveCase } from "./live-fixture";
 import { PHOTO_CRAFT, photoCase, photoResources } from "./photo-fixture";
 import { craftSceneCase, craftSceneCraft, craftSceneRender, craftSceneResources } from "./craft-fixture";
-import type { CraftPreview } from "../src/host/craft";
+import { rawSceneCase, rawSceneCraft, rawScenePreview, rawSceneResources } from "./raw-fixture";
+import { CRAFT_BUNDLE_NS, CRAFT_PREVIEW_COMMAND, type CraftPreview } from "../src/host/craft";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import {
   generateGraphFixture as graphFixture,
@@ -268,6 +269,12 @@ const PHOTO = photoCase(params.get("photo"));
 /// domanda, la riga «spente», «Preparo l'anteprima…» o la frase di `missing`.
 const CRAFT_SCENE = craftSceneCase(params.get("craft-scheda"));
 if (CRAFT_SCENE !== null && PHOTO !== null) throw new RangeError("craft-scheda is a vault of its own");
+
+/// Il RAW delle scene `raw-*` (`?raw-scheda=dritto|girato|senza`, vedi
+/// `raw-fixture.ts`): la scheda di una foto RAW col JPEG che ha dentro, dritto
+/// o girato, o senza JPEG con la domanda di LightCraft.
+const RAW_SCENE = rawSceneCase(params.get("raw-scheda"));
+if (RAW_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null)) throw new RangeError("raw-scheda is a vault of its own");
 
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
 const DRAWING = CONNECTORS !== null
@@ -1111,6 +1118,7 @@ const options: Options = {
     ...RESOURCES,
     ...(PHOTO === null ? {} : photoResources(PHOTO)),
     ...(CRAFT_SCENE === null ? {} : craftSceneResources()),
+    ...(RAW_SCENE === null ? {} : rawSceneResources(RAW_SCENE)),
   },
   root: ROOT,
   view: VIEWS,
@@ -1133,6 +1141,7 @@ const options: Options = {
     craftRender: craftSceneRender(async (doc, size) =>
       ((await host.module.api.invokeCommand("craft.preview", { doc, size })).effect as { payload: CraftPreview }).payload),
   }),
+  ...(RAW_SCENE === null ? {} : { craft: rawSceneCraft(RAW_SCENE) }),
 };
 
 const host = createFakeHost(options);
@@ -1322,6 +1331,16 @@ function snippetOf(doc: string, text: string): Pick<DocumentMatch, "snippet" | "
 
 export const api: typeof host.module.api = {
   ...behind,
+  invokeCommand: async (id, args, ...rest) => {
+    // L'anteprima del RAW della scena: il finto non sa leggere un RAW.
+    const doc = (args as { doc?: unknown } | null)?.doc;
+    if (RAW_SCENE !== null && id === CRAFT_PREVIEW_COMMAND && typeof doc === "string") {
+      const size = (args as { size?: unknown }).size === "large" ? "large" : "small";
+      const payload = rawScenePreview(RAW_SCENE, doc, size);
+      if (payload !== null) return { notify: null, effect: { kind: "custom", ns: CRAFT_BUNDLE_NS, payload }, undo: null, partial: null };
+    }
+    return behind.invokeCommand(id, args, ...rest);
+  },
   queryIndex: async (q) => {
     // Le note con un'icona (`icon:` nel frontmatter), come le legge l'indice:
     // il finto non sa leggere le proprietà, e del banco ce l'ha solo la nota

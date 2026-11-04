@@ -20,6 +20,7 @@ import type { CommandOutcome, KernelNotice } from "../host/contract";
 import { asPluginError } from "../host/errors";
 import { CRAFT_BUNDLE_NS, CRAFT_PHOTO_COMMAND, readPhotoSidecar, type CraftPhotoSidecar } from "../host/craft";
 import { mediaKindOfId } from "../editors/media/media-types";
+import { isRawPhoto } from "../ui/format-kind";
 import type { Lifetime } from "../ui/lifetime";
 import { onAnyEvent } from "./kernel";
 import { on, openVaultRoot, state, vaultArg } from "./store";
@@ -46,9 +47,10 @@ export function craftPhotosServed(): boolean {
 }
 
 /// Un documento che può avere l'XMP di LightCraft accanto: una foto che la
-/// shell mostra. Un PDF, un audio, una nota o un XMP non lo è.
+/// shell mostra, o una foto RAW. Un PDF, un audio, una nota o un XMP non lo
+/// è.
 export function isPhotoDoc(doc: string): boolean {
-  return mediaKindOfId(doc) === "image";
+  return mediaKindOfId(doc) === "image" || isRawPhoto(doc);
 }
 
 /// I due nomi possibili dell'XMP di `doc`, come `xmp::sidecar_candidates`:

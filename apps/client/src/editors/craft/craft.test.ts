@@ -5,13 +5,21 @@
 // JPEG, la revisione nulla), il pulsante, il `job_done` che porta
 // l'immagine, la revisione che cambia, la
 // risposta che arriva a scheda chiusa, il componente spento, e la vista XMP
-// con ogni campo e con ogni campo assente.
+// con ogni campo e con ogni campo assente. Poi la scheda di un RAW: il JPEG
+// che ha dentro, dritto, la riga dei dati e quelli del suo XMP; senza JPEG,
+// la domanda di LightCraft; e il RAW che va alla sua scheda solo col
+// componente acceso.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeCraft, FakeCraftDoc, FakeHost } from "../../host/fake";
-import type { CraftPreviewImage, CraftXmpInfo } from "../../host/craft";
+import type { CraftPreview, CraftPreviewImage, CraftXmpInfo } from "../../host/craft";
 import type { EditorSurface } from "../core/registry";
 
-const box = vi.hoisted(() => ({ host: null as FakeHost | null }));
+const box = vi.hoisted(() => ({
+  host: null as FakeHost | null,
+  /// L'host finto non sa dire l'anteprima di un RAW (lo dice il bundle vero,
+  /// T27): la danno i test del RAW, prima di passare all'host.
+  raw: null as ((name: string, args: unknown[]) => Promise<unknown> | undefined) | null,
+}));
 
 vi.mock("../../host/ipc", () => {
   const now = () => {
@@ -23,7 +31,7 @@ vi.mock("../../host/ipc", () => {
       {},
       {
         get: (_t, name: string) => (...args: unknown[]) =>
-          (now().api as unknown as Record<string, (...a: unknown[]) => unknown>)[name](...args),
+          box.raw?.(name, args) ?? (now().api as unknown as Record<string, (...a: unknown[]) => unknown>)[name](...args),
       },
     ),
     onKernelEvent: (handler: (n: unknown) => void) => now().onKernelEvent(handler as never),
@@ -103,6 +111,7 @@ const craft = (doc: FakeCraftDoc): FakeCraft => ({ docs: { [LOGO]: doc } });
 
 beforeEach(() => {
   box.host = null;
+  box.raw = null;
 });
 
 describe("la scheda di un file Craft", () => {
@@ -335,5 +344,153 @@ describe("la registrazione", () => {
       expect(registry.resolve({ formatId: format, sourceKind: "bytes", documentId: "x" }))
         .toMatchObject({ owner: "fub.craft", family: "craft", profile });
     }
+  });
+});
+
+describe("la scheda di un RAW", () => {
+  const RAW = "Foto/IMG_0412.CR3";
+  const RAW_XMP = "Foto/IMG_0412.xmp";
+
+  interface RawMounted extends Mounted {
+    asked: Record<string, unknown>[];
+  }
+
+  /// Il RAW con l'anteprima che il bundle darebbe (`preview`), il suo XMP
+  /// accanto se `xmp` lo dice, e la scheda montata col profilo `raw`.
+  async function mountRaw(preview: Partial<CraftPreview>, xmp: CraftXmpInfo | null = null, component = true): Promise<RawMounted> {
+    const resources: Record<string, { bytes: Uint8Array; mime: string }> = { [RAW]: BYTES };
+    if (xmp) resources[RAW_XMP] = { bytes: new TextEncoder().encode("<x:xmpmeta/>"), mime: "application/rdf+xml" };
+    const host = createFakeHost({ resources, craft: { component, docs: xmp ? { [RAW_XMP]: { info: { xmp } } } : {} } });
+    box.host = host;
+    const asked: Record<string, unknown>[] = [];
+    box.raw = (name, args) => {
+      if (name !== "invokeCommand" || args[0] !== "craft.preview" || (args[1] as { doc?: string }).doc !== RAW) return undefined;
+      asked.push(args[1] as Record<string, unknown>);
+      if (!component) return Promise.reject({ kind: "unknown_command", message: "craft.preview" });
+      const payload: CraftPreview = {
+        version: 2, doc: RAW, revision: null, size: "large", origin: "file", queued: false, image: null,
+        missing: "absent", limit_bytes: null, render: null,
+        info: { app: "raw", editor: "LightCraft", format_version: null, bytes: 27_011_420, photo: null, edits: [], xmp: null },
+        ...preview,
+      };
+      return Promise.resolve({ notify: null, effect: { kind: "custom", ns: "fub.craft", payload }, undo: null, partial: null });
+    };
+    vi.resetModules();
+    const store = await import("../../state/store");
+    store.state.vaultRoot = "/vault";
+    store.setCommandSpecs(await host.module.api.listCommands());
+    const kernel = await import("../../state/kernel");
+    const { openLifetime } = await import("../../ui/lifetime");
+    const previews = await import("../../state/craft-previews");
+    const photos = await import("../../state/craft-photos");
+    const { mountCraftSurface, MEDIA_RAW_PROFILE } = await import("./index");
+    await kernel.startKernelRouter();
+    previews.mountCraftPreviews(openLifetime());
+    photos.mountCraftPhotos(openLifetime());
+    const parent = document.createElement("div");
+    document.body.replaceChildren(parent);
+    const opened: string[] = [];
+    const searched: string[] = [];
+    const surface = mountCraftSurface("raw", { paneId: "p1", documentId: RAW, parent, formatId: null }, {
+      onOpenDocument: (id) => void opened.push(id),
+      onSearchTag: (tag) => void searched.push(tag),
+    }, { family: "viewer", profile: MEDIA_RAW_PROFILE });
+    return { host, surface, parent, opened, searched, asked };
+  }
+
+  it("col JPEG e l'orientamento 6: la foto dritta, la riga del RAW e i dati dell'XMP, e nessuna app", async () => {
+    const m = await mountRaw({ image: jpeg(1200, 800) }, { rating: 5, label: null, flag: "pick", keywords: ["faro", "Liguria"] });
+    const { parent, surface, host } = m;
+    await until(() => parent.querySelector(".craft-card .photo-data") !== null);
+    expect(surface).toMatchObject({ family: "viewer", profile: "media-raw" });
+    expect(m.asked).toEqual([{ doc: RAW, size: "large" }]);
+    const image = parent.querySelector<HTMLImageElement>(".zoom-content")!;
+    expect(image.style.imageOrientation).toBe("none");
+    expect(image.style.transform).toContain("rotate(90deg)");
+    expect(text(parent, ".zoom-info")).toMatch(/^JPEG · 800 × 1200 px · /);
+    expect(text(parent, ".craft-info")).toBe("Foto RAW · CR3 · 25.8 MiB");
+    // I dati dell'XMP stanno nella scheda, dopo la riga del RAW.
+    const card = parent.querySelector(".craft-card")!;
+    expect([...card.children].map((child) => child.className)).toEqual(["media-image", "craft-info", "photo-data"]);
+    expect(card.querySelectorAll(".craft-xmp-star[data-on='true']")).toHaveLength(5);
+    expect([...card.querySelectorAll(".craft-xmp-tag")].map((tag) => tag.textContent)).toEqual(["#faro", "#Liguria"]);
+    card.querySelector<HTMLButtonElement>(".photo-data-open")!.click();
+    expect(m.opened).toEqual([RAW_XMP]);
+    // Con il JPEG la scheda non chiede mai l'anteprima all'app.
+    expect(host.atGate("craftRender")).toHaveLength(0);
+    expect(parent.querySelector(".craft-render, .craft-ask")).toBeNull();
+  });
+
+  it("un RAW dritto non gira, e nemmeno la sua riga", async () => {
+    const { parent } = await mountRaw({ image: { ...jpeg(1500, 1000), orientation: 1 } });
+    await until(() => parent.querySelector(".media-image") !== null);
+    expect(parent.querySelector<HTMLImageElement>(".zoom-content")!.style.transform).toContain("rotate(0deg)");
+    expect(text(parent, ".zoom-info")).toMatch(/^JPEG · 1500 × 1000 px · /);
+    // Senza XMP accanto, nessuna riga dei dati.
+    await settle();
+    expect(parent.querySelector(".photo-data")).toBeNull();
+  });
+
+  it("senza JPEG e col consenso «ask»: il riquadro con la domanda di LightCraft, e i dati dell'XMP sotto", async () => {
+    const { parent, host } = await mountRaw(
+      { origin: "none", render: { app: "LightCraft", consent: "ask" } },
+      { rating: 2, label: null, flag: "reject", keywords: [] },
+    );
+    await until(() => parent.querySelector(".craft-ask") !== null && parent.querySelector(".photo-data") !== null);
+    expect(text(parent, ".craft-empty-name")).toBe("IMG_0412.CR3");
+    expect(text(parent, ".craft-info")).toBe("Foto RAW · CR3 · 25.8 MiB");
+    expect(text(parent, ".craft-empty-state")).toBe("Il file non porta un'anteprima");
+    expect(parent.querySelector(".craft-ask")?.textContent).toContain("LightCraft");
+    // La riga dei dati è sorella del riquadro, dopo di lui.
+    const surface = parent.firstElementChild!;
+    expect([...surface.children].map((child) => child.className)).toEqual(["craft-empty", "photo-data"]);
+    expect(host.atGate("craftRender")).toHaveLength(0);
+  });
+
+  it("col componente spento dice ciò che dice un file senza superficie", async () => {
+    const { parent } = await mountRaw({}, null, false);
+    await until(() => text(parent, ".craft-status") === "Nessuna superficie disponibile");
+  });
+});
+
+describe("la registrazione di un RAW", () => {
+  async function registry(component: boolean) {
+    box.host = createFakeHost({ craft: { component } });
+    vi.resetModules();
+    const store = await import("../../state/store");
+    store.setCommandSpecs(await box.host.module.api.listCommands());
+    const { createDocumentSurfaceRegistry } = await import("../core/bootstrap");
+    return createDocumentSurfaceRegistry({
+      onChange: vi.fn(), onSelectionChange: vi.fn(), onOpenWikilink: vi.fn(),
+      onOpenPath: vi.fn(), onOpenDocument: vi.fn(), onSearchTag: vi.fn(),
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+    });
+  }
+
+  it("col componente acceso un RAW, in ogni caso di lettere, va al profilo media-raw del viewer", async () => {
+    const reg = await registry(true);
+    for (const doc of ["Foto/IMG_0001.CR3", "foto/img.nef", "scatto.Dng", "a.rw2"]) {
+      expect(reg.showsBytes(doc), doc).toBe(true);
+      expect(reg.resolve({ formatId: null, sourceKind: "bytes", documentId: doc }), doc)
+        .toMatchObject({ family: "viewer", profile: "media-raw" });
+    }
+    // Una foto resta della vista delle immagini, un XMP accanto non è un RAW.
+    expect(reg.resolve({ formatId: null, sourceKind: "bytes", documentId: "foto.jpg" })).toMatchObject({ profile: "media-image" });
+    expect(reg.showsBytes("Foto/IMG_0001.CR3.xmp")).toBe(false);
+  });
+
+  it("col componente spento un RAW resta un file senza vista", async () => {
+    const reg = await registry(false);
+    expect(reg.showsBytes("Foto/IMG_0001.CR3")).toBe(false);
+    expect(reg.opensWithoutFormat("Foto/IMG_0001.CR3")).toBe(false);
+  });
+
+  it("la scheda montata dal registro si presenta come media-raw", async () => {
+    const reg = await registry(true);
+    const parent = document.createElement("div");
+    const surface = reg.mount({ formatId: null, sourceKind: "bytes", documentId: "Foto/IMG_0001.CR3" }, { paneId: "p", documentId: "Foto/IMG_0001.CR3", parent });
+    expect(surface).toMatchObject({ family: "viewer", profile: "media-raw" });
+    expect(parent.querySelector(".craft-surface")?.getAttribute("data-profile")).toBe("raw");
+    surface.destroy();
   });
 });

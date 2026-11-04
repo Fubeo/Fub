@@ -10,6 +10,7 @@
 // disegno di `fub.draw`. I file delle app Craft hanno la sigla dell'app: un
 // disegno di VectorCraft o un progetto di FigCraft sono disegni, un'immagine di
 // PhotoCraft e l'XMP che LightCraft scrive accanto a una foto sono foto.
+// Una foto RAW è una foto, con la sigla della sua estensione: «CR3», «NEF».
 // Un'estensione che qui non c'è non ha una specie, e resta com'era.
 import { t, type Key } from "../i18n/strings";
 
@@ -60,11 +61,28 @@ const FORMAT_NAME: Readonly<Record<FormatKind, Key>> = {
   note: "format.kind.note",
 };
 
-function known(id: string): Known | null {
+/// Le estensioni delle foto RAW, senza il punto: le stesse di
+/// `RAW_EXTENSIONS` in `crates/fub-format-craft/src/contract.rs`, che un test
+/// tiene allineate.
+export const RAW_EXTENSIONS: readonly string[] = ["cr3", "cr2", "nef", "arw", "raf", "dng", "orf", "rw2"];
+
+function extensionOf(id: string): string | null {
   const base = id.split("#")[0]!.split("/").pop() ?? "";
   const point = base.lastIndexOf(".");
-  if (point <= 0) return null;
-  return BY_EXTENSION[base.slice(point + 1).toLowerCase()] ?? null;
+  return point <= 0 ? null : base.slice(point + 1).toLowerCase();
+}
+
+/// Una foto RAW, dall'estensione e in qualunque maiuscola.
+export function isRawPhoto(id: string): boolean {
+  const extension = extensionOf(id);
+  return extension !== null && RAW_EXTENSIONS.includes(extension);
+}
+
+function known(id: string): Known | null {
+  const extension = extensionOf(id);
+  if (extension === null) return null;
+  if (RAW_EXTENSIONS.includes(extension)) return { kind: "photo", tag: extension.toUpperCase() };
+  return BY_EXTENSION[extension] ?? null;
 }
 
 export function formatKindOf(id: string): FormatKind | null {

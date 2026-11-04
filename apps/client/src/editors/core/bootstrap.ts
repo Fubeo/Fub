@@ -2,7 +2,7 @@ import { mountMarkdownSurface, type EditorSlashHost, type PageIcons, type System
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
 import { api } from "../../host/ipc";
-import { openVaultRoot, vaultArg } from "../../state/store";
+import { openVaultRoot, state, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
 import type { GridDialogs, GridRibbon } from "../grid/ribbon/ribbon";
 import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
@@ -20,7 +20,11 @@ import { mountRichSurface, RICH_FAMILY, RICH_FORMATS, RICH_OWNER, RICH_PROFILE }
 import { mountMediaSurface, profileForKind, type MediaSurfaceDeps } from "../media/media-surface";
 import { mediaKindOfId, mimeOfId } from "../media/media-types";
 import { mountSvgSurface, SVG_PROFILE } from "../text/profiles/svg";
-import { CRAFT_FAMILY, CRAFT_FORMATS, CRAFT_OWNER, CRAFT_PROFILE, XMP_PROFILE, mountCraftSurface } from "../craft/index";
+import {
+  CRAFT_FAMILY, CRAFT_FORMATS, CRAFT_OWNER, CRAFT_PROFILE, MEDIA_RAW_PROFILE, RAW_PROFILE, XMP_PROFILE, mountCraftSurface,
+} from "../craft/index";
+import { CRAFT_PREVIEW_COMMAND } from "../../host/craft";
+import { isRawPhoto } from "../../ui/format-kind";
 import { showPhotoData } from "../craft/photo-data";
 import { makePdfJsLoader, pdfIdWithoutFragment, type PdfJsModule } from "../media/pdf-view";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -449,6 +453,11 @@ export function createDocumentSurfaceRegistry(
       },
     },
   });
+  const craftDeps = {
+    onOpenDocument: options.onOpenDocument,
+    onSearchTag: options.onSearchTag,
+    ...(options.onOpenSettings ? { onOpenSettings: options.onOpenSettings } : {}),
+  };
   registry.register({
     owner: CRAFT_OWNER,
     family: CRAFT_FAMILY,
@@ -459,11 +468,7 @@ export function createDocumentSurfaceRegistry(
     formats: CRAFT_FORMATS,
     factory: {
       mount(profile, context) {
-        return mountCraftSurface(profile, context, {
-          onOpenDocument: options.onOpenDocument,
-          onSearchTag: options.onSearchTag,
-          ...(options.onOpenSettings ? { onOpenSettings: options.onOpenSettings } : {}),
-        });
+        return mountCraftSurface(profile, context, craftDeps);
       },
     },
   });
@@ -525,20 +530,32 @@ export function createDocumentSurfaceRegistry(
     owner: "fub.shell.viewer",
     family: "viewer",
     defaultProfile: "bytes-read-only",
-    profiles: ["media-image", "media-audio", "media-video", "media-pdf"],
+    profiles: ["media-image", "media-audio", "media-video", "media-pdf", MEDIA_RAW_PROFILE],
     sources: { bytes: "bytes-read-only" },
     // L'unica classificazione di un file senza formato: la tabella MIME della
     // shell sceglie la vista, e ciò che nessuna vista sa mostrare non è di
     // questa famiglia. Un SVG è testo: lo prende la famiglia `text`, che lo
     // scrive con l'anteprima accanto invece di mostrarlo e basta.
+    //
+    // Una foto RAW non ha un formato del vault e il registro ha un solo
+    // legame per i byte, questo: la prende il profilo `media-raw`, che monta
+    // la scheda di `editors/craft` col profilo `raw`, solo se il componente
+    // «File delle app Craft» risponde a `craft.preview`. Spento, il RAW resta
+    // un file senza vista.
     selectSourceProfile: (request, fallback) => {
       if (!request.documentId) return fallback;
+      if (isRawPhoto(request.documentId)) {
+        return state.commandSpecs.some((spec) => spec.id === CRAFT_PREVIEW_COMMAND) ? MEDIA_RAW_PROFILE : null;
+      }
       if (mimeOfId(request.documentId) === "image/svg+xml") return null;
       const kind = mediaKindOfId(pdfIdWithoutFragment(request.documentId));
       return kind === "other" ? null : profileForKind(kind);
     },
     factory: {
       mount(profile, context) {
+        if (profile === MEDIA_RAW_PROFILE) {
+          return mountCraftSurface(RAW_PROFILE, context, craftDeps, { family: "viewer", profile: MEDIA_RAW_PROFILE });
+        }
         return options.media
           ? mountMediaSurface(profile, context, {
             ...options.media,
