@@ -215,11 +215,26 @@ e dal libro della cartella; la scheda della tabella compare con la selezione
 dentro una tabella. La tavolozza disegna i colori del tema con le sfumature
 di ECMA-376 (`palette.ts`), le gallerie gli stili di tabella e di cella.
 
+Nello stile di Fub le schede stanno in un pozzetto nella testata, e i
+comandi su un vassoio stondato, un tono sotto la carta, in foglietti
+sollevati col nome del gruppo in grigio sotto i controlli; la pelle è nei
+blocchi `.grid-ribbon-…` di `structure.css` e `skin/editors.css`, e sotto i
+900 px del foglio (`@container sheet`) testata e vassoio si stringono di un
+passo.
+
 La barra si percorre con le frecce (un solo controllo per scheda sta nel
 Tab), Esc torna alla griglia, Alt o F10 mostrano le lettere di Excel. Quando
 la barra è stretta i pulsanti piccoli perdono il nome, poi i gruppi si
-raccolgono da destra in un pulsante che li apre in un riquadro. Il testo
-della barra è in un catalogo suo (`strings.ts`), in italiano e in inglese.
+raccolgono da destra in un pulsante col disegno e il nome: due raccolti di
+fila stanno a pila, uno rimasto solo è alto quanto un foglietto aperto. Nei
+fogli il gruppo raccolto si apre sul posto, nella barra (l'opzione
+`openInPlace` del kit): clic, Invio, Spazio, ↓ o la sua lettera di Alt lo
+aprono col fuoco sul primo comando, gli altri si raccolgono per fargli
+posto, e se nemmeno così la fila ci sta i pulsanti perdono il nome
+(`data-dense`). Ne è aperto uno alla volta; Esc lo richiude e torna al suo
+pulsante, un secondo Esc torna alla griglia, e una scheda cambiata o una
+larghezza che basta a tutti lo richiudono. Il testo della barra è in un
+catalogo suo (`strings.ts`), in italiano e in inglese.
 
 Il tasto destro sceglie come Excel: fuori dalla selezione sceglie la cella,
 la riga o la colonna sotto il puntatore, dentro la lascia. `ribbon/context.ts`
