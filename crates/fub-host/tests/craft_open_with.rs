@@ -415,8 +415,11 @@ fn an_empty_path_or_a_folder_is_missing_and_starts_nothing() {
             "{path:?}: {error:?}"
         );
     }
+    // L'app finta scrive gli argomenti accanto all'ultimo: nessun file vuol
+    // dire nessun avvio. `running` no: il registro è di tutto il processo e
+    // un altro test può avere VectorCraft aperto.
     assert!(!on_disk(&root, "Disegni/cartella.vectorcraft.args").exists());
-    assert!(!host.external_editors(vault, Some(folder)).unwrap()[0].running);
+    assert!(!on_disk(&root, "Disegni/cartella.vectorcraft/.args").exists());
 }
 
 #[test]
