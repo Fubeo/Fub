@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · Scrittoio 2 · le risposte dell'utente: D1–D9 tutte A, titolo a
+  600, «Figure» prima di «Emoji», prototipo del computer approvato. Il
+  telefono è in revisione su sua richiesta: foglio da bordo a bordo,
+  «Salvato» e la modalità come icone, il bottone della modalità in basso a
+  destra sulla riga di Annulla e Ripeti, niente marchio in alto a sinistra.
+  La lavagna segue il prototipo di N6 anche sul computer («il discorso del
+  Canvas che fosse meglio nel prototipo originale è vero anche per il
+  computer»): T23 fa solo l'icona della modalità.
 - 2026-11-04 · scrittoio-2 · il menu delle modalità è il B, la spunta blu a
   destra con le scorciatoie in pastiglie (T10 porta il blocco `menu-b` in
   `skin/menus.css`) · parole dell'utente: «al momento preferisco la spunta
