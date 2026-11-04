@@ -311,7 +311,7 @@ Fatto quando:
   rallentata, il primo disegno è il fondo scuro e non c'è nessun bottone
   nativo; a shell pronta lo strato se ne va (foto nel resoconto del coder).
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base 7cd3d776
+Stato: [x] fatto
 
 ## T3 · Il fondo della finestra nativa
 
@@ -364,7 +364,7 @@ Fatto quando:
   `cargo tauri dev` o il banco WebView di `CLAUDE_DEVICE.md`), senza lampo
   bianco.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base aebbbf60
 
 ## T2 · La consegna all'app
 
