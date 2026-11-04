@@ -143,6 +143,9 @@ la scheda di un file Craft senza anteprima: la domanda sulle anteprime fatte
 dalle app con LightCraft, o il pulsante per farla, come in **Le anteprime
 fatte dalle app**, e sotto la riga dell'XMP. Con il componente `fub.craft`
 spento un RAW resta un file che Fub non sa aprire.
+Una scheda RAW già aperta segue il componente: riaperta all'avvio, o con il
+componente acceso o spento mentre è aperta, si rimonta da sola, senza avviare
+LightCraft; gli altri riquadri restano come sono.
 
 ## File collegati
 

@@ -286,6 +286,10 @@ export interface Pane {
   /// sorgente» apre, e ciò contro cui si controlla una scelta già fatta.
   /// Null senza documento, prima della lettura, o se non ce n'è una.
   sourceView: SourceView | null;
+  /// Il documento mostrato si è montato dai byte (un'immagine, un PDF, un
+  /// RAW), e non dal suo testo. Quando l'elenco dei comandi cambia, un
+  /// riquadro il cui documento ha cambiato legame coi byte si rimonta.
+  bytes: boolean;
 }
 /// Nome breve della tab + stato testuale: non solo colore (U21).
 /// View: titolo dichiarato, mai finto file.
@@ -1023,6 +1027,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     }),
   );
   mountDocumentLends(lifetime);
+  lifetime.add(on("commands", commandsChanged));
   for (const event of ["index_updated", "batch_ended"] as const) {
     lifetime.add(onEvent(event, () => {
       for (const r of panes.values()) {
@@ -1820,6 +1825,7 @@ export function renderPane(id: string): Pane {
     loadGeneration: 0,
     disposeSurface: null,
     sourceView: null,
+    bytes: false,
   };
   panes.set(id, r);
   return r;
@@ -2038,6 +2044,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     detachSurface(r);
     destroySurface(r);
     r.sourceView = null;
+    r.bytes = false;
   }
   r.shown = tab;
   view.drawViewSurface(r, tab?.k === "view");
@@ -2057,7 +2064,8 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   // superficie dei byte possiede soltanto il suo prestito della risorsa, e la
   // sessione di testo resta dei documenti di testo. Un formato del vault per
   // la stessa estensione passa invece dal descrittore, come ogni documento.
-  if (!handledByVault(tab.doc) && surfaceRegistry.showsBytes(tab.doc)) {
+  if (showsFromBytes(tab.doc)) {
+    r.bytes = true;
     // Dai byte non c'è un testo da guardare come sorgente: una scelta rimasta
     // sulla scheda (uno stato scritto a mano, un file cambiato di natura) si
     // scarta, e il visualizzatore si monta come sempre.
@@ -2180,6 +2188,41 @@ function forgetOverride(r: Pane, tab: Extract<Tab, { k: "doc" }>): Extract<Tab, 
     : { k: "doc", doc: tab.doc, ...(tab.pinned ? { pinned: true } : {}), ...(tab.stack ? { stack: tab.stack } : {}) };
   r.shown = next;
   return next;
+}
+
+/// Il documento si monta dai byte: nessun formato del vault lo gestisce, e il
+/// registro sa mostrarlo così. Per un RAW la risposta dipende dall'elenco dei
+/// comandi (`craft.preview`), che può cambiare con il riquadro già montato.
+function showsFromBytes(doc: string): boolean {
+  return !handledByVault(doc) && surfaceRegistry.showsBytes(doc);
+}
+
+/// L'elenco dei comandi è cambiato (arrivato dopo l'apertura del vault, o un
+/// componente acceso o spento): un riquadro il cui documento ha cambiato
+/// legame coi byte si rimonta, senza gesto; gli altri non si toccano, e una
+/// scheda di testo tiene buffer e cursore. Anche un riquadro rimasto senza
+/// tab mostrata (una lettura fallita) riprova.
+function commandsChanged(): void {
+  let stale = false;
+  for (const id of layoutPanes()) {
+    const r = panes.get(id);
+    const tab = activeTab(id);
+    if (!r || tab?.k !== "doc") continue;
+    if (r.shown === null) {
+      stale = true;
+      continue;
+    }
+    if (r.shown.k !== "doc" || r.bytes === showsFromBytes(r.shown.doc)) continue;
+    detachSurface(r);
+    destroySurface(r);
+    r.shown = null;
+    stale = true;
+  }
+  if (stale) {
+    void synchronize().catch((e) => {
+      notify(t("panes.redraw_failed", { reason: errorText(e) }), "guasto");
+    });
+  }
 }
 
 /// Un formato del vault gestisce il file: lo dicono le estensioni dei
