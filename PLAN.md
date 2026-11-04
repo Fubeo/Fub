@@ -536,7 +536,7 @@ Fatto quando:
   1100 ms dopo l'inizio del passaggio (come `proto/misura.mjs`);
 - le foto e le misure sono nel resoconto del coder.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base bfd350cc
+Stato: [~] in corso · codice integrato (1f1ab3e2), in attesa della scelta sul criterio dei 25 ms a CPU 4×
 
 ## T4 · La guardia del lampo e le scene del banco
 
@@ -616,7 +616,7 @@ Fatto quando:
 - le foto locali delle quattro scene (`bench/.output/`) sono nel resoconto del
   coder.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 1f1ab3e2
 
 ## Non verificato da qui
 
