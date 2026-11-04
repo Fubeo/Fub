@@ -613,7 +613,7 @@ Fatto quando:
 - le foto locali delle quattro scene (`bench/.output/`) sono nel resoconto del
   coder.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base 1f1ab3e2
+Stato: [~] in corso · codice integrato (5a858fab), mancano le 8 baseline avvio-* dal runner
 
 ## Non verificato da qui
 

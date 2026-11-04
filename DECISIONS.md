@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · caricamento T4 · perimetro allargato dall'orchestratore per due
+  difetti di T1 trovati dalle scene: col moto ridotto il guasto e l'attesa
+  sono visibili subito e solo l'opacità dissolve (prima `visibility` arrivava
+  dopo 90 ms e «Riprova» non prendeva il fuoco); lo strato è `role=region`
+  col nome `app.avvio.regione`. Nel banco `openPage` riporta a zero
+  `performance.now()` a ogni documento, perché l'orologio finto di Playwright
+  lo tiene per contesto e lo strato passerebbe al guasto per tempo dopo
+  qualche scena. `openStage` prende `port`, `bench:lampo` `--port`.
 - 2026-11-04 · caricamento T2 · tolto da «Fatto quando» il limite di 25 ms
   fra due fotogrammi con la CPU rallentata 4×. Su server-di-fub, senza
   scheda grafica, il primo fotogramma ne prende 50–67 e la pulizia 67–83;
