@@ -59,6 +59,18 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · N7 · La revisione Rust di T32 (un revisore in sola lettura)
+  ha trovato difetti medi e bassi, nessuno alto: il RAW ostile senza budget
+  di lavoro, il JSON intero in `Value`, la coda ZIP, l'XMP letto fino a 64
+  MiB e poi scartato, l'errore non tipizzato di `craft_render`, «Apri con»
+  su una cartella, `stop_group` dopo la raccolta, la CLI orfana se Fub esce
+  di colpo, e `craft.preview` che calcola la revisione di un file grande col
+  turno dello scrittore preso. Li correggo tutti in un task nuovo, T33,
+  senza cambiare né ciò che si vede né il contratto. Resta fuori il turno
+  dei comandi in sola lettura in `session.rs`: è di tutto l'host (vale anche
+  su `main` per ogni comando di un provider), va in un'issue e nel
+  resoconto. Il Job Object di Windows resta fuori perché vuole `windows-
+  sys`.
 - 2026-11-04 · N7 · T26 è entrato con questi scarti presi da me: una nota
   con un'icona scelta da chi scrive tiene l'icona e non prende la miniatura
   (`data-own-icon`); le miniature compaiono solo se `craftServed()`, cioè

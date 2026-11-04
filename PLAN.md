@@ -60,6 +60,11 @@ T14–T17 non hanno prototipo: riusano pezzi che ci sono.
   nuove (T23, T25); un RAW nell'albero ha l'icona delle foto (T26); il peso
   massimo dice «(MiB)» nel nome e la frase di T7 perde «Vale su questo
   computer.» (T19); le chiavi delle frasi sono quelle della pagina.
+- 2026-11-04, dalla revisione riga per riga di T32 (la parte Rust): task
+  nuovo T33 per i difetti trovati (i tetti dei file ostili, il turno dello
+  scrittore durante `craft.preview`, l'errore non tipizzato di
+  `craft_render`, il tetto degli XMP, «Apri con» su una cartella, la CLI
+  orfana); T32 aspetta anche T33.
 
 ## Dal prototipo
 
@@ -250,6 +255,7 @@ quale risposta il task segue, o quale aspetta ancora.
 | T29 · le CLI di LightCraft, PdfCraft e WordCraft | T11, T27, T30 | D-1 (b), D-9 (c) |
 | T30 · le anteprime dei documenti | T20, T21, T22 | D-9 (c) |
 | T31 · PDF e documenti nella shell | T18, T23, T29, T30 | D-1 (b), D-9 (c) |
+| T33 · i tetti dei file ostili e il turno dell'anteprima | T1–T31 | nessuna |
 | T32 · la CI completa e la revisione | tutti gli altri | nessuna |
 
 T5 non usa niente di T1–T4: aspetta T4 solo perché scrive nella stessa
@@ -3079,7 +3085,7 @@ all'orchestratore.
 Non toccare: i limiti di `apps/client/bench/webview/budgets.json` (nessuno si
 alza); i task fatti (un difetto in un task fatto si corregge con un task
 nuovo).
-Dipende da: tutti gli altri task (T1–T31)
+Dipende da: tutti gli altri task (T1–T31, T33)
 Cosa fare (lo fa l'orchestratore, non un coder):
 - `gh pr ready 299`: parte la CI completa (Linux, Windows, macOS, i banchi
   del client).
@@ -3110,6 +3116,78 @@ uguale su `main` è scritto, col run di `main`); la revisione è scritta nella
 PR; nessun task resta aperto; l'utente ha detto sì al merge.
 Prova: gh pr checks 299
 Stato: [~] in corso · orchestratore · CI completa e revisione
+
+## T33 · I tetti dei file ostili e il turno dell'anteprima
+
+Perché: la revisione di T32 ha trovato, nel codice Rust di N7, letture che
+hanno un tetto sui byte ma non sul lavoro o sulla memoria, e un'anteprima
+che può leggere un file grande mentre tiene il turno dello scrittore
+(`Session::invoke_user_command` tiene `write_turn()` per tutto
+`prepared.invoke`, quindi un salvataggio aspetta la fine di `craft.preview`).
+Nessuno cambia ciò che chi usa Fub vede né il contratto `CraftPreview`.
+Tocca: `crates/fub-format-craft/src/raw.rs`, `container.rs`,
+`container/zip_tail.rs`; `crates/fub-host/src/craft/preview.rs`,
+`photo.rs`, `open_with.rs`, `launch.rs`, `craft_render.rs`; i loro test
+(`crates/fub-format-craft/tests/raw.rs`, `containers.rs`,
+`crates/fub-host/tests/craft*.rs`); il catalogo dei testi dell'host se serve
+una chiave nuova; `docs/reference/craft-formats.md` (le righe dei tetti e
+della revisione).
+Non toccare: `crates/fub-host/src/session.rs` e `custody.rs` (il turno dei
+comandi in sola lettura è una scelta di tutto l'host, fuori da N7); il
+contratto `CraftPreview` e il suo mirror TS; il client.
+Dipende da: T1–T31
+Cosa fare:
+- I RAW (`raw.rs`, `Tiff::walk`, `cr3`, `embedded_jpegs`, `walk_jpeg`): gli
+  span si deduplicano per `offset` prima di `check_jpeg`, e si esaminano al
+  più `MAX_CANDIDATES` span, validi o no; in più un budget di byte letti per
+  un file intero (come `zip_tail::Budgeted`), oltre il quale il RAW non ha
+  anteprima. Prova: un `.rw2` con 16 000 voci `0x002E` sullo stesso offset e
+  una catena di segmenti APP senza SOF finisce subito senza anteprima, e un
+  CR3 con 10 000 scatole THMB/PRVW lo stesso.
+- Il JSON dei contenitori (`container.rs`: `parse_json` in
+  `vectorcraft_json_from`, `vectorcraft_json`, `read_meta`): niente
+  `serde_json::Value` intero da un file ostile. Anteprima e versione si
+  leggono con una struct tipizzata che salta il resto (`IgnoredAny`);
+  `read_meta` legge solo i campi che indicizza, con un tetto suo più basso
+  del file intero. Prova: un `document.json` `[0,0,0,…]` di 64 MiB non fa
+  crescere la memoria oltre qualche MiB (un test che misura il numero di
+  valori costruiti o il tempo, non la RSS).
+- La coda ZIP (`zip_tail.rs` `check`): al più N candidati EOCD, o il
+  `Budgeted` anche lì. Prova: una coda di 64 KiB piena di firme EOCD ZIP64.
+- Il turno durante `craft.preview` (`preview.rs`, `offer`): dentro il comando
+  la revisione si calcola soltanto se è già ricordata o se il file sta sotto
+  `MAX_FILE_BYTES`; oltre, `offer` risponde senza revisione (il contratto la
+  ammette nulla) e la calcola il job `craft.render`, fuori dal turno. Prova:
+  un PDF sopra la soglia con la CLI presente: `craft.preview` non legge il
+  file intero (il conto dei byte letti dal `ResourceReader`), il render dopo
+  il gesto funziona e trova la cache.
+- Il tetto degli XMP (`preview.rs`, `limit_of`): `CraftApp::Xmp` legge al più
+  `MAX_XMP_BYTES`; `photo.rs` legge l'XMP con lo stesso tetto anche se il
+  file cresce fra l'indice e la lettura.
+- `craft_render.rs`: il ramo `Err(error)` dopo `render::abandon` dà un errore
+  tipizzato con una chiave del catalogo (in ogni lingua), il dettaglio solo
+  in `tracing`.
+- «Apri con» (`open_with.rs`, `open_file`): rifiuta "" e una destinazione che
+  non è un file (una cartella chiamata `x.vectorcraft`), con l'errore che
+  `open_with` già usa per un file che non c'è.
+- La CLI (`launch.rs`): `stop_group` prima della raccolta del figlio, così un
+  pid riciclato non riceve il segnale; su Linux la CLI muore con Fub
+  (`PR_SET_PDEATHSIG`) solo se si fa con ciò che il crate già usa per i
+  segnali, senza dipendenze nuove; al montaggio del bundle si tolgono le
+  cartelle `fub-craft-render-*` lasciate da un Fub uscito di colpo (solo le
+  sue, col prefisso e i permessi 0700, mai altro).
+- `docs/reference/craft-formats.md`: la revisione si legge fino a
+  `craft.preview-max-mib`, e dentro `craft.preview` solo sotto la soglia;
+  la riga degli XMP col tetto vero.
+Casi limite: un RAW buono con molti IFD (l'anteprima c'è ancora: il fixture
+vero di T27 resta verde); un `.vectorcraft` buono con un `document.json`
+grande ma valido (l'anteprima e i metadati ci sono); una revisione ricordata
+per un file grande (la risposta resta in cache come prima).
+Fatto quando: `cargo test -p fub-format-craft` e `cargo test -p fub-host
+--test craft --test craft_cli --test craft_ranged --test craft_open_with`
+passano con le prove nuove, che falliscono senza la correzione.
+Prova: scripts/check.sh --rapido
+Stato: [~] in corso · coder · base da fissare
 
 ## Non verificato stanotte
 
