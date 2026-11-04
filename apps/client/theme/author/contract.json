@@ -253,6 +253,10 @@
     "kit-options-row",
     "kit-options-more",
     "kit-options-overflow",
+    "kit-bar",
+    "kit-bar-group",
+    "kit-bar-button",
+    "kit-bar-field",
     "kit-field-clear",
     "kit-list",
     "kit-list-item",
@@ -1756,6 +1760,10 @@
     "kit-options-row": "cornice",
     "kit-options-more": "cornice",
     "kit-options-overflow": "cornice",
+    "kit-bar": "cornice",
+    "kit-bar-group": "cornice",
+    "kit-bar-button": "cornice",
+    "kit-bar-field": "cornice",
     "kit-field-clear": "cornice",
     "kit-list": "cornice",
     "kit-list-item": "cornice",
@@ -3564,6 +3572,24 @@
         "rest",
         "hover",
         "focused"
+      ]
+    },
+    {
+      "name": "kit-bar",
+      "part": "kit",
+      "hooks": [
+        "kit-bar",
+        "kit-bar-group",
+        "kit-bar-button",
+        "kit-bar-field"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
       ]
     },
     {
@@ -7789,6 +7815,7 @@
   ],
   "optional_roles": [
     "draw-desk",
+    "bar-tray",
     "doc-ins",
     "doc-del",
     "doc-proof-spell",
@@ -8176,6 +8203,24 @@
       "paper-find-now",
       4.5,
       "il risultato corrente sulla carta di un file"
+    ],
+    [
+      "text",
+      "bar-tray",
+      4.5,
+      "l'etichetta di un bottone nella barra in una fila"
+    ],
+    [
+      "muted",
+      "bar-tray",
+      4.5,
+      "un'icona spenta nella barra in una fila"
+    ],
+    [
+      "outline",
+      "bar-tray",
+      3,
+      "il confine di un campo nella barra in una fila"
     ]
   ],
   "preference_tokens": [
@@ -8275,6 +8320,7 @@
     "elevation-dialog-border",
     "elevation-dialog-shadow",
     "draw-desk",
+    "bar-tray",
     "graph-node",
     "graph-node-active",
     "graph-node-hover",
@@ -8418,11 +8464,11 @@
   },
   "counts": {
     "required_roles": 154,
-    "optional_roles": 63,
-    "hooks": 1501,
+    "optional_roles": 64,
+    "hooks": 1505,
     "state_names": 7,
-    "assigned_states": 730,
-    "components": 217,
-    "preference_tokens": 186
+    "assigned_states": 736,
+    "components": 218,
+    "preference_tokens": 187
   }
 }

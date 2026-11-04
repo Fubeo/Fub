@@ -229,7 +229,17 @@ pannelli) lo Scrittoio compone:
   la barra multifunzione comune (schede e schede contestuali, gruppi raccolti
   da destra, lettere con Alt e F10, mini-barra), generica sulla vista e sulle
   etichette di chi la monta; non sta nell'indice del kit, perché arriva con
-  l'editor che la carica a parte;
+  l'editor che la carica a parte. Le barre degli editor hanno tre forme,
+  scritte una volta nel tema e non in ogni editor: la barra a schede
+  (`kit/ribbon/`), la barra in una fila e la colonna degli strumenti. La
+  fila non ha un costruttore: chi costruisce la barra mette sul suo DOM
+  `kit-bar` (il vassoio), `kit-bar-group` (un foglietto), `kit-bar-button`
+  e `kit-bar-field`, e per ciò che non ci sta usa `kit/options-bar.ts`
+  (`kit-options`, «…»). La colonna è `kit/tool-rail.ts` (`kit-rail`). Fila
+  e colonna hanno la forma in `theme/scrittoio/structure.css` e la pelle in
+  `theme/scrittoio/skin/kit.css`; il vassoio è il ruolo facoltativo
+  `--bar-tray` della ricetta, col ripiego su `--sheet-2` per un tema che
+  non lo dichiara;
 - `moto/`: molle, FLIP, presenza e gesti. Le animazioni sono fotogrammi
   chiave WAAPI di sola `transform` e `opacity`; il livello `appearance.motion`
   e la preferenza del sistema decidono quanto movimento esiste, e lo stato

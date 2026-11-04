@@ -23,7 +23,9 @@ import "../src/theme/scrittoio/structure.css";
 import {
   attachHoverCard,
   createList,
+  createOptionsBar,
   createTabs,
+  createToolRail,
   iconButton,
   mountSplitter,
   openDialog,
@@ -621,6 +623,117 @@ function split(
     split("orizzontale · passaggio", "horizontal", (handle) => force(handle, "hover")),
   );
   section("Divisore", "left", row);
+}
+
+// ── Barra in una fila e colonna ──────────────────────────────────────────────
+
+/// Un pulsante della fila. Le classi le mette chi costruisce la barra: il kit
+/// non ha un costruttore della fila, ha la sua pelle.
+function barButton(icon: string, label: string, pressed?: boolean): HTMLButtonElement {
+  const button = el("button", "kit-bar-button");
+  button.type = "button";
+  button.setAttribute("aria-label", label);
+  if (pressed !== undefined) button.setAttribute("aria-pressed", String(pressed));
+  const glyph = iconEl(icon);
+  if (glyph) button.append(glyph);
+  return button;
+}
+
+function sheetOf(...content: Node[]): HTMLElement {
+  const group = el("div", "kit-bar-group");
+  group.append(...content);
+  return group;
+}
+
+function barField(label: string, value: string): HTMLInputElement {
+  const input = el("input", "kit-bar-field");
+  input.type = "text";
+  input.value = value;
+  input.size = 10;
+  input.setAttribute("aria-label", label);
+  return input;
+}
+
+/// Una fila di tre foglietti: il terzo sta nella fila del kit, che non ci sta
+/// tutta e manda il resto in «…».
+function bar(label: string, dress?: (bar: HTMLElement) => void): HTMLElement {
+  const node = el("div", "kit-bar");
+  node.setAttribute("role", "toolbar");
+  node.setAttribute("aria-label", label);
+  const spento = barButton("trash", "Elimina");
+  spento.disabled = true;
+  const options = createOptionsBar({ label: `${label}: altre`, moreLabel: "Altre opzioni", lifetime });
+  options.setItems([
+    { id: "copia", element: sheetOf(barButton("cut", "Taglia"), barButton("copy", "Copia")), priority: 1 },
+    { id: "etichetta", element: sheetOf(barButton("tag", "Etichetta"), barButton("search", "Cerca")) },
+    { id: "storia", element: sheetOf(barButton("history", "Cronologia"), barButton("stats", "Statistiche")) },
+  ]);
+  node.append(
+    sheetOf(barButton("pin", "Fissa", true), barButton("notes", "Nota", false), spento),
+    sheetOf(barField("Carattere", "Newsreader")),
+    options.element,
+  );
+  dress?.(node);
+  return node;
+}
+
+{
+  const bars = el("div", "cella");
+  const rest = bar("Fila a riposo");
+  const states = bar("Fila negli stati", (node) => {
+    // 0 è acceso, 2 è spento: passaggio sul secondo, pressione e fuoco sui
+    // primi due del terzo foglietto, e il campo col fuoco.
+    const buttons = node.querySelectorAll<HTMLButtonElement>(".kit-bar-button");
+    force(buttons[1]!, "hover");
+    force(buttons[3]!, "hover", "active");
+    force(buttons[4]!, "focus");
+    force(node.querySelector<HTMLInputElement>(".kit-bar-field")!, "focus");
+  });
+  // Larga quanto basta perché l'ultimo foglietto non ci stia e vada in «…».
+  const narrow = (node: HTMLElement): HTMLElement => {
+    const box = el("div", "fila-stretta");
+    box.append(node);
+    return box;
+  };
+  bars.append(
+    caption("riposo: acceso, spento, campo, «…»"),
+    narrow(rest),
+    caption("passaggio, premuto, fuoco"),
+    narrow(states),
+  );
+
+  const rail = createToolRail({
+    label: "Strumenti",
+    groups: [
+      {
+        id: "scelta",
+        slots: [
+          { id: "nota", tools: [{ id: "nota", label: "Nota", icon: "notes", keys: "N" }] },
+          {
+            id: "cerca",
+            tools: [
+              { id: "cerca", label: "Cerca", icon: "search", keys: "F" },
+              { id: "etichetta", label: "Etichetta", icon: "tag", keys: "T" },
+            ],
+          },
+        ],
+      },
+      { id: "altro", slots: [{ id: "grafo", tools: [{ id: "grafo", label: "Grafo", icon: "graph", keys: "G" }] }] },
+    ],
+    active: "nota",
+    text: { more: (tool) => `Altri strumenti di ${tool}` },
+    onSelect: (tool) => rail.setActive(tool),
+    lifetime,
+  });
+  const slots = rail.element.querySelectorAll<HTMLElement>(".kit-rail-slot");
+  force(slots[1]!, "hover");
+  force(slots[2]!, "focus");
+
+  const row = el("div", "fila");
+  const column = cell("colonna: scelto, passaggio, fuoco", rail.element);
+  column.classList.add("cella-in-piedi");
+  row.append(bars, column);
+  section("Barra in una fila e colonna", "left", row);
 }
 
 // Il contenitore scorre e i suoi campioni prendono il fuoco: non gli serve un
