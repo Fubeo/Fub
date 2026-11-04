@@ -339,8 +339,17 @@ function heard(notice: KernelNotice): void {
   const done = readRenderDone(event.result);
   if (!done) return;
   if ("preview" in done) {
-    // Un'anteprima di un documento che nessuno ha chiesto entra lo stesso: è
-    // del vault di adesso, e la prossima domanda la trova.
+    // Entra soltanto un'anteprima che qualcuno aspetta adesso: una richiesta
+    // a `craft_render` in volo per la sua chiave, o una risposta tenuta della
+    // stessa revisione. `forget` toglie le due cose: il `job_done` di un
+    // render partito prima che il documento cambiasse è di byte che non ci
+    // sono più, e non si prende come attuale.
+    const key = keyOf(done.preview.doc, done.preview.size);
+    const before = known.get(key);
+    const current =
+      rendering.has(key) ||
+      (before !== undefined && (before.preview.revision === null || before.preview.revision === done.preview.revision));
+    if (!current) return;
     keep(done.preview);
     announce(done.preview.doc);
     return;

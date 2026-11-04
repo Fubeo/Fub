@@ -273,6 +273,27 @@ describe("renderPreview", () => {
     expect(previews.peekPreview(LOGO, "large")?.preview.image?.width).toBe(8);
   });
 
+  it("il job_done di un render partito prima che il documento cambiasse non entra", async () => {
+    const { host, previews, heard } = await boot(ON, queuing(() => box.host!));
+    const queued = await previews.renderPreview(LOGO, "large");
+    host.writeFromOutside(LOGO, "{\"x\":1}");
+    await settle();
+    expect(previews.peekPreview(LOGO, "large")).toBeNull();
+    heard.length = 0;
+    host.emit({ type: "job_done", id: "j1", job: "craft.render", result: { Ok: rendered(queued!.preview, png(8, 8)) } });
+    await settle();
+    expect(previews.peekPreview(LOGO, "large")).toBeNull();
+    expect(heard).toEqual([]);
+    // La figura richiede: la risposta nuova è dei byte di adesso, e il
+    // job_done vecchio, di un'altra revisione, non la copre.
+    const fresh = await previews.previewOf(LOGO, "large");
+    expect(fresh?.preview.revision).not.toBe(queued!.preview.revision);
+    host.emit({ type: "job_done", id: "j2", job: "craft.render", result: { Ok: rendered(queued!.preview, png(8, 8)) } });
+    await settle();
+    expect(previews.peekPreview(LOGO, "large")).toBe(fresh);
+    expect(previews.peekPreview(LOGO, "large")?.preview.image).toBeNull();
+  });
+
   it("no_consent rifiuta e fa dimenticare le risposte: chi guarda richiede", async () => {
     const denied = { kind: "permission_denied", message: "Le anteprime fatte dalle app sono spente" };
     const { host, previews, heard } = await boot(ON, () => Promise.reject(denied));
