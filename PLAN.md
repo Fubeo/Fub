@@ -2577,7 +2577,7 @@ src/state/craft-previews.test.ts` passa con i casi qui sopra; le foto del
 banco somigliano al prototipo, in chiaro e in scuro.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/craft/consent.test.ts
-Stato: [~] in corso · coder · base cc8bf621
+Stato: [x] fatto · 6a50629f · check --rapido 18 passi su 19 verdi; rossi solo scene.test «ci sono tutte» (atteso fino a T32) e i flaky theme/runtime, grid/engine, markdown/surface, verdi da soli
 
 ## T24 · La foto e il suo XMP nell'host
 
@@ -2895,7 +2895,7 @@ src/ui/format-kind.test.ts src/editors/media` passa; le foto del banco
 somigliano al prototipo, in chiaro e in scuro.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/editors/media/orientation.test.ts src/editors/media/zoom-view.test.ts
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 6a50629f
 
 ## T29 · Le CLI di LightCraft, PdfCraft e WordCraft
 

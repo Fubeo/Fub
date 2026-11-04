@@ -59,6 +59,19 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- N7 T23 (6a50629f): il gesto vive in `gestureBirths` per riquadro, solo per
+  la durata dell'apertura che fa nascere la scheda; passano il gesto
+  l'albero (clic, Invio, «Apri»), la ricerca, il passaggio veloce, i link e
+  le figure nelle note (anche nella finestra staccata). Restano senza gesto,
+  per scelta, le riaperture all'avvio, il ripristino della sessione, le
+  aperture «accanto», le viste, il grafo, le note create o duplicate e il
+  tocco su mobile (il piano non lo elenca: al telefono una scheda Craft
+  mostra il pulsante e non fa partire l'app da sola; da riprendere se
+  l'utente lo vuole). «No» chiama forgetConsent; l'errore di salvataggio del
+  consenso usa la classe esistente `.setting-error`; i link alle
+  impostazioni compaiono solo se la shell passa onOpenSettings
+  (`openSettingsAt` in panels/settings.ts). Le 12 scene craft-* aspettano le
+  baseline dal runner (T32).
 - N7 T29 integrata (e31e9b9b). Decisioni dell'orchestratore, senza contratti
   toccati: la copia si chiama in.<estensione così come è scritta> solo se
   PreviewSubject::of_extension la riconosce come del soggetto (input_name al
