@@ -59,6 +59,22 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- K3 T15, le differenze accettate: in sola lettura un esito con modifiche si
+  scarta e il provider riparte dal giornale confermato
+  (`#openWorkbook(#confirmedJournal)`), invece di applicarlo;
+  `setCommandEffects` e `servesCommands` nel motore, perché sia lui a sapere
+  quali comandi passano in sola lettura; `READ_ONLY_DIALOGS` lascia aprire
+  in sola lettura le finestre scritte a mano che non cambiano niente (find,
+  goTo, goToSpecial, printPreview, nameManager); un comando `legge` con un
+  parametro obbligatorio apre prima il modulo. Nella finestra del risultato
+  i valori lunghi vanno a capo (`overflow-wrap: anywhere`), i numeri restano
+  a precisione piena (il prototipo arrotondava a due decimali, che per un
+  risultato da copiare perde dati), e `.grid-dialog-error` usa il colore del
+  testo perché il rosso scuro del prototipo stava a 4.01:1. Le foto strette
+  del banco sono a 1016 px (foglio 700 px), perché sotto 800 px parte la
+  shell del telefono. Restano note per T17: in sola lettura «trova e
+  sostituisci» rifiuta le sostituzioni dal motore, le voci di menu che
+  cambiano non fanno niente, «1 celle» viene dal prototipo.
 - K3 T14 (e3b8afc0): il menu «Comandi» è `editors/grid/menu-comandi.ts`
   (`openCommandMenu`) agganciato alla fila `quick` della barra; i comandi
   che la barra non ha passano da una seconda istanza della tavolozza

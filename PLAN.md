@@ -1254,7 +1254,7 @@ lettura sono spenti soltanto i `cambia`; `engine.test.ts`: in sola lettura
 `bench:a11y` verde; le foto del banco del risultato, chiara e scura, piena e
 stretta, corrispondono al prototipo.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base e3b8afc0
+Stato: [x] fatto · 5566efdf · check --rapido 31/33 sull'integrazione: rossi solo scene.test «ci sono tutte» (baseline dal runner in T17) e due instabili noti (fub-host legacy concurrency a_before_write_error, theme/runtime), verdi rilanciati da soli; bench:a11y 280/280 e theme:verify verdi sulla worktree del coder
 
 ## T16 · La misura con i documenti che si chiudono
 
