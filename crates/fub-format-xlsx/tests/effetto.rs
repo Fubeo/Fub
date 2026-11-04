@@ -9,7 +9,7 @@ mod common;
 
 use common::{sheet, Package};
 use fub_abi::{
-    GridBytesProvider, GridCommand, GridCommandRequest, GridJournal, PluginError, Revision,
+    GridBytesProvider, GridCommand, GridCommandRequest, GridJournal, PluginError, Revision, Text,
 };
 use fub_format_xlsx::catalogo::comandi;
 use fub_format_xlsx::grid::{XlsxGridProvider, XLSX_GRID_SURFACE};
@@ -19,6 +19,10 @@ use serde_json::{json, Map, Value};
 const DATI: &str = r#"<dimension ref="A1:E5"/><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Regione</t></is></c><c r="B1" t="inlineStr"><is><t>Mese</t></is></c><c r="C1" t="inlineStr"><is><t>Vendite</t></is></c><c r="D1" t="inlineStr"><is><t>Doppio</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>Nord</t></is></c><c r="B2"><v>1</v></c><c r="C2"><v>10</v></c><c r="D2"><f>C2*2</f><v>20</v></c><c r="E2"><f>D2+1</f><v>21</v></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>Sud</t></is></c><c r="B3"><v>2</v></c><c r="C3"><v>20</v></c><c r="D3"><f>C3*2</f><v>40</v></c></row><row r="4"><c r="A4" t="inlineStr"><is><t>Nord</t></is></c><c r="B4"><v>3</v></c><c r="C4"><v>30</v></c><c r="D4"><f>C4*2</f><v>60</v></c></row><row r="5"><c r="A5" t="inlineStr"><is><t>Sud</t></is></c><c r="B5"><v>4</v></c><c r="C5"><v>40</v></c><c r="D5"><f>SUM(C2:C4)</f><v>60</v></c></row></sheetData>"#;
 
 const SECONDO: &str = r#"<dimension ref="A1"/><sheetData><row r="1"><c r="A1"><f>Foglio1!C2+1</f><v>11</v></c></row></sheetData>"#;
+
+/// L'inizio del rifiuto di GridCraft quando il sistema non ha un elenco di
+/// parole per l'ortografia.
+const SENZA_DIZIONARIO: &str = "No dictionary is available on this system";
 
 /// I comandi che preparano la cartella, con i loro parametri.
 const PREPARA: &[(&str, &str)] = &[
@@ -111,6 +115,7 @@ fn i_comandi_che_leggono_o_mostrano_non_scrivono_nel_giornale() {
         .collect();
     assert!(provati.len() > 50, "solo {} comandi provati", provati.len());
     let mut errori = Vec::new();
+    let mut senza_dizionario = Vec::new();
     for comando in provati {
         // Una cartella nuova per ogni comando: la selezione o il foglio
         // attivo che un comando sposta non cambiano il comando dopo.
@@ -132,6 +137,17 @@ fn i_comandi_che_leggono_o_mostrano_non_scrivono_nel_giornale() {
             },
         );
         match esito {
+            // L'ortografia di GridCraft legge l'elenco di parole del sistema
+            // (`/usr/share/dict/words`), che i runner della CI non hanno:
+            // senza, il motore rifiuta il controllo prima di toccare la
+            // cartella, e non c'è niente da provare. Con l'elenco il comando
+            // gira e la prova vale.
+            Err(PluginError::BadArgs(Text::Literal(ref motivo)))
+                if comando.motore.starts_with("review.")
+                    && motivo.starts_with(SENZA_DIZIONARIO) =>
+            {
+                senza_dizionario.push(comando.motore.clone());
+            }
             Err(error) => errori.push(format!("{} {params}: non gira: {error:?}", comando.motore)),
             Ok(outcome) => {
                 let edit = &outcome.commit.edit;
@@ -145,6 +161,9 @@ fn i_comandi_che_leggono_o_mostrano_non_scrivono_nel_giornale() {
         }
     }
     assert!(errori.is_empty(), "{}", errori.join("\n"));
+    if !senza_dizionario.is_empty() {
+        eprintln!("senza l'elenco di parole del sistema, non provati: {senza_dizionario:?}");
+    }
 }
 
 /// I comandi che la regola direbbe «mostra» o «legge» e che il catalogo mette
