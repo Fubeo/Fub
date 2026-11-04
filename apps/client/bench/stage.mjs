@@ -216,8 +216,12 @@ export async function prepareScene(page, scene, light, base, url) {
   // Di solito si arriva quando l'avvio è finito. Una scena che fotografa
   // l'avvio stesso (lo strato in attesa, il guasto) non lo vedrà mai finire:
   // dichiara la sua condizione d'arrivo, e quanto può farsi aspettare.
+  // Le altre aspettano anche che lo strato se ne sia andato: la finestra
+  // documento senza un documento valido chiama `consegna()` senza aspettarla,
+  // e il marchio resta fermo i suoi ms minimi anche a pagina pronta.
   await page.waitForFunction(
-    scene.ready ?? (() => document.documentElement.dataset.bench === "ready"),
+    scene.ready ??
+      (() => document.documentElement.dataset.bench === "ready" && !document.querySelector(".avvio")),
     null,
     { timeout: scene.readyTimeout ?? 30_000 },
   );
