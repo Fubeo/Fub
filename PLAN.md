@@ -3187,7 +3187,7 @@ Fatto quando: `cargo test -p fub-format-craft` e `cargo test -p fub-host
 --test craft --test craft_cli --test craft_ranged --test craft_open_with`
 passano con le prove nuove, che falliscono senza la correzione.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base da fissare
+Stato: [~] in corso · coder · base cd18886b
 
 ## Non verificato stanotte
 
