@@ -21,8 +21,11 @@
 //    strato sfuma e le regioni dell'app entrano in ordine di lettura, ciascuna
 //    con la molla `elastic` (la «cascata»); con meno movimento una sola
 //    dissolvenza di 90 ms;
-// 6. quando lo strato ha finito di sfumare lo toglie, col suo stile e i suoi
-//    attributi. Le corse delle regioni finiscono da sole e non lasciano niente.
+// 6. quando lo strato ha finito di sfumare lo toglie; il suo stile e ciò che
+//    ha scritto su `<html>` se ne vanno quando anche la cascata è finita,
+//    perché toglierli ricalcola lo stile di tutta la pagina (una sessantina di
+//    ms con la CPU 4×) e lo si fa quando niente si muove. Le corse delle
+//    regioni finiscono da sole e non lasciano niente.
 //
 // Senza strato (i test che montano un DOM loro, le pagine che non lo hanno)
 // niente qui fa qualcosa. Il modulo non importa il tema: la finestra
@@ -178,7 +181,8 @@ async function consegnaStrato(el: HTMLElement, { tema, vita }: ConsegnaOpzioni):
 
   if (!el.hasAttribute("data-marchio")) {
     vivifica(el);
-    pulisci(el);
+    el.remove();
+    pulisci();
     return;
   }
   const da = Number(el.dataset.marchioDa);
@@ -190,13 +194,21 @@ async function consegnaStrato(el: HTMLElement, { tema, vita }: ConsegnaOpzioni):
   vivifica(el);
   const corse = passaggio(el, vita);
   await corse.strato.finished;
-  corse.resto?.cancel();
-  pulisci(el);
+  corse.marchio?.cancel();
+  el.remove();
+  await corse.cascata?.finished;
+  pulisci();
 }
 
-/// Le corse del passaggio. `strato` è la sua dissolvenza, `resto` le altre
-/// corse dello strato, che la pulizia annulla.
-function passaggio(el: HTMLElement, vita: Lifetime | undefined): { strato: Motion; resto: Motion | null } {
+/// Le corse del passaggio: la dissolvenza dello strato, la stretta del marchio
+/// (che finisce con lo strato) e la cascata delle regioni.
+interface Corse {
+  readonly strato: Motion;
+  readonly marchio: Motion | null;
+  readonly cascata: Motion | null;
+}
+
+function passaggio(el: HTMLElement, vita: Lifetime | undefined): Corse {
   const ridotto = motionLevel() === "reduced" || document.documentElement.dataset.avvioMoto === "ridotto";
   // Lo stato finale prima della corsa: se la fine arriva prima della pulizia
   // lo strato resta trasparente, non ricompare.
@@ -209,7 +221,7 @@ function passaggio(el: HTMLElement, vita: Lifetime | undefined): { strato: Motio
     whenReduced: "fade",
     lifetime: vita,
   });
-  if (ridotto) return { strato: dissolvenza, resto: null };
+  if (ridotto) return { strato: dissolvenza, marchio: null, cascata: null };
 
   const marchio = el.querySelector(".avvio-marchio");
   const stretta = marchio
@@ -223,13 +235,13 @@ function passaggio(el: HTMLElement, vita: Lifetime | undefined): { strato: Motio
     const rettangolo = regione.getBoundingClientRect();
     return rettangolo.width > 0 && rettangolo.height > 0 ? [[regione, posa] as const] : [];
   });
-  stagger(
+  const entrata = stagger(
     regioni,
     ([regione, posa]) =>
       animate(regione, { from: { opacity: 0, ...posa }, spring: "elastic", whenReduced: "none", lifetime: vita }),
     { each: FAN_EACH },
   );
-  return { strato: dissolvenza, resto: stretta };
+  return { strato: dissolvenza, marchio: stretta, cascata: entrata };
 }
 
 function cascata(): readonly Voce[] {
@@ -259,9 +271,8 @@ function vivifica(el: HTMLElement): void {
   }
 }
 
-/// Via lo strato, il suo stile e ciò che i due script hanno scritto su `<html>`.
-function pulisci(el: HTMLElement): void {
-  el.remove();
+/// Via lo stile dello strato e ciò che i due script hanno scritto su `<html>`.
+function pulisci(): void {
   document.getElementById("avvio-stile")?.remove();
   const root = document.documentElement;
   for (const nome of root.getAttributeNames()) {

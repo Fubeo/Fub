@@ -226,8 +226,14 @@ describe("il passaggio", () => {
     expect(motore.plays.length).toBeGreaterThan(0);
     expect(motore.plays.every((corsa) => corsa.state === "running")).toBe(true);
     expect(finita).toBe(false);
-    // Lo strato sfuma in 90 ms, poi se ne va.
+    // Lo strato sfuma in 90 ms, poi se ne va; il suo stile e i segni su
+    // `<html>` aspettano che la cascata sia finita.
     motore.advance(100);
+    await giro();
+    expect(strato()).toBeNull();
+    expect(document.getElementById("avvio-stile")).not.toBeNull();
+    expect(finita).toBe(false);
+    motore.advance(3000);
     await giro();
     expect(finita).toBe(true);
     nienteStrato();
@@ -263,11 +269,13 @@ describe("il passaggio", () => {
     // Alla fine dello strato la sua corsa del marchio si annulla; quelle
     // dell'app finiscono da sole e non lasciano niente.
     motore.advance(100);
-    await fatto;
-    nienteStrato();
+    await giro();
+    expect(strato()).toBeNull();
     expect(motore.plays.find((corsa) => corsa.el.classList.contains("avvio-marchio"))?.state).toBe("canceled");
     expect(motore.plays.filter((corsa) => corsa.el.id === "topbar")[0]?.state).toBe("running");
     motore.advance(3000);
+    await fatto;
+    nienteStrato();
     expect(activeMotions()).toBe(0);
     expect(motore.plays.every((corsa) => corsa.state !== "running")).toBe(true);
     for (const id of ["topbar", "rail", "panes", "status-band"]) {

@@ -235,10 +235,13 @@ viva e mette il fuoco prima di animare; poi lo strato sfuma in 90 ms mentre il
 marchio si stringe e le regioni dell'app entrano in ordine di lettura, ogni
 30 ms, con la molla `elastic` di `moto` (la cascata). Senza marchio, cioè con
 un avvio sotto i 120 ms, non c'è passaggio; il marchio entrato resta almeno
-400 ms; con meno movimento c'è la sola dissolvenza. Alla fine lo strato se ne
-va con tutto ciò che ha scritto su `<html>`, e la consegna salva in
-`localStorage` (`fub.avvio`) le scelte di luce, contrasto e movimento, i colori
-del tema per quella luce e i testi dello strato nella lingua scelta: sono ciò
+400 ms; con meno movimento c'è la sola dissolvenza. Sfumato, lo strato si
+toglie; il suo stile e ciò che ha scritto su `<html>` se ne vanno a cascata
+finita, perché toglierli ricalcola lo stile di tutta la pagina e lo si fa
+quando niente si muove. La consegna si risolve allora. Prima del passaggio
+salva in `localStorage` (`fub.avvio`) le scelte di luce, contrasto e
+movimento, i colori del tema per quella luce e i testi dello strato nella
+lingua scelta: sono ciò
 che `luce.js` e `stati.js` leggono al prossimo avvio. La cache si può perdere
 senza danno: si ricostruisce alla consegna dopo.
 
