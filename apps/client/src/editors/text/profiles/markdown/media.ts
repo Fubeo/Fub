@@ -21,6 +21,7 @@ import { api } from "../../../../host/ipc";
 import { mediaKindOfId, mimeOfId } from "../../../media/media-types";
 import { openResourcePort, type ResourceTransport } from "../../../media/resource-port";
 import type { VaultFontPort } from "../../../spatial/fonts/vault";
+import { showEmbeddedCraft } from "../../../craft/figure";
 import { drawingFonts } from "../../../../state/drawing-fonts";
 import { documentOutline, existingDocuments, resolvedReference } from "../../../../host/query";
 import { pageName } from "../../../../rules/mirrored";
@@ -354,6 +355,8 @@ export async function hydrateVaultMedia(
   expected: Expected,
   life: Lifetime,
   port: MediaPort = hostPort,
+  /// Apre un documento con il gesto: il clic sulla figura di un PDF.
+  open?: (doc: string) => void | Promise<void>,
 ): Promise<void> {
   const images = Array.from(container.querySelectorAll<HTMLImageElement>(`img[${VAULT_SRC_ATTRIBUTE}]`))
     .filter((img) => !img.dataset.vaultMedia && isVaultPath(img.getAttribute(VAULT_SRC_ATTRIBUTE) ?? ""));
@@ -395,12 +398,27 @@ export async function hydrateVaultMedia(
       slot.dataset.vaultMedia = "pending";
       if (mediaKindOfId(page) === "pdf") {
         // Un PDF non si incorpora dentro la nota: diventa un collegamento
-        // alla sua superficie, che lo apre nel visualizzatore dedicato.
-        const link = Object.assign(document.createElement("a"), { href: "#", textContent: page });
-        link.className = "wikilink";
-        link.dataset.wikilinkPage = page;
+        // alla sua superficie, che lo apre nel visualizzatore dedicato. Con
+        // l'anteprima piccola che un'app ne ha fatto (T31) è la figura della
+        // prima pagina, col nome sotto, e il clic lo apre con il gesto; una
+        // pagina scelta (`#page=3`) resta il collegamento.
+        const link = (): HTMLElement => {
+          const anchor = Object.assign(document.createElement("a"), { href: "#", textContent: page });
+          anchor.className = "wikilink";
+          anchor.dataset.wikilinkPage = page;
+          return anchor;
+        };
         slot.dataset.vaultMedia = "loaded";
-        slot.replaceChildren(link);
+        slot.replaceChildren(link());
+        if (slot.dataset.embedHeading || slot.dataset.embedBlock) return;
+        const id = await expected(
+          port.resolve({ kind: "wiki", value: { page, heading: null, block: null } }, documentId).catch(() => null),
+        );
+        if (!id || life.closed) return;
+        await showEmbeddedCraft(container, slot, { doc: id, app: "pdf", name: page.split("/").pop() || page }, life, {
+          withoutImage: link,
+          ...(open ? { open: (doc: string) => open(doc) } : {}),
+        });
         return;
       }
       const id = await expected(

@@ -481,6 +481,48 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-host/src/craft/editors.rs::opens",
+            (
+                Family::AsciiCase,
+                "dice se un'app Craft apre un'estensione (N7, «Apri con»): un `IMG.JPG` è un \
+                 `jpg` per PhotoCraft. Le estensioni della tabella sono ASCII e il sistema le \
+                 tratta così; non è il nome di una nota, di un tag o di un percorso, che si \
+                 confrontano con le loro regole.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/craft/launch.rs::is_fub_variable",
+            (
+                Family::AsciiCase,
+                "riconosce le variabili d'ambiente di Fub (`FUB_*`) da togliere all'ambiente di \
+                 un'app Craft avviata (N7, l'avvio): su Windows i nomi delle variabili non \
+                 distinguono il maiuscolo e il sistema li piega in ASCII, su unix il confronto \
+                 è esatto. Non è il nome di una nota, di un tag o di un percorso.",
+            ),
+        ),
+        (
+            "crates/fub-format-craft/src/contract.rs::of_extension",
+            (
+                Family::AsciiCase,
+                "dice il soggetto dell'anteprima di un file che non ha un provider Craft (N7, \
+                 il contratto 2): un `IMG_0001.CR3` è una foto RAW come un `.cr3`. Le estensioni \
+                 della tabella sono ASCII e il sistema le tratta così, come `editors.rs::opens`; \
+                 non è il nome di una nota, di un tag o di un percorso, che si confrontano con le \
+                 loro regole.",
+            ),
+        ),
+        (
+            "crates/fub-format-craft/src/office.rs::is_package_extension",
+            (
+                Family::AsciiCase,
+                "dice se un documento è un pacchetto ZIP da cui leggere la miniatura (N7, le \
+                 anteprime dei documenti): un `RELAZIONE.DOCX` è un `.docx`, come per \
+                 `contract.rs::of_extension`, che lo ha già detto un documento. Le estensioni \
+                 della tabella sono ASCII; non è il nome di una nota, di un tag o di un \
+                 percorso.",
+            ),
+        ),
+        (
             "crates/fub-host/src/link_card.rs::card",
             (
                 Family::AsciiCase,

@@ -135,6 +135,7 @@ import {
   type Tab,
 } from "./layout";
 import { createNote, handToSystem, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
+import { lendHeld, lentDocuments, mountLends, onLendChanged, provideLendGate, renameLend, unlend } from "./lend";
 import { confirm } from "../platform/confirm";
 import { registerShellCommand } from "../ui/commands";
 import { registerLiveCommands } from "../editors/spatial/live/commands";
@@ -152,6 +153,7 @@ import { noteTargets } from "../editors/text/profiles/markdown/kinds";
 import type { SelectionBox } from "../editors/core/editor-actions";
 import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
 import { errorText } from "../host/errors";
+import { renderOnOpen } from "./craft-previews";
 import { writeChrome } from "./machine-chrome";
 import { onLanguage, t } from "../i18n/strings";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
@@ -181,6 +183,9 @@ export interface DocumentDeps {
   /// Esegue un comando come la tastiera e la palette: per i pulsanti della
   /// barra di formattazione che non sono azioni dell'editor.
   runCommand(id: string): void;
+  /// Apre le impostazioni sul gruppo della riga `key`: la scheda di un file
+  /// Craft ci rimanda per il consenso e il peso massimo.
+  openSettings?(key: string): void;
 }
 
 /// I tre elementi di un riquadro che il controller tiene. Glieli dà la vista
@@ -282,6 +287,10 @@ export interface Pane {
   /// sorgente» apre, e ciò contro cui si controlla una scelta già fatta.
   /// Null senza documento, prima della lettura, o se non ce n'è una.
   sourceView: SourceView | null;
+  /// Il documento mostrato si è montato dai byte (un'immagine, un PDF, un
+  /// RAW), e non dal suo testo. Quando l'elenco dei comandi cambia, un
+  /// riquadro il cui documento ha cambiato legame coi byte si rimonta.
+  bytes: boolean;
 }
 /// Nome breve della tab + stato testuale: non solo colore (U21).
 /// View: titolo dichiarato, mai finto file.
@@ -643,8 +652,7 @@ async function noteReference(from: string, doc: string, preference: LinkPreferen
 /// Gli allegati depositati entrano nel documento come rimandi: come si
 /// scrivono lo decide la superficie, nella sintassi del suo formato.
 function insertAttachmentLinks(r: Pane, doc: string, links: readonly string[]): void {
-  if (r.shown?.k !== "doc" || r.shown.doc !== doc || !r.surface?.insertReferences ||
-      closeDraining || documentSessions.isDeletionPending(doc)) return;
+  if (r.shown?.k !== "doc" || r.shown.doc !== doc || !r.surface?.insertReferences || heldReadOnly(doc)) return;
   const references = links.map((link): SurfaceReference => ({ kind: "attachment", link }));
   if (!r.surface.insertReferences(references)) {
     throw new Error(t("errors.document.no_editor"));
@@ -665,12 +673,12 @@ function mountDocumentAttachments(r: Pane, doc: string): void {
     if (!life.closed) notify(t("document.attachment_failed", { reason: errorText(error) }), "guasto");
   };
   const accept = (files: readonly File[]) => {
-    if (life.closed || r.surface !== surface || closeDraining || documentSessions.isDeletionPending(doc)) {
+    if (life.closed || r.surface !== surface || heldReadOnly(doc)) {
       fail(new Error("The document is read-only or no longer open"));
       return;
     }
     void attachmentDeposit(doc).then((target) => {
-      if (!life.closed && r.surface === surface && !closeDraining && !documentSessions.isDeletionPending(doc)) {
+      if (!life.closed && r.surface === surface && !heldReadOnly(doc)) {
         return depositFiles(files, target, insert);
       }
     }).catch(fail);
@@ -779,6 +787,12 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   lifetime.add(() => {
     recentRound = null;
   });
+  // Il contesto in attesa muore con la shell: un timer rimasto pubblicherebbe
+  // dopo lo smontaggio, verso un host che non c'è più.
+  lifetime.add(() => {
+    window.clearTimeout(contextTimer);
+    contextTimer = undefined;
+  });
   surfaceRegistry = createDocumentSurfaceRegistry({
     onChange: written,
     onSelectionChange: (paneId) => {
@@ -788,8 +802,9 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       const r = panes.get(paneId);
       if (r?.shown?.k === "doc") failSurface(r, r.shown.doc, error);
     },
+    // Il clic su un link è un gesto: la scheda che nasce lo sa (T23).
     onOpenWikilink: (page, heading, block) =>
-      openWikilink(page, heading ?? undefined, block ?? undefined),
+      openWikilink(page, heading ?? undefined, block ?? undefined, undefined, { gesture: true }),
     onOpenWikilinkBeside: async (page, heading, block) => {
       const target = await resolvedReference({ kind: "wiki", value: { page, heading, block } }, activeDoc() ?? undefined);
       if (!target) throw new Error(t("preview.target_missing"));
@@ -806,10 +821,11 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       else emit("reveal-path", id);
     },
     onOpenDocument: (doc) => openDocument(doc),
+    onOpenFigure: openFigure,
     onOpenPath: async (path, from) => {
       const target = await resolvedReference({ kind: "path", value: path }, from ?? activeDoc() ?? undefined);
       if (!target) throw new Error(t("preview.target_missing"));
-      await openDocument(target.doc);
+      await openDocument(target.doc, { gesture: true });
       if (target.at) await reveal(target.doc, { span: target.at.span });
     },
     onImportRemoteImage: importRemoteImage,
@@ -837,11 +853,12 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     drawingFonts,
     renderCanvasMarkdown: (_nodeId, text, host, documentId, forms) => mountMarkdown(host, renderMarkdown(text, forms).html, {
       documentId,
-      openWikilink: (page, heading, block) => openWikilink(page, heading, block),
+      openWikilink: (page, heading, block) => openWikilink(page, heading, block, undefined, { gesture: true }),
+      openFigure,
       openPath: async (path, from) => {
         const target = await resolvedReference({ kind: "path", value: path }, from ?? documentId);
         if (!target) throw new Error(t("preview.target_missing"));
-        await openDocument(target.doc);
+        await openDocument(target.doc, { gesture: true });
         if (target.at) await reveal(target.doc, { span: target.at.span });
       },
       searchTag: (tag) => deps.searchTag(tag),
@@ -885,6 +902,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       watch: (changed) => on("link-cards", changed),
     },
     runShellCommand: (id) => deps.runCommand(id),
+    ...(deps.openSettings ? { onOpenSettings: (key: string) => deps.openSettings?.(key) } : {}),
     requestMode: (paneId, mode) => {
       if (layout.focus !== paneId) focusPane(paneId);
       void setMode(mode);
@@ -966,6 +984,9 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     media: {
       transport: mediaTransport,
       assetUrl: api.assetUrl,
+      // «Apri con un'altra app» sull'immagine o sul PDF mostrato, come
+      // nell'albero: l'app del sistema, e con un'app Craft il sottomenu.
+      openExternal: (id) => handToSystem(id, true),
       copyText: writeClipboardText,
       // Il comando del kernel, come dalla palette: crea le annotazioni accanto
       // al PDF, o apre quelle che ci sono.
@@ -1018,6 +1039,8 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       });
     }),
   );
+  mountDocumentLends(lifetime);
+  lifetime.add(on("commands", commandsChanged));
   for (const event of ["index_updated", "batch_ended"] as const) {
     lifetime.add(onEvent(event, () => {
       for (const r of panes.values()) {
@@ -1072,9 +1095,11 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     if (outcome.kind !== "collision") {
       moveSheetNotices(from, to);
       renameInDocumentCaches(from, to);
+      // Il prestito segue il file col nome nuovo, come le schede qui sotto.
+      renameLend(from, to);
       // The layout still names the old path until `rename` below runs. Keep
       // those editors read-only across that tiny migration window.
-      setReadOnlyForDocument(from, documentSessions.isDeletionPending(to));
+      setReadOnlyForDocument(from, documentSessions.isDeletionPending(to) || lendHeld(to));
       rename(from, to);
     }
   };
@@ -1813,6 +1838,7 @@ export function renderPane(id: string): Pane {
     loadGeneration: 0,
     disposeSurface: null,
     sourceView: null,
+    bytes: false,
   };
   panes.set(id, r);
   return r;
@@ -1956,10 +1982,21 @@ function drawPaneConflict(doc: string): void {
   }
 }
 
+/// Le schede di `doc` sono in sola lettura per una cancellazione in sospeso
+/// (`readOnly`, che chi chiama legge dalla sessione col nome giusto), per la
+/// chiusura in corso o perché il documento è in prestito a un'app Craft, o
+/// sta per esserlo (`lendHeld`: la prenotazione conta già).
 function setReadOnlyForDocument(doc: string, readOnly: boolean): void {
   for (const paneId of panesWithDoc(doc)) {
-    panes.get(paneId)?.surface?.setReadOnly?.(readOnly || closeDraining);
+    panes.get(paneId)?.surface?.setReadOnly?.(readOnly || closeDraining || lendHeld(doc));
   }
+}
+
+/// Perché una scheda di `doc` non accetta modifiche: la chiusura in corso,
+/// una cancellazione in sospeso, o il prestito a un'app Craft (T17), anche
+/// soltanto prenotato.
+function heldReadOnly(doc: string): boolean {
+  return closeDraining || documentSessions.isDeletionPending(doc) || lendHeld(doc);
 }
 
 /** Ferma gli input locali prima del drain delle finestre e del salvataggio. */
@@ -1967,7 +2004,7 @@ export function freezeDocumentSurfaces(frozen: boolean): void {
   closeDraining = frozen;
   for (const [paneId, pane] of panes) {
     const doc = activeDoc(paneId);
-    if (doc) pane.surface?.setReadOnly?.(frozen || documentSessions.isDeletionPending(doc));
+    if (doc) pane.surface?.setReadOnly?.(frozen || documentSessions.isDeletionPending(doc) || lendHeld(doc));
   }
 }
 
@@ -2022,6 +2059,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     detachSurface(r);
     destroySurface(r);
     r.sourceView = null;
+    r.bytes = false;
   }
   r.shown = tab;
   view.drawViewSurface(r, tab?.k === "view");
@@ -2034,20 +2072,22 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   if (!tab) {
     return;
   }
+  const gesture = takeGesture(r.id, tab.doc);
 
   // Un file che nessun formato del vault gestisce e che il registro sa
   // mostrare dai byte (un'immagine, un PDF) non ha una sorgente UTF-8: la
   // superficie dei byte possiede soltanto il suo prestito della risorsa, e la
   // sessione di testo resta dei documenti di testo. Un formato del vault per
   // la stessa estensione passa invece dal descrittore, come ogni documento.
-  if (!handledByVault(tab.doc) && surfaceRegistry.showsBytes(tab.doc)) {
+  if (showsFromBytes(tab.doc)) {
+    r.bytes = true;
     // Dai byte non c'è un testo da guardare come sorgente: una scelta rimasta
     // sulla scheda (uno stato scritto a mano, un file cambiato di natura) si
     // scarta, e il visualizzatore si monta come sempre.
     tab = forgetOverride(r, tab);
     const surface = surfaceRegistry.mount(
       { formatId: null, sourceKind: "bytes", documentId: tab.doc },
-      { paneId: r.id, documentId: tab.doc, parent: r.editorEl },
+      { paneId: r.id, documentId: tab.doc, parent: r.editorEl, ...(gesture ? { gesture } : {}) },
     );
     r.surface = surface;
     surface.setMode("view");
@@ -2099,6 +2139,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
         parent: r.editorEl,
         formatId: source.formatId,
         revision: source.revision,
+        ...(gesture ? { gesture } : {}),
       },
     );
   } catch (error) {
@@ -2124,7 +2165,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     showSurfaceError(r, tab.doc, error);
     return;
   }
-  surface.setReadOnly?.(closeDraining || documentSessions.isDeletionPending(tab.doc));
+  surface.setReadOnly?.(heldReadOnly(tab.doc));
   // Il contenuto è a posto: da qui la sessione può raggiungere questo
   // riquadro come superficie, finché non mostra altro.
   attachSurface(r, tab.doc);
@@ -2164,6 +2205,41 @@ function forgetOverride(r: Pane, tab: Extract<Tab, { k: "doc" }>): Extract<Tab, 
   return next;
 }
 
+/// Il documento si monta dai byte: nessun formato del vault lo gestisce, e il
+/// registro sa mostrarlo così. Per un RAW la risposta dipende dall'elenco dei
+/// comandi (`craft.preview`), che può cambiare con il riquadro già montato.
+function showsFromBytes(doc: string): boolean {
+  return !handledByVault(doc) && surfaceRegistry.showsBytes(doc);
+}
+
+/// L'elenco dei comandi è cambiato (arrivato dopo l'apertura del vault, o un
+/// componente acceso o spento): un riquadro il cui documento ha cambiato
+/// legame coi byte si rimonta, senza gesto; gli altri non si toccano, e una
+/// scheda di testo tiene buffer e cursore. Anche un riquadro rimasto senza
+/// tab mostrata (una lettura fallita) riprova.
+function commandsChanged(): void {
+  let stale = false;
+  for (const id of layoutPanes()) {
+    const r = panes.get(id);
+    const tab = activeTab(id);
+    if (!r || tab?.k !== "doc") continue;
+    if (r.shown === null) {
+      stale = true;
+      continue;
+    }
+    if (r.shown.k !== "doc" || r.bytes === showsFromBytes(r.shown.doc)) continue;
+    detachSurface(r);
+    destroySurface(r);
+    r.shown = null;
+    stale = true;
+  }
+  if (stale) {
+    void synchronize().catch((e) => {
+      notify(t("panes.redraw_failed", { reason: errorText(e) }), "guasto");
+    });
+  }
+}
+
 /// Un formato del vault gestisce il file: lo dicono le estensioni dei
 /// provider registrati nel backend, non la tabella dei media della shell.
 function handledByVault(doc: string): boolean {
@@ -2201,15 +2277,23 @@ async function followRemote(target: NavigateTarget, from: string): Promise<void>
       return;
     }
     if (target.kind === "wikilink") {
-      await openWikilink(target.page, target.heading ?? undefined, target.block ?? undefined, from);
+      // Il clic su un link nella finestra staccata è un gesto come qui.
+      await openWikilink(target.page, target.heading ?? undefined, target.block ?? undefined, from, { gesture: true });
+      return;
+    }
+    if (target.kind === "figure") {
+      await openFigure(target.doc);
       return;
     }
     const resolved = await resolvedReference({ kind: "path", value: target.path }, from);
     if (!resolved) throw new Error(t("preview.target_missing"));
-    await openDocument(resolved.doc);
+    await openDocument(resolved.doc, { gesture: true });
     if (resolved.at) await reveal(resolved.doc, { span: resolved.at.span });
   } catch (error) {
-    const page = target.kind === "wikilink" ? target.page : target.kind === "path" ? target.path : target.tag;
+    const page = target.kind === "wikilink" ? target.page
+      : target.kind === "path" ? target.path
+      : target.kind === "figure" ? target.doc
+      : target.tag;
     notify(t("preview.open_failed", { page, reason: errorText(error) }), "guasto");
   }
 }
@@ -2284,7 +2368,7 @@ function attachSurface(r: Pane, doc: string): void {
     commitPending: buffer?.commitPending ? () => buffer.commitPending?.() : undefined,
     watchPending: buffer?.watchPending ? (listener) => buffer.watchPending!(listener) : undefined,
   });
-  surface.setReadOnly?.(closeDraining || documentSessions.isDeletionPending(doc));
+  surface.setReadOnly?.(heldReadOnly(doc));
 }
 
 /// Prima di staccarsi la superficie registra il testo che tiene ancora: va alla
@@ -2605,7 +2689,28 @@ async function refreshLimitedMode(): Promise<void> {
 // --- aprire e chiudere ------------------------------------------------------
 
 /// Apre un documento nel riquadro col fuoco.
-export async function openDocument(id: string): Promise<void> {
+/// Come si apre un documento. `gesture`: l'apertura nasce da un gesto di chi
+/// usa Fub (un clic o Invio su una riga dell'albero, un risultato della
+/// ricerca, il passaggio veloce, un link o una figura in una nota). Lo vede
+/// soltanto il montaggio che l'apertura fa nascere (`SurfaceMountContext`).
+export interface OpenOptions {
+  readonly gesture?: boolean;
+}
+
+/// Il documento che l'apertura in corso con un gesto farà nascere in un
+/// riquadro: `show` lo prende al montaggio, `openDocument` lo toglie quando
+/// ha finito. Vive quanto quell'apertura, mai come «l'ultimo gesto».
+const gestureBirths = new Map<string, string>();
+
+/// Il gesto per la scheda di `doc` che nasce adesso nel riquadro `pane`, preso
+/// una volta sola: un rimontaggio dopo non lo trova.
+function takeGesture(pane: string, doc: string): boolean {
+  if (gestureBirths.get(pane) !== doc) return false;
+  gestureBirths.delete(pane);
+  return true;
+}
+
+export async function openDocument(id: string, options: OpenOptions = {}): Promise<void> {
   // Reserve the target before entering the shared flush queue. Otherwise the
   // last-tab release can close the owner while this opening is still waiting
   // for that same queue.
@@ -2617,8 +2722,21 @@ export async function openDocument(id: string): Promise<void> {
       // lasciando: costa zero quando sono puliti, ed è la regola già scritta per le
       // azioni di view.
       await documentSessions.flushPendingSave();
-      openIn(layout.focus, id);
-      await synchronize();
+      const pane = layout.focus;
+      // Il gesto va soltanto alla scheda che questa apertura fa nascere: un
+      // documento che è già una scheda del riquadro prende il fuoco, e basta.
+      const born = options.gesture === true
+        && !(layout.panes[pane]?.tabs ?? []).some((tab) => tab.k === "doc" && tab.doc === id);
+      if (born) gestureBirths.set(pane, id);
+      openIn(pane, id);
+      // Un PDF o un documento nato da un gesto, col consenso acceso: l'app ne
+      // fa l'anteprima in sottofondo, per la nota e il passaggio (T31).
+      if (born) void renderOnOpen(id);
+      try {
+        await synchronize();
+      } finally {
+        if (born && gestureBirths.get(pane) === id) gestureBirths.delete(pane);
+      }
       // Il contesto si pubblica DOPO aver caricato il buffer: prima, lo span della
       // selezione sarebbe quello del documento precedente.
       await publishContext();
@@ -2681,6 +2799,28 @@ export function isOpen(id: string): boolean {
   return panesWithDoc(id).length > 0;
 }
 
+/// Il prestito (T17) visto dalle schede. Una scheda aperta che mostra il
+/// documento si può prestare; un'immagine o un PDF che il visore mostra dai
+/// byte no: Fub non li scrive, e non c'è niente da tenere fermo. Le schede di
+/// un documento prestato sono in sola lettura (`heldReadOnly`), la riga
+/// «Aperto in {app}» la disegna `panels/document.ts`, e il prestito finisce
+/// quando si chiude l'ultima scheda del documento, comunque si chiuda.
+function mountDocumentLends(lifetime: Lifetime): void {
+  mountLends(lifetime);
+  lifetime.add(provideLendGate({
+    lendable: (doc) => isOpen(doc) && (handledByVault(doc) || !surfaceRegistry.showsBytes(doc)),
+    flush: flushPendingSave,
+  }));
+  lifetime.add(onLendChanged((doc) => {
+    setReadOnlyForDocument(doc, documentSessions.isDeletionPending(doc));
+    redrawTabs(doc);
+    drawPaneConflict(doc);
+  }));
+  lifetime.add(on("layout", () => {
+    for (const doc of lentDocuments()) if (!isOpen(doc)) unlend(doc);
+  }));
+}
+
 /// Risolve un wikilink e lo apre; se non risolve, crea la nota che manca col
 /// nome scritto nel link. Il backlink c'è già prima ancora
 /// che l'utente abbia scritto la prima riga — è il grafo a ricucirlo.
@@ -2705,13 +2845,14 @@ export async function openWikilink(
   heading?: string,
   block?: string,
   from?: string,
+  options: OpenOptions = {},
 ): Promise<void> {
   const target = await resolvedReference(
     { kind: "wiki", value: { page, heading: heading ?? null, block: block ?? null } },
     from ?? activeDoc() ?? undefined,
   );
   if (target) {
-    await openDocument(target.doc);
+    await openDocument(target.doc, options);
     // Il punto può non esserci — un heading rinominato, un `^abc` cancellato —
     // e allora resta la nota aperta in cima: è il degrado dichiarato di
     // `ResolvedRef.at`, non un caso da nascondere.
@@ -2724,6 +2865,16 @@ export async function openWikilink(
   if (!page) return;
   const created = await createNote(page);
   if (created) await openDocument(created);
+}
+
+/// Il clic su una figura di una nota (un file Craft, un PDF): apre il suo
+/// documento col gesto, come un link a un percorso. A differenza di
+/// `openWikilink` non crea mai niente: se il file non c'è più (rinominato o
+/// tolto fuori da Fub) è un errore, e chi ha cliccato lo dice con un avviso.
+export async function openFigure(doc: string): Promise<void> {
+  const target = await resolvedReference({ kind: "wiki", value: { page: doc, heading: null, block: null } }, doc);
+  if (!target) throw new Error(t("preview.target_missing"));
+  await openDocument(target.doc, { gesture: true });
 }
 
 // --- salvataggio ------------------------------------------------------------

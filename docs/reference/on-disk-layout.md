@@ -165,7 +165,7 @@ nomi simili restano dati dell'utente.
 | `.fub/data/trash/*.json` | sidecar | 1 | provenienza del cestino |
 | `.fub/plugins/<id>/` | per-plugin | proprio | storage persistente namespaced |
 | `.fub/plugins/fub.commands/archive-recovery.json` | autorevole operativo | 1 | `fub.commands` |
-| `.fub/data/plugins/fub.linkcard/cards/*.json` | derivata | 1 | schede dei collegamenti |
+| `.fub/data/plugins/fub.linkcard/cards/*.json`, `.fub/data/plugins/fub.craft/previews/*.json` | derivata | 1 | schede dei collegamenti (`fub.linkcard`), anteprime dei file Craft (`fub.craft`) |
 
 `properties.types` è un valore autorevole dentro `.fub/settings.json`. Il valore
 ha un proprio schema JSON `{ "version": 1, "types": { ... } }`: separa la

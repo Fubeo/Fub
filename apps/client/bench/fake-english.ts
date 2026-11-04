@@ -165,6 +165,25 @@ export const ENGLISH: Readonly<Record<string, string>> = {
   "Il cestino è vuoto": "The trash is empty",
   "Ciò che si cestina resta qui finché non lo si svuota.": "What you trash stays here until you empty it.",
   "Il grafo, per chi non sa disegnarlo.": "The graph, for those who cannot draw it.",
+  "App esterne": "External apps",
+  "Dove sono le app Craft": "Where the Craft apps are",
+  "Una riga per programma, come vectorcraft=/opt/vc/vectorcraft, o vectorcraft-cli=… per la riga di comando. Il percorso intero vince su quello che Fub trova da solo.":
+    "One line per program, like vectorcraft=/opt/vc/vectorcraft, or vectorcraft-cli=… for the command line. The full path wins over what Fub finds on its own.",
+  "Anteprime fatte dalle app": "Previews made by the apps",
+  "Fub fa fare l'anteprima di un file che non ne ha una all'app che lo apre, su una copia, solo quando apri il file tu.":
+    "Fub has the app that opens a file make the preview the file lacks, on a copy, only when you open the file yourself.",
+  "Chiedi la prima volta": "Ask the first time",
+  Accese: "On",
+  Spente: "Off",
+  "Peso massimo da leggere per un'anteprima (MiB)": "Largest file to read for a preview (MiB)",
+  "Un file che va letto intero per l'anteprima e pesa di più resta senza: i file che si leggono a pezzi non hanno limite.":
+    "A file that has to be read whole for its preview and weighs more stays without one: files read in pieces have no limit.",
+  "Miniature nell'albero": "Thumbnails in the tree",
+  "Accanto al nome di un file Craft, di un RAW, di un PDF o di un documento, la piccola anteprima che il file ha già. L'albero non avvia mai un'app.":
+    "Next to the name of a Craft file, a RAW, a PDF or a document, the small preview the file already has. The tree never starts an app.",
+  "Mostra i file XMP nell'albero": "Show XMP files in the tree",
+  "Spento, gli XMP spariscono dall'albero: la ricerca li trova e la foto mostra i loro dati.":
+    "Off, XMP files disappear from the tree: search finds them and the photo shows their data.",
 };
 
 /// La scenografia nella lingua in cui parla adesso la shell.

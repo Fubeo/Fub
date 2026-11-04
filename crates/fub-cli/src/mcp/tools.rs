@@ -20,6 +20,12 @@
 //!   in prova, e con `"apply": true` vogliono tutto il vault fra le radici
 //!   di scrittura: un componente cambia il comportamento del vault intero,
 //!   come un piano che non dice quali note tocca.
+//! - **I file Craft** (`fub_preview`, `fub_external_editors`,
+//!   `fub_open_with`) seguono le regole di chi scrive: vedere vuole la radice
+//!   di lettura, passare un file a un'app vuole la sua radice di scrittura e
+//!   `"apply": true`. L'anteprima passa da `craft.preview`, che legge e basta:
+//!   nessuno strumento chiama `craft_render` né cambia `craft.cli-previews`,
+//!   quindi un agente non fa partire la riga di comando di un'app.
 //! - **Le risposte sono a pagine**, 50 per difetto e al più 200, per non
 //!   riempire il contesto dell'agente.
 
@@ -42,6 +48,16 @@ const LIMIT_DEFAULT: u32 = 50;
 const CANVAS_CREATE: &str = "canvas.create";
 const CANVAS_APPLY: &str = "canvas.apply";
 const LIMIT_MAX: u32 = 200;
+
+/// Il comando del bundle `fub.craft` che risponde l'anteprima, e lo spazio dei
+/// nomi del suo effetto. La CLI non dipende da `fub-format-craft`: legge il
+/// `CraftPreview` come JSON, nella forma della versione 2.
+const PREVIEW_COMMAND: &str = "craft.preview";
+const CRAFT_NS: &str = "fub.craft";
+const PREVIEW_VERSION: u64 = 2;
+
+/// Le immagini che un'anteprima può portare, e che MCP passa all'agente.
+const PREVIEW_MEDIA: &[&str] = &["image/png", "image/jpeg"];
 
 /// Lo schema di `limit` e `offset`, uguale per ogni strumento a pagine.
 fn paging() -> (Value, Value) {
@@ -105,6 +121,20 @@ pub fn specs() -> Value {
             "inputSchema": {
                 "type": "object",
                 "properties": { "doc": { "type": "string", "description": "Path della nota nel vault" } },
+                "required": ["doc"],
+                "additionalProperties": false
+            },
+            "annotations": { "readOnlyHint": true }
+        },
+        {
+            "name": "fub_preview",
+            "description": "L'anteprima di un file delle app Craft (VectorCraft, PhotoCraft, FigCraft, un XMP di LightCraft, un RAW, un PDF, un documento) e i suoi dati: l'immagine se il file ne porta una, e da dove viene. Legge e basta: non avvia mai un'app per farne una.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "doc": { "type": "string", "description": "Path del file nel vault, per esempio Disegni/logo.vectorcraft" },
+                    "size": { "type": "string", "enum": ["small", "large"], "default": "small", "description": "small per una miniatura, large per l'anteprima grande" }
+                },
                 "required": ["doc"],
                 "additionalProperties": false
             },
@@ -199,6 +229,35 @@ pub fn specs() -> Value {
             "annotations": { "readOnlyHint": false, "destructiveHint": true, "idempotentHint": false }
         },
         {
+            "name": "fub_external_editors",
+            "description": "Le app Craft che aprono un file del vault, nell'ordine di Fub: se sono installate su questa macchina e se Fub le ha già aperte.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "doc": { "type": "string", "description": "Path del file nel vault" }
+                },
+                "required": ["doc"],
+                "additionalProperties": false
+            },
+            "annotations": { "readOnlyHint": true }
+        },
+        {
+            "name": "fub_open_with",
+            "description": "Apre un file del vault con un'app Craft, da fub_external_editors. Senza apply è una prova: dice quale app lo riceverebbe, se è installata e come (forwarded: alla finestra già aperta; new_process: una finestra nuova). Con \"apply\": true lo apre davvero: vuole il file fra le radici di scrittura, perché l'app lo può cambiare.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "doc": { "type": "string", "description": "Path del file nel vault" },
+                    "editor": { "type": "string", "description": "L'id dell'app, per esempio vectorcraft" },
+                    "page": { "type": "integer", "minimum": 1, "description": "La pagina, per PdfCraft" },
+                    "apply": { "type": "boolean", "default": false, "description": "Apri davvero invece di provare" }
+                },
+                "required": ["doc", "editor"],
+                "additionalProperties": false
+            },
+            "annotations": { "readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true }
+        },
+        {
             "name": "fub_components",
             "description": "I componenti di Fub nel vault: acceso o spento, se è scelto o serve a un altro, il nome e chi lo richiede.",
             "inputSchema": {
@@ -266,21 +325,24 @@ pub fn call(c: &Connection, access: &Access, params: &Value) -> Result<Value, Rp
         Some(Value::Object(map)) => Value::Object(map.clone()),
         Some(_) => return Err(RpcError::invalid_params("`arguments` è un oggetto")),
     };
-    let outcome = match name {
-        "fub_search" => search(c, access, &args),
-        "fub_query" => query(c, access, &args),
-        "fub_read" => read(c, access, &args),
-        "fub_read_model" => read_model(c, access, &args),
-        "fub_write" => write(c, access, &args),
-        "fub_create" => create(c, access, &args),
-        "fub_canvas_create" => canvas_create(c, access, &args),
-        "fub_canvas_apply" => canvas_apply(c, access, &args),
-        "fub_commands" => commands(c, &args),
-        "fub_invoke" => invoke(c, access, &args),
-        "fub_components" => components(c, &args),
-        "fub_components_why" => components_why(c, &args),
-        "fub_components_enable" => components_enable(c, access, &args),
-        "fub_components_disable" => components_disable(c, access, &args),
+    let outcome: Result<Output, Failure> = match name {
+        "fub_search" => search(c, access, &args).map(Output::from),
+        "fub_query" => query(c, access, &args).map(Output::from),
+        "fub_read" => read(c, access, &args).map(Output::from),
+        "fub_read_model" => read_model(c, access, &args).map(Output::from),
+        "fub_preview" => preview(c, access, &args),
+        "fub_write" => write(c, access, &args).map(Output::from),
+        "fub_create" => create(c, access, &args).map(Output::from),
+        "fub_canvas_create" => canvas_create(c, access, &args).map(Output::from),
+        "fub_canvas_apply" => canvas_apply(c, access, &args).map(Output::from),
+        "fub_commands" => commands(c, &args).map(Output::from),
+        "fub_invoke" => invoke(c, access, &args).map(Output::from),
+        "fub_external_editors" => external_editors(c, access, &args).map(Output::from),
+        "fub_open_with" => open_with(c, access, &args).map(Output::from),
+        "fub_components" => components(c, &args).map(Output::from),
+        "fub_components_why" => components_why(c, &args).map(Output::from),
+        "fub_components_enable" => components_enable(c, access, &args).map(Output::from),
+        "fub_components_disable" => components_disable(c, access, &args).map(Output::from),
         other => {
             return Err(RpcError::invalid_params(&format!(
                 "strumento sconosciuto: {other}"
@@ -288,14 +350,32 @@ pub fn call(c: &Connection, access: &Access, params: &Value) -> Result<Value, Rp
         }
     };
     Ok(match outcome {
-        Ok(data) => {
-            json!({ "content": [{ "type": "text", "text": data.to_string() }], "structuredContent": data })
+        Ok(Output { data, image }) => {
+            // Il testo è il primo contenuto ed è uguale a `structuredContent`;
+            // un'immagine, se c'è, lo segue.
+            let mut content = vec![json!({ "type": "text", "text": data.to_string() })];
+            content.extend(image);
+            json!({ "content": content, "structuredContent": data })
         }
         Err(failure) => json!({
             "content": [{ "type": "text", "text": format!("{}: {}", failure.kind, crate::output::redact(&failure.message)) }],
             "isError": true
         }),
     })
+}
+
+/// Il risultato di uno strumento: i dati, che vanno nel testo e in
+/// `structuredContent`, e un contenuto immagine di MCP quando lo strumento ne
+/// porta uno.
+struct Output {
+    data: Value,
+    image: Option<Value>,
+}
+
+impl From<Value> for Output {
+    fn from(data: Value) -> Output {
+        Output { data, image: None }
+    }
 }
 
 fn text_arg<'a>(args: &'a Value, key: &str) -> Result<Option<&'a str>, Failure> {
@@ -886,6 +966,172 @@ fn invoke(c: &Connection, access: &Access, args: &Value) -> Result<Value, Failur
     }
     let outcome = run(InvokeMode::Apply)?;
     Ok(json!({ "dry_run": false, "outcome": outcome_json(&outcome) }))
+}
+
+/// `fub_preview`: il `CraftPreview` di `craft.preview`, che legge e basta.
+/// L'immagine, quando c'è, diventa un contenuto immagine di MCP; il testo
+/// porta tutto il resto, senza i byte.
+fn preview(c: &Connection, access: &Access, args: &Value) -> Result<Output, Failure> {
+    let id = doc(args, "doc")?;
+    access.check_read(id.as_str())?;
+    let size = match text_arg(args, "size")? {
+        None => "small",
+        Some(size @ ("small" | "large")) => size,
+        Some(_) => return Err(Failure::bad_args("`size` è \"small\" o \"large\"")),
+    };
+    // Soltanto `doc` e `size`: niente che chieda all'app di farne una.
+    let outcome = c
+        .host
+        .invoke_user_command(
+            c.vault_selector(),
+            PREVIEW_COMMAND,
+            json!({ "doc": id.as_str(), "size": size }),
+            InvokeMode::Apply,
+        )
+        .map_err(|error| match error {
+            fub_abi::PluginError::UnknownCommand(_) => Failure::new(
+                3,
+                "unavailable",
+                "craft.preview non c'è: il componente fub.craft è spento in questo vault",
+            ),
+            other => plugin(other),
+        })?;
+    let mut payload = match outcome.effect {
+        CommandEffect::Custom { ns, payload } if ns == CRAFT_NS => payload,
+        _ => return Err(Failure::local("craft.preview non ha risposto un'anteprima")),
+    };
+    if payload["version"].as_u64() != Some(PREVIEW_VERSION) {
+        return Err(Failure::local(format!(
+            "craft.preview ha risposto la versione {}, non la {PREVIEW_VERSION}",
+            payload["version"]
+        )));
+    }
+    let image = preview_image(&mut payload);
+    let data = json!({
+        "doc": payload["doc"],
+        "revision": payload["revision"],
+        "size": payload["size"],
+        "origin": payload["origin"],
+        "missing": payload["missing"],
+        "limit_bytes": payload["limit_bytes"],
+        "image": payload["image"],
+        "info": payload["info"],
+    });
+    Ok(Output { data, image })
+}
+
+/// Toglie i byte dall'immagine dell'anteprima (restano tipo, misure e
+/// orientamento) e li restituisce come contenuto immagine di MCP. Un tipo che
+/// non è PNG o JPEG non passa all'agente.
+fn preview_image(payload: &mut Value) -> Option<Value> {
+    let image = payload.get_mut("image")?.as_object_mut()?;
+    let data = match image.remove("data")? {
+        Value::String(data) => data,
+        _ => return None,
+    };
+    let media = image.get("media_type")?.as_str()?;
+    if !PREVIEW_MEDIA.contains(&media) {
+        return None;
+    }
+    Some(json!({ "type": "image", "data": data, "mimeType": media }))
+}
+
+fn external_editors(c: &Connection, access: &Access, args: &Value) -> Result<Value, Failure> {
+    let id = doc(args, "doc")?;
+    access.check_read(id.as_str())?;
+    let editors = c
+        .host
+        .external_editors(c.vault_selector(), Some(id.as_str()))
+        .map_err(plugin)?;
+    Ok(json!({ "doc": id.as_str(), "items": editors }))
+}
+
+/// `fub_open_with`: senza `apply` la prova, con `apply` il file all'app.
+fn open_with(c: &Connection, access: &Access, args: &Value) -> Result<Value, Failure> {
+    let id = doc(args, "doc")?;
+    access.check_read(id.as_str())?;
+    let editor = required(args, "editor")?;
+    let page = match args.get("page") {
+        None | Some(Value::Null) => None,
+        Some(value) => Some(
+            value
+                .as_u64()
+                .and_then(|n| u32::try_from(n).ok())
+                .filter(|n| *n >= 1)
+                .ok_or_else(|| Failure::bad_args("`page` è un intero >= 1"))?,
+        ),
+    };
+    if !bool_arg(args, "apply")? {
+        return open_with_plan(c, &id, editor);
+    }
+    // L'app può cambiare il file: come una scrittura.
+    access.check_write(id.as_str())?;
+    let opened = c
+        .host
+        .open_with(c.vault_selector(), id.as_str(), editor, page)
+        .map_err(plugin)?;
+    Ok(json!({
+        "dry_run": false,
+        "doc": id.as_str(),
+        "editor": opened.editor,
+        "how": opened.how,
+    }))
+}
+
+/// Che cosa farebbe `fub_open_with`, senza avviare niente: le stesse domande
+/// di `Host::open_with`, nello stesso ordine, e il modo da `single_instance`
+/// della tabella delle app.
+fn open_with_plan(c: &Connection, id: &DocId, editor: &str) -> Result<Value, Failure> {
+    use fub_abi::text::{Arg, Text};
+    use fub_abi::PluginError;
+    let vault = c.vault_selector();
+    let listed = c
+        .host
+        .external_editors(vault, Some(id.as_str()))
+        .map_err(plugin)?;
+    let Some(app) = listed.into_iter().find(|app| app.id == editor) else {
+        // Perché non c'è: il componente spento, un'app che Fub non conosce, o
+        // un'app che non apre questo file. Gli errori sono quelli di
+        // `Host::open_with`.
+        let known = c.host.external_editors(vault, None).map_err(plugin)?;
+        let error = if known.is_empty() {
+            PluginError::Unserved(Text::key("host.open_with.off"))
+        } else if let Some(app) = known.iter().find(|app| app.id == editor) {
+            PluginError::BadArgs(Text::message(
+                "host.open_with.wrong_kind",
+                vec![Arg::text("app", &app.name), Arg::text("path", id.as_str())],
+            ))
+        } else {
+            PluginError::BadArgs(Text::message(
+                "host.open_with.unknown_editor",
+                vec![Arg::text("editor", editor)],
+            ))
+        };
+        return Err(plugin(error));
+    };
+    let root = c.host.root(vault).map_err(plugin)?;
+    fub_host::vault_path::inside(root.as_std_path(), id.as_str()).map_err(plugin)?;
+    let how = app.installed.then(|| {
+        let single = fub_host::craft::editors::editor(&app.id).is_some_and(|known| {
+            known
+                .single_instance
+                .contains(&fub_host::craft::editors::Os::current())
+        });
+        if single {
+            fub_host::open_with::OpenHow::Forwarded
+        } else {
+            fub_host::open_with::OpenHow::NewProcess
+        }
+    });
+    Ok(json!({
+        "dry_run": true,
+        "doc": id.as_str(),
+        "editor": app.id,
+        "name": app.name,
+        "installed": app.installed,
+        "running": app.running,
+        "how": how,
+    }))
 }
 
 fn components(c: &Connection, args: &Value) -> Result<Value, Failure> {

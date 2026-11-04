@@ -369,6 +369,7 @@ pub struct MovedExplicitAssetRename {
     stat: crate::storage::Stat,
     identity: Option<crate::storage::FileIdentity>,
     rewrites: Vec<(DocId, EditRequest)>,
+    stale_byte_links: Vec<String>,
     side_data: CompletedAssetRenameSideData,
     recovery: RenameRecoveryReceipt,
 }
@@ -379,6 +380,7 @@ pub struct PendingExplicitAssetRename {
     workspace_id: u64,
     installed: VaultEntry,
     rewrites: Vec<(DocId, EditRequest)>,
+    stale_byte_links: Vec<String>,
     side_data: CompletedAssetRenameSideData,
     recovery: RenameRecoveryReceipt,
     journal: Arc<Journal>,
@@ -397,6 +399,7 @@ pub struct CompletedExplicitAssetRename {
     to: DocId,
     owns_batch: bool,
     rewrite_failures: Vec<String>,
+    stale_byte_links: Vec<String>,
     journal_fault: Option<String>,
 }
 
@@ -410,6 +413,7 @@ pub struct ParsedExplicitRename {
     stat: crate::storage::Stat,
     identity: Option<crate::storage::FileIdentity>,
     rewrites: Vec<(DocId, EditRequest)>,
+    stale_byte_links: Vec<String>,
     side_data: CompletedRenameSideData,
     recovery: RenameRecoveryReceipt,
 }
@@ -419,6 +423,7 @@ pub struct ParsedExplicitRename {
 pub struct PendingExplicitRename {
     identity: PendingIdentityMigration,
     rewrites: Vec<(DocId, EditRequest)>,
+    stale_byte_links: Vec<String>,
     side_data: CompletedRenameSideData,
     recovery: RenameRecoveryReceipt,
     journal: Arc<Journal>,
@@ -436,6 +441,7 @@ pub struct CompletedExplicitRename {
     recovery: RenameRecoveryReceipt,
     owns_batch: bool,
     rewrite_failures: Vec<String>,
+    stale_byte_links: Vec<String>,
     journal_fault: Option<String>,
 }
 
@@ -868,7 +874,11 @@ impl PreparedExplicitRename {
             SourceKind::Bytes => DocumentSource::Bytes(bytes),
         };
         let model = parser.invoke(source)?;
-        let durable_rewrites = invoke_prepared_link_rewrites(storage.as_ref(), rewrites)?;
+        let PreparedLinkRewriteOutcome {
+            edits: durable_rewrites,
+            unwritable_bytes,
+        } = invoke_prepared_link_rewrites(storage.as_ref(), rewrites)?;
+        let stale_byte_links = stale_byte_link_lines(&unwritable_bytes, &snapshot.from);
 
         // Rename "case-only" (`nota.md` → `Nota.md`): su un filesystem
         // case-insensitive (macOS/Windows) `storage.exists` vede lo STESSO
@@ -958,6 +968,7 @@ impl PreparedExplicitRename {
             stat: after,
             identity,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
         })
@@ -1059,6 +1070,7 @@ impl PendingExplicitRename {
         let PendingExplicitRename {
             identity,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
             journal,
@@ -1082,6 +1094,7 @@ impl PendingExplicitRename {
             recovery,
             owns_batch,
             rewrite_failures: Vec::new(),
+            stale_byte_links,
             journal_fault,
         }
     }
@@ -1126,12 +1139,24 @@ impl CompletedExplicitRename {
 /// nel kernel, nessun provider sotto lock, nessuna omissione silenziosa.
 /// La CAS di [`EditRequest`] resta la preimmagine per-file; i conflitti restano
 /// [`KernelError::Stale`]/`AlreadyExists`, senza protocollo parallelo.
+///
+/// L'unica eccezione è una sorgente a byte ([`SourceKind::Bytes`]) che non sa
+/// riscriversi (provider assente o `Ok(None)`): i file Craft dichiarano i loro
+/// collegamenti ma Fub non li scrive mai (D-3). Quella sorgente non ferma il
+/// piano: resta com'è e finisce in [`PreparedLinkRewriteOutcome::unwritable_bytes`],
+/// e chi chiama decide che cosa dirne. Una sorgente a byte che risponde con
+/// degli edit resta un errore, come prima.
 fn invoke_prepared_link_rewrites(
     storage: &dyn crate::storage::VaultStorage,
     rewrites: Vec<PreparedExplicitLinkRewrite>,
-) -> Result<Vec<RenameRecoveryEdit>> {
+) -> Result<PreparedLinkRewriteOutcome> {
     let mut out = Vec::new();
+    let mut unwritable_bytes = Vec::new();
     for prepared in rewrites {
+        if prepared.source_kind == SourceKind::Bytes && prepared.provider.is_none() {
+            unwritable_bytes.push(prepared.destination);
+            continue;
+        }
         let bytes = storage
             .read(&prepared.source_path)
             .map_err(|source| KernelError::Io {
@@ -1157,10 +1182,7 @@ fn invoke_prepared_link_rewrites(
             DocumentSource::Bytes(bytes) => Revision::of_bytes(bytes),
         };
         let Some(provider) = prepared.provider.clone() else {
-            return Err(KernelError::Format(FormatError::Parse(format!(
-                "il formato di {} non offre la riscrittura dei link",
-                prepared.destination
-            ))));
+            return Err(no_link_rewrite(&prepared.destination));
         };
         let provider_id = prepared.provider_id.clone();
         let destination = prepared.destination.clone();
@@ -1172,12 +1194,15 @@ fn invoke_prepared_link_rewrites(
             destination.as_str(),
             FormatError::Parse,
             || provider.rewrite_links(&source, &ctx, &wanted),
-        )?
-        .ok_or_else(|| {
-            KernelError::Format(FormatError::Parse(format!(
-                "il formato di {destination} non offre la riscrittura dei link"
-            )))
-        })?;
+        )?;
+        let edits = match edits {
+            Some(edits) => edits,
+            None if prepared.source_kind == SourceKind::Bytes => {
+                unwritable_bytes.push(destination);
+                continue;
+            }
+            None => return Err(no_link_rewrite(&destination)),
+        };
         validate_rewrite_output(&wanted, &edits, &source, &destination)?;
         if edits.is_empty() {
             continue;
@@ -1199,7 +1224,34 @@ fn invoke_prepared_link_rewrites(
         };
         out.push(RenameRecoveryEdit::new(destination, request, result));
     }
-    Ok(out)
+    Ok(PreparedLinkRewriteOutcome {
+        edits: out,
+        unwritable_bytes,
+    })
+}
+
+/// Il risultato di [`invoke_prepared_link_rewrites`]: gli edit da applicare e
+/// le sorgenti a byte lasciate com'erano, nell'ordine del piano.
+struct PreparedLinkRewriteOutcome {
+    edits: Vec<RenameRecoveryEdit>,
+    unwritable_bytes: Vec<DocId>,
+}
+
+/// L'errore di una sorgente che il suo formato non sa riscrivere.
+fn no_link_rewrite(destination: &DocId) -> KernelError {
+    KernelError::Format(FormatError::Parse(format!(
+        "il formato di {destination} non offre la riscrittura dei link"
+    )))
+}
+
+/// Una riga per ogni file a byte che punta ancora al nome vecchio `from`: la
+/// rinomina è fatta, le note sono aggiornate, e queste righe arrivano a chi
+/// l'ha chiesta nell'esito parziale [`KernelError::LinkRewrite`].
+fn stale_byte_link_lines(unwritable: &[DocId], from: &DocId) -> Vec<String> {
+    unwritable
+        .iter()
+        .map(|src| format!("{src}: un file a byte non si riscrive, il link punta ancora a {from}"))
+        .collect()
 }
 
 /// Vincolo d'output della porta format-owned: copertura totale, confini
@@ -1290,7 +1342,11 @@ impl PreparedExplicitAssetRename {
             return Err(KernelError::Stale(snapshot.from.to_string()));
         }
         let identity = identity_after;
-        let durable_rewrites = invoke_prepared_link_rewrites(storage.as_ref(), rewrites)?;
+        let PreparedLinkRewriteOutcome {
+            edits: durable_rewrites,
+            unwritable_bytes,
+        } = invoke_prepared_link_rewrites(storage.as_ref(), rewrites)?;
+        let stale_byte_links = stale_byte_link_lines(&unwritable_bytes, &snapshot.from);
         let same_file = storage.same_file(&snapshot.from_path, &snapshot.to_path);
         if !same_file && storage.exists(&snapshot.to_path) {
             return Err(KernelError::AlreadyExists(snapshot.to.to_string()));
@@ -1360,6 +1416,7 @@ impl PreparedExplicitAssetRename {
             stat: after,
             identity,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
         })
@@ -1469,6 +1526,7 @@ impl PendingExplicitAssetRename {
             workspace_id,
             installed,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
             journal,
@@ -1508,6 +1566,7 @@ impl PendingExplicitAssetRename {
             to,
             owns_batch,
             rewrite_failures,
+            stale_byte_links,
             journal_fault,
         }
     }
@@ -2664,6 +2723,82 @@ pub struct PreparedResourceOpen {
     id: DocId,
 }
 
+/// Il lettore delle lease di un vault, da tenere fuori dal workspace.
+///
+/// È la forma durevole di [`PreparedResourceOpen`] e
+/// [`PreparedResourceRead`]: tiene il [`Vault`](crate::vault::Vault) clonato,
+/// come `prepare_resource_open` lo clona a ogni apertura, in un posto che il
+/// workspace condivide con tutti i suoi lettori, e **non** il lucchetto del
+/// workspace. Chi lo tiene apre e legge a pezzi senza prendere
+/// la custodia, cioè anche da dentro un comando o un job che ha già il suo
+/// `HostApi`.
+///
+/// Le recinzioni sono quelle delle due `prepare_*`, con le stesse funzioni:
+/// [`valid_doc_id`] e `transfer::resource_open_on` all'apertura, il controllo
+/// della radice di `check_resource_lease` e `transfer::resource_read_at` a
+/// ogni pezzo (stat, identità e timbro prima e dopo, `Stale` se uno cambia).
+///
+/// Chiuso il vault ([`Workspace::prepare_close`]), il lettore non apre e non
+/// legge più: il pezzo dopo è un errore `Io` di specie `NotConnected`, mai un
+/// byte di un vault che non c'è più. La chiusura svuota il posto condiviso, e
+/// con lui la maniglia della cartella del vault: un lettore rimasto in giro
+/// (in una cache, in un biglietto) non tiene aperta la cartella, che su
+/// Windows altrimenti non si rinomina e non si cancella.
+#[derive(Clone)]
+pub struct ResourceReader {
+    root: Utf8PathBuf,
+    vault: Arc<Shelter<Option<crate::vault::Vault>>>,
+}
+
+impl ResourceReader {
+    /// Una lease su `id`, come [`Workspace::open_resource`].
+    pub fn open(&self, id: &DocId) -> Result<ResourceLease> {
+        let vault = self.vault()?;
+        crate::transfer::resource_open_on(&vault, &valid_doc_id(id.as_str())?)
+    }
+
+    /// Al più `len` byte da `offset` della lease, come
+    /// [`Workspace::read_resource`]: una lease di un altro vault è
+    /// `OutsideVault`, un file cambiato dall'apertura è `Stale`.
+    pub fn read_at(&self, lease: &ResourceLease, offset: u64, len: usize) -> Result<Vec<u8>> {
+        let vault = self.vault()?;
+        check_lease_root(vault.root(), lease)?;
+        crate::transfer::resource_read_at(vault.storage().as_ref(), lease, offset, len)
+    }
+
+    /// La radice canonica del vault che il lettore serve.
+    pub fn root(&self) -> &Utf8Path {
+        &self.root
+    }
+
+    /// Il vault ancora aperto, clonato fuori dal lucchetto del posto: la
+    /// lettura non trattiene la chiusura, e la chiusura che arriva a metà
+    /// lascia finire solo il pezzo già cominciato.
+    fn vault(&self) -> Result<crate::vault::Vault> {
+        if let Some(vault) = self.vault.acquire().as_ref() {
+            return Ok(vault.clone());
+        }
+        Err(KernelError::Io {
+            path: self.root.clone(),
+            source: std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "il vault è chiuso: il lettore delle risorse non legge più",
+            ),
+        })
+    }
+}
+
+/// Il controllo della radice di una lease: una lease aperta su un altro vault
+/// non si legge da questo.
+fn check_lease_root(root: &Utf8Path, lease: &ResourceLease) -> Result<()> {
+    if lease.root != *root {
+        return Err(KernelError::OutsideVault(
+            lease.root.join(lease.path.as_str()),
+        ));
+    }
+    Ok(())
+}
+
 /// Lettura bounded su lease condivisa: non copia path o buffer dell'allegato.
 pub struct PreparedResourceRead {
     storage: Arc<dyn crate::storage::VaultStorage>,
@@ -2699,13 +2834,23 @@ impl PreparedLinkRetarget {
     /// Gli edit, uno per documento che cambia, ciascuno sulla revisione dei
     /// byte appena letti: chi li applica li vede fallire se nel frattempo il
     /// documento è cambiato.
+    ///
+    /// Un file a byte che non sa riscriversi ferma il piano, come una sorgente
+    /// di testo senza riscrittura: qui non c'è una rinomina già fatta a cui
+    /// appendere l'avviso, e chi unisce le note cestinerebbe un file a cui quel
+    /// link punta ancora.
     pub fn edits(self) -> Result<Vec<(DocId, EditRequest)>> {
-        Ok(
-            invoke_prepared_link_rewrites(self.storage.as_ref(), self.rewrites)?
-                .into_iter()
-                .map(|edit| (edit.source().clone(), edit.request().clone()))
-                .collect(),
-        )
+        let PreparedLinkRewriteOutcome {
+            edits,
+            unwritable_bytes,
+        } = invoke_prepared_link_rewrites(self.storage.as_ref(), self.rewrites)?;
+        if let Some(destination) = unwritable_bytes.first() {
+            return Err(no_link_rewrite(destination));
+        }
+        Ok(edits
+            .into_iter()
+            .map(|edit| (edit.source().clone(), edit.request().clone()))
+            .collect())
     }
 }
 
@@ -3451,6 +3596,11 @@ pub struct Workspace {
     /// esattamente la frase che li riguarda tutti insieme. Serve a una cosa
     /// sola: chiudere due volte non è chiudere due volte.
     closed: bool,
+    /// Il vault che leggono i [`ResourceReader`] dati fuori, che non hanno il
+    /// workspace e devono smettere quando si chiude. Lo svuota
+    /// [`prepare_close`](Workspace::prepare_close), insieme a `closed`: così
+    /// nessun lettore tiene viva la maniglia della cartella del vault.
+    resource_readers_vault: Arc<Shelter<Option<crate::vault::Vault>>>,
     /// *Com'è configurato questo vault* (§11.1): gli schemi che i plugin
     /// dichiarano nel manifest, i valori dei due livelli, e la precedenza.
     ///
@@ -3977,14 +4127,16 @@ impl Workspace {
         // scrivendo in questo archivio viaggia con questo archivio. Condivise
         // con l'indice del kernel, che è chi risponde a chi le chiede (0019).
         let drafts = Arc::new(Drafts::open(root, Arc::clone(&storage)));
+        let docs = DocumentStore::new(
+            root,
+            Arc::clone(&registry),
+            Arc::clone(&storage),
+            Arc::clone(&settings),
+        )?;
+        let resource_readers_vault = Arc::new(Shelter::new(Some(docs.vault.clone())));
         Ok(Workspace {
             workspace_id: NEXT_WORKSPACE_ID.fetch_add(1, Ordering::Relaxed),
-            docs: DocumentStore::new(
-                root,
-                Arc::clone(&registry),
-                Arc::clone(&storage),
-                Arc::clone(&settings),
-            )?,
+            docs,
             indexes: Indexes::new(
                 registry,
                 Arc::clone(&settings),
@@ -4000,6 +4152,7 @@ impl Workspace {
             clock: Arc::new(crate::time::SystemClock),
             sources: Shelter::new(OpenSources::default()),
             closed: false,
+            resource_readers_vault,
             settings,
             view_states: ViewStates::in_memory(),
             organization,
@@ -4656,6 +4809,7 @@ impl Workspace {
             return None;
         }
         self.closed = true;
+        self.resource_readers_vault.acquire().take();
 
         let root = self.docs.vault.root().to_string();
         self.as_actor(Actor::Kernel, |ws| {
@@ -6287,12 +6441,16 @@ impl Workspace {
     }
 
     fn check_resource_lease(&self, lease: &ResourceLease) -> Result<()> {
-        if lease.root != *self.docs.vault.root() {
-            return Err(KernelError::OutsideVault(
-                lease.root.join(lease.path.as_str()),
-            ));
+        check_lease_root(self.docs.vault.root(), lease)
+    }
+
+    /// Il lettore delle lease di questo vault, da tenere fuori dal lucchetto
+    /// (vedi [`ResourceReader`]). Smette di leggere quando il vault si chiude.
+    pub fn resource_reader(&self) -> ResourceReader {
+        ResourceReader {
+            root: self.docs.vault.root().to_owned(),
+            vault: Arc::clone(&self.resource_readers_vault),
         }
-        Ok(())
     }
 
     pub fn prepare_resource_read(
@@ -8784,6 +8942,7 @@ impl Workspace {
             stat: _,
             identity: _,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
         } = parsed;
@@ -8793,6 +8952,7 @@ impl Workspace {
         Ok(PendingExplicitRename {
             identity,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
             journal: Arc::clone(&self.journal),
@@ -8825,6 +8985,7 @@ impl Workspace {
             recovery: _,
             owns_batch,
             rewrite_failures,
+            stale_byte_links,
             journal_fault,
         } = completed;
         if self.finish_identity_migration(identity).is_err() {
@@ -8839,7 +9000,11 @@ impl Workspace {
                 None,
             );
         }
-        let failed = rewrite_failures;
+        // Le righe dei file a byte vanno in coda solo qui: l'intent di recupero
+        // si chiude quando le riscritture vere sono riuscite, e un file a byte
+        // che non si riscrive non ha niente da recuperare.
+        let mut failed = rewrite_failures;
+        failed.extend(stale_byte_links);
         // Dentro il lotto questo `index-updated` non esce: diventa il
         // `batch-ended` che la chiusura emette. Resta scritto qui perché il
         // rename **ha** aggiornato l'indice, e chi legge questo metodo non deve
@@ -8983,6 +9148,7 @@ impl Workspace {
             stat,
             identity: _,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
         } = moved;
@@ -9001,6 +9167,7 @@ impl Workspace {
             workspace_id: snapshot.workspace_id,
             installed,
             rewrites,
+            stale_byte_links,
             side_data,
             recovery,
             journal: Arc::clone(&self.journal),
@@ -9032,9 +9199,11 @@ impl Workspace {
             from,
             to,
             owns_batch,
-            rewrite_failures,
+            mut rewrite_failures,
+            stale_byte_links,
             journal_fault,
         } = completed;
+        rewrite_failures.extend(stale_byte_links);
         for error in side_data.errors {
             self.doc_data_warnings.push(format!(
                 "lo stato per-documento di {} non ha potuto seguire la rinomina in {} — {error}",
@@ -14408,5 +14577,37 @@ mod tests {
         );
         let sizes: Vec<usize> = slices(work).iter().map(Vec::len).collect();
         assert_eq!(sizes, [FEED_BATCH, 1]);
+    }
+
+    /// **Chiuso il vault, un lettore rimasto in giro non tiene la cartella.**
+    ///
+    /// Il bundle Craft tiene i lettori in una cache del processo: se il
+    /// lettore clonasse il vault per sé, la maniglia della cartella vivrebbe
+    /// oltre la chiusura, e su Windows la cartella non si rinomina né si
+    /// cancella più. Il supporto del vault deve morire col workspace anche se
+    /// un lettore resta vivo.
+    #[test]
+    fn a_reader_left_around_does_not_keep_the_vault_storage_alive() {
+        let dir = tempfile::tempdir().expect("la cartella del vault");
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("un path UTF-8");
+        std::fs::write(root.join("a.bin"), b"0123").expect("il file");
+        let mut ws = Workspace::new(&root, FormatRegistry::new()).expect("l'apertura");
+        let reader = ws.resource_reader();
+        let lease = reader.open(&DocId::new("a.bin")).expect("la lease");
+        assert_eq!(reader.read_at(&lease, 0, 4).unwrap(), b"0123");
+        let storage = Arc::downgrade(ws.storage());
+        assert!(ws.close().is_empty());
+        drop(ws);
+        assert!(
+            storage.upgrade().is_none(),
+            "il lettore tiene ancora il supporto del vault chiuso"
+        );
+        assert_eq!(reader.root(), lease.root.as_path());
+        let error = reader.read_at(&lease, 0, 4).unwrap_err();
+        assert!(
+            matches!(&error, KernelError::Io { source, .. }
+                if source.kind() == std::io::ErrorKind::NotConnected),
+            "{error:?}"
+        );
     }
 }

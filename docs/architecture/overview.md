@@ -224,6 +224,10 @@ flowchart LR
 ```
 
 Il quarto blocco è il nucleo della lavagna, `fub-canvas-core`, con chi lo usa.
+Il quinto blocco è `fub-format-craft`, che legge in sola lettura i
+[file delle app Craft](../reference/craft-formats.md): dipende soltanto dal
+contratto, e lo usa soltanto `fub-host`, che ne monta i formati e il bundle
+`fub.craft` (feature `craft`).
 
 ```mermaid
 flowchart LR
@@ -239,6 +243,17 @@ flowchart LR
     canvaswasm --> canvascore
     features --> canvascore
     features -.-> canvas
+
+    %% E fub-format-craft.
+
+    abi["fub-abi"]
+    sdk["fub-sdk"]
+    host["fub-host"]
+    craft["fub-format-craft"]
+
+    host --> craft
+    craft --> abi
+    craft -.-> sdk
 ```
 
 Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso
