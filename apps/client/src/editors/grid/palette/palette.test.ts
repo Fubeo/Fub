@@ -164,14 +164,37 @@ describe("le voci dei fogli nella tavolozza", () => {
     ];
     const entries = mountGridPalette(engineWith(states)).commands();
     expect(entries.map((entry) => entry.id)).toEqual(["fogli.edit.redo", "fogli.edit.undo", "fogli.home.bold"]);
-    expect(entries.find((entry) => entry.id === "fogli.edit.undo")!.unavailable).toBe("nothing to undo");
+    // Il perché del motore arriva in italiano (`motivi.ts`).
+    expect(entries.find((entry) => entry.id === "fogli.edit.undo")!.unavailable).toBe("Non c'è niente da annullare.");
     expect(entries.find((entry) => entry.id === "fogli.edit.redo")!.unavailable).toBe("Adesso questo comando non si può usare.");
   });
 
-  it("in sola lettura li dà tutti spenti, con un motivo solo", () => {
+  it("in sola lettura spegne soltanto i comandi che cambiano, con un motivo solo", () => {
     const entries = mountGridPalette(engineWith(ALL_ON, { writable: () => false })).commands();
     expect(entries.length).toBe(CATALOG_COMMANDS.length);
-    expect(new Set(entries.map((entry) => entry.unavailable))).toEqual(new Set(["La cartella è aperta in sola lettura."]));
+    const effect = new Map(CATALOG_COMMANDS.map((command) => [command.id, command.effetto]));
+    for (const entry of entries) {
+      if (effect.get(entry.id) === "cambia") expect(entry.unavailable, entry.id).toBe("La cartella è aperta in sola lettura.");
+      else expect(entry.unavailable, entry.id).toBeNull();
+    }
+    expect(entries.some((entry) => effect.get(entry.id) === "legge")).toBe(true);
+    expect(entries.some((entry) => effect.get(entry.id) === "mostra")).toBe(true);
+  });
+
+  it("in sola lettura un comando che legge, spento dal motore, dice il perché del motore", () => {
+    const states = [{ id: "selection.stats", enabled: false, reason: "no workbook open" }];
+    const entries = mountGridPalette(engineWith(states, { writable: () => false })).commands();
+    expect(entries[0]!.unavailable).toBe("Non c'è una cartella aperta.");
+  });
+
+  it("dice al motore l'effetto di ogni comando e le finestre che in sola lettura si aprono", () => {
+    let told: { effect: (id: string) => string | undefined; dialogs: string[] } | null = null;
+    mountGridPalette(engineWith(ALL_ON, { setCommandEffects: (effect, dialogs) => (told = { effect, dialogs: [...dialogs] }) }));
+    expect(told!.effect("home.bold")).toBe("cambia");
+    expect(told!.effect("selection.stats")).toBe("legge");
+    expect(told!.effect("edit.goTo")).toBe("mostra");
+    expect(told!.dialogs).toEqual(expect.arrayContaining(["find", "goTo", "goToSpecial", "printPreview", "nameManager"]));
+    expect(told!.dialogs).not.toContain("formatCells");
   });
 
   it("senza una cartella che serve i comandi non dà niente", () => {
@@ -200,6 +223,35 @@ describe("le voci dei fogli nella tavolozza", () => {
     mountGridPalette(engine).commands().find((entry) => entry.id === "fogli.home.bold")!.run();
     expect(engine.calls).toEqual(["command home.bold {}"]);
     expect(document.querySelector(".grid-command-dialog")).toBeNull();
+  });
+
+  it("un comando che legge apre la finestra del risultato, una sola, anche dalla barra", async () => {
+    const engine = engineWith(ALL_ON, {
+      run: async (id, params) => {
+        engine.calls.push(`run ${id} ${params}`);
+        return { ok: true, result: JSON.stringify({ count: 3, sum: 6 }) };
+      },
+    });
+    const palette = mountGridPalette(engine);
+    const entry = palette.commands().find((one) => one.id === "fogli.selection.stats")!;
+    entry.run();
+    expect(palette.give("selection.stats")).toBe(true);
+    await vi.waitFor(() => expect(document.querySelector(".grid-result-table")).not.toBeNull());
+    expect(document.querySelectorAll(".grid-result-dialog")).toHaveLength(1);
+    expect(engine.calls).toEqual(["run selection.stats {}"]);
+    palette.destroy();
+    expect(document.querySelector(".grid-result-dialog")).toBeNull();
+  });
+
+  it("in sola lettura la barra non dà un comando che cambia, e uno che legge sì", async () => {
+    const engine = engineWith(ALL_ON, { writable: () => false });
+    const palette = mountGridPalette(engine);
+    expect(palette.give("formulas.errorChecking")).toBe(true);
+    expect(document.querySelector(".grid-result-dialog")).not.toBeNull();
+    // Un comando che cambia passa al motore, che lo rifiuta da sé.
+    palette.give("home.bold", "{}");
+    expect(engine.calls).toContain("command home.bold {}");
+    palette.destroy();
   });
 
   it("apre la finestra costruita per un comando che chiede un parametro", () => {

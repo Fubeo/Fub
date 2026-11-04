@@ -524,6 +524,65 @@ export const SCENE = onPage("shell", [
       await openCommands(page, ["Home"]);
     },
   },
+  // **Il risultato dei comandi che leggono** (`editors/grid/risultato.ts`),
+  // aperto dalla tavolozza: mentre legge (il provider frenato), le
+  // statistiche della selezione, il rifiuto del provider (il finto non serve
+  // il comando) con «Riprova», nessun errore, e cinquecento errori su un
+  // foglio dal nome lungo a 700 px (`?result=…`, vedi `fake-ipc.ts`).
+  {
+    id: "grid-result-loading",
+    title: "Il risultato dei fogli mentre legge",
+    query: "workbook=1&result=stats",
+    prepare: async (page) => {
+      await openWorkbook(page);
+      await page.evaluate(() => {
+        window.bench.throttle("gridBytesCommand");
+      });
+      await runScrittoioCommand(page, "Statistiche della selezione");
+      await page.waitForSelector('.grid-result-dialog .grid-result[aria-busy="true"] .skeleton-rows');
+    },
+  },
+  {
+    id: "grid-result-table",
+    title: "Il risultato dei fogli: le statistiche della selezione",
+    query: "workbook=1&result=stats",
+    prepare: async (page) => {
+      await openWorkbook(page);
+      await runScrittoioCommand(page, "Statistiche della selezione");
+      await page.waitForSelector(".grid-result-dialog .grid-result-table");
+    },
+  },
+  {
+    id: "grid-result-error",
+    title: "Il risultato dei fogli: il provider rifiuta, con «Riprova»",
+    query: "workbook=1",
+    prepare: async (page) => {
+      await openWorkbook(page);
+      await runScrittoioCommand(page, "Statistiche della selezione");
+      await page.waitForSelector(".grid-result-dialog .grid-dialog-error");
+    },
+  },
+  {
+    id: "grid-result-empty",
+    title: "Il risultato dei fogli: nessun errore",
+    query: "workbook=1&result=empty",
+    prepare: async (page) => {
+      await openWorkbook(page);
+      await runScrittoioCommand(page, "Controllo errori");
+      await page.waitForSelector('.grid-result-dialog .grid-result:not([aria-busy]) .grid-dialog-note:not([hidden])');
+    },
+  },
+  {
+    id: "grid-result-many",
+    title: "Il risultato dei fogli a 700 px: cinquecento errori su un foglio dal nome lungo",
+    query: "workbook=1&result=errors",
+    viewport: SHEET_700,
+    prepare: async (page) => {
+      await openWorkbook(page);
+      await runScrittoioCommand(page, "Controllo errori");
+      await page.waitForSelector(".grid-result-dialog .grid-result-table tbody tr:nth-child(500)");
+    },
+  },
   // **Il disegno**: il disegno dei connettori (`?connectors=6`, vedi
   // `fake-ipc.ts`), aperto e guardato com'è prima che l'impianto nuovo lo
   // rifaccia, largo e stretto. Le scene della colonna, dell'ispettore, del

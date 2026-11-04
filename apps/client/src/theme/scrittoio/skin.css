@@ -7964,7 +7964,9 @@ kbd,
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-control);
   background: var(--danger-wash);
-  color: var(--danger);
+  /* Sul velo del pericolo il testo pieno, come gli altri avvisi della serie:
+     il rosso sul suo velo scuro non arriva a 4.5:1. */
+  color: var(--text);
   font-size: var(--text-sm);
 }
 .grid-dialog-toolbar {
@@ -7987,6 +7989,46 @@ kbd,
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
   background: var(--bg-input);
+}
+/* Il risultato dei comandi che leggono: numeri allineati a destra, testata
+   attenuata, riferimenti come collegamenti. */
+.grid-result-table {
+  color: var(--text);
+  font-size: var(--text-base);
+  font-variant-numeric: tabular-nums;
+}
+.grid-result-table th,
+.grid-result-table td {
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+.grid-result-table thead th {
+  background: var(--bg-elev);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.grid-result-key {
+  color: var(--muted);
+  font-weight: var(--weight-regular);
+}
+.grid-result-table .grid-result-number {
+  text-align: end;
+  white-space: nowrap;
+}
+.grid-result-ref {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.grid-result-ref:hover {
+  color: var(--accent-soft);
 }
 .grid-dialog-names-head,
 .grid-dialog-names-row {

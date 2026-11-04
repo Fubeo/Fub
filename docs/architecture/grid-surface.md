@@ -285,7 +285,7 @@ lanciatore dello Scrittoio) mostra ogni comando del catalogo che il motore
 serve, nel gruppo «Foglio», col titolo tradotto e la scheda della barra in cui
 lo si trova (`editors/grid/palette/`). La superficie li dà con
 `paletteCommands()` di `EditorSurface`. Un comando che il motore dice spento
-resta in elenco col suo motivo e non parte; in sola lettura lo sono tutti.
+resta in elenco col suo motivo e non parte.
 
 Scelto, un comando si dà come lo darebbe la barra: con la finestra scritta a
 mano se ne ha una (`OWN_DIALOGS` in `palette/commands.ts`, controllata dai
@@ -296,11 +296,59 @@ scritto dentro; altrimenti subito sulla selezione. I titoli e i nomi dei campi
 stanno in un catalogo dei testi a parte (`palette/strings.ts`), caricato con
 la superficie e non con la shell.
 
-Gli stessi comandi stanno nel menu «Comandi» della barra. Il test di
-copertura (`palette/palette.test.ts`) vuole che ogni comando del catalogo si
-trovi nel suo albero e che ogni scheda e gruppo che il menu mostra abbia un
-nome, nella barra o fra quelli del solo menu (`fogli.menu.tab.*`,
-`fogli.menu.group.*`).
+Gli stessi comandi stanno nel menu «Comandi» della barra. Barra, menu e
+tavolozza danno un comando da un solo punto (`GridPalette.give`), che sceglie
+fra la finestra scritta a mano, quella costruita e il risultato.
+
+Il test di copertura (`palette/palette.test.ts`) vuole che ogni comando del
+catalogo si trovi nel suo albero e che ogni scheda e gruppo che il menu
+mostra abbia un nome, nella barra o fra quelli del solo menu
+(`fogli.menu.tab.*`, `fogli.menu.group.*`).
+
+### La sola lettura per effetto
+
+Ogni comando del catalogo ha un effetto: `cambia`, `legge` o `mostra`. In
+sola lettura si spengono soltanto quelli che cambiano, col perché
+`fogli.palette.read_only`; quelli che leggono o mostrano restano accesi nella
+barra, nel menu «Comandi» e nella tavolozza. La barra resta visibile
+(`servesCommands()` del motore), coi controlli che cambiano spenti. Il motore
+ne è il presidio: la palette gli dice l'effetto di ogni comando
+(`setCommandEffects`), e in sola lettura lascia partire soltanto quelli che
+leggono o mostrano, e soltanto le finestre scritte a mano dei comandi che non
+cambiano (trova, vai a, vai a formato, anteprima di stampa, gestione nomi).
+Un esito che porta comunque delle modifiche non si applica: il motore lo
+scrive nel registro e riapre la cartella del provider dal testo confermato.
+Le scorciatoie, i gesti sulla griglia e il menu del tasto destro restano
+quelli della sola lettura.
+
+### Il risultato dei comandi che leggono
+
+Un comando che legge e non ha una finestra scritta a mano apre la finestra del
+risultato (`editors/grid/risultato.ts`, sulla finestra del kit): una sola alla
+volta, e lo stesso comando dato di nuovo ritrova quella aperta. Se il comando
+chiede un parametro obbligatorio, prima la finestra costruita, poi il
+risultato. Mentre legge dice «Sto leggendo il risultato…» sopra delle righe
+segnaposto; poi una tabella, con la testata che resta ferma mentre il corpo
+scorre, i numeri allineati a destra nella lingua dell'interfaccia e i
+riferimenti a una cella come pulsanti che chiudono la finestra e scelgono la
+cella (un foglio che non c'è più lo dice nella nota). La tabella scorre in una
+scatola alta al più 14rem, e un valore lungo va a capo. «Copia» mette negli
+appunti il risultato in TSV, e un rifiuto degli appunti lo dice nella nota; un
+rifiuto del provider dice il suo perché, con «Riprova». Esc chiude e rende il
+fuoco a chi l'aveva; la finestra si chiude anche con la cartella. Le forme che
+il provider restituisce e le parole da tradurre sono in
+`risultati.generated.json`, scritto da
+`crates/fub-format-xlsx/tests/ts_risultati.rs`.
+
+### I perché
+
+Il motore e l'adattatore spengono o rifiutano un comando con una frase
+inglese. `editors/grid/motivi.ts` dà a ogni frase che possono dire
+(`motivi.generated.json`, dallo stesso test) la sua chiave `fogli.motivo.*`:
+i parametri passano nella traduzione, il nome di un comando diventa il suo
+titolo, un perché dentro un perché si traduce a sua volta, e una frase che
+non si conosce resta citata in una frase generica. La barra, il menu, la
+tavolozza, la finestra costruita e il risultato passano tutti di qui.
 
 ## Gli oggetti dei fogli
 
@@ -380,6 +428,8 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 - `apps/client/src/editors/grid/dialogs/protect.ts`
 - `apps/client/src/editors/grid/palette/commands.ts`
 - `apps/client/src/editors/grid/palette/form.ts`
+- `apps/client/src/editors/grid/risultato.ts`
+- `apps/client/src/editors/grid/motivi.ts`
 - `crates/fub-format-xlsx/src/grid.rs`
 - `crates/fub-format-xlsx/src/export.rs`
 - `crates/fub-format-xlsx/src/objects.rs`

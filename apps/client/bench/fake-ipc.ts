@@ -277,6 +277,43 @@ const BENCH_SESSION = GRID_CASE === "readonly"
   }
   : XLSX_GRID.session;
 
+/// Il risultato dei comandi che leggono (`?result=stats|errors|empty`,
+/// insieme a `?workbook=1`): la risposta del provider alla prima esecuzione,
+/// senza modifiche alla cartella. Le statistiche di una selezione, cinquecento
+/// errori su un foglio dal nome lungo, nessun errore. Senza `result` il
+/// comando non è servito, e la finestra del risultato dice il perché.
+const RESULT_CASE = params.get("result");
+const RESULT_SHEET = "Movimenti del conto corrente cointestato 2026";
+const BENCH_RESULTS: Readonly<Record<string, unknown>> = {
+  stats: { count: 24, numeric: 24, sum: 16437.9, average: 684.9125, min: 88.6, max: 1403.15 },
+  errors: {
+    errors: Array.from({ length: 500 }, (_, i) => ({
+      sheet: RESULT_SHEET,
+      cell: `F${i + 2}`,
+      error: i % 7 === 3 ? "#VALUE!" : "#DIV/0!",
+      formula: `=D${i + 2}/E${i + 2}`,
+    })),
+    circular: [],
+  },
+  empty: { errors: [], circular: [] },
+};
+const BENCH_OUTCOMES = RESULT_CASE !== null && RESULT_CASE in BENCH_RESULTS
+  ? [{
+    commit: {
+      revision: BENCH_SESSION.revision,
+      edit: { from: 0, to: 0, deleted: "", inserted: "" },
+      invalidation: { kind: "cells", cells: [] },
+    },
+    sheets: BENCH_SESSION.sheets,
+    hidden: BENCH_SESSION.hidden,
+    selection: { sheet: BENCH_SESSION.active, selection: "B2:E7", active: "B2" },
+    result: JSON.stringify(BENCH_RESULTS[RESULT_CASE]),
+    dialog: null,
+    commands: BENCH_SESSION.commands,
+    book: BENCH_SESSION.book,
+  }]
+  : undefined;
+
 /// Il documento di videoscrittura delle scene `document-*` (`?rich=…`), con
 /// la proiezione che `fub-format-rich` dà davvero del file: quella con un po'
 /// di tutto (`tests/ts_projection.rs`), oppure un `.odt`, uno pieno di
@@ -1060,6 +1097,7 @@ const options: Options = {
       session: BENCH_SESSION,
       windows: [...XLSX_GRID.windows, XLSX_GRID.edit.window].map(benchWindow),
       commits: [XLSX_GRID.edit.commit],
+      ...(BENCH_OUTCOMES === undefined ? {} : { outcomes: BENCH_OUTCOMES }),
     } as GridBytesFake,
   }),
   ...(DRAWING === null ? {} : { draw: true }),

@@ -199,8 +199,8 @@ describe("l'albero del menu «Comandi»", () => {
     expect(at(items, "Formule").disabled).toBeUndefined();
   });
 
-  it("la ragione del motore è la descrizione della voce spenta", () => {
-    const states = ALL_ON.map((state) => (state.id === "edit.redo" ? { ...state, enabled: false, reason: "Non c'è niente da ripetere." } : state));
+  it("la ragione del motore, tradotta, è la descrizione della voce spenta", () => {
+    const states = ALL_ON.map((state) => (state.id === "edit.redo" ? { ...state, enabled: false, reason: "nothing to redo" } : state));
     const undo = kids(at(commandMenuItems(VIEW, fake(states), anchor), "Home", "Annulla"));
     expect(undo[0]).toMatchObject({ disabled: true, description: "Non c'è niente da ripetere." });
     expect(undo[1]!.disabled).toBeUndefined();

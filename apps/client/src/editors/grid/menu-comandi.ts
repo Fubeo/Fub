@@ -14,7 +14,8 @@
 // parametri, o apre la stessa finestra. Un comando che la barra non ha si dà
 // come lo dà la tavolozza (`palette/commands.ts`). Una voce spenta resta, con
 // il suo perché nella descrizione: la sola lettura, il contesto che manca, la
-// ragione del motore. Un sottomenu è spento soltanto quando ogni sua voce lo è
+// ragione del motore tradotta (`motivi.ts`). Un comando che legge mostra il
+// suo risultato dallo stesso punto della barra (`GridPalette.give`). Un sottomenu è spento soltanto quando ogni sua voce lo è
 // per lo stesso perché.
 //
 // Lo stato si legge quando il menu si apre; finché resta aperto la barra gli
@@ -23,6 +24,7 @@
 import type { GridCommandState } from "../../host/contract";
 import type { MenuOpening, MenuSession } from "../../kit/ribbon/types";
 import { showContextMenu, type MenuItem } from "../../ui/menu";
+import { motivo } from "./motivi";
 import { CATALOG_COMMANDS, CATALOG_TABS, commandTitle, type GridPaletteCommand } from "./palette/commands";
 import { t as fogliT, type FogliKey } from "./palette/strings";
 import { CELL_STYLE_GROUPS, STANDARD_COLORS, TABLE_FAMILIES } from "./ribbon/palette";
@@ -53,6 +55,9 @@ export interface CommandMenuEngine {
 /// Ciò che il menu chiede alla barra che lo apre.
 export interface CommandMenuHost {
   readonly engine: CommandMenuEngine;
+  /// Dà un comando come un pulsante della barra (`GridPalette.give`); senza,
+  /// `engine.command`.
+  give?(id: string, params: string): boolean;
   /// Le voci della tavolozza: i comandi che la barra non ha si danno con loro.
   palette(): readonly GridPaletteCommand[];
   /// Se una scheda contestuale ha il suo contesto.
@@ -128,7 +133,8 @@ export function commandMenuItems(view: RibbonView, host: CommandMenuHost, anchor
   const text = (label: Text): string => (typeof label === "string" ? t(label) : label.raw);
   const params = (value: Params | null | undefined): string => JSON.stringify(value ?? {});
   const give = (id: string, value?: Params | null) => () => {
-    engine.command(id, params(value));
+    if (host.give) host.give(id, params(value));
+    else engine.command(id, params(value));
   };
   const ask = (dialog: string, value?: Params | null) => () => {
     engine.openDialog(dialog, params(value));
@@ -142,7 +148,7 @@ export function commandMenuItems(view: RibbonView, host: CommandMenuHost, anchor
     if (!writable && changes) return fogliT("fogli.palette.read_only");
     if (context !== null) return fogliT(`fogli.motivo.context.${context}` as FogliKey);
     const state = id === undefined ? undefined : states.get(id);
-    if (state && !state.enabled) return state.reason?.trim() || fogliT("fogli.palette.off");
+    if (state && !state.enabled) return motivo(state.reason) ?? fogliT("fogli.palette.off");
     return null;
   }
 

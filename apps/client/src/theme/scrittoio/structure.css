@@ -2350,6 +2350,13 @@ body {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+/* La finestra del risultato: la tabella scorre sotto la sua testata, e un
+   valore lungo va a capo invece di allargare la finestra. */
+.grid-result-table { width: 100%; border-collapse: collapse; }
+.grid-result-table thead th { position: sticky; top: 0; z-index: 1; }
+.grid-result-table td,
+.grid-result-table th { overflow-wrap: anywhere; }
+.grid-result-ref { display: inline; padding: 0; }
 .grid-dialog-names-head,
 .grid-dialog-names-row {
   display: grid;

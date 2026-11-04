@@ -326,6 +326,10 @@ export type GridRun =
   | { readonly ok: true; readonly result: string | null }
   | { readonly ok: false; readonly error: string | null };
 
+/// Che cosa fa un comando del catalogo (`effetto` di `catalogo.generated.json`):
+/// cambia la cartella, la legge, o cambia soltanto ciò che si vede.
+export type GridCommandEffect = "cambia" | "legge" | "mostra";
+
 /**
  * La griglia di una cartella di Excel: il testo della sessione è il giornale
  * delle sue celle cambiate, e la griglia si apre sui byte con la versione 2
@@ -573,6 +577,11 @@ function safeSourceBoundary(bytes: Uint8Array, at: number): boolean {
     && !(at > 0 && at < bytes.length && bytes[at - 1] === 0x0d && bytes[at] === 0x0a);
 }
 
+/// Se l'esito di un comando non porta modifiche al giornale.
+function emptyEdit(edit: GridCommit["edit"]): boolean {
+  return edit.from === edit.to && !edit.inserted;
+}
+
 function applySourceEdit(source: string, edit: GridCommit["edit"]): string {
   if (typeof edit.deleted !== "string" || typeof edit.inserted !== "string") {
     throw new Error("grid source diff has invalid text");
@@ -666,6 +675,11 @@ export class GridEngine {
   /// un elemento uguale a quello nuovo resta al suo posto (`#reconcile`).
   readonly #drawn = new WeakMap<Element, string>();
   #readOnly = false;
+  /// L'effetto di un comando, da chi conosce il catalogo
+  /// (`setCommandEffects`): in sola lettura passano soltanto `legge` e
+  /// `mostra`, e le finestre di `#readOnlyDialogs`.
+  #effectOf: (id: string) => GridCommandEffect | undefined = () => undefined;
+  #readOnlyDialogs: ReadonlySet<string> = new Set();
   #destroyed = false;
   #providerCommitTail: Promise<void> = Promise.resolve();
   #undo: GridCellPatch[][] = [];
@@ -983,11 +997,14 @@ export class GridEngine {
 
   setReadOnly(requested: boolean): void {
     const readOnly = requested;
+    const changed = readOnly !== this.#readOnly;
     this.#readOnly = readOnly;
     this.#formulaEditor.setReadOnly(readOnly);
     this.#cellEditor.setReadOnly(readOnly);
     this.#root.dataset.readOnly = String(readOnly);
     if (readOnly) this.#finishEditing(false, "input");
+    // Quali comandi si danno cambia con la sola lettura: la barra si rilegge.
+    if (changed && !this.#destroyed) this.#options.onCommands?.();
   }
 
   setTheme(theme: Theme): void {
@@ -1089,6 +1106,28 @@ export class GridEngine {
       .map((sheet) => ({ id: sheet.id, name: sheet.name }));
   }
 
+  /// Dice alla griglia l'effetto di ogni comando e le finestre scritte a
+  /// mano che non cambiano niente: in sola lettura lascia passare soltanto
+  /// quelli. Senza, in sola lettura non passa niente.
+  setCommandEffects(effectOf: (id: string) => GridCommandEffect | undefined, readOnlyDialogs: Iterable<string> = []): void {
+    this.#effectOf = effectOf;
+    this.#readOnlyDialogs = new Set(readOnlyDialogs);
+  }
+
+  /// Se la sessione serve dei comandi, anche in sola lettura: quelli che
+  /// leggono o cambiano soltanto ciò che si vede si danno lo stesso.
+  servesCommands(): boolean {
+    return !this.#destroyed && this.#bytes !== null && this.#commands.length > 0;
+  }
+
+  /// Se il comando `id` si può dare in questo stato: in sola lettura
+  /// soltanto se non cambia la cartella.
+  #allowed(id: string): boolean {
+    if (!this.#readOnly) return true;
+    const effect = this.#effectOf(id);
+    return effect === "legge" || effect === "mostra";
+  }
+
   /// Se i comandi si possono dare adesso: una sessione che ne serve, e un
   /// documento che si modifica.
   commandable(): boolean {
@@ -1148,7 +1187,7 @@ export class GridEngine {
   /// testo di un oggetto JSON. Falso se il catalogo non lo serve acceso.
   command(id: string, params = "{}"): boolean {
     const state = this.#commands.find((command) => command.id === id);
-    if (!this.#bytes || this.#readOnly || !state) return false;
+    if (!this.#bytes || !this.#allowed(id) || !state) return false;
     if (!state.enabled) {
       if (state.reason) this.#refuse(t("grid.workbook.command_off", { reason: state.reason }));
       return false;
@@ -1165,7 +1204,7 @@ export class GridEngine {
   /// cartella è cambiata sotto, o la griglia è stata smontata.
   run(id: string, params = "{}"): Promise<GridRun> {
     const state = this.#commands.find((command) => command.id === id);
-    if (!this.#bytes || this.#readOnly || !state) return Promise.resolve({ ok: false, error: null });
+    if (!this.#bytes || !this.#allowed(id) || !state) return Promise.resolve({ ok: false, error: null });
     if (!state.enabled) return Promise.resolve({ ok: false, error: state.reason ?? null });
     this.#finishEditing(true, "input", false);
     return new Promise((resolve) => this.#give(id, params, false, resolve));
@@ -1174,7 +1213,8 @@ export class GridEngine {
   /// Chiede alla shell la finestra `id` (`onDialog`), come la chiederebbe
   /// un comando: per le finestre che nessun comando del catalogo apre da sé.
   openDialog(id: string, params = "{}"): boolean {
-    if (!this.commandable() || !this.#options.onDialog) return false;
+    const allowed = this.#readOnly ? this.servesCommands() && this.#readOnlyDialogs.has(id) : this.commandable();
+    if (!allowed || !this.#options.onDialog) return false;
     this.#finishEditing(true, "input", false);
     this.#options.onDialog({ id, params });
     return true;
@@ -1363,6 +1403,15 @@ export class GridEngine {
     try {
       outcome = await host.gridBytesCommand(state.surface, state.instance, { revision: state.session.revision, command });
       if (!current()) return;
+      if (this.#readOnly && !emptyEdit(outcome.commit.edit)) {
+        // Un comando che doveva soltanto leggere ha cambiato la cartella del
+        // provider: in sola lettura non si applica. Il provider riparte dal
+        // testo confermato, così la sua cartella torna quella che si vede.
+        console.warn(`grid: «${command.id}» ha portato modifiche in sola lettura, scartate`);
+        this.#openWorkbook(this.#confirmedJournal, false);
+        done?.({ ok: false, error: null });
+        return;
+      }
       session = {
         ...state.session,
         revision: outcome.commit.revision,
@@ -1399,7 +1448,7 @@ export class GridEngine {
     const inserted = last && command.id.startsWith("insert.") ? insertedObject(outcome.result) : null;
     done?.({ ok: true, result: outcome.result });
     if (outcome.dialog) this.#options.onDialog?.(outcome.dialog);
-    if (outcome.commit.edit.from === outcome.commit.edit.to && !outcome.commit.edit.inserted) {
+    if (emptyEdit(outcome.commit.edit)) {
       this.#showView(this.#sheet().id, false);
       return;
     }

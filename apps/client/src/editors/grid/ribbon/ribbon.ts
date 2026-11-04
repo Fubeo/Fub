@@ -37,7 +37,7 @@ import {
 import { t, type RibbonKey } from "./strings";
 import { contextEntries, MINI_CONTROLS, type GridMenuTarget } from "./context";
 import { openCommandMenu, STANDARD_NAMES } from "../menu-comandi";
-import { mountGridPalette, type PaletteEngine } from "../palette/commands";
+import { commandUnavailable, mountGridPalette, type PaletteEngine } from "../palette/commands";
 import { t as fogliT } from "../palette/strings";
 import type { SurfaceMenuItem } from "../../core/editor-menu";
 import {
@@ -83,6 +83,11 @@ export interface RibbonEngine {
   run?: PaletteEngine["run"];
   selectionRefs?: PaletteEngine["selectionRefs"];
   sheetNames?: PaletteEngine["sheetNames"];
+  /// Se la sessione serve dei comandi anche in sola lettura
+  /// (`GridEngine.servesCommands`): la barra resta, coi comandi che
+  /// cambiano spenti.
+  servesCommands?(): boolean;
+  setCommandEffects?: PaletteEngine["setCommandEffects"];
 }
 
 export interface GridRibbon {
@@ -186,7 +191,18 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     sheetNames: () => engine.sheetNames?.() ?? [],
     book: () => engine.book(),
     focus: () => engine.focus(),
+    setCommandEffects: (effectOf, dialogs) => engine.setCommandEffects?.(effectOf, dialogs),
   });
+
+  // Lo stato dei comandi come lo mostra la barra: in sola lettura spenti
+  // soltanto quelli che cambiano, e ogni perché nella lingua della shell.
+  function commandStates(): GridCommandState[] {
+    const writable = engine.writable?.() ?? true;
+    return engine.commands().map((state) => {
+      const reason = commandUnavailable(state.id, state, writable);
+      return reason === null ? state : { ...state, enabled: false, reason };
+    });
+  }
   // I pezzi della barra, per aprire la tavolozza intera di un colore dal menu.
   let ribbonParts: Parts | null = null;
   const commandsMenu: MenuControl = {
@@ -200,6 +216,7 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     open: (anchor, view, how) =>
       openCommandMenu(anchor, view, how, {
         engine,
+        give: (id, params) => palette.give(id, params),
         palette: () => palette.commands(),
         contextShown,
         cellStyleName,
@@ -235,11 +252,11 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     },
     t: (key) => (key === "fogli.menu.button" ? fogliT(key) : t(key)),
     quick: [commandsMenu],
-    commands: () => engine.commands(),
-    commandable: () => engine.commandable(),
+    commands: commandStates,
+    commandable: () => engine.servesCommands?.() ?? engine.commandable(),
     view: readView,
     contextShown,
-    command: (id, params) => engine.command(id, params),
+    command: (id, params) => palette.give(id, params),
     openDialog: (id, params) => engine.openDialog(id, params),
     write: (text) => engine.writeFormula(text),
     shell: (action) => (action === "exportPdf" ? (engine.pdfExport?.() ?? null) : null),
