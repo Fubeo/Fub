@@ -14,7 +14,7 @@ Fuori scope:
 - la WebView vera, Windows e macOS, che si vedono solo in CI;
 - il telefono ridisegnato da capo: l'utente lo vuole cambiare a fondo («Comunque la GUI del telefono non mi piace proprio. Per ora do l'ok, la aggiustiamo più avanti, ma è sicuramente da modificare pesantemente»), e lo fa un piano successivo. Qui le righe del telefono restano piccole: quelle approvate per ora, e nessuna parte nuova.
 Assunzioni:
-- Risposte dell'utente (2026-11-04): A a D1–D9; il titolo della nota a 600; nel selettore dell'icona «Figure» prima di «Emoji»; il menu delle modalità è il B, la spunta blu a destra; il telefono è approvato per ora con la A, il tondo in basso a destra. Lo stesso giorno l'utente ha chiesto l'ombra del foglio morbida e visibile ai fianchi (T27), il vassoio delle barre meno grigio in giorno e notte (T16, T20) e le sezioni della barra a schede come le schede dell'ispettore (T20, T21).
+- Risposte dell'utente (2026-11-04): A a D1–D9; il titolo della nota a 600; nel selettore dell'icona «Figure» prima di «Emoji»; il menu delle modalità è il B, la spunta blu a destra; il telefono è approvato per ora con la A, il tondo in basso a destra. Lo stesso giorno l'utente ha chiesto l'ombra del foglio morbida e visibile ai fianchi (T27), il vassoio delle barre meno grigio in giorno e notte (T16, T20) e le sezioni della barra a schede come le schede dell'ispettore (T20, T21). Sulle cinque domande di gusto (2026-11-04): l'ombra va bene così, ma deve stare anche sotto la linguetta accesa, fusa col foglio (T27); di notte nessun filo chiaro attorno al foglio; le sezioni restano a 13 px, 12 sotto i 900 px; la sezione scelta ha il nome più marcato (T20); il vassoio più chiaro anche per la barra a una riga e per la colonna degli strumenti del disegno se ne riparla, e intanto resta com'è nel piano.
 - Valgono le «Decisioni già prese» del documento dell'utente, tranne le eccezioni di D2 e dei tre ruoli nuovi (sopra).
 - Si apre una PR bozza sola (D9). T1 e T16 partono subito. Il prototipo è approvato (2026-11-04): il computer per intero, il telefono per ora, con la A; nessun task aspetta più un OK. Al massimo due task insieme.
 - Differenze volute dalla bozza dell'utente:
@@ -28,6 +28,19 @@ Ondate: T1 T16 | T2 T11 | T5 T10 | T3 T6 | T7 T17 | T4 T8 | T18 T20 | T9 T19 | T
 Prototipo: `PLAN-ui/scrittoio-2.html`. Il computer è approvato (2026-11-04); il telefono è approvato per ora (2026-11-04), con la A, e la variante B è uscita. Le caselle «Rimetti com'era» (o `?prima=ombra,vassoio,sezioni`) rimettono l'ombra del foglio, il vassoio e le sezioni di oggi, per il confronto.
 
 ## Modifiche
+
+- 2026-11-04 · le risposte alle cinque domande di gusto · task toccati: T20,
+  T27.
+  - L'ombra («l'ombra va bene così, solo che vorrei stesse sotto anche
+    all'indicatore della tab, che sembra quasi non averne al momento. Deve
+    sembrare fuso con il foglio anche per l'ombra»): la linguetta accesa e il
+    foglio fanno un'ombra sola, con la stessa sagoma. T27 la mostra prima nel
+    prototipo.
+  - Di notte niente filo chiaro attorno al foglio, come nel piano.
+  - Le sezioni restano a 13 px, 12 sotto i 900 px, come nel piano.
+  - La sezione scelta ha il nome più marcato (T20), senza allargare la fila.
+  - Il vassoio più chiaro per la barra a una riga e per la colonna degli
+    strumenti: se ne riparla; T16 resta com'è.
 
 - 2026-11-04 · l'ombra del foglio, il vassoio più chiaro, le sezioni come
   l'ispettore e il telefono approvato per ora · task toccati: T3, T11, T16,
@@ -376,7 +389,7 @@ Dal prototipo: niente, il task non è grafico.
 Casi limite: una superficie con una modalità sola (un'immagine); un riquadro senza documento; il fuoco su un riquadro vuoto; un documento in sola lettura.
 Fatto quando: i test nuovi passano su `main` senza cambiare la produzione (`git diff --stat` elenca solo i cinque file di test), e ognuno è stato visto rosso.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · 98a1af7f · il documento in sola lettura non si prova in `document.test.ts`, perché l'host finto non ha i file in sola lettura: lo prova `standing.test.ts` (`readonly`)
 
 ## T2 · Il menu delle modalità, in un posto solo
 
@@ -418,6 +431,7 @@ Casi limite:
 - una scorciatoia cambiata dalla persona: compare quella;
 - un'icona sconosciuta: vale quella del ruolo;
 - il riquadro chiuso mentre il menu è aperto: la voce non fa niente e non lancia;
+- il clic sul bottone di un riquadro senza fuoco quando il clic non dà il fuoco al bottone (Safari e la WebView di macOS): il menu, chiudendosi, rende il fuoco all'elemento di prima, l'editor dell'altro riquadro, e `setMode` (che legge `layout.focus`) cambierebbe l'altro riquadro. Visto scrivendo T1, in jsdom senza `focus()`; la voce porta il fuoco al suo riquadro prima di `setMode`, e `mode-menu.test.ts` lo prova senza dare il fuoco al bottone;
 - in inglese, le etichette delle modalità vengono già dal catalogo.
 Fatto quando:
 - `mode-menu.test.ts` fissa l'ordine per Markdown, SVG, documento e disegno, le icone, gli `hint` (anche quello cambiato) e `setMode` sul riquadro giusto;
@@ -1036,7 +1050,7 @@ Cosa fare:
 - Nella stessa sezione, il vassoio più chiaro (righe 974–1000) e le sezioni come le schede dell'ispettore (righe 1002–1042), scelte dell'utente del 2026-11-04 (il vassoio: «meno stacco tra il bianco e quello sfondo», anche di notte; le sezioni: «vorrei anche che il selettore di tab dell'editor docx fosse più simile al selettore di collegamenti, struttura ecc. della sidebar»):
   - si fondono nelle regole ricavate sopra: una regola per selettore e un valore per proprietà, nessuna regola che ne scavalca un'altra dello stesso file;
   - il vassoio è `var(--bar-tray, var(--sheet-2))`, il ruolo di T16 (senza il ruolo resta quello di oggi); di notte i foglietti sono `--bg-elev` col filo di luce in cima e un filo attorno, e quello aperto sul posto sale di un gradino; col contrasto alto resta il bordo pieno di oggi;
-  - le sezioni sono il pozzetto delle schede dell'ispettore: segmenti alti 26, il nome in `--text-base` (in `--text-sm` quando il foglio è sotto i 900 px), in grafite; la scelta è un foglietto `--bg-elev` col nome in inchiostro, che scorre (`.kit-tab-indicator`), e il peso non cambia, così la fila non si allarga; le sezioni contestuali tengono l'accento; di giorno il pozzetto è il velo di oggi, di notte `--bg-hover`;
+  - le sezioni sono il pozzetto delle schede dell'ispettore: segmenti alti 26, il nome in `--text-base` (in `--text-sm` quando il foglio è sotto i 900 px), in grafite; la scelta è un foglietto `--bg-elev` col nome in inchiostro, che scorre (`.kit-tab-indicator`), e il nome più marcato (600; risposta dell'utente, 2026-11-04) senza che la fila si allarghi: ogni sezione tiene già la larghezza del nome a 600, con un doppio invisibile del nome (`::after` con `content: attr(data-label)`, `font-weight: 600`, alto 0 e `visibility: hidden`), così il cambio di peso non sposta le vicine; le sezioni contestuali tengono l'accento; di giorno il pozzetto è il velo di oggi, di notte `--bg-hover`;
   - i ruoli (`tablist`, `tab`), le frecce e il fuoco della fila non cambiano: è solo pelle, comune ai fogli e ai documenti.
 - I ganci: i `kit-ribbon-*` in un pezzo nuovo di `anatomia/kit.ts`; quelli `grid-ribbon-*` che non hanno più regole escono da `anatomia/editors.ts`.
 - Il blocco del prototipo è ricavato dalle regole `.grid-ribbon-*` di `main` a `3f4f3731`, con lo stesso testo e la stessa specificità. Se K3 o griglia le hanno cambiate, il blocco si rifà dalle regole nuove con lo stesso cambio di nome, e il report dice che cosa è cambiato.
@@ -1228,7 +1242,7 @@ Cosa fare:
   - `.pane` prende `z-index: var(--z-sheet)`, così la sua ombra cade sull'ispettore, che viene dopo nel DOM e la coprirebbe; divisori, cassetti e menu restano sopra.
   - Le regole si fondono in quelle di `#panes` che ci sono (la riga di base, il padding senza cassetto, quello con l'ispettore agganciato): nessuna regola nuova in coda che scavalca la vecchia. Le regole di `#panes` del benvenuto e della concentrazione (righe 1202, 1206 e 1390 di `main`) restano e si guardano con la fascia.
 - `recipe.ts`: due ruoli facoltativi nuovi nella tavolozza, accanto a `shadow-1`…`shadow-4`, e nell'elenco di `OPTIONAL_ROLES`:
-  - `shadow-sheet`, il foglio a riposo: tre strati, il contatto, una penombra corta e una lunga, e le due larghe con lo spread negativo, così l'ombra scende sotto il foglio e si vede ai fianchi senza salire sopra la linguetta. Di giorno l'inchiostro di `shadow()`, `0 1px 2px` all'8 %, `0 2px 8px -1px` all'8 % e `0 8px 16px -6px` al 14 %; di notte il nero, al 40, 45 e 60 %, perché la scrivania è già quasi nera;
+  - `shadow-sheet`, il foglio a riposo: tre strati, il contatto, una penombra corta e una lunga, e le due larghe con lo spread negativo, così l'ombra scende sotto il foglio e si vede ai fianchi. Di giorno l'inchiostro di `shadow()`, `0 1px 2px` all'8 %, `0 2px 8px -1px` all'8 % e `0 8px 16px -6px` al 14 %; di notte il nero, al 40, 45 e 60 %, perché la scrivania è già quasi nera;
   - `shadow-sheet-focus`, il foglio a fuoco: lo stesso disegno un passo più fondo, `0 1px 3px`, `0 3px 10px -1px` e `0 10px 20px -6px`, di giorno al 9, 10 e 18 %, di notte al 45, 50 e 66 %;
   - col contrasto alto gli stessi valori; niente filo di luce, che sotto il 10 % non si vede e sopra è un bordo che si interrompe alla linguetta;
   - poi `npm run theme:generate` (i fogli generati e `theme/author/`).
@@ -1245,7 +1259,7 @@ Casi limite:
 - i clic e il trascinamento dei divisori dentro la fascia arrivano al cassetto, all'ispettore e alla banda;
 - nessuno scorrimento in più: `scrollWidth` e `scrollHeight` di `#app` e di `#layout` restano quelli di oggi;
 - il benvenuto, la concentrazione, la banda spenta;
-- la linguetta accesa, che non ha rilievo: l'ombra non le sale sopra;
+- la linguetta accesa: l'utente (2026-11-04) vuole che stia anch'essa sull'ombra, «fuso con il foglio anche per l'ombra». La linguetta accesa e il foglio fanno un'ombra sola con la stessa sagoma: ai fianchi e sopra la linguetta l'ombra si vede, e nel punto dove la linguetta entra nel foglio non c'è nessun segno. Il prototipo non lo mostra ancora: T27 lo disegna prima lì (una via possibile: la stessa ombra sulla linguetta, tagliata sotto con `clip-path` dove incontra il foglio), lo fotografa in giorno e notte e poi lo porta nel codice; le linguette spente restano senza ombra;
 - la sagoma del foglio che si chiude e la linguetta trascinata (`tab-drop`);
 - il telefono in piedi e sdraiato;
 - il contrasto alto.

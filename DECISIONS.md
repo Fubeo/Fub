@@ -59,6 +59,19 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · Scrittoio 2 · le cinque domande di gusto: l'ombra resta
+  quella di T27 ma la linguetta accesa la condivide, con la sagoma fusa col
+  foglio; di notte nessun filo chiaro; le sezioni a 13 px (12 sotto i 900);
+  la sezione scelta col nome a 600, con un doppio invisibile che tiene ferma
+  la fila; il vassoio della barra a una riga e della colonna degli strumenti
+  resta da decidere · parole dell'utente: «Deve sembrare fuso con il foglio
+  anche per l'ombra». Il «sì» alla terza domanda («13 px, 12 sugli schermi
+  stretti, o sempre 12?») l'orchestratore lo legge come la prima delle due.
+- 2026-11-04 · Scrittoio 2 · T1: la voce del menu delle modalità deve portare
+  il fuoco al suo riquadro prima di `setMode` (nota in T2), perché dove il
+  clic non dà il fuoco al bottone il menu rende il fuoco all'editor dell'altro
+  riquadro · visto in jsdom scrivendo T1; nessun file di produzione cambia in
+  T1, la correzione va con T2, che riscrive quel menu.
 - 2026-11-04 · Scrittoio 2 · il telefono è approvato per ora con la A, il
   tondo in basso a destra, scelta dall'orchestratore perché era la
   raccomandata e l'utente non ha scelto fra le due; la B esce dal prototipo.
