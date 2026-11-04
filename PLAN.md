@@ -71,6 +71,13 @@ T14–T17 non hanno prototipo: riusano pezzi che ci sono.
   prestito, il fuoco perso nella domanda, i tre difetti del visore PDF che la
   scena `pdf-domanda` trova, quattro difetti minori di stato e pulizia); T32
   aspetta anche T34.
+- 2026-11-04, dalla CI di T32 dopo il merge di `main`: su Windows il
+  `ResourceReader` che il bundle tiene nella cache dei biglietti teneva
+  aperta la cartella del vault chiuso (os error 32 nei test di fub-host);
+  ora il lettore condivide col workspace un posto che la chiusura svuota. Il
+  timer del contesto del client ora muore con la shell (rigetto «window is
+  not defined» dopo `craft-raw.e2e`). Le 36 baseline nuove vengono
+  dall'artefatto `banco-visivo` del runner.
 
 ## Dal prototipo
 

@@ -787,6 +787,12 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   lifetime.add(() => {
     recentRound = null;
   });
+  // Il contesto in attesa muore con la shell: un timer rimasto pubblicherebbe
+  // dopo lo smontaggio, verso un host che non c'è più.
+  lifetime.add(() => {
+    window.clearTimeout(contextTimer);
+    contextTimer = undefined;
+  });
   surfaceRegistry = createDocumentSurfaceRegistry({
     onChange: written,
     onSelectionChange: (paneId) => {

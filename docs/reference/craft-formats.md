@@ -269,7 +269,9 @@ Il bundle legge i file con le lease del kernel, le stesse del protocollo
 `fub-asset:`, senza una porta nell'ABI: quando si registra prende il
 `ResourceReader` del vault (`Registrar::craft_reader`, una superficie del
 solo `fub.craft`), e dentro un comando non prende mai il lucchetto del
-workspace (`crates/fub-host/src/craft/ranged.rs`).
+workspace (`crates/fub-host/src/craft/ranged.rs`). Chiuso il vault, il lettore
+non legge più e non tiene aperta la cartella: un lettore rimasto nella cache
+dei biglietti non impedisce di rinominare, spostare o cancellare il vault.
 
 - Che cosa si legge a pezzi: tutto ciò che il bundle legge di un file. Il
   peso viene dalla lease (`stat.size`), non dall'elenco della cartella.

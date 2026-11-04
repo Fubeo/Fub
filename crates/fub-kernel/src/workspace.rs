@@ -2727,8 +2727,9 @@ pub struct PreparedResourceOpen {
 ///
 /// È la forma durevole di [`PreparedResourceOpen`] e
 /// [`PreparedResourceRead`]: tiene il [`Vault`](crate::vault::Vault) clonato,
-/// come `prepare_resource_open` lo clona a ogni apertura, e **non** il
-/// lucchetto del workspace. Chi lo tiene apre e legge a pezzi senza prendere
+/// come `prepare_resource_open` lo clona a ogni apertura, in un posto che il
+/// workspace condivide con tutti i suoi lettori, e **non** il lucchetto del
+/// workspace. Chi lo tiene apre e legge a pezzi senza prendere
 /// la custodia, cioè anche da dentro un comando o un job che ha già il suo
 /// `HostApi`.
 ///
@@ -2739,40 +2740,46 @@ pub struct PreparedResourceOpen {
 ///
 /// Chiuso il vault ([`Workspace::prepare_close`]), il lettore non apre e non
 /// legge più: il pezzo dopo è un errore `Io` di specie `NotConnected`, mai un
-/// byte di un vault che non c'è più.
+/// byte di un vault che non c'è più. La chiusura svuota il posto condiviso, e
+/// con lui la maniglia della cartella del vault: un lettore rimasto in giro
+/// (in una cache, in un biglietto) non tiene aperta la cartella, che su
+/// Windows altrimenti non si rinomina e non si cancella.
 #[derive(Clone)]
 pub struct ResourceReader {
-    vault: crate::vault::Vault,
-    open: Arc<AtomicBool>,
+    root: Utf8PathBuf,
+    vault: Arc<Shelter<Option<crate::vault::Vault>>>,
 }
 
 impl ResourceReader {
     /// Una lease su `id`, come [`Workspace::open_resource`].
     pub fn open(&self, id: &DocId) -> Result<ResourceLease> {
-        self.check_open()?;
-        crate::transfer::resource_open_on(&self.vault, &valid_doc_id(id.as_str())?)
+        let vault = self.vault()?;
+        crate::transfer::resource_open_on(&vault, &valid_doc_id(id.as_str())?)
     }
 
     /// Al più `len` byte da `offset` della lease, come
     /// [`Workspace::read_resource`]: una lease di un altro vault è
     /// `OutsideVault`, un file cambiato dall'apertura è `Stale`.
     pub fn read_at(&self, lease: &ResourceLease, offset: u64, len: usize) -> Result<Vec<u8>> {
-        self.check_open()?;
-        check_lease_root(self.vault.root(), lease)?;
-        crate::transfer::resource_read_at(self.vault.storage().as_ref(), lease, offset, len)
+        let vault = self.vault()?;
+        check_lease_root(vault.root(), lease)?;
+        crate::transfer::resource_read_at(vault.storage().as_ref(), lease, offset, len)
     }
 
     /// La radice canonica del vault che il lettore serve.
     pub fn root(&self) -> &Utf8Path {
-        self.vault.root()
+        &self.root
     }
 
-    fn check_open(&self) -> Result<()> {
-        if self.open.load(Ordering::Acquire) {
-            return Ok(());
+    /// Il vault ancora aperto, clonato fuori dal lucchetto del posto: la
+    /// lettura non trattiene la chiusura, e la chiusura che arriva a metà
+    /// lascia finire solo il pezzo già cominciato.
+    fn vault(&self) -> Result<crate::vault::Vault> {
+        if let Some(vault) = self.vault.acquire().as_ref() {
+            return Ok(vault.clone());
         }
         Err(KernelError::Io {
-            path: self.vault.root().to_owned(),
+            path: self.root.clone(),
             source: std::io::Error::new(
                 std::io::ErrorKind::NotConnected,
                 "il vault è chiuso: il lettore delle risorse non legge più",
@@ -3589,11 +3596,11 @@ pub struct Workspace {
     /// esattamente la frase che li riguarda tutti insieme. Serve a una cosa
     /// sola: chiudere due volte non è chiudere due volte.
     closed: bool,
-    /// Vale `true` finché il vault è aperto: lo leggono i [`ResourceReader`]
-    /// dati fuori, che non hanno il workspace e devono smettere quando si
-    /// chiude. Lo spegne [`prepare_close`](Workspace::prepare_close), insieme a
-    /// `closed`.
-    resource_readers_open: Arc<AtomicBool>,
+    /// Il vault che leggono i [`ResourceReader`] dati fuori, che non hanno il
+    /// workspace e devono smettere quando si chiude. Lo svuota
+    /// [`prepare_close`](Workspace::prepare_close), insieme a `closed`: così
+    /// nessun lettore tiene viva la maniglia della cartella del vault.
+    resource_readers_vault: Arc<Shelter<Option<crate::vault::Vault>>>,
     /// *Com'è configurato questo vault* (§11.1): gli schemi che i plugin
     /// dichiarano nel manifest, i valori dei due livelli, e la precedenza.
     ///
@@ -4120,14 +4127,16 @@ impl Workspace {
         // scrivendo in questo archivio viaggia con questo archivio. Condivise
         // con l'indice del kernel, che è chi risponde a chi le chiede (0019).
         let drafts = Arc::new(Drafts::open(root, Arc::clone(&storage)));
+        let docs = DocumentStore::new(
+            root,
+            Arc::clone(&registry),
+            Arc::clone(&storage),
+            Arc::clone(&settings),
+        )?;
+        let resource_readers_vault = Arc::new(Shelter::new(Some(docs.vault.clone())));
         Ok(Workspace {
             workspace_id: NEXT_WORKSPACE_ID.fetch_add(1, Ordering::Relaxed),
-            docs: DocumentStore::new(
-                root,
-                Arc::clone(&registry),
-                Arc::clone(&storage),
-                Arc::clone(&settings),
-            )?,
+            docs,
             indexes: Indexes::new(
                 registry,
                 Arc::clone(&settings),
@@ -4143,7 +4152,7 @@ impl Workspace {
             clock: Arc::new(crate::time::SystemClock),
             sources: Shelter::new(OpenSources::default()),
             closed: false,
-            resource_readers_open: Arc::new(AtomicBool::new(true)),
+            resource_readers_vault,
             settings,
             view_states: ViewStates::in_memory(),
             organization,
@@ -4800,7 +4809,7 @@ impl Workspace {
             return None;
         }
         self.closed = true;
-        self.resource_readers_open.store(false, Ordering::Release);
+        self.resource_readers_vault.acquire().take();
 
         let root = self.docs.vault.root().to_string();
         self.as_actor(Actor::Kernel, |ws| {
@@ -6439,8 +6448,8 @@ impl Workspace {
     /// (vedi [`ResourceReader`]). Smette di leggere quando il vault si chiude.
     pub fn resource_reader(&self) -> ResourceReader {
         ResourceReader {
-            vault: self.docs.vault.clone(),
-            open: Arc::clone(&self.resource_readers_open),
+            root: self.docs.vault.root().to_owned(),
+            vault: Arc::clone(&self.resource_readers_vault),
         }
     }
 
@@ -14568,5 +14577,37 @@ mod tests {
         );
         let sizes: Vec<usize> = slices(work).iter().map(Vec::len).collect();
         assert_eq!(sizes, [FEED_BATCH, 1]);
+    }
+
+    /// **Chiuso il vault, un lettore rimasto in giro non tiene la cartella.**
+    ///
+    /// Il bundle Craft tiene i lettori in una cache del processo: se il
+    /// lettore clonasse il vault per sé, la maniglia della cartella vivrebbe
+    /// oltre la chiusura, e su Windows la cartella non si rinomina né si
+    /// cancella più. Il supporto del vault deve morire col workspace anche se
+    /// un lettore resta vivo.
+    #[test]
+    fn a_reader_left_around_does_not_keep_the_vault_storage_alive() {
+        let dir = tempfile::tempdir().expect("la cartella del vault");
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("un path UTF-8");
+        std::fs::write(root.join("a.bin"), b"0123").expect("il file");
+        let mut ws = Workspace::new(&root, FormatRegistry::new()).expect("l'apertura");
+        let reader = ws.resource_reader();
+        let lease = reader.open(&DocId::new("a.bin")).expect("la lease");
+        assert_eq!(reader.read_at(&lease, 0, 4).unwrap(), b"0123");
+        let storage = Arc::downgrade(ws.storage());
+        assert!(ws.close().is_empty());
+        drop(ws);
+        assert!(
+            storage.upgrade().is_none(),
+            "il lettore tiene ancora il supporto del vault chiuso"
+        );
+        assert_eq!(reader.root(), lease.root.as_path());
+        let error = reader.read_at(&lease, 0, 4).unwrap_err();
+        assert!(
+            matches!(&error, KernelError::Io { source, .. }
+                if source.kind() == std::io::ErrorKind::NotConnected),
+            "{error:?}"
+        );
     }
 }

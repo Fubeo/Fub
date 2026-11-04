@@ -7,7 +7,7 @@
 // (la sessione riaperta all'avvio) o «File delle app Craft» acceso e spento
 // con la scheda aperta cambiano il legame sotto un riquadro già montato. Quel
 // riquadro si rimonta, senza gesto, e gli altri restano come sono.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeHost } from "./host/fake";
 import type { CommandSpec } from "./host/contract";
 import type { CraftPreview } from "./host/craft";
@@ -134,6 +134,13 @@ async function splitRight(): Promise<void> {
 }
 
 const rawTab = () => document.querySelector('[data-profile="raw"] .craft-card .zoom-content');
+
+// L'ultima prova smonta la shell anche lei: un timer della shell che scattasse
+// dopo la fine del file troverebbe l'ambiente già smontato.
+afterAll(() => {
+  activeStop?.();
+  activeStop = null;
+});
 
 beforeEach(() => {
   activeStop?.();
