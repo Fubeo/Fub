@@ -59,8 +59,14 @@ const LOCALE = "it-IT";
 /// quaranta pixel, e quaranta pixel che vanno e vengono sono il modo in cui un
 /// banco visivo diventa «ogni tanto rosso». Si nasconde il livello, non il
 /// tema: quello che si fotografa resta il CSS vero.
+///
+/// La scia dello strato d'avvio (`.avvio-scia`) scorre all'infinito anche col
+/// moto ridotto, dove diventa un respiro: è un `@keyframes` dello stile in
+/// linea, e le scene `avvio-*` la fotograferebbero ogni volta in un punto
+/// diverso. Si ferma dov'è a riposo; il resto dello strato resta il suo CSS.
 const QUIET = `
   .cm-cursorLayer { visibility: hidden !important; }
+  .avvio-scia { animation: none !important; }
 `;
 
 const here = (rel) => fileURLToPath(new URL(rel, import.meta.url));
@@ -74,8 +80,13 @@ export const OUTPUT = here("./.output");
 /// Apre il palco: server di Vite e browser. Restituisce anche come si chiude,
 /// perché un banco che lascia in giro un server è un banco che alla seconda
 /// corsa non parte.
+///
+/// `port` sposta il server per una corsa sola (`--port` di chi lo chiama), come
+/// `FUB_BENCH_PORT` per tutte: senza, vale la porta della config.
 export async function openStage({
   quiet = true,
+  port,
+  strictPort = true,
   createServer: createServerImpl = createServer,
   chromium: chromiumImpl = chromium,
 } = {}) {
@@ -85,6 +96,7 @@ export async function openStage({
     server = await createServerImpl({
       configFile: here("../vite.bench.config.ts"),
       logLevel: quiet ? "warn" : "info",
+      ...(port === undefined ? {} : { server: { port, strictPort } }),
     });
     await server.listen();
     const base = `http://localhost:${server.config.server.port}`;
@@ -187,9 +199,14 @@ export async function openPage(browser, light, { clock = true } = {}) {
 /// l'unica cosa che tocca la pagina e deve toccarla il meno possibile.
 export async function prepareScene(page, scene, light, base, url) {
   await page.goto(url(base, scene, light), { waitUntil: "load" });
-  await page.waitForFunction(() => document.documentElement.dataset.bench === "ready", null, {
-    timeout: 30_000,
-  });
+  // Di solito si arriva quando l'avvio è finito. Una scena che fotografa
+  // l'avvio stesso (lo strato in attesa, il guasto) non lo vedrà mai finire:
+  // dichiara la sua condizione d'arrivo, e quanto può farsi aspettare.
+  await page.waitForFunction(
+    scene.ready ?? (() => document.documentElement.dataset.bench === "ready"),
+    null,
+    { timeout: scene.readyTimeout ?? 30_000 },
+  );
   await page.evaluate(() => document.fonts.ready);
   await scene.prepare(page);
   // I gesti di Playwright lasciano il puntatore sopra l'ultimo controllo.
