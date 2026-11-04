@@ -59,6 +59,12 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-04 · caricamento · lo strato d'avvio sta in linea nei tre HTML (uno
+  `<style>` uguale, due script classici in `public/avvio/`, una cache
+  `fub.avvio` sua) e lo consegna la shell con `moto` a finestra e vault
+  pronti · deve valere al primo disegno, prima di ogni modulo e col JS spento;
+  la CSP vieta lo script in linea e la pelle arriva solo dopo il sanitizer.
+
 - CI di PR #297 (orchestratore): i job dei banchi (visual, a11y, graph,
   benches) non avevano il toolchain Rust col bersaglio wasm32-unknown-
   unknown, e Vite non poteva compilare il nucleo della lavagna quando
