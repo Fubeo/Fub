@@ -35,9 +35,9 @@ describe("document.html", () => {
     }
   });
 
-  it("carica l'ingresso della finestra documento dello Scrittoio, e nessun altro", () => {
+  it("carica i due script dello strato d'avvio e l'ingresso della finestra documento, e nessun altro", () => {
     const scripts = [...page.matchAll(/<script[^>]*\ssrc="([^"]+)"/g)].map((match) => match[1]);
-    expect(scripts).toEqual(["/src/shells/scrittoio/document/entry.ts"]);
+    expect(scripts).toEqual(["/avvio/luce.js", "/avvio/stati.js", "/src/shells/scrittoio/document/entry.ts"]);
   });
 
   it("il foglio ha una linguetta scelta che governa il pannello dell'editor", () => {

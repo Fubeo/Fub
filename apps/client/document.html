@@ -4,14 +4,483 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fub — documento</title>
+    <!-- Lo strato d'avvio, prima di ogni altro script: i caratteri del marchio,
+         lo stile in linea (luce e colori dal primo disegno, anche senza JS),
+         la frase per chi ha il JS spento e i due script classici di
+         public/avvio/. È lo stesso nelle tre pagine. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/newsreader-latin-opsz-italic.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/hanken-grotesk-latin-wght-normal.woff2" />
+    <style id="avvio-stile">
+      /* Lo strato d'avvio: lo stesso blocco in index.html, mobile.html e
+         document.html (src/avvio/pagine.test.ts lo pretende). Sta in linea e non
+         nella pelle perché vale al primo disegno, prima di ogni JS e anche con il JS
+         spento; il sanitizer non lo legge, per questo usa solo variabili sue
+         (--avvio-*), non tocca i ruoli del tema e se ne va alla consegna
+         (src/avvio/consegna.ts). Le famiglie hanno un nome loro, così non toccano
+         quelle di theme/scrittoio/fonts.css; i file sono gli stessi, e la cache del
+         browser non li scarica due volte. */
+      @font-face {
+        font-family: "Avvio Newsreader";
+        font-style: italic;
+        font-display: block;
+        font-weight: 200 800;
+        src: url("/fonts/newsreader-latin-opsz-italic.woff2") format("woff2-variations");
+      }
+      @font-face {
+        font-family: "Avvio Hanken";
+        font-style: normal;
+        font-display: swap;
+        font-weight: 100 900;
+        src: url("/fonts/hanken-grotesk-latin-wght-normal.woff2") format("woff2-variations");
+      }
+
+      /* I colori di serie delle quattro luci, da theme/scrittoio/sheet-dark.css,
+         sheet-light.css, sheet-dark-high.css, sheet-light-high.css (--bg, --text,
+         --muted, --accent, --accent-contrast, --border, --danger, --focus-ring,
+         --overlay-hover, --overlay-active, --shadow-2). Senza attributo la luce è
+         scura, come il ripiego di theme.ts; senza JS decide il sistema. Un tema
+         installato o un accento scelto arrivano da luce.js, in linea su <html>. */
+      :root,
+      :root[data-avvio-luce="dark"] {
+        color-scheme: dark;
+        --avvio-sfondo: #0a0e16;
+        --avvio-testo: #e5e8ed;
+        --avvio-tenue: #a0a5ae;
+        --avvio-accento: #82a8fd;
+        --avvio-inchiostro: #070d1a;
+        --avvio-bordo: #2b303a;
+        --avvio-guasto: #f66d67;
+        --avvio-fuoco: #82a8fd;
+        --avvio-velo: rgb(229 232 237 / 7%);
+        --avvio-velo-forte: rgb(229 232 237 / 12%);
+        --avvio-ombra: 0 1px 2px rgb(0 0 0 / 28%), 0 10px 28px rgb(0 0 0 / 28%);
+      }
+      @media (prefers-color-scheme: light) {
+        :root:not([data-avvio-luce]) {
+          color-scheme: light;
+          --avvio-sfondo: #e8edf5;
+          --avvio-testo: #1a1f29;
+          --avvio-tenue: #5a5f6a;
+          --avvio-accento: #2b56cc;
+          --avvio-inchiostro: #fafcff;
+          --avvio-bordo: #d3d8e0;
+          --avvio-guasto: #ca131b;
+          --avvio-fuoco: #2b56cc;
+          --avvio-velo: rgb(26 31 41 / 5%);
+          --avvio-velo-forte: rgb(26 31 41 / 9%);
+          --avvio-ombra: 0 1px 2px rgb(24 28 44 / 6%), 0 10px 28px rgb(24 28 44 / 10%);
+        }
+      }
+      :root[data-avvio-luce="light"] {
+        color-scheme: light;
+        --avvio-sfondo: #e8edf5;
+        --avvio-testo: #1a1f29;
+        --avvio-tenue: #5a5f6a;
+        --avvio-accento: #2b56cc;
+        --avvio-inchiostro: #fafcff;
+        --avvio-bordo: #d3d8e0;
+        --avvio-guasto: #ca131b;
+        --avvio-fuoco: #2b56cc;
+        --avvio-velo: rgb(26 31 41 / 5%);
+        --avvio-velo-forte: rgb(26 31 41 / 9%);
+        --avvio-ombra: 0 1px 2px rgb(24 28 44 / 6%), 0 10px 28px rgb(24 28 44 / 10%);
+      }
+      :root[data-avvio-luce="dark"][data-avvio-contrasto="high"] {
+        --avvio-testo: #f2f5fb;
+        --avvio-tenue: #bac0c9;
+        --avvio-accento: #a2c0ff;
+        --avvio-bordo: #868d9a;
+        --avvio-guasto: #ff938b;
+        --avvio-fuoco: #a2c0ff;
+        --avvio-velo: rgb(242 245 251 / 7%);
+        --avvio-velo-forte: rgb(242 245 251 / 12%);
+      }
+      :root[data-avvio-luce="light"][data-avvio-contrasto="high"] {
+        --avvio-testo: #090d16;
+        --avvio-tenue: #3e434d;
+        --avvio-accento: #1235ab;
+        --avvio-bordo: #666b76;
+        --avvio-guasto: #980009;
+        --avvio-fuoco: #1235ab;
+        --avvio-velo: rgb(9 13 22 / 5%);
+        --avvio-velo-forte: rgb(9 13 22 / 9%);
+      }
+
+      /* Il fondo del documento è già quello dell'app: niente bianco fra un disegno
+         e l'altro, neppure nella finestra di Tauri. */
+      :root {
+        background: var(--avvio-sfondo);
+      }
+      body:has(> .avvio) {
+        margin: 0;
+        overflow: hidden;
+      }
+
+      /* Lo strato. Solo classi, mai l'id: l'immagine d'uscita di moto toglie gli
+         id dal clone. */
+      .avvio {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483000;
+        color: var(--avvio-testo);
+        font: 400 13px/1.45 "Avvio Hanken", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        user-select: none;
+      }
+      .avvio-velo {
+        position: absolute;
+        inset: 0;
+        background: var(--avvio-sfondo);
+      }
+
+      /* La colonna: il marchio sta fermo poco sopra il centro e tutto il resto
+         cresce sotto di lui, così nessuno stato lo sposta. */
+      .avvio-colonna {
+        position: absolute;
+        top: calc(50% - 44px);
+        left: 16px;
+        right: 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+
+      /* Il marchio della barra, due volte più grande: 56 px, raggio 16, la effe di
+         Newsreader in corsivo. Alla consegna, in scala 0,5, è esattamente
+         #brand-menu (28 px, raggio 8, glifo 19 px). */
+      .avvio-marchio {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 56px;
+        height: 56px;
+        border-radius: 16px;
+        background: var(--avvio-accento);
+        color: var(--avvio-inchiostro);
+        opacity: 0;
+        transform: scale(0.96);
+        transition:
+          opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
+          transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .avvio-marchio::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow: var(--avvio-ombra);
+        pointer-events: none;
+      }
+      .avvio[data-marchio] .avvio-marchio {
+        opacity: 1;
+        transform: none;
+      }
+      .avvio-glifo {
+        font-family: "Avvio Newsreader", Georgia, "Times New Roman", serif;
+        font-size: 38px;
+        font-style: italic;
+        font-weight: 500;
+        line-height: 1;
+        transform: translateY(-2px);
+      }
+      /* Il segnale del guasto: un punto rosso sull'angolo, staccato dal fondo. */
+      .avvio-segnale {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        width: 12px;
+        height: 12px;
+        border-radius: 999px;
+        background: var(--avvio-guasto);
+        box-shadow: 0 0 0 3px var(--avvio-sfondo);
+        opacity: 0;
+        transform: scale(0.5);
+        transition:
+          opacity 140ms cubic-bezier(0.22, 1, 0.36, 1),
+          transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .avvio[data-stato="guasto"] .avvio-segnale {
+        opacity: 1;
+        transform: none;
+      }
+
+      /* Sotto il marchio, i pannelli degli stati stanno nella stessa cella: uno
+         compare, l'altro sfuma, e nessuno spinge il marchio. */
+      .avvio-info {
+        display: grid;
+        justify-items: center;
+        margin-top: 20px;
+        width: 100%;
+      }
+      .avvio-pannello {
+        grid-area: 1 / 1;
+        align-self: start;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-width: 0;
+        max-width: 100%;
+        opacity: 0;
+        visibility: hidden;
+        transition:
+          opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
+          visibility 0s linear 220ms;
+      }
+      /* L'attesa lunga sta dentro il pannello dell'attesa, sotto la scia: compare
+         da sola, senza spostare ciò che c'è già. */
+      .avvio-lento {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-top: 20px;
+        opacity: 0;
+        visibility: hidden;
+        transition:
+          opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
+          visibility 0s linear 220ms;
+      }
+      .avvio[data-stato="attesa"] .avvio-attesa,
+      .avvio[data-stato="lento"] .avvio-attesa,
+      .avvio[data-stato="lento"] .avvio-attesa .avvio-lento,
+      .avvio[data-stato="guasto"] .avvio-guasto {
+        opacity: 1;
+        visibility: visible;
+        transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+
+      /* La fase: una riga tenue; il nome del vault si taglia da solo, le
+         virgolette restano. */
+      .avvio-fase {
+        display: flex;
+        max-width: 100%;
+        margin: 0;
+        color: var(--avvio-tenue);
+        white-space: nowrap;
+      }
+      .avvio-nome {
+        min-width: 0;
+        max-width: 26ch;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* L'attesa: una scia d'accento che scorre su un filo. */
+      .avvio-traccia {
+        position: relative;
+        width: 96px;
+        height: 2px;
+        margin-top: 12px;
+        border-radius: 999px;
+        background: var(--avvio-bordo);
+        overflow: hidden;
+      }
+      .avvio-scia {
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 36px;
+        border-radius: inherit;
+        background: var(--avvio-accento);
+        animation: avvio-scia 1400ms cubic-bezier(0.45, 0, 0.55, 1) infinite;
+      }
+      @keyframes avvio-scia {
+        from { transform: translateX(-36px); }
+        to { transform: translateX(96px); }
+      }
+      @keyframes avvio-respiro {
+        from { opacity: 0.35; }
+        to { opacity: 1; }
+      }
+
+      .avvio-lento-testo,
+      .avvio-motivo {
+        margin: 0;
+        color: var(--avvio-tenue);
+      }
+
+      /* Il guasto: titolo, motivo selezionabile, due pulsanti. */
+      .avvio-titolo {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+        line-height: 1.3;
+      }
+      .avvio-motivo {
+        max-width: 44ch;
+        margin-top: 6px;
+        overflow-wrap: anywhere;
+        user-select: text;
+      }
+      .avvio-azioni {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 20px;
+      }
+
+      /* I pulsanti sono quelli del kit (kit.css), con i valori al posto dei token. */
+      .avvio-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 32px;
+        padding: 0 16px;
+        border: none;
+        border-radius: 8px;
+        background: var(--avvio-velo);
+        color: var(--avvio-testo);
+        font: inherit;
+        font-weight: 500;
+        line-height: 1.3;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .avvio-btn:hover,
+      .avvio-btn:active {
+        background: var(--avvio-velo-forte);
+      }
+      .avvio-btn[data-kind="primary"] {
+        background: var(--avvio-accento);
+        color: var(--avvio-inchiostro);
+        font-weight: 600;
+      }
+      .avvio-btn[data-kind="primary"]:hover,
+      .avvio-btn[data-kind="primary"]:active {
+        box-shadow: inset 0 0 0 32px var(--avvio-velo-forte);
+      }
+      .avvio-btn:focus-visible {
+        outline: 2px solid var(--avvio-fuoco);
+        outline-offset: 2px;
+      }
+      .avvio-btn[hidden] {
+        display: none;
+      }
+
+      .avvio-senza-js {
+        display: none;
+        margin: 20px 0 0;
+        max-width: 44ch;
+        color: var(--avvio-tenue);
+      }
+
+      .avvio-annuncio {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+
+      /* Meno movimento: niente scale, la scia diventa un respiro lento, ogni
+         comparsa è una sola dissolvenza in 90 ms (il livello «ridotto» di moto). */
+      @media (prefers-reduced-motion: reduce) {
+        .avvio-marchio,
+        .avvio-segnale {
+          transform: none;
+          transition: opacity 90ms linear;
+        }
+        .avvio-pannello,
+        .avvio-lento,
+        .avvio[data-stato] .avvio-pannello,
+        .avvio[data-stato] .avvio-lento {
+          transition: opacity 90ms linear, visibility 0s linear 90ms;
+        }
+        .avvio-scia {
+          inset: 0;
+          width: auto;
+          animation: avvio-respiro 1200ms ease-in-out infinite alternate;
+        }
+      }
+      /* Lo stesso quando la preferenza è di Fub (appearance.motion = reduced):
+         luce.js scrive data-avvio-moto="ridotto" su <html>. */
+      :root[data-avvio-moto="ridotto"] .avvio-marchio,
+      :root[data-avvio-moto="ridotto"] .avvio-segnale {
+        transform: none;
+        transition: opacity 90ms linear;
+      }
+      :root[data-avvio-moto="ridotto"] .avvio-pannello,
+      :root[data-avvio-moto="ridotto"] .avvio-lento,
+      :root[data-avvio-moto="ridotto"] .avvio[data-stato] .avvio-pannello,
+      :root[data-avvio-moto="ridotto"] .avvio[data-stato] .avvio-lento {
+        transition: opacity 90ms linear, visibility 0s linear 90ms;
+      }
+      :root[data-avvio-moto="ridotto"] .avvio-scia {
+        inset: 0;
+        width: auto;
+        animation: avvio-respiro 1200ms ease-in-out infinite alternate;
+      }
+
+      /* La consegna. Da quando comincia lo strato non prende più il puntatore:
+         l'app sotto è già viva e si usa subito, mentre lo strato se ne va. */
+      .avvio[data-consegna] {
+        pointer-events: none;
+      }
+      /* Colori forzati (alto contrasto di Windows): il marchio tiene un bordo, la
+         scia prende il colore di sistema. */
+      @media (forced-colors: active) {
+        .avvio-marchio {
+          outline: 1px solid CanvasText;
+        }
+        .avvio-scia {
+          background: Highlight;
+        }
+        .avvio-segnale {
+          background: Mark;
+        }
+      }
+    </style>
+    <noscript><style>
+      .avvio-marchio { opacity: 1; transform: none; }
+      .avvio-senza-js { display: block; }
+      .avvio-info { display: none; }
+    </style></noscript>
+    <script src="/avvio/luce.js"></script>
+    <script defer src="/avvio/stati.js"></script>
   </head>
   <body>
+    <!-- Lo strato d'avvio: copre la pagina dal primo disegno fino alla
+         consegna (src/avvio/consegna.ts), che lo toglie e rende viva l'app.
+         I tempi, i testi salvati e il guasto li tiene /avvio/stati.js; la
+         fase e il nome li scrive l'avvio su data-fase e data-nome. -->
+    <div id="avvio" class="avvio" data-stato="avvio">
+      <div class="avvio-velo"></div>
+      <div class="avvio-colonna">
+        <div class="avvio-posto">
+          <div class="avvio-marchio" aria-hidden="true">
+            <span class="avvio-glifo">f</span>
+            <span class="avvio-segnale"></span>
+          </div>
+        </div>
+        <div class="avvio-info">
+          <div class="avvio-pannello avvio-attesa">
+            <p class="avvio-fase" id="avvio-fase"><span>Carico Fub…</span><span class="avvio-nome" id="avvio-nome"></span><span></span></p>
+            <div class="avvio-traccia" aria-hidden="true"><span class="avvio-scia"></span></div>
+            <div class="avvio-lento">
+              <p class="avvio-lento-testo" data-i18n="app.avvio.lento">Ci vuole più del solito.</p>
+            </div>
+          </div>
+          <div class="avvio-pannello avvio-guasto">
+            <p class="avvio-titolo" id="avvio-titolo" data-i18n="app.avvio.guasto">Fub non è partito</p>
+            <p class="avvio-motivo" id="avvio-motivo"></p>
+            <div class="avvio-azioni">
+              <button type="button" class="avvio-btn" data-kind="primary" id="avvio-riprova" data-i18n="app.retry" aria-describedby="avvio-titolo avvio-motivo">Riprova</button>
+              <button type="button" class="avvio-btn" id="avvio-copia" data-i18n="app.avvio.copia" hidden>Copia i dettagli</button>
+            </div>
+          </div>
+        </div>
+        <p class="avvio-senza-js" data-i18n="app.avvio.senza_js">Fub ha bisogno di JavaScript per partire.</p>
+      </div>
+      <p class="avvio-annuncio" id="avvio-annuncio" role="status"></p>
+    </div>
     <!-- La finestra documento sui ganci dello Scrittoio: un foglio solo, con la
          sua linguetta e la sua testata, come quelli della finestra principale.
          Gli id di `document.html` ci sono tutti e fanno lo stesso mestiere; gli
          altri sono del foglio. I testi li scrive l'ingresso. Il titolo della
          pagina è per chi ascolta: prende il nome del documento. -->
-    <main id="document-window" class="document-window-root">
+    <main id="document-window" class="document-window-root" inert aria-busy="true">
       <h1 id="document-window-heading" class="sr-only">Fub</h1>
       <section id="document-window-sheet" class="pane focus document-window-sheet">
         <div class="pane-tabs">
