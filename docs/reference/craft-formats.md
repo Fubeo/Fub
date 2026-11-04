@@ -237,15 +237,24 @@ il suo programma non dà né offerta né domanda.
   assoluti della copia e di `out.png` nella stessa cartella, come argomenti
   separati, e non vede mai il file del vault. Gira coi limiti di
   `craft::launch` (20 s, 64 KiB di uscita, il gruppo di processi chiuso alla
-  fine) e si ferma quando il job si annulla o il consenso si spegne. La
-  cartella si cancella sempre, anche dopo un errore o un annullamento.
+  fine, prima di raccogliere l'uscita, così il segnale non arriva a un id
+  passato a un altro processo; su Linux la CLI muore anche con Fub, con
+  `PR_SET_PDEATHSIG`) e si ferma quando il job si annulla o il consenso si
+  spegne. La cartella si cancella sempre, anche dopo un errore o un
+  annullamento; quelle lasciate da un Fub uscito di colpo si tolgono al
+  montaggio del bundle, soltanto se sono cartelle vere (mai un link) col
+  prefisso `fub-craft-render-`, di chi usa Fub, 0700 e ferme da più di
+  un'ora (`LEFT_AFTER`).
 - **L'immagine.** `out.png` vale se è un file regolare (non un link, non una
   cartella), di al più 16 MiB, e un PNG o un JPEG, riconosciuto dalla firma
   e non dal nome, con misure lecite (`PreviewImage::from_png` o
   `from_jpeg`, un JPEG con orientamento 1). Allora l'esito è
   un `CraftPreview` con `origin: cli`, scritto in cache per la revisione
   presa all'inizio; se il file è cambiato nel frattempo l'esito c'è ma la
-  cache no. Un errore (programma che non parte, tempo scaduto, uscita non
+  cache no. Dopo la copia il job guarda la cache e l'insieme «già provato»
+  per la revisione della copia: un'anteprima che c'è già risponde da lì, una
+  revisione già fallita risponde `failed`, e in tutti e due i casi la CLI
+  non parte. Un errore (programma che non parte, tempo scaduto, uscita non
   zero, un PDF cifrato che la CLI rifiuta, un'immagine cattiva) è un
   `CraftPreview` con `origin: none`, `missing: "failed"` e `render: null`,
   con la chiave `render.*` del catalogo del bundle nel log del job; la coppia (revisione, misura) resta «già provata»
@@ -272,14 +281,15 @@ workspace (`crates/fub-host/src/craft/ranged.rs`).
   |---|---|---|
   | `.pcraft`, `.figcraft` | la coda (al più 65 557 byte), la directory centrale e le sole voci che servono: l'anteprima e il JSON della versione (`manifest.json` o `document.json`) | nessun peso massimo del file; directory centrale 4 MiB, 10 000 voci, anteprima 8 MiB, JSON della versione 1 MiB |
   | `.vectorcraft` | il file intero con `read_all`, poi il JSON fino al separatore dei blob | `craft.preview-max-mib` (di partenza 64 MiB) |
-  | XMP | il file intero con `read_all` | 64 MiB |
+  | XMP | il file intero con `read_all`, anche per `craft.photo` | 8 MiB (`MAX_XMP_BYTES`) |
   | `.docx`, `.odt` | la coda, la directory centrale, le relazioni del pacchetto e la miniatura | nessun peso massimo del file; directory e voci come un `.pcraft`, relazioni 64 KiB, miniatura 8 MiB |
 
 - Uno ZIP letto a pezzi (`container::embedded_preview_from`) ha
   `revision: null` e non entra in cache: senza tutti i byte non se ne sa
   l'impronta. La coda si guarda prima di darla a `zip`: ogni fine della
   directory centrale che `zip` potrebbe scegliere, anche una finta dentro un
-  commento, e la sua fine ZIP64; una directory oltre 4 MiB o 10 000 voci è
+  commento, e la sua fine ZIP64, al più 32 (`MAX_EOCD_CANDIDATES`, oltre è
+  `TooLarge`); una directory oltre 4 MiB o 10 000 voci è
   `TooLarge`, una che esce dal file `NotZip`. Ogni voce si misura prima di
   leggerla, e i byte che `zip` legge hanno un tetto riarmato prima di
   aprire l'archivio e prima di ogni voce. Uno ZIP rotto è `unreadable`.
@@ -297,7 +307,12 @@ workspace (`crates/fub-host/src/craft/ranged.rs`).
   chiave `changing`. Chiuso il vault, ogni lettore si spegne e il pezzo dopo
   è un errore.
 - La revisione senza i byte (`ranged::revision`) si legge a pezzi fino a
-  64 MiB e si ricorda per `(radice, documento)`, al più 4096 voci (piena, la
+  `craft.preview-max-mib` (di partenza 64 MiB). Dentro `craft.preview`, che
+  tiene il turno del vault, si legge soltanto per un file sotto la soglia di
+  `MAX_FILE_BYTES` (64 MiB); oltre vale solo quella già ricordata, e senza
+  quella l'offerta c'è con `revision: null`: la calcola il job
+  `craft.render` sulla sua copia, fuori dal turno, e la ricorda. Si ricorda
+  per `(radice, documento)`, al più 4096 voci (piena, la
   memoria si svuota), finché una lease nuova ha la stessa identità, lo stesso
   peso e data e lo stesso timbro di cambiamento: riscrivere un file con lo
   stesso peso e rimettergli la data cambia il timbro, e la revisione si
@@ -312,7 +327,7 @@ workspace (`crates/fub-host/src/craft/ranged.rs`).
 ## Contenitori
 
 `container::read_meta` legge la versione, il titolo, il testo per la ricerca
-e il documento JSON; `container::embedded_preview` l'anteprima che il file
+e i file collegati, senza costruire il documento JSON; `container::embedded_preview` l'anteprima che il file
 porta, per la misura `small` o `large`.
 
 | Formato | Contenitore | Metadati | Anteprima |
@@ -357,6 +372,11 @@ I limiti dei contenitori si guardano prima di leggere:
 - una stringa `/preview/data` più lunga di quanto 8 MiB diventano in base64
   si rifiuta senza decodificarla, e così un'anteprima decodificata oltre
   8 MiB;
+- `read_meta` legge al più i primi 16 MiB del JSON (`MAX_META_JSON_BYTES`)
+  e ne tiene soltanto i campi che indicizza, saltando il resto senza
+  costruirlo: un JSON più lungo che fin lì è valido dà ciò che si è trovato
+  prima del taglio. Di un `.vectorcraft` in gzip si scompatta solo fino al
+  separatore dei blob;
 - `serde_json` rifiuta un JSON annidato oltre 128 livelli, e il testo si
   raccoglie con una pila, non con la ricorsione.
 
@@ -397,7 +417,11 @@ I limiti si guardano prima di leggere, e ciascuno ha la sua costante:
 - al più 1000 voci per IFD (`MAX_IFD_ENTRIES`), contate prima di leggerle;
 - al più 8 livelli di scatole (`MAX_BOX_DEPTH`) e 10 000 scatole
   (`MAX_BOXES`) in un CR3;
-- al più 64 candidati diversi (`MAX_CANDIDATES`);
+- al più 64 candidati diversi (`MAX_CANDIDATES`), ciascuno guardato una
+  volta sola: oltre è `TooLarge`;
+- tutto il cammino legge al più 2 MiB (`MAX_STRUCTURE_BYTES`), contati IFD,
+  scatole e intestazioni dei JPEG fino al loro `SOF`; oltre è `TooLarge`, e
+  i byte del JPEG scelto non contano;
 - un JPEG oltre 8 MiB (`MAX_JPEG_BYTES`) non si prende, e `read_jpeg` non lo
   legge.
 
@@ -448,6 +472,7 @@ centrale con gli stessi tetti, poi al più tre voci.
 | Voci di uno ZIP | 10 000 |
 | Testo per la ricerca | 64 KiB |
 | File collegati per documento | 1000 |
+| JSON letto per l'indice | 16 MiB |
 | Un XMP | 8 MiB |
 | Parole chiave di un XMP | 500 |
 | Un JPEG dentro un RAW | 8 MiB |
@@ -455,6 +480,8 @@ centrale con gli stessi tetti, poi al più tre voci.
 | Voci di un IFD | 1000 |
 | Livelli e scatole di un CR3 | 8 e 10 000 |
 | JPEG candidati in un RAW | 64 |
+| Strutture lette di un RAW | 2 MiB |
+| Fini della directory centrale guardate | 32 |
 | Relazioni di un `.docx` | 64 KiB |
 | Miniatura di un documento | 8 MiB |
 
