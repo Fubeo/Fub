@@ -1872,6 +1872,9 @@ describe("ogni documento che la shell apre si chiude (chiavi di apertura)", () =
     sessions.close("Lettera-0.docx");
     await settle();
     expect(host.openKeys(VAULT)).toBe(0);
+  });
+});
+
 describe("la cadenza delle bozze", () => {
   afterEach(() => {
     vi.useRealTimers();
