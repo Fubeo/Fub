@@ -59,6 +59,17 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-05 · griglia-celle · D-1…D-6 e D-8: l'utente «seguo i tuoi
+  consigli». Valgono B1–B4, B6, B7 e «coperte» come sono scritte; in più,
+  come l'orchestratore aveva consigliato, il segno della copia (D-1) e la
+  velocità della selezione (D-5) diventano due preferenze in Impostazioni
+  (`editor.grid.copy-mark`, `editor.grid.selection-speed`), con di norma la
+  scelta del prototipo: il task nuovo T9, fra T6 e T8. È l'unico lavoro
+  nell'host del piano (due voci in `settings.rs`, nessuna porta) · perché:
+  l'utente vuole il prodotto più personalizzabile possibile e il consiglio
+  dato a D-1 e D-5 era «di norma come il prototipo, più una scelta in
+  Impostazioni»; la lettura che le preferenze facciano parte del consiglio
+  seguito è dell'orchestratore, ed è scritta nel rapporto all'utente.
 - 2026-11-04 · griglia-celle · D-7, la selezione col puntatore: «scivola»,
   la risposta dell'utente («in celle dei fogli voglio selezione del
   puntatore -> scivola sempre»). Il puntatore usa le regole dei tasti; B5,

@@ -21,7 +21,8 @@ motore; un difetto a parte, per cui l'orchestratore apre un'issue); l'aspetto
 `look-tema` (il foglio di calcolo offre soltanto `file` e `adattato`); la
 griglia delle tabelle Markdown (`tabella/`), che ha la sua.
 Assunzioni: B1–B7 qui sotto, prese dal pianificatore col prototipo; le
-domande D-1…D-8 le rimettono all'utente, e nessuna blocca il primo task.
+domande D-1…D-8 le hanno rimesse all'utente, che ha risposto a tutte (D-7
+il 2026-11-04, le altre il 2026-11-05).
 L'utente ha visto il prototipo: le celle vanno bene e «per il resto
 funziona tutto»; ha chiesto un movimento senza scatti e un po' più svelto,
 che è quello di B5, B6 e T3. Poi, provandolo col mouse: «per una frazione
@@ -34,12 +35,17 @@ segni di T3. Fra i tre modi del prototipo l'utente ha scelto «scivola»
 (D-7): col puntatore la selezione scivola come coi tasti (B5).
 Anche il quadratino e le maniglie del tocco sono sempre un pezzo solo,
 intero: mai spezzati sul filo del blocco né lasciati sul filo dopo uno
-scorrimento (B7, D-8). Le D-1…D-8 restano aperte.
-Ondate: T1 | T2 | T3 | T4 T7 | T5 | T6 | T8 (tutti toccano
+scorrimento (B7, D-8). Il 2026-11-05, alle D-1…D-6 e D-8: «seguo i tuoi
+consigli». Valgono quindi B1–B4, B6 e B7 come sono scritte e «coperte» per
+D-8; e, come l'orchestratore aveva consigliato, il segno della copia (D-1)
+e la velocità della selezione (D-5) diventano anche due preferenze in
+Impostazioni, con di norma la scelta di B1 e di B5–B6: T9.
+Ondate: T1 | T2 | T3 | T4 T7 | T5 | T6 | T9 | T8 (tutti toccano
 `editors/grid/engine.ts`: T4 e T7 ne toccano parti diverse, la cella aperta
 e il puntatore, e possono girare insieme; T5 e T6 toccano tutti e due la
 risposta del foglio, `grid-motion.ts` e `motion-rules.mjs`, e vanno uno dopo
-l'altro). Il primo task parte quando T19 di K3 è integrato in
+l'altro; T9 legge le costanti di T3 e i segni di T6 e viene dopo di loro,
+prima delle foto di T8). Il primo task parte quando T19 di K3 è integrato in
 piano/k3-motori: T14, T15, T18 e T19 di K3 toccano `structure.css`,
 `skin/editors.css`, l'anatomia, `bench/scene.mjs`, `bench/motion-rules.mjs`
 e `moto/flip.ts`, come questo piano. T16 e T17 di K3 non li toccano.
@@ -128,6 +134,7 @@ le larghezze fisse e righe alte uguali: il codice usa `#columns.offsets` e
 | script «La risposta del foglio»: il numero a destra subito, la formula tenue fino al valore, la larghezza subito, il ritorno scivolando con l'avviso | `editors/grid/engine.ts` (`#showWritten`, il bordo tirato), `grid-motion.ts` | T5 |
 | script «Riempimento», la copia (`copy`, `flash`, `pulse`), il taglio (`cut`), le formiche (`ants`, `.grid-ants`), l'incolla che si vede subito | `editors/grid/engine.ts`, `grid-motion.ts`; CSS `.grid-mark.copy`, `.cut`, `.ants`, `.grid-ants` nei due file | T6 |
 | script «Il puntatore»: `TAP_MOVE`, `LONG_PRESS_MS`, `DOUBLE_TAP_MS`, le maniglie del tocco lungo (`touch`, `data-handle`), la presa `gripAt` (`GRIP_R`) e l'ascoltatore `touchstart` che la ferma | `editors/grid/engine.ts` (`#pointerDown` e seguenti), `grid-motion.ts`; CSS `.grid-mark.touch` | T7 |
+| la scelta «Segno della copia» della barra del prototipo (tratteggio e battito, solo il tratteggio, solo il battito) e le molle `GLIDE`/`SLIDE` | `crates/fub-host/src/settings.rs` (le due voci), `editors/grid/grid-motion.ts`, `engine.ts` | T9 |
 | gli stati della barra del prototipo (intervallo, oltre il blocco, cella aperta, colonna tirata, riempimento, copiato, tagliato, telefono) | `apps/client/bench/scene.mjs` | T8 |
 | le misure delle sonde del pianificatore (`sonde/moti.cjs`, `sonde/gesti.cjs`: fasce vuote, fotogrammi della colonna ferma, nodi rifatti per freccia, scostamento del testo, contrasto) | `apps/client/bench/grid-gestures.mjs`, un controllo per task con la sua sigla | T1–T7 |
 
@@ -202,20 +209,43 @@ dell'anatomia; il verso (`h`, `v`) e il lato possono stare in un attributo
   prende dove si vede il suo angolo, per intero anche quando la fascia ne
   copre metà. (D-8)
 
-## Domande per l'utente (raccolte, non bloccano)
+## Domande per l'utente (tutte con la risposta)
 
 - D-1 · Il segno della copia: tratteggio e battito (B1, consigliato), solo
   il tratteggio, o solo il battito? (Nel prototipo: «Segno della copia».)
+
+  Risposta (2026-11-05, l'utente: «seguo i tuoi consigli»): tratteggio e
+  battito di norma (B1), e una preferenza in Impostazioni per scegliere
+  fra le tre (T9).
+
 - D-2 · La cella aperta che cresce copre le celle accanto anche quando non
   sono vuote, come Excel (B2)?
+
+  Risposta (2026-11-05, «seguo i tuoi consigli»): sì, come Excel (B2).
+
 - D-3 · Mostrare subito una larghezza o un numero prima che il foglio
   risponda, e tornare indietro se dice di no (B3)? (Nel prototipo: «Il
   foglio risponde: no».)
+
+  Risposta (2026-11-05, «seguo i tuoi consigli»): sì, subito, e indietro
+  scivolando con l'avviso se il foglio dice di no (B3).
+
 - D-4 · Al telefono, il tocco lungo per le maniglie va bene (B4)?
+
+  Risposta (2026-11-05, «seguo i tuoi consigli»): sì, il tocco lungo (B4).
+
 - D-5 · La velocità della selezione, coi tasti e quando cresce col
   puntatore: `GLIDE`, al 90 % in circa 105 ms (B5, B6)?
+
+  Risposta (2026-11-05, «seguo i tuoi consigli»): `GLIDE` di norma (B5,
+  B6), e una preferenza in Impostazioni per una selezione più svelta, più
+  morbida o a scatti (T9).
+
 - D-6 · Le formiche che camminano mentre il foglio risponde a un
   riempimento (B1)?
+
+  Risposta (2026-11-05, «seguo i tuoi consigli»): sì, le formiche (B1).
+
 - D-7 · La selezione col puntatore (B5). Nel prototipo: «Selezione col
   puntatore». In tutti e tre i modi i pezzi sono sempre lo stesso
   rettangolo, la cella attiva sta dentro, e la selezione finisce sulla
@@ -259,12 +289,13 @@ dell'anatomia; il verso (`h`, `v`) e il lato possono stare in un attributo
     fotogramma dietro le celle, e quando l'angolo passa sotto la fascia
     torna giù di colpo.
 
-Una risposta diversa da B1–B5, B7 o D-8 cambia soltanto il task che la
-nomina (T1, T3, T4, T5, T6 o T7), non l'ordine (D-7 ha la risposta, e T3
-la dice già): con «sopra» in T3 un segno
-d'angolo che si vede sale nel livello della fascia che lo coprirebbe e il
-gestore di `scroll` lo ridisegna (nel prototipo `pointSpot` e
-`pointRect`).
+  Risposta (2026-11-05, «seguo i tuoi consigli»): «coperte» (B7).
+
+Le risposte confermano B1–B7 e «coperte»: nessun task cambia, salvo T9
+che nasce dalle due preferenze. (Se un giorno si volesse «sopra» per D-8,
+cambierebbe solo T3: un segno d'angolo che si vede sale nel livello della
+fascia che lo coprirebbe e il gestore di `scroll` lo ridisegna, nel
+prototipo `pointSpot` e `pointRect`.)
 
 ## Cancello del piano
 
@@ -281,6 +312,7 @@ gestore di `scroll` lo ridisegna (nel prototipo `pointSpot` e
 | il quadratino e le maniglie del tocco sono un pezzo solo, intero, anche sul filo del blocco e dopo uno scorrimento | `bench:grid` G1 `g1-quadratino-intero`, G3 `g3-mouse-fitto` (zero fotogrammi con un segno d'angolo diviso o tagliato), G7 `g7-maniglia-sul-filo`; `marks.test.ts` | T1, T3, T7 |
 | col dito si scorre e basta | `bench:grid` G7 col tocco: un trascinamento scorre senza intervallo, un tocco sceglie, due aprono, il tocco lungo mette due maniglie | T7 |
 | la griglia si muove con `moto/` e con «ridotto» quasi si ferma | `npm run bench:motion` con le coreografie della griglia; `bench/motion.test.ts` con `src/editors/grid/**` nell'elenco | T3–T7 |
+| il segno della copia e la velocità della selezione si scelgono in Impostazioni, di norma come il prototipo, e una scelta vale subito senza riaprire il foglio | `grid-motion.test.ts` (ogni scelta, il cambio a griglia aperta, «ridotto» che vince), `catalogs.rs` di fub-host, la riga in Impostazioni guardata nelle due luci | T9 |
 | le foto del banco somigliano al prototipo | le scene `grid-*` nelle due luci, piena, 700 px e telefono, confrontate col prototipo; `bench:a11y` e `theme:verify` verdi; le baseline nuove dal runner | T8 |
 
 ## Regole che valgono per ogni task
@@ -302,7 +334,9 @@ gestore di `scroll` lo ridisegna (nel prototipo `pointSpot` e
   ciò che la griglia mostra prima della risposta è un'anteprima, e una
   risposta vecchia non scrive mai sopra un gesto più nuovo.
 - Niente IPC per battuta, niente lavoro nuovo nell'host: questo piano tocca
-  solo il client.
+  solo il client, salvo le due voci delle preferenze di T9 in
+  `crates/fub-host/src/settings.rs` (chiavi, scelte e stringhe), senza
+  porte nuove.
 - CodeMirror resta dentro `editors/text/` (`check-codemirror-boundary`).
 - Ogni task aggiunge i suoi controlli a `bench/grid-gestures.mjs` con la sua
   sigla (G1…G7) e la mette in `ACCESI`; i controlli che ci sono già (d34…d47,
@@ -949,6 +983,71 @@ Prova: scripts/check.sh --rapido, poi `npm run bench:grid` e
 `npm run bench:motion`
 Stato: [ ] da fare
 
+## T9 · Le due preferenze della griglia
+
+Perché: l'utente vuole il prodotto più personalizzabile possibile e, alle
+D-1 e D-5, ha seguito il consiglio dell'orchestratore: la scelta del
+prototipo di norma, e in Impostazioni la possibilità di cambiarla.
+Tocca: `crates/fub-host/src/settings.rs` (due voci nuove fra quelle
+dell'editor, come `editor.soft-cursor` ed `editor.indent`: le chiavi, le
+scelte, le stringhe italiane e inglesi), `editors/grid/grid-motion.ts`
+(legge le due scelte), `editors/grid/engine.ts` (carica le preferenze come
+`TextEngine.loadInputPreferences` e le rilegge quando una delle due
+cambia), i test, `docs/architecture/grid-surface.md` e la pagina di
+prodotto del foglio di calcolo o, se non c'è, `docs/product/editor-blocks.md`
+accanto al «Cursore morbido».
+Non toccare: `moto/spring.ts`, `moto/level.ts`, `appearance.motion` (il
+movimento ridotto resta di tutta l'app e vince sempre); i valori di norma
+di B1, B5 e B6.
+Dipende da: T3 (le costanti e il motore dei segni), T6 (i segni della
+copia)
+Cosa fare:
+- `editor.grid.copy-mark`, a scelta: «Tratteggio e battito» (`dash-pulse`,
+  di norma, B1), «Solo il tratteggio» (`dash`), «Solo il battito»
+  (`pulse`), come le tre scelte «Segno della copia» del prototipo. Il
+  taglio resta il tratteggio fitto, e le formiche del riempimento non
+  cambiano.
+- `editor.grid.selection-speed`, a scelta: «Svelta» (`quick`, una molla
+  `GLIDE_QUICK` 2800/106, le radici 50 e 56 al secondo, al 90 % in circa
+  74 ms), «Come di norma» (`normal`, `GLIDE`, circa 105 ms, B6), «Morbida»
+  (`soft`, la molla `SLIDE` 700/53, circa 150 ms), «A scatti» (`none`: la
+  selezione è in ogni fotogramma quella scelta, come il modo «salta» di
+  D-7, coi tasti e col puntatore). Vale per la cella attiva e il
+  rettangolo, coi tasti, coi comandi e col puntatore; le colonne che
+  scivolano e le maniglie restano su `SLIDE`. Le molle nuove stanno in
+  cima a `grid-motion.ts` col loro nome; i tempi al 90 % si misurano nel
+  test, non si copiano da qui.
+- Le descrizioni dicono che cosa si vede, e che col movimento ridotto la
+  selezione si ferma subito qualunque sia la scelta.
+- Una scelta cambiata a griglia aperta vale dal gesto dopo, senza
+  riaprire il foglio e senza un salto del segno che sta scivolando; un
+  valore sconosciuto vale come quello di norma.
+- Le regole del motore dei segni di T3 restano vere con ogni scelta: i
+  pezzi sono sempre un rettangolo solo, la cella attiva ci sta dentro, la
+  selezione finisce sulla cella sotto il puntatore.
+- Se un mirror o una fixture del client elenca le chiavi delle
+  impostazioni, si rigenera col comando scritto nella sua intestazione
+  (`UPDATE_MIRROR=1`), mai a mano.
+Dal prototipo: «Segno della copia»; per la velocità, i tempi di B6.
+Casi limite: una preferenza scritta a mano con un valore che non esiste;
+la scelta cambiata mentre un segno scivola o mentre le formiche camminano;
+«A scatti» col trascinamento fitto di `g3-mouse-fitto`; due griglie aperte
+in due riquadri, che cambiano insieme; la griglia smontata prima che
+arrivino le impostazioni (nessun ascoltatore resta, `check-listeners`).
+Fatto quando: le due voci si vedono in Impostazioni, nelle due lingue,
+con di norma `dash-pulse` e `normal`; ogni scelta cambia ciò che si vede
+come descritto, subito; con «ridotto» la selezione quasi si ferma con ogni
+scelta; `bench:grid` G3 verde con ogni velocità (le regole dei pezzi e
+della cella sotto il puntatore); `catalogs.rs` di fub-host verde; la riga
+in Impostazioni guardata nelle due luci e a 700 px; lo scripts/check.sh
+--rapido verde. Le baseline della scena `settings` possono cambiare solo
+se la riga nuova cade nell'inquadratura: le prende l'orchestratore dal
+runner.
+Prova: `cargo test -p fub-host --test catalogs`, `npx vitest run
+src/editors/grid`, `npm run bench:grid`, `npm run bench:motion`,
+scripts/check.sh --rapido
+Stato: [ ] da fare
+
 ## T8 · Le foto del banco e il confronto col prototipo
 
 Perché: il cancello del piano è che la griglia si vede come il prototipo,
@@ -960,7 +1059,7 @@ trova»), e i resti dei task prima (un hook rimasto, un commento vecchio).
 Non toccare: le baseline (le prende l'orchestratore dal runner); il codice
 della griglia, salvo un difetto che le foto trovano (e allora il rapporto
 lo dice e il task che lo possiede si riapre).
-Dipende da: T1–T7
+Dipende da: T1–T7, T9
 Cosa fare:
 - Le scene del banco come gli stati del prototipo, sulla scena `grid-large`
   e su `grid-workbook`: l'intervallo, l'intervallo oltre il blocco scorso, la
@@ -972,8 +1071,10 @@ Cosa fare:
 - `npm run bench:a11y` con le scene nuove.
 - In `grid-surface.md` ogni sezione toccata descrive il presente: il piano e
   le zone, la carta, i segni e il loro movimento, la cella aperta,
-  l'anteprima e il ritorno, la copia e le formiche, il dito.
-- Le domande D-1…D-8 ancora aperte vanno nel rapporto.
+  l'anteprima e il ritorno, la copia e le formiche, il dito, le due
+  preferenze.
+- Le due preferenze di T9: una foto per scelta del segno della copia,
+  nelle due luci, accanto al prototipo.
 Dal prototipo: gli stati della barra del prototipo.
 Casi limite: le scene dei documenti e delle tabelle non cambiano
 (`document-*`, `window-document`, `mobile-document*`, `live-14-tabella-attiva`,
