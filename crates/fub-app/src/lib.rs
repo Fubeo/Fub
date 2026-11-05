@@ -58,6 +58,7 @@ pub use fub_host::{
     BundleInfo, EmbedContent, ThemeInfo, ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
 };
 pub use fub_wasm_host::managed::InstalledPluginInfo;
+mod avvio;
 mod document_windows;
 mod frame_rate;
 mod live;
@@ -2723,10 +2724,21 @@ pub fn run() {
                 .and_then(|entry| entry.value.as_text())
                 == Some("system");
             for window in app.webview_windows().values() {
+                // Il fondo nativo copre l'attimo prima del primo disegno della
+                // pagina (`avvio.rs`). Un errore si ignora: la finestra resta
+                // col fondo di serie, un lampo e non un guasto; su mobile il
+                // fondo nativo non è supportato e non deve fermare l'avvio.
+                let _ = window.set_background_color(Some(avvio::fondo_di_macchina(&machine, window)));
                 window.set_zoom(zoom)?;
                 #[cfg(not(mobile))]
                 if window.label() == "main" {
                     window.set_decorations(system_frame)?;
+                    // La `main` nasce nascosta (`tauri.conf.json`) perché si
+                    // veda già col suo fondo: mostrarla non dipende dal colore,
+                    // e una finestra che non si mostra è peggio di un lampo.
+                    if let Err(error) = window.show() {
+                        tracing::warn!(%error, "main window not shown");
+                    }
                 }
             }
             #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]

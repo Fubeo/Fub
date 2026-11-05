@@ -216,6 +216,27 @@ strumenti stanno in due cassetti. Le pagine `index.html`, `mobile.html` e
 `document.html` ne portano il markup, e `main.ts` avvia
 `shells/scrittoio/bootstrap.ts`. Non esiste una seconda shell da selezionare.
 
+Le tre pagine si aprono sotto lo **strato d'avvio** (`.avvio`), nel `<head>`
+prima dei moduli perché dipinga subito: il foglio `public/avvio/avvio.css`
+(un file e non un `<style>`, per la CSP: vedi
+[Permessi e sicurezza](../reference/permissions-and-security.md)),
+`luce.js` sceglie luce, contrasto, moto e colori, `stati.js` i tempi. Il fondo c'è dal primo
+fotogramma, il marchio entra a 120 ms (1 s al più), la fase (`data-fase`) a
+2 s, l'avvio è lento a 10 s e un guasto con Riprova a 30 s; sotto, l'app è
+`inert` e `aria-busy`. Lo consegna `avvio/consegna.ts` a fine avvio
+(`bootstrap.ts`, `mobile/compose.ts` col tema definitivo, 1,5 s al più;
+`document/window.ts`); `desktop-shell.ts` segna le fasi e chiama `fallito()`
+se l'avvio cade, e lo strato resta. La consegna rende viva l'app e dà il fuoco,
+poi lo strato sfuma in 90 ms e le regioni entrano ogni 30 ms con la molla
+`elastic` di `moto` (la cascata; con meno movimento la sola dissolvenza, senza
+marchio niente passaggio). Lo stile dello strato e i suoi segni su `<html>` se
+ne vanno a cascata finita, quando ricalcolare lo stile della pagina non ferma
+niente che si muove. Prima salva `fub.avvio` in `localStorage`: scelte, colori
+della luce in vigore e testi dello strato, ciò che i due script leggono al
+prossimo avvio; persa, si rifà alla consegna dopo. Il `@keyframes` della scia
+sta fuori dalla regola della pelle senza fotogrammi chiave: non è pelle, gira
+prima di `moto` e se ne va alla consegna.
+
 Sopra la shell comune (`desktop-shell.ts`: sessioni, riquadri, comandi,
 pannelli) lo Scrittoio compone:
 

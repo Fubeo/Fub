@@ -416,6 +416,11 @@ jobs:
           name: banco-visivo-${{ github.sha }}
           path: apps/client/bench/.output/
           include-hidden-files: true
+      # Lo strato d'avvio copre la finestra prima di ogni modulo, nelle due
+      # luci e sul telefono: senza questa guardia il lampo bianco torna.
+      - name: niente lampo all'avvio
+        run: npm run bench:lampo
+        working-directory: apps/client
 
   a11y:
     # Le due luci sono due corse separate dello stesso banco: in fila

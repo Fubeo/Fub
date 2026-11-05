@@ -1194,6 +1194,20 @@ const options: Options = {
 
 const host = createFakeHost(options);
 
+/// **Lo strato d'avvio fermo a uno stato**, per le scene che lo fotografano
+/// (`avvio-*` in `scene.mjs`). Si decide qui, alla nascita del fake, perché
+/// `window.bench` arriva quando l'avvio è già partito: con le porte che il fake
+/// ha già, senza un meccanismo nuovo.
+///
+/// - `avvio=attesa`: `openVault` resta in volo per sempre. La shell è in piedi
+///   (`data-pronta`), la fase è «vault», e lo strato resta sopra l'app.
+/// - `avvio=guasto`: `initialVault` rifiuta, `init()` lancia e
+///   `mountDesktopShell` finisce nel guasto dello strato. Non `openVault`:
+///   `openInitialVault` ne cattura l'errore e lo dice nell'app.
+const AVVIO = params.get("avvio");
+if (AVVIO === "attesa") host.throttle("openVault");
+else if (AVVIO === "guasto") host.fault("initialVault", "il ponte non risponde");
+
 /// L'host del banco, esposto sulla finestra perché il **fotografo** possa
 /// guidarlo da fuori: emettere un evento del kernel, guastare una porta,
 /// frenarla. Sono i tre gesti che una scena non può fare cliccando — un avviso
