@@ -103,25 +103,33 @@ T11).
 
 ## Il motore come componente
 
-Il motore è il componente `fub.motore-vettoriale`, «Motore del disegno», un
-motore di supporto che `fub.draw` richiede
-(`crates/fub-features/src/componenti.rs`, la riga arriva con T13). Senza la
-feature `draw` l'host non compila il motore, e i comandi del disegno
-rispondono `Unserved`. Il motore si costruisce al primo disegno aperto,
-con i caratteri di Fub e non quelli del sistema (arriva con T7 e T11).
+Il motore è il componente `fub.motore-vettoriale`, «Motore del disegno», una
+riga sua nel gruppo «Disegnare» della pagina Componenti, accesa di serie e con
+il suo interruttore (`crates/fub-features/src/componenti.rs`, la riga arriva
+con T13). `fub.draw` lo usa senza richiederlo: spento il motore, i disegni
+restano accesi. Senza la feature `draw` l'host non compila il motore, e i
+comandi del disegno rispondono `Unserved`. Il motore si costruisce al primo
+disegno aperto, con i caratteri di Fub e non quelli del sistema (arriva con T7
+e T11).
 
 Il disegno usa il motore nei due spazi di lavoro, Semplice e Completo, perché
 gli strumenti sono gli stessi e cambia solo l'aspetto. Il profilo `pdf` tiene
 i suoi strumenti TypeScript ([ADR 0231](../decisions/0231-la-chiusura-di-fubdraw.md),
 §3), e la lavagna non usa il motore.
 
-Senza motore (componente spento o un errore all'apertura) la sessione è
-`MotoreAssente`, e gli strumenti del disegno sono quelli TypeScript fino al
-cancello del piano. Dopo, con la decisione D-8 dell'ADR, Selezione, forme e
-Testo si spengono con il suggerimento «Serve il Motore del disegno», e il
-chip della superficie dice «Motore del disegno spento» con «Accendi…»
-(arriva con T23 e T24). Mano, Lente, Penna, Evidenziatore e Gomma
-funzionano sempre.
+Senza motore la sessione è `MotoreAssente`, e il disegno usa gli strumenti
+semplici, quelli TypeScript del client: Selezione, forme e Testo funzionano
+lo stesso. Un chip della superficie dice perché (arriva con T23, T28 e T29):
+
+- **motore spento** (la riga del componente spenta): «Accendi…» apre la
+  pagina Componenti sulla riga del motore;
+- **motore fermo** (un errore all'apertura o durante il lavoro): «Riprova»
+  lo riapre;
+- **build senza motore**: il chip c'è, senza azione.
+
+Le frasi esatte del chip si scelgono sul prototipo del piano (T25). Mano,
+Lente, Penna, Evidenziatore e Gomma non passano mai dal motore e funzionano
+sempre. I vettori dei gesti sono l'oracolo delle due strade.
 
 ## I comandi IPC
 

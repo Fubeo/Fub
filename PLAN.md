@@ -31,7 +31,7 @@ Assunzioni: A1–A17 qui sotto. A1–A15 le ha scelte il pianificatore il
 2026-11-02 di notte; l'utente ha risposto a D-1…D-13 il 2026-11-02 e le ha
 approvate, con A9 e A15 riscritte dalle risposte (D-3, D-8) e A16, A17
 nuove (D-8 (c)). D-14 è nuova e aspetta la risposta.
-Ondate: fatti T1–T5, T8, T10, T12; poi T25 T26 | T6 T7 | T9 T24 T28 | T27 T11 | T13 T14 T15 | T16 T17 T18 | T19 | T29 T20 | T21 | T22 | T23 | T30
+Ondate: fatti T1–T5, T8, T10, T12, T26; poi T25 | T6 T7 | T9 T24 T28 | T27 T11 | T13 T14 T15 | T16 T17 T18 | T19 | T29 T20 | T21 | T22 | T23 | T30
 (T26 parte con la risposta a D-14; T21–T24 solo dopo il sì dell'utente al
 prototipo di T25; T6 solo quando c'è la copia `Fubeo/vectorcraft`)
 Prototipo: `PLAN-ui/disegno-motore.html` (T25, da fare); approvato: — (lo
@@ -1928,7 +1928,7 @@ Fatto quando: `node .github/scripts/check-doc-links.mjs` e
 "Serve il Motore del disegno" docs/` non trova niente; l'ADR dice «accolta»
 e ha una riga per ognuna di D-1…D-14.
 Prova: scripts/check.sh --rapido; node .github/scripts/check-doc-links.mjs
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T27 · Le versioni dopo il motore
 

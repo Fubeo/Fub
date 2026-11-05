@@ -1,6 +1,6 @@
 # 0239 — Il disegno passa dal motore vettoriale, e il file lo scrive il client
 
-- **Stato:** proposta
+- **Stato:** accolta
 - **Data:** 2026-11-02
 - **Ambito:** contratto
 - **Sostituisce:** —
@@ -57,11 +57,13 @@ qui e non solo nel codice.
    un gesto che arriva prima aspetta la revisione giusta, e uno a una
    revisione diversa è rifiutato come vecchio. Un reimport più fine si fa solo
    se la misura del cancello lo chiede.
-6. **Il motore è un componente.** Si chiama `fub.motore-vettoriale`,
-   «Motore del disegno», è un motore di supporto, e `fub.draw` lo richiede,
-   come `fub.rich` richiede `fub.motore-documenti`
-   ([0234](0234-il-modello-dei-componenti.md)). Nell'interfaccia non compare
-   mai il nome VectorCraft.
+6. **Il motore è un componente con il suo interruttore.** Si chiama
+   `fub.motore-vettoriale`, «Motore del disegno», ed è una riga sua nel
+   gruppo «Disegnare» della pagina Componenti
+   ([0234](0234-il-modello-dei-componenti.md)), accesa di serie. `fub.draw`
+   lo usa senza richiederlo: spento il motore, i disegni restano accesi con
+   gli strumenti semplici (punto 9). Nell'interfaccia non compare mai il nome
+   VectorCraft.
 7. **Il motore guida gli strumenti del profilo «vector»**, nei due spazi di
    lavoro: Semplice e Completo hanno gli stessi strumenti e cambiano solo
    l'aspetto. Il profilo `pdf` tiene i suoi strumenti TypeScript (0231 §3);
@@ -71,10 +73,11 @@ qui e non solo nel codice.
    `close_drawing`, con le forme in `crates/fub-abi/src/drawing.rs` e i
    limiti validati a ogni richiesta. I comandi del motore esposti sono solo
    colore del tratto, colore del riempimento e spessore.
-9. **Il ripiego ha una fine.** Finché il cancello non passa, senza motore gli
-   strumenti del disegno sono quelli TypeScript. Dopo il cancello vale D-8:
-   con la raccomandazione, gli strumenti del motore si spengono e la
-   superficie dice che cosa manca.
+9. **Due strade.** Con il motore spento, o fermo per un errore, il disegno
+   usa gli strumenti semplici, quelli TypeScript del client, e un chip della
+   superficie lo dice: «Accendi…» con il motore spento, «Riprova» con il
+   motore fermo. I vettori dei gesti sono l'oracolo di tutte e due le strade,
+   e l'inventario degli strumenti della 0231 §5 non cambia.
 
 ## Conseguenze
 
@@ -94,10 +97,12 @@ qui e non solo nel codice.
   gesto è rifiutato invece di riscrivere l'elemento;
 - ciò che il motore non sa modificare resta com'è e lo si dice all'apertura e
   al gesto, non al salvataggio, perché Fub salva da sé;
-- a ogni modifica il motore reimporta il disegno intero, finché la misura non
-  dice che serve altro;
-- la copia nel motore occupa memoria nell'host per ogni disegno aperto;
-- fino al cancello convivono due strade per gli stessi strumenti.
+- la copia nel motore occupa memoria nell'host per ogni disegno aperto, e a
+  ogni modifica si reimporta intera, finché la misura non dice che serve altro;
+- convivono due strade per gli stessi strumenti, da mantenere e da provare
+  tutte e due;
+- `usvg` entra in due versioni, quella di Fub e quella del motore, e il tetto
+  `librerie_doppie` si alza una volta sola, con l'elenco motivato.
 
 ## Alternative scartate
 
@@ -114,49 +119,49 @@ Plausibile, perché è la strada più corta. Scartata: ogni gesto riscriverebbe
 anche ciò che non tocca, e il cancello senza perdite diventerebbe una
 scommessa su ogni file.
 
+### Senza motore, gli strumenti del motore spenti
+
+Plausibile, perché una cosa sola si comporta in un modo solo: con il motore
+spento Selezione, forme e Testo si sarebbero disattivati, con «Accendi…».
+Scartata dall'utente: un disegno si deve poter modificare anche senza motore,
+con meno memoria e meno codice in esecuzione.
+
+### Il ripiego in silenzio
+
+Plausibile, perché non chiede niente alla persona. Scartata: gli strumenti
+semplici restano, ma la superficie dice quando li sta usando e perché.
+
 ### La penna nel motore subito
 
 Plausibile, perché il disegno completo la vorrà. Scartata: il nucleo
 dell'inchiostro è di Fub (0204), il cancello chiede `bench:ink` e la latenza
 della penna invariati, e l'inclinazione della penna nel motore non c'è.
 
-## Da decidere
+## Le scelte dell'utente (2026-11-02)
 
-Ogni domanda con la raccomandazione per prima; il lavoro procede con quella.
+Le risposte a D-1…D-13 sono del 2026-11-02, quella a D-14 del 2026-11-03.
 
-- **D-1, la copia di VectorCraft:** da un mirror `Fubeo/vectorcraft`, come
-  WordCraft e GridCraft (consigliata), o da `storytold/vectorcraft` a una
-  revisione fissata.
-- **D-2, le librerie comuni di Craft:** in `vendor/craft-libs/` solo
-  `docpath` e `vectorcraft-format`, con il PDF del motore dietro una feature
-  spenta (consigliata); anche `craft-pdf`; o dipendenze Git.
-- **D-3, dipendenze e licenze nuove:** allineare verso l'alto le versioni in
-  comune e alzare una volta il tetto `librerie_doppie`, con l'elenco motivato
-  in `docs/misure/` (consigliata); patch che abbassano VectorCraft; o niente
-  motore.
-- **D-4, i sei comandi IPC** e le loro righe in `permissions/default.toml`:
-  sì, nella forma dei fogli (consigliata).
-- **D-5, i caratteri del motore:** quelli di Fub, da un servizio dello strato
-  dei motori, subito (consigliata); la riga di componente `caratteri` arriva
-  con chi ne ha bisogno da solo.
-- **D-6, chi scrive il file:** il client, con le operazioni di scena del
-  motore (consigliata, punto 2); o il motore che riscrive l'SVG.
-- **D-7, lo strumento Testo:** torna in barra, e un clic crea un testo
-  «Testo» con il cursore nel campo dell'ispettore (consigliata); o resta
-  fuori. Con il sì questa decisione cambia la 0231 §2 per il solo Testo.
-- **D-8, senza motore:** dopo il cancello gli strumenti del motore si
-  spengono con «Serve il Motore del disegno» e «Accendi…» (consigliata); o
-  il ripiego TypeScript resta per sempre, in silenzio.
-- **D-9, aspetto e parole:** i testi proposti nel piano, guardati al banco
-  (consigliata).
-- **D-10, l'interruttore Semplice · Completo nella barra del file:** con il
-  disegno completo; fino ad allora resta nel menu ≡ (consigliata).
-- **D-11, la lavagna che dice che cosa manca:** con la lavagna sul motore; il
-  disegno lo dice già (consigliata).
-- **D-12, l'inclinazione della penna nel motore:** proposta a monte quando la
-  penna entra nel motore (consigliata).
-- **D-13, il motore nello spazio Completo:** in tutti e due gli spazi
-  (consigliata, punto 7); o solo nel Semplice.
+- **D-1, la copia di VectorCraft:** dal mirror `Fubeo/vectorcraft`.
+- **D-2, le librerie comuni di Craft:** in `vendor/` soltanto `docpath` e
+  `vectorcraft-format`; il PDF del motore resta dietro una feature spenta.
+- **D-3, dipendenze e licenze nuove:** le versioni in comune si allineano
+  dove si può e il tetto `librerie_doppie` si alza una volta sola, con
+  l'elenco motivato in `docs/misure/`; `usvg` resta doppio.
+- **D-4, i sei comandi IPC:** sì, con le righe dei permessi (punto 8).
+- **D-5, i caratteri del motore:** quelli di Fub, dallo strato dei motori.
+- **D-6, chi scrive il file:** il client (punto 2).
+- **D-7, lo strumento Testo:** torna in barra (cambia la 0231 §2 per il solo
+  Testo); un clic crea «Testo», lo seleziona e apre il campo dell'ispettore.
+- **D-8, senza motore:** gli strumenti semplici, detti dal chip (punto 9).
+- **D-9, aspetto e parole:** le frasi proposte, guardate al banco; quelle del
+  motore spento e fermo si scelgono sul prototipo del piano.
+- **D-10, l'interruttore Semplice · Completo nella barra del file:** arriva
+  con il disegno completo; fino ad allora resta nel menu ≡.
+- **D-11, la lavagna che dice che cosa manca:** arriva con la lavagna sul
+  motore; il disegno lo dice già.
+- **D-12, l'inclinazione della penna nel motore:** a monte, dopo il piano.
+- **D-13, il motore nello spazio Completo:** in tutti e due (punto 7).
+- **D-14, l'interruttore del motore:** una riga sua, accesa (punto 6).
 
 ## Verifica
 
@@ -167,8 +172,7 @@ Ogni domanda con la raccomandazione per prima; il lavoro procede con quella.
   il motore non sa modificare è elencato per file;
 - `node tools/disegno-cancello/cancello.mjs`: il corpus si apre, si modifica e
   si salva senza perdite visibili, al confronto a pixel;
-- un test dei gesti nel client: penna, evidenziatore e gomma non chiamano
-  l'IPC del disegno;
+- un test dei gesti nel client: penna, evidenziatore e gomma senza l'IPC;
 - `check-engine-boundary.mjs` e `dependency_invariant.rs`: solo
   `fub-disegno` nomina `vectorcraft-*`.
 
