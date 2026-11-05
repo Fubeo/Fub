@@ -1664,7 +1664,7 @@ loro niente cambia; `kit/ribbon/ribbon-motion.test.ts` prova che con
 lo smontaggio non lascia niente; `check-listeners` e `npm run typecheck`
 verdi.
 Prova: scripts/check.sh --rapido
-Stato: [x] fatto · scelta D dell'utente (la griglia non cambia altezza durante la tenda, DECISIONS 2026-11-05) · bench:motion 44/44 (rich-review-list, rosso una volta nel giro intero, verde due volte da sola) · ribbon-motion.test verde · check --rapido 31/32 (rosso solo scene.test «ci sono tutte»: 38 baseline nuove dal runner, T17)
+Stato: [x] fatto · scelta D dell'utente (la griglia non cambia altezza durante la tenda, DECISIONS 2026-11-05) · bench:motion 44/44 (rich-review-list, rosso una volta nel giro intero, verde due volte da sola) · ribbon-motion.test verde · check --rapido 35/36: rossi scene.test «ci sono tutte» (38 baseline nuove dal runner, T17) e due tempi scaduti sotto carico (theme/runtime, grid/engine «seleziona gli oggetti»), verdi rilanciati da soli (90/90)
 
 Dopo K3, non in K3: lo stesso stile e lo stesso movimento passano alla barra
 dei documenti, a quella delle tabelle e alle altre modalità, spostando le
