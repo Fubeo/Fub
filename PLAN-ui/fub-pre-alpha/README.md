@@ -49,6 +49,8 @@ foto, non il simulatore.
   con le catture accanto, confronta ogni foto con quella del client.
 - Gli script usano il Playwright di `apps/client/node_modules` e, per i
   pixel uguali al banco, `FONTCONFIG_FILE` di `CLAUDE_DEVICE.md`.
+- La pagina dell'artifact (le cinque parti, con il simulatore dentro):
+  `node script/costruisci-hub.mjs PLAN.md PLAN-ui/fub-pre-alpha <cartella>`.
 - Catturare di nuovo uno stato: `script/cattura.mjs` con i mod di
   `script/mods.mjs`, contro una copia del client sulla porta 1468 (mai
   1431, 1432, 1437 o 1438).

@@ -1613,9 +1613,10 @@ Cosa fare:
 - README: la riga in alto che rimanda alla pagina.
 - CHANGELOG: la voce `0.2.0-prealpha.1`, scritta dai piani uniti (le loro
   sezioni «Cosa cambia»).
-- D9: i modelli delle issue (un difetto, un'idea), con i campi del sistema
-  e della versione; se D9 è B, anche il comando «Segnala un problema» (è un
-  task UI a parte, con un suo stato nel simulatore).
+- D9: i modelli delle issue («Problema», «Ho perso dei dati», con la
+  priorità, e «Idea»), con i campi del sistema e della versione, e le
+  Discussions per le domande. Se D9 è B, anche il comando «Segnala un
+  problema»: è un task UI a parte, con un suo stato nel simulatore.
 Casi limite: un link a una pagina che non c'è ancora (le guardie lo
 trovano); l'indice delle ADR con un numero saltato (0230: si scrive
 «non usato»).
