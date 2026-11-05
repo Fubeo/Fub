@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-05 · caricamento · scelta dell'utente (A): il banco del moto non
+  conta come residuo la `transform: scale(1, 1)` che CodeMirror lascia sui
+  suoi strati (`.cm-layer`) dopo la cascata d'avvio, che scala il riquadro a
+  0,98; la cascata resta com'è. L'eccezione vale solo per la scala neutra e
+  solo sull'elemento `.cm-layer` (`editorLayerIdentity` in
+  `bench/motion-rules.mjs`) · l'altra strada era togliere la scala dalla
+  cascata, cioè cambiare ciò che si vede all'avvio.
+
 - 2026-11-04 · caricamento · piano concluso. `bench:lampo` entra in CI nel
   job del banco visivo e in `ci-required`. Il controllo completo locale è
   verde salvo le otto baseline `avvio-*`, che arrivano dal runner, e quattro
