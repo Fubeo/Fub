@@ -40,6 +40,10 @@ prototipi approvati: Scrittoio 2 (2026-11-04), K2, K3 T12 (2026-11-03),
 K5 T25 (2026-11-05), N4 T20 (2026-11-02), N6 T25 (2026-11-04) e A1
 (2026-11-03). Per la griglia l'approvazione non è scritta (domanda D2).
 Approvato: in attesa.
+Stato: secondo giro in corso, chiesto dall'utente il 2026-11-05: il
+simulatore si rifà più completo (ogni scenario della pre-alpha, raggiungibile
+come nel prodotto) e si correggono gli errori e le lacune dei task. Finché
+questa riga c'è, il piano non va implementato.
 
 ## Modifiche
 
