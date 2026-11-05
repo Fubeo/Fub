@@ -1545,7 +1545,7 @@ senza l'opzione, il riquadro di sempre; i test del tema
 `theme/forced-colors.test.ts`), `npm run theme:verify`, `npm run typecheck`
 e `bench:a11y` verdi.
 Prova: scripts/check.sh --rapido
-Stato: [~] integrato · 3c583a48..bb5ad39b · check --rapido 19/20 (rosso solo scene.test: le baseline delle 9 scene nuove dal runner, T17) · al telefono 44/100 px invece di 38/88 e Dati 0/4 per i 44 px dei bottoni della shell mobile: l'utente li tiene (2026-11-04: «i tasti ok a 44px»)
+Stato: [x] fatto · 3c583a48..bb5ad39b · check --rapido 19/20 (rosso solo scene.test, le baseline delle 9 scene nuove: arrivate dal runner in T17, ee20018a) · al telefono 44/100 px invece di 38/88 e Dati 0/4 per i 44 px dei bottoni della shell mobile: l'utente li tiene (2026-11-04: «i tasti ok a 44px»)
 
 ## T19 · Il movimento della barra dei fogli
 
