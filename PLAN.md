@@ -31,12 +31,13 @@ Assunzioni: A1–A17 qui sotto. A1–A15 le ha scelte il pianificatore il
 2026-11-02 di notte; l'utente ha risposto a D-1…D-13 il 2026-11-02 e le ha
 approvate, con A9 e A15 riscritte dalle risposte (D-3, D-8) e A16, A17
 nuove (D-8 (c)). D-14 è nuova e aspetta la risposta.
-Ondate: fatti T1–T5, T8, T10, T12, T26; poi T25 | T6 T7 | T9 T24 T28 | T27 T11 | T13 T14 T15 | T16 T17 T18 | T19 | T29 T20 | T21 | T22 | T23 | T30
+Ondate: fatti T1–T5, T8, T10, T12, T25, T26; poi T6 T7 | T9 T24 T28 | T27 T11 | T13 T14 T15 | T16 T17 T18 | T19 | T29 T20 | T21 | T22 | T23 | T30
 (T26 parte con la risposta a D-14; T21–T24 solo dopo il sì dell'utente al
 prototipo di T25; T6 solo quando c'è la copia `Fubeo/vectorcraft`)
-Prototipo: `PLAN-ui/disegno-motore.html` (T25, da fare); approvato: — (lo
-mostra all'utente l'orchestratore, insieme a D-14 e ad A17, e scrive qui la
-data del sì).
+Prototipo: `PLAN-ui/disegno-motore.html` (T25, fatto il 2026-11-05;
+Artifact https://claude.ai/artifact/9eQfYxTBbkBc9WzQ1eW8D4); approvato: —
+(mostrato all'utente il 2026-11-05 con D-14 e A17; l'orchestratore scrive
+qui la data del sì).
 
 ## Modifiche
 
@@ -51,8 +52,10 @@ data del sì).
 
 ## Dal prototipo
 
-Il prototipo è `PLAN-ui/disegno-motore.html` (T25, da fare). I pezzi
-visibili, tutti fatti con ciò che la shell ha già, vanno così:
+Il prototipo è `PLAN-ui/disegno-motore.html` (T25, fatto). I pezzi
+visibili, tutti fatti con ciò che la shell ha già, vanno così. I blocchi
+`/* → skin/sheets.css */` e `/* → skin/settings.css */` della pagina sono
+le regole nuove, passate intere da `sanitizeThemeCss`:
 
 | Pezzo | Destinazione | Task |
 |---|---|---|
@@ -63,6 +66,10 @@ visibili, tutti fatti con ciò che la shell ha già, vanno così:
 | chip «Motore spento: strumenti semplici» con «Accendi…», e «Motore fermo: strumenti semplici» con «Riprova» | lo stesso `SurfaceStanding`, costruito da `motore/standing.ts` (di T21) con lo stato del motore di `motore/gesti.ts` (T28) | T23 |
 | «Accendi…» che apre Impostazioni › Componenti sulla riga del motore | una porta in `apps/client/src/ui/commands.ts` come `registerDrawingImport`, aperta da `apps/client/src/panels/settings.ts`, e `focusRow` in `apps/client/src/panels/components-page.ts` (di K2) | T24 |
 | la riga «Motore del disegno» con il suo interruttore, nel gruppo «Disegnare» della pagina Componenti | la riga in `crates/fub-features/src/componenti.rs`; la pagina la disegna com'è (`panels/components-page.ts`, K2) | T13 |
+| i due `kind` nuovi del chip: `"reduced"` (motore spento, e la build senza motore: segno vuoto) e `"stopped"` (motore fermo: segno `--danger`), al posto di `"body"` proposto in T23 | `SurfaceStandingKind` di `apps/client/src/editors/core/registry.ts`; le regole `.pane-standing[data-standing="reduced"\|"stopped"] .pane-standing-mark` in `skin/sheets.css` | T23 |
+| l'elenco lungo di «Che cosa manca?» che scorre (`grid-template-columns: minmax(0, 1fr)`, `max-height: 232px`) e il nome che si taglia, «Vai» sempre in vista | `.pane-standing-places` e la classe nuova `pane-standing-place-name` (sullo `span` del nome) in `skin/sheets.css`, `anatomia/sheets.ts` e `apps/client/src/panels/standing.ts` | T21 |
+| la riga segnata dopo «Accendi…» | la classe nuova `components-row--found` in `skin/settings.css` e `anatomia/settings.ts` (di K2), messa e tolta da `focusRow` | T24 |
+| l'icona `draw-text` della casella Testo (la «T» a tre tratti del prototipo) | `apps/client/src/editors/spatial/icons.ts` | T22 |
 | testi | `apps/client/src/editors/spatial/strings.ts` (IT, EN); il nome e la descrizione della riga nei cataloghi di `crates/fub-features` | T13, T21, T22, T23 |
 | scene del banco con il motore acceso, spento e fermo | `apps/client/bench/scene.mjs`, `apps/client/bench/fake-ipc.ts` | T23 |
 
@@ -1889,7 +1896,7 @@ luci e nelle due larghezze; la prova con `sanitizeThemeCss` non scarta
 nessuna regola; le foto ci sono. Il task si chiude `[x] fatto, aspetta il
 sì dell'utente`; il sì lo scrive l'orchestratore nella riga `Prototipo:`.
 Prova: scripts/check.sh --rapido (la pagina non tocca il prodotto); la prova usa e getta di `sanitizeThemeCss`
-Stato: [ ] da fare
+Stato: [x] fatto, aspetta il sì dell'utente
 
 ## T26 · Le risposte dell'utente nell'ADR e nella pagina del disegno
 
