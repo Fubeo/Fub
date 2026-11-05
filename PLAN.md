@@ -59,6 +59,10 @@ Assunzioni:
 7. La guida per i modelli (`guida.md`) è in italiano, come la
    documentazione. Le parole chiave (nomi di operazioni e campi, codici
    d'errore) sono in inglese, come nel file JSON Canvas.
+Risposte dell'utente (2026-11-05): D1 (a), D2 (a), D3 (a), D4 (a), D5 (b),
+D6 (a). Con D5 (b) l'anteprima scrive il testo vero delle schede (T21), con
+i caratteri e `resvg` che `draw` ha già: nessuna dipendenza e nessun
+carattere nuovo.
 Ondate: T1 T2 | T3 T4 T5 | T6 | T7 | T8 | T9 | T10 T15 | T11 T17 | T12 T21 | T13 T22 | T16 | T18 | T20 T23 | T14 T24 | T19 T25 | T26
 Prototipo: nessuno. Questo piano non decide nessuna schermata. T25 aggiunge
 tre voci di menu con i pezzi del kit che ci sono, e solo se D6 lo approva.
@@ -91,6 +95,8 @@ aspettano. Fino alla risposta quei task non partono. Gli altri sì.
 - (c) solo le forme brevi (T9). Il resto si fa con `set` e le coordinate:
   la parità non arriva.
 
+  Risposta (2026-11-05): (a).
+
 ### D2 · Comandi e strumenti MCP (aspettano T8, T22)
 
 - **(a) consigliata:** tre comandi che leggono soltanto (`canvas.read`,
@@ -106,6 +112,8 @@ aspettano. Fino alla risposta quei task non partono. Gli altri sì.
 - (c) un solo strumento `fub_canvas` con un campo `action`: è la porta
   universale senza tipi che `CLAUDE.md` chiede di evitare.
 
+  Risposta (2026-11-05): (a).
+
 ### D3 · L'inchiostro scritto dal codice (aspettano T15, T16, T18)
 
 - **(a) consigliata:** `draw` con i punti o con una forma (linea, freccia,
@@ -119,6 +127,8 @@ aspettano. Fino alla risposta quei task non partono. Gli altri sì.
 - (c) né l'uno né l'altro. Il modello scrive `add_strokes` con la stringa
   codificata, che in pratica non sa fare.
 
+  Risposta (2026-11-05): (a).
+
 ### D4 · Da Mermaid e da una scaletta (aspetta T20)
 
 - **(a) consigliata:** `from_mermaid` (una parte di `flowchart`: nodi, archi
@@ -129,6 +139,8 @@ aspettano. Fino alla risposta quei task non partono. Gli altri sì.
   Perché: è la strada di Excalidraw, e un modello scrive già Mermaid bene.
 - (b) solo `from_outline`.
 - (c) nessuno dei due.
+
+  Risposta (2026-11-05): (a).
 
 ### D5 · L'anteprima (aspetta T21)
 
@@ -142,6 +154,14 @@ aspettano. Fino alla risposta quei task non partono. Gli altri sì.
   più, e la resa cambia col font).
 - (c) nessuna anteprima: il modello si fida della lettura.
 
+  Risposta (2026-11-05): (b), il testo vero. Verificato nel codice dopo la
+  risposta: `crates/fub-features/src/draw.rs` (`FACES`) incorpora già Inter,
+  Literata e JetBrains Mono in TrueType (SIL OFL 1.1, `fonts/OFL.txt`) e li
+  dà a `resvg`, quindi i «centinaia di KB in più» sono già pagati da
+  `draw`: l'anteprima non aggiunge né caratteri né dipendenze, e resta
+  uguale su ogni macchina perché non legge i caratteri di sistema. T21 lo
+  dice.
+
 ### D6 · Nella GUI: copia e incolla come codice, «Disponi» (aspetta T25)
 
 - **(a) consigliata:** nel menu della lavagna «Copia come codice» (la
@@ -153,6 +173,8 @@ aspettano. Fino alla risposta quei task non partono. Gli altri sì.
   la persona e l'assistente.
 - (b) solo «Disponi».
 - (c) niente di visibile: la parità va solo dalla GUI al codice.
+
+  Risposta (2026-11-05): (a).
 
 ## La forma
 
@@ -1536,30 +1558,48 @@ Tocca: `crates/fub-canvas-core/src/preview.rs` (nuovo),
 `docs/reference/canvas-operations.md` («Comandi»: `canvas.preview`).
 Non toccare: la tela (l'anteprima non è una vista della GUI); `resvg`
 (c'è già con `draw`).
-Dipende da: T7; D5
+Dipende da: T7; D5 (b), risposta del 2026-11-05
 Cosa fare:
-- `sketch_svg(&Canvas, &SketchOptions { size, ordinals }) -> String`, senza
-  font. Le schede sono rettangoli col loro colore (i sei di JSON Canvas a
-  valori fissi, l'esadecimale com'è, grigio senza colore), i gruppi
-  tratteggiati, gli archi linee dai centri dei lati (o dai centri delle
-  schede) con le punte. I tratti, quando N4 è in main, sono polilinee col
-  loro colore e spessore. Su ogni scheda c'è il suo numero d'ordine,
-  quello di `outline`, disegnato a sette segmenti. Il riquadro è quello
-  del contenuto più 32.
+- `sketch_svg(&Canvas, &SketchOptions { size, ordinals }) -> String`. Le
+  schede sono rettangoli col loro colore (i sei di JSON Canvas a valori
+  fissi, l'esadecimale com'è, grigio senza colore), i gruppi tratteggiati
+  con la loro etichetta, gli archi linee dai centri dei lati (o dai centri
+  delle schede) con le punte e l'etichetta a metà. I tratti, quando N4 è in
+  main, sono polilinee col loro colore e spessore. Il riquadro è quello del
+  contenuto più 32.
+- Il testo vero (D5 (b)): su ogni scheda di testo le sue righe, tolti i
+  segni del Markdown, spezzate con la stessa stima di «Misure e posti» e
+  tagliate al bordo della scheda con «…»; su una scheda file il nome del
+  file, su un link l'indirizzo. In un angolo, piccolo, il numero d'ordine
+  di `outline`, così l'immagine e la lettura si ritrovano. Gli elementi
+  `<text>` nominano `Inter` (il codice in `JetBrains Mono`), ed escono
+  dall'SVG come testo: chi lo legge senza `draw` ha le parole, non i
+  pixel. Il testo non va mai fuori dalla scheda nell'SVG, anche quando la
+  stima sbaglia: si taglia con `clipPath`, e la scheda che taglia lo dice
+  in `outline` (`clipped: true`), così il modello sa che la scheda è
+  troppo piccola.
 - `canvas.preview {doc, ops?, base?, seed?, size?}` → `{version: 1, kind:
   "preview", doc, revision, image: {media_type, width, height, data},
   outline}`. Con `ops` disegna la lavagna di dopo, senza scriverla. Con
   `draw` dà un PNG (`resvg`, lato lungo `size`: di serie 1024, al più
-  2048) in base64, senza `draw` l'SVG come testo.
+  2048) in base64, senza `draw` l'SVG come testo. Il PNG usa soltanto i
+  caratteri incorporati di `draw.rs` (`FACES`), mai quelli di sistema:
+  la stessa lavagna dà gli stessi pixel su ogni macchina.
 - `CommandScope::read_only()`, come T8.
 Casi limite: lavagna vuota (un'immagine 64×64 vuota); una lavagna larga
 100 000 e alta 10 (la misura minima di un lato è 64); 10 000 schede (sotto
-i due secondi in release, i numeri d'ordine solo se la scheda è larga
-almeno 16 pixel nell'immagine); `size` 10 000 (si stringe a 2048).
+i due secondi in release; testo e numeri d'ordine solo se nell'immagine la
+scheda è alta almeno 12 pixel, sotto resta il rettangolo); `size` 10 000
+(si stringe a 2048); testo con emoji, scritture da destra a sinistra o
+caratteri che i tre font non hanno (un segno sostitutivo, mai un errore né
+un carattere di sistema); una scheda di 2 000 righe (si taglia, non
+rallenta); `<`, `&` e `]]>` nel testo (escape XML).
 Fatto quando: `cargo test -p fub-canvas-core --test preview` confronta
-l'SVG di tre lavagne con il suo atteso; `cargo test -p fub-features
---features lavagna,draw --test lavagna` prova il PNG (misure, firma PNG) e
-l'SVG senza `draw`.
+l'SVG di tre lavagne con il suo atteso (una con testo lungo tagliato e
+`clipped: true`, una con caratteri speciali); `cargo test -p fub-features
+--features lavagna,draw --test lavagna` prova il PNG (misure, firma PNG,
+due chiamate uguali danno gli stessi byte, e i pixel di una scheda con
+testo non sono tutti del colore della scheda) e l'SVG senza `draw`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-core --test
 preview; cargo test -p fub-features --features lavagna,draw --test lavagna
 Stato: [ ] da fare

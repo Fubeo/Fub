@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-05 · lavagna-in-codice · le risposte dell'utente: D1 (a), D2
+  (a), D3 (a), D4 (a), D5 (b), D6 (a). Con D5 (b) l'anteprima scrive il
+  testo vero delle schede con i caratteri che `draw` incorpora già
+  (`draw.rs`, `FACES`: Inter, Literata, JetBrains Mono, SIL OFL 1.1), mai
+  quelli di sistema · perché: l'utente vuole la qualità maggiore; il
+  costo in byte che la domanda temeva è già pagato da `draw`, quindi niente
+  dipendenze né caratteri nuovi, e la stessa lavagna dà gli stessi pixel
+  ovunque.
 - 2026-11-05 · caricamento · scelta dell'utente (A): il banco del moto non
   conta come residuo la `transform: scale(1, 1)` che CodeMirror lascia sui
   suoi strati (`.cm-layer`) dopo la cascata d'avvio, che scala il riquadro a
