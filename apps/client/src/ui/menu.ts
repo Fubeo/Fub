@@ -76,6 +76,9 @@ export interface ContextMenuOptions {
   onClose?: () => void;
   /// Lega il menu al suo trigger per i lettori di schermo.
   labelledBy?: string;
+  /// Il nome del menu per chi ascolta, quando il trigger dice meno («Comandi»
+  /// apre «Tutti i comandi del foglio»): prende il posto di `labelledBy`.
+  label?: string;
   /// Una barra di controlli sopra il menu, nella stessa superficie: la
   /// mini-barra di formato. Chi la passa la monta nel contenitore e torna come
   /// smontarla; vive quanto il menu. Il fuoco parte dal menu, Tab passa dall'uno
@@ -99,6 +102,21 @@ export interface ContextMenuOptions {
   /// Scrivere filtra le voci, col piede che lo dice. Di serie sì nei menu
   /// aperti in un punto; un menu a tendina va invece all'iniziale.
   search?: boolean;
+  /// La ricerca guarda tutto l'albero: nessun tetto alle voci trovate, i
+  /// sottomenu preparati quando servono anche se annidati, e le voci spente
+  /// dopo le accese, con la loro descrizione (il perché). Niente rimando alla
+  /// ricerca fra tutti i comandi: chi non trova niente legge che non c'è
+  /// niente. Una lettera scritta in un sottomenu cerca dal menu principale.
+  fullSearch?: boolean;
+  /// Le voci spente si raggiungono con le frecce, con `aria-disabled`, e
+  /// non si attivano: chi ascolta sente il perché nella loro descrizione.
+  reachDisabled?: boolean;
+}
+
+/// Il menu aperto, per chi l'ha aperto: le voci si cambiano senza chiuderlo,
+/// tenendo il fuoco e il sottomenu aperto dove stavano.
+export interface ContextMenuHandle {
+  update(items: readonly MenuItem[]): void;
 }
 
 /// La testata: l'icona e il tipo dell'oggetto, poi il suo nome.
@@ -149,6 +167,15 @@ interface Chrome {
   readonly clipboard: readonly MenuItem[];
   readonly searchable: readonly MenuItem[];
   readonly search: boolean;
+  readonly full: boolean;
+}
+
+/// Ciò che il menu principale passa ai suoi sottomenu.
+interface Reach {
+  /// Le voci spente prendono il fuoco.
+  readonly disabled: boolean;
+  /// Una lettera scritta in un sottomenu va alla ricerca del menu principale.
+  readonly typed: ((key: string) => void) | null;
 }
 
 /// Quante voci trovate mostra la ricerca, come il tetto di un menu.
@@ -164,14 +191,15 @@ interface Row {
 }
 
 /// Le voci che si possono scegliere, sottomenu compresi, col loro percorso.
-/// Un sottomenu preparato quando serve conta se è già pronto.
-function flatten(items: readonly MenuItem[], ready: ReadonlyMap<MenuItem, readonly MenuItem[]>, path = ""): Row[] {
+/// Un sottomenu preparato quando serve conta se è già pronto. Con `disabled`
+/// ci sono anche le voci spente, e i sottomenu spenti si attraversano.
+function flatten(items: readonly MenuItem[], ready: ReadonlyMap<MenuItem, readonly MenuItem[]>, path = "", disabled = false): Row[] {
   const out: Row[] = [];
   for (const item of items) {
-    if (item.disabled) continue;
+    if (item.disabled && !disabled) continue;
     const children = Array.isArray(item.items) ? item.items : ready.get(item);
     if (item.items !== undefined) {
-      if (children) out.push(...flatten(children, ready, path ? `${path} › ${item.label}` : item.label));
+      if (children) out.push(...flatten(children, ready, path ? `${path} › ${item.label}` : item.label, disabled));
       continue;
     }
     out.push(path ? { item, path } : { item });
@@ -243,7 +271,7 @@ export function showContextMenu(
   at: MouseEvent | HTMLElement | MenuPoint,
   items: readonly MenuItem[],
   options: ContextMenuOptions = {},
-): void {
+): ContextMenuHandle {
   closeContextMenu();
   const lifetime = openLifetime();
   menuLifetime = lifetime;
@@ -266,17 +294,20 @@ export function showContextMenu(
     clipboard: clipboard.length >= 2 ? clipboard : [],
     searchable: options.searchable ?? [],
     search: options.search ?? anchor === null,
+    full: options.fullSearch === true,
   };
-  const root = renderMenu(clipboard.length === 1 ? [clipboard[0]!, ...items] : items, lifetime, replaceWith, chrome);
+  const withClipboard = (list: readonly MenuItem[]): readonly MenuItem[] => (clipboard.length === 1 ? [clipboard[0]!, ...list] : list);
+  const root = renderMenu(withClipboard(items), lifetime, replaceWith, chrome, { disabled: options.reachDisabled === true, typed: null });
   const menu = root.menu;
   menu.id = "context-menu";
-  if (options.labelledBy) menu.setAttribute("aria-labelledby", options.labelledBy);
+  if (options.label) menu.setAttribute("aria-label", options.label);
+  else if (options.labelledBy) menu.setAttribute("aria-labelledby", options.labelledBy);
   menu.style.left = `${x}px`;
   menu.style.top = `${y}px`;
   const workspace = document.getElementById("workspace");
   (workspace ?? document.body).appendChild(menu);
   if (anchor === null) placeInViewport(menu, x, y);
-  else placeBeside(menu, anchor);
+  else placeBeside(menu, anchor, chrome.full);
   // WebKitGTK può terminare il processo web mentre fotografa in una View
   // Transition un menu fisso appena inserito. Conserviamo l'animazione CSS
   // canonica, senza portare questa superficie effimera nel percorso nativo.
@@ -308,6 +339,13 @@ export function showContextMenu(
     closeContextMenu();
   };
   setTimeout(() => lifetime.listen(document, "click", outside), 0);
+  return {
+    update: (next) => {
+      if (lifetime.closed) return;
+      items = next;
+      root.update(withClipboard(next));
+    },
+  };
 }
 
 /// Le voci di un sottomenu, preparate se serve.
@@ -318,16 +356,20 @@ async function itemsOf(item: MenuItem): Promise<readonly MenuItem[]> {
 interface RenderedMenu {
   readonly menu: HTMLElement;
   focusActive(): void;
+  /// Le voci nuove al posto di quelle di prima, nello stesso menu.
+  update(items: readonly MenuItem[]): void;
 }
 
 /// Un elenco di voci con la sua navigazione da tastiera: il menu principale e
 /// ciascun sottomenu a cascata sono la stessa cosa, cambia solo dove stanno.
 function renderMenu(
-  items: readonly MenuItem[],
+  initialItems: readonly MenuItem[],
   lifetime: Lifetime,
   replaceWith: (item: MenuItem) => Promise<void>,
   chrome: Chrome | null = null,
+  reach: Reach = { disabled: false, typed: null },
 ): RenderedMenu {
+  let items = initialItems;
   const menu = document.createElement("div");
   menu.className = "context-menu";
   // Un menu è un menu: il ruolo è ciò che fa annunciare «menu, cinque voci» e
@@ -338,7 +380,8 @@ function renderMenu(
   const buttons: HTMLButtonElement[] = [];
   const usable: MenuItem[] = [];
   // Il sottomenu aperto, se ce n'è uno: la voce da cui parte e come chiuderlo.
-  let open: { button: HTMLButtonElement; lifetime: Lifetime; focusFirst: () => void; sub: HTMLElement } | null = null;
+  // Il bottone cambia quando le voci si ridisegnano, il sottomenu resta.
+  let open: { button: HTMLButtonElement; item: MenuItem; lifetime: Lifetime; child: RenderedMenu; sub: HTMLElement } | null = null;
   // Dove stava il puntatore al movimento prima e adesso: la mira si legge da qui.
   let pointer: { from: Point; to: Point } | null = null;
   lifetime.listen(menu, "pointermove", (e) => {
@@ -362,7 +405,7 @@ function renderMenu(
   const coarse = (): boolean => typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
   const cascade = async (button: HTMLButtonElement, item: MenuItem, focus: boolean): Promise<void> => {
     if (open?.button === button) {
-      if (focus) open.focusFirst();
+      if (focus) open.child.focusActive();
       return;
     }
     closeOpen();
@@ -371,7 +414,12 @@ function renderMenu(
     closeOpen();
     const childLifetime = openLifetime();
     lifetime.add(() => childLifetime.close());
-    const child = renderMenu(children, childLifetime, replaceWith);
+    // Una lettera scritta nel sottomenu del menu che cerca dappertutto va alla
+    // sua ricerca; quella di un sottomenu più in là, a quella del suo menu.
+    const typed = chrome?.full ? (key: string) => {
+      search(query + key);
+    } : reach.typed;
+    const child = renderMenu(children, childLifetime, replaceWith, null, { disabled: reach.disabled, typed });
     const sub = child.menu;
     sub.classList.add("context-submenu");
     sub.setAttribute("aria-label", item.label);
@@ -384,13 +432,13 @@ function renderMenu(
     // ci sta sopra: la tolleranza diagonale è questa.
     childLifetime.listen(sub, "pointerenter", cancelHover);
     button.setAttribute("aria-expanded", "true");
-    const state = { button, lifetime: childLifetime, focusFirst: () => child.focusActive(), sub };
+    const state = { button, item, lifetime: childLifetime, child, sub };
     open = state;
     // ← o Escape tornano alla voce da cui si è entrati: la trappola del
     // sottomenu sta sopra quella del menu, ed Escape chiude solo lei.
     const back = (): void => {
       if (open === state) closeOpen();
-      button.focus();
+      state.button.focus();
     };
     childLifetime.listen(sub, "keydown", (e) => {
       if (e.key === "ArrowLeft") {
@@ -612,6 +660,10 @@ function renderMenu(
       if (item.disabled) {
         b.setAttribute("aria-disabled", "true");
         host.appendChild(b);
+        if (reach.disabled) {
+          buttons.push(b);
+          usable.push(item);
+        }
         continue;
       }
       // L'attivazione da tastiera passa dal click nativo del button (Invio/Spazio):
@@ -692,7 +744,7 @@ function renderMenu(
       focusItem(Math.min(quick.length - 1, Math.max(0, at + (e.key === "ArrowRight" ? 1 : -1))));
     } else if (e.key === "ArrowRight") {
       const item = usable[active];
-      if (item?.items !== undefined) {
+      if (item?.items !== undefined && !item.disabled) {
         e.preventDefault();
         if (coarse()) void replaceWith(item);
         else void cascade(buttons[active]!, item, true);
@@ -700,9 +752,15 @@ function renderMenu(
     } else if (chrome?.search && e.key === "Backspace" && query !== "") {
       e.preventDefault();
       search(query.slice(0, -1));
+    } else if (at >= 0 && usable[at]?.disabled && (e.key === "Enter" || (e.key === " " && !(chrome?.search && query !== "")))) {
+      // Una voce spenta raggiunta con le frecce non si attiva.
+      e.preventDefault();
     } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       // Lo spazio sceglie la voce col fuoco, finché non si sta scrivendo.
-      if (chrome?.search) {
+      if (reach.typed !== null && e.key !== " ") {
+        e.preventDefault();
+        reach.typed(e.key);
+      } else if (chrome?.search) {
         if (e.key === " " && query === "") return;
         e.preventDefault();
         search(query + e.key);
@@ -735,21 +793,33 @@ function renderMenu(
   const prepare = (): void => {
     if (preparing) return;
     preparing = true;
-    const pending = [...items, ...(chrome?.searchable ?? [])].filter((item) => typeof item.items === "function");
-    for (const item of pending) {
-      void itemsOf(item).then((children) => {
-        if (lifetime.closed) return;
-        ready.set(item, children);
-        if (query !== "") search(query);
-      });
-    }
+    const prepared = items;
+    // Il menu che cerca dappertutto prepara anche i sottomenu annidati.
+    const visit = (list: readonly MenuItem[], deep: boolean): void => {
+      for (const item of list) {
+        if (typeof item.items === "function") {
+          void itemsOf(item).then((children) => {
+            if (lifetime.closed || items !== prepared) return;
+            ready.set(item, children);
+            if (chrome?.full) visit(children, true);
+            if (query !== "") search(query, true);
+          });
+        } else if (deep && Array.isArray(item.items)) {
+          visit(item.items, true);
+        }
+      }
+    };
+    visit([...items, ...(chrome?.searchable ?? [])], chrome?.full === true);
   };
 
   /// Filtra le voci con `text`: le trovate al posto del menu, col loro
   /// percorso, e la prima col fuoco; niente scritto, il menu com'era.
-  function search(text: string): void {
+  /// Con `keep`, la voce col fuoco resta quella di prima: le voci sono
+  /// cambiate sotto chi le stava guardando.
+  function search(text: string, keep = false): void {
     query = text;
     closeOpen();
+    const was = keep ? buttons.indexOf(document.activeElement as HTMLButtonElement) : -1;
     if (query === "") {
       fill(items.map((item) => ({ item })));
       drawFoot(0);
@@ -758,13 +828,16 @@ function renderMenu(
     }
     prepare();
     const wanted = fold(query);
-    const hits = flatten([...items, ...(chrome?.searchable ?? [])], ready).filter(
+    const full = chrome?.full === true;
+    const found = flatten([...items, ...(chrome?.searchable ?? [])], ready, "", full).filter(
       ({ item, path }) => fold(item.label).includes(wanted) || (path !== undefined && fold(path).includes(wanted)),
     );
+    // Dappertutto, le spente vengono dopo le accese, e tutte si vedono.
+    const hits = full ? [...found.filter(({ item }) => !item.disabled), ...found.filter(({ item }) => item.disabled)] : found;
     // Trovate, le voci perdono i gruppi: è un elenco solo.
-    const rows: Row[] = hits.slice(0, SEARCH_LIMIT).map(({ item, path }) => ({ item: { ...item, group: undefined, separator: undefined, selected: false }, path }));
+    const rows: Row[] = (full ? hits : hits.slice(0, SEARCH_LIMIT)).map(({ item, path }) => ({ item: { ...item, group: undefined, separator: undefined, selected: false }, path }));
     const all = menuSearch;
-    if (rows.length === 0 && all !== null) {
+    if (rows.length === 0 && all !== null && !full) {
       const typed = query;
       rows.push({ item: { label: t("context.search.all", { query: typed }), run: () => all.run(typed) } });
     }
@@ -777,12 +850,14 @@ function renderMenu(
       list.append(empty);
     }
     drawFoot(hits.length);
-    if (buttons.length > quick.length) focusItem(quick.length);
+    if (was >= 0 && buttons.length > 0) focusItem(Math.min(was, buttons.length - 1));
+    else if (keep) return;
+    else if (buttons.length > quick.length) focusItem(quick.length);
     else menu.focus({ preventScroll: true });
   }
   function activate(button: HTMLButtonElement, item: MenuItem): void {
     // Una voce già chiusa non deve rispondere a click tardivi.
-    if (lifetime.closed) return;
+    if (lifetime.closed || item.disabled) return;
     if (item.items !== undefined) {
       cancelHover();
       if (coarse()) void replaceWith(item);
@@ -793,7 +868,40 @@ function renderMenu(
     closeContextMenu();
     item.run?.();
   }
-  return { menu, focusActive: () => focusItem(active) };
+  /// Le voci nuove: la ricerca si rifà, altrimenti il fuoco resta alla voce
+  /// che aveva, e il sottomenu aperto resta aperto se la sua voce c'è ancora,
+  /// nella stessa riga e con lo stesso nome.
+  function update(next: readonly MenuItem[]): void {
+    const index = open === null ? -1 : items.indexOf(open.item);
+    items = next;
+    ready.clear();
+    preparing = false;
+    if (query !== "") {
+      search(query, true);
+      return;
+    }
+    const was = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    fill(items.map((item) => ({ item })));
+    if (was >= 0) focusItem(Math.min(was, buttons.length - 1));
+    else if (buttons[active]) buttons[active].tabIndex = 0;
+    if (open === null) return;
+    const item = items[index];
+    if (item === undefined || item.label !== open.item.label || item.items === undefined || item.disabled) {
+      closeOpen();
+      return;
+    }
+    const button = list.querySelectorAll<HTMLButtonElement>("button")[index];
+    if (button === undefined) {
+      closeOpen();
+      return;
+    }
+    button.setAttribute("aria-expanded", "true");
+    const kept = open;
+    kept.button = button;
+    kept.item = item;
+    if (Array.isArray(item.items)) kept.child.update(item.items);
+  }
+  return { menu, focusActive: () => focusItem(active), update };
 }
 
 /// La mini-barra sopra il menu: un contenitore che chi apre il menu riempie, e
@@ -907,8 +1015,11 @@ const ANCHOR_GAP = 4;
 /// destra dove a sinistra uscirebbe dalla finestra. Se sotto non c'è posto e
 /// sopra ce n'è di più, si apre sopra; dalla parte dove si apre, un elenco più
 /// alto del posto scorre. Il pulsante resta sempre visibile, perché è lì che
-/// si guarda e che torna il fuoco.
-function placeBeside(menu: HTMLElement, anchor: DOMRectReadOnly): void {
+/// si guarda e che torna il fuoco. Un menu che cerca dappertutto (`grows`)
+/// tiene sotto l'altezza del posto anche quando ci sta: la ricerca senza tetto
+/// può trovare più voci di quante ce ne fossero, e scorrono invece di uscire
+/// dalla finestra.
+function placeBeside(menu: HTMLElement, anchor: DOMRectReadOnly, grows = false): void {
   const margin = 8;
   const box = menu.getBoundingClientRect();
   const below = window.innerHeight - margin - (anchor.bottom + ANCHOR_GAP);
@@ -919,7 +1030,7 @@ function placeBeside(menu: HTMLElement, anchor: DOMRectReadOnly): void {
     room = above;
     top = anchor.top - ANCHOR_GAP - Math.min(box.height, above);
   }
-  if (box.height > room) menu.style.maxHeight = `${Math.max(0, room)}px`;
+  if (box.height > room || (grows && top > anchor.top)) menu.style.maxHeight = `${Math.max(0, room)}px`;
   let left = anchor.left;
   if (left + box.width > window.innerWidth - margin) left = anchor.right - box.width;
   menu.style.left = `${Math.max(margin, left)}px`;

@@ -84,6 +84,8 @@ import { nameFaultText } from "../ui/name-fault";
 import { setTooltip } from "../ui/tooltip";
 import { mediaKindOfId } from "../editors/media/media-types";
 import type { ResourceKind } from "../host/contract";
+import { api } from "../host/ipc";
+import { engineExtension, engineWarmup, type EngineWarmup } from "./engine-warmup";
 
 const fileListEl = $("#file-list");
 /// Il moto della cartella appena aperta o chiusa, finché l'albero non si
@@ -148,6 +150,18 @@ interface View {
 }
 
 let view: View = { folders: new Map(), existing: new Set() };
+/// Chi scalda i motori dei formati al passaggio del puntatore e all'apertura
+/// di una cartella: vive finché il pannello è montato (`mountExplorer`).
+let warmup: EngineWarmup | null = null;
+
+/// La riga di un file con motore scalda il motore quando il puntatore ci si
+/// ferma; le altre righe non ascoltano niente.
+function wireWarmup(row: HTMLElement, id: string): void {
+  if (engineExtension(id) === null) return;
+  row.addEventListener("pointerenter", () => warmup?.hover(id));
+  row.addEventListener("pointerleave", () => warmup?.leave());
+}
+
 /// La finestra richiesta per ogni livello visibile. Cresce solo per il livello
 /// il cui pulsante «altre» è stato attivato; nessuna domanda perde il proprio
 /// limite mentre gli altri livelli conservano il costo iniziale.
@@ -292,6 +306,14 @@ export function mountExplorer(lifetime: Lifetime): void {
   wireRootDropTarget(lifetime);
   wireOutsideDrops(lifetime);
   lifetime.add(cancelHoverOpen);
+  const warming = engineWarmup((extension) => api.warmEngine(extension));
+  warmup = warming;
+  lifetime.add(() => {
+    warming.dispose();
+    if (warmup === warming) warmup = null;
+  });
+  // Un vault nuovo ha i suoi componenti: le estensioni si riscaldano.
+  lifetime.add(on("vault", () => warming.reset()));
   selection = mountTreeSelection({
     list: fileListEl,
     currentDoc: () => state.currentDoc,
@@ -917,6 +939,7 @@ function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
     e.preventDefault();
     noteMenu(e, row, id);
   });
+  wireWarmup(row, id);
   if (opts.draggable) wireDrag(row, id, "note");
   return row;
 }
@@ -958,6 +981,7 @@ function fileRow(id: string): HTMLElement {
     e.preventDefault();
     fileMenu(e, row, id);
   });
+  wireWarmup(row, id);
   return row;
 }
 
@@ -1431,6 +1455,9 @@ function toggleFolder(path: string): void {
   treeMotion = motion;
   void refreshFromKernel(true).finally(() => {
     if (treeMotion === motion) treeMotion = null;
+    // Aperta, la cartella scalda i motori dei suoi file.
+    const content = state.expanded.has(path) ? view.folders.get(path) : undefined;
+    if (content) warmup?.folder([...content.notes, ...content.files]);
   });
 }
 

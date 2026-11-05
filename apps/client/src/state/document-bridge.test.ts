@@ -17,6 +17,11 @@ vi.mock("./document-session", async (importOriginal) => {
         text: id.includes("crlf") ? "\ufeffa\r\nb" : "abc",
         revision: "disk-1", format_id: "plain", source_kind: "text", text_kind: "source",
       }),
+      openDocument: async (id) => ({
+        text: id.includes("crlf") ? "\ufeffa\r\nb" : "abc",
+        revision: "disk-1", format_id: "plain", source_kind: "text", text_kind: "source",
+      }),
+      documentClosed: async () => {},
       writeDocument: async () => "disk-2",
       resourceWrite: async () => ({ revision: "disk-2" }),
       saveDraft: async () => {},

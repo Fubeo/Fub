@@ -42,7 +42,7 @@ import {
   mountedTextEditors as editorViews,
   undoDepth,
 } from "./editors/text/test-support";
-import type { FakeHost } from "./host/fake";
+import type { Call, FakeHost } from "./host/fake";
 import type { KernelNotice, SettingEntry, CommandSpec, KnownVault } from "./host/contract";
 import { SHELL_KEYS } from "./ui/shell-keys.generated";
 
@@ -238,6 +238,12 @@ async function waitFor(thing: string, cond: () => boolean, within = 2000): Promi
     await new Promise((r) => setTimeout(r, 10));
   }
   throw new Error(`non è mai successo: ${thing}`);
+}
+
+/// Le letture di un documento, in ordine: quelle semplici e quelle di una
+/// sessione sotto la sua chiave di apertura. Tutte e due hanno l'id per primo.
+function documentReads(host: FakeHost): Call[] {
+  return host.calls.filter((call) => call.gate === "readDocument" || call.gate === "openDocument");
 }
 
 function rowsOfNote(): HTMLElement[] {
@@ -1120,13 +1126,13 @@ describe("apri un vault", () => {
 
     fileRows()[0]!.click();
     await settle();
-    expect(host.atGate("readDocument").map((call) => call.args[0])).not.toContain("note/dati.zip");
+    expect(documentReads(host).map((call) => call.args[0])).not.toContain("note/dati.zip");
     expect(host.atGate("resourceOpen")).toHaveLength(0);
 
     fileRows()[1]!.click();
     await waitFor("il visualizzatore chiede la risorsa", () => host.atGate("resourceOpen").length > 0);
     expect(host.atGate("resourceOpen")[0]!.args[0]).toBe("note/foto.png");
-    expect(host.atGate("readDocument").map((call) => call.args[0])).not.toContain("note/foto.png");
+    expect(documentReads(host).map((call) => call.args[0])).not.toContain("note/foto.png");
   });
 
   it("un allegato si cestina dal suo menu contestuale, come una nota", async () => {
@@ -1244,7 +1250,7 @@ describe("apri un vault", () => {
 describe("scrivi", () => {
   it("ciò che si batte arriva al disco, e discende dalla revisione che si era letta", async () => {
     const host = await start(VAULT);
-    const reads = host.atGate("readDocument");
+    const reads = documentReads(host);
     const read = reads[reads.length - 1];
     expect(read?.args[0]).toBe("Benvenuto.md");
 
@@ -1317,7 +1323,7 @@ describe("i confini del buffer", () => {
 
   it("ricarica un cambio watcher quando il buffer è pulito", async () => {
     const host = await start(VAULT);
-    const readsBefore = host.atGate("readDocument").length;
+    const readsBefore = documentReads(host).length;
 
     await host.module.api.writeDocument(
       "Benvenuto.md",
@@ -1328,7 +1334,7 @@ describe("i confini del buffer", () => {
 
     await waitFor(
       "il documento viene riletto dopo il cambio watcher",
-      () => host.atGate("readDocument").length > readsBefore,
+      () => documentReads(host).length > readsBefore,
     );
     await waitFor(
       "il testo watcher arriva all'editor",
@@ -1344,7 +1350,7 @@ describe("i confini del buffer", () => {
   it("non sovrascrive il buffer sporco quando il watcher cambia il file", async () => {
     const host = await start(VAULT);
     typeInEditor("testo locale non salvato");
-    const readsBefore = host.atGate("readDocument").length;
+    const readsBefore = documentReads(host).length;
 
     await host.module.api.writeDocument(
       "Benvenuto.md",
@@ -1354,7 +1360,7 @@ describe("i confini del buffer", () => {
     expect(host.emit({ type: "document_changed", id: "Benvenuto.md" })).toBe(true);
 
     await settle();
-    expect(host.atGate("readDocument").length).toBe(readsBefore);
+    expect(documentReads(host).length).toBe(readsBefore);
     expect(textToVideo()).toContain("testo locale non salvato");
     expect(textToVideo()).not.toContain("testo arrivato dal watcher");
     expect(document.querySelector('.sheet-notice[data-notice]')?.getAttribute("data-notice")).toMatch(/changed_on_disk|overwritten/);
@@ -1404,7 +1410,7 @@ describe("i confini del buffer", () => {
 describe("undo locale tra riquadri", () => {
   it("condivide il testo ma non la cronologia, senza rileggere o lasciare timer", async () => {
     const host = await start(VAULT);
-    const readsAtSplit = host.atGate("readDocument").length;
+    const readsAtSplit = documentReads(host).length;
     const initial = editorTexts();
     expect(initial).toHaveLength(1);
 
@@ -1413,7 +1419,7 @@ describe("undo locale tra riquadri", () => {
     );
     await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
     await settle();
-    expect(host.atGate("readDocument").length).toBe(readsAtSplit);
+    expect(documentReads(host).length).toBe(readsAtSplit);
     expect(editorTexts()).toEqual([initial[0], initial[0]]);
 
     const views = editorViews();
@@ -1645,7 +1651,7 @@ describe("due salvataggi della stessa nota", () => {
     expect(host.atGate("writeDocument").length).toBe(1);
 
     unlock();
-    await waitFor("la nota si apre", () => host.atGate("readDocument").length > 1);
+    await waitFor("la nota si apre", () => documentReads(host).length > 1);
     await settle();
 
     // Una scrittura sola, e nessun conflitto: il flush ha aspettato quella in
@@ -2792,7 +2798,7 @@ describe("cerca", () => {
 
     results[0].click();
     await waitFor("il documento cercato si apre", () =>
-      host.atGate("readDocument").some((c) => c.args[0] === "note/Spesa.md"),
+      documentReads(host).some((c) => c.args[0] === "note/Spesa.md"),
     );
     await settle();
     expect(textToVideo()).toContain("pane, latte, arance");
@@ -3245,10 +3251,10 @@ describe("i riquadri dopo un'attesa", () => {
   it("una lettura fallita non lascia la linguetta mostrata senza editor", async () => {
     const host = await start(VAULT);
     const { openDocument, synchronize } = await import("./panels/document");
-    const restore = host.fault("readDocument");
+    const restore = [host.fault("readDocument"), host.fault("openDocument")];
     await openDocument("note/Spesa.md").catch(() => {});
     expect(textToVideo()).not.toContain("pane, latte");
-    restore();
+    for (const undo of restore) undo();
 
     await synchronize();
     await settle();

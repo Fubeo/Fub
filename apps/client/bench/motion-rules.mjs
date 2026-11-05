@@ -135,6 +135,15 @@ function distance(a, b) {
   return { px, opacity: Math.abs(a.opacity - b.opacity) };
 }
 
+/// Un riquadro arrotondato, per il rapporto.
+const shape = (box) => ({
+  left: Math.round(box.left * 10) / 10,
+  top: Math.round(box.top * 10) / 10,
+  width: Math.round(box.width * 10) / 10,
+  height: Math.round(box.height * 10) / 10,
+  opacity: Math.round(box.opacity * 1000) / 1000,
+});
+
 /// I salti all'inversione (regola 4). `before` sono i riquadri di ciò che si
 /// stava muovendo un attimo prima del gesto, `after` quelli di ciò che si vede
 /// subito dopo, allo stesso istante. Ogni riquadro di prima deve proseguire in
@@ -149,7 +158,7 @@ export function jumps(before, after, tolerance = CONTINUITY) {
       const within = gap.px <= tolerance.px && gap.opacity <= tolerance.opacity;
       const better =
         !nearest || (within && !nearest.within) || (within === nearest.within && gap.px + gap.opacity * 100 < nearest.px + nearest.opacity * 100);
-      if (better) nearest = { ...gap, within, key: candidate.key };
+      if (better) nearest = { ...gap, within, key: candidate.key, box: candidate };
     }
     if (nearest?.within) continue;
     found.push({
@@ -157,6 +166,8 @@ export function jumps(before, after, tolerance = CONTINUITY) {
       px: nearest ? Math.round(nearest.px * 100) / 100 : null,
       opacity: nearest ? Math.round(nearest.opacity * 1000) / 1000 : null,
       nearest: nearest?.key ?? null,
+      was: shape(box),
+      is: nearest ? shape(nearest.box) : null,
     });
   }
   return found;
@@ -374,6 +385,14 @@ const light = (theme) => (page) =>
     (t) => document.documentElement.dataset.theme === t && document.querySelector(".light-scene") === null,
     theme,
   );
+
+/// La barra dei fogli del riquadro col fuoco.
+const GRID_RIBBON = ".pane.focus .grid-ribbon";
+/// La cella scelta cinque colonne più a destra, fuori dalla tabella della
+/// scena `grid-ribbon-table`.
+const stepRight = async (page) => {
+  for (let step = 0; step < 5; step += 1) await page.keyboard.press("ArrowRight");
+};
 
 /// Le coreografie. Ognuna dice:
 ///
@@ -910,6 +929,70 @@ export const CHOREOGRAPHIES = [
     undo: (page) => page.keyboard.press("Escape"),
     returned: lacks(".pane.focus .cm-fub-block-lift, .pane.focus .cm-fub-block-lifted"),
     holds: true,
+  },
+  {
+    id: "fogli-sezione",
+    title: "Barra dei fogli: cambiando sezione i foglietti della nuova entrano uno dopo l'altro dal suo verso",
+    sources: ["src/kit/ribbon/ribbon-motion.ts"],
+    scene: "grid-ribbon",
+    act: (page) => press(page, `${GRID_RIBBON} .kit-tab[data-tab="insert"]`),
+    arrived: has(`${GRID_RIBBON} .grid-ribbon-panel[data-tab="insert"]:not([hidden])`),
+    undo: (page) => press(page, `${GRID_RIBBON} .kit-tab[data-tab="home"]`),
+    returned: has(`${GRID_RIBBON} .grid-ribbon-panel[data-tab="home"]:not([hidden])`),
+  },
+  {
+    id: "fogli-ritiro",
+    title: "Barra dei fogli: riaperta, la formula e la griglia scendono e il vassoio riappare; ritirata, gli salgono sopra mentre svanisce",
+    sources: ["src/kit/ribbon/ribbon-motion.ts"],
+    // Si parte ritirati: l'uscita è il gesto che disfa (regola 5).
+    scene: "grid-ribbon-collapsed",
+    act: (page) => page.keyboard.press("Control+F1"),
+    arrived: has(`${GRID_RIBBON}[data-collapsed="false"]`),
+    undo: (page) => page.keyboard.press("Control+F1"),
+    returned: has(`${GRID_RIBBON}[data-collapsed="true"]`),
+    exit: true,
+  },
+  {
+    id: "fogli-fisarmonica",
+    title: "Barra dei fogli a 700 px: il foglietto «Numeri» si apre sul posto e gli altri scivolano; Esc lo richiude",
+    sources: ["src/kit/ribbon/ribbon-motion.ts"],
+    // La scena stretta è quella della tabella: si torna alla Home. Il clic è
+    // quello del DOM, perché la pressione del pulsante non entri nella misura.
+    scene: "grid-ribbon-table",
+    setup: async (page) => {
+      await click(`${GRID_RIBBON} .kit-tab[data-tab="home"]`)(page);
+      await page.waitForSelector(`${GRID_RIBBON} .grid-ribbon-panel[data-tab="home"]:not([hidden])`);
+    },
+    act: click(`${GRID_RIBBON} [data-group="number"] .grid-ribbon-group-toggle`),
+    arrived: has(`${GRID_RIBBON} [data-group="number"][data-open="true"]`),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: lacks(`${GRID_RIBBON} [data-open="true"]`),
+  },
+  {
+    id: "fogli-fisarmonica-telefono",
+    title: "Barra dei fogli al telefono: il foglietto in fondo si apre, il vassoio scorre e gli altri scivolano nella stessa corsa",
+    sources: ["src/kit/ribbon/ribbon-motion.ts"],
+    scene: "mobile-grid-ribbon",
+    act: click(`${GRID_RIBBON} [data-group="editing"] .grid-ribbon-group-toggle`),
+    arrived: has(`${GRID_RIBBON} [data-group="editing"][data-open="true"]`),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: lacks(`${GRID_RIBBON} [data-open="true"]`),
+  },
+  {
+    id: "fogli-sezione-tabella",
+    title: "Barra dei fogli: la sezione della tabella compare quando la cella scelta entra nella tabella",
+    sources: ["src/kit/ribbon/ribbon-motion.ts"],
+    scene: "grid-ribbon-table",
+    // La cella scelta esce dalla tabella (A1:D6): la sua sezione se ne va.
+    setup: async (page) => {
+      await click(`${GRID_RIBBON} .kit-tab[data-tab="home"]`)(page);
+      await stepRight(page);
+      await page.waitForSelector(`${GRID_RIBBON} .kit-tab[data-tab="table"]`, { state: "detached" });
+    },
+    act: (page) => page.keyboard.press("Control+Home"),
+    arrived: has(`${GRID_RIBBON} .kit-tab[data-tab="table"]`),
+    undo: stepRight,
+    returned: lacks(`${GRID_RIBBON} .kit-tab[data-tab="table"]`),
   },
 ];
 

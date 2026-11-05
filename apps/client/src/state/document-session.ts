@@ -77,9 +77,17 @@ export type SurfaceChangeResult =
 /// corrente» dell'host cambia quando se ne apre un altro, e un salvataggio o
 /// una bozza partiti dopo non devono finire in quello nuovo. Assente: l'host
 /// risponde con il corrente, come prima.
+///
+/// Leggere non apre. Una sessione apre il suo documento sotto la sua **chiave
+/// di apertura** (`open`), e la chiude quando esce per sempre: con
+/// `openDocument` legge, con `writeDocument(…, open)` scrive, con
+/// `documentClosed(open)` chiude. Quali documenti l'host tiene sotto la chiave
+/// lo decide l'host: la sessione la passa per ogni formato. `readDocument` è
+/// la lettura semplice, che non tiene niente.
 export interface DocumentSessionApi {
   readDocument(id: string, vault?: string | null): Promise<DocumentSource>;
-  writeDocument(id: string, text: string, base: WriteBase, vault?: string | null): Promise<string>;
+  openDocument(id: string, open: string, vault?: string | null): Promise<DocumentSource>;
+  writeDocument(id: string, text: string, base: WriteBase, vault?: string | null, open?: string): Promise<string>;
   /// I byte di un file che nessun formato serve — un `.svg`, un `.txt`. Il
   /// kernel rifiuta `writeDocument` su quei file, perché non c'è un modello
   /// da riparsare, e accetta i byte con la stessa guardia: `expected` è la
@@ -92,6 +100,30 @@ export interface DocumentSessionApi {
   ): Promise<{ readonly revision: string }>;
   saveDraft(id: string, text: string, base: string | null, vault?: string | null): Promise<void>;
   discardDraft(id: string, vault?: string | null): Promise<void>;
+  /// La sessione con la chiave `open` è uscita: l'host lascia andare ciò che
+  /// teneva sotto la chiave. Chiudere una chiave sconosciuta o già chiusa non
+  /// costa niente.
+  documentClosed(open: string, vault?: string | null): Promise<void>;
+}
+
+/// Le porte che una `DocumentSession` vede: quelle della collezione, già
+/// legate al vault e alla chiave della sessione.
+interface SessionPort {
+  readDocument(id: string): Promise<DocumentSource>;
+  writeDocument(id: string, text: string, base: WriteBase): Promise<string>;
+  saveDraft(id: string, text: string, base: string | null): Promise<void>;
+  discardDraft(id: string): Promise<void>;
+}
+
+/// Una chiave di apertura nuova: un UUID, o 32 cifre esadecimali dove
+/// `crypto.randomUUID` manca (una pagina servita in un contesto non sicuro,
+/// come il client di prova su HTTP). Tutte e due stanno nella forma che l'host
+/// accetta: da 1 a 64 fra lettere, cifre, `-` e `_`.
+function newOpenKey(): string {
+  const random = globalThis.crypto;
+  if (typeof random.randomUUID === "function") return random.randomUUID();
+  const bytes = random.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export interface DocumentSurfaceDescriptor {
@@ -239,7 +271,7 @@ export class DocumentSession implements DraftBuffer {
   #draftOutcome: DraftOutcome | undefined;
   #externalGeneration = 0;
   #activityGeneration = 0;
-  readonly #api: DocumentSessionApi;
+  readonly #api: SessionPort;
   readonly #hooks: SessionHooks;
   /// Le superfici sottoscritte, per identità di registrazione. È ownership di
   /// ciclo di vita, non un registro di famiglie: chi si toglie chiude, la
@@ -255,7 +287,7 @@ export class DocumentSession implements DraftBuffer {
     id: string,
     text: string,
     base: WriteBase,
-    api: DocumentSessionApi,
+    api: SessionPort,
     hooks: SessionHooks,
   ) {
     if (token !== OWNER_TOKEN) throw new Error("DocumentSession must be created by its owner");
@@ -1098,6 +1130,14 @@ export class DocumentSessionCollection implements DraftBufferStore {
   /// era aperto. Si fissa una volta e non cambia: la sessione scrive lì anche
   /// quando l'host ha già aperto un altro vault.
   readonly #vaults = new WeakMap<DocumentSession, string | null>();
+  /// La chiave di apertura di ciascuna sessione, accanto al suo vault: nasce
+  /// con la sessione (o con la lettura che la crea), la segue nelle rinomine
+  /// e si chiude una volta sola, in `#release`, quando la sessione esce per
+  /// sempre.
+  readonly #keys = new WeakMap<DocumentSession, string>();
+  /// Le sessioni uscite, la cui chiave è già chiusa. Una lettura o una
+  /// scrittura con la chiave che finisce dopo la richiude.
+  readonly #released = new WeakSet<DocumentSession>();
   readonly #currentVault: () => string | null;
 
   /// `currentVault` dice qual è il vault della shell adesso. Il default è la
@@ -1205,25 +1245,36 @@ export class DocumentSessionCollection implements DraftBufferStore {
     // viene aperto un altro, il testo è di prima e non deve diventare la
     // sessione di un documento omonimo del vault nuovo.
     const vault = this.#currentVault();
-    const source = await this.#api.readDocument(id, ...vaultArg(vault));
-    const current = this.#sessions.get(id);
-    if (current?.snapshot().lifecycle === "open") return current.text();
-    const renamedPendingOwner = this.#pendingDeletionOwners.get(id);
-    if (renamedPendingOwner?.isDeletionPending()) return renamedPendingOwner.text();
-    const deletion = this.#deletions.get(id);
-    if (deletion) {
-      const outcome = await deletion;
-      if (outcome.kind === "deleted") return failDeletedRead(id);
-      return this.read(id);
+    // La lettura apre già sotto la chiave della sessione che forse nascerà:
+    // se non nasce (un'altra sessione si è aperta nel frattempo, una
+    // rinomina, un vault o un'identità cambiati, una cancellazione, una
+    // lettura fallita) la chiave si chiude subito.
+    const open = newOpenKey();
+    let adopted = false;
+    try {
+      const source = await this.#api.openDocument(id, open, ...vaultArg(vault));
+      const current = this.#sessions.get(id);
+      if (current?.snapshot().lifecycle === "open") return current.text();
+      const renamedPendingOwner = this.#pendingDeletionOwners.get(id);
+      if (renamedPendingOwner?.isDeletionPending()) return renamedPendingOwner.text();
+      const deletion = this.#deletions.get(id);
+      if (deletion) {
+        const outcome = await deletion;
+        if (outcome.kind === "deleted") return failDeletedRead(id);
+        return this.read(id);
+      }
+      if (this.#renaming.has(id) || this.#identityVersion(id) !== version) return source.text;
+      if (this.#currentVault() !== vault) return source.text;
+      const session = this.#create(id, source.text, {
+        kind: "descends_from",
+        value: source.revision,
+      }, vault, open);
+      adopted = this.#keys.get(session) === open;
+      this.#describe(session, source);
+      return session.text();
+    } finally {
+      if (!adopted) this.#closeKey(open, vault);
     }
-    if (this.#renaming.has(id) || this.#identityVersion(id) !== version) return source.text;
-    if (this.#currentVault() !== vault) return source.text;
-    const session = this.#create(id, source.text, {
-      kind: "descends_from",
-      value: source.revision,
-    }, vault);
-    this.#describe(session, source);
-    return session.text();
   }
 
   async readForSurface(id: string): Promise<DocumentSurfaceSource> {
@@ -1238,7 +1289,12 @@ export class DocumentSessionCollection implements DraftBufferStore {
 
     let source: DocumentSource;
     try {
-      source = await this.#api.readDocument(id, ...vaultArg(this.#vaultFor(id)));
+      // Con una sessione si legge sotto la sua chiave; senza (la lettura non
+      // è diventata una sessione) è una lettura semplice.
+      const vault = this.#vaultFor(id);
+      source = session
+        ? await this.#underKey(session, (open) => this.#api.openDocument(id, open, ...vaultArg(vault)))
+        : await this.#api.readDocument(id, ...vaultArg(vault));
     } catch (error) {
       // Una bozza ripristinata può essere l'unica copia rimasta. Se il backend
       // non sa più descriverne la sorgente, la superficie testuale generica la
@@ -1371,6 +1427,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
       session.settlePending();
       if (session.dirty) dirty.push(id);
       session.close(true);
+      this.#release(session);
     }
     this.#sessions.clear();
     this.#pendingDeletionOwners.clear();
@@ -1458,7 +1515,12 @@ export class DocumentSessionCollection implements DraftBufferStore {
       for (const alias of aliases) {
         if (this.#deletions.get(alias) === reservation) this.#deletions.delete(alias);
       }
-      if (session) this.#forgetPendingOwner(session);
+      if (session) {
+        this.#forgetPendingOwner(session);
+        // Cancellata, o tolta da un errore che non l'ha riaperta: è uscita.
+        // Riaperta da una cancellazione fallita, tiene la sua chiave.
+        if (session.snapshot().lifecycle !== "open") this.#release(session);
+      }
     }
   }
 
@@ -1482,6 +1544,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
     session.close(true);
     if (this.#sessions.get(session.id) === session) this.#sessions.delete(session.id);
     this.#forgetPendingOwner(session);
+    this.#release(session);
     if (!dirty || own) {
       void session.discardDraftAfterClose();
       return { kind: "removed", dirty };
@@ -1633,7 +1696,42 @@ export class DocumentSessionCollection implements DraftBufferStore {
     const dirty = session.dirty;
     if (!session.close()) return { kind: "active" };
     if (this.#sessions.get(session.id) === session) this.#sessions.delete(session.id);
+    this.#release(session);
     return { kind: "closed", dirty };
+  }
+
+  /// L'unica uscita della chiave: la sessione è uscita per sempre (chiusa,
+  /// chiusa con tutte, cancellata, sparita dal disco, sostituita), e l'host
+  /// lascia andare ciò che teneva sotto la sua chiave. Una volta sola; un
+  /// errore dell'host non cambia la chiusura.
+  #release(session: DocumentSession): void {
+    if (this.#released.has(session)) return;
+    this.#released.add(session);
+    const open = this.#keys.get(session);
+    if (open !== undefined) this.#closeKey(open, this.#vaults.get(session) ?? null);
+  }
+
+  #closeKey(open: string, vault: string | null): void {
+    try {
+      void this.#api.documentClosed(open, ...vaultArg(vault)).catch(() => {});
+    } catch {
+      // Una porta che fallisce prima di promettere non cambia la chiusura.
+    }
+  }
+
+  /// Una lettura o una scrittura sotto la chiave della sessione. Se finisce
+  /// quando la sessione è già uscita, l'host può aver segnato di nuovo la
+  /// chiave appena chiusa: la si richiude, e per l'host chiudere due volte non
+  /// costa niente.
+  #underKey<T>(session: DocumentSession, call: (open: string) => Promise<T>): Promise<T> {
+    const open = this.#keys.get(session);
+    if (open === undefined) return Promise.reject(new Error(`document session ${session.id} has no open key`));
+    const pending = call(open);
+    const settled = (): void => {
+      if (this.#released.has(session)) this.#closeKey(open, this.#vaults.get(session) ?? null);
+    };
+    void pending.then(settled, settled);
+    return pending;
   }
 
   #identityVersion(id: string): number {
@@ -1684,6 +1782,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
   /// revisione del disco e il CAS si fa su quella; se il file non c'è più, lo
   /// si crea — e se nel frattempo qualcuno l'ha creato, è un conflitto.
   async #writeFormatless(
+    session: DocumentSession,
     id: string,
     text: string,
     base: WriteBase,
@@ -1692,26 +1791,36 @@ export class DocumentSessionCollection implements DraftBufferStore {
     const expected =
       base.kind === "descends_from"
         ? base.value
-        : await this.#api.readDocument(id, ...vaultArg(vault)).then((source) => source.revision, () => null);
+        : await this.#underKey(session, (open) => this.#api.openDocument(id, open, ...vaultArg(vault))).then(
+            (source) => source.revision,
+            () => null,
+          );
     const receipt = await this.#api.resourceWrite(id, new TextEncoder().encode(text), expected, ...vaultArg(vault));
     return receipt.revision;
   }
 
-  /// Crea la sessione legandola al `vault` in cui il documento è stato letto.
-  #create(id: string, text: string, base: WriteBase, vault: string | null): DocumentSession {
+  /// Crea la sessione legandola al `vault` in cui il documento è stato letto e
+  /// alla chiave `open` con cui è stato letto; senza lettura (una bozza, un
+  /// documento nuovo) la chiave nasce qui. Se c'è già una sessione aperta la
+  /// chiave non serve, e chi l'ha fatta la chiude.
+  #create(id: string, text: string, base: WriteBase, vault: string | null, open?: string): DocumentSession {
     const existing = this.#sessions.get(id);
     if (existing?.snapshot().lifecycle === "open") return existing;
-    if (existing) this.#sessions.delete(id);
+    if (existing) {
+      this.#sessions.delete(id);
+      this.#release(existing);
+    }
     // La sessione scrive dalla porta che il suo file accetta: il testo per un
     // formato, i byte per un file che nessun formato serve. La scelta è della
-    // collezione, che sa cosa ha letto; la sessione vede una porta sola.
-    const api: DocumentSessionApi = {
-      readDocument: (doc) => this.#api.readDocument(doc, ...vaultArg(vault)),
+    // collezione, che sa cosa ha letto; la sessione vede una porta sola. Ogni
+    // lettura e ogni scrittura passa la chiave della sessione.
+    const api: SessionPort = {
+      readDocument: (doc) =>
+        this.#underKey(session, (key) => this.#api.openDocument(doc, key, ...vaultArg(vault))),
       writeDocument: (doc, source, writeBase) =>
         this.#formatless.has(session)
-          ? this.#writeFormatless(doc, source, writeBase, vault)
-          : this.#api.writeDocument(doc, source, writeBase, ...vaultArg(vault)),
-      resourceWrite: (doc, bytes, expected) => this.#api.resourceWrite(doc, bytes, expected, ...vaultArg(vault)),
+          ? this.#writeFormatless(session, doc, source, writeBase, vault)
+          : this.#underKey(session, (key) => this.#api.writeDocument(doc, source, writeBase, vault, key)),
       saveDraft: (doc, source, draftBase) => this.#api.saveDraft(doc, source, draftBase, ...vaultArg(vault)),
       discardDraft: (doc) => this.#api.discardDraft(doc, ...vaultArg(vault)),
     };
@@ -1728,6 +1837,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
       },
     });
     this.#vaults.set(session, vault);
+    this.#keys.set(session, open ?? newOpenKey());
     this.#sessions.set(id, session);
     return session;
   }

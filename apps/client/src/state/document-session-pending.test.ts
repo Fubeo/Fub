@@ -61,6 +61,9 @@ function fakeHost(files: Record<string, string>) {
     discardDraft: async (id) => {
       drafts.delete(id);
     },
+    // La chiave di apertura non conta qui: aprire è leggere, chiudere niente.
+    openDocument: (id, _open, ...vault) => api.readDocument(id, ...vault),
+    documentClosed: async () => {},
   };
   const listDrafts = (): DraftInfo[] =>
     [...drafts].map(([doc, draft]) => ({
