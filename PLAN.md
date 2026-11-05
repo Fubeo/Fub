@@ -30,14 +30,15 @@ generale di un motore come scrittore del file (D-6).
 Assunzioni: A1–A17 qui sotto. A1–A15 le ha scelte il pianificatore il
 2026-11-02 di notte; l'utente ha risposto a D-1…D-13 il 2026-11-02 e le ha
 approvate, con A9 e A15 riscritte dalle risposte (D-3, D-8) e A16, A17
-nuove (D-8 (c)). D-14 è nuova e aspetta la risposta.
+nuove (D-8 (c)). D-14 ha la risposta (a) del 2026-11-03.
 Ondate: fatti T1–T5, T8, T10, T12, T25, T26; poi T6 T7 | T9 T24 T28 | T27 T11 | T13 T14 T15 | T16 T17 T18 | T19 | T29 T20 | T21 | T22 | T23 | T30
-(T26 parte con la risposta a D-14; T21–T24 solo dopo il sì dell'utente al
-prototipo di T25; T6 solo quando c'è la copia `Fubeo/vectorcraft`)
+(T21–T23 dopo il sì al prototipo di T25, arrivato il 2026-11-05; T24 anche
+dopo K2; T6 solo quando c'è la copia `Fubeo/vectorcraft`)
 Prototipo: `PLAN-ui/disegno-motore.html` (T25, fatto il 2026-11-05;
-Artifact https://claude.ai/artifact/9eQfYxTBbkBc9WzQ1eW8D4); approvato: —
-(mostrato all'utente il 2026-11-05 con D-14 e A17; l'orchestratore scrive
-qui la data del sì).
+Artifact https://claude.ai/artifact/9eQfYxTBbkBc9WzQ1eW8D4); approvato:
+2026-11-05 (l'utente: «2a: ridotto e fermo, 2b: resta, 2c: lascia così per
+ora»: i due `kind` nuovi, Testo anche senza motore (A17), le parole del
+prototipo).
 
 ## Modifiche
 
@@ -1896,7 +1897,7 @@ luci e nelle due larghezze; la prova con `sanitizeThemeCss` non scarta
 nessuna regola; le foto ci sono. Il task si chiude `[x] fatto, aspetta il
 sì dell'utente`; il sì lo scrive l'orchestratore nella riga `Prototipo:`.
 Prova: scripts/check.sh --rapido (la pagina non tocca il prodotto); la prova usa e getta di `sanitizeThemeCss`
-Stato: [x] fatto, aspetta il sì dell'utente
+Stato: [x] fatto · d91ca987 · approvato dall'utente il 2026-11-05
 
 ## T26 · Le risposte dell'utente nell'ADR e nella pagina del disegno
 

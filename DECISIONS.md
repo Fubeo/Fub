@@ -59,6 +59,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-05 · K5 · il prototipo di T25 è approvato così com'è: il chip
+  del disegno ha due `kind` nuovi, `"reduced"` (motore spento, e la build
+  senza motore: segno vuoto) e `"stopped"` (motore fermo: segno
+  `--danger`), al posto del solo `"body"` che T23 proponeva; lo strumento
+  Testo resta anche senza motore (A17); le parole restano quelle del
+  prototipo «per ora» · perché: l'utente («2a: ridotto e fermo, 2b: resta,
+  2c: lascia così per ora»); due segni distinguono lo spento voluto dal
+  guasto, e il rosso compare solo per un errore.
 - 2026-11-03 · K5 · D-14 (a): il Motore del disegno ha un interruttore suo
   in «Disegnare», acceso di serie; il repository Fubeo/vectorcraft si crea
   come fork di storytold/vectorcraft, come WordCraft e GridCraft (l'utente
