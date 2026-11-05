@@ -238,6 +238,7 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     menuPrefix: "grid.menu.",
     // Nei fogli il gruppo raccolto si apre sul posto, nella barra.
     openInPlace: true,
+    motion: true,
     tabs: RIBBON_TABS,
     mini: MINI_CONTROLS,
     chevrons: { down: "gr-chevron-down", up: "gr-chevron-up" },

@@ -24,12 +24,14 @@
 // le pelli che lo vestono restino le sue.
 import { labelButton, setPressed, type ButtonChord } from "../button";
 import { openPopover, type PopoverHandle } from "../popover";
+import { pressable } from "../press";
 import { createTabs, type TabsHandle } from "../tabs";
 import { identifier } from "../../ui/a11y";
 import { iconEl } from "../../ui/icons";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../../ui/menu";
 import { setTooltip } from "../../ui/tooltip";
+import { STILL_RIBBON, ribbonMotion, type RibbonMotion, type RibbonSection } from "./ribbon-motion";
 import {
   groupControls,
   type ButtonControl,
@@ -167,6 +169,9 @@ export interface RibbonOptions<V, K extends string, X extends ExtraControl<V, K>
   /// riquadro: gli altri gruppi si raccolgono per fargli posto, e se la fila
   /// non ci sta ancora il pannello prende `data-dense`.
   readonly openInPlace?: boolean;
+  /// La barra si muove (`ribbon-motion.ts`): le sezioni, il ritiro, i gruppi
+  /// aperti sul posto, la pressione dei pulsanti. Di serie ferma.
+  readonly motion?: boolean;
   /// Disegna un controllo di una specie che la barra non conosce.
   extra?(control: X, group: RibbonGroup<KitControl<V, K> | X, K>, parts: RibbonParts<V, K>): RibbonItem<V, KitControl<V, K> | X, K>;
 }
@@ -235,6 +240,18 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   panels.className = cls("panels");
   element.append(head, panels);
   host.append(element);
+  /// Ferma finché la barra non è montata: il primo stato non entra.
+  let motion: RibbonMotion = STILL_RIBBON;
+  /// Il pulsante cede alla pressione, se la barra si muove.
+  const yielding = (el: HTMLElement): void => {
+    if (options.motion) pressable(el, life);
+  };
+  /// Rifà la misura: con il movimento subito, perché chi anima misuri prima e
+  /// dopo nello stesso giro; senza, al prossimo fotogramma.
+  const refit = (): void => {
+    if (motion !== STILL_RIBBON) fit();
+    else scheduleFit();
+  };
 
   let states = new Map<string, RibbonCommandState>();
   const served = (id: string): boolean => states.has(id);
@@ -503,6 +520,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     };
     life.listen(el, "keydown", hold);
     life.listen(el, "keyup", hold);
+    yielding(el);
     return el;
   }
 
@@ -541,6 +559,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     arrow.setAttribute("aria-haspopup", popup);
     arrow.setAttribute("aria-expanded", "false");
     arrow.append(chevron());
+    yielding(arrow);
     return arrow;
   }
 
@@ -1011,6 +1030,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     group.relabel();
     relabels.push(group.relabel);
     life.listen(toggle, "click", () => openGroup(group));
+    yielding(toggle);
     return group;
   }
 
@@ -1063,9 +1083,11 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   function unfold(group: Group, focus: boolean): void {
     closePopover();
     closeContextMenu();
-    pin(group);
-    fit(true);
-    group.element.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    motion.fold(siblingsOf(group), group.element, () => {
+      pin(group);
+      fit(true);
+      group.element.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    });
     if (focus) focusables(group.body)[0]?.focus();
   }
 
@@ -1073,11 +1095,20 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   /// al suo primo comando se adesso il gruppo ci sta tutto.
   function refold(group: Group, focus: boolean): void {
     if (pinned !== group) return;
-    pin(null);
-    fit(focus);
+    motion.fold(siblingsOf(group), null, () => {
+      pin(null);
+      fit(focus);
+    });
     if (!focus) return;
     const target = group.collapsed ? group.toggle : focusables(group.element)[0];
     target?.focus();
+  }
+
+  /// I gruppi in vista della scheda di `group`, lui compreso: scivolano
+  /// insieme quando uno si apre o si richiude.
+  function siblingsOf(group: Group): HTMLElement[] {
+    const tab = tabs.find((each) => each.groups.includes(group));
+    return (tab?.groups ?? [group]).filter((each) => !each.element.hidden).map((each) => each.element);
   }
 
   /// L'ultimo raccolto di una fila dispari di raccolti, nell'ordine della
@@ -1149,6 +1180,8 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
       (control) =>
         !(control as HTMLButtonElement).disabled &&
         !hiddenWithin(control, container) &&
+        // L'immagine di un foglietto che esce non è un posto del Tab.
+        control.closest("[inert]") === null &&
         control.closest(`[data-collapsed="true"] > .${cls("group-body")}`) === null,
     );
   }
@@ -1215,6 +1248,13 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   function mountTabs(visible: readonly Tab[], force: boolean): void {
     const signature = visible.map((tab) => tab.spec.id).join(" ");
     if (signature === shownTabs && !force) return;
+    const before = shownTabs === "" ? null : new Set(shownTabs.split(" "));
+    // Una sezione che scompare mentre stava ancora comparendo svanisce da
+    // dov'era (la sua immagine si misura prima che la scheda se ne vada).
+    const gone = before && tabsHandle
+      ? [...before].filter((id) => !visible.some((tab) => tab.spec.id === id)).flatMap((id) => tabsHandle?.tab(id) ?? [])
+      : [];
+    const vanish = motion.leave(gone);
     shownTabs = signature;
     tabsLife?.close();
     const local = openLifetime();
@@ -1232,9 +1272,11 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
       label: strings.label(),
       lifetime: local,
       onSelect: (id) => {
+        const from = selected;
         if (id !== selected) pin(null);
         selected = id;
-        scheduleFit();
+        refit();
+        sectionChanged(from, id);
       },
     });
     for (const tab of visible) {
@@ -1242,7 +1284,11 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
       if (!button) continue;
       button.dataset.keytip = tab.spec.keytip;
       if (tab.spec.contextual) button.classList.add(cls("contextual"));
+      // Una sezione che compare dopo il primo montaggio (la tabella, per la
+      // selezione) entra; al primo montaggio c'era già.
+      if (before && !before.has(tab.spec.id)) motion.appear([button]);
     }
+    vanish();
     // Una scheda scelta mentre la barra è ritirata si apre finché non si
     // torna all'editor; due click la ritirano o la riaprono, come in Office.
     local.listen(tablist, "click", (event) => {
@@ -1260,20 +1306,39 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     if (!tabsHandle) return;
     tabsHandle.select(id);
     const now = tabsHandle.selected() ?? selected;
+    const from = selected;
     if (now !== selected) pin(null);
     selected = now;
-    scheduleFit();
+    refit();
+    sectionChanged(from, now);
+  }
+
+  /// I gruppi della sezione `to` entrano dal verso in cui sta rispetto a
+  /// `from`; nel vassoio ritirato non c'è niente da vedere.
+  function sectionChanged(from: string, to: string): void {
+    if (from === to || panels.hidden) return;
+    const order = shownTabs.split(" ");
+    const section = (id: string): RibbonSection | null => {
+      const tab = tabs.find((each) => each.spec.id === id);
+      return tab ? { panel: tab.panel, groups: tab.groups.map((group) => group.element) } : null;
+    };
+    const next = section(to);
+    if (!next) return;
+    motion.section(next, section(from), order.indexOf(to) >= order.indexOf(from) ? 1 : -1);
   }
 
   /// La barra ritirata mostra una scheda per un gesto: un comando, un clic o
   /// il fuoco fuori dalla barra la ritirano di nuovo.
   let peeking = false;
   function peek(on: boolean): void {
-    peeking = on && collapsed;
-    if (peeking) element.dataset.peek = "true";
-    else delete element.dataset.peek;
-    panels.hidden = collapsed && !peeking;
-    if (peeking) scheduleFit();
+    const next = on && collapsed;
+    motion.tray(!collapsed || next, () => {
+      peeking = next;
+      if (peeking) element.dataset.peek = "true";
+      else delete element.dataset.peek;
+      panels.hidden = collapsed && !peeking;
+      if (peeking) refit();
+    });
   }
   function endPeek(): void {
     if (peeking) peek(false);
@@ -1286,20 +1351,23 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   });
 
   function setCollapsed(on: boolean): void {
-    collapsed = on;
-    peeking = false;
-    delete element.dataset.peek;
-    element.dataset.collapsed = String(on);
-    panels.hidden = on;
-    toggle.setAttribute("aria-expanded", String(!on));
-    labelButton(toggle, on ? strings.expand() : strings.collapse());
-    toggle.replaceChildren(iconEl(on ? options.chevrons.down : options.chevrons.up) ?? "");
-    if (on) {
-      closePopover();
-      pin(null);
-    } else scheduleFit();
+    motion.tray(!on, () => {
+      collapsed = on;
+      peeking = false;
+      delete element.dataset.peek;
+      element.dataset.collapsed = String(on);
+      panels.hidden = on;
+      toggle.setAttribute("aria-expanded", String(!on));
+      labelButton(toggle, on ? strings.expand() : strings.collapse());
+      toggle.replaceChildren(iconEl(on ? options.chevrons.down : options.chevrons.up) ?? "");
+      if (on) {
+        closePopover();
+        pin(null);
+      } else refit();
+    });
   }
   life.listen(toggle, "click", () => setCollapsed(!collapsed));
+  yielding(toggle);
   life.listen(toggle, "mousedown", (event) => event.preventDefault());
 
   // ── Quando la barra è stretta ─────────────────────────────────────────
@@ -1452,6 +1520,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
       local.add(() => badge.remove());
       return badge;
     });
+    motion.tips(badges, local);
     const narrow = () => {
       tips.forEach((tip, at) => {
         badges[at]!.hidden = !tip.keytip.startsWith(typed);
@@ -1596,6 +1665,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
 
   relabel();
   setCollapsed(false);
+  if (options.motion) motion = ribbonMotion({ element, panels, host }, life);
   life.add(
     options.languages(() => {
       relabel();

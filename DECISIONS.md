@@ -59,6 +59,18 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-05 · k3-motori · T19, ciò che cambia forma o se ne va mentre era
+  ancora in corsa (un foglietto che si richiude a metà apertura, i foglietti
+  di una sezione lasciata a metà entrata, la scheda della tabella che
+  scompare mentre compariva) lascia un'immagine (`moto/prepareExit`) che
+  svanisce da dove si vedeva; chi tiene la forma prosegue dalla sua posa ·
+  perché: con solo `transform` e `opacity` un riquadro che cambia misura non
+  può proseguire, e la regola 4 del banco vuole che niente salti. Il banco
+  dice ora com'era e com'è il riquadro che salta (`was`, `is`). Provato e
+  tolto: misurare soltanto la parte visibile dei riquadri, che faceva saltare
+  concentration e rich-reading senza aiutare il ritiro. Aperto: nel ritiro a
+  metà riapertura la griglia cambia altezza (92 px) e il suo bordo di sotto
+  non può proseguire; la scelta è dell'utente.
 - 2026-11-04 · k3-motori · T18, al telefono i bottoni della barra dei fogli
   restano a 44 px, la regola della shell mobile, e non 38/88 come nel
   prototipo; la risposta dell'utente: «i tasti ok a 44px» · perché: la

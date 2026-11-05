@@ -7523,6 +7523,14 @@ kbd,
 .grid-viewport {
   background: var(--sheet);
 }
+/* Gli avvisi tengono il loro velo, ma sopra il fondo del foglio: anche loro
+   coprono il vassoio. */
+.grid-notice {
+  background: linear-gradient(var(--info-wash), var(--info-wash)), var(--sheet);
+}
+.grid-draft-notice {
+  background: linear-gradient(var(--warning-wash), var(--warning-wash)), var(--sheet);
+}
 /* Il pozzetto delle sezioni è quello di `.segmented` (`skin/controls.css`):
    un velo appena, il raggio di un controllo, i segmenti col raggio di una
    pastiglia; la scelta ha il velo d'accento, che scorre. */

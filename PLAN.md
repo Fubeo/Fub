@@ -1664,7 +1664,7 @@ loro niente cambia; `kit/ribbon/ribbon-motion.test.ts` prova che con
 lo smontaggio non lascia niente; `check-listeners` e `npm run typecheck`
 verdi.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · bench:motion 43/44: rosso solo fogli-ritiro, regola 4 (la griglia, riaperta e ritirata a metà, cambia altezza di 92 px e il bordo di sotto salta: con solo `transform` e `opacity` non si può), scelta chiesta all'utente · check --rapido verde tranne scene.test «ci sono tutte» (T17) e tre test a tempo (grid/engine, annotations.e2e, theme/runtime), verdi da soli
 
 Dopo K3, non in K3: lo stesso stile e lo stesso movimento passano alla barra
 dei documenti, a quella delle tabelle e alle altre modalità, spostando le

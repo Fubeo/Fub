@@ -221,7 +221,9 @@ Il banco del moto (`npm run bench:motion`) misura le coreografie dello
 Scrittoio nel browser: lo stato d'arrivo coincide con quello a moto ridotto,
 non resta nessuna animazione viva, i fotogrammi chiave toccano soltanto
 `transform` e `opacity`, un gesto invertito a metà torna allo stato di
-partenza, e un'uscita (un lanciatore, un cassetto, un dialogo che si chiude)
+partenza senza salti (ogni riquadro in corsa prosegue da dov'era, lui o la
+sua immagine che esce, e il referto dice com'era e com'è il riquadro che
+salta), e un'uscita (un lanciatore, un cassetto, un dialogo che si chiude)
 finisce entro 140 ms. Ogni file della shell e del kit che fa partire una corsa
 ha la sua coreografia. Anche il budget d'interazione (`npm run bench:interaction`) apre
 la pagina col movimento acceso e l'ora vera: misura in quanti millisecondi un

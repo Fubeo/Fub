@@ -2196,6 +2196,10 @@ body {
 .grid-formula-bar,
 .grid-sheets { position: relative; z-index: 2; }
 .grid-viewport { z-index: 1; }
+/* Gli avvisi fra la barra e la formula salgono e scendono con lei, sullo
+   stesso piano. */
+.grid-notice,
+.grid-draft-notice { position: relative; z-index: 2; }
 
 /* Il foglietto chiuso non ha il nome sopra e un pulsante vuoto sotto: il
    pulsante è il foglietto, e il nome ci sta dentro. Come sta dentro lo dicono

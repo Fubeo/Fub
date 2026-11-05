@@ -236,6 +236,17 @@ pulsante, un secondo Esc torna alla griglia, e una scheda cambiata o una
 larghezza che basta a tutti lo richiudono. Il testo della barra è in un
 catalogo suo (`strings.ts`), in italiano e in inglese.
 
+Nei fogli la barra si muove (l'opzione `motion` del kit, che soltanto la
+griglia accende; il padrone è `kit/ribbon/ribbon-motion.ts`, con `moto/`):
+i foglietti di una sezione nuova entrano uno dopo l'altro dal suo verso,
+Ctrl+F1 ritira il vassoio, che svanisce mentre la formula e la griglia gli
+salgono sopra come una tenda (e ridiscendono riaprendolo), il foglietto che
+si apre sul posto si alza di un gradino e gli altri scivolano, e la scheda
+della tabella compare e svanisce con la selezione. Un gesto nuovo a metà
+corsa riparte da posa e velocità correnti; ciò che cambia forma o se ne va
+mentre era ancora in corsa lascia un'immagine che svanisce da dove si
+vedeva. Con «ridotto» resta soltanto la dissolvenza del vassoio che torna.
+
 Il primo pulsante della fila dell'accesso rapido, prima delle schede, è
 «Comandi» (`editors/grid/menu-comandi.ts`): un gettone pieno, con
 `aria-haspopup="menu"` e `aria-expanded`, che clic, Invio, Spazio, ↓ o Alt e
@@ -419,6 +430,7 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 - `apps/client/src/editors/grid/comment-card.ts`
 - `apps/client/src/editors/grid/ribbon/ribbon.ts`
 - `apps/client/src/kit/ribbon/ribbon.ts`
+- `apps/client/src/kit/ribbon/ribbon-motion.ts`
 - `apps/client/src/editors/grid/ribbon/tabs.ts`
 - `apps/client/src/editors/grid/menu-comandi.ts`
 - `apps/client/src/editors/grid/dialogs/host.ts`
