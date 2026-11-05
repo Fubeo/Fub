@@ -61,6 +61,51 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-05 · fub-pre-alpha (skin facile) · la richiesta del manutentore
+  («se non è facile creare una skin non andiamo da nessuna parte») entra nel
+  piano come PA T34–T42 e «Fatto quando» 9, con tre domande (D15 il nome del
+  campo, D16 le icone, D17 l'aspetto dei due temi) · è una scelta di
+  prodotto già presa dal manutentore; il pianificatore ha deciso solo il
+  come, qui sotto.
+- 2026-11-05 · fub-pre-alpha (skin facile) · l'ordine: la pelle che eredita
+  e i caratteri in Fase A (T34, T35, T39, T40); gli strumenti dell'autore in
+  Fase B dopo le Impostazioni di S2 (T36–T38); gli hook congelati per
+  ultimi, dopo tutta la Fase C (T41); i temi d'esempio dopo il congelamento
+  (T42) · si congela solo ciò che la pre-alpha mostra, quando non cambia
+  più; i temi d'esempio provano lo snapshot, non un contratto che si muove.
+- 2026-11-05 · fub-pre-alpha (skin facile) · i canali del loader diventano
+  `caratteri`, `caratteri-tema`, `foglio`, `pelle`, `pelle-tema`,
+  `preferenze`, `snippets`; senza `extends` tutto resta come oggi, byte per
+  byte · un canale separato, e non una fusione dei testi, tiene le
+  preferenze dell'utente sopra ogni pelle e lascia smontare il tema senza
+  toccare la serie.
+- 2026-11-05 · fub-pre-alpha (skin facile) · `extends` accetta solo
+  `fub.serie`; ereditare da un altro tema è fuori · una catena di temi
+  vorrebbe un ordine, i cicli e le versioni; nessun caso lo chiede adesso.
+- 2026-11-05 · fub-pre-alpha (skin facile) · una «Modalità sviluppatore»
+  (`developer.mode`, gruppo «Sviluppo», livello macchina, spenta) apre
+  installare e collegare da cartella; la regola sta nell'host, non solo nel
+  bottone; un tema collegato alla volta, con fiducia «In sviluppo» · è la
+  stessa idea dei temi in sviluppo che `TRUST_LABELS` sa già dire, e un
+  programma non può accenderla da sé.
+- 2026-11-05 · fub-pre-alpha (skin facile) · i caratteri del tema: le regole
+  `@font-face` le scrive il loader dai campi del manifest (woff2 fra gli
+  asset, firma `wOF2`, 8 file, 2 MiB l'uno, 6 MiB in tutto); `@font-face`
+  resta vietato nel CSS · un `src:` scritto a mano potrebbe chiamare la
+  rete; la CSP non cambia (ha già `font-src data:`).
+- 2026-11-05 · fub-pre-alpha (skin facile) · le icone del tema (se D16 è A o
+  C) passano `PATH_DATA` come il registro di oggi; un nome che nessuno
+  disegna è un avviso nella diagnosi, non un rifiuto · i moduli registrano
+  le loro icone quando si caricano, quindi al montaggio del tema non tutti i
+  nomi ci sono ancora.
+- 2026-11-05 · fub-pre-alpha (skin facile) · al ricaricamento di un tema
+  collegato, un fascio rifiutato lascia montato l'ultimo buono (non la
+  serie) e mostra la diagnosi con l'ora · chi scrive il tema salva spesso
+  file a metà; cadere sulla serie a ogni errore farebbe lampeggiare l'app.
+- 2026-11-05 · fub-pre-alpha (skin facile) · il codice vince sulla
+  richiesta: `contract.json` è cambiato in 12 commit (non 11); `install_theme`
+  c'è già nell'host senza IPC; la fiducia `development` c'è già · scritto in
+  «Differenze fra piani e codice», 28–36.
 - 2026-11-05 · fub-pre-alpha (secondo giro) · un coder alla volta, più al
   massimo un pianificatore, anche in questo file (prima diceva «al massimo
   tre») · è la regola dell'utente dal 2026-11-04; le «ondate» del piano sono

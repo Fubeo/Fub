@@ -17,12 +17,13 @@ al pixel, da copiare.
 Fuori scope: K6 (disegno completo); K4, K7, K8, K9, K10; PdfCraft P1–P5,
 e con loro N6 T79–T85; N6 T88 (CSV, D-20); N5, N9, N10; l'app del
 telefono e del tablet (l'APK resta di prova); la lavagna v2 e v3; A1
-F2–F6; #9; gli installer firmati. Ognuno ha il suo posto in «Dentro e
-fuori».
+F2–F6; #9; gli installer firmati; i layout alternativi della shell e
+`backdrop-filter` nei temi. Ognuno ha il suo posto in «Dentro e fuori».
 Assunzioni: 
 - Questo è un piano ombrello. I task degli altri piani restano nei loro
-  `PLAN.md` e sui loro rami. Qui stanno l'ordine, i cancelli e 33 task
-  nuovi («PA T1»–«PA T33»), che tengono tutto insieme.
+  `PLAN.md` e sui loro rami. Qui stanno l'ordine, i cancelli e 42 task
+  nuovi («PA T1»–«PA T42»), che tengono tutto insieme. PA T34–T42 sono la
+  skin facile, chiesta dal manutentore il 2026-11-05.
 - Lavora un coder alla volta, più al massimo un pianificatore: è la regola
   dell'utente dal 2026-11-04, e cambia solo se la cambia l'utente. Le «ondate»
   qui sotto sono quindi file, una dopo l'altra.
@@ -31,12 +32,13 @@ Assunzioni:
 - Gli stati detti «fatti» sono verificati su `origin` il 2026-11-05 (vedi
   «Differenze fra piani e codice»).
 Ondate: Fase A: K3 T17 (il sì dell'utente) e #295 | K2 (#290, come dice
-D13) | PA T3 T13 | T4 T5 | T6 T7 | T1 T8 T19 T25 T32 T33 · Fase B: Scrittoio 2
-T3–T27 (le sue ondate), con PA T2, T20 e T21 · Fase C: griglia, K5, N4, N6,
-lavagna in codice e A1 (le loro ondate, nell'ordine di «L'ordine»), con
-PA T12 · Fase D: PA T14 T18 | T26 T27 T28 T29 T30 | T15 T17 T22 T31 |
+D13) | PA T3 T13 | T4 T5 | T6 T7 | T1 T8 T19 T25 T32 T33 | T34 T35 |
+T39 T40 · Fase B: Scrittoio 2 T3–T27 (le sue ondate), con PA T2, T20 e
+T21, e PA T36 T37 T38 dopo S2 T10 · Fase C: griglia, K5, N4, N6, lavagna
+in codice e A1 (le loro ondate, nell'ordine di «L'ordine»), con PA T12 ·
+Fase D: PA T41 | T42 | T14 T18 | T26 T27 T28 T29 T30 | T15 T17 T22 T31 |
 T16 T23 | T24. PA T9, T10 e T11 partono solo con la risposta alla loro
-domanda.
+domanda; PA T34 con D15, PA T40 con D16, PA T42 con D17.
 Prototipo: `PLAN-ui/fub-pre-alpha/simulatore.html`, il simulatore di tutta
 la pre-alpha (artifact «Fub pre-alpha»,
 https://claude.ai/artifact/RCUxmuv2dCqbwDRagbKHcK, parte 1). È costruito dai
@@ -82,6 +84,12 @@ Confermata dall'utente il 2026-11-05.
    prova di K2 con una persona si fa dove dice D13.
 8. `docs/project/status.md` è aggiornato, c'è la pagina «Prova la
    pre-alpha», e `fub:abi@0.2.0` è congelata (#289; PA T6, T7, T18).
+9. Una skin vera si fa facile. Un tema dichiara `extends: "fub.serie"` e
+   porta solo ciò che cambia; si installa da una cartella e si ricarica al
+   salvataggio, con la diagnosi leggibile; porta i suoi caratteri (e le sue
+   icone, se D16 è A). Due temi d'esempio passano i cancelli e sono
+   guardati nelle due luci, in contrasto alto, stretti e al telefono. Gli
+   hook sono congelati e un test lo tiene (PA T34–T42).
 
 ### Fuori scope, e dove va
 
@@ -107,6 +115,8 @@ Confermata dall'utente il 2026-11-05.
 | #237 R05–R08 e A03 | Sono UX, non perdono dati | #237 |
 | #253, #254 · upstream dei motori | Le proposte le fa l'utente (decisione 9) | #253, #254 |
 | #282 · archiviare FubDraw | È un gesto dell'utente su GitHub | #282 |
+| Layout alternativi (le regioni della finestra spostate) | Sono una variante della shell, non una pelle | piano futuro delle varianti della shell |
+| `backdrop-filter` nei temi | Blocca WebKitGTK senza composizione | resta vietato (`NEVER_PROPERTIES` del sanificatore) |
 
 ## Dentro e fuori
 
@@ -157,6 +167,7 @@ codice, nei rami e nelle issue il 2026-11-05.
 | #283 · S7 su una GPU | Aperta | dentro | Il portatile Windows dell'utente ha una GPU | PA T16 |
 | #281 · i Blocchi con cinque persone | Aperta | dentro | Fatto quando 7 | PA T17 |
 | P00–P18 (#76–#93) | Vecchia mappa | fuori | Superata da N e K | le loro issue |
+| Richiesta del manutentore: la skin facile (2026-11-05) | Verificato in `main` (638358da): la pelle di un tema è tutto o niente; `install_theme` c'è ma senza IPC; la fiducia `development` («In sviluppo») c'è già; nessuna modalità sviluppatore; il contratto `theme-2` non è congelato (12 commit dal 29 ottobre al 4 novembre); le icone passano da un registro solo | dentro: sei passi | Fatto quando 9 | PA T34–T42, D15–D17 |
 
 ### Le nove decisioni di «Prossime fasi»
 
@@ -236,11 +247,14 @@ dell'utente dal 2026-11-04; cambia solo se la cambia l'utente, `DECISIONS.md`).
 due, M mezza giornata, L due o tre giorni, XL di più.
 
 **Quanto ci vuole, a occhio.** Restano circa 207 task negli altri piani
-(circa 79 solo in N6) e circa 30 task di questo piano: circa 237 in tutto.
-Con un coder alla volta e circa 2 ore per task, revisione e CI comprese,
-fanno circa 475 ore di lavoro. A circa 14 ore al giorno (l'orchestratore
-lavora anche di notte con `/orchestra-auto`) sono circa 34 giorni, cioè 5
-settimane piene. Con le attese dell'utente (i prototipi da approvare, i sì
+(circa 79 solo in N6) e circa 39 task di questo piano (PA T9, T10, T11 e
+T40 dipendono da una risposta): circa 246 in tutto. Con un coder alla
+volta e circa 2 ore per task, revisione e CI comprese, fanno circa 490 ore
+di lavoro; i nove task della skin facile sono quasi tutti M e ne
+aggiungono una ventina, quindi circa 510 ore. A circa 14 ore al giorno
+(l'orchestratore lavora anche di notte con `/orchestra-auto`) sono circa
+37 giorni, poco più di 5 settimane piene. Con le attese dell'utente (i
+prototipi da approvare, i sì
 ai merge, le risposte alle domande, la misura su Windows, la prova con le
 persone, gli installer) diventano **7–9 settimane**. N6 da sola sono circa
 160 ore, cioè 2–3 settimane con l'approvazione dei suoi prototipi.
@@ -268,6 +282,10 @@ Se una di queste cade, la stima si allunga.
 | PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | da fare | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
 | PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | da fare | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
 | PA T33 · il nome FubDraw dove le persone lo vedono | PA | da fare | la risposta a D14 | basso | M | test dei descrittori, di `fub-scene` e del catalogo |
+| PA T34 · il manifest dice da quale tema parte | PA | da fare | la risposta a D15 | medio: la forma del manifest sul filo | M | `crates/fub-host/tests/themes.rs`, mirror |
+| PA T35 · la pelle del tema sopra quella di serie | PA | da fare | T34 | medio: tocca il montaggio di ogni tema | M | `theme/inherit.test.ts`, `gate.test.ts` |
+| PA T39 · i caratteri del tema | PA | da fare | T34, T35 | basso | M | test dell'host e del loader |
+| PA T40 · le icone del tema | PA | solo se D16 è A o C | T34, T35, D16; mai nella stessa ondata di S2 T14 | basso | M | Vitest di `ui/icons` e di `theme/` |
 
 ### Fase B · la cornice
 
@@ -277,6 +295,9 @@ Se una di queste cade, la stima si allunga.
 | PA T2 · N4 e K5 allineati a `main` | PA | da fare | #295 in `main` | basso | S | `tsc --noEmit` pulito sui due rami |
 | PA T11 · il vassoio delle barre | PA | solo se D6 non è A | S2 T20 | basso | S | foto del banco |
 | PA T20, T21 · i test instabili del client e del banco | PA | da fare | nessuno | medio | M + M | 50 giri verdi o causa trovata |
+| PA T36 · installare da cartella, e la diagnosi | PA | da fare | T34; S2 T10 | medio: un'IPC nuova che scrive nella configurazione | M | test di `fub-host`, Vitest delle Impostazioni |
+| PA T37 · collegare una cartella, il tema cambia al salvataggio | PA | da fare | T36 | medio: un osservatore nuovo | M | test di `fub-host` con l'evento, Vitest |
+| PA T38 · la pagina «Tutti i componenti» | PA | da fare | T35, T36; S2 T10 | basso | M | foto del banco uguali, bundle iniziale uguale |
 
 ### Fase C · gli editor
 
@@ -294,11 +315,13 @@ Se una di queste cade, la stima si allunga.
 
 | Passo | Fonte | Stato | Dipende da | Rischio | Taglia | Prova di chiusura |
 |---|---|---|---|---|---|---|
+| PA T41 · gli hook congelati | PA | da fare | Fase C in `main`; T34–T40 | basso per il codice, alto se si sbaglia il momento | S | `contract-frozen.test.ts` |
+| PA T42 · due temi d'esempio | PA | da fare | T41; la risposta a D17 | basso | M | `examples.test.ts`, scene del banco |
 | PA T14 · il giro nel banco: lo scheletro e il primo avvio | PA | da fare | Fase B in `main` | medio | M | `npm run bench:giro` verde sui compiti 1–5 |
 | PA T26 · il giro: le note | PA | da fare | T14 | basso | M | compiti 6–11 verdi |
 | PA T27 · il giro: Word, Excel, SVG e PDF | PA | da fare | T14; griglia e K5 in `main` | medio | M | compiti 12–15 verdi |
 | PA T28 · il giro: la lavagna e la penna | PA | da fare | T14; N4 e N6 in `main` | medio | M | compiti 16–17 verdi |
-| PA T29 · il giro: ricette, componenti e aspetto | PA | da fare | T14; A1 e K2 in `main` | basso | M | compiti 18–20 verdi |
+| PA T29 · il giro: ricette, componenti e aspetto | PA | da fare | T14; A1 e K2 in `main`; PA T36 e T42 in `main` | basso | M | compiti 18–20 verdi |
 | PA T30 · il giro: conflitto, sola lettura, cestino, tastiera e guasti | PA | da fare | T14; PA T4 e T5 | medio | M | compiti 21–27 verdi |
 | PA T15 · il simulatore accanto all'app | PA | da fare | Fase C; T14 e T26–T30 (le loro scene danno le foto) | basso | S | il foglio di contatto rivisto dall'utente |
 | PA T16 · le misure della WebView | PA | da fare | Fase C; la misura di Windows usa l'MSI della prova di T22 | medio: Windows lo misura l'utente | M | la pagina delle misure |
@@ -449,6 +472,82 @@ Verificato su `origin/main` 638358da e sui rami dei piani, il 2026-11-05.
 - **Su disco.** Una ricetta è una nota Markdown con un blocco `fub-recipe`.
   Le ricette adottate stanno in un registro con l'impronta (T8, T9).
 
+### I temi e la skin facile (PA T34–T42)
+
+La richiesta del manutentore, 2026-11-05: «è importante la
+personalizzazione in FUB e se non è facile creare una skin non andiamo da
+nessuna parte». Verificato su `main` (638358da).
+
+- **Chi è il padrone.**
+  - Il manifest: `ThemeManifest` in `crates/fub-abi/src/theme.rs`. Il tema
+    non è nella WIT (il `theme-colors` della WIT sono i colori di una
+    cartella xlsx, un'altra cosa).
+  - Trovare, leggere, installare e togliere: `crates/fub-host/src/theme.rs`
+    (`discover_themes`, `read_theme`, `install_theme`,
+    `install_theme_checked`, `update_theme`, `uninstall_theme`;
+    `ThemeError` con le varianti `Malformed`, `Permissions`, `InvalidId`,
+    `Traversal`, `AlreadyInstalled`, `Io` ed `Engine`).
+  - Montare: `apps/client/src/theme/loader.ts` (i canali, i cancelli,
+    `mountThemeBundle`) e `theme.ts` (`apply`, la preview, il ritorno alla
+    serie).
+  - Il vocabolario: `ui/sanitize-css.ts` e
+    `apps/client/theme/author/contract.json` (generato).
+- **Che cosa c'è.**
+  - Due IPC, `list_themes` e `read_theme`, più il catalogo firmato
+    (`catalog_install_theme` e gli aggiornamenti).
+  - La fiducia: `core` per la serie, `community` per gli altri;
+    `ui/permissions.ts` sa già dire anche «In sviluppo» (`development`).
+  - I canali del loader: `caratteri`, `foglio`, `pelle`, `preferenze`,
+    `snippets`. `replaceTheme` toglie il foglio e la pelle di prima e mette
+    quelli nuovi.
+  - Il contratto `theme-2`: 1.501 hook, 217 componenti, 154 ruoli
+    obbligatori e 63 facoltativi, 91 coppie di contrasto e 54 facoltative,
+    186 token di preferenza, 7 stati.
+  - Il kit autore: `sample/` è una copia intera della serie (`skin.css` di
+    18.222 righe).
+  - Le icone: un registro solo, `ui/icons.ts` (43 nella mappa di serie, gli
+    alias, e `registerIcon` per i moduli, che ne disegnano qualche
+    centinaio), che accetta solo tracciati (`PATH_DATA`).
+  - I cataloghi del banco: `bench/catalog.ts`, `samples.ts`, `kit.ts`.
+  - La CSP ha già `font-src 'self' asset: data:`, e gli asset del tema
+    diventano già URL `data:`.
+- **Che cosa manca.**
+  - Un tema che eredita: oggi la sua pelle sostituisce tutta quella di serie,
+    e senza `skin.css` i componenti restano con la sola struttura.
+  - Installare da una cartella dall'app, ricaricare al salvataggio, una
+    diagnosi leggibile, una pagina di tutti i componenti dentro l'app.
+  - I caratteri del tema (`@font-face` è vietato nel CSS) e le icone del
+    tema.
+  - Un contratto fermo: `contract.json` è cambiato in 12 commit dal 29
+    ottobre al 4 novembre, e nessuna guardia ferma un hook tolto.
+- **Come si fa, in quest'ordine.**
+  1. La pelle che eredita: `extends` nel manifest (T34) e il canale
+     `pelle-tema` (T35). Fase A.
+  2. Gli strumenti dell'autore, in una sezione nuova «Sviluppo» delle
+     Impostazioni (la chiave `developer.mode`): installare da cartella e la
+     diagnosi (T36), collegare una cartella e ricaricare (T37), «Tutti i
+     componenti» (T38). Fase B, dopo le Impostazioni nuove di S2 (T10).
+  3. I caratteri del tema (T39). Fase A.
+  4. Le icone del tema, se D16 è A o C (T40). Fase A.
+  5. Gli hook congelati, per ultimi, quando la Fase C è in `main` (T41).
+  6. Due temi d'esempio, la prova d'uscita (T42).
+- **I canali, dopo.** `caratteri`, `caratteri-tema`, `foglio`, `pelle`,
+  `pelle-tema`, `preferenze`, `snippets`. Le preferenze dell'utente restano
+  dopo ogni pelle. Senza `extends` si monta tutto come oggi, byte per byte.
+- **La sicurezza non cambia.**
+  - Lo stesso sanificatore per la pelle del tema, con lo stesso
+    vocabolario. `@font-face` resta vietato nel CSS: le regole le scrive il
+    loader dai campi del manifest. `backdrop-filter` resta vietato.
+  - Niente rete: caratteri e icone sono asset del tema, validati dall'host
+    (la firma `wOF2`, `PATH_DATA`) e messi come URL `data:`. La CSP non
+    cambia.
+  - Nessuna capacità nuova per i temi.
+  - Installare e collegare da cartella solo in modalità sviluppatore, e la
+    regola sta nell'host.
+- **Fuori.** I layout alternativi (le regioni della finestra spostate: una
+  variante della shell, non una pelle); `backdrop-filter`; ereditare da un
+  tema che non sia la serie.
+
 ### I contratti: IPC, WIT, su disco, MCP
 
 - **WIT.**
@@ -464,7 +563,10 @@ Verificato su `origin/main` 638358da e sui rami dei piani, il 2026-11-05.
   - K3: tre comandi;
   - K5: i comandi `drawing_*`;
   - A1: quattro comandi;
-  - N6 T31: un campo facoltativo.
+  - N6 T31: un campo facoltativo;
+  - la skin facile: `install_theme_from_folder`, `link_theme_folder`,
+    `unlink_theme_folder` e l'evento `fub://theme-changed` (PA T36, T37);
+    `ThemePayload.sheet` diventa facoltativo (PA T34).
 
   Ognuno porta `contract.ts`, il mirror e la fixture (`UPDATE_MIRROR=1`),
   `fake.ts`, `ipc_permissions` e `lean_ipc`, nel task del suo piano.
@@ -473,7 +575,14 @@ Verificato su `origin/main` 638358da e sui rami dei piani, il 2026-11-05.
   - le chiavi `components.*`;
   - le note delle ricette;
   - docx, xlsx e svg li scrivono i motori. Il loro formato non cambia, e il
-    corpus di PA T13 lo prova.
+    corpus di PA T13 lo prova;
+  - il manifest dei temi prende tre campi facoltativi, `extends`, `fonts` e
+    `icons` (additivi: un manifest senza resta uguale byte per byte), e le
+    impostazioni le chiavi `developer.mode` e `developer.theme-folder` (PA
+    T34, T36, T37, T39, T40).
+- **Il contratto dei temi.** Non è nella WIT. `theme-2` si congela con PA
+  T41 (`apps/client/theme/author/frozen/theme-2.json`); da lì un nome tolto
+  chiede un motore nuovo, `theme-3` (ADR 0206).
 - **MCP (N2, in `main`).** `crates/fub-cli/src/mcp.rs`, con
   `mcp/access.rs` e `mcp/tools.rs`; la pagina è
   `docs/reference/mcp-server.md`, la ragione l'ADR 0232. Un server stdio
@@ -996,6 +1105,85 @@ stato `fubdraw` e `fubdraw://live` restano.
   - Qualità: a metà: il nome sparisce dalla lista dei formati ma resta
     negli avvisi.
 
+### D15 · Il nome del campo che dice da quale tema si parte
+
+Il manifest di un tema prende un campo nuovo che dice «parto dalla serie e
+porto solo ciò che cambia» (PA T34). Il nome resta per sempre: lo
+scriveranno tutti i temi. Le altre chiavi del manifest sono in inglese
+(`id`, `name`, `version`, `engine`, `lights`, `asset_namespace`, `motion`,
+`settings`).
+
+- **A (consigliata).** `extends`, come `"extends": "fub.serie"`.
+  - Tempo: niente in più.
+  - Qualità: chi ha scritto un `tsconfig.json`, una configurazione di
+    ESLint o di Stylelint lo riconosce subito; è inglese come il resto del
+    manifest.
+  - Contro: fa pensare a un'eredità a catena, che qui non c'è (solo la
+    serie, per ora).
+- **B.** `base`.
+  - Tempo: niente in più.
+  - Qualità: corto, ma generico: base di che cosa? Si confonde facilmente
+    coi colori di base di un foglio.
+- **C.** `eredita`.
+  - Tempo: niente in più.
+  - Qualità: chiaro per chi legge l'italiano, ma sarebbe l'unica chiave
+    italiana del manifest, e i temi li scrivono anche persone che non lo
+    leggono.
+
+### D16 · Le icone del tema
+
+Le icone passano tutte da un registro solo (`ui/icons.ts`): 43 nella mappa
+di serie, e qualche centinaio registrate dai moduli (il nastro del foglio,
+il documento, il disegno, la barra del formato, Scrittoio). Un tema oggi
+può solo ricolorarle. Il registro accetta già soltanto tracciati SVG
+validati, quindi un set del tema non apre porte nuove.
+
+- **A (consigliata).** Dentro: un tema può ridisegnare ogni icona, per nome
+  (PA T40). I nomi entrano nello snapshot di PA T41, quindi restano
+  stabili.
+  - Tempo: un task M, circa mezza giornata di un coder.
+  - Qualità: un'identità intera, coerente fra la cornice e gli editor.
+  - Contro: qualche centinaio di nomi da tenere fermi; un'icona nuova di un
+    modulo, sotto un tema, ha il disegno di serie finché il tema non la
+    ridisegna.
+- **B.** Fuori dalla pre-alpha: si congelano solo i nomi, il set del tema
+  arriva dopo.
+  - Tempo: niente adesso.
+  - Qualità: i temi d'esempio cambiano colori, forme e caratteri, ma le
+    icone restano quelle di serie.
+- **C.** Solo le 43 della cornice (la mappa di serie).
+  - Tempo: un task S.
+  - Qualità: a metà: si vede la cucitura fra la cornice ridisegnata e le
+    barre degli editor di serie.
+
+### D17 · L'aspetto dei due temi d'esempio
+
+La prova d'uscita della skin facile (PA T42) sono due temi: uno di circa
+100 righe sopra la serie, con un'identità diversa, e uno di soli colori.
+Diventano il punto di partenza di chi scrive un tema, e il simulatore li
+mostra (gli stati «vestito da …», «da approvare»).
+
+- **A (consigliata).** «Carta» e «Salvia».
+  - «Carta»: carta calda, angoli dritti, maiuscoletto nelle etichette,
+    nessuna ombra, filetti sottili al posto delle scatole, un suo carattere
+    con le grazie (PA T39) e, se D16 è A, una decina di icone a tratto
+    sottile.
+  - «Salvia»: soli colori, un accento salvia e superfici appena verdi,
+    nelle due luci.
+  - Tempo: è quello di PA T42.
+  - Qualità: mostra che cosa si cambia con 100 righe senza toccare la
+    struttura; «Carta» è leggibile a lungo, adatta a un vault di studio.
+  - Contro: tutti e due restano vicini allo spirito della serie.
+- **B.** «Officina» e «Salvia». «Officina»: bordi spessi, etichette in
+  monospazio, contrasto alto, icone quadrate.
+  - Tempo: come A.
+  - Qualità: più lontano dalla serie, quindi una prova più dura dei
+    cancelli di contrasto; meno adatto a leggere a lungo.
+- **C.** Tutti e tre.
+  - Tempo: mezza giornata in più, e un tema in più da tenere verde a ogni
+    cambio della serie.
+  - Qualità: la prova più larga.
+
 ## Come si implementa
 
 Per i coder con ragionamento medio e per l'orchestratore. Basta da sola: chi
@@ -1093,6 +1281,9 @@ che serve in più per questo piano.
 | Due worktree con lo stesso `CARGO_TARGET_DIR` | `cargo clean -p fub-abi` prima della verifica finale |
 | La cache di Vitest che riempie `/tmp` | `TMPDIR` nella cartella temporanea del lavoro |
 | Il vault vero dell'utente o le porte 1431, 1432, 1437 e 1438 | mai: i test usano le fixture e le cartelle temporanee |
+| Un campo nuovo del manifest dei temi scritto sul filo anche quando manca | `skip_serializing_if`, e un test che rilegge e riscrive un manifest di oggi byte per byte |
+| Un hook congelato tolto o rinominato | `contract-frozen.test.ts` (dopo PA T41); lo snapshot non si riscrive mai |
+| Un'icona o un carattere di un tema che arriva da fuori | `PATH_DATA` per le icone, la firma `wOF2` per i caratteri, solo asset del tema; la CSP non cambia |
 
 ### Quando fermarsi e chiedere
 
@@ -1265,6 +1456,40 @@ dell'utente, il primo giro e il codice:
 27. **S8.** Il menu «/» non ha uno scenario nel banco WebView (S1–S7, R1,
     T1, I1, L1): PA T16 lo aggiunge. S4, S5 e S6 ci sono in `run.mjs` ma il
     job `webview` della CI non li fa girare.
+
+Le differenze trovate con la richiesta della skin facile (2026-11-05,
+verificate su `main` 638358da):
+
+28. **La pelle di un tema è tutto o niente.** `replaceTheme`
+    (`theme/loader.ts`) toglie la pelle di serie e mette quella del tema; un
+    tema senza `skin.css` monta solo il foglio. Per questo il kit autore
+    parte da una copia intera (`sample/skin.css`, 18.222 righe; la pelle di
+    serie ne ha 18.145 in 23 file) (PA T34, T35).
+29. **Il contratto si muove più di quanto dice la richiesta.**
+    `apps/client/theme/author/contract.json` è cambiato in 12 commit dal 29
+    ottobre al 4 novembre, non 11. L'unico script che lo legge, `check-inline-theme.mjs`, non ferma un hook
+    tolto (PA T41).
+30. **Installare da cartella c'è già nell'host,** ma solo i test lo usano:
+    `install_theme` (`crates/fub-host/src/theme.rs:1932`) non ha un'IPC.
+    Le Impostazioni installano solo dal catalogo firmato (PA T36).
+31. **La fiducia «In sviluppo» c'è già:** `development` sta in
+    `TRUST_LABELS` (`ui/permissions.ts:103`), ma nessun tema la usa (PA
+    T37).
+32. **Non c'è una modalità sviluppatore:** nessuna chiave in
+    `crates/fub-host/src/settings.rs` (PA T36).
+33. **I cataloghi per chi scrive un tema ci sono già,** nel banco:
+    `bench/catalog.ts` dice di essere «la pagina di prova che si consegnerà
+    a chi scriverà un tema» (PA T38 la porta nell'app).
+34. **Le icone passano da un registro solo che valida già:** la mappa di
+    serie, gli alias e `registerIcon` accettano solo tracciati
+    (`PATH_DATA`). La richiesta diceva «stanno nel codice»: è vero, ma il
+    registro è già la porta giusta per un set del tema (PA T40).
+35. **La CSP ammette già i caratteri da URL `data:`** (`font-src 'self'
+    asset: data:`, `crates/fub-app/tauri.conf.json`), e `materializeAssets`
+    fa già degli asset URL `data:`: i caratteri del tema non toccano la CSP
+    (PA T39). Il `mimeType` del loader però non conosce `woff2`.
+36. **Il README del kit autore** parte dalla copia intera di `sample/`; con
+    PA T42 parte dai due temi d'esempio.
 
 ## T1 · Il finto del banco dice le impostazioni d'Aspetto dell'host
 
@@ -2287,13 +2512,18 @@ Ramo: piano/fub-pre-alpha.
 Tocca: `apps/client/bench/giro/scelte.mjs` (nuovo),
 `apps/client/bench/giro/elenco.mjs`, `docs/development/testing-and-quality.md`.
 Non toccare: `bench/giro.mjs`; i finti di K2 e A1 (se manca un caso, dillo).
-Dipende da: T14; A1, K2 e S2 in `main`.
+Dipende da: T14; A1, K2 e S2 in `main`; PA T36 e T42 in `main`.
 Cosa fare:
 18. una ricetta (A1): la si toglie dalle Ricette e la si riprende;
 19. un componente (K2): lo si spegne nelle Impostazioni, il suo editor non
     c'è più; lo si riaccende e torna;
 20. l'aspetto: la luce chiara, poi il movimento «ridotto»; la cornice
-    cambia (le variabili del tema sulla radice).
+    cambia (le variabili del tema sulla radice). Poi, in modalità
+    sviluppatore, «Installa da cartella…» col primo tema d'esempio di PA
+    T42 (il finto host dà la cartella); lo si prova in anteprima: la
+    cornice cambia e `<style data-fub="pelle-tema">` c'è; «Annulla
+    anteprima» torna alla serie e il canale è vuoto; lo si applica, e dopo
+    un ricaricamento della pagina è ancora lì.
 Casi limite: un componente che ne richiede un altro (la finestra di K2 lo
 dice: il compito la accetta).
 Fatto quando: `npm run bench:giro -- --solo=scelte` è verde.
@@ -2438,4 +2668,439 @@ confrontano il testo esatto (si aggiornano con la frase nuova).
 Fatto quando: la guardia passa; i test dei descrittori, di `fub-scene` e
 del catalogo sono verdi.
 Prova: scripts/check.sh --rapido
+Stato: [ ] da fare
+
+## T34 · Il manifest dice da quale tema parte
+
+Perché: la skin facile, passo 1 (vedi «I temi e la skin facile»). Oggi un
+tema porta tutto o niente: la sua pelle sostituisce per intero quella di
+serie (18.145 righe in 23 file), e un tema senza `skin.css` lascia i
+componenti con la sola `structure.css`. Un campo nuovo del manifest dice che
+il tema parte dalla serie e porta solo ciò che cambia.
+Ramo: piano/fub-pre-alpha.
+Tocca: `crates/fub-abi/src/theme.rs` (`ThemeManifest`: il campo
+`extends`), `crates/fub-host/src/theme.rs` (la validazione del manifest,
+`discover_themes`, `read_theme`, `ThemePayload`, l'installazione),
+`crates/fub-host/tests/themes.rs`, `crates/fub-app/tests/ts_mirror_app.rs`
+(i campioni), `apps/client/src/host/contract.ts` (`ThemeManifest`,
+`ThemePayload.sheet`), il mirror e la fixture (`UPDATE_MIRROR=1 cargo test
+-p fub-app --test ts_mirror_app`), `apps/client/src/host/fake.ts`,
+`apps/client/src/theme/theme.ts` solo dove il tipo di `sheet` lo chiede,
+`docs/reference/permissions-and-security.md` («Temi installati»),
+`docs/reference/on-disk-layout.md`.
+Non toccare: il montaggio nel loader (è T35); la WIT (il tema non c'è); i
+limiti di dimensione; il motore `theme-1`.
+Dipende da: la risposta a D15 (il nome del campo; qui `extends`, la
+consigliata).
+Cosa fare:
+- `ThemeManifest` prende `extends: Option<String>`, con `#[serde(default,
+  skip_serializing_if = "Option::is_none")]`, come fa già `settings`. Un
+  manifest senza il campo si legge e si scrive come oggi.
+- L'unico valore accettato è `"fub.serie"` (`SERIES_ID`). Un altro valore è
+  un `ThemeError::Malformed` col perché, come fa `check_settings`.
+- Solo col motore `theme-2`: un tema `theme-1` con `extends` è rifiutato
+  (il motore vecchio non cambia, ADR 0206).
+- Con `extends` i fogli diventano facoltativi. `read_theme` dà `sheet:
+  None` per una luce senza foglio, e il client userà il foglio di serie di
+  quella luce e di quel contrasto (T35). Senza `extends` il foglio resta
+  obbligatorio. `ThemePayload.sheet` diventa `Option<String>` (sul filo
+  `string | null`), e il mirror segue.
+- Un tema con `extends` che non porta niente (né fogli, né pelle, né
+  caratteri, né icone) è rifiutato: «il tema non cambia niente».
+- `lights` resta obbligatorio anche con `extends`: dice quali luci il tema
+  offre.
+- Il catalogo firmato passa dalla stessa validazione: una voce con
+  `extends` si installa come le altre.
+Casi limite: un manifest di `main` senza il campo, letto e riscritto, resta
+uguale byte per byte (un test lo confronta, come fa già
+`a_manifest_without_settings_keeps_its_wire_form` in `fub-abi`); `extends: ""`; `extends:
+"fub.serie "` (con lo spazio); `extends` col motore `theme-1`; un tema con
+`extends` e il solo foglio chiaro (lo scuro viene dalla serie).
+Fatto quando: `crates/fub-host/tests/themes.rs` prova i casi sopra; il
+mirror è quello scritto da `UPDATE_MIRROR=1`; il finto host dà un tema con
+`extends`.
+Prova: scripts/check.sh --rapido; cargo test -p fub-host --test themes;
+cargo test -p fub-app --test ts_mirror_app
+Stato: [ ] da fare
+
+## T35 · La pelle del tema si monta sopra quella di serie
+
+Perché: la skin facile, passo 1, la parte della shell. Con `extends` (T34)
+la pelle di serie resta, e quella del tema si aggiunge sopra, in un canale
+suo. Così un tema di 100 righe cambia solo ciò che vuole, e un componente
+che arriva dopo resta vestito dalla serie.
+Ramo: piano/fub-pre-alpha.
+Tocca: `apps/client/src/theme/loader.ts` (`ORDER`, `replaceTheme`,
+`validateThemeBundle`, `mountThemeBundle`), `apps/client/src/theme/theme.ts`
+(`apply` e `themeBundle`: il foglio di serie quando il tema non ne porta),
+`apps/client/src/theme/gate.test.ts`, un test nuovo
+`apps/client/src/theme/inherit.test.ts`,
+`docs/architecture/frontend-and-ipc.md`, `apps/client/theme/author/README.md`,
+una ADR nuova («La pelle che eredita») col primo numero libero quando la
+scrivi (oggi 0240: 0236, 0238 e 0239 sono di K3, N4 e K5),
+`docs/decisions/README.md`.
+Non toccare: il sanificatore (`ui/sanitize-css.ts`): la pelle del tema passa
+dallo stesso, con `kind: "skin"` e lo stesso vocabolario; i canali
+`preferenze` e `snippets`; la pelle di serie.
+Dipende da: T34.
+Cosa fare:
+- `ORDER` diventa `["caratteri", "caratteri-tema", "foglio", "pelle",
+  "pelle-tema", "preferenze", "snippets"]`. Le preferenze restano dopo ogni
+  pelle. `caratteri-tema` lo riempie T39: qui c'è solo il posto.
+- Senza `extends`, `replaceTheme` fa ciò che fa oggi, byte per byte, e
+  `pelle-tema` resta vuoto (si toglie, se c'era).
+- Con `extends`:
+  - il foglio è quello del tema per quella luce, o quello di serie
+    (`series.sheet(light, contrast)`) se il tema non lo porta;
+  - la pelle di serie resta montata in `pelle`;
+  - la pelle del tema va in `pelle-tema`.
+  Tutto in una commit sola, dopo che ogni cancello è verde, come oggi.
+- I cancelli: il foglio (il suo o quello di serie) passa ruoli e contrasti;
+  la pelle del tema passa `themeCssViolations` col vocabolario `theme-2` e
+  il cancello del contenuto. Il motivo `fascio: pelle vuota` non vale per un
+  tema che eredita: per lui una pelle assente è il caso normale.
+- «Applica tema», «Annulla anteprima» e il ritorno alla serie dopo un
+  rifiuto smontano anche `pelle-tema`: non resta niente.
+- La ADR dice:
+  - perché un canale e non una fusione dei due testi;
+  - l'ordine dei canali;
+  - che `extends` accetta solo la serie (ereditare da un altro tema è fuori,
+    per ora);
+  - che quando la serie cambia il tema eredita il cambio, ed è lo scopo.
+Casi limite: passare da un tema che eredita a uno che non eredita e
+ritorno (nessun `<style data-fub="pelle-tema">` rimasto); un tema che
+eredita ed è rifiutato (si torna alla serie, pulita); la luce che cambia
+con la preview aperta; il contrasto alto con un tema senza foglio (si usa il
+foglio di serie del contrasto alto).
+Fatto quando: `theme/inherit.test.ts` prova che:
+- un tema senza `extends` monta gli stessi elementi di oggi;
+- un tema con `extends` e una pelle di tre regole lascia la pelle di serie e
+  aggiunge la sua dopo;
+- una regola del tema vince su quella di serie a parità di specificità;
+- un componente che il tema non nomina ha lo stile di serie;
+- «Annulla anteprima» non lascia resti.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/theme/
+Stato: [ ] da fare
+
+## T36 · Installare un tema da una cartella, e leggere perché è rifiutato
+
+Perché: la skin facile, passo 2. Oggi un tema si installa solo dal catalogo
+firmato, o copiando la cartella a mano in `<config>/themes/<id>/`. L'host
+sa già installare da una cartella (`install_theme`,
+`crates/fub-host/src/theme.rs:1932`: atomico, senza link simbolici né
+traversal), ma non c'è un'IPC e lo usano solo i test. E quando un tema è
+rifiutato, chi lo scrive vede solo «Tema «X» rifiutato» in un avviso.
+Ramo: piano/fub-pre-alpha.
+Tocca: `crates/fub-host/src/settings.rs` (la chiave `developer.mode`:
+interruttore, livello macchina, spento, gruppo «Sviluppo»), l'host (un
+metodo che installa da cartella con `install_theme`),
+`crates/fub-app/src/lib.rs` (il comando `install_theme_from_folder`),
+`crates/fub-app/src/lean_ipc.rs` (`Why::AppSurface`),
+`crates/fub-app/permissions/default.toml`, `apps/client/src/host/contract.ts`,
+`ipc.ts`, `fake.ts`, `dialog.ts` (`pickFolder` c'è già),
+`apps/client/src/panels/settings.ts` (in Aspetto: «Installa da cartella…»
+nel blocco «Temi installati», e la lista della diagnosi),
+`apps/client/src/i18n/catalog.ts`, la pelle delle Impostazioni dal
+simulatore, `docs/reference/permissions-and-security.md`,
+`docs/reference/ipc-contract.md`.
+Non toccare: il catalogo firmato e la sua fiducia; i limiti
+dell'installazione; il formato su disco di `themes/<id>/`.
+Dipende da: T34; S2 T10 in `main` (le Impostazioni nuove).
+Dal prototipo: gli stati di Aspetto della skin facile (la modalità
+sviluppatore, «Installa da cartella», la diagnosi; gli S-numeri sono in
+«Dal prototipo»).
+Cosa fare:
+- La chiave `developer.mode` mostra, in Aspetto, il bottone «Installa da
+  cartella…». L'host rifiuta il comando se la chiave è spenta: la regola sta
+  nell'host, non solo nel bottone nascosto.
+- Il bottone apre `pickFolder`; l'host installa con `install_theme` (stessi
+  controlli, stesso rename atomico, la serie riservata). Il tema compare in
+  «Temi installati» con la fiducia «Della comunità», come ogni tema non di
+  serie.
+- Un id già installato: la finestra lo dice e offre «Sostituisci». Prima si
+  valida la cartella nuova con le stesse porte di `install_theme`, poi si
+  toglie il vecchio (`uninstall_theme`, c'è) e si installa il nuovo. Se
+  l'installazione fallisce dopo aver tolto il vecchio, la finestra lo dice:
+  la cartella sorgente resta dov'è, quindi niente si perde, ma il tema va
+  reinstallato. Se il tema sostituito è quello in uso, si rimonta.
+- La diagnosi: quando un tema è rifiutato, all'installazione o al montaggio,
+  Aspetto mostra una lista con una riga per motivo:
+  - il file (`manifest.json`, `skin.css`, `sheet-light.css`…);
+  - riga:colonna, quando c'è;
+  - il codice e il perché, in italiano.
+  I motivi vengono da `validateThemeBundle` così come sono (`pelle:
+  selector-hook (12:3): …`): si dividono in campi, non si riscrivono. La
+  lista ha `role="alert"` solo quando compare, e un bottone «Copia la
+  diagnosi».
+Casi limite: la cartella senza `manifest.json`; un link simbolico dentro;
+una cartella oltre i limiti di oggi (si ferma e lo dice); la modalità
+sviluppatore spenta mentre la finestra di scelta è aperta (l'host rifiuta);
+un tema che passa l'installazione ma che il loader rifiuta (la diagnosi è
+quella del loader).
+Fatto quando: un test di `fub-host` installa da una cartella temporanea, e
+rifiuta con la chiave spenta; Vitest delle Impostazioni prova il bottone, la
+fiducia, «Sostituisci» e la lista della diagnosi con un tema rifiutato del
+finto host; mirror e fixture rigenerati.
+Prova: scripts/check.sh --rapido; cargo test -p fub-host --test themes;
+cd apps/client && npx vitest run src/panels/
+Stato: [ ] da fare
+
+## T37 · Collegare una cartella, e il tema cambia al salvataggio
+
+Perché: la skin facile, passo 2. Chi scrive un tema salva il file e vuole
+vederlo subito, senza reinstallare. Oggi nessuno guarda la cartella di un
+tema.
+Ramo: piano/fub-pre-alpha.
+Tocca: `crates/fub-host/src/settings.rs` (la chiave
+`developer.theme-folder`: testo, livello macchina, non scrivibile da
+programma), `crates/fub-host/src/theme.rs` (il tema collegato:
+`discover_themes` e `read_theme` leggono anche la cartella collegata, con le
+stesse porte; fiducia `development`), un osservatore nuovo accanto a
+`crates/fub-host/src/watcher.rs` (riusa `notify` e il debouncer che ci sono
+già), `crates/fub-app/src/lib.rs` (`link_theme_folder`,
+`unlink_theme_folder`, l'evento `fub://theme-changed`), `lean_ipc.rs`,
+`permissions/default.toml`, `apps/client/src/host/contract.ts`, `ipc.ts`,
+`fake.ts`, `apps/client/src/theme/theme.ts` (rimonta all'evento),
+`apps/client/src/panels/settings.ts`, `i18n/catalog.ts`,
+`docs/reference/permissions-and-security.md`,
+`docs/reference/ipc-contract.md`.
+Non toccare: l'osservatore del vault; i temi installati (un tema collegato
+non si copia in `themes/`).
+Dipende da: T36.
+Dal prototipo: gli stati «tema collegato, in sviluppo» e «tema ricaricato»
+di Aspetto.
+Cosa fare:
+- «Collega una cartella…», in modalità sviluppatore accanto a «Installa da
+  cartella…», salva il percorso nella chiave. Il tema compare in «Temi
+  installati» con la fiducia «In sviluppo» (`development`, che
+  `ui/permissions.ts` sa già dire). Un tema collegato alla volta.
+- L'host legge il tema collegato al suo posto, con le stesse porte
+  dell'installazione (niente link simbolici né traversal, gli stessi
+  limiti). Un id uguale a un tema installato è rifiutato, e il messaggio lo
+  dice.
+- L'osservatore guarda solo quella cartella, con un debounce di circa
+  200 ms. Ha un padrone, il custode dei temi dell'host, e si smonta con
+  «Scollega», con un'altra cartella, con la modalità sviluppatore spenta e
+  alla chiusura dell'app. A ogni cambio emette `fub://theme-changed { id }`.
+- Il client, se il tema cambiato è quello in uso o in preview, lo rilegge e
+  lo rimonta. Se il fascio nuovo è rifiutato, **resta montato l'ultimo
+  buono**: non si cade sulla serie, come fa oggi `apply`. Aspetto mostra la
+  diagnosi di T36 con l'ora del tentativo.
+- Una corsa vecchia non sovrascrive una nuova: si usa la generazione che
+  `apply` ha già.
+Casi limite: la cartella cancellata mentre è collegata (il tema sparisce,
+si torna alla serie, l'avviso lo dice); un editor che salva con un rename
+(il debounce ne fa un cambio solo); 50 salvataggi di fila (al massimo un
+rimontaggio in volo); l'app riaperta con la cartella che non c'è più
+(avviso, nessun blocco); montare e smontare l'osservatore due volte (nessun
+resto, `check-listeners.mjs`).
+Fatto quando: un test di `fub-host` collega una cartella temporanea, scrive
+`skin.css`, riceve l'evento, e dopo «Scollega» non ne riceve più; Vitest
+prova che un fascio rifiutato lascia montato l'ultimo buono e mostra la
+diagnosi.
+Prova: scripts/check.sh --rapido; cargo test -p fub-host --test themes;
+cd apps/client && npx vitest run src/theme/ src/panels/
+Stato: [ ] da fare
+
+## T38 · La pagina «Tutti i componenti»
+
+Perché: la skin facile, passo 2. Chi scrive un tema deve vedere tutto ciò
+che il tema veste, in ogni stato, senza cercarlo nell'app. Il banco ha già i
+cataloghi: `bench/catalog.ts` (componenti, tavolozza, campionario: «la
+pagina di prova che si consegnerà a chi scriverà un tema») e `bench/kit.ts`
+(i primitivi del kit con gli stati forzati). Stanno però fuori dall'app.
+Ramo: piano/fub-pre-alpha.
+Tocca: `apps/client/bench/catalog.ts`, `bench/samples.ts` e `bench/kit.ts`
+(il cuore va in un modulo sotto `src/`, per esempio `src/dev/catalogo/`, che
+il banco importa), una vista nuova aperta da Aspetto in modalità
+sviluppatore, `apps/client/src/panels/settings.ts`, `i18n/catalog.ts`, la
+pelle dal simulatore, la pagina di `docs/development/` che descrive il
+banco, il README del kit autore.
+Non toccare: le scene e le baseline del banco (le foto di `catalog` e `kit`
+restano uguali: è la prova che lo spostamento non cambia niente); il bundle
+iniziale.
+Dipende da: T35, T36; S2 T10 in `main`.
+Dal prototipo: «Tutti i componenti».
+Cosa fare:
+- Una pagina con tre schede (Componenti, Tavolozza, Caratteri) più i
+  primitivi del kit, col tema in uso o in preview, e due interruttori:
+  Chiaro/Scuro e Contrasto alto. Ogni componente compare in ogni stato del
+  contratto (`states`: 7).
+- Il codice si carica solo quando la pagina si apre (`import()`): il bundle
+  iniziale non cresce.
+- Un clic su un componente mostra il suo nome e gli hook che lo vestono
+  (dall'anatomia, `COMPONENTS`), da copiare.
+Casi limite: un tema rifiutato con la pagina aperta (la pagina resta, con la
+diagnosi in testa); la pagina aperta due volte (ce n'è una sola); la
+finestra stretta (una colonna).
+Fatto quando: le scene `catalog` e `kit` del banco danno le stesse foto di
+prima (CI); un Vitest apre e chiude la pagina due volte senza resti; il
+bundle iniziale ha la stessa misura (±1 KB).
+Prova: scripts/check.sh --rapido; cd apps/client && npm run build
+Stato: [ ] da fare
+
+## T39 · I caratteri del tema
+
+Perché: la skin facile, passo 3. Un'identità vera passa dai caratteri, e
+oggi un tema non può portarne: `@font-face` è vietato nel CSS
+(`NEVER_AT_RULES`), e resta vietato, perché un `src:` scritto a mano
+potrebbe chiamare la rete.
+Ramo: piano/fub-pre-alpha.
+Tocca: `crates/fub-abi/src/theme.rs` (il campo `fonts`),
+`crates/fub-host/src/theme.rs` (la validazione: i file sono fra gli asset,
+sono woff2, i limiti), `apps/client/src/theme/loader.ts` (scrive le regole
+`@font-face` nel canale `caratteri-tema`; `mimeType` impara `woff2`),
+`contract.ts`, mirror e fixture, `fake.ts`, i test,
+`docs/reference/permissions-and-security.md`, il README del kit autore.
+Non toccare: il sanificatore (niente `@font-face` nel CSS); la CSP di
+`crates/fub-app/tauri.conf.json` (ha già `font-src data:`, e
+`materializeAssets` fa già degli asset URL `data:`); i caratteri di serie
+(`fonts.css`, canale `caratteri`).
+Dipende da: T34, T35.
+Cosa fare:
+- Il manifest prende `fonts: Vec<ThemeFont>` (additivo, `#[serde(default,
+  skip_serializing_if = "Vec::is_empty")]`). Ogni voce ha:
+  - `family`: lettere, cifre, spazi e `-`, al massimo 64 caratteri, diversa
+    dalle famiglie di serie;
+  - `file`: un asset del tema, `fonts/<nome>.woff2` (cioè
+    `theme://<id>/fonts/<nome>.woff2`);
+  - `weight`: 100–900;
+  - `style`: `normal` o `italic`.
+- L'host controlla che il file sia fra gli asset e cominci con `wOF2`. Al
+  massimo 8 file, 2 MiB l'uno, 6 MiB in tutto.
+- Il loader scrive da sé le regole `@font-face`, coi valori del manifest e
+  l'URL `data:` dell'asset, nel canale `caratteri-tema`. La pelle del tema
+  usa la famiglia per nome (`font-family: "Carta Serif", var(--font-ui)`).
+- Cambiato tema, il canale si svuota.
+Casi limite: `file: "https://…"` (rifiutato: non è un asset); un `.ttf`
+rinominato in `.woff2` (rifiutato dalla firma `wOF2`); una famiglia con il
+nome di una di serie (rifiutata); il nono file; 6 MiB e un byte.
+Fatto quando: i test dell'host provano i limiti e i casi sopra; un Vitest
+prova le regole generate, e che un `@font-face` scritto nella pelle è ancora
+rifiutato.
+Prova: scripts/check.sh --rapido; cargo test -p fub-host --test themes;
+cd apps/client && npx vitest run src/theme/
+Stato: [ ] da fare
+
+## T40 · Le icone del tema
+
+Perché: la skin facile, passo 4 (D16). Le icone della shell e degli editor
+passano tutte da un registro solo, `ui/icons.ts`: la mappa `SVG` di serie
+(43 icone) e `registerIcon`, usato dal nastro del foglio, dal documento, dal
+disegno, dal selettore dei colori, dalla barra del formato e da Scrittoio.
+Oggi un tema può solo ricolorarle. Il registro accetta già soltanto
+tracciati (`PATH_DATA`), quindi un set del tema si valida con la stessa
+regola. Questo task vale com'è se D16 è A; con C si ridisegnano solo le 43
+della mappa `SVG`; con B non si fa.
+Ramo: piano/fub-pre-alpha.
+Tocca: `crates/fub-abi/src/theme.rs` (il campo `icons`: il nome di un
+asset JSON), `crates/fub-host/src/theme.rs` (i limiti del file),
+`apps/client/src/ui/icons.ts` (una mappa `THEMED` guardata per prima;
+`icon()` mette `data-icon="<nome>"` sull'`<svg>`),
+`apps/client/src/theme/theme.ts` (monta e smonta il set col tema, e
+ridisegna le icone già nella pagina), contract e mirror, `fake.ts`, i test,
+`docs/reference/permissions-and-security.md`, il README del kit autore (con
+l'elenco dei nomi, da `iconNames()`).
+Non toccare: la mappa `SVG` di serie e le registrazioni dei moduli (un tema
+non aggiunge nomi: ridisegna quelli che ci sono); la griglia 24, il tratto e
+il colore (`currentColor`).
+Dipende da: T34, T35; la risposta a D16. Mai nella stessa ondata di un task
+che aggiunge icone alla mappa `SVG` (S2 T14 lo fa).
+Cosa fare:
+- Il manifest dichiara `icons: "icons.json"`. Il file è `{ "<nome>":
+  ["<d>", …] }`; ogni `d` passa `PATH_DATA`. Al massimo 512 nomi, 8
+  tracciati e 4 KB per nome, 256 KB in tutto.
+- `icon(name)` guarda prima il set del tema, poi la serie, poi le
+  registrazioni. Il corpo si costruisce come oggi (`<path d="…"/>`, coi
+  soli dati validati). `registerIcon` non conta il set del tema come «già
+  disegnato».
+- Un nome che oggi nessuno disegna non rifiuta il tema, perché i moduli
+  registrano le loro icone quando si caricano: la diagnosi di T36 lo
+  segnala come avviso.
+- Cambiato tema, o aperta la preview, un passaggio solo ridisegna gli
+  `<svg data-icon>` già nella pagina. «Annulla anteprima» torna alla serie.
+Casi limite: un `d` con `<` o `"` (rifiutato); un alias ridisegnato
+(`folder`: vale per il nome a cui punta); l'icona di un modulo spento (resta
+nel set, non si vede); 10.000 icone nella pagina al cambio di tema (un
+passaggio solo, sotto i 16 ms).
+Fatto quando: Vitest prova la precedenza, la validazione, il ridisegno e
+«Annulla anteprima»; i test dell'host provano i limiti.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/ui/ src/theme/
+Stato: [ ] da fare
+
+## T41 · Gli hook congelati
+
+Perché: la skin facile, passo 5. `theme-2` non è congelato:
+`apps/client/theme/author/contract.json` è cambiato in 12 commit dal 29
+ottobre al 4 novembre, e nessuna guardia ferma un hook tolto o rinominato
+(l'unico script che legge il file, `check-inline-theme.mjs`, guarda
+altro). Una pelle che nomina un hook tolto è rifiutata per intero
+(`selector-hook`) e il tema cade sulla serie. Si congela per ultimo, quando
+ciò che si vede nella pre-alpha è fermo.
+Ramo: piano/fub-pre-alpha.
+Tocca: `apps/client/theme/author/frozen/theme-2.json` (nuovo: lo snapshot),
+un test nuovo `apps/client/src/theme/contract-frozen.test.ts`, il README del
+kit autore, `docs/architecture/frontend-and-ipc.md`, una ADR nuova («Gli
+hook di `theme-2` congelati», col primo numero libero), `CLAUDE.md` (la
+parte «Generated files», accanto a `wit/frozen`).
+Non toccare: `contract.json` a mano (è generato); i temi.
+Dipende da: tutta la Fase C in `main` (S2, griglia, K5, N4, N6, la lavagna
+in codice e A1: sono loro che cambiano ciò che si vede); T34–T40.
+Cosa fare:
+- Lo snapshot tiene i nomi che un tema può usare: `hooks`, `components`,
+  `required_roles`, `optional_roles`, `contrast_pairs`, `optional_pairs`,
+  `preference_tokens`, `states` e, se D16 è A o C, i nomi delle icone.
+- Il test fallisce se un nome dello snapshot manca dal contratto, o se un
+  ruolo facoltativo diventa obbligatorio. Le aggiunte passano.
+- Il messaggio del test dice che cosa fare: un nome tolto chiede un motore
+  nuovo (`theme-3`, ADR 0206), non uno snapshot cambiato.
+- Lo snapshot non si riscrive per far passare il test, come `wit/frozen/`
+  con `wit_additivity`.
+Casi limite: un hook rinominato (è un tolto più un aggiunto: fallisce);
+l'ordine delle voci cambiato (passa); il generatore che cambia formato (il
+test confronta insiemi di nomi, non testo).
+Fatto quando: il test passa su `main`, e fallisce su una prova locale che
+toglie un hook (scritta nel resoconto, non committata).
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
+src/theme/contract-frozen.test.ts && npm run theme:verify
+Stato: [ ] da fare
+
+## T42 · Due temi d'esempio
+
+Perché: la skin facile, passo 6, e la sua prova d'uscita. Un tema vero di
+circa 100 righe sopra la serie, con un'identità diversa, e uno di soli
+colori. Tutti e due si installano da cartella, passano i cancelli e si
+guardano dappertutto.
+Ramo: piano/fub-pre-alpha.
+Tocca: `apps/client/theme/examples/<id>/` (due cartelle nuove:
+`manifest.json`, i fogli, `skin.css` per il primo, i caratteri e le icone
+se D16 lo dice), un test nuovo `apps/client/src/theme/examples.test.ts`, le
+scene del banco dei due temi (`bench/scene.mjs`), il README del kit autore
+(i due temi come punto di partenza, al posto della copia intera di
+`sample/`), la pagina di `docs/product/` che parla dell'aspetto.
+Non toccare: la serie; il contratto; lo snapshot di T41.
+Dipende da: T41; la risposta a D17 (l'aspetto dei due temi).
+Dal prototipo: i blocchi `blocchi/93-tema-*.css` del simulatore (il CSS
+dei due temi, già passato dal sanificatore stretto) e gli stati «vestito da
+…» (gli S-numeri sono in «Dal prototipo»).
+Cosa fare:
+- Il primo (in D17 il consigliato è «Carta») ha `extends: "fub.serie"`, i
+  due fogli, una pelle di circa 100 righe che usa solo hook dello snapshot,
+  i suoi caratteri (T39) e, se D16 è A, una decina di icone.
+- Il secondo («Salvia») ha `extends`, i due fogli e nient'altro.
+- Il test prova che:
+  - tutti e due passano `validateThemeBundle` nelle due luci e col
+    contrasto alto;
+  - la pelle del primo usa solo hook di `frozen/theme-2.json`;
+  - un componente che il primo non nomina ha lo stile di serie.
+- Le foto del banco, per ciascun tema: la scrivania, una nota, il foglio e
+  le Impostazioni, nelle due luci, in contrasto alto, a 700 e al telefono
+  (390). Le baseline vengono dal runner.
+- Si installano da cartella nell'app vera (T36), a mano, e il resoconto lo
+  dice.
+Casi limite: il contrasto alto (le coppie di contrasto passano anche lì: lo
+prova il test); un componente aggiunto dopo (lo prova il test).
+Fatto quando: il test è verde; le scene del banco ci sono, con le baseline
+dal runner; il resoconto dice dell'installazione a mano.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/theme/examples.test.ts
 Stato: [ ] da fare
