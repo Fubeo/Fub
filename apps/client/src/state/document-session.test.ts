@@ -1872,5 +1872,50 @@ describe("ogni documento che la shell apre si chiude (chiavi di apertura)", () =
     sessions.close("Lettera-0.docx");
     await settle();
     expect(host.openKeys(VAULT)).toBe(0);
+describe("la cadenza delle bozze", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("in una nota scritta senza fermarsi: una bozza al secondo, e il salvataggio aspetta la pausa", async () => {
+    vi.useFakeTimers();
+    const api = fakeApi();
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    let text = "";
+    for (let key = 0; key < 30; key++) {
+      text += "a";
+      acceptText(sessions, "nota.md", text);
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    const drafts = vi.mocked(api.saveDraft).mock.calls;
+    expect(drafts.map(([, draft]) => draft.length)).toEqual([10, 20, 30]);
+    expect(api.writeDocument).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(400);
+    expect(api.writeDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it("una bozza ancora in volo non ne accoda una seconda uguale", async () => {
+    vi.useFakeTimers();
+    const api = fakeApi();
+    let release!: () => void;
+    api.saveDraft = vi.fn(() => new Promise<void>((resolve) => {
+      release = resolve;
+    }));
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    const big = "x".repeat(4 * 1_048_576);
+    for (let key = 0; key < 10; key++) {
+      acceptText(sessions, "nota.md", `${big}${key}`);
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    expect(api.saveDraft).toHaveBeenCalledTimes(1);
+    // La chiusura chiede la bozza dello stesso testo mentre quella è in volo.
+    const flushed = sessions.flushDraft("nota.md");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(api.saveDraft).toHaveBeenCalledTimes(1);
+    release();
+    await flushed;
+    expect(api.saveDraft).toHaveBeenCalledTimes(1);
   });
 });

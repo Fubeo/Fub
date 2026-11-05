@@ -61,6 +61,7 @@ import type {
   CatalogEntry,
 } from "./contract";
 import { openViewer, saveViewer, writeResource } from "../editors/media/transport";
+import { readCraftPreview, type CraftPreview, type CraftPreviewSize } from "./craft";
 import { createMobileBridge } from "../shells/mobile/bridge";
 import type { MobileBridge } from "../shells/mobile/bridge";
 
@@ -138,6 +139,21 @@ export type SaveArtifactOutcome = { status: "saved"; path: string } | { status: 
 export type PrintArtifactOutcome = { status: "opened" } | { status: "no_viewer" } | { status: "unwritable"; reason: string };
 /** How a vault entry went to the system: taken, no program took it, or a program that opening would run. */
 export type RevealOutcome = { status: "opened" } | { status: "no_opener" } | { status: "executable" };
+/// Un'app Craft vista da «Apri con» (`fub_host::open_with::ExternalEditor`):
+/// le estensioni che apre, minuscole e senza il punto; `installed` se Fub ha
+/// trovato il suo programma; `running` se Fub l'ha avviata e non è uscita.
+export interface ExternalEditor {
+  id: string;
+  name: string;
+  opens: string[];
+  installed: boolean;
+  running: boolean;
+}
+/// Come il file è arrivato all'app: passato alla sua finestra unica, ricevuto
+/// dall'app già aperta, o in un processo nuovo.
+export type OpenHow = "forwarded" | "in_running" | "new_process";
+/// L'esito di «Apri con» (`fub_host::open_with::OpenedWith`).
+export interface OpenedWith { editor: string; how: OpenHow }
 
 /// Il vault a cui una chiamata si rivolge, quando chi chiama lo sa (FUB-001).
 ///
@@ -244,6 +260,26 @@ export const api = {
   /// (`open: true`) di una voce del vault, per percorso relativo alla radice.
   revealInSystem: (path: string, open: boolean, vault?: string | null) =>
     invoke<RevealOutcome>("reveal_in_system", toVault({ path, open }, vault)),
+  /// Le app Craft che aprono `doc` (percorso relativo alla radice), o senza
+  /// `doc` tutte quelle che Fub conosce. Soltanto dalla shell principale.
+  externalEditors: (doc: string | null, vault?: string | null) =>
+    invoke<ExternalEditor[]>("external_editors", toVault({ doc }, vault)),
+  /// Apre la voce `path` del vault con l'app Craft `editor`; `page` vale per
+  /// PdfCraft. Soltanto dalla shell principale.
+  openWith: (path: string, editor: string, page?: number | null, vault?: string | null) =>
+    invoke<OpenedWith>("open_with", toVault({ path, editor, page: page ?? null }, vault)),
+  /// L'anteprima di `doc` fatta dalla CLI della sua app, dopo un gesto: la
+  /// risposta ha `queued: true` quando il job `craft.render` è in coda, e il
+  /// risultato arriva come `job_done`. Una forma che non è quella del
+  /// contratto è un errore `internal`, non un oggetto a metà.
+  craftRender: async (doc: string, size: CraftPreviewSize, vault?: string | null): Promise<CraftPreview> => {
+    const answer = await invoke<unknown>("craft_render", toVault({ doc, size }, vault));
+    const preview = readCraftPreview(answer);
+    if (preview === null) {
+      throw { kind: "internal", message: "craft_render: the answer is not a CraftPreview" } satisfies PluginError;
+    }
+    return preview;
+  },
   listGridSurfaces: () => invoke<GridSurfaceSpec[]>("list_grid_surfaces"),
   openGridBytes: (surface: string, doc: string, journal: string, base: string) =>
     invoke<GridBytesSession>("open_grid_bytes", { surface, doc, journal, base }),

@@ -4,7 +4,8 @@
 > risorse, radici dell'automazione e regole di scrittura.
 > **Fonti autorevoli:** `crates/fub-cli/src/mcp.rs`,
 > `crates/fub-cli/src/mcp/tools.rs`, `crates/fub-cli/src/mcp/access.rs`,
-> `crates/fub-cli/src/componenti.rs` e le prove in
+> `crates/fub-cli/src/componenti.rs`, `crates/fub-cli/src/port.rs`, i comandi
+> `canvas.*` di `crates/fub-features/src/lavagna.rs` e le prove in
 > `crates/fub-cli/tests/mcp.rs`.
 
 Un agente usa Fub come usa le app Craft: cerca, legge, collega, scrive e
@@ -59,10 +60,15 @@ CLI (`bad_args`, `not_found`, `denied`, `conflict`, `unavailable`, `local`).
 | `fub_query` | una chiave fra `backlinks`, `neighbors`, `tag` (le note col tag), `tags` (l'elenco) e `resolve` | `Backlinks`, `Neighbors`, `Documents`, `Tags`, `Resolve` | no |
 | `fub_read` | testo e revisione | `read_document` | no |
 | `fub_read_model` | il modello strutturato | `read_model` | no |
+| `fub_preview` | l'anteprima di un file Craft: l'immagine, se il file ne porta una, e i suoi dati | `invoke_user_command(craft.preview)` | no |
 | `fub_write` | riscrive da una revisione | `write_document(DescendsFrom)` | sì |
 | `fub_create` | nota nuova, con un testo o da un modello | `note.create`, `note.from_template` | sì |
+| `fub_canvas_create` | lavagna nuova e vuota; `name` e `folder` facoltativi | `canvas.create` | sì |
+| `fub_canvas_apply` | operazioni su una lavagna da una revisione, in prova se non si chiede `apply` | `canvas.apply` | con `apply` |
 | `fub_commands` | i comandi, con argomenti e se scrivono | `commands` | no |
 | `fub_invoke` | esegue un comando, in prova se non si chiede `apply` | `invoke_user_command` | con `apply` |
+| `fub_external_editors` | le app Craft che aprono un file, se sono installate e se sono aperte | `external_editors` | no |
+| `fub_open_with` | passa un file a un'app Craft, in prova se non si chiede `apply` | `open_with` | con `apply`, è l'app che può scrivere |
 | `fub_components` | i componenti: acceso o spento, perché (`core`, `chosen`, `required`, `off`), nome e chi lo richiede | `query_index(Settings)` | no |
 | `fub_components_why` | perché `id` è acceso, o che è spento | `query_index(Settings)` | no |
 | `fub_components_enable` | accende `id` e ciò senza cui non funziona, in prova se non si chiede `apply` | `set_plugin_enabled` | con `apply` |
@@ -71,6 +77,54 @@ CLI (`bad_args`, `not_found`, `denied`, `conflict`, `unavailable`, `local`).
 Ogni risultato riuscito porta i dati due volte: in `structuredContent` e,
 come testo JSON, nel primo elemento di `content`. Gli elenchi sono a pagine:
 `limit` da 1 a 200, 50 per difetto, e `offset`; la risposta dice `total`.
+
+`external_editors`, `open_with` e la lettura dei file passano dall'app
+desktop se tiene il vault, come le altre chiamate, e dall'host locale
+altrimenti.
+
+## I file Craft
+
+- `fub_preview { doc, size? }`: `size` è `"small"` (di partenza) o `"large"`.
+  Il risultato ha `doc`, `revision`, `size`, `origin` (`"file"` se
+  l'immagine viene dal file, `"cli"` se viene da una copia già fatta prima
+  con la riga di comando di un'app, `"none"` senza immagine), `missing`
+  (perché non c'è: `"absent"`, `"over_limit"`, `"unreadable"`, `"failed"`),
+  `limit_bytes`, `info` (app, formato, peso, dati della foto) e `image`
+  (tipo, misure e orientamento, senza i byte). I byte, quando ci sono,
+  vanno in un secondo elemento di `content`,
+  `{"type":"image","data":…,"mimeType":…}`, con `image/png` o
+  `image/jpeg`. Un'anteprima incorporata passa fino a 8 MiB; oltre, il file
+  resta senza immagine. Con il componente `fub.craft` spento la risposta è
+  `unavailable`: il comando `craft.preview` non c'è.
+- `fub_external_editors { doc }`: le app della tabella di Fub che aprono il
+  file, nel loro ordine, con `installed` e `running`. `running` dice soltanto
+  le app che questo processo ha avviato: senza l'app desktop aperta, la CLI
+  ne trova sempre `false`. Con `fub.craft` spento l'elenco è vuoto.
+- `fub_open_with { doc, editor, page?, apply? }`: senza `apply` risponde
+  `dry_run: true` con l'app (`editor`, `name`), `installed`, `running` e
+  `how`, cioè come la riceverebbe: `"forwarded"` alla finestra già aperta di
+  un'app a istanza unica, `"new_process"` in una finestra nuova, `null` se
+  non è installata. Non avvia niente. Con `"apply": true` apre davvero e
+  risponde `dry_run: false` con `editor` e `how`. Un'app che Fub non conosce
+  o che non apre quel file è `bad_args`; un'app non installata o un file che
+  non c'è sono `not_found`; con `fub.craft` spento è `unavailable`. `page`
+  (un intero da 1) serve a PdfCraft.
+
+Le radici valgono come per le note: tutti e tre gli strumenti vogliono `doc`
+sotto le radici di lettura, e `fub_open_with` con `apply` lo vuole sotto
+quelle di scrittura, perché l'app che lo riceve può cambiarlo. La prova non
+chiede la radice di scrittura.
+
+**Nessuno strumento avvia un'app per fare un'anteprima.** `fub_preview`
+chiama `craft.preview` soltanto con `doc` e `size`, e `craft.preview` legge e
+basta: guarda l'immagine nel file e la copia già fatta, e non mette in coda
+niente, neanche se `fub_invoke` gli passa `"render": true`, con o senza
+`apply`. Far partire la riga di comando di un'app (`craft_render`) e
+cambiarne il consenso (`craft.cli-previews`) restano gesti di chi usa Fub:
+nessuno strumento MCP li espone, perché un'app avviata da un agente
+eseguirebbe un programma fuori dal vault su un file che l'agente sceglie.
+`fub_open_with` è l'unico strumento che avvia un'app, e solo con `apply`,
+dentro le radici di scrittura.
 
 ## Risorse
 
@@ -103,6 +157,23 @@ risorse, né come bersaglio di un link risolto.
   (estensione e cartella comprese) lo sceglie `note.create`; con un testo la
   nota nasce già scritta, in un passo solo, così anche una lavagna `.canvas`
   nasce valida.
+- `fub_canvas_create` fa nascere una lavagna vuota con `canvas.create`, come
+  `fub_create` una nota: la prova nomina la lavagna (il primo nome libero
+  senza `name`, `.canvas` aggiunto, `folder` per un nome semplice), le radici
+  di scrittura la giudicano, e un nome preso è un `conflict`. Risponde
+  `{doc, revision}`.
+- `fub_canvas_apply` porta in una lavagna una lista di operazioni
+  (`add_card`, `connect`, `move`, `resize`, `set`, `remove`, `reorder`; la
+  forma sta in [Operazioni sulla lavagna](canvas-operations.md)) come una
+  modifica sola, con `canvas.apply`. `ops` è la lista o il suo testo JSON; `base` è
+  obbligatoria come per `fub_write`, e una revisione superata è un
+  `conflict`. Vuole la lavagna fra le radici di lettura e di scrittura, non
+  tutto il vault come `fub_invoke`. Senza `"apply": true` risponde col piano
+  (`dry_run: true`, `outcome`) e non scrive; con `apply` risponde
+  `{doc, dry_run: false, created, revision}`: gli id delle schede e degli
+  archi aggiunti, dati o nuovi, e la revisione dopo. Operazioni che non si
+  leggono o non si applicano, e un documento che non è una lavagna, sono
+  `bad_args`.
 - `fub_invoke` senza `"apply": true` restituisce il piano e non scrive.
   Con `apply`, un comando che scrive si esegue soltanto se tutte le note del
   suo piano stanno sotto le radici di scrittura; un comando che non dice
@@ -127,7 +198,3 @@ risorse, né come bersaglio di un link risolto.
 
 ## Non ancora
 
-`fub_open_with` (aprire un file in un'app Craft) e gli strumenti della
-lavagna (`fub_canvas_*`) arrivano coi comandi che li servono. Finché non ci
-sono, una lavagna si scrive come file `.canvas` con `fub_create` e
-`fub_write`.

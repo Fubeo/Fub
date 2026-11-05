@@ -22,6 +22,7 @@
 | il formato scena dei disegni | `docs/reference/scene-format.md` |
 | le annotazioni PDF (`.fubann`) | `docs/reference/annotation-format.md` |
 | JSON Canvas (`.canvas`) | `crates/fub-format-canvas/schema/canvas-v1.schema.json` |
+| il modello e le regole della lavagna | `crates/fub-canvas-core/` e `docs/reference/canvas-format.md` |
 | la proiezione dei documenti ricchi | `docs/reference/rich-projection.md` |
 | il protocollo della sessione live | `docs/reference/live-session.md` |
 | gli strumenti del server MCP | `docs/reference/mcp-server.md` |

@@ -160,6 +160,105 @@ export const SCENE = onPage("shell", [
     },
   },
   {
+    id: "settings-external-apps",
+    title: "Le preferenze: il gruppo «App esterne», con le anteprime fatte dalle app, il peso massimo e l'albero",
+    query: "craft=1",
+    prepare: async (page) => {
+      await page.click("#open-settings");
+      await page.waitForSelector('#settings-body .setting-row[data-setting-key="craft.tree-show-xmp"]');
+      await page.$eval('.setting-row[data-setting-key="craft.editor-paths"]', (row) => row.scrollIntoView({ block: "start" }));
+    },
+  },
+  // **I dati sulla foto**: una foto aperta col suo XMP di LightCraft accanto
+  // (`?photo=xmp`, vedi `photo-fixture.ts`), con la riga di stelle,
+  // etichetta, scelta e parole chiave sotto; e la stessa foto senza XMP, che
+  // non ha la riga né il suo posto.
+  {
+    id: "photo-xmp",
+    title: "Una foto col suo XMP: i dati di LightCraft sotto la foto",
+    query: "photo=xmp",
+    prepare: (page) => openPhoto(page, true),
+  },
+  {
+    id: "photo-senza-xmp",
+    title: "Una foto senza XMP: niente riga sotto la foto",
+    query: "photo=senza",
+    prepare: (page) => openPhoto(page, false),
+  },
+  // **La scheda di un file Craft senza anteprima** (`?craft-scheda=<caso>`,
+  // vedi `craft-fixture.ts`), aperta con un clic nell'albero come le
+  // schermate T23 del prototipo: la domanda sulle anteprime fatte dalle app,
+  // la riga «spente», l'app che prepara l'anteprima e le frasi di `missing`.
+  ...[
+    ["craft-domanda", "domanda", "La scheda di un file Craft: la domanda sulle anteprime fatte dalle app", ".craft-ask"],
+    ["craft-spente", "spente", "La scheda di un file Craft: le anteprime fatte dalle app spente, col link alle impostazioni", ".craft-off"],
+    ["craft-prepara", "prepara", "La scheda di un file Craft aperta con un clic, anteprime accese: l'app prepara l'anteprima", ".craft-empty-state"],
+    ["craft-peso", "peso", "La scheda di un file Craft oltre il peso massimo, col link alle impostazioni", ".craft-empty > .link-button"],
+    ["craft-rotto", "rotto", "La scheda di un file Craft che non si legge", ".craft-empty-state"],
+    ["craft-fallita", "fallita", "La scheda di un file Craft di cui l'app non è riuscita a fare l'anteprima", ".craft-empty-state"],
+  ].map(([id, kind, title, ready]) => ({
+    id,
+    title,
+    query: `craft-scheda=${kind}`,
+    prepare: (page) => openCraft(page, ready, kind === "prepara" ? "Preparo l'anteprima…" : null),
+  })),
+  // **La scheda di un RAW** (`?raw-scheda=<caso>`, vedi `raw-fixture.ts`),
+  // aperta con un clic nell'albero come le schermate T28 del prototipo: il
+  // JPEG che il RAW ha dentro, dritto o scattato in verticale (orientamento
+  // 6), coi dati dell'XMP sotto; e un RAW senza JPEG, con la domanda.
+  ...[
+    ["raw", "dritto", "La scheda di un RAW: il JPEG che ha dentro, coi dati dell'XMP sotto", "IMG_0398.CR3"],
+    ["raw-girato", "girato", "La scheda di un RAW scattato in verticale: il JPEG raddrizzato dall'orientamento", "IMG_0412.CR3"],
+    ["raw-senza", "senza", "La scheda di un RAW senza JPEG dentro: la domanda di LightCraft, coi dati dell'XMP", "IMG_0413.CR3"],
+  ].map(([id, kind, title, name]) => ({
+    id,
+    title,
+    query: `raw-scheda=${kind}`,
+    prepare: (page) => openRaw(page, `Foto/${name}`, kind !== "senza"),
+  })),
+  // **PDF e documenti** (`?pdf-scena=<caso>`, vedi `craft-fixture.ts`),
+  // come le schermate T31 del prototipo: la nota col contratto in PDF, con la
+  // prima pagina o col link; il PDF aperto con la domanda sulle anteprime
+  // nella riga d'avviso; un Word prestato a WordCraft, con la riga del
+  // prestito e la domanda.
+  {
+    id: "nota-pdf",
+    title: "Una nota con un PDF che ha l'anteprima: la prima pagina, il nome sotto",
+    query: "pdf-scena=nota",
+    prepare: (page) => openPdfNote(page, true),
+  },
+  {
+    id: "nota-pdf-senza",
+    title: "La stessa nota, il PDF senza anteprima: il link",
+    query: "pdf-scena=nota-senza",
+    prepare: (page) => openPdfNote(page, false),
+  },
+  {
+    id: "pdf-domanda",
+    title: "Il PDF aperto: la domanda sulle anteprime nella riga d'avviso",
+    query: "pdf-scena=domanda",
+    prepare: openPdfQuestion,
+  },
+  {
+    id: "docx-due-righe",
+    title: "Un Word prestato a WordCraft: la riga del prestito e la domanda, ognuna con le sue azioni",
+    query: "pdf-scena=due-righe",
+    prepare: openLentDocx,
+  },
+  // **L'albero con le miniature** (`?albero=<caso>`, vedi `craft-fixture.ts`),
+  // come i modi `albero-miniature` e `albero-xmp` del prototipo: le cartelle
+  // «Foto 2026» e «Progetti» aperte, le miniature accese, gli XMP mostrati o
+  // nascosti. In una finestra stretta l'albero resta nel cassetto aperto.
+  ...[
+    ["albero-miniature", "miniature", "L'albero con le miniature: l'anteprima che il file ha già, al posto dell'icona"],
+    ["albero-xmp", "xmp", "L'albero con le miniature e gli XMP nascosti"],
+  ].map(([id, kind, title]) => ({
+    id,
+    title,
+    query: `albero=${kind}`,
+    prepare: openThumbTree,
+  })),
+  {
     id: "prefs-appearance",
     title: "Le preferenze: carattere, accento e spazio dell'interfaccia, coi controlli dello Scrittoio",
     prepare: async (page) => {
@@ -977,6 +1076,36 @@ export const SCENE = onPage("shell", [
       await page.waitForSelector(".pane.focus .sheet-thread-item:focus-visible");
     },
   },
+  // **Lo strato d'avvio** (`.avvio`, nelle tre pagine): ciò che si vede prima
+  // dell'app. Il fake lo ferma a uno stato dalla query (`avvio=…` in
+  // `fake-ipc.ts`), e la scena dichiara la sua condizione d'arrivo perché
+  // l'avvio non finisce mai (attesa) o finisce nel guasto: `data-bench` non
+  // dice niente su di loro. La scia la ferma il palco (`QUIET`).
+  {
+    id: "avvio-attesa",
+    title: "L'avvio: il marchio, la riga del vault che si apre, la scia",
+    query: "avvio=attesa",
+    ready: () => document.querySelector('.avvio[data-stato="attesa"][data-fase="vault"]') !== null,
+    prepare: async () => {},
+  },
+  {
+    id: "avvio-lento",
+    title: "L'avvio che si allunga: «Ci vuole più del solito.»",
+    query: "avvio=attesa",
+    // Lo dice `stati.js` a 10 s: una condizione, non un tempo.
+    ready: () => document.querySelector('.avvio[data-stato="lento"]') !== null,
+    readyTimeout: 15_000,
+    prepare: async () => {},
+  },
+  {
+    id: "avvio-guasto",
+    title: "L'avvio caduto: il motivo, Riprova col fuoco, Copia i dettagli",
+    query: "avvio=guasto",
+    ready: () =>
+      document.querySelector('.avvio[data-stato="guasto"]') !== null &&
+      document.activeElement?.id === "avvio-riprova",
+    prepare: async () => {},
+  },
 ]).concat(
   // **Il kit** (`bench/kit.html`): le primitive di `src/kit/` vestite dalla
   // stessa serie. Stanno in questo elenco perché sono la stessa pelle e le
@@ -1145,6 +1274,14 @@ export const SCENE = onPage("shell", [
         await page.click('#views-ribbon .rail-btn[data-panel="files"]');
         await page.waitForSelector("#sidebar-scrim:not([hidden])");
       },
+    },
+    {
+      id: "avvio-telefono",
+      title: "L'avvio sul telefono: il marchio e la riga del vault",
+      query: "avvio=attesa",
+      viewport: PHONE,
+      ready: () => document.querySelector('.avvio[data-stato="attesa"][data-fase="vault"]') !== null,
+      prepare: async () => {},
     },
   ]),
   // **La finestra documento** (`document.html`): un foglio solo, in
@@ -1403,6 +1540,136 @@ async function openDrawing(page) {
   );
   await page.evaluate(() => document.fonts.ready);
   await page.focus(".draw-editor .draw-surface");
+}
+
+/// Apre la foto delle scene `photo-*` e aspetta che sia disegnata, e con
+/// `withData` anche la riga dei dati di LightCraft.
+async function openPhoto(page, withData) {
+  await openFolder(page, "Foto");
+  await page.click('#file-list .tree-row[data-path="Foto/spiaggia.jpg"]');
+  await page.waitForFunction(() => {
+    const image = document.querySelector(".pane.focus .media-surface img");
+    return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0;
+  });
+  if (withData) await page.waitForSelector(".pane.focus .photo-data .photo-data-open");
+}
+
+/// Apre il disegno delle scene `craft-*` con un clic nell'albero (un gesto) e
+/// aspetta `ready` nella scheda, e con `said` la frase dello stato.
+async function openCraft(page, ready, said) {
+  await openFolder(page, "Disegni");
+  await page.click('#file-list .tree-row[data-path="Disegni/logo-studio.vectorcraft"]');
+  await page.waitForSelector(`.pane.focus ${ready}`);
+  if (said !== null) {
+    await page.waitForFunction((text) => document.querySelector(".pane.focus .craft-empty-state")?.textContent === text, said);
+  }
+}
+
+/// Apre il RAW delle scene `raw-*` con un clic nell'albero e aspetta il JPEG
+/// disegnato (`withImage`) o la domanda, e la riga dei dati dell'XMP.
+async function openRaw(page, doc, withImage) {
+  await openFolder(page, "Foto");
+  await page.click(`#file-list .tree-row[data-path="${doc}"]`);
+  if (withImage) {
+    await page.waitForFunction(() => {
+      const image = document.querySelector(".pane.focus .craft-card img");
+      return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0;
+    });
+  } else {
+    await page.waitForSelector(".pane.focus .craft-ask");
+  }
+  await page.waitForSelector(".pane.focus .photo-data .photo-data-open");
+}
+
+/// Apre la nota col PDF delle scene `nota-pdf*` e aspetta la prima pagina
+/// disegnata (`withPreview`) o il link.
+async function openPdfNote(page, withPreview) {
+  await fromTreeDrawer(page, () => openNote(page, "Casa/Affitto di via Roma.md"));
+  if (withPreview) {
+    // Lo slot dell'incorporamento ha già la sua didascalia: l'immagine ci
+    // entra da sola, senza un `figure` suo.
+    await page.waitForFunction(() => {
+      const image = document.querySelector(".pane.focus img.craft-figure-page");
+      return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0;
+    });
+  } else {
+    await page.waitForSelector('.pane.focus [data-vault-media="loaded"] a.wikilink');
+  }
+  await page.mouse.move(0, 0);
+}
+
+/// Apre il PDF della scena `pdf-domanda` con un clic nell'albero e aspetta
+/// la pagina disegnata e la riga della domanda.
+async function openPdfQuestion(page) {
+  await fromTreeDrawer(page, async () => {
+    await openFolder(page, "Casa");
+    await page.click('#file-list .tree-row[data-path="Casa/contratto-affitto.pdf"]');
+    await page.waitForSelector('.pane.focus .sheet-notice[data-notice="craft_consent"]');
+  });
+  // La pagina è disegnata quando la riga di stato conta le pagine.
+  await page.waitForFunction(() => {
+    const pdf = document.querySelector(".pane.focus .media-pdf");
+    return /\d/.test(pdf?.querySelector('[role="status"]')?.textContent ?? "")
+      && (pdf?.querySelector(".media-pdf-page canvas")?.width ?? 0) > 0;
+  });
+  await page.mouse.move(0, 0);
+}
+
+/// Fa `open` con l'albero a portata: in una finestra stretta l'albero sta nel
+/// cassetto, che si apre prima e si chiude dopo, come in `openRichDocument`.
+async function fromTreeDrawer(page, open) {
+  const compact = await page.evaluate(() => document.querySelector("#layout")?.classList.contains("layout-compact") ?? false);
+  if (compact) {
+    await page.click('#views-ribbon .rail-btn[data-panel="files"]');
+    await page.waitForSelector("#sidebar-scrim:not([hidden])");
+  }
+  await open();
+  if (compact && await page.isVisible("#sidebar-scrim")) {
+    // Non sul bordo destro: lì il puntatore fa affacciare l'ispettore.
+    const scrim = await page.locator("#sidebar-scrim").boundingBox();
+    await page.click("#sidebar-scrim", { position: { x: scrim.width - 80, y: 8 } });
+    await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
+  }
+}
+
+/// Le miniature che l'albero delle scene `albero-*` mostra: il RAW girato, i
+/// tre file Craft, il Word e il PDF.
+const TREE_THUMBS = 6;
+
+/// Apre le cartelle dell'albero delle scene `albero-*` e aspetta che tutte le
+/// miniature siano dipinte. In una finestra stretta apre il cassetto e lo
+/// lascia aperto: la scena è l'albero.
+async function openThumbTree(page) {
+  const compact = await page.evaluate(() => document.querySelector("#layout")?.classList.contains("layout-compact") ?? false);
+  if (compact) {
+    await page.click('#views-ribbon .rail-btn[data-panel="files"]');
+    await page.waitForSelector("#sidebar-scrim:not([hidden])");
+  }
+  await openFolder(page, "Foto 2026");
+  await openFolder(page, "Progetti");
+  await page.waitForFunction((count) => {
+    const thumbs = [...document.querySelectorAll("#file-list img.tree-thumb")];
+    return thumbs.length === count && thumbs.every((img) => img.complete && img.naturalWidth > 0);
+  }, TREE_THUMBS);
+  await page.mouse.move(0, 0);
+}
+
+/// Apre il Word della scena `docx-due-righe`, lo presta a WordCraft dal menu
+/// dell'albero e aspetta le due righe.
+async function openLentDocx(page) {
+  const path = "Documenti/relazione.docx";
+  await fromTreeDrawer(page, async () => {
+    await openFolder(page, "Documenti");
+    await page.click(`#file-list .tree-row[data-path="${path}"]`);
+    await page.waitForSelector(".pane.focus .rich-surface .ProseMirror");
+    await page.click(`#file-list li[data-path="${path}"] > .tree-row`, { button: "right" });
+    await page.click('#context-menu button:has-text("Organizza")');
+    await page.click('.context-submenu button:has-text("Apri con un\'altra app")');
+    await page.click('.context-submenu >> nth=1 >> button:has-text("WordCraft")');
+    await page.waitForSelector('.pane.focus .sheet-notice[data-notice="lent"]');
+  });
+  await page.waitForSelector('.pane.focus .sheet-notice[data-notice="craft_consent"]');
+  await page.mouse.move(0, 0);
 }
 
 /// Apre la cartella di Excel della scena `grid-workbook` e aspetta che la

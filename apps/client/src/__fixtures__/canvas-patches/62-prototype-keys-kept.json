@@ -1,0 +1,10 @@
+{
+  "name": "prototype-keys-kept",
+  "description": "Spostare una scheda tiene le chiavi __proto__ e constructor dove sono",
+  "before": "{\"nodes\":[{\"id\":\"n\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"a\",\"constructor\":{\"keep\":1}}],\"edges\":[],\"__proto__\":{\"own\":true}}",
+  "patches": [{"kind":"upsert-node","before":{"id":"n","type":"text","x":0,"y":0,"width":10,"height":10,"text":"a","constructor":{"keep":1}},"after":{"id":"n","type":"text","x":8,"y":0,"width":10,"height":10,"text":"a","constructor":{"keep":1}}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"n\",\"type\":\"text\",\"x\":8,\"y\":0,\"width\":10,\"height\":10,\"text\":\"a\",\"constructor\":{\"keep\":1}}],\"edges\":[],\"__proto__\":{\"own\":true}}"
+  }
+}

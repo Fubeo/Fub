@@ -28,7 +28,9 @@ messages. This file and the agent files under `.claude/` are in English.
 
 Toolchain: Rust 1.95, Node.js >=22.12.0 with **npm only** (`npm ci`, never
 `npm install` during setup: it rewrites the lockfile). Tauri CLI v2. The
-`wasm32-wasip2` target is needed for the full `fub-wasm-host` tests.
+`wasm32-wasip2` target is needed for the full `fub-wasm-host` tests, and
+`wasm32-unknown-unknown` for the client: its Vite build, dev server and tests
+compile `fub-canvas-wasm` with cargo.
 
 ## Order of success
 

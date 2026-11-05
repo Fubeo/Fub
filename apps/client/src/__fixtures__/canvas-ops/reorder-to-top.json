@@ -1,0 +1,19 @@
+{
+  "about": "reorder porta le schede nominate in cima, nell'ordine dato; le altre restano sotto nel loro ordine.",
+  "before": { "nodes": [
+    { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+    { "id": "b", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "b" },
+    { "id": "c", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "c" },
+    { "id": "d", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "d" }
+  ] },
+  "ops": [{ "op": "reorder", "ids": ["b", "a"] }],
+  "expect": {
+    "outcome": "applied",
+    "after": { "nodes": [
+      { "id": "c", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "c" },
+      { "id": "d", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "d" },
+      { "id": "b", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "b" },
+      { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" }
+    ] }
+  }
+}

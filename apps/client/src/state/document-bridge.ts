@@ -38,7 +38,8 @@ export type RemoteMessage = Identity & (
 export type NavigateTarget =
   | { kind: "wikilink"; page: string; heading: string | null; block: string | null }
   | { kind: "path"; path: string }
-  | { kind: "tag"; tag: string };
+  | { kind: "tag"; tag: string }
+  | { kind: "figure"; doc: string };
 
 /** How the main window follows what a child window clicked. */
 export interface DocumentWindowNavigation {
@@ -68,6 +69,7 @@ function validNavigateTarget(value: unknown): value is NavigateTarget {
       && (target.block === null || typeof target.block === "string");
     case "path": return typeof target.path === "string" && !!target.path;
     case "tag": return typeof target.tag === "string" && !!target.tag;
+    case "figure": return typeof target.doc === "string" && !!target.doc;
     default: return false;
   }
 }

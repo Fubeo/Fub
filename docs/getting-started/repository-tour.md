@@ -57,9 +57,11 @@ Fub/
 | `fub-format-markdown` | provider Markdown |
 | `fub-format-base` | provider `.base`: viste YAML sulle proprietà delle note |
 | `fub-format-canvas` | provider JSON Canvas (`.canvas`) |
+| `fub-canvas-core` | nucleo della lavagna: modello e lettura di una `.canvas` |
 | `fub-format-rich` | documenti di videoscrittura (`.docx`, `.odt`, `.rtf`, `.doc`) |
 | `fub-format-xlsx` | cartelle di Excel (`.xlsx`) sopra i motori di GridCraft |
 | `fub-format-svg` | provider delle scene di FubDraw (`.svg`) |
+| `fub-format-craft` | file delle app Craft (`.vectorcraft`, `.pcraft`, `.figcraft`, `.xmp`) in sola lettura |
 | `fub-features` | feature ufficiali dietro feature Cargo |
 | `fub-importers` | import ed export ufficiali (HTML, CSV, ZIP, ENEX, PDF, connettori) |
 | `fub-services` | servizio locale di account, sincronizzazione e pubblicazione |

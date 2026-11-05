@@ -2,7 +2,7 @@ import { mountMarkdownSurface, type EditorSlashHost, type PageIcons, type System
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
 import { api } from "../../host/ipc";
-import { openVaultRoot, vaultArg } from "../../state/store";
+import { openVaultRoot, state, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
 import type { GridDialogs, GridRibbon } from "../grid/ribbon/ribbon";
 import type { GridPalette } from "../grid/palette/commands";
@@ -21,6 +21,12 @@ import { mountRichSurface, RICH_FAMILY, RICH_FORMATS, RICH_OWNER, RICH_PROFILE }
 import { mountMediaSurface, profileForKind, type MediaSurfaceDeps } from "../media/media-surface";
 import { mediaKindOfId, mimeOfId } from "../media/media-types";
 import { mountSvgSurface, SVG_PROFILE } from "../text/profiles/svg";
+import {
+  CRAFT_FAMILY, CRAFT_FORMATS, CRAFT_OWNER, CRAFT_PROFILE, MEDIA_RAW_PROFILE, RAW_PROFILE, XMP_PROFILE, mountCraftSurface,
+} from "../craft/index";
+import { CRAFT_PREVIEW_COMMAND } from "../../host/craft";
+import { isRawPhoto } from "../../ui/format-kind";
+import { showPhotoData } from "../craft/photo-data";
 import { makePdfJsLoader, pdfIdWithoutFragment, type PdfJsModule } from "../media/pdf-view";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { CanvasAttachmentPort, CanvasMediaPort } from "../canvas/engine";
@@ -39,6 +45,9 @@ import {
 export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onOpenWikilink: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
   readonly onOpenPath: (path: string, from?: string) => void | Promise<void>;
+  /// Il clic su una figura di una nota (un file Craft, un PDF): apre il suo
+  /// documento col gesto e non crea mai una nota.
+  readonly onOpenFigure?: (doc: string) => void | Promise<void>;
   /// «Apri a lato» dal menu di un wikilink: la nota in un riquadro accanto.
   readonly onOpenWikilinkBeside?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
   /// Un file nominato da una nota aperto con un'altra app o mostrato
@@ -49,6 +58,9 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onImportRemoteImage?: (url: string, from: string) => Promise<string | null>;
   readonly onOpenDocument: (doc: string) => void | Promise<void>;
   readonly onSearchTag: (tag: string) => void;
+  /// Apre le impostazioni sul gruppo della riga `key` (la scheda di un file
+  /// Craft, per il consenso e il peso massimo).
+  readonly onOpenSettings?: (key: string) => void;
   /// Rinomina una pagina dal titolo della testata dei Blocchi: `null` se è
   /// andata, altrimenti la frase che dice perché no.
   readonly onRenamePage?: (doc: string, name: string) => Promise<string | null>;
@@ -250,6 +262,7 @@ export function createDocumentSurfaceRegistry(
             onSelectionChange: () => options.onSelectionChange(context.paneId),
             onOpenWikilink: options.onOpenWikilink,
             onOpenPath: options.onOpenPath,
+            ...(options.onOpenFigure ? { onOpenFigure: options.onOpenFigure } : {}),
             onOpenWikilinkBeside: options.onOpenWikilinkBeside,
             onOpenDocument: options.onOpenDocument,
             onShowFile: options.onShowFile,
@@ -456,6 +469,25 @@ export function createDocumentSurfaceRegistry(
       },
     },
   });
+  const craftDeps = {
+    onOpenDocument: options.onOpenDocument,
+    onSearchTag: options.onSearchTag,
+    ...(options.onOpenSettings ? { onOpenSettings: options.onOpenSettings } : {}),
+  };
+  registry.register({
+    owner: CRAFT_OWNER,
+    family: CRAFT_FAMILY,
+    defaultProfile: CRAFT_PROFILE,
+    // I file delle app Craft e gli XMP, in sola lettura: la superficie arriva
+    // con un `import()` alla prima scheda (`editors/craft/`).
+    profiles: [XMP_PROFILE],
+    formats: CRAFT_FORMATS,
+    factory: {
+      mount(profile, context) {
+        return mountCraftSurface(profile, context, craftDeps);
+      },
+    },
+  });
   registry.register({
     owner: CANVAS_MOUNT.owner,
     family: CANVAS_MOUNT.family,
@@ -468,6 +500,7 @@ export function createDocumentSurfaceRegistry(
         return mountCanvasSurface(profile, context, {
           onChange: options.onChange,
           onSelectionChange: options.onSelectionChange,
+          onFail: options.onFail,
           onOpenWikilink: options.onOpenWikilink,
           onOpenPath: options.onOpenPath,
           onCreateNote: options.onCreateCanvasNote,
@@ -514,22 +547,45 @@ export function createDocumentSurfaceRegistry(
     owner: "fub.shell.viewer",
     family: "viewer",
     defaultProfile: "bytes-read-only",
-    profiles: ["media-image", "media-audio", "media-video", "media-pdf"],
+    profiles: ["media-image", "media-audio", "media-video", "media-pdf", MEDIA_RAW_PROFILE],
     sources: { bytes: "bytes-read-only" },
     // L'unica classificazione di un file senza formato: la tabella MIME della
     // shell sceglie la vista, e ciò che nessuna vista sa mostrare non è di
     // questa famiglia. Un SVG è testo: lo prende la famiglia `text`, che lo
     // scrive con l'anteprima accanto invece di mostrarlo e basta.
+    //
+    // Una foto RAW non ha un formato del vault e il registro ha un solo
+    // legame per i byte, questo: la prende il profilo `media-raw`, che monta
+    // la scheda di `editors/craft` col profilo `raw`, solo se il componente
+    // «File delle app Craft» risponde a `craft.preview`. Spento, il RAW resta
+    // un file senza vista.
     selectSourceProfile: (request, fallback) => {
       if (!request.documentId) return fallback;
+      if (isRawPhoto(request.documentId)) {
+        return state.commandSpecs.some((spec) => spec.id === CRAFT_PREVIEW_COMMAND) ? MEDIA_RAW_PROFILE : null;
+      }
       if (mimeOfId(request.documentId) === "image/svg+xml") return null;
       const kind = mediaKindOfId(pdfIdWithoutFragment(request.documentId));
       return kind === "other" ? null : profileForKind(kind);
     },
     factory: {
       mount(profile, context) {
+        if (profile === MEDIA_RAW_PROFILE) {
+          return mountCraftSurface(RAW_PROFILE, context, craftDeps, { family: "viewer", profile: MEDIA_RAW_PROFILE });
+        }
         return options.media
-          ? mountMediaSurface(profile, context, { ...options.media, pdfLoader: options.media.pdfLoader ?? loadPdf })
+          ? mountMediaSurface(profile, context, {
+            ...options.media,
+            pdfLoader: options.media.pdfLoader ?? loadPdf,
+            // I dati di LightCraft sotto la foto, solo col componente «File
+            // delle app Craft» acceso: spento, il kernel non elenca
+            // `craft.photo` e la foto non chiede niente; acceso dopo, la riga
+            // arriva da sola (`state/craft-photos.ts`).
+            photoData: options.media.photoData ?? {
+              show: (root, doc, life) =>
+                showPhotoData(root, doc, { onOpenDocument: options.onOpenDocument, onSearchTag: options.onSearchTag }, life),
+            },
+          })
           : staticSurface("viewer", profile, context, "viewer.unavailable");
       },
     },

@@ -43,6 +43,7 @@
 | il mirror TypeScript non diverge dal Rust | i test `ts_*` dei crate | `UPDATE_MIRROR=1 cargo test …` e i banchi `mirror` |
 | le regole lato shell sono le stesse del contratto | `apps/client/src/rules/` | `crates/fub-abi/tests/rules_mirror.rs` |
 | l'inchiostro TypeScript è la copia calda di quello Rust | `apps/client/src/ink/` | `crates/fub-ink/tests/ts_mirror.rs` e la fixture `ink-samples.json` |
+| la lavagna si legge e si scrive con un codice solo, in nativo e nel `.wasm` a 32 bit della tela | `crates/fub-canvas-core/` (le regole), `crates/fub-canvas-wasm/` (la build della tela) | `read_vectors.rs`, `patch_vectors.rs` e `ts_mirror.rs` di `crates/fub-canvas-core/tests/`, e di là `editors/canvas/wasm/vectors.test.ts` e `wasm/mirror.test.ts` |
 | i disegni grandi si aprono e si muovono nei tempi | `apps/client/src/editors/spatial/painter/` | `npm run bench:large`, gate della CI |
 | la battuta sta nel budget di 4 ms di mediana | `apps/client/src/editors/text/profiles/markdown/` | `node bench/interaction.mjs --only=battuta` e `render-incremental.test.ts` |
 | una feature Cargo è accesa solo da chi la usa | `crates/fub-features/src/inventory.rs` | `crates/fub-features/tests/cargo_features.rs` e `check-cargo-feature-default.mjs` |

@@ -1,7 +1,7 @@
 # Misure nella WebView
 
 Questa guida dice come misurare i tempi di Fub nella WebView vera, con la
-sonda delle prestazioni e i sette scenari del banco WebView.
+sonda delle prestazioni e gli scenari del banco WebView.
 
 > **Per chi:** chi cambia l'editor, il passaggio fra le note, la lavagna, il
 > grafo, l'inchiostro o l'avvio, e chi prepara una versione.
@@ -42,6 +42,7 @@ ascolta niente e non chiede fotogrammi.
 | R1 | la memoria: l'app vuota, aprendo un file per modalità (nota, lavagna, disegno, documento Word, foglio Excel, PDF, immagine), dopo «chiudi tutto» e un minuto dopo | PSS in MiB, in tutto e per processo (app, WebView), soltanto Linux |
 | T1 | le tessere: un fotogramma di 2880 × 1800 RGBA letto a tessere di 256 × 256 dalla IPC (`resource_read_chunk`) e da `fub-asset:` con `Range`, poi disegnato su una tela, una tessera e un fotogramma intero per fotogramma | p95 per tessera, mediana per fotogramma, ms |
 | I1 | il vault durante l'indicizzazione dell'avvio (10.000 note): una nota aperta con `read_document` e una tessera letta dalla IPC, una dopo l'altra, finché `vault_status` non dice che l'indice è pronto | p95 per nota e per tessera, ms |
+| L1 | il nucleo della lavagna in WebAssembly: il modulo degli asset compilato con la CSP dell'app, poi venti aperture e duecento spostamenti di una scheda su una lavagna di 50 e una di 2.000 schede | istanza; prima apertura, primo commit e p95, ms |
 
 R1 legge `/proc/<pid>/smaps_rollup` dei processi che discendono dal driver,
 tolti i driver (`memory.mjs`): la PSS divide le pagine condivise fra chi le
@@ -104,6 +105,19 @@ si tocca. Gli obiettivi e le soglie stanno in
 S5 chiede la feature `draw` dell'app: senza, un `.svg` si apre come immagine
 e il referto scrive lo scenario come saltato, senza numero.
 
+L1 vive in `canvas.mjs` e segue il patto del
+[modulo](../reference/canvas-operations.md#webassembly) come il caricatore
+della shell: l'**istanza** è compilare e istanziare il modulo dai suoi byte,
+l'**open** va dal testo della lavagna al modello letto, il **commit** dalle
+toppe di uno spostamento al tratto cambiato e alle toppe dell'annulla letti.
+Ogni commit rimette la scheda dov'era con l'annulla del precedente, e alla
+fine il testo deve tornare uguale a quello di partenza. Il nome del modulo,
+con l'hash, viene da `apps/client/dist/assets/`: `dist/` deve essere la build
+che l'app di release ha dentro (`--dist=` ne sceglie un'altra). Una CSP che
+non lascia compilare il modulo fa fallire lo scenario, con l'errore e le
+violazioni che la pagina ha visto. La stessa misura gira in Node, senza app:
+`node bench/webview/canvas.mjs` da `apps/client/`, dopo `npm run build`.
+
 ## Linux, con un comando solo
 
 Dalla radice del repository:
@@ -143,7 +157,7 @@ in più vanno a `run.mjs`, per esempio `--only=R1,T1`.
 Il referto va in `apps/client/bench/.output/webview/referto.json`. Il comando
 esce con 1 se un valore supera la soglia scelta.
 
-Il job `webview` della CI fa lo stesso con S1–S3, S7, R1, T1 e I1, sotto Xvfb e
+Il job `webview` della CI fa lo stesso con S1–S3, S7, R1, T1, I1 e L1, sotto Xvfb e
 senza scheda grafica, e carica il referto come artifact `webview-<sha>`.
 
 ## macOS

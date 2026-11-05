@@ -141,6 +141,9 @@ export interface MarkdownSurfaceOptions {
   /// Click su un wikilink nella resa.
   onOpenWikilink(page: string, heading: string | null, block: string | null): void | Promise<void>;
   onOpenPath(path: string, from?: string): void | Promise<void>;
+  /// Clic su una figura (un file Craft, un PDF): apre il suo documento col
+  /// gesto, e non crea mai una nota. Senza, la figura non apre niente.
+  onOpenFigure?(doc: string): void | Promise<void>;
   /// Apre un documento del vault per id (l'immagine resa nel visore).
   onOpenDocument?(id: string): void | Promise<void>;
   /// «Apri a lato» dal menu di un wikilink. Senza, la voce non c'è.
@@ -357,6 +360,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         resources,
         openWikilink,
         openPath: opts.onOpenPath,
+        openFigure: opts.onOpenFigure,
         searchTag: opts.onSearchTag,
         toggleTask: readOnly ? undefined : actions.toggleTask,
         editFence: readOnly ? undefined : actions.editFence,
@@ -638,6 +642,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       resources,
       openWikilink,
       openPath: opts.onOpenPath,
+      openFigure: opts.onOpenFigure,
       searchTag: opts.onSearchTag,
       toggleTask,
       importRemoteImage: toggleTask ? importRemoteImage : undefined,

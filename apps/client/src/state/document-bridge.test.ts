@@ -264,6 +264,14 @@ describe("document-window protocol", () => {
     children[0].navigate({ kind: "wikilink", page: "Altra", heading: null, block: "abc" });
     await settle();
     expect(navigate).toHaveBeenCalledWith({ kind: "wikilink", page: "Altra", heading: null, block: "abc" }, doc);
+    // Il clic su una figura arriva come figura, non come wikilink: la finestra
+    // principale la apre senza mai creare una nota. Una figura senza documento
+    // non passa.
+    children[0].navigate({ kind: "figure", doc: "Foto/scatto.photocraft" });
+    children[0].navigate({ kind: "figure", doc: "" } as never);
+    await settle();
+    expect(navigate).toHaveBeenCalledWith({ kind: "figure", doc: "Foto/scatto.photocraft" }, doc);
+    expect(navigate).toHaveBeenCalledTimes(2);
     setDocumentWindowNavigation(null);
 
     await opened.handle.dispose();

@@ -1,0 +1,19 @@
+[package]
+name = "fub-format-craft"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "I file delle app Craft nel vault (.vectorcraft, .pcraft, .figcraft e gli XMP di LightCraft) in sola lettura: FormatProvider a byte con metadati, testo e file collegati, e il contratto dell'anteprima. Mai il motore dell'app, mai una scrittura."
+
+[dependencies]
+fub-abi = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+zip = { workspace = true }
+flate2 = { workspace = true }
+quick-xml = { workspace = true }
+base64 = { workspace = true }
+
+[dev-dependencies]
+fub-sdk = { workspace = true }
