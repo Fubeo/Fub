@@ -89,6 +89,38 @@ export function ribbonMotion(parts: RibbonMotionParts, lifetime: Lifetime): Ribb
     return found;
   };
   const shownNow = (): boolean => !panels.hidden && panels.getClientRects().length > 0;
+  /// La tenda non cambia altezza (la risposta dell'utente a T19): mentre il
+  /// vassoio riappare, chi sotto di lui si accorcerebbe (la griglia) resta
+  /// alto com'era, con un margine negativo sotto, e la sua parte di sotto
+  /// passa sotto la fila dei fogli e fuori dal riquadro, che la tagliano.
+  /// Finita la corsa più nuova si accorcia: ciò che toglie non si vedeva.
+  /// Così la tenda scende e risale per intero, senza che il suo bordo di
+  /// sotto salti e senza una fascia vuota sotto di lei.
+  let held: HTMLElement[] = [];
+  let curtain = 0;
+  const release = (): void => {
+    for (const el of held) el.style.removeProperty("margin-block-end");
+    held = [];
+  };
+  lifetime.add(release);
+  /// Cambia lo stato e tiene alto chi si è accorciato rispetto a `heights`.
+  const holding = (apply: () => void, items: readonly HTMLElement[], heights: readonly number[]) => () => {
+    release();
+    apply();
+    items.forEach((el, index) => {
+      const shrunk = heights[index] - el.offsetHeight;
+      if (shrunk >= 1) {
+        el.style.setProperty("margin-block-end", `${-shrunk}px`);
+        held.push(el);
+      }
+    });
+  };
+  /// Toglie i margini quando finisce la corsa più nuova della tenda.
+  const settle = (run: number, done: Promise<void>): void => {
+    void done.then(() => {
+      if (run === curtain) release();
+    });
+  };
   /// Un'immagine che se ne va col tempo di un'uscita, dentro la barra o in
   /// `layer`, dove prende gli stessi stili dell'originale.
   const vanish = (ghost: Ghost, layer: HTMLElement = element): void => {
@@ -124,18 +156,23 @@ export function ribbonMotion(parts: RibbonMotionParts, lifetime: Lifetime): Ribb
         apply();
         return;
       }
+      const items = below();
+      const heights = items.map((el) => el.offsetHeight);
+      const run = (curtain += 1);
       if (!shown) {
         // Il vassoio non si muove: resta un'immagine che svanisce, e la
         // formula e la griglia gli salgono sopra come una tenda. Chi sale al
         // posto di ciò che esce finisce col tempo dell'uscita.
         const ghost = prepareExit(panels);
-        flip(below(), apply, { edge: "top", scale: false, duration: DURATION.swap, easing: "ease-out", lifetime });
+        const rise = flip(items, holding(apply, items, heights), { edge: "top", scale: false, duration: DURATION.swap, easing: "ease-out", lifetime });
+        settle(run, rise.finished);
         vanish(ghost);
         return;
       }
       // La tenda ridiscende e lo scopre; se stava uscendo, `enter` riparte
       // dall'opacità che l'immagine aveva.
-      flip(below(), apply, { edge: "top", scale: false, spring: "wide", lifetime });
+      const fall = flip(items, holding(apply, items, heights), { edge: "top", scale: false, spring: "wide", lifetime });
+      settle(run, fall.finished);
       enter(panels, { from: { opacity: 0 }, spring: "wide", whenReduced: "fade", lifetime });
     },
 

@@ -240,7 +240,9 @@ Nei fogli la barra si muove (l'opzione `motion` del kit, che soltanto la
 griglia accende; il padrone è `kit/ribbon/ribbon-motion.ts`, con `moto/`):
 i foglietti di una sezione nuova entrano uno dopo l'altro dal suo verso,
 Ctrl+F1 ritira il vassoio, che svanisce mentre la formula e la griglia gli
-salgono sopra come una tenda (e ridiscendono riaprendolo), il foglietto che
+salgono sopra come una tenda (e ridiscendono riaprendolo; durante la corsa
+la griglia tiene la sua altezza e passa sotto la barra dei fogli, così il
+bordo di sotto non salta, e la rende a corsa finita), il foglietto che
 si apre sul posto si alza di un gradino e gli altri scivolano, e la scheda
 della tabella compare e svanisce con la selezione. Un gesto nuovo a metà
 corsa riparte da posa e velocità correnti; ciò che cambia forma o se ne va

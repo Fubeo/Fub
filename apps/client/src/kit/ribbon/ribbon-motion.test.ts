@@ -161,6 +161,43 @@ describe("il movimento della barra", () => {
     expect(liveState(panels)).not.toBeNull();
   });
 
+  it("la tenda non cambia altezza: la griglia resta alta finché la corsa non finisce, anche se la si inverte", async () => {
+    // La griglia riempie ciò che resta: col vassoio è più bassa di 80 px, e
+    // un margine negativo sotto la allunga di altrettanto.
+    const height = () => (panels.hidden ? 480 : 400) - (parseFloat(grid.style.marginBlockEnd) || 0);
+    Object.defineProperty(grid, "offsetHeight", { configurable: true, get: height });
+    box(grid, () => new DOMRect(0, trayTop() + 30, 400, height()));
+    const flush = async () => {
+      for (let at = 0; at < 5; at += 1) await Promise.resolve();
+    };
+    panels.hidden = true;
+    motion.tray(true, () => (panels.hidden = false));
+    expect(grid.offsetHeight).toBe(480);
+    expect(grid.style.marginBlockEnd).toBe("-80px");
+    driver.advance(60);
+    const midway = grid.getBoundingClientRect();
+    // Ritirata a metà: la griglia prosegue da dov'è, con la stessa altezza.
+    motion.tray(false, () => (panels.hidden = true));
+    expect(grid.style.marginBlockEnd).toBe("");
+    expect(grid.getBoundingClientRect().top).toBeCloseTo(midway.top, 0);
+    expect(grid.getBoundingClientRect().height).toBe(midway.height);
+    // La corsa vecchia che finisce non tocca la nuova.
+    motion.tray(true, () => (panels.hidden = false));
+    expect(grid.style.marginBlockEnd).toBe("-80px");
+    driver.advance(5000);
+    await flush();
+    // Finita la corsa più nuova, la griglia prende la sua misura: ciò che
+    // toglie stava sotto la fila dei fogli.
+    expect(grid.style.marginBlockEnd).toBe("");
+    expect(grid.offsetHeight).toBe(400);
+    // Chiusa la vita della barra a metà corsa, nessun margine resta.
+    motion.tray(false, () => (panels.hidden = true));
+    motion.tray(true, () => (panels.hidden = false));
+    expect(grid.style.marginBlockEnd).toBe("-80px");
+    life.close();
+    expect(grid.style.marginBlockEnd).toBe("");
+  });
+
   it("il foglietto che si apre si alza e il suo contenuto scende; gli altri scivolano", () => {
     const [first, opened, last] = groups();
     let moved = false;

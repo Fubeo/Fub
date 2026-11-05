@@ -59,6 +59,19 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-05 · k3-motori · T19, risposta dell'utente alla scelta aperta qui
+  sotto: D, la griglia non cambia altezza durante la tenda, senza salti né
+  bande scure. Fatto così: per la durata della corsa la griglia e chi le sta
+  sotto tengono l'altezza che avevano prima del gesto, con un margine
+  negativo in fondo che li fa passare sotto la barra dei fogli; a corsa
+  finita (e allo smontaggio) il margine se ne va e la griglia è alta quanto
+  la parte che si vede · perché: la D alla lettera, la griglia sempre alta
+  come a nastro chiuso, nasconderebbe sotto la barra dei fogli la barra di
+  scorrimento orizzontale e le ultime righe, e il motore usa `clientHeight`
+  in più di dieci posti. Così si vede la D durante la corsa e a riposo non si
+  nasconde niente. Il margine è uno stile fermo, non animato: la regola 3 del
+  banco resta verde. Un'inversione a metà corsa riparte dalle altezze di
+  prima del primo gesto.
 - 2026-11-05 · k3-motori · T19, ciò che cambia forma o se ne va mentre era
   ancora in corsa (un foglietto che si richiude a metà apertura, i foglietti
   di una sezione lasciata a metà entrata, la scheda della tabella che
