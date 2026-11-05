@@ -896,6 +896,29 @@ const CRAFT_SETTINGS: readonly SettingEntry[] = params.get("craft") === "1" || T
   })
   : [];
 
+/// I due pannelli ai lati, come li dichiara l'host vero (`fub-host`,
+/// `chrome.sidebar.visible` e `chrome.inspector.visible`). Le scene della barra
+/// dei fogli li chiudono per dare al foglio tutta la larghezza: senza la
+/// dichiarazione la scrittura fallirebbe, e la foto terrebbe l'avviso «Non ho
+/// potuto ricordare come hai lasciato i pannelli». Solo con `workbook=1`, così
+/// le scene delle Impostazioni non cambiano.
+const WORKBOOK_CHROME: readonly SettingEntry[] = WORKBOOK_DOC === null ? [] : [
+  ["chrome.sidebar.visible", "Mostra il pannello a sinistra"],
+  ["chrome.inspector.visible", "Mostra il pannello a destra"],
+].map(([key, label]): SettingEntry => ({
+  spec: {
+    key,
+    label,
+    description: "Lo affianca ai riquadri quando la finestra è larga abbastanza; altrimenti si apre a richiesta.",
+    group: "Aspetto",
+    scope: "machine",
+    kind: { kind: "toggle", default: true },
+    program_writable: false,
+  },
+  value: true,
+  source: "default",
+}));
+
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
 ///
 /// `satisfies` è deliberato: queste fixture attraversano lo stesso confine
@@ -1237,7 +1260,7 @@ const options: Options = {
   root: ROOT,
   view: VIEWS,
   commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS],
-  settings: [...SETTINGS, ...(DRAWING === null ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS],
+  settings: [...SETTINGS, ...(DRAWING === null ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(WORKBOOK_DOC === null ? {} : {
     // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.
