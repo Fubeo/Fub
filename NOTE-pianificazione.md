@@ -6,7 +6,7 @@ Ramo `piano/fub-pre-alpha`, worktree `~/.cache/fub-prealpha/piano`, base
 
 ## Punto a cui sono
 
-- 2026-11-05 · passo 1 fatto: worktree e ramo creati. Passo 2 (raccolta) in corso.
+- 2026-11-05 · passi 1–4 fatti (definizione confermata). Passo 5 (simulatore) in corso.
 
 ## Regole che valgono per me (dal prompt)
 
@@ -70,7 +70,14 @@ Scaricati tutti in $A (cartelle per id, mappa in $S/mappa.txt), testo in $T/<nom
 
 (da riempire)
 
-## Bozza della definizione (2026-11-05, da far confermare)
+## Risposte dell'utente (2026-11-05, AskUserQuestion)
+
+1. «Fatto quando»: COSÌ (gli otto punti della bozza).
+2. Dentro: TUTTI I PIANI TRANNE K6 (K2, K3, griglia, Scrittoio 2, K5, N4, N6 v1 senza T79, A1, lavagna in codice, punti sciolti).
+3. Dispositivi: COMPUTER + ANDROID DI PROVA (APK dalla CI, segnato sperimentale). Quindi la cornice del telefono/tablet conta: domanda in parte 4 (rifarla o tenere la provvisoria A di Scrittoio 2).
+4. Rilascio: PRE-RELEASE PUBBLICA `v0.2.0-prealpha.1`, release GitHub «pre-release», #289 dentro (congelare fub:abi@0.2.0).
+
+## Bozza della definizione (2026-11-05, CONFERMATA)
 
 Obiettivo: la prima versione che una persona scarica, installa sul suo computer
 e usa per una settimana di studio e lavoro: vault di Markdown, note, Word, Excel,
