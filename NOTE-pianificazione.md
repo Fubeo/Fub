@@ -21,7 +21,8 @@ Ramo `piano/fub-pre-alpha`, worktree `~/.cache/fub-prealpha/piano`, base
   - Gli stati nuovi (non in S2) guardati a occhio in fogli di contatto: piena, 700, telefono, due luci (prove/zona-*.png, z700-*.png, ztel.png).
   - Telefono: S2 ha disegnato 11 stati; per gli altri il simulatore mostra il telefono più vicino e lo dice sotto lo schermo (`#sim-vicino`).
 - 2026-11-05 tarda sera · **PLAN.md scritto** (testata, definizione, dentro e fuori, ordine A–D, backend, «Dal prototipo», D1–D12, «Come si implementa», differenze 1–13, PA T1–T24). DECISIONS: 8 righe in cima al registro. Simulatore copiato in `PLAN-ui/fub-pre-alpha/` (con `blocchi/`, `script/`, README; le catture, 243 MB, restano in `~/.cache/fub-prealpha/sim/catture/`).
-  - Prossimo: pagina hub in `$A/fub-pre-alpha/` (5 schede, parti 2–5 rese da PLAN.md con `marked`), commit, push, artifact, URL in PLAN.md e qui.
+  - **Pubblicato** 2026-11-05: artifact «Fub pre-alpha» https://claude.ai/artifact/RCUxmuv2dCqbwDRagbKHcK (v1). Ramo pushato su origin. La pagina si rifà con `node $S/tools/costruisci-hub.mjs PLAN.md PLAN-ui/fub-pre-alpha $A/fub-pre-alpha` (copia in `PLAN-ui/fub-pre-alpha/script/`), poi publish dello stesso file_path con i `files` (simulatore.html, sim-dati.js, solo-simulatore.js, piani/*).
+  - Ora: aspetto l'utente (approvazione del simulatore, D1–D12).
   - Dopo la pubblicazione: iterare con l'utente sulle domande D1–D12. Se D3 o D4 = A: disegnare N6 T26–T28 e comporre le pagine dei piani nella cornice.
   - Non verificati (resoconto finale): i due punti sciolti di D10; macOS a mano (D11); #97 e #216 corretti ma aperti (le chiude l'utente).
 

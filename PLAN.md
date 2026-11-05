@@ -34,7 +34,8 @@ ondate, nell'ordine di «L'ordine»), con PA T12 · Fase D: PA T14 T18 |
 T15 T17 T22 | T16 T23 | T24. PA T9, T10 e T11 partono solo con la risposta
 alla loro domanda.
 Prototipo: `PLAN-ui/fub-pre-alpha/simulatore.html`, il simulatore di tutta
-la pre-alpha (artifact «Fub pre-alpha», parte 1). È costruito dai
+la pre-alpha (artifact «Fub pre-alpha»,
+https://claude.ai/artifact/RCUxmuv2dCqbwDRagbKHcK, parte 1). È costruito dai
 prototipi approvati: Scrittoio 2 (2026-11-04), K2, K3 T12 (2026-11-03),
 K5 T25 (2026-11-05), N4 T20 (2026-11-02), N6 T25 (2026-11-04) e A1
 (2026-11-03). Per la griglia l'approvazione non è scritta (domanda D2).
