@@ -22,9 +22,12 @@ Ramo `piano/fub-pre-alpha`, worktree `~/.cache/fub-prealpha/piano`, base
   - Telefono: S2 ha disegnato 11 stati; per gli altri il simulatore mostra il telefono più vicino e lo dice sotto lo schermo (`#sim-vicino`).
 - 2026-11-05 tarda sera · **PLAN.md scritto** (testata, definizione, dentro e fuori, ordine A–D, backend, «Dal prototipo», D1–D12, «Come si implementa», differenze 1–13, PA T1–T24). DECISIONS: 8 righe in cima al registro. Simulatore copiato in `PLAN-ui/fub-pre-alpha/` (con `blocchi/`, `script/`, README; le catture, 243 MB, restano in `~/.cache/fub-prealpha/sim/catture/`).
   - **Pubblicato** 2026-11-05: artifact «Fub pre-alpha» https://claude.ai/artifact/RCUxmuv2dCqbwDRagbKHcK (v1). Ramo pushato su origin. La pagina si rifà con `node $S/tools/costruisci-hub.mjs PLAN.md PLAN-ui/fub-pre-alpha $A/fub-pre-alpha` (copia in `PLAN-ui/fub-pre-alpha/script/`), poi publish dello stesso file_path con i `files` (simulatore.html, sim-dati.js, solo-simulatore.js, piani/*).
-  - Ora: aspetto l'utente (approvazione del simulatore, D1–D12).
+  - (primo giro) Aspettavo l'utente: approvazione del simulatore, D1–D12.
   - Dopo la pubblicazione: iterare con l'utente sulle domande D1–D12. Se D3 o D4 = A: disegnare N6 T26–T28 e comporre le pagine dei piani nella cornice.
   - Non verificati (resoconto finale): i due punti sciolti di D10; macOS a mano (D11); #97 e #216 corretti ma aperti (le chiude l'utente).
+- 2026-11-05 notte · **secondo giro** (richiesta in `~/.claude/jobs/7517738d/tmp/richiesta.txt`, §1 simulatore, §2 correzioni, §3 chiusura). Scelte dell'utente: D3 = A, D4 = A, D5 = A e B composte, D12 = B; restano D1, D2, D6–D11 e le nuove D13, D14.
+  - §2 fatto in PLAN.md: T1 dopo K3, K3 18/19, T4 (R01 prima un test), T5 col file, T14 diviso in T14 + T26–T30, T22 (sei posti, `wix.version` 0.2.0.N, rischio MSI), T23 (MCP che c'è; proposta MCP in A1 F5), telefono in Fatto quando 5/T15/T23/T31, un coder alla volta e stima 7–9 settimane, D13, N2, T25 (pre-release negli aggiornamenti), T31 (emulatore Android in CI), T32 (solo la pagina del PDF), T33 + D14 (FubDraw visibile in ~40 frasi). Differenze 22–27. DECISIONS: riga 19 e sette righe di registro.
+  - Prossimo: §1, il simulatore nuovo (stati S1… con provenienza, scenari 1–16, telefono per ogni stato, niente clic morti, pixel e sanitizer), poi hub, README, ripubblicazione allo stesso indirizzo.
 
 ## Regole che valgono per me (dal prompt)
 

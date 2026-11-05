@@ -21,18 +21,22 @@ F2–F6; #9; gli installer firmati. Ognuno ha il suo posto in «Dentro e
 fuori».
 Assunzioni: 
 - Questo è un piano ombrello. I task degli altri piani restano nei loro
-  `PLAN.md` e sui loro rami. Qui stanno l'ordine, i cancelli e 24 task
-  nuovi («PA T1»–«PA T24»), che tengono tutto insieme.
+  `PLAN.md` e sui loro rami. Qui stanno l'ordine, i cancelli e 33 task
+  nuovi («PA T1»–«PA T33»), che tengono tutto insieme.
+- Lavora un coder alla volta, più al massimo un pianificatore: è la regola
+  dell'utente dal 2026-11-04, e cambia solo se la cambia l'utente. Le «ondate»
+  qui sotto sono quindi file, una dopo l'altra.
 - La strada degli altri piani non cambia. Fanno eccezione le decisioni
   della parte «Domande aperte», quando l'utente risponde.
 - Gli stati detti «fatti» sono verificati su `origin` il 2026-11-05 (vedi
   «Differenze fra piani e codice»).
-Ondate: Fase A: PA T1 T3 T13 | T4 T6 T8 | T5 T7 T19, con K3 T17 e poi
-#295, e K2 (#290) · Fase B: Scrittoio 2 T3–T27 (le sue ondate), con PA T2,
-T20 e T21 · Fase C: griglia, K5, N4, N6, lavagna in codice e A1 (le loro
-ondate, nell'ordine di «L'ordine»), con PA T12 · Fase D: PA T14 T18 |
-T15 T17 T22 | T16 T23 | T24. PA T9, T10 e T11 partono solo con la risposta
-alla loro domanda.
+Ondate: Fase A: K3 T17 (il sì dell'utente) e #295 | K2 (#290, come dice
+D13) | PA T3 T13 | T4 T5 | T6 T7 | T1 T8 T19 T25 T32 T33 · Fase B: Scrittoio 2
+T3–T27 (le sue ondate), con PA T2, T20 e T21 · Fase C: griglia, K5, N4, N6,
+lavagna in codice e A1 (le loro ondate, nell'ordine di «L'ordine»), con
+PA T12 · Fase D: PA T14 T18 | T26 T27 T28 T29 T30 | T15 T17 T22 T31 |
+T16 T23 | T24. PA T9, T10 e T11 partono solo con la risposta alla loro
+domanda.
 Prototipo: `PLAN-ui/fub-pre-alpha/simulatore.html`, il simulatore di tutta
 la pre-alpha (artifact «Fub pre-alpha»,
 https://claude.ai/artifact/RCUxmuv2dCqbwDRagbKHcK, parte 1). È costruito dai
@@ -59,19 +63,23 @@ Confermata dall'utente il 2026-11-05.
    la CI di rilascio è verde (PA T22, T24).
 2. I piani dentro sono in `main`, ognuno col suo cancello e con la CI
    completa verde (Fasi A–C).
-3. Il giro della pre-alpha, circa 24 compiti, passa e2e nel banco (PA T14)
-   e a mano sugli installer (PA T23).
+3. Il giro della pre-alpha, circa 30 compiti, passa e2e nel banco (PA T14,
+   T26–T30) e a mano sugli installer (PA T23).
 4. Un corpus per formato (md, docx, xlsx, svg, canvas con l'inchiostro,
    pdf) torna byte per byte: aprire e chiudere non cambia niente, e una
    modifica non tocca il resto. Il conflitto e la sola lettura sono
    provati (PA T13).
 5. Il simulatore e l'app coincidono: le foto del banco, nelle due luci, a
-   tutta larghezza e a 700, stanno accanto al simulatore, e ogni differenza
-   è spiegata (PA T15).
+   tutta larghezza, a 700 e al telefono (390), stanno accanto al
+   simulatore, e ogni differenza è spiegata (PA T15). L'APK di prova si
+   installa e parte nell'emulatore Android della CI (PA T31) e sul telefono
+   Android dell'utente, dove si apre un vault, si scrive una nota, si usa la
+   lavagna con le dita e con la penna e si apre un foglio col telefono di
+   lato (PA T23).
 6. Le misure della WebView stanno nei budget sul runner Linux, e c'è una
    misura a mano su Windows (PA T16).
-7. C'è una prova unica con cinque persone, su K2, N12, N13 e la lavagna
-   (PA T17).
+7. C'è una prova con cinque persone su N12, N13 e la lavagna (PA T17). La
+   prova di K2 con una persona si fa dove dice D13.
 8. `docs/project/status.md` è aggiornato, c'è la pagina «Prova la
    pre-alpha», e `fub:abi@0.2.0` è congelata (#289; PA T6, T7, T18).
 
@@ -83,7 +91,7 @@ Confermata dall'utente il 2026-11-05.
 | K4 · la consegna (edizioni, dati scaricabili) | La pre-alpha esce con un installer solo e tutto dentro | «Piani di Fub», passo K4 |
 | K7, K8 · foto e libreria foto | Aspettano la decisione di N9 | «Piani di Fub» |
 | K9 · documenti e fogli completi | Dopo K3: la pre-alpha usa le modalità di K3 | «Piani di Fub» |
-| K10 · seguire i motori | È lavoro continuo, non una tappa (`aggiorna.sh` c'è già) | «Piani di Fub» |
+| K10 · seguire i motori | È lavoro continuo, non una tappa. Il controllo settimanale c'è già: `aggiorna.sh` gira ogni lunedì alle 4:17 sul server (cron), da `~/Progetti/fub-archivio/motori-upstream`, fuori dal repository | «Piani di Fub», K10 |
 | PdfCraft P1–P5 | Non hanno un piano. Il PDF della pre-alpha è il visore pdf.js di `main` | «Piani di Fub», `riferimenti/pdfcraft.md` |
 | N6 T79–T85 (PDF sui tasselli, estratti di PDF) | Dipendono da PdfCraft P1, P2 e P4 | `piano/n6-lavagna`, dopo PdfCraft |
 | N6 T88 (la scheda CSV) | Dipende da D-20: un piano «I CSV nel motore dei fogli», che non c'è | N6 D-20, piano futuro |
@@ -108,9 +116,9 @@ codice, nei rami e nelle issue il 2026-11-05.
 
 | Voce | Stato verificato | Pre-alpha | Ragione | Dove |
 |---|---|---|---|---|
-| N0 · misurare | Banco WebView in `main` (`bench/webview`, `docs/development/webview-measurements.md`); #283 aperta | dentro: misure | Fatto quando 6 | PA T16 |
-| N1 · FubDraw | In `main` (ADR 0231, tag `fubdraw-completo`) | fatto | Cancello passato; resta l'archivio | #282, fuori |
-| N2 · MCP | In `main` (`crates/fub-cli/src/mcp.rs`, ADR 0232) | fatto | L'AI della definizione passa di qui | — |
+| N0 · misurare | Banco WebView in `main` (`bench/webview`, `docs/development/webview-measurements.md`); #283 aperta. Le scene S4–S6 e le tre piattaforme sono nel cancello di N0 | dentro: misure sulle tre piattaforme, S4–S6 comprese, dove si può | Fatto quando 6 | PA T16 |
+| N1 · FubDraw | In `main` (ADR 0231, tag `fubdraw-completo`). I 42 file `.rs` che nominano FubDraw sono codice vivo: FubDraw è il nome del formato (ADR 0203). La prova byte per byte c'è già: `editors/spatial/corpus-open.test.ts`, `crates/fub-scene/tests/corpus.rs` e i test del provider svg (ADR 0231, «Verifica») | fatto; dentro: il nome dove le persone lo vedono, se D14 è A o C | Cancello passato; resta l'archivio | PA T33 (D14); #282, fuori |
+| N2 · MCP | In `main` (`crates/fub-cli/src/mcp.rs`, ADR 0232): 17 strumenti, vedi «Contratti» qui sotto | fatto; dentro: due flussi veri nel giro a mano | L'AI della definizione passa di qui | PA T23 |
 | N3 · la lavagna in Rust | In `main` (#297, #306, #307) | fatto | Base di N4, N6 e della lavagna in codice | — |
 | N4 · l'inchiostro | Ramo: 14 di 25 | dentro | La penna della definizione | `piano/n4-inchiostro`, #298 |
 | N5 · strati nativi | Senza piano | fuori | Vedi la tabella sopra | «Prossime fasi» |
@@ -119,13 +127,13 @@ codice, nei rami e nelle issue il 2026-11-05.
 | N8 · DOCX e XLSX | Sostituita da K6–K9 | — | Vedi K3 e K9 | — |
 | N9 · egui o Tauri | Senza piano | fuori | Vedi sopra | «Prossime fasi» |
 | N10 · Linux | Senza piano | fuori | Vedi sopra, domanda D8 | «Prossime fasi» |
-| N11 · budget, documenti, upstream | Continuo | dentro: budget e documenti; fuori: upstream | Fatto quando 6 e 8 | PA T16, T18; #253, #254 |
-| N12 · il menu «/» | In `main` | fatto, prova con persone dentro | Fatto quando 7 | PA T17 |
-| N13 · i Blocchi | In `main`; #281 aperta | fatto, prova con persone dentro | Fatto quando 7 | PA T17 (chiude #281) |
+| N11 · budget, documenti, upstream | Continuo | dentro: budget e documenti; fuori: upstream (le voci precise sono in «Le voci sciolte», più sotto) | Fatto quando 6 e 8 | PA T16, T18; #253, #254 |
+| N12 · il menu «/» | In `main` | fatto; dentro: la prova con persone, i 16 ms nella WebView, il «/» nelle schede della lavagna; fuori: il «/» nelle celle | Fatto quando 6 e 7 | PA T16, T17; N6 T43; celle con K9 |
+| N13 · i Blocchi | In `main`, coreografie comprese (`motion-rules.mjs`, regole `blocchi-*`); #281 aperta | fatto; dentro: la prova con persone, i 33 ms su 2.000 righe, la pagina del PDF nella nota | Fatto quando 6 e 7 | PA T16, T17 (chiude #281), T32 |
 | K0 · misure dei motori | In `main` (`docs/misure/*-k0.md`) | fatto | — | — |
 | K1 · i componenti | In `main` (#285, `crates/fub-componenti`) | fatto | — | — |
-| K2 · la pagina «Componenti» | Ramo: 7 di 7 | dentro | I componenti accesi e spenti | `piano/k2-pagina-componenti`, #290 |
-| K3 · lo strato dei motori | Ramo: 17 di 19, T18 integrato, manca T17 | dentro | Word ed Excel | `piano/k3-motori`, #295 |
+| K2 · la pagina «Componenti» | Ramo: 7 di 7; la prova con una persona di K2 D-2 non è fatta | dentro | I componenti accesi e spenti | `piano/k2-pagina-componenti`, #290; l'ordine lo dice D13 |
+| K3 · lo strato dei motori | Ramo: 18 di 19 (T18 fatto); T17 aspetta solo il sì dell'utente per unire #295 (CI completa verde, run 42049126094) | dentro | Word ed Excel | `piano/k3-motori`, #295 |
 | K4, K7–K10 | Senza piano | fuori | Vedi sopra | «Piani di Fub» |
 | K5 · il disegno | Ramo: 10 di 30 | dentro | Il disegno SVG | `piano/k5-disegno`, #300 |
 | K6 · il disegno completo | Ramo: 0 di 30 | fuori | Scelta dell'utente | #313 |
@@ -164,28 +172,102 @@ codice, nei rami e nelle issue il 2026-11-05.
 | 8 · che cosa congelare in DOCX e XLSX | Il corpus di PA T13 dice ciò che non si perde; il resto va con K9 | dentro: il corpus |
 | 9 · i post upstream, fatti dall'utente | Dell'utente | fuori (#253, #254) |
 
+### Le voci sciolte
+
+Le voci che il primo giro non metteva da nessuna parte, verificate nel
+codice il 2026-11-05.
+
+| Voce | Che cosa c'è | Pre-alpha | Dove |
+|---|---|---|---|
+| Blocchi · `tabIndex` sulle maniglie | Fatto: il «+» e la maniglia sono `<button>` veri, si raggiungono con Tab e si premono con Invio e Spazio (`editors/text/profiles/markdown/blocks/handles.ts`, `docs/product/editor-blocks.md`) | fatto | — |
+| Blocchi · il tasto destro sulla maniglia | Fatto: il tasto destro sulla maniglia apre il menu del blocco, non quello del testo (`handles.ts`, l'ascoltatore `contextmenu`) | fatto | — |
+| Blocchi · `![[x.pdf#page=3]]` | Il PDF nella nota diventa un collegamento senza la pagina (`editors/text/profiles/markdown/media.ts`); il visore la sa aprire (`editors/media/pdf-view.ts`, `initialPage`, `goToPage`) | dentro | PA T32 |
+| Blocchi · trascinare un blocco fuori dall'app (DataTransfer) | Non c'è; la lavagna lo mette nella v2 (`lavagna.md` S12; N6 T84 «Non toccare») | fuori | lavagna v2, `lavagna.md` |
+| Blocchi · una tavolozza unica | I nove colori dei Blocchi e quelli della lavagna sono due liste | dentro | N6 T47 (D-13 c di N6) |
+| Rischio · il controllo settimanale dei motori Craft | Gira già: `aggiorna.sh` ogni lunedì (cron del server), fuori dal repository | fuori | K10 |
+| Rischio · il marchio ArtCraft | Nel codice di `main` compare solo dove deve: `THIRD_PARTY_NOTICES`, l'intestazione dello stabilizzatore, i percorsi d'installazione dei Craft | dentro: un controllo | PA T18 |
+| Rischio · i token del canale di controllo dei Craft | Lato motori, non lato Fub | fuori | #253, #254 (decisione 9) |
+| Rischio · l'app compagna per iPad | Decisione 6 di «Prossime fasi» | fuori | D1, #90 |
+| N12 · i 16 ms del «/» nella WebView | Misurati solo in Chromium | dentro | PA T16 |
+| N12 · il «/» nelle schede della lavagna | N6 T43 scrive le schede in Live, con «/» se l'editor delle note lo ha | dentro | N6 T43 |
+| N12 · il «/» nelle celle del foglio | Le celle non sono testo Markdown | fuori | K9 |
+| N13 · le coreografie | In `main`: `motion-rules.mjs`, regole `blocchi-*` e `slash-*` | fatto | — |
+| N13 · i 33 ms su 2.000 righe | Misurati solo in Chromium | dentro | PA T16 |
+| N1 · i 42 file `.rs` | Codice vivo, non resti: FubDraw è il nome del formato (ADR 0203). Restano per compatibilità il namespace `fub:`, `Status::Fubdraw` e l'abbinamento `fubdraw://live`. Le persone vedono il nome in tre stringhe del Rust e in una quarantina del client | dentro, come dice D14 | PA T33 |
+| N1 · la prova byte per byte | C'è: `corpus-open.test.ts`, `crates/fub-scene/tests/corpus.rs`, i test del provider svg | fatto; il corpus della pre-alpha la allarga | PA T13 |
+| N0 · le tre piattaforme e S4–S6 | Il banco WebView gira su Linux; S4 c'è in Chromium | dentro, dove si può; ciò che non si può misurare si scrive | PA T16 |
+| N11 · le voci da portare a monte | Un'anteprima PNG in ogni formato nativo; `info --json` stabile; istanza unica per VectorCraft, FigCraft, LightCraft, GridCraft e WordCraft; un token del canale di controllo per VectorCraft, FigCraft e LightCraft; un commento su storytold/vectorcraft#647 | fuori | #253, #254 (decisione 9: le scrive l'utente) |
+| K7–K9 · le issue | Non ci sono; il testo proposto è qui sotto | fuori | issue da aprire (l'utente) |
+
+**Le issue proposte per K7–K9.** Titolo e testo, pronti da incollare.
+
+- **«K7 · Le foto nella modalità completa, sopra il motore di PhotoCraft»**.
+  «Dopo la decisione di N9. Prima a monte: la proposta e le PR per separare
+  `tools` e `viewport` dall'interfaccia di PhotoCraft (senza, la modalità
+  completa vorrebbe dire riscrivere i loro strumenti). Poi il componente, la
+  tela con la strada scelta in N9, le cinque finestre che PhotoCraft disegna
+  a mano (Curve, Livelli, Camera Raw, Fluidifica, Stile livello) e il resto
+  dagli schemi. Cancello: il tratto del pennello appare entro il fotogramma
+  successivo, misurato; copertura dei comandi al 100%. Fonte: «Fub a
+  componenti», K7; «Piani di Fub», passo 21.»
+- **«K8 · La libreria foto, sopra il motore di LightCraft»**. «Dopo la
+  decisione di N9. Il catalogo sulle cartelle del vault, senza copiare le
+  foto (`mode: "add"`); il pannello di sviluppo dai 122 controlli, con la
+  scheda grafica e il ripiego sul processore; l'IA come dati scaricabili, i
+  volti dietro una feature; voti ed etichette come proprietà del vault (come
+  in N7). Cancello: un cursore entro 16 ms sulla scheda grafica, dentro Fub;
+  10.000 foto si sfogliano senza scatti, misurato; copertura dei comandi al
+  100%. Fonte: «Fub a componenti», K8; «Piani di Fub», passo 21; D13 di
+  «Prossime fasi».»
+- **«K9 · Documenti e fogli completi»**. «Dopo K3. La facciata `engine` di
+  WordCraft in `vendor/`; le modalità complete dai cataloghi, con i percorsi
+  della barra multifunzione che diventano i menu di Fub; il «/» nelle celle
+  (dalla pre-alpha, N12). Cancello: copertura dei comandi al 100%; i banchi
+  dei fogli e dei documenti invariati. Fonte: «Fub a componenti», K9;
+  «Piani di Fub», passo 22; decisione 8 di «Prossime fasi».»
+
 ## L'ordine
 
 Quattro fasi. Una fase finisce quando tutti i suoi passi sono chiusi; la
 dopo può cominciare prima solo dove la colonna «Dipende da» lo permette.
-Al massimo tre coder insieme (`DECISIONS.md`), o meno se l'utente lo dice;
-mai due coder sullo stesso file. «Taglia» è a occhio: S è mezza giornata di
-un coder, M una giornata o due, L una settimana, XL di più.
+Lavora un coder alla volta, più al massimo un pianificatore (regola
+dell'utente dal 2026-11-04; cambia solo se la cambia l'utente, `DECISIONS.md`).
+«Taglia» è a occhio, in tempo di un coder con revisione e CI: S un'ora o
+due, M mezza giornata, L due o tre giorni, XL di più.
+
+**Quanto ci vuole, a occhio.** Restano circa 207 task negli altri piani
+(circa 79 solo in N6) e circa 30 task di questo piano: circa 237 in tutto.
+Con un coder alla volta e circa 2 ore per task, revisione e CI comprese,
+fanno circa 475 ore di lavoro. A circa 14 ore al giorno (l'orchestratore
+lavora anche di notte con `/orchestra-auto`) sono circa 34 giorni, cioè 5
+settimane piene. Con le attese dell'utente (i prototipi da approvare, i sì
+ai merge, le risposte alle domande, la misura su Windows, la prova con le
+persone, gli installer) diventano **7–9 settimane**. N6 da sola sono circa
+160 ore, cioè 2–3 settimane con l'approvazione dei suoi prototipi.
+
+Le assunzioni della stima: le 2 ore vengono dai piani recenti (il piano del
+caricamento ha chiuso 4 task in circa 3 ore il 2026-11-04; i task M e L di
+K3 sono durati di più); i task L e XL non rifanno pezzi grandi; le baseline
+arrivano dal runner senza giri in più; l'utente risponde entro un giorno.
+Se una di queste cade, la stima si allunga.
 
 ### Fase A · unire ciò che è finito e chiudere i buchi fra i piani
 
 | Passo | Fonte | Stato | Dipende da | Rischio | Taglia | Prova di chiusura |
 |---|---|---|---|---|---|---|
-| K3 T17 · la CI completa e la revisione | K3 | da fare (T1–T16, T19 fatti; T18 integrato) | nessuno | medio: un crate nuovo (`fub-motori`), patch nel `vendor/`, tre sistemi | M | CI completa verde su #295, la revisione senza difetti alti |
-| Unire #295 (K3, con K3-IPC T8) | K3 | PR pronta | K3 T17, OK dell'utente | medio | S | `main` ha `crates/fub-motori` e i comandi `open_key`, `warm_engine` e `document_closed` |
-| Riallineare #290 a `main` e unirla | K2 | 7 di 7 | nessuno | basso | S | CI completa verde, OK dell'utente |
-| PA T1 · il finto del banco con le impostazioni dell'host | PA | da fare | nessuno | basso | S | `bench/fake-ipc.test.ts` |
+| K3 T17 · il sì dell'utente | K3 | aspetta solo il sì (T1–T16, T18 e T19 fatti; CI completa verde, run 42049126094) | nessuno | medio: un crate nuovo (`fub-motori`), patch nel `vendor/`, tre sistemi | — | il sì dell'utente |
+| Unire #295 (K3, con K3-IPC T8) | K3 | PR pronta, testa 165b8fa8 | il sì dell'utente | medio | S | `main` ha `crates/fub-motori` e i comandi `open_key`, `warm_engine` e `document_closed` |
+| Riallineare #290 a `main` e unirla | K2 | 7 di 7; la prova con una persona non è fatta | la risposta a D13 | basso | S | CI completa verde, OK dell'utente |
+| PA T1 · il finto del banco con le impostazioni dell'host | PA | da fare | #295 in `main` (d90a09d0 di K3 cambia `bench/fake-ipc.ts`) | basso | S | `bench/fake-ipc.test.ts` |
 | PA T3 · i comandi in sola lettura non tengono il turno | PA | da fare | nessuno | medio: tocca il custode | M | test d'integrazione di `fub-host` |
-| PA T4, T5 · #237 R01–R03 | PA | da fare | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione |
+| PA T4, T5 · #237 R01–R03 | PA | da fare | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione; R01 si chiude col test se non si riproduce |
 | PA T6, T7 · #289 | PA | da fare | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
 | PA T8 · la pagina della cornice del telefono | PA | da fare | nessuno | basso | S | guardie dei documenti |
 | PA T13 · il corpus senza perdite | PA | da fare | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
 | PA T19 · i test instabili del Rust | PA | da fare | nessuno | medio | M | 200 giri verdi o causa trovata |
+| PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | da fare | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
+| PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | da fare | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
+| PA T33 · il nome FubDraw dove le persone lo vedono | PA | da fare | la risposta a D14 | basso | M | test dei descrittori, di `fub-scene` e del catalogo |
 
 ### Fase B · la cornice
 
@@ -206,19 +288,25 @@ un coder, M una giornata o due, L una settimana, XL di più.
 | N6 v1, senza T79–T85 e T88 | N6 | 11 di 90 | N4 in `main` (il ramo nasce da N4, e T90 lo chiede); i task grafici dopo l'approvazione dei prototipi T26–T28 (D3) | alto: 79 task | XL | N6 T90 |
 | K5 T6, T7, T9, T11, T13–T24, T27–T30 | K5 | 10 di 30 | PA T2; T6 copia `Fubeo/vectorcraft` (c'è, pubblico, 2026-11-02); T22 dopo D5; T24 dopo K2 in `main` | alto: motore vettoriale nuovo | XL | K5 T30 |
 | La lavagna in codice T1–T26 | lavagna in codice | 0 di 26 | T15–T18 dopo N4 in `main`; T14, T19, T23 e T24 dopo N6 in `main` (T72, T73, T19, T37, T48) | medio | L | lavagna in codice T26 |
-| A1 T4, T5, T7, T9–T13 | A1 | 5 di 13 | T12 mai insieme a S2 T10 (le impostazioni) | basso | M | A1 T13 |
+| A1 T4, T5, T7, T9–T13 | A1 | 5 di 13 | T12 dopo S2 T10 (le impostazioni) | basso | M | A1 T13 |
 
 ### Fase D · la prova e la pre-release
 
 | Passo | Fonte | Stato | Dipende da | Rischio | Taglia | Prova di chiusura |
 |---|---|---|---|---|---|---|
-| PA T14 · il giro della pre-alpha nel banco | PA | da fare | tutte le Fasi A–C in `main` | medio | M | `npm run bench:giro` verde |
-| PA T15 · il simulatore accanto all'app | PA | da fare | Fase C | basso | S | il foglio di contatto rivisto dall'utente |
+| PA T14 · il giro nel banco: lo scheletro e il primo avvio | PA | da fare | Fase B in `main` | medio | M | `npm run bench:giro` verde sui compiti 1–5 |
+| PA T26 · il giro: le note | PA | da fare | T14 | basso | M | compiti 6–11 verdi |
+| PA T27 · il giro: Word, Excel, SVG e PDF | PA | da fare | T14; griglia e K5 in `main` | medio | M | compiti 12–15 verdi |
+| PA T28 · il giro: la lavagna e la penna | PA | da fare | T14; N4 e N6 in `main` | medio | M | compiti 16–17 verdi |
+| PA T29 · il giro: ricette, componenti e aspetto | PA | da fare | T14; A1 e K2 in `main` | basso | M | compiti 18–20 verdi |
+| PA T30 · il giro: conflitto, sola lettura, cestino, tastiera e guasti | PA | da fare | T14; PA T4 e T5 | medio | M | compiti 21–27 verdi |
+| PA T15 · il simulatore accanto all'app | PA | da fare | Fase C; T14 e T26–T30 (le loro scene danno le foto) | basso | S | il foglio di contatto rivisto dall'utente |
 | PA T16 · le misure della WebView | PA | da fare | Fase C; la misura di Windows usa l'MSI della prova di T22 | medio: Windows lo misura l'utente | M | la pagina delle misure |
 | PA T17 · la prova con cinque persone | PA | da fare | PA T14 per il protocollo; la prova usa gli installer di T22 | basso per il codice; serve l'utente | S + la prova | il resoconto della prova |
 | PA T18 · i documenti della pre-alpha | PA | da fare | Fase C | basso | S | guardie dei documenti |
-| PA T22 · la versione e la prova del rilascio | PA | da fare | T14, T18; T19–T21 | alto: MSI e versione non numerica | M | `release.yml` verde in prova |
-| PA T23 · il giro a mano sugli installer | PA | da fare | T22 | medio | M | la lista del giro spuntata |
+| PA T22 · la versione e la prova del rilascio | PA | da fare | T14, T18, T25; T19–T21 | alto: MSI e versione non numerica | M | `release.yml` verde in prova |
+| PA T31 · l'APK nell'emulatore della CI | PA | da fare | T22 (l'APK con la versione nuova) | medio: emulatore su runner Linux | M | il job `mobile.yml` installa, apre e fotografa l'APK |
+| PA T23 · il giro a mano sugli installer e sul telefono | PA | da fare | T22, T31 | medio | M | la lista del giro spuntata |
 | PA T24 · il tag e la pre-release | PA | da fare | tutti gli altri passi (T16 e T17 compresi), OK dell'utente | basso | S | la release `v0.2.0-prealpha.1` pubblicata |
 
 ## Il backend, area per area
@@ -253,8 +341,9 @@ Verificato su `origin/main` 638358da e sui rami dei piani, il 2026-11-05.
   - `fub-host` (`workbook.rs` e i documenti aperti): apre e chiude;
   - `apps/client/src/editors/grid/` e `editors/rich/`: le barre e il menu
     «Comandi».
-- **Che cosa c'è.** Sul ramo `piano/k3-motori` (6e6fc623) c'è tutto, salvo
-  T17:
+- **Che cosa c'è.** Sul ramo `piano/k3-motori` (165b8fa8) c'è tutto, T18
+  compreso; T17 ha la CI completa verde (run 42049126094) e aspetta solo il
+  sì dell'utente:
   - il catalogo dei comandi e il test di copertura;
   - la guardia `check-motori.mjs`;
   - le patch che liberano le cache dei motori;
@@ -263,7 +352,7 @@ Verificato su `origin/main` 638358da e sui rami dei piani, il 2026-11-05.
 
   In `main` ci sono N7, i file Craft (`fub-format-craft`, la CLI Craft) e i
   motori già adottati (#227, #234).
-- **Che cosa manca.** K3 T17 e il merge di #295.
+- **Che cosa manca.** Il sì dell'utente e il merge di #295.
 - **Rischio.** `cargo deny` sulle dipendenze dei motori: K3 T17 lo fa
   girare nella CI completa.
 
@@ -279,7 +368,8 @@ Verificato su `origin/main` 638358da e sui rami dei piani, il 2026-11-05.
   MCP `components_*` sono già in `main` con N2.
 - **Su disco.** Le chiavi `components.*` nelle impostazioni del vault, e i
   bundle spenti in `plugins.disabled`, la chiave di oggi.
-- **Che cosa manca.** Il merge di #290 e la prova con le persone (PA T17).
+- **Che cosa manca.** La prova con una persona che K2 D-2 chiede prima di
+  segnare pronta la PR, e il merge di #290, nell'ordine che dice D13.
 
 ### La lavagna in Rust (N3, N6, la lavagna in codice)
 
@@ -384,8 +474,35 @@ Verificato su `origin/main` 638358da e sui rami dei piani, il 2026-11-05.
   - le note delle ricette;
   - docx, xlsx e svg li scrivono i motori. Il loro formato non cambia, e il
     corpus di PA T13 lo prova.
-- **MCP.** `docs/reference/mcp-server.md`. Gli strumenti nuovi vengono
-  dalla lavagna in codice (T22) e da A1 (T11).
+- **MCP (N2, in `main`).** `crates/fub-cli/src/mcp.rs`, con
+  `mcp/access.rs` e `mcp/tools.rs`; la pagina è
+  `docs/reference/mcp-server.md`, la ragione l'ADR 0232. Un server stdio
+  (JSON-RPC 2.0, un messaggio per riga), avviato da `fub-cli mcp`.
+  - **17 strumenti:** `fub_search`, `fub_query`, `fub_read`,
+    `fub_read_model`, `fub_preview`, `fub_write`, `fub_create`,
+    `fub_canvas_create`, `fub_canvas_apply`, `fub_commands`, `fub_invoke`,
+    `fub_external_editors`, `fub_open_with`, `fub_components`,
+    `fub_components_why`, `fub_components_enable` e
+    `fub_components_disable`.
+  - **La base è obbligatoria.** `fub_write` e `fub_canvas_apply` vogliono la
+    revisione letta; una revisione superata torna `conflict`, l'agente
+    rilegge e riprova. `fub_create` non sovrascrive.
+  - **La prova a vuoto è di serie.** `fub_canvas_apply`, `fub_invoke`,
+    `fub_open_with` e i due `fub_components_*` che cambiano qualcosa senza
+    `"apply": true` rispondono col piano (`dry_run: true`) e non scrivono.
+  - **Le radici.** Senza `--automation-write-root` il server è in sola
+    lettura e ogni scrittura risponde `denied`; `--automation-read-root`
+    restringe ciò che si legge. Le cancellazioni passano da `note.trash` e
+    vanno nel cestino.
+  - **Nessuna faccia nelle Impostazioni.** Le schede sono `settings`,
+    `components`, `shortcuts`, `vault` e `about`: l'MCP non ha una sezione.
+    Si vede di riflesso: le note cambiate sul disco (`changed_on_disk`, o un
+    conflitto se c'è testo non salvato), il pannello delle attività, la
+    pagina «Componenti», le ricette proposte di A1.
+  - **Che cosa arriva coi piani.** Gli strumenti della lavagna in codice
+    (T22) e delle ricette di A1 (T11). Una nota «proposta» dall'AI, da
+    rivedere riga per riga in Fub, non è in nessun piano dentro: è A1 F5
+    («L'assistente dentro Fub», artifact «Ricette di Fub»), fuori.
 - **Il turno di scrittura.** È di tutto l'host, ed è PA T3.
 
 ### Il rilascio e la CI
@@ -400,12 +517,16 @@ Verificato su `origin/main` 638358da e sui rami dei piani, il 2026-11-05.
   - C'è un tag, `v0.1.0-rc.1` (2026-09-21). C'è stata una corsa a mano,
     verde, sul ramo di K2 (2026-11-01).
 - **Che cosa manca.**
-  - La versione `0.2.0-prealpha.1` nei sei posti.
+  - La versione `0.2.0-prealpha.1` nei sei posti (PA T22).
   - L'MSI: WiX vuole una versione numerica, e Tauri rifiuta un
-    identificatore di prerelease non numerico. Serve `bundle.windows.wix.version`.
-  - L'APK allegato alla pre-release.
-
-  Tutto questo è PA T22.
+    identificatore di prerelease non numerico. Serve
+    `bundle.windows.wix.version` = `0.2.0.N` (PA T22; l'aggiornamento da una
+    pre-alpha all'altra lo prova PA T23).
+  - L'APK allegato alla pre-release (PA T22), e provato nell'emulatore della
+    CI (PA T31).
+  - Il controllo degli aggiornamenti: chiede `releases/latest`, che salta le
+    pre-release, e confronta `prealpha.10` come testo, sotto `prealpha.2`
+    (`crates/fub-host/src/updates.rs`, PA T25).
 
 ## Dal prototipo
 
@@ -597,6 +718,9 @@ con due preferenze nelle Impostazioni (griglia T9).
 
 ### D3 · N6 T26–T28: i prototipi della lavagna che mancano
 
+**Decisa dall'utente il 2026-11-05: A.** I tre prototipi sono nel
+simulatore del secondo giro, segnati «da approvare».
+
 N6 ha quattro pagine di prototipo, e solo la prima è approvata (le schede,
 T25). Mancano l'impianto (T26: la colonna degli strumenti, la riga delle
 opzioni, la barra della selezione, la banda), la modifica (T27: scrivere
@@ -623,6 +747,9 @@ fuori).
 
 ### D4 · Comporre le pagine dei piani nella cornice di Scrittoio 2
 
+**Decisa dall'utente il 2026-11-05: A.** Gli editor sono composti nel
+simulatore del secondo giro, con le barre nel kit, segnati «da approvare».
+
 Le pagine di K5 (la colonna con Testo e i gettoni del motore), N4 (il menu
 delle penne), N6 (le schede), A1 (le ricette), della griglia (le celle) e
 di K3 (il menu «Comandi») sono state disegnate nella cornice di oggi. Nel
@@ -646,6 +773,9 @@ simulatore stanno a parte, in `piani/`.
   - Qualità: buona; il rischio è che gli editor partano prima.
 
 ### D5 · La testa del disegno: K5 contro Scrittoio 2 T22
+
+**L'utente ha chiesto di vedere composte sia A sia B (2026-11-05).** Nel
+simulatore ci sono tutte e due; la scelta resta sua.
 
 Il prototipo di K5 (approvato il 2026-11-05) mette nella colonna degli
 strumenti anche Testo, e i gettoni del motore (`pane-standing*`) nella
@@ -784,6 +914,9 @@ e l'utente ha un portatile Windows; un Mac non c'è.
 
 ### D12 · Densità e accento nel simulatore
 
+**Decisa dall'utente il 2026-11-05: B.** Densità, contrasto e accento
+cambiano davvero il simulatore, nelle due luci.
+
 Il simulatore cambia davvero il tema, la luce, le animazioni, il corpo,
 l'interlinea, la misura e il carattere. Non cambia la densità, il contrasto
 e l'accento, perché per quelli il tema va ricompilato: quando li si sceglie,
@@ -795,6 +928,73 @@ segna la scelta e lo dice nella riga sopra lo schermo.
   contrasto alto e gli accenti, nelle due luci.
   - Tempo: qualche ora, e alcuni MB in più.
   - Qualità: si vedono anche quelle.
+
+### D13 · La prova di K2 con una persona: prima o dopo il merge
+
+K2 D-2 dice: la prova con persone si fa sulla PR in bozza, la fa l'utente
+(se può con una persona che non conosce Fub) e «la PR non si segna pronta
+prima del suo resoconto». Il primo giro di questo piano l'aveva spostata
+alla fine (PA T17) senza chiedere. Il protocollo c'è già: «Prova dei
+componenti di Fub», sei compiti in circa 25 minuti, sull'installer della
+corsa «release» del ramo.
+
+- **A (consigliata).** Come dice K2 D-2, e in più i compiti di K2 tornano
+  nella prova finale. Prima di segnare pronta #290, riallineata a `main`,
+  l'utente fa il protocollo, da solo o con una persona. Ciò che emerge
+  diventa un task di K2 o una riga di `DECISIONS.md`; poi il merge. Alla
+  fine PA T17 ripete i compiti di K2 nella cornice nuova, con cinque
+  persone.
+  - Tempo: 25–50 minuti dell'utente adesso, più una corsa di `release.yml`
+    sul ramo (circa un'ora di CI). #290 aspetta il resoconto, un giorno o
+    due; ciò che usa K2 (K5 T24, PA T29) viene molto dopo, quindi non
+    aspetta niente.
+  - Qualità: la migliore. I problemi della pagina si trovano prima che
+    Scrittoio 2 la rivesta e che altri piani ci costruiscano sopra, e la
+    prova finale guarda la pagina vestita.
+  - Contro: la prima prova guarda la cornice di oggi, che Scrittoio 2
+    cambierà.
+- **B.** Si unisce subito; la prova solo alla fine, in PA T17, come diceva
+  il primo giro.
+  - Tempo: il più corto, nessuna attesa.
+  - Qualità: ciò che la prova trova arriva quando Scrittoio 2, K5 T24 e
+    A1 ci hanno già costruito sopra.
+  - Contro: cambia una regola che l'utente aveva scritto (K2 D-2).
+- **C.** La prova prima del merge, come K2 D-2, e niente K2 nella prova
+  finale.
+  - Tempo: PA T17 più corta di circa 25 minuti a persona.
+  - Qualità: la pagina rivestita da Scrittoio 2 non la prova nessuno.
+
+### D14 · Il nome «FubDraw» dove le persone lo vedono
+
+FubDraw era l'app dei disegni; ora vive dentro Fub e la sua app è
+archiviata (ADR 0231, #282). Il nome resta in una quarantina di frasi che
+le persone leggono, in italiano e in inglese: «SVG (FubDraw)» fra i
+formati, «Questo SVG non è stato fatto con FubDraw», «il file viene da una
+versione più recente di FubDraw», «FubDraw la lascia com'è», gli avvisi
+dell'import e la diagnosi S002. Chi prova la pre-alpha non sa che cosa sia
+FubDraw. Per il codice non cambia niente: il namespace `fub:`, gli id, lo
+stato `fubdraw` e `fubdraw://live` restano.
+
+- **A (consigliata).** Dove si legge, il nome diventa Fub o il disegno:
+  «Disegno SVG», «Annotazioni PDF», «Questo SVG non è stato fatto con
+  Fub», «Fub la lascia com'è», «il formato dei disegni di Fub». Le pagine
+  `docs/product/drawing*.md` seguono; le pagine `docs/reference/scene-*`
+  dicono una volta che «FubDraw» è il nome tecnico del formato.
+  - Tempo: un task M (PA T33), circa mezza giornata di un coder.
+  - Qualità: una sola parola per il prodotto; nessuna sorpresa per chi
+    prova.
+  - Contro: ADR 0203 chiama il formato FubDraw; serve una riga in
+    `DECISIONS.md` e una nota nell'ADR (non riscritta).
+- **B.** Resta FubDraw, come nome del formato dei disegni; la pagina
+  «Prova la pre-alpha» (T18) lo spiega in una riga.
+  - Tempo: niente.
+  - Qualità: un nome in più da imparare, e alcune frasi («non fatto con
+    FubDraw») sembrano parlare di un'altra app.
+- **C.** Cambiano solo i due nomi dei formati («Disegno SVG», «Annotazioni
+  PDF»); le frasi restano.
+  - Tempo: un task S.
+  - Qualità: a metà: il nome sparisce dalla lista dei formati ma resta
+    negli avvisi.
 
 ## Come si implementa
 
@@ -992,6 +1192,80 @@ cosa, vince il codice.
     sulla colonna, ma T16 (68f48788) le ha già messe sul vassoio più chiaro
     (`--bar-tray`) (D6).
 
+Le differenze trovate nel secondo giro (2026-11-05), fra la richiesta
+dell'utente, il primo giro e il codice:
+
+14. **La Lettura di una nota non è `view`.** La richiesta dice che la
+    Lettura è la modalità `view` di `editors/core/bootstrap.ts:156`. Per una
+    nota Markdown è la modalità `reading`
+    (`editors/text/profiles/markdown/surface.ts:112`); `view`, a
+    `bootstrap.ts:156`, sono i visori (`VIEWER_MODES`: il PDF e gli altri).
+    La Lettura disegna già il buffer, anche non salvato (`redrawReading`,
+    `state/document-controller.ts:2437`). PA T5 nomina `surface.ts`.
+15. **R01 è già gestito in un caso.** `release()` prova a salvare e a
+    scrivere la bozza e restituisce `CloseResult`
+    (`state/document-session.ts:154`, `:1496`); `dismissIfUnwatched` chiede
+    con `document.close_unsaved` (`keepOrDiscardUnsaved`,
+    `state/document-controller.ts:1672`). Tre chiamanti ignorano il
+    risultato: `state/shell-layout.ts:30`,
+    `state/document-bridge.ts:350` e `state/document-controller.ts:2749`.
+    Se lì si perde testo, lo deve dimostrare un test (PA T4).
+16. **R02 passa da codice morto.** `forceReload()`
+    (`state/document-session.ts:503`) mette `dirty = false` dopo aver
+    ricaricato dal disco, ma il suo unico chiamante, `reloadCurrent()`
+    (`state/document-controller.ts:2948`, ripreso in `panels/document.ts:128`),
+    non ha chiamanti in `main`. Il ripristino di una versione vero passa da
+    `crates/fub-features/src/versioning.rs` (`version.restore`), che
+    riscrive il file: il client lo vede come una modifica dal disco (PA T4).
+17. **L'MSI e il quarto numero.** La richiesta dice che Windows ignora il
+    quarto numero, e quindi `0.2.0.1` e `0.2.0.2` sarebbero la stessa
+    versione. Vale per un `MajorUpgrade` senza permessi; il modello di
+    Tauri (`main.wxs` di tauri-bundler 2.10.4) ha `Product Id="*"` e un
+    `MajorUpgrade` con `AllowDowngrades="yes"` (di serie,
+    `allowDowngrades: true`) o `AllowSameVersionUpgrades="yes"`: in tutti e
+    due i casi l'installer nuovo toglie quello vecchio, qualunque sia il
+    quarto numero. `0.2.0.N` quindi aggiorna; PA T23 lo prova su Windows, e
+    se non va le note dicono «disinstalla prima» (PA T22).
+18. **Il controllo degli aggiornamenti non vede le pre-release.**
+    `crates/fub-host/src/updates.rs:28` chiede `releases/latest`, che GitHub
+    dà senza le pre-release; e l'ordine delle versioni confronta
+    l'identificatore di prerelease come testo (`prealpha.10` < `prealpha.2`)
+    (PA T25).
+19. **#308 è in `main`** (il caricamento, 2026-11-05).
+20. **L'MCP non ha una faccia sua.** Nelle Impostazioni non c'è una sezione
+    «Automazione» o «MCP»: le schede sono `settings`, `components`,
+    `shortcuts`, `vault` e `about`. Il primo giro di PA T23 chiedeva una
+    proposta MCP «vista e accettata in Fub», che nessun task costruisce:
+    ora T23 prova i flussi che ci sono, e la nota proposta dall'AI va ad A1
+    F5, fuori.
+21. **K2 D-2.** Il primo giro aveva spostato la prova con una persona dopo
+    il merge di #290, contro K2 D-2, senza chiedere (D13).
+22. **I 42 file `.rs` di N1** non sono resti da togliere: FubDraw è il nome
+    del formato (ADR 0203), e restano per compatibilità il namespace `fub:`,
+    `Status::Fubdraw` e `fubdraw://live`. Le persone vedono il nome in tre
+    stringhe del Rust (i due descrittori di `fub-format-svg` e la diagnosi
+    S002 di `fub-scene`) e in una quarantina di stringhe del client, in
+    italiano e in inglese: `i18n/catalog.ts` (`vector.*`,
+    `live.not_editable`), `editors/spatial/strings.ts`,
+    `editors/spatial/import/strings.ts` e `editors/spatial/scene/diagnostics.ts`.
+    Che cosa dire al posto del nome lo chiede D14 (PA T33).
+23. **K3 è avanti.** Il primo giro diceva 17 di 19 con T18 integrato: T18 è
+    fatto, e T17 ha la CI completa verde e aspetta solo il sì dell'utente.
+24. **`aggiorna.sh` non è nel repository.** Sta in
+    `~/Progetti/fub-archivio/motori-upstream` e gira col cron del server
+    ogni lunedì; K10 lo porterà in `vendor.mjs` (decisione di «Fub a
+    componenti», K10).
+25. **Le maniglie dei Blocchi hanno già la tastiera e il tasto destro.** Il
+    primo giro le dava senza fuoco e senza menu proprio: in `main` sono
+    `<button>` che Tab raggiunge, e il tasto destro sulla maniglia apre il
+    menu del blocco (`blocks/handles.ts`). PA T32 resta solo per la pagina
+    del PDF.
+26. **«FubDraw» si legge in una quarantina di frasi**, non in tre: il primo
+    giro aveva guardato solo il Rust. Ora c'è D14.
+27. **S8.** Il menu «/» non ha uno scenario nel banco WebView (S1–S7, R1,
+    T1, I1, L1): PA T16 lo aggiunge. S4, S5 e S6 ci sono in `run.mjs` ma il
+    job `webview` della CI non li fa girare.
+
 ## T1 · Il finto del banco dice le impostazioni d'Aspetto dell'host
 
 Perché: l'host ha «Animazioni» (`appearance.motion`) nel gruppo Aspetto, e
@@ -1003,8 +1277,10 @@ Tocca: `apps/client/bench/fake-ipc.ts`, `apps/client/bench/fake-english.ts`,
 Non toccare: i valori di corpo e misura (17 e 68: li cambia S2 T11, che
 tocca anche `fake-ipc.ts`, quindi i due task non vanno insieme);
 `crates/fub-host/src/settings.rs`; le baseline visive.
-Dipende da: nessuno.
+Dipende da: #295 in `main`. K3 (d90a09d0) cambia `bench/fake-ipc.ts`
+(`WORKBOOK_CHROME`): prima di #295 i due si scontrano. Non insieme a S2 T11.
 Cosa fare:
+- Parti da `main` con #295 dentro.
 - Leggi in `crates/fub-host/src/settings.rs` tutte le voci del gruppo Aspetto
   (`C_GROUP_APPEARANCE`) e confrontale con quelle del finto. Le chiavi del
   finto oggi sono: `chrome.compactness`, `appearance.theme`, `.contrast`,
@@ -1106,39 +1382,74 @@ Stato: [ ] da fare
 
 ## T4 · #237 R01 e R02: chiudere e ripristinare non perdono il testo
 
-Perché: R01. Quando `DocumentSessionCollection.release()` chiude un
-documento, prova il flush e la bozza: se falliscono tutti e due, la UI non
-deve far sparire l'unica copia recuperabile. R02. `reloadCurrent()` chiama
-`forceReload()`, che azzera lo stato «da salvare» prima di rileggere: il
-ripristino di una versione con modifiche non salvate può perderle.
+Perché: #237 chiede di dimostrare con un test se R01 e R02 perdono ancora
+testo, e di correggere solo ciò che si riproduce. Il codice ne fa già una
+parte (differenze 15 e 16):
+- `release()` prova il salvataggio e la bozza e restituisce `CloseResult`
+  (`state/document-session.ts:154`, `:1496`); con il buffer ancora sporco
+  dà `unsaved` e la sessione resta aperta;
+- `dismissIfUnwatched` gestisce `unsaved` con il dialogo
+  `document.close_unsaved` (`keepOrDiscardUnsaved`,
+  `state/document-controller.ts:1672`);
+- tre chiamanti ignorano il risultato di `release()`:
+  `state/shell-layout.ts:30` (un riquadro che si chiude),
+  `state/document-bridge.ts:350` (la finestra di un documento che si
+  chiude) e `state/document-controller.ts:2749` (nel `finally` di
+  un'apertura);
+- `forceReload()` (`state/document-session.ts:503`) mette `dirty = false`
+  dopo aver riletto il disco. Il suo unico chiamante, `reloadCurrent()`
+  (`state/document-controller.ts:2948`, ripreso in
+  `panels/document.ts:128`), non ha chiamanti: il ripristino vero di una
+  versione passa da `version.restore` (`crates/fub-features/src/versioning.rs`),
+  che riscrive il file sotto al buffer.
 Ramo: piano/fub-pre-alpha.
-Tocca: `apps/client/src/state/document-session.ts` (`release`,
-`forceReload`), `apps/client/src/state/document-controller.ts`
-(`reloadCurrent`), `apps/client/src/state/document-session.test.ts`,
-`apps/client/src/i18n/catalog.ts` (se serve un testo), `docs/architecture/document-model.md`.
-Non toccare: `panels/document.ts`; l'host; le bozze su disco (il loro
-formato).
+Tocca: `apps/client/src/state/document-session.ts` (`forceReload`),
+`apps/client/src/state/document-controller.ts` (`reloadCurrent`, e i
+chiamanti di `release` solo se un test lo chiede),
+`apps/client/src/state/shell-layout.ts` e
+`apps/client/src/state/document-bridge.ts` (solo se un test lo chiede),
+`apps/client/src/panels/document.ts` (solo la riga 128, che riprende
+`reloadCurrent`), `apps/client/src/state/document-session.test.ts`,
+`apps/client/src/state/document-bridge.test.ts`,
+`apps/client/src/panels/document.test.ts` (il chiamante del controller e il
+ripristino passano dal pannello), `docs/architecture/document-model.md`.
+Non toccare: il catalogo dei testi (nessun testo nuovo: niente
+`demo.unsaved`); l'host; il formato delle bozze su disco; il dialogo
+`document.close_unsaved`.
 Dipende da: nessuno.
 Cosa fare:
-- Prima i due test che riproducono, nel finto host (`host/fake.ts`):
-  - R01: una sessione con testo non salvato; flush e bozza che falliscono;
-    `release()`. Oggi la sessione sparisce?
-  - R02: testo non salvato e `reloadCurrent()`. Oggi il testo si perde?
-- R01: se nessuna delle due strade ha reso il testo durevole, `release()`
-  non chiude. Restituisce un `CloseResult` che lo dice, e la sessione resta
-  viva e «da salvare». Chi chiama (la linguetta, il cambio di vault) mostra
-  l'avviso che usa già per i file non salvati (`demo.unsaved`). Niente
-  copia segreta in un altro posto.
-- R02: tutti i chiamanti del ripristino (cercali). Se c'è testo non salvato,
-  `forceReload()` non lo azzera prima di rileggere: lo mette prima in bozza.
-  Se la bozza fallisce, non rilegge e lo dice. Non si aggiunge una conferma
-  dopo una scrittura già fatta.
-Casi limite: la bozza che riesce e il flush no (si chiude, il testo è in
-bozza); due chiusure di fila; il vault che cambia mentre si chiude; un
-documento in sola lettura (niente da salvare).
-Fatto quando: i due test falliscono prima e passano dopo; i test di
-`state/` restano verdi.
-Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/state/
+- **R01, prima la prova.** Nel finto host (`host/fake.ts`), un test per
+  ognuno dei tre chiamanti: una nota con testo non salvato, salvataggio e
+  bozza che falliscono, poi il gesto (chiudere il riquadro, chiudere la
+  finestra, l'apertura che finisce). Dopo il gesto: la sessione è viva e
+  sporca, riaprire la nota mostra il testo, la bozza c'è appena il finto la
+  lascia scrivere.
+  - Se nessuno perde testo, R01 si chiude con questi test: scrivi nel
+    resoconto «non riprodotto» e il testo del commento per #237.
+  - Se uno perde testo, quel chiamante passa da `keepOrDiscardUnsaved`, come
+    `dismissIfUnwatched`. Niente avviso nuovo, niente copia segreta altrove.
+- **R02, prima la prova.** Un test con testo non salvato e un ripristino di
+  versione dalla vista della cronologia (`version.restore`, poi
+  `restore_confirm`) che riscrive il file nel finto host: il testo della
+  persona resta, e la nota passa in conflitto (o in «cambiata sul disco»),
+  come per ogni modifica da fuori. Se il testo si perde, correggi quel
+  percorso e fermati prima di toccare altro.
+- **R02, il codice morto.** Togli `reloadCurrent()` e la sua ripresa in
+  `panels/document.ts:128`. Rendi `forceReload()` sicura per chi la
+  userà: se la sessione è sporca, prima `flushDraft()`; se la bozza
+  fallisce, restituisce `unavailable` e lascia testo e stato com'erano.
+  Aggiorna il test di `document-session.test.ts:246` («la ricarica forzata
+  pulisce e aggiorna il testo autorevole»), che oggi scarta per scelta.
+Casi limite: la bozza che riesce e il salvataggio no (si chiude, il testo è
+in bozza); due chiusure di fila; il vault che cambia mentre si chiude; un
+documento in sola lettura (niente da salvare); una finestra chiusa mentre il
+dialogo `document.close_unsaved` è aperto.
+Fatto quando: i test dei tre chiamanti e quello del ripristino ci sono e
+passano; se uno falliva prima, la correzione lo fa passare; il test di
+`forceReload` prova che una bozza fallita lascia il testo; i test di
+`state/` restano verdi; `document-model.md` dice che cosa succede al testo
+non salvato quando un riquadro, una finestra o un ripristino lo toccano.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/state/ src/panels/
 Stato: [ ] da fare
 
 ## T5 · #237 R03: il conflitto e la Lettura dicono quale versione si vede
@@ -1147,10 +1458,13 @@ Perché: con un conflitto aperto il buffer non si può salvare. Non è
 dichiarato se la Lettura mostra il testo della persona o la versione sul
 disco.
 Ramo: piano/fub-pre-alpha.
-Tocca: `apps/client/src/panels/document.ts` (`drawConflict`),
+Tocca: `apps/client/src/panels/document.ts` (`drawConflict`, :1225),
 `apps/client/src/state/document-session.ts` (solo se serve esporre lo
-stato), il modulo della Lettura (parti da `editors/core/bootstrap.ts`, dove
-le modalità si registrano), i loro test, `apps/client/src/i18n/catalog.ts`,
+stato), `apps/client/src/editors/text/profiles/markdown/surface.ts` (la
+Lettura di una nota è la modalità `reading`, :112; `view` in
+`editors/core/bootstrap.ts:156` sono i visori, non questa),
+`apps/client/src/state/document-controller.ts` (`redrawReading`, :2437,
+che disegna già il buffer), i loro test, `apps/client/src/i18n/catalog.ts`,
 `docs/architecture/editor-surfaces.md`.
 Non toccare: i comandi di risoluzione del conflitto (ci sono e restano);
 l'host.
@@ -1452,53 +1766,40 @@ tre sistemi nella CI completa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test prealpha_corpus
 Stato: [ ] da fare
 
-## T14 · Il giro della pre-alpha sul banco
+## T14 · Il giro della pre-alpha sul banco: lo scheletro e il primo avvio
 
 Perché: è il «Fatto quando» 3. I compiti che una persona fa nella pre-alpha
 girano sul banco, di fila, con la shell vera e il finto host, e lasciano
-una foto per ognuno.
+una foto per ognuno. Questo task fa lo scheletro e i primi cinque compiti;
+T26–T30 aggiungono gli altri, un gruppo per task.
 Ramo: piano/fub-pre-alpha.
-Tocca: `apps/client/bench/giro.mjs` (nuovo), `apps/client/bench/giro-compiti.mjs`
-(nuovo: l'elenco dei compiti e dei controlli), `apps/client/package.json`
-(lo script `bench:giro`), `docs/development/testing-and-quality.md`.
+Tocca: `apps/client/bench/giro.mjs` (nuovo: il corridore),
+`apps/client/bench/giro/elenco.mjs` (nuovo: l'elenco dei gruppi, in
+ordine), `apps/client/bench/giro/avvio.mjs` (nuovo: i compiti 1–5),
+`apps/client/package.json` (lo script `bench:giro`),
+`docs/development/testing-and-quality.md`.
 Non toccare: `bench/scene.mjs` e le baseline (il giro non è un banco
 visivo: le sue foto non si confrontano coi pixel); `.github/workflows/ci.yml`
 (se e dove il giro entra in CI lo decide l'orchestratore, con
 `check-release-gate.mjs`).
-Dipende da: le Fasi A–C in `main` (il giro passa per ogni editor).
-Lo scheletro e i compiti già possibili si scrivono prima; ogni piano che si
-unisce aggiunge i suoi.
+Dipende da: la Fase B in `main` (le foto sono della cornice nuova).
 Cosa fare:
 - `giro.mjs` usa `bench/stage.mjs` come le altre scene (la porta 1431; vedi
   la skill `banco`), e il finto host con il vault del banco. Ogni compito è
-  una funzione che fa i gesti con la tastiera o col puntatore, controlla il
-  risultato nel DOM o nel finto host (non solo che non ci siano errori), e
-  fa una foto.
-- I 24 compiti, in quest'ordine:
+  una funzione `{ id, nome, fai(pagina), controlla(pagina, host) }`: fa i
+  gesti con la tastiera o col puntatore, controlla il risultato nel DOM o
+  nel finto host (non solo che non ci siano errori), e fa una foto.
+- `giro/elenco.mjs` importa i gruppi in ordine; un gruppo che non c'è
+  ancora non si importa (lo aggiungono T26–T30).
+- `--solo=<gruppo>` fa girare un gruppo solo; `--telefono` fa girare il
+  giro a 390 × 844 (la misura `PHONE` di `scene.mjs`), con i compiti che
+  dicono `telefono: true`.
+- I compiti di questo task:
   1. l'avvio arriva alla scrivania con lo strato d'avvio sparito;
   2. aprire il vault;
   3. l'albero: aprire una cartella e una nota;
   4. scrivere in Live (un titolo, una lista, un grassetto);
-  5. le quattro modalità sulla stessa nota;
-  6. «/» e un blocco;
-  7. il tasto destro su una parola;
-  8. la tavolozza dei comandi;
-  9. due riquadri affiancati;
-  10. rinominare una nota (i collegamenti seguono);
-  11. la ricerca e «In entrata»;
-  12. un documento Word: scrivere e salvare;
-  13. un foglio Excel: una formula e la modalità «Comandi»;
-  14. un disegno SVG: una forma;
-  15. un PDF: cercare e andare a una pagina;
-  16. la lavagna: una scheda e un collegamento;
-  17. la penna e la gomma sulla lavagna;
-  18. le ricette (una ricetta tolta e rimessa);
-  19. Componenti: spegnere e riaccendere un editor;
-  20. Aspetto: la luce e il movimento;
-  21. un conflitto e la sua risoluzione;
-  22. un file in sola lettura;
-  23. il cestino e il ripristino;
-  24. un giro solo con la tastiera (dal 3 al 9, senza puntatore).
+  5. le quattro modalità sulla stessa nota.
 - Il giro esce col codice 1 se un compito fallisce, e dice quale. Le foto
   vanno in una cartella data con `--out`.
 - In `testing-and-quality.md`: come si lancia, che cosa prova, e che cosa
@@ -1506,26 +1807,30 @@ Cosa fare:
 Casi limite: un compito che dipende dal precedente (il giro si ferma al
 primo errore e lo dice); il moto ridotto (il giro gira con «ridotto», per
 non aspettare le animazioni); la shell in inglese (non serve).
-Fatto quando: `npm run bench:giro -- --out=$TMPDIR/giro` è verde sul
-ramo con tutti i piani uniti, e le 24 foto ci sono.
+Fatto quando: `npm run bench:giro -- --out=$TMPDIR/giro` è verde con i
+compiti 1–5 e le loro foto, anche con `--telefono` per 1–4.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npm run bench:giro -- --out=$TMPDIR/giro
 Stato: [ ] da fare
 
 ## T15 · Il simulatore accanto all'app
 
 Perché: è il «Fatto quando» 5. Ogni stato del simulatore si confronta con
-la foto della stessa schermata nell'app, nelle due luci, piena e a 700.
+la foto della stessa schermata nell'app, nelle due luci, piena, a 700 e al
+telefono (390). Il telefono è la cornice A di Scrittoio 2, «provvisoria».
 Ramo: piano/fub-pre-alpha.
 Chi: l'orchestratore, con l'utente.
 Tocca: `PLAN-ui/fub-pre-alpha/script/accosta.mjs` (nuovo), il resoconto in
 `PLAN.md` (questa sezione).
 Non toccare: il simulatore (se l'app è giusta e il simulatore no, si
 corregge il simulatore in un passo a parte e si dice).
-Dipende da: T14; le fasi B e C in `main`; le baseline del runner.
+Dipende da: T14 e T26–T30; le fasi B e C in `main`; le baseline del
+runner; T31 per le foto dell'emulatore.
 Cosa fare:
-- `foto-sim.mjs` fotografa ogni stato del simulatore (le due luci, piena e
-  700). Le foto dell'app vengono dalle baseline del runner (`bench/baseline/`)
-  e dalle foto di T14.
+- `foto-sim.mjs` fotografa ogni stato del simulatore (le due luci, piena,
+  700 e telefono). Le foto dell'app vengono dalle baseline del runner
+  (`bench/baseline/`, comprese le scene a 390 × 844), dalle foto del giro
+  (T14, T26–T30, anche con `--telefono`) e dalla foto dell'APK
+  nell'emulatore (T31).
 - `accosta.mjs` mette le coppie una accanto all'altra in una pagina sola
   (simulatore a sinistra, app a destra), con il nome dello stato.
 - L'orchestratore la manda all'utente. Ogni differenza diventa una riga:
@@ -1533,64 +1838,96 @@ Cosa fare:
   bene così» (con la ragione, in `DECISIONS.md`).
 Casi limite: uno stato del simulatore che l'app non ha in nessuna foto
 (si aggiunge una scena al banco, o lo si dice); le 30 baseline che il banco
-locale non riproduce (si usano quelle del runner).
+locale non riproduce (si usano quelle del runner); i gesti solo del
+telefono (la penna e le dita, la pressione lunga): il banco non li prova,
+li prova l'utente in T23.
 Fatto quando: l'utente ha guardato la pagina, e ogni differenza è chiusa o
 scritta.
 Prova: la pagina accostata, guardata dall'utente.
 Stato: [ ] da fare
 
-## T16 · Le misure della WebView
+## T16 · Le misure della WebView, sulle tre piattaforme
 
-Perché: è il «Fatto quando» 6. I budget della WebView (`ci`) sul runner
-Linux, e una misura a mano su Windows, sul computer dell'utente.
+Perché: è il «Fatto quando» 6. I numeri di N0 (S1–S7) sulle tre WebView,
+dove si possono prendere, più due cancelli rimasti misurati solo in
+Chromium: il menu «/» entro 16 ms (N12) e i Blocchi entro 33 ms su 2.000
+righe (N13, che è S7). Ciò che non si può misurare si scrive, con la
+ragione.
 Ramo: piano/fub-pre-alpha.
-Tocca: `docs/misure/<data>-prealpha-webview.md` (nuovo),
-`docs/development/webview-measurements.md` (la procedura per Windows, se
-manca).
-Non toccare: i budget; `bench/webview*.mjs`.
+Tocca: `apps/client/bench/webview/run.mjs` (lo scenario S8, il menu «/»),
+`apps/client/bench/webview/budgets.json` (solo `targets.S8.slashMenu.p95`
+= 16,7; nessuna soglia `ci` finché il runner non l'ha misurato),
+`docs/development/webview-measurements.md` (S8 nella tabella degli
+scenari), `docs/misure/<data>-prealpha-webview.md` (nuovo).
+Non toccare: le soglie `ci` che ci sono; gli altri scenari; il job
+`webview` di `ci.yml` (S8 entra in CI solo se l'orchestratore lo decide,
+dopo tre giri del runner, con la soglia a una volta e mezza il peggiore,
+come dice la nota di `budgets.json`).
 Dipende da: le Fasi A–C in `main`. La parte di Windows usa l'MSI della
 corsa a secco di T22: la pagina si chiude dopo T22.
 Cosa fare:
-- Prendi i numeri della corsa del banco WebView del runner Linux sul `main`
-  di quel giorno (`gh run view`), per S1, S2 e S3, e scrivili con i budget
-  accanto.
-- La misura a mano qui (Xvfb, `CLAUDE_DEVICE.md`) come confronto.
-- La procedura per Windows: installare l'MSI della corsa a secco di T22,
-  aprire il vault di prova, misurare S1–S3 (con lo strumento che la pagina
-  dice). La fa l'utente; l'orchestratore gli manda la procedura e scrive i
-  numeri che riceve.
-- #283 (la GPU sul computer dell'utente): la misura di Windows la chiude o
-  la aggiorna.
-Casi limite: un numero fuori budget (si apre un task, non si alza il
-budget); la misura di Windows che non arriva (il «Fatto quando» 6 resta
-aperto, e il resoconto lo dice).
-Fatto quando: la pagina di misura ha Linux (runner e qui) e Windows; le
-guardie dei documenti passano.
-Prova: scripts/check.sh --rapido
+- S8 in `run.mjs`, sul modello di S1 e di S2: apre «Lunga», va in fondo,
+  va a capo, poi venti volte arma `__fubProbe.waitFor("slashMenu",
+  ".slash-panel", 1000)`, scrive «/» e chiude con Esc. Il valore è
+  `S8.slashMenu.p95` dal segno `slashMenu`. Va nell'elenco di `--only` e
+  nell'ordine, dopo S7.
+- Linux, sul runner: i numeri di S1–S3 e S7 vengono dalla corsa del job
+  `webview` sul `main` di quel giorno (`gh run view`), coi budget accanto.
+- Linux, qui (Xvfb, `CLAUDE_DEVICE.md`): `misura.sh` con tutti gli scenari,
+  S4, S5 (con la feature `draw`), S6 e S8 compresi. Sotto Xvfb non c'è la
+  scheda grafica: i numeri sono un confronto, non il cancello, e la pagina
+  lo dice.
+- Windows: la procedura «Linux e Windows, passo per passo» di
+  `webview-measurements.md`, con l'MSI della corsa a secco di T22 e
+  msedgedriver. La fa l'utente, sul suo computer (che ha la GPU); misura
+  S1–S8. L'orchestratore gli manda i passi e scrive i numeri che riceve.
+  Chiude o aggiorna #283.
+- macOS: niente driver WebDriver e nessun Mac a mano (D11). La pagina
+  scrive «non misurato» per tutti gli scenari, con la ragione; se D11
+  cambia, si usa la procedura «macOS» della stessa pagina.
+- La pagina di misura ha una tabella per piattaforma: scenario, valore,
+  obiettivo (`targets`), soglia (`ci`), giro o commit, e «non misurato:
+  perché» dove manca.
+Casi limite: un numero fuori obiettivo (si apre un task o un'issue, non si
+alza l'obiettivo); la misura di Windows che non arriva (il «Fatto quando» 6
+resta aperto, e il resoconto lo dice); S5 senza la feature `draw` (il
+referto lo dà saltato: si ricostruisce l'app con la feature); il menu «/»
+che si apre con un'animazione (il segno conta quando `.slash-panel` c'è,
+non quando ha finito di muoversi: la pagina lo dice).
+Fatto quando: `npm run bench:webview -- --only=S8` dà un numero qui; la
+pagina di misura ha Linux (runner e qui) e Windows, e macOS scritto come
+non misurato; le guardie dei documenti passano.
+Prova: scripts/check.sh --rapido; apps/client/bench/webview/misura.sh --only=S1,S2,S3,S4,S5,S6,S7,S8
 Stato: [ ] da fare
 
 ## T17 · Il protocollo della prova con cinque persone
 
-Perché: è il «Fatto quando» 7. Una prova con cinque persone sola, che
-unisce quella dei componenti (K2), quella del primo uso (N12, #281), quella
-dell'inchiostro (N13) e quella della lavagna.
+Perché: è il «Fatto quando» 7. Una prova con cinque persone, alla fine,
+sulla cornice nuova: il primo uso (N12, #281), l'inchiostro (N13), la
+lavagna, e di nuovo i compiti dei componenti (K2), come dice D13 A. La
+prima prova di K2 si fa prima, sulla sua PR (vedi Fase A e D13): questa
+la ripete con la pagina rivestita.
 Ramo: piano/fub-pre-alpha.
 Tocca: `docs/development/prova-con-persone.md` (nuovo), `docs/README.md`.
-Non toccare: i dati delle persone (niente nomi né indirizzi nel repo).
-Dipende da: T14 (il protocollo riprende i suoi compiti). La prova vera usa
-gli installer della corsa a secco di T22.
+Non toccare: i dati delle persone (niente nomi né indirizzi nel repo); il
+protocollo di K2 «Prova dei componenti di Fub» (si riprende, non si
+riscrive).
+Dipende da: T14 e T26–T30 (il protocollo riprende i loro compiti). La
+prova vera usa gli installer della corsa a secco di T22.
 Cosa fare:
-- Parti dalla pagina «Prova componenti» di K2 (i suoi sei compiti) e dalle
-  voci di #281, N12 e N13 che ci sono nei piani. Tieni i compiti che si
-  ripetono una volta sola.
+- Parti dal protocollo di K2 («Prova dei componenti di Fub»: sei compiti,
+  circa 25 minuti) e dalle voci di #281, N12 e N13 che ci sono nei piani.
+  Tieni una volta sola i compiti che si ripetono.
 - Per ogni compito: che cosa si chiede, che cosa si osserva (dove si
   blocca, quanto ci mette, che cosa dice), e quando conta come riuscito.
 - Come si fa: chi conduce, quanto dura (al massimo un'ora), che cosa si
   registra (niente schermo, solo note), e come si anonimizza.
 - I risultati vanno in un'issue (un commento per persona, anonimo).
   L'orchestratore apre l'issue; la prova la conduce l'utente.
-Casi limite: una persona su Windows senza permessi di amministratore (l'MSI
-per utente); una persona che non ha mai usato Obsidian.
+- Se D13 è B o C, adatta: con B questa è l'unica prova di K2; con C i
+  compiti di K2 escono da qui.
+Casi limite: una persona su Windows senza permessi di amministratore
+(l'installer per utente); una persona che non ha mai usato Obsidian.
 Fatto quando: la pagina c'è e le guardie passano. Il «Fatto quando» 7 si
 chiude quando l'issue ha cinque risultati.
 Prova: scripts/check.sh --rapido
@@ -1622,6 +1959,15 @@ Cosa fare:
   priorità, e «Idea»), con i campi del sistema e della versione, e le
   Discussions per le domande. Se D9 è B, anche il comando «Segnala un
   problema»: è un task UI a parte, con un suo stato nel simulatore.
+- `status.md` oggi dice ancora «in pila» per lavori già in `main`: allinea
+  ogni riga al `main` di quel giorno (`git log`, `gh pr list`).
+- Il controllo dei marchi (il rischio «ArtCraft» e i nomi dei motori): i
+  nomi Craft compaiono solo in `THIRD_PARTY_NOTICES`, nell'intestazione
+  dello stabilizzatore e nei percorsi d'installazione delle CLI Craft; mai
+  come nome di una funzione di Fub. Cerca «artcraft» e «fubdraw», senza
+  badare alle maiuscole, nelle stringhe che l'utente vede (il catalogo, i
+  descrittori, i testi della shell) e scrivi l'esito nella PR. «FubDraw»
+  nelle stringhe lo toglie T33.
 Casi limite: un link a una pagina che non c'è ancora (le guardie lo
 trovano); l'indice delle ADR con un numero saltato (0230: si scrive
 «non usato»).
@@ -1700,22 +2046,45 @@ Perché: è il «Fatto quando» 1. La versione `0.2.0-prealpha.1` va in tutti
 i posti, e il rilascio deve funzionare prima del tag.
 Ramo: piano/fub-pre-alpha.
 Chi: l'orchestratore (tocca la CI).
-Tocca: la versione nei sei posti (`Cargo.toml` del workspace,
-`crates/fub-app/tauri.conf.json`, `apps/client/package.json` e
-`package-lock.json`, e gli altri che `check-release-gate.mjs` o
-`release.yml` controllano: cercali); `bundle.windows.wix.version`
-(`0.2.0.1`, perché l'MSI vuole solo numeri); il `versionCode` di Android,
-se serve; `.github/workflows/release.yml` (`--prerelease`, e l'APK di
-prova allegato e segnato «sperimentale»); `.github/scripts/check-release-gate.mjs`
-se un job cambia nome; `CHANGELOG.md` (la data).
-Non toccare: la firma (la pre-alpha esce senza); gli altri workflow.
-Dipende da: le Fasi A–C in `main`; T14, T18 e T19–T21 chiusi.
+Tocca:
+- i sei posti che `.github/scripts/check-release-version.mjs` confronta
+  già (la guardia c'è, con la regola
+  `^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$`): `Cargo.toml`
+  (`[workspace.package]`), `crates/fub-app/tauri.conf.json`,
+  `crates/fub-app/tauri.android.conf.json`,
+  `crates/fub-app/tauri.ios.conf.json`, `apps/client/package.json`,
+  `apps/client/package-lock.json` (`packages[""].version`);
+- `crates/fub-app/tauri.conf.json`: `bundle.windows.wix.version` =
+  `0.2.0.1` (l'MSI vuole quattro numeri, e il quarto è N di
+  `prealpha.N`);
+- `crates/fub-app/tauri.android.conf.json`: il `versionCode` scritto a mano
+  (oggi `autoIncrementVersionCode` è `false`), che cresce a ogni
+  `prealpha.N`;
+- `.github/scripts/check-release-version.mjs`: in più, il quarto numero di
+  `wix.version` uguale a N di `prealpha.N`, e il `versionCode` presente;
+  con il suo test, se la guardia ne ha uno;
+- `.github/workflows/release.yml`: `--prerelease` quando il tag ha un
+  trattino, l'APK di prova allegato, le note della release;
+- `.github/scripts/check-release-gate.mjs` se un job cambia nome;
+- `CHANGELOG.md` (la data).
+Non toccare: la firma (la pre-alpha esce senza); gli altri workflow;
+`mobile.yml` (lo tocca T31).
+Dipende da: le Fasi A–C in `main`; T14, T18, T19–T21, T25 e T31 chiusi.
 Cosa fare:
-- La versione in tutti i posti; un test o una guardia che le confronta, se
-  non c'è già.
+- La versione nei sei posti; `node .github/scripts/check-release-version.mjs`
+  passa.
+- L'MSI e l'aggiornamento. Il `main.wxs` di Tauri ha `Product Id="*"` e un
+  `MajorUpgrade` che permette di scendere e di reinstallare la stessa
+  versione: `0.2.0.1` → `0.2.0.2` sostituisce la voce di prima. Se la prova
+  di T23 su Windows lascia due voci, le note della release dicono
+  «disinstalla la versione di prima, poi installa questa», e lo dice anche
+  `prova-la-pre-alpha.md` (T18).
+- Il setup NSIS (`*-setup.exe`, perché `targets` è `all`): la corsa a secco
+  dice se accetta la versione col trattino. Se la rifiuta, si allega solo
+  l'MSI e si scrive in «Differenze».
 - `release.yml`: il tag `v*-prealpha.*` fa una release `--prerelease`
   (ancora in bozza: la pubblica una persona).
-- L'APK di debug di `mobile.yml` allegato alla release col nome
+- L'APK di debug di `mobile.yml` (aarch64) allegato alla release col nome
   `Fub-0.2.0-prealpha.1-android-sperimentale.apk`.
 - macOS (D11): l'app costruita in CI si avvia (una prova di fumo: parte, la
   finestra c'è, si chiude), e la pagina della release dice che non è
@@ -1723,36 +2092,63 @@ Cosa fare:
 - La corsa a secco: `gh workflow run release.yml` (`workflow_dispatch`, solo
   gli artefatti), e controlla che ci siano gli installer dei tre sistemi
   e l'APK.
-Casi limite: la versione con il trattino rifiutata da un passo (l'MSI, il
-`versionCode`); il gate che chiede una CI completa verde sul commit.
-Fatto quando: la corsa a secco è verde e ha tutti gli artefatti.
-Prova: scripts/check.sh --rapido; la corsa a secco
+Casi limite: la versione col trattino rifiutata da un passo (MSI, NSIS,
+`versionCode`); il gate che chiede una CI completa verde sul commit; un
+`prealpha.10` (il quarto numero dell'MSI arriva fino a 65535, il
+`versionCode` deve crescere: la guardia lo controlla).
+Fatto quando: la guardia della versione passa con `wix.version` e
+`versionCode`; la corsa a secco è verde e ha tutti gli artefatti.
+Prova: scripts/check.sh --rapido; node .github/scripts/check-release-version.mjs; la corsa a secco
 Stato: [ ] da fare
 
-## T23 · Il giro a mano sugli installer
+## T23 · Il giro a mano sugli installer e sul telefono
 
-Perché: è il «Fatto quando» 3, la parte a mano. Il giro di T14 sugli
-installer veri: Linux qui, Windows dall'utente.
+Perché: è il «Fatto quando» 3 e 5, la parte a mano. I compiti del giro
+(T14, T26–T30: 27) sugli installer veri, Linux qui e Windows dall'utente;
+l'AI con MCP; l'APK sul telefono vero dell'utente.
 Ramo: piano/fub-pre-alpha.
-Chi: l'orchestratore (Linux) e l'utente (Windows).
+Chi: l'orchestratore (Linux) e l'utente (Windows, telefono).
 Tocca: il resoconto in questa sezione; un'issue per ogni difetto trovato.
 Non toccare: il vault vero dell'utente (`vault-tutti`): il giro usa una
 copia temporanea.
-Dipende da: T22.
+Dipende da: T22 e T31.
 Cosa fare:
-- Linux: installa il `.deb` o l'AppImage della corsa a secco (senza sudo:
-  l'AppImage), apri una copia del vault del banco, fai i 24 compiti a mano,
-  e scrivi il risultato di ognuno.
-- Windows: l'orchestratore manda all'utente la lista dei 24 compiti; l'utente
-  li fa con l'MSI e risponde.
-- L'AI (A1): con il server MCP acceso, un client esterno legge una nota e
-  ne propone una modifica, e la proposta si vede e si accetta in Fub.
+- Linux: installa l'AppImage della corsa a secco (senza sudo), apri una
+  copia del vault del banco, fai i 27 compiti a mano, e scrivi il
+  risultato di ognuno.
+- Windows: l'orchestratore manda all'utente la lista dei 27 compiti;
+  l'utente li fa con l'MSI e risponde. In più: installa la corsa a secco,
+  poi una seconda corsa costruita con `prealpha.2` (solo per la prova,
+  senza tag), e guarda in «App installate» che ci sia una voce sola. Se
+  sono due, vale il ripiego di T22.
+- L'AI con MCP (N2 e A1), con `fub-cli mcp --vault <copia>
+  --automation-read-root <cartella> --automation-write-root <cartella>`
+  e Fub aperto sulla stessa copia:
+  a) un client esterno chiama `fub_read` su una nota, poi `fub_write` con
+     la sua base: Fub mostra il cambio da disco; se la nota aveva testo non
+     salvato, mostra il conflitto (T5);
+  b) `fub_canvas_apply` prima a secco (la risposta dice che cosa farebbe,
+     la lavagna non cambia), poi davvero (la lavagna cambia, e l'annulla
+     di Fub la riporta indietro);
+  c) una ricetta scritta dal client compare come «proposta» nelle Ricette
+     (A1 T9, T11, T12): la si simula e la si adotta.
+  La nota col confronto della modifica proposta dall'AI non c'è: è fuori,
+  nella fase F5 di A1 («L'assistente dentro Fub»).
+- Il telefono vero dell'utente (Android): l'orchestratore manda all'utente
+  l'APK sperimentale e cinque passi: installa, apri una copia del vault,
+  scrivi una nota, una lavagna con le dita e con la penna (se il telefono
+  ce l'ha), un foglio in orizzontale. L'utente risponde con una riga per
+  passo e una foto se qualcosa non va.
 - Ogni difetto: un'issue; quelli che fermano la pre-alpha diventano task.
 Casi limite: un difetto che c'è solo sull'installer (i percorsi, i
-permessi): non si vede sul banco.
-Fatto quando: i 24 compiti sono verdi su Linux e su Windows, o i difetti
-che restano sono accettati dall'utente come noti.
-Prova: il resoconto dei due giri.
+permessi): non si vede sul banco; il telefono senza penna (il passo si
+scrive «non provato»); il server MCP che trova il vault tenuto dall'app
+(passa dal canale di controllo dell'app: è il caso da provare, non un
+errore).
+Fatto quando: i 27 compiti sono verdi su Linux e su Windows, i tre giri
+MCP fanno ciò che dicono, il telefono ha i cinque passi; o i difetti che
+restano sono accettati dall'utente come noti.
+Prova: il resoconto dei giri.
 Stato: [ ] da fare
 
 ## T24 · Il tag e la pre-release
@@ -1776,4 +2172,270 @@ con un tag nuovo `-prealpha.2`; il tag vecchio non si sposta).
 Fatto quando: la pre-release è pubblica e la pagina «Prova la pre-alpha»
 porta lì.
 Prova: la pagina della release.
+Stato: [ ] da fare
+
+## T25 · Il controllo degli aggiornamenti vede le pre-release
+
+Perché: è il «Fatto quando» 1. Chi ha `0.2.0-prealpha.1` deve sapere che
+c'è `prealpha.2`. Oggi `updates.rs` chiede `/releases/latest`, che GitHub
+dà solo per le release vere: per una pre-alpha risponde 404 («nessuna
+release») o la `0.1.x`. E due pre-release si confrontano come testo, quindi
+`prealpha.10` verrebbe prima di `prealpha.2`.
+Ramo: piano/fub-pre-alpha.
+Tocca: `crates/fub-host/src/updates.rs`; `docs/reference/` o
+`docs/architecture/` dove il controllo degli aggiornamenti è descritto
+(cercalo con `updates.check`).
+Non toccare: la forma della risposta (`{current, latest, newer, url}` e
+`{current, failed, status}`), che la shell legge; il permesso di rete (solo
+`api.github.com`); il catalogo.
+Dipende da: niente.
+Cosa fare:
+- Se la versione che gira è una pre-release, chiedi
+  `https://api.github.com/repos/Fubeo/Fub/releases?per_page=30` e prendi
+  la versione più alta fra quelle che `Version::parse` legge (le bozze
+  non arrivano senza autenticazione). Se è una release vera, resta
+  `/releases/latest`.
+- `Version`: le parti della pre-release si confrontano come dice semver
+  (separate dai punti; numeri come numeri, testo come testo, il numero
+  prima del testo, la lista più corta prima a parità).
+- Estendi `versions_order_like_releases` (`prealpha.10` > `prealpha.2`,
+  `0.2.0` > `0.2.0-prealpha.9`, `0.2.0-rc.1` > `0.2.0-prealpha.3`) e
+  aggiungi un test con `MemoryHost` per la lista: una lista vuota, una con
+  una bozza senza `tag_name`, una con un tag che non è una versione.
+Casi limite: la lista che non è un array (`failed: "unreadable"`); una
+pre-release più vecchia della release vera che c'è (vince la più alta);
+chi ha una release vera non vede le pre-release.
+Fatto quando: i test nuovi passano e quelli che c'erano restano verdi.
+Prova: cargo test -p fub-host --lib updates::
+Stato: [ ] da fare
+
+## T26 · Il giro sul banco: scrivere e muoversi
+
+Perché: è il «Fatto quando» 3. I compiti 6–11 del giro (T14).
+Ramo: piano/fub-pre-alpha.
+Tocca: `apps/client/bench/giro/scrivere.mjs` (nuovo),
+`apps/client/bench/giro/elenco.mjs` (una riga),
+`docs/development/testing-and-quality.md` (la lista dei compiti).
+Non toccare: `bench/giro.mjs` (il corridore è di T14: se manca qualcosa,
+dillo nel resoconto); i componenti della shell.
+Dipende da: T14; la Fase B in `main`.
+Cosa fare: un compito per voce, ognuno coi suoi controlli nel DOM o nel
+finto host:
+6. «/» in una nota: si apre il menu, si sceglie una tabella, la tabella
+   c'è nel testo; poi un blocco spostato con la maniglia;
+7. il tasto destro sul testo: il menu c'è, «Grassetto» cambia il testo;
+8. la tavolozza (Ctrl+K): si cerca un comando e lo si esegue;
+9. due riquadri: una nota a sinistra, un'altra a destra, il fuoco passa;
+10. rinominare una nota nell'albero: i link che la nominano cambiano
+    (il finto host lo fa: controlla il testo dell'altra nota);
+11. la ricerca trova una parola; il pannello «In entrata» della nota
+    mostra chi la nomina.
+Casi limite: il menu «/» che si chiude se il fuoco scappa (il compito
+rimette il fuoco nel testo prima di scrivere); la rinomina annullata con
+Esc (un compito in più non serve: lo dice il test della rinomina).
+Fatto quando: `npm run bench:giro -- --solo=scrivere` è verde, e il giro
+intero resta verde.
+Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npm run bench:giro -- --out=$TMPDIR/giro
+Stato: [ ] da fare
+
+## T27 · Il giro sul banco: i quattro editor dei file degli altri
+
+Perché: è il «Fatto quando» 3. I compiti 12–15 del giro.
+Ramo: piano/fub-pre-alpha.
+Tocca: `apps/client/bench/giro/editor.mjs` (nuovo),
+`apps/client/bench/giro/elenco.mjs`, `docs/development/testing-and-quality.md`.
+Non toccare: i motori (il giro usa i loro finti, come le scene del banco);
+`bench/giro.mjs`.
+Dipende da: T14; la griglia e K5 in `main` (Fase C).
+Cosa fare:
+12. un documento Word: si scrive una frase, si salva, il finto host ha il
+    salvataggio;
+13. un foglio Excel: una formula in una cella dà il risultato; il comando
+    «Ordina» dalla barra «Comandi» cambia l'ordine;
+14. un disegno SVG: lo strumento rettangolo fa una forma, la forma c'è
+    nel testo del disegno;
+15. un PDF: la ricerca trova una parola, si va a pagina 3.
+Casi limite: il motore finto che risponde tardi (il compito aspetta lo
+stato «pronto», non un tempo fisso).
+Fatto quando: `npm run bench:giro -- --solo=editor` è verde.
+Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npm run bench:giro -- --solo=editor --out=$TMPDIR/giro
+Stato: [ ] da fare
+
+## T28 · Il giro sul banco: la lavagna e la penna
+
+Perché: è il «Fatto quando» 3. I compiti 16–17 del giro.
+Ramo: piano/fub-pre-alpha.
+Tocca: `apps/client/bench/giro/lavagna.mjs` (nuovo),
+`apps/client/bench/giro/elenco.mjs`, `docs/development/testing-and-quality.md`.
+Non toccare: `bench/giro.mjs`; il nucleo della lavagna.
+Dipende da: T14; N4 e N6 in `main` (Fase C).
+Cosa fare:
+16. una lavagna: si crea una scheda, si scrive dentro (T27 di N6), si fa
+    un collegamento fra due schede; il testo della lavagna li ha;
+17. la penna (N4): un tratto con `pointerType: "pen"`, poi la gomma lo
+    toglie; il testo del file lo dice.
+Casi limite: il tratto di penna che il banco non sa fare con la pressione
+(si usa la pressione fissa, e il resoconto lo dice).
+Fatto quando: `npm run bench:giro -- --solo=lavagna` è verde.
+Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npm run bench:giro -- --solo=lavagna --out=$TMPDIR/giro
+Stato: [ ] da fare
+
+## T29 · Il giro sul banco: ricette, componenti e aspetto
+
+Perché: è il «Fatto quando» 3. I compiti 18–20 del giro.
+Ramo: piano/fub-pre-alpha.
+Tocca: `apps/client/bench/giro/scelte.mjs` (nuovo),
+`apps/client/bench/giro/elenco.mjs`, `docs/development/testing-and-quality.md`.
+Non toccare: `bench/giro.mjs`; i finti di K2 e A1 (se manca un caso, dillo).
+Dipende da: T14; A1, K2 e S2 in `main`.
+Cosa fare:
+18. una ricetta (A1): la si toglie dalle Ricette e la si riprende;
+19. un componente (K2): lo si spegne nelle Impostazioni, il suo editor non
+    c'è più; lo si riaccende e torna;
+20. l'aspetto: la luce chiara, poi il movimento «ridotto»; la cornice
+    cambia (le variabili del tema sulla radice).
+Casi limite: un componente che ne richiede un altro (la finestra di K2 lo
+dice: il compito la accetta).
+Fatto quando: `npm run bench:giro -- --solo=scelte` è verde.
+Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npm run bench:giro -- --solo=scelte --out=$TMPDIR/giro
+Stato: [ ] da fare
+
+## T30 · Il giro sul banco: quando qualcosa va storto
+
+Perché: è il «Fatto quando» 3 e 4. I compiti 21–27 del giro: i casi in cui
+una persona può perdere testo, provati come li vede.
+Ramo: piano/fub-pre-alpha.
+Tocca: `apps/client/bench/giro/guasti.mjs` (nuovo),
+`apps/client/bench/giro/elenco.mjs`, `docs/development/testing-and-quality.md`.
+Non toccare: `bench/giro.mjs`; `src/host/fake.ts` (usa ciò che ha già:
+`fault(gate, reason)` e le scritture da fuori).
+Dipende da: T14; PA T4 e T5 in `main`.
+Cosa fare:
+21. il conflitto: testo non salvato, poi il finto host cambia la stessa
+    nota da fuori; la barra del conflitto c'è, e ogni sua azione fa ciò
+    che dice (T5);
+22. la sola lettura: un file che il finto dà in sola lettura non si
+    scrive, e la shell lo dice;
+23. il cestino: si cancella una nota, la si ritrova nel cestino, la si
+    rimette;
+24. la tastiera: i compiti 3–9 rifatti senza puntatore, col fuoco visibile
+    a ogni passo (l'anello del fuoco c'è nella foto);
+25. chiudere con testo non salvato: la finestra di R01 chiede, e
+    «Annulla» lascia il testo (T4);
+26. ripristinare una versione con testo non salvato: la bozza resta, e la
+    shell lo dice (R02, T4);
+27. il salvataggio che fallisce: `fault("writeDocument", …)`; la shell lo
+    dice, il testo resta, e quando la porta torna buona il salvataggio
+    riprova.
+Casi limite: il conflitto che arriva mentre la finestra di R01 è aperta
+(un compito solo: il conflitto vince, la finestra si chiude, il testo
+resta).
+Fatto quando: `npm run bench:giro -- --solo=guasti` è verde.
+Prova: scripts/check.sh --rapido; cd apps/client && npm run build && npm run bench:giro -- --solo=guasti --out=$TMPDIR/giro
+Stato: [ ] da fare
+
+## T31 · L'APK di prova parte in un emulatore della CI
+
+Perché: è il «Fatto quando» 5. Oggi `mobile.yml` costruisce l'APK di
+debug (aarch64) e basta: nessuno lo apre. Un emulatore sul runner dice
+almeno che parte, che la finestra c'è e che non si chiude da sola.
+Ramo: piano/fub-pre-alpha.
+Chi: l'orchestratore (tocca la CI).
+Tocca: `.github/workflows/mobile.yml` (un job nuovo, `android-emulatore`);
+`.github/scripts/check-release-gate.mjs` se il job entra nel cancello del
+rilascio; `docs/development/mobile.md` o la pagina dove `mobile.yml` è
+descritto.
+Non toccare: il job `android` che c'è (l'APK aarch64 resta, è quello che
+va nella release); gli altri workflow.
+Dipende da: niente; T22 e T23 usano la sua foto.
+Cosa fare:
+- Il job costruisce un APK di debug x86_64 (`cargo tauri android build
+  --debug --apk --target x86_64`, stessa CLI 2.11.5 e stesso JDK 17 del job
+  `android`), perché l'emulatore del runner è x86_64.
+- Accende KVM sul runner `ubuntu-latest` (la regola udev per `/dev/kvm`).
+- Usa l'SDK che il runner ha già: `sdkmanager` per l'immagine di sistema
+  (API 34, `google_apis`, x86_64), `avdmanager` per l'AVD, `emulator`
+  senza finestra. **Nessuna action di terzi**: una action nuova è una
+  dipendenza, e va chiesta all'utente.
+- `adb install`, `adb shell am start` sull'attività di Fub, aspetta la
+  finestra (`dumpsys window`), poi 20 s; controlla che `logcat` non abbia
+  un crash del processo; `adb exec-out screencap -p` in un artifact
+  `android-emulatore-<sha>`.
+- Gira sulle PR pronte e su `main`, come il job `android`.
+Casi limite: l'emulatore lento a partire (attesa fino a 5 minuti, poi il
+job fallisce e lo dice); un runner senza KVM (il job lo dice e fallisce,
+non salta in silenzio).
+Fatto quando: il job è verde su una PR pronta e l'artifact ha la foto della
+scrivania.
+Prova: scripts/check.sh --rapido; la corsa del job sulla PR
+Stato: [ ] da fare
+
+## T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina
+
+Perché: una voce rimasta aperta (vedi «Le voci sciolte»). In una nota,
+`![[x.pdf#page=3]]` diventa un collegamento al PDF, ma la pagina si perde:
+il PDF si apre alla prima. Il visore sa già partire da una pagina.
+Ramo: piano/fub-pre-alpha.
+Tocca: `apps/client/src/editors/text/profiles/markdown/media.ts` (il PDF
+incorporato, intorno alla riga 396: il collegamento e
+`showEmbeddedCraft`), il punto dove il clic su un collegamento apre un
+documento (seguilo da `data-wikilink-page`), le opzioni di apertura della
+superficie del PDF fino a `initialPage` in
+`apps/client/src/editors/media/pdf-view.ts` (riga 337), i test accanto,
+`docs/product/` dove il PDF nelle note è descritto.
+Non toccare: il formato dei link; il visore fuori da `initialPage`; il
+risolutore dei link (`port.resolve`).
+Dipende da: niente.
+Cosa fare:
+- Il collegamento del PDF tiene il numero di pagina (`#page=N`, intero
+  positivo), e aprirlo porta `initialPage = N` alla superficie del PDF.
+- Lo stesso per `[[x.pdf#page=3]]` (il collegamento senza «!»), se passa
+  dallo stesso punto.
+- Un numero fuori dal documento apre l'ultima pagina, come `goToPage`.
+Casi limite: `#page=0`, `#page=abc`, `#page=` (prima pagina, nessun
+errore); un PDF già aperto in un'altra scheda (va a quella pagina); un PDF
+rotto (resta l'errore che c'è).
+Fatto quando: un test di Vitest prova che il clic su
+`![[x.pdf#page=3]]` apre la superficie con `initialPage` 3, e i casi
+limite.
+Prova: scripts/check.sh --rapido
+Stato: [ ] da fare
+
+## T33 · Il nome FubDraw dove le persone lo vedono
+
+Perché: D14. Chi prova la pre-alpha non sa che cosa sia FubDraw (vedi
+«Differenze», 22). Questo task vale com'è se D14 è A; con C si fanno solo
+i due descrittori; con B non si fa.
+Ramo: piano/fub-pre-alpha.
+Tocca: `crates/fub-format-svg/src/lib.rs` (i descrittori: «SVG (FubDraw)»
+→ «Disegno SVG», «Annotazioni PDF (FubDraw)» → «Annotazioni PDF»),
+`crates/fub-scene/src/diagnostics.rs` (S002: «…che Fub conserva…»),
+`apps/client/src/editors/spatial/scene/diagnostics.ts` (la stessa S002),
+`apps/client/src/i18n/catalog.ts` (`vector.foreign`,
+`vector.foreign.editable.hint`, `vector.read_only.future_version`,
+`live.not_editable`, in italiano e in inglese),
+`apps/client/src/editors/spatial/strings.ts` e
+`apps/client/src/editors/spatial/import/strings.ts` (ogni frase con
+«FubDraw», nelle due lingue), i messaggi di `scene/engine.ts` che arrivano
+alla shell o a MCP, `docs/product/drawing*.md`, una riga nelle pagine
+`docs/reference/scene-*.md` («FubDraw è il nome tecnico del formato»), i
+test e le fixture che citano quelle frasi.
+Non toccare: il namespace `fub:`, gli id dei formati e dei comandi,
+`Status::Fubdraw`, `fubdraw://live`, i commenti del codice, le ADR (una
+nota in coda a ADR 0203, non una riscrittura).
+Dipende da: la risposta a D14.
+Cosa fare:
+- Cambia le frasi: al posto di «FubDraw» si dice «Fub», «il disegno» o «il
+  formato dei disegni di Fub», come suona meglio nella frase; in inglese
+  lo stesso.
+- Una guardia: un test che cerca «FubDraw» nei cataloghi e nei
+  descrittori e fallisce se lo trova (accanto ai test del catalogo).
+- Le fixture `scene-export` e `scene-ops` hanno «FubDraw» solo nella
+  descrizione del caso: restano.
+Casi limite: una frase che citava FubDraw come altra app («non è stato
+fatto con FubDraw» diventa «non è stato fatto con Fub»); i test che
+confrontano il testo esatto (si aggiornano con la frase nuova).
+Fatto quando: la guardia passa; i test dei descrittori, di `fub-scene` e
+del catalogo sono verdi.
+Prova: scripts/check.sh --rapido
 Stato: [ ] da fare

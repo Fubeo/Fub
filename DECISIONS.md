@@ -16,7 +16,9 @@ dubbio su una scelta tecnica si decide, non si chiede.
 
 ## L'orchestratore decide da solo
 
-- l'ordine dei task pronti e quanti coder far lavorare insieme (al massimo tre);
+- l'ordine dei task pronti. Lavora un coder alla volta, più al massimo un
+  pianificatore: è la regola dell'utente dal 2026-11-04, e la cambia solo
+  l'utente;
 - il come che il piano approvato lascia aperto: nomi, tipi, dove sta una
   funzione, la forma di un messaggio d'errore, la forma dei test;
 - un piccolo refactor dentro i file del task;
@@ -59,6 +61,40 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-05 · fub-pre-alpha (secondo giro) · un coder alla volta, più al
+  massimo un pianificatore, anche in questo file (prima diceva «al massimo
+  tre») · è la regola dell'utente dal 2026-11-04; le «ondate» del piano sono
+  file, una dopo l'altra. Stima scritta in «L'ordine»: 7–9 settimane.
+- 2026-11-05 · fub-pre-alpha (secondo giro) · task nuovi decisi dal
+  pianificatore: PA T25 (il controllo degli aggiornamenti vede le
+  pre-release: `/releases/latest` non le dà), T26–T30 (T14 diviso in sei
+  task, 27 compiti), T31 (l'APK di debug x86_64 parte in un emulatore della
+  CI, senza action di terzi), T32 (`![[x.pdf#page=3]]`) · ognuno chiude un
+  buco fra «Fatto quando» e il codice; le ragioni sono nelle loro sezioni.
+- 2026-11-05 · fub-pre-alpha (secondo giro) · PA T4: R01 si prova con un
+  test sui tre chiamanti di `release()` prima di correggere, e si chiude se
+  non si riproduce; niente `demo.unsaved` · `release()` ritorna già
+  `CloseResult` e `dismissIfUnwatched` tiene il testo non salvato.
+- 2026-11-05 · fub-pre-alpha (secondo giro) · l'MSI usa
+  `bundle.windows.wix.version = 0.2.0.N` (N di `prealpha.N`), con la
+  guardia; se l'aggiornamento su Windows lascia due voci, le note dicono di
+  disinstallare prima (PA T22, T23) · il `MajorUpgrade` di Tauri sostituisce
+  la voce di prima, ma va visto su Windows.
+- 2026-11-05 · fub-pre-alpha (secondo giro) · la proposta MCP «vista e
+  accettata in Fub» esce dalla pre-alpha e va in A1 F5 («L'assistente
+  dentro Fub»); PA T23 prova i flussi MCP che ci sono (`fub_write` con la
+  base, `fub_canvas_apply` in prova e davvero, la ricetta proposta) ·
+  nessun task la costruiva.
+- 2026-11-05 · fub-pre-alpha (secondo giro) · due domande nuove per
+  l'utente: D13 (la prova di K2 prima del merge di #290, come dice K2 D-2;
+  consiglio A) e D14 (il nome «FubDraw» nelle frasi che le persone leggono;
+  consiglio A). PA T33 aspetta D14 · cambiano ciò che si vede o una regola
+  che l'utente aveva scritto.
+- 2026-11-05 · fub-pre-alpha (secondo giro) · scelte dell'utente: D3 = A
+  (disegnare ora N6 T26–T28 nel simulatore), D4 = A (le pagine dei piani
+  composte nella cornice di Scrittoio 2, con le barre nel kit), D5 composte
+  tutte e due, D12 = B (densità, contrasto e accento cambiano davvero il
+  simulatore).
 - 2026-11-05 · fub-pre-alpha (pianificatore) · definizione confermata
   dall'utente: gli otto punti di «Fatto quando» del piano; dentro tutti i
   piani aperti tranne K6; computer più un APK Android di prova segnato
