@@ -59,6 +59,22 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-05 · k3-motori · T17, la scena `window-document` aspetta di nuovo
+  che lo strato d'avvio se ne sia andato dopo aver ricaricato la pagina, come
+  fa `prepareScene` · perché: la corsa 42045342312 l'ha fotografata col
+  marchio fermo (93% di pixel diversi, nelle due luci). È una gara del banco
+  arrivata con il piano del caricamento (#308), uguale su `main`: la scena
+  ricarica la pagina dopo l'attesa comune, e quell'attesa non la copriva più.
+  Correzione piccola del banco, la baseline non cambia; in prova locale 0 su
+  24 foto con lo strato.
+- 2026-11-05 · k3-motori · T17, il finto host del banco dichiara
+  `chrome.sidebar.visible` e `chrome.inspector.visible` quando la scena apre
+  una cartella di Excel (`workbook=1`), come l'host vero (`fub-host`) · perché:
+  le scene della barra dei fogli chiudono i due pannelli e senza la
+  dichiarazione la scrittura falliva, così le foto del runner tenevano
+  l'avviso «Non ho potuto ricordare come hai lasciato i pannelli» e il 2 sulla
+  campanella. Correzione piccola del banco, nessun cambio di ciò che l'utente
+  vede nel prodotto; le scene delle Impostazioni non cambiano (d90a09d0).
 - 2026-11-05 · k3-motori · T19, risposta dell'utente alla scelta aperta qui
   sotto: D, la griglia non cambia altezza durante la tenda, senza salti né
   bande scure. Fatto così: per la durata della corsa la griglia e chi le sta

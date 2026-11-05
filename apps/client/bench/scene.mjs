@@ -1357,7 +1357,14 @@ async function openDocumentWindow(page) {
     )
   ).jsonValue();
   await page.goto(`${here.origin}${here.pathname}${here.search}&${new URLSearchParams(request)}`, { waitUntil: "load" });
-  await page.waitForFunction(() => document.documentElement.dataset.bench === "ready", null, { timeout: 30_000 });
+  // La pagina rinasce qui, dopo l'attesa di `prepareScene`: si aspetta di
+  // nuovo anche che lo strato d'avvio se ne sia andato, o la foto prende il
+  // marchio fermo nei suoi ms minimi (il runner l'ha preso una volta).
+  await page.waitForFunction(
+    () => document.documentElement.dataset.bench === "ready" && !document.querySelector(".avvio"),
+    null,
+    { timeout: 30_000 },
+  );
   // Collegata: la principale ha risposto, il testo c'è e si può scrivere.
   await page.waitForSelector('#document-window-link[data-state="salvato"]');
   await page.waitForSelector('#document-window-panel .cm-content[contenteditable="true"]');
