@@ -1330,7 +1330,7 @@ Fatto quando: la PR #295 è pronta e ogni job è verde, salvo
 `R1.giri.pendenza.MiB` se è rosso, spiegato; la revisione è scritta nella
 PR; nessun task resta aperto; l'utente ha detto sì al merge.
 Prova: gh pr checks 295
-Stato: [ ] da fare
+Stato: [~] in attesa del sì dell'utente · ee20018a · CI completa (corsa 42049126094) verde su Linux, Windows e macOS, banchi compresi; rilanciati una volta i job con un instabile noto (Windows #292, WebView S1 #293 e S3 #287), verdi; resta rosso solo R1.giri.pendenza.MiB (34 MiB, #284), ammesso · baseline delle 38 scene nuove e delle 12 grid-* dal runner (corsa 42045342312), confrontate col prototipo · correzioni piccole del banco d90a09d0 e d6508b1a (DECISIONS) · revisione riga per riga scritta nella PR
 
 ## T18 · La barra dei fogli nello stile di Fub
 
