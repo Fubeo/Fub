@@ -1,0 +1,1553 @@
+# Mappa di VectorCraft cfb30d8139161cf1722dfabf3046741a0b21b3da in Fub (generata da PLAN-mappa/strumenti/mappa.py, K6)
+fonte	id	etichetta	menu	famiglia	fase	task	posto	pigro	nota
+motore	appearance.addFill	Add New Fill	Window › Appearance	aspetto	F1	T15	ispettore/design	famiglia	
+motore	appearance.addStroke	Add New Stroke	Window › Appearance	aspetto	F1	T15	ispettore/design	famiglia	
+motore	appearance.clear	Clear Appearance	Window › Appearance	aspetto	F1	T15	ispettore/design	famiglia	
+motore	appearance.reduceToBasic	Reduce to Basic Appearance	Window › Appearance	aspetto	F1	T15	ispettore/design	famiglia	
+motore	appearance.setItem	Appearance Item		aspetto	F1	T15	ispettore/design	famiglia	
+motore	appearance.removeItem	Remove Item		aspetto	F1	T15	ispettore/design	famiglia	
+motore	appearance.addEffect	Add Effect		aspetto	F1	T15	ispettore/design	famiglia	
+motore	appearance.duplicateItem	Duplicate Item	Window › Appearance	aspetto	F1	T15	ispettore/design	famiglia	
+motore	appearance.moveItem	Reorder Appearance Item		aspetto	F1	T15	ispettore/design	famiglia	
+motore	appearance.copyFrom	Eyedropper		aspetto	F1	T15	ispettore/design	famiglia	
+motore	appearance.setActiveItem	Select Appearance Item		aspetto	F1	T15	ispettore/design	famiglia	
+motore	appearance.showAllHidden	Show All Hidden Attributes	Window › Appearance	aspetto	F1	T15	ispettore/design	famiglia	
+motore	appearance.targetContents	Target Contents		aspetto	F1	T15	ispettore/design	famiglia	
+motore	appearance.transfer	Move Appearance		aspetto	F1	T15	ispettore/design	famiglia	
+motore	assets.add	Collect for Export	Object › Collect for Export	web	F3	T22	menu/oggetto	famiglia	
+motore	assets.remove	Remove Asset		web	F3	T22	ispettore/design/documento	famiglia	
+motore	assets.rename	Rename Asset		web	F3	T22	ispettore/design/documento	famiglia	
+motore	assets.list	Assets		web	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	assets.export	Export Assets		web	F3	T22	ispettore/design/documento	famiglia	
+motore	assets.settings.set	Asset Export Settings		web	F3	T22	ispettore/design/documento	famiglia	
+motore	attributes.set	Attributes		dati	F4	T26	ispettore/design/documento	famiglia	
+motore	path.setFillRule	Fill Rule		tracciati	F1	T12	ispettore/design	famiglia	
+motore	brush.libraries	Brush Libraries		pennelli	F2	T17	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	brush.library	Brush Library		pennelli	F2	T17	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	brush.addFromLibrary	Add to Brushes	Window › Brush Libraries	pennelli	F2	T17	ispettore/risorse	famiglia	
+motore	brush.saveLibrary	Save Brush Library…	Window › Brushes	pennelli	F2	T17	ispettore/risorse	famiglia	finestra
+motore	brush.loadLibrary	Other Library…	Window › Brush Libraries	pennelli	F2	T17	ispettore/risorse	famiglia	finestra
+motore	brush.list	Brushes		pennelli	F2	T17	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	brush.get	Brush Definition		pennelli	F2	T17	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	brush.selectionArt	Brush Art		pennelli	F2	T17	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	brush.apply	Apply Brush		pennelli	F2	T17	ispettore/risorse	famiglia	
+motore	brush.remove	Remove Brush Stroke		pennelli	F2	T17	ispettore/risorse	famiglia	
+motore	brush.setCurrent	Current Brush		pennelli	F2	T17	ispettore/risorse	famiglia	
+motore	brush.new	New Brush…		pennelli	F2	T17	ispettore/risorse	famiglia	finestra
+motore	brush.delete	Delete Brush		pennelli	F2	T17	ispettore/risorse	famiglia	
+motore	brush.move	Move Brush		pennelli	F2	T17	ispettore/risorse	famiglia	
+motore	brush.duplicate	Duplicate Brush		pennelli	F2	T17	ispettore/risorse	famiglia	
+motore	brush.unused	Select All Unused		pennelli	F2	T17	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	brush.options	Brush Options…		pennelli	F2	T17	ispettore/risorse	famiglia	finestra
+motore	object.expandBrush	Expand Brush Strokes		pennelli	F2	T17	ispettore/risorse	famiglia	
+motore	brush.freehand	Paintbrush		pennelli	F2	T17	ispettore/risorse	famiglia	
+motore	symbol.list	Symbols		simboli	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	symbol.new	New Symbol…		simboli	F3	T22	ispettore/risorse	famiglia	finestra
+motore	symbol.options	Symbol Options…		simboli	F3	T22	ispettore/risorse	famiglia	finestra
+motore	symbol.place	Place Symbol Instance		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	symbol.breakLink	Break Link to Symbol		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	symbol.edit	Edit Symbol		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	symbol.exitEditing	Exit Symbol Editing Mode		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	symbol.update	Redefine Symbol		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	symbol.delete	Delete Symbol		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	symbol.duplicate	Duplicate Symbol		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	symbol.replace	Replace Symbol		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	symbol.instance.setAppearance	Symbol Instance Appearance		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	symbol.instance.reset	Reset Symbol Instance		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	symbol.setCurrent	Current Symbol		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	symbol.unused	Select All Unused		simboli	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	symbol.selectInstances	Select All Instances		simboli	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	symbol.spray	Symbol Sprayer		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	symbol.adjust	Symbolism Tool		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	shapeBuilder.merge	Shape Builder		forme	F1	T13	ispettore/design	famiglia	
+motore	shapeBuilder.regions	Shape Builder Regions		forme	F1	T13	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	livePaint.make	Make	Object › Live Paint	trame	F2	T21	menu/oggetto	famiglia	
+motore	livePaint.merge	Merge	Object › Live Paint	trame	F2	T21	menu/oggetto	famiglia	
+motore	livePaint.release	Release	Object › Live Paint	trame	F2	T21	menu/oggetto	famiglia	
+motore	livePaint.expand	Expand	Object › Live Paint	trame	F2	T21	menu/oggetto	famiglia	
+motore	livePaint.gapOptions	Gap Options		trame	F2	T21	ispettore/design	famiglia	
+motore	livePaint.fill	Live Paint Bucket		trame	F2	T21	ispettore/design	famiglia	
+motore	livePaint.strokeEdge	Live Paint Bucket (Stroke)		trame	F2	T21	ispettore/design	famiglia	
+motore	livePaint.info	Live Paint Info		trame	F2	T21	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	imageTrace.make	Make	Object › Image Trace	immagini	F3	T20	menu/oggetto	famiglia	
+motore	imageTrace.makeAndExpand	Make and Expand	Object › Image Trace	immagini	F3	T20	menu/oggetto	famiglia	
+motore	imageTrace.release	Release	Object › Image Trace	immagini	F3	T20	menu/oggetto	famiglia	
+motore	imageTrace.expand	Expand	Object › Image Trace	immagini	F3	T20	menu/oggetto	famiglia	
+motore	imageTrace.setView	Image Trace View		immagini	F3	T20	ispettore/design	famiglia	
+motore	imageTrace.presets	Image Trace Presets		immagini	F3	T20	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	imageTrace.presets.save	Save Image Trace Preset		immagini	F3	T20	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	imageTrace.presets.delete	Delete Image Trace Preset		immagini	F3	T20	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	clipboard.exportSvg	Clipboard as SVG		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	clipboard.importSvg	Load SVG into Clipboard		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	clipboard.conflicts	Swatch Conflicts		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	edit.colors.invert	Invert Colors	Edit › Edit Colors	colore	F1	T14	menu/modifica	famiglia	
+motore	edit.colors.toCMYK	Convert to CMYK	Edit › Edit Colors	colore	F1	T14	menu/modifica	famiglia	
+motore	edit.colors.toGrayscale	Convert to Grayscale	Edit › Edit Colors	colore	F1	T14	menu/modifica	famiglia	
+motore	edit.colors.toRGB	Convert to RGB	Edit › Edit Colors	colore	F1	T14	menu/modifica	famiglia	
+motore	edit.colors.saturate	Saturate…	Edit › Edit Colors	colore	F1	T14	menu/modifica	famiglia	finestra
+motore	edit.colors.adjustBalance	Adjust Color Balance…	Edit › Edit Colors	colore	F1	T14	menu/modifica	famiglia	finestra
+motore	edit.colors.blendFrontToBack	Blend Front to Back	Edit › Edit Colors	colore	F1	T14	menu/modifica	famiglia	
+motore	edit.colors.blendHorizontally	Blend Horizontally	Edit › Edit Colors	colore	F1	T14	menu/modifica	famiglia	
+motore	edit.colors.blendVertically	Blend Vertically	Edit › Edit Colors	colore	F1	T14	menu/modifica	famiglia	
+motore	color.harmony	Color Guide		colore	F1	T14	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	edit.colorSettings	Color Settings…	Edit	stampa	F4	T25	menu/modifica	famiglia	finestra
+motore	color.loadProfile	Load Color Profile…		colore	F1	T14	ispettore/design	famiglia	finestra
+motore	color.removeProfile	Remove Color Profile…		colore	F1	T14	ispettore/design	famiglia	finestra
+motore	edit.assignProfile	Assign Profile…	Edit	stampa	F4	T25	menu/modifica	famiglia	finestra
+motore	object.convertDocumentColorMode	Convert Document Color Mode		stampa	F4	T25	menu/file	famiglia	
+motore	color.convert	Convert Color		colore	F1	T14	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	color.gamutCheck	Gamut Warning		colore	F1	T14	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	view.proofSetup	Proof Setup	View › Proof Setup	stampa	F4	T25	menu/visualizza	famiglia	
+motore	view.proofColors	Proof Colors	View	stampa	F4	T25	menu/visualizza	famiglia	
+motore	view.overprintPreview	Overprint Preview	View	stampa	F4	T25	menu/visualizza	famiglia	
+motore	view.separationsPreview	Separations Preview		stampa	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	color.plates	Plates		colore	F1	T14	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	edit.colors.overprintBlack	Overprint Black…	Edit › Edit Colors	colore	F1	T14	menu/modifica	famiglia	finestra
+motore	swatch.setSpot	Spot Color		colore	F1	T14	ispettore/design	famiglia	
+motore	colorTheme.list	Color Themes		colore	F1	T14	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	colorTheme.save	Save Theme	Window › Color Themes	colore	F1	T14	ispettore/risorse	famiglia	
+motore	colorTheme.delete	Delete Theme	Window › Color Themes	colore	F1	T14	ispettore/risorse	famiglia	
+motore	colorTheme.addToSwatches	Add to Swatches	Window › Color Themes	colore	F1	T14	ispettore/risorse	famiglia	
+motore	object.compoundShape.make	Make Compound Shape	Window › Pathfinder	forme	F1	T13	ispettore/design	famiglia	
+motore	object.compoundShape.setMode	Shape Mode	Window › Pathfinder	forme	F1	T13	ispettore/design	famiglia	
+motore	object.compoundShape.release	Release Compound Shape	Window › Pathfinder	forme	F1	T13	ispettore/design	famiglia	
+motore	object.compoundShape.expand	Expand Compound Shape	Window › Pathfinder	forme	F1	T13	ispettore/design	famiglia	
+motore	shape.rectangle	Rectangle		forme	F1	T13	ispettore/design	famiglia	
+motore	shape.ellipse	Ellipse		forme	F1	T13	ispettore/design	famiglia	
+motore	shape.polygon	Polygon		forme	F1	T13	ispettore/design	famiglia	
+motore	shape.star	Star		forme	F1	T13	ispettore/design	famiglia	
+motore	shape.flare	Flare		forme	F1	T13	ispettore/design	famiglia	
+motore	shape.line	Line Segment		forme	F1	T13	ispettore/design	famiglia	
+motore	shape.spiral	Spiral		forme	F1	T13	ispettore/design	famiglia	
+motore	shape.arc	Arc		forme	F1	T13	ispettore/design	famiglia	
+motore	shape.rectangularGrid	Rectangular Grid		forme	F1	T13	ispettore/design	famiglia	
+motore	shape.polarGrid	Polar Grid		forme	F1	T13	ispettore/design	famiglia	
+motore	path.create	Create Path		tracciati	F1	T12	ispettore/design	famiglia	
+motore	view.drawMode	Drawing Mode		vista	F1	T11	menu/visualizza	famiglia	
+motore	text.create	Create Text		testo	F2	T16	ispettore/design	famiglia	
+motore	css.selection	CSS Properties		web	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	css.generate	Generate CSS		web	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	css.export	Export CSS		web	F3	T22	ispettore/design/documento	famiglia	
+motore	path.mirrorCut	Mirror & Cut		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.lineCut	Line Cut		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.rectCut	Rectangle Cut		tracciati	F1	T12	ispettore/design	famiglia	
+motore	dimension.create	Create Dimension		tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	dimension.update	Update Dimensions		tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	dimension.applyToAll	Apply to All		tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	stroke.widthPoint.set	Width Point		aspetto	F1	T15	ispettore/design	famiglia	
+motore	stroke.widthPoint.remove	Delete Width Point		aspetto	F1	T15	ispettore/design	famiglia	
+motore	stroke.widthPoint.copy	Copy Width Point		aspetto	F1	T15	ispettore/design	famiglia	
+motore	stroke.widthProfile.set	Width Profile		aspetto	F1	T15	ispettore/design	famiglia	
+motore	object.liquify	Liquify		pennelli	F2	T17	ispettore/risorse	famiglia	
+motore	object.puppetWarp	Puppet Warp		trasforma	F1	T13	ispettore/design	famiglia	
+motore	object.puppetWarp.pins	Puppet Warp Pins		trasforma	F1	T13	ispettore/design	famiglia	
+motore	perspective.grid.set	Define Perspective Grid		prospettiva	F4	T25	menu/visualizza	famiglia	
+motore	perspective.grid.preset	Perspective Grid Preset		prospettiva	F4	T25	menu/visualizza	famiglia	
+motore	perspective.grid.show	Show Perspective Grid		prospettiva	F4	T25	menu/visualizza	famiglia	
+motore	perspective.plane.set	Active Perspective Plane		prospettiva	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	perspective.attach	Attach to Active Plane		prospettiva	F4	T25	menu/oggetto	famiglia	
+motore	perspective.release	Release with Perspective		prospettiva	F4	T25	menu/oggetto	famiglia	
+motore	perspective.move	Move in Perspective		prospettiva	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	perspective.draw	Draw in Perspective		prospettiva	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	perspective.transform	Transform in Perspective		prospettiva	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	perspective.nudge	Nudge in Perspective		prospettiva	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	perspective.plane.move	Move Plane		prospettiva	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	perspective.plane.matchObject	Move Plane to Match Object		prospettiva	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	perspective.editText	Edit Text		prospettiva	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	document.info	Document Info	Window › Document Info	dati	F4	T26	ispettore/design/documento	famiglia	
+motore	object.makePixelPerfect	Make Pixel Perfect	Object	trasforma	F1	T13	menu/oggetto	famiglia	
+motore	select.same.symbolInstance	Symbol Instance	Select › Same	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.same.fontFamily	Font Family	Select › Same	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.same.fontFamilyStyle	Font Family & Style	Select › Same	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.same.fontFamilyStyleSize	Font Family, Style & Size	Select › Same	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.same.fontSize	Font Size	Select › Same	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.same.textFillColor	Text Fill Color	Select › Same	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.same.textStrokeColor	Text Stroke Color	Select › Same	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.object.directionHandles	Direction Handles	Select › Object	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.object.pointText	Point Text Objects	Select › Object	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.object.areaText	Area Text Objects	Select › Object	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.object.brushStrokes	Brush Strokes	Select › Object	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.object.bristleBrushStrokes	Bristle Brush Strokes	Select › Object	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.save	Save Selection…	Select	livelli	F1	T15	menu/selezione	famiglia	finestra
+motore	select.update	Update Selection	Select	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.recall	Recall Selection	Select	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.editSaved	Edit Selection…	Select	livelli	F1	T15	menu/selezione	famiglia	finestra
+motore	select.savedList	Saved Selections		livelli	F1	T15	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	view.guides.make	Make Guides	View › Guides	tavole	F2	T19	menu/visualizza	famiglia	
+motore	view.guides.release	Release Guides	View › Guides	tavole	F2	T19	menu/visualizza	famiglia	
+motore	view.guides.lock	Lock Guides	View › Guides	tavole	F2	T19	menu/visualizza	famiglia	
+motore	view.guides.clear	Clear Guides	View › Guides	tavole	F2	T19	menu/visualizza	famiglia	
+motore	guide.add	Add Guide		tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	guide.list	Guides		tavole	F2	T19	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	guide.select	Select Guides		tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	guide.remove	Remove Guide		tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	guide.move	Move Guide		tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	guide.setLayer	Move Guide to Layer		tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	file.closeAll	Close All	File	fub	—	T2	fub	—	chiudere le schede di Fub
+motore	file.documentColorMode	Document Color Mode	File › Document Color Mode	formati	F3	T23	menu/file	famiglia	
+motore	file.info	File Info…	File	fub	—	T2	fub	—	proprietà della nota di Fub; finestra
+motore	document.setup	Document Setup		tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	file.new	New…	File	fub	—	T2	fub	—	nuovo disegno di Fub (menu File, «Nuovo disegno…»); finestra
+motore	file.close	Close	File	fub	—	T2	fub	—	chiudere la scheda di Fub
+motore	document.activate	Activate Document		fub	—	T2	fub	—	le schede di Fub
+motore	document.inspect	Inspect Document		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	document.node	Inspect Object		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	document.find	Find Objects		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	document.json	Document JSON		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	document.setUnits	Units	File › Document Setup	tavole	F2	T19	menu/file	famiglia	
+motore	document.switchUnits	Switch Units		tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	document.rulerOrigin	Ruler Origin		tavole	F2	T19	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	document.setRulerOrigin	Ruler Origin		tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	document.resetRulerOrigin	Reset Ruler Origin		tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	view.globalRulers	Change to Global Rulers	View › Rulers	vista	F1	T11	menu/visualizza	famiglia	
+motore	edit.dropSelection	Drop Artwork		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	edit.undo	Undo	Edit	nucleo	F1	T11	menu/modifica	nucleo	
+motore	edit.redo	Redo	Edit	nucleo	F1	T11	menu/modifica	nucleo	
+motore	edit.clearHistory	Clear History		nucleo	F1	T11	tavolozza	nucleo	
+motore	edit.undoGroup.begin	Begin Undo Group		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	edit.undoGroup.end	End Undo Group		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	edit.cut	Cut	Edit	nucleo	F1	T11	menu/modifica	nucleo	
+motore	edit.copy	Copy	Edit	nucleo	F1	T11	menu/modifica	nucleo	
+motore	edit.paste	Paste	Edit	nucleo	F1	T11	menu/modifica	nucleo	
+motore	edit.pasteInFront	Paste in Front	Edit	nucleo	F1	T11	menu/modifica	nucleo	
+motore	edit.pasteInBack	Paste in Back	Edit	nucleo	F1	T11	menu/modifica	nucleo	
+motore	edit.pasteInPlace	Paste in Place	Edit	nucleo	F1	T11	menu/modifica	nucleo	
+motore	edit.pasteOnAllArtboards	Paste on All Artboards	Edit	nucleo	F1	T11	menu/modifica	nucleo	
+motore	edit.clear	Clear	Edit	nucleo	F1	T11	menu/modifica	nucleo	
+motore	edit.duplicate	Duplicate	Edit	nucleo	F1	T11	menu/modifica	nucleo	
+motore	effect.apply	Apply Effect		effetti	F2	T18	menu/effetto	famiglia	
+motore	effect.list	Effects		effetti	F2	T18	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	effect.remove	Remove Effect		effetti	F2	T18	menu/effetto	famiglia	
+motore	effect.setParams	Effect Options		effetti	F2	T18	menu/effetto	famiglia	
+motore	effect.lightingPreset	3D Lighting Preset		effetti	F2	T18	menu/effetto	famiglia	
+motore	effect.expandAppearance	Expand Appearance	Object	effetti	F2	T18	menu/oggetto	famiglia	
+motore	effect.duplicate	Duplicate Effect		effetti	F2	T18	menu/effetto	famiglia	
+motore	effect.move	Move Effect		effetti	F2	T18	menu/effetto	famiglia	
+motore	object.expand	Expand…	Object	tracciati	F1	T12	menu/oggetto	famiglia	finestra
+motore	object.expand.info	Expand Options		tracciati	F1	T12	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	text.missingFonts	Missing Fonts		testo	F2	T16	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	text.findFontFiles	Find Font Files		testo	F2	T16	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	text.addFontFiles	Add Font Files		testo	F2	T16	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	text.fonts	Fonts in Document		testo	F2	T16	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	text.replaceFont	Replace Font		testo	F2	T16	ispettore/design	famiglia	
+motore	select.font	Select Text by Font		livelli	F1	T15	ispettore/livelli	famiglia	
+motore	text.fontList	Font List		testo	F2	T16	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	text.rescanFonts	Refresh Font List		testo	F2	T16	ispettore/design	famiglia	
+motore	paint.freeform.addPoint	Add Freeform Point		colore	F1	T14	ispettore/design	famiglia	
+motore	paint.freeform.setPoint	Edit Freeform Point		colore	F1	T14	ispettore/design	famiglia	
+motore	paint.freeform.deletePoint	Delete Freeform Point		colore	F1	T14	ispettore/design	famiglia	
+motore	paint.freeform.addLine	Add Freeform Line		colore	F1	T14	ispettore/design	famiglia	
+motore	paint.freeform.splitLine	Split Freeform Line		colore	F1	T14	ispettore/design	famiglia	
+motore	paint.freeform.selectPoint	Select Freeform Point		colore	F1	T14	ispettore/design	famiglia	
+motore	paint.freeform.get	Freeform Gradient		colore	F1	T14	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	select.globalEdit	Start Global Edit	Select	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.globalEditOptions	Global Edit Options		livelli	F1	T15	ispettore/livelli	famiglia	
+motore	paint.editGradient	Gradient	Window › Gradient	colore	F1	T14	ispettore/design	famiglia	
+motore	paint.setGradientGeom	Gradient Vector		colore	F1	T14	ispettore/design	famiglia	
+motore	gradient.selectStop	Select Gradient Stop		aspetto	F1	T15	ispettore/design	famiglia	
+motore	gradient.presets.list	Gradient Presets		aspetto	F1	T15	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	gradient.presets.apply	Apply Gradient Preset		aspetto	F1	T15	ispettore/design	famiglia	
+motore	gradient.presets.save	Save Gradient Preset		aspetto	F1	T15	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	gradient.presets.delete	Delete Gradient Preset		aspetto	F1	T15	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	object.vectorHalftone	Vector Halftone…	Object	immagini	F3	T20	menu/oggetto	famiglia	finestra
+motore	help.discord	Join Our Discord	Help	escluso	—	T2	escluso	—	link della comunità ArtCraft: Fub ha il suo Aiuto (D6)
+motore	help.website	ArtCraft Website	Help	escluso	—	T2	escluso	—	link ad ArtCraft (D6)
+motore	help.appPage	VectorCraft on getartcraft.com	Help	escluso	—	T2	escluso	—	link a getartcraft.com (D6)
+motore	help.github	VectorCraft on GitHub	Help	escluso	—	T2	escluso	—	link al GitHub di VectorCraft: il credito sta in Informazioni e THIRD_PARTY_NOTICES (D6)
+motore	help.links	Links		escluso	—	T2	escluso	—	elenco dei link sopra (D6)
+motore	importMatches.list	Import Matches		formati	F3	T23	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	importMatches.set	Remember Import Matches		formati	F3	T23	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	importMatches.reset	Forget Import Matches		formati	F3	T23	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	text.insertInline	Insert Inline Symbol	Type	testo	F2	T16	menu/testo	famiglia	
+motore	svgInteractivity.info	SVG Interactivity		web	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	svgInteractivity.setEvent	Add Event		web	F3	T22	ispettore/design/documento	famiglia	
+motore	svgInteractivity.removeEvent	Remove Selected Entry		web	F3	T22	ispettore/design/documento	famiglia	
+motore	svgInteractivity.clearEvents	Clear Events		web	F3	T22	ispettore/design/documento	famiglia	
+motore	svgInteractivity.addFile	Add JavaScript File		web	F3	T22	ispettore/design/documento	famiglia	
+motore	svgInteractivity.removeFile	Remove JavaScript File		web	F3	T22	ispettore/design/documento	famiglia	
+motore	object.intertwine.make	Make	Object › Intertwine	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.intertwine.edit	Edit	Object › Intertwine	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.intertwine.release	Release	Object › Intertwine	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.intertwine.arrange	Arrange Intertwine Area		dinamici	F2	T21	menu/oggetto	famiglia	
+motore	layer.new	New Layer…	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	finestra
+motore	layer.newSublayer	New Sublayer…	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	finestra
+motore	layer.delete	Delete Selection	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.duplicate	Duplicate Selection	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.setCurrent	Set Current Layer		livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.highlight	Highlight Rows		livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.setProps	Layer Options…	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	finestra
+motore	layer.collectInNew	Collect in New Layer	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.selectAll	Select Art		livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.move	Move Rows		livelli	F1	T15	ispettore/livelli	famiglia	
+motore	node.move	Reorder		livelli	F1	T15	ispettore/livelli	famiglia	
+motore	artboard.new	New Artboard	Window › Artboards	tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	artboard.delete	Delete Artboard	Window › Artboards	tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	artboard.deleteEmpty	Delete Empty Artboards	Window › Artboards	tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	artboard.setProps	Artboard Options…	Window › Artboards	tavole	F2	T19	ispettore/design/documento	famiglia	finestra
+motore	artboard.fitToArt	Fit to Artwork Bounds	Object › Artboards	tavole	F2	T19	menu/oggetto	famiglia	
+motore	artboard.fitToSelection	Fit to Selected Art	Object › Artboards	tavole	F2	T19	menu/oggetto	famiglia	
+motore	layer.clippingMask.toggle	Make/Release Clipping Mask	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.target	Target		livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.pasteRemembersLayers	Paste Remembers Layers	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.merge	Merge Selected	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.flatten	Flatten Artwork	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.releaseToLayers	Release to Layers (Sequence)	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.releaseToLayersBuild	Release to Layers (Build)	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.reverse	Reverse Order	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.template	Template	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.hideOthers	Hide Others	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.showAll	Show All Layers	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.outlineOthers	Outline Others	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.previewAll	Preview All Layers	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.lockOthers	Lock Others	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.unlockAll	Unlock All Layers	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	layer.locate	Locate Object	Window › Layers	livelli	F1	T15	ispettore/livelli	famiglia	
+motore	library.list	Libraries		simboli	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	library.get	Library		simboli	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	library.setCurrent	Show Library		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	library.create	Create New Library		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	library.rename	Rename Library		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	library.delete	Delete Library		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	library.add	Add to Library		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	library.use	Use Library Item		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	library.removeItem	Delete Library Item		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	library.createGroup	New Library Group		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	library.renameGroup	Rename Library Group		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	library.deleteGroup	Delete Library Group		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	library.moveItem	Move Library Item to Group		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	library.moveGroup	Move Library Group		simboli	F3	T22	ispettore/risorse	famiglia	
+motore	library.export	Export Library		simboli	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	library.import	Import Library		simboli	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	links.findFiles	Find Linked Files		immagini	F3	T20	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	links.check	Check Links		immagini	F3	T20	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	links.update	Update Links		immagini	F3	T20	ispettore/design	famiglia	
+motore	links.updateChanged	Update Changed Links		immagini	F3	T20	ispettore/design	famiglia	
+motore	links.relink	Relink		immagini	F3	T20	ispettore/design	famiglia	
+motore	links.list	Links		immagini	F3	T20	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	links.goTo	Go To Link		immagini	F3	T20	ispettore/design	famiglia	
+motore	links.embed	Embed Image		immagini	F3	T20	ispettore/design	famiglia	
+motore	links.unembed	Unembed		immagini	F3	T20	ispettore/design	famiglia	
+motore	links.info	Link Info		immagini	F3	T20	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	links.placementOptions	Placement Options		immagini	F3	T20	ispettore/design	famiglia	
+motore	transparency.editOpacityMask	Edit Opacity Mask	Window › Transparency	aspetto	F1	T15	ispettore/design	famiglia	
+motore	transparency.stopEditingOpacityMask	Stop Editing Opacity Mask	Window › Transparency	aspetto	F1	T15	ispettore/design	famiglia	
+motore	transparency.viewOpacityMask	View Opacity Mask	Window › Transparency	aspetto	F1	T15	ispettore/design	famiglia	
+motore	object.lock.above	All Artwork Above	Object › Lock	nucleo	F1	T11	menu/oggetto	nucleo	
+motore	object.lock.otherLayers	Other Layers	Object › Lock	nucleo	F1	T11	menu/oggetto	nucleo	
+motore	object.lock.unselected	Unselected Artwork	Object › Lock	nucleo	F1	T11	menu/oggetto	nucleo	
+motore	object.hide.above	All Artwork Above	Object › Hide	nucleo	F1	T11	menu/oggetto	nucleo	
+motore	object.hide.otherLayers	Other Layers	Object › Hide	nucleo	F1	T11	menu/oggetto	nucleo	
+motore	object.hide.unselected	Unselected Artwork	Object › Hide	nucleo	F1	T11	menu/oggetto	nucleo	
+motore	object.transformEach	Transform Each…	Object › Transform	trasforma	F1	T13	menu/oggetto	famiglia	finestra
+motore	object.resetBoundingBox	Reset Bounding Box	Object › Transform	trasforma	F1	T13	menu/oggetto	famiglia	
+motore	object.rasterize	Rasterize…	Object	immagini	F3	T20	menu/oggetto	famiglia	finestra
+motore	object.createObjectMosaic	Create Object Mosaic…	Object	immagini	F3	T20	menu/oggetto	famiglia	finestra
+motore	object.cropImage	Crop Image	Object	immagini	F3	T20	menu/oggetto	famiglia	
+motore	object.maskImage	Mask		immagini	F3	T20	ispettore/design	famiglia	
+motore	object.createTrimMarks	Create Trim Marks	Object	stampa	F4	T25	menu/oggetto	famiglia	
+motore	object.shape.convertToShape	Convert to Shape	Object › Shape	forme	F1	T13	menu/oggetto	famiglia	
+motore	artboard.convertToArtboards	Convert to Artboards	Object › Artboards	tavole	F2	T19	menu/oggetto	famiglia	
+motore	artboard.rearrange	Rearrange All Artboards…	Object › Artboards	tavole	F2	T19	menu/oggetto	famiglia	finestra
+motore	appearance.setNewArtBasic	New Art Has Basic Appearance	Window › Appearance	aspetto	F1	T15	ispettore/design	famiglia	
+motore	appearance.newArt	New Art Appearance		aspetto	F1	T15	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	file.newPresets	New Document Presets		formati	F3	T23	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	file.newPresets.save	Save Preset		formati	F3	T23	menu/file	famiglia	
+motore	file.newPresets.delete	Delete Preset		formati	F3	T23	menu/file	famiglia	
+motore	object.objectsOnPath.attach	Attach	Object › Objects on Path	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.objectsOnPath.options	Objects on Path Options		dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.objectsOnPath.expand	Expand	Object › Objects on Path	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	transparency.makeOpacityMask	Make Opacity Mask	Window › Transparency	aspetto	F1	T15	ispettore/design	famiglia	
+motore	transparency.releaseOpacityMask	Release Opacity Mask	Window › Transparency	aspetto	F1	T15	ispettore/design	famiglia	
+motore	transparency.disableOpacityMask	Disable Opacity Mask	Window › Transparency	aspetto	F1	T15	ispettore/design	famiglia	
+motore	transparency.enableOpacityMask	Enable Opacity Mask	Window › Transparency	aspetto	F1	T15	ispettore/design	famiglia	
+motore	transparency.unlinkOpacityMask	Unlink Opacity Mask	Window › Transparency	aspetto	F1	T15	ispettore/design	famiglia	
+motore	transparency.linkOpacityMask	Link Opacity Mask	Window › Transparency	aspetto	F1	T15	ispettore/design	famiglia	
+motore	transparency.setOpacityMask	Opacity Mask Options		aspetto	F1	T15	ispettore/design	famiglia	
+motore	transparency.toggleNewMasksClipping	New Opacity Masks Are Clipping	Window › Transparency	aspetto	F1	T15	ispettore/design	famiglia	
+motore	transparency.toggleNewMasksInverted	New Opacity Masks Are Inverted	Window › Transparency	aspetto	F1	T15	ispettore/design	famiglia	
+motore	transparency.opacityMaskInfo	Opacity Mask Info		aspetto	F1	T15	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	transparency.info	Transparency Info		aspetto	F1	T15	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	transparency.togglePageIsolatedBlending	Page Isolated Blending	Window › Transparency	aspetto	F1	T15	ispettore/design	famiglia	
+motore	transparency.togglePageKnockoutGroup	Page Knockout Group	Window › Transparency	aspetto	F1	T15	ispettore/design	famiglia	
+motore	object.setOverprint	Overprint		stampa	F4	T25	menu/file	famiglia	
+motore	attributes.info	Attributes		dati	F4	T26	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	file.package	Package		formati	F3	T23	menu/file	famiglia	
+motore	paint.setFill	Fill		colore	F1	T14	ispettore/design	famiglia	
+motore	paint.setStroke	Stroke		colore	F1	T14	ispettore/design	famiglia	
+motore	paint.swap	Swap Fill and Stroke		colore	F1	T14	ispettore/design	famiglia	
+motore	paint.default	Default Fill and Stroke		colore	F1	T14	ispettore/design	famiglia	
+motore	paint.toggleActive	Toggle Fill/Stroke Focus		colore	F1	T14	ispettore/design	famiglia	
+motore	paint.none	None		colore	F1	T14	ispettore/design	famiglia	
+motore	transparency.set	Transparency	Window › Transparency	aspetto	F1	T15	ispettore/design	famiglia	
+motore	paint.invert	Invert		colore	F1	T14	ispettore/design	famiglia	
+motore	paint.complement	Complement		colore	F1	T14	ispettore/design	famiglia	
+motore	paint.lastColor	Apply Last Color		colore	F1	T14	ispettore/design	famiglia	
+motore	paint.lastGradient	Apply Last Gradient		colore	F1	T14	ispettore/design	famiglia	
+motore	paint.recent	Recent Colors		colore	F1	T14	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	paint.proxies	Fill and Stroke		colore	F1	T14	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	artboard.reorder	Move Artboard Up/Down		tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	artboard.duplicate	Duplicate Artboard	Window › Artboards	tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	artboard.copy	Copy Artboard		tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	artboard.cut	Cut Artboard		tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	text.setFormat	Character / Paragraph		testo	F2	T16	ispettore/design	famiglia	
+motore	text.convertListToText	Convert to Text		testo	F2	T16	ispettore/design	famiglia	
+motore	path.appendAnchor	Add Anchor (Pen)		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.close	Close Path		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.moveAnchors	Move Anchors		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.setHandle	Move Direction Handle		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.moveAnchor	Move Anchor Point		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.setAnchors	Set Anchors		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.reverse	Reverse Path Direction	Object › Path	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	path.join	Join	Object › Path	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	path.average	Average…	Object › Path	tracciati	F1	T12	menu/oggetto	famiglia	finestra
+motore	path.averageJoin	Average & Join…	Object › Path	tracciati	F1	T12	menu/oggetto	famiglia	finestra
+motore	path.convertAnchors	Convert Anchor Points		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.deleteAnchors	Delete Anchor Points		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.reshape	Reshape		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.insertAnchor	Add Anchor Point		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.cutAtAnchors	Cut Path at Selected Anchor Points		tracciati	F1	T12	ispettore/design	famiglia	
+motore	object.pathfinder.unite	Unite	Window › Pathfinder	tracciati	F1	T12	ispettore/design	famiglia	
+motore	object.pathfinder.minusFront	Minus Front	Window › Pathfinder	tracciati	F1	T12	ispettore/design	famiglia	
+motore	object.pathfinder.intersect	Intersect	Window › Pathfinder	tracciati	F1	T12	ispettore/design	famiglia	
+motore	object.pathfinder.exclude	Exclude	Window › Pathfinder	tracciati	F1	T12	ispettore/design	famiglia	
+motore	object.pathfinder.divide	Divide	Window › Pathfinder	tracciati	F1	T12	ispettore/design	famiglia	
+motore	object.pathfinder.trim	Trim	Window › Pathfinder	tracciati	F1	T12	ispettore/design	famiglia	
+motore	object.pathfinder.merge	Merge	Window › Pathfinder	tracciati	F1	T12	ispettore/design	famiglia	
+motore	object.pathfinder.crop	Crop	Window › Pathfinder	tracciati	F1	T12	ispettore/design	famiglia	
+motore	object.pathfinder.outline	Outline	Window › Pathfinder	tracciati	F1	T12	ispettore/design	famiglia	
+motore	object.pathfinder.minusBack	Minus Back	Window › Pathfinder	tracciati	F1	T12	ispettore/design	famiglia	
+motore	object.pathfinder.trap	Trap…	Window › Pathfinder	tracciati	F1	T12	ispettore/design	famiglia	finestra
+motore	object.pathfinder.options	Pathfinder Options…	Window › Pathfinder	tracciati	F1	T12	ispettore/design	famiglia	finestra
+motore	object.path.outlineStroke	Outline Stroke	Object › Path	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	object.path.offsetPath	Offset Path…	Object › Path	tracciati	F1	T12	menu/oggetto	famiglia	finestra
+motore	object.path.simplify	Simplify…	Object › Path	tracciati	F1	T12	menu/oggetto	famiglia	finestra
+motore	object.path.smooth	Smooth…	Object › Path	tracciati	F1	T12	menu/oggetto	famiglia	finestra
+motore	object.path.addAnchorPoints	Add Anchor Points	Object › Path	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	object.path.divideObjectsBelow	Divide Objects Below	Object › Path	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	object.path.splitIntoGrid	Split Into Grid…	Object › Path	tracciati	F1	T12	menu/oggetto	famiglia	finestra
+motore	object.path.cleanUp	Clean Up…	Object › Path	tracciati	F1	T12	menu/oggetto	famiglia	finestra
+motore	object.pattern.make	Make	Object › Pattern	trame	F2	T21	menu/oggetto	famiglia	
+motore	object.pattern.edit	Edit Pattern	Object › Pattern	trame	F2	T21	menu/oggetto	famiglia	
+motore	object.pattern.done	Done		trame	F2	T21	ispettore/design	famiglia	
+motore	object.pattern.cancel	Cancel		trame	F2	T21	ispettore/design	famiglia	
+motore	object.pattern.saveCopy	Save a Copy		trame	F2	T21	ispettore/design	famiglia	
+motore	pattern.options	Pattern Options	Window › Pattern Options	trame	F2	T21	ispettore/design	famiglia	
+motore	pattern.delete	Delete Pattern		trame	F2	T21	ispettore/design	famiglia	
+motore	pattern.list	List Patterns		trame	F2	T21	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	pattern.transform	Transform Patterns		trame	F2	T21	ispettore/design	famiglia	
+motore	object.repeat.radial	Radial	Object › Repeat	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.repeat.grid	Grid	Object › Repeat	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.repeat.mirror	Mirror	Object › Repeat	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.repeat.release	Release	Object › Repeat	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.repeat.options	Options…	Object › Repeat	dinamici	F2	T21	menu/oggetto	famiglia	finestra
+motore	object.repeat.expand	Expand Repeat		dinamici	F2	T21	menu/oggetto	famiglia	
+motore	pdf.preset.list	PDF Presets		formati	F3	T23	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	pdf.preset.save	Save PDF Preset		formati	F3	T23	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	pdf.preset.delete	Delete PDF Preset		formati	F3	T23	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	pdf.preset.export	Export PDF Presets		formati	F3	T23	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	pdf.preset.import	Import PDF Presets		formati	F3	T23	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	perspective.grid.get	Perspective Grid		prospettiva	F4	T25	menu/visualizza	famiglia	
+motore	perspective.grid.define	Define Perspective Grid		prospettiva	F4	T25	menu/visualizza	famiglia	
+motore	perspective.presets.list	Perspective Grid Presets		prospettiva	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	perspective.presets.save	Save Perspective Grid Preset		prospettiva	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	perspective.presets.delete	Delete Perspective Grid Preset		prospettiva	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	perspective.presets.export	Export Perspective Grid Presets		prospettiva	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	perspective.presets.import	Import Perspective Grid Presets		prospettiva	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	perspective.widget.options	Perspective Grid Options		prospettiva	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	perspective.grid.lock	Lock Grid		prospettiva	F4	T25	menu/visualizza	famiglia	
+motore	perspective.grid.lockStation	Lock Station Point		prospettiva	F4	T25	menu/visualizza	famiglia	
+motore	perspective.grid.snap	Snap to Grid		prospettiva	F4	T25	menu/visualizza	famiglia	
+motore	perspective.grid.rulers	Show Rulers		prospettiva	F4	T25	menu/visualizza	famiglia	
+motore	file.place	Place…	File	formati	F3	T23	menu/file	famiglia	finestra
+motore	file.place.info	Placed File Info		formati	F3	T23	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	image.info	Image Info		immagini	F3	T20	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	file.place.queue	Load Place Cursor		formati	F3	T23	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	plugin.list	List Plug-ins		automazione	F4	T26	interno	sotto:disegno-plugin	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	plugin.info	Plug-in Info		automazione	F4	T26	interno	sotto:disegno-plugin	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	plugin.run	Run Plug-in		automazione	F4	T26	menu/file	sotto:disegno-plugin	
+motore	plugin.install	Install Plug-in		automazione	F4	T26	interno	sotto:disegno-plugin	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	plugin.inspect	Inspect Plug-in		automazione	F4	T26	interno	sotto:disegno-plugin	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	plugin.remove	Remove Plug-in		automazione	F4	T26	interno	sotto:disegno-plugin	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	plugin.reload	Reload Plug-ins	Object › Plug-ins	automazione	F4	T26	menu/oggetto	sotto:disegno-plugin	
+motore	prefs.get	Get Preferences		fub	—	T11	fub	—	Impostazioni › Disegno (le preferenze del motore come impostazioni di Fub)
+motore	prefs.set	Set Preference		fub	—	T11	fub	—	Impostazioni › Disegno (le preferenze del motore come impostazioni di Fub)
+motore	prefs.reset	Reset Preferences		fub	—	T11	fub	—	Impostazioni › Disegno (le preferenze del motore come impostazioni di Fub)
+motore	prefs.list	List Preferences		fub	—	T11	fub	—	Impostazioni › Disegno (le preferenze del motore come impostazioni di Fub)
+motore	print.setup	Print Setup		stampa	F4	T25	menu/file	sotto:disegno-formati	
+motore	print.preview	Print Preview		stampa	F4	T25	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	file.print	Print		formati	F3	T23	menu/file	sotto:disegno-formati	
+motore	print.presets.list	Print Presets		stampa	F4	T25	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	print.presets.save	Save Print Preset		stampa	F4	T25	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	print.presets.delete	Delete Print Preset		stampa	F4	T25	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	print.presets.export	Export Print Presets		stampa	F4	T25	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	print.presets.import	Import Print Presets		stampa	F4	T25	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	view.printTiling	Show Print Tiling	View	stampa	F4	T25	menu/visualizza	sotto:disegno-formati	
+motore	print.tiling.set	Print Tiling		stampa	F4	T25	menu/file	sotto:disegno-formati	
+motore	print.tiling	Print Tiling Pages		stampa	F4	T25	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	document.rasterEffectsSettings	Document Raster Effects Settings…	Effect	raster	F3	T24	menu/effetto	famiglia	finestra
+motore	recolor.colors	Artwork Colors		colore	F1	T14	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	recolor.apply	Recolor Artwork	Edit › Edit Colors	colore	F1	T14	menu/modifica	famiglia	
+motore	recolor.reduce	Reduce Colors		colore	F1	T14	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	recolor.randomize	Randomize Colors		colore	F1	T14	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	file.recovery.save	Save Recovery Data		fub	—	T2	fub	—	bozze e versioni del kernel
+motore	file.recovery.list	Recovery Data		fub	—	T2	fub	—	bozze e versioni del kernel
+motore	file.recovery.restore	Restore Recovered Documents		fub	—	T2	fub	—	bozze e versioni del kernel
+motore	file.recovery.discard	Discard Recovered Documents		fub	—	T2	fub	—	bozze e versioni del kernel
+motore	script.check	Check Script		automazione	F4	T26	interno	sotto:disegno-script	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	select.all	All	Select	nucleo	F1	T11	menu/selezione	nucleo	
+motore	select.allOnArtboard	All on Active Artboard	Select	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.none	Deselect	Select	nucleo	F1	T11	menu/selezione	nucleo	
+motore	select.reselect	Reselect	Select	nucleo	F1	T11	menu/selezione	nucleo	
+motore	select.inverse	Inverse	Select	nucleo	F1	T11	menu/selezione	nucleo	
+motore	select.nextAbove	Next Object Above	Select	nucleo	F1	T11	menu/selezione	nucleo	
+motore	select.nextBelow	Next Object Below	Select	nucleo	F1	T11	menu/selezione	nucleo	
+motore	select.set	Select Objects		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	select.add	Add to Selection		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	select.toggle	Toggle Selection		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	select.key	Cancel Key Object		livelli	F1	T15	ispettore/livelli	famiglia	
+motore	select.anchors	Select Anchors		livelli	F1	T15	ispettore/livelli	famiglia	
+motore	select.segments	Select Segments		livelli	F1	T15	ispettore/livelli	famiglia	
+motore	select.anchorsMany	Select Anchors		livelli	F1	T15	ispettore/livelli	famiglia	
+motore	select.color	Select by Color		livelli	F1	T15	ispettore/livelli	famiglia	
+motore	select.same.fillColor	Fill Color	Select › Same	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.same.strokeColor	Stroke Color	Select › Same	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.same.strokeWeight	Stroke Weight	Select › Same	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.same.fillAndStroke	Fill & Stroke	Select › Same	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.same.opacity	Opacity	Select › Same	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.same.blendingMode	Blending Mode	Select › Same	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.same.appearance	Appearance	Select › Same	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.same.shapeType	Shape	Select › Same	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.object.allOnSameLayers	All on Same Layers	Select › Object	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.object.clippingMasks	Clipping Masks	Select › Object	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.object.textObjects	All Text Objects	Select › Object	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.object.strayPoints	Stray Points	Select › Object	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.object.openPaths	Open Paths	Select › Object	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.same.graphicStyle	Graphic Style	Select › Same	livelli	F1	T15	menu/selezione	famiglia	
+motore	select.same.appearanceAttribute	Appearance Attribute	Select › Same	livelli	F1	T15	menu/selezione	famiglia	
+motore	shaper.scribble	Shaper		forme	F1	T13	ispettore/design	famiglia	
+motore	shaper.select	Select Shaper Face		forme	F1	T13	ispettore/design	famiglia	
+motore	shaper.release	Release Shaper Group	Object › Shaper	forme	F1	T13	menu/oggetto	famiglia	
+motore	shaper.expand	Expand Shaper Group	Object › Shaper	forme	F1	T13	menu/oggetto	famiglia	
+motore	shaper.releaseSource	Remove from Shaper Group		forme	F1	T13	ispettore/design	famiglia	
+motore	shortcutSet.read	Read Shortcut Set File		fub	—	T9	fub	—	Impostazioni › Scorciatoie: importa un insieme (domanda D7)
+motore	object.slice.make	Make	Object › Slice	web	F3	T22	menu/oggetto	famiglia	
+motore	object.slice.release	Release	Object › Slice	web	F3	T22	menu/oggetto	famiglia	
+motore	object.slice.fromGuides	Create from Guides	Object › Slice	web	F3	T22	menu/oggetto	famiglia	
+motore	object.slice.fromSelection	Create from Selection	Object › Slice	web	F3	T22	menu/oggetto	famiglia	
+motore	object.slice.duplicate	Duplicate Slice	Object › Slice	web	F3	T22	menu/oggetto	famiglia	
+motore	object.slice.combine	Combine Slices	Object › Slice	web	F3	T22	menu/oggetto	famiglia	
+motore	object.slice.divide	Divide Slices…	Object › Slice	web	F3	T22	menu/oggetto	famiglia	finestra
+motore	object.slice.deleteAll	Delete All	Object › Slice	web	F3	T22	menu/oggetto	famiglia	
+motore	object.slice.options	Slice Options…	Object › Slice	web	F3	T22	menu/oggetto	famiglia	finestra
+motore	object.slice.clipToArtboard	Clip to Artboard	Object › Slice	web	F3	T22	menu/oggetto	famiglia	
+motore	view.slices.hide	Hide Slices	View	web	F3	T22	menu/visualizza	famiglia	
+motore	view.slices.lock	Lock Slices	View	web	F3	T22	menu/visualizza	famiglia	
+motore	slice.list	List Slices		web	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	select.object.slices	Slices	Select › Object	livelli	F1	T15	menu/selezione	famiglia	
+motore	object.slice.create	Create Slice		web	F3	T22	ispettore/design/documento	famiglia	
+motore	object.slice.setRect	Set Slice Rectangle		web	F3	T22	ispettore/design/documento	famiglia	
+motore	object.slice.move	Move Slices		web	F3	T22	ispettore/design/documento	famiglia	
+motore	object.slice.delete	Delete Slices		web	F3	T22	ispettore/design/documento	famiglia	
+motore	object.slice.select	Select Slices		web	F3	T22	ispettore/design/documento	famiglia	
+motore	stroke.set	Stroke Options	Window › Stroke	aspetto	F1	T15	ispettore/design	famiglia	
+motore	stroke.setAdvanced	Stroke Options		aspetto	F1	T15	ispettore/design	famiglia	
+motore	stroke.widthProfile.add	Add to Profiles		aspetto	F1	T15	ispettore/design	famiglia	
+motore	stroke.widthProfile.delete	Delete Profile		aspetto	F1	T15	ispettore/design	famiglia	
+motore	stroke.widthProfile.reset	Reset Profiles		aspetto	F1	T15	ispettore/design	famiglia	
+motore	stroke.widthProfile.list	Width Profiles		aspetto	F1	T15	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	graphicStyle.apply	Apply Graphic Style	Window › Graphic Styles	aspetto	F1	T15	ispettore/risorse	famiglia	
+motore	graphicStyle.new	New Graphic Style	Window › Graphic Styles	aspetto	F1	T15	ispettore/risorse	famiglia	
+motore	graphicStyle.delete	Delete Graphic Style	Window › Graphic Styles	aspetto	F1	T15	ispettore/risorse	famiglia	
+motore	graphicStyle.duplicate	Duplicate Graphic Style	Window › Graphic Styles	aspetto	F1	T15	ispettore/risorse	famiglia	
+motore	graphicStyle.list	List Graphic Styles		aspetto	F1	T15	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	graphicStyle.redefine	Redefine Graphic Style	Window › Appearance	aspetto	F1	T15	ispettore/design	famiglia	
+motore	graphicStyle.breakLink	Break Link to Graphic Style	Window › Graphic Styles	aspetto	F1	T15	ispettore/risorse	famiglia	
+motore	graphicStyle.rename	Rename Graphic Style	Window › Graphic Styles	aspetto	F1	T15	ispettore/risorse	famiglia	
+motore	graphicStyle.unused	Select All Unused	Window › Graphic Styles	aspetto	F1	T15	ispettore/risorse	famiglia	
+motore	graphicStyle.sortByName	Sort by Name	Window › Graphic Styles	aspetto	F1	T15	ispettore/risorse	famiglia	
+motore	graphicStyle.merge	Merge Graphic Styles	Window › Graphic Styles	aspetto	F1	T15	ispettore/risorse	famiglia	
+motore	graphicStyle.move	Move Graphic Style		aspetto	F1	T15	ispettore/design	famiglia	
+motore	graphicStyle.setOptions	Graphic Styles Options		aspetto	F1	T15	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	graphicStyle.libraries	Graphic Style Libraries		aspetto	F1	T15	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	graphicStyle.library	Graphic Style Library		aspetto	F1	T15	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	graphicStyle.addFromLibrary	Add to Graphic Styles	Window › Graphic Style Libraries	aspetto	F1	T15	ispettore/risorse	famiglia	
+motore	graphicStyle.saveLibrary	Save Graphic Style Library…	Window › Graphic Styles	aspetto	F1	T15	ispettore/risorse	famiglia	finestra
+motore	graphicStyle.loadLibrary	Other Library…	Window › Graphic Style Libraries	aspetto	F1	T15	ispettore/risorse	famiglia	finestra
+motore	swatch.new	New Swatch	Window › Swatches	colore	F1	T14	ispettore/risorse	famiglia	
+motore	swatch.delete	Delete Swatch	Window › Swatches	colore	F1	T14	ispettore/risorse	famiglia	
+motore	swatch.newGroup	New Color Group	Window › Swatches	colore	F1	T14	ispettore/risorse	famiglia	
+motore	swatch.duplicate	Duplicate Swatch	Window › Swatches	colore	F1	T14	ispettore/risorse	famiglia	
+motore	swatch.sortByName	Sort by Name	Window › Swatches	colore	F1	T14	ispettore/risorse	famiglia	
+motore	swatch.edit	Swatch Options	Window › Swatches	colore	F1	T14	ispettore/risorse	famiglia	
+motore	swatch.list	Swatches		colore	F1	T14	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	swatch.move	Move Swatch	Window › Swatches	colore	F1	T14	ispettore/risorse	famiglia	
+motore	swatch.addUsedColors	Add Used Colors	Window › Swatches	colore	F1	T14	ispettore/risorse	famiglia	
+motore	swatch.unused	Select All Unused	Window › Swatches	colore	F1	T14	ispettore/risorse	famiglia	
+motore	swatch.merge	Merge Swatches	Window › Swatches	colore	F1	T14	ispettore/risorse	famiglia	
+motore	swatch.ungroup	Ungroup Color Group	Window › Swatches	colore	F1	T14	ispettore/risorse	famiglia	
+motore	swatch.sortByKind	Sort by Kind	Window › Swatches	colore	F1	T14	ispettore/risorse	famiglia	
+motore	swatch.spotOptions	Spot Colors	Window › Swatches	colore	F1	T14	ispettore/risorse	famiglia	
+motore	swatch.editGroup	Edit Color Group	Window › Swatches	colore	F1	T14	ispettore/risorse	famiglia	
+motore	swatch.library.list	Swatch Libraries		colore	F1	T14	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	swatch.library.get	Swatch Library		colore	F1	T14	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	swatch.library.add	Add to Swatches	Window › Swatch Libraries	colore	F1	T14	ispettore/risorse	famiglia	
+motore	swatch.resetDefaults	Default Swatches	Window › Swatch Libraries	colore	F1	T14	ispettore/risorse	famiglia	
+motore	swatch.library.save	Save Swatch Library…	Window › Swatches	colore	F1	T14	ispettore/risorse	famiglia	finestra
+motore	swatch.library.load	Other Library…	Window › Swatch Libraries	colore	F1	T14	ispettore/risorse	famiglia	finestra
+motore	swatch.library.copyToUser	Copy to User Defined	Window › Swatch Libraries	colore	F1	T14	ispettore/risorse	famiglia	
+motore	symbol.libraries	Symbol Libraries		simboli	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	symbol.library	Symbol Library		simboli	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	symbol.addFromLibrary	Add to Symbols	Window › Symbol Libraries	simboli	F3	T22	ispettore/risorse	famiglia	
+motore	symbol.saveLibrary	Save Symbol Library…	Window › Symbols	simboli	F3	T22	ispettore/risorse	famiglia	finestra
+motore	symbol.loadLibrary	Other Library…	Window › Symbol Libraries	simboli	F3	T22	ispettore/risorse	famiglia	finestra
+motore	text.tabs.set	Set Tab Stops	Window › Tabs	testo	F2	T16	ispettore/design	famiglia	
+motore	text.tabs.get	Tab Stops		testo	F2	T16	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	text.tabs.clear	Clear All Tabs	Window › Tabs	testo	F2	T16	ispettore/design	famiglia	
+motore	text.editRange	Edit Text		testo	F2	T16	ispettore/design	famiglia	
+motore	text.startList	Bullets and Numbering		testo	F2	T16	ispettore/design	famiglia	
+motore	text.setRangeStyle	Character		testo	F2	T16	ispettore/design	famiglia	
+motore	text.touchType	Touch Type		testo	F2	T16	ispettore/design	famiglia	
+motore	text.getRange	Get Text Range		testo	F2	T16	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	text.createInPath	Area / Path Type		testo	F2	T16	ispettore/design	famiglia	
+motore	type.fitHeadline	Fit Headline	Type	testo	F2	T16	menu/testo	famiglia	
+motore	type.step	Step Type		testo	F2	T16	ispettore/design	famiglia	
+motore	type.size.increase	Increase Font Size		testo	F2	T16	ispettore/design	famiglia	
+motore	type.size.decrease	Decrease Font Size		testo	F2	T16	ispettore/design	famiglia	
+motore	type.size.increaseByFive	Increase Font Size by Five Steps		testo	F2	T16	ispettore/design	famiglia	
+motore	type.size.decreaseByFive	Decrease Font Size by Five Steps		testo	F2	T16	ispettore/design	famiglia	
+motore	type.resetTracking	Reset Tracking and Kerning		testo	F2	T16	ispettore/design	famiglia	
+motore	type.resetHorizontalScale	Reset Horizontal Scale		testo	F2	T16	ispettore/design	famiglia	
+motore	text.discardEmpty	Discard Empty Type		testo	F2	T16	ispettore/design	famiglia	
+motore	object.textWrap.make	Make	Object › Text Wrap	testo	F2	T16	menu/oggetto	famiglia	
+motore	object.textWrap.release	Release	Object › Text Wrap	testo	F2	T16	menu/oggetto	famiglia	
+motore	object.textWrap.options	Text Wrap Options…	Object › Text Wrap	testo	F2	T16	menu/oggetto	famiglia	finestra
+motore	text.thread.create	Create	Type › Threaded Text	testo	F2	T16	menu/testo	famiglia	
+motore	text.thread.add	Thread Text		testo	F2	T16	ispettore/design	famiglia	
+motore	text.thread.releaseSelection	Release Selection	Type › Threaded Text	testo	F2	T16	menu/testo	famiglia	
+motore	text.thread.remove	Remove Threading	Type › Threaded Text	testo	F2	T16	menu/testo	famiglia	
+motore	text.thread.break	Break Thread		testo	F2	T16	ispettore/design	famiglia	
+motore	text.thread.info	Threads		testo	F2	T16	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	type.orientation.vertical	Vertical	Type › Orientation	testo	F2	T16	menu/testo	famiglia	
+motore	type.orientation.horizontal	Horizontal	Type › Orientation	testo	F2	T16	menu/testo	famiglia	
+motore	type.createOutlines	Create Outlines	Type	testo	F2	T16	menu/testo	famiglia	
+motore	type.scaleTextAttributes	Scale Text Attributes	Type	testo	F2	T16	menu/testo	famiglia	
+motore	type.opticalMarginAlignment	Optical Margin Alignment	Type	testo	F2	T16	menu/testo	famiglia	
+motore	type.systemLayout	System Layout		testo	F2	T16	ispettore/design	famiglia	
+motore	type.fractionalWidths	Fractional Widths		testo	F2	T16	ispettore/design	famiglia	
+motore	text.setText	Set Text		testo	F2	T16	ispettore/design	famiglia	
+motore	text.areaOptions	Area Type Options…	Type	testo	F2	T16	menu/testo	famiglia	finestra
+motore	text.reshapeArea	Reshape Type Area		testo	F2	T16	ispettore/design	famiglia	
+motore	text.reshapePath	Reshape Type Path		testo	F2	T16	ispettore/design	famiglia	
+motore	text.fitHeadline	Fit Headline	Type	testo	F2	T16	menu/testo	famiglia	
+motore	text.setStyle	Character		testo	F2	T16	ispettore/design	famiglia	
+motore	type.ruby	Ruby…		testo	F2	T16	ispettore/design	famiglia	finestra
+motore	type.changeCase	Change Case	Type › Change Case	testo	F2	T16	menu/testo	famiglia	
+motore	type.smartPunctuation	Smart Punctuation…	Type	testo	F2	T16	menu/testo	famiglia	finestra
+motore	type.convertToAreaType	Convert To Area Type	Type	testo	F2	T16	menu/testo	famiglia	
+motore	type.convertToPointType	Convert To Point Type	Type	testo	F2	T16	menu/testo	famiglia	
+motore	type.pathOptions	Type on a Path Options…	Type › Type on a Path	testo	F2	T16	menu/testo	famiglia	finestra
+motore	type.fillPlaceholder	Fill with Placeholder Text	Type	testo	F2	T16	menu/testo	famiglia	
+motore	type.insert	Insert Character	Type	testo	F2	T16	menu/testo	famiglia	
+motore	edit.findReplace	Find and Replace…	Edit	testo	F2	T16	menu/modifica	famiglia	finestra
+motore	edit.findNext	Find Next	Edit	testo	F2	T16	menu/modifica	famiglia	
+motore	edit.pasteWithoutFormatting	Paste without Formatting	Edit	nucleo	F1	T11	menu/modifica	nucleo	
+motore	variable.define	New Variable…	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	finestra
+motore	variable.delete	Delete Variable	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	
+motore	variable.rename	Rename Variable	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	
+motore	variable.list	List Variables		dati	F4	T26	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	variable.makeTextDynamic	Make Text Dynamic	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	
+motore	variable.makeVisibilityDynamic	Make Visibility Dynamic	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	
+motore	variable.makeImageDynamic	Make Image Dynamic	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	
+motore	variable.makeGraphDynamic	Make Graph Dynamic	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	
+motore	variable.bind	Bind Variable	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	
+motore	variable.unbind	Unbind Variable	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	
+motore	variable.lock	Lock Variables	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	
+motore	variable.highlight	Highlight Variable		dati	F4	T26	ispettore/design/documento	famiglia	
+motore	dataset.new	New Data Set…	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	finestra
+motore	dataset.set	Edit Data Set…	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	finestra
+motore	dataset.rename	Rename Data Set	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	
+motore	dataset.capture	Capture Data Set	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	
+motore	dataset.update	Update Data Set	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	
+motore	dataset.delete	Delete Data Set	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	
+motore	dataset.list	List Data Sets		dati	F4	T26	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	dataset.select	Select Data Set	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	
+motore	dataset.next	Next Data Set	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	
+motore	dataset.prev	Previous Data Set	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	
+motore	dataset.import	Import Data Sets…	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	finestra
+motore	dataset.export	Export Data Sets…	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	finestra
+motore	variable.loadLibrary	Load Variable Library…	Window › Variables	dati	F4	T26	ispettore/design/documento	famiglia	finestra
+motore	view.capsLock	Caps Lock Cursor State		vista	F1	T11	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	view.saved.new	New View…	View	vista	F1	T11	menu/visualizza	famiglia	finestra
+motore	view.saved.edit	Edit Views…	View	vista	F1	T11	menu/visualizza	famiglia	finestra
+motore	view.saved.list	Saved Views		vista	F1	T11	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	view.transparencyGrid	Show Transparency Grid	View	vista	F1	T11	menu/visualizza	famiglia	
+motore	view.snapToGlyph.options	Snap to Glyph Options		testo	F2	T16	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	select.magicWand	Magic Wand		livelli	F1	T15	ispettore/livelli	famiglia	
+motore	magicWand.set	Magic Wand Options	Window › Magic Wand	livelli	F1	T15	ispettore/design	famiglia	
+motore	magicWand.options	Magic Wand Settings		livelli	F1	T15	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	document.exportForWeb	Save for Web		web	F3	T22	ispettore/design/documento	famiglia	
+motore	document.exportForWeb.preview	Save for Web Preview		web	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	webExport.settings	Save for Web Settings		web	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	webExport.presets.list	Save for Web Presets		web	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	webExport.presets.save	Save Save for Web Preset		web	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	webExport.presets.delete	Delete Save for Web Preset		web	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	object.distort	Free Distort		trasforma	F1	T13	ispettore/design	famiglia	
+motore	paint.sampleColor	Sample Color		colore	F1	T14	ispettore/design	famiglia	
+motore	eyedropper.setOptions	Eyedropper Options		colore	F1	T14	ispettore/design	famiglia	
+motore	artboard.move	Move Artboard		tavole	F2	T19	ispettore/design/documento	famiglia	
+motore	addon.arrange.grid	Arrange in Grid	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	menu/oggetto	famiglia	
+motore	addon.arrange.swap	Swap Objects	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	menu/oggetto	famiglia	
+motore	addon.arrange.replace	Replace with Top Object	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	menu/oggetto	famiglia	
+motore	addon.arrange.size	Set Size of Each	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	menu/oggetto	famiglia	
+motore	addon.arrange.groupOverlapping	Group Overlapping Objects	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	menu/oggetto	famiglia	
+motore	addon.arrange.randomizeOpacity	Randomize Opacity	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	menu/oggetto	famiglia	
+motore	addon.arrange.sort	Sort Objects	Object › Plug-ins › Arrange Tools	trasforma	F1	T13	menu/oggetto	famiglia	
+motore	addon.cleanup.simplify	Simplify Anchors (Keep Shape)…	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	menu/oggetto	famiglia	finestra
+motore	addon.cleanup.check	Health Check	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	menu/oggetto	famiglia	
+motore	addon.cleanup.show	Show Issue	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	menu/oggetto	famiglia	
+motore	addon.cleanup.fix	Fix All Issues	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	menu/oggetto	famiglia	
+motore	addon.cleanup.deepUngroup	Deep Ungroup…	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	menu/oggetto	famiglia	finestra
+motore	addon.cleanup.rejoin	Rejoin Path Pieces…	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	menu/oggetto	famiglia	finestra
+motore	addon.color.select	Select by Color Kind	Object › Plug-ins › Color Effects	colore	F1	T14	menu/oggetto	famiglia	
+motore	addon.color.filter	Apply as Filter	Object › Plug-ins › Color Effects	colore	F1	T14	menu/oggetto	famiglia	
+motore	addon.color.printFixes	Print Ink Fixes	Object › Plug-ins › Color Effects	colore	F1	T14	menu/oggetto	famiglia	
+motore	addon.color.nearestSwatch	Find Nearest Swatch	Object › Plug-ins › Color Effects	colore	F1	T14	menu/oggetto	famiglia	
+motore	addon.color.applyNearestSwatch	Apply Nearest Swatch	Object › Plug-ins › Color Effects	colore	F1	T14	menu/oggetto	famiglia	
+motore	addon.document.saveTimestampedCopy	Save a Timestamped Copy	Object › Plug-ins › Document Tools	pulizia	F2	T17	menu/oggetto	famiglia	
+motore	addon.document.exportAllOpen	Export All Open Documents	Object › Plug-ins › Document Tools	pulizia	F2	T17	menu/oggetto	famiglia	
+motore	addon.document.symbolsFromLayers	New Symbols from Layers	Object › Plug-ins › Document Tools	pulizia	F2	T17	menu/oggetto	famiglia	
+motore	addon.pathtools.erase	Anchor Eraser Brush		tracciati	F1	T12	ispettore/design	famiglia	
+motore	addon.pathtools.extend	Extend Path		tracciati	F1	T12	ispettore/design	famiglia	
+motore	addon.pathtools.inspect	Measure & Inspect		tracciati	F1	T12	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	addon.pathtools.setAnchor	Set Anchor		tracciati	F1	T12	ispettore/design	famiglia	
+motore	addon.pathtools.smooth	Make Smooth	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	addon.pathtools.corner	Make Corner	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	addon.pathtools.equalize	Equalize Handles	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	addon.pathtools.removeKeepShape	Remove Points, Keep Shape	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	addon.pathtools.addPoints	Add Points to Segments…	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	menu/oggetto	famiglia	finestra
+motore	addon.pathtools.close	Close Path	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	addon.pathtools.crossings	Add Points at Crossings	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	addon.pathtools.slideAnchor	Slide Anchor Along Path		tracciati	F1	T12	ispettore/design	famiglia	
+motore	addon.pathtools.divideDashes	Divide into Dashes	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	addon.pathtools.expandDashes	Expand Dashes into Paths	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	addon.pen.append	Smart Pen		tracciati	F1	T12	ispettore/design	famiglia	
+motore	addon.pen.close	Close Path		tracciati	F1	T12	ispettore/design	famiglia	
+motore	addon.pen.segment	Straight or Curved Segment		tracciati	F1	T12	ispettore/design	famiglia	
+motore	addon.pen.removePoint	Remove Points, Keep Shape		tracciati	F1	T12	ispettore/design	famiglia	
+motore	addon.pen.togglePoint	Convert Anchor Point		tracciati	F1	T12	ispettore/design	famiglia	
+motore	addon.pen.reshape	Reshape Segment		tracciati	F1	T12	ispettore/design	famiglia	
+motore	addon.pen.nextSegment	Next Segment	Object › Plug-ins › Smart Pen	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	addon.pen.closeJoin	Close or Join	Object › Plug-ins › Smart Pen	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	addon.cleanup.breakText	Break Text	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	menu/oggetto	famiglia	
+motore	addon.cleanup.combineText	Combine Point Text	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	menu/oggetto	famiglia	
+motore	addon.cleanup.joinText	Join Point Text	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	menu/oggetto	famiglia	
+motore	addon.cleanup.removeBreaks	Remove Breaks	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	menu/oggetto	famiglia	
+motore	addon.cleanup.splitText	Split Text at Cursor	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	menu/oggetto	famiglia	
+motore	addon.cleanup.alignInPlace	Set Alignment, Keep Position	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	menu/oggetto	famiglia	
+motore	addon.cleanup.resetTextTransform	Reset Text Transform	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	menu/oggetto	famiglia	
+motore	addon.cleanup.replaceFonts	Replace Missing Fonts…	Object › Plug-ins › Artwork Cleanup	pulizia	F2	T17	menu/oggetto	famiglia	finestra
+motore	addon.pathtools.cornerSet	Set Corners		tracciati	F1	T12	ispettore/design	famiglia	
+motore	addon.pathtools.cornerRemove	Remove Corners		tracciati	F1	T12	ispettore/design	famiglia	
+motore	addon.pathtools.shape.create	Parametric Shape		tracciati	F1	T12	ispettore/design	famiglia	
+motore	addon.pathtools.shape.set	Edit Parametric Shape		tracciati	F1	T12	ispettore/design	famiglia	
+motore	addon.pathtools.shape.convert	Convert to Parametric Shape	Object › Plug-ins › Path Precision Tools	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	addon.pathtools.mergeEdge	Merge Shared Edge		tracciati	F1	T12	ispettore/design	famiglia	
+motore	addon.pathtools.movePointsTogether	Keep Shared Points Together		tracciati	F1	T12	ispettore/design	famiglia	
+motore	clipboard.exportPng	Clipboard as PNG		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	clipboard.exportPdf	Clipboard as PDF		nucleo	F1	T11	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	clipboard.exportText	Clipboard as Text		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	clipboard.flavours	Clipboard Formats		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	clipboard.importImage	Load Image into Clipboard		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	clipboard.importText	Load Text into Clipboard		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	clipboard.importPdf	Load PDF into Clipboard		nucleo	F1	T11	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	clipboard.importEmf	Load Metafile into Clipboard		nucleo	F1	T11	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	clipboard.importEps	Load EPS into Clipboard		nucleo	F1	T11	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	path.freehand	Pencil		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.curvature	Curvature		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.curvatureEdit	Curvature		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.removeAnchor	Delete Anchor Point		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.removeAnchors	Remove Anchor Points	Object › Path	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	path.convertAnchor	Convert Anchor Point		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.reshapeSegment	Reshape Segment		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.split	Split Path		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.knife	Knife		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.eraseRegion	Eraser		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.eraseSegments	Path Eraser		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.smoothRegion	Smooth		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.joinScrub	Join		tracciati	F1	T12	ispettore/design	famiglia	
+motore	path.blob	Blob Brush		tracciati	F1	T12	ispettore/design	famiglia	
+motore	document.open	Open Document		fub	—	T2	fub	—	aprire dal vault (il motore non legge il disco)
+motore	file.list	List Folder		fub	—	T2	fub	—	le schede aperte di Fub
+motore	document.serialize	Serialize Document		formati	F3	T23	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	document.export	Export Document		formati	F3	T23	menu/file	famiglia	
+motore	document.exportSelection	Export Selection…	File	formati	F3	T23	menu/file	famiglia	finestra
+motore	document.exportForScreens	Export for Screens	File › Export	web	F3	T22	menu/file	famiglia	
+motore	document.exportPresets.list	Export Presets		web	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	document.exportPresets.save	Save Export Preset		web	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	document.exportPresets.delete	Delete Export Preset		web	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	command.batch	Batch		automazione	F4	T26	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	action.batch	Batch…		automazione	F4	T26	ispettore/cronologia	famiglia	finestra
+motore	document.formats	File Formats		formati	F3	T23	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	document.pdfInfo	PDF Info		formati	F3	T23	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	document.exportForOffice	Save for Office Documents…	File	formati	F3	T23	menu/file	sotto:disegno-formati	finestra
+motore	document.exportSettings	Export for Screens Settings		web	F3	T22	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	document.exportDxf	Export DXF		formati	F3	T23	menu/file	sotto:disegno-formati	
+motore	document.dxfInfo	DXF Info		formati	F3	T23	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	document.exportEps	Export EPS		formati	F3	T23	menu/file	sotto:disegno-formati	
+motore	document.exportPdf	Export PDF		formati	F3	T23	menu/file	sotto:disegno-formati	
+motore	document.pdfSettings	PDF Settings		formati	F3	T23	interno	sotto:disegno-formati	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	document.save	Save Document		fub	—	T2	fub	—	il salvataggio di Fub (DocumentSession): il motore non scrive il disco
+motore	file.saveAs	Save As…	File	fub	—	T2	fub	—	Fub: Salva con nome del file del vault; finestra
+motore	file.saveCopy	Save a Copy…	File	fub	—	T2	fub	—	Fub: Salva una copia nel vault; finestra
+motore	file.saveAsTemplate	Save as Template…	File	formati	F3	T23	menu/file	famiglia	finestra
+motore	file.newFromTemplate	New from Template…	File	fub	—	T2	fub	—	modelli di Fub (`editors/spatial/templates`); finestra
+motore	file.revert	Revert	File	fub	—	T2	fub	—	Fub: torna alla versione salvata (versioni del kernel)
+motore	file.formatOptions	Format Options		formati	F3	T23	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	object.flattenTransparency	Flatten Transparency…	Object	stampa	F4	T25	menu/oggetto	famiglia	finestra
+motore	flattener.presets.list	Transparency Flattener Presets		stampa	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	flattener.presets.save	Save Transparency Flattener Preset		stampa	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	flattener.presets.delete	Delete Transparency Flattener Preset		stampa	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	flattener.presets.import	Import Transparency Flattener Presets		stampa	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	flattener.presets.export	Export Transparency Flattener Presets		stampa	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	flattener.preview	Flattener Preview		stampa	F4	T25	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	graph.create	Create Graph		grafici	F4	T25	colonna	famiglia	
+motore	graph.setData	Data…	Object › Graph	grafici	F4	T25	menu/oggetto	famiglia	finestra
+motore	graph.setType	Type…	Object › Graph	grafici	F4	T25	menu/oggetto	famiglia	finestra
+motore	graph.design	Design…	Object › Graph	grafici	F4	T25	menu/oggetto	famiglia	finestra
+motore	graph.column	Column…	Object › Graph	grafici	F4	T25	menu/oggetto	famiglia	finestra
+motore	graph.marker	Marker…	Object › Graph	grafici	F4	T25	menu/oggetto	famiglia	finestra
+motore	object.blend.make	Make	Object › Blend	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.blend.release	Release	Object › Blend	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.blend.options	Blend Options…	Object › Blend	dinamici	F2	T21	menu/oggetto	famiglia	finestra
+motore	object.blend.expand	Expand	Object › Blend	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.blend.replaceSpine	Replace Spine	Object › Blend	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.blend.reverseSpine	Reverse Spine	Object › Blend	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.blend.info	Blend Info		dinamici	F2	T21	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	object.blend.spine.moveAnchor	Move Spine Point		dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.blend.spine.convertAnchor	Convert Anchor Point		dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.blend.spine.reshapeSegment	Reshape Spine Segment		dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.blend.spine.addAnchor	Add Spine Point		dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.blend.spine.removeAnchor	Delete Spine Point		dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.blend.reverseFrontToBack	Reverse Front to Back	Object › Blend	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.envelope.makeWithWarp	Make with Warp…	Object › Envelope Distort	dinamici	F2	T21	menu/oggetto	famiglia	finestra
+motore	object.envelope.makeWithMesh	Make with Mesh…	Object › Envelope Distort	dinamici	F2	T21	menu/oggetto	famiglia	finestra
+motore	object.envelope.makeWithTopObject	Make with Top Object	Object › Envelope Distort	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.envelope.resetWithWarp	Reset with Warp…	Object › Envelope Distort	dinamici	F2	T21	menu/oggetto	famiglia	finestra
+motore	object.envelope.resetWithMesh	Reset with Mesh…	Object › Envelope Distort	dinamici	F2	T21	menu/oggetto	famiglia	finestra
+motore	object.envelope.info	Envelope Info		dinamici	F2	T21	interno	famiglia	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	object.envelope.release	Release	Object › Envelope Distort	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.envelope.options	Envelope Options…	Object › Envelope Distort	dinamici	F2	T21	menu/oggetto	famiglia	finestra
+motore	object.envelope.expand	Expand	Object › Envelope Distort	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.envelope.editContents	Edit Contents	Object › Envelope Distort	dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.envelope.setMeshPoint	Move Envelope Mesh Point		dinamici	F2	T21	menu/oggetto	famiglia	
+motore	object.mesh.create	Create Gradient Mesh…	Object	trame	F2	T21	menu/oggetto	famiglia	finestra
+motore	object.mesh.setPointColor	Set Mesh Point Color		trame	F2	T21	ispettore/design	famiglia	
+motore	object.mesh.movePoint	Move Mesh Point		trame	F2	T21	ispettore/design	famiglia	
+motore	object.mesh.movePoints	Move Mesh Points		trame	F2	T21	ispettore/design	famiglia	
+motore	object.mesh.addLine	Add Mesh Line		trame	F2	T21	ispettore/design	famiglia	
+motore	object.mesh.deletePoint	Delete Mesh Point		trame	F2	T21	ispettore/design	famiglia	
+motore	object.mesh.expand	Expand Gradient Mesh	Object	trame	F2	T21	menu/oggetto	famiglia	
+motore	object.transform	Transform		trasforma	F1	T13	ispettore/design	famiglia	
+motore	object.move	Move…	Object › Transform	trasforma	F1	T13	menu/oggetto	famiglia	finestra
+motore	object.rotate	Rotate…	Object › Transform	trasforma	F1	T13	menu/oggetto	famiglia	finestra
+motore	object.scale	Scale…	Object › Transform	trasforma	F1	T13	menu/oggetto	famiglia	finestra
+motore	object.reflect	Reflect…	Object › Transform	trasforma	F1	T13	menu/oggetto	famiglia	finestra
+motore	object.shear	Shear…	Object › Transform	trasforma	F1	T13	menu/oggetto	famiglia	finestra
+motore	object.transformAgain	Transform Again	Object › Transform	trasforma	F1	T13	menu/oggetto	famiglia	
+motore	object.nudge	Nudge		trasforma	F1	T13	ispettore/design	famiglia	
+motore	object.arrange.bringToFront	Bring to Front	Object › Arrange	nucleo	F1	T11	menu/oggetto	nucleo	
+motore	object.arrange.bringForward	Bring Forward	Object › Arrange	nucleo	F1	T11	menu/oggetto	nucleo	
+motore	object.arrange.sendBackward	Send Backward	Object › Arrange	nucleo	F1	T11	menu/oggetto	nucleo	
+motore	object.arrange.sendToBack	Send to Back	Object › Arrange	nucleo	F1	T11	menu/oggetto	nucleo	
+motore	object.arrange.sendToCurrentLayer	Send to Current Layer	Object › Arrange	nucleo	F1	T11	menu/oggetto	nucleo	
+motore	object.group	Group	Object	nucleo	F1	T11	menu/oggetto	nucleo	
+motore	object.ungroup	Ungroup	Object	nucleo	F1	T11	menu/oggetto	nucleo	
+motore	object.lock	Selection	Object › Lock	nucleo	F1	T11	menu/oggetto	nucleo	
+motore	object.unlockAll	Unlock All	Object	nucleo	F1	T11	menu/oggetto	nucleo	
+motore	object.hide	Selection	Object › Hide	nucleo	F1	T11	menu/oggetto	nucleo	
+motore	object.showAll	Show All	Object	nucleo	F1	T11	menu/oggetto	nucleo	
+motore	object.compoundPath.make	Make	Object › Compound Path	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	object.compoundPath.release	Release	Object › Compound Path	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	object.clippingMask.make	Make	Object › Clipping Mask	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	object.clippingMask.release	Release	Object › Clipping Mask	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	object.clippingMask.editContents	Edit Contents	Object › Clipping Mask	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	object.clippingMask.editMask	Edit Clipping Path	Object › Clipping Mask	tracciati	F1	T12	menu/oggetto	famiglia	
+motore	object.isolate	Enter Isolation Mode		nucleo	F1	T11	tasto-destro	nucleo	
+motore	object.exitIsolation	Exit Isolation Mode		nucleo	F1	T11	tasto-destro	nucleo	
+motore	object.setProps	Object Properties		nucleo	F1	T11	interno	nucleo	lettura del motore: la usano l'ispettore, le finestre e i test, non è una voce
+motore	object.align	Align	Window › Align	trasforma	F1	T13	ispettore/design	famiglia	
+motore	object.distribute	Distribute	Window › Align	trasforma	F1	T13	ispettore/design	famiglia	
+motore	object.distributeSpacing	Distribute Spacing	Window › Align	trasforma	F1	T13	ispettore/design	famiglia	
+motore	object.setBounds	Set Bounds		trasforma	F1	T13	ispettore/design	famiglia	
+motore	object.expandShape	Expand Shape	Object › Shape	forme	F1	T13	menu/oggetto	famiglia	
+motore	object.setLiveShape	Live Shape Properties		forme	F1	T13	ispettore/design	famiglia	
+interfaccia	addon.pathtools.cornerTool	Corner Tool		tracciati	F1	T12	ispettore/design	famiglia	
+interfaccia	addon.pathtools.sharedEdgeTool	Shared Edge Merge Tool		tracciati	F1	T12	ispettore/design	famiglia	
+interfaccia	addon.arrange.zoomSelection	Zoom to Selection		trasforma	F1	T13	ispettore/design	famiglia	
+interfaccia	app.language	Interface Language		fub	—	T2	fub	—	la lingua di Fub
+interfaccia	file.open	Open…		fub	—	T2	fub	—	aprire dal vault
+interfaccia	file.save	Save		fub	—	T2	fub	—	il salvataggio di Fub (DocumentSession)
+interfaccia	file.place	Place…		formati	F3	T23	menu/file	famiglia	
+interfaccia	file.openRecent1	Open Recent File 1		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent2	Open Recent File 2		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent3	Open Recent File 3		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent4	Open Recent File 4		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent5	Open Recent File 5		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent6	Open Recent File 6		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent7	Open Recent File 7		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent8	Open Recent File 8		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent9	Open Recent File 9		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent10	Open Recent File 10		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	view.goto1	Saved View 1		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto2	Saved View 2		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto3	Saved View 3		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto4	Saved View 4		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto5	Saved View 5		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto6	Saved View 6		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto7	Saved View 7		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto8	Saved View 8		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto9	Saved View 9		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto10	Saved View 10		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto11	Saved View 11		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto12	Saved View 12		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto13	Saved View 13		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto14	Saved View 14		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto15	Saved View 15		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto16	Saved View 16		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto17	Saved View 17		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto18	Saved View 18		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto19	Saved View 19		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto20	Saved View 20		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto21	Saved View 21		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto22	Saved View 22		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto23	Saved View 23		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto24	Saved View 24		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	view.goto25	Saved View 25		tavole	F2	T19	banda	famiglia	voce numerata: una sola voce che elenca, non view.gotoN
+interfaccia	select.recall1	Saved Selection 1		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall2	Saved Selection 2		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall3	Saved Selection 3		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall4	Saved Selection 4		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall5	Saved Selection 5		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall6	Saved Selection 6		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall7	Saved Selection 7		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall8	Saved Selection 8		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall9	Saved Selection 9		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall10	Saved Selection 10		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall11	Saved Selection 11		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall12	Saved Selection 12		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall13	Saved Selection 13		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall14	Saved Selection 14		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall15	Saved Selection 15		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall16	Saved Selection 16		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall17	Saved Selection 17		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall18	Saved Selection 18		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall19	Saved Selection 19		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall20	Saved Selection 20		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall21	Saved Selection 21		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall22	Saved Selection 22		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall23	Saved Selection 23		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall24	Saved Selection 24		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	select.recall25	Saved Selection 25		livelli	F1	T15	menu/selezione	famiglia	
+interfaccia	type.recentFont1	Recent Font 1		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.recentFont2	Recent Font 2		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.recentFont3	Recent Font 3		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.recentFont4	Recent Font 4		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.recentFont5	Recent Font 5		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.recentFont6	Recent Font 6		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.recentFont7	Recent Font 7		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.recentFont8	Recent Font 8		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.recentFont9	Recent Font 9		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.recentFont10	Recent Font 10		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.recentFont11	Recent Font 11		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.recentFont12	Recent Font 12		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.recentFont13	Recent Font 13		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.recentFont14	Recent Font 14		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.recentFont15	Recent Font 15		testo	F2	T16	menu/testo	famiglia	
+interfaccia	file.clearRecent	Clear Recent Files		fub	—	T2	fub	—	recenti di Fub
+interfaccia	type.findFont	Find Font…		testo	F2	T16	menu/testo	famiglia	
+interfaccia	ui.missingFontsDialog	Missing Fonts Dialog		testo	F2	T16	finestra	famiglia	
+interfaccia	ui.findFontsInFolder	Find Fonts in Folder…		testo	F2	T16	finestra	famiglia	
+interfaccia	file.recentFiles	Recent Files		fub	—	T2	fub	—	recenti di Fub
+interfaccia	file.export.svg	Export As SVG…		formati	F3	T23	menu/file	famiglia	
+interfaccia	file.export.png	Export As PNG…		formati	F3	T23	menu/file	famiglia	
+interfaccia	file.exportForScreens	Export for Screens…		formati	F3	T23	menu/file	famiglia	
+interfaccia	file.documentSetup	Document Setup…		formati	F3	T23	menu/file	famiglia	
+interfaccia	file.newDialog	New…		fub	—	T2	fub	—	nuovo disegno di Fub
+interfaccia	file.newWithoutDialog	New Without Dialog		fub	—	T2	fub	—	nuovo disegno di Fub
+interfaccia	app.home	Home		fub	—	T2	fub	—	il Benvenuto di Fub
+interfaccia	edit.preferences	Preferences…		fub	—	T11	fub	—	Impostazioni › Disegno
+interfaccia	edit.keyboardShortcuts	Keyboard Shortcuts…		fub	—	T9	fub	—	Impostazioni › Scorciatoie
+interfaccia	shortcuts.set	Set Keyboard Shortcut		fub	—	T9	fub	—	Impostazioni › Scorciatoie (comandi del disegno inclusi)
+interfaccia	shortcuts.list	List Keyboard Shortcuts		fub	—	T9	fub	—	Impostazioni › Scorciatoie (comandi del disegno inclusi)
+interfaccia	shortcuts.conflicts	Keyboard Shortcut Conflicts		fub	—	T9	fub	—	Impostazioni › Scorciatoie (comandi del disegno inclusi)
+interfaccia	shortcuts.reset	Reset Keyboard Shortcuts		fub	—	T9	fub	—	Impostazioni › Scorciatoie (comandi del disegno inclusi)
+interfaccia	shortcuts.preset	Keyboard Shortcut Set		fub	—	T9	fub	—	Impostazioni › Scorciatoie (comandi del disegno inclusi)
+interfaccia	shortcuts.export	Export Keyboard Shortcuts…		fub	—	T9	fub	—	Impostazioni › Scorciatoie (comandi del disegno inclusi)
+interfaccia	shortcuts.import	Import Keyboard Shortcuts…		fub	—	T9	fub	—	Impostazioni › Scorciatoie (comandi del disegno inclusi)
+interfaccia	ui.shortcutImportDialog	Import Shortcut Set…		fub	—	T9	fub	—	Impostazioni › Scorciatoie
+interfaccia	view.outline	Outline		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	view.pixelPreview	Pixel Preview		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	view.trimView	Trim View		stampa	F4	T25	menu/visualizza	famiglia	
+interfaccia	view.cornerWidget	Hide Corner Widget		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	view.snapToPixel	Snap to Pixel		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	view.snapToGlyph	Snap to Glyph		testo	F2	T16	menu/visualizza	famiglia	
+interfaccia	view.preciseCursors	Use Precise Cursors		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	imageTrace.preview	Image Trace Preview		immagini	F3	T20	ispettore/design	famiglia	
+interfaccia	view.textThreads	Hide Text Threads		testo	F2	T16	menu/visualizza	famiglia	
+interfaccia	view.gradientAnnotator	Hide Gradient Annotator		aspetto	F1	T15	menu/visualizza	famiglia	
+interfaccia	view.livePaintGaps	Show Live Paint Gaps		trame	F2	T21	menu/visualizza	famiglia	
+interfaccia	type.hiddenCharacters	Show Hidden Characters		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.alignLeft	Align left		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.alignCenter	Align center		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.alignRight	Align right		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.justifyLeft	Justify with last line aligned left		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.justifyAll	Justify all lines		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.applyBullets	Apply Bullets		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.applyNumbers	Apply Numbers		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.convertListToText	Convert to Text		testo	F2	T16	menu/testo	famiglia	
+interfaccia	align.horizontalLeft	Horizontal Align Left		trasforma	F1	T13	ispettore/design	famiglia	
+interfaccia	align.horizontalCenter	Horizontal Align Center		trasforma	F1	T13	ispettore/design	famiglia	
+interfaccia	align.horizontalRight	Horizontal Align Right		trasforma	F1	T13	ispettore/design	famiglia	
+interfaccia	align.horizontalVerticalCenter	Horizontal & Vertical Align Center		trasforma	F1	T13	ispettore/design	famiglia	
+interfaccia	align.verticalTop	Vertical Align Top		trasforma	F1	T13	ispettore/design	famiglia	
+interfaccia	align.verticalCenter	Vertical Align Center		trasforma	F1	T13	ispettore/design	famiglia	
+interfaccia	align.verticalBottom	Vertical Align Bottom		trasforma	F1	T13	ispettore/design	famiglia	
+interfaccia	align.distributeVerticalTop	Vertical Distribute Top		trasforma	F1	T13	ispettore/design	famiglia	
+interfaccia	align.distributeVerticalCenter	Vertical Distribute Center		trasforma	F1	T13	ispettore/design	famiglia	
+interfaccia	align.distributeVerticalBottom	Vertical Distribute Bottom		trasforma	F1	T13	ispettore/design	famiglia	
+interfaccia	align.distributeHorizontalLeft	Horizontal Distribute Left		trasforma	F1	T13	ispettore/design	famiglia	
+interfaccia	align.distributeHorizontalCenter	Horizontal Distribute Center		trasforma	F1	T13	ispettore/design	famiglia	
+interfaccia	align.distributeHorizontalRight	Horizontal Distribute Right		trasforma	F1	T13	ispettore/design	famiglia	
+interfaccia	align.distributeVerticalSpace	Vertical Distribute Space		trasforma	F1	T13	ispettore/design	famiglia	
+interfaccia	align.distributeHorizontalSpace	Horizontal Distribute Space		trasforma	F1	T13	ispettore/design	famiglia	
+interfaccia	type.bold	Bold		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.italic	Italic		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.highlightFontName	Highlight Font Name		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.highlightKerning	Highlight Kerning		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.highlightTracking	Highlight Tracking		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.underline	Underline		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.lineComposer	Toggle Line Composer		testo	F2	T16	menu/testo	famiglia	
+interfaccia	type.hyphenate	Hyphenate		testo	F2	T16	menu/testo	famiglia	
+interfaccia	effect.last	Last Effect…		effetti	F2	T18	menu/effetto	famiglia	
+interfaccia	view.zoomIn	Zoom In		vista	F1	T11	banda	famiglia	
+interfaccia	view.zoomOut	Zoom Out		vista	F1	T11	banda	famiglia	
+interfaccia	view.fitArtboard	Fit Artboard in Window		tavole	F2	T19	banda	famiglia	
+interfaccia	view.fitAll	Fit All in Window		vista	F1	T11	banda	famiglia	
+interfaccia	view.actualSize	Actual Size		vista	F1	T11	banda	famiglia	
+interfaccia	view.setZoom	Set Zoom		vista	F1	T11	banda	famiglia	
+interfaccia	view.goToArtboard	Go to Artboard		tavole	F2	T19	menu/visualizza	famiglia	
+interfaccia	view.edges	Hide Edges		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	view.artboards	Hide Artboards		tavole	F2	T19	menu/visualizza	famiglia	
+interfaccia	view.template	Hide Template		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	view.rulers	Show Rulers		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	view.videoRulers	Show Video Rulers		stampa	F4	T25	menu/visualizza	famiglia	
+interfaccia	view.boundingBox	Hide Bounding Box		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	view.guides	Hide Guides		tavole	F2	T19	menu/visualizza	famiglia	
+interfaccia	view.smartGuides	Smart Guides		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	view.grid	Show Grid		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	view.snapToGrid	Snap to Grid		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	view.snapToPoint	Snap to Point		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	view.presentation	Presentation Mode		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	view.screenMode	Screen Mode		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	view.rotate	Rotate View		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	view.rotateToSelection	Rotate View to Selection		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	view.rotateReset	Reset Rotate View		vista	F1	T11	menu/visualizza	famiglia	
+interfaccia	window.control	Control		fub	—	T8	fub	—	la testata del disegno
+interfaccia	window.toolbar	Tools		fub	—	T8	fub	—	la colonna del disegno
+interfaccia	window.toolbarColumns	Toolbar: Single/Double Column		fub	—	T8	fub	—	la colonna di Fub è una sola: il resto nel cassetto «Tutti gli strumenti»
+interfaccia	window.toolbarAdvanced	Toolbar: Advanced / Basic		fub	—	T8	fub	—	lo spazio di lavoro Semplice/Completo
+interfaccia	window.floatTools	Float Tool Group		fub	—	T8	fub	—	niente gruppi fluttuanti: il cassetto «Tutti gli strumenti»
+interfaccia	toolbar.show	Toolbar: Show Controls		fub	—	T8	fub	—	la colonna del disegno, configurata dallo spazio di lavoro
+interfaccia	window.editToolbar	Edit Toolbar		fub	—	T8	fub	—	«Modifica la colonna» nel cassetto degli strumenti
+interfaccia	toolbar.addTool	Toolbar: Add Tool		fub	—	T8	fub	—	la colonna del disegno, configurata dallo spazio di lavoro
+interfaccia	toolbar.removeTool	Toolbar: Remove Tool		fub	—	T8	fub	—	la colonna del disegno, configurata dallo spazio di lavoro
+interfaccia	toolbar.reset	Toolbar: Reset		fub	—	T8	fub	—	la colonna del disegno, configurata dallo spazio di lavoro
+interfaccia	window.taskBar	Contextual Task Bar		fub	—	T10	fub	—	la barra contestuale diventa la fila delle opzioni della testata
+interfaccia	window.taskBar.pin	Pin Bar Position		escluso	—	T2	escluso	—	la barra contestuale non si sposta: è la fila delle opzioni (D6)
+interfaccia	window.taskBar.reset	Reset Bar Position		escluso	—	T2	escluso	—	come sopra (D6)
+interfaccia	window.dock	Panels		fub	—	T10	fub	—	mostra o nascondi l'ispettore e il cassetto
+interfaccia	window.panels	Panels Except Tools and Control		fub	—	T10	fub	—	le schede dell'ispettore di Fub
+interfaccia	window.panel	Show Panel		fub	—	T10	fub	—	le schede dell'ispettore di Fub
+interfaccia	window.panel.layout	Change Panel Layout		escluso	—	T2	escluso	—	aggancio libero dei pannelli: Fub ha l'ispettore a schede (D6)
+interfaccia	window.panel.move	Move Panel		escluso	—	T2	escluso	—	aggancio libero (D6)
+interfaccia	window.panel.activate	Activate Panel		fub	—	T10	fub	—	le schede dell'ispettore di Fub
+interfaccia	window.panel.close	Close Panel		fub	—	T10	fub	—	le schede dell'ispettore di Fub
+interfaccia	window.panel.collapse	Collapse Panel Group		escluso	—	T2	escluso	—	aggancio libero (D6)
+interfaccia	window.panel.float	Float Panel		escluso	—	T2	escluso	—	pannelli fluttuanti (D6)
+interfaccia	window.panel.dock	Dock Panel		escluso	—	T2	escluso	—	aggancio libero (D6)
+interfaccia	window.collapseDock	Collapse Panels to Icons		fub	—	T10	fub	—	l'ispettore di Fub
+interfaccia	window.brightness	UI Brightness		fub	—	T2	fub	—	la luce di Fub (giorno/notte)
+interfaccia	window.workspace	Workspace		fub	—	T7	fub	—	gli spazi di lavoro del disegno (Semplice, Completo, per famiglia) e i workspace salvati di Fub
+interfaccia	window.workspace.reset	Reset Essentials		fub	—	T7	fub	—	gli spazi di lavoro del disegno (Semplice, Completo, per famiglia) e i workspace salvati di Fub
+interfaccia	window.workspace.new	New Workspace…		fub	—	T7	fub	—	gli spazi di lavoro del disegno (Semplice, Completo, per famiglia) e i workspace salvati di Fub
+interfaccia	window.workspace.manage	Manage Workspaces…		fub	—	T7	fub	—	gli spazi di lavoro del disegno (Semplice, Completo, per famiglia) e i workspace salvati di Fub
+interfaccia	window.workspace.delete	Delete Workspace		fub	—	T7	fub	—	gli spazi di lavoro del disegno (Semplice, Completo, per famiglia) e i workspace salvati di Fub
+interfaccia	window.workspace.rename	Rename Workspace		fub	—	T7	fub	—	gli spazi di lavoro del disegno (Semplice, Completo, per famiglia) e i workspace salvati di Fub
+interfaccia	window.workspace.list	List Workspaces		fub	—	T7	fub	—	gli spazi di lavoro del disegno (Semplice, Completo, per famiglia) e i workspace salvati di Fub
+interfaccia	window.newWindow	New Window		fub	—	T2	fub	—	Fub: nuova finestra della shell
+interfaccia	window.nextDocument	Next Document		fub	—	T2	fub	—	Vai › Scheda successiva
+interfaccia	window.previousDocument	Previous Document		fub	—	T2	fub	—	Vai › Scheda precedente
+interfaccia	tool.select	Select Tool		nucleo	F1	T11	colonna	nucleo	
+interfaccia	tool.setOption	Tool Option		nucleo	F1	T11	colonna	nucleo	
+interfaccia	effect.dialog	Effect…		effetti	F2	T18	menu/effetto	famiglia	
+interfaccia	ui.paramDialog	Command Dialog		nucleo	F1	T11	finestra	nucleo	
+interfaccia	ui.recolorDialog	Recolor Artwork…		colore	F1	T14	finestra	famiglia	
+interfaccia	ui.cropImage	Crop Image		immagini	F3	T20	finestra	famiglia	
+interfaccia	effect.applyLast	Apply Last Effect		effetti	F2	T18	menu/effetto	famiglia	
+interfaccia	pathfinder.repeat	Repeat Pathfinder		forme	F1	T13	ispettore/design	famiglia	
+interfaccia	file.export.pdf	Save as PDF…		formati	F3	T23	menu/file	sotto:disegno-formati	
+interfaccia	help.about	About VectorCraft		fub	—	T2	fub	—	Informazioni su Fub e THIRD_PARTY_NOTICES
+interfaccia	help.checkForUpdates	Check for Updates…		fub	—	T2	fub	—	gli aggiornamenti di Fub: il motore viaggia dentro Fub
+interfaccia	help.commandPalette	Search Commands…		fub	—	T9	fub	—	la tavolozza dei comandi di Fub
+interfaccia	app.quit	Quit VectorCraft		fub	—	T2	fub	—	chiudere Fub
+interfaccia	ui.swatchOptions	Swatch Options…		colore	F1	T14	finestra	famiglia	
+interfaccia	ui.newSwatch	New Swatch…		colore	F1	T14	finestra	famiglia	
+interfaccia	ui.newColorGroup	New Color Group…		colore	F1	T14	finestra	famiglia	
+interfaccia	ui.colorPicker	Color Picker…		colore	F1	T14	finestra	famiglia	
+interfaccia	ui.sampleScreenColor	Sample Color from Screen		colore	F1	T14	finestra	famiglia	
+interfaccia	ui.newBrush	New Brush…		pennelli	F2	T17	finestra	famiglia	
+interfaccia	ui.brushOptions	Brush Options…		pennelli	F2	T17	finestra	famiglia	
+interfaccia	ui.graphicStyleOptions	Graphic Style Options…		aspetto	F1	T15	finestra	famiglia	
+interfaccia	ui.charStyleOptions	Character Style Options		testo	F2	T16	finestra	famiglia	
+interfaccia	ui.charStyleOptions.resetPanel	Reset Panel		testo	F2	T16	finestra	famiglia	
+interfaccia	ui.newCharStyle	New Character Style…		testo	F2	T16	finestra	famiglia	
+interfaccia	ui.newParaStyle	New Paragraph Style…		testo	F2	T16	finestra	famiglia	
+interfaccia	ui.symbolOptions	Symbol Options…		simboli	F3	T22	finestra	famiglia	
+interfaccia	tool.options	Tool Options…		nucleo	F1	T11	colonna	nucleo	
+interfaccia	ui.colorGuideOptions	Color Guide Options…		colore	F1	T14	finestra	famiglia	
+interfaccia	ui.colorBalanceDialog	Adjust Color Balance…		colore	F1	T14	finestra	famiglia	
+interfaccia	ui.saturateDialog	Saturate…		colore	F1	T14	finestra	famiglia	
+interfaccia	window.swatchLibrary	Swatch Library		colore	F1	T14	ispettore/design	famiglia	
+interfaccia	window.swatchLibrary.other	Other Library…		colore	F1	T14	ispettore/design	famiglia	
+interfaccia	ui.libraryPanel	Library Panel Options		simboli	F3	T22	finestra	famiglia	
+interfaccia	ui.libraryPanel.locate	Locate Library…		simboli	F3	T22	finestra	famiglia	
+interfaccia	ui.saveSwatchLibrary	Save Swatch Library…		colore	F1	T14	finestra	famiglia	
+interfaccia	window.userSwatchLibrary1	User Swatch Library 1		colore	F1	T14	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userSwatchLibraryN
+interfaccia	window.userSwatchLibrary2	User Swatch Library 2		colore	F1	T14	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userSwatchLibraryN
+interfaccia	window.userSwatchLibrary3	User Swatch Library 3		colore	F1	T14	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userSwatchLibraryN
+interfaccia	window.userSwatchLibrary4	User Swatch Library 4		colore	F1	T14	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userSwatchLibraryN
+interfaccia	window.userSwatchLibrary5	User Swatch Library 5		colore	F1	T14	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userSwatchLibraryN
+interfaccia	window.userSwatchLibrary6	User Swatch Library 6		colore	F1	T14	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userSwatchLibraryN
+interfaccia	window.userSwatchLibrary7	User Swatch Library 7		colore	F1	T14	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userSwatchLibraryN
+interfaccia	window.userSwatchLibrary8	User Swatch Library 8		colore	F1	T14	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userSwatchLibraryN
+interfaccia	window.userSwatchLibrary9	User Swatch Library 9		colore	F1	T14	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userSwatchLibraryN
+interfaccia	window.userSwatchLibrary10	User Swatch Library 10		colore	F1	T14	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userSwatchLibraryN
+interfaccia	ui.mergeGraphicStyles	Merge Graphic Styles…		aspetto	F1	T15	finestra	famiglia	
+interfaccia	ui.layerOptions	Options for Selection…		livelli	F1	T15	finestra	famiglia	
+interfaccia	ui.newLayer	New Layer Options…		livelli	F1	T15	finestra	famiglia	
+interfaccia	ui.newArtboard	New Artboard Options…		tavole	F2	T19	finestra	famiglia	
+interfaccia	ui.layersPanelOptions	Panel Options…		livelli	F1	T15	finestra	famiglia	
+interfaccia	ui.layersExpand	Expand Layers Panel Rows		livelli	F1	T15	finestra	famiglia	
+interfaccia	ui.layersFilter	Filter Layers Panel Rows		livelli	F1	T15	finestra	famiglia	
+interfaccia	ui.tileEdgeColor	Tile Edge Color…		colore	F1	T14	finestra	famiglia	
+interfaccia	ui.flattenTransparencyDialog	Flatten Transparency…		stampa	F4	T25	finestra	famiglia	
+interfaccia	ui.flattenerPresetsDialog	Transparency Flattener Presets…		stampa	F4	T25	finestra	famiglia	
+interfaccia	ui.imageTracePresetDialog	Save as New Preset…		immagini	F3	T20	finestra	famiglia	
+interfaccia	ui.flattenerPreview	Flattener Preview		stampa	F4	T25	finestra	famiglia	
+interfaccia	window.graphicStyleLibrary	Graphic Style Library		aspetto	F1	T15	ispettore/design	famiglia	
+interfaccia	window.graphicStyleLibrary.other	Other Library…		aspetto	F1	T15	ispettore/design	famiglia	
+interfaccia	ui.saveGraphicStyleLibrary	Save Graphic Style Library…		aspetto	F1	T15	finestra	famiglia	
+interfaccia	window.userGraphicStyleLibrary1	User Graphic Style Library 1		aspetto	F1	T15	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userGraphicStyleLibraryN
+interfaccia	window.userGraphicStyleLibrary2	User Graphic Style Library 2		aspetto	F1	T15	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userGraphicStyleLibraryN
+interfaccia	window.userGraphicStyleLibrary3	User Graphic Style Library 3		aspetto	F1	T15	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userGraphicStyleLibraryN
+interfaccia	window.userGraphicStyleLibrary4	User Graphic Style Library 4		aspetto	F1	T15	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userGraphicStyleLibraryN
+interfaccia	window.userGraphicStyleLibrary5	User Graphic Style Library 5		aspetto	F1	T15	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userGraphicStyleLibraryN
+interfaccia	window.userGraphicStyleLibrary6	User Graphic Style Library 6		aspetto	F1	T15	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userGraphicStyleLibraryN
+interfaccia	window.userGraphicStyleLibrary7	User Graphic Style Library 7		aspetto	F1	T15	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userGraphicStyleLibraryN
+interfaccia	window.userGraphicStyleLibrary8	User Graphic Style Library 8		aspetto	F1	T15	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userGraphicStyleLibraryN
+interfaccia	window.userGraphicStyleLibrary9	User Graphic Style Library 9		aspetto	F1	T15	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userGraphicStyleLibraryN
+interfaccia	window.userGraphicStyleLibrary10	User Graphic Style Library 10		aspetto	F1	T15	ispettore/design	famiglia	voce numerata: una sola voce che elenca, non window.userGraphicStyleLibraryN
+interfaccia	window.symbolLibrary	Symbol Library		simboli	F3	T22	ispettore/risorse	famiglia	
+interfaccia	window.symbolLibrary.other	Other Library…		simboli	F3	T22	ispettore/risorse	famiglia	
+interfaccia	ui.saveSymbolLibrary	Save Symbols…		simboli	F3	T22	finestra	famiglia	
+interfaccia	window.userSymbolLibrary1	User Symbol Library 1		simboli	F3	T22	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userSymbolLibraryN
+interfaccia	window.userSymbolLibrary2	User Symbol Library 2		simboli	F3	T22	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userSymbolLibraryN
+interfaccia	window.userSymbolLibrary3	User Symbol Library 3		simboli	F3	T22	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userSymbolLibraryN
+interfaccia	window.userSymbolLibrary4	User Symbol Library 4		simboli	F3	T22	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userSymbolLibraryN
+interfaccia	window.userSymbolLibrary5	User Symbol Library 5		simboli	F3	T22	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userSymbolLibraryN
+interfaccia	window.userSymbolLibrary6	User Symbol Library 6		simboli	F3	T22	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userSymbolLibraryN
+interfaccia	window.userSymbolLibrary7	User Symbol Library 7		simboli	F3	T22	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userSymbolLibraryN
+interfaccia	window.userSymbolLibrary8	User Symbol Library 8		simboli	F3	T22	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userSymbolLibraryN
+interfaccia	window.userSymbolLibrary9	User Symbol Library 9		simboli	F3	T22	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userSymbolLibraryN
+interfaccia	window.userSymbolLibrary10	User Symbol Library 10		simboli	F3	T22	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userSymbolLibraryN
+interfaccia	window.brushLibrary	Brush Library		pennelli	F2	T17	ispettore/risorse	famiglia	
+interfaccia	window.brushLibrary.other	Other Library…		pennelli	F2	T17	ispettore/risorse	famiglia	
+interfaccia	ui.saveBrushLibrary	Save Brushes…		pennelli	F2	T17	finestra	famiglia	
+interfaccia	window.userBrushLibrary1	User Brush Library 1		pennelli	F2	T17	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userBrushLibraryN
+interfaccia	window.userBrushLibrary2	User Brush Library 2		pennelli	F2	T17	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userBrushLibraryN
+interfaccia	window.userBrushLibrary3	User Brush Library 3		pennelli	F2	T17	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userBrushLibraryN
+interfaccia	window.userBrushLibrary4	User Brush Library 4		pennelli	F2	T17	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userBrushLibraryN
+interfaccia	window.userBrushLibrary5	User Brush Library 5		pennelli	F2	T17	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userBrushLibraryN
+interfaccia	window.userBrushLibrary6	User Brush Library 6		pennelli	F2	T17	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userBrushLibraryN
+interfaccia	window.userBrushLibrary7	User Brush Library 7		pennelli	F2	T17	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userBrushLibraryN
+interfaccia	window.userBrushLibrary8	User Brush Library 8		pennelli	F2	T17	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userBrushLibraryN
+interfaccia	window.userBrushLibrary9	User Brush Library 9		pennelli	F2	T17	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userBrushLibraryN
+interfaccia	window.userBrushLibrary10	User Brush Library 10		pennelli	F2	T17	ispettore/risorse	famiglia	voce numerata: una sola voce che elenca, non window.userBrushLibraryN
+interfaccia	ui.expandDialog	Expand…		tracciati	F1	T12	finestra	famiglia	
+interfaccia	attributes.openUrl	Browser		dati	F4	T26	ispettore/design/documento	famiglia	
+interfaccia	ui.javascriptFilesDialog	Link JavaScript Files…		automazione	F4	T26	finestra	sotto:disegno-script	
+interfaccia	ui.spotColors	Spot Colors…		colore	F1	T14	finestra	famiglia	
+interfaccia	ui.menuDialog	Menu Dialog		fub	—	T2	fub	—	la tavolozza e il menu del disegno
+interfaccia	ui.widthPointEdit	Width Point Edit…		pennelli	F2	T17	finestra	famiglia	
+interfaccia	ui.corners	Corners…		forme	F1	T13	finestra	famiglia	
+interfaccia	ui.simplifyAuto	Auto-Simplify		tracciati	F1	T12	finestra	famiglia	
+interfaccia	ui.smoothAuto	Auto-Smooth		tracciati	F1	T12	finestra	famiglia	
+interfaccia	ui.simplifyMoreOptions	More Options		tracciati	F1	T12	finestra	famiglia	
+interfaccia	ui.dialogReset	Reset		fub	—	T2	fub	—	le finestre di Fub non ricordano posizioni
+interfaccia	ui.justification	Justification…		testo	F2	T16	finestra	famiglia	
+interfaccia	ui.hyphenation	Hyphenation…		testo	F2	T16	finestra	famiglia	
+interfaccia	ui.colorGuideLimit	Limit Color Guide to Library		colore	F1	T14	finestra	famiglia	
+interfaccia	ui.colorPanel	Color Panel Options		colore	F1	T14	finestra	famiglia	
+interfaccia	ui.savePdfDialog	Save PDF Dialog		formati	F3	T23	finestra	sotto:disegno-formati	
+interfaccia	file.exportAs	Export As…		formati	F3	T23	menu/file	famiglia	
+interfaccia	ui.fileInfoDialog	File Info Dialog		dati	F4	T26	finestra	famiglia	
+interfaccia	ui.rasterEffectsSettingsDialog	Document Raster Effects Settings Dialog		raster	F3	T24	finestra	famiglia	
+interfaccia	ui.effectGalleryDialog	Effect Gallery Dialog		raster	F3	T24	finestra	famiglia	
+interfaccia	ui.pdfPresetsDialog	PDF Presets…		formati	F3	T23	finestra	sotto:disegno-formati	
+interfaccia	ui.pdfPresetDialog	PDF Preset		formati	F3	T23	finestra	sotto:disegno-formati	
+interfaccia	file.openRecent11	Open Recent File 11		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent12	Open Recent File 12		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent13	Open Recent File 13		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent14	Open Recent File 14		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent15	Open Recent File 15		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent16	Open Recent File 16		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent17	Open Recent File 17		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent18	Open Recent File 18		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent19	Open Recent File 19		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent20	Open Recent File 20		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent21	Open Recent File 21		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent22	Open Recent File 22		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent23	Open Recent File 23		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent24	Open Recent File 24		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent25	Open Recent File 25		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent26	Open Recent File 26		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent27	Open Recent File 27		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent28	Open Recent File 28		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent29	Open Recent File 29		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.openRecent30	Open Recent File 30		fub	—	T2	fub	—	recenti di Fub; voce numerata: una sola voce che elenca, non file.openRecentN
+interfaccia	file.reveal	Show in Folder		fub	—	T2	fub	—	Mostra nella cartella di Fub
+interfaccia	file.cancelExport	Cancel Export		formati	F3	T23	menu/file	famiglia	
+interfaccia	file.exportInBackground	Continue in Background		formati	F3	T23	menu/file	famiglia	
+interfaccia	ui.dxfOptionsDialog	DXF Options Dialog		formati	F3	T23	finestra	sotto:disegno-formati	
+interfaccia	links.editOriginal	Edit Original		immagini	F3	T20	ispettore/design	famiglia	
+interfaccia	links.reveal	Show in Folder		immagini	F3	T20	ispettore/design	famiglia	
+interfaccia	ui.placementOptionsDialog	Placement Options…		immagini	F3	T20	finestra	famiglia	
+interfaccia	ui.findLinksInFolder	Find Linked Files in Folder…		immagini	F3	T20	finestra	famiglia	
+interfaccia	ui.packageDialog	Package…		formati	F3	T23	finestra	famiglia	
+interfaccia	ui.batchDialog	Batch…		automazione	F4	T26	finestra	famiglia	
+interfaccia	ui.actionSet.delete	Delete Action Sets		automazione	F4	T26	finestra	famiglia	
+interfaccia	ui.actionSet.duplicate	Duplicate Action or Action Set		automazione	F4	T26	finestra	famiglia	
+interfaccia	file.showPackage	Show Package		formati	F3	T23	menu/file	famiglia	
+interfaccia	docInfo.save	Save Document Info…		dati	F4	T26	ispettore/design/documento	famiglia	
+interfaccia	ui.epsOptionsDialog	EPS Options Dialog		formati	F3	T23	finestra	sotto:disegno-formati	
+interfaccia	file.saveForWeb	Save for Web (Legacy)…		formati	F3	T23	menu/file	famiglia	
+interfaccia	file.saveForWeb.browser	Preview in Browser		formati	F3	T23	menu/file	famiglia	
+interfaccia	file.exportSelection	Export Selection…		formati	F3	T23	menu/file	famiglia	
+interfaccia	css.copy	Copy Selected Style		web	F3	T22	ispettore/design/documento	famiglia	
+interfaccia	css.exportFile	Export CSS…		web	F3	T22	ispettore/design/documento	famiglia	
+interfaccia	file.print	Print…		formati	F3	T23	menu/file	sotto:disegno-formati	
+interfaccia	print.printers	Printers		stampa	F4	T25	menu/file	famiglia	
+interfaccia	print.printerSetup	Printer Setup…		stampa	F4	T25	menu/file	famiglia	
+interfaccia	ui.printPresetsDialog	Print Presets…		stampa	F4	T25	finestra	sotto:disegno-formati	
+interfaccia	ui.printPresetDialog	Print Preset		stampa	F4	T25	finestra	sotto:disegno-formati	
+interfaccia	plugin.dialog	Plug-in…		automazione	F4	T26	menu/file	sotto:disegno-plugin	
+interfaccia	ui.installPlugin	Install Plug-in…		automazione	F4	T26	finestra	sotto:disegno-plugin	
+interfaccia	plugin.cancelRuns	Cancel Plug-in Run		automazione	F4	T26	menu/file	sotto:disegno-plugin	
+interfaccia	plugin.hideRuns	Continue in Background		automazione	F4	T26	menu/file	sotto:disegno-plugin	
+interfaccia	imageTrace.cancelRuns	Cancel Image Trace		immagini	F3	T20	ispettore/design	famiglia	
+interfaccia	imageTrace.hideRuns	Continue in Background		immagini	F3	T20	ispettore/design	famiglia	
+interfaccia	ui.checkScript	Check Script…		automazione	F4	T26	finestra	sotto:disegno-script	
+interfaccia	ui.perspectiveGridDialog	Define Perspective Grid…		prospettiva	F4	T25	finestra	famiglia	
+interfaccia	ui.perspectivePresetsDialog	Perspective Grid Presets…		prospettiva	F4	T25	finestra	famiglia	
+interfaccia	ui.savePerspectivePreset	Save Grid as Preset…		prospettiva	F4	T25	finestra	famiglia	
+interfaccia	ui.perspectiveUserPreset1.1	One Point Perspective Preset 1		prospettiva	F4	T25	finestra	famiglia	voce numerata: una sola voce che elenca, non ui.perspectiveUserPresetN
+interfaccia	ui.perspectiveUserPreset1.2	One Point Perspective Preset 2		prospettiva	F4	T25	finestra	famiglia	voce numerata: una sola voce che elenca, non ui.perspectiveUserPresetN
+interfaccia	ui.perspectiveUserPreset1.3	One Point Perspective Preset 3		prospettiva	F4	T25	finestra	famiglia	voce numerata: una sola voce che elenca, non ui.perspectiveUserPresetN
+interfaccia	ui.perspectiveUserPreset1.4	One Point Perspective Preset 4		prospettiva	F4	T25	finestra	famiglia	voce numerata: una sola voce che elenca, non ui.perspectiveUserPresetN
+interfaccia	ui.perspectiveUserPreset1.5	One Point Perspective Preset 5		prospettiva	F4	T25	finestra	famiglia	voce numerata: una sola voce che elenca, non ui.perspectiveUserPresetN
+interfaccia	ui.perspectiveUserPreset2.1	Two Point Perspective Preset 1		prospettiva	F4	T25	finestra	famiglia	voce numerata: una sola voce che elenca, non ui.perspectiveUserPresetN
+interfaccia	ui.perspectiveUserPreset2.2	Two Point Perspective Preset 2		prospettiva	F4	T25	finestra	famiglia	voce numerata: una sola voce che elenca, non ui.perspectiveUserPresetN
+interfaccia	ui.perspectiveUserPreset2.3	Two Point Perspective Preset 3		prospettiva	F4	T25	finestra	famiglia	voce numerata: una sola voce che elenca, non ui.perspectiveUserPresetN
+interfaccia	ui.perspectiveUserPreset2.4	Two Point Perspective Preset 4		prospettiva	F4	T25	finestra	famiglia	voce numerata: una sola voce che elenca, non ui.perspectiveUserPresetN
+interfaccia	ui.perspectiveUserPreset2.5	Two Point Perspective Preset 5		prospettiva	F4	T25	finestra	famiglia	voce numerata: una sola voce che elenca, non ui.perspectiveUserPresetN
+interfaccia	ui.perspectiveUserPreset3.1	Three Point Perspective Preset 1		prospettiva	F4	T25	finestra	famiglia	voce numerata: una sola voce che elenca, non ui.perspectiveUserPresetN
+interfaccia	ui.perspectiveUserPreset3.2	Three Point Perspective Preset 2		prospettiva	F4	T25	finestra	famiglia	voce numerata: una sola voce che elenca, non ui.perspectiveUserPresetN
+interfaccia	ui.perspectiveUserPreset3.3	Three Point Perspective Preset 3		prospettiva	F4	T25	finestra	famiglia	voce numerata: una sola voce che elenca, non ui.perspectiveUserPresetN
+interfaccia	ui.perspectiveUserPreset3.4	Three Point Perspective Preset 4		prospettiva	F4	T25	finestra	famiglia	voce numerata: una sola voce che elenca, non ui.perspectiveUserPresetN
+interfaccia	ui.perspectiveUserPreset3.5	Three Point Perspective Preset 5		prospettiva	F4	T25	finestra	famiglia	voce numerata: una sola voce che elenca, non ui.perspectiveUserPresetN
+interfaccia	ui.blendOptions	Blend Options…		dinamici	F2	T21	finestra	famiglia	
+interfaccia	ui.livePaintGapOptions	Gap Options…		trame	F2	T21	finestra	famiglia	
+interfaccia	ui.perspectivePlane	Perspective Plane Options…		prospettiva	F4	T25	finestra	famiglia	
+strumento	selection	Selection Tool		nucleo	F1	T11	colonna/scegli	nucleo	riquadro «selection»
+strumento	directSelection	Direct Selection Tool		nucleo	F1	T11	colonna/scegli	nucleo	riquadro «directSelection»
+strumento	groupSelection	Group Selection Tool		nucleo	F1	T11	colonna/scegli	nucleo	riquadro «directSelection»
+strumento	magicWand	Magic Wand Tool		livelli	F1	T15	colonna/scegli	famiglia	riquadro «magicWand»
+strumento	lasso	Lasso Tool		nucleo	F1	T11	colonna/scegli	nucleo	riquadro «lasso»
+strumento	pen	Pen Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «pen»
+strumento	addAnchor	Add Anchor Point Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «pen»
+strumento	deleteAnchor	Delete Anchor Point Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «pen»
+strumento	anchorPoint	Anchor Point Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «pen»
+strumento	curvature	Curvature Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «curvature»
+strumento	type	Type Tool		testo	F2	T16	colonna/testo	famiglia	riquadro «type»
+strumento	areaType	Area Type Tool		testo	F2	T16	colonna/testo	famiglia	riquadro «type»
+strumento	typeOnPath	Type on a Path Tool		testo	F2	T16	colonna/testo	famiglia	riquadro «type»
+strumento	verticalType	Vertical Type Tool		testo	F2	T16	colonna/testo	famiglia	riquadro «type»
+strumento	verticalAreaType	Vertical Area Type Tool		testo	F2	T16	colonna/testo	famiglia	riquadro «type»
+strumento	verticalTypeOnPath	Vertical Type on a Path Tool		testo	F2	T16	colonna/testo	famiglia	riquadro «type»
+strumento	touchType	Touch Type Tool		testo	F2	T16	colonna/testo	famiglia	riquadro «type»
+strumento	lineSegment	Line Segment Tool		forme	F1	T13	colonna/forme	famiglia	riquadro «lineSegment»
+strumento	arc	Arc Tool		forme	F1	T13	colonna/forme	famiglia	riquadro «lineSegment»
+strumento	spiral	Spiral Tool		forme	F1	T13	colonna/forme	famiglia	riquadro «lineSegment»
+strumento	rectangularGrid	Rectangular Grid Tool		forme	F1	T13	colonna/forme	famiglia	riquadro «lineSegment»
+strumento	polarGrid	Polar Grid Tool		forme	F1	T13	colonna/forme	famiglia	riquadro «lineSegment»
+strumento	rectangle	Rectangle Tool		forme	F1	T13	colonna/forme	famiglia	riquadro «rectangle»
+strumento	roundedRectangle	Rounded Rectangle Tool		forme	F1	T13	colonna/forme	famiglia	riquadro «rectangle»
+strumento	ellipse	Ellipse Tool		forme	F1	T13	colonna/forme	famiglia	riquadro «rectangle»
+strumento	polygon	Polygon Tool		forme	F1	T13	colonna/forme	famiglia	riquadro «rectangle»
+strumento	star	Star Tool		forme	F1	T13	colonna/forme	famiglia	riquadro «rectangle»
+strumento	flare	Flare Tool		forme	F1	T13	colonna/forme	famiglia	riquadro «rectangle»
+strumento	paintbrush	Paintbrush Tool		pennelli	F2	T17	colonna/disegna	famiglia	riquadro «paintbrush»
+strumento	blobBrush	Blob Brush Tool		pennelli	F2	T17	colonna/disegna	famiglia	riquadro «paintbrush»
+strumento	shaper	Shaper Tool		forme	F1	T13	colonna/forme	famiglia	riquadro «shaper»
+strumento	pencil	Pencil Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «shaper»
+strumento	smooth	Smooth Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «shaper»
+strumento	pathEraser	Path Eraser Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «shaper»
+strumento	join	Join Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «shaper»
+strumento	eraser	Eraser Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «eraser»
+strumento	scissors	Scissors Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «eraser»
+strumento	knife	Knife		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «eraser»
+strumento	mirrorCut	Mirror & Cut Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «eraser»
+strumento	lineCut	Line Cut Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «eraser»
+strumento	rectCut	Rectangle Cut Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «eraser»
+strumento	rotate	Rotate Tool		trasforma	F1	T13	colonna/trasforma	famiglia	riquadro «rotate»
+strumento	reflect	Reflect Tool		trasforma	F1	T13	colonna/trasforma	famiglia	riquadro «rotate»
+strumento	scale	Scale Tool		trasforma	F1	T13	colonna/trasforma	famiglia	riquadro «scale»
+strumento	shear	Shear Tool		trasforma	F1	T13	colonna/trasforma	famiglia	riquadro «scale»
+strumento	reshape	Reshape Tool		trasforma	F1	T13	colonna/trasforma	famiglia	riquadro «scale»
+strumento	width	Width Tool		pennelli	F2	T17	colonna/disegna	famiglia	riquadro «width»
+strumento	warp	Warp Tool		pennelli	F2	T17	colonna/disegna	famiglia	riquadro «width»
+strumento	twirl	Twirl Tool		pennelli	F2	T17	colonna/disegna	famiglia	riquadro «width»
+strumento	pucker	Pucker Tool		pennelli	F2	T17	colonna/disegna	famiglia	riquadro «width»
+strumento	bloat	Bloat Tool		pennelli	F2	T17	colonna/disegna	famiglia	riquadro «width»
+strumento	scallop	Scallop Tool		pennelli	F2	T17	colonna/disegna	famiglia	riquadro «width»
+strumento	crystallize	Crystallize Tool		pennelli	F2	T17	colonna/disegna	famiglia	riquadro «width»
+strumento	wrinkle	Wrinkle Tool		pennelli	F2	T17	colonna/disegna	famiglia	riquadro «width»
+strumento	freeTransform	Free Transform Tool		trasforma	F1	T13	colonna/trasforma	famiglia	riquadro «freeTransform»
+strumento	puppetWarp	Puppet Warp Tool		trasforma	F1	T13	colonna/trasforma	famiglia	riquadro «freeTransform»
+strumento	shapeBuilder	Shape Builder Tool		forme	F1	T13	colonna/forme	famiglia	riquadro «shapeBuilder»
+strumento	livePaintBucket	Live Paint Bucket		trame	F2	T21	colonna/colore	famiglia	riquadro «shapeBuilder»
+strumento	livePaintSelection	Live Paint Selection Tool		trame	F2	T21	colonna/colore	famiglia	riquadro «shapeBuilder»
+strumento	perspectiveGrid	Perspective Grid Tool		prospettiva	F4	T25	colonna/prospettiva	famiglia	riquadro «perspectiveGrid»
+strumento	perspectiveSelection	Perspective Selection Tool		prospettiva	F4	T25	colonna/prospettiva	famiglia	riquadro «perspectiveGrid»
+strumento	mesh	Mesh Tool		trame	F2	T21	colonna/colore	famiglia	riquadro «mesh»
+strumento	gradient	Gradient Tool		colore	F1	T14	colonna/colore	famiglia	riquadro «gradient»
+strumento	eyedropper	Eyedropper Tool		colore	F1	T14	colonna/colore	famiglia	riquadro «eyedropper»
+strumento	measure	Measure Tool		tavole	F2	T19	colonna/misura	famiglia	riquadro «eyedropper»
+strumento	blend	Blend Tool		dinamici	F2	T21	colonna/oggetti	famiglia	riquadro «blend»
+strumento	objectsOnPath	Objects on Path Tool		dinamici	F2	T21	colonna/oggetti	famiglia	riquadro «blend»
+strumento	dimension	Dimension Tool		tavole	F2	T19	colonna/misura	famiglia	riquadro «dimension»
+strumento	symbolSprayer	Symbol Sprayer Tool		simboli	F3	T22	colonna/oggetti	famiglia	riquadro «symbolSprayer»
+strumento	symbolShifter	Symbol Shifter Tool		simboli	F3	T22	colonna/oggetti	famiglia	riquadro «symbolSprayer»
+strumento	symbolScruncher	Symbol Scruncher Tool		simboli	F3	T22	colonna/oggetti	famiglia	riquadro «symbolSprayer»
+strumento	symbolSizer	Symbol Sizer Tool		simboli	F3	T22	colonna/oggetti	famiglia	riquadro «symbolSprayer»
+strumento	symbolSpinner	Symbol Spinner Tool		simboli	F3	T22	colonna/oggetti	famiglia	riquadro «symbolSprayer»
+strumento	symbolStainer	Symbol Stainer Tool		simboli	F3	T22	colonna/oggetti	famiglia	riquadro «symbolSprayer»
+strumento	symbolScreener	Symbol Screener Tool		simboli	F3	T22	colonna/oggetti	famiglia	riquadro «symbolSprayer»
+strumento	symbolStyler	Symbol Styler Tool		simboli	F3	T22	colonna/oggetti	famiglia	riquadro «symbolSprayer»
+strumento	columnGraph	Column Graph Tool		grafici	F4	T25	colonna/oggetti	famiglia	riquadro «columnGraph»
+strumento	stackedColumnGraph	Stacked Column Graph Tool		grafici	F4	T25	colonna/oggetti	famiglia	riquadro «columnGraph»
+strumento	barGraph	Bar Graph Tool		grafici	F4	T25	colonna/oggetti	famiglia	riquadro «columnGraph»
+strumento	stackedBarGraph	Stacked Bar Graph Tool		grafici	F4	T25	colonna/oggetti	famiglia	riquadro «columnGraph»
+strumento	lineGraph	Line Graph Tool		grafici	F4	T25	colonna/oggetti	famiglia	riquadro «columnGraph»
+strumento	areaGraph	Area Graph Tool		grafici	F4	T25	colonna/oggetti	famiglia	riquadro «columnGraph»
+strumento	scatterGraph	Scatter Graph Tool		grafici	F4	T25	colonna/oggetti	famiglia	riquadro «columnGraph»
+strumento	pieGraph	Pie Graph Tool		grafici	F4	T25	colonna/oggetti	famiglia	riquadro «columnGraph»
+strumento	radarGraph	Radar Graph Tool		grafici	F4	T25	colonna/oggetti	famiglia	riquadro «columnGraph»
+strumento	artboard	Artboard Tool		tavole	F2	T19	colonna/misura	famiglia	riquadro «artboard»
+strumento	slice	Slice Tool		web	F3	T22	colonna/misura	famiglia	riquadro «artboard»
+strumento	sliceSelection	Slice Selection Tool		web	F3	T22	colonna/misura	famiglia	riquadro «artboard»
+strumento	hand	Hand Tool		nucleo	F1	T11	colonna/vista	nucleo	riquadro «hand»
+strumento	rotateView	Rotate View Tool		nucleo	F1	T11	colonna/vista	nucleo	riquadro «hand»
+strumento	printTiling	Print Tiling Tool		stampa	F4	T25	colonna/misura	sotto:disegno-formati	riquadro «hand»
+strumento	zoom	Zoom Tool		nucleo	F1	T11	colonna/vista	nucleo	riquadro «zoom»
+strumento	anchor_eraser	Anchor Eraser Brush		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «anchor_eraser» (aggiunta di VectorCraft)
+strumento	extend_path	Extend Path Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «extend_path» (aggiunta di VectorCraft)
+strumento	measure_inspect	Measure & Inspect Tool		tavole	F2	T19	colonna/misura	famiglia	riquadro «measure_inspect» (aggiunta di VectorCraft)
+strumento	parametric_shape	Parametric Shape Tool		forme	F1	T13	colonna/forme	famiglia	riquadro «parametric_shape» (aggiunta di VectorCraft)
+strumento	corner_tool	Corner Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «corner_tool» (aggiunta di VectorCraft)
+strumento	slide_anchor	Slide Anchor Along Path		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «slide_anchor» (aggiunta di VectorCraft)
+strumento	shared_edge	Shared Edge Merge Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «shared_edge» (aggiunta di VectorCraft)
+strumento	smart_pen	Smart Pen Tool		tracciati	F1	T12	colonna/disegna	famiglia	riquadro «smart_pen» (aggiunta di VectorCraft)
+effetto	threeD.revolve	Revolve…	Effect › 3D and Materials	tre-d	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	threeD.extrude	Extrude & Bevel…	Effect › 3D and Materials	tre-d	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	threeD.inflate	Inflate…	Effect › 3D and Materials	tre-d	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	threeD.rotate	Rotate…	Effect › 3D and Materials	tre-d	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	convertToShape.rectangle	Rectangle…	Effect › Convert to Shape	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	convertToShape.roundedRectangle	Rounded Rectangle…	Effect › Convert to Shape	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	convertToShape.ellipse	Ellipse…	Effect › Convert to Shape	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	distort.freeDistort	Free Distort…	Effect › Distort & Transform	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	distort.puckerBloat	Pucker & Bloat…	Effect › Distort & Transform	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	distort.roughen	Roughen…	Effect › Distort & Transform	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	distort.transform	Transform…	Effect › Distort & Transform	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	distort.tweak	Tweak…	Effect › Distort & Transform	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	distort.twist	Twist…	Effect › Distort & Transform	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	distort.zigZag	Zig Zag…	Effect › Distort & Transform	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	path.offsetPath	Offset Path…	Effect › Path	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	path.outlineObject	Outline Object	Effect › Path	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	path.outlineStroke	Outline Stroke	Effect › Path	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	stylize.roundCorners	Round Corners…	Effect › Stylize	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	stylize.scribble	Scribble…	Effect › Stylize	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	stylize.dropShadow	Drop Shadow…	Effect › Stylize	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	stylize.innerGlow	Inner Glow…	Effect › Stylize	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	stylize.outerGlow	Outer Glow…	Effect › Stylize	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	stylize.feather	Feather…	Effect › Stylize	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	blur.gaussian	Gaussian Blur…	Effect › Blur	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	artistic.coloredPencil	Colored Pencil…	Effect › Artistic	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	artistic.cutout	Cutout…	Effect › Artistic	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	artistic.dryBrush	Dry Brush…	Effect › Artistic	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	artistic.filmGrain	Film Grain…	Effect › Artistic	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	artistic.fresco	Fresco…	Effect › Artistic	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	artistic.neonGlow	Neon Glow…	Effect › Artistic	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	artistic.paintDaubs	Paint Daubs…	Effect › Artistic	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	artistic.paletteKnife	Palette Knife…	Effect › Artistic	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	artistic.plasticWrap	Plastic Wrap…	Effect › Artistic	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	artistic.posterEdges	Poster Edges…	Effect › Artistic	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	artistic.roughPastels	Rough Pastels…	Effect › Artistic	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	artistic.smudgeStick	Smudge Stick…	Effect › Artistic	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	artistic.sponge	Sponge…	Effect › Artistic	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	artistic.underpainting	Underpainting…	Effect › Artistic	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	artistic.watercolor	Watercolor…	Effect › Artistic	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	blur.radial	Radial Blur…	Effect › Blur	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	blur.smart	Smart Blur…	Effect › Blur	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	brushStrokes.accentedEdges	Accented Edges…	Effect › Brush Strokes	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	brushStrokes.angledStrokes	Angled Strokes…	Effect › Brush Strokes	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	brushStrokes.crosshatch	Crosshatch…	Effect › Brush Strokes	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	brushStrokes.darkStrokes	Dark Strokes…	Effect › Brush Strokes	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	brushStrokes.inkOutlines	Ink Outlines…	Effect › Brush Strokes	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	brushStrokes.spatter	Spatter…	Effect › Brush Strokes	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	brushStrokes.sprayedStrokes	Sprayed Strokes…	Effect › Brush Strokes	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	brushStrokes.sumiE	Sumi-e…	Effect › Brush Strokes	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	distort.diffuseGlow	Diffuse Glow…	Effect › Distort	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	distort.glass	Glass…	Effect › Distort	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	distort.oceanRipple	Ocean Ripple…	Effect › Distort	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	sharpen.unsharpMask	Unsharp Mask…	Effect › Sharpen	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	sketch.basRelief	Bas Relief…	Effect › Sketch	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	sketch.chalkCharcoal	Chalk & Charcoal…	Effect › Sketch	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	sketch.charcoal	Charcoal…	Effect › Sketch	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	sketch.chrome	Chrome…	Effect › Sketch	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	sketch.conteCrayon	Conté Crayon…	Effect › Sketch	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	sketch.graphicPen	Graphic Pen…	Effect › Sketch	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	sketch.halftonePattern	Halftone Pattern…	Effect › Sketch	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	sketch.notePaper	Note Paper…	Effect › Sketch	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	sketch.photocopy	Photocopy…	Effect › Sketch	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	sketch.plaster	Plaster…	Effect › Sketch	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	sketch.reticulation	Reticulation…	Effect › Sketch	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	sketch.stamp	Stamp…	Effect › Sketch	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	sketch.tornEdges	Torn Edges…	Effect › Sketch	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	sketch.waterPaper	Water Paper…	Effect › Sketch	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	stylize.glowingEdges	Glowing Edges…	Effect › Stylize	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	pixelate.colorHalftone	Color Halftone…	Effect › Pixelate	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	pixelate.crystallize	Crystallize…	Effect › Pixelate	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	pixelate.mezzotint	Mezzotint…	Effect › Pixelate	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	pixelate.pointillize	Pointillize…	Effect › Pixelate	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	texture.craquelure	Craquelure…	Effect › Texture	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	texture.grain	Grain…	Effect › Texture	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	texture.mosaicTiles	Mosaic Tiles…	Effect › Texture	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	texture.patchwork	Patchwork…	Effect › Texture	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	texture.stainedGlass	Stained Glass…	Effect › Texture	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	texture.texturizer	Texturizer…	Effect › Texture	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	video.deinterlace	De-Interlace…	Effect › Video	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	video.ntscColors	NTSC Colors	Effect › Video	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	adjust.brightnessContrast	Brightness/Contrast…	Effect › Color Adjustments	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	adjust.curves	Curves…	Effect › Color Adjustments	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	adjust.hueSaturation	Hue/Saturation…	Effect › Color Adjustments	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	adjust.levels	Levels…	Effect › Color Adjustments	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	adjust.shiftToColor	Shift to Color…	Effect › Color Adjustments	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	adjust.temperatureTint	Temperature/Tint…	Effect › Color Adjustments	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	pathfinder.trap	Trap…	Effect › Pathfinder	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	cropMarks	Crop Marks	Effect	stampa	F4	T25	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	rasterize	Rasterize…	Effect	raster	F3	T24	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	addon.color.desaturate	Desaturate	Effect › Color Effects	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	addon.color.duotone	Duotone…	Effect › Color Effects	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	addon.color.exposure	Exposure…	Effect › Color Effects	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	addon.color.invert	Invert Colors	Effect › Color Effects	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	addon.path.dashes	Dashes to Geometry…	Effect › Path Effects	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	addon.path.addAnchors	Add Anchors…	Effect › Path Effects	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	addon.path.extend	Extend Path…	Effect › Path Effects	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	addon.path.close	Close Path…	Effect › Path Effects	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	addon.path.smooth	Smooth Anchors…	Effect › Path Effects	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	addon.path.retract	Retract Handles…	Effect › Path Effects	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	addon.path.reverse	Reverse Direction	Effect › Path Effects	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	addon.path.simplify	Simplify Anchors…	Effect › Path Effects	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	addon.path.split	Split at Anchors…	Effect › Path Effects	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	addon.color.halftone	Vector Halftone…	Effect › Color Effects	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	warp.arc	Arc…	Effect › Warp	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	warp.arcLower	Arc Lower…	Effect › Warp	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	warp.arcUpper	Arc Upper…	Effect › Warp	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	warp.arch	Arch…	Effect › Warp	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	warp.bulge	Bulge…	Effect › Warp	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	warp.shellLower	Shell Lower…	Effect › Warp	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	warp.shellUpper	Shell Upper…	Effect › Warp	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	warp.flag	Flag…	Effect › Warp	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	warp.wave	Wave…	Effect › Warp	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	warp.fish	Fish…	Effect › Warp	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	warp.rise	Rise…	Effect › Warp	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	warp.fisheye	Fisheye…	Effect › Warp	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	warp.inflate	Inflate…	Effect › Warp	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	warp.squeeze	Squeeze…	Effect › Warp	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	warp.twist	Twist…	Effect › Warp	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	pathfinder.add	Add	Effect › Pathfinder	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	pathfinder.intersect	Intersect	Effect › Pathfinder	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	pathfinder.exclude	Exclude	Effect › Pathfinder	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	pathfinder.subtract	Subtract	Effect › Pathfinder	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	pathfinder.minusBack	Minus Back	Effect › Pathfinder	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	pathfinder.divide	Divide	Effect › Pathfinder	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	pathfinder.trim	Trim	Effect › Pathfinder	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	pathfinder.merge	Merge	Effect › Pathfinder	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	pathfinder.crop	Crop	Effect › Pathfinder	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	pathfinder.outline	Outline	Effect › Pathfinder	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	pathfinder.hardMix	Hard Mix	Effect › Pathfinder	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+effetto	pathfinder.softMix	Soft Mix	Effect › Pathfinder	effetti	F2	T18	menu/effetto	famiglia	anche in Design › Aspetto › «Aggiungi effetto»
+pannello	actions	Actions	Window	automazione	F4	T26	ispettore/cronologia	famiglia	
+pannello	align	Align	Window	trasforma	F1	T13	ispettore/design	famiglia	
+pannello	appearance	Appearance	Window	aspetto	F1	T15	ispettore/design	famiglia	
+pannello	artboards	Artboards	Window	tavole	F2	T19	ispettore/design/documento	famiglia	
+pannello	asset_export	Asset Export	Window	web	F3	T22	ispettore/design/documento	famiglia	
+pannello	attributes	Attributes	Window	dati	F4	T26	ispettore/design	famiglia	
+pannello	blend	Blend	Window	dinamici	F2	T21	finestra	famiglia	
+pannello	brushes	Brushes	Window	pennelli	F2	T17	ispettore/risorse	famiglia	
+pannello	character	Character	Window	testo	F2	T16	ispettore/design	famiglia	
+pannello	color	Color	Window	colore	F1	T14	ispettore/design	famiglia	
+pannello	color_guide	Color Guide	Window	colore	F1	T14	ispettore/design	famiglia	
+pannello	color_themes	Color Themes	Window	colore	F1	T14	ispettore/risorse	famiglia	
+pannello	css_properties	Css Properties	Window	web	F3	T22	ispettore/design/documento	famiglia	
+pannello	doc_info	Doc Info	Window	dati	F4	T26	ispettore/design/documento	famiglia	
+pannello	flattener_preview	Flattener Preview	Window	stampa	F4	T25	ispettore/design/documento	famiglia	
+pannello	glyphs	Glyphs	Window	testo	F2	T16	ispettore/risorse	famiglia	
+pannello	gradient	Gradient	Window	aspetto	F1	T15	ispettore/design	famiglia	
+pannello	graphic_styles	Graphic Styles	Window	aspetto	F1	T15	ispettore/risorse	famiglia	
+pannello	history	History	Window	nucleo	F1	T11	ispettore/cronologia	nucleo	
+pannello	image_trace	Image Trace	Window	immagini	F3	T20	ispettore/design	famiglia	
+pannello	info	Info	Window	vista	F1	T11	banda	famiglia	
+pannello	layers	Layers	Window	livelli	F1	T15	ispettore/livelli	famiglia	
+pannello	libraries	Libraries	Window	simboli	F3	T22	ispettore/risorse	famiglia	
+pannello	library_panel	Library Panel	Window	simboli	F3	T22	ispettore/risorse	famiglia	
+pannello	links	Links	Window	immagini	F3	T20	ispettore/risorse	famiglia	
+pannello	magic_wand	Magic Wand	Window	livelli	F1	T15	testata	famiglia	
+pannello	memo	Memo	Window	dati	F4	T26	ispettore/design/documento	famiglia	
+pannello	navigator	Navigator	Window	vista	F1	T11	banda	famiglia	
+pannello	opentype	Opentype	Window	testo	F2	T16	ispettore/design	famiglia	
+pannello	paragraph	Paragraph	Window	testo	F2	T16	ispettore/design	famiglia	
+pannello	pathfinder	Pathfinder	Window	forme	F1	T13	ispettore/design	famiglia	
+pannello	pattern_options	Pattern Options	Window	trame	F2	T21	ispettore/design	famiglia	
+pannello	properties	Properties	Window	nucleo	F1	T11	ispettore/design	nucleo	
+pannello	separations	Separations	Window	stampa	F4	T25	ispettore/design/documento	famiglia	
+pannello	stroke	Stroke	Window	aspetto	F1	T15	ispettore/design	famiglia	
+pannello	svg_interactivity	Svg Interactivity	Window	web	F3	T22	ispettore/design/documento	famiglia	
+pannello	swatches	Swatches	Window	colore	F1	T14	ispettore/risorse	famiglia	
+pannello	symbols	Symbols	Window	simboli	F3	T22	ispettore/risorse	famiglia	
+pannello	tabs	Tabs	Window	fub	—	T2	fub	—	le schede del documento sono le schede di Fub
+pannello	text_styles	Text Styles	Window	testo	F2	T16	ispettore/risorse	famiglia	
+pannello	transform	Transform	Window	trasforma	F1	T13	ispettore/design	famiglia	
+pannello	transparency	Transparency	Window	aspetto	F1	T15	ispettore/design	famiglia	
+pannello	variables	Variables	Window	dati	F4	T26	ispettore/design/documento	famiglia	
