@@ -66,7 +66,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [Frontend e IPC](architecture/frontend-and-ipc.md)
 - [Superfici dell'editor](architecture/editor-surfaces.md), la
   [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md)
-  e la [superficie dei fogli](architecture/grid-surface.md)
+  e la [superficie dei fogli](architecture/grid-surface.md), con gli
+  [editor dei componenti](architecture/component-editors.md)
 - [Inchiostro e strumenti](architecture/ink-and-tools.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md)
 

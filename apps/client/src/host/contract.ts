@@ -21,6 +21,7 @@ import type {
   Align,
   Axis,
   CommandReach,
+  ComponentKind,
   CommandSurface,
   ContextKind,
   DocChange,
@@ -442,6 +443,10 @@ export type ViewUpdate =
 
 // Evento del kernel (rispecchia fub_abi::event::Event).
 export type KernelEvent =
+  // Esce anche dopo un **rimontaggio** (spegnere o riaccendere la lavagna dalla
+  // pagina «Componenti», dalla CLI o da MCP): dopo il `vault_closed` dello
+  // stesso `root`, il vault è di nuovo aperto, con i formati di adesso, e la
+  // shell rilegge ciò che ne dipende (`components_map` compresa).
   | { type: "vault_opened"; root: string }
   // `changes` dice COSA è cambiato (§22.2, decisione 0069). Assente/null =
   // NON LO SO — l'evento non viene dalla coda di una scrittura del kernel — e
@@ -2318,6 +2323,141 @@ export interface InstalledPluginInfo extends BundleInfo {
   revoked: boolean;
   revocation?: CatalogProvenance;
 }
+
+// --- la pagina «Componenti» (A7) -------------------------------------------
+//
+// Rispecchiano `fub_app_lib::{ComponentsMap, ComponentRow, ComponentProfile,
+// ComponentsApplied}` e i tipi di `fub_host::componenti` che ci stanno dentro.
+// I nomi Rust sono italiani (`Azione`, `Rifiuto`, `Esito`…); qui portano il
+// prefisso `Component` perché nel contratto TS stanno accanto a tutto il resto.
+
+export type { ComponentKind } from "./enums.generated";
+
+// Che cosa fare di ciò che dopo uno spegnimento non serve più a nessuno.
+// `chiedi` = nessuna risposta: restano accesi, in attesa.
+export type ComponentOrphans = "chiedi" | "togli" | "tieni";
+
+// Una scelta di chi usa l'app. I campi con un default in Rust possono mancare.
+export type ComponentAction =
+  | { azione: "accendi"; id: string }
+  | { azione: "spegni"; id: string; anche_questi?: boolean; orfani?: ComponentOrphans }
+  | { azione: "rispondi"; orfani: ComponentOrphans; ids?: string[] }
+  | { azione: "profilo"; nome: string };
+
+// Perché un componente è acceso, o che non lo è: la forma di default di serde
+// (`fub_componenti::Perche`), una stringa o `{ RichiestoDa: [...] }`.
+export type ComponentWhy =
+  | "Nucleo"
+  | "Scelto"
+  | { RichiestoDa: string[] }
+  | "InAttesa"
+  | "Spento"
+  | "Sconosciuto";
+
+// Lo stato che il vault ricorda: i componenti scelti e quelli in attesa.
+export interface ComponentState {
+  scelti: string[];
+  in_attesa: string[];
+}
+
+// Un id che una chiave `components.*` nomina e che non conta.
+export interface ComponentMissing {
+  chiave: string;
+  id: string;
+}
+
+// Una riga della pagina: `nome` e `descrizione` sono già nella lingua del vault
+// (l'id e la stringa vuota se il catalogo non li ha: mai una chiave), `gruppo`
+// è l'id di un `ComponentGroup` (`altro` se la riga non ne dice uno), `ui` le
+// cartelle del client che carica (`editors/media`), `richiede` i requisiti
+// diretti già risolti in id, `usa` gli «usa se c'è» che in questa build sono
+// righe.
+export interface ComponentRow {
+  id: string;
+  nome: string;
+  gruppo: string;
+  bundle: boolean;
+  acceso: boolean;
+  perche: ComponentWhy;
+  richiesto_da: string[];
+  descrizione: string;
+  tipo: ComponentKind;
+  ui: string[];
+  richiede: string[];
+  usa: string[];
+}
+
+// Un gruppo della pagina, con il nome nella lingua del vault.
+export interface ComponentGroup {
+  id: string;
+  nome: string;
+}
+
+// Un profilo: `etichetta` è il nome da mostrare, nella lingua del vault;
+// `piu_avanti` se aspetta componenti che non ci sono ancora (`arriva_con`), e
+// allora non si applica.
+export interface ComponentProfile {
+  nome: string;
+  etichetta: string;
+  componenti: string[];
+  arriva_con: string[];
+  piu_avanti: boolean;
+}
+
+// Ciò che `components_map` risponde. `profilo` null = personalizzato.
+// `gruppi` sono quelli che hanno righe, nell'ordine in cui si disegnano.
+export interface ComponentsMap {
+  gruppi: ComponentGroup[];
+  righe: ComponentRow[];
+  stato: ComponentState;
+  profilo: string | null;
+  profili: ComponentProfile[];
+  mancanti: ComponentMissing[];
+}
+
+// Che cosa una scelta cambia oltre al componente nominato. `accesi_anche` è
+// «Attivati anche …: … non funziona senza»; `mancanti` è `[chi, id]`.
+export interface ComponentEffect {
+  accesi_anche: string[];
+  spenti_anche: string[];
+  orfani: string[];
+  mancanti: [string, string][];
+}
+
+// Una riga che cambia: un bundle (`plugins.disabled`) o una riga senza bundle
+// (`components.off`).
+export interface ComponentWrite {
+  id: string;
+  acceso: boolean;
+  bundle: boolean;
+}
+
+// L'esito di una scelta: prima di farla (`applicato: false`, la prova senza
+// `apply`) o dopo. Una scrittura su `fub.lavagna` vuol dire che il vault si è
+// rimontato: la shell lo sa anche dall'evento `vault_opened` che segue il
+// `vault_closed` (vedi `KernelEvent`).
+export interface ComponentOutcome {
+  azione: ComponentAction;
+  effetto: ComponentEffect;
+  scritture: ComponentWrite[];
+  chiavi: string[];
+  stato: ComponentState;
+  applicato: boolean;
+  avvisi: PluginError[];
+}
+
+// Perché una scelta non si applica: una risposta, non un errore.
+export type ComponentRefusal =
+  | { rifiuto: "sconosciuto"; id: string }
+  | { rifiuto: "nucleo"; id: string }
+  | { rifiuto: "richiesto"; id: string; da: string[] }
+  | { rifiuto: "profilo_sconosciuto"; nome: string }
+  | { rifiuto: "profilo_piu_avanti"; nome: string; arriva_con: string[] };
+
+// Ciò che `components_apply` risponde: l'esito o il rifiuto tipato.
+export type ComponentsApplied =
+  | ({ risposta: "esito" } & ComponentOutcome)
+  | ({ risposta: "rifiuto" } & ComponentRefusal);
 
 
 // Un vault che questa macchina conosce (rispecchia `fub_host::VaultEntry`,

@@ -42,11 +42,13 @@
 // prima di ogni vault. Da qui in poi la tabella degli accordi arriva generata
 // (`shell-keys.generated.ts`) e questo modulo non distingue più i due registri
 // se non per chi esegue.
-import { IMPORT_ACCEPT, sourceOf } from "../editors/spatial/import/sources";
+import { IMPORT_ACCEPT, sourceOf } from "../editors/core/drawing-sources";
 import type { CommandSpec, SettingEntry } from "../host/contract";
 import { settings } from "../host/query";
 import { type Key, t } from "../i18n/strings";
 import { onEvent } from "../state/kernel";
+import { components } from "../state/components";
+import { UI_SPATIAL } from "../editors/core/component-surfaces";
 import { state } from "../state/store";
 import type { Lifetime } from "./lifetime";
 import { SHELL_KEYS, type ShellCommandId } from "./shell-keys.generated";
@@ -239,8 +241,22 @@ export const NEW_DRAWING = "drawing.create";
 /// comando: con la feature `draw` spenta un `.svg` non è nemmeno un disegno, e
 /// una voce che non può riuscire è peggio di una voce che manca. Si legge a ogni
 /// apertura di un menu e a ogni cambio dell'elenco (`on("commands")`).
+///
+/// E i disegni sono accesi (K2): spento il loro componente, le porte spariscono
+/// anche se il comando è ancora nell'elenco, e tornano quando si riaccende
+/// (`onComponents`). Finché la mappa non è arrivata valgono i comandi.
 export function canCreateDrawing(): boolean {
-  return hasKernelCommand(NEW_DRAWING);
+  return hasKernelCommand(NEW_DRAWING) && (components()?.uiOn(UI_SPATIAL) ?? true);
+}
+
+/// Che cosa si crea adesso dai menu «Nuovo», nel loro ordine: la nota c'è
+/// sempre (il testo è del nucleo), il disegno alle condizioni delle sue porte.
+/// L'esploratore e il riquadro della pagina «Componenti» leggono da qui, così
+/// il riquadro dice le voci che il menu mostra davvero.
+export type NewKind = "note" | "drawing";
+
+export function newKinds(): NewKind[] {
+  return canCreateDrawing() ? ["note", "drawing"] : ["note"];
 }
 
 /// Apre «Nuovo disegno…»: il modulo proprio del comando, la galleria, o la

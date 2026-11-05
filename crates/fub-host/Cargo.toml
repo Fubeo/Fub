@@ -13,6 +13,8 @@ fub-abi = { workspace = true }
 # decide quali feature ufficiali esistono, e la scelta si propaga a un posto
 # solo (§16.3).
 fub-features = { workspace = true }
+# Il risolutore dei componenti (`crate::componenti`): solo `serde`.
+fub-componenti = { workspace = true }
 fub-format-markdown = { workspace = true }
 fub-format-canvas = { workspace = true }
 fub-format-base = { workspace = true }

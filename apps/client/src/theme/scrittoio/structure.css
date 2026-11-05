@@ -1238,6 +1238,24 @@ body {
   text-align: center;
 }
 
+/* Il profilo di un vault nuovo prende il posto del benvenuto: il resto della
+   colonna si ritira finché non si sceglie, e lo riprende chi lo gestisce. */
+#onboarding[data-step="profile"] > :not(#onboarding-profile) {
+  display: none;
+}
+
+.onboarding-profile {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+
+.onboarding-profile > .components-profiles {
+  justify-content: center;
+}
+
 /* ── L'adattamento ───────────────────────────────────────────────────────── */
 
 /* Il velo sta dietro il cassetto in sovrapposizione e copre i fogli, non la

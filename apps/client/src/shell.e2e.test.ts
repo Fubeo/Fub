@@ -453,6 +453,152 @@ describe("il pannello delle impostazioni", () => {
   });
 });
 
+describe("la pagina «Componenti» con la sola tastiera", () => {
+  /// Un tasto sul controllo che ha il fuoco, con l'attivazione che il browser
+  /// farebbe da sé (happy-dom non la fa): Invio sui pulsanti, Spazio sui
+  /// pulsanti e sulle caselle. Un `preventDefault` la ferma, come nel browser.
+  function press(key: string): void {
+    const target = document.activeElement as HTMLElement | null;
+    if (!target || target === document.body) throw new Error(`nessun fuoco per «${key}»`);
+    const proceed = target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+    if (!proceed) return;
+    const button = target instanceof HTMLButtonElement;
+    const checkbox = target instanceof HTMLInputElement && target.type === "checkbox";
+    if ((key === "Enter" && button) || (key === " " && (button || checkbox))) target.click();
+  }
+  function focus(selector: string): HTMLElement {
+    const el = document.querySelector<HTMLElement>(selector);
+    if (!el) throw new Error(`non c'è ${selector}`);
+    el.focus();
+    expect(document.activeElement).toBe(el);
+    return el;
+  }
+  const sw = (id: string) => document.getElementById(`component-${id}`) as HTMLInputElement | null;
+  const pressed = (name: string) =>
+    document.querySelector(`[data-profile="${name}"]`)?.getAttribute("aria-pressed") === "true";
+  const notice = () => document.querySelector(".components-notice")?.textContent ?? "";
+  /// Il gesto è finito: niente di occupato, e la mappa riletta è a schermo.
+  /// Con la suite intera in parallelo il ricaricamento dei bundle e la rilettura
+  /// possono superare i due secondi soliti di `waitFor`.
+  async function done(): Promise<void> {
+    await waitFor("la fine del gesto", () => document.querySelector(".components-page [aria-busy]") === null, 8000);
+    await new Promise((r) => setTimeout(r, 80));
+    await settle();
+  }
+
+  it("profili, interruttori, la finestra delle dipendenze, Togli e Tienili, la ricerca", async () => {
+    await start(VAULT);
+    const panel = document.querySelector<HTMLElement>("#settings-panel")!;
+    focus("#open-settings");
+    press("Enter");
+    await settle();
+    focus('#settings-tabs button[data-tab="components"]');
+    press("Enter");
+    await waitFor("la pagina", () => document.querySelector('[data-profile="studio"]') !== null);
+    expect(pressed("studio")).toBe(true);
+
+    // Un profilo che non spegne niente: un tasto, nessuna domanda.
+    box.asked = 0;
+    focus('[data-profile="tutto"]');
+    press("Enter");
+    await done();
+    expect(pressed("tutto")).toBe(true);
+    expect(box.asked).toBe(0);
+    expect((document.activeElement as HTMLElement).dataset.profile).toBe("tutto");
+    focus('[data-profile="studio"]');
+    press(" ");
+    await done();
+    expect(pressed("studio")).toBe(true);
+
+    // Un interruttore: Spazio spegne, il fuoco resta lì, il profilo diventa
+    // personalizzato.
+    focus("#component-fub\\.graph");
+    press(" ");
+    await done();
+    expect(sw("fub.graph")!.checked).toBe(false);
+    expect(document.activeElement).toBe(sw("fub.graph"));
+    expect(document.querySelector(".components-custom")?.textContent).toBe("personalizzato");
+    focus('[data-profile="studio"]');
+    press("Enter");
+    await done();
+    expect(sw("fub.graph")!.checked).toBe(true);
+
+    // La finestra delle dipendenze: «Annulla» non spegne niente…
+    focus('[data-group="supporto"] .components-group-toggle');
+    press("Enter");
+    expect(document.activeElement?.getAttribute("aria-expanded")).toBe("true");
+    box.confirm = false;
+    box.asked = 0;
+    focus("#component-fub\\.penna");
+    press("Enter");
+    await done();
+    expect(box.asked).toBe(1);
+    expect(sw("fub.penna")!.checked).toBe(true);
+    // …e confermare spegne anche chi ne ha bisogno. La scelta rimonta il vault
+    // (`vault_closed` e subito `vault_opened`): il pannello resta aperto.
+    box.confirm = true;
+    focus("#component-fub\\.penna");
+    press(" ");
+    await done();
+    expect(box.asked).toBe(2);
+    expect(sw("fub.penna")!.checked).toBe(false);
+    expect(sw("fub.lavagna")!.checked).toBe(false);
+    await new Promise((r) => setTimeout(r, 2100));
+    expect(panel.hidden).toBe(false);
+    focus('[data-profile="studio"]');
+    press("Enter");
+    await done();
+    expect(sw("fub.penna")!.checked).toBe(true);
+
+    // «Solo note» spegne qualcosa: lo dice prima.
+    box.asked = 0;
+    focus('[data-profile="solo-note"]');
+    press("Enter");
+    await done();
+    expect(box.asked).toBe(1);
+    expect(pressed("solo-note")).toBe(true);
+    // Accendere il PDF accende la penna, e lo dice.
+    focus("#component-fub\\.pdf");
+    press(" ");
+    await done();
+    expect(notice()).toContain("«Penna»");
+    for (const id of ["lavagna", "pdf", "lavagna"]) {
+      focus(`#component-fub\\.${id}`);
+      press(" ");
+      await done();
+    }
+    expect(notice()).toContain("Non serve più a nessun componente: «Penna».");
+    focus('[data-focus-key="notice:drop"]');
+    press("Enter");
+    await done();
+    expect(notice()).not.toContain("«Penna»");
+    expect(sw("fub.penna")!.checked).toBe(false);
+    focus("#component-fub\\.pdf");
+    press(" ");
+    await done();
+    focus("#component-fub\\.pdf");
+    press(" ");
+    await done();
+    expect(notice()).toContain("Non serve più a nessun componente: «Penna».");
+    focus('[data-focus-key="notice:keep"]');
+    press("Enter");
+    await done();
+    expect(notice()).toBe("");
+    expect(sw("fub.penna")!.checked).toBe(true);
+
+    // La ricerca: si scrive, e una ricerca senza esito lo dice.
+    const find = focus("#components-find") as HTMLInputElement;
+    find.value = "zzz";
+    find.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(document.querySelector<HTMLElement>(".components-empty")!.hidden).toBe(false);
+    find.value = "penna";
+    find.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(document.querySelector<HTMLElement>(".components-empty")!.hidden).toBe(true);
+    expect(document.querySelector<HTMLElement>('[data-component="fub.penna"]')!.hidden).toBe(false);
+    expect(panel.hidden).toBe(false);
+  }, 40000);
+});
+
 describe("vita della finestra", () => {
   it("un avvio lento lo dice, col tratto più lungo, e i tempi si copiano", async () => {
     // L'orologio fermo a venti secondi: la pagina sembra averli spesi tutti.
