@@ -146,6 +146,12 @@ e poi controllato con le foto.
   - le patch `*_bytes()`/`release_*()` di K3 T3.
 - **Il piano K2** (`origin/piano/k2-pagina-componenti`, HEAD `fcd30123`): la
   pagina Componenti, le righe (`Riga::motore(…)`), `state/components.ts`.
+- **Il modello dei componenti di K1** (in main dalla PR #285): la mappa dei
+  componenti in `crates/fub-features/src/componenti.rs`, risolta da
+  `fub_componenti`, dove ogni riga sta dietro la sua feature Cargo. T3 vi
+  aggiunge la riga «Disegno completo», che richiede
+  `fub.motore-vettoriale`; spenta in Componenti (K2), nessuna famiglia nasce
+  e i comandi `disegno.*` oltre ai tre di K5 rispondono `Unserved`.
 - **Il piano Scrittoio 2** (`origin/piano/scrittoio-2`, HEAD `fe4d84c4`),
   con il suo prototipo `PLAN-ui/scrittoio-2.html` (artifact
   Er7sWJtyct6mq471Uy73cj e RqKayaCnTaTtNg4ZQ5wd1z). K6 ne usa:
