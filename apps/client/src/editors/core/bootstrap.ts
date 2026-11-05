@@ -2,7 +2,7 @@ import { mountMarkdownSurface, type EditorSlashHost, type PageIcons, type System
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
 import { api } from "../../host/ipc";
-import { openVaultRoot, vaultArg } from "../../state/store";
+import { openVaultRoot, state, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
 import type { GridDialogs, GridRibbon } from "../grid/ribbon/ribbon";
 import type { GridMenuHost } from "../grid/menu";
@@ -17,6 +17,13 @@ import { createPlainTextProfile } from "../text/profiles/plain-text";
 import { mountMediaSurface, profileForKind, type MediaSurfaceDeps } from "../media/media-surface";
 import { mediaKindOfId, mimeOfId } from "../media/media-types";
 import { mountSvgSurface, SVG_PROFILE } from "../text/profiles/svg";
+import {
+  CRAFT_FAMILY, CRAFT_FORMATS, CRAFT_OWNER, CRAFT_PROFILE, MEDIA_RAW_PROFILE, RAW_PROFILE, XMP_PROFILE, mountCraftSurface,
+  type CraftSurfaceDeps,
+} from "../craft/index";
+import { CRAFT_PREVIEW_COMMAND } from "../../host/craft";
+import { isRawPhoto } from "../../ui/format-kind";
+import { showPhotoData } from "../craft/photo-data";
 import { makePdfJsLoader, pdfIdWithoutFragment, type PdfEngineLoader, type PdfJsModule } from "../media/pdf-view";
 import type { CanvasAttachmentPort, CanvasMediaPort } from "../canvas/engine";
 import type { DrawingImagePort } from "../canvas/surface";
@@ -43,6 +50,7 @@ import {
   UI_MEDIA,
   UI_RICH,
   UI_SPATIAL,
+  UI_CRAFT,
   UI_TEXT,
   VECTOR_PROFILE,
   VIEWER_OWNER,
@@ -64,6 +72,9 @@ import {
 export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onOpenWikilink: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
   readonly onOpenPath: (path: string, from?: string) => void | Promise<void>;
+  /// Il clic su una figura di una nota (un file Craft, un PDF): apre il suo
+  /// documento col gesto e non crea mai una nota.
+  readonly onOpenFigure?: (doc: string) => void | Promise<void>;
   /// «Apri a lato» dal menu di un wikilink: la nota in un riquadro accanto.
   readonly onOpenWikilinkBeside?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
   /// Un file nominato da una nota aperto con un'altra app o mostrato
@@ -74,6 +85,9 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onImportRemoteImage?: (url: string, from: string) => Promise<string | null>;
   readonly onOpenDocument: (doc: string) => void | Promise<void>;
   readonly onSearchTag: (tag: string) => void;
+  /// Apre le impostazioni sul gruppo della riga `key` (la scheda di un file
+  /// Craft, per il consenso e il peso massimo).
+  readonly onOpenSettings?: (key: string) => void;
   /// Rinomina una pagina dal titolo della testata dei Blocchi: `null` se è
   /// andata, altrimenti la frase che dice perché no.
   readonly onRenamePage?: (doc: string, name: string) => Promise<string | null>;
@@ -296,6 +310,7 @@ export function createDocumentSurfaceRegistry(
             onSelectionChange: () => options.onSelectionChange(context.paneId),
             onOpenWikilink: options.onOpenWikilink,
             onOpenPath: options.onOpenPath,
+            ...(options.onOpenFigure ? { onOpenFigure: options.onOpenFigure } : {}),
             onOpenWikilinkBeside: options.onOpenWikilinkBeside,
             onOpenDocument: options.onOpenDocument,
             onShowFile: options.onShowFile,
@@ -371,6 +386,7 @@ export function createDocumentSurfaceRegistry(
     },
   });
   const parts = new Map<string, () => void>();
+  const craft = craftDeps(options);
   registry.register({
     owner: VIEWER_OWNER,
     family: "viewer",
@@ -378,14 +394,23 @@ export function createDocumentSurfaceRegistry(
     // Il profilo PDF è di `fub.pdf` (`COMPONENT_EDITORS`): un PDF col
     // componente spento non è di questa famiglia, e lo mostra il riquadro
     // «solo come file».
-    profiles: ["media-image", "media-audio", "media-video"],
+    profiles: ["media-image", "media-audio", "media-video", MEDIA_RAW_PROFILE],
     sources: { bytes: "bytes-read-only" },
     // L'unica classificazione di un file senza formato: la tabella MIME della
     // shell sceglie la vista, e ciò che nessuna vista sa mostrare non è di
     // questa famiglia. Un SVG è testo: lo prende la famiglia `text`, che lo
     // scrive con l'anteprima accanto invece di mostrarlo e basta.
+    //
+    // Una foto RAW non ha un formato del vault e il registro ha un solo
+    // legame per i byte, questo: la prende il profilo `media-raw`, che monta
+    // la scheda di `editors/craft` col profilo `raw`, solo se il componente
+    // «File delle app Craft» risponde a `craft.preview`. Spento, il RAW resta
+    // un file senza vista.
     selectSourceProfile: (request, fallback) => {
       if (!request.documentId) return fallback;
+      if (isRawPhoto(request.documentId)) {
+        return state.commandSpecs.some((spec) => spec.id === CRAFT_PREVIEW_COMMAND) ? MEDIA_RAW_PROFILE : null;
+      }
       if (mimeOfId(request.documentId) === "image/svg+xml") return null;
       const kind = mediaKindOfId(pdfIdWithoutFragment(request.documentId));
       if (kind === "pdf" && !parts.has(MEDIA_PDF_PART)) return null;
@@ -393,6 +418,9 @@ export function createDocumentSurfaceRegistry(
     },
     factory: {
       mount(profile, context) {
+        if (profile === MEDIA_RAW_PROFILE) {
+          return mountCraftSurface(RAW_PROFILE, context, craft, { family: "viewer", profile: MEDIA_RAW_PROFILE });
+        }
         return mountViewer(options, profile, context);
       },
     },
@@ -416,7 +444,18 @@ export function createDocumentSurfaceRegistry(
 /// soltanto che non può mostrare il file.
 function mountViewer(options: SurfaceBootstrapOptions, profile: string, context: SurfaceMountContext): EditorSurface {
   return options.media
-    ? mountMediaSurface(profile, context, { ...options.media, pdfLoader: options.media.pdfLoader ?? loadPdf })
+    ? mountMediaSurface(profile, context, {
+      ...options.media,
+      pdfLoader: options.media.pdfLoader ?? loadPdf,
+      // I dati di LightCraft sotto la foto, solo col componente «File delle
+      // app Craft» acceso: spento, il kernel non elenca `craft.photo` e la
+      // foto non chiede niente; acceso dopo, la riga arriva da sola
+      // (`state/craft-photos.ts`).
+      photoData: options.media.photoData ?? {
+        show: (root, doc, life) =>
+          showPhotoData(root, doc, { onOpenDocument: options.onOpenDocument, onSearchTag: options.onSearchTag }, life),
+      },
+    })
     : staticSurface("viewer", profile, context, "viewer.unavailable");
 }
 
@@ -553,6 +592,15 @@ interface EditorPart {
 
 const MEDIA_PDF_PART = "media.pdf";
 
+/// Ciò che la scheda dei file Craft chiede alla shell.
+function craftDeps(options: SurfaceBootstrapOptions): CraftSurfaceDeps {
+  return {
+    onOpenDocument: options.onOpenDocument,
+    onSearchTag: options.onSearchTag,
+    ...(options.onOpenSettings ? { onOpenSettings: options.onOpenSettings } : {}),
+  };
+}
+
 /// I collegamenti, le immagini e i caratteri di un disegno o delle
 /// annotazioni di un PDF, come per la lavagna.
 function drawingCallbacks(options: SurfaceBootstrapOptions): DrawingSurfaceCallbacks {
@@ -636,6 +684,7 @@ export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> 
             mount: (profile, context) => mountCanvasSurface(profile, context, {
               onChange: options.onChange,
               onSelectionChange: options.onSelectionChange,
+              onFail: options.onFail,
               onOpenWikilink: options.onOpenWikilink,
               onOpenPath: options.onOpenPath,
               onCreateNote: options.onCreateCanvasNote,
@@ -677,6 +726,21 @@ export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> 
       formats: { [FUBANN_FORMAT]: PDF_PROFILE },
       sourceViews: { [PDF_PROFILE]: { family: "text", profile: SVG_PROFILE } },
       factory: { load: () => drawingFactory(options) },
+    }),
+  }],
+  // I file delle app Craft e gli XMP (`fub.craft`), in sola lettura: la
+  // superficie arriva con un `import()` alla prima scheda (`editors/craft/`).
+  [UI_CRAFT]: [{
+    id: "craft",
+    registration: (options) => ({
+      owner: CRAFT_OWNER,
+      family: CRAFT_FAMILY,
+      defaultProfile: CRAFT_PROFILE,
+      profiles: [XMP_PROFILE],
+      formats: CRAFT_FORMATS,
+      factory: {
+        mount: (profile, context) => mountCraftSurface(profile, context, craftDeps(options)),
+      },
     }),
   }],
   // Il lettore PDF (`fub.pdf`): soltanto il profilo PDF del visore, con

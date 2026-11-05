@@ -4,6 +4,7 @@
 import type { CommandSpec } from "../host/contract";
 import type { EditorSurface } from "../editors/core/registry";
 import { mountMarkdownSurface } from "../editors/text/profiles/markdown/surface";
+import { mediaMenu } from "../editors/media/media-surface";
 import { composeEditorMenu, type ComposedEditorMenu, type EditorMenuHost } from "../panels/editor-menu";
 import type { CommandEntry } from "./commands";
 
@@ -85,6 +86,35 @@ function noteCase(place: string, doc: string, at: number, mode: "source" | "live
   };
 }
 
+/// Un file che non è una nota, mostrato dal visualizzatore, con un'app Craft
+/// installata: «Apri con un'altra app» è il sottomenu, l'app di sistema per
+/// prima e poi le app che aprono il file.
+function fileCase(place: string, doc: string): MenuCase {
+  return {
+    place,
+    open() {
+      const element = document.createElement("div");
+      const raw = mediaMenu({ kind: "image", element }, null, doc, {
+        transport: { open: async () => Promise.reject(new Error("niente")), read_chunk: async () => new ArrayBuffer(0), close: async () => {} },
+        assetUrl: (handle) => handle,
+        copyText: async () => {},
+        openExternal: () => {},
+        openWith: {
+          installed: () => true,
+          editors: async () => [
+            { id: "photocraft", name: "PhotoCraft", opens: ["png"], installed: true, running: true },
+            { id: "lightcraft", name: "LightCraft", opens: ["png"], installed: false, running: false },
+          ],
+          open: async (_doc, editor) => ({ editor, how: "new_process" }),
+        },
+      });
+      if (!raw) throw new Error(`nessun menu per ${place}`);
+      const surface = { contextMenu: () => raw } as unknown as EditorSurface;
+      return { menu: composeEditorMenu(raw, hostOf(surface)), miniBar: false, close: () => {} };
+    },
+  };
+}
+
 const NOTE = "## Formula\n\nLa media e la [[Media]] di un #esame, vedi https://it.wikipedia.org/wiki/Media qui.\n\n- uno\n- due\n- [ ] fare\n\n```python\nx = 1\n```\n\n| Nome | Voto |\n| --- | --- |\n| Ada | 10 |\n";
 const at = (text: string, offset = 1): number => NOTE.indexOf(text) + offset;
 
@@ -100,4 +130,5 @@ export const MENU_CASES: readonly MenuCase[] = [
   noteCase("un blocco di codice", NOTE, at("x = 1")),
   noteCase("una tabella nel sorgente", NOTE, at("| Ada", 3), "source"),
   noteCase("la Lettura", NOTE, 0, "reading"),
+  fileCase("un file con «Apri con un'altra app»", "Foto/IMG_0001.png"),
 ];

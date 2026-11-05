@@ -1,6 +1,7 @@
 import { searchForWorkspaceRoot, type Rollup } from "vite";
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
+import { canvasWasm } from "./build/canvas-wasm.mjs";
 
 const CHUNK_BUDGET = 500_000;
 // Il parser upstream arriva già precompilato: resta separato e solo lazy.
@@ -126,7 +127,12 @@ function reportStartup(context: Rollup.PluginContext, bundle: Rollup.OutputBundl
 // Config allineata a Tauri: porta fissa 1420, niente clear screen.
 export default defineConfig({
   clearScreen: false,
-  plugins: [{
+  plugins: [
+    // Il nucleo della lavagna in WebAssembly, compilato da cargo a ogni build
+    // (`build/canvas-wasm.mjs`): serve Rust col bersaglio
+    // wasm32-unknown-unknown.
+    canvasWasm(),
+    {
     // La pelle composta arriva come testo (`?raw`), e Vite non minimizza il
     // testo: un terzo erano commenti, che documentano i pezzi ma nel bundle
     // pesano come regole. Nella build si tolgono; in sviluppo e al banco la
@@ -355,6 +361,19 @@ export default defineConfig({
           // lo leggono tutte le finestre: senza un nome suo finisce nel chunk
           // condiviso più grosso e ne consuma il margine a ogni frase nuova.
           if (/\/src\/i18n\/catalog\.ts$/.test(id)) return "shell-strings";
+          // Il motore del testo con i suoi pezzi, il tema che legge, gli
+          // appunti delle tabelle e il diario della griglia: li usano la
+          // shell e la finestra del documento fin dall'avvio. Senza un nome
+          // suo, da quando i fogli arrivano soltanto con un `import()`,
+          // Rollup li fondeva nel chunk del ponte dei documenti, oltre la
+          // soglia.
+          if (
+            /\/src\/editors\/text\/(engine|theme|phrases|history-footprints|smart-lists|properties-display|live-reveal|paste-html|indent-guides|soft-cursor)\.ts$/.test(id) ||
+            /\/src\/theme\/(theme|loader|options|snippets|diagram-style|content-look)\.ts$/.test(id) ||
+            /\/src\/(rules\/offsets|editors\/core\/tsv|tabella\/clipboard|tabella\/selection|state\/grid-journal)\.ts$/.test(id)
+          ) {
+            return "text-engine";
+          }
           if (/\/node_modules\/postcss\//.test(id)) return "theme-parser";
           if (/\/node_modules\/@tauri-apps\//.test(id)) return "host-bridge";
           if (/\/node_modules\/(d3-(selection|transition|shape|color|dispatch|ease|interpolate|timer|array|path)|dagre-d3-es|roughjs|dompurify|lodash-es|es-toolkit|marked|khroma)\//.test(id)) {
@@ -378,5 +397,8 @@ export default defineConfig({
     // senza questa riga i presidi che guardano del testo passerebbero o
     // fallirebbero a seconda del locale della macchina che li lancia.
     setupFiles: ["./src/test-setup.ts"],
+    // Il nucleo della lavagna si compila prima delle prove, non dentro il
+    // tempo massimo della prima che lo importa: il perché sta nel file.
+    globalSetup: ["./build/canvas-wasm.global-setup.mjs"],
   },
 });

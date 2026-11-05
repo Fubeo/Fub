@@ -1,0 +1,11 @@
+{
+  "name": "nodes-null",
+  "description": "R7: \"nodes\": null è una lavagna vuota; edges null resta finché gli archi non cambiano",
+  "before": "{\"nodes\":null,\"edges\":null}",
+  "patches": [{"kind":"upsert-node","before":null,"after":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"uno"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}],\"edges\":null}",
+    "undo": "{\"nodes\":[],\"edges\":null}"
+  }
+}

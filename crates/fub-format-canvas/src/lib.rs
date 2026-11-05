@@ -1,7 +1,9 @@
 //! Formato `.canvas`: JSON Canvas 1.0 reale, interoperabile.
 //!
-//! Questo crate possiede il modello persistito (parse/serialize) e le tre
-//! proiezioni che il contratto chiede al provider: [`DocumentModel`] per
+//! Il modello persistito e la sua lettura vivono nel nucleo della lavagna,
+//! `fub-canvas-core`, che non vede il contratto: questo crate li riespone
+//! con la stessa API ([`Canvas`], [`parse_canvas`]) e possiede la scrittura e
+//! le tre proiezioni che il contratto chiede al provider: [`DocumentModel`] per
 //! indice/grafo, HTML statico per anteprima/embed, [`rewrite_links`] per la
 //! rinomina chirurgica dei riferimenti.
 //!

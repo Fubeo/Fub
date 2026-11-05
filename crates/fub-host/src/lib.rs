@@ -96,6 +96,12 @@ mod connector_tokens;
 /// Il canale di controllo: la CLI e l'host nativo del clipper chiedono all'app
 /// che tiene aperto il vault, invece di trovarlo occupato.
 pub mod control;
+/// I file delle app Craft: il bundle `fub.craft`, che risponde l'anteprima di
+/// un file con la sua cache.
+#[cfg(feature = "craft")]
+pub mod craft;
+/// L'anteprima di un file Craft fatta dalla CLI dell'app, dopo un gesto.
+pub mod craft_render;
 mod custody;
 mod export_folder;
 pub mod format_source;
@@ -110,6 +116,8 @@ pub mod mount;
 #[cfg(feature = "http-client")]
 pub mod net;
 pub mod obsidian_import;
+/// «Apri con»: quali app Craft aprono un file del vault, e aprirlo con una.
+pub mod open_with;
 #[cfg(feature = "http-client")]
 pub mod publish;
 mod query;
@@ -130,6 +138,7 @@ pub mod theme;
 #[cfg(feature = "http-client")]
 pub mod updates;
 pub mod uri_inbox;
+pub mod vault_path;
 pub mod vaults;
 /// **Chi aspetta cosa** fra il turno di scrittura e l'istanza di un componente
 /// (FUB-019): il grafo che lascia cedere a chi sta dentro il guest.

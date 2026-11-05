@@ -47,6 +47,7 @@ import type {
   ComponentsMap,
   InstalledPluginInfo,
   CommandSpec,
+  ParamSpec,
   DraftInfo,
   DocumentWindowEvent,
   DocumentWindowRequest,
@@ -89,8 +90,28 @@ import type {
   LiveStatus,
   LiveWriterStatus,
 } from "./contract";
-import type { PrintArtifactOutcome, RevealOutcome, SaveArtifactOutcome } from "./ipc";
+import type {
+  ExternalEditor,
+  OpenedWith,
+  PrintArtifactOutcome,
+  RevealOutcome,
+  SaveArtifactOutcome,
+} from "./ipc";
 import { mediaKindOfMime, mimeOrOctet } from "../editors/media/media-types";
+import {
+  CRAFT_BUNDLE_NS,
+  CRAFT_PHOTO_COMMAND,
+  CRAFT_PREVIEW_COMMAND,
+  CRAFT_PREVIEW_VERSION,
+  type CraftMissing,
+  type CraftPhotoSidecar,
+  type CraftPreview,
+  type CraftPreviewImage,
+  type CraftPreviewInfo,
+  type CraftPreviewSize,
+  type CraftPreviewSubject,
+  type CraftRenderConsent,
+} from "./craft";
 import COMPONENTS_SCENARIO from "../__fixtures__/components-scenario.json";
 
 /// Le risposte dell'host vero per la pagina «Componenti», registrate da
@@ -264,6 +285,17 @@ export interface Options {
   printArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<PrintArtifactOutcome>;
   /// Il sistema che riceve una voce del vault. Senza, la porta non è servita.
   revealInSystem?: (path: string, open: boolean) => Promise<RevealOutcome>;
+  /// Le app Craft della macchina per «Apri con» (`doc` è `null` quando la
+  /// shell le chiede tutte). Senza, la porta non è servita, come quella di
+  /// un'app vecchia che non ha il comando.
+  externalEditors?: (doc: string | null) => Promise<ExternalEditor[]>;
+  /// L'app Craft che riceve una voce del vault. Senza, la porta non è servita.
+  openWith?: (path: string, editor: string, page: number | null) => Promise<OpenedWith>;
+  /// L'anteprima fatta dalla CLI dopo un gesto. Senza, la porta non è
+  /// servita. Servita o no, ogni chiamata resta in `atGate("craftRender")`:
+  /// è da lì che i test della shell provano che una via senza gesto non la
+  /// chiama mai.
+  craftRender?: (doc: string, size: CraftPreviewSize) => Promise<CraftPreview>;
   /// La rete della macchina per la sessione live. Senza, le porte `live*` non
   /// sono servite; con zero indirizzi è un PC fuori da una rete locale, che
   /// l'app rifiuta con `unserved`.
@@ -277,6 +309,59 @@ export interface Options {
   /// `components.profilo`, cioè «Studio». Un nome che lo scenario non ha
   /// lancia.
   componentsStart?: string;
+  /// I file delle app Craft (N7). Con, un `.vectorcraft`, un `.pcraft`, un
+  /// `.figcraft` e un `.xmp` hanno il formato `craft-*` a byte, come con
+  /// `fub-format-craft` montato, e il bundle `fub.craft` risponde a
+  /// `craft.preview`. Senza, restano file senza formato.
+  craft?: FakeCraft;
+}
+
+/// Il bundle `fub.craft` del finto. I byte dei file stanno in `resources`.
+export interface FakeCraft {
+  /// Il componente «File delle app Craft»: spento, i formati restano e
+  /// `craft.preview` e `craft.photo` non ci sono (`unknown_command`), né
+  /// fra i comandi elencati. Di serie acceso.
+  component?: boolean;
+  /// Ciò che il bundle sa di ogni documento. Un file Craft che qui non c'è
+  /// risponde senza immagine, col peso dei suoi byte. Per `craft.photo`,
+  /// `info.xmp` di un XMP è ciò che l'XMP dice (`null`: rotto); senza, un
+  /// XMP che c'è non dice niente.
+  docs?: Record<string, FakeCraftDoc>;
+}
+
+/// Ciò che il bundle finto sa di un documento Craft.
+export interface FakeCraftDoc {
+  /// Ciò che si sa del file; ciò che manca si ricava dall'estensione e dai
+  /// byte.
+  info?: Partial<CraftPreviewInfo>;
+  /// L'immagine che il file porta (`origin: file`), per tutte e due le misure.
+  image?: CraftPreviewImage | null;
+  /// Perché l'immagine manca, quando manca; di serie `absent`. Con
+  /// `over_limit`, `limit_bytes` è il limite che la risposta dice.
+  missing?: CraftMissing;
+  limit_bytes?: number;
+  /// `null`: Fub ha letto solo dei pezzi del file, e la risposta non ha
+  /// revisione. Di serie quella del documento.
+  revision?: null;
+  /// L'app installata che può fare l'anteprima che manca, col consenso (di
+  /// serie `ask`). `craft.preview` non avvia mai niente: l'anteprima fatta
+  /// dall'app la porta un `job_done` di `craft.render`, che manda il banco.
+  render?: { app: string; consent?: CraftRenderConsent };
+}
+
+/// L'app di un file Craft dall'estensione, come i formati di `fub-format-craft`.
+const CRAFT_FAKE_APPS: Readonly<Record<string, { app: CraftPreviewSubject; editor: string }>> = {
+  vectorcraft: { app: "vectorcraft", editor: "VectorCraft" },
+  pcraft: { app: "photocraft", editor: "PhotoCraft" },
+  figcraft: { app: "figcraft", editor: "FigCraft" },
+  xmp: { app: "xmp", editor: "LightCraft" },
+};
+
+function craftExtensionOf(id: string): string | null {
+  const point = id.lastIndexOf(".");
+  if (point < 0 || point < id.lastIndexOf("/")) return null;
+  const extension = id.slice(point + 1);
+  return extension in CRAFT_FAKE_APPS ? extension : null;
 }
 
 /// Gli indirizzi privati delle interfacce attive, quello della rotta
@@ -554,6 +639,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
     if (id.endsWith(".rtf")) return "rtf";
     if (id.endsWith(".doc") || id.endsWith(".dot")) return "doc";
     if (XLSX_FAKE_EXTENSIONS.some((extension) => id.toLowerCase().endsWith(`.${extension}`))) return "xlsx";
+    const craft = options.craft ? craftExtensionOf(id) : null;
+    if (craft) return `craft-${CRAFT_FAKE_APPS[craft]!.app}`;
     return null;
   }
 
@@ -562,7 +649,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// (`fub-format-rich`).
   function sourceKindOf(id: string): "text" | "bytes" {
     const format = formatOf(id) ?? "";
-    return RICH_FAKE_FORMATS.has(format) || format === "xlsx" ? "bytes" : "text";
+    return RICH_FAKE_FORMATS.has(format) || format === "xlsx" || format.startsWith("craft-") ? "bytes" : "text";
   }
 
   /// Registra la chiamata e restituisce ciò che la porta risponde.
@@ -1081,8 +1168,96 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// della palette usano per provare che un comando che non scrive non
   /// flussa — e un host finto che non lo sapesse eseguire lancerebbe al posto
   /// di rispondere.
+  /// L'anteprima del bundle finto per `doc` alla misura `size`.
+  function craftPreview(doc: string, size: CraftPreviewSize): CraftPreview {
+    const extension = craftExtensionOf(doc);
+    const stored = docs.get(doc);
+    if (!options.craft || !extension) {
+      throw { kind: "bad_args", message: `\`${doc}\` non è un file delle app Craft.` } satisfies PluginError;
+    }
+    if (!stored) throw { kind: "not_found", message: `host fake: «${doc}» non c'è` } satisfies PluginError;
+    const known = options.craft.docs?.[doc] ?? {};
+    const base = CRAFT_FAKE_APPS[extension]!;
+    const info: CraftPreviewInfo = {
+      app: base.app,
+      editor: base.editor,
+      format_version: null,
+      bytes: bytesOf(stored).byteLength,
+      photo: null,
+      edits: [],
+      xmp: null,
+      ...known.info,
+    };
+    const image = known.image ?? null;
+    const missing = image ? null : (known.missing ?? "absent");
+    return {
+      version: CRAFT_PREVIEW_VERSION,
+      doc,
+      revision: known.revision === null ? null : stored.revision,
+      size,
+      origin: image ? "file" : "none",
+      queued: false,
+      image,
+      missing,
+      limit_bytes: missing === "over_limit" ? (known.limit_bytes ?? 64 * 1024 * 1024) : null,
+      info,
+      render: image || !known.render ? null : { app: known.render.app, consent: known.render.consent ?? "ask" },
+    };
+  }
+
+  /// I comandi che il finto elenca: quelli dati, più i due del bundle
+  /// `fub.craft` di sola lettura quando il componente è acceso, come il
+  /// registro vero (`craft::bundle`).
+  function listedCommands(): CommandSpec[] {
+    const given = options.commands ?? [];
+    if (!options.craft || options.craft.component === false) return given;
+    const doc: ParamSpec = { name: "doc", title: "Documento", description: "", kind: { kind: "document" }, required: true };
+    const craft: CommandSpec[] = [
+      { id: CRAFT_PREVIEW_COMMAND, title: "Anteprima di un file Craft", description: "", keybinding: null, params: [doc], scope: { writes: false, reach: "session", reversible: true }, surfaces: [] },
+      { id: CRAFT_PHOTO_COMMAND, title: "Dati di LightCraft di una foto", description: "", keybinding: null, params: [doc], scope: { writes: false, reach: "session", reversible: true }, surfaces: [] },
+    ];
+    return [...given, ...craft.filter((spec) => !given.some((other) => other.id === spec.id))];
+  }
+
+  /// I dati della foto `doc` del bundle finto, con la regola di
+  /// `craft::photo`: il primo candidato XMP che c'è nel vault, niente per un
+  /// documento che è già un XMP, la copia `-Edit.psd` se c'è.
+  function craftPhoto(doc: string): CraftPhotoSidecar {
+    if (!docs.has(doc)) throw { kind: "not_found", message: `host fake: «${doc}» non c'è` } satisfies PluginError;
+    const answer: CraftPhotoSidecar = { version: CRAFT_PREVIEW_VERSION, doc, xmp: null, meta: null, edits: [] };
+    if (craftExtensionOf(doc) === "xmp") return answer;
+    const slash = doc.lastIndexOf("/");
+    const point = doc.lastIndexOf(".");
+    const stem = point > slash + 1 ? doc.slice(0, point) : doc;
+    const candidates = [`${doc}.xmp`, ...(stem !== doc ? [`${stem}.xmp`] : [])];
+    const xmp = candidates.find((candidate) => docs.has(candidate)) ?? null;
+    if (xmp !== null) {
+      const info = options.craft?.docs?.[xmp]?.info;
+      answer.xmp = xmp;
+      answer.meta = info && "xmp" in info ? (info.xmp ?? null) : { rating: null, label: null, flag: null, keywords: [] };
+    }
+    const edit = `${stem}-Edit.psd`;
+    if (docs.has(edit)) answer.edits.push(edit);
+    return answer;
+  }
+
   function command(id: string, args: Record<string, unknown> | null, mode: InvokeMode) {
     switch (id) {
+      case CRAFT_PHOTO_COMMAND: {
+        if (!options.craft || options.craft.component === false) {
+          throw { kind: "unknown_command", message: id } satisfies PluginError;
+        }
+        const photo = craftPhoto(String(args?.doc));
+        return { notify: null, effect: { kind: "custom" as const, ns: CRAFT_BUNDLE_NS, payload: photo }, undo: null, partial: null };
+      }
+      case CRAFT_PREVIEW_COMMAND: {
+        if (!options.craft || options.craft.component === false) {
+          throw { kind: "unknown_command", message: id } satisfies PluginError;
+        }
+        const size = args?.size === "large" ? "large" : "small";
+        const preview = craftPreview(String(args?.doc), size);
+        return { notify: null, effect: { kind: "custom" as const, ns: CRAFT_BUNDLE_NS, payload: preview }, undo: null, partial: null };
+      }
       case "search.open":
         return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
       case "note.create": {
@@ -1376,7 +1551,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       configHealth: () => gate("configHealth", [], Promise.reject(new Error("host fake: configurazione di macchina non disponibile"))),
       recoverConfig: (path, action) => gate("recoverConfig", [path, action], Promise.reject(new Error("host fake: recovery senza disco"))),
       openVault: (path) => {
-        const extensions = ["md", "markdown", "docx", "odt", "rtf", "doc", "dot", ...XLSX_FAKE_EXTENSIONS, "canvas", "base", ...(options.draw === true ? ["svg", "fubann"] : [])];
+        const extensions = ["md", "markdown", "docx", "odt", "rtf", "doc", "dot", ...XLSX_FAKE_EXTENSIONS, "canvas", "base", ...(options.draw === true ? ["svg", "fubann"] : []), ...(options.craft ? Object.keys(CRAFT_FAKE_APPS) : [])];
         const info: VaultInfo = { root: path, extensions, plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },
@@ -1463,6 +1638,18 @@ export function createFakeHost(options: Options = {}): FakeHost {
         options.revealInSystem
           ? gate("revealInSystem", [path, open], options.revealInSystem(path, open))
           : unavailable("revealInSystem", [path, open]),
+      externalEditors: (doc) =>
+        options.externalEditors
+          ? gate("externalEditors", [doc], options.externalEditors(doc))
+          : unavailable("externalEditors", [doc]),
+      openWith: (path, editor, page) =>
+        options.openWith
+          ? gate("openWith", [path, editor, page ?? null], options.openWith(path, editor, page ?? null))
+          : unavailable("openWith", [path, editor, page ?? null]),
+      craftRender: (doc, size) =>
+        options.craftRender
+          ? gate("craftRender", [doc, size], options.craftRender(doc, size))
+          : unavailable("craftRender", [doc, size]),
       listGridSurfaces: () => gate("listGridSurfaces", [], Promise.resolve(gridBytes ? [gridBytes.surface] : [])),
       // L'host legge i byte da sé: il finto controlla soltanto che il
       // documento ci sia e che la revisione da cui la shell parte sia ancora
@@ -1590,7 +1777,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         throw new Error(`host fake: la view «${v}» non ha l'azione «${action}»`);
       },
       listCommands: (vault) =>
-        gate("listCommands", named([], vault), Promise.resolve(options.commands ?? [])),
+        gate("listCommands", named([], vault), Promise.resolve(listedCommands())),
       invokeCommand: (commandId, args, mode, vault) => {
         const callArgs = named([commandId, args, mode], vault);
         calls.push({ gate: "invokeCommand", args: callArgs });

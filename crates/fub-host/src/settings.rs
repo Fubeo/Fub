@@ -289,6 +289,52 @@ pub const FILES_LEGACY_FOLDER_PAGES: &str = "files.legacy-folder-pages";
 /// `unique`, `capture`. Di macchina, e vuota di default: un vault arrivato da
 /// fuori non può decidere che un link del browser scriva in silenzio.
 pub const URI_ALLOWED: &str = "uri.allowed";
+/// Dove sono le app Craft quando Fub non le trova da solo: una riga
+/// `id=percorso` (`vectorcraft=/opt/vc/vectorcraft`) o `id-cli=percorso` per
+/// la riga di comando. Di **macchina**: i percorsi dei programmi sono di
+/// questo computer e non viaggiano col vault. Le legge
+/// `craft::editors::detect`.
+#[cfg(feature = "craft")]
+pub const CRAFT_EDITOR_PATHS: &str = "craft.editor-paths";
+/// Le anteprime fatte dalle app: se Fub fa fare alla riga di comando di
+/// un'app Craft l'anteprima di un file che non ne ha una. Una scelta fra
+/// [`CRAFT_CLI_PREVIEWS_ASK`] (di partenza), [`CRAFT_CLI_PREVIEWS_ON`] e
+/// [`CRAFT_CLI_PREVIEWS_OFF`]; di macchina e **non** `program_writable` (vedi
+/// `craft_settings`). La legge `craft::consent::current`. Un valore di
+/// un'altra specie, come il booleano che la chiave portava prima, non regge
+/// lo schema e vale la scelta di partenza: mai un sì.
+#[cfg(feature = "craft")]
+pub const CRAFT_CLI_PREVIEWS: &str = "craft.cli-previews";
+/// Chiedere a chi guarda, la prima volta.
+#[cfg(feature = "craft")]
+pub const CRAFT_CLI_PREVIEWS_ASK: &str = "ask";
+/// Farle senza chiedere.
+#[cfg(feature = "craft")]
+pub const CRAFT_CLI_PREVIEWS_ON: &str = "on";
+/// Non farle mai.
+#[cfg(feature = "craft")]
+pub const CRAFT_CLI_PREVIEWS_OFF: &str = "off";
+/// Il peso massimo, in MiB, di un file che va letto intero per la sua
+/// anteprima; i file che si leggono a pezzi non hanno limite. Di macchina, da
+/// [`CRAFT_PREVIEW_MAX_MIB_MIN`] a [`CRAFT_PREVIEW_MAX_MIB_MAX`], di partenza
+/// [`CRAFT_PREVIEW_MAX_MIB_DEFAULT`]. La legge `craft::consent::max_bytes`.
+#[cfg(feature = "craft")]
+pub const CRAFT_PREVIEW_MAX_MIB: &str = "craft.preview-max-mib";
+#[cfg(feature = "craft")]
+pub const CRAFT_PREVIEW_MAX_MIB_MIN: f64 = 1.0;
+#[cfg(feature = "craft")]
+pub const CRAFT_PREVIEW_MAX_MIB_MAX: f64 = 4096.0;
+#[cfg(feature = "craft")]
+pub const CRAFT_PREVIEW_MAX_MIB_DEFAULT: f64 = 64.0;
+/// Le miniature accanto al nome nell'albero, prese dall'anteprima che il
+/// file ha già: l'albero non avvia mai un'app. Di macchina, spenta. La legge
+/// la shell.
+#[cfg(feature = "craft")]
+pub const CRAFT_TREE_THUMBNAILS: &str = "craft.tree-thumbnails";
+/// Gli XMP nell'albero; spenta, spariscono dall'albero e restano nella
+/// ricerca e nei dati della foto. Di macchina, accesa. La legge la shell.
+#[cfg(feature = "craft")]
+pub const CRAFT_TREE_SHOW_XMP: &str = "craft.tree-show-xmp";
 /// Come nasce un link a una nota trascinata o copiata: wikilink (`[[Nota]]`)
 /// o link Markdown (`[Nota](Nota.md)`), che leggono anche gli altri programmi.
 pub const FILES_LINK_STYLE: &str = "files.link-style";
@@ -560,6 +606,8 @@ pub fn core_settings() -> Vec<SettingSpec> {
     settings.extend(service_settings());
     settings.extend(live_settings());
     settings.extend(viewer_settings());
+    #[cfg(feature = "craft")]
+    settings.extend(craft_settings());
     // **Le famiglie del kernel, tutte, e non una a una.** Quelle righe erano
     // quattro `extend` scritti a mano — `locale`, `journal`, `properties`,
     // `ignore` — e ogni chiave del kernel sta là dove sta chi la legge (§11.1):
@@ -1125,6 +1173,78 @@ pub fn setting_requires_reopen(key: &str) -> bool {
     matches!(key, CHROME_FRAME | CHROME_SCHEMA)
 }
 
+/// Le app Craft (N7): dove sono i loro programmi, se Fub può farne avviare la
+/// riga di comando per le anteprime, quanto pesa al più un file da leggere
+/// intero per l'anteprima, e i due interruttori dell'albero. Tutte di
+/// macchina (i programmi e le scelte sono di questo computer e non viaggiano
+/// col vault), nel gruppo «App esterne».
+#[cfg(feature = "craft")]
+fn craft_settings() -> Vec<SettingSpec> {
+    let external = |spec: SettingSpec, description: &str| {
+        spec.describing(Text::key(description))
+            .grouped(Text::key(C_GROUP_EXTERNAL_APPS))
+            .for_machine()
+    };
+    vec![
+        external(
+            SettingSpec::new(
+                CRAFT_EDITOR_PATHS,
+                Text::key(C_CRAFT_EDITOR_PATHS),
+                SettingKind::List {
+                    default: Vec::new(),
+                },
+            ),
+            C_CRAFT_EDITOR_PATHS_DESC,
+        ),
+        // **Non** `program_writable`, ed è la riga che conta, come per
+        // `plugins.disabled` e i permessi: accenderla vuol dire lasciare che
+        // Fub avvii un programma esterno, e quell'azione la decide la persona
+        // davanti allo schermo, dalla shell o dalla CLI di Fub nel suo
+        // terminale. Un plugin, un bundle o un comando del registro che
+        // potessero accenderla avvierebbero programmi da sé; un vault
+        // importato non può, perché la chiave è di macchina.
+        external(
+            SettingSpec::new(
+                CRAFT_CLI_PREVIEWS,
+                Text::key(C_CRAFT_CLI_PREVIEWS),
+                SettingKind::Choice {
+                    default: CRAFT_CLI_PREVIEWS_ASK.into(),
+                    options: vec![
+                        UiOption::new(CRAFT_CLI_PREVIEWS_ASK, Text::key(C_CRAFT_CLI_PREVIEWS_ASK)),
+                        UiOption::new(CRAFT_CLI_PREVIEWS_ON, Text::key(C_CRAFT_CLI_PREVIEWS_ON)),
+                        UiOption::new(CRAFT_CLI_PREVIEWS_OFF, Text::key(C_CRAFT_CLI_PREVIEWS_OFF)),
+                    ],
+                },
+            ),
+            C_CRAFT_CLI_PREVIEWS_DESC,
+        ),
+        external(
+            SettingSpec::new(
+                CRAFT_PREVIEW_MAX_MIB,
+                Text::key(C_CRAFT_PREVIEW_MAX_MIB),
+                SettingKind::Number {
+                    default: CRAFT_PREVIEW_MAX_MIB_DEFAULT,
+                    min: Some(CRAFT_PREVIEW_MAX_MIB_MIN),
+                    max: Some(CRAFT_PREVIEW_MAX_MIB_MAX),
+                },
+            ),
+            C_CRAFT_PREVIEW_MAX_MIB_DESC,
+        ),
+        external(
+            SettingSpec::toggle(
+                CRAFT_TREE_THUMBNAILS,
+                Text::key(C_CRAFT_TREE_THUMBNAILS),
+                false,
+            ),
+            C_CRAFT_TREE_THUMBNAILS_DESC,
+        ),
+        external(
+            SettingSpec::toggle(CRAFT_TREE_SHOW_XMP, Text::key(C_CRAFT_TREE_SHOW_XMP), true),
+            C_CRAFT_TREE_SHOW_XMP_DESC,
+        ),
+    ]
+}
+
 #[cfg(feature = "http-client")]
 fn service_settings() -> Vec<SettingSpec> {
     vec![
@@ -1323,6 +1443,20 @@ const C_FILES_LEGACY_FOLDER_PAGES: &str = "core.files_legacy_folder_pages";
 const C_FILES_LEGACY_FOLDER_PAGES_DESC: &str = "core.files_legacy_folder_pages.desc";
 const C_URI_ALLOWED: &str = "core.uri_allowed";
 const C_URI_ALLOWED_DESC: &str = "core.uri_allowed.desc";
+const C_GROUP_EXTERNAL_APPS: &str = "core.group.external_apps";
+const C_CRAFT_EDITOR_PATHS: &str = "core.craft.editor_paths";
+const C_CRAFT_EDITOR_PATHS_DESC: &str = "core.craft.editor_paths.desc";
+const C_CRAFT_CLI_PREVIEWS: &str = "core.craft.cli_previews";
+const C_CRAFT_CLI_PREVIEWS_DESC: &str = "core.craft.cli_previews.desc";
+const C_CRAFT_CLI_PREVIEWS_ASK: &str = "core.craft.cli_previews.ask";
+const C_CRAFT_CLI_PREVIEWS_ON: &str = "core.craft.cli_previews.on";
+const C_CRAFT_CLI_PREVIEWS_OFF: &str = "core.craft.cli_previews.off";
+const C_CRAFT_PREVIEW_MAX_MIB: &str = "core.craft.preview_max_mib";
+const C_CRAFT_PREVIEW_MAX_MIB_DESC: &str = "core.craft.preview_max_mib.desc";
+const C_CRAFT_TREE_THUMBNAILS: &str = "core.craft.tree_thumbnails";
+const C_CRAFT_TREE_THUMBNAILS_DESC: &str = "core.craft.tree_thumbnails.desc";
+const C_CRAFT_TREE_SHOW_XMP: &str = "core.craft.tree_show_xmp";
+const C_CRAFT_TREE_SHOW_XMP_DESC: &str = "core.craft.tree_show_xmp.desc";
 const C_FILES_LINK_STYLE: &str = "core.files_link_style";
 const C_FILES_LINK_STYLE_DESC: &str = "core.files_link_style.desc";
 const C_FILES_LINK_WIKI: &str = "core.files_link_style.wiki";
@@ -1764,6 +1898,29 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.reveal.outside", "{path} è fuori dal vault.")
         .with("host.reveal.root", "La cartella del vault non si legge: {reason}")
         .with(
+            "host.open_with.off",
+            "Le app Craft sono spente in questo vault: accendi il componente Craft.",
+        )
+        .with("host.open_with.unknown_editor", "«{editor}» non è un'app che Fub conosce.")
+        .with("host.open_with.wrong_kind", "{app} non apre {path}.")
+        .with(
+            "host.open_with.not_installed",
+            "{app} non è installata su questo computer.",
+        )
+        .with("host.open_with.missing", "{path} non c'è più nel vault.")
+        .with("host.open_with.launch_failed", "{app} non si è avviata.")
+        .with("host.craft_render.off", "Le anteprime dei file Craft sono spente in questo vault.")
+        .with(
+            "host.craft_render.no_consent",
+            "Fub non usa le app Craft per le anteprime: si permette nelle impostazioni.",
+        )
+        .with("host.craft_render.no_cli", "Fub non trova il programma a riga di comando dell'app.")
+        .with("host.craft_render.ticket", "Fub non è riuscito a preparare l'anteprima: riprova.")
+        .with(
+            "host.craft_render.over_limit",
+            "Il file supera il peso massimo per un'anteprima fatta dall'app.",
+        )
+        .with(
             "host.mobile.shared_path",
             "La cartella condivisa non ha un percorso utilizzabile.",
         )
@@ -1849,6 +2006,38 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_FILES_LEGACY_FOLDER_PAGES_DESC,
             "Oltre a Cartella/_index.md, apre come pagina della cartella anche Cartella/Cartella.md e Cartella/index.md, come Obsidian. Nessun file cambia nome.",
+        )
+        .with(C_GROUP_EXTERNAL_APPS, "App esterne")
+        .with(C_CRAFT_EDITOR_PATHS, "Dove sono le app Craft")
+        .with(
+            C_CRAFT_EDITOR_PATHS_DESC,
+            "Una riga per programma, come vectorcraft=/opt/vc/vectorcraft, o vectorcraft-cli=… per la riga di comando. Il percorso intero vince su quello che Fub trova da solo.",
+        )
+        .with(C_CRAFT_CLI_PREVIEWS, "Anteprime fatte dalle app")
+        .with(
+            C_CRAFT_CLI_PREVIEWS_DESC,
+            "Fub fa fare l'anteprima di un file che non ne ha una all'app che lo apre, su una copia, solo quando apri il file tu.",
+        )
+        .with(C_CRAFT_CLI_PREVIEWS_ASK, "Chiedi la prima volta")
+        .with(C_CRAFT_CLI_PREVIEWS_ON, "Accese")
+        .with(C_CRAFT_CLI_PREVIEWS_OFF, "Spente")
+        .with(
+            C_CRAFT_PREVIEW_MAX_MIB,
+            "Peso massimo da leggere per un'anteprima (MiB)",
+        )
+        .with(
+            C_CRAFT_PREVIEW_MAX_MIB_DESC,
+            "Un file che va letto intero per l'anteprima e pesa di più resta senza: i file che si leggono a pezzi non hanno limite.",
+        )
+        .with(C_CRAFT_TREE_THUMBNAILS, "Miniature nell'albero")
+        .with(
+            C_CRAFT_TREE_THUMBNAILS_DESC,
+            "Accanto al nome di un file Craft, di un RAW, di un PDF o di un documento, la piccola anteprima che il file ha già. L'albero non avvia mai un'app.",
+        )
+        .with(C_CRAFT_TREE_SHOW_XMP, "Mostra i file XMP nell'albero")
+        .with(
+            C_CRAFT_TREE_SHOW_XMP_DESC,
+            "Spento, gli XMP spariscono dall'albero: la ricerca li trova e la foto mostra i loro dati.",
         )
         .with(C_URI_ALLOWED, "Collegamenti fub:// che scrivono senza chiedere")
         .with(
@@ -2334,6 +2523,29 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.reveal.outside", "{path} is outside the vault.")
         .with("host.reveal.root", "The vault folder cannot be read: {reason}")
         .with(
+            "host.open_with.off",
+            "The Craft apps are off in this vault: turn on the Craft component.",
+        )
+        .with("host.open_with.unknown_editor", "“{editor}” is not an app Fub knows.")
+        .with("host.open_with.wrong_kind", "{app} does not open {path}.")
+        .with(
+            "host.open_with.not_installed",
+            "{app} is not installed on this computer.",
+        )
+        .with("host.open_with.missing", "{path} is no longer in the vault.")
+        .with("host.open_with.launch_failed", "{app} did not start.")
+        .with("host.craft_render.off", "Craft file previews are off in this vault.")
+        .with(
+            "host.craft_render.no_consent",
+            "Fub does not use the Craft apps for previews: allow it in the settings.",
+        )
+        .with("host.craft_render.no_cli", "Fub cannot find the app's command-line program.")
+        .with("host.craft_render.ticket", "Fub could not prepare the preview: try again.")
+        .with(
+            "host.craft_render.over_limit",
+            "The file is over the maximum size for a preview made by the app.",
+        )
+        .with(
             "host.mobile.shared_path",
             "The shared folder has no usable path.",
         )
@@ -2442,6 +2654,38 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_FILES_LEGACY_FOLDER_PAGES_DESC,
             "Besides Folder/_index.md, opens Folder/Folder.md and Folder/index.md as the folder page too, like Obsidian. No file is renamed.",
+        )
+        .with(C_GROUP_EXTERNAL_APPS, "External apps")
+        .with(C_CRAFT_EDITOR_PATHS, "Where the Craft apps are")
+        .with(
+            C_CRAFT_EDITOR_PATHS_DESC,
+            "One line per program, like vectorcraft=/opt/vc/vectorcraft, or vectorcraft-cli=… for the command line. The full path wins over what Fub finds on its own.",
+        )
+        .with(C_CRAFT_CLI_PREVIEWS, "Previews made by the apps")
+        .with(
+            C_CRAFT_CLI_PREVIEWS_DESC,
+            "Fub has the app that opens a file make the preview the file lacks, on a copy, only when you open the file yourself.",
+        )
+        .with(C_CRAFT_CLI_PREVIEWS_ASK, "Ask the first time")
+        .with(C_CRAFT_CLI_PREVIEWS_ON, "On")
+        .with(C_CRAFT_CLI_PREVIEWS_OFF, "Off")
+        .with(
+            C_CRAFT_PREVIEW_MAX_MIB,
+            "Largest file to read for a preview (MiB)",
+        )
+        .with(
+            C_CRAFT_PREVIEW_MAX_MIB_DESC,
+            "A file that has to be read whole for its preview and weighs more stays without one: files read in pieces have no limit.",
+        )
+        .with(C_CRAFT_TREE_THUMBNAILS, "Thumbnails in the tree")
+        .with(
+            C_CRAFT_TREE_THUMBNAILS_DESC,
+            "Next to the name of a Craft file, a RAW, a PDF or a document, the small preview the file already has. The tree never starts an app.",
+        )
+        .with(C_CRAFT_TREE_SHOW_XMP, "Show XMP files in the tree")
+        .with(
+            C_CRAFT_TREE_SHOW_XMP_DESC,
+            "Off, XMP files disappear from the tree: search finds them and the photo shows their data.",
         )
         .with(C_URI_ALLOWED, "fub:// links that write without asking")
         .with(
@@ -2968,6 +3212,44 @@ fn set_log_levels(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Senza la feature `craft` nessuna delle cinque di «App esterne» c'è.
+    #[cfg(not(feature = "craft"))]
+    #[test]
+    fn without_craft_no_craft_setting_is_declared() {
+        let craft: Vec<String> = core_settings()
+            .into_iter()
+            .map(|spec| spec.key)
+            .filter(|key| key.starts_with("craft."))
+            .collect();
+        assert!(craft.is_empty(), "{craft:?}");
+    }
+
+    /// Con la feature ci sono tutte e cinque, nel gruppo «App esterne» e di
+    /// macchina.
+    #[cfg(feature = "craft")]
+    #[test]
+    fn with_craft_the_five_external_app_settings_are_of_the_machine() {
+        let craft: Vec<SettingSpec> = core_settings()
+            .into_iter()
+            .filter(|spec| spec.key.starts_with("craft."))
+            .collect();
+        let keys: Vec<&str> = craft.iter().map(|spec| spec.key.as_str()).collect();
+        assert_eq!(
+            keys,
+            [
+                CRAFT_EDITOR_PATHS,
+                CRAFT_CLI_PREVIEWS,
+                CRAFT_PREVIEW_MAX_MIB,
+                CRAFT_TREE_THUMBNAILS,
+                CRAFT_TREE_SHOW_XMP,
+            ]
+        );
+        for spec in &craft {
+            assert_eq!(spec.scope, fub_abi::settings::SettingScope::Machine);
+            assert_eq!(spec.group, Text::key(C_GROUP_EXTERNAL_APPS), "{}", spec.key);
+        }
+    }
 
     /// La cartella delle persone (K5) è del vault, viaggia con lui, e parte da
     /// `Persone`: `@` propone le note che ci stanno.

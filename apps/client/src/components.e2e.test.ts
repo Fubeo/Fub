@@ -126,7 +126,9 @@ const focusedPane = () => document.querySelector<HTMLElement>(".pane.focus")!;
 const fileOnly = () => focusedPane().querySelector<HTMLElement>(".document-surface-file-only");
 const switchOn = () => fileOnly()?.querySelector<HTMLButtonElement>("[data-action='switch-on']") ?? null;
 const pdfViewer = () => focusedPane().querySelector(".media-pdf");
-const board = () => focusedPane().querySelector(".canvas-surface-host");
+/// La lavagna montata: la tela arriva quando il nucleo in WebAssembly è
+/// caricato, dopo il riquadro che la ospita.
+const board = () => focusedPane().querySelector(".canvas-surface-host .canvas-viewport");
 
 /// Il riquadro «solo come file» per `name`, con il componente che serve.
 async function fileOnlyFor(name: string, component: string): Promise<void> {
@@ -197,7 +199,7 @@ describe("un file di un componente spento", () => {
     await waitFor("la lavagna si apre", () => board() !== null);
     // Un doppio clic sulla tela vuota aggiunge una scheda: una modifica che
     // il salvataggio automatico non ha ancora scritto.
-    focusedPane().querySelector(".canvas-viewport")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+    board()!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
     await settle();
     const { describeTab } = await import("./state/document-controller");
     const { activeTab } = await import("./state/layout");

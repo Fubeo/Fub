@@ -13,6 +13,10 @@ contributi e i controlli da eseguire. Le regole architetturali sono spiegate in
 - dipendenze di sistema richieste da Tauri;
 - `cargo-deny` soltanto per il controllo della supply chain;
 - target `wasm32-wasip2` per i test completi del runtime WASM.
+- target `wasm32-unknown-unknown` per il client: `npm test`, `npm run build` e
+  `npm run dev` compilano il nucleo della lavagna (`crates/fub-canvas-wasm`) in
+  un modulo `.wasm` con cargo, e senza il target si fermano con il comando che
+  lo installa (`rustup target add wasm32-unknown-unknown`).
 
 Usa `npm ci`, non sostituire npm con un altro package manager.
 
@@ -82,6 +86,7 @@ npm run typecheck
 npm test
 npm run build
 npm run bench:grid
+npm run bench:lampo
 node .github/scripts/check-host-workspace-boundary.mjs
 node .github/scripts/check-error-literals.mjs
 node .github/scripts/check-rust-comments.mjs

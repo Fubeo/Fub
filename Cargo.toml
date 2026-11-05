@@ -12,6 +12,13 @@ members = [
     "crates/fub-testkit",
     "crates/fub-format-markdown",
     "crates/fub-format-canvas",
+    # Il nucleo della lavagna (N3): il modello e la lettura di una `.canvas`.
+    # Puro: lo usano il formato, i comandi e la WebView.
+    "crates/fub-canvas-core",
+    # La facciata WebAssembly del nucleo (N3): la WebView la carica come
+    # `.wasm`, fatto con `cargo rustc --crate-type cdylib` (il manifesto resta
+    # `rlib`).
+    "crates/fub-canvas-wasm",
     "crates/fub-format-base",
     "crates/fub-ink",
     # Il risolutore dei componenti (K1): puro, non dipende da nessun membro.
@@ -20,6 +27,7 @@ members = [
     "crates/fub-format-svg",
     "crates/fub-format-rich",
     "crates/fub-format-xlsx",
+    "crates/fub-format-craft",
     "crates/fub-importers",
     "crates/fub-features",
     "crates/fub-host",
@@ -106,8 +114,10 @@ flate2 = "1.1.9"
 quick-xml = "0.41.0"
 # Open-no-follow flags for theme bundle descriptors on Unix. The host keeps
 # these platform bits behind its target dependency; no path-based read relies
-# on a preflight stat.
-rustix = { version = "1", default-features = false, features = ["fs"] }
+# on a preflight stat. `process` serve a `craft/launch.rs` per fermare
+# l'intero gruppo di una CLI scaduta (`kill_process_group`): la accendeva già
+# cap-primitives, quindi non entra codice nuovo nell'albero.
+rustix = { version = "1", default-features = false, features = ["fs", "process"] }
 # Il vocabolario del log (§17.3, decisione 0062). **Era già nell'albero** —
 # 0.1.44, tirato da tauri — e prenderlo come dipendenza diretta non aggiunge un
 # crate: aggiunge un nome che descrive una cosa che c'era. Il collettore invece
@@ -157,11 +167,13 @@ fub-sdk = { path = "crates/fub-sdk", version = "0.1.0" }
 fub-testkit = { path = "crates/fub-testkit", version = "0.1.0" }
 fub-format-markdown = { path = "crates/fub-format-markdown", version = "0.1.0" }
 fub-format-canvas = { path = "crates/fub-format-canvas", version = "0.1.0" }
+fub-canvas-core = { path = "crates/fub-canvas-core", version = "0.1.0" }
 fub-format-base = { path = "crates/fub-format-base", version = "0.1.0" }
 fub-ink = { path = "crates/fub-ink", version = "0.1.0" }
 fub-componenti = { path = "crates/fub-componenti", version = "0.1.0" }
 fub-scene = { path = "crates/fub-scene", version = "0.1.0" }
 fub-format-svg = { path = "crates/fub-format-svg", version = "0.1.0" }
+fub-format-craft = { path = "crates/fub-format-craft", version = "0.1.0" }
 fub-format-rich = { path = "crates/fub-format-rich", version = "0.1.0" }
 fub-format-xlsx = { path = "crates/fub-format-xlsx", version = "0.1.0" }
 fub-importers = { path = "crates/fub-importers", version = "0.1.0" }

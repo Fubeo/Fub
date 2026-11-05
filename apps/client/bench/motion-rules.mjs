@@ -88,9 +88,24 @@ export function foreignInKeyframes(keyframes) {
   return foreignProperties(names);
 }
 
+/// La scala neutra che CodeMirror scrive da sé sui suoi strati (`.cm-layer`:
+/// selezione, cursore). Quando misura l'editor dentro un antenato scalato,
+/// come il riquadro durante la cascata d'avvio, compensa la scala sugli strati
+/// e, a scala finita, ci lascia `scale(1, 1)`: non sposta niente, e non è del
+/// moto. Vale solo per l'ultimo elemento del percorso e solo per la scala 1.
+export function editorLayerIdentity(entry) {
+  const last = entry.path.split(" > ").at(-1) ?? "";
+  return (
+    entry.property === "transform" &&
+    /(^|\.)cm-layer(\.|:|$)/.test(last) &&
+    /^scale\(\s*1(\s*,\s*1)?\s*\)$/.test(entry.value.trim())
+  );
+}
+
 /// Ciò che il movimento ha lasciato in linea e il moto ridotto no (regola 2).
 /// Le due liste sono `{ path, property, value }` degli stessi elementi nelle due
 /// pagine, a riposo. Conta anche un valore diverso: è un altro stato finale.
+/// La scala neutra degli strati di CodeMirror non conta (`editorLayerIdentity`).
 export function residue(moving, still) {
   const kept = new Map(still.map((entry) => [`${entry.path}\n${entry.property}`, entry.value.trim()]));
   const left = [];
@@ -98,6 +113,7 @@ export function residue(moving, still) {
     const key = `${entry.path}\n${entry.property}`;
     const value = entry.value.trim();
     if (kept.get(key) === value) continue;
+    if (editorLayerIdentity(entry)) continue;
     left.push({ ...entry, value, still: kept.has(key) ? kept.get(key) : null });
   }
   return left;

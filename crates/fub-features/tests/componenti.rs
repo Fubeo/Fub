@@ -46,7 +46,11 @@ fn gli_id_sono_unici_e_tutti_inclusi() {
 
 /// Un requisito che una build parziale non compila non è un panic a runtime:
 /// la mappa non si costruisce, e l'errore nomina chi e che cosa.
+///
+/// La riga che lo prova è la Lavagna, che richiede la Penna: senza la sua
+/// cargo feature la domanda non ha un soggetto.
 #[test]
+#[cfg(feature = "lavagna")]
 fn un_requisito_spento_e_un_errore_chiaro() {
     let righe: Vec<_> = componenti::righe()
         .into_iter()
@@ -149,9 +153,12 @@ fn ogni_feature_ufficiale_e_una_riga() {
         .iter()
         .filter(|riga| riga.gruppo == "scrivere" && riga.requires.contains(&"fub.markdown"))
         .count();
+    // Disegni e Lavagna non sono feature delle note: stanno in `disegnare` e
+    // in `pensare`.
     let disegni = usize::from(cfg!(feature = "draw"));
+    let lavagna = usize::from(cfg!(feature = "lavagna"));
     assert_eq!(
-        note + disegni,
+        note + disegni + lavagna,
         ufficiali,
         "ogni feature ufficiale delle note richiede le note"
     );

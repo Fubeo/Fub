@@ -1,10 +1,11 @@
 // Gli scenari di N0, S7 di N13, la memoria (R1), le tessere (T1) e
-// l'indicizzazione (I1) di K0, i chunk di ciascun profilo dei componenti (C1)
-// di K2, nella WebView vera, guidati da WebDriver.
+// l'indicizzazione (I1) di K0, il nucleo della lavagna (L1) di N3 e i chunk
+// di ciascun profilo dei componenti (C1) di K2, nella WebView vera, guidati da
+// WebDriver.
 //
 //   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3,C1]
 //        [--driver=tauri-driver] [--native-driver=/usr/bin/WebKitWebDriver]
-//        [--budgets=ci|targets] [--out=bench/.output/webview]
+//        [--budgets=ci|targets] [--out=bench/.output/webview] [--dist=dist]
 //
 // Avvia `tauri-driver` con un vault e una configurazione scritti in una
 // cartella temporanea (`fixtures.mjs`): la sonda è accesa dalle impostazioni
@@ -25,6 +26,7 @@ import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
 import { noteName, writeFixtures } from "./fixtures.mjs";
 import { settled } from "./memory.mjs";
+import { CANVAS_SCRIPT, COMMITS, OPENS, SIZES, builtModule } from "./canvas.mjs";
 import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
 
@@ -34,7 +36,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
-const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,R1,T1,I1,C1").split(","));
+const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,R1,T1,I1,L1,C1").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
 const port = Number(args.port ?? 4444);
@@ -573,6 +575,30 @@ const SCENARIOS = {
     }
     return { profiles, values, samples: C1_PROFILES.length };
   },
+  /// Il nucleo della lavagna in WebAssembly (N3): il modulo che la build ha
+  /// messo fra gli asset, compilato con la CSP dell'app, poi istanza, `open`
+  /// e `commit` di uno spostamento su una lavagna di 50 e una di 2000 schede
+  /// (`canvas.mjs`). Una CSP che non lascia compilare WebAssembly fa fallire
+  /// lo scenario, con l'errore e le violazioni che la pagina ha visto.
+  async L1(session) {
+    // Il nome con l'hash viene da `dist/`: deve essere la build che l'app
+    // di release ha dentro.
+    const { url } = builtModule(args.dist ? resolve(args.dist) : undefined);
+    const report = await session.executeAsync(CANVAS_SCRIPT, [url, SIZES, OPENS, COMMITS]);
+    const violations = (report.violations ?? []).map((v) => `${v.directive} ${v.blocked}`.trim());
+    if (report.error) {
+      throw new Error(`il nucleo della lavagna non si carica (${report.error})${violations.length > 0 ? `; violazioni della CSP: ${violations.join(", ")}` : ""}`);
+    }
+    if (violations.length > 0) throw new Error(`violazioni della CSP mentre il nucleo si carica: ${violations.join(", ")}`);
+    const values = { "L1.istanza": report.instanceMs };
+    for (const board of report.boards) {
+      values[`L1.open.${board.size}.prima`] = board.firstOpenMs;
+      values[`L1.open.${board.size}.p95`] = board.open.p95;
+      values[`L1.commit.${board.size}.primo`] = board.firstCommitMs;
+      values[`L1.commit.${board.size}.p95`] = board.commit.p95;
+    }
+    return { report, values, samples: report.boards.reduce((n, b) => n + b.open.count + b.commit.count, 0) };
+  },
   /// Avvio a freddo fino alla prima nota visibile: l'app riapre la nota che
   /// S1 ha lasciato aperta.
   async S6(session) {
@@ -657,9 +683,9 @@ async function main() {
     // R1 subito dopo il riscaldamento: l'avvio riapre soltanto la nota del
     // riscaldamento, non le schede degli altri scenari. I1 subito dopo, con
     // poche schede da riaprire. S6 dopo S1: l'avvio da misurare riapre la
-    // nota che S1 ha lasciato.
-    // C1 in fondo: cambia il profilo del vault, e lo lascia a «Tutto».
-    const order = ["R1", "I1", "S1", "S6", "S2", "S3", "S4", "S5", "S7", "T1", "C1"].filter((id) => only.has(id));
+    // nota che S1 ha lasciato. L1 dopo: non apre niente nel vault. C1 in
+    // fondo: cambia il profilo del vault, e lo lascia a «Tutto».
+    const order = ["R1", "I1", "S1", "S6", "S2", "S3", "S4", "S5", "S7", "T1", "L1", "C1"].filter((id) => only.has(id));
     for (const id of order) {
       // Un'app che non parte è un risultato dello scenario, non la fine del
       // banco: gli altri scenari e il referto vanno avanti.

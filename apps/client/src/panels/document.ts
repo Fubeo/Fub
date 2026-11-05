@@ -18,6 +18,8 @@ import { iconEl } from "../ui/icons";
 import { api } from "../host/ipc";
 import { emit, on, state } from "../state/store";
 import { documentSessions } from "../state/document-session";
+import { lentTo, unlend } from "../state/lend";
+import { appPreviewSubject, CRAFT_CONSENT_SETTING, craftServed, forgetConsent, peekPreview, previewOf, renderPreview, watchCraftPreviews } from "../state/craft-previews";
 import { openDocument as openRecreated } from "../state/document-controller";
 import { clearRemovedNotice, dismissSheetNotice, limitedMode, removedNoticeOf, sheetNoticesOf, type SheetNoticeKind } from "../state/sheet-notices";
 import {
@@ -199,6 +201,14 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
       if (frame && current) drawEmptyPane(frame, current.tabs.length === 0);
     }
   }));
+  // La domanda sulle anteprime fatte dalle app (T31) segue le risposte dello
+  // store: un'anteprima arrivata, il consenso cambiato (allora `""`, tutti).
+  watchCraftPreviews(lifetime, (doc) => {
+    if (doc === "") consentAsked.clear();
+    else consentAsked.delete(doc);
+    redrawNoticesOf(doc);
+  });
+  lifetime.add(() => consentAsked.clear());
   mountDocumentController(lifetime, d, view);
 }
 
@@ -1379,7 +1389,7 @@ interface SheetLine {
   readonly id: string;
   readonly tone: "info" | "warning" | "danger";
   readonly text: string;
-  readonly action?: { readonly label: string; readonly run: () => void };
+  readonly actions?: readonly { readonly label: string; readonly run: () => void }[];
   readonly dismiss?: () => void;
 }
 
@@ -1401,13 +1411,13 @@ function noticeLines(doc: string | null, pane: string): SheetLine[] {
       text: t("notice.removed", { doc: docTitle(removed.doc) }),
       ...(recreate
         ? {
-            action: {
+            actions: [{
               label: t("document.recreate"),
               run: () => {
                 clearRemovedNotice(pane);
                 void recreate().then(() => openRecreated(removed.doc));
               },
-            },
+            }],
           }
         : {}),
       dismiss: () => {
@@ -1434,15 +1444,28 @@ function noticeLinesOf(doc: string): SheetLine[] {
       id: "save_failed",
       tone: "danger",
       text: t("notice.save_failed", { doc: name }),
-      action: {
+      actions: [{
         label: t("app.retry"),
         run: () => void allCommands().find((entry) => entry.id === "shell.doc.save")?.run?.(),
-      },
+      }],
     });
   }
   if (documentSessions.isDeletionPending(doc)) {
     lines.push({ id: "read_only", tone: "warning", text: t("notice.read_only", { doc: name }) });
   }
+  // Il prestito a un'app Craft (T17): «Riprendi qui» lo finisce, e la scheda
+  // torna modificabile se nient'altro la tiene ferma.
+  const app = lentTo(doc);
+  if (app !== null) {
+    lines.push({
+      id: "lent",
+      tone: "info",
+      text: t("lend.notice", { app }),
+      actions: [{ label: t("lend.resume"), run: () => unlend(doc) }],
+    });
+  }
+  const consent = consentLineOf(doc);
+  if (consent) lines.push(consent);
   for (const notice of sheetNoticesOf(doc)) {
     const detail = notice.detail ? t(notice.detail) : "";
     lines.push({
@@ -1456,6 +1479,75 @@ function noticeLinesOf(doc: string): SheetLine[] {
     });
   }
   return lines;
+}
+
+/// I documenti di cui la domanda a `craft.preview` della riga del consenso è
+/// già partita senza una risposta tenuta (un guasto, il componente spento):
+/// un ridisegno non la rifà finché lo store non dice che qualcosa è cambiato.
+const consentAsked = new Set<string>();
+/// Una risposta alla domanda alla volta, in tutta la finestra.
+let consentPending = false;
+
+/// La riga che chiede di accendere le anteprime fatte dalle app (T31): un PDF
+/// o un documento senza anteprima, col consenso da chiedere e l'app che la
+/// farebbe installata (`render` c'è). La risposta tenuta dallo store basta;
+/// se non c'è, la si chiede senza avviare niente, e la risposta ridisegna.
+function consentLineOf(doc: string): SheetLine | null {
+  if (appPreviewSubject(doc) === null || !craftServed()) return null;
+  const answer = peekPreview(doc, "small");
+  if (!answer) {
+    if (!consentAsked.has(doc)) {
+      consentAsked.add(doc);
+      void previewOf(doc, "small").then((asked) => {
+        if (asked) {
+          consentAsked.delete(doc);
+          redrawNoticesOf(doc);
+        }
+      }, () => {});
+    }
+    return null;
+  }
+  const { preview } = answer;
+  if (preview.image || preview.queued || preview.render?.consent !== "ask") return null;
+  return {
+    id: "craft_consent",
+    tone: "info",
+    text: t("craft.consent.notice", { app: preview.render.app }),
+    actions: [
+      { label: t("craft.consent.yes"), run: () => void answerConsent(doc, "on") },
+      { label: t("craft.consent.no"), run: () => void answerConsent(doc, "off") },
+    ],
+  };
+}
+
+/// «Sì, accendi»: il consenso acceso, e l'anteprima chiesta adesso (il clic
+/// è il gesto); la risposta in coda toglie la riga. «No, lasciale spente»: le
+/// risposte tenute dicono ancora `ask`, e si dimenticano. Il cambio del
+/// consenso toglie la riga da ogni scheda.
+async function answerConsent(doc: string, value: "on" | "off"): Promise<void> {
+  if (consentPending) return;
+  consentPending = true;
+  try {
+    await api.setSetting(CRAFT_CONSENT_SETTING, value);
+  } catch (failure) {
+    notify(errorText(failure), "guasto");
+    return;
+  } finally {
+    consentPending = false;
+  }
+  if (value === "off") {
+    forgetConsent();
+    return;
+  }
+  await renderPreview(doc, "small").catch((failure: unknown) => notify(errorText(failure), "guasto"));
+}
+
+/// Ridisegna gli avvisi dei riquadri che mostrano `doc` (`""`: tutti).
+function redrawNoticesOf(doc: string): void {
+  for (const [pane, frame] of frames) {
+    const shown = activeDoc(pane);
+    if (doc === "" || shown === doc) drawNotices(frame, shown);
+  }
 }
 
 function drawNotices(r: PaneFrame, doc: string | null): void {
@@ -1478,12 +1570,12 @@ function drawNotices(r: PaneFrame, doc: string | null): void {
     text.className = "sheet-notice-text";
     text.textContent = line.text;
     row.append(text);
-    if (line.action) {
-      const run = line.action.run;
+    for (const action of line.actions ?? []) {
+      const run = action.run;
       const button = document.createElement("button");
       button.type = "button";
       button.className = "link-button";
-      button.textContent = line.action.label;
+      button.textContent = action.label;
       button.addEventListener("click", () => run());
       row.append(button);
     }

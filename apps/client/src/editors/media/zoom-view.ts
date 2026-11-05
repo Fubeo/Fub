@@ -17,6 +17,7 @@ import { t, type Key } from "../../i18n/strings";
 import type { Lifetime } from "../../ui/lifetime";
 import { reducedMotion } from "../../theme/reduced-motion";
 import { attachTooltip, setTooltip } from "../../ui/tooltip";
+import { orientationOf } from "./orientation";
 
 export type Rotation = 0 | 90 | 180 | 270;
 
@@ -37,6 +38,9 @@ export interface ZoomState {
   readonly x: number;
   readonly y: number;
   readonly rotation: Rotation;
+  /// Specchiata in orizzontale (l'orientamento EXIF 2, 4, 5, 7): assente vale
+  /// come no.
+  readonly mirrored?: boolean;
 }
 
 export const MIN_SCALE = 0.05;
@@ -120,7 +124,8 @@ export function rotated(state: ZoomState): Rotation {
 export function transformOf(state: ZoomState): string {
   const round = (n: number) => Math.round(n * 100) / 100;
   return `translate(-50%, -50%) translate(${round(state.x)}px, ${round(state.y)}px) `
-    + `rotate(${state.rotation}deg) scale(${Math.round(state.scale * 10000) / 10000})`;
+    + `rotate(${state.rotation}deg) scale(${Math.round(state.scale * 10000) / 10000})`
+    + (state.mirrored ? " scaleX(-1)" : "");
 }
 
 /// Il fondo sotto un contenuto che può essere trasparente.
@@ -142,6 +147,10 @@ export interface ZoomViewOptions {
   /// Un disegno vettoriale (un diagramma, un SVG): adattandolo al palco lo si
   /// può anche ingrandire, fino a `VECTOR_FIT_LIMIT`.
   readonly vector?: boolean;
+  /// L'orientamento EXIF di una foto (da 1 a 8): la vista parte già girata
+  /// e specchiata, e il browser non la gira una seconda volta. Assente, la
+  /// vista parte dritta come sempre.
+  readonly orientation?: number | null;
 }
 
 export interface ZoomView {
@@ -199,6 +208,8 @@ export function mountZoomView(src: string, options: ZoomViewOptions, life: Lifet
   image.style.maxHeight = "none";
   image.style.transformOrigin = "50% 50%";
   image.style.visibility = "hidden";
+  const start = orientationOf(options.orientation);
+  if (options.orientation !== undefined && options.orientation !== null) image.style.imageOrientation = "none";
   stage.append(image);
 
   const bar = document.createElement("div");
@@ -230,7 +241,9 @@ export function mountZoomView(src: string, options: ZoomViewOptions, life: Lifet
 
   let content: Size = options.size ?? { width: 0, height: 0 };
   const fitLimit = options.vector ? VECTOR_FIT_LIMIT : 1;
-  let state: ZoomState = { scale: 1, x: 0, y: 0, rotation: 0 };
+  let state: ZoomState = start.mirrored
+    ? { scale: 1, x: 0, y: 0, rotation: start.rotation, mirrored: true }
+    : { scale: 1, x: 0, y: 0, rotation: start.rotation };
   // Finché l'utente non tocca lo zoom, il contenuto segue il palco: si
   // riadatta quando la finestra cambia.
   let following = true;
@@ -264,6 +277,11 @@ export function mountZoomView(src: string, options: ZoomViewOptions, life: Lifet
     }
   }
 
+  /// Lo specchio non cambia adattando o girando: è della foto.
+  function keep(next: ZoomState): ZoomState {
+    return state.mirrored ? { ...next, mirrored: true } : next;
+  }
+
   function set(next: ZoomState, animate = false): void {
     state = clampPan(next, content, viewport());
     paint(animate);
@@ -271,7 +289,7 @@ export function mountZoomView(src: string, options: ZoomViewOptions, life: Lifet
 
   function fit(animate = false): void {
     following = true;
-    set(fitted(content, viewport(), state.rotation, fitLimit), animate);
+    set(keep(fitted(content, viewport(), state.rotation, fitLimit)), animate);
   }
 
   function actual(animate = false): void {
@@ -288,7 +306,7 @@ export function mountZoomView(src: string, options: ZoomViewOptions, life: Lifet
   function rotate(): void {
     const rotation = rotated(state);
     if (following) {
-      state = fitted(content, viewport(), rotation, fitLimit);
+      state = keep(fitted(content, viewport(), rotation, fitLimit));
       paint(true);
     } else {
       set({ ...state, rotation }, true);

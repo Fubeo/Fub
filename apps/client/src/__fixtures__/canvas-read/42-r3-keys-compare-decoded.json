@@ -1,0 +1,13 @@
+{
+  "name": "r3-keys-compare-decoded",
+  "description": "R3: le chiavi si confrontano decodificate, dopo il BOM iniziale: \\u0061 e a sono la stessa chiave sconosciuta",
+  "source": "\ufeff {\"\\u0061\":1,\"a\":2}",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [],
+    "edges": [],
+    "extra": {
+      "a": 2
+    }
+  }
+}

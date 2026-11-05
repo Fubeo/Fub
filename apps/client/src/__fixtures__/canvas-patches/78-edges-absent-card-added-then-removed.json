@@ -1,0 +1,10 @@
+{
+  "name": "edges-absent-card-added-then-removed",
+  "description": "R11: edges è assente; una scheda nuova e poi la stessa tolta, in un giro: il modello di dopo ha edges vuoto, che non si aggiunge, e il testo resta byte per byte quello di prima, xFuture compreso",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"a\"}],\"xFuture\":1}",
+  "patches": [{"kind":"upsert-node","before":null,"after":{"id":"c","type":"text","x":0,"y":100,"width":100,"height":50,"text":"c"}},{"kind":"remove-node","before":{"id":"c","type":"text","x":0,"y":100,"width":100,"height":50,"text":"c"},"after":null,"at":1}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"a\"}],\"xFuture\":1}"
+  }
+}

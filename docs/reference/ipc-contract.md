@@ -230,6 +230,47 @@ ciclo degli eventi successivo alla risposta e con la radice del suo vault.
 eventi, senza `componentsApply`), `componentsFail` fa rispondere a
 `componentsApply` un `PluginError`.
 
+## Apri con e anteprime Craft
+
+Tre comandi dell'app servono «Apri con» un'app Craft e l'anteprima fatta dalla
+riga di comando di un'app (`crates/fub-app/src/lib.rs`). Le regole sono
+dell'host, in [App esterne](external-editors.md) e in
+[Formati Craft](craft-formats.md); il comando IPC apre il cancello, lavora
+fuori dal thread principale e localizza l'errore.
+
+| Comando | Argomenti | Risposta |
+|---|---|---|
+| `external_editors` | `vault?`, `doc?` | `ExternalEditor[]`: `id`, `name`, `opens`, `installed`, `running` |
+| `open_with` | `vault?`, `path`, `editor`, `page?` | `OpenedWith`: `editor`, `how` (`forwarded`, `in_running`, `new_process`) |
+| `craft_render` | `vault?`, `doc`, `size` (`small`, `large`) | `CraftPreview`, con `queued: true` quando il job `craft.render` è in coda |
+
+Senza `doc`, `external_editors` elenca tutte le app che Fub conosce. `page`
+è un `u32`: un numero negativo o oltre quel limite lo rifiuta la
+deserializzazione, come una `size` che non è `small` o `large`, prima che il
+comando parta. L'esito di `craft_render` arriva come `job_done` del job
+`craft.render`; la shell legge la risposta con `readCraftPreview`, e una forma
+diversa da quella del contratto è un errore `internal`.
+
+I tre comandi sono della sola shell principale: `guard_main_shell` rifiuta con
+`permission_denied` una finestra di documento, il visore e ogni finestra fuori
+dall'origine locale, prima di ogni lavoro. Li concede `allow-shell`, non
+`allow-mobile`. `craft_render` non è un comando del bundle `fub.craft`: un
+plugin e l'MCP raggiungono `invoke_command`, e avviare il programma di un'app
+vuole il gesto di chi guarda la shell. Il comando del bundle,
+`craft.preview`, resta in sola lettura e non avvia niente.
+
+| Errore | Quando |
+|---|---|
+| `permission_denied` | la finestra non è la shell principale; `craft_render` senza il consenso `on` di `craft.cli-previews` |
+| `unserved` | il componente `fub.craft` è spento; `craft_render` per un file oltre il peso massimo |
+| `bad_args` | un'app che Fub non conosce, un'app che non apre quell'estensione, argomenti non validi |
+| `not_found` | vault chiuso fra due chiamate, app non installata, file sparito, CLI dell'app non trovata |
+| `io` | il programma dell'app non è partito |
+
+Un'app vecchia che non ha questi comandi li rifiuta; la shell tratta il
+rifiuto come «nessuna app Craft». L'host finto li serve solo con le opzioni
+`externalEditors`, `openWith` e `craftRender`, e registra ogni chiamata.
+
 ## Tipi principali
 
 La shell riceve forme per:

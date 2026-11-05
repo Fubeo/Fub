@@ -172,6 +172,19 @@ pub enum Call {
         template: Option<String>,
         mode: InvokeMode,
     },
+    /// Le app Craft che aprono `doc` ([`Host::external_editors`]): all'app,
+    /// perché «Già aperta» lo sa chi ha avviato i programmi.
+    ExternalEditors {
+        vault: Option<String>,
+        doc: Option<String>,
+    },
+    /// Apre `path` con l'app `editor` ([`Host::open_with`]).
+    OpenWith {
+        vault: Option<String>,
+        path: String,
+        editor: String,
+        page: Option<u32>,
+    },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -291,6 +304,15 @@ pub fn answer(host: &Host, call: Call) -> Result<Value, PluginError> {
                 mode,
             )?)
         }
+        Call::ExternalEditors { vault, doc } => {
+            to_value(host.external_editors(vault.as_deref(), doc.as_deref())?)
+        }
+        Call::OpenWith {
+            vault,
+            path,
+            editor,
+            page,
+        } => to_value(host.open_with(vault.as_deref(), &path, &editor, page)?),
     }
 }
 
@@ -442,7 +464,7 @@ impl Drop for ControlServer {
     }
 }
 
-fn fresh_token() -> std::io::Result<String> {
+pub(crate) fn fresh_token() -> std::io::Result<String> {
     use ring::rand::SecureRandom;
     let mut bytes = [0u8; 32];
     ring::rand::SystemRandom::new()
@@ -617,6 +639,309 @@ mod tests {
         assert_eq!(Endpoint::read(&dir), None);
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
         drop(server);
+    }
+
+    /// Il tag `op` di ogni chiamata. Il `match` senza `_` obbliga chi aggiunge
+    /// una chiamata a dargli un nome qui, e quindi a metterla in
+    /// [`every_call`].
+    fn op(call: &Call) -> &'static str {
+        match call {
+            Call::Vaults => "vaults",
+            Call::WaitIndexed { .. } => "wait_indexed",
+            Call::QueryIndex { .. } => "query_index",
+            Call::Commands { .. } => "commands",
+            Call::InvokeCommand { .. } => "invoke_command",
+            Call::InvokeJob { .. } => "invoke_job",
+            Call::ReadDocument { .. } => "read_document",
+            Call::ReadModel { .. } => "read_model",
+            Call::WriteDocument { .. } => "write_document",
+            Call::WriteBytes { .. } => "write_bytes",
+            Call::Views { .. } => "views",
+            Call::RenderView { .. } => "render_view",
+            Call::ViewAction { .. } => "view_action",
+            Call::SetPluginEnabled { .. } => "set_plugin_enabled",
+            Call::SetSetting { .. } => "set_setting",
+            Call::Components { .. } => "components",
+            Call::ApplyComponents { .. } => "apply_components",
+            Call::ResetSetting { .. } => "reset_setting",
+            Call::SessionNotice => "session_notice",
+            Call::StartupDiagnostics { .. } => "startup_diagnostics",
+            Call::Capture { .. } => "capture",
+            Call::NewNote { .. } => "new_note",
+            Call::ExternalEditors { .. } => "external_editors",
+            Call::OpenWith { .. } => "open_with",
+        }
+    }
+
+    const CALLS: usize = 24;
+
+    fn every_call() -> Vec<Call> {
+        let vault = || Some("/v".to_string());
+        let doc = || DocId::new("Note/a.md");
+        let instance = ViewInstance::only("fub.graph");
+        vec![
+            Call::Vaults,
+            Call::WaitIndexed {
+                vault: vault(),
+                timeout_ms: 100,
+            },
+            Call::QueryIndex {
+                vault: vault(),
+                query: IndexQuery::Tags {
+                    matching: Default::default(),
+                    page: None,
+                },
+            },
+            Call::Commands { vault: None },
+            Call::InvokeCommand {
+                vault: vault(),
+                command: "note.create".into(),
+                args: serde_json::json!({ "name": "a.md" }),
+                mode: InvokeMode::DryRun,
+            },
+            Call::InvokeJob {
+                vault: vault(),
+                plugin: "fub.craft".into(),
+                job: "craft.render".into(),
+                payload: serde_json::json!({}),
+            },
+            Call::ReadDocument {
+                vault: vault(),
+                doc: doc(),
+            },
+            Call::ReadModel {
+                vault: None,
+                doc: doc(),
+            },
+            Call::WriteDocument {
+                vault: vault(),
+                doc: doc(),
+                source: "# A\n".into(),
+                base: WriteBase::DescendsFrom(Revision::new("1")),
+            },
+            Call::WriteBytes {
+                vault: vault(),
+                doc: doc(),
+                bytes: "AA==".into(),
+                expected: None,
+            },
+            Call::Views { vault: vault() },
+            Call::RenderView {
+                vault: vault(),
+                instance: instance.clone(),
+            },
+            Call::ViewAction {
+                vault: vault(),
+                instance,
+                action: UiAction {
+                    action: fub_abi::ui::ActionId("open".into()),
+                    payload: Value::Null,
+                    fields: Vec::new(),
+                },
+            },
+            Call::SetPluginEnabled {
+                vault: vault(),
+                id: "fub.graph".into(),
+                enabled: false,
+            },
+            Call::SetSetting {
+                vault: vault(),
+                key: "craft.cli-previews".into(),
+                value: SettingValue::Text("ask".into()),
+            },
+            Call::Components { vault: vault() },
+            Call::ApplyComponents {
+                vault: vault(),
+                azione: crate::componenti::Azione::Accendi {
+                    id: "fub.graph".into(),
+                },
+                apply: false,
+            },
+            Call::ResetSetting {
+                vault: vault(),
+                key: "craft.cli-previews".into(),
+            },
+            Call::SessionNotice,
+            Call::StartupDiagnostics { vault: None },
+            Call::Capture {
+                vault: vault(),
+                payload: crate::automation::CapturePayloadV1 {
+                    v: 1,
+                    title: "T".into(),
+                    markdown: "x".into(),
+                    source_url: None,
+                    properties: None,
+                    target: crate::automation::CaptureTarget {
+                        vault: None,
+                        folder: None,
+                        note: None,
+                        mode: crate::automation::CaptureMode::Create,
+                    },
+                },
+            },
+            Call::NewNote {
+                vault: vault(),
+                folder: Some("Note".into()),
+                name: None,
+                title: Some("T".into()),
+                template: None,
+                mode: InvokeMode::Apply,
+            },
+            Call::ExternalEditors {
+                vault: vault(),
+                doc: Some("Disegni/logo.vectorcraft".into()),
+            },
+            Call::OpenWith {
+                vault: None,
+                path: "Documenti/carta.pdf".into(),
+                editor: "pdfcraft".into(),
+                page: Some(3),
+            },
+        ]
+    }
+
+    #[test]
+    fn every_call_crosses_json_with_its_op_and_comes_back_the_same() {
+        let calls = every_call();
+        let ops: std::collections::BTreeSet<&str> = calls.iter().map(op).collect();
+        assert_eq!(ops.len(), CALLS, "one sample for each call");
+        assert_eq!(calls.len(), CALLS);
+        for call in calls {
+            let json = serde_json::to_value(&call).unwrap();
+            assert_eq!(json["op"], op(&call), "{json}");
+            let request = Request {
+                token: "t".into(),
+                call: call.clone(),
+            };
+            let line = serde_json::to_vec(&request).unwrap();
+            let back: Request = serde_json::from_slice(&line).unwrap();
+            assert_eq!(back.call, call, "{json}");
+        }
+        // Le forme delle due chiamate di «Apri con», come le scrive la CLI.
+        assert_eq!(
+            serde_json::to_value(Call::ExternalEditors {
+                vault: None,
+                doc: None
+            })
+            .unwrap(),
+            serde_json::json!({ "op": "external_editors", "vault": null, "doc": null })
+        );
+        assert_eq!(
+            serde_json::from_value::<Call>(serde_json::json!({
+                "op": "open_with", "vault": "/v", "path": "a.pdf", "editor": "pdfcraft", "page": null
+            }))
+            .unwrap(),
+            Call::OpenWith {
+                vault: Some("/v".into()),
+                path: "a.pdf".into(),
+                editor: "pdfcraft".into(),
+                page: None,
+            }
+        );
+    }
+
+    /// Un vault vuoto aperto da un host senza watcher, con la sua configurazione.
+    fn opened() -> (tempfile::TempDir, Host) {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(tmp.path().join("vault")).unwrap();
+        std::fs::create_dir_all(root.join("Disegni")).unwrap();
+        std::fs::write(root.join("Disegni/logo.vectorcraft"), b"{}").unwrap();
+        let config = camino::Utf8PathBuf::from_path_buf(tmp.path().join("config")).unwrap();
+        std::fs::create_dir_all(&config).unwrap();
+        let host = Host::without_watcher().with_config_dir(&config);
+        host.open(&root).unwrap();
+        (tmp, host)
+    }
+
+    fn key_of(error: &PluginError) -> Option<String> {
+        let text = match error {
+            PluginError::BadArgs(text)
+            | PluginError::NotFound(text)
+            | PluginError::Unserved(text)
+            | PluginError::Io(text) => text,
+            _ => return None,
+        };
+        text.as_message().map(|message| message.key.clone())
+    }
+
+    #[test]
+    fn the_open_with_calls_are_answered_by_the_host_methods() {
+        let (_tmp, host) = opened();
+        let editors: Vec<crate::open_with::ExternalEditor> = serde_json::from_value(
+            answer(
+                &host,
+                Call::ExternalEditors {
+                    vault: None,
+                    doc: Some("Disegni/logo.vectorcraft".into()),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            editors,
+            host.external_editors(None, Some("Disegni/logo.vectorcraft"))
+                .unwrap()
+        );
+        let unknown = answer(
+            &host,
+            Call::OpenWith {
+                vault: None,
+                path: "Disegni/logo.vectorcraft".into(),
+                editor: "paintcraft".into(),
+                page: None,
+            },
+        )
+        .unwrap_err();
+        #[cfg(feature = "craft")]
+        {
+            let ids: Vec<&str> = editors.iter().map(|editor| editor.id.as_str()).collect();
+            assert_eq!(ids, ["vectorcraft"]);
+            // Nessuna app avviata da questo host: nessuna è «Già aperta».
+            assert!(editors.iter().all(|editor| !editor.running));
+            assert!(matches!(unknown, PluginError::BadArgs(_)), "{unknown:?}");
+            assert_eq!(
+                key_of(&unknown).as_deref(),
+                Some("host.open_with.unknown_editor")
+            );
+        }
+        #[cfg(not(feature = "craft"))]
+        {
+            assert!(editors.is_empty());
+            assert_eq!(key_of(&unknown).as_deref(), Some("host.open_with.off"));
+        }
+    }
+
+    #[test]
+    fn the_open_with_calls_cross_the_channel() {
+        let (_tmp, host) = opened();
+        let host = Arc::new(host);
+        let (config_tmp, config) = dir();
+        let served = Arc::clone(&host);
+        let server = ControlServer::start(&config, move |call| answer(&served, call)).unwrap();
+        let endpoint = Endpoint::read(&config).unwrap();
+        let editors: Vec<crate::open_with::ExternalEditor> = endpoint
+            .call_as(Call::ExternalEditors {
+                vault: None,
+                doc: None,
+            })
+            .unwrap();
+        assert_eq!(editors, host.external_editors(None, None).unwrap());
+        // L'errore torna col suo tipo, detto in parole per il terminale.
+        let error = endpoint
+            .call(Call::OpenWith {
+                vault: None,
+                path: "Disegni/logo.vectorcraft".into(),
+                editor: "paintcraft".into(),
+                page: None,
+            })
+            .unwrap_err();
+        #[cfg(feature = "craft")]
+        assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+        #[cfg(not(feature = "craft"))]
+        assert!(matches!(error, PluginError::Unserved(_)), "{error:?}");
+        server.close();
+        drop(config_tmp);
     }
 
     #[test]

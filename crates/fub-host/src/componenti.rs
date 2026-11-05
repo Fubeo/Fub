@@ -5,8 +5,9 @@
 //! - **La mappa** sono le righe di `fub_features::componenti`, ri-esportate
 //!   qui; **il risolutore** è `fub_componenti`.
 //! - **Lo stato sta in cinque chiavi del vault** (A1, D-5):
-//!   `plugins.disabled` per i bundle, come prima; `components.off` per le
-//!   righe senza bundle spente a mano (Lavagna, PDF); `components.kept` per i
+//!   `plugins.disabled` per i bundle, come prima, Lavagna compresa;
+//!   `components.off` per le righe senza bundle spente a mano (il PDF);
+//!   `components.kept` per i
 //!   componenti di supporto tenuti con «Tienili»; `components.waiting` per
 //!   quelli in attesa di una risposta; `components.profile` per il profilo
 //!   scelto. Un vault senza le chiavi nuove vale come prima: tutto acceso
@@ -39,7 +40,8 @@ use crate::settings::{
 /// Il gruppo dei componenti di supporto: accesi se qualcuno li richiede.
 pub const SUPPORTO: &str = "supporto";
 
-/// La lavagna: spenta, l'host non registra il formato `.canvas`.
+/// La lavagna, un bundle: spenta, l'host non registra nemmeno il formato
+/// `.canvas`.
 pub const LAVAGNA: &str = "fub.lavagna";
 
 /// Il visore dei PDF: tutto nel client, l'host lo dice soltanto.
@@ -223,7 +225,7 @@ fn nucleo(id: &str) -> bool {
     NUCLEO.contains(&id)
 }
 
-/// Una riga che si spegne a mano e non è un bundle: Lavagna e PDF.
+/// Una riga che si spegne a mano e non è un bundle: il PDF.
 fn senza_bundle_spegnibile(riga: &Riga) -> bool {
     !riga.bundle && riga.gruppo != SUPPORTO && !nucleo(riga.id)
 }
@@ -559,11 +561,12 @@ fn profilo_def(nome: &str) -> Option<DefProfilo> {
     fub_features::componenti::profilo(nome)
 }
 
-/// Se la lavagna è spenta in questo vault, letto dal file prima che il vault
-/// si monti: `crate::mount` non registra il formato `.canvas`.
+/// Se la lavagna è spenta in questo vault (`plugins.disabled`), letto dal file
+/// prima che il vault si monti: `crate::mount` non registra il formato
+/// `.canvas`.
 pub(crate) fn lavagna_spenta(settings: &fub_kernel::SettingsStore) -> bool {
     settings
-        .effective(COMPONENTS_OFF)
+        .effective(PLUGINS_DISABLED)
         .ok()
         .and_then(|(value, _)| {
             value
@@ -831,24 +834,35 @@ mod tests {
 
     #[test]
     fn un_id_sconosciuto_o_fuori_posto_non_conta_e_resta_scritto() {
+        // La lavagna è un bundle: in `components.off` è fuori posto.
         let lettura = lettura(
-            &[],
+            &[LAVAGNA],
             &["fub.sparito", "fub.graph", LAVAGNA],
             &["fub.graph"],
             &[],
         );
         assert!(lettura.stato.scelti.contains("fub.graph"));
         assert!(!lettura.stato.scelti.contains(LAVAGNA));
-        assert_eq!(lettura.mancanti.len(), 3, "{:?}", lettura.mancanti);
+        assert_eq!(lettura.mancanti.len(), 4, "{:?}", lettura.mancanti);
         let piano = lettura
             .pianifica(&Azione::Accendi { id: LAVAGNA.into() })
             .unwrap();
+        assert_eq!(
+            piano.scritture,
+            [Scrittura {
+                id: LAVAGNA.into(),
+                acceso: true,
+                bundle: true
+            }]
+        );
+        // Ciò che non contava resta scritto, in ordine.
         assert_eq!(
             piano.chiavi,
             [(
                 COMPONENTS_OFF,
                 Some(SettingValue::List(vec![
                     "fub.graph".into(),
+                    LAVAGNA.into(),
                     "fub.sparito".into()
                 ]))
             )]
@@ -891,7 +905,7 @@ mod tests {
             [Scrittura {
                 id: LAVAGNA.into(),
                 acceso: false,
-                bundle: false
+                bundle: true
             }]
         );
         assert!(piano.chiavi.contains(&(
@@ -1009,7 +1023,8 @@ mod tests {
     }
 
     /// Con il PDF acceso la penna serve ancora: spegnere la lavagna non lascia
-    /// orfani, e la lavagna è una scrittura (di `components.off`).
+    /// orfani, e la lavagna è una scrittura del suo bundle (in
+    /// `plugins.disabled`), non una chiave dei componenti.
     #[test]
     fn spegnere_la_lavagna_con_il_pdf_acceso_tiene_la_penna() {
         let lettura = lettura(&[], &[], &[], &[]);
@@ -1022,12 +1037,14 @@ mod tests {
             .unwrap();
         assert!(piano.effetto.orfani.is_empty());
         assert_eq!(
-            piano.chiavi,
-            [(
-                COMPONENTS_OFF,
-                Some(SettingValue::List(vec![LAVAGNA.into()]))
-            )]
+            piano.scritture,
+            [Scrittura {
+                id: LAVAGNA.into(),
+                acceso: false,
+                bundle: true
+            }]
         );
+        assert!(piano.chiavi.is_empty(), "{:?}", piano.chiavi);
     }
 
     /// Un vault che non ha mai toccato i componenti non cambia file per una

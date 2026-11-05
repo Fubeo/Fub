@@ -108,6 +108,8 @@ use crate::draw::{self, DRAW_ID};
 use crate::formatting::{self, FormattingCommands, FORMATTING_ID};
 #[cfg(feature = "graph")]
 use crate::graph::{self, GraphCommands, GraphView, GRAPH_ID};
+#[cfg(feature = "lavagna")]
+use crate::lavagna::{self, LavagnaCommands, LAVAGNA_ID};
 #[cfg(feature = "outline")]
 use crate::outline::{self, OutlineCommands, OutlineView, OUTLINE_ID};
 #[cfg(feature = "proof")]
@@ -571,6 +573,25 @@ static OFFICIALS: &[OfficialFeature] = &[
         renderers: None,
         exports: Some(draw::exports),
         settings: Some(draw::settings),
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::None,
+    },
+    // In coda anche lei, per la stessa ragione: non registra pannelli, e il
+    // suo solo comando si aggiunge dopo quelli che c'erano. La Penna che la
+    // sua riga richiede sta solo nella mappa (`SOLO_DELLA_MAPPA`).
+    #[cfg(feature = "lavagna")]
+    OfficialFeature {
+        id: LAVAGNA_ID,
+        name: "Whiteboard",
+        catalog: lavagna::catalog,
+        view: None,
+        commands: Some(|| Box::new(LavagnaCommands)),
+        index: None,
+        syntax: None,
+        renderers: None,
+        exports: None,
+        settings: None,
         provides: &[],
         requires: &[],
         wiring: HostWiring::None,

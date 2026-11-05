@@ -1,0 +1,12 @@
+{
+  "about": "Collegare una scheda tolta prima nello stesso giro è UnknownNode: ogni operazione vede il modello lasciato dalla precedente.",
+  "before": { "nodes": [
+    { "id": "a", "type": "text", "x": 0, "y": 0, "width": 100, "height": 60, "text": "a" },
+    { "id": "b", "type": "text", "x": 200, "y": 0, "width": 100, "height": 60, "text": "b" }
+  ] },
+  "ops": [
+    { "op": "remove", "ids": ["b"] },
+    { "op": "connect", "edge": { "fromNode": "a", "toNode": "b" } }
+  ],
+  "expect": { "outcome": "rejected", "error": { "kind": "UnknownNode", "index": 1, "id": "b" } }
+}

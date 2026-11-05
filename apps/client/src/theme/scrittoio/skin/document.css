@@ -1434,6 +1434,18 @@
   line-height: var(--leading-normal);
   text-align: center;
 }
+/* La figura di un file Craft, di un PDF o di un documento (T15, T31) è
+   larga quanto la sua immagine: il nome sta sotto di lei, non al centro della
+   colonna. */
+.craft-figure {
+  width: fit-content;
+  max-width: 100%;
+}
+/* La prima pagina di un PDF o di un documento come figura (T31): un foglio
+   bianco sulla carta, col filo e l'ombra bassa del cartoncino delle foto. */
+.craft-figure-page {
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-1);
+}
 /* L'immagine selezionata in Live (D8): il contorno d'accento e, sul bordo
    destro, la maniglia della larghezza (D9) con la misura mentre la si tira. */
 .cm-editor .cm-content .cm-fub-image.cm-fub-image-selected img:not([hidden]),

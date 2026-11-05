@@ -45,6 +45,7 @@ flowchart LR
 | [Correttore](product/proofing.md) | l'ortografia mentre si scrive |
 | [Documenti di Word](product/word-documents.md) | la videoscrittura nel vault |
 | [Annotazioni dei PDF](product/pdf-annotations.md) | scrivere accanto ai PDF |
+| [File delle app Craft](product/craft-files.md) | disegni, immagini e foto delle app Craft |
 | [Ricerca, link e grafo](product/search-links-and-graph.md) | trovare e seguire |
 | [Importare ed esportare](product/import-and-export.md) | dentro e fuori dal vault |
 | [Plugin ed estensioni](product/plugins-and-extensions.md) | come Fub cresce |
@@ -65,7 +66,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [Frontend e IPC](architecture/frontend-and-ipc.md)
 - [Superfici dell'editor](architecture/editor-surfaces.md), la
   [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md)
-  e la [superficie dei fogli](architecture/grid-surface.md)
+  e la [superficie dei fogli](architecture/grid-surface.md), con gli
+  [editor dei componenti](architecture/component-editors.md)
 - [Inchiostro e strumenti](architecture/ink-and-tools.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md)
 
@@ -88,7 +90,14 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [Le annotazioni PDF](reference/annotation-format.md), la
   [proiezione dei documenti di videoscrittura](reference/rich-projection.md)
   e la [sessione live](reference/live-session.md)
+- [Il formato della lavagna](reference/canvas-format.md): il nucleo
+  `fub-canvas-core` e le regole di lettura e scrittura delle `.canvas`, e
+  le [operazioni sulla lavagna](reference/canvas-operations.md): le toppe e
+  la loro inversa
 - [Il server MCP](reference/mcp-server.md)
+- [I formati dei file Craft](reference/craft-formats.md), gli
+  [XMP accanto alle foto](reference/xmp-sidecars.md) e le
+  [app esterne](reference/external-editors.md)
 
 ## Vedere stato e direzione
 

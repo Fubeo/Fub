@@ -16,6 +16,7 @@ export const UI_MEDIA = "editors/media";
 export const UI_RICH = "editors/rich";
 export const UI_GRID = "editors/grid";
 export const UI_SPATIAL = "editors/spatial";
+export const UI_CRAFT = "editors/craft";
 
 export const CANVAS_OWNER = "fub.shell.canvas";
 export const CANVAS_FAMILY = "canvas" as const;
@@ -70,6 +71,13 @@ const FILES: ReadonlyArray<readonly [extension: string, uis: readonly string[]]>
   ["xlsm", [UI_GRID]],
   ["xltx", [UI_GRID]],
   ["xltm", [UI_GRID]],
+  // I file delle app Craft (`fub.craft`), in sola lettura. Una foto RAW no:
+  // non ha un formato del vault, e senza il componente resta un file senza
+  // vista (`editors/core/bootstrap.ts`).
+  ["vectorcraft", [UI_CRAFT]],
+  ["pcraft", [UI_CRAFT]],
+  ["figcraft", [UI_CRAFT]],
+  ["xmp", [UI_CRAFT]],
 ];
 const BY_EXTENSION = new Map(FILES);
 

@@ -17,6 +17,7 @@ export const TREE: PartAnatomy = {
         "tree-row",
         "row-name",
         "row-icon",
+        "tree-thumb",
         "no-icon",
         "leaf",
         "chevron",

@@ -75,10 +75,12 @@ fn before() -> BTreeSet<&'static str> {
         ("fub.commands", cfg!(feature = "commands")),
         ("fub.blocks", cfg!(feature = "blocks")),
         ("fub.draw", cfg!(feature = "draw")),
+        ("fub.lavagna", cfg!(feature = "lavagna")),
         ("fub.sync", cfg!(feature = "http-client")),
         ("fub.publish", cfg!(feature = "http-client")),
         ("fub.updates", cfg!(feature = "http-client")),
         ("fub.linkcard", cfg!(feature = "http-client")),
+        ("fub.craft", cfg!(feature = "craft")),
     ];
     always
         .into_iter()
@@ -149,6 +151,8 @@ fn the_manifest_says_what_the_row_says() {
     ids.push("fub.rich");
     #[cfg(feature = "xlsx")]
     ids.push("fub.xlsx");
+    #[cfg(feature = "craft")]
+    ids.push("fub.craft");
     let strings = |items: &[&str]| items.iter().map(|s| s.to_string()).collect::<Vec<_>>();
     for id in &ids {
         let row = componenti::riga(id).unwrap_or_else(|| panic!("`{id}` has no row"));
@@ -200,6 +204,7 @@ fn the_rows_follow_the_cargo_features() {
     assert_eq!(ids.contains("fub.motore-fogli"), cfg!(feature = "xlsx"));
     assert_eq!(ids.contains("fub.sync"), cfg!(feature = "http-client"));
     assert_eq!(ids.contains("fub.graph"), cfg!(feature = "graph"));
+    assert_eq!(ids.contains("fub.craft"), cfg!(feature = "craft"));
 }
 
 // ---------------------------------------------------------------------------
@@ -359,7 +364,9 @@ fn a_vault_without_the_keys_mounts_the_same_bundles() {
 
 /// Il cancello: spegnere e riaccendere lavagna e PDF lascia le chiavi, i
 /// bundle e i formati montati come prima. Con «Tienili» no, ed è giusto: la
-/// penna tenuta resta una scelta (`components.kept`).
+/// penna tenuta resta una scelta (`components.kept`). La lavagna è un bundle:
+/// riaccesa, `plugins.disabled` resta scritto vuoto, come per ogni bundle
+/// riacceso (`Host::set_plugin_enabled`), e vuoto vale come assente.
 #[test]
 fn turning_lavagna_and_pdf_off_and_on_leaves_everything_as_it_was() {
     for orfani in [Orfani::Chiedi, Orfani::Togli] {
@@ -374,7 +381,11 @@ fn turning_lavagna_and_pdf_off_and_on_leaves_everything_as_it_was() {
         accendi(&host, componenti::LAVAGNA);
         accendi(&host, componenti::PDF);
 
-        assert_eq!(keys(&root), keys_before, "{orfani:?}: the keys");
+        let keys_after: Vec<_> = keys(&root)
+            .into_iter()
+            .filter(|(k, v)| !(k == "plugins.disabled" && v == &Value::Array(Vec::new())))
+            .collect();
+        assert_eq!(keys_after, keys_before, "{orfani:?}: the keys");
         assert_eq!(bundles(&host), bundles_before, "{orfani:?}: the bundles");
         assert_eq!(
             extensions(&host, &root),

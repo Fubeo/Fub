@@ -146,6 +146,27 @@ La `DocumentSession` è l'autorità della shell per il testo in memoria e per la
 scrittura del documento aperto; il core resta l'autorità del file persistente e
 della revisione verificata dalla scrittura.
 
+La bozza di recupero ha una cadenza, non un debounce: la prima modifica arma
+un timer di un secondo (`DRAFT_MS`) che le battute successive non riarmano,
+così chi scrive senza pause perde al più un secondo se il processo muore. Il
+salvataggio resta un debounce sulla pausa.
+
+### Il testo in sospeso
+
+Una superficie può tenere testo che non è ancora nel buffer della sessione,
+come il campo di una scheda della lavagna. Lo dichiara con una porta
+facoltativa del `SurfaceBuffer` (`editors/core/registry.ts`): `watchPending`
+avvisa quando c'è o non c'è più testo in sospeso, `pendingText` dà il testo
+del documento con quel testo già dentro (per la lavagna una `preview` del
+nucleo, senza commit) e `commitPending` lo registra. La sessione tiene
+l'elenco delle superfici con testo in sospeso: la prima battuta arma la bozza
+come un buffer sporco, e la bozza scrive `pendingText`. Prima di ogni passo
+che legge o sostituisce il buffer (flush, chiusura, rilascio, ricarica, cambio
+da fuori, conflitto, recupero, rinomina, cancellazione) la sessione chiede
+`commitPending`, e il controller lo chiede prima di staccare una superficie:
+nessuna superficie si distrugge con testo in sospeso. Se l'anteprima non
+riesce, la bozza tiene l'ultimo testo accettato e la console lo dice.
+
 Ogni sessione fissa alla nascita il vault in cui il documento è stato letto e lo
 nomina (`vault`) in ogni lettura, scrittura, bozza e scarto di bozza: il vault
 corrente dell'host cambia quando se ne apre un altro, e non decide dove scrive
@@ -194,6 +215,27 @@ la scrivania è il piano di fondo, i documenti sono fogli appoggiati sopra e gli
 strumenti stanno in due cassetti. Le pagine `index.html`, `mobile.html` e
 `document.html` ne portano il markup, e `main.ts` avvia
 `shells/scrittoio/bootstrap.ts`. Non esiste una seconda shell da selezionare.
+
+Le tre pagine si aprono sotto lo **strato d'avvio** (`.avvio`), nel `<head>`
+prima dei moduli perché dipinga subito: il foglio `public/avvio/avvio.css`
+(un file e non un `<style>`, per la CSP: vedi
+[Permessi e sicurezza](../reference/permissions-and-security.md)),
+`luce.js` sceglie luce, contrasto, moto e colori, `stati.js` i tempi. Il fondo c'è dal primo
+fotogramma, il marchio entra a 120 ms (1 s al più), la fase (`data-fase`) a
+2 s, l'avvio è lento a 10 s e un guasto con Riprova a 30 s; sotto, l'app è
+`inert` e `aria-busy`. Lo consegna `avvio/consegna.ts` a fine avvio
+(`bootstrap.ts`, `mobile/compose.ts` col tema definitivo, 1,5 s al più;
+`document/window.ts`); `desktop-shell.ts` segna le fasi e chiama `fallito()`
+se l'avvio cade, e lo strato resta. La consegna rende viva l'app e dà il fuoco,
+poi lo strato sfuma in 90 ms e le regioni entrano ogni 30 ms con la molla
+`elastic` di `moto` (la cascata; con meno movimento la sola dissolvenza, senza
+marchio niente passaggio). Lo stile dello strato e i suoi segni su `<html>` se
+ne vanno a cascata finita, quando ricalcolare lo stile della pagina non ferma
+niente che si muove. Prima salva `fub.avvio` in `localStorage`: scelte, colori
+della luce in vigore e testi dello strato, ciò che i due script leggono al
+prossimo avvio; persa, si rifà alla consegna dopo. Il `@keyframes` della scia
+sta fuori dalla regola della pelle senza fotogrammi chiave: non è pelle, gira
+prima di `moto` e se ne va alla consegna.
 
 Sopra la shell comune (`desktop-shell.ts`: sessioni, riquadri, comandi,
 pannelli) lo Scrittoio compone:
@@ -375,38 +417,8 @@ o il disegno resta agli eventi di copia e incolla del browser.
 
 ## Superfici di editing
 
-Sessione documento, superfici, motori e profili, insieme al confine di
-CodeMirror e al suo guard, sono in [Superfici dell'editor](editor-surfaces.md).
-
-## I componenti accesi
-
-Ogni riga di `components_map` porta i pezzi di interfaccia (`ui`) che il suo
-componente accende. `COMPONENT_EDITORS` in
-`apps/client/src/editors/core/bootstrap.ts` è la tabella sola che lega ogni
-`ui` al codice del suo editor e alla sua registrazione; `editors/text` è del
-nucleo e non c'è. `apps/client/src/editors/core/component-surfaces.ts` tiene le
-costanti dei pezzi e `uisForFile`, l'estensione di un file con i pezzi che
-servono per aprirlo dentro Fub.
-
-Lo stato dei componenti del vault aperto sta in
-`apps/client/src/state/components.ts`: la mappa dell'host, letta all'apertura
-e riletta quando cambiano le chiavi `components.*`, i plugin spenti o la lingua.
-La shell non ricalcola chi richiede chi: legge l'esito. `setComponentEditors`
-registra i pezzi accesi e toglie gli altri. La registrazione di un componente
-ha una `LazySurfaceFactory`: il registro conosce famiglia, profili e formati
-dalla registrazione, e chiede il codice con `import()` solo quando un documento
-lo apre (`load`, `isLoaded`). Il plugin di `apps/client/vite.config.ts` scrive
-i chunk che ogni pagina carica all'avvio e ferma la build se fra questi c'è il
-codice di un pezzo spegnibile (pdf.js, lavagna, disegni, documenti, fogli).
-
-Un file il cui pezzo è spento si apre «solo come file»: la famiglia
-`file-only` di `apps/client/src/state/document-controller.ts` non viene dal
-registro e mostra nome, dimensione, «Accendi …» e «Apri con un'altra app».
-Quando un componente si spegne con un suo file aperto, il riquadro prima salva
-ciò che la sessione ha in sospeso, poi passa a «solo come file». Se il
-salvataggio non riesce, l'editor resta registrato con l'errore della sessione
-finché le modifiche non sono al sicuro. Quando il componente torna, il riquadro
-si rimonta nel suo editor.
+Sessione, superfici, motori, profili e confine di CodeMirror sono in
+[Superfici dell'editor](editor-surfaces.md), i componenti in [Editor dei componenti](component-editors.md).
 
 ## Guard del frontend
 
@@ -435,5 +447,3 @@ Oltre al confine di CodeMirror, i guard del frontend impediscono:
 - `apps/client/src/platform/clipboard.ts`
 - `apps/client/src/desktop-shell.ts`
 - `apps/client/src/state/document-session.ts`
-- `apps/client/src/state/components.ts`
-- `apps/client/src/editors/core/component-surfaces.ts`

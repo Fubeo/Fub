@@ -1,0 +1,26 @@
+{
+  "name": "r7-edge-optionals-null",
+  "description": "R7: i campi facoltativi di un arco a null spariscono",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\"}],\"edges\":[{\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"a\",\"fromSide\":null,\"fromEnd\":null,\"toSide\":null,\"toEnd\":null,\"color\":null,\"label\":null}]}",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 10,
+        "height": 10,
+        "text": "t"
+      }
+    ],
+    "edges": [
+      {
+        "id": "e",
+        "fromNode": "a",
+        "toNode": "a"
+      }
+    ]
+  }
+}

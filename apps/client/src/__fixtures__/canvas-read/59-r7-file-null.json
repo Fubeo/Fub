@@ -1,0 +1,9 @@
+{
+  "name": "r7-file-null",
+  "description": "R7: file a null su una scheda file è come mancante",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"file\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"file\":null}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

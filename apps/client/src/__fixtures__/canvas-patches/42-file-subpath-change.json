@@ -1,0 +1,11 @@
+{
+  "name": "file-subpath-change",
+  "description": "Il subpath di una scheda file cambia al suo posto",
+  "before": "{\"nodes\":[{\"id\":\"f\",\"type\":\"file\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"file\":\"Note/Idea.md\",\"subpath\":\"#Titolo\"}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"f","type":"file","x":0,"y":0,"width":100,"height":50,"file":"Note/Idea.md","subpath":"#Titolo"},"after":{"id":"f","type":"file","x":0,"y":0,"width":100,"height":50,"file":"Note/Idea.md","subpath":"#Altro"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"f\",\"type\":\"file\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"file\":\"Note/Idea.md\",\"subpath\":\"#Altro\"}],\"edges\":[]}",
+    "undo": "{\"nodes\":[{\"id\":\"f\",\"type\":\"file\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"file\":\"Note/Idea.md\",\"subpath\":\"#Titolo\"}],\"edges\":[]}"
+  }
+}

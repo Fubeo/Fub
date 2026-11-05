@@ -15,13 +15,12 @@
 //!
 //! # Righe che non sono bundle
 //!
-//! Lavagna, PDF, Penna, Dizionari e i due motori sono componenti senza un
-//! bundle loro (`bundle: false`): sono sempre dentro il binario. Penna,
-//! Dizionari e i motori li richiede o li usa qualcun altro; Lavagna e PDF si
-//! spengono a mano, e il loro stato sta nelle chiavi `components.*` del vault
-//! (`fub_host::componenti`), non in `plugins.disabled`. I loro id sono quelli
-//! dell'ADR, e nel manifest di chi li richiede non compaiono: vedi
-//! [`SOLO_DELLA_MAPPA`].
+//! PDF, Penna, Dizionari e i due motori sono componenti senza un bundle loro
+//! (`bundle: false`): sono sempre dentro il binario. Penna, Dizionari e i
+//! motori li richiede o li usa qualcun altro; il PDF si spegne a mano, e il suo
+//! stato sta nelle chiavi `components.*` del vault (`fub_host::componenti`),
+//! non in `plugins.disabled`. I loro id sono quelli dell'ADR, e nel manifest di
+//! chi li richiede non compaiono: vedi [`SOLO_DELLA_MAPPA`].
 //!
 //! # Profili
 //!
@@ -298,6 +297,13 @@ pub fn righe() -> Vec<Riga> {
             .group("disegnare")
             .ui(&["editors/spatial"])
             .cargo_feature("draw"),
+        // I file delle app Craft: il bundle e i formati stanno in `fub-host`.
+        // Spento il componente, l'anteprima non c'è e i formati restano.
+        #[cfg(feature = "craft")]
+        Riga::servizio("fub.craft", "component.craft.name")
+            .group("disegnare")
+            .ui(&["editors/craft"])
+            .cargo_feature("craft"),
         // Documenti e Fogli: il bundle e il codec stanno in `fub-host`.
         #[cfg(feature = "rich")]
         Riga::modalita("fub.rich", "component.rich.name")
@@ -313,16 +319,16 @@ pub fn righe() -> Vec<Riga> {
             .uses(&["fub.penna"])
             .ui(&["editors/grid"])
             .cargo_feature("xlsx"),
-        // Sempre compilata nel client, e senza bundle: spenta, l'host non
-        // registra il formato `.canvas`. Il motore vettoriale che la porterà
-        // non esiste ancora: quando ci sarà, sarà una riga di supporto che
-        // questa richiede.
+        // Il bundle porta `canvas.apply`, che cambia una `.canvas` con le
+        // operazioni del nucleo (`fub-canvas-core`); l'editor sta nel client.
+        // Spenta, l'host non registra nemmeno il formato `.canvas`.
+        #[cfg(feature = "lavagna")]
         Riga::modalita("fub.lavagna", "component.lavagna.name")
             .group("pensare")
             .requires(&["fub.penna"])
             .uses(&["fub.rich", "fub.xlsx"])
             .ui(&["editors/canvas"])
-            .senza_bundle(),
+            .cargo_feature("lavagna"),
         // Il visore dei PDF del client (pdfjs, profilo `media-pdf`): senza
         // bundle, e nell'host non c'è niente da spegnere.
         Riga::modalita("fub.pdf", "component.pdf.name")
@@ -556,6 +562,11 @@ const DESCRIZIONI: &[(&str, &str, &str)] = &[
         "SVG files: pen, shapes, arrows, text.",
     ),
     (
+        "component.craft.description",
+        "I file di VectorCraft, PhotoCraft, FigCraft e LightCraft, da guardare.",
+        "VectorCraft, PhotoCraft, FigCraft and LightCraft files, to look at.",
+    ),
+    (
         "component.rich.description",
         "I file Word e OpenDocument, semplici o completi.",
         "Word and OpenDocument files, simple or complete.",
@@ -650,6 +661,11 @@ const NOMI: &[(&str, &str, &str)] = &[
     ),
     ("component.proof.name", "Correttore", "Proofing"),
     ("component.draw.name", "Disegni", "Drawings"),
+    (
+        "component.craft.name",
+        "File delle app Craft",
+        "Craft app files",
+    ),
     ("component.rich.name", "Documenti", "Documents"),
     ("component.xlsx.name", "Fogli", "Spreadsheets"),
     ("component.lavagna.name", "Lavagna", "Whiteboard"),

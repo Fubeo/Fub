@@ -88,6 +88,7 @@ export const COMPONENT_ICONS: Readonly<Record<string, string>> = {
   "fub.base": "collection",
   "fub.formatting": "format-word",
   "fub.draw": "format-drawing",
+  "fub.craft": "format-photo",
   "fub.rich": "format-word",
   "fub.xlsx": "format-sheet",
   "fub.lavagna": "layout-dashboard",

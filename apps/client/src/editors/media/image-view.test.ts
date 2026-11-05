@@ -139,4 +139,28 @@ describe("la view montata", () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith(image.url);
     expect(view.element.isConnected).toBe(false);
   });
+
+  it("una foto con orientamento 6 dice le misure della foto dritta, anche a caricamento finito", () => {
+    // Un JPEG non porta le misure nella firma: le dà chi la conosce.
+    const decoded = decodeImage(descriptor("raw.jpg", "image/jpeg"), new Uint8Array([0xff, 0xd8, 0xff, 0xd9]));
+    const image = { ...decoded, width: 1200, height: 800 };
+    const life = openLifetime();
+    const view = mountImageView(image, "IMG_0002.CR3", life, 6);
+    document.body.append(view.element);
+    const info = () => view.element.querySelector(".zoom-info")!.textContent;
+    expect(info()).toBe("JPEG · 800 × 1200 px · 4 B");
+    expect(view.zoom.state().rotation).toBe(90);
+    view.zoom.image.dispatchEvent(new Event("load"));
+    expect(info()).toBe("JPEG · 800 × 1200 px · 4 B");
+    life.close();
+  });
+
+  it("senza orientamento le misure restano quelle della firma", () => {
+    const image = decodeImage(descriptor("a.png", "image/png"), png(1200, 800));
+    const life = openLifetime();
+    const view = mountImageView(image, "a.png", life);
+    expect(view.element.querySelector(".zoom-info")!.textContent).toBe("PNG · 1200 × 800 px · 24 B");
+    expect(view.zoom.state().rotation).toBe(0);
+    life.close();
+  });
 });

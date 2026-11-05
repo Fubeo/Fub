@@ -1,0 +1,9 @@
+{
+  "name": "r3-node-optional-twice",
+  "description": "R3: una chiave nota facoltativa due volte in una scheda",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\",\"color\":\"1\",\"color\":\"2\"}]}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

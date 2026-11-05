@@ -146,6 +146,43 @@ La Content Security Policy impedisce script remoti, iframe e oggetti non
 previsti. Il rendering non deve creare HTML attivo da una stringa del vault o
 del plugin senza sanitizzazione e una decisione esplicita.
 
+La CSP sta in `crates/fub-app/tauri.conf.json` (`app.security.csp`) e vale per
+ogni piattaforma. `script-src` è `'self' 'wasm-unsafe-eval'`, e nient'altro:
+
+- `'self'`: gli script vengono soltanto dagli asset dell'app;
+- `'wasm-unsafe-eval'`: la WebView può compilare e istanziare un modulo
+  WebAssembly, che la shell prende anche lui dagli asset dell'app. Serve al
+  nucleo della lavagna, che nella shell gira come WebAssembly
+  ([ADR 0237](../decisions/0237-la-lavagna-in-webassembly-nella-webview.md),
+  [il modulo](canvas-operations.md#webassembly)).
+
+`'wasm-unsafe-eval'` non permette di eseguire testo come JavaScript: `eval`,
+`new Function` e un timer con una stringa restano vietati, perché
+`'unsafe-eval'` non c'è. Per gli script non ci sono nemmeno `'unsafe-inline'`,
+`data:`, `blob:`, `*` o un'altra origine.
+`crates/fub-app/tests/platform_configs.rs` lo controlla sulla config fusa di
+Linux, Windows, macOS, Android e iOS, e su `devCsp` se c'è, direttiva per
+direttiva e senza guardare le maiuscole: fallisce se `'unsafe-eval'` compare
+in una direttiva qualsiasi, se `'wasm-unsafe-eval'` compare fuori da
+`script-src`, se `script-src` manca, compare due volte o non è esattamente
+`'self' 'wasm-unsafe-eval'`, o se `script-src-elem` o `script-src-attr` lo
+scavalcano. Tauri, quando serve gli asset, aggiunge a `script-src` i nonce e
+gli hash dei propri script; il controllo guarda la config, cioè ciò che si
+scrive a mano.
+
+Una WebView che non conosce `'wasm-unsafe-eval'` non compila il modulo: la
+lavagna non si cambia, e non c'è un ripiego in TypeScript.
+
+`style-src` è `'self' 'unsafe-inline'`: i moduli della shell, CodeMirror per
+primo, aggiungono elementi `<style>` a pagina avviata. Per questo
+`index.html`, `mobile.html` e `document.html` non hanno un `<style>`: Tauri
+metterebbe un nonce a ognuno e lo aggiungerebbe a `style-src`, e con un nonce
+la WebView ignora `'unsafe-inline'` e rifiuta gli stili aggiunti dopo (gli
+editor restano senza stile). Lo stile che serve prima dei moduli, quello dello
+strato d'avvio, è un file in `public/avvio/`. `src/avvio/pagine.test.ts` tiene
+le tre pagine senza `<style>` né script in linea; nella WebView vera la stessa
+caduta la vede lo scenario S7 di `bench:webview`.
+
 ### Immagini remote
 
 Un'immagine con un indirizzo remoto non si carica mai da sola: il sanitizzatore
@@ -241,6 +278,46 @@ servite insieme al più otto. Il server ha un owner: l'app lo chiude
 all'uscita, prima dei vault, e toglie il file se è ancora il suo. Un file
 rimasto da un'app caduta indica una porta che non risponde, e il vault resta
 `busy`. `--standalone` non passa mai dall'app.
+
+### Il canale verso un'app Craft
+
+È l'altro verso: Fub parla, un'app Craft ascolta, per aprire un file nella
+finestra che l'app ha già (`fub_host::craft::channel`). Fub parla soltanto con
+un'app che ha avviato lui, con un token suo: 32 byte casuali nuovi per ogni
+canale, scelti come quello del canale di controllo e dati all'app quando parte.
+Un'app che non chiede un token (`Auth::None`) o che vuole una «chiave» dal
+formato non documentato (`Auth::Key`) non ha mai un canale: un canale senza
+autenticazione lo potrebbe usare qualunque programma della macchina, e un
+`match` esaustivo nel codice obbliga ogni autenticazione nuova a decidere.
+
+L'indirizzo è sempre il loopback, `127.0.0.1` e poi `::1`, costruito da Fub e
+mai risolto da un nome. La connessione aspetta al più 1 s per indirizzo, ogni
+risposta al più 2 s in tutto, anche se arriva un byte alla volta. Una
+connessione che non riesce, anche scadendo, vuol dire che nessuna app ascolta:
+sul loopback un'app accetta subito, e Windows davanti a una porta chiusa
+ritenta finché il tempo scade invece di rifiutare. Una richiesta è un
+oggetto JSON per riga: prima l'autenticazione, poi il comando che apre il
+file (`app.open`, o `ui.open` in JSON-RPC 2.0, dove la risposta deve ripetere
+l'`id`). Una risposta è al più 64 KiB; una più lunga, non JSON o con un altro
+`id` è una risposta sbagliata, una con `error` è un rifiuto. Un percorso che
+non è UTF-8 si ferma prima di connettersi. Il token non compare nel `Debug`
+del canale, gli errori non hanno testo e le risposte non si tengono, così un
+token ripetuto dall'app non finisce in un log.
+
+### Chi avvia un'app Craft
+
+Un'anteprima fatta dalla riga di comando di un'app Craft parte soltanto dal
+core, con `Host::craft_render`, che la shell principale chiama dopo un gesto
+dell'utente e con `craft.cli-previews` a `on`: una scelta di macchina che un
+programma non scrive (`PermissionDenied`). `craft_render` dà al job
+`craft.render` un biglietto casuale legato a vault, documento e misura, buono
+una volta sola e per 60 s; il job senza un biglietto buono non avvia niente.
+Un plugin, l'MCP, il canale di controllo e `fub_invoke` arrivano al job
+soltanto per nome, senza biglietto, e un plugin non può nemmeno metterlo in
+coda, perché il job non è suo. Il biglietto non va nel log né nell'esito.
+L'app riceve soltanto una copia del documento in una cartella privata 0700,
+che si cancella sempre (vedi
+[Anteprime con la CLI](craft-formats.md#anteprime-con-la-cli)).
 
 ## Supply chain
 

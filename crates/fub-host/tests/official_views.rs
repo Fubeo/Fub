@@ -96,6 +96,9 @@ fn declared_bundles_are_inventory_plus_host_infrastructure() {
     // La griglia delle cartelle di Excel viene col loro codec.
     #[cfg(feature = "xlsx")]
     expected.insert("fub.xlsx".to_string());
+    // L'anteprima dei file Craft vive nell'host, accanto ai suoi formati.
+    #[cfg(feature = "craft")]
+    expected.insert(fub_host::craft::CRAFT_ID.to_string());
     #[cfg(feature = "http-client")]
     {
         expected.insert(fub_host::remote::views::SYNC_ID.to_string());
