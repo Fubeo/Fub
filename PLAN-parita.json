@@ -1,0 +1,1111 @@
+{
+  "version": 1,
+  "about": "Inventario della parità della lavagna: ogni azione che una persona fa dalla GUI (main, N4, N6) e la forma in codice che la fa. Stati: code (un'operazione la fa, con la stessa regola), composed (operazioni più un'altra porta, in `port`), port (la fa un'altra porta, nessuna operazione), by_hand (si fa con le operazioni che ci sono, ma chi scrive calcola a mano ciò che la GUI decide: `computes`), missing (nessuna operazione la fa), view (non scrive il file), exception (resta fuori, `note` dice perché). `ops` compila su `board`; `target_ops` è la forma che porta il task `task`. Regole in PLAN.md, sezione «La parità».",
+  "merged": ["main"],
+  "max_missing": 36,
+  "board": {
+    "nodes": [
+      { "id": "g1", "type": "group", "label": "Lezione 4", "x": -40, "y": -80, "width": 800, "height": 400 },
+      { "id": "t1", "type": "text", "text": "Perché la media è bassa?", "x": 0, "y": 0, "width": 320, "height": 160 },
+      { "id": "t2", "type": "text", "text": "Ripasso", "x": 400, "y": 0, "width": 320, "height": 160 },
+      {
+        "id": "f1",
+        "type": "file",
+        "file": "Corsi/voti.xlsx",
+        "x": 0,
+        "y": 400,
+        "width": 480,
+        "height": 304,
+        "fub:ink": {
+          "v": 1,
+          "strokes": [
+            {
+              "id": "s1",
+              "tool": "pen",
+              "brush": "pf1 size=2 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=2 taperEnd=8 capStart=1 capEnd=1 sim=1 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": { "kind": "card", "width": 480, "height": 304 },
+              "ink": "1 s100 cxyt 4000,6000,0 400,0,8"
+            }
+          ]
+        }
+      },
+      { "id": "p1", "type": "file", "file": "Corsi/dispensa.pdf", "x": 560, "y": 400, "width": 360, "height": 480 },
+      { "id": "l1", "type": "link", "url": "https://example.org", "x": 1000, "y": 0, "width": 320, "height": 120 }
+    ],
+    "edges": [{ "id": "e1", "fromNode": "t1", "fromSide": "right", "toNode": "t2", "toSide": "left", "toEnd": "arrow" }],
+    "fub:ink": {
+      "v": 1,
+      "strokes": [
+        {
+          "id": "s1",
+          "tool": "pen",
+          "brush": "pf1 size=2 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=2 taperEnd=8 capStart=1 capEnd=1 sim=1 pen=ballpoint",
+          "color": "#0072b2",
+          "anchor": { "kind": "free" },
+          "ink": "1 s100 cxyt 150000,0,0 400,400,8"
+        }
+      ]
+    }
+  },
+  "ops_without_gui": ["layout", "from_mermaid", "from_outline"],
+  "entries": [
+    {
+      "id": "main.card.add_text",
+      "name": "Aggiungi una scheda di testo",
+      "source": "main",
+      "gui": [{ "menu": "canvas.add.text" }, { "toolbar": "add-text" }, { "gesture": "dblclick-empty" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [{ "op": "add_card", "node": { "type": "text", "text": "Idea", "x": 1400, "y": 0, "width": 320, "height": 160 } }],
+      "computes": "il posto (la GUI: il centro della vista) e le misure 320×160",
+      "target_ops": [{ "op": "add_card", "text": "Idea" }],
+      "task": "T9"
+    },
+    {
+      "id": "main.card.add_file",
+      "name": "Aggiungi una scheda di file",
+      "source": "main",
+      "gui": [{ "menu": "canvas.add.file" }, { "toolbar": "add-file" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": { "type": "file", "file": "Corsi/appunti.md", "x": 1400, "y": 0, "width": 320, "height": 160 }
+        }
+      ],
+      "computes": "il posto e le misure",
+      "target_ops": [{ "op": "add_card", "file": "Corsi/appunti.md" }],
+      "task": "T9",
+      "note": "La GUI di main dà 320×160 a ogni file; il codice dà le misure di nascita per tipo (D-11 di N6), come la GUI dopo N6 T9."
+    },
+    {
+      "id": "main.card.add_link",
+      "name": "Aggiungi una scheda di link",
+      "source": "main",
+      "gui": [{ "menu": "canvas.add.link" }, { "toolbar": "add-link" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": { "type": "link", "url": "https://example.org/a", "x": 1400, "y": 0, "width": 320, "height": 120 }
+        }
+      ],
+      "computes": "il posto e le misure 320×120",
+      "target_ops": [{ "op": "add_card", "url": "https://example.org/a" }],
+      "task": "T9"
+    },
+    {
+      "id": "main.card.add_group",
+      "name": "Aggiungi un gruppo",
+      "source": "main",
+      "gui": [{ "menu": "canvas.add.group" }, { "toolbar": "add-group" }, { "menu": "canvas.add" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [{ "op": "add_card", "node": { "type": "group", "label": "Nuovo", "x": 1400, "y": 0, "width": 480, "height": 320 } }],
+      "computes": "il posto e le misure 480×320",
+      "target_ops": [{ "op": "add_card", "label": "Nuovo" }],
+      "task": "T9"
+    },
+    {
+      "id": "main.card.drop_files",
+      "name": "Trascina o incolla file del vault",
+      "source": "main",
+      "gui": [{ "gesture": "drop-files" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        { "op": "add_card", "node": { "type": "file", "file": "Corsi/a.md", "x": 1400, "y": 0, "width": 320, "height": 160 } },
+        { "op": "add_card", "node": { "type": "file", "file": "Corsi/b.md", "x": 1432, "y": 32, "width": 320, "height": 160 } }
+      ],
+      "computes": "il posto e le misure di ogni scheda",
+      "target_ops": [{ "op": "add_card", "file": "Corsi/a.md" }, { "op": "add_card", "file": "Corsi/b.md" }],
+      "task": "T9",
+      "note": "I byte di un file che viene da fuori entrano con il deposito degli allegati: eccezione external-bytes. Il codice mette in fila file già nel vault."
+    },
+    {
+      "id": "main.card.paste_text",
+      "name": "Incolla o trascina un testo o un URL",
+      "source": "main",
+      "gui": [{ "gesture": "paste-text" }, { "gesture": "drop-text" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": { "type": "text", "text": "Testo incollato", "x": 1400, "y": 0, "width": 320, "height": 160 }
+        }
+      ],
+      "computes": "il posto e le misure; testo o link",
+      "target_ops": [{ "op": "add_card", "text": "Testo incollato" }],
+      "task": "T9"
+    },
+    {
+      "id": "main.card.replace_file",
+      "name": "Sostituisci il file di una scheda",
+      "source": "main",
+      "gui": [{ "gesture": "drop-on-file-card" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "f1", "fields": { "file": "Corsi/voti-2.xlsx", "subpath": null } }]
+    },
+    {
+      "id": "main.card.convert_to_note",
+      "name": "Trasforma il testo in una nota",
+      "source": "main",
+      "gui": [{ "gesture": "convert-to-note" }],
+      "writes": "file",
+      "state": "missing",
+      "computes": "`set` non cambia il tipo: la GUI scrive una toppa che lo fa",
+      "target_ops": [{ "op": "convert", "id": "t1", "file": "Corsi/Perché la media è bassa.md" }],
+      "port": "note.create (la nota col testo), poi l'operazione",
+      "task": "T13"
+    },
+    {
+      "id": "main.card.edit",
+      "name": "Scrivi nella scheda (testo, file, URL, titolo del gruppo)",
+      "source": "main",
+      "gui": [{ "menu": "canvas.edit" }, { "key": "Enter" }, { "gesture": "dblclick-card" }, { "gesture": "edit-commit" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "t1", "fields": { "text": "Perché la media è così bassa?" } }]
+    },
+    {
+      "id": "main.card.open",
+      "name": "Apri il file o il link",
+      "source": "main",
+      "gui": [{ "menu": "canvas.open" }, { "menu": "canvas.open_url" }],
+      "writes": "nothing",
+      "state": "view"
+    },
+    {
+      "id": "main.card.move",
+      "name": "Sposta le schede",
+      "source": "main",
+      "gui": [
+        { "gesture": "drag-card" },
+        { "key": "ArrowLeft" },
+        { "key": "ArrowRight" },
+        { "key": "ArrowUp" },
+        { "key": "ArrowDown" },
+        { "key": "Shift+ArrowLeft" },
+        { "key": "Shift+ArrowRight" },
+        { "key": "Shift+ArrowUp" },
+        { "key": "Shift+ArrowDown" }
+      ],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "move", "ids": ["t1"], "dx": 8, "dy": 0 }]
+    },
+    {
+      "id": "main.group.drag",
+      "name": "Sposta un gruppo con le schede dentro",
+      "source": "main",
+      "gui": [{ "gesture": "drag-group" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [{ "op": "move", "ids": ["g1", "t1", "t2"], "dx": 40, "dy": 0 }],
+      "computes": "quali schede stanno tutte dentro il gruppo",
+      "target_ops": [{ "op": "move", "ids": ["g1"], "dx": 40, "dy": 0, "contents": true }],
+      "task": "T10"
+    },
+    {
+      "id": "main.card.resize",
+      "name": "Ridimensiona una scheda",
+      "source": "main",
+      "gui": [{ "gesture": "resize-handle" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "resize", "id": "t1", "width": 400, "height": 200 }]
+    },
+    {
+      "id": "main.color.preset",
+      "name": "Colora con un colore di serie",
+      "source": "main",
+      "gui": [
+        { "menu": "canvas.color" },
+        { "menu": "canvas.color.1" },
+        { "menu": "canvas.color.2" },
+        { "menu": "canvas.color.3" },
+        { "menu": "canvas.color.4" },
+        { "menu": "canvas.color.5" },
+        { "menu": "canvas.color.6" },
+        { "field": "node-color" }
+      ],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "t1", "fields": { "color": "1" } }],
+      "target_ops": [{ "op": "color", "ids": ["t1", "t2"], "color": "red" }],
+      "task": "T10",
+      "note": "Già in codice; T10 aggiunge i nomi e più schede in un'operazione."
+    },
+    {
+      "id": "main.color.none",
+      "name": "Togli il colore",
+      "source": "main",
+      "gui": [{ "menu": "canvas.color.none" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "t1", "fields": { "color": null } }]
+    },
+    {
+      "id": "main.color.hex",
+      "name": "Colora con un colore scritto",
+      "source": "main",
+      "gui": [{ "field": "node-color-hex" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "t1", "fields": { "color": "#0064b0" } }]
+    },
+    {
+      "id": "main.duplicate",
+      "name": "Duplica",
+      "source": "main",
+      "gui": [{ "menu": "canvas.duplicate" }, { "toolbar": "duplicate" }, { "key": "Mod+D" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": { "type": "text", "text": "Perché la media è bassa?", "x": 32, "y": 32, "width": 320, "height": 160 }
+        }
+      ],
+      "computes": "la copia dei campi, il posto +32 agganciato, gli id nuovi",
+      "target_ops": [{ "op": "duplicate", "ids": ["t1", "t2"] }],
+      "task": "T11",
+      "note": "La GUI di main non copia gli archi fra le schede duplicate; `duplicate` li copia (D1)."
+    },
+    {
+      "id": "main.delete",
+      "name": "Togli schede e archi",
+      "source": "main",
+      "gui": [{ "menu": "canvas.delete" }, { "toolbar": "delete" }, { "key": "Delete" }, { "key": "Backspace" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "remove", "ids": ["t2"] }]
+    },
+    {
+      "id": "main.order.front",
+      "name": "Porta sopra",
+      "source": "main",
+      "gui": [{ "menu": "canvas.order" }, { "menu": "canvas.bring_front" }, { "toolbar": "bring-front" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "reorder", "ids": ["t1"] }]
+    },
+    {
+      "id": "main.order.back",
+      "name": "Porta sotto",
+      "source": "main",
+      "gui": [{ "menu": "canvas.send_back" }, { "toolbar": "send-back" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [{ "op": "reorder", "ids": ["t1", "g1", "t2", "f1", "p1", "l1"] }],
+      "computes": "l'ordine di tutte le altre schede",
+      "target_ops": [{ "op": "reorder", "ids": ["t1"], "to": "back" }],
+      "task": "T10"
+    },
+    {
+      "id": "main.align",
+      "name": "Allinea",
+      "source": "main",
+      "gui": [
+        { "menu": "canvas.align" },
+        { "menu": "canvas.align.left" },
+        { "menu": "canvas.align.center" },
+        { "menu": "canvas.align.right" },
+        { "menu": "canvas.align.top" },
+        { "menu": "canvas.align.middle" },
+        { "menu": "canvas.align.bottom" },
+        { "toolbar": "left" },
+        { "toolbar": "center" },
+        { "toolbar": "right" },
+        { "toolbar": "top" },
+        { "toolbar": "middle" },
+        { "toolbar": "bottom" }
+      ],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [{ "op": "move", "ids": ["t2"], "dx": -400, "dy": 0 }],
+      "computes": "i bordi o i centri comuni, agganciati a 8",
+      "target_ops": [{ "op": "align", "ids": ["t2", "f1"], "to": "left" }],
+      "task": "T11"
+    },
+    {
+      "id": "main.distribute",
+      "name": "Distribuisci",
+      "source": "main",
+      "gui": [
+        { "menu": "canvas.distribute_x" },
+        { "menu": "canvas.distribute_y" },
+        { "toolbar": "distribute-x" },
+        { "toolbar": "distribute-y" }
+      ],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [{ "op": "move", "ids": ["t2"], "dx": 104, "dy": 0 }],
+      "computes": "gli spazi uguali fra i centri",
+      "target_ops": [{ "op": "distribute", "ids": ["t1", "t2", "l1"], "axis": "x" }],
+      "task": "T11"
+    },
+    {
+      "id": "main.select",
+      "name": "Scegli schede e archi",
+      "source": "main",
+      "gui": [{ "key": "Mod+A" }, { "gesture": "click-select" }, { "gesture": "marquee" }, { "field": "select-edge" }],
+      "writes": "nothing",
+      "state": "view",
+      "note": "Il codice nomina le schede per id; `canvas.read` (T8) dà gli id in ordine di lettura."
+    },
+    {
+      "id": "main.view.fit",
+      "name": "Mostra tutto",
+      "source": "main",
+      "gui": [{ "menu": "canvas.fit" }, { "toolbar": "fit" }, { "key": "Mod+0" }],
+      "writes": "nothing",
+      "state": "view"
+    },
+    {
+      "id": "main.view.fit_selection",
+      "name": "Mostra la selezione",
+      "source": "main",
+      "gui": [{ "menu": "canvas.fit_selection" }, { "toolbar": "fit-selection" }],
+      "writes": "nothing",
+      "state": "view"
+    },
+    {
+      "id": "main.view.zoom",
+      "name": "Ingrandisci e rimpicciolisci",
+      "source": "main",
+      "gui": [
+        { "menu": "canvas.zoom_in" },
+        { "menu": "canvas.zoom_out" },
+        { "toolbar": "zoom-in" },
+        { "toolbar": "zoom-out" },
+        { "key": "Mod+=" },
+        { "key": "Mod++" },
+        { "key": "Mod+-" },
+        { "gesture": "wheel-zoom" }
+      ],
+      "writes": "nothing",
+      "state": "view"
+    },
+    {
+      "id": "main.view.pan",
+      "name": "Sposta la vista",
+      "source": "main",
+      "gui": [{ "gesture": "pan" }],
+      "writes": "nothing",
+      "state": "view"
+    },
+    {
+      "id": "main.undo",
+      "name": "Annulla e ripeti",
+      "source": "main",
+      "gui": [{ "key": "Mod+Z" }, { "key": "Mod+Shift+Z" }, { "key": "Mod+Y" }],
+      "writes": "file",
+      "state": "port",
+      "port": "l'Undo che `canvas.apply` restituisce, o `fub_write` del testo letto prima con la sua revisione",
+      "note": "Nessuna operazione «annulla»: la cronologia è della sessione, non del file."
+    },
+    {
+      "id": "main.copy",
+      "name": "Copia",
+      "source": "main",
+      "gui": [{ "clipboard": "copy" }],
+      "writes": "nothing",
+      "state": "view",
+      "note": "Da codice si legge con `canvas.read` (T8); il frammento si rimette con `insert` (T13)."
+    },
+    {
+      "id": "main.edge.connect",
+      "name": "Collega due schede",
+      "source": "main",
+      "gui": [{ "gesture": "connect-handle" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "connect", "edge": { "fromNode": "t2", "toNode": "f1", "toEnd": "arrow" } }],
+      "target_ops": [{ "op": "connect", "from": "t2", "to": "f1" }],
+      "task": "T9",
+      "note": "Già in codice; T9 accorcia la forma."
+    },
+    {
+      "id": "main.edge.reconnect",
+      "name": "Sposta un estremo dell'arco",
+      "source": "main",
+      "gui": [{ "gesture": "reconnect-end" }, { "field": "edge-fromNode" }, { "field": "edge-toNode" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "e1", "fields": { "toNode": "f1" } }]
+    },
+    {
+      "id": "main.edge.reverse",
+      "name": "Inverti l'arco",
+      "source": "main",
+      "gui": [{ "menu": "canvas.edge.reverse" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "set",
+          "id": "e1",
+          "fields": { "fromNode": "t2", "fromSide": "left", "toNode": "t1", "toSide": "right", "fromEnd": "arrow", "toEnd": null }
+        }
+      ],
+      "computes": "lo scambio di estremi, lati e punte",
+      "target_ops": [{ "op": "reverse", "ids": ["e1"] }],
+      "task": "T11"
+    },
+    {
+      "id": "main.edge.label",
+      "name": "Scrivi l'etichetta dell'arco",
+      "source": "main",
+      "gui": [{ "field": "edge-label" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "e1", "fields": { "label": "perché" } }]
+    },
+    {
+      "id": "main.edge.color",
+      "name": "Colora l'arco",
+      "source": "main",
+      "gui": [{ "field": "edge-color" }, { "field": "edge-color-hex" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "e1", "fields": { "color": "4" } }]
+    },
+    {
+      "id": "main.edge.sides",
+      "name": "Scegli i lati dell'arco",
+      "source": "main",
+      "gui": [{ "field": "edge-fromSide" }, { "field": "edge-toSide" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "e1", "fields": { "fromSide": "bottom", "toSide": "top" } }]
+    },
+    {
+      "id": "main.edge.ends",
+      "name": "Scegli le punte dell'arco",
+      "source": "main",
+      "gui": [{ "field": "edge-fromEnd" }, { "field": "edge-toEnd" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "e1", "fields": { "fromEnd": "arrow" } }]
+    },
+    {
+      "id": "N4.ink.pen_card",
+      "name": "Scrivi con la penna sopra una scheda",
+      "source": "N4",
+      "gui": [{ "plan": "N4 T12" }, { "plan": "N4 T3" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_strokes",
+          "layer": { "node": "f1" },
+          "strokes": [
+            {
+              "tool": "pen",
+              "brush": "pf1 size=2 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=2 taperEnd=8 capStart=1 capEnd=1 sim=1 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": { "kind": "card", "width": 480, "height": 304 },
+              "ink": "1 s100 cxyt 4000,6000,0 400,0,8 400,0,8"
+            }
+          ]
+        }
+      ],
+      "computes": "la stringa `ink`, il pennello della penna, l'ancora e a chi va il tratto",
+      "target_ops": [{ "op": "draw", "on": "auto", "points": [[40, 460], [44, 460], [48, 460]], "pen": "ballpoint", "color": "blue" }],
+      "task": "T16"
+    },
+    {
+      "id": "N4.ink.pen_free",
+      "name": "Scrivi con la penna sul vuoto",
+      "source": "N4",
+      "gui": [{ "plan": "N4 T12" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_strokes",
+          "layer": "board",
+          "strokes": [
+            {
+              "tool": "pen",
+              "brush": "pf1 size=2 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=2 taperEnd=8 capStart=1 capEnd=1 sim=1 pen=ballpoint",
+              "color": "#0072b2",
+              "anchor": { "kind": "free" },
+              "ink": "1 s100 cxyt 150000,0,0 400,400,8"
+            }
+          ]
+        }
+      ],
+      "computes": "la stringa `ink` e il pennello",
+      "target_ops": [{ "op": "draw", "on": "board", "points": [[1500, 0], [1504, 4]], "pen": "ballpoint" }],
+      "task": "T16"
+    },
+    {
+      "id": "N4.ink.highlighter",
+      "name": "Evidenzia",
+      "source": "N4",
+      "gui": [{ "plan": "N4 T21" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_strokes",
+          "layer": { "node": "t1" },
+          "strokes": [
+            {
+              "tool": "highlighter",
+              "brush": "pf1 size=16 thinning=0 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=1 pen=highlighter",
+              "color": "#f0e442",
+              "anchor": { "kind": "card", "width": 320, "height": 160 },
+              "ink": "1 s100 cxyt 2000,4000,0 20000,0,8"
+            }
+          ]
+        }
+      ],
+      "computes": "lo strumento, il pennello, la stringa `ink`",
+      "target_ops": [{ "op": "draw", "on": "t1", "points": [[20, 40], [220, 40]], "pen": "highlighter", "color": "yellow" }],
+      "task": "T16"
+    },
+    {
+      "id": "N4.ink.menu",
+      "name": "Scegli penna, colore e spessore",
+      "source": "N4",
+      "gui": [{ "plan": "N4 T21" }, { "plan": "N4 T16" }],
+      "writes": "nothing",
+      "state": "view",
+      "note": "La scelta non scrive; in codice sono gli argomenti `pen`, `color`, `size` di `draw`."
+    },
+    {
+      "id": "N4.ink.erase_stroke",
+      "name": "Gomma: togli il tratto intero",
+      "source": "N4",
+      "gui": [{ "plan": "N4 T13" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "erase_strokes", "layer": { "node": "f1" }, "ids": ["s1"] }],
+      "note": "Gli id dei tratti li dà `canvas.read` (T8, con l'inchiostro da T17)."
+    },
+    {
+      "id": "N4.ink.erase_piece",
+      "name": "Gomma: taglia il pezzo strofinato",
+      "source": "N4",
+      "gui": [{ "plan": "N4 T22" }],
+      "writes": "file",
+      "state": "missing",
+      "computes": "il taglio dei campioni, che N4 T22 fa solo in TypeScript (`ink/tools/split.ts`)",
+      "target_ops": [{ "op": "erase_along", "points": [[100, 450], [140, 450]], "size": 12 }],
+      "task": "T18"
+    },
+    {
+      "id": "N4.ink.mouse",
+      "name": "Scrivi col mouse, tasto D",
+      "source": "N4",
+      "gui": [{ "plan": "N4 T13" }, { "plan": "N4 T16" }, { "plan": "N4 T19" }],
+      "writes": "nothing",
+      "state": "view"
+    },
+    {
+      "id": "N6.card.drop_vault",
+      "name": "Trascina un file dall'albero: misure per tipo",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T9" }, { "plan": "N6 T15" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": { "type": "file", "file": "Corsi/foto.png", "x": 1400, "y": 0, "width": 480, "height": 360 }
+        }
+      ],
+      "computes": "le misure di nascita per tipo (D-11)",
+      "target_ops": [{ "op": "add_card", "file": "Corsi/foto.png", "content_size": [4032, 3024] }],
+      "task": "T9"
+    },
+    {
+      "id": "N6.card.drop_many",
+      "name": "Trascina molti file: griglia e gruppo",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T9" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": { "id": "a", "type": "file", "file": "Corsi/a.md", "x": 1400, "y": 0, "width": 320, "height": 240 }
+        },
+        {
+          "op": "add_card",
+          "node": { "id": "b", "type": "file", "file": "Corsi/b.md", "x": 1744, "y": 0, "width": 320, "height": 240 }
+        }
+      ],
+      "computes": "la griglia di ceil(√n) colonne, il passo 24, il gruppo sopra 12",
+      "target_ops": [
+        { "op": "add_card", "id": "a", "file": "Corsi/a.md" },
+        { "op": "add_card", "id": "b", "file": "Corsi/b.md" },
+        { "op": "layout", "ids": ["a", "b"], "kind": "grid" }
+      ],
+      "task": "T12"
+    },
+    {
+      "id": "N6.text.grow",
+      "name": "La scheda di testo cresce col testo",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T44" }, { "plan": "N6 T46" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [{ "op": "resize", "id": "t1", "width": 480, "height": 200 }],
+      "computes": "la misura del testo",
+      "target_ops": [{ "op": "resize", "id": "t1", "fit": "content" }],
+      "task": "T10",
+      "note": "La GUI misura il testo nel DOM; il codice stima con la regola di `text_size` (eccezione dom-text-fit: può differire di qualche riga)."
+    },
+    {
+      "id": "N6.text.new_below",
+      "name": "Ctrl+Invio: una scheda sotto",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T44" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [{ "op": "add_card", "node": { "type": "text", "text": "Poi", "x": 0, "y": 184, "width": 320, "height": 160 } }],
+      "computes": "il posto sotto, a 24, con la stessa larghezza",
+      "target_ops": [{ "op": "add_card", "text": "Poi", "near": "t1", "side": "bottom" }],
+      "task": "T9"
+    },
+    {
+      "id": "N6.text.new_right",
+      "name": "Ctrl+Maiusc+Invio: una scheda a destra, collegata",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T44" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": { "id": "n", "type": "text", "text": "Perché", "x": 1368, "y": 0, "width": 320, "height": 160 }
+        },
+        {
+          "op": "connect",
+          "edge": { "fromNode": "l1", "fromSide": "right", "toNode": "n", "toSide": "left", "toEnd": "arrow" }
+        }
+      ],
+      "computes": "il posto a destra e i lati dell'arco",
+      "target_ops": [
+        { "op": "add_card", "id": "n", "text": "Perché", "near": "l1", "side": "right" },
+        { "op": "connect", "from": "l1", "to": "n" }
+      ],
+      "task": "T9"
+    },
+    {
+      "id": "N6.color.names",
+      "name": "I colori con un nome",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T47" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "t1", "fields": { "color": "#0064b0" } }],
+      "target_ops": [{ "op": "color", "ids": ["t1"], "color": "note-blue" }],
+      "task": "T10"
+    },
+    {
+      "id": "N6.group.selection",
+      "name": "Raggruppa la selezione",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T51" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": { "id": "g2", "type": "group", "label": "", "x": -24, "y": 376, "width": 968, "height": 528 }
+        },
+        { "op": "reorder", "ids": ["g1", "t1", "t2", "g2", "f1", "p1", "l1"] }
+      ],
+      "computes": "il rettangolo con il margine e il posto nell'ordine (sotto le schede)",
+      "target_ops": [{ "op": "group", "ids": ["f1", "p1"] }],
+      "task": "T11"
+    },
+    {
+      "id": "N6.resize.fit",
+      "name": "Doppio clic sulla maniglia: misura del contenuto",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T66" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [{ "op": "resize", "id": "p1", "width": 360, "height": 480 }],
+      "computes": "la misura del contenuto",
+      "target_ops": [{ "op": "resize", "id": "p1", "fit": "content" }],
+      "task": "T10"
+    },
+    {
+      "id": "N6.edge.nearest",
+      "name": "Collega senza mirare: i lati più vicini",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T67" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "connect",
+          "edge": { "fromNode": "t1", "fromSide": "bottom", "toNode": "f1", "toSide": "top", "toEnd": "arrow" }
+        }
+      ],
+      "computes": "i lati più vicini",
+      "target_ops": [{ "op": "connect", "from": "t1", "to": "f1", "sides": "auto" }],
+      "task": "T9"
+    },
+    {
+      "id": "N6.edge.drop_empty",
+      "name": "Lascia il filo nel vuoto: una scheda nuova collegata",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T67" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        { "op": "add_card", "node": { "id": "n", "type": "text", "text": "", "x": 0, "y": 728, "width": 320, "height": 160 } },
+        {
+          "op": "connect",
+          "edge": { "fromNode": "f1", "fromSide": "bottom", "toNode": "n", "toSide": "top", "toEnd": "arrow" }
+        }
+      ],
+      "computes": "il posto della scheda nuova e i lati",
+      "target_ops": [
+        { "op": "add_card", "id": "n", "type": "text", "near": "f1", "side": "bottom" },
+        { "op": "connect", "from": "f1", "to": "n", "sides": "auto" }
+      ],
+      "task": "T9"
+    },
+    {
+      "id": "N6.clipboard.paste",
+      "name": "Incolla schede copiate",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T68" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": { "id": "c1", "type": "text", "text": "Perché la media è bassa?", "x": 1400, "y": 0, "width": 320, "height": 160 }
+        },
+        {
+          "op": "add_card",
+          "node": { "id": "c2", "type": "text", "text": "Ripasso", "x": 1800, "y": 0, "width": 320, "height": 160 }
+        },
+        {
+          "op": "connect",
+          "edge": { "fromNode": "c1", "fromSide": "right", "toNode": "c2", "toSide": "left", "toEnd": "arrow" }
+        }
+      ],
+      "computes": "gli id nuovi, gli archi rimappati, lo spostamento",
+      "target_ops": [
+        {
+          "op": "insert",
+          "fragment": {
+            "version": 1,
+            "nodes": [
+              { "id": "t1", "type": "text", "text": "Perché la media è bassa?", "x": 0, "y": 0, "width": 320, "height": 160 },
+              { "id": "t2", "type": "text", "text": "Ripasso", "x": 400, "y": 0, "width": 320, "height": 160 }
+            ],
+            "edges": [{ "id": "e1", "fromNode": "t1", "toNode": "t2", "toEnd": "arrow" }]
+          },
+          "x": 1400,
+          "y": 0
+        }
+      ],
+      "task": "T13"
+    },
+    {
+      "id": "N6.convert.extract",
+      "name": "Estrai in una nota",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T70" }],
+      "writes": "file",
+      "state": "missing",
+      "computes": "`set` non cambia il tipo",
+      "target_ops": [{ "op": "convert", "id": "t2", "file": "Corsi/Ripasso.md" }],
+      "port": "note.create, poi l'operazione",
+      "task": "T13"
+    },
+    {
+      "id": "N6.convert.copy_here",
+      "name": "Copia qui il testo del file",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T70" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": { "type": "text", "text": "(il testo letto)", "x": 1400, "y": 0, "width": 480, "height": 400 }
+        }
+      ],
+      "computes": "le misure del testo",
+      "target_ops": [{ "op": "add_card", "text": "(il testo letto)", "near": "f1", "side": "right" }],
+      "port": "fub_read del file",
+      "task": "T9"
+    },
+    {
+      "id": "N6.card.relink",
+      "name": "Ritrova un file mancante, sostituisci il file",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T16" }, { "plan": "N6 T70" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "f1", "fields": { "file": "Archivio/voti.xlsx" } }]
+    },
+    {
+      "id": "N6.pages.spread",
+      "name": "Spargi le pagine del PDF",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T72" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": {
+            "type": "file",
+            "file": "Corsi/dispensa.pdf",
+            "subpath": "#page=1",
+            "x": 944,
+            "y": 400,
+            "width": 360,
+            "height": 480
+          }
+        },
+        {
+          "op": "add_card",
+          "node": {
+            "type": "file",
+            "file": "Corsi/dispensa.pdf",
+            "subpath": "#page=2",
+            "x": 1328,
+            "y": 400,
+            "width": 360,
+            "height": 480
+          }
+        }
+      ],
+      "computes": "la fila accanto, l'a capo dopo 10, il gruppo sopra 12",
+      "target_ops": [{ "op": "spread_pages", "id": "p1", "pages": [1, 2] }],
+      "task": "T14"
+    },
+    {
+      "id": "N6.parts.excerpt",
+      "name": "Estratti: pagine, zona, sezioni, ritaglio",
+      "source": "N6",
+      "gui": [
+        { "plan": "N6 T73" },
+        { "plan": "N6 T74" },
+        { "plan": "N6 T75" },
+        { "plan": "N6 T78" },
+        { "plan": "N6 T80" },
+        { "plan": "N6 T81" },
+        { "plan": "N6 T82" }
+      ],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [{ "op": "set", "id": "p1", "fields": { "subpath": "#page=3", "fub:parts": { "kind": "pages", "pages": [3, 4] } } }],
+      "computes": "la forma di `fub:parts` (N6 T73) e il `subpath` che la prima parte dà",
+      "target_ops": [{ "op": "excerpt", "id": "p1", "part": { "kind": "pages", "pages": [3, 4] } }],
+      "task": "T14"
+    },
+    {
+      "id": "N6.ink.page",
+      "name": "Inchiostro sulla pagina del PDF",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T19" }],
+      "writes": "file",
+      "state": "missing",
+      "computes": "l'ancora di pagina",
+      "target_ops": [{ "op": "draw", "on": { "card": "p1", "page": 3, "page_size": [595, 842] }, "points": [[72, 100], [300, 100]] }],
+      "task": "T19"
+    },
+    {
+      "id": "N6.ink.cell",
+      "name": "Inchiostro attaccato a una cella",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T37" }, { "plan": "N6 T38" }],
+      "writes": "file",
+      "state": "missing",
+      "computes": "l'ancora di cella",
+      "target_ops": [{ "op": "draw", "on": { "card": "f1", "sheet": "Foglio1", "cell": "B3" }, "points": [[2, 10], [60, 10]] }],
+      "task": "T19"
+    },
+    {
+      "id": "N6.ink.lasso",
+      "name": "Lazo: sposta i tratti",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T86" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "move_strokes", "layer": "board", "ids": ["s1"], "dx": 40, "dy": 0 }],
+      "note": "L'operazione la porta N6 T86, in snake_case (Differenze); la sua forma esatta la decide N6."
+    },
+    {
+      "id": "N6.ink.restyle",
+      "name": "Cambia penna o colore ai tratti",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T86" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "restyle_strokes", "layer": "board", "ids": ["s1"], "color": "#d55e00" }],
+      "note": "Come sopra: N6 T86."
+    },
+    {
+      "id": "N6.ink.shapes",
+      "name": "Forme dal tratto e linea dritta",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T87" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_strokes",
+          "layer": "board",
+          "strokes": [
+            {
+              "tool": "pen",
+              "brush": "pf1 size=6 thinning=0 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=1 pen=marker",
+              "color": "#d55e00",
+              "anchor": { "kind": "free" },
+              "ink": "1 s100 cxyt 0,0,0 10000,0,8"
+            }
+          ]
+        }
+      ],
+      "computes": "i campioni della forma",
+      "target_ops": [
+        {
+          "op": "draw",
+          "on": "board",
+          "shape": { "kind": "rect", "x": 1400, "y": 0, "width": 200, "height": 100 },
+          "pen": "marker",
+          "color": "vermilion"
+        }
+      ],
+      "task": "T16"
+    },
+    {
+      "id": "N6.card.write_inside",
+      "name": "Scrivi dentro una scheda di nota o di foglio",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T40" }, { "plan": "N6 T41" }, { "plan": "N6 T42" }, { "plan": "N6 T43" }],
+      "writes": "other-file",
+      "state": "port",
+      "port": "fub_write sulla nota; i comandi dei fogli per le celle",
+      "note": "Cambia il file della scheda, non la lavagna."
+    },
+    {
+      "id": "N6.inspector.raw",
+      "name": "L'ispettore: numeri e nodo grezzo",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T59" }],
+      "writes": "file",
+      "state": "code",
+      "ops": [{ "op": "set", "id": "t1", "fields": { "x": 16, "fub:nota": "campo di un altro programma" } }]
+    },
+    {
+      "id": "N6.put_page",
+      "name": "Metti la pagina sulla lavagna",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T84" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_card",
+          "node": {
+            "type": "file",
+            "file": "Corsi/dispensa.pdf",
+            "subpath": "#page=5",
+            "x": 1400,
+            "y": 0,
+            "width": 360,
+            "height": 480
+          }
+        }
+      ],
+      "computes": "le misure di nascita del PDF",
+      "target_ops": [{ "op": "add_card", "file": "Corsi/dispensa.pdf", "subpath": "#page=5" }],
+      "task": "T9"
+    },
+    {
+      "id": "N6.guides",
+      "name": "Guide e griglia durante il gesto",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T71" }],
+      "writes": "file",
+      "state": "exception",
+      "note": "Le guide aiutano la mano mentre trascina; il codice scrive numeri esatti, o usa `align`, `distribute`, `layout`, e `near`."
+    },
+    {
+      "id": "N6.ink.owner",
+      "name": "A chi va il tratto mentre si scrive (e Alt per libero)",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T69" }],
+      "writes": "file",
+      "state": "by_hand",
+      "ops": [
+        {
+          "op": "add_strokes",
+          "layer": "board",
+          "strokes": [
+            {
+              "tool": "pen",
+              "brush": "pf1 size=2 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=2 taperEnd=8 capStart=1 capEnd=1 sim=1 pen=ballpoint",
+              "color": "#000000",
+              "anchor": { "kind": "free" },
+              "ink": "1 s100 cxyt 4000,46000,0 400,0,8"
+            }
+          ]
+        }
+      ],
+      "computes": "la regola dell'ancora",
+      "target_ops": [{ "op": "draw", "on": "auto", "points": [[40, 460], [44, 460]] }],
+      "task": "T16",
+      "note": "`on: \"auto\"` usa la regola di N4 T3 (e di N6 T19 e T38 quando ci sono); `on: \"board\"` è Alt."
+    },
+    {
+      "id": "N6.view",
+      "name": "Vista, navigatore, indietro e avanti, cerca, lettore da vicino, entrare nella scheda",
+      "source": "N6",
+      "gui": [
+        { "plan": "N6 T14" },
+        { "plan": "N6 T35" },
+        { "plan": "N6 T36" },
+        { "plan": "N6 T53" },
+        { "plan": "N6 T55" },
+        { "plan": "N6 T56" },
+        { "plan": "N6 T57" },
+        { "plan": "N6 T60" },
+        { "plan": "N6 T76" }
+      ],
+      "writes": "nothing",
+      "state": "view"
+    },
+    {
+      "id": "N6.chrome",
+      "name": "Catalogo, barra della selezione, menu radiale, lavagna vuota",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T48" }, { "plan": "N6 T51" }, { "plan": "N6 T62" }, { "plan": "N6 T63" }],
+      "writes": "nothing",
+      "state": "view",
+      "note": "Ospitano comandi; ognuno ha la sua voce qui. Dopo N6 ogni comando del catalogo dichiara la sua operazione (T23)."
+    },
+    {
+      "id": "N6.settings",
+      "name": "Impostazioni della lavagna, dove vanno i file trascinati",
+      "source": "N6",
+      "gui": [{ "plan": "N6 T33" }, { "plan": "N6 T34" }],
+      "writes": "nothing",
+      "state": "exception",
+      "note": "Impostazioni di Fub, non contenuto della lavagna."
+    }
+  ]
+}
