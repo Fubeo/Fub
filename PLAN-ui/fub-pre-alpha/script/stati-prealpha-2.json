@@ -1,0 +1,10 @@
+[
+ {"id":"nota-blocchi","scena":"proto-nota","modo":"blocks","modoNota":"blocks","mods":["notaIn","modo"]},
+ {"id":"nota-blocchi-700","scena":"proto-nota","modo":"blocks","modoNota":"blocks","mods":["notaIn","modo"],"dopo":700,"modsDopo":["modo"]},
+ {"id":"nota-sorgente","scena":"proto-nota","modo":"source","modoNota":"source","mods":["notaIn","modo"]},
+ {"id":"nota-sorgente-700","scena":"proto-nota","modo":"source","modoNota":"source","mods":["notaIn","modo"],"dopo":700,"modsDopo":["modo"]},
+ {"id":"nota-lettura","scena":"proto-nota","modo":"reading","modoNota":"reading","mods":["notaIn","modo"]},
+ {"id":"nota-lettura-700","scena":"proto-nota","modo":"reading","modoNota":"reading","mods":["notaIn","modo"],"dopo":700,"modsDopo":["modo"]},
+ {"id":"conflitto","scena":"proto-nota","mods":["nota","modo","conflitto"]},
+ {"id":"conflitto-700","scena":"proto-nota","mods":["nota","modo","conflitto"],"dopo":700,"modsDopo":["modo"]}
+]

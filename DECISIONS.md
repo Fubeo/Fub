@@ -59,6 +59,39 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-05 · fub-pre-alpha (pianificatore) · definizione confermata
+  dall'utente: gli otto punti di «Fatto quando» del piano; dentro tutti i
+  piani aperti tranne K6; computer più un APK Android di prova segnato
+  «sperimentale»; pre-release pubblica `v0.2.0-prealpha.1`, con #289 · scelte
+  dell'utente, date con le domande della pianificazione.
+- 2026-11-05 · fub-pre-alpha · «il blocco di scrittura in sola lettura» entra
+  come PA T3: i comandi in sola lettura non prendono `write_turn()` in
+  `FubSession::invoke_command` · nella pre-alpha l'AI legge (MCP,
+  `canvas.read`) mentre la persona scrive; l'issue che N7 (2026-11-04)
+  prometteva non è mai stata aperta, e il task la sostituisce.
+- 2026-11-05 · fub-pre-alpha · N6 «v1 senza T79» vuol dire senza T79–T85 e
+  T88 · T80–T84 dipendono da T79 e da PdfCraft P1, P2 e P4, T85 da T82, T88
+  da D-20 (il piano dei CSV, che non c'è): sono le dipendenze scritte nel
+  piano di N6.
+- 2026-11-05 · fub-pre-alpha · `fub:abi@0.2.0` si congela nella fase A (PA
+  T6, T7), non alla fine · nessun piano dentro tocca `wit/fub/abi.wit`
+  (verificato su tutti i rami): la guardia stretta protegge da subito il
+  lavoro delle fasi B e C.
+- 2026-11-05 · fub-pre-alpha · il corpus senza perdite (PA T13) entra nella
+  fase A e si allarga quando K5 e N4 entrano · ogni piano unito dopo lo deve
+  tenere verde, e un difetto si trova presto.
+- 2026-11-05 · fub-pre-alpha · Scrittoio 2 T23 contro N6 sulla lavagna: vince
+  N6, e S2 T23 aggiunge solo l'icona · N6 ha il prototipo approvato
+  `lavagna-schede` (T25, 2026-11-04). S2 T22 contro K5 (la testa del
+  disegno) resta una domanda (D5), perché cambia ciò che si vede.
+- 2026-11-05 · fub-pre-alpha · il simulatore scrive il corpo del testo a 18,
+  il valore di S2 T11, anche dove il prototipo approvato di S2 mostra il 17
+  del finto del banco · il simulatore mostra il prodotto dopo S2; è la sola
+  differenza col prototipo approvato (stato `impostazioni`).
+- 2026-11-05 · fub-pre-alpha · i sedici test instabili aperti entrano come tre
+  task (PA T19–T21): 200 corse o la causa; la quarantena la decide l'utente ·
+  la pre-alpha chiede la CI completa verde sul commit del tag.
+
 - 2026-11-05 · caricamento · scelta dell'utente (A): il banco del moto non
   conta come residuo la `transform: scale(1, 1)` che CodeMirror lascia sui
   suoi strati (`.cm-layer`) dopo la cascata d'avvio, che scala il riquadro a

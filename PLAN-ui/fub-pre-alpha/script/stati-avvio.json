@@ -1,0 +1,6 @@
+[
+ {"id":"avvio-attesa","scena":"avvio-attesa","mods":[]},
+ {"id":"avvio-lento","scena":"avvio-lento","mods":[]},
+ {"id":"avvio-guasto","scena":"avvio-guasto","mods":[]},
+ {"id":"tel-avvio-attesa","scena":"avvio-telefono","mods":[]}
+]

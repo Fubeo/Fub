@@ -1,0 +1,2884 @@
+<!doctype html>
+<html lang="it" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulatore pre-alpha</title>
+<!--
+  Il simulatore di Fub pre-alpha (piano/fub-pre-alpha, PLAN-ui/fub-pre-alpha/).
+  Lo schermo è il client vero del banco (anteprima/tutto del 2026-11-04 con la
+  IPC finta) fotografato stato per stato: DOM e CSS copiati, compressi in
+  sim-dati.js e rimontati in un iframe senza script. Sopra il CSS copiato si
+  monta il CSS nuovo di Scrittoio 2, un <style> per file di destinazione, nello
+  stesso posto dove andrà nel codice. Le interazioni (clic, «/», tasto destro,
+  avvio rapido, impostazioni) sono in solo-simulatore.js: fingono il prodotto e
+  non vanno nel codice. Le pagine dei piani (lavagna, penne, celle, «Comandi»,
+  disegno, ricette) sono in piani/, tali e quali come sono state approvate.
+-->
+<style>
+/* solo simulatore: la pagina attorno allo schermo. */
+:root {
+  --bg: #e8edf5;
+  --sheet: #fcfdff;
+  --sheet-2: #f3f6f9;
+  --bg-elev: #ffffff;
+  --text: #1a1f29;
+  --muted: #5a5f6a;
+  --border: #d3d8e0;
+  --accent: #2b56cc;
+  --accent-wash: #d8e5ff;
+  --focus-ring: #2b56cc;
+  --ok: #1d7a46;
+  --ok-wash: #dcf3e5;
+  --warn: #8a5a00;
+  --warn-wash: #fbefd6;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 12px;
+  --space-6: 16px;
+  --space-8: 24px;
+  --radius-chip: 6px;
+  --radius-control: 8px;
+  --radius-sheet: 12px;
+  --font-ui: "Hanken Grotesk Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a0e16; --sheet: #151a21; --sheet-2: #1d222a; --bg-elev: #212730; --text: #e5e8ed; --muted: #a0a5ae; --border: #2c323c;
+    --accent: #82a8fd; --accent-wash: #213156; --focus-ring: #82a8fd; --ok: #7fd3a0; --ok-wash: #173326; --warn: #f0c46a; --warn-wash: #3a2e12;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0a0e16; --sheet: #151a21; --sheet-2: #1d222a; --bg-elev: #212730; --text: #e5e8ed; --muted: #a0a5ae; --border: #2c323c;
+  --accent: #82a8fd; --accent-wash: #213156; --focus-ring: #82a8fd; --ok: #7fd3a0; --ok-wash: #173326; --warn: #f0c46a; --warn-wash: #3a2e12;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 var(--font-ui); overflow-x: hidden; }
+a { color: var(--accent); }
+.sim-bar {
+  position: sticky; top: 0; z-index: 3;
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-6);
+  padding: var(--space-4) max(var(--space-6), env(safe-area-inset-right)) var(--space-4) max(var(--space-6), env(safe-area-inset-left));
+  background: var(--sheet-2); border-bottom: 1px solid var(--border);
+}
+.sim-bar h1 { margin: 0 var(--space-4) 0 0; font-size: 15px; font-weight: 600; }
+.sim-field { display: inline-flex; align-items: center; gap: var(--space-3); }
+.sim-bar select, .sim-bar button {
+  min-height: 32px; border: 1px solid var(--border); border-radius: var(--radius-control);
+  background: var(--bg-elev); color: var(--text); font: inherit; padding: 0 var(--space-5);
+}
+.sim-bar select { max-width: min(100%, 22rem); }
+.sim-seg { display: inline-flex; margin: 0; padding: 2px; border: 0; border-radius: var(--radius-control); background: var(--bg-elev); box-shadow: 0 0 0 1px var(--border); }
+.sim-seg legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.sim-seg input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.sim-seg label { padding: var(--space-2) var(--space-5); border-radius: var(--radius-chip); color: var(--muted); cursor: pointer; }
+.sim-seg input:checked + label { background: var(--accent-wash); color: var(--accent); }
+.sim-seg input:disabled + label { opacity: 0.4; cursor: default; }
+.sim-seg input:focus-visible + label, .sim-bar select:focus-visible, .sim-bar button:focus-visible, .sim-pezzi button:focus-visible {
+  outline: 2px solid var(--focus-ring); outline-offset: 2px;
+}
+.sim-bar button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent); border-color: transparent; }
+.sim-msg {
+  min-height: 22px; margin: 0; padding: var(--space-2) max(var(--space-6), env(safe-area-inset-left));
+  color: var(--warn); background: var(--warn-wash); font-size: 13px;
+}
+.sim-msg:empty { background: transparent; }
+main { padding: var(--space-6) max(var(--space-6), env(safe-area-inset-right)) var(--space-8) max(var(--space-6), env(safe-area-inset-left)); max-width: 1340px; margin: 0 auto; }
+.sim-box {
+  position: relative; overflow: hidden; border-radius: var(--radius-sheet);
+  box-shadow: 0 0 0 1px var(--border), 0 8px 24px rgb(0 0 0 / 0.12); background: var(--sheet); margin: 0 auto;
+}
+.sim-box iframe { display: block; border: 0; transform-origin: 0 0; background: var(--bg); }
+.sim-segno { position: absolute; pointer-events: none; border: 2px solid var(--accent); border-radius: 4px; box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.18); }
+.sim-segno[hidden] { display: none; }
+.sim-didascalia { margin: var(--space-6) 0 var(--space-4); }
+.sim-didascalia h2 { margin: 0 0 var(--space-3); font-size: 16px; }
+.sim-didascalia p { margin: 0 0 var(--space-3); max-width: 75ch; }
+.sim-task { display: inline-block; padding: 0 var(--space-3); border-radius: var(--radius-chip); background: var(--accent-wash); color: var(--accent); font-size: 12px; font-weight: 600; }
+.sim-muto { color: var(--muted); font-size: 13px; }
+.sim-come { display: inline-block; padding: 0 var(--space-3); border-radius: var(--radius-chip); font-size: 12px; font-weight: 600; }
+.sim-come[data-come="nuovo"] { background: var(--accent-wash); color: var(--accent); }
+.sim-come[data-come="cambiato"] { background: var(--warn-wash); color: var(--warn); }
+.sim-come[data-come="uguale"] { background: var(--ok-wash); color: var(--ok); }
+.sim-pezzi { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+.sim-pezzi li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-5); padding: var(--space-4) var(--space-5); border-radius: var(--radius-control); background: var(--sheet); box-shadow: 0 0 0 1px var(--border); }
+.sim-pezzi .sim-dest { grid-column: 1 / -1; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.sim-pezzi button { border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--bg-elev); color: var(--text); font: inherit; font-size: 13px; padding: 2px var(--space-4); }
+.sim-pezzi pre { grid-column: 1 / -1; max-height: 260px; overflow: auto; margin: 0; padding: var(--space-4); border-radius: var(--radius-chip); background: var(--sheet-2); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+details { margin: var(--space-4) 0; padding: var(--space-4) var(--space-6); border-radius: var(--radius-control); background: var(--sheet-2); }
+summary { cursor: pointer; font-weight: 600; }
+details li { margin: var(--space-2) 0; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--border); vertical-align: top; }
+code { font-size: 12.5px; overflow-wrap: anywhere; }
+.sim-tabella { overflow-x: auto; }
+@media (max-width: 600px) {
+  .sim-bar { gap: var(--space-3) var(--space-4); }
+  .sim-bar h1 { width: 100%; }
+}
+</style>
+<!-- Il CSS nuovo, un blocco per file di destinazione: spento qui (media="not all"), lo monta lo schermo. -->
+<style media="not all" data-destinazione="theme/scrittoio/structure.css" data-posto="struttura" data-task="S2 T3, T4, T9, T16, T20, T21, T27">
+/* → theme/scrittoio/structure.css (S2 T3, T4, T9, T16, T20, T21, T27) */
+/* L'ispettore si stringe: 264 come il cassetto, così il foglio sta al centro. */
+:root {
+  --inspector-w: 264px;
+}
+/* La modalità si sceglie dalla banda: la testata non mostra più né i
+   segmenti né il bottone che li riassume. Il bottone è un figlio del foglio,
+   dopo la barra di formato, e si vede soltanto sul telefono, dove la banda
+   non c'è o si è ritirata (`mobile.css`). */
+.pane-toolbar > .segmented,
+.pane > .pane-mode-current {
+  display: none;
+}
+/* Le schede dell'ispettore salgono sulla riga delle linguette: in cima, prima
+   del titolo. */
+.inspector-tabs {
+  order: -1;
+}
+/* Gli stili che `ui/node.ts` scriveva in linea sulle righe di un elenco e di
+   un albero passano qui, uguali: la pelle li può ora cambiare. */
+.ui-list-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: max(var(--space-9, 32px), 28px);
+}
+.ui-tree-label {
+  display: flex;
+  align-items: center;
+  min-height: max(var(--space-9, 32px), 28px);
+}
+.ui-tree-label > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* La banda stretta. Con «Si scrive» e la modalità a destra, sotto gli 800 px
+   la lingua del documento si fa da parte (la dice già il correttore), e ciò
+   che sta a sinistra si taglia invece di passare sotto la parte destra. */
+#status-band > #status-start,
+#status-band > #views-status {
+  overflow: hidden;
+}
+@media (max-width: 800px) {
+  #status-band [data-surface-item="language"] {
+    display: none;
+  }
+}
+/* ── L'ombra del foglio esce dalla scrivania ─────────────────────────────────
+   `#panes` taglia ciò che esce (`overflow: hidden`): l'ombra della carta finiva
+   contro il suo bordo, a sinistra e a destra a filo del foglio e sotto dopo
+   8 px, ed era un rettangolo. La scrivania si allarga di `--sheet-reach` verso
+   i vicini che stanno dentro la finestra (il cassetto o il binario a sinistra,
+   l'ispettore agganciato a destra, la banda sotto) e restituisce la stessa
+   misura in padding: i fogli restano dove sono, la scatola esterna non cambia
+   (il flex non va a capo in modo diverso) e l'ombra ha spazio per sfumare.
+   Verso il bordo della finestra non si allarga mai: l'eccedenza positiva
+   renderebbe `#app` scorrevole da programma. La fascia in più non prende i
+   clic (`pointer-events`): il cassetto, l'ispettore e la banda sotto l'ombra
+   restano vivi. */
+#panes {
+  --sheet-reach: 20px;
+  --reach-l: var(--sheet-reach);
+  --reach-r: 0px;
+  --reach-b: var(--sheet-reach);
+  height: calc(100% + var(--reach-b));
+  margin: 0 calc(-1 * var(--reach-r)) calc(-1 * var(--reach-b)) calc(-1 * var(--reach-l));
+  padding: 0 calc(var(--sheet-gap) + var(--reach-r)) calc(var(--sheet-gap) + var(--reach-b)) var(--reach-l);
+  pointer-events: none;
+}
+#panes > * {
+  pointer-events: auto;
+}
+#layout:not(:has(> #sidebar:not([hidden]))) > #panes,
+#layout.layout-compact > #panes {
+  padding-left: calc(var(--sheet-gap) + var(--reach-l));
+}
+#layout:has(> #right-pane:not([hidden])):not(.layout-compact):not(.layout-inspector-overlay) > #panes {
+  --reach-r: var(--sheet-reach);
+  padding-right: var(--reach-r);
+}
+/* Il benvenuto non ha fogli, la modalità concentrata non ha vicini: niente
+   fascia. Senza la banda di stato, sotto c'è il bordo della finestra. */
+#app[data-welcome] #panes,
+#app[data-focus-mode] #panes {
+  --sheet-reach: 0px;
+}
+#app[data-status-off] #panes {
+  --reach-b: 0px;
+}
+/* Il foglio sta sopra i vicini, perché la sua ombra cada su di loro e non
+   sotto: l'ispettore viene dopo nel DOM e la coprirebbe. Divisori (2),
+   cassetti e menu (40 e oltre) restano sopra. */
+.pane {
+  z-index: var(--z-sheet);
+}
+
+/* ── La barra degli strumenti di serie: la forma ───────────────────────────
+   Ricavata a macchina dalle regole della barra dei fogli: `.grid-ribbon-*`
+   diventa `.kit-ribbon-*`, con lo stesso testo, lo stesso ordine e la stessa
+   specificità. Il kit mette `kit-ribbon` sulla radice e `kit-ribbon-<parte>`
+   accanto a `<prefisso>-<parte>` su ogni pezzo. Ai fogli restano la
+   tavolozza, la galleria, i campioni, «Comandi», la formula e le schede. */
+.kit-ribbon {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.kit-ribbon-head {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+/* Le sezioni stanno in un pozzetto che abbraccia i loro nomi; se non ci
+   stanno, il pozzetto scorre. L'evidenza della scelta corre dietro i nomi: la
+   fila è un piano a sé, e il segno ci sta sotto. */
+.kit-ribbon-tabs {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  isolation: isolate;
+  scrollbar-width: none;
+}
+.kit-ribbon-tabs > .kit-tab-indicator {
+  z-index: -1;
+}
+.kit-ribbon-tabs .kit-tab,
+.kit-ribbon-item,
+.kit-ribbon-group {
+  position: relative;
+}
+/* Il nome lungo di una sezione per la selezione finisce coi puntini: quello
+   intero resta nel nome accessibile e nel suggerimento. */
+.kit-ribbon-contextual .kit-tab-label {
+  max-width: 12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-ribbon-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-inline-start: auto;
+  padding: 0;
+}
+.kit-ribbon-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+.kit-ribbon-panel {
+  min-width: 0;
+}
+/* Il vassoio abbraccia i suoi foglietti: nessuna altezza fissa. */
+.kit-ribbon-toolbar {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+}
+/* Un foglietto: il nome in alto, sotto due file di comandi alte 28. */
+.kit-ribbon-group {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-width: 0;
+}
+.kit-ribbon-group-label {
+  display: block;
+  order: -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-ribbon-group-body,
+.kit-ribbon-stack {
+  display: grid;
+  grid-template-rows: repeat(2, 28px);
+  grid-auto-columns: max-content;
+  grid-auto-flow: column;
+  align-items: center;
+}
+/* Una pila prende le due file; se ne ha tre, la terza va in una colonna
+   accanto. */
+.kit-ribbon-group-body > .kit-ribbon-stack {
+  grid-row: 1 / -1;
+}
+.kit-ribbon-group[data-collapsed="true"] > .kit-ribbon-group-body {
+  display: none;
+}
+.kit-ribbon-row,
+.kit-ribbon-item,
+.kit-ribbon-field,
+.kit-ribbon-check,
+.kit-ribbon-chevron {
+  display: inline-flex;
+  align-items: center;
+}
+.kit-ribbon-row {
+  display: flex;
+}
+.kit-ribbon-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+/* Alti 28 come nella barra di formato; larghi 24 quando portano solo
+   l'icona, perché una fila di Home ne tiene dieci. */
+.kit-ribbon-small {
+  min-width: 24px;
+  height: 28px;
+}
+/* Il pulsante grande di una volta è un gettone su una riga: icona, nome e la
+   freccina, se apre qualcosa. Una taglia sola in tutta la barra. */
+.kit-ribbon-large {
+  justify-content: flex-start;
+  min-width: 28px;
+  height: 28px;
+}
+.kit-ribbon-small svg,
+.kit-ribbon-large svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.kit-ribbon-chevron svg {
+  width: 10px;
+  height: 10px;
+}
+.kit-ribbon-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+}
+/* Un pulsante diviso grande è un gettone diviso, come quelli piccoli. */
+.kit-ribbon-split-large {
+  flex-direction: row;
+}
+.kit-ribbon-arrow {
+  align-self: stretch;
+  min-width: 14px;
+}
+.kit-ribbon-color-bar {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 3px;
+  height: 3px;
+}
+/* Un foglietto chiuso: resta il suo nome e, sotto, un gettone alto quanto le
+   due file, col disegno del gruppo e la freccina che dice «si apre qui». */
+.kit-ribbon-group-toggle {
+  justify-content: center;
+  height: calc(28px * 2 + var(--space-1, 2px));
+}
+.kit-ribbon-group-toggle .kit-ribbon-label {
+  display: none;
+}
+.kit-ribbon-group-toggle .kit-ribbon-chevron {
+  transform: rotate(-90deg);
+}
+/* Quando lo spazio manca, prima i pulsanti piccoli perdono il nome; se non
+   basta, lo perdono anche i gettoni del foglietto aperto (quelli del suo
+   contenuto: il pulsante di un foglietto chiuso tiene il suo nome). */
+.kit-ribbon-panel[data-compact="true"] .kit-ribbon-small .kit-ribbon-label,
+.kit-ribbon-panel[data-dense="true"] .kit-ribbon-group-body .kit-ribbon-large .kit-ribbon-label {
+  display: none;
+}
+.kit-ribbon-keytip {
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  z-index: var(--z-menu);
+  transform: translateX(-50%);
+  pointer-events: none;
+  white-space: nowrap;
+}
+/* Nella testata la lettera scende fino al bordo della fila, sotto il nome:
+   il nome resta leggibile e la lettera non esce dalla fila, che scorre. */
+.kit-ribbon-head .kit-ribbon-keytip {
+  bottom: -6px;
+}
+/* Il foglietto chiuso non ha il nome sopra e un pulsante vuoto sotto: il
+   pulsante è il foglietto, e il nome ci sta dentro. Come sta dentro lo dicono
+   le regole della pila e della tessera, qui sotto. */
+.kit-ribbon-group[data-collapsed="true"] > .kit-ribbon-group-label {
+  display: none;
+}
+.kit-ribbon-group-toggle {
+  flex: 1 1 auto;
+  height: auto;
+}
+.kit-ribbon-group-toggle .kit-ribbon-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Al telefono nemmeno coi foglietti tutti chiusi la sezione ci sta sempre:
+   allora il vassoio scorre sotto il dito, senza barra di scorrimento, e il
+   foglietto che si apre si porta in vista. */
+.kit-ribbon-toolbar {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+/* I foglietti chiusi: due per colonna «a pila», ognuno su una riga; quello
+   che resta solo nella sua colonna è alto quanto un foglietto aperto, «a
+   tessera». */
+/* Il vassoio è una griglia di due file che si riempie per colonne: un
+   foglietto aperto le prende tutte e due, uno chiuso una sola, e due chiusi
+   di fila stanno uno sopra l'altro, larghi uguali. L'ordine resta quello della
+   sezione: niente `dense`. */
+.kit-ribbon-toolbar {
+  display: grid;
+  grid-auto-columns: max-content;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, auto);
+}
+.kit-ribbon-group {
+  grid-row: span 2;
+}
+.kit-ribbon-group[data-collapsed="true"] {
+  grid-row: span 1;
+}
+/* L'ultimo chiuso di una fila dispari resta solo nella sua colonna (il kit
+   lo segna con `data-alone`): prende tutte e due le file. */
+.kit-ribbon-group[data-collapsed="true"][data-alone="true"] {
+  grid-row: span 2;
+}
+/* Due a pila: il disegno, il nome accanto e la freccina. */
+.kit-ribbon-group-toggle {
+  justify-content: flex-start;
+}
+/* Un nome lunghissimo («Visualizzazioni cartella di lavoro») finisce coi
+   puntini: quello intero è il nome del pulsante e il suo suggerimento. */
+.kit-ribbon-group-toggle .kit-ribbon-label {
+  max-width: 10em;
+}
+.kit-ribbon-group-toggle .kit-ribbon-chevron {
+  margin-inline-start: auto;
+}
+/* Uno solo: il disegno in un tondo e il nome sotto, in mezzo al foglietto;
+   il nome va a capo una volta, in due righe pari, e uno più lungo finisce
+   coi puntini. */
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle {
+  flex-direction: column;
+  justify-content: center;
+  white-space: normal;
+}
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle > svg {
+  box-sizing: content-box;
+  padding: 6px;
+}
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle .kit-ribbon-label {
+  display: -webkit-box;
+  max-width: 7em;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-align: center;
+  text-wrap: balance;
+}
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle .kit-ribbon-chevron {
+  display: none;
+}
+/* La fila dell'accesso rapido, prima delle sezioni. */
+.kit-ribbon-quick {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+/* ── La barra in una fila (`kit-bar`) ────────────────────────────────────────
+   La stessa barra della barra a schede quando sta in una fila sola: il
+   vassoio (`kit-bar`), i foglietti senza nome (`kit-bar-group`), gli stessi
+   pulsanti (`kit-bar-button`) e campi (`kit-bar-field`). Le classi le mette
+   chi costruisce la barra: la barra di formato delle note, la testa del
+   disegno, la barra del PDF. Lo scorrimento resta di ciascuna: la barra di
+   formato taglia e manda il resto in «…». La lavagna segue il piano N6. */
+.kit-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+}
+.kit-bar-group {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+/* La fila del kit (`kit/options-bar.ts`) dentro un vassoio: una riga sola, e
+   ciò che non ci sta va in «…» (`kit-options-more`). */
+.kit-options {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+.kit-options-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* Col mouse i pulsanti della fila sono alti 28, come nella barra a schede; col
+   dito restano i bersagli da 44 che le regole `pointer: coarse` danno già. */
+@media (pointer: fine) {
+  .kit-bar-button,
+  .kit-options-more {
+    min-width: 28px;
+    min-height: 28px;
+    height: 28px;
+  }
+}
+
+/* La galleria degli stili del documento sta nelle due file del suo foglietto
+   (in `structure.css`, accanto a `.rich-ribbon-styles`). */
+.rich-ribbon-styles {
+  grid-row: 1 / -1;
+  height: calc(28px * 2 + var(--space-1));
+}
+.rich-ribbon-style {
+  width: 64px;
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/kit.css" data-posto="pelle" data-task="S2 T16, T20">
+/* → theme/scrittoio/skin/kit.css (S2 T16, T20) */
+/* ── La barra degli strumenti di serie: la pelle ───────────────────────────
+   Ricavata a macchina dalle regole della barra dei fogli: `.grid-ribbon-*`
+   diventa `.kit-ribbon-*`, con lo stesso testo, lo stesso ordine e la stessa
+   specificità. Il kit mette `kit-ribbon` sulla radice e `kit-ribbon-<parte>`
+   accanto a `<prefisso>-<parte>` su ogni pezzo. Ai fogli restano la
+   tavolozza, la galleria, i campioni, «Comandi», la formula e le schede. */
+/* La barra di serie è una testata di Fub, non un nastro d'ufficio. Le sezioni
+   sono una scelta a segmenti nel suo pozzetto, come in Impostazioni; i comandi
+   stanno su un vassoio stondato, un tono sotto la carta, in foglietti col nome
+   in grigio. Niente righe: separano lo spazio e la carta. */
+.kit-ribbon {
+  padding-bottom: var(--space-2);
+  background: var(--sheet);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+/* Ritirata resta la fila delle sezioni: un filetto la stacca dal contenuto. */
+.kit-ribbon[data-collapsed="true"] {
+  padding-bottom: 0;
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.kit-ribbon-head {
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+}
+/* Il pozzetto delle sezioni è quello di `.segmented` (`skin/controls.css`):
+   un velo appena, il raggio di un controllo, i segmenti col raggio di una
+   pastiglia; la scelta ha il velo d'accento, che scorre. */
+.kit-ribbon-tabs.kit-tabs {
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-control);
+  background: var(--overlay-hover);
+  box-shadow: none;
+}
+.kit-ribbon-tabs .kit-tab {
+  gap: var(--space-2);
+  min-height: 24px;
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.kit-ribbon-tabs .kit-tab:hover {
+  color: var(--text);
+}
+.kit-ribbon-tabs .kit-tab[aria-selected="true"] {
+  color: var(--accent);
+}
+.kit-ribbon-tabs > .kit-tab-indicator {
+  top: var(--space-1);
+  height: calc(100% - var(--space-1) * 2);
+  border-radius: var(--radius-chip);
+  background: var(--accent-wash);
+}
+/* Le sezioni per la selezione dicono di essere in più con l'accento e un
+   punto, e stanno un passo più in là dalle altre. */
+.kit-ribbon-tabs .kit-ribbon-contextual {
+  color: var(--accent);
+}
+.kit-ribbon-tabs .kit-ribbon-contextual::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}
+.kit-ribbon-tabs .kit-tab:not(.kit-ribbon-contextual) + .kit-ribbon-contextual {
+  margin-inline-start: var(--space-3);
+}
+.kit-ribbon-toggle {
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.kit-ribbon-toggle:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+/* Il vassoio dei comandi: lo stesso raggio di un foglio; i foglietti dentro
+   col raggio di un controllo, così gli angoli corrono paralleli. */
+.kit-ribbon-toolbar {
+  gap: var(--space-2);
+  margin: 0 var(--space-4);
+  padding: var(--space-2);
+  border-radius: var(--radius-sheet);
+  background: var(--sheet-2);
+}
+/* Un foglietto è carta sul vassoio, con un orlo sotto al posto dell'ombra:
+   un'ombra vera, nel vassoio stretto, verrebbe tagliata. */
+.kit-ribbon-group {
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  box-shadow: 0 1px 0 var(--border);
+}
+/* Il nome del gruppo è piccolo e grigio, scritto come si scrive: non
+   maiuscoletto, non nero. Dice dove si è, non chiede di essere letto. */
+.kit-ribbon-group-label {
+  padding: 0 var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular);
+  line-height: 16px;
+}
+.kit-ribbon-group-body {
+  gap: var(--space-1) var(--space-2);
+}
+.kit-ribbon-stack {
+  gap: var(--space-1) var(--space-2);
+}
+.kit-ribbon-row {
+  gap: var(--space-1);
+}
+/* I pulsanti sono quelli della barra di formato: grafite a riposo, un velo al
+   passaggio, il velo d'accento quando sono accesi. */
+.kit-ribbon-button {
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  line-height: var(--leading-tight);
+  cursor: pointer;
+}
+.kit-ribbon-large {
+  padding: 0 var(--space-2);
+}
+.kit-ribbon-arrow {
+  padding: 0 var(--space-1);
+}
+.kit-ribbon-button:hover:not([aria-disabled="true"]),
+.kit-ribbon-button[aria-expanded="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-ribbon-button:active:not([aria-disabled="true"]) {
+  background: var(--overlay-active);
+}
+/* Un pulsante diviso è un pezzo solo con due bocche: sotto il puntatore si
+   vela tutto, e la parte che risponde un po' di più. */
+.kit-ribbon-split > .kit-ribbon-button:first-child {
+  border-radius: var(--radius-chip) 0 0 var(--radius-chip);
+}
+.kit-ribbon-split > .kit-ribbon-arrow {
+  border-radius: 0 var(--radius-chip) var(--radius-chip) 0;
+}
+.kit-ribbon-split:hover > .kit-ribbon-button:not([aria-disabled="true"]) {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-ribbon-split:hover > .kit-ribbon-button:hover:not([aria-disabled="true"]) {
+  background: var(--overlay-active);
+}
+/* «Acceso» è lo stesso ovunque nella shell: velo d'accento e inchiostro blu. */
+.kit-ribbon-button[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.kit-ribbon-button[aria-disabled="true"],
+.kit-ribbon-select:disabled,
+.kit-ribbon-input:disabled,
+.kit-ribbon-check:has(> input:disabled) {
+  opacity: 0.4;
+  cursor: default;
+}
+.kit-ribbon-toggle:focus-visible,
+.kit-ribbon-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.kit-ribbon-glyph {
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+.kit-ribbon-color-bar {
+  border-radius: var(--radius-pill);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+/* I campi sono i campi di Fub (`skin/controls.css`): carta, il confine dei
+   controlli, il raggio di controllo; il passaggio scurisce il confine e il
+   fuoco lo fa blu con l'alone. */
+.kit-ribbon-select,
+.kit-ribbon-input {
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: var(--sheet);
+  color: var(--text);
+  font: inherit;
+  text-overflow: ellipsis;
+}
+.kit-ribbon-select:hover:not(:disabled),
+.kit-ribbon-input:hover:not(:disabled) {
+  border-color: var(--text);
+}
+.kit-ribbon-select:focus-visible,
+.kit-ribbon-input:focus-visible {
+  border-color: var(--focus-ring);
+  outline-offset: -1px;
+  box-shadow: 0 0 0 4px var(--accent-veil);
+}
+.kit-ribbon-check {
+  gap: var(--space-3);
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  cursor: pointer;
+}
+.kit-ribbon-check:hover:not(:has(> input:disabled)) {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-ribbon-check input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+/* Le lettere di Alt: pastiglie scure, staccate dalla carta da un anello, come
+   il conteggio sulle icone della cornice. */
+.kit-ribbon-keytip {
+  min-width: 16px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--text);
+  box-shadow: 0 0 0 2px var(--sheet), var(--shadow-2);
+  color: var(--sheet);
+  font-size: 10px;
+  font-weight: var(--weight-bold);
+  line-height: 16px;
+  text-align: center;
+}
+/* In un foglio stretto si stringono di un passo i margini della testata, i
+   segmenti e il vassoio, che restano allineati: a 700 px le sezioni ci stanno
+   tutte, anche quella della selezione. */
+@container sheet (max-width: 900px) {
+  .kit-ribbon-head {
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+  }
+  .kit-ribbon-tabs.kit-tabs {
+    gap: 0;
+  }
+  .kit-ribbon-tabs .kit-tab {
+    padding: 0 var(--space-3);
+  }
+  .kit-ribbon-tabs .kit-tab:not(.kit-ribbon-contextual) + .kit-ribbon-contextual {
+    margin-inline-start: var(--space-2);
+  }
+  .kit-ribbon-toolbar {
+    margin: 0 var(--space-3);
+  }
+}
+/* In colori forzati i fondi spariscono: la scelta la dice il contorno del
+   kit, il pozzetto, il vassoio e i foglietti un bordo vero. */
+@media (forced-colors: active) {
+  .kit-ribbon-tabs > .kit-tab-indicator {
+    background: transparent;
+  }
+  .kit-ribbon-tabs.kit-tabs,
+  .kit-ribbon-toolbar,
+  .kit-ribbon-group {
+    border: 1px solid CanvasText;
+  }
+}
+/* Un foglietto è un cartoncino tondo da ogni lato, appoggiato sul vassoio: un
+   filo d'inchiostro tutt'attorno e sotto un'ombra di contatto corta. Resta un
+   gradino sotto i fogli della scrivania: `--shadow-1` è la loro carta
+   (`--elevation-paper-shadow`) e qui non si usa; il suo alone di 20 px, poi,
+   il vassoio lo taglierebbe. L'ombra è fatta coi veli della shell,
+   `--overlay-hover` e `--overlay-active`: nessun token nuovo. */
+.kit-ribbon-group {
+  box-shadow: 0 0 0 1px var(--overlay-hover), 0 1px 2px var(--overlay-active);
+}
+/* Il foglietto chiuso che si apre sul posto sale di un gradino: il filo e
+   l'ombra crescono, sempre sotto la carta. */
+.kit-ribbon-group[data-open="true"] {
+  box-shadow: 0 0 0 1px var(--overlay-active), 0 1px 1px var(--overlay-active), 0 2px 4px var(--overlay-active);
+}
+/* Nella luce scura un'ombra non si vede: il foglietto è un poco più chiaro
+   del vassoio e ha un filo di luce sul bordo di sopra. */
+:root[data-theme="dark"] .kit-ribbon-group {
+  background: color-mix(in oklab, var(--bg-elev) 95%, var(--text));
+  box-shadow: inset 0 1px 0 var(--overlay-active);
+}
+:root[data-theme="dark"] .kit-ribbon-group[data-open="true"] {
+  background: color-mix(in oklab, var(--bg-elev) 90%, var(--text));
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-hover);
+}
+/* Contrasto alto: il filo è il bordo pieno della shell, tutt'attorno. */
+:root[data-contrast="high"] .kit-ribbon-group {
+  box-shadow: 0 0 0 1px var(--border);
+}
+:root[data-contrast="high"] .kit-ribbon-group[data-open="true"] {
+  box-shadow: 0 0 0 2px var(--border);
+}
+@media (forced-colors: active) {
+  .kit-ribbon-group[data-open="true"] {
+    outline: 1px solid CanvasText;
+  }
+}
+/* Il pulsante del foglietto chiuso riempie il foglietto: il velo del
+   passaggio copre tutta la sua carta, col raggio della carta. */
+.kit-ribbon-group[data-collapsed="true"] {
+  padding: 0;
+}
+.kit-ribbon-group-toggle {
+  border-radius: var(--radius-control);
+  color: var(--text);
+}
+/* Due a pila: ognuno è alto metà di un foglietto aperto, e i due, col passo
+   del vassoio fra loro, sono alti quanto lui ((80 − 4) / 2). Il disegno, il
+   nome e la freccina come in un gettone; la freccina, grigia, dice «si apre
+   qui». */
+.kit-ribbon-group[data-collapsed="true"] {
+  min-height: 38px;
+}
+.kit-ribbon-group-toggle {
+  gap: var(--space-3);
+  padding: 0 var(--space-3) 0 var(--space-4);
+}
+.kit-ribbon-group-toggle .kit-ribbon-chevron {
+  color: var(--muted);
+}
+/* Uno solo: alto quanto un foglietto aperto (80), anche quando i foglietti
+   sono tutti chiusi e nessuno dà l'altezza al vassoio, e largo almeno 48 px
+   come una tessera. */
+.kit-ribbon-group[data-collapsed="true"][data-alone="true"] {
+  min-height: 80px;
+}
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle {
+  gap: var(--space-2);
+  min-width: 48px;
+  padding: var(--space-2) var(--space-4);
+}
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle > svg {
+  border-radius: var(--radius-pill);
+  background: var(--overlay-hover);
+}
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle .kit-ribbon-label {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 14px;
+}
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle:hover .kit-ribbon-label {
+  color: var(--text);
+}
+/* L'accesso rapido accanto alle sezioni. */
+.kit-ribbon-quick {
+  gap: var(--space-1);
+}
+
+/* ── Il vassoio più chiaro ───────────────────────────────────────────────────
+   Il vassoio dei comandi si avvicina ai foglietti: di giorno sta a metà fra
+   `--sheet-2` e la carta, di notte un passo sotto `--sheet-2`. È un ruolo
+   suo (`--bar-tray`), perché `--sheet-2` lo usano anche i campi e la fila
+   delle linguette; la barra in una fila e la colonna lo prendono anche loro
+   (più sotto), così i vassoi restano uno. I foglietti si staccano ancora: di
+   giorno col filo e l'ombra di contatto di sempre, di notte con la carta
+   alzata (`--bg-elev`), il filo di luce in cima e un filo attorno; la carta
+   schiarita verso il testo resta solo a quello aperto sul posto, che sale
+   ancora di un gradino. Col contrasto alto il filo di notte
+   si ferma e resta il bordo pieno attorno a ogni foglietto, come oggi; la
+   carta è quella alzata, come nelle altre due barre. */
+.kit-ribbon-toolbar {
+  background: var(--bar-tray, var(--sheet-2));
+}
+:root[data-theme="dark"] .kit-ribbon-group {
+  background: var(--bg-elev);
+}
+:root[data-theme="dark"] .kit-ribbon-group[data-open="true"] {
+  background: color-mix(in oklab, var(--bg-elev) 95%, var(--text));
+}
+:root[data-theme="dark"]:not([data-contrast="high"]) .kit-ribbon-group {
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-hover);
+}
+:root[data-theme="dark"]:not([data-contrast="high"]) .kit-ribbon-group[data-open="true"] {
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-active);
+}
+
+/* ── Le sezioni come le schede dell'ispettore ────────────────────────────────
+   La fila delle sezioni è il pozzetto delle schede dell'ispettore e degli
+   spazi del cassetto: segmenti alti 26, il nome in grafite, la scelta è un
+   foglietto di carta alzata col nome in inchiostro, che scorre. Di giorno il
+   pozzetto resta il velo sulla carta (il `--bg-hover` della scrivania, sulla
+   carta, sarebbe un grigio pieno); di notte è `--bg-hover`, un incavo, perché
+   un velo chiaro avrebbe il tono del foglietto. Il foglietto ha l'ombra di
+   contatto dei foglietti del vassoio e non `--shadow-1`: la fila scorre e
+   taglierebbe un alone lungo. Le sezioni per la selezione tengono l'accento e
+   il punto. Il peso non cambia con la scelta: la fila non si allarga. In
+   colori forzati resta il contorno del kit (`.kit-tab[aria-selected]`). */
+.kit-ribbon-tabs .kit-tab {
+  min-height: 26px;
+  font-size: var(--text-base);
+}
+.kit-ribbon-tabs .kit-tab:not([aria-selected="true"]):hover {
+  background: var(--overlay-hover);
+}
+.kit-ribbon-tabs .kit-tab[aria-selected="true"] {
+  color: var(--text);
+}
+.kit-ribbon-tabs .kit-ribbon-contextual[aria-selected="true"] {
+  color: var(--accent);
+}
+.kit-ribbon-tabs > .kit-tab-indicator {
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--overlay-hover), 0 1px 2px var(--overlay-active);
+}
+:root[data-theme="dark"] .kit-ribbon-tabs.kit-tabs {
+  background: var(--bg-hover);
+}
+:root[data-theme="dark"] .kit-ribbon-tabs > .kit-tab-indicator {
+  box-shadow: inset 0 1px 0 var(--overlay-hover);
+}
+/* Nel foglio stretto il nome torna di un passo più piccolo: a 700 px le
+   sezioni ci stanno tutte, quella della selezione compresa. */
+@container sheet (max-width: 900px) {
+  .kit-ribbon-tabs .kit-tab {
+    font-size: var(--text-sm);
+  }
+}
+
+/* ── La barra in una fila: la pelle (`kit-bar`) ──────────────────────────────
+   Gli stessi valori della barra a schede qui sopra (il vassoio, i foglietti,
+   i pulsanti), scritti una volta sola sulle classi del kit: il kit non
+   conosce gli editor, e ogni barra li prende mettendo le classi e togliendo
+   le sue regole vecchie. La bolla della selezione resta una bolla: i suoi
+   pulsanti sono questi, ma non sta in un vassoio. */
+.kit-bar {
+  gap: var(--space-2);
+  margin: 0 var(--space-4) var(--space-2);
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sheet);
+  background: var(--bar-tray, var(--sheet-2));
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+@container sheet (max-width: 900px) {
+  .kit-bar {
+    margin: 0 var(--space-3) var(--space-2);
+  }
+}
+/* Un foglietto è un cartoncino sul vassoio, come nella barra a schede. */
+.kit-bar .kit-bar-group {
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--overlay-hover), 0 1px 2px var(--overlay-active);
+}
+:root[data-theme="dark"] .kit-bar .kit-bar-group {
+  background: var(--bg-elev);
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-hover);
+}
+:root[data-contrast="high"] .kit-bar .kit-bar-group {
+  box-shadow: 0 0 0 1px var(--border);
+}
+@media (forced-colors: active) {
+  .kit-bar,
+  .kit-bar .kit-bar-group {
+    border: 1px solid CanvasText;
+  }
+}
+/* La fila del kit dentro un vassoio non ha fondo suo: il vassoio ce l'ha già. */
+.kit-bar > .kit-options,
+.kit-bar .kit-options-row {
+  gap: var(--space-2);
+  padding: 0;
+  background: transparent;
+}
+
+/* I pulsanti: grafite a riposo, un velo al passaggio, il velo d'accento
+   quando sono accesi. */
+.kit-bar-button,
+.kit-options-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-tight);
+  cursor: pointer;
+}
+.kit-bar-button:hover:not(:disabled, [aria-disabled="true"]),
+.kit-bar-button[aria-expanded="true"],
+.kit-options-more:hover,
+.kit-options-more[aria-expanded="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-bar-button:active:not(:disabled, [aria-disabled="true"]) {
+  background: var(--overlay-active);
+}
+.kit-bar-button[aria-pressed="true"],
+.kit-bar-button[aria-checked="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.kit-bar-button:disabled,
+.kit-bar-button[aria-disabled="true"] {
+  background: transparent;
+  opacity: 0.4;
+  cursor: default;
+}
+.kit-bar-button:focus-visible,
+.kit-options-more:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.kit-bar-button > svg,
+.kit-options-more > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+/* I campi sono quelli della barra a schede. */
+.kit-bar-field {
+  height: 28px;
+  margin: 0;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: var(--sheet);
+  color: var(--text);
+  font: inherit;
+  text-overflow: ellipsis;
+}
+.kit-bar-field:hover:not(:disabled) {
+  border-color: var(--text);
+}
+.kit-bar-field:focus-visible {
+  border-color: var(--focus-ring);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+  box-shadow: 0 0 0 4px var(--accent-veil);
+}
+
+/* ── La colonna degli strumenti (`kit/tool-rail.ts`) ─────────────────────────
+   La stessa barra in piedi: il vassoio stondato, i gruppi come foglietti,
+   niente filo fra i gruppi. Le caselle tengono le loro misure (32, 44 col dito
+   o in `data-size="large"`): cambia solo la pelle. */
+.kit-rail {
+  margin: var(--space-2) 0 var(--space-2) var(--space-4);
+  border-radius: var(--radius-sheet);
+  background: var(--bar-tray, var(--sheet-2));
+}
+.kit-rail-group {
+  padding: var(--space-1);
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--overlay-hover), 0 1px 2px var(--overlay-active);
+}
+:root[data-theme="dark"] .kit-rail-group {
+  background: var(--bg-elev);
+  box-shadow: inset 0 1px 0 var(--overlay-active), 0 0 0 1px var(--overlay-hover);
+}
+:root[data-contrast="high"] .kit-rail-group {
+  box-shadow: 0 0 0 1px var(--border);
+}
+.kit-rail-rule {
+  display: none;
+}
+.kit-rail-slot {
+  border-radius: var(--radius-chip);
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/frame.css" data-posto="pelle" data-task="S2 T3, T4, T7, T9">
+/* → theme/scrittoio/skin/frame.css (S2 T3, T4, T7, T9) */
+/* ── Il pulsante premuto: un foglietto sollevato, non una macchia blu ─────── */
+/* Vale per il binario e per i bottoni della barra del titolo: chi è acceso è
+   carta bianca col suo rilievo, l'icona torna inchiostro senza velo. */
+.rail-btn[aria-pressed="true"],
+.rail-btn[aria-expanded="true"],
+.titlebar-btn[aria-pressed="true"] {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
+.rail-btn[aria-pressed="true"] svg,
+.rail-btn[aria-expanded="true"] svg,
+.inspector-tab[aria-selected="true"] svg {
+  fill: none;
+}
+.rail-notch {
+  background: transparent;
+}
+
+/* ── La pillola diventa il campo dei comandi ─────────────────────────────── */
+.pill {
+  gap: var(--space-4);
+  padding: 0 var(--space-2) 0 var(--space-5);
+  border-radius: var(--radius-control);
+  background: var(--bg-hover);
+  font-size: var(--text-md);
+}
+.pill:hover {
+  background: var(--bg-active);
+}
+.pill-icon {
+  color: var(--muted);
+}
+.pill-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.pill .titlebar-shortcut {
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-elev);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+/* ── L'ispettore ─────────────────────────────────────────────────────────── */
+/* Le schede sono un pozzetto, come gli spazi del cassetto: quattro parti
+   uguali, l'accesa è un foglietto. */
+.inspector-tabs {
+  flex-wrap: nowrap;
+  gap: var(--space-1);
+  margin: var(--space-3) var(--drawer-pad) var(--space-3);
+  padding: var(--space-1);
+  border-radius: var(--radius-control);
+  background: var(--bg-hover);
+}
+.inspector-tab {
+  flex: 1 1 0;
+  width: auto;
+  height: 26px;
+  border-radius: var(--radius-chip);
+}
+.inspector-tab:hover {
+  background: var(--overlay-hover);
+}
+.inspector-tab[aria-selected="true"] {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
+.inspector-title {
+  padding: 0 var(--drawer-pad);
+  font-size: var(--text-lg);
+}
+/* «● Segue la nota»: il punto dice che la vista è legata al foglio acceso.
+   Il titolo non cede: è «Segue…» che si accorcia coi puntini, come oggi. */
+.inspector-title > span:first-child {
+  flex: none;
+}
+.inspector-title > .inspector-follows {
+  font-size: var(--text-base);
+}
+.inspector-title > .inspector-follows::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  vertical-align: 0.1em;
+}
+
+/* ── La banda: la modalità è un bottone ──────────────────────────────────── */
+.status-band {
+  font-size: var(--text-sm);
+}
+.status-item--button {
+  gap: var(--space-2);
+  min-height: 22px;
+  font-size: var(--text-sm);
+}
+.status-mode > svg {
+  width: 14px;
+  height: 14px;
+}
+.status-mode > .status-mode-arrow {
+  width: 12px;
+  height: 12px;
+  color: var(--muted);
+}
+.status-mode[aria-expanded="true"] {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
+.status-item--button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+/* «Si scrive» è lo stato normale di un documento: lo dice la banda, a voce
+   bassa, accanto alla modalità. Premuto apre lo stesso riquadro del chip. Gli
+   altri stati (sola lettura, parti chiuse, motore spento) restano nella
+   testata, dove si vedono. */
+.status-standing {
+  color: var(--muted);
+}
+.status-standing > .status-standing-mark {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--success);
+}
+.status-standing[aria-expanded="true"] {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/drawers.css" data-posto="pelle" data-task="S2 T8, T14">
+/* → theme/scrittoio/skin/drawers.css (S2 T8, T14) */
+/* ── La striscia degli spazi: un pozzetto ────────────────────────────────── */
+/* Gli spazi stanno in un pozzetto come le schede dell'ispettore: l'acceso è un
+   foglietto con icona e nome, gli altri solo l'icona (il nome è l'etichetta
+   accessibile). «+» resta fuori, il più discreto. Non va più a capo. */
+.space-strip {
+  flex-wrap: nowrap;
+  gap: var(--space-3);
+  min-height: var(--tab-h);
+  padding: 0 0 0 var(--space-2);
+}
+.space-well {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-1);
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  background: var(--bg-hover);
+}
+.space-chip {
+  flex: none;
+  gap: var(--space-3);
+  min-width: 32px;
+  height: 26px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-base);
+}
+.space-chip:hover,
+.space-chip:active {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.space-chip > svg,
+.space-chip-icon > svg {
+  width: 16px;
+  height: 16px;
+}
+.space-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 14px;
+  line-height: 1;
+}
+.space-chip-name {
+  display: none;
+}
+.space-chip[aria-pressed="true"] {
+  padding: 0 var(--space-5) 0 var(--space-4);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.space-chip[aria-pressed="true"] > .space-chip-name {
+  display: inline;
+}
+.space-chip.add {
+  min-width: 28px;
+  height: 28px;
+  border-radius: var(--radius-chip);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-regular);
+}
+
+/* ── Il titolo del cassetto e le sue azioni a icona ──────────────────────── */
+.sidebar .panel-title {
+  padding: 0 var(--space-1) 0 var(--space-4);
+}
+/* Fra la striscia degli spazi e il titolo un respiro, come nel mockup. */
+.space-strip + .panel-title {
+  margin-top: var(--space-4);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+}
+.panel-title-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.icon-button > svg {
+  width: 16px;
+  height: 16px;
+}
+.icon-button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.icon-button:active {
+  background: var(--overlay-active);
+}
+.icon-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* ── Le etichette di sezione: in tondo, non in maiuscoletto ─────────────── */
+/* «Appuntate», «Tutte le note 18»: una parola in grafite, a destra il conto. */
+.files-panel .panel-title ~ .panel-title,
+.bookmarks-panel .palette-row {
+  min-height: var(--row-h);
+  padding: var(--space-5) var(--space-4) 0;
+  color: var(--muted);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* Dopo le appuntate un po' d'aria in più: «Tutte le note» apre un'altra parte. */
+.files-panel .panel-title + .plain-list {
+  padding-bottom: var(--space-4);
+}
+.panel-count {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Il selettore dell'icona: le figure accanto alle emoji ───────────────────
+   Due sezioni col loro titolo in tondo: le figure monocrome del set, che
+   prendono il colore del testo come le icone dell'albero, e le emoji, che
+   restano una scelta piena. Quella scelta ha il velo d'accento. */
+.icon-picker {
+  width: 248px;
+  border: 0;
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-3);
+}
+.icon-picker-title {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.icon-picker .icon-grid + .icon-picker-title {
+  margin-top: var(--space-2);
+}
+.icon-picker .icon-grid button {
+  color: var(--muted);
+}
+.icon-picker .icon-grid button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.icon-picker .icon-grid button:active {
+  background: var(--overlay-active);
+}
+.icon-picker .icon-grid button[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.icon-picker .icon-grid button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.icon-picker .icon-grid--figures button > svg {
+  width: 18px;
+  height: 18px;
+}
+.icon-picker .icon-none:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/tree.css" data-posto="pelle" data-task="S2 T8">
+/* → theme/scrittoio/skin/tree.css (S2 T8) */
+/* ── Il filtro: un pozzetto pieno con la lente ──────────────────────────── */
+.explorer-filter {
+  padding: var(--space-2) 0 var(--space-3);
+}
+/* Il campo del kit con la sua lente (`icon: "search"`), senza bordo: il
+   pozzetto lo fa il fondo. Al fuoco torna carta con l'anello del kit. */
+.explorer-filter .kit-field-box {
+  height: 32px;
+  border-color: transparent;
+  background: var(--bg-hover);
+}
+.explorer-filter .kit-field-box:has(> .kit-field-input:focus-visible) {
+  border-color: var(--focus-ring);
+  background: var(--sheet);
+}
+.explorer-filter .kit-field-input {
+  font-size: var(--text-md);
+}
+
+/* ── Le righe ────────────────────────────────────────────────────────────── */
+.tree-row {
+  font-size: var(--text-md);
+}
+/* La nota aperta: un foglietto sollevato dal cassetto. L'icona prende il blu,
+   il nome resta inchiostro e sale di peso. */
+[role="treeitem"][aria-selected="true"] > .tree-row {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+[role="treeitem"][aria-selected="true"] > .tree-row:hover {
+  background: var(--bg-elev);
+}
+/* Fra le appuntate la puntina tiene la colonna dell'icona: il punto blu non
+   serve più, la riga accesa è una, nell'albero. */
+.tree-row[aria-current="true"]::before {
+  content: none;
+}
+.row-icon.row-pin > svg {
+  width: 14px;
+  height: 14px;
+}
+/* Il conto di una cartella, a destra, in grafite. */
+.row-count {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Il gallone: una «›» sottile, non un triangolo pieno ──────────────────── */
+.chevron::before {
+  box-sizing: border-box;
+  width: 6px;
+  height: 6px;
+  margin-left: -2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  background: transparent;
+  clip-path: none;
+  transform: rotate(-45deg);
+}
+.chevron[aria-expanded="true"]::before {
+  margin-top: -3px;
+  margin-left: 0;
+  transform: rotate(45deg);
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/sheets.css" data-posto="pelle" data-task="S2 T5, T6, T27">
+/* → theme/scrittoio/skin/sheets.css (S2 T5, T6, T27) */
+/* ── La testata: solo il percorso, «Salvato» e «…» ──────────────────────── */
+.pane-toolbar {
+  gap: var(--space-5);
+  padding: 0 var(--space-4) 0 var(--space-7);
+  font-size: var(--text-base);
+}
+/* Il percorso a briciole: la cartella disegnata, il vault e le cartelle in
+   grafite, il nome in inchiostro. */
+.sheet-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--text-base);
+}
+.sheet-title > svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+}
+/* La barra fra le cartelle è un segno, non un testo: la grafite dei bordi dei
+   campi, che resta sopra 3:1 in tutte e due le luci senza farsi leggere. */
+.crumb-sep {
+  color: var(--outline);
+}
+.crumb-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+}
+.sheet-title [data-folder] {
+  flex: none;
+}
+/* «…» è una figura, non tre caratteri. */
+.pane-toolbar > [data-pane-menu] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-chip);
+}
+.pane-toolbar > [data-pane-menu] > svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ── Le linguette ────────────────────────────────────────────────────────── */
+/* Ogni linguetta porta la figura del suo formato, anche la nota. */
+.tab {
+  gap: var(--space-3);
+  padding: 0 var(--space-2) 0 var(--space-5);
+}
+.tab-pin,
+.tab-format {
+  width: 14px;
+  height: 14px;
+  margin-right: var(--space-4);
+  vertical-align: -2px;
+}
+.tab[aria-selected="true"] {
+  font-weight: var(--weight-medium);
+}
+.tab[aria-selected="true"] .tab-format {
+  color: var(--text);
+}
+
+/* ── La scrivania dei fogli: l'etichetta in tondo ─────────────────────────── */
+.sheet-desk-label {
+  font-size: var(--text-sm);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ── L'ombra del foglio ───────────────────────────────────────────────────────
+   Un foglio appoggiato sulla scrivania: un contatto stretto, una penombra
+   corta ai fianchi e una lunga sotto. I due strati larghi hanno lo spread
+   negativo, così l'ombra scende e non sale sopra la carta, dove la linguetta
+   accesa la attraversa senza rilievo. Col fuoco lo stesso disegno, un passo
+   più fondo. I valori sono ruoli della ricetta; un tema che non li ha tiene
+   le ombre di sempre. */
+.pane::before {
+  box-shadow: var(--shadow-sheet, var(--shadow-1));
+}
+.pane.focus::before {
+  box-shadow: var(--shadow-sheet-focus, var(--shadow-2));
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/document.css" data-posto="pelle" data-task="S2 T11, T12">
+/* → theme/scrittoio/skin/document.css (S2 T11, T12) */
+/* ── I titoli: il titolo della nota grande e pieno; i capitoli a 25 ──────── */
+.markdown-rendered h1,
+.cm-editor .cm-content .cm-fub-h1-line {
+  padding-top: calc(var(--text-reading) * 0.5);
+  font-size: 2.22em;
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.markdown-rendered h2,
+.cm-editor .cm-content .cm-fub-h2-line {
+  padding-top: calc(var(--text-reading) * 0.6);
+  font-size: 1.39em;
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.012em;
+  line-height: 1.28;
+}
+
+/* ── Gli elenchi: un punto grafite, staccato dal testo ──────────────────── */
+.cm-editor .cm-content .cm-fub-bullet:not(.cm-fub-bullet-task) {
+  margin-inline: 0.3em 0.35em;
+}
+.markdown-rendered ul {
+  padding-left: 1.25em;
+}
+.markdown-rendered ul > li::marker {
+  color: var(--muted);
+}
+
+/* ── I collegamenti: inchiostro blu, il filo a metà forza ───────────────── */
+.markdown-rendered a,
+.cm-editor .cm-content .cm-fub-link,
+.cm-editor .cm-content .cm-fub-wikilink {
+  text-decoration-color: color-mix(in oklab, var(--doc-link) 42%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+}
+.markdown-rendered a:hover,
+.cm-editor .cm-content .cm-fub-link:hover,
+.cm-editor .cm-content .cm-fub-wikilink:hover {
+  text-decoration-color: currentColor;
+}
+
+/* ── La citazione: un filo e un corsivo in grafite ─────────────────────── */
+.markdown-rendered blockquote,
+.cm-editor .cm-content .cm-line.cm-fub-quote {
+  padding-left: 1em;
+  border-left: 2px solid var(--border-strong);
+  color: var(--muted);
+}
+
+/* ── Il richiamo: una scheda neutra, il tipo lo dice l'icona ────────────── */
+/* Ogni tipo ha la stessa carta e lo stesso filo; il colore del tipo resta
+   solo sul cerchietto, e il titolo in grassetto apre la riga. */
+.markdown-rendered .callout,
+.markdown-rendered .callout[data-callout] {
+  position: relative;
+  padding: var(--space-5) var(--space-7) var(--space-5) 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: 1.55;
+}
+.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout] {
+  background: var(--sheet-2);
+}
+.markdown-rendered .callout > .callout-title,
+.markdown-rendered .callout[data-callout] > .callout-title {
+  display: inline;
+  margin: 0 var(--space-2) 0 0;
+  color: var(--doc-heading);
+  font-size: 1em;
+  font-weight: var(--weight-bold);
+}
+.markdown-rendered .callout > .callout-title + p {
+  display: inline;
+}
+.markdown-rendered .callout > .callout-title::before {
+  content: "i";
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-pill);
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: var(--weight-bold);
+  line-height: 1;
+}
+.markdown-rendered .callout[data-callout="warning"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="caution"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="important"] > .callout-title::before {
+  content: "!";
+  border-color: var(--warning);
+  color: var(--warning);
+}
+.markdown-rendered .callout[data-callout="danger"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="error"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="bug"] > .callout-title::before {
+  content: "!";
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.markdown-rendered .callout[data-callout="tip"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="success"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="done"] > .callout-title::before {
+  content: "✓";
+  border-color: var(--success);
+  color: var(--success);
+}
+.markdown-rendered .callout kbd {
+  font-size: var(--text-sm);
+}
+
+/* ── La riga dei dati, sotto il titolo ──────────────────────────────────── */
+/* Modificata, collegamenti, etichette: carattere dell'interfaccia, grafite,
+   le etichette come in testo. Non è testo della nota: non si seleziona col
+   corpo e non si scrive. */
+.note-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-7);
+  margin: 0;
+  padding: var(--space-4) 0 var(--space-6);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: var(--leading-tight);
+  white-space: normal;
+}
+.note-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.note-fact > svg {
+  width: 15px;
+  height: 15px;
+}
+.note-fact-tags {
+  gap: var(--space-2);
+}
+.note-tag {
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-chip);
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+.markdown-rendered .tag,
+.cm-editor .cm-content .cm-fub-tag {
+  border-radius: var(--radius-chip);
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/media.css" data-posto="pelle" data-task="S2 T18, T19">
+/* → theme/scrittoio/skin/media.css (S2 T18, T19) */
+/* ── Il PDF: la barra di serie in cima, il piano sotto ──────────────────────
+   Non più una pillola sospesa che va a capo: la barra in una fila sta sulla
+   carta, sotto la testata, come quella del documento; le pagine sono fogli
+   sul piano un tono sotto. «Pagina N di M» passa nella banda. */
+.media-surface > .media-pdf {
+  background: var(--sheet);
+}
+.media-pdf-body {
+  background: var(--sheet-2);
+}
+/* La barra del PDF è la barra di serie (`kit-bar`): qui solo ciò che è suo.
+   Il sommario è un elenco a tendina largo quanto un titolo corto. */
+.media-pdf-toolbar > select.kit-bar-field {
+  flex: 0 1 12rem;
+  min-width: 6rem;
+}
+/* La ricerca: il campo dei campi, con la lente dentro. */
+.media-pdf-search {
+  position: relative;
+  display: inline-flex;
+  flex: 0 1 14rem;
+  align-items: center;
+  min-width: 8rem;
+}
+.media-pdf-search > svg {
+  position: absolute;
+  left: var(--space-4);
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.media-pdf-search > .kit-bar-field {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  padding-left: calc(var(--space-4) + 14px + var(--space-3));
+}
+.media-pdf-toolbar > .kit-options-more {
+  margin-inline-start: auto;
+}
+/* Le diapositive: «3 / 12» in tondo. */
+.slide-status {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ── I file delle app Craft: un foglietto sollevato ─────────────────────────
+   Senza anteprima la scheda non è più un riquadro tratteggiato: è un
+   foglietto di carta posato sul piano, come la nota aperta nel cassetto, col
+   nome in inchiostro e i dati in grafite. Le risposte sono quelle dei
+   pulsanti del kit (`kit-button`): un fondo anche a riposo, uguali fra loro,
+   perché è una scelta e non un invito. */
+.craft-card {
+  background: var(--sheet-2);
+}
+.craft-empty {
+  gap: var(--space-2);
+  max-width: 30rem;
+  padding: var(--space-9) var(--space-9) var(--space-8);
+  border: 0;
+  border-radius: var(--radius-sheet);
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--overlay-hover), var(--shadow-1);
+  font-size: var(--text-base);
+}
+:root[data-contrast="high"] .craft-empty {
+  box-shadow: 0 0 0 1px var(--border);
+}
+@media (forced-colors: active) {
+  .craft-empty {
+    border: 1px solid CanvasText;
+  }
+}
+.craft-empty-name {
+  font-size: var(--text-lg);
+}
+.craft-ask {
+  gap: var(--space-5);
+  margin-top: var(--space-4);
+  padding-top: var(--space-6);
+  border-top-color: var(--overlay-active);
+}
+.craft-ask-answer,
+.craft-render {
+  min-height: var(--control-h);
+  padding: 0 var(--space-6);
+  border: 0;
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.craft-ask-answer:hover,
+.craft-render:hover,
+.craft-ask-answer:active,
+.craft-render:active {
+  background: var(--overlay-active);
+  color: var(--text);
+}
+.craft-ask-answer:focus-visible,
+.craft-render:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/nodes.css" data-posto="pelle" data-task="S2 T9, T13">
+/* → theme/scrittoio/skin/nodes.css (S2 T9, T13) */
+/* ── La struttura: un filo a sinistra, la voce corrente è una tacca blu ───
+   Vale per la vista «Struttura» (`data-view-id="outline"`), non per ogni
+   albero dichiarato: un albero di etichette resta com'è. */
+.declared-view[data-view-id="outline"] .ui-tree {
+  border-left: 1px solid var(--border);
+}
+.declared-view[data-view-id="outline"] .ui-tree-label {
+  min-height: var(--row-h);
+  padding: 0 var(--space-4) 0 var(--space-5);
+  border-radius: 0 var(--radius-chip) var(--radius-chip) 0;
+  color: var(--muted);
+  font-size: var(--text-md);
+}
+.declared-view[data-view-id="outline"] .ui-tree-label::before {
+  content: none;
+}
+.declared-view[data-view-id="outline"] .ui-tree-item > .ui-children {
+  margin-left: var(--space-5);
+}
+.declared-view[data-view-id="outline"] .ui-tree-label.clickable:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.declared-view[data-view-id="outline"] .ui-tree-item[aria-selected="true"] > .ui-tree-label,
+.declared-view[data-view-id="outline"] .ui-tree-item[aria-selected="true"] > .ui-tree-label.clickable:hover {
+  background: transparent;
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+/* La tacca sta sul filo, a qualunque profondità: 2 px centrati sulla riga di
+   1 px, alti 16. */
+.declared-view[data-view-id="outline"] .ui-tree-item[aria-selected="true"] > .ui-tree-label::after {
+  inset: 6px auto 6px -1.5px;
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+.declared-view[data-view-id="outline"] .ui-children .ui-tree-item[aria-selected="true"] > .ui-tree-label::after {
+  left: calc(-1 * var(--space-5) - 1.5px);
+}
+.declared-view[data-view-id="outline"] .ui-children .ui-children .ui-tree-item[aria-selected="true"] > .ui-tree-label::after {
+  left: calc(-2 * var(--space-5) - 1.5px);
+}
+
+/* ── «In entrata 3»: chi punta qui, il nome a sinistra e la cartella a destra.
+   La sezione la dichiara la vista Struttura con la chiave `outline-incoming` (`incoming` è già dei Collegamenti). */
+.ui-section[data-key="outline-incoming"] {
+  margin-top: var(--space-8);
+}
+.ui-section[data-key="outline-incoming"] > summary {
+  padding: 0;
+  color: var(--muted);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.ui-section[data-key="outline-incoming"] > summary::before {
+  content: none;
+}
+.ui-section[data-key="outline-incoming"] > summary:hover {
+  background: transparent;
+  color: var(--text);
+}
+.ui-section[data-key="outline-incoming"] > .ui-children {
+  padding: var(--space-2) 0 0;
+}
+.ui-section[data-key="outline-incoming"] .ui-list-item {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-4);
+  /* 28 più i 2 px fra una voce e l'altra: il passo di 30 del mockup */
+  min-height: var(--row-h);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-chip);
+  font-size: var(--text-md);
+}
+.ui-section[data-key="outline-incoming"] .ui-list-item-title {
+  flex: 1 1 auto;
+  font-weight: var(--weight-regular);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-section[data-key="outline-incoming"] .ui-list-item-subtitle {
+  flex: none;
+  margin: 0;
+  /* grafite e non più chiaro: la cartella è testo, e sotto 4,5:1 non si legge */
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+/* L'icona di una voce che nomina una nota: la sua, come nell'albero. */
+.ui-list-item-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+}
+.ui-list-item-icon > svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* ── Le sezioni delle viste: in tondo ───────────────────────────────────────
+   «In entrata · 2», «In uscita · 2», «Menzioni non collegate · 1»: il nome
+   della sezione si scrive come si scrive, in grafite, e il conto lo segue. */
+.ui-section > summary {
+  color: var(--muted);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/graph.css" data-posto="pelle" data-task="S2 T10">
+/* → theme/scrittoio/skin/graph.css (S2 T10) */
+/* Le etichette del pannello del grafo e della legenda, in tondo. */
+.graph-panel-sezione-titolo,
+.graph-legend::before {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/menus.css" data-posto="pelle" data-task="S2 T10">
+/* → theme/scrittoio/skin/menus.css (S2 T10) */
+/* ── Le etichette dei menu e del pannello «/»: in tondo ──────────────────── */
+.context-menu .menu-head,
+.slash-panel .slash-section,
+.slash-panel .slash-preview-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* ── Le voci dei menu, come nel mockup ─────────────────────────────────────
+   La spunta a destra in blu anche per una scelta fra alternative, le
+   scorciatoie in tasti, le icone in grafite. I nomi tornano sulla stessa
+   verticale senza la colonna a sinistra. Scelta dell'utente (B), 2026-11-04. */
+.context-menu .menu-check {
+  order: 3;
+  margin-inline-start: var(--space-4);
+}
+.context-menu .menu-hint {
+  order: 2;
+}
+.context-menu button[role="menuitemradio"][aria-checked="true"] .menu-check::before {
+  width: 10px;
+  height: 10px;
+  border-radius: 0;
+  clip-path: polygon(8% 54%, 20% 42%, 40% 62%, 80% 20%, 92% 32%, 40% 86%);
+}
+.context-menu:has(.menu-check) button:not(:has(.menu-check)) {
+  padding-left: var(--space-4);
+}
+.context-menu button > svg {
+  color: var(--muted);
+}
+.context-menu .menu-hint {
+  min-width: 20px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--overlay-hover);
+  box-shadow: inset 0 -1px 0 var(--border);
+  font-family: var(--font-ui);
+  line-height: 18px;
+  text-align: center;
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/launcher.css" data-posto="pelle" data-task="S2 T10">
+/* → theme/scrittoio/skin/launcher.css (S2 T10) */
+/* Il riassunto della ricerca, in tondo. */
+.modale .docsearch-summary {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/centres.css" data-posto="pelle" data-task="S2 T5">
+/* → theme/scrittoio/skin/centres.css (S2 T5) */
+/* «Salvato» ha la spunta verde, non il punto grigio: il punto resta per ciò
+   che è in sospeso, e il rosso per ciò che è andato storto. Il bottone della
+   testata ripete la classe: al telefono `sheets/sheets.css` arriva dopo la
+   pelle e il suo `display: block` vincerebbe. */
+.save-state,
+.save-state.sheet-save {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-base);
+}
+.save-state:not(:empty)::before {
+  margin-right: 0;
+}
+.save-state[data-state="salvato"]::before {
+  box-sizing: border-box;
+  width: 5px;
+  height: 9px;
+  margin: -3px var(--space-1) 0 var(--space-1);
+  border-right: 1.5px solid var(--success);
+  border-bottom: 1.5px solid var(--success);
+  border-radius: 0;
+  background: transparent;
+  transform: rotate(45deg);
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/settings.css" data-posto="pelle" data-task="S2 T10">
+/* → theme/scrittoio/skin/settings.css (S2 T10) */
+/* ── Le impostazioni nella lingua dello Scrittoio ───────────────────────────
+   Il posto dove si è, nell'indice, è un foglietto sollevato come la nota
+   aperta nel cassetto: carta, un'ombra breve, l'icona in blu. Una scelta fra
+   alternative (i segmenti) resta il velo d'accento, come le sezioni della
+   barra. */
+.settings-tab[aria-selected="true"] {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.settings-tab[aria-selected="true"]:hover {
+  background: var(--bg-elev);
+}
+/* Le etichette si scrivono come si scrive. */
+.settings-toc-title,
+.components-group-title,
+.components-preview-title,
+.components-preview-head {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/welcome.css" data-posto="pelle" data-task="S2 T10">
+/* → theme/scrittoio/skin/welcome.css (S2 T10) */
+/* «Vault recenti»: l'etichetta della scrivania, in tondo. */
+.onboarding h3 {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+</style>
+<style media="not all" data-destinazione="shells/scrittoio/mobile/mobile.css" data-posto="telefono" data-task="S2 T3, T4, T5, T7, T11, T27">
+/* → shells/scrittoio/mobile/mobile.css (S2 T3, T4, T5, T7, T11, T27) */
+/* ── La testata del telefono: il nome, lo stato, «…» ───────────────────────
+   La testata è stretta e, in piedi, la banda non c'è: resta il nome del file
+   (con l'estensione, che sul telefono dice il formato), lo stato e «…». Le
+   cartelle si leggono nel cassetto. */
+:root[data-client-shell="mobile"] .sheet-title > svg,
+:root[data-client-shell="mobile"] .sheet-title > [data-folder],
+:root[data-client-shell="mobile"] .sheet-title > .crumb-sep {
+  display: none;
+}
+:root[data-client-shell="mobile"] .sheet-title {
+  gap: 0;
+}
+/* «Si scrive» è lo stato normale: sul telefono sta in «…». Gli altri
+   stati restano nella testata, dove si vedono. */
+:root[data-client-shell="mobile"] .pane-toolbar > .pane-standing[data-standing="writes"] {
+  display: none;
+}
+/* Il segno del livello («H1») vive nel margine sinistro, che al telefono è
+   più stretto di lui: si vedrebbe tagliato contro il bordo. Il livello si
+   legge e si cambia nella barra in basso («Titolo 1»). Nascosto e non tolto:
+   la riga del titolo tiene le stesse misure e CodeMirror non rimisura. */
+:root[data-client-shell="mobile"] .cm-editor .cm-content .cm-fub-heading-pill {
+  visibility: hidden;
+}
+
+@media (max-width: 599px) {
+  /* ── In piedi il foglio è lo schermo ──────────────────────────────────────
+     Niente scrivania ai fianchi: la carta va da un bordo all'altro, con gli
+     angoli vivi. `--sheet-gap` a zero vince anche la regola della struttura
+     che rimette il margine a sinistra quando il cassetto è chiuso. */
+  :root[data-client-shell="mobile"] #panes {
+    --sheet-gap: 0px;
+  }
+  :root[data-client-shell="mobile"] .pane::before,
+  :root[data-client-shell="mobile"] .pane > [role="tabpanel"] {
+    border-radius: 0;
+  }
+
+  /* ── La barra del titolo senza il marchio ─────────────────────────────────
+     In piedi la barra del titolo tiene la pillola e la campanella: il marchio
+     se ne va, e la pillola parte da dove stava lui. Il menu dell'applicazione
+     qui non ha più una porta, e non perde niente: ogni sua voce è un comando,
+     e la pillola apre il lanciatore che li esegue tutti; le impostazioni sono
+     anche nella barra inferiore, e indietro è il gesto del telefono. Il bottone
+     resta nel DOM (lo cercano `frame/brand-menu.ts` e i test): non si vede.
+     Sdraiato, da 600 px, la barra del titolo è quella stretta del computer, e
+     il marchio torna con il menu. */
+  :root[data-client-shell="mobile"] #brand-menu {
+    display: none;
+  }
+
+  /* ── Lo stato in figura ───────────────────────────────────────────────────
+     «Salvato» è la spunta, ciò che è in sospeso il punto: la parola resta al
+     nome del bottone e al suggerimento. Ciò che è andato storto tiene la
+     parola rossa, perché è la sola che deve farsi leggere. Alto e largo un
+     dito. */
+  :root[data-client-shell="mobile"] .pane-toolbar .sheet-save:not([data-state="fallito"]):not([data-state="conflitto"]) {
+    justify-content: center;
+    min-width: var(--touch);
+    min-height: var(--touch);
+    padding: 0;
+    gap: 0;
+    font-size: 0;
+  }
+}
+
+/* ── La modalità in basso a destra ──────────────────────────────────────────
+   Dove la banda non c'è, la modalità la dice il bottone del foglio: in piedi,
+   e sdraiato quando l'altezza manca (la banda si ritira dai 600 px in su sotto
+   i 500 di altezza, più su). È la sola icona in un tondo alto un dito,
+   all'angolo basso della carta: lì il pollice arriva, e lì stanno Annulla e
+   Ripeti mentre si scrive. Il nome resta all'etichetta e al suggerimento. Il
+   bottone viene dopo la barra di formato, nel DOM e nel giro del Tab.
+   Sdraiato la barra di formato sta in cima, come sul computer: il tondo resta
+   all'angolo anche mentre si scrive, nel margine bianco a destra del testo. */
+@media (max-width: 599px), (max-height: 500px) {
+  :root[data-client-shell="mobile"] .pane > .pane-mode-current:not([hidden]) {
+    position: absolute;
+    right: var(--space-6);
+    bottom: var(--space-6);
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--touch);
+    height: var(--touch);
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--bg-elev);
+    box-shadow: var(--shadow-2);
+  }
+  :root[data-client-shell="mobile"] .pane > .pane-mode-current > svg {
+    flex: none;
+    width: 20px;
+    height: 20px;
+  }
+  :root[data-client-shell="mobile"] .pane > .pane-mode-current > .pane-mode-name {
+    display: none;
+  }
+  :root[data-client-shell="mobile"] .pane > .pane-mode-current:hover {
+    background: linear-gradient(var(--overlay-hover), var(--overlay-hover)), var(--bg-elev);
+  }
+  /* Il tondo resta carta anche premuto: il velo si stende sopra, non al posto. */
+  :root[data-client-shell="mobile"] .pane > .pane-mode-current[aria-expanded="true"] {
+    background: linear-gradient(var(--accent-wash), var(--accent-wash)), var(--bg-elev);
+    color: var(--accent);
+  }
+
+  /* Il documento ha il suo pulsante dei commenti in basso a destra: si sposta
+     a sinistra del tondo, sulla stessa riga. */
+  :root[data-client-shell="mobile"] .pane:has(> .pane-mode-current:not([hidden])) .rich-surface > .rich-side-open {
+    right: calc(var(--space-6) + var(--touch) + var(--space-4));
+  }
+}
+
+@media (max-width: 599px) {
+  /* In piedi, mentre si scrive, c'è la barra di formato in fondo: il bottone
+     ne chiude la fila, piatto, nell'ultima casella dopo Annulla, Ripeti e il
+     resto. La barra gli lascia il posto, e il filo che la separa dal testo
+     passa anche sopra di lui. Le condizioni sono quelle che mostrano la barra,
+     più il suo menu aperto. Con la tastiera aperta la fila sta sopra i tasti. */
+  :root[data-client-shell="mobile"] .pane:has(> .pane-mode-current:not([hidden])) > .format-bar {
+    margin-inline-end: var(--touch);
+  }
+  :root[data-client-shell="mobile"] #app:not([data-formatbar-off]) .pane:has(> .format-bar:not([hidden])):is(:has(.cm-focused), :has(> .format-bar:focus-within), :has(> .format-bar [aria-expanded="true"]), :has(> .pane-mode-current[aria-expanded="true"])) > .pane-mode-current:not([hidden]) {
+    right: 0;
+    bottom: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: inset 0 1px 0 var(--border);
+  }
+  :root[data-client-shell="mobile"] #app:not([data-formatbar-off]) .pane:has(> .format-bar:not([hidden])):is(:has(.cm-focused), :has(> .format-bar:focus-within), :has(> .format-bar [aria-expanded="true"]), :has(> .pane-mode-current[aria-expanded="true"])) > .pane-mode-current:not([hidden]):hover {
+    background: var(--overlay-hover);
+  }
+  :root[data-client-shell="mobile"] #app:not([data-formatbar-off]) .pane:has(> .format-bar:not([hidden])):is(:has(.cm-focused), :has(> .format-bar:focus-within), :has(> .format-bar [aria-expanded="true"]), :has(> .pane-mode-current[aria-expanded="true"])) > .pane-mode-current[aria-expanded="true"] {
+    background: var(--accent-wash);
+  }
+}
+
+/* ── L'ombra del foglio al telefono ─────────────────────────────────────────
+   In piedi la carta va da un bordo all'altro e tocca la barra di sotto: non
+   c'è scrivania dove l'ombra possa cadere, e non se ne disegna. Sdraiato la
+   banda di stato non c'è e sotto il foglio c'è il bordo dello schermo: la
+   scrivania non si allarga in basso, ai fianchi sì, come sul computer. */
+@media (max-width: 599px) {
+  :root[data-client-shell="mobile"] #panes {
+    --sheet-reach: 0px;
+  }
+  :root[data-client-shell="mobile"] .pane::before,
+  :root[data-client-shell="mobile"] .pane.focus::before {
+    box-shadow: none;
+  }
+}
+@media (min-width: 600px) and (max-height: 500px) {
+  :root[data-client-shell="mobile"] #panes {
+    --reach-b: 0px;
+  }
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/series.ts" data-posto="serie" data-task="S2 T11">
+/* → theme/scrittoio/series.ts: defaults.body 17 → 18 e defaults.measure
+   68 → 58 (non è pelle: sono i valori di partenza del corpo e della misura di
+   lettura, che la persona può cambiare in Aspetto). 58ch di Newsreader a
+   18 px sono 574 px: la colonna del mockup, con gli stessi a capo. */
+:root {
+  --text-reading: 18px;
+  --content-width: 58ch;
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/recipe.ts" data-posto="serie" data-task="S2 T16, T27">
+/* → theme/scrittoio/recipe.ts: tre ruoli facoltativi nuovi (`OPTIONAL_ROLES`),
+   con questi valori nei quattro fogli generati. Non è pelle: è la ricetta, e
+   la pelle li legge con un ripiego (`var(--shadow-sheet, var(--shadow-1))`),
+   così un tema `theme-2` che non li dichiara resta com'è oggi.
+   - `--shadow-sheet`, `--shadow-sheet-focus`: l'ombra del foglio a riposo e
+     col fuoco. Tre strati, dal contatto al lontano; i due larghi hanno lo
+     spread negativo, così l'ombra scende sotto il foglio e si vede ai fianchi
+     senza salire sopra la linguetta, che di suo non ha rilievo.
+     Di giorno l'inchiostro di `shadow()`, di notte il nero, più fondo perché
+     la scrivania è già quasi nera. Niente filo di luce: a meno del 10 % ha il
+     tono della carta e non si vede, dal 10 % in su è un bordo che corre fino
+     alla linguetta e lì si interrompe.
+   - `--bar-tray`: il vassoio delle barre (a schede, in una fila, la colonna),
+     a metà fra la carta e `--sheet-2` di giorno; di notte un passo sotto
+     `--sheet-2`. Contrasto alto: lo stesso valore di `--sheet-2`, come oggi. */
+:root {
+  --shadow-sheet: 0 1px 2px rgb(24 28 44 / 8%), 0 2px 8px -1px rgb(24 28 44 / 8%), 0 8px 16px -6px rgb(24 28 44 / 14%);
+  --shadow-sheet-focus: 0 1px 3px rgb(24 28 44 / 9%), 0 3px 10px -1px rgb(24 28 44 / 10%), 0 10px 20px -6px rgb(24 28 44 / 18%);
+  --bar-tray: #f8fafc;
+}
+:root[data-theme="dark"] {
+  --shadow-sheet: 0 1px 2px rgb(0 0 0 / 40%), 0 2px 8px -1px rgb(0 0 0 / 45%), 0 8px 16px -6px rgb(0 0 0 / 60%);
+  --shadow-sheet-focus: 0 1px 3px rgb(0 0 0 / 45%), 0 3px 10px -1px rgb(0 0 0 / 50%), 0 10px 20px -6px rgb(0 0 0 / 66%);
+  --bar-tray: #1a1f27;
+}
+:root[data-contrast="high"] {
+  --bar-tray: var(--sheet-2);
+}
+</style>
+<style id="sim-scala"></style>
+<script src="sim-dati.js"></script>
+<script src="solo-simulatore.js"></script>
+</head>
+<body>
+<header class="sim-bar" aria-label="Comandi del simulatore">
+  <h1>Fub pre-alpha · simulatore</h1>
+  <span class="sim-field">
+    <label for="sim-stato">Stato</label>
+    <select id="sim-stato">
+      <optgroup label="La nota">
+        <option value="nota-riposo">Nota in Live</option>
+        <option value="nota">Il menu delle modalità</option>
+        <option value="nota-blocchi">La stessa nota in Blocchi</option>
+        <option value="nota-sorgente">La stessa nota in Sorgente</option>
+        <option value="nota-lettura">La stessa nota in Lettura</option>
+        <option value="barra">La barra di formato</option>
+        <option value="live-tabella">Live: una tabella in modifica</option>
+        <option value="blocchi-menu">Blocchi: il menu della maniglia</option>
+        <option value="slash">«/»: il menu dei blocchi</option>
+        <option value="slash-filtro">«/» con un filtro</option>
+        <option value="slash-nessuno">«/» senza risultati</option>
+        <option value="conflitto">Conflitto: il file è cambiato su disco</option>
+        <option value="schede">Molte schede</option>
+        <option value="concentrazione">Concentrazione</option>
+        <option value="nota-pdf">Un PDF dentro una nota</option>
+        <option value="icone">L'icona di una cartella: le figure</option>
+        <option value="icone-emoji">L'icona di una cartella: le emoji</option>
+      </optgroup>
+      <optgroup label="Gli altri editor">
+        <option value="documento">Documento Word</option>
+        <option value="documento-oggetti">Documento: immagini, caselle, formule</option>
+        <option value="sola-lettura">Documento in sola lettura</option>
+        <option value="foglio">Foglio di calcolo</option>
+        <option value="foglio-modifica">Foglio: una cella aperta</option>
+        <option value="foglio-comandi">Foglio: il menu «Comandi»</option>
+        <option value="foglio-comandi-cerca">Foglio: «Comandi» con la ricerca</option>
+        <option value="caricamento">Foglio: un risultato che si carica</option>
+        <option value="errore">Foglio: il motore non risponde</option>
+        <option value="molti">Foglio a 700 px: 500 errori</option>
+        <option value="disegno">Disegno SVG</option>
+        <option value="disegno-selezione">Disegno: una figura scelta</option>
+        <option value="pdf">PDF</option>
+        <option value="lavagna">Lavagna</option>
+        <option value="craft">File Craft senza anteprima</option>
+        <option value="craft-spente">File Craft col componente spento</option>
+        <option value="craft-prepara">File Craft: l'anteprima si prepara</option>
+        <option value="craft-rotto">File Craft rotto</option>
+        <option value="foto">Foto RAW con XMP</option>
+      </optgroup>
+      <optgroup label="Cassetti, finestre, impostazioni">
+        <option value="ricerca">La ricerca nel vault</option>
+        <option value="grafo">Il grafo</option>
+        <option value="palette">Avvio rapido: i comandi</option>
+        <option value="palette-file">Avvio rapido: le note</option>
+        <option value="zero">Avvio rapido senza risultati</option>
+        <option value="salvataggio">Lo stato del salvataggio, aperto</option>
+        <option value="avvisi">Gli avvisi</option>
+        <option value="toast">Un avviso che passa</option>
+        <option value="conferma">Una conferma pericolosa</option>
+        <option value="impostazioni">Impostazioni</option>
+        <option value="aspetto">Impostazioni › Aspetto</option>
+        <option value="impostazioni-vault">Impostazioni › Vault</option>
+        <option value="componenti">Componenti</option>
+        <option value="nuovo-vault">Un vault nuovo: il profilo</option>
+      </optgroup>
+      <optgroup label="Casi">
+        <option value="vuoto">Nessun vault aperto</option>
+        <option value="avvio-attesa">L'avvio: il vault si apre</option>
+        <option value="avvio-lento">L'avvio che si allunga</option>
+        <option value="avvio-guasto">L'avvio caduto</option>
+      </optgroup>
+      <optgroup label="Telefono (Android di prova)">
+        <option value="tel-nota">Telefono: nota, si scrive</option>
+        <option value="tel-ferma">Telefono: nota, a riposo</option>
+        <option value="tel-tastiera">Telefono: tastiera aperta</option>
+        <option value="tel-sdraiato">Telefono sdraiato</option>
+        <option value="tel-doc">Telefono: documento</option>
+        <option value="tel-foglio">Telefono: foglio</option>
+        <option value="tel-cassetto">Telefono: il cassetto</option>
+        <option value="tel-ispettore">Telefono: l'ispettore</option>
+        <option value="tel-lanciatore">Telefono: avvio rapido</option>
+        <option value="tel-avvio">Telefono: il benvenuto</option>
+        <option value="tel-avvio-attesa">Telefono: l'avvio</option>
+      </optgroup>
+    </select>
+  </span>
+  <fieldset class="sim-seg" id="sim-luce">
+    <legend>Luce</legend>
+    <input type="radio" name="luce" id="luce-giorno" value="light" checked><label for="luce-giorno">Giorno</label>
+    <input type="radio" name="luce" id="luce-notte" value="dark"><label for="luce-notte">Notte</label>
+  </fieldset>
+  <fieldset class="sim-seg" id="sim-larghezza">
+    <legend>Larghezza</legend>
+    <input type="radio" name="larghezza" id="larghezza-piena" value="piena" checked><label for="larghezza-piena">Piena</label>
+    <input type="radio" name="larghezza" id="larghezza-700" value="700"><label for="larghezza-700">700 px</label>
+    <input type="radio" name="larghezza" id="larghezza-tel" value="tel"><label for="larghezza-tel">Telefono</label>
+  </fieldset>
+  <fieldset class="sim-seg" id="sim-moto">
+    <legend>Movimento</legend>
+    <input type="radio" name="moto" id="moto-pieno" value="pieno" checked><label for="moto-pieno">Pieno</label>
+    <input type="radio" name="moto" id="moto-calmo" value="calmo"><label for="moto-calmo">Calmo</label>
+    <input type="radio" name="moto" id="moto-ridotto" value="ridotto"><label for="moto-ridotto">Ridotto</label>
+  </fieldset>
+  <button type="button" id="sim-fuoco" aria-pressed="false">Fuoco sul controllo principale</button>
+</header>
+<p class="sim-msg" id="sim-msg" role="status" aria-live="polite"></p>
+<main>
+  <div class="sim-box" id="sim-box">
+    <iframe id="sim-schermo" title="Lo schermo di Fub nello stato scelto" sandbox="allow-same-origin"></iframe>
+    <div class="sim-segno" id="sim-segno" hidden></div>
+  </div>
+  <section class="sim-didascalia" aria-live="polite">
+    <h2 id="sim-nome"></h2>
+    <p id="sim-dice"></p>
+    <p id="sim-vicino" hidden></p>
+    <p>Task: <span id="sim-task"></span></p>
+  </section>
+  <details open>
+    <summary>I pezzi di questo stato</summary>
+    <p class="sim-muto">Ogni pezzo dice il file che lo costruisce, il task, e se il suo DOM è nuovo, cambiato o uguale a main. «Indica» lo segna nello schermo; «DOM» mostra quello da copiare.</p>
+    <ul class="sim-pezzi" id="sim-pezzi"></ul>
+  </details>
+  <details>
+    <summary>Che cosa si può fare nello schermo</summary>
+    <ul>
+      <li>Nell'albero: un file apre il suo editor, una cartella si apre e si chiude. Le linguette portano alla loro scheda.</li>
+      <li>Nella nota si scrive davvero (non si salva). «/» apre il menu dei blocchi: frecce, Invio, Esc, e le lettere filtrano.</li>
+      <li>Il tasto destro apre il menu del testo, dell'albero, di una cartella o di una linguetta.</li>
+      <li>Ctrl+O, Ctrl+K o la pillola aprono l'avvio rapido; si scrive per filtrare, Esc chiude.</li>
+      <li>La modalità nella banda apre il menu: Live, Blocchi, Sorgente, Lettura cambiano davvero la nota.</li>
+      <li>«Salvato» nella testata apre il foglietto; la campanella apre gli avvisi; il binario porta a ricerca e grafo; la luna cambia luce.</li>
+      <li>Impostazioni › Aspetto: Tema, Animazioni, corpo, interlinea, misura e carattere cambiano lo schermo, anche nelle altre schermate. Gli interruttori di «Componenti» si muovono.</li>
+      <li>Tab e Maiuscolo+Tab girano per i controlli; Esc chiude ciò che è aperto.</li>
+    </ul>
+  </details>
+  <details>
+    <summary>Il CSS nuovo, per file di destinazione</summary>
+    <div class="sim-tabella"><table>
+      <thead><tr><th>File</th><th>Task</th><th>Peso</th></tr></thead>
+      <tbody>
+        <tr><td><code>theme/scrittoio/structure.css</code></td><td>S2 T3, T4, T9, T16, T20, T21, T27</td><td>13 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/kit.css</code></td><td>S2 T16, T20</td><td>19.4 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/frame.css</code></td><td>S2 T3, T4, T7, T9</td><td>3.7 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/drawers.css</code></td><td>S2 T8, T14</td><td>4.7 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/tree.css</code></td><td>S2 T8</td><td>2 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/sheets.css</code></td><td>S2 T5, T6, T27</td><td>2.5 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/document.css</code></td><td>S2 T11, T12</td><td>5 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/media.css</code></td><td>S2 T18, T19</td><td>2.9 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/nodes.css</code></td><td>S2 T9, T13</td><td>3.9 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/graph.css</code></td><td>S2 T10</td><td>0.3 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/menus.css</code></td><td>S2 T10</td><td>1.4 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/launcher.css</code></td><td>S2 T10</td><td>0.2 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/centres.css</code></td><td>S2 T5</td><td>0.8 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/settings.css</code></td><td>S2 T10</td><td>0.8 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/welcome.css</code></td><td>S2 T10</td><td>0.2 KB</td></tr>
+        <tr><td><code>shells/scrittoio/mobile/mobile.css</code></td><td>S2 T3, T4, T5, T7, T11, T27</td><td>7.6 KB</td></tr>
+        <tr><td><code>theme/scrittoio/series.ts</code></td><td>S2 T11</td><td>0.3 KB</td></tr>
+        <tr><td><code>theme/scrittoio/recipe.ts</code></td><td>S2 T16, T27</td><td>1.7 KB</td></tr>
+      </tbody>
+    </table></div>
+    <p class="sim-muto">Il testo sta nei blocchi <code>&lt;style data-destinazione&gt;</code> in testa a questa pagina, già senza le varianti «com'era».</p>
+  </details>
+  <details>
+    <summary>Le pagine dei piani</summary>
+    <ul>
+        <li><a href="piani/lavagna-schede.html">Le schede della lavagna</a> <span class="sim-task">N6 T25</span> <span class="sim-muto">approvato il 2026-11-04</span></li>
+        <li><a href="piani/lavagna-penne.html">Le penne della lavagna</a> <span class="sim-task">N4 T20</span> <span class="sim-muto">approvato il 2026-11-02</span></li>
+        <li><a href="piani/celle-griglia.html">Le celle della griglia</a> <span class="sim-task">griglia T1–T9</span> <span class="sim-muto">nessuna approvazione scritta nel piano (domanda)</span></li>
+        <li><a href="piani/menu-comandi-fogli.html">«Comandi» e la barra dei fogli</a> <span class="sim-task">K3 T12, T18, T19</span> <span class="sim-muto">approvato il 2026-11-03</span></li>
+        <li><a href="piani/disegno-motore.html">Il disegno sul motore</a> <span class="sim-task">K5 T25</span> <span class="sim-muto">approvato il 2026-11-05</span></li>
+        <li><a href="piani/ricette.html">Le ricette</a> <span class="sim-task">A1 T12</span> <span class="sim-muto">approvato il 2026-11-03</span></li>
+    </ul>
+  </details>
+</main>
+<script>
+// solo simulatore: la vista. Monta una cattura nell'iframe col CSS nuovo dove
+// andrà nel codice, poi passa il documento a solo-simulatore.js.
+(() => {
+  "use strict";
+  const STATI = [{"g":"Nota","id":"nota-riposo","nome":"Nota in Live","w700":"nota-riposo-700","tel":"tel-nota","fuoco":".pane.focus .cm-content","dice":"Il posto da cui si parte: la cornice di Scrittoio 2 attorno alla nota in Live. Si scrive davvero nel foglio (il testo non si salva); «/» a inizio riga apre il menu dei blocchi, il tasto destro il menu del testo, la modalità si cambia dalla banda in basso a destra.","task":["S2 T2–T13","main N12 N13"]},{"g":"Nota","id":"nota","nome":"Il menu delle modalità","w700":"nota-700","tel":"tel-nota","fuoco":"[role=\"menuitemradio\"][aria-checked=\"true\"]","dice":"La modalità si sceglie dalla banda: Live, Blocchi, Sorgente, Lettura. Le scorciatoie stanno a destra, in tasti.","task":["S2 T2","S2 T3","S2 T10"]},{"g":"Nota","id":"nota-blocchi","nome":"La stessa nota in Blocchi","w700":"nota-blocchi-700","tel":"tel-nota","fuoco":".pane.focus .cm-content","dice":"Blocchi è la nota a blocchi alla Notion, sullo stesso testo: le maniglie a sinistra di ogni blocco.","task":["main N13","S2 T3"]},{"g":"Nota","id":"nota-sorgente","nome":"La stessa nota in Sorgente","w700":"nota-sorgente-700","tel":"tel-nota","fuoco":".pane.focus .cm-content","dice":"Il Markdown com'è nel file, coi numeri di riga.","task":["main","S2 T3"]},{"g":"Nota","id":"nota-lettura","nome":"La stessa nota in Lettura","w700":"nota-lettura-700","tel":"tel-nota","fuoco":".pane.focus .reading-view, .pane.focus [tabindex]","dice":"La nota da leggere, senza cursore.","task":["main","S2 T3","S2 T11"]},{"g":"Nota","id":"barra","nome":"La barra di formato","w700":"barra-700","tel":"tel-nota","fuoco":".kit-bar-button","dice":"La barra di formato delle note nella fila di serie: il vassoio un tono sotto la carta, i gruppi come foglietti. A 700 px ciò che non ci sta va in «…».","task":["S2 T16","S2 T17"]},{"g":"Nota","id":"live-tabella","nome":"Live: una tabella in modifica","w700":"live-tabella-700","tel":null,"fuoco":".pane.focus .cm-content","dice":"La griglia delle tabelle Markdown in Live, con la riga attiva.","task":["main","S2 T11"]},{"g":"Nota","id":"blocchi-menu","nome":"Blocchi: il menu della maniglia","w700":"blocchi-menu-700","tel":null,"fuoco":"[role=\"menu\"] [role=\"menuitem\"]","dice":"Il menu che si apre dalla maniglia di un blocco.","task":["main N13","PA (rifiniture di Blocchi)"]},{"g":"Nota","id":"slash","nome":"«/»: il menu dei blocchi","w700":"slash-700","tel":null,"fuoco":".slash-row.is-selected","dice":"«/» a inizio riga: suggerimenti, tutte le specie di blocco, l'anteprima a destra.","task":["main N12","S2 T10"]},{"g":"Nota","id":"slash-filtro","nome":"«/» con un filtro","w700":null,"tel":null,"fuoco":".slash-row.is-selected","dice":"Si scrive dopo «/»: la lista si stringe.","task":["main N12"]},{"g":"Nota","id":"slash-nessuno","nome":"«/» senza risultati","w700":null,"tel":null,"fuoco":".pane.focus .cm-content","dice":"Nessun blocco col nome scritto: il menu lo dice e resta aperto.","task":["main N12"]},{"g":"Nota","id":"conflitto","nome":"Conflitto: il file è cambiato su disco","w700":"conflitto-700","tel":null,"fuoco":".conflict-actions [data-choice=\"mine\"]","dice":"Il file è cambiato fuori da Fub mentre si scriveva: nessuna scelta è automatica. La testata dice «Cambiato su disco».","task":["main (U59–U60)","S2 T5","PA giro della pre-alpha"]},{"g":"Nota","id":"schede","nome":"Molte schede","w700":"schede-700","tel":null,"fuoco":".pane.focus .tab[aria-selected=\"true\"]","dice":"Le linguette quando sono tante.","task":["S2 T6"]},{"g":"Nota","id":"concentrazione","nome":"Concentrazione","w700":"concentrazione-700","tel":null,"fuoco":".pane.focus .cm-content","dice":"Solo il foglio: cassetto e ispettore si ritirano.","task":["main","S2 T6"]},{"g":"Nota","id":"nota-pdf","nome":"Un PDF dentro una nota","w700":"nota-pdf-700","tel":null,"fuoco":".pane.focus .cm-content","dice":"`![[contratto.pdf]]` mostra la pagina dentro la nota.","task":["main","PA (`#page=3`)"]},{"g":"Nota","id":"icone","nome":"L'icona di una cartella: le figure","w700":null,"tel":null,"fuoco":"[data-icon^=\"fub:\"]","dice":"Il selettore dell'icona offre le figure monocrome accanto alle emoji.","task":["S2 T14","S2 T15"]},{"g":"Nota","id":"icone-emoji","nome":"L'icona di una cartella: le emoji","w700":null,"tel":null,"fuoco":"[data-icon^=\"fub:\"]","dice":"Le emoji restano una scelta piena.","task":["S2 T14","S2 T15"]},{"g":"Editor","id":"documento","nome":"Documento Word","w700":"documento-700","tel":"tel-doc","fuoco":".kit-ribbon-tabs [role=\"tab\"][aria-selected=\"true\"]","dice":"Il .docx nella sua pagina, con la barra a schede di serie (le classi del kit); la galleria degli stili resta del documento.","task":["S2 T5","S2 T20","S2 T21"]},{"g":"Editor","id":"documento-oggetti","nome":"Documento: immagini, caselle, formule","w700":"documento-oggetti-700","tel":"tel-doc","fuoco":".kit-ribbon-tabs [role=\"tab\"][aria-selected=\"true\"]","dice":"Gli oggetti dentro il testo di un documento.","task":["main","S2 T21"]},{"g":"Editor","id":"sola-lettura","nome":"Documento in sola lettura","w700":"sola-lettura-700","tel":"tel-doc","fuoco":"#status-mode","dice":"Uno stato diverso da «Si scrive» resta nella testata, dove si vede. La pre-alpha blocca davvero la scrittura (oggi è solo un segno).","task":["S2 T4","S2 T5","PA sola lettura"]},{"g":"Editor","id":"foglio","nome":"Foglio di calcolo","w700":"foglio-700","tel":"tel-foglio","fuoco":".kit-ribbon-tabs [role=\"tab\"][aria-selected=\"true\"]","dice":"La barra dei fogli nello stile di Fub (K3 T18) e la sua forma nel kit (S2 T20). Le celle nuove sono nella pagina «Le celle della griglia».","task":["K3 T18","S2 T20","griglia T1–T9"]},{"g":"Editor","id":"foglio-modifica","nome":"Foglio: una cella aperta","w700":"foglio-modifica-700","tel":"tel-foglio","fuoco":".pane.focus .grid-editor, .pane.focus input","dice":"La cella in modifica com'è oggi; la cella aperta nuova (griglia T4) è nella pagina della griglia.","task":["griglia T4","S2 T20"]},{"g":"Editor","id":"foglio-comandi","nome":"Foglio: il menu «Comandi»","w700":null,"tel":null,"fuoco":"[role=\"menu\"] [role=\"menuitem\"]","dice":"I comandi dei motori Craft sulla barra dei fogli.","task":["K3 T12–T15","S2 T20"]},{"g":"Editor","id":"foglio-comandi-cerca","nome":"Foglio: «Comandi» con la ricerca","w700":null,"tel":null,"fuoco":"[role=\"searchbox\"], input","dice":"Si cerca fra i comandi dei motori.","task":["K3 T12–T15"]},{"g":"Editor","id":"caricamento","nome":"Foglio: un risultato che si carica","w700":null,"tel":null,"fuoco":".kit-button[data-kind=\"primary\"]","dice":"«Statistiche della selezione» mentre il motore legge.","task":["K3 T15","S2 T20"]},{"g":"Editor","id":"errore","nome":"Foglio: il motore non risponde","w700":null,"tel":null,"fuoco":".kit-button[data-kind=\"primary\"]","dice":"Il messaggio e «Riprova».","task":["K3 T15","S2 T20"]},{"g":"Editor","id":"molti","nome":"Foglio a 700 px: 500 errori","w700":null,"tel":null,"fuoco":".kit-button[data-kind=\"primary\"]","dice":"La tabella scorre dentro il dialogo; dietro, la barra si raccoglie.","task":["K3 T15","S2 T20"]},{"g":"Editor","id":"disegno","nome":"Disegno SVG","w700":"disegno-700","tel":null,"fuoco":".draw-header .kit-bar-button","dice":"La testa del disegno nella fila di serie, la colonna degli strumenti con la pelle di `kit-rail`. Il motore del disegno è nella pagina «Il disegno sul motore».","task":["S2 T16","S2 T22","K5 T25"]},{"g":"Editor","id":"disegno-selezione","nome":"Disegno: una figura scelta","w700":"disegno-selezione-700","tel":null,"fuoco":".draw-header .kit-bar-button","dice":"Le maniglie e la barra della selezione.","task":["K5","S2 T22"]},{"g":"Editor","id":"pdf","nome":"PDF","w700":"pdf-700","tel":null,"fuoco":".media-pdf-toolbar .kit-bar-button","dice":"La barra del PDF nella fila di serie; «Pagina N di M» nella banda.","task":["S2 T18"]},{"g":"Editor","id":"lavagna","nome":"Lavagna","w700":"lavagna-700","tel":null,"fuoco":".pane.focus .canvas-toolbar button","dice":"La lavagna com'è oggi nella cornice nuova. Le schede di N6 e le penne di N4 sono nelle loro pagine (in «Dai piani»): nel prodotto entrano qui.","task":["N6","N4","S2 T23","lavagna in codice"]},{"g":"Editor","id":"craft","nome":"File Craft senza anteprima","w700":"craft-700","tel":null,"fuoco":".craft-ask-answer","dice":"Senza anteprima la scheda è un foglietto sollevato; le risposte sono pulsanti del kit.","task":["main N7","S2 T19"]},{"g":"Editor","id":"craft-spente","nome":"File Craft col componente spento","w700":"craft-spente-700","tel":null,"fuoco":".pane.focus a, .pane.focus button","dice":"Il componente che lo legge è spento: la scheda lo dice e porta alle impostazioni.","task":["main N7","K2","S2 T19"]},{"g":"Editor","id":"craft-prepara","nome":"File Craft: l'anteprima si prepara","w700":"craft-prepara-700","tel":null,"fuoco":".pane.focus button","dice":"L'anteprima arriva: il segno d'attesa.","task":["main N7","S2 T19"]},{"g":"Editor","id":"craft-rotto","nome":"File Craft rotto","w700":"craft-rotto-700","tel":null,"fuoco":".pane.focus button","dice":"Il file non si legge: il motivo, e il file resta com'è.","task":["main N7","S2 T19"]},{"g":"Editor","id":"foto","nome":"Foto RAW con XMP","w700":"foto-700","tel":null,"fuoco":".pane.focus button","dice":"Una foto RAW con le modifiche di LightCraft lette dall'XMP.","task":["main"]},{"g":"Cornice","id":"ricerca","nome":"La ricerca nel vault","w700":"ricerca-700","tel":"tel-cassetto","fuoco":"#search-input","dice":"Il cassetto della ricerca: il pozzetto pieno con la lente.","task":["S2 T8"]},{"g":"Cornice","id":"grafo","nome":"Il grafo","w700":"grafo-700","tel":null,"fuoco":".graph-list-summary","dice":"Il grafo resta; cambiano le etichette in tondo.","task":["S2 T10"]},{"g":"Cornice","id":"palette","nome":"Avvio rapido: i comandi","w700":"palette-700","tel":"tel-lanciatore","fuoco":".launcher-input","dice":"Ctrl+O: note, ricerca e comandi in un campo solo. Qui la scheda «Comandi».","task":["main","S2 T10"]},{"g":"Cornice","id":"palette-file","nome":"Avvio rapido: le note","w700":"palette-file-700","tel":"tel-lanciatore","fuoco":".launcher-input","dice":"La prima scheda: i file del vault.","task":["main","S2 T10"]},{"g":"Cornice","id":"zero","nome":"Avvio rapido senza risultati","w700":"zero-700","tel":null,"fuoco":".launcher-input","dice":"Zero voci: il messaggio resta.","task":["S2 T10"]},{"g":"Cornice","id":"salvataggio","nome":"Lo stato del salvataggio, aperto","w700":"salvataggio-700","tel":null,"fuoco":".kit-popover button, .kit-popover","dice":"«Salvato» nella testata si apre: che cosa è successo e che cosa si può fare.","task":["main","S2 T5"]},{"g":"Cornice","id":"avvisi","nome":"Gli avvisi","w700":"avvisi-700","tel":null,"fuoco":"#notify-clear","dice":"La campanella: gli avvisi del vault.","task":["main"]},{"g":"Cornice","id":"toast","nome":"Un avviso che passa","w700":"toast-700","tel":null,"fuoco":".toast button","dice":"Il messaggio in basso che se ne va da solo.","task":["main"]},{"g":"Cornice","id":"conferma","nome":"Una conferma pericolosa","w700":"conferma-700","tel":null,"fuoco":".kit-button[data-kind=\"danger\"], .kit-dialog button","dice":"Il dialogo del kit quando una scelta butta via qualcosa.","task":["main"]},{"g":"Cornice","id":"impostazioni","nome":"Impostazioni","w700":"impostazioni-700","tel":null,"fuoco":".settings-tab[aria-selected=\"true\"]","dice":"Le impostazioni nella lingua dello Scrittoio. Nel simulatore «Tema» e «Movimento» cambiano davvero lo schermo.","task":["S2 T10"]},{"g":"Cornice","id":"aspetto","nome":"Impostazioni › Aspetto","w700":"aspetto-700","tel":null,"fuoco":".settings-tab[aria-selected=\"true\"]","dice":"Tema, contrasto, densità, carattere, tinta: le scelte dell'aspetto.","task":["main","S2 T10"]},{"g":"Cornice","id":"impostazioni-vault","nome":"Impostazioni › Vault","w700":"impostazioni-vault-700","tel":null,"fuoco":".settings-tab[aria-selected=\"true\"]","dice":"I vault conosciuti, aperti e da aprire.","task":["main","S2 T10"]},{"g":"Cornice","id":"componenti","nome":"Componenti","w700":"componenti-700","tel":null,"fuoco":".settings-tab[aria-selected=\"true\"]","dice":"La pagina «Componenti»: che cosa è acceso, chi lo richiede, i profili. Nel simulatore gli interruttori si muovono.","task":["K2 T1–T7","S2 T10"]},{"g":"Cornice","id":"nuovo-vault","nome":"Un vault nuovo: il profilo","w700":"nuovo-vault-700","tel":null,"fuoco":".kit-button[data-kind=\"primary\"], button","dice":"«Come userai questo vault?»: il profilo accende i componenti che servono.","task":["K2"]},{"g":"Casi","id":"vuoto","nome":"Nessun vault aperto","w700":"vuoto-700","tel":"tel-avvio","fuoco":"#pill","dice":"La pillola è il campo dei comandi anche a vuoto.","task":["S2 T7"]},{"g":"Casi","id":"avvio-attesa","nome":"L'avvio: il vault si apre","w700":null,"tel":"tel-avvio-attesa","fuoco":".avvio button","dice":"Il marchio, la riga del vault che si apre, la scia. È in main (#308).","task":["main #308"]},{"g":"Casi","id":"avvio-lento","nome":"L'avvio che si allunga","w700":null,"tel":null,"fuoco":".avvio button","dice":"«Ci vuole più del solito.»","task":["main #308"]},{"g":"Casi","id":"avvio-guasto","nome":"L'avvio caduto","w700":null,"tel":null,"fuoco":".avvio button","dice":"Il motivo, «Riprova» col fuoco, «Copia i dettagli».","task":["main #308"]},{"g":"Telefono","id":"tel-nota","nome":"Telefono: nota, si scrive","w700":null,"tel":null,"fuoco":".pane > .pane-mode-current","dice":"La cornice provvisoria A di Scrittoio 2. La pre-alpha la porta su Android di prova: va rifatta o tenuta? (domanda nella parte 4).","task":["S2 T2–T7","PA telefono"]},{"g":"Telefono","id":"tel-ferma","nome":"Telefono: nota, a riposo","w700":null,"tel":null,"fuoco":".pane > .pane-mode-current","dice":"Senza il fuoco nel testo la barra di formato non c'è; la modalità è il tondo in basso a destra.","task":["S2 T3","PA telefono"]},{"g":"Telefono","id":"tel-tastiera","nome":"Telefono: tastiera aperta","w700":null,"tel":null,"fuoco":".pane > .pane-mode-current","dice":"La fila della barra di formato sta sopra i tasti.","task":["S2 T17","PA telefono"]},{"g":"Telefono","id":"tel-sdraiato","nome":"Telefono sdraiato","w700":null,"tel":null,"fuoco":".pane > .pane-mode-current","dice":"Sdraiato la barra del titolo è quella stretta del computer.","task":["S2 T3","S2 T7","PA telefono"]},{"g":"Telefono","id":"tel-doc","nome":"Telefono: documento","w700":null,"tel":null,"fuoco":".pane > .pane-mode-current","dice":"Il documento con la barra di serie raccolta.","task":["S2 T21","PA telefono"]},{"g":"Telefono","id":"tel-foglio","nome":"Telefono: foglio","w700":null,"tel":null,"fuoco":"[data-pane-menu]","dice":"Il foglio da un bordo all'altro.","task":["S2 T20","PA telefono"]},{"g":"Telefono","id":"tel-cassetto","nome":"Telefono: il cassetto","w700":null,"tel":null,"fuoco":"#file-list [role=\"treeitem\"]","dice":"L'albero del vault in un foglio che sale dal basso.","task":["main","PA telefono"]},{"g":"Telefono","id":"tel-ispettore","nome":"Telefono: l'ispettore","w700":null,"tel":null,"fuoco":".inspector-tab","dice":"Struttura e collegamenti in un foglio che sale dal basso.","task":["main","PA telefono"]},{"g":"Telefono","id":"tel-lanciatore","nome":"Telefono: avvio rapido","w700":null,"tel":null,"fuoco":".launcher-input","dice":"L'avvio rapido a tutta altezza.","task":["main","PA telefono"]},{"g":"Telefono","id":"tel-avvio","nome":"Telefono: il benvenuto","w700":null,"tel":null,"fuoco":"button","dice":"Il primo schermo senza vault.","task":["main","PA telefono"]},{"g":"Telefono","id":"tel-avvio-attesa","nome":"Telefono: l'avvio","w700":null,"tel":null,"fuoco":".avvio button","dice":"Lo strato d'avvio al telefono.","task":["main #308"]}];
+  const PEZZI = [{"sel":"#topbar","nome":"La barra del titolo","dest":"apps/client/index.html, shells/scrittoio/frame/*.ts","task":"S2 T7","come":"cambiato"},{"sel":"#pill","nome":"La pillola (cerca o esegui)","dest":"shells/scrittoio/frame/pill.ts","task":"S2 T7","come":"cambiato"},{"sel":"#rail","nome":"Il binario","dest":"shells/scrittoio/frame/rail.ts, index.html","task":"S2 T7 (pelle)","come":"uguale"},{"sel":"#space-strip","nome":"La striscia degli spazi","dest":"panels/explorer.ts","task":"S2 T8","come":"cambiato"},{"sel":"#file-list","nome":"L'albero del vault","dest":"panels/explorer.ts, ui/page-mark.ts","task":"S2 T8, T14","come":"cambiato"},{"sel":"#search-input","nome":"Il pozzetto della ricerca","dest":"index.html, panels/explorer.ts","task":"S2 T8","come":"cambiato"},{"sel":".pane.focus .pane-tabs","nome":"Le linguette","dest":"panels/document.ts (pelle in skin/sheets.css)","task":"S2 T6","come":"uguale"},{"sel":".pane.focus .pane-toolbar","nome":"La testata del foglio","dest":"panels/document.ts, shells/scrittoio/sheets/title-rename.ts","task":"S2 T5","come":"cambiato"},{"sel":".pane.focus .sheet-save","nome":"«Salvato» nella testata","dest":"shells/scrittoio/sheets/save-state.ts","task":"S2 T5","come":"cambiato"},{"sel":".pane.focus .format-bar","nome":"La barra di formato","dest":"panels/format-bar.ts, kit/toolbar-keys.ts","task":"S2 T16, T17","come":"cambiato"},{"sel":".pane > .pane-mode-current","nome":"La modalità nel foglio (telefono)","dest":"panels/document.ts, mobile.css","task":"S2 T3","come":"cambiato"},{"sel":".note-facts","nome":"La riga dei dati sotto il titolo","dest":"editors/text/profiles/markdown/note-facts.ts (nuovo)","task":"S2 T12","come":"nuovo"},{"sel":"#status-band","nome":"La banda","dest":"shells/scrittoio/frame/status-band.ts, index.html","task":"S2 T3, T4","come":"cambiato"},{"sel":".status-standing","nome":"«Si scrive» nella banda","dest":"shells/scrittoio/frame/status-band.ts, panels/standing.ts","task":"S2 T4","come":"nuovo"},{"sel":"#status-mode","nome":"La modalità nella banda","dest":"shells/scrittoio/frame/status-band.ts, state/mode-menu.ts","task":"S2 T2, T3","come":"nuovo"},{"sel":"#right-pane","nome":"L'ispettore","dest":"ui/views.ts, ui/node.ts","task":"S2 T9","come":"cambiato"},{"sel":"#view-panel-backlinks","nome":"«In entrata»","dest":"ui/node.ts, crates/fub-features/src/backlinks.rs","task":"S2 T13","come":"cambiato"},{"sel":".conflict-banner","nome":"Il conflitto","dest":"panels/document.ts (drawConflict)","task":"main; PA giro","come":"uguale"},{"sel":".sheet-notices:not(:empty)","nome":"Gli avvisi del foglio","dest":"panels/document.ts","task":"main","come":"uguale"},{"sel":"#context-menu[aria-label=\"Modalità del riquadro\"]","nome":"Il menu delle modalità","dest":"state/mode-menu.ts (nuovo), ui/menu.ts","task":"S2 T2, T10","come":"nuovo"},{"sel":"#context-menu:not([aria-label=\"Modalità del riquadro\"])","nome":"Il menu del tasto destro","dest":"ui/menu.ts, panels/editor-menu.ts","task":"main (#238)","come":"uguale"},{"sel":".slash-panel","nome":"Il menu «/»","dest":"panels/slash/panel.ts","task":"main N12","come":"uguale"},{"sel":".launcher-layer","nome":"L'avvio rapido","dest":"shells/scrittoio/launcher/launcher.ts","task":"main (pelle S2 T10)","come":"uguale"},{"sel":".kit-popover","nome":"Il foglietto del salvataggio","dest":"kit/popover.ts, shells/scrittoio/sheets/save-state.ts","task":"S2 T5","come":"cambiato"},{"sel":"#notify-panel:not([hidden])","nome":"Gli avvisi","dest":"ui/notify.ts","task":"main","come":"uguale"},{"sel":".toast-stack:not(:empty)","nome":"Un avviso che passa","dest":"ui/notify.ts","task":"main","come":"uguale"},{"sel":".kit-dialog-scrim","nome":"Il dialogo del kit","dest":"kit/dialog.ts","task":"main","come":"uguale"},{"sel":".settings-panel","nome":"Le impostazioni","dest":"panels/settings.ts, shells/scrittoio/preferences/*.ts","task":"main (pelle S2 T10)","come":"uguale"},{"sel":".components-page","nome":"La pagina «Componenti»","dest":"panels/components-page.ts (nuovo)","task":"K2 T1–T7","come":"nuovo"},{"sel":".onboarding:not([hidden])","nome":"Il benvenuto","dest":"shells/scrittoio/frame/welcome.ts","task":"main (pelle S2 T10)","come":"uguale"},{"sel":".avvio","nome":"Lo strato d'avvio","dest":"avvio/consegna.ts, index.html","task":"main #308","come":"uguale"},{"sel":".kit-ribbon","nome":"La barra a schede","dest":"kit/ribbon/ribbon.ts, editors/rich/ribbon.ts","task":"S2 T20, T21; K3 T18","come":"nuovo"},{"sel":".media-pdf-toolbar","nome":"La barra del PDF","dest":"editors/media/pdf-view.ts","task":"S2 T18","come":"cambiato"},{"sel":".draw-header","nome":"La testa del disegno","dest":"editors/spatial/tools/editor/toolbar.ts","task":"S2 T22; K5","come":"cambiato"},{"sel":".canvas-toolbar","nome":"La barra della lavagna di oggi","dest":"editors/canvas/engine.ts","task":"N6 T26, T49 (la sostituiscono)","come":"cambiato"},{"sel":".craft-ask","nome":"La domanda dei file Craft","dest":"editors/craft/consent.ts","task":"main N7 (pelle S2 T19)","come":"uguale"}];
+  const $ = (id) => document.getElementById(id);
+  const frame = $("sim-schermo");
+  const box = $("sim-box");
+  let dati = null;
+  const testi = [];
+  const fontUrl = new Map();
+  const scelto = { stato: "nota-riposo", luce: "light", larghezza: "piena", moto: "pieno", fuoco: false };
+  const prefs = { body: 18, lineHeight: 1.65, measure: 58, font: "newsreader", theme: "light", motion: "" };
+  const storia = [];
+  const tok = (s, kind) => s.split(kind === "h" ? /(?<=>)/ : /(?<=})/);
+  function testo(i) {
+    if (testi[i] !== undefined) return testi[i];
+    const t = dati.texts[i];
+    if (typeof t === "string") return (testi[i] = t);
+    const a = tok(testo(t.b), t.k);
+    let out = "";
+    let pos = 0;
+    for (const [s, n, ins] of t.p) {
+      out += a.slice(pos, s).join("") + ins;
+      pos = s + n;
+    }
+    return (testi[i] = out + a.slice(pos).join(""));
+  }
+  const bytes = (b64) => {
+    const bin = atob(b64);
+    const u = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i += 1) u[i] = bin.charCodeAt(i);
+    return u;
+  };
+  async function carica() {
+    const stream = new Blob([bytes(window.SIM_DATI)]).stream().pipeThrough(new DecompressionStream("gzip"));
+    dati = JSON.parse(await new Response(stream).text());
+    for (const [name, b] of dati.fonts) {
+      const u = bytes(b);
+      fontUrl.set(name, URL.createObjectURL(new Blob([u], { type: "font/woff2" })));
+      if (name.startsWith("hanken")) {
+        const face = new FontFace("Hanken Grotesk Variable", u.buffer, { weight: "100 900", style: name.endsWith("italic") ? "italic" : "normal" });
+        document.fonts.add(face);
+        face.load().catch(() => {});
+      }
+    }
+  }
+  const conFont = (css) => css.replace(/\/fonts\/([\w-]+)\.woff2/g, (m, n) => fontUrl.get(n) ?? m);
+  const attr = (pairs) => pairs.map(([k, v]) => ` ${k}="${String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;")}"`).join("");
+  const stile = (css, label) => `<style data-proto="${label}">${css.replace(/<\/style/gi, "<\\/style")}</style>`;
+  const blocco = (sel) => [...document.querySelectorAll(sel)].map((s) => s.textContent).join("\n");
+  const statoDi = (id) => STATI.find((x) => x.id === id);
+
+  function capBase(s = statoDi(scelto.stato)) {
+    if (s.g === "Telefono") return s.id;
+    if (scelto.larghezza === "700" && s.w700) return s.w700;
+    if (scelto.larghezza === "tel" && s.tel) return s.tel;
+    return s.id;
+  }
+  const capId = () => `${capBase()}-${scelto.luce}`;
+  // Le scelte di Aspetto, sopra tutto: le stesse variabili che scrive
+  // theme/theme.ts (preferenceTokens), solo quando cambiano dal valore di serie.
+  const PILE = {
+    newsreader: '"Newsreader Variable", Georgia, "Times New Roman", serif',
+    hanken: '"Hanken Grotesk Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    literata: '"Literata Variable", Georgia, "Times New Roman", serif',
+    inter: '"Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    system: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+  };
+  function cssPrefs() {
+    const r = [];
+    if (prefs.body !== 18) r.push(`--text-reading: ${prefs.body}px;`);
+    if (prefs.lineHeight !== 1.65) r.push(`--leading-relaxed: ${prefs.lineHeight};`);
+    if (prefs.measure !== 58) r.push(`--content-width: ${prefs.measure}ch;`);
+    if (prefs.font !== "newsreader") r.push(`--font-reading: ${PILE[prefs.font] ?? PILE.newsreader};`);
+    return r.length ? `:root { ${r.join(" ")} }` : "";
+  }
+  function documento(cap) {
+    const nuovo = { struttura: blocco('style[data-posto="struttura"]'), pelle: blocco('style[data-posto="pelle"]'), telefono: blocco('style[data-posto="telefono"]'), serie: blocco('style[data-posto="serie"]') };
+    let head = '<meta charset="utf-8">';
+    const messi = { struttura: false, pelle: false, telefono: false };
+    for (const [label, media, i] of cap.c) {
+      head += stile(conFont(testo(i)), label).replace("<style", media ? `<style media="${media}"` : "<style");
+      if (label === "src/theme/scrittoio/structure.css") (head += stile(nuovo.struttura, "nuovo:struttura")), (messi.struttura = true);
+      if (label === "fub:pelle") (head += stile(nuovo.pelle, "nuovo:pelle")), (messi.pelle = true);
+      if (label === "src/shells/scrittoio/mobile/mobile.css") (head += stile(nuovo.telefono, "nuovo:telefono")), (messi.telefono = true);
+    }
+    if (!messi.struttura) head += stile(nuovo.struttura, "nuovo:struttura");
+    if (!messi.pelle) head += stile(nuovo.pelle, "nuovo:pelle");
+    if (!messi.telefono) head += stile(nuovo.telefono, "nuovo:telefono");
+    head += stile(nuovo.serie, "nuovo:serie");
+    head += stile(cssPrefs(), "solo-simulatore:aspetto");
+    head += stile(window.SIM_INTERAZIONI?.css ?? "", "solo-simulatore");
+    const attrs = cap.a.filter(([k]) => k !== "data-motion");
+    if (scelto.moto === "calmo") attrs.push(["data-motion", "calm"]);
+    if (scelto.moto === "ridotto") attrs.push(["data-motion", "reduced"]);
+    return `<!doctype html><html${attr(attrs)}><head>${head}<title>${cap.t.replace(/</g, "&lt;")}</title></head><body${attr(cap.ba)}>${testo(cap.b)}</body></html>`;
+  }
+  const MISURE = ["display", "position", "top", "right", "bottom", "left", "width", "height", "min-height", "margin", "border-radius", "box-shadow", "background-color", "z-index", "pointer-events"];
+  function ripristina(doc, dentro = doc) {
+    for (const el of dentro.querySelectorAll("[data-proto-style]")) el.setAttribute("style", el.getAttribute("data-proto-style"));
+    if (dentro.nodeType === 1 && dentro.hasAttribute("data-proto-style")) dentro.setAttribute("style", dentro.getAttribute("data-proto-style"));
+    if (dentro === doc) {
+      const r = doc.documentElement;
+      if (r.hasAttribute("data-proto-style")) r.setAttribute("style", r.getAttribute("data-proto-style"));
+    }
+    const tele = [...dentro.querySelectorAll("canvas[data-proto-src]")].map((c) => {
+      const cs = doc.defaultView.getComputedStyle(c);
+      const img = doc.createElement("img");
+      for (const a of c.attributes) if (!["data-proto-src", "width", "height", "style"].includes(a.name)) img.setAttribute(a.name, a.value);
+      if (!img.hasAttribute("aria-label")) img.alt = "";
+      img.setAttribute("style", MISURE.map((k) => `${k}: ${cs.getPropertyValue(k)}`).join("; "));
+      img.src = c.getAttribute("data-proto-src");
+      c.replaceWith(img);
+      return img.decode().catch(() => {});
+    });
+    scorri(dentro);
+    return Promise.all(tele);
+  }
+  function segni(doc) {
+    for (const ind of doc.querySelectorAll(".kit-tab-indicator:not([hidden])")) {
+      const fila = ind.parentElement;
+      const scelta = fila.querySelector(':scope > .kit-tab[aria-selected="true"]');
+      if (!scelta) continue;
+      if (fila.getAttribute("aria-orientation") === "vertical") {
+        ind.style.top = `${scelta.offsetTop}px`;
+        ind.style.height = `${scelta.offsetHeight}px`;
+      } else {
+        ind.style.left = `${scelta.offsetLeft}px`;
+        ind.style.width = `${scelta.offsetWidth}px`;
+      }
+    }
+  }
+  function scorri(dentro) {
+    for (const el of dentro.querySelectorAll("[data-proto-scroll]")) {
+      const [x, y] = el.getAttribute("data-proto-scroll").split(",").map(Number);
+      el.scrollLeft = x;
+      el.scrollTop = y;
+    }
+  }
+  const visibile = (el) => !el.disabled && (el.checkVisibility ? el.checkVisibility() : el.getClientRects().length > 0);
+  function metti_fuoco(doc) {
+    if (!scelto.fuoco) return;
+    const s = statoDi(scelto.stato);
+    const el = [...doc.querySelectorAll(s.fuoco)].find(visibile) ?? doc.querySelector("[data-proto-focus]");
+    el?.focus({ preventScroll: true, focusVisible: true });
+  }
+  let scalaOra = 1;
+  function scala() {
+    const cap = dati.caps[capId()];
+    const main = box.parentElement;
+    const cs = getComputedStyle(main);
+    const avail = main.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    scalaOra = Math.min(1, avail / cap.v.w);
+    frame.width = String(cap.v.w);
+    frame.height = String(cap.v.h);
+    $("sim-scala").textContent = `#sim-schermo { transform: scale(${scalaOra}); } #sim-box { width: ${Math.round(cap.v.w * scalaOra)}px; height: ${Math.round(cap.v.h * scalaOra)}px; }`;
+  }
+  // I documenti delle catture, per prenderne i pezzi.
+  const parsati = new Map();
+  function catturaDoc(base, luce = scelto.luce) {
+    const key = `${base}-${luce}`;
+    if (!parsati.has(key)) {
+      const cap = dati.caps[key];
+      if (!cap) return null;
+      parsati.set(key, new DOMParser().parseFromString(`<!doctype html><html><body>${testo(cap.b)}</body></html>`, "text/html"));
+    }
+    return parsati.get(key);
+  }
+  function pezzo(doc, base, sel) {
+    const src = catturaDoc(base);
+    const el = src?.querySelector(sel);
+    if (!el) return null;
+    const cap = dati.caps[`${base}-${scelto.luce}`];
+    const hanno = new Set([...doc.querySelectorAll("style[data-proto]")].map((s) => s.getAttribute("data-proto")));
+    const prima = doc.querySelector('style[data-proto="nuovo:serie"]');
+    for (const [label, media, i] of cap.c) {
+      if (!label || hanno.has(label)) continue;
+      const s = doc.createElement("style");
+      s.setAttribute("data-proto", label);
+      if (media) s.media = media;
+      s.textContent = conFont(testo(i));
+      prima.before(s);
+    }
+    const clone = doc.importNode(el, true);
+    ripristina(doc, clone);
+    return clone;
+  }
+  let msgTimer = 0;
+  function avviso(t) {
+    $("sim-msg").textContent = t;
+    clearTimeout(msgTimer);
+    msgTimer = setTimeout(() => ($("sim-msg").textContent = ""), 6000);
+  }
+  function aggiornaPezzi(doc) {
+    const ul = $("sim-pezzi");
+    ul.replaceChildren();
+    for (const p of PEZZI) {
+      const el = [...doc.querySelectorAll(p.sel)].find(visibile);
+      if (!el) continue;
+      const li = document.createElement("li");
+      const nome = document.createElement("span");
+      nome.innerHTML = `<b></b> <span class="sim-come" data-come="${p.come}">${p.come}</span> <span class="sim-task"></span>`;
+      nome.querySelector("b").textContent = p.nome;
+      nome.querySelector(".sim-task").textContent = p.task;
+      const azioni = document.createElement("span");
+      const indica = document.createElement("button");
+      indica.type = "button";
+      indica.textContent = "Indica";
+      indica.addEventListener("click", () => segna(el));
+      const mostraDom = document.createElement("button");
+      mostraDom.type = "button";
+      mostraDom.textContent = "DOM";
+      mostraDom.setAttribute("aria-expanded", "false");
+      azioni.append(indica, " ", mostraDom);
+      const dest = document.createElement("span");
+      dest.className = "sim-dest";
+      dest.textContent = `${p.dest} · ${p.sel}`;
+      const pre = document.createElement("pre");
+      pre.hidden = true;
+      mostraDom.addEventListener("click", () => {
+        pre.hidden = !pre.hidden;
+        mostraDom.setAttribute("aria-expanded", String(!pre.hidden));
+        if (!pre.hidden) pre.textContent = pulito(el);
+      });
+      li.append(nome, azioni, dest, pre);
+      ul.append(li);
+    }
+  }
+  // Il DOM da copiare: senza gli attributi del banco e senza le figure in linea.
+  function pulito(el) {
+    const c = el.cloneNode(true);
+    for (const n of [c, ...c.querySelectorAll("*")]) {
+      for (const a of [...n.attributes]) if (a.name.startsWith("data-proto")) n.removeAttribute(a.name);
+    }
+    return c.outerHTML.replace(/<svg[\s\S]*?<\/svg>/g, "<svg>…</svg>").replace(/></g, ">\n<");
+  }
+  function segna(el) {
+    const r = el.getBoundingClientRect();
+    const s = $("sim-segno");
+    s.style.left = `${r.left * scalaOra - 3}px`;
+    s.style.top = `${r.top * scalaOra - 3}px`;
+    s.style.width = `${r.width * scalaOra + 6}px`;
+    s.style.height = `${r.height * scalaOra + 6}px`;
+    s.hidden = false;
+    box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    setTimeout(() => (s.hidden = true), 2200);
+  }
+  const api = {
+    get scelto() { return scelto; },
+    prefs,
+    dati: () => dati,
+    statoDi,
+    capBase,
+    vai(id, { storia: tieni = true } = {}) {
+      if (!statoDi(id)) return;
+      if (tieni && id !== scelto.stato) storia.push(scelto.stato);
+      scelto.stato = id;
+      $("sim-stato").value = id;
+      mostra();
+    },
+    indietro() { api.vai(storia.pop() ?? "nota-riposo", { storia: false }); },
+    luce(l) { scelto.luce = l; prefs.theme = l; $(l === "dark" ? "luce-notte" : "luce-giorno").checked = true; mostra(); },
+    moto(m) { scelto.moto = m; $(`moto-${m}`).checked = true; mostra(); },
+    ridisegna: () => mostra(),
+    pezzo,
+    catturaDoc,
+    avviso,
+  };
+  // Gli stati il cui telefono è proprio quello (non solo il più vicino).
+  const TEL_PROPRI = new Set(["nota-riposo", "documento", "foglio", "palette-file", "vuoto", "avvio-attesa"]);
+  function mostra() {
+    if (!dati) return;
+    const s = statoDi(scelto.stato);
+    const tel = s.g === "Telefono";
+    $("larghezza-piena").disabled = tel;
+    $("larghezza-700").disabled = tel || !s.w700;
+    $("larghezza-tel").disabled = !tel && !s.tel;
+    if (tel) $("larghezza-tel").checked = true;
+    else if ((scelto.larghezza === "700" && !s.w700) || (scelto.larghezza === "tel" && !s.tel)) $("larghezza-piena").checked = true;
+    if (!tel) scelto.larghezza = document.querySelector('input[name="larghezza"]:checked').value;
+    document.documentElement.setAttribute("data-theme", scelto.luce);
+    const cap = dati.caps[capId()];
+    delete box.dataset.pronto;
+    $("sim-segno").hidden = true;
+    scala();
+    frame.onload = () => {
+      const doc = frame.contentDocument;
+      if (!doc) return;
+      Promise.all([ripristina(doc), doc.fonts.ready]).then(() => {
+        segni(doc);
+        scorri(doc);
+        window.SIM_INTERAZIONI?.aggancia(doc, api);
+        requestAnimationFrame(() => {
+          metti_fuoco(doc);
+          aggiornaPezzi(doc);
+          box.dataset.pronto = capId();
+        });
+      });
+    };
+    frame.srcdoc = documento(cap);
+    $("sim-nome").textContent = s.nome;
+    $("sim-dice").textContent = s.dice;
+    // Al telefono molti stati non hanno una foto loro: si vede il più vicino.
+    const vicino = !tel && scelto.larghezza === "tel" && !TEL_PROPRI.has(s.id) ? statoDi(s.tel) : null;
+    $("sim-vicino").hidden = !vicino;
+    if (vicino) $("sim-vicino").textContent = `Al telefono questo stato non ha una foto sua: si vede «${vicino.nome}», il più vicino. Il telefono di Scrittoio 2 è provvisorio (le scelte A) e si rifà in un piano futuro: vedi le domande.`;
+    $("sim-task").textContent = s.task.join(", ");
+    const q = new URLSearchParams({ stato: scelto.stato, luce: scelto.luce, larghezza: scelto.larghezza, moto: scelto.moto });
+    try { history.replaceState(null, "", `#${q}`); } catch {}
+  }
+  $("sim-stato").addEventListener("change", (e) => api.vai(e.target.value));
+  for (const r of document.querySelectorAll('input[name="luce"]')) r.addEventListener("change", (e) => api.luce(e.target.value));
+  for (const r of document.querySelectorAll('input[name="larghezza"]')) r.addEventListener("change", (e) => ((scelto.larghezza = e.target.value), mostra()));
+  for (const r of document.querySelectorAll('input[name="moto"]')) r.addEventListener("change", (e) => api.moto(e.target.value));
+  $("sim-fuoco").addEventListener("click", (e) => {
+    scelto.fuoco = !scelto.fuoco;
+    e.currentTarget.setAttribute("aria-pressed", String(scelto.fuoco));
+    const doc = frame.contentDocument;
+    if (doc && scelto.fuoco) metti_fuoco(doc);
+    else if (doc) doc.activeElement?.blur?.();
+  });
+  addEventListener("resize", () => dati && scala());
+  // Lo stato si legge dall'indirizzo (#stato=…&luce=…&larghezza=…&moto=…),
+  // anche quando cambia: la pagina principale ci porta con un link.
+  function leggi() {
+    const q = new URLSearchParams(location.hash.slice(1) || location.search);
+    if (q.get("stato") && statoDi(q.get("stato"))) scelto.stato = q.get("stato");
+    scelto.luce = q.get("luce") === "dark" ? "dark" : q.has("luce") ? "light" : scelto.luce;
+    if (["piena", "700", "tel"].includes(q.get("larghezza"))) scelto.larghezza = q.get("larghezza");
+    if (["pieno", "calmo", "ridotto"].includes(q.get("moto"))) scelto.moto = q.get("moto");
+    $("sim-stato").value = scelto.stato;
+    $(scelto.luce === "dark" ? "luce-notte" : "luce-giorno").checked = true;
+    $(`larghezza-${scelto.larghezza}`).checked = true;
+    $(`moto-${scelto.moto}`).checked = true;
+  }
+  leggi();
+  addEventListener("hashchange", () => (leggi(), mostra()));
+  carica().then(mostra);
+})();
+</script>
+</body>
+</html>

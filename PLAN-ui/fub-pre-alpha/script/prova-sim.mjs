@@ -1,0 +1,112 @@
+// Prova il simulatore: node prova-sim.mjs <out-dir> <foto-dir>
+import { chromium } from "/home/fubeo/Progetti/Fub/apps/client/node_modules/playwright/index.mjs";
+const [dir, fotoDir] = process.argv.slice(2);
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
+const errori = [];
+p.on("pageerror", (e) => errori.push("pageerror " + e.message));
+p.on("console", (m) => m.type() === "error" && errori.push("console " + m.text()));
+await p.route(/^https?:/, (r) => r.abort());
+await p.goto(`file://${dir}/simulatore.html`);
+const pronto = async (id) => { await p.waitForFunction((id) => document.getElementById("sim-box").dataset.pronto?.startsWith(id), id, { timeout: 15000 }); await p.waitForTimeout(250); };
+const fr = () => p.frameLocator("#sim-schermo");
+const box = p.locator("#sim-box");
+const foto = async (n) => { await box.screenshot({ path: `${fotoDir}/${n}.png` }); console.log("foto", n); };
+const msg = async () => (await p.textContent("#sim-msg")).trim();
+await pronto("nota-riposo-light");
+await foto("01-nota");
+// albero: apre Dati, poi Conti
+await fr().locator('li[data-path="Dati"] > *').first().click();
+await p.waitForTimeout(200);
+await foto("02-dati-aperta");
+await fr().locator('li[data-path="Dati/Conti.xlsx"]').first().click();
+await pronto("foglio-light");
+await foto("03-foglio");
+// linguetta Benvenuto
+await fr().locator('.tab[role="tab"]').first().click();
+await pronto("nota-riposo-light");
+// menu modalità
+await fr().locator("#status-mode").click();
+await p.waitForTimeout(300);
+await foto("04-menu-modi");
+await fr().locator('[role="menuitemradio"]', { hasText: "Sorgente" }).click();
+await pronto("nota-sorgente-light");
+await foto("05-sorgente");
+await fr().locator("#status-mode").click();
+await p.waitForTimeout(200);
+await fr().locator('[role="menuitemradio"]', { hasText: "Live" }).click();
+await pronto("nota-riposo-light");
+// scrivere e «/»
+const ultima = fr().locator(".pane.focus .cm-content .cm-line").last();
+await ultima.click();
+await p.keyboard.press("End");
+await p.keyboard.press("Enter");
+await p.keyboard.type("Ciao ");
+await p.keyboard.type("/");
+await p.waitForTimeout(400);
+await foto("06-slash");
+await p.keyboard.type("tito");
+await p.waitForTimeout(200);
+await foto("07-slash-filtro");
+await p.keyboard.press("ArrowDown");
+await p.keyboard.press("Enter");
+console.log("msg dopo slash:", await msg());
+// tasto destro sul testo
+await fr().locator(".pane.focus .cm-content .cm-line").nth(2).click({ button: "right" });
+await p.waitForTimeout(300);
+await foto("08-destro-testo");
+await p.keyboard.press("Escape");
+await fr().locator('li[data-path="Benvenuto.md"]').click({ button: "right" });
+await p.waitForTimeout(300);
+await foto("09-destro-albero");
+await p.keyboard.press("Escape");
+// avvio rapido
+await fr().locator(".pane.focus .cm-content").click();
+await p.keyboard.press("Control+o");
+await p.waitForTimeout(400);
+await foto("10-lanciatore");
+await p.keyboard.type("sint");
+await p.waitForTimeout(200);
+await foto("11-lanciatore-filtro");
+await p.keyboard.press("Enter");
+await pronto("schede-light");
+await foto("12-schede");
+// salvataggio, avvisi
+await fr().locator(".tab[role=tab]").first().click();
+await pronto("nota-riposo-light");
+await fr().locator(".pane.focus .sheet-save").click();
+await p.waitForTimeout(300);
+await foto("13-salvataggio");
+await p.keyboard.press("Escape");
+await fr().locator("#notify-button").click();
+await p.waitForTimeout(300);
+await foto("14-avvisi");
+await p.keyboard.press("Escape");
+// impostazioni
+await fr().locator("#open-settings").click();
+await pronto("aspetto-light");
+await foto("15-aspetto");
+await fr().locator('[id="setting-appearance.theme"] [data-choice="dark"]').click();
+await pronto("aspetto-dark");
+await foto("16-aspetto-scuro");
+const corpo = fr().locator('[id="setting-appearance.body"]');
+await corpo.fill("24");
+await p.waitForTimeout(200);
+await fr().locator('[data-setting-key="appearance.motion"] [data-choice="calm"]').click();
+await pronto("aspetto-dark");
+console.log("moto:", await p.evaluate(() => document.getElementById("sim-schermo").contentDocument.documentElement.dataset.motion));
+await fr().locator("#settings-tab-components").click();
+await pronto("componenti-dark");
+await foto("17-componenti");
+await fr().locator("#settings-close").click();
+await pronto("nota-riposo-dark");
+await foto("18-nota-scura-24px");
+// 700 e telefono
+await p.click("label[for=larghezza-700]");
+await pronto("nota-riposo-700-dark");
+await foto("19-nota-700");
+await p.click("label[for=larghezza-tel]");
+await pronto("tel-nota-dark");
+await foto("20-tel");
+console.log("errori:", errori.length ? errori.join("\n") : "nessuno");
+await b.close();

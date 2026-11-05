@@ -1,0 +1,539 @@
+[
+  {
+    "id": "nota",
+    "scena": "proto-nota",
+    "mods": [
+      "nota",
+      "menuModi",
+      "modo"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ],
+    "tab": 30
+  },
+  {
+    "id": "nota-700",
+    "scena": "proto-nota",
+    "mods": [
+      "nota",
+      "menuModi",
+      "modo"
+    ],
+    "dopo": 700,
+    "luci": [
+      "light",
+      "dark"
+    ],
+    "modsDopo": [
+      "modo"
+    ]
+  },
+  {
+    "id": "barra",
+    "scena": "proto-nota-barra",
+    "mods": [
+      "cornice",
+      "banda",
+      "kitBar",
+      "modo",
+      "via"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "barra-700",
+    "scena": "proto-nota-barra",
+    "mods": [
+      "cornice",
+      "banda",
+      "kitBar",
+      "modo",
+      "via"
+    ],
+    "dopo": 700,
+    "modsDopo": [
+      "kitBar",
+      "modo"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "documento",
+    "scena": "document-docx",
+    "modo": "page",
+    "mods": [
+      "cornice",
+      "banda",
+      "testataFile",
+      "kitRibbon",
+      "modo",
+      "via"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ],
+    "tab": 30
+  },
+  {
+    "id": "documento-700",
+    "scena": "document-docx",
+    "modo": "page",
+    "mods": [
+      "cornice",
+      "banda",
+      "testataFile",
+      "kitRibbon",
+      "modo",
+      "via"
+    ],
+    "dopo": 700,
+    "modsDopo": [
+      "kitRibbon",
+      "modo"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "foglio",
+    "scena": "proto-foglio",
+    "mods": [
+      "cornice",
+      "testataFile",
+      "kitRibbon",
+      "modo",
+      "via"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "foglio-700",
+    "scena": "proto-foglio",
+    "mods": [
+      "cornice",
+      "testataFile",
+      "kitRibbon",
+      "modo",
+      "via"
+    ],
+    "dopo": 700,
+    "modsDopo": [
+      "kitRibbon",
+      "modo"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "disegno",
+    "scena": "draw-open",
+    "modo": "drawing",
+    "mods": [
+      "cornice",
+      "banda",
+      "testataFile",
+      "kitBar",
+      "modo",
+      "via"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "disegno-700",
+    "scena": "draw-open",
+    "modo": "drawing",
+    "mods": [
+      "cornice",
+      "banda",
+      "testataFile",
+      "kitBar",
+      "modo",
+      "via"
+    ],
+    "dopo": 700,
+    "modsDopo": [
+      "kitBar",
+      "modo"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "craft",
+    "scena": "craft-domanda",
+    "mods": [
+      "cornice",
+      "testataFile",
+      "modo",
+      "via"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "craft-700",
+    "scena": "craft-domanda",
+    "mods": [
+      "cornice",
+      "testataFile",
+      "modo",
+      "via"
+    ],
+    "dopo": 700,
+    "luci": [
+      "light",
+      "dark"
+    ],
+    "modsDopo": [
+      "modo"
+    ]
+  },
+  {
+    "id": "pdf",
+    "scena": "pdf-domanda",
+    "mods": [
+      "cornice",
+      "testataFile",
+      "pdfBarra",
+      "kitBar",
+      "modo",
+      "via"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "pdf-700",
+    "scena": "pdf-domanda",
+    "mods": [
+      "cornice",
+      "testataFile",
+      "pdfBarra",
+      "kitBar",
+      "modo",
+      "via"
+    ],
+    "dopo": 700,
+    "modsDopo": [
+      "kitBar",
+      "modo"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "impostazioni",
+    "scena": "settings",
+    "mods": [
+      "cornice",
+      "banda",
+      "modo",
+      "via"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "impostazioni-700",
+    "scena": "settings",
+    "mods": [
+      "cornice",
+      "banda",
+      "modo",
+      "via"
+    ],
+    "dopo": 700,
+    "luci": [
+      "light",
+      "dark"
+    ],
+    "modsDopo": [
+      "modo"
+    ]
+  },
+  {
+    "id": "icone",
+    "scena": "proto-nota",
+    "mods": [
+      "nota",
+      "icone",
+      "modo"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "icone-emoji",
+    "scena": "proto-icone",
+    "mods": [
+      "nota",
+      "icone",
+      "modo"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "tel-nota",
+    "scena": "mobile-startup",
+    "mods": [
+      "testata",
+      "schede",
+      "senzaAvvisi",
+      "datiNota",
+      "modo"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "tel-ferma",
+    "scena": "mobile-startup",
+    "mods": [
+      "testata",
+      "schede",
+      "senzaAvvisi",
+      "datiNota",
+      "modo",
+      "sfoca"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "tel-sdraiato",
+    "scena": "mobile-startup",
+    "dopo": 844,
+    "dopoAltezza": 390,
+    "mods": [
+      "testata",
+      "schede",
+      "senzaAvvisi",
+      "datiNota",
+      "modo",
+      "sfoca"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "tel-tastiera",
+    "scena": "mobile-keyboard",
+    "mods": [
+      "testata",
+      "schede",
+      "senzaAvvisi",
+      "datiNota",
+      "modo"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "tel-doc",
+    "scena": "mobile-document",
+    "mods": [
+      "testata",
+      "schede",
+      "senzaAvvisi",
+      "testataFile",
+      "kitRibbon",
+      "modo"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "tel-foglio",
+    "scena": "mobile-grid-ribbon",
+    "mods": [
+      "testata",
+      "schede",
+      "senzaAvvisi",
+      "testataFile",
+      "kitRibbon",
+      "modo"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "vuoto",
+    "scena": "empty",
+    "mods": [
+      "pillola",
+      "modo",
+      "via"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "caricamento",
+    "scena": "grid-result-loading",
+    "mods": [
+      "cornice",
+      "testataFile",
+      "kitRibbon",
+      "modo",
+      "via"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "errore",
+    "scena": "grid-result-error",
+    "mods": [
+      "cornice",
+      "testataFile",
+      "kitRibbon",
+      "modo",
+      "via"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "molti",
+    "scena": "grid-result-many",
+    "mods": [
+      "cornice",
+      "testataFile",
+      "kitRibbon",
+      "modo",
+      "via"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ],
+    "dopo": 700,
+    "modsDopo": [
+      "modo"
+    ]
+  },
+  {
+    "id": "sola-lettura",
+    "scena": "document-readonly",
+    "modo": "page",
+    "mods": [
+      "cornice",
+      "banda",
+      "testataFile",
+      "kitRibbon",
+      "modo",
+      "via"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "zero",
+    "scena": "launcher-empty",
+    "mods": [
+      "cornice",
+      "banda",
+      "modo"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "ricerca",
+    "scena": "search",
+    "mods": [
+      "cornice",
+      "banda",
+      "datiNota",
+      "modo",
+      "via"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "grafo",
+    "scena": "graph",
+    "mods": [
+      "cornice",
+      "modo",
+      "via"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  },
+  {
+    "id": "componenti",
+    "scena": "settings-components",
+    "mods": [
+      "cornice",
+      "banda",
+      "modo",
+      "via"
+    ],
+    "luci": [
+      "light",
+      "dark"
+    ]
+  }
+]

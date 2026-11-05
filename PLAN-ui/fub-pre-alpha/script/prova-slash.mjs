@@ -1,0 +1,20 @@
+import { chromium } from "/home/fubeo/Progetti/Fub/apps/client/node_modules/playwright/index.mjs";
+const [dir] = process.argv.slice(2);
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
+p.on("pageerror", (e) => console.log("pageerror " + e.message));
+p.on("console", (m) => console.log("console " + m.text()));
+await p.goto(`file://${dir}/simulatore.html`);
+await p.waitForFunction(() => document.getElementById("sim-box").dataset.pronto);
+const fr = p.frameLocator("#sim-schermo");
+await fr.locator(".pane.focus .cm-content .cm-line").nth(3).click();
+await p.keyboard.press("End");
+await p.keyboard.type(" /");
+await p.waitForTimeout(300);
+console.log(await p.evaluate(() => {
+  const d = document.getElementById("sim-schermo").contentDocument;
+  const s = d.getSelection();
+  const el = d.querySelector(".slash-panel");
+  return { active: d.activeElement?.className, anchor: s.anchorNode?.nodeName, off: s.anchorOffset, text: s.anchorNode?.textContent?.slice(-10), panel: !!el, rect: el && JSON.stringify(el.getBoundingClientRect()), style: el?.getAttribute("style"), msg: document.getElementById("sim-msg").textContent };
+}));
+await b.close();

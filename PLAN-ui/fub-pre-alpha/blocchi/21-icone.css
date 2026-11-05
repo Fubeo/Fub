@@ -1,0 +1,44 @@
+/* → skin/drawers.css */
+/* ── Il selettore dell'icona: le figure accanto alle emoji ───────────────────
+   Due sezioni col loro titolo in tondo: le figure monocrome del set, che
+   prendono il colore del testo come le icone dell'albero, e le emoji, che
+   restano una scelta piena. Quella scelta ha il velo d'accento. */
+.icon-picker {
+  width: 248px;
+  border: 0;
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-3);
+}
+.icon-picker-title {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.icon-picker .icon-grid + .icon-picker-title {
+  margin-top: var(--space-2);
+}
+.icon-picker .icon-grid button {
+  color: var(--muted);
+}
+.icon-picker .icon-grid button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.icon-picker .icon-grid button:active {
+  background: var(--overlay-active);
+}
+.icon-picker .icon-grid button[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.icon-picker .icon-grid button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.icon-picker .icon-grid--figures button > svg {
+  width: 18px;
+  height: 18px;
+}
+.icon-picker .icon-none:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}

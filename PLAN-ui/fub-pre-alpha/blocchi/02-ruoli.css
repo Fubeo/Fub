@@ -1,0 +1,28 @@
+/* → theme/scrittoio/recipe.ts: tre ruoli facoltativi nuovi (`OPTIONAL_ROLES`),
+   con questi valori nei quattro fogli generati. Non è pelle: è la ricetta, e
+   la pelle li legge con un ripiego (`var(--shadow-sheet, var(--shadow-1))`),
+   così un tema `theme-2` che non li dichiara resta com'è oggi.
+   - `--shadow-sheet`, `--shadow-sheet-focus`: l'ombra del foglio a riposo e
+     col fuoco. Tre strati, dal contatto al lontano; i due larghi hanno lo
+     spread negativo, così l'ombra scende sotto il foglio e si vede ai fianchi
+     senza salire sopra la linguetta, che di suo non ha rilievo.
+     Di giorno l'inchiostro di `shadow()`, di notte il nero, più fondo perché
+     la scrivania è già quasi nera. Niente filo di luce: a meno del 10 % ha il
+     tono della carta e non si vede, dal 10 % in su è un bordo che corre fino
+     alla linguetta e lì si interrompe.
+   - `--bar-tray`: il vassoio delle barre (a schede, in una fila, la colonna),
+     a metà fra la carta e `--sheet-2` di giorno; di notte un passo sotto
+     `--sheet-2`. Contrasto alto: lo stesso valore di `--sheet-2`, come oggi. */
+:root {
+  --shadow-sheet: 0 1px 2px rgb(24 28 44 / 8%), 0 2px 8px -1px rgb(24 28 44 / 8%), 0 8px 16px -6px rgb(24 28 44 / 14%);
+  --shadow-sheet-focus: 0 1px 3px rgb(24 28 44 / 9%), 0 3px 10px -1px rgb(24 28 44 / 10%), 0 10px 20px -6px rgb(24 28 44 / 18%);
+  --bar-tray: #f8fafc;
+}
+:root[data-theme="dark"] {
+  --shadow-sheet: 0 1px 2px rgb(0 0 0 / 40%), 0 2px 8px -1px rgb(0 0 0 / 45%), 0 8px 16px -6px rgb(0 0 0 / 60%);
+  --shadow-sheet-focus: 0 1px 3px rgb(0 0 0 / 45%), 0 3px 10px -1px rgb(0 0 0 / 50%), 0 10px 20px -6px rgb(0 0 0 / 66%);
+  --bar-tray: #1a1f27;
+}
+:root[data-contrast="high"] {
+  --bar-tray: var(--sheet-2);
+}

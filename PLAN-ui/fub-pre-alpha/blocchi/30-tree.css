@@ -1,0 +1,70 @@
+/* → skin/tree.css */
+/* ── Il filtro: un pozzetto pieno con la lente ──────────────────────────── */
+.explorer-filter {
+  padding: var(--space-2) 0 var(--space-3);
+}
+/* Il campo del kit con la sua lente (`icon: "search"`), senza bordo: il
+   pozzetto lo fa il fondo. Al fuoco torna carta con l'anello del kit. */
+.explorer-filter .kit-field-box {
+  height: 32px;
+  border-color: transparent;
+  background: var(--bg-hover);
+}
+.explorer-filter .kit-field-box:has(> .kit-field-input:focus-visible) {
+  border-color: var(--focus-ring);
+  background: var(--sheet);
+}
+.explorer-filter .kit-field-input {
+  font-size: var(--text-md);
+}
+
+/* ── Le righe ────────────────────────────────────────────────────────────── */
+.tree-row {
+  font-size: var(--text-md);
+}
+/* La nota aperta: un foglietto sollevato dal cassetto. L'icona prende il blu,
+   il nome resta inchiostro e sale di peso. */
+[role="treeitem"][aria-selected="true"] > .tree-row {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+[role="treeitem"][aria-selected="true"] > .tree-row:hover {
+  background: var(--bg-elev);
+}
+/* Fra le appuntate la puntina tiene la colonna dell'icona: il punto blu non
+   serve più, la riga accesa è una, nell'albero. */
+.tree-row[aria-current="true"]::before {
+  content: none;
+}
+.row-icon.row-pin > svg {
+  width: 14px;
+  height: 14px;
+}
+/* Il conto di una cartella, a destra, in grafite. */
+.row-count {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Il gallone: una «›» sottile, non un triangolo pieno ──────────────────── */
+.chevron::before {
+  box-sizing: border-box;
+  width: 6px;
+  height: 6px;
+  margin-left: -2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  background: transparent;
+  clip-path: none;
+  transform: rotate(-45deg);
+}
+.chevron[aria-expanded="true"]::before {
+  margin-top: -3px;
+  margin-left: 0;
+  transform: rotate(45deg);
+}

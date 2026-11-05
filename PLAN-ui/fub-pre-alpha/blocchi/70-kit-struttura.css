@@ -1,0 +1,281 @@
+/* → theme/scrittoio/structure.css */
+/* ── La barra degli strumenti di serie: la forma ───────────────────────────
+   Ricavata a macchina dalle regole della barra dei fogli: `.grid-ribbon-*`
+   diventa `.kit-ribbon-*`, con lo stesso testo, lo stesso ordine e la stessa
+   specificità. Il kit mette `kit-ribbon` sulla radice e `kit-ribbon-<parte>`
+   accanto a `<prefisso>-<parte>` su ogni pezzo. Ai fogli restano la
+   tavolozza, la galleria, i campioni, «Comandi», la formula e le schede. */
+.kit-ribbon {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.kit-ribbon-head {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+/* Le sezioni stanno in un pozzetto che abbraccia i loro nomi; se non ci
+   stanno, il pozzetto scorre. L'evidenza della scelta corre dietro i nomi: la
+   fila è un piano a sé, e il segno ci sta sotto. */
+.kit-ribbon-tabs {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  isolation: isolate;
+  scrollbar-width: none;
+}
+.kit-ribbon-tabs > .kit-tab-indicator {
+  z-index: -1;
+}
+.kit-ribbon-tabs .kit-tab,
+.kit-ribbon-item,
+.kit-ribbon-group {
+  position: relative;
+}
+/* Il nome lungo di una sezione per la selezione finisce coi puntini: quello
+   intero resta nel nome accessibile e nel suggerimento. */
+.kit-ribbon-contextual .kit-tab-label {
+  max-width: 12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-ribbon-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-inline-start: auto;
+  padding: 0;
+}
+.kit-ribbon-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+.kit-ribbon-panel {
+  min-width: 0;
+}
+/* Il vassoio abbraccia i suoi foglietti: nessuna altezza fissa. */
+.kit-ribbon-toolbar {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+}
+/* Un foglietto: il nome in alto, sotto due file di comandi alte 28. */
+.kit-ribbon-group {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-width: 0;
+}
+.kit-ribbon-group-label {
+  display: block;
+  order: -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-ribbon-group-body,
+.kit-ribbon-stack {
+  display: grid;
+  grid-template-rows: repeat(2, 28px);
+  grid-auto-columns: max-content;
+  grid-auto-flow: column;
+  align-items: center;
+}
+/* Una pila prende le due file; se ne ha tre, la terza va in una colonna
+   accanto. */
+.kit-ribbon-group-body > .kit-ribbon-stack {
+  grid-row: 1 / -1;
+}
+.kit-ribbon-group[data-collapsed="true"] > .kit-ribbon-group-body {
+  display: none;
+}
+.kit-ribbon-row,
+.kit-ribbon-item,
+.kit-ribbon-field,
+.kit-ribbon-check,
+.kit-ribbon-chevron {
+  display: inline-flex;
+  align-items: center;
+}
+.kit-ribbon-row {
+  display: flex;
+}
+.kit-ribbon-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+/* Alti 28 come nella barra di formato; larghi 24 quando portano solo
+   l'icona, perché una fila di Home ne tiene dieci. */
+.kit-ribbon-small {
+  min-width: 24px;
+  height: 28px;
+}
+/* Il pulsante grande di una volta è un gettone su una riga: icona, nome e la
+   freccina, se apre qualcosa. Una taglia sola in tutta la barra. */
+.kit-ribbon-large {
+  justify-content: flex-start;
+  min-width: 28px;
+  height: 28px;
+}
+.kit-ribbon-small svg,
+.kit-ribbon-large svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.kit-ribbon-chevron svg {
+  width: 10px;
+  height: 10px;
+}
+.kit-ribbon-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+}
+/* Un pulsante diviso grande è un gettone diviso, come quelli piccoli. */
+.kit-ribbon-split-large {
+  flex-direction: row;
+}
+.kit-ribbon-arrow {
+  align-self: stretch;
+  min-width: 14px;
+}
+.kit-ribbon-color-bar {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 3px;
+  height: 3px;
+}
+/* Un foglietto chiuso: resta il suo nome e, sotto, un gettone alto quanto le
+   due file, col disegno del gruppo e la freccina che dice «si apre qui». */
+.kit-ribbon-group-toggle {
+  justify-content: center;
+  height: calc(28px * 2 + var(--space-1, 2px));
+}
+.kit-ribbon-group-toggle .kit-ribbon-label {
+  display: none;
+}
+.kit-ribbon-group-toggle .kit-ribbon-chevron {
+  transform: rotate(-90deg);
+}
+/* Quando lo spazio manca, prima i pulsanti piccoli perdono il nome; se non
+   basta, lo perdono anche i gettoni del foglietto aperto (quelli del suo
+   contenuto: il pulsante di un foglietto chiuso tiene il suo nome). */
+.kit-ribbon-panel[data-compact="true"] .kit-ribbon-small .kit-ribbon-label,
+.kit-ribbon-panel[data-dense="true"] .kit-ribbon-group-body .kit-ribbon-large .kit-ribbon-label {
+  display: none;
+}
+.kit-ribbon-keytip {
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  z-index: var(--z-menu);
+  transform: translateX(-50%);
+  pointer-events: none;
+  white-space: nowrap;
+}
+/* Nella testata la lettera scende fino al bordo della fila, sotto il nome:
+   il nome resta leggibile e la lettera non esce dalla fila, che scorre. */
+.kit-ribbon-head .kit-ribbon-keytip {
+  bottom: -6px;
+}
+/* Il foglietto chiuso non ha il nome sopra e un pulsante vuoto sotto: il
+   pulsante è il foglietto, e il nome ci sta dentro. Come sta dentro lo dicono
+   le regole della pila e della tessera, qui sotto. */
+.kit-ribbon-group[data-collapsed="true"] > .kit-ribbon-group-label {
+  display: none;
+}
+.kit-ribbon-group-toggle {
+  flex: 1 1 auto;
+  height: auto;
+}
+.kit-ribbon-group-toggle .kit-ribbon-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Al telefono nemmeno coi foglietti tutti chiusi la sezione ci sta sempre:
+   allora il vassoio scorre sotto il dito, senza barra di scorrimento, e il
+   foglietto che si apre si porta in vista. */
+.kit-ribbon-toolbar {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+/* I foglietti chiusi: due per colonna «a pila», ognuno su una riga; quello
+   che resta solo nella sua colonna è alto quanto un foglietto aperto, «a
+   tessera». */
+/* Il vassoio è una griglia di due file che si riempie per colonne: un
+   foglietto aperto le prende tutte e due, uno chiuso una sola, e due chiusi
+   di fila stanno uno sopra l'altro, larghi uguali. L'ordine resta quello della
+   sezione: niente `dense`. */
+.kit-ribbon-toolbar {
+  display: grid;
+  grid-auto-columns: max-content;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, auto);
+}
+.kit-ribbon-group {
+  grid-row: span 2;
+}
+.kit-ribbon-group[data-collapsed="true"] {
+  grid-row: span 1;
+}
+/* L'ultimo chiuso di una fila dispari resta solo nella sua colonna (il kit
+   lo segna con `data-alone`): prende tutte e due le file. */
+.kit-ribbon-group[data-collapsed="true"][data-alone="true"] {
+  grid-row: span 2;
+}
+/* Due a pila: il disegno, il nome accanto e la freccina. */
+.kit-ribbon-group-toggle {
+  justify-content: flex-start;
+}
+/* Un nome lunghissimo («Visualizzazioni cartella di lavoro») finisce coi
+   puntini: quello intero è il nome del pulsante e il suo suggerimento. */
+.kit-ribbon-group-toggle .kit-ribbon-label {
+  max-width: 10em;
+}
+.kit-ribbon-group-toggle .kit-ribbon-chevron {
+  margin-inline-start: auto;
+}
+/* Uno solo: il disegno in un tondo e il nome sotto, in mezzo al foglietto;
+   il nome va a capo una volta, in due righe pari, e uno più lungo finisce
+   coi puntini. */
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle {
+  flex-direction: column;
+  justify-content: center;
+  white-space: normal;
+}
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle > svg {
+  box-sizing: content-box;
+  padding: 6px;
+}
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle .kit-ribbon-label {
+  display: -webkit-box;
+  max-width: 7em;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-align: center;
+  text-wrap: balance;
+}
+.kit-ribbon-group[data-alone="true"] > .kit-ribbon-group-toggle .kit-ribbon-chevron {
+  display: none;
+}
+/* La fila dell'accesso rapido, prima delle sezioni. */
+.kit-ribbon-quick {
+  display: flex;
+  flex: none;
+  align-items: center;
+}

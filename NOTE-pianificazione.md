@@ -20,6 +20,10 @@ Ramo `piano/fub-pre-alpha`, worktree `~/.cache/fub-prealpha/piano`, base
   - La foto PNG di una cattura NON è un riferimento: i mod con `inserisci` (riga dei dati, cassetto, testata…) entrano solo nel JSON, quindi la PNG è «prima». Il riferimento giusto è il prototipo approvato (fatto dallo stesso JSON).
   - Gli stati nuovi (non in S2) guardati a occhio in fogli di contatto: piena, 700, telefono, due luci (prove/zona-*.png, z700-*.png, ztel.png).
   - Telefono: S2 ha disegnato 11 stati; per gli altri il simulatore mostra il telefono più vicino e lo dice sotto lo schermo (`#sim-vicino`).
+- 2026-11-05 tarda sera · **PLAN.md scritto** (testata, definizione, dentro e fuori, ordine A–D, backend, «Dal prototipo», D1–D12, «Come si implementa», differenze 1–13, PA T1–T24). DECISIONS: 8 righe in cima al registro. Simulatore copiato in `PLAN-ui/fub-pre-alpha/` (con `blocchi/`, `script/`, README; le catture, 243 MB, restano in `~/.cache/fub-prealpha/sim/catture/`).
+  - Prossimo: pagina hub in `$A/fub-pre-alpha/` (5 schede, parti 2–5 rese da PLAN.md con `marked`), commit, push, artifact, URL in PLAN.md e qui.
+  - Dopo la pubblicazione: iterare con l'utente sulle domande D1–D12. Se D3 o D4 = A: disegnare N6 T26–T28 e comporre le pagine dei piani nella cornice.
+  - Non verificati (resoconto finale): i due punti sciolti di D10; macOS a mano (D11); #97 e #216 corretti ma aperti (le chiude l'utente).
 
 ## Regole che valgono per me (dal prompt)
 
@@ -77,15 +81,13 @@ Scaricati tutti in $A (cartelle per id, mappa in $S/mappa.txt), testo in $T/<nom
 
 ## Differenze fra piani e codice
 
-1. K3-IPC T8 (#296) è nel ramo `piano/k3-motori`, non in main (il prompt lo dava in main).
-2. Griglia (`piano/griglia-celle`): il prototipo `celle-griglia.html` non ha un'approvazione scritta nel piano → domanda.
-3. N6: i prototipi di T26–T28 (impianto, modifica, estratti) non ci sono; approvata solo `lavagna-schede` (T25, 2026-11-04).
-4. Il finto del banco (`bench/fake-ipc.ts`) non ha `appearance.motion`, che l'host ha (`crates/fub-host/src/settings.rs`, «Animazioni»): la foto approvata delle impostazioni di S2 non mostra la riga. Nella mia copia del client l'ho aggiunta (nuove5/aspetto). Task PA: il finto la deve avere.
-5. S2 T11 porta corpo 18 e misura 58ch; il finto del banco dice 17 e 68: la foto approvata di S2 mostra 17.
-6. Scrittoio 2 avanza: T1, T2 («il menu delle modalità, in un posto solo», e7630eef), T16 fatti su `piano/scrittoio-2` (fe4d84c4).
-7. La cattura `foglio-comandi` di nuove3 non aveva il menu: il mod `kitRibbon` rimisura la finestra e il menu si chiude. Rifatta (nuove6).
-8. `docs/project/status.md` è fermo al 2026-10-31; in main mancano le ADR 0230 e 0236 (sui rami).
-9. In Notte la griglia del foglio lascia bianco a destra dell'ultima colonna (anche nella foto approvata di S2, `foglio-dark`); in main la griglia arriva al bordo. Da guardare in S2 T20/griglia: non è del simulatore.
+La lista vera, 1–13, sta in `PLAN.md` («Differenze fra piani e codice»). In
+più rispetto alla prima stesura: N6 senza T79–T85 e T88 (dipendenze); #216 e
+#97 corretti in main ma aperti; il blocco di scrittura in sola lettura è in
+`FubSession::invoke_command` (`write_turn()` per ogni comando); i sei errori
+di tipo riprodotti su `anteprima/tutto` (tre in N4, tre in K5); l'ADR 0230
+non esiste da nessuna parte, la 0236 è su `piano/k3-motori`; il vassoio
+della fila e della colonna è già sul ramo di S2 (T16, 68f48788).
 
 ## Domande per l'utente (parte 4 dell'artifact)
 

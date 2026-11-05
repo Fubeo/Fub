@@ -1,0 +1,43 @@
+/* → theme/scrittoio/skin/menus.css */
+/* ── Le etichette dei menu e del pannello «/»: in tondo ──────────────────── */
+.context-menu .menu-head,
+.slash-panel .slash-section,
+.slash-panel .slash-preview-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* ── Le voci dei menu, come nel mockup ─────────────────────────────────────
+   La spunta a destra in blu anche per una scelta fra alternative, le
+   scorciatoie in tasti, le icone in grafite. I nomi tornano sulla stessa
+   verticale senza la colonna a sinistra. Scelta dell'utente (B), 2026-11-04. */
+.context-menu .menu-check {
+  order: 3;
+  margin-inline-start: var(--space-4);
+}
+.context-menu .menu-hint {
+  order: 2;
+}
+.context-menu button[role="menuitemradio"][aria-checked="true"] .menu-check::before {
+  width: 10px;
+  height: 10px;
+  border-radius: 0;
+  clip-path: polygon(8% 54%, 20% 42%, 40% 62%, 80% 20%, 92% 32%, 40% 86%);
+}
+.context-menu:has(.menu-check) button:not(:has(.menu-check)) {
+  padding-left: var(--space-4);
+}
+.context-menu button > svg {
+  color: var(--muted);
+}
+.context-menu .menu-hint {
+  min-width: 20px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--overlay-hover);
+  box-shadow: inset 0 -1px 0 var(--border);
+  font-family: var(--font-ui);
+  line-height: 18px;
+  text-align: center;
+}

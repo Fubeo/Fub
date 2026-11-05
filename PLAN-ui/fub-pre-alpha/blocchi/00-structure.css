@@ -1,0 +1,97 @@
+/* → theme/scrittoio/structure.css */
+/* L'ispettore si stringe: 264 come il cassetto, così il foglio sta al centro. */
+:root {
+  --inspector-w: 264px;
+}
+/* La modalità si sceglie dalla banda: la testata non mostra più né i
+   segmenti né il bottone che li riassume. Il bottone è un figlio del foglio,
+   dopo la barra di formato, e si vede soltanto sul telefono, dove la banda
+   non c'è o si è ritirata (`mobile.css`). */
+.pane-toolbar > .segmented,
+.pane > .pane-mode-current {
+  display: none;
+}
+/* Le schede dell'ispettore salgono sulla riga delle linguette: in cima, prima
+   del titolo. */
+.inspector-tabs {
+  order: -1;
+}
+/* Gli stili che `ui/node.ts` scriveva in linea sulle righe di un elenco e di
+   un albero passano qui, uguali: la pelle li può ora cambiare. */
+.ui-list-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: max(var(--space-9, 32px), 28px);
+}
+.ui-tree-label {
+  display: flex;
+  align-items: center;
+  min-height: max(var(--space-9, 32px), 28px);
+}
+.ui-tree-label > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* La banda stretta. Con «Si scrive» e la modalità a destra, sotto gli 800 px
+   la lingua del documento si fa da parte (la dice già il correttore), e ciò
+   che sta a sinistra si taglia invece di passare sotto la parte destra. */
+#status-band > #status-start,
+#status-band > #views-status {
+  overflow: hidden;
+}
+@media (max-width: 800px) {
+  #status-band [data-surface-item="language"] {
+    display: none;
+  }
+}
+/* ── L'ombra del foglio esce dalla scrivania ─────────────────────────────────
+   `#panes` taglia ciò che esce (`overflow: hidden`): l'ombra della carta finiva
+   contro il suo bordo, a sinistra e a destra a filo del foglio e sotto dopo
+   8 px, ed era un rettangolo. La scrivania si allarga di `--sheet-reach` verso
+   i vicini che stanno dentro la finestra (il cassetto o il binario a sinistra,
+   l'ispettore agganciato a destra, la banda sotto) e restituisce la stessa
+   misura in padding: i fogli restano dove sono, la scatola esterna non cambia
+   (il flex non va a capo in modo diverso) e l'ombra ha spazio per sfumare.
+   Verso il bordo della finestra non si allarga mai: l'eccedenza positiva
+   renderebbe `#app` scorrevole da programma. La fascia in più non prende i
+   clic (`pointer-events`): il cassetto, l'ispettore e la banda sotto l'ombra
+   restano vivi. */
+#panes {
+  --sheet-reach: 20px;
+  --reach-l: var(--sheet-reach);
+  --reach-r: 0px;
+  --reach-b: var(--sheet-reach);
+  height: calc(100% + var(--reach-b));
+  margin: 0 calc(-1 * var(--reach-r)) calc(-1 * var(--reach-b)) calc(-1 * var(--reach-l));
+  padding: 0 calc(var(--sheet-gap) + var(--reach-r)) calc(var(--sheet-gap) + var(--reach-b)) var(--reach-l);
+  pointer-events: none;
+}
+#panes > * {
+  pointer-events: auto;
+}
+#layout:not(:has(> #sidebar:not([hidden]))) > #panes,
+#layout.layout-compact > #panes {
+  padding-left: calc(var(--sheet-gap) + var(--reach-l));
+}
+#layout:has(> #right-pane:not([hidden])):not(.layout-compact):not(.layout-inspector-overlay) > #panes {
+  --reach-r: var(--sheet-reach);
+  padding-right: var(--reach-r);
+}
+/* Il benvenuto non ha fogli, la modalità concentrata non ha vicini: niente
+   fascia. Senza la banda di stato, sotto c'è il bordo della finestra. */
+#app[data-welcome] #panes,
+#app[data-focus-mode] #panes {
+  --sheet-reach: 0px;
+}
+#app[data-status-off] #panes {
+  --reach-b: 0px;
+}
+/* Il foglio sta sopra i vicini, perché la sua ombra cada su di loro e non
+   sotto: l'ispettore viene dopo nel DOM e la coprirebbe. Divisori (2),
+   cassetti e menu (40 e oltre) restano sopra. */
+.pane {
+  z-index: var(--z-sheet);
+}

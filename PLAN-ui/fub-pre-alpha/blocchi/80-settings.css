@@ -1,0 +1,25 @@
+/* → theme/scrittoio/skin/settings.css */
+/* ── Le impostazioni nella lingua dello Scrittoio ───────────────────────────
+   Il posto dove si è, nell'indice, è un foglietto sollevato come la nota
+   aperta nel cassetto: carta, un'ombra breve, l'icona in blu. Una scelta fra
+   alternative (i segmenti) resta il velo d'accento, come le sezioni della
+   barra. */
+.settings-tab[aria-selected="true"] {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.settings-tab[aria-selected="true"]:hover {
+  background: var(--bg-elev);
+}
+/* Le etichette si scrivono come si scrive. */
+.settings-toc-title,
+.components-group-title,
+.components-preview-title,
+.components-preview-head {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
