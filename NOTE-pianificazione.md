@@ -14,6 +14,12 @@ Ramo `piano/fub-pre-alpha`, worktree `~/.cache/fub-prealpha/piano`, base
   - Catture: s2/ (le 35 di S2, approvate), nuove/ (40), nuove2/ (modi sulla stessa nota + conflitto), nuove3/ (pezzi menu senza cornice + foglio-comandi), nuove4/ (varianti 700), avvio/.
   - Simulatore = pagina `simulatore.html` + `sim-dati.js` (pacco gzip+base64) + `solo-simulatore.js` (i passaggi fra stati, i pezzi sovrapposti: menu modalità, «/», tasto destro, avvio rapido, salvataggio, avvisi). Iframe stesso origine senza script.
   - Pagine dei piani scritte a mano (lavagna-schede, lavagna-penne, celle-griglia, menu-comandi-fogli, disegno-motore, ricette) entrano tali e quali come «Dai piani».
+  - Precedenza delle catture: nuove6 > nuove5 > nuove2 > nuove4 > nuove3 > nuove > s2 > avvio. nuove5 = aspetto con la riga «Animazioni»; nuove6 = foglio-comandi(-cerca) col menu aperto DOPO la barra del kit (mod `apriComandi`), toast con `corniceConAvvisi`.
+  - Si ricostruisce con `node script/costruisci-sim.mjs $PWD/out`; si prova con `script/prova-sim.mjs` (giro dei gesti, «errori: nessuno») e `script/foto-sim.mjs` (ogni stato × luce × larghezza).
+- 2026-11-05 notte · **il simulatore è uguale al pixel al prototipo approvato di S2**: i 26 stati di S2 (due luci, 700, telefono) fotografati da `PLAN-ui/scrittoio-2.html` (foto-proto.mjs, FOTO_SOLO=1) e dal simulatore danno 0 pixel diversi; unica eccezione `impostazioni` (265 px): il simulatore scrive 18 nel corpo del testo (il valore di serie di S2 T11), il prototipo mostra il 17 del finto del banco.
+  - La foto PNG di una cattura NON è un riferimento: i mod con `inserisci` (riga dei dati, cassetto, testata…) entrano solo nel JSON, quindi la PNG è «prima». Il riferimento giusto è il prototipo approvato (fatto dallo stesso JSON).
+  - Gli stati nuovi (non in S2) guardati a occhio in fogli di contatto: piena, 700, telefono, due luci (prove/zona-*.png, z700-*.png, ztel.png).
+  - Telefono: S2 ha disegnato 11 stati; per gli altri il simulatore mostra il telefono più vicino e lo dice sotto lo schermo (`#sim-vicino`).
 
 ## Regole che valgono per me (dal prompt)
 
@@ -71,11 +77,25 @@ Scaricati tutti in $A (cartelle per id, mappa in $S/mappa.txt), testo in $T/<nom
 
 ## Differenze fra piani e codice
 
-(da riempire)
+1. K3-IPC T8 (#296) è nel ramo `piano/k3-motori`, non in main (il prompt lo dava in main).
+2. Griglia (`piano/griglia-celle`): il prototipo `celle-griglia.html` non ha un'approvazione scritta nel piano → domanda.
+3. N6: i prototipi di T26–T28 (impianto, modifica, estratti) non ci sono; approvata solo `lavagna-schede` (T25, 2026-11-04).
+4. Il finto del banco (`bench/fake-ipc.ts`) non ha `appearance.motion`, che l'host ha (`crates/fub-host/src/settings.rs`, «Animazioni»): la foto approvata delle impostazioni di S2 non mostra la riga. Nella mia copia del client l'ho aggiunta (nuove5/aspetto). Task PA: il finto la deve avere.
+5. S2 T11 porta corpo 18 e misura 58ch; il finto del banco dice 17 e 68: la foto approvata di S2 mostra 17.
+6. Scrittoio 2 avanza: T1, T2 («il menu delle modalità, in un posto solo», e7630eef), T16 fatti su `piano/scrittoio-2` (fe4d84c4).
+7. La cattura `foglio-comandi` di nuove3 non aveva il menu: il mod `kitRibbon` rimisura la finestra e il menu si chiude. Rifatta (nuove6).
+8. `docs/project/status.md` è fermo al 2026-10-31; in main mancano le ADR 0230 e 0236 (sui rami).
+9. In Notte la griglia del foglio lascia bianco a destra dell'ultima colonna (anche nella foto approvata di S2, `foglio-dark`); in main la griglia arriva al bordo. Da guardare in S2 T20/griglia: non è del simulatore.
 
-## Domande per l'utente
+## Domande per l'utente (parte 4 dell'artifact)
 
-(da riempire)
+- Telefono/tablet: rifare la cornice (piano proprio) o tenere la provvisoria A di S2 per l'APK di prova.
+- Le 5 domande di gusto aperte di S2 (ombra T27, vassoio, sezioni…): rileggerle dal PLAN di S2.
+- Griglia: approvare il prototipo `celle-griglia`.
+- N6 T26–T28: disegnarli ora nel simulatore o lasciarli al coder di N6 (consiglio: N6, + task PA che li aggiunge al simulatore).
+- Contraddizioni: S2 T22 contro K5 (la colonna degli strumenti del disegno); S2 T23 contro N6 (la lavagna).
+- Densità e accento non si simulano (serve ricompilare il tema): va bene così?
+- `windows-sys`, firma degli installer, canale dei riscontri della pre-alpha.
 
 ## Risposte dell'utente (2026-11-05, AskUserQuestion)
 
