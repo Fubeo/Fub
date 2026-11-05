@@ -69,3 +69,20 @@ Scaricati tutti in $A (cartelle per id, mappa in $S/mappa.txt), testo in $T/<nom
 ## Domande per l'utente
 
 (da riempire)
+
+## Bozza della definizione (2026-11-05, da far confermare)
+
+Obiettivo: la prima versione che una persona scarica, installa sul suo computer
+e usa per una settimana di studio e lavoro: vault di Markdown, note, Word, Excel,
+SVG, PDF e lavagne nella stessa cornice (Scrittoio 2), la penna sopra, i
+componenti accesi e spenti, un'AI che fa lo stesso via MCP, nessun dato perso.
+
+Fatto quando (proposta): 1 installer 3 OS da tag `v0.2.0-prealpha.1`, CI release
+verde; 2 i piani dentro in main con il loro cancello e CI completa; 3 il giro della
+pre-alpha (~24 compiti) e2e nel banco e a mano sugli installer; 4 corpus per formato
+byte per byte; 5 simulatore = app (foto banco due luci, piena e 700); 6 misure
+WebView Linux nei budget + una a mano su Windows; 7 prova unica con 5 persone
+(K2+N12+N13+lavagna); 8 status.md, pagina «Prova la pre-alpha», #289.
+
+Fuori (proposta): K6; K4 K7 K8 K9 K10; PdfCraft P1–P5 e N6 T79; N5 N9 N10; app
+telefono/tablet; lavagna v2/v3; A1 F2–F6; #9; installer firmati.
