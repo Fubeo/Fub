@@ -7,6 +7,13 @@ Ramo `piano/fub-pre-alpha`, worktree `~/.cache/fub-prealpha/piano`, base
 ## Punto a cui sono
 
 - 2026-11-05 · passi 1–4 fatti (definizione confermata). Passo 5 (simulatore) in corso.
+- Simulatore, come lo costruisco (2026-11-05 sera):
+  - Lavoro in `~/.cache/fub-prealpha/sim/` (script/, blocchi/ = i blocchi CSS di Scrittoio 2, catture/).
+  - Client di cattura `~/.cache/fub-prealpha/cattura-s2` = COPIA mia di `~/.cache/fub-k1/tmp/scrittoio2/anteprima-copia` (il client con cui è stato fotografato il prototipo approvato di S2: icone `fub:`, Benvenuto del mockup). node_modules = symlink a quello di `~/.cache/fub-k1/scrittoio2`. Per l'avvio (#308) uso `~/.cache/fub-prealpha/cattura` (5006937c).
+  - `script/cattura.mjs` (porta 1468, strictPort) + `mods.mjs` di S2 + i miei `notaIn` (stessa nota in un'altra modalità) e `conflitto`.
+  - Catture: s2/ (le 35 di S2, approvate), nuove/ (40), nuove2/ (modi sulla stessa nota + conflitto), nuove3/ (pezzi menu senza cornice + foglio-comandi), nuove4/ (varianti 700), avvio/.
+  - Simulatore = pagina `simulatore.html` + `sim-dati.js` (pacco gzip+base64) + `solo-simulatore.js` (i passaggi fra stati, i pezzi sovrapposti: menu modalità, «/», tasto destro, avvio rapido, salvataggio, avvisi). Iframe stesso origine senza script.
+  - Pagine dei piani scritte a mano (lavagna-schede, lavagna-penne, celle-griglia, menu-comandi-fogli, disegno-motore, ricette) entrano tali e quali come «Dai piani».
 
 ## Regole che valgono per me (dal prompt)
 
