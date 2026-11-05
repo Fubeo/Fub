@@ -193,7 +193,7 @@ Ogni patch ha un tipo, che dice quando può uscire dalla pila:
 | `0008-viste-ed-estensioni` | UPSTREAM-BUGFIX | `corpus.rs`: `ogni_cartella_del_corpus_ha_la_sua_classe` (la cartella `viste-di-libreoffice`, che senza la patch diventa preservabile) | da proporre | quando `<sheetView>` e gli `<ext>` del documento restano |
 | `0009-svg-degli-oggetti` | UPSTREAM-API | `objects.rs` chiama `chart_svg` e `prims_svg` | da proporre: `chart_svg` pubblico | quando il modulo è pubblico |
 | `0010-modifica-di-note-e-commenti` | UPSTREAM-BUGFIX | `commands.rs`: `modificare_un_commento_tiene_le_risposte` | da proporre | quando «Modifica commento» tiene il thread |
-| `0011-cache-liberabili` | UPSTREAM-API | la pressione di memoria di Fub, che chiama `release_spelling_dictionary` e `clear_number_format_cache` (i suoi test arrivano con quel lavoro); per ora i test della patch in `spelling.rs` e `display.rs` | da proporre: il testo qui sotto | quando l'upstream ha un modo di liberare le due cache |
+| `0011-cache-liberabili` | UPSTREAM-API | la pressione di memoria di Fub: `fub-format-xlsx/src/motore.rs` chiama `release_spelling_dictionary` e `clear_number_format_cache`, e `fub-format-xlsx/tests/motore.rs` lo prova; poi i test della patch in `spelling.rs` e `display.rs` | da proporre: il testo qui sotto | quando l'upstream ha un modo di liberare le due cache |
 
 Senza `0005` o `0009` `fub-format-xlsx` non compila, e senza `0008` o
 `0010` il test della tabella fallisce: lo si è provato togliendo ciascuna
