@@ -1,17 +1,31 @@
 // Costruisce la pagina dell'artifact «Fub pre-alpha» da PLAN.md.
 // node costruisci-hub.mjs <PLAN.md> <cartella del simulatore> <out>
-// In <out>: index.html, e accanto simulatore.html, sim-dati.js,
-// solo-simulatore.js e piani/ copiati dal simulatore.
-import { readFile, writeFile, mkdir, cp } from "node:fs/promises";
-import { join } from "node:path";
+// In <out>: index.html, e accanto i file del simulatore (simulatore.html,
+// sim-dati-N.js, sim-stati.js, vista-sim.js, solo-simulatore.js, piani/).
+// `marked` viene da apps/client (FUB_CLIENT, o quello del repository).
+import { readFile, writeFile, mkdir, cp, readdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { execSync } from "node:child_process";
-import { Marked } from "/home/fubeo/Progetti/Fub/apps/client/node_modules/marked/lib/marked.esm.js";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { runInNewContext } from "node:vm";
+
+const qui = dirname(fileURLToPath(import.meta.url));
+const client = process.env.FUB_CLIENT ?? join(qui, "../../../apps/client");
+const { Marked } = await import(pathToFileURL(join(client, "node_modules/marked/lib/marked.esm.js")).href);
 
 const [planPath, simDir, out] = process.argv.slice(2);
 if (!out) throw new Error("uso: node costruisci-hub.mjs <PLAN.md> <sim> <out>");
 await mkdir(out, { recursive: true });
-for (const f of ["simulatore.html", "sim-dati.js", "solo-simulatore.js"]) await cp(join(simDir, f), join(out, f));
+const fileSim = ["simulatore.html", "sim-stati.js", "vista-sim.js", "solo-simulatore.js", ...(await readdir(simDir)).filter((f) => /^sim-dati-\d+\.js$/.test(f))];
+for (const f of fileSim) await cp(join(simDir, f), join(out, f));
 await cp(join(simDir, "piani"), join(out, "piani"), { recursive: true });
+
+// Gli stati e gli scenari del simulatore, per i numeri della testa.
+const finestra = {};
+runInNewContext(await readFile(join(simDir, "sim-stati.js"), "utf8"), { window: finestra });
+const STATI = finestra.SIM_STATI;
+const SCENARI = finestra.SIM_SCENARI ?? [];
+const daApprovare = STATI.filter((s) => s.prov !== "cattura").length;
 
 const plan = await readFile(planPath, "utf8");
 const commit = execSync("git rev-parse --short HEAD", { cwd: join(planPath, "..") }).toString().trim();
@@ -81,9 +95,12 @@ const dalProto = sez("Dal prototipo");
 const parte1 = `
 <div class="sim-cornice">
   <div class="sim-testa">
-    <p>Il simulatore di tutta la pre-alpha: lo schermo è il client vero del banco, con il CSS nuovo di
-    Scrittoio 2 sopra. In alto si scelgono lo stato, la luce, la larghezza e il movimento. Sotto lo schermo,
-    «I pezzi di questo stato» dice dove va ogni pezzo e in quale task.</p>
+    <p>Il simulatore di tutta la pre-alpha: ${STATI.length} stati, da S1 a S${Math.max(...STATI.map((s) => s.n))}, e
+    ${SCENARI.length} scenari da passare con Avanti e Indietro. Si usa come il prodotto: ogni clic porta a uno stato,
+    cambia lo schermo o dice che cosa farebbe. In alto si scelgono lo stato, lo scenario, la luce, la larghezza
+    (piena, 700 px, telefono) e il movimento. Sotto lo schermo ogni stato dice da dove viene (cattura del client,
+    composta, nuova) e dove va ogni suo pezzo. ${daApprovare} stati, i composti e i nuovi, aspettano un sì:
+    «Approvare gli stati nuovi e composti» scrive la frase da incollare nella risposta.</p>
     <a class="bottone" href="simulatore.html" target="_blank" rel="noopener">Apri a tutta pagina</a>
   </div>
   <iframe id="sim-iframe" src="simulatore.html" title="Il simulatore di Fub pre-alpha" loading="eager"></iframe>
@@ -103,19 +120,32 @@ ${md(back.corpo, "backend")}
 </div>`;
 
 // ── Parte 3 · la strada ─────────────────────────────────────────────────────
-const FASE = {
-  T1: "Fase A", T3: "Fase A", T4: "Fase A", T5: "Fase A", T6: "Fase A", T7: "Fase A", T8: "Fase A", T13: "Fase A", T19: "Fase A",
-  T2: "Fase B", T20: "Fase B", T21: "Fase B", T11: "Fase B · aspetta D6",
-  T12: "Fase C",
-  T14: "Fase D", T15: "Fase D", T16: "Fase D", T17: "Fase D", T18: "Fase D", T22: "Fase D", T23: "Fase D", T24: "Fase D",
-  T9: "aspetta D7", T10: "aspetta D10",
-};
+// La fase di ogni task PA viene dalle tabelle di «L'ordine» (la prima colonna,
+// «PA T4, T5 · …»); la colonna «Dipende da» aggiunge la domanda che aspetta.
+// Un task che non sta in nessuna tabella parte solo con la risposta alla sua
+// domanda (la riga «Ondate» della testa).
+const FASE = {};
+for (const [, lettera, corpo] of sez("L'ordine").corpo.matchAll(/^### Fase ([A-D]) ·[^\n]*\n([\s\S]*?)(?=^### |(?![\s\S]))/gm)) {
+  for (const riga of corpo.split("\n").filter((l) => /^\| PA T\d/.test(l))) {
+    const celle = riga.split("|").map((c) => c.trim());
+    const aspetta = [...`${celle[3]} ${celle[4]}`.matchAll(/(?:solo se|risposta a) (D\d+)/g)].map((m) => m[1]);
+    for (const n of celle[1].split(" · ")[0].match(/T\d+/g) ?? []) {
+      FASE[n] = `Fase ${lettera}${aspetta.length ? ` · aspetta ${[...new Set(aspetta)].join(", ")}` : ""}`;
+    }
+  }
+}
 const tasks = sezioni.filter((s) => /^T\d+ · /.test(s.titolo));
+for (const t of tasks) {
+  const num = t.titolo.split(" · ")[0];
+  FASE[num] ??= "dopo la sua risposta";
+}
+const ultimoTask = tasks.at(-1).titolo.split(" · ")[0];
+const fasi = new Set(Object.values(FASE).map((f) => f.split(" · ")[0]).filter((f) => f.startsWith("Fase"))).size;
 const strada = ["La definizione", "Dentro e fuori", "L'ordine"].map(sez);
 const diff = sez("Differenze fra piani e codice");
 const voci3 = [
   ...strada.map((s) => ({ t: s.titolo, id: `strada--${slug(s.titolo)}` })),
-  { t: "I task del piano (PA T1–T24)", id: "strada--i-task" },
+  { t: `I task del piano (PA T1–${ultimoTask})`, id: "strada--i-task" },
   { t: diff.titolo, id: `strada--${slug(diff.titolo)}` },
 ];
 const blocco = (s) => `<h2 id="strada--${slug(s.titolo)}">${esc(s.titolo)}</h2>\n${md(s.corpo, "strada")}`;
@@ -146,7 +176,7 @@ const taskHtml = tasks
 const parte3 = `<div class="testo">
 ${indice(voci3)}
 ${strada.map(blocco).join("\n")}
-<h2 id="strada--i-task">I task del piano (PA T1–T24)</h2>
+<h2 id="strada--i-task">I task del piano (PA T1–${ultimoTask})</h2>
 <p>I task degli altri piani restano nei loro <code>PLAN.md</code>; questi tengono insieme la pre-alpha. Ogni task ha il formato di
 <code>PLAN.modello.md</code>: un coder con ragionamento medio lo fa da solo.</p>
 <p class="azioni-task"><button type="button" class="bottone" data-tutti="1">Apri tutti</button> <button type="button" class="bottone" data-tutti="0">Chiudi tutti</button></p>
@@ -160,6 +190,7 @@ const [introD, ...ds] = dom.corpo.split(/^### /m);
 const ASPETTA = {
   D1: "l'APK di PA T22", D2: "griglia T1–T9", D3: "i task grafici di N6", D4: "il simulatore, prima della consegna",
   D5: "S2 T22, K5 T21–T23", D6: "PA T11", D7: "PA T9", D8: "PA T22", D9: "PA T18", D10: "PA T10", D11: "PA T22", D12: "nessuno",
+  D13: "il merge di #290 (K2)", D14: "PA T33", D15: "PA T34", D16: "PA T40", D17: "PA T42",
 };
 // Il consiglio in una riga, fedele all'opzione «(consigliata)» di PLAN.md.
 const CONSIGLIO = {
@@ -168,25 +199,35 @@ const CONSIGLIO = {
   D3: "Li disegno io adesso, nella cornice di Scrittoio 2, sullo stesso link.",
   D4: "Le compongo adesso nel simulatore: ogni editor nella cornice di Scrittoio 2.",
   D5: "La cornice di Scrittoio 2 con il contenuto di K5: gli strumenti nella colonna del kit, i gettoni del motore nella banda.",
-  D6: "Un vassoio solo, il più chiaro, per tutte e tre le barre, com'è sul ramo.",
+  D6: "Un vassoio solo, il più chiaro, per la barra a schede, la fila e la colonna, com'è sul ramo.",
   D7: "Sì, diretta, solo per `cfg(windows)`, alla versione che il lockfile ha già.",
   D8: "deb, rpm e AppImage, come oggi.",
   D9: "I modelli di issue su GitHub, più le Discussions per le domande.",
   D10: "Mi dici dove li hai visti.",
   D11: "Solo nella CI: si costruisce, parte e si chiude; le note della pre-release lo dicono.",
   D12: "Va bene così.",
+  D13: "Prima del merge, come dice K2 D-2: fai il protocollo sulla PR (da solo o con una persona), e i compiti di K2 tornano nella prova finale.",
+  D14: "Dove si legge, il nome diventa Fub o il disegno; resta solo nel codice e nelle pagine di riferimento.",
+  D15: "`extends`, come `\"extends\": \"fub.serie\"`.",
+  D16: "Dentro: un tema può ridisegnare ogni icona, per nome; i nomi restano stabili.",
+  D17: "«Carta» e «Salvia».",
 };
+// Una domanda già decisa comincia con «**Decisa dall'utente … : X.**»: nel
+// riassunto si legge la decisione, non il consiglio. D5 («L'utente ha chiesto
+// di vedere …») resta aperta.
 const domande = ds.map((d) => {
   const nl = d.indexOf("\n");
   const titolo = d.slice(0, nl).trim();
   const corpo = d.slice(nl + 1);
   const num = titolo.split(" · ")[0];
-  const cons = corpo.match(/^- \*\*([A-Z]) \(consigliata\)\.\*\*/m);
+  const cons = corpo.match(/^- \*\*([A-Z]) \(consigliata[^)]*\)\.\*\*/m);
   if (!cons || !CONSIGLIO[num]) throw new Error(`${num}: manca il consiglio`);
-  const consiglio = `**${cons[1]}.** ${CONSIGLIO[num]}`;
-  return { num, titolo, corpo, consiglio };
+  const decisa = corpo.trimStart().match(/^\*\*(Decisa dall'utente[^*]*?)\*\*/);
+  const consiglio = decisa ? `**${decisa[1].replace(/\.$/, "")}.**` : `**${cons[1]}.** ${CONSIGLIO[num]}`;
+  return { num, titolo, corpo, consiglio, decisa: !!decisa };
 });
-const tabellaD = `<div class="tabella"><table class="riassunto"><thead><tr><th>Domanda</th><th>Il mio consiglio</th><th>Che cosa aspetta</th></tr></thead><tbody>
+const aperte = domande.filter((d) => !d.decisa);
+const tabellaD = `<div class="tabella"><table class="riassunto"><thead><tr><th>Domanda</th><th>Il mio consiglio, o la decisione</th><th>Che cosa aspetta</th></tr></thead><tbody>
 ${domande
   .map((d) => `<tr><td><a href="#domande--${slug(d.titolo)}">${md(d.titolo, "r").replace(/^<p>|<\/p>\s*$/g, "")}</a></td><td>${md(d.consiglio, "r").replace(/^<p>|<\/p>\s*$/g, "")}</td><td>${esc(ASPETTA[d.num] ?? "")}</td></tr>`)
   .join("\n")}
@@ -338,19 +379,21 @@ table.riassunto td:first-child { min-width: 14rem; }
       <p class="obiettivo">${md(obiettivo, "o").replace(/^<p>|<\/p>\s*$/g, "")}</p>
       <ul class="chips">
         <li class="chip ok">Definizione confermata il 2026-11-05</li>
-        <li class="chip attesa">Simulatore: da approvare</li>
+        <li class="chip attesa">Secondo giro: ${daApprovare} stati da approvare</li>
+        <li class="chip">${STATI.length} stati · ${SCENARI.length} scenari</li>
         <li class="chip">${fatti} punti di «Fatto quando»</li>
-        <li class="chip">${tasks.length} task nuovi · 4 fasi</li>
-        <li class="chip">${domande.length} domande aperte</li>
+        <li class="chip">${tasks.length} task nuovi · ${fasi} fasi</li>
+        <li class="chip">${aperte.length} domande aperte su ${domande.length}</li>
         <li class="chip"><code>piano/fub-pre-alpha</code> @ ${commit}</li>
       </ul>
     </div>
     <section class="decidere" aria-labelledby="da-decidere">
       <h2 id="da-decidere">Che cosa ti chiedo</h2>
       <ol>
-        <li>Guarda il <a href="#simulatore">simulatore</a>: ogni stato, le due luci, 700 e telefono. Dimmi se è approvato o che cosa cambiare.</li>
-        <li>Rispondi alle <a href="#domande">domande D1–D${domande.length}</a>. Per ognuna c'è il mio consiglio per primo.</li>
-        <li>Con D3 e D4 «A», disegno la lavagna e compongo le pagine dei piani nella cornice, sullo stesso link.</li>
+        <li>Passa il <a href="#simulatore">simulatore</a>: gli scenari, le due luci, 700 px e telefono. Gli stati composti e nuovi (${daApprovare})
+        aspettano un sì: segna quelli da rivedere, e incolla la frase che il simulatore scrive.</li>
+        <li>Rispondi alle <a href="#domande">domande aperte</a> (${aperte.map((d) => d.num).join(", ")}). Per ognuna c'è il mio consiglio per primo.</li>
+        <li>D5 (la testa del disegno) si sceglie guardando le due forme, tutte e due nel simulatore.</li>
       </ol>
     </section>
   </div>
