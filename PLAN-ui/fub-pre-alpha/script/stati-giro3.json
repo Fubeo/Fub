@@ -1,0 +1,362 @@
+[
+{
+"id": "g3-doc-trova",
+"scena": "g3-doc-trova",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g3-doc-chiuse",
+"scena": "document-closed",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g3-doc-chiuse-pannello",
+"scena": "g3-doc-chiuse-pannello",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g3-disegno-livelli",
+"scena": "g3-disegno-livelli",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitBar",
+"modo",
+"via"
+]
+},
+{
+"id": "g3-disegno-tutto",
+"scena": "g3-disegno-tutto",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitBar",
+"modo",
+"via"
+]
+},
+{
+"id": "g3-disegno-zoom",
+"scena": "g3-disegno-zoom",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitBar",
+"modo",
+"via"
+]
+},
+{
+"id": "g3-foglio-errore",
+"scena": "g3-foglio-errore",
+"mods": [
+"cornice",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g3-doc-odt",
+"scena": "document-odt",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g3-doc-oggetti",
+"scena": "document-objects",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitRibbon",
+"modo",
+"via"
+]
+},
+{
+"id": "g3-pdf-rotto",
+"scena": "g3-pdf-rotto",
+"mods": [
+"cornice",
+"banda",
+"testataFile",
+"kitBar",
+"modo",
+"via",
+"pdfBarra"
+]
+},
+{
+"id": "t-aspetto",
+"scena": "prefs-appearance",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-non-salvata",
+"scena": "g2-non-salvata",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-salvataggio-fallito",
+"scena": "g2-salvataggio-fallito",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-foglio-selezione",
+"scena": "grid-selection",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitRibbon"
+],
+"telefono": true
+},
+{
+"id": "t-foglio-comandi",
+"scena": "grid-commands",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitRibbon"
+],
+"telefono": true
+},
+{
+"id": "t-foglio-risultato",
+"scena": "grid-result-table",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitRibbon"
+],
+"telefono": true
+},
+{
+"id": "t-foglio-errore",
+"scena": "grid-result-error",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitRibbon"
+],
+"telefono": true
+},
+{
+"id": "t-foto",
+"scena": "photo-xmp",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile"
+],
+"telefono": true
+},
+{
+"id": "t-nuovo-vault",
+"scena": "new-vault-profile",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-nuovo",
+"scena": "g2-nuovo",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-rinomina",
+"scena": "g2-rinomina",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-craft",
+"scena": "craft-peso",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile"
+],
+"telefono": true
+},
+{
+"id": "t-concentrazione",
+"scena": "concentration",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-schede",
+"scena": "tabs",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-lettura",
+"scena": "reading",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-sorgente",
+"scena": "source",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-doc-trova",
+"scena": "g3-doc-trova",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitRibbon"
+],
+"telefono": true,
+"modo": "page"
+},
+{
+"id": "t-pdf-rotto",
+"scena": "g3-pdf-rotto",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitBar",
+"pdfBarra"
+],
+"telefono": true
+},
+{
+"id": "t-disegno-tutto",
+"scena": "g3-disegno-tutto",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitBar"
+],
+"telefono": true,
+"modo": "drawing"
+},
+{
+"id": "t-cassetto-file",
+"scena": "g2-cestino",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true,
+"cassetto": true
+}
+]

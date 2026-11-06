@@ -21,7 +21,9 @@ const stati = JSON.parse(await readFile(statiPath, "utf8"));
 
 async function nuovoCss() {
   const dir = join(here, "..", "blocchi");
-  const files = (await readdir(dir)).filter((f) => f.endsWith(".css")).sort();
+  // I temi d'esempio (93-tema-*) non sono CSS del prodotto: nel simulatore si
+  // montano solo quando Aspetto li sceglie, quindi non entrano nelle catture.
+  const files = (await readdir(dir)).filter((f) => f.endsWith(".css") && !/^93-tema-/.test(f)).sort();
   const parts = [];
   for (const f of files) {
     const text = await readFile(join(dir, f), "utf8");
@@ -138,7 +140,11 @@ const opened = await stage.openStage({
 try {
   for (const stato of stati) {
     if (solo && !solo.has(stato.id)) continue;
-    const scene = scenes.SCENE.find((s) => s.id === stato.scena);
+    const trovata = scenes.SCENE.find((s) => s.id === stato.scena);
+    // `telefono`: la stessa scena dentro mobile.html, alla misura del
+    // telefono in piedi (390×844). La preparazione resta quella della scena:
+    // openFromTree apre e richiude il cassetto da sé.
+    const scene = trovata && stato.telefono ? { ...trovata, page: "mobile", viewport: { width: 390, height: 844 } } : trovata;
     if (!scene) {
       console.log("ERRORE", stato.id, "scena mancante", stato.scena);
       continue;
@@ -152,6 +158,21 @@ try {
         };
         await page.setViewportSize(viewport);
         await stage.prepareScene(page, scene, light, opened.base, scenes.sceneUrl);
+        // Sul telefono il cassetto aperto per raggiungere un file si richiude,
+        // salvo negli stati che mostrano proprio il cassetto.
+        // Se la scena ha già aperto un dialogo (il risultato dei fogli), il
+        // clic sul velo chiuderebbe il dialogo e non il cassetto: allora il
+        // cassetto si chiude dalla sua maniglia («Chiudi», bottom-sheets.ts).
+        if (stato.telefono && !stato.cassetto && (await page.isVisible("#sidebar-scrim").catch(() => false))) {
+          if (await page.isVisible(".kit-dialog-scrim").catch(() => false)) {
+            await page.evaluate(() => document.querySelector("#sidebar .sheet-grip")?.click());
+          } else {
+            const scrim = await page.locator("#sidebar-scrim").boundingBox();
+            await page.mouse.click(scrim.x + scrim.width - 80, scrim.y + 8);
+          }
+          await page.waitForSelector("#sidebar-scrim", { state: "hidden" }).catch(() => {});
+          await page.waitForFunction(() => !document.getElementById("layout")?.className.includes("sheet-leaving")).catch(() => {});
+        }
         if (!stato.vecchio) await page.addStyleTag({ content: css }).then((h) => h.evaluate((n) => (n.id = "proto-nuovo")));
         const inserimenti = [];
         for (const name of stato.mods ?? []) {
@@ -168,6 +189,27 @@ try {
           for (const name of stato.modsDopo ?? []) await mods[name](page, { light, stato, inserisci: (x) => inserimenti.push(x) });
           await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
         }
+        // La pagina ferma prima della foto: i suggerimenti di CodeMirror (la
+        // tendina di «/») si posano qualche frame dopo, e il DOM copiato più
+        // sotto li avrebbe già al posto nuovo. Si fotografa quando due frame
+        // di fila danno le stesse posizioni (al massimo venti frame).
+        await page.evaluate(async () => {
+          const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+          const impronta = () =>
+            [...document.querySelectorAll(".cm-tooltip, [role='menu'], [role='listbox'], [role='dialog']")]
+              .map((e) => {
+                const q = e.getBoundingClientRect();
+                return `${q.left},${q.top},${q.width},${q.height}`;
+              })
+              .join("|");
+          let prima = impronta();
+          for (let i = 0, fermi = 0; i < 20 && fermi < 2; i += 1) {
+            await frame();
+            const ora = impronta();
+            fermi = ora === prima ? fermi + 1 : 0;
+            prima = ora;
+          }
+        });
         const shot = await page.screenshot();
         await writeFile(join(out, `${stato.id}-${light}.png`), shot);
         const snap = await page.evaluate(serialize, inserimenti);

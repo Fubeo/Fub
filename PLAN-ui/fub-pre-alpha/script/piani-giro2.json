@@ -1,0 +1,1865 @@
+[
+{
+"id": "p-lav-schede-snapshot",
+"pagina": "lavagna-schede.html",
+"palco": "#proto-screen",
+"passi": [
+{
+"clic": "[data-proto-scene=\"schede\"]"
+},
+{
+"clic": "[data-proto-mode=\"snapshot\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+]
+},
+{
+"id": "p-lav-schede-live",
+"pagina": "lavagna-schede.html",
+"palco": "#proto-screen",
+"passi": [
+{
+"clic": "[data-proto-scene=\"schede\"]"
+},
+{
+"clic": "[data-proto-mode=\"live\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+]
+},
+{
+"id": "p-lav-schede-selected",
+"pagina": "lavagna-schede.html",
+"palco": "#proto-screen",
+"passi": [
+{
+"clic": "[data-proto-scene=\"schede\"]"
+},
+{
+"clic": "[data-proto-mode=\"selected\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+]
+},
+{
+"id": "p-lav-schede-active",
+"pagina": "lavagna-schede.html",
+"palco": "#proto-screen",
+"passi": [
+{
+"clic": "[data-proto-scene=\"schede\"]"
+},
+{
+"clic": "[data-proto-mode=\"active\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+]
+},
+{
+"id": "p-lav-testate",
+"pagina": "lavagna-schede.html",
+"palco": "#proto-screen",
+"passi": [
+{
+"clic": "[data-proto-scene=\"testate\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+]
+},
+{
+"id": "p-lav-inchiostro",
+"pagina": "lavagna-schede.html",
+"palco": "#proto-screen",
+"passi": [
+{
+"clic": "[data-proto-scene=\"inchiostro\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+]
+},
+{
+"id": "p-lav-maniglie",
+"pagina": "lavagna-schede.html",
+"palco": "#proto-screen",
+"passi": [
+{
+"clic": "[data-proto-scene=\"maniglie\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+]
+},
+{
+"id": "p-lav-mancante",
+"pagina": "lavagna-schede.html",
+"palco": "#proto-screen",
+"passi": [
+{
+"clic": "[data-proto-scene=\"mancante\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+]
+},
+{
+"id": "p-lav-rilascio3",
+"pagina": "lavagna-schede.html",
+"palco": "#proto-screen",
+"passi": [
+{
+"clic": "[data-proto-scene=\"rilascio3\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+]
+},
+{
+"id": "p-lav-rilascio47",
+"pagina": "lavagna-schede.html",
+"palco": "#proto-screen",
+"passi": [
+{
+"clic": "[data-proto-scene=\"rilascio47\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+]
+},
+{
+"id": "p-lav-colori",
+"pagina": "lavagna-schede.html",
+"palco": "#proto-screen",
+"passi": [
+{
+"clic": "[data-proto-scene=\"colori\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+]
+},
+{
+"id": "p-lav-notifiche",
+"pagina": "lavagna-schede.html",
+"palco": "#proto-screen",
+"passi": [
+{
+"clic": "[data-proto-scene=\"notifiche\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+]
+},
+{
+"id": "p-lav-lontano",
+"pagina": "lavagna-schede.html",
+"palco": "#proto-screen",
+"passi": [
+{
+"clic": "[data-proto-scene=\"lontano\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+]
+},
+{
+"id": "p-lav-lontanissimo",
+"pagina": "lavagna-schede.html",
+"palco": "#proto-screen",
+"passi": [
+{
+"clic": "[data-proto-scene=\"lontanissimo\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+]
+},
+{
+"id": "p-lav-cinquecento",
+"pagina": "lavagna-schede.html",
+"palco": "#proto-screen",
+"passi": [
+{
+"clic": "[data-proto-scene=\"cinquecento\"]"
+},
+{
+"clic": "[data-proto-zoom=\"0.1\"]",
+"dopo": 1500
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+],
+"attesa": 1500
+},
+{
+"id": "p-lav-impostazioni",
+"pagina": "lavagna-schede.html",
+"palco": "#proto-settings",
+"passi": [
+{
+"clic": "[data-proto-scene=\"impostazioni\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+760,
+640
+]
+},
+{
+"id": "p-penne-closed",
+"pagina": "lavagna-penne.html",
+"palco": "#proto-board",
+"passi": [
+{
+"clic": "[data-proto-state=\"closed\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+],
+"nascondi": [
+".canvas-toolbar"
+]
+},
+{
+"id": "p-penne-pen",
+"pagina": "lavagna-penne.html",
+"palco": "#proto-board",
+"passi": [
+{
+"clic": "[data-proto-state=\"pen\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+],
+"nascondi": [
+".canvas-toolbar"
+]
+},
+{
+"id": "p-penne-highlighter",
+"pagina": "lavagna-penne.html",
+"palco": "#proto-board",
+"passi": [
+{
+"clic": "[data-proto-state=\"highlighter\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+],
+"nascondi": [
+".canvas-toolbar"
+]
+},
+{
+"id": "p-penne-eraser",
+"pagina": "lavagna-penne.html",
+"palco": "#proto-board",
+"passi": [
+{
+"clic": "[data-proto-state=\"eraser\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+],
+"nascondi": [
+".canvas-toolbar"
+]
+},
+{
+"id": "p-penne-custom",
+"pagina": "lavagna-penne.html",
+"palco": "#proto-board",
+"passi": [
+{
+"clic": "[data-proto-state=\"custom\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+],
+"nascondi": [
+".canvas-toolbar"
+]
+},
+{
+"id": "p-penne-mouse",
+"pagina": "lavagna-penne.html",
+"palco": "#proto-board",
+"passi": [
+{
+"clic": "[data-proto-state=\"mouse\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+],
+"nascondi": [
+".canvas-toolbar"
+]
+},
+{
+"id": "p-penne-readonly",
+"pagina": "lavagna-penne.html",
+"palco": "#proto-board",
+"passi": [
+{
+"clic": "[data-proto-state=\"readonly\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+912,
+640
+],
+"nascondi": [
+".canvas-toolbar"
+]
+},
+{
+"id": "p-penne-settings",
+"pagina": "lavagna-penne.html",
+"palco": "#proto-settings",
+"passi": [
+{
+"clic": "[data-proto-state=\"settings\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-proto-theme=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-proto-theme=\"dark\"]"
+}
+]
+},
+"misura": [
+760,
+640
+]
+},
+{
+"id": "p-celle-riposo",
+"pagina": "celle-griglia.html",
+"palco": ".grid-surface",
+"passi": [
+{
+"scegli": [
+"#proto-stato",
+"riposo"
+]
+}
+],
+"luci": {
+"light": [
+{
+"scegli": [
+"#proto-luce",
+"chiara"
+]
+}
+],
+"dark": [
+{
+"scegli": [
+"#proto-luce",
+"scura"
+]
+}
+]
+},
+"misura": [
+960,
+600
+],
+"nascondi": [
+".proto-sheets"
+]
+},
+{
+"id": "p-celle-intervallo",
+"pagina": "celle-griglia.html",
+"palco": ".grid-surface",
+"passi": [
+{
+"scegli": [
+"#proto-stato",
+"intervallo"
+]
+}
+],
+"luci": {
+"light": [
+{
+"scegli": [
+"#proto-luce",
+"chiara"
+]
+}
+],
+"dark": [
+{
+"scegli": [
+"#proto-luce",
+"scura"
+]
+}
+]
+},
+"misura": [
+960,
+600
+],
+"nascondi": [
+".proto-sheets"
+]
+},
+{
+"id": "p-celle-oltre",
+"pagina": "celle-griglia.html",
+"palco": ".grid-surface",
+"passi": [
+{
+"scegli": [
+"#proto-stato",
+"oltre"
+]
+}
+],
+"luci": {
+"light": [
+{
+"scegli": [
+"#proto-luce",
+"chiara"
+]
+}
+],
+"dark": [
+{
+"scegli": [
+"#proto-luce",
+"scura"
+]
+}
+]
+},
+"misura": [
+960,
+600
+],
+"nascondi": [
+".proto-sheets"
+]
+},
+{
+"id": "p-celle-editor",
+"pagina": "celle-griglia.html",
+"palco": ".grid-surface",
+"passi": [
+{
+"scegli": [
+"#proto-stato",
+"editor"
+]
+}
+],
+"luci": {
+"light": [
+{
+"scegli": [
+"#proto-luce",
+"chiara"
+]
+}
+],
+"dark": [
+{
+"scegli": [
+"#proto-luce",
+"scura"
+]
+}
+]
+},
+"misura": [
+960,
+600
+],
+"nascondi": [
+".proto-sheets"
+]
+},
+{
+"id": "p-celle-misura",
+"pagina": "celle-griglia.html",
+"palco": ".grid-surface",
+"passi": [
+{
+"scegli": [
+"#proto-stato",
+"misura"
+]
+}
+],
+"luci": {
+"light": [
+{
+"scegli": [
+"#proto-luce",
+"chiara"
+]
+}
+],
+"dark": [
+{
+"scegli": [
+"#proto-luce",
+"scura"
+]
+}
+]
+},
+"misura": [
+960,
+600
+],
+"nascondi": [
+".proto-sheets"
+]
+},
+{
+"id": "p-celle-riempimento",
+"pagina": "celle-griglia.html",
+"palco": ".grid-surface",
+"passi": [
+{
+"scegli": [
+"#proto-stato",
+"riempimento"
+]
+}
+],
+"luci": {
+"light": [
+{
+"scegli": [
+"#proto-luce",
+"chiara"
+]
+}
+],
+"dark": [
+{
+"scegli": [
+"#proto-luce",
+"scura"
+]
+}
+]
+},
+"misura": [
+960,
+600
+],
+"nascondi": [
+".proto-sheets"
+]
+},
+{
+"id": "p-celle-copiata",
+"pagina": "celle-griglia.html",
+"palco": ".grid-surface",
+"passi": [
+{
+"scegli": [
+"#proto-stato",
+"copiata"
+]
+}
+],
+"luci": {
+"light": [
+{
+"scegli": [
+"#proto-luce",
+"chiara"
+]
+}
+],
+"dark": [
+{
+"scegli": [
+"#proto-luce",
+"scura"
+]
+}
+]
+},
+"misura": [
+960,
+600
+],
+"nascondi": [
+".proto-sheets"
+]
+},
+{
+"id": "p-celle-tagliata",
+"pagina": "celle-griglia.html",
+"palco": ".grid-surface",
+"passi": [
+{
+"scegli": [
+"#proto-stato",
+"tagliata"
+]
+}
+],
+"luci": {
+"light": [
+{
+"scegli": [
+"#proto-luce",
+"chiara"
+]
+}
+],
+"dark": [
+{
+"scegli": [
+"#proto-luce",
+"scura"
+]
+}
+]
+},
+"misura": [
+960,
+600
+],
+"nascondi": [
+".proto-sheets"
+]
+},
+{
+"id": "p-dis-1",
+"pagina": "disegno-motore.html",
+"palco": ".proto-frame[data-view=\"draw\"]",
+"passi": [
+{
+"clic": "[data-state=\"1\"]",
+"dopo": 600
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-light=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-light=\"dark\"]"
+}
+]
+},
+"misura": [
+968,
+760
+]
+},
+{
+"id": "p-dis-2a",
+"pagina": "disegno-motore.html",
+"palco": ".proto-frame[data-view=\"draw\"]",
+"passi": [
+{
+"clic": "[data-state=\"2a\"]",
+"dopo": 600
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-light=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-light=\"dark\"]"
+}
+]
+},
+"misura": [
+968,
+760
+]
+},
+{
+"id": "p-dis-2b",
+"pagina": "disegno-motore.html",
+"palco": ".proto-frame[data-view=\"draw\"]",
+"passi": [
+{
+"clic": "[data-state=\"2b\"]",
+"dopo": 600
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-light=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-light=\"dark\"]"
+}
+]
+},
+"misura": [
+968,
+760
+]
+},
+{
+"id": "p-dis-3",
+"pagina": "disegno-motore.html",
+"palco": ".proto-frame[data-view=\"draw\"]",
+"passi": [
+{
+"clic": "[data-state=\"3\"]",
+"dopo": 600
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-light=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-light=\"dark\"]"
+}
+]
+},
+"misura": [
+968,
+760
+]
+},
+{
+"id": "p-dis-4",
+"pagina": "disegno-motore.html",
+"palco": ".proto-frame[data-view=\"draw\"]",
+"passi": [
+{
+"clic": "[data-state=\"4\"]",
+"dopo": 600
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-light=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-light=\"dark\"]"
+}
+]
+},
+"misura": [
+968,
+760
+]
+},
+{
+"id": "p-dis-5",
+"pagina": "disegno-motore.html",
+"palco": ".proto-frame[data-view=\"draw\"]",
+"passi": [
+{
+"clic": "[data-state=\"5\"]",
+"dopo": 600
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-light=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-light=\"dark\"]"
+}
+]
+},
+"misura": [
+968,
+760
+]
+},
+{
+"id": "p-dis-6a",
+"pagina": "disegno-motore.html",
+"palco": ".proto-frame[data-view=\"draw\"]",
+"passi": [
+{
+"clic": "[data-state=\"6a\"]",
+"dopo": 600
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-light=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-light=\"dark\"]"
+}
+]
+},
+"misura": [
+968,
+760
+]
+},
+{
+"id": "p-dis-6b",
+"pagina": "disegno-motore.html",
+"palco": ".proto-frame[data-view=\"draw\"]",
+"passi": [
+{
+"clic": "[data-state=\"6b\"]",
+"dopo": 600
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-light=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-light=\"dark\"]"
+}
+]
+},
+"misura": [
+968,
+760
+]
+},
+{
+"id": "p-dis-7a",
+"pagina": "disegno-motore.html",
+"palco": ".proto-frame[data-view=\"draw\"]",
+"passi": [
+{
+"clic": "[data-state=\"7a\"]",
+"dopo": 600
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-light=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-light=\"dark\"]"
+}
+]
+},
+"misura": [
+968,
+760
+]
+},
+{
+"id": "p-dis-7b",
+"pagina": "disegno-motore.html",
+"palco": ".proto-frame[data-view=\"draw\"]",
+"passi": [
+{
+"clic": "[data-state=\"7b\"]",
+"dopo": 600
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-light=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-light=\"dark\"]"
+}
+]
+},
+"misura": [
+968,
+760
+]
+},
+{
+"id": "p-dis-strumento-hand",
+"pagina": "disegno-motore.html",
+"palco": ".proto-frame[data-view=\"draw\"]",
+"passi": [
+{
+"clic": "[data-state=\"1\"]"
+},
+{
+"clic": ".proto-frame[data-view=\"draw\"] [data-slot=\"hand\"]",
+"dopo": 600
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-light=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-light=\"dark\"]"
+}
+]
+},
+"misura": [
+968,
+760
+]
+},
+{
+"id": "p-dis-strumento-pen",
+"pagina": "disegno-motore.html",
+"palco": ".proto-frame[data-view=\"draw\"]",
+"passi": [
+{
+"clic": "[data-state=\"1\"]"
+},
+{
+"clic": ".proto-frame[data-view=\"draw\"] [data-slot=\"pen\"]",
+"dopo": 600
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-light=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-light=\"dark\"]"
+}
+]
+},
+"misura": [
+968,
+760
+]
+},
+{
+"id": "p-dis-strumento-eraser",
+"pagina": "disegno-motore.html",
+"palco": ".proto-frame[data-view=\"draw\"]",
+"passi": [
+{
+"clic": "[data-state=\"1\"]"
+},
+{
+"clic": ".proto-frame[data-view=\"draw\"] [data-slot=\"eraser\"]",
+"dopo": 600
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-light=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-light=\"dark\"]"
+}
+]
+},
+"misura": [
+968,
+760
+]
+},
+{
+"id": "p-dis-strumento-rect",
+"pagina": "disegno-motore.html",
+"palco": ".proto-frame[data-view=\"draw\"]",
+"passi": [
+{
+"clic": "[data-state=\"1\"]"
+},
+{
+"clic": ".proto-frame[data-view=\"draw\"] [data-slot=\"rect\"]",
+"dopo": 600
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-light=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-light=\"dark\"]"
+}
+]
+},
+"misura": [
+968,
+760
+]
+},
+{
+"id": "p-dis-8a",
+"pagina": "disegno-motore.html",
+"palco": ".proto-frame[data-view=\"settings\"]",
+"passi": [
+{
+"clic": "[data-state=\"8a\"]",
+"dopo": 600
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-light=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-light=\"dark\"]"
+}
+]
+},
+"misura": [
+1000,
+700
+]
+},
+{
+"id": "p-dis-8b",
+"pagina": "disegno-motore.html",
+"palco": ".proto-frame[data-view=\"settings\"]",
+"passi": [
+{
+"clic": "[data-state=\"8b\"]",
+"dopo": 600
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-light=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-light=\"dark\"]"
+}
+]
+},
+"misura": [
+1000,
+700
+]
+},
+{
+"id": "p-dis-8c",
+"pagina": "disegno-motore.html",
+"palco": ".proto-frame[data-view=\"settings\"]",
+"passi": [
+{
+"clic": "[data-state=\"8c\"]",
+"dopo": 600
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-light=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-light=\"dark\"]"
+}
+]
+},
+"misura": [
+1000,
+700
+]
+},
+{
+"id": "p-ricette-piena",
+"pagina": "ricette.html",
+"palco": ".proto-settings",
+"passi": [
+{
+"clic": "[data-group=\"toast\"][data-value=\"no\"]"
+},
+{
+"clic": "[data-group=\"section\"][data-value=\"piena\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"dark\"]"
+}
+]
+},
+"misura": [
+760,
+640
+],
+"nascondi": [
+"[data-proto-section]:not([data-proto-section=\"piena\"])"
+]
+},
+{
+"id": "p-ricette-vuota",
+"pagina": "ricette.html",
+"palco": ".proto-settings",
+"passi": [
+{
+"clic": "[data-group=\"toast\"][data-value=\"no\"]"
+},
+{
+"clic": "[data-group=\"section\"][data-value=\"vuota\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"dark\"]"
+}
+]
+},
+"misura": [
+760,
+640
+],
+"nascondi": [
+"[data-proto-section]:not([data-proto-section=\"vuota\"])"
+]
+},
+{
+"id": "p-ricette-problemi",
+"pagina": "ricette.html",
+"palco": ".proto-settings",
+"passi": [
+{
+"clic": "[data-group=\"toast\"][data-value=\"no\"]"
+},
+{
+"clic": "[data-group=\"section\"][data-value=\"problemi\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"dark\"]"
+}
+]
+},
+"misura": [
+760,
+640
+],
+"nascondi": [
+"[data-proto-section]:not([data-proto-section=\"problemi\"])"
+]
+},
+{
+"id": "p-ricette-carica",
+"pagina": "ricette.html",
+"palco": ".proto-settings",
+"passi": [
+{
+"clic": "[data-group=\"toast\"][data-value=\"no\"]"
+},
+{
+"clic": "[data-group=\"section\"][data-value=\"carica\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"dark\"]"
+}
+]
+},
+"misura": [
+760,
+640
+],
+"nascondi": [
+"[data-proto-section]:not([data-proto-section=\"carica\"])"
+]
+},
+{
+"id": "p-ricette-errore",
+"pagina": "ricette.html",
+"palco": ".proto-settings",
+"passi": [
+{
+"clic": "[data-group=\"toast\"][data-value=\"no\"]"
+},
+{
+"clic": "[data-group=\"section\"][data-value=\"errore\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"dark\"]"
+}
+]
+},
+"misura": [
+760,
+640
+],
+"nascondi": [
+"[data-proto-section]:not([data-proto-section=\"errore\"])"
+]
+},
+{
+"id": "p-ricette-cinquecento",
+"pagina": "ricette.html",
+"palco": ".proto-settings",
+"passi": [
+{
+"clic": "[data-group=\"toast\"][data-value=\"no\"]"
+},
+{
+"clic": "[data-group=\"section\"][data-value=\"cinquecento\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"dark\"]"
+}
+]
+},
+"misura": [
+760,
+640
+],
+"nascondi": [
+"[data-proto-section]:not([data-proto-section=\"cinquecento\"])"
+]
+},
+{
+"id": "p-ricette-dialogo-aperta",
+"pagina": "ricette.html",
+"palco": "#stage",
+"passi": [
+{
+"clic": "[data-group=\"toast\"][data-value=\"no\"]"
+},
+{
+"clic": "[data-group=\"dialog\"][data-value=\"aperta\"]",
+"dopo": 500
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"dark\"]"
+}
+]
+},
+"misura": [
+1280,
+800
+],
+"mostra": [
+"#scrim"
+],
+"trasparente": true
+},
+{
+"id": "p-ricette-dialogo-prova",
+"pagina": "ricette.html",
+"palco": "#stage",
+"passi": [
+{
+"clic": "[data-group=\"toast\"][data-value=\"no\"]"
+},
+{
+"clic": "[data-group=\"dialog\"][data-value=\"prova\"]",
+"dopo": 500
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"dark\"]"
+}
+]
+},
+"misura": [
+1280,
+800
+],
+"mostra": [
+"#scrim"
+],
+"trasparente": true
+},
+{
+"id": "p-ricette-dialogo-prova-errore",
+"pagina": "ricette.html",
+"palco": "#stage",
+"passi": [
+{
+"clic": "[data-group=\"toast\"][data-value=\"no\"]"
+},
+{
+"clic": "[data-group=\"dialog\"][data-value=\"prova-errore\"]",
+"dopo": 500
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"dark\"]"
+}
+]
+},
+"misura": [
+1280,
+800
+],
+"mostra": [
+"#scrim"
+],
+"trasparente": true
+},
+{
+"id": "p-ricette-dialogo-nessuna-nota",
+"pagina": "ricette.html",
+"palco": "#stage",
+"passi": [
+{
+"clic": "[data-group=\"toast\"][data-value=\"no\"]"
+},
+{
+"clic": "[data-group=\"dialog\"][data-value=\"nessuna-nota\"]",
+"dopo": 500
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"dark\"]"
+}
+]
+},
+"misura": [
+1280,
+800
+],
+"mostra": [
+"#scrim"
+],
+"trasparente": true
+},
+{
+"id": "p-ricette-dialogo-venti",
+"pagina": "ricette.html",
+"palco": "#stage",
+"passi": [
+{
+"clic": "[data-group=\"toast\"][data-value=\"no\"]"
+},
+{
+"clic": "[data-group=\"dialog\"][data-value=\"venti\"]",
+"dopo": 500
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"dark\"]"
+}
+]
+},
+"misura": [
+1280,
+800
+],
+"mostra": [
+"#scrim"
+],
+"trasparente": true
+},
+{
+"id": "p-ricette-dialogo-cambiata",
+"pagina": "ricette.html",
+"palco": "#stage",
+"passi": [
+{
+"clic": "[data-group=\"toast\"][data-value=\"no\"]"
+},
+{
+"clic": "[data-group=\"dialog\"][data-value=\"cambiata\"]",
+"dopo": 500
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"dark\"]"
+}
+]
+},
+"misura": [
+1280,
+800
+],
+"mostra": [
+"#scrim"
+],
+"trasparente": true
+},
+{
+"id": "p-ricette-avviso",
+"pagina": "ricette.html",
+"palco": "#stage",
+"passi": [
+{
+"clic": "[data-group=\"toast\"][data-value=\"si\"]"
+}
+],
+"luci": {
+"light": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"light\"]"
+}
+],
+"dark": [
+{
+"clic": "[data-group=\"theme\"][data-value=\"dark\"]"
+}
+]
+},
+"misura": [
+1280,
+800
+],
+"mostra": [
+"#toasts"
+],
+"trasparente": true
+}
+]

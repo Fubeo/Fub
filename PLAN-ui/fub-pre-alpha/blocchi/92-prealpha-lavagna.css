@@ -1,0 +1,138 @@
+/* → theme/scrittoio/skin/nodes.css (N6 T26–T28, PA T28) */
+/* ── La lavagna nella cornice del disegno ──────────────────────────────────
+   La colonna degli strumenti e la riga delle opzioni sono quelle del disegno
+   (`kit-rail`, `kit-options-row`, `draw-button`): qui c'è solo ciò che la
+   lavagna aggiunge. Le opzioni della lavagna sono parole, non icone. */
+.lav-option-text {
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+/* Mentre si scrive in una scheda la riga delle opzioni diventa la barra del
+   formato, senza il filo sotto: è già dentro la testata. */
+.lav-format-bar {
+  flex: 1 1 auto;
+  padding: 0;
+  box-shadow: none;
+}
+.lav-exit-hint {
+  margin-left: auto;
+  padding: 0 var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+/* La barra della selezione: la bolla della nota, con il nome di ciò che è
+   scelto davanti, in grigio. */
+.lav-selection {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+}
+.lav-selection-count {
+  padding: 0 var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+.lav-selection .kit-bar-group {
+  padding-left: var(--space-2);
+  box-shadow: inset 1px 0 0 var(--border);
+}
+
+/* La lavagna vuota: tre righe al centro, e i due gesti per cominciare. */
+.lav-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  color: var(--text);
+  font-family: var(--font-ui);
+  text-align: center;
+}
+.lav-empty-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+}
+.lav-empty-body {
+  max-width: 40ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+/* Il lazo: un tratto a puntini nell'accento, un velo appena sotto. */
+.lav-lasso {
+  position: absolute;
+  top: 14%;
+  left: 12%;
+  z-index: 5;
+  width: 58%;
+  height: 56%;
+  overflow: visible;
+  pointer-events: none;
+}
+.lav-lasso path {
+  fill: var(--accent-wash);
+  stroke: var(--accent);
+  stroke-width: 1.5px;
+  stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Il selettore delle parti: le miniature in fila, l'intervallo scritto, il
+   suggerimento. Sta sul rialzo del popover. */
+.lav-parts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 320px;
+  padding: var(--space-5);
+}
+.lav-parts-title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+.lav-parts-thumbs {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.lav-parts-thumb {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  aspect-ratio: 3 / 4;
+  padding-bottom: var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.lav-parts-thumb[aria-selected="true"] {
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  color: var(--accent);
+}
+.lav-parts-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+.lav-parts-hint {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}

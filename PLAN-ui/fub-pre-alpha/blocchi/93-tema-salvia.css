@@ -1,0 +1,99 @@
+/* tema della comunità «Salvia» · chiaro e scuro · PA T42, D17 A */
+/* Il secondo tema d'esempio: soli colori. Un accento salvia e superfici
+   appena verdi, nelle due luci; nessuna regola di pelle, nessun hook. Nel
+   tema vero i blocchi diventano `light.css` e `dark.css`, con `extends`. */
+
+/* ── Giorno ──────────────────────────────────────────────────────────────── */
+:root[data-theme="light"] {
+  --bg: #e5ebe3;
+  --bg-chrome: #e5ebe3;
+  --bg-panel: #e5ebe3;
+  --bg-hover: #dae2d8;
+  --bg-active: #cfd9cc;
+  --sheet: #fbfdfa;
+  --sheet-2: #f1f5ef;
+  --bg-input: #f1f5ef;
+  --bg-elev: #ffffff;
+  --overlay-hover: rgb(27 36 29 / 5%);
+  --overlay-active: rgb(27 36 29 / 9%);
+  --text: #1b241d;
+  --muted: #546057;
+  --border: #d0dacd;
+  --border-strong: #adbaa9;
+  --outline: #7b887d;
+  --accent: #3f6f4a;
+  --accent-soft: #2f5a39;
+  --accent-contrast: #f8fcf8;
+  --accent-wash: #d5e8d6;
+  --accent-veil: rgb(63 111 74 / 12%);
+  --focus-ring: #3f6f4a;
+  --graph-node: #7b887d;
+  --graph-node-active: #3f6f4a;
+  --graph-node-hover: #2f5a39;
+  --draw-desk: #e6ebe4;
+  --doc-bg: #fbfdfa;
+  --doc-active-line: #f2f6f0;
+  --doc-selection: #d3e6d4;
+  --doc-fg: #1f2821;
+  --doc-heading: #1f2821;
+  --doc-link: #376a43;
+  --doc-caret: #3f6f4a;
+  --doc-gutter-fg: #58635a;
+  --doc-drop-line: #3f6f4a;
+  --doc-block-selected: rgb(63 111 74 / 12%);
+}
+:root[data-theme="light"][data-contrast="high"] {
+  --text: #111a13;
+  --muted: #3b463e;
+  --border: #93a28f;
+  --border-strong: #63725f;
+  --accent: #2f5a39;
+  --accent-soft: #23482c;
+  --focus-ring: #2f5a39;
+}
+
+/* ── Notte ───────────────────────────────────────────────────────────────── */
+:root[data-theme="dark"] {
+  --bg: #0b110d;
+  --bg-chrome: #0b110d;
+  --bg-panel: #0b110d;
+  --bg-hover: #131b15;
+  --bg-active: #1b241d;
+  --sheet: #151d17;
+  --sheet-2: #1d261f;
+  --bg-input: #1d261f;
+  --bg-elev: #212b23;
+  --text: #e3ebe4;
+  --muted: #9faba1;
+  --border: #2a352c;
+  --border-strong: #415044;
+  --outline: #738276;
+  --accent: #8fc79a;
+  --accent-soft: #abd8b4;
+  --accent-contrast: #08130b;
+  --accent-wash: #22392a;
+  --accent-veil: rgb(143 199 154 / 20%);
+  --focus-ring: #8fc79a;
+  --graph-node: #738276;
+  --graph-node-active: #8fc79a;
+  --graph-node-hover: #abd8b4;
+  --doc-bg: #151d17;
+  --doc-active-line: #1a231c;
+  --doc-selection: #20352a;
+  --doc-fg: #d9e2da;
+  --doc-heading: #d9e2da;
+  --doc-link: #8fc79a;
+  --doc-caret: #8fc79a;
+  --doc-gutter-fg: #9faba1;
+  --doc-drop-line: #8fc79a;
+  --doc-block-selected: rgb(143 199 154 / 20%);
+}
+:root[data-theme="dark"][data-contrast="high"] {
+  --text: #f3f8f3;
+  --muted: #c0cbc2;
+  --border: #536355;
+  --border-strong: #75867a;
+  --accent: #a9dcb3;
+  --accent-soft: #c3e8ca;
+  --focus-ring: #a9dcb3;
+}

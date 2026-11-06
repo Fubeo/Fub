@@ -1,0 +1,22 @@
+/* → theme/scrittoio/skin/frame.css (D5 A: K5 T21–T23 con S2 T4) */
+/* ── Il segno del motore nella banda ───────────────────────────────────────
+   Lo stesso puntino dello stato del riquadro, coi cinque valori del motore
+   del disegno: acceso (verde), si apre (grigio), chiuso con parti che restano
+   come sono (ambra), ridotto (vuoto: gli strumenti semplici ci sono) e fermo
+   (rosso). Il colore non è mai l'unico segno: c'è sempre la parola accanto. */
+.status-standing[data-standing="opening"] > .status-standing-mark {
+  background: var(--muted);
+}
+.status-standing[data-standing="closed"] > .status-standing-mark {
+  background: var(--warning);
+}
+.status-standing[data-standing="reduced"] > .status-standing-mark {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--muted);
+}
+.status-standing[data-standing="stopped"] > .status-standing-mark {
+  background: var(--danger);
+}
+.status-standing[data-standing="stopped"] {
+  color: var(--text);
+}

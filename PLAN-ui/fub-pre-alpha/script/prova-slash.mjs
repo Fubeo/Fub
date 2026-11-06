@@ -1,4 +1,4 @@
-import { chromium } from "/home/fubeo/Progetti/Fub/apps/client/node_modules/playwright/index.mjs";
+import { chromium } from "./client.mjs";
 const [dir] = process.argv.slice(2);
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });

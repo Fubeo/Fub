@@ -1,7 +1,7 @@
 // node diff2.mjs a.png b.png out.diff.png → percentuale di pixel diversi
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-const require = createRequire("/home/fubeo/Progetti/Fub/apps/client/package.json");
+const { richiedi: require } = await import("./client.mjs");
 const { PNG } = require("pngjs");
 const pixelmatch = require("pixelmatch").default ?? require("pixelmatch");
 const [x, y, out] = process.argv.slice(2);

@@ -1,0 +1,162 @@
+<template data-toppa="tema-sviluppo" data-nome="Il gruppo «Sviluppo» con la modalità sviluppatore">
+<!-- → crates/fub-host/src/settings.rs (la chiave developer.mode, gruppo «Sviluppo»), panels/settings.ts la rende come le altre; PA T36 -->
+<section class="settings-section" id="settings-section-sviluppo" aria-labelledby="settings-section-sviluppo-title">
+  <div class="settings-section-head"><h3 class="settings-section-title" id="settings-section-sviluppo-title">Sviluppo</h3></div>
+  <div class="settings-section-body">
+    <div class="setting-row" data-setting-key="developer.mode" data-modified="true">
+      <div class="setting-text"><label for="setting-developer.mode" id="setting-developer.mode-label">Modalità sviluppatore</label><div class="muted setting-description" id="setting-developer.mode-desc">Per chi scrive un tema: installa da una cartella, collega una cartella che cambia mentre la scrivi, apre «Tutti i componenti».</div><div class="setting-meta"><span class="setting-scope" data-scope="machine" aria-hidden="true"><span class="setting-scope-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M9 20h6M12 16v4"></path></svg></span><span>Questa macchina</span></span><div class="setting-default">Predefinito: spento</div><button type="button" class="link-button setting-reset">Azzera</button></div></div>
+      <div class="setting-control"><input type="checkbox" class="setting-switch" role="switch" id="setting-developer.mode" aria-describedby="setting-developer.mode-desc" checked></div>
+    </div>
+  </div>
+</section>
+</template>
+
+<template data-toppa="tema-catalogo" data-nome="«Temi installati» in modalità sviluppatore">
+<!-- → panels/settings.ts (renderThemeCatalog: due bottoni in più quando developer.mode è acceso), i18n/catalog.ts; PA T36 e T37 -->
+<div class="setting-row setting-block" data-theme-catalog="">
+  <div class="setting-text"><div class="setting-label" role="heading" aria-level="4">Temi installati</div><div class="muted">Scegli un tema per provarlo senza salvare. Applica rende la scelta autorevole; Annulla ripristina il tema precedente.</div></div>
+  <div class="segmented segmented--wide setting-segmented" role="radiogroup" aria-label="Temi installati">
+    <button type="button" class="segmented-option" role="radio" data-theme-id="fub.scrittoio" data-theme-light="light" aria-checked="true">Scrittoio · chiaro · Parte di Fub</button>
+    <button type="button" class="segmented-option" role="radio" data-theme-id="fub.scrittoio" data-theme-light="dark" aria-checked="false">Scrittoio · scuro · Parte di Fub</button>
+    <button type="button" class="segmented-option" role="radio" data-theme-id="carta" data-theme-light="light" aria-checked="false">Carta · chiaro · Della comunità</button>
+    <button type="button" class="segmented-option" role="radio" data-theme-id="salvia" data-theme-light="light" aria-checked="false">Salvia · chiaro · Della comunità</button>
+    <button type="button" class="segmented-option" role="radio" data-theme-id="salvia" data-theme-light="dark" aria-checked="false">Salvia · scuro · Della comunità</button>
+  </div>
+  <div class="settings-actions"><button type="button" class="settings-btn">Applica tema</button><button type="button" class="settings-btn">Annulla anteprima</button><button type="button" class="settings-btn" data-dev-action="install">Installa da cartella…</button><button type="button" class="settings-btn" data-dev-action="link">Collega una cartella…</button><button type="button" class="settings-btn" data-dev-action="catalog">Tutti i componenti</button></div>
+  <div class="setting-source" role="status" aria-live="polite">Nessuna anteprima attiva.</div>
+</div>
+</template>
+
+<template data-toppa="tema-collegato" data-nome="Il tema collegato, in sviluppo">
+<!-- → panels/settings.ts (sotto «Temi installati», con la chiave developer.theme-folder), theme/theme.ts rimonta a fub://theme-changed; PA T37 -->
+<div class="setting-row setting-block" data-theme-linked="">
+  <div class="setting-text"><div class="setting-label" role="heading" aria-level="4">Cartella collegata</div><div class="muted">~/temi/carta · Carta · In sviluppo. Salvi un file e il tema si rimonta.</div></div>
+  <div class="setting-source" role="status" aria-live="polite">Ricaricato alle 10:42:07, dopo il salvataggio di skin.css.</div>
+  <div class="settings-actions"><button type="button" class="settings-btn">Scollega</button></div>
+</div>
+</template>
+
+<template data-toppa="tema-diagnosi" data-nome="Perché un tema è rifiutato: la diagnosi">
+<!-- → panels/settings.ts (i motivi di theme/loader.ts validateThemeBundle divisi in campi, non riscritti), skin/settings.css; PA T36 e T37 -->
+<div class="setting-row setting-block tema-diagnosi" role="alert">
+  <div class="setting-text"><div class="setting-label" role="heading" aria-level="4">«Carta» è rifiutato: 3 motivi</div><div class="muted">Tentativo delle 10:44:31. Resta montato l'ultimo buono, delle 10:42:07.</div></div>
+  <ol class="tema-diagnosi-lista">
+    <li class="tema-diagnosi-riga"><span class="tema-diagnosi-file">skin.css</span><span class="tema-diagnosi-dove">12:3</span><code class="tema-diagnosi-codice">selector-hook</code><span class="tema-diagnosi-perche">hook .carta-titolo non dichiarato</span></li>
+    <li class="tema-diagnosi-riga"><span class="tema-diagnosi-file">skin.css</span><span class="tema-diagnosi-dove">40:1</span><code class="tema-diagnosi-codice">at-rule</code><span class="tema-diagnosi-perche">@font-face non ammesso</span></li>
+    <li class="tema-diagnosi-riga"><span class="tema-diagnosi-file">manifest.json</span><span class="tema-diagnosi-dove">—</span><code class="tema-diagnosi-codice">engine</code><span class="tema-diagnosi-perche">engine theme-1 incompatibile, serve theme-2</span></li>
+  </ol>
+  <div class="settings-actions"><button type="button" class="settings-btn">Copia la diagnosi</button></div>
+</div>
+</template>
+
+<template data-toppa="tema-sostituisci" data-nome="Un tema con lo stesso id: «Sostituisci»">
+<!-- → panels/settings.ts (kit/dialog.ts, prima di uninstall_theme e install_theme), i18n/catalog.ts; PA T36 -->
+<div class="kit-dialog-scrim">
+  <div class="kit-dialog" role="dialog" aria-modal="true" aria-labelledby="tema-sostituisci-titolo" aria-describedby="tema-sostituisci-testo">
+    <h2 class="kit-dialog-title" id="tema-sostituisci-titolo">«Carta» è già installato</h2>
+    <p class="kit-dialog-description" id="tema-sostituisci-testo">La cartella ~/temi/carta ha lo stesso id, «carta», con la versione 0.4.0 (installata: 0.3.2). La cartella nuova è già controllata: si può sostituire. Il tema è in uso, quindi si rimonta subito.</p>
+    <div class="kit-dialog-actions"><button type="button" class="kit-button" data-kind="normal">Annulla</button><button type="button" class="kit-button" data-kind="primary">Sostituisci</button></div>
+  </div>
+</div>
+</template>
+
+<template data-toppa="tema-sostituisci-fallito" data-nome="La sostituzione fallita a metà">
+<!-- → panels/settings.ts (kit/dialog.ts, l'esito d'errore di T36); PA T36 -->
+<div class="kit-dialog-scrim">
+  <div class="kit-dialog" role="alertdialog" aria-modal="true" aria-labelledby="tema-fallito-titolo" aria-describedby="tema-fallito-testo">
+    <h2 class="kit-dialog-title" id="tema-fallito-titolo">«Carta» non si è installato</h2>
+    <p class="kit-dialog-description" id="tema-fallito-testo">Il tema vecchio è stato tolto, il nuovo si è fermato: il disco è pieno. La cartella ~/temi/carta resta dov'è, quindi non hai perso niente: libera spazio e installalo di nuovo. Per ora torna Scrittoio.</p>
+    <div class="kit-dialog-actions"><button type="button" class="kit-button" data-kind="primary">Ho capito</button></div>
+  </div>
+</div>
+</template>
+
+<template data-toppa="tutti-componenti" data-nome="La pagina «Tutti i componenti»: i componenti negli stati del contratto">
+<!-- → src/dev/catalogo/ (nuovo: il cuore di bench/catalog.ts e bench/kit.ts, caricato con import()), una vista aperta da Aspetto, skin/settings.css; PA T38 -->
+<section class="dev-catalog" aria-labelledby="dev-catalog-title">
+  <header class="dev-catalog-head">
+    <div class="dev-catalog-heading"><h2 class="dev-catalog-title" id="dev-catalog-title">Tutti i componenti</h2><p class="muted">Carta · In sviluppo · ricaricato alle 10:42:07</p></div>
+    <div class="dev-catalog-switches">
+      <div class="segmented" role="radiogroup" aria-label="Luce della pagina"><button type="button" class="segmented-option" role="radio" aria-checked="true">Chiaro</button><button type="button" class="segmented-option" role="radio" aria-checked="false">Scuro</button></div>
+      <label class="dev-catalog-switch"><input type="checkbox" class="setting-switch" role="switch"><span>Contrasto alto</span></label>
+    </div>
+  </header>
+  <div class="kit-tabs dev-catalog-tabs" role="tablist" aria-orientation="horizontal" aria-label="Che cosa guardare">
+    <button type="button" class="kit-tab" id="dev-tab-componenti" role="tab" aria-selected="true" tabindex="0" data-tab="componenti"><span class="kit-tab-label">Componenti</span></button>
+    <button type="button" class="kit-tab" id="dev-tab-tavolozza" role="tab" aria-selected="false" tabindex="-1" data-tab="tavolozza"><span class="kit-tab-label">Tavolozza</span></button>
+    <button type="button" class="kit-tab" id="dev-tab-caratteri" role="tab" aria-selected="false" tabindex="-1" data-tab="caratteri"><span class="kit-tab-label">Caratteri</span></button>
+    <button type="button" class="kit-tab" id="dev-tab-kit" role="tab" aria-selected="false" tabindex="-1" data-tab="kit"><span class="kit-tab-label">Primitivi del kit</span></button>
+  </div>
+  <div class="dev-catalog-body">
+    <div class="dev-catalog-list" role="tabpanel" aria-labelledby="dev-tab-componenti">
+      <section class="dev-catalog-item" aria-labelledby="dev-item-kit-button" aria-current="true">
+        <h3 class="dev-catalog-name" id="dev-item-kit-button">kit-button <span class="muted">kit · cornice</span></h3>
+        <div class="dev-catalog-states">
+          <figure class="dev-catalog-state"><button type="button" class="kit-button" data-kind="normal">Applica</button><figcaption class="muted">riposo</figcaption></figure>
+          <figure class="dev-catalog-state"><button type="button" class="kit-button" data-kind="normal" data-force="hover">Applica</button><figcaption class="muted">passaggio</figcaption></figure>
+          <figure class="dev-catalog-state"><button type="button" class="kit-button" data-kind="normal" data-force="active">Applica</button><figcaption class="muted">premuto</figcaption></figure>
+          <figure class="dev-catalog-state"><button type="button" class="kit-button kit-button--icon" aria-label="Cerca" aria-pressed="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 17a7 7 0 1 0 0-14 7 7 0 0 0 0 14z"></path><path d="M21 21l-5-5"></path></svg></button><figcaption class="muted">selezionato</figcaption></figure>
+          <figure class="dev-catalog-state"><button type="button" class="kit-button" data-kind="normal" data-force="focus">Applica</button><figcaption class="muted">a fuoco</figcaption></figure>
+          <figure class="dev-catalog-state"><button type="button" class="kit-button" data-kind="normal" disabled>Applica</button><figcaption class="muted">disabilitato</figcaption></figure>
+        </div>
+      </section>
+      <section class="dev-catalog-item" aria-labelledby="dev-item-kit-field">
+        <h3 class="dev-catalog-name" id="dev-item-kit-field">kit-field <span class="muted">kit · cornice</span></h3>
+        <div class="dev-catalog-states">
+          <figure class="dev-catalog-state"><div class="kit-field"><label class="kit-field-label sr-only" for="dev-campo-1">Cerca</label><div class="kit-field-box"><input type="search" class="kit-field-input" id="dev-campo-1" placeholder="Cerca"></div></div><figcaption class="muted">riposo</figcaption></figure>
+          <figure class="dev-catalog-state"><div class="kit-field" data-force="hover"><label class="kit-field-label sr-only" for="dev-campo-2">Cerca</label><div class="kit-field-box" data-force="hover"><input type="search" class="kit-field-input" id="dev-campo-2" placeholder="Cerca"></div></div><figcaption class="muted">passaggio</figcaption></figure>
+          <figure class="dev-catalog-state"><div class="kit-field"><label class="kit-field-label sr-only" for="dev-campo-3">Cerca</label><div class="kit-field-box"><input type="search" class="kit-field-input" id="dev-campo-3" value="varianza" data-force="focus"></div></div><figcaption class="muted">a fuoco</figcaption></figure>
+          <figure class="dev-catalog-state"><div class="kit-field"><label class="kit-field-label sr-only" for="dev-campo-4">Cerca</label><div class="kit-field-box"><input type="search" class="kit-field-input" id="dev-campo-4" placeholder="Cerca" disabled></div></div><figcaption class="muted">disabilitato</figcaption></figure>
+        </div>
+      </section>
+      <section class="dev-catalog-item" aria-labelledby="dev-item-segmented">
+        <h3 class="dev-catalog-name" id="dev-item-segmented">segmented-control <span class="muted">controls · cornice</span></h3>
+        <div class="dev-catalog-states">
+          <figure class="dev-catalog-state"><div class="segmented" role="radiogroup" aria-label="Riposo"><button type="button" class="segmented-option" role="radio" aria-checked="false">Chiaro</button></div><figcaption class="muted">riposo</figcaption></figure>
+          <figure class="dev-catalog-state"><div class="segmented" role="radiogroup" aria-label="Passaggio"><button type="button" class="segmented-option" role="radio" aria-checked="false" data-force="hover">Chiaro</button></div><figcaption class="muted">passaggio</figcaption></figure>
+          <figure class="dev-catalog-state"><div class="segmented" role="radiogroup" aria-label="Premuto"><button type="button" class="segmented-option" role="radio" aria-checked="false" data-force="active">Chiaro</button></div><figcaption class="muted">premuto</figcaption></figure>
+          <figure class="dev-catalog-state"><div class="segmented" role="radiogroup" aria-label="Selezionato"><button type="button" class="segmented-option" role="radio" aria-checked="true">Chiaro</button></div><figcaption class="muted">selezionato</figcaption></figure>
+          <figure class="dev-catalog-state"><div class="segmented" role="radiogroup" aria-label="A fuoco"><button type="button" class="segmented-option" role="radio" aria-checked="false" data-force="focus">Chiaro</button></div><figcaption class="muted">a fuoco</figcaption></figure>
+          <figure class="dev-catalog-state"><div class="segmented" role="radiogroup" aria-label="Disabilitato"><button type="button" class="segmented-option" role="radio" aria-checked="false" disabled>Chiaro</button></div><figcaption class="muted">disabilitato</figcaption></figure>
+        </div>
+      </section>
+    </div>
+    <aside class="dev-catalog-info" aria-labelledby="dev-catalog-info-title">
+      <h3 class="dev-catalog-info-title" id="dev-catalog-info-title">kit-button</h3>
+      <p class="muted">Pezzo kit, strato cornice. Sei stati: riposo, passaggio, premuto, selezionato (aria-pressed), a fuoco, disabilitato.</p>
+      <ul class="dev-catalog-hooks"><li><code>.kit-button</code></li><li><code>.kit-button--icon</code></li><li><code>.kit-button[data-kind="primary"]</code></li></ul>
+      <div class="settings-actions"><button type="button" class="settings-btn">Copia gli hook</button></div>
+    </aside>
+  </div>
+</section>
+</template>
+
+<template data-toppa="tutti-tavolozza" data-nome="«Tutti i componenti»: la tavolozza">
+<!-- → src/dev/catalogo/ (la tavolozza di bench/catalog.ts), skin/settings.css; PA T38 -->
+<div class="dev-catalog-list" role="tabpanel" aria-labelledby="dev-tab-tavolozza">
+  <ul class="dev-swatches">
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="bg"></span><code>--bg</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="bg-chrome"></span><code>--bg-chrome</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="sheet"></span><code>--sheet</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="text"></span><code>--text</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="muted"></span><code>--muted</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="border"></span><code>--border</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="accent"></span><code>--accent</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="accent-soft"></span><code>--accent-soft</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="danger"></span><code>--danger</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="warning"></span><code>--warning</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="success"></span><code>--success</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="info"></span><code>--info</code></li>
+  </ul>
+  <p class="muted">Contrasto di --text su --sheet: 13,1:1. Di --muted su --sheet: 5,2:1 (serve almeno 4,5).</p>
+</div>
+</template>
+
+<template data-toppa="tutti-caratteri" data-nome="«Tutti i componenti»: i caratteri">
+<!-- → src/dev/catalogo/ (il campionario di bench/samples.ts), skin/settings.css; PA T38 e T39 -->
+<div class="dev-catalog-list" role="tabpanel" aria-labelledby="dev-tab-caratteri">
+  <section class="dev-font" data-font="ui"><h3 class="dev-catalog-name">--font-ui <span class="muted">Carta Serif, poi Hanken Grotesk</span></h3><p class="dev-font-sample">Il foglio è salvato. Tre schede, un filo.</p></section>
+  <section class="dev-font" data-font="reading"><h3 class="dev-catalog-name">--font-reading <span class="muted">Newsreader</span></h3><p class="dev-font-sample">La varianza misura quanto i dati si allontanano dalla media.</p></section>
+  <section class="dev-font" data-font="mono"><h3 class="dev-catalog-name">--font-mono <span class="muted">IBM Plex Mono</span></h3><p class="dev-font-sample">=MEDIA(B2:B40) · 0123456789</p></section>
+</div>
+</template>

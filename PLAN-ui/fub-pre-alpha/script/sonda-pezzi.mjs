@@ -1,5 +1,5 @@
 // Quali sovrapposizioni ha una cattura: node sonda-pezzi.mjs <cattura.json>
-import { chromium } from "/home/fubeo/Progetti/Fub/apps/client/node_modules/playwright/index.mjs";
+import { chromium } from "./client.mjs";
 import { readFileSync } from "node:fs";
 const j = JSON.parse(readFileSync(process.argv[2], "utf8"));
 const b = await chromium.launch();

@@ -1,5 +1,5 @@
 // node foto-pagina.mjs pagina.html out.png [larghezza] [altezza] → una foto della pagina (offline)
-const { chromium } = await import("/home/fubeo/Progetti/Fub/apps/client/node_modules/playwright/index.mjs");
+const { chromium } = await import("./client.mjs");
 const [pagina, out, w = "1400", h = "1000", sel] = process.argv.slice(2);
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: +w, height: +h } });

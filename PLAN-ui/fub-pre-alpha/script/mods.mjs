@@ -728,3 +728,103 @@ export async function corniceConAvvisi(page, ctx) {
   await testata(page, ctx);
   await ispettore(page, ctx);
 }
+
+// ── Secondo giro ───────────────────────────────────────────────────────────
+/** Clic dati dallo stato (`stato.clicca`: selettori Playwright), dopo gli altri
+ * mods: una scheda della barra, uno strumento, un foglio. Solo pre-alpha. */
+export async function clicca(page, { stato }) {
+  for (const sel of stato.clicca ?? []) {
+    await page.click(sel);
+    await page.waitForTimeout(350);
+  }
+  await settle(page);
+}
+
+/** Tasti dati dallo stato (`stato.tasti`), dopo gli altri mods. Solo pre-alpha. */
+export async function tasti(page, { stato }) {
+  for (const k of stato.tasti ?? []) {
+    if (k.length > 1 && /^[A-Z]/.test(k)) await page.keyboard.press(k);
+    else await page.keyboard.type(k);
+    await page.waitForTimeout(150);
+  }
+  await settle(page);
+}
+
+// ── Quarto giro: gli esiti del conflitto, col codice vero ──────────────────
+// Il banner del conflitto è disegnato da `conflitto` (il banco non ha una scena
+// che lo provochi). Gli esiti invece si fanno coi moduli veri del client: il
+// confronto è `openCompare` (ui/compare.ts), la conferma è `confirm`
+// (platform/confirm.ts) col presentatore della shell, le stringhe sono quelle
+// del catalogo. Nessun DOM scritto a mano, tranne il banner ridotto, che copia
+// riga per riga il ramo «rimandato» di `drawConflict`.
+async function righeNota(page) {
+  return page.evaluate(() => [...document.querySelectorAll(".pane.focus .cm-line")].map((l) => l.textContent ?? "").slice(0, 14));
+}
+/** «Confronta»: il diff per righe fra il disco e il mio testo. */
+export async function confronta(page) {
+  const righe = await righeNota(page);
+  await page.evaluate(async (righe) => {
+    const { openCompare } = await import("/src/ui/compare.ts");
+    const { t } = await import("/src/i18n/strings.ts");
+    const mio = [...righe];
+    mio.splice(Math.min(3, mio.length), 0, "Ho aggiunto questa riga stamattina, prima di uscire.");
+    const disco = [...righe];
+    disco.splice(Math.min(3, disco.length), 0, "Riga scritta dal telefono, arrivata adesso.");
+    openCompare(t("document.conflict.compare_title", { doc: "Benvenuto" }), disco.join("\n"), mio.join("\n"));
+  }, righe);
+  await page.waitForSelector(".modale .compare-box");
+  await page.waitForTimeout(400);
+  await settle(page);
+}
+// La conferma: `platform/confirm` importato da qui è un'altra istanza del modulo
+// (senza il presentatore dichiarato), così si chiama `openDialog` del kit con
+// gli stessi argomenti di `present` in shells/scrittoio/confirm.ts.
+async function chiedi(page, choice) {
+  await page.evaluate(async (choice) => {
+    const { openDialog } = await import("/src/kit/index.ts");
+    const { t } = await import("/src/i18n/strings.ts");
+    const current = "Benvenuto.md";
+    const ok = t(choice === "mine" ? "commands.doc.conflict.mine" : "commands.doc.conflict.theirs");
+    const detail = t(choice === "mine" ? "commands.doc.conflict.mine.desc" : "commands.doc.conflict.theirs.desc");
+    const { openLifetime } = await import("/src/ui/lifetime.ts");
+    const danger = choice === "theirs";
+    openDialog({
+      lifetime: openLifetime(),
+      title: t("document.conflict.title", { doc: current }),
+      description: `${ok}\n${current}\n${detail}`,
+      actions: [
+        { id: "cancel", label: t("app.cancel"), value: false, autofocus: danger },
+        { id: "confirm", label: ok, kind: danger ? "danger" : "primary", value: true },
+      ],
+      dismissValue: false,
+    });
+  }, choice);
+  await page.waitForSelector(".kit-dialog");
+  await page.waitForTimeout(400);
+  await settle(page);
+}
+/** «Mantieni il mio testo»: la conferma prima di scrivere. */
+export async function confermaMio(page) {
+  await chiedi(page, "mine");
+}
+/** «Usa la versione su disco»: la conferma, col tono del pericolo. */
+export async function confermaDisco(page) {
+  await chiedi(page, "theirs");
+}
+/** «Decidi dopo»: il banner ridotto a una riga, come in `drawConflict`. */
+export async function conflittoDopo(page) {
+  await page.evaluate(async () => {
+    const { t } = await import("/src/i18n/strings.ts");
+    const box = document.querySelector(".pane.focus .conflict-banner");
+    box.dataset.collapsed = "";
+    box.setAttribute("role", "status");
+    const line = document.createElement("span");
+    line.textContent = t("document.conflict.pending", { doc: "Benvenuto" });
+    const reopen = document.createElement("button");
+    reopen.type = "button";
+    reopen.className = "link-button";
+    reopen.textContent = t("document.conflict.resume");
+    box.replaceChildren(line, reopen);
+  });
+  await settle(page);
+}

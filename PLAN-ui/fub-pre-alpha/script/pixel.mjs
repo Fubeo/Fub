@@ -1,7 +1,7 @@
 // node pixel.mjs in.png x,y [x,y ...]  → il colore di ogni punto (hex)
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-const require = createRequire("/home/fubeo/.cache/fub-k1/tmp/scrittoio2/anteprima-copia/apps/client/package.json");
+const { richiedi: require } = await import("./client.mjs");
 const { chromium } = require("playwright");
 const [inp, ...pts] = process.argv.slice(2);
 const data = readFileSync(inp).toString("base64");

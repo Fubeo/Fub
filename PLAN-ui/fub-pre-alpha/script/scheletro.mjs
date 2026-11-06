@@ -1,5 +1,5 @@
 // Lo scheletro di una cattura: tag, id, classi, ruolo, fino a una profondità.
-import { chromium } from "/home/fubeo/Progetti/Fub/apps/client/node_modules/playwright/index.mjs";
+import { chromium } from "./client.mjs";
 import fs from "node:fs";
 const [file, depth = "5", root = "body"] = process.argv.slice(2);
 const j = JSON.parse(fs.readFileSync(file, "utf8"));

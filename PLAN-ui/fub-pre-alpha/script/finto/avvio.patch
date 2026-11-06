@@ -1,0 +1,121 @@
+diff -ruN a/apps/client/bench/fake-ipc.ts b/apps/client/bench/fake-ipc.ts
+--- a/apps/client/bench/fake-ipc.ts
++++ b/apps/client/bench/fake-ipc.ts
+@@ -133,6 +133,9 @@
+ // ---------------------------------------------------------------------------
+ 
+ const params = new URLSearchParams(globalThis.window.location.search);
++/// Le icone del banco sono monocrome (`fub:<nome>`, Scrittoio 2); `?icone=emoji`
++/// rimette le emoji, che restano una scelta piena.
++const ICONE_EMOJI = params.get("icone") === "emoji";
+ 
+ const graphNodesParam = params.get("graphNodes");
+ const graphSeedParam = params.get("graphSeed");
+@@ -956,7 +959,7 @@
+   {
+     root: "/Bench vault",
+     name: "Vault del banco",
+-    icon: "📷",
++    icon: ICONE_EMOJI ? "📷" : null,
+     favorite: true,
+     last_opened: 0,
+     keys_seen: {},
+@@ -978,7 +981,9 @@
+ /// L'organizzazione del vault: due note appuntate, tre icone, uno spazio. Il
+ /// finto risponde tutto vuoto — che è onesto e invisibile.
+ const ORGANIZATION: Organization = {
+-  icons: { "Benvenuto.md": "👋", Guida: "📘", Diario: "📅" },
++  icons: ICONE_EMOJI
++    ? { "Benvenuto.md": "👋", Guida: "📘", Diario: "📅", Progetti: "🚀" }
++    : { Guida: "fub:book", Diario: "fub:calendar" },
+   pinned: ["Benvenuto.md", "Guida/Sintassi di Fub.md"],
+   order: {},
+   spaces: ["Guida", "Diario", "Progetti"],
+@@ -1048,24 +1053,13 @@
+     roots: [
+       {
+         node: "tree_item",
+-        label: "Sintassi di Fub",
++        label: "Benvenuto in Fub",
+         selected: false,
+         expanded: true,
+         action: { action: "goto", payload: 1 },
+         children: [
+-          { node: "tree_item", label: "Titoli", selected: false, expanded: false, action: { action: "goto", payload: 2 }, children: [] },
+-          {
+-            node: "tree_item",
+-            label: "Testo",
+-            selected: false,
+-            expanded: true,
+-            action: { action: "goto", payload: 3 },
+-            children: [
+-              { node: "tree_item", label: "Riferimenti", selected: false, expanded: false, action: { action: "goto", payload: 4 }, children: [] },
+-            ],
+-          },
+-          { node: "tree_item", label: "Tabella", selected: false, expanded: false, action: { action: "goto", payload: 5 }, children: [] },
+-          { node: "tree_item", label: "Codice", selected: false, expanded: false, action: { action: "goto", payload: 6 }, children: [] },
++          { node: "tree_item", label: "Da dove partire", selected: true, expanded: false, action: { action: "goto", payload: 7 }, children: [] },
++          { node: "tree_item", label: "Una regola", selected: false, expanded: false, action: { action: "goto", payload: 16 }, children: [] },
+         ],
+       },
+     ],
+@@ -1243,7 +1237,7 @@
+   },
+   root: ROOT,
+   view: VIEWS,
+-  commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS],
++  commands: ON_MOBILE || params.get("formatbar") === "1" ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS],
+   settings: [...SETTINGS, ...(DRAWING === null ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS],
+   syntaxForms: [...MARKDOWN_SYNTAX],
+   ...(WORKBOOK_DOC === null ? {} : {
+diff -ruN a/apps/client/bench/scene.mjs b/apps/client/bench/scene.mjs
+--- a/apps/client/bench/scene.mjs
++++ b/apps/client/bench/scene.mjs
+@@ -1843,4 +1843,45 @@
+   const page = PAGES[scene.page ?? ""] ?? "/";
+   const query = [`light=${light}`, scene.query].filter(Boolean).join("&");
+   return `${base}${page}?${query}`;
+-}
+\ No newline at end of file
++}
++// ---------------------------------------------------------------------------
++// Prototipo di Scrittoio 2 (sonda usa-e-getta, non entra nel repository).
++// ---------------------------------------------------------------------------
++async function protoNota(page) {
++  await openNote(page, "Guida/Sintassi di Fub.md");
++  await openWorkbook(page);
++  await page.click(".pane.focus .tab >> nth=0");
++  await page.waitForSelector('.pane.focus .tab[data-index="0"][aria-selected="true"]');
++  for (const path of ["Dati", "Guida"]) {
++    const item = `#file-list li[role="treeitem"][data-path="${path}"]`;
++    if (await page.evaluate((sel) => document.querySelector(sel)?.getAttribute("aria-expanded") === "true", item)) {
++      await page.click(`${item} > .tree-row.folder`);
++    }
++  }
++  const line = page.locator(".pane.focus .cm-line", { hasText: "con tre voci" }).first();
++  const box = await line.boundingBox();
++  if (box) await page.mouse.click(box.x + box.width - 4, box.y + box.height / 2);
++  await page.keyboard.press("End");
++  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
++}
++SCENE.push(...onPage("shell", [
++  { id: "proto-nota", title: "Prototipo: la nota in Live", query: "workbook=1", prepare: protoNota },
++  { id: "proto-nota-barra", title: "Prototipo: la nota con la barra di formattazione", query: "workbook=1&formatbar=1", prepare: protoNota },
++  { id: "proto-icone", title: "Prototipo: le emoji", query: "workbook=1&icone=emoji", prepare: protoNota },
++  {
++    id: "proto-foglio",
++    title: "Prototipo: il foglio",
++    query: "workbook=1",
++    prepare: async (page) => {
++      await openRibbon(page, "any");
++    },
++  },
++  {
++    id: "proto-lavagna",
++    title: "Prototipo: la lavagna",
++    prepare: async (page) => {
++      await openFromTree(page, "Progetti/Mappa del banco.canvas", ".pane.focus .canvas-toolbar");
++      await page.waitForTimeout(400);
++    },
++  },
++]));

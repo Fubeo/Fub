@@ -1,0 +1,506 @@
+[
+{
+"id": "t-menu",
+"scena": "startup",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"clicca"
+],
+"telefono": true,
+"clicca": [
+"#brand-menu"
+]
+},
+{
+"id": "t-vault",
+"scena": "startup",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"clicca"
+],
+"telefono": true,
+"clicca": [
+"#vault-chip"
+]
+},
+{
+"id": "t-attivita",
+"scena": "activity",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-impostazioni",
+"scena": "settings",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-aspetto",
+"scena": "prefs-appearance",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-componenti",
+"scena": "settings-components",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-imp-vault",
+"scena": "settings-vault",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-imp-info",
+"scena": "g2-imp-info",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-cestino",
+"scena": "g2-cestino",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true,
+"cassetto": true
+},
+{
+"id": "t-cestino-vuoto",
+"scena": "g2-cestino-vuoto",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true,
+"cassetto": true
+},
+{
+"id": "t-non-salvata",
+"scena": "g2-non-salvata",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-salvataggio-fallito",
+"scena": "g2-salvataggio-fallito",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-bozza",
+"scena": "g2-bozza",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"datiNota"
+],
+"telefono": true
+},
+{
+"id": "t-conflitto",
+"scena": "mobile-startup",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"datiNota",
+"conflitto"
+],
+"telefono": true
+},
+{
+"id": "t-conferma",
+"scena": "confirm",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-conferma-pericolo",
+"scena": "confirm-danger",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-ricerca",
+"scena": "search",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true,
+"cassetto": true
+},
+{
+"id": "t-grafo",
+"scena": "graph",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-pdf",
+"scena": "g2-pdf-cerca",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitBar",
+"pdfBarra"
+],
+"telefono": true
+},
+{
+"id": "t-pdf-nessuno",
+"scena": "g2-pdf-nessuno",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitBar",
+"pdfBarra"
+],
+"telefono": true
+},
+{
+"id": "t-disegno",
+"scena": "draw-open",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitBar"
+],
+"telefono": true,
+"modo": "drawing"
+},
+{
+"id": "t-disegno-selezione",
+"scena": "draw-selection",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitBar"
+],
+"telefono": true,
+"modo": "drawing"
+},
+{
+"id": "t-lavagna",
+"scena": "proto-lavagna",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-foglio-selezione",
+"scena": "grid-selection",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitRibbon"
+],
+"telefono": true
+},
+{
+"id": "t-foglio-comandi",
+"scena": "grid-commands",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitRibbon"
+],
+"telefono": true
+},
+{
+"id": "t-foglio-risultato",
+"scena": "grid-result-table",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitRibbon"
+],
+"telefono": true
+},
+{
+"id": "t-foglio-errore",
+"scena": "grid-result-error",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitRibbon"
+],
+"telefono": true
+},
+{
+"id": "t-foto",
+"scena": "photo-xmp",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile"
+],
+"telefono": true
+},
+{
+"id": "t-nota-pdf",
+"scena": "nota-pdf",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-vuoto",
+"scena": "empty",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-nuovo-vault",
+"scena": "new-vault-profile",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-toast",
+"scena": "toast",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-avvisi",
+"scena": "notices",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-nuovo",
+"scena": "g2-nuovo",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-rinomina",
+"scena": "g2-rinomina",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-comp-spegni",
+"scena": "g2-comp-spegni",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-craft",
+"scena": "craft-peso",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile"
+],
+"telefono": true
+},
+{
+"id": "t-concentrazione",
+"scena": "concentration",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-schede",
+"scena": "tabs",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-lettura",
+"scena": "reading",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-sorgente",
+"scena": "source",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo"
+],
+"telefono": true
+},
+{
+"id": "t-doc-tab",
+"scena": "document-docx",
+"mods": [
+"testata",
+"schede",
+"senzaAvvisi",
+"modo",
+"testataFile",
+"kitRibbon"
+],
+"telefono": true,
+"modo": "page",
+"clicca": [
+".pane.focus .kit-ribbon-tabs .kit-tab >> nth=1"
+]
+}
+]

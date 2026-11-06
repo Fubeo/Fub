@@ -2,63 +2,87 @@
 
 Il prototipo del piano `piano/fub-pre-alpha` (vedi `PLAN.md`, «Dal
 prototipo»). È una superficie, non un programma: niente IPC, niente
-salvataggi, niente logica del prodotto. Ogni schermata è il DOM e il CSS
-del client vero, fotografati dal banco e uniti al CSS nuovo di Scrittoio 2.
+salvataggi, niente logica del prodotto. Si usa come il prodotto: ogni clic
+porta dove porterebbe l'app, o dice perché lì non succede niente.
+
+Ci sono 286 stati (S1–S286) e 17 scenari, nelle due luci, alle tre larghezze
+(piena, 700 px, telefono) e nei tre livelli di movimento. Ogni stato dice da
+dove viene:
+
+- **cattura**: il DOM del client vero, fotografato dal banco col CSS di
+  Scrittoio 2;
+- **composta**: DOM vero spostato o ritoccato, per esempio un editor di una
+  pagina dei piani nella cornice di Scrittoio 2;
+- **nuova**: DOM scritto a mano in questo giro (`toppe/`).
+
+Gli stati composti e nuovi aspettano il sì dell'utente: la pagina ha
+l'elenco e la frase pronta.
 
 ## Che cosa c'è
 
 - `simulatore.html`: la pagina. Si apre con un doppio clic, senza server.
-  In alto si scelgono lo stato, la luce, la larghezza (piena, 700,
-  telefono), il movimento e il fuoco. Lo stato sta nell'indirizzo
-  (`#stato=…&luce=…&larghezza=…&moto=…`).
-- `sim-dati.js`: le catture compresse (gzip e base64): il DOM e il CSS del
-  client vero, uno per stato e per luce.
-- `solo-simulatore.js`: i passaggi fra gli stati e i pezzi che si aprono
-  sopra (il menu delle modalità, «/», il tasto destro, la tavolozza, il
-  salvataggio, gli avvisi). Non va nel codice del prodotto.
-- `piani/*.html`: le pagine approvate degli altri piani, tali e quali
-  (griglia, disegno di K5, lavagna di N4 e di N6, comandi dei fogli, ricette
-  di A1).
-- `blocchi/*.css`: il CSS nuovo, un file per blocco. La prima riga di ogni
-  file dice il file di destinazione e il task.
-- `script/`: gli attrezzi che lo hanno costruito.
+  In alto si scelgono lo stato, lo scenario, la luce, la larghezza e il
+  movimento; l'indirizzo ricorda tutto
+  (`#stato=…&luce=…&larghezza=…&moto=…`, più `scenario=…&passo=…`). In testa
+  c'è il CSS nuovo, un blocco
+  `<style media="not all" data-destinazione="…" data-task="…">` per file di
+  destinazione.
+- `sim-dati-1.js`: le 632 catture compresse (316 schermi nelle due luci), le
+  toppe, i temi e i caratteri. È la fonte del DOM catturato.
+- `sim-stati.js`: gli stati, i gruppi, gli scenari, i pezzi e le pagine dei
+  piani.
+- `vista-sim.js`, `solo-simulatore.js`: il motore. Monta uno stato, risponde
+  ai clic e ai tasti, fa i passi degli scenari e i gesti del telefono. Non
+  va nel codice del prodotto.
+- `piani/*.html`: le pagine approvate degli altri piani, tali e quali.
+- `blocchi/*.css`: il CSS, un file per blocco; la prima riga dice il file di
+  destinazione e il task.
+- `toppe/*.html`: il DOM scritto a mano, un `<template data-toppa>` per
+  pezzo, con la destinazione e il task in testa.
+- `dal-prototipo.md`: le tabelle di «Dal prototipo», generate.
+- `script/`: ciò che rifà il simulatore, le sue prove e la pagina
+  dell'artifact.
 
 ## Come si copia
 
 Nella pagina, «I pezzi di questo stato» elenca ogni pezzo con il file di
-destinazione e il task; «Indica» lo mostra sullo schermo, «DOM» copia il suo
-HTML. Nel sorgente della pagina il CSS nuovo sta in blocchi
-`<style media="not all" data-destinazione="…" data-posto="…" data-task="…">`,
-uno per file di destinazione: si copia il blocco intero nel file che dice.
-Il JS dei blocchi segnati «solo simulatore» non si copia.
+destinazione, il task e se è nuovo, composto, cambiato o uguale; «Indica» lo
+mostra sullo schermo, «DOM» dà il suo HTML. Il CSS si copia blocco per
+blocco nel file che dice. Il JS «solo simulatore» non si copia.
 
-La tabella completa, pezzo per pezzo, è in `PLAN.md`, «Dal prototipo».
+La guida intera è in `PLAN.md`: «Dal prototipo» e «Come si implementa».
 
 ## Come si rifà
 
-Le catture (243 MB) non sono nel repository: stanno su `server-di-fub` in
-`~/.cache/fub-prealpha/sim/catture/`. Senza di loro si possono rifare le
-foto, non il simulatore.
+Dalla radice del repository, senza catturare di nuovo:
 
-- Costruire: `node script/costruisci-sim.mjs <cartella>`. Vuole le catture
-  in `../catture/` e le pagine dei piani in `$PROTO`.
-- Provare i gesti: `node script/prova-sim.mjs <cartella del simulatore>
-  <cartella delle foto>` (deve dire «errori: nessuno»).
-- Fotografare ogni stato, nelle due luci e alle tre larghezze:
-  `node script/foto-sim.mjs <cartella del simulatore> <cartella delle foto>`;
-  con le catture accanto, confronta ogni foto con quella del client.
-- Gli script usano il Playwright di `apps/client/node_modules` e, per i
-  pixel uguali al banco, `FONTCONFIG_FILE` di `CLAUDE_DEVICE.md`.
+```bash
+DATI=PLAN-ui/fub-pre-alpha node PLAN-ui/fub-pre-alpha/script/costruisci-sim.mjs PLAN-ui/fub-pre-alpha
+```
+
+Senza altri cambi riscrive gli stessi byte: lo si controlla prima di
+committare. Dove cambiare che cosa è in `PLAN.md`, «Rifare il simulatore».
+
+Gli script del browser vogliono un `apps/client` con `npm ci` fatto, in
+`FUB_CLIENT` (di serie quello di questo repository). Di solito è il client
+delle catture, che ha anche i caratteri.
+
+- Provare che si usa come il prodotto: `node script/prova-sim.mjs <cartella
+  del simulatore> <cartella delle foto>` (deve dire «errori: nessuno»).
+- Confrontare i pixel con le catture: `node script/foto-sim.mjs <cartella
+  del simulatore> <cartella delle foto>`. Vuole le catture (circa 560 MB),
+  che non sono nel repository.
+- Catturare di nuovo: `script/finto/LEGGIMI.md` (il client delle catture, le
+  sue toppe, `script/ricattura.mjs` e `script/ricattura-tutto.sh`). Il Vite
+  delle catture usa la porta 1468.
 - La pagina dell'artifact (le cinque parti, con il simulatore dentro):
-  `node script/costruisci-hub.mjs PLAN.md PLAN-ui/fub-pre-alpha <cartella>`.
-- Catturare di nuovo uno stato: `script/cattura.mjs` con i mod di
-  `script/mods.mjs`, contro una copia del client sulla porta 1468 (mai
-  1431, 1432, 1437 o 1438).
+  `node PLAN-ui/fub-pre-alpha/script/costruisci-hub.mjs PLAN.md PLAN-ui/fub-pre-alpha <cartella>`.
 
 ## Che cosa non fa
 
-- Densità, contrasto e accento: il simulatore segna la scelta e lo dice, ma
-  non ricompila i colori (domanda D12 del piano).
-- Il telefono: Scrittoio 2 ne ha disegnati 11 stati; per gli altri il
-  simulatore mostra il telefono più vicino e lo dice sotto lo schermo.
-- Le pagine dei piani stanno fuori dalla cornice di Scrittoio 2 (domanda D4).
+- Non salva e non parla con l'host: il testo che si scrive resta nello
+  stato montato.
+- L'affaccio dei cassetti col puntatore che sosta sul bordo non c'è: è un
+  gesto nel tempo che una cattura non prende (`PLAN.md`, differenza 39).
+- Il telefono è provvisorio (D1): le strisciate e il bordo che torna indietro
+  non ci sono in `main`.

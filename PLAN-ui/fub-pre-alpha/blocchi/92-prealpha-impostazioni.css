@@ -1,0 +1,228 @@
+/* → theme/scrittoio/skin/settings.css (PA T29, T36–T38) */
+/* ── Un componente fermato ─────────────────────────────────────────────────
+   Il motivo sta nella scheda, nel rosso del pericolo, sotto il nome. */
+.settings-component[data-state="stopped"] .setting-source {
+  color: var(--danger);
+}
+
+/* ── La diagnosi di un tema rifiutato ──────────────────────────────────────
+   Una riga per motivo, in quattro colonne che si leggono come una tabella:
+   il file, riga:colonna, il codice, il perché. Il filo rosso a sinistra dice
+   che è un rifiuto. Stretto, il perché va a capo sotto. */
+.tema-diagnosi {
+  padding-left: var(--space-5);
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+.tema-diagnosi-lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tema-diagnosi-riga {
+  display: grid;
+  grid-template-columns: 7em 4em 8em minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+.tema-diagnosi-file,
+.tema-diagnosi-dove,
+.tema-diagnosi-codice {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.tema-diagnosi-dove {
+  color: var(--muted);
+}
+.tema-diagnosi-codice {
+  color: var(--danger);
+}
+.tema-diagnosi-perche {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 560px) {
+  .tema-diagnosi-riga {
+    grid-template-columns: 7em minmax(0, 1fr);
+  }
+}
+
+/* ── «Tutti i componenti» ──────────────────────────────────────────────────
+   Una pagina da guardare mentre si scrive un tema: in testa la luce e il
+   contrasto, poi le schede, poi a sinistra i componenti in ogni stato e a
+   destra quello scelto, coi suoi hook. Stretta, una colonna. */
+.dev-catalog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  height: 100%;
+  overflow: auto;
+  padding: var(--space-7) var(--space-7) var(--space-9);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+.dev-catalog-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.dev-catalog-title {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+}
+.dev-catalog-heading p {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+}
+.dev-catalog-switches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-5);
+}
+.dev-catalog-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+.dev-catalog-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  align-items: start;
+  gap: var(--space-6);
+}
+.dev-catalog-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+.dev-catalog-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-sheet);
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.dev-catalog-item[aria-current="true"] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.dev-catalog-name {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.dev-catalog-name .muted {
+  margin-left: var(--space-2);
+  font-family: var(--font-ui);
+  font-weight: var(--weight-regular);
+}
+.dev-catalog-states {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+.dev-catalog-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 96px;
+  margin: 0;
+}
+.dev-catalog-state figcaption {
+  font-size: var(--text-xs);
+}
+.dev-catalog-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-radius: var(--radius-sheet);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+}
+.dev-catalog-info-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+}
+.dev-catalog-info p {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.dev-catalog-hooks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  list-style: none;
+}
+.dev-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dev-swatch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.dev-swatch-chip {
+  height: 56px;
+  border-radius: var(--radius-control);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.dev-swatch-chip[data-token="bg"] { background: var(--bg); }
+.dev-swatch-chip[data-token="bg-chrome"] { background: var(--bg-chrome); }
+.dev-swatch-chip[data-token="sheet"] { background: var(--sheet); }
+.dev-swatch-chip[data-token="text"] { background: var(--text); }
+.dev-swatch-chip[data-token="muted"] { background: var(--muted); }
+.dev-swatch-chip[data-token="border"] { background: var(--border); }
+.dev-swatch-chip[data-token="accent"] { background: var(--accent); }
+.dev-swatch-chip[data-token="accent-soft"] { background: var(--accent-soft); }
+.dev-swatch-chip[data-token="danger"] { background: var(--danger); }
+.dev-swatch-chip[data-token="warning"] { background: var(--warning); }
+.dev-swatch-chip[data-token="success"] { background: var(--success); }
+.dev-swatch-chip[data-token="info"] { background: var(--info); }
+.dev-font {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.dev-font-sample {
+  margin: 0;
+  font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+}
+.dev-font[data-font="ui"] .dev-font-sample { font-family: var(--font-ui); }
+.dev-font[data-font="reading"] .dev-font-sample { font-family: var(--font-reading); }
+.dev-font[data-font="mono"] .dev-font-sample { font-family: var(--font-mono); }
+@media (max-width: 760px) {
+  .dev-catalog {
+    padding: var(--space-5);
+  }
+  .dev-catalog-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

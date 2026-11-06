@@ -2,7 +2,7 @@
 import { createServer } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
 import { join, extname } from "node:path";
-const { chromium } = await import("/home/fubeo/Progetti/Fub/apps/client/node_modules/playwright/index.mjs");
+const { chromium } = await import("./client.mjs");
 const [proto, simDir, stato, ...sels] = process.argv.slice(2);
 const tipi = { ".html": "text/html; charset=utf-8", ".js": "text/javascript" };
 const srv = (root, file, port) => createServer((q, r) => {

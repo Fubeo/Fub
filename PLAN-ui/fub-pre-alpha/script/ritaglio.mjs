@@ -1,7 +1,7 @@
 // node ritaglio.mjs out.png x y w h scala a.png b.png [c.png] → i ritagli affiancati, ingranditi
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-const require = createRequire("/home/fubeo/Progetti/Fub/apps/client/package.json");
+const { richiedi: require } = await import("./client.mjs");
 const { PNG } = require("pngjs");
 const [out, X, Y, W, H, S, ...imgs] = process.argv.slice(2);
 const [x, y, w, h, s] = [X, Y, W, H, S].map(Number);

@@ -1,5 +1,5 @@
 // Fotografa una pagina locale: node foto.mjs <file.html> <out.png> [larghezza] [altezza] [js da eseguire]
-import { chromium } from "/home/fubeo/Progetti/Fub/apps/client/node_modules/playwright/index.mjs";
+import { chromium } from "./client.mjs";
 const [file, out, w = "1280", h = "800", js] = process.argv.slice(2);
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: +w, height: +h } });

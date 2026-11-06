@@ -1,0 +1,170 @@
+<template data-toppa="lav-colonna" data-nome="La colonna degli strumenti della lavagna (8 strumenti)">
+<!-- → editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); N6 T26 e T49, PA T28 -->
+<div class="kit-rail" data-size="normal" role="toolbar" aria-label="Strumenti della lavagna" aria-orientation="vertical" data-orientation="vertical">
+  <div class="kit-rail-group" data-group="pick">
+    <button type="button" class="kit-rail-slot draw-tool" data-slot="select" data-tools="select" data-tool="select" aria-label="Selezione" aria-keyshortcuts="V" aria-pressed="true" tabindex="0"><span class="kit-rail-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 3v15.5l4.2-4.1 2.9 6.6 2.6-1.1-2.9-6.5H19z"></path></svg></span></button>
+    <button type="button" class="kit-rail-slot draw-tool" data-slot="hand" data-tools="hand" data-tool="hand" aria-label="Mano" aria-keyshortcuts="H" aria-pressed="false" tabindex="-1"><span class="kit-rail-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11"></path><path d="M11 10V4.5a1.5 1.5 0 0 1 3 0V11"></path><path d="M14 10.5V6a1.5 1.5 0 0 1 3 0v8a7 7 0 0 1-7 7h-.5a6 6 0 0 1-4.6-2.2L3.6 15.4a1.5 1.5 0 0 1 2.3-1.9L8 15.5"></path></svg></span></button>
+  </div>
+  <div class="kit-rail-rule" role="separator"></div>
+  <div class="kit-rail-group" data-group="ink">
+    <button type="button" class="kit-rail-slot draw-tool" data-slot="pen" data-tools="pen" data-tool="pen" aria-haspopup="menu" aria-expanded="false" aria-label="Penna" aria-keyshortcuts="P" aria-pressed="false" tabindex="-1"><span class="kit-rail-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20l1-4.5L16 4.5a2.1 2.1 0 0 1 3 3L8 18.5z"></path><path d="M14 6.5l3 3"></path></svg></span><span class="kit-rail-corner" aria-hidden="true"></span></button>
+    <button type="button" class="kit-rail-slot draw-tool" data-slot="highlighter" data-tools="highlighter" data-tool="highlighter" aria-label="Evidenziatore" aria-pressed="false" tabindex="-1"><span class="kit-rail-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 21h7"></path><path d="M8.5 17.5l-3-3 9.8-9.8a2.1 2.1 0 0 1 3 3z"></path><path d="M5.5 14.5L4 19l4.5-1.5"></path></svg></span></button>
+    <button type="button" class="kit-rail-slot draw-tool" data-slot="eraser" data-tools="eraser" data-tool="eraser" aria-label="Gomma" aria-keyshortcuts="E" aria-pressed="false" tabindex="-1"><span class="kit-rail-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 20h11"></path><path d="M5.5 15.5l9.6-9.6a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L12.5 18.5 9 20l-3.5-1.5a2 2 0 0 1 0-3z"></path><path d="M10 11l5 5"></path></svg></span></button>
+    <button type="button" class="kit-rail-slot draw-tool" data-slot="lasso" data-tools="lasso" data-tool="lasso" aria-label="Lazo" aria-keyshortcuts="Q" aria-pressed="false" tabindex="-1"><span class="kit-rail-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 4c4.4 0 8 2.2 8 5s-3.6 5-8 5-8-2.2-8-5 3.6-5 8-5z"></path><path d="M7.5 13c-1.2 1.4-.8 3.1.8 3.5 1.5.4 1.6 2.1.4 3.5"></path></svg></span></button>
+  </div>
+  <div class="kit-rail-rule" role="separator"></div>
+  <div class="kit-rail-group" data-group="make">
+    <button type="button" class="kit-rail-slot draw-tool" data-slot="text" data-tools="text" data-tool="text" aria-label="Testo" aria-keyshortcuts="T" aria-pressed="false" tabindex="-1"><span class="kit-rail-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 7.5V5h14v2.5"></path><path d="M12 5v14"></path><path d="M9.5 19h5"></path></svg></span></button>
+    <button type="button" class="kit-rail-slot draw-tool" data-slot="connect" data-tools="connect" data-tool="connect" aria-label="Collega" aria-keyshortcuts="C" aria-pressed="false" tabindex="-1"><span class="kit-rail-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 5h6v5H3z"></path><path d="M15 14h6v5h-6z"></path><path d="M9 7.5c4.5 0 1.5 9 6 9"></path></svg></span></button>
+  </div>
+</div>
+</template>
+
+<template data-toppa="lav-opzioni" data-nome="La riga delle opzioni della lavagna (Selezione, niente scelto)">
+<!-- → editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); N6 T26 e T50, PA T28 -->
+<div class="kit-options-row">
+  <div class="draw-options-item"><div class="draw-group kit-bar-group" role="group" aria-label="Aggiungi">
+    <button type="button" class="draw-button kit-bar-button lav-option-text" tabindex="0">Testo</button>
+    <button type="button" class="draw-button kit-bar-button lav-option-text" tabindex="-1">File…</button>
+    <button type="button" class="draw-button kit-bar-button lav-option-text" tabindex="-1">Pagina web</button>
+    <button type="button" class="draw-button kit-bar-button lav-option-text" tabindex="-1">Gruppo</button>
+  </div></div>
+  <div class="draw-options-item"><div class="draw-group kit-bar-group" role="group" aria-label="Appunti">
+    <button type="button" class="draw-button kit-bar-button lav-option-text" tabindex="-1" aria-keyshortcuts="Control+V">Incolla</button>
+  </div></div>
+  <div class="draw-options-item"><div class="draw-group kit-bar-group" role="group" aria-label="Vista">
+    <button type="button" class="draw-button kit-bar-button draw-zoom-level" tabindex="-1" aria-label="80%: riporta lo zoom al 100%">80%</button>
+    <button type="button" class="draw-button kit-bar-button lav-option-text" tabindex="-1" aria-keyshortcuts="Shift+1">Mostra tutta la lavagna</button>
+  </div></div>
+</div>
+</template>
+
+<template data-toppa="lav-opzioni-scrive" data-nome="La riga delle opzioni mentre si scrive in una scheda: la barra di formato">
+<!-- → editors/canvas/chrome/options.ts (la barra di formato di panels/format-bar.ts dentro la riga); N6 T27 e T41, PA T28 -->
+<div class="kit-options-row">
+  <div class="format-bar lav-format-bar" role="toolbar" aria-orientation="horizontal" aria-label="Formato: Varianza.md">
+    <div class="format-bar-group" data-group="block" role="group" aria-label="Blocco"><button type="button" class="format-bar-button format-bar-menu" tabindex="-1" aria-haspopup="menu" aria-expanded="false" aria-label="Stile del paragrafo"><span class="format-bar-menu-label">Paragrafo</span></button></div>
+    <div class="format-bar-group" data-group="inline" role="group" aria-label="Testo">
+      <button type="button" class="format-bar-button" tabindex="0" aria-label="Grassetto" aria-keyshortcuts="Control+B" aria-pressed="false">G</button>
+      <button type="button" class="format-bar-button" tabindex="-1" aria-label="Corsivo" aria-keyshortcuts="Control+I" aria-pressed="true">C</button>
+      <button type="button" class="format-bar-button" tabindex="-1" aria-label="Codice" aria-pressed="false">&lt;/&gt;</button>
+    </div>
+    <div class="format-bar-group" data-group="links" role="group" aria-label="Collegamenti"><button type="button" class="format-bar-button" tabindex="-1" aria-label="Collegamento" aria-keyshortcuts="Control+K">Link</button></div>
+  </div>
+  <div class="draw-options-item"><span class="lav-exit-hint" role="note">Esc per uscire · Ctrl+Invio una scheda sotto</span></div>
+</div>
+</template>
+
+<template data-toppa="lav-bolla-una" data-nome="La barra della selezione sopra una scheda">
+<!-- → editors/canvas/chrome/selection.ts (nuovo, sul posto di panels/selection-bubble.ts); N6 T26 e T51, PA T28 -->
+<div class="selection-bubble lav-selection" role="toolbar" aria-label="Scheda scelta: Varianza.md">
+  <span class="lav-selection-count">Varianza.md</span>
+  <div class="kit-bar-group" role="group" aria-label="Apri">
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="0" aria-keyshortcuts="Enter">Apri</button>
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="-1">Apri a lato</button>
+  </div>
+  <div class="kit-bar-group" role="group" aria-label="Scheda">
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="-1" aria-haspopup="menu" aria-expanded="false">Colore ›</button>
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="-1" aria-keyshortcuts="C">Collega…</button>
+    <button type="button" class="kit-bar-button" tabindex="-1" aria-haspopup="menu" aria-expanded="false" aria-label="Altre azioni"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 12h.01M12 12h.01M18 12h.01"></path></svg></button>
+  </div>
+</div>
+</template>
+
+<template data-toppa="lav-bolla-molte" data-nome="La barra della selezione sopra molte schede">
+<!-- → editors/canvas/chrome/selection.ts (nuovo); N6 T26 e T51, PA T28 -->
+<div class="selection-bubble lav-selection" role="toolbar" aria-label="10 schede scelte">
+  <span class="lav-selection-count">10 schede</span>
+  <div class="kit-bar-group" role="group" aria-label="Disponi">
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="0" aria-haspopup="menu" aria-expanded="false">Allinea ›</button>
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="-1" aria-haspopup="menu" aria-expanded="false">Disponi ›</button>
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="-1" aria-keyshortcuts="Control+G">Raggruppa</button>
+  </div>
+  <div class="kit-bar-group" role="group" aria-label="Schede">
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="-1" aria-haspopup="menu" aria-expanded="false">Colore ›</button>
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="-1" aria-keyshortcuts="Delete">Togli dalla lavagna</button>
+  </div>
+</div>
+</template>
+
+<template data-toppa="lav-vuota" data-nome="La lavagna vuota che spiega da sé">
+<!-- → editors/canvas/chrome/empty.ts (nuovo); N6 T26 e T62, PA T28 -->
+<div class="lav-empty" role="note" aria-labelledby="lav-empty-title">
+  <h2 class="lav-empty-title" id="lav-empty-title">La lavagna è vuota</h2>
+  <p class="lav-empty-body">Trascina qui dei file dall'albero, scrivi con T, o disegna con la penna (P). Doppio clic fa una scheda di testo.</p>
+  <div class="settings-actions"><button type="button" class="kit-button" data-kind="primary" aria-keyshortcuts="Control+V">Incolla</button><button type="button" class="kit-button" data-kind="normal">Aggiungi file…</button></div>
+</div>
+</template>
+
+<template data-toppa="lav-lazo" data-nome="Il lazo che prende schede e tratti">
+<!-- → editors/canvas/tools/lasso.ts (nuovo, N6 T86 con D-22 a); PA T28 -->
+<svg class="lav-lasso" viewBox="0 0 600 360" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M40 60c120-50 330-40 420 10s60 170-40 210-300 40-360-20S-20 90 40 60z"></path></svg>
+</template>
+
+<template data-toppa="lav-estratti" data-nome="Il selettore delle parti attaccato alla scheda rilasciata (PDF)">
+<!-- → editors/canvas/parts-picker.ts (nuovo, su kit/popover.ts e kit/list.ts); N6 T28 e T74–T76, PA T28 -->
+<div class="kit-popover lav-parts" role="dialog" aria-label="Quali pagine di Dispense.pdf">
+  <h3 class="lav-parts-title">Quali pagine di «Dispense.pdf»?</h3>
+  <div class="lav-parts-thumbs" role="listbox" aria-multiselectable="true" aria-label="Pagine">
+    <div class="lav-parts-thumb" role="option" aria-selected="false" tabindex="-1">1</div>
+    <div class="lav-parts-thumb" role="option" aria-selected="false" tabindex="-1">2</div>
+    <div class="lav-parts-thumb" role="option" aria-selected="true" tabindex="0">3</div>
+    <div class="lav-parts-thumb" role="option" aria-selected="true" tabindex="-1">4</div>
+    <div class="lav-parts-thumb" role="option" aria-selected="true" tabindex="-1">5</div>
+    <div class="lav-parts-thumb" role="option" aria-selected="false" tabindex="-1">6</div>
+  </div>
+  <label class="lav-parts-field"><span>Pagine</span><input type="text" class="kit-number-input" value="3-5" aria-describedby="lav-parts-hint"></label>
+  <p class="lav-parts-hint muted" id="lav-parts-hint">Anche «3-5, 8, 20-» o «#124». Esc tiene tutto il file; Alt mentre rilasci salta questa domanda.</p>
+  <div class="settings-actions"><button type="button" class="kit-button" data-kind="normal">Tutto il file</button><button type="button" class="kit-button" data-kind="primary">Prendi 3 pagine</button></div>
+</div>
+</template>
+
+<template data-toppa="lav-codice-menu" data-nome="Le tre voci della lavagna in codice nel menu della scheda">
+<!-- → editors/canvas/chrome/commands.ts ed engine.ts (il menu contestuale, ui/menu.ts); lavagna in codice T25, PA T28 -->
+<div class="context-menu" role="menu" aria-orientation="vertical" tabindex="-1" id="context-menu" aria-label="Scheda · Varianza.md">
+  <div class="menu-head" aria-hidden="true"><span class="menu-head-kind">Scheda</span><span class="menu-head-name">Varianza.md</span></div>
+  <div class="menu-items" role="none">
+    <button role="menuitem" tabindex="-1" aria-keyshortcuts="Enter"><span class="menu-label">Apri</span><kbd class="menu-hint">Invio</kbd></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Apri a lato</span></button>
+    <button role="menuitem" tabindex="-1" aria-keyshortcuts="C"><span class="menu-label">Collega…</span><kbd class="menu-hint">C</kbd></button>
+    <div class="menu-separator" role="separator"></div>
+    <button role="menuitem" tabindex="0"><span class="menu-label">Copia come codice</span></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Incolla codice</span></button>
+    <button role="menuitem" tabindex="-1" aria-haspopup="menu" aria-expanded="true"><span class="menu-label">Disponi</span><span class="menu-hint menu-more" aria-hidden="true">›</span></button>
+  </div>
+</div>
+</template>
+
+<template data-toppa="lav-codice-disponi" data-nome="«Disponi»: il sottomenu">
+<!-- → editors/canvas/chrome/commands.ts (canvas.layout.grid, .row, .column, .tree); lavagna in codice T25, PA T28 -->
+<div class="context-menu context-submenu" role="menu" aria-orientation="vertical" tabindex="-1" aria-label="Disponi">
+  <div class="menu-items" role="none">
+    <button role="menuitem" tabindex="0"><span class="menu-label">In griglia</span></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">In riga</span></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">In colonna</span></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Ad albero</span></button>
+  </div>
+</div>
+</template>
+
+<template data-toppa="lav-codice-riepilogo" data-nome="«Incolla codice»: il riassunto prima di scrivere">
+<!-- → editors/canvas/chrome/commands.ts (canvas.paste_code con kit/dialog.ts); lavagna in codice T25, PA T28 -->
+<div class="kit-dialog-scrim">
+  <div class="kit-dialog" role="dialog" aria-modal="true" aria-labelledby="lav-codice-titolo" aria-describedby="lav-codice-testo">
+    <h2 class="kit-dialog-title" id="lav-codice-titolo">Incollare il codice?</h2>
+    <p class="kit-dialog-description" id="lav-codice-testo">3 schede nuove, 1 arco, 2 schede spostate. Si annulla con un solo Ctrl+Z.</p>
+    <div class="kit-dialog-actions"><button type="button" class="kit-button" data-kind="normal">Annulla</button><button type="button" class="kit-button" data-kind="primary">Incolla</button></div>
+  </div>
+</div>
+</template>
+
+<template data-toppa="lav-codice-problema" data-nome="«Incolla codice» con un problema: il primo, col suggerimento">
+<!-- → editors/canvas/chrome/commands.ts (canvas.check: niente si scrive); lavagna in codice T25, PA T28 -->
+<div class="kit-dialog-scrim">
+  <div class="kit-dialog" role="alertdialog" aria-modal="true" aria-labelledby="lav-problema-titolo" aria-describedby="lav-problema-testo">
+    <h2 class="kit-dialog-title" id="lav-problema-titolo">Il codice non si incolla</h2>
+    <p class="kit-dialog-description" id="lav-problema-testo">Riga 4: l'arco va verso «n7», che non c'è nella lavagna né nel codice. Forse volevi «n2»? Niente è stato scritto.</p>
+    <div class="kit-dialog-actions"><button type="button" class="kit-button" data-kind="primary">Ho capito</button></div>
+  </div>
+</div>
+</template>

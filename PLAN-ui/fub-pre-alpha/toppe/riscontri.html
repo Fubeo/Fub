@@ -1,0 +1,16 @@
+<template data-toppa="riscontri-voce" data-nome="D9 B: «Segnala un problema…» nel menu dell'applicazione">
+<!-- → ui/app-menu.ts (una voce prima di «Impostazioni»), i18n/catalog.ts; D9 B: un task M in più dopo PA T18 -->
+<button role="menuitem" tabindex="-1"><span class="menu-label">Segnala un problema…</span></button>
+<div class="menu-separator" role="separator"></div>
+</template>
+
+<template data-toppa="riscontri-apre" data-nome="D9 B: che cosa si apre e che cosa si manda">
+<!-- → ui/app-menu.ts (kit/dialog.ts, poi l'apertura del browser che c'è); D9 B -->
+<div class="kit-dialog-scrim">
+  <div class="kit-dialog" role="dialog" aria-modal="true" aria-labelledby="riscontri-titolo" aria-describedby="riscontri-testo">
+    <h2 class="kit-dialog-title" id="riscontri-titolo">Segnala un problema</h2>
+    <p class="kit-dialog-description" id="riscontri-testo">Si apre il browser su GitHub, con la versione (0.2.0-prealpha.1) e il sistema (Linux x86_64) già scritti. Nessun dato personale: niente nomi di file, niente testo delle note.</p>
+    <div class="kit-dialog-actions"><button type="button" class="kit-button" data-kind="normal">Annulla</button><button type="button" class="kit-button" data-kind="primary">Apri GitHub</button></div>
+  </div>
+</div>
+</template>

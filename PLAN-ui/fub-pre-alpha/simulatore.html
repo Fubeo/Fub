@@ -5,15 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Simulatore pre-alpha</title>
 <!--
-  Il simulatore di Fub pre-alpha (piano/fub-pre-alpha, PLAN-ui/fub-pre-alpha/).
-  Lo schermo è il client vero del banco (anteprima/tutto del 2026-11-04 con la
-  IPC finta) fotografato stato per stato: DOM e CSS copiati, compressi in
-  sim-dati.js e rimontati in un iframe senza script. Sopra il CSS copiato si
-  monta il CSS nuovo di Scrittoio 2, un <style> per file di destinazione, nello
-  stesso posto dove andrà nel codice. Le interazioni (clic, «/», tasto destro,
-  avvio rapido, impostazioni) sono in solo-simulatore.js: fingono il prodotto e
-  non vanno nel codice. Le pagine dei piani (lavagna, penne, celle, «Comandi»,
-  disegno, ricette) sono in piani/, tali e quali come sono state approvate.
+  Il simulatore v2 di Fub pre-alpha (piano/fub-pre-alpha, PLAN-ui/fub-pre-alpha/).
+  Lo schermo è il client vero del banco fotografato stato per stato: DOM e CSS
+  copiati, compressi in sim-dati-N.js e rimontati in un iframe senza script.
+  Sopra il CSS copiato si monta il CSS nuovo, un <style> per file di
+  destinazione, nello stesso posto dove andrà nel codice. Il DOM nuovo sta nei
+  <template data-toppa> in fondo a questa pagina, ognuno col suo commento di
+  destinazione e task; le pagine dei piani (piani/) entrano nella cornice come
+  strati. Ogni stato dice se è una cattura, composto o nuovo da approvare.
+  vista-sim.js monta gli stati; solo-simulatore.js finge le interazioni.
+  Nessuno dei due va nel codice.
 -->
 <style>
 /* solo simulatore: la pagina attorno allo schermo. */
@@ -32,6 +33,8 @@
   --ok-wash: #dcf3e5;
   --warn: #8a5a00;
   --warn-wash: #fbefd6;
+  --new: #a3215f;
+  --new-wash: #fbe1ec;
   --space-2: 4px;
   --space-3: 6px;
   --space-4: 8px;
@@ -48,18 +51,21 @@
   :root:not([data-theme="light"]) {
     --bg: #0a0e16; --sheet: #151a21; --sheet-2: #1d222a; --bg-elev: #212730; --text: #e5e8ed; --muted: #a0a5ae; --border: #2c323c;
     --accent: #82a8fd; --accent-wash: #213156; --focus-ring: #82a8fd; --ok: #7fd3a0; --ok-wash: #173326; --warn: #f0c46a; --warn-wash: #3a2e12;
+    --new: #f59ac3; --new-wash: #3f1a2c;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0a0e16; --sheet: #151a21; --sheet-2: #1d222a; --bg-elev: #212730; --text: #e5e8ed; --muted: #a0a5ae; --border: #2c323c;
   --accent: #82a8fd; --accent-wash: #213156; --focus-ring: #82a8fd; --ok: #7fd3a0; --ok-wash: #173326; --warn: #f0c46a; --warn-wash: #3a2e12;
+  --new: #f59ac3; --new-wash: #3f1a2c;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { background: var(--bg); color: var(--text); font: 14px/1.45 var(--font-ui); overflow-x: hidden; }
 a { color: var(--accent); }
+button { font: inherit; }
 .sim-bar {
   position: sticky; top: 0; z-index: 3;
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-6);
@@ -67,49 +73,81 @@ a { color: var(--accent); }
   background: var(--sheet-2); border-bottom: 1px solid var(--border);
 }
 .sim-bar h1 { margin: 0 var(--space-4) 0 0; font-size: 15px; font-weight: 600; }
-.sim-field { display: inline-flex; align-items: center; gap: var(--space-3); }
-.sim-bar select, .sim-bar button {
+.sim-field { display: inline-flex; align-items: center; gap: var(--space-3); min-width: 0; max-width: 100%; }
+.sim-bar select, .sim-bar button, .sim-passi button, .sim-azioni button {
   min-height: 32px; border: 1px solid var(--border); border-radius: var(--radius-control);
-  background: var(--bg-elev); color: var(--text); font: inherit; padding: 0 var(--space-5);
+  background: var(--bg-elev); color: var(--text); padding: 0 var(--space-5);
 }
-.sim-bar select { max-width: min(100%, 22rem); }
+.sim-bar select { max-width: min(100%, 24rem); min-width: 0; }
 .sim-seg { display: inline-flex; margin: 0; padding: 2px; border: 0; border-radius: var(--radius-control); background: var(--bg-elev); box-shadow: 0 0 0 1px var(--border); }
 .sim-seg legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .sim-seg input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .sim-seg label { padding: var(--space-2) var(--space-5); border-radius: var(--radius-chip); color: var(--muted); cursor: pointer; }
 .sim-seg input:checked + label { background: var(--accent-wash); color: var(--accent); }
 .sim-seg input:disabled + label { opacity: 0.4; cursor: default; }
-.sim-seg input:focus-visible + label, .sim-bar select:focus-visible, .sim-bar button:focus-visible, .sim-pezzi button:focus-visible {
+.sim-seg input:focus-visible + label, select:focus-visible, button:focus-visible, a:focus-visible, textarea:focus-visible, input[type="checkbox"]:focus-visible {
   outline: 2px solid var(--focus-ring); outline-offset: 2px;
 }
-.sim-bar button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent); border-color: transparent; }
+button[aria-pressed="true"] { background: var(--accent-wash); color: var(--accent); border-color: transparent; }
+button:disabled { opacity: 0.45; }
 .sim-msg {
   min-height: 22px; margin: 0; padding: var(--space-2) max(var(--space-6), env(safe-area-inset-left));
   color: var(--warn); background: var(--warn-wash); font-size: 13px;
 }
 .sim-msg:empty { background: transparent; }
-main { padding: var(--space-6) max(var(--space-6), env(safe-area-inset-right)) var(--space-8) max(var(--space-6), env(safe-area-inset-left)); max-width: 1340px; margin: 0 auto; }
-.sim-box {
-  position: relative; overflow: hidden; border-radius: var(--radius-sheet);
-  box-shadow: 0 0 0 1px var(--border), 0 8px 24px rgb(0 0 0 / 0.12); background: var(--sheet); margin: 0 auto;
+.sim-passi {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-5);
+  padding: var(--space-4) max(var(--space-6), env(safe-area-inset-left));
+  background: var(--accent-wash); color: var(--text);
 }
-.sim-box iframe { display: block; border: 0; transform-origin: 0 0; background: var(--bg); }
+.sim-passi[hidden] { display: none; }
+.sim-passi b { color: var(--accent); }
+.sim-passi span { flex: 1 1 20rem; min-width: 0; }
+main { padding: var(--space-6) max(var(--space-6), env(safe-area-inset-right)) var(--space-8) max(var(--space-6), env(safe-area-inset-left)); max-width: 1340px; margin: 0 auto; }
+.sim-box { position: relative; display: flex; justify-content: center; align-items: flex-start; gap: var(--space-6); }
+.sim-fig { margin: 0; min-width: 0; }
+.sim-fig[hidden] { display: none; }
+.sim-fig figcaption { margin: 0 0 var(--space-3); font-size: 13px; color: var(--muted); }
+.sim-fig figcaption[hidden] { display: none; }
+#sim-fig-b .sim-vetro { cursor: pointer; }
+.sim-vetro {
+  overflow: hidden; border-radius: var(--radius-sheet);
+  box-shadow: 0 0 0 1px var(--border), 0 8px 24px rgb(0 0 0 / 0.12); background: var(--sheet);
+}
+.sim-vetro iframe { display: block; border: 0; transform-origin: 0 0; background: var(--bg); }
 .sim-segno { position: absolute; pointer-events: none; border: 2px solid var(--accent); border-radius: 4px; box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.18); }
 .sim-segno[hidden] { display: none; }
+.sim-manca { margin: var(--space-4) 0 0; padding: var(--space-3) var(--space-5); border-radius: var(--radius-control); background: var(--warn-wash); color: var(--warn); font-size: 13px; }
+.sim-manca[hidden] { display: none; }
 .sim-didascalia { margin: var(--space-6) 0 var(--space-4); }
-.sim-didascalia h2 { margin: 0 0 var(--space-3); font-size: 16px; }
+.sim-didascalia h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3) var(--space-4); margin: 0 0 var(--space-3); font-size: 16px; }
 .sim-didascalia p { margin: 0 0 var(--space-3); max-width: 75ch; }
+.sim-didascalia p[hidden] { display: none; }
+.sim-numero { font-variant-numeric: tabular-nums; color: var(--muted); }
+.sim-prov { display: inline-block; padding: 0 var(--space-3); border-radius: var(--radius-chip); font-size: 12px; font-weight: 600; }
+.sim-prov[data-prov="cattura"] { background: var(--ok-wash); color: var(--ok); }
+.sim-prov[data-prov="composta"] { background: var(--warn-wash); color: var(--warn); }
+.sim-prov[data-prov="nuova"] { background: var(--new-wash); color: var(--new); }
+.sim-azioni { display: flex; flex-wrap: wrap; gap: var(--space-4); }
+.sim-azioni button[hidden] { display: none; }
 .sim-task { display: inline-block; padding: 0 var(--space-3); border-radius: var(--radius-chip); background: var(--accent-wash); color: var(--accent); font-size: 12px; font-weight: 600; }
 .sim-muto { color: var(--muted); font-size: 13px; }
 .sim-come { display: inline-block; padding: 0 var(--space-3); border-radius: var(--radius-chip); font-size: 12px; font-weight: 600; }
-.sim-come[data-come="nuovo"] { background: var(--accent-wash); color: var(--accent); }
-.sim-come[data-come="cambiato"] { background: var(--warn-wash); color: var(--warn); }
+.sim-come[data-come="nuovo"] { background: var(--new-wash); color: var(--new); }
+.sim-come[data-come="cambiato"], .sim-come[data-come="composto"] { background: var(--warn-wash); color: var(--warn); }
 .sim-come[data-come="uguale"] { background: var(--ok-wash); color: var(--ok); }
 .sim-pezzi { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
 .sim-pezzi li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-5); padding: var(--space-4) var(--space-5); border-radius: var(--radius-control); background: var(--sheet); box-shadow: 0 0 0 1px var(--border); }
 .sim-pezzi .sim-dest { grid-column: 1 / -1; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
-.sim-pezzi button { border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--bg-elev); color: var(--text); font: inherit; font-size: 13px; padding: 2px var(--space-4); }
+.sim-pezzi button { border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--bg-elev); color: var(--text); font-size: 13px; padding: 2px var(--space-4); }
 .sim-pezzi pre { grid-column: 1 / -1; max-height: 260px; overflow: auto; margin: 0; padding: var(--space-4); border-radius: var(--radius-chip); background: var(--sheet-2); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sim-pezzi pre[hidden] { display: none; }
+.sim-revisione { list-style: none; margin: var(--space-4) 0 0; padding: 0; columns: 2 22rem; column-gap: var(--space-8); }
+.sim-revisione li { break-inside: avoid; margin: 0 0 var(--space-2); }
+.sim-revisione label { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.sim-frase { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: flex-start; }
+.sim-frase textarea { flex: 1 1 24rem; min-width: 0; min-height: 3.2em; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--bg-elev); color: var(--text); font: inherit; resize: vertical; }
+.sim-frase button { min-height: 32px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--bg-elev); color: var(--text); padding: 0 var(--space-5); }
 details { margin: var(--space-4) 0; padding: var(--space-4) var(--space-6); border-radius: var(--radius-control); background: var(--sheet-2); }
 summary { cursor: pointer; font-weight: 600; }
 details li { margin: var(--space-2) 0; }
@@ -120,6 +158,9 @@ code { font-size: 12.5px; overflow-wrap: anywhere; }
 @media (max-width: 600px) {
   .sim-bar { gap: var(--space-3) var(--space-4); }
   .sim-bar h1 { width: 100%; }
+  .sim-field { width: 100%; }
+  .sim-bar select { flex: 1 1 auto; max-width: none; }
+  .sim-box { gap: var(--space-4); }
 }
 </style>
 <!-- Il CSS nuovo, un blocco per file di destinazione: spento qui (media="not all"), lo monta lo schermo. -->
@@ -2362,92 +2403,709 @@ code { font-size: 12.5px; overflow-wrap: anywhere; }
   --bar-tray: var(--sheet-2);
 }
 </style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/frame.css" data-posto="prealpha" data-task="D5 A: K5 T21–T23 con S2 T4">
+/* → theme/scrittoio/skin/frame.css (D5 A: K5 T21–T23 con S2 T4) */
+/* ── Il segno del motore nella banda ───────────────────────────────────────
+   Lo stesso puntino dello stato del riquadro, coi cinque valori del motore
+   del disegno: acceso (verde), si apre (grigio), chiuso con parti che restano
+   come sono (ambra), ridotto (vuoto: gli strumenti semplici ci sono) e fermo
+   (rosso). Il colore non è mai l'unico segno: c'è sempre la parola accanto. */
+.status-standing[data-standing="opening"] > .status-standing-mark {
+  background: var(--muted);
+}
+.status-standing[data-standing="closed"] > .status-standing-mark {
+  background: var(--warning);
+}
+.status-standing[data-standing="reduced"] > .status-standing-mark {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--muted);
+}
+.status-standing[data-standing="stopped"] > .status-standing-mark {
+  background: var(--danger);
+}
+.status-standing[data-standing="stopped"] {
+  color: var(--text);
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/draw.css" data-posto="prealpha" data-task="K5 T21, PA T27">
+/* → theme/scrittoio/skin/draw.css (K5 T21, PA T27) */
+/* ── Il disegno vuoto ──────────────────────────────────────────────────────
+   Una riga sola, al centro del foglio, che dice da dove si comincia. Non
+   prende i clic: si disegna anche sopra. */
+.draw-empty-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  max-width: 36ch;
+  margin: 0;
+  padding: var(--space-4) var(--space-5);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  text-align: center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/settings.css" data-posto="prealpha" data-task="PA T29, T36–T38">
+/* → theme/scrittoio/skin/settings.css (PA T29, T36–T38) */
+/* ── Un componente fermato ─────────────────────────────────────────────────
+   Il motivo sta nella scheda, nel rosso del pericolo, sotto il nome. */
+.settings-component[data-state="stopped"] .setting-source {
+  color: var(--danger);
+}
+
+/* ── La diagnosi di un tema rifiutato ──────────────────────────────────────
+   Una riga per motivo, in quattro colonne che si leggono come una tabella:
+   il file, riga:colonna, il codice, il perché. Il filo rosso a sinistra dice
+   che è un rifiuto. Stretto, il perché va a capo sotto. */
+.tema-diagnosi {
+  padding-left: var(--space-5);
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+.tema-diagnosi-lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tema-diagnosi-riga {
+  display: grid;
+  grid-template-columns: 7em 4em 8em minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+.tema-diagnosi-file,
+.tema-diagnosi-dove,
+.tema-diagnosi-codice {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.tema-diagnosi-dove {
+  color: var(--muted);
+}
+.tema-diagnosi-codice {
+  color: var(--danger);
+}
+.tema-diagnosi-perche {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 560px) {
+  .tema-diagnosi-riga {
+    grid-template-columns: 7em minmax(0, 1fr);
+  }
+}
+
+/* ── «Tutti i componenti» ──────────────────────────────────────────────────
+   Una pagina da guardare mentre si scrive un tema: in testa la luce e il
+   contrasto, poi le schede, poi a sinistra i componenti in ogni stato e a
+   destra quello scelto, coi suoi hook. Stretta, una colonna. */
+.dev-catalog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  height: 100%;
+  overflow: auto;
+  padding: var(--space-7) var(--space-7) var(--space-9);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+.dev-catalog-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.dev-catalog-title {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+}
+.dev-catalog-heading p {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+}
+.dev-catalog-switches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-5);
+}
+.dev-catalog-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+.dev-catalog-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  align-items: start;
+  gap: var(--space-6);
+}
+.dev-catalog-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+.dev-catalog-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-sheet);
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.dev-catalog-item[aria-current="true"] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.dev-catalog-name {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.dev-catalog-name .muted {
+  margin-left: var(--space-2);
+  font-family: var(--font-ui);
+  font-weight: var(--weight-regular);
+}
+.dev-catalog-states {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+.dev-catalog-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 96px;
+  margin: 0;
+}
+.dev-catalog-state figcaption {
+  font-size: var(--text-xs);
+}
+.dev-catalog-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-radius: var(--radius-sheet);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+}
+.dev-catalog-info-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+}
+.dev-catalog-info p {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.dev-catalog-hooks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  list-style: none;
+}
+.dev-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dev-swatch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.dev-swatch-chip {
+  height: 56px;
+  border-radius: var(--radius-control);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.dev-swatch-chip[data-token="bg"] { background: var(--bg); }
+.dev-swatch-chip[data-token="bg-chrome"] { background: var(--bg-chrome); }
+.dev-swatch-chip[data-token="sheet"] { background: var(--sheet); }
+.dev-swatch-chip[data-token="text"] { background: var(--text); }
+.dev-swatch-chip[data-token="muted"] { background: var(--muted); }
+.dev-swatch-chip[data-token="border"] { background: var(--border); }
+.dev-swatch-chip[data-token="accent"] { background: var(--accent); }
+.dev-swatch-chip[data-token="accent-soft"] { background: var(--accent-soft); }
+.dev-swatch-chip[data-token="danger"] { background: var(--danger); }
+.dev-swatch-chip[data-token="warning"] { background: var(--warning); }
+.dev-swatch-chip[data-token="success"] { background: var(--success); }
+.dev-swatch-chip[data-token="info"] { background: var(--info); }
+.dev-font {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.dev-font-sample {
+  margin: 0;
+  font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+}
+.dev-font[data-font="ui"] .dev-font-sample { font-family: var(--font-ui); }
+.dev-font[data-font="reading"] .dev-font-sample { font-family: var(--font-reading); }
+.dev-font[data-font="mono"] .dev-font-sample { font-family: var(--font-mono); }
+@media (max-width: 760px) {
+  .dev-catalog {
+    padding: var(--space-5);
+  }
+  .dev-catalog-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/nodes.css" data-posto="prealpha" data-task="N6 T26–T28, PA T28">
+/* → theme/scrittoio/skin/nodes.css (N6 T26–T28, PA T28) */
+/* ── La lavagna nella cornice del disegno ──────────────────────────────────
+   La colonna degli strumenti e la riga delle opzioni sono quelle del disegno
+   (`kit-rail`, `kit-options-row`, `draw-button`): qui c'è solo ciò che la
+   lavagna aggiunge. Le opzioni della lavagna sono parole, non icone. */
+.lav-option-text {
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+/* Mentre si scrive in una scheda la riga delle opzioni diventa la barra del
+   formato, senza il filo sotto: è già dentro la testata. */
+.lav-format-bar {
+  flex: 1 1 auto;
+  padding: 0;
+  box-shadow: none;
+}
+.lav-exit-hint {
+  margin-left: auto;
+  padding: 0 var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+/* La barra della selezione: la bolla della nota, con il nome di ciò che è
+   scelto davanti, in grigio. */
+.lav-selection {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+}
+.lav-selection-count {
+  padding: 0 var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+.lav-selection .kit-bar-group {
+  padding-left: var(--space-2);
+  box-shadow: inset 1px 0 0 var(--border);
+}
+
+/* La lavagna vuota: tre righe al centro, e i due gesti per cominciare. */
+.lav-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  color: var(--text);
+  font-family: var(--font-ui);
+  text-align: center;
+}
+.lav-empty-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+}
+.lav-empty-body {
+  max-width: 40ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+/* Il lazo: un tratto a puntini nell'accento, un velo appena sotto. */
+.lav-lasso {
+  position: absolute;
+  top: 14%;
+  left: 12%;
+  z-index: 5;
+  width: 58%;
+  height: 56%;
+  overflow: visible;
+  pointer-events: none;
+}
+.lav-lasso path {
+  fill: var(--accent-wash);
+  stroke: var(--accent);
+  stroke-width: 1.5px;
+  stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Il selettore delle parti: le miniature in fila, l'intervallo scritto, il
+   suggerimento. Sta sul rialzo del popover. */
+.lav-parts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 320px;
+  padding: var(--space-5);
+}
+.lav-parts-title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+}
+.lav-parts-thumbs {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.lav-parts-thumb {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  aspect-ratio: 3 / 4;
+  padding-bottom: var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.lav-parts-thumb[aria-selected="true"] {
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  color: var(--accent);
+}
+.lav-parts-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+.lav-parts-hint {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/media.css" data-posto="prealpha" data-task="PA T30">
+/* → theme/scrittoio/skin/media.css (PA T30) */
+/* ── Un file che Fub non apre ──────────────────────────────────────────────
+   Sotto la spiegazione, una riga d'azioni centrata come il testo. */
+.craft-empty-actions {
+  justify-content: center;
+  margin-top: var(--space-4);
+}
+</style>
+<style media="not all" data-destinazione="theme/examples/carta/ (fogli e skin.css)" data-posto="tema" data-tema="carta" data-task="PA T42, D17">
+/* tema della comunità «Carta» · solo chiaro · PA T42, D17 A */
+/* Il primo tema d'esempio: carta calda, angoli dritti, maiuscoletto nelle
+   etichette, nessuna ombra, filetti sottili al posto delle scatole, i titoli
+   con le grazie. Usa solo gli hook dello snapshot (`frozen/theme-2.json`, PA
+   T41) e nessun hook nuovo: lo prova la sonda dei temi del simulatore. Nel
+   tema vero i tre blocchi `:root` diventano `light.css` (il foglio) e il resto
+   `skin.css` (la pelle); il carattere «Carta Serif» arriva dal manifest (PA
+   T39). Di notte Carta non c'è: Fub tiene la serie. */
+
+/* ── Il foglio, giorno ───────────────────────────────────────────────────── */
+:root {
+  --bg: #ece4d4;
+  --bg-chrome: #ece4d4;
+  --bg-panel: #ece4d4;
+  --bg-hover: #e3d9c5;
+  --bg-active: #dacfb8;
+  --sheet: #fbf8f1;
+  --sheet-2: #f4eee2;
+  --bg-input: #f4eee2;
+  --bg-elev: #fdfbf6;
+  --overlay-hover: rgb(42 35 24 / 5%);
+  --overlay-active: rgb(42 35 24 / 9%);
+  --scrim: rgb(38 30 18 / 30%);
+  --text: #2a2318;
+  --muted: #5b503f;
+  --border: #d9cdb7;
+  --border-strong: #b3a386;
+  --outline: #85765c;
+  --accent: #8e3a1f;
+  --accent-soft: #742c15;
+  --accent-contrast: #fdfbf6;
+  --accent-wash: #f1ddce;
+  --accent-veil: rgb(142 58 31 / 12%);
+  --focus-ring: #8e3a1f;
+  --danger: #a51d19;
+  --danger-wash: rgb(165 29 25 / 12%);
+  --danger-contrast: #fdfbf6;
+  --warning: #7a4e00;
+  --warning-wash: rgb(122 78 0 / 14%);
+  --warning-contrast: #fdfbf6;
+  --success: #2e672b;
+  --success-wash: rgb(46 103 43 / 14%);
+  --success-contrast: #fdfbf6;
+  --info: #285b7e;
+  --info-wash: rgb(40 91 126 / 12%);
+  --info-contrast: #fdfbf6;
+  --graph-node: #85765c;
+  --graph-node-active: #8e3a1f;
+  --graph-node-hover: #742c15;
+  --draw-desk: #e8e1d2;
+  --doc-bg: #fbf8f1;
+  --doc-active-line: #f5efe3;
+  --doc-selection: #eedccb;
+  --doc-tooltip-bg: #fdfbf6;
+  --doc-fg: #2a2318;
+  --doc-heading: #2a2318;
+  --doc-link: #8e3a1f;
+  --doc-caret: #8e3a1f;
+  --doc-danger: #a51d19;
+  --doc-gutter-fg: #66594a;
+  --doc-drop-line: #8e3a1f;
+  --doc-block-selected: rgb(142 58 31 / 12%);
+}
+:root[data-contrast="high"] {
+  --text: #1d170d;
+  --muted: #3f3627;
+  --border: #a3937a;
+  --border-strong: #6f624e;
+  --outline: #5b4f3c;
+  --accent: #7a2f16;
+  --accent-soft: #62240f;
+  --focus-ring: #7a2f16;
+  --doc-fg: #1d170d;
+  --doc-gutter-fg: #4a3f31;
+}
+
+/* ── La forma: angoli dritti, niente ombre ───────────────────────────────── */
+:root {
+  --radius-xs: 0;
+  --radius-chip: 2px;
+  --radius-control: 2px;
+  --radius-menu: 2px;
+  --radius-sheet: 2px;
+  --radius-dialog: 2px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --shadow-1: none;
+  --shadow-2: none;
+  --shadow-3: none;
+  --shadow-4: none;
+  --shadow-5: none;
+  --shadow-6: none;
+  --shadow-7: none;
+  --elevation-paper-shadow: none;
+  --elevation-floating-shadow: none;
+  --elevation-dialog-shadow: none;
+}
+
+/* ── La pelle ────────────────────────────────────────────────────────────── */
+/* I titoli con le grazie. */
+.settings-title,
+.settings-section-title,
+.sheet-title,
+.kit-dialog-title,
+.ui-heading {
+  font-family: "Carta Serif", var(--font-reading);
+  font-weight: var(--weight-medium);
+}
+
+/* Le etichette in maiuscoletto, un poco spaziate. */
+.panel-title,
+.settings-tab-label,
+.settings-section-meta,
+.inspector-tab,
+.kit-tab-label,
+.sheet-desk-label {
+  font-variant: all-small-caps;
+  letter-spacing: 0.05em;
+}
+
+/* Un filo al posto dell'ombra: il foglio, i rialzi, la banda. */
+.pane::before {
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+.pane.focus::before {
+  box-shadow: 0 0 0 1px var(--muted);
+}
+.kit-dialog,
+.kit-popover,
+.context-menu,
+.launcher-panel,
+.selection-bubble,
+.toast {
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+.status-band {
+  box-shadow: inset 0 1px 0 var(--border);
+}
+
+/* Le schede delle Impostazioni non sono scatole: due filetti. */
+.settings-section-body > .settings-card {
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border-strong);
+  background: transparent;
+}
+
+/* I bottoni e le scelte: il contorno, non il fondo. */
+.kit-button,
+.segmented {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.kit-button[data-kind="primary"] {
+  box-shadow: none;
+}
+
+/* La linguetta accesa si sottolinea nell'inchiostro dell'accento. */
+.tab[aria-selected="true"] .tab-name {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
+}
+</style>
+<style media="not all" data-destinazione="theme/examples/salvia/ (i due fogli)" data-posto="tema" data-tema="salvia" data-task="PA T42, D17">
+/* tema della comunità «Salvia» · chiaro e scuro · PA T42, D17 A */
+/* Il secondo tema d'esempio: soli colori. Un accento salvia e superfici
+   appena verdi, nelle due luci; nessuna regola di pelle, nessun hook. Nel
+   tema vero i blocchi diventano `light.css` e `dark.css`, con `extends`. */
+
+/* ── Giorno ──────────────────────────────────────────────────────────────── */
+:root[data-theme="light"] {
+  --bg: #e5ebe3;
+  --bg-chrome: #e5ebe3;
+  --bg-panel: #e5ebe3;
+  --bg-hover: #dae2d8;
+  --bg-active: #cfd9cc;
+  --sheet: #fbfdfa;
+  --sheet-2: #f1f5ef;
+  --bg-input: #f1f5ef;
+  --bg-elev: #ffffff;
+  --overlay-hover: rgb(27 36 29 / 5%);
+  --overlay-active: rgb(27 36 29 / 9%);
+  --text: #1b241d;
+  --muted: #546057;
+  --border: #d0dacd;
+  --border-strong: #adbaa9;
+  --outline: #7b887d;
+  --accent: #3f6f4a;
+  --accent-soft: #2f5a39;
+  --accent-contrast: #f8fcf8;
+  --accent-wash: #d5e8d6;
+  --accent-veil: rgb(63 111 74 / 12%);
+  --focus-ring: #3f6f4a;
+  --graph-node: #7b887d;
+  --graph-node-active: #3f6f4a;
+  --graph-node-hover: #2f5a39;
+  --draw-desk: #e6ebe4;
+  --doc-bg: #fbfdfa;
+  --doc-active-line: #f2f6f0;
+  --doc-selection: #d3e6d4;
+  --doc-fg: #1f2821;
+  --doc-heading: #1f2821;
+  --doc-link: #376a43;
+  --doc-caret: #3f6f4a;
+  --doc-gutter-fg: #58635a;
+  --doc-drop-line: #3f6f4a;
+  --doc-block-selected: rgb(63 111 74 / 12%);
+}
+:root[data-theme="light"][data-contrast="high"] {
+  --text: #111a13;
+  --muted: #3b463e;
+  --border: #93a28f;
+  --border-strong: #63725f;
+  --accent: #2f5a39;
+  --accent-soft: #23482c;
+  --focus-ring: #2f5a39;
+}
+
+/* ── Notte ───────────────────────────────────────────────────────────────── */
+:root[data-theme="dark"] {
+  --bg: #0b110d;
+  --bg-chrome: #0b110d;
+  --bg-panel: #0b110d;
+  --bg-hover: #131b15;
+  --bg-active: #1b241d;
+  --sheet: #151d17;
+  --sheet-2: #1d261f;
+  --bg-input: #1d261f;
+  --bg-elev: #212b23;
+  --text: #e3ebe4;
+  --muted: #9faba1;
+  --border: #2a352c;
+  --border-strong: #415044;
+  --outline: #738276;
+  --accent: #8fc79a;
+  --accent-soft: #abd8b4;
+  --accent-contrast: #08130b;
+  --accent-wash: #22392a;
+  --accent-veil: rgb(143 199 154 / 20%);
+  --focus-ring: #8fc79a;
+  --graph-node: #738276;
+  --graph-node-active: #8fc79a;
+  --graph-node-hover: #abd8b4;
+  --doc-bg: #151d17;
+  --doc-active-line: #1a231c;
+  --doc-selection: #20352a;
+  --doc-fg: #d9e2da;
+  --doc-heading: #d9e2da;
+  --doc-link: #8fc79a;
+  --doc-caret: #8fc79a;
+  --doc-gutter-fg: #9faba1;
+  --doc-drop-line: #8fc79a;
+  --doc-block-selected: rgb(143 199 154 / 20%);
+}
+:root[data-theme="dark"][data-contrast="high"] {
+  --text: #f3f8f3;
+  --muted: #c0cbc2;
+  --border: #536355;
+  --border-strong: #75867a;
+  --accent: #a9dcb3;
+  --accent-soft: #c3e8ca;
+  --focus-ring: #a9dcb3;
+}
+</style>
 <style id="sim-scala"></style>
-<script src="sim-dati.js"></script>
-<script src="solo-simulatore.js"></script>
 </head>
 <body>
 <header class="sim-bar" aria-label="Comandi del simulatore">
   <h1>Fub pre-alpha · simulatore</h1>
   <span class="sim-field">
     <label for="sim-stato">Stato</label>
-    <select id="sim-stato">
-      <optgroup label="La nota">
-        <option value="nota-riposo">Nota in Live</option>
-        <option value="nota">Il menu delle modalità</option>
-        <option value="nota-blocchi">La stessa nota in Blocchi</option>
-        <option value="nota-sorgente">La stessa nota in Sorgente</option>
-        <option value="nota-lettura">La stessa nota in Lettura</option>
-        <option value="barra">La barra di formato</option>
-        <option value="live-tabella">Live: una tabella in modifica</option>
-        <option value="blocchi-menu">Blocchi: il menu della maniglia</option>
-        <option value="slash">«/»: il menu dei blocchi</option>
-        <option value="slash-filtro">«/» con un filtro</option>
-        <option value="slash-nessuno">«/» senza risultati</option>
-        <option value="conflitto">Conflitto: il file è cambiato su disco</option>
-        <option value="schede">Molte schede</option>
-        <option value="concentrazione">Concentrazione</option>
-        <option value="nota-pdf">Un PDF dentro una nota</option>
-        <option value="icone">L'icona di una cartella: le figure</option>
-        <option value="icone-emoji">L'icona di una cartella: le emoji</option>
-      </optgroup>
-      <optgroup label="Gli altri editor">
-        <option value="documento">Documento Word</option>
-        <option value="documento-oggetti">Documento: immagini, caselle, formule</option>
-        <option value="sola-lettura">Documento in sola lettura</option>
-        <option value="foglio">Foglio di calcolo</option>
-        <option value="foglio-modifica">Foglio: una cella aperta</option>
-        <option value="foglio-comandi">Foglio: il menu «Comandi»</option>
-        <option value="foglio-comandi-cerca">Foglio: «Comandi» con la ricerca</option>
-        <option value="caricamento">Foglio: un risultato che si carica</option>
-        <option value="errore">Foglio: il motore non risponde</option>
-        <option value="molti">Foglio a 700 px: 500 errori</option>
-        <option value="disegno">Disegno SVG</option>
-        <option value="disegno-selezione">Disegno: una figura scelta</option>
-        <option value="pdf">PDF</option>
-        <option value="lavagna">Lavagna</option>
-        <option value="craft">File Craft senza anteprima</option>
-        <option value="craft-spente">File Craft col componente spento</option>
-        <option value="craft-prepara">File Craft: l'anteprima si prepara</option>
-        <option value="craft-rotto">File Craft rotto</option>
-        <option value="foto">Foto RAW con XMP</option>
-      </optgroup>
-      <optgroup label="Cassetti, finestre, impostazioni">
-        <option value="ricerca">La ricerca nel vault</option>
-        <option value="grafo">Il grafo</option>
-        <option value="palette">Avvio rapido: i comandi</option>
-        <option value="palette-file">Avvio rapido: le note</option>
-        <option value="zero">Avvio rapido senza risultati</option>
-        <option value="salvataggio">Lo stato del salvataggio, aperto</option>
-        <option value="avvisi">Gli avvisi</option>
-        <option value="toast">Un avviso che passa</option>
-        <option value="conferma">Una conferma pericolosa</option>
-        <option value="impostazioni">Impostazioni</option>
-        <option value="aspetto">Impostazioni › Aspetto</option>
-        <option value="impostazioni-vault">Impostazioni › Vault</option>
-        <option value="componenti">Componenti</option>
-        <option value="nuovo-vault">Un vault nuovo: il profilo</option>
-      </optgroup>
-      <optgroup label="Casi">
-        <option value="vuoto">Nessun vault aperto</option>
-        <option value="avvio-attesa">L'avvio: il vault si apre</option>
-        <option value="avvio-lento">L'avvio che si allunga</option>
-        <option value="avvio-guasto">L'avvio caduto</option>
-      </optgroup>
-      <optgroup label="Telefono (Android di prova)">
-        <option value="tel-nota">Telefono: nota, si scrive</option>
-        <option value="tel-ferma">Telefono: nota, a riposo</option>
-        <option value="tel-tastiera">Telefono: tastiera aperta</option>
-        <option value="tel-sdraiato">Telefono sdraiato</option>
-        <option value="tel-doc">Telefono: documento</option>
-        <option value="tel-foglio">Telefono: foglio</option>
-        <option value="tel-cassetto">Telefono: il cassetto</option>
-        <option value="tel-ispettore">Telefono: l'ispettore</option>
-        <option value="tel-lanciatore">Telefono: avvio rapido</option>
-        <option value="tel-avvio">Telefono: il benvenuto</option>
-        <option value="tel-avvio-attesa">Telefono: l'avvio</option>
-      </optgroup>
-    </select>
+    <select id="sim-stato"></select>
+  </span>
+  <span class="sim-field">
+    <label for="sim-scenario">Scenario</label>
+    <select id="sim-scenario"><option value="">Nessuno</option></select>
   </span>
   <fieldset class="sim-seg" id="sim-luce">
     <legend>Luce</legend>
@@ -2467,63 +3125,106 @@ code { font-size: 12.5px; overflow-wrap: anywhere; }
     <input type="radio" name="moto" id="moto-ridotto" value="ridotto"><label for="moto-ridotto">Ridotto</label>
   </fieldset>
   <button type="button" id="sim-fuoco" aria-pressed="false">Fuoco sul controllo principale</button>
+  <button type="button" id="sim-segna" aria-pressed="false">Segna il nuovo</button>
 </header>
 <p class="sim-msg" id="sim-msg" role="status" aria-live="polite"></p>
+<nav class="sim-passi" id="sim-passi" aria-label="I passi dello scenario" hidden>
+  <button type="button" id="sim-passo-prima">← Indietro</button>
+  <span><b id="sim-passo-n"></b> · <span id="sim-passo-dice"></span></span>
+  <button type="button" id="sim-passo-fuori" hidden>Torna al passo</button>
+  <button type="button" id="sim-passo-dopo">Avanti →</button>
+</nav>
 <main>
-  <div class="sim-box" id="sim-box">
-    <iframe id="sim-schermo" title="Lo schermo di Fub nello stato scelto" sandbox="allow-same-origin"></iframe>
+  <div class="sim-box" id="sim-box" data-solo>
+    <figure class="sim-fig" id="sim-fig-a">
+      <figcaption id="sim-cap-a" hidden></figcaption>
+      <div class="sim-vetro"><iframe id="sim-schermo" title="Lo schermo di Fub nello stato scelto" sandbox="allow-same-origin"></iframe></div>
+    </figure>
+    <figure class="sim-fig" id="sim-fig-b" hidden>
+      <figcaption id="sim-cap-b"></figcaption>
+      <div class="sim-vetro"><iframe id="sim-gemello" title="L'altra forma dello stesso stato, da confrontare" sandbox="allow-same-origin"></iframe></div>
+    </figure>
     <div class="sim-segno" id="sim-segno" hidden></div>
   </div>
+  <p class="sim-manca" id="sim-manca" role="alert" hidden></p>
   <section class="sim-didascalia" aria-live="polite">
-    <h2 id="sim-nome"></h2>
+    <h2><span class="sim-numero" id="sim-numero"></span><span id="sim-nome"></span><span class="sim-prov" id="sim-provenienza"></span></h2>
     <p id="sim-dice"></p>
-    <p id="sim-vicino" hidden></p>
+    <p id="sim-perche" class="sim-muto" hidden></p>
+    <p id="sim-vicino" class="sim-muto" hidden></p>
     <p>Task: <span id="sim-task"></span></p>
+    <p id="sim-piano" hidden>La pagina del piano: <a id="sim-piano-link" href="#"></a></p>
+    <p class="sim-azioni">
+      <button type="button" id="sim-rivedi" aria-pressed="false">Da rivedere</button>
+      <button type="button" id="sim-azzera">Aspetto di serie</button>
+    </p>
   </section>
   <details open>
     <summary>I pezzi di questo stato</summary>
-    <p class="sim-muto">Ogni pezzo dice il file che lo costruisce, il task, e se il suo DOM è nuovo, cambiato o uguale a main. «Indica» lo segna nello schermo; «DOM» mostra quello da copiare.</p>
+    <p class="sim-muto">Ogni pezzo dice il file che lo costruisce e il task. «nuovo» è DOM scritto a mano per questo piano (con «Segna il nuovo» si vede nello schermo); «composto» è DOM vero spostato o la pagina di un piano; «cambiato» e «uguale» dicono se il DOM di main cambia. «Indica» lo segna; «DOM» mostra quello da copiare.</p>
     <ul class="sim-pezzi" id="sim-pezzi"></ul>
+    <p class="sim-muto" id="sim-pezzi-vuoto" hidden>Nessun pezzo segnato in questo stato.</p>
+  </details>
+  <details>
+    <summary>Approvare gli stati nuovi e composti (<span id="sim-conta-rivedere">0</span> da rivedere)</summary>
+    <p class="sim-muto">Gli stati «nuova» e «composta» aspettano un sì. Segna quelli da rivedere (anche col bottone sotto lo schermo): la frase si scrive da sola, da incollare nella risposta. Il segno resta in questo browser.</p>
+    <div class="sim-frase">
+      <textarea id="sim-frase" readonly aria-label="La frase di approvazione"></textarea>
+      <button type="button" id="sim-copia">Copia la frase</button>
+    </div>
+    <ul class="sim-revisione" id="sim-revisione"></ul>
   </details>
   <details>
     <summary>Che cosa si può fare nello schermo</summary>
     <ul>
-      <li>Nell'albero: un file apre il suo editor, una cartella si apre e si chiude. Le linguette portano alla loro scheda.</li>
-      <li>Nella nota si scrive davvero (non si salva). «/» apre il menu dei blocchi: frecce, Invio, Esc, e le lettere filtrano.</li>
-      <li>Il tasto destro apre il menu del testo, dell'albero, di una cartella o di una linguetta.</li>
-      <li>Ctrl+O, Ctrl+K o la pillola aprono l'avvio rapido; si scrive per filtrare, Esc chiude.</li>
-      <li>La modalità nella banda apre il menu: Live, Blocchi, Sorgente, Lettura cambiano davvero la nota.</li>
-      <li>«Salvato» nella testata apre il foglietto; la campanella apre gli avvisi; il binario porta a ricerca e grafo; la luna cambia luce.</li>
-      <li>Impostazioni › Aspetto: Tema, Animazioni, corpo, interlinea, misura e carattere cambiano lo schermo, anche nelle altre schermate. Gli interruttori di «Componenti» si muovono.</li>
-      <li>Tab e Maiuscolo+Tab girano per i controlli; Esc chiude ciò che è aperto.</li>
+      <li>Ogni controllo risponde: porta a un altro stato, cambia lo schermo, o dice in alto che cosa farebbe. I clic che non portano altrove sono elencati sotto.</li>
+      <li>Nell'albero un file apre il suo editor, una cartella si apre e si chiude. Le linguette portano alla loro scheda. «Nuovo» chiede il tipo.</li>
+      <li>Nella nota si scrive davvero (non si salva). «/» apre il menu dei blocchi: frecce, Invio, Esc, e le lettere filtrano. Il tasto destro apre il menu giusto.</li>
+      <li>Ctrl+O, Ctrl+K o la pillola aprono l'avvio rapido; Ctrl+P i comandi. Il menu del marchio, il chip del vault, l'attività e l'ispettore portano ai loro stati.</li>
+      <li>Impostazioni › Aspetto: tema, contrasto, densità, accento, spazio dell'interfaccia, zoom, corpo, interlinea, misura e carattere cambiano davvero lo schermo, e restano negli altri stati (D12 B).</li>
+      <li>Al telefono: scorrere verso l'alto apre il cassetto, verso il basso torna indietro, una pressione lunga apre il menu.</li>
+      <li>Gli scenari vanno passo per passo con Avanti e Indietro; «Segna il nuovo» circonda il DOM scritto a mano.</li>
+    </ul>
+  </details>
+  <details>
+    <summary>I clic che non portano altrove</summary>
+    <ul>
+        <li>Nessuna: ogni clic porta a uno stato, cambia lo schermo o dice che cosa farebbe.</li>
     </ul>
   </details>
   <details>
     <summary>Il CSS nuovo, per file di destinazione</summary>
     <div class="sim-tabella"><table>
-      <thead><tr><th>File</th><th>Task</th><th>Peso</th></tr></thead>
+      <thead><tr><th>File</th><th>Posto</th><th>Task</th><th>Peso</th></tr></thead>
       <tbody>
-        <tr><td><code>theme/scrittoio/structure.css</code></td><td>S2 T3, T4, T9, T16, T20, T21, T27</td><td>13 KB</td></tr>
-        <tr><td><code>theme/scrittoio/skin/kit.css</code></td><td>S2 T16, T20</td><td>19.4 KB</td></tr>
-        <tr><td><code>theme/scrittoio/skin/frame.css</code></td><td>S2 T3, T4, T7, T9</td><td>3.7 KB</td></tr>
-        <tr><td><code>theme/scrittoio/skin/drawers.css</code></td><td>S2 T8, T14</td><td>4.7 KB</td></tr>
-        <tr><td><code>theme/scrittoio/skin/tree.css</code></td><td>S2 T8</td><td>2 KB</td></tr>
-        <tr><td><code>theme/scrittoio/skin/sheets.css</code></td><td>S2 T5, T6, T27</td><td>2.5 KB</td></tr>
-        <tr><td><code>theme/scrittoio/skin/document.css</code></td><td>S2 T11, T12</td><td>5 KB</td></tr>
-        <tr><td><code>theme/scrittoio/skin/media.css</code></td><td>S2 T18, T19</td><td>2.9 KB</td></tr>
-        <tr><td><code>theme/scrittoio/skin/nodes.css</code></td><td>S2 T9, T13</td><td>3.9 KB</td></tr>
-        <tr><td><code>theme/scrittoio/skin/graph.css</code></td><td>S2 T10</td><td>0.3 KB</td></tr>
-        <tr><td><code>theme/scrittoio/skin/menus.css</code></td><td>S2 T10</td><td>1.4 KB</td></tr>
-        <tr><td><code>theme/scrittoio/skin/launcher.css</code></td><td>S2 T10</td><td>0.2 KB</td></tr>
-        <tr><td><code>theme/scrittoio/skin/centres.css</code></td><td>S2 T5</td><td>0.8 KB</td></tr>
-        <tr><td><code>theme/scrittoio/skin/settings.css</code></td><td>S2 T10</td><td>0.8 KB</td></tr>
-        <tr><td><code>theme/scrittoio/skin/welcome.css</code></td><td>S2 T10</td><td>0.2 KB</td></tr>
-        <tr><td><code>shells/scrittoio/mobile/mobile.css</code></td><td>S2 T3, T4, T5, T7, T11, T27</td><td>7.6 KB</td></tr>
-        <tr><td><code>theme/scrittoio/series.ts</code></td><td>S2 T11</td><td>0.3 KB</td></tr>
-        <tr><td><code>theme/scrittoio/recipe.ts</code></td><td>S2 T16, T27</td><td>1.7 KB</td></tr>
+        <tr><td><code>theme/scrittoio/structure.css</code></td><td>struttura</td><td>S2 T3, T4, T9, T16, T20, T21, T27</td><td>13 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/kit.css</code></td><td>pelle</td><td>S2 T16, T20</td><td>19.4 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/frame.css</code></td><td>pelle</td><td>S2 T3, T4, T7, T9</td><td>3.7 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/drawers.css</code></td><td>pelle</td><td>S2 T8, T14</td><td>4.7 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/tree.css</code></td><td>pelle</td><td>S2 T8</td><td>2 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/sheets.css</code></td><td>pelle</td><td>S2 T5, T6, T27</td><td>2.5 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/document.css</code></td><td>pelle</td><td>S2 T11, T12</td><td>5 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/media.css</code></td><td>pelle</td><td>S2 T18, T19</td><td>2.9 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/nodes.css</code></td><td>pelle</td><td>S2 T9, T13</td><td>3.9 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/graph.css</code></td><td>pelle</td><td>S2 T10</td><td>0.3 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/menus.css</code></td><td>pelle</td><td>S2 T10</td><td>1.4 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/launcher.css</code></td><td>pelle</td><td>S2 T10</td><td>0.2 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/centres.css</code></td><td>pelle</td><td>S2 T5</td><td>0.8 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/settings.css</code></td><td>pelle</td><td>S2 T10</td><td>0.8 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/welcome.css</code></td><td>pelle</td><td>S2 T10</td><td>0.2 KB</td></tr>
+        <tr><td><code>shells/scrittoio/mobile/mobile.css</code></td><td>telefono</td><td>S2 T3, T4, T5, T7, T11, T27</td><td>7.6 KB</td></tr>
+        <tr><td><code>theme/scrittoio/series.ts</code></td><td>serie</td><td>S2 T11</td><td>0.3 KB</td></tr>
+        <tr><td><code>theme/scrittoio/recipe.ts</code></td><td>serie</td><td>S2 T16, T27</td><td>1.7 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/frame.css</code></td><td>prealpha</td><td>D5 A: K5 T21–T23 con S2 T4</td><td>0.9 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/draw.css</code></td><td>prealpha</td><td>K5 T21, PA T27</td><td>0.6 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/settings.css</code></td><td>prealpha</td><td>PA T29, T36–T38</td><td>5.9 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/nodes.css</code></td><td>prealpha</td><td>N6 T26–T28, PA T28</td><td>3.3 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/media.css</code></td><td>prealpha</td><td>PA T30</td><td>0.3 KB</td></tr>
+        <tr><td><code>theme/examples/carta/ (fogli e skin.css)</code></td><td>tema</td><td>PA T42, D17</td><td>4.4 KB</td></tr>
+        <tr><td><code>theme/examples/salvia/ (i due fogli)</code></td><td>tema</td><td>PA T42, D17</td><td>2.7 KB</td></tr>
       </tbody>
     </table></div>
-    <p class="sim-muto">Il testo sta nei blocchi <code>&lt;style data-destinazione&gt;</code> in testa a questa pagina, già senza le varianti «com'era».</p>
+    <p class="sim-muto">Il testo sta nei blocchi <code>&lt;style data-destinazione&gt;</code> in testa a questa pagina, già senza le varianti «com'era». «prealpha» è il CSS di questo piano; «tema» sono i due temi d'esempio.</p>
   </details>
   <details>
     <summary>Le pagine dei piani</summary>
@@ -2537,348 +3238,492 @@ code { font-size: 12.5px; overflow-wrap: anywhere; }
     </ul>
   </details>
 </main>
-<script>
-// solo simulatore: la vista. Monta una cattura nell'iframe col CSS nuovo dove
-// andrà nel codice, poi passa il documento a solo-simulatore.js.
-(() => {
-  "use strict";
-  const STATI = [{"g":"Nota","id":"nota-riposo","nome":"Nota in Live","w700":"nota-riposo-700","tel":"tel-nota","fuoco":".pane.focus .cm-content","dice":"Il posto da cui si parte: la cornice di Scrittoio 2 attorno alla nota in Live. Si scrive davvero nel foglio (il testo non si salva); «/» a inizio riga apre il menu dei blocchi, il tasto destro il menu del testo, la modalità si cambia dalla banda in basso a destra.","task":["S2 T2–T13","main N12 N13"]},{"g":"Nota","id":"nota","nome":"Il menu delle modalità","w700":"nota-700","tel":"tel-nota","fuoco":"[role=\"menuitemradio\"][aria-checked=\"true\"]","dice":"La modalità si sceglie dalla banda: Live, Blocchi, Sorgente, Lettura. Le scorciatoie stanno a destra, in tasti.","task":["S2 T2","S2 T3","S2 T10"]},{"g":"Nota","id":"nota-blocchi","nome":"La stessa nota in Blocchi","w700":"nota-blocchi-700","tel":"tel-nota","fuoco":".pane.focus .cm-content","dice":"Blocchi è la nota a blocchi alla Notion, sullo stesso testo: le maniglie a sinistra di ogni blocco.","task":["main N13","S2 T3"]},{"g":"Nota","id":"nota-sorgente","nome":"La stessa nota in Sorgente","w700":"nota-sorgente-700","tel":"tel-nota","fuoco":".pane.focus .cm-content","dice":"Il Markdown com'è nel file, coi numeri di riga.","task":["main","S2 T3"]},{"g":"Nota","id":"nota-lettura","nome":"La stessa nota in Lettura","w700":"nota-lettura-700","tel":"tel-nota","fuoco":".pane.focus .reading-view, .pane.focus [tabindex]","dice":"La nota da leggere, senza cursore.","task":["main","S2 T3","S2 T11"]},{"g":"Nota","id":"barra","nome":"La barra di formato","w700":"barra-700","tel":"tel-nota","fuoco":".kit-bar-button","dice":"La barra di formato delle note nella fila di serie: il vassoio un tono sotto la carta, i gruppi come foglietti. A 700 px ciò che non ci sta va in «…».","task":["S2 T16","S2 T17"]},{"g":"Nota","id":"live-tabella","nome":"Live: una tabella in modifica","w700":"live-tabella-700","tel":null,"fuoco":".pane.focus .cm-content","dice":"La griglia delle tabelle Markdown in Live, con la riga attiva.","task":["main","S2 T11"]},{"g":"Nota","id":"blocchi-menu","nome":"Blocchi: il menu della maniglia","w700":"blocchi-menu-700","tel":null,"fuoco":"[role=\"menu\"] [role=\"menuitem\"]","dice":"Il menu che si apre dalla maniglia di un blocco.","task":["main N13","PA (rifiniture di Blocchi)"]},{"g":"Nota","id":"slash","nome":"«/»: il menu dei blocchi","w700":"slash-700","tel":null,"fuoco":".slash-row.is-selected","dice":"«/» a inizio riga: suggerimenti, tutte le specie di blocco, l'anteprima a destra.","task":["main N12","S2 T10"]},{"g":"Nota","id":"slash-filtro","nome":"«/» con un filtro","w700":null,"tel":null,"fuoco":".slash-row.is-selected","dice":"Si scrive dopo «/»: la lista si stringe.","task":["main N12"]},{"g":"Nota","id":"slash-nessuno","nome":"«/» senza risultati","w700":null,"tel":null,"fuoco":".pane.focus .cm-content","dice":"Nessun blocco col nome scritto: il menu lo dice e resta aperto.","task":["main N12"]},{"g":"Nota","id":"conflitto","nome":"Conflitto: il file è cambiato su disco","w700":"conflitto-700","tel":null,"fuoco":".conflict-actions [data-choice=\"mine\"]","dice":"Il file è cambiato fuori da Fub mentre si scriveva: nessuna scelta è automatica. La testata dice «Cambiato su disco».","task":["main (U59–U60)","S2 T5","PA giro della pre-alpha"]},{"g":"Nota","id":"schede","nome":"Molte schede","w700":"schede-700","tel":null,"fuoco":".pane.focus .tab[aria-selected=\"true\"]","dice":"Le linguette quando sono tante.","task":["S2 T6"]},{"g":"Nota","id":"concentrazione","nome":"Concentrazione","w700":"concentrazione-700","tel":null,"fuoco":".pane.focus .cm-content","dice":"Solo il foglio: cassetto e ispettore si ritirano.","task":["main","S2 T6"]},{"g":"Nota","id":"nota-pdf","nome":"Un PDF dentro una nota","w700":"nota-pdf-700","tel":null,"fuoco":".pane.focus .cm-content","dice":"`![[contratto.pdf]]` mostra la pagina dentro la nota.","task":["main","PA (`#page=3`)"]},{"g":"Nota","id":"icone","nome":"L'icona di una cartella: le figure","w700":null,"tel":null,"fuoco":"[data-icon^=\"fub:\"]","dice":"Il selettore dell'icona offre le figure monocrome accanto alle emoji.","task":["S2 T14","S2 T15"]},{"g":"Nota","id":"icone-emoji","nome":"L'icona di una cartella: le emoji","w700":null,"tel":null,"fuoco":"[data-icon^=\"fub:\"]","dice":"Le emoji restano una scelta piena.","task":["S2 T14","S2 T15"]},{"g":"Editor","id":"documento","nome":"Documento Word","w700":"documento-700","tel":"tel-doc","fuoco":".kit-ribbon-tabs [role=\"tab\"][aria-selected=\"true\"]","dice":"Il .docx nella sua pagina, con la barra a schede di serie (le classi del kit); la galleria degli stili resta del documento.","task":["S2 T5","S2 T20","S2 T21"]},{"g":"Editor","id":"documento-oggetti","nome":"Documento: immagini, caselle, formule","w700":"documento-oggetti-700","tel":"tel-doc","fuoco":".kit-ribbon-tabs [role=\"tab\"][aria-selected=\"true\"]","dice":"Gli oggetti dentro il testo di un documento.","task":["main","S2 T21"]},{"g":"Editor","id":"sola-lettura","nome":"Documento in sola lettura","w700":"sola-lettura-700","tel":"tel-doc","fuoco":"#status-mode","dice":"Uno stato diverso da «Si scrive» resta nella testata, dove si vede. La pre-alpha blocca davvero la scrittura (oggi è solo un segno).","task":["S2 T4","S2 T5","PA sola lettura"]},{"g":"Editor","id":"foglio","nome":"Foglio di calcolo","w700":"foglio-700","tel":"tel-foglio","fuoco":".kit-ribbon-tabs [role=\"tab\"][aria-selected=\"true\"]","dice":"La barra dei fogli nello stile di Fub (K3 T18) e la sua forma nel kit (S2 T20). Le celle nuove sono nella pagina «Le celle della griglia».","task":["K3 T18","S2 T20","griglia T1–T9"]},{"g":"Editor","id":"foglio-modifica","nome":"Foglio: una cella aperta","w700":"foglio-modifica-700","tel":"tel-foglio","fuoco":".pane.focus .grid-editor, .pane.focus input","dice":"La cella in modifica com'è oggi; la cella aperta nuova (griglia T4) è nella pagina della griglia.","task":["griglia T4","S2 T20"]},{"g":"Editor","id":"foglio-comandi","nome":"Foglio: il menu «Comandi»","w700":null,"tel":null,"fuoco":"[role=\"menu\"] [role=\"menuitem\"]","dice":"I comandi dei motori Craft sulla barra dei fogli.","task":["K3 T12–T15","S2 T20"]},{"g":"Editor","id":"foglio-comandi-cerca","nome":"Foglio: «Comandi» con la ricerca","w700":null,"tel":null,"fuoco":"[role=\"searchbox\"], input","dice":"Si cerca fra i comandi dei motori.","task":["K3 T12–T15"]},{"g":"Editor","id":"caricamento","nome":"Foglio: un risultato che si carica","w700":null,"tel":null,"fuoco":".kit-button[data-kind=\"primary\"]","dice":"«Statistiche della selezione» mentre il motore legge.","task":["K3 T15","S2 T20"]},{"g":"Editor","id":"errore","nome":"Foglio: il motore non risponde","w700":null,"tel":null,"fuoco":".kit-button[data-kind=\"primary\"]","dice":"Il messaggio e «Riprova».","task":["K3 T15","S2 T20"]},{"g":"Editor","id":"molti","nome":"Foglio a 700 px: 500 errori","w700":null,"tel":null,"fuoco":".kit-button[data-kind=\"primary\"]","dice":"La tabella scorre dentro il dialogo; dietro, la barra si raccoglie.","task":["K3 T15","S2 T20"]},{"g":"Editor","id":"disegno","nome":"Disegno SVG","w700":"disegno-700","tel":null,"fuoco":".draw-header .kit-bar-button","dice":"La testa del disegno nella fila di serie, la colonna degli strumenti con la pelle di `kit-rail`. Il motore del disegno è nella pagina «Il disegno sul motore».","task":["S2 T16","S2 T22","K5 T25"]},{"g":"Editor","id":"disegno-selezione","nome":"Disegno: una figura scelta","w700":"disegno-selezione-700","tel":null,"fuoco":".draw-header .kit-bar-button","dice":"Le maniglie e la barra della selezione.","task":["K5","S2 T22"]},{"g":"Editor","id":"pdf","nome":"PDF","w700":"pdf-700","tel":null,"fuoco":".media-pdf-toolbar .kit-bar-button","dice":"La barra del PDF nella fila di serie; «Pagina N di M» nella banda.","task":["S2 T18"]},{"g":"Editor","id":"lavagna","nome":"Lavagna","w700":"lavagna-700","tel":null,"fuoco":".pane.focus .canvas-toolbar button","dice":"La lavagna com'è oggi nella cornice nuova. Le schede di N6 e le penne di N4 sono nelle loro pagine (in «Dai piani»): nel prodotto entrano qui.","task":["N6","N4","S2 T23","lavagna in codice"]},{"g":"Editor","id":"craft","nome":"File Craft senza anteprima","w700":"craft-700","tel":null,"fuoco":".craft-ask-answer","dice":"Senza anteprima la scheda è un foglietto sollevato; le risposte sono pulsanti del kit.","task":["main N7","S2 T19"]},{"g":"Editor","id":"craft-spente","nome":"File Craft col componente spento","w700":"craft-spente-700","tel":null,"fuoco":".pane.focus a, .pane.focus button","dice":"Il componente che lo legge è spento: la scheda lo dice e porta alle impostazioni.","task":["main N7","K2","S2 T19"]},{"g":"Editor","id":"craft-prepara","nome":"File Craft: l'anteprima si prepara","w700":"craft-prepara-700","tel":null,"fuoco":".pane.focus button","dice":"L'anteprima arriva: il segno d'attesa.","task":["main N7","S2 T19"]},{"g":"Editor","id":"craft-rotto","nome":"File Craft rotto","w700":"craft-rotto-700","tel":null,"fuoco":".pane.focus button","dice":"Il file non si legge: il motivo, e il file resta com'è.","task":["main N7","S2 T19"]},{"g":"Editor","id":"foto","nome":"Foto RAW con XMP","w700":"foto-700","tel":null,"fuoco":".pane.focus button","dice":"Una foto RAW con le modifiche di LightCraft lette dall'XMP.","task":["main"]},{"g":"Cornice","id":"ricerca","nome":"La ricerca nel vault","w700":"ricerca-700","tel":"tel-cassetto","fuoco":"#search-input","dice":"Il cassetto della ricerca: il pozzetto pieno con la lente.","task":["S2 T8"]},{"g":"Cornice","id":"grafo","nome":"Il grafo","w700":"grafo-700","tel":null,"fuoco":".graph-list-summary","dice":"Il grafo resta; cambiano le etichette in tondo.","task":["S2 T10"]},{"g":"Cornice","id":"palette","nome":"Avvio rapido: i comandi","w700":"palette-700","tel":"tel-lanciatore","fuoco":".launcher-input","dice":"Ctrl+O: note, ricerca e comandi in un campo solo. Qui la scheda «Comandi».","task":["main","S2 T10"]},{"g":"Cornice","id":"palette-file","nome":"Avvio rapido: le note","w700":"palette-file-700","tel":"tel-lanciatore","fuoco":".launcher-input","dice":"La prima scheda: i file del vault.","task":["main","S2 T10"]},{"g":"Cornice","id":"zero","nome":"Avvio rapido senza risultati","w700":"zero-700","tel":null,"fuoco":".launcher-input","dice":"Zero voci: il messaggio resta.","task":["S2 T10"]},{"g":"Cornice","id":"salvataggio","nome":"Lo stato del salvataggio, aperto","w700":"salvataggio-700","tel":null,"fuoco":".kit-popover button, .kit-popover","dice":"«Salvato» nella testata si apre: che cosa è successo e che cosa si può fare.","task":["main","S2 T5"]},{"g":"Cornice","id":"avvisi","nome":"Gli avvisi","w700":"avvisi-700","tel":null,"fuoco":"#notify-clear","dice":"La campanella: gli avvisi del vault.","task":["main"]},{"g":"Cornice","id":"toast","nome":"Un avviso che passa","w700":"toast-700","tel":null,"fuoco":".toast button","dice":"Il messaggio in basso che se ne va da solo.","task":["main"]},{"g":"Cornice","id":"conferma","nome":"Una conferma pericolosa","w700":"conferma-700","tel":null,"fuoco":".kit-button[data-kind=\"danger\"], .kit-dialog button","dice":"Il dialogo del kit quando una scelta butta via qualcosa.","task":["main"]},{"g":"Cornice","id":"impostazioni","nome":"Impostazioni","w700":"impostazioni-700","tel":null,"fuoco":".settings-tab[aria-selected=\"true\"]","dice":"Le impostazioni nella lingua dello Scrittoio. Nel simulatore «Tema» e «Movimento» cambiano davvero lo schermo.","task":["S2 T10"]},{"g":"Cornice","id":"aspetto","nome":"Impostazioni › Aspetto","w700":"aspetto-700","tel":null,"fuoco":".settings-tab[aria-selected=\"true\"]","dice":"Tema, contrasto, densità, carattere, tinta: le scelte dell'aspetto.","task":["main","S2 T10"]},{"g":"Cornice","id":"impostazioni-vault","nome":"Impostazioni › Vault","w700":"impostazioni-vault-700","tel":null,"fuoco":".settings-tab[aria-selected=\"true\"]","dice":"I vault conosciuti, aperti e da aprire.","task":["main","S2 T10"]},{"g":"Cornice","id":"componenti","nome":"Componenti","w700":"componenti-700","tel":null,"fuoco":".settings-tab[aria-selected=\"true\"]","dice":"La pagina «Componenti»: che cosa è acceso, chi lo richiede, i profili. Nel simulatore gli interruttori si muovono.","task":["K2 T1–T7","S2 T10"]},{"g":"Cornice","id":"nuovo-vault","nome":"Un vault nuovo: il profilo","w700":"nuovo-vault-700","tel":null,"fuoco":".kit-button[data-kind=\"primary\"], button","dice":"«Come userai questo vault?»: il profilo accende i componenti che servono.","task":["K2"]},{"g":"Casi","id":"vuoto","nome":"Nessun vault aperto","w700":"vuoto-700","tel":"tel-avvio","fuoco":"#pill","dice":"La pillola è il campo dei comandi anche a vuoto.","task":["S2 T7"]},{"g":"Casi","id":"avvio-attesa","nome":"L'avvio: il vault si apre","w700":null,"tel":"tel-avvio-attesa","fuoco":".avvio button","dice":"Il marchio, la riga del vault che si apre, la scia. È in main (#308).","task":["main #308"]},{"g":"Casi","id":"avvio-lento","nome":"L'avvio che si allunga","w700":null,"tel":null,"fuoco":".avvio button","dice":"«Ci vuole più del solito.»","task":["main #308"]},{"g":"Casi","id":"avvio-guasto","nome":"L'avvio caduto","w700":null,"tel":null,"fuoco":".avvio button","dice":"Il motivo, «Riprova» col fuoco, «Copia i dettagli».","task":["main #308"]},{"g":"Telefono","id":"tel-nota","nome":"Telefono: nota, si scrive","w700":null,"tel":null,"fuoco":".pane > .pane-mode-current","dice":"La cornice provvisoria A di Scrittoio 2. La pre-alpha la porta su Android di prova: va rifatta o tenuta? (domanda nella parte 4).","task":["S2 T2–T7","PA telefono"]},{"g":"Telefono","id":"tel-ferma","nome":"Telefono: nota, a riposo","w700":null,"tel":null,"fuoco":".pane > .pane-mode-current","dice":"Senza il fuoco nel testo la barra di formato non c'è; la modalità è il tondo in basso a destra.","task":["S2 T3","PA telefono"]},{"g":"Telefono","id":"tel-tastiera","nome":"Telefono: tastiera aperta","w700":null,"tel":null,"fuoco":".pane > .pane-mode-current","dice":"La fila della barra di formato sta sopra i tasti.","task":["S2 T17","PA telefono"]},{"g":"Telefono","id":"tel-sdraiato","nome":"Telefono sdraiato","w700":null,"tel":null,"fuoco":".pane > .pane-mode-current","dice":"Sdraiato la barra del titolo è quella stretta del computer.","task":["S2 T3","S2 T7","PA telefono"]},{"g":"Telefono","id":"tel-doc","nome":"Telefono: documento","w700":null,"tel":null,"fuoco":".pane > .pane-mode-current","dice":"Il documento con la barra di serie raccolta.","task":["S2 T21","PA telefono"]},{"g":"Telefono","id":"tel-foglio","nome":"Telefono: foglio","w700":null,"tel":null,"fuoco":"[data-pane-menu]","dice":"Il foglio da un bordo all'altro.","task":["S2 T20","PA telefono"]},{"g":"Telefono","id":"tel-cassetto","nome":"Telefono: il cassetto","w700":null,"tel":null,"fuoco":"#file-list [role=\"treeitem\"]","dice":"L'albero del vault in un foglio che sale dal basso.","task":["main","PA telefono"]},{"g":"Telefono","id":"tel-ispettore","nome":"Telefono: l'ispettore","w700":null,"tel":null,"fuoco":".inspector-tab","dice":"Struttura e collegamenti in un foglio che sale dal basso.","task":["main","PA telefono"]},{"g":"Telefono","id":"tel-lanciatore","nome":"Telefono: avvio rapido","w700":null,"tel":null,"fuoco":".launcher-input","dice":"L'avvio rapido a tutta altezza.","task":["main","PA telefono"]},{"g":"Telefono","id":"tel-avvio","nome":"Telefono: il benvenuto","w700":null,"tel":null,"fuoco":"button","dice":"Il primo schermo senza vault.","task":["main","PA telefono"]},{"g":"Telefono","id":"tel-avvio-attesa","nome":"Telefono: l'avvio","w700":null,"tel":null,"fuoco":".avvio button","dice":"Lo strato d'avvio al telefono.","task":["main #308"]}];
-  const PEZZI = [{"sel":"#topbar","nome":"La barra del titolo","dest":"apps/client/index.html, shells/scrittoio/frame/*.ts","task":"S2 T7","come":"cambiato"},{"sel":"#pill","nome":"La pillola (cerca o esegui)","dest":"shells/scrittoio/frame/pill.ts","task":"S2 T7","come":"cambiato"},{"sel":"#rail","nome":"Il binario","dest":"shells/scrittoio/frame/rail.ts, index.html","task":"S2 T7 (pelle)","come":"uguale"},{"sel":"#space-strip","nome":"La striscia degli spazi","dest":"panels/explorer.ts","task":"S2 T8","come":"cambiato"},{"sel":"#file-list","nome":"L'albero del vault","dest":"panels/explorer.ts, ui/page-mark.ts","task":"S2 T8, T14","come":"cambiato"},{"sel":"#search-input","nome":"Il pozzetto della ricerca","dest":"index.html, panels/explorer.ts","task":"S2 T8","come":"cambiato"},{"sel":".pane.focus .pane-tabs","nome":"Le linguette","dest":"panels/document.ts (pelle in skin/sheets.css)","task":"S2 T6","come":"uguale"},{"sel":".pane.focus .pane-toolbar","nome":"La testata del foglio","dest":"panels/document.ts, shells/scrittoio/sheets/title-rename.ts","task":"S2 T5","come":"cambiato"},{"sel":".pane.focus .sheet-save","nome":"«Salvato» nella testata","dest":"shells/scrittoio/sheets/save-state.ts","task":"S2 T5","come":"cambiato"},{"sel":".pane.focus .format-bar","nome":"La barra di formato","dest":"panels/format-bar.ts, kit/toolbar-keys.ts","task":"S2 T16, T17","come":"cambiato"},{"sel":".pane > .pane-mode-current","nome":"La modalità nel foglio (telefono)","dest":"panels/document.ts, mobile.css","task":"S2 T3","come":"cambiato"},{"sel":".note-facts","nome":"La riga dei dati sotto il titolo","dest":"editors/text/profiles/markdown/note-facts.ts (nuovo)","task":"S2 T12","come":"nuovo"},{"sel":"#status-band","nome":"La banda","dest":"shells/scrittoio/frame/status-band.ts, index.html","task":"S2 T3, T4","come":"cambiato"},{"sel":".status-standing","nome":"«Si scrive» nella banda","dest":"shells/scrittoio/frame/status-band.ts, panels/standing.ts","task":"S2 T4","come":"nuovo"},{"sel":"#status-mode","nome":"La modalità nella banda","dest":"shells/scrittoio/frame/status-band.ts, state/mode-menu.ts","task":"S2 T2, T3","come":"nuovo"},{"sel":"#right-pane","nome":"L'ispettore","dest":"ui/views.ts, ui/node.ts","task":"S2 T9","come":"cambiato"},{"sel":"#view-panel-backlinks","nome":"«In entrata»","dest":"ui/node.ts, crates/fub-features/src/backlinks.rs","task":"S2 T13","come":"cambiato"},{"sel":".conflict-banner","nome":"Il conflitto","dest":"panels/document.ts (drawConflict)","task":"main; PA giro","come":"uguale"},{"sel":".sheet-notices:not(:empty)","nome":"Gli avvisi del foglio","dest":"panels/document.ts","task":"main","come":"uguale"},{"sel":"#context-menu[aria-label=\"Modalità del riquadro\"]","nome":"Il menu delle modalità","dest":"state/mode-menu.ts (nuovo), ui/menu.ts","task":"S2 T2, T10","come":"nuovo"},{"sel":"#context-menu:not([aria-label=\"Modalità del riquadro\"])","nome":"Il menu del tasto destro","dest":"ui/menu.ts, panels/editor-menu.ts","task":"main (#238)","come":"uguale"},{"sel":".slash-panel","nome":"Il menu «/»","dest":"panels/slash/panel.ts","task":"main N12","come":"uguale"},{"sel":".launcher-layer","nome":"L'avvio rapido","dest":"shells/scrittoio/launcher/launcher.ts","task":"main (pelle S2 T10)","come":"uguale"},{"sel":".kit-popover","nome":"Il foglietto del salvataggio","dest":"kit/popover.ts, shells/scrittoio/sheets/save-state.ts","task":"S2 T5","come":"cambiato"},{"sel":"#notify-panel:not([hidden])","nome":"Gli avvisi","dest":"ui/notify.ts","task":"main","come":"uguale"},{"sel":".toast-stack:not(:empty)","nome":"Un avviso che passa","dest":"ui/notify.ts","task":"main","come":"uguale"},{"sel":".kit-dialog-scrim","nome":"Il dialogo del kit","dest":"kit/dialog.ts","task":"main","come":"uguale"},{"sel":".settings-panel","nome":"Le impostazioni","dest":"panels/settings.ts, shells/scrittoio/preferences/*.ts","task":"main (pelle S2 T10)","come":"uguale"},{"sel":".components-page","nome":"La pagina «Componenti»","dest":"panels/components-page.ts (nuovo)","task":"K2 T1–T7","come":"nuovo"},{"sel":".onboarding:not([hidden])","nome":"Il benvenuto","dest":"shells/scrittoio/frame/welcome.ts","task":"main (pelle S2 T10)","come":"uguale"},{"sel":".avvio","nome":"Lo strato d'avvio","dest":"avvio/consegna.ts, index.html","task":"main #308","come":"uguale"},{"sel":".kit-ribbon","nome":"La barra a schede","dest":"kit/ribbon/ribbon.ts, editors/rich/ribbon.ts","task":"S2 T20, T21; K3 T18","come":"nuovo"},{"sel":".media-pdf-toolbar","nome":"La barra del PDF","dest":"editors/media/pdf-view.ts","task":"S2 T18","come":"cambiato"},{"sel":".draw-header","nome":"La testa del disegno","dest":"editors/spatial/tools/editor/toolbar.ts","task":"S2 T22; K5","come":"cambiato"},{"sel":".canvas-toolbar","nome":"La barra della lavagna di oggi","dest":"editors/canvas/engine.ts","task":"N6 T26, T49 (la sostituiscono)","come":"cambiato"},{"sel":".craft-ask","nome":"La domanda dei file Craft","dest":"editors/craft/consent.ts","task":"main N7 (pelle S2 T19)","come":"uguale"}];
-  const $ = (id) => document.getElementById(id);
-  const frame = $("sim-schermo");
-  const box = $("sim-box");
-  let dati = null;
-  const testi = [];
-  const fontUrl = new Map();
-  const scelto = { stato: "nota-riposo", luce: "light", larghezza: "piena", moto: "pieno", fuoco: false };
-  const prefs = { body: 18, lineHeight: 1.65, measure: 58, font: "newsreader", theme: "light", motion: "" };
-  const storia = [];
-  const tok = (s, kind) => s.split(kind === "h" ? /(?<=>)/ : /(?<=})/);
-  function testo(i) {
-    if (testi[i] !== undefined) return testi[i];
-    const t = dati.texts[i];
-    if (typeof t === "string") return (testi[i] = t);
-    const a = tok(testo(t.b), t.k);
-    let out = "";
-    let pos = 0;
-    for (const [s, n, ins] of t.p) {
-      out += a.slice(pos, s).join("") + ins;
-      pos = s + n;
-    }
-    return (testi[i] = out + a.slice(pos).join(""));
-  }
-  const bytes = (b64) => {
-    const bin = atob(b64);
-    const u = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i += 1) u[i] = bin.charCodeAt(i);
-    return u;
-  };
-  async function carica() {
-    const stream = new Blob([bytes(window.SIM_DATI)]).stream().pipeThrough(new DecompressionStream("gzip"));
-    dati = JSON.parse(await new Response(stream).text());
-    for (const [name, b] of dati.fonts) {
-      const u = bytes(b);
-      fontUrl.set(name, URL.createObjectURL(new Blob([u], { type: "font/woff2" })));
-      if (name.startsWith("hanken")) {
-        const face = new FontFace("Hanken Grotesk Variable", u.buffer, { weight: "100 900", style: name.endsWith("italic") ? "italic" : "normal" });
-        document.fonts.add(face);
-        face.load().catch(() => {});
-      }
-    }
-  }
-  const conFont = (css) => css.replace(/\/fonts\/([\w-]+)\.woff2/g, (m, n) => fontUrl.get(n) ?? m);
-  const attr = (pairs) => pairs.map(([k, v]) => ` ${k}="${String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;")}"`).join("");
-  const stile = (css, label) => `<style data-proto="${label}">${css.replace(/<\/style/gi, "<\\/style")}</style>`;
-  const blocco = (sel) => [...document.querySelectorAll(sel)].map((s) => s.textContent).join("\n");
-  const statoDi = (id) => STATI.find((x) => x.id === id);
+<div hidden id="sim-toppe">
+<!-- toppe/componenti.html -->
+<template data-toppa="comp-installato" data-nome="Un componente della comunità installato">
+<!-- → panels/settings.ts (la sezione «Installati su questa macchina», con la scheda di panels/components-page.ts); K1, K2 T3, PA T29 -->
+<div class="settings-card settings-component" data-component="esempio.conta-parole">
+  <div class="setting-text"><span class="setting-label">Conta parole</span><div class="muted">esempio.conta-parole · Della comunità · 0.3.1</div></div>
+  <input type="checkbox" class="setting-switch components-switch" role="switch" checked aria-label="Conta parole acceso">
+  <details class="settings-details"><summary>Chiede 1 permesso</summary><div class="settings-details-body"><div class="setting-row setting-permission"><div class="setting-text"><div>Può sapere quale nota stai guardando, e in che modalità.</div></div></div></div></details>
+  <div class="settings-actions"><button type="button" class="settings-btn">Disinstalla</button></div>
+</div>
+</template>
 
-  function capBase(s = statoDi(scelto.stato)) {
-    if (s.g === "Telefono") return s.id;
-    if (scelto.larghezza === "700" && s.w700) return s.w700;
-    if (scelto.larghezza === "tel" && s.tel) return s.tel;
-    return s.id;
-  }
-  const capId = () => `${capBase()}-${scelto.luce}`;
-  // Le scelte di Aspetto, sopra tutto: le stesse variabili che scrive
-  // theme/theme.ts (preferenceTokens), solo quando cambiano dal valore di serie.
-  const PILE = {
-    newsreader: '"Newsreader Variable", Georgia, "Times New Roman", serif',
-    hanken: '"Hanken Grotesk Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-    literata: '"Literata Variable", Georgia, "Times New Roman", serif',
-    inter: '"Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-    system: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-  };
-  function cssPrefs() {
-    const r = [];
-    if (prefs.body !== 18) r.push(`--text-reading: ${prefs.body}px;`);
-    if (prefs.lineHeight !== 1.65) r.push(`--leading-relaxed: ${prefs.lineHeight};`);
-    if (prefs.measure !== 58) r.push(`--content-width: ${prefs.measure}ch;`);
-    if (prefs.font !== "newsreader") r.push(`--font-reading: ${PILE[prefs.font] ?? PILE.newsreader};`);
-    return r.length ? `:root { ${r.join(" ")} }` : "";
-  }
-  function documento(cap) {
-    const nuovo = { struttura: blocco('style[data-posto="struttura"]'), pelle: blocco('style[data-posto="pelle"]'), telefono: blocco('style[data-posto="telefono"]'), serie: blocco('style[data-posto="serie"]') };
-    let head = '<meta charset="utf-8">';
-    const messi = { struttura: false, pelle: false, telefono: false };
-    for (const [label, media, i] of cap.c) {
-      head += stile(conFont(testo(i)), label).replace("<style", media ? `<style media="${media}"` : "<style");
-      if (label === "src/theme/scrittoio/structure.css") (head += stile(nuovo.struttura, "nuovo:struttura")), (messi.struttura = true);
-      if (label === "fub:pelle") (head += stile(nuovo.pelle, "nuovo:pelle")), (messi.pelle = true);
-      if (label === "src/shells/scrittoio/mobile/mobile.css") (head += stile(nuovo.telefono, "nuovo:telefono")), (messi.telefono = true);
-    }
-    if (!messi.struttura) head += stile(nuovo.struttura, "nuovo:struttura");
-    if (!messi.pelle) head += stile(nuovo.pelle, "nuovo:pelle");
-    if (!messi.telefono) head += stile(nuovo.telefono, "nuovo:telefono");
-    head += stile(nuovo.serie, "nuovo:serie");
-    head += stile(cssPrefs(), "solo-simulatore:aspetto");
-    head += stile(window.SIM_INTERAZIONI?.css ?? "", "solo-simulatore");
-    const attrs = cap.a.filter(([k]) => k !== "data-motion");
-    if (scelto.moto === "calmo") attrs.push(["data-motion", "calm"]);
-    if (scelto.moto === "ridotto") attrs.push(["data-motion", "reduced"]);
-    return `<!doctype html><html${attr(attrs)}><head>${head}<title>${cap.t.replace(/</g, "&lt;")}</title></head><body${attr(cap.ba)}>${testo(cap.b)}</body></html>`;
-  }
-  const MISURE = ["display", "position", "top", "right", "bottom", "left", "width", "height", "min-height", "margin", "border-radius", "box-shadow", "background-color", "z-index", "pointer-events"];
-  function ripristina(doc, dentro = doc) {
-    for (const el of dentro.querySelectorAll("[data-proto-style]")) el.setAttribute("style", el.getAttribute("data-proto-style"));
-    if (dentro.nodeType === 1 && dentro.hasAttribute("data-proto-style")) dentro.setAttribute("style", dentro.getAttribute("data-proto-style"));
-    if (dentro === doc) {
-      const r = doc.documentElement;
-      if (r.hasAttribute("data-proto-style")) r.setAttribute("style", r.getAttribute("data-proto-style"));
-    }
-    const tele = [...dentro.querySelectorAll("canvas[data-proto-src]")].map((c) => {
-      const cs = doc.defaultView.getComputedStyle(c);
-      const img = doc.createElement("img");
-      for (const a of c.attributes) if (!["data-proto-src", "width", "height", "style"].includes(a.name)) img.setAttribute(a.name, a.value);
-      if (!img.hasAttribute("aria-label")) img.alt = "";
-      img.setAttribute("style", MISURE.map((k) => `${k}: ${cs.getPropertyValue(k)}`).join("; "));
-      img.src = c.getAttribute("data-proto-src");
-      c.replaceWith(img);
-      return img.decode().catch(() => {});
-    });
-    scorri(dentro);
-    return Promise.all(tele);
-  }
-  function segni(doc) {
-    for (const ind of doc.querySelectorAll(".kit-tab-indicator:not([hidden])")) {
-      const fila = ind.parentElement;
-      const scelta = fila.querySelector(':scope > .kit-tab[aria-selected="true"]');
-      if (!scelta) continue;
-      if (fila.getAttribute("aria-orientation") === "vertical") {
-        ind.style.top = `${scelta.offsetTop}px`;
-        ind.style.height = `${scelta.offsetHeight}px`;
-      } else {
-        ind.style.left = `${scelta.offsetLeft}px`;
-        ind.style.width = `${scelta.offsetWidth}px`;
-      }
-    }
-  }
-  function scorri(dentro) {
-    for (const el of dentro.querySelectorAll("[data-proto-scroll]")) {
-      const [x, y] = el.getAttribute("data-proto-scroll").split(",").map(Number);
-      el.scrollLeft = x;
-      el.scrollTop = y;
-    }
-  }
-  const visibile = (el) => !el.disabled && (el.checkVisibility ? el.checkVisibility() : el.getClientRects().length > 0);
-  function metti_fuoco(doc) {
-    if (!scelto.fuoco) return;
-    const s = statoDi(scelto.stato);
-    const el = [...doc.querySelectorAll(s.fuoco)].find(visibile) ?? doc.querySelector("[data-proto-focus]");
-    el?.focus({ preventScroll: true, focusVisible: true });
-  }
-  let scalaOra = 1;
-  function scala() {
-    const cap = dati.caps[capId()];
-    const main = box.parentElement;
-    const cs = getComputedStyle(main);
-    const avail = main.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-    scalaOra = Math.min(1, avail / cap.v.w);
-    frame.width = String(cap.v.w);
-    frame.height = String(cap.v.h);
-    $("sim-scala").textContent = `#sim-schermo { transform: scale(${scalaOra}); } #sim-box { width: ${Math.round(cap.v.w * scalaOra)}px; height: ${Math.round(cap.v.h * scalaOra)}px; }`;
-  }
-  // I documenti delle catture, per prenderne i pezzi.
-  const parsati = new Map();
-  function catturaDoc(base, luce = scelto.luce) {
-    const key = `${base}-${luce}`;
-    if (!parsati.has(key)) {
-      const cap = dati.caps[key];
-      if (!cap) return null;
-      parsati.set(key, new DOMParser().parseFromString(`<!doctype html><html><body>${testo(cap.b)}</body></html>`, "text/html"));
-    }
-    return parsati.get(key);
-  }
-  function pezzo(doc, base, sel) {
-    const src = catturaDoc(base);
-    const el = src?.querySelector(sel);
-    if (!el) return null;
-    const cap = dati.caps[`${base}-${scelto.luce}`];
-    const hanno = new Set([...doc.querySelectorAll("style[data-proto]")].map((s) => s.getAttribute("data-proto")));
-    const prima = doc.querySelector('style[data-proto="nuovo:serie"]');
-    for (const [label, media, i] of cap.c) {
-      if (!label || hanno.has(label)) continue;
-      const s = doc.createElement("style");
-      s.setAttribute("data-proto", label);
-      if (media) s.media = media;
-      s.textContent = conFont(testo(i));
-      prima.before(s);
-    }
-    const clone = doc.importNode(el, true);
-    ripristina(doc, clone);
-    return clone;
-  }
-  let msgTimer = 0;
-  function avviso(t) {
-    $("sim-msg").textContent = t;
-    clearTimeout(msgTimer);
-    msgTimer = setTimeout(() => ($("sim-msg").textContent = ""), 6000);
-  }
-  function aggiornaPezzi(doc) {
-    const ul = $("sim-pezzi");
-    ul.replaceChildren();
-    for (const p of PEZZI) {
-      const el = [...doc.querySelectorAll(p.sel)].find(visibile);
-      if (!el) continue;
-      const li = document.createElement("li");
-      const nome = document.createElement("span");
-      nome.innerHTML = `<b></b> <span class="sim-come" data-come="${p.come}">${p.come}</span> <span class="sim-task"></span>`;
-      nome.querySelector("b").textContent = p.nome;
-      nome.querySelector(".sim-task").textContent = p.task;
-      const azioni = document.createElement("span");
-      const indica = document.createElement("button");
-      indica.type = "button";
-      indica.textContent = "Indica";
-      indica.addEventListener("click", () => segna(el));
-      const mostraDom = document.createElement("button");
-      mostraDom.type = "button";
-      mostraDom.textContent = "DOM";
-      mostraDom.setAttribute("aria-expanded", "false");
-      azioni.append(indica, " ", mostraDom);
-      const dest = document.createElement("span");
-      dest.className = "sim-dest";
-      dest.textContent = `${p.dest} · ${p.sel}`;
-      const pre = document.createElement("pre");
-      pre.hidden = true;
-      mostraDom.addEventListener("click", () => {
-        pre.hidden = !pre.hidden;
-        mostraDom.setAttribute("aria-expanded", String(!pre.hidden));
-        if (!pre.hidden) pre.textContent = pulito(el);
-      });
-      li.append(nome, azioni, dest, pre);
-      ul.append(li);
-    }
-  }
-  // Il DOM da copiare: senza gli attributi del banco e senza le figure in linea.
-  function pulito(el) {
-    const c = el.cloneNode(true);
-    for (const n of [c, ...c.querySelectorAll("*")]) {
-      for (const a of [...n.attributes]) if (a.name.startsWith("data-proto")) n.removeAttribute(a.name);
-    }
-    return c.outerHTML.replace(/<svg[\s\S]*?<\/svg>/g, "<svg>…</svg>").replace(/></g, ">\n<");
-  }
-  function segna(el) {
-    const r = el.getBoundingClientRect();
-    const s = $("sim-segno");
-    s.style.left = `${r.left * scalaOra - 3}px`;
-    s.style.top = `${r.top * scalaOra - 3}px`;
-    s.style.width = `${r.width * scalaOra + 6}px`;
-    s.style.height = `${r.height * scalaOra + 6}px`;
-    s.hidden = false;
-    box.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    setTimeout(() => (s.hidden = true), 2200);
-  }
-  const api = {
-    get scelto() { return scelto; },
-    prefs,
-    dati: () => dati,
-    statoDi,
-    capBase,
-    vai(id, { storia: tieni = true } = {}) {
-      if (!statoDi(id)) return;
-      if (tieni && id !== scelto.stato) storia.push(scelto.stato);
-      scelto.stato = id;
-      $("sim-stato").value = id;
-      mostra();
-    },
-    indietro() { api.vai(storia.pop() ?? "nota-riposo", { storia: false }); },
-    luce(l) { scelto.luce = l; prefs.theme = l; $(l === "dark" ? "luce-notte" : "luce-giorno").checked = true; mostra(); },
-    moto(m) { scelto.moto = m; $(`moto-${m}`).checked = true; mostra(); },
-    ridisegna: () => mostra(),
-    pezzo,
-    catturaDoc,
-    avviso,
-  };
-  // Gli stati il cui telefono è proprio quello (non solo il più vicino).
-  const TEL_PROPRI = new Set(["nota-riposo", "documento", "foglio", "palette-file", "vuoto", "avvio-attesa"]);
-  function mostra() {
-    if (!dati) return;
-    const s = statoDi(scelto.stato);
-    const tel = s.g === "Telefono";
-    $("larghezza-piena").disabled = tel;
-    $("larghezza-700").disabled = tel || !s.w700;
-    $("larghezza-tel").disabled = !tel && !s.tel;
-    if (tel) $("larghezza-tel").checked = true;
-    else if ((scelto.larghezza === "700" && !s.w700) || (scelto.larghezza === "tel" && !s.tel)) $("larghezza-piena").checked = true;
-    if (!tel) scelto.larghezza = document.querySelector('input[name="larghezza"]:checked').value;
-    document.documentElement.setAttribute("data-theme", scelto.luce);
-    const cap = dati.caps[capId()];
-    delete box.dataset.pronto;
-    $("sim-segno").hidden = true;
-    scala();
-    frame.onload = () => {
-      const doc = frame.contentDocument;
-      if (!doc) return;
-      Promise.all([ripristina(doc), doc.fonts.ready]).then(() => {
-        segni(doc);
-        scorri(doc);
-        window.SIM_INTERAZIONI?.aggancia(doc, api);
-        requestAnimationFrame(() => {
-          metti_fuoco(doc);
-          aggiornaPezzi(doc);
-          box.dataset.pronto = capId();
-        });
-      });
-    };
-    frame.srcdoc = documento(cap);
-    $("sim-nome").textContent = s.nome;
-    $("sim-dice").textContent = s.dice;
-    // Al telefono molti stati non hanno una foto loro: si vede il più vicino.
-    const vicino = !tel && scelto.larghezza === "tel" && !TEL_PROPRI.has(s.id) ? statoDi(s.tel) : null;
-    $("sim-vicino").hidden = !vicino;
-    if (vicino) $("sim-vicino").textContent = `Al telefono questo stato non ha una foto sua: si vede «${vicino.nome}», il più vicino. Il telefono di Scrittoio 2 è provvisorio (le scelte A) e si rifà in un piano futuro: vedi le domande.`;
-    $("sim-task").textContent = s.task.join(", ");
-    const q = new URLSearchParams({ stato: scelto.stato, luce: scelto.luce, larghezza: scelto.larghezza, moto: scelto.moto });
-    try { history.replaceState(null, "", `#${q}`); } catch {}
-  }
-  $("sim-stato").addEventListener("change", (e) => api.vai(e.target.value));
-  for (const r of document.querySelectorAll('input[name="luce"]')) r.addEventListener("change", (e) => api.luce(e.target.value));
-  for (const r of document.querySelectorAll('input[name="larghezza"]')) r.addEventListener("change", (e) => ((scelto.larghezza = e.target.value), mostra()));
-  for (const r of document.querySelectorAll('input[name="moto"]')) r.addEventListener("change", (e) => api.moto(e.target.value));
-  $("sim-fuoco").addEventListener("click", (e) => {
-    scelto.fuoco = !scelto.fuoco;
-    e.currentTarget.setAttribute("aria-pressed", String(scelto.fuoco));
-    const doc = frame.contentDocument;
-    if (doc && scelto.fuoco) metti_fuoco(doc);
-    else if (doc) doc.activeElement?.blur?.();
-  });
-  addEventListener("resize", () => dati && scala());
-  // Lo stato si legge dall'indirizzo (#stato=…&luce=…&larghezza=…&moto=…),
-  // anche quando cambia: la pagina principale ci porta con un link.
-  function leggi() {
-    const q = new URLSearchParams(location.hash.slice(1) || location.search);
-    if (q.get("stato") && statoDi(q.get("stato"))) scelto.stato = q.get("stato");
-    scelto.luce = q.get("luce") === "dark" ? "dark" : q.has("luce") ? "light" : scelto.luce;
-    if (["piena", "700", "tel"].includes(q.get("larghezza"))) scelto.larghezza = q.get("larghezza");
-    if (["pieno", "calmo", "ridotto"].includes(q.get("moto"))) scelto.moto = q.get("moto");
-    $("sim-stato").value = scelto.stato;
-    $(scelto.luce === "dark" ? "luce-notte" : "luce-giorno").checked = true;
-    $(`larghezza-${scelto.larghezza}`).checked = true;
-    $(`moto-${scelto.moto}`).checked = true;
-  }
-  leggi();
-  addEventListener("hashchange", () => (leggi(), mostra()));
-  carica().then(mostra);
-})();
-</script>
+<template data-toppa="comp-permesso" data-nome="Installare un componente: la richiesta dei permessi">
+<!-- → panels/settings.ts (dopo «Scegli file…», kit/dialog.ts); K1, K2 T3, PA T29 -->
+<div class="kit-dialog-scrim">
+  <div class="kit-dialog" role="dialog" aria-modal="true" aria-labelledby="comp-permesso-titolo" aria-describedby="comp-permesso-testo">
+    <h2 class="kit-dialog-title" id="comp-permesso-titolo">Installare «Conta parole»?</h2>
+    <p class="kit-dialog-description" id="comp-permesso-testo">esempio.conta-parole 0.3.1, della comunità: nessuno l'ha verificato. Chiede di sapere quale nota stai guardando. Non chiede la rete, né file fuori dal vault.</p>
+    <div class="kit-dialog-actions"><button type="button" class="kit-button" data-kind="normal">Annulla</button><button type="button" class="kit-button" data-kind="primary">Installa e accendi</button></div>
+  </div>
+</div>
+</template>
+
+<template data-toppa="comp-fermo-tempo" data-nome="Un componente fermato: ha superato il tempo">
+<!-- → panels/settings.ts e panels/components-page.ts (lo stato del componente, fub-wasm-host: timeout); K1, PA T29 -->
+<div class="settings-card settings-component" data-component="esempio.conta-parole" data-state="stopped">
+  <div class="setting-text"><span class="setting-label">Conta parole</span><div class="muted">esempio.conta-parole · Della comunità · 0.3.1</div><div class="setting-source" role="status">Fermato: ha superato il tempo (5 s). Le note non hanno perso niente.</div></div>
+  <input type="checkbox" class="setting-switch components-switch" role="switch" aria-label="Conta parole acceso">
+  <div class="settings-actions"><button type="button" class="settings-btn">Riavvia</button><button type="button" class="settings-btn">Disinstalla</button></div>
+</div>
+</template>
+
+<template data-toppa="comp-fermo-errore" data-nome="Un componente fermato: un errore interno">
+<!-- → panels/settings.ts e panels/components-page.ts (fub-wasm-host: trap); K1, PA T29 -->
+<div class="settings-card settings-component" data-component="esempio.conta-parole" data-state="stopped">
+  <div class="setting-text"><span class="setting-label">Conta parole</span><div class="muted">esempio.conta-parole · Della comunità · 0.3.1</div><div class="setting-source" role="status">Fermato: un errore dentro il componente («unreachable» in count_words). Si riaccende a mano.</div></div>
+  <input type="checkbox" class="setting-switch components-switch" role="switch" aria-label="Conta parole acceso">
+  <div class="settings-actions"><button type="button" class="settings-btn">Riavvia</button><button type="button" class="settings-btn">Copia il motivo</button></div>
+</div>
+</template>
+
+<template data-toppa="comp-aggiorna" data-nome="Un componente con una versione nuova (fuori dalla pre-alpha)">
+<!-- → panels/settings.ts (nessun piano lo copre: «Differenze fra piani e codice»); fuori dalla pre-alpha -->
+<div class="settings-card settings-component" data-component="esempio.conta-parole">
+  <div class="setting-text"><span class="setting-label">Conta parole</span><div class="muted">esempio.conta-parole · Della comunità · 0.3.1</div><div class="setting-source">C'è la 0.4.0 nel catalogo firmato. Chiede un permesso in più: leggere tutte le note.</div></div>
+  <input type="checkbox" class="setting-switch components-switch" role="switch" checked aria-label="Conta parole acceso">
+  <div class="settings-actions"><button type="button" class="settings-btn">Vedi cosa cambia</button><button type="button" class="settings-btn">Aggiorna</button></div>
+</div>
+</template>
+<!-- toppe/disegno.html -->
+<template data-toppa="banda-motore-pronto" data-nome="D5 A: il motore del disegno nella banda (pronto)">
+<!-- → shells/scrittoio/frame/status-band.ts (il bottone #status-standing di S2 T4, anche per il disegno), skin/frame.css; D5 A: K5 T21–T23 con S2 T4 -->
+<button type="button" class="status-item status-item--button status-standing" id="status-standing" data-surface-item="standing" data-standing="ready" aria-haspopup="dialog" aria-expanded="false" aria-label="Stato del disegno: Motore acceso"><span class="status-standing-mark" aria-hidden="true"></span><span>Motore acceso</span></button>
+</template>
+
+<template data-toppa="banda-motore-perse" data-nome="D5 A: 3 parti restano come sono, nella banda">
+<!-- → shells/scrittoio/frame/status-band.ts, skin/frame.css; D5 A: K5 T21–T23 con S2 T4 -->
+<button type="button" class="status-item status-item--button status-standing" id="status-standing" data-surface-item="standing" data-standing="closed" aria-haspopup="dialog" aria-expanded="false" aria-label="Stato del disegno: 3 parti restano come sono"><span class="status-standing-mark" aria-hidden="true"></span><span>3 parti restano come sono</span></button>
+</template>
+
+<template data-toppa="banda-motore-spento" data-nome="D5 A: motore spento, nella banda">
+<!-- → shells/scrittoio/frame/status-band.ts, skin/frame.css; D5 A: K5 T21–T23 con S2 T4 -->
+<button type="button" class="status-item status-item--button status-standing" id="status-standing" data-surface-item="standing" data-standing="reduced" aria-haspopup="dialog" aria-expanded="false" aria-label="Stato del disegno: Motore spento, strumenti semplici"><span class="status-standing-mark" aria-hidden="true"></span><span>Motore spento: strumenti semplici</span></button>
+</template>
+
+<template data-toppa="banda-motore-fermo" data-nome="D5 A: motore fermo, nella banda (aperto)">
+<!-- → shells/scrittoio/frame/status-band.ts, skin/frame.css; D5 A: K5 T21–T23 con S2 T4 -->
+<button type="button" class="status-item status-item--button status-standing" id="status-standing" data-surface-item="standing" data-standing="stopped" aria-haspopup="dialog" aria-expanded="true" aria-label="Stato del disegno: Motore fermo, strumenti semplici"><span class="status-standing-mark" aria-hidden="true"></span><span>Motore fermo: strumenti semplici</span></button>
+</template>
+
+<template data-toppa="banda-motore-apre" data-nome="D5 A: il disegno si sta aprendo, nella banda">
+<!-- → shells/scrittoio/frame/status-band.ts, skin/frame.css; D5 A: K5 T21–T23 con S2 T4 (K5 non ha un segno per «si apre»: Differenze) -->
+<button type="button" class="status-item status-item--button status-standing" id="status-standing" data-surface-item="standing" data-standing="opening" aria-haspopup="dialog" aria-expanded="false" aria-label="Stato del disegno: Si apre"><span class="status-standing-mark" aria-hidden="true"></span><span>Si apre…</span></button>
+</template>
+
+<template data-toppa="disegno-vuoto" data-nome="Un disegno vuoto: l'invito">
+<!-- → editors/craft/surface.ts (il foglio vuoto, testo nuovo in i18n/catalog.ts); K5 T21, PA T27 -->
+<p class="draw-empty-hint" role="note">Il foglio è vuoto. Scegli la penna (P) o una forma (R) e disegna; Ctrl+V incolla un'immagine.</p>
+</template>
+<!-- toppe/file.html -->
+<template data-toppa="menu-nuovo" data-nome="«Nuovo»: la scelta del tipo">
+<!-- → panels/explorer.ts (il pulsante #new-note apre il menu), ui/menu.ts; PA T43 -->
+<div class="context-menu" role="menu" aria-orientation="vertical" tabindex="-1" id="context-menu" aria-label="Nuovo">
+  <div class="menu-items" role="none">
+    <button role="menuitem" tabindex="0" aria-keyshortcuts="Ctrl+N"><span class="menu-label">Nota</span><kbd class="menu-hint">Ctrl+N</kbd></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Documento (.docx)</span></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Foglio (.xlsx)</span></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Disegno (.svg)</span></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Lavagna (.canvas)</span></button>
+    <div class="menu-separator" role="separator"></div>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Nota da un modello…</span></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Cartella</span></button>
+  </div>
+</div>
+</template>
+
+<template data-toppa="altra-app" data-nome="«Apri con un'altra app» sotto un file che Fub non apre">
+<!-- → editors/craft/surface.ts (la stessa vista .craft-empty di craft-rotto, più una riga d'azioni), skin/media.css; PA T30 -->
+<div class="settings-actions craft-empty-actions">
+  <button type="button" class="kit-button" data-kind="primary">Apri con un'altra app</button>
+  <button type="button" class="kit-button" data-kind="normal">Mostra nella cartella</button>
+</div>
+</template>
+
+<template data-toppa="altra-app-grande" data-nome="«Apri il sorgente» sotto un file troppo grande">
+<!-- → editors/craft/surface.ts (.craft-empty, azioni per il file troppo grande), skin/media.css; PA T30 -->
+<div class="settings-actions craft-empty-actions">
+  <button type="button" class="kit-button" data-kind="primary">Apri con un'altra app</button>
+  <button type="button" class="kit-button" data-kind="normal">Apri in sola lettura</button>
+</div>
+</template>
+
+<template data-toppa="vault-scegli" data-nome="«Scegli un altro vault…» nell'avvio guasto">
+<!-- → apps/client/index.html e src/avvio/*.ts (la schermata d'avvio di N7, già in main: un terzo bottone nel guasto del vault); PA T30 -->
+<button type="button" class="avvio-btn" id="avvio-altro-vault">Scegli un altro vault…</button>
+</template>
+<!-- toppe/foglio.html -->
+<template data-toppa="foglio-enorme" data-nome="Un foglio enorme: l'avviso della lettura a pezzi">
+<!-- → editors/grid/surface.ts (la stessa .grid-notice di oggi, un testo nuovo in i18n/catalog.ts); griglia T8, PA T27 -->
+<p class="grid-notice" role="status">1.048.576 righe e 120 colonne: Fub le legge a pezzi mentre scorri. Cercare e ordinare lavorano su tutto il foglio.</p>
+</template>
+
+<template data-toppa="foglio-vuoto" data-nome="Un foglio vuoto: l'invito a scrivere">
+<!-- → editors/grid/surface.ts (.grid-notice, testo nuovo); griglia T1, PA T27 -->
+<p class="grid-notice" role="status">Il foglio è vuoto: scrivi in una cella, o incolla una tabella.</p>
+</template>
+<!-- toppe/lavagna.html -->
+<template data-toppa="lav-colonna" data-nome="La colonna degli strumenti della lavagna (8 strumenti)">
+<!-- → editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); N6 T26 e T49, PA T28 -->
+<div class="kit-rail" data-size="normal" role="toolbar" aria-label="Strumenti della lavagna" aria-orientation="vertical" data-orientation="vertical">
+  <div class="kit-rail-group" data-group="pick">
+    <button type="button" class="kit-rail-slot draw-tool" data-slot="select" data-tools="select" data-tool="select" aria-label="Selezione" aria-keyshortcuts="V" aria-pressed="true" tabindex="0"><span class="kit-rail-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 3v15.5l4.2-4.1 2.9 6.6 2.6-1.1-2.9-6.5H19z"></path></svg></span></button>
+    <button type="button" class="kit-rail-slot draw-tool" data-slot="hand" data-tools="hand" data-tool="hand" aria-label="Mano" aria-keyshortcuts="H" aria-pressed="false" tabindex="-1"><span class="kit-rail-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11"></path><path d="M11 10V4.5a1.5 1.5 0 0 1 3 0V11"></path><path d="M14 10.5V6a1.5 1.5 0 0 1 3 0v8a7 7 0 0 1-7 7h-.5a6 6 0 0 1-4.6-2.2L3.6 15.4a1.5 1.5 0 0 1 2.3-1.9L8 15.5"></path></svg></span></button>
+  </div>
+  <div class="kit-rail-rule" role="separator"></div>
+  <div class="kit-rail-group" data-group="ink">
+    <button type="button" class="kit-rail-slot draw-tool" data-slot="pen" data-tools="pen" data-tool="pen" aria-haspopup="menu" aria-expanded="false" aria-label="Penna" aria-keyshortcuts="P" aria-pressed="false" tabindex="-1"><span class="kit-rail-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20l1-4.5L16 4.5a2.1 2.1 0 0 1 3 3L8 18.5z"></path><path d="M14 6.5l3 3"></path></svg></span><span class="kit-rail-corner" aria-hidden="true"></span></button>
+    <button type="button" class="kit-rail-slot draw-tool" data-slot="highlighter" data-tools="highlighter" data-tool="highlighter" aria-label="Evidenziatore" aria-pressed="false" tabindex="-1"><span class="kit-rail-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 21h7"></path><path d="M8.5 17.5l-3-3 9.8-9.8a2.1 2.1 0 0 1 3 3z"></path><path d="M5.5 14.5L4 19l4.5-1.5"></path></svg></span></button>
+    <button type="button" class="kit-rail-slot draw-tool" data-slot="eraser" data-tools="eraser" data-tool="eraser" aria-label="Gomma" aria-keyshortcuts="E" aria-pressed="false" tabindex="-1"><span class="kit-rail-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 20h11"></path><path d="M5.5 15.5l9.6-9.6a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L12.5 18.5 9 20l-3.5-1.5a2 2 0 0 1 0-3z"></path><path d="M10 11l5 5"></path></svg></span></button>
+    <button type="button" class="kit-rail-slot draw-tool" data-slot="lasso" data-tools="lasso" data-tool="lasso" aria-label="Lazo" aria-keyshortcuts="Q" aria-pressed="false" tabindex="-1"><span class="kit-rail-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 4c4.4 0 8 2.2 8 5s-3.6 5-8 5-8-2.2-8-5 3.6-5 8-5z"></path><path d="M7.5 13c-1.2 1.4-.8 3.1.8 3.5 1.5.4 1.6 2.1.4 3.5"></path></svg></span></button>
+  </div>
+  <div class="kit-rail-rule" role="separator"></div>
+  <div class="kit-rail-group" data-group="make">
+    <button type="button" class="kit-rail-slot draw-tool" data-slot="text" data-tools="text" data-tool="text" aria-label="Testo" aria-keyshortcuts="T" aria-pressed="false" tabindex="-1"><span class="kit-rail-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 7.5V5h14v2.5"></path><path d="M12 5v14"></path><path d="M9.5 19h5"></path></svg></span></button>
+    <button type="button" class="kit-rail-slot draw-tool" data-slot="connect" data-tools="connect" data-tool="connect" aria-label="Collega" aria-keyshortcuts="C" aria-pressed="false" tabindex="-1"><span class="kit-rail-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 5h6v5H3z"></path><path d="M15 14h6v5h-6z"></path><path d="M9 7.5c4.5 0 1.5 9 6 9"></path></svg></span></button>
+  </div>
+</div>
+</template>
+
+<template data-toppa="lav-opzioni" data-nome="La riga delle opzioni della lavagna (Selezione, niente scelto)">
+<!-- → editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); N6 T26 e T50, PA T28 -->
+<div class="kit-options-row">
+  <div class="draw-options-item"><div class="draw-group kit-bar-group" role="group" aria-label="Aggiungi">
+    <button type="button" class="draw-button kit-bar-button lav-option-text" tabindex="0">Testo</button>
+    <button type="button" class="draw-button kit-bar-button lav-option-text" tabindex="-1">File…</button>
+    <button type="button" class="draw-button kit-bar-button lav-option-text" tabindex="-1">Pagina web</button>
+    <button type="button" class="draw-button kit-bar-button lav-option-text" tabindex="-1">Gruppo</button>
+  </div></div>
+  <div class="draw-options-item"><div class="draw-group kit-bar-group" role="group" aria-label="Appunti">
+    <button type="button" class="draw-button kit-bar-button lav-option-text" tabindex="-1" aria-keyshortcuts="Control+V">Incolla</button>
+  </div></div>
+  <div class="draw-options-item"><div class="draw-group kit-bar-group" role="group" aria-label="Vista">
+    <button type="button" class="draw-button kit-bar-button draw-zoom-level" tabindex="-1" aria-label="80%: riporta lo zoom al 100%">80%</button>
+    <button type="button" class="draw-button kit-bar-button lav-option-text" tabindex="-1" aria-keyshortcuts="Shift+1">Mostra tutta la lavagna</button>
+  </div></div>
+</div>
+</template>
+
+<template data-toppa="lav-opzioni-scrive" data-nome="La riga delle opzioni mentre si scrive in una scheda: la barra di formato">
+<!-- → editors/canvas/chrome/options.ts (la barra di formato di panels/format-bar.ts dentro la riga); N6 T27 e T41, PA T28 -->
+<div class="kit-options-row">
+  <div class="format-bar lav-format-bar" role="toolbar" aria-orientation="horizontal" aria-label="Formato: Varianza.md">
+    <div class="format-bar-group" data-group="block" role="group" aria-label="Blocco"><button type="button" class="format-bar-button format-bar-menu" tabindex="-1" aria-haspopup="menu" aria-expanded="false" aria-label="Stile del paragrafo"><span class="format-bar-menu-label">Paragrafo</span></button></div>
+    <div class="format-bar-group" data-group="inline" role="group" aria-label="Testo">
+      <button type="button" class="format-bar-button" tabindex="0" aria-label="Grassetto" aria-keyshortcuts="Control+B" aria-pressed="false">G</button>
+      <button type="button" class="format-bar-button" tabindex="-1" aria-label="Corsivo" aria-keyshortcuts="Control+I" aria-pressed="true">C</button>
+      <button type="button" class="format-bar-button" tabindex="-1" aria-label="Codice" aria-pressed="false">&lt;/&gt;</button>
+    </div>
+    <div class="format-bar-group" data-group="links" role="group" aria-label="Collegamenti"><button type="button" class="format-bar-button" tabindex="-1" aria-label="Collegamento" aria-keyshortcuts="Control+K">Link</button></div>
+  </div>
+  <div class="draw-options-item"><span class="lav-exit-hint" role="note">Esc per uscire · Ctrl+Invio una scheda sotto</span></div>
+</div>
+</template>
+
+<template data-toppa="lav-bolla-una" data-nome="La barra della selezione sopra una scheda">
+<!-- → editors/canvas/chrome/selection.ts (nuovo, sul posto di panels/selection-bubble.ts); N6 T26 e T51, PA T28 -->
+<div class="selection-bubble lav-selection" role="toolbar" aria-label="Scheda scelta: Varianza.md">
+  <span class="lav-selection-count">Varianza.md</span>
+  <div class="kit-bar-group" role="group" aria-label="Apri">
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="0" aria-keyshortcuts="Enter">Apri</button>
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="-1">Apri a lato</button>
+  </div>
+  <div class="kit-bar-group" role="group" aria-label="Scheda">
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="-1" aria-haspopup="menu" aria-expanded="false">Colore ›</button>
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="-1" aria-keyshortcuts="C">Collega…</button>
+    <button type="button" class="kit-bar-button" tabindex="-1" aria-haspopup="menu" aria-expanded="false" aria-label="Altre azioni"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 12h.01M12 12h.01M18 12h.01"></path></svg></button>
+  </div>
+</div>
+</template>
+
+<template data-toppa="lav-bolla-molte" data-nome="La barra della selezione sopra molte schede">
+<!-- → editors/canvas/chrome/selection.ts (nuovo); N6 T26 e T51, PA T28 -->
+<div class="selection-bubble lav-selection" role="toolbar" aria-label="10 schede scelte">
+  <span class="lav-selection-count">10 schede</span>
+  <div class="kit-bar-group" role="group" aria-label="Disponi">
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="0" aria-haspopup="menu" aria-expanded="false">Allinea ›</button>
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="-1" aria-haspopup="menu" aria-expanded="false">Disponi ›</button>
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="-1" aria-keyshortcuts="Control+G">Raggruppa</button>
+  </div>
+  <div class="kit-bar-group" role="group" aria-label="Schede">
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="-1" aria-haspopup="menu" aria-expanded="false">Colore ›</button>
+    <button type="button" class="kit-bar-button lav-option-text" tabindex="-1" aria-keyshortcuts="Delete">Togli dalla lavagna</button>
+  </div>
+</div>
+</template>
+
+<template data-toppa="lav-vuota" data-nome="La lavagna vuota che spiega da sé">
+<!-- → editors/canvas/chrome/empty.ts (nuovo); N6 T26 e T62, PA T28 -->
+<div class="lav-empty" role="note" aria-labelledby="lav-empty-title">
+  <h2 class="lav-empty-title" id="lav-empty-title">La lavagna è vuota</h2>
+  <p class="lav-empty-body">Trascina qui dei file dall'albero, scrivi con T, o disegna con la penna (P). Doppio clic fa una scheda di testo.</p>
+  <div class="settings-actions"><button type="button" class="kit-button" data-kind="primary" aria-keyshortcuts="Control+V">Incolla</button><button type="button" class="kit-button" data-kind="normal">Aggiungi file…</button></div>
+</div>
+</template>
+
+<template data-toppa="lav-lazo" data-nome="Il lazo che prende schede e tratti">
+<!-- → editors/canvas/tools/lasso.ts (nuovo, N6 T86 con D-22 a); PA T28 -->
+<svg class="lav-lasso" viewBox="0 0 600 360" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M40 60c120-50 330-40 420 10s60 170-40 210-300 40-360-20S-20 90 40 60z"></path></svg>
+</template>
+
+<template data-toppa="lav-estratti" data-nome="Il selettore delle parti attaccato alla scheda rilasciata (PDF)">
+<!-- → editors/canvas/parts-picker.ts (nuovo, su kit/popover.ts e kit/list.ts); N6 T28 e T74–T76, PA T28 -->
+<div class="kit-popover lav-parts" role="dialog" aria-label="Quali pagine di Dispense.pdf">
+  <h3 class="lav-parts-title">Quali pagine di «Dispense.pdf»?</h3>
+  <div class="lav-parts-thumbs" role="listbox" aria-multiselectable="true" aria-label="Pagine">
+    <div class="lav-parts-thumb" role="option" aria-selected="false" tabindex="-1">1</div>
+    <div class="lav-parts-thumb" role="option" aria-selected="false" tabindex="-1">2</div>
+    <div class="lav-parts-thumb" role="option" aria-selected="true" tabindex="0">3</div>
+    <div class="lav-parts-thumb" role="option" aria-selected="true" tabindex="-1">4</div>
+    <div class="lav-parts-thumb" role="option" aria-selected="true" tabindex="-1">5</div>
+    <div class="lav-parts-thumb" role="option" aria-selected="false" tabindex="-1">6</div>
+  </div>
+  <label class="lav-parts-field"><span>Pagine</span><input type="text" class="kit-number-input" value="3-5" aria-describedby="lav-parts-hint"></label>
+  <p class="lav-parts-hint muted" id="lav-parts-hint">Anche «3-5, 8, 20-» o «#124». Esc tiene tutto il file; Alt mentre rilasci salta questa domanda.</p>
+  <div class="settings-actions"><button type="button" class="kit-button" data-kind="normal">Tutto il file</button><button type="button" class="kit-button" data-kind="primary">Prendi 3 pagine</button></div>
+</div>
+</template>
+
+<template data-toppa="lav-codice-menu" data-nome="Le tre voci della lavagna in codice nel menu della scheda">
+<!-- → editors/canvas/chrome/commands.ts ed engine.ts (il menu contestuale, ui/menu.ts); lavagna in codice T25, PA T28 -->
+<div class="context-menu" role="menu" aria-orientation="vertical" tabindex="-1" id="context-menu" aria-label="Scheda · Varianza.md">
+  <div class="menu-head" aria-hidden="true"><span class="menu-head-kind">Scheda</span><span class="menu-head-name">Varianza.md</span></div>
+  <div class="menu-items" role="none">
+    <button role="menuitem" tabindex="-1" aria-keyshortcuts="Enter"><span class="menu-label">Apri</span><kbd class="menu-hint">Invio</kbd></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Apri a lato</span></button>
+    <button role="menuitem" tabindex="-1" aria-keyshortcuts="C"><span class="menu-label">Collega…</span><kbd class="menu-hint">C</kbd></button>
+    <div class="menu-separator" role="separator"></div>
+    <button role="menuitem" tabindex="0"><span class="menu-label">Copia come codice</span></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Incolla codice</span></button>
+    <button role="menuitem" tabindex="-1" aria-haspopup="menu" aria-expanded="true"><span class="menu-label">Disponi</span><span class="menu-hint menu-more" aria-hidden="true">›</span></button>
+  </div>
+</div>
+</template>
+
+<template data-toppa="lav-codice-disponi" data-nome="«Disponi»: il sottomenu">
+<!-- → editors/canvas/chrome/commands.ts (canvas.layout.grid, .row, .column, .tree); lavagna in codice T25, PA T28 -->
+<div class="context-menu context-submenu" role="menu" aria-orientation="vertical" tabindex="-1" aria-label="Disponi">
+  <div class="menu-items" role="none">
+    <button role="menuitem" tabindex="0"><span class="menu-label">In griglia</span></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">In riga</span></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">In colonna</span></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Ad albero</span></button>
+  </div>
+</div>
+</template>
+
+<template data-toppa="lav-codice-riepilogo" data-nome="«Incolla codice»: il riassunto prima di scrivere">
+<!-- → editors/canvas/chrome/commands.ts (canvas.paste_code con kit/dialog.ts); lavagna in codice T25, PA T28 -->
+<div class="kit-dialog-scrim">
+  <div class="kit-dialog" role="dialog" aria-modal="true" aria-labelledby="lav-codice-titolo" aria-describedby="lav-codice-testo">
+    <h2 class="kit-dialog-title" id="lav-codice-titolo">Incollare il codice?</h2>
+    <p class="kit-dialog-description" id="lav-codice-testo">3 schede nuove, 1 arco, 2 schede spostate. Si annulla con un solo Ctrl+Z.</p>
+    <div class="kit-dialog-actions"><button type="button" class="kit-button" data-kind="normal">Annulla</button><button type="button" class="kit-button" data-kind="primary">Incolla</button></div>
+  </div>
+</div>
+</template>
+
+<template data-toppa="lav-codice-problema" data-nome="«Incolla codice» con un problema: il primo, col suggerimento">
+<!-- → editors/canvas/chrome/commands.ts (canvas.check: niente si scrive); lavagna in codice T25, PA T28 -->
+<div class="kit-dialog-scrim">
+  <div class="kit-dialog" role="alertdialog" aria-modal="true" aria-labelledby="lav-problema-titolo" aria-describedby="lav-problema-testo">
+    <h2 class="kit-dialog-title" id="lav-problema-titolo">Il codice non si incolla</h2>
+    <p class="kit-dialog-description" id="lav-problema-testo">Riga 4: l'arco va verso «n7», che non c'è nella lavagna né nel codice. Forse volevi «n2»? Niente è stato scritto.</p>
+    <div class="kit-dialog-actions"><button type="button" class="kit-button" data-kind="primary">Ho capito</button></div>
+  </div>
+</div>
+</template>
+<!-- toppe/mcp.html -->
+<template data-toppa="mcp-riga" data-nome="N2: ciò che ha fatto un agente (MCP), nel centro attività">
+<!-- → panels/activity.ts (una riga per le scritture di fub-mcp, N2 T9); PA T26 -->
+<li class="activity-row" data-source="mcp"><span class="activity-label">Agente (MCP) · ha scritto Guida/Riassunto.md</span><span class="muted">10:42 · si annulla dalle versioni</span><button type="button" class="link-button">Apri</button></li>
+</template>
+<!-- toppe/riscontri.html -->
+<template data-toppa="riscontri-voce" data-nome="D9 B: «Segnala un problema…» nel menu dell'applicazione">
+<!-- → ui/app-menu.ts (una voce prima di «Impostazioni»), i18n/catalog.ts; D9 B: un task M in più dopo PA T18 -->
+<button role="menuitem" tabindex="-1"><span class="menu-label">Segnala un problema…</span></button>
+<div class="menu-separator" role="separator"></div>
+</template>
+
+<template data-toppa="riscontri-apre" data-nome="D9 B: che cosa si apre e che cosa si manda">
+<!-- → ui/app-menu.ts (kit/dialog.ts, poi l'apertura del browser che c'è); D9 B -->
+<div class="kit-dialog-scrim">
+  <div class="kit-dialog" role="dialog" aria-modal="true" aria-labelledby="riscontri-titolo" aria-describedby="riscontri-testo">
+    <h2 class="kit-dialog-title" id="riscontri-titolo">Segnala un problema</h2>
+    <p class="kit-dialog-description" id="riscontri-testo">Si apre il browser su GitHub, con la versione (0.2.0-prealpha.1) e il sistema (Linux x86_64) già scritti. Nessun dato personale: niente nomi di file, niente testo delle note.</p>
+    <div class="kit-dialog-actions"><button type="button" class="kit-button" data-kind="normal">Annulla</button><button type="button" class="kit-button" data-kind="primary">Apri GitHub</button></div>
+  </div>
+</div>
+</template>
+<!-- toppe/temi.html -->
+<template data-toppa="tema-sviluppo" data-nome="Il gruppo «Sviluppo» con la modalità sviluppatore">
+<!-- → crates/fub-host/src/settings.rs (la chiave developer.mode, gruppo «Sviluppo»), panels/settings.ts la rende come le altre; PA T36 -->
+<section class="settings-section" id="settings-section-sviluppo" aria-labelledby="settings-section-sviluppo-title">
+  <div class="settings-section-head"><h3 class="settings-section-title" id="settings-section-sviluppo-title">Sviluppo</h3></div>
+  <div class="settings-section-body">
+    <div class="setting-row" data-setting-key="developer.mode" data-modified="true">
+      <div class="setting-text"><label for="setting-developer.mode" id="setting-developer.mode-label">Modalità sviluppatore</label><div class="muted setting-description" id="setting-developer.mode-desc">Per chi scrive un tema: installa da una cartella, collega una cartella che cambia mentre la scrivi, apre «Tutti i componenti».</div><div class="setting-meta"><span class="setting-scope" data-scope="machine" aria-hidden="true"><span class="setting-scope-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M9 20h6M12 16v4"></path></svg></span><span>Questa macchina</span></span><div class="setting-default">Predefinito: spento</div><button type="button" class="link-button setting-reset">Azzera</button></div></div>
+      <div class="setting-control"><input type="checkbox" class="setting-switch" role="switch" id="setting-developer.mode" aria-describedby="setting-developer.mode-desc" checked></div>
+    </div>
+  </div>
+</section>
+</template>
+
+<template data-toppa="tema-catalogo" data-nome="«Temi installati» in modalità sviluppatore">
+<!-- → panels/settings.ts (renderThemeCatalog: due bottoni in più quando developer.mode è acceso), i18n/catalog.ts; PA T36 e T37 -->
+<div class="setting-row setting-block" data-theme-catalog="">
+  <div class="setting-text"><div class="setting-label" role="heading" aria-level="4">Temi installati</div><div class="muted">Scegli un tema per provarlo senza salvare. Applica rende la scelta autorevole; Annulla ripristina il tema precedente.</div></div>
+  <div class="segmented segmented--wide setting-segmented" role="radiogroup" aria-label="Temi installati">
+    <button type="button" class="segmented-option" role="radio" data-theme-id="fub.scrittoio" data-theme-light="light" aria-checked="true">Scrittoio · chiaro · Parte di Fub</button>
+    <button type="button" class="segmented-option" role="radio" data-theme-id="fub.scrittoio" data-theme-light="dark" aria-checked="false">Scrittoio · scuro · Parte di Fub</button>
+    <button type="button" class="segmented-option" role="radio" data-theme-id="carta" data-theme-light="light" aria-checked="false">Carta · chiaro · Della comunità</button>
+    <button type="button" class="segmented-option" role="radio" data-theme-id="salvia" data-theme-light="light" aria-checked="false">Salvia · chiaro · Della comunità</button>
+    <button type="button" class="segmented-option" role="radio" data-theme-id="salvia" data-theme-light="dark" aria-checked="false">Salvia · scuro · Della comunità</button>
+  </div>
+  <div class="settings-actions"><button type="button" class="settings-btn">Applica tema</button><button type="button" class="settings-btn">Annulla anteprima</button><button type="button" class="settings-btn" data-dev-action="install">Installa da cartella…</button><button type="button" class="settings-btn" data-dev-action="link">Collega una cartella…</button><button type="button" class="settings-btn" data-dev-action="catalog">Tutti i componenti</button></div>
+  <div class="setting-source" role="status" aria-live="polite">Nessuna anteprima attiva.</div>
+</div>
+</template>
+
+<template data-toppa="tema-collegato" data-nome="Il tema collegato, in sviluppo">
+<!-- → panels/settings.ts (sotto «Temi installati», con la chiave developer.theme-folder), theme/theme.ts rimonta a fub://theme-changed; PA T37 -->
+<div class="setting-row setting-block" data-theme-linked="">
+  <div class="setting-text"><div class="setting-label" role="heading" aria-level="4">Cartella collegata</div><div class="muted">~/temi/carta · Carta · In sviluppo. Salvi un file e il tema si rimonta.</div></div>
+  <div class="setting-source" role="status" aria-live="polite">Ricaricato alle 10:42:07, dopo il salvataggio di skin.css.</div>
+  <div class="settings-actions"><button type="button" class="settings-btn">Scollega</button></div>
+</div>
+</template>
+
+<template data-toppa="tema-diagnosi" data-nome="Perché un tema è rifiutato: la diagnosi">
+<!-- → panels/settings.ts (i motivi di theme/loader.ts validateThemeBundle divisi in campi, non riscritti), skin/settings.css; PA T36 e T37 -->
+<div class="setting-row setting-block tema-diagnosi" role="alert">
+  <div class="setting-text"><div class="setting-label" role="heading" aria-level="4">«Carta» è rifiutato: 3 motivi</div><div class="muted">Tentativo delle 10:44:31. Resta montato l'ultimo buono, delle 10:42:07.</div></div>
+  <ol class="tema-diagnosi-lista">
+    <li class="tema-diagnosi-riga"><span class="tema-diagnosi-file">skin.css</span><span class="tema-diagnosi-dove">12:3</span><code class="tema-diagnosi-codice">selector-hook</code><span class="tema-diagnosi-perche">hook .carta-titolo non dichiarato</span></li>
+    <li class="tema-diagnosi-riga"><span class="tema-diagnosi-file">skin.css</span><span class="tema-diagnosi-dove">40:1</span><code class="tema-diagnosi-codice">at-rule</code><span class="tema-diagnosi-perche">@font-face non ammesso</span></li>
+    <li class="tema-diagnosi-riga"><span class="tema-diagnosi-file">manifest.json</span><span class="tema-diagnosi-dove">—</span><code class="tema-diagnosi-codice">engine</code><span class="tema-diagnosi-perche">engine theme-1 incompatibile, serve theme-2</span></li>
+  </ol>
+  <div class="settings-actions"><button type="button" class="settings-btn">Copia la diagnosi</button></div>
+</div>
+</template>
+
+<template data-toppa="tema-sostituisci" data-nome="Un tema con lo stesso id: «Sostituisci»">
+<!-- → panels/settings.ts (kit/dialog.ts, prima di uninstall_theme e install_theme), i18n/catalog.ts; PA T36 -->
+<div class="kit-dialog-scrim">
+  <div class="kit-dialog" role="dialog" aria-modal="true" aria-labelledby="tema-sostituisci-titolo" aria-describedby="tema-sostituisci-testo">
+    <h2 class="kit-dialog-title" id="tema-sostituisci-titolo">«Carta» è già installato</h2>
+    <p class="kit-dialog-description" id="tema-sostituisci-testo">La cartella ~/temi/carta ha lo stesso id, «carta», con la versione 0.4.0 (installata: 0.3.2). La cartella nuova è già controllata: si può sostituire. Il tema è in uso, quindi si rimonta subito.</p>
+    <div class="kit-dialog-actions"><button type="button" class="kit-button" data-kind="normal">Annulla</button><button type="button" class="kit-button" data-kind="primary">Sostituisci</button></div>
+  </div>
+</div>
+</template>
+
+<template data-toppa="tema-sostituisci-fallito" data-nome="La sostituzione fallita a metà">
+<!-- → panels/settings.ts (kit/dialog.ts, l'esito d'errore di T36); PA T36 -->
+<div class="kit-dialog-scrim">
+  <div class="kit-dialog" role="alertdialog" aria-modal="true" aria-labelledby="tema-fallito-titolo" aria-describedby="tema-fallito-testo">
+    <h2 class="kit-dialog-title" id="tema-fallito-titolo">«Carta» non si è installato</h2>
+    <p class="kit-dialog-description" id="tema-fallito-testo">Il tema vecchio è stato tolto, il nuovo si è fermato: il disco è pieno. La cartella ~/temi/carta resta dov'è, quindi non hai perso niente: libera spazio e installalo di nuovo. Per ora torna Scrittoio.</p>
+    <div class="kit-dialog-actions"><button type="button" class="kit-button" data-kind="primary">Ho capito</button></div>
+  </div>
+</div>
+</template>
+
+<template data-toppa="tutti-componenti" data-nome="La pagina «Tutti i componenti»: i componenti negli stati del contratto">
+<!-- → src/dev/catalogo/ (nuovo: il cuore di bench/catalog.ts e bench/kit.ts, caricato con import()), una vista aperta da Aspetto, skin/settings.css; PA T38 -->
+<section class="dev-catalog" aria-labelledby="dev-catalog-title">
+  <header class="dev-catalog-head">
+    <div class="dev-catalog-heading"><h2 class="dev-catalog-title" id="dev-catalog-title">Tutti i componenti</h2><p class="muted">Carta · In sviluppo · ricaricato alle 10:42:07</p></div>
+    <div class="dev-catalog-switches">
+      <div class="segmented" role="radiogroup" aria-label="Luce della pagina"><button type="button" class="segmented-option" role="radio" aria-checked="true">Chiaro</button><button type="button" class="segmented-option" role="radio" aria-checked="false">Scuro</button></div>
+      <label class="dev-catalog-switch"><input type="checkbox" class="setting-switch" role="switch"><span>Contrasto alto</span></label>
+    </div>
+  </header>
+  <div class="kit-tabs dev-catalog-tabs" role="tablist" aria-orientation="horizontal" aria-label="Che cosa guardare">
+    <button type="button" class="kit-tab" id="dev-tab-componenti" role="tab" aria-selected="true" tabindex="0" data-tab="componenti"><span class="kit-tab-label">Componenti</span></button>
+    <button type="button" class="kit-tab" id="dev-tab-tavolozza" role="tab" aria-selected="false" tabindex="-1" data-tab="tavolozza"><span class="kit-tab-label">Tavolozza</span></button>
+    <button type="button" class="kit-tab" id="dev-tab-caratteri" role="tab" aria-selected="false" tabindex="-1" data-tab="caratteri"><span class="kit-tab-label">Caratteri</span></button>
+    <button type="button" class="kit-tab" id="dev-tab-kit" role="tab" aria-selected="false" tabindex="-1" data-tab="kit"><span class="kit-tab-label">Primitivi del kit</span></button>
+  </div>
+  <div class="dev-catalog-body">
+    <div class="dev-catalog-list" role="tabpanel" aria-labelledby="dev-tab-componenti">
+      <section class="dev-catalog-item" aria-labelledby="dev-item-kit-button" aria-current="true">
+        <h3 class="dev-catalog-name" id="dev-item-kit-button">kit-button <span class="muted">kit · cornice</span></h3>
+        <div class="dev-catalog-states">
+          <figure class="dev-catalog-state"><button type="button" class="kit-button" data-kind="normal">Applica</button><figcaption class="muted">riposo</figcaption></figure>
+          <figure class="dev-catalog-state"><button type="button" class="kit-button" data-kind="normal" data-force="hover">Applica</button><figcaption class="muted">passaggio</figcaption></figure>
+          <figure class="dev-catalog-state"><button type="button" class="kit-button" data-kind="normal" data-force="active">Applica</button><figcaption class="muted">premuto</figcaption></figure>
+          <figure class="dev-catalog-state"><button type="button" class="kit-button kit-button--icon" aria-label="Cerca" aria-pressed="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 17a7 7 0 1 0 0-14 7 7 0 0 0 0 14z"></path><path d="M21 21l-5-5"></path></svg></button><figcaption class="muted">selezionato</figcaption></figure>
+          <figure class="dev-catalog-state"><button type="button" class="kit-button" data-kind="normal" data-force="focus">Applica</button><figcaption class="muted">a fuoco</figcaption></figure>
+          <figure class="dev-catalog-state"><button type="button" class="kit-button" data-kind="normal" disabled>Applica</button><figcaption class="muted">disabilitato</figcaption></figure>
+        </div>
+      </section>
+      <section class="dev-catalog-item" aria-labelledby="dev-item-kit-field">
+        <h3 class="dev-catalog-name" id="dev-item-kit-field">kit-field <span class="muted">kit · cornice</span></h3>
+        <div class="dev-catalog-states">
+          <figure class="dev-catalog-state"><div class="kit-field"><label class="kit-field-label sr-only" for="dev-campo-1">Cerca</label><div class="kit-field-box"><input type="search" class="kit-field-input" id="dev-campo-1" placeholder="Cerca"></div></div><figcaption class="muted">riposo</figcaption></figure>
+          <figure class="dev-catalog-state"><div class="kit-field" data-force="hover"><label class="kit-field-label sr-only" for="dev-campo-2">Cerca</label><div class="kit-field-box" data-force="hover"><input type="search" class="kit-field-input" id="dev-campo-2" placeholder="Cerca"></div></div><figcaption class="muted">passaggio</figcaption></figure>
+          <figure class="dev-catalog-state"><div class="kit-field"><label class="kit-field-label sr-only" for="dev-campo-3">Cerca</label><div class="kit-field-box"><input type="search" class="kit-field-input" id="dev-campo-3" value="varianza" data-force="focus"></div></div><figcaption class="muted">a fuoco</figcaption></figure>
+          <figure class="dev-catalog-state"><div class="kit-field"><label class="kit-field-label sr-only" for="dev-campo-4">Cerca</label><div class="kit-field-box"><input type="search" class="kit-field-input" id="dev-campo-4" placeholder="Cerca" disabled></div></div><figcaption class="muted">disabilitato</figcaption></figure>
+        </div>
+      </section>
+      <section class="dev-catalog-item" aria-labelledby="dev-item-segmented">
+        <h3 class="dev-catalog-name" id="dev-item-segmented">segmented-control <span class="muted">controls · cornice</span></h3>
+        <div class="dev-catalog-states">
+          <figure class="dev-catalog-state"><div class="segmented" role="radiogroup" aria-label="Riposo"><button type="button" class="segmented-option" role="radio" aria-checked="false">Chiaro</button></div><figcaption class="muted">riposo</figcaption></figure>
+          <figure class="dev-catalog-state"><div class="segmented" role="radiogroup" aria-label="Passaggio"><button type="button" class="segmented-option" role="radio" aria-checked="false" data-force="hover">Chiaro</button></div><figcaption class="muted">passaggio</figcaption></figure>
+          <figure class="dev-catalog-state"><div class="segmented" role="radiogroup" aria-label="Premuto"><button type="button" class="segmented-option" role="radio" aria-checked="false" data-force="active">Chiaro</button></div><figcaption class="muted">premuto</figcaption></figure>
+          <figure class="dev-catalog-state"><div class="segmented" role="radiogroup" aria-label="Selezionato"><button type="button" class="segmented-option" role="radio" aria-checked="true">Chiaro</button></div><figcaption class="muted">selezionato</figcaption></figure>
+          <figure class="dev-catalog-state"><div class="segmented" role="radiogroup" aria-label="A fuoco"><button type="button" class="segmented-option" role="radio" aria-checked="false" data-force="focus">Chiaro</button></div><figcaption class="muted">a fuoco</figcaption></figure>
+          <figure class="dev-catalog-state"><div class="segmented" role="radiogroup" aria-label="Disabilitato"><button type="button" class="segmented-option" role="radio" aria-checked="false" disabled>Chiaro</button></div><figcaption class="muted">disabilitato</figcaption></figure>
+        </div>
+      </section>
+    </div>
+    <aside class="dev-catalog-info" aria-labelledby="dev-catalog-info-title">
+      <h3 class="dev-catalog-info-title" id="dev-catalog-info-title">kit-button</h3>
+      <p class="muted">Pezzo kit, strato cornice. Sei stati: riposo, passaggio, premuto, selezionato (aria-pressed), a fuoco, disabilitato.</p>
+      <ul class="dev-catalog-hooks"><li><code>.kit-button</code></li><li><code>.kit-button--icon</code></li><li><code>.kit-button[data-kind="primary"]</code></li></ul>
+      <div class="settings-actions"><button type="button" class="settings-btn">Copia gli hook</button></div>
+    </aside>
+  </div>
+</section>
+</template>
+
+<template data-toppa="tutti-tavolozza" data-nome="«Tutti i componenti»: la tavolozza">
+<!-- → src/dev/catalogo/ (la tavolozza di bench/catalog.ts), skin/settings.css; PA T38 -->
+<div class="dev-catalog-list" role="tabpanel" aria-labelledby="dev-tab-tavolozza">
+  <ul class="dev-swatches">
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="bg"></span><code>--bg</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="bg-chrome"></span><code>--bg-chrome</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="sheet"></span><code>--sheet</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="text"></span><code>--text</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="muted"></span><code>--muted</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="border"></span><code>--border</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="accent"></span><code>--accent</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="accent-soft"></span><code>--accent-soft</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="danger"></span><code>--danger</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="warning"></span><code>--warning</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="success"></span><code>--success</code></li>
+    <li class="dev-swatch"><span class="dev-swatch-chip" data-token="info"></span><code>--info</code></li>
+  </ul>
+  <p class="muted">Contrasto di --text su --sheet: 13,1:1. Di --muted su --sheet: 5,2:1 (serve almeno 4,5).</p>
+</div>
+</template>
+
+<template data-toppa="tutti-caratteri" data-nome="«Tutti i componenti»: i caratteri">
+<!-- → src/dev/catalogo/ (il campionario di bench/samples.ts), skin/settings.css; PA T38 e T39 -->
+<div class="dev-catalog-list" role="tabpanel" aria-labelledby="dev-tab-caratteri">
+  <section class="dev-font" data-font="ui"><h3 class="dev-catalog-name">--font-ui <span class="muted">Carta Serif, poi Hanken Grotesk</span></h3><p class="dev-font-sample">Il foglio è salvato. Tre schede, un filo.</p></section>
+  <section class="dev-font" data-font="reading"><h3 class="dev-catalog-name">--font-reading <span class="muted">Newsreader</span></h3><p class="dev-font-sample">La varianza misura quanto i dati si allontanano dalla media.</p></section>
+  <section class="dev-font" data-font="mono"><h3 class="dev-catalog-name">--font-mono <span class="muted">IBM Plex Mono</span></h3><p class="dev-font-sample">=MEDIA(B2:B40) · 0123456789</p></section>
+</div>
+</template>
+</div>
+<script src="sim-dati-1.js"></script>
+<script src="sim-stati.js"></script>
+<script src="solo-simulatore.js"></script>
+<script src="vista-sim.js"></script>
 </body>
 </html>

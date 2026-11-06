@@ -1,0 +1,99 @@
+[
+{
+"id": "g2-menu",
+"scena": "startup",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"clicca"
+],
+"clicca": [
+"#brand-menu",
+"#app-menu > button >> nth=0"
+]
+},
+{
+"id": "g2-menu-700",
+"scena": "startup",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"clicca"
+],
+"clicca": [
+"#brand-menu",
+"#app-menu > button >> nth=0"
+],
+"larghezza": 700
+},
+{
+"id": "g2-vault",
+"scena": "startup",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"clicca"
+],
+"clicca": [
+"#vault-chip"
+]
+},
+{
+"id": "g2-vault-700",
+"scena": "startup",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"clicca"
+],
+"clicca": [
+"#vault-chip"
+],
+"larghezza": 700
+},
+{
+"id": "g2-menu-riquadro",
+"scena": "g2-menu-riquadro",
+"mods": [
+"nota",
+"modo",
+"clicca"
+],
+"clicca": [
+".pane.focus [data-pane-menu]"
+]
+},
+{
+"id": "g2-cestino-700",
+"scena": "g2-cestino-stretto",
+"mods": [
+"cornice",
+"banda",
+"modo"
+]
+},
+{
+"id": "g2-comp-spegni",
+"scena": "g2-comp-spegni",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+},
+{
+"id": "g2-comp-orfani",
+"scena": "g2-comp-orfani",
+"mods": [
+"cornice",
+"banda",
+"modo",
+"via"
+]
+}
+]

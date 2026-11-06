@@ -1,0 +1,164 @@
+/* tema della comunità «Carta» · solo chiaro · PA T42, D17 A */
+/* Il primo tema d'esempio: carta calda, angoli dritti, maiuscoletto nelle
+   etichette, nessuna ombra, filetti sottili al posto delle scatole, i titoli
+   con le grazie. Usa solo gli hook dello snapshot (`frozen/theme-2.json`, PA
+   T41) e nessun hook nuovo: lo prova la sonda dei temi del simulatore. Nel
+   tema vero i tre blocchi `:root` diventano `light.css` (il foglio) e il resto
+   `skin.css` (la pelle); il carattere «Carta Serif» arriva dal manifest (PA
+   T39). Di notte Carta non c'è: Fub tiene la serie. */
+
+/* ── Il foglio, giorno ───────────────────────────────────────────────────── */
+:root {
+  --bg: #ece4d4;
+  --bg-chrome: #ece4d4;
+  --bg-panel: #ece4d4;
+  --bg-hover: #e3d9c5;
+  --bg-active: #dacfb8;
+  --sheet: #fbf8f1;
+  --sheet-2: #f4eee2;
+  --bg-input: #f4eee2;
+  --bg-elev: #fdfbf6;
+  --overlay-hover: rgb(42 35 24 / 5%);
+  --overlay-active: rgb(42 35 24 / 9%);
+  --scrim: rgb(38 30 18 / 30%);
+  --text: #2a2318;
+  --muted: #5b503f;
+  --border: #d9cdb7;
+  --border-strong: #b3a386;
+  --outline: #85765c;
+  --accent: #8e3a1f;
+  --accent-soft: #742c15;
+  --accent-contrast: #fdfbf6;
+  --accent-wash: #f1ddce;
+  --accent-veil: rgb(142 58 31 / 12%);
+  --focus-ring: #8e3a1f;
+  --danger: #a51d19;
+  --danger-wash: rgb(165 29 25 / 12%);
+  --danger-contrast: #fdfbf6;
+  --warning: #7a4e00;
+  --warning-wash: rgb(122 78 0 / 14%);
+  --warning-contrast: #fdfbf6;
+  --success: #2e672b;
+  --success-wash: rgb(46 103 43 / 14%);
+  --success-contrast: #fdfbf6;
+  --info: #285b7e;
+  --info-wash: rgb(40 91 126 / 12%);
+  --info-contrast: #fdfbf6;
+  --graph-node: #85765c;
+  --graph-node-active: #8e3a1f;
+  --graph-node-hover: #742c15;
+  --draw-desk: #e8e1d2;
+  --doc-bg: #fbf8f1;
+  --doc-active-line: #f5efe3;
+  --doc-selection: #eedccb;
+  --doc-tooltip-bg: #fdfbf6;
+  --doc-fg: #2a2318;
+  --doc-heading: #2a2318;
+  --doc-link: #8e3a1f;
+  --doc-caret: #8e3a1f;
+  --doc-danger: #a51d19;
+  --doc-gutter-fg: #66594a;
+  --doc-drop-line: #8e3a1f;
+  --doc-block-selected: rgb(142 58 31 / 12%);
+}
+:root[data-contrast="high"] {
+  --text: #1d170d;
+  --muted: #3f3627;
+  --border: #a3937a;
+  --border-strong: #6f624e;
+  --outline: #5b4f3c;
+  --accent: #7a2f16;
+  --accent-soft: #62240f;
+  --focus-ring: #7a2f16;
+  --doc-fg: #1d170d;
+  --doc-gutter-fg: #4a3f31;
+}
+
+/* ── La forma: angoli dritti, niente ombre ───────────────────────────────── */
+:root {
+  --radius-xs: 0;
+  --radius-chip: 2px;
+  --radius-control: 2px;
+  --radius-menu: 2px;
+  --radius-sheet: 2px;
+  --radius-dialog: 2px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --shadow-1: none;
+  --shadow-2: none;
+  --shadow-3: none;
+  --shadow-4: none;
+  --shadow-5: none;
+  --shadow-6: none;
+  --shadow-7: none;
+  --elevation-paper-shadow: none;
+  --elevation-floating-shadow: none;
+  --elevation-dialog-shadow: none;
+}
+
+/* ── La pelle ────────────────────────────────────────────────────────────── */
+/* I titoli con le grazie. */
+.settings-title,
+.settings-section-title,
+.sheet-title,
+.kit-dialog-title,
+.ui-heading {
+  font-family: "Carta Serif", var(--font-reading);
+  font-weight: var(--weight-medium);
+}
+
+/* Le etichette in maiuscoletto, un poco spaziate. */
+.panel-title,
+.settings-tab-label,
+.settings-section-meta,
+.inspector-tab,
+.kit-tab-label,
+.sheet-desk-label {
+  font-variant: all-small-caps;
+  letter-spacing: 0.05em;
+}
+
+/* Un filo al posto dell'ombra: il foglio, i rialzi, la banda. */
+.pane::before {
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+.pane.focus::before {
+  box-shadow: 0 0 0 1px var(--muted);
+}
+.kit-dialog,
+.kit-popover,
+.context-menu,
+.launcher-panel,
+.selection-bubble,
+.toast {
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+.status-band {
+  box-shadow: inset 0 1px 0 var(--border);
+}
+
+/* Le schede delle Impostazioni non sono scatole: due filetti. */
+.settings-section-body > .settings-card {
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border-strong);
+  background: transparent;
+}
+
+/* I bottoni e le scelte: il contorno, non il fondo. */
+.kit-button,
+.segmented {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.kit-button[data-kind="primary"] {
+  box-shadow: none;
+}
+
+/* La linguetta accesa si sottolinea nell'inchiostro dell'accento. */
+.tab[aria-selected="true"] .tab-name {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
+}

@@ -77,15 +77,24 @@ export const applica = (base, kind, patch) => {
 
 export const texts = [];
 const byHash = new Map();
-const pieni = []; // indici dei testi pieni, per tipo e etichetta
+const pieni = new Map(); // "tipo|etichetta" → gli ultimi testi pieni
+// Il simulatore v2 mette ~300 catture: confrontare ognuna con tutte le
+// precedenti è quadratico. Con la finestra si guardano solo gli ultimi N
+// testi pieni della stessa etichetta (le catture arrivano ordinate per id,
+// chiaro e scuro vicini, quindi i simili sono vicini).
+let finestra = Infinity;
+export const impostaFinestra = (n) => void (finestra = n);
 export function metti(text, kind, label) {
   const h = createHash("sha1").update(text).digest("hex");
   if (byHash.has(h)) return byHash.get(h);
   let best = null;
-  for (const p of pieni) {
-    if (p.kind !== kind || p.label !== label) continue;
-    const a = tok(p.text, kind);
-    const b = tok(text, kind);
+  const b = tok(text, kind);
+  const chiave = `${kind}|${label}`;
+  const candidati = pieni.get(chiave) ?? [];
+  for (const p of candidati) {
+    // Testi di misura troppo diversa non fanno una toppa piccola: si saltano.
+    if (Math.abs(p.text.length - text.length) > 0.6 * Math.max(p.text.length, text.length)) continue;
+    const a = (p.tok ??= tok(p.text, kind));
     const ops = diff(a, b);
     const patch = ops.map(([s, n, bs, bn]) => [s, n, b.slice(bs, bs + bn).join("")]);
     const size = JSON.stringify(patch).length;
@@ -97,7 +106,9 @@ export function metti(text, kind, label) {
     texts.push({ b: best.base, k: kind, p: best.patch });
   } else {
     texts.push(text);
-    pieni.push({ idx, kind, label, text });
+    candidati.push({ idx, kind, label, text });
+    if (candidati.length > finestra) candidati.shift();
+    pieni.set(chiave, candidati);
   }
   byHash.set(h, idx);
   return idx;

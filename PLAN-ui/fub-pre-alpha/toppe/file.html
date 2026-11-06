@@ -1,0 +1,36 @@
+<template data-toppa="menu-nuovo" data-nome="«Nuovo»: la scelta del tipo">
+<!-- → panels/explorer.ts (il pulsante #new-note apre il menu), ui/menu.ts; PA T43 -->
+<div class="context-menu" role="menu" aria-orientation="vertical" tabindex="-1" id="context-menu" aria-label="Nuovo">
+  <div class="menu-items" role="none">
+    <button role="menuitem" tabindex="0" aria-keyshortcuts="Ctrl+N"><span class="menu-label">Nota</span><kbd class="menu-hint">Ctrl+N</kbd></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Documento (.docx)</span></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Foglio (.xlsx)</span></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Disegno (.svg)</span></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Lavagna (.canvas)</span></button>
+    <div class="menu-separator" role="separator"></div>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Nota da un modello…</span></button>
+    <button role="menuitem" tabindex="-1"><span class="menu-label">Cartella</span></button>
+  </div>
+</div>
+</template>
+
+<template data-toppa="altra-app" data-nome="«Apri con un'altra app» sotto un file che Fub non apre">
+<!-- → editors/craft/surface.ts (la stessa vista .craft-empty di craft-rotto, più una riga d'azioni), skin/media.css; PA T30 -->
+<div class="settings-actions craft-empty-actions">
+  <button type="button" class="kit-button" data-kind="primary">Apri con un'altra app</button>
+  <button type="button" class="kit-button" data-kind="normal">Mostra nella cartella</button>
+</div>
+</template>
+
+<template data-toppa="altra-app-grande" data-nome="«Apri il sorgente» sotto un file troppo grande">
+<!-- → editors/craft/surface.ts (.craft-empty, azioni per il file troppo grande), skin/media.css; PA T30 -->
+<div class="settings-actions craft-empty-actions">
+  <button type="button" class="kit-button" data-kind="primary">Apri con un'altra app</button>
+  <button type="button" class="kit-button" data-kind="normal">Apri in sola lettura</button>
+</div>
+</template>
+
+<template data-toppa="vault-scegli" data-nome="«Scegli un altro vault…» nell'avvio guasto">
+<!-- → apps/client/index.html e src/avvio/*.ts (la schermata d'avvio di N7, già in main: un terzo bottone nel guasto del vault); PA T30 -->
+<button type="button" class="avvio-btn" id="avvio-altro-vault">Scegli un altro vault…</button>
+</template>
