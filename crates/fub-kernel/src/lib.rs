@@ -133,7 +133,7 @@ pub use workspace::{
     ExternalRenamePlan, GraphUpdate, IndexBatchStep, Indexing, Opening, ParsedBatch, ParsedChange,
     ParsedExplicitRename, ParsedExternalAssetRename, ParsedExternalRename,
     PendingExternalAssetRename, PendingSyncChange, PreparedCatchUp, PreparedDocumentBytesWrite,
-    PreparedExplicitRename, PreparedExternalAssetRename, PreparedResourceOpen,
-    PreparedResourceRead, PreparedTimerCursors, Rejected, SyncPlan, Trust, Workspace, INDEX_JOB,
-    INDEX_WRITE_BUDGET, MAIN_PANE,
+    PreparedExplicitRename, PreparedExternalAssetRename, PreparedReadOnlyCommand,
+    PreparedResourceOpen, PreparedResourceRead, PreparedTimerCursors, Rejected, SyncPlan, Trust,
+    Workspace, INDEX_JOB, INDEX_WRITE_BUDGET, MAIN_PANE,
 };
