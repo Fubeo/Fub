@@ -326,13 +326,13 @@ Se una di queste cade, la stima si allunga.
 | Unire #295 (K3, con K3-IPC T8) | K3 | PR pronta, testa 165b8fa8 | il sì dell'utente | medio | S | `main` ha `crates/fub-motori` e i comandi `open_key`, `warm_engine` e `document_closed` |
 | Riallineare #290 a `main` e unirla | K2 | 7 di 7; la prova con una persona non è fatta | la prova dell'utente col protocollo di K2, prima di segnarla pronta (D13 A) | basso | S | CI completa verde, OK dell'utente |
 | PA T1 · il finto del banco con le impostazioni dell'host | PA | da fare | #295 in `main` (d90a09d0 di K3 cambia `bench/fake-ipc.ts`) | basso | S | `bench/fake-ipc.test.ts` |
-| PA T3 · i comandi in sola lettura non tengono il turno | PA | da fare | nessuno | medio: tocca il custode | M | test d'integrazione di `fub-host` |
-| PA T4, T5 · #237 R01–R03 | PA | da fare | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione; R01 si chiude col test se non si riproduce |
+| PA T3 · i comandi in sola lettura non tengono il turno | PA | in corso (coder, base 0cc94bde) | nessuno | medio: tocca il custode | M | test d'integrazione di `fub-host` |
+| PA T4, T5 · #237 R01–R03 | PA | T4 in corso (coder, base 0cc94bde); T5 dopo T4 | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione; R01 si chiude col test se non si riproduce |
 | PA T6, T7 · #289 | PA | da fare | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
 | PA T8 · la pagina della cornice del telefono | PA | da fare | nessuno | basso | S | guardie dei documenti |
 | PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | da fare (D7 A) | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
 | PA T10 · i due punti sciolti da ritrovare | PA | da fare (D10 B) | nessuno | basso | S | la causa trovata o la riga che chiude |
-| PA T13 · il corpus senza perdite | PA | da fare | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
+| PA T13 · il corpus senza perdite | PA | da fare, dopo #295 (registro 2026-11-08) | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
 | PA T19 · i test instabili del Rust | PA | da fare | nessuno | medio | M | 200 giri verdi o causa trovata |
 | PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | da fare | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
 | PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | da fare | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
@@ -3540,7 +3540,7 @@ Fatto quando: `cargo test -p fub-host --test read_only_command_turn` passa,
 e senza la modifica il primo test va oltre il tempo; i test di `fub-host`
 restano verdi.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 0cc94bde
 
 ## T4 · #237 R01 e R02: chiudere e ripristinare non perdono il testo
 
@@ -3612,7 +3612,7 @@ passano; se uno falliva prima, la correzione lo fa passare; il test di
 `state/` restano verdi; `document-model.md` dice che cosa succede al testo
 non salvato quando un riquadro, una finestra o un ripristino lo toccano.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/state/ src/panels/
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 0cc94bde
 
 ## T5 · #237 R03: il conflitto e la Lettura dicono quale versione si vede
 
