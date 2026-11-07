@@ -2963,18 +2963,6 @@ async function reloadDocument(id: string): Promise<void> {
   redrawReading(id);
 }
 
-/// Rilegge dal disco il documento attivo (usato dopo un ripristino di versione,
-/// che riscrive il file sotto al buffer).
-export async function reloadCurrent(): Promise<void> {
-  const doc = state.currentDoc;
-  if (!doc) return;
-  const outcome = await documentSessions.forceReload(doc);
-  if (outcome.kind === "unavailable") notify(t("document.reload_failed", { doc }), "guasto");
-  redrawReading(doc);
-  view.drawSave();
-  redrawTabs(doc);
-}
-
 // --- contesto di sessione (decisione 0007) ----------------------------------
 //
 // La shell è l'unica a sapere quale riquadro ha il focus, che nota mostra, cosa
