@@ -3649,7 +3649,7 @@ Fatto quando: il test prova il testo mostrato e la riga, in conflitto e
 dopo la risoluzione; la foto della scena del conflitto in Lettura sta
 accanto allo stato `conflitto` del simulatore.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/panels src/state
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 63a9528d
 
 ## T6 · #289: `fub:abi@0.2.0` congelata, e la guardia stretta
 
