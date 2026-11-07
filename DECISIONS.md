@@ -61,6 +61,203 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-07 · fub-pre-alpha (simulatore v2) · il simulatore mostra il
+  telefono corretto da PA T47 (`92-prealpha-telefono.css`): l'interruttore
+  resta il binario di 32 × 18 della pelle, con un tocco di 44 px dato da un
+  `::after` trasparente, e le schede delle impostazioni scorrono intere. Il
+  confronto dei pixel toglie interruttori e schede e misura le righe che si
+  accorciano · il cerchio di 44 px e i nomi in «…» sono un difetto di
+  `shells/mobile/mobile.css` (differenza 47), non una forma da approvare;
+  l'aspetto dell'interruttore è già approvato con Scrittoio 2. Un
+  interruttore più grande solo sul telefono sarebbe stato una forma nuova
+  da approvare, e non serve: il tocco di 44 px non deve per forza vedersi.
+- 2026-11-07 · fub-pre-alpha (simulatore v2) · la scheda di un componente
+  fermato porta `data-state="stopped"` nelle toppe, e il rosso del
+  pericolo vale solo per la sua riga dello stato (`.setting-source[role=
+  "status"]`) · la riscrittura delle toppe dal codice l'aveva perso, e la
+  riga «Fermato…» usciva grigia come le altre; «Rimuovi» e le altre righe
+  della scheda restano col loro colore.
+
+- 2026-11-07 · fub-pre-alpha (simulatore v2) · nel confronto dei pixel lo
+  spazio che il DOM nuovo prende si misura: il simulatore si riprova scorso
+  di quanto il DOM nuovo spinge giù il resto, e un quadretto di 16 px che
+  differisce conta come spiegato solo se si ritrova uguale nella foto del
+  client spostato (in verticale o di lato, al massimo l'altezza del DOM
+  nuovo più 64 px, mai oltre 480). Si tolgono anche gli elementi a cui una
+  toppa cambia testo, attributi o classi · prima «spazio che il DOM nuovo
+  prende» era una frase senza misura, e 37 righe restavano sopra la soglia
+  con quella sola spiegazione; il quadretto deve ritrovarsi uguale, quindi
+  un colore, un carattere o un CSS sbagliato resta una differenza.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · le toppe dei componenti
+  (S204–S208) copiano `renderInstalledComponent` e la richiesta del
+  consenso com'è oggi («Abilitato», «Consenso all'esecuzione», «Rimuovi»,
+  «Concedere i permessi»); le righe nuove (lo stato «Fermato…», «Riavvia»,
+  «Copia il motivo») hanno il loro commento · il codice vince sul piano
+  finché l'utente non risponde a D18; il primo giro aveva inventato
+  «Disinstalla» e un dialogo «Installare …?» che il codice non ha. D18
+  consiglia A perché la regola del 2026-10-30 («Accendi, Spegni… Togli»)
+  e il commento di `i18n/lexicon.ts` dicono «dappertutto».
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · nei livelli senza script
+  (le pagine dei piani dentro la cornice) ogni `canvas` è sostituito da
+  un'`img` con le sue misure · in un documento senza script il canvas non
+  ha misura propria, e la pagina del PDF della lavagna usciva bianca.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · nel confronto dei pixel
+  una differenza sopra lo 0,5 % è spiegata solo se togliendo la sua zona
+  (il bottone della modalità spostato di S2 T3, l'anello del fuoco) il resto
+  scende sotto la soglia; `script/foto-sim.mjs` scrive nella riga quanto
+  resta. Il tema d'esempio e l'ispettore compatto di S2 T9 sono spiegati
+  per stato, senza zona · una spiegazione che non si misura copre anche gli
+  errori veri; così ogni riga dice se basta.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · con la finestra compatta il
+  simulatore mostra l'ispettore di S2 T9 (264 → 216 px in cinque passi,
+  `measures.ts`), non quello della foto: nella foto i blocchi, montati dopo
+  le preferenze, lo tengono a 264 · nell'app `structure.css` viene prima
+  delle preferenze e il passo compatto vince; il simulatore deve far vedere
+  il prodotto dopo T9, non l'ordine dei fogli del banco.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · nelle pagine dei piani i
+  caratteri di Google (Hanken Grotesk, Newsreader, IBM Plex Mono) si
+  prendono dai file `@fontsource` del client · il simulatore gira senza rete
+  (dentro l'artifact e da `file://`), e senza quei caratteri lo strato si
+  disegnava con quelli di riserva e andava a capo altrove.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · `cattura.mjs` aspetta che
+  menu, dialoghi e finestrelle di CodeMirror restino fermi due fotogrammi
+  prima della foto; le tre catture del menu «/» sono rifatte così · la foto
+  vecchia era presa mentre il menu si sistemava, e non coincideva col DOM
+  copiato subito dopo.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · la pagina dell'artifact
+  (`script/costruisci-hub.mjs`) non tiene più numeri scritti a mano: stati,
+  scenari e quanti aspettano un sì vengono da `sim-stati.js`; la fase di
+  ogni task dalle tabelle di «L'ordine» (con «aspetta Dn» quando la riga lo
+  dice); una domanda è decisa quando il suo corpo comincia con «**Decisa
+  dall'utente…**», e allora la tabella riassuntiva mostra la decisione al
+  posto del consiglio · nel primo giro le fasi e i conti erano copiati
+  nello script, e al secondo giro erano già sbagliati (T1–T24 contro
+  T1–T45, D5 data per decisa).
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · gli script del ramo trovano
+  Playwright, pngjs, pixelmatch, happy-dom e i caratteri in `FUB_CLIENT`
+  (`script/client.mjs`), di serie `apps/client` del repository che li
+  contiene; nessun percorso della macchina resta negli script del ramo
+  (`script/ricattura-tutto.sh` prende i due client come argomenti) · uno
+  script che punta a `~/.cache/…` non gira su un'altra macchina, e la
+  richiesta del secondo giro vuole il simulatore rifacibile dal repository.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · D12 B è fatta come la
+  pagina Aspetto dell'app: densità, contrasto e accento si scelgono in S234
+  e restano negli altri stati finché «Aspetto di serie» non li toglie; non
+  c'è una riga apposta sopra lo schermo · è il gesto del prodotto, e una
+  seconda via nel simulatore sarebbe un comando che l'app non ha.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · tutte le catture si sono
+  rifatte in un colpo (`script/ricattura.mjs`, 632 foto del client più 248
+  delle pagine dei piani), e le vecchie stanno in `prove/catture-vecchie/`
+  sulla macchina; restano le sole `s2/lavagna*`, senza definizione · metà
+  delle foto vecchie aveva il CSS di prima dei blocchi o un cassetto aperto
+  per sbaglio, e il confronto dei pixel non diceva più niente. Una foto
+  vecchia superata da una cartella più in alto (`aspetto`, `toast`, le note
+  in Blocchi, Sorgente e Lettura, «Comandi» del foglio) non si rifà: non la
+  usa nessuno.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · le pagine dei piani si
+  fotografano con gli argomenti di Chromium del banco anche quando la foto
+  vecchia era diversa: le schede della lavagna (`p-lav-*`) vanno a capo in
+  un altro punto (2–3 % dei pixel) perché le foto vecchie avevano il
+  «hinting» dei caratteri acceso · la pagina è la stessa byte per byte, e
+  la foto nuova si rifà uguale (0 pixel diversi) con lo script del ramo.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · `piani/ricette.html` si
+  fotografa dalla copia avvolta del simulatore (con `<!doctype html>`), non
+  dal file grezzo · grezzo il browser lo apre in «quirks mode» e le misure
+  cambiano; nel simulatore e nell'artifact la pagina è sempre avvolta.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · i due temi d'esempio
+  (`blocchi/93-tema-*`) non entrano nelle catture (`cattura.mjs` li salta) e
+  il simulatore li monta solo sugli stati che li vestono · non sono CSS del
+  prodotto; montati sempre, avrebbero vestito ogni foto.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · «il DOM» nel piano vuol dire
+  una cosa sola per provenienza: per una cattura il DOM del client di oggi
+  (uguale o cambiato da un task di Scrittoio 2), per una composta quello
+  della pagina del piano, per una nuova quello di `toppe/*.html` · la
+  richiesta del secondo giro diceva che la frase «si copia il DOM» non
+  diceva quale.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · il file nuovo col tipo
+  diventa tre task: PA T43 (il menu «Nuovo» chiede il tipo, S34), PA T44
+  (il documento e il foglio vuoti, in `fub-host`) e PA T45 (la misura con
+  5.000 file, S253) · un task che tocca client, host e banco non sta nella
+  misura di un coder medio; il menu mostra solo i tipi che hanno un comando
+  dichiarato, così T43 non aspetta T44.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · `t-foglio-errore` diventa uno
+  stato suo (S286, «Telefono: l'errore di un comando») e non è più il
+  telefono di «Foglio: una formula sbagliata» · la cattura è l'errore di un
+  comando della griglia, non un #DIV/0! in una cella: mostrarla come la
+  stessa cosa al telefono era sbagliato.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · nel menu «Nuovo» la voce
+  «Cartella» non ha scorciatoia · Ctrl+Shift+N l'avevo scritta io, e il
+  client non la ha: una scorciatoia inventata nel prototipo finirebbe nel
+  codice.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · ogni stato ha una
+  provenienza (cattura, composta, nuova) e un numero S che non cambia più
+  (`script/numeri-sim.json` cresce soltanto); da approvare sono le composte
+  e le nuove, 118 su 286 · l'utente approva per numero («approvo tutto
+  tranne S23»), e un numero che cambiasse farebbe approvare la cosa
+  sbagliata.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · il CSS nuovo ha una fonte
+  sola. Per Scrittoio 2 vince il prototipo approvato del suo piano
+  (`PLAN-ui/scrittoio-2.html` di `piano/scrittoio-2`), e
+  `script/prova-css-fonte.mjs` controlla che i 18 blocchi del simulatore
+  che vengono da lì coincidano con i suoi, tolte le varianti «com'era», i
+  commenti e gli spazi. Per i pezzi di questo giro la fonte è il blocco del
+  simulatore (`blocchi/92-*` e `93-*`), con destinazione e task. La
+  cattura monta i blocchi per la foto ma non li copia (`cattura.mjs`), e il
+  simulatore li rimonta sopra ogni cattura · due copie dello stesso CSS
+  prima o poi divergono, e il coder copierebbe quella vecchia.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · le catture (560 MB) restano
+  fuori dal repository; nel repository la fonte delle catture sono i dati
+  già impacchettati (`sim-dati-*.js`), e `DATI=<cartella> node
+  script/costruisci-sim.mjs <uscita>` rifà la pagina uguale byte per byte ·
+  così blocchi, toppe, scenari e vista si cambiano dal repository senza il
+  server, e la prova dice se la ricostruzione è fedele.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · una cattura presa prima di
+  un cambio dei blocchi si rifà (`script/ricattura.mjs`, coi blocchi e coi
+  mod di oggi) · il simulatore monta i blocchi di oggi: una foto col CSS di
+  allora non confronta più niente.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · le foto del confronto, anche
+  quelle delle pagine dei piani (`script/cattura-piani.mjs`), usano gli
+  argomenti di Chromium del banco (`bench/stage.mjs`) · senza, il testo si
+  disegna diverso e ogni parola conta come differenza.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · nel confronto dei pixel si
+  nasconde la riga dei dati della nota (il mod `datiNota` la mette nel DOM
+  da copiare, la foto del client non ce l'ha), si coprono le toppe e i
+  pezzi composti, e gli strati si confrontano solo a tutta larghezza · la
+  pagina approvata è fotografata alla sua misura; a 700 px e al telefono lo
+  strato è la stessa pagina che si adatta, e la differenza è attesa.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · i gesti del telefono sono
+  provvisori come il telaio A (D1): una strisciata orizzontale di almeno
+  60 px apre e chiude i cassetti, dal bordo (24 px) torna indietro, la
+  pressione lunga (500 ms) apre il menu del tocco; vale anche sul testo, e
+  il documento ha `touch-action: pan-y pinch-zoom` · senza `pan-y` il
+  browser prende la strisciata per sé (`pointercancel`); il guscio mobile
+  vero li decide nel piano del telefono.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · i tempi del simulatore
+  (`setTimeout`) stanno sulla finestra del simulatore, non nello schermo ·
+  lo schermo è un iframe senza `allow-scripts`, e lì un timer non scatta mai.
+  Solo simulatore.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · Indietro salta lo stato di
+  adesso nella storia e, senza storia, torna alla «casa» dello stato (il
+  foglio per un dialogo del foglio) · Indietro deve portare sempre altrove.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · il clic sul velo di un
+  dialogo del kit annulla (`kit/dialog.ts`); il velo delle impostazioni le
+  chiude come × (`preferences/scrim.ts`); l'icona del binario del pannello
+  già davanti chiude e riapre la colonna (`panels/rail.ts`, `railClick`);
+  l'indice delle impostazioni scorre, dà il fuoco al titolo e segna la voce
+  con `aria-current` (`jumpTo` di `panels/settings.ts`) · il simulatore fa
+  ciò che fa il prodotto, anche dove la foto non c'è.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · la colonna della lavagna
+  (toppa `lav-colonna`) scrive `data-tool` e `data-tools` come
+  `kit/tool-rail.ts:126` e `:244` · è lo stesso kit del disegno, e il coder
+  copia il DOM che il kit produce davvero.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · `prova-sim.mjs` conta come
+  «coperto» solo un controllo sotto qualcosa che non è un controllo; non
+  conta chi è tagliato da un antenato che scorre o ritaglia, né chi sta
+  sotto un velo, uno strato, un pannello o un menu aperto, o sotto la
+  striscia del bordo del cassetto (`frame/peek.ts`); dopo ogni montaggio
+  aspetta le animazioni finite (al più 1,5 s) · senza, l'elenco dei
+  controlli cambia fra il movimento calmo e il ridotto, e i falsi allarmi
+  nascondono quelli veri.
 - 2026-11-05 · fub-pre-alpha (skin facile) · la richiesta del manutentore
   («se non è facile creare una skin non andiamo da nessuna parte») entra nel
   piano come PA T34–T42 e «Fatto quando» 9, con tre domande (D15 il nome del

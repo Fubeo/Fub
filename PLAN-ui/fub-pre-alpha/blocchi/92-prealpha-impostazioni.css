@@ -1,7 +1,7 @@
 /* → theme/scrittoio/skin/settings.css (PA T29, T36–T38) */
 /* ── Un componente fermato ─────────────────────────────────────────────────
    Il motivo sta nella scheda, nel rosso del pericolo, sotto il nome. */
-.settings-component[data-state="stopped"] .setting-source {
+.settings-component[data-state="stopped"] .setting-source[role="status"] {
   color: var(--danger);
 }
 

@@ -209,11 +209,11 @@
 | S201 | `ricetta-venti` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
 | S202 | `ricetta-cambiata` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
 | S203 | `ricetta-fatta` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
-| S204 | `comp-installato` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts (la sezione «Installati su questa macchina», con la scheda di panels/components-page.ts) |
-| S205 | `comp-permesso` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts (dopo «Scegli file…», kit/dialog.ts) |
-| S206 | `comp-rotto-tempo` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts e panels/components-page.ts (lo stato del componente, fub-wasm-host: timeout) |
-| S207 | `comp-rotto-errore` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts e panels/components-page.ts (fub-wasm-host: trap) |
-| S208 | `comp-aggiorna` | Componenti e ricette | nuova, da approvare | dopo la pre-alpha | toppe: panels/settings.ts (nessun piano lo copre: «Differenze fra piani e codice») |
+| S204 | `comp-installato` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts renderInstalledComponent, così com'è oggi (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41") |
+| S205 | `comp-permesso` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts renderInstalledComponent, così com'è oggi (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41"); toppe: panels/settings.ts renderInstalledComponent (il consenso «Concesso» chiede con confirm, che la Scrivania mostra con shells/scrittoio/confirm.ts e kit/dialog.ts), così com'è oggi |
+| S206 | `comp-rotto-tempo` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault» e «Riavvia» (fub-wasm-host: timeout; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi |
+| S207 | `comp-rotto-errore` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault», «Copia il motivo» e «Riavvia» (fub-wasm-host: trap; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi |
+| S208 | `comp-aggiorna` | Componenti e ricette | nuova, da approvare | dopo la pre-alpha | toppe: panels/settings.ts renderInstalledComponent: nuovi la riga della versione nuova e «Vedi cosa cambia» (nessun piano lo copre: «Differenze fra piani e codice») |
 | S209 | `ricerca` | La cornice | cattura | S2 T8 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S210 | `grafo` | La cornice | cattura | S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S211 | `palette` | La cornice | cattura | main, S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
@@ -319,11 +319,11 @@
 
 | Modello | Che cos'è | Destinazione | Task | Stati |
 |---|---|---|---|---|
-| `comp-installato` | Un componente della comunità installato | panels/settings.ts (la sezione «Installati su questa macchina», con la scheda di panels/components-page.ts) | K1, K2 T3, PA T29 | S204 |
-| `comp-permesso` | Installare un componente: la richiesta dei permessi | panels/settings.ts (dopo «Scegli file…», kit/dialog.ts) | K1, K2 T3, PA T29 | S205 |
-| `comp-fermo-tempo` | Un componente fermato: ha superato il tempo | panels/settings.ts e panels/components-page.ts (lo stato del componente, fub-wasm-host: timeout) | K1, PA T29 | S206 |
-| `comp-fermo-errore` | Un componente fermato: un errore interno | panels/settings.ts e panels/components-page.ts (fub-wasm-host: trap) | K1, PA T29 | S207 |
-| `comp-aggiorna` | Un componente con una versione nuova (fuori dalla pre-alpha) | panels/settings.ts (nessun piano lo copre: «Differenze fra piani e codice») | fuori dalla pre-alpha | S208 |
+| `comp-installato` | Un componente della comunità installato | panels/settings.ts renderInstalledComponent, così com'è oggi (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41") | K1, K2 T3, PA T29 | S204, S205 |
+| `comp-permesso` | Concedere il consenso: i permessi | panels/settings.ts renderInstalledComponent (il consenso «Concesso» chiede con confirm, che la Scrivania mostra con shells/scrittoio/confirm.ts e kit/dialog.ts), così com'è oggi | K1, K2 T3, PA T29 | S205 |
+| `comp-fermo-tempo` | Un componente fermato: ha superato il tempo | panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault» e «Riavvia» (fub-wasm-host: timeout; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi | K1, PA T29 | S206 |
+| `comp-fermo-errore` | Un componente fermato: un errore interno | panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault», «Copia il motivo» e «Riavvia» (fub-wasm-host: trap; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi | K1, PA T29 | S207 |
+| `comp-aggiorna` | Un componente con una versione nuova (fuori dalla pre-alpha) | panels/settings.ts renderInstalledComponent: nuovi la riga della versione nuova e «Vedi cosa cambia» (nessun piano lo copre: «Differenze fra piani e codice») | fuori dalla pre-alpha | S208 |
 | `banda-motore-pronto` | D5 A: il motore del disegno nella banda (pronto) | shells/scrittoio/frame/status-band.ts (il bottone #status-standing di S2 T4, anche per il disegno), skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S125 |
 | `banda-motore-perse` | D5 A: 3 parti restano come sono, nella banda | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S126 |
 | `banda-motore-spento` | D5 A: motore spento, nella banda | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S127 |
@@ -385,8 +385,9 @@
 | `theme/scrittoio/recipe.ts` | serie | `02-ruoli.css` | S2 T16, T27 | 1.7 KB |
 | `theme/scrittoio/skin/frame.css` | prealpha | `92-prealpha-banda.css` | D5 A: K5 T21–T23 con S2 T4 | 0.9 KB |
 | `theme/scrittoio/skin/draw.css` | prealpha | `92-prealpha-disegno.css` | K5 T21, PA T27 | 0.6 KB |
-| `theme/scrittoio/skin/settings.css` | prealpha | `92-prealpha-impostazioni.css` | PA T29, T36–T38 | 5.9 KB |
+| `theme/scrittoio/skin/settings.css` | prealpha | `92-prealpha-impostazioni.css` | PA T29, T36–T38 | 6 KB |
 | `theme/scrittoio/skin/nodes.css` | prealpha | `92-prealpha-lavagna.css` | N6 T26–T28, PA T28 | 3.3 KB |
 | `theme/scrittoio/skin/media.css` | prealpha | `92-prealpha-media.css` | PA T30 | 0.3 KB |
+| `shells/mobile/mobile.css` | prealpha | `92-prealpha-telefono.css` | PA T47 | 1.3 KB |
 | `theme/examples/carta/ (fogli e skin.css)` | tema | `93-tema-carta.css` | PA T42, D17 | 4.4 KB |
 | `theme/examples/salvia/ (i due fogli)` | tema | `93-tema-salvia.css` | PA T42, D17 | 2.7 KB |

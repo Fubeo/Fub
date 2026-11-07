@@ -71,7 +71,11 @@ delle catture, che ha anche i caratteri.
   del simulatore> <cartella delle foto>` (deve dire «errori: nessuno»).
 - Confrontare i pixel con le catture: `node script/foto-sim.mjs <cartella
   del simulatore> <cartella delle foto>`. Vuole le catture (circa 560 MB),
-  che non sono nel repository.
+  che non sono nel repository. Scrive `confronto.tsv`: una riga per stato,
+  larghezza, luce e fonte, e sopra lo 0,5 % il perché, con quanto resta
+  togliendo la zona che lo spiega (fra queste lo spazio che il DOM nuovo
+  prende, misurato coi quadretti che si ritrovano spostati: `PLAN.md`, «I
+  pixel contro la fonte»).
 - Catturare di nuovo: `script/finto/LEGGIMI.md` (il client delle catture, le
   sue toppe, `script/ricattura.mjs` e `script/ricattura-tutto.sh`). Il Vite
   delle catture usa la porta 1468.

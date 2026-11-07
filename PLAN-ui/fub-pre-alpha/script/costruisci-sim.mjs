@@ -125,6 +125,7 @@ const DEST = [
   ["theme/scrittoio/skin/settings.css", "prealpha", ["92-prealpha-impostazioni"], "PA T29, T36–T38"],
   ["theme/scrittoio/skin/nodes.css", "prealpha", ["92-prealpha-lavagna"], "N6 T26–T28, PA T28"],
   ["theme/scrittoio/skin/media.css", "prealpha", ["92-prealpha-media"], "PA T30"],
+  ["shells/mobile/mobile.css", "prealpha", ["92-prealpha-telefono"], "PA T47"],
   ["theme/examples/carta/ (fogli e skin.css)", "tema", ["93-tema-carta"], "PA T42, D17", "carta"],
   ["theme/examples/salvia/ (i due fogli)", "tema", ["93-tema-salvia"], "PA T42, D17", "salvia"],
 ];

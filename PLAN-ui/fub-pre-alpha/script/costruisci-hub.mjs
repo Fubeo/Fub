@@ -190,7 +190,7 @@ const [introD, ...ds] = dom.corpo.split(/^### /m);
 const ASPETTA = {
   D1: "l'APK di PA T22", D2: "griglia T1–T9", D3: "i task grafici di N6", D4: "il simulatore, prima della consegna",
   D5: "S2 T22, K5 T21–T23", D6: "PA T11", D7: "PA T9", D8: "PA T22", D9: "PA T18", D10: "PA T10", D11: "PA T22", D12: "nessuno",
-  D13: "il merge di #290 (K2)", D14: "PA T33", D15: "PA T34", D16: "PA T40", D17: "PA T42",
+  D13: "il merge di #290 (K2)", D14: "PA T33", D15: "PA T34", D16: "PA T40", D17: "PA T42", D18: "PA T46",
 };
 // Il consiglio in una riga, fedele all'opzione «(consigliata)» di PLAN.md.
 const CONSIGLIO = {
@@ -211,6 +211,7 @@ const CONSIGLIO = {
   D15: "`extends`, come `\"extends\": \"fub.serie\"`.",
   D16: "Dentro: un tema può ridisegnare ogni icona, per nome; i nomi restano stabili.",
   D17: "«Carta» e «Salvia».",
+  D18: "La scheda segue il lessico: «Acceso», «Togli», e una guardia sui testi `settings.components.*`.",
 };
 // Una domanda già decisa comincia con «**Decisa dall'utente … : X.**»: nel
 // riassunto si legge la decisione, non il consiglio. D5 («L'utente ha chiesto

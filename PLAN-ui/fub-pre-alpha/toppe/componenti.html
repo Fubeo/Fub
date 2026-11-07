@@ -1,47 +1,57 @@
 <template data-toppa="comp-installato" data-nome="Un componente della comunità installato">
-<!-- → panels/settings.ts (la sezione «Installati su questa macchina», con la scheda di panels/components-page.ts); K1, K2 T3, PA T29 -->
-<div class="settings-card settings-component" data-component="esempio.conta-parole">
-  <div class="setting-text"><span class="setting-label">Conta parole</span><div class="muted">esempio.conta-parole · Della comunità · 0.3.1</div></div>
-  <input type="checkbox" class="setting-switch components-switch" role="switch" checked aria-label="Conta parole acceso">
-  <details class="settings-details"><summary>Chiede 1 permesso</summary><div class="settings-details-body"><div class="setting-row setting-permission"><div class="setting-text"><div>Può sapere quale nota stai guardando, e in che modalità.</div></div></div></div></details>
-  <div class="settings-actions"><button type="button" class="settings-btn">Disinstalla</button></div>
+<!-- → panels/settings.ts renderInstalledComponent, così com'è oggi (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41"); K1, K2 T3, PA T29 -->
+<div class="settings-card settings-component">
+  <div class="setting-row"><div class="setting-text"><div class="setting-label" role="heading" aria-level="4">Conta parole</div><div class="muted">esempio.conta-parole · versione 0.3.1 · Della comunità</div><div class="setting-source">Attivo in questo vault</div></div></div>
+  <div class="setting-row"><div class="setting-text"><label for="installed-enabled-41">Abilitato</label><div class="muted">Scelta persistita su questa macchina. Il componente può avviarsi soltanto se anche il consenso è concesso.</div></div><div class="setting-control"><input type="checkbox" class="setting-switch" role="switch" id="installed-enabled-41" checked></div></div>
+  <div class="setting-row"><div class="setting-text"><label for="installed-consent-41">Consenso all'esecuzione</label><div class="muted">È distinto dall'abilitazione: negato o da decidere impediscono sempre l'esecuzione.</div></div><div class="setting-control"><select class="setting-select" id="installed-consent-41"><option value="undecided">Da decidere</option><option value="denied">Negato</option><option value="granted" selected>Concesso</option></select></div></div>
+  <details class="settings-details" data-details-key="permissions:installed:41"><summary>Chiede un permesso</summary><div class="settings-details-body"><div class="muted">Capacità dichiarate dal file. Concedere il consenso le approva insieme; un consenso negato non esegue il componente.</div><div class="setting-row setting-permission" data-setting-key="esempio.conta-parole:permissions.read-session"><div class="setting-text"><div>Può sapere quale nota stai guardando, e in che modalità.</div></div></div></div></details>
+  <div class="setting-row"><div class="setting-text"><div class="setting-label">Rimuovi</div><div class="muted">Rimuove l'installazione ma conserva i suoi dati nel vault.</div><div class="setting-source" id="installed-remove-hint-41">Disabilita il componente prima di rimuoverlo.</div></div><div class="setting-control"><button type="button" class="settings-btn settings-btn--danger" disabled aria-describedby="installed-remove-hint-41">Rimuovi</button></div></div>
 </div>
 </template>
 
-<template data-toppa="comp-permesso" data-nome="Installare un componente: la richiesta dei permessi">
-<!-- → panels/settings.ts (dopo «Scegli file…», kit/dialog.ts); K1, K2 T3, PA T29 -->
+<template data-toppa="comp-permesso" data-nome="Concedere il consenso: i permessi">
+<!-- → panels/settings.ts renderInstalledComponent (il consenso «Concesso» chiede con confirm, che la Scrivania mostra con shells/scrittoio/confirm.ts e kit/dialog.ts), così com'è oggi; K1, K2 T3, PA T29 -->
 <div class="kit-dialog-scrim">
-  <div class="kit-dialog" role="dialog" aria-modal="true" aria-labelledby="comp-permesso-titolo" aria-describedby="comp-permesso-testo">
-    <h2 class="kit-dialog-title" id="comp-permesso-titolo">Installare «Conta parole»?</h2>
-    <p class="kit-dialog-description" id="comp-permesso-testo">esempio.conta-parole 0.3.1, della comunità: nessuno l'ha verificato. Chiede di sapere quale nota stai guardando. Non chiede la rete, né file fuori dal vault.</p>
-    <div class="kit-dialog-actions"><button type="button" class="kit-button" data-kind="normal">Annulla</button><button type="button" class="kit-button" data-kind="primary">Installa e accendi</button></div>
+  <div class="kit-dialog" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="comp-permesso-titolo" aria-describedby="comp-permesso-testo">
+    <h2 class="kit-dialog-title" id="comp-permesso-titolo">Concedere i permessi</h2>
+    <p class="kit-dialog-description" id="comp-permesso-testo">Conta parole potrà:
+• Può sapere quale nota stai guardando, e in che modalità.
+
+I permessi si possono togliere uno per uno anche dopo.</p>
+    <div class="kit-dialog-actions"><button type="button" class="kit-button" data-kind="normal" data-action="cancel">Annulla</button><button type="button" class="kit-button" data-kind="primary" data-action="confirm">Concedi</button></div>
   </div>
 </div>
 </template>
 
 <template data-toppa="comp-fermo-tempo" data-nome="Un componente fermato: ha superato il tempo">
-<!-- → panels/settings.ts e panels/components-page.ts (lo stato del componente, fub-wasm-host: timeout); K1, PA T29 -->
-<div class="settings-card settings-component" data-component="esempio.conta-parole" data-state="stopped">
-  <div class="setting-text"><span class="setting-label">Conta parole</span><div class="muted">esempio.conta-parole · Della comunità · 0.3.1</div><div class="setting-source" role="status">Fermato: ha superato il tempo (5 s). Le note non hanno perso niente.</div></div>
-  <input type="checkbox" class="setting-switch components-switch" role="switch" aria-label="Conta parole acceso">
-  <div class="settings-actions"><button type="button" class="settings-btn">Riavvia</button><button type="button" class="settings-btn">Disinstalla</button></div>
+<!-- → panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault» e «Riavvia» (fub-wasm-host: timeout; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi; K1, PA T29 -->
+<div class="settings-card settings-component" data-state="stopped">
+  <div class="setting-row"><div class="setting-text"><div class="setting-label" role="heading" aria-level="4">Conta parole</div><div class="muted">esempio.conta-parole · versione 0.3.1 · Della comunità</div><div class="setting-source" role="status">Fermato: ha superato il tempo (5 s). Le note non hanno perso niente.</div></div><div class="setting-control"><button type="button" class="settings-btn">Riavvia</button></div></div>
+  <div class="setting-row"><div class="setting-text"><label for="installed-enabled-41">Abilitato</label><div class="muted">Scelta persistita su questa macchina. Il componente può avviarsi soltanto se anche il consenso è concesso.</div></div><div class="setting-control"><input type="checkbox" class="setting-switch" role="switch" id="installed-enabled-41" checked></div></div>
+  <div class="setting-row"><div class="setting-text"><label for="installed-consent-41">Consenso all'esecuzione</label><div class="muted">È distinto dall'abilitazione: negato o da decidere impediscono sempre l'esecuzione.</div></div><div class="setting-control"><select class="setting-select" id="installed-consent-41"><option value="undecided">Da decidere</option><option value="denied">Negato</option><option value="granted" selected>Concesso</option></select></div></div>
+  <details class="settings-details" data-details-key="permissions:installed:41"><summary>Chiede un permesso</summary><div class="settings-details-body"><div class="muted">Capacità dichiarate dal file. Concedere il consenso le approva insieme; un consenso negato non esegue il componente.</div><div class="setting-row setting-permission" data-setting-key="esempio.conta-parole:permissions.read-session"><div class="setting-text"><div>Può sapere quale nota stai guardando, e in che modalità.</div></div></div></div></details>
+  <div class="setting-row"><div class="setting-text"><div class="setting-label">Rimuovi</div><div class="muted">Rimuove l'installazione ma conserva i suoi dati nel vault.</div><div class="setting-source" id="installed-remove-hint-41">Disabilita il componente prima di rimuoverlo.</div></div><div class="setting-control"><button type="button" class="settings-btn settings-btn--danger" disabled aria-describedby="installed-remove-hint-41">Rimuovi</button></div></div>
 </div>
 </template>
 
 <template data-toppa="comp-fermo-errore" data-nome="Un componente fermato: un errore interno">
-<!-- → panels/settings.ts e panels/components-page.ts (fub-wasm-host: trap); K1, PA T29 -->
-<div class="settings-card settings-component" data-component="esempio.conta-parole" data-state="stopped">
-  <div class="setting-text"><span class="setting-label">Conta parole</span><div class="muted">esempio.conta-parole · Della comunità · 0.3.1</div><div class="setting-source" role="status">Fermato: un errore dentro il componente («unreachable» in count_words). Si riaccende a mano.</div></div>
-  <input type="checkbox" class="setting-switch components-switch" role="switch" aria-label="Conta parole acceso">
-  <div class="settings-actions"><button type="button" class="settings-btn">Riavvia</button><button type="button" class="settings-btn">Copia il motivo</button></div>
+<!-- → panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault», «Copia il motivo» e «Riavvia» (fub-wasm-host: trap; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi; K1, PA T29 -->
+<div class="settings-card settings-component" data-state="stopped">
+  <div class="setting-row"><div class="setting-text"><div class="setting-label" role="heading" aria-level="4">Conta parole</div><div class="muted">esempio.conta-parole · versione 0.3.1 · Della comunità</div><div class="setting-source" role="status">Fermato: un errore dentro il componente («unreachable» in count_words). Si riaccende a mano.</div></div><div class="setting-control"><button type="button" class="settings-btn">Copia il motivo</button><button type="button" class="settings-btn">Riavvia</button></div></div>
+  <div class="setting-row"><div class="setting-text"><label for="installed-enabled-41">Abilitato</label><div class="muted">Scelta persistita su questa macchina. Il componente può avviarsi soltanto se anche il consenso è concesso.</div></div><div class="setting-control"><input type="checkbox" class="setting-switch" role="switch" id="installed-enabled-41" checked></div></div>
+  <div class="setting-row"><div class="setting-text"><label for="installed-consent-41">Consenso all'esecuzione</label><div class="muted">È distinto dall'abilitazione: negato o da decidere impediscono sempre l'esecuzione.</div></div><div class="setting-control"><select class="setting-select" id="installed-consent-41"><option value="undecided">Da decidere</option><option value="denied">Negato</option><option value="granted" selected>Concesso</option></select></div></div>
+  <details class="settings-details" data-details-key="permissions:installed:41"><summary>Chiede un permesso</summary><div class="settings-details-body"><div class="muted">Capacità dichiarate dal file. Concedere il consenso le approva insieme; un consenso negato non esegue il componente.</div><div class="setting-row setting-permission" data-setting-key="esempio.conta-parole:permissions.read-session"><div class="setting-text"><div>Può sapere quale nota stai guardando, e in che modalità.</div></div></div></div></details>
+  <div class="setting-row"><div class="setting-text"><div class="setting-label">Rimuovi</div><div class="muted">Rimuove l'installazione ma conserva i suoi dati nel vault.</div><div class="setting-source" id="installed-remove-hint-41">Disabilita il componente prima di rimuoverlo.</div></div><div class="setting-control"><button type="button" class="settings-btn settings-btn--danger" disabled aria-describedby="installed-remove-hint-41">Rimuovi</button></div></div>
 </div>
 </template>
 
 <template data-toppa="comp-aggiorna" data-nome="Un componente con una versione nuova (fuori dalla pre-alpha)">
-<!-- → panels/settings.ts (nessun piano lo copre: «Differenze fra piani e codice»); fuori dalla pre-alpha -->
-<div class="settings-card settings-component" data-component="esempio.conta-parole">
-  <div class="setting-text"><span class="setting-label">Conta parole</span><div class="muted">esempio.conta-parole · Della comunità · 0.3.1</div><div class="setting-source">C'è la 0.4.0 nel catalogo firmato. Chiede un permesso in più: leggere tutte le note.</div></div>
-  <input type="checkbox" class="setting-switch components-switch" role="switch" checked aria-label="Conta parole acceso">
-  <div class="settings-actions"><button type="button" class="settings-btn">Vedi cosa cambia</button><button type="button" class="settings-btn">Aggiorna</button></div>
+<!-- → panels/settings.ts renderInstalledComponent: nuovi la riga della versione nuova e «Vedi cosa cambia» (nessun piano lo copre: «Differenze fra piani e codice»); fuori dalla pre-alpha -->
+<div class="settings-card settings-component">
+  <div class="setting-row"><div class="setting-text"><div class="setting-label" role="heading" aria-level="4">Conta parole</div><div class="muted">esempio.conta-parole · versione 0.3.1 · Della comunità</div><div class="setting-source">Attivo in questo vault</div><div class="setting-source">C'è la 0.4.0 nel catalogo firmato. Chiede un permesso in più: leggere tutte le note.</div></div><div class="setting-control"><button type="button" class="settings-btn">Vedi cosa cambia</button></div></div>
+  <div class="setting-row"><div class="setting-text"><label for="installed-enabled-41">Abilitato</label><div class="muted">Scelta persistita su questa macchina. Il componente può avviarsi soltanto se anche il consenso è concesso.</div></div><div class="setting-control"><input type="checkbox" class="setting-switch" role="switch" id="installed-enabled-41" checked></div></div>
+  <div class="setting-row"><div class="setting-text"><label for="installed-consent-41">Consenso all'esecuzione</label><div class="muted">È distinto dall'abilitazione: negato o da decidere impediscono sempre l'esecuzione.</div></div><div class="setting-control"><select class="setting-select" id="installed-consent-41"><option value="undecided">Da decidere</option><option value="denied">Negato</option><option value="granted" selected>Concesso</option></select></div></div>
+  <details class="settings-details" data-details-key="permissions:installed:41"><summary>Chiede un permesso</summary><div class="settings-details-body"><div class="muted">Capacità dichiarate dal file. Concedere il consenso le approva insieme; un consenso negato non esegue il componente.</div><div class="setting-row setting-permission" data-setting-key="esempio.conta-parole:permissions.read-session"><div class="setting-text"><div>Può sapere quale nota stai guardando, e in che modalità.</div></div></div></div></details>
+  <div class="setting-row"><div class="setting-text"><div class="setting-label">Rimuovi</div><div class="muted">Rimuove l'installazione ma conserva i suoi dati nel vault.</div><div class="setting-source" id="installed-remove-hint-41">Disabilita il componente prima di rimuoverlo.</div></div><div class="setting-control"><button type="button" class="settings-btn settings-btn--danger" disabled aria-describedby="installed-remove-hint-41">Rimuovi</button></div></div>
 </div>
 </template>

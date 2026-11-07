@@ -240,12 +240,21 @@ html[data-sim-segna] [data-sim-composto], html[data-sim-segna] iframe[data-sim-s
       const r = doc.documentElement;
       if (r.hasAttribute("data-proto-style")) r.setAttribute("style", r.getAttribute("data-proto-style"));
     }
+    // Uno strato è una pagina senza script (sandbox), e lì una tela non ha la
+    // sua misura propria: misura 0 se il CSS non gliene dà una. La misura
+    // propria passa all'immagine con width e height, come la tela viva.
     const tele = [...dentro.querySelectorAll("canvas[data-proto-src]")].map((c) => {
       const cs = doc.defaultView.getComputedStyle(c);
       const img = doc.createElement("img");
       for (const a of c.attributes) if (!["data-proto-src", "width", "height", "style"].includes(a.name)) img.setAttribute(a.name, a.value);
       if (!img.hasAttribute("aria-label")) img.alt = "";
-      img.setAttribute("style", MISURE.map((k) => `${k}: ${cs.getPropertyValue(k)}`).join("; "));
+      const propria = c.hasAttribute("width") && c.hasAttribute("height");
+      if (propria) {
+        img.setAttribute("width", c.getAttribute("width"));
+        img.setAttribute("height", c.getAttribute("height"));
+      }
+      const salta = (k) => propria && (k === "width" || k === "height") && cs.getPropertyValue(k) === "0px";
+      img.setAttribute("style", MISURE.filter((k) => !salta(k)).map((k) => `${k}: ${cs.getPropertyValue(k)}`).join("; "));
       img.src = c.getAttribute("data-proto-src");
       c.replaceWith(img);
       return img.decode().catch(() => {});
@@ -275,12 +284,15 @@ html[data-sim-segna] [data-sim-composto], html[data-sim-segna] iframe[data-sim-s
     }
   }
   // Porta in vista a mano: scrollIntoView muoverebbe anche body, che nel
-  // client non scorre mai.
+  // client non scorre mai. Lo scorrimento di prima resta in data-sim-scorso:
+  // la prova dei pixel (foto-sim.mjs) lo rimette per confrontare il client
+  // con la sua foto, che è ferma lì.
   function portaInVista(el) {
     const win = el.ownerDocument.defaultView;
     for (let p = el.parentElement; p && p !== el.ownerDocument.body; p = p.parentElement) {
       const oy = win.getComputedStyle(p).overflowY;
       if ((oy === "auto" || oy === "scroll") && p.scrollHeight > p.clientHeight) {
+        if (!p.hasAttribute("data-sim-scorso")) p.setAttribute("data-sim-scorso", String(p.scrollTop));
         p.scrollTop += el.getBoundingClientRect().top - p.getBoundingClientRect().top - 16;
         return;
       }
@@ -342,16 +354,27 @@ html[data-sim-segna] [data-sim-composto], html[data-sim-segna] iframe[data-sim-s
       return null;
     }
     const bers = t.tutte ? tutti : tutti.slice(0, 1);
+    // Gli elementi a cui la toppa cambia testo, attributi o classi: il
+    // confronto dei pixel (foto-sim.mjs) li toglie come il DOM nuovo. Stanno
+    // in una proprietà del documento, non nel DOM, che resta quello copiato.
+    const segna = (el) => (d.__simCambiati ??= []).push(el);
     if (t.testi) {
-      tutti.forEach((el, i) => i < t.testi.length && setTesto(el, t.testi[i]));
+      tutti.forEach((el, i) => i < t.testi.length && (setTesto(el, t.testi[i]), segna(el)));
       return null;
     }
     const messi = [];
     for (const el of bers) {
       if (t.rimuovi) el.remove();
-      else if (t.attr) for (const [k, v] of Object.entries(t.attr)) v === null ? el.removeAttribute(k) : el.setAttribute(k, v);
-      else if (t.classe) for (const c of t.classe.split(/\s+/).filter(Boolean)) c[0] === "-" ? el.classList.remove(c.slice(1)) : el.classList.add(c.replace(/^\+/, ""));
-      else if (t.testo !== undefined) setTesto(el, t.testo);
+      else if (t.attr) {
+        for (const [k, v] of Object.entries(t.attr)) v === null ? el.removeAttribute(k) : el.setAttribute(k, v);
+        segna(el);
+      } else if (t.classe) {
+        for (const c of t.classe.split(/\s+/).filter(Boolean)) c[0] === "-" ? el.classList.remove(c.slice(1)) : el.classList.add(c.replace(/^\+/, ""));
+        segna(el);
+      } else if (t.testo !== undefined) {
+        setTesto(el, t.testo);
+        segna(el);
+      }
       else if (t.come) {
         let frag;
         if (t.html) {

@@ -21,9 +21,13 @@ F2–F6; #9; gli installer firmati; i layout alternativi della shell e
 `backdrop-filter` nei temi. Ognuno ha il suo posto in «Dentro e fuori».
 Assunzioni: 
 - Questo è un piano ombrello. I task degli altri piani restano nei loro
-  `PLAN.md` e sui loro rami. Qui stanno l'ordine, i cancelli e 42 task
-  nuovi («PA T1»–«PA T42»), che tengono tutto insieme. PA T34–T42 sono la
-  skin facile, chiesta dal manutentore il 2026-11-05.
+  `PLAN.md` e sui loro rami. Qui stanno l'ordine, i cancelli e 47 task
+  nuovi («PA T1»–«PA T47»), che tengono tutto insieme. PA T34–T42 sono la
+  skin facile, chiesta dal manutentore il 2026-11-05. PA T43–T47 vengono
+  dal secondo giro del simulatore: il file nuovo col tipo, il vault da
+  5.000 file, le parole della scheda di un componente e i 44 px del tocco
+  sul telefono, che oggi deformano l'interruttore e troncano le schede
+  delle impostazioni.
 - Lavora un coder alla volta, più al massimo un pianificatore: è la regola
   dell'utente dal 2026-11-04, e cambia solo se la cambia l'utente. Le «ondate»
   qui sotto sono quindi file, una dopo l'altra.
@@ -33,12 +37,12 @@ Assunzioni:
   «Differenze fra piani e codice»).
 Ondate: Fase A: K3 T17 (il sì dell'utente) e #295 | K2 (#290, come dice
 D13) | PA T3 T13 | T4 T5 | T6 T7 | T1 T8 T19 T25 T32 T33 | T34 T35 |
-T39 T40 · Fase B: Scrittoio 2 T3–T27 (le sue ondate), con PA T2, T20 e
-T21, e PA T36 T37 T38 dopo S2 T10 · Fase C: griglia, K5, N4, N6, lavagna
+T39 T40 | T44 T46 T47 · Fase B: Scrittoio 2 T3–T27 (le sue ondate), con PA T2, T20 e
+T21, e PA T36 T37 T38 dopo S2 T10, PA T43 dopo S2 T8 e T14 · Fase C: griglia, K5, N4, N6, lavagna
 in codice e A1 (le loro ondate, nell'ordine di «L'ordine»), con PA T12 ·
 Fase D: PA T41 | T42 | T14 T18 | T26 T27 T28 T29 T30 | T15 T17 T22 T31 |
-T16 T23 | T24. PA T9, T10 e T11 partono solo con la risposta alla loro
-domanda; PA T34 con D15, PA T40 con D16, PA T42 con D17.
+T16 T45 T23 | T24. PA T9, T10 e T11 partono solo con la risposta alla loro
+domanda; PA T34 con D15, PA T40 con D16, PA T42 con D17, PA T46 con D18.
 Prototipo: `PLAN-ui/fub-pre-alpha/simulatore.html`, il simulatore di tutta
 la pre-alpha (artifact «Fub pre-alpha»,
 https://claude.ai/artifact/RCUxmuv2dCqbwDRagbKHcK, parte 1). È costruito dai
@@ -46,10 +50,11 @@ prototipi approvati: Scrittoio 2 (2026-11-04), K2, K3 T12 (2026-11-03),
 K5 T25 (2026-11-05), N4 T20 (2026-11-02), N6 T25 (2026-11-04) e A1
 (2026-11-03). Per la griglia l'approvazione non è scritta (domanda D2).
 Approvato: in attesa.
-Stato: secondo giro in corso, chiesto dall'utente il 2026-11-05: il
-simulatore si rifà più completo (ogni scenario della pre-alpha, raggiungibile
-come nel prodotto) e si correggono gli errori e le lacune dei task. Finché
-questa riga c'è, il piano non va implementato.
+Stato: secondo giro chiuso il 2026-11-07 (chiesto dall'utente il
+2026-11-05). Il simulatore è rifatto: 286 stati e 17 scenari, che si usano
+come il prodotto; i task sono corretti e sono arrivati PA T34–T47.
+Aspettano l'utente i 118 stati composti e nuovi e le domande aperte. Finché
+«Approvato» dice «in attesa», il piano non va implementato.
 
 ## Modifiche
 
@@ -247,16 +252,16 @@ dell'utente dal 2026-11-04; cambia solo se la cambia l'utente, `DECISIONS.md`).
 due, M mezza giornata, L due o tre giorni, XL di più.
 
 **Quanto ci vuole, a occhio.** Restano circa 207 task negli altri piani
-(circa 79 solo in N6) e circa 39 task di questo piano (PA T9, T10, T11 e
-T40 dipendono da una risposta): circa 246 in tutto. Con un coder alla
-volta e circa 2 ore per task, revisione e CI comprese, fanno circa 490 ore
-di lavoro; i nove task della skin facile sono quasi tutti M e ne
-aggiungono una ventina, quindi circa 510 ore. A circa 14 ore al giorno
-(l'orchestratore lavora anche di notte con `/orchestra-auto`) sono circa
-37 giorni, poco più di 5 settimane piene. Con le attese dell'utente (i
-prototipi da approvare, i sì
-ai merge, le risposte alle domande, la misura su Windows, la prova con le
-persone, gli installer) diventano **7–9 settimane**. N6 da sola sono circa
+(circa 79 solo in N6) e circa 44 task di questo piano (PA T9, T10, T11,
+T40 e T46 dipendono da una risposta): circa 250 in tutto. Con un coder alla
+volta e circa 2 ore per task, revisione e CI comprese, fanno circa 500 ore
+di lavoro; i nove task della skin facile e i cinque del secondo giro (T43–T47)
+sono quasi tutti M e ne aggiungono una trentina, quindi circa 530 ore. A
+circa 14 ore al giorno (l'orchestratore lavora anche di notte con
+`/orchestra-auto`) sono circa 38 giorni, poco più di 5 settimane piene.
+Con le attese dell'utente (i prototipi da approvare, i sì ai merge, le
+risposte alle domande, la misura su Windows, la prova con le persone, gli
+installer) diventano **7–9 settimane**. N6 da sola sono circa
 160 ore, cioè 2–3 settimane con l'approvazione dei suoi prototipi.
 
 Le assunzioni della stima: le 2 ore vengono dai piani recenti (il piano del
@@ -286,6 +291,9 @@ Se una di queste cade, la stima si allunga.
 | PA T35 · la pelle del tema sopra quella di serie | PA | da fare | T34 | medio: tocca il montaggio di ogni tema | M | `theme/inherit.test.ts`, `gate.test.ts` |
 | PA T39 · i caratteri del tema | PA | da fare | T34, T35 | basso | M | test dell'host e del loader |
 | PA T40 · le icone del tema | PA | solo se D16 è A o C | T34, T35, D16; mai nella stessa ondata di S2 T14 | basso | M | Vitest di `ui/icons` e di `theme/` |
+| PA T44 · un documento e un foglio vuoti | PA | da fare | nessuno | basso: due comandi che creano file, dietro le loro feature | M | test d'integrazione di `fub-host`, anche con `--no-default-features` |
+| PA T46 · le parole della scheda di un componente | PA | solo se D18 è A | K2 in `main`; D18 | basso: solo testi del catalogo | S | `i18n/lexicon-settings.test.ts` |
+| PA T47 · i 44 px del tocco sul telefono, senza deformare | PA | da fare | nessuno | basso: solo CSS del telefono | S | la scena `mobile-settings` di `bench/scene.mjs` (`bench:verify`, `bench:a11y`) |
 
 ### Fase B · la cornice
 
@@ -298,6 +306,7 @@ Se una di queste cade, la stima si allunga.
 | PA T36 · installare da cartella, e la diagnosi | PA | da fare | T34; S2 T10 | medio: un'IPC nuova che scrive nella configurazione | M | test di `fub-host`, Vitest delle Impostazioni |
 | PA T37 · collegare una cartella, il tema cambia al salvataggio | PA | da fare | T36 | medio: un osservatore nuovo | M | test di `fub-host` con l'evento, Vitest |
 | PA T38 · la pagina «Tutti i componenti» | PA | da fare | T35, T36; S2 T10 | basso | M | foto del banco uguali, bundle iniziale uguale |
+| PA T43 · «Nuovo» chiede il tipo | PA | da fare | S2 T8 e T14; l'approvazione di S34; T44 per due voci | basso | M | Vitest di `ui/commands` e dell'albero, la scena di S34 nel banco |
 
 ### Fase C · gli editor
 
@@ -325,6 +334,7 @@ Se una di queste cade, la stima si allunga.
 | PA T30 · il giro: conflitto, sola lettura, cestino, tastiera e guasti | PA | da fare | T14; PA T4 e T5 | medio | M | compiti 21–27 verdi |
 | PA T15 · il simulatore accanto all'app | PA | da fare | Fase C; T14 e T26–T30 (le loro scene danno le foto) | basso | S | il foglio di contatto rivisto dall'utente |
 | PA T16 · le misure della WebView | PA | da fare | Fase C; la misura di Windows usa l'MSI della prova di T22 | medio: Windows lo misura l'utente | M | la pagina delle misure |
+| PA T45 · cinquemila file: la misura | PA | da fare | S2 in `main` | basso: misura, non cambia l'albero | M | `npm run bench:tree` con le soglie; se una salta, la issue |
 | PA T17 · la prova con cinque persone | PA | da fare | PA T14 per il protocollo; la prova usa gli installer di T22 | basso per il codice; serve l'utente | S + la prova | il resoconto della prova |
 | PA T18 · i documenti della pre-alpha | PA | da fare | Fase C | basso | S | guardie dei documenti |
 | PA T22 · la versione e la prova del rilascio | PA | da fare | T14, T18, T25; T19–T21 | alto: MSI e versione non numerica | M | `release.yml` verde in prova |
@@ -639,35 +649,136 @@ nessuna parte». Verificato su `main` (638358da).
 
 ## Dal prototipo
 
-Il simulatore sta in `PLAN-ui/fub-pre-alpha/`: `simulatore.html`,
-`sim-dati.js`, `solo-simulatore.js` e `piani/`. Si apre col doppio clic, o
-da un server statico qualsiasi. In alto si scelgono lo stato, la luce, la
-larghezza e il movimento; l'indirizzo li ricorda
-(`#stato=…&luce=…&larghezza=…&moto=…`). Sotto lo schermo, «I pezzi di
-questo stato» elenca per ogni pezzo il file, il task e «nuovo», «cambiato» o
-«uguale». «Indica» lo segna nello schermo, «DOM» mostra il DOM da copiare.
+Il simulatore sta in `PLAN-ui/fub-pre-alpha/`. Si apre col doppio clic su
+`simulatore.html`, senza server (va bene anche un server statico
+qualsiasi). In questa sezione i percorsi senza `apps/client/` davanti
+stanno sotto `apps/client/src/`.
 
-Come si legge:
+| File | Che cos'è | Si copia nell'app? |
+|---|---|---|
+| `simulatore.html` | la pagina: i comandi in alto, lo schermo, la didascalia e gli elenchi sotto; in testa il CSS nuovo, un blocco `<style data-destinazione="…" data-task="…">` per file | i blocchi `data-destinazione` sì, il resto no |
+| `sim-dati-1.js` | i 286 stati impacchettati (5 MB): il DOM e il CSS di ogni cattura nelle due luci, le toppe, i temi e i caratteri | il DOM, come dice «Come si leggono il DOM e il CSS» |
+| `sim-stati.js` | l'elenco degli stati (numero, nome, gruppo, provenienza, task, pagina del piano) e gli scenari | no |
+| `vista-sim.js`, `solo-simulatore.js` | il motore: monta uno stato, risponde ai clic e ai tasti, fa i passi degli scenari e i gesti del telefono | no |
+| `piani/*.html` | le sei pagine approvate dei piani, tali e quali | restano la fonte dei loro piani |
+| `blocchi/*.css` | il CSS nuovo, un file per blocco, con la destinazione e il task nella prima riga | sì |
+| `toppe/*.html` | il DOM scritto a mano dei pezzi nuovi, un `<template>` per pezzo, con la destinazione e il task | sì |
+| `script/` | ciò che rifà il simulatore e le sue prove («Rifare il simulatore», sotto) | no |
+| `dal-prototipo.md` | le tabelle in fondo a questa sezione, generate dalla costruzione | no |
 
-- **Il DOM** di ogni stato è quello del client vero, fotografato dal banco
-  (Playwright, finto host), con le classi, i ruoli, gli ARIA e i
-  `data-i18n` di oggi. I pezzi «uguale» sono quelli di `main`: si copia solo
-  la pelle. Per i pezzi «cambiato» e «nuovo» il DOM è quello da costruire.
-- **Il CSS nuovo** sta in testa a `simulatore.html`, un blocco
-  `<style data-destinazione="…" data-task="…">` per file di destinazione,
-  già senza le varianti «com'era». Ogni blocco passa il sanitizer del tema
-  (`themeCssViolations`, profilo `theme-2`, `kind: "skin"`): zero
-  violazioni, 2026-11-05. `structure.css`, `mobile.css` e `series.ts` nell'app
-  non passano dal sanitizer.
-- **«Solo simulatore»**: `solo-simulatore.js` e lo `<script>` in fondo a
-  `simulatore.html`. Sono i passaggi fra gli stati, i menu sovrapposti e il
-  segno di «Indica». **Non si copiano**: nell'app gli stessi comportamenti li
-  danno il contratto, i registri, i comandi e le sessioni.
-- **Lo stile in linea**: nel markup degli stati non c'è nessun attributo
-  `style=` (0 su 252 catture). Le misure che l'app scrive in linea dal suo
-  codice restano nel codice, come oggi.
-- **I percorsi** senza `apps/client/` davanti stanno sotto
-  `apps/client/src/`.
+In alto si scelgono lo stato, lo scenario, la luce (Giorno, Notte), la
+larghezza (Piena, 700 px, Telefono) e il movimento (Pieno, Calmo, Ridotto).
+«Fuoco sul controllo principale» mette il fuoco dove lo metterebbe l'app.
+«Segna il nuovo» contorna il DOM scritto a mano (in rosa) e quello composto
+(in verde). L'indirizzo ricorda tutto (`#stato=…&luce=…&larghezza=…&moto=…`,
+più `scenario=…&passo=…`), così un link porta a uno stato preciso. Uno
+scenario mostra i suoi passi sopra lo schermo, con «← Indietro», «Avanti →»
+e, quando un clic ha portato altrove, «Torna al passo». Quando uno stato ha
+un'altra forma da confrontare (D5, D9), una seconda figura la mostra
+accanto.
+
+Sotto lo schermo:
+
+- **la didascalia**: il numero, il nome e la provenienza dello stato, che
+  cosa dice, il task e la pagina del piano. «Da rivedere» (solo sugli stati
+  composti e nuovi) lo mette nell'elenco dell'approvazione; «Aspetto di
+  serie» toglie le scelte fatte in Impostazioni › Aspetto;
+- **«I pezzi di questo stato»**: per ogni pezzo il file, il task e «nuovo»,
+  «composto», «cambiato» o «uguale». «Indica» lo segna nello schermo, «DOM»
+  mostra il DOM da copiare;
+- **«Approvare gli stati nuovi e composti»**: l'elenco e la frase pronta
+  (sotto);
+- **«Che cosa si può fare nello schermo»** e **«I clic che non portano
+  altrove»** (oggi nessuno);
+- **«Il CSS nuovo, per file di destinazione»** e **«Le pagine dei piani»**.
+
+### Gli stati, la provenienza e l'approvazione
+
+Gli stati sono 286, da S1 a S286. I numeri sono fissi
+(`script/numeri-sim.json`): uno stato nuovo prende il numero dopo l'ultimo,
+uno tolto lascia il buco. Ogni stato dice la sua provenienza nella
+didascalia, nel menu degli stati e nella tabella «Gli stati», sotto:
+
+- **cattura** (168): il DOM del client vero, fotografato dal banco
+  (Playwright, finto host) con i ritocchi di Scrittoio 2 già montati. Il
+  client è quello che ha fotografato il prototipo approvato di Scrittoio 2
+  (il ramo locale `anteprima/tutto`); gli stati d'avvio vengono dallo stesso
+  ramo con #308 (5006937c). Non è nell'elenco da approvare: è il client di
+  oggi con i ritocchi già approvati.
+- **composta** (67): DOM vero, spostato o ritoccato. Sono gli editor delle
+  pagine dei piani messi nella cornice di Scrittoio 2 (D4 A: la griglia, il
+  disegno di K5, le schede della lavagna, le penne, i componenti del disegno,
+  le ricette e le loro Impostazioni), più cinque catture cambiate solo nel
+  testo o nelle righe (D4). La pagina del piano resta la fonte del pezzo; lo
+  stato composto dice dove sta nella cornice.
+- **nuova** (51): DOM scritto a mano in questo giro (`toppe/*.html`), con il
+  CSS dei blocchi `92-*` e `93-*`. Sono gli stati che nessun piano aveva
+  disegnato: N6 T26–T28 (D3), la banda del motore di D5 A, i file che non
+  si aprono, i componenti della comunità, i temi e la skin facile, i
+  riscontri di D9 B, ciò che ha fatto un agente (N2), `#page=3`, il foglio
+  vuoto e quello enorme.
+
+**L'approvazione.** I 118 stati composti e nuovi aspettano un sì. In
+«Approvare gli stati nuovi e composti» si segnano quelli da rivedere (anche
+con «Da rivedere» sotto lo schermo), e la frase si scrive da sola, per
+esempio «Approvo tutti gli stati nuovi e composti tranne S23, S41.». «Copia
+la frase» la copia; i segni restano in quel browser. Uno stato approvato
+diventa la fonte del suo task, come una pagina approvata di un piano.
+
+**Gli scenari** sono 17: i 16 chiesti più la skin facile. La tabella «Gli
+scenari», sotto, dà per ognuno i passi e gli stati in ordine.
+
+### Come si leggono il DOM e il CSS
+
+- **Il DOM, secondo la provenienza.**
+  - *cattura*: il DOM di oggi, con le classi, i ruoli, gli ARIA e i
+    `data-i18n` del client. Dove «I pezzi di questo stato» dice «uguale», il
+    DOM è quello di `main` e si copia solo la pelle. Dove dice «cambiato», è
+    il DOM che il task di Scrittoio 2 costruisce (il ritocco montato nella
+    foto), e la fonte resta il prototipo di Scrittoio 2.
+  - *composta*: il DOM della pagina del piano, nella cornice. Si costruisce
+    dal piano e dal suo `PLAN.md`; il simulatore dice solo dove sta.
+  - *nuova*: il DOM di `toppe/*.html`. Ogni `<template>` ha in testa il
+    commento `<!-- → file di destinazione; task -->`, e nello schermo il
+    pezzo porta `data-sim-toppa` (si vede con «Segna il nuovo»). La tabella
+    «I pezzi nuovi», sotto, li elenca tutti.
+- **Una fonte sola per il CSS.**
+  - Per Scrittoio 2 vince il prototipo approvato del suo piano
+    (`PLAN-ui/scrittoio-2.html` sul ramo `piano/scrittoio-2`). I 18 blocchi
+    del simulatore che vengono da lì (struttura, pelle, telefono, serie)
+    devono coincidere con i suoi, tolte le varianti «com'era», i commenti e
+    gli spazi. Lo controlla `script/prova-css-fonte.mjs`: 18 uguali su 18,
+    2026-11-06, contro fe4d84c4. Se il prototipo di Scrittoio 2 cambia, si
+    ricopia il blocco da lì e si rifà il simulatore, mai il contrario.
+  - Per i pezzi di questo giro la fonte è il blocco del simulatore:
+    `blocchi/92-prealpha-*.css` e `blocchi/93-tema-*.css`, ognuno col file di
+    destinazione e il task nella prima riga. La tabella «Il CSS nuovo»,
+    sotto, li elenca.
+  - Le catture non portano il CSS nuovo: il banco lo monta per la foto, ma
+    nei dati finisce il CSS del client (`script/cattura.mjs`). Il simulatore
+    rimonta i blocchi sopra ogni cattura, così ne esiste una copia sola.
+  - I due temi d'esempio (`93-tema-carta.css`, `93-tema-salvia.css`; PA
+    T42, D17) non sono CSS del prodotto: il simulatore li monta solo quando
+    Impostazioni › Aspetto sceglie «Carta» (che ha solo la luce del giorno:
+    di notte resta il tema di serie) o «Salvia». Non entrano nelle catture,
+    e il confronto dei pixel li lascia fuori.
+- **Il sanitizer del tema.** I blocchi che vanno in `skin/` passano
+  `themeCssViolations` col profilo `theme-2` e `kind: "skin"`, con i ganci di
+  oggi più quelli nuovi elencati sotto: zero violazioni, 2026-11-06. I due
+  temi d'esempio (`93-tema-*`) passano coi soli ganci di oggi, e tengono le
+  coppie di contrasto di `theme-2` in ogni luce che hanno, col contrasto
+  normale e con l'alto. Le prove sono `script/sonda/pelle.test.ts` e
+  `script/sonda/temi.test.ts`. Nell'app `structure.css`, `mobile.css` e
+  `series.ts` non passano dal sanitizer.
+- **«Solo simulatore».** `vista-sim.js`, `solo-simulatore.js`, lo
+  `<script>` in fondo a `simulatore.html` e gli attributi `data-sim-*`: i
+  passaggi fra gli stati, i menu sovrapposti, i gesti, il segno di «Indica».
+  **Non si copiano**: nell'app gli stessi comportamenti li danno il
+  contratto, i registri, i comandi e le sessioni.
+- **Lo stile in linea.** Nel markup degli stati non c'è nessun attributo
+  `style=`: 0 nelle 632 catture impacchettate (316 schermi nelle due luci),
+  0 nelle toppe, e la costruzione rifiuta una toppa che ne ha uno. Le misure
+  che l'app scrive in linea dal suo codice restano nel codice, come oggi.
 
 ### I pezzi dello schermo
 
@@ -712,32 +823,21 @@ Come si legge:
 
 ### Il CSS nuovo, per file di destinazione
 
-Ogni blocco è il CSS del prototipo approvato di Scrittoio 2, unito per
-file. Il dettaglio riga per riga (quali righe, quale task) è nella tabella
-«Dal prototipo» del `PLAN.md` di `piano/scrittoio-2`, che resta la fonte.
+La tabella «Il CSS nuovo», in fondo alla sezione, dà per ogni file di
+destinazione i blocchi, il task e il peso. Due fonti, secondo la regola di
+«Una fonte sola per il CSS»:
 
-| File di destinazione (sotto `apps/client/src/`) | Blocchi del simulatore | Task | Come |
-|---|---|---|---|
-| `theme/scrittoio/structure.css` | struttura, kit, fila del kit | S2 T3, T4, T9, T16, T20, T21, T27 | cambiato |
-| `theme/scrittoio/skin/kit.css` | kit, vassoio, fila | S2 T16 (fatto), T20 | cambiato |
-| `theme/scrittoio/skin/frame.css` | cornice | S2 T3, T4, T7, T9 | cambiato |
-| `theme/scrittoio/skin/drawers.css` | cassetto, icone | S2 T8, T14 | cambiato |
-| `theme/scrittoio/skin/tree.css` | albero | S2 T8 | cambiato |
-| `theme/scrittoio/skin/sheets.css` | fogli | S2 T5, T6, T27 | cambiato |
-| `theme/scrittoio/skin/document.css` | documento | S2 T11, T12 | cambiato |
-| `theme/scrittoio/skin/media.css` | PDF, Craft | S2 T18, T19 | cambiato |
-| `theme/scrittoio/skin/nodes.css` | viste | S2 T9, T13 | cambiato |
-| `theme/scrittoio/skin/graph.css` | grafo | S2 T10 | cambiato |
-| `theme/scrittoio/skin/menus.css` | menu | S2 T10 | cambiato |
-| `theme/scrittoio/skin/launcher.css` | avvio rapido | S2 T10 | cambiato |
-| `theme/scrittoio/skin/centres.css` | «Salvato» | S2 T5 | cambiato |
-| `theme/scrittoio/skin/settings.css` | impostazioni | S2 T10 | cambiato |
-| `theme/scrittoio/skin/welcome.css` | benvenuto | S2 T10 | cambiato |
-| `shells/scrittoio/mobile/mobile.css` | telefono | S2 T3, T4, T5, T7, T11, T27 | cambiato |
-| `theme/scrittoio/series.ts` | corpo 18, misura 58 | S2 T11 | cambiato |
-| `theme/scrittoio/recipe.ts` | `--bar-tray` (fatto), `--shadow-sheet`, `--shadow-sheet-focus` | S2 T16, T27 | cambiato |
-| `theme/scrittoio/anatomia/*.ts` | i ganci nuovi elencati sotto | il task del blocco | cambiato |
-| `bench/fake-ipc.ts` | la riga «Animazioni» delle impostazioni | PA T1 | cambiato |
+- i blocchi `00-*` … `90-*` sono il CSS del prototipo approvato di
+  Scrittoio 2, unito per file. Il dettaglio riga per riga (quali righe,
+  quale task) è nella tabella «Dal prototipo» del `PLAN.md` di
+  `piano/scrittoio-2`, che resta la fonte;
+- i blocchi `92-prealpha-*` e `93-tema-*` sono di questo giro, e la fonte
+  sono loro.
+
+Fuori dai blocchi restano due cambi: `theme/scrittoio/anatomia/*.ts`
+dichiara i ganci nuovi elencati sotto (col task del blocco che li usa), e
+`bench/fake-ipc.ts` aggiunge la riga «Animazioni» delle impostazioni
+(PA T1).
 
 I ganci nuovi che le pelli usano, e che `anatomia` deve dichiarare
 (`anatomia.test.ts` vuole le classi della pelle e i ganci uguali nei due
@@ -754,29 +854,692 @@ versi):
 - **nota e media** (S2 T12, T18): `media-pdf-search`, `note-fact`,
   `note-fact-tags`, `note-facts`, `note-tag`;
 - **banda** (S2 T3, T4): `status-mode`, `status-mode-arrow`,
-  `status-standing`, `status-standing-mark`.
+  `status-standing`, `status-standing-mark`;
+- **lavagna** (N6 T26–T28, PA T28, `92-prealpha-lavagna.css`): `lav-empty`,
+  `lav-empty-body`, `lav-empty-title`, `lav-exit-hint`, `lav-format-bar`,
+  `lav-lasso`, `lav-option-text`, `lav-parts`, `lav-parts-field`,
+  `lav-parts-hint`, `lav-parts-thumb`, `lav-parts-thumbs`,
+  `lav-parts-title`, `lav-selection`, `lav-selection-count`;
+- **disegno e file Craft vuoti** (PA T27, T30): `draw-empty-hint`,
+  `craft-empty-actions`;
+- **i temi** (PA T36–T38, `92-prealpha-impostazioni.css`): `tema-diagnosi`,
+  `tema-diagnosi-codice`, `tema-diagnosi-dove`, `tema-diagnosi-file`,
+  `tema-diagnosi-lista`, `tema-diagnosi-perche`, `tema-diagnosi-riga`,
+  e per «Tutti i componenti» `dev-catalog`, `dev-catalog-*`, `dev-font`,
+  `dev-font-sample`, `dev-swatch`, `dev-swatch-chip`, `dev-swatches`.
 
 ### Le pagine dei piani
 
-Le pagine scritte a mano dai pianificatori entrano tali e quali, in
-`piani/`. Non sono composte nella cornice di Scrittoio 2: lo chiede la
-domanda D4.
+Le pagine scritte a mano dai pianificatori stanno tali e quali in `piani/`,
+e restano la fonte dei loro pezzi. Con D4 A sono anche composte nella
+cornice di Scrittoio 2: gli stati composti dicono dove sta ogni pezzo, la
+pagina dice com'è fatto. La didascalia di ogni stato composto porta alla
+sua pagina.
 
-| Pagina | Piano e task | Approvata | Dove va ogni pezzo |
+| Pagina | Piano e task | Approvata | Stati composti | Dove va ogni pezzo |
+|---|---|---|---|---|
+| `piani/menu-comandi-fogli.html` | K3 T12 | 2026-11-03 | nessuno: è una cattura (S44–S48) | già nel codice del ramo (K3 T14) |
+| `piani/celle-griglia.html` | griglia | non scritta (D2) | S73–S80 | `PLAN.md` di `piano/griglia-celle`, «Dal prototipo» |
+| `piani/disegno-motore.html` | K5 T25 | 2026-11-05 | S111–S124, S188–S190 | `PLAN.md` di `piano/k5-disegno` (T21–T23) |
+| `piani/lavagna-penne.html` | N4 T20 | 2026-11-02 | S148–S154, S245 | `PLAN.md` di `piano/n4-inchiostro` (T21) |
+| `piani/lavagna-schede.html` | N6 T25 | 2026-11-04 | S133–S147, S244 | `PLAN.md` di `piano/n6-lavagna` |
+| `piani/ricette.html` | A1 | 2026-11-03 | S191–S203 | `PLAN.md` di `piano/a1-base-per-ai` (T12) |
+
+Senza una pagina approvata, e quindi stati nuovi da approvare in questo
+giro:
+
+- N6 T26–T28 (D3): S155–S166;
+- le tre voci della lavagna in codice (pezzi del kit che ci sono):
+  S167–S169;
+- la forma A di D5 (il motore nella banda, la colonna con Testo):
+  S125–S130;
+- i file che non si aprono, i componenti della comunità, i temi, i
+  riscontri di D9 B, N2, `#page=3` e i fogli ai bordi: gli altri stati
+  «nuova» della tabella «Gli stati»;
+- le scene del giro (PA T14), che usano solo stati di questa sezione.
+
+### Si usa come il prodotto
+
+`script/prova-sim.mjs` apre il simulatore com'è sul ramo e fa tre giri.
+
+1. **Ogni stato, ogni controllo.** Monta ogni stato a ogni larghezza (a
+   tutta larghezza nelle due luci) e chiede al simulatore che cosa farebbe
+   ogni controllo visibile: bottoni, voci, campi, righe dell'albero,
+   linguette. Un esito va bene quando porta a un altro stato, torna
+   indietro, apre un menu o un cassetto, cambia lo schermo, dice con un
+   avviso preciso che cosa farebbe l'app, o è un controllo spento o nativo
+   (un campo che prende il testo). Non va bene l'avviso generico, che non
+   dice niente: un controllo così deve avere un esito suo, o stare fra le
+   eccezioni scritte (`script/eccezioni-sim.mjs`) con la ragione.
+2. **Clic veri.** Per ogni stato, un controllo per ogni tipo di esito
+   riceve un clic di Playwright nello schermo, e il clic deve cambiare
+   qualcosa: lo stato, l'avviso sotto lo schermo o il DOM. Un clic sul velo
+   di un dialogo o di un cassetto deve chiuderlo.
+3. **Gli scenari.** Ognuno si percorre coi bottoni della pagina, e ogni
+   passo si fotografa.
+
+Il giro del 2026-11-07, sul simulatore di questo ramo, dice «errori:
+nessuno»:
+
+| Larghezza | Stati montati | Controlli chiesti | Clic veri | Coperti |
+|---|---|---|---|---|
+| piena (nelle due luci) | 572 | 18.491 | 1.244 | 65 |
+| 700 px | 286 | 12.564 | 1.228 | 95 |
+| telefono | 286 | 7.342 | 402 | 53 |
+
+Gli esiti dei 18.491 controlli a tutta larghezza: porta a un altro stato
+7.686, cambia lo schermo 4.837, avviso preciso 2.633, nativo (un campo che
+prende il testo, una zona che prende il fuoco o scorre) 950, apre un menu,
+un cassetto o un dialogo 818, avviso
+della zona 805 (dice che cosa fa nel prodotto quella zona, per esempio la
+griglia del foglio, e il task che la costruisce), spento 447, torna
+indietro 302, menu dell'applicazione 13. Nessun avviso generico.
+
+«Coperti» sono controlli che stanno sotto qualcosa che non è un controllo
+(il velo di un dialogo, un livello sopra): nell'app il clic non li
+raggiunge, e nel simulatore nemmeno. Non sono clic morti; l'elenco è in
+`coperti-<larghezza>.tsv`, accanto alle foto della prova.
+
+Gli scenari: 17, e i loro 100 passi fotografati.
+
+### I pixel contro la fonte
+
+`script/foto-sim.mjs` fotografa ogni stato del simulatore nelle due luci,
+a ogni larghezza che ha, col movimento ridotto, e lo confronta con la sua
+fonte (pixelmatch, soglia di colore 0,1):
+
+- uno stato **cattura** contro la foto del client presa dal banco nello
+  stesso momento del DOM;
+- uno stato **composto** o **nuovo**: la parte di client fuori dagli
+  strati, dalle toppe e dai pezzi presi da un'altra cattura, contro la foto
+  del client da cui viene; ogni strato (una pagina di un piano messa nella
+  cornice) contro la pagina approvata, a tutta larghezza, portato per un
+  momento alla misura della pagina. A 700 px e sul telefono la pagina
+  approvata non ha una foto sua, quindi lo strato lì non si confronta;
+- il DOM scritto a mano (le toppe) non ha una fonte in pixel: la sua fonte
+  è lui stesso, e si approva guardandolo (S-numeri in «Gli stati»).
+
+Sopra lo 0,5 % dei punti una differenza va spiegata. Una spiegazione vale
+solo se, tolta dal confronto la zona che spiega, il resto scende sotto la
+soglia: la riga del confronto (`confronto.tsv`) scrive quanto resta. Le
+zone si sommano, nell'ordine:
+
+1. il DOM nuovo (toppe e pezzi di altre catture) e gli elementi a cui una
+   toppa cambia testo, attributi o classi;
+2. S2 T3 sul telefono: la testata, il bottone della modalità, la barra di
+   formato e il bottone del lato, che nel simulatore stanno dove li mette
+   T3 e nella foto dove sono oggi;
+3. l'anello del fuoco della pagina approvata, che il DOM copiato non porta
+   (nel simulatore si vede col bottone «Fuoco»);
+4. PA T47 sul telefono: gli interruttori e la riga delle schede delle
+   impostazioni, che nel simulatore sono corretti
+   (`92-prealpha-telefono.css`) e nella foto sono il cerchio di 44 px e i
+   nomi in «…» (differenza 47);
+5. lo spazio che il DOM nuovo prende. Ciò che gli viene dopo scende, sale o
+   va di lato, e ogni suo punto conta come differenza. Se il DOM nuovo sta
+   sopra ciò che la foto mostra, il simulatore si riprova scorso in più di
+   quanto lo spinge giù (i tre spostamenti più pesanti; si tiene il
+   migliore). Poi ogni quadretto di 16 px che ancora differisce conta come
+   spiegato solo se si ritrova uguale nella foto del client spostato in
+   verticale o di lato, al massimo dell'altezza del DOM nuovo più 64 px
+   (con PA T47, 26 px per interruttore visibile più 64; mai oltre 480).
+   `confronto.tsv` scrive gli spostamenti trovati e quanto resta;
+   `<stato>.resto.png` mostra i punti che restano.
+
+Due differenze si spiegano per stato, senza zona, perché toccano tutto lo
+schermo: il tema d'esempio (PA T42 cambia i colori di ogni punto, e la foto
+del client è col tema di serie) e l'ispettore compatto di S2 T9 (264 px
+nella foto, 216 nel simulatore: tutto ciò che gli sta a sinistra si sposta,
+e il passo 5 lo misura).
+
+Il giro del 2026-11-07, sul simulatore di questo ramo: 1.384 confronti,
+uno per stato, larghezza, luce e fonte (il telefono rifatto dopo il blocco
+di PA T47).
+
+| Fonte | Confronti | Misurati | Media | Sopra lo 0,5 % | Dopo le zone |
+|---|---|---|---|---|---|
+| cattura pura contro la sua foto | 510 | 510 | 0,15 % | 44 | 42 sotto, 2 con PA T47 |
+| client fuori dagli strati e dal DOM nuovo | 530 | 462 | 0,87 % | 112 | 106 sotto, 6 col tema |
+| strato contro la pagina approvata | 344 | 152 | 0,10 % | 2 | tutti sotto |
+
+Non misurati, 260: 192 strati a 700 px e sul telefono (la pagina approvata
+ha una foto sola, alla sua misura) e 68 schermi in cui il DOM nuovo copre
+tutto il client (un dialogo col suo velo: `comp-permesso`, le sette ricette
+col dialogo, `riscontri-b-apre`, `tema-installa`, `tema-sostituisci`,
+`tema-sostituisci-fallito`, `lav-codice-riepilogo`, `lav-codice-problema`).
+
+Le 158 righe sopra la soglia, per motivo:
+
+- **S2 T3 sul telefono** (78 righe): la testata, il bottone della modalità e
+  la barra di formato stanno dove li mette T3; tolti, resta al massimo lo
+  0,14 %;
+- **PA T47 sul telefono** (24 righe): tolti gli interruttori e le schede, e
+  ritrovati i quadretti spostati (ogni riga con un interruttore si accorcia),
+  in 22 righe resta lo 0,00 %. Restano sopra le 2 righe di S185
+  `g2-comp-spegni`, il dialogo sopra la pagina Componenti: 0,86 % nella luce
+  chiara e 0,66 % nella scura. Lì ogni scheda si accorcia di 4,31 px (il
+  testo di due righe, 39,69 px, ora è più alto dell'interruttore), e i
+  titoli salgono di 21,56, 25,88, 34,50 e 60,52 px, misurati nel simulatore
+  prima e dopo il blocco. Sono spostamenti frazionari: gli orli dei
+  caratteri si ridisegnano diversi e non si ritrovano con nessuno
+  spostamento intero. Ciò che resta sono quegli orli
+  (`g2-comp-spegni--tel-*.resto.png`);
+- **il DOM nuovo prende spazio** (35 righe, più le 4 di `tema-anteprima`
+  che hanno anche il tema): tolto il DOM nuovo e ritrovati i quadretti
+  spostati, resta al massimo lo 0,14 % (`mcp-riflesso` a 700, chiara). In
+  16 righe il simulatore si è riprovato scorso in più (per esempio 236 px
+  in `tema-sviluppo`, quanto è alto l'elenco dei temi);
+- **l'anello del fuoco** della pagina approvata (6 righe): tolto, resta al
+  massimo lo 0,43 % (`live-tabella` a 700, scura);
+- **S2 T9, l'ispettore compatto** (2 righe, `g2-compatta`): i quadretti si
+  ritrovano spostati di lato, resta lo 0,00 %;
+- **DOM nuovo dentro uno strato** (2 righe, `lav-lazo`): tolto, resta lo
+  0,03 %;
+- **il tema d'esempio** (11 righe): «salvia», e «carta» sul telefono e
+  nella luce scura, scendono sotto con le altre zone; restano sopra le **6
+  righe di «carta» nella luce chiara**, spiegate per stato perché il tema
+  cambia i colori di tutto lo schermo e la foto del client è col tema di
+  serie:
+
+| Stato | Larghezza | Differenza | Resta dopo le zone |
 |---|---|---|---|
-| `piani/menu-comandi-fogli.html` | K3 T12 | 2026-11-03 | già nel codice del ramo (K3 T14) |
-| `piani/celle-griglia.html` | griglia | non scritta (D2) | `PLAN.md` di `piano/griglia-celle`, «Dal prototipo» |
-| `piani/disegno-motore.html` | K5 T25 | 2026-11-05 | `PLAN.md` di `piano/k5-disegno` (T21–T23) |
-| `piani/lavagna-penne.html` | N4 T20 | 2026-11-02 | `PLAN.md` di `piano/n4-inchiostro` (T21) |
-| `piani/lavagna-schede.html` | N6 T25 | 2026-11-04 | `PLAN.md` di `piano/n6-lavagna` |
-| `piani/ricette.html` | A1 | 2026-11-03 | `PLAN.md` di `piano/a1-base-per-ai` (T12) |
+| S278 `tema-anteprima` | piena | 7,36 % | 1,67 % |
+| S278 `tema-anteprima` | 700 | 8,48 % | 2,41 % |
+| S282 `tema-carta` | piena | 0,71 % | 0,80 % |
+| S282 `tema-carta` | 700 | 1,04 % | 1,67 % |
+| S283 `tema-carta-impostazioni` | piena | 1,93 % | 1,91 % |
+| S283 `tema-carta-impostazioni` | 700 | 2,47 % | 2,43 % |
 
-Senza prototipo:
+Nessuna riga sopra la soglia è senza motivo. Il DOM scritto a mano (le
+toppe) non ha una foto da cui venire: si approva guardandolo (gli stati
+«nuova» e «composta» di «Gli stati»).
 
-- N6 T26–T28 (D3);
-- le tre voci di menu della lavagna in codice (T25, pezzi del kit che ci
-  sono);
-- le scene del giro (PA T14), che usano solo pezzi di questa tabella.
+### Rifare il simulatore
+
+Tutto ciò che serve per rifare il simulatore sta sul ramo, in
+`PLAN-ui/fub-pre-alpha/`. Le foto e i JSON grezzi delle catture (circa
+560 MB) no: restano sulla macchina che li ha presi.
+
+**La fonte del DOM catturato è `sim-dati-1.js`.** Contiene, compressi, il
+DOM e il CSS di ogni cattura nelle due luci, i temi e i caratteri. Quasi
+tutto si cambia senza catturare di nuovo:
+
+| Cosa cambia | Dove |
+|---|---|
+| il DOM dei pezzi nuovi | `toppe/*.html` (un `<template data-toppa>` per pezzo) |
+| il CSS nuovo | `blocchi/*.css` |
+| uno stato composto o nuovo sopra una cattura | `script/stati-composte-sim.mjs`, `script/stati-nuove-sim.mjs` |
+| gli scenari e i loro passi | `script/scenari-sim.mjs` |
+| i pezzi, i menu sovrapposti, le eccezioni ai clic | `script/pezzi-sim.mjs`, `script/eccezioni-sim.mjs` |
+| le interazioni finte | `script/solo-simulatore.js` |
+
+Poi, dalla radice del repository:
+
+```bash
+DATI=PLAN-ui/fub-pre-alpha node PLAN-ui/fub-pre-alpha/script/costruisci-sim.mjs PLAN-ui/fub-pre-alpha
+```
+
+Con `DATI` la costruzione riusa le catture impacchettate. Senza altri
+cambi riscrive gli stessi byte di `simulatore.html`, `sim-dati-1.js`,
+`sim-stati.js` e `dal-prototipo.md`: lo si controlla così prima di
+committare un cambio.
+
+**Catturare di nuovo uno stato**, anche da un'altra macchina. La ricetta
+intera, coi comandi, è in `script/finto/LEGGIMI.md`. In breve:
+
+1. *Il client delle catture.* È il client vero col banco e l'host finto,
+   nel punto della storia in cui sono state prese le catture, più le toppe
+   del finto in `script/finto/`:
+   - `cattura.patch` su `0c2a7e91` (`anteprima/tutto` del 2026-11-04), per
+     tutte le catture tranne l'avvio. Cambia nove file: il corpus e l'host
+     finto del banco, le scene del secondo giro, le sonde di Scrittoio 2
+     (icone, gruppo Carattere, striscia degli spazi: DOM che i task di
+     Scrittoio 2 scriveranno davvero) e l'errore dell'inchiostro della
+     facciata WebAssembly;
+   - `avvio.patch` su `5006937c` (`anteprima/tutto` con #308), per le
+     quattro catture dell'avvio.
+
+   `anteprima/tutto` è un ramo locale: i suoi 23 commit d'unione stanno in
+   `script/finto/anteprima-tutto.bundle` (115 KB), gli altri 21 sono già su
+   `origin`.
+2. *Gli stati.* `script/ricattura.mjs`, con `DATI` che punta a
+   `PLAN-ui/fub-pre-alpha`, sa dai dati impacchettati quali catture ci
+   sono e prende la definizione di ognuna da `script/stati-*.json`
+   (`secco=1` dice solo che cosa catturerebbe). Le pagine dei piani (gli
+   stati `p-*`) si catturano con `cartelle=piani`, da `file://` e senza
+   client. Le catture nuove vanno in `catture-r/<cartella>/`.
+   `script/ricattura-tutto.sh <client delle catture> <client dell'avvio>`
+   le rifà tutte, tranne le pagine dei piani: è come sono state prese le
+   632 catture di oggi, il 2026-11-06, in circa un'ora.
+3. *Dentro il simulatore.* `RIFATTE=catture-r/<cartella>` insieme a `DATI`
+   fa entrare nella costruzione solo le catture rifatte.
+
+`s2/lavagna` e `s2/lavagna-700` non hanno definizione: sono le catture
+della lavagna di prima di N6 e restano quelle impacchettate.
+
+**Dopo la Fase A**, quando i piani sono in `main`, la base del client delle
+catture diventa `main`. Le toppe si riportano a mano: `bench/` e
+`src/host/fake.ts` restano toppe del finto, le sonde di Scrittoio 2 restano
+finché i loro task non le hanno scritte nel codice.
+
+**Le prove**, dalla cartella `script/`:
+
+- `node prova-sim.mjs <cartella del simulatore> <cartella delle foto>`:
+  monta ogni stato, prova ogni controllo visibile, fa un clic vero su un
+  campione e percorre gli scenari («Si usa come il prodotto»);
+- `node foto-sim.mjs <cartella del simulatore> <cartella delle foto>`:
+  il confronto dei pixel con la fonte («I pixel contro la fonte»), in
+  `confronto.tsv`, con il perché di ogni riga sopra lo 0,5 %. Vuole le
+  foto delle catture, quindi gira solo dopo aver catturato tutto (dopo,
+  `catture-r/` si rinomina in `catture/`);
+- `node prova-css-fonte.mjs <scrittoio-2.html> <simulatore.html>`: il CSS
+  di Scrittoio 2 uguale alla sua fonte (prima
+  `git show origin/piano/scrittoio-2:PLAN-ui/scrittoio-2.html > <file>`);
+- `CLIENT=<apps/client> <CLIENT>/node_modules/.bin/vitest run --config sonda/vitest.config.mjs`:
+  i blocchi della pelle e i temi contro il sanitizer di `theme-2`.
+
+Gli script del browser trovano Playwright, pngjs, pixelmatch e happy-dom
+nel client di `FUB_CLIENT` (`script/client.mjs`). Il Vite delle catture
+usa la porta 1468. Gli `script/genera-*.py` hanno scritto gli
+`stati-*.json` dei lotti di catture di questo giro: restano come memoria,
+perché la definizione di ogni cattura sta già nei JSON, e non servono per
+rifare uno stato.
+
+<!-- dal-prototipo:inizio -->
+<!-- Generato da PLAN-ui/fub-pre-alpha/script/costruisci-sim.mjs: non si modifica a mano. -->
+
+286 stati: 168 catture, 67 composti, 51 nuovi da approvare. 17 scenari.
+
+#### Gli stati
+
+| S | Stato | Gruppo | Provenienza | Task | Da dove si copia |
+|---|---|---|---|---|---|
+| S1 | `nota-riposo` | La nota | cattura | S2 T2–T13, main N12 N13 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S2 | `nota` | La nota | cattura | S2 T2, S2 T3, S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S3 | `nota-blocchi` | La nota | cattura | main N13, S2 T3 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S4 | `nota-sorgente` | La nota | cattura | main, S2 T3 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S5 | `nota-lettura` | La nota | cattura | main, S2 T3, S2 T11 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S6 | `barra` | La nota | cattura | S2 T16, S2 T17 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S7 | `live-tabella` | La nota | cattura | main, S2 T11 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S8 | `blocchi-menu` | La nota | cattura | main N13, PA (rifiniture di Blocchi) | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S9 | `slash` | La nota | cattura | main N12, S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S10 | `slash-filtro` | La nota | cattura | main N12 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S11 | `slash-nessuno` | La nota | cattura | main N12 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S12 | `schede` | La nota | cattura | S2 T6 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S13 | `concentrazione` | La nota | cattura | main, S2 T6 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S14 | `nota-pdf` | La nota | cattura | main, PA (`#page=3`) | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S15 | `icone` | La nota | cattura | S2 T14, S2 T15 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S16 | `icone-emoji` | La nota | cattura | S2 T14, S2 T15 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S17 | `g2-filo-titoli` | La nota | cattura | S2 T5, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S18 | `g2-nota-pdf-senza` | La nota | cattura | main, PA T32 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S19 | `g2-due-riquadri` | I riquadri | cattura | S2 T4, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S20 | `g2-live-lettura` | I riquadri | cattura | S2 T4, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S21 | `g2-trascina` | I riquadri | cattura | S2 T4, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S22 | `g2-menu-riquadro` | I riquadri | cattura | S2 T4, S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S23 | `conflitto` | I file, i salvataggi, i conflitti | cattura | main (U59–U60), S2 T5, PA giro della pre-alpha | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S24 | `g2-rinomina` | I file, i salvataggi, i conflitti | cattura | main, S2 T8 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S25 | `g2-titolo-rinomina` | I file, i salvataggi, i conflitti | cattura | main, S2 T5 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S26 | `g2-cestino` | I file, i salvataggi, i conflitti | cattura | main, S2 T8 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S27 | `g2-cestino-vuoto` | I file, i salvataggi, i conflitti | cattura | main, S2 T8 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S28 | `g2-ispettore-3` | I file, i salvataggi, i conflitti | cattura | PA T4, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S29 | `g2-bozza` | I file, i salvataggi, i conflitti | cattura | main, PA T4 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S30 | `g2-bozza-divergente` | I file, i salvataggi, i conflitti | cattura | main, PA T4, PA T5 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S31 | `g2-non-salvata` | I file, i salvataggi, i conflitti | cattura | PA T4 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S32 | `g2-salvataggio-fallito` | I file, i salvataggi, i conflitti | cattura | main, PA T4, S2 T5 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S33 | `g2-conflitto-lettura` | I file, i salvataggi, i conflitti | cattura | PA T5 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S34 | `file-nuovo-tipo` | I file, i salvataggi, i conflitti | nuova, da approvare | PA T43, PA T44 | toppe: panels/explorer.ts (il pulsante #new-note apre il menu), ui/menu.ts |
+| S35 | `file-troppo-grande` | I file, i salvataggi, i conflitti | nuova, da approvare | PA T30 | toppe: editors/craft/surface.ts (.craft-empty, azioni per il file troppo grande), skin/media.css |
+| S36 | `file-sconosciuto` | I file, i salvataggi, i conflitti | nuova, da approvare | PA T30 | toppe: editors/craft/surface.ts (la stessa vista .craft-empty di craft-rotto, più una riga d'azioni), skin/media.css |
+| S37 | `vault-irraggiungibile` | I file, i salvataggi, i conflitti | nuova, da approvare | PA T30, N7 | toppe: apps/client/index.html e src/avvio/*.ts (la schermata d'avvio di N7, già in main: un terzo bottone nel guasto del vault) |
+| S38 | `g4-conflitto-confronta` | I file, i salvataggi, i conflitti | cattura | main, PA T5 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S39 | `g4-conflitto-mio` | I file, i salvataggi, i conflitti | cattura | main, PA T5 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S40 | `g4-conflitto-disco` | I file, i salvataggi, i conflitti | cattura | main, PA T5 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S41 | `g4-conflitto-dopo` | I file, i salvataggi, i conflitti | cattura | main, PA T5 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S42 | `foglio` | Il foglio | cattura | K3 T18, S2 T20, griglia T1–T9 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S43 | `foglio-modifica` | Il foglio | cattura | griglia T4, S2 T20 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S44 | `foglio-comandi` | Il foglio | cattura | K3 T12–T15, S2 T20 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S45 | `foglio-comandi-cerca` | Il foglio | cattura | K3 T12–T15 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S46 | `caricamento` | Il foglio | cattura | K3 T15, S2 T20 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S47 | `errore` | Il foglio | cattura | K3 T15, S2 T20 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S48 | `molti` | Il foglio | cattura | K3 T15, S2 T20 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S49 | `g2-foglio-selection` | Il foglio | cattura | griglia T1–T9, S2 T20 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S50 | `g2-foglio-formula` | Il foglio | cattura | griglia T1–T9, K3 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S51 | `g2-foglio-scrive` | Il foglio | cattura | griglia T1–T9 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S52 | `g3-foglio-errore` | Il foglio | cattura | griglia T1–T9, K3 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S53 | `g2-foglio-resize` | Il foglio | cattura | griglia T1–T9 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S54 | `g2-foglio-secondo` | Il foglio | cattura | K3 T18, S2 T20 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S55 | `g2-foglio-ribbon-open` | Il foglio | cattura | K3 T18, S2 T20 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S56 | `g2-foglio-ribbon-palette` | Il foglio | cattura | K3 T18, S2 T20 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S57 | `g2-foglio-ribbon-keytips` | Il foglio | cattura | K3 T18 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S58 | `g2-foglio-ribbon-collapsed` | Il foglio | cattura | K3 T18, S2 T20 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S59 | `g2-foglio-ribbon-table` | Il foglio | cattura | K3 T18 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S60 | `g2-foglio-ribbon-readonly` | Il foglio | cattura | K3 T18 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S61 | `g2-foglio-tab-inserisci` | Il foglio | cattura | K3 T18, S2 T20 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S62 | `g2-foglio-tab-layout` | Il foglio | cattura | K3 T18, S2 T20 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S63 | `g2-foglio-tab-formule` | Il foglio | cattura | K3 T18, S2 T20 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S64 | `g2-foglio-tab-dati` | Il foglio | cattura | K3 T18, S2 T20 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S65 | `g2-foglio-tab-revisione` | Il foglio | cattura | K3 T18, S2 T20 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S66 | `g2-foglio-tab-visualizza` | Il foglio | cattura | K3 T18, S2 T20 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S67 | `g2-foglio-command-form` | Il foglio | cattura | K3 T12, K3 T15 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S68 | `g2-foglio-commands-table` | Il foglio | cattura | K3 T12 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S69 | `g2-foglio-commands-context-off` | Il foglio | cattura | K3 T12 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S70 | `g2-foglio-commands-readonly` | Il foglio | cattura | K3 T12 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S71 | `g2-foglio-result-table` | Il foglio | cattura | K3 T15 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S72 | `g2-foglio-result-empty` | Il foglio | cattura | K3 T15 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S73 | `celle-riposo` | Il foglio | composta, da approvare | griglia T1–T9, PA T27 | piani/celle-griglia.html |
+| S74 | `celle-intervallo` | Il foglio | composta, da approvare | griglia T1–T9, PA T27 | piani/celle-griglia.html |
+| S75 | `celle-oltre` | Il foglio | composta, da approvare | griglia T1–T9, PA T27 | piani/celle-griglia.html |
+| S76 | `celle-editor` | Il foglio | composta, da approvare | griglia T1–T9, PA T27 | piani/celle-griglia.html |
+| S77 | `celle-misura` | Il foglio | composta, da approvare | griglia T1–T9, PA T27 | piani/celle-griglia.html |
+| S78 | `celle-riempimento` | Il foglio | composta, da approvare | griglia T1–T9, PA T27 | piani/celle-griglia.html |
+| S79 | `celle-copiata` | Il foglio | composta, da approvare | griglia T1–T9, PA T27 | piani/celle-griglia.html |
+| S80 | `celle-tagliata` | Il foglio | composta, da approvare | griglia T1–T9, PA T27 | piani/celle-griglia.html |
+| S81 | `foglio-vuoto` | Il foglio | nuova, da approvare | griglia T1, PA T27 | toppe: editors/grid/surface.ts (.grid-notice, testo nuovo) |
+| S82 | `foglio-enorme` | Il foglio | nuova, da approvare | griglia T8, PA T27 | toppe: editors/grid/surface.ts (la stessa .grid-notice di oggi, un testo nuovo in i18n/catalog.ts) |
+| S83 | `documento` | Il documento | cattura | S2 T5, S2 T20, S2 T21 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S84 | `documento-oggetti` | Il documento | cattura | main, S2 T21 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S85 | `sola-lettura` | Il documento | cattura | S2 T4, S2 T5, PA sola lettura | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S86 | `g2-doc-tab-inserisci` | Il documento | cattura | S2 T21, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S87 | `g2-doc-tab-disegna` | Il documento | cattura | S2 T21, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S88 | `g2-doc-tab-layout` | Il documento | cattura | S2 T21, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S89 | `g2-doc-tab-revisione` | Il documento | cattura | S2 T21, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S90 | `g2-doc-tab-visualizza` | Il documento | cattura | S2 T21, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S91 | `g3-doc-trova` | Il documento | cattura | S2 T21, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S92 | `g3-doc-chiuse` | Il documento | cattura | main, PA T18 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S93 | `g3-doc-chiuse-pannello` | Il documento | cattura | main, PA T18 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S94 | `g3-doc-oggetti` | Il documento | cattura | S2 T21, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S95 | `g3-doc-odt` | Il documento | cattura | main, PA T18 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S96 | `g2-doc-prestato` | Il documento | cattura | main, K2 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S97 | `disegno` | Il disegno | cattura | S2 T16, S2 T22, K5 T25 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S98 | `disegno-selezione` | Il disegno | cattura | K5, S2 T22 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S99 | `craft` | Il disegno | cattura | main N7, S2 T19 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S100 | `craft-prepara` | Il disegno | cattura | main N7, S2 T19 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S101 | `craft-rotto` | Il disegno | cattura | main N7, S2 T19 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S102 | `g2-disegno-penna` | Il disegno | cattura | S2 T22, K5 T21–T23 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S103 | `g2-disegno-gomma` | Il disegno | cattura | S2 T22, K5 T21–T23 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S104 | `g2-disegno-rettangolo` | Il disegno | cattura | S2 T22, K5 T21–T23 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S105 | `g2-disegno-mano` | Il disegno | cattura | S2 T22 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S106 | `g3-disegno-livelli` | Il disegno | cattura | S2 T22, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S107 | `g3-disegno-tutto` | Il disegno | cattura | S2 T22, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S108 | `g3-disegno-zoom` | Il disegno | cattura | S2 T22, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S109 | `g2-craft-peso` | Il disegno | cattura | main N7, S2 T19 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S110 | `g2-craft-fallita` | Il disegno | cattura | main N7, S2 T19 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S111 | `dis-b-pronto` | Il disegno | composta, da approvare | K5 T21–T23, PA T27 | piani/disegno-motore.html |
+| S112 | `dis-b-perse` | Il disegno | composta, da approvare | K5 T21–T23, PA T27 | piani/disegno-motore.html |
+| S113 | `dis-b-cinquecento` | Il disegno | composta, da approvare | K5 T21–T23, PA T27 | piani/disegno-motore.html |
+| S114 | `dis-b-spento` | Il disegno | composta, da approvare | K5 T21–T23, PA T27 | piani/disegno-motore.html |
+| S115 | `dis-b-fermo` | Il disegno | composta, da approvare | K5 T21–T23, PA T27 | piani/disegno-motore.html |
+| S116 | `dis-b-senza` | Il disegno | composta, da approvare | K5 T21–T23, PA T27 | piani/disegno-motore.html |
+| S117 | `dis-b-rifiutato` | Il disegno | composta, da approvare | K5 T21–T23, PA T27 | piani/disegno-motore.html |
+| S118 | `dis-b-si-apre` | Il disegno | composta, da approvare | K5 T21–T23, PA T27 | piani/disegno-motore.html |
+| S119 | `dis-b-testo` | Il disegno | composta, da approvare | K5 T21–T23, PA T27 | piani/disegno-motore.html |
+| S120 | `dis-b-testo-spento` | Il disegno | composta, da approvare | K5 T21–T23, PA T27 | piani/disegno-motore.html |
+| S121 | `dis-b-mano` | Il disegno | composta, da approvare | K5 T21–T23, PA T27 | piani/disegno-motore.html |
+| S122 | `dis-b-penna` | Il disegno | composta, da approvare | K5 T21–T23, PA T27 | piani/disegno-motore.html |
+| S123 | `dis-b-gomma` | Il disegno | composta, da approvare | K5 T21–T23, PA T27 | piani/disegno-motore.html |
+| S124 | `dis-b-rettangolo` | Il disegno | composta, da approvare | K5 T21–T23, PA T27 | piani/disegno-motore.html |
+| S125 | `disegno-a-pronto` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts (il bottone #status-standing di S2 T4, anche per il disegno), skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
+| S126 | `disegno-a-perse` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
+| S127 | `disegno-a-spento` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
+| S128 | `disegno-a-fermo` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1); un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-4) |
+| S129 | `disegno-a-apre` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
+| S130 | `disegno-a-testo` | Il disegno | nuova, da approvare | K5 T21, K5 T22, PA T27 | un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1); un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-7a) |
+| S131 | `disegno-vuoto` | Il disegno | nuova, da approvare | K5 T21, PA T27 | toppe: editors/craft/surface.ts (il foglio vuoto, testo nuovo in i18n/catalog.ts); un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
+| S132 | `lavagna` | La lavagna | cattura | N6, N4, S2 T23, lavagna in codice | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S133 | `lav-schede` | La lavagna | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
+| S134 | `lav-schede-vive` | La lavagna | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
+| S135 | `lav-una-scelta` | La lavagna | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
+| S136 | `lav-attive` | La lavagna | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
+| S137 | `lav-testate` | La lavagna | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
+| S138 | `lav-inchiostro` | La lavagna | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
+| S139 | `lav-filo` | La lavagna | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
+| S140 | `lav-mancante` | La lavagna | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
+| S141 | `lav-rilascio3` | La lavagna | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
+| S142 | `lav-rilascio47` | La lavagna | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
+| S143 | `lav-colori` | La lavagna | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
+| S144 | `lav-notifiche` | La lavagna | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
+| S145 | `lav-lontano` | La lavagna | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
+| S146 | `lav-lontanissimo` | La lavagna | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
+| S147 | `lav-cinquecento` | La lavagna | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
+| S148 | `pen-chiuso` | La lavagna | composta, da approvare | N4 T20, N4 T21, PA T28 | piani/lavagna-penne.html |
+| S149 | `pen-penna` | La lavagna | composta, da approvare | N4 T20, N4 T21, PA T28 | piani/lavagna-penne.html |
+| S150 | `pen-evidenziatore` | La lavagna | composta, da approvare | N4 T20, N4 T21, PA T28 | piani/lavagna-penne.html |
+| S151 | `pen-gomma` | La lavagna | composta, da approvare | N4 T20, N4 T21, PA T28 | piani/lavagna-penne.html |
+| S152 | `pen-mia` | La lavagna | composta, da approvare | N4 T20, N4 T21, PA T28 | piani/lavagna-penne.html |
+| S153 | `pen-mouse` | La lavagna | composta, da approvare | N4 T20, N4 T21, PA T28 | piani/lavagna-penne.html |
+| S154 | `pen-sola-lettura` | La lavagna | composta, da approvare | N4 T20, N4 T21, PA T28 | piani/lavagna-penne.html |
+| S155 | `lav-impianto` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); piani/lavagna-schede.html |
+| S156 | `lav-vuota` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/chrome/empty.ts (nuovo) |
+| S157 | `lav-sel-una` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/chrome/selection.ts (nuovo, sul posto di panels/selection-bubble.ts); piani/lavagna-schede.html |
+| S158 | `lav-sel-molte` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/chrome/selection.ts (nuovo); piani/lavagna-schede.html |
+| S159 | `lav-scrive` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28, N6 T27 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (la barra di formato di panels/format-bar.ts dentro la riga); piani/lavagna-schede.html |
+| S160 | `lav-scrive-slash` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (la barra di formato di panels/format-bar.ts dentro la riga); un pezzo della cattura slash (il DOM del client delle catture, spostato); piani/lavagna-schede.html |
+| S161 | `lav-filo-nuovo` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); piani/lavagna-schede.html |
+| S162 | `lav-penna` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); piani/lavagna-schede.html |
+| S163 | `lav-evidenziatore` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); piani/lavagna-schede.html |
+| S164 | `lav-gomma` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); piani/lavagna-schede.html |
+| S165 | `lav-lazo` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/tools/lasso.ts (nuovo, N6 T86 con D-22 a); piani/lavagna-schede.html |
+| S166 | `lav-estratti` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28, N6 T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/parts-picker.ts (nuovo, su kit/popover.ts e kit/list.ts); piani/lavagna-schede.html |
+| S167 | `lav-codice-menu` | La lavagna | nuova, da approvare | lavagna in codice, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/chrome/commands.ts ed engine.ts (il menu contestuale, ui/menu.ts); toppe: editors/canvas/chrome/commands.ts (canvas.layout.grid, .row, .column, .tree); piani/lavagna-schede.html |
+| S168 | `lav-codice-riepilogo` | La lavagna | nuova, da approvare | lavagna in codice, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/chrome/commands.ts (canvas.paste_code con kit/dialog.ts); piani/lavagna-schede.html |
+| S169 | `lav-codice-problema` | La lavagna | nuova, da approvare | lavagna in codice, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/chrome/commands.ts (canvas.check: niente si scrive); piani/lavagna-schede.html |
+| S170 | `pdf` | PDF e foto | cattura | S2 T18 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S171 | `foto` | PDF e foto | cattura | main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S172 | `g2-pdf-cerca` | PDF e foto | cattura | main, S2 T18 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S173 | `g2-pdf-nessuno` | PDF e foto | cattura | main, S2 T18 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S174 | `g2-pdf-miniature` | PDF e foto | cattura | main, S2 T18 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S175 | `g2-pdf-due` | PDF e foto | cattura | main, S2 T18 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S176 | `g2-pdf-scuro` | PDF e foto | cattura | main, S2 T18 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S177 | `g3-pdf-rotto` | PDF e foto | cattura | main, S2 T18 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S178 | `g2-foto-senza` | PDF e foto | cattura | main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S179 | `g2-raw-girato` | PDF e foto | cattura | main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S180 | `g2-raw-senza` | PDF e foto | cattura | main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S181 | `pdf-pagina3` | PDF e foto | nuova, da approvare | PA T32 | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
+| S182 | `craft-spente` | Componenti e ricette | cattura | main N7, K2, S2 T19 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S183 | `componenti` | Componenti e ricette | cattura | K2 T1–T7, S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S184 | `nuovo-vault` | Componenti e ricette | cattura | K2 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S185 | `g2-comp-spegni` | Componenti e ricette | cattura | K2 T1–T7 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S186 | `g2-comp-orfani` | Componenti e ricette | cattura | K2 T1–T7 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S187 | `g2-comp-cerca` | Componenti e ricette | cattura | K2 T1–T7 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S188 | `dis-comp-acceso` | Componenti e ricette | composta, da approvare | K5 T23, K2 T1–T7 | piani/disegno-motore.html |
+| S189 | `dis-comp-spento` | Componenti e ricette | composta, da approvare | K5 T23, K2 T1–T7 | piani/disegno-motore.html |
+| S190 | `dis-comp-accendi` | Componenti e ricette | composta, da approvare | K5 T23, K2 T1–T7 | piani/disegno-motore.html |
+| S191 | `ricette` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
+| S192 | `ricette-vuote` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
+| S193 | `ricette-problemi` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
+| S194 | `ricette-carica` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
+| S195 | `ricette-errore` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
+| S196 | `ricette-cinquecento` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
+| S197 | `ricetta-dialogo` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
+| S198 | `ricetta-prova` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
+| S199 | `ricetta-prova-errore` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
+| S200 | `ricetta-nessuna-nota` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
+| S201 | `ricetta-venti` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
+| S202 | `ricetta-cambiata` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
+| S203 | `ricetta-fatta` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
+| S204 | `comp-installato` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts renderInstalledComponent, così com'è oggi (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41") |
+| S205 | `comp-permesso` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts renderInstalledComponent, così com'è oggi (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41"); toppe: panels/settings.ts renderInstalledComponent (il consenso «Concesso» chiede con confirm, che la Scrivania mostra con shells/scrittoio/confirm.ts e kit/dialog.ts), così com'è oggi |
+| S206 | `comp-rotto-tempo` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault» e «Riavvia» (fub-wasm-host: timeout; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi |
+| S207 | `comp-rotto-errore` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault», «Copia il motivo» e «Riavvia» (fub-wasm-host: trap; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi |
+| S208 | `comp-aggiorna` | Componenti e ricette | nuova, da approvare | dopo la pre-alpha | toppe: panels/settings.ts renderInstalledComponent: nuovi la riga della versione nuova e «Vedi cosa cambia» (nessun piano lo copre: «Differenze fra piani e codice») |
+| S209 | `ricerca` | La cornice | cattura | S2 T8 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S210 | `grafo` | La cornice | cattura | S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S211 | `palette` | La cornice | cattura | main, S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S212 | `palette-file` | La cornice | cattura | main, S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S213 | `zero` | La cornice | cattura | S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S214 | `salvataggio` | La cornice | cattura | main, S2 T5 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S215 | `avvisi` | La cornice | cattura | main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S216 | `toast` | La cornice | cattura | main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S217 | `conferma` | La cornice | cattura | main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S218 | `g2-menu` | La cornice | cattura | S2 T7, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S219 | `g2-vault` | La cornice | cattura | S2 T7, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S220 | `g2-attivita` | La cornice | cattura | S2 T7, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S221 | `g2-ispettore-0` | La cornice | cattura | S2 T9, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S222 | `g2-ispettore-1` | La cornice | cattura | S2 T9, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S223 | `g2-ispettore-2` | La cornice | cattura | S2 T9, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S224 | `g2-ispettore-chiuso` | La cornice | cattura | S2 T9, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S225 | `g2-compatta` | La cornice | cattura | S2 T14, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S226 | `g2-stretta` | La cornice | cattura | S2 T14 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S227 | `g2-stretta-cassetto` | La cornice | cattura | S2 T14 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S228 | `g2-lanciatore-anteprima` | La cornice | cattura | S2 T10, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S229 | `g2-lanciatore-cerca` | La cornice | cattura | S2 T10, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S230 | `g2-lanciatore-comandi` | La cornice | cattura | S2 T10, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S231 | `g2-conferma` | La cornice | cattura | S2 T16, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S232 | `mcp-riflesso` | La cornice | nuova, da approvare | N2, PA T26 | toppe: panels/activity.ts (una riga per le scritture di fub-mcp, N2 T9) |
+| S233 | `impostazioni` | Le impostazioni | cattura | S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S234 | `aspetto` | Le impostazioni | cattura | main, S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S235 | `impostazioni-vault` | Le impostazioni | cattura | main, S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S236 | `g2-imp-editor` | Le impostazioni | cattura | main, S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S237 | `g2-imp-diagnostica` | Le impostazioni | cattura | main, S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S238 | `g2-imp-profili` | Le impostazioni | cattura | K2, S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S239 | `g2-imp-tasti` | Le impostazioni | cattura | main, S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S240 | `g2-imp-vault` | Le impostazioni | cattura | main, S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S241 | `g2-imp-info` | Le impostazioni | cattura | main, PA T22 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S242 | `g2-tema` | Le impostazioni | cattura | S2 T10, main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S243 | `g2-app-esterne` | Le impostazioni | cattura | main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S244 | `lav-impostazioni` | Le impostazioni | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
+| S245 | `pen-impostazioni` | Le impostazioni | composta, da approvare | N4 T20, PA T28 | piani/lavagna-penne.html |
+| S246 | `imp-info-prealpha` | Le impostazioni | composta, da approvare | PA T22 | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
+| S247 | `vuoto` | Casi ai margini | cattura | S2 T7 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S248 | `avvio-attesa` | Casi ai margini | cattura | main #308 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S249 | `avvio-lento` | Casi ai margini | cattura | main #308 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S250 | `avvio-guasto` | Casi ai margini | cattura | main #308 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S251 | `dati-uno` | Casi ai margini | composta, da approvare | main | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
+| S252 | `dati-nome-lungo` | Casi ai margini | composta, da approvare | main | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
+| S253 | `dati-cinquemila` | Casi ai margini | composta, da approvare | PA T45 | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
+| S254 | `riscontri-a` | I riscontri | composta, da approvare | PA T18 | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
+| S255 | `riscontri-b-menu` | I riscontri | nuova, da approvare | PA T18, D9 B | toppe: ui/app-menu.ts (una voce prima di «Impostazioni»), i18n/catalog.ts |
+| S256 | `riscontri-b-apre` | I riscontri | nuova, da approvare | PA T18, D9 B | toppe: ui/app-menu.ts (kit/dialog.ts, poi l'apertura del browser che c'è) |
+| S257 | `tel-nota` | Il telefono (Android di prova) | cattura | S2 T2–T7, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S258 | `tel-ferma` | Il telefono (Android di prova) | cattura | S2 T3, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S259 | `tel-tastiera` | Il telefono (Android di prova) | cattura | S2 T17, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S260 | `tel-sdraiato` | Il telefono (Android di prova) | cattura | S2 T3, S2 T7, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S261 | `tel-doc` | Il telefono (Android di prova) | cattura | S2 T21, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S262 | `tel-foglio` | Il telefono (Android di prova) | cattura | S2 T20, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S263 | `tel-cassetto` | Il telefono (Android di prova) | cattura | main, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S264 | `tel-ispettore` | Il telefono (Android di prova) | cattura | main, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S265 | `tel-lanciatore` | Il telefono (Android di prova) | cattura | main, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S266 | `tel-avvio` | Il telefono (Android di prova) | cattura | main, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S267 | `tel-avvio-attesa` | Il telefono (Android di prova) | cattura | main #308 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S268 | `g2-tel-doc-pannello` | Il telefono (Android di prova) | cattura | S2 T21, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S269 | `g2-tel-foglio-aperto` | Il telefono (Android di prova) | cattura | S2 T20, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S270 | `t-cassetto-file` | Il telefono (Android di prova) | cattura | main, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S271 | `t-foglio-risultato` | Il telefono (Android di prova) | cattura | K3 T15, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S286 | `t-foglio-errore` | Il telefono (Android di prova) | cattura | K3 T15, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S272 | `tema-sviluppo` | I temi e la skin facile | nuova, da approvare | PA T36, PA T37 | toppe: panels/settings.ts (renderThemeCatalog: due bottoni in più quando developer.mode è acceso), i18n/catalog.ts; toppe: crates/fub-host/src/settings.rs (la chiave developer.mode, gruppo «Sviluppo»), panels/settings.ts la rende come le altre |
+| S273 | `tema-installa` | I temi e la skin facile | nuova, da approvare | PA T36, PA T37 | toppe: panels/settings.ts (renderThemeCatalog: due bottoni in più quando developer.mode è acceso), i18n/catalog.ts; toppe: crates/fub-host/src/settings.rs (la chiave developer.mode, gruppo «Sviluppo»), panels/settings.ts la rende come le altre; un pezzo della cattura palette-file (il DOM del client delle catture, spostato) |
+| S274 | `tema-sostituisci` | I temi e la skin facile | nuova, da approvare | PA T36 | toppe: panels/settings.ts (renderThemeCatalog: due bottoni in più quando developer.mode è acceso), i18n/catalog.ts; toppe: panels/settings.ts (kit/dialog.ts, prima di uninstall_theme e install_theme), i18n/catalog.ts |
+| S275 | `tema-sostituisci-fallito` | I temi e la skin facile | nuova, da approvare | PA T36 | toppe: panels/settings.ts (renderThemeCatalog: due bottoni in più quando developer.mode è acceso), i18n/catalog.ts; toppe: panels/settings.ts (kit/dialog.ts, l'esito d'errore di T36) |
+| S276 | `tema-rifiutato` | I temi e la skin facile | nuova, da approvare | PA T36 | toppe: panels/settings.ts (renderThemeCatalog: due bottoni in più quando developer.mode è acceso), i18n/catalog.ts; toppe: panels/settings.ts (i motivi di theme/loader.ts validateThemeBundle divisi in campi, non riscritti), skin/settings.css |
+| S277 | `tema-collegato` | I temi e la skin facile | nuova, da approvare | PA T37 | toppe: panels/settings.ts (sotto «Temi installati», con la chiave developer.theme-folder), theme/theme.ts rimonta a fub://theme-changed; toppe: crates/fub-host/src/settings.rs (la chiave developer.mode, gruppo «Sviluppo»), panels/settings.ts la rende come le altre |
+| S278 | `tema-anteprima` | I temi e la skin facile | nuova, da approvare | PA T37, PA T38 | toppe: panels/settings.ts (renderThemeCatalog: due bottoni in più quando developer.mode è acceso), i18n/catalog.ts; theme/examples/carta/ (fogli e skin.css) |
+| S279 | `tema-tutti-componenti` | I temi e la skin facile | nuova, da approvare | PA T38, PA T39 | toppe: src/dev/catalogo/ (nuovo: il cuore di bench/catalog.ts e bench/kit.ts, caricato con import()), una vista aperta da Aspetto, skin/settings.css |
+| S280 | `tema-tutti-tavolozza` | I temi e la skin facile | nuova, da approvare | PA T38, PA T39 | toppe: src/dev/catalogo/ (nuovo: il cuore di bench/catalog.ts e bench/kit.ts, caricato con import()), una vista aperta da Aspetto, skin/settings.css; toppe: src/dev/catalogo/ (la tavolozza di bench/catalog.ts), skin/settings.css |
+| S281 | `tema-tutti-caratteri` | I temi e la skin facile | nuova, da approvare | PA T38, PA T39 | toppe: src/dev/catalogo/ (nuovo: il cuore di bench/catalog.ts e bench/kit.ts, caricato con import()), una vista aperta da Aspetto, skin/settings.css; toppe: src/dev/catalogo/ (il campionario di bench/samples.ts), skin/settings.css |
+| S282 | `tema-carta` | I temi e la skin facile | nuova, da approvare | PA T42 | theme/examples/carta/ (fogli e skin.css) |
+| S283 | `tema-carta-impostazioni` | I temi e la skin facile | nuova, da approvare | PA T42 | theme/examples/carta/ (fogli e skin.css) |
+| S284 | `tema-salvia` | I temi e la skin facile | nuova, da approvare | PA T42 | theme/examples/salvia/ (i due fogli) |
+| S285 | `tema-salvia-impostazioni` | I temi e la skin facile | nuova, da approvare | PA T42 | theme/examples/salvia/ (i due fogli) |
+
+#### Gli scenari
+
+| Scenario | Che cosa fa la persona | Passi | Gli stati, in ordine |
+|---|---|---|---|
+| `primo-avvio` | Il primo avvio | 5 | S248 → S249 → S247 → S184 → S1 |
+| `scrivere` | Scrivere una nota | 6 | S1 → S9 → S10 → S6 → S214 → S5 |
+| `riquadri` | Due riquadri | 4 | S21 → S19 → S20 → S22 |
+| `foglio` | Un foglio di calcolo | 8 | S42 → S49 → S78 → S50 → S52 → S64 → S44 → S71 |
+| `disegno` | Un disegno | 6 | S102 → S130 → S106 → S126 → S128 → S115 |
+| `lavagna` | Una lavagna | 12 | S156 → S155 → S157 → S158 → S160 → S161 → S162 → S165 → S166 → S167 → S168 → S147 |
+| `conflitto` | Un conflitto | 5 | S23 → S38 → S39 → S41 → S33 |
+| `r01-versione` | Una bozza ritrovata e una versione | 4 | S29 → S30 → S28 → S31 |
+| `cestino` | Il cestino | 3 | S26 → S217 → S27 |
+| `componente` | Un componente | 7 | S183 → S205 → S204 → S206 → S207 → S208 → S185 |
+| `ricetta` | Una ricetta (A1) | 5 | S191 → S197 → S198 → S199 → S203 |
+| `vault` | Cambiare vault | 3 | S219 → S235 → S37 |
+| `aspetto` | L'aspetto | 6 | S234 → S234 → S234 → S1 → S1 → S282 |
+| `tastiera` | Solo con la tastiera | 5 | S212 → S230 → S2 → S8 → S239 |
+| `errori` | Quando qualcosa va storto | 6 | S32 → S177 → S36 → S35 → S47 → S250 |
+| `telefono` | Al telefono | 9 | S266 → S257 → S259 → S263 → S270 → S261 → S269 → S286 → S157 |
+| `skin` | Una skin facile | 6 | S272 → S273 → S276 → S277 → S279 → S284 |
+
+#### I pezzi nuovi (DOM scritto a mano, `toppe/*.html`)
+
+| Modello | Che cos'è | Destinazione | Task | Stati |
+|---|---|---|---|---|
+| `comp-installato` | Un componente della comunità installato | panels/settings.ts renderInstalledComponent, così com'è oggi (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41") | K1, K2 T3, PA T29 | S204, S205 |
+| `comp-permesso` | Concedere il consenso: i permessi | panels/settings.ts renderInstalledComponent (il consenso «Concesso» chiede con confirm, che la Scrivania mostra con shells/scrittoio/confirm.ts e kit/dialog.ts), così com'è oggi | K1, K2 T3, PA T29 | S205 |
+| `comp-fermo-tempo` | Un componente fermato: ha superato il tempo | panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault» e «Riavvia» (fub-wasm-host: timeout; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi | K1, PA T29 | S206 |
+| `comp-fermo-errore` | Un componente fermato: un errore interno | panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault», «Copia il motivo» e «Riavvia» (fub-wasm-host: trap; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi | K1, PA T29 | S207 |
+| `comp-aggiorna` | Un componente con una versione nuova (fuori dalla pre-alpha) | panels/settings.ts renderInstalledComponent: nuovi la riga della versione nuova e «Vedi cosa cambia» (nessun piano lo copre: «Differenze fra piani e codice») | fuori dalla pre-alpha | S208 |
+| `banda-motore-pronto` | D5 A: il motore del disegno nella banda (pronto) | shells/scrittoio/frame/status-band.ts (il bottone #status-standing di S2 T4, anche per il disegno), skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S125 |
+| `banda-motore-perse` | D5 A: 3 parti restano come sono, nella banda | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S126 |
+| `banda-motore-spento` | D5 A: motore spento, nella banda | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S127 |
+| `banda-motore-fermo` | D5 A: motore fermo, nella banda (aperto) | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S128 |
+| `banda-motore-apre` | D5 A: il disegno si sta aprendo, nella banda | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 (K5 non ha un segno per «si apre»: Differenze) | S129 |
+| `disegno-vuoto` | Un disegno vuoto: l'invito | editors/craft/surface.ts (il foglio vuoto, testo nuovo in i18n/catalog.ts) | K5 T21, PA T27 | S131 |
+| `menu-nuovo` | «Nuovo»: la scelta del tipo | panels/explorer.ts (il pulsante #new-note apre il menu), ui/menu.ts | PA T43 | S34 |
+| `altra-app` | «Apri con un'altra app» sotto un file che Fub non apre | editors/craft/surface.ts (la stessa vista .craft-empty di craft-rotto, più una riga d'azioni), skin/media.css | PA T30 | S36 |
+| `altra-app-grande` | «Apri il sorgente» sotto un file troppo grande | editors/craft/surface.ts (.craft-empty, azioni per il file troppo grande), skin/media.css | PA T30 | S35 |
+| `vault-scegli` | «Scegli un altro vault…» nell'avvio guasto | apps/client/index.html e src/avvio/*.ts (la schermata d'avvio di N7, già in main: un terzo bottone nel guasto del vault) | PA T30 | S37 |
+| `foglio-enorme` | Un foglio enorme: l'avviso della lettura a pezzi | editors/grid/surface.ts (la stessa .grid-notice di oggi, un testo nuovo in i18n/catalog.ts) | griglia T8, PA T27 | S82 |
+| `foglio-vuoto` | Un foglio vuoto: l'invito a scrivere | editors/grid/surface.ts (.grid-notice, testo nuovo) | griglia T1, PA T27 | S81 |
+| `lav-colonna` | La colonna degli strumenti della lavagna (8 strumenti) | editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno) | N6 T26 e T49, PA T28 | S155, S156, S157, S158, S159, S160, S161, S162, S163, S164, S165, S166, S167, S168, S169 |
+| `lav-opzioni` | La riga delle opzioni della lavagna (Selezione, niente scelto) | editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts) | N6 T26 e T50, PA T28 | S155, S156, S157, S158, S161, S165, S166, S167, S168, S169 |
+| `lav-opzioni-scrive` | La riga delle opzioni mentre si scrive in una scheda: la barra di formato | editors/canvas/chrome/options.ts (la barra di formato di panels/format-bar.ts dentro la riga) | N6 T27 e T41, PA T28 | S159, S160 |
+| `lav-bolla-una` | La barra della selezione sopra una scheda | editors/canvas/chrome/selection.ts (nuovo, sul posto di panels/selection-bubble.ts) | N6 T26 e T51, PA T28 | S157 |
+| `lav-bolla-molte` | La barra della selezione sopra molte schede | editors/canvas/chrome/selection.ts (nuovo) | N6 T26 e T51, PA T28 | S158 |
+| `lav-vuota` | La lavagna vuota che spiega da sé | editors/canvas/chrome/empty.ts (nuovo) | N6 T26 e T62, PA T28 | S156 |
+| `lav-lazo` | Il lazo che prende schede e tratti | editors/canvas/tools/lasso.ts (nuovo, N6 T86 con D-22 a) | PA T28 | S165 |
+| `lav-estratti` | Il selettore delle parti attaccato alla scheda rilasciata (PDF) | editors/canvas/parts-picker.ts (nuovo, su kit/popover.ts e kit/list.ts) | N6 T28 e T74–T76, PA T28 | S166 |
+| `lav-codice-menu` | Le tre voci della lavagna in codice nel menu della scheda | editors/canvas/chrome/commands.ts ed engine.ts (il menu contestuale, ui/menu.ts) | lavagna in codice T25, PA T28 | S167 |
+| `lav-codice-disponi` | «Disponi»: il sottomenu | editors/canvas/chrome/commands.ts (canvas.layout.grid, .row, .column, .tree) | lavagna in codice T25, PA T28 | S167 |
+| `lav-codice-riepilogo` | «Incolla codice»: il riassunto prima di scrivere | editors/canvas/chrome/commands.ts (canvas.paste_code con kit/dialog.ts) | lavagna in codice T25, PA T28 | S168 |
+| `lav-codice-problema` | «Incolla codice» con un problema: il primo, col suggerimento | editors/canvas/chrome/commands.ts (canvas.check: niente si scrive) | lavagna in codice T25, PA T28 | S169 |
+| `mcp-riga` | N2: ciò che ha fatto un agente (MCP), nel centro attività | panels/activity.ts (una riga per le scritture di fub-mcp, N2 T9) | PA T26 | S232 |
+| `riscontri-voce` | D9 B: «Segnala un problema…» nel menu dell'applicazione | ui/app-menu.ts (una voce prima di «Impostazioni»), i18n/catalog.ts | D9 B: un task M in più dopo PA T18 | S255 |
+| `riscontri-apre` | D9 B: che cosa si apre e che cosa si manda | ui/app-menu.ts (kit/dialog.ts, poi l'apertura del browser che c'è) | D9 B | S256 |
+| `tema-sviluppo` | Il gruppo «Sviluppo» con la modalità sviluppatore | crates/fub-host/src/settings.rs (la chiave developer.mode, gruppo «Sviluppo»), panels/settings.ts la rende come le altre | PA T36 | S272, S273, S277 |
+| `tema-catalogo` | «Temi installati» in modalità sviluppatore | panels/settings.ts (renderThemeCatalog: due bottoni in più quando developer.mode è acceso), i18n/catalog.ts | PA T36 e T37 | S272, S273, S274, S275, S276, S278 |
+| `tema-collegato` | Il tema collegato, in sviluppo | panels/settings.ts (sotto «Temi installati», con la chiave developer.theme-folder), theme/theme.ts rimonta a fub://theme-changed | PA T37 | S277 |
+| `tema-diagnosi` | Perché un tema è rifiutato: la diagnosi | panels/settings.ts (i motivi di theme/loader.ts validateThemeBundle divisi in campi, non riscritti), skin/settings.css | PA T36 e T37 | S276 |
+| `tema-sostituisci` | Un tema con lo stesso id: «Sostituisci» | panels/settings.ts (kit/dialog.ts, prima di uninstall_theme e install_theme), i18n/catalog.ts | PA T36 | S274 |
+| `tema-sostituisci-fallito` | La sostituzione fallita a metà | panels/settings.ts (kit/dialog.ts, l'esito d'errore di T36) | PA T36 | S275 |
+| `tutti-componenti` | La pagina «Tutti i componenti»: i componenti negli stati del contratto | src/dev/catalogo/ (nuovo: il cuore di bench/catalog.ts e bench/kit.ts, caricato con import()), una vista aperta da Aspetto, skin/settings.css | PA T38 | S279, S280, S281 |
+| `tutti-tavolozza` | «Tutti i componenti»: la tavolozza | src/dev/catalogo/ (la tavolozza di bench/catalog.ts), skin/settings.css | PA T38 | S280 |
+| `tutti-caratteri` | «Tutti i componenti»: i caratteri | src/dev/catalogo/ (il campionario di bench/samples.ts), skin/settings.css | PA T38 e T39 | S281 |
+
+#### Il CSS nuovo
+
+| File | Posto | Blocchi | Task | Peso |
+|---|---|---|---|---|
+| `theme/scrittoio/structure.css` | struttura | `00-structure.css`, `70-kit-struttura.css`, `70f-kit-fila-struttura.css` | S2 T3, T4, T9, T16, T20, T21, T27 | 13 KB |
+| `theme/scrittoio/skin/kit.css` | pelle | `71-kit.css`, `72-kit-vassoio.css`, `71f-kit-fila.css` | S2 T16, T20 | 19.4 KB |
+| `theme/scrittoio/skin/frame.css` | pelle | `10-frame.css` | S2 T3, T4, T7, T9 | 3.7 KB |
+| `theme/scrittoio/skin/drawers.css` | pelle | `20-drawers.css`, `21-icone.css` | S2 T8, T14 | 4.7 KB |
+| `theme/scrittoio/skin/tree.css` | pelle | `30-tree.css` | S2 T8 | 2 KB |
+| `theme/scrittoio/skin/sheets.css` | pelle | `40-sheets.css` | S2 T5, T6, T27 | 2.5 KB |
+| `theme/scrittoio/skin/document.css` | pelle | `50-document.css` | S2 T11, T12 | 5 KB |
+| `theme/scrittoio/skin/media.css` | pelle | `85-media.css`, `86-craft.css` | S2 T18, T19 | 2.9 KB |
+| `theme/scrittoio/skin/nodes.css` | pelle | `60-nodes.css`, `61-nodes.css` | S2 T9, T13 | 3.9 KB |
+| `theme/scrittoio/skin/graph.css` | pelle | `81-graph.css` | S2 T10 | 0.3 KB |
+| `theme/scrittoio/skin/menus.css` | pelle | `65-menus.css` | S2 T10 | 1.4 KB |
+| `theme/scrittoio/skin/launcher.css` | pelle | `82-launcher.css` | S2 T10 | 0.2 KB |
+| `theme/scrittoio/skin/centres.css` | pelle | `45-centres.css` | S2 T5 | 0.8 KB |
+| `theme/scrittoio/skin/settings.css` | pelle | `80-settings.css` | S2 T10 | 0.8 KB |
+| `theme/scrittoio/skin/welcome.css` | pelle | `83-welcome.css` | S2 T10 | 0.2 KB |
+| `shells/scrittoio/mobile/mobile.css` | telefono | `90-mobile.css` | S2 T3, T4, T5, T7, T11, T27 | 7.6 KB |
+| `theme/scrittoio/series.ts` | serie | `01-series.css` | S2 T11 | 0.3 KB |
+| `theme/scrittoio/recipe.ts` | serie | `02-ruoli.css` | S2 T16, T27 | 1.7 KB |
+| `theme/scrittoio/skin/frame.css` | prealpha | `92-prealpha-banda.css` | D5 A: K5 T21–T23 con S2 T4 | 0.9 KB |
+| `theme/scrittoio/skin/draw.css` | prealpha | `92-prealpha-disegno.css` | K5 T21, PA T27 | 0.6 KB |
+| `theme/scrittoio/skin/settings.css` | prealpha | `92-prealpha-impostazioni.css` | PA T29, T36–T38 | 6 KB |
+| `theme/scrittoio/skin/nodes.css` | prealpha | `92-prealpha-lavagna.css` | N6 T26–T28, PA T28 | 3.3 KB |
+| `theme/scrittoio/skin/media.css` | prealpha | `92-prealpha-media.css` | PA T30 | 0.3 KB |
+| `shells/mobile/mobile.css` | prealpha | `92-prealpha-telefono.css` | PA T47 | 1.3 KB |
+| `theme/examples/carta/ (fogli e skin.css)` | tema | `93-tema-carta.css` | PA T42, D17 | 4.4 KB |
+| `theme/examples/salvia/ (i due fogli)` | tema | `93-tema-salvia.css` | PA T42, D17 | 2.7 KB |
+<!-- dal-prototipo:fine -->
 
 ## Domande aperte
 
@@ -814,6 +1577,9 @@ Il prototipo della griglia (`piani/celle-griglia.html`) non ha una riga
 «Approvato» nel suo piano. Il prompt dice che D-1…D-8 seguono i consigli,
 con due preferenze nelle Impostazioni (griglia T9).
 
+Nel simulatore: S73–S80 (la griglia composta nella cornice), più S81 e S82
+(il foglio vuoto e quello enorme, nuovi).
+
 - **A (consigliata).** Approvato così com'è.
   - Tempo: la griglia parte appena K3 è in `main`.
   - Qualità: il prototipo è stato fatto sul client vero.
@@ -828,7 +1594,9 @@ con due preferenze nelle Impostazioni (griglia T9).
 ### D3 · N6 T26–T28: i prototipi della lavagna che mancano
 
 **Decisa dall'utente il 2026-11-05: A.** I tre prototipi sono nel
-simulatore del secondo giro, segnati «da approvare».
+simulatore del secondo giro, segnati «da approvare»: S155–S166 (l'impianto,
+la modifica e gli estratti), più S167–S169 per la lavagna in codice. Lo
+scenario `lavagna` li passa in fila.
 
 N6 ha quattro pagine di prototipo, e solo la prima è approvata (le schede,
 T25). Mancano l'impianto (T26: la colonna degli strumenti, la riga delle
@@ -858,6 +1626,14 @@ fuori).
 
 **Decisa dall'utente il 2026-11-05: A.** Gli editor sono composti nel
 simulatore del secondo giro, con le barre nel kit, segnati «da approvare».
+Gli stati composti sono 67: la griglia S73–S80, il disegno S111–S124 (K5
+com'è approvato), le schede della lavagna S133–S147, le penne S148–S154, i
+componenti S188–S190, le ricette S191–S203, e le loro Impostazioni S244 e
+S245 (62 stati). Gli altri cinque sono catture ritoccate solo nel testo o
+nelle righe: le Informazioni con la versione della pre-alpha (S246), i tre
+casi dei dati (S251–S253) e il menu di oggi per D9 A (S254). Il menu
+«Comandi» di K3 non è composto: è già nel client, ed è una cattura
+(S44–S48).
 
 Le pagine di K5 (la colonna con Testo e i gettoni del motore), N4 (il menu
 delle penne), N6 (le schede), A1 (le ricette), della griglia (le celle) e
@@ -884,7 +1660,12 @@ simulatore stanno a parte, in `piani/`.
 ### D5 · La testa del disegno: K5 contro Scrittoio 2 T22
 
 **L'utente ha chiesto di vedere composte sia A sia B (2026-11-05).** Nel
-simulatore ci sono tutte e due; la scelta resta sua.
+simulatore ci sono tutte e due; la scelta resta sua. A è S125–S130 (la
+banda col motore, la colonna con Testo), B è S111–S124 (la testata di K5).
+I casi sono gli stessi nelle due forme (pronto, parti perse, motore spento,
+fermo, si apre, Testo): si confrontano scorrendo il gruppo Disegno. Lo
+scenario `disegno` passa per S130, S126 e S128 (A) e finisce su S115 (B),
+lo stesso caso dell'ultimo passo di A.
 
 Il prototipo di K5 (approvato il 2026-11-05) mette nella colonna degli
 strumenti anche Testo, e i gettoni del motore (`pane-standing*`) nella
@@ -1024,14 +1805,19 @@ e l'utente ha un portatile Windows; un Mac non c'è.
 ### D12 · Densità e accento nel simulatore
 
 **Decisa dall'utente il 2026-11-05: B.** Densità, contrasto e accento
-cambiano davvero il simulatore, nelle due luci.
+cambiano davvero il simulatore, nelle due luci. Si scelgono nella pagina
+Aspetto (S234), restano negli altri 285 stati finché «Aspetto di serie»,
+sotto lo schermo, non le toglie: le tre densità vengono dalle misure di
+`series.ts`, il contrasto alto e gli accenti dalla ricetta di `recipe.ts`
+(`temi.json`).
 
-Il simulatore cambia davvero il tema, la luce, le animazioni, il corpo,
-l'interlinea, la misura e il carattere. Non cambia la densità, il contrasto
-e l'accento, perché per quelli il tema va ricompilato: quando li si sceglie,
-segna la scelta e lo dice nella riga sopra lo schermo.
+La domanda, com'era nel primo giro: il simulatore cambiava davvero il
+tema, la luce, le animazioni, il corpo, l'interlinea, la misura e il
+carattere. Non cambiava la densità, il contrasto e l'accento, perché per
+quelli il tema va ricompilato: quando li si sceglieva, segnava la scelta e
+lo diceva nella riga sopra lo schermo.
 
-- **A (consigliata).** Va bene così.
+- **A (consigliata nel primo giro).** Va bene così.
   - Tempo: niente.
 - **B.** Prima di consegnare preparo le varianti: tre densità, il
   contrasto alto e gli accenti, nelle due luci.
@@ -1184,6 +1970,29 @@ mostra (gli stati «vestito da …», «da approvare»).
     cambio della serie.
   - Qualità: la prova più larga.
 
+### D18 · Le parole della scheda di un componente installato
+
+Nella stessa finestra delle Impostazioni, la pagina Componenti dice
+«Spegni» e la scheda di un componente installato dice «Abilitato»,
+«Disabilita il componente prima di rimuoverlo.» e «Rimuovi». Il lessico di
+K2 vuole «Accendi», «Spegni» e «Togli» dappertutto, ma la sua guardia
+guarda solo i menu (S204–S208, «Differenze fra piani e codice» 46).
+
+- **A (consigliata).** La scheda segue il lessico: «Acceso», «Spegni il
+  componente prima di toglierlo.», «Togli» (PA T46), e una guardia nuova
+  sui testi `settings.components.*`.
+  - Tempo: un task S, un'ora o due.
+  - Qualità: una parola per ogni azione, come promette il lessico; chi
+    prova la pre-alpha non si chiede se «spegnere» e «disabilitare» siano
+    due cose.
+  - Contro: la scheda di un componente installato e la pagina dei
+    componenti di serie restano due pezzi diversi; questo li allinea solo
+    nelle parole.
+- **B.** Restano le parole di oggi; il lessico dice che vale solo per i
+  menu e per la pagina Componenti.
+  - Tempo: niente.
+  - Qualità: due parole per la stessa azione nella stessa finestra.
+
 ## Come si implementa
 
 Per i coder con ragionamento medio e per l'orchestratore. Basta da sola: chi
@@ -1213,10 +2022,23 @@ che serve in più per questo piano.
    per proprietà.
 2. **Il tema.** `cd apps/client && npm run theme:generate && npm run
    theme:verify`. I derivati si rigenerano uguali byte per byte; mai a mano.
-3. **Il DOM.** Si apre lo stato nel simulatore (lo stato, la luce, la
-   larghezza), si preme «DOM» sul pezzo, e si costruisce lo stesso albero
-   nel modulo del task: classi, ruoli, ARIA e `data-i18n`. I testi vanno in
-   `apps/client/src/i18n/catalog.ts`, con l'inglese.
+3. **Il DOM.** Si apre lo stato nel simulatore col suo numero S (lo stato,
+   la luce, la larghezza) e si guarda «I pezzi di questo stato». La fonte
+   del DOM dipende da che cosa dice il pezzo:
+   - **uguale**: il DOM è già in `main`; si cambia solo la pelle;
+   - **cambiato**: il DOM che il task di Scrittoio 2 costruisce. La fonte è
+     il prototipo di Scrittoio 2; nel simulatore lo si vede montato;
+   - **composto**: il DOM della pagina approvata del piano (il link è nella
+     didascalia). Il simulatore dice solo dove sta nella cornice;
+   - **nuovo**: il `<template>` di `PLAN-ui/fub-pre-alpha/toppe/*.html` che
+     ha il task in testa. «DOM» lo mostra, «Segna il nuovo» lo contorna.
+
+   Si costruisce lo stesso albero nel modulo del task: classi, ruoli, ARIA e
+   `data-i18n`. I testi vanno in `apps/client/src/i18n/catalog.ts`, con
+   l'inglese. Uno stato composto o nuovo si costruisce solo dopo il sì
+   dell'utente al suo numero («Approvato:» in testa al piano); se manca, il
+   task aspetta. Al telefono uno stato «ricomposto col guscio mobile» è
+   provvisorio come il telaio A (D1): non è una fonte.
 4. **I fili.** Il pezzo si collega a ciò che c'è già: il contratto
    (`host/contract.ts`), i registri (`DocumentSurfaceRegistry`, i comandi,
    `list_views` e `render_view`), le sessioni (`DocumentSession`) e il kit
@@ -1257,7 +2079,10 @@ che serve in più per questo piano.
 ### Copiare o scrivere
 
 - **Si copia** dal simulatore: il CSS dei blocchi, il DOM dei pezzi
-  «nuovo» e «cambiato», i testi, gli stati da fotografare.
+  «nuovo» (da `toppe/*.html`), i testi, gli stati da fotografare.
+- **Si copia** dal prototipo di Scrittoio 2: il DOM dei pezzi «cambiato».
+- **Si copia** dalla pagina approvata del piano: il DOM dei pezzi
+  «composto».
 - **Si copia** da `main`: il DOM dei pezzi «uguale». Lì si cambia solo la
   pelle.
 - **Si scrive:** il comportamento, il cablaggio, i test, la scena del banco
@@ -1308,8 +2133,9 @@ Piano: Fub pre-alpha (piano/fub-pre-alpha, PLAN.md) · task PA T<n>
 [oppure: piano <nome> (piano/<slug>), task T<n>; l'ordine sta in Fub pre-alpha]
 Worktree: <percorso> · ramo base: <ramo> @ <sha>
 Leggi: la sezione del task in PLAN.md; «Come si implementa» di Fub pre-alpha;
-       per un task grafico, lo stato <stato> del simulatore
-       (PLAN-ui/fub-pre-alpha/simulatore.html#stato=<stato>).
+       per un task grafico, gli stati S<n> del simulatore
+       (PLAN-ui/fub-pre-alpha/simulatore.html#stato=<id>), già approvati,
+       e la fonte del DOM di ogni pezzo (uguale, cambiato, composto, nuovo).
 Tocca solo: <file del «Tocca»>
 Non toccare: <file del «Non toccare»>
 Fatto quando: <il «Fatto quando» del task, parola per parola>
@@ -1342,7 +2168,8 @@ cosa, vince il codice.
 2. **Griglia.** Il prototipo `celle-griglia.html` non ha una riga
    «Approvato» nel piano (D2).
 3. **N6.** Mancano i prototipi di T26–T28; è approvato solo `lavagna-schede`
-   (T25, 2026-11-04) (D3).
+   (T25, 2026-11-04). Con D3 A li disegna questo giro: S155–S166, da
+   approvare.
 4. **N6 «v1 senza T79».** T80–T84 dipendono da T79 e da PdfCraft P1, P2 e
    P4, e T85 dipende da T82: escono con T79. Esce anche T88, che dipende da
    D-20 (il piano dei CSV, che non c'è).
@@ -1351,8 +2178,10 @@ cosa, vince il codice.
    approvata delle impostazioni di S2 non mostra la riga (PA T1).
 6. **S2 T11** porta il corpo a 18 e la misura a 58ch, mentre il finto del
    banco dice 17 e 68. La foto approvata di S2 mostra 17; il simulatore
-   scrive 18, il valore di S2 T11. È l'unica differenza fra il simulatore e
-   il prototipo approvato (265 px nello stato `impostazioni`).
+   scrive 18, il valore di S2 T11. Il client delle catture
+   (`script/finto/cattura.patch`) dice già 18, quindi il simulatore coincide
+   con la sua foto (S233 `impostazioni`: 0,00 %); la differenza resta solo
+   contro la foto approvata di S2.
 7. **Scrittoio 2 avanza:** T1, T2 e T16 sono fatti su `piano/scrittoio-2`
    (fe4d84c4).
 8. **#216** è corretto in `main` (1d20ce96, 2026-10-19: `closeLeftVault` in
@@ -1490,6 +2319,93 @@ verificate su `main` 638358da):
     (PA T39). Il `mimeType` del loader però non conosce `woff2`.
 36. **Il README del kit autore** parte dalla copia intera di `sample/`; con
     PA T42 parte dai due temi d'esempio.
+
+Le differenze trovate costruendo il simulatore del secondo giro
+(2026-11-06, verificate su `main` 638358da e sul client delle catture):
+
+37. **Un collegamento si segue con Ctrl+clic** (⌘+clic sul Mac), non col
+    clic semplice, che mette il cursore nel testo
+    (`editors/text/profiles/markdown/livepreview.ts:1506`, `:1516`). Il
+    simulatore fa lo stesso e lo dice con un avviso. Gli scenari che
+    seguono un collegamento lo scrivono nel passo.
+38. **Sul telefono i menu mostrano i tasti.** Il piede del menu del tasto
+    destro e le voci scrivono la scorciatoia in un `<kbd>`
+    (`ui/menu.ts:484`, `:580`), e nessuna regola di
+    `shells/scrittoio/mobile/mobile.css` li nasconde. Le catture del
+    telefono li mostrano così; è un punto della cornice del telefono, che
+    resta provvisoria (D1).
+39. **I gesti del telefono sono in parte nuovi.** La pressione lunga apre
+    già il menu del tocco (`ui/long-press.ts`, 500 ms, montata in
+    `desktop-shell.ts:802`), e il simulatore la imita coi suoi tempi. Le
+    strisciate che aprono i cassetti e il bordo che torna indietro non ci
+    sono in `main`: nel simulatore sono provvisorie, come la cornice (D1).
+    Sul computer l'affaccio dei cassetti (`shells/scrittoio/frame/peek.ts`:
+    il puntatore sosta 160 ms sul bordo) il simulatore non lo fa, perché è
+    un gesto nel tempo che una cattura non prende.
+40. **Le catture della lavagna di oggi** (`s2/lavagna`, `s2/lavagna-700`)
+    sono di prima di N6 e mostrano `.canvas-toolbar`, la barra che N6 T26 e
+    T49 sostituiscono. Non hanno una definizione per rifarle; gli stati
+    della lavagna di questo giro sono composti da `piani/lavagna-schede.html`
+    o nuovi (D3).
+41. **La riga dei dati della nota** (S2 T12, `.note-facts`) non c'è nel
+    client: la disegna il prototipo di Scrittoio 2. Nelle catture la mette
+    `script/mods.mjs` solo nel DOM copiato, non nella foto, quindi il
+    confronto dei pixel la toglie prima di fotografare il simulatore.
+42. **Le catture non sono `main`.** Vengono da `anteprima/tutto` (i piani
+    approvati uniti a `main`) con le sonde di Scrittoio 2 in `src/` (le
+    icone nuove, il gruppo Carattere, la striscia degli spazi:
+    `script/finto/cattura.patch`). «I pezzi di questo stato» dice per ogni
+    pezzo se il DOM è quello di `main` («uguale») o un ritocco di Scrittoio 2
+    («cambiato»).
+43. **`ricette.html` non ha `<!doctype>`.** La pagina approvata di A1
+    (`PLAN-ui/ricette.html` su `piano/a1-base-per-ai`) comincia da
+    `<title>`: l'artifact la pubblica dentro uno scheletro con il doctype,
+    mentre aperta da sola va in modalità quirks e cambia le misure. Il
+    simulatore la copia in `piani/` con lo scheletro, e le sue foto
+    (`p-ricette-*`) si prendono da quella copia, cioè come l'ha vista
+    l'utente. Lo stesso vale per `a1-piano.html`, che il simulatore non usa.
+44. **Quattro pagine dei piani prendono i caratteri da Google.**
+    `ricette.html`, `disegno-motore.html`, `celle-griglia.html` e
+    `menu-comandi-fogli.html` caricano Hanken Grotesk, Newsreader e IBM Plex
+    Mono da `fonts.googleapis.com`. L'app non può (`font-src 'self' asset:
+    data:` in `crates/fub-app/tauri.conf.json`) e non ne ha bisogno: gli
+    stessi caratteri sono nei pacchetti `@fontsource` del client. Il
+    simulatore, che gira senza rete, li prende da lì (`vista-sim.js`,
+    `caratteriPiano`). Chi copia un pezzo da quelle pagine non copia il
+    `<link>` ai caratteri.
+45. **L'ispettore compatto nelle catture.** Il banco monta i blocchi dopo
+    tutto il CSS del client, quindi nella foto `--inspector-w: 264px` di
+    `00-structure.css` vince anche sul passo compatto delle preferenze (260
+    px, `measures.ts` di oggi). Nell'app `structure.css` viene prima di
+    `fub:preferenze`, e dopo S2 T9 il passo compatto arriva a 216 px. Il
+    simulatore mostra 216; la foto di `g2-compatta` resta quella del banco,
+    e il confronto dei pixel lo dice («I pixel contro la fonte»).
+46. **Le parole dei componenti.** Il lessico di K2 (`i18n/lexicon.ts`,
+    «I componenti (K2): le parole della pagina Componenti … sono queste,
+    dappertutto») vuole «Accendi», «Spegni» e «Togli» al posto di
+    «Abilita», «Disabilita» e «Disinstalla». La scheda di un componente
+    installato (`panels/settings.ts`, `renderInstalledComponent`) dice
+    «Abilitato», «Disabilita il componente prima di rimuoverlo.» e
+    «Rimuovi», e la guardia (`ui/menu-budget.test.ts`) guarda solo le voci
+    dei menu. Il primo giro del simulatore aveva inventato una scheda con
+    «Disinstalla» e un dialogo «Installare …?» che il codice non ha: ora le
+    toppe `comp-*` copiano la scheda e il dialogo del consenso veri, con le
+    parole di oggi (D18, PA T46).
+47. **I 44 px del tocco sul telefono.** `shells/mobile/mobile.css` dà
+    `min-width` e `min-height` di 44 px a `button`, `[role="button"]`,
+    `input[type="checkbox"]` e `input[type="radio"]`, con
+    `:root[data-client-shell="mobile"]` davanti. Così vince su
+    `input[role="switch"]` di `skin/controls.css` (32 × 18): sul telefono
+    ogni interruttore è un cerchio di 44 px col pomello in mezzo, che
+    sembra un bottone di scelta. Lo stesso minimo prende il posto di
+    `min-width: auto` dei bottoni, quindi in una fila flessibile si
+    stringono fino a 44 px: le schede delle impostazioni diventano «Co…»,
+    «C…», «S…», mentre la riga doveva scorrere (`skin/settings.css`, sotto i
+    760 px: `overflow-x: auto` e `white-space: nowrap`). Si vede nelle
+    catture vere (`catture/tel/t-comp-spegni-*.png`) e c'è in `origin/main`
+    (638358da). Nessun piano lo copre, e le scene del telefono del banco non
+    aprono le impostazioni. Il simulatore mostra la correzione
+    (`92-prealpha-telefono.css`, PA T47); il confronto dei pixel lo dice.
 
 ## T1 · Il finto del banco dice le impostazioni d'Aspetto dell'host
 
@@ -3103,4 +4019,231 @@ prova il test); un componente aggiunto dopo (lo prova il test).
 Fatto quando: il test è verde; le scene del banco ci sono, con le baseline
 dal runner; il resoconto dice dell'installazione a mano.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/theme/examples.test.ts
+Stato: [ ] da fare
+
+## T43 · «Nuovo» chiede il tipo
+
+Perché: la richiesta del secondo giro vuole «un file nuovo, con la scelta
+del tipo». Oggi il «+» dell'albero (`#new-note`, `index.html:227`) fa solo
+una nota (`panels/explorer.ts:170`); un disegno si crea dal menu File, dal
+contestuale di una cartella («Nuovo ▸», `explorer.ts:1337`) o del titolo
+dell'albero (`explorer.ts:1385`); al telefono c'è «+ Disegno» accanto
+(`shells/mobile/creation.ts`). Una lavagna, un documento e un foglio non
+hanno una porta nella shell (verificato su `main` 638358da).
+Ramo: piano/fub-pre-alpha.
+Tocca: `apps/client/src/ui/commands.ts` (l'elenco dei tipi che si possono
+creare), `apps/client/src/panels/explorer.ts` (il «+» apre il menu; «Nuovo ▸»
+e il menu del titolo leggono lo stesso elenco), `apps/client/src/ui/app-menu.ts`
+(il menu File), `apps/client/src/shells/mobile/creation.ts` (al telefono il
+«+» apre lo stesso elenco, e «+ Disegno» non serve più), il catalogo
+(`i18n/catalog.ts`, IT e EN), i loro test.
+Non toccare: i comandi del kernel (li aggiunge T44); `ui/menu.ts` oltre a ciò
+che il menu ha già (voci, suggerimenti, separatori).
+Dipende da: S2 T8 e T14 in `main` (toccano `explorer.ts` e `ui/menu.ts`);
+l'approvazione di S34. Le voci «Documento» e «Foglio» si vedono quando T44 è
+in `main`: T43 può entrare prima e le mostra da sé appena il kernel dichiara
+i comandi.
+Dal prototipo: S34 (`file-nuovo-tipo`), la toppa `menu-nuovo` in
+`toppe/file.html`.
+Cosa fare:
+- Un elenco solo dei tipi, in `ui/commands.ts`, nell'ordine di S34: Nota,
+  Documento (.docx), Foglio (.xlsx), Disegno (.svg), Lavagna (.canvas), poi
+  un separatore, «Nota da un modello…» e Cartella.
+- Ogni voce c'è soltanto se si può fare, come `canCreateDrawing`: la nota e
+  la cartella sempre; le altre se il kernel dichiara `document.create`,
+  `sheet.create`, `drawing.create` e `canvas.create`; «da un modello» se c'è
+  la vista dei modelli (`templates`). Si rilegge a ogni apertura e a ogni
+  `on("commands")`.
+- Il «+» dell'albero apre il menu sotto di sé. Ctrl+N (`shell.note.new`)
+  resta una nota diretta, senza menu, e la voce Nota mostra la scorciatoia.
+- «Nuovo ▸» della cartella, il menu del titolo e il menu File usano lo
+  stesso elenco, con la cartella dove nasce il file.
+- Il menu si apre e si chiude con la tastiera come gli altri menu (frecce,
+  Invio, Esc che torna al «+»).
+Casi limite: nessun componente acceso oltre alle note (il menu ha Nota,
+Cartella e «da un modello» se c'è); uno spazio attivo (il file nasce lì,
+come oggi la nota); un comando che sparisce a menu aperto (la voce resta
+fino alla chiusura e il comando dice il suo errore).
+Fatto quando: S34 si riproduce nel banco (la foto della scena nuova
+coincide con la toppa, a parte il testo delle voci che mancano); i test
+dicono quali voci si vedono con quali comandi.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/ui/commands.test.ts src/panels/explorer.test.ts
+Stato: [ ] da fare
+
+## T44 · Un documento e un foglio vuoti
+
+Perché: T43 offre «Documento» e «Foglio», ma il kernel non sa crearli. Un
+`.docx` nuovo in realtà nasce già: scrivere la proiezione di un documento
+che non c'è parte da `fub_format_rich::blank` (`fub-host/src/session.rs:3657`,
+`rich.rs:135`). Un `.xlsx` nuovo no: `write_workbook_in` risponde
+`workbook::missing` quando il file non c'è (`session.rs:3696`). Nessun
+comando `*.create` esiste per i due formati (verificato su `main` 638358da).
+Ramo: piano/fub-pre-alpha.
+Tocca: `crates/fub-host/src/rich.rs` e `crates/fub-host/src/workbook.rs`
+(o il modulo che il coder trova padrone del formato), la registrazione dei
+comandi in `fub-host` (accanto a `folder.create`, `session.rs:92`), il
+catalogo dei comandi (IT e EN), i test d'integrazione di `fub-host`.
+Non toccare: `fub-features` (i due formati stanno in `fub-host`, e
+`fub-features` ha per loro solo le righe della mappa, `Cargo.toml:118`);
+la shell (T43).
+Dipende da: nessuno.
+Dal prototipo: S34 (le due voci).
+Cosa fare:
+- `document.create` dietro la feature `rich` di `fub-host`: argomenti
+  `folder` e `name` come `canvas.create`; scrive `blank(Codec::Docx)` col
+  nome libero più vicino («Documento senza titolo.docx», poi « 2», « 3»…),
+  e apre il file.
+- `sheet.create` dietro la feature `xlsx`: i byte di una cartella vuota con
+  un foglio («Foglio1»), scritti da GridCraft (`save_bytes_as` in
+  `vendor/gridcraft/crates/engine/src/io.rs:236`, sopra `Workbook::new()`)
+  attraverso il padrone che oggi innesta il giornale. Niente codice nuovo
+  nel `vendor/`.
+- Tutti e due passano dal `Guard` e dalla scrittura atomica come gli altri
+  comandi che creano file, e hanno una prova a secco (`InvokeMode::DryRun`)
+  che dice il nome senza scrivere.
+Casi limite: la feature spenta (il comando non è dichiarato: lo prova
+`--no-default-features`); un nome già preso; una cartella in sola lettura
+(l'errore tipato, non una stringa); il file aperto subito dopo dal suo
+editor, letto dal motore senza avvisi.
+Fatto quando: i due comandi creano file che i loro editor aprono e salvano
+(un test scrive, rilegge con il codec e salva una modifica); spenta la
+feature il comando non c'è.
+Prova: scripts/check.sh --rapido; cargo test -p fub-host --test rich_documents; cargo test -p fub-host --no-default-features --lib
+Stato: [ ] da fare
+
+## T45 · Cinquemila file: la misura
+
+Perché: la richiesta vuole «un vault da 5.000 file». L'albero non è
+virtualizzato (`panels/explorer-motion.ts:8`: «L'albero non è
+virtualizzato: basta FLIP»), e nessun banco ha un vault grande: `large.mjs`
+misura un disegno grande, non un albero. S253 mostra le cartelle chiuse che
+contano i file; prima di cambiare l'albero si misura.
+Ramo: piano/fub-pre-alpha.
+Tocca: `apps/client/bench/vault-fixture.ts` (nuovo: un vault finto di 5.000
+file in cinque cartelle, una da 1.500 note), `apps/client/bench/fake-ipc.ts`
+(`?vault=5000`, come `?large=N`), `apps/client/bench/tree.mjs` (nuovo),
+`package.json` (`bench:tree`), un test d'integrazione di `fub-host` che
+monta un vault temporaneo di 5.000 file e misura il montaggio e l'elenco
+dell'albero.
+Non toccare: `panels/explorer.ts` (questo task misura, non cambia);
+il vault vero dell'utente.
+Dipende da: S2 in `main` (l'albero col cassetto); vicino a T16.
+Dal prototipo: S253 (`dati-cinquemila`).
+Cosa fare:
+- Il banco apre il vault da 5.000 file nell'app vera e misura: il primo
+  disegno dell'albero dopo l'arrivo dell'elenco; l'apertura della cartella
+  da 1.500 note (il fotogramma più lungo); lo scorrimento fino in fondo
+  (i fotogrammi oltre 50 ms); la ricerca rapida di un nome.
+- Le soglie, al livello Standard e con la CPU quattro volte più lenta:
+  primo disegno entro 300 ms; nessun fotogramma oltre 100 ms aprendo la
+  cartella; nessuno oltre 50 ms scorrendo.
+- Il test di `fub-host` misura il montaggio e l'elenco su disco vero (una
+  cartella temporanea), e stampa i tempi; fallisce solo oltre il doppio
+  delle soglie, per non diventare instabile.
+- Una soglia superata apre una issue con i numeri e le foto, e la
+  virtualizzazione dell'albero diventa un piano a parte: non entra qui.
+Casi limite: la CPU lenta (i numeri si scrivono tutti e due); nomi lunghi
+(S252); cartelle annidate a dieci livelli.
+Fatto quando: `npm run bench:tree` stampa le misure con le soglie; il test
+di `fub-host` passa; il resoconto dice i numeri e, se serve, il numero
+della issue.
+Prova: scripts/check.sh --rapido; cd apps/client && npm run bench:tree
+Stato: [ ] da fare
+
+## T46 · Le parole della scheda di un componente installato
+
+Perché: la scheda di un componente in «Installati su questa macchina»
+(`panels/settings.ts`, `renderInstalledComponent`) dice «Abilitato»,
+«Disabilita il componente prima di rimuoverlo.» e «Rimuovi». Il lessico di
+K2 (`i18n/lexicon.ts`) dice che le parole dei componenti sono «Accendi»,
+«Spegni» e «Togli», dappertutto, e la pagina Componenti dice già «Spegni».
+La guardia del lessico (`ui/menu-budget.test.ts`) guarda solo le voci dei
+menu, quindi non se ne accorge (D18, «Differenze fra piani e codice» 46).
+Ramo: piano/fub-pre-alpha.
+Tocca: `apps/client/src/i18n/catalog.ts` (i testi di
+`settings.components.enabled*` e `settings.components.remove*`, in italiano
+e in inglese), `apps/client/src/panels/settings.components.test.ts`,
+`apps/client/src/i18n/lexicon-settings.test.ts` (nuovo).
+Non toccare: le chiavi del catalogo e gli id degli elementi (cambiano i
+testi, non le chiavi); `panels/components-page.ts`; la logica della scheda
+(«Togli» resta spento finché il componente è acceso).
+Dipende da: la risposta a D18; K2 in `main` (#290, che porta il lessico).
+Dal prototipo: S204–S208 (`comp-*`): le toppe mostrano le parole di oggi,
+perché il codice vince finché D18 non è decisa.
+Cosa fare:
+- Con D18 A, i testi italiani diventano: «Abilitato» → «Acceso»; «Scelta
+  di abilitazione non cambiata: {reason}» → «Componente non acceso né
+  spento: {reason}»; «Rimuovi» → «Togli»; «Rimuove l'installazione ma
+  conserva i suoi dati nel vault.» → «Toglie l'installazione; i suoi dati
+  restano nel vault.»; «Disabilita il componente prima di rimuoverlo.» →
+  «Spegni il componente prima di toglierlo.»; «Rimuovi componente» →
+  «Togli il componente»; «Rimuovere «{name}»? I dati che il componente ha
+  salvato nei vault verranno conservati.» → «Togliere «{name}»? I dati che
+  il componente ha salvato nei vault restano.»; «Componente non rimosso:
+  {reason}» → «Componente non tolto: {reason}». In inglese: «On», «Turn
+  the component off before removing it.»; «Remove» resta.
+- `lexicon-settings.test.ts` passa ogni testo italiano
+  `settings.components.*` per le varianti vietate del lessico (`FORBIDDEN`),
+  come `menu-budget.test.ts` fa con le voci dei menu.
+- Le toppe `comp-*` del simulatore prendono le parole nuove nello stesso
+  giro in cui D18 si decide (le rifà il pianificatore, non il coder).
+Casi limite: la descrizione accessibile del bottone spento
+(`aria-describedby`) dice la frase nuova; l'avviso di errore di un
+interruttore che non cambia.
+Fatto quando: la scheda dice le parole del lessico; il test nuovo fallisce
+se una variante vietata torna in un testo `settings.components.*`.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/i18n src/panels/settings.components.test.ts
+Stato: [ ] da fare (aspetta D18)
+
+## T47 · I 44 px del tocco sul telefono, senza deformare
+
+Perché: `shells/mobile/mobile.css` dà `min-width` e `min-height` di 44 px a
+`button`, `[role="button"]`, `input[type="checkbox"]` e
+`input[type="radio"]`, con `:root[data-client-shell="mobile"]` davanti, che
+pesa più di `input[role="switch"]` in `skin/controls.css`. Sul telefono
+ogni interruttore diventa un cerchio di 44 px col pomello in mezzo, e
+sembra un bottone di scelta. Lo stesso minimo prende il posto di
+`min-width: auto` dei bottoni: le schede delle impostazioni si stringono
+fino a 44 px e diventano «Co…», «C…», «S…», invece di scorrere come vuole
+`skin/settings.css` sotto i 760 px. È in `origin/main` (638358da) e nelle
+catture vere («Differenze fra piani e codice» 47). Con l'APK di prova le
+persone lo vedrebbero in ogni pagina di impostazioni.
+Ramo: piano/fub-pre-alpha.
+Tocca: `apps/client/src/shells/mobile/mobile.css`,
+`apps/client/bench/scene.mjs` (una scena nuova, `mobile-settings`).
+Non toccare: `theme/scrittoio/skin/controls.css` (l'interruttore del
+computer resta com'è); `shells/scrittoio/mobile/mobile.css`; il minimo di
+44 px degli altri bottoni, che resta.
+Dipende da: nessuno.
+Dal prototipo: il blocco `92-prealpha-telefono.css` (`<style
+data-destinazione="shells/mobile/mobile.css">` in testa al simulatore); al
+telefono S185 (`g2-comp-spegni`), S183 (`componenti`), S206 e S207
+(`comp-rotto-*`), S233 (`impostazioni`).
+Cosa fare:
+- Nella regola dei 44 px, `input[type="checkbox"]` diventa
+  `input[type="checkbox"]:not([role="switch"])`. Le due righe `min-width` e
+  `min-height` del blocco non si copiano: servono solo al simulatore, che
+  ha la regola di oggi (il blocco lo dice in testa).
+- L'interruttore prende il tocco di 44 px senza cambiare aspetto: si
+  copiano `position: relative` e il suo `::after` trasparente con
+  `inset: -13px -6px`, come nel blocco.
+- `.settings-tab` sul telefono prende `flex: none`, come nel blocco: la
+  riga delle schede scorre di lato, coi nomi interi.
+- La scena `mobile-settings` apre le impostazioni sul telefono, scheda
+  «Componenti». Nel suo `prepare` aspetta che ogni interruttore visibile
+  misuri 32 × 18; che `document.elementFromPoint` 10 px sopra e sotto il
+  suo centro, e 5 px a sinistra, renda l'interruttore stesso; che nessuna
+  `.settings-tab` abbia `scrollWidth` maggiore di `clientWidth`. Se una di
+  queste cade, la scena non si prepara e `bench:verify` fallisce.
+Casi limite: in colori forzati l'interruttore torna nativo, 16 × 16
+(`controls.css`, «Garanzie»): con la regola nuova non diventa un quadrato
+di 44 px. Il `::after` trasparente non è un secondo pomello, e la regola
+«Un pomello solo» di `controls.css` resta per il computer. La scheda scelta
+deve vedersi quando le impostazioni si aprono su «Informazioni»: se resta
+fuori dalla riga, si porta in vista con `scrollIntoView({ inline: "nearest"
+})`. Il telefono sdraiato (`mobile-landscape`).
+Fatto quando: sul telefono l'interruttore è il binario della pelle con un
+tocco di 44 px, e le schede delle impostazioni scorrono intere; la scena
+nuova lo controlla; le baseline nuove vengono dal runner.
+Prova: scripts/check.sh --rapido; cd apps/client && npm run bench:verify && npm run bench:a11y
 Stato: [ ] da fare
