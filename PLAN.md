@@ -327,7 +327,7 @@ Se una di queste cade, la stima si allunga.
 | Riallineare #290 a `main` e unirla | K2 | 7 di 7; la prova con una persona non è fatta | la prova dell'utente col protocollo di K2, prima di segnarla pronta (D13 A) | basso | S | CI completa verde, OK dell'utente |
 | PA T1 · il finto del banco con le impostazioni dell'host | PA | da fare | #295 in `main` (d90a09d0 di K3 cambia `bench/fake-ipc.ts`) | basso | S | `bench/fake-ipc.test.ts` |
 | PA T3 · i comandi in sola lettura non tengono il turno | PA | in corso (coder, base 0cc94bde) | nessuno | medio: tocca il custode | M | test d'integrazione di `fub-host` |
-| PA T4, T5 · #237 R01–R03 | PA | T4 in corso (coder, base 0cc94bde); T5 dopo T4 | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione; R01 si chiude col test se non si riproduce |
+| PA T4, T5 · #237 R01–R03 | PA | T4 fatto; T5 da fare | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione; R01 si chiude col test se non si riproduce |
 | PA T6, T7 · #289 | PA | da fare | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
 | PA T8 · la pagina della cornice del telefono | PA | da fare | nessuno | basso | S | guardie dei documenti |
 | PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | da fare (D7 A) | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
@@ -3612,7 +3612,7 @@ passano; se uno falliva prima, la correzione lo fa passare; il test di
 `state/` restano verdi; `document-model.md` dice che cosa succede al testo
 non salvato quando un riquadro, una finestra o un ripristino lo toccano.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/state/ src/panels/
-Stato: [~] in corso · coder · base 0cc94bde
+Stato: [x] fatto · c0bf4733..8aa22806 · R01 non riprodotto (test sui tre chiamanti), R02 non perde testo (cambiata sul disco, poi conflitto); forceReload passa dalla bozza, reloadCurrent tolto · check --rapido 18/19 sull'integrazione: rosso solo il vitest per tempi scaduti sotto carico (load 24), i 14 file rilanciati da soli 371/371 verdi
 
 ## T5 · #237 R03: il conflitto e la Lettura dicono quale versione si vede
 
