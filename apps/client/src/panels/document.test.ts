@@ -629,8 +629,8 @@ describe("il testo non salvato resta (#237)", () => {
     box.versions.set(BENVENUTO, restored);
     const { api } = await import("../host/ipc");
 
-    await api.viewAction("history", "history-1", null, "restore", { doc: BENVENUTO, ts: 1 }, {});
-    await api.viewAction("history", "history-1", null, "restore_confirm", { doc: BENVENUTO, ts: 1 }, {});
+    await api.viewAction("history", "history-1", null, "restore", { doc: BENVENUTO, ts: 1 }, []);
+    await api.viewAction("history", "history-1", null, "restore_confirm", { doc: BENVENUTO, ts: 1 }, []);
     await settle();
 
     expect(host.files()[BENVENUTO]).toBe(restored);

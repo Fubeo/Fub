@@ -125,7 +125,6 @@ export {
   publishContext,
   recoverDrafts,
   refreshLooks,
-  reloadCurrent,
   resetDocumentsForVault,
   reveal,
   runEditorAction,

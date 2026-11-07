@@ -243,21 +243,60 @@ describe("decisioni del ciclo di vita della sessione", () => {
     });
   });
 
-  it("la ricarica forzata pulisce e aggiorna il testo autorevole", async () => {
+  it("la ricarica forzata mette in bozza il testo sporco, poi aggiorna il testo autorevole", async () => {
     const source: DocumentSource = { text: "versione ripristinata", revision: "rev-3", format_id: "markdown", source_kind: "text", text_kind: "source" };
-    api.readDocument = vi.fn(async () => source);
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
-    acceptText(sessions, "nota.md", "modifica da scartare");
+    acceptText(sessions, "nota.md", "modifica locale");
+    api.readDocument = vi.fn(async () => source);
 
     const outcome = await sessions.forceReload("nota.md");
 
+    // Il testo della persona non sparisce: è nella bozza, scritta prima di
+    // leggere il disco, e il recupero lo ritrova.
+    expect(api.saveDraft).toHaveBeenCalledWith("nota.md", "modifica locale", "rev-1");
+    expect(vi.mocked(api.saveDraft).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(api.readDocument).mock.invocationCallOrder[0]!,
+    );
+    expect(api.discardDraft).not.toHaveBeenCalled();
     expect(outcome).toEqual({ kind: "reloaded", text: source.text, changed: true });
     expect(sessions.inspect("nota.md")).toMatchObject({
       text: source.text,
       dirty: false,
       result: "ok",
     });
+  });
+
+  it("una ricarica forzata con la bozza fallita non legge il disco e lascia il testo", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "modifica locale");
+    api.saveDraft = vi.fn(async () => {
+      throw new Error("disco pieno");
+    });
+    const reads = vi.mocked(api.readDocument).mock.calls.length;
+
+    const outcome = await sessions.forceReload("nota.md");
+
+    expect(outcome).toEqual({ kind: "unavailable" });
+    expect(api.saveDraft).toHaveBeenCalledWith("nota.md", "modifica locale", "rev-1");
+    expect(vi.mocked(api.readDocument).mock.calls.length).toBe(reads);
+    expect(sessions.inspect("nota.md")).toMatchObject({
+      text: "modifica locale",
+      dirty: true,
+      result: "ok",
+      saveState: "non_salvato",
+    });
+  });
+
+  it("una ricarica forzata di un testo pulito non scrive bozze", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+
+    const outcome = await sessions.forceReload("nota.md");
+
+    expect(outcome).toEqual({ kind: "reloaded", text: "nota.md: disco", changed: false });
+    expect(api.saveDraft).not.toHaveBeenCalled();
   });
 
   it("una ricarica forzata fallita lascia testo e stato com'erano", async () => {
