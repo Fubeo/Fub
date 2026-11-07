@@ -925,7 +925,14 @@ nessuno»:
 |---|---|---|---|---|
 | piena (nelle due luci) | 572 | 18.491 | 1.244 | 65 |
 | 700 px | 286 | 12.564 | 1.228 | 95 |
-| telefono | 286 | 7.342 | 402 | 53 |
+| telefono | 286 | 7.271 | 401 | 53 |
+
+Il telefono è rifatto dopo il blocco di PA T47, e ha 71 controlli in meno
+del giro di prima. 72 sono le schede «Vault» e «Informazioni» degli stati
+delle impostazioni, che ora scorrono fuori dalla riga, intere, invece di
+starci dentro troncate; le righe più basse portano fuori vista un
+interruttore e dentro due elenchi a scelta. A tutta larghezza e a 700 il
+blocco non vale.
 
 Gli esiti dei 18.491 controlli a tutta larghezza: porta a un altro stato
 7.686, cambia lo schermo 4.837, avviso preciso 2.633, nativo (un campo che
