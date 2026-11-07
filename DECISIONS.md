@@ -61,6 +61,14 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · fub-pre-alpha (orchestratore) · la prima coppia è PA T3 e
+  PA T4, non T3 e T13 come dice l'ondata; PA T13 parte quando #295 è in
+  `main` · T13 chiede di aprire fogli e documenti come la shell, con
+  `open_key` e `document_closed` dei motori, che arrivano con #295: fatto
+  prima, il corpus coprirebbe metà del percorso e andrebbe rifatto. T4
+  invece non aspetta niente, sta in un altro strato (il client) e sblocca
+  T5 e T30.
+
 - 2026-11-07 · fub-pre-alpha · il piano è approvato, coi 130 stati
   composti e nuovi del simulatore; resta da confermare solo la licenza del
   logo, prima di PA T49 · l'utente: «Per il resto il piano è approvato»
