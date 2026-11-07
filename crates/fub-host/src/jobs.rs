@@ -86,8 +86,8 @@ use fub_kernel::workspace::{
     PreparedPluginDataIo,
 };
 use fub_kernel::{
-    authorize_query, filter_query_result, IndexBatchStep, ReadOnly, RenameRecoveryPosition,
-    Workspace,
+    authorize_query, filter_query_result, IndexBatchStep, PreparedReadOnlyCommand, ReadOnly,
+    RenameRecoveryPosition, Workspace,
 };
 
 /// L'[`HostApi`] di un job: intestato a un plugin, servito da un workspace
@@ -138,6 +138,15 @@ pub struct JobHost {
     /// sapere che la cancellazione esiste si ferma comunque, alla prima cosa
     /// che prova a fare.
     cancelled: Arc<AtomicBool>,
+    /// **I comandi di sola lettura che stanno girando sopra questo host**, dal
+    /// più esterno: ciò su cui si rifiuta la ricorsione di un comando che non
+    /// passa dalla pila condivisa del workspace
+    /// ([`Workspace::prepare_read_only_provider_command`]).
+    ///
+    /// Vuota per un job e per l'ingresso dell'utente. I comandi che scrivono
+    /// non ci finiscono: la loro ricorsione la rifiuta la pila condivisa, che
+    /// col turno è di chi la usa.
+    chain: Vec<String>,
 }
 
 impl JobHost {
@@ -155,6 +164,7 @@ impl JobHost {
             instance: None,
             job: None,
             cancelled: Arc::new(AtomicBool::new(false)),
+            chain: Vec::new(),
         }
     }
 
@@ -204,6 +214,7 @@ impl JobHost {
             instance: None,
             job: None,
             cancelled: Arc::clone(&self.cancelled),
+            chain: self.chain.clone(),
         }
     }
 
@@ -679,6 +690,27 @@ pub(crate) fn finish_events<T>(
     drain_events(workspace)?;
     let mut ws = workspace.write()?;
     Ok(ws.finish_deferred_events(deferred))
+}
+
+/// Esegue un comando **di sola lettura** col frame tutto suo
+/// ([`PreparedReadOnlyCommand`]), senza il turno di scrittura.
+///
+/// Il provider gira sotto il recinto [`ReadOnly`], come sul percorso
+/// condiviso; il suo host porta avanti la catena dei comandi, così una sua
+/// invocazione annidata di sé stesso è rifiutata. La fine prende solo un
+/// prestito condiviso: una lettura non ha undo da spingere, batch da chiudere
+/// né eventi da consegnare.
+pub(crate) fn run_read_only_command(
+    workspace: &Custody<Workspace>,
+    mut host: JobHost,
+    mut prepared: PreparedReadOnlyCommand,
+) -> Result<CommandOutcome, PluginError> {
+    host.chain = prepared.chain().to_vec();
+    let why = prepared.read_only_reason();
+    let mut host = Guard::new(host, ReadOnly { why });
+    let outcome = prepared.invoke(&mut host);
+    let ws = workspace.read()?;
+    ws.finish_read_only_provider_command(prepared, outcome)
 }
 
 /// Porta in fondo il solo rebuild di manutenzione con la stessa sequenza a
@@ -1509,6 +1541,18 @@ impl HostCommands for JobHost {
         self.stopped()?;
         self.authorize_caller(Capability::Commands, || format!("invoking `{command}`"))?;
         let workspace = self.workspace.clone();
+        // Un comando di sola lettura ha il suo frame e non prende il turno:
+        // annidato o no, non ferma chi scrive.
+        let read_only = workspace.read()?.prepare_read_only_provider_command(
+            command,
+            args.clone(),
+            self.mode,
+            &self.chain,
+        )?;
+        if let Some(prepared) = read_only {
+            let host = self.for_provider(prepared.owner().to_string(), prepared.host_mode());
+            return run_read_only_command(&workspace, host, prepared);
+        }
         let _turn = self.turn(&workspace)?;
         let mut prepared = {
             let mut ws = workspace.write()?;

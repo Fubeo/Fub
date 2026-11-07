@@ -4333,6 +4333,20 @@ impl Host {
             let result = invoke_folder_create(&workspace, args, mode);
             return self.localized_host_result(vault, result);
         }
+        // Un comando che si è dichiarato di sola lettura ha il suo frame e
+        // **non** prende il turno: una lettura lunga (un'anteprima, uno
+        // strumento dell'AI) non ferma i salvataggi di chi scrive.
+        let read_only = workspace.read()?.prepare_read_only_provider_command(
+            command,
+            args.clone(),
+            mode,
+            &[],
+        )?;
+        if let Some(prepared) = read_only {
+            let host = JobHost::new(workspace.clone(), prepared.owner().to_string())
+                .in_mode(prepared.host_mode());
+            return crate::jobs::run_read_only_command(&workspace, host, prepared);
+        }
         // Il turno serializza gli altri writer ma **non** è il RwLock del
         // workspace: fra prepare e finalize i reader possono entrare, e il
         // callback può rientrare sullo stesso thread per singola capacità.

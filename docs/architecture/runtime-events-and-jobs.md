@@ -139,6 +139,35 @@ verifica generazione, revisione o identità del workspace. Un token legato a
 un'altra istanza produce un `Conflict` e torna al chiamante: il finalizzatore
 sbagliato non chiude il frame originale.
 
+### Chi prende il turno per un comando
+
+Un comando di un provider (`Host::invoke_user_command` per l'utente,
+`JobHost::run_command` per un comando annidato o lanciato da un job) prende il
+turno **solo se scrive**:
+
+- un comando che si è dichiarato di sola lettura (`CommandScope::read_only()`,
+  cioè `!spec.scope.writes`) passa da
+  `Workspace::prepare_read_only_provider_command` e **non prende il turno**.
+  Il provider gira sotto `Guard` con la politica `ReadOnly`, come prima: una
+  sua scrittura è rifiutata. Mentre legge, chi salva salva e i suoi eventi
+  arrivano subito; due letture girano insieme;
+- un comando che scrive prende il turno per tutta la chiamata, anche quando
+  gira in `DryRun`: è l'anteprima di una scrittura e resta sul frame condiviso;
+- la manutenzione del kernel e i comandi dell'host trattati prima (le cartelle,
+  il cestino del sistema, i montaggi, la cattura) restano come sono.
+
+La lettura ha **un frame tutto suo** perché il frame condiviso vive nello stato
+del workspace fino alla fine del comando: attore scambiato, batch aperto,
+comando sulla pila, `in_provider_call` alzato. Senza il turno a isolarlo, gli
+eventi di una scrittura parallela finirebbero nel batch del comando e
+aspetterebbero la sua fine, e due letture si pesterebbero sulla pila. Il token
+di sola lettura (`PreparedReadOnlyCommand`) non tocca niente di tutto questo:
+porta con sé la catena dei comandi per rifiutare la ricorsione (`JobHost` la
+passa alle invocazioni annidate), e la sua fine (`finish_read_only_provider_command`,
+un prestito condiviso) non spinge undo, non chiude batch e non accoda eventi.
+Se il vault si chiude mentre il comando legge, la fine risponde `Cancelled` e
+l'esito non si applica.
+
 ## Turno di scrittura e istanza
 
 I due lucchetti si prendono in ordine opposto da due parti. Un salvataggio tiene
