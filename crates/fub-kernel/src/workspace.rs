@@ -2308,6 +2308,10 @@ pub struct PreparedReadOnlyCommand {
     /// Il workspace in cui è stata preparata: la fine non si applica a un
     /// altro, né a questo se nel frattempo si è chiuso.
     workspace_id: u64,
+    /// Il vault si stava già chiudendo alla preparazione? Allora è una
+    /// lettura della chiusura stessa (un `deactivate` o un handler di
+    /// `VaultClosed` che invoca un comando), e la chiusura non la invalida.
+    closed_at_prepare: bool,
 }
 
 impl PreparedReadOnlyCommand {
@@ -11625,12 +11629,6 @@ impl Workspace {
                 .into(),
             ));
         }
-        if self.closed {
-            return Err(PluginError::Cancelled(
-                format!("il vault si sta chiudendo: il comando `{command}` non parte").into(),
-            ));
-        }
-
         let why = if mode.is_dry_run() {
             "una simulazione non scrive"
         } else {
@@ -11647,6 +11645,7 @@ impl Workspace {
             why,
             chain,
             workspace_id: self.workspace_id,
+            closed_at_prepare: self.closed,
         }))
     }
 
@@ -11656,13 +11655,16 @@ impl Workspace {
     /// dichiara uno), niente batch, niente eventi.
     ///
     /// Se il vault si è chiuso dopo la preparazione l'esito non si applica: la
-    /// chiamata risponde con [`PluginError::Cancelled`].
+    /// chiamata risponde con [`PluginError::Cancelled`]. Una lettura preparata
+    /// quando la chiusura era già cominciata (chi si spegne può ancora
+    /// invocare comandi, come sul percorso condiviso) finisce normalmente.
     pub fn finish_read_only_provider_command(
         &self,
         prepared: PreparedReadOnlyCommand,
         outcome: std::result::Result<CommandOutcome, PluginError>,
     ) -> std::result::Result<CommandOutcome, PluginError> {
-        if prepared.workspace_id != self.workspace_id || self.closed {
+        let closed_meanwhile = self.closed && !prepared.closed_at_prepare;
+        if prepared.workspace_id != self.workspace_id || closed_meanwhile {
             return Err(PluginError::Cancelled(
                 format!(
                     "il vault si è chiuso mentre il comando `{}` leggeva",

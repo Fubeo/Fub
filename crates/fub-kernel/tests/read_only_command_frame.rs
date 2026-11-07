@@ -295,6 +295,18 @@ fn the_outcome_of_a_read_does_not_land_on_a_closed_vault() {
             &[]
         )
         .is_err(),
-        "a closed vault starts no read"
+        "the commands of a closed vault are gone"
     );
+}
+
+/// Chi si spegne durante la chiusura può ancora invocare una lettura (lo fa
+/// un `deactivate`): la chiusura già cominciata non la invalida.
+#[test]
+fn a_read_started_during_the_close_finishes_normally() {
+    let (_dir, mut ws) = vault();
+    let _closing = ws.prepare_close().expect("the close starts");
+    let mut prepared = read(&ws, &[]);
+    let outcome = ws.with_host("test", |host| prepared.invoke(host));
+    ws.finish_read_only_provider_command(prepared, outcome)
+        .expect("a read of the close itself finishes");
 }
