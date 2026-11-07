@@ -1018,22 +1018,29 @@ giro:
 3. **Gli scenari.** Ognuno si percorre coi bottoni della pagina, e ogni
    passo si fotografa.
 
-Il giro del 2026-11-07, sul simulatore di questo ramo (298 stati, coi
-blocchi di PA T47, T56 e T57), dice «errori: nessuno»:
+Il giro del 2026-11-07 sera, sul simulatore di questo ramo con Marcuzzo
+(298 stati, coi blocchi di PA T47, T56 e T57), dice «errori: nessuno»:
 
 | Larghezza | Stati montati | Controlli chiesti | Clic veri | Coperti |
 |---|---|---|---|---|
-| piena (nelle due luci) | 596 | 19.348 | 1.309 | 71 |
-| 700 px | 298 | 13.182 | 1.293 | 101 |
-| telefono | 298 | 7.663 | 409 | 53 |
+| piena (nelle due luci) | 596 | 19.342 | 1.309 | 71 |
+| 700 px | 298 | 13.176 | 1.293 | 101 |
+| telefono | 298 | 7.656 | 409 | 53 |
+
+Rispetto al giro col primo logo cambia solo `g2-foglio-ribbon-palette`,
+ricatturata: la tavolozza si apre 20 px più a destra (la freccia del
+pulsante diviso è larga 24, PA T57), e copre sei celle del foglio in più a
+tutta larghezza e a 700; al telefono otto quadretti di colore escono dallo
+schermo ed entra «Bordi». In `g2-raw-girato` lo zoom della foto dice −77 %
+invece di −78 %.
 
 Al telefono le schede «Vault» e «Informazioni» degli stati delle
 impostazioni scorrono fuori dalla riga, intere (PA T47), invece di starci
 dentro troncate: fuori vista non si chiedono. A tutta larghezza e a 700 il
 blocco del telefono non vale.
 
-Gli esiti dei 19.348 controlli a tutta larghezza: porta a un altro stato
-7.938, cambia lo schermo 5.104, avviso preciso 2.781, nativo (un campo che
+Gli esiti dei 19.342 controlli a tutta larghezza: porta a un altro stato
+7.932, cambia lo schermo 5.104, avviso preciso 2.781, nativo (un campo che
 prende il testo, una zona che prende il fuoco o scorre) 1.022, apre un
 menu, un cassetto o un dialogo 855, avviso della zona 847 (dice che cosa fa
 nel prodotto quella zona, per esempio la griglia del foglio, e il task che
@@ -1105,15 +1112,23 @@ del client è col tema di serie) e l'ispettore compatto di S2 T9 (264 px
 nella foto, 216 nel simulatore: tutto ciò che gli sta a sinistra si sposta,
 e il passo 6 lo misura).
 
-Il giro del 2026-11-07, sul simulatore verde di questo ramo (le catture
-rifatte col verde di serie, D25, le risposte dell'utente e i blocchi di PA
-T47, T56 e T57): 1.424 confronti, uno per stato, larghezza, luce e fonte.
+Il giro del 2026-11-07 sera, sul simulatore di questo ramo con Marcuzzo
+(le catture rifatte col verde di serie, D25, e col logo, D26, le risposte
+dell'utente e i blocchi di PA T47, T56 e T57): 1.424 confronti, uno per
+stato, larghezza, luce e fonte.
 
 | Fonte | Confronti | Misurati | Media | Sopra lo 0,5 % | Dopo le zone |
 |---|---|---|---|---|---|
-| cattura pura contro la sua foto | 510 | 510 | 0,22 % | 67 | tutti sotto |
-| client fuori dagli strati e dal DOM nuovo | 570 | 494 | 1,05 % | 191 | 127 sotto, 44 lavagna, 17 tema, 2 tinte, 1 ombra |
+| cattura pura contro la sua foto | 510 | 510 | 0,14 % | 45 | tutti sotto |
+| client fuori dagli strati e dal DOM nuovo | 570 | 494 | 1,00 % | 132 | 90 sotto, 22 lavagna, 17 tema, 2 tinte, 1 ombra |
 | strato contro la pagina approvata | 344 | 152 | 0,10 % | 2 | tutti sotto |
+
+Rispetto al giro di prima, col primo logo, nessuna riga sale di 0,3 punti
+e 92 scendono, 82 sotto lo 0,05 %. Le catture si rifanno col CSS di oggi
+(`ricattura-tutto.sh`), e quelle per Marcuzzo hanno preso anche le
+correzioni di PA T56 e T57: la freccia del pulsante diviso larga 24, per
+esempio, ora sta anche nella foto di `s2/foglio`, e le celle e i fogli
+fuori dagli strati non differiscono più.
 
 Non misurati, 268: 192 strati a 700 px e sul telefono (la pagina approvata
 ha una foto sola, alla sua misura) e 76 schermi in cui il DOM nuovo copre
@@ -1123,16 +1138,17 @@ col dialogo, `riscontri-b-apre`, `tema-installa`, `tema-sostituisci`,
 e le barre marcate di D6, `aspetto-barre-marcate` e `barra-marcate`, che
 ridisegnano tutta la cornice).
 
-Le 260 righe sopra la soglia, per motivo:
+Le 179 righe sopra la soglia, per motivo:
 
 - **S2 T3 sul telefono**: la testata, il bottone della modalità e la barra
   di formato stanno dove li mette T3; tolti, resta al massimo lo 0,07 %;
 - **PA T47 sul telefono**: tolti gli interruttori e le schede, e ritrovati
   i quadretti spostati, resta lo 0,00 %;
-- **PA T56 e T57** (172 righe, fra cui i fogli con la barra a schede, gli
-  avvisi, la lavagna e le impostazioni): tolte le correzioni e ritrovati i
-  quadretti spostati, fuori dalla lavagna e dai temi resta al massimo lo
-  0,49 % (S81 al telefono, al buio);
+- **PA T56 e T57** (95 righe: 68 della lavagna, 11 dei temi, le altre
+  del documento, del foglio, dei file, delle impostazioni e del telefono):
+  tolte le correzioni e ritrovati i quadretti spostati,
+  fuori dalla lavagna e dai temi resta al massimo lo 0,09 % (S276
+  `tema-rifiutato` a piena larghezza);
 - **il DOM nuovo prende spazio**: tolto il DOM nuovo e ritrovati i
   quadretti spostati, la riga scende sotto; il simulatore si riprova scorso
   in più dove il DOM nuovo sta sopra ciò che la foto mostra (per esempio
@@ -1141,29 +1157,35 @@ Le 260 righe sopra la soglia, per motivo:
   sotto;
 - **S2 T9, l'ispettore compatto** (`g2-compatta`): i quadretti si ritrovano
   spostati di lato, resta lo 0,00 %;
-- **la lavagna ancora blu** (44 righe, tutte a 700): `s2/lavagna` e
-  `s2/lavagna-700` hanno il DOM verde (`verde-lavagna.mjs`) e la foto blu
-  di prima di N6 (vedi «Rifare il simulatore»). Il colore conta come
-  differenza: a tutta larghezza resta sotto la soglia, a 700 resta fra lo
-  0,56 e lo 0,57 %. È l'unica eccezione ai pixel, e la riga lo scrive;
+- **la lavagna ancora blu** (22 righe, tutte a 700 nella luce scura):
+  `s2/lavagna` e `s2/lavagna-700` hanno il DOM verde (`verde-lavagna.mjs`)
+  e la foto blu di prima di N6 (vedi «Rifare il simulatore»). Il colore
+  conta come differenza: a tutta larghezza resta sotto la soglia, a 700
+  nella luce chiara arriva allo 0,50 %, nella scura resta lo 0,55 %. È
+  l'unica eccezione ai pixel, e la riga lo scrive;
 - **il tema d'esempio** (17 righe): «carta», «officina» e l'anteprima di
   «carta» cambiano i colori di tutto lo schermo, e la foto del client è col
   tema di serie. Si spiegano per stato:
 
 | Stato | Larghezza | Luce | Differenza | Resta dopo le zone |
 |---|---|---|---|---|
-| S278 `tema-anteprima` | piena | chiara | 7,43 % | 1,65 % |
-| S278 `tema-anteprima` | 700 | chiara | 8,68 % | 1,82 % |
-| S282 `tema-carta` | piena | chiara | 1,77 % | 0,74 % |
-| S282 `tema-carta` | 700 | chiara | 2,98 % | 1,35 % |
+| S278 `tema-anteprima` | piena | chiara | 7,45 % | 1,67 % |
+| S278 `tema-anteprima` | 700 | chiara | 8,70 % | 1,83 % |
+| S282 `tema-carta` | piena | chiara | 1,79 % | 0,77 % |
+| S282 `tema-carta` | 700 | chiara | 3,01 % | 1,51 % |
 | S282 `tema-carta` | telefono | chiara | 4,03 % | 0,87 % |
-| S283 `tema-carta-impostazioni` | piena | chiara | 1,76 % | 1,85 % |
-| S283 `tema-carta-impostazioni` | 700 | chiara | 2,25 % | 2,20 % |
-| S297 `tema-officina` | piena | chiara, scura | 2,95 %, 2,68 % | 1,61 %, 1,32 % |
-| S297 `tema-officina` | 700 | chiara, scura | 4,83 %, 4,48 % | 2,32 %, 1,69 % |
+| S283 `tema-carta-impostazioni` | piena | chiara | 1,78 % | 1,87 % |
+| S283 `tema-carta-impostazioni` | 700 | chiara | 2,26 % | 2,21 % |
+| S297 `tema-officina` | piena | chiara, scura | 2,97 %, 2,70 % | 1,64 %, 1,35 % |
+| S297 `tema-officina` | 700 | chiara, scura | 4,86 %, 4,50 % | 2,49 %, 1,86 % |
 | S297 `tema-officina` | telefono | chiara, scura | 5,21 %, 5,00 % | 1,88 %, 1,84 % |
-| S298 `tema-officina-impostazioni` | piena | chiara, scura | 2,63 %, 1,88 % | 2,78 %, 2,00 % |
-| S298 `tema-officina-impostazioni` | 700 | chiara, scura | 3,56 %, 2,49 % | 3,51 %, 2,43 % |
+| S298 `tema-officina-impostazioni` | piena | chiara, scura | 2,64 %, 1,90 % | 2,80 %, 2,02 % |
+| S298 `tema-officina-impostazioni` | 700 | chiara, scura | 3,57 %, 2,50 % | 3,52 %, 2,44 % |
+
+Coi temi d'esempio anche la cartella del logo prende i colori del tema, e
+la foto del client ha quella di serie: per questo, rispetto al giro di
+prima, la differenza sale di qualche centesimo e ciò che resta dopo le
+zone fino a 0,17 punti.
 
 In S283 e S298 a piena larghezza ciò che resta supera la differenza: la
 percentuale si conta sui punti che restano, e l'indice delle impostazioni,
@@ -1248,11 +1270,12 @@ guardato 70.020 testi, 90.860 controlli e 73.918 fuochi. 646 bersagli sotto
 i 24 px hanno la loro distanza (bersaglio-distanziato) e non sono difetti.
 Rifatto su `sim/out-v8`, con Marcuzzo (D26), dà gli stessi riscontri
 rigorosi. Fuori da quelli cambia solo la tavolozza della barra dei fogli al
-telefono (`g2-foglio-ribbon-palette`, ricatturata: la tavolozza si
-dispone in modo un poco diverso), con quattordici sovrapposti in meno e quattro nuovi
-(due pulsanti della barra coperti, nelle due luci), più un taglio in meno
-in `slash-nessuno`; il telefono è del suo piano. Ogni cella dice i riscontri, fra parentesi quanti nelle viste rigorose, e i
-gruppi (lo stesso tipo sullo stesso selettore):
+telefono (`g2-foglio-ribbon-palette`, ricatturata: con la freccia del
+pulsante diviso larga 24, PA T57, si apre 20 px più a destra), con
+quattordici sovrapposti in meno e quattro nuovi (due pulsanti della barra
+coperti, nelle due luci), più un taglio in meno in `slash-nessuno`; il
+telefono è del suo piano. Ogni cella dice i riscontri, fra parentesi quanti
+nelle viste rigorose, e i gruppi (lo stesso tipo sullo stesso selettore):
 
 | Tipo | Computer | Telefono | Strati |
 |---|---|---|---|
