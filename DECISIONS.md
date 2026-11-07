@@ -61,6 +61,19 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-07 · fub-pre-alpha (le scelte) · i consigli delle domande si
+  pesano solo sulla qualità del risultato (aperto, personalizzabile, senza
+  problemi), e il tempo non conta. Cambiano sei consigli (D1 B, D6 C, D8 B,
+  D9 B, D11 B, D17 C), e arrivano D19–D24 dalle voci di «Fuori scope» che
+  urtano col criterio (il controllo di tutte le viste, la firma, #237
+  R05–R08 e A03, #242, le parti della finestra, K6). D23 e D24 consigliano
+  comunque di aspettare, per una ragione di qualità. Le risposte e i 118
+  stati, in 14 gruppi, si danno nella pagina «Le scelte di Fub pre-alpha»
+  (https://claude.ai/artifact/Q5Lydynyn4DV8xwFDLZt18, `scelte.html`). Le
+  risposte stanno nel db dell'artifact (`risposte/<D>`, `stati/<gruppo>`):
+  solo il proprietario scrive, e il pianificatore le legge con
+  ArtifactData. · L'utente l'ha chiesto il 2026-11-07: «voglio la qualità
+  massima… open, personalizzabile… che funzioni da Dio».
 - 2026-11-07 · fub-pre-alpha (simulatore v2) · il simulatore mostra il
   telefono corretto da PA T47 (`92-prealpha-telefono.css`): l'interruttore
   resta il binario di 32 × 18 della pelle, con un tocco di 44 px dato da un

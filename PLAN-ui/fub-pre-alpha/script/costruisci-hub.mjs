@@ -191,27 +191,35 @@ const ASPETTA = {
   D1: "l'APK di PA T22", D2: "griglia T1–T9", D3: "i task grafici di N6", D4: "il simulatore, prima della consegna",
   D5: "S2 T22, K5 T21–T23", D6: "PA T11", D7: "PA T9", D8: "PA T22", D9: "PA T18", D10: "PA T10", D11: "PA T22", D12: "nessuno",
   D13: "il merge di #290 (K2)", D14: "PA T33", D15: "PA T34", D16: "PA T40", D17: "PA T42", D18: "PA T46",
+  D19: "l'approvazione", D20: "PA T22", D21: "la Fase A", D22: "PA T41", D23: "Scrittoio 2, o il piano dopo la pre-alpha",
+  D24: "il piano di K6 (#313)",
 };
 // Il consiglio in una riga, fedele all'opzione «(consigliata)» di PLAN.md.
 const CONSIGLIO = {
-  D1: "L'APK esce con la cornice provvisoria, segnato «sperimentale»; il piano del telefono parte dopo la pre-alpha.",
+  D1: "Un piano del telefono prima della pre-alpha: pianificatore, prototipo, poi i task.",
   D2: "Approvato così com'è.",
   D3: "Li disegno io adesso, nella cornice di Scrittoio 2, sullo stesso link.",
   D4: "Le compongo adesso nel simulatore: ogni editor nella cornice di Scrittoio 2.",
   D5: "La cornice di Scrittoio 2 con il contenuto di K5: gli strumenti nella colonna del kit, i gettoni del motore nella banda.",
-  D6: "Un vassoio solo, il più chiaro, per la barra a schede, la fila e la colonna, com'è sul ramo.",
+  D6: "Il vassoio più chiaro di serie, più la preferenza «Le barre: chiare · marcate» in Impostazioni › Aspetto.",
   D7: "Sì, diretta, solo per `cfg(windows)`, alla versione che il lockfile ha già.",
-  D8: "deb, rpm e AppImage, come oggi.",
-  D9: "I modelli di issue su GitHub, più le Discussions per le domande.",
+  D8: "Anche Flatpak, sul runtime GNOME, accanto a deb, rpm e AppImage.",
+  D9: "I modelli di issue e le Discussions, più «Segnala un problema» nel menu, senza dati personali.",
   D10: "Mi dici dove li hai visti.",
-  D11: "Solo nella CI: si costruisce, parte e si chiude; le note della pre-release lo dicono.",
+  D11: "Il giro a mano su un Mac vero (una persona o un Mac in affitto), con i compiti di PA T23.",
   D12: "Va bene così.",
   D13: "Prima del merge, come dice K2 D-2: fai il protocollo sulla PR (da solo o con una persona), e i compiti di K2 tornano nella prova finale.",
   D14: "Dove si legge, il nome diventa Fub o il disegno; resta solo nel codice e nelle pagine di riferimento.",
   D15: "`extends`, come `\"extends\": \"fub.serie\"`.",
   D16: "Dentro: un tema può ridisegnare ogni icona, per nome; i nomi restano stabili.",
-  D17: "«Carta» e «Salvia».",
+  D17: "Tutti e tre: «Carta», «Officina» e «Salvia».",
   D18: "La scheda segue il lessico: «Acceso», «Togli», e una guardia sui testi `settings.components.*`.",
+  D19: "Una sonda su tutte le 1.716 viste prima dell'approvazione, poi gli stessi controlli come guardia del banco.",
+  D20: "Firmati tutti e due: macOS con Developer ID e notarizzazione, Windows con SignPath Foundation o un certificato OV.",
+  D21: "Tutte e cinque le voci, in Fase A, ognuna con un test che la riproduce.",
+  D22: "I colori nella pelle, la sola geometria in `EditorView.theme`, prima degli hook congelati.",
+  D23: "Un piano subito dopo la pre-alpha, col prototipo e con i riscontri della prova.",
+  D24: "Fuori, come deciso: un piano subito dopo la pre-alpha, su una base già provata.",
 };
 // Una domanda già decisa comincia con «**Decisa dall'utente … : X.**»: nel
 // riassunto si legge la decisione, non il consiglio. D5 («L'utente ha chiesto
@@ -393,7 +401,9 @@ table.riassunto td:first-child { min-width: 14rem; }
       <ol>
         <li>Passa il <a href="#simulatore">simulatore</a>: gli scenari, le due luci, 700 px e telefono. Gli stati composti e nuovi (${daApprovare})
         aspettano un sì: segna quelli da rivedere, e incolla la frase che il simulatore scrive.</li>
-        <li>Rispondi alle <a href="#domande">domande aperte</a> (${aperte.map((d) => d.num).join(", ")}). Per ognuna c'è il mio consiglio per primo.</li>
+        <li>Rispondi alle <a href="#domande">domande aperte</a> (${aperte.map((d) => d.num).join(", ")}) nella pagina
+        <a href="https://claude.ai/artifact/Q5Lydynyn4DV8xwFDLZt18" target="_blank" rel="noopener">«Le scelte di Fub pre-alpha»</a>:
+        per ognuna ci sono le possibilità e il mio consiglio, pesato sulla qualità e non sul tempo. Lì puoi segnare anche gli stati.</li>
         <li>D5 (la testa del disegno) si sceglie guardando le due forme, tutte e due nel simulatore.</li>
       </ol>
     </section>

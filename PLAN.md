@@ -53,7 +53,8 @@ Approvato: in attesa.
 Stato: secondo giro chiuso il 2026-11-07 (chiesto dall'utente il
 2026-11-05). Il simulatore è rifatto: 286 stati e 17 scenari, che si usano
 come il prodotto; i task sono corretti e sono arrivati PA T34–T47.
-Aspettano l'utente i 118 stati composti e nuovi e le domande aperte. Finché
+Aspettano l'utente i 118 stati composti e nuovi e le domande aperte (dal
+2026-11-07 tutte nella pagina «Le scelte di Fub pre-alpha»). Finché
 «Approvato» dice «in attesa», il piano non va implementato.
 
 ## Modifiche
@@ -100,7 +101,7 @@ Confermata dall'utente il 2026-11-05.
 
 | Che cosa | Perché fuori | Dove va |
 |---|---|---|
-| K6 · il disegno completo | XL, 30 task, nessuno fatto. La pre-alpha usa il disegno semplice di K5 | `piano/k6-disegno-completo`, PR #313 |
+| K6 · il disegno completo | XL, 30 task, nessuno fatto. La pre-alpha usa il disegno semplice di K5 (domanda D24) | `piano/k6-disegno-completo`, PR #313 |
 | K4 · la consegna (edizioni, dati scaricabili) | La pre-alpha esce con un installer solo e tutto dentro | «Piani di Fub», passo K4 |
 | K7, K8 · foto e libreria foto | Aspettano la decisione di N9 | «Piani di Fub» |
 | K9 · documenti e fogli completi | Dopo K3: la pre-alpha usa le modalità di K3 | «Piani di Fub» |
@@ -115,12 +116,12 @@ Confermata dall'utente il 2026-11-05.
 | Lavagna v2 e v3 | Fuori dalla v1 di N6 (D-1 b) | `lavagna.md`, «Le tappe» |
 | A1 F2–F6 | A1 consegna F1, la base | artifact «Ricette di Fub» |
 | #9 · sincronizzazione | Grande e senza piano | #9 |
-| Installer firmati | Una prerelease può uscire senza firma (`release.yml`); la firma arriva con la beta | `docs/development/versioning-and-releases.md` |
-| #242 · il tema di CodeMirror in linea | Debito della pelle, non cambia ciò che si vede | #242 |
-| #237 R05–R08 e A03 | Sono UX, non perdono dati | #237 |
+| Installer firmati | Una prerelease può uscire senza firma (`release.yml`); la firma arriva con la beta (domanda D20) | `docs/development/versioning-and-releases.md` |
+| #242 · il tema di CodeMirror in linea | Debito della pelle, non cambia ciò che si vede (domanda D22) | #242 |
+| #237 R05–R08 e A03 | Sono UX, non perdono dati (domanda D21) | #237 |
 | #253, #254 · upstream dei motori | Le proposte le fa l'utente (decisione 9) | #253, #254 |
 | #282 · archiviare FubDraw | È un gesto dell'utente su GitHub | #282 |
-| Layout alternativi (le regioni della finestra spostate) | Sono una variante della shell, non una pelle | piano futuro delle varianti della shell |
+| Layout alternativi (le regioni della finestra spostate) | Sono una variante della shell, non una pelle (domanda D23) | piano futuro delle varianti della shell |
 | `backdrop-filter` nei temi | Blocca WebKitGTK senza composizione | resta vietato (`NEVER_PROPERTIES` del sanificatore) |
 
 ## Dentro e fuori
@@ -1550,23 +1551,37 @@ rifare uno stato.
 
 ## Domande aperte
 
-Ogni domanda ha le sue opzioni, il consiglio per primo, e i pro e i contro
+Ogni domanda ha le sue opzioni, il consiglio segnato, e i pro e i contro
 su tempo, qualità e personalizzazione. Il criterio di `DECISIONS.md` è il
 risultato migliore, anche quando costa di più. Fino alla risposta, i task
 che aspettano una domanda non partono; gli altri sì.
+
+Il 2026-11-07 l'utente ha fissato il criterio dei consigli: la qualità
+massima del risultato (aperto, personalizzabile, senza problemi), e il
+tempo non conta. Con quel criterio cambiano sei consigli (D1 B, D6 C, D8 B,
+D9 B, D11 B, D17 C) e arrivano sei domande nuove (D19–D24). Le domande si
+rispondono nella pagina «Le scelte di Fub pre-alpha»
+(https://claude.ai/artifact/Q5Lydynyn4DV8xwFDLZt18,
+`PLAN-ui/fub-pre-alpha/scelte.html`), con i 118 stati da approvare per
+gruppi. Le risposte restano salvate nella pagina; il pianificatore le legge
+da lì e le scrive qui e in `DECISIONS.md`.
 
 ### D1 · Il telefono, per l'APK di prova
 
 Oggi il telefono è la variante A di Scrittoio 2, «approvata per ora».
 L'utente ha detto: «sicuramente da modificare pesantemente».
 
-- **A (consigliata).** L'APK esce con la cornice A, segnato «sperimentale»
+Col criterio del 2026-11-07 il consiglio passa da A a B: un telefono che si
+sa già di voler rifare è un problema che chi prova vede subito. B parte
+quando Scrittoio 2 è in `main`, per non lavorare due volte sulla cornice.
+
+- **A.** L'APK esce con la cornice A, segnato «sperimentale»
   e lo dice. Un piano del telefono, con un prototipo suo, parte subito dopo
   la pre-alpha.
   - Tempo: niente in più adesso.
   - Qualità: chi prova l'APK vede un telefono provvisorio, ma lo sa.
   - Personalizzazione: si decide dopo, con calma, sul telefono vero.
-- **B.** Un piano del telefono **prima** della pre-alpha: pianificatore,
+- **B (consigliata dal 2026-11-07).** Un piano del telefono **prima** della pre-alpha: pianificatore,
   prototipo, poi i task.
   - Tempo: una o due settimane in più, e lavoro che si sovrappone a
     Scrittoio 2 mentre entra.
@@ -1707,7 +1722,10 @@ notte. Di notte ci sono anche i gruppi come foglietti alzati. Nel
 simulatore, gli stati con la barra di formato, il PDF e il disegno lo
 mostrano già.
 
-- **A (consigliata).** Un vassoio solo, il più chiaro, per la barra a
+Col criterio del 2026-11-07 il consiglio passa da A a C: la stessa qualità
+di A, più la libertà di cambiarla, che è anche accessibilità.
+
+- **A.** Un vassoio solo, il più chiaro, per la barra a
   schede, la fila e la colonna, com'è sul ramo.
   - Tempo: niente.
   - Qualità: tutte le barre si somigliano, e il contrasto è provato (15,78,
@@ -1718,7 +1736,7 @@ mostrano già.
   `--sheet-2`, il grigio di oggi.
   - Tempo: un task piccolo (PA T11).
   - Qualità: due vassoi diversi nella stessa cornice.
-- **C.** A, più una preferenza in Impostazioni › Aspetto: «Le barre: chiare
+- **C (consigliata dal 2026-11-07).** A, più una preferenza in Impostazioni › Aspetto: «Le barre: chiare
   · marcate». «Marcate» rimette `--sheet-2` sotto tutte le barre.
   - Tempo: PA T11, una chiave nuova nell'host e le foto delle due varianti.
   - Qualità: come A di serie.
@@ -1747,27 +1765,36 @@ dipendenza nuova.
 
 ### D8 · I pacchetti per Linux
 
-- **A (consigliata).** deb, rpm e AppImage, come fa `release.yml` oggi.
+Col criterio del 2026-11-07 il consiglio passa da A a B: con lo stesso
+WebKitGTK per tutti, ciò che si prova è ciò che vede chi prova.
+
+- **A.** deb, rpm e AppImage, come fa `release.yml` oggi.
   - Tempo: niente.
   - Qualità: WebKitGTK cambia da una distribuzione all'altra (lo dice N10).
-- **B.** Anche Flatpak, sul runtime GNOME (decisione 5).
+- **B (consigliata dal 2026-11-07).** Anche Flatpak, sul runtime GNOME (decisione 5), accanto ai tre di oggi.
   - Tempo: L, con i portali per aprire un vault fuori dalla sandbox.
   - Qualità: lo stesso motore su ogni distribuzione.
+  - Contro: porta dentro una parte di N10. Vanno provati il vault fuori
+    dalla sandbox e il watcher, che deve vedere le modifiche fatte da altri
+    programmi.
 - **C.** Solo AppImage.
   - Tempo: meno controlli.
   - Qualità: niente aggiornamenti dal sistema.
 
 ### D9 · Il canale dei riscontri della pre-alpha
 
-- **A (consigliata).** I modelli di issue su GitHub, «Problema», «Ho perso
+Col criterio del 2026-11-07 il consiglio passa da A a B: più è facile
+mandare un riscontro, più ne arrivano, e più sono completi.
+
+- **A.** I modelli di issue su GitHub, «Problema», «Ho perso
   dei dati» (con priorità) e «Idea», più le Discussions per le domande. La
   pagina «Prova la pre-alpha» li nomina (PA T18).
   - Tempo: S.
   - Qualità: tutto in un posto, e già lo strumento del lavoro.
-- **B.** A, più «Segnala un problema» nel menu di Fub: apre il browser
+- **B (consigliata dal 2026-11-07).** A, più «Segnala un problema» nel menu di Fub: apre il browser
   sulla pagina dell'issue con la versione e il sistema già scritti, e senza
   dati personali.
-  - Tempo: un task M in più, con un pezzo di GUI senza prototipo.
+  - Tempo: un task M in più; il pezzo di GUI è nel simulatore (S255, S256).
   - Qualità e personalizzazione: le migliori, perché chi prova scrive di
     più se è facile.
 - **C.** Solo le issue.
@@ -1798,12 +1825,16 @@ errori di tipo (PA T2), la pagina del telefono (PA T8) e `windows-sys`
 Il «Fatto quando» 3 chiede il giro a mano sugli installer. Qui c'è Linux,
 e l'utente ha un portatile Windows; un Mac non c'è.
 
-- **A (consigliata).** Su macOS si prova solo nella CI: l'installer si
+Col criterio del 2026-11-07 il consiglio passa da A a B: la CI vede se
+l'app parte, non se si usa bene.
+
+- **A.** Su macOS si prova solo nella CI: l'installer si
   costruisce, e l'app parte e si chiude pulita. Le note della pre-release lo
   dicono.
   - Tempo: S (PA T22).
   - Qualità: nessuno ha usato il dmg a mano.
-- **B.** Una persona con un Mac fa il giro a mano.
+- **B (consigliata dal 2026-11-07).** Una persona con un Mac fa il giro a mano, o un Mac in affitto
+  nel cloud, con la lista di compiti di PA T23.
   - Tempo: dipende da chi.
   - Qualità: la migliore.
 - **C.** Niente dmg nella pre-release.
@@ -1956,7 +1987,11 @@ La prova d'uscita della skin facile (PA T42) sono due temi: uno di circa
 Diventano il punto di partenza di chi scrive un tema, e il simulatore li
 mostra (gli stati «vestito da …», «da approvare»).
 
-- **A (consigliata).** «Carta» e «Salvia».
+Col criterio del 2026-11-07 il consiglio passa da A a C: tre punti di
+partenza più lontani fra loro, e la prova più dura dei cancelli. Con C il
+terzo tema va disegnato nel simulatore prima dell'approvazione.
+
+- **A.** «Carta» e «Salvia».
   - «Carta»: carta calda, angoli dritti, maiuscoletto nelle etichette,
     nessuna ombra, filetti sottili al posto delle scatole, un suo carattere
     con le grazie (PA T39) e, se D16 è A, una decina di icone a tratto
@@ -1972,7 +2007,7 @@ mostra (gli stati «vestito da …», «da approvare»).
   - Tempo: come A.
   - Qualità: più lontano dalla serie, quindi una prova più dura dei
     cancelli di contrasto; meno adatto a leggere a lungo.
-- **C.** Tutti e tre.
+- **C (consigliata dal 2026-11-07).** Tutti e tre.
   - Tempo: mezza giornata in più, e un tema in più da tenere verde a ogni
     cambio della serie.
   - Qualità: la prova più larga.
@@ -1999,6 +2034,155 @@ guarda solo i menu (S204–S208, «Differenze fra piani e codice» 46).
   menu e per la pagina Componenti.
   - Tempo: niente.
   - Qualità: due parole per la stessa azione nella stessa finestra.
+
+### D19 · Il controllo automatico di tutte le viste
+
+Il difetto dei 44 px (Differenze 47, PA T47) è venuto fuori guardando, non
+da un controllo. «I pixel contro la fonte» prova che il simulatore è uguale
+al client, non che il client sia senza difetti. Le viste sono 1.716 (286
+stati × 3 larghezze × 2 luci), e sono state guardate a campione.
+
+- **A (consigliata).** Prima dell'approvazione una sonda passa tutte le
+  1.716 viste del simulatore e cerca:
+  - testi tagliati con «…»;
+  - elementi che escono dallo schermo o si sovrappongono;
+  - bersagli del tocco sotto i 24 px (44 al telefono);
+  - contrasto sotto le soglie del contratto del tema;
+  - fuoco invisibile.
+
+  Ogni difetto vero va in «Differenze fra piani e codice» con il suo task;
+  i falsi allarmi si spiegano in un elenco. Poi un task nuovo porta gli
+  stessi controlli nel banco, accanto a `bench:a11y`, così una modifica
+  futura non li riporta.
+  - Tempo: mezza giornata di pianificazione adesso, più un task M.
+  - Qualità: la migliore. I difetti si trovano prima che un coder li copi,
+    e la guardia li tiene lontani.
+  - Contro: falsi allarmi da spiegare a mano (un «…» voluto, un'icona
+    decorativa).
+- **B.** Solo la sonda di adesso, senza guardia nel banco.
+  - Qualità: un difetto simile può tornare con una modifica futura.
+- **C.** Solo la guardia nel banco, durante l'implementazione.
+  - Qualità: i difetti si trovano dopo che i coder li hanno copiati.
+- **D.** Niente: restano il confronto dei pixel e l'occhio.
+
+### D20 · La firma degli installer
+
+La pre-alpha esce senza firma («Fuori scope», installer firmati). Senza
+firma Windows mostra SmartScreen («Windows ha protetto il PC»), e macOS
+blocca l'app finché non la si apre da Impostazioni di sistema › Privacy e
+sicurezza. Firmare chiede account a nome dell'utente e denaro.
+
+Verificato il 2026-11-07, da riverificare quando si fa il task:
+- Azure Artifact Signing (prima Trusted Signing) accetta persone singole
+  solo negli Stati Uniti e in Canada;
+- SignPath Foundation firma gratis i progetti open source che ammette: tutto
+  il codice aperto, la firma fatta dalla CI, e l'editore mostrato è
+  «SignPath Foundation»;
+- un certificato OV di un'autorità costa circa 150–300 USD l'anno;
+- l'Apple Developer Program costa 99 USD l'anno.
+
+- **A (consigliata).** Firmati tutti e due. macOS con Developer ID e
+  notarizzazione nella CI di rilascio. Windows con SignPath Foundation, o con
+  un certificato OV se Fub non è ammesso. Un task nuovo in Fase D, prima di
+  PA T22.
+  - Tempo: L, più l'attesa delle verifiche di Apple e di SignPath.
+  - Qualità: la migliore. Su macOS si installa senza blocchi, e su Windows
+    l'editore è verificato.
+  - Contro: su Windows SmartScreen può avvisare nelle prime settimane,
+    finché la firma non si fa una reputazione. I segreti vanno tenuti nella
+    CI.
+- **B.** Solo macOS firmato e notarizzato. Su Windows resta l'avviso, e la
+  pagina «Prova la pre-alpha» spiega come andare avanti.
+  - Qualità: su Windows il primo incontro con Fub è un avviso.
+- **C.** Come oggi, senza firma. Le note spiegano come aprire l'app.
+  - Qualità: ogni persona che prova incontra un avviso o un blocco.
+
+### D21 · Cinque difetti di #237 che non perdono dati
+
+#237 tiene aperte cinque voci, fuori dal piano perché «sono UX, non perdono
+dati»:
+- R05: dopo un errore, Attività può tenere la lista vecchia senza dirlo;
+- R06: i suggerimenti dei documenti chiedono una finestra di 200 documenti,
+  e in un vault grande una nota può non comparire;
+- R07: che cosa ricordano la barra laterale e le ricerche, per vault; un
+  vault non deve ereditare la ricerca di un altro;
+- R08: le viste dopo un cambio di vault (il grafo, dopo il cambio e dopo la
+  chiusura);
+- A03: Spazio su una casella delle Impostazioni lasciava il fuoco sul fondo
+  della pagina; va riprovato.
+
+- **A (consigliata).** Dentro, in Fase A: un task nuovo, una voce alla volta,
+  con la regola di #237. Prima un test che la riproduce nel proprietario,
+  poi la correzione lì; se non si riproduce, si chiude col test che lo
+  dimostra.
+  - Tempo: M–L.
+  - Qualità: chi prova non incontra questi intoppi. R06 conta col vault da
+    5.000 file (PA T45), A03 per chi usa la tastiera.
+- **B.** Dentro solo R06 e A03, i due che una persona incontra di sicuro.
+  - Qualità: gli altri tre restano possibili.
+- **C.** Fuori, come oggi.
+
+### D22 · L'editor di testo vestito dal tema (#242)
+
+`editors/text/theme.ts` scrive i colori con `EditorView.theme` (42
+`var(--ruolo)`), e alcuni profili Markdown passano ruoli in linea.
+`check-inline-theme.mjs` tiene `theme.ts` in `SEPARATE`. Un tema cambia i
+ruoli, ma la sua pelle non veste l'editor di testo come veste il resto.
+#242 chiede di scegliere.
+
+- **A (consigliata).** I colori nella pelle (`skin/editors.css`, sotto le
+  classi `.cm-*`), la sola geometria in `EditorView.theme`. Gli hook nuovi
+  entrano nel contratto prima di PA T41. Un task nuovo in Fase A, dopo PA
+  T35. Non insieme a S2 T20 e alla griglia T2–T3, che toccano lo stesso
+  file.
+  - Tempo: M.
+  - Qualità: un tema veste anche l'editor di testo, con gli stessi
+    cancelli, e `theme.ts` esce da `SEPARATE`.
+  - Contro: le foto dell'editor di testo si rifanno, e devono tornare
+    uguali a oggi.
+- **B.** L'editor di testo resta a parte per sempre, scritto in
+  `docs/architecture/editor-surfaces.md`.
+  - Personalizzazione: un tema non arriva dove si scrive.
+- **C.** Dopo la pre-alpha. Gli hook si congelano senza l'editor di testo e
+  si aggiungono dopo (le aggiunte sono ammesse), ma i temi d'esempio
+  nascono senza.
+
+### D23 · Spostare le parti della finestra
+
+La skin facile cambia l'aspetto (colori, forme, caratteri, icone), non dove
+stanno le regioni della finestra: per esempio la barra laterale a destra o
+le proprietà in basso. È fuori come «variante della shell».
+
+- **A.** Dentro: un piano suo, con pianificatore e prototipo, dopo
+  Scrittoio 2.
+  - Personalizzazione: piena, già nella pre-alpha.
+  - Contro: le varianti si disegnano prima dei riscontri sulla cornice
+    nuova, e la prova con cinque persone (PA T17) si divide fra più
+    varianti.
+- **B (consigliata).** Un piano subito dopo la pre-alpha, col prototipo e
+  con i riscontri di PA T17.
+  - Qualità: le varianti nascono dall'uso vero, e la pre-alpha prova a
+    fondo una cornice sola. Il motivo è la qualità, non il tempo.
+  - Contro: chi prova la pre-alpha non può spostare le parti.
+- **C.** Mai: solo la pelle.
+
+### D24 · Il disegno completo (K6)
+
+Il 2026-11-05 l'utente ha scelto «Tutti tranne K6», col consiglio di allora,
+che pesava anche il tempo. K6 apre tutto il motore del disegno (100
+strumenti, 881 comandi, 130 effetti, 43 pannelli: 1.551 righe di mappa). Il
+suo piano è pronto (#313) e ha D1–D12 aperte.
+
+- **A.** Dentro, dopo K5.
+  - Qualità: i disegni hanno già l'editor professionale.
+  - Contro: la prova con le persone si allarga a 1.551 funzioni prima che
+    la base sia provata: più superficie, più punti dove può rompersi.
+- **B (consigliata).** Fuori, come deciso: un piano subito dopo la
+  pre-alpha, con i riscontri.
+  - Qualità: la pre-alpha prova a fondo la base (dati, cornice, editor), e
+    K6 si costruisce su una base già provata. Anche qui il motivo è la
+    qualità, non il tempo.
+  - Contro: chi prova la pre-alpha ha il disegno semplice di K5.
 
 ## Come si implementa
 

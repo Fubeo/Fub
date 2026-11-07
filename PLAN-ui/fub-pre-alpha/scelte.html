@@ -1,0 +1,826 @@
+<title>Le scelte di Fub pre-alpha</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400..700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Un questionario di lavoro: la testa col criterio, una barra fissa con i
+   conti e l'indice, poi le domande in una colonna di lettura e gli stati in
+   una griglia. I colori sono quelli di foundation.css di Fub, come nell'hub. */
+:root {
+  --bg: #e8edf5;
+  --sheet: #fcfdff;
+  --sheet-2: #f3f6f9;
+  --bg-elev: #ffffff;
+  --text: #1a1f29;
+  --muted: #5a5f6a;
+  --border: #d3d8e0;
+  --accent: #2b56cc;
+  --accent-wash: #e3ecff;
+  --on-accent: #ffffff;
+  --ok: #1d7a46;
+  --ok-wash: #e2f4e9;
+  --warn: #8a5a00;
+  --warn-wash: #fbefd6;
+  --danger: #b42318;
+  --code-bg: #eef2f8;
+  --font-ui: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --gutter-l: max(16px, env(safe-area-inset-left, 0px));
+  --gutter-r: max(16px, env(safe-area-inset-right, 0px));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a0e16; --sheet: #151a21; --sheet-2: #1d222a; --bg-elev: #212730; --text: #e5e8ed; --muted: #a0a5ae;
+    --border: #2c323c; --accent: #82a8fd; --accent-wash: #1c2a4a; --on-accent: #0a0e16; --ok: #6fd39a; --ok-wash: #15301f;
+    --warn: #f0c060; --warn-wash: #3a2c10; --danger: #ff8a7a; --code-bg: #1b2029; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0a0e16; --sheet: #151a21; --sheet-2: #1d222a; --bg-elev: #212730; --text: #e5e8ed; --muted: #a0a5ae;
+  --border: #2c323c; --accent: #82a8fd; --accent-wash: #1c2a4a; --on-accent: #0a0e16; --ok: #6fd39a; --ok-wash: #15301f;
+  --warn: #f0c060; --warn-wash: #3a2c10; --danger: #ff8a7a; --code-bg: #1b2029; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font: 15px/1.55 var(--font-ui); overflow-x: hidden; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+a { color: var(--accent); text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code { font-family: var(--font-mono); font-size: 0.86em; background: var(--code-bg); padding: 0.05em 0.3em; border-radius: 4px; overflow-wrap: anywhere; }
+.sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ── la testa ── */
+.testa { background: var(--sheet-2); border-bottom: 1px solid var(--border); padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-block: 26px 22px; }
+.testa-dentro { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 20px 36px; align-items: start; }
+.sopra { margin: 0 0 6px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); letter-spacing: 0.02em; }
+.testa h1 { margin: 0 0 10px; font-size: 30px; line-height: 1.12; letter-spacing: -0.015em; text-wrap: balance; }
+.testa p.lead { margin: 0 0 10px; max-width: 62ch; }
+.testa p.lead + p { margin: 0; max-width: 62ch; color: var(--muted); }
+.criterio { background: var(--sheet); border-radius: 12px; box-shadow: 0 0 0 1px var(--border); padding: 14px 16px; }
+.criterio h2 { margin: 0 0 6px; font-size: 15px; }
+.criterio p { margin: 0 0 8px; }
+.criterio ul { margin: 0; padding-left: 18px; }
+.criterio li + li { margin-top: 3px; }
+
+/* ── la barra fissa ── */
+.barra { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 6; background: var(--bg); border-bottom: 1px solid var(--border); padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-block: 8px; }
+.barra-dentro { max-width: 1100px; margin: 0 auto; display: grid; gap: 8px; }
+.barra-riga { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.conti { display: flex; flex-wrap: wrap; gap: 4px 14px; font-variant-numeric: tabular-nums; font-size: 14px; }
+.conti b { font-weight: 650; }
+.stato-salva { flex: 1 1 18rem; min-width: 0; color: var(--muted); font-size: 13px; }
+.stato-salva.male { color: var(--danger); }
+.azioni { display: flex; flex-wrap: wrap; gap: 6px; }
+.bottone { display: inline-flex; align-items: center; min-height: 34px; padding: 0 13px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--text); font: inherit; font-size: 14px; cursor: pointer; }
+.bottone:hover { background: var(--accent-wash); }
+.bottone:disabled { opacity: 0.55; cursor: default; }
+.indice { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
+.ind { flex: none; display: inline-flex; align-items: center; min-height: 26px; padding: 0 8px; border-radius: 6px; font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--muted); text-decoration: none; box-shadow: inset 0 0 0 1px var(--border); background: var(--sheet); }
+.ind.fatta { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+.ind.manca { background: var(--warn-wash); color: var(--warn); box-shadow: none; }
+.ind.sep { margin-left: 8px; }
+.copia-box { display: grid; gap: 6px; }
+.copia-box textarea { width: 100%; min-height: 8rem; font: 12.5px/1.45 var(--font-mono); padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--sheet); color: var(--text); }
+
+/* ── la colonna ── */
+main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-block: 8px 72px; }
+.colonna { max-width: 920px; margin: 0 auto; }
+.sezione-testa { margin: 40px 0 6px; }
+.sezione-testa h2 { margin: 0 0 4px; font-size: 22px; line-height: 1.25; text-wrap: balance; }
+.sezione-testa p { margin: 0; max-width: 72ch; color: var(--muted); }
+
+.domanda { background: var(--sheet); border-radius: 14px; box-shadow: 0 0 0 1px var(--border); padding: 16px 18px 16px; margin: 14px 0; scroll-margin-top: 140px; }
+.d-testa { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.d-num { font-family: var(--font-mono); font-weight: 600; font-size: 14px; color: var(--accent); flex: none; }
+.d-testa h3 { margin: 0; font-size: 18px; line-height: 1.3; flex: 1 1 18rem; min-width: 0; text-wrap: balance; }
+.esito { flex: none; font-size: 12.5px; padding: 1px 9px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--border); color: var(--muted); white-space: nowrap; }
+.esito.fatta { background: var(--accent-wash); color: var(--accent); box-shadow: none; font-weight: 600; }
+.esito.manca { background: var(--warn-wash); color: var(--warn); box-shadow: none; font-weight: 600; }
+.d-meta { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+.d-contesto { margin-top: 8px; }
+.d-contesto p { margin: 0 0 8px; max-width: 74ch; }
+.d-contesto ul { margin: 0 0 8px; padding-left: 20px; max-width: 74ch; }
+.d-contesto li + li { margin-top: 3px; }
+
+.opzioni { border: 0; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; min-width: 0; }
+.opz { position: relative; display: grid; grid-template-columns: 1.9rem minmax(0, 1fr); gap: 2px 12px; padding: 11px 13px; border-radius: 10px; background: var(--bg-elev); box-shadow: inset 0 0 0 1px var(--border); cursor: pointer; }
+.opz:hover { box-shadow: inset 0 0 0 1px var(--accent); }
+.opz:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.opz.scelta { background: var(--accent-wash); box-shadow: inset 0 0 0 2px var(--accent); }
+.opz.spenta { cursor: default; }
+.lettera { width: 1.9rem; height: 1.9rem; border-radius: 7px; display: grid; place-items: center; font-family: var(--font-mono); font-weight: 600; background: var(--sheet-2); color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
+.opz.scelta .lettera { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+.opz-corpo { display: grid; gap: 3px; min-width: 0; }
+.opz-nome { font-weight: 600; line-height: 1.35; padding-top: 3px; }
+.tag { display: inline-block; margin-left: 6px; padding: 0 8px; border-radius: 999px; background: var(--ok-wash); color: var(--ok); font-size: 12px; font-weight: 600; vertical-align: 1px; white-space: nowrap; }
+.opz-testo { max-width: 72ch; }
+.pc { font-size: 13.5px; color: var(--muted); max-width: 72ch; }
+.pc b { color: var(--text); font-weight: 600; }
+
+.perche { margin-top: 12px; padding: 11px 13px; border-radius: 10px; background: var(--ok-wash); }
+.perche strong { color: var(--ok); }
+.cambia { display: inline-block; margin-top: 6px; padding: 1px 9px; border-radius: 999px; background: var(--warn-wash); color: var(--warn); font-size: 12.5px; font-weight: 600; }
+.nota { margin-top: 12px; display: grid; gap: 4px; }
+.nota label { font-size: 13px; color: var(--muted); }
+.nota-riga { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+.nota textarea { width: 100%; min-height: 2.6rem; resize: vertical; font: inherit; font-size: 14px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--text); }
+.togli { border: 0; background: none; padding: 2px 0; color: var(--muted); font: inherit; font-size: 13px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.togli:hover { color: var(--text); }
+
+/* ── gli stati ── */
+.gruppi { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.gruppo { background: var(--sheet); border-radius: 12px; box-shadow: 0 0 0 1px var(--border); padding: 13px 15px; display: grid; gap: 6px; align-content: start; scroll-margin-top: 140px; }
+.gruppo.ok { box-shadow: inset 0 0 0 2px var(--ok); }
+.gruppo.rivedere { box-shadow: inset 0 0 0 2px var(--warn); }
+.g-testa { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 10px; }
+.g-testa h3 { margin: 0; font-size: 15.5px; line-height: 1.3; min-width: 0; }
+.g-num { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gruppo p { margin: 0; font-size: 14px; }
+.g-prov { font-size: 12.5px; color: var(--muted); }
+.segmenti { display: flex; flex-wrap: wrap; gap: 6px; border: 0; margin: 2px 0 0; padding: 0; min-width: 0; }
+.seg { position: relative; display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px; border-radius: 8px; background: var(--bg-elev); box-shadow: inset 0 0 0 1px var(--border); cursor: pointer; font-size: 14px; }
+.seg:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg.ok.scelta { background: var(--ok-wash); color: var(--ok); box-shadow: inset 0 0 0 2px var(--ok); font-weight: 600; }
+.seg.rivedere.scelta { background: var(--warn-wash); color: var(--warn); box-shadow: inset 0 0 0 2px var(--warn); font-weight: 600; }
+.gruppo textarea { width: 100%; min-height: 2.4rem; resize: vertical; font: inherit; font-size: 13.5px; padding: 6px 9px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--text); }
+.gruppo label.piccola { font-size: 12.5px; color: var(--muted); }
+
+@media (max-width: 820px) {
+  .testa-dentro { grid-template-columns: minmax(0, 1fr); }
+  .gruppi { grid-template-columns: minmax(0, 1fr); }
+  .testa h1 { font-size: 26px; }
+}
+@media (max-width: 640px) {
+  .barra { position: static; }
+  .domanda, .gruppo { scroll-margin-top: 16px; }
+}
+@media (max-width: 480px) {
+  .domanda { padding: 14px 13px; }
+  .opz { grid-template-columns: 1.7rem minmax(0, 1fr); gap: 2px 10px; padding: 10px 11px; }
+  .lettera { width: 1.7rem; height: 1.7rem; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<header class="testa">
+  <div class="testa-dentro">
+    <div>
+      <p class="sopra">piano/fub-pre-alpha · 7 novembre 2026</p>
+      <h1>Le scelte di Fub pre-alpha</h1>
+      <p class="lead">Prima che si scriva codice servono le tue risposte: 21 domande, 14 gruppi di stati da guardare nel simulatore e il via finale. Per ogni domanda trovi le scelte, i pro e i contro, e il mio consiglio.</p>
+      <p>Le risposte si salvano da sole mentre scegli, e io le leggo da qui: alla fine basta che mi scrivi «ho risposto». Il piano completo, con il simulatore, è nell'<a href="https://claude.ai/artifact/RCUxmuv2dCqbwDRagbKHcK" target="_blank" rel="noopener">artifact Fub pre-alpha</a>.</p>
+    </div>
+    <section class="criterio" aria-labelledby="criterio-t">
+      <h2 id="criterio-t">Come ho scelto i consigli</h2>
+      <p>Solo con il tuo criterio: la qualità del risultato. Fub dev'essere aperto, personalizzabile e funzionare senza problemi. Il tempo non conta.</p>
+      <ul>
+        <li>Sei consigli cambiano rispetto al piano, che pesava anche il tempo: D1, D6, D8, D9, D11 e D17. Li riconosci dall'etichetta gialla.</li>
+        <li>Sei domande sono nuove (D19–D24): un controllo in più e cinque cose che il piano lasciava fuori.</li>
+        <li>Due volte (D23, D24) consiglio di aspettare. Anche lì il motivo è la qualità, non il tempo.</li>
+      </ul>
+    </section>
+  </div>
+</header>
+
+<div class="barra" role="region" aria-label="Avanzamento">
+  <div class="barra-dentro">
+    <div class="barra-riga">
+      <div class="conti" aria-live="polite">
+        <span>Domande <b id="conto-d">0</b> di 22</span>
+        <span>Stati <b id="conto-g">0</b> di 14 gruppi</span>
+      </div>
+      <div class="stato-salva" id="stato-salva" role="status">Collego le risposte salvate…</div>
+      <div class="azioni">
+        <button type="button" class="bottone" id="metti-consigli">Metti i miei consigli dove manca la risposta</button>
+        <button type="button" class="bottone" id="copia">Copia le risposte</button>
+      </div>
+    </div>
+    <nav class="indice" id="indice" aria-label="Vai a una domanda"></nav>
+    <div class="copia-box" id="copia-box" hidden>
+      <label for="copia-testo">Copia questo testo e incollalo nella chat:</label>
+      <textarea id="copia-testo" readonly></textarea>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div class="colonna" id="colonna"></div>
+</main>
+
+<script>
+(() => {
+  const HUB = "https://claude.ai/artifact/RCUxmuv2dCqbwDRagbKHcK";
+
+  // ── Le domande ────────────────────────────────────────────────────────────
+  // Ogni opzione: k (lettera), nome, testo, pro, contro. consiglio.k è la
+  // scelta che darei guardando solo la qualità del risultato.
+  const PIANO = [
+    {
+      id: "D1", titolo: "Il telefono, per l'APK di prova", aspetta: "l'APK di PA T22",
+      ancora: "domande--d1-il-telefono-per-l-apk-di-prova",
+      contesto: `<p>Oggi il telefono è la variante A di Scrittoio 2, approvata «per ora». Hai detto che è «sicuramente da modificare pesantemente». La pre-alpha porta anche un APK Android di prova.</p>`,
+      opzioni: [
+        { k: "A", nome: "L'APK esce con il telefono di oggi, segnato «sperimentale»", testo: "Il piano del telefono, con un prototipo suo, parte subito dopo la pre-alpha.", pro: "Niente lavoro in più adesso.", contro: "Chi prova l'APK vede un telefono provvisorio, che sai già di voler cambiare." },
+        { k: "B", nome: "Prima un piano del telefono, poi l'APK", testo: "Un pianificatore disegna il telefono con il suo prototipo, tu lo approvi, poi i task. Parte quando Scrittoio 2 è in <code>main</code>, così non si lavora due volte sulla stessa cornice.", pro: "L'APK è già quello giusto, e la forma del telefono la decidi subito, guardandola.", contro: "Un piano in più prima dell'uscita." },
+        { k: "C", nome: "Niente APK nella pre-alpha", pro: "Nessun telefono provvisorio in giro.", contro: "Cambia la tua risposta «Computer + Android di prova», e nessuno prova Fub su un telefono." },
+      ],
+      consiglio: { k: "B", perche: "Un telefono che sai già di voler rifare è un problema che chi prova vede subito. Con B l'APK mostra il telefono vero, e i riscontri servono a migliorarlo, non a dirti ciò che sai già." },
+      cambia: "Nel piano il consiglio era A",
+    },
+    {
+      id: "D2", titolo: "La griglia del foglio: approvare il prototipo", aspetta: "griglia T1–T9",
+      ancora: "domande--d2-la-griglia-approvare-celle-griglia",
+      stati: "S73–S82",
+      contesto: `<p>Il prototipo della griglia (<code>celle-griglia</code>) non ha una riga «Approvato» nel suo piano. Le sue otto scelte seguono i consigli, con due preferenze nelle Impostazioni. Nel simulatore: S73–S80 sono la griglia nella cornice nuova, S81 e S82 il foglio vuoto e quello enorme.</p>`,
+      opzioni: [
+        { k: "A", nome: "Approvata così com'è", pro: "La griglia parte appena K3 è in <code>main</code>. Il prototipo è fatto sul client vero." },
+        { k: "B", nome: "Approvata con modifiche", testo: "Scrivi nella nota che cosa cambiare: il pianificatore della griglia fa un giro in più.", pro: "Se qualcosa non ti convince, si sistema prima del codice." },
+        { k: "C", nome: "La griglia resta quella di oggi", testo: "Il piano della griglia esce dalla pre-alpha.", contro: "Il foglio resta più lento a rispondere." },
+      ],
+      consiglio: { k: "A", perche: "Il prototipo è fatto sul client vero e lascia scegliere due cose nelle Impostazioni. Guardalo prima: se un dettaglio non ti piace, scegli B e scrivilo nella nota." },
+    },
+    {
+      id: "D5", titolo: "La testa del disegno", aspetta: "Scrittoio 2 T22, K5 T21–T23",
+      ancora: "domande--d5-la-testa-del-disegno-k5-contro-scrittoio-2-t2",
+      stati: "A: S125–S130 · B: S111–S124",
+      contesto: `<p>Il prototipo di K5 (approvato) mette lo strumento Testo nella colonna e i gettoni del motore nella testata di oggi. Scrittoio 2 porta la testa del disegno in una fila del kit, come negli altri editor. Avevi chiesto di vederle composte tutte e due: sono nel simulatore, e lo scenario «disegno» le mette a confronto.</p>`,
+      opzioni: [
+        { k: "A", nome: "La cornice di Scrittoio 2 con il contenuto di K5", testo: "Gli strumenti di K5 nella colonna del kit, Testo compreso. I gettoni del motore nella banda accanto a «Si scrive». I comandi nella fila.", pro: "Un solo disegno per tutti gli editor: chi ne impara uno li sa usare tutti." },
+        { k: "B", nome: "K5 com'è approvato", testo: "Scrittoio 2 T22 cambia solo la pelle.", pro: "Non tocca niente di già approvato.", contro: "Il disegno ha una testata diversa da quella degli altri editor." },
+        { k: "C", nome: "Scrittoio 2 T22 com'è scritto", testo: "K5 rifà una parte del suo prototipo (T21–T23).", contro: "Tocca una scelta già approvata." },
+      ],
+      consiglio: { k: "A", perche: "La coerenza fra gli editor è qualità: la stessa cosa sta nello stesso posto dappertutto." },
+    },
+    {
+      id: "D6", titolo: "Il vassoio più chiaro sotto le barre", aspetta: "PA T11",
+      ancora: "domande--d6-il-vassoio-piu-chiaro-anche-per-la-fila-e-per",
+      contesto: `<p>Sul ramo di Scrittoio 2 la barra a una riga e la colonna degli strumenti stanno già sul vassoio più chiaro, come la barra a schede. Il contrasto è provato nelle due luci. Si vede negli stati con la barra di formato, il PDF e il disegno.</p>`,
+      opzioni: [
+        { k: "A", nome: "Un vassoio solo, il più chiaro, per tutte le barre", pro: "Tutte le barre si somigliano.", contro: "Sulla scrivania del disegno la colonna si stacca meno." },
+        { k: "B", nome: "Più chiara solo la barra a schede", testo: "La fila e la colonna tornano al grigio di oggi.", contro: "Due vassoi diversi nella stessa cornice." },
+        { k: "C", nome: "A di serie, più una preferenza", testo: "In Impostazioni › Aspetto: «Le barre: chiare · marcate». «Marcate» rimette il grigio sotto tutte le barre.", pro: "Di serie è A; chi vede poco il vassoio chiaro, per lo schermo o per gli occhi, lo cambia.", contro: "Una chiave nuova nelle impostazioni e le foto delle due varianti." },
+      ],
+      consiglio: { k: "C", perche: "È A, più la libertà di cambiarla: personalizzazione e accessibilità insieme, e chi tiene la serie non perde niente." },
+      cambia: "Nel piano il consiglio era A",
+    },
+    {
+      id: "D7", titolo: "Fermare i processi figli della CLI Craft su Windows", aspetta: "PA T9",
+      ancora: "domande--d7-windows-sys-per-fermare-i-figli-della-cli-cra",
+      contesto: `<p>Su Windows, quando il tempo di un comando scade, oggi si ferma la CLI Craft ma non i processi che ha lanciato, che possono restare vivi. Per fermarli tutti serve un «job object» di Windows, con il pacchetto <code>windows-sys</code>. Lo mantiene Microsoft, la licenza è MIT o Apache-2.0, ed è già nel lockfile come dipendenza indiretta.</p>`,
+      opzioni: [
+        { k: "A", nome: "Sì, come dipendenza diretta, solo su Windows", testo: "Alla versione che il lockfile ha già.", pro: "Nessun processo orfano, come su Linux e macOS." },
+        { k: "B", nome: "No, il limite resta scritto nella pagina", contro: "Su Windows un tempo scaduto può lasciare processi vivi." },
+        { k: "C", nome: "<code>taskkill /T /F</code> lanciato da Fub", testo: "Senza dipendenze nuove.", contro: "Più fragile: è un processo in più, e il numero del processo può essere già stato riusato." },
+      ],
+      consiglio: { k: "A", perche: "È la soluzione robusta, con un pacchetto ufficiale e aperto." },
+    },
+    {
+      id: "D8", titolo: "I pacchetti per Linux", aspetta: "PA T22",
+      ancora: "domande--d8-i-pacchetti-per-linux",
+      contesto: `<p>Oggi Fub esce in deb, rpm e AppImage. Su Linux Fub si disegna con WebKitGTK, che cambia da una distribuzione all'altra: lo stesso Fub può comportarsi in modo diverso su Ubuntu, Fedora o Arch.</p>`,
+      opzioni: [
+        { k: "A", nome: "deb, rpm e AppImage, come oggi", pro: "Niente lavoro in più.", contro: "Ogni distribuzione ha il suo WebKitGTK, con i suoi difetti." },
+        { k: "B", nome: "In più Flatpak, sul runtime GNOME", testo: "Lo stesso WebKitGTK su ogni distribuzione, e gli aggiornamenti da Flathub. I tre pacchetti di oggi restano.", pro: "Toglie una classe intera di problemi «solo sulla mia distribuzione». Flathub è il posto aperto dove le persone cercano le app.", contro: "Porta dentro una parte di N10, che il piano lasciava fuori. Vanno provati bene due punti: aprire un vault fuori dalla sandbox, e il watcher che vede le modifiche fatte da altri programmi." },
+        { k: "C", nome: "Solo AppImage", contro: "Niente aggiornamenti dal sistema." },
+      ],
+      consiglio: { k: "B", perche: "Con un motore uguale per tutti, ciò che proviamo noi è ciò che vede chi prova." },
+      cambia: "Nel piano il consiglio era A",
+    },
+    {
+      id: "D9", titolo: "Il canale dei riscontri", aspetta: "PA T18",
+      ancora: "domande--d9-il-canale-dei-riscontri-della-pre-alpha",
+      stati: "A: S254 · B: S255–S256",
+      contesto: `<p>Dove scrive chi prova la pre-alpha quando trova un problema o ha un'idea.</p>`,
+      opzioni: [
+        { k: "A", nome: "Modelli di issue su GitHub, più le Discussions", testo: "«Problema», «Ho perso dei dati» (con priorità) e «Idea». Le Discussions per le domande.", pro: "Tutto in un posto, lo stesso dove si lavora." },
+        { k: "B", nome: "A, più «Segnala un problema» nel menu di Fub", testo: "Apre il browser sulla pagina dell'issue, con la versione e il sistema già scritti e senza dati personali. È già disegnato nel simulatore.", pro: "Chi prova scrive di più se è facile, e ogni segnalazione arriva con i dati che servono.", contro: "Un pezzo di interfaccia in più da fare e da provare." },
+        { k: "C", nome: "Solo le issue", contro: "Le domande si mescolano ai problemi." },
+      ],
+      consiglio: { k: "B", perche: "La pre-alpha trova i problemi attraverso i riscontri: più è facile mandarli, più ne arrivano, e più sono completi." },
+      cambia: "Nel piano il consiglio era A",
+    },
+    {
+      id: "D10", titolo: "Due punti che non trovo", aspetta: "PA T10",
+      ancora: "domande--d10-due-punti-sciolti-che-non-trovo",
+      contesto: `<p>Avevi nominato «una stringa inglese nel fake host» e «il conto dei diagrammi Mermaid». Li ho cercati nei piani, nelle decisioni di tutti i rami, nelle issue, nei commit e nel codice. Il test delle stringhe inglesi del banco passa, e il controllo dei Mermaid trova 40 blocchi validi su <code>main</code>. Non so a che cosa ti riferivi.</p>`,
+      opzioni: [
+        { k: "A", nome: "Ti dico dove li ho visti", testo: "Un messaggio, un resoconto, una schermata: scrivilo nella nota qui sotto. Diventano PA T10." },
+        { k: "B", nome: "Li cerca il coder di PA T10", testo: "Se non li riproduce, li chiude come «non riprodotti».", contro: "Se erano veri ma diversi da come li immagino, si perdono." },
+        { k: "C", nome: "Fuori dalla pre-alpha", contro: "Restano aperti." },
+      ],
+      consiglio: { k: "A", perche: "Solo tu sai che cosa avevi visto: con la tua indicazione si corregge la cosa giusta." },
+      nota: "Dove li hai visti? (serve con A)", notaServeCon: "A",
+    },
+    {
+      id: "D11", titolo: "macOS provato a mano", aspetta: "PA T22, T23",
+      ancora: "domande--d11-macos-a-mano",
+      contesto: `<p>La prova a mano sugli installer chiede un Mac. Qui c'è Linux, e tu hai un portatile Windows.</p>`,
+      opzioni: [
+        { k: "A", nome: "Su macOS solo la CI", testo: "L'installer si costruisce, l'app parte e si chiude pulita. Le note della pre-release lo dicono.", contro: "Nessuno usa il dmg con le mani: un menu storto o un permesso chiesto male passano." },
+        { k: "B", nome: "Una persona con un Mac fa il giro a mano", testo: "Una persona che conosci, o un Mac in affitto nel cloud, con la stessa lista di compiti degli altri sistemi.", pro: "macOS provato come Windows e Linux.", contro: "Serve trovare la persona o il Mac." },
+        { k: "C", nome: "Niente dmg nella pre-release", contro: "Chi ha un Mac non può provare Fub." },
+      ],
+      consiglio: { k: "B", perche: "La CI vede se l'app parte, non se si usa bene. Una persona vera su un Mac trova ciò che la CI non vede." },
+      cambia: "Nel piano il consiglio era A",
+    },
+    {
+      id: "D13", titolo: "La prova dei componenti (K2) con una persona", aspetta: "il merge di #290",
+      ancora: "domande--d13-la-prova-di-k2-con-una-persona-prima-o-dopo-",
+      contesto: `<p>K2 dice che la prova con una persona si fa sulla PR in bozza, e che la PR non si segna pronta prima del tuo resoconto. Il protocollo c'è già: sei compiti in circa 25 minuti, sull'installer del ramo.</p>`,
+      opzioni: [
+        { k: "A", nome: "Prima del merge, e di nuovo alla fine", testo: "Prima di segnare pronta #290 fai il protocollo, da solo o con una persona che non conosce Fub. Ciò che emerge diventa un task o una decisione, poi il merge. Alla fine i compiti di K2 tornano nella prova con cinque persone, nella cornice nuova.", pro: "I problemi si trovano prima che altri piani ci costruiscano sopra, e la prova finale guarda la pagina vestita.", contro: "Dai 25 ai 50 minuti tuoi adesso; la prima prova guarda la cornice di oggi." },
+        { k: "B", nome: "Merge subito, prova solo alla fine", contro: "Ciò che la prova trova arriva quando altri piani ci hanno già costruito sopra. Cambia una regola che avevi scritto tu." },
+        { k: "C", nome: "Prova prima del merge, niente K2 alla fine", contro: "La pagina rivestita da Scrittoio 2 non la prova nessuno." },
+      ],
+      consiglio: { k: "A", perche: "Due prove nei due momenti giusti: presto, quando correggere costa poco, e alla fine, sulla pagina vera." },
+    },
+    {
+      id: "D14", titolo: "Il nome «FubDraw» dove le persone lo leggono", aspetta: "PA T33",
+      ancora: "domande--d14-il-nome-fubdraw-dove-le-persone-lo-vedono",
+      contesto: `<p>FubDraw era l'app dei disegni; ora vive dentro Fub. Il nome resta in una quarantina di frasi che le persone leggono, come «SVG (FubDraw)» o «Questo SVG non è stato fatto con FubDraw». Chi prova la pre-alpha non sa che cosa sia. Nel codice non cambia niente.</p>`,
+      opzioni: [
+        { k: "A", nome: "Dove si legge, diventa Fub o «il disegno»", testo: "«Disegno SVG», «Annotazioni PDF», «Questo SVG non è stato fatto con Fub». Le pagine tecniche dicono una volta che FubDraw è il nome tecnico del formato.", pro: "Una parola sola per il prodotto, nessuna sorpresa.", contro: "Serve una nota nell'ADR che chiama il formato FubDraw." },
+        { k: "B", nome: "Resta FubDraw, come nome del formato", testo: "La pagina della pre-alpha lo spiega in una riga.", contro: "Un nome in più da imparare; alcune frasi sembrano parlare di un'altra app." },
+        { k: "C", nome: "Cambiano solo i nomi dei due formati", contro: "A metà: il nome sparisce dalla lista dei formati ma resta negli avvisi." },
+      ],
+      consiglio: { k: "A", perche: "Chi usa Fub deve leggere un nome solo. Quello tecnico resta dove serve: nel codice e nelle pagine di riferimento." },
+    },
+    {
+      id: "D15", titolo: "Il nome del campo «parto dalla serie» nei temi", aspetta: "PA T34",
+      ancora: "domande--d15-il-nome-del-campo-che-dice-da-quale-tema-si-",
+      contesto: `<p>Il manifest di un tema prende un campo nuovo che dice «parto dal tema di serie e porto solo ciò che cambia». Il nome resta per sempre, perché lo scriveranno tutti i temi. Le altre chiavi del manifest sono in inglese.</p>`,
+      opzioni: [
+        { k: "A", nome: "<code>extends</code>", testo: "Come in <code>\"extends\": \"fub.serie\"</code>.", pro: "Lo riconosce subito chi ha scritto una configurazione di TypeScript, ESLint o Stylelint; è inglese come il resto.", contro: "Fa pensare a una catena di eredità, che per ora non c'è." },
+        { k: "B", nome: "<code>base</code>", contro: "Corto ma generico: base di che cosa? Si confonde con i colori di base." },
+        { k: "C", nome: "<code>eredita</code>", contro: "Sarebbe l'unica chiave italiana, e i temi li scrive anche chi non legge l'italiano." },
+      ],
+      consiglio: { k: "A", perche: "Aperto vuol dire che chiunque scriva un tema, in qualunque lingua, capisce la chiave al primo colpo." },
+    },
+    {
+      id: "D16", titolo: "Le icone del tema", aspetta: "PA T40",
+      ancora: "domande--d16-le-icone-del-tema",
+      contesto: `<p>Le icone passano tutte da un registro solo: 43 nella cornice e qualche centinaio negli editor. Oggi un tema le può solo ricolorare. Il registro accetta già soltanto disegni validati, quindi un set del tema non apre porte nuove.</p>`,
+      opzioni: [
+        { k: "A", nome: "Un tema ridisegna ogni icona, per nome", testo: "I nomi entrano negli hook congelati (PA T41), quindi restano stabili.", pro: "Un'identità intera, coerente fra cornice ed editor.", contro: "Qualche centinaio di nomi da tenere fermi. Un'icona nuova, sotto un tema, ha il disegno di serie finché il tema non la ridisegna." },
+        { k: "B", nome: "Dopo la pre-alpha", testo: "Adesso si congelano solo i nomi.", contro: "I temi d'esempio cambiano tutto tranne le icone." },
+        { k: "C", nome: "Solo le 43 della cornice", contro: "Si vede la cucitura fra la cornice ridisegnata e gli editor di serie." },
+      ],
+      consiglio: { k: "A", perche: "È la personalizzazione completa: un tema può cambiare tutto ciò che si vede." },
+    },
+    {
+      id: "D17", titolo: "I temi d'esempio", aspetta: "PA T42",
+      ancora: "domande--d17-l-aspetto-dei-due-temi-d-esempio",
+      stati: "S282–S285",
+      contesto: `<p>La prova d'uscita della skin facile sono dei temi d'esempio. Diventano il punto di partenza di chi scrive un tema, e il simulatore li mostra.</p>`,
+      opzioni: [
+        { k: "A", nome: "«Carta» e «Salvia»", testo: "«Carta»: carta calda, angoli dritti, maiuscoletto nelle etichette, nessuna ombra, filetti sottili al posto delle scatole, un carattere con le grazie e icone a tratto sottile. «Salvia»: soli colori, con un accento salvia, nelle due luci.", pro: "«Carta» si legge bene a lungo, adatto a un vault di studio.", contro: "Tutti e due restano vicini allo spirito della serie." },
+        { k: "B", nome: "«Officina» e «Salvia»", testo: "«Officina»: bordi spessi, etichette in monospazio, contrasto alto, icone quadrate.", pro: "Più lontano dalla serie: la prova più dura dei cancelli di contrasto.", contro: "Meno adatto a leggere a lungo." },
+        { k: "C", nome: "Tutti e tre", pro: "Tre punti di partenza diversi, e la prova più larga: se passano tutti e tre, la skin facile regge davvero.", contro: "Un tema in più da tenere verde a ogni cambio della serie, e da disegnare nel simulatore prima dell'approvazione." },
+      ],
+      consiglio: { k: "C", perche: "Più esempi, più lontani fra loro: chi scrive un tema ha più strade da cui partire, e noi una prova più dura." },
+      cambia: "Nel piano il consiglio era A",
+    },
+    {
+      id: "D18", titolo: "Le parole della scheda di un componente installato", aspetta: "PA T46",
+      ancora: "domande--d18-le-parole-della-scheda-di-un-componente-inst",
+      stati: "S204–S208",
+      contesto: `<p>Nella stessa finestra delle Impostazioni la pagina Componenti dice «Spegni», e la scheda di un componente installato dice «Abilitato», «Disabilita il componente prima di rimuoverlo.» e «Rimuovi».</p>`,
+      opzioni: [
+        { k: "A", nome: "La scheda segue il lessico", testo: "«Acceso», «Spegni il componente prima di toglierlo.», «Togli», e una guardia nuova che controlla questi testi.", pro: "Una parola sola per ogni azione." },
+        { k: "B", nome: "Restano le parole di oggi", contro: "Due parole per la stessa azione nella stessa finestra." },
+      ],
+      consiglio: { k: "A", perche: "Chi prova non deve chiedersi se «spegnere» e «disabilitare» siano due cose diverse." },
+    },
+  ];
+
+  const NUOVE = [
+    {
+      id: "D19", titolo: "Il controllo automatico di tutte le viste", aspetta: "l'approvazione degli stati, e un task nuovo",
+      ancora: "domande--d19-il-controllo-automatico-di-tutte-le-viste",
+      contesto: `<p>Il difetto dei 44 px sul telefono (PA T47) l'ho trovato guardando con gli occhi. Il confronto dei pixel prova che il simulatore è uguale al client, non che il client sia senza difetti. Le viste sono 1.716 (286 stati, tre larghezze, due luci), e io ne ho guardate a campione.</p>`,
+      opzioni: [
+        { k: "A", nome: "Adesso sul simulatore, poi come guardia fissa nel banco", testo: "Prima che tu approvi, un programma guarda tutte le 1.716 viste e cerca testi tagliati con «…», cose che escono dallo schermo o si sovrappongono, bersagli del tocco troppo piccoli, contrasto sotto le soglie e fuoco invisibile. Ogni difetto vero entra nelle «Differenze fra piani e codice» con il suo task. Poi un task nuovo porta gli stessi controlli nel banco di Fub.", pro: "Trova i difetti prima che un coder li copi, e nessuna modifica futura li riporta.", contro: "Qualche falso allarme da spiegare a mano, per esempio un «…» voluto o un'icona decorativa." },
+        { k: "B", nome: "Solo adesso, sul simulatore", contro: "Senza guardia, un difetto simile può tornare con una modifica futura." },
+        { k: "C", nome: "Solo come guardia nel banco, durante l'implementazione", contro: "I difetti si trovano dopo che i coder li hanno già copiati." },
+        { k: "D", nome: "Niente", contro: "Restano il confronto dei pixel, che il difetto dei 44 px non l'ha visto, e l'occhio." },
+      ],
+      consiglio: { k: "A", perche: "È l'unica scelta che trova i difetti adesso e impedisce che tornino dopo." },
+    },
+    {
+      id: "D20", titolo: "La firma degli installer", aspetta: "PA T22, T24",
+      ancora: "domande--d20-la-firma-degli-installer",
+      contesto: `<p>Oggi la pre-alpha esce senza firma: il piano la rimandava alla beta. Senza firma Windows mostra «Windows ha protetto il PC», e macOS blocca l'app finché non la si apre dalle Impostazioni di sistema. Chi prova incontra un problema prima ancora di aprire Fub.</p><p>Firmare chiede account a tuo nome e un po' di denaro: per questo decidi tu. Prezzi e regole li ho controllati oggi, e si ricontrollano quando si fa il task.</p>`,
+      opzioni: [
+        { k: "A", nome: "Firmati su Windows e su macOS", testo: "macOS: Apple Developer Program (99 USD l'anno), con firma e notarizzazione nella CI. Windows: SignPath Foundation, gratis per i progetti open source se Fub viene ammesso (vuole tutto il codice aperto e la firma fatta dalla CI); altrimenti un certificato OV di un'autorità, circa 150–300 USD l'anno. Il servizio di firma di Azure oggi accetta persone singole solo negli Stati Uniti e in Canada.", pro: "Su macOS si installa senza blocchi; su Windows l'editore è verificato.", contro: "Su Windows l'avviso può restare nelle prime settimane, finché la firma non si fa una reputazione. Con SignPath l'editore che Windows mostra è «SignPath Foundation». Le chiavi vanno tenute al sicuro nella CI." },
+        { k: "B", nome: "Solo macOS firmato e notarizzato", testo: "Su macOS il blocco è il più duro. Su Windows resta l'avviso, e la pagina «Prova la pre-alpha» spiega come andare avanti.", contro: "Su Windows il primo incontro con Fub è un avviso." },
+        { k: "C", nome: "Come oggi, senza firma", testo: "Le note spiegano come aprire l'app sui due sistemi.", contro: "Ogni persona che prova incontra un avviso o un blocco." },
+      ],
+      consiglio: { k: "A", perche: "Funzionare bene comincia dall'installazione. Con SignPath il costo su Windows può essere zero, proprio perché Fub è open source." },
+    },
+    {
+      id: "D21", titolo: "Cinque difetti di #237 che non perdono dati", aspetta: "un task nuovo in Fase A",
+      ancora: "domande--d21-cinque-difetti-di-237-che-non-perdono-dati",
+      contesto: `<p>In #237 restano cinque voci che il piano lasciava fuori perché non perdono dati. Sono però cose che chi prova nota:</p><ul><li><b>R05</b>: dopo un errore, Attività può mostrare la lista vecchia senza dirlo.</li><li><b>R06</b>: i suggerimenti dei documenti guardano solo i primi 200. In un vault da 5.000 file una nota può non comparire.</li><li><b>R07</b>: la barra laterale e le ricerche quando si riapre o si cambia vault. Va deciso che cosa ricordare, e un vault non deve ereditare la ricerca di un altro.</li><li><b>R08</b>: le viste dopo un cambio di vault. Il grafo va verificato dopo il cambio e dopo la chiusura.</li><li><b>A03</b>: nell'audit, Spazio su una casella delle Impostazioni cambiava il valore e il fuoco finiva sul fondo della pagina. Va riprovato, perché le Impostazioni sono cambiate.</li></ul>`,
+      opzioni: [
+        { k: "A", nome: "Dentro, tutti e cinque", testo: "Per ognuno prima un test che lo riproduce, poi la correzione dove sta la regola. Se non si riproduce, si chiude con il test che lo dimostra.", pro: "Chi prova non li incontra, e i test li tengono lontani.", contro: "Un task in più in Fase A." },
+        { k: "B", nome: "Dentro solo R06 e A03", testo: "Sono i due che una persona incontra di sicuro: il vault grande e la tastiera.", contro: "Gli altri tre restano possibili." },
+        { k: "C", nome: "Fuori, come oggi", contro: "Chi prova può incontrarli tutti e cinque." },
+      ],
+      consiglio: { k: "A", perche: "Sono piccoli, ma sono proprio gli intoppi che fanno dire «non funziona bene»." },
+    },
+    {
+      id: "D22", titolo: "L'editor di testo vestito dal tema (#242)", aspetta: "PA T41, gli hook congelati",
+      ancora: "domande--d22-l-editor-di-testo-vestito-dal-tema-242",
+      contesto: `<p>L'editor di testo prende i colori da stili scritti nel codice, non dalla pelle. Una guardia lo tiene come caso a parte, e un tema non lo veste come veste il resto di Fub. Per la skin facile è un buco proprio dove si scrive di più.</p>`,
+      opzioni: [
+        { k: "A", nome: "I colori nella pelle, prima che gli hook si congelino", testo: "I colori dell'editor di testo e dei profili Markdown passano nella pelle (<code>skin/editors.css</code>); nel codice resta solo la geometria. Gli hook nuovi entrano nel contratto prima di PA T41.", pro: "Un tema veste anche l'editor di testo, con gli stessi cancelli di contrasto.", contro: "Le foto dell'editor di testo vanno rifatte, e devono tornare uguali a oggi." },
+        { k: "B", nome: "L'editor di testo resta a parte, per sempre", testo: "Lo dice la pagina canonica.", contro: "Un tema non arriva dove si scrive." },
+        { k: "C", nome: "Dopo la pre-alpha", contro: "Gli hook si congelano senza l'editor di testo. Aggiungerli dopo si può, ma i temi d'esempio nascono senza." },
+      ],
+      consiglio: { k: "A", perche: "La skin facile deve arrivare dappertutto, e l'editor di testo è il posto dove si passa più tempo." },
+    },
+    {
+      id: "D23", titolo: "Spostare le parti della finestra", aspetta: "un piano suo",
+      ancora: "domande--d23-spostare-le-parti-della-finestra",
+      contesto: `<p>La skin facile cambia come appare Fub: colori, forme, caratteri, icone. Non cambia dove stanno le parti della finestra, per esempio la barra laterale a destra o le proprietà in basso. Il piano l'ha lasciato fuori come «variante della shell».</p>`,
+      opzioni: [
+        { k: "A", nome: "Dentro la pre-alpha, con un piano suo", testo: "Un pianificatore e un prototipo dopo Scrittoio 2, poi i task.", pro: "Personalizzazione piena già nella prima versione.", contro: "Le varianti si disegnano prima di aver visto come le persone usano la cornice nuova, e la prova con cinque persone si divide fra più varianti." },
+        { k: "B", nome: "Un piano subito dopo la pre-alpha", testo: "Con il prototipo e con i riscontri delle persone sulla cornice nuova.", pro: "Le varianti nascono da come si usa davvero la cornice, e la pre-alpha prova a fondo una cornice sola.", contro: "Chi prova la pre-alpha non può spostare le parti." },
+        { k: "C", nome: "Mai: basta la pelle", contro: "Un pezzo di personalizzazione che non arriva." },
+      ],
+      consiglio: { k: "B", perche: "Non per il tempo: le varianti vengono meglio se si disegnano sui riscontri di persone vere, e una cornice sola si prova meglio. Se per te spostare le parti fa parte di Fub fin dal primo giorno, scegli A." },
+    },
+    {
+      id: "D24", titolo: "Il disegno completo (K6)", aspetta: "nessun task del piano",
+      ancora: "domande--d24-il-disegno-completo-k6",
+      contesto: `<p>Il 5 novembre hai scelto «Tutti tranne K6», con il mio consiglio, che pesava anche il tempo. K6 apre tutto il motore del disegno: 100 strumenti, 881 comandi, 130 effetti e 43 pannelli, cioè 1.551 righe di mappa. Il suo piano è pronto (#313) e ha 12 domande sue ancora aperte.</p>`,
+      opzioni: [
+        { k: "A", nome: "Dentro la pre-alpha, dopo K5", pro: "I disegni hanno già l'editor professionale.", contro: "La prova con le persone si allarga a 1.551 funzioni prima che la base sia provata: più superficie, più punti dove può rompersi." },
+        { k: "B", nome: "Fuori, come avevi scelto: un piano subito dopo", testo: "Parte appena la pre-alpha è uscita, con i riscontri delle persone.", pro: "La pre-alpha prova a fondo la base (dati, cornice, editor), e K6 si costruisce su una base già provata.", contro: "Chi prova la pre-alpha ha il disegno semplice di K5." },
+      ],
+      consiglio: { k: "B", perche: "Anche guardando solo la qualità: prima una base provata, poi l'editor completo sopra." },
+    },
+  ];
+
+  const VIA = {
+    id: "VIA", etichetta: "Il via", titolo: "Il via al piano", aspetta: "tutto il piano",
+    contesto: `<p>Finché in testa al piano «Approvato» dice «in attesa», nessuno scrive codice. Le tue risposte cambiano il piano: alcune aggiungono task (D19–D22), altre lavoro nel simulatore (D6 C, D17 C) o un piano nuovo (D1 B).</p>`,
+    opzioni: [
+      { k: "A", nome: "Non ancora: prima aggiorni piano e simulatore", testo: "Scrivi le risposte nel piano e nel simulatore, fai il controllo di D19 se l'ho scelto, e mi mostri gli stati cambiati. Poi approvo sul simulatore aggiornato.", pro: "Approvi ciò che verrà costruito davvero.", contro: "Un giro in più prima di partire." },
+      { k: "B", nome: "Sì: approvo il piano con queste risposte", testo: "Gli aggiornamenti li fai, e si parte senza un altro sguardo.", contro: "Le parti nuove (le varianti, il terzo tema, i difetti trovati) entrano senza che tu le abbia viste." },
+    ],
+    consiglio: { k: "A", perche: "Con la qualità come criterio, si approva ciò che si è visto." },
+  };
+
+  // ── I 118 stati da approvare, per gruppi ──────────────────────────────────
+  const GRUPPI = [
+    { id: "g-file", nome: "I file che non si aprono", s: "S34–S37", n: 4, prov: "nuovi", cosa: "Il file nuovo che chiede il tipo, il file troppo grande, quello sconosciuto, il vault che non si raggiunge." },
+    { id: "g-foglio", nome: "Il foglio", s: "S73–S82", n: 10, prov: "8 composti, 2 nuovi", cosa: "La griglia nella cornice nuova (va con D2), il foglio vuoto e quello enorme." },
+    { id: "g-disegno-b", nome: "Il disegno, forma B", s: "S111–S124", n: 14, prov: "composti", cosa: "La testata di K5 com'è approvata (va con D5)." },
+    { id: "g-disegno-a", nome: "Il disegno, forma A, e il disegno vuoto", s: "S125–S131", n: 7, prov: "nuovi", cosa: "La banda col motore e la colonna con Testo (va con D5), più il disegno vuoto." },
+    { id: "g-lav-schede", nome: "La lavagna: le schede", s: "S133–S147", n: 15, prov: "composti", cosa: "Le schede di N6 nella cornice di Scrittoio 2." },
+    { id: "g-penne", nome: "La lavagna: le penne", s: "S148–S154", n: 7, prov: "composti", cosa: "Il menu delle penne di N4, anche col mouse e in sola lettura." },
+    { id: "g-lav-nuova", nome: "La lavagna: impianto, modifica, estratti", s: "S155–S166", n: 12, prov: "nuovi", cosa: "I tre prototipi di N6 che mancavano: la colonna degli strumenti, scrivere dentro le schede, gli estratti. Lo scenario «lavagna» li passa in fila." },
+    { id: "g-lav-codice", nome: "La lavagna in codice", s: "S167–S169", n: 3, prov: "nuovi", cosa: "Il menu, il riepilogo e il problema." },
+    { id: "g-pdf", nome: "Il PDF aperto a una pagina", s: "S181", n: 1, prov: "nuovo", cosa: "<code>![[x.pdf#page=3]]</code> apre il PDF alla pagina 3 (PA T32)." },
+    { id: "g-componenti", nome: "Componenti e ricette", s: "S188–S208", n: 21, prov: "16 composti, 5 nuovi", cosa: "I componenti del disegno, le ricette di A1 e i componenti installati dalla comunità (vanno con D18)." },
+    { id: "g-agente", nome: "Ciò che ha fatto un agente", s: "S232", n: 1, prov: "nuovo", cosa: "Come Fub mostra ciò che un'AI ha fatto attraverso MCP." },
+    { id: "g-impostazioni", nome: "Impostazioni e casi dei dati", s: "S244–S246, S251–S253", n: 6, prov: "composti", cosa: "Le impostazioni della lavagna e delle penne, le Informazioni con la versione della pre-alpha, e i casi di un file solo, di un nome lungo e di cinquemila file." },
+    { id: "g-riscontri", nome: "I riscontri", s: "S254–S256", n: 3, prov: "1 composto, 2 nuovi", cosa: "Il menu di oggi (D9 A) e «Segnala un problema» (D9 B)." },
+    { id: "g-temi", nome: "I temi e la skin facile", s: "S272–S285", n: 14, prov: "nuovi", cosa: "Sviluppo, installare, sostituire, il tema rifiutato, collegare una cartella, l'anteprima, «Tutti i componenti», e i temi «Carta» e «Salvia» (vanno con D15–D17)." },
+  ];
+
+  const DOMANDE = [...PIANO, ...NUOVE, VIA];
+  const PER_ID = new Map(DOMANDE.map((q) => [q.id, q]));
+  const stato = { r: {}, g: {} };
+
+  // ── Disegno della pagina ──────────────────────────────────────────────────
+  const colonna = document.getElementById("colonna");
+  const indice = document.getElementById("indice");
+  const ancora = (id) => id.toLowerCase();
+
+  const opzHtml = (q, o) => {
+    const cons = o.k === q.consiglio.k;
+    return `<label class="opz${cons ? " consigliata" : ""}" for="${q.id}-${o.k}" data-k="${o.k}">
+      <input class="sr" type="radio" name="${q.id}" id="${q.id}-${o.k}" value="${o.k}">
+      <span class="lettera" aria-hidden="true">${o.k}</span>
+      <span class="opz-corpo">
+        <span class="opz-nome">${o.nome}${cons ? ' <span class="tag">Il mio consiglio</span>' : ""}</span>
+        ${o.testo ? `<span class="opz-testo">${o.testo}</span>` : ""}
+        ${o.pro ? `<span class="pc"><b>Pro.</b> ${o.pro}</span>` : ""}
+        ${o.contro ? `<span class="pc"><b>Contro.</b> ${o.contro}</span>` : ""}
+      </span>
+    </label>`;
+  };
+
+  const domandaHtml = (q) => {
+    const meta = [
+      q.aspetta ? `Aspetta: ${q.aspetta}` : "",
+      q.stati ? `Nel simulatore: ${q.stati}` : "",
+      q.ancora ? `<a href="${HUB}#${q.ancora}" target="_blank" rel="noopener">Nel piano</a>` : "",
+    ].filter(Boolean).join(" · ");
+    return `<article class="domanda" id="${ancora(q.id)}" aria-labelledby="t-${q.id}">
+      <div class="d-testa">
+        <span class="d-num">${q.etichetta ? "" : q.id}</span>
+        <h3 id="t-${q.id}">${q.titolo}</h3>
+        <span class="esito" data-esito="${q.id}">Da rispondere</span>
+      </div>
+      <p class="d-meta">${meta}</p>
+      <div class="d-contesto">${q.contesto}</div>
+      <fieldset class="opzioni" data-domanda="${q.id}">
+        <legend class="sr">Le scelte per ${q.etichetta || q.id}</legend>
+        ${q.opzioni.map((o) => opzHtml(q, o)).join("")}
+      </fieldset>
+      <div class="perche"><strong>Il mio consiglio: ${q.consiglio.k}.</strong> ${q.consiglio.perche}${q.cambia ? `<br><span class="cambia">${q.cambia}</span>` : ""}</div>
+      <div class="nota">
+        <div class="nota-riga">
+          <label for="nota-${q.id}">${q.nota || "Una nota, se vuoi"}</label>
+          <button type="button" class="togli" data-togli="${q.id}" hidden>Togli la scelta</button>
+        </div>
+        <textarea id="nota-${q.id}" data-nota="${q.id}" rows="2"></textarea>
+      </div>
+    </article>`;
+  };
+
+  const gruppoHtml = (g) => `<section class="gruppo" id="${g.id}" aria-labelledby="t-${g.id}">
+      <div class="g-testa"><h3 id="t-${g.id}">${g.nome}</h3><span class="g-num">${g.s} · ${g.n}</span></div>
+      <p>${g.cosa}</p>
+      <p class="g-prov">Stati ${g.prov}</p>
+      <fieldset class="segmenti" data-gruppo="${g.id}">
+        <legend class="sr">${g.nome}: approvi?</legend>
+        <label class="seg ok" for="${g.id}-ok"><input class="sr" type="radio" name="${g.id}" id="${g.id}-ok" value="ok">Approvo</label>
+        <label class="seg rivedere" for="${g.id}-rivedere"><input class="sr" type="radio" name="${g.id}" id="${g.id}-rivedere" value="rivedere">Da rivedere</label>
+      </fieldset>
+      <label class="piccola" for="nota-${g.id}">Che cosa cambiare (con i numeri S, se vuoi)</label>
+      <textarea id="nota-${g.id}" data-nota-g="${g.id}" rows="2"></textarea>
+    </section>`;
+
+  colonna.innerHTML = `
+    <div class="sezione-testa"><h2 id="sez-piano">Le domande del piano</h2>
+      <p>Le quindici domande aperte del piano. Il testo intero, con tutti i dettagli, è nella parte «Domande aperte» dell'artifact.</p></div>
+    ${PIANO.map(domandaHtml).join("")}
+    <div class="sezione-testa"><h2 id="sez-nuove">Le domande nuove</h2>
+      <p>Nate dal tuo criterio: un controllo in più e cinque cose che il piano lasciava fuori.</p></div>
+    ${NUOVE.map(domandaHtml).join("")}
+    <div class="sezione-testa" id="stati"><h2 id="sez-stati">Gli stati da approvare</h2>
+      <p>118 stati del simulatore sono composti o nuovi, e aspettano il tuo sì. Apri il <a href="${HUB}#simulatore" target="_blank" rel="noopener">simulatore</a>, scegli i numeri nel menu degli stati e guardali nelle due luci e alle tre larghezze. Qui basta un sì o un «da rivedere» per gruppo; i singoli stati scrivili nella nota.</p></div>
+    <div class="gruppi">${GRUPPI.map(gruppoHtml).join("")}</div>
+    <div class="sezione-testa"><h2 id="sez-via">Alla fine</h2>
+      <p>Si risponde dopo tutte le altre.</p></div>
+    ${domandaHtml(VIA)}
+  `;
+
+  indice.innerHTML = [
+    ...PIANO.map((q) => `<a class="ind" href="#${ancora(q.id)}" data-ind="${q.id}">${q.id}</a>`),
+    ...NUOVE.map((q, i) => `<a class="ind${i === 0 ? " sep" : ""}" href="#${ancora(q.id)}" data-ind="${q.id}">${q.id}</a>`),
+    `<a class="ind sep" href="#stati" data-ind="stati">Stati</a>`,
+    `<a class="ind" href="#via" data-ind="VIA">Il via</a>`,
+  ].join("");
+
+  // ── Mostrare lo stato ─────────────────────────────────────────────────────
+  const manca = (q, r) => q.notaServeCon && r && r.scelta === q.notaServeCon && !(r.nota || "").trim();
+
+  function mostra() {
+    let fatte = 0;
+    for (const q of DOMANDE) {
+      const r = stato.r[q.id];
+      const scelta = r && r.scelta;
+      const viaManca = manca(q, r);
+      if (scelta && !viaManca) fatte++;
+      for (const lab of document.querySelectorAll(`fieldset[data-domanda="${q.id}"] .opz`)) {
+        const qui = lab.dataset.k === scelta;
+        lab.classList.toggle("scelta", qui);
+        lab.querySelector("input").checked = qui;
+      }
+      const es = document.querySelector(`[data-esito="${q.id}"]`);
+      es.className = "esito" + (viaManca ? " manca" : scelta ? " fatta" : "");
+      es.textContent = viaManca ? `${scelta}: manca la nota` : scelta ? `Risposta: ${scelta}` : "Da rispondere";
+      const ind = document.querySelector(`[data-ind="${q.id}"]`);
+      ind.className = ind.className.replace(/ ?(fatta|manca)/g, "") + (viaManca ? " manca" : scelta ? " fatta" : "");
+      const ta = document.querySelector(`[data-nota="${q.id}"]`);
+      if (document.activeElement !== ta) ta.value = (r && r.nota) || "";
+      document.querySelector(`[data-togli="${q.id}"]`).hidden = !scelta || !puoScrivere;
+    }
+    let gruppi = 0;
+    for (const g of GRUPPI) {
+      const v = stato.g[g.id];
+      const esito = v && v.esito;
+      if (esito) gruppi++;
+      const sez = document.getElementById(g.id);
+      sez.classList.toggle("ok", esito === "ok");
+      sez.classList.toggle("rivedere", esito === "rivedere");
+      for (const lab of sez.querySelectorAll(".seg")) {
+        const inp = lab.querySelector("input");
+        inp.checked = inp.value === esito;
+        lab.classList.toggle("scelta", inp.value === esito);
+      }
+      const ta = sez.querySelector("textarea");
+      if (document.activeElement !== ta) ta.value = (v && v.nota) || "";
+    }
+    const indStati = document.querySelector('[data-ind="stati"]');
+    indStati.className = "ind sep" + (gruppi === GRUPPI.length ? " fatta" : "");
+    document.getElementById("conto-d").textContent = fatte;
+    document.getElementById("conto-g").textContent = gruppi;
+  }
+
+  // ── Salvare ───────────────────────────────────────────────────────────────
+  const CHIAVE = "fub-prealpha-scelte-1";
+  const salvaStato = document.getElementById("stato-salva");
+  let modo = "attesa";            // attesa | db | locale | lettura
+  let db = null;
+  let puoScrivere = true;
+  const pendenti = new Set();
+  const code = new Map();
+  const attese = new Map();
+
+  const di = (testo, male) => { salvaStato.textContent = testo; salvaStato.classList.toggle("male", !!male); };
+  const salvaLocale = () => { try { localStorage.setItem(CHIAVE, JSON.stringify(stato)); } catch (e) { /* niente */ } };
+  const caricaLocale = () => {
+    try {
+      const s = JSON.parse(localStorage.getItem(CHIAVE) || "null");
+      if (s && typeof s === "object") { Object.assign(stato.r, s.r || {}); Object.assign(stato.g, s.g || {}); }
+    } catch (e) { /* niente */ }
+  };
+
+  function scrivi(col, id) {
+    if (modo === "locale") { salvaLocale(); return; }
+    if (modo === "lettura") return;
+    if (modo === "attesa") { pendenti.add(col + "/" + id); return; }
+    const k = col + "/" + id;
+    const corpo = col === "risposte" ? stato.r[id] : stato.g[id];
+    const dati = { ...corpo, quando: new Date().toISOString() };
+    const prima = code.get(k) || Promise.resolve();
+    const dopo = prima.then(() => db.collection(col).doc(id).set(dati)).then(
+      () => di("Salvato. Le risposte restano qui, e io le leggo da questa pagina."),
+      (e) => {
+        if (e && e.code === "invalid_argument") { modo = "lettura"; blocca(); di("Questa risposta non si è salvata: qui puoi solo leggere. Usa «Copia le risposte» e incollale nella chat.", true); }
+        else di("Una risposta non si è salvata. Riprova tra poco, oppure usa «Copia le risposte» e incollale nella chat.", true);
+      },
+    );
+    code.set(k, dopo);
+  }
+  const scriviPiano = (col, id) => {
+    clearTimeout(attese.get(col + id));
+    attese.set(col + id, setTimeout(() => scrivi(col, id), 700));
+  };
+
+  function blocca() {
+    puoScrivere = false;
+    for (const el of document.querySelectorAll("main input, main textarea")) el.disabled = true;
+    for (const el of document.querySelectorAll(".opz, .seg")) el.classList.add("spenta");
+    document.getElementById("metti-consigli").disabled = true;
+    mostra();
+  }
+
+  // ── Gesti ────────────────────────────────────────────────────────────────
+  colonna.addEventListener("change", (ev) => {
+    const t = ev.target;
+    if (!puoScrivere || t.type !== "radio") return;
+    const fq = t.closest("fieldset[data-domanda]");
+    const fg = t.closest("fieldset[data-gruppo]");
+    if (fq) {
+      const id = fq.dataset.domanda;
+      stato.r[id] = { scelta: t.value, nota: (stato.r[id] && stato.r[id].nota) || "" };
+      mostra(); scrivi("risposte", id);
+    } else if (fg) {
+      const id = fg.dataset.gruppo;
+      stato.g[id] = { esito: t.value, nota: (stato.g[id] && stato.g[id].nota) || "" };
+      mostra(); scrivi("stati", id);
+    }
+  });
+  colonna.addEventListener("input", (ev) => {
+    const t = ev.target;
+    if (!puoScrivere || t.tagName !== "TEXTAREA") return;
+    if (t.dataset.nota) {
+      const id = t.dataset.nota;
+      stato.r[id] = { scelta: (stato.r[id] && stato.r[id].scelta) || null, nota: t.value };
+      scriviPiano("risposte", id);
+    } else if (t.dataset.notaG) {
+      const id = t.dataset.notaG;
+      stato.g[id] = { esito: (stato.g[id] && stato.g[id].esito) || null, nota: t.value };
+      scriviPiano("stati", id);
+    }
+  });
+  colonna.addEventListener("focusout", (ev) => { if (ev.target.tagName === "TEXTAREA") mostra(); });
+  colonna.addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-togli]");
+    if (!b || !puoScrivere) return;
+    const id = b.dataset.togli;
+    stato.r[id] = { scelta: null, nota: (stato.r[id] && stato.r[id].nota) || "" };
+    mostra(); scrivi("risposte", id);
+  });
+
+  document.getElementById("metti-consigli").addEventListener("click", () => {
+    if (!puoScrivere) return;
+    let messi = 0;
+    for (const q of DOMANDE) {
+      const r = stato.r[q.id];
+      if (r && r.scelta) continue;
+      stato.r[q.id] = { scelta: q.consiglio.k, nota: (r && r.nota) || "" };
+      scrivi("risposte", q.id);
+      messi++;
+    }
+    mostra();
+    di(messi ? `Ho messo ${messi} consigli. Ricontrollali, e per D10 scrivi dove hai visto i due punti. Gli stati restano a te.` : "Ogni domanda ha già una risposta.");
+  });
+
+  const testoRisposte = () => {
+    const righe = ["Le mie scelte per Fub pre-alpha", ""];
+    for (const q of DOMANDE) {
+      const r = stato.r[q.id];
+      const nome = q.etichetta || q.id;
+      const nota = r && (r.nota || "").trim();
+      righe.push(`${nome}: ${(r && r.scelta) || "—"}${nota ? ` (nota: ${nota.replace(/\s+/g, " ")})` : ""}`);
+    }
+    righe.push("", "Stati:");
+    for (const g of GRUPPI) {
+      const v = stato.g[g.id];
+      const esito = v && v.esito === "ok" ? "approvo" : v && v.esito === "rivedere" ? "da rivedere" : "—";
+      const nota = v && (v.nota || "").trim();
+      righe.push(`${g.nome} (${g.s}): ${esito}${nota ? ` (nota: ${nota.replace(/\s+/g, " ")})` : ""}`);
+    }
+    return righe.join("\n");
+  };
+  document.getElementById("copia").addEventListener("click", () => {
+    const t = testoRisposte();
+    const box = document.getElementById("copia-box");
+    const ta = document.getElementById("copia-testo");
+    const ripiego = () => { ta.value = t; box.hidden = false; ta.focus(); ta.select(); di("Seleziona il testo qui sotto e copialo."); };
+    try {
+      navigator.clipboard.writeText(t).then(() => { box.hidden = true; di("Risposte copiate: incollale nella chat."); }, ripiego);
+    } catch (e) { ripiego(); }
+  });
+
+  // ── Collegarsi alle risposte salvate ──────────────────────────────────────
+  function locale(testo) {
+    modo = "locale";
+    // ciò che si è scelto mentre si collegava vince su ciò che era salvato
+    const ora = JSON.parse(JSON.stringify(stato));
+    caricaLocale();
+    Object.assign(stato.r, ora.r);
+    Object.assign(stato.g, ora.g);
+    pendenti.clear();
+    salvaLocale();
+    mostra();
+    di(testo);
+  }
+
+  mostra();
+
+  (async () => {
+    const c = window.claude;
+    if (!c || typeof c.use !== "function") {
+      locale("Qui le risposte restano solo in questo browser. Alla fine usa «Copia le risposte» e incollale nella chat.");
+      return;
+    }
+    let d = null, u = null;
+    try { [d, u] = await Promise.all([c.use("db"), c.use("user")]); } catch (e) { d = null; }
+    if (!d) {
+      locale("Qui le risposte restano solo in questo browser. Alla fine usa «Copia le risposte» e incollale nella chat.");
+      return;
+    }
+    db = d;
+    if (u) {
+      try { if (!(await u.isOwner())) { modo = "lettura"; blocca(); } } catch (e) { /* lascia scrivere: decide il server */ }
+    }
+    if (modo !== "lettura") {
+      modo = "db";
+      for (const k of pendenti) { const [col, id] = k.split("/"); scrivi(col, id); }
+      pendenti.clear();
+    }
+    let arrivate = 0;
+    const timer = setTimeout(() => {
+      if (arrivate < 2) di("Non raggiungo ancora le risposte salvate. Ciò che scegli resta in questa pagina, e si salva appena si collega.", true);
+    }, 10000);
+    const pronto = () => {
+      arrivate++;
+      if (arrivate === 2) {
+        clearTimeout(timer);
+        di(modo === "lettura" ? "Puoi leggere le scelte: risponde solo chi ha creato la pagina." : "Le risposte si salvano da sole mentre scegli, e io le leggo da qui.");
+      }
+    };
+    let primaR = true, primaG = true;
+    db.collection("risposte").onSnapshot((snap) => {
+      for (const doc of snap.docs) {
+        const v = doc.data() || {};
+        const q = PER_ID.get(doc.id);
+        if (!q) continue;
+        const valida = typeof v.scelta === "string" && q.opzioni.some((o) => o.k === v.scelta);
+        stato.r[doc.id] = { scelta: valida ? v.scelta : null, nota: typeof v.nota === "string" ? v.nota : "" };
+      }
+      mostra();
+      if (primaR && !snap.metadata.fromCache) { primaR = false; pronto(); }
+    }, () => { clearTimeout(timer); di("Le risposte salvate non si leggono più. Usa «Copia le risposte» e incollale nella chat.", true); });
+    db.collection("stati").onSnapshot((snap) => {
+      for (const doc of snap.docs) {
+        const v = doc.data() || {};
+        if (!GRUPPI.some((g) => g.id === doc.id)) continue;
+        const esito = v.esito === "ok" || v.esito === "rivedere" ? v.esito : null;
+        stato.g[doc.id] = { esito, nota: typeof v.nota === "string" ? v.nota : "" };
+      }
+      mostra();
+      if (primaG && !snap.metadata.fromCache) { primaG = false; pronto(); }
+    }, () => { clearTimeout(timer); di("Gli stati salvati non si leggono più. Usa «Copia le risposte» e incollale nella chat.", true); });
+  })();
+})();
+</script>
