@@ -3540,7 +3540,7 @@ Fatto quando: `cargo test -p fub-host --test read_only_command_turn` passa,
 e senza la modifica il primo test va oltre il tempo; i test di `fub-host`
 restano verdi.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host
-Stato: [~] in corso · coder · base 0cc94bde
+Stato: [~] in corso · coder · base 0cc94bde · diviso in due (kernel, poi host), registro 2026-11-08
 
 ## T4 · #237 R01 e R02: chiudere e ripristinare non perdono il testo
 
