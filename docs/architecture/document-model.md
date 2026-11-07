@@ -241,7 +241,7 @@ mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
   ripristinata.
 - **La ricarica forzata.** `forceReload()` scarta il buffer per il disco solo
   dopo averlo messo in bozza: se la bozza non si scrive restituisce
-  `unavailable` e lascia testo e stato com'erano. Oggi nessun gesto la usa.
+  `unavailable` e lascia testo e stato com'erano. Nessun gesto la usa.
 
 ## Invarianti
 
