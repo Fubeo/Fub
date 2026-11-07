@@ -61,6 +61,19 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · fub-pre-alpha (orchestratore) · PA T3 si divide in due
+  parti fatte dallo stesso coder: prima `fub-kernel` dà ai comandi in sola
+  lettura (`!spec.scope.writes`) un frame tutto loro (niente batch, nessun
+  cambio dell'attore condiviso, `in_provider_call` giù, la ricorsione
+  controllata nel prepared, mai undo), poi `fub-host` toglie loro il turno;
+  il perimetro si allarga a `workspace.rs` (e `jobs.rs` se è lo stesso
+  schema); il «Fatto quando» non cambia; un comando che scrive in DryRun
+  tiene il turno · il coder ha trovato che il frame di `prepare` vive nello
+  stato condiviso fino a `finish` ed è il turno a isolarlo: senza turno gli
+  eventi di una scrittura parallela restavano chiusi nel batch della
+  lettura, e due letture MCP insieme si rifiutavano a vicenda. Il «Non
+  toccare `fub-kernel`» del piano partiva da un'ipotesi sbagliata.
+
 - 2026-11-08 · fub-pre-alpha (orchestratore) · la prima coppia è PA T3 e
   PA T4, non T3 e T13 come dice l'ondata; PA T13 parte quando #295 è in
   `main` · T13 chiede di aprire fogli e documenti come la shell, con
