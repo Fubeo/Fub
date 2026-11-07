@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <title>Fub</title>
+  <path fill="#1f4b36" d="M15 2H36A3 3 0 0 1 39 5V39A3 3 0 0 1 36 42H11A3 3 0 0 1 8 39V9Z"/>
+  <path fill="#7ea189" d="M8 9L15 2V7A2 2 0 0 1 13 9Z"/>
+  <rect fill="#6e8b64" x="11.5" y="14" width="14" height="26" rx="2.5"/>
+  <rect fill="#ffffff" x="22.5" y="13" width="16.5" height="29" rx="2.2"/>
+  <g fill="#2f4a3e">
+    <rect x="25.5" y="16.5" width="10.5" height="1.8" rx="0.9"/>
+    <rect x="25.5" y="19.8" width="8.5" height="1.8" rx="0.9"/>
+    <rect x="25.5" y="28.5" width="10.5" height="1.8" rx="0.9"/>
+  </g>
+  <g fill="none" stroke="#2f4a3e" stroke-width="1.4">
+    <rect x="29.7" y="33.2" width="6.6" height="6.6" rx="0.4"/>
+    <path d="M33 33.2V39.8M29.7 36.5H36.3"/>
+  </g>
+  <path fill="none" stroke="#0a6b47" stroke-opacity="0.55" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round" transform="translate(0.5 0.8)" d="M35.7 12.2C39.5 12.3 41.6 9.6 41.4 6.7C41.1 4.2 38.8 3.1 36.4 3.5C31.5 4.2 27.7 8.2 25.5 12.9C23.2 18 21.4 23.8 19.9 29.6C18.5 35.4 17 41.3 13.7 43.3C11 45 6.8 44.5 5.9 41.3C5 38 7.6 35.1 11 32.9C16.6 29.3 24.6 24.9 33.2 23.2"/>
+  <path fill="none" stroke="#14c77d" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round" d="M35.7 12.2C39.5 12.3 41.6 9.6 41.4 6.7C41.1 4.2 38.8 3.1 36.4 3.5C31.5 4.2 27.7 8.2 25.5 12.9C23.2 18 21.4 23.8 19.9 29.6C18.5 35.4 17 41.3 13.7 43.3C11 45 6.8 44.5 5.9 41.3C5 38 7.6 35.1 11 32.9C16.6 29.3 24.6 24.9 33.2 23.2"/>
+</svg>

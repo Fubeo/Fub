@@ -124,11 +124,11 @@ export const STATI = [
   { g: "Casi", id: "vuoto", nome: "Nessun vault aperto", w700: "vuoto-700", tel: "tel-avvio", fuoco: "#pill",
     dice: "La pillola è il campo dei comandi anche a vuoto.", task: ["S2 T7"] },
   { g: "Casi", id: "avvio-attesa", nome: "L'avvio: il vault si apre", w700: null, tel: "tel-avvio-attesa", fuoco: ".avvio button",
-    dice: "Il marchio, la riga del vault che si apre, la scia. È in main (#308).", task: ["main #308"] },
+    dice: "Il marchio, la riga del vault che si apre, la scia. È in main (#308); il logo provvisorio (D26) e il verde di serie (D25) vengono da PA T49 e T48.", task: ["main #308", "PA T48", "PA T49"] },
   { g: "Casi", id: "avvio-lento", nome: "L'avvio che si allunga", w700: null, tel: null, fuoco: ".avvio button",
-    dice: "«Ci vuole più del solito.»", task: ["main #308"] },
+    dice: "«Ci vuole più del solito.» Col logo provvisorio e il verde (PA T48, T49).", task: ["main #308", "PA T48", "PA T49"] },
   { g: "Casi", id: "avvio-guasto", nome: "L'avvio caduto", w700: null, tel: null, fuoco: ".avvio button",
-    dice: "Il motivo, «Riprova» col fuoco, «Copia i dettagli».", task: ["main #308"] },
+    dice: "Il motivo, «Riprova» col fuoco, «Copia i dettagli». Col logo provvisorio e il verde (PA T48, T49).", task: ["main #308", "PA T48", "PA T49"] },
 
   // ── Telefono (Android di prova) ─────────────────────────────────────────
   { g: "Telefono", id: "tel-nota", nome: "Telefono: nota, si scrive", fuoco: ".pane > .pane-mode-current",
@@ -153,7 +153,7 @@ export const STATI = [
   { g: "Telefono", id: "tel-avvio", nome: "Telefono: il benvenuto", fuoco: "button",
     dice: "Il primo schermo senza vault.", task: ["main", "PA telefono"] },
   { g: "Telefono", id: "tel-avvio-attesa", nome: "Telefono: l'avvio", fuoco: ".avvio button",
-    dice: "Lo strato d'avvio al telefono.", task: ["main #308"] },
+    dice: "Lo strato d'avvio al telefono, col logo provvisorio e il verde (PA T48, T49).", task: ["main #308", "PA T48", "PA T49"] },
 ];
 
 // Le pagine approvate dei piani, scritte a mano: entrano tali e quali.

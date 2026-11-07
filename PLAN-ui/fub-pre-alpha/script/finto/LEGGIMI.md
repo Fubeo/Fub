@@ -37,6 +37,8 @@ finto di questa cartella.
 |---|---|---|
 | `cattura.patch` | `0c2a7e91` (`anteprima/tutto` del 2026-11-04) | tutte le catture tranne l'avvio |
 | `avvio.patch` | `5006937c` (`anteprima/tutto` del 2026-11-05, con #308) | le quattro catture dell'avvio |
+| `verde.patch` | il client di `cattura.patch` | il verde di serie (D25), sopra `cattura.patch` |
+| `verde-avvio.patch` | il client di `avvio.patch` | il verde di serie (D25), sopra `avvio.patch` |
 
 `anteprima/tutto` è il ramo locale che unisce `main` e i piani approvati
 (N4, N6, N7, K2, K3, K5, A1, griglia-celle, Scrittoio 2, caricamento). I suoi
@@ -53,6 +55,34 @@ scriveranno davvero) e l'errore dell'inchiostro nella facciata
 WebAssembly (`crates/fub-canvas-wasm/src/api.rs`, lo stesso di `b92cf9f5`).
 `avvio.patch` cambia solo `bench/fake-ipc.ts` e `bench/scene.mjs`.
 
+### Il verde di serie (D25)
+
+Dal 2026-11-07 le catture sono verdi: la tinta di serie è 160 «Smeraldo»
+(D25 C, PA T48) e non più il blu 265. Le due toppe verdi portano il verde
+nel client delle catture, come lo porterà PA T48 nel codice: la ricetta e i
+quattro fogli di `src/theme/scrittoio/`, l'accento di serie in
+`preferences/accent-control.ts` e `panels/settings.ts`, le parole in
+`src/i18n/catalog.ts`, il colore di avvio in `index.html` (e per l'avvio
+anche `document.html`, `mobile.html` e `public/avvio/avvio.css`) e l'host
+finto (`bench/fake-ipc.ts`). `verde.patch` cambia dieci file,
+`verde-avvio.patch` dodici. Si applicano dopo l'altra toppa:
+
+```bash
+git -C ../fub-cattura apply "$PWD/PLAN-ui/fub-pre-alpha/script/finto/cattura.patch"
+git -C ../fub-cattura apply "$PWD/PLAN-ui/fub-pre-alpha/script/finto/verde.patch"
+```
+
+Tre pezzi del verde non passano dal client:
+
+| Pezzo | Cosa fa |
+|---|---|
+| `verde-mappa.mjs` → `finto/verde-mappa.json` | confronta la stessa cattura blu e verde (`s2/nota`) e scrive, colore per colore, il blu di prima e il verde di serie. Generata, non si modifica a mano. |
+| `cattura-piani.mjs` con `VERDE=finto/verde-mappa.json` | le pagine dei piani (`p-*`) non hanno un client: prima di fotografarle ricolora il blu nel verde con la mappa. |
+| `verde-lavagna.mjs` | `s2/lavagna` e `s2/lavagna-700` non si rifanno (vedi sotto): il loro foglio di serie diventa quello di una cattura verde della stessa luce. **La foto PNG resta blu**: è l'unica eccezione ai pixel, e il controllo delle foto la conosce. |
+
+Le catture blu di prima stanno in `catture-blu/`, accanto a `catture/`,
+solo sulla macchina che le ha prese.
+
 ```bash
 # 1. il client, accanto al repository
 git fetch origin
@@ -67,9 +97,10 @@ git -C ../fub-cattura apply "$PWD/PLAN-ui/fub-pre-alpha/script/finto/cattura.pat
 cd PLAN-ui/fub-pre-alpha/script
 DATI=.. FUB_CLIENT=../../../../fub-cattura/apps/client \
   node ricattura.mjs ../../../../fub-cattura/apps/client cartelle=tel solo=t-cestino
-# le pagine dei piani (p-*): cartelle=piani, senza client, da file://
+# le pagine dei piani (p-*): cartelle=piani, senza client, da file://,
+#   col verde: VERDE=finto/verde-mappa.json node ricattura.mjs … cartelle=piani
 # tutte insieme, come il 2026-11-06 (circa un'ora; DATI va esportato):
-#   DATI=.. bash ricattura-tutto.sh <client 0c2a7e91 + cattura.patch> <client 5006937c + avvio.patch>
+#   DATI=.. bash ricattura-tutto.sh <client 0c2a7e91 + cattura.patch + verde.patch> <client 5006937c + avvio.patch + verde-avvio.patch>
 
 # 3. dentro il simulatore
 DATI=.. RIFATTE=../catture-r/tel node costruisci-sim.mjs ..

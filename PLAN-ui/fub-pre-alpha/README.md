@@ -5,7 +5,7 @@ prototipo»). È una superficie, non un programma: niente IPC, niente
 salvataggi, niente logica del prodotto. Si usa come il prodotto: ogni clic
 porta dove porterebbe l'app, o dice perché lì non succede niente.
 
-Ci sono 286 stati (S1–S286) e 17 scenari, nelle due luci, alle tre larghezze
+Ci sono 298 stati (S1–S298) e 18 scenari, nelle due luci, alle tre larghezze
 (piena, 700 px, telefono) e nei tre livelli di movimento. Ogni stato dice da
 dove viene:
 
@@ -76,6 +76,11 @@ delle catture, che ha anche i caratteri.
   togliendo la zona che lo spiega (fra queste lo spazio che il DOM nuovo
   prende, misurato coi quadretti che si ritrovano spostati: `PLAN.md`, «I
   pixel contro la fonte»).
+- Guardare ogni vista come la guarderebbe una persona (tagli, bersagli,
+  contrasto, fuoco): `node script/sonda-viste.mjs <cartella del simulatore>
+  <cartella>`. Scrive `viste.tsv` (un riscontro per riga), `gruppi.tsv` e
+  `riassunto.json` (`PLAN.md`, «Il controllo di tutte le viste»); con
+  `solo=id,id` guarda solo quegli stati.
 - Catturare di nuovo: `script/finto/LEGGIMI.md` (il client delle catture, le
   sue toppe, `script/ricattura.mjs` e `script/ricattura-tutto.sh`). Il Vite
   delle catture usa la porta 1468.

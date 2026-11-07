@@ -23,6 +23,21 @@
 <button type="button" class="status-item status-item--button status-standing" id="status-standing" data-surface-item="standing" data-standing="opening" aria-haspopup="dialog" aria-expanded="false" aria-label="Stato del disegno: Si apre"><span class="status-standing-mark" aria-hidden="true"></span><span>Si apre…</span></button>
 </template>
 
+<template data-toppa="banda-motore-cinquecento" data-nome="D5 A: 500 parti restano come sono, nella banda (aperto)">
+<!-- → shells/scrittoio/frame/status-band.ts, skin/frame.css; D5 A: K5 T21–T23 con S2 T4 (il riquadro è quello di K5 2b) -->
+<button type="button" class="status-item status-item--button status-standing" id="status-standing" data-surface-item="standing" data-standing="closed" aria-haspopup="dialog" aria-expanded="true" aria-label="Stato del disegno: 500 parti restano come sono"><span class="status-standing-mark" aria-hidden="true"></span><span>500 parti restano come sono</span></button>
+</template>
+
+<template data-toppa="banda-motore-senza" data-nome="D5 A: senza motore, nella banda (aperto)">
+<!-- → shells/scrittoio/frame/status-band.ts, skin/frame.css; D5 A: K5 T21–T23 con S2 T4 (il riquadro è quello di K5 5) -->
+<button type="button" class="status-item status-item--button status-standing" id="status-standing" data-surface-item="standing" data-standing="reduced" aria-haspopup="dialog" aria-expanded="true" aria-label="Stato del disegno: Senza motore, strumenti semplici"><span class="status-standing-mark" aria-hidden="true"></span><span>Senza motore: strumenti semplici</span></button>
+</template>
+
+<template data-toppa="disegno-rifiutato-annuncio" data-nome="D5 A: la modifica rifiutata, detta al lettore di schermo">
+<!-- → editors/craft/surface.ts (l'annuncio di K5 6a nella regione viva del disegno; il testo da i18n/catalog.ts); K5 T22 -->
+<span class="sr-only" role="status" aria-live="polite">Modifica non applicata: Questa parte resta com'è: il disegno non la sa ancora modificare.</span>
+</template>
+
 <template data-toppa="disegno-vuoto" data-nome="Un disegno vuoto: l'invito">
 <!-- → editors/craft/surface.ts (il foglio vuoto, testo nuovo in i18n/catalog.ts); K5 T21, PA T27 -->
 <p class="draw-empty-hint" role="note">Il foglio è vuoto. Scegli la penna (P) o una forma (R) e disegna; Ctrl+V incolla un'immagine.</p>

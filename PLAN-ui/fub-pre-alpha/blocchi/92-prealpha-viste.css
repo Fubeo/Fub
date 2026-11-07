@@ -1,0 +1,181 @@
+/* → più file (PA T56, T57): ogni sezione dice il suo file e il suo task */
+/* Le correzioni del controllo di tutte le viste (D19 A). Il controllo
+   (sonda-viste.mjs) ha guardato ogni stato del simulatore in tre larghezze e
+   due luci; qui ci sono i difetti veri che si vedono, ognuno col file del
+   client dove va. I suggerimenti che mancano (un nome in «…» senza il testo
+   intero da nessuna parte) sono TypeScript, `setTooltip`, e stanno nel testo
+   di PA T57. PA T56 è la carta del file e il fuoco; PA T57 i bersagli e i
+   nomi. */
+
+/* ── PA T56 · structure.css, accanto a `:focus-visible` ──────────────────
+   Una superficie che riempie il suo riquadro (l'editor, l'anteprima, il
+   grafo) ha l'anello fuori dal bordo, e il riquadro lo taglia su tutti e
+   quattro i lati: il fuoco della tastiera non si vede. L'anello rientra
+   della sua larghezza e sta dentro. */
+.cm-editor > .cm-scroller:focus-visible,
+.pane-preview:focus-visible,
+.graph-main:focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+/* ── PA T56 · structure.css, nella carta del file (`.look-file .rich-desk,
+   .look-file .grid-viewport`) ─────────────────────────────────────────────
+   La carta del file è chiara in ogni luce, e ricollega già i ruoli `--doc-*`
+   ai `--paper-*`. L'anello del fuoco e i colori della sintassi restavano del
+   tema: al buio l'anello verde chiaro sta a 2,2:1 sul bianco, e nella cella
+   in modifica il «=» e i numeri di una formula a 1,8:1. Sulla carta l'anello
+   prende l'accento della carta; la formula l'inchiostro, come in Excel, dove
+   solo i riferimenti hanno colore (e i loro, `--doc-author-*`, sono già
+   della carta). */
+.look-file .rich-desk,
+.look-file .grid-viewport {
+  --focus-ring: var(--paper-link, #2c57cd);
+  --syn-keyword: var(--doc-fg);
+  --syn-name: var(--doc-fg);
+  --syn-function: var(--doc-fg);
+  --syn-literal: var(--doc-fg);
+  --syn-type: var(--doc-fg);
+  --syn-operator: var(--doc-fg);
+  --syn-string: var(--doc-fg);
+  --syn-heading: var(--doc-fg);
+  --syn-comment: var(--doc-gutter-fg);
+  --syn-invalid: var(--doc-danger);
+}
+
+/* ── PA T56 · skin/editors.css, i segni della griglia sulla carta ────────
+   Sulla carta chiara la griglia disegna i suoi segni: la cella attiva, la
+   selezione, il quadratino del riempimento, la cella in modifica, gli
+   oggetti. Erano dell'accento del tema, e al buio il verde chiaro sul bianco
+   sta a 2,2:1: la cella attiva quasi non si vede. Sui segni della carta
+   l'accento è quello della carta, e il velo della selezione con lui. Le
+   intestazioni di righe e colonne sono cornice, col fondo del tema, e
+   tengono l'accento del tema: per questo la regola va sulle celle
+   (`.grid-row .active`, `.selected`) e non sulla riga, che contiene anche
+   l'intestazione. La cella in modifica ha il fondo della carta, non quello
+   dei pannelli. */
+.look-file :is(.grid-cell, .grid-selection, .grid-fill-handle, .grid-fill-preview, .grid-move-preview, .grid-cut-mark, .grid-cell-editor, .grid-object, .grid-object-handle, .grid-object-text-editor, .grid-comment-mark) {
+  --accent: var(--paper-link, #2c57cd);
+  --accent-veil: color-mix(in srgb, var(--paper-link, #2c57cd) 12%, transparent);
+}
+.look-file .grid-cell-editor {
+  background: var(--doc-bg);
+}
+.look-file .grid-fill-handle {
+  border-color: var(--doc-bg);
+}
+
+/* ── PA T56 · editors/text/engine.ts, `FIELD_LAYOUT` ─────────────────────
+   Un campo (la barra delle formule, la cella in modifica) toglieva i numeri
+   di riga ma teneva il margine delle pieghe: una striscia di 9 px a sinistra
+   del testo, col fondo del foglio del tema (scura sulla carta al buio), per
+   una riga che non si piega mai. `foldGutter: false` nel campo. */
+.grid-cell-editor .cm-gutters,
+.grid-formula-editor .cm-gutters {
+  display: none;
+}
+
+/* ── PA T56 · skin/editors.css, `.rich-side-open:focus-visible` ──────────
+   La pillola dei commenti galleggia sulla carta del documento nello stretto,
+   e il suo anello d'ombra stava fuori, sul bianco: al buio 2,2:1. L'anello
+   va dentro la pillola, sul suo fondo, e l'ombra della pillola resta. */
+.rich-side-open:focus-visible {
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring), var(--shadow-2);
+}
+
+/* ── PA T56 · skin/drawers.css, accanto a `.link-button` ─────────────────
+   L'azione testuale di un avviso («Decidi dopo», «Riprova», «Scegli ora»)
+   sta sul velo rosso o giallo dell'avviso, e l'accento ci arriva a 4,4:1.
+   Sopra un velo prende l'inchiostro d'accento più forte, `--accent-soft`
+   (più scuro alla luce, più chiaro al buio). */
+.conflict-banner .link-button,
+.sheet-notice .link-button {
+  color: var(--accent-soft);
+}
+
+/* ── PA T57 · skin/document.css e markdown/blocks/handles.ts ────────────
+   Il «+» e la maniglia del blocco del cursore, fuori dal passaggio, stavano
+   a 0,55 e si leggevano a 2,2:1: tenui sì, ma sopra il 3:1 dei controlli
+   (0,75). E sono bersagli da 24 × 24 (la forma è di `handles.ts`, base
+   theme: `width` e `height` 24 px al posto di 1,4 × 1,5 rem). */
+.cm-editor .cm-fub-block-handles > .cm-fub-block-add,
+.cm-editor .cm-fub-block-handles > .cm-fub-block-grip {
+  width: 24px;
+  height: 24px;
+  opacity: 0.75;
+}
+
+/* ── PA T57 · editors/text/profiles/markdown/hints.ts (base theme) ───────
+   La pastiglia del titolo resta piccola com'è (20 × 13), ma si prende in un
+   rettangolo di 24 × 25: il bersaglio lo allarga un `::after` trasparente,
+   verso il titolo e non verso sinistra, dove nel riquadro di destra c'è il
+   divisorio dei riquadri che prende il clic. */
+.cm-editor .cm-content .cm-fub-heading-pill-button::after {
+  content: "";
+  position: absolute;
+  inset: -6px -4px -6px 0;
+}
+
+/* ── PA T56 · editors/canvas/engine.ts, `nodeFill` ───────────────────────
+   Una scheda colorata della lavagna era il colore al 18–22 % sul niente: si
+   vedeva la scrivania sotto, e il titolo in grafite e l'azione d'accento
+   scendevano a 4,2:1. Il colore si mescola nella carta della scheda,
+   `var(--doc-bg)`, come la scheda senza colore. Le linee tengono il loro
+   (`PRESET_FILL` resta per `edge.color`). Qui il colore sta nello stile in
+   linea della scheda, e il simulatore lo imita con `!important`. */
+.canvas-node[style*="var(--danger) 18%, transparent"] { background: color-mix(in srgb, var(--danger) 18%, var(--doc-bg)) !important; }
+.canvas-node[style*="var(--warning) 22%, transparent"] { background: color-mix(in srgb, var(--warning) 22%, var(--doc-bg)) !important; }
+.canvas-node[style*="yellow 22%, transparent"] { background: color-mix(in srgb, yellow 22%, var(--doc-bg)) !important; }
+.canvas-node[style*="var(--success) 18%, transparent"] { background: color-mix(in srgb, var(--success) 18%, var(--doc-bg)) !important; }
+.canvas-node[style*="var(--info) 20%, transparent"] { background: color-mix(in srgb, var(--info) 20%, var(--doc-bg)) !important; }
+.canvas-node[style*="var(--accent) 18%, transparent"] { background: color-mix(in srgb, var(--accent) 18%, var(--doc-bg)) !important; }
+
+/* ── PA T57 · skin/editors.css, accanto a `.grid-ribbon-palette-grid` ─────
+   I quadretti della tavolozza sono da 18 px e stavano a 2 px l'uno
+   dall'altro. A 6 px il passo è 24: ogni quadretto ha il suo cerchio di
+   24 px che non tocca i vicini (l'eccezione della distanza di WCAG 2.5.8). */
+.grid-ribbon-palette-grid {
+  gap: var(--space-3);
+}
+
+/* ── PA T57 · structure.css, `.kit-ribbon-arrow` ─────────────────────────
+   La freccia di un pulsante diviso era larga 14 px, attaccata al pulsante:
+   un bersaglio sotto i 24 che non ha distanza da nessuno. Larga 24. La fila
+   si allunga di 10 px per ogni pulsante diviso. */
+.kit-ribbon-arrow {
+  min-width: 24px;
+}
+
+/* ── PA T57 · skin/frame.css, `.status-item--button` ─────────────────────
+   La modalità nella banda era alta 22 px. */
+.status-item--button {
+  min-height: var(--space-8);
+}
+
+/* ── PA T57 · skin/sheets.css, `.sheet-title` ────────────────────────────
+   Il percorso a briciole si rinomina con un clic, ed era alto quanto il
+   testo, 18–20 px. */
+.sheet-title {
+  min-height: var(--space-8);
+}
+
+/* ── PA T57 · skin/media.css, `.craft-xmp-tag` ───────────────────────────
+   Un'etichetta XMP si cerca con un clic, ed era alta 20 px. */
+.craft-xmp-tag {
+  min-height: var(--space-8);
+}
+
+/* ── PA T57 · skin/settings.css, `.settings-toc-link` e `-name` ──────────
+   «Permessi dei componenti inclusi» non stava nella colonna (185 px in
+   183, 147 a 700) e finiva in «…» senza il nome intero da nessuna parte.
+   Un nome lungo va a capo: la voce si alza, e la tacca della sezione
+   corrente la segue. */
+.settings-toc-link {
+  height: auto;
+  min-height: var(--row-h);
+  padding-block: var(--space-2);
+}
+.settings-toc-name {
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}

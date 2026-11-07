@@ -141,7 +141,14 @@
     if (prefs.zoom !== undefined && prefs.zoom !== 100) righe.push(`zoom: ${prefs.zoom / 100};`);
     return righe.length ? `:root { ${righe.join(" ")} }` : "";
   }
-  const cssTema = (tema, luce) => (tema && !(tema === "carta" && luce === "dark") ? blocco(`style[data-posto="tema"][data-tema="${tema}"]`) : "");
+  // Un tema che non dichiara i tre ruoli facoltativi della ricetta
+  // (blocchi/02-ruoli.css) non li ha: nel client vero il suo foglio prende il
+  // posto di quello della serie, e la pelle ripiega (`var(--bar-tray,
+  // var(--sheet-2))`). Qui la serie è un blocco sempre montato, quindi il
+  // ripiego si scrive accanto al tema.
+  const RIPIEGO_TEMA = ":root[data-sim-tema] { --bar-tray: var(--sheet-2); --shadow-sheet: var(--shadow-1); --shadow-sheet-focus: var(--shadow-2); }";
+  const cssTema = (tema, luce) =>
+    tema && !(tema === "carta" && luce === "dark") ? `${blocco(`style[data-posto="tema"][data-tema="${tema}"]`)}\n${RIPIEGO_TEMA}` : "";
   // Le scelte cambiano lo schermo senza ricaricarlo (il cursore dello
   // scorrimento resta dov'è); la luce invece cambia cattura e ricarica.
   function applicaAspetto(doc, luce = scelto.luce, s = statoDi(scelto.stato)) {
@@ -158,6 +165,12 @@
       set("fub:foglio", contrasto() === "high" ? dati.temi.fogli[luce].high : foglio.__serie);
     }
     doc.documentElement.setAttribute("data-contrast", contrasto());
+    // «Le barre» (D6 C): la scelta sta sulla radice; senza scelta vale quella
+    // dello stato (una toppa la può mettere), altrimenti chiare.
+    const radice = doc.documentElement;
+    radice.__barre ??= radice.getAttribute("data-bars") ?? "light";
+    if ((prefs.bars ?? radice.__barre) === "marked") radice.setAttribute("data-bars", "marked");
+    else radice.removeAttribute("data-bars");
     if (temaDi(s)) doc.documentElement.setAttribute("data-sim-tema", temaDi(s));
     else doc.documentElement.removeAttribute("data-sim-tema");
   }
@@ -903,7 +916,7 @@ html[data-sim-segna] [data-sim-composto], html[data-sim-segna] iframe[data-sim-s
     const parti = [];
     if (ris.ricomposta === "700") parti.push("A 700 px questo stato non ha una foto sua: è la cattura piena rimessa in 700 px, col CSS vero (le classi che il JavaScript del client mette alle misure strette non ci sono).");
     if (ris.ricomposta === "tel") parti.push("Al telefono questo stato non ha una foto sua: è ricomposto col guscio mobile (frame A, provvisorio, D1).");
-    if (temaDi(s) === "carta" && scelto.luce === "dark") parti.push("«Carta» ha solo il chiaro: di notte si vede la serie (D17 A).");
+    if (temaDi(s) === "carta" && scelto.luce === "dark") parti.push("«Carta» ha solo il chiaro: di notte si vede la serie (D17).");
     v.replaceChildren(...parti.map((t) => Object.assign(document.createElement("span"), { textContent: `${t} ` })));
     if (ris.ricomposta && s.vicino && per.has(s.vicino)) {
       const a = document.createElement("a");

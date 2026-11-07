@@ -14,6 +14,11 @@
 // Con `mostra`, dentro il palco restano visibili solo quei pezzi; con
 // `trasparente`, lo sfondo è trasparente (uno strato sopra un'altra cattura).
 // Le pagine non si toccano: si leggono da file:// e basta. Nessuna porta.
+//
+// Con VERDE=<mappa.json> (verde-mappa.mjs), prima di isolare il palco i
+// colori del blu di prima diventano quelli del verde di serie (D25): nel CSS
+// della pagina, negli stili in linea e negli attributi di colore degli SVG.
+// Il file della pagina resta com'è; cambia solo la pagina aperta.
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
@@ -71,6 +76,25 @@ ${trasparente ? "html, body, [data-sim-via], [data-sim-palco] { background: tran
   window.dispatchEvent(new Event("resize"));
 }
 
+function ricolora(mappa) {
+  const sost = (t) =>
+    t
+      .replace(/#[0-9a-fA-F]{6}\b/g, (h) => mappa.hex[h.toLowerCase()] ?? h)
+      .replace(/(rgba?\(\s*)(\d+)([ ,]+)(\d+)([ ,]+)(\d+)/g, (m, a, r, s1, g, s2, b) => {
+        const n = mappa.terne[`${r} ${g} ${b}`];
+        if (!n) return m;
+        const [R, G, B] = n.split(" ");
+        return a + R + s1 + G + s2 + B;
+      });
+  let n = 0;
+  const cambia = (prima, dopo) => (prima !== dopo && n++, dopo);
+  for (const s of document.querySelectorAll("style")) s.textContent = cambia(s.textContent, sost(s.textContent));
+  for (const el of document.querySelectorAll("[style]")) el.setAttribute("style", cambia(el.getAttribute("style"), sost(el.getAttribute("style"))));
+  for (const at of ["fill", "stroke", "stop-color", "color", "flood-color"])
+    for (const el of document.querySelectorAll(`[${at}]`)) el.setAttribute(at, cambia(el.getAttribute(at), sost(el.getAttribute(at))));
+  return n;
+}
+
 async function passo(page, p) {
   if (p.clic) await page.click(p.clic, { timeout: 8000 });
   else if (p.scegli) await page.selectOption(p.scegli[0], p.scegli[1]);
@@ -88,6 +112,7 @@ async function passo(page, p) {
   await page.waitForTimeout(p.dopo ?? 250);
 }
 
+const verde = process.env.VERDE ? JSON.parse(await readFile(process.env.VERDE, "utf8")) : null;
 await mkdir(out, { recursive: true });
 // Gli argomenti del banco (bench/stage.mjs), gli stessi di foto-sim.mjs: senza,
 // i caratteri si disegnano diversi e il confronto dei pixel conta ogni testo.
@@ -107,6 +132,7 @@ try {
         await page.waitForTimeout(e.attesa ?? 500);
         const [w, h] = e.misura ?? [960, 620];
         await page.setViewportSize({ width: w, height: h });
+        if (verde) await page.evaluate(ricolora, verde);
         await page.evaluate(isola, { palco: e.palco, mostra: e.mostra, trasparente: e.trasparente, nascondi: e.nascondi });
         await page.waitForTimeout(400);
         await page.mouse.move(w - 2, h - 2);

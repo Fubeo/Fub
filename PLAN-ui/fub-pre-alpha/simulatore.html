@@ -2388,18 +2388,25 @@ code { font-size: 12.5px; overflow-wrap: anywhere; }
      alla linguetta e lì si interrompe.
    - `--bar-tray`: il vassoio delle barre (a schede, in una fila, la colonna),
      a metà fra la carta e `--sheet-2` di giorno; di notte un passo sotto
-     `--sheet-2`. Contrasto alto: lo stesso valore di `--sheet-2`, come oggi. */
+     `--sheet-2`. Contrasto alto: lo stesso valore di `--sheet-2`, come oggi.
+     La ricetta lo ricava dalla tinta della carta (S2 T16:
+     `lch(0.984, 0.004, paper)` di giorno, `lch(0.238, 0.017, paper)` di
+     notte), quindi segue il verde di serie da sola (D25): #f8faf8 e #18211c.
+     Il blu di prima dava #f8fafc e #1a1f27.
+   «Le barre: marcate» (D6 C, PA T11: il modulo delle scelte d'Aspetto mette
+   `data-bars="marked"` sulla radice, e la pelle rimette `--sheet-2`). */
 :root {
   --shadow-sheet: 0 1px 2px rgb(24 28 44 / 8%), 0 2px 8px -1px rgb(24 28 44 / 8%), 0 8px 16px -6px rgb(24 28 44 / 14%);
   --shadow-sheet-focus: 0 1px 3px rgb(24 28 44 / 9%), 0 3px 10px -1px rgb(24 28 44 / 10%), 0 10px 20px -6px rgb(24 28 44 / 18%);
-  --bar-tray: #f8fafc;
+  --bar-tray: #f8faf8;
 }
 :root[data-theme="dark"] {
   --shadow-sheet: 0 1px 2px rgb(0 0 0 / 40%), 0 2px 8px -1px rgb(0 0 0 / 45%), 0 8px 16px -6px rgb(0 0 0 / 60%);
   --shadow-sheet-focus: 0 1px 3px rgb(0 0 0 / 45%), 0 3px 10px -1px rgb(0 0 0 / 50%), 0 10px 20px -6px rgb(0 0 0 / 66%);
-  --bar-tray: #1a1f27;
+  --bar-tray: #18211c;
 }
-:root[data-contrast="high"] {
+:root[data-contrast="high"],
+:root[data-bars="marked"] {
   --bar-tray: var(--sheet-2);
 }
 </style>
@@ -2806,11 +2813,15 @@ code { font-size: 12.5px; overflow-wrap: anywhere; }
   box-shadow: inset 0 0 0 2px var(--accent);
   color: var(--accent);
 }
+/* Il campo delle pagine è il campo del kit (`textField` di `kit/field.ts`),
+   con l'anello sulla scatola, e l'etichetta accanto invece che sopra. */
 .lav-parts-field {
-  display: flex;
+  flex-direction: row;
   align-items: center;
   gap: var(--space-3);
-  font-size: var(--text-sm);
+}
+.lav-parts-field > .kit-field-box {
+  flex: 1 1 auto;
 }
 .lav-parts-hint {
   margin: 0;
@@ -2825,6 +2836,189 @@ code { font-size: 12.5px; overflow-wrap: anywhere; }
 .craft-empty-actions {
   justify-content: center;
   margin-top: var(--space-4);
+}
+</style>
+<style media="not all" data-destinazione="più file (ogni sezione dice il suo)" data-posto="prealpha" data-task="PA T56, T57">
+/* → più file (PA T56, T57): ogni sezione dice il suo file e il suo task */
+/* Le correzioni del controllo di tutte le viste (D19 A). Il controllo
+   (sonda-viste.mjs) ha guardato ogni stato del simulatore in tre larghezze e
+   due luci; qui ci sono i difetti veri che si vedono, ognuno col file del
+   client dove va. I suggerimenti che mancano (un nome in «…» senza il testo
+   intero da nessuna parte) sono TypeScript, `setTooltip`, e stanno nel testo
+   di PA T57. PA T56 è la carta del file e il fuoco; PA T57 i bersagli e i
+   nomi. */
+
+/* ── PA T56 · structure.css, accanto a `:focus-visible` ──────────────────
+   Una superficie che riempie il suo riquadro (l'editor, l'anteprima, il
+   grafo) ha l'anello fuori dal bordo, e il riquadro lo taglia su tutti e
+   quattro i lati: il fuoco della tastiera non si vede. L'anello rientra
+   della sua larghezza e sta dentro. */
+.cm-editor > .cm-scroller:focus-visible,
+.pane-preview:focus-visible,
+.graph-main:focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+/* ── PA T56 · structure.css, nella carta del file (`.look-file .rich-desk,
+   .look-file .grid-viewport`) ─────────────────────────────────────────────
+   La carta del file è chiara in ogni luce, e ricollega già i ruoli `--doc-*`
+   ai `--paper-*`. L'anello del fuoco e i colori della sintassi restavano del
+   tema: al buio l'anello verde chiaro sta a 2,2:1 sul bianco, e nella cella
+   in modifica il «=» e i numeri di una formula a 1,8:1. Sulla carta l'anello
+   prende l'accento della carta; la formula l'inchiostro, come in Excel, dove
+   solo i riferimenti hanno colore (e i loro, `--doc-author-*`, sono già
+   della carta). */
+.look-file .rich-desk,
+.look-file .grid-viewport {
+  --focus-ring: var(--paper-link, #2c57cd);
+  --syn-keyword: var(--doc-fg);
+  --syn-name: var(--doc-fg);
+  --syn-function: var(--doc-fg);
+  --syn-literal: var(--doc-fg);
+  --syn-type: var(--doc-fg);
+  --syn-operator: var(--doc-fg);
+  --syn-string: var(--doc-fg);
+  --syn-heading: var(--doc-fg);
+  --syn-comment: var(--doc-gutter-fg);
+  --syn-invalid: var(--doc-danger);
+}
+
+/* ── PA T56 · skin/editors.css, i segni della griglia sulla carta ────────
+   Sulla carta chiara la griglia disegna i suoi segni: la cella attiva, la
+   selezione, il quadratino del riempimento, la cella in modifica, gli
+   oggetti. Erano dell'accento del tema, e al buio il verde chiaro sul bianco
+   sta a 2,2:1: la cella attiva quasi non si vede. Sui segni della carta
+   l'accento è quello della carta, e il velo della selezione con lui. Le
+   intestazioni di righe e colonne sono cornice, col fondo del tema, e
+   tengono l'accento del tema: per questo la regola va sulle celle
+   (`.grid-row .active`, `.selected`) e non sulla riga, che contiene anche
+   l'intestazione. La cella in modifica ha il fondo della carta, non quello
+   dei pannelli. */
+.look-file :is(.grid-cell, .grid-selection, .grid-fill-handle, .grid-fill-preview, .grid-move-preview, .grid-cut-mark, .grid-cell-editor, .grid-object, .grid-object-handle, .grid-object-text-editor, .grid-comment-mark) {
+  --accent: var(--paper-link, #2c57cd);
+  --accent-veil: color-mix(in srgb, var(--paper-link, #2c57cd) 12%, transparent);
+}
+.look-file .grid-cell-editor {
+  background: var(--doc-bg);
+}
+.look-file .grid-fill-handle {
+  border-color: var(--doc-bg);
+}
+
+/* ── PA T56 · editors/text/engine.ts, `FIELD_LAYOUT` ─────────────────────
+   Un campo (la barra delle formule, la cella in modifica) toglieva i numeri
+   di riga ma teneva il margine delle pieghe: una striscia di 9 px a sinistra
+   del testo, col fondo del foglio del tema (scura sulla carta al buio), per
+   una riga che non si piega mai. `foldGutter: false` nel campo. */
+.grid-cell-editor .cm-gutters,
+.grid-formula-editor .cm-gutters {
+  display: none;
+}
+
+/* ── PA T56 · skin/editors.css, `.rich-side-open:focus-visible` ──────────
+   La pillola dei commenti galleggia sulla carta del documento nello stretto,
+   e il suo anello d'ombra stava fuori, sul bianco: al buio 2,2:1. L'anello
+   va dentro la pillola, sul suo fondo, e l'ombra della pillola resta. */
+.rich-side-open:focus-visible {
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring), var(--shadow-2);
+}
+
+/* ── PA T56 · skin/drawers.css, accanto a `.link-button` ─────────────────
+   L'azione testuale di un avviso («Decidi dopo», «Riprova», «Scegli ora»)
+   sta sul velo rosso o giallo dell'avviso, e l'accento ci arriva a 4,4:1.
+   Sopra un velo prende l'inchiostro d'accento più forte, `--accent-soft`
+   (più scuro alla luce, più chiaro al buio). */
+.conflict-banner .link-button,
+.sheet-notice .link-button {
+  color: var(--accent-soft);
+}
+
+/* ── PA T57 · skin/document.css e markdown/blocks/handles.ts ────────────
+   Il «+» e la maniglia del blocco del cursore, fuori dal passaggio, stavano
+   a 0,55 e si leggevano a 2,2:1: tenui sì, ma sopra il 3:1 dei controlli
+   (0,75). E sono bersagli da 24 × 24 (la forma è di `handles.ts`, base
+   theme: `width` e `height` 24 px al posto di 1,4 × 1,5 rem). */
+.cm-editor .cm-fub-block-handles > .cm-fub-block-add,
+.cm-editor .cm-fub-block-handles > .cm-fub-block-grip {
+  width: 24px;
+  height: 24px;
+  opacity: 0.75;
+}
+
+/* ── PA T57 · editors/text/profiles/markdown/hints.ts (base theme) ───────
+   La pastiglia del titolo resta piccola com'è (20 × 13), ma si prende in un
+   rettangolo di 24 × 25: il bersaglio lo allarga un `::after` trasparente,
+   verso il titolo e non verso sinistra, dove nel riquadro di destra c'è il
+   divisorio dei riquadri che prende il clic. */
+.cm-editor .cm-content .cm-fub-heading-pill-button::after {
+  content: "";
+  position: absolute;
+  inset: -6px -4px -6px 0;
+}
+
+/* ── PA T56 · editors/canvas/engine.ts, `nodeFill` ───────────────────────
+   Una scheda colorata della lavagna era il colore al 18–22 % sul niente: si
+   vedeva la scrivania sotto, e il titolo in grafite e l'azione d'accento
+   scendevano a 4,2:1. Il colore si mescola nella carta della scheda,
+   `var(--doc-bg)`, come la scheda senza colore. Le linee tengono il loro
+   (`PRESET_FILL` resta per `edge.color`). Qui il colore sta nello stile in
+   linea della scheda, e il simulatore lo imita con `!important`. */
+.canvas-node[style*="var(--danger) 18%, transparent"] { background: color-mix(in srgb, var(--danger) 18%, var(--doc-bg)) !important; }
+.canvas-node[style*="var(--warning) 22%, transparent"] { background: color-mix(in srgb, var(--warning) 22%, var(--doc-bg)) !important; }
+.canvas-node[style*="yellow 22%, transparent"] { background: color-mix(in srgb, yellow 22%, var(--doc-bg)) !important; }
+.canvas-node[style*="var(--success) 18%, transparent"] { background: color-mix(in srgb, var(--success) 18%, var(--doc-bg)) !important; }
+.canvas-node[style*="var(--info) 20%, transparent"] { background: color-mix(in srgb, var(--info) 20%, var(--doc-bg)) !important; }
+.canvas-node[style*="var(--accent) 18%, transparent"] { background: color-mix(in srgb, var(--accent) 18%, var(--doc-bg)) !important; }
+
+/* ── PA T57 · skin/editors.css, accanto a `.grid-ribbon-palette-grid` ─────
+   I quadretti della tavolozza sono da 18 px e stavano a 2 px l'uno
+   dall'altro. A 6 px il passo è 24: ogni quadretto ha il suo cerchio di
+   24 px che non tocca i vicini (l'eccezione della distanza di WCAG 2.5.8). */
+.grid-ribbon-palette-grid {
+  gap: var(--space-3);
+}
+
+/* ── PA T57 · structure.css, `.kit-ribbon-arrow` ─────────────────────────
+   La freccia di un pulsante diviso era larga 14 px, attaccata al pulsante:
+   un bersaglio sotto i 24 che non ha distanza da nessuno. Larga 24. La fila
+   si allunga di 10 px per ogni pulsante diviso. */
+.kit-ribbon-arrow {
+  min-width: 24px;
+}
+
+/* ── PA T57 · skin/frame.css, `.status-item--button` ─────────────────────
+   La modalità nella banda era alta 22 px. */
+.status-item--button {
+  min-height: var(--space-8);
+}
+
+/* ── PA T57 · skin/sheets.css, `.sheet-title` ────────────────────────────
+   Il percorso a briciole si rinomina con un clic, ed era alto quanto il
+   testo, 18–20 px. */
+.sheet-title {
+  min-height: var(--space-8);
+}
+
+/* ── PA T57 · skin/media.css, `.craft-xmp-tag` ───────────────────────────
+   Un'etichetta XMP si cerca con un clic, ed era alta 20 px. */
+.craft-xmp-tag {
+  min-height: var(--space-8);
+}
+
+/* ── PA T57 · skin/settings.css, `.settings-toc-link` e `-name` ──────────
+   «Permessi dei componenti inclusi» non stava nella colonna (185 px in
+   183, 147 a 700) e finiva in «…» senza il nome intero da nessuna parte.
+   Un nome lungo va a capo: la voce si alza, e la tacca della sezione
+   corrente la segue. */
+.settings-toc-link {
+  height: auto;
+  min-height: var(--row-h);
+  padding-block: var(--space-2);
+}
+.settings-toc-name {
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 </style>
 <style media="not all" data-destinazione="shells/mobile/mobile.css" data-posto="prealpha" data-task="PA T47">
@@ -2857,6 +3051,187 @@ code { font-size: 12.5px; overflow-wrap: anywhere; }
    lato, come `skin/settings.css` già prevede sotto i 760 px. */
 :root[data-client-shell="mobile"] .settings-tab {
   flex: none;
+}
+
+/* ── Le righe di un elenco coi bottoni da 44 px non si toccano ─────────────
+   Sul computer una riga del cestino o delle versioni è alta quanto le sue
+   due righe di testo, e il bottone di 28 px ci sta dentro con aria sopra e
+   sotto. Al telefono il bottone sale a 44 px, la riga diventa alta quanto
+   lui e fra un bottone e l'altro resta 1 px: tre «Ripristina» pieni
+   sembrano un bottone solo, e l'anello del fuoco cade sul vicino. Fra una
+   riga e l'altra, 8 px. */
+:root[data-client-shell="mobile"] .ui-list > .ui-stack[data-dir="row"] + .ui-stack[data-dir="row"] {
+  margin-top: var(--space-4);
+}
+
+/* ── Il tondo della modalità ha l'anello dentro ────────────────────────────
+   Il tondo galleggia sulla carta del documento, che è bianca anche al buio:
+   l'anello fuori dal tondo, verde chiaro al buio, ci sta a 2,2:1. Dentro il
+   tondo l'anello sta sul suo fondo, `--bg-elev`, in tutte e due le luci. */
+@media (max-width: 599px), (max-height: 500px) {
+  :root[data-client-shell="mobile"] .pane > .pane-mode-current:focus-visible {
+    outline-offset: calc(-1 * var(--focus-ring-width) - var(--space-2));
+  }
+}
+</style>
+<style media="not all" data-destinazione="theme/scrittoio/skin/frame.css e skin/settings.css" data-posto="prealpha" data-task="PA T49, D26">
+/* → theme/scrittoio/skin/frame.css e skin/settings.css (PA T49, D26) */
+/* ── Il logo ────────────────────────────────────────────────────────────────
+   Il marchio della barra non è più la «f» corsiva sul colore dell'accento:
+   è il logo di Fub, nella forma minima (16–24 px). Le sue tinte sono gettoni
+   suoi, non della ricetta: non seguono l'accento (il logo resta verde anche
+   con la matita blu), ma un tema le può ridichiarare. Il bottone resta
+   trasparente e prende il velo del passaggio come le icone accanto. */
+:root {
+  --logo-foglio: #1f4b36;
+  --logo-orecchia: #7ea189;
+  --logo-oliva: #6e8b64;
+  --logo-pagina: #ffffff;
+  --logo-righe: #2f4a3e;
+  --logo-nastro: #14c77d;
+  --logo-ombra: rgb(10 107 71 / 55%);
+}
+
+.brand-mark {
+  background: transparent;
+  color: inherit;
+}
+
+.brand-logo {
+  width: 24px;
+  height: 24px;
+}
+
+.brand-logo-foglio {
+  fill: var(--logo-foglio);
+}
+
+.brand-logo-pagina {
+  fill: var(--logo-pagina);
+}
+
+.brand-logo-nastro {
+  fill: none;
+  stroke: var(--logo-nastro);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Informazioni: il logo nella forma piccola (32–48 px), accanto alla versione. */
+.about-version {
+  grid-template-columns: auto minmax(40%, 1fr) auto;
+  align-items: center;
+}
+
+.about-logo {
+  flex: none;
+  width: 48px;
+  height: 48px;
+}
+
+.about-logo .logo-foglio {
+  fill: var(--logo-foglio);
+}
+
+.about-logo .logo-orecchia {
+  fill: var(--logo-orecchia);
+}
+
+.about-logo .logo-oliva {
+  fill: var(--logo-oliva);
+}
+
+.about-logo .logo-pagina {
+  fill: var(--logo-pagina);
+}
+
+.about-logo .logo-righe {
+  fill: var(--logo-righe);
+}
+
+.about-logo .logo-griglia {
+  fill: none;
+  stroke: var(--logo-righe);
+  stroke-width: 1.4;
+}
+
+.about-logo .logo-ombra,
+.about-logo .logo-nastro {
+  fill: none;
+  stroke-width: 4.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.about-logo .logo-ombra {
+  stroke: var(--logo-ombra);
+}
+
+.about-logo .logo-nastro {
+  stroke: var(--logo-nastro);
+}
+</style>
+<style media="not all" data-destinazione="public/avvio/avvio.css" data-posto="prealpha" data-task="PA T49, D26">
+/* → public/avvio/avvio.css (PA T49, D26) */
+/* ── Il logo nell'avvio ─────────────────────────────────────────────────────
+   Il marchio dell'avvio non è più la tessera dell'accento con la «f»: è il
+   logo, nella forma piccola, a 56 px. Le tinte stanno qui perché l'avvio si
+   disegna prima di ogni altro foglio; sono le stesse di --logo-* della pelle.
+   Il segnale del guasto resta sull'angolo, staccato dal fondo. */
+.avvio-marchio {
+  background: none;
+}
+
+.avvio-marchio::after {
+  box-shadow: none;
+}
+
+.avvio-logo {
+  width: 56px;
+  height: 56px;
+}
+
+.avvio-logo .logo-foglio {
+  fill: #1f4b36;
+}
+
+.avvio-logo .logo-orecchia {
+  fill: #7ea189;
+}
+
+.avvio-logo .logo-oliva {
+  fill: #6e8b64;
+}
+
+.avvio-logo .logo-pagina {
+  fill: #ffffff;
+}
+
+.avvio-logo .logo-righe {
+  fill: #2f4a3e;
+}
+
+.avvio-logo .logo-griglia {
+  fill: none;
+  stroke: #2f4a3e;
+  stroke-width: 1.4;
+}
+
+.avvio-logo .logo-ombra,
+.avvio-logo .logo-nastro {
+  fill: none;
+  stroke-width: 4.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.avvio-logo .logo-ombra {
+  stroke: rgb(10 107 71 / 55%);
+}
+
+.avvio-logo .logo-nastro {
+  stroke: #14c77d;
 }
 </style>
 <style media="not all" data-destinazione="theme/examples/carta/ (fogli e skin.css)" data-posto="tema" data-tema="carta" data-task="PA T42, D17">
@@ -2920,6 +3295,7 @@ code { font-size: 12.5px; overflow-wrap: anywhere; }
   --doc-caret: #8e3a1f;
   --doc-danger: #a51d19;
   --doc-gutter-fg: #66594a;
+  --syn-comment: #66594a;
   --doc-drop-line: #8e3a1f;
   --doc-block-selected: rgb(142 58 31 / 12%);
 }
@@ -3017,113 +3393,386 @@ code { font-size: 12.5px; overflow-wrap: anywhere; }
   box-shadow: none;
 }
 
-/* La linguetta accesa si sottolinea nell'inchiostro dell'accento. */
-.tab[aria-selected="true"] .tab-name {
-  text-decoration: underline;
-  text-decoration-color: var(--accent);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 6px;
+/* La linguetta accesa si sottolinea nell'inchiostro dell'accento: un filo
+   dentro la linguetta, in basso. Non una sottolineatura del nome: `.tab-name`
+   taglia ciò che esce dalla sua riga (overflow), e la linea non si vedeva. */
+.tab[aria-selected="true"] {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* ── L'editor di testo (D22 A, PA T54) ───────────────────────────────────── */
+/* I titoli col carattere del tema; il primo con un filetto sotto, i piccoli
+   in maiuscoletto. */
+.cm-editor .cm-content .cm-fub-heading-line {
+  font-family: "Carta Serif", var(--font-reading);
+  font-weight: var(--weight-medium);
+}
+.cm-editor .cm-content .cm-fub-h1-line {
+  border-bottom: 1px solid var(--border-strong);
+}
+.cm-editor .cm-content .cm-fub-h4-line,
+.cm-editor .cm-content .cm-fub-h5-line,
+.cm-editor .cm-content .cm-fub-h6-line {
+  font-variant: all-small-caps;
+  letter-spacing: 0.05em;
+}
+/* La citazione resta in corsivo, col filetto nell'inchiostro dell'accento. */
+.cm-editor .cm-content .cm-line.cm-fub-quote {
+  border-left: 1px solid var(--accent);
+}
+/* Il tag non è una pillola: maiuscoletto, senza fondo. */
+.cm-editor .cm-content .cm-fub-tag {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  font-variant: all-small-caps;
+  letter-spacing: 0.05em;
 }
 </style>
-<style media="not all" data-destinazione="theme/examples/salvia/ (i due fogli)" data-posto="tema" data-tema="salvia" data-task="PA T42, D17">
-/* tema della comunità «Salvia» · chiaro e scuro · PA T42, D17 A */
-/* Il secondo tema d'esempio: soli colori. Un accento salvia e superfici
-   appena verdi, nelle due luci; nessuna regola di pelle, nessun hook. Nel
-   tema vero i blocchi diventano `light.css` e `dark.css`, con `extends`. */
+<style media="not all" data-destinazione="theme/examples/officina/ (i due fogli e skin.css)" data-posto="tema" data-tema="officina" data-task="PA T42, D17">
+/* tema della comunità «Officina» · chiaro e scuro · PA T42, D17 C */
+/* Il tema d'esempio più lontano dalla serie, la prova più dura dei cancelli:
+   grigi d'acciaio, un arancio da cantiere, angoli vivi, nessuna ombra, bordi
+   di 2 px, le etichette in monospazio. Di serie è più contrastato della
+   serie; il suo contrasto alto lo è ancora di più. Usa solo gli hook dello
+   snapshot (PA T41) e nessun hook nuovo: lo prova la sonda dei temi del
+   simulatore. Nel tema vero i blocchi `:root` diventano `light.css` e
+   `dark.css`, il resto `skin.css`; il monospazio delle etichette arriva dal
+   manifest (PA T39), qui ripiega su quello di serie. */
+
+/* ── Il foglio, giorno ───────────────────────────────────────────────────── */
+:root[data-theme="light"] {
+  --bg: #e3e4e6;
+  --bg-chrome: #e3e4e6;
+  --bg-panel: #e3e4e6;
+  --bg-hover: #d8dadd;
+  --bg-active: #cdd0d4;
+  --sheet: #ffffff;
+  --sheet-2: #f2f3f4;
+  --bg-input: #f2f3f4;
+  --bg-elev: #ffffff;
+  --overlay-hover: rgb(13 14 16 / 6%);
+  --overlay-active: rgb(13 14 16 / 11%);
+  --text: #0d0e10;
+  --muted: #3c4046;
+  --border: #8a8f96;
+  --border-strong: #4a4f56;
+  --outline: #4a4f56;
+  --accent: #a33f00;
+  --accent-soft: #873300;
+  --accent-contrast: #ffffff;
+  --accent-wash: #fde3cf;
+  --accent-veil: rgb(163 63 0 / 12%);
+  --focus-ring: #a33f00;
+  --danger: #b00042;
+  --danger-wash: rgb(176 0 66 / 12%);
+  --danger-contrast: #ffffff;
+  --warning: #6f5600;
+  --warning-wash: rgb(111 86 0 / 14%);
+  --warning-contrast: #ffffff;
+  --graph-node: #4a4f56;
+  --graph-node-active: #a33f00;
+  --graph-node-hover: #873300;
+  --draw-desk: #e3e4e6;
+  --doc-bg: #ffffff;
+  --doc-active-line: #f4f5f6;
+  --doc-selection: #fbd9bf;
+  --doc-fg: #0d0e10;
+  --doc-heading: #0d0e10;
+  --doc-link: #a33f00;
+  --doc-caret: #a33f00;
+  --doc-danger: #b00042;
+  --doc-gutter-fg: #3c4046;
+  --doc-drop-line: #a33f00;
+  --doc-block-selected: rgb(163 63 0 / 12%);
+}
+:root[data-theme="light"][data-contrast="high"] {
+  --text: #000000;
+  --muted: #24272b;
+  --border: #5c6168;
+  --border-strong: #2b2f35;
+  --outline: #2b2f35;
+  --accent: #8a3500;
+  --accent-soft: #702a00;
+  --focus-ring: #8a3500;
+  --doc-fg: #000000;
+  --doc-gutter-fg: #24272b;
+}
+
+/* ── Il foglio, notte ────────────────────────────────────────────────────── */
+:root[data-theme="dark"] {
+  --bg: #101113;
+  --bg-chrome: #101113;
+  --bg-panel: #101113;
+  --bg-hover: #1a1c1f;
+  --bg-active: #24272b;
+  --sheet: #17191c;
+  --sheet-2: #1f2125;
+  --bg-input: #1f2125;
+  --bg-elev: #23262a;
+  --text: #f2f3f5;
+  --muted: #b9bec6;
+  --border: #5a6069;
+  --border-strong: #8a919b;
+  --outline: #8a919b;
+  --accent: #ff9a52;
+  --accent-soft: #ffb57f;
+  --accent-contrast: #170a00;
+  --accent-wash: #3d2412;
+  --accent-veil: rgb(255 154 82 / 18%);
+  --focus-ring: #ff9a52;
+  --danger: #ff6b8f;
+  --danger-wash: rgb(255 107 143 / 16%);
+  --danger-contrast: #1a0008;
+  --warning: #e2c04f;
+  --warning-wash: rgb(226 192 79 / 16%);
+  --warning-contrast: #171200;
+  --graph-node: #8a919b;
+  --graph-node-active: #ff9a52;
+  --graph-node-hover: #ffb57f;
+  --draw-desk: #101113;
+  --doc-bg: #17191c;
+  --doc-active-line: #1c1e22;
+  --doc-selection: #4a2c16;
+  --doc-fg: #eceef1;
+  --doc-heading: #eceef1;
+  --doc-link: #ff9a52;
+  --doc-caret: #ff9a52;
+  --doc-danger: #ff6b8f;
+  --doc-gutter-fg: #b9bec6;
+  --doc-drop-line: #ff9a52;
+  --doc-block-selected: rgb(255 154 82 / 18%);
+}
+:root[data-theme="dark"][data-contrast="high"] {
+  --text: #ffffff;
+  --muted: #d3d7dd;
+  --border: #7c838d;
+  --border-strong: #a9b0ba;
+  --outline: #a9b0ba;
+  --accent: #ffb27a;
+  --accent-soft: #ffc9a1;
+  --focus-ring: #ffb27a;
+  --doc-fg: #ffffff;
+  --doc-gutter-fg: #d3d7dd;
+}
+
+/* ── La forma: angoli vivi, niente ombre ─────────────────────────────────── */
+:root {
+  --radius-xs: 0;
+  --radius-chip: 0;
+  --radius-control: 0;
+  --radius-menu: 0;
+  --radius-sheet: 0;
+  --radius-dialog: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --shadow-1: none;
+  --shadow-2: none;
+  --shadow-3: none;
+  --shadow-4: none;
+  --shadow-5: none;
+  --shadow-6: none;
+  --shadow-7: none;
+  --elevation-paper-shadow: none;
+  --elevation-floating-shadow: none;
+  --elevation-dialog-shadow: none;
+}
+
+/* ── La pelle ────────────────────────────────────────────────────────────── */
+/* Le etichette in monospazio, come su una targhetta. */
+.panel-title,
+.settings-tab-label,
+.settings-section-title,
+.settings-title,
+.inspector-tab,
+.kit-tab-label,
+.sheet-desk-label,
+.tab-name,
+.status-item {
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+}
+.panel-title,
+.settings-section-title,
+.kit-tab-label,
+.inspector-tab {
+  text-transform: uppercase;
+}
+
+/* Bordi di 2 px al posto delle ombre: il foglio, i rialzi, la banda. */
+.pane::before {
+  box-shadow: 0 0 0 2px var(--border-strong);
+}
+.pane.focus::before {
+  box-shadow: 0 0 0 2px var(--text);
+}
+.kit-dialog,
+.kit-popover,
+.context-menu,
+.launcher-panel,
+.selection-bubble,
+.toast {
+  box-shadow: 0 0 0 2px var(--text);
+}
+.status-band {
+  box-shadow: inset 0 2px 0 var(--border-strong);
+}
+
+/* Le schede delle Impostazioni: una cornice piena. */
+.settings-section-body > .settings-card {
+  box-shadow: inset 0 0 0 2px var(--border-strong);
+}
+
+/* I bottoni e le scelte: il contorno pieno. */
+.kit-button,
+.segmented {
+  box-shadow: inset 0 0 0 2px var(--border-strong);
+}
+.kit-button[data-kind="primary"] {
+  box-shadow: none;
+}
+
+/* La linguetta accesa: una barra d'arancio in cima. Dentro la linguetta, non
+   sul nome: `.tab-name` taglia ciò che esce dalla sua riga (overflow). */
+.tab[aria-selected="true"] {
+  box-shadow: inset 0 3px 0 var(--accent);
+}
+
+/* ── L'editor di testo (D22 A, PA T54) ───────────────────────────────────── */
+/* I titoli nel carattere dell'interfaccia; il primo con un filo pieno. */
+.cm-editor .cm-content .cm-fub-heading-line {
+  font-family: var(--font-ui);
+  letter-spacing: 0;
+}
+.cm-editor .cm-content .cm-fub-h1-line {
+  border-bottom: 2px solid var(--text);
+}
+/* La citazione: dritta, con la barra d'arancio. */
+.cm-editor .cm-content .cm-line.cm-fub-quote {
+  border-left: 4px solid var(--accent);
+  font-style: normal;
+}
+/* Il codice e i tag: angoli vivi, un filo. */
+.cm-editor .cm-content .cm-fub-code {
+  border-radius: 0;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.cm-editor .cm-content .cm-fub-tag {
+  border-radius: 0;
+  font-family: var(--font-mono);
+}
+</style>
+<style media="not all" data-destinazione="theme/examples/mare/ (i due fogli)" data-posto="tema" data-tema="mare" data-task="PA T42, D17, D27">
+/* tema della comunità «Mare» · chiaro e scuro · PA T42, D17 C, D27 A */
+/* Il tema d'esempio di soli colori: un blu profondo e superfici
+   grigio-azzurre, scelti a mano, nelle due luci; nessuna regola di pelle,
+   nessun hook. L'editor di testo lo veste coi ruoli (PA T54). Nel tema vero
+   i blocchi diventano `light.css` e `dark.css`, con `extends`. Si chiamava
+   «Salvia»: col verde di serie (D25) era troppo vicino alla serie, e
+   «Salvia» è anche il nome di un accento (D27). */
 
 /* ── Giorno ──────────────────────────────────────────────────────────────── */
 :root[data-theme="light"] {
-  --bg: #e5ebe3;
-  --bg-chrome: #e5ebe3;
-  --bg-panel: #e5ebe3;
-  --bg-hover: #dae2d8;
-  --bg-active: #cfd9cc;
-  --sheet: #fbfdfa;
-  --sheet-2: #f1f5ef;
-  --bg-input: #f1f5ef;
+  --bg: #e6ebf1;
+  --bg-chrome: #e6ebf1;
+  --bg-panel: #e6ebf1;
+  --bg-hover: #dae1ea;
+  --bg-active: #ced7e2;
+  --sheet: #fbfcfe;
+  --sheet-2: #f0f3f7;
+  --bg-input: #f0f3f7;
   --bg-elev: #ffffff;
-  --overlay-hover: rgb(27 36 29 / 5%);
-  --overlay-active: rgb(27 36 29 / 9%);
-  --text: #1b241d;
-  --muted: #546057;
-  --border: #d0dacd;
-  --border-strong: #adbaa9;
-  --outline: #7b887d;
-  --accent: #3f6f4a;
-  --accent-soft: #2f5a39;
-  --accent-contrast: #f8fcf8;
-  --accent-wash: #d5e8d6;
-  --accent-veil: rgb(63 111 74 / 12%);
-  --focus-ring: #3f6f4a;
-  --graph-node: #7b887d;
-  --graph-node-active: #3f6f4a;
-  --graph-node-hover: #2f5a39;
-  --draw-desk: #e6ebe4;
-  --doc-bg: #fbfdfa;
-  --doc-active-line: #f2f6f0;
-  --doc-selection: #d3e6d4;
-  --doc-fg: #1f2821;
-  --doc-heading: #1f2821;
-  --doc-link: #376a43;
-  --doc-caret: #3f6f4a;
-  --doc-gutter-fg: #58635a;
-  --doc-drop-line: #3f6f4a;
-  --doc-block-selected: rgb(63 111 74 / 12%);
+  --overlay-hover: rgb(20 32 52 / 5%);
+  --overlay-active: rgb(20 32 52 / 9%);
+  --text: #142034;
+  --muted: #4f5b6d;
+  --border: #cdd5e0;
+  --border-strong: #a9b4c4;
+  --outline: #77849a;
+  --accent: #1d4f91;
+  --accent-soft: #163f78;
+  --accent-contrast: #f7faff;
+  --accent-wash: #d6e3f5;
+  --accent-veil: rgb(29 79 145 / 12%);
+  --focus-ring: #1d4f91;
+  --info: #006a7a;
+  --info-wash: rgb(0 106 122 / 12%);
+  --info-contrast: #f7faff;
+  --graph-node: #77849a;
+  --graph-node-active: #1d4f91;
+  --graph-node-hover: #163f78;
+  --draw-desk: #e7ecf2;
+  --doc-bg: #fbfcfe;
+  --doc-active-line: #f1f4f8;
+  --doc-selection: #d3e0f3;
+  --doc-fg: #18243a;
+  --doc-heading: #18243a;
+  --doc-link: #1f5399;
+  --doc-caret: #1d4f91;
+  --doc-gutter-fg: #556074;
+  --syn-comment: #556074;
+  --doc-drop-line: #1d4f91;
+  --doc-block-selected: rgb(29 79 145 / 12%);
 }
 :root[data-theme="light"][data-contrast="high"] {
-  --text: #111a13;
-  --muted: #3b463e;
-  --border: #93a28f;
-  --border-strong: #63725f;
-  --accent: #2f5a39;
-  --accent-soft: #23482c;
-  --focus-ring: #2f5a39;
+  --text: #0b1424;
+  --muted: #36414f;
+  --border: #8e9bb0;
+  --border-strong: #5d6a80;
+  --accent: #163f78;
+  --accent-soft: #113266;
+  --focus-ring: #163f78;
 }
 
 /* ── Notte ───────────────────────────────────────────────────────────────── */
 :root[data-theme="dark"] {
-  --bg: #0b110d;
-  --bg-chrome: #0b110d;
-  --bg-panel: #0b110d;
-  --bg-hover: #131b15;
-  --bg-active: #1b241d;
-  --sheet: #151d17;
-  --sheet-2: #1d261f;
-  --bg-input: #1d261f;
-  --bg-elev: #212b23;
-  --text: #e3ebe4;
-  --muted: #9faba1;
-  --border: #2a352c;
-  --border-strong: #415044;
-  --outline: #738276;
-  --accent: #8fc79a;
-  --accent-soft: #abd8b4;
-  --accent-contrast: #08130b;
-  --accent-wash: #22392a;
-  --accent-veil: rgb(143 199 154 / 20%);
-  --focus-ring: #8fc79a;
-  --graph-node: #738276;
-  --graph-node-active: #8fc79a;
-  --graph-node-hover: #abd8b4;
-  --doc-bg: #151d17;
-  --doc-active-line: #1a231c;
-  --doc-selection: #20352a;
-  --doc-fg: #d9e2da;
-  --doc-heading: #d9e2da;
-  --doc-link: #8fc79a;
-  --doc-caret: #8fc79a;
-  --doc-gutter-fg: #9faba1;
-  --doc-drop-line: #8fc79a;
-  --doc-block-selected: rgb(143 199 154 / 20%);
+  --bg: #0a0f17;
+  --bg-chrome: #0a0f17;
+  --bg-panel: #0a0f17;
+  --bg-hover: #121926;
+  --bg-active: #1a2231;
+  --sheet: #131a26;
+  --sheet-2: #1b2331;
+  --bg-input: #1b2331;
+  --bg-elev: #1f2837;
+  --text: #e2e8f1;
+  --muted: #9ba6b6;
+  --border: #283244;
+  --border-strong: #3e4a5f;
+  --outline: #6f7d93;
+  --accent: #8db4f0;
+  --accent-soft: #a9c7f5;
+  --accent-contrast: #07101d;
+  --accent-wash: #1d2f4d;
+  --accent-veil: rgb(141 180 240 / 20%);
+  --focus-ring: #8db4f0;
+  --info: #6cc7d6;
+  --info-wash: rgb(108 199 214 / 16%);
+  --info-contrast: #07101d;
+  --graph-node: #6f7d93;
+  --graph-node-active: #8db4f0;
+  --graph-node-hover: #a9c7f5;
+  --doc-bg: #131a26;
+  --doc-active-line: #18202d;
+  --doc-selection: #1f3352;
+  --doc-fg: #d8dfea;
+  --doc-heading: #d8dfea;
+  --doc-link: #8db4f0;
+  --doc-caret: #8db4f0;
+  --doc-gutter-fg: #9ba6b6;
+  --syn-comment: #9ba6b6;
+  --doc-drop-line: #8db4f0;
+  --doc-block-selected: rgb(141 180 240 / 20%);
 }
 :root[data-theme="dark"][data-contrast="high"] {
-  --text: #f3f8f3;
-  --muted: #c0cbc2;
-  --border: #536355;
-  --border-strong: #75867a;
-  --accent: #a9dcb3;
-  --accent-soft: #c3e8ca;
-  --focus-ring: #a9dcb3;
+  --text: #f3f6fa;
+  --muted: #c2cad6;
+  --border: #4f5d74;
+  --border-strong: #73829a;
+  --accent: #a7c6f5;
+  --accent-soft: #c2d8f8;
+  --focus-ring: #a7c6f5;
 }
 </style>
 <style id="sim-scala"></style>
@@ -3246,15 +3895,19 @@ code { font-size: 12.5px; overflow-wrap: anywhere; }
         <tr><td><code>theme/scrittoio/skin/welcome.css</code></td><td>pelle</td><td>S2 T10</td><td>0.2 KB</td></tr>
         <tr><td><code>shells/scrittoio/mobile/mobile.css</code></td><td>telefono</td><td>S2 T3, T4, T5, T7, T11, T27</td><td>7.6 KB</td></tr>
         <tr><td><code>theme/scrittoio/series.ts</code></td><td>serie</td><td>S2 T11</td><td>0.3 KB</td></tr>
-        <tr><td><code>theme/scrittoio/recipe.ts</code></td><td>serie</td><td>S2 T16, T27</td><td>1.7 KB</td></tr>
+        <tr><td><code>theme/scrittoio/recipe.ts</code></td><td>serie</td><td>S2 T16, T27</td><td>2.1 KB</td></tr>
         <tr><td><code>theme/scrittoio/skin/frame.css</code></td><td>prealpha</td><td>D5 A: K5 T21–T23 con S2 T4</td><td>0.9 KB</td></tr>
         <tr><td><code>theme/scrittoio/skin/draw.css</code></td><td>prealpha</td><td>K5 T21, PA T27</td><td>0.6 KB</td></tr>
         <tr><td><code>theme/scrittoio/skin/settings.css</code></td><td>prealpha</td><td>PA T29, T36–T38</td><td>6 KB</td></tr>
-        <tr><td><code>theme/scrittoio/skin/nodes.css</code></td><td>prealpha</td><td>N6 T26–T28, PA T28</td><td>3.3 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/nodes.css</code></td><td>prealpha</td><td>N6 T26–T28, PA T28</td><td>3.5 KB</td></tr>
         <tr><td><code>theme/scrittoio/skin/media.css</code></td><td>prealpha</td><td>PA T30</td><td>0.3 KB</td></tr>
-        <tr><td><code>shells/mobile/mobile.css</code></td><td>prealpha</td><td>PA T47</td><td>1.3 KB</td></tr>
-        <tr><td><code>theme/examples/carta/ (fogli e skin.css)</code></td><td>tema</td><td>PA T42, D17</td><td>4.4 KB</td></tr>
-        <tr><td><code>theme/examples/salvia/ (i due fogli)</code></td><td>tema</td><td>PA T42, D17</td><td>2.7 KB</td></tr>
+        <tr><td><code>più file (ogni sezione dice il suo)</code></td><td>prealpha</td><td>PA T56, T57</td><td>8.5 KB</td></tr>
+        <tr><td><code>shells/mobile/mobile.css</code></td><td>prealpha</td><td>PA T47</td><td>2.4 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/frame.css e skin/settings.css</code></td><td>prealpha</td><td>PA T49, D26</td><td>1.9 KB</td></tr>
+        <tr><td><code>public/avvio/avvio.css</code></td><td>prealpha</td><td>PA T49, D26</td><td>1.1 KB</td></tr>
+        <tr><td><code>theme/examples/carta/ (fogli e skin.css)</code></td><td>tema</td><td>PA T42, D17</td><td>5.4 KB</td></tr>
+        <tr><td><code>theme/examples/officina/ (i due fogli e skin.css)</code></td><td>tema</td><td>PA T42, D17</td><td>6.2 KB</td></tr>
+        <tr><td><code>theme/examples/mare/ (i due fogli)</code></td><td>tema</td><td>PA T42, D17, D27</td><td>3.1 KB</td></tr>
       </tbody>
     </table></div>
     <p class="sim-muto">Il testo sta nei blocchi <code>&lt;style data-destinazione&gt;</code> in testa a questa pagina, già senza le varianti «com'era». «prealpha» è il CSS di questo piano; «tema» sono i due temi d'esempio.</p>
@@ -3272,15 +3925,25 @@ code { font-size: 12.5px; overflow-wrap: anywhere; }
   </details>
 </main>
 <div hidden id="sim-toppe">
+<!-- toppe/aspetto.html -->
+<template data-toppa="aspetto-barre" data-nome="D6 C: la riga «Le barre» in Aspetto (di serie: chiare)">
+<!-- → panels/settings.ts (la riga dal registro: chiave d'host appearance.bars, light | marked, di serie light; la scrive crates/fub-host/src/settings.rs), il modulo che mette le scelte d'Aspetto sulla radice (data-bars, come appearance.density), i18n/catalog.ts; PA T11, D6 C. Dopo «Densità». -->
+<div class="setting-row" data-setting-key="appearance.bars" data-search="le barre chiare o marcate il vassoio sotto le barre e la colonna degli strumenti. appearance.bars aspetto chiare marcate"><div class="setting-text"><label for="setting-appearance.bars" id="setting-appearance.bars-label">Le barre</label><div class="muted setting-description" id="setting-appearance.bars-desc">Il vassoio sotto le schede, le barre dei comandi e la colonna degli strumenti: chiaro, vicino alla carta, o marcato, che si stacca di più.</div><span class="sr-only" id="setting-appearance.bars-source">valore predefinito · vale per questa macchina</span></div><div class="setting-control"><div class="segmented segmented--wide setting-segmented" id="setting-appearance.bars" role="radiogroup" aria-labelledby="setting-appearance.bars-label" aria-describedby="setting-appearance.bars-desc setting-appearance.bars-source"><button type="button" class="segmented-option" role="radio" aria-checked="true" data-choice="light" tabindex="0">Chiare</button><button type="button" class="segmented-option" role="radio" aria-checked="false" data-choice="marked" tabindex="-1">Marcate</button></div></div></div>
+</template>
+
+<template data-toppa="aspetto-barre-marcate" data-nome="D6 C: la riga «Le barre» con «Marcate» scelta">
+<!-- → panels/settings.ts (la stessa riga, scelta cambiata: il segno di modifica e «Azzera» come le altre righe), i18n/catalog.ts; PA T11, D6 C -->
+<div class="setting-row" data-setting-key="appearance.bars" data-modified="true" data-search="le barre chiare o marcate il vassoio sotto le barre e la colonna degli strumenti. appearance.bars aspetto chiare marcate"><div class="setting-text"><label for="setting-appearance.bars" id="setting-appearance.bars-label">Le barre</label><div class="muted setting-description" id="setting-appearance.bars-desc">Il vassoio sotto le schede, le barre dei comandi e la colonna degli strumenti: chiaro, vicino alla carta, o marcato, che si stacca di più.</div><div class="setting-meta"><span class="setting-scope" data-scope="machine" aria-hidden="true"><span class="setting-scope-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M9 20h6M12 16v4"></path></svg></span><span>Questa macchina</span></span><div class="setting-default">Predefinito: Chiare</div><button type="button" class="link-button setting-reset">Azzera</button></div><span class="sr-only" id="setting-appearance.bars-source">scelto per questa macchina</span></div><div class="setting-control"><div class="segmented segmented--wide setting-segmented" id="setting-appearance.bars" role="radiogroup" aria-labelledby="setting-appearance.bars-label" aria-describedby="setting-appearance.bars-desc setting-appearance.bars-source"><button type="button" class="segmented-option" role="radio" aria-checked="false" data-choice="light" tabindex="-1">Chiare</button><button type="button" class="segmented-option" role="radio" aria-checked="true" data-choice="marked" tabindex="0">Marcate</button></div></div></div>
+</template>
 <!-- toppe/componenti.html -->
 <template data-toppa="comp-installato" data-nome="Un componente della comunità installato">
-<!-- → panels/settings.ts renderInstalledComponent, così com'è oggi (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41"); K1, K2 T3, PA T29 -->
+<!-- → panels/settings.ts renderInstalledComponent, con le parole del lessico (D18 A, PA T46) (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41"); K1, K2 T3, PA T29 -->
 <div class="settings-card settings-component">
   <div class="setting-row"><div class="setting-text"><div class="setting-label" role="heading" aria-level="4">Conta parole</div><div class="muted">esempio.conta-parole · versione 0.3.1 · Della comunità</div><div class="setting-source">Attivo in questo vault</div></div></div>
-  <div class="setting-row"><div class="setting-text"><label for="installed-enabled-41">Abilitato</label><div class="muted">Scelta persistita su questa macchina. Il componente può avviarsi soltanto se anche il consenso è concesso.</div></div><div class="setting-control"><input type="checkbox" class="setting-switch" role="switch" id="installed-enabled-41" checked></div></div>
-  <div class="setting-row"><div class="setting-text"><label for="installed-consent-41">Consenso all'esecuzione</label><div class="muted">È distinto dall'abilitazione: negato o da decidere impediscono sempre l'esecuzione.</div></div><div class="setting-control"><select class="setting-select" id="installed-consent-41"><option value="undecided">Da decidere</option><option value="denied">Negato</option><option value="granted" selected>Concesso</option></select></div></div>
+  <div class="setting-row"><div class="setting-text"><label for="installed-enabled-41">Acceso</label><div class="muted">Scelta persistita su questa macchina. Il componente può avviarsi soltanto se anche il consenso è concesso.</div></div><div class="setting-control"><input type="checkbox" class="setting-switch" role="switch" id="installed-enabled-41" checked></div></div>
+  <div class="setting-row"><div class="setting-text"><label for="installed-consent-41">Consenso all'esecuzione</label><div class="muted">È distinto da acceso e spento: negato o da decidere impediscono sempre l'esecuzione.</div></div><div class="setting-control"><select class="setting-select" id="installed-consent-41"><option value="undecided">Da decidere</option><option value="denied">Negato</option><option value="granted" selected>Concesso</option></select></div></div>
   <details class="settings-details" data-details-key="permissions:installed:41"><summary>Chiede un permesso</summary><div class="settings-details-body"><div class="muted">Capacità dichiarate dal file. Concedere il consenso le approva insieme; un consenso negato non esegue il componente.</div><div class="setting-row setting-permission" data-setting-key="esempio.conta-parole:permissions.read-session"><div class="setting-text"><div>Può sapere quale nota stai guardando, e in che modalità.</div></div></div></div></details>
-  <div class="setting-row"><div class="setting-text"><div class="setting-label">Rimuovi</div><div class="muted">Rimuove l'installazione ma conserva i suoi dati nel vault.</div><div class="setting-source" id="installed-remove-hint-41">Disabilita il componente prima di rimuoverlo.</div></div><div class="setting-control"><button type="button" class="settings-btn settings-btn--danger" disabled aria-describedby="installed-remove-hint-41">Rimuovi</button></div></div>
+  <div class="setting-row"><div class="setting-text"><div class="setting-label">Togli</div><div class="muted">Toglie l'installazione; i suoi dati restano nel vault.</div><div class="setting-source" id="installed-remove-hint-41">Spegni il componente prima di toglierlo.</div></div><div class="setting-control"><button type="button" class="settings-btn settings-btn--danger" disabled aria-describedby="installed-remove-hint-41">Togli</button></div></div>
 </div>
 </template>
 
@@ -3302,10 +3965,10 @@ I permessi si possono togliere uno per uno anche dopo.</p>
 <!-- → panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault» e «Riavvia» (fub-wasm-host: timeout; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi; K1, PA T29 -->
 <div class="settings-card settings-component" data-state="stopped">
   <div class="setting-row"><div class="setting-text"><div class="setting-label" role="heading" aria-level="4">Conta parole</div><div class="muted">esempio.conta-parole · versione 0.3.1 · Della comunità</div><div class="setting-source" role="status">Fermato: ha superato il tempo (5 s). Le note non hanno perso niente.</div></div><div class="setting-control"><button type="button" class="settings-btn">Riavvia</button></div></div>
-  <div class="setting-row"><div class="setting-text"><label for="installed-enabled-41">Abilitato</label><div class="muted">Scelta persistita su questa macchina. Il componente può avviarsi soltanto se anche il consenso è concesso.</div></div><div class="setting-control"><input type="checkbox" class="setting-switch" role="switch" id="installed-enabled-41" checked></div></div>
-  <div class="setting-row"><div class="setting-text"><label for="installed-consent-41">Consenso all'esecuzione</label><div class="muted">È distinto dall'abilitazione: negato o da decidere impediscono sempre l'esecuzione.</div></div><div class="setting-control"><select class="setting-select" id="installed-consent-41"><option value="undecided">Da decidere</option><option value="denied">Negato</option><option value="granted" selected>Concesso</option></select></div></div>
+  <div class="setting-row"><div class="setting-text"><label for="installed-enabled-41">Acceso</label><div class="muted">Scelta persistita su questa macchina. Il componente può avviarsi soltanto se anche il consenso è concesso.</div></div><div class="setting-control"><input type="checkbox" class="setting-switch" role="switch" id="installed-enabled-41" checked></div></div>
+  <div class="setting-row"><div class="setting-text"><label for="installed-consent-41">Consenso all'esecuzione</label><div class="muted">È distinto da acceso e spento: negato o da decidere impediscono sempre l'esecuzione.</div></div><div class="setting-control"><select class="setting-select" id="installed-consent-41"><option value="undecided">Da decidere</option><option value="denied">Negato</option><option value="granted" selected>Concesso</option></select></div></div>
   <details class="settings-details" data-details-key="permissions:installed:41"><summary>Chiede un permesso</summary><div class="settings-details-body"><div class="muted">Capacità dichiarate dal file. Concedere il consenso le approva insieme; un consenso negato non esegue il componente.</div><div class="setting-row setting-permission" data-setting-key="esempio.conta-parole:permissions.read-session"><div class="setting-text"><div>Può sapere quale nota stai guardando, e in che modalità.</div></div></div></div></details>
-  <div class="setting-row"><div class="setting-text"><div class="setting-label">Rimuovi</div><div class="muted">Rimuove l'installazione ma conserva i suoi dati nel vault.</div><div class="setting-source" id="installed-remove-hint-41">Disabilita il componente prima di rimuoverlo.</div></div><div class="setting-control"><button type="button" class="settings-btn settings-btn--danger" disabled aria-describedby="installed-remove-hint-41">Rimuovi</button></div></div>
+  <div class="setting-row"><div class="setting-text"><div class="setting-label">Togli</div><div class="muted">Toglie l'installazione; i suoi dati restano nel vault.</div><div class="setting-source" id="installed-remove-hint-41">Spegni il componente prima di toglierlo.</div></div><div class="setting-control"><button type="button" class="settings-btn settings-btn--danger" disabled aria-describedby="installed-remove-hint-41">Togli</button></div></div>
 </div>
 </template>
 
@@ -3313,10 +3976,10 @@ I permessi si possono togliere uno per uno anche dopo.</p>
 <!-- → panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault», «Copia il motivo» e «Riavvia» (fub-wasm-host: trap; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi; K1, PA T29 -->
 <div class="settings-card settings-component" data-state="stopped">
   <div class="setting-row"><div class="setting-text"><div class="setting-label" role="heading" aria-level="4">Conta parole</div><div class="muted">esempio.conta-parole · versione 0.3.1 · Della comunità</div><div class="setting-source" role="status">Fermato: un errore dentro il componente («unreachable» in count_words). Si riaccende a mano.</div></div><div class="setting-control"><button type="button" class="settings-btn">Copia il motivo</button><button type="button" class="settings-btn">Riavvia</button></div></div>
-  <div class="setting-row"><div class="setting-text"><label for="installed-enabled-41">Abilitato</label><div class="muted">Scelta persistita su questa macchina. Il componente può avviarsi soltanto se anche il consenso è concesso.</div></div><div class="setting-control"><input type="checkbox" class="setting-switch" role="switch" id="installed-enabled-41" checked></div></div>
-  <div class="setting-row"><div class="setting-text"><label for="installed-consent-41">Consenso all'esecuzione</label><div class="muted">È distinto dall'abilitazione: negato o da decidere impediscono sempre l'esecuzione.</div></div><div class="setting-control"><select class="setting-select" id="installed-consent-41"><option value="undecided">Da decidere</option><option value="denied">Negato</option><option value="granted" selected>Concesso</option></select></div></div>
+  <div class="setting-row"><div class="setting-text"><label for="installed-enabled-41">Acceso</label><div class="muted">Scelta persistita su questa macchina. Il componente può avviarsi soltanto se anche il consenso è concesso.</div></div><div class="setting-control"><input type="checkbox" class="setting-switch" role="switch" id="installed-enabled-41" checked></div></div>
+  <div class="setting-row"><div class="setting-text"><label for="installed-consent-41">Consenso all'esecuzione</label><div class="muted">È distinto da acceso e spento: negato o da decidere impediscono sempre l'esecuzione.</div></div><div class="setting-control"><select class="setting-select" id="installed-consent-41"><option value="undecided">Da decidere</option><option value="denied">Negato</option><option value="granted" selected>Concesso</option></select></div></div>
   <details class="settings-details" data-details-key="permissions:installed:41"><summary>Chiede un permesso</summary><div class="settings-details-body"><div class="muted">Capacità dichiarate dal file. Concedere il consenso le approva insieme; un consenso negato non esegue il componente.</div><div class="setting-row setting-permission" data-setting-key="esempio.conta-parole:permissions.read-session"><div class="setting-text"><div>Può sapere quale nota stai guardando, e in che modalità.</div></div></div></div></details>
-  <div class="setting-row"><div class="setting-text"><div class="setting-label">Rimuovi</div><div class="muted">Rimuove l'installazione ma conserva i suoi dati nel vault.</div><div class="setting-source" id="installed-remove-hint-41">Disabilita il componente prima di rimuoverlo.</div></div><div class="setting-control"><button type="button" class="settings-btn settings-btn--danger" disabled aria-describedby="installed-remove-hint-41">Rimuovi</button></div></div>
+  <div class="setting-row"><div class="setting-text"><div class="setting-label">Togli</div><div class="muted">Toglie l'installazione; i suoi dati restano nel vault.</div><div class="setting-source" id="installed-remove-hint-41">Spegni il componente prima di toglierlo.</div></div><div class="setting-control"><button type="button" class="settings-btn settings-btn--danger" disabled aria-describedby="installed-remove-hint-41">Togli</button></div></div>
 </div>
 </template>
 
@@ -3324,10 +3987,10 @@ I permessi si possono togliere uno per uno anche dopo.</p>
 <!-- → panels/settings.ts renderInstalledComponent: nuovi la riga della versione nuova e «Vedi cosa cambia» (nessun piano lo copre: «Differenze fra piani e codice»); fuori dalla pre-alpha -->
 <div class="settings-card settings-component">
   <div class="setting-row"><div class="setting-text"><div class="setting-label" role="heading" aria-level="4">Conta parole</div><div class="muted">esempio.conta-parole · versione 0.3.1 · Della comunità</div><div class="setting-source">Attivo in questo vault</div><div class="setting-source">C'è la 0.4.0 nel catalogo firmato. Chiede un permesso in più: leggere tutte le note.</div></div><div class="setting-control"><button type="button" class="settings-btn">Vedi cosa cambia</button></div></div>
-  <div class="setting-row"><div class="setting-text"><label for="installed-enabled-41">Abilitato</label><div class="muted">Scelta persistita su questa macchina. Il componente può avviarsi soltanto se anche il consenso è concesso.</div></div><div class="setting-control"><input type="checkbox" class="setting-switch" role="switch" id="installed-enabled-41" checked></div></div>
-  <div class="setting-row"><div class="setting-text"><label for="installed-consent-41">Consenso all'esecuzione</label><div class="muted">È distinto dall'abilitazione: negato o da decidere impediscono sempre l'esecuzione.</div></div><div class="setting-control"><select class="setting-select" id="installed-consent-41"><option value="undecided">Da decidere</option><option value="denied">Negato</option><option value="granted" selected>Concesso</option></select></div></div>
+  <div class="setting-row"><div class="setting-text"><label for="installed-enabled-41">Acceso</label><div class="muted">Scelta persistita su questa macchina. Il componente può avviarsi soltanto se anche il consenso è concesso.</div></div><div class="setting-control"><input type="checkbox" class="setting-switch" role="switch" id="installed-enabled-41" checked></div></div>
+  <div class="setting-row"><div class="setting-text"><label for="installed-consent-41">Consenso all'esecuzione</label><div class="muted">È distinto da acceso e spento: negato o da decidere impediscono sempre l'esecuzione.</div></div><div class="setting-control"><select class="setting-select" id="installed-consent-41"><option value="undecided">Da decidere</option><option value="denied">Negato</option><option value="granted" selected>Concesso</option></select></div></div>
   <details class="settings-details" data-details-key="permissions:installed:41"><summary>Chiede un permesso</summary><div class="settings-details-body"><div class="muted">Capacità dichiarate dal file. Concedere il consenso le approva insieme; un consenso negato non esegue il componente.</div><div class="setting-row setting-permission" data-setting-key="esempio.conta-parole:permissions.read-session"><div class="setting-text"><div>Può sapere quale nota stai guardando, e in che modalità.</div></div></div></div></details>
-  <div class="setting-row"><div class="setting-text"><div class="setting-label">Rimuovi</div><div class="muted">Rimuove l'installazione ma conserva i suoi dati nel vault.</div><div class="setting-source" id="installed-remove-hint-41">Disabilita il componente prima di rimuoverlo.</div></div><div class="setting-control"><button type="button" class="settings-btn settings-btn--danger" disabled aria-describedby="installed-remove-hint-41">Rimuovi</button></div></div>
+  <div class="setting-row"><div class="setting-text"><div class="setting-label">Togli</div><div class="muted">Toglie l'installazione; i suoi dati restano nel vault.</div><div class="setting-source" id="installed-remove-hint-41">Spegni il componente prima di toglierlo.</div></div><div class="setting-control"><button type="button" class="settings-btn settings-btn--danger" disabled aria-describedby="installed-remove-hint-41">Togli</button></div></div>
 </div>
 </template>
 <!-- toppe/disegno.html -->
@@ -3354,6 +4017,21 @@ I permessi si possono togliere uno per uno anche dopo.</p>
 <template data-toppa="banda-motore-apre" data-nome="D5 A: il disegno si sta aprendo, nella banda">
 <!-- → shells/scrittoio/frame/status-band.ts, skin/frame.css; D5 A: K5 T21–T23 con S2 T4 (K5 non ha un segno per «si apre»: Differenze) -->
 <button type="button" class="status-item status-item--button status-standing" id="status-standing" data-surface-item="standing" data-standing="opening" aria-haspopup="dialog" aria-expanded="false" aria-label="Stato del disegno: Si apre"><span class="status-standing-mark" aria-hidden="true"></span><span>Si apre…</span></button>
+</template>
+
+<template data-toppa="banda-motore-cinquecento" data-nome="D5 A: 500 parti restano come sono, nella banda (aperto)">
+<!-- → shells/scrittoio/frame/status-band.ts, skin/frame.css; D5 A: K5 T21–T23 con S2 T4 (il riquadro è quello di K5 2b) -->
+<button type="button" class="status-item status-item--button status-standing" id="status-standing" data-surface-item="standing" data-standing="closed" aria-haspopup="dialog" aria-expanded="true" aria-label="Stato del disegno: 500 parti restano come sono"><span class="status-standing-mark" aria-hidden="true"></span><span>500 parti restano come sono</span></button>
+</template>
+
+<template data-toppa="banda-motore-senza" data-nome="D5 A: senza motore, nella banda (aperto)">
+<!-- → shells/scrittoio/frame/status-band.ts, skin/frame.css; D5 A: K5 T21–T23 con S2 T4 (il riquadro è quello di K5 5) -->
+<button type="button" class="status-item status-item--button status-standing" id="status-standing" data-surface-item="standing" data-standing="reduced" aria-haspopup="dialog" aria-expanded="true" aria-label="Stato del disegno: Senza motore, strumenti semplici"><span class="status-standing-mark" aria-hidden="true"></span><span>Senza motore: strumenti semplici</span></button>
+</template>
+
+<template data-toppa="disegno-rifiutato-annuncio" data-nome="D5 A: la modifica rifiutata, detta al lettore di schermo">
+<!-- → editors/craft/surface.ts (l'annuncio di K5 6a nella regione viva del disegno; il testo da i18n/catalog.ts); K5 T22 -->
+<span class="sr-only" role="status" aria-live="polite">Modifica non applicata: Questa parte resta com'è: il disegno non la sa ancora modificare.</span>
 </template>
 
 <template data-toppa="disegno-vuoto" data-nome="Un disegno vuoto: l'invito">
@@ -3512,7 +4190,7 @@ I permessi si possono togliere uno per uno anche dopo.</p>
 </template>
 
 <template data-toppa="lav-estratti" data-nome="Il selettore delle parti attaccato alla scheda rilasciata (PDF)">
-<!-- → editors/canvas/parts-picker.ts (nuovo, su kit/popover.ts e kit/list.ts); N6 T28 e T74–T76, PA T28 -->
+<!-- → editors/canvas/parts-picker.ts (nuovo, su kit/popover.ts, kit/list.ts e kit/field.ts); N6 T28 e T74–T76, PA T28 -->
 <div class="kit-popover lav-parts" role="dialog" aria-label="Quali pagine di Dispense.pdf">
   <h3 class="lav-parts-title">Quali pagine di «Dispense.pdf»?</h3>
   <div class="lav-parts-thumbs" role="listbox" aria-multiselectable="true" aria-label="Pagine">
@@ -3523,7 +4201,7 @@ I permessi si possono togliere uno per uno anche dopo.</p>
     <div class="lav-parts-thumb" role="option" aria-selected="true" tabindex="-1">5</div>
     <div class="lav-parts-thumb" role="option" aria-selected="false" tabindex="-1">6</div>
   </div>
-  <label class="lav-parts-field"><span>Pagine</span><input type="text" class="kit-number-input" value="3-5" aria-describedby="lav-parts-hint"></label>
+  <div class="kit-field lav-parts-field"><label class="kit-field-label" for="lav-parts-pagine">Pagine</label><div class="kit-field-box"><input type="text" class="kit-field-input" id="lav-parts-pagine" autocomplete="off" value="3-5" aria-describedby="lav-parts-hint"></div></div>
   <p class="lav-parts-hint muted" id="lav-parts-hint">Anche «3-5, 8, 20-» o «#124». Esc tiene tutto il file; Alt mentre rilasci salta questa domanda.</p>
   <div class="settings-actions"><button type="button" class="kit-button" data-kind="normal">Tutto il file</button><button type="button" class="kit-button" data-kind="primary">Prendi 3 pagine</button></div>
 </div>
@@ -3581,7 +4259,7 @@ I permessi si possono togliere uno per uno anche dopo.</p>
 <!-- toppe/mcp.html -->
 <template data-toppa="mcp-riga" data-nome="N2: ciò che ha fatto un agente (MCP), nel centro attività">
 <!-- → panels/activity.ts (una riga per le scritture di fub-mcp, N2 T9); PA T26 -->
-<li class="activity-row" data-source="mcp"><span class="activity-label">Agente (MCP) · ha scritto Guida/Riassunto.md</span><span class="muted">10:42 · si annulla dalle versioni</span><button type="button" class="link-button">Apri</button></li>
+<li class="activity-row" data-source="mcp"><span class="activity-label" title="Un agente (MCP) ha scritto Guida/Riassunto.md">Agente (MCP) · Guida/Riassunto.md</span><span class="muted">10:42</span><button type="button" class="link-button">Apri</button><span role="status">Si annulla dalle versioni del file.</span></li>
 </template>
 <!-- toppe/riscontri.html -->
 <template data-toppa="riscontri-voce" data-nome="D9 B: «Segnala un problema…» nel menu dell'applicazione">
@@ -3622,8 +4300,10 @@ I permessi si possono togliere uno per uno anche dopo.</p>
     <button type="button" class="segmented-option" role="radio" data-theme-id="fub.scrittoio" data-theme-light="light" aria-checked="true">Scrittoio · chiaro · Parte di Fub</button>
     <button type="button" class="segmented-option" role="radio" data-theme-id="fub.scrittoio" data-theme-light="dark" aria-checked="false">Scrittoio · scuro · Parte di Fub</button>
     <button type="button" class="segmented-option" role="radio" data-theme-id="carta" data-theme-light="light" aria-checked="false">Carta · chiaro · Della comunità</button>
-    <button type="button" class="segmented-option" role="radio" data-theme-id="salvia" data-theme-light="light" aria-checked="false">Salvia · chiaro · Della comunità</button>
-    <button type="button" class="segmented-option" role="radio" data-theme-id="salvia" data-theme-light="dark" aria-checked="false">Salvia · scuro · Della comunità</button>
+    <button type="button" class="segmented-option" role="radio" data-theme-id="officina" data-theme-light="light" aria-checked="false">Officina · chiaro · Della comunità</button>
+    <button type="button" class="segmented-option" role="radio" data-theme-id="officina" data-theme-light="dark" aria-checked="false">Officina · scuro · Della comunità</button>
+    <button type="button" class="segmented-option" role="radio" data-theme-id="mare" data-theme-light="light" aria-checked="false">Mare · chiaro · Della comunità</button>
+    <button type="button" class="segmented-option" role="radio" data-theme-id="mare" data-theme-light="dark" aria-checked="false">Mare · scuro · Della comunità</button>
   </div>
   <div class="settings-actions"><button type="button" class="settings-btn">Applica tema</button><button type="button" class="settings-btn">Annulla anteprima</button><button type="button" class="settings-btn" data-dev-action="install">Installa da cartella…</button><button type="button" class="settings-btn" data-dev-action="link">Collega una cartella…</button><button type="button" class="settings-btn" data-dev-action="catalog">Tutti i componenti</button></div>
   <div class="setting-source" role="status" aria-live="polite">Nessuna anteprima attiva.</div>

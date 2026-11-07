@@ -192,7 +192,8 @@ const ASPETTA = {
   D5: "S2 T22, K5 T21–T23", D6: "PA T11", D7: "PA T9", D8: "PA T22", D9: "PA T18", D10: "PA T10", D11: "PA T22", D12: "nessuno",
   D13: "il merge di #290 (K2)", D14: "PA T33", D15: "PA T34", D16: "PA T40", D17: "PA T42", D18: "PA T46",
   D19: "l'approvazione", D20: "PA T22", D21: "la Fase A", D22: "PA T41", D23: "Scrittoio 2, o il piano dopo la pre-alpha",
-  D24: "il piano di K6 (#313)",
+  D24: "il piano di K6 (#313)", D25: "PA T48 (e il sì su 160 col logo definitivo)", D26: "PA T49 (i file del logo)",
+  D27: "PA T42", D28: "PA T49",
 };
 // Il consiglio in una riga, fedele all'opzione «(consigliata)» di PLAN.md.
 const CONSIGLIO = {
@@ -212,7 +213,7 @@ const CONSIGLIO = {
   D14: "Dove si legge, il nome diventa Fub o il disegno; resta solo nel codice e nelle pagine di riferimento.",
   D15: "`extends`, come `\"extends\": \"fub.serie\"`.",
   D16: "Dentro: un tema può ridisegnare ogni icona, per nome; i nomi restano stabili.",
-  D17: "Tutti e tre: «Carta», «Officina» e «Salvia».",
+  D17: "Tutti e tre: «Carta», «Officina» e «Mare» (D27).",
   D18: "La scheda segue il lessico: «Acceso», «Togli», e una guardia sui testi `settings.components.*`.",
   D19: "Una sonda su tutte le 1.716 viste prima dell'approvazione, poi gli stessi controlli come guardia del banco.",
   D20: "Firmati tutti e due: macOS con Developer ID e notarizzazione, Windows con SignPath Foundation o un certificato OV.",
@@ -220,18 +221,22 @@ const CONSIGLIO = {
   D22: "I colori nella pelle, la sola geometria in `EditorView.theme`, prima degli hook congelati.",
   D23: "Un piano subito dopo la pre-alpha, col prototipo e con i riscontri della prova.",
   D24: "Fuori, come deciso: un piano subito dopo la pre-alpha, su una base già provata.",
+  D25: "«Foglia» (145), il verde pieno, con la regola dei 30° fra i colori di stato e l'accento.",
+  D26: "La stessa idea del logo, col foglio davanti che diventa una pagina.",
+  D27: "«Mare»: soli colori, un blu profondo, il più lontano dal verde di serie.",
+  D28: "Nessun consiglio: è un fatto che sa solo l'utente.",
 };
-// Una domanda già decisa comincia con «**Decisa dall'utente … : X.**»: nel
-// riassunto si legge la decisione, non il consiglio. D5 («L'utente ha chiesto
-// di vedere …») resta aperta.
+// Una domanda già decisa comincia con «**Decisa dall'utente … : X.**» (o con
+// «**Risposta dell'utente …**», D28, che non ha un consiglio): nel riassunto
+// si legge la decisione, non il consiglio.
 const domande = ds.map((d) => {
   const nl = d.indexOf("\n");
   const titolo = d.slice(0, nl).trim();
   const corpo = d.slice(nl + 1);
   const num = titolo.split(" · ")[0];
   const cons = corpo.match(/^- \*\*([A-Z]) \(consigliata[^)]*\)\.\*\*/m);
-  if (!cons || !CONSIGLIO[num]) throw new Error(`${num}: manca il consiglio`);
-  const decisa = corpo.trimStart().match(/^\*\*(Decisa dall'utente[^*]*?)\*\*/);
+  const decisa = corpo.trimStart().match(/^\*\*((?:Decisa|Risposta) dell'utente[^*]*?)\*\*/);
+  if ((!cons && !decisa) || !CONSIGLIO[num]) throw new Error(`${num}: manca il consiglio`);
   const consiglio = decisa ? `**${decisa[1].replace(/\.$/, "")}.**` : `**${cons[1]}.** ${CONSIGLIO[num]}`;
   return { num, titolo, corpo, consiglio, decisa: !!decisa };
 });
@@ -268,21 +273,21 @@ const html = `<title>Fub pre-alpha</title>
 /* Una pagina di lavoro del piano: la testa col goal e le scelte da fare, cinque
    schede (il simulatore a tutta larghezza, le altre come testo a colonna). */
 :root {
-  /* i colori di foundation.css di Fub, gli stessi del simulatore */
-  --bg: #e8edf5;
-  --sheet: #fcfdff;
-  --sheet-2: #f3f6f9;
+  /* i colori del foglio di serie di Fub, verde (D25), gli stessi del simulatore */
+  --bg: #e7efe9;
+  --sheet: #fcfefd;
+  --sheet-2: #f3f7f4;
   --bg-elev: #ffffff;
-  --text: #1a1f29;
-  --muted: #5a5f6a;
-  --border: #d3d8e0;
-  --accent: #2b56cc;
-  --accent-wash: #d8e5ff;
-  --ok: #1d7a46;
-  --ok-wash: #dcf3e5;
+  --text: #17221b;
+  --muted: #57625b;
+  --border: #d1dad4;
+  --accent: #006e46;
+  --accent-wash: #cceeda;
+  --ok: #49700a;
+  --ok-wash: #e4edd6;
   --warn: #8a5a00;
   --warn-wash: #fbefd6;
-  --code-bg: #eef2f8;
+  --code-bg: #ebf1ed;
   --font-ui: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --gutter-l: max(16px, env(safe-area-inset-left, 0px));
@@ -290,15 +295,15 @@ const html = `<title>Fub pre-alpha</title>
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0a0e16; --sheet: #151a21; --sheet-2: #1d222a; --bg-elev: #212730; --text: #e5e8ed; --muted: #a0a5ae;
-    --border: #2c323c; --accent: #82a8fd; --accent-wash: #213156; --ok: #6fd39a; --ok-wash: #173326; --warn: #f0c060;
-    --warn-wash: #3a2c10; --code-bg: #1b2029; color-scheme: dark;
+    --bg: #08110b; --sheet: #131c16; --sheet-2: #1b241e; --bg-elev: #1e2923; --text: #e4e9e6; --muted: #9ea7a1;
+    --border: #29332d; --accent: #53c48e; --accent-wash: #033d26; --ok: #8fbb5f; --ok-wash: #24301a; --warn: #f0c060;
+    --warn-wash: #3a2c10; --code-bg: #18211c; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0a0e16; --sheet: #151a21; --sheet-2: #1d222a; --bg-elev: #212730; --text: #e5e8ed; --muted: #a0a5ae;
-  --border: #2c323c; --accent: #82a8fd; --accent-wash: #213156; --ok: #6fd39a; --ok-wash: #173326; --warn: #f0c060;
-  --warn-wash: #3a2c10; --code-bg: #1b2029; color-scheme: dark;
+  --bg: #08110b; --sheet: #131c16; --sheet-2: #1b241e; --bg-elev: #1e2923; --text: #e4e9e6; --muted: #9ea7a1;
+  --border: #29332d; --accent: #53c48e; --accent-wash: #033d26; --ok: #8fbb5f; --ok-wash: #24301a; --warn: #f0c060;
+  --warn-wash: #3a2c10; --code-bg: #18211c; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--text); font: 15px/1.55 var(--font-ui); overflow-x: hidden; }
@@ -321,6 +326,7 @@ pre code { background: none; padding: 0; font-size: 13px; overflow-wrap: normal;
 .decidere h2 { margin: 0 0 6px; font-size: 15px; }
 .decidere ol { margin: 0; padding-left: 20px; }
 .decidere li + li { margin-top: 4px; }
+.decidere-nota { margin: 8px 0 0; color: var(--muted); font-size: 13.5px; }
 
 .schede { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--border); padding-left: var(--gutter-l); padding-right: var(--gutter-r); }
 .schede ul { max-width: 1400px; margin: 0 auto; padding: 0; list-style: none; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
@@ -388,24 +394,26 @@ table.riassunto td:first-child { min-width: 14rem; }
       <p class="obiettivo">${md(obiettivo, "o").replace(/^<p>|<\/p>\s*$/g, "")}</p>
       <ul class="chips">
         <li class="chip ok">Definizione confermata il 2026-11-05</li>
-        <li class="chip attesa">Secondo giro: ${daApprovare} stati da approvare</li>
+        <li class="chip ok">Tutte le domande decise il 2026-11-07</li>
+        <li class="chip attesa">${daApprovare} stati composti e nuovi: il sì sul simulatore aggiornato</li>
         <li class="chip">${STATI.length} stati · ${SCENARI.length} scenari</li>
         <li class="chip">${fatti} punti di «Fatto quando»</li>
         <li class="chip">${tasks.length} task nuovi · ${fasi} fasi</li>
-        <li class="chip">${aperte.length} domande aperte su ${domande.length}</li>
+        <li class="chip">${domande.length} domande, ${aperte.length} aperte</li>
         <li class="chip"><code>piano/fub-pre-alpha</code> @ ${commit}</li>
       </ul>
     </div>
     <section class="decidere" aria-labelledby="da-decidere">
       <h2 id="da-decidere">Che cosa ti chiedo</h2>
       <ol>
-        <li>Passa il <a href="#simulatore">simulatore</a>: gli scenari, le due luci, 700 px e telefono. Gli stati composti e nuovi (${daApprovare})
-        aspettano un sì: segna quelli da rivedere, e incolla la frase che il simulatore scrive.</li>
-        <li>Rispondi alle <a href="#domande">domande aperte</a> (${aperte.map((d) => d.num).join(", ")}) nella pagina
-        <a href="https://claude.ai/artifact/Q5Lydynyn4DV8xwFDLZt18" target="_blank" rel="noopener">«Le scelte di Fub pre-alpha»</a>:
-        per ognuna ci sono le possibilità e il mio consiglio, pesato sulla qualità e non sul tempo. Lì puoi segnare anche gli stati.</li>
-        <li>D5 (la testa del disegno) si sceglie guardando le due forme, tutte e due nel simulatore.</li>
+        <li>Guarda <a href="#simulatore">il simulatore</a> con lo scenario <b>«Che cosa è cambiato»</b>: il verde, il logo provvisorio, e gli
+        stati che le tue risposte hanno cambiato o aggiunto (S287–S298). L'elenco è in
+        <a href="#simulatore--gli-stati-cambiati-dalle-risposte">«Gli stati cambiati dalle risposte»</a>.</li>
+        <li>Dai il sì ai ${daApprovare} stati composti e nuovi: «Approvare gli stati nuovi e composti», sotto lo schermo, scrive la frase da incollare.</li>
+        <li>Quando c'è, il logo definitivo: i file, e lo strumento con cui è fatto (D28). Col logo ti chiederò se il verde 160 resta.</li>
       </ol>
+      <p class="decidere-nota">Le tue risposte sono nella pagina <a href="https://claude.ai/artifact/Q5Lydynyn4DV8xwFDLZt18" target="_blank" rel="noopener">«Le scelte di Fub pre-alpha»</a>
+      e, una per una, in testa a ogni domanda.</p>
     </section>
   </div>
 </header>

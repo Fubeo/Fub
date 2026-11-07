@@ -125,11 +125,15 @@
   box-shadow: inset 0 0 0 2px var(--accent);
   color: var(--accent);
 }
+/* Il campo delle pagine è il campo del kit (`textField` di `kit/field.ts`),
+   con l'anello sulla scatola, e l'etichetta accanto invece che sopra. */
 .lav-parts-field {
-  display: flex;
+  flex-direction: row;
   align-items: center;
   gap: var(--space-3);
-  font-size: var(--text-sm);
+}
+.lav-parts-field > .kit-field-box {
+  flex: 1 1 auto;
 }
 .lav-parts-hint {
   margin: 0;

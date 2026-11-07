@@ -1,0 +1,96 @@
+/* → theme/scrittoio/skin/frame.css e skin/settings.css (PA T49, D26) */
+/* ── Il logo ────────────────────────────────────────────────────────────────
+   Il marchio della barra non è più la «f» corsiva sul colore dell'accento:
+   è il logo di Fub, nella forma minima (16–24 px). Le sue tinte sono gettoni
+   suoi, non della ricetta: non seguono l'accento (il logo resta verde anche
+   con la matita blu), ma un tema le può ridichiarare. Il bottone resta
+   trasparente e prende il velo del passaggio come le icone accanto. */
+:root {
+  --logo-foglio: #1f4b36;
+  --logo-orecchia: #7ea189;
+  --logo-oliva: #6e8b64;
+  --logo-pagina: #ffffff;
+  --logo-righe: #2f4a3e;
+  --logo-nastro: #14c77d;
+  --logo-ombra: rgb(10 107 71 / 55%);
+}
+
+.brand-mark {
+  background: transparent;
+  color: inherit;
+}
+
+.brand-logo {
+  width: 24px;
+  height: 24px;
+}
+
+.brand-logo-foglio {
+  fill: var(--logo-foglio);
+}
+
+.brand-logo-pagina {
+  fill: var(--logo-pagina);
+}
+
+.brand-logo-nastro {
+  fill: none;
+  stroke: var(--logo-nastro);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Informazioni: il logo nella forma piccola (32–48 px), accanto alla versione. */
+.about-version {
+  grid-template-columns: auto minmax(40%, 1fr) auto;
+  align-items: center;
+}
+
+.about-logo {
+  flex: none;
+  width: 48px;
+  height: 48px;
+}
+
+.about-logo .logo-foglio {
+  fill: var(--logo-foglio);
+}
+
+.about-logo .logo-orecchia {
+  fill: var(--logo-orecchia);
+}
+
+.about-logo .logo-oliva {
+  fill: var(--logo-oliva);
+}
+
+.about-logo .logo-pagina {
+  fill: var(--logo-pagina);
+}
+
+.about-logo .logo-righe {
+  fill: var(--logo-righe);
+}
+
+.about-logo .logo-griglia {
+  fill: none;
+  stroke: var(--logo-righe);
+  stroke-width: 1.4;
+}
+
+.about-logo .logo-ombra,
+.about-logo .logo-nastro {
+  fill: none;
+  stroke-width: 4.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.about-logo .logo-ombra {
+  stroke: var(--logo-ombra);
+}
+
+.about-logo .logo-nastro {
+  stroke: var(--logo-nastro);
+}

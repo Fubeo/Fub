@@ -1,0 +1,232 @@
+/* tema della comunità «Officina» · chiaro e scuro · PA T42, D17 C */
+/* Il tema d'esempio più lontano dalla serie, la prova più dura dei cancelli:
+   grigi d'acciaio, un arancio da cantiere, angoli vivi, nessuna ombra, bordi
+   di 2 px, le etichette in monospazio. Di serie è più contrastato della
+   serie; il suo contrasto alto lo è ancora di più. Usa solo gli hook dello
+   snapshot (PA T41) e nessun hook nuovo: lo prova la sonda dei temi del
+   simulatore. Nel tema vero i blocchi `:root` diventano `light.css` e
+   `dark.css`, il resto `skin.css`; il monospazio delle etichette arriva dal
+   manifest (PA T39), qui ripiega su quello di serie. */
+
+/* ── Il foglio, giorno ───────────────────────────────────────────────────── */
+:root[data-theme="light"] {
+  --bg: #e3e4e6;
+  --bg-chrome: #e3e4e6;
+  --bg-panel: #e3e4e6;
+  --bg-hover: #d8dadd;
+  --bg-active: #cdd0d4;
+  --sheet: #ffffff;
+  --sheet-2: #f2f3f4;
+  --bg-input: #f2f3f4;
+  --bg-elev: #ffffff;
+  --overlay-hover: rgb(13 14 16 / 6%);
+  --overlay-active: rgb(13 14 16 / 11%);
+  --text: #0d0e10;
+  --muted: #3c4046;
+  --border: #8a8f96;
+  --border-strong: #4a4f56;
+  --outline: #4a4f56;
+  --accent: #a33f00;
+  --accent-soft: #873300;
+  --accent-contrast: #ffffff;
+  --accent-wash: #fde3cf;
+  --accent-veil: rgb(163 63 0 / 12%);
+  --focus-ring: #a33f00;
+  --danger: #b00042;
+  --danger-wash: rgb(176 0 66 / 12%);
+  --danger-contrast: #ffffff;
+  --warning: #6f5600;
+  --warning-wash: rgb(111 86 0 / 14%);
+  --warning-contrast: #ffffff;
+  --graph-node: #4a4f56;
+  --graph-node-active: #a33f00;
+  --graph-node-hover: #873300;
+  --draw-desk: #e3e4e6;
+  --doc-bg: #ffffff;
+  --doc-active-line: #f4f5f6;
+  --doc-selection: #fbd9bf;
+  --doc-fg: #0d0e10;
+  --doc-heading: #0d0e10;
+  --doc-link: #a33f00;
+  --doc-caret: #a33f00;
+  --doc-danger: #b00042;
+  --doc-gutter-fg: #3c4046;
+  --doc-drop-line: #a33f00;
+  --doc-block-selected: rgb(163 63 0 / 12%);
+}
+:root[data-theme="light"][data-contrast="high"] {
+  --text: #000000;
+  --muted: #24272b;
+  --border: #5c6168;
+  --border-strong: #2b2f35;
+  --outline: #2b2f35;
+  --accent: #8a3500;
+  --accent-soft: #702a00;
+  --focus-ring: #8a3500;
+  --doc-fg: #000000;
+  --doc-gutter-fg: #24272b;
+}
+
+/* ── Il foglio, notte ────────────────────────────────────────────────────── */
+:root[data-theme="dark"] {
+  --bg: #101113;
+  --bg-chrome: #101113;
+  --bg-panel: #101113;
+  --bg-hover: #1a1c1f;
+  --bg-active: #24272b;
+  --sheet: #17191c;
+  --sheet-2: #1f2125;
+  --bg-input: #1f2125;
+  --bg-elev: #23262a;
+  --text: #f2f3f5;
+  --muted: #b9bec6;
+  --border: #5a6069;
+  --border-strong: #8a919b;
+  --outline: #8a919b;
+  --accent: #ff9a52;
+  --accent-soft: #ffb57f;
+  --accent-contrast: #170a00;
+  --accent-wash: #3d2412;
+  --accent-veil: rgb(255 154 82 / 18%);
+  --focus-ring: #ff9a52;
+  --danger: #ff6b8f;
+  --danger-wash: rgb(255 107 143 / 16%);
+  --danger-contrast: #1a0008;
+  --warning: #e2c04f;
+  --warning-wash: rgb(226 192 79 / 16%);
+  --warning-contrast: #171200;
+  --graph-node: #8a919b;
+  --graph-node-active: #ff9a52;
+  --graph-node-hover: #ffb57f;
+  --draw-desk: #101113;
+  --doc-bg: #17191c;
+  --doc-active-line: #1c1e22;
+  --doc-selection: #4a2c16;
+  --doc-fg: #eceef1;
+  --doc-heading: #eceef1;
+  --doc-link: #ff9a52;
+  --doc-caret: #ff9a52;
+  --doc-danger: #ff6b8f;
+  --doc-gutter-fg: #b9bec6;
+  --doc-drop-line: #ff9a52;
+  --doc-block-selected: rgb(255 154 82 / 18%);
+}
+:root[data-theme="dark"][data-contrast="high"] {
+  --text: #ffffff;
+  --muted: #d3d7dd;
+  --border: #7c838d;
+  --border-strong: #a9b0ba;
+  --outline: #a9b0ba;
+  --accent: #ffb27a;
+  --accent-soft: #ffc9a1;
+  --focus-ring: #ffb27a;
+  --doc-fg: #ffffff;
+  --doc-gutter-fg: #d3d7dd;
+}
+
+/* ── La forma: angoli vivi, niente ombre ─────────────────────────────────── */
+:root {
+  --radius-xs: 0;
+  --radius-chip: 0;
+  --radius-control: 0;
+  --radius-menu: 0;
+  --radius-sheet: 0;
+  --radius-dialog: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --shadow-1: none;
+  --shadow-2: none;
+  --shadow-3: none;
+  --shadow-4: none;
+  --shadow-5: none;
+  --shadow-6: none;
+  --shadow-7: none;
+  --elevation-paper-shadow: none;
+  --elevation-floating-shadow: none;
+  --elevation-dialog-shadow: none;
+}
+
+/* ── La pelle ────────────────────────────────────────────────────────────── */
+/* Le etichette in monospazio, come su una targhetta. */
+.panel-title,
+.settings-tab-label,
+.settings-section-title,
+.settings-title,
+.inspector-tab,
+.kit-tab-label,
+.sheet-desk-label,
+.tab-name,
+.status-item {
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+}
+.panel-title,
+.settings-section-title,
+.kit-tab-label,
+.inspector-tab {
+  text-transform: uppercase;
+}
+
+/* Bordi di 2 px al posto delle ombre: il foglio, i rialzi, la banda. */
+.pane::before {
+  box-shadow: 0 0 0 2px var(--border-strong);
+}
+.pane.focus::before {
+  box-shadow: 0 0 0 2px var(--text);
+}
+.kit-dialog,
+.kit-popover,
+.context-menu,
+.launcher-panel,
+.selection-bubble,
+.toast {
+  box-shadow: 0 0 0 2px var(--text);
+}
+.status-band {
+  box-shadow: inset 0 2px 0 var(--border-strong);
+}
+
+/* Le schede delle Impostazioni: una cornice piena. */
+.settings-section-body > .settings-card {
+  box-shadow: inset 0 0 0 2px var(--border-strong);
+}
+
+/* I bottoni e le scelte: il contorno pieno. */
+.kit-button,
+.segmented {
+  box-shadow: inset 0 0 0 2px var(--border-strong);
+}
+.kit-button[data-kind="primary"] {
+  box-shadow: none;
+}
+
+/* La linguetta accesa: una barra d'arancio in cima. Dentro la linguetta, non
+   sul nome: `.tab-name` taglia ciò che esce dalla sua riga (overflow). */
+.tab[aria-selected="true"] {
+  box-shadow: inset 0 3px 0 var(--accent);
+}
+
+/* ── L'editor di testo (D22 A, PA T54) ───────────────────────────────────── */
+/* I titoli nel carattere dell'interfaccia; il primo con un filo pieno. */
+.cm-editor .cm-content .cm-fub-heading-line {
+  font-family: var(--font-ui);
+  letter-spacing: 0;
+}
+.cm-editor .cm-content .cm-fub-h1-line {
+  border-bottom: 2px solid var(--text);
+}
+/* La citazione: dritta, con la barra d'arancio. */
+.cm-editor .cm-content .cm-line.cm-fub-quote {
+  border-left: 4px solid var(--accent);
+  font-style: normal;
+}
+/* Il codice e i tag: angoli vivi, un filo. */
+.cm-editor .cm-content .cm-fub-code {
+  border-radius: 0;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.cm-editor .cm-content .cm-fub-tag {
+  border-radius: 0;
+  font-family: var(--font-mono);
+}

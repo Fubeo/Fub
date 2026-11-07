@@ -102,7 +102,7 @@
 </template>
 
 <template data-toppa="lav-estratti" data-nome="Il selettore delle parti attaccato alla scheda rilasciata (PDF)">
-<!-- → editors/canvas/parts-picker.ts (nuovo, su kit/popover.ts e kit/list.ts); N6 T28 e T74–T76, PA T28 -->
+<!-- → editors/canvas/parts-picker.ts (nuovo, su kit/popover.ts, kit/list.ts e kit/field.ts); N6 T28 e T74–T76, PA T28 -->
 <div class="kit-popover lav-parts" role="dialog" aria-label="Quali pagine di Dispense.pdf">
   <h3 class="lav-parts-title">Quali pagine di «Dispense.pdf»?</h3>
   <div class="lav-parts-thumbs" role="listbox" aria-multiselectable="true" aria-label="Pagine">
@@ -113,7 +113,7 @@
     <div class="lav-parts-thumb" role="option" aria-selected="true" tabindex="-1">5</div>
     <div class="lav-parts-thumb" role="option" aria-selected="false" tabindex="-1">6</div>
   </div>
-  <label class="lav-parts-field"><span>Pagine</span><input type="text" class="kit-number-input" value="3-5" aria-describedby="lav-parts-hint"></label>
+  <div class="kit-field lav-parts-field"><label class="kit-field-label" for="lav-parts-pagine">Pagine</label><div class="kit-field-box"><input type="text" class="kit-field-input" id="lav-parts-pagine" autocomplete="off" value="3-5" aria-describedby="lav-parts-hint"></div></div>
   <p class="lav-parts-hint muted" id="lav-parts-hint">Anche «3-5, 8, 20-» o «#124». Esc tiene tutto il file; Alt mentre rilasci salta questa domanda.</p>
   <div class="settings-actions"><button type="button" class="kit-button" data-kind="normal">Tutto il file</button><button type="button" class="kit-button" data-kind="primary">Prendi 3 pagine</button></div>
 </div>

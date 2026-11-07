@@ -28,3 +28,24 @@
 :root[data-client-shell="mobile"] .settings-tab {
   flex: none;
 }
+
+/* ── Le righe di un elenco coi bottoni da 44 px non si toccano ─────────────
+   Sul computer una riga del cestino o delle versioni è alta quanto le sue
+   due righe di testo, e il bottone di 28 px ci sta dentro con aria sopra e
+   sotto. Al telefono il bottone sale a 44 px, la riga diventa alta quanto
+   lui e fra un bottone e l'altro resta 1 px: tre «Ripristina» pieni
+   sembrano un bottone solo, e l'anello del fuoco cade sul vicino. Fra una
+   riga e l'altra, 8 px. */
+:root[data-client-shell="mobile"] .ui-list > .ui-stack[data-dir="row"] + .ui-stack[data-dir="row"] {
+  margin-top: var(--space-4);
+}
+
+/* ── Il tondo della modalità ha l'anello dentro ────────────────────────────
+   Il tondo galleggia sulla carta del documento, che è bianca anche al buio:
+   l'anello fuori dal tondo, verde chiaro al buio, ci sta a 2,2:1. Dentro il
+   tondo l'anello sta sul suo fondo, `--bg-elev`, in tutte e due le luci. */
+@media (max-width: 599px), (max-height: 500px) {
+  :root[data-client-shell="mobile"] .pane > .pane-mode-current:focus-visible {
+    outline-offset: calc(-1 * var(--focus-ring-width) - var(--space-2));
+  }
+}

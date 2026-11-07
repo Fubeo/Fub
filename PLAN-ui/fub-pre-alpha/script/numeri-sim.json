@@ -1,5 +1,5 @@
 {
- "next": 287,
+ "next": 299,
  "ids": {
   "nota-riposo": 1,
   "nota": 2,
@@ -284,8 +284,20 @@
   "tema-tutti-caratteri": 281,
   "tema-carta": 282,
   "tema-carta-impostazioni": 283,
-  "tema-salvia": 284,
-  "tema-salvia-impostazioni": 285,
-  "t-foglio-errore": 286
+  "tema-mare": 284,
+  "tema-mare-impostazioni": 285,
+  "t-foglio-errore": 286,
+  "disegno-a-cinquecento": 287,
+  "disegno-a-senza": 288,
+  "disegno-a-rifiutato": 289,
+  "disegno-a-testo-spento": 290,
+  "disegno-a-mano": 291,
+  "disegno-a-gomma": 292,
+  "disegno-a-rettangolo": 293,
+  "aspetto-barre": 294,
+  "aspetto-barre-marcate": 295,
+  "barra-marcate": 296,
+  "tema-officina": 297,
+  "tema-officina-impostazioni": 298
  }
 }

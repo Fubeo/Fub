@@ -14,20 +14,26 @@ task; circa 69 sono fatti sui rami, nessuno in `main`). Questo piano li
 mette in fila e chiude ciò che resta fra uno e l'altro: dati, contratti,
 rilascio, prova con le persone. A chi implementa dà un simulatore uguale
 al pixel, da copiare.
-Fuori scope: K6 (disegno completo); K4, K7, K8, K9, K10; PdfCraft P1–P5,
-e con loro N6 T79–T85; N6 T88 (CSV, D-20); N5, N9, N10; l'app del
-telefono e del tablet (l'APK resta di prova); la lavagna v2 e v3; A1
-F2–F6; #9; gli installer firmati; i layout alternativi della shell e
-`backdrop-filter` nei temi. Ognuno ha il suo posto in «Dentro e fuori».
+Fuori scope: K6 (disegno completo, D24); K4, K7, K8, K9, K10; PdfCraft
+P1–P5, e con loro N6 T79–T85; N6 T88 (CSV, D-20); N5, N9; di N10 Flathub
+e Wayland (il Flatpak è dentro, D8); l'app del tablet; la lavagna v2 e v3;
+A1 F2–F6; #9; i layout alternativi della shell (D23) e `backdrop-filter`
+nei temi. Ognuno ha il suo posto in «Dentro e fuori».
 Assunzioni: 
 - Questo è un piano ombrello. I task degli altri piani restano nei loro
-  `PLAN.md` e sui loro rami. Qui stanno l'ordine, i cancelli e 47 task
-  nuovi («PA T1»–«PA T47»), che tengono tutto insieme. PA T34–T42 sono la
+  `PLAN.md` e sui loro rami. Qui stanno l'ordine, i cancelli e 57 task
+  nuovi («PA T1»–«PA T57»), che tengono tutto insieme. PA T34–T42 sono la
   skin facile, chiesta dal manutentore il 2026-11-05. PA T43–T47 vengono
   dal secondo giro del simulatore: il file nuovo col tipo, il vault da
   5.000 file, le parole della scheda di un componente e i 44 px del tocco
   sul telefono, che oggi deformano l'interruttore e troncano le schede
-  delle impostazioni.
+  delle impostazioni. PA T48–T57 vengono dalle risposte del 2026-11-07:
+  il verde di serie, il logo, la firma, il Flatpak, «Segnala un problema»,
+  #237 R05–R08 e A03, l'editor di testo vestito dal tema, il controllo di
+  tutte le viste nel banco e i difetti che il controllo ha trovato (PA T56,
+  T57).
+- Il telefono ha un piano suo, prima della pre-alpha (D1 B): parte quando
+  Scrittoio 2 è in `main`, e l'APK di PA T22, T23 e T31 lo aspetta.
 - Lavora un coder alla volta, più al massimo un pianificatore: è la regola
   dell'utente dal 2026-11-04, e cambia solo se la cambia l'utente. Le «ondate»
   qui sotto sono quindi file, una dopo l'altra.
@@ -35,27 +41,37 @@ Assunzioni:
   della parte «Domande aperte», quando l'utente risponde.
 - Gli stati detti «fatti» sono verificati su `origin` il 2026-11-05 (vedi
   «Differenze fra piani e codice»).
-Ondate: Fase A: K3 T17 (il sì dell'utente) e #295 | K2 (#290, come dice
-D13) | PA T3 T13 | T4 T5 | T6 T7 | T1 T8 T19 T25 T32 T33 | T34 T35 |
-T39 T40 | T44 T46 T47 · Fase B: Scrittoio 2 T3–T27 (le sue ondate), con PA T2, T20 e
-T21, e PA T36 T37 T38 dopo S2 T10, PA T43 dopo S2 T8 e T14 · Fase C: griglia, K5, N4, N6, lavagna
-in codice e A1 (le loro ondate, nell'ordine di «L'ordine»), con PA T12 ·
-Fase D: PA T41 | T42 | T14 T18 | T26 T27 T28 T29 T30 | T15 T17 T22 T31 |
-T16 T45 T23 | T24. PA T9, T10 e T11 partono solo con la risposta alla loro
-domanda; PA T34 con D15, PA T40 con D16, PA T42 con D17, PA T46 con D18.
+Ondate: Fase A: K3 T17 (il sì dell'utente) e #295 | K2 (#290, dopo la
+prova dell'utente, D13 A) | PA T3 T13 | T4 T5 | T6 T7 | T1 T8 T9 T10 T19
+T25 T32 T33 | T48 | T34 T35 | T54 | T39 T40 | T44 T46 T47 | T53 · Fase B:
+Scrittoio 2 T3–T27 (le sue ondate), con PA T2, T11 (dopo S2 T20), T20 e
+T21, e PA T36 T37 T38 dopo S2 T10, PA T43 dopo S2 T8 e T14, PA T56 T57
+quando S2 è in `main`; poi il piano del telefono (pianificatore e task,
+D1 B) · Fase C: griglia, K5, N4, N6,
+lavagna in codice e A1 (le loro ondate, nell'ordine di «L'ordine»), con PA
+T12 · Fase D: PA T41 | T42 | T49 (quando ci sono i file del logo) | T14
+T18 T55 | T26 T27 T28 T29 T30 | T52 | T50 T51 | T15 T17 T22 T31 | T16 T45
+T23 | T24. PA T48 parte dopo il sì dell'utente su 160 col logo definitivo;
+PA T49 dopo i file del logo e D28; PA T50 dopo gli account dell'utente.
 Prototipo: `PLAN-ui/fub-pre-alpha/simulatore.html`, il simulatore di tutta
 la pre-alpha (artifact «Fub pre-alpha»,
 https://claude.ai/artifact/RCUxmuv2dCqbwDRagbKHcK, parte 1). È costruito dai
 prototipi approvati: Scrittoio 2 (2026-11-04), K2, K3 T12 (2026-11-03),
 K5 T25 (2026-11-05), N4 T20 (2026-11-02), N6 T25 (2026-11-04) e A1
-(2026-11-03). Per la griglia l'approvazione non è scritta (domanda D2).
-Approvato: in attesa.
-Stato: secondo giro chiuso il 2026-11-07 (chiesto dall'utente il
-2026-11-05). Il simulatore è rifatto: 286 stati e 17 scenari, che si usano
-come il prodotto; i task sono corretti e sono arrivati PA T34–T47.
-Aspettano l'utente i 118 stati composti e nuovi e le domande aperte (dal
-2026-11-07 tutte nella pagina «Le scelte di Fub pre-alpha»). Finché
-«Approvato» dice «in attesa», il piano non va implementato.
+(2026-11-03). La griglia (`celle-griglia`) l'ha approvata l'utente il
+2026-11-07 (D2 A).
+Approvato: in attesa del sì sul simulatore aggiornato (il via A del
+2026-11-07).
+Stato: il 2026-11-07 l'utente ha risposto a tutte le domande (D1–D28),
+ha approvato i 118 stati composti e nuovi e ha dato il via A: «scrivi le
+risposte nel piano e nel simulatore, fai il controllo di D19, mostrami gli
+stati cambiati; poi approvo sul simulatore aggiornato». Le risposte sono
+scritte qui (ogni domanda in testa), i task nuovi sono PA T48–T57, e il
+simulatore è rifatto in verde, col logo provvisorio e con gli stati che le
+risposte hanno cambiato o aggiunto. Il controllo di D19 è fatto («Il
+controllo di tutte le viste»): i difetti che ha trovato sono PA T56, T57 e
+due punti di T47, e il simulatore li mostra già corretti. Finché
+«Approvato» non dice sì, il piano non va implementato.
 
 ## Modifiche
 
@@ -92,16 +108,21 @@ Confermata dall'utente il 2026-11-05.
    pre-alpha», e `fub:abi@0.2.0` è congelata (#289; PA T6, T7, T18).
 9. Una skin vera si fa facile. Un tema dichiara `extends: "fub.serie"` e
    porta solo ciò che cambia; si installa da una cartella e si ricarica al
-   salvataggio, con la diagnosi leggibile; porta i suoi caratteri (e le sue
-   icone, se D16 è A). Due temi d'esempio passano i cancelli e sono
-   guardati nelle due luci, in contrasto alto, stretti e al telefono. Gli
-   hook sono congelati e un test lo tiene (PA T34–T42).
+   salvataggio, con la diagnosi leggibile; porta i suoi caratteri e le sue
+   icone, e veste anche l'editor di testo. Tre temi d'esempio («Carta»,
+   «Officina», «Mare») passano i cancelli e sono guardati nelle due luci,
+   in contrasto alto, stretti e al telefono. Gli hook sono congelati e un
+   test lo tiene (PA T34–T42, T54).
+10. Fub è verde di serie e ha il suo logo (PA T48, T49); gli installer sono
+   firmati su Windows e macOS, e c'è il Flatpak (PA T50, T51); «Segnala un
+   problema» apre la issue con versione e sistema (PA T52); un controllo
+   del banco passa tutte le viste (PA T55).
 
 ### Fuori scope, e dove va
 
 | Che cosa | Perché fuori | Dove va |
 |---|---|---|
-| K6 · il disegno completo | XL, 30 task, nessuno fatto. La pre-alpha usa il disegno semplice di K5 (domanda D24) | `piano/k6-disegno-completo`, PR #313 |
+| K6 · il disegno completo | XL, 30 task, nessuno fatto. La pre-alpha usa il disegno semplice di K5 (D24 B, 2026-11-07: un piano dopo la pre-alpha, coi riscontri) | `piano/k6-disegno-completo`, PR #313 |
 | K4 · la consegna (edizioni, dati scaricabili) | La pre-alpha esce con un installer solo e tutto dentro | «Piani di Fub», passo K4 |
 | K7, K8 · foto e libreria foto | Aspettano la decisione di N9 | «Piani di Fub» |
 | K9 · documenti e fogli completi | Dopo K3: la pre-alpha usa le modalità di K3 | «Piani di Fub» |
@@ -111,17 +132,14 @@ Confermata dall'utente il 2026-11-05.
 | N6 T88 (la scheda CSV) | Dipende da D-20: un piano «I CSV nel motore dei fogli», che non c'è | N6 D-20, piano futuro |
 | N5 · strati nativi | Senza un piano; aspettano le misure di N0 sui dispositivi | «Prossime fasi», N5 |
 | N9 · egui o Tauri | Si decide coi numeri di N5 | «Prossime fasi», N9, decisione 7 |
-| N10 · Linux (Flatpak, Wayland) | La pre-alpha esce in deb, rpm e AppImage (domanda D8) | «Prossime fasi», N10, decisione 5 |
-| App del telefono e del tablet | La pre-alpha è per il computer; l'APK è solo di prova (domanda D1) | piano futuro del telefono, #90 |
+| N10 · Flathub e Wayland | Il Flatpak è dentro (D8 B, PA T51), ma come file allegato alla release; Flathub e Wayland restano | «Prossime fasi», N10, decisione 5 |
+| App del tablet | Il telefono ha un piano suo prima della pre-alpha (D1 B); il tablet no | piano futuro del tablet, #90 |
 | Lavagna v2 e v3 | Fuori dalla v1 di N6 (D-1 b) | `lavagna.md`, «Le tappe» |
 | A1 F2–F6 | A1 consegna F1, la base | artifact «Ricette di Fub» |
 | #9 · sincronizzazione | Grande e senza piano | #9 |
-| Installer firmati | Una prerelease può uscire senza firma (`release.yml`); la firma arriva con la beta (domanda D20) | `docs/development/versioning-and-releases.md` |
-| #242 · il tema di CodeMirror in linea | Debito della pelle, non cambia ciò che si vede (domanda D22) | #242 |
-| #237 R05–R08 e A03 | Sono UX, non perdono dati (domanda D21) | #237 |
 | #253, #254 · upstream dei motori | Le proposte le fa l'utente (decisione 9) | #253, #254 |
 | #282 · archiviare FubDraw | È un gesto dell'utente su GitHub | #282 |
-| Layout alternativi (le regioni della finestra spostate) | Sono una variante della shell, non una pelle (domanda D23) | piano futuro delle varianti della shell |
+| Layout alternativi (le regioni della finestra spostate) | Sono una variante della shell, non una pelle (D23 B, 2026-11-07: un piano dopo la pre-alpha, coi riscontri di PA T17) | piano futuro delle varianti della shell |
 | `backdrop-filter` nei temi | Blocca WebKitGTK senza composizione | resta vietato (`NEVER_PROPERTIES` del sanificatore) |
 
 ## Dentro e fuori
@@ -133,7 +151,7 @@ codice, nei rami e nelle issue il 2026-11-05.
 | Voce | Stato verificato | Pre-alpha | Ragione | Dove |
 |---|---|---|---|---|
 | N0 · misurare | Banco WebView in `main` (`bench/webview`, `docs/development/webview-measurements.md`); #283 aperta. Le scene S4–S6 e le tre piattaforme sono nel cancello di N0 | dentro: misure sulle tre piattaforme, S4–S6 comprese, dove si può | Fatto quando 6 | PA T16 |
-| N1 · FubDraw | In `main` (ADR 0231, tag `fubdraw-completo`). I 42 file `.rs` che nominano FubDraw sono codice vivo: FubDraw è il nome del formato (ADR 0203). La prova byte per byte c'è già: `editors/spatial/corpus-open.test.ts`, `crates/fub-scene/tests/corpus.rs` e i test del provider svg (ADR 0231, «Verifica») | fatto; dentro: il nome dove le persone lo vedono, se D14 è A o C | Cancello passato; resta l'archivio | PA T33 (D14); #282, fuori |
+| N1 · FubDraw | In `main` (ADR 0231, tag `fubdraw-completo`). I 42 file `.rs` che nominano FubDraw sono codice vivo: FubDraw è il nome del formato (ADR 0203). La prova byte per byte c'è già: `editors/spatial/corpus-open.test.ts`, `crates/fub-scene/tests/corpus.rs` e i test del provider svg (ADR 0231, «Verifica») | fatto; dentro: il nome dove le persone lo vedono (D14 A) | Cancello passato; resta l'archivio | PA T33; #282, fuori |
 | N2 · MCP | In `main` (`crates/fub-cli/src/mcp.rs`, ADR 0232): 17 strumenti, vedi «Contratti» qui sotto | fatto; dentro: due flussi veri nel giro a mano | L'AI della definizione passa di qui | PA T23 |
 | N3 · la lavagna in Rust | In `main` (#297, #306, #307) | fatto | Base di N4, N6 e della lavagna in codice | — |
 | N4 · l'inchiostro | Ramo: 14 di 25 | dentro | La penna della definizione | `piano/n4-inchiostro`, #298 |
@@ -142,38 +160,45 @@ codice, nei rami e nelle issue il 2026-11-05.
 | N7 · file Craft | In `main` (#299) | fatto | Le anteprime ci sono | — |
 | N8 · DOCX e XLSX | Sostituita da K6–K9 | — | Vedi K3 e K9 | — |
 | N9 · egui o Tauri | Senza piano | fuori | Vedi sopra | «Prossime fasi» |
-| N10 · Linux | Senza piano | fuori | Vedi sopra, domanda D8 | «Prossime fasi» |
+| N10 · Linux | Senza piano | dentro: il Flatpak come file della release (D8 B); fuori: Flathub e Wayland | Lo stesso WebKitGTK per tutti | PA T51; «Prossime fasi» |
 | N11 · budget, documenti, upstream | Continuo | dentro: budget e documenti; fuori: upstream (le voci precise sono in «Le voci sciolte», più sotto) | Fatto quando 6 e 8 | PA T16, T18; #253, #254 |
 | N12 · il menu «/» | In `main` | fatto; dentro: la prova con persone, i 16 ms nella WebView, il «/» nelle schede della lavagna; fuori: il «/» nelle celle | Fatto quando 6 e 7 | PA T16, T17; N6 T43; celle con K9 |
 | N13 · i Blocchi | In `main`, coreografie comprese (`motion-rules.mjs`, regole `blocchi-*`); #281 aperta | fatto; dentro: la prova con persone, i 33 ms su 2.000 righe, la pagina del PDF nella nota | Fatto quando 6 e 7 | PA T16, T17 (chiude #281), T32 |
 | K0 · misure dei motori | In `main` (`docs/misure/*-k0.md`) | fatto | — | — |
 | K1 · i componenti | In `main` (#285, `crates/fub-componenti`) | fatto | — | — |
-| K2 · la pagina «Componenti» | Ramo: 7 di 7; la prova con una persona di K2 D-2 non è fatta | dentro | I componenti accesi e spenti | `piano/k2-pagina-componenti`, #290; l'ordine lo dice D13 |
+| K2 · la pagina «Componenti» | Ramo: 7 di 7; la prova con una persona di K2 D-2 non è fatta | dentro | I componenti accesi e spenti | `piano/k2-pagina-componenti`, #290; la prova dell'utente prima del merge (D13 A) |
 | K3 · lo strato dei motori | Ramo: 18 di 19 (T18 fatto); T17 aspetta solo il sì dell'utente per unire #295 (CI completa verde, run 42049126094) | dentro | Word ed Excel | `piano/k3-motori`, #295 |
 | K4, K7–K10 | Senza piano | fuori | Vedi sopra | «Piani di Fub» |
 | K5 · il disegno | Ramo: 10 di 30 | dentro | Il disegno SVG | `piano/k5-disegno`, #300 |
-| K6 · il disegno completo | Ramo: 0 di 30 | fuori | Scelta dell'utente | #313 |
-| Griglia · le celle | Ramo: 0 di 9 | dentro | Il foglio che risponde subito | `piano/griglia-celle`, senza PR |
+| K6 · il disegno completo | Ramo: 0 di 30 | fuori | Scelta dell'utente (D24 B) | #313 |
+| Griglia · le celle | Ramo: 0 di 9; il prototipo approvato dall'utente il 2026-11-07 (D2 A) | dentro | Il foglio che risponde subito | `piano/griglia-celle`, senza PR |
 | Scrittoio 2 | Ramo: 3 di 27 (T1, T2, T16) | dentro | La cornice | `piano/scrittoio-2`, #309 |
 | La lavagna in codice | Ramo: 0 di 26 | dentro | L'AI che disegna e dispone | `piano/lavagna-in-codice`, #311 |
 | A1 · la base per l'AI | Ramo: 5 di 13 | dentro (F1) | Le ricette | `piano/a1-base-per-ai`, #305 |
 | #304 · `/orchestra-auto` | PR pronta | fuori dal prodotto | È un attrezzo di lavoro | #304, la decide l'utente |
 | Punto sciolto: il blocco di scrittura in sola lettura | Trovato: `FubSession::invoke_command` prende `write_turn()` anche per i comandi in sola lettura (`crates/fub-host/src/session.rs`); è scritto in DECISIONS (N7, 2026-11-04) ma l'issue non è mai stata aperta | dentro | L'AI legge (MCP, `canvas.read`) mentre la persona scrive | PA T3 |
-| Punto sciolto: `windows-sys` | Già in `Cargo.lock` come dipendenza indiretta (cinque versioni, 0.45–0.61); serve diretta per il job object | domanda | È una dipendenza nuova | D7, PA T9 |
+| Punto sciolto: `windows-sys` | Già in `Cargo.lock` come dipendenza indiretta (cinque versioni, 0.45–0.61); serve diretta per il job object | dentro (D7 A) | È una dipendenza nuova, accettata | PA T9 |
 | Punto sciolto: sei errori di tipo nei test dell'anteprima | Riprodotti con `tsc --noEmit` su `anteprima/tutto` (5006937c): tre in N4 e tre in K5 | dentro | Vengono dai rami indietro rispetto a `main` | PA T2 |
-| Punto sciolto: una stringa inglese nel fake host | Non trovata: `bench/fake-english.test.ts` passa su `anteprima/tutto` | domanda | Da dove viene? | D10, PA T10 |
-| Punto sciolto: il conto dei diagrammi Mermaid | Non trovato: `check-mermaid.mjs` dà 40 blocchi validi su `main` e 45 sull'anteprima | domanda | Da dove viene? | D10, PA T10 |
+| Punto sciolto: una stringa inglese nel fake host | Non trovata: `bench/fake-english.test.ts` passa su `anteprima/tutto` | dentro: la cerca il coder (D10 B) | Da dove viene? | PA T10 |
+| Punto sciolto: il conto dei diagrammi Mermaid | Non trovato: `check-mermaid.mjs` dà 40 blocchi validi su `main` e 45 sull'anteprima | dentro: lo cerca il coder (D10 B) | Da dove viene? | PA T10 |
 | Punto sciolto: la pagina della cornice del telefono | Manca davvero: nessuna pagina in `docs/architecture/` | dentro | Docs che descrivono il presente | PA T8 |
-| Punto sciolto: il vassoio più chiaro della fila e della colonna | Sul ramo di S2, T16 lo ha già messo (`--bar-tray`) | domanda | L'utente decide qui | D6, PA T11 |
+| Punto sciolto: il vassoio più chiaro della fila e della colonna | Sul ramo di S2, T16 lo ha già messo (`--bar-tray`) | dentro: chiaro di serie, «marcate» in Aspetto (D6 C) | Qualità e accessibilità | PA T11 |
 | #97 · CRLF e BOM nella lavagna | Corretto in `main` (0f39a80a, `editors/canvas/line-endings.test.ts`) | fatto | L'issue è ancora aperta | da chiudere (l'utente) |
 | #216 · il vault lasciato aperto | Corretto in `main` (1d20ce96, `closeLeftVault` in `state/vault-session.ts`) | fatto | L'issue è ancora aperta | da chiudere (l'utente) |
 | #237 R01–R04 | Aperti | dentro | Perdono dati | PA T4, T5, T12 |
+| #237 R05–R08 e A03 | Aperti | dentro (D21 A) | Intoppi che chi prova incontra | PA T53 |
+| #242 · il tema di CodeMirror in linea | Aperta | dentro (D22 A) | Un tema deve vestire anche l'editor di testo | PA T54 |
 | #289 · congelare `fub:abi@0.2.0` | Aperta | dentro | Fatto quando 8 | PA T6, T7 |
 | Test instabili (#70, #98, #270–#273, #279, #280, #284, #286, #287, #292, #293, #301, #310, #312) | Aperti | dentro | Bloccano la CI di rilascio | PA T19, T20, T21 |
 | #283 · S7 su una GPU | Aperta | dentro | Il portatile Windows dell'utente ha una GPU | PA T16 |
 | #281 · i Blocchi con cinque persone | Aperta | dentro | Fatto quando 7 | PA T17 |
 | P00–P18 (#76–#93) | Vecchia mappa | fuori | Superata da N e K | le loro issue |
-| Richiesta del manutentore: la skin facile (2026-11-05) | Verificato in `main` (638358da): la pelle di un tema è tutto o niente; `install_theme` c'è ma senza IPC; la fiducia `development` («In sviluppo») c'è già; nessuna modalità sviluppatore; il contratto `theme-2` non è congelato (12 commit dal 29 ottobre al 4 novembre); le icone passano da un registro solo | dentro: sei passi | Fatto quando 9 | PA T34–T42, D15–D17 |
+| Richiesta dell'utente: Fub verde di serie, col suo logo (2026-11-07) | La tinta di serie è la matita blu (265, `recipe.ts`); l'icona è un quadrato viola con una «F» (`crates/fub-app/icons`) | dentro | Fatto quando 10 | PA T48, T49; D25–D28 |
+| La firma degli installer | `release.yml` costruisce senza firma | dentro (D20 A) | Nessun avviso a chi installa | PA T50 |
+| I riscontri della pre-alpha | Nessun modello di issue, nessuna voce nel menu | dentro (D9 B) | Più riscontri, più completi | PA T18, T52 |
+| Il controllo di tutte le viste | Le viste del simulatore guardate a campione | dentro (D19 A) | Il difetto dei 44 px è venuto fuori guardando | sonda del 2026-11-07; PA T55 |
+| Il telefono | La variante A di Scrittoio 2, «approvata per ora» | dentro: un piano suo prima dell'APK (D1 B) | L'APK deve essere quello giusto | piano del telefono, `PLAN-ui/fub-pre-alpha/prompt-piano-telefono.md` |
+| Richiesta del manutentore: la skin facile (2026-11-05) | Verificato in `main` (638358da): la pelle di un tema è tutto o niente; `install_theme` c'è ma senza IPC; la fiducia `development` («In sviluppo») c'è già; nessuna modalità sviluppatore; il contratto `theme-2` non è congelato (12 commit dal 29 ottobre al 4 novembre); le icone passano da un registro solo | dentro: sei passi, più l'editor di testo (D22 A) | Fatto quando 9 | PA T34–T42, T54 |
 
 ### Le nove decisioni di «Prossime fasi»
 
@@ -183,8 +208,8 @@ codice, nei rami e nelle issue il 2026-11-05.
 | 2 · il riconoscimento delle forme e della scrittura resta | Presa: N6 T87 «Forme dal tratto» (D-22 a) | dentro, con N6 |
 | 3 · niente export verso Excalidraw e draw.io | Presa con la chiusura di FubDraw (ADR 0231) | fatto |
 | 4 · `.fubann` letto e convertito | In `main` (`crates/fub-host/tests/fubann_vault.rs`) | fatto |
-| 5 · Linux via Flatpak | Aperta | domanda D8 |
-| 6 · iPad e Android: prima un'app compagna | L'utente ha scelto l'APK di prova | domanda D1 |
+| 5 · Linux via Flatpak | Presa dall'utente il 2026-11-07 (D8 B) | dentro: il Flatpak come file della release (PA T51); Flathub fuori |
+| 6 · iPad e Android: prima un'app compagna | L'utente ha scelto l'APK di prova, con un piano del telefono prima (D1 B) | dentro: il telefono; fuori: il tablet e l'iPad |
 | 7 · le soglie di N9 | Aperta, con N9 | fuori |
 | 8 · che cosa congelare in DOCX e XLSX | Il corpus di PA T13 dice ciò che non si perde; il resto va con K9 | dentro: il corpus |
 | 9 · i post upstream, fatti dall'utente | Dell'utente | fuori (#253, #254) |
@@ -204,13 +229,13 @@ codice il 2026-11-05.
 | Rischio · il controllo settimanale dei motori Craft | Gira già: `aggiorna.sh` ogni lunedì (cron del server), fuori dal repository | fuori | K10 |
 | Rischio · il marchio ArtCraft | Nel codice di `main` compare solo dove deve: `THIRD_PARTY_NOTICES`, l'intestazione dello stabilizzatore, i percorsi d'installazione dei Craft | dentro: un controllo | PA T18 |
 | Rischio · i token del canale di controllo dei Craft | Lato motori, non lato Fub | fuori | #253, #254 (decisione 9) |
-| Rischio · l'app compagna per iPad | Decisione 6 di «Prossime fasi» | fuori | D1, #90 |
+| Rischio · l'app compagna per iPad | Decisione 6 di «Prossime fasi» | fuori (D1 B porta dentro solo il telefono) | #90 |
 | N12 · i 16 ms del «/» nella WebView | Misurati solo in Chromium | dentro | PA T16 |
 | N12 · il «/» nelle schede della lavagna | N6 T43 scrive le schede in Live, con «/» se l'editor delle note lo ha | dentro | N6 T43 |
 | N12 · il «/» nelle celle del foglio | Le celle non sono testo Markdown | fuori | K9 |
 | N13 · le coreografie | In `main`: `motion-rules.mjs`, regole `blocchi-*` e `slash-*` | fatto | — |
 | N13 · i 33 ms su 2.000 righe | Misurati solo in Chromium | dentro | PA T16 |
-| N1 · i 42 file `.rs` | Codice vivo, non resti: FubDraw è il nome del formato (ADR 0203). Restano per compatibilità il namespace `fub:`, `Status::Fubdraw` e l'abbinamento `fubdraw://live`. Le persone vedono il nome in tre stringhe del Rust e in una quarantina del client | dentro, come dice D14 | PA T33 |
+| N1 · i 42 file `.rs` | Codice vivo, non resti: FubDraw è il nome del formato (ADR 0203). Restano per compatibilità il namespace `fub:`, `Status::Fubdraw` e l'abbinamento `fubdraw://live`. Le persone vedono il nome in tre stringhe del Rust e in una quarantina del client | dentro (D14 A) | PA T33 |
 | N1 · la prova byte per byte | C'è: `corpus-open.test.ts`, `crates/fub-scene/tests/corpus.rs`, i test del provider svg | fatto; il corpus della pre-alpha la allarga | PA T13 |
 | N0 · le tre piattaforme e S4–S6 | Il banco WebView gira su Linux; S4 c'è in Chromium | dentro, dove si può; ciò che non si può misurare si scrive | PA T16 |
 | N11 · le voci da portare a monte | Un'anteprima PNG in ogni formato nativo; `info --json` stabile; istanza unica per VectorCraft, FigCraft, LightCraft, GridCraft e WordCraft; un token del canale di controllo per VectorCraft, FigCraft e LightCraft; un commento su storytold/vectorcraft#647 | fuori | #253, #254 (decisione 9: le scrive l'utente) |
@@ -253,17 +278,21 @@ dell'utente dal 2026-11-04; cambia solo se la cambia l'utente, `DECISIONS.md`).
 due, M mezza giornata, L due o tre giorni, XL di più.
 
 **Quanto ci vuole, a occhio.** Restano circa 207 task negli altri piani
-(circa 79 solo in N6) e circa 44 task di questo piano (PA T9, T10, T11,
-T40 e T46 dipendono da una risposta): circa 250 in tutto. Con un coder alla
-volta e circa 2 ore per task, revisione e CI comprese, fanno circa 500 ore
-di lavoro; i nove task della skin facile e i cinque del secondo giro (T43–T47)
-sono quasi tutti M e ne aggiungono una trentina, quindi circa 530 ore. A
-circa 14 ore al giorno (l'orchestratore lavora anche di notte con
-`/orchestra-auto`) sono circa 38 giorni, poco più di 5 settimane piene.
-Con le attese dell'utente (i prototipi da approvare, i sì ai merge, le
-risposte alle domande, la misura su Windows, la prova con le persone, gli
-installer) diventano **7–9 settimane**. N6 da sola sono circa
-160 ore, cioè 2–3 settimane con l'approvazione dei suoi prototipi.
+(circa 79 solo in N6) e i 57 task di questo piano (PA T1–T57, tutti da
+fare): circa 264 in tutto, più il piano del telefono (D1 B), che a occhio
+ne porta una quindicina. Con un coder alla volta e circa 2 ore per task,
+revisione e CI comprese, fanno circa 530 ore; i task della skin facile, del
+secondo giro (T43–T47) e delle risposte (T48–T57) sono quasi tutti M e ne
+aggiungono una quarantina; il telefono circa altre 40. In tutto circa 610
+ore. A circa 14 ore al giorno (l'orchestratore lavora anche di notte con
+`/orchestra-auto`) sono circa 44 giorni, circa 6 settimane piene.
+Con le attese dell'utente (i prototipi da approvare, il piano del
+telefono, i sì ai merge, la misura su Windows, la prova con le persone, gli
+account per la firma, gli installer) diventano **8–10 settimane**. N6 da
+sola sono circa 160 ore, cioè 2–3 settimane con l'approvazione dei suoi
+prototipi. La firma di Windows può allungare la coda: la risposta di
+SignPath Foundation richiede giorni o settimane, e senza la firma PA T22
+non chiude (D20 A).
 
 Le assunzioni della stima: le 2 ore vengono dai piani recenti (il piano del
 caricamento ha chiuso 4 task in circa 3 ore il 2026-11-04; i task M e L di
@@ -277,37 +306,45 @@ Se una di queste cade, la stima si allunga.
 |---|---|---|---|---|---|---|
 | K3 T17 · il sì dell'utente | K3 | aspetta solo il sì (T1–T16, T18 e T19 fatti; CI completa verde, run 42049126094) | nessuno | medio: un crate nuovo (`fub-motori`), patch nel `vendor/`, tre sistemi | — | il sì dell'utente |
 | Unire #295 (K3, con K3-IPC T8) | K3 | PR pronta, testa 165b8fa8 | il sì dell'utente | medio | S | `main` ha `crates/fub-motori` e i comandi `open_key`, `warm_engine` e `document_closed` |
-| Riallineare #290 a `main` e unirla | K2 | 7 di 7; la prova con una persona non è fatta | la risposta a D13 | basso | S | CI completa verde, OK dell'utente |
+| Riallineare #290 a `main` e unirla | K2 | 7 di 7; la prova con una persona non è fatta | la prova dell'utente col protocollo di K2, prima di segnarla pronta (D13 A) | basso | S | CI completa verde, OK dell'utente |
 | PA T1 · il finto del banco con le impostazioni dell'host | PA | da fare | #295 in `main` (d90a09d0 di K3 cambia `bench/fake-ipc.ts`) | basso | S | `bench/fake-ipc.test.ts` |
 | PA T3 · i comandi in sola lettura non tengono il turno | PA | da fare | nessuno | medio: tocca il custode | M | test d'integrazione di `fub-host` |
 | PA T4, T5 · #237 R01–R03 | PA | da fare | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione; R01 si chiude col test se non si riproduce |
 | PA T6, T7 · #289 | PA | da fare | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
 | PA T8 · la pagina della cornice del telefono | PA | da fare | nessuno | basso | S | guardie dei documenti |
+| PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | da fare (D7 A) | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
+| PA T10 · i due punti sciolti da ritrovare | PA | da fare (D10 B) | nessuno | basso | S | la causa trovata o la riga che chiude |
 | PA T13 · il corpus senza perdite | PA | da fare | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
 | PA T19 · i test instabili del Rust | PA | da fare | nessuno | medio | M | 200 giri verdi o causa trovata |
 | PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | da fare | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
 | PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | da fare | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
-| PA T33 · il nome FubDraw dove le persone lo vedono | PA | da fare | la risposta a D14 | basso | M | test dei descrittori, di `fub-scene` e del catalogo |
-| PA T34 · il manifest dice da quale tema parte | PA | da fare | la risposta a D15 | medio: la forma del manifest sul filo | M | `crates/fub-host/tests/themes.rs`, mirror |
+| PA T33 · il nome FubDraw dove le persone lo vedono | PA | da fare (D14 A) | nessuno | basso | M | test dei descrittori, di `fub-scene` e del catalogo |
+| PA T34 · il manifest dice da quale tema parte | PA | da fare (D15 A, `extends`) | nessuno | medio: la forma del manifest sul filo | M | `crates/fub-host/tests/themes.rs`, mirror |
 | PA T35 · la pelle del tema sopra quella di serie | PA | da fare | T34 | medio: tocca il montaggio di ogni tema | M | `theme/inherit.test.ts`, `gate.test.ts` |
 | PA T39 · i caratteri del tema | PA | da fare | T34, T35 | basso | M | test dell'host e del loader |
-| PA T40 · le icone del tema | PA | solo se D16 è A o C | T34, T35, D16; mai nella stessa ondata di S2 T14 | basso | M | Vitest di `ui/icons` e di `theme/` |
+| PA T40 · le icone del tema | PA | da fare (D16 A) | T34, T35; mai nella stessa ondata di S2 T14 | basso | M | Vitest di `ui/icons` e di `theme/` |
 | PA T44 · un documento e un foglio vuoti | PA | da fare | nessuno | basso: due comandi che creano file, dietro le loro feature | M | test d'integrazione di `fub-host`, anche con `--no-default-features` |
-| PA T46 · le parole della scheda di un componente | PA | solo se D18 è A | K2 in `main`; D18 | basso: solo testi del catalogo | S | `i18n/lexicon-settings.test.ts` |
+| PA T46 · le parole della scheda di un componente | PA | da fare (D18 A) | K2 in `main` | basso: solo testi del catalogo | S | `i18n/lexicon-settings.test.ts` |
 | PA T47 · i 44 px del tocco sul telefono, senza deformare | PA | da fare | nessuno | basso: solo CSS del telefono | S | la scena `mobile-settings` di `bench/scene.mjs` (`bench:verify`, `bench:a11y`) |
+| PA T48 · il verde di serie | PA | da fare (D25 C) | la conferma dell'utente che 160 resta col logo definitivo; mai con un task che rifà baseline | medio: cambia ogni schermata, le baseline vengono dal runner | M | `recipe.test.ts`, `colori.test.ts`, `theme:verify`, `cargo test -p fub-host` |
+| PA T53 · #237 R05–R08 e A03 | PA | da fare (D21 A) | S2 T10 per A03 | basso | M | un test per voce nel proprietario |
+| PA T54 · l'editor di testo vestito dal tema | PA | da fare (D22 A) | T35; prima di T41; mai con S2 T20 o la griglia T2–T3 | medio: tocca la pelle di ogni tema | M | Vitest di `theme.ts`, `check-inline-theme.mjs` |
 
 ### Fase B · la cornice
 
 | Passo | Fonte | Stato | Dipende da | Rischio | Taglia | Prova di chiusura |
 |---|---|---|---|---|---|---|
-| Scrittoio 2 T3–T27 | S2 | 3 di 27 (T1, T2, T16) | K3 in `main` per T20 e T21, che rifanno la barra a schede dalle regole di K3 T18; T22 dopo la risposta a D5; T23 aggiunge solo l'icona (N6 vince sulla lavagna) | medio: tocca quasi ogni pelle; le baseline vengono dal runner (T25) | L | S2 T26 e la CI completa |
+| Scrittoio 2 T3–T27 | S2 | 3 di 27 (T1, T2, T16) | K3 in `main` per T20 e T21, che rifanno la barra a schede dalle regole di K3 T18; T22 costruisce la forma A (D5 A); T23 aggiunge solo l'icona (N6 vince sulla lavagna) | medio: tocca quasi ogni pelle; le baseline vengono dal runner (T25) | L | S2 T26 e la CI completa |
 | PA T2 · N4 e K5 allineati a `main` | PA | da fare | #295 in `main` | basso | S | `tsc --noEmit` pulito sui due rami |
-| PA T11 · il vassoio delle barre | PA | solo se D6 non è A | S2 T20 | basso | S | foto del banco |
+| PA T11 · il vassoio delle barre | PA | da fare (D6 C: chiaro di serie, «marcate» in Aspetto) | S2 T20 | basso | S | Vitest delle preferenze, foto del banco |
+| Il piano del telefono | telefono | da pianificare (D1 B) | S2 in `main`; un pianificatore alla volta | medio: rifà la cornice del telefono prima dell'APK | L | il piano approvato e i suoi task in `main` |
 | PA T20, T21 · i test instabili del client e del banco | PA | da fare | nessuno | medio | M + M | 50 giri verdi o causa trovata |
 | PA T36 · installare da cartella, e la diagnosi | PA | da fare | T34; S2 T10 | medio: un'IPC nuova che scrive nella configurazione | M | test di `fub-host`, Vitest delle Impostazioni |
 | PA T37 · collegare una cartella, il tema cambia al salvataggio | PA | da fare | T36 | medio: un osservatore nuovo | M | test di `fub-host` con l'evento, Vitest |
 | PA T38 · la pagina «Tutti i componenti» | PA | da fare | T35, T36; S2 T10 | basso | M | foto del banco uguali, bundle iniziale uguale |
 | PA T43 · «Nuovo» chiede il tipo | PA | da fare | S2 T8 e T14; l'approvazione di S34; T44 per due voci | basso | M | Vitest di `ui/commands` e dell'albero, la scena di S34 nel banco |
+| PA T56 · la carta del file e il fuoco | PA | da fare (D19 A) | S2 in `main`; T48; mai nella stessa ondata di T54, della griglia T2–T3 o di S2 T20 | basso: CSS e due tabelle in TypeScript; le baseline vengono dal runner | M | Vitest di `FIELD_LAYOUT` e di `nodeFill`, `bench:a11y` |
+| PA T57 · i bersagli e i nomi interi | PA | da fare (D19 A) | T56 | basso: la barra a schede si allunga di 10 px per pulsante diviso | M | Vitest dei suggerimenti, `bench:a11y` |
 
 ### Fase C · gli editor
 
@@ -326,7 +363,9 @@ Se una di queste cade, la stima si allunga.
 | Passo | Fonte | Stato | Dipende da | Rischio | Taglia | Prova di chiusura |
 |---|---|---|---|---|---|---|
 | PA T41 · gli hook congelati | PA | da fare | Fase C in `main`; T34–T40 | basso per il codice, alto se si sbaglia il momento | S | `contract-frozen.test.ts` |
-| PA T42 · due temi d'esempio | PA | da fare | T41; la risposta a D17 | basso | M | `examples.test.ts`, scene del banco |
+| PA T42 · tre temi d'esempio | PA | da fare (D17 C: Carta, Officina, Mare) | T41, T54 | basso | M | `examples.test.ts`, scene del banco |
+| PA T49 · il logo | PA | aspetta i file del logo dell'utente e D28 | T48 | basso: icone e un SVG, gli hook restano | M | le icone generate, le scene del banco |
+| PA T55 · il controllo di tutte le viste nel banco | PA | da fare (D19 A) | S2 in `main`; T47, T56 e T57; prima di T15 | basso | M | `bench:viste` verde, rosso sulla scena di prova |
 | PA T14 · il giro nel banco: lo scheletro e il primo avvio | PA | da fare | Fase B in `main` | medio | M | `npm run bench:giro` verde sui compiti 1–5 |
 | PA T26 · il giro: le note | PA | da fare | T14 | basso | M | compiti 6–11 verdi |
 | PA T27 · il giro: Word, Excel, SVG e PDF | PA | da fare | T14; griglia e K5 in `main` | medio | M | compiti 12–15 verdi |
@@ -338,9 +377,12 @@ Se una di queste cade, la stima si allunga.
 | PA T45 · cinquemila file: la misura | PA | da fare | S2 in `main` | basso: misura, non cambia l'albero | M | `npm run bench:tree` con le soglie; se una salta, la issue |
 | PA T17 · la prova con cinque persone | PA | da fare | PA T14 per il protocollo; la prova usa gli installer di T22 | basso per il codice; serve l'utente | S + la prova | il resoconto della prova |
 | PA T18 · i documenti della pre-alpha | PA | da fare | Fase C | basso | S | guardie dei documenti |
-| PA T22 · la versione e la prova del rilascio | PA | da fare | T14, T18, T25; T19–T21 | alto: MSI e versione non numerica | M | `release.yml` verde in prova |
-| PA T31 · l'APK nell'emulatore della CI | PA | da fare | T22 (l'APK con la versione nuova) | medio: emulatore su runner Linux | M | il job `mobile.yml` installa, apre e fotografa l'APK |
-| PA T23 · il giro a mano sugli installer e sul telefono | PA | da fare | T22, T31 | medio | M | la lista del giro spuntata |
+| PA T52 · «Segnala un problema» | PA | da fare (D9 B) | T18; S2 in `main` | basso: il browser apre la pagina, Fub non manda niente | S | Vitest della funzione dell'indirizzo e del menu |
+| PA T50 · la firma degli installer | PA | aspetta gli account dell'utente (D20 A) | i segreti nel repository | medio: certificati e notarizzazione | M | `codesign`, `spctl`, `stapler`, `signtool` nella corsa a secco |
+| PA T51 · Flatpak | PA | da fare (D8 B) | prima di T22 | medio: i permessi e l'osservatore dei file | M | `flatpak install --user` e i compiti 1, 6 e 21 |
+| PA T31 · l'APK nell'emulatore della CI | PA | da fare | niente; la foto si rifà quando il piano del telefono è in `main` | medio: emulatore su runner Linux | M | il job `mobile.yml` installa, apre e fotografa l'APK |
+| PA T22 · la versione e la prova del rilascio | PA | da fare | T14, T18, T25; T19–T21; T31, T50, T51; il piano del telefono in `main` (D1 B) | alto: MSI e versione non numerica | M | `release.yml` verde in prova, installer firmati, `.flatpak` e APK |
+| PA T23 · il giro a mano sugli installer e sul telefono | PA | da fare | T22, T31; per macOS la persona o il Mac trovati dall'utente (D11 B) | medio | M | la lista del giro spuntata |
 | PA T24 · il tag e la pre-release | PA | da fare | tutti gli altri passi (T16 e T17 compresi), OK dell'utente | basso | S | la release `v0.2.0-prealpha.1` pubblicata |
 
 ## Il backend, area per area
@@ -541,7 +583,7 @@ nessuna parte». Verificato su `main` (638358da).
   3. I caratteri del tema (T39). Fase A.
   4. Le icone del tema, se D16 è A o C (T40). Fase A.
   5. Gli hook congelati, per ultimi, quando la Fase C è in `main` (T41).
-  6. Due temi d'esempio, la prova d'uscita (T42).
+  6. Tre temi d'esempio, la prova d'uscita (T42).
 - **I canali, dopo.** `caratteri`, `caratteri-tema`, `foglio`, `pelle`,
   `pelle-tema`, `preferenze`, `snippets`. Le preferenze dell'utente restano
   dopo ogni pelle. Senza `extends` si monta tutto come oggi, byte per byte.
@@ -658,7 +700,7 @@ stanno sotto `apps/client/src/`.
 | File | Che cos'è | Si copia nell'app? |
 |---|---|---|
 | `simulatore.html` | la pagina: i comandi in alto, lo schermo, la didascalia e gli elenchi sotto; in testa il CSS nuovo, un blocco `<style data-destinazione="…" data-task="…">` per file | i blocchi `data-destinazione` sì, il resto no |
-| `sim-dati-1.js` | i 286 stati impacchettati (5 MB): il DOM e il CSS di ogni cattura nelle due luci, le toppe, i temi e i caratteri | il DOM, come dice «Come si leggono il DOM e il CSS» |
+| `sim-dati-1.js` | i 298 stati impacchettati (5 MB): il DOM e il CSS di ogni cattura nelle due luci, le toppe, i temi e i caratteri | il DOM, come dice «Come si leggono il DOM e il CSS» |
 | `sim-stati.js` | l'elenco degli stati (numero, nome, gruppo, provenienza, task, pagina del piano) e gli scenari | no |
 | `vista-sim.js`, `solo-simulatore.js` | il motore: monta uno stato, risponde ai clic e ai tasti, fa i passi degli scenari e i gesti del telefono | no |
 | `piani/*.html` | le sei pagine approvate dei piani, tali e quali | restano la fonte dei loro piani |
@@ -666,6 +708,9 @@ stanno sotto `apps/client/src/`.
 | `toppe/*.html` | il DOM scritto a mano dei pezzi nuovi, un `<template>` per pezzo, con la destinazione e il task | sì |
 | `script/` | ciò che rifà il simulatore e le sue prove («Rifare il simulatore», sotto) | no |
 | `dal-prototipo.md` | le tabelle in fondo a questa sezione, generate dalla costruzione | no |
+| `scelte.html` | la pagina delle scelte (artifact «Le scelte di Fub pre-alpha»): le domande, le risposte, gli stati da approvare | no |
+| `prompt-piano-telefono.md` | il prompt del pianificatore del telefono (D1 B), da avviare quando Scrittoio 2 è in `main` | no |
+| `logo/`, `verde/` | il logo provvisorio in SVG (D26 B, fino ai file dell'utente) e le foto delle tinte di D25 della pagina delle scelte | no: il logo vero lo porta PA T49 |
 
 In alto si scelgono lo stato, lo scenario, la luce (Giorno, Notte), la
 larghezza (Piena, 700 px, Telefono) e il movimento (Pieno, Calmo, Ridotto).
@@ -695,7 +740,7 @@ Sotto lo schermo:
 
 ### Gli stati, la provenienza e l'approvazione
 
-Gli stati sono 286, da S1 a S286. I numeri sono fissi
+Gli stati sono 298, da S1 a S298. I numeri sono fissi
 (`script/numeri-sim.json`): uno stato nuovo prende il numero dopo l'ultimo,
 uno tolto lascia il buco. Ogni stato dice la sua provenienza nella
 didascalia, nel menu degli stati e nella tabella «Gli stati», sotto:
@@ -704,30 +749,80 @@ didascalia, nel menu degli stati e nella tabella «Gli stati», sotto:
   (Playwright, finto host) con i ritocchi di Scrittoio 2 già montati. Il
   client è quello che ha fotografato il prototipo approvato di Scrittoio 2
   (il ramo locale `anteprima/tutto`); gli stati d'avvio vengono dallo stesso
-  ramo con #308 (5006937c). Non è nell'elenco da approvare: è il client di
-  oggi con i ritocchi già approvati.
+  ramo con #308 (5006937c). Dal 2026-11-07 le catture sono rifatte col
+  verde di serie e col logo provvisorio (le toppe verdi del finto, «Rifare
+  il simulatore»). Non è nell'elenco da approvare: è il client di oggi con i
+  ritocchi già approvati, più il verde di D25 e il logo di D26.
 - **composta** (67): DOM vero, spostato o ritoccato. Sono gli editor delle
   pagine dei piani messi nella cornice di Scrittoio 2 (D4 A: la griglia, il
   disegno di K5, le schede della lavagna, le penne, i componenti del disegno,
   le ricette e le loro Impostazioni), più cinque catture cambiate solo nel
   testo o nelle righe (D4). La pagina del piano resta la fonte del pezzo; lo
   stato composto dice dove sta nella cornice.
-- **nuova** (51): DOM scritto a mano in questo giro (`toppe/*.html`), con il
-  CSS dei blocchi `92-*` e `93-*`. Sono gli stati che nessun piano aveva
-  disegnato: N6 T26–T28 (D3), la banda del motore di D5 A, i file che non
-  si aprono, i componenti della comunità, i temi e la skin facile, i
-  riscontri di D9 B, ciò che ha fatto un agente (N2), `#page=3`, il foglio
-  vuoto e quello enorme.
+- **nuova** (63): DOM scritto a mano (`toppe/*.html`), con il CSS dei
+  blocchi `92-*` e `93-*`. Sono gli stati che nessun piano aveva disegnato:
+  N6 T26–T28 (D3), la banda del motore di D5 A, i file che non si aprono, i
+  componenti della comunità, i temi d'esempio e la skin facile, «Le barre»
+  di D6 C, i riscontri di D9 B, ciò che ha fatto un agente (N2), `#page=3`,
+  il foglio vuoto e quello enorme.
 
-**L'approvazione.** I 118 stati composti e nuovi aspettano un sì. In
-«Approvare gli stati nuovi e composti» si segnano quelli da rivedere (anche
-con «Da rivedere» sotto lo schermo), e la frase si scrive da sola, per
-esempio «Approvo tutti gli stati nuovi e composti tranne S23, S41.». «Copia
-la frase» la copia; i segni restano in quel browser. Uno stato approvato
-diventa la fonte del suo task, come una pagina approvata di un piano.
+**L'approvazione.** Il 2026-11-07 l'utente ha approvato i 118 stati
+composti e nuovi di allora, per gruppi. Le risposte dello stesso giorno ne
+hanno cambiati alcuni e ne hanno aggiunti dodici (S287–S298): «Gli stati
+cambiati dalle risposte», sotto, li elenca, e lo scenario «Che cosa è
+cambiato» li passa in ordine. Il sì sul simulatore aggiornato (il via A)
+vale per tutti i 130 stati composti e nuovi. In «Approvare gli stati nuovi e
+composti» si segnano quelli da rivedere (anche con «Da rivedere» sotto lo
+schermo), e la frase si scrive da sola, per esempio «Approvo tutti gli stati
+nuovi e composti tranne S23, S41.». «Copia la frase» la copia; i segni
+restano in quel browser. Uno stato approvato diventa la fonte del suo task,
+come una pagina approvata di un piano.
 
-**Gli scenari** sono 17: i 16 chiesti più la skin facile. La tabella «Gli
-scenari», sotto, dà per ognuno i passi e gli stati in ordine.
+**Gli scenari** sono 18: i 16 chiesti, la skin facile e «Che cosa è
+cambiato». La tabella «Gli scenari», sotto, dà per ognuno i passi e gli
+stati in ordine.
+
+### Gli stati cambiati dalle risposte
+
+Le risposte del 2026-11-07 cambiano questi stati, già approvati, e ne
+aggiungono dodici. Lo scenario «Che cosa è cambiato» li mostra uno dopo
+l'altro.
+
+| Stati | Che cosa cambia | Da dove |
+|---|---|---|
+| tutti | il verde di serie, tinta 160 «Smeraldo», al posto del blu 265: la cornice, i bottoni, la scelta, i collegamenti, l'anello del fuoco e il velo sulle superfici, nelle due luci e col contrasto alto. Il vassoio delle barre segue la tinta (`#f8faf8`, `#18211c`). I colori di stato restano 30° lontani dall'accento: il «salvato» va a 130 | D25 C, PA T48 |
+| tutti quelli col marchio, S246, S248–S250, S267 | il logo provvisorio (la «f» a nastro sopra un foglio scuro e una pagina) nel marchio, in Informazioni e nell'avvio, al posto della «f» corsiva | D26 B, PA T49 |
+| S234 | Aspetto: «Smeraldo» è il primo campione e quello di serie; «Matita blu» resta fra i campioni | D25 C, PA T48 |
+| S294–S296, nuovi | «Le barre: chiare · marcate» in Aspetto, e una nota con le barre marcate | D6 C, PA T11 |
+| S125–S130 | il disegno nella forma A, quella scelta: senza la figura di confronto accanto | D5 A |
+| S287–S293, nuovi | i casi che c'erano solo in B, nella forma A: 500 parti, senza motore, la modifica rifiutata (con l'annuncio per il lettore di schermo), Testo spento, la mano, la gomma, il rettangolo | D5 A |
+| S111–S124 | la forma B resta solo come confronto: la didascalia dice «D5 B: non si costruisce» | D5 A |
+| S255, S256 | «Segnala un problema» nel menu: la forma scelta, senza confronto | D9 B, PA T52 |
+| S254 | la forma A dei riscontri: «non si costruisce» | D9 B |
+| S204–S207 | la scheda del componente con le parole del lessico: «Acceso», «Togli» | D18 A, PA T46 |
+| S282, S283 | «Carta»: i titoli, la citazione e i tag dell'editor vestiti dal tema; la linguetta accesa con un filo d'accento dentro la linguetta; il vassoio delle barre e l'ombra del foglio ripiegano su quelli del tema (`var(--bar-tray, var(--sheet-2))`), come nel prodotto: prima il simulatore teneva quelli della serie | D22 A, PA T42, PA T54 |
+| S284, S285 | «Salvia» diventa «Mare»: un blu profondo e superfici grigio-azzurre, soli colori | D27 A, PA T42 |
+| S297, S298, nuovi | «Officina», chiaro e scuro: acciaio e arancio, angoli vivi, bordi di 2 px, etichette in monospazio, l'editor vestito | D17 C, PA T42, PA T54 |
+
+Il controllo di tutte le viste (D19 A, «Il controllo di tutte le viste»)
+cambia anche questi. Quasi tutti si vedono solo in un punto, o solo col
+bottone «Fuoco»:
+
+| Stati | Che cosa cambia | Da dove |
+|---|---|---|
+| i fogli con la barra a schede (27 stati fra S42 e S82) | la freccia di un pulsante diviso è larga 24 px, non 14: la fila si allunga di 10 px per pulsante diviso. È il cambio che si vede di più | D19 A, PA T57 |
+| i fogli (S42–S82) al buio | sulla carta del file la cella attiva, la selezione e il quadratino del riempimento hanno l'accento della carta (verde scuro), non quello del tema; la formula nella cella in modifica è d'inchiostro, come in Excel, senza la striscia scura a sinistra; l'anello della griglia è dell'accento della carta | D19 A, PA T56 |
+| S5, S33, S210, ogni editor, col bottone «Fuoco» | l'anello dell'editor, dell'anteprima e del grafo sta dentro il bordo, e si vede | D19 A, PA T56 |
+| S83 nello stretto, col bottone «Fuoco» | l'anello della pillola dei commenti sta dentro la pillola | D19 A, PA T56 |
+| S23, S30, S32, S33, S41 | l'azione di un avviso («Decidi dopo», «Riprova», «Chiudi», «Scegli ora») è un verde più scuro | D19 A, PA T56 |
+| S132 | le schede colorate della lavagna sono piene: il colore sulla carta della scheda, senza la scrivania sotto | D19 A, PA T56 |
+| S3, S8 | il «+» e la maniglia del blocco sono 24 × 24 e un po' meno tenui | D19 A, PA T57 |
+| S56 | i quadretti della tavolozza stanno a 6 px l'uno dall'altro: la tavolozza è larga 234 px | D19 A, PA T57 |
+| S7, S19, S179, le impostazioni (S183–S208, S233–S246) | il percorso a briciole e le etichette XMP alti 24 px; nell'indice delle impostazioni «Permessi dei componenti inclusi» va a capo invece di finire in «…» | D19 A, PA T57 |
+| S166 | il campo «Pagine» è il campo del kit (`kit/field.ts`), con la sua scatola e il suo anello: prima era un campo nudo, senza fuoco visibile | D19 A, N6 T28 |
+| S232 | la riga dell'agente ha il testo intero nel suggerimento | D19 A, PA T26 |
+| S26, S28 al telefono | nel cestino e nelle versioni i bottoni di 44 px stanno a 8 px l'uno dall'altro | D19 A, PA T47 |
+| S83 al telefono, col bottone «Fuoco» | l'anello del tondo della modalità sta dentro il tondo | D19 A, PA T47 |
 
 ### Come si leggono il DOM e il CSS
 
@@ -758,14 +853,15 @@ scenari», sotto, dà per ognuno i passi e gli stati in ordine.
   - Le catture non portano il CSS nuovo: il banco lo monta per la foto, ma
     nei dati finisce il CSS del client (`script/cattura.mjs`). Il simulatore
     rimonta i blocchi sopra ogni cattura, così ne esiste una copia sola.
-  - I due temi d'esempio (`93-tema-carta.css`, `93-tema-salvia.css`; PA
-    T42, D17) non sono CSS del prodotto: il simulatore li monta solo quando
-    Impostazioni › Aspetto sceglie «Carta» (che ha solo la luce del giorno:
-    di notte resta il tema di serie) o «Salvia». Non entrano nelle catture,
-    e il confronto dei pixel li lascia fuori.
+  - I tre temi d'esempio (`93-tema-carta.css`, `93-tema-officina.css`,
+    `93-tema-mare.css`; PA T42, D17 C, D27 A) non sono CSS del prodotto: il
+    simulatore li monta solo quando Impostazioni › Aspetto sceglie «Carta»
+    (che ha solo la luce del giorno: di notte resta il tema di serie),
+    «Officina» o «Mare». Non entrano nelle catture, e il confronto dei
+    pixel li lascia fuori.
 - **Il sanitizer del tema.** I blocchi che vanno in `skin/` passano
   `themeCssViolations` col profilo `theme-2` e `kind: "skin"`, con i ganci di
-  oggi più quelli nuovi elencati sotto: zero violazioni, 2026-11-06. I due
+  oggi più quelli nuovi elencati sotto: zero violazioni, 2026-11-07. I tre
   temi d'esempio (`93-tema-*`) passano coi soli ganci di oggi, e tengono le
   coppie di contrasto di `theme-2` in ogni luce che hanno, col contrasto
   normale e con l'alto. Le prove sono `script/sonda/pelle.test.ts` e
@@ -919,36 +1015,34 @@ giro:
 3. **Gli scenari.** Ognuno si percorre coi bottoni della pagina, e ogni
    passo si fotografa.
 
-Il giro del 2026-11-07, sul simulatore di questo ramo, dice «errori:
-nessuno»:
+Il giro del 2026-11-07, sul simulatore di questo ramo (298 stati, coi
+blocchi di PA T47, T56 e T57), dice «errori: nessuno»:
 
 | Larghezza | Stati montati | Controlli chiesti | Clic veri | Coperti |
 |---|---|---|---|---|
-| piena (nelle due luci) | 572 | 18.491 | 1.244 | 65 |
-| 700 px | 286 | 12.564 | 1.228 | 95 |
-| telefono | 286 | 7.271 | 401 | 53 |
+| piena (nelle due luci) | 596 | 19.348 | 1.309 | 71 |
+| 700 px | 298 | 13.182 | 1.293 | 101 |
+| telefono | 298 | 7.663 | 409 | 53 |
 
-Il telefono è rifatto dopo il blocco di PA T47, e ha 71 controlli in meno
-del giro di prima. 72 sono le schede «Vault» e «Informazioni» degli stati
-delle impostazioni, che ora scorrono fuori dalla riga, intere, invece di
-starci dentro troncate; le righe più basse portano fuori vista un
-interruttore e dentro due elenchi a scelta. A tutta larghezza e a 700 il
-blocco non vale.
+Al telefono le schede «Vault» e «Informazioni» degli stati delle
+impostazioni scorrono fuori dalla riga, intere (PA T47), invece di starci
+dentro troncate: fuori vista non si chiedono. A tutta larghezza e a 700 il
+blocco del telefono non vale.
 
-Gli esiti dei 18.491 controlli a tutta larghezza: porta a un altro stato
-7.686, cambia lo schermo 4.837, avviso preciso 2.633, nativo (un campo che
-prende il testo, una zona che prende il fuoco o scorre) 950, apre un menu,
-un cassetto o un dialogo 818, avviso
-della zona 805 (dice che cosa fa nel prodotto quella zona, per esempio la
-griglia del foglio, e il task che la costruisce), spento 447, torna
-indietro 302, menu dell'applicazione 13. Nessun avviso generico.
+Gli esiti dei 19.348 controlli a tutta larghezza: porta a un altro stato
+7.938, cambia lo schermo 5.104, avviso preciso 2.781, nativo (un campo che
+prende il testo, una zona che prende il fuoco o scorre) 1.022, apre un
+menu, un cassetto o un dialogo 855, avviso della zona 847 (dice che cosa fa
+nel prodotto quella zona, per esempio la griglia del foglio, e il task che
+la costruisce), spento 474, torna indietro 314, menu dell'applicazione 13.
+Nessun avviso generico.
 
 «Coperti» sono controlli che stanno sotto qualcosa che non è un controllo
 (il velo di un dialogo, un livello sopra): nell'app il clic non li
 raggiunge, e nel simulatore nemmeno. Non sono clic morti; l'elenco è in
 `coperti-<larghezza>.tsv`, accanto alle foto della prova.
 
-Gli scenari: 17, e i loro 100 passi fotografati.
+Gli scenari: 18, e i loro 136 passi fotografati.
 
 ### I pixel contro la fonte
 
@@ -979,18 +1073,26 @@ zone si sommano, nell'ordine:
    T3 e nella foto dove sono oggi;
 3. l'anello del fuoco della pagina approvata, che il DOM copiato non porta
    (nel simulatore si vede col bottone «Fuoco»);
-4. PA T47 sul telefono: gli interruttori e la riga delle schede delle
-   impostazioni, che nel simulatore sono corretti
-   (`92-prealpha-telefono.css`) e nella foto sono il cerchio di 44 px e i
-   nomi in «…» (differenza 47);
-5. lo spazio che il DOM nuovo prende. Ciò che gli viene dopo scende, sale o
+4. PA T56 e T57: le correzioni del controllo delle viste che si vedono
+   senza fuoco (`92-prealpha-viste.css`), cioè l'azione d'un avviso, le
+   maniglie del blocco, la scheda colorata della lavagna, la tavolozza, la
+   fila col pulsante diviso, le etichette XMP, l'indice delle impostazioni
+   e la cella in modifica sulla carta del file; nella foto sono com'erano
+   (Differenze 49–53);
+5. PA T47 sul telefono: gli interruttori, la riga delle schede delle
+   impostazioni e le righe di un elenco, che nel simulatore sono corretti
+   (`92-prealpha-telefono.css`) e nella foto sono il cerchio di 44 px, i
+   nomi in «…» e i bottoni che si toccano (Differenze 47 e 48);
+6. lo spazio che il DOM nuovo prende. Ciò che gli viene dopo scende, sale o
    va di lato, e ogni suo punto conta come differenza. Se il DOM nuovo sta
    sopra ciò che la foto mostra, il simulatore si riprova scorso in più di
    quanto lo spinge giù (i tre spostamenti più pesanti; si tiene il
    migliore). Poi ogni quadretto di 16 px che ancora differisce conta come
    spiegato solo se si ritrova uguale nella foto del client spostato in
    verticale o di lato, al massimo dell'altezza del DOM nuovo più 64 px
-   (con PA T47, 26 px per interruttore visibile più 64; mai oltre 480).
+   (con PA T47, 26 px per interruttore visibile più 64, mai oltre 480; con
+   PA T56 e T57, 10 px per ogni freccia d'un pulsante diviso e 8 per ciò
+   che si alza, mai oltre 96).
    `confronto.tsv` scrive gli spostamenti trovati e quanto resta;
    `<stato>.resto.png` mostra i punti che restano.
 
@@ -998,69 +1100,275 @@ Due differenze si spiegano per stato, senza zona, perché toccano tutto lo
 schermo: il tema d'esempio (PA T42 cambia i colori di ogni punto, e la foto
 del client è col tema di serie) e l'ispettore compatto di S2 T9 (264 px
 nella foto, 216 nel simulatore: tutto ciò che gli sta a sinistra si sposta,
-e il passo 5 lo misura).
+e il passo 6 lo misura).
 
-Il giro del 2026-11-07, sul simulatore di questo ramo: 1.384 confronti,
-uno per stato, larghezza, luce e fonte (il telefono rifatto dopo il blocco
-di PA T47).
+Il giro del 2026-11-07, sul simulatore verde di questo ramo (le catture
+rifatte col verde di serie, D25, le risposte dell'utente e i blocchi di PA
+T47, T56 e T57): 1.424 confronti, uno per stato, larghezza, luce e fonte.
 
 | Fonte | Confronti | Misurati | Media | Sopra lo 0,5 % | Dopo le zone |
 |---|---|---|---|---|---|
-| cattura pura contro la sua foto | 510 | 510 | 0,15 % | 44 | 42 sotto, 2 con PA T47 |
-| client fuori dagli strati e dal DOM nuovo | 530 | 462 | 0,87 % | 112 | 106 sotto, 6 col tema |
+| cattura pura contro la sua foto | 510 | 510 | 0,22 % | 67 | tutti sotto |
+| client fuori dagli strati e dal DOM nuovo | 570 | 494 | 1,05 % | 191 | 127 sotto, 44 lavagna, 17 tema, 2 tinte, 1 ombra |
 | strato contro la pagina approvata | 344 | 152 | 0,10 % | 2 | tutti sotto |
 
-Non misurati, 260: 192 strati a 700 px e sul telefono (la pagina approvata
-ha una foto sola, alla sua misura) e 68 schermi in cui il DOM nuovo copre
+Non misurati, 268: 192 strati a 700 px e sul telefono (la pagina approvata
+ha una foto sola, alla sua misura) e 76 schermi in cui il DOM nuovo copre
 tutto il client (un dialogo col suo velo: `comp-permesso`, le sette ricette
 col dialogo, `riscontri-b-apre`, `tema-installa`, `tema-sostituisci`,
-`tema-sostituisci-fallito`, `lav-codice-riepilogo`, `lav-codice-problema`).
+`tema-sostituisci-fallito`, `lav-codice-riepilogo`, `lav-codice-problema`,
+e le barre marcate di D6, `aspetto-barre-marcate` e `barra-marcate`, che
+ridisegnano tutta la cornice).
 
-Le 158 righe sopra la soglia, per motivo:
+Le 260 righe sopra la soglia, per motivo:
 
-- **S2 T3 sul telefono** (78 righe): la testata, il bottone della modalità e
-  la barra di formato stanno dove li mette T3; tolti, resta al massimo lo
-  0,14 %;
-- **PA T47 sul telefono** (24 righe): tolti gli interruttori e le schede, e
-  ritrovati i quadretti spostati (ogni riga con un interruttore si accorcia),
-  in 22 righe resta lo 0,00 %. Restano sopra le 2 righe di S185
-  `g2-comp-spegni`, il dialogo sopra la pagina Componenti: 0,86 % nella luce
-  chiara e 0,66 % nella scura. Lì ogni scheda si accorcia di 4,31 px (il
-  testo di due righe, 39,69 px, ora è più alto dell'interruttore), e i
-  titoli salgono di 21,56, 25,88, 34,50 e 60,52 px, misurati nel simulatore
-  prima e dopo il blocco. Sono spostamenti frazionari: gli orli dei
-  caratteri si ridisegnano diversi e non si ritrovano con nessuno
-  spostamento intero. Ciò che resta sono quegli orli
-  (`g2-comp-spegni--tel-*.resto.png`);
-- **il DOM nuovo prende spazio** (35 righe, più le 4 di `tema-anteprima`
-  che hanno anche il tema): tolto il DOM nuovo e ritrovati i quadretti
-  spostati, resta al massimo lo 0,14 % (`mcp-riflesso` a 700, chiara). In
-  16 righe il simulatore si è riprovato scorso in più (per esempio 236 px
-  in `tema-sviluppo`, quanto è alto l'elenco dei temi);
-- **l'anello del fuoco** della pagina approvata (6 righe): tolto, resta al
-  massimo lo 0,43 % (`live-tabella` a 700, scura);
-- **S2 T9, l'ispettore compatto** (2 righe, `g2-compatta`): i quadretti si
-  ritrovano spostati di lato, resta lo 0,00 %;
-- **DOM nuovo dentro uno strato** (2 righe, `lav-lazo`): tolto, resta lo
-  0,03 %;
-- **il tema d'esempio** (11 righe): «salvia», e «carta» sul telefono e
-  nella luce scura, scendono sotto con le altre zone; restano sopra le **6
-  righe di «carta» nella luce chiara**, spiegate per stato perché il tema
-  cambia i colori di tutto lo schermo e la foto del client è col tema di
-  serie:
+- **S2 T3 sul telefono**: la testata, il bottone della modalità e la barra
+  di formato stanno dove li mette T3; tolti, resta al massimo lo 0,07 %;
+- **PA T47 sul telefono**: tolti gli interruttori e le schede, e ritrovati
+  i quadretti spostati, resta lo 0,00 %;
+- **PA T56 e T57** (172 righe, fra cui i fogli con la barra a schede, gli
+  avvisi, la lavagna e le impostazioni): tolte le correzioni e ritrovati i
+  quadretti spostati, fuori dalla lavagna e dai temi resta al massimo lo
+  0,49 % (S81 al telefono, al buio);
+- **il DOM nuovo prende spazio**: tolto il DOM nuovo e ritrovati i
+  quadretti spostati, la riga scende sotto; il simulatore si riprova scorso
+  in più dove il DOM nuovo sta sopra ciò che la foto mostra (per esempio
+  306 px in `tema-sviluppo`);
+- **l'anello del fuoco** della pagina approvata: tolto, la riga scende
+  sotto;
+- **S2 T9, l'ispettore compatto** (`g2-compatta`): i quadretti si ritrovano
+  spostati di lato, resta lo 0,00 %;
+- **la lavagna ancora blu** (44 righe, tutte a 700): `s2/lavagna` e
+  `s2/lavagna-700` hanno il DOM verde (`verde-lavagna.mjs`) e la foto blu
+  di prima di N6 (vedi «Rifare il simulatore»). Il colore conta come
+  differenza: a tutta larghezza resta sotto la soglia, a 700 resta fra lo
+  0,56 e lo 0,57 %. È l'unica eccezione ai pixel, e la riga lo scrive;
+- **il tema d'esempio** (17 righe): «carta», «officina» e l'anteprima di
+  «carta» cambiano i colori di tutto lo schermo, e la foto del client è col
+  tema di serie. Si spiegano per stato:
 
-| Stato | Larghezza | Differenza | Resta dopo le zone |
-|---|---|---|---|
-| S278 `tema-anteprima` | piena | 7,36 % | 1,67 % |
-| S278 `tema-anteprima` | 700 | 8,48 % | 2,41 % |
-| S282 `tema-carta` | piena | 0,71 % | 0,80 % |
-| S282 `tema-carta` | 700 | 1,04 % | 1,67 % |
-| S283 `tema-carta-impostazioni` | piena | 1,93 % | 1,91 % |
-| S283 `tema-carta-impostazioni` | 700 | 2,47 % | 2,43 % |
+| Stato | Larghezza | Luce | Differenza | Resta dopo le zone |
+|---|---|---|---|---|
+| S278 `tema-anteprima` | piena | chiara | 7,43 % | 1,65 % |
+| S278 `tema-anteprima` | 700 | chiara | 8,68 % | 1,82 % |
+| S282 `tema-carta` | piena | chiara | 1,77 % | 0,74 % |
+| S282 `tema-carta` | 700 | chiara | 2,98 % | 1,35 % |
+| S282 `tema-carta` | telefono | chiara | 4,03 % | 0,87 % |
+| S283 `tema-carta-impostazioni` | piena | chiara | 1,76 % | 1,85 % |
+| S283 `tema-carta-impostazioni` | 700 | chiara | 2,25 % | 2,20 % |
+| S297 `tema-officina` | piena | chiara, scura | 2,95 %, 2,68 % | 1,61 %, 1,32 % |
+| S297 `tema-officina` | 700 | chiara, scura | 4,83 %, 4,48 % | 2,32 %, 1,69 % |
+| S297 `tema-officina` | telefono | chiara, scura | 5,21 %, 5,00 % | 1,88 %, 1,84 % |
+| S298 `tema-officina-impostazioni` | piena | chiara, scura | 2,63 %, 1,88 % | 2,78 %, 2,00 % |
+| S298 `tema-officina-impostazioni` | 700 | chiara, scura | 3,56 %, 2,49 % | 3,51 %, 2,43 % |
+
+In S283 e S298 a piena larghezza ciò che resta supera la differenza: la
+percentuale si conta sui punti che restano, e l'indice delle impostazioni,
+tolto come zona di PA T57, differiva meno della media, perché il tema
+cambia i colori di tutto lo schermo.
+
+- **le tinte dell'accento** (2 righe, S276 `tema-rifiutato` a 700): 0,55 %
+  nella luce chiara e 0,56 % nella scura dopo le zone. Ciò che resta
+  (`tema-rifiutato--700-*.resto.png`) sono i nove cerchi delle tinte: la
+  foto del client ha la serie di prima, il simulatore ha Smeraldo per primo
+  (D25, PA T48), e gli orli dei caratteri che il DOM nuovo sposta di
+  frazioni di pixel;
+- **l'ombra del riquadro «Attività»** (1 riga, S232 `mcp-riflesso` a 700,
+  luce chiara): 0,52 % dopo le zone. La riga dell'agente ora sta intera
+  (PA T26), e il riquadro è più alto di 23 px; ciò che resta
+  (`mcp-riflesso--700-light.resto.png`) è la sua ombra sul documento, che
+  sta fuori dal rettangolo del DOM nuovo.
 
 Nessuna riga sopra la soglia è senza motivo. Il DOM scritto a mano (le
 toppe) non ha una foto da cui venire: si approva guardandolo (gli stati
 «nuova» e «composta» di «Gli stati»).
+
+### Il controllo di tutte le viste
+
+I pixel provano che il simulatore è uguale al client, non che il client sia
+senza difetti: il difetto dei 44 px (Differenze 47) è venuto fuori guardando.
+Per D19 A `script/sonda-viste.mjs` passa ogni vista del simulatore, 1.724 in
+tutto: i 282 stati del computer a piena larghezza, a 700 e al telefono, i 16
+del telefono solo al telefono, ognuno nelle due luci, col movimento ridotto.
+In ogni vista guarda lo schermo e, dentro, gli strati (le pagine dei piani
+messe nella cornice), e cerca:
+
+- **taglio**: un testo che finisce in «…» (`text-overflow: ellipsis` con
+  `scrollWidth` maggiore di `clientWidth`) o tagliato a righe
+  (`line-clamp`). Non è un difetto se il testo intero sta nel `title`,
+  nell'`aria-label` o in un suggerimento;
+- **tagliato** ed **esce**: un testo o un controllo tagliato in parte da un
+  contenitore che non scorre, o dal bordo dello schermo; la pagina che
+  scorre di lato;
+- **sovrapposti** e **testi-sovrapposti**: due controlli o due testi che si
+  coprono in parte, nella parte che si vede e nello stesso livello. Un menu,
+  un dialogo, un elenco a comparsa, un suggerimento o uno strato fisso
+  stanno sopra ciò che coprono, non ci si sovrappongono; una superficie di
+  testo (l'editor, la griglia, un albero) ospita i suoi bottoni;
+- **bersaglio**: un controllo sotto i 24 px (44 al telefono), misurato dove
+  il clic lo prende davvero (`elementFromPoint`: conta anche un `::after`
+  più largo o l'etichetta di un campo), che non sia un collegamento in una
+  frase. Sotto i 24 px vale l'eccezione della distanza di WCAG 2.5.8: un
+  cerchio di 24 px attorno al bersaglio che non tocca i vicini, contando
+  solo i vicini che il clic raggiunge (un controllo coperto da un livello
+  non è un bersaglio). Quelli si contano a parte
+  (**bersaglio-distanziato**), e non sono difetti;
+- **contrasto**: un testo sotto 4,5:1 (3 se grande), un segnaposto o un
+  valore sotto 4,5, l'icona di un bottone senza testo sotto 3: le soglie
+  «normal» del contratto del tema (`recipe.ts`, `THRESHOLDS`). Lo sfondo è
+  quello che si vede davvero sotto il testo (`elementsFromPoint`, con veli,
+  sfumature e opacità, rimettendo nella pila gli antenati con
+  `pointer-events: none`). Un testo spento non conta, come in WCAG. Il
+  testo colorato dal file sulla carta del file si conta a parte
+  (**contrasto-file**): il colore è di chi ha scritto il file, non di Fub;
+- **fuoco**: col fuoco della tastiera il controllo non cambia niente
+  (**fuoco-invisibile**), cambia solo un colore (**fuoco-debole**), mostra
+  solo il cursore del testo (**fuoco-solo-cursore**), ha l'anello sotto 3:1
+  contro lo sfondo accanto su tutti e quattro i lati (**anello-contrasto**)
+  o tagliato su tutti e quattro (**anello-tagliato**).
+
+Una vista è **rigorosa** quando ha la sua cattura a quella misura (o è del
+telefono); le altre sono ricomposte dal simulatore (una cattura a tutta
+larghezza mostrata a 700 o al telefono), e un riscontro lì può essere della
+ricomposizione, non del prodotto: si guarda, ma non decide da solo.
+
+Le regole sono state affinate in cinque giri, ognuno guardando a mano i
+riscontri: prima l'anello si giudicava su un lato solo, i livelli si
+sovrapponevano al resto, i `details` chiusi contavano, il colore di un
+testo dentro un antenato con `pointer-events: none` veniva preso dal fondo
+sbagliato, un bersaglio si misurava sul suo rettangolo e non dove il clic
+arriva. PA T55 porta nel banco le stesse regole, già affinate.
+
+**Il giro finale** (2026-11-07, `sim/out-v7`, con i blocchi di PA T47, T56
+e T57): 1.724 viste, tutte montate, 770 rigorose, in 622 secondi. Ha
+guardato 70.020 testi, 90.860 controlli e 73.918 fuochi. 646 bersagli sotto
+i 24 px hanno la loro distanza (bersaglio-distanziato) e non sono difetti.
+Ogni cella dice i riscontri, fra parentesi quanti nelle viste rigorose, e i
+gruppi (lo stesso tipo sullo stesso selettore):
+
+| Tipo | Computer | Telefono | Strati |
+|---|---|---|---|
+| taglio | 236 (56), 8 | 888 (58), 7 | 2.856 (1.158), 8 |
+| tagliato | 26 (14), 8 | 2 (0), 1 | 366 (102), 10 |
+| sovrapposti | – | 532 (10), 8 | 266 (94), 7 |
+| testi-sovrapposti | – | – | 16 (8), 3 |
+| bersaglio | 52 (26), 1 | 1.966 (190), 54 | 1.490 (2), 55 |
+| bersaglio-distanziato | 506 (298), 46 | – | 140 (104), 11 |
+| contrasto | 471 (350), 2 | 1 (0), 1 | 67 (23), 2 |
+| contrasto-file | 332 (202), 2 | 202 (24), 2 | – |
+| fuoco-debole | 104 (56), 3 | 56 (6), 3 | – |
+| fuoco-solo-cursore | 274 (198), 1 | 152 (20), 1 | – |
+| fuoco-invisibile | – | – | 66 (24), 2 |
+| anello-contrasto | – | 45 (0), 13 | – |
+
+Sul computer ogni gruppo che resta ha il suo perché, scritto sotto: i
+falsi allarmi (la «/» e la «›», la griglia, il cursore, le linguette, lo
+«/» che scorre, i titoli del filo in S17, i colori del file, le viste
+ricomposte S109 e S156) e i nomi di Differenze 54, che aspettano i
+suggerimenti di PA T57. Non resta nessun anello tagliato o sotto il 3:1,
+nessun fuoco invisibile e nessun bersaglio senza distanza fuori da S17.
+Rispetto al giro di prima, con la prima versione delle correzioni, le
+intestazioni della griglia al buio non hanno più riscontri (164 in meno),
+la tavolozza di S56 è tutta distanziata (280 bersagli diventano distanziati),
+la pastiglia del titolo di S20 passa e il campo di S166 non ha più
+riscontri. Al telefono e negli strati i numeri sono quelli dei piani che li
+possiedono (sotto).
+
+**I difetti veri.** Vanno in «Differenze fra piani e codice», coi loro
+task; il simulatore li mostra già corretti, nel blocco
+`92-prealpha-viste.css` (PA T56, T57) e in `92-prealpha-telefono.css` (PA
+T47), e il confronto dei pixel toglie le loro zone.
+
+| Differenza | Che cosa | Stati | Task |
+|---|---|---|---|
+| 48 | al telefono le righe di un elenco che si toccano; il tondo della modalità con l'anello fuori, sulla carta | S26, S28, S83 al telefono | PA T47 |
+| 49 | l'anello tagliato su tutti i lati (l'editor, l'anteprima, il grafo); l'anello della pillola dei commenti fuori, sul bianco | S5, S33, S210, ogni editor; S83 nello stretto | PA T56 |
+| 50 | la carta del file al buio coi segni del tema: l'anello e la cella attiva a 2,2:1, la formula a 1,8:1, la cella in modifica scura col margine delle pieghe | i fogli al buio (S43, S50, S51, S56) | PA T56 |
+| 51 | l'azione di un avviso a 4,40–4,48:1 | S23, S30, S32, S33, S41 | PA T56 |
+| 52 | le schede colorate della lavagna trasparenti: titolo e azioni a 4,19–4,27:1 | S132 | PA T56 |
+| 53 | bersagli sotto i 24 px senza distanza: la freccia del pulsante diviso, la tavolozza, la modalità nella banda, il percorso a briciole, le etichette XMP, le maniglie del blocco, la pastiglia del titolo | 27 stati dei fogli, S56, S7, S179, S3, S8, S20 | PA T57 |
+| 54 | nomi in «…» senza il testo intero da nessuna parte | S183–S208, S106, S132, S210, S211 | PA T57 |
+
+I suggerimenti di Differenze 54 sono TypeScript (`setTooltip`): il
+simulatore non li ha, e la sonda continua a segnalare quei nomi finché PA
+T57 non li scrive. Due difetti erano del simulatore e sono corretti nelle
+toppe: la riga dell'agente in S232 senza il testo intero, e il campo
+«Pagine» di S166 scritto come un campo nudo, senza la scatola del kit e
+quindi senza un fuoco visibile (ora è `textField` di `kit/field.ts`, come lo
+scriverà N6 T28).
+
+Il controllo ha trovato anche due difetti delle correzioni stesse, al primo
+giro: la regola dei segni della carta messa sulla riga della griglia
+coloriva anche l'intestazione scelta, che sta sul fondo del tema, e al buio
+la portava a 2,7:1 (ora la regola è sulle celle, PA T56); la tavolozza con
+6 px fra i quadretti, al telefono, fa sovrapporre i quadretti di 44 px
+(una vista ricomposta: va al piano del telefono, sotto).
+
+**I falsi allarmi**, col perché:
+
+- `crumb-sep`, la «/» del percorso a briciole, a 3,07:1: è un segno
+  nascosto ai lettori di schermo, che Scrittoio 2 disegna apposta sopra il
+  3:1 dei segni grafici (`40-sheets.css`); non è testo da leggere;
+- `menu-more`, la «›» di un sottomenu, a 4,20:1: un glifo nascosto ai
+  lettori di schermo, cioè un'icona, e le icone vogliono 3;
+- `fuoco-debole` della griglia: quando la griglia ha una cella attiva
+  (`aria-activedescendant`) il suo fuoco è il bordo della cella, non un
+  anello attorno a tutto (`skin/editors.css`), come in ogni foglio di
+  calcolo. Il bordo però al buio, sulla carta, stava a 2,2:1: quello era un
+  difetto vero (Differenze 50); con PA T56 sta a 6,0:1. Lo stesso vale per
+  la griglia della pagina `celle-griglia` negli strati;
+- `fuoco-solo-cursore`: un editor o un campo di testo col fuoco mostra il
+  cursore che lampeggia, come ogni editor; un anello attorno al testo lo
+  coprirebbe. Il riquadro che scorre (`.cm-scroller`) ha il suo anello (PA
+  T56);
+- i nomi in «…» delle linguette, del percorso a briciole e delle righe
+  dell'albero: il testo intero sta nell'`aria-label` e nel suggerimento del
+  client (`ui/tooltip.ts`), che è JavaScript e nel simulatore non c'è; nel
+  banco (PA T55) si legge;
+- il campo della barra a schede in S59 (`kit-ribbon-input`): un campo fa
+  scorrere il suo valore;
+- le schede e l'elenco del «/» in S9, tagliati di lato o in basso:
+  scorrono (`panel.ts`, i due contenitori con `overflow: auto`);
+- i tagli nelle viste ricomposte a 700 (S109, S156): la ricomposizione
+  tiene aperti insieme il cassetto e l'ispettore, che a 700 il client non
+  apre insieme;
+- un collegamento in una frase (`wikilink`, 106 × 19): WCAG 2.5.8 esclude i
+  bersagli in linea nel testo;
+- i titoli del filo in S17 (`sheet-thread-item`, 12 × 9): l'eccezione
+  «equivalente» di WCAG 2.5.8, perché gli stessi titoli stanno nella
+  struttura dell'ispettore, con righe intere;
+- `contrasto-file`: i colori che il file dà alle sue celle sono
+  dell'autore del file;
+- negli strati: i tagli e le sovrapposizioni della lavagna da lontano (la
+  lavagna è infinita e il bordo la taglia; un gruppo contiene le sue
+  schede); i colori delle penne «poco leggibili», che lo dicono nel nome;
+  le righe e le colonne fermate di `celle-oltre`, che stanno sopra le
+  celle che scorrono; il nome del posto in piedi, che ha il `title`.
+
+**Al telefono.** Il telefono si ridisegna nel suo piano (D1 B), che parte
+da questi riscontri (`prompt-piano-telefono.md`). PA T47 corregge solo ciò
+che la regola dei 44 px deforma. Il resto va al piano del telefono:
+
+- bersagli sotto i 44 px: le celle della griglia (28 px), i campi (30), la
+  ricerca delle impostazioni, le tendine, i cursori, le voci dell'albero,
+  le righe del lanciatore, la maniglia del foglio (28);
+- la barra a schede, che con la regola dei 44 px si sovrappone (S269), e la
+  tavolozza;
+- il titolo della pillola in «…» (il testo intero è nell'etichetta);
+- i suggerimenti, che al tocco non ci sono: un nome tagliato deve stare
+  intero da un'altra parte;
+- gli anelli degli interruttori nelle viste ricomposte.
+
+**Negli strati**, cioè nelle pagine approvate di altri piani, i riscontri
+vanno ai piani che le possiedono, quando la loro pagina si rifà nella
+cornice:
+
+- N6 (`lavagna-schede`): «Converti in nota» (74 × 16) e «Collega» (18 ×
+  18) sotto i 24 px fra schede vicine (S143); una scheda col fuoco
+  che non cambia (S138, S162–S164);
+- A1 (`ricette`): il codice di un problema a 4,36:1 (S193);
+- K5 (`disegno-motore`): l'indice delle impostazioni di `p-dis-8` col nome
+  in «…»; nella cornice lo corregge PA T57.
 
 ### Rifare il simulatore
 
@@ -1105,7 +1413,12 @@ intera, coi comandi, è in `script/finto/LEGGIMI.md`. In breve:
      Scrittoio 2 scriveranno davvero) e l'errore dell'inchiostro della
      facciata WebAssembly;
    - `avvio.patch` su `5006937c` (`anteprima/tutto` con #308), per le
-     quattro catture dell'avvio.
+     quattro catture dell'avvio;
+   - sopra ognuna, `verde.patch` e `verde-avvio.patch`: il verde di serie
+     (D25, PA T48) nel client delle catture, come lo porterà PA T48 nel
+     codice. Le pagine dei piani, che non hanno un client, si ricolorano
+     con `finto/verde-mappa.json` (`VERDE=` per `cattura-piani.mjs`). Il
+     come è in `script/finto/LEGGIMI.md`, «Il verde di serie».
 
    `anteprima/tutto` è un ramo locale: i suoi 23 commit d'unione stanno in
    `script/finto/anteprima-tutto.bundle` (115 KB), gli altri 21 sono già su
@@ -1118,12 +1431,16 @@ intera, coi comandi, è in `script/finto/LEGGIMI.md`. In breve:
    client. Le catture nuove vanno in `catture-r/<cartella>/`.
    `script/ricattura-tutto.sh <client delle catture> <client dell'avvio>`
    le rifà tutte, tranne le pagine dei piani: è come sono state prese le
-   632 catture di oggi, il 2026-11-06, in circa un'ora.
+   632 catture del 2026-11-06, in circa un'ora, e come sono state rifatte
+   verdi il 2026-11-07.
 3. *Dentro il simulatore.* `RIFATTE=catture-r/<cartella>` insieme a `DATI`
    fa entrare nella costruzione solo le catture rifatte.
 
 `s2/lavagna` e `s2/lavagna-700` non hanno definizione: sono le catture
 della lavagna di prima di N6 e restano quelle impacchettate.
+`verde-lavagna.mjs` dà al loro DOM il foglio di serie verde di una cattura
+della stessa luce; la loro foto PNG resta blu, ed è l'unica eccezione ai
+pixel: `foto-sim.mjs` la scrive nel motivo della riga.
 
 **Dopo la Fase A**, quando i piani sono in `main`, la base del client delle
 catture diventa `main`. Le toppe si riportano a mano: `bench/` e
@@ -1140,6 +1457,9 @@ finché i loro task non le hanno scritte nel codice.
   `confronto.tsv`, con il perché di ogni riga sopra lo 0,5 %. Vuole le
   foto delle catture, quindi gira solo dopo aver catturato tutto (dopo,
   `catture-r/` si rinomina in `catture/`);
+- `node sonda-viste.mjs <cartella del simulatore> <cartella d'uscita>`: il
+  controllo di tutte le viste di D19 («Il controllo di tutte le viste»), in
+  `viste.tsv`, `gruppi.tsv` e `riassunto.json`;
 - `node prova-css-fonte.mjs <scrittoio-2.html> <simulatore.html>`: il CSS
   di Scrittoio 2 uguale alla sua fonte (prima
   `git show origin/piano/scrittoio-2:PLAN-ui/scrittoio-2.html > <file>`);
@@ -1156,7 +1476,7 @@ rifare uno stato.
 <!-- dal-prototipo:inizio -->
 <!-- Generato da PLAN-ui/fub-pre-alpha/script/costruisci-sim.mjs: non si modifica a mano. -->
 
-286 stati: 168 catture, 67 composti, 51 nuovi da approvare. 17 scenari.
+298 stati: 168 catture, 67 composti, 63 nuovi da approvare. 18 scenari.
 
 #### Gli stati
 
@@ -1291,6 +1611,13 @@ rifare uno stato.
 | S127 | `disegno-a-spento` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
 | S128 | `disegno-a-fermo` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1); un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-4) |
 | S129 | `disegno-a-apre` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
+| S287 | `disegno-a-cinquecento` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1); un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-2b) |
+| S288 | `disegno-a-senza` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1); un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-5) |
+| S289 | `disegno-a-rifiutato` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; toppe: editors/craft/surface.ts (l'annuncio di K5 6a nella regione viva del disegno; il testo da i18n/catalog.ts); un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
+| S290 | `disegno-a-testo-spento` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-7b) |
+| S291 | `disegno-a-mano` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts (il bottone #status-standing di S2 T4, anche per il disegno), skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
+| S292 | `disegno-a-gomma` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts (il bottone #status-standing di S2 T4, anche per il disegno), skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
+| S293 | `disegno-a-rettangolo` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts (il bottone #status-standing di S2 T4, anche per il disegno), skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
 | S130 | `disegno-a-testo` | Il disegno | nuova, da approvare | K5 T21, K5 T22, PA T27 | un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1); un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-7a) |
 | S131 | `disegno-vuoto` | Il disegno | nuova, da approvare | K5 T21, PA T27 | toppe: editors/craft/surface.ts (il foglio vuoto, testo nuovo in i18n/catalog.ts); un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
 | S132 | `lavagna` | La lavagna | cattura | N6, N4, S2 T23, lavagna in codice | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
@@ -1327,7 +1654,7 @@ rifare uno stato.
 | S163 | `lav-evidenziatore` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); piani/lavagna-schede.html |
 | S164 | `lav-gomma` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); piani/lavagna-schede.html |
 | S165 | `lav-lazo` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/tools/lasso.ts (nuovo, N6 T86 con D-22 a); piani/lavagna-schede.html |
-| S166 | `lav-estratti` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28, N6 T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/parts-picker.ts (nuovo, su kit/popover.ts e kit/list.ts); piani/lavagna-schede.html |
+| S166 | `lav-estratti` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28, N6 T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/parts-picker.ts (nuovo, su kit/popover.ts, kit/list.ts e kit/field.ts); piani/lavagna-schede.html |
 | S167 | `lav-codice-menu` | La lavagna | nuova, da approvare | lavagna in codice, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/chrome/commands.ts ed engine.ts (il menu contestuale, ui/menu.ts); toppe: editors/canvas/chrome/commands.ts (canvas.layout.grid, .row, .column, .tree); piani/lavagna-schede.html |
 | S168 | `lav-codice-riepilogo` | La lavagna | nuova, da approvare | lavagna in codice, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/chrome/commands.ts (canvas.paste_code con kit/dialog.ts); piani/lavagna-schede.html |
 | S169 | `lav-codice-problema` | La lavagna | nuova, da approvare | lavagna in codice, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/chrome/commands.ts (canvas.check: niente si scrive); piani/lavagna-schede.html |
@@ -1365,10 +1692,10 @@ rifare uno stato.
 | S201 | `ricetta-venti` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
 | S202 | `ricetta-cambiata` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
 | S203 | `ricetta-fatta` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
-| S204 | `comp-installato` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts renderInstalledComponent, così com'è oggi (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41") |
-| S205 | `comp-permesso` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts renderInstalledComponent, così com'è oggi (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41"); toppe: panels/settings.ts renderInstalledComponent (il consenso «Concesso» chiede con confirm, che la Scrivania mostra con shells/scrittoio/confirm.ts e kit/dialog.ts), così com'è oggi |
-| S206 | `comp-rotto-tempo` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault» e «Riavvia» (fub-wasm-host: timeout; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi |
-| S207 | `comp-rotto-errore` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault», «Copia il motivo» e «Riavvia» (fub-wasm-host: trap; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi |
+| S204 | `comp-installato` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29, PA T46 | toppe: panels/settings.ts renderInstalledComponent, con le parole del lessico (D18 A, PA T46) (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41") |
+| S205 | `comp-permesso` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29, PA T46 | toppe: panels/settings.ts renderInstalledComponent, con le parole del lessico (D18 A, PA T46) (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41"); toppe: panels/settings.ts renderInstalledComponent (il consenso «Concesso» chiede con confirm, che la Scrivania mostra con shells/scrittoio/confirm.ts e kit/dialog.ts), così com'è oggi |
+| S206 | `comp-rotto-tempo` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29, PA T46 | toppe: panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault» e «Riavvia» (fub-wasm-host: timeout; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi |
+| S207 | `comp-rotto-errore` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29, PA T46 | toppe: panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault», «Copia il motivo» e «Riavvia» (fub-wasm-host: trap; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi |
 | S208 | `comp-aggiorna` | Componenti e ricette | nuova, da approvare | dopo la pre-alpha | toppe: panels/settings.ts renderInstalledComponent: nuovi la riga della versione nuova e «Vedi cosa cambia» (nessun piano lo copre: «Differenze fra piani e codice») |
 | S209 | `ricerca` | La cornice | cattura | S2 T8 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S210 | `grafo` | La cornice | cattura | S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
@@ -1407,17 +1734,20 @@ rifare uno stato.
 | S243 | `g2-app-esterne` | Le impostazioni | cattura | main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S244 | `lav-impostazioni` | Le impostazioni | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
 | S245 | `pen-impostazioni` | Le impostazioni | composta, da approvare | N4 T20, PA T28 | piani/lavagna-penne.html |
-| S246 | `imp-info-prealpha` | Le impostazioni | composta, da approvare | PA T22 | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
+| S246 | `imp-info-prealpha` | Le impostazioni | composta, da approvare | PA T22, PA T48, PA T49 | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
+| S294 | `aspetto-barre` | Le impostazioni | nuova, da approvare | PA T11 | toppe: panels/settings.ts (la riga dal registro: chiave d'host appearance.bars, light \| marked, di serie light; la scrive crates/fub-host/src/settings.rs), il modulo che mette le scelte d'Aspetto sulla radice (data-bars, come appearance.density), i18n/catalog.ts |
+| S295 | `aspetto-barre-marcate` | Le impostazioni | nuova, da approvare | PA T11 | toppe: panels/settings.ts (la stessa riga, scelta cambiata: il segno di modifica e «Azzera» come le altre righe), i18n/catalog.ts |
+| S296 | `barra-marcate` | Le impostazioni | nuova, da approvare | PA T11 | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
 | S247 | `vuoto` | Casi ai margini | cattura | S2 T7 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
-| S248 | `avvio-attesa` | Casi ai margini | cattura | main #308 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
-| S249 | `avvio-lento` | Casi ai margini | cattura | main #308 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
-| S250 | `avvio-guasto` | Casi ai margini | cattura | main #308 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S248 | `avvio-attesa` | Casi ai margini | cattura | main #308, PA T48, PA T49 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S249 | `avvio-lento` | Casi ai margini | cattura | main #308, PA T48, PA T49 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S250 | `avvio-guasto` | Casi ai margini | cattura | main #308, PA T48, PA T49 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S251 | `dati-uno` | Casi ai margini | composta, da approvare | main | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
 | S252 | `dati-nome-lungo` | Casi ai margini | composta, da approvare | main | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
 | S253 | `dati-cinquemila` | Casi ai margini | composta, da approvare | PA T45 | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
 | S254 | `riscontri-a` | I riscontri | composta, da approvare | PA T18 | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
-| S255 | `riscontri-b-menu` | I riscontri | nuova, da approvare | PA T18, D9 B | toppe: ui/app-menu.ts (una voce prima di «Impostazioni»), i18n/catalog.ts |
-| S256 | `riscontri-b-apre` | I riscontri | nuova, da approvare | PA T18, D9 B | toppe: ui/app-menu.ts (kit/dialog.ts, poi l'apertura del browser che c'è) |
+| S255 | `riscontri-b-menu` | I riscontri | nuova, da approvare | PA T52, PA T18 | toppe: ui/app-menu.ts (una voce prima di «Impostazioni»), i18n/catalog.ts |
+| S256 | `riscontri-b-apre` | I riscontri | nuova, da approvare | PA T52 | toppe: ui/app-menu.ts (kit/dialog.ts, poi l'apertura del browser che c'è) |
 | S257 | `tel-nota` | Il telefono (Android di prova) | cattura | S2 T2–T7, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S258 | `tel-ferma` | Il telefono (Android di prova) | cattura | S2 T3, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S259 | `tel-tastiera` | Il telefono (Android di prova) | cattura | S2 T17, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
@@ -1428,7 +1758,7 @@ rifare uno stato.
 | S264 | `tel-ispettore` | Il telefono (Android di prova) | cattura | main, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S265 | `tel-lanciatore` | Il telefono (Android di prova) | cattura | main, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S266 | `tel-avvio` | Il telefono (Android di prova) | cattura | main, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
-| S267 | `tel-avvio-attesa` | Il telefono (Android di prova) | cattura | main #308 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S267 | `tel-avvio-attesa` | Il telefono (Android di prova) | cattura | main #308, PA T48, PA T49 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S268 | `g2-tel-doc-pannello` | Il telefono (Android di prova) | cattura | S2 T21, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S269 | `g2-tel-foglio-aperto` | Il telefono (Android di prova) | cattura | S2 T20, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S270 | `t-cassetto-file` | Il telefono (Android di prova) | cattura | main, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
@@ -1444,10 +1774,12 @@ rifare uno stato.
 | S279 | `tema-tutti-componenti` | I temi e la skin facile | nuova, da approvare | PA T38, PA T39 | toppe: src/dev/catalogo/ (nuovo: il cuore di bench/catalog.ts e bench/kit.ts, caricato con import()), una vista aperta da Aspetto, skin/settings.css |
 | S280 | `tema-tutti-tavolozza` | I temi e la skin facile | nuova, da approvare | PA T38, PA T39 | toppe: src/dev/catalogo/ (nuovo: il cuore di bench/catalog.ts e bench/kit.ts, caricato con import()), una vista aperta da Aspetto, skin/settings.css; toppe: src/dev/catalogo/ (la tavolozza di bench/catalog.ts), skin/settings.css |
 | S281 | `tema-tutti-caratteri` | I temi e la skin facile | nuova, da approvare | PA T38, PA T39 | toppe: src/dev/catalogo/ (nuovo: il cuore di bench/catalog.ts e bench/kit.ts, caricato con import()), una vista aperta da Aspetto, skin/settings.css; toppe: src/dev/catalogo/ (il campionario di bench/samples.ts), skin/settings.css |
-| S282 | `tema-carta` | I temi e la skin facile | nuova, da approvare | PA T42 | theme/examples/carta/ (fogli e skin.css) |
+| S282 | `tema-carta` | I temi e la skin facile | nuova, da approvare | PA T42, PA T54 | theme/examples/carta/ (fogli e skin.css) |
 | S283 | `tema-carta-impostazioni` | I temi e la skin facile | nuova, da approvare | PA T42 | theme/examples/carta/ (fogli e skin.css) |
-| S284 | `tema-salvia` | I temi e la skin facile | nuova, da approvare | PA T42 | theme/examples/salvia/ (i due fogli) |
-| S285 | `tema-salvia-impostazioni` | I temi e la skin facile | nuova, da approvare | PA T42 | theme/examples/salvia/ (i due fogli) |
+| S284 | `tema-mare` | I temi e la skin facile | nuova, da approvare | PA T42, PA T54 | theme/examples/mare/ (i due fogli) |
+| S285 | `tema-mare-impostazioni` | I temi e la skin facile | nuova, da approvare | PA T42 | theme/examples/mare/ (i due fogli) |
+| S297 | `tema-officina` | I temi e la skin facile | nuova, da approvare | PA T42, PA T54 | theme/examples/officina/ (i due fogli e skin.css) |
+| S298 | `tema-officina-impostazioni` | I temi e la skin facile | nuova, da approvare | PA T42 | theme/examples/officina/ (i due fogli e skin.css) |
 
 #### Gli scenari
 
@@ -1457,7 +1789,7 @@ rifare uno stato.
 | `scrivere` | Scrivere una nota | 6 | S1 → S9 → S10 → S6 → S214 → S5 |
 | `riquadri` | Due riquadri | 4 | S21 → S19 → S20 → S22 |
 | `foglio` | Un foglio di calcolo | 8 | S42 → S49 → S78 → S50 → S52 → S64 → S44 → S71 |
-| `disegno` | Un disegno | 6 | S102 → S130 → S106 → S126 → S128 → S115 |
+| `disegno` | Un disegno | 7 | S125 → S130 → S293 → S106 → S126 → S289 → S128 |
 | `lavagna` | Una lavagna | 12 | S156 → S155 → S157 → S158 → S160 → S161 → S162 → S165 → S166 → S167 → S168 → S147 |
 | `conflitto` | Un conflitto | 5 | S23 → S38 → S39 → S41 → S33 |
 | `r01-versione` | Una bozza ritrovata e una versione | 4 | S29 → S30 → S28 → S31 |
@@ -1465,26 +1797,32 @@ rifare uno stato.
 | `componente` | Un componente | 7 | S183 → S205 → S204 → S206 → S207 → S208 → S185 |
 | `ricetta` | Una ricetta (A1) | 5 | S191 → S197 → S198 → S199 → S203 |
 | `vault` | Cambiare vault | 3 | S219 → S235 → S37 |
-| `aspetto` | L'aspetto | 6 | S234 → S234 → S234 → S1 → S1 → S282 |
+| `aspetto` | L'aspetto | 9 | S234 → S234 → S234 → S1 → S1 → S294 → S295 → S296 → S282 |
 | `tastiera` | Solo con la tastiera | 5 | S212 → S230 → S2 → S8 → S239 |
 | `errori` | Quando qualcosa va storto | 6 | S32 → S177 → S36 → S35 → S47 → S250 |
 | `telefono` | Al telefono | 9 | S266 → S257 → S259 → S263 → S270 → S261 → S269 → S286 → S157 |
-| `skin` | Una skin facile | 6 | S272 → S273 → S276 → S277 → S279 → S284 |
+| `skin` | Una skin facile | 7 | S272 → S273 → S276 → S277 → S279 → S284 → S297 |
+| `cambiato` | Che cosa è cambiato (risposte del 2026-11-07) | 31 | S1 → S1 → S248 → S246 → S234 → S294 → S295 → S296 → S125 → S287 → S288 → S289 → S290 → S291 → S111 → S255 → S204 → S26 → S232 → S56 → S51 → S23 → S132 → S3 → S183 → S166 → S282 → S284 → S297 → S297 → S298 |
 
 #### I pezzi nuovi (DOM scritto a mano, `toppe/*.html`)
 
 | Modello | Che cos'è | Destinazione | Task | Stati |
 |---|---|---|---|---|
-| `comp-installato` | Un componente della comunità installato | panels/settings.ts renderInstalledComponent, così com'è oggi (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41") | K1, K2 T3, PA T29 | S204, S205 |
+| `aspetto-barre` | D6 C: la riga «Le barre» in Aspetto (di serie: chiare) | panels/settings.ts (la riga dal registro: chiave d'host appearance.bars, light \| marked, di serie light; la scrive crates/fub-host/src/settings.rs), il modulo che mette le scelte d'Aspetto sulla radice (data-bars, come appearance.density), i18n/catalog.ts | PA T11, D6 C. Dopo «Densità». | S294 |
+| `aspetto-barre-marcate` | D6 C: la riga «Le barre» con «Marcate» scelta | panels/settings.ts (la stessa riga, scelta cambiata: il segno di modifica e «Azzera» come le altre righe), i18n/catalog.ts | PA T11, D6 C | S295 |
+| `comp-installato` | Un componente della comunità installato | panels/settings.ts renderInstalledComponent, con le parole del lessico (D18 A, PA T46) (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41") | K1, K2 T3, PA T29 | S204, S205 |
 | `comp-permesso` | Concedere il consenso: i permessi | panels/settings.ts renderInstalledComponent (il consenso «Concesso» chiede con confirm, che la Scrivania mostra con shells/scrittoio/confirm.ts e kit/dialog.ts), così com'è oggi | K1, K2 T3, PA T29 | S205 |
 | `comp-fermo-tempo` | Un componente fermato: ha superato il tempo | panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault» e «Riavvia» (fub-wasm-host: timeout; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi | K1, PA T29 | S206 |
 | `comp-fermo-errore` | Un componente fermato: un errore interno | panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault», «Copia il motivo» e «Riavvia» (fub-wasm-host: trap; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi | K1, PA T29 | S207 |
 | `comp-aggiorna` | Un componente con una versione nuova (fuori dalla pre-alpha) | panels/settings.ts renderInstalledComponent: nuovi la riga della versione nuova e «Vedi cosa cambia» (nessun piano lo copre: «Differenze fra piani e codice») | fuori dalla pre-alpha | S208 |
-| `banda-motore-pronto` | D5 A: il motore del disegno nella banda (pronto) | shells/scrittoio/frame/status-band.ts (il bottone #status-standing di S2 T4, anche per il disegno), skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S125 |
-| `banda-motore-perse` | D5 A: 3 parti restano come sono, nella banda | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S126 |
-| `banda-motore-spento` | D5 A: motore spento, nella banda | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S127 |
+| `banda-motore-pronto` | D5 A: il motore del disegno nella banda (pronto) | shells/scrittoio/frame/status-band.ts (il bottone #status-standing di S2 T4, anche per il disegno), skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S125, S291, S292, S293 |
+| `banda-motore-perse` | D5 A: 3 parti restano come sono, nella banda | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S126, S289 |
+| `banda-motore-spento` | D5 A: motore spento, nella banda | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S127, S290 |
 | `banda-motore-fermo` | D5 A: motore fermo, nella banda (aperto) | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S128 |
 | `banda-motore-apre` | D5 A: il disegno si sta aprendo, nella banda | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 (K5 non ha un segno per «si apre»: Differenze) | S129 |
+| `banda-motore-cinquecento` | D5 A: 500 parti restano come sono, nella banda (aperto) | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 (il riquadro è quello di K5 2b) | S287 |
+| `banda-motore-senza` | D5 A: senza motore, nella banda (aperto) | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 (il riquadro è quello di K5 5) | S288 |
+| `disegno-rifiutato-annuncio` | D5 A: la modifica rifiutata, detta al lettore di schermo | editors/craft/surface.ts (l'annuncio di K5 6a nella regione viva del disegno; il testo da i18n/catalog.ts) | K5 T22 | S289 |
 | `disegno-vuoto` | Un disegno vuoto: l'invito | editors/craft/surface.ts (il foglio vuoto, testo nuovo in i18n/catalog.ts) | K5 T21, PA T27 | S131 |
 | `menu-nuovo` | «Nuovo»: la scelta del tipo | panels/explorer.ts (il pulsante #new-note apre il menu), ui/menu.ts | PA T43 | S34 |
 | `altra-app` | «Apri con un'altra app» sotto un file che Fub non apre | editors/craft/surface.ts (la stessa vista .craft-empty di craft-rotto, più una riga d'azioni), skin/media.css | PA T30 | S36 |
@@ -1499,7 +1837,7 @@ rifare uno stato.
 | `lav-bolla-molte` | La barra della selezione sopra molte schede | editors/canvas/chrome/selection.ts (nuovo) | N6 T26 e T51, PA T28 | S158 |
 | `lav-vuota` | La lavagna vuota che spiega da sé | editors/canvas/chrome/empty.ts (nuovo) | N6 T26 e T62, PA T28 | S156 |
 | `lav-lazo` | Il lazo che prende schede e tratti | editors/canvas/tools/lasso.ts (nuovo, N6 T86 con D-22 a) | PA T28 | S165 |
-| `lav-estratti` | Il selettore delle parti attaccato alla scheda rilasciata (PDF) | editors/canvas/parts-picker.ts (nuovo, su kit/popover.ts e kit/list.ts) | N6 T28 e T74–T76, PA T28 | S166 |
+| `lav-estratti` | Il selettore delle parti attaccato alla scheda rilasciata (PDF) | editors/canvas/parts-picker.ts (nuovo, su kit/popover.ts, kit/list.ts e kit/field.ts) | N6 T28 e T74–T76, PA T28 | S166 |
 | `lav-codice-menu` | Le tre voci della lavagna in codice nel menu della scheda | editors/canvas/chrome/commands.ts ed engine.ts (il menu contestuale, ui/menu.ts) | lavagna in codice T25, PA T28 | S167 |
 | `lav-codice-disponi` | «Disponi»: il sottomenu | editors/canvas/chrome/commands.ts (canvas.layout.grid, .row, .column, .tree) | lavagna in codice T25, PA T28 | S167 |
 | `lav-codice-riepilogo` | «Incolla codice»: il riassunto prima di scrivere | editors/canvas/chrome/commands.ts (canvas.paste_code con kit/dialog.ts) | lavagna in codice T25, PA T28 | S168 |
@@ -1538,15 +1876,19 @@ rifare uno stato.
 | `theme/scrittoio/skin/welcome.css` | pelle | `83-welcome.css` | S2 T10 | 0.2 KB |
 | `shells/scrittoio/mobile/mobile.css` | telefono | `90-mobile.css` | S2 T3, T4, T5, T7, T11, T27 | 7.6 KB |
 | `theme/scrittoio/series.ts` | serie | `01-series.css` | S2 T11 | 0.3 KB |
-| `theme/scrittoio/recipe.ts` | serie | `02-ruoli.css` | S2 T16, T27 | 1.7 KB |
+| `theme/scrittoio/recipe.ts` | serie | `02-ruoli.css` | S2 T16, T27 | 2.1 KB |
 | `theme/scrittoio/skin/frame.css` | prealpha | `92-prealpha-banda.css` | D5 A: K5 T21–T23 con S2 T4 | 0.9 KB |
 | `theme/scrittoio/skin/draw.css` | prealpha | `92-prealpha-disegno.css` | K5 T21, PA T27 | 0.6 KB |
 | `theme/scrittoio/skin/settings.css` | prealpha | `92-prealpha-impostazioni.css` | PA T29, T36–T38 | 6 KB |
-| `theme/scrittoio/skin/nodes.css` | prealpha | `92-prealpha-lavagna.css` | N6 T26–T28, PA T28 | 3.3 KB |
+| `theme/scrittoio/skin/nodes.css` | prealpha | `92-prealpha-lavagna.css` | N6 T26–T28, PA T28 | 3.5 KB |
 | `theme/scrittoio/skin/media.css` | prealpha | `92-prealpha-media.css` | PA T30 | 0.3 KB |
-| `shells/mobile/mobile.css` | prealpha | `92-prealpha-telefono.css` | PA T47 | 1.3 KB |
-| `theme/examples/carta/ (fogli e skin.css)` | tema | `93-tema-carta.css` | PA T42, D17 | 4.4 KB |
-| `theme/examples/salvia/ (i due fogli)` | tema | `93-tema-salvia.css` | PA T42, D17 | 2.7 KB |
+| `più file (ogni sezione dice il suo)` | prealpha | `92-prealpha-viste.css` | PA T56, T57 | 8.5 KB |
+| `shells/mobile/mobile.css` | prealpha | `92-prealpha-telefono.css` | PA T47 | 2.4 KB |
+| `theme/scrittoio/skin/frame.css e skin/settings.css` | prealpha | `92-prealpha-logo.css` | PA T49, D26 | 1.9 KB |
+| `public/avvio/avvio.css` | prealpha | `92-prealpha-logo-avvio.css` | PA T49, D26 | 1.1 KB |
+| `theme/examples/carta/ (fogli e skin.css)` | tema | `93-tema-carta.css` | PA T42, D17 | 5.4 KB |
+| `theme/examples/officina/ (i due fogli e skin.css)` | tema | `93-tema-officina.css` | PA T42, D17 | 6.2 KB |
+| `theme/examples/mare/ (i due fogli)` | tema | `93-tema-mare.css` | PA T42, D17, D27 | 3.1 KB |
 <!-- dal-prototipo:fine -->
 
 ## Domande aperte
@@ -1566,7 +1908,24 @@ rispondono nella pagina «Le scelte di Fub pre-alpha»
 gruppi. Le risposte restano salvate nella pagina; il pianificatore le legge
 da lì e le scrive qui e in `DECISIONS.md`.
 
+Il 2026-11-07 l'utente ha risposto a tutte: D1–D24 e il via nella pagina,
+D25–D28 in chat e poi nella pagina. Ha approvato anche i 14 gruppi di
+stati. Dopo le prime risposte ha chiesto un Fub verde di serie e ha
+mandato il suo logo: da lì vengono D25–D28. Ogni domanda dice in testa la
+scelta e che cosa cambia nel piano.
+
 ### D1 · Il telefono, per l'APK di prova
+
+**Decisa dall'utente il 2026-11-07: B.** Il telefono ha un piano suo
+prima della pre-alpha: pianificatore, prototipo, poi i task. Il
+pianificatore parte quando Scrittoio 2 è in `main`, per non disegnare due
+volte la cornice; lo avvia l'utente col prompt
+`PLAN-ui/fub-pre-alpha/prompt-piano-telefono.md`. Vale la regola di un
+coder e un pianificatore alla volta. PA T22, PA T31 e la parte del telefono
+di PA T23 aspettano che il piano del telefono sia in `main`. PA T8 e PA T47
+restano: correggono la cornice di oggi, e il piano nuovo parte da lì. Gli
+stati del telefono (S257–S271) restano la variante A, il punto di partenza
+del piano. Il tablet resta fuori.
 
 Oggi il telefono è la variante A di Scrittoio 2, «approvata per ora».
 L'utente ha detto: «sicuramente da modificare pesantemente».
@@ -1594,6 +1953,12 @@ quando Scrittoio 2 è in `main`, per non lavorare due volte sulla cornice.
     nessuno prova Fub su un telefono.
 
 ### D2 · La griglia: approvare `celle-griglia`
+
+**Decisa dall'utente il 2026-11-07: A.** `celle-griglia` è approvato così
+com'è, con le due preferenze di griglia T9. Prima del primo task grafico
+della griglia l'orchestratore scrive nel `PLAN.md` della griglia
+«Approvato: sì, dall'utente il 2026-11-07 (PA D2)», e lo segna in
+`DECISIONS.md`.
 
 Il prototipo della griglia (`piani/celle-griglia.html`) non ha una riga
 «Approvato» nel suo piano. Il prompt dice che D-1…D-8 seguono i consigli,
@@ -1681,13 +2046,22 @@ simulatore stanno a parte, in `piani/`.
 
 ### D5 · La testa del disegno: K5 contro Scrittoio 2 T22
 
-**L'utente ha chiesto di vedere composte sia A sia B (2026-11-05).** Nel
-simulatore ci sono tutte e due; la scelta resta sua. A è S125–S130 (la
-banda col motore, la colonna con Testo), B è S111–S124 (la testata di K5).
-I casi sono gli stessi nelle due forme (pronto, parti perse, motore spento,
-fermo, si apre, Testo): si confrontano scorrendo il gruppo Disegno. Lo
-scenario `disegno` passa per S130, S126 e S128 (A) e finisce su S115 (B),
-lo stesso caso dell'ultimo passo di A.
+**Decisa dall'utente il 2026-11-07: A.** Si costruisce la forma A: la
+colonna del kit con gli strumenti di K5 e Testo, i gettoni del motore nella
+banda, la fila del kit coi comandi della testa. La forma B (S111–S124)
+resta nel simulatore solo come confronto, e la sua didascalia dice «D5 B:
+non si costruisce». I casi che c'erano solo in B sono composti nella forma
+A: 500 parti (S287), senza motore (S288), la modifica rifiutata (S289),
+Testo spento (S290), la mano, la gomma e il rettangolo (S291–S293); la
+penna è S125. Lo scenario `disegno` passa solo per A (S125, S130, S293,
+S106, S126, S289, S128). Per K5 T21–T23 e S2
+T22 la pagina di K5 resta la fonte dei pezzi (la colonna, le righe
+d'opzioni, i riquadri del motore); lo stato A dice dove stanno nella
+cornice.
+
+L'utente aveva chiesto di vedere composte tutte e due le forme
+(2026-11-05), e ha scelto guardandole. A è S125–S130 e S287–S293 (la banda
+col motore, la colonna con Testo), B è S111–S124 (la testata di K5).
 
 Il prototipo di K5 (approvato il 2026-11-05) mette nella colonna degli
 strumenti anche Testo, e i gettoni del motore (`pane-standing*`) nella
@@ -1712,6 +2086,19 @@ una fila del kit, e dice che T22 segue K5 T25 se K5 ha approvato altro.
 
 ### D6 · Il vassoio più chiaro, anche per la fila e per la colonna
 
+**Decisa dall'utente il 2026-11-07: C.** Di serie il vassoio chiaro sotto
+tutte le barre, com'è sul ramo; in Impostazioni › Aspetto la riga «Le
+barre: chiare · marcate» (chiave d'host `appearance.bars`, `light` di
+serie, oppure `marked`). La fa PA T11. Nel simulatore la riga è in S294
+(la pagina Aspetto, dopo «Densità») e cambia davvero tutti gli stati, come
+la densità (D12): S295 è la stessa pagina con «marcate» scelta, S296 un
+documento con la barra di formato e le barre marcate. Sono le due varianti
+che T11 chiedeva di mostrare prima del codice. Il vassoio segue la tinta
+da solo (la formula di S2 T16 parte dalla tinta della carta): col verde di
+serie è `#f8faf8` di giorno e `#18211c` di notte, e il contrasto resta
+sopra le soglie: 15,63, 6,06 e 3,43 di giorno, 13,43, 6,67 e 3,89 di
+notte.
+
 È la domanda aperta di Scrittoio 2: «Il vassoio più chiaro per la barra a
 una riga e per la colonna degli strumenti: se ne riparla; T16 resta com'è».
 
@@ -1728,8 +2115,9 @@ di A, più la libertà di cambiarla, che è anche accessibilità.
 - **A.** Un vassoio solo, il più chiaro, per la barra a
   schede, la fila e la colonna, com'è sul ramo.
   - Tempo: niente.
-  - Qualità: tutte le barre si somigliano, e il contrasto è provato (15,78,
-    6,12 e 3,50 di giorno; 13,47, 6,69 e 3,88 di notte).
+  - Qualità: tutte le barre si somigliano, e il contrasto è provato (il
+    testo, il testo tenue e il contorno: 15,78, 6,12 e 3,50 di giorno;
+    13,47, 6,69 e 3,88 di notte, col blu di allora).
   - Contro: sulla scrivania del disegno (`--draw-desk`) la colonna si
     stacca meno.
 - **B.** Solo la barra a schede è più chiara; la fila e la colonna tornano a
@@ -1744,6 +2132,9 @@ di A, più la libertà di cambiarla, che è anche accessibilità.
     lo schermo o per gli occhi, lo rimette.
 
 ### D7 · `windows-sys`, per fermare i figli della CLI Craft su Windows
+
+**Decisa dall'utente il 2026-11-07: A.** `windows-sys` diretta, solo per
+`cfg(windows)`, alla versione che il lockfile ha già. PA T9 può partire.
 
 Su Windows, quando il tempo scade, oggi si ferma solo la CLI Craft e non
 i suoi figli: serve un job object (DECISIONS, N7 T8). `windows-sys` è già
@@ -1765,6 +2156,11 @@ dipendenza nuova.
 
 ### D8 · I pacchetti per Linux
 
+**Decisa dall'utente il 2026-11-07: B.** La pre-alpha esce anche in
+Flatpak, sul runtime GNOME, accanto a deb, rpm e AppImage: PA T51, in Fase
+D prima di PA T22. Il pacchetto è un file `.flatpak` fra quelli della
+pre-release. Flathub e Wayland restano in N10, fuori.
+
 Col criterio del 2026-11-07 il consiglio passa da A a B: con lo stesso
 WebKitGTK per tutti, ciò che si prova è ciò che vede chi prova.
 
@@ -1782,6 +2178,11 @@ WebKitGTK per tutti, ciò che si prova è ciò che vede chi prova.
   - Qualità: niente aggiornamenti dal sistema.
 
 ### D9 · Il canale dei riscontri della pre-alpha
+
+**Decisa dall'utente il 2026-11-07: B.** I modelli di issue e le
+Discussions di A (PA T18), più «Segnala un problema» nel menu di Fub: PA
+T52, in Fase D. La fonte è S255 e S256; S254, il menu di oggi, resta come
+confronto.
 
 Col criterio del 2026-11-07 il consiglio passa da A a B: più è facile
 mandare un riscontro, più ne arrivano, e più sono completi.
@@ -1802,6 +2203,10 @@ mandare un riscontro, più ne arrivano, e più sono completi.
 
 ### D10 · Due punti sciolti che non trovo
 
+**Decisa dall'utente il 2026-11-07: B.** All'inizio di PA T10 il coder
+cerca i due punti come dice il task. Se non li riproduce, lo scrive nel
+registro e li chiude come «non riprodotti». PA T10 può partire.
+
 «Una stringa inglese nel fake host» e «il conto dei diagrammi Mermaid».
 Ho cercato nei piani, nelle DECISIONS di tutti i rami, nelle issue, nei
 messaggi di commit e nel codice:
@@ -1821,6 +2226,11 @@ errori di tipo (PA T2), la pagina del telefono (PA T8) e `windows-sys`
 - **C.** Fuori dalla pre-alpha.
 
 ### D11 · macOS a mano
+
+**Decisa dall'utente il 2026-11-07: B.** Il giro a mano su macOS lo fa una
+persona con un Mac, o un Mac in affitto nel cloud, con la lista di PA T23.
+Trovare la persona o il Mac tocca all'utente, prima di PA T23;
+l'orchestratore glielo ricorda quando PA T22 è chiuso.
 
 Il «Fatto quando» 3 chiede il giro a mano sugli installer. Qui c'è Linux,
 e l'utente ha un portatile Windows; un Mac non c'è.
@@ -1864,6 +2274,12 @@ lo diceva nella riga sopra lo schermo.
 
 ### D13 · La prova di K2 con una persona: prima o dopo il merge
 
+**Decisa dall'utente il 2026-11-07: A.** Prima di segnare pronta #290,
+riallineata a `main`, l'utente fa il protocollo «Prova dei componenti di
+Fub», da solo o con una persona. Ciò che emerge diventa un task di K2 o
+una riga di `DECISIONS.md`; poi il merge. PA T17 ripete i compiti di K2
+nella cornice nuova, con cinque persone.
+
 K2 D-2 dice: la prova con persone si fa sulla PR in bozza, la fa l'utente
 (se può con una persona che non conosce Fub) e «la PR non si segna pronta
 prima del suo resoconto». Il primo giro di questo piano l'aveva spostata
@@ -1899,6 +2315,9 @@ corsa «release» del ramo.
 
 ### D14 · Il nome «FubDraw» dove le persone lo vedono
 
+**Decisa dall'utente il 2026-11-07: A.** Dove si legge, FubDraw diventa
+Fub o il disegno (PA T33).
+
 FubDraw era l'app dei disegni; ora vive dentro Fub e la sua app è
 archiviata (ADR 0231, #282). Il nome resta in una quarantina di frasi che
 le persone leggono, in italiano e in inglese: «SVG (FubDraw)» fra i
@@ -1931,6 +2350,9 @@ stato `fubdraw` e `fubdraw://live` restano.
 
 ### D15 · Il nome del campo che dice da quale tema si parte
 
+**Decisa dall'utente il 2026-11-07: A.** Il campo si chiama `extends`
+(PA T34).
+
 Il manifest di un tema prende un campo nuovo che dice «parto dalla serie e
 porto solo ciò che cambia» (PA T34). Il nome resta per sempre: lo
 scriveranno tutti i temi. Le altre chiavi del manifest sono in inglese
@@ -1956,6 +2378,9 @@ scriveranno tutti i temi. Le altre chiavi del manifest sono in inglese
 
 ### D16 · Le icone del tema
 
+**Decisa dall'utente il 2026-11-07: A.** Un tema può ridisegnare ogni
+icona, per nome (PA T40).
+
 Le icone passano tutte da un registro solo (`ui/icons.ts`): 43 nella mappa
 di serie, e qualche centinaio registrate dai moduli (il nastro del foglio,
 il documento, il disegno, la barra del formato, Scrittoio). Un tema oggi
@@ -1980,7 +2405,14 @@ validati, quindi un set del tema non apre porte nuove.
   - Qualità: a metà: si vede la cucitura fra la cornice ridisegnata e le
     barre degli editor di serie.
 
-### D17 · L'aspetto dei due temi d'esempio
+### D17 · L'aspetto dei temi d'esempio
+
+**Decisa dall'utente il 2026-11-07: C, e «Salvia» diventa «Mare» (D27).**
+I temi d'esempio sono tre: «Carta», «Officina» e «Mare». Col verde di
+serie (D25) «Salvia» non mostrerebbe niente: sarebbe quasi Fub stesso. PA
+T42 diventa «Tre temi d'esempio». Nel simulatore: «Carta» in S282 e S283,
+«Mare» in S284 e S285 (al posto di «Salvia»), «Officina» in S297 e S298,
+nuovi, da approvare.
 
 La prova d'uscita della skin facile (PA T42) sono due temi: uno di circa
 100 righe sopra la serie, con un'identità diversa, e uno di soli colori.
@@ -2014,6 +2446,10 @@ terzo tema va disegnato nel simulatore prima dell'approvazione.
 
 ### D18 · Le parole della scheda di un componente installato
 
+**Decisa dall'utente il 2026-11-07: A.** La scheda segue il lessico (PA
+T46). Le toppe `comp-*` del simulatore (S204–S208) hanno già le parole
+nuove.
+
 Nella stessa finestra delle Impostazioni, la pagina Componenti dice
 «Spegni» e la scheda di un componente installato dice «Abilitato»,
 «Disabilita il componente prima di rimuoverlo.» e «Rimuovi». Il lessico di
@@ -2037,13 +2473,25 @@ guarda solo i menu (S204–S208, «Differenze fra piani e codice» 46).
 
 ### D19 · Il controllo automatico di tutte le viste
 
+**Decisa dall'utente il 2026-11-07: A.** La sonda è passata il 2026-11-07
+su tutte le viste del simulatore verde («Il controllo di tutte le viste»,
+sotto «I pixel contro la fonte»). I difetti veri sono in «Differenze fra
+piani e codice» (48–54), e li correggono PA T47 (due punti in più), PA
+T56 (la carta del file e il fuoco) e PA T57 (i bersagli e i nomi interi);
+il simulatore li mostra già corretti. I falsi allarmi sono spiegati
+nell'elenco; i riscontri del telefono vanno al piano del telefono, quelli
+dentro le pagine di altri piani ai piani che le possiedono. PA T55 porta
+gli stessi controlli nel banco.
+
 Il difetto dei 44 px (Differenze 47, PA T47) è venuto fuori guardando, non
 da un controllo. «I pixel contro la fonte» prova che il simulatore è uguale
-al client, non che il client sia senza difetti. Le viste sono 1.716 (286
-stati × 3 larghezze × 2 luci), e sono state guardate a campione.
+al client, non che il client sia senza difetti. Le viste sono 1.724 (298
+stati: i 282 del computer a 3 larghezze × 2 luci, i 16 del telefono solo al
+telefono, nelle 2 luci), e prima della sonda erano state guardate a
+campione.
 
 - **A (consigliata).** Prima dell'approvazione una sonda passa tutte le
-  1.716 viste del simulatore e cerca:
+  viste del simulatore e cerca:
   - testi tagliati con «…»;
   - elementi che escono dallo schermo o si sovrappongono;
   - bersagli del tocco sotto i 24 px (44 al telefono);
@@ -2066,6 +2514,13 @@ stati × 3 larghezze × 2 luci), e sono state guardate a campione.
 - **D.** Niente: restano il confronto dei pixel e l'occhio.
 
 ### D20 · La firma degli installer
+
+**Decisa dall'utente il 2026-11-07: A.** Firmati tutti e due: PA T50, in
+Fase D prima di PA T22. Prima del task servono due gesti dell'utente:
+l'iscrizione all'Apple Developer Program (99 USD l'anno, a suo nome) e la
+domanda a SignPath Foundation per Fub; se Fub non è ammesso, un
+certificato OV (circa 150–300 USD l'anno). Le chiavi stanno solo nei
+segreti della CI: il coder non le vede.
 
 La pre-alpha esce senza firma («Fuori scope», installer firmati). Senza
 firma Windows mostra SmartScreen («Windows ha protetto il PC»), e macOS
@@ -2099,6 +2554,9 @@ Verificato il 2026-11-07, da riverificare quando si fa il task:
 
 ### D21 · Cinque difetti di #237 che non perdono dati
 
+**Decisa dall'utente il 2026-11-07: A.** Dentro, in Fase A: PA T53, una
+voce alla volta, con la regola di #237.
+
 #237 tiene aperte cinque voci, fuori dal piano perché «sono UX, non perdono
 dati»:
 - R05: dopo un errore, Attività può tenere la lista vecchia senza dirlo;
@@ -2123,6 +2581,11 @@ dati»:
 - **C.** Fuori, come oggi.
 
 ### D22 · L'editor di testo vestito dal tema (#242)
+
+**Decisa dall'utente il 2026-11-07: A.** I colori dell'editor di testo
+vanno nella pelle: PA T54, in Fase A dopo PA T35 e prima di PA T41, mai
+nella stessa ondata di S2 T20 o della griglia T2–T3. Nel simulatore i tre
+temi d'esempio vestono anche l'editor di testo (S282, S284, S297).
 
 `editors/text/theme.ts` scrive i colori con `EditorView.theme` (42
 `var(--ruolo)`), e alcuni profili Markdown passano ruoli in linea.
@@ -2149,6 +2612,9 @@ ruoli, ma la sua pelle non veste l'editor di testo come veste il resto.
 
 ### D23 · Spostare le parti della finestra
 
+**Decisa dall'utente il 2026-11-07: B.** Fuori: un piano subito dopo la
+pre-alpha, col prototipo e coi riscontri di PA T17.
+
 La skin facile cambia l'aspetto (colori, forme, caratteri, icone), non dove
 stanno le regioni della finestra: per esempio la barra laterale a destra o
 le proprietà in basso. È fuori come «variante della shell».
@@ -2168,6 +2634,9 @@ le proprietà in basso. È fuori come «variante della shell».
 
 ### D24 · Il disegno completo (K6)
 
+**Decisa dall'utente il 2026-11-07: B.** Fuori: K6 (#313) parte dopo la
+pre-alpha, coi riscontri.
+
 Il 2026-11-05 l'utente ha scelto «Tutti tranne K6», col consiglio di allora,
 che pesava anche il tempo. K6 apre tutto il motore del disegno (100
 strumenti, 881 comandi, 130 effetti, 43 pannelli: 1.551 righe di mappa). Il
@@ -2183,6 +2652,111 @@ suo piano è pronto (#313) e ha D1–D12 aperte.
     K6 si costruisce su una base già provata. Anche qui il motivo è la
     qualità, non il tempo.
   - Contro: chi prova la pre-alpha ha il disegno semplice di K5.
+
+### D25 · Quale verde, di serie
+
+**Decisa dall'utente il 2026-11-07: C, il verde del logo.** Dopo le prime
+risposte l'utente ha scritto: «vorrei che il tema base di Fub fosse il
+verde». Ha scelto prima B («Foglia», 145), poi, visto il logo, il verde del
+logo (nella pagina, «tinta 159»). La tinta di serie è **160**, «Smeraldo»:
+le tinte della «f» del logo vanno da 157,6 a 164 e il foglio scuro sta a
+160,6; 160 è un passo di 5°, che il simulatore mostra esatto. Fra 159 e 160
+l'occhio non vede differenza. La «matita blu» (265) resta fra i campioni.
+Lo porta nel codice PA T48. Il logo definitivo lo porta l'utente (D26):
+prima di PA T48 l'orchestratore gli chiede se 160 resta anche col logo
+nuovo, perché cambiare la tinta dopo vuol dire rifare tutte le baseline.
+
+In Fub una sola tinta fa tutto: i bottoni, la scelta, i collegamenti,
+l'anello del fuoco, e un velo dello stesso colore sulle superfici
+(`theme/scrittoio/recipe.ts`). Cambiare la tinta di serie cambia quindi
+tutto, nelle due luci e col contrasto alto.
+
+Il verde dice anche «fatto, salvato», fisso alla tinta 155: con un accento
+a 160 sarebbero lo stesso colore. Per questo PA T48 porta nella ricetta una
+regola: un colore di stato resta almeno 30° lontano dall'accento, dal lato
+dove stava (`statusHue`). Con 160 il «salvato» va a 130, più verso il
+giallo, e resta verde. La regola vale anche per le tinte libere, che oggi
+possono già cadere sopra il rosso o il verde degli avvisi; con la matita
+blu sposta l'informazione da 240 a 235.
+
+- **A.** «Salvia» (130), il verde che c'è già fra i campioni.
+  - Qualità: già provato coi cancelli del contrasto; lontano dal
+    «salvato» anche senza regola. Tira all'oliva, e di notte al lime.
+- **B (consigliata).** «Foglia» (145), il verde pieno.
+  - Qualità: si legge subito come verde, nelle due luci. Serve la regola
+    dei 30°.
+- **C.** «Smeraldo» (160), un verde che tira al blu: il verde del logo.
+  - Qualità: il più fresco; di notte il più luminoso. Serve la regola dei
+    30°; è il più vicino a «Petrolio» fra i campioni.
+- **D.** Una tinta scelta dall'utente nel simulatore.
+
+### D26 · L'icona di Fub: il logo dell'utente
+
+**Decisa dall'utente il 2026-11-07: B, il foglio davanti diventa una
+pagina.** Il logo dell'utente è una «f» a nastro verde sopra dei fogli,
+uno con la griglia. Ridisegnato in vettoriale in
+`PLAN-ui/fub-pre-alpha/logo/`, prende il posto dell'icona di oggi (un
+quadrato viola con una «F» bianca, `crates/fub-app/icons`) e della «f»
+corsiva sul colore dell'accento dentro la finestra. Il foglio bianco
+davanti diventa una pagina con righe di testo e un angolo a quadretti:
+resta il logo dell'utente, dice «note e ogni documento», e si stacca
+dall'icona di Excel. Le forme sono quattro, e l'utente le approva guardando
+la pagina «Il logo» (parte dell'artifact) prima del codice:
+
+| Forma | File | Dove |
+|---|---|---|
+| grande | `fub-logo.svg` | da 64 px in su: l'icona dell'app, l'installer |
+| piccola | `fub-logo-48.svg` | 32–48 px: le Informazioni, l'avvio (56 px) |
+| minima | `fub-logo-16.svg` | 16–24 px: la barra della finestra, le schede, i file |
+| simbolica | `fub-logo-simbolico.svg` | un solo colore: le icone simboliche di Linux |
+
+L'icona adattiva di Android (il davanti e il dietro) nasce dalla forma
+grande in PA T49. Lo porta nel codice PA T49.
+
+**Il logo definitivo lo porta l'utente.** Più tardi, lo stesso giorno,
+l'utente ha trovato il logo definitivo (un gufo, con i fogli, la griglia e
+la scritta «Fub») e ha detto: «intanto lascia il logo che avevi fatto
+prima, poi ci penso io al logo». Il ridisegno di
+`PLAN-ui/fub-pre-alpha/logo/` è quindi **provvisorio**: tiene il posto nel
+simulatore e mostra dove va il logo, a quali misure e con quali gettoni
+(`--logo-*`). PA T49 parte dai file che dà l'utente, nelle quattro forme
+della tabella. Se l'utente dà un'immagine sola, le forme le ridisegna un
+pianificatore, non un coder, e l'utente le approva prima del codice.
+
+- **A.** Fedele, griglia compresa. Contro: ricorda Excel.
+- **B (consigliata).** La stessa idea, il foglio davanti è una pagina.
+- **C.** Solo la «f» a nastro sul foglio scuro. Contro: si perde l'idea
+  dei tanti documenti.
+
+### D27 · Il tema d'esempio «Salvia»
+
+**Decisa dall'utente il 2026-11-07: A, diventa «Mare».** Soli colori: un
+blu profondo e superfici grigio-azzurre, nelle due luci, scelti a mano e
+non dalla ricetta. È il più lontano dal verde di serie, e chi preferiva il
+Fub blu lo ritrova come tema. PA T42.
+
+- **A (consigliata).** «Mare».
+- **B.** «Prugna»: viola e superfici rosate; più difficile da tenere sopra
+  le soglie del contrasto.
+- **C.** Resta «Salvia»: quasi uguale a Fub di serie.
+
+### D28 · Da dove viene l'immagine del logo
+
+**Risposta dell'utente il 2026-11-07: A, l'ha fatta con un'AI.** Lo
+strumento non l'ha detto. La risposta riguardava il primo logo; il logo
+definitivo lo porta l'utente (D26), e la domanda vale per quello. Fub è
+open source: l'icona entra nel repository pubblico e ha bisogno di una
+licenza chiara. **PA T49 non parte** finché l'utente non dice da dove viene
+il logo definitivo (lo strumento, se è un'AI) e l'orchestratore non ha
+letto le condizioni e scritto in `DECISIONS.md` che permettono l'uso in un
+progetto pubblico. Il ridisegno provvisorio del prototipo non entra nel
+repository del prodotto.
+
+- **A.** Fatta dall'utente con un'AI: si controllano le condizioni dello
+  strumento.
+- **B.** Disegnata dall'utente: la licenza la sceglie l'utente.
+- **C.** Di un'altra persona o di un sito: serve il permesso scritto, o un
+  ridisegno originale.
 
 ## Come si implementa
 
@@ -2401,7 +2975,9 @@ cosa, vince il codice.
     S2 T20 e nella griglia; non viene dal simulatore.
 13. **Il vassoio.** S2 dice «T16 resta com'è, se ne riparla» sulla fila e
     sulla colonna, ma T16 (68f48788) le ha già messe sul vassoio più chiaro
-    (`--bar-tray`) (D6).
+    (`--bar-tray`) (D6). Il piano di S2 scrive `#f8fafc` e `#1a1f27`, ma
+    sono la sua formula con la matita blu: la formula parte dalla tinta
+    della carta, e col verde di serie (PA T48) dà `#f8faf8` e `#18211c`.
 
 Le differenze trovate nel secondo giro (2026-11-05), fra la richiesta
 dell'utente, il primo giro e il codice:
@@ -2509,7 +3085,7 @@ verificate su `main` 638358da):
     fa già degli asset URL `data:`: i caratteri del tema non toccano la CSP
     (PA T39). Il `mimeType` del loader però non conosce `woff2`.
 36. **Il README del kit autore** parte dalla copia intera di `sample/`; con
-    PA T42 parte dai due temi d'esempio.
+    PA T42 parte dai tre temi d'esempio.
 
 Le differenze trovate costruendo il simulatore del secondo giro
 (2026-11-06, verificate su `main` 638358da e sul client delle catture):
@@ -2597,6 +3173,59 @@ Le differenze trovate costruendo il simulatore del secondo giro
     (638358da). Nessun piano lo copre, e le scene del telefono del banco non
     aprono le impostazioni. Il simulatore mostra la correzione
     (`92-prealpha-telefono.css`, PA T47); il confronto dei pixel lo dice.
+48. **Altri due effetti dei 44 px al telefono.** Il controllo di tutte le
+    viste (D19) li ha trovati. In un elenco dichiarato (`.ui-list`: il
+    cestino, le versioni) la riga diventa alta quanto il bottone di 44 px, e
+    fra un «Ripristina» pieno e l'altro resta 1 px: sembrano un bottone solo,
+    e l'anello del fuoco cade sul vicino (S26 al telefono). Il tondo della
+    modalità galleggia sulla carta del documento, bianca anche al buio, e il
+    suo anello verde chiaro sta fuori, sul bianco, a 2,2:1 (S83 al
+    telefono). PA T47 li corregge con la regola dei 44 px.
+49. **Anelli del fuoco che non si vedono.** L'anello di serie sta 2 px fuori
+    dal controllo. L'editor (`.cm-editor > .cm-scroller`), l'anteprima
+    (`.pane-preview`) e il grafo (`.graph-main`) riempiono il loro riquadro,
+    che taglia l'anello su tutti e quattro i lati: col fuoco della tastiera
+    non cambia niente (S5, S33, S210). La pillola dei commenti nello
+    stretto (`.rich-side-open`) galleggia sulla carta del documento e ha
+    l'anello d'ombra fuori, sul bianco: al buio 2,2:1 (S83). PA T56.
+50. **La carta del file al buio coi segni del tema.** In `look-file` la
+    carta è chiara in ogni luce, e `structure.css` ricollega i ruoli
+    `--doc-*` ai `--paper-*`. Non ricollega l'anello (`--focus-ring`), la
+    sintassi (`--syn-*`) e l'accento dei segni della griglia (la cella
+    attiva, la selezione, il riempimento, la cella in modifica:
+    `skin/editors.css`, `var(--accent)`). Al buio sul bianco l'anello e la
+    cella attiva stanno a 2,2:1, il «=» e i numeri della formula a 1,8:1
+    (S43, S50, S51). La cella in modifica ha il fondo dei pannelli
+    (`--bg-elev`, scuro) attorno alla riga, e a sinistra la striscia scura
+    del margine delle pieghe: `FIELD_LAYOUT` di `editors/text/engine.ts`
+    toglie i numeri di riga a un campo ma non le pieghe, anche nella barra
+    delle formule. PA T56.
+51. **L'azione di un avviso.** `.link-button` ha l'accento, e sul velo
+    rosso o giallo di un avviso (`.conflict-banner`, `.sheet-notice`) sta a
+    4,40–4,48:1 alla luce, sotto il 4,5 di un testo di 12 px: «Decidi dopo»,
+    «Riprova», «Chiudi», «Scegli ora» (S23, S30, S32, S33, S41). PA T56.
+52. **Le schede colorate della lavagna.** `nodeFill`
+    (`editors/canvas/engine.ts`) dà a una scheda colorata il colore al
+    18–22 % su `transparent`: si vede la scrivania sotto, più scura della
+    carta, e il titolo in grafite, la freccia e «Converti in nota» scendono a
+    4,19–4,27:1 (S132). Una scheda senza colore ha `var(--doc-bg)`. Le linee
+    usano la stessa tabella (`PRESET_FILL`), e lì `transparent` va bene.
+    PA T56.
+53. **Bersagli sotto i 24 px senza distanza.** Sul computer WCAG 2.5.8
+    chiede 24 px, o un cerchio di 24 px attorno al bersaglio che non tocchi
+    i vicini. Non lo hanno: la freccia di un pulsante diviso della barra a
+    schede (14 × 28, in 27 stati), i quadretti della tavolozza (18 × 18 a
+    2 px l'uno dall'altro, S56), la modalità nella banda (22 px), il percorso
+    a briciole che si rinomina (18–20 px, S7), le etichette XMP (20 px,
+    S179), il «+» e la maniglia del blocco (19 × 20, e a riposo a 2,2:1,
+    S3, S8), la pastiglia del titolo (20 × 14, S20). PA T57.
+54. **Nomi in «…» senza il testo intero.** Un nome tagliato si può lasciare
+    se il testo intero sta nel suggerimento o nell'etichetta. Non ci sta:
+    «Permessi dei componenti inclusi» nell'indice delle impostazioni (185
+    px in 183, S183–S208), i nomi degli oggetti del disegno (S106), il
+    titolo di una scheda della lavagna (S132), «Nessuna nota in primo piano»
+    nell'ispettore (S210), il dettaglio di una riga del lanciatore (S211).
+    PA T57.
 
 ## T1 · Il finto del banco dice le impostazioni d'Aspetto dell'host
 
@@ -2923,7 +3552,7 @@ Stato: [ ] da fare
 
 Perché: su Windows, quando il tempo scade, oggi si ferma solo la CLI Craft
 e non i suoi figli. Serve un job object, cioè `windows-sys` come
-dipendenza diretta. Parte solo se la risposta a D7 è A.
+dipendenza diretta. D7 è A (2026-11-07).
 Ramo: piano/fub-pre-alpha.
 Tocca: `Cargo.toml` (la dipendenza del workspace, solo per
 `cfg(windows)`), `crates/fub-host/Cargo.toml`,
@@ -2931,7 +3560,7 @@ Tocca: `Cargo.toml` (la dipendenza del workspace, solo per
 pagina di `docs/` che oggi dice il limite (cercala per «job object»).
 Non toccare: il comportamento su Linux e macOS (`kill_process_group` di
 rustix); `Cargo.lock` oltre a ciò che la dipendenza diretta cambia.
-Dipende da: la risposta a D7.
+Dipende da: nessuno (D7 A, 2026-11-07).
 Cosa fare:
 - `windows-sys` alla versione che il lockfile ha già (0.61.2), con le sole
   feature che servono (`Win32_System_JobObjects`, `Win32_Foundation`,
@@ -2950,18 +3579,18 @@ Fatto quando: il test Windows è verde nella CI completa; la pagina non dice
 più il limite.
 Prova: scripts/check.sh --rapido (qui il test Windows non gira: lo dice
 il resoconto); CI completa
-Stato: [ ] da fare (aspetta D7)
+Stato: [ ] da fare
 
 ## T10 · I due punti sciolti da ritrovare
 
 Perché: «una stringa inglese nel fake host» e «il conto dei diagrammi
 Mermaid» sono nella lista dei punti sciolti, ma non li ho trovati (D10).
 Ramo: piano/fub-pre-alpha.
-Tocca: lo dice la risposta a D10; senza risposta, solo il registro di
+Tocca: D10 è B (2026-11-07): ciò che si trova cercando, oppure solo il registro di
 `DECISIONS.md`.
 Non toccare: le baseline; `check-mermaid.mjs`, se non è il posto del
 difetto.
-Dipende da: la risposta a D10.
+Dipende da: nessuno (D10 B, 2026-11-07).
 Cosa fare:
 - Con la risposta: riproduci, correggi nel proprietario, aggiungi il test
   che fallisce prima.
@@ -2980,41 +3609,46 @@ difetto).
 Fatto quando: un test che falliva passa, oppure il registro dice «non
 riprodotto» con le prove fatte.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare (aspetta D10)
+Stato: [ ] da fare
 
 ## T11 · Il vassoio delle barre
 
-Perché: è la scelta di D6 sul vassoio della fila e della colonna. Con la A
-non c'è niente da fare, e il task si chiude come «non serve».
+Perché: è la scelta di D6 (C, 2026-11-07): di serie il vassoio chiaro sotto
+tutte le barre, e in Impostazioni › Aspetto la riga «Le barre: chiare ·
+marcate», per chi il vassoio chiaro lo vede poco.
 Ramo: piano/fub-pre-alpha.
-Tocca:
-- con B: `apps/client/src/theme/scrittoio/skin/kit.css` (le regole
-  `.kit-bar` e `.kit-rail`);
-- con C: anche `crates/fub-host/src/settings.rs` (una chiave nuova
-  `appearance.bars`, scelta `light` o `marked`, di serie `light`), il
-  modulo che applica le altre scelte d'Aspetto sulla radice (lo stesso di
-  `appearance.density`), `bench/fake-ipc.ts`, `apps/client/src/i18n/catalog.ts`
-  e i test di quei moduli.
-Non toccare: `recipe.ts` (`--bar-tray` resta com'è); la barra a schede, che
-resta sul vassoio chiaro.
-Dipende da: la risposta a D6; S2 T20 in `main`.
+Tocca: `crates/fub-host/src/settings.rs` (una chiave nuova
+`appearance.bars`, scelta `light` o `marked`, di serie `light`, ambito
+macchina come la densità); il modulo che applica le altre scelte d'Aspetto
+sulla radice (`apps/client/src/theme/theme.ts`, lo stesso di
+`appearance.density`); la pelle di serie in `theme/scrittoio/skin/`;
+`apps/client/src/panels/settings.ts` (la riga); `bench/fake-ipc.ts`;
+`apps/client/src/i18n/catalog.ts`; i test di quei moduli.
+Non toccare: `recipe.ts` (il valore di `--bar-tray` è di S2 T16 e segue la
+tinta); la barra
+a schede, che resta sul vassoio delle altre barre.
+Dipende da: S2 T20 in `main`.
 Cosa fare:
-- B: la fila e la colonna prendono `var(--sheet-2)`, e restano i foglietti
-  alzati di notte.
-- C: con `marked`, tutte e tre le barre prendono `--sheet-2`. Il valore sta
-  sulla radice come un attributo (per esempio `data-bars="marked"`), letto
-  dalla pelle; il sanitizer lo deve accettare (`npm run theme:verify`). La
-  riga «Le barre» in Impostazioni › Aspetto, dopo «Densità».
-- Per C, prima di scrivere: lo stato `aspetto` e uno con la barra di
-  formato, nel simulatore, con le due varianti, mostrati all'utente
-  dall'orchestratore.
-Casi limite: il contrasto alto (resta il bordo pieno); un tema `theme-2`
-senza `--bar-tray`; la colonna sulla scrivania del disegno.
-Fatto quando: le foto del banco della barra di formato, del PDF e del
-disegno, nelle due luci, mostrano la variante scelta; `npm run bench:a11y` è
-verde.
+- Con `marked` il modulo mette `data-bars="marked"` sulla radice, e la
+  pelle di serie rimette `--sheet-2` sotto tutte e tre le barre:
+  `:root[data-bars="marked"] { --bar-tray: var(--sheet-2); }`, accanto alla
+  regola del contrasto alto che fa già lo stesso. Con `light` l'attributo
+  non c'è. Il sanitizer dei temi lo deve accettare (`npm run theme:verify`).
+- La riga «Le barre» in Impostazioni › Aspetto, dopo «Densità», con le due
+  scelte «Chiare» e «Marcate», la riga cambiata e «Azzera» come le altre
+  scelte di macchina.
+Dal prototipo: S294 (la riga, chiare), S295 (marcate, con «Azzera»), S296
+(una nota con la barra di formato e le barre marcate). Il DOM della riga è
+in `toppe/aspetto.html` (`aspetto-barre`, `aspetto-barre-marcate`), la
+regola in `blocchi/02-ruoli.css`.
+Casi limite: il contrasto alto (resta `--sheet-2` e il bordo pieno); un
+tema `theme-2` senza `--bar-tray` (la pelle ripiega su `--sheet-2`); la
+colonna sulla scrivania del disegno; cambiare scelta senza ricaricare.
+Fatto quando: la scelta si salva nell'host e sopravvive al riavvio; le foto
+del banco della barra di formato, del PDF e del disegno, nelle due luci,
+mostrano le due varianti; `npm run bench:a11y` è verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run theme:verify
-Stato: [ ] da fare (aspetta D6)
+Stato: [ ] da fare
 
 ## T12 · #237 R04: la griglia e le modifiche che vengono da fuori
 
@@ -3275,7 +3909,7 @@ Tocca: `docs/project/status.md`, `docs/getting-started/prova-la-pre-alpha.md`
 o B), `docs/decisions/README.md` (l'indice, se un piano ha aggiunto ADR).
 Non toccare: le ADR stesse; le pagine delle architetture (le aggiorna il
 task che cambia il comportamento).
-Dipende da: le Fasi A–C in `main`; la risposta a D9.
+Dipende da: le Fasi A–C in `main` (D9 B, 2026-11-07: «Segnala un problema» lo fa PA T52).
 Cosa fare:
 - `status.md`: che cosa c'è nella pre-alpha, che cosa no (la tabella «Fuori
   scope» del piano, con i link alle issue), e i limiti noti (telefono di
@@ -3399,9 +4033,11 @@ Tocca:
   trattino, l'APK di prova allegato, le note della release;
 - `.github/scripts/check-release-gate.mjs` se un job cambia nome;
 - `CHANGELOG.md` (la data).
-Non toccare: la firma (la pre-alpha esce senza); gli altri workflow;
-`mobile.yml` (lo tocca T31).
-Dipende da: le Fasi A–C in `main`; T14, T18, T19–T21, T25 e T31 chiusi.
+Non toccare: la firma (la porta T50, D20 A) e il Flatpak (T51, D8 B):
+qui si controlla solo che ci siano; gli altri workflow; `mobile.yml` (lo
+tocca T31).
+Dipende da: le Fasi A–C in `main`; T14, T18, T19–T21, T25, T31, T50 e T51
+chiusi; il piano del telefono in `main` (D1 B).
 Cosa fare:
 - La versione nei sei posti; `node .github/scripts/check-release-version.mjs`
   passa.
@@ -3418,12 +4054,11 @@ Cosa fare:
   (ancora in bozza: la pubblica una persona).
 - L'APK di debug di `mobile.yml` (aarch64) allegato alla release col nome
   `Fub-0.2.0-prealpha.1-android-sperimentale.apk`.
-- macOS (D11): l'app costruita in CI si avvia (una prova di fumo: parte, la
-  finestra c'è, si chiude), e la pagina della release dice che non è
-  provata a mano.
+- macOS: l'app costruita in CI si avvia (una prova di fumo: parte, la
+  finestra c'è, si chiude). Il giro a mano lo fa T23 (D11 B).
 - La corsa a secco: `gh workflow run release.yml` (`workflow_dispatch`, solo
-  gli artefatti), e controlla che ci siano gli installer dei tre sistemi
-  e l'APK.
+  gli artefatti), e controlla che ci siano gli installer dei tre sistemi,
+  firmati su Windows e su macOS (T50), il `.flatpak` (T51) e l'APK.
 Casi limite: la versione col trattino rifiutata da un passo (MSI, NSIS,
 `versionCode`); il gate che chiede una CI completa verde sul commit; un
 `prealpha.10` (il quarto numero dell'MSI arriva fino a 65535, il
@@ -3436,23 +4071,34 @@ Stato: [ ] da fare
 ## T23 · Il giro a mano sugli installer e sul telefono
 
 Perché: è il «Fatto quando» 3 e 5, la parte a mano. I compiti del giro
-(T14, T26–T30: 27) sugli installer veri, Linux qui e Windows dall'utente;
-l'AI con MCP; l'APK sul telefono vero dell'utente.
+(T14, T26–T30: 27) sugli installer veri, Linux qui, Windows dall'utente e
+macOS da una persona con un Mac (D11 B); l'AI con MCP; l'APK sul telefono
+vero dell'utente.
 Ramo: piano/fub-pre-alpha.
-Chi: l'orchestratore (Linux) e l'utente (Windows, telefono).
+Chi: l'orchestratore (Linux), l'utente (Windows, telefono) e la persona o
+il Mac in affitto che trova l'utente (macOS).
 Tocca: il resoconto in questa sezione; un'issue per ogni difetto trovato.
 Non toccare: il vault vero dell'utente (`vault-tutti`): il giro usa una
 copia temporanea.
-Dipende da: T22 e T31.
+Dipende da: T22 e T31; per macOS, la persona o il Mac trovati dall'utente
+(D11 B).
 Cosa fare:
 - Linux: installa l'AppImage della corsa a secco (senza sudo), apri una
   copia del vault del banco, fai i 27 compiti a mano, e scrivi il
-  risultato di ognuno.
+  risultato di ognuno. Poi installa il `.flatpak` (T51) con `flatpak
+  install --user`, apri un vault fuori dalla sandbox e ripeti i compiti 1,
+  6 e 21 (il primo avvio, una nota, una modifica fatta da un altro
+  programma mentre Fub è aperto).
+- macOS: la persona riceve la lista dei 27 compiti e il dmg firmato e
+  notarizzato (T50); lo apre senza passare da Impostazioni di sistema, fa
+  i compiti e risponde con una riga per compito.
 - Windows: l'orchestratore manda all'utente la lista dei 27 compiti;
   l'utente li fa con l'MSI e risponde. In più: installa la corsa a secco,
   poi una seconda corsa costruita con `prealpha.2` (solo per la prova,
   senza tag), e guarda in «App installate» che ci sia una voce sola. Se
-  sono due, vale il ripiego di T22.
+  sono due, vale il ripiego di T22. L'installer firmato (T50) mostra
+  l'editore nella finestra di Windows; un eventuale avviso di SmartScreen
+  si scrive nel resoconto, com'è.
 - L'AI con MCP (N2 e A1), con `fub-cli mcp --vault <copia>
   --automation-read-root <cartella> --automation-write-root <cartella>`
   e Fub aperto sulla stessa copia:
@@ -3477,8 +4123,9 @@ permessi): non si vede sul banco; il telefono senza penna (il passo si
 scrive «non provato»); il server MCP che trova il vault tenuto dall'app
 (passa dal canale di controllo dell'app: è il caso da provare, non un
 errore).
-Fatto quando: i 27 compiti sono verdi su Linux e su Windows, i tre giri
-MCP fanno ciò che dicono, il telefono ha i cinque passi; o i difetti che
+Fatto quando: i 27 compiti sono verdi su Linux, su Windows e su macOS, il
+Flatpak fa i suoi tre compiti, i tre giri MCP fanno ciò che dicono, il
+telefono ha i cinque passi; o i difetti che
 restano sono accettati dall'utente come noti.
 Prova: il resoconto dei giri.
 Stato: [ ] da fare
@@ -3684,7 +4331,7 @@ rilascio; `docs/development/mobile.md` o la pagina dove `mobile.yml` è
 descritto.
 Non toccare: il job `android` che c'è (l'APK aarch64 resta, è quello che
 va nella release); gli altri workflow.
-Dipende da: niente; T22 e T23 usano la sua foto.
+Dipende da: niente: il job si fa quando si vuole. T22 e T23 usano la sua foto, che si rifà quando il piano del telefono è in `main` (D1 B).
 Cosa fare:
 - Il job costruisce un APK di debug x86_64 (`cargo tauri android build
   --debug --apk --target x86_64`, stessa CLI 2.11.5 e stesso JDK 17 del job
@@ -3760,7 +4407,7 @@ test e le fixture che citano quelle frasi.
 Non toccare: il namespace `fub:`, gli id dei formati e dei comandi,
 `Status::Fubdraw`, `fubdraw://live`, i commenti del codice, le ADR (una
 nota in coda a ADR 0203, non una riscrittura).
-Dipende da: la risposta a D14.
+Dipende da: nessuno (D14 A, 2026-11-07).
 Cosa fare:
 - Cambia le frasi: al posto di «FubDraw» si dice «Fub», «il disegno» o «il
   formato dei disegni di Fub», come suona meglio nella frase; in inglese
@@ -3797,7 +4444,7 @@ Tocca: `crates/fub-abi/src/theme.rs` (`ThemeManifest`: il campo
 `docs/reference/on-disk-layout.md`.
 Non toccare: il montaggio nel loader (è T35); la WIT (il tema non c'è); i
 limiti di dimensione; il motore `theme-1`.
-Dipende da: la risposta a D15 (il nome del campo; qui `extends`, la
+Dipende da: nessuno; D15 è A (2026-11-07): il campo è `extends`, la
 consigliata).
 Cosa fare:
 - `ThemeManifest` prende `extends: Option<String>`, con `#[serde(default,
@@ -4111,7 +4758,7 @@ l'elenco dei nomi, da `iconNames()`).
 Non toccare: la mappa `SVG` di serie e le registrazioni dei moduli (un tema
 non aggiunge nomi: ridisegna quelli che ci sono); la griglia 24, il tratto e
 il colore (`currentColor`).
-Dipende da: T34, T35; la risposta a D16. Mai nella stessa ondata di un task
+Dipende da: T34, T35; D16 A (2026-11-07). Mai nella stessa ondata di un task
 che aggiunge icone alla mappa `SVG` (S2 T14 lo fa).
 Cosa fare:
 - Il manifest dichiara `icons: "icons.json"`. Il file è `{ "<nome>":
@@ -4172,41 +4819,59 @@ Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run
 src/theme/contract-frozen.test.ts && npm run theme:verify
 Stato: [ ] da fare
 
-## T42 · Due temi d'esempio
+## T42 · Tre temi d'esempio
 
-Perché: la skin facile, passo 6, e la sua prova d'uscita. Un tema vero di
-circa 100 righe sopra la serie, con un'identità diversa, e uno di soli
-colori. Tutti e due si installano da cartella, passano i cancelli e si
+Perché: la skin facile, passo 6, e la sua prova d'uscita (D17 C, D27 A).
+Tre punti di partenza lontani fra loro: «Carta», un tema di circa 100 righe
+sopra la serie con un'identità diversa e leggibile a lungo; «Officina»,
+il più lontano dalla serie, la prova più dura dei cancelli; «Mare», di soli
+colori. Tutti e tre si installano da cartella, passano i cancelli e si
 guardano dappertutto.
 Ramo: piano/fub-pre-alpha.
-Tocca: `apps/client/theme/examples/<id>/` (due cartelle nuove:
-`manifest.json`, i fogli, `skin.css` per il primo, i caratteri e le icone
-se D16 lo dice), un test nuovo `apps/client/src/theme/examples.test.ts`, le
-scene del banco dei due temi (`bench/scene.mjs`), il README del kit autore
-(i due temi come punto di partenza, al posto della copia intera di
-`sample/`), la pagina di `docs/product/` che parla dell'aspetto.
+Tocca: `apps/client/theme/examples/<id>/` (tre cartelle nuove, `carta`,
+`officina` e `mare`: `manifest.json`, i fogli, `skin.css` per i primi due,
+i caratteri e le icone), un test nuovo
+`apps/client/src/theme/examples.test.ts`, le scene del banco dei tre temi
+(`bench/scene.mjs`), il README del kit autore (i tre temi come punto di
+partenza, al posto della copia intera di `sample/`), la pagina di
+`docs/product/` che parla dell'aspetto.
 Non toccare: la serie; il contratto; lo snapshot di T41.
-Dipende da: T41; la risposta a D17 (l'aspetto dei due temi).
-Dal prototipo: i blocchi `blocchi/93-tema-*.css` del simulatore (il CSS
-dei due temi, già passato dal sanificatore stretto) e gli stati «vestito da
-…» (gli S-numeri sono in «Dal prototipo»).
+Dipende da: T41; T54 (l'editor di testo vestito dalla pelle, D22 A); le
+icone di «Carta» e «Officina» (D16 A) disegnate da un pianificatore e
+approvate dall'utente prima del task: il simulatore mostra le icone di
+serie, e un coder non le disegna.
+Dal prototipo: i blocchi `blocchi/93-tema-carta.css`,
+`93-tema-officina.css` e `93-tema-mare.css` del simulatore (il CSS dei tre
+temi, già passato dal sanificatore stretto), e gli stati «vestito da …»:
+«Carta» S282 e S283, «Mare» S284 e S285, «Officina» S297 e S298.
 Cosa fare:
-- Il primo (in D17 il consigliato è «Carta») ha `extends: "fub.serie"`, i
-  due fogli, una pelle di circa 100 righe che usa solo hook dello snapshot,
-  i suoi caratteri (T39) e, se D16 è A, una decina di icone.
-- Il secondo («Salvia») ha `extends`, i due fogli e nient'altro.
+- «Carta» ha `extends: "fub.serie"`, il solo foglio del giorno
+  (`lights: ["light"]`, col suo contrasto alto: di notte resta la serie),
+  una pelle di circa 100
+  righe che usa solo hook dello snapshot, il suo carattere con le grazie
+  (T39) e una decina di icone a tratto sottile (T40). La pelle veste anche
+  l'editor di testo, con gli hook che porta T54.
+- «Officina» ha `extends`, i due fogli, una pelle con bordi spessi, angoli
+  dritti ed etichette in monospazio, un carattere monospazio libero (OFL)
+  per le etichette (T39) e una decina di icone quadrate (T40). Di serie è
+  più contrastato della serie; il suo contrasto alto lo è ancora di più.
+- «Mare» ha `extends`, i due fogli e nient'altro: un blu profondo e
+  superfici grigio-azzurre, scelti a mano, come nel blocco del simulatore.
 - Il test prova che:
-  - tutti e due passano `validateThemeBundle` nelle due luci e col
+  - tutti e tre passano `validateThemeBundle` nelle due luci e col
     contrasto alto;
-  - la pelle del primo usa solo hook di `frozen/theme-2.json`;
-  - un componente che il primo non nomina ha lo stile di serie.
+  - le pelli di «Carta» e «Officina» usano solo hook di
+    `frozen/theme-2.json`;
+  - un componente che una pelle non nomina ha lo stile di serie.
 - Le foto del banco, per ciascun tema: la scrivania, una nota, il foglio e
   le Impostazioni, nelle due luci, in contrasto alto, a 700 e al telefono
   (390). Le baseline vengono dal runner.
 - Si installano da cartella nell'app vera (T36), a mano, e il resoconto lo
   dice.
 Casi limite: il contrasto alto (le coppie di contrasto passano anche lì: lo
-prova il test); un componente aggiunto dopo (lo prova il test).
+prova il test); un componente aggiunto dopo (lo prova il test); le
+etichette in monospazio di «Officina» nelle schede strette (si tagliano con
+«…» come quelle di serie, mai sopra il bordo).
 Fatto quando: il test è verde; le scene del banco ci sono, con le baseline
 dal runner; il resoconto dice dell'installazione a mano.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/theme/examples.test.ts
@@ -4352,17 +5017,19 @@ La guardia del lessico (`ui/menu-budget.test.ts`) guarda solo le voci dei
 menu, quindi non se ne accorge (D18, «Differenze fra piani e codice» 46).
 Ramo: piano/fub-pre-alpha.
 Tocca: `apps/client/src/i18n/catalog.ts` (i testi di
-`settings.components.enabled*` e `settings.components.remove*`, in italiano
-e in inglese), `apps/client/src/panels/settings.components.test.ts`,
+`settings.components.enabled*`, `settings.components.consent.hint` e
+`settings.components.remove*`, in italiano e in inglese),
+`apps/client/src/panels/settings.components.test.ts`,
 `apps/client/src/i18n/lexicon-settings.test.ts` (nuovo).
 Non toccare: le chiavi del catalogo e gli id degli elementi (cambiano i
 testi, non le chiavi); `panels/components-page.ts`; la logica della scheda
 («Togli» resta spento finché il componente è acceso).
-Dipende da: la risposta a D18; K2 in `main` (#290, che porta il lessico).
-Dal prototipo: S204–S208 (`comp-*`): le toppe mostrano le parole di oggi,
-perché il codice vince finché D18 non è decisa.
+Dipende da: K2 in `main` (#290, che porta il lessico); D18 è A (2026-11-07).
+Dal prototipo: S204–S207 (`comp-*`, `toppe/componenti.html`): le toppe
+hanno già le parole nuove, rifatte il 2026-11-07 con D18 A. S208 è dopo la
+pre-alpha.
 Cosa fare:
-- Con D18 A, i testi italiani diventano: «Abilitato» → «Acceso»; «Scelta
+- I testi italiani diventano: «Abilitato» → «Acceso»; «Scelta
   di abilitazione non cambiata: {reason}» → «Componente non acceso né
   spento: {reason}»; «Rimuovi» → «Togli»; «Rimuove l'installazione ma
   conserva i suoi dati nel vault.» → «Toglie l'installazione; i suoi dati
@@ -4371,20 +5038,20 @@ Cosa fare:
   «Togli il componente»; «Rimuovere «{name}»? I dati che il componente ha
   salvato nei vault verranno conservati.» → «Togliere «{name}»? I dati che
   il componente ha salvato nei vault restano.»; «Componente non rimosso:
-  {reason}» → «Componente non tolto: {reason}». In inglese: «On», «Turn
-  the component off before removing it.»; «Remove» resta.
+  {reason}» → «Componente non tolto: {reason}»; «È distinto
+  dall'abilitazione: …» → «È distinto da acceso e spento: …». In inglese:
+  «Enabled» → «On»; «Turn the component off before removing it.»; «This is
+  separate from turning it on or off: …»; «Remove» resta.
 - `lexicon-settings.test.ts` passa ogni testo italiano
   `settings.components.*` per le varianti vietate del lessico (`FORBIDDEN`),
   come `menu-budget.test.ts` fa con le voci dei menu.
-- Le toppe `comp-*` del simulatore prendono le parole nuove nello stesso
-  giro in cui D18 si decide (le rifà il pianificatore, non il coder).
 Casi limite: la descrizione accessibile del bottone spento
 (`aria-describedby`) dice la frase nuova; l'avviso di errore di un
 interruttore che non cambia.
 Fatto quando: la scheda dice le parole del lessico; il test nuovo fallisce
 se una variante vietata torna in un testo `settings.components.*`.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/i18n src/panels/settings.components.test.ts
-Stato: [ ] da fare (aspetta D18)
+Stato: [ ] da fare
 
 ## T47 · I 44 px del tocco sul telefono, senza deformare
 
@@ -4398,10 +5065,18 @@ sembra un bottone di scelta. Lo stesso minimo prende il posto di
 fino a 44 px e diventano «Co…», «C…», «S…», invece di scorrere come vuole
 `skin/settings.css` sotto i 760 px. È in `origin/main` (638358da) e nelle
 catture vere («Differenze fra piani e codice» 47). Con l'APK di prova le
-persone lo vedrebbero in ogni pagina di impostazioni.
+persone lo vedrebbero in ogni pagina di impostazioni. Il controllo di tutte
+le viste ha trovato altri due difetti della stessa regola (Differenze 48):
+in un elenco dichiarato (il cestino, le versioni) le righe diventano alte
+quanto il bottone di 44 px e fra un «Ripristina» e l'altro resta 1 px, così
+tre bottoni pieni sembrano uno solo e l'anello del fuoco cade sul vicino; e
+il tondo della modalità, che galleggia sulla carta bianca del documento, al
+buio ha l'anello verde chiaro fuori, sul bianco, a 2,2:1.
 Ramo: piano/fub-pre-alpha.
 Tocca: `apps/client/src/shells/mobile/mobile.css`,
-`apps/client/bench/scene.mjs` (una scena nuova, `mobile-settings`).
+`apps/client/bench/scene.mjs` (una scena nuova, `mobile-settings`, e i
+controlli nuovi di `mobile-trash` e `mobile-document`, se ci sono; se no due
+scene nuove con questi nomi).
 Non toccare: `theme/scrittoio/skin/controls.css` (l'interruttore del
 computer resta com'è); `shells/scrittoio/mobile/mobile.css`; il minimo di
 44 px degli altri bottoni, che resta.
@@ -4409,7 +5084,10 @@ Dipende da: nessuno.
 Dal prototipo: il blocco `92-prealpha-telefono.css` (`<style
 data-destinazione="shells/mobile/mobile.css">` in testa al simulatore); al
 telefono S185 (`g2-comp-spegni`), S183 (`componenti`), S206 e S207
-(`comp-rotto-*`), S233 (`impostazioni`).
+(`comp-rotto-*`), S233 (`impostazioni`); le righe dell'elenco in S26
+(`g2-cestino`) e S28 (`g2-ispettore-3`) al telefono; il tondo della
+modalità in S83 (`documento`) al telefono, al buio, col fuoco (il bottone
+«Fuoco» del simulatore).
 Cosa fare:
 - Nella regola dei 44 px, `input[type="checkbox"]` diventa
   `input[type="checkbox"]:not([role="switch"])`. Le due righe `min-width` e
@@ -4420,12 +5098,26 @@ Cosa fare:
   `inset: -13px -6px`, come nel blocco.
 - `.settings-tab` sul telefono prende `flex: none`, come nel blocco: la
   riga delle schede scorre di lato, coi nomi interi.
+- Fra due righe di un elenco dichiarato (`.ui-list > .ui-stack[data-dir="row"]
+  + .ui-stack[data-dir="row"]`) 8 px (`--space-4`), come nel blocco. È il solo
+  posto dove la regola dei 44 px fa toccare due bottoni pieni: le righe dei
+  menu e degli alberi hanno già il loro passo.
+- Il tondo della modalità (`.pane > .pane-mode-current`, nelle due media
+  query dove galleggia) col fuoco ha l'anello dentro:
+  `outline-offset: calc(-1 * var(--focus-ring-width) - var(--space-2))`,
+  come nel blocco. Dentro il tondo l'anello sta su `--bg-elev`, in tutte e
+  due le luci.
 - La scena `mobile-settings` apre le impostazioni sul telefono, scheda
   «Componenti». Nel suo `prepare` aspetta che ogni interruttore visibile
   misuri 32 × 18; che `document.elementFromPoint` 10 px sopra e sotto il
   suo centro, e 5 px a sinistra, renda l'interruttore stesso; che nessuna
   `.settings-tab` abbia `scrollWidth` maggiore di `clientWidth`. Se una di
   queste cade, la scena non si prepara e `bench:verify` fallisce.
+- `mobile-trash` (il cestino con tre file, al telefono) aspetta che fra due
+  bottoni «Ripristina» vicini ci siano almeno 8 px; `mobile-document` (un
+  documento di videoscrittura al telefono, al buio) dà il fuoco della
+  tastiera al tondo e aspetta che il contorno stia dentro il suo rettangolo
+  (`outline-offset` negativo, più largo della linea).
 Casi limite: in colori forzati l'interruttore torna nativo, 16 × 16
 (`controls.css`, «Garanzie»): con la regola nuova non diventa un quadrato
 di 44 px. Il `::after` trasparente non è un secondo pomello, e la regola
@@ -4434,7 +5126,552 @@ deve vedersi quando le impostazioni si aprono su «Informazioni»: se resta
 fuori dalla riga, si porta in vista con `scrollIntoView({ inline: "nearest"
 })`. Il telefono sdraiato (`mobile-landscape`).
 Fatto quando: sul telefono l'interruttore è il binario della pelle con un
-tocco di 44 px, e le schede delle impostazioni scorrono intere; la scena
-nuova lo controlla; le baseline nuove vengono dal runner.
+tocco di 44 px, le schede delle impostazioni scorrono intere, i bottoni di
+un elenco non si toccano e il tondo della modalità ha l'anello dentro; le
+scene lo controllano; le baseline nuove vengono dal runner.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run bench:verify && npm run bench:a11y
+Stato: [ ] da fare
+
+## T48 · Il verde di serie
+
+Perché: D25. L'utente vuole Fub verde di serie: la tinta di serie passa
+dalla matita blu (265) allo smeraldo (160), il verde del logo. In Fub una
+sola tinta fa tutto, quindi cambia l'aspetto di ogni schermata. Con
+l'accento verde il «salvato» (155) diventerebbe lo stesso colore: serve la
+regola dei 30° fra i colori di stato e l'accento.
+Ramo: piano/fub-pre-alpha.
+Tocca:
+- `apps/client/src/theme/scrittoio/recipe.ts`: `DEFAULT_ACCENT_HUE` = 160;
+  `STATUS_HUE_GAP` = 30 e `statusHue()` nuovi; i quattro colori di stato
+  passano da `statusHue`; il campione `smeraldo` (160) primo in
+  `ACCENT_SWATCHES`, la `matita-blu` resta;
+- `apps/client/src/shells/scrittoio/preferences/accent-control.ts` (il nome
+  del campione) e `apps/client/src/i18n/catalog.ts`
+  (`prefs.accent.smeraldo`: «Smeraldo», «Emerald»);
+- i quattro fogli `theme/scrittoio/sheet-*.css`, rigenerati con `npm run
+  theme:generate`, mai a mano;
+- `crates/fub-host/src/settings.rs`: il valore di serie di
+  `APPEARANCE_ACCENT` (oggi `265.0`);
+- `apps/client/bench/fake-ipc.ts`: il valore e il valore di serie di
+  `appearance.accent`;
+- `apps/client/public/avvio/avvio.css`: i colori dell'avvio, nelle due luci
+  e nel contrasto alto;
+- un test nuovo `apps/client/src/avvio/colori.test.ts`;
+- i test che nominano 265 o la matita blu come serie
+  (`theme/recipe.test.ts`, `theme/preferences.test.ts`,
+  `shells/scrittoio/preferences/preferences.test.ts`,
+  `theme/contrast-fixture.ts`);
+- la pagina di `docs/` che descrive la ricetta (oggi
+  `docs/architecture/frontend-and-ipc.md`, cercala per «accento»).
+Non toccare: le tinte degli altri campioni; i neutri della ricetta, che
+seguono già la tinta da soli, e con loro il vassoio delle barre di S2 T16
+(`--bar-tray`, dalla tinta della carta: `#f8faf8` e `#18211c` col verde);
+`docs/decisions/0208-*.md`, che si cita e non si riscrive; il logo (T49).
+Dipende da: la conferma dell'utente che 160 resta anche col logo
+definitivo (D25, D26); la chiede l'orchestratore prima di partire. Mai
+nella stessa ondata di un task che rifà baseline del banco.
+Dal prototipo: tutto il simulatore è verde. Le catture vengono dai client
+con la ricetta nuova; il diff da copiare è in
+`script/finto/verde.patch` (il client delle catture) e
+`script/finto/verde-avvio.patch` (il client dell'avvio), nelle parti di
+`recipe.ts`, `accent-control.ts`, `catalog.ts`, `fake-ipc.ts` e
+`avvio.css`. I fogli si rigenerano, non si copiano.
+Cosa fare:
+- La ricetta come nel diff: `statusHue(hue, accent)` sposta una tinta di
+  stato a `accent ± 30` quando le sta più vicino di 30°, dal lato dove
+  stava; altrimenti la lascia. Con 160 il «salvato» va a 130; con la
+  matita blu l'informazione va da 240 a 235; il pericolo (27) e
+  l'avvertenza (70) non cambiano.
+- `npm run theme:generate && npm run theme:verify`: i fogli tornano uguali
+  byte per byte alla seconda generazione.
+- Il valore di serie nell'host e nel finto. Il test di
+  `crates/fub-host/src/legacy_tests/switches.rs` lega già il valore
+  dell'host a `DEFAULT_ACCENT_HUE`: deve passare senza toccarlo.
+- `avvio.css` prende i colori dei fogli nuovi (sfondo, testo, tenue,
+  accento, inchiostro, bordo, guasto e i veli), come nel diff.
+- `colori.test.ts` lega l'avvio alla ricetta: per la tinta di serie, nelle
+  due luci e nel contrasto alto, ogni colore di `avvio.css` è uguale al
+  ruolo della ricetta da cui viene. Oggi nessun test lo fa, e un cambio
+  della ricetta lascerebbe l'avvio blu.
+- I mirror, se un valore di serie delle impostazioni entra in un mirror:
+  `UPDATE_MIRROR=1` col comando scritto in testa al file generato.
+Casi limite: chi ha già salvato una tinta resta con la sua (si cambia solo
+il valore di serie, non la preferenza scritta); una tinta libera vicina al
+rosso (27) o all'ambra (70): la regola sposta il segno, e il test lo prova;
+`accentPalette` rende `{}` per la tinta di serie (nessun foglio di
+preferenze in più); il contrasto alto; l'informazione sotto la matita blu.
+Fatto quando: la serie è verde nelle due luci e nel contrasto alto; il
+«salvato» si distingue dall'accento (`recipe.test.ts` prova la distanza
+per ogni campione e per dieci tinte libere); `colori.test.ts` è verde; le
+baseline nuove vengono dal runner.
+Prova: scripts/check.sh --rapido; cd apps/client && npm run theme:generate && npm run theme:verify && npx vitest run src/theme src/avvio; cargo test -p fub-host
+Stato: [ ] da fare
+
+## T49 · Il logo
+
+Perché: D26. Il logo prende il posto dell'icona dell'app (un quadrato viola
+con una «F» bianca, `crates/fub-app/icons`) e della «f» corsiva sul colore
+dell'accento dentro la finestra. Il logo definitivo lo porta l'utente; il
+ridisegno del prototipo è provvisorio e non entra nel prodotto.
+Ramo: piano/fub-pre-alpha.
+Tocca: `crates/fub-app/icons/` (tutte le misure, `icon.icns`, `icon.ico`,
+`source.png`), le icone Android nate da `cargo tauri icon`, una cartella
+nuova `assets/logo/` con le quattro forme SVG e la loro licenza,
+`apps/client/index.html` (il marchio della barra), `panels/settings.ts`
+(le Informazioni), `apps/client/public/avvio/avvio.css` e le tre pagine
+dell'avvio (`index.html`, `document.html`, `mobile.html`),
+`theme/scrittoio/skin/frame.css` e `skin/settings.css`,
+`theme/author/contract.json` (i gettoni nuovi), `THIRD_PARTY_NOTICES.md`
+se la licenza lo chiede, la pagina di `docs/` sull'aspetto.
+Non toccare: gli hook `brand-mark` e `brand-glyph`, che restano: il glifo
+diventa l'SVG del logo, quindi T49 può venire dopo T41; la ricetta.
+Dipende da: i file del logo definitivo, dati dall'utente; D28 chiusa
+(l'origine del logo e le condizioni dello strumento lette e scritte in
+`DECISIONS.md`). Se l'utente dà un'immagine sola, le quattro forme le
+ridisegna prima un pianificatore, e l'utente le approva.
+Dal prototipo: dove va il logo, a quali misure e con quali gettoni. I
+blocchi `92-prealpha-logo.css` (la barra a 24 px, le Informazioni a 48) e
+`92-prealpha-logo-avvio.css` (l'avvio a 56), le parti di `index.html`,
+`settings.ts` e delle pagine dell'avvio in `script/finto/verde.patch` e
+`verde-avvio.patch`; la pagina «Il logo» dell'artifact. Le forme e i nomi
+dei gettoni seguono il logo definitivo, non quello provvisorio.
+Cosa fare:
+- Le quattro forme in `assets/logo/`: grande (da 64 px), piccola (32–48),
+  minima (16–24), simbolica (un colore solo, senza tratti: i tratti
+  diventano superfici, come vogliono le icone simboliche di Linux).
+- Le icone dell'app da un PNG di 1024 × 1024 della forma grande, con
+  `cargo tauri icon`; le misure da 16 a 48 si sostituiscono con le forme
+  piccola e minima rese a quella misura, non ridotte dalla grande.
+- L'icona adattiva di Android: il davanti è la forma grande dentro la zona
+  sicura (66 su 108), il dietro un colore pieno del logo.
+- Il marchio della barra: l'SVG della forma minima a 24 px dentro
+  `.brand-mark`, col bottone trasparente; i colori sono gettoni `--logo-*`
+  della pelle, che non seguono l'accento ma che un tema può ridichiarare.
+- Le Informazioni: la forma piccola a 48 px accanto alla versione.
+- L'avvio: la forma piccola a 56 px al posto della tessera con la «f»,
+  coi colori scritti in `avvio.css` (l'avvio si disegna prima dei fogli).
+Casi limite: il contrasto alto e i colori forzati (il logo resta leggibile;
+in colori forzati prende `CanvasText`); un tema scuro che non ridichiara i
+gettoni; la barra a 700 px e al telefono; l'icona su uno sfondo scuro della
+barra delle applicazioni.
+Fatto quando: le icone dell'app, il marchio, le Informazioni e l'avvio
+mostrano il logo; la licenza è scritta; le foto del banco (barra,
+Informazioni, avvio) hanno le baseline nuove dal runner.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/avvio src/panels; npm run bench:verify
+Stato: [ ] da fare (aspetta i file del logo e D28)
+
+## T50 · La firma degli installer
+
+Perché: D20. Senza firma Windows mostra «Windows ha protetto il PC» e
+macOS blocca l'app finché non la si apre da Impostazioni di sistema. Chi
+prova la pre-alpha deve poterla installare senza avvisi.
+Ramo: piano/fub-pre-alpha.
+Chi: l'orchestratore (tocca la CI); l'utente apre gli account e mette i
+segreti.
+Tocca: `.github/workflows/release.yml` (la firma e la notarizzazione),
+`crates/fub-app/tauri.conf.json` (`bundle.macOS`: l'identità dai segreti,
+il runtime rinforzato; `bundle.windows`: il comando di firma o i suoi
+parametri), un `crates/fub-app/Entitlements.plist` se la notarizzazione lo
+chiede, `.github/scripts/check-release-gate.mjs` se un job cambia nome,
+`docs/development/versioning-and-releases.md`.
+Non toccare: i workflow dei PR (i segreti non devono mai arrivare a un PR,
+nemmeno da un fork); `ci.yml`.
+Dipende da: i gesti dell'utente di D20 (l'Apple Developer Program; la
+domanda a SignPath Foundation, o un certificato OV); i segreti messi
+dall'utente nel repository. Prima di PA T22.
+Cosa fare:
+- macOS: Developer ID Application e notarizzazione nella CI di rilascio,
+  con le variabili che Tauri legge (il certificato in base64, la sua
+  password, l'identità; per la notarizzazione la chiave API di App Store
+  Connect, meglio di Apple ID e password). Il dmg è graffato
+  (`stapler`).
+- Windows, se SignPath ammette Fub: la CI manda gli artefatti senza firma a
+  SignPath con la sua azione GitHub, e riprende l'exe, l'MSI e il setup
+  firmati (la configurazione di SignPath firma anche l'exe dentro l'MSI e
+  dentro il setup). L'editore mostrato è «SignPath Foundation».
+- Windows, se SignPath non ammette Fub: un certificato OV. La chiave oggi
+  sta per regola in un modulo hardware, quindi si firma dalla CI col
+  servizio cloud dell'autorità, chiamato da `bundle.windows.signCommand`.
+- Un passo di controllo dopo la firma: `codesign --verify --deep
+  --strict` e `spctl -a -vv` su macOS, `xcrun stapler validate` sul dmg,
+  `signtool verify /pa` su exe, MSI e setup. Se uno fallisce, il rilascio
+  si ferma.
+- La pagina dei rilasci dice come si rinnovano i certificati, chi li tiene,
+  e che cosa fare se scadono.
+Casi limite: un segreto che manca (il job fallisce con un messaggio chiaro,
+non esce un installer senza firma per sbaglio; una corsa a secco senza
+segreti lo dice e non pubblica); il server del timestamp giù (si riprova);
+SmartScreen che avvisa nelle prime settimane anche con la firma (la pagina
+«Prova la pre-alpha» lo dice); un certificato scaduto.
+Fatto quando: la corsa a secco di T22 produce installer firmati, e i
+controlli dopo la firma passano su tutti e due i sistemi.
+Prova: la corsa a secco (`gh workflow run release.yml`), coi log dei
+controlli.
+Stato: [ ] da fare (aspetta gli account dell'utente)
+
+## T51 · Flatpak
+
+Perché: D8 B. Con Flatpak tutti hanno lo stesso WebKitGTK, quello del
+runtime GNOME: ciò che si prova è ciò che vede chi prova, su ogni
+distribuzione. Flathub resta fuori (N10).
+Ramo: piano/fub-pre-alpha.
+Chi: l'orchestratore (tocca la CI).
+Tocca: `packaging/flatpak/` (nuova: il manifest, il file `.desktop`, il
+metainfo di AppStream), `.github/workflows/release.yml` (un job che
+costruisce il `.flatpak`), `.github/scripts/check-release-gate.mjs`,
+`docs/development/versioning-and-releases.md`, la pagina «Prova la
+pre-alpha» (T18: come si installa).
+Non toccare: deb, rpm e AppImage, che restano; i permessi dell'app nel
+codice.
+Dipende da: nessuno per il manifest; prima di PA T22.
+Cosa fare:
+- L'id dell'app è `io.github.Fubeo.Fub`: Flathub, più avanti, accetta un
+  id `io.github.<organizzazione>` verificato su GitHub, mentre `dev.fub.app`
+  chiederebbe di provare il dominio. Cambiare l'id dopo vorrebbe dire
+  perdere gli aggiornamenti, quindi si sceglie adesso e si scrive in
+  `DECISIONS.md`.
+- Il manifest usa il runtime e l'SDK GNOME alla versione corrente e
+  costruisce Fub dai sorgenti, con le dipendenze di Cargo e di npm
+  scaricate prima e dichiarate nel manifest (il builder non ha la rete).
+- I permessi: `--share=ipc`, `--socket=wayland`, `--socket=fallback-x11`,
+  `--device=dri`. Il vault si apre col portale dei file. Prima di
+  scegliere i permessi dei file, prova che il watcher veda una modifica
+  fatta da un altro programma a un vault aperto dal portale: se non la
+  vede, il manifest prende `--filesystem=home` e i dischi esterni, e
+  `DECISIONS.md` dice perché.
+- Il job costruisce il `.flatpak` in un contenitore col builder di
+  Flatpak e lo allega alla release col nome
+  `Fub-<versione>-linux-x86_64.flatpak`.
+Casi limite: un vault su un disco esterno (`/run/media`, `/media`); la CLI
+`fub-cli` dentro la sandbox (il server MCP di T23); i caratteri di sistema;
+la cartella della configurazione, che nella sandbox sta altrove (il primo
+avvio la crea, e il vault non cambia).
+Fatto quando: il job della release produce il `.flatpak`; T23 lo installa
+e fa i suoi tre compiti.
+Prova: la corsa a secco della release; il giro a mano di T23.
+Stato: [ ] da fare
+
+## T52 · «Segnala un problema»
+
+Perché: D9 B. Più è facile mandare un riscontro, più ne arrivano, e più
+sono completi. Una voce nel menu dell'applicazione apre la pagina della
+issue su GitHub con la versione e il sistema già scritti, e nient'altro.
+Ramo: piano/fub-pre-alpha.
+Tocca: `apps/client/src/ui/app-menu.ts` (la voce prima di
+«Impostazioni»), `apps/client/src/i18n/catalog.ts`, il dialogo con
+`kit/dialog.ts`, l'apertura del browser che c'è già nel host, i loro
+test; i modelli delle issue di T18 (il campo della versione e del
+sistema, che la voce riempie).
+Non toccare: niente telemetria, niente invii da Fub: è il browser
+dell'utente che apre la pagina; i nomi di file, il testo delle note e il
+percorso del vault non entrano mai nell'indirizzo.
+Dipende da: PA T18 (i modelli delle issue); S2 in `main` (il menu
+dell'applicazione).
+Dal prototipo: S255 (la voce nel menu) e S256 (il dialogo che dice che
+cosa si manda); le toppe `riscontri-voce` e `riscontri-apre` di
+`toppe/riscontri.html`.
+Cosa fare:
+- La voce «Segnala un problema…» apre il dialogo di S256: dice la
+  versione e il sistema che finiranno nella pagina, e che non si manda
+  altro. «Apri GitHub» apre
+  `https://github.com/Fubeo/Fub/issues/new?template=…` con la versione e
+  il sistema nei campi del modello; «Annulla» chiude.
+- L'indirizzo si costruisce da una funzione pura con il suo test: solo la
+  versione dell'app, il sistema e l'architettura, codificati.
+Casi limite: nessun browser predefinito (l'errore del host si mostra
+com'è, con l'indirizzo da copiare); la versione di sviluppo (`0.0.0-dev`);
+il menu aperto da tastiera.
+Fatto quando: la voce c'è, il dialogo dice il vero, il test prova che
+l'indirizzo non porta altro.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/ui
+Stato: [ ] da fare
+
+## T53 · Cinque difetti di #237 che non perdono dati
+
+Perché: D21 A. #237 tiene aperte R05–R08 e A03: intoppi che chi prova la
+pre-alpha incontrerebbe. R06 conta col vault da 5.000 file (PA T45), A03
+per chi usa la tastiera.
+Ramo: piano/fub-pre-alpha.
+Tocca, per voce:
+- R05: `apps/client/src/panels/activity.ts` (dopo una riconciliazione
+  fallita la lista vecchia resta senza dirlo);
+- R06: `paletteHost.listDocuments` in `desktop-shell.ts` (una finestra di
+  200 documenti: una nota fuori finestra non compare);
+- R07: `syncRail()` e `clearSearch()` (che cosa si ricorda per vault; un
+  vault non eredita la ricerca o la scelta di un altro);
+- R08: il montaggio delle viste e `synchronize()` (la scheda del grafo
+  dopo un cambio di vault e dopo la chiusura);
+- A03: la casella delle impostazioni e il fuoco dopo Spazio.
+Non toccare: R01–R04, che sono PA T4, T5 e T12.
+Dipende da: S2 T10 per A03 (le impostazioni nuove).
+Cosa fare: la regola di #237, una voce alla volta. Prima un test che la
+riproduce nel proprietario; poi la correzione lì. Se non si riproduce, la
+voce si chiude col test che lo dimostra, e la casella di #237 si spunta
+solo quando il cambio è in `main`.
+- R05: uno stato esplicito nell'elenco quando la lista non è aggiornata
+  («Non aggiornato: {motivo}» e «Riprova»), col testo nuovo nel catalogo.
+- R06: la ricerca o la paginazione che c'è già, mai tutto il vault in
+  memoria.
+- R07: per vault si ricordano la vista della barra laterale e la ricerca
+  scritta; al cambio di vault si parte puliti.
+- R08: non si toglie una chiamata che sembra in più senza una prova che la
+  riproduca.
+- A03: dopo Spazio il fuoco resta sulla casella.
+Casi limite: il vault da 5.000 file (R06); due cambi di vault di fila
+(R07, R08); la tastiera sola (A03).
+Fatto quando: ogni voce ha un test che falliva e passa, o un test che
+prova che non si riproduce; le caselle di #237 si spuntano dopo il merge.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/panels src/shells
+Stato: [ ] da fare
+
+## T54 · L'editor di testo vestito dal tema
+
+Perché: D22 A (#242). `editors/text/theme.ts` scrive i colori con
+`EditorView.theme` (42 `var(--ruolo)`), e alcuni profili Markdown passano
+ruoli in linea. Un tema cambia i ruoli, ma la sua pelle non arriva
+all'editor di testo, che è dove si scrive.
+Ramo: piano/fub-pre-alpha.
+Tocca: `apps/client/src/editors/text/theme.ts`, i profili Markdown che
+passano colori in linea (`editors/text/profiles/markdown/`:
+`code-block.ts`, `details-live.ts`, `proof.ts`, `hanging.ts`,
+`livepreview.ts`, `blocks/handles.ts`, `pending.ts`, `hints.ts`,
+`math-live.ts`: solo le righe di colore), `theme/scrittoio/skin/editors.css`,
+`theme/author/contract.json` e l'anatomia degli editor (gli hook nuovi),
+`.github/scripts/check-inline-theme.mjs` (`theme.ts` esce da `SEPARATE`),
+`docs/architecture/editor-surfaces.md`.
+Non toccare: la geometria dell'editor (resta in `EditorView.theme`); gli
+import di CodeMirror, che restano dentro il pacchetto dell'editor di testo
+(`check-codemirror-boundary.mjs`); le classi `.cm-*`, che non cambiano.
+Dipende da: PA T35 (la pelle del tema sopra quella di serie). Prima di PA
+T41. Mai nella stessa ondata di S2 T20 o della griglia T2–T3, che toccano
+`skin/editors.css`.
+Dal prototipo: i tre temi d'esempio vestono anche l'editor di testo
+(S282, S284, S297); le loro regole `.cm-*` stanno nei blocchi
+`93-tema-*.css`.
+Cosa fare:
+- I colori vanno in `skin/editors.css`, sotto le classi `.cm-*`, con gli
+  stessi ruoli di oggi; in `EditorView.theme` resta solo la geometria.
+- Gli hook nuovi (il contenuto, la riga attiva, la selezione, il cursore,
+  il margine, i segni del Markdown dal vivo) entrano nel contratto e
+  nell'anatomia, così il cancello del tema li conosce e T41 li congela.
+- `check-inline-theme.mjs` non ha più `theme.ts` in `SEPARATE`, e la sua
+  guardia passa.
+Casi limite: le foto dell'editor di testo si rifanno e devono tornare
+uguali a oggi, pixel per pixel, nelle due luci e nel contrasto alto (se
+una cambia, è un difetto); l'ordine dei fogli (la pelle deve vincere sul
+tema base di CodeMirror senza `!important`); i colori forzati.
+Fatto quando: un tema veste l'editor di testo con gli stessi cancelli del
+resto; le foto del banco dell'editor di testo sono uguali a prima; la
+guardia del tema in linea passa senza il caso a parte.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/editors/text src/theme && npm run bench:verify; node ../../.github/scripts/check-inline-theme.mjs
+Stato: [ ] da fare
+
+## T55 · Il controllo di tutte le viste nel banco
+
+Perché: D19 A. Il difetto dei 44 px è venuto fuori guardando, non da un
+controllo. La sonda del 2026-11-07 ha passato tutte le viste del
+simulatore («Il controllo di tutte le viste»); questo task porta gli
+stessi controlli nel banco, così una modifica futura non riporta difetti
+simili.
+Ramo: piano/fub-pre-alpha.
+Tocca: `apps/client/bench/viste.mjs` (nuovo), un file delle eccezioni
+`apps/client/bench/viste-eccezioni.json` (nuovo), `apps/client/package.json`
+(`bench:viste`), `.github/workflows/ci.yml` (il passo nel job del banco,
+accanto a `bench:a11y`), `CONTRIBUTING.md` (fra `ci-required:start/end`),
+`docs/development/testing-and-quality.md`.
+Non toccare: `bench:a11y` e le sue regole; le baseline.
+Dipende da: S2 in `main` (le scene della cornice nuova); dopo PA T47, T56 e
+T57, che tolgono i difetti trovati; prima di PA T15.
+Dal prototipo: `script/sonda-viste.mjs` del simulatore, la sonda del
+2026-11-07, coi suoi controlli, le sue soglie e le regole affinate in
+cinque giri; l'elenco dei falsi allarmi in «Il controllo di tutte le
+viste», che diventa il file delle eccezioni.
+Cosa fare:
+- `bench:viste` passa ogni scena di `bench/scene.mjs` a piena larghezza, a
+  700 e al telefono (390), nelle due luci, col movimento ridotto, e cerca
+  ciò che cerca la sonda, con le stesse regole:
+  - un testo in «…» o tagliato a righe, quando il testo intero non sta né
+    nel `title`, né nell'`aria-label`, né nel suggerimento di
+    `ui/tooltip.ts` (nel banco gira il JavaScript vero, quindi il
+    suggerimento si legge: è ciò che il simulatore non sa fare);
+  - un testo o un controllo tagliato da un contenitore che non scorre o dal
+    bordo; la pagina che scorre di lato;
+  - due controlli o due testi che si coprono nella parte che si vede e
+    nello stesso livello (menu, dialogo, elenco a comparsa, suggerimento,
+    strato fisso stanno sopra; una superficie di testo ospita i suoi
+    bottoni; un `details` chiuso non conta);
+  - un bersaglio sotto i 24 px (44 al telefono), misurato dove il clic lo
+    prende (`elementFromPoint`), che non sia in linea in una frase, con
+    l'eccezione della distanza di WCAG 2.5.8 contata a parte (i vicini
+    contano solo se il clic li raggiunge);
+  - un contrasto sotto le soglie «normal» del contratto del tema, contro lo
+    sfondo che si vede davvero (veli, sfumature, opacità, gli antenati con
+    `pointer-events: none` rimessi nella pila), senza i testi spenti; il
+    testo colorato dal file sulla carta del file a parte;
+  - un fuoco che non cambia niente, che cambia solo un colore, o il cui
+    anello sta sotto 3:1 o è tagliato su tutti e quattro i lati.
+- Ogni eccezione ha la scena, il selettore e il perché; un'eccezione che
+  non serve più fa fallire il controllo, come le eccezioni di
+  `check-inline-theme.mjs`. Le prime sono i falsi allarmi di «Il controllo
+  di tutte le viste»; i riscontri del telefono che aspettano il suo piano
+  sono eccezioni con quel perché, e il piano del telefono le toglie.
+Casi limite: un «…» voluto (un nome lungo in una scheda: eccezione col
+perché); un'icona decorativa (glifi nascosti ai lettori di schermo:
+soglia 3); un elemento nascosto per i lettori di schermo; la griglia, il
+cui fuoco è il bordo della cella attiva (`aria-activedescendant`); il
+cursore di un editor; le animazioni (il controllo gira col movimento
+ridotto).
+Fatto quando: `bench:viste` è verde sulle scene di oggi con le sole
+eccezioni spiegate, e fallisce su una scena di prova con un taglio, un
+bersaglio piccolo e un fuoco invisibile.
+Prova: cd apps/client && npm run bench:viste && npm run bench:a11y
+Stato: [ ] da fare
+
+## T56 · La carta del file e il fuoco, dal controllo delle viste
+
+Perché: D19 A. Il controllo di tutte le viste ha trovato sul computer
+difetti veri di contrasto e di fuoco che nessun piano copre (Differenze
+49–52). Al buio la carta del file resta bianca ma tiene i segni del
+tema: la cella attiva, la selezione e l'anello stanno a 2,2:1, il «=» e i
+numeri della formula a 1,8:1, e la cella in modifica ha un bordo scuro.
+Tre superfici hanno l'anello tagliato su tutti i lati; l'azione di un
+avviso sta a 4,4:1; una scheda colorata della lavagna lascia vedere la
+scrivania sotto.
+Ramo: piano/fub-pre-alpha.
+Tocca:
+- `theme/scrittoio/structure.css`: l'anello che rientra; nella carta del
+  file (`.look-file .rich-desk, .look-file .grid-viewport`), l'anello e la
+  sintassi;
+- `theme/scrittoio/skin/editors.css`: i segni della griglia sulla carta, la
+  cella in modifica, la pillola dei commenti;
+- `theme/scrittoio/skin/drawers.css`: l'azione di un avviso;
+- `editors/text/engine.ts` (`FIELD_LAYOUT`) e il suo test dei campi
+  (`editors/grid/engine.test.ts`, «barra delle formule ed editor di cella
+  sono campi»);
+- `editors/canvas/engine.ts` (`nodeFill`) e il suo test;
+- `docs/architecture/rich-surface-and-proofing.md` (la carta del file).
+Non toccare: il contratto del tema (`theme/author/contract.json`): nessun
+ruolo nuovo, la carta usa quelli che ha (`--paper-link`, `--doc-fg`,
+`--doc-gutter-fg`, `--doc-danger`); le intestazioni della griglia, che sono
+cornice e tengono il tema; `PRESET_FILL` per le linee della lavagna; il
+colore che un file dà alle sue celle; `look-adattato`; il telefono (PA T47).
+Dipende da: S2 in `main`; dopo PA T48 (i rapporti si rimisurano col verde
+di serie). Mai nella stessa ondata di PA T54, della griglia T2–T3 o di S2
+T20, che toccano `skin/editors.css`. Prima di PA T55, che lo controlla.
+Dal prototipo: le sezioni «PA T56» del blocco `92-prealpha-viste.css`, ognuna
+col suo file; al buio S43 (`foglio-modifica`), S50 (`g2-foglio-formula`),
+S51 (`g2-foglio-scrive`), S56 (la cella attiva); alla luce S23
+(`conflitto`), S30, S32, S33, S41 (gli avvisi), S132 (`lavagna`); col bottone
+«Fuoco» S5 e S33 (l'anteprima), S210 (il grafo), S83 nello stretto (la
+pillola dei commenti).
+Cosa fare:
+- L'anello di `.cm-editor > .cm-scroller`, `.pane-preview` e `.graph-main`
+  rientra della sua larghezza (`outline-offset: calc(-1 *
+  var(--focus-ring-width))`), accanto a `:focus-visible` in `structure.css`.
+- Nella regola della carta di `structure.css` si aggiungono `--focus-ring:
+  var(--paper-link, #2c57cd)`, i dieci `--syn-*` sull'inchiostro della carta
+  (`--doc-fg`; `--syn-comment` su `--doc-gutter-fg`, `--syn-invalid` su
+  `--doc-danger`), con le righe del blocco. Come in Excel, nella formula
+  hanno colore solo i riferimenti, che usano già `--doc-author-*`.
+- In `skin/editors.css`, sotto la regola dei segni della griglia, i segni
+  della carta (le celle, `.grid-cell`, che portano `.active` e `.selected`;
+  `.grid-selection`, il riempimento, lo spostamento, il taglio, la cella in
+  modifica, gli oggetti, il segno dei commenti) ridichiarano `--accent` e
+  `--accent-veil` dalla carta; la cella in modifica ha `background:
+  var(--doc-bg)` e il quadratino del riempimento il bordo della carta. Le
+  regole sono quelle del blocco. Non la riga (`.grid-row`): contiene anche
+  l'intestazione, che sta sul fondo del tema, e al buio l'intestazione
+  scelta scenderebbe a 2,7:1 (il primo giro del simulatore l'ha fatto, e il
+  controllo l'ha trovato).
+- `FIELD_LAYOUT` prende `foldGutter: false`; il test dei campi controlla
+  anche che non ci sia `.cm-foldGutter`.
+- `.rich-side-open:focus-visible` ha l'anello dentro la pillola (`box-shadow:
+  inset …, var(--shadow-2)`).
+- `.conflict-banner .link-button` e `.sheet-notice .link-button` hanno
+  `color: var(--accent-soft)`; il passaggio resta com'è.
+- In `editors/canvas/engine.ts` la scheda colorata mescola il colore nella
+  carta: una tabella `NODE_FILL` con `var(--doc-bg)` al posto di
+  `transparent`, usata da `nodeFill`; `PRESET_FILL` resta per `edge.color`.
+  Il test: una scheda col colore 4 ha uno sfondo che finisce in
+  `var(--doc-bg))`, una linea col colore 4 un tratto che finisce in
+  `transparent)`.
+- La pagina della carta in `docs/` dice che l'anello, la sintassi e i segni
+  della griglia stanno sulla carta.
+Casi limite: un tema senza `--paper-*` (i ripieghi della serie, `#2c57cd`);
+il contrasto alto (`--paper-link` del contrasto alto è più scuro, i
+rapporti si rimisurano); i colori forzati (gli anelli restano `outline`, e
+`box-shadow` sparisce: la pillola ha già un bordo); una scheda con un colore
+libero (`#rrggbb`) resta del suo autore; la riga attiva della cella in
+modifica resta `--doc-active-line` della carta; un documento di
+videoscrittura al buio con un'immagine selezionata (i segni della carta del
+documento: se usano `--accent`, stessa regola sui segni, non su tutta la
+scrivania).
+Fatto quando: le viste dette sopra passano `bench:viste` (PA T55) senza le
+righe di Differenze 49–52; i test di `FIELD_LAYOUT` e di `nodeFill`
+sono verdi; le baseline nuove vengono dal runner.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/editors/text src/editors/grid src/editors/canvas && npm run typecheck && npm run bench:verify && npm run bench:a11y
+Stato: [ ] da fare
+
+## T57 · I bersagli e i nomi interi, dal controllo delle viste
+
+Perché: D19 A. Il controllo di tutte le viste ha trovato sul computer
+bersagli sotto i 24 px che non hanno distanza dai vicini (WCAG 2.5.8) e nomi
+in «…» il cui testo intero non sta da nessuna parte, né nel suggerimento né
+nell'etichetta (Differenze 53 e 54).
+Ramo: piano/fub-pre-alpha.
+Tocca:
+- `theme/scrittoio/skin/document.css` e
+  `editors/text/profiles/markdown/blocks/handles.ts` (le maniglie del
+  blocco), `editors/text/profiles/markdown/hints.ts` (la pastiglia del
+  titolo);
+- `theme/scrittoio/skin/editors.css` (la tavolozza), `structure.css`
+  (`.kit-ribbon-arrow`), `skin/frame.css`, `skin/sheets.css`,
+  `skin/media.css`, `skin/settings.css`;
+- i suggerimenti: `editors/spatial/tools/objects.ts`,
+  `editors/canvas/engine.ts`, `ui/views.ts`,
+  `shells/scrittoio/launcher/launcher.ts`, coi test accanto.
+Non toccare: `ui/tooltip.ts` (si usa `setTooltip` com'è); i bersagli del
+telefono (PA T47 e il piano del telefono); le eccezioni del controllo
+(«Il controllo di tutte le viste»: un collegamento in una frase, il segno
+di un commento in una cella, le celle della griglia).
+Dipende da: PA T56 (tocca anche `editors/canvas/engine.ts` e
+`skin/editors.css`). Mai nella stessa ondata di PA T54, della griglia T2–T3
+o di S2 T20. Prima di PA T55.
+Dal prototipo: le sezioni «PA T57» del blocco `92-prealpha-viste.css`; S3
+(`nota-blocchi`) e S8 (`blocchi-menu`), S20 (la pastiglia), S56
+(`g2-foglio-ribbon-palette`: tavolozza e frecce), S179 (`g2-raw-girato`, le
+etichette XMP), S183 (`componenti`, l'indice), S106 (gli oggetti del
+disegno), S132 (la lavagna), S210 («Segue»), S211 (il lanciatore).
+Cosa fare:
+- Le maniglie del blocco: 24 × 24 nella forma di `handles.ts` (base theme),
+  `opacity: 0.75` a riposo in `skin/document.css`.
+- La pastiglia del titolo: un `::after` trasparente con `inset: -6px -4px
+  -6px 0` nella forma di `hints.ts` (24 × 25); non cambia aspetto. Verso
+  destra e non verso sinistra: nel riquadro di destra, a sinistra della
+  pastiglia, c'è il divisorio dei riquadri, che prende il clic.
+- La tavolozza: `gap: var(--space-3)`, passo 24.
+- `.kit-ribbon-arrow`: `min-width: 24px`. La fila si allunga di 10 px per
+  ogni pulsante diviso: il gruppo che non ci sta va nel «più», come oggi.
+- `.status-item--button`, `.sheet-title` e `.craft-xmp-tag`: `min-height:
+  var(--space-8)`.
+- L'indice delle impostazioni: il nome va a capo (`.settings-toc-link`
+  alta quanto serve, `.settings-toc-name` senza «…»), come nel blocco.
+- `setTooltip` col testo intero sull'elemento che prende passaggio e
+  fuoco: la riga di un oggetto del disegno (il nome della riga), la testata
+  di una scheda della lavagna (il titolo), l'intestazione dell'ispettore
+  («Segue: …»), la riga del lanciatore (titolo, dettaglio e scorciatoia).
+  Quando il testo cambia, `setTooltip` di nuovo; il suggerimento muore con
+  l'elemento.
+- I test accanto: ogni riga detta sopra ha il suggerimento col testo
+  intero, anche lungo.
+Casi limite: la maniglia più larga nel margine stretto della Live a 700
+(non deve uscire dalla carta); la pastiglia di un titolo di sesto livello,
+dove la riga è alta 24 px; una fila della barra a schede alla 700; un nome
+dell'indice di tre righe (con un carattere grande d'Aspetto); i
+suggerimenti con la tastiera (il fuoco li apre, Esc li chiude) e il
+movimento ridotto.
+Fatto quando: le viste dette sopra passano `bench:viste` senza le righe di
+Differenze 53 e 54; i test dei suggerimenti sono verdi; le baseline nuove
+vengono dal runner.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/editors src/ui src/shells/scrittoio/launcher src/panels && npm run typecheck && npm run bench:verify && npm run bench:a11y
 Stato: [ ] da fare

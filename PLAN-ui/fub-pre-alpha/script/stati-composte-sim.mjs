@@ -36,8 +36,9 @@ const pen = (id, scena, nome, dice) =>
   c("Lavagna", id, nome, `p-penne-${scena}`, LAV, { dice, task: ["N4 T20", "N4 T21", "PA T28"], piano: "lavagna-penne", fuoco: "button" });
 const cel = (id, scena, nome, dice) =>
   c("Foglio", id, nome, `p-celle-${scena}`, CEL, { dice, task: ["griglia T1–T9", "PA T27"], piano: "celle-griglia", fuoco: ".grid-cell, [role=gridcell]" });
+// D5 = A (2026-11-07): la forma B resta solo come confronto, e lo dice.
 const dis = (id, scena, nome, dice, task = ["K5 T21–T23", "PA T27"]) =>
-  c("Disegno", id, nome, `p-dis-${scena}`, DIS, { dice, task, piano: "disegno-motore", fuoco: ".kit-rail-slot, button" });
+  c("Disegno", id, nome, `p-dis-${scena}`, DIS, { dice: `D5 B: non si costruisce. ${dice}`, task, piano: "disegno-motore", fuoco: ".kit-rail-slot, button" });
 // I dialoghi e l'avviso delle ricette stanno sopra la nota su cui girano.
 const NOTA = { base: "nota-riposo" };
 const ric = (id, scena, nome, dice, sopra = false) =>
@@ -89,7 +90,7 @@ export const COMPOSTE = [
   cel("celle-riempimento", "riempimento", "Celle: la maniglia di riempimento", "La maniglia nell'angolo: il riempimento tratteggiato mostra dove arriva."),
   cel("celle-copiata", "copiata", "Celle: copiata", "Le celle copiate: il bordo tratteggiato che scorre."),
   cel("celle-tagliata", "tagliata", "Celle: tagliata", "Le celle tagliate: il tratteggio e il testo smorzato."),
-  // ── Disegno: la pagina di K5 com'è approvata (D5 = B) ─────────────────────
+  // ── Disegno: la pagina di K5 com'è approvata (D5 B, solo confronto) ───────
   dis("dis-b-pronto", "1", "Disegno (D5 B): il motore pronto", "La testa di K5 com'è approvata: il motore acceso, gli strumenti a sinistra."),
   dis("dis-b-perse", "2a", "Disegno (D5 B): 3 parti perse", "Il motore apre il file ma tre parti non le sa tenere: lo dice prima di salvare."),
   dis("dis-b-cinquecento", "2b", "Disegno (D5 B): 500 parti", "Un disegno grande: il motore lavora, la testa resta pronta."),

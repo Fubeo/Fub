@@ -79,6 +79,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; background: var(--code-
 .ind.fatta { background: var(--accent); color: var(--on-accent); box-shadow: none; }
 .ind.manca { background: var(--warn-wash); color: var(--warn); box-shadow: none; }
 .ind.sep { margin-left: 8px; }
+@media (min-width: 900px) { .indice { flex-wrap: wrap; row-gap: 6px; overflow-x: visible; } }
 .copia-box { display: grid; gap: 6px; }
 .copia-box textarea { width: 100%; min-height: 8rem; font: 12.5px/1.45 var(--font-mono); padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--sheet); color: var(--text); }
 
@@ -101,6 +102,21 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
 .d-contesto p { margin: 0 0 8px; max-width: 74ch; }
 .d-contesto ul { margin: 0 0 8px; padding-left: 20px; max-width: 74ch; }
 .d-contesto li + li { margin-top: 3px; }
+.d-contesto p.dopo { padding: 8px 12px; border-radius: 8px; background: var(--accent-wash); }
+.verdi { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 6px 0 12px; }
+.verdi figure { margin: 0; min-width: 0; }
+.verdi figcaption { font-size: 13px; line-height: 1.35; margin-bottom: 5px; }
+.verdi figcaption b { display: block; }
+.verdi a { display: block; border-radius: 8px; overflow: hidden; box-shadow: 0 0 0 1px var(--border); }
+.verdi a + a { margin-top: 6px; }
+.verdi a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.verdi img { display: block; width: 100%; height: auto; }
+@media (max-width: 720px) { .verdi { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.logo-prova { display: grid; grid-template-columns: minmax(0, 240px) minmax(0, 1fr); gap: 16px; align-items: center; margin: 6px 0 12px; }
+.logo-prova > img { width: 100%; height: auto; border-radius: 12px; background: var(--sheet-2); box-shadow: 0 0 0 1px var(--border); }
+.logo-piccoli p { margin: 0 0 8px; }
+.logo-piccoli span { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; margin: 0 14px 8px 0; font-size: 12px; color: var(--muted); }
+@media (max-width: 520px) { .logo-prova { grid-template-columns: minmax(0, 1fr); } .logo-prova > img { max-width: 240px; } }
 
 .opzioni { border: 0; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; min-width: 0; }
 .opz { position: relative; display: grid; grid-template-columns: 1.9rem minmax(0, 1fr); gap: 2px 12px; padding: 11px 13px; border-radius: 10px; background: var(--bg-elev); box-shadow: inset 0 0 0 1px var(--border); cursor: pointer; }
@@ -167,8 +183,9 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
     <div>
       <p class="sopra">piano/fub-pre-alpha · 7 novembre 2026</p>
       <h1>Le scelte di Fub pre-alpha</h1>
-      <p class="lead">Prima che si scriva codice servono le tue risposte: 21 domande, 14 gruppi di stati da guardare nel simulatore e il via finale. Per ogni domanda trovi le scelte, i pro e i contro, e il mio consiglio.</p>
-      <p>Le risposte si salvano da sole mentre scegli, e io le leggo da qui: alla fine basta che mi scrivi «ho risposto». Il piano completo, con il simulatore, è nell'<a href="https://claude.ai/artifact/RCUxmuv2dCqbwDRagbKHcK" target="_blank" rel="noopener">artifact Fub pre-alpha</a>.</p>
+      <p class="lead">Prima che si scriva codice servono le tue risposte: 24 domande, 14 gruppi di stati da guardare nel simulatore e il via finale. Per ogni domanda trovi le scelte, i pro e i contro, e il mio consiglio.</p>
+      <p><b>Il 7 novembre hai risposto a tutto:</b> le domande, i 14 gruppi di stati e il via A. Poi hai chiesto un Fub verde e mi hai mandato il tuo logo, e sono arrivate D25–D28. Le risposte sono scritte nel piano e nel simulatore, che adesso è verde.</p>
+      <p>Resta un passo: guardare il simulatore aggiornato e dare il sì. Nell'<a href="https://claude.ai/artifact/RCUxmuv2dCqbwDRagbKHcK" target="_blank" rel="noopener">artifact Fub pre-alpha</a> lo scenario «Che cosa è cambiato» passa, uno dopo l'altro, gli stati che le risposte hanno cambiato e i dodici nuovi (S287–S298). Le risposte di questa pagina restano salvate qui.</p>
     </div>
     <section class="criterio" aria-labelledby="criterio-t">
       <h2 id="criterio-t">Come ho scelto i consigli</h2>
@@ -186,7 +203,7 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
   <div class="barra-dentro">
     <div class="barra-riga">
       <div class="conti" aria-live="polite">
-        <span>Domande <b id="conto-d">0</b> di 22</span>
+        <span>Domande <b id="conto-d">0</b> di 26</span>
         <span>Stati <b id="conto-g">0</b> di 14 gruppi</span>
       </div>
       <div class="stato-salva" id="stato-salva" role="status">Collego le risposte salvate…</div>
@@ -242,7 +259,7 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
     {
       id: "D5", titolo: "La testa del disegno", aspetta: "Scrittoio 2 T22, K5 T21–T23",
       ancora: "domande--d5-la-testa-del-disegno-k5-contro-scrittoio-2-t2",
-      stati: "A: S125–S130 · B: S111–S124",
+      stati: "A: S125–S130, S287–S293 · B: S111–S124",
       contesto: `<p>Il prototipo di K5 (approvato) mette lo strumento Testo nella colonna e i gettoni del motore nella testata di oggi. Scrittoio 2 porta la testa del disegno in una fila del kit, come negli altri editor. Avevi chiesto di vederle composte tutte e due: sono nel simulatore, e lo scenario «disegno» le mette a confronto.</p>`,
       opzioni: [
         { k: "A", nome: "La cornice di Scrittoio 2 con il contenuto di K5", testo: "Gli strumenti di K5 nella colonna del kit, Testo compreso. I gettoni del motore nella banda accanto a «Si scrive». I comandi nella fila.", pro: "Un solo disegno per tutti gli editor: chi ne impara uno li sa usare tutti." },
@@ -254,6 +271,7 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
     {
       id: "D6", titolo: "Il vassoio più chiaro sotto le barre", aspetta: "PA T11",
       ancora: "domande--d6-il-vassoio-piu-chiaro-anche-per-la-fila-e-per",
+      stati: "S294–S296",
       contesto: `<p>Sul ramo di Scrittoio 2 la barra a una riga e la colonna degli strumenti stanno già sul vassoio più chiaro, come la barra a schede. Il contrasto è provato nelle due luci. Si vede negli stati con la barra di formato, il PDF e il disegno.</p>`,
       opzioni: [
         { k: "A", nome: "Un vassoio solo, il più chiaro, per tutte le barre", pro: "Tutte le barre si somigliano.", contro: "Sulla scrivania del disegno la colonna si stacca meno." },
@@ -369,8 +387,8 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
     },
     {
       id: "D17", titolo: "I temi d'esempio", aspetta: "PA T42",
-      ancora: "domande--d17-l-aspetto-dei-due-temi-d-esempio",
-      stati: "S282–S285",
+      ancora: "domande--d17-l-aspetto-dei-temi-d-esempio",
+      stati: "S282–S285, S297–S298",
       contesto: `<p>La prova d'uscita della skin facile sono dei temi d'esempio. Diventano il punto di partenza di chi scrive un tema, e il simulatore li mostra.</p>`,
       opzioni: [
         { k: "A", nome: "«Carta» e «Salvia»", testo: "«Carta»: carta calda, angoli dritti, maiuscoletto nelle etichette, nessuna ombra, filetti sottili al posto delle scatole, un carattere con le grazie e icone a tratto sottile. «Salvia»: soli colori, con un accento salvia, nelle due luci.", pro: "«Carta» si legge bene a lungo, adatto a un vault di studio.", contro: "Tutti e due restano vicini allo spirito della serie." },
@@ -462,6 +480,87 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
     },
   ];
 
+  // ── Il verde (chiesto dall'utente il 2026-11-07, dopo le prime risposte) ───
+  const figura = (h, nome, sotto) => `<figure>
+      <figcaption><b>${nome}</b>${sotto}</figcaption>
+      <a href="verde/nota-riposo-${h}-light.jpg" target="_blank" rel="noopener"><img src="verde/nota-riposo-${h}-light.jpg" width="1280" height="801" loading="lazy" alt="${nome}: la nota, di giorno"></a>
+      <a href="verde/componenti-${h}-dark.jpg" target="_blank" rel="noopener"><img src="verde/componenti-${h}-dark.jpg" width="1280" height="801" loading="lazy" alt="${nome}: i componenti, di notte"></a>
+    </figure>`;
+  const VERDE = [
+    {
+      id: "D25", titolo: "Quale verde, di serie", aspetta: "il simulatore rifatto in verde, e un task nuovo",
+      contesto: `<p>Hai chiesto che il tema di serie di Fub sia verde. In Fub una sola tinta fa tutto: i bottoni, la scelta, i collegamenti, l'anello del fuoco, la «f» in alto a sinistra, e dà alle superfici un velo dello stesso colore. Quindi «Fub verde» vuol dire cambiare la tinta di serie, e il resto segue da sé, nelle due luci e col contrasto alto. La matita blu di oggi resta fra i campioni, per chi la vuole.</p>
+        <p>Sotto, gli stessi due stati del simulatore (la nota di giorno, i componenti di notte) con la tinta di oggi e con tre verdi. Tocca un'immagine per vederla grande.</p>
+        <div class="verdi">
+          ${figura(265, "Oggi: matita blu", "tinta 265")}
+          ${figura(130, "A · Salvia", "tinta 130, #436a00")}
+          ${figura(145, "B · Foglia", "tinta 145, #006f18")}
+          ${figura(160, "C · Smeraldo", "tinta 160, #006e46")}
+        </div>
+        <p>Il logo che mi hai mandato (D26) è verde smeraldo: la sua «f» è tinta 159, cioè C. Con C l'accento di Fub e il logo sono lo stesso verde.</p>
+        <p class="dopo"><b>Hai scelto C, il verde del logo.</b> Qui sopra avevo scritto «tinta 159» per la «f»; nel piano la tinta di serie è <b>160</b>. Le tinte della «f» vanno da 157,6 a 164 e il foglio scuro sta a 160,6: 160 è il loro centro, e la tinta si sceglie a passi di 5°, quindi il simulatore la mostra esatta. Fra 159 e 160 l'occhio non vede differenza. Prima che il verde entri nel codice ti chiedo se 160 resta anche col logo definitivo.</p>
+        <p>Una cosa da sapere: il verde vuol dire anche «fatto, salvato» (il pallino di «Tutto salvato», gli avvisi che va tutto bene), e oggi quel verde è fisso alla tinta 155. Con B e C la tinta di serie e il «salvato» diventano quasi lo stesso colore. Per non confonderli, con qualunque verde il task nuovo porta una regola nella ricetta: i colori di stato restano almeno 30° lontani dall'accento (il «salvato» resta verde, ma più verso il blu o più verso il giallo). La regola vale anche per chi sceglie una tinta libera, che oggi può già cadere sopra il rosso o il verde degli avvisi.</p>`,
+      opzioni: [
+        { k: "A", nome: "Salvia (tinta 130)", testo: "Il verde che c'è già fra i campioni.", pro: "Già provato con i cancelli del contrasto; resta lontano dal verde del «salvato» anche senza regola.", contro: "Tira al verde oliva, e di notte al verde lime: è il meno «verde» dei tre." },
+        { k: "B", nome: "Foglia (tinta 145)", testo: "Il verde pieno. Diventa il primo campione; «Salvia» esce dai campioni perché gli sarebbe troppo vicina (una tinta 130 salvata resta, come tinta libera).", pro: "Si legge subito come verde, di giorno e di notte; calmo sulla carta.", contro: "Ha bisogno della regola dei 30° per non confondersi col «salvato»." },
+        { k: "C", nome: "Smeraldo (tinta 160)", testo: "Un verde che tira al blu. Diventa il primo campione; «Salvia» resta.", pro: "Il più moderno e il più fresco; di notte è il più luminoso.", contro: "Ha bisogno della regola dei 30°; è il più vicino a «Petrolio» fra i campioni." },
+        { k: "D", nome: "Un altro verde, scelto da te", testo: "Nel simulatore apri Impostazioni › Aspetto (S234), sposta la «tinta libera» finché ti piace, e scrivi il numero nella nota.", pro: "Il verde esatto che vuoi." },
+      ],
+      nota: "Se scegli D, il numero della tinta (serve con D)", notaServeCon: "D",
+      consiglio: { k: "B", perche: "È il verde che si riconosce senza pensarci, nelle due luci. Con la regola dei 30° il «salvato» resta verde e distinto, e la stessa regola corregge un difetto che oggi c'è già con le tinte libere." },
+    },
+    {
+      id: "D26", titolo: "L'icona di Fub: il tuo logo", aspetta: "il task del verde",
+      contesto: `<p>Mi hai mandato il logo che stai valutando: una «f» a nastro sopra dei fogli, uno con la griglia. Oggi l'icona dell'app è un quadrato viola con una «F» bianca (<code>crates/fub-app/icons</code>), e dentro la finestra c'è una «f» corsiva sul colore dell'accento. Il tuo logo prende il posto di tutte e due.</p>
+        <div class="logo-prova">
+          <img src="verde/logo-proposto.png" width="653" height="653" alt="Il logo proposto: una f a nastro verde smeraldo sopra un foglio verde scuro, due fogli verde salvia e un foglio bianco a griglia">
+          <div class="logo-piccoli">
+            <p><b>Com'è piccolo</b>, ridotto così com'è:</p>
+            <span><img src="verde/logo-48.png" width="48" height="48" alt="">48 px</span>
+            <span><img src="verde/logo-32.png" width="32" height="32" alt="">32 px</span>
+            <span><img src="verde/logo-16.png" width="16" height="16" alt="">16 px</span>
+            <p>A 32 e a 16 px (le schede, la barra delle applicazioni, i file) la griglia e i fogli trasparenti spariscono.</p>
+          </div>
+        </div>
+        <p>Che cosa ho misurato e che cosa serve:</p>
+        <ul>
+          <li><b>I colori.</b> La «f» è verde smeraldo, tinta 159; il foglio scuro 160; i fogli salvia 137. Il verde del logo è quindi «Smeraldo» (160), non «Foglia» (145): vedi D25.</li>
+          <li><b>Il disegno.</b> È un'immagine di 896 × 1200 punti, compressa e in verticale. Un'icona va ridisegnata in vettoriale su un quadrato, e ne servono quattro forme: quella grande; una semplificata per 16–48 px; quella per Android, divisa in davanti e dietro; una a un solo colore per le icone simboliche di Linux. La disegno io in SVG nel prototipo, e la approvi guardandola prima del codice.</li>
+          <li><b>La griglia.</b> Un foglio verde a quadretti con i fogli dietro ricorda molto l'icona di Excel. Chi la vede può pensare a un foglio di calcolo, mentre Fub parte dalle note; ed è un aspetto che Microsoft difende.</li>
+        </ul>
+        <p class="dopo"><b>Hai scelto B.</b> Poi hai trovato il logo definitivo e mi hai detto di lasciare intanto questo: il ridisegno resta nel simulatore come logo <b>provvisorio</b>, e mostra dove va il logo, a quali misure e con quali colori. Il logo vero lo porti tu, nelle quattro forme.</p>`,
+      opzioni: [
+        { k: "A", nome: "Fedele, griglia compresa", testo: "Ridisegnato in vettoriale così com'è, con le quattro forme.", pro: "È esattamente il tuo logo.", contro: "Ricorda Excel, e dice «foglio di calcolo» prima di «note»." },
+        { k: "B", nome: "La stessa idea, il foglio davanti diventa una pagina", testo: "La «f» a nastro e i fogli restano; il foglio bianco ha righe di testo e un angolo a quadretti. Ridisegnato in vettoriale, con le quattro forme.", pro: "Resta il tuo logo, dice «note e ogni documento», e si stacca da Excel.", contro: "Cambia un pezzo del tuo disegno." },
+        { k: "C", nome: "Solo la «f» a nastro sul foglio scuro", testo: "Senza gli altri fogli.", pro: "Si legge anche a 16 px, e non somiglia a niente.", contro: "Si perde l'idea dei tanti documenti." },
+      ],
+      consiglio: { k: "B", perche: "Tiene la tua idea e toglie i due problemi: la somiglianza con Excel e il messaggio «foglio di calcolo». Con tutte e tre le scelte le versioni piccole sono semplificate." },
+    },
+    {
+      id: "D28", titolo: "Da dove viene l'immagine del logo", aspetta: "il task del verde",
+      contesto: `<p>Fub è open source: l'icona entra nel repository pubblico e ha bisogno di una licenza chiara. Se l'hai fatta con un'AI, conta che cosa permettono le condizioni dello strumento; se viene da un'altra persona o da un sito, serve il suo permesso scritto.</p>
+        <p class="dopo"><b>Hai risposto A.</b> La domanda vale anche per il logo definitivo: prima del task del logo mi serve sapere da dove viene, e con quale strumento, se è un'AI.</p>`,
+      opzioni: [
+        { k: "A", nome: "L'ho fatta io con un'AI", testo: "Mi dici quale strumento, e ne controllo le condizioni prima del task." },
+        { k: "B", nome: "L'ho disegnata io", testo: "La licenza la scegli tu, insieme a quella del progetto." },
+        { k: "C", nome: "Viene da un'altra persona o da un sito", testo: "Prima del task serve il permesso, o un ridisegno originale." },
+      ],
+      nota: "Quale strumento, o da dove viene", consiglio: null,
+      senzaConsiglio: "Qui non c'è un consiglio: è un fatto che sai solo tu.",
+    },
+    {
+      id: "D27", titolo: "Il tema d'esempio «Salvia»", aspetta: "PA T42",
+      contesto: `<p>Con D17 C hai scelto tre temi d'esempio: «Carta», «Officina» e «Salvia». «Salvia» doveva mostrare un tema fatto di soli colori, con un accento salvia e superfici appena verdi. Con Fub verde di serie sarebbe quasi uguale a Fub stesso, e non insegnerebbe niente a chi scrive un tema.</p>
+        <p class="dopo"><b>Hai scelto A.</b> «Mare» è nel simulatore al posto di «Salvia» (S284, S285); «Officina» è in S297 e S298.</p>`,
+      opzioni: [
+        { k: "A", nome: "Diventa «Mare»", testo: "Soli colori: un blu profondo e superfici grigio-azzurre, nelle due luci, scelti a mano e non dalla ricetta.", pro: "Il più lontano dal verde di serie, e chi preferiva il Fub blu di oggi lo ritrova come tema.", contro: "Nessuno di rilievo." },
+        { k: "B", nome: "Diventa «Prugna»", testo: "Soli colori: un viola prugna e superfici appena rosate.", pro: "Lontano dal verde, e più insolito.", contro: "Più difficile da tenere sopra le soglie del contrasto." },
+        { k: "C", nome: "Resta «Salvia»", contro: "Un tema d'esempio quasi uguale a Fub di serie." },
+      ],
+      consiglio: { k: "A", perche: "Un tema d'esempio deve mostrare quanto si può cambiare con i soli colori: il più lontano dalla serie lo mostra meglio, e il blu di oggi non va perso." },
+    },
+  ];
+
   const VIA = {
     id: "VIA", etichetta: "Il via", titolo: "Il via al piano", aspetta: "tutto il piano",
     contesto: `<p>Finché in testa al piano «Approvato» dice «in attesa», nessuno scrive codice. Le tue risposte cambiano il piano: alcune aggiungono task (D19–D22), altre lavoro nel simulatore (D6 C, D17 C) o un piano nuovo (D1 B).</p>`,
@@ -490,7 +589,8 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
     { id: "g-temi", nome: "I temi e la skin facile", s: "S272–S285", n: 14, prov: "nuovi", cosa: "Sviluppo, installare, sostituire, il tema rifiutato, collegare una cartella, l'anteprima, «Tutti i componenti», e i temi «Carta» e «Salvia» (vanno con D15–D17)." },
   ];
 
-  const DOMANDE = [...PIANO, ...NUOVE, VIA];
+  VERDE.sort((a, b) => Number(a.id.slice(1)) - Number(b.id.slice(1)));
+  const DOMANDE = [...PIANO, ...NUOVE, ...VERDE, VIA];
   const PER_ID = new Map(DOMANDE.map((q) => [q.id, q]));
   const stato = { r: {}, g: {} };
 
@@ -500,7 +600,7 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
   const ancora = (id) => id.toLowerCase();
 
   const opzHtml = (q, o) => {
-    const cons = o.k === q.consiglio.k;
+    const cons = !!q.consiglio && o.k === q.consiglio.k;
     return `<label class="opz${cons ? " consigliata" : ""}" for="${q.id}-${o.k}" data-k="${o.k}">
       <input class="sr" type="radio" name="${q.id}" id="${q.id}-${o.k}" value="${o.k}">
       <span class="lettera" aria-hidden="true">${o.k}</span>
@@ -531,7 +631,7 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
         <legend class="sr">Le scelte per ${q.etichetta || q.id}</legend>
         ${q.opzioni.map((o) => opzHtml(q, o)).join("")}
       </fieldset>
-      <div class="perche"><strong>Il mio consiglio: ${q.consiglio.k}.</strong> ${q.consiglio.perche}${q.cambia ? `<br><span class="cambia">${q.cambia}</span>` : ""}</div>
+      <div class="perche">${q.consiglio ? `<strong>Il mio consiglio: ${q.consiglio.k}.</strong> ${q.consiglio.perche}` : q.senzaConsiglio}${q.cambia ? `<br><span class="cambia">${q.cambia}</span>` : ""}</div>
       <div class="nota">
         <div class="nota-riga">
           <label for="nota-${q.id}">${q.nota || "Una nota, se vuoi"}</label>
@@ -562,6 +662,9 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
     <div class="sezione-testa"><h2 id="sez-nuove">Le domande nuove</h2>
       <p>Nate dal tuo criterio: un controllo in più e cinque cose che il piano lasciava fuori.</p></div>
     ${NUOVE.map(domandaHtml).join("")}
+    <div class="sezione-testa"><h2 id="sez-verde">Il verde</h2>
+      <p>Hai chiesto un Fub verde di serie, e mi hai mandato il tuo logo. Restano da scegliere quale verde, l'icona, da dove viene l'immagine, e che cosa diventa il tema d'esempio «Salvia».</p></div>
+    ${VERDE.map(domandaHtml).join("")}
     <div class="sezione-testa" id="stati"><h2 id="sez-stati">Gli stati da approvare</h2>
       <p>118 stati del simulatore sono composti o nuovi, e aspettano il tuo sì. Apri il <a href="${HUB}#simulatore" target="_blank" rel="noopener">simulatore</a>, scegli i numeri nel menu degli stati e guardali nelle due luci e alle tre larghezze. Qui basta un sì o un «da rivedere» per gruppo; i singoli stati scrivili nella nota.</p></div>
     <div class="gruppi">${GRUPPI.map(gruppoHtml).join("")}</div>
@@ -573,6 +676,7 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
   indice.innerHTML = [
     ...PIANO.map((q) => `<a class="ind" href="#${ancora(q.id)}" data-ind="${q.id}">${q.id}</a>`),
     ...NUOVE.map((q, i) => `<a class="ind${i === 0 ? " sep" : ""}" href="#${ancora(q.id)}" data-ind="${q.id}">${q.id}</a>`),
+    ...VERDE.map((q, i) => `<a class="ind${i === 0 ? " sep" : ""}" href="#${ancora(q.id)}" data-ind="${q.id}">${q.id}</a>`),
     `<a class="ind sep" href="#stati" data-ind="stati">Stati</a>`,
     `<a class="ind" href="#via" data-ind="VIA">Il via</a>`,
   ].join("");
@@ -715,7 +819,7 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
     let messi = 0;
     for (const q of DOMANDE) {
       const r = stato.r[q.id];
-      if (r && r.scelta) continue;
+      if ((r && r.scelta) || !q.consiglio) continue;
       stato.r[q.id] = { scelta: q.consiglio.k, nota: (r && r.nota) || "" };
       scrivi("risposte", q.id);
       messi++;

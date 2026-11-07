@@ -58,15 +58,24 @@ function lav(id, nome, { strato, dice, task = LAV_TASK, toppe = [], cornice = {}
 // ── Il disegno con la banda di D5 A ─────────────────────────────────────────
 const DIS_A_TASK = ["K5 T21", "K5 T22", "K5 T23", "S2 T4", "PA T27"];
 const RAIL_TESTO = { dove: ".draw-rail .kit-rail", come: "sostituisci", da: "p-dis-1", sel: ".kit-rail" };
-function disA(id, nome, banda, dice, extra = []) {
+// D5 = A (2026-11-07): si costruisce questa forma; B resta a parte, senza
+// gemelli. «base» sceglie la cattura del client (la riga delle opzioni dello
+// strumento), «rail» la colonna di K5 da cui si parte.
+const premuto = (tool) => [
+  { dove: ".draw-rail [data-tool]", attr: { "aria-pressed": "false", tabindex: "-1" }, tutte: true },
+  { dove: `.draw-rail [data-tool=${tool}]`, attr: { "aria-pressed": "true", tabindex: "0" } },
+];
+function disA(id, nome, banda, dice, extra = [], { base = "g2-disegno-penna", rail = RAIL_TESTO, fuoco = "#status-standing", task = DIS_A_TASK } = {}) {
   return nuova("Disegno", id, nome, {
-    base: "g2-disegno-penna",
-    toppe: [RAIL_TESTO, { dove: "#status-mode", come: "prima", html: banda }, ...extra],
-    dice, task: DIS_A_TASK, fuoco: "#status-standing", gemelli: ["dis-b-" + id.replace(/^disegno-a-/, "").replace(/^apre$/, "si-apre")],
+    base,
+    toppe: [rail, { dove: "#status-mode", come: "prima", html: banda }, ...extra],
+    dice, task, fuoco,
   });
 }
 
 // ── Le Impostazioni ─────────────────────────────────────────────────────────
+const BARRE = (html) => ({ dove: '[data-setting-key="appearance.density"]', come: "dopo", html, scorri: true });
+const MARCATE = { dove: "html", attr: { "data-bars": "marked" } };
 const COMP_BODY = "#settings-section-2-installati-su-questa-macchina .settings-section-body";
 const TEMA_TASK = ["PA T36", "PA T37"];
 const catalogo = { dove: '[data-setting-key="appearance.theme"]', come: "dopo", html: "tema-catalogo" };
@@ -168,6 +177,29 @@ export const NUOVE = [
     [{ dove: "body", come: "dentro", da: "p-dis-4", sel: "#kit-popover-1", ancora: "#status-standing", lato: "sopra" }]),
   disA("disegno-a-apre", "D5 A: il disegno si sta aprendo", "banda-motore-apre",
     "D5 A: mentre il motore carica, la banda lo dice; il foglio resta fermo."),
+  disA("disegno-a-cinquecento", "D5 A: 500 parti restano come sono", "banda-motore-cinquecento",
+    "D5 A: un disegno con 500 parti che il motore non sa scrivere: la banda lo dice, e il riquadro di K5 (2b) le elenca, con «Vai» per trovarle sul foglio.",
+    [{ dove: "body", come: "dentro", da: "p-dis-2b", sel: "#kit-popover-1", ancora: "#status-standing", lato: "sopra" }]),
+  disA("disegno-a-senza", "D5 A: senza motore", "banda-motore-senza",
+    "D5 A: questa versione di Fub non ha il motore del disegno: gli strumenti semplici funzionano, e il riquadro di K5 (5) dice che cosa manca e dove si accende.",
+    [{ dove: "body", come: "dentro", da: "p-dis-5", sel: "#kit-popover-1", ancora: "#status-standing", lato: "sopra" }]),
+  disA("disegno-a-rifiutato", "D5 A: una modifica non applicata", "banda-motore-perse",
+    "D5 A: si prova a cambiare una delle parti che restano come sono: la figura resta com'è e scelta, la banda tiene il segno ambra, e il lettore di schermo sente «Modifica non applicata» (K5 6a). Niente finestre.",
+    [...premuto("select"), { dove: "body", come: "dentro", html: "disegno-rifiutato-annuncio" }],
+    { base: "disegno-selezione" }),
+  disA("disegno-a-testo-spento", "D5 A: Testo col motore spento", "banda-motore-spento",
+    "D5 A: col motore spento il Testo funziona anche con gli strumenti semplici (K5 7b): la colonna lo tiene acceso, la riga delle opzioni è la sua, la banda dice «Motore spento».",
+    [{ dove: ".draw-toolbar .kit-options-row", come: "sostituisci", da: "p-dis-7b", sel: ".kit-options-row" }],
+    { rail: { dove: ".draw-rail .kit-rail", come: "sostituisci", da: "p-dis-7b", sel: ".kit-rail" }, fuoco: ".draw-rail [data-tool=text]" }),
+  disA("disegno-a-mano", "D5 A: la mano", "banda-motore-pronto",
+    "D5 A: la mano (H) sposta il foglio; la colonna di K5 con Testo, la riga delle opzioni del client, il motore nella banda.",
+    premuto("hand"), { base: "g2-disegno-mano", fuoco: ".draw-rail [data-tool=hand]" }),
+  disA("disegno-a-gomma", "D5 A: la gomma", "banda-motore-pronto",
+    "D5 A: la gomma (E) con la sua riga d'opzioni; la colonna di K5 con Testo, il motore nella banda.",
+    premuto("eraser"), { base: "g2-disegno-gomma", fuoco: ".draw-rail [data-tool=eraser]" }),
+  disA("disegno-a-rettangolo", "D5 A: il rettangolo", "banda-motore-pronto",
+    "D5 A: le forme (R): il rettangolo con riempimento e bordo; la colonna di K5 con Testo, il motore nella banda.",
+    premuto("rect"), { base: "g2-disegno-rettangolo", fuoco: ".draw-rail [data-tool=rect]" }),
   nuova("Disegno", "disegno-a-testo", "Lo strumento Testo con la sua riga", {
     base: "g2-disegno-penna",
     toppe: [
@@ -307,8 +339,8 @@ export const NUOVE = [
     base: "componenti",
     toppe: [{ dove: COMP_BODY, come: "vuota", html: "comp-installato", scorri: true }],
     fuoco: ".settings-component [role=switch]",
-    dice: "Un componente installato da un file: nome, versione, fiducia, se è attivo; l'interruttore «Abilitato», il consenso, i permessi che chiede e «Rimuovi», spento finché il componente è abilitato.",
-    task: ["K1", "K2 T3", "PA T29"],
+    dice: "Un componente installato da un file: nome, versione, fiducia, se è attivo; l'interruttore «Acceso», il consenso, i permessi che chiede e «Togli», spento finché il componente è acceso (D18 A: le parole del lessico).",
+    task: ["K1", "K2 T3", "PA T29", "PA T46"],
   }),
   nuova("Componenti", "comp-permesso", "Il consenso: i permessi", {
     base: "componenti",
@@ -318,21 +350,21 @@ export const NUOVE = [
     ],
     fuoco: ".kit-dialog .kit-button[data-action=confirm]",
     dice: "Quando il consenso passa a «Concesso», Fub elenca che cosa il componente potrà fare e chiede. I permessi si tolgono uno per uno anche dopo.",
-    task: ["K1", "K2 T3", "PA T29"],
+    task: ["K1", "K2 T3", "PA T29", "PA T46"],
   }),
   nuova("Componenti", "comp-rotto-tempo", "Un componente fermato: il tempo", {
     base: "componenti",
     toppe: [{ dove: COMP_BODY, come: "vuota", html: "comp-fermo-tempo", scorri: true }],
     fuoco: ".settings-component .settings-btn:not([disabled])",
     dice: "Il componente ha superato il tempo concesso: Fub lo ferma, lo dice e offre «Riavvia». Il resto continua.",
-    task: ["K1", "K2 T3", "PA T29"],
+    task: ["K1", "K2 T3", "PA T29", "PA T46"],
   }),
   nuova("Componenti", "comp-rotto-errore", "Un componente fermato: un errore", {
     base: "componenti",
     toppe: [{ dove: COMP_BODY, come: "vuota", html: "comp-fermo-errore", scorri: true }],
     fuoco: ".settings-component .settings-btn:not([disabled])",
     dice: "Un errore dentro il componente (una trappola): fermato, col motivo in chiaro e i dettagli da copiare.",
-    task: ["K1", "K2 T3", "PA T29"],
+    task: ["K1", "K2 T3", "PA T29", "PA T46"],
   }),
   nuova("Componenti", "comp-aggiorna", "Una versione nuova (fuori)", {
     base: "componenti",
@@ -348,30 +380,53 @@ export const NUOVE = [
     base: "g2-imp-info",
     toppe: [{ dove: ".settings-main .setting-label", testo: "Versione 0.2.0-prealpha.1" }],
     fuoco: ".settings-main a, .settings-main button",
-    dice: "Informazioni con la versione della pre-alpha: la stessa che va nei riscontri.",
-    task: ["PA T22"],
+    dice: "Informazioni con la versione della pre-alpha: la stessa che va nei riscontri. Il verde di serie (D25) e il logo provvisorio (D26) come in tutte le catture.",
+    task: ["PA T22", "PA T48", "PA T49"],
+  }),
+
+  // «Le barre» (D6 C): la riga in Aspetto dopo «Densità», e le due varianti.
+  nuova("Impostazioni", "aspetto-barre", "Aspetto: «Le barre» (chiare)", {
+    base: "aspetto",
+    toppe: [BARRE("aspetto-barre")],
+    fuoco: '[data-setting-key="appearance.bars"] [role=radio]',
+    dice: "D6 C: la riga «Le barre» dopo «Densità». Di serie «Chiare»: il vassoio vicino alla carta sotto le schede, le barre dei comandi e la colonna. Nel simulatore la scelta cambia davvero tutti gli stati.",
+    task: ["PA T11"],
+  }),
+  nuova("Impostazioni", "aspetto-barre-marcate", "Aspetto: «Le barre» marcate", {
+    base: "aspetto",
+    toppe: [BARRE("aspetto-barre-marcate"), MARCATE],
+    fuoco: '[data-setting-key="appearance.bars"] [role=radio]',
+    dice: "D6 C: «Marcate» rimette `--sheet-2` sotto tutte le barre, come prima di Scrittoio 2: il vassoio si stacca di più dalla carta. La riga dice che la scelta è cambiata, con «Azzera».",
+    task: ["PA T11"],
+  }),
+  nuova("Impostazioni", "barra-marcate", "La barra di formato con le barre marcate", {
+    base: "barra",
+    toppe: [MARCATE],
+    fuoco: ".kit-bar button",
+    dice: "D6 C: una nota con la barra di formato e «Le barre: marcate». Il vassoio della barra e quello delle schede prendono `--sheet-2`; i foglietti restano come sono.",
+    task: ["PA T11"],
   }),
 
   // ── Riscontri (D9) ──────────────────────────────────────────────────────
   composta("Riscontri", "riscontri-a", "D9 A e C: nessuna faccia in Fub", {
     base: "g2-menu",
     fuoco: "#context-menu [role=menuitem]",
-    dice: "D9 A (consigliata) e C: i riscontri passano dalle issue di GitHub e dalla pagina «Prova la pre-alpha»; il menu di Fub resta com'è.",
-    task: ["PA T18"], gemelli: ["riscontri-b-menu"],
+    dice: "D9 A: non si costruisce (l'utente ha scelto B il 2026-11-07). Con A e C i riscontri passavano solo dalle issue di GitHub e dalla pagina «Prova la pre-alpha»; il menu di Fub restava com'era.",
+    task: ["PA T18"],
   }),
   nuova("Riscontri", "riscontri-b-menu", "D9 B: «Segnala un problema…»", {
     base: "g2-menu",
     toppe: [{ dove: "#context-menu .menu-items > button:last-of-type", come: "prima", html: "riscontri-voce" }],
     fuoco: "#context-menu [role=menuitem]",
-    dice: "D9 B: una voce nel menu dell'applicazione apre la pagina dell'issue con versione e sistema già scritti.",
-    task: ["PA T18", "D9 B"], gemelli: ["riscontri-a"],
+    dice: "D9 B (scelta il 2026-11-07): una voce nel menu dell'applicazione apre la pagina dell'issue con versione e sistema già scritti.",
+    task: ["PA T52", "PA T18"],
   }),
   nuova("Riscontri", "riscontri-b-apre", "D9 B: che cosa si manda", {
     base: "g2-menu",
     toppe: [{ dove: "#context-menu", rimuovi: true }, { dove: "body", come: "dentro", html: "riscontri-apre" }],
     fuoco: ".kit-dialog .kit-button",
     dice: "D9 B: prima di aprire il browser, Fub mostra esattamente che cosa scrive nella pagina (versione, sistema) e che non manda altro.",
-    task: ["PA T18", "D9 B"],
+    task: ["PA T52"],
   }),
 
   // ── I casi ai bordi dei dati ────────────────────────────────────────────
@@ -492,8 +547,8 @@ export const NUOVE = [
   nuova("Temi", "tema-carta", "Il tema «Carta»: la nota", {
     base: "nota-riposo", tema: "carta",
     fuoco: ".pane.focus .cm-content",
-    dice: "Carta, il primo tema d'esempio: carta calda, angoli dritti, maiuscoletto, titoli con le grazie. Solo hook di oggi. Solo chiaro: di notte resta la serie.",
-    task: ["PA T42"],
+    dice: "Carta, il primo tema d'esempio: carta calda, angoli dritti, maiuscoletto, titoli con le grazie. Veste anche l'editor di testo (D22 A): il filetto sotto il primo titolo, la citazione col filo dell'accento, i tag in maiuscoletto. Solo hook di oggi. Solo chiaro: di notte resta la serie.",
+    task: ["PA T42", "PA T54"],
   }),
   nuova("Temi", "tema-carta-impostazioni", "Il tema «Carta»: le Impostazioni", {
     base: "aspetto", tema: "carta",
@@ -501,16 +556,28 @@ export const NUOVE = [
     dice: "Carta nelle Impostazioni: le schede diventano filetti, i bottoni contorni.",
     task: ["PA T42"],
   }),
-  nuova("Temi", "tema-salvia", "Il tema «Salvia»: la nota", {
-    base: "nota-riposo", tema: "salvia",
+  nuova("Temi", "tema-mare", "Il tema «Mare»: la nota", {
+    base: "nota-riposo", tema: "mare",
     fuoco: ".pane.focus .cm-content",
-    dice: "Salvia, il secondo tema d'esempio: soli colori, chiaro e scuro, nessuna regola di pelle.",
+    dice: "Mare, il tema d'esempio di soli colori (D27 A, prima «Salvia»): un blu profondo e superfici grigio-azzurre, chiaro e scuro, nessuna regola di pelle. L'editor di testo lo segue coi ruoli.",
+    task: ["PA T42", "PA T54"],
+  }),
+  nuova("Temi", "tema-mare-impostazioni", "Il tema «Mare»: le Impostazioni", {
+    base: "aspetto", tema: "mare",
+    fuoco: ".settings-tab",
+    dice: "Mare nelle Impostazioni, nelle due luci.",
     task: ["PA T42"],
   }),
-  nuova("Temi", "tema-salvia-impostazioni", "Il tema «Salvia»: le Impostazioni", {
-    base: "aspetto", tema: "salvia",
+  nuova("Temi", "tema-officina", "Il tema «Officina»: la nota", {
+    base: "nota-riposo", tema: "officina",
+    fuoco: ".pane.focus .cm-content",
+    dice: "Officina, il tema d'esempio più lontano dalla serie (D17 C): grigi d'acciaio, arancio da cantiere, angoli vivi, bordi di 2 px, etichette in monospazio, più contrasto della serie. Veste anche l'editor di testo: il filo pieno sotto il primo titolo, la citazione con la barra d'arancio. Solo hook di oggi.",
+    task: ["PA T42", "PA T54"],
+  }),
+  nuova("Temi", "tema-officina-impostazioni", "Il tema «Officina»: le Impostazioni", {
+    base: "aspetto", tema: "officina",
     fuoco: ".settings-tab",
-    dice: "Salvia nelle Impostazioni, nelle due luci.",
+    dice: "Officina nelle Impostazioni, nelle due luci: le schede in una cornice piena, i bottoni col contorno di 2 px, i titoli in monospazio.",
     task: ["PA T42"],
   }),
 ];

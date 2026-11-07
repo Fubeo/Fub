@@ -19,7 +19,11 @@ const { contrast } = await import(`${CLIENT}/src/theme/contrast.ts`);
 
 const dir = fileURLToPath(new URL("../../blocchi", import.meta.url));
 const files = readdirSync(dir).filter((f) => /^93-tema-.*\.css$/.test(f)).sort();
-const LUCI: Record<string, ("light" | "dark")[]> = { "93-tema-carta.css": ["light"], "93-tema-salvia.css": ["light", "dark"] };
+const LUCI: Record<string, ("light" | "dark")[]> = {
+  "93-tema-carta.css": ["light"],
+  "93-tema-mare.css": ["light", "dark"],
+  "93-tema-officina.css": ["light", "dark"],
+};
 
 const tokensOf = (css: string) =>
   Object.fromEntries(

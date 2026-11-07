@@ -58,6 +58,7 @@
   --doc-caret: #8e3a1f;
   --doc-danger: #a51d19;
   --doc-gutter-fg: #66594a;
+  --syn-comment: #66594a;
   --doc-drop-line: #8e3a1f;
   --doc-block-selected: rgb(142 58 31 / 12%);
 }
@@ -155,10 +156,38 @@
   box-shadow: none;
 }
 
-/* La linguetta accesa si sottolinea nell'inchiostro dell'accento. */
-.tab[aria-selected="true"] .tab-name {
-  text-decoration: underline;
-  text-decoration-color: var(--accent);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 6px;
+/* La linguetta accesa si sottolinea nell'inchiostro dell'accento: un filo
+   dentro la linguetta, in basso. Non una sottolineatura del nome: `.tab-name`
+   taglia ciò che esce dalla sua riga (overflow), e la linea non si vedeva. */
+.tab[aria-selected="true"] {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* ── L'editor di testo (D22 A, PA T54) ───────────────────────────────────── */
+/* I titoli col carattere del tema; il primo con un filetto sotto, i piccoli
+   in maiuscoletto. */
+.cm-editor .cm-content .cm-fub-heading-line {
+  font-family: "Carta Serif", var(--font-reading);
+  font-weight: var(--weight-medium);
+}
+.cm-editor .cm-content .cm-fub-h1-line {
+  border-bottom: 1px solid var(--border-strong);
+}
+.cm-editor .cm-content .cm-fub-h4-line,
+.cm-editor .cm-content .cm-fub-h5-line,
+.cm-editor .cm-content .cm-fub-h6-line {
+  font-variant: all-small-caps;
+  letter-spacing: 0.05em;
+}
+/* La citazione resta in corsivo, col filetto nell'inchiostro dell'accento. */
+.cm-editor .cm-content .cm-line.cm-fub-quote {
+  border-left: 1px solid var(--accent);
+}
+/* Il tag non è una pillola: maiuscoletto, senza fondo. */
+.cm-editor .cm-content .cm-fub-tag {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  font-variant: all-small-caps;
+  letter-spacing: 0.05em;
 }

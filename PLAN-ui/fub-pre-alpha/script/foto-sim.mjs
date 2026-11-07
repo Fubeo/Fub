@@ -177,6 +177,11 @@ const STATI = await p.evaluate(() => window.SIM_STATI);
 // Perché una cattura pura può non coincidere con la sua foto: le righe che il
 // banco aggiunge al DOM dopo la foto (mods.mjs, datiNota).
 const FACCIA = "riga dei dati della nota tolta dal confronto (mods.mjs datiNota la mette solo nel DOM copiato, non nella foto del client)";
+// L'unica eccezione ai pixel: le due catture della lavagna di prima di N6 non
+// si rifanno, verde-lavagna.mjs porta al verde solo il loro DOM e la foto
+// resta quella blu (finto/LEGGIMI.md, «Il verde di serie»).
+const FOTO_BLU = new Set(["lavagna", "lavagna-700"]);
+const BLU = (cap) => (FOTO_BLU.has(cap) ? "la foto della cattura è ancora blu, il DOM è verde (verde-lavagna.mjs): il colore conta come differenza" : "");
 
 // La larghezza dell'ispettore che la foto del client ha preso dalle
 // preferenze (fub:preferenze): c'è solo con la finestra compatta.
@@ -212,19 +217,48 @@ async function spiega(s, cap, luce, a, foto, fuori, sposta = 0, out = null) {
     // PA T47 (92-prealpha-telefono.css): sul telefono l'interruttore torna di
     // 32 × 18 e le schede delle impostazioni non si stringono; nella foto del
     // client sono il cerchio di 44 px e i nomi in «…». Ogni interruttore
-    // visibile accorcia la sua riga di 26 px.
+    // visibile accorcia la sua riga di 26 px. Le righe di un elenco dichiarato
+    // (il cestino, le versioni) prendono 8 px l'una dall'altra: l'elenco si
+    // toglie, e ciò che sta sotto scende di 8 px per riga.
     const tel = d.documentElement.dataset.clientShell === "mobile";
     const sw = tel ? [...d.querySelectorAll('input[role="switch"]')].filter((e) => e.getClientRects().length) : [];
     const nav = tel ? [...d.querySelectorAll(".settings-nav")].filter(visto) : [];
-    const t47 = [...sw.map((e) => r(e, 14)), ...nav.map((e) => r(e))].filter(Boolean);
+    const righe = (l) => l.querySelectorAll(':scope > .ui-stack[data-dir="row"] + .ui-stack[data-dir="row"]').length;
+    const liste = tel ? [...d.querySelectorAll(".ui-list")].filter((l) => visto(l) && righe(l)) : [];
+    const scende = liste.reduce((t, l) => t + 8 * righe(l), 0);
+    const t47 = [...sw.map((e) => r(e, 14)), ...nav.map((e) => r(e)), ...liste.map((e) => r(e))].filter(Boolean);
     const alto = d.documentElement.clientHeight;
     const viste = sw.filter((e) => {
       const q = e.getBoundingClientRect();
       return q.bottom > 0 && q.top < alto;
     }).length;
-    return { t3, fuoco, t47, t47sposta: t47.length ? Math.min(480, 26 * Math.max(1, viste) + 64) : 0 };
+    // PA T56 e T57 (92-prealpha-viste.css): le correzioni del controllo delle viste
+    // che si vedono senza fuoco. Si toglie ciò che cambia: l'azione d'un
+    // avviso, le maniglie del blocco, la scheda colorata della lavagna, la
+    // tavolozza, la fila col pulsante diviso, le etichette XMP, l'indice delle
+    // impostazioni e la cella in modifica sulla carta del file (la banda e la
+    // testata del foglio alte 24 non cambiano un pixel: il contenuto è al
+    // centro di una fila più alta). Ciò che si alza o si allarga sposta il
+    // resto di qualche px: 10 px per ogni freccia d'un pulsante diviso, 8 per
+    // il resto.
+    const su = (sel, chi) => [...d.querySelectorAll(sel)].filter(visto).map((e) => (chi ? e.closest(chi) || e : e));
+    const frecce = su(".kit-ribbon-arrow");
+    const fila = [...new Set(frecce.map((e) => e.closest('[role="toolbar"]') || e.parentElement))];
+    const alzati = [...su(".craft-xmp-tag", ".craft-xmp-tags"), ...su(".settings-toc")];
+    const t56 = [
+      ...su(".conflict-banner .link-button, .sheet-notice .link-button"),
+      ...su(".cm-fub-block-handles"),
+      ...su('.canvas-node[style*="%, transparent"]'),
+      ...su(".grid-ribbon-palette-grid", '[role="dialog"], .kit-popover, .grid-ribbon-palette'),
+      ...fila,
+      ...new Set(alzati),
+      ...su(".look-file .grid-viewport .cm-editor"),
+    ].map((e) => r(e, 2)).filter(Boolean);
+    const t56sposta = t56.length ? Math.min(96, 10 * frecce.length + (alzati.length ? 8 : 0)) : 0;
+    return { t3, fuoco, t47, t47sposta: t47.length ? Math.min(480, 26 * Math.max(1, viste) + scende + 64) : 0, t56, t56sposta };
   });
   if (z.t47sposta) sposta = Math.max(sposta, z.t47sposta);
+  if (z.t56sposta) sposta = Math.max(sposta, z.t56sposta);
   // Le zone si sommano: la seconda si misura senza anche la prima.
   const tolte = [];
   const senza = (zone, testo) => {
@@ -236,13 +270,14 @@ async function spiega(s, cap, luce, a, foto, fuori, sposta = 0, out = null) {
   };
   senza(z.t3, "S2 T3: il bottone della modalità sta nella testata nella foto del client e dopo la barra di formato nel simulatore (si sposta solo nella copia, mods.mjs modo); la testata, il bottone, la barra di formato e il bottone del lato (90-mobile.css li sposta per lui) tolti");
   senza(z.fuoco, "il fuoco della pagina viva (data-proto-focus) non passa nel DOM copiato; nel simulatore si vede col bottone «Fuoco»");
-  senza(z.t47, "PA T47: sul telefono l'interruttore torna il binario di 32 × 18 e le schede delle impostazioni scorrono intere (92-prealpha-telefono.css); nella foto del client sono il cerchio di 44 px e i nomi in «…» della regola dei 44 px di mobile.css; interruttori e schede tolti");
+  senza(z.t56, "PA T56 e T57: le correzioni del controllo delle viste (92-prealpha-viste.css): l'azione d'un avviso in `--accent-soft`, le maniglie del blocco da 24 px a 0,75, la scheda colorata della lavagna mescolata nella carta, la tavolozza a passo 24, la freccia d'un pulsante diviso larga 24, le etichette XMP alte 24, i nomi lunghi dell'indice delle impostazioni a capo, la formula sulla carta del file in inchiostro; nella foto del client sono com'erano; quelle zone tolte");
+  senza(z.t47, "PA T47: sul telefono l'interruttore torna il binario di 32 × 18, le schede delle impostazioni scorrono intere e le righe di un elenco coi bottoni da 44 px stanno a 8 px l'una dall'altra (92-prealpha-telefono.css); nella foto del client sono il cerchio di 44 px, i nomi in «…» e i bottoni che si toccano, per la regola dei 44 px di mobile.css; interruttori, schede ed elenchi tolti");
   if (sposta) {
     const via = (x, y) => fuori?.(x, y) || tolte.some((q) => x >= q.x && x < q.x + q.w && y >= q.y && y < q.y + q.h);
     const r = spostati(a, foto, via, sposta);
     if (out && r.n) writeFileSync(out.replace(/\.png$/, ".resto.png"), PNG.sync.write(r.resto));
     motivi.push(
-      `${z.t47sposta && !s.toppe?.length ? "l'interruttore più basso di PA T47" : isp && !s.toppe?.length ? "l'ispettore più stretto" : "il DOM nuovo"} sposta il resto${r.spost.length ? ` (${r.spost.join(", ")})` : ""}: i quadretti di ${LATO} px che differiscono si ritrovano uguali nella foto del client spostati fino a ${sposta} px; tolti quelli che si ritrovano resta ${pc(r.n, r.tot)}`,
+      `${z.t47sposta && !s.toppe?.length ? "ciò che PA T47 abbassa" : z.t56sposta && !isp && !s.toppe?.length ? "ciò che PA T56 e T57 alzano o allargano" : isp && !s.toppe?.length ? "l'ispettore più stretto" : "il DOM nuovo"} sposta il resto${r.spost.length ? ` (${r.spost.join(", ")})` : ""}: i quadretti di ${LATO} px che differiscono si ritrovano uguali nella foto del client spostati fino a ${sposta} px; tolti quelli che si ritrovano resta ${pc(r.n, r.tot)}`,
     );
   }
   return motivi;
@@ -309,7 +344,7 @@ for (const s of STATI) {
         const { n, tot, d } = confronta(a, foto);
         if (n > 0) writeFileSync(out.replace(/\.png$/, ".diff.png"), PNG.sync.write(d));
         const perche = (100 * n) / tot > SOGLIA ? await spiega(s, cap, luce, a, foto, null, 0, out) : [];
-        riga(s, larghezza, luce, "client", pc(n, tot), [...perche, faccia ? FACCIA : ""].filter(Boolean).join("; "));
+        riga(s, larghezza, luce, "client", pc(n, tot), [...perche, faccia ? FACCIA : "", BLU(cap)].filter(Boolean).join("; "));
         continue;
       }
 
@@ -438,7 +473,7 @@ for (const s of STATI) {
               (v) => [...document.getElementById("sim-schermo").contentDocument.querySelectorAll("[data-sim-scorso]")].forEach((e, i) => (e.scrollTop = v[i])),
               scorsi,
             );
-          riga(s, larghezza, luce, "client fuori dagli strati", pc(n, tot), [alta && toppe?.length ? "le toppe del piano cambiano il client attorno al DOM nuovo (classi, testi, spazio che il DOM nuovo prende)" : "", ...perche, faccia ? FACCIA : ""].filter(Boolean).join("; "));
+          riga(s, larghezza, luce, "client fuori dagli strati", pc(n, tot), [alta && toppe?.length ? "le toppe del piano cambiano il client attorno al DOM nuovo (classi, testi, spazio che il DOM nuovo prende)" : "", ...perche, faccia ? FACCIA : "", BLU(cap)].filter(Boolean).join("; "));
         } else riga(s, larghezza, luce, "client fuori dagli strati", `misura ${a.width}x${a.height} ≠ ${foto.width}x${foto.height}`);
       }
       for (const [i, q] of rett.entries()) {

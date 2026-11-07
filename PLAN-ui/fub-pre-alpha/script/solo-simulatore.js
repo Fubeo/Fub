@@ -143,6 +143,7 @@ html[data-sim-tocco] :is([role="grid"], [role="application"]), html[data-sim-toc
   const PREF = {
     "appearance.contrast": "contrast",
     "appearance.density": "density",
+    "appearance.bars": "bars",
     "appearance.accent": "accent",
     "appearance.body": "body",
     "appearance.line-height": "lineHeight",
@@ -567,6 +568,7 @@ html[data-sim-tocco] :is([role="grid"], [role="application"]), html[data-sim-toc
       radio("appearance.motion", (b) => (b.dataset.choice ?? "") === ({ pieno: "", calmo: "calm", ridotto: "reduced" }[api.scelto.moto] ?? ""));
       if (def("contrast")) radio("appearance.contrast", (b) => (b.dataset.choice ?? "") === (api.prefs.contrast === "system" ? "" : api.val("contrast")));
       if (def("density")) radio("appearance.density", (b) => b.dataset.choice === api.val("density"));
+      if (def("bars")) radio("appearance.bars", (b) => b.dataset.choice === (api.prefs.bars ?? doc.documentElement.__barre ?? "light"));
       if (def("font")) radio("appearance.font", (b) => b.dataset.value === api.val("font"));
       if (def("compactness")) radio("chrome.compactness", (b) => Number(b.dataset.step) === Number(api.val("compactness")));
       if (def("accent")) {
@@ -591,7 +593,9 @@ html[data-sim-tocco] :is([role="grid"], [role="application"]), html[data-sim-toc
       }
     }
     function azzera(key, bottone) {
-      if (PREF[key]) api.imposta(PREF[key], null);
+      // «Le barre» azzerata torna a «chiare» anche sullo stato con «marcate».
+      if (key === "appearance.bars") api.imposta("bars", "light");
+      else if (PREF[key]) api.imposta(PREF[key], null);
       else if (key === "appearance.theme") api.imposta("theme", null);
       else if (key === "appearance.motion") return api.moto("pieno");
       else {
@@ -769,6 +773,7 @@ html[data-sim-tocco] :is([role="grid"], [role="application"]), html[data-sim-toc
       if (key === "appearance.motion") return R.cambia("il movimento", () => api.moto({ "": "pieno", calm: "calmo", reduced: "ridotto" }[v] ?? "pieno"));
       if (key === "appearance.contrast") return R.cambia("il contrasto", poi(() => api.imposta("contrast", v === "" ? "system" : v)));
       if (key === "appearance.density") return R.cambia("la densità", poi(() => api.imposta("density", v)));
+      if (key === "appearance.bars") return R.cambia("le barre", poi(() => api.imposta("bars", v)));
       if (key === "appearance.font") return R.cambia("il carattere", poi(() => api.imposta("font", v)));
       if (key === "chrome.compactness") return R.cambia("la compattezza", poi(() => api.imposta("compactness", Number(v))));
       if (key === "appearance.accent") {

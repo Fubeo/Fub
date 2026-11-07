@@ -1,0 +1,1089 @@
+diff --git a/apps/client/bench/fake-ipc.ts b/apps/client/bench/fake-ipc.ts
+--- a/apps/client/bench/fake-ipc.ts
++++ b/apps/client/bench/fake-ipc.ts
+@@ -682,10 +682,10 @@
+       description: "Il colore di collegamenti, fuoco e selezione. Chiarezza e intensità si adattano da sole per restare leggibili.",
+       group: "Aspetto",
+       scope: "machine",
+-      kind: { kind: "number", default: 265, min: 0, max: 360 },
++      kind: { kind: "number", default: 160, min: 0, max: 360 },
+       program_writable: false,
+     },
+-    value: 265,
++    value: 160,
+     source: "default",
+   },
+   ...(ON_SHELL ? [CHROME_COMPACTNESS] : []),
+diff --git a/apps/client/index.html b/apps/client/index.html
+--- a/apps/client/index.html
++++ b/apps/client/index.html
+@@ -26,7 +26,7 @@
+             aria-label="Menu di Fub"
+             aria-expanded="false"
+             aria-controls="app-menu"
+-          ><span class="brand-glyph" aria-hidden="true">f</span></button>
++          ><svg class="brand-logo" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path class="brand-logo-foglio" d="M5 1H12A1 1 0 0 1 13 2V14A1 1 0 0 1 12 15H3A1 1 0 0 1 2 14V4Z"/><rect class="brand-logo-pagina" x="8" y="5" width="5" height="10" rx="0.8"/><path class="brand-logo-nastro" d="M13.6 3.2C13.2 1.6 10.6 1.1 9.4 3.2C8.4 5 7.6 9 6.9 11.6C6.3 13.8 5 14.9 3.6 14.6C2.2 14.3 2.1 12.8 3.4 11.9C5.2 10.6 8.2 9.6 11.6 9.1"/></svg></button>
+           <!-- `#app-menu-toggle` e `#open-vault` restano come manici: il
+                registro dei comandi e `ui/titlebar.ts` li cercano per id. Non
+                si vedono mai: il menu si apre dal marchio. -->
+diff --git a/apps/client/src/i18n/catalog.ts b/apps/client/src/i18n/catalog.ts
+--- a/apps/client/src/i18n/catalog.ts
++++ b/apps/client/src/i18n/catalog.ts
+@@ -415,6 +415,7 @@
+ "prefs.space.step.2": "Media",
+ "prefs.space.step.3": "Stretta",
+ "prefs.space.step.4": "Minima",
++"prefs.accent.smeraldo": "Smeraldo",
+ "prefs.accent.matita-blu": "Matita blu",
+ "prefs.accent.viola": "Viola",
+ "prefs.accent.prugna": "Prugna",
+@@ -3607,6 +3608,7 @@
+ "prefs.space.step.2": "Medium",
+ "prefs.space.step.3": "Narrow",
+ "prefs.space.step.4": "Minimal",
++"prefs.accent.smeraldo": "Emerald",
+ "prefs.accent.matita-blu": "Blue pencil",
+ "prefs.accent.viola": "Violet",
+ "prefs.accent.prugna": "Plum",
+diff --git a/apps/client/src/panels/settings.ts b/apps/client/src/panels/settings.ts
+--- a/apps/client/src/panels/settings.ts
++++ b/apps/client/src/panels/settings.ts
+@@ -2973,7 +2973,10 @@
+   source.target = "_blank";
+   source.rel = "noopener noreferrer";
+   source.textContent = t("about.source");
+-  versionRow.append(versionText, source);
++  // PA, D26 (toppa della cattura): il logo accanto alla versione.
++  const logo = document.importNode(new DOMParser().parseFromString("<svg xmlns=\"http://www.w3.org/2000/svg\" class=\"about-logo\" viewBox=\"0 0 48 48\" aria-hidden=\"true\" focusable=\"false\"><path class=\"logo-foglio\" d=\"M15 2H36A3 3 0 0 1 39 5V39A3 3 0 0 1 36 42H11A3 3 0 0 1 8 39V9Z\"/><path class=\"logo-orecchia\" d=\"M8 9L15 2V7A2 2 0 0 1 13 9Z\"/><rect class=\"logo-oliva\" x=\"11.5\" y=\"14\" width=\"14\" height=\"26\" rx=\"2.5\"/><rect class=\"logo-pagina\" x=\"22.5\" y=\"13\" width=\"16.5\" height=\"29\" rx=\"2.2\"/><g class=\"logo-righe\"><rect x=\"25.5\" y=\"16.5\" width=\"10.5\" height=\"1.8\" rx=\"0.9\"/><rect x=\"25.5\" y=\"19.8\" width=\"8.5\" height=\"1.8\" rx=\"0.9\"/><rect x=\"25.5\" y=\"28.5\" width=\"10.5\" height=\"1.8\" rx=\"0.9\"/></g><g class=\"logo-griglia\"><rect x=\"29.7\" y=\"33.2\" width=\"6.6\" height=\"6.6\" rx=\"0.4\"/><path d=\"M33 33.2V39.8M29.7 36.5H36.3\"/></g><path class=\"logo-ombra\" transform=\"translate(0.5 0.8)\" d=\"M35.7 12.2C39.5 12.3 41.6 9.6 41.4 6.7C41.1 4.2 38.8 3.1 36.4 3.5C31.5 4.2 27.7 8.2 25.5 12.9C23.2 18 21.4 23.8 19.9 29.6C18.5 35.4 17 41.3 13.7 43.3C11 45 6.8 44.5 5.9 41.3C5 38 7.6 35.1 11 32.9C16.6 29.3 24.6 24.9 33.2 23.2\"/><path class=\"logo-nastro\" d=\"M35.7 12.2C39.5 12.3 41.6 9.6 41.4 6.7C41.1 4.2 38.8 3.1 36.4 3.5C31.5 4.2 27.7 8.2 25.5 12.9C23.2 18 21.4 23.8 19.9 29.6C18.5 35.4 17 41.3 13.7 43.3C11 45 6.8 44.5 5.9 41.3C5 38 7.6 35.1 11 32.9C16.6 29.3 24.6 24.9 33.2 23.2\"/></svg>", "image/svg+xml").documentElement, true);
++  versionRow.classList.add("about-version");
++  versionRow.append(logo, versionText, source);
+   about.body.append(versionRow);
+ 
+   const check = updateChecker?.state() ?? { kind: "idle" as const };
+diff --git a/apps/client/src/shells/scrittoio/preferences/accent-control.ts b/apps/client/src/shells/scrittoio/preferences/accent-control.ts
+--- a/apps/client/src/shells/scrittoio/preferences/accent-control.ts
++++ b/apps/client/src/shells/scrittoio/preferences/accent-control.ts
+@@ -24,6 +24,7 @@
+ const CUSTOM = "custom";
+ 
+ const NAMES: Readonly<Record<SwatchId, Key>> = {
++  smeraldo: "prefs.accent.smeraldo",
+   "matita-blu": "prefs.accent.matita-blu",
+   viola: "prefs.accent.viola",
+   prugna: "prefs.accent.prugna",
+diff --git a/apps/client/src/theme/scrittoio/recipe.ts b/apps/client/src/theme/scrittoio/recipe.ts
+--- a/apps/client/src/theme/scrittoio/recipe.ts
++++ b/apps/client/src/theme/scrittoio/recipe.ts
+@@ -40,11 +40,25 @@
+ export type ContrastLevel = "normal" | "high";
+ export const CONTRASTS = ["normal", "high"] as const;
+ 
+-/** La matita blu. */
+-export const DEFAULT_ACCENT_HUE = 265;
++/** Lo smeraldo: il verde del logo (D25). */
++export const DEFAULT_ACCENT_HUE = 160;
++
++/// Quanto un colore di stato resta lontano dall'accento, in gradi di tinta:
++/// il «salvato» verde non si confonde con un accento verde, né l'errore
++/// rosso con una tinta su misura rossa (D25).
++export const STATUS_HUE_GAP = 30;
++
++/// La tinta di un segno: se cade a meno di `STATUS_HUE_GAP` dall'accento si
++/// sposta a quella distanza, dal lato dove stava.
++export function statusHue(hue: number, accentHue: number): number {
++  const d = ((((hue - accentHue) % 360) + 540) % 360) - 180;
++  if (Math.abs(d) >= STATUS_HUE_GAP) return hue;
++  return (((accentHue + (d < 0 ? -STATUS_HUE_GAP : STATUS_HUE_GAP)) % 360) + 360) % 360;
++}
+ 
+ /** I campioni offerti nelle impostazioni del tema, oltre alla tinta libera. */
+ export const ACCENT_SWATCHES = [
++  { id: "smeraldo", hue: 160 },
+   { id: "matita-blu", hue: 265 },
+   { id: "viola", hue: 300 },
+   { id: "prugna", hue: 340 },
+@@ -253,10 +267,11 @@
+   // ── I segni ─────────────────────────────────────────────────────────────
+   const plain = [bg, bgHover, sheetColor, sheet2, raise];
+   const sign = (dayColor: Oklch, nightColor: Oklch): string => hold(day ? dayColor : nightColor, plain, T.text, light);
+-  const danger = sign(lch(0.55, 0.21, 27), lch(0.7, 0.17, 25));
+-  const warning = sign(lch(0.56, 0.13, 70), lch(0.8, 0.13, 75));
+-  const success = sign(lch(0.52, 0.13, 155), lch(0.74, 0.13, 155));
+-  const info = sign(lch(0.52, 0.12, 240), lch(0.76, 0.1, 240));
++  const apart = (h: number): number => statusHue(h, hue);
++  const danger = sign(lch(0.55, 0.21, apart(27)), lch(0.7, 0.17, apart(25)));
++  const warning = sign(lch(0.56, 0.13, apart(70)), lch(0.8, 0.13, apart(75)));
++  const success = sign(lch(0.52, 0.13, apart(155)), lch(0.74, 0.13, apart(155)));
++  const info = sign(lch(0.52, 0.12, apart(240)), lch(0.76, 0.1, apart(240)));
+   const wash = day ? 12 : 18;
+ 
+   // L'evidenziatore si vede, non si legge: di notte è un velo, o un giallo
+diff --git a/apps/client/src/theme/scrittoio/sheet-dark-high.css b/apps/client/src/theme/scrittoio/sheet-dark-high.css
+--- a/apps/client/src/theme/scrittoio/sheet-dark-high.css
++++ b/apps/client/src/theme/scrittoio/sheet-dark-high.css
+@@ -73,37 +73,37 @@
+   --spring-jelly-c: 12;
+   --focus-ring-width: 2px;
+   --focus-ring-offset: 2px;
+-  --bg: #0a0e16;
+-  --bg-chrome: #0a0e16;
+-  --bg-panel: #0a0e16;
+-  --bg-hover: #121720;
+-  --bg-active: #1a1f2a;
+-  --sheet: #151a21;
+-  --sheet-2: #1d222a;
+-  --bg-input: #1d222a;
+-  --bg-elev: #212730;
+-  --overlay-hover: rgb(242 245 251 / 7%);
+-  --overlay-active: rgb(242 245 251 / 12%);
++  --bg: #08110b;
++  --bg-chrome: #08110b;
++  --bg-panel: #08110b;
++  --bg-hover: #0f1a13;
++  --bg-active: #17221b;
++  --sheet: #131c16;
++  --sheet-2: #1b241e;
++  --bg-input: #1b241e;
++  --bg-elev: #1e2923;
++  --overlay-hover: rgb(241 247 243 / 7%);
++  --overlay-active: rgb(241 247 243 / 12%);
+   --scrim: rgb(0 0 0 / 52%);
+-  --text: #f2f5fb;
+-  --muted: #bac0c9;
+-  --border: #868d9a;
+-  --border-strong: #8c939f;
+-  --outline: #868d9a;
+-  --accent: #a2c0ff;
+-  --accent-soft: #a3c0ff;
+-  --accent-contrast: #070d1a;
+-  --accent-wash: #213156;
+-  --accent-veil: rgb(162 192 255 / 20%);
+-  --focus-ring: #a2c0ff;
++  --text: #f1f7f3;
++  --muted: #bcc6bf;
++  --border: #829087;
++  --border-strong: #89968d;
++  --outline: #829087;
++  --accent: #68d8a1;
++  --accent-soft: #75d9a6;
++  --accent-contrast: #021109;
++  --accent-wash: #033d26;
++  --accent-veil: rgb(104 216 161 / 20%);
++  --focus-ring: #68d8a1;
+   --danger: #ff938b;
+   --danger-wash: rgb(255 147 139 / 18%);
+   --danger-contrast: #180807;
+   --warning: #eeb154;
+   --warning-wash: rgb(238 177 84 / 20%);
+   --warning-contrast: #150b01;
+-  --success: #60c588;
+-  --success-wash: rgb(96 197 136 / 20%);
++  --success: #93be63;
++  --success-wash: rgb(147 190 99 / 20%);
+   --success-contrast: #031108;
+   --info: #73baea;
+   --info-wash: rgb(115 186 234 / 18%);
+@@ -120,112 +120,112 @@
+   --shadow-sm: 0 1px 1px rgb(0 0 0 / 25%), 0 6px 20px rgb(0 0 0 / 22%);
+   --shadow-md: 0 2px 4px rgb(0 0 0 / 30%), 0 14px 36px rgb(0 0 0 / 38%);
+   --shadow-lg: 0 4px 10px rgb(0 0 0 / 35%), 0 28px 70px rgb(0 0 0 / 50%);
+-  --elevation-paper-surface: #151a21;
+-  --elevation-paper-border: #151a21;
++  --elevation-paper-surface: #131c16;
++  --elevation-paper-border: #131c16;
+   --elevation-paper-shadow: 0 1px 1px rgb(0 0 0 / 25%), 0 6px 20px rgb(0 0 0 / 22%);
+-  --elevation-base-surface: #0a0e16;
+-  --elevation-base-border: #0a0e16;
++  --elevation-base-surface: #08110b;
++  --elevation-base-border: #08110b;
+   --elevation-base-shadow: none;
+-  --elevation-chrome-surface: #0a0e16;
+-  --elevation-chrome-border: #0a0e16;
++  --elevation-chrome-surface: #08110b;
++  --elevation-chrome-border: #08110b;
+   --elevation-chrome-shadow: none;
+-  --elevation-floating-surface: #212730;
+-  --elevation-floating-border: #868d9a;
++  --elevation-floating-surface: #1e2923;
++  --elevation-floating-border: #829087;
+   --elevation-floating-shadow: 0 2px 4px rgb(0 0 0 / 30%), 0 14px 36px rgb(0 0 0 / 38%);
+-  --elevation-dialog-surface: #212730;
+-  --elevation-dialog-border: #868d9a;
++  --elevation-dialog-surface: #1e2923;
++  --elevation-dialog-border: #829087;
+   --elevation-dialog-shadow: 0 4px 10px rgb(0 0 0 / 35%), 0 28px 70px rgb(0 0 0 / 50%);
+   --draw-desk: #2b2e32;
+-  --graph-node: #7b828e;
+-  --graph-node-active: #a2c0ff;
+-  --graph-node-hover: #a3c0ff;
+-  --doc-bg: #151a21;
+-  --doc-active-line: #1b1f28;
+-  --doc-selection: #26365c;
+-  --doc-tooltip-bg: #212730;
+-  --doc-fill: rgb(242 245 251 / 11%);
+-  --doc-fill-soft: rgb(242 245 251 / 7%);
+-  --doc-rule: rgb(242 245 251 / 34%);
+-  --doc-rule-soft: rgb(242 245 251 / 20%);
++  --graph-node: #77857c;
++  --graph-node-active: #68d8a1;
++  --graph-node-hover: #75d9a6;
++  --doc-bg: #131c16;
++  --doc-active-line: #19221c;
++  --doc-selection: #0b432b;
++  --doc-tooltip-bg: #1e2923;
++  --doc-fill: rgb(241 247 243 / 11%);
++  --doc-fill-soft: rgb(241 247 243 / 7%);
++  --doc-rule: rgb(241 247 243 / 34%);
++  --doc-rule-soft: rgb(241 247 243 / 20%);
+   --doc-highlight: rgb(216 189 81 / 30%);
+-  --doc-fg: #eff2f7;
+-  --doc-link: #acc7ff;
+-  --doc-heading: #eff2f7;
+-  --doc-danger: #ffb4ad;
+-  --doc-gutter-fg: #c2c7d0;
+-  --doc-caret: #a2c0ff;
+-  --syn-keyword: #d9baff;
+-  --syn-name: #ffb4ad;
+-  --syn-function: #a0caff;
+-  --syn-literal: #ffb785;
+-  --syn-type: #e8c270;
+-  --syn-operator: #5dd8e5;
+-  --syn-comment: #c0c7d4;
+-  --syn-string: #8ed79d;
+-  --syn-heading: #eff2f7;
+-  --syn-invalid: #ffb4aa;
+-  --doc-ins: #acc7ff;
+-  --doc-del: #ffb4ad;
+-  --doc-proof-spell: #ff746e;
++  --doc-fg: #eef3f0;
++  --doc-link: #72e1a9;
++  --doc-heading: #eef3f0;
++  --doc-danger: #ffbbb4;
++  --doc-gutter-fg: #c4cec7;
++  --doc-caret: #68d8a1;
++  --syn-keyword: #dcc0ff;
++  --syn-name: #ffbbb4;
++  --syn-function: #a9cfff;
++  --syn-literal: #ffbe91;
++  --syn-type: #edc775;
++  --syn-operator: #62ddea;
++  --syn-comment: #c0cfc5;
++  --syn-string: #92dca1;
++  --syn-heading: #eef3f0;
++  --syn-invalid: #ffbbb2;
++  --doc-ins: #72e1a9;
++  --doc-del: #ffbbb4;
++  --doc-proof-spell: #ff7b74;
+   --doc-proof-gram: #eeb154;
+   --doc-find: #473d13;
+   --doc-find-now: #704a07;
+   --doc-comment: #eeb154;
+-  --doc-author-1: #a0caff;
+-  --doc-author-2: #ffb4ad;
+-  --doc-author-3: #90d892;
+-  --doc-author-4: #e0b7ff;
+-  --doc-author-5: #ffb87c;
+-  --doc-author-6: #4adae1;
+-  --doc-syntax-near: #7eaa86;
+-  --doc-ghost: #9aa0a9;
++  --doc-author-1: #a9cfff;
++  --doc-author-2: #ffbbb4;
++  --doc-author-3: #95dd97;
++  --doc-author-4: #e3bdff;
++  --doc-author-5: #ffbe88;
++  --doc-author-6: #50dfe6;
++  --doc-syntax-near: #82ae8a;
++  --doc-ghost: #9ba69f;
+   --doc-wavy: #d49838;
+-  --doc-block-hover: rgb(242 245 251 / 6%);
+-  --doc-block-selected: rgb(162 192 255 / 20%);
+-  --doc-drop-line: #a2c0ff;
+-  --doc-color-gray: #c1c7d1;
+-  --doc-tint-gray: #2f3339;
+-  --doc-color-brown: #e5bfaa;
++  --doc-block-hover: rgb(241 247 243 / 6%);
++  --doc-block-selected: rgb(104 216 161 / 20%);
++  --doc-drop-line: #68d8a1;
++  --doc-color-gray: #c3cec6;
++  --doc-tint-gray: #2e3530;
++  --doc-color-brown: #eac4af;
+   --doc-tint-brown: #3f2f26;
+-  --doc-color-orange: #ffb785;
++  --doc-color-orange: #ffbe91;
+   --doc-tint-orange: #4b290f;
+-  --doc-color-yellow: #e2c474;
++  --doc-color-yellow: #e6c978;
+   --doc-tint-yellow: #3e310b;
+-  --doc-color-green: #91d79f;
++  --doc-color-green: #95dca4;
+   --doc-tint-green: #1c3b23;
+-  --doc-color-blue: #9acbff;
++  --doc-color-blue: #a2d0ff;
+   --doc-tint-blue: #193550;
+-  --doc-color-purple: #d9baff;
++  --doc-color-purple: #dcc0ff;
+   --doc-tint-purple: #3a2a4b;
+-  --doc-color-pink: #ffb0d5;
++  --doc-color-pink: #ffb7d8;
+   --doc-tint-pink: #492537;
+-  --doc-color-red: #ffb4aa;
++  --doc-color-red: #ffbbb2;
+   --doc-tint-red: #53211d;
+   --paper-bg: #ffffff;
+-  --paper-ink: #050608;
+-  --paper-link: #1538ae;
+-  --paper-danger: #910008;
+-  --paper-rule: rgb(5 6 8 / 30%);
+-  --paper-rule-soft: rgb(5 6 8 / 16%);
+-  --paper-fill: rgb(5 6 8 / 8%);
+-  --paper-fill-soft: rgb(5 6 8 / 5%);
+-  --paper-caret: #1538ae;
+-  --paper-selection: #d0defd;
+-  --paper-active-line: #f4f7fb;
++  --paper-ink: #040605;
++  --paper-link: #005233;
++  --paper-danger: #940009;
++  --paper-rule: rgb(4 6 5 / 30%);
++  --paper-rule-soft: rgb(4 6 5 / 16%);
++  --paper-fill: rgb(4 6 5 / 8%);
++  --paper-fill-soft: rgb(4 6 5 / 5%);
++  --paper-caret: #005233;
++  --paper-selection: #c5e8d4;
++  --paper-active-line: #f4f8f5;
+   --paper-highlight: rgb(250 222 78 / 55%);
+-  --paper-ins: #1538ae;
+-  --paper-del: #910008;
+-  --paper-proof-spell: #c60817;
+-  --paper-proof-gram: #8c5600;
++  --paper-ins: #005233;
++  --paper-del: #940009;
++  --paper-proof-spell: #c80c19;
++  --paper-proof-gram: #8d5700;
+   --paper-find: #f6e697;
+   --paper-find-now: #fac053;
+-  --paper-comment: #8c5600;
+-  --paper-author-1: #00448d;
+-  --paper-author-2: #910012;
+-  --paper-author-3: #00520d;
+-  --paper-author-4: #68238e;
+-  --paper-author-5: #6d3800;
+-  --paper-author-6: #004e52;
++  --paper-comment: #8d5700;
++  --paper-author-1: #00458f;
++  --paper-author-2: #930014;
++  --paper-author-3: #00530e;
++  --paper-author-4: #692490;
++  --paper-author-5: #6f3900;
++  --paper-author-6: #004f53;
+   color-scheme: dark;
+   font-family: var(--font-ui);
+   font-size: var(--text-base);
+diff --git a/apps/client/src/theme/scrittoio/sheet-dark.css b/apps/client/src/theme/scrittoio/sheet-dark.css
+--- a/apps/client/src/theme/scrittoio/sheet-dark.css
++++ b/apps/client/src/theme/scrittoio/sheet-dark.css
+@@ -73,37 +73,37 @@
+   --spring-jelly-c: 12;
+   --focus-ring-width: 2px;
+   --focus-ring-offset: 2px;
+-  --bg: #0a0e16;
+-  --bg-chrome: #0a0e16;
+-  --bg-panel: #0a0e16;
+-  --bg-hover: #121720;
+-  --bg-active: #1a1f2a;
+-  --sheet: #151a21;
+-  --sheet-2: #1d222a;
+-  --bg-input: #1d222a;
+-  --bg-elev: #212730;
+-  --overlay-hover: rgb(229 232 237 / 7%);
+-  --overlay-active: rgb(229 232 237 / 12%);
++  --bg: #08110b;
++  --bg-chrome: #08110b;
++  --bg-panel: #08110b;
++  --bg-hover: #0f1a13;
++  --bg-active: #17221b;
++  --sheet: #131c16;
++  --sheet-2: #1b241e;
++  --bg-input: #1b241e;
++  --bg-elev: #1e2923;
++  --overlay-hover: rgb(228 233 230 / 7%);
++  --overlay-active: rgb(228 233 230 / 12%);
+   --scrim: rgb(0 0 0 / 52%);
+-  --text: #e5e8ed;
+-  --muted: #a0a5ae;
+-  --border: #2b303a;
+-  --border-strong: #424853;
+-  --outline: #747b87;
+-  --accent: #82a8fd;
+-  --accent-soft: #a3c0ff;
+-  --accent-contrast: #070d1a;
+-  --accent-wash: #213156;
+-  --accent-veil: rgb(130 168 253 / 20%);
+-  --focus-ring: #82a8fd;
++  --text: #e4e9e6;
++  --muted: #9ea7a1;
++  --border: #29332d;
++  --border-strong: #3f4b43;
++  --outline: #717e76;
++  --accent: #53c48e;
++  --accent-soft: #75d9a6;
++  --accent-contrast: #021109;
++  --accent-wash: #033d26;
++  --accent-veil: rgb(83 196 142 / 20%);
++  --focus-ring: #53c48e;
+   --danger: #f66d67;
+   --danger-wash: rgb(246 109 103 / 18%);
+   --danger-contrast: #180807;
+   --warning: #eeb154;
+   --warning-wash: rgb(238 177 84 / 20%);
+   --warning-contrast: #150b01;
+-  --success: #5ec386;
+-  --success-wash: rgb(94 195 134 / 20%);
++  --success: #8fbb5f;
++  --success-wash: rgb(143 187 95 / 20%);
+   --success-contrast: #031108;
+   --info: #73baea;
+   --info-wash: rgb(115 186 234 / 18%);
+@@ -120,52 +120,52 @@
+   --shadow-sm: 0 1px 1px rgb(0 0 0 / 25%), 0 6px 20px rgb(0 0 0 / 22%);
+   --shadow-md: 0 2px 4px rgb(0 0 0 / 30%), 0 14px 36px rgb(0 0 0 / 38%);
+   --shadow-lg: 0 4px 10px rgb(0 0 0 / 35%), 0 28px 70px rgb(0 0 0 / 50%);
+-  --elevation-paper-surface: #151a21;
+-  --elevation-paper-border: #151a21;
++  --elevation-paper-surface: #131c16;
++  --elevation-paper-border: #131c16;
+   --elevation-paper-shadow: 0 1px 1px rgb(0 0 0 / 25%), 0 6px 20px rgb(0 0 0 / 22%);
+-  --elevation-base-surface: #0a0e16;
+-  --elevation-base-border: #0a0e16;
++  --elevation-base-surface: #08110b;
++  --elevation-base-border: #08110b;
+   --elevation-base-shadow: none;
+-  --elevation-chrome-surface: #0a0e16;
+-  --elevation-chrome-border: #0a0e16;
++  --elevation-chrome-surface: #08110b;
++  --elevation-chrome-border: #08110b;
+   --elevation-chrome-shadow: none;
+-  --elevation-floating-surface: #212730;
+-  --elevation-floating-border: #212730;
++  --elevation-floating-surface: #1e2923;
++  --elevation-floating-border: #1e2923;
+   --elevation-floating-shadow: 0 2px 4px rgb(0 0 0 / 30%), 0 14px 36px rgb(0 0 0 / 38%);
+-  --elevation-dialog-surface: #212730;
+-  --elevation-dialog-border: #212730;
++  --elevation-dialog-surface: #1e2923;
++  --elevation-dialog-border: #1e2923;
+   --elevation-dialog-shadow: 0 4px 10px rgb(0 0 0 / 35%), 0 28px 70px rgb(0 0 0 / 50%);
+   --draw-desk: #2b2e32;
+-  --graph-node: #747b87;
+-  --graph-node-active: #82a8fd;
+-  --graph-node-hover: #a3c0ff;
+-  --doc-bg: #151a21;
+-  --doc-active-line: #1b1f28;
+-  --doc-selection: #26365c;
+-  --doc-tooltip-bg: #212730;
+-  --doc-fill: rgb(229 232 237 / 11%);
+-  --doc-fill-soft: rgb(229 232 237 / 7%);
+-  --doc-rule: rgb(229 232 237 / 34%);
+-  --doc-rule-soft: rgb(229 232 237 / 20%);
++  --graph-node: #717e76;
++  --graph-node-active: #53c48e;
++  --graph-node-hover: #75d9a6;
++  --doc-bg: #131c16;
++  --doc-active-line: #19221c;
++  --doc-selection: #0b432b;
++  --doc-tooltip-bg: #1e2923;
++  --doc-fill: rgb(228 233 230 / 11%);
++  --doc-fill-soft: rgb(228 233 230 / 7%);
++  --doc-rule: rgb(228 233 230 / 34%);
++  --doc-rule-soft: rgb(228 233 230 / 20%);
+   --doc-highlight: rgb(216 189 81 / 30%);
+-  --doc-fg: #dbdee3;
+-  --doc-link: #82a8fd;
+-  --doc-heading: #dbdee3;
+-  --doc-danger: #ff746e;
+-  --doc-gutter-fg: #a0a5ae;
+-  --doc-caret: #82a8fd;
++  --doc-fg: #dae0dc;
++  --doc-link: #53c48e;
++  --doc-heading: #dae0dc;
++  --doc-danger: #ff7b74;
++  --doc-gutter-fg: #9ea7a1;
++  --doc-caret: #53c48e;
+   --syn-keyword: #c8a5f0;
+   --syn-name: #f69b94;
+   --syn-function: #87bafd;
+   --syn-literal: #eea471;
+   --syn-type: #d8b260;
+   --syn-operator: #4fccd9;
+-  --syn-comment: #98a0ac;
++  --syn-comment: #99a79e;
+   --syn-string: #82cb92;
+-  --syn-heading: #dbdee3;
++  --syn-heading: #dae0dc;
+   --syn-invalid: #f69c91;
+-  --doc-ins: #82a8fd;
+-  --doc-del: #ff746e;
++  --doc-ins: #53c48e;
++  --doc-del: #ff7b74;
+   --doc-proof-spell: #f66d67;
+   --doc-proof-gram: #eeb154;
+   --doc-find: #473d13;
+@@ -178,13 +178,13 @@
+   --doc-author-5: #e99e5e;
+   --doc-author-6: #30c8cf;
+   --doc-syntax-near: #679270;
+-  --doc-ghost: #7b808a;
++  --doc-ghost: #7c867f;
+   --doc-wavy: #d49838;
+-  --doc-block-hover: rgb(229 232 237 / 6%);
+-  --doc-block-selected: rgb(130 168 253 / 20%);
+-  --doc-drop-line: #82a8fd;
+-  --doc-color-gray: #acb1bb;
+-  --doc-tint-gray: #2f3339;
++  --doc-block-hover: rgb(228 233 230 / 6%);
++  --doc-block-selected: rgb(83 196 142 / 20%);
++  --doc-drop-line: #53c48e;
++  --doc-color-gray: #aab4ad;
++  --doc-tint-gray: #2e3530;
+   --doc-color-brown: #cda894;
+   --doc-tint-brown: #3f2f26;
+   --doc-color-orange: #ec9c63;
+@@ -202,30 +202,30 @@
+   --doc-color-red: #ff8b7f;
+   --doc-tint-red: #53211d;
+   --paper-bg: #ffffff;
+-  --paper-ink: #14161a;
+-  --paper-link: #2c57cd;
+-  --paper-danger: #c60817;
+-  --paper-rule: rgb(20 22 26 / 30%);
+-  --paper-rule-soft: rgb(20 22 26 / 16%);
+-  --paper-fill: rgb(20 22 26 / 8%);
+-  --paper-fill-soft: rgb(20 22 26 / 5%);
+-  --paper-caret: #2c57cd;
+-  --paper-selection: #d0defd;
+-  --paper-active-line: #f4f7fb;
++  --paper-ink: #131715;
++  --paper-link: #007249;
++  --paper-danger: #c80c19;
++  --paper-rule: rgb(19 23 21 / 30%);
++  --paper-rule-soft: rgb(19 23 21 / 16%);
++  --paper-fill: rgb(19 23 21 / 8%);
++  --paper-fill-soft: rgb(19 23 21 / 5%);
++  --paper-caret: #007249;
++  --paper-selection: #c5e8d4;
++  --paper-active-line: #f4f8f5;
+   --paper-highlight: rgb(250 222 78 / 55%);
+-  --paper-ins: #2c57cd;
+-  --paper-del: #c60817;
++  --paper-ins: #007249;
++  --paper-del: #c80c19;
+   --paper-proof-spell: #d01d21;
+   --paper-proof-gram: #a16500;
+   --paper-find: #f6e697;
+   --paper-find-now: #fac053;
+-  --paper-comment: #b16f00;
+-  --paper-author-1: #0060bf;
++  --paper-comment: #b37100;
++  --paper-author-1: #0061c0;
+   --paper-author-2: #b02a2d;
+-  --paper-author-3: #007219;
++  --paper-author-3: #00741a;
+   --paper-author-4: #813faa;
+   --paper-author-5: #934f00;
+-  --paper-author-6: #006d72;
++  --paper-author-6: #006f74;
+   color-scheme: dark;
+   font-family: var(--font-ui);
+   font-size: var(--text-base);
+diff --git a/apps/client/src/theme/scrittoio/sheet-light-high.css b/apps/client/src/theme/scrittoio/sheet-light-high.css
+--- a/apps/client/src/theme/scrittoio/sheet-light-high.css
++++ b/apps/client/src/theme/scrittoio/sheet-light-high.css
+@@ -73,37 +73,37 @@
+   --spring-jelly-c: 12;
+   --focus-ring-width: 2px;
+   --focus-ring-offset: 2px;
+-  --bg: #e8edf5;
+-  --bg-chrome: #e8edf5;
+-  --bg-panel: #e8edf5;
+-  --bg-hover: #dce4ee;
+-  --bg-active: #d1dae6;
+-  --sheet: #fcfdff;
+-  --sheet-2: #f3f6f9;
+-  --bg-input: #f3f6f9;
++  --bg: #e7efe9;
++  --bg-chrome: #e7efe9;
++  --bg-panel: #e7efe9;
++  --bg-hover: #dce6dd;
++  --bg-active: #d0ddd2;
++  --sheet: #fcfefd;
++  --sheet-2: #f3f7f4;
++  --bg-input: #f3f7f4;
+   --bg-elev: #ffffff;
+-  --overlay-hover: rgb(9 13 22 / 5%);
+-  --overlay-active: rgb(9 13 22 / 9%);
+-  --scrim: rgb(14 22 36 / 32%);
+-  --text: #090d16;
+-  --muted: #3e434d;
+-  --border: #666b76;
+-  --border-strong: #5d646f;
+-  --outline: #666b76;
+-  --accent: #1235ab;
+-  --accent-soft: #1235ab;
+-  --accent-contrast: #fafcff;
+-  --accent-wash: #d8e5ff;
+-  --accent-veil: rgb(18 53 171 / 12%);
+-  --focus-ring: #1235ab;
++  --overlay-hover: rgb(6 16 10 / 5%);
++  --overlay-active: rgb(6 16 10 / 9%);
++  --scrim: rgb(9 26 16 / 32%);
++  --text: #06100a;
++  --muted: #3b463f;
++  --border: #636e67;
++  --border-strong: #5a675f;
++  --outline: #636e67;
++  --accent: #004e30;
++  --accent-soft: #004e30;
++  --accent-contrast: #f9fdfb;
++  --accent-wash: #cceeda;
++  --accent-veil: rgb(0 78 48 / 12%);
++  --focus-ring: #004e30;
+   --danger: #980009;
+   --danger-wash: rgb(152 0 9 / 12%);
+   --danger-contrast: #fffbfa;
+   --warning: #694000;
+   --warning-wash: rgb(105 64 0 / 14%);
+   --warning-contrast: #fefbf8;
+-  --success: #00552d;
+-  --success-wash: rgb(0 85 45 / 14%);
++  --success: #325200;
++  --success-wash: rgb(50 82 0 / 14%);
+   --success-contrast: #f9fdfa;
+   --info: #004d76;
+   --info-wash: rgb(0 77 118 / 12%);
+@@ -120,112 +120,112 @@
+   --shadow-sm: 0 1px 1px rgb(24 28 44 / 5%), 0 6px 20px rgb(24 28 44 / 7%);
+   --shadow-md: 0 2px 4px rgb(24 28 44 / 8%), 0 14px 36px rgb(24 28 44 / 14%);
+   --shadow-lg: 0 4px 10px rgb(24 28 44 / 10%), 0 28px 70px rgb(24 28 44 / 22%);
+-  --elevation-paper-surface: #fcfdff;
+-  --elevation-paper-border: #fcfdff;
++  --elevation-paper-surface: #fcfefd;
++  --elevation-paper-border: #fcfefd;
+   --elevation-paper-shadow: 0 1px 1px rgb(24 28 44 / 5%), 0 6px 20px rgb(24 28 44 / 7%);
+-  --elevation-base-surface: #e8edf5;
+-  --elevation-base-border: #e8edf5;
++  --elevation-base-surface: #e7efe9;
++  --elevation-base-border: #e7efe9;
+   --elevation-base-shadow: none;
+-  --elevation-chrome-surface: #e8edf5;
+-  --elevation-chrome-border: #e8edf5;
++  --elevation-chrome-surface: #e7efe9;
++  --elevation-chrome-border: #e7efe9;
+   --elevation-chrome-shadow: none;
+   --elevation-floating-surface: #ffffff;
+-  --elevation-floating-border: #666b76;
++  --elevation-floating-border: #636e67;
+   --elevation-floating-shadow: 0 2px 4px rgb(24 28 44 / 8%), 0 14px 36px rgb(24 28 44 / 14%);
+   --elevation-dialog-surface: #ffffff;
+-  --elevation-dialog-border: #666b76;
++  --elevation-dialog-border: #636e67;
+   --elevation-dialog-shadow: 0 4px 10px rgb(24 28 44 / 10%), 0 28px 70px rgb(24 28 44 / 22%);
+   --draw-desk: #edeef1;
+-  --graph-node: #656c78;
+-  --graph-node-active: #1235ab;
+-  --graph-node-hover: #1235ab;
+-  --doc-bg: #fcfdff;
+-  --doc-active-line: #f4f7fb;
+-  --doc-selection: #d0defd;
++  --graph-node: #626e66;
++  --graph-node-active: #004e30;
++  --graph-node-hover: #004e30;
++  --doc-bg: #fcfefd;
++  --doc-active-line: #f4f8f5;
++  --doc-selection: #c5e8d4;
+   --doc-tooltip-bg: #ffffff;
+-  --doc-fill: rgb(9 13 22 / 8%);
+-  --doc-fill-soft: rgb(9 13 22 / 5%);
+-  --doc-rule: rgb(9 13 22 / 30%);
+-  --doc-rule-soft: rgb(9 13 22 / 16%);
++  --doc-fill: rgb(6 16 10 / 8%);
++  --doc-fill-soft: rgb(6 16 10 / 5%);
++  --doc-rule: rgb(6 16 10 / 30%);
++  --doc-rule-soft: rgb(6 16 10 / 16%);
+   --doc-highlight: rgb(250 222 78 / 55%);
+-  --doc-fg: #0d121a;
+-  --doc-link: #1538ae;
+-  --doc-heading: #0d121a;
+-  --doc-danger: #910008;
+-  --doc-gutter-fg: #414650;
+-  --doc-caret: #1235ab;
+-  --syn-keyword: #5b3281;
+-  --syn-name: #822323;
+-  --syn-function: #01458a;
+-  --syn-literal: #713500;
+-  --syn-type: #5b4100;
+-  --syn-operator: #004e55;
+-  --syn-comment: #404651;
+-  --syn-string: #005120;
+-  --syn-heading: #0d121a;
+-  --syn-invalid: #822320;
+-  --doc-ins: #1538ae;
+-  --doc-del: #910008;
+-  --doc-proof-spell: #c60817;
+-  --doc-proof-gram: #8c5600;
++  --doc-fg: #0b140e;
++  --doc-link: #005233;
++  --doc-heading: #0b140e;
++  --doc-danger: #940009;
++  --doc-gutter-fg: #3f4943;
++  --doc-caret: #004e30;
++  --syn-keyword: #5c3382;
++  --syn-name: #842424;
++  --syn-function: #03468c;
++  --syn-literal: #733600;
++  --syn-type: #5c4300;
++  --syn-operator: #004f57;
++  --syn-comment: #3e4a43;
++  --syn-string: #005321;
++  --syn-heading: #0b140e;
++  --syn-invalid: #832521;
++  --doc-ins: #005233;
++  --doc-del: #940009;
++  --doc-proof-spell: #c80c19;
++  --doc-proof-gram: #8d5700;
+   --doc-find: #f6e697;
+   --doc-find-now: #fac053;
+-  --doc-comment: #8c5600;
+-  --doc-author-1: #00448d;
+-  --doc-author-2: #910012;
+-  --doc-author-3: #00520d;
+-  --doc-author-4: #68238e;
+-  --doc-author-5: #6d3800;
+-  --doc-author-6: #004e52;
+-  --doc-syntax-near: #3c6c47;
+-  --doc-ghost: #5e626b;
+-  --doc-wavy: #8c5600;
+-  --doc-block-hover: rgb(9 13 22 / 4%);
+-  --doc-block-selected: rgb(18 53 171 / 12%);
+-  --doc-drop-line: #1235ab;
+-  --doc-color-gray: #42464f;
+-  --doc-tint-gray: #e4e8ef;
+-  --doc-color-brown: #653b23;
++  --doc-comment: #8d5700;
++  --doc-author-1: #00458f;
++  --doc-author-2: #930014;
++  --doc-author-3: #00530e;
++  --doc-author-4: #692490;
++  --doc-author-5: #6f3900;
++  --doc-author-6: #004f53;
++  --doc-syntax-near: #3d6e49;
++  --doc-ghost: #5c6660;
++  --doc-wavy: #8d5700;
++  --doc-block-hover: rgb(6 16 10 / 4%);
++  --doc-block-selected: rgb(0 78 48 / 12%);
++  --doc-drop-line: #004e30;
++  --doc-color-gray: #414944;
++  --doc-tint-gray: #e3eae5;
++  --doc-color-brown: #673c24;
+   --doc-tint-brown: #f6e4da;
+-  --doc-color-orange: #713500;
++  --doc-color-orange: #733600;
+   --doc-tint-orange: #ffe1ce;
+-  --doc-color-yellow: #584300;
++  --doc-color-yellow: #594400;
+   --doc-tint-yellow: #f4e7c3;
+-  --doc-color-green: #005120;
++  --doc-color-green: #005321;
+   --doc-tint-green: #d2f2d7;
+-  --doc-color-blue: #004781;
++  --doc-color-blue: #004883;
+   --doc-tint-blue: #d7eaff;
+-  --doc-color-purple: #5e2d8a;
++  --doc-color-purple: #5f2e8c;
+   --doc-tint-purple: #eee1ff;
+-  --doc-color-pink: #811956;
++  --doc-color-pink: #831b58;
+   --doc-tint-pink: #ffddec;
+-  --doc-color-red: #910008;
++  --doc-color-red: #940009;
+   --doc-tint-red: #ffdfdb;
+   --paper-bg: #ffffff;
+-  --paper-ink: #050608;
+-  --paper-link: #1538ae;
+-  --paper-danger: #910008;
+-  --paper-rule: rgb(5 6 8 / 30%);
+-  --paper-rule-soft: rgb(5 6 8 / 16%);
+-  --paper-fill: rgb(5 6 8 / 8%);
+-  --paper-fill-soft: rgb(5 6 8 / 5%);
+-  --paper-caret: #1538ae;
+-  --paper-selection: #d0defd;
+-  --paper-active-line: #f4f7fb;
++  --paper-ink: #040605;
++  --paper-link: #005233;
++  --paper-danger: #940009;
++  --paper-rule: rgb(4 6 5 / 30%);
++  --paper-rule-soft: rgb(4 6 5 / 16%);
++  --paper-fill: rgb(4 6 5 / 8%);
++  --paper-fill-soft: rgb(4 6 5 / 5%);
++  --paper-caret: #005233;
++  --paper-selection: #c5e8d4;
++  --paper-active-line: #f4f8f5;
+   --paper-highlight: rgb(250 222 78 / 55%);
+-  --paper-ins: #1538ae;
+-  --paper-del: #910008;
+-  --paper-proof-spell: #c60817;
+-  --paper-proof-gram: #8c5600;
++  --paper-ins: #005233;
++  --paper-del: #940009;
++  --paper-proof-spell: #c80c19;
++  --paper-proof-gram: #8d5700;
+   --paper-find: #f6e697;
+   --paper-find-now: #fac053;
+-  --paper-comment: #8c5600;
+-  --paper-author-1: #00448d;
+-  --paper-author-2: #910012;
+-  --paper-author-3: #00520d;
+-  --paper-author-4: #68238e;
+-  --paper-author-5: #6d3800;
+-  --paper-author-6: #004e52;
++  --paper-comment: #8d5700;
++  --paper-author-1: #00458f;
++  --paper-author-2: #930014;
++  --paper-author-3: #00530e;
++  --paper-author-4: #692490;
++  --paper-author-5: #6f3900;
++  --paper-author-6: #004f53;
+   color-scheme: light;
+   font-family: var(--font-ui);
+   font-size: var(--text-base);
+diff --git a/apps/client/src/theme/scrittoio/sheet-light.css b/apps/client/src/theme/scrittoio/sheet-light.css
+--- a/apps/client/src/theme/scrittoio/sheet-light.css
++++ b/apps/client/src/theme/scrittoio/sheet-light.css
+@@ -73,37 +73,37 @@
+   --spring-jelly-c: 12;
+   --focus-ring-width: 2px;
+   --focus-ring-offset: 2px;
+-  --bg: #e8edf5;
+-  --bg-chrome: #e8edf5;
+-  --bg-panel: #e8edf5;
+-  --bg-hover: #dce4ee;
+-  --bg-active: #d1dae6;
+-  --sheet: #fcfdff;
+-  --sheet-2: #f3f6f9;
+-  --bg-input: #f3f6f9;
++  --bg: #e7efe9;
++  --bg-chrome: #e7efe9;
++  --bg-panel: #e7efe9;
++  --bg-hover: #dce6dd;
++  --bg-active: #d0ddd2;
++  --sheet: #fcfefd;
++  --sheet-2: #f3f7f4;
++  --bg-input: #f3f7f4;
+   --bg-elev: #ffffff;
+-  --overlay-hover: rgb(26 31 41 / 5%);
+-  --overlay-active: rgb(26 31 41 / 9%);
+-  --scrim: rgb(14 22 36 / 32%);
+-  --text: #1a1f29;
+-  --muted: #5a5f6a;
+-  --border: #d3d8e0;
+-  --border-strong: #b2b8c2;
+-  --outline: #808691;
+-  --accent: #2b56cc;
+-  --accent-soft: #1a40b6;
+-  --accent-contrast: #fafcff;
+-  --accent-wash: #d8e5ff;
+-  --accent-veil: rgb(43 86 204 / 12%);
+-  --focus-ring: #2b56cc;
++  --overlay-hover: rgb(23 34 27 / 5%);
++  --overlay-active: rgb(23 34 27 / 9%);
++  --scrim: rgb(9 26 16 / 32%);
++  --text: #17221b;
++  --muted: #57625b;
++  --border: #d1dad4;
++  --border-strong: #b0bbb3;
++  --outline: #7e8a82;
++  --accent: #006e46;
++  --accent-soft: #00603c;
++  --accent-contrast: #f9fdfb;
++  --accent-wash: #cceeda;
++  --accent-veil: rgb(0 110 70 / 12%);
++  --focus-ring: #006e46;
+   --danger: #ca131b;
+   --danger-wash: rgb(202 19 27 / 12%);
+   --danger-contrast: #fffbfa;
+   --warning: #905900;
+   --warning-wash: rgb(144 89 0 / 14%);
+   --warning-contrast: #fefbf8;
+-  --success: #007541;
+-  --success-wash: rgb(0 117 65 / 14%);
++  --success: #49700a;
++  --success-wash: rgb(73 112 10 / 14%);
+   --success-contrast: #f9fdfa;
+   --info: #006ba0;
+   --info-wash: rgb(0 107 160 / 12%);
+@@ -120,14 +120,14 @@
+   --shadow-sm: 0 1px 1px rgb(24 28 44 / 5%), 0 6px 20px rgb(24 28 44 / 7%);
+   --shadow-md: 0 2px 4px rgb(24 28 44 / 8%), 0 14px 36px rgb(24 28 44 / 14%);
+   --shadow-lg: 0 4px 10px rgb(24 28 44 / 10%), 0 28px 70px rgb(24 28 44 / 22%);
+-  --elevation-paper-surface: #fcfdff;
+-  --elevation-paper-border: #fcfdff;
++  --elevation-paper-surface: #fcfefd;
++  --elevation-paper-border: #fcfefd;
+   --elevation-paper-shadow: 0 1px 1px rgb(24 28 44 / 5%), 0 6px 20px rgb(24 28 44 / 7%);
+-  --elevation-base-surface: #e8edf5;
+-  --elevation-base-border: #e8edf5;
++  --elevation-base-surface: #e7efe9;
++  --elevation-base-border: #e7efe9;
+   --elevation-base-shadow: none;
+-  --elevation-chrome-surface: #e8edf5;
+-  --elevation-chrome-border: #e8edf5;
++  --elevation-chrome-surface: #e7efe9;
++  --elevation-chrome-border: #e7efe9;
+   --elevation-chrome-shadow: none;
+   --elevation-floating-surface: #ffffff;
+   --elevation-floating-border: #ffffff;
+@@ -136,64 +136,64 @@
+   --elevation-dialog-border: #ffffff;
+   --elevation-dialog-shadow: 0 4px 10px rgb(24 28 44 / 10%), 0 28px 70px rgb(24 28 44 / 22%);
+   --draw-desk: #edeef1;
+-  --graph-node: #808693;
+-  --graph-node-active: #2b56cc;
+-  --graph-node-hover: #1a40b6;
+-  --doc-bg: #fcfdff;
+-  --doc-active-line: #f4f7fb;
+-  --doc-selection: #d0defd;
++  --graph-node: #7d8a81;
++  --graph-node-active: #006e46;
++  --graph-node-hover: #00603c;
++  --doc-bg: #fcfefd;
++  --doc-active-line: #f4f8f5;
++  --doc-selection: #c5e8d4;
+   --doc-tooltip-bg: #ffffff;
+-  --doc-fill: rgb(26 31 41 / 8%);
+-  --doc-fill-soft: rgb(26 31 41 / 5%);
+-  --doc-rule: rgb(26 31 41 / 30%);
+-  --doc-rule-soft: rgb(26 31 41 / 16%);
++  --doc-fill: rgb(23 34 27 / 8%);
++  --doc-fill-soft: rgb(23 34 27 / 5%);
++  --doc-rule: rgb(23 34 27 / 30%);
++  --doc-rule-soft: rgb(23 34 27 / 16%);
+   --doc-highlight: rgb(250 222 78 / 55%);
+-  --doc-fg: #22272f;
+-  --doc-link: #2c57cd;
+-  --doc-heading: #22272f;
+-  --doc-danger: #c60817;
+-  --doc-gutter-fg: #5d626d;
+-  --doc-caret: #2b56cc;
++  --doc-fg: #1f2923;
++  --doc-link: #007249;
++  --doc-heading: #1f2923;
++  --doc-danger: #c80c19;
++  --doc-gutter-fg: #5b665f;
++  --doc-caret: #006e46;
+   --syn-keyword: #6f4797;
+   --syn-name: #9a3936;
+   --syn-function: #215da5;
+   --syn-literal: #904700;
+   --syn-type: #785800;
+   --syn-operator: #006b74;
+-  --syn-comment: #5c626e;
++  --syn-comment: #5a665e;
+   --syn-string: #067132;
+-  --syn-heading: #22272f;
++  --syn-heading: #1f2923;
+   --syn-invalid: #993a33;
+-  --doc-ins: #2c57cd;
+-  --doc-del: #c60817;
++  --doc-ins: #007249;
++  --doc-del: #c80c19;
+   --doc-proof-spell: #d01d21;
+   --doc-proof-gram: #a16500;
+   --doc-find: #f6e697;
+   --doc-find-now: #fac053;
+-  --doc-comment: #b16f00;
+-  --doc-author-1: #0060bf;
++  --doc-comment: #b37100;
++  --doc-author-1: #0061c0;
+   --doc-author-2: #b02a2d;
+-  --doc-author-3: #007219;
++  --doc-author-3: #00741a;
+   --doc-author-4: #813faa;
+   --doc-author-5: #934f00;
+-  --doc-author-6: #006d72;
+-  --doc-syntax-near: #588963;
+-  --doc-ghost: #797e88;
+-  --doc-wavy: #b16f00;
+-  --doc-block-hover: rgb(26 31 41 / 4%);
+-  --doc-block-selected: rgb(43 86 204 / 12%);
+-  --doc-drop-line: #2b56cc;
+-  --doc-color-gray: #5e626b;
+-  --doc-tint-gray: #e4e8ef;
++  --doc-author-6: #006f74;
++  --doc-syntax-near: #598a63;
++  --doc-ghost: #78827c;
++  --doc-wavy: #b17000;
++  --doc-block-hover: rgb(23 34 27 / 4%);
++  --doc-block-selected: rgb(0 110 70 / 12%);
++  --doc-drop-line: #006e46;
++  --doc-color-gray: #5c6660;
++  --doc-tint-gray: #e3eae5;
+   --doc-color-brown: #84573e;
+   --doc-tint-brown: #f6e4da;
+   --doc-color-orange: #984b00;
+   --doc-tint-orange: #ffe1ce;
+-  --doc-color-yellow: #795f00;
++  --doc-color-yellow: #7a6000;
+   --doc-tint-yellow: #f4e7c3;
+-  --doc-color-green: #007231;
++  --doc-color-green: #007331;
+   --doc-tint-green: #d2f2d7;
+-  --doc-color-blue: #0064b0;
++  --doc-color-blue: #0065b1;
+   --doc-tint-blue: #d7eaff;
+   --doc-color-purple: #7847a6;
+   --doc-tint-purple: #eee1ff;
+@@ -202,30 +202,30 @@
+   --doc-color-red: #b7191c;
+   --doc-tint-red: #ffdfdb;
+   --paper-bg: #ffffff;
+-  --paper-ink: #14161a;
+-  --paper-link: #2c57cd;
+-  --paper-danger: #c60817;
+-  --paper-rule: rgb(20 22 26 / 30%);
+-  --paper-rule-soft: rgb(20 22 26 / 16%);
+-  --paper-fill: rgb(20 22 26 / 8%);
+-  --paper-fill-soft: rgb(20 22 26 / 5%);
+-  --paper-caret: #2c57cd;
+-  --paper-selection: #d0defd;
+-  --paper-active-line: #f4f7fb;
++  --paper-ink: #131715;
++  --paper-link: #007249;
++  --paper-danger: #c80c19;
++  --paper-rule: rgb(19 23 21 / 30%);
++  --paper-rule-soft: rgb(19 23 21 / 16%);
++  --paper-fill: rgb(19 23 21 / 8%);
++  --paper-fill-soft: rgb(19 23 21 / 5%);
++  --paper-caret: #007249;
++  --paper-selection: #c5e8d4;
++  --paper-active-line: #f4f8f5;
+   --paper-highlight: rgb(250 222 78 / 55%);
+-  --paper-ins: #2c57cd;
+-  --paper-del: #c60817;
++  --paper-ins: #007249;
++  --paper-del: #c80c19;
+   --paper-proof-spell: #d01d21;
+   --paper-proof-gram: #a16500;
+   --paper-find: #f6e697;
+   --paper-find-now: #fac053;
+-  --paper-comment: #b16f00;
+-  --paper-author-1: #0060bf;
++  --paper-comment: #b37100;
++  --paper-author-1: #0061c0;
+   --paper-author-2: #b02a2d;
+-  --paper-author-3: #007219;
++  --paper-author-3: #00741a;
+   --paper-author-4: #813faa;
+   --paper-author-5: #934f00;
+-  --paper-author-6: #006d72;
++  --paper-author-6: #006f74;
+   color-scheme: light;
+   font-family: var(--font-ui);
+   font-size: var(--text-base);

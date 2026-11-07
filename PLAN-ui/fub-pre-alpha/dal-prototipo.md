@@ -1,6 +1,6 @@
 <!-- Generato da PLAN-ui/fub-pre-alpha/script/costruisci-sim.mjs: non si modifica a mano. -->
 
-286 stati: 168 catture, 67 composti, 51 nuovi da approvare. 17 scenari.
+298 stati: 168 catture, 67 composti, 63 nuovi da approvare. 18 scenari.
 
 #### Gli stati
 
@@ -135,6 +135,13 @@
 | S127 | `disegno-a-spento` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
 | S128 | `disegno-a-fermo` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1); un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-4) |
 | S129 | `disegno-a-apre` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
+| S287 | `disegno-a-cinquecento` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1); un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-2b) |
+| S288 | `disegno-a-senza` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1); un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-5) |
+| S289 | `disegno-a-rifiutato` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; toppe: editors/craft/surface.ts (l'annuncio di K5 6a nella regione viva del disegno; il testo da i18n/catalog.ts); un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
+| S290 | `disegno-a-testo-spento` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts, skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-7b) |
+| S291 | `disegno-a-mano` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts (il bottone #status-standing di S2 T4, anche per il disegno), skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
+| S292 | `disegno-a-gomma` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts (il bottone #status-standing di S2 T4, anche per il disegno), skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
+| S293 | `disegno-a-rettangolo` | Il disegno | nuova, da approvare | K5 T21, K5 T22, K5 T23, S2 T4, PA T27 | toppe: shells/scrittoio/frame/status-band.ts (il bottone #status-standing di S2 T4, anche per il disegno), skin/frame.css; un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
 | S130 | `disegno-a-testo` | Il disegno | nuova, da approvare | K5 T21, K5 T22, PA T27 | un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1); un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-7a) |
 | S131 | `disegno-vuoto` | Il disegno | nuova, da approvare | K5 T21, PA T27 | toppe: editors/craft/surface.ts (il foglio vuoto, testo nuovo in i18n/catalog.ts); un pezzo di piani/disegno-motore.html (la pagina approvata, cattura p-dis-1) |
 | S132 | `lavagna` | La lavagna | cattura | N6, N4, S2 T23, lavagna in codice | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
@@ -171,7 +178,7 @@
 | S163 | `lav-evidenziatore` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); piani/lavagna-schede.html |
 | S164 | `lav-gomma` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); piani/lavagna-schede.html |
 | S165 | `lav-lazo` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/tools/lasso.ts (nuovo, N6 T86 con D-22 a); piani/lavagna-schede.html |
-| S166 | `lav-estratti` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28, N6 T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/parts-picker.ts (nuovo, su kit/popover.ts e kit/list.ts); piani/lavagna-schede.html |
+| S166 | `lav-estratti` | La lavagna | nuova, da approvare | N6 T26, N6 T27, N6 T28, PA T28, N6 T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/parts-picker.ts (nuovo, su kit/popover.ts, kit/list.ts e kit/field.ts); piani/lavagna-schede.html |
 | S167 | `lav-codice-menu` | La lavagna | nuova, da approvare | lavagna in codice, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/chrome/commands.ts ed engine.ts (il menu contestuale, ui/menu.ts); toppe: editors/canvas/chrome/commands.ts (canvas.layout.grid, .row, .column, .tree); piani/lavagna-schede.html |
 | S168 | `lav-codice-riepilogo` | La lavagna | nuova, da approvare | lavagna in codice, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/chrome/commands.ts (canvas.paste_code con kit/dialog.ts); piani/lavagna-schede.html |
 | S169 | `lav-codice-problema` | La lavagna | nuova, da approvare | lavagna in codice, PA T28 | toppe: editors/canvas/chrome/rail.ts (nuovo, su kit/tool-rail.ts come il disegno); toppe: editors/canvas/chrome/options.ts (nuovo, su kit/options-bar.ts); toppe: editors/canvas/chrome/commands.ts (canvas.check: niente si scrive); piani/lavagna-schede.html |
@@ -209,10 +216,10 @@
 | S201 | `ricetta-venti` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
 | S202 | `ricetta-cambiata` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
 | S203 | `ricetta-fatta` | Componenti e ricette | composta, da approvare | A1 T12, PA T29 | piani/ricette.html |
-| S204 | `comp-installato` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts renderInstalledComponent, così com'è oggi (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41") |
-| S205 | `comp-permesso` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts renderInstalledComponent, così com'è oggi (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41"); toppe: panels/settings.ts renderInstalledComponent (il consenso «Concesso» chiede con confirm, che la Scrivania mostra con shells/scrittoio/confirm.ts e kit/dialog.ts), così com'è oggi |
-| S206 | `comp-rotto-tempo` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault» e «Riavvia» (fub-wasm-host: timeout; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi |
-| S207 | `comp-rotto-errore` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29 | toppe: panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault», «Copia il motivo» e «Riavvia» (fub-wasm-host: trap; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi |
+| S204 | `comp-installato` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29, PA T46 | toppe: panels/settings.ts renderInstalledComponent, con le parole del lessico (D18 A, PA T46) (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41") |
+| S205 | `comp-permesso` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29, PA T46 | toppe: panels/settings.ts renderInstalledComponent, con le parole del lessico (D18 A, PA T46) (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41"); toppe: panels/settings.ts renderInstalledComponent (il consenso «Concesso» chiede con confirm, che la Scrivania mostra con shells/scrittoio/confirm.ts e kit/dialog.ts), così com'è oggi |
+| S206 | `comp-rotto-tempo` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29, PA T46 | toppe: panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault» e «Riavvia» (fub-wasm-host: timeout; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi |
+| S207 | `comp-rotto-errore` | Componenti e ricette | nuova, da approvare | K1, K2 T3, PA T29, PA T46 | toppe: panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault», «Copia il motivo» e «Riavvia» (fub-wasm-host: trap; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi |
 | S208 | `comp-aggiorna` | Componenti e ricette | nuova, da approvare | dopo la pre-alpha | toppe: panels/settings.ts renderInstalledComponent: nuovi la riga della versione nuova e «Vedi cosa cambia» (nessun piano lo copre: «Differenze fra piani e codice») |
 | S209 | `ricerca` | La cornice | cattura | S2 T8 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S210 | `grafo` | La cornice | cattura | S2 T10 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
@@ -251,17 +258,20 @@
 | S243 | `g2-app-esterne` | Le impostazioni | cattura | main | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S244 | `lav-impostazioni` | Le impostazioni | composta, da approvare | N6 T25, PA T28 | piani/lavagna-schede.html |
 | S245 | `pen-impostazioni` | Le impostazioni | composta, da approvare | N4 T20, PA T28 | piani/lavagna-penne.html |
-| S246 | `imp-info-prealpha` | Le impostazioni | composta, da approvare | PA T22 | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
+| S246 | `imp-info-prealpha` | Le impostazioni | composta, da approvare | PA T22, PA T48, PA T49 | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
+| S294 | `aspetto-barre` | Le impostazioni | nuova, da approvare | PA T11 | toppe: panels/settings.ts (la riga dal registro: chiave d'host appearance.bars, light \| marked, di serie light; la scrive crates/fub-host/src/settings.rs), il modulo che mette le scelte d'Aspetto sulla radice (data-bars, come appearance.density), i18n/catalog.ts |
+| S295 | `aspetto-barre-marcate` | Le impostazioni | nuova, da approvare | PA T11 | toppe: panels/settings.ts (la stessa riga, scelta cambiata: il segno di modifica e «Azzera» come le altre righe), i18n/catalog.ts |
+| S296 | `barra-marcate` | Le impostazioni | nuova, da approvare | PA T11 | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
 | S247 | `vuoto` | Casi ai margini | cattura | S2 T7 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
-| S248 | `avvio-attesa` | Casi ai margini | cattura | main #308 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
-| S249 | `avvio-lento` | Casi ai margini | cattura | main #308 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
-| S250 | `avvio-guasto` | Casi ai margini | cattura | main #308 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S248 | `avvio-attesa` | Casi ai margini | cattura | main #308, PA T48, PA T49 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S249 | `avvio-lento` | Casi ai margini | cattura | main #308, PA T48, PA T49 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S250 | `avvio-guasto` | Casi ai margini | cattura | main #308, PA T48, PA T49 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S251 | `dati-uno` | Casi ai margini | composta, da approvare | main | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
 | S252 | `dati-nome-lungo` | Casi ai margini | composta, da approvare | main | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
 | S253 | `dati-cinquemila` | Casi ai margini | composta, da approvare | PA T45 | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
 | S254 | `riscontri-a` | I riscontri | composta, da approvare | PA T18 | catture del client, ritoccate nel testo o nelle righe; CSS dai blocchi |
-| S255 | `riscontri-b-menu` | I riscontri | nuova, da approvare | PA T18, D9 B | toppe: ui/app-menu.ts (una voce prima di «Impostazioni»), i18n/catalog.ts |
-| S256 | `riscontri-b-apre` | I riscontri | nuova, da approvare | PA T18, D9 B | toppe: ui/app-menu.ts (kit/dialog.ts, poi l'apertura del browser che c'è) |
+| S255 | `riscontri-b-menu` | I riscontri | nuova, da approvare | PA T52, PA T18 | toppe: ui/app-menu.ts (una voce prima di «Impostazioni»), i18n/catalog.ts |
+| S256 | `riscontri-b-apre` | I riscontri | nuova, da approvare | PA T52 | toppe: ui/app-menu.ts (kit/dialog.ts, poi l'apertura del browser che c'è) |
 | S257 | `tel-nota` | Il telefono (Android di prova) | cattura | S2 T2–T7, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S258 | `tel-ferma` | Il telefono (Android di prova) | cattura | S2 T3, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S259 | `tel-tastiera` | Il telefono (Android di prova) | cattura | S2 T17, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
@@ -272,7 +282,7 @@
 | S264 | `tel-ispettore` | Il telefono (Android di prova) | cattura | main, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S265 | `tel-lanciatore` | Il telefono (Android di prova) | cattura | main, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S266 | `tel-avvio` | Il telefono (Android di prova) | cattura | main, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
-| S267 | `tel-avvio-attesa` | Il telefono (Android di prova) | cattura | main #308 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
+| S267 | `tel-avvio-attesa` | Il telefono (Android di prova) | cattura | main #308, PA T48, PA T49 | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S268 | `g2-tel-doc-pannello` | Il telefono (Android di prova) | cattura | S2 T21, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S269 | `g2-tel-foglio-aperto` | Il telefono (Android di prova) | cattura | S2 T20, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
 | S270 | `t-cassetto-file` | Il telefono (Android di prova) | cattura | main, PA telefono | la cattura: DOM del client (uguale a main o ritocco di S2, per pezzo), CSS dai blocchi |
@@ -288,10 +298,12 @@
 | S279 | `tema-tutti-componenti` | I temi e la skin facile | nuova, da approvare | PA T38, PA T39 | toppe: src/dev/catalogo/ (nuovo: il cuore di bench/catalog.ts e bench/kit.ts, caricato con import()), una vista aperta da Aspetto, skin/settings.css |
 | S280 | `tema-tutti-tavolozza` | I temi e la skin facile | nuova, da approvare | PA T38, PA T39 | toppe: src/dev/catalogo/ (nuovo: il cuore di bench/catalog.ts e bench/kit.ts, caricato con import()), una vista aperta da Aspetto, skin/settings.css; toppe: src/dev/catalogo/ (la tavolozza di bench/catalog.ts), skin/settings.css |
 | S281 | `tema-tutti-caratteri` | I temi e la skin facile | nuova, da approvare | PA T38, PA T39 | toppe: src/dev/catalogo/ (nuovo: il cuore di bench/catalog.ts e bench/kit.ts, caricato con import()), una vista aperta da Aspetto, skin/settings.css; toppe: src/dev/catalogo/ (il campionario di bench/samples.ts), skin/settings.css |
-| S282 | `tema-carta` | I temi e la skin facile | nuova, da approvare | PA T42 | theme/examples/carta/ (fogli e skin.css) |
+| S282 | `tema-carta` | I temi e la skin facile | nuova, da approvare | PA T42, PA T54 | theme/examples/carta/ (fogli e skin.css) |
 | S283 | `tema-carta-impostazioni` | I temi e la skin facile | nuova, da approvare | PA T42 | theme/examples/carta/ (fogli e skin.css) |
-| S284 | `tema-salvia` | I temi e la skin facile | nuova, da approvare | PA T42 | theme/examples/salvia/ (i due fogli) |
-| S285 | `tema-salvia-impostazioni` | I temi e la skin facile | nuova, da approvare | PA T42 | theme/examples/salvia/ (i due fogli) |
+| S284 | `tema-mare` | I temi e la skin facile | nuova, da approvare | PA T42, PA T54 | theme/examples/mare/ (i due fogli) |
+| S285 | `tema-mare-impostazioni` | I temi e la skin facile | nuova, da approvare | PA T42 | theme/examples/mare/ (i due fogli) |
+| S297 | `tema-officina` | I temi e la skin facile | nuova, da approvare | PA T42, PA T54 | theme/examples/officina/ (i due fogli e skin.css) |
+| S298 | `tema-officina-impostazioni` | I temi e la skin facile | nuova, da approvare | PA T42 | theme/examples/officina/ (i due fogli e skin.css) |
 
 #### Gli scenari
 
@@ -301,7 +313,7 @@
 | `scrivere` | Scrivere una nota | 6 | S1 → S9 → S10 → S6 → S214 → S5 |
 | `riquadri` | Due riquadri | 4 | S21 → S19 → S20 → S22 |
 | `foglio` | Un foglio di calcolo | 8 | S42 → S49 → S78 → S50 → S52 → S64 → S44 → S71 |
-| `disegno` | Un disegno | 6 | S102 → S130 → S106 → S126 → S128 → S115 |
+| `disegno` | Un disegno | 7 | S125 → S130 → S293 → S106 → S126 → S289 → S128 |
 | `lavagna` | Una lavagna | 12 | S156 → S155 → S157 → S158 → S160 → S161 → S162 → S165 → S166 → S167 → S168 → S147 |
 | `conflitto` | Un conflitto | 5 | S23 → S38 → S39 → S41 → S33 |
 | `r01-versione` | Una bozza ritrovata e una versione | 4 | S29 → S30 → S28 → S31 |
@@ -309,26 +321,32 @@
 | `componente` | Un componente | 7 | S183 → S205 → S204 → S206 → S207 → S208 → S185 |
 | `ricetta` | Una ricetta (A1) | 5 | S191 → S197 → S198 → S199 → S203 |
 | `vault` | Cambiare vault | 3 | S219 → S235 → S37 |
-| `aspetto` | L'aspetto | 6 | S234 → S234 → S234 → S1 → S1 → S282 |
+| `aspetto` | L'aspetto | 9 | S234 → S234 → S234 → S1 → S1 → S294 → S295 → S296 → S282 |
 | `tastiera` | Solo con la tastiera | 5 | S212 → S230 → S2 → S8 → S239 |
 | `errori` | Quando qualcosa va storto | 6 | S32 → S177 → S36 → S35 → S47 → S250 |
 | `telefono` | Al telefono | 9 | S266 → S257 → S259 → S263 → S270 → S261 → S269 → S286 → S157 |
-| `skin` | Una skin facile | 6 | S272 → S273 → S276 → S277 → S279 → S284 |
+| `skin` | Una skin facile | 7 | S272 → S273 → S276 → S277 → S279 → S284 → S297 |
+| `cambiato` | Che cosa è cambiato (risposte del 2026-11-07) | 31 | S1 → S1 → S248 → S246 → S234 → S294 → S295 → S296 → S125 → S287 → S288 → S289 → S290 → S291 → S111 → S255 → S204 → S26 → S232 → S56 → S51 → S23 → S132 → S3 → S183 → S166 → S282 → S284 → S297 → S297 → S298 |
 
 #### I pezzi nuovi (DOM scritto a mano, `toppe/*.html`)
 
 | Modello | Che cos'è | Destinazione | Task | Stati |
 |---|---|---|---|---|
-| `comp-installato` | Un componente della comunità installato | panels/settings.ts renderInstalledComponent, così com'è oggi (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41") | K1, K2 T3, PA T29 | S204, S205 |
+| `aspetto-barre` | D6 C: la riga «Le barre» in Aspetto (di serie: chiare) | panels/settings.ts (la riga dal registro: chiave d'host appearance.bars, light \| marked, di serie light; la scrive crates/fub-host/src/settings.rs), il modulo che mette le scelte d'Aspetto sulla radice (data-bars, come appearance.density), i18n/catalog.ts | PA T11, D6 C. Dopo «Densità». | S294 |
+| `aspetto-barre-marcate` | D6 C: la riga «Le barre» con «Marcate» scelta | panels/settings.ts (la stessa riga, scelta cambiata: il segno di modifica e «Azzera» come le altre righe), i18n/catalog.ts | PA T11, D6 C | S295 |
+| `comp-installato` | Un componente della comunità installato | panels/settings.ts renderInstalledComponent, con le parole del lessico (D18 A, PA T46) (nel banco: host/fake.ts, un InstalledPluginInfo con installation "41") | K1, K2 T3, PA T29 | S204, S205 |
 | `comp-permesso` | Concedere il consenso: i permessi | panels/settings.ts renderInstalledComponent (il consenso «Concesso» chiede con confirm, che la Scrivania mostra con shells/scrittoio/confirm.ts e kit/dialog.ts), così com'è oggi | K1, K2 T3, PA T29 | S205 |
 | `comp-fermo-tempo` | Un componente fermato: ha superato il tempo | panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault» e «Riavvia» (fub-wasm-host: timeout; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi | K1, PA T29 | S206 |
 | `comp-fermo-errore` | Un componente fermato: un errore interno | panels/settings.ts renderInstalledComponent: nuovi data-state="stopped" sulla scheda, la riga dello stato al posto di «Attivo in questo vault», «Copia il motivo» e «Riavvia» (fub-wasm-host: trap; il motivo arriva con InstalledPluginInfo); il resto è la scheda di oggi | K1, PA T29 | S207 |
 | `comp-aggiorna` | Un componente con una versione nuova (fuori dalla pre-alpha) | panels/settings.ts renderInstalledComponent: nuovi la riga della versione nuova e «Vedi cosa cambia» (nessun piano lo copre: «Differenze fra piani e codice») | fuori dalla pre-alpha | S208 |
-| `banda-motore-pronto` | D5 A: il motore del disegno nella banda (pronto) | shells/scrittoio/frame/status-band.ts (il bottone #status-standing di S2 T4, anche per il disegno), skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S125 |
-| `banda-motore-perse` | D5 A: 3 parti restano come sono, nella banda | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S126 |
-| `banda-motore-spento` | D5 A: motore spento, nella banda | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S127 |
+| `banda-motore-pronto` | D5 A: il motore del disegno nella banda (pronto) | shells/scrittoio/frame/status-band.ts (il bottone #status-standing di S2 T4, anche per il disegno), skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S125, S291, S292, S293 |
+| `banda-motore-perse` | D5 A: 3 parti restano come sono, nella banda | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S126, S289 |
+| `banda-motore-spento` | D5 A: motore spento, nella banda | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S127, S290 |
 | `banda-motore-fermo` | D5 A: motore fermo, nella banda (aperto) | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 | S128 |
 | `banda-motore-apre` | D5 A: il disegno si sta aprendo, nella banda | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 (K5 non ha un segno per «si apre»: Differenze) | S129 |
+| `banda-motore-cinquecento` | D5 A: 500 parti restano come sono, nella banda (aperto) | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 (il riquadro è quello di K5 2b) | S287 |
+| `banda-motore-senza` | D5 A: senza motore, nella banda (aperto) | shells/scrittoio/frame/status-band.ts, skin/frame.css | D5 A: K5 T21–T23 con S2 T4 (il riquadro è quello di K5 5) | S288 |
+| `disegno-rifiutato-annuncio` | D5 A: la modifica rifiutata, detta al lettore di schermo | editors/craft/surface.ts (l'annuncio di K5 6a nella regione viva del disegno; il testo da i18n/catalog.ts) | K5 T22 | S289 |
 | `disegno-vuoto` | Un disegno vuoto: l'invito | editors/craft/surface.ts (il foglio vuoto, testo nuovo in i18n/catalog.ts) | K5 T21, PA T27 | S131 |
 | `menu-nuovo` | «Nuovo»: la scelta del tipo | panels/explorer.ts (il pulsante #new-note apre il menu), ui/menu.ts | PA T43 | S34 |
 | `altra-app` | «Apri con un'altra app» sotto un file che Fub non apre | editors/craft/surface.ts (la stessa vista .craft-empty di craft-rotto, più una riga d'azioni), skin/media.css | PA T30 | S36 |
@@ -343,7 +361,7 @@
 | `lav-bolla-molte` | La barra della selezione sopra molte schede | editors/canvas/chrome/selection.ts (nuovo) | N6 T26 e T51, PA T28 | S158 |
 | `lav-vuota` | La lavagna vuota che spiega da sé | editors/canvas/chrome/empty.ts (nuovo) | N6 T26 e T62, PA T28 | S156 |
 | `lav-lazo` | Il lazo che prende schede e tratti | editors/canvas/tools/lasso.ts (nuovo, N6 T86 con D-22 a) | PA T28 | S165 |
-| `lav-estratti` | Il selettore delle parti attaccato alla scheda rilasciata (PDF) | editors/canvas/parts-picker.ts (nuovo, su kit/popover.ts e kit/list.ts) | N6 T28 e T74–T76, PA T28 | S166 |
+| `lav-estratti` | Il selettore delle parti attaccato alla scheda rilasciata (PDF) | editors/canvas/parts-picker.ts (nuovo, su kit/popover.ts, kit/list.ts e kit/field.ts) | N6 T28 e T74–T76, PA T28 | S166 |
 | `lav-codice-menu` | Le tre voci della lavagna in codice nel menu della scheda | editors/canvas/chrome/commands.ts ed engine.ts (il menu contestuale, ui/menu.ts) | lavagna in codice T25, PA T28 | S167 |
 | `lav-codice-disponi` | «Disponi»: il sottomenu | editors/canvas/chrome/commands.ts (canvas.layout.grid, .row, .column, .tree) | lavagna in codice T25, PA T28 | S167 |
 | `lav-codice-riepilogo` | «Incolla codice»: il riassunto prima di scrivere | editors/canvas/chrome/commands.ts (canvas.paste_code con kit/dialog.ts) | lavagna in codice T25, PA T28 | S168 |
@@ -382,12 +400,16 @@
 | `theme/scrittoio/skin/welcome.css` | pelle | `83-welcome.css` | S2 T10 | 0.2 KB |
 | `shells/scrittoio/mobile/mobile.css` | telefono | `90-mobile.css` | S2 T3, T4, T5, T7, T11, T27 | 7.6 KB |
 | `theme/scrittoio/series.ts` | serie | `01-series.css` | S2 T11 | 0.3 KB |
-| `theme/scrittoio/recipe.ts` | serie | `02-ruoli.css` | S2 T16, T27 | 1.7 KB |
+| `theme/scrittoio/recipe.ts` | serie | `02-ruoli.css` | S2 T16, T27 | 2.1 KB |
 | `theme/scrittoio/skin/frame.css` | prealpha | `92-prealpha-banda.css` | D5 A: K5 T21–T23 con S2 T4 | 0.9 KB |
 | `theme/scrittoio/skin/draw.css` | prealpha | `92-prealpha-disegno.css` | K5 T21, PA T27 | 0.6 KB |
 | `theme/scrittoio/skin/settings.css` | prealpha | `92-prealpha-impostazioni.css` | PA T29, T36–T38 | 6 KB |
-| `theme/scrittoio/skin/nodes.css` | prealpha | `92-prealpha-lavagna.css` | N6 T26–T28, PA T28 | 3.3 KB |
+| `theme/scrittoio/skin/nodes.css` | prealpha | `92-prealpha-lavagna.css` | N6 T26–T28, PA T28 | 3.5 KB |
 | `theme/scrittoio/skin/media.css` | prealpha | `92-prealpha-media.css` | PA T30 | 0.3 KB |
-| `shells/mobile/mobile.css` | prealpha | `92-prealpha-telefono.css` | PA T47 | 1.3 KB |
-| `theme/examples/carta/ (fogli e skin.css)` | tema | `93-tema-carta.css` | PA T42, D17 | 4.4 KB |
-| `theme/examples/salvia/ (i due fogli)` | tema | `93-tema-salvia.css` | PA T42, D17 | 2.7 KB |
+| `più file (ogni sezione dice il suo)` | prealpha | `92-prealpha-viste.css` | PA T56, T57 | 8.5 KB |
+| `shells/mobile/mobile.css` | prealpha | `92-prealpha-telefono.css` | PA T47 | 2.4 KB |
+| `theme/scrittoio/skin/frame.css e skin/settings.css` | prealpha | `92-prealpha-logo.css` | PA T49, D26 | 1.9 KB |
+| `public/avvio/avvio.css` | prealpha | `92-prealpha-logo-avvio.css` | PA T49, D26 | 1.1 KB |
+| `theme/examples/carta/ (fogli e skin.css)` | tema | `93-tema-carta.css` | PA T42, D17 | 5.4 KB |
+| `theme/examples/officina/ (i due fogli e skin.css)` | tema | `93-tema-officina.css` | PA T42, D17 | 6.2 KB |
+| `theme/examples/mare/ (i due fogli)` | tema | `93-tema-mare.css` | PA T42, D17, D27 | 3.1 KB |

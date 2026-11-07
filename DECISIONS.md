@@ -61,6 +61,54 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-07 · fub-pre-alpha (D19) · i difetti veri del controllo di tutte
+  le viste vanno in due task nuovi, PA T56 (la carta del file e il fuoco) e
+  PA T57 (i bersagli e i nomi interi), più due punti in PA T47 (le righe
+  che si toccano, il tondo della modalità); il simulatore li mostra già
+  corretti (`92-prealpha-viste.css`) · un difetto che il coder copia dal
+  simulatore torna nel prodotto: si corregge prima, e la guardia di PA T55
+  lo tiene lontano.
+- 2026-11-07 · fub-pre-alpha (D19) · la carta del file al buio prende
+  l'anello, la sintassi e i segni della griglia dai `--paper-*` che ci sono,
+  senza ruoli nuovi nel contratto del tema; la formula nella cella in
+  modifica è d'inchiostro, come in Excel, e solo i riferimenti hanno colore ·
+  un ruolo nuovo è un contratto pubblico (temi di terzi), e la carta ne ha
+  già abbastanza; l'utente può chiedere la formula colorata, ma allora
+  servono colori pensati per il bianco.
+- 2026-11-07 · fub-pre-alpha (D19) · la freccia di un pulsante diviso
+  della barra a schede è larga 24 px (prima 14): la fila si allunga di 10 px
+  per pulsante diviso, e a piena larghezza ci sta ancora · WCAG 2.5.8 vuole
+  24 px o la distanza dai vicini, e la freccia è attaccata al pulsante; è
+  il cambio che si vede di più (27 stati dei fogli), quindi l'utente lo
+  guarda nel simulatore.
+- 2026-11-07 · fub-pre-alpha (D19) · i riscontri della sonda al telefono,
+  tranne ciò che deforma la regola dei 44 px, vanno al piano del telefono
+  (`prompt-piano-telefono.md`); quelli dentro le pagine dei piani (gli
+  strati) vanno ai piani che le possiedono · il telefono si ridisegna (D1
+  B) e una correzione di adesso sarebbe buttata; una pagina di un altro
+  piano si cambia nel suo piano.
+
+- 2026-11-07 · fub-pre-alpha (il verde) · la tinta di serie è 160
+  «Smeraldo», non 159 come ha detto l'utente guardando il logo · le tinte
+  della «f» del logo vanno da 157,6 a 164 e il suo foglio scuro è 160,6; i
+  campioni dell'accento vanno a passi di 5°, e fra 159 e 160 l'occhio non
+  vede differenza. Prima di PA T48 si chiede il sì su 160 col logo
+  definitivo.
+- 2026-11-07 · fub-pre-alpha (il verde) · il vassoio delle barre di S2 T16
+  segue la tinta da solo (col verde #f8faf8 di giorno, #18211c di notte):
+  né PA T11 né PA T48 toccano la ricetta per il vassoio · è la formula di
+  S2 (`paper` = tinta − 10 di giorno, − 3 di notte); i valori a metà strada
+  scritti prima erano sbagliati.
+- 2026-11-07 · fub-pre-alpha (il verde) · le catture si rifanno verdi con
+  due toppe sopra quelle del finto (`verde.patch`, `verde-avvio.patch`), le
+  pagine dei piani con la mappa dei colori (`verde-mappa.json`); la lavagna
+  (`s2/lavagna*`) resta una foto blu col DOM verde, unica eccezione ai pixel
+  · il simulatore resta il client che PA T48 scriverà, e si rifà da
+  un'altra macchina; la lavagna non ha una definizione per rifarla.
+- 2026-11-07 · fub-pre-alpha (il logo) · il logo resta quello provvisorio
+  (il nastro «f» con la pagina davanti) finché l'utente porta i file; PA T49
+  aspetta i file e D28 · l'utente: «intanto lascia il logo che avevi fatto
+  prima, poi ci penso io al logo, te pensa a finire il progetto».
 - 2026-11-07 · fub-pre-alpha (le scelte) · i consigli delle domande si
   pesano solo sulla qualità del risultato (aperto, personalizzabile, senza
   problemi), e il tempo non conta. Cambiano sei consigli (D1 B, D6 C, D8 B,

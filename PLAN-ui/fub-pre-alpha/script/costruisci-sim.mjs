@@ -125,9 +125,13 @@ const DEST = [
   ["theme/scrittoio/skin/settings.css", "prealpha", ["92-prealpha-impostazioni"], "PA T29, T36–T38"],
   ["theme/scrittoio/skin/nodes.css", "prealpha", ["92-prealpha-lavagna"], "N6 T26–T28, PA T28"],
   ["theme/scrittoio/skin/media.css", "prealpha", ["92-prealpha-media"], "PA T30"],
+  ["più file (ogni sezione dice il suo)", "prealpha", ["92-prealpha-viste"], "PA T56, T57"],
   ["shells/mobile/mobile.css", "prealpha", ["92-prealpha-telefono"], "PA T47"],
+  ["theme/scrittoio/skin/frame.css e skin/settings.css", "prealpha", ["92-prealpha-logo"], "PA T49, D26"],
+  ["public/avvio/avvio.css", "prealpha", ["92-prealpha-logo-avvio"], "PA T49, D26"],
   ["theme/examples/carta/ (fogli e skin.css)", "tema", ["93-tema-carta"], "PA T42, D17", "carta"],
-  ["theme/examples/salvia/ (i due fogli)", "tema", ["93-tema-salvia"], "PA T42, D17", "salvia"],
+  ["theme/examples/officina/ (i due fogli e skin.css)", "tema", ["93-tema-officina"], "PA T42, D17", "officina"],
+  ["theme/examples/mare/ (i due fogli)", "tema", ["93-tema-mare"], "PA T42, D17, D27", "mare"],
 ];
 const usati = new Set(DEST.flatMap((d) => d[2]));
 for (const k of Object.keys(blocchi)) if (!usati.has(k)) throw new Error(`blocco senza destinazione: ${k}`);

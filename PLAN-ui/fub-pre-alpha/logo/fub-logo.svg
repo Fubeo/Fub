@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="111 275 656 656" width="644" height="644">
+  <title>Fub</title>
+  <defs>
+    <linearGradient id="nastro" gradientUnits="userSpaceOnUse" x1="180" y1="330" x2="640" y2="880">
+      <stop offset="0" stop-color="#74e5ac"/>
+      <stop offset="0.45" stop-color="#14c77d"/>
+      <stop offset="1" stop-color="#0cbb79"/>
+    </linearGradient>
+    <linearGradient id="dietro" gradientUnits="userSpaceOnUse" x1="0" y1="470" x2="0" y2="860">
+      <stop offset="0" stop-color="#7ea189"/>
+      <stop offset="1" stop-color="#2f5a45"/>
+    </linearGradient>
+    <mask id="dentro" maskUnits="userSpaceOnUse" x="111" y="275" width="656" height="656">
+      <path fill="none" stroke="#fff" stroke-width="38" stroke-linecap="round" stroke-linejoin="round" d="M602 440C655 442 684 405 680 365C676 330 645 315 612 320C545 330 492 385 462 450C430 520 405 600 385 680C365 760 345 840 300 868C262 892 205 885 192 840C180 795 215 755 262 725C340 675 450 615 568 592"/>
+    </mask>
+  </defs>
+  <!-- il foglio scuro dietro, con l'orecchia -->
+  <path fill="#1f4b36" d="M352 300H606A34 34 0 0 1 640 334V818A34 34 0 0 1 606 852H252A34 34 0 0 1 218 818V440A34 34 0 0 1 252 406H296A40 40 0 0 0 336 366V316A16 16 0 0 1 352 300Z"/>
+  <path fill="#7ea189" d="M218 432L346 300H352A16 16 0 0 0 336 316V366A40 40 0 0 1 296 406H252A34 34 0 0 0 218 440Z"/>
+  <!-- il foglio storto a destra -->
+  <rect fill="url(#dietro)" x="420" y="462" width="252" height="388" rx="24" transform="rotate(6 546 656)"/>
+  <!-- i fogli salvia -->
+  <rect fill="#7fa18a" x="258" y="452" width="352" height="200" rx="40"/>
+  <rect fill="#6e8b64" x="258" y="523" width="262" height="349" rx="40"/>
+  <!-- la pagina davanti: righe di testo e una piccola griglia -->
+  <rect fill="#ffffff" x="425" y="452" width="215" height="393" rx="22"/>
+  <g fill="#2f4a3e">
+    <rect x="456" y="484" width="150" height="11" rx="5.5"/>
+    <rect x="456" y="512" width="130" height="11" rx="5.5"/>
+    <rect x="456" y="540" width="150" height="11" rx="5.5"/>
+    <rect x="456" y="664" width="150" height="11" rx="5.5"/>
+    <rect x="456" y="692" width="110" height="11" rx="5.5"/>
+    <rect x="456" y="756" width="62" height="11" rx="5.5"/>
+    <rect x="456" y="784" width="50" height="11" rx="5.5"/>
+  </g>
+  <g fill="none" stroke="#2f4a3e" stroke-width="6">
+    <rect x="535" y="738" width="75" height="75" rx="3"/>
+    <path d="M560 738V813M585 738V813M535 763H610M535 788H610"/>
+  </g>
+  <!-- il nastro: la «f» -->
+  <path fill="none" stroke="#0a6b47" stroke-opacity="0.55" stroke-width="38" stroke-linecap="round" stroke-linejoin="round" transform="translate(6 10)" d="M602 440C655 442 684 405 680 365C676 330 645 315 612 320C545 330 492 385 462 450C430 520 405 600 385 680C365 760 345 840 300 868C262 892 205 885 192 840C180 795 215 755 262 725C340 675 450 615 568 592"/>
+  <path fill="none" stroke="url(#nastro)" stroke-width="38" stroke-linecap="round" stroke-linejoin="round" d="M602 440C655 442 684 405 680 365C676 330 645 315 612 320C545 330 492 385 462 450C430 520 405 600 385 680C365 760 345 840 300 868C262 892 205 885 192 840C180 795 215 755 262 725C340 675 450 615 568 592"/>
+  <g mask="url(#dentro)"><path fill="none" stroke="#a6f5cd" stroke-opacity="0.75" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" transform="translate(-9 -8)" d="M602 440C655 442 684 405 680 365C676 330 645 315 612 320C545 330 492 385 462 450C430 520 405 600 385 680C365 760 345 840 300 868C262 892 205 885 192 840C180 795 215 755 262 725C340 675 450 615 568 592"/></g>
+</svg>

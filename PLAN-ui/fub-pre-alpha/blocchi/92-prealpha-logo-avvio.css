@@ -1,0 +1,60 @@
+/* → public/avvio/avvio.css (PA T49, D26) */
+/* ── Il logo nell'avvio ─────────────────────────────────────────────────────
+   Il marchio dell'avvio non è più la tessera dell'accento con la «f»: è il
+   logo, nella forma piccola, a 56 px. Le tinte stanno qui perché l'avvio si
+   disegna prima di ogni altro foglio; sono le stesse di --logo-* della pelle.
+   Il segnale del guasto resta sull'angolo, staccato dal fondo. */
+.avvio-marchio {
+  background: none;
+}
+
+.avvio-marchio::after {
+  box-shadow: none;
+}
+
+.avvio-logo {
+  width: 56px;
+  height: 56px;
+}
+
+.avvio-logo .logo-foglio {
+  fill: #1f4b36;
+}
+
+.avvio-logo .logo-orecchia {
+  fill: #7ea189;
+}
+
+.avvio-logo .logo-oliva {
+  fill: #6e8b64;
+}
+
+.avvio-logo .logo-pagina {
+  fill: #ffffff;
+}
+
+.avvio-logo .logo-righe {
+  fill: #2f4a3e;
+}
+
+.avvio-logo .logo-griglia {
+  fill: none;
+  stroke: #2f4a3e;
+  stroke-width: 1.4;
+}
+
+.avvio-logo .logo-ombra,
+.avvio-logo .logo-nastro {
+  fill: none;
+  stroke-width: 4.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.avvio-logo .logo-ombra {
+  stroke: rgb(10 107 71 / 55%);
+}
+
+.avvio-logo .logo-nastro {
+  stroke: #14c77d;
+}

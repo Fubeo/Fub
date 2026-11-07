@@ -12,17 +12,24 @@
      alla linguetta e lì si interrompe.
    - `--bar-tray`: il vassoio delle barre (a schede, in una fila, la colonna),
      a metà fra la carta e `--sheet-2` di giorno; di notte un passo sotto
-     `--sheet-2`. Contrasto alto: lo stesso valore di `--sheet-2`, come oggi. */
+     `--sheet-2`. Contrasto alto: lo stesso valore di `--sheet-2`, come oggi.
+     La ricetta lo ricava dalla tinta della carta (S2 T16:
+     `lch(0.984, 0.004, paper)` di giorno, `lch(0.238, 0.017, paper)` di
+     notte), quindi segue il verde di serie da sola (D25): #f8faf8 e #18211c.
+     Il blu di prima dava #f8fafc e #1a1f27.
+   «Le barre: marcate» (D6 C, PA T11: il modulo delle scelte d'Aspetto mette
+   `data-bars="marked"` sulla radice, e la pelle rimette `--sheet-2`). */
 :root {
   --shadow-sheet: 0 1px 2px rgb(24 28 44 / 8%), 0 2px 8px -1px rgb(24 28 44 / 8%), 0 8px 16px -6px rgb(24 28 44 / 14%);
   --shadow-sheet-focus: 0 1px 3px rgb(24 28 44 / 9%), 0 3px 10px -1px rgb(24 28 44 / 10%), 0 10px 20px -6px rgb(24 28 44 / 18%);
-  --bar-tray: #f8fafc;
+  --bar-tray: #f8faf8;
 }
 :root[data-theme="dark"] {
   --shadow-sheet: 0 1px 2px rgb(0 0 0 / 40%), 0 2px 8px -1px rgb(0 0 0 / 45%), 0 8px 16px -6px rgb(0 0 0 / 60%);
   --shadow-sheet-focus: 0 1px 3px rgb(0 0 0 / 45%), 0 3px 10px -1px rgb(0 0 0 / 50%), 0 10px 20px -6px rgb(0 0 0 / 66%);
-  --bar-tray: #1a1f27;
+  --bar-tray: #18211c;
 }
-:root[data-contrast="high"] {
+:root[data-contrast="high"],
+:root[data-bars="marked"] {
   --bar-tray: var(--sheet-2);
 }

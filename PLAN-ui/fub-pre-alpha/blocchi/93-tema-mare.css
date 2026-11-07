@@ -1,0 +1,110 @@
+/* tema della comunità «Mare» · chiaro e scuro · PA T42, D17 C, D27 A */
+/* Il tema d'esempio di soli colori: un blu profondo e superfici
+   grigio-azzurre, scelti a mano, nelle due luci; nessuna regola di pelle,
+   nessun hook. L'editor di testo lo veste coi ruoli (PA T54). Nel tema vero
+   i blocchi diventano `light.css` e `dark.css`, con `extends`. Si chiamava
+   «Salvia»: col verde di serie (D25) era troppo vicino alla serie, e
+   «Salvia» è anche il nome di un accento (D27). */
+
+/* ── Giorno ──────────────────────────────────────────────────────────────── */
+:root[data-theme="light"] {
+  --bg: #e6ebf1;
+  --bg-chrome: #e6ebf1;
+  --bg-panel: #e6ebf1;
+  --bg-hover: #dae1ea;
+  --bg-active: #ced7e2;
+  --sheet: #fbfcfe;
+  --sheet-2: #f0f3f7;
+  --bg-input: #f0f3f7;
+  --bg-elev: #ffffff;
+  --overlay-hover: rgb(20 32 52 / 5%);
+  --overlay-active: rgb(20 32 52 / 9%);
+  --text: #142034;
+  --muted: #4f5b6d;
+  --border: #cdd5e0;
+  --border-strong: #a9b4c4;
+  --outline: #77849a;
+  --accent: #1d4f91;
+  --accent-soft: #163f78;
+  --accent-contrast: #f7faff;
+  --accent-wash: #d6e3f5;
+  --accent-veil: rgb(29 79 145 / 12%);
+  --focus-ring: #1d4f91;
+  --info: #006a7a;
+  --info-wash: rgb(0 106 122 / 12%);
+  --info-contrast: #f7faff;
+  --graph-node: #77849a;
+  --graph-node-active: #1d4f91;
+  --graph-node-hover: #163f78;
+  --draw-desk: #e7ecf2;
+  --doc-bg: #fbfcfe;
+  --doc-active-line: #f1f4f8;
+  --doc-selection: #d3e0f3;
+  --doc-fg: #18243a;
+  --doc-heading: #18243a;
+  --doc-link: #1f5399;
+  --doc-caret: #1d4f91;
+  --doc-gutter-fg: #556074;
+  --syn-comment: #556074;
+  --doc-drop-line: #1d4f91;
+  --doc-block-selected: rgb(29 79 145 / 12%);
+}
+:root[data-theme="light"][data-contrast="high"] {
+  --text: #0b1424;
+  --muted: #36414f;
+  --border: #8e9bb0;
+  --border-strong: #5d6a80;
+  --accent: #163f78;
+  --accent-soft: #113266;
+  --focus-ring: #163f78;
+}
+
+/* ── Notte ───────────────────────────────────────────────────────────────── */
+:root[data-theme="dark"] {
+  --bg: #0a0f17;
+  --bg-chrome: #0a0f17;
+  --bg-panel: #0a0f17;
+  --bg-hover: #121926;
+  --bg-active: #1a2231;
+  --sheet: #131a26;
+  --sheet-2: #1b2331;
+  --bg-input: #1b2331;
+  --bg-elev: #1f2837;
+  --text: #e2e8f1;
+  --muted: #9ba6b6;
+  --border: #283244;
+  --border-strong: #3e4a5f;
+  --outline: #6f7d93;
+  --accent: #8db4f0;
+  --accent-soft: #a9c7f5;
+  --accent-contrast: #07101d;
+  --accent-wash: #1d2f4d;
+  --accent-veil: rgb(141 180 240 / 20%);
+  --focus-ring: #8db4f0;
+  --info: #6cc7d6;
+  --info-wash: rgb(108 199 214 / 16%);
+  --info-contrast: #07101d;
+  --graph-node: #6f7d93;
+  --graph-node-active: #8db4f0;
+  --graph-node-hover: #a9c7f5;
+  --doc-bg: #131a26;
+  --doc-active-line: #18202d;
+  --doc-selection: #1f3352;
+  --doc-fg: #d8dfea;
+  --doc-heading: #d8dfea;
+  --doc-link: #8db4f0;
+  --doc-caret: #8db4f0;
+  --doc-gutter-fg: #9ba6b6;
+  --syn-comment: #9ba6b6;
+  --doc-drop-line: #8db4f0;
+  --doc-block-selected: rgb(141 180 240 / 20%);
+}
+:root[data-theme="dark"][data-contrast="high"] {
+  --text: #f3f6fa;
+  --muted: #c2cad6;
+  --border: #4f5d74;
+  --border-strong: #73829a;
+  --accent: #a7c6f5;
+  --accent-soft: #c2d8f8;
+  --focus-ring: #a7c6f5;
+}
