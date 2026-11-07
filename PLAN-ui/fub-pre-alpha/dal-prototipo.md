@@ -408,8 +408,11 @@
 | `theme/scrittoio/skin/media.css` | prealpha | `92-prealpha-media.css` | PA T30 | 0.3 KB |
 | `più file (ogni sezione dice il suo)` | prealpha | `92-prealpha-viste.css` | PA T56, T57 | 8.5 KB |
 | `shells/mobile/mobile.css` | prealpha | `92-prealpha-telefono.css` | PA T47 | 2.4 KB |
-| `theme/scrittoio/skin/frame.css e skin/settings.css` | prealpha | `92-prealpha-logo.css` | PA T49, D26 | 1.9 KB |
-| `public/avvio/avvio.css` | prealpha | `92-prealpha-logo-avvio.css` | PA T49, D26 | 1.1 KB |
+| `theme/scrittoio/skin/frame.css e skin/settings.css` | prealpha | `92-prealpha-logo.css` | PA T49, D26 | 2.3 KB |
+| `public/avvio/avvio.css` | prealpha | `92-prealpha-logo-avvio.css` | PA T49, D26 | 2.6 KB |
 | `theme/examples/carta/ (fogli e skin.css)` | tema | `93-tema-carta.css` | PA T42, D17 | 5.4 KB |
 | `theme/examples/officina/ (i due fogli e skin.css)` | tema | `93-tema-officina.css` | PA T42, D17 | 6.2 KB |
 | `theme/examples/mare/ (i due fogli)` | tema | `93-tema-mare.css` | PA T42, D17, D27 | 3.1 KB |
+| `nessun file: la serie calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts) i colori del logo di Carta` | tema | `93-tema-carta-logo.css` | PA T49, D26 | 0.9 KB |
+| `nessun file: la serie calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts) i colori del logo di Officina` | tema | `93-tema-officina-logo.css` | PA T49, D26 | 1.4 KB |
+| `nessun file: la serie calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts) i colori del logo di Mare` | tema | `93-tema-mare-logo.css` | PA T49, D26 | 1.4 KB |

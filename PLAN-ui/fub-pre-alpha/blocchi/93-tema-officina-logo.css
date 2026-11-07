@@ -1,0 +1,37 @@
+/* → nessun file: la serie li calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts; PA T49, D26) */
+/* I colori del logo per il tema «Officina», che non li dichiara. GENERATO da
+   script/logo-temi.mjs con `logoColors` della ricetta: non si modifica a
+   mano. Nel prodotto li calcola il caricatore dall'accento e dai fondi del
+   tema; il simulatore li monta insieme al tema. */
+/* accento #a33f00 (tinta 43.8, croma 0.146), fondi #e3e4e6 #ffffff */
+:root[data-theme="light"] {
+  --logo-cartella: #bf6d4a;
+  --logo-cartella-retro: #975437;
+  --logo-cartella-ombra: #9f5e42;
+  --logo-foglio-1: #cbb490;
+  --logo-foglio-2: #c39396;
+}
+/* accento #8a3500 (tinta 44.3, croma 0.128), fondi #e3e4e6 #ffffff */
+:root[data-theme="light"][data-contrast="high"] {
+  --logo-cartella: #9e512c;
+  --logo-cartella-retro: #78381a;
+  --logo-cartella-ombra: #804226;
+  --logo-foglio-1: #cab490;
+  --logo-foglio-2: #c39396;
+}
+/* accento #ff9a52 (tinta 54.0, croma 0.149), fondi #101113 #23262a */
+:root[data-theme="dark"] {
+  --logo-cartella: #e7ac86;
+  --logo-cartella-retro: #c88c65;
+  --logo-cartella-ombra: #cc9774;
+  --logo-foglio-1: #8a4914;
+  --logo-foglio-2: #907836;
+}
+/* accento #ffb27a (tinta 56.4, croma 0.115), fondi #101113 #23262a */
+:root[data-theme="dark"][data-contrast="high"] {
+  --logo-cartella: #e6ad84;
+  --logo-cartella-retro: #c78d64;
+  --logo-cartella-ombra: #cb9873;
+  --logo-foglio-1: #894910;
+  --logo-foglio-2: #8e7936;
+}

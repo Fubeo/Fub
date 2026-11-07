@@ -64,8 +64,12 @@ quattro fogli di `src/theme/scrittoio/`, l'accento di serie in
 `preferences/accent-control.ts` e `panels/settings.ts`, le parole in
 `src/i18n/catalog.ts`, il colore di avvio in `index.html` (e per l'avvio
 anche `document.html`, `mobile.html` e `public/avvio/avvio.css`) e l'host
-finto (`bench/fake-ipc.ts`). `verde.patch` cambia dieci file,
-`verde-avvio.patch` dodici. Si applicano dopo l'altra toppa:
+finto (`bench/fake-ipc.ts`). Portano anche Marcuzzo (D26, PA T49): le
+parti del logo della ricetta (`logoColors`) e dei fogli, il marchio in
+`index.html`, le Informazioni in `panels/settings.ts`, e per l'avvio le tre
+pagine, `public/avvio/luce.js` e `src/avvio/consegna.ts` (i colori della
+cartella nella memoria dell'avvio). `verde.patch` cambia dieci file,
+`verde-avvio.patch` quattordici. Si applicano dopo l'altra toppa:
 
 ```bash
 git -C ../fub-cattura apply "$PWD/PLAN-ui/fub-pre-alpha/script/finto/cattura.patch"
@@ -80,8 +84,14 @@ Tre pezzi del verde non passano dal client:
 | `cattura-piani.mjs` con `VERDE=finto/verde-mappa.json` | le pagine dei piani (`p-*`) non hanno un client: prima di fotografarle ricolora il blu nel verde con la mappa. |
 | `verde-lavagna.mjs` | `s2/lavagna` e `s2/lavagna-700` non si rifanno (vedi sotto): il loro foglio di serie diventa quello di una cattura verde della stessa luce. **La foto PNG resta blu**: è l'unica eccezione ai pixel, e il controllo delle foto la conosce. |
 
-Le catture blu di prima stanno in `catture-blu/`, accanto a `catture/`,
-solo sulla macchina che le ha prese.
+Le forme del logo e i colori dei temi d'esempio si fanno con gli script
+`logo-*` (vedi `logo/LEGGIMI.md`). `verde-lavagna.mjs` mette nella lavagna
+la forma del marchio di una cattura della stessa luce, anche se ce n'è già
+una più vecchia.
+
+Le catture blu di prima stanno in `catture-blu/`, quelle verdi col primo
+logo in `catture-v7/`, accanto a `catture/`, solo sulla macchina che le ha
+prese.
 
 ```bash
 # 1. il client, accanto al repository

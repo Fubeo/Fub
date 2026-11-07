@@ -132,6 +132,11 @@ const DEST = [
   ["theme/examples/carta/ (fogli e skin.css)", "tema", ["93-tema-carta"], "PA T42, D17", "carta"],
   ["theme/examples/officina/ (i due fogli e skin.css)", "tema", ["93-tema-officina"], "PA T42, D17", "officina"],
   ["theme/examples/mare/ (i due fogli)", "tema", ["93-tema-mare"], "PA T42, D17, D27", "mare"],
+  // I colori del logo dei tre temi: nessun file, li calcola la serie
+  // (script/logo-temi.mjs fa lo stesso calcolo per il simulatore).
+  ["nessun file: la serie calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts) i colori del logo di Carta", "tema", ["93-tema-carta-logo"], "PA T49, D26", "carta"],
+  ["nessun file: la serie calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts) i colori del logo di Officina", "tema", ["93-tema-officina-logo"], "PA T49, D26", "officina"],
+  ["nessun file: la serie calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts) i colori del logo di Mare", "tema", ["93-tema-mare-logo"], "PA T49, D26", "mare"],
 ];
 const usati = new Set(DEST.flatMap((d) => d[2]));
 for (const k of Object.keys(blocchi)) if (!usati.has(k)) throw new Error(`blocco senza destinazione: ${k}`);

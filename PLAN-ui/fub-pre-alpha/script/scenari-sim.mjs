@@ -202,9 +202,9 @@ export const SCENARI = [
     // cambiati dalle risposte».
     id: "cambiato", nome: "Che cosa è cambiato (risposte del 2026-11-07)",
     passi: [
-      p("nota-riposo", "Il verde di serie (D25 C): la tinta 160 «Smeraldo» al posto del blu 265, in tutti gli stati. Nel marchio il logo provvisorio (D26 B)."),
+      p("nota-riposo", "Il verde di serie (D25 C): la tinta 160 «Smeraldo» al posto del blu 265, in tutti gli stati. Nel marchio il logo, Marcuzzo: la cartella prende la tinta del tema (D26)."),
       p("nota-riposo", "Di notte lo stesso verde; anche il vassoio sotto le schede è verde (PA T48).", { luce: "dark" }),
-      p("avvio-attesa", "L'avvio col logo provvisorio e col verde (PA T48, T49)."),
+      p("avvio-attesa", "L'avvio col logo intero a 56 px e col verde (PA T48, T49)."),
       p("imp-info-prealpha", "Informazioni: il logo accanto alla versione della pre-alpha."),
       p("aspetto", "Aspetto: «Smeraldo» è il primo campione e quello di serie; «Matita blu» resta fra i campioni."),
       p("aspetto-barre", "Nuovo, S294 (D6 C): «Le barre», chiare di serie."),

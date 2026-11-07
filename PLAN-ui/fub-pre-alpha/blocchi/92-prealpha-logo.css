@@ -1,47 +1,47 @@
 /* → theme/scrittoio/skin/frame.css e skin/settings.css (PA T49, D26) */
 /* ── Il logo ────────────────────────────────────────────────────────────────
-   Il marchio della barra non è più la «f» corsiva sul colore dell'accento:
-   è il logo di Fub, nella forma minima (16–24 px). Le sue tinte sono gettoni
-   suoi, non della ricetta: non seguono l'accento (il logo resta verde anche
-   con la matita blu), ma un tema le può ridichiarare. Il bottone resta
-   trasparente e prende il velo del passaggio come le icone accanto. */
-:root {
-  --logo-foglio: #1f4b36;
-  --logo-orecchia: #7ea189;
-  --logo-oliva: #6e8b64;
-  --logo-pagina: #ffffff;
-  --logo-righe: #2f4a3e;
-  --logo-nastro: #14c77d;
-  --logo-ombra: rgb(10 107 71 / 55%);
-}
-
+   Il marchio della barra e le Informazioni mostrano Marcuzzo, il logo
+   dell'utente: un gufo che spunta da una cartella. Il gufo ha i colori
+   scritti nel disegno e non cambia mai. La cartella, il suo retro, l'ombra
+   sotto le zampe e i due fogli prendono la tinta del tema dai ruoli
+   `--logo-*`: la ricetta li calcola per la serie e per ogni tinta scelta, il
+   caricatore per un tema fatto a mano che non li dichiara. Sono già lontani
+   dal fondo quanto basta (3:1, 4,5:1 nel contrasto alto); senza ruoli
+   ripiegano sull'accento. Il bottone del marchio resta trasparente e prende
+   il velo del passaggio come le icone accanto. */
 .brand-mark {
   background: transparent;
   color: inherit;
 }
 
+/* La forma minima (`marcuzzo-24.svg`) a 24 px nel bottone di 28. */
 .brand-logo {
   width: 24px;
   height: 24px;
 }
 
-.brand-logo-foglio {
-  fill: var(--logo-foglio);
+.marcuzzo .logo-cartella {
+  fill: var(--logo-cartella, var(--accent));
 }
 
-.brand-logo-pagina {
-  fill: var(--logo-pagina);
+.marcuzzo .logo-cartella-retro {
+  fill: var(--logo-cartella-retro, var(--accent));
 }
 
-.brand-logo-nastro {
-  fill: none;
-  stroke: var(--logo-nastro);
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.marcuzzo .logo-cartella-ombra {
+  fill: var(--logo-cartella-ombra, var(--accent));
 }
 
-/* Informazioni: il logo nella forma piccola (32–48 px), accanto alla versione. */
+.marcuzzo .logo-foglio-1 {
+  fill: var(--logo-foglio-1, var(--sheet-2));
+}
+
+.marcuzzo .logo-foglio-2 {
+  fill: var(--logo-foglio-2, var(--sheet-2));
+}
+
+/* Informazioni: il disegno intero (`marcuzzo.svg`) a 48 px, accanto alla
+   versione. */
 .about-version {
   grid-template-columns: auto minmax(40%, 1fr) auto;
   align-items: center;
@@ -53,44 +53,36 @@
   height: 48px;
 }
 
-.about-logo .logo-foglio {
-  fill: var(--logo-foglio);
-}
+/* Colori forzati: il logo prende i colori del sistema, non i suoi. La
+   cartella e le pupille nel colore del testo, il gufo nel grigio del
+   sistema, le facce, gli occhi e i fogli nel colore del fondo. */
+@media (forced-colors: active) {
+  .marcuzzo {
+    forced-color-adjust: none;
+  }
 
-.about-logo .logo-orecchia {
-  fill: var(--logo-orecchia);
-}
+  .marcuzzo path[class] {
+    fill: CanvasText;
+    stroke: none;
+  }
 
-.about-logo .logo-oliva {
-  fill: var(--logo-oliva);
-}
+  .marcuzzo path.logo-piumaggio,
+  .marcuzzo path.logo-pancia,
+  .marcuzzo path.logo-ali,
+  .marcuzzo path.logo-ombra,
+  .marcuzzo path.logo-zampe {
+    fill: GrayText;
+  }
 
-.about-logo .logo-pagina {
-  fill: var(--logo-pagina);
-}
+  .marcuzzo path.logo-bianco,
+  .marcuzzo path.logo-occhi,
+  .marcuzzo path.logo-becco-luce,
+  .marcuzzo path.logo-foglio-1,
+  .marcuzzo path.logo-foglio-2 {
+    fill: Canvas;
+  }
 
-.about-logo .logo-righe {
-  fill: var(--logo-righe);
-}
-
-.about-logo .logo-griglia {
-  fill: none;
-  stroke: var(--logo-righe);
-  stroke-width: 1.4;
-}
-
-.about-logo .logo-ombra,
-.about-logo .logo-nastro {
-  fill: none;
-  stroke-width: 4.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.about-logo .logo-ombra {
-  stroke: var(--logo-ombra);
-}
-
-.about-logo .logo-nastro {
-  stroke: var(--logo-nastro);
+  .marcuzzo path.logo-pupille {
+    stroke: CanvasText;
+  }
 }

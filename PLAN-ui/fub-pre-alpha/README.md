@@ -40,6 +40,10 @@ l'elenco e la frase pronta.
 - `toppe/*.html`: il DOM scritto a mano, un `<template data-toppa>` per
   pezzo, con la destinazione e il task in testa.
 - `dal-prototipo.md`: le tabelle di «Dal prototipo», generate.
+- `logo/`: Marcuzzo (D26), gli originali dell'utente, le quattro forme da
+  copiare e i contrasti misurati della cartella; come si rifanno è in
+  `logo/LEGGIMI.md`.
+- `verde/`: le foto delle tinte di D25 per la pagina delle scelte.
 - `script/`: ciò che rifà il simulatore, le sue prove e la pagina
   dell'artifact.
 

@@ -192,7 +192,7 @@ const ASPETTA = {
   D5: "S2 T22, K5 T21–T23", D6: "PA T11", D7: "PA T9", D8: "PA T22", D9: "PA T18", D10: "PA T10", D11: "PA T22", D12: "nessuno",
   D13: "il merge di #290 (K2)", D14: "PA T33", D15: "PA T34", D16: "PA T40", D17: "PA T42", D18: "PA T46",
   D19: "l'approvazione", D20: "PA T22", D21: "la Fase A", D22: "PA T41", D23: "Scrittoio 2, o il piano dopo la pre-alpha",
-  D24: "il piano di K6 (#313)", D25: "PA T48 (e il sì su 160 col logo definitivo)", D26: "PA T49 (i file del logo)",
+  D24: "il piano di K6 (#313)", D25: "PA T48", D26: "PA T49 (dopo D28)",
   D27: "PA T42", D28: "PA T49",
 };
 // Il consiglio in una riga, fedele all'opzione «(consigliata)» di PLAN.md.
@@ -224,7 +224,7 @@ const CONSIGLIO = {
   D25: "«Foglia» (145), il verde pieno, con la regola dei 30° fra i colori di stato e l'accento.",
   D26: "La stessa idea del logo, col foglio davanti che diventa una pagina.",
   D27: "«Mare»: soli colori, un blu profondo, il più lontano dal verde di serie.",
-  D28: "Nessun consiglio: è un fatto che sa solo l'utente.",
+  D28: "CC BY-SA 4.0 per i file del logo, con una nota che chiede ai fork di cambiare nome e logo; e mi dici con quale strumento hai fatto Marcuzzo.",
 };
 // Una domanda già decisa comincia con «**Decisa dall'utente … : X.**» (o con
 // «**Risposta dell'utente …**», D28, che non ha un consiglio): nel riassunto
@@ -259,6 +259,98 @@ const parte5 = `<div class="testo">
 <h2 id="come--come-si-implementa">Come si implementa</h2>
 ${indice(sottoVoci(come.corpo, "come"))}
 ${md(come.corpo, "come")}
+</div>`;
+
+// ── Parte 6 · il logo ───────────────────────────────────────────────────────
+// Marcuzzo (D26): gli originali e le forme come file accanto alla pagina, e
+// la cartella con ogni tinta e ogni tema d'esempio, coi colori e i contrasti
+// di logo/misure.json (fatti da logo-misure.mjs con la ricetta del finto).
+const logoDir = join(planPath, "..", "PLAN-ui/fub-pre-alpha/logo");
+await cp(logoDir, join(out, "logo"), { recursive: true, filter: (f) => !/\.(md|json)$/.test(f) });
+const misure = JSON.parse(await readFile(join(logoDir, "misure.json"), "utf8"));
+const intera = await readFile(join(logoDir, "marcuzzo.svg"), "utf8");
+const simbolica = await readFile(join(logoDir, "marcuzzo-simbolico.svg"), "utf8");
+const PARTI_LOGO = ["cartella", "cartella-retro", "cartella-ombra", "foglio-1", "foglio-2"];
+// Il disegno intero una volta sola, in un <symbol>: le cinque parti della
+// cartella leggono i gettoni `--logo-*` del <svg> che lo usa, come nella pelle.
+const simbolo = intera
+  .slice(intera.indexOf("<path"), intera.lastIndexOf("</svg>"))
+  .replace(/class="logo-(cartella-retro|cartella-ombra|cartella|foglio-1|foglio-2)" fill="(#[0-9a-f]{6})"/g, 'class="logo-$1" style="fill:var(--logo-$1,$2)"')
+  .trim();
+const simboloSvg = `<svg class="logo-simbolo" width="0" height="0" aria-hidden="true" focusable="false"><symbol id="marcuzzo" viewBox="29 30 968 968">${simbolo}</symbol></svg>`;
+const simbolicaIn = (px) =>
+  `<svg viewBox="29 30 968 968" width="${px}" height="${px}" aria-hidden="true" focusable="false">` +
+  simbolica
+    .slice(simbolica.indexOf("<path"), simbolica.lastIndexOf("</svg>"))
+    .replace('fill="#000"', 'fill="currentColor"')
+    .trim() +
+  "</svg>";
+const LUCI_LOGO = { "light-normal": "giorno", "light-high": "giorno, contrasto alto", "dark-normal": "notte", "dark-high": "notte, contrasto alto" };
+const virgola = (x) => x.toFixed(2).replace(".", ",");
+const nomeTinta = (id) => id.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase());
+const tessera = (v, luce, chi) => {
+  const stile = PARTI_LOGO.map((p) => `--logo-${p}:${v.colori[p]}`).join(";");
+  const fondi = v.fondi
+    .map((f) => `<span class="logo-fondo" style="background:${f}"><svg viewBox="29 30 968 968" style="${stile}" aria-hidden="true" focusable="false"><use href="#marcuzzo"/></svg></span>`)
+    .join("");
+  const soglia = String(v.soglia).replace(".", ",");
+  return `<figure class="logo-tessera">
+  <div class="logo-fondi" role="img" aria-label="Marcuzzo con ${esc(chi)}, ${LUCI_LOGO[luce]}, sulla barra e sulle Informazioni">${fondi}</div>
+  <figcaption><b>${LUCI_LOGO[luce]}</b><span>cartella&nbsp;${virgola(v.cartella)} · retro&nbsp;${virgola(v.retro)}</span><span class="${v.regge ? "regge" : "cade"}">soglia ${soglia}: ${v.regge ? "regge" : "non regge"}</span></figcaption>
+</figure>`;
+};
+const gruppoLogo = (titolo, chi, varianti) => `<section class="logo-gruppo" aria-label="${esc(titolo)}">
+<h4>${titolo}</h4>
+<div class="logo-griglia">${Object.entries(varianti).map(([luce, v]) => tessera(v, luce, chi)).join("\n")}</div>
+</section>`;
+const tutteLogo = [...misure.tinte, ...misure.temi];
+const varianteN = tutteLogo.reduce((n, t) => n + Object.keys(t.varianti).length, 0);
+const tutteReggono = tutteLogo.every((t) => Object.values(t.varianti).every((v) => v.regge));
+const linkD = (n) => {
+  const d = domande.find((x) => x.num === n);
+  return `<a href="#domande--${slug(d.titolo)}">${n}</a>`;
+};
+const parte6 = `<div class="testo">
+${simboloSvg}
+<h2 id="logo--il-logo">Il logo: Marcuzzo</h2>
+<nav class="indice" aria-label="In questa parte"><ul><li><a href="#logo--i-tuoi-tre-file">I tuoi tre file</a></li><li><a href="#logo--le-forme">Le forme</a></li><li><a href="#logo--la-cartella-con-ogni-tinta">La cartella con ogni tinta</a></li><li><a href="#logo--i-temi-d-esempio">I temi d'esempio</a></li></ul></nav>
+<p>Marcuzzo è il logo di Fub (${linkD("D26")}). Il gufo ha sempre i suoi colori. La cartella e i due fogli prendono il colore
+della tinta o del tema, e restano staccati dal fondo: la cartella e il suo retro reggono il contrasto dei controlli
+(3:1, o 4,5:1 col contrasto alto) contro i due fondi dove sta il logo, la barra e l'avvio (<code>--bg</code>) e le
+Informazioni (<code>--bg-elev</code>). Di giorno la scala dei colori è quella del tuo Smeraldo, di notte quella di Menta.
+Un tema fatto da altri non deve dichiarare niente: i colori della cartella li calcola Fub dal suo accento.</p>
+<p>Manca solo ${linkD("D28")}: con che cosa hai fatto Marcuzzo e quale licenza vuoi per i file del logo. Il task del logo
+(PA T49) aspetta quella risposta; il verde di serie (PA T48) no, perché la cartella di Marcuzzo sta a 160 come il verde.</p>
+
+<h3 id="logo--i-tuoi-tre-file">I tuoi tre file</h3>
+<div class="logo-originali">
+  <figure><img src="logo/originali/marcuzzo-smeraldo.svg" width="128" height="128" alt="Marcuzzo Smeraldo: la cartella verde smeraldo"><figcaption><b>Smeraldo</b> · l'icona del sistema, e la scala di giorno</figcaption></figure>
+  <figure><img src="logo/originali/marcuzzo-menta.svg" width="128" height="128" alt="Marcuzzo Menta: la cartella verde menta"><figcaption><b>Menta</b> · la scala di notte</figcaption></figure>
+  <figure><img src="logo/originali/marcuzzo-kraft.svg" width="128" height="128" alt="Marcuzzo Kraft: la cartella color cartone"><figcaption><b>Kraft</b> · resta fra gli originali</figcaption></figure>
+</div>
+<p class="logo-nota">L'icona del sistema è Smeraldo: è una mia scelta, e la puoi cambiare. Su una barra delle applicazioni
+chiara Menta si perde, Smeraldo regge sia sul chiaro sia sullo scuro.</p>
+
+<h3 id="logo--le-forme">Le forme, alla loro misura</h3>
+<p>Quattro forme fatte dal tuo Smeraldo, da copiare e non da ridisegnare. Le piccole tolgono i dettagli minuti e
+ingrandiscono ciò che deve restare leggibile: l'occhio aperto, la pupilla, l'occhiolino e il becco.</p>
+<div class="logo-forme">
+  <figure><div class="logo-misure"><img src="logo/marcuzzo.svg" width="56" height="56" alt="La forma intera a 56 px"><img src="logo/marcuzzo.svg" width="48" height="48" alt="La forma intera a 48 px"></div><figcaption><b>Intera</b> · 56 px nell'avvio, 48 nelle Informazioni, e l'icona grande</figcaption></figure>
+  <figure><div class="logo-misure"><img src="logo/marcuzzo-24.svg" width="24" height="24" alt="La forma minima a 24 px"><img src="logo/marcuzzo-24.svg" width="96" height="96" alt="La forma minima a 24, ingrandita"></div><figcaption><b>Minima 24</b> · il marchio della barra, le icone 24 e 32 (accanto, ingrandita)</figcaption></figure>
+  <figure><div class="logo-misure"><img src="logo/marcuzzo-16.svg" width="16" height="16" alt="La forma minima a 16 px"><img src="logo/marcuzzo-16.svg" width="96" height="96" alt="La forma minima a 16, ingrandita"></div><figcaption><b>Minima 16</b> · l'icona più piccola</figcaption></figure>
+  <figure><div class="logo-misure logo-sola" role="img" aria-label="La forma simbolica, a 24 px e ingrandita">${simbolicaIn(24)}${simbolicaIn(96)}</div><figcaption><b>Simbolica</b> · un colore solo: il livello monocromo di Android, l'icona simbolica di Linux</figcaption></figure>
+</div>
+
+<h3 id="logo--la-cartella-con-ogni-tinta">La cartella con ogni tinta</h3>
+<p>Ogni tessera mostra Marcuzzo sui due fondi di quella tinta: a sinistra la barra, a destra le Informazioni. I numeri sono
+il contrasto più basso dei due, della cartella e del retro; la soglia è quella dei controlli. ${varianteN} varianti
+misurate, ${tutteReggono ? "e reggono tutte" : "e non tutte reggono"}.</p>
+${misure.tinte.map((t) => gruppoLogo(`${nomeTinta(t.id)} · ${t.tinta}${t.id === "smeraldo" ? " (di serie)" : ""}`, `la tinta ${nomeTinta(t.id)}`, t.varianti)).join("\n")}
+
+<h3 id="logo--i-temi-d-esempio">I temi d'esempio</h3>
+<p>Carta, Officina e Mare non dichiarano i colori del logo: Fub li calcola dal loro accento quando il tema si monta. Carta
+c'è solo di giorno.</p>
+${misure.temi.map((t) => gruppoLogo(nomeTinta(t.id), `il tema ${nomeTinta(t.id)}`, t.varianti)).join("\n")}
 </div>`;
 
 // ── La testa ────────────────────────────────────────────────────────────────
@@ -319,7 +411,8 @@ pre code { background: none; padding: 0; font-size: 13px; overflow-wrap: normal;
 .testa h1 { margin: 0 0 6px; font-size: 28px; line-height: 1.15; letter-spacing: -0.01em; text-wrap: balance; }
 .testa .obiettivo { margin: 0 0 12px; max-width: 70ch; color: var(--text); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 9px; border-radius: 999px; background: var(--bg-elev); box-shadow: inset 0 0 0 1px var(--border); color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 9px; border-radius: 999px; background: var(--bg-elev); box-shadow: inset 0 0 0 1px var(--border); color: var(--muted); font-size: 12.5px; white-space: nowrap; max-width: 100%; }
+@media (max-width: 520px) { .chip { white-space: normal; border-radius: 12px; } }
 .chip.ok { background: var(--ok-wash); color: var(--ok); box-shadow: none; }
 .chip.attesa { background: var(--warn-wash); color: var(--warn); box-shadow: none; }
 .decidere { background: var(--sheet); border-radius: 12px; box-shadow: 0 0 0 1px var(--border); padding: 14px 16px; }
@@ -379,6 +472,25 @@ td code, th code { font-size: 0.82em; }
 .domanda strong { color: var(--text); }
 .domanda li:has(> strong:first-child) { margin-top: 10px; }
 table.riassunto td:first-child { min-width: 14rem; }
+/* la parte del logo */
+.logo-simbolo { position: absolute; width: 0; height: 0; overflow: hidden; }
+.logo-originali, .logo-forme { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 12px; margin: 12px 0; }
+.logo-originali figure, .logo-forme figure { margin: 0; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--sheet); display: flex; flex-direction: column; gap: 10px; }
+.logo-originali img { width: 128px; height: 128px; align-self: center; }
+.logo-misure { display: flex; align-items: flex-end; gap: 14px; min-height: 96px; }
+.logo-sola { color: var(--text); }
+.logo-originali figcaption, .logo-forme figcaption, .logo-tessera figcaption { font-size: 13px; color: var(--muted); line-height: 1.4; }
+.logo-originali figcaption b, .logo-forme figcaption b, .logo-tessera figcaption b { color: var(--text); font-weight: 600; }
+.logo-nota { color: var(--muted); font-size: 14px; }
+.logo-gruppo h4 { margin: 18px 0 8px; font-size: 15px; }
+.logo-griglia { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: 10px; }
+.logo-tessera { margin: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--sheet); }
+.logo-fondi { display: grid; grid-template-columns: 1fr 1fr; }
+.logo-fondo { display: flex; align-items: center; justify-content: center; padding: 12px 0; }
+.logo-fondo svg { width: 52px; height: 52px; display: block; }
+.logo-tessera figcaption { display: flex; flex-direction: column; gap: 1px; padding: 8px 10px 9px; border-top: 1px solid var(--border); }
+.logo-tessera .regge { color: var(--ok); }
+.logo-tessera .cade { color: var(--warn); font-weight: 600; }
 
 @media (max-width: 860px) {
   .testa-dentro { grid-template-columns: minmax(0, 1fr); }
@@ -394,23 +506,24 @@ table.riassunto td:first-child { min-width: 14rem; }
       <p class="obiettivo">${md(obiettivo, "o").replace(/^<p>|<\/p>\s*$/g, "")}</p>
       <ul class="chips">
         <li class="chip ok">Definizione confermata il 2026-11-05</li>
-        <li class="chip ok">Tutte le domande decise il 2026-11-07</li>
+        <li class="chip ok">Domande decise il 2026-11-07${aperte.length ? `, tranne ${aperte.map((d) => d.num).join(", ")}` : ""}</li>
         <li class="chip attesa">${daApprovare} stati composti e nuovi: il sì sul simulatore aggiornato</li>
         <li class="chip">${STATI.length} stati · ${SCENARI.length} scenari</li>
         <li class="chip">${fatti} punti di «Fatto quando»</li>
         <li class="chip">${tasks.length} task nuovi · ${fasi} fasi</li>
-        <li class="chip">${domande.length} domande, ${aperte.length ? `${aperte.length} aperte` : "tutte decise"}</li>
+        <li class="chip">${domande.length} domande, ${aperte.length ? `${aperte.length} ${aperte.length === 1 ? "aperta" : "aperte"}` : "tutte decise"}</li>
         <li class="chip"><code>piano/fub-pre-alpha</code> @ ${commit}</li>
       </ul>
     </div>
     <section class="decidere" aria-labelledby="da-decidere">
       <h2 id="da-decidere">Che cosa ti chiedo</h2>
       <ol>
-        <li>Guarda <a href="#simulatore">il simulatore</a> con lo scenario <b>«Che cosa è cambiato»</b>: il verde, il logo provvisorio, e gli
+        <li>Guarda <a href="#simulatore">il simulatore</a> con lo scenario <b>«Che cosa è cambiato»</b>: il verde, Marcuzzo, e gli
         stati che le tue risposte hanno cambiato o aggiunto (S287–S298). L'elenco è in
         <a href="#simulatore--gli-stati-cambiati-dalle-risposte">«Gli stati cambiati dalle risposte»</a>.</li>
         <li>Dai il sì ai ${daApprovare} stati composti e nuovi: «Approvare gli stati nuovi e composti», sotto lo schermo, scrive la frase da incollare.</li>
-        <li>Quando c'è, il logo definitivo: i file, e lo strumento con cui è fatto (D28). Col logo ti chiederò se il verde 160 resta.</li>
+        <li>Rispondi a <a href="#domande--${slug(domande.find((d) => d.num === "D28").titolo)}">D28</a>: con che cosa hai fatto Marcuzzo, e quale licenza vuoi per i file del logo.
+        Il logo, con la cartella in ogni tinta e in ogni tema, è nella parte <a href="#logo">«Il logo»</a>.</li>
       </ol>
       <p class="decidere-nota">Le tue risposte sono nella pagina <a href="https://claude.ai/artifact/Q5Lydynyn4DV8xwFDLZt18" target="_blank" rel="noopener">«Le scelte di Fub pre-alpha»</a>
       e, una per una, in testa a ogni domanda.</p>
@@ -424,6 +537,7 @@ table.riassunto td:first-child { min-width: 14rem; }
     <li><a href="#strada"><span class="n">3</span>Strada</a></li>
     <li><a href="#domande"><span class="n">4</span>Domande aperte</a></li>
     <li><a href="#come"><span class="n">5</span>Come si implementa</a></li>
+    <li><a href="#logo"><span class="n">6</span>Il logo</a></li>
   </ul>
 </nav>
 <main>
@@ -432,6 +546,7 @@ table.riassunto td:first-child { min-width: 14rem; }
   <section class="parte" id="parte-strada" data-parte="strada" aria-label="Strada" hidden>${parte3}</section>
   <section class="parte" id="parte-domande" data-parte="domande" aria-label="Domande aperte" hidden>${parte4}</section>
   <section class="parte" id="parte-come" data-parte="come" aria-label="Come si implementa" hidden>${parte5}</section>
+  <section class="parte" id="parte-logo" data-parte="logo" aria-label="Il logo" hidden>${parte6}</section>
 </main>
 <script>
 (() => {

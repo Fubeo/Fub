@@ -49,10 +49,10 @@ T21, e PA T36 T37 T38 dopo S2 T10, PA T43 dopo S2 T8 e T14, PA T56 T57
 quando S2 è in `main`; poi il piano del telefono (pianificatore e task,
 D1 B) · Fase C: griglia, K5, N4, N6,
 lavagna in codice e A1 (le loro ondate, nell'ordine di «L'ordine»), con PA
-T12 · Fase D: PA T41 | T42 | T49 (quando ci sono i file del logo) | T14
+T12 · Fase D: PA T41 | T42 | T49 (dopo D28) | T14
 T18 T55 | T26 T27 T28 T29 T30 | T52 | T50 T51 | T15 T17 T22 T31 | T16 T45
-T23 | T24. PA T48 parte dopo il sì dell'utente su 160 col logo definitivo;
-PA T49 dopo i file del logo e D28; PA T50 dopo gli account dell'utente.
+T23 | T24. PA T49 parte dopo D28 (lo strumento e la licenza del logo);
+PA T50 dopo gli account dell'utente.
 Prototipo: `PLAN-ui/fub-pre-alpha/simulatore.html`, il simulatore di tutta
 la pre-alpha (artifact «Fub pre-alpha»,
 https://claude.ai/artifact/RCUxmuv2dCqbwDRagbKHcK, parte 1). È costruito dai
@@ -67,8 +67,11 @@ ha approvato i 118 stati composti e nuovi e ha dato il via A: «scrivi le
 risposte nel piano e nel simulatore, fai il controllo di D19, mostrami gli
 stati cambiati; poi approvo sul simulatore aggiornato». Le risposte sono
 scritte qui (ogni domanda in testa), i task nuovi sono PA T48–T57, e il
-simulatore è rifatto in verde, col logo provvisorio e con gli stati che le
-risposte hanno cambiato o aggiunto. Il controllo di D19 è fatto («Il
+simulatore è rifatto in verde, col logo e con gli stati che le
+risposte hanno cambiato o aggiunto. Lo stesso giorno l'utente ha portato il
+logo definitivo, Marcuzzo (D26), con la cartella che prende il colore del
+tema: le catture sono rifatte con lui, e resta aperta solo D28 (lo
+strumento e la licenza del logo). Il controllo di D19 è fatto («Il
 controllo di tutte le viste»): i difetti che ha trovato sono PA T56, T57 e
 due punti di T47, e il simulatore li mostra già corretti. Finché
 «Approvato» non dice sì, il piano non va implementato.
@@ -326,7 +329,7 @@ Se una di queste cade, la stima si allunga.
 | PA T44 · un documento e un foglio vuoti | PA | da fare | nessuno | basso: due comandi che creano file, dietro le loro feature | M | test d'integrazione di `fub-host`, anche con `--no-default-features` |
 | PA T46 · le parole della scheda di un componente | PA | da fare (D18 A) | K2 in `main` | basso: solo testi del catalogo | S | `i18n/lexicon-settings.test.ts` |
 | PA T47 · i 44 px del tocco sul telefono, senza deformare | PA | da fare | nessuno | basso: solo CSS del telefono | S | la scena `mobile-settings` di `bench/scene.mjs` (`bench:verify`, `bench:a11y`) |
-| PA T48 · il verde di serie | PA | da fare (D25 C) | la conferma dell'utente che 160 resta col logo definitivo; mai con un task che rifà baseline | medio: cambia ogni schermata, le baseline vengono dal runner | M | `recipe.test.ts`, `colori.test.ts`, `theme:verify`, `cargo test -p fub-host` |
+| PA T48 · il verde di serie | PA | da fare (D25 C) | niente (il logo definitivo conferma 160); mai con un task che rifà baseline | medio: cambia ogni schermata, le baseline vengono dal runner | M | `recipe.test.ts`, `colori.test.ts`, `theme:verify`, `cargo test -p fub-host` |
 | PA T53 · #237 R05–R08 e A03 | PA | da fare (D21 A) | S2 T10 per A03 | basso | M | un test per voce nel proprietario |
 | PA T54 · l'editor di testo vestito dal tema | PA | da fare (D22 A) | T35; prima di T41; mai con S2 T20 o la griglia T2–T3 | medio: tocca la pelle di ogni tema | M | Vitest di `theme.ts`, `check-inline-theme.mjs` |
 
@@ -364,7 +367,7 @@ Se una di queste cade, la stima si allunga.
 |---|---|---|---|---|---|---|
 | PA T41 · gli hook congelati | PA | da fare | Fase C in `main`; T34–T40 | basso per il codice, alto se si sbaglia il momento | S | `contract-frozen.test.ts` |
 | PA T42 · tre temi d'esempio | PA | da fare (D17 C: Carta, Officina, Mare) | T41, T54 | basso | M | `examples.test.ts`, scene del banco |
-| PA T49 · il logo | PA | aspetta i file del logo dell'utente e D28 | T48 | basso: icone e un SVG, gli hook restano | M | le icone generate, le scene del banco |
+| PA T49 · il logo | PA | aspetta D28 | T48 | medio: icone, la ricetta e la serie dei temi; gli hook restano | M | le icone generate, le scene del banco |
 | PA T55 · il controllo di tutte le viste nel banco | PA | da fare (D19 A) | S2 in `main`; T47, T56 e T57; prima di T15 | basso | M | `bench:viste` verde, rosso sulla scena di prova |
 | PA T14 · il giro nel banco: lo scheletro e il primo avvio | PA | da fare | Fase B in `main` | medio | M | `npm run bench:giro` verde sui compiti 1–5 |
 | PA T26 · il giro: le note | PA | da fare | T14 | basso | M | compiti 6–11 verdi |
@@ -710,7 +713,7 @@ stanno sotto `apps/client/src/`.
 | `dal-prototipo.md` | le tabelle in fondo a questa sezione, generate dalla costruzione | no |
 | `scelte.html` | la pagina delle scelte (artifact «Le scelte di Fub pre-alpha»): le domande, le risposte, gli stati da approvare | no |
 | `prompt-piano-telefono.md` | il prompt del pianificatore del telefono (D1 B), da avviare quando Scrittoio 2 è in `main` | no |
-| `logo/`, `verde/` | il logo provvisorio in SVG (D26 B, fino ai file dell'utente) e le foto delle tinte di D25 della pagina delle scelte | no: il logo vero lo porta PA T49 |
+| `logo/`, `verde/` | Marcuzzo (D26): gli originali dell'utente in `logo/originali/`, le quattro forme (intera, minima 24 e 16, simbolica), i contrasti misurati in `logo/misure.json`; le foto delle tinte di D25 della pagina delle scelte | sì: le forme si copiano in `assets/logo/` con PA T49 |
 
 In alto si scelgono lo stato, lo scenario, la luce (Giorno, Notte), la
 larghezza (Piena, 700 px, Telefono) e il movimento (Pieno, Calmo, Ridotto).
@@ -750,7 +753,7 @@ didascalia, nel menu degli stati e nella tabella «Gli stati», sotto:
   client è quello che ha fotografato il prototipo approvato di Scrittoio 2
   (il ramo locale `anteprima/tutto`); gli stati d'avvio vengono dallo stesso
   ramo con #308 (5006937c). Dal 2026-11-07 le catture sono rifatte col
-  verde di serie e col logo provvisorio (le toppe verdi del finto, «Rifare
+  verde di serie e col logo Marcuzzo (le toppe verdi del finto, «Rifare
   il simulatore»). Non è nell'elenco da approvare: è il client di oggi con i
   ritocchi già approvati, più il verde di D25 e il logo di D26.
 - **composta** (67): DOM vero, spostato o ritoccato. Sono gli editor delle
@@ -791,7 +794,7 @@ l'altro.
 | Stati | Che cosa cambia | Da dove |
 |---|---|---|
 | tutti | il verde di serie, tinta 160 «Smeraldo», al posto del blu 265: la cornice, i bottoni, la scelta, i collegamenti, l'anello del fuoco e il velo sulle superfici, nelle due luci e col contrasto alto. Il vassoio delle barre segue la tinta (`#f8faf8`, `#18211c`). I colori di stato restano 30° lontani dall'accento: il «salvato» va a 130 | D25 C, PA T48 |
-| tutti quelli col marchio, S246, S248–S250, S267 | il logo provvisorio (la «f» a nastro sopra un foglio scuro e una pagina) nel marchio, in Informazioni e nell'avvio, al posto della «f» corsiva | D26 B, PA T49 |
+| tutti quelli col marchio, S246, S248–S250, S267 | Marcuzzo nel marchio, in Informazioni e nell'avvio, al posto della «f» corsiva; la cartella ha il colore della tinta o del tema e regge il contrasto col fondo | D26, PA T49 |
 | S234 | Aspetto: «Smeraldo» è il primo campione e quello di serie; «Matita blu» resta fra i campioni | D25 C, PA T48 |
 | S294–S296, nuovi | «Le barre: chiare · marcate» in Aspetto, e una nota con le barre marcate | D6 C, PA T11 |
 | S125–S130 | il disegno nella forma A, quella scelta: senza la figura di confronto accanto | D5 A |
@@ -1243,7 +1246,12 @@ arriva. PA T55 porta nel banco le stesse regole, già affinate.
 e T57): 1.724 viste, tutte montate, 770 rigorose, in 622 secondi. Ha
 guardato 70.020 testi, 90.860 controlli e 73.918 fuochi. 646 bersagli sotto
 i 24 px hanno la loro distanza (bersaglio-distanziato) e non sono difetti.
-Ogni cella dice i riscontri, fra parentesi quanti nelle viste rigorose, e i
+Rifatto su `sim/out-v8`, con Marcuzzo (D26), dà gli stessi riscontri
+rigorosi. Fuori da quelli cambia solo la tavolozza della barra dei fogli al
+telefono (`g2-foglio-ribbon-palette`, ricatturata: la tavolozza si
+dispone in modo un poco diverso), con quattordici sovrapposti in meno e quattro nuovi
+(due pulsanti della barra coperti, nelle due luci), più un taglio in meno
+in `slash-nessuno`; il telefono è del suo piano. Ogni cella dice i riscontri, fra parentesi quanti nelle viste rigorose, e i
 gruppi (lo stesso tipo sullo stesso selettore):
 
 | Tipo | Computer | Telefono | Strati |
@@ -1884,11 +1892,14 @@ rifare uno stato.
 | `theme/scrittoio/skin/media.css` | prealpha | `92-prealpha-media.css` | PA T30 | 0.3 KB |
 | `più file (ogni sezione dice il suo)` | prealpha | `92-prealpha-viste.css` | PA T56, T57 | 8.5 KB |
 | `shells/mobile/mobile.css` | prealpha | `92-prealpha-telefono.css` | PA T47 | 2.4 KB |
-| `theme/scrittoio/skin/frame.css e skin/settings.css` | prealpha | `92-prealpha-logo.css` | PA T49, D26 | 1.9 KB |
-| `public/avvio/avvio.css` | prealpha | `92-prealpha-logo-avvio.css` | PA T49, D26 | 1.1 KB |
+| `theme/scrittoio/skin/frame.css e skin/settings.css` | prealpha | `92-prealpha-logo.css` | PA T49, D26 | 2.3 KB |
+| `public/avvio/avvio.css` | prealpha | `92-prealpha-logo-avvio.css` | PA T49, D26 | 2.6 KB |
 | `theme/examples/carta/ (fogli e skin.css)` | tema | `93-tema-carta.css` | PA T42, D17 | 5.4 KB |
 | `theme/examples/officina/ (i due fogli e skin.css)` | tema | `93-tema-officina.css` | PA T42, D17 | 6.2 KB |
 | `theme/examples/mare/ (i due fogli)` | tema | `93-tema-mare.css` | PA T42, D17, D27 | 3.1 KB |
+| `nessun file: la serie calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts) i colori del logo di Carta` | tema | `93-tema-carta-logo.css` | PA T49, D26 | 0.9 KB |
+| `nessun file: la serie calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts) i colori del logo di Officina` | tema | `93-tema-officina-logo.css` | PA T49, D26 | 1.4 KB |
+| `nessun file: la serie calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts) i colori del logo di Mare` | tema | `93-tema-mare-logo.css` | PA T49, D26 | 1.4 KB |
 <!-- dal-prototipo:fine -->
 
 ## Domande aperte
@@ -1912,7 +1923,9 @@ Il 2026-11-07 l'utente ha risposto a tutte: D1–D24 e il via nella pagina,
 D25–D28 in chat e poi nella pagina. Ha approvato anche i 14 gruppi di
 stati. Dopo le prime risposte ha chiesto un Fub verde di serie e ha
 mandato il suo logo: da lì vengono D25–D28. Ogni domanda dice in testa la
-scelta e che cosa cambia nel piano.
+scelta e che cosa cambia nel piano. Più tardi, lo stesso giorno, l'utente ha
+portato il logo definitivo, Marcuzzo (D26): D28 si è riaperta, perché la sua
+risposta riguardava il primo logo, ed è l'unica domanda aperta.
 
 ### D1 · Il telefono, per l'APK di prova
 
@@ -2659,12 +2672,12 @@ suo piano è pronto (#313) e ha D1–D12 aperte.
 risposte l'utente ha scritto: «vorrei che il tema base di Fub fosse il
 verde». Ha scelto prima B («Foglia», 145), poi, visto il logo, il verde del
 logo (nella pagina, «tinta 159»). La tinta di serie è **160**, «Smeraldo»:
-le tinte della «f» del logo vanno da 157,6 a 164 e il foglio scuro sta a
-160,6; 160 è un passo di 5°, che il simulatore mostra esatto. Fra 159 e 160
+le tinte della «f» del primo logo vanno da 157,6 a 164 e il foglio scuro sta
+a 160,6; 160 è un passo di 5°, che il simulatore mostra esatto. Fra 159 e 160
 l'occhio non vede differenza. La «matita blu» (265) resta fra i campioni.
-Lo porta nel codice PA T48. Il logo definitivo lo porta l'utente (D26):
-prima di PA T48 l'orchestratore gli chiede se 160 resta anche col logo
-nuovo, perché cambiare la tinta dopo vuol dire rifare tutte le baseline.
+Lo porta nel codice PA T48. Il logo definitivo (D26, Marcuzzo) conferma
+160: la sua cartella sta a 160,1 nelle due versioni a colori dell'utente,
+Smeraldo (`#399b6e`) e Menta (`#89cca8`). PA T48 non aspetta altro.
 
 In Fub una sola tinta fa tutto: i bottoni, la scelta, i collegamenti,
 l'anello del fuoco, e un velo dello stesso colore sulle superfici
@@ -2690,43 +2703,91 @@ blu sposta l'informazione da 240 a 235.
     30°; è il più vicino a «Petrolio» fra i campioni.
 - **D.** Una tinta scelta dall'utente nel simulatore.
 
-### D26 · L'icona di Fub: il logo dell'utente
+### D26 · L'icona di Fub: Marcuzzo
 
-**Decisa dall'utente il 2026-11-07: B, il foglio davanti diventa una
-pagina.** Il logo dell'utente è una «f» a nastro verde sopra dei fogli,
-uno con la griglia. Ridisegnato in vettoriale in
-`PLAN-ui/fub-pre-alpha/logo/`, prende il posto dell'icona di oggi (un
-quadrato viola con una «F» bianca, `crates/fub-app/icons`) e della «f»
-corsiva sul colore dell'accento dentro la finestra. Il foglio bianco
-davanti diventa una pagina con righe di testo e un angolo a quadretti:
-resta il logo dell'utente, dice «note e ogni documento», e si stacca
-dall'icona di Excel. Le forme sono quattro, e l'utente le approva guardando
-la pagina «Il logo» (parte dell'artifact) prima del codice:
+**Decisa dall'utente il 2026-11-07: il logo è Marcuzzo.** Marcuzzo è un
+gufo che sbuca da una cartella piena di fogli. L'utente ne ha dato tre
+versioni, in `PLAN-ui/fub-pre-alpha/logo/originali/`: Smeraldo (la
+cartella verde), Menta (verde chiaro, per i fondi scuri) e Kraft (la
+cartella color cartone). Ha scritto: «Sicuramente voglio questi come loghi
+ufficiali dell'applicazione», e poi che la cartella «dovrà avere il colore
+del tema scelto in qualche modo, comunque gestendolo anche in modo tale che
+non si vada a sovrapporre il colore attuale con quello di sfondo».
+Marcuzzo prende il posto dell'icona di oggi (un quadrato viola con una «F»
+bianca, `crates/fub-app/icons`) e della «f» corsiva sul colore dell'accento
+dentro la finestra. Il primo ridisegno, la «f» a nastro sopra i fogli,
+esce dal piano.
 
-| Forma | File | Dove |
-|---|---|---|
-| grande | `fub-logo.svg` | da 64 px in su: l'icona dell'app, l'installer |
-| piccola | `fub-logo-48.svg` | 32–48 px: le Informazioni, l'avvio (56 px) |
-| minima | `fub-logo-16.svg` | 16–24 px: la barra della finestra, le schede, i file |
-| simbolica | `fub-logo-simbolico.svg` | un solo colore: le icone simboliche di Linux |
+**Il gufo resta fermo, la cartella segue il tema.** Le piume, la pancia, le
+facce, gli occhi, il becco e le zampe hanno sempre i colori del disegno
+dell'utente. La cartella (davanti, retro e la sua ombra) e i due fogli
+prendono la tinta dell'accento, con una regola nuova della ricetta,
+`logoColors` in `theme/scrittoio/recipe.ts`:
 
-L'icona adattiva di Android (il davanti e il dietro) nasce dalla forma
-grande in PA T49. Lo porta nel codice PA T49.
+- La scala viene dai file dell'utente: di giorno quella di Smeraldo, di
+  notte quella di Menta. Tutte e due stanno alla tinta 160 (la cartella a
+  160,1), quindi con la tinta di serie il logo è il disegno dell'utente.
+  Per un'altra tinta ogni parte tiene la sua luminosità (L) e la sua croma
+  (C) e prende la tinta nuova (t); i fogli restano spostati come nel
+  disegno.
 
-**Il logo definitivo lo porta l'utente.** Più tardi, lo stesso giorno,
-l'utente ha trovato il logo definitivo (un gufo, con i fogli, la griglia e
-la scritta «Fub») e ha detto: «intanto lascia il logo che avevi fatto
-prima, poi ci penso io al logo». Il ridisegno di
-`PLAN-ui/fub-pre-alpha/logo/` è quindi **provvisorio**: tiene il posto nel
-simulatore e mostra dove va il logo, a quali misure e con quali gettoni
-(`--logo-*`). PA T49 parte dai file che dà l'utente, nelle quattro forme
-della tabella. Se l'utente dà un'immagine sola, le forme le ridisegna un
-pianificatore, non un coder, e l'utente le approva prima del codice.
+  | Parte | Giorno (Smeraldo): L · C · tinta | Notte (Menta): L · C · tinta |
+  |---|---|---|
+  | cartella davanti | 0,62 · 0,115 · t | 0,79 · 0,086 · t |
+  | retro | 0,519 · 0,099 · t | 0,691 · 0,090 · t |
+  | ombra della cartella | 0,549 · 0,094 · t | 0,719 · 0,080 · t |
+  | foglio 1 | 0,78 · 0,055 · t + 35 | 0,475 · 0,108 · t |
+  | foglio 2 | 0,709 · 0,059 · t − 30 | 0,581 · 0,090 · t + 35 |
 
-- **A.** Fedele, griglia compresa. Contro: ricorda Excel.
-- **B (consigliata).** La stessa idea, il foglio davanti è una pagina.
-- **C.** Solo la «f» a nastro sul foglio scuro. Contro: si perde l'idea
-  dei tanti documenti.
+- La tenuta: la cartella davanti e il retro si staccano dal fondo almeno
+  3:1, 4,5:1 col contrasto alto (`THRESHOLDS[level].ui`), contro i due
+  fondi dove sta il logo: `--bg` (la barra della finestra e l'avvio) e
+  `--bg-elev` (le Informazioni). Dove non ci arrivano, la ricetta sposta
+  solo la loro luminosità (più scura di giorno, più chiara di notte) fino
+  alla soglia; l'ombra segue la cartella dello stesso passo. È la tenuta
+  che la ricetta usa già per gli altri colori (`hold`).
+- Con 160, di notte i colori sono esattamente quelli di Menta (`#89cca8`,
+  `#67ad88`, `#77b493`, `#006e46`, `#238b8b`). Di giorno sono quelli di
+  Smeraldo, con la cartella appena più scura per la tenuta: `#37996c` al
+  posto di `#399b6e`, 3,02:1 sul fondo della barra. Col contrasto alto di
+  giorno la cartella scende a `#077b50`.
+- La regola regge per gli otto campioni e per i tre temi d'esempio, nelle
+  due luci e nei due contrasti: nessuna delle 42 varianti scende sotto la
+  soglia, e dove la scala dell'utente non basta la tenuta si ferma sulla
+  soglia (Officina di giorno: 3,00:1). I valori e i rapporti sono nella
+  pagina «Il logo» dell'artifact e in `logo/misure.json`
+  (`script/logo-misure.mjs`).
+- I gettoni sono cinque ruoli facoltativi della serie: `--logo-cartella`,
+  `--logo-cartella-retro`, `--logo-cartella-ombra`, `--logo-foglio-1` e
+  `--logo-foglio-2`. Una tinta scelta dalla persona li ricalcola con il
+  resto della tavolozza (`accentPalette`). Un tema fatto a mano può
+  dichiararli; se non lo fa, la serie li calcola quando il tema si monta,
+  dalla tinta e dalla croma del suo `--accent` e dai suoi `--bg` e
+  `--bg-elev`: un tema non si ritrova mai il logo verde di serie sopra i
+  suoi colori.
+- Con i colori forzati (il contrasto alto di Windows) il logo diventa una
+  sagoma: il contorno in `CanvasText`, il gufo in `GrayText`, le facce, gli
+  occhi e i fogli in `Canvas`.
+
+**Le forme.** Stanno in `PLAN-ui/fub-pre-alpha/logo/`, con le classi
+`logo-*` e coordinate intere, e si rifanno da
+`originali/marcuzzo-smeraldo.svg` con gli script `logo-forme.py`,
+`logo-minima.py` e `logo-simbolico.mjs` (in `script/`):
+
+| Forma | File | Dove | Che cosa cambia |
+|---|---|---|---|
+| intera | `marcuzzo.svg` | da 32 px in su: le Informazioni (48), l'avvio (56), l'icona dell'app | niente: è il disegno dell'utente |
+| minima 24 | `marcuzzo-24.svg` | 24 px: il marchio della barra | via le ombre, i puntini, le zampe e la luce del becco; occhio, pupilla, occhiolino e becco più grandi |
+| minima 16 | `marcuzzo-16.svg` | 16 px: la favicon, le icone piccole del sistema | in più via il riflesso dell'occhio e le strisce dei fogli sopra la testa |
+| simbolica | `marcuzzo-simbolico.svg` | un colore solo: le icone simboliche di Linux, il livello monocromo di Android, il vassoio | un path pieno pari-dispari, dalla minima 24; un filo vuoto stacca la cartella davanti |
+
+**L'icona del sistema** (l'installer, il dock, il menu delle applicazioni,
+Android) non conosce il tema: è Smeraldo, coi suoi colori fissi, su fondo
+trasparente. È una scelta del pianificatore, e l'utente può cambiarla in
+Menta o in Kraft, che restano fra gli originali. Kraft non entra nel tema:
+resta il file dell'utente, per esempio per la stampa.
+
+Lo porta nel codice PA T49, dopo D28.
 
 ### D27 · Il tema d'esempio «Salvia»
 
@@ -2740,23 +2801,41 @@ Fub blu lo ritrova come tema. PA T42.
   le soglie del contrasto.
 - **C.** Resta «Salvia»: quasi uguale a Fub di serie.
 
-### D28 · Da dove viene l'immagine del logo
+### D28 · Da dove viene il logo, e con quale licenza
 
-**Risposta dell'utente il 2026-11-07: A, l'ha fatta con un'AI.** Lo
-strumento non l'ha detto. La risposta riguardava il primo logo; il logo
-definitivo lo porta l'utente (D26), e la domanda vale per quello. Fub è
-open source: l'icona entra nel repository pubblico e ha bisogno di una
-licenza chiara. **PA T49 non parte** finché l'utente non dice da dove viene
-il logo definitivo (lo strumento, se è un'AI) e l'orchestratore non ha
-letto le condizioni e scritto in `DECISIONS.md` che permettono l'uso in un
-progetto pubblico. Il ridisegno provvisorio del prototipo non entra nel
-repository del prodotto.
+**Aperta.** Il 2026-11-07 l'utente ha risposto «A, l'ha fatta con un'AI»,
+ma la risposta riguardava il primo logo, la «f» a nastro. Per Marcuzzo
+(D26) non ha ancora detto con che cosa l'ha fatto né con quale licenza lo
+vuole dare. Fub è open source (il codice è MIT o Apache-2.0): il logo entra
+nel repository pubblico e ha bisogno di una licenza scritta. **PA T49 non
+parte** finché l'utente non dice con che cosa è fatto Marcuzzo e quale
+licenza sceglie, e l'orchestratore non ha letto le condizioni dello
+strumento (se è un'AI) e scritto in `DECISIONS.md` che permettono l'uso in
+un progetto pubblico. Le due licenze di Fub vanno bene per il codice, non
+per un disegno.
 
-- **A.** Fatta dall'utente con un'AI: si controllano le condizioni dello
-  strumento.
-- **B.** Disegnata dall'utente: la licenza la sceglie l'utente.
-- **C.** Di un'altra persona o di un sito: serve il permesso scritto, o un
-  ridisegno originale.
+- **A (consigliata).** CC BY-SA 4.0 per i file del logo, con una nota in
+  `assets/logo/LEGGIMI.md` che chiede a chi fa un fork di cambiare nome e
+  logo.
+  - Qualità: è aperta come il resto di Fub; chi ridistribuisce Fub intero
+    (una distribuzione Linux, Flathub) tiene l'icona senza chiedere, e chi
+    modifica il logo deve ridarlo con la stessa licenza. È la scelta di
+    molti progetti aperti per le immagini.
+  - Contro: la nota sul fork è una richiesta, non un obbligo: nessuna
+    licenza aperta impedisce di usare il logo.
+- **B.** Tutti i diritti riservati sul logo, con il permesso scritto di
+  usarlo per Fub e per chi lo ridistribuisce senza cambiarlo (come
+  Firefox).
+  - Qualità: il nome e il logo restano riconoscibili come di Fub.
+  - Contro: il pacchetto non è più tutto libero; qualche distribuzione
+    sostituisce l'icona, e serve una pagina di regole da tenere.
+- **C.** Pubblico dominio (CC0).
+  - Qualità: la più semplice, nessuna condizione.
+  - Contro: chiunque può usare Marcuzzo, anche per un altro prodotto.
+
+Se Marcuzzo è fatto con un'AI, si leggono anche le condizioni dello
+strumento: alcune non danno i diritti sull'immagine a chi la genera, o li
+danno solo con un abbonamento.
 
 ## Come si implementa
 
@@ -5166,16 +5245,22 @@ Tocca:
 Non toccare: le tinte degli altri campioni; i neutri della ricetta, che
 seguono già la tinta da soli, e con loro il vassoio delle barre di S2 T16
 (`--bar-tray`, dalla tinta della carta: `#f8faf8` e `#18211c` col verde);
-`docs/decisions/0208-*.md`, che si cita e non si riscrive; il logo (T49).
-Dipende da: la conferma dell'utente che 160 resta anche col logo
-definitivo (D25, D26); la chiede l'orchestratore prima di partire. Mai
-nella stessa ondata di un task che rifà baseline del banco.
+`docs/decisions/0208-*.md`, che si cita e non si riscrive; il logo e i
+suoi colori (`logoColors`, T49).
+Dipende da: niente (il logo definitivo conferma 160, D25). Mai nella
+stessa ondata di un task che rifà baseline del banco.
 Dal prototipo: tutto il simulatore è verde. Le catture vengono dai client
 con la ricetta nuova; il diff da copiare è in
 `script/finto/verde.patch` (il client delle catture) e
 `script/finto/verde-avvio.patch` (il client dell'avvio), nelle parti di
 `recipe.ts`, `accent-control.ts`, `catalog.ts`, `fake-ipc.ts` e
-`avvio.css`. I fogli si rigenerano, non si copiano.
+`avvio.css`. I fogli si rigenerano, non si copiano. Le parti del logo
+negli stessi diff sono di T49 e qui non si copiano: in `recipe.ts`
+`LOGO_ROLES`, `logoColors`, `holdLightness`, la riga `...logoColors` in
+fondo a `palette` e `logo-` in `OPTIONAL_ROLES`; le righe `--logo-*` dei
+fogli; il marchio in `index.html` e in `settings.ts`;
+`public/avvio/luce.js`, `src/avvio/consegna.ts` e il disegno nelle pagine
+dell'avvio.
 Cosa fare:
 - La ricetta come nel diff: `statusHue(hue, accent)` sposta una tinta di
   stato a `accent ± 30` quando le sta più vicino di 30°, dal lato dove
@@ -5209,56 +5294,100 @@ Stato: [ ] da fare
 
 ## T49 · Il logo
 
-Perché: D26. Il logo prende il posto dell'icona dell'app (un quadrato viola
+Perché: D26. Marcuzzo prende il posto dell'icona dell'app (un quadrato viola
 con una «F» bianca, `crates/fub-app/icons`) e della «f» corsiva sul colore
-dell'accento dentro la finestra. Il logo definitivo lo porta l'utente; il
-ridisegno del prototipo è provvisorio e non entra nel prodotto.
+dell'accento dentro la finestra. Il gufo ha colori fissi; la cartella e i
+fogli seguono la tinta, il tema e il contrasto, e restano staccati dal
+fondo.
 Ramo: piano/fub-pre-alpha.
-Tocca: `crates/fub-app/icons/` (tutte le misure, `icon.icns`, `icon.ico`,
-`source.png`), le icone Android nate da `cargo tauri icon`, una cartella
-nuova `assets/logo/` con le quattro forme SVG e la loro licenza,
-`apps/client/index.html` (il marchio della barra), `panels/settings.ts`
-(le Informazioni), `apps/client/public/avvio/avvio.css` e le tre pagine
-dell'avvio (`index.html`, `document.html`, `mobile.html`),
-`theme/scrittoio/skin/frame.css` e `skin/settings.css`,
-`theme/author/contract.json` (i gettoni nuovi), `THIRD_PARTY_NOTICES.md`
-se la licenza lo chiede, la pagina di `docs/` sull'aspetto.
-Non toccare: gli hook `brand-mark` e `brand-glyph`, che restano: il glifo
-diventa l'SVG del logo, quindi T49 può venire dopo T41; la ricetta.
-Dipende da: i file del logo definitivo, dati dall'utente; D28 chiusa
-(l'origine del logo e le condizioni dello strumento lette e scritte in
-`DECISIONS.md`). Se l'utente dà un'immagine sola, le quattro forme le
-ridisegna prima un pianificatore, e l'utente le approva.
-Dal prototipo: dove va il logo, a quali misure e con quali gettoni. I
-blocchi `92-prealpha-logo.css` (la barra a 24 px, le Informazioni a 48) e
-`92-prealpha-logo-avvio.css` (l'avvio a 56), le parti di `index.html`,
-`settings.ts` e delle pagine dell'avvio in `script/finto/verde.patch` e
-`verde-avvio.patch`; la pagina «Il logo» dell'artifact. Le forme e i nomi
-dei gettoni seguono il logo definitivo, non quello provvisorio.
+Tocca:
+- `apps/client/src/theme/scrittoio/recipe.ts`: `LOGO_ROLES`,
+  `logoColors()`, `holdLightness()` (la luminosità che `hold` cerca già,
+  resa da sola), la riga `...logoColors(light, level, hue, [bg, raise])` in
+  fondo a `palette`, `logo-` in `OPTIONAL_ROLES`; i quattro fogli
+  `theme/scrittoio/sheet-*.css`, rigenerati;
+- `apps/client/src/theme/theme.ts` e `theme/scrittoio/series.ts`: un campo
+  facoltativo nuovo di `ThemeSeries` (per esempio
+  `completeSheet(sheet, light, contrast)`) che dà i colori del logo a un
+  tema installato che non li dichiara, prima di `mountThemeBundle`;
+- `apps/client/theme/author/contract.json`: i cinque gettoni, facoltativi;
+- `theme/scrittoio/skin/frame.css` e `skin/settings.css`: il marchio
+  trasparente, le misure, i colori delle parti, i colori forzati;
+- `apps/client/index.html` (il marchio della barra), `panels/settings.ts`
+  (le Informazioni);
+- l'avvio: `public/avvio/avvio.css`, le tre pagine (`index.html`,
+  `document.html`, `mobile.html`), `public/avvio/luce.js` e
+  `src/avvio/consegna.ts` (cinque chiavi nuove della memoria dei colori),
+  `src/avvio/colori.test.ts` (di T48);
+- una cartella nuova `assets/logo/`: gli originali, le quattro forme,
+  `LEGGIMI.md` e la licenza di D28;
+- `crates/fub-app/icons/` (tutte le misure, `icon.icns`, `icon.ico`,
+  `source.png`) e le icone Android nate da `cargo tauri icon`;
+- `THIRD_PARTY_NOTICES.md` se la licenza lo chiede; la pagina di `docs/`
+  sull'aspetto (cercala per «accento»): la ricetta e i gettoni del logo.
+Non toccare: gli hook `brand-mark` e `brand-glyph`, che restano (il glifo
+diventa l'SVG, quindi T49 può venire dopo T41); i colori del gufo, che sono
+gli attributi `fill` del disegno; le soglie del contrasto; le tinte dei
+campioni.
+Dipende da: T48 (la ricetta verde e `colori.test.ts`); D28 chiusa: l'utente
+dice con che cosa è fatto Marcuzzo e quale licenza sceglie, e
+l'orchestratore legge le condizioni dello strumento e scrive in
+`DECISIONS.md` che permettono l'uso in un progetto pubblico.
+Dal prototipo: tutto. Le forme in `logo/`, da copiare e non da ridisegnare;
+il diff del client delle catture in `script/finto/verde.patch` (le parti
+del logo di `recipe.ts` e dei fogli, il marchio in `index.html`, le
+Informazioni in `settings.ts`) e in `verde-avvio.patch` (le pagine
+dell'avvio, `luce.js`, `consegna.ts`); i blocchi `92-prealpha-logo.css` (la
+barra a 24 px, le Informazioni a 48, i colori forzati) e
+`92-prealpha-logo-avvio.css` (l'avvio a 56, coi colori di riserva); per i
+temi `93-tema-*-logo.css`, fatti da `script/logo-temi.mjs`; i valori
+attesi in `logo/misure.json`; la pagina «Il logo» dell'artifact.
 Cosa fare:
-- Le quattro forme in `assets/logo/`: grande (da 64 px), piccola (32–48),
-  minima (16–24), simbolica (un colore solo, senza tratti: i tratti
-  diventano superfici, come vogliono le icone simboliche di Linux).
-- Le icone dell'app da un PNG di 1024 × 1024 della forma grande, con
-  `cargo tauri icon`; le misure da 16 a 48 si sostituiscono con le forme
-  piccola e minima rese a quella misura, non ridotte dalla grande.
-- L'icona adattiva di Android: il davanti è la forma grande dentro la zona
-  sicura (66 su 108), il dietro un colore pieno del logo.
-- Il marchio della barra: l'SVG della forma minima a 24 px dentro
-  `.brand-mark`, col bottone trasparente; i colori sono gettoni `--logo-*`
-  della pelle, che non seguono l'accento ma che un tema può ridichiarare.
-- Le Informazioni: la forma piccola a 48 px accanto alla versione.
-- L'avvio: la forma piccola a 56 px al posto della tessera con la «f»,
-  coi colori scritti in `avvio.css` (l'avvio si disegna prima dei fogli).
-Casi limite: il contrasto alto e i colori forzati (il logo resta leggibile;
-in colori forzati prende `CanvasText`); un tema scuro che non ridichiara i
-gettoni; la barra a 700 px e al telefono; l'icona su uno sfondo scuro della
-barra delle applicazioni.
+- La ricetta come nel diff, poi `npm run theme:generate && npm run
+  theme:verify`. Con 160 i colori sono quelli di D26.
+- Il marchio: `marcuzzo-24.svg` in linea dentro `.brand-mark`, con
+  `class="brand-logo marcuzzo"`, `aria-hidden="true"` e
+  `focusable="false"` (il nome resta quello del bottone), a 24 px, col
+  bottone trasparente. Le Informazioni: `marcuzzo.svg` a 48 px accanto
+  alla versione, costruito come nel diff (`DOMParser` e `importNode`, mai
+  `innerHTML`).
+- L'avvio: `marcuzzo.svg` a 56 px al posto della tessera con la «f». I
+  colori della cartella vengono dalla memoria dell'avvio (`consegna.ts`
+  scrive i gettoni `--logo-*`, `luce.js` li rimette prima dei fogli) e, la
+  prima volta, da `avvio.css`, che ha quelli di serie per le due luci e il
+  contrasto alto. `colori.test.ts` li lega alla ricetta come gli altri.
+- Le forme portano i `fill` di Smeraldo come ripiego; la pelle colora le
+  cinque parti della cartella con `var(--logo-…)`, il gufo resta coi suoi
+  `fill`.
+- Un tema senza `--logo-cartella`: la serie aggiunge una regola `:root` con
+  `logoColors(luce, contrasto, tinta di --accent, [--bg, --bg-elev],
+  min(1, croma di --accent / 0,08))`, coi gettoni letti dalle regole del
+  foglio per quella luce e quel contrasto. Un tema che lo dichiara si tiene
+  i suoi.
+- I colori forzati come nel blocco: `forced-color-adjust: none`, la sagoma
+  `CanvasText`, il gufo `GrayText`, facce, occhi e fogli `Canvas`.
+- Le icone: un PNG 1024 × 1024 da `originali/marcuzzo-smeraldo.svg`, fondo
+  trasparente, poi `cargo tauri icon`; le misure 16, 24 e 32 si rifanno da
+  `marcuzzo-16.svg` (16) e `marcuzzo-24.svg` (24 e 32) rese a quella
+  misura, non ridotte dalla grande. Android: il davanti è Marcuzzo dentro la
+  zona sicura (66 su 108 dp), il dietro un colore pieno (`#e7efe9`), il
+  livello monocromo `marcuzzo-simbolico.svg`; la stessa forma è l'icona
+  simbolica di Linux dove il pacchetto la installa.
+Casi limite: una tinta libera qualsiasi (`recipe.test.ts` prova la soglia
+per gli otto campioni e dieci tinte libere, due luci, due contrasti, sui
+due fondi); un tema che dichiara solo una parte dei gettoni (quelli che
+mancano cadono nel ripiego della pelle); un accento quasi grigio (la croma
+scala, la cartella diventa grigia e non verde); l'avvio senza memoria e con
+la memoria di un altro tema; il contrasto alto e i colori forzati; l'icona
+su una barra delle applicazioni scura.
 Fatto quando: le icone dell'app, il marchio, le Informazioni e l'avvio
-mostrano il logo; la licenza è scritta; le foto del banco (barra,
+mostrano Marcuzzo; la cartella segue la tinta, il tema e il contrasto e
+regge la soglia (`recipe.test.ts`, un test della serie per un tema senza
+gettoni del logo); `colori.test.ts` copre i colori del logo dell'avvio; la
+licenza è scritta in `assets/logo/`; le foto del banco (barra,
 Informazioni, avvio) hanno le baseline nuove dal runner.
-Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/avvio src/panels; npm run bench:verify
-Stato: [ ] da fare (aspetta i file del logo e D28)
+Prova: scripts/check.sh --rapido; cd apps/client && npm run theme:generate && npm run theme:verify && npx vitest run src/theme src/avvio src/panels; npm run bench:verify
+Stato: [ ] da fare (aspetta D28)
 
 ## T50 · La firma degli installer
 

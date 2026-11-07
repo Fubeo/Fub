@@ -61,6 +61,41 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-07 · fub-pre-alpha (il logo) · Marcuzzo, il gufo nella cartella
+  dell'utente, è il logo (D26); il gufo ha colori fissi, la cartella e i
+  fogli seguono la tinta, il tema e il contrasto con `logoColors()` della
+  ricetta, e la cartella e il retro reggono la soglia dei controlli (3, o
+  4,5 col contrasto alto) contro `--bg` e `--bg-elev` · l'utente: «la
+  cartella dovrà avere il colore del tema scelto […] in modo tale che non si
+  vada a sovrapporre il colore attuale con quello di sfondo»; i fondi sono
+  quelli dove sta il logo (la barra e l'avvio su `--bg`, le Informazioni su
+  `--bg-elev`), e le 42 varianti misurate reggono tutte
+  (`logo/misure.json`).
+- 2026-11-07 · fub-pre-alpha (il logo) · un tema installato che non
+  dichiara `--logo-*` li riceve dalla serie al montaggio (un campo
+  facoltativo nuovo di `ThemeSeries`, chiamato da `theme.ts` prima di
+  `mountThemeBundle`), non dal caricatore dei temi né da un file del tema ·
+  il bundle è già per luce e il contrasto si legge lì; il caricatore non
+  conosce la ricetta, e chiedere i colori del logo a chi scrive un tema
+  sarebbe un obbligo nuovo nel contratto. I gettoni restano facoltativi.
+- 2026-11-07 · fub-pre-alpha (il logo) · l'icona del sistema è Smeraldo
+  (scelta del pianificatore, l'utente la può cambiare); Menta è la scala di
+  notte della ricetta, Kraft resta fra gli originali · Smeraldo è il verde di
+  serie (160) e regge sia su una barra delle applicazioni chiara sia su una
+  scura; Menta su una barra chiara si perde.
+- 2026-11-07 · fub-pre-alpha (il logo) · la forma simbolica si fa dalla
+  forma a 24 px con un filo vuoto di 45 unità dentro la cartella davanti,
+  tagliato nell'ordine del disegno (`logo-simbolico.mjs`, valori di
+  partenza) · un filo fuori dalla cartella o tagliato dopo tutto il disegno
+  mangiava la faccia e l'ala; un filo limitato a una distanza lasciava gli
+  angoli seghettati. La cartella davanti si stringe un poco ai lati e sotto,
+  e a 16–24 px non si vede.
+- 2026-11-07 · fub-pre-alpha (il logo) · D28 resta aperta e PA T49 aspetta
+  lei; il consiglio è CC BY-SA 4.0 per i file del logo, con una nota che
+  chiede ai fork di cambiare nome e logo · la risposta «A, AI» di prima
+  riguardava il primo logo; per Marcuzzo servono lo strumento (le sue
+  condizioni d'uso) e la licenza, che sono dell'utente.
+
 - 2026-11-07 · fub-pre-alpha (D19) · i difetti veri del controllo di tutte
   le viste vanno in due task nuovi, PA T56 (la carta del file e il fuoco) e
   PA T57 (i bersagli e i nomi interi), più due punti in PA T47 (le righe
@@ -93,7 +128,9 @@ La più recente in cima: data · piano · decisione · perché.
   della «f» del logo vanno da 157,6 a 164 e il suo foglio scuro è 160,6; i
   campioni dell'accento vanno a passi di 5°, e fra 159 e 160 l'occhio non
   vede differenza. Prima di PA T48 si chiede il sì su 160 col logo
-  definitivo.
+  definitivo. (Superata lo stesso giorno: la cartella di Marcuzzo sta a
+  160,1 in Smeraldo e in Menta, quindi il logo conferma 160 e PA T48 non
+  aspetta altro.)
 - 2026-11-07 · fub-pre-alpha (il verde) · il vassoio delle barre di S2 T16
   segue la tinta da solo (col verde #f8faf8 di giorno, #18211c di notte):
   né PA T11 né PA T48 toccano la ricetta per il vassoio · è la formula di
@@ -109,6 +146,7 @@ La più recente in cima: data · piano · decisione · perché.
   (il nastro «f» con la pagina davanti) finché l'utente porta i file; PA T49
   aspetta i file e D28 · l'utente: «intanto lascia il logo che avevi fatto
   prima, poi ci penso io al logo, te pensa a finire il progetto».
+  (Superata lo stesso giorno: l'utente ha portato Marcuzzo, D26.)
 - 2026-11-07 · fub-pre-alpha (le scelte) · i consigli delle domande si
   pesano solo sulla qualità del risultato (aperto, personalizzabile, senza
   problemi), e il tempo non conta. Cambiano sei consigli (D1 B, D6 C, D8 B,

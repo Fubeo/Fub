@@ -1,0 +1,21 @@
+/* → nessun file: la serie li calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts; PA T49, D26) */
+/* I colori del logo per il tema «Carta», che non li dichiara. GENERATO da
+   script/logo-temi.mjs con `logoColors` della ricetta: non si modifica a
+   mano. Nel prodotto li calcola il caricatore dall'accento e dai fondi del
+   tema; il simulatore li monta insieme al tema. */
+/* accento #8e3a1f (tinta 38.0, croma 0.121), fondi #ece4d4 #fdfbf6 */
+:root {
+  --logo-cartella: #c06c51;
+  --logo-cartella-retro: #98533d;
+  --logo-cartella-ombra: #a05d48;
+  --logo-foglio-1: #cdb391;
+  --logo-foglio-2: #c3929a;
+}
+/* accento #7a2f16 (tinta 38.2, croma 0.111), fondi #ece4d4 #fdfbf6 */
+:root[data-contrast="high"] {
+  --logo-cartella: #a14f36;
+  --logo-cartella-retro: #7a3822;
+  --logo-cartella-ombra: #82422d;
+  --logo-foglio-1: #cdb391;
+  --logo-foglio-2: #c3929a;
+}

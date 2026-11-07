@@ -3077,48 +3077,48 @@ code { font-size: 12.5px; overflow-wrap: anywhere; }
 <style media="not all" data-destinazione="theme/scrittoio/skin/frame.css e skin/settings.css" data-posto="prealpha" data-task="PA T49, D26">
 /* → theme/scrittoio/skin/frame.css e skin/settings.css (PA T49, D26) */
 /* ── Il logo ────────────────────────────────────────────────────────────────
-   Il marchio della barra non è più la «f» corsiva sul colore dell'accento:
-   è il logo di Fub, nella forma minima (16–24 px). Le sue tinte sono gettoni
-   suoi, non della ricetta: non seguono l'accento (il logo resta verde anche
-   con la matita blu), ma un tema le può ridichiarare. Il bottone resta
-   trasparente e prende il velo del passaggio come le icone accanto. */
-:root {
-  --logo-foglio: #1f4b36;
-  --logo-orecchia: #7ea189;
-  --logo-oliva: #6e8b64;
-  --logo-pagina: #ffffff;
-  --logo-righe: #2f4a3e;
-  --logo-nastro: #14c77d;
-  --logo-ombra: rgb(10 107 71 / 55%);
-}
-
+   Il marchio della barra e le Informazioni mostrano Marcuzzo, il logo
+   dell'utente: un gufo che spunta da una cartella. Il gufo ha i colori
+   scritti nel disegno e non cambia mai. La cartella, il suo retro, l'ombra
+   sotto le zampe e i due fogli prendono la tinta del tema dai ruoli
+   `--logo-*`: la ricetta li calcola per la serie e per ogni tinta scelta, il
+   caricatore per un tema fatto a mano che non li dichiara. Sono già lontani
+   dal fondo quanto basta (3:1, 4,5:1 nel contrasto alto); senza ruoli
+   ripiegano sull'accento. Il bottone del marchio resta trasparente e prende
+   il velo del passaggio come le icone accanto. */
 .brand-mark {
   background: transparent;
   color: inherit;
 }
 
+/* La forma minima (`marcuzzo-24.svg`) a 24 px nel bottone di 28. */
 .brand-logo {
   width: 24px;
   height: 24px;
 }
 
-.brand-logo-foglio {
-  fill: var(--logo-foglio);
+.marcuzzo .logo-cartella {
+  fill: var(--logo-cartella, var(--accent));
 }
 
-.brand-logo-pagina {
-  fill: var(--logo-pagina);
+.marcuzzo .logo-cartella-retro {
+  fill: var(--logo-cartella-retro, var(--accent));
 }
 
-.brand-logo-nastro {
-  fill: none;
-  stroke: var(--logo-nastro);
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.marcuzzo .logo-cartella-ombra {
+  fill: var(--logo-cartella-ombra, var(--accent));
 }
 
-/* Informazioni: il logo nella forma piccola (32–48 px), accanto alla versione. */
+.marcuzzo .logo-foglio-1 {
+  fill: var(--logo-foglio-1, var(--sheet-2));
+}
+
+.marcuzzo .logo-foglio-2 {
+  fill: var(--logo-foglio-2, var(--sheet-2));
+}
+
+/* Informazioni: il disegno intero (`marcuzzo.svg`) a 48 px, accanto alla
+   versione. */
 .about-version {
   grid-template-columns: auto minmax(40%, 1fr) auto;
   align-items: center;
@@ -3130,55 +3130,85 @@ code { font-size: 12.5px; overflow-wrap: anywhere; }
   height: 48px;
 }
 
-.about-logo .logo-foglio {
-  fill: var(--logo-foglio);
-}
+/* Colori forzati: il logo prende i colori del sistema, non i suoi. La
+   cartella e le pupille nel colore del testo, il gufo nel grigio del
+   sistema, le facce, gli occhi e i fogli nel colore del fondo. */
+@media (forced-colors: active) {
+  .marcuzzo {
+    forced-color-adjust: none;
+  }
 
-.about-logo .logo-orecchia {
-  fill: var(--logo-orecchia);
-}
+  .marcuzzo path[class] {
+    fill: CanvasText;
+    stroke: none;
+  }
 
-.about-logo .logo-oliva {
-  fill: var(--logo-oliva);
-}
+  .marcuzzo path.logo-piumaggio,
+  .marcuzzo path.logo-pancia,
+  .marcuzzo path.logo-ali,
+  .marcuzzo path.logo-ombra,
+  .marcuzzo path.logo-zampe {
+    fill: GrayText;
+  }
 
-.about-logo .logo-pagina {
-  fill: var(--logo-pagina);
-}
+  .marcuzzo path.logo-bianco,
+  .marcuzzo path.logo-occhi,
+  .marcuzzo path.logo-becco-luce,
+  .marcuzzo path.logo-foglio-1,
+  .marcuzzo path.logo-foglio-2 {
+    fill: Canvas;
+  }
 
-.about-logo .logo-righe {
-  fill: var(--logo-righe);
-}
-
-.about-logo .logo-griglia {
-  fill: none;
-  stroke: var(--logo-righe);
-  stroke-width: 1.4;
-}
-
-.about-logo .logo-ombra,
-.about-logo .logo-nastro {
-  fill: none;
-  stroke-width: 4.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.about-logo .logo-ombra {
-  stroke: var(--logo-ombra);
-}
-
-.about-logo .logo-nastro {
-  stroke: var(--logo-nastro);
+  .marcuzzo path.logo-pupille {
+    stroke: CanvasText;
+  }
 }
 </style>
 <style media="not all" data-destinazione="public/avvio/avvio.css" data-posto="prealpha" data-task="PA T49, D26">
 /* → public/avvio/avvio.css (PA T49, D26) */
 /* ── Il logo nell'avvio ─────────────────────────────────────────────────────
-   Il marchio dell'avvio non è più la tessera dell'accento con la «f»: è il
-   logo, nella forma piccola, a 56 px. Le tinte stanno qui perché l'avvio si
-   disegna prima di ogni altro foglio; sono le stesse di --logo-* della pelle.
-   Il segnale del guasto resta sull'angolo, staccato dal fondo. */
+   Il marchio dell'avvio è Marcuzzo intero (`marcuzzo.svg`) a 56 px, al posto
+   della tessera dell'accento con la «f». Il gufo ha i colori del disegno; la
+   cartella e i fogli quelli della luce risolta. Di serie sono i ruoli
+   `--logo-*` dei quattro fogli della ricetta, scritti qui perché l'avvio si
+   disegna prima di ogni foglio (colori.test.ts li tiene uguali). Con un tema
+   o una tinta scelti arrivano da `luce.js`, salvati alla consegna con le
+   chiavi `cartella`, `cartella-retro`, `cartella-ombra`, `foglio-1` e
+   `foglio-2`. Il segnale del guasto resta sull'angolo, staccato dal fondo. */
+:root,
+:root[data-avvio-luce="dark"] {
+  --avvio-cartella: #89cca8;
+  --avvio-cartella-retro: #67ad88;
+  --avvio-cartella-ombra: #77b493;
+  --avvio-foglio-1: #006e46;
+  --avvio-foglio-2: #238b8b;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-avvio-luce]) {
+    --avvio-cartella: #37996c;
+    --avvio-cartella-retro: #267853;
+    --avvio-cartella-ombra: #36805d;
+    --avvio-foglio-1: #8ec3c2;
+    --avvio-foglio-2: #95a982;
+  }
+}
+
+:root[data-avvio-luce="light"] {
+  --avvio-cartella: #37996c;
+  --avvio-cartella-retro: #267853;
+  --avvio-cartella-ombra: #36805d;
+  --avvio-foglio-1: #8ec3c2;
+  --avvio-foglio-2: #95a982;
+}
+
+/* Di notte il contrasto alto non cambia la cartella: regge già 4,5:1. */
+:root[data-avvio-luce="light"][data-avvio-contrasto="high"] {
+  --avvio-cartella: #077b50;
+  --avvio-cartella-retro: #005b39;
+  --avvio-cartella-ombra: #116442;
+}
+
 .avvio-marchio {
   background: none;
 }
@@ -3192,46 +3222,52 @@ code { font-size: 12.5px; overflow-wrap: anywhere; }
   height: 56px;
 }
 
-.avvio-logo .logo-foglio {
-  fill: #1f4b36;
+.avvio-logo .logo-cartella {
+  fill: var(--avvio-cartella);
 }
 
-.avvio-logo .logo-orecchia {
-  fill: #7ea189;
+.avvio-logo .logo-cartella-retro {
+  fill: var(--avvio-cartella-retro);
 }
 
-.avvio-logo .logo-oliva {
-  fill: #6e8b64;
+.avvio-logo .logo-cartella-ombra {
+  fill: var(--avvio-cartella-ombra);
 }
 
-.avvio-logo .logo-pagina {
-  fill: #ffffff;
+.avvio-logo .logo-foglio-1 {
+  fill: var(--avvio-foglio-1);
 }
 
-.avvio-logo .logo-righe {
-  fill: #2f4a3e;
+.avvio-logo .logo-foglio-2 {
+  fill: var(--avvio-foglio-2);
 }
 
-.avvio-logo .logo-griglia {
-  fill: none;
-  stroke: #2f4a3e;
-  stroke-width: 1.4;
-}
+/* Colori forzati: come il logo della pelle (skin/frame.css). */
+@media (forced-colors: active) {
+  .avvio-logo {
+    forced-color-adjust: none;
+  }
 
-.avvio-logo .logo-ombra,
-.avvio-logo .logo-nastro {
-  fill: none;
-  stroke-width: 4.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
+  .avvio-logo path[class] {
+    fill: CanvasText;
+    stroke: none;
+  }
 
-.avvio-logo .logo-ombra {
-  stroke: rgb(10 107 71 / 55%);
-}
+  .avvio-logo path.logo-piumaggio,
+  .avvio-logo path.logo-pancia,
+  .avvio-logo path.logo-ali,
+  .avvio-logo path.logo-ombra,
+  .avvio-logo path.logo-zampe {
+    fill: GrayText;
+  }
 
-.avvio-logo .logo-nastro {
-  stroke: #14c77d;
+  .avvio-logo path.logo-bianco,
+  .avvio-logo path.logo-occhi,
+  .avvio-logo path.logo-becco-luce,
+  .avvio-logo path.logo-foglio-1,
+  .avvio-logo path.logo-foglio-2 {
+    fill: Canvas;
+  }
 }
 </style>
 <style media="not all" data-destinazione="theme/examples/carta/ (fogli e skin.css)" data-posto="tema" data-tema="carta" data-task="PA T42, D17">
@@ -3775,6 +3811,107 @@ code { font-size: 12.5px; overflow-wrap: anywhere; }
   --focus-ring: #a7c6f5;
 }
 </style>
+<style media="not all" data-destinazione="nessun file: la serie calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts) i colori del logo di Carta" data-posto="tema" data-tema="carta" data-task="PA T49, D26">
+/* → nessun file: la serie li calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts; PA T49, D26) */
+/* I colori del logo per il tema «Carta», che non li dichiara. GENERATO da
+   script/logo-temi.mjs con `logoColors` della ricetta: non si modifica a
+   mano. Nel prodotto li calcola il caricatore dall'accento e dai fondi del
+   tema; il simulatore li monta insieme al tema. */
+/* accento #8e3a1f (tinta 38.0, croma 0.121), fondi #ece4d4 #fdfbf6 */
+:root {
+  --logo-cartella: #c06c51;
+  --logo-cartella-retro: #98533d;
+  --logo-cartella-ombra: #a05d48;
+  --logo-foglio-1: #cdb391;
+  --logo-foglio-2: #c3929a;
+}
+/* accento #7a2f16 (tinta 38.2, croma 0.111), fondi #ece4d4 #fdfbf6 */
+:root[data-contrast="high"] {
+  --logo-cartella: #a14f36;
+  --logo-cartella-retro: #7a3822;
+  --logo-cartella-ombra: #82422d;
+  --logo-foglio-1: #cdb391;
+  --logo-foglio-2: #c3929a;
+}
+</style>
+<style media="not all" data-destinazione="nessun file: la serie calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts) i colori del logo di Officina" data-posto="tema" data-tema="officina" data-task="PA T49, D26">
+/* → nessun file: la serie li calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts; PA T49, D26) */
+/* I colori del logo per il tema «Officina», che non li dichiara. GENERATO da
+   script/logo-temi.mjs con `logoColors` della ricetta: non si modifica a
+   mano. Nel prodotto li calcola il caricatore dall'accento e dai fondi del
+   tema; il simulatore li monta insieme al tema. */
+/* accento #a33f00 (tinta 43.8, croma 0.146), fondi #e3e4e6 #ffffff */
+:root[data-theme="light"] {
+  --logo-cartella: #bf6d4a;
+  --logo-cartella-retro: #975437;
+  --logo-cartella-ombra: #9f5e42;
+  --logo-foglio-1: #cbb490;
+  --logo-foglio-2: #c39396;
+}
+/* accento #8a3500 (tinta 44.3, croma 0.128), fondi #e3e4e6 #ffffff */
+:root[data-theme="light"][data-contrast="high"] {
+  --logo-cartella: #9e512c;
+  --logo-cartella-retro: #78381a;
+  --logo-cartella-ombra: #804226;
+  --logo-foglio-1: #cab490;
+  --logo-foglio-2: #c39396;
+}
+/* accento #ff9a52 (tinta 54.0, croma 0.149), fondi #101113 #23262a */
+:root[data-theme="dark"] {
+  --logo-cartella: #e7ac86;
+  --logo-cartella-retro: #c88c65;
+  --logo-cartella-ombra: #cc9774;
+  --logo-foglio-1: #8a4914;
+  --logo-foglio-2: #907836;
+}
+/* accento #ffb27a (tinta 56.4, croma 0.115), fondi #101113 #23262a */
+:root[data-theme="dark"][data-contrast="high"] {
+  --logo-cartella: #e6ad84;
+  --logo-cartella-retro: #c78d64;
+  --logo-cartella-ombra: #cb9873;
+  --logo-foglio-1: #894910;
+  --logo-foglio-2: #8e7936;
+}
+</style>
+<style media="not all" data-destinazione="nessun file: la serie calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts) i colori del logo di Mare" data-posto="tema" data-tema="mare" data-task="PA T49, D26">
+/* → nessun file: la serie li calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts; PA T49, D26) */
+/* I colori del logo per il tema «Mare», che non li dichiara. GENERATO da
+   script/logo-temi.mjs con `logoColors` della ricetta: non si modifica a
+   mano. Nel prodotto li calcola il caricatore dall'accento e dai fondi del
+   tema; il simulatore li monta insieme al tema. */
+/* accento #1d4f91 (tinta 256.8, croma 0.121), fondi #e6ebf1 #ffffff */
+:root[data-theme="light"] {
+  --logo-cartella: #5787ca;
+  --logo-cartella-retro: #426aa1;
+  --logo-cartella-ombra: #4c73a8;
+  --logo-foglio-1: #b7b2d8;
+  --logo-foglio-2: #7aa9be;
+}
+/* accento #163f78 (tinta 257.6, croma 0.108), fondi #e6ebf1 #ffffff */
+:root[data-theme="light"][data-contrast="high"] {
+  --logo-cartella: #3d6aac;
+  --logo-cartella-retro: #294e83;
+  --logo-cartella-ombra: #33578a;
+  --logo-foglio-1: #b8b1d8;
+  --logo-foglio-2: #7aa9be;
+}
+/* accento #8db4f0 (tinta 258.8, croma 0.097), fondi #0a0f17 #1f2837 */
+:root[data-theme="dark"] {
+  --logo-cartella: #99bcf2;
+  --logo-cartella-retro: #7a9dd4;
+  --logo-cartella-ombra: #86a6d7;
+  --logo-foglio-1: #345c98;
+  --logo-foglio-2: #7d70ab;
+}
+/* accento #a7c6f5 (tinta 258.6, croma 0.075), fondi #0a0f17 #1f2837 */
+:root[data-theme="dark"][data-contrast="high"] {
+  --logo-cartella: #9bbcee;
+  --logo-cartella-retro: #7c9dd0;
+  --logo-cartella-ombra: #88a6d3;
+  --logo-foglio-1: #375c94;
+  --logo-foglio-2: #7d71a8;
+}
+</style>
 <style id="sim-scala"></style>
 </head>
 <body>
@@ -3903,11 +4040,14 @@ code { font-size: 12.5px; overflow-wrap: anywhere; }
         <tr><td><code>theme/scrittoio/skin/media.css</code></td><td>prealpha</td><td>PA T30</td><td>0.3 KB</td></tr>
         <tr><td><code>più file (ogni sezione dice il suo)</code></td><td>prealpha</td><td>PA T56, T57</td><td>8.5 KB</td></tr>
         <tr><td><code>shells/mobile/mobile.css</code></td><td>prealpha</td><td>PA T47</td><td>2.4 KB</td></tr>
-        <tr><td><code>theme/scrittoio/skin/frame.css e skin/settings.css</code></td><td>prealpha</td><td>PA T49, D26</td><td>1.9 KB</td></tr>
-        <tr><td><code>public/avvio/avvio.css</code></td><td>prealpha</td><td>PA T49, D26</td><td>1.1 KB</td></tr>
+        <tr><td><code>theme/scrittoio/skin/frame.css e skin/settings.css</code></td><td>prealpha</td><td>PA T49, D26</td><td>2.3 KB</td></tr>
+        <tr><td><code>public/avvio/avvio.css</code></td><td>prealpha</td><td>PA T49, D26</td><td>2.6 KB</td></tr>
         <tr><td><code>theme/examples/carta/ (fogli e skin.css)</code></td><td>tema</td><td>PA T42, D17</td><td>5.4 KB</td></tr>
         <tr><td><code>theme/examples/officina/ (i due fogli e skin.css)</code></td><td>tema</td><td>PA T42, D17</td><td>6.2 KB</td></tr>
         <tr><td><code>theme/examples/mare/ (i due fogli)</code></td><td>tema</td><td>PA T42, D17, D27</td><td>3.1 KB</td></tr>
+        <tr><td><code>nessun file: la serie calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts) i colori del logo di Carta</code></td><td>tema</td><td>PA T49, D26</td><td>0.9 KB</td></tr>
+        <tr><td><code>nessun file: la serie calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts) i colori del logo di Officina</code></td><td>tema</td><td>PA T49, D26</td><td>1.4 KB</td></tr>
+        <tr><td><code>nessun file: la serie calcola al montaggio del tema (theme/theme.ts, scrittoio/series.ts) i colori del logo di Mare</code></td><td>tema</td><td>PA T49, D26</td><td>1.4 KB</td></tr>
       </tbody>
     </table></div>
     <p class="sim-muto">Il testo sta nei blocchi <code>&lt;style data-destinazione&gt;</code> in testa a questa pagina, già senza le varianti «com'era». «prealpha» è il CSS di questo piano; «tema» sono i due temi d'esempio.</p>

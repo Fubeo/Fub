@@ -2,7 +2,7 @@
 // non hanno una definizione per rifarle (Differenze 40). Col verde di serie
 // (D25) si portano al verde senza rifarle: il foglio della serie
 // (`fub:foglio`) diventa quello della stessa luce di una cattura verde della
-// stessa misura, e il marchio della barra diventa il logo provvisorio (D26)
+// stessa misura, e il marchio della barra diventa il logo (D26)
 // come nelle catture verdi. Il resto del CSS col verde non cambia
 // (verde-mappa.mjs lo dice: cambia solo `fub:foglio`). La foto PNG resta
 // quella blu di prima: il confronto dei pixel lo spiega («I pixel contro la
@@ -20,7 +20,7 @@ const GLIFO = '<span class="brand-glyph" aria-hidden="true">f</span>';
 const leggi = (f) => JSON.parse(readFileSync(f, "utf8"));
 const foglio = (j) => j.css.find((c) => c.label === "fub:foglio");
 const logo = (body) => {
-  const i = body.indexOf('<svg class="brand-logo"');
+  const i = body.indexOf('<svg class="brand-logo');
   const k = body.indexOf("</svg>", i);
   if (i < 0 || k < 0) throw new Error("la cattura verde non ha il logo nel marchio");
   return body.slice(i, k + 6);
@@ -35,9 +35,12 @@ for (const [id, rif] of COPPIE) {
     // riferimento: stessa luce, stesso contrasto, stessa densità.
     if (foglio(c).text !== foglio(b).text) throw new Error(`${id} ${luce}: il foglio non è quello di ${rif}`);
     foglio(c).text = foglio(v).text;
+    // Il marchio di prima: la «f» blu, o un logo già messo da un giro
+    // precedente (che si sostituisce col logo di oggi).
     const n = c.body.split(GLIFO).length - 1;
-    if (n !== 1) throw new Error(`${id} ${luce}: ${n} marchi «f» invece di uno`);
-    c.body = c.body.replace(GLIFO, logo(v.body));
+    const prima = n === 0 && c.body.includes('<svg class="brand-logo') ? logo(c.body) : null;
+    if (n !== 1 && !prima) throw new Error(`${id} ${luce}: ${n} marchi «f» invece di uno, e nessun logo`);
+    c.body = c.body.replace(prima ?? GLIFO, logo(v.body));
     writeFileSync(join(verde, `${id}-${luce}.json`), JSON.stringify(c));
     console.log(`ok ${id} ${luce}`);
   }

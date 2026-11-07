@@ -380,7 +380,7 @@ export const NUOVE = [
     base: "g2-imp-info",
     toppe: [{ dove: ".settings-main .setting-label", testo: "Versione 0.2.0-prealpha.1" }],
     fuoco: ".settings-main a, .settings-main button",
-    dice: "Informazioni con la versione della pre-alpha: la stessa che va nei riscontri. Il verde di serie (D25) e il logo provvisorio (D26) come in tutte le catture.",
+    dice: "Informazioni con la versione della pre-alpha: la stessa che va nei riscontri. Il verde di serie (D25) e il logo intero a 48 px, con la cartella nella tinta (D26).",
     task: ["PA T22", "PA T48", "PA T49"],
   }),
 

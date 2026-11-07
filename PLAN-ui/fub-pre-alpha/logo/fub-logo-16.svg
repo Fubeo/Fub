@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
-  <title>Fub</title>
-  <path fill="#1f4b36" d="M5 1H12A1 1 0 0 1 13 2V14A1 1 0 0 1 12 15H3A1 1 0 0 1 2 14V4Z"/>
-  <rect fill="#ffffff" x="8" y="5" width="5" height="10" rx="0.8"/>
-  <path fill="none" stroke="#14c77d" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="M13.6 3.2C13.2 1.6 10.6 1.1 9.4 3.2C8.4 5 7.6 9 6.9 11.6C6.3 13.8 5 14.9 3.6 14.6C2.2 14.3 2.1 12.8 3.4 11.9C5.2 10.6 8.2 9.6 11.6 9.1"/>
-</svg>

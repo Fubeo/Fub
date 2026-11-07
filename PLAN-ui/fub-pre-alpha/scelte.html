@@ -115,6 +115,8 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
 .logo-prova { display: grid; grid-template-columns: minmax(0, 240px) minmax(0, 1fr); gap: 16px; align-items: center; margin: 6px 0 12px; }
 .logo-prova > img { width: 100%; height: auto; border-radius: 12px; background: var(--sheet-2); box-shadow: 0 0 0 1px var(--border); }
 .logo-piccoli p { margin: 0 0 8px; }
+details.prima { margin-top: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; }
+details.prima summary { cursor: pointer; color: var(--muted); }
 .logo-piccoli span { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; margin: 0 14px 8px 0; font-size: 12px; color: var(--muted); }
 @media (max-width: 520px) { .logo-prova { grid-template-columns: minmax(0, 1fr); } .logo-prova > img { max-width: 240px; } }
 
@@ -184,7 +186,7 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
       <p class="sopra">piano/fub-pre-alpha · 7 novembre 2026</p>
       <h1>Le scelte di Fub pre-alpha</h1>
       <p class="lead">Prima che si scriva codice servono le tue risposte: 24 domande, 14 gruppi di stati da guardare nel simulatore e il via finale. Per ogni domanda trovi le scelte, i pro e i contro, e il mio consiglio.</p>
-      <p><b>Il 7 novembre hai risposto a tutto:</b> le domande, i 14 gruppi di stati e il via A. Poi hai chiesto un Fub verde e mi hai mandato il tuo logo, e sono arrivate D25–D28. Le risposte sono scritte nel piano e nel simulatore, che adesso è verde.</p>
+      <p><b>Il 7 novembre hai risposto a tutto:</b> le domande, i 14 gruppi di stati e il via A. Poi hai chiesto un Fub verde e mi hai mandato il tuo logo, e sono arrivate D25–D28. Le risposte sono scritte nel piano e nel simulatore, che adesso è verde. Più tardi hai portato il logo definitivo, Marcuzzo: D26 è decisa, e D28 è di nuovo aperta, perché la risposta di prima riguardava il primo logo.</p>
       <p>Resta un passo: guardare il simulatore aggiornato e dare il sì. Nell'<a href="https://claude.ai/artifact/RCUxmuv2dCqbwDRagbKHcK" target="_blank" rel="noopener">artifact Fub pre-alpha</a> lo scenario «Che cosa è cambiato» passa, uno dopo l'altro, gli stati che le risposte hanno cambiato e i dodici nuovi (S287–S298). Le risposte di questa pagina restano salvate qui.</p>
     </div>
     <section class="criterio" aria-labelledby="criterio-t">
@@ -498,7 +500,8 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
           ${figura(160, "C · Smeraldo", "tinta 160, #006e46")}
         </div>
         <p>Il logo che mi hai mandato (D26) è verde smeraldo: la sua «f» è tinta 159, cioè C. Con C l'accento di Fub e il logo sono lo stesso verde.</p>
-        <p class="dopo"><b>Hai scelto C, il verde del logo.</b> Qui sopra avevo scritto «tinta 159» per la «f»; nel piano la tinta di serie è <b>160</b>. Le tinte della «f» vanno da 157,6 a 164 e il foglio scuro sta a 160,6: 160 è il loro centro, e la tinta si sceglie a passi di 5°, quindi il simulatore la mostra esatta. Fra 159 e 160 l'occhio non vede differenza. Prima che il verde entri nel codice ti chiedo se 160 resta anche col logo definitivo.</p>
+        <p class="dopo"><b>Hai scelto C, il verde del logo.</b> Qui sopra avevo scritto «tinta 159» per la «f»; nel piano la tinta di serie è <b>160</b>. Le tinte della «f» vanno da 157,6 a 164 e il foglio scuro sta a 160,6: 160 è il loro centro, e la tinta si sceglie a passi di 5°, quindi il simulatore la mostra esatta. Fra 159 e 160 l'occhio non vede differenza.</p>
+        <p class="dopo"><b>Marcuzzo conferma 160.</b> La cartella del tuo logo definitivo sta a 160 sia in Smeraldo sia in Menta: 160 resta, e non ti chiedo altro.</p>
         <p>Una cosa da sapere: il verde vuol dire anche «fatto, salvato» (il pallino di «Tutto salvato», gli avvisi che va tutto bene), e oggi quel verde è fisso alla tinta 155. Con B e C la tinta di serie e il «salvato» diventano quasi lo stesso colore. Per non confonderli, con qualunque verde il task nuovo porta una regola nella ricetta: i colori di stato restano almeno 30° lontani dall'accento (il «salvato» resta verde, ma più verso il blu o più verso il giallo). La regola vale anche per chi sceglie una tinta libera, che oggi può già cadere sopra il rosso o il verde degli avvisi.</p>`,
       opzioni: [
         { k: "A", nome: "Salvia (tinta 130)", testo: "Il verde che c'è già fra i campioni.", pro: "Già provato con i cancelli del contrasto; resta lontano dal verde del «salvato» anche senza regola.", contro: "Tira al verde oliva, e di notte al verde lime: è il meno «verde» dei tre." },
@@ -510,25 +513,30 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
       consiglio: { k: "B", perche: "È il verde che si riconosce senza pensarci, nelle due luci. Con la regola dei 30° il «salvato» resta verde e distinto, e la stessa regola corregge un difetto che oggi c'è già con le tinte libere." },
     },
     {
-      id: "D26", titolo: "L'icona di Fub: il tuo logo", aspetta: "il task del verde",
-      contesto: `<p>Mi hai mandato il logo che stai valutando: una «f» a nastro sopra dei fogli, uno con la griglia. Oggi l'icona dell'app è un quadrato viola con una «F» bianca (<code>crates/fub-app/icons</code>), e dentro la finestra c'è una «f» corsiva sul colore dell'accento. Il tuo logo prende il posto di tutte e due.</p>
+      id: "D26", titolo: "L'icona di Fub: Marcuzzo", aspetta: "il task del logo, dopo D28",
+      contesto: `<p class="dopo"><b>Deciso: il logo è Marcuzzo.</b> Hai portato tre file del gufo che sbuca dalla cartella (Smeraldo, Menta, Kraft): «Sicuramente voglio questi come loghi ufficiali dell'applicazione». Il gufo tiene i suoi colori; la cartella e i fogli prendono il colore della tinta o del tema scelto, e restano staccati dal fondo: reggono il contrasto dei controlli (3:1, o 4,5:1 col contrasto alto) sulla barra e nelle Informazioni. Ho provato tutte le otto tinte e i tre temi d'esempio, nelle due luci e nei due contrasti: 42 varianti, e reggono tutte. L'icona del sistema è Smeraldo: è una mia scelta, e la puoi cambiare. Tutto, con la cartella in ogni tinta, è nell'<a href="https://claude.ai/artifact/RCUxmuv2dCqbwDRagbKHcK#logo" target="_blank" rel="noopener">artifact Fub pre-alpha</a>, parte «Il logo».</p>
         <div class="logo-prova">
-          <img src="verde/logo-proposto.png" width="653" height="653" alt="Il logo proposto: una f a nastro verde smeraldo sopra un foglio verde scuro, due fogli verde salvia e un foglio bianco a griglia">
+          <img src="logo/originali/marcuzzo-smeraldo.svg" width="1024" height="1024" alt="Marcuzzo: un gufo marrone che sbuca da una cartella verde smeraldo piena di fogli">
           <div class="logo-piccoli">
-            <p><b>Com'è piccolo</b>, ridotto così com'è:</p>
-            <span><img src="verde/logo-48.png" width="48" height="48" alt="">48 px</span>
-            <span><img src="verde/logo-32.png" width="32" height="32" alt="">32 px</span>
-            <span><img src="verde/logo-16.png" width="16" height="16" alt="">16 px</span>
-            <p>A 32 e a 16 px (le schede, la barra delle applicazioni, i file) la griglia e i fogli trasparenti spariscono.</p>
+            <p><b>Com'è piccolo</b>, con le forme semplificate:</p>
+            <span><img src="logo/marcuzzo.svg" width="48" height="48" alt="">48 px</span>
+            <span><img src="logo/marcuzzo-24.svg" width="32" height="32" alt="">32 px</span>
+            <span><img src="logo/marcuzzo-24.svg" width="24" height="24" alt="">24 px</span>
+            <span><img src="logo/marcuzzo-16.svg" width="16" height="16" alt="">16 px</span>
+            <p>Le forme piccole tolgono i dettagli minuti e ingrandiscono l'occhio, la pupilla, l'occhiolino e il becco.</p>
           </div>
         </div>
-        <p>Che cosa ho misurato e che cosa serve:</p>
+        <details class="prima"><summary>La domanda di prima, sul primo logo</summary>
+        <p>Mi hai mandato il logo che stai valutando: una «f» a nastro sopra dei fogli, uno con la griglia. Oggi l'icona dell'app è un quadrato viola con una «F» bianca (<code>crates/fub-app/icons</code>), e dentro la finestra c'è una «f» corsiva sul colore dell'accento. Il tuo logo prende il posto di tutte e due.</p>
+        <p>A 32 e a 16 px (le schede, la barra delle applicazioni, i file) la griglia e i fogli trasparenti sparivano. Che cosa avevo misurato e che cosa serviva:</p>
         <ul>
           <li><b>I colori.</b> La «f» è verde smeraldo, tinta 159; il foglio scuro 160; i fogli salvia 137. Il verde del logo è quindi «Smeraldo» (160), non «Foglia» (145): vedi D25.</li>
           <li><b>Il disegno.</b> È un'immagine di 896 × 1200 punti, compressa e in verticale. Un'icona va ridisegnata in vettoriale su un quadrato, e ne servono quattro forme: quella grande; una semplificata per 16–48 px; quella per Android, divisa in davanti e dietro; una a un solo colore per le icone simboliche di Linux. La disegno io in SVG nel prototipo, e la approvi guardandola prima del codice.</li>
           <li><b>La griglia.</b> Un foglio verde a quadretti con i fogli dietro ricorda molto l'icona di Excel. Chi la vede può pensare a un foglio di calcolo, mentre Fub parte dalle note; ed è un aspetto che Microsoft difende.</li>
         </ul>
-        <p class="dopo"><b>Hai scelto B.</b> Poi hai trovato il logo definitivo e mi hai detto di lasciare intanto questo: il ridisegno resta nel simulatore come logo <b>provvisorio</b>, e mostra dove va il logo, a quali misure e con quali colori. Il logo vero lo porti tu, nelle quattro forme.</p>`,
+        <p class="dopo"><b>Hai scelto B.</b> Poi hai trovato il logo definitivo e mi hai detto di lasciare intanto questo: il ridisegno resta nel simulatore come logo <b>provvisorio</b>, e mostra dove va il logo, a quali misure e con quali colori. Il logo vero lo porti tu, nelle quattro forme.</p>
+        </details>
+        <p>Le scelte qui sotto riguardano il primo logo e restano come memoria: non serve rispondere di nuovo.</p>`,
       opzioni: [
         { k: "A", nome: "Fedele, griglia compresa", testo: "Ridisegnato in vettoriale così com'è, con le quattro forme.", pro: "È esattamente il tuo logo.", contro: "Ricorda Excel, e dice «foglio di calcolo» prima di «note»." },
         { k: "B", nome: "La stessa idea, il foglio davanti diventa una pagina", testo: "La «f» a nastro e i fogli restano; il foglio bianco ha righe di testo e un angolo a quadretti. Ridisegnato in vettoriale, con le quattro forme.", pro: "Resta il tuo logo, dice «note e ogni documento», e si stacca da Excel.", contro: "Cambia un pezzo del tuo disegno." },
@@ -537,9 +545,9 @@ main { padding-left: var(--gutter-l); padding-right: var(--gutter-r); padding-bl
       consiglio: { k: "B", perche: "Tiene la tua idea e toglie i due problemi: la somiglianza con Excel e il messaggio «foglio di calcolo». Con tutte e tre le scelte le versioni piccole sono semplificate." },
     },
     {
-      id: "D28", titolo: "Da dove viene l'immagine del logo", aspetta: "il task del verde",
+      id: "D28", titolo: "Da dove viene il logo, e con quale licenza", aspetta: "il task del logo",
       contesto: `<p>Fub è open source: l'icona entra nel repository pubblico e ha bisogno di una licenza chiara. Se l'hai fatta con un'AI, conta che cosa permettono le condizioni dello strumento; se viene da un'altra persona o da un sito, serve il suo permesso scritto.</p>
-        <p class="dopo"><b>Hai risposto A.</b> La domanda vale anche per il logo definitivo: prima del task del logo mi serve sapere da dove viene, e con quale strumento, se è un'AI.</p>`,
+        <p class="dopo"><b>Di nuovo aperta.</b> Avevi risposto A, ma per il primo logo. Per Marcuzzo mi servono due cose prima del task del logo: <b>con che cosa l'hai fatto</b> (se è un'AI, quale strumento: ne leggo le condizioni) e <b>quale licenza vuoi per i file del logo</b>. Il mio consiglio per la licenza: <b>CC BY-SA 4.0</b>, con una nota che chiede a chi fa un fork di Fub di cambiare nome e logo. Chiunque può usare e adattare Marcuzzo dando il credito, e le copie restano libere; la nota tiene il nome e il gufo legati al progetto vero. Le altre strade: tutti i diritti riservati, col permesso di usarlo per Fub, come fa Firefox (il nome e il logo restano di Fub, ma il pacchetto non è più tutto libero e qualche distribuzione cambia l'icona), oppure CC0 (nessuna condizione: chiunque può usare Marcuzzo, anche per un altro prodotto). Il resto è nel piano, D28.</p>`,
       opzioni: [
         { k: "A", nome: "L'ho fatta io con un'AI", testo: "Mi dici quale strumento, e ne controllo le condizioni prima del task." },
         { k: "B", nome: "L'ho disegnata io", testo: "La licenza la scegli tu, insieme a quella del progetto." },

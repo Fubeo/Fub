@@ -1,9 +1,47 @@
 /* → public/avvio/avvio.css (PA T49, D26) */
 /* ── Il logo nell'avvio ─────────────────────────────────────────────────────
-   Il marchio dell'avvio non è più la tessera dell'accento con la «f»: è il
-   logo, nella forma piccola, a 56 px. Le tinte stanno qui perché l'avvio si
-   disegna prima di ogni altro foglio; sono le stesse di --logo-* della pelle.
-   Il segnale del guasto resta sull'angolo, staccato dal fondo. */
+   Il marchio dell'avvio è Marcuzzo intero (`marcuzzo.svg`) a 56 px, al posto
+   della tessera dell'accento con la «f». Il gufo ha i colori del disegno; la
+   cartella e i fogli quelli della luce risolta. Di serie sono i ruoli
+   `--logo-*` dei quattro fogli della ricetta, scritti qui perché l'avvio si
+   disegna prima di ogni foglio (colori.test.ts li tiene uguali). Con un tema
+   o una tinta scelti arrivano da `luce.js`, salvati alla consegna con le
+   chiavi `cartella`, `cartella-retro`, `cartella-ombra`, `foglio-1` e
+   `foglio-2`. Il segnale del guasto resta sull'angolo, staccato dal fondo. */
+:root,
+:root[data-avvio-luce="dark"] {
+  --avvio-cartella: #89cca8;
+  --avvio-cartella-retro: #67ad88;
+  --avvio-cartella-ombra: #77b493;
+  --avvio-foglio-1: #006e46;
+  --avvio-foglio-2: #238b8b;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-avvio-luce]) {
+    --avvio-cartella: #37996c;
+    --avvio-cartella-retro: #267853;
+    --avvio-cartella-ombra: #36805d;
+    --avvio-foglio-1: #8ec3c2;
+    --avvio-foglio-2: #95a982;
+  }
+}
+
+:root[data-avvio-luce="light"] {
+  --avvio-cartella: #37996c;
+  --avvio-cartella-retro: #267853;
+  --avvio-cartella-ombra: #36805d;
+  --avvio-foglio-1: #8ec3c2;
+  --avvio-foglio-2: #95a982;
+}
+
+/* Di notte il contrasto alto non cambia la cartella: regge già 4,5:1. */
+:root[data-avvio-luce="light"][data-avvio-contrasto="high"] {
+  --avvio-cartella: #077b50;
+  --avvio-cartella-retro: #005b39;
+  --avvio-cartella-ombra: #116442;
+}
+
 .avvio-marchio {
   background: none;
 }
@@ -17,44 +55,50 @@
   height: 56px;
 }
 
-.avvio-logo .logo-foglio {
-  fill: #1f4b36;
+.avvio-logo .logo-cartella {
+  fill: var(--avvio-cartella);
 }
 
-.avvio-logo .logo-orecchia {
-  fill: #7ea189;
+.avvio-logo .logo-cartella-retro {
+  fill: var(--avvio-cartella-retro);
 }
 
-.avvio-logo .logo-oliva {
-  fill: #6e8b64;
+.avvio-logo .logo-cartella-ombra {
+  fill: var(--avvio-cartella-ombra);
 }
 
-.avvio-logo .logo-pagina {
-  fill: #ffffff;
+.avvio-logo .logo-foglio-1 {
+  fill: var(--avvio-foglio-1);
 }
 
-.avvio-logo .logo-righe {
-  fill: #2f4a3e;
+.avvio-logo .logo-foglio-2 {
+  fill: var(--avvio-foglio-2);
 }
 
-.avvio-logo .logo-griglia {
-  fill: none;
-  stroke: #2f4a3e;
-  stroke-width: 1.4;
-}
+/* Colori forzati: come il logo della pelle (skin/frame.css). */
+@media (forced-colors: active) {
+  .avvio-logo {
+    forced-color-adjust: none;
+  }
 
-.avvio-logo .logo-ombra,
-.avvio-logo .logo-nastro {
-  fill: none;
-  stroke-width: 4.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
+  .avvio-logo path[class] {
+    fill: CanvasText;
+    stroke: none;
+  }
 
-.avvio-logo .logo-ombra {
-  stroke: rgb(10 107 71 / 55%);
-}
+  .avvio-logo path.logo-piumaggio,
+  .avvio-logo path.logo-pancia,
+  .avvio-logo path.logo-ali,
+  .avvio-logo path.logo-ombra,
+  .avvio-logo path.logo-zampe {
+    fill: GrayText;
+  }
 
-.avvio-logo .logo-nastro {
-  stroke: #14c77d;
+  .avvio-logo path.logo-bianco,
+  .avvio-logo path.logo-occhi,
+  .avvio-logo path.logo-becco-luce,
+  .avvio-logo path.logo-foglio-1,
+  .avvio-logo path.logo-foglio-2 {
+    fill: Canvas;
+  }
 }
