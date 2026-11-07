@@ -99,8 +99,8 @@ const parte1 = `
     ${SCENARI.length} scenari da passare con Avanti e Indietro. Si usa come il prodotto: ogni clic porta a uno stato,
     cambia lo schermo o dice che cosa farebbe. In alto si scelgono lo stato, lo scenario, la luce, la larghezza
     (piena, 700 px, telefono) e il movimento. Sotto lo schermo ogni stato dice da dove viene (cattura del client,
-    composta, nuova) e dove va ogni suo pezzo. ${daApprovare} stati, i composti e i nuovi, aspettano un sì:
-    «Approvare gli stati nuovi e composti» scrive la frase da incollare nella risposta.</p>
+    composta, nuova) e dove va ogni suo pezzo. I ${daApprovare} stati composti e nuovi hanno avuto il tuo sì il
+    2026-11-07, col piano: sono la fonte dei loro task.</p>
     <a class="bottone" href="simulatore.html" target="_blank" rel="noopener">Apri a tutta pagina</a>
   </div>
   <iframe id="sim-iframe" src="simulatore.html" title="Il simulatore di Fub pre-alpha" loading="eager"></iframe>
@@ -191,7 +191,7 @@ const ASPETTA = {
   D1: "l'APK di PA T22", D2: "griglia T1–T9", D3: "i task grafici di N6", D4: "il simulatore, prima della consegna",
   D5: "S2 T22, K5 T21–T23", D6: "PA T11", D7: "PA T9", D8: "PA T22", D9: "PA T18", D10: "PA T10", D11: "PA T22", D12: "nessuno",
   D13: "il merge di #290 (K2)", D14: "PA T33", D15: "PA T34", D16: "PA T40", D17: "PA T42", D18: "PA T46",
-  D19: "l'approvazione", D20: "PA T22", D21: "la Fase A", D22: "PA T41", D23: "Scrittoio 2, o il piano dopo la pre-alpha",
+  D19: "l'approvazione", D20: "PA T50 (la risposta di SignPath)", D21: "la Fase A", D22: "PA T41", D23: "Scrittoio 2, o il piano dopo la pre-alpha",
   D24: "il piano di K6 (#313)", D25: "PA T48", D26: "PA T49 (dopo D28)",
   D27: "PA T42", D28: "PA T49",
 };
@@ -224,7 +224,7 @@ const CONSIGLIO = {
   D25: "«Foglia» (145), il verde pieno, con la regola dei 30° fra i colori di stato e l'accento.",
   D26: "La stessa idea del logo, col foglio davanti che diventa una pagina.",
   D27: "«Mare»: soli colori, un blu profondo, il più lontano dal verde di serie.",
-  D28: "CC BY-SA 4.0 per i file del logo, con una nota che chiede ai fork di cambiare nome e logo; e mi dici con quale strumento hai fatto Marcuzzo.",
+  D28: "CC BY-SA 4.0 per i file del logo, con una nota che chiede ai fork di cambiare nome e logo. Lo strumento l'hai detto (ArtCraft, poi VectorCraft): manca il nome del modello che ArtCraft ha usato per il ritocco.",
 };
 // Una domanda già decisa comincia con «**Decisa dall'utente … : X.**» (o con
 // «**Risposta dell'utente …**», D28, che non ha un consiglio): nel riassunto
@@ -319,8 +319,9 @@ della tinta o del tema, e restano staccati dal fondo: la cartella e il suo retro
 (3:1, o 4,5:1 col contrasto alto) contro i due fondi dove sta il logo, la barra e l'avvio (<code>--bg</code>) e le
 Informazioni (<code>--bg-elev</code>). Di giorno la scala dei colori è quella del tuo Smeraldo, di notte quella di Menta.
 Un tema fatto da altri non deve dichiarare niente: i colori della cartella li calcola Fub dal suo accento.</p>
-<p>Manca solo ${linkD("D28")}: con che cosa hai fatto Marcuzzo e quale licenza vuoi per i file del logo. Il task del logo
-(PA T49) aspetta quella risposta; il verde di serie (PA T48) no, perché la cartella di Marcuzzo sta a 160 come il verde.</p>
+<p>Marcuzzo l'hai disegnato tu, e l'hai ritoccato con l'AI in ArtCraft e poi in VectorCraft. Di ${linkD("D28")} manca
+solo la licenza dei file del logo, più il nome del modello che ArtCraft ha usato: il task del logo (PA T49) li aspetta;
+il verde di serie (PA T48) no, perché la cartella di Marcuzzo sta a 160 come il verde.</p>
 
 <h3 id="logo--i-tuoi-tre-file">I tuoi tre file</h3>
 <div class="logo-originali">
@@ -332,8 +333,9 @@ Un tema fatto da altri non deve dichiarare niente: i colori della cartella li ca
 chiara Menta si perde, Smeraldo regge sia sul chiaro sia sullo scuro.</p>
 
 <h3 id="logo--le-forme">Le forme, alla loro misura</h3>
-<p>Quattro forme fatte dal tuo Smeraldo, da copiare e non da ridisegnare. Le piccole tolgono i dettagli minuti e
-ingrandiscono ciò che deve restare leggibile: l'occhio aperto, la pupilla, l'occhiolino e il becco.</p>
+<p>Quattro forme fatte dal tuo Smeraldo, da copiare e non da ridisegnare. Le piccole tolgono solo i dettagli minuti
+(le ombre, i puntini, le zampe, e a 16 px il riflesso e le strisce dei fogli): l'occhio, l'occhiolino e il becco restano
+come li hai disegnati, senza ingrandimenti.</p>
 <div class="logo-forme">
   <figure><div class="logo-misure"><img src="logo/marcuzzo.svg" width="56" height="56" alt="La forma intera a 56 px"><img src="logo/marcuzzo.svg" width="48" height="48" alt="La forma intera a 48 px"></div><figcaption><b>Intera</b> · 56 px nell'avvio, 48 nelle Informazioni, e l'icona grande</figcaption></figure>
   <figure><div class="logo-misure"><img src="logo/marcuzzo-24.svg" width="24" height="24" alt="La forma minima a 24 px"><img src="logo/marcuzzo-24.svg" width="96" height="96" alt="La forma minima a 24, ingrandita"></div><figcaption><b>Minima 24</b> · il marchio della barra, le icone 24 e 32 (accanto, ingrandita)</figcaption></figure>
@@ -507,7 +509,7 @@ table.riassunto td:first-child { min-width: 14rem; }
       <ul class="chips">
         <li class="chip ok">Definizione confermata il 2026-11-05</li>
         <li class="chip ok">Domande decise il 2026-11-07${aperte.length ? `, tranne ${aperte.map((d) => d.num).join(", ")}` : ""}</li>
-        <li class="chip attesa">${daApprovare} stati composti e nuovi: il sì sul simulatore aggiornato</li>
+        <li class="chip ok">Piano approvato il 2026-11-07, coi ${daApprovare} stati composti e nuovi</li>
         <li class="chip">${STATI.length} stati · ${SCENARI.length} scenari</li>
         <li class="chip">${fatti} punti di «Fatto quando»</li>
         <li class="chip">${tasks.length} task nuovi · ${fasi} fasi</li>
@@ -518,12 +520,12 @@ table.riassunto td:first-child { min-width: 14rem; }
     <section class="decidere" aria-labelledby="da-decidere">
       <h2 id="da-decidere">Che cosa ti chiedo</h2>
       <ol>
-        <li>Guarda <a href="#simulatore">il simulatore</a> con lo scenario <b>«Che cosa è cambiato»</b>: il verde, Marcuzzo, e gli
-        stati che le tue risposte hanno cambiato o aggiunto (S287–S298). L'elenco è in
-        <a href="#simulatore--gli-stati-cambiati-dalle-risposte">«Gli stati cambiati dalle risposte»</a>.</li>
-        <li>Dai il sì ai ${daApprovare} stati composti e nuovi: «Approvare gli stati nuovi e composti», sotto lo schermo, scrive la frase da incollare.</li>
-        <li>Rispondi a <a href="#domande--${slug(domande.find((d) => d.num === "D28").titolo)}">D28</a>: con che cosa hai fatto Marcuzzo, e quale licenza vuoi per i file del logo.
-        Il logo, con la cartella in ogni tinta e in ogni tema, è nella parte <a href="#logo">«Il logo»</a>.</li>
+        <li>Avvia l'orchestratore col suo prompt, <code>~/.cache/fub-prealpha/prompt-orchestratore.md</code>: due coder alla
+        volta, Opus con ragionamento medio, dalla Fase A.</li>
+        <li>Fai la domanda a SignPath Foundation per la firma di Windows (${linkD("D20")}): la risposta richiede giorni o
+        settimane. La firma di Apple per ora non si fa.</li>
+        <li>Prima del logo nel codice (PA T49): la licenza dei file del logo, e il modello che ArtCraft ha usato
+        (<a href="#domande--${slug(domande.find((d) => d.num === "D28").titolo)}">D28</a>). Te lo chiederà anche l'orchestratore.</li>
       </ol>
       <p class="decidere-nota">Le tue risposte sono nella pagina <a href="https://claude.ai/artifact/Q5Lydynyn4DV8xwFDLZt18" target="_blank" rel="noopener">«Le scelte di Fub pre-alpha»</a>
       e, una per una, in testa a ogni domanda.</p>

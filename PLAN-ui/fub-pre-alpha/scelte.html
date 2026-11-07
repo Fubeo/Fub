@@ -186,8 +186,8 @@ details.prima summary { cursor: pointer; color: var(--muted); }
       <p class="sopra">piano/fub-pre-alpha · 7 novembre 2026</p>
       <h1>Le scelte di Fub pre-alpha</h1>
       <p class="lead">Prima che si scriva codice servono le tue risposte: 24 domande, 14 gruppi di stati da guardare nel simulatore e il via finale. Per ogni domanda trovi le scelte, i pro e i contro, e il mio consiglio.</p>
-      <p><b>Il 7 novembre hai risposto a tutto:</b> le domande, i 14 gruppi di stati e il via A. Poi hai chiesto un Fub verde e mi hai mandato il tuo logo, e sono arrivate D25–D28. Le risposte sono scritte nel piano e nel simulatore, che adesso è verde. Più tardi hai portato il logo definitivo, Marcuzzo: D26 è decisa, e D28 è di nuovo aperta, perché la risposta di prima riguardava il primo logo.</p>
-      <p>Resta un passo: guardare il simulatore aggiornato e dare il sì. Nell'<a href="https://claude.ai/artifact/RCUxmuv2dCqbwDRagbKHcK" target="_blank" rel="noopener">artifact Fub pre-alpha</a> lo scenario «Che cosa è cambiato» passa, uno dopo l'altro, gli stati che le risposte hanno cambiato e i dodici nuovi (S287–S298). Le risposte di questa pagina restano salvate qui.</p>
+      <p><b>Il 7 novembre hai risposto a tutto:</b> le domande, i 14 gruppi di stati e il via A. Poi hai chiesto un Fub verde e mi hai mandato il tuo logo, e sono arrivate D25–D28. Le risposte sono scritte nel piano e nel simulatore, che adesso è verde. Più tardi hai portato il logo definitivo, Marcuzzo: D26 è decisa, e D28 si è riaperta, perché la risposta di prima riguardava il primo logo.</p>
+      <p><b>Poi hai approvato il piano:</b> «Per il resto il piano è approvato». Marcuzzo l'hai disegnato tu e l'hai ritoccato con ArtCraft e VectorCraft (D28: resta solo la licenza), e la firma di Apple per ora non si fa (D20). Lavorano due coder alla volta, dalla Fase A. Nell'<a href="https://claude.ai/artifact/RCUxmuv2dCqbwDRagbKHcK" target="_blank" rel="noopener">artifact Fub pre-alpha</a> c'è il simulatore approvato. Le risposte di questa pagina restano salvate qui.</p>
     </div>
     <section class="criterio" aria-labelledby="criterio-t">
       <h2 id="criterio-t">Come ho scelto i consigli</h2>
@@ -429,7 +429,8 @@ details.prima summary { cursor: pointer; color: var(--muted); }
     {
       id: "D20", titolo: "La firma degli installer", aspetta: "PA T22, T24",
       ancora: "domande--d20-la-firma-degli-installer",
-      contesto: `<p>Oggi la pre-alpha esce senza firma: il piano la rimandava alla beta. Senza firma Windows mostra «Windows ha protetto il PC», e macOS blocca l'app finché non la si apre dalle Impostazioni di sistema. Chi prova incontra un problema prima ancora di aprire Fub.</p><p>Firmare chiede account a tuo nome e un po' di denaro: per questo decidi tu. Prezzi e regole li ho controllati oggi, e si ricontrollano quando si fa il task.</p>`,
+      contesto: `<p>Oggi la pre-alpha esce senza firma: il piano la rimandava alla beta. Senza firma Windows mostra «Windows ha protetto il PC», e macOS blocca l'app finché non la si apre dalle Impostazioni di sistema. Chi prova incontra un problema prima ancora di aprire Fub.</p><p>Firmare chiede account a tuo nome e un po' di denaro: per questo decidi tu. Prezzi e regole li ho controllati oggi, e si ricontrollano quando si fa il task.</p>
+        <p class="dopo"><b>Hai scelto A, poi Apple l'hai messa da parte:</b> «Quello di Apple per ora ce ne freghiamo assolutamente». Si firma solo Windows, con SignPath Foundation (la domanda la fai tu: la risposta richiede giorni o settimane). Il dmg di macOS esce senza notarizzazione: la prima volta macOS lo blocca, e la pagina «Prova la pre-alpha» spiega come aprirlo da Impostazioni di sistema › Privacy e sicurezza › «Apri comunque».</p>`,
       opzioni: [
         { k: "A", nome: "Firmati su Windows e su macOS", testo: "macOS: Apple Developer Program (99 USD l'anno), con firma e notarizzazione nella CI. Windows: SignPath Foundation, gratis per i progetti open source se Fub viene ammesso (vuole tutto il codice aperto e la firma fatta dalla CI); altrimenti un certificato OV di un'autorità, circa 150–300 USD l'anno. Il servizio di firma di Azure oggi accetta persone singole solo negli Stati Uniti e in Canada.", pro: "Su macOS si installa senza blocchi; su Windows l'editore è verificato.", contro: "Su Windows l'avviso può restare nelle prime settimane, finché la firma non si fa una reputazione. Con SignPath l'editore che Windows mostra è «SignPath Foundation». Le chiavi vanno tenute al sicuro nella CI." },
         { k: "B", nome: "Solo macOS firmato e notarizzato", testo: "Su macOS il blocco è il più duro. Su Windows resta l'avviso, e la pagina «Prova la pre-alpha» spiega come andare avanti.", contro: "Su Windows il primo incontro con Fub è un avviso." },
@@ -523,7 +524,7 @@ details.prima summary { cursor: pointer; color: var(--muted); }
             <span><img src="logo/marcuzzo-24.svg" width="32" height="32" alt="">32 px</span>
             <span><img src="logo/marcuzzo-24.svg" width="24" height="24" alt="">24 px</span>
             <span><img src="logo/marcuzzo-16.svg" width="16" height="16" alt="">16 px</span>
-            <p>Le forme piccole tolgono i dettagli minuti e ingrandiscono l'occhio, la pupilla, l'occhiolino e il becco.</p>
+            <p>Le forme piccole tolgono solo i dettagli minuti: l'occhio, l'occhiolino e il becco restano come li hai disegnati.</p>
           </div>
         </div>
         <details class="prima"><summary>La domanda di prima, sul primo logo</summary>
@@ -547,7 +548,7 @@ details.prima summary { cursor: pointer; color: var(--muted); }
     {
       id: "D28", titolo: "Da dove viene il logo, e con quale licenza", aspetta: "il task del logo",
       contesto: `<p>Fub è open source: l'icona entra nel repository pubblico e ha bisogno di una licenza chiara. Se l'hai fatta con un'AI, conta che cosa permettono le condizioni dello strumento; se viene da un'altra persona o da un sito, serve il suo permesso scritto.</p>
-        <p class="dopo"><b>Di nuovo aperta.</b> Avevi risposto A, ma per il primo logo. Per Marcuzzo mi servono due cose prima del task del logo: <b>con che cosa l'hai fatto</b> (se è un'AI, quale strumento: ne leggo le condizioni) e <b>quale licenza vuoi per i file del logo</b>. Il mio consiglio per la licenza: <b>CC BY-SA 4.0</b>, con una nota che chiede a chi fa un fork di Fub di cambiare nome e logo. Chiunque può usare e adattare Marcuzzo dando il credito, e le copie restano libere; la nota tiene il nome e il gufo legati al progetto vero. Le altre strade: tutti i diritti riservati, col permesso di usarlo per Fub, come fa Firefox (il nome e il logo restano di Fub, ma il pacchetto non è più tutto libero e qualche distribuzione cambia l'icona), oppure CC0 (nessuna condizione: chiunque può usare Marcuzzo, anche per un altro prodotto). Il resto è nel piano, D28.</p>`,
+        <p class="dopo"><b>Lo strumento me l'hai detto:</b> «Ho fatto il logo di Marcuzzo. Con l'intelligenza artificiale l'ho ritoccato dopo con Artcraft. Vectorcraft.» Prima del task del logo mancano due cose: <b>il modello che ArtCraft ha usato</b> per il ritocco (ne leggo le condizioni) e <b>la licenza dei file del logo</b>. Il mio consiglio per la licenza: <b>CC BY-SA 4.0</b>, con una nota che chiede a chi fa un fork di Fub di cambiare nome e logo. Chiunque può usare e adattare Marcuzzo dando il credito, e le copie restano libere; la nota tiene il nome e il gufo legati al progetto vero. Le altre strade: tutti i diritti riservati, col permesso di usarlo per Fub, come fa Firefox (il nome e il logo restano di Fub, ma il pacchetto non è più tutto libero e qualche distribuzione cambia l'icona), oppure CC0 (nessuna condizione: chiunque può usare Marcuzzo, anche per un altro prodotto). Il resto è nel piano, D28.</p>`,
       opzioni: [
         { k: "A", nome: "L'ho fatta io con un'AI", testo: "Mi dici quale strumento, e ne controllo le condizioni prima del task." },
         { k: "B", nome: "L'ho disegnata io", testo: "La licenza la scegli tu, insieme a quella del progetto." },
@@ -571,7 +572,8 @@ details.prima summary { cursor: pointer; color: var(--muted); }
 
   const VIA = {
     id: "VIA", etichetta: "Il via", titolo: "Il via al piano", aspetta: "tutto il piano",
-    contesto: `<p>Finché in testa al piano «Approvato» dice «in attesa», nessuno scrive codice. Le tue risposte cambiano il piano: alcune aggiungono task (D19–D22), altre lavoro nel simulatore (D6 C, D17 C) o un piano nuovo (D1 B).</p>`,
+    contesto: `<p>Finché in testa al piano «Approvato» dice «in attesa», nessuno scrive codice. Le tue risposte cambiano il piano: alcune aggiungono task (D19–D22), altre lavoro nel simulatore (D6 C, D17 C) o un piano nuovo (D1 B).</p>
+      <p class="dopo"><b>Hai scelto A, poi hai approvato sul simulatore aggiornato:</b> «Per il resto il piano è approvato». In testa al piano «Approvato» dice sì, dal 7 novembre.</p>`,
     opzioni: [
       { k: "A", nome: "Non ancora: prima aggiorni piano e simulatore", testo: "Scrivi le risposte nel piano e nel simulatore, fai il controllo di D19 se l'ho scelto, e mi mostri gli stati cambiati. Poi approvo sul simulatore aggiornato.", pro: "Approvi ciò che verrà costruito davvero.", contro: "Un giro in più prima di partire." },
       { k: "B", nome: "Sì: approvo il piano con queste risposte", testo: "Gli aggiornamenti li fai, e si parte senza un altro sguardo.", contro: "Le parti nuove (le varianti, il terzo tema, i difetti trovati) entrano senza che tu le abbia viste." },

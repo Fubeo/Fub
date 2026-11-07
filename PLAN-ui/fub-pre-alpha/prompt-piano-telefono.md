@@ -1,8 +1,8 @@
 # Prompt · il pianificatore del telefono di Fub
 
 > **Per l'utente, non fa parte del prompt.** Si parte quando Scrittoio 2 è
-> in `main` (Fub pre-alpha, D1 B), e mentre gira nessun altro pianificatore:
-> vale la regola di un coder e un pianificatore alla volta. Avvia una
+> in `main` (Fub pre-alpha, D1 B), e mentre gira nessun altro pianificatore;
+> i coder dell'orchestratore restano due al più. Avvia una
 > sessione nuova con Opus e ragionamento **xhigh**, dalla radice del
 > repository, scrivi `/pianifica` e incolla tutto ciò che sta sotto la riga.
 

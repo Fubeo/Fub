@@ -34,9 +34,12 @@ Assunzioni:
   T57).
 - Il telefono ha un piano suo, prima della pre-alpha (D1 B): parte quando
   Scrittoio 2 è in `main`, e l'APK di PA T22, T23 e T31 lo aspetta.
-- Lavora un coder alla volta, più al massimo un pianificatore: è la regola
-  dell'utente dal 2026-11-04, e cambia solo se la cambia l'utente. Le «ondate»
-  qui sotto sono quindi file, una dopo l'altra.
+- Lavorano due coder alla volta (Opus, ragionamento medio), e nessun altro
+  agente: è la regola dell'utente dal 2026-11-07 (prima era un coder solo),
+  e cambia solo se la cambia l'utente. Le «ondate» qui sotto restano
+  l'ordine: due task vanno insieme solo se i loro «Tocca» non si toccano e
+  la tabella della fase non li tiene separati («mai con…»). Il pianificatore
+  del telefono (D1 B) lo avvia l'utente.
 - La strada degli altri piani non cambia. Fanno eccezione le decisioni
   della parte «Domande aperte», quando l'utente risponde.
 - Gli stati detti «fatti» sono verificati su `origin` il 2026-11-05 (vedi
@@ -51,8 +54,8 @@ D1 B) · Fase C: griglia, K5, N4, N6,
 lavagna in codice e A1 (le loro ondate, nell'ordine di «L'ordine»), con PA
 T12 · Fase D: PA T41 | T42 | T49 (dopo D28) | T14
 T18 T55 | T26 T27 T28 T29 T30 | T52 | T50 T51 | T15 T17 T22 T31 | T16 T45
-T23 | T24. PA T49 parte dopo D28 (lo strumento e la licenza del logo);
-PA T50 dopo gli account dell'utente.
+T23 | T24. PA T49 parte dopo la licenza del logo (D28); PA T50 dopo la
+risposta di SignPath Foundation (D20).
 Prototipo: `PLAN-ui/fub-pre-alpha/simulatore.html`, il simulatore di tutta
 la pre-alpha (artifact «Fub pre-alpha»,
 https://claude.ai/artifact/RCUxmuv2dCqbwDRagbKHcK, parte 1). È costruito dai
@@ -60,8 +63,9 @@ prototipi approvati: Scrittoio 2 (2026-11-04), K2, K3 T12 (2026-11-03),
 K5 T25 (2026-11-05), N4 T20 (2026-11-02), N6 T25 (2026-11-04) e A1
 (2026-11-03). La griglia (`celle-griglia`) l'ha approvata l'utente il
 2026-11-07 (D2 A).
-Approvato: in attesa del sì sul simulatore aggiornato (il via A del
-2026-11-07).
+Approvato: sì, dall'utente il 2026-11-07: «Per il resto il piano è
+approvato». Il sì vale per il piano e per i 130 stati composti e nuovi del
+simulatore; la licenza del logo resta da confermare prima di PA T49 (D28).
 Stato: il 2026-11-07 l'utente ha risposto a tutte le domande (D1–D28),
 ha approvato i 118 stati composti e nuovi e ha dato il via A: «scrivi le
 risposte nel piano e nel simulatore, fai il controllo di D19, mostrami gli
@@ -70,11 +74,16 @@ scritte qui (ogni domanda in testa), i task nuovi sono PA T48–T57, e il
 simulatore è rifatto in verde, col logo e con gli stati che le
 risposte hanno cambiato o aggiunto. Lo stesso giorno l'utente ha portato il
 logo definitivo, Marcuzzo (D26), con la cartella che prende il colore del
-tema: le catture sono rifatte con lui, e resta aperta solo D28 (lo
-strumento e la licenza del logo). Il controllo di D19 è fatto («Il
-controllo di tutte le viste»): i difetti che ha trovato sono PA T56, T57 e
-due punti di T47, e il simulatore li mostra già corretti. Finché
-«Approvato» non dice sì, il piano non va implementato.
+tema: le catture sono rifatte con lui, con le forme piccole che non
+ingrandiscono niente (l'utente: «non mi piace l'icona con l'occhio
+strizzato ingrandito»). Il controllo di D19 è fatto («Il controllo di
+tutte le viste»): i difetti che ha trovato sono PA T56, T57 e due punti di
+T47, e il simulatore li mostra già corretti. Poi l'utente ha detto che
+Marcuzzo l'ha disegnato lui e l'ha ritoccato con l'AI in ArtCraft e poi in
+VectorCraft (D28: la licenza resta da confermare), che la firma di Apple
+per ora non si fa (D20), e ha approvato il piano: «Per il resto il piano è
+approvato». Lavorano due coder alla volta. Il piano si implementa, dalla
+Fase A.
 
 ## Modifiche
 
@@ -116,9 +125,10 @@ Confermata dall'utente il 2026-11-05.
    «Officina», «Mare») passano i cancelli e sono guardati nelle due luci,
    in contrasto alto, stretti e al telefono. Gli hook sono congelati e un
    test lo tiene (PA T34–T42, T54).
-10. Fub è verde di serie e ha il suo logo (PA T48, T49); gli installer sono
-   firmati su Windows e macOS, e c'è il Flatpak (PA T50, T51); «Segnala un
-   problema» apre la issue con versione e sistema (PA T52); un controllo
+10. Fub è verde di serie e ha il suo logo (PA T48, T49); gli installer per
+   Windows sono firmati (quelli per macOS no, per ora: D20), e c'è il
+   Flatpak (PA T50, T51); «Segnala un problema» apre la issue con versione
+   e sistema (PA T52); un controllo
    del banco passa tutte le viste (PA T55).
 
 ### Fuori scope, e dove va
@@ -197,7 +207,7 @@ codice, nei rami e nelle issue il 2026-11-05.
 | #281 · i Blocchi con cinque persone | Aperta | dentro | Fatto quando 7 | PA T17 |
 | P00–P18 (#76–#93) | Vecchia mappa | fuori | Superata da N e K | le loro issue |
 | Richiesta dell'utente: Fub verde di serie, col suo logo (2026-11-07) | La tinta di serie è la matita blu (265, `recipe.ts`); l'icona è un quadrato viola con una «F» (`crates/fub-app/icons`) | dentro | Fatto quando 10 | PA T48, T49; D25–D28 |
-| La firma degli installer | `release.yml` costruisce senza firma | dentro (D20 A) | Nessun avviso a chi installa | PA T50 |
+| La firma degli installer | `release.yml` costruisce senza firma | dentro per Windows; macOS per ora senza notarizzazione (D20) | Nessun avviso a chi installa su Windows | PA T50 |
 | I riscontri della pre-alpha | Nessun modello di issue, nessuna voce nel menu | dentro (D9 B) | Più riscontri, più completi | PA T18, T52 |
 | Il controllo di tutte le viste | Le viste del simulatore guardate a campione | dentro (D19 A) | Il difetto dei 44 px è venuto fuori guardando | sonda del 2026-11-07; PA T55 |
 | Il telefono | La variante A di Scrittoio 2, «approvata per ora» | dentro: un piano suo prima dell'APK (D1 B) | L'APK deve essere quello giusto | piano del telefono, `PLAN-ui/fub-pre-alpha/prompt-piano-telefono.md` |
@@ -275,27 +285,32 @@ codice il 2026-11-05.
 
 Quattro fasi. Una fase finisce quando tutti i suoi passi sono chiusi; la
 dopo può cominciare prima solo dove la colonna «Dipende da» lo permette.
-Lavora un coder alla volta, più al massimo un pianificatore (regola
-dell'utente dal 2026-11-04; cambia solo se la cambia l'utente, `DECISIONS.md`).
+Lavorano due coder alla volta, Opus con ragionamento medio, e nessun altro
+agente (regola dell'utente dal 2026-11-07, prima era un coder solo; cambia
+solo se la cambia l'utente, `DECISIONS.md`). Dove va il codice e come entra
+in `main` lo dice «Come si implementa», «Il ramo, le consegne e i due coder».
 «Taglia» è a occhio, in tempo di un coder con revisione e CI: S un'ora o
 due, M mezza giornata, L due o tre giorni, XL di più.
 
 **Quanto ci vuole, a occhio.** Restano circa 207 task negli altri piani
 (circa 79 solo in N6) e i 57 task di questo piano (PA T1–T57, tutti da
 fare): circa 264 in tutto, più il piano del telefono (D1 B), che a occhio
-ne porta una quindicina. Con un coder alla volta e circa 2 ore per task,
-revisione e CI comprese, fanno circa 530 ore; i task della skin facile, del
+ne porta una quindicina. Con circa 2 ore di un coder per task, revisione
+e CI comprese, fanno circa 530 ore; i task della skin facile, del
 secondo giro (T43–T47) e delle risposte (T48–T57) sono quasi tutti M e ne
 aggiungono una quarantina; il telefono circa altre 40. In tutto circa 610
-ore. A circa 14 ore al giorno (l'orchestratore lavora anche di notte con
-`/orchestra-auto`) sono circa 44 giorni, circa 6 settimane piene.
-Con le attese dell'utente (i prototipi da approvare, il piano del
-telefono, i sì ai merge, la misura su Windows, la prova con le persone, gli
-account per la firma, gli installer) diventano **8–10 settimane**. N6 da
+ore di lavoro. Con due coder insieme il tempo non si dimezza: la
+revisione, la CI e le catene di «Dipende da» restano una alla volta, e
+molti passi aspettano quello prima. A occhio il calendario scende a circa
+due terzi, cioè circa 400 ore; a circa 14 ore al giorno sono circa 29
+giorni, poco più di 4 settimane piene. Con le attese dell'utente (i
+prototipi da approvare, il piano del telefono, i sì ai merge, la misura su
+Windows, la prova con le persone, la firma di Windows, gli installer)
+diventano **6–8 settimane**. N6 da
 sola sono circa 160 ore, cioè 2–3 settimane con l'approvazione dei suoi
 prototipi. La firma di Windows può allungare la coda: la risposta di
 SignPath Foundation richiede giorni o settimane, e senza la firma PA T22
-non chiude (D20 A).
+non chiude (D20).
 
 Le assunzioni della stima: le 2 ore vengono dai piani recenti (il piano del
 caricamento ha chiuso 4 task in circa 3 ore il 2026-11-04; i task M e L di
@@ -367,7 +382,7 @@ Se una di queste cade, la stima si allunga.
 |---|---|---|---|---|---|---|
 | PA T41 · gli hook congelati | PA | da fare | Fase C in `main`; T34–T40 | basso per il codice, alto se si sbaglia il momento | S | `contract-frozen.test.ts` |
 | PA T42 · tre temi d'esempio | PA | da fare (D17 C: Carta, Officina, Mare) | T41, T54 | basso | M | `examples.test.ts`, scene del banco |
-| PA T49 · il logo | PA | aspetta D28 | T48 | medio: icone, la ricetta e la serie dei temi; gli hook restano | M | le icone generate, le scene del banco |
+| PA T49 · il logo | PA | aspetta la licenza e il modello usato in ArtCraft (D28) | T48 | medio: icone, la ricetta e la serie dei temi; gli hook restano | M | le icone generate, le scene del banco |
 | PA T55 · il controllo di tutte le viste nel banco | PA | da fare (D19 A) | S2 in `main`; T47, T56 e T57; prima di T15 | basso | M | `bench:viste` verde, rosso sulla scena di prova |
 | PA T14 · il giro nel banco: lo scheletro e il primo avvio | PA | da fare | Fase B in `main` | medio | M | `npm run bench:giro` verde sui compiti 1–5 |
 | PA T26 · il giro: le note | PA | da fare | T14 | basso | M | compiti 6–11 verdi |
@@ -381,7 +396,7 @@ Se una di queste cade, la stima si allunga.
 | PA T17 · la prova con cinque persone | PA | da fare | PA T14 per il protocollo; la prova usa gli installer di T22 | basso per il codice; serve l'utente | S + la prova | il resoconto della prova |
 | PA T18 · i documenti della pre-alpha | PA | da fare | Fase C | basso | S | guardie dei documenti |
 | PA T52 · «Segnala un problema» | PA | da fare (D9 B) | T18; S2 in `main` | basso: il browser apre la pagina, Fub non manda niente | S | Vitest della funzione dell'indirizzo e del menu |
-| PA T50 · la firma degli installer | PA | aspetta gli account dell'utente (D20 A) | i segreti nel repository | medio: certificati e notarizzazione | M | `codesign`, `spctl`, `stapler`, `signtool` nella corsa a secco |
+| PA T50 · la firma degli installer di Windows | PA | aspetta la risposta di SignPath Foundation (D20: Windows sì, macOS per ora no) | i segreti nel repository | medio: la firma nella CI di rilascio | M | `signtool verify` nella corsa a secco; `codesign --verify` sulla firma ad hoc del dmg |
 | PA T51 · Flatpak | PA | da fare (D8 B) | prima di T22 | medio: i permessi e l'osservatore dei file | M | `flatpak install --user` e i compiti 1, 6 e 21 |
 | PA T31 · l'APK nell'emulatore della CI | PA | da fare | niente; la foto si rifà quando il piano del telefono è in `main` | medio: emulatore su runner Linux | M | il job `mobile.yml` installa, apre e fotografa l'APK |
 | PA T22 · la versione e la prova del rilascio | PA | da fare | T14, T18, T25; T19–T21; T31, T50, T51; il piano del telefono in `main` (D1 B) | alto: MSI e versione non numerica | M | `release.yml` verde in prova, installer firmati, `.flatpak` e APK |
@@ -773,8 +788,9 @@ didascalia, nel menu degli stati e nella tabella «Gli stati», sotto:
 composti e nuovi di allora, per gruppi. Le risposte dello stesso giorno ne
 hanno cambiati alcuni e ne hanno aggiunti dodici (S287–S298): «Gli stati
 cambiati dalle risposte», sotto, li elenca, e lo scenario «Che cosa è
-cambiato» li passa in ordine. Il sì sul simulatore aggiornato (il via A)
-vale per tutti i 130 stati composti e nuovi. In «Approvare gli stati nuovi e
+cambiato» li passa in ordine. Il sì sul simulatore aggiornato è arrivato
+lo stesso giorno («Per il resto il piano è approvato») e vale per tutti i
+130 stati composti e nuovi. In «Approvare gli stati nuovi e
 composti» si segnano quelli da rivedere (anche con «Da rivedere» sotto lo
 schermo), e la frase si scrive da sola, per esempio «Approvo tutti gli stati
 nuovi e composti tranne S23, S41.». «Copia la frase» la copia; i segni
@@ -1032,7 +1048,9 @@ ricatturata: la tavolozza si apre 20 px più a destra (la freccia del
 pulsante diviso è larga 24, PA T57), e copre sei celle del foglio in più a
 tutta larghezza e a 700; al telefono otto quadretti di colore escono dallo
 schermo ed entra «Bordi». In `g2-raw-girato` lo zoom della foto dice −77 %
-invece di −78 %.
+invece di −78 %. Rifatto la notte del 2026-11-07 sul simulatore con le
+forme piccole del logo senza l'occhio ingrandito (`sim/out-v9`), dà gli
+stessi numeri e di nuovo «errori: nessuno».
 
 Al telefono le schede «Vault» e «Informazioni» degli stati delle
 impostazioni scorrono fuori dalla riga, intere (PA T47), invece di starci
@@ -1112,14 +1130,14 @@ del client è col tema di serie) e l'ispettore compatto di S2 T9 (264 px
 nella foto, 216 nel simulatore: tutto ciò che gli sta a sinistra si sposta,
 e il passo 6 lo misura).
 
-Il giro del 2026-11-07 sera, sul simulatore di questo ramo con Marcuzzo
-(le catture rifatte col verde di serie, D25, e col logo, D26, le risposte
-dell'utente e i blocchi di PA T47, T56 e T57): 1.424 confronti, uno per
-stato, larghezza, luce e fonte.
+Il giro del 2026-11-07 notte, sul simulatore di questo ramo con Marcuzzo
+nelle forme piccole senza ingrandimento (le catture rifatte col verde di
+serie, D25, e col logo, D26, le risposte dell'utente e i blocchi di PA T47,
+T56 e T57): 1.424 confronti, uno per stato, larghezza, luce e fonte.
 
 | Fonte | Confronti | Misurati | Media | Sopra lo 0,5 % | Dopo le zone |
 |---|---|---|---|---|---|
-| cattura pura contro la sua foto | 510 | 510 | 0,14 % | 45 | tutti sotto |
+| cattura pura contro la sua foto | 510 | 510 | 0,13 % | 43 | tutti sotto |
 | client fuori dagli strati e dal DOM nuovo | 570 | 494 | 1,00 % | 132 | 90 sotto, 22 lavagna, 17 tema, 2 tinte, 1 ombra |
 | strato contro la pagina approvata | 344 | 152 | 0,10 % | 2 | tutti sotto |
 
@@ -1130,6 +1148,13 @@ correzioni di PA T56 e T57: la freccia del pulsante diviso larga 24, per
 esempio, ora sta anche nella foto di `s2/foglio`, e le celle e i fogli
 fuori dagli strati non differiscono più.
 
+Rifatte le catture per le forme piccole senza l'occhio ingrandito, cambiano
+30 righe e nessuna sale di 0,3 punti: 22 righe della lavagna a 700 nella
+luce scura passano dallo 0,52 allo 0,51 %, due del foglio salgono allo
+0,35 % al più, e il menu «/» della nota (S9, S10, S11) scende sotto la
+soglia in due righe: la foto e il DOM lo prendono in un punto diverso del
+suo assestarsi, come nel controllo delle viste.
+
 Non misurati, 268: 192 strati a 700 px e sul telefono (la pagina approvata
 ha una foto sola, alla sua misura) e 76 schermi in cui il DOM nuovo copre
 tutto il client (un dialogo col suo velo: `comp-permesso`, le sette ricette
@@ -1138,7 +1163,7 @@ col dialogo, `riscontri-b-apre`, `tema-installa`, `tema-sostituisci`,
 e le barre marcate di D6, `aspetto-barre-marcate` e `barra-marcate`, che
 ridisegnano tutta la cornice).
 
-Le 179 righe sopra la soglia, per motivo:
+Le 177 righe sopra la soglia, per motivo:
 
 - **S2 T3 sul telefono**: la testata, il bottone della modalità e la barra
   di formato stanno dove li mette T3; tolti, resta al massimo lo 0,07 %;
@@ -1274,7 +1299,12 @@ telefono (`g2-foglio-ribbon-palette`, ricatturata: con la freccia del
 pulsante diviso larga 24, PA T57, si apre 20 px più a destra), con
 quattordici sovrapposti in meno e quattro nuovi (due pulsanti della barra
 coperti, nelle due luci), più un taglio in meno in `slash-nessuno`; il
-telefono è del suo piano. Ogni cella dice i riscontri, fra parentesi quanti
+telefono è del suo piano. Rifatto ancora su `sim/out-v9`, con le forme
+piccole di Marcuzzo che non ingrandiscono niente, dà di nuovo gli stessi
+riscontri rigorosi; fuori da quelli i tagli tornano 3.980, come nella
+tabella: la linguetta «Benvenuto» dietro il menu «/» (S10, S11, non
+rigorose) la cattura la prende in un punto diverso del suo assestarsi.
+Ogni cella dice i riscontri, fra parentesi quanti
 nelle viste rigorose, e i gruppi (lo stesso tipo sullo stesso selettore):
 
 | Tipo | Computer | Telefono | Strati |
@@ -1948,7 +1978,9 @@ stati. Dopo le prime risposte ha chiesto un Fub verde di serie e ha
 mandato il suo logo: da lì vengono D25–D28. Ogni domanda dice in testa la
 scelta e che cosa cambia nel piano. Più tardi, lo stesso giorno, l'utente ha
 portato il logo definitivo, Marcuzzo (D26): D28 si è riaperta, perché la sua
-risposta riguardava il primo logo, ed è l'unica domanda aperta.
+risposta riguardava il primo logo. Poi ha detto con che cosa ha fatto
+Marcuzzo, ha messo da parte la firma di Apple (D20) e ha approvato il
+piano: di D28 resta solo la licenza, da confermare prima di PA T49.
 
 ### D1 · Il telefono, per l'APK di prova
 
@@ -1956,8 +1988,8 @@ risposta riguardava il primo logo, ed è l'unica domanda aperta.
 prima della pre-alpha: pianificatore, prototipo, poi i task. Il
 pianificatore parte quando Scrittoio 2 è in `main`, per non disegnare due
 volte la cornice; lo avvia l'utente col prompt
-`PLAN-ui/fub-pre-alpha/prompt-piano-telefono.md`. Vale la regola di un
-coder e un pianificatore alla volta. PA T22, PA T31 e la parte del telefono
+`PLAN-ui/fub-pre-alpha/prompt-piano-telefono.md`. Mentre gira, i coder
+dell'orchestratore restano due al più (la regola del 2026-11-07). PA T22, PA T31 e la parte del telefono
 di PA T23 aspettano che il piano del telefono sia in `main`. PA T8 e PA T47
 restano: correggono la cornice di oggi, e il piano nuovo parte da lì. Gli
 stati del telefono (S257–S271) restano la variante A, il punto di partenza
@@ -2551,12 +2583,23 @@ campione.
 
 ### D20 · La firma degli installer
 
-**Decisa dall'utente il 2026-11-07: A.** Firmati tutti e due: PA T50, in
-Fase D prima di PA T22. Prima del task servono due gesti dell'utente:
-l'iscrizione all'Apple Developer Program (99 USD l'anno, a suo nome) e la
-domanda a SignPath Foundation per Fub; se Fub non è ammesso, un
-certificato OV (circa 150–300 USD l'anno). Le chiavi stanno solo nei
-segreti della CI: il coder non le vede.
+**Decisa dall'utente il 2026-11-07: Windows firmato, macOS per ora no.**
+Prima l'utente aveva scelto A (firmati tutti e due); poi, lo stesso giorno:
+«Quello di Apple per ora ce ne freghiamo assolutamente». Quindi niente
+Apple Developer Program. PA T50, in Fase D prima di PA T22, firma solo gli
+installer di Windows, con SignPath Foundation, o con un certificato OV
+(circa 150–300 USD l'anno) se Fub non è ammesso. Prima del task serve un
+gesto dell'utente: la domanda a SignPath Foundation per Fub. Le chiavi
+stanno solo nei segreti della CI: il coder non le vede.
+
+Il dmg esce senza Developer ID e senza notarizzazione, con la sola firma
+«ad hoc» che non chiede account (`bundle.macOS.signingIdentity: "-"`):
+la documentazione di Tauri la consiglia per i Mac con Apple Silicon, che
+non avviano codice scaricato senza nessuna firma (da riverificare nel
+task). La prima volta macOS lo blocca, e la pagina «Prova la pre-alpha»
+(PA T18) spiega come aprirlo da Impostazioni di sistema › Privacy e
+sicurezza › «Apri comunque». La firma di Apple torna una domanda quando
+l'utente la vuole, dopo la pre-alpha.
 
 La pre-alpha esce senza firma («Fuori scope», installer firmati). Senza
 firma Windows mostra SmartScreen («Windows ha protetto il PC»), e macOS
@@ -2800,9 +2843,14 @@ prendono la tinta dell'accento, con una regola nuova della ricetta,
 | Forma | File | Dove | Che cosa cambia |
 |---|---|---|---|
 | intera | `marcuzzo.svg` | da 32 px in su: le Informazioni (48), l'avvio (56), l'icona dell'app | niente: è il disegno dell'utente |
-| minima 24 | `marcuzzo-24.svg` | 24 px: il marchio della barra | via le ombre, i puntini, le zampe e la luce del becco; occhio, pupilla, occhiolino e becco più grandi |
+| minima 24 | `marcuzzo-24.svg` | 24 px: il marchio della barra | via le ombre, i puntini, le zampe e la luce del becco; l'occhio, la pupilla, l'occhiolino e il becco restano quelli del disegno |
 | minima 16 | `marcuzzo-16.svg` | 16 px: la favicon, le icone piccole del sistema | in più via il riflesso dell'occhio e le strisce dei fogli sopra la testa |
 | simbolica | `marcuzzo-simbolico.svg` | un colore solo: le icone simboliche di Linux, il livello monocromo di Android, il vassoio | un path pieno pari-dispari, dalla minima 24; un filo vuoto stacca la cartella davanti |
+
+Le forme piccole tolgono e non ingrandiscono: la prima minima aveva
+l'occhiolino più spesso e la pupilla più grande, e all'utente l'occhio
+strizzato ingrandito non piace (2026-11-07). Alle misure piccole il gufo
+resta quello del disegno, solo con meno dettagli.
 
 **L'icona del sistema** (l'installer, il dock, il menu delle applicazioni,
 Android) non conosce il tema: è Smeraldo, coi suoi colori fissi, su fondo
@@ -2826,16 +2874,25 @@ Fub blu lo ritrova come tema. PA T42.
 
 ### D28 · Da dove viene il logo, e con quale licenza
 
-**Aperta.** Il 2026-11-07 l'utente ha risposto «A, l'ha fatta con un'AI»,
-ma la risposta riguardava il primo logo, la «f» a nastro. Per Marcuzzo
-(D26) non ha ancora detto con che cosa l'ha fatto né con quale licenza lo
-vuole dare. Fub è open source (il codice è MIT o Apache-2.0): il logo entra
-nel repository pubblico e ha bisogno di una licenza scritta. **PA T49 non
-parte** finché l'utente non dice con che cosa è fatto Marcuzzo e quale
-licenza sceglie, e l'orchestratore non ha letto le condizioni dello
-strumento (se è un'AI) e scritto in `DECISIONS.md` che permettono l'uso in
-un progetto pubblico. Le due licenze di Fub vanno bene per il codice, non
-per un disegno.
+**Lo strumento: risposto. La licenza: da confermare prima di PA T49.**
+Il 2026-11-07 l'utente ha detto: «Ho fatto il logo di Marcuzzo. Con
+l'intelligenza artificiale l'ho ritoccato dopo con Artcraft. Vectorcraft.»
+Marcuzzo è quindi un disegno dell'utente, ritoccato con l'AI in ArtCraft e
+poi passato in VectorCraft. ArtCraft (di storytold, codice `MIT OR
+Apache-2.0`) è il programma: per il ritocco ha chiamato un modello di
+immagini, e le condizioni che contano sono quelle di quel modello o del
+servizio che lo serve. VectorCraft trasforma un'immagine in vettori sul
+computer, e il risultato è di chi l'ha disegnata. Lo stesso giorno
+l'utente ha approvato il piano «per il resto», senza nominare la licenza.
+
+Fub è open source (il codice è MIT o Apache-2.0): il logo entra nel
+repository pubblico e ha bisogno di una licenza scritta, e le due licenze
+di Fub vanno bene per il codice, non per un disegno. **PA T49 non parte**
+finché: l'utente conferma la licenza (il consiglio resta A); l'utente dice
+quale modello ha usato in ArtCraft per il ritocco; l'orchestratore ha
+letto le condizioni di quel modello e scritto in `DECISIONS.md` che
+permettono l'uso in un progetto pubblico. Le due domande le fa
+l'orchestratore all'utente, insieme, prima di T49.
 
 - **A (consigliata).** CC BY-SA 4.0 per i file del logo, con una nota in
   `assets/logo/LEGGIMI.md` che chiede a chi fa un fork di cambiare nome e
@@ -2877,6 +2934,47 @@ che serve in più per questo piano.
 - Un task PA tocca solo i file del suo «Tocca». Il suo test, un chiamante,
   un file generato o la pagina di `docs/` che lo descrive si possono
   aggiungere: lo decide l'orchestratore e lo scrive nel registro.
+
+### Il ramo, le consegne e i due coder
+
+- **Due coder alla volta**, Opus con ragionamento medio
+  (`.claude/agents/coder.md`), ognuno nel suo worktree. Due task vanno
+  insieme solo se i loro «Tocca» non si toccano, non stanno nello stesso
+  crate (salvo che il piano li dica indipendenti) e la tabella della fase
+  non li tiene separati: le note «mai con…» (per esempio T48 con un task
+  che rifà le baseline, T54 con S2 T20 o con la griglia T2–T3). Nel
+  dubbio, uno alla volta.
+- **I task PA** si integrano su `piano/fub-pre-alpha` (la riga «Ramo:»):
+  il coder parte dalla testa di quel ramo e trova nel suo worktree il
+  simulatore, le toppe e i blocchi di `PLAN-ui/`. La PR del ramo del piano
+  resta bozza, per la CI corta, e non si unisce mai così com'è: porta
+  `PLAN-ui/` (13 MB).
+- **Le consegne.** Il codice dei task PA entra in `main` a pezzi, con un
+  ramo di consegna `pre-alpha/consegna-<n>` nato da `origin/main`.
+  L'orchestratore ci porta con `cherry-pick -x`, nell'ordine, i commit
+  integrati dopo la consegna di prima, tranne quelli che toccano solo
+  `PLAN.md`, `PLAN-ui/` e `NOTE-pianificazione.md`. Poi apre la PR, la
+  segna pronta (la CI completa, con Windows e macOS) e, quando è verde,
+  chiede all'utente il merge. Dopo il merge unisce `origin/main` nel ramo
+  del piano: merge, mai rebase né force.
+- **Quando si consegna:** quando un passo che viene dopo ha bisogno di quel
+  codice in `main` (la colonna «Dipende da»: per esempio T48 e la skin
+  facile prima della Fase B), alla fine di ogni fase, e comunque quando una
+  consegna arriva a circa sei task, perché una PR più lunga si rivede male.
+- **`DECISIONS.md`.** Le righe che l'orchestratore aggiunge al registro sono
+  commit a parte (`docs(decisioni): …`) e viaggiano con la consegna. La
+  prima consegna porta anche le righe scritte durante la pianificazione:
+  il diff di `DECISIONS.md` fra il punto in cui il ramo del piano è nato da
+  `main` (il `merge-base`) e la testa del ramo, applicato con `apply -3`.
+- **I task degli altri piani** si fanno dal loro `PLAN.md`, sul loro ramo e
+  con la loro PR. Il coder parte dalla testa di quel ramo. Il merge di
+  `origin/main` nei loro rami lo fa l'orchestratore (merge, mai rebase né
+  force), e il loro merge in `main` chiede l'OK dell'utente come ogni altro.
+- **Alla fine** (PA T24 fatto): il piano si chiude come dice `/orchestra`
+  (la CI completa, il resoconto), ma il ramo del piano non si unisce. Il
+  codice è già entrato con le consegne; `PLAN.md` e `PLAN-ui/` restano
+  nella storia del ramo su GitHub, fuori da `main`, e la PR del piano si
+  chiude senza merge, con l'OK dell'utente.
 
 ### Il giro di un task grafico
 
@@ -3019,7 +3117,8 @@ Resoconto: cosa hai fatto, i file, le prove girate e il loro esito, le
   - legge il diff (file generati, duplicati, smontaggi);
   - fa girare la «Prova» sul ramo integrato;
   - spinge sulla PR bozza e aspetta la CI corta.
-- **A fine piano:** la CI completa (la PR pronta), con Windows e macOS.
+- **A ogni consegna:** la CI completa (la PR di consegna pronta), con
+  Windows e macOS, prima di chiedere il merge.
 - **Un `SALTA`** di `check.sh` non è una prova: il resoconto lo dice.
 - **Per un task grafico** ci sono anche le foto del banco accanto al
   simulatore, nelle due luci, a tutta larghezza e a 700. Le differenze si
@@ -4015,10 +4114,12 @@ Dipende da: le Fasi A–C in `main` (D9 B, 2026-11-07: «Segnala un problema» l
 Cosa fare:
 - `status.md`: che cosa c'è nella pre-alpha, che cosa no (la tabella «Fuori
   scope» del piano, con i link alle issue), e i limiti noti (telefono di
-  prova, macOS solo in CI, Windows senza firma).
+  prova, il dmg di macOS non notarizzato, D20).
 - `prova-la-pre-alpha.md`: scaricare (dalla pagina della release),
-  installare sui tre sistemi (con l'avviso di SmartScreen e di Gatekeeper,
-  perché non è firmata), aprire un vault (consigliare una copia), che cosa
+  installare sui tre sistemi (su Windows SmartScreen può avvisare nelle
+  prime settimane anche con la firma; su macOS il primo avvio è bloccato,
+  perché il dmg non è notarizzato, e la pagina dà i passi per «Apri
+  comunque», D20), aprire un vault (consigliare una copia), che cosa
   provare, come segnalare un problema.
 - README: la riga in alto che rimanda alla pagina.
 - CHANGELOG: la voce `0.2.0-prealpha.1`, scritta dai piani uniti (le loro
@@ -4135,7 +4236,7 @@ Tocca:
   trattino, l'APK di prova allegato, le note della release;
 - `.github/scripts/check-release-gate.mjs` se un job cambia nome;
 - `CHANGELOG.md` (la data).
-Non toccare: la firma (la porta T50, D20 A) e il Flatpak (T51, D8 B):
+Non toccare: la firma (la porta T50, D20) e il Flatpak (T51, D8 B):
 qui si controlla solo che ci siano; gli altri workflow; `mobile.yml` (lo
 tocca T31).
 Dipende da: le Fasi A–C in `main`; T14, T18, T19–T21, T25, T31, T50 e T51
@@ -4160,7 +4261,8 @@ Cosa fare:
   finestra c'è, si chiude). Il giro a mano lo fa T23 (D11 B).
 - La corsa a secco: `gh workflow run release.yml` (`workflow_dispatch`, solo
   gli artefatti), e controlla che ci siano gli installer dei tre sistemi,
-  firmati su Windows e su macOS (T50), il `.flatpak` (T51) e l'APK.
+  quelli di Windows firmati e il dmg con la firma ad hoc (T50, D20), il
+  `.flatpak` (T51) e l'APK.
 Casi limite: la versione col trattino rifiutata da un passo (MSI, NSIS,
 `versionCode`); il gate che chiede una CI completa verde sul commit; un
 `prealpha.10` (il quarto numero dell'MSI arriva fino a 65535, il
@@ -4191,9 +4293,11 @@ Cosa fare:
   install --user`, apri un vault fuori dalla sandbox e ripeti i compiti 1,
   6 e 21 (il primo avvio, una nota, una modifica fatta da un altro
   programma mentre Fub è aperto).
-- macOS: la persona riceve la lista dei 27 compiti e il dmg firmato e
-  notarizzato (T50); lo apre senza passare da Impostazioni di sistema, fa
-  i compiti e risponde con una riga per compito.
+- macOS: la persona riceve la lista dei 27 compiti e il dmg, che non è
+  notarizzato (D20); lo apre coi passi della pagina «Prova la pre-alpha»
+  (Impostazioni di sistema › Privacy e sicurezza › «Apri comunque») e
+  scrive se bastano, poi fa i compiti e risponde con una riga per
+  compito.
 - Windows: l'orchestratore manda all'utente la lista dei 27 compiti;
   l'utente li fa con l'MSI e risponde. In più: installa la corsa a secco,
   poi una seconda corsa costruita con `prealpha.2` (solo per la prova,
@@ -5353,8 +5457,8 @@ diventa l'SVG, quindi T49 può venire dopo T41); i colori del gufo, che sono
 gli attributi `fill` del disegno; le soglie del contrasto; le tinte dei
 campioni.
 Dipende da: T48 (la ricetta verde e `colori.test.ts`); D28 chiusa: l'utente
-dice con che cosa è fatto Marcuzzo e quale licenza sceglie, e
-l'orchestratore legge le condizioni dello strumento e scrive in
+conferma la licenza e dice quale modello ha usato in ArtCraft per il
+ritocco, e l'orchestratore legge le condizioni di quel modello e scrive in
 `DECISIONS.md` che permettono l'uso in un progetto pubblico.
 Dal prototipo: tutto. Le forme in `logo/`, da copiare e non da ridisegnare;
 il diff del client delle catture in `script/finto/verde.patch` (le parti
@@ -5410,33 +5514,30 @@ gettoni del logo); `colori.test.ts` copre i colori del logo dell'avvio; la
 licenza è scritta in `assets/logo/`; le foto del banco (barra,
 Informazioni, avvio) hanno le baseline nuove dal runner.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run theme:generate && npm run theme:verify && npx vitest run src/theme src/avvio src/panels; npm run bench:verify
-Stato: [ ] da fare (aspetta D28)
+Stato: [ ] da fare (aspetta la licenza di D28)
 
 ## T50 · La firma degli installer
 
-Perché: D20. Senza firma Windows mostra «Windows ha protetto il PC» e
-macOS blocca l'app finché non la si apre da Impostazioni di sistema. Chi
-prova la pre-alpha deve poterla installare senza avvisi.
+Perché: D20. Senza firma Windows mostra «Windows ha protetto il PC». Chi
+prova la pre-alpha deve poterla installare su Windows senza quell'avviso.
+macOS per ora resta senza Developer ID e senza notarizzazione (l'utente,
+2026-11-07: «Quello di Apple per ora ce ne freghiamo assolutamente»): il
+dmg ha solo la firma «ad hoc», e la pagina «Prova la pre-alpha» dice come
+aprirlo.
 Ramo: piano/fub-pre-alpha.
-Chi: l'orchestratore (tocca la CI); l'utente apre gli account e mette i
-segreti.
-Tocca: `.github/workflows/release.yml` (la firma e la notarizzazione),
-`crates/fub-app/tauri.conf.json` (`bundle.macOS`: l'identità dai segreti,
-il runtime rinforzato; `bundle.windows`: il comando di firma o i suoi
-parametri), un `crates/fub-app/Entitlements.plist` se la notarizzazione lo
-chiede, `.github/scripts/check-release-gate.mjs` se un job cambia nome,
+Chi: l'orchestratore (tocca la CI); l'utente fa la domanda a SignPath
+Foundation e mette i segreti.
+Tocca: `.github/workflows/release.yml` (la firma di Windows),
+`crates/fub-app/tauri.conf.json` (`bundle.windows`: il comando di firma o
+i suoi parametri; `bundle.macOS.signingIdentity: "-"`, la firma ad hoc),
+`.github/scripts/check-release-gate.mjs` se un job cambia nome,
 `docs/development/versioning-and-releases.md`.
 Non toccare: i workflow dei PR (i segreti non devono mai arrivare a un PR,
 nemmeno da un fork); `ci.yml`.
-Dipende da: i gesti dell'utente di D20 (l'Apple Developer Program; la
-domanda a SignPath Foundation, o un certificato OV); i segreti messi
-dall'utente nel repository. Prima di PA T22.
+Dipende da: la domanda a SignPath Foundation (o un certificato OV, se Fub
+non è ammesso) e i segreti messi dall'utente nel repository (D20). Prima
+di PA T22.
 Cosa fare:
-- macOS: Developer ID Application e notarizzazione nella CI di rilascio,
-  con le variabili che Tauri legge (il certificato in base64, la sua
-  password, l'identità; per la notarizzazione la chiave API di App Store
-  Connect, meglio di Apple ID e password). Il dmg è graffato
-  (`stapler`).
 - Windows, se SignPath ammette Fub: la CI manda gli artefatti senza firma a
   SignPath con la sua azione GitHub, e riprende l'exe, l'MSI e il setup
   firmati (la configurazione di SignPath firma anche l'exe dentro l'MSI e
@@ -5444,22 +5545,27 @@ Cosa fare:
 - Windows, se SignPath non ammette Fub: un certificato OV. La chiave oggi
   sta per regola in un modulo hardware, quindi si firma dalla CI col
   servizio cloud dell'autorità, chiamato da `bundle.windows.signCommand`.
-- Un passo di controllo dopo la firma: `codesign --verify --deep
-  --strict` e `spctl -a -vv` su macOS, `xcrun stapler validate` sul dmg,
-  `signtool verify /pa` su exe, MSI e setup. Se uno fallisce, il rilascio
-  si ferma.
-- La pagina dei rilasci dice come si rinnovano i certificati, chi li tiene,
-  e che cosa fare se scadono.
+- macOS: la firma ad hoc (`signingIdentity: "-"`), senza account e senza
+  segreti; niente notarizzazione. Si verifica prima nella documentazione
+  di Tauri che sia ancora la strada per i Mac con Apple Silicon.
+- Un passo di controllo dopo la firma: `signtool verify /pa` su exe, MSI e
+  setup; su macOS `codesign --verify --deep --strict` (la firma ad hoc è
+  valida) e la prova di fumo di T22. Se uno fallisce, il rilascio si
+  ferma.
+- La pagina dei rilasci dice come si rinnova la firma di Windows, chi la
+  tiene e che cosa fare se scade, e che il dmg non è notarizzato (D20).
 Casi limite: un segreto che manca (il job fallisce con un messaggio chiaro,
-non esce un installer senza firma per sbaglio; una corsa a secco senza
-segreti lo dice e non pubblica); il server del timestamp giù (si riprova);
-SmartScreen che avvisa nelle prime settimane anche con la firma (la pagina
-«Prova la pre-alpha» lo dice); un certificato scaduto.
-Fatto quando: la corsa a secco di T22 produce installer firmati, e i
-controlli dopo la firma passano su tutti e due i sistemi.
+non esce un installer di Windows senza firma per sbaglio; una corsa a
+secco senza segreti lo dice e non pubblica); il server del timestamp giù
+(si riprova); SmartScreen che avvisa nelle prime settimane anche con la
+firma (la pagina «Prova la pre-alpha» lo dice); un certificato scaduto;
+`spctl` che rifiuta il dmg (è atteso: non è notarizzato, e non è un
+errore del rilascio).
+Fatto quando: la corsa a secco di T22 produce gli installer di Windows
+firmati e il dmg con la firma ad hoc, e i controlli dopo la firma passano.
 Prova: la corsa a secco (`gh workflow run release.yml`), coi log dei
 controlli.
-Stato: [ ] da fare (aspetta gli account dell'utente)
+Stato: [ ] da fare (aspetta la risposta di SignPath Foundation)
 
 ## T51 · Flatpak
 

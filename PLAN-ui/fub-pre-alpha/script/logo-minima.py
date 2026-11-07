@@ -1,6 +1,8 @@
-"""Forme piccole del Marcuzzo dal disegno dell'utente: toglie i dettagli minuti
-e ingrandisce ciò che deve restare leggibile (l'occhio aperto, la pupilla,
-l'occhiolino, il becco). python3 logo-minima.py <in.svg> <out.svg> <misura: 24|16>"""
+"""Forme piccole del Marcuzzo dal disegno dell'utente: tolgono i dettagli
+minuti e non ingrandiscono niente. L'occhio, la pupilla, l'occhiolino e il
+becco restano quelli del disegno (l'utente, 2026-11-07: «non mi piace l'icona
+con l'occhio strizzato ingrandito»).
+python3 logo-minima.py <in.svg> <out.svg> <misura: 24|16>"""
 import re
 import sys
 
@@ -19,28 +21,7 @@ drop = SHADOWS | BEAK_LIGHT | DOTS | FEET
 if size <= 16:
     drop |= HIGHLIGHT | SLIVERS
 
-def scaled(p, cx, cy, k):
-    return f'<g transform="translate({cx} {cy}) scale({k}) translate({-cx} {-cy})">{p}</g>'
-
-out_paths = []
-for i, p in enumerate(paths, 1):
-    if i in drop:
-        continue
-    if i == 17:  # l'iride gialla
-        k = 1.12 if size > 16 else 1.18
-        p = scaled(p, 355.2, 453.7, k)
-    elif i == 18:  # la pupilla
-        k = 1.3 if size > 16 else 1.5
-        p = scaled(p, 390.8, 438.1, k)
-    elif i == 19:  # la luce nella pupilla, segue la pupilla
-        p = scaled(p, 390.8, 438.1, 1.3)
-    elif i == 13:  # l'occhiolino: un tratto più spesso dello stesso colore
-        w = 26 if size > 16 else 44
-        p = p.replace('stroke-width="1.5"', f'stroke-width="{w}"')
-    elif i == 23:  # il becco
-        k = 1.1 if size > 16 else 1.25
-        p = scaled(p, 486, 598, k)
-    out_paths.append('    ' + p)
+out_paths = ['    ' + p for i, p in enumerate(paths, 1) if i not in drop]
 
 head = t[: t.index('<g class="marcuzzo">') + len('<g class="marcuzzo">')]
 res = head + '\n' + '\n'.join(out_paths) + '\n  </g>\n</svg>\n'

@@ -90,7 +90,8 @@ la forma del marchio di una cattura della stessa luce, anche se ce n'è già
 una più vecchia.
 
 Le catture blu di prima stanno in `catture-blu/`, quelle verdi col primo
-logo in `catture-v7/`, accanto a `catture/`, solo sulla macchina che le ha
+logo in `catture-v7/`, quelle con Marcuzzo e l'occhio ingrandito nella forma
+minima in `catture-v8/`, accanto a `catture/`, solo sulla macchina che le ha
 prese.
 
 ```bash

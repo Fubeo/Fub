@@ -9,8 +9,8 @@ scritta.
 |---|---|---|
 | `originali/marcuzzo-smeraldo.svg`, `-menta.svg`, `-kraft.svg` | i tre file dell'utente, come li ha caricati | `assets/logo/originali/`; Smeraldo è l'icona del sistema (scelta del pianificatore, si cambia) |
 | `marcuzzo.svg` | la forma intera: classi `logo-*`, coordinate intere, il riquadro stretto attorno al disegno | le Informazioni (48 px), l'avvio (56 px), l'icona grande |
-| `marcuzzo-24.svg` | la forma minima per 24 e 32 px: niente dettagli minuti, occhio, pupilla, occhiolino e becco più grandi | il marchio della barra, le icone 24 e 32 |
-| `marcuzzo-16.svg` | la forma minima per 16 px | l'icona 16 |
+| `marcuzzo-24.svg` | la forma minima per 24 e 32 px: niente dettagli minuti; l'occhio, la pupilla, l'occhiolino e il becco restano quelli del disegno, senza ingrandimenti | il marchio della barra, le icone 24 e 32 |
+| `marcuzzo-16.svg` | la forma minima per 16 px: in più via il riflesso dell'occhio e le strisce dei fogli sopra la testa | l'icona 16 |
 | `marcuzzo-simbolico.svg` | un colore solo, un path pieno con la regola pari-dispari: le facce e l'iride sono buchi, un filo vuoto stacca la cartella davanti | il livello monocromo di Android, l'icona simbolica di Linux |
 | `misure.json` | i colori della cartella e i loro contrasti per gli otto campioni della tinta e i tre temi d'esempio, nelle due luci e nei due contrasti | i valori attesi dai test di PA T49 |
 

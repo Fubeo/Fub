@@ -16,9 +16,9 @@ dubbio su una scelta tecnica si decide, non si chiede.
 
 ## L'orchestratore decide da solo
 
-- l'ordine dei task pronti. Lavora un coder alla volta, più al massimo un
-  pianificatore: è la regola dell'utente dal 2026-11-04, e la cambia solo
-  l'utente;
+- l'ordine dei task pronti. Lavorano due coder alla volta (Opus,
+  ragionamento medio) e nessun altro agente: è la regola dell'utente dal
+  2026-11-07 (dal 2026-11-04 era un coder solo), e la cambia solo l'utente;
 - il come che il piano approvato lascia aperto: nomi, tipi, dove sta una
   funzione, la forma di un messaggio d'errore, la forma dei test;
 - un piccolo refactor dentro i file del task;
@@ -61,6 +61,38 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-07 · fub-pre-alpha · il piano è approvato, coi 130 stati
+  composti e nuovi del simulatore; resta da confermare solo la licenza del
+  logo, prima di PA T49 · l'utente: «Per il resto il piano è approvato»
+- 2026-11-07 · fub-pre-alpha · lavorano due coder alla volta, Opus con
+  ragionamento medio, e nessun altro agente; il pianificatore del telefono
+  (D1 B) lo avvia l'utente · l'utente: «il prompt per l'orchestratore che
+  si occuperà di avviare 2 sub-agent per volta, Opus con effort medio che
+  saranno i coder»
+- 2026-11-07 · fub-pre-alpha (pianificatore) · i task PA si integrano sul
+  ramo del piano ed entrano in `main` con rami di consegna
+  `pre-alpha/consegna-<n>` (i commit di codice portati da `origin/main`
+  con `cherry-pick -x`, la PR pronta con la CI completa, l'OK dell'utente);
+  il ramo del piano non si unisce · porta `PLAN-ui/` (13 MB), e la Fase B
+  ha bisogno di T48 e della skin facile già in `main`; regole in «Come si
+  implementa», «Il ramo, le consegne e i due coder»
+- 2026-11-07 · fub-pre-alpha (D20) · la firma di Apple per ora non si fa:
+  PA T50 firma solo Windows (SignPath Foundation, o un certificato OV), il
+  dmg esce con la firma ad hoc e senza notarizzazione, e «Prova la
+  pre-alpha» spiega «Apri comunque» · l'utente: «Quello di Apple per ora ce
+  ne freghiamo assolutamente»
+- 2026-11-07 · fub-pre-alpha (D28) · Marcuzzo è un disegno dell'utente,
+  ritoccato con l'AI in ArtCraft e poi passato in VectorCraft; prima di PA
+  T49 l'orchestratore chiede la licenza (consiglio: CC BY-SA 4.0 con la
+  nota per i fork) e il modello usato in ArtCraft, e ne legge le
+  condizioni · l'utente: «Ho fatto il logo di Marcuzzo. Con l'intelligenza
+  artificiale l'ho ritoccato dopo con Artcraft. Vectorcraft.»
+- 2026-11-07 · fub-pre-alpha (il logo) · le forme piccole di Marcuzzo
+  (minima 24, minima 16 e la simbolica che ne viene) tolgono solo i
+  dettagli minuti e non ingrandiscono niente: l'occhio, la pupilla,
+  l'occhiolino e il becco restano quelli del disegno · l'utente: «non mi
+  piace l'icona con l'occhio strizzato ingrandito»; la prima minima aveva
+  l'occhiolino più spesso e la pupilla più grande per leggersi a 16 px
 - 2026-11-07 · fub-pre-alpha (il logo) · Marcuzzo, il gufo nella cartella
   dell'utente, è il logo (D26); il gufo ha colori fissi, la cartella e i
   fogli seguono la tinta, il tema e il contrasto con `logoColors()` della
