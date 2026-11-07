@@ -235,7 +235,7 @@ const domande = ds.map((d) => {
   const corpo = d.slice(nl + 1);
   const num = titolo.split(" · ")[0];
   const cons = corpo.match(/^- \*\*([A-Z]) \(consigliata[^)]*\)\.\*\*/m);
-  const decisa = corpo.trimStart().match(/^\*\*((?:Decisa|Risposta) dell'utente[^*]*?)\*\*/);
+  const decisa = corpo.trimStart().match(/^\*\*((?:Decisa|Risposta) d[ae]ll'utente[^*]*?)\*\*/);
   if ((!cons && !decisa) || !CONSIGLIO[num]) throw new Error(`${num}: manca il consiglio`);
   const consiglio = decisa ? `**${decisa[1].replace(/\.$/, "")}.**` : `**${cons[1]}.** ${CONSIGLIO[num]}`;
   return { num, titolo, corpo, consiglio, decisa: !!decisa };
@@ -399,7 +399,7 @@ table.riassunto td:first-child { min-width: 14rem; }
         <li class="chip">${STATI.length} stati · ${SCENARI.length} scenari</li>
         <li class="chip">${fatti} punti di «Fatto quando»</li>
         <li class="chip">${tasks.length} task nuovi · ${fasi} fasi</li>
-        <li class="chip">${domande.length} domande, ${aperte.length} aperte</li>
+        <li class="chip">${domande.length} domande, ${aperte.length ? `${aperte.length} aperte` : "tutte decise"}</li>
         <li class="chip"><code>piano/fub-pre-alpha</code> @ ${commit}</li>
       </ul>
     </div>
