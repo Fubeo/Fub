@@ -272,10 +272,7 @@ giustezza) li dichiara l'host e coincidono con quelli della serie; un test Rust
 lo verifica. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
 400 px, ispettore da 248 a 440 px. Un tema `theme-1` non si monta; uno con
 `extends` lascia la pelle di serie in `pelle` e aggiunge la sua in `pelle-tema`,
-dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)). Il set di icone
-di un tema (`icons`) va a `ui/icons.ts`, che lo guarda prima della serie e
-delle registrazioni; il loader lo sostituisce nello stesso giro dei canali CSS
-e le icone già nella pagina (`svg[data-icon]`) si ridisegnano.
+dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
 
 ### Comportamenti della shell
 
