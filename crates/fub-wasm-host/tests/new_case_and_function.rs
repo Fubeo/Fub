@@ -1,10 +1,12 @@
-//! Un caso nuovo e una funzione nuova in un'interfaccia esportata (#289).
+//! Un caso nuovo e una funzione nuova, in un'interfaccia esportata (#289) e in
+//! una importata (PA T58).
 //!
 //! Stesso giro di `published_record_does_not_grow.rs`: un guest compilato
 //! contro la WIT di prima, un host con la WIT cresciuta. Il risultato è scritto
-//! com'è, e `docs/reference/abi-and-wit.md` lo riporta in «Compatibilità».
+//! com'è, e `docs/reference/abi-and-wit.md` lo riporta in «Compatibilità»;
+//! `crates/fub-abi/tests/wit_additivity.rs` ne fa la guardia sui testi WIT.
 //!
-//! # Due banchi
+//! # Tre banchi
 //!
 //! - **Il contratto vero.** `esempi/plugin-prima-del-caso` e
 //!   `esempi/plugin-prima-della-funzione` esportano `fub:abi/plugin@0.2.0` da
@@ -20,6 +22,10 @@
 //!   è della crescita, non di un guasto del componente. Lo stesso banco manda
 //!   al guest vecchio il caso nuovo per la via dinamica, l'unica che arriva a
 //!   chiamarlo.
+//! - **Il lato degli import.** `esempi/cliente-prima` importa
+//!   `esempio:fornitore/fornitore@0.1.0`, da cui riceve un `enum` e un
+//!   `variant`. L'host gli offre il fornitore uguale, con uno stato in più, con
+//!   un evento in più, con una funzione in più.
 //!
 //! # Il risultato
 //!
@@ -33,6 +39,13 @@
 //! trap. Quell'errore però chiude l'istanza: la chiamata dopo è una trap
 //! «cannot enter component instance».
 //!
+//! Dal lato degli import wasmtime controlla allo stesso modo, quando istanzia,
+//! il tipo di ogni funzione che il guest importa: un `enum` o un `variant`
+//! cresciuto nell'host è un tipo diverso da quello che il guest ha compilato,
+//! e il guest non si istanzia, anche se l'host non manderebbe mai il caso
+//! nuovo. Una funzione in più che l'host offre, invece, il guest non la chiede
+//! e nessuno la controlla: il guest vecchio gira come prima.
+//!
 //! Se uno di questi test diventa verde nel senso opposto, cioè il guest si
 //! carica, la regola di «Compatibilità» va riletta prima del test.
 
@@ -40,7 +53,7 @@ mod common;
 
 use fub_kernel::Trust;
 use fub_wasm_host::WasmBundle;
-use wasmtime::component::{Component, Func, Linker, Val};
+use wasmtime::component::{Component, Func, HasSelf, Linker, Val};
 use wasmtime::{Engine, Store};
 
 /// L'interfaccia del guest com'è, in ogni host di questo file: il pacchetto e
@@ -313,6 +326,271 @@ fn the_dynamic_instance_answers_twice_without_the_new_case() {
         eco.post_return(&mut store).expect("il ritorno si chiude");
         assert_eq!(results[0], Val::Enum(colore.to_string()));
     }
+}
+
+// ---------------------------------------------------------------------------
+// Il lato degli import (PA T58)
+// ---------------------------------------------------------------------------
+//
+// `esempi/cliente-prima` importa `esempio:fornitore/fornitore@0.1.0`, con un
+// `enum stato` e un `variant evento` che riceve dall'host, ed esporta
+// `cliente`, due funzioni che chiedono al fornitore e raccontano la risposta.
+// Qui l'host offre il fornitore in quattro forme: uguale al guest, con uno
+// stato in più, con un evento in più, con una funzione in più.
+
+/// L'host che offre il fornitore com'era: la prova che il guest funziona.
+mod fornitore_uguale {
+    wasmtime::component::bindgen!({
+        inline: "
+            package esempio:fornitore@0.1.0;
+
+            interface fornitore {
+                enum stato { pronto, occupato }
+                variant evento { vuoto, testo(string) }
+
+                stato-attuale: func() -> stato;
+                prossimo-evento: func() -> evento;
+            }
+
+            interface cliente {
+                leggi-stato: func() -> string;
+                leggi-evento: func() -> string;
+            }
+
+            world uguale {
+                import fornitore;
+                export cliente;
+            }
+        ",
+        world: "uguale",
+    });
+}
+
+/// L'host con uno stato in più, in coda all'`enum` che il guest riceve.
+mod fornitore_enum {
+    wasmtime::component::bindgen!({
+        inline: "
+            package esempio:fornitore@0.1.0;
+
+            interface fornitore {
+                enum stato { pronto, occupato, spento }
+                variant evento { vuoto, testo(string) }
+
+                stato-attuale: func() -> stato;
+                prossimo-evento: func() -> evento;
+            }
+
+            interface cliente {
+                leggi-stato: func() -> string;
+                leggi-evento: func() -> string;
+            }
+
+            world enum-cresciuto {
+                import fornitore;
+                export cliente;
+            }
+        ",
+        world: "enum-cresciuto",
+    });
+}
+
+/// L'host con un evento in più, in coda al `variant` che il guest riceve.
+mod fornitore_variant {
+    wasmtime::component::bindgen!({
+        inline: "
+            package esempio:fornitore@0.1.0;
+
+            interface fornitore {
+                enum stato { pronto, occupato }
+                variant evento { vuoto, testo(string), errore(u32) }
+
+                stato-attuale: func() -> stato;
+                prossimo-evento: func() -> evento;
+            }
+
+            interface cliente {
+                leggi-stato: func() -> string;
+                leggi-evento: func() -> string;
+            }
+
+            world variante-cresciuta {
+                import fornitore;
+                export cliente;
+            }
+        ",
+        world: "variante-cresciuta",
+    });
+}
+
+/// L'host con una funzione in più nell'interfaccia che il guest importa.
+mod fornitore_funzione {
+    wasmtime::component::bindgen!({
+        inline: "
+            package esempio:fornitore@0.1.0;
+
+            interface fornitore {
+                enum stato { pronto, occupato }
+                variant evento { vuoto, testo(string) }
+
+                stato-attuale: func() -> stato;
+                prossimo-evento: func() -> evento;
+                versione: func() -> u32;
+            }
+
+            interface cliente {
+                leggi-stato: func() -> string;
+                leggi-evento: func() -> string;
+            }
+
+            world funzione-nuova {
+                import fornitore;
+                export cliente;
+            }
+        ",
+        world: "funzione-nuova",
+    });
+}
+
+/// Lo stato dell'host del fornitore: risponde sempre con un caso che il guest
+/// conosce, così un rifiuto non può venire dal valore.
+struct Fornitore;
+
+impl fornitore_uguale::esempio::fornitore::fornitore::Host for Fornitore {
+    fn stato_attuale(&mut self) -> fornitore_uguale::esempio::fornitore::fornitore::Stato {
+        fornitore_uguale::esempio::fornitore::fornitore::Stato::Occupato
+    }
+    fn prossimo_evento(&mut self) -> fornitore_uguale::esempio::fornitore::fornitore::Evento {
+        fornitore_uguale::esempio::fornitore::fornitore::Evento::Testo("ciao".into())
+    }
+}
+
+impl fornitore_enum::esempio::fornitore::fornitore::Host for Fornitore {
+    fn stato_attuale(&mut self) -> fornitore_enum::esempio::fornitore::fornitore::Stato {
+        fornitore_enum::esempio::fornitore::fornitore::Stato::Occupato
+    }
+    fn prossimo_evento(&mut self) -> fornitore_enum::esempio::fornitore::fornitore::Evento {
+        fornitore_enum::esempio::fornitore::fornitore::Evento::Vuoto
+    }
+}
+
+impl fornitore_variant::esempio::fornitore::fornitore::Host for Fornitore {
+    fn stato_attuale(&mut self) -> fornitore_variant::esempio::fornitore::fornitore::Stato {
+        fornitore_variant::esempio::fornitore::fornitore::Stato::Pronto
+    }
+    fn prossimo_evento(&mut self) -> fornitore_variant::esempio::fornitore::fornitore::Evento {
+        fornitore_variant::esempio::fornitore::fornitore::Evento::Vuoto
+    }
+}
+
+impl fornitore_funzione::esempio::fornitore::fornitore::Host for Fornitore {
+    fn stato_attuale(&mut self) -> fornitore_funzione::esempio::fornitore::fornitore::Stato {
+        fornitore_funzione::esempio::fornitore::fornitore::Stato::Occupato
+    }
+    fn prossimo_evento(&mut self) -> fornitore_funzione::esempio::fornitore::fornitore::Evento {
+        fornitore_funzione::esempio::fornitore::fornitore::Evento::Testo("ciao".into())
+    }
+    fn versione(&mut self) -> u32 {
+        2
+    }
+}
+
+/// Il cliente di prima, compilato adesso, con un linker in cui ogni import è
+/// una trap: chi chiama ci mette sopra il fornitore nella forma che prova
+/// (l'ombra è ammessa per questo), e il resto, gli import di WASI della std
+/// che il guest non chiama, resta una trap.
+fn cliente_di_prima() -> (Engine, Component, Linker<Fornitore>) {
+    let wasm = common::component("cliente-prima", "cliente_prima", "");
+    let engine = Engine::default();
+    let component = Component::from_file(&engine, wasm.as_std_path())
+        .expect("il cliente di prima è un componente valido");
+    let mut linker = Linker::new(&engine);
+    linker.allow_shadowing(true);
+    linker
+        .define_unknown_imports_as_traps(&component)
+        .expect("gli import del guest diventano trap");
+    (engine, component, linker)
+}
+
+#[test]
+fn the_old_client_works_with_a_host_that_offers_the_same_interface() {
+    let (engine, component, mut linker) = cliente_di_prima();
+    fornitore_uguale::esempio::fornitore::fornitore::add_to_linker::<_, HasSelf<Fornitore>>(
+        &mut linker,
+        |s| s,
+    )
+    .expect("il fornitore uguale entra nel linker");
+    let mut store = Store::new(&engine, Fornitore);
+    let host = fornitore_uguale::Uguale::instantiate(&mut store, &component, &linker)
+        .expect("l'host uguale istanzia il cliente di prima");
+    let cliente = host.esempio_fornitore_cliente();
+    assert_eq!(cliente.call_leggi_stato(&mut store).unwrap(), "occupato");
+    assert_eq!(cliente.call_leggi_evento(&mut store).unwrap(), "testo: ciao");
+}
+
+/// Un caso in più nell'`enum` che il guest **riceve** da un import.
+///
+/// wasmtime controlla il tipo di ogni import quando istanzia, come per gli
+/// export: l'enum dell'host deve avere esattamente i casi che il guest ha
+/// compilato. Il guest non si istanzia, anche se l'host non manderebbe mai il
+/// caso nuovo.
+#[test]
+fn a_new_enum_case_in_an_import_refuses_the_old_client() {
+    let (engine, component, mut linker) = cliente_di_prima();
+    fornitore_enum::esempio::fornitore::fornitore::add_to_linker::<_, HasSelf<Fornitore>>(
+        &mut linker,
+        |s| s,
+    )
+    .expect("il fornitore con uno stato in più entra nel linker");
+    let mut store = Store::new(&engine, Fornitore);
+    let error = fornitore_enum::EnumCresciuto::instantiate(&mut store, &component, &linker)
+        .err()
+        .expect("uno stato in più nell'host e il cliente di prima non si istanzia");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("stato-attuale")
+            && message.contains("expected enum of 3 names, found 2 names"),
+        "il rifiuto nomina l'enum cresciuto, non un altro guasto: {message}"
+    );
+}
+
+/// Un caso in più nel `variant` che il guest riceve da un import: lo stesso
+/// rifiuto dell'`enum`.
+#[test]
+fn a_new_variant_case_in_an_import_refuses_the_old_client() {
+    let (engine, component, mut linker) = cliente_di_prima();
+    fornitore_variant::esempio::fornitore::fornitore::add_to_linker::<_, HasSelf<Fornitore>>(
+        &mut linker,
+        |s| s,
+    )
+    .expect("il fornitore con un evento in più entra nel linker");
+    let mut store = Store::new(&engine, Fornitore);
+    let error = fornitore_variant::VarianteCresciuta::instantiate(&mut store, &component, &linker)
+        .err()
+        .expect("un evento in più nell'host e il cliente di prima non si istanzia");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("prossimo-evento")
+            && message.contains("expected variant of 3 cases, found 2 cases"),
+        "il rifiuto nomina il variant cresciuto, non un altro guasto: {message}"
+    );
+}
+
+/// Una funzione in più nell'interfaccia che il guest importa: il guest non la
+/// chiede, wasmtime non la controlla, e tutto il resto risponde come prima.
+#[test]
+fn a_new_function_in_an_import_does_not_disturb_the_old_client() {
+    let (engine, component, mut linker) = cliente_di_prima();
+    fornitore_funzione::esempio::fornitore::fornitore::add_to_linker::<_, HasSelf<Fornitore>>(
+        &mut linker,
+        |s| s,
+    )
+    .expect("il fornitore con una funzione in più entra nel linker");
+    let mut store = Store::new(&engine, Fornitore);
+    let host = fornitore_funzione::FunzioneNuova::instantiate(&mut store, &component, &linker)
+        .expect("una funzione in più offerta dall'host non disturba il cliente di prima");
+    let cliente = host.esempio_fornitore_cliente();
+    assert_eq!(cliente.call_leggi_stato(&mut store).unwrap(), "occupato");
+    assert_eq!(cliente.call_leggi_evento(&mut store).unwrap(), "testo: ciao");
 }
 
 /// Il contratto vero: un `enum` di `fub:abi/plugin@0.2.0` con un caso in più
