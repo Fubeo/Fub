@@ -813,7 +813,7 @@ fn unix_writable(mode: u32, uid: u32, gid: u32, euid: u32, egid: u32, groups: &[
 /// (allora vale il gruppo effettivo, e al più si rifiuta un file che si
 /// sarebbe potuto scrivere: il verso sicuro).
 #[cfg(unix)]
-fn supplementary_groups() -> Vec<u32> {
+fn supplementary_groups() -> Vec<libc::gid_t> {
     // SAFETY: con 0 `getgroups` non scrive niente e dice quanti sono.
     let count = unsafe { libc::getgroups(0, std::ptr::null_mut()) };
     if count <= 0 {
@@ -826,7 +826,7 @@ fn supplementary_groups() -> Vec<u32> {
         return Vec::new();
     }
     groups.truncate(filled as usize);
-    groups.into_iter().map(|gid| gid as u32).collect()
+    groups
 }
 
 /// Il rifiuto di sovrascrivere un file in sola lettura: `PermissionDenied`,
