@@ -907,7 +907,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
             APPEARANCE_ACCENT,
             C_ACCENT,
             C_ACCENT_DESC,
-            265.0,
+            160.0,
             0.0,
             360.0,
         ),

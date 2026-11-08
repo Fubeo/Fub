@@ -40,11 +40,25 @@ export const LIGHTS = ["light", "dark"] as const;
 export type ContrastLevel = "normal" | "high";
 export const CONTRASTS = ["normal", "high"] as const;
 
-/** La matita blu. */
-export const DEFAULT_ACCENT_HUE = 265;
+/** Lo smeraldo: il verde del logo (D25). */
+export const DEFAULT_ACCENT_HUE = 160;
+
+/// Quanto un colore di stato resta lontano dall'accento, in gradi di tinta:
+/// il «salvato» verde non si confonde con un accento verde, né l'errore
+/// rosso con una tinta su misura rossa (D25).
+export const STATUS_HUE_GAP = 30;
+
+/// La tinta di un segno: se cade a meno di `STATUS_HUE_GAP` dall'accento si
+/// sposta a quella distanza, dal lato dove stava.
+export function statusHue(hue: number, accentHue: number): number {
+  const d = ((((hue - accentHue) % 360) + 540) % 360) - 180;
+  if (Math.abs(d) >= STATUS_HUE_GAP) return hue;
+  return (((accentHue + (d < 0 ? -STATUS_HUE_GAP : STATUS_HUE_GAP)) % 360) + 360) % 360;
+}
 
 /** I campioni offerti nelle impostazioni del tema, oltre alla tinta libera. */
 export const ACCENT_SWATCHES = [
+  { id: "smeraldo", hue: 160 },
   { id: "matita-blu", hue: 265 },
   { id: "viola", hue: 300 },
   { id: "prugna", hue: 340 },
@@ -253,10 +267,11 @@ export function palette(
   // ── I segni ─────────────────────────────────────────────────────────────
   const plain = [bg, bgHover, sheetColor, sheet2, raise];
   const sign = (dayColor: Oklch, nightColor: Oklch): string => hold(day ? dayColor : nightColor, plain, T.text, light);
-  const danger = sign(lch(0.55, 0.21, 27), lch(0.7, 0.17, 25));
-  const warning = sign(lch(0.56, 0.13, 70), lch(0.8, 0.13, 75));
-  const success = sign(lch(0.52, 0.13, 155), lch(0.74, 0.13, 155));
-  const info = sign(lch(0.52, 0.12, 240), lch(0.76, 0.1, 240));
+  const apart = (h: number): number => statusHue(h, hue);
+  const danger = sign(lch(0.55, 0.21, apart(27)), lch(0.7, 0.17, apart(25)));
+  const warning = sign(lch(0.56, 0.13, apart(70)), lch(0.8, 0.13, apart(75)));
+  const success = sign(lch(0.52, 0.13, apart(155)), lch(0.74, 0.13, apart(155)));
+  const info = sign(lch(0.52, 0.12, apart(240)), lch(0.76, 0.1, apart(240)));
   const wash = day ? 12 : 18;
 
   // L'evidenziatore si vede, non si legge: di notte è un velo, o un giallo

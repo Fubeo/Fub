@@ -281,7 +281,9 @@ pannelli) lo Scrittoio compone:
 I predefiniti dell'aspetto (accento, i tre caratteri, corpo di 18 px,
 interlinea, giustezza di 58 caratteri) li dichiara l'host e coincidono con
 quelli della serie; un test Rust lo verifica. Un valore scelto in Aspetto resta
-quello scelto. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
+quello scelto. L'accento di serie è lo smeraldo, 160; i colori di stato ne
+restano a 30° (`statusHue`), e `avvio/colori.test.ts` lega l'avvio alla
+ricetta. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
 400 px, ispettore da 248 a 440 px. Un tema `theme-1` non si monta; uno con
 `extends` lascia la pelle di serie in `pelle` e aggiunge la sua in `pelle-tema`,
 dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).

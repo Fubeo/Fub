@@ -48,6 +48,8 @@ import {
   themeAssetUrls,
   themeCssViolations,
   type ContentGate,
+  type ThemeCssPolicy,
+  type ThemeCssViolation,
   type ThemeCssVocabulary,
 } from "../ui/sanitize-css";
 import { contrast } from "./contrast";
@@ -55,7 +57,16 @@ import { mountMirroredOptions, mountedThemeOptions, type MirroredOptions } from 
 import type { ContrastPair } from "./contrast-fixture";
 import { THEME_2_PROFILE } from "./scrittoio/profile";
 import { t } from "../i18n/strings";
-import { THEME_FONT_LIMITS, themeFontFault, type ThemeFontFault } from "../rules/mirrored";
+import {
+  THEME_FONT_LIMITS,
+  THEME_ICON_LIMITS,
+  themeFontFault,
+  themeIconFault,
+  themeIconsFileHolds,
+  type ThemeFontFault,
+  type ThemeIconFault,
+} from "../rules/mirrored";
+import { replaceThemeIcons, themeIcons } from "../ui/icons";
 
 export type Layer =
   | "caratteri"
@@ -341,6 +352,85 @@ export function themeFontFaces(
   }).join("\n");
 }
 
+/** La frase del cancello per un guasto della regola delle icone. */
+const ICON_FAULT_REASON: Readonly<Record<ThemeIconFault, string>> = {
+  name: `il nome vuole lettere minuscole, cifre e -, al massimo ${THEME_ICON_LIMITS.name_chars}`,
+  paths: `servono da 1 a ${THEME_ICON_LIMITS.paths} tracciati`,
+  path_data: "un tracciato porta altro che comandi e numeri di un tracciato SVG",
+  bytes: `i tracciati superano ${THEME_ICON_LIMITS.icon_bytes} byte`,
+};
+
+/** Il set di icone letto dal fascio, o perché non si legge. */
+type IconSetReading =
+  | { readonly set: Readonly<Record<string, unknown>> | null; readonly reasons: readonly [] }
+  | { readonly set: null; readonly reasons: readonly string[] };
+
+/**
+ * Legge il set di icone del fascio (`icons` nel manifest): il nome del file,
+ * i byte fra gli asset, il peso, UTF-8 e un oggetto JSON. `set: null` quando
+ * il tema non ne porta. La forma di ogni voce la decide `iconReasons`.
+ */
+function readIconSet(
+  manifest: ThemeBundleManifest,
+  assets: Readonly<Record<string, unknown>>,
+): IconSetReading {
+  const file: unknown = (manifest as { icons?: unknown }).icons;
+  if (file === undefined) return { set: null, reasons: [] };
+  if (!themeIconsFileHolds(file)) {
+    return { set: null, reasons: ["icone: il file non è <nome>.json accanto al manifest"] };
+  }
+  const asset = `${manifest.asset_namespace}${String(file)}`;
+  const bytes = Object.prototype.hasOwnProperty.call(assets, asset) ? bytesOf(assets[asset]) : null;
+  if (bytes === null) return { set: null, reasons: [`icone: il file ${String(file)} manca dal fascio`] };
+  if (bytes.length > THEME_ICON_LIMITS.set_bytes) {
+    return { set: null, reasons: [`icone: il file ${String(file)} supera ${THEME_ICON_LIMITS.set_bytes} byte`] };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(bytes)));
+  } catch {
+    return { set: null, reasons: [`icone: il file ${String(file)} non è JSON in UTF-8`] };
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return { set: null, reasons: [`icone: il file ${String(file)} non è un oggetto { nome: [tracciati] }`] };
+  }
+  return { set: parsed as Record<string, unknown>, reasons: [] };
+}
+
+/**
+ * Tutti i motivi per cui il set di icone del fascio non si può montare. Ogni
+ * voce la decide la regola rispecchiata (`themeIconFault`, la stessa dell'host
+ * per fixture). Un nome che oggi nessuno disegna non è un motivo: i moduli
+ * registrano le loro icone quando si caricano.
+ */
+function iconReasons(manifest: ThemeBundleManifest, assets: Readonly<Record<string, unknown>>): string[] {
+  const reading = readIconSet(manifest, assets);
+  if (reading.set === null) return [...reading.reasons];
+  const entries = Object.entries(reading.set);
+  const reasons: string[] = [];
+  if (entries.length > THEME_ICON_LIMITS.icons) {
+    reasons.push(`icone: ${entries.length} ridisegnate, al massimo ${THEME_ICON_LIMITS.icons}`);
+  }
+  for (const [name, paths] of entries) {
+    const fault = themeIconFault(name, paths);
+    if (fault !== null) reasons.push(`icone: ${name || "<senza nome>"}: ${ICON_FAULT_REASON[fault]}`);
+  }
+  return reasons;
+}
+
+/**
+ * Il set di icone del tema, o `null` se non ne porta. Si chiama solo su un
+ * fascio che ha passato il cancello; `replaceThemeIcons` ripassa comunque
+ * ogni voce dalla regola prima di disegnarla.
+ */
+export function themeIconSet(
+  manifest: ThemeBundleManifest,
+  assets: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, readonly string[]>> | null {
+  const { set } = readIconSet(manifest, assets);
+  return set as Readonly<Record<string, readonly string[]>> | null;
+}
+
 function mimeType(asset: string): string {
   const extension = asset.slice(asset.lastIndexOf(".") + 1).toLowerCase();
   return ({
@@ -469,6 +559,36 @@ function contrastReasons(sheet: string): string[] {
   return reasons;
 }
 
+/**
+ * Le ultime pelli controllate, con il profilo e lo spazio degli asset con cui
+ * si sono controllate. La pelle di serie è lunga (circa 18 mila righe) e ogni
+ * cambio di luce, contrasto o tema la ripassava da capo, un centinaio di
+ * millisecondi ogni volta. Il controllo è una funzione pura del testo e della
+ * politica: a parità dei tre il risultato è lo stesso. Due voci bastano alla
+ * serie e al tema installato; un profilo nuovo le fa rifare.
+ */
+const SKIN_CHECKS_KEPT = 2;
+const skinChecks: {
+  readonly css: string;
+  readonly profile: ThemeProfile;
+  readonly assetNamespace: string;
+  readonly violations: readonly ThemeCssViolation[];
+}[] = [];
+
+function skinViolations(css: string, policy: ThemeCssPolicy): readonly ThemeCssViolation[] {
+  const at = skinChecks.findIndex((entry) =>
+    entry.profile === profile && entry.assetNamespace === policy.assetNamespace && entry.css === css);
+  if (at >= 0) {
+    const [entry] = skinChecks.splice(at, 1);
+    skinChecks.unshift(entry!);
+    return entry!.violations;
+  }
+  const violations = themeCssViolations(css, { ...policy, kind: "skin" });
+  skinChecks.unshift({ css, profile, assetNamespace: policy.assetNamespace, violations });
+  skinChecks.length = Math.min(skinChecks.length, SKIN_CHECKS_KEPT);
+  return violations;
+}
+
 /** Tutti i motivi di rifiuto; nessun cancello accorcia il report del successivo. */
 export function validateThemeBundle(bundle: ThemeBundle, light: ThemeLight): string[] {
   const reasons = manifestReasons(bundle.manifest, light);
@@ -488,7 +608,7 @@ export function validateThemeBundle(bundle: ThemeBundle, light: ThemeLight): str
     reasons.push("fascio: porta una pelle ereditata ma non dichiara extends");
   }
 
-  const policy = {
+  const policy: ThemeCssPolicy = {
     assetNamespace: bundle.manifest.asset_namespace,
     allowedHooks: profile.hooks,
     requiredRoles: profile.requiredRoles,
@@ -504,7 +624,7 @@ export function validateThemeBundle(bundle: ThemeBundle, light: ThemeLight): str
     reasons.push(...contrastReasons(bundle.sheet));
   }
   if (bundle.skin !== undefined) {
-    for (const violation of themeCssViolations(bundle.skin, { ...policy, kind: "skin" })) {
+    for (const violation of skinViolations(bundle.skin, policy)) {
       reasons.push(
         `pelle: ${violation.code} (${violation.line}:${violation.column}): ${violation.detail}`,
       );
@@ -520,6 +640,7 @@ export function validateThemeBundle(bundle: ThemeBundle, light: ThemeLight): str
     if (bytesOf(value) === null) reasons.push(`asset: ${asset} non contiene byte validi`);
   }
   reasons.push(...fontReasons(bundle.manifest, assets));
+  reasons.push(...iconReasons(bundle.manifest, assets));
   const referenced = themeAssetUrls(`${bundle.sheet}\n${bundle.skin ?? ""}`);
   for (const asset of referenced) {
     if (asset.startsWith(bundle.manifest.asset_namespace) &&
@@ -547,11 +668,15 @@ export function mountThemeBundle(
 ): ThemeMountResult {
   const reasons = validateThemeBundle(bundle, light);
   if (reasons.length > 0) return rejectTheme(bundle.manifest.name, reasons, report);
+  // Le icone cambiano nello stesso giro dei canali: un tema senza set torna
+  // alla serie, e se i canali non si montano torna il set di prima.
+  const previousIcons = themeIcons();
   try {
     // Una pelle vuota di un tema che eredita non occupa `pelle-tema`.
     const skin = bundle.skin === undefined || (bundle.inherited !== undefined && bundle.skin.trim() === "")
       ? undefined
       : materializeAssets(bundle.skin, bundle.assets, bundle.manifest.asset_namespace);
+    replaceThemeIcons(themeIconSet(bundle.manifest, bundle.assets));
     replaceTheme(
       themeFontFaces(bundle.manifest, bundle.assets),
       materializeAssets(bundle.sheet, bundle.assets, bundle.manifest.asset_namespace),
@@ -560,6 +685,7 @@ export function mountThemeBundle(
     );
     return { mounted: true };
   } catch (error) {
+    replaceThemeIcons(previousIcons);
     const detail = error instanceof Error ? error.message : String(error);
     return rejectTheme(bundle.manifest.name, [`montaggio atomico fallito: ${detail}`], report);
   }
@@ -608,6 +734,8 @@ export interface MirroredTheme {
   readonly layers: readonly { readonly layer: Layer; readonly text: string }[];
   /** Le scelte del tema scritte sulla radice (`data-opt-*`, `--opt-*`). */
   readonly options?: MirroredOptions;
+  /** Il set di icone del tema montato, già validato. Assente senza set. */
+  readonly icons?: Readonly<Record<string, readonly string[]>>;
 }
 
 export function mountedTheme(): MirroredTheme {
@@ -616,11 +744,13 @@ export function mountedTheme(): MirroredTheme {
     const layer = el.dataset.fub as Layer;
     if (ORDER.includes(layer)) layers.push({ layer, text: el.textContent ?? "" });
   }
+  const icons = themeIcons();
   return {
     light: document.documentElement.dataset.theme ?? "",
     contrast: document.documentElement.dataset.contrast ?? "",
     layers,
     options: mountedThemeOptions(document.documentElement),
+    ...(Object.keys(icons).length > 0 ? { icons } : {}),
   };
 }
 
@@ -640,4 +770,14 @@ export function mountMirroredTheme(theme: MirroredTheme): void {
   document.documentElement.dataset.theme = theme.light;
   document.documentElement.dataset.contrast = theme.contrast;
   mountMirroredOptions(document.documentElement, theme.options);
+  // Il set arriva da un'altra finestra: `replaceThemeIcons` lo ripassa dalla
+  // regola, e uno che non regge lascia la serie.
+  const icons = theme.icons !== null && typeof theme.icons === "object" && !Array.isArray(theme.icons)
+    ? theme.icons
+    : null;
+  try {
+    replaceThemeIcons(icons);
+  } catch {
+    replaceThemeIcons(null);
+  }
 }

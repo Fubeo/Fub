@@ -27,7 +27,21 @@ import { describe, expect, it } from "vitest";
 import { contrast } from "./contrast";
 import { fromHex } from "./oklch";
 import { THEME_2_OPTIONAL_PAIRS } from "./scrittoio/profile";
-import { CONTRASTS, LIGHTS, OPTIONAL_ROLES, SHEETS, VARIANTS, palette, roles, sheet } from "./scrittoio/recipe";
+import {
+  ACCENT_SWATCHES,
+  CONTRASTS,
+  DEFAULT_ACCENT_HUE,
+  LIGHTS,
+  OPTIONAL_ROLES,
+  SHEETS,
+  STATUS_HUE_GAP,
+  VARIANTS,
+  accentPalette,
+  palette,
+  roles,
+  sheet,
+  statusHue,
+} from "./scrittoio/recipe";
 import darkHigh from "./scrittoio/sheet-dark-high.css?raw";
 import dark from "./scrittoio/sheet-dark.css?raw";
 import lightHigh from "./scrittoio/sheet-light-high.css?raw";
@@ -209,5 +223,53 @@ describe("il vocabolario cresce solo in modo additivo", () => {
     const roleNames = roles();
     const duplicates = roleNames.filter((n, i) => roleNames.indexOf(n) !== i);
     expect(duplicates).toEqual([]);
+  });
+});
+
+describe("i colori di stato restano lontani dall'accento (D25)", () => {
+  const STATUS = ["danger", "warning", "success", "info"] as const;
+  /// Dieci tinte libere sulla ruota: due vicino al rosso (27) e all'ambra (70)
+  /// dei segni, una sul «salvato» (155).
+  const FREE_HUES = [0, 20, 40, 60, 95, 150, 180, 230, 290, 320] as const;
+  const gap = (a: number, b: number): number => Math.abs(((((a - b) % 360) + 540) % 360) - 180);
+
+  it("la serie è lo smeraldo, primo dei campioni, e la matita blu resta", () => {
+    expect(DEFAULT_ACCENT_HUE).toBe(160);
+    expect(ACCENT_SWATCHES[0]).toEqual({ id: "smeraldo", hue: 160 });
+    expect(ACCENT_SWATCHES.find((s) => s.id === "matita-blu")?.hue).toBe(265);
+  });
+
+  it("statusHue sposta una tinta troppo vicina a 30°, dal lato dove stava, e lascia le altre", () => {
+    expect(STATUS_HUE_GAP).toBe(30);
+    expect(statusHue(155, 160)).toBe(130); // il salvato sotto lo smeraldo
+    expect(statusHue(240, 265)).toBe(235); // l'informazione sotto la matita blu
+    expect(statusHue(27, 160)).toBe(27);
+    expect(statusHue(70, 160)).toBe(70);
+    expect(statusHue(27, 40)).toBe(10); // una tinta libera vicina al rosso
+    expect(statusHue(70, 60)).toBe(90); // e una vicina all'ambra
+    expect(statusHue(10, 350)).toBe(20); // attraverso lo zero
+    expect(statusHue(350, 10)).toBe(340);
+    expect(statusHue(190, 160)).toBe(190); // a 30° esatti non si muove
+  });
+
+  it.each([...ACCENT_SWATCHES.map((s) => s.hue), ...FREE_HUES])("accento %i: ogni segno a 30° o più", (accent) => {
+    for (const hue of [27, 25, 70, 75, 155, 240]) {
+      expect(gap(statusHue(hue, accent), accent)).toBeGreaterThanOrEqual(STATUS_HUE_GAP);
+    }
+    // E nei colori che escono davvero, dove il gamut e gli otto bit possono
+    // limare qualche grado.
+    for (const { light, contrast } of VARIANTS) {
+      const colors = palette(light, contrast, accent);
+      const accentHue = fromHex(colors["accent"]!).h;
+      for (const role of STATUS) {
+        expect(gap(fromHex(colors[role]!).h, accentHue), `${role} in ${light} × ${contrast}`).toBeGreaterThanOrEqual(
+          STATUS_HUE_GAP - 6,
+        );
+      }
+    }
+  });
+
+  it("l'accento di serie non aggiunge un foglio di preferenze", () => {
+    for (const { light, contrast } of VARIANTS) expect(accentPalette(light, contrast, DEFAULT_ACCENT_HUE)).toEqual({});
   });
 });

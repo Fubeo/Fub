@@ -70,6 +70,19 @@
 //! cominci con la firma `wOF2`, e i limiti ([`MAX_THEME_FONTS`],
 //! [`MAX_THEME_FONT_BYTES`], [`MAX_THEME_FONT_TOTAL_BYTES`]).
 //!
+//! # Le icone di un tema
+//!
+//! Da `theme-2` un manifest può nominare un set di icone (`icons`): un asset
+//! JSON, `{ "<nome>": ["<d>", …] }`, che ridisegna per nome le icone della
+//! shell. Il tema porta soltanto i `d` dei tracciati; il costrutto (griglia,
+//! tratto, colore) resta quello della shell. Qui (`check_icons`) si legge il
+//! file e si chiede ogni voce alla regola del contratto
+//! ([`theme_icon_fault`](fub_abi::rules::theme_icons::theme_icon_fault), la
+//! stessa che la shell rispecchia), coi limiti ([`MAX_THEME_ICONS`],
+//! [`MAX_THEME_ICON_PATHS`], [`MAX_THEME_ICON_BYTES`],
+//! [`MAX_THEME_ICONS_BYTES`]). Quali nomi la shell sa disegnare non lo sa
+//! l'host: un nome che oggi nessuno disegna non rifiuta il tema.
+//!
 //! # L'installazione è una cartella, e atomica
 //!
 //! Un tema installato è `<config>/themes/<id>/` (vedi
@@ -90,10 +103,15 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::rules::theme_font::{
     theme_font_fault, ThemeFontFault, MAX_THEME_FONT_FILE_NAME, THEME_FONT_WEIGHTS,
 };
+use fub_abi::rules::theme_icons::{
+    theme_icon_fault, theme_icons_file_holds, ThemeIconFault, MAX_THEME_ICONS_FILE_NAME,
+    MAX_THEME_ICON_NAME,
+};
 use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::theme::{
     ThemeEngine, ThemeFontStyle, ThemeLight, ThemeManifest, ThemeSetting, MAX_THEME_FONTS,
-    MAX_THEME_FONT_BYTES, MAX_THEME_FONT_FAMILY, MAX_THEME_FONT_TOTAL_BYTES, MAX_THEME_SETTINGS,
+    MAX_THEME_FONT_BYTES, MAX_THEME_FONT_FAMILY, MAX_THEME_FONT_TOTAL_BYTES, MAX_THEME_ICONS,
+    MAX_THEME_ICONS_BYTES, MAX_THEME_ICON_BYTES, MAX_THEME_ICON_PATHS, MAX_THEME_SETTINGS,
     THEME_ENGINE,
 };
 use fub_abi::traits::{Plugin, PluginManifest};
@@ -157,6 +175,7 @@ pub fn series_manifest() -> ThemeManifest {
         settings: Vec::new(),
         extends: None,
         fonts: Vec::new(),
+        icons: None,
     }
 }
 
@@ -355,6 +374,7 @@ impl ThemeBundle {
         }
         brings += validate_asset_limits(&root, &manifest.id)?;
         check_font_files(&root, &manifest)?;
+        check_icons(&root, &manifest)?;
         // Un tema che eredita e non porta niente — né fogli, né pelle, né un
         // asset (caratteri, icone) — è la serie con un altro nome: si dice
         // all'autore, invece di installare un doppione.
@@ -656,6 +676,90 @@ fn check_font_files(root: &Utf8Path, manifest: &ThemeManifest) -> Result<(), The
     Ok(())
 }
 
+/// Il set di icone del manifest regge? Il motore, il nome del file, il file
+/// fra gli asset entro [`MAX_THEME_ICONS_BYTES`], un oggetto JSON di al più
+/// [`MAX_THEME_ICONS`] nomi, e ogni voce secondo la regola del contratto
+/// ([`theme_icon_fault`], la stessa che la shell rispecchia).
+fn check_icons(root: &Utf8Path, manifest: &ThemeManifest) -> Result<(), ThemeError> {
+    let bad = |why: String| ThemeError::Malformed(why);
+    let Some(file) = manifest.icons.as_deref() else {
+        return Ok(());
+    };
+    if manifest.engine == ThemeEngine::Theme1 {
+        return Err(bad(format!(
+            "icons need `{}`: `{THEME_ENGINE}` has none",
+            ThemeEngine::Theme2.as_str()
+        )));
+    }
+    if !theme_icons_file_holds(file) {
+        return Err(bad(format!(
+            "icon set `{file}` is not a theme asset: it must be `<name>.json` beside the \
+             manifest, with a name of 1 to {MAX_THEME_ICONS_FILE_NAME} characters of \
+             lowercase ASCII letters, digits, `-` or `_`, and not `manifest`"
+        )));
+    }
+    let path = root.join(file);
+    // Il limite degli asset qui, quello del set subito sotto: così l'autore
+    // legge che è il set a pesare troppo.
+    let Some(handle) = open_regular(&path, root, &manifest.id, MAX_THEME_ASSET_BYTES, false)?
+    else {
+        return Err(bad(format!(
+            "icon set `{file}` is not among the theme assets"
+        )));
+    };
+    let mut raw = Vec::new();
+    handle
+        .take(MAX_THEME_ICONS_BYTES.saturating_add(1))
+        .read_to_end(&mut raw)
+        .map_err(|error| ThemeError::Io(format!("{path}: {error}")))?;
+    if raw.len() as u64 > MAX_THEME_ICONS_BYTES {
+        return Err(bad(format!(
+            "icon set `{file}` exceeds {MAX_THEME_ICONS_BYTES} bytes"
+        )));
+    }
+    let set: serde_json::Map<String, serde_json::Value> = serde_json::from_slice(&raw)
+        .map_err(|error| bad(format!("icon set `{file}` is not a JSON object: {error}")))?;
+    if set.len() > MAX_THEME_ICONS {
+        return Err(bad(format!(
+            "icon set `{file}` redraws {} icons, at most {MAX_THEME_ICONS} are allowed",
+            set.len()
+        )));
+    }
+    for (name, value) in &set {
+        let paths: Vec<&str> = value
+            .as_array()
+            .and_then(|items| items.iter().map(serde_json::Value::as_str).collect())
+            .ok_or_else(|| {
+                bad(format!(
+                    "icon `{name}` in `{file}` is not a list of path data"
+                ))
+            })?;
+        if let Some(fault) = theme_icon_fault(name, &paths) {
+            return Err(bad(icon_fault_message(fault, name, file)));
+        }
+    }
+    Ok(())
+}
+
+fn icon_fault_message(fault: ThemeIconFault, name: &str, file: &str) -> String {
+    match fault {
+        ThemeIconFault::Name => format!(
+            "icon name `{name}` in `{file}` must be 1 to {MAX_THEME_ICON_NAME} characters of \
+             lowercase ASCII letters, digits and `-`, not starting with `-`"
+        ),
+        ThemeIconFault::Paths => {
+            format!("icon `{name}` in `{file}` must have 1 to {MAX_THEME_ICON_PATHS} paths")
+        }
+        ThemeIconFault::PathData => format!(
+            "icon `{name}` in `{file}` accepts only SVG path data: \
+             commands, numbers, `.`, `,`, signs and spaces"
+        ),
+        ThemeIconFault::Bytes => {
+            format!("icon `{name}` in `{file}` exceeds {MAX_THEME_ICON_BYTES} bytes of path data")
+        }
+    }
+}
+
 /// Un nome che può stare in un attributo della radice senza essere citato.
 fn is_setting_token(token: &str) -> bool {
     token.len() <= MAX_THEME_SETTING_NAME
@@ -936,6 +1040,14 @@ pub fn read_theme(
             .fonts
             .iter()
             .map(|font| format!("{}{}", theme.manifest.asset_namespace, font.file)),
+    );
+    // Il set di icone anche: lo legge la shell, nessun CSS lo nomina.
+    needed.extend(
+        theme
+            .manifest
+            .icons
+            .iter()
+            .map(|file| format!("{}{file}", theme.manifest.asset_namespace)),
     );
     let assets = asset_inventory(&dir, &theme.manifest.asset_namespace, &needed)?;
     Ok(ThemePayload {
