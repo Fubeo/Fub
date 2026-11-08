@@ -99,6 +99,18 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · fub-pre-alpha (utente) · le consegne diventano più grandi e
+  più rare: una ogni 12–15 task integrati, o una per traguardo (per esempio
+  «Scrittoio 2 completo»); la CI completa (Windows, macOS, banchi e baseline
+  dal runner) gira solo sulle consegne; sul ramo del piano resta la CI corta
+  di ogni push, che l'orchestratore non aspetta; i coder lavorano ai task
+  successivi mentre la CI va avanti · la CI non ferma la scrittura del
+  codice, ma la CI completa e le baseline costano; una CI sola alla fine
+  mescolerebbe i difetti di centinaia di task, e le baseline non si
+  potrebbero più guardare una per una.
+- 2026-11-08 · fub-pre-alpha (utente) · i coder restano Opus medio, mai
+  Sonnet né Haiku · la rilavorazione e i giri di CI in più costano più del
+  tempo che un modello più leggero risparmierebbe.
 - 2026-11-08 · fub-pre-alpha (orchestratore) · PA T40 si integra anche se
   10.000 icone cambiate si ridisegnano in 18–35 ms (headless, macchina
   carica) e non sotto i 16 ms del piano · il ridisegno è già un passaggio
