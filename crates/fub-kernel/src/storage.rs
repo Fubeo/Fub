@@ -776,7 +776,14 @@ impl WriteBits {
             // possono fallire.
             let euid = unsafe { libc::geteuid() };
             let egid = unsafe { libc::getegid() };
-            unix_writable(self.mode, self.uid, self.gid, euid, egid, &supplementary_groups())
+            unix_writable(
+                self.mode,
+                self.uid,
+                self.gid,
+                euid,
+                egid,
+                &supplementary_groups(),
+            )
         }
         #[cfg(not(unix))]
         {

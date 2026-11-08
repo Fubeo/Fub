@@ -103,7 +103,11 @@ fn exercise(open: impl FnOnce(&Utf8Path) -> Box<dyn VaultStorage>) {
 
     assert_refused(storage.write(&locked, b"dopo\n"), &locked);
     assert_refused(storage.write_derived(&locked, b"dopo\n"), &locked);
-    assert_eq!(std::fs::read(&locked).unwrap(), b"prima\n", "the bytes stay");
+    assert_eq!(
+        std::fs::read(&locked).unwrap(),
+        b"prima\n",
+        "the bytes stay"
+    );
     assert_eq!(dir.names(), before, "no temporary is left beside it");
     assert!(
         std::fs::metadata(&locked).unwrap().permissions().readonly(),
@@ -119,7 +123,9 @@ fn exercise(open: impl FnOnce(&Utf8Path) -> Box<dyn VaultStorage>) {
 
     // Un file scrivibile e un file nuovo si scrivono come prima.
     let writable = dir.file("Scrivibile.md", b"prima\n");
-    storage.write(&writable, b"dopo\n").expect("a writable file");
+    storage
+        .write(&writable, b"dopo\n")
+        .expect("a writable file");
     assert_eq!(std::fs::read(&writable).unwrap(), b"dopo\n");
     let new = dir.root.join("Nuovo.md");
     storage.write(&new, b"nuovo\n").expect("a new file");
@@ -132,7 +138,9 @@ fn exercise(open: impl FnOnce(&Utf8Path) -> Box<dyn VaultStorage>) {
 
     // E ridato, si torna a scrivere.
     set_read_only(&writable, false);
-    storage.write(&writable, b"ancora\n").expect("writable again");
+    storage
+        .write(&writable, b"ancora\n")
+        .expect("writable again");
     assert_eq!(std::fs::read(&writable).unwrap(), b"ancora\n");
 }
 
