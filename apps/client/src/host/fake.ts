@@ -336,7 +336,10 @@ export interface FakeHost {
   /// Ciò che la porta avrebbe fatto **non lo fa**: una scrittura guasta non
   /// lascia i byte, o un banco che chiede «il disco rifiuta» leggerebbe il file
   /// nuovo e crederebbe di aver provato il contrario.
-  fault(gate: string, reason?: string): () => void;
+  ///
+  /// Un `PluginError` al posto della frase rifiuta con l'errore tipizzato,
+  /// come il backend vero: un permesso negato, un conflitto.
+  fault(gate: string, reason?: string | PluginError): () => void;
 
   /// Chiede di chiudere la finestra, e **aspetta** ciò che la shell fa prima.
   ///
@@ -556,7 +559,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const throttles = new Map<string, Promise<void>>();
 
   /// Le porte guaste, col motivo che rispondono.
-  const faults = new Map<string, string>();
+  const faults = new Map<string, string | PluginError>();
+  const faultError = (fault: string | PluginError): Error | PluginError =>
+    typeof fault === "string" ? new Error(fault) : fault;
 
   /// Gli argomenti di una porta con il **vault nominato** in coda, ma solo se la
   /// chiamata lo nomina: le asserzioni sulle chiamate senza vault restano quelle
@@ -589,7 +594,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       // **guardandola**: una promessa rifiutata che nessuno ascolta è un
       // avviso di runtime in mezzo all'output del banco.
       void (result as Promise<unknown>).catch(() => {});
-      return Promise.reject(new Error(fault)) as T;
+      return Promise.reject(faultError(fault)) as T;
     }
     const throttle = throttles.get(name);
     // La chiamata è **già registrata**: un banco che aspetta «la scrittura è
@@ -608,7 +613,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   ): Promise<T> {
     calls.push({ gate: name, args });
     const fault = faults.get(name);
-    if (fault !== undefined) return Promise.reject(new Error(fault));
+    if (fault !== undefined) return Promise.reject(faultError(fault));
     const run = () => Promise.resolve().then(effect);
     const throttle = throttles.get(name);
     return throttle ? throttle.then(run) : run();
@@ -626,7 +631,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   function liveSession(session: string): LiveSession {
     const live = liveSessions.get(session);
     if (live) return live;
-    throw { kind: "not_found", message: `no live session ${JSON.stringify(session)} in this window` } satisfies PluginError;
+    throw { kind: "not_found", message: `Questa finestra non ha la sessione live ${session}.` } satisfies PluginError;
   }
 
   /// Un contatore nella sua grafia unica, o un errore della shell: l'app
@@ -1613,7 +1618,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         if (!session) throw new Error("host fake: grid session closed");
         const outcome = gridBytes?.outcomes?.[gridBytesOutcome++];
         if (!outcome) {
-          throw { kind: "bad_args", message: `host fake: grid command \`${request.command.id}\` is not served` } satisfies PluginError;
+          throw { kind: "bad_args", message: `host fake: il comando della griglia \`${request.command.id}\` non è servito` } satisfies PluginError;
         }
         gridBytesInstances.set(instance, {
           ...session,
@@ -1626,7 +1631,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       })),
       closeGridBytes: (_surface, instance) => gate("closeGridBytes", [instance], Promise.resolve().then(() => {
         if (!gridBytesInstances.delete(instance)) {
-          throw { kind: "not_found", message: "host fake: grid session closed" } satisfies PluginError;
+          throw { kind: "not_found", message: "host fake: la sessione della griglia è chiusa" } satisfies PluginError;
         }
       })),
       writeDocument: (id, source, base, vault, open) => {
@@ -1638,7 +1643,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         // passasse dentro risponderebbe «no» avendo già scritto.
         const fault = faults.get("writeDocument");
         if (fault !== undefined) {
-          return gate("writeDocument", named([id, source, base], vault), Promise.reject(new Error(fault)));
+          return gate("writeDocument", named([id, source, base], vault), Promise.reject(faultError(fault)));
         }
         // Nessun provider serve un file senza formato: il kernel rifiuta la
         // scrittura (`NoProvider`), e lo fa anche il finto — chi salva un
@@ -1709,7 +1714,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         calls.push({ gate: "invokeCommand", args: callArgs });
         const execute = () => {
           const fault = faults.get("invokeCommand");
-          if (fault !== undefined) return Promise.reject(new Error(fault));
+          if (fault !== undefined) return Promise.reject(faultError(fault));
           // Un comando che rifiuta **rifiuta la promessa**, come attraverso l'IPC:
           // un'eccezione sincrona qui sfuggirebbe a chi aspetta con `.catch`.
           try {
@@ -1808,7 +1813,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         installedOperation("setInstalledPluginEnabled", [installation, enabled], () => {
           const plugin = installed(installation);
           if (enabled && plugin.revoked) throw {
-            kind: "permission_denied", message: "revoked catalog release cannot mount",
+            kind: "permission_denied", message: "Questa versione del catalogo è stata ritirata: non si monta.",
           } satisfies PluginError;
           plugin.enabled = enabled;
           reconcile(plugin);
@@ -1915,7 +1920,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
           if ([...liveSessions.values()].some((live) => live.document === document)) {
             throw {
               kind: "already_exists",
-              message: `document ${JSON.stringify(document)} already has a live session`,
+              message: `«${document}» ha già una sessione live.`,
             } satisfies PluginError;
           }
           const chosen = request.address === undefined
@@ -1925,11 +1930,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
             throw (request.address === undefined
               ? {
                   kind: "unserved",
-                  message: "the PC is not on a local network: no active interface has a private IPv4 address",
+                  message: "Il PC non è su una rete locale: nessuna interfaccia attiva ha un indirizzo IPv4 privato.",
                 }
               : {
                   kind: "not_found",
-                  message: `${request.address} is not a private address of an active interface`,
+                  message: `${request.address} non è l'indirizzo privato di un'interfaccia attiva.`,
                 }) satisfies PluginError;
           }
           const session = `live-${String(++nextLive).padStart(6, "0")}`;
@@ -1958,9 +1963,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
         installedOperation("livePairing", [session, renew], () => {
           const live = liveSession(session);
           if (!renew) return live.pairing && liveCopy(live.pairing);
-          if (live.ended) throw { kind: "cancelled", message: "the live session has ended" } satisfies PluginError;
+          if (live.ended) throw { kind: "cancelled", message: "La sessione live è finita." } satisfies PluginError;
           if (live.writer?.connected) {
-            throw { kind: "already_exists", message: "a writer is connected to the session" } satisfies PluginError;
+            throw { kind: "already_exists", message: "Il tablet è collegato: un QR nuovo si chiede quando esce." } satisfies PluginError;
           }
           live.pairing = livePairing(session, live);
           // Lo scrittore che aspettava la ripresa la perde.
@@ -1972,10 +1977,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
       liveSend: (session, message) =>
         installedOperation("liveSend", [session, message], () => {
           const live = liveSession(session);
-          if (live.ended) throw { kind: "cancelled", message: "the live session has ended" } satisfies PluginError;
+          if (live.ended) throw { kind: "cancelled", message: "La sessione live è finita." } satisfies PluginError;
           const regression = (seq: string): PluginError => ({
             kind: "conflict",
-            message: `seq ${seq} is behind the session seq ${live.seq}`,
+            message: `La sessione live ha rifiutato il messaggio: il seq ${seq} è indietro rispetto al ${live.seq} della sessione.`,
           });
           if (message.t === "ack" || message.t === "nack") {
             liveCounter(message.writer, "writer");
@@ -1984,7 +1989,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
             if (at < 0) {
               throw {
                 kind: "not_found",
-                message: `commit ${message.c} of writer ${message.writer} is not awaiting an answer`,
+                message: `La sessione live ha rifiutato il messaggio: il commit ${message.c} dello scrittore ${message.writer} non aspetta una risposta.`,
               } satisfies PluginError;
             }
             // Un `ack` di un duplicato non porta operazioni nuove: il suo
@@ -2201,6 +2206,75 @@ function titled(source: string, title: string): string {
   const text = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const root = new RegExp(`(<${"svg"}\\b[^>]*>)(\\s*<title>[\\s\\S]*?</title>)?`);
   return source.replace(root, (_, head: string, old: string | undefined) => (old === undefined ? `${head}\n  <title>${text}</title>` : `${head}${old.replace(/<title>[\s\S]*<\/title>/, () => `<title>${text}</title>`)}`));
+}
+
+/// Un tema installato che parte dalla serie (`extends`), pronto per le opzioni
+/// `themes` e `themePayloads` del finto: porta il foglio chiaro e una pelle, e
+/// la luce scura arriva con `sheet: null`, come la consegna l'host vero.
+export function extendingTheme(id = "acme.carta"): {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+} {
+  const manifest: ThemeInfo["manifest"] = {
+    id,
+    name: "Carta",
+    version: "1.0.0",
+    engine: "theme-2",
+    lights: ["light", "dark"],
+    asset_namespace: `theme://${id}/`,
+    motion: ["opacity", "transform"],
+    extends: "fub.serie",
+  };
+  const skin = ".carta { color: inherit; }";
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: ":root { --carta: #fbf7ee; }", skin, assets: {} },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets: {} },
+    },
+  };
+}
+
+/// I byte di un WOFF2 finto: la firma `wOF2` e qualche byte dopo. Il finto non
+/// disegna caratteri: conta che la forma arrivi come la consegna l'host vero.
+export function fakeWoff2(size = 12): number[] {
+  return [0x77, 0x4f, 0x46, 0x32, ...Array.from({ length: Math.max(0, size - 4) }, (_, i) => i & 0xff)];
+}
+
+/// Un tema che parte dalla serie e porta due caratteri (`fonts`): il manifest
+/// li dichiara, il fascio porta i file fra gli asset anche se nessun CSS li
+/// nomina, e la pelle usa la famiglia per nome. Come per `extendingTheme`, la
+/// luce scura arriva con `sheet: null`.
+export function fontTheme(id = "acme.caratteri"): {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+} {
+  const manifest: ThemeInfo["manifest"] = {
+    id,
+    name: "Caratteri",
+    version: "1.0.0",
+    engine: "theme-2",
+    lights: ["light", "dark"],
+    asset_namespace: `theme://${id}/`,
+    motion: ["opacity", "transform"],
+    extends: "fub.serie",
+    fonts: [
+      { family: "Carta Serif", file: "fonts/carta.woff2", weight: 400, style: "normal" },
+      { family: "Carta Serif", file: "fonts/carta-italic.woff2", weight: 400, style: "italic" },
+    ],
+  };
+  const skin = '.shell-tooltip { font-family: "Carta Serif", var(--font-ui); }';
+  const assets = {
+    [`theme://${id}/fonts/carta.woff2`]: fakeWoff2(12),
+    [`theme://${id}/fonts/carta-italic.woff2`]: fakeWoff2(9),
+  };
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets },
+    },
+  };
 }
 
 /// L'id della view cestino del finto: la stessa che `fub-features` registra,

@@ -50,7 +50,7 @@ import { pageName } from "../rules/organizer";
 import { folderForNote } from "../rules/mirrored";
 import { looksLikeWebShortcut, webShortcut } from "../rules/web-shortcut";
 import { declaredFences } from "../rules/syntax";
-import { pdfIdWithoutFragment } from "../editors/media/pdf-view";
+import { pdfIdWithoutFragment, pdfPageFromFragment } from "../editors/media/pdf-view";
 import { mediaKindOfId, mimeOfId } from "../editors/media/media-types";
 import { openResourcePort, type ResourceTransport } from "../editors/media/resource-port";
 import { vaultImageSource } from "../editors/text/profiles/markdown/media";
@@ -152,7 +152,7 @@ import type * as SlashPanelModule from "../panels/slash/panel";
 import { noteTargets } from "../editors/text/profiles/markdown/kinds";
 import type { SelectionBox } from "../editors/core/editor-actions";
 import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
-import { errorText } from "../host/errors";
+import { errorText, isErrorKind } from "../host/errors";
 import { renderOnOpen } from "./craft-previews";
 import { writeChrome } from "./machine-chrome";
 import { onLanguage, t } from "../i18n/strings";
@@ -828,7 +828,8 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     onOpenWikilinkBeside: async (page, heading, block) => {
       const target = await resolvedReference({ kind: "wiki", value: { page, heading, block } }, activeDoc() ?? undefined);
       if (!target) throw new Error(t("preview.target_missing"));
-      await openDocumentBeside(target.doc, "row");
+      const pdfPage = linkedPdfPage(target.doc, heading);
+      await openDocumentBeside(target.doc, "row", pdfPage === null ? {} : { page: pdfPage });
       if (target.at) await reveal(target.doc, { span: target.at.span });
     },
     onShowFile: async (file, from, where) => {
@@ -1027,12 +1028,14 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   view.attach();
   sessionEventsStop?.();
   paintedSessions.clear();
+  deniedSaves.clear();
   const stopSessionEvents = documentSessions.subscribe(handleSessionEvent);
   sessionEventsStop = stopSessionEvents;
   lifetime.add(() => {
     closeDraining = false;
     stopSessionEvents();
     paintedSessions.clear();
+    deniedSaves.clear();
     if (sessionEventsStop === stopSessionEvents) sessionEventsStop = undefined;
     for (const r of panes.values()) {
       if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, r.id);
@@ -1929,11 +1932,19 @@ function redrawTabs(doc: string): void {
 /// ridipingeva tutte le tab e forzava un layout (`scrollIntoView`).
 const paintedSessions = new Map<string, string>();
 
+/// I documenti il cui salvataggio il sistema ha rifiutato perché il file non
+/// si può scrivere (`permission_denied`, PA T59), già detti all'utente. Il
+/// salvataggio automatico ci riprova a ogni pausa (così il file torna a
+/// salvarsi da solo appena ridiventa scrivibile), ma l'avviso non si ripete a
+/// ogni battuta: torna solo dopo un salvataggio riuscito o un «Riprova».
+const deniedSaves = new Set<string>();
+
 /// Registra l'aspetto della sessione; falso se è quello già disegnato.
 function sessionLookChanged(doc: string): boolean {
   const state = documentSessions.saveState(doc);
   if (state === null) {
     paintedSessions.delete(doc);
+    deniedSaves.delete(doc);
     return true;
   }
   const look = `${state}|${documentSessions.isDirty(doc)}|${documentSessions.isDeletionPending(doc)}`;
@@ -1966,6 +1977,21 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
   if (event.kind === "save-failed") {
     if (event.outcome === "conflitto") {
       notify(t("document.save_conflict", { doc: event.id }), "guasto");
+    } else if (isErrorKind(event.error, "permission_denied")) {
+      // Il file è in sola lettura (PA T59), o l'host lo tiene tale per un
+      // suo motivo: la bozza resta sporca e nessun byte è perso, ma non è un
+      // guasto del disco.
+      const doc = event.id;
+      if (!deniedSaves.has(doc)) {
+        deniedSaves.add(doc);
+        notify(t("document.save_read_only", { doc }), "guasto", {
+          label: t("app.retry"),
+          run: () => {
+            deniedSaves.delete(doc);
+            return saveNow();
+          },
+        });
+      }
     } else {
       // La bozza resta sporca e il salvataggio automatico ci riprova alla
       // prossima battuta; «Riprova» serve a chi non vuole scrivere per salvare.
@@ -1983,6 +2009,7 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
   redrawTabs(event.id);
   drawPaneConflict(event.id);
   if (event.kind === "saved") {
+    deniedSaves.delete(event.id);
     // Il testo è su disco: ciò che l'avviso diceva di non ancora deciso è
     // passato. La bozza ritrovata no: dice da dove viene il testo, e il
     // salvataggio automatico che la scrive non lo cambia.
@@ -2093,6 +2120,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     return;
   }
   const gesture = takeGesture(r.id, tab.doc);
+  const page = takeOpeningPage(r.id, tab.doc);
 
   // Un file che nessun formato del vault gestisce e che il registro sa
   // mostrare dai byte (un'immagine, un PDF) non ha una sorgente UTF-8: la
@@ -2107,7 +2135,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     tab = forgetOverride(r, tab);
     const surface = surfaceRegistry.mount(
       { formatId: null, sourceKind: "bytes", documentId: tab.doc },
-      { paneId: r.id, documentId: tab.doc, parent: r.editorEl, ...(gesture ? { gesture } : {}) },
+      { paneId: r.id, documentId: tab.doc, parent: r.editorEl, ...(gesture ? { gesture } : {}), ...(page !== null ? { page } : {}) },
     );
     r.surface = surface;
     surface.setMode("view");
@@ -2160,6 +2188,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
         formatId: source.formatId,
         revision: source.revision,
         ...(gesture ? { gesture } : {}),
+        ...(page !== null ? { page } : {}),
       },
     );
   } catch (error) {
@@ -2715,6 +2744,25 @@ async function refreshLimitedMode(): Promise<void> {
 /// soltanto il montaggio che l'apertura fa nascere (`SurfaceMountContext`).
 export interface OpenOptions {
   readonly gesture?: boolean;
+  /// La pagina che l'apertura chiede, da 1: un link a `x.pdf#page=3`. La
+  /// prende la superficie che l'apertura monta (`SurfaceMountContext.page`)
+  /// o, se il documento è già la scheda attiva, `EditorSurface.showPage`.
+  readonly page?: number;
+}
+
+/// La pagina chiesta dall'apertura in corso per il documento del riquadro:
+/// `show` la prende al montaggio (una scheda nuova o una che torna attiva),
+/// `openDocument` la toglie quando ha finito. Come `gestureBirths`, vive
+/// quanto quell'apertura.
+const openingPages = new Map<string, { readonly doc: string; readonly page: number }>();
+
+/// La pagina per la scheda di `doc` montata adesso nel riquadro `pane`, presa
+/// una volta sola.
+function takeOpeningPage(pane: string, doc: string): number | null {
+  const wanted = openingPages.get(pane);
+  if (wanted?.doc !== doc) return null;
+  openingPages.delete(pane);
+  return wanted.page;
 }
 
 /// Il documento che l'apertura in corso con un gesto farà nascere in un
@@ -2748,6 +2796,8 @@ export async function openDocument(id: string, options: OpenOptions = {}): Promi
       const born = options.gesture === true
         && !(layout.panes[pane]?.tabs ?? []).some((tab) => tab.k === "doc" && tab.doc === id);
       if (born) gestureBirths.set(pane, id);
+      const page = options.page !== undefined && Number.isSafeInteger(options.page) && options.page >= 1 ? options.page : null;
+      if (page !== null) openingPages.set(pane, { doc: id, page });
       openIn(pane, id);
       // Un PDF o un documento nato da un gesto, col consenso acceso: l'app ne
       // fa l'anteprima in sottofondo, per la nota e il passaggio (T31).
@@ -2756,6 +2806,12 @@ export async function openDocument(id: string, options: OpenOptions = {}): Promi
         await synchronize();
       } finally {
         if (born && gestureBirths.get(pane) === id) gestureBirths.delete(pane);
+      }
+      // La scheda era già quella attiva e non si è rimontata: la pagina va
+      // alla superficie che c'è, se è ancora questo documento a mostrarla.
+      if (page !== null && takeOpeningPage(pane, id) !== null) {
+        const r = panes.get(pane);
+        if (r?.shown?.k === "doc" && r.shown.doc === id) r.surface?.showPage?.(page);
       }
       // Il contesto si pubblica DOPO aver caricato il buffer: prima, lo span della
       // selezione sarebbe quello del documento precedente.
@@ -2791,10 +2847,10 @@ export async function openFromView(id: string): Promise<void> {
 
 /// Apre un documento in un riquadro nuovo accanto a quello col fuoco, a
 /// destra (`row`) o sotto (`col`): è il `split` di un `fub://open`.
-export async function openDocumentBeside(id: string, dir: "row" | "col"): Promise<void> {
+export async function openDocumentBeside(id: string, dir: "row" | "col", options: OpenOptions = {}): Promise<void> {
   const other = split(layout.focus, dir);
   if (other) focusPane(other);
-  await openDocument(id);
+  await openDocument(id, options);
 }
 
 /// Chiude il documento aperto **in ogni riquadro**, senza salvarlo: lo si usa
@@ -2872,7 +2928,8 @@ export async function openWikilink(
     from ?? activeDoc() ?? undefined,
   );
   if (target) {
-    await openDocument(target.doc, options);
+    const page = linkedPdfPage(target.doc, heading);
+    await openDocument(target.doc, page === null ? options : { ...options, page });
     // Il punto può non esserci — un heading rinominato, un `^abc` cancellato —
     // e allora resta la nota aperta in cima: è il degrado dichiarato di
     // `ResolvedRef.at`, non un caso da nascondere.
@@ -2885,6 +2942,15 @@ export async function openWikilink(
   if (!page) return;
   const created = await createNote(page);
   if (created) await openDocument(created);
+}
+
+/// La pagina che un link a un PDF nomina dopo il `#`: `[[x.pdf#page=3]]` e
+/// `![[x.pdf#page=3]]` arrivano con `heading` = `page=3`. Un numero che non è
+/// un intero positivo (`page=0`, `page=abc`, `page=`) non nomina niente, e il
+/// PDF si apre alla prima pagina; un altro documento non ha pagine.
+export function linkedPdfPage(doc: string, heading: string | null | undefined): number | null {
+  if (!heading || mediaKindOfId(pdfIdWithoutFragment(doc)) !== "pdf") return null;
+  return pdfPageFromFragment(`#${heading.trim()}`);
 }
 
 /// Il clic su una figura di una nota (un file Craft, un PDF): apre il suo
@@ -2961,18 +3027,6 @@ async function applyExternalChange(id: string, outcome: ExternalChangeResult): P
 async function reloadDocument(id: string): Promise<void> {
   await documentSessions.reloadIfClean(id);
   redrawReading(id);
-}
-
-/// Rilegge dal disco il documento attivo (usato dopo un ripristino di versione,
-/// che riscrive il file sotto al buffer).
-export async function reloadCurrent(): Promise<void> {
-  const doc = state.currentDoc;
-  if (!doc) return;
-  const outcome = await documentSessions.forceReload(doc);
-  if (outcome.kind === "unavailable") notify(t("document.reload_failed", { doc }), "guasto");
-  redrawReading(doc);
-  view.drawSave();
-  redrawTabs(doc);
 }
 
 // --- contesto di sessione (decisione 0007) ----------------------------------

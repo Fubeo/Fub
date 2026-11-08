@@ -86,6 +86,9 @@ export function mountMediaSurface(
   let pendingPort: ResourcePort | null = null;
   // La view montata, per il menu del tasto destro.
   let mounted: Mounted = null;
+  /// La pagina chiesta dall'apertura (un link a `x.pdf#page=3`) o da un link
+  /// seguito mentre i byte si leggono ancora: il visore parte da lì.
+  let wantedPage: number | null = context.page ?? null;
 
   function message(key: Key): void {
     if (!active) return;
@@ -121,7 +124,7 @@ export function mountMediaSurface(
       } else {
         const bytes = await port.readAll();
         if (!active) return;
-        mounted = await mountBytes(descriptor, bytes, life, deps, root, context.documentId);
+        mounted = await mountBytes(descriptor, bytes, life, deps, root, context.documentId, wantedPage);
       }
       status.remove();
       showPhotoData();
@@ -160,6 +163,11 @@ export function mountMediaSurface(
     focus() {
       root.focus();
     },
+    showPage(page: number) {
+      if (!active || !Number.isSafeInteger(page) || page < 1) return;
+      if (mounted?.pdf) void mounted.pdf.goToPage(page).catch(() => {});
+      else if (!mounted) wantedPage = page;
+    },
     contextMenu: (at) => mediaMenu(mounted, at, pdfIdWithoutFragment(context.documentId), deps),
     setTheme(theme) {
       root.dataset.theme = theme;
@@ -181,6 +189,7 @@ async function mountBytes(
   deps: MediaSurfaceDeps,
   root: HTMLElement,
   documentId: string,
+  wantedPage: number | null = null,
 ): Promise<Mounted> {
   const kind: MediaKind = mediaKindOfId(descriptor.id);
   const openExternal = deps.openExternal ? () => deps.openExternal!(descriptor.id) : undefined;
@@ -202,7 +211,7 @@ async function mountBytes(
       return { kind, element: view.element };
     }
     case "pdf": {
-      const page = pdfPageFromFragment(documentId);
+      const page = wantedPage ?? pdfPageFromFragment(documentId);
       const view = mountPdfView(
         descriptor,
         bytes,

@@ -159,16 +159,36 @@ fn the_remembered_revision_does_not_trust_size_and_date() {
     let doc = DocId::new("a.bin");
     let path = root.join("a.bin");
     let first = ranged.revision(&doc, BIG).unwrap();
+    // La seconda domanda passa dalla memoria, ed è quella che si prova.
+    assert_eq!(ranged.remembered(&doc), Some(first.clone()));
+    let change = |ranged: &Ranged| ranged.open(&doc).unwrap().lease().change;
+    let first_change = change(&ranged);
+    assert!(first_change.is_some());
     let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
     // Stesso peso, stessa data, sullo stesso file: resta il timbro di
     // cambiamento, che è nuovo.
-    std::fs::write(&path, b"BBBBBBBB").unwrap();
-    std::fs::File::options()
-        .write(true)
-        .open(&path)
-        .unwrap()
-        .set_modified(modified)
-        .unwrap();
+    //
+    // Nuovo però solo se l'orologio del filesystem è andato avanti: su Linux
+    // `ctime` prende l'orologio grossolano del kernel (un tick, 1–10 ms), e
+    // una riscrittura nello stesso tick della creazione lascia il timbro
+    // uguale (#310). Lì non c'è niente che distingua i due file, né per la
+    // memoria né per il kernel; si riscrive finché il timbro non cambia.
+    let mut tries = 0;
+    loop {
+        std::fs::write(&path, b"BBBBBBBB").unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_modified(modified)
+            .unwrap();
+        if change(&ranged) != first_change {
+            break;
+        }
+        tries += 1;
+        assert!(tries < 2000, "il timbro di cambiamento non si muove");
+        std::thread::sleep(Duration::from_millis(1));
+    }
     assert_eq!(
         std::fs::metadata(&path).unwrap().modified().unwrap(),
         modified

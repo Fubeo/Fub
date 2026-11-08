@@ -154,9 +154,9 @@ Il rapporto della finestra lo dice prima di scrivere, una frase per genere:
   resta;
 - un pezzo dell'aspetto di un testo che il disegno non ha (un'immagine nel
   testo, un apice, uno sfondo) resta fuori, e il testo resta;
-- una forma che FubDraw non ha, come le icone dei servizi cloud, diventa la
+- una forma che Fub non ha, come le icone dei servizi cloud, diventa la
   più vicina, di solito un rettangolo dei suoi colori;
-- una punta che FubDraw non ha diventa la più vicina, o nessuna; una punta
+- una punta che Fub non ha diventa la più vicina, o nessuna; una punta
   vuota diventa piena;
 - un percorso disegnato a mano su un connettore lascia il posto a quello che
   il connettore trova da sé, quando i due sono lontani;

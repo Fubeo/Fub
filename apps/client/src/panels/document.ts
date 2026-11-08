@@ -125,7 +125,6 @@ export {
   publishContext,
   recoverDrafts,
   refreshLooks,
-  reloadCurrent,
   resetDocumentsForVault,
   reveal,
   runEditorAction,
@@ -1218,6 +1217,8 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
 /// spiegazione, Mantieni mio / Usa disco, conferma esplicita con conseguenza,
 /// comandi shell.doc.conflict.* esistenti. Mai merge finto, mai risoluzione
 /// automatica; buffer recuperabile finché irrisolto (solo ridisegno + comandi).
+/// In una modalità di lettura una riga dice che il reso è il testo di chi
+/// scrive, non ancora salvato (R03): la Lettura disegna dal buffer.
 /// I conflitti rimandati: il banner si riduce a una riga finché chi scrive non
 /// torna a deciderlo. La decisione resta sua; rimandarla non la perde.
 const deferredConflicts = new Set<string>();
@@ -1260,6 +1261,15 @@ function drawConflict(r: PaneFrame, doc: string | null): void {
   const body = document.createElement("p");
   body.textContent = t("document.conflict.body");
   body.setAttribute("data-doc", current);
+  // In Lettura il reso viene dal buffer della sessione, lo stesso della
+  // scrittura: la riga dice che quel testo è quello di chi scrive, non
+  // ancora salvato, e non la versione sul disco (R03).
+  const pane = paneOf(r.id);
+  const reading = pane && selectedMode(pane)?.contextMode === "reading" ? document.createElement("p") : null;
+  if (reading) {
+    reading.dataset.conflictReading = "";
+    reading.textContent = t("document.conflict.reading");
+  }
   const actions = document.createElement("div");
   actions.className = "conflict-actions";
   const compare = document.createElement("button");
@@ -1310,7 +1320,7 @@ function drawConflict(r: PaneFrame, doc: string | null): void {
     drawConflict(r, current);
   });
   actions.append(compare, mine, theirs, cancel);
-  box.append(title, body, actions);
+  box.append(title, body, ...(reading ? [reading] : []), actions);
 }
 
 /// Gli avvisi della nota sotto il banner del conflitto. Alcuni si ricavano

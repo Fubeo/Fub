@@ -30,19 +30,17 @@ fn vault() -> (tempfile::TempDir, Host, Utf8PathBuf) {
 /// Avvelena il workspace del vault corrente come lo avvelena la vita: un thread
 /// che pania **tenendo il prestito esclusivo**.
 ///
-/// L'hook dei panici si mette a tacere per la durata del misfatto: un panico di
-/// proposito che stampa la sua traccia fa sembrare rotto un banco verde, e chi
-/// legge l'output smette di fidarsi di tutti gli altri.
+/// Il panico del misfatto non si stampa: un panico di proposito che stampa la
+/// sua traccia fa sembrare rotto un banco verde, e chi legge l'output smette di
+/// fidarsi di tutti gli altri. Tace però solo il suo thread
+/// ([`crate::quiet_panic`]): un hook muto per tutto il processo nascondeva il
+/// perché dei test concorrenti caduti in quella finestra (#98).
 fn poison(ws: &Custody<fub_kernel::Workspace>) {
     let copy = ws.clone();
-    let hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
-    let _ = std::thread::spawn(move || {
+    crate::quiet_panic::quietly(move || {
         let _g = copy.write().expect("alive before the misdeed");
         panic!("a provider halfway through a write");
-    })
-    .join();
-    std::panic::set_hook(hook);
+    });
 }
 
 /// **Ciò che l'utente vede la prima volta, e ciò che vede le volte dopo.**

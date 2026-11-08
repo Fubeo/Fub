@@ -45,7 +45,8 @@ libc = { workspace = true }
 # sbagliato. Fra un crate che non aggiunge niente e un `unsafe` che non si può
 # rileggere, questo repo prende il crate.
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = [
+# La versione è quella della radice; le feature sono di questo crate.
+windows-sys = { workspace = true, features = [
     "Wdk_Storage_FileSystem",
     "Win32_Foundation",
     "Win32_Storage_FileSystem",

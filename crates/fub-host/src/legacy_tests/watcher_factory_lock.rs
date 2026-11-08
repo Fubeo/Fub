@@ -109,14 +109,14 @@ impl Probe {
     }
 
     fn assert_released(workspace: &Custody<Workspace>) {
-        let read = workspace
-            .try_read()
-            .expect("WatcherFactory::start must not inherit a read or write lock");
-        drop(read);
-        let write = workspace
-            .try_write()
-            .expect("WatcherFactory::start must not inherit a read or write lock");
-        drop(write);
+        assert!(
+            super::read_comes_free(workspace),
+            "WatcherFactory::start must not inherit a read or write lock"
+        );
+        assert!(
+            super::write_comes_free(workspace),
+            "WatcherFactory::start must not inherit a read or write lock"
+        );
     }
 
     fn assert_rolled_back(workspace: &Custody<Workspace>) {
@@ -546,6 +546,8 @@ impl WatcherFactory for FailsAfterStart {
         let worker_finished = Arc::clone(&self.worker_finished);
         let (waiting_tx, waiting_rx) = std::sync::mpsc::sync_channel(1);
         let worker = std::thread::spawn(move || {
+            // Preso: il turno dell'apertura è dell'altro thread finché lo
+            // tiene, e un colpo solo basta.
             assert!(
                 worker_workspace.try_write().is_none(),
                 "the opening writer turn must still exclude another writer"

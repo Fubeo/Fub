@@ -62,6 +62,9 @@ pub use removal::{
     CommittedDocumentDeletion, CompletedDocumentDeletion, CompletedDocumentRemoval,
     FinalizedDocumentDeletion, PreparedDocumentDeletion, PreparedDocumentRemoval,
 };
+mod reads_in_flight;
+use reads_in_flight::ReadInFlight;
+pub use reads_in_flight::{Barred, ReadsInFlight};
 mod restore;
 pub use restore::{CompletedDocumentRestore, PendingDocumentRestore, PreparedDocumentRestore};
 
@@ -2235,6 +2238,50 @@ pub type BeforeWriteHook =
 /// It can only undo that write while it is still the latest write to the key.
 pub struct PermissionInitialization(crate::settings::MachineSettingRevision);
 
+/// Il rifiuto di un comando che invoca sé stesso, con la catena che lo mostra.
+///
+/// Una frase sola per i quattro posti che lo controllano: la pila condivisa
+/// (sincrona, staccata, rebuild) e la catena di una lettura col suo frame.
+/// Il rifiuto di una lettura fermata: dal suo inizio, se chi smonta il
+/// proprietario l'ha sbarrata, o dalla sua fine, se il vault si è chiuso o il
+/// suo plugin si è spento mentre leggeva.
+fn read_stopped(command: &str) -> PluginError {
+    PluginError::Cancelled(
+        format!("il comando `{command}` è stato fermato: il vault si è chiuso o il suo plugin si sta spegnendo")
+            .into(),
+    )
+}
+
+fn self_invocation(stack: &[String], command: &str) -> PluginError {
+    let mut round = stack.to_vec();
+    round.push(command.to_string());
+    PluginError::BadArgs(
+        format!(
+            "un comando non può invocare sé stesso: {}",
+            round.join(" → ")
+        )
+        .into(),
+    )
+}
+
+/// Esegue il codice di un provider preparato, una volta sola: la porta comune
+/// di [`PreparedCommand::invoke`] e [`PreparedReadOnlyCommand::invoke`].
+fn invoke_prepared(
+    owner: &str,
+    command: &str,
+    args: &mut Option<serde_json::Value>,
+    mode: InvokeMode,
+    provider: &dyn CommandProvider,
+    host: &mut dyn HostApi,
+) -> std::result::Result<CommandOutcome, PluginError> {
+    let args = args.take().ok_or_else(|| {
+        PluginError::Internal("una chiamata preparata è stata invocata due volte".into())
+    })?;
+    crate::safety::calling(owner, Gate::Command, command, || {
+        provider.invoke(command, args, mode, host)
+    })
+}
+
 /// Una chiamata a `CommandProvider` preparata sotto lock e invocabile fuori.
 ///
 /// Contiene anche il frame da ripristinare al rientro: attore, batch, pila e
@@ -2277,14 +2324,96 @@ impl PreparedCommand {
         &mut self,
         host: &mut dyn HostApi,
     ) -> std::result::Result<CommandOutcome, PluginError> {
-        let args = self.args.take().ok_or_else(|| {
-            PluginError::Internal("una chiamata preparata è stata invocata due volte".into())
-        })?;
-        crate::safety::calling(&self.owner, Gate::Command, &self.command, || {
-            self.provider.invoke(&self.command, args, self.mode, host)
-        })
+        invoke_prepared(
+            &self.owner,
+            &self.command,
+            &mut self.args,
+            self.mode,
+            self.provider.as_ref(),
+            host,
+        )
     }
 }
+
+/// Una chiamata a un comando **di sola lettura**, preparata con un frame tutto
+/// suo ([`Workspace::prepare_read_only_provider_command`]).
+///
+/// A differenza di [`PreparedCommand`] non lascia niente nello stato condiviso
+/// del workspace: nessun attore scambiato, nessun batch aperto, nessuna voce
+/// sulla pila dei comandi, `in_provider_call` mai alzato. Per questo l'host la
+/// può eseguire **senza il turno di scrittura**, e due letture possono girare
+/// insieme fra loro e accanto a chi scrive. La pila della ricorsione viaggia
+/// dentro il token ([`chain`](Self::chain)): chi presta l'host al provider la
+/// porta avanti alle invocazioni annidate.
+pub struct PreparedReadOnlyCommand {
+    owner: String,
+    command: String,
+    args: Option<serde_json::Value>,
+    mode: InvokeMode,
+    provider: Arc<dyn CommandProvider>,
+    why: &'static str,
+    /// I comandi della catena fino a questo, compreso.
+    chain: Vec<String>,
+    /// Il workspace in cui è stata preparata: la fine non si applica a un
+    /// altro, né a questo se nel frattempo si è chiuso.
+    workspace_id: u64,
+    /// Il vault si stava già chiudendo alla preparazione? Allora è una
+    /// lettura della chiusura stessa (un `deactivate` o un handler di
+    /// `VaultClosed` che invoca un comando), e la chiusura non la invalida.
+    closed_at_prepare: bool,
+    /// La bandiera **propria** della lettura: alzata da uno smontaggio o dalla
+    /// chiusura, l'esito non si applica.
+    cancel: Arc<AtomicBool>,
+    /// L'iscrizione fra le letture in volo, che cade col token. `None` per una
+    /// lettura della chiusura stessa: la chiusura che l'ha lanciata non la
+    /// deve aspettare.
+    _in_flight: Option<ReadInFlight>,
+}
+
+impl PreparedReadOnlyCommand {
+    pub fn owner(&self) -> &str {
+        &self.owner
+    }
+
+    pub fn command(&self) -> &str {
+        &self.command
+    }
+
+    /// Modalità per le capacità annidate: sempre una simulazione, come per il
+    /// recinto di sola lettura del percorso condiviso.
+    pub fn host_mode(&self) -> InvokeMode {
+        InvokeMode::DryRun
+    }
+
+    /// Il motivo da dare a [`ReadOnly`](crate::ReadOnly), il recinto che l'host
+    /// mette **sempre** davanti al proxy di questa chiamata.
+    pub fn read_only_reason(&self) -> &'static str {
+        self.why
+    }
+
+    /// La catena dei comandi fino a questo, compreso: è ciò che l'host passa a
+    /// [`Workspace::prepare_read_only_provider_command`] per le invocazioni
+    /// annidate, perché un comando che invoca sé stesso resti rifiutato.
+    pub fn chain(&self) -> &[String] {
+        &self.chain
+    }
+
+    /// Esegue **soltanto** il codice del provider, senza guardie del workspace.
+    pub fn invoke(
+        &mut self,
+        host: &mut dyn HostApi,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        invoke_prepared(
+            &self.owner,
+            &self.command,
+            &mut self.args,
+            self.mode,
+            self.provider.as_ref(),
+            host,
+        )
+    }
+}
+
 /// Frame del solo rebuild di manutenzione che l'host porta avanti senza una
 /// guardia del workspace. Attore, batch, pila e rinvio degli eventi restano
 /// aperti fino alla riconciliazione finale.
@@ -3596,6 +3725,10 @@ pub struct Workspace {
     /// esattamente la frase che li riguarda tutti insieme. Serve a una cosa
     /// sola: chiudere due volte non è chiudere due volte.
     closed: bool,
+    /// I comandi di sola lettura in volo, che il turno non vede: lo
+    /// smontaggio di un loro proprietario risponde `Busy`, la chiusura li
+    /// ferma e li aspetta ([`ReadsInFlight`]).
+    reads_in_flight: ReadsInFlight,
     /// Il vault che leggono i [`ResourceReader`] dati fuori, che non hanno il
     /// workspace e devono smettere quando si chiude. Lo svuota
     /// [`prepare_close`](Workspace::prepare_close), insieme a `closed`: così
@@ -4152,6 +4285,7 @@ impl Workspace {
             clock: Arc::new(crate::time::SystemClock),
             sources: Shelter::new(OpenSources::default()),
             closed: false,
+            reads_in_flight: ReadsInFlight::default(),
             resource_readers_vault,
             settings,
             view_states: ViewStates::in_memory(),
@@ -4631,7 +4765,7 @@ impl Workspace {
         if self.providers.plugins.get(plugin).is_none() {
             return Err(RegistryError::UnknownPlugin(plugin.to_string()));
         }
-        if self.dispatch.in_provider_call() {
+        if self.dispatch.in_provider_call() || self.reads_in_flight.busy(plugin) {
             return Err(RegistryError::Busy(plugin.to_string()));
         }
 
@@ -11503,6 +11637,145 @@ impl Workspace {
         self.prepare_provider_command_here(command, args, mode, None)
     }
 
+    /// Prepara un comando che si è dichiarato **di sola lettura**
+    /// (`!spec.scope.writes`) con un frame tutto suo, che l'host può eseguire
+    /// senza il turno di scrittura.
+    ///
+    /// Prende `&self`: non tocca lo stato condiviso. Niente `swap_actor`,
+    /// niente batch, niente voce sulla pila dei comandi, `in_provider_call`
+    /// resta basso. Gli eventi che altri producono mentre il comando legge
+    /// arrivano subito, e la sua fine non spinge undo, non chiude batch e non
+    /// accoda eventi ([`finish_read_only_provider_command`]).
+    ///
+    /// `outer` è la catena dei comandi che stanno invocando questo (vuota per
+    /// un ingresso dall'utente): il rifiuto della ricorsione si calcola su di
+    /// lei e non sulla pila condivisa, che appartiene a chi tiene il turno.
+    ///
+    /// La lettura si iscrive fra quelle in volo ([`reads_in_flight`]) finché
+    /// il token vive, con `cancel`: la bandiera **sua**, che l'host che la
+    /// serve guarda insieme a quelle di chi la contiene (`outer_stops`, la
+    /// bandiera del job e delle letture fuori). Lo smontaggio del proprietario
+    /// alza solo `cancel`: il job che l'ha chiamata riceve un `Cancelled` da
+    /// `invoke_command` e decide lui. La chiusura del vault alza anche
+    /// `outer_stops`, perché lì si ferma tutto. Finché la lettura è in volo,
+    /// lo smontaggio del suo proprietario risponde `Busy`; mentre chi smonta
+    /// il proprietario ne tiene la sbarra ([`ReadsInFlight::bar`]), una nuova
+    /// lettura è rifiutata con `Cancelled`.
+    ///
+    /// [`reads_in_flight`]: Self::reads_in_flight
+    ///
+    /// `None` vuol dire «non è per questa porta»: il comando scrive, oppure è
+    /// manutenzione del kernel. Il chiamante passa allora dal percorso di
+    /// sempre ([`prepare_provider_command`], col turno). Vale anche per un
+    /// comando che scrive invocato in `DryRun`: è l'anteprima di una
+    /// scrittura, e la sua semantica resta quella del frame condiviso.
+    ///
+    /// [`finish_read_only_provider_command`]: Self::finish_read_only_provider_command
+    /// [`prepare_provider_command`]: Self::prepare_provider_command
+    pub fn prepare_read_only_provider_command(
+        &self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+        outer: &[String],
+        cancel: &Arc<AtomicBool>,
+        outer_stops: &[Arc<AtomicBool>],
+    ) -> std::result::Result<Option<PreparedReadOnlyCommand>, PluginError> {
+        let at = self.command_owner(command)?;
+        let entry = &self.providers.commands[at];
+        if entry.id == crate::maintenance::MAINTENANCE_ID {
+            return Ok(None);
+        }
+        let spec = entry
+            .specs
+            .iter()
+            .find(|s| s.id == command)
+            .expect("il proprietario è stato trovato dichiarando questo comando");
+        if spec.scope.writes {
+            return Ok(None);
+        }
+        spec.validate_args(&args)?;
+
+        if outer.iter().any(|c| c == command) {
+            return Err(self_invocation(outer, command));
+        }
+        // Alla chiusura la lettura non si iscrive: chi si spegne può ancora
+        // invocare i comandi di chi resta, e la chiusura non aspetta le
+        // letture lanciate da sé. Altrimenti l'iscrizione è rifiutata se chi
+        // smonta il proprietario ne ha sbarrato le nuove letture.
+        let in_flight = if self.closed {
+            None
+        } else {
+            let entered =
+                self.reads_in_flight
+                    .enter(&entry.id, Arc::clone(cancel), outer_stops.to_vec());
+            Some(entered.ok_or_else(|| read_stopped(command))?)
+        };
+        let why = if mode.is_dry_run() {
+            "una simulazione non scrive"
+        } else {
+            "il comando si è dichiarato di sola lettura"
+        };
+        let mut chain = outer.to_vec();
+        chain.push(command.to_string());
+        Ok(Some(PreparedReadOnlyCommand {
+            owner: entry.id.clone(),
+            command: command.to_string(),
+            args: Some(args),
+            mode,
+            provider: Arc::clone(&entry.provider),
+            why,
+            chain,
+            workspace_id: self.workspace_id,
+            closed_at_prepare: self.closed,
+            cancel: Arc::clone(cancel),
+            _in_flight: in_flight,
+        }))
+    }
+
+    /// Chiude una [`PreparedReadOnlyCommand`]: il recinto degli intenti,
+    /// il completamento del piano e la localizzazione. Nient'altro: niente
+    /// undo (una lettura non ha niente da annullare, anche se il provider ne
+    /// dichiara uno), niente batch, niente eventi.
+    ///
+    /// Se il vault si è chiuso dopo la preparazione, o la lettura è stata
+    /// fermata (la sua bandiera, alzata da uno smontaggio), l'esito non si
+    /// applica: la chiamata risponde con [`PluginError::Cancelled`], anche se
+    /// il provider ha ingoiato il rifiuto dell'host. Una lettura preparata
+    /// quando la chiusura era già cominciata (chi si spegne può ancora
+    /// invocare comandi, come sul percorso condiviso) finisce normalmente.
+    pub fn finish_read_only_provider_command(
+        &self,
+        prepared: PreparedReadOnlyCommand,
+        outcome: std::result::Result<CommandOutcome, PluginError>,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        let closed_meanwhile = self.closed && !prepared.closed_at_prepare;
+        let stopped = prepared.cancel.load(Ordering::Relaxed);
+        if prepared.workspace_id != self.workspace_id || closed_meanwhile || stopped {
+            return Err(read_stopped(&prepared.command));
+        }
+        let outcome = outcome.and_then(|outcome| {
+            self.guard_command_intent(&prepared.owner, &outcome)
+                .map(|()| outcome)
+        });
+        match outcome {
+            Err(and) => Err(self.localized(&prepared.owner, and)),
+            Ok(mut outcome) => {
+                if let CommandEffect::Plan(plan) = &mut outcome.effect {
+                    plan.complete();
+                }
+                self.localize(&prepared.owner, &mut outcome);
+                Ok(outcome)
+            }
+        }
+    }
+
+    /// Il registro delle letture in volo, da tenere **fuori** dal lucchetto:
+    /// chi chiude il vault lo usa per fermarle e aspettarle.
+    pub fn reads_in_flight(&self) -> ReadsInFlight {
+        self.reads_in_flight.clone()
+    }
+
     fn prepare_provider_command_here(
         &mut self,
         command: &str,
@@ -11520,15 +11793,7 @@ impl Workspace {
         spec.validate_args(&args)?;
 
         if self.providers.command_stack.iter().any(|c| c == command) {
-            let mut round = self.providers.command_stack.clone();
-            round.push(command.to_string());
-            return Err(PluginError::BadArgs(
-                format!(
-                    "un comando non può invocare sé stesso: {}",
-                    round.join(" → ")
-                )
-                .into(),
-            ));
+            return Err(self_invocation(&self.providers.command_stack, command));
         }
 
         if self.providers.commands[at].id == crate::maintenance::MAINTENANCE_ID {
@@ -11589,15 +11854,7 @@ impl Workspace {
         spec.validate_args(&args)?;
 
         if self.providers.command_stack.iter().any(|id| id == command) {
-            let mut round = self.providers.command_stack.clone();
-            round.push(command.to_string());
-            return Err(PluginError::BadArgs(
-                format!(
-                    "un comando non può invocare sé stesso: {}",
-                    round.join(" → ")
-                )
-                .into(),
-            ));
+            return Err(self_invocation(&self.providers.command_stack, command));
         }
 
         let owner = self.providers.commands[at].id.clone();
@@ -11799,15 +12056,7 @@ impl Workspace {
         // profondità da limitare con un numero: è un errore di chi lo ha
         // scritto, e l'unica risposta utile lo nomina.
         if self.providers.command_stack.iter().any(|c| c == command) {
-            let mut round = self.providers.command_stack.clone();
-            round.push(command.to_string());
-            return Err(PluginError::BadArgs(
-                format!(
-                    "un comando non può invocare sé stesso: {}",
-                    round.join(" → ")
-                )
-                .into(),
-            ));
+            return Err(self_invocation(&self.providers.command_stack, command));
         }
 
         // **La manutenzione la esegue il kernel** (§15.2). L'id è passato dalla

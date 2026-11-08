@@ -4,7 +4,7 @@
 use fub_abi::format::{DocumentSource, ParseContext, SourceKind};
 use fub_abi::model::{Block, DocumentModel, Inline, LinkTarget, Span};
 use fub_abi::{FormatError, FormatProvider};
-use fub_format_svg::{SvgProvider, FORMAT_ID, SUMMARY_KIND};
+use fub_format_svg::{FubannProvider, SvgProvider, FORMAT_ID, SUMMARY_KIND};
 
 const HEAD: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" xmlns:xlink="http://www.w3.org/1999/xlink" fub:version="1" viewBox="0 0 100 100">"#;
 
@@ -38,10 +38,22 @@ fn inside(model: &DocumentModel) -> &[Block] {
 }
 
 #[test]
+fn the_descriptors_speak_of_fub_not_of_fubdraw() {
+    // FubDraw è il nome tecnico del formato (ADR 0203), non un prodotto che
+    // chi usa Fub conosce: nella lista dei formati non compare (PA T33).
+    for name in [
+        SvgProvider.descriptor().name,
+        FubannProvider.descriptor().name,
+    ] {
+        assert!(!name.contains("FubDraw"), "{name}");
+    }
+}
+
+#[test]
 fn the_descriptor_claims_svg_as_text() {
     let descriptor = SvgProvider.descriptor();
     assert_eq!(descriptor.id, FORMAT_ID);
-    assert_eq!(descriptor.name, "SVG (FubDraw)");
+    assert_eq!(descriptor.name, "Disegno SVG");
     assert_eq!(descriptor.extensions, ["svg"]);
     assert_eq!(descriptor.source, SourceKind::Text);
     // Né wikilink, né tag, né frontmatter, né prosa: le feature che scrivono

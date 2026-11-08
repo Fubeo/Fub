@@ -62,6 +62,9 @@
 //! - [`keys`] — **che forma ha una scorciatoia**: la sequenza di accordi, i
 //!   modificatori in ordine, e quali stringhe questa app non sa premere
 //!   (§1.36);
+//! - [`theme_font`] — **quale carattere di un tema regge**: la famiglia, il
+//!   file `fonts/<nome>.woff2`, il peso e lo stile, e i limiti che l'host e la
+//!   shell applicano entrambi;
 //! - [`health`] — cosa conta come link rotto, e cosa no.
 //!
 //! Le regole che erano **già** nel contratto restano dove sono e si raggiungono
@@ -102,6 +105,7 @@ pub mod search_syntax;
 pub mod snippet;
 pub mod tag;
 pub mod text_policy;
+pub mod theme_font;
 pub mod trash;
 pub mod yaml;
 
