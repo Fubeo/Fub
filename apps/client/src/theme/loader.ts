@@ -14,6 +14,11 @@
 // caratteri un terzo ancora (§31.3). La struttura, che non si tematizza, non
 // passa da qui: è importata da `main.ts` e resta sempre montata.
 //
+// Un tema che eredita dalla serie (`extends`, ADR 0240) non sostituisce la
+// pelle di serie: la lascia in `pelle` e mette la sua in un canale proprio,
+// `pelle-tema`, subito dopo. Il posto `caratteri-tema` aspetta i caratteri di
+// un tema allo stesso modo.
+//
 // **L'ordine è dichiarato, non una conseguenza di quando si monta.** Finché i
 // canali erano due, appendere in coda bastava — l'ordine di montaggio era
 // sempre lo stesso ordine di lettura. Con un terzo canale (e presto un quarto,
@@ -45,7 +50,14 @@ import type { ContrastPair } from "./contrast-fixture";
 import { THEME_2_PROFILE } from "./scrittoio/profile";
 import { t } from "../i18n/strings";
 
-export type Layer = "caratteri" | "foglio" | "pelle" | "preferenze" | "snippets";
+export type Layer =
+  | "caratteri"
+  | "caratteri-tema"
+  | "foglio"
+  | "pelle"
+  | "pelle-tema"
+  | "preferenze"
+  | "snippets";
 
 /**
  * Il **profilo** contro cui il cancello misura un fascio: quale motore, quali
@@ -103,10 +115,20 @@ export type ThemeBundleManifest = Omit<ThemeManifest, "engine" | "lights" | "mot
 
 export interface ThemeBundle {
   readonly manifest: ThemeBundleManifest;
+  /** Per un tema che eredita e non porta il foglio di questa luce, chi compone
+   * il fascio ci mette quello di serie della stessa luce e dello stesso
+   * contrasto: il cancello lo misura come ogni altro foglio. */
   readonly sheet: string;
   readonly skin?: string;
   /** Asset names are validated before mount; their bytes stay behind the host boundary. */
   readonly assets: Readonly<Record<string, unknown>>;
+  /**
+   * Ciò che un tema con `extends` eredita e che resta montato sotto di lui: la
+   * pelle di serie, nel canale `pelle`. La sua pelle va in `pelle-tema`, dopo.
+   * Lo dà chi conosce la serie (`theme.ts`); un fascio che dichiara `extends`
+   * senza portarlo è rifiutato, perché non si saprebbe cosa resta sotto.
+   */
+  readonly inherited?: { readonly skin: string };
 }
 
 export type ThemeMountResult =
@@ -115,8 +137,21 @@ export type ThemeMountResult =
 
 export type ThemeTroubleReporter = (trouble: ThemeTrouble) => void;
 
-/** L'ordine dichiarato della cascata. Le preferenze vengono dopo ogni pelle. */
-const ORDER: readonly Layer[] = ["caratteri", "foglio", "pelle", "preferenze", "snippets"];
+/**
+ * L'ordine dichiarato della cascata. I canali `-tema` stanno subito dopo il
+ * loro gemello di serie: un tema che eredita lascia montata la serie e vince
+ * su di lei a parità di specificità, perché viene dopo. Le preferenze vengono
+ * dopo ogni pelle, i frammenti della persona per ultimi.
+ */
+const ORDER: readonly Layer[] = [
+  "caratteri",
+  "caratteri-tema",
+  "foglio",
+  "pelle",
+  "pelle-tema",
+  "preferenze",
+  "snippets",
+];
 
 /** Sostituisce uno strato e lo inserisce nel punto dichiarato della cascata. */
 function replace(text: string, layer: Layer): void {
@@ -139,23 +174,38 @@ function replace(text: string, layer: Layer): void {
   else head.append(el);
 }
 
-function style(text: string, layer: "foglio" | "pelle"): HTMLStyleElement {
+function style(text: string, layer: "foglio" | "pelle" | "pelle-tema"): HTMLStyleElement {
   const element = document.createElement("style");
   element.dataset.fub = layer;
   element.textContent = text;
   return element;
 }
 
-/** Sostituisce foglio e pelle in una sola commit, dopo che ogni cancello è verde. */
-function replaceTheme(sheet: string, skin: string | undefined): void {
+/** I canali che un fascio di tema possiede: si sostituiscono tutti insieme. */
+const THEME_LAYERS = ["foglio", "pelle", "pelle-tema"] as const;
+
+/**
+ * Sostituisce foglio e pelli in una sola commit, dopo che ogni cancello è
+ * verde. Senza eredità monta foglio e pelle come sempre, e `pelle-tema` si
+ * toglie; con l'eredità la pelle di serie va in `pelle` e quella del tema, se
+ * c'è, in `pelle-tema`.
+ */
+function replaceTheme(sheet: string, skin: string | undefined, inherited: string | undefined): void {
   const head = document.head;
   const previous = [...head.querySelectorAll<HTMLStyleElement>(
-    'style[data-fub="foglio"], style[data-fub="pelle"]',
+    THEME_LAYERS.map((layer) => `style[data-fub="${layer}"]`).join(", "),
   )];
-  const next = [style(sheet, "foglio"), ...(skin === undefined ? [] : [style(skin, "pelle")])];
-  const preference = head.querySelector<HTMLStyleElement>('style[data-fub="preferenze"]');
+  const next = inherited === undefined
+    ? [style(sheet, "foglio"), ...(skin === undefined ? [] : [style(skin, "pelle")])]
+    : [style(sheet, "foglio"), style(inherited, "pelle"), ...(skin === undefined ? [] : [style(skin, "pelle-tema")])];
+  // Il primo canale montato che viene dopo i canali del tema: di solito le
+  // preferenze, ma anche i frammenti quando le preferenze non ci sono ancora.
+  const last = ORDER.indexOf("pelle-tema");
+  const anchor = [...head.querySelectorAll<HTMLStyleElement>("style[data-fub]")].find(
+    (existing) => ORDER.indexOf(existing.dataset.fub as Layer) > last,
+  ) ?? null;
   try {
-    for (const element of next) head.insertBefore(element, preference);
+    for (const element of next) head.insertBefore(element, anchor);
   } catch (error) {
     for (const element of next) element.remove();
     throw error;
@@ -297,8 +347,17 @@ export function validateThemeBundle(bundle: ThemeBundle, light: ThemeLight): str
   if (typeof bundle.sheet !== "string" || bundle.sheet.trim() === "") {
     reasons.push("fascio: foglio mancante");
   }
-  if (bundle.skin !== undefined && bundle.skin.trim() === "") {
+  // Per un tema che eredita una pelle assente è il caso normale: lo veste la
+  // serie. Chi non eredita e porta una pelle vuota ha perso un file.
+  const inherits = bundle.manifest.extends !== undefined;
+  if (bundle.skin !== undefined && bundle.skin.trim() === "" && !inherits) {
     reasons.push("fascio: pelle vuota");
+  }
+  if (inherits && bundle.inherited === undefined) {
+    reasons.push(`fascio: eredita da ${bundle.manifest.extends || "<vuoto>"}, che qui non c'è`);
+  }
+  if (!inherits && bundle.inherited !== undefined) {
+    reasons.push("fascio: porta una pelle ereditata ma non dichiara extends");
   }
 
   const policy = {
@@ -351,7 +410,7 @@ function rejectTheme(
   report(trouble);
   return { mounted: false, trouble };
 }
-/** Valida l'intero fascio e solo allora sostituisce i due strati del tema. */
+/** Valida l'intero fascio e solo allora sostituisce gli strati del tema. */
 export function mountThemeBundle(
   bundle: ThemeBundle,
   light: ThemeLight,
@@ -360,11 +419,14 @@ export function mountThemeBundle(
   const reasons = validateThemeBundle(bundle, light);
   if (reasons.length > 0) return rejectTheme(bundle.manifest.name, reasons, report);
   try {
+    // Una pelle vuota di un tema che eredita non occupa `pelle-tema`.
+    const skin = bundle.skin === undefined || (bundle.inherited !== undefined && bundle.skin.trim() === "")
+      ? undefined
+      : materializeAssets(bundle.skin, bundle.assets, bundle.manifest.asset_namespace);
     replaceTheme(
       materializeAssets(bundle.sheet, bundle.assets, bundle.manifest.asset_namespace),
-      bundle.skin === undefined
-        ? undefined
-        : materializeAssets(bundle.skin, bundle.assets, bundle.manifest.asset_namespace),
+      skin,
+      bundle.inherited?.skin,
     );
     return { mounted: true };
   } catch (error) {

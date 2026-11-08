@@ -22,6 +22,10 @@ Dove una superficie offre anche `file` o `adattato` il cancello lo fa rispettare
 
 Una cartella installabile contiene `manifest.json`, un foglio per ogni luce dichiarata (`sheet-light.css` e/o `sheet-dark.css`), `skin.css` opzionale e asset locali. Il campione `sample/` è un bundle non-serie completo, generato dagli stessi cancelli.
 
+## Partire dalla serie
+
+Con `"extends": "fub.serie"` nel manifest un tema parte dal tema di serie e porta solo ciò che cambia. I fogli diventano facoltativi: una luce senza foglio usa quello di serie della stessa luce e dello stesso contrasto, anche alto. Un foglio portato dal tema resta completo: passa i ruoli e i contrasti come ogni foglio. La pelle di serie resta montata, e `skin.css` si aggiunge dopo di lei: una regola del tema vince su quella di serie a parità di specificità, e un componente che il tema non nomina resta vestito dalla serie, anche quando arriva con una versione di Fub più nuova. Una `skin.css` assente o vuota è il caso normale. Quando la serie cambia, il tema eredita il cambio. Ereditare da un altro tema non si può.
+
 Il manifest usa `engine: theme-2`; l'id deve essere un singolo componente di path sicuro e `asset_namespace` deve essere esattamente `theme://<id>/`. Il tema non dichiara permessi; può dichiarare impostazioni sue (`settings`), che la shell mostra nelle Preferenze. Un engine sconosciuto, un id insicuro, un namespace diverso, un manifest malformato o una luce non dichiarata vengono rifiutati. Un tema `theme-1` resta installato ma la shell non lo monta: lo segnala con una diagnosi e ricade sul tema di serie.
 
 ## Limiti e pubblicazione

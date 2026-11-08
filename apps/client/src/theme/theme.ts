@@ -13,6 +13,7 @@ import {
   mountThemeBundle,
   validateThemeBundle,
   declareThemeProfile,
+  type ThemeBundle,
   type ThemeBundleManifest,
   type ThemeMountResult,
   type ThemeProfile,
@@ -271,25 +272,21 @@ export function preferenceTokens(
 }
 
 /**
- * Perché un fascio senza foglio non si monta ancora: un tema con `extends`
- * può lasciare il foglio di una luce alla serie, ma il loader non sa ancora
- * comporre il foglio di serie con la pelle del tema. Finché non lo sa, il
- * tema resta fuori e la persona vede la serie, con questo motivo.
+ * Il fascio da montare per una luce di un tema installato. Un tema che eredita
+ * dalla serie (`extends: "fub.serie"`) e non porta il foglio di questa luce
+ * prende quello di serie della stessa luce e dello stesso contrasto, e porta
+ * con sé la pelle di serie, che resta montata sotto la sua (ADR 0240).
+ * Ereditare da altro che la serie non si sa fare: il fascio parte senza
+ * eredità e il cancello lo rifiuta dicendo da chi voleva ereditare.
  */
-const INHERITED_SHEET_REASON = "il foglio di questa luce viene dal tema di serie, che questa versione non sa ancora comporre";
-
-function themeBundle(payload: ThemePayload): {
-  manifest: ThemeBundleManifest;
-  sheet: string;
-  skin?: string;
-  assets: Readonly<Record<string, unknown>>;
-} | null {
-  if (payload.sheet === null) return null;
+function themeBundle(payload: ThemePayload, light: Theme, contrast: ContrastLevel): ThemeBundle {
+  const inherits = payload.manifest.extends === SERIES_THEME_ID;
   return {
     manifest: payload.manifest,
-    sheet: payload.sheet,
+    sheet: payload.sheet ?? (inherits ? series.sheet(light, contrast) : ""),
     skin: payload.skin ?? undefined,
     assets: payload.assets,
+    ...(inherits ? { inherited: { skin: series.skin } } : {}),
   };
 }
 
@@ -349,13 +346,8 @@ async function apply(): Promise<void> {
         if (payload.manifest.id !== requestedId || payload.light !== light) {
           reportLoadFailure(requestedId, "risposta del canale non coerente");
         } else {
-          const bundle = themeBundle(payload);
-          if (bundle === null) {
-            reportLoadFailure(requestedId, INHERITED_SHEET_REASON);
-          } else {
-            mounted = mountThemeBundle(bundle, light);
-            if (mounted.mounted) actualId = requestedId;
-          }
+          mounted = mountThemeBundle(themeBundle(payload, light, contrast), light);
+          if (mounted.mounted) actualId = requestedId;
         }
       } catch (error) {
         if (generation !== applyGeneration) return;
@@ -502,8 +494,10 @@ async function readCatalog(): Promise<ThemeInfo[]> {
                 // Un fascio che il cancello rifiuta resta installato ma fuori
                 // dal catalogo, e la persona sa perché: è anche il caso di un
                 // tema `theme-1`, scritto per la shell di prima.
-                const bundle = themeBundle(payload);
-                const reasons = bundle === null ? [INHERITED_SHEET_REASON] : validateThemeBundle(bundle, light);
+                // Il foglio ereditato si misura col contrasto di adesso: è
+                // quello che `apply` monterà.
+                const contrast = effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
+                const reasons = validateThemeBundle(themeBundle(payload, light, contrast), light);
                 if (reasons.length > 0) {
                   reportThemeTrouble({ type: "theme", theme: info.manifest.name, reasons });
                   return null;

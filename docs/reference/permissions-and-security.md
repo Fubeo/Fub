@@ -75,8 +75,10 @@ con `theme-1`, rende il manifest malformato. Con `extends` i fogli sono
 facoltativi: `read_theme` consegna `sheet: null` per una luce senza foglio, e
 `lights` resta obbligatorio. Un tema che eredita e non porta né fogli, né skin,
 né asset è rifiutato. Il catalogo firmato passa dalla stessa validazione. Il
-client non monta ancora un fascio con `sheet: null`: resta sulla serie e lo
-dice nella diagnosi.
+client monta un tema che eredita sopra la serie: per una luce senza foglio usa
+il foglio di serie della stessa luce e dello stesso contrasto, lascia la pelle
+di serie montata e aggiunge la skin del tema in un canale suo
+([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
 
 Da `theme-2` un tema può dichiarare impostazioni: al massimo 32, con nome
 `a-z`, `0-9`, `-`, etichetta in prosa e specie fra interruttore, numero (con

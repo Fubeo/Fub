@@ -274,6 +274,20 @@ verifica. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
 400 px, ispettore da 248 a 440 px. Un tema `theme-1` installato non si monta, e
 la diagnosi del catalogo nomina il motore.
 
+Il caricatore (`theme/loader.ts`) monta il tema per canali, uno `<style
+data-fub>` ciascuno, in un ordine dichiarato e non di montaggio:
+`caratteri`, `caratteri-tema`, `foglio`, `pelle`, `pelle-tema`,
+`preferenze`, `snippets`. Un tema senza `extends` occupa `foglio` e `pelle`.
+Un tema che eredita dalla serie (`extends: "fub.serie"`) lascia la pelle di
+serie in `pelle` e mette la sua in `pelle-tema`, dopo: una sua regola vince a
+parità di specificità, e un componente che non nomina resta vestito dalla
+serie. Per una luce senza foglio usa quello di serie della stessa luce e dello
+stesso contrasto. Foglio e pelli si sostituiscono in una sola commit, solo con
+ogni cancello verde; tornare alla serie, applicare un altro tema o annullare
+l'anteprima tolgono anche `pelle-tema`
+([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)). `caratteri-tema` è un
+posto riservato: oggi nessuno lo riempie.
+
 ### Comportamenti della shell
 
 Ciò che la shell fa sopra le porte generiche, senza contratti propri:

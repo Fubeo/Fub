@@ -183,20 +183,22 @@ describe("tema runtime installato", () => {
     expect(reasons.some((reason) => reason.includes("engine") && reason.includes("theme-2"))).toBe(true);
   });
 
-  // Un tema che lascia il foglio alla serie (`sheet: null`) non si monta
-  // finché il loader non sa comporre la serie con la sua pelle: la shell resta
-  // sulla serie e dice perché, invece di montare un fascio senza foglio.
-  it("un tema con extends senza il foglio della luce resta fuori, e la serie resta", async () => {
+  // Un tema che lascia il foglio alla serie (`sheet: null`) si monta col
+  // foglio di serie della sua luce: la pelle di serie resta in `pelle` e la
+  // sua si aggiunge in `pelle-tema` (ADR 0240).
+  it("un tema con extends senza il foglio della luce si monta sopra la serie", async () => {
     const extending: ThemeManifest = { ...manifest, extends: "fub.serie" };
+    const themeSkin = ".shell-tooltip { white-space: nowrap; }";
     box.listThemes.mockResolvedValue([{ manifest: extending, trust: "community" }]);
-    box.readTheme.mockResolvedValue({ ...payload, manifest: extending, sheet: null });
-    await mountFromCache(info.manifest.id);
+    box.readTheme.mockResolvedValue({ ...payload, manifest: extending, sheet: null, skin: themeSkin });
+    const theme = await mountFromCache(info.manifest.id);
     await vi.waitFor(() =>
-      expect(JSON.parse(localStorage.getItem("fub.appearance.theme")!).id).toBe("fub.serie"),
+      expect(document.querySelector('style[data-fub="pelle-tema"]')?.textContent).toBe(themeSkin),
     );
+    expect(theme.currentThemeId()).toBe(info.manifest.id);
     expect(document.querySelector('style[data-fub="foglio"]')?.textContent).toBe(sheetLight);
-    const reasons = box.report.mock.calls.flatMap(([trouble]) => (trouble as { reasons: string[] }).reasons);
-    expect(reasons.some((reason) => reason.includes("tema di serie"))).toBe(true);
+    expect(document.querySelector('style[data-fub="pelle"]')?.textContent).toBe(skin);
+    expect(box.report).not.toHaveBeenCalled();
   });
 
   it("does not reactivate a removed theme after a restart", async () => {
