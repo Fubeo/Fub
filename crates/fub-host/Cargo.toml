@@ -145,9 +145,18 @@ ureq = { version = "3", default-features = false, features = [
 rustix = { workspace = true }
 
 # Il job object di una CLI Craft su Windows (`craft/launch.rs`): il tempo
-# scaduto la ferma con tutti i suoi figli.
+# scaduto la ferma con tutti i suoi figli. Solo le feature che servono: i job,
+# l'avvio sospeso e la ripresa del thread (`Threading`,
+# `Diagnostics_ToolHelp`), gli handle (`Foundation`) e `Security`, che
+# `CreateJobObjectW` nomina nella firma.
 [target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true }
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }
 
 [features]
 default = ["notify-watcher", "http-client", "official-features", "rich", "xlsx", "draw", "craft"]
