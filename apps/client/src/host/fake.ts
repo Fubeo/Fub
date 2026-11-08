@@ -631,7 +631,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   function liveSession(session: string): LiveSession {
     const live = liveSessions.get(session);
     if (live) return live;
-    throw { kind: "not_found", message: `no live session ${JSON.stringify(session)} in this window` } satisfies PluginError;
+    throw { kind: "not_found", message: `Questa finestra non ha la sessione live ${session}.` } satisfies PluginError;
   }
 
   /// Un contatore nella sua grafia unica, o un errore della shell: l'app
@@ -1618,7 +1618,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         if (!session) throw new Error("host fake: grid session closed");
         const outcome = gridBytes?.outcomes?.[gridBytesOutcome++];
         if (!outcome) {
-          throw { kind: "bad_args", message: `host fake: grid command \`${request.command.id}\` is not served` } satisfies PluginError;
+          throw { kind: "bad_args", message: `host fake: il comando della griglia \`${request.command.id}\` non è servito` } satisfies PluginError;
         }
         gridBytesInstances.set(instance, {
           ...session,
@@ -1631,7 +1631,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       })),
       closeGridBytes: (_surface, instance) => gate("closeGridBytes", [instance], Promise.resolve().then(() => {
         if (!gridBytesInstances.delete(instance)) {
-          throw { kind: "not_found", message: "host fake: grid session closed" } satisfies PluginError;
+          throw { kind: "not_found", message: "host fake: la sessione della griglia è chiusa" } satisfies PluginError;
         }
       })),
       writeDocument: (id, source, base, vault, open) => {
@@ -1813,7 +1813,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         installedOperation("setInstalledPluginEnabled", [installation, enabled], () => {
           const plugin = installed(installation);
           if (enabled && plugin.revoked) throw {
-            kind: "permission_denied", message: "revoked catalog release cannot mount",
+            kind: "permission_denied", message: "Questa versione del catalogo è stata ritirata: non si monta.",
           } satisfies PluginError;
           plugin.enabled = enabled;
           reconcile(plugin);
@@ -1920,7 +1920,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
           if ([...liveSessions.values()].some((live) => live.document === document)) {
             throw {
               kind: "already_exists",
-              message: `document ${JSON.stringify(document)} already has a live session`,
+              message: `«${document}» ha già una sessione live.`,
             } satisfies PluginError;
           }
           const chosen = request.address === undefined
@@ -1930,11 +1930,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
             throw (request.address === undefined
               ? {
                   kind: "unserved",
-                  message: "the PC is not on a local network: no active interface has a private IPv4 address",
+                  message: "Il PC non è su una rete locale: nessuna interfaccia attiva ha un indirizzo IPv4 privato.",
                 }
               : {
                   kind: "not_found",
-                  message: `${request.address} is not a private address of an active interface`,
+                  message: `${request.address} non è l'indirizzo privato di un'interfaccia attiva.`,
                 }) satisfies PluginError;
           }
           const session = `live-${String(++nextLive).padStart(6, "0")}`;
@@ -1963,9 +1963,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
         installedOperation("livePairing", [session, renew], () => {
           const live = liveSession(session);
           if (!renew) return live.pairing && liveCopy(live.pairing);
-          if (live.ended) throw { kind: "cancelled", message: "the live session has ended" } satisfies PluginError;
+          if (live.ended) throw { kind: "cancelled", message: "La sessione live è finita." } satisfies PluginError;
           if (live.writer?.connected) {
-            throw { kind: "already_exists", message: "a writer is connected to the session" } satisfies PluginError;
+            throw { kind: "already_exists", message: "Il tablet è collegato: un QR nuovo si chiede quando esce." } satisfies PluginError;
           }
           live.pairing = livePairing(session, live);
           // Lo scrittore che aspettava la ripresa la perde.
@@ -1977,10 +1977,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
       liveSend: (session, message) =>
         installedOperation("liveSend", [session, message], () => {
           const live = liveSession(session);
-          if (live.ended) throw { kind: "cancelled", message: "the live session has ended" } satisfies PluginError;
+          if (live.ended) throw { kind: "cancelled", message: "La sessione live è finita." } satisfies PluginError;
           const regression = (seq: string): PluginError => ({
             kind: "conflict",
-            message: `seq ${seq} is behind the session seq ${live.seq}`,
+            message: `La sessione live ha rifiutato il messaggio: il seq ${seq} è indietro rispetto al ${live.seq} della sessione.`,
           });
           if (message.t === "ack" || message.t === "nack") {
             liveCounter(message.writer, "writer");
@@ -1989,7 +1989,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
             if (at < 0) {
               throw {
                 kind: "not_found",
-                message: `commit ${message.c} of writer ${message.writer} is not awaiting an answer`,
+                message: `La sessione live ha rifiutato il messaggio: il commit ${message.c} dello scrittore ${message.writer} non aspetta una risposta.`,
               } satisfies PluginError;
             }
             // Un `ack` di un duplicato non porta operazioni nuove: il suo
