@@ -61,6 +61,22 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · fub-pre-alpha · da 0.2.0 in poi un `enum` o un `variant`
+  che attraversa il confine non prende casi nuovi, e un'interfaccia
+  esportata dal plugin non prende funzioni nuove: le novità arrivano con
+  interfacce nuove, come per i record; la guardia, l'ADR 0235 e i commenti
+  di `abi.wit` lo dicono (nuovo task PA T58, che prova prima anche gli
+  import) · T7 ha provato con componenti veri che l'una e l'altra cosa
+  impediscono di caricare un plugin già compilato; alla domanda fra
+  stringere la guardia e scriverlo solo nella pagina l'utente: «non importa
+  quanto tempo ci vorrà, meglio la qualità»
+
+- 2026-11-08 · fub-pre-alpha (orchestratore) · #295 unita in `main` col sì
+  dell'utente (fb722164); i file del piano K3 entrati con lei escono da
+  `main` con #316 (PLAN.md e PLAN-ui erano in conflitto con ogni ramo di
+  piano); gli altri rami si allineano a `main` dopo #316 · l'utente: «Sì,
+  unisci #295»
+
 - 2026-11-08 · fub-pre-alpha (orchestratore) · ogni componente
   d'esempio (`esempi/*/Cargo.toml`) e `tools/varco-wasm` ha un
   `[workspace]` suo, vuoto (844c5f5b) · i coder lavorano in worktree
