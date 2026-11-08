@@ -360,7 +360,7 @@ Se una di queste cade, la stima si allunga.
 | PA T2 · N4 e K5 allineati a `main` | PA | da fare | #295 in `main` | basso | S | `tsc --noEmit` pulito sui due rami |
 | PA T11 · il vassoio delle barre | PA | da fare (D6 C: chiaro di serie, «marcate» in Aspetto) | S2 T20 | basso | S | Vitest delle preferenze, foto del banco |
 | Il piano del telefono | telefono | da pianificare (D1 B) | S2 in `main`; un pianificatore alla volta | medio: rifà la cornice del telefono prima dell'APK | L | il piano approvato e i suoi task in `main` |
-| PA T20, T21 · i test instabili del client e del banco | PA | da fare | nessuno | medio | M + M | 50 giri verdi o causa trovata |
+| PA T20, T21 · i test instabili del client e del banco | PA | T20 integrato (baseline live-07…11 dal runner); T21 in corso | nessuno | medio | M + M | 50 giri verdi o causa trovata |
 | PA T36 · installare da cartella, e la diagnosi | PA | da fare | T34; S2 T10 | medio: un'IPC nuova che scrive nella configurazione | M | test di `fub-host`, Vitest delle Impostazioni |
 | PA T37 · collegare una cartella, il tema cambia al salvataggio | PA | da fare | T36 | medio: un osservatore nuovo | M | test di `fub-host` con l'evento, Vitest |
 | PA T38 · la pagina «Tutti i componenti» | PA | da fare | T35, T36; S2 T10 | basso | M | foto del banco uguali, bundle iniziale uguale |
@@ -4238,7 +4238,13 @@ Casi limite: un difetto del banco che è un difetto dell'app (si corregge
 l'app).
 Fatto quando: ogni issue ha la causa corretta o le corse scritte.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] integrato · 4bea6b45..eb3e85d5 · le cinque cause corrette:
+#312 e proof.test (albero parziale nel confronto; e il correttore non
+ricontrollava la prosa che il parser raggiunge dopo l'apertura, ora sì),
+#286 (memo della pelle nel cancello, finestra della griglia, punte in sei
+prove), #279 e #273 (la Live si fotografa a salvataggio finito e a formule
+disegnate), #280 (orologio fisso nel banco del moto); 50 corse verdi;
+restano: le baseline di live-07…11 dal runner con la consegna 3
 
 ## T21 · I test instabili della WebView
 
