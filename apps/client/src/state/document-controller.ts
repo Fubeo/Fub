@@ -152,7 +152,7 @@ import type * as SlashPanelModule from "../panels/slash/panel";
 import { noteTargets } from "../editors/text/profiles/markdown/kinds";
 import type { SelectionBox } from "../editors/core/editor-actions";
 import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
-import { errorText } from "../host/errors";
+import { errorText, isErrorKind } from "../host/errors";
 import { renderOnOpen } from "./craft-previews";
 import { writeChrome } from "./machine-chrome";
 import { onLanguage, t } from "../i18n/strings";
@@ -1028,12 +1028,14 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   view.attach();
   sessionEventsStop?.();
   paintedSessions.clear();
+  deniedSaves.clear();
   const stopSessionEvents = documentSessions.subscribe(handleSessionEvent);
   sessionEventsStop = stopSessionEvents;
   lifetime.add(() => {
     closeDraining = false;
     stopSessionEvents();
     paintedSessions.clear();
+    deniedSaves.clear();
     if (sessionEventsStop === stopSessionEvents) sessionEventsStop = undefined;
     for (const r of panes.values()) {
       if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, r.id);
@@ -1930,11 +1932,19 @@ function redrawTabs(doc: string): void {
 /// ridipingeva tutte le tab e forzava un layout (`scrollIntoView`).
 const paintedSessions = new Map<string, string>();
 
+/// I documenti il cui salvataggio il sistema ha rifiutato perché il file non
+/// si può scrivere (`permission_denied`, PA T59), già detti all'utente. Il
+/// salvataggio automatico ci riprova a ogni pausa (così il file torna a
+/// salvarsi da solo appena ridiventa scrivibile), ma l'avviso non si ripete a
+/// ogni battuta: torna solo dopo un salvataggio riuscito o un «Riprova».
+const deniedSaves = new Set<string>();
+
 /// Registra l'aspetto della sessione; falso se è quello già disegnato.
 function sessionLookChanged(doc: string): boolean {
   const state = documentSessions.saveState(doc);
   if (state === null) {
     paintedSessions.delete(doc);
+    deniedSaves.delete(doc);
     return true;
   }
   const look = `${state}|${documentSessions.isDirty(doc)}|${documentSessions.isDeletionPending(doc)}`;
@@ -1967,6 +1977,20 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
   if (event.kind === "save-failed") {
     if (event.outcome === "conflitto") {
       notify(t("document.save_conflict", { doc: event.id }), "guasto");
+    } else if (isErrorKind(event.error, "permission_denied")) {
+      // Il file è in sola lettura (o la sua cartella non si scrive): la bozza
+      // resta sporca e nessun byte è perso, ma non è un guasto del disco.
+      const doc = event.id;
+      if (!deniedSaves.has(doc)) {
+        deniedSaves.add(doc);
+        notify(t("document.save_read_only", { doc }), "guasto", {
+          label: t("app.retry"),
+          run: () => {
+            deniedSaves.delete(doc);
+            return saveNow();
+          },
+        });
+      }
     } else {
       // La bozza resta sporca e il salvataggio automatico ci riprova alla
       // prossima battuta; «Riprova» serve a chi non vuole scrivere per salvare.
@@ -1984,6 +2008,7 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
   redrawTabs(event.id);
   drawPaneConflict(event.id);
   if (event.kind === "saved") {
+    deniedSaves.delete(event.id);
     // Il testo è su disco: ciò che l'avviso diceva di non ancora deciso è
     // passato. La bozza ritrovata no: dice da dove viene il testo, e il
     // salvataggio automatico che la scrive non lo cambia.

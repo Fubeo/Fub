@@ -2286,6 +2286,10 @@ export const IT = { // --- la scocca -------------------------------------------
   "{doc} è stato cancellato da fuori mentre avevi modifiche non salvate: il testo è conservato in bozza. Puoi ricrearlo adesso o recuperarlo al prossimo avvio.",
 "document.recreate": "Ricrea la nota",
 "document.save_failed": "{doc} non è stato salvato: {reason}",
+// Il file non ha il permesso di scrittura (PA T59): Fub non lo sovrascrive.
+// Non è un guasto del disco, e la frase dice che cosa fare.
+"document.save_read_only":
+  "{doc} è in sola lettura: Fub non lo sovrascrive. Quello che hai scritto resta qui; quando il file si potrà di nuovo scrivere, premi Riprova.",
 // Dice **perché il gesto non è partito**, e nomina il documento appeso: chi
 // legge ha appena chiesto di spostare una nota e deve capire che il rifiuto
 // riguarda un salvataggio, non la rinomina.
@@ -5315,6 +5319,8 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "{doc} was deleted from outside while you had unsaved changes: the text is kept as a draft. You can recreate it now or recover it at the next start.",
 "document.recreate": "Recreate the note",
 "document.save_failed": "{doc} was not saved: {reason}",
+"document.save_read_only":
+  "{doc} is read-only: Fub won't overwrite it. What you wrote stays here; once the file can be written again, press Retry.",
 "document.close_unhooked":
   "Fub cannot listen for the window closing: use «Save now» before you close, because the last keystroke may not be on disk yet.",
 "document.close_failed": "Close cancelled: {reason}. Documents remain open.",

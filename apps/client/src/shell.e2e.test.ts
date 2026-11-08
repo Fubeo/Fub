@@ -1321,6 +1321,50 @@ describe("i confini del buffer", () => {
     );
   });
 
+  it("dice che il file è in sola lettura, tiene la bozza e non lo ripete a ogni battuta", async () => {
+    const host = await start(VAULT);
+    const repair = host.fault("writeDocument", {
+      kind: "permission_denied",
+      message: "I/O su Benvenuto.md: il file è in sola lettura: Benvenuto.md",
+    });
+    const { recentNotices } = await import("./ui/notify");
+    const readOnly = () =>
+      recentNotices().filter((notice) => notice.text.includes("è in sola lettura: Fub non lo sovrascrive"));
+
+    typeInEditor("testo su un file in sola lettura");
+    await waitFor("la scrittura rifiutata parte", () => host.atGate("writeDocument").length === 1);
+    await waitFor(
+      "lo stato diventa fallito",
+      () => document.getElementById("save-state")?.dataset.state === "fallito",
+    );
+    expect(host.files()["Benvenuto.md"]).not.toContain("testo su un file in sola lettura");
+    expect(readOnly(), "l'avviso dice sola lettura, non un errore di I/O").toHaveLength(1);
+    expect(readOnly()[0]!.times).toBe(1);
+    expect(
+      recentNotices().some((notice) => notice.text.includes("non è stato salvato")),
+      "non è il messaggio del guasto generico",
+    ).toBe(false);
+
+    // Un'altra battuta: il salvataggio automatico ci riprova, l'avviso no.
+    typeInEditor(" ancora");
+    await waitFor("la seconda scrittura rifiutata parte", () => host.atGate("writeDocument").length === 2);
+    await waitFor(
+      "lo stato torna fallito",
+      () => document.getElementById("save-state")?.dataset.state === "fallito",
+    );
+    await settle();
+    expect(readOnly()[0]!.times, "l'avviso non si ripete a ogni battuta").toBe(1);
+    expect(host.files()["Benvenuto.md"]).not.toContain("testo su un file in sola lettura");
+
+    // Il file torna scrivibile: «Riprova» salva quello che era rimasto.
+    repair();
+    document.querySelector<HTMLButtonElement>('.sheet-notice[data-notice="save_failed"] button')!.click();
+    await waitFor(
+      "il testo rimasto arriva sul disco",
+      () => host.files()["Benvenuto.md"]?.includes("testo su un file in sola lettura ancora") === true,
+    );
+  });
+
   it("ricarica un cambio watcher quando il buffer è pulito", async () => {
     const host = await start(VAULT);
     const readsBefore = documentReads(host).length;
