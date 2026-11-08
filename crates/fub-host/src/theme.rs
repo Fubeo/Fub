@@ -57,6 +57,18 @@
 //! eredita e non porta niente — né fogli, né pelle, né asset — è rifiutato.
 //! Senza `extends` tutto resta com'era: un foglio per ogni luce offerta.
 //!
+//! # I caratteri di un tema
+//!
+//! Da `theme-2` un manifest può portare dei caratteri ([`ThemeFont`]): una
+//! famiglia, un file WOFF2 fra i suoi asset (`fonts/<nome>.woff2`), un peso e
+//! uno stile. Il CSS di un tema resta senza `@font-face`: la regola la scrive
+//! la shell, coi valori del manifest e l'URL `data:` del file, così nessun
+//! `src:` scritto a mano può chiamare la rete. Qui ([`check_fonts`] e
+//! [`check_font_files`]) si decide ciò che si decide senza renderer: la forma
+//! di ogni voce, che la famiglia non sia una di serie, che il file ci sia e
+//! cominci con la firma `wOF2`, e i limiti ([`MAX_THEME_FONTS`],
+//! [`MAX_THEME_FONT_BYTES`], [`MAX_THEME_FONT_TOTAL_BYTES`]).
+//!
 //! # L'installazione è una cartella, e atomica
 //!
 //! Un tema installato è `<config>/themes/<id>/` (vedi
@@ -76,7 +88,8 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::theme::{
-    ThemeEngine, ThemeLight, ThemeManifest, ThemeSetting, MAX_THEME_SETTINGS, THEME_ENGINE,
+    ThemeEngine, ThemeLight, ThemeManifest, ThemeSetting, MAX_THEME_FONTS, MAX_THEME_FONT_BYTES,
+    MAX_THEME_FONT_FAMILY, MAX_THEME_FONT_TOTAL_BYTES, MAX_THEME_SETTINGS, THEME_ENGINE,
 };
 use fub_abi::traits::{Plugin, PluginManifest};
 use fub_abi::{PluginError, Text};
@@ -111,6 +124,49 @@ pub const MAX_THEME_CSS_BYTES: u64 = 4 * 1024 * 1024;
 pub const MAX_THEME_SETTING_NAME: usize = 48;
 /// Quante opzioni può offrire una scelta di un tema.
 pub const MAX_THEME_SETTING_OPTIONS: usize = 16;
+/// Quanto può essere lungo il `<nome>` di `fonts/<nome>.woff2`.
+pub const MAX_THEME_FONT_FILE_NAME: usize = 64;
+
+/// Le famiglie dei caratteri di serie (`apps/client/src/theme/scrittoio/fonts.css`,
+/// canale `caratteri`). Un tema non può dichiarare una famiglia con uno di
+/// questi nomi: la sua regola `@font-face` si mescolerebbe a quella di serie, e
+/// ciò che la persona vede dipenderebbe da quale delle due il motore sceglie.
+/// Un test tiene l'elenco allineato al foglio.
+pub const SERIES_FONT_FAMILIES: &[&str] = &[
+    "Newsreader Variable",
+    "Hanken Grotesk Variable",
+    "IBM Plex Mono",
+    "Inter Variable",
+    "Literata Variable",
+    "JetBrains Mono Variable",
+];
+
+/// I nomi che in `font-family` non sono una famiglia ma una parola chiave del
+/// CSS: famiglie generiche e valori globali. Una famiglia del tema non li usa.
+const RESERVED_FONT_FAMILIES: &[&str] = &[
+    "serif",
+    "sans-serif",
+    "monospace",
+    "cursive",
+    "fantasy",
+    "system-ui",
+    "ui-serif",
+    "ui-sans-serif",
+    "ui-monospace",
+    "ui-rounded",
+    "math",
+    "emoji",
+    "fangsong",
+    "inherit",
+    "initial",
+    "unset",
+    "revert",
+    "revert-layer",
+    "default",
+];
+
+/// La firma con cui comincia ogni file WOFF2.
+const WOFF2_SIGNATURE: &[u8; 4] = b"wOF2";
 
 /// Il manifest del tema di serie: la costante che il §29.4 chiede, identica al
 /// campione pinato dal banco di `fub_abi::theme` (id, nome, versione, motore,
@@ -135,6 +191,7 @@ pub fn series_manifest() -> ThemeManifest {
         ],
         settings: Vec::new(),
         extends: None,
+        fonts: Vec::new(),
     }
 }
 
@@ -313,6 +370,7 @@ impl ThemeBundle {
         check_id(&manifest.id)?;
         check_settings(&manifest)?;
         check_extends(&manifest)?;
+        check_fonts(&manifest)?;
         // Check every well-known bundle file before any later copy/read. Missing
         // sheets and skin remain allowed here; read_theme/list_themes decide
         // whether a requested light is actually loadable.
@@ -331,6 +389,7 @@ impl ThemeBundle {
             }
         }
         brings += validate_asset_limits(&root, &manifest.id)?;
+        check_font_files(&root, &manifest)?;
         // Un tema che eredita e non porta niente — né fogli, né pelle, né un
         // asset (caratteri, icone) — è la serie con un altro nome: si dice
         // all'autore, invece di installare un doppione.
@@ -503,6 +562,150 @@ fn check_extends(manifest: &ThemeManifest) -> Result<(), ThemeError> {
         )));
     }
     Ok(())
+}
+
+/// I caratteri del manifest reggono? Si decide sulla sola forma, prima di
+/// toccare il disco: motore, quanti sono, la famiglia, il file, il peso e che
+/// la stessa faccia non sia dichiarata due volte. I file li guarda
+/// [`check_font_files`].
+fn check_fonts(manifest: &ThemeManifest) -> Result<(), ThemeError> {
+    let bad = |why: String| ThemeError::Malformed(why);
+    if manifest.fonts.is_empty() {
+        return Ok(());
+    }
+    if manifest.engine == ThemeEngine::Theme1 {
+        return Err(bad(format!(
+            "fonts need `{}`: `{THEME_ENGINE}` has none",
+            ThemeEngine::Theme2.as_str()
+        )));
+    }
+    if manifest.fonts.len() > MAX_THEME_FONTS {
+        return Err(bad(format!(
+            "{} fonts declared, at most {MAX_THEME_FONTS} are allowed",
+            manifest.fonts.len()
+        )));
+    }
+    let mut faces = std::collections::BTreeSet::new();
+    for font in &manifest.fonts {
+        let family = font.family.as_str();
+        if !is_font_family(family) {
+            return Err(bad(format!(
+                "font family `{family}` must be 1 to {MAX_THEME_FONT_FAMILY} characters \
+                 of letters, digits, `-` and single spaces between words"
+            )));
+        }
+        let folded = family.to_ascii_lowercase();
+        if SERIES_FONT_FAMILIES
+            .iter()
+            .any(|series| series.to_ascii_lowercase() == folded)
+        {
+            return Err(bad(format!(
+                "font family `{family}` is a series family: a theme names its own"
+            )));
+        }
+        if RESERVED_FONT_FAMILIES.contains(&folded.as_str()) {
+            return Err(bad(format!(
+                "font family `{family}` is a CSS keyword, not a family name"
+            )));
+        }
+        if !is_font_file(&font.file) {
+            return Err(bad(format!(
+                "font file `{}` is not a theme asset: it must be `fonts/<name>.woff2`, \
+                 with a name of 1 to {MAX_THEME_FONT_FILE_NAME} characters of \
+                 a-z, A-Z, 0-9, `-` or `_`",
+                font.file
+            )));
+        }
+        if !(100..=900).contains(&font.weight) {
+            return Err(bad(format!(
+                "font `{family}` declares weight {}, which is not between 100 and 900",
+                font.weight
+            )));
+        }
+        if !faces.insert((folded, font.weight, font.style)) {
+            return Err(bad(format!(
+                "font `{family}` declares weight {} and style {:?} twice",
+                font.weight, font.style
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// I file dei caratteri ci sono, sono WOFF2 e stanno nei limiti? Un file
+/// nominato da due voci si conta una volta.
+fn check_font_files(root: &Utf8Path, manifest: &ThemeManifest) -> Result<(), ThemeError> {
+    let files: std::collections::BTreeSet<&str> = manifest
+        .fonts
+        .iter()
+        .map(|font| font.file.as_str())
+        .collect();
+    let mut total = 0_u64;
+    for file in files {
+        let path = root.join(file);
+        // Il limite degli asset qui, quello dei caratteri subito sotto: così
+        // l'autore legge che è il carattere a pesare troppo.
+        let Some(handle) = open_regular(&path, root, &manifest.id, MAX_THEME_ASSET_BYTES, false)?
+        else {
+            return Err(ThemeError::Malformed(format!(
+                "font file `{file}` is not among the theme assets"
+            )));
+        };
+        let size = handle
+            .metadata()
+            .map_err(|error| ThemeError::Io(format!("{path}: {error}")))?
+            .len();
+        if size > MAX_THEME_FONT_BYTES {
+            return Err(ThemeError::Malformed(format!(
+                "font file `{file}` exceeds {MAX_THEME_FONT_BYTES} bytes"
+            )));
+        }
+        let mut signature = Vec::with_capacity(WOFF2_SIGNATURE.len());
+        handle
+            .take(WOFF2_SIGNATURE.len() as u64)
+            .read_to_end(&mut signature)
+            .map_err(|error| ThemeError::Io(format!("{path}: {error}")))?;
+        if signature.as_slice() != WOFF2_SIGNATURE {
+            return Err(ThemeError::Malformed(format!(
+                "font file `{file}` is not WOFF2: it does not start with `wOF2`"
+            )));
+        }
+        total = total.saturating_add(size);
+        if total > MAX_THEME_FONT_TOTAL_BYTES {
+            return Err(ThemeError::Malformed(format!(
+                "the theme fonts exceed {MAX_THEME_FONT_TOTAL_BYTES} bytes together"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Una famiglia che la shell può scrivere fra virgolette senza fughe: lettere
+/// e cifre ASCII, `-` e spazi singoli fra le parole.
+fn is_font_family(family: &str) -> bool {
+    !family.is_empty()
+        && family.len() <= MAX_THEME_FONT_FAMILY
+        && !family.starts_with(' ')
+        && !family.ends_with(' ')
+        && !family.contains("  ")
+        && family
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == ' ' || c == '-')
+}
+
+/// `fonts/<nome>.woff2`, con un nome che non esce dalla cartella.
+fn is_font_file(file: &str) -> bool {
+    let Some(name) = file
+        .strip_prefix("fonts/")
+        .and_then(|rest| rest.strip_suffix(".woff2"))
+    else {
+        return false;
+    };
+    !name.is_empty()
+        && name.len() <= MAX_THEME_FONT_FILE_NAME
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 /// Un nome che può stare in un attributo della radice senza essere citato.
@@ -772,10 +975,19 @@ pub fn read_theme(
     }
     let skin_path = dir.join("skin.css");
     let skin = read_theme_text(&skin_path, &dir, id, MAX_THEME_CSS_BYTES, false)?;
-    let needed = referenced_assets(
+    let mut needed = referenced_assets(
         sheet.as_deref(),
         skin.as_deref(),
         &theme.manifest.asset_namespace,
+    );
+    // I file dei caratteri viaggiano col fascio anche se nessun CSS li nomina:
+    // la regola `@font-face` la scrive la shell.
+    needed.extend(
+        theme
+            .manifest
+            .fonts
+            .iter()
+            .map(|font| format!("{}{}", theme.manifest.asset_namespace, font.file)),
     );
     let assets = asset_inventory(&dir, &theme.manifest.asset_namespace, &needed)?;
     Ok(ThemePayload {

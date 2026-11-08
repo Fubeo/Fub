@@ -231,7 +231,15 @@
           "opacity",
           "transform"
         ],
-        "extends": "fub.serie"
+        "extends": "fub.serie",
+        "fonts": [
+          {
+            "family": "Carta Serif",
+            "file": "fonts/carta.woff2",
+            "weight": 400,
+            "style": "italic"
+          }
+        ]
       },
       "trust": "community"
     }
@@ -279,7 +287,15 @@
           "opacity",
           "transform"
         ],
-        "extends": "fub.serie"
+        "extends": "fub.serie",
+        "fonts": [
+          {
+            "family": "Carta Serif",
+            "file": "fonts/carta.woff2",
+            "weight": 400,
+            "style": "italic"
+          }
+        ]
       },
       "light": "dark",
       "sheet": null,
