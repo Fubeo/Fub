@@ -1548,6 +1548,7 @@ impl HostCommands for JobHost {
             args.clone(),
             self.mode,
             &self.chain,
+            &self.cancelled,
         )?;
         if let Some(prepared) = read_only {
             let host = self.for_provider(prepared.owner().to_string(), prepared.host_mode());

@@ -19,7 +19,7 @@ use fub_abi::event::{EventMask, Notice};
 use fub_abi::traits::{CommandProvider, EventHandler, HostApi, Plugin, PluginManifest};
 use fub_abi::{DocId, PluginError, WriteBase};
 use fub_host::registry::Registrar;
-use fub_host::{Bundle, BundleClaim, Host, OnlyProviders, StartupBundle};
+use fub_host::{Bundle, BundleClaim, Host, StartupBundle};
 use fub_kernel::Trust;
 
 const OWNER: &str = "test.turn";
@@ -47,6 +47,9 @@ struct Gate {
     open: Mutex<bool>,
     opened: Condvar,
     arrived: Mutex<mpsc::Sender<&'static str>>,
+    /// Ciò che è successo, nell'ordine: l'uscita della lettura e il
+    /// `deactivate` del plugin.
+    order: Mutex<Vec<&'static str>>,
 }
 
 impl Gate {
@@ -56,6 +59,7 @@ impl Gate {
             open: Mutex::new(false),
             opened: Condvar::new(),
             arrived: Mutex::new(tx),
+            order: Mutex::new(Vec::new()),
         };
         (Arc::new(gate), rx)
     }
@@ -109,7 +113,9 @@ impl CommandProvider for Probe {
         match command {
             READ => {
                 let text = host.read_document(&note)?;
-                self.gate.wait(READ)?;
+                let waited = self.gate.wait(READ);
+                self.gate.order.lock().unwrap().push("read out");
+                waited?;
                 Ok(CommandOutcome::notify(text))
             }
             OUTER => host.run_command(READ, serde_json::Value::Null),
@@ -146,6 +152,26 @@ impl EventHandler for Changes {
     }
 }
 
+/// Il plugin del banco: annota quando lo si spegne.
+struct ProbePlugin {
+    gate: Arc<Gate>,
+}
+
+impl Plugin for ProbePlugin {
+    fn manifest(&self) -> PluginManifest {
+        PluginManifest::core(OWNER, "Turn probe")
+    }
+
+    fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn deactivate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        self.gate.order.lock().unwrap().push("deactivate");
+        Ok(())
+    }
+}
+
 struct ProbeBundle {
     gate: Arc<Gate>,
     changes: Arc<Mutex<Vec<String>>>,
@@ -161,7 +187,9 @@ impl Bundle for ProbeBundle {
     }
 
     fn plugin(&self) -> Box<dyn Plugin> {
-        OnlyProviders::boxed(self.manifest())
+        Box::new(ProbePlugin {
+            gate: Arc::clone(&self.gate),
+        })
     }
 
     fn register(&self, registrar: &mut Registrar<'_>) -> Vec<String> {
@@ -414,8 +442,11 @@ fn a_command_that_does_not_exist_is_refused() {
     assert!(invoke(&bench.host, "test.turn.nobody").is_err());
 }
 
+/// La chiusura del vault non smonta un plugin mentre una sua lettura è in
+/// volo: la ferma, la aspetta, e solo dopo chiama `deactivate`. L'esito della
+/// lettura è `Cancelled`, e nessuno resta fermo.
 #[test]
-fn the_vault_closed_while_a_read_runs_does_not_take_its_outcome() {
+fn the_vault_closed_while_a_read_runs_waits_for_it_and_takes_no_outcome() {
     let bench = bench();
     std::thread::scope(|scope| {
         let read = scope.spawn(|| invoke(&bench.host, READ));
@@ -426,12 +457,25 @@ fn the_vault_closed_while_a_read_runs_does_not_take_its_outcome() {
         scope.spawn(move || {
             let _ = closed_tx.send(host.close_vault(root));
         });
-        let closed = closed_rx.recv_timeout(WATCHDOG);
+        // Il controllo negativo è a tempo, ma non può passare per caso: una
+        // chiusura che non aspetta la lettura risponde subito.
+        let early = closed_rx.recv_timeout(Duration::from_millis(200));
+        let order_meanwhile = bench.gate.order.lock().unwrap().clone();
         bench.gate.release();
         let outcome = read.join().expect("the command thread");
+        let waited = early.is_err();
+        let closed = match early {
+            Ok(closed) => Ok(closed),
+            Err(_) => closed_rx.recv_timeout(WATCHDOG),
+        };
 
+        assert!(
+            order_meanwhile.is_empty(),
+            "nothing was torn down while the read was in flight: {order_meanwhile:?}"
+        );
+        assert!(waited, "the close waited for the read in flight");
         let errors = closed
-            .expect("the vault closes while the read is stopped")
+            .expect("the close finishes once the read is out")
             .expect("close");
         assert!(errors.is_empty(), "{errors:?}");
         assert!(
@@ -439,4 +483,9 @@ fn the_vault_closed_while_a_read_runs_does_not_take_its_outcome() {
             "the outcome of a closed vault is not applied: {outcome:?}"
         );
     });
+    assert_eq!(
+        *bench.gate.order.lock().unwrap(),
+        vec!["read out", "deactivate"],
+        "the plugin is deactivated only after its read is out"
+    );
 }
