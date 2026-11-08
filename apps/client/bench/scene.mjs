@@ -1209,6 +1209,60 @@ export const SCENE = onPage("shell", [
         await page.waitForSelector("#inspector-scrim:not([hidden])");
       },
     },
+    // Le impostazioni in piedi, scheda «Componenti»: gli interruttori sono il
+    // binario della pelle con un tocco di 44 px attorno, e le schede scorrono
+    // di lato coi nomi interi (`shells/mobile/mobile.css`, PA T47).
+    {
+      id: "mobile-settings",
+      title: "Il telefono: le impostazioni sui componenti, gli interruttori e le schede intere",
+      viewport: PHONE,
+      prepare: async (page) => {
+        await page.click("#open-settings");
+        await page.click('#settings-tabs button[data-tab="components"]');
+        await page.waitForSelector('#settings-body input[role="switch"]');
+        await page.$eval('#settings-body input[role="switch"]', (first) => first.scrollIntoView({ block: "center" }));
+        await page.waitForFunction(() => {
+          const scroll = document.querySelector("#settings-scroll") ?? document.querySelector("#settings-body");
+          if (!scroll) return false;
+          const box = scroll.getBoundingClientRect();
+          // Visibile: per intero dentro la parte che scorre.
+          const switches = [...document.querySelectorAll('#settings-body input[role="switch"]')].filter((input) => {
+            const r = input.getBoundingClientRect();
+            return r.width > 0 && r.top >= box.top && r.bottom <= box.bottom && r.left >= box.left && r.right <= box.right;
+          });
+          if (switches.length === 0) return false;
+          const touchable = switches.every((input) => {
+            const r = input.getBoundingClientRect();
+            if (Math.round(r.width) !== 32 || Math.round(r.height) !== 18) return false;
+            const x = r.left + r.width / 2;
+            const y = r.top + r.height / 2;
+            return document.elementFromPoint(x, y - 10) === input
+              && document.elementFromPoint(x, y + 10) === input
+              && document.elementFromPoint(r.left - 5, y) === input;
+          });
+          const whole = [...document.querySelectorAll(".settings-tab")].every((tab) => tab.scrollWidth <= tab.clientWidth);
+          return touchable && whole;
+        }, null, { timeout: 5_000 });
+      },
+    },
+    // Il cestino con tre file, in piedi: i bottoni «Ripristina» di due righe
+    // vicine non si toccano (`shells/mobile/mobile.css`, PA T47).
+    {
+      id: "mobile-trash",
+      title: "Il telefono: il cestino con tre file, i bottoni staccati",
+      query: "cestino=3",
+      viewport: PHONE,
+      prepare: async (page) => {
+        await page.click('#views-ribbon .rail-btn[data-panel="trash"]');
+        await page.waitForFunction(() => {
+          const buttons = [...document.querySelectorAll(".ui-list > .ui-stack > .ui-button")]
+            .filter((button) => button.getClientRects().length > 0);
+          if (buttons.length !== 3) return false;
+          const boxes = buttons.map((button) => button.getBoundingClientRect());
+          return boxes.slice(1).every((box, index) => box.top - boxes[index].bottom >= 8);
+        }, null, { timeout: 5_000 });
+      },
+    },
     // Il documento in piedi: la carta sta nella vista, e il pannello del
     // documento sale dal basso, aperto dal pulsante col numero dei commenti.
     {
@@ -1216,7 +1270,24 @@ export const SCENE = onPage("shell", [
       title: "Il telefono: un .docx con la carta larga quanto la vista e il pulsante dei commenti",
       query: "rich=docx",
       viewport: PHONE,
-      prepare: (page) => openRichDocument(page, "Documenti/Prova.docx"),
+      prepare: async (page) => {
+        await openRichDocument(page, "Documenti/Prova.docx");
+        // Il fuoco della tastiera sul bottone della modalità: dal menu «…»
+        // un passo indietro, così l'anello è quello di `:focus-visible`. Il
+        // bottone sta sulla carta o accanto: l'anello sta dentro il suo
+        // rettangolo, cioè lo scarto è negativo e largo almeno quanto la linea
+        // (`shells/mobile/mobile.css`, PA T47).
+        await page.focus(".pane.focus [data-pane-menu]");
+        await page.keyboard.press("Shift+Tab");
+        await page.waitForFunction(() => {
+          const mode = document.activeElement;
+          if (!(mode instanceof HTMLElement) || !mode.matches(".pane.focus .pane-mode-current:focus-visible")) return false;
+          const style = getComputedStyle(mode);
+          const width = parseFloat(style.outlineWidth);
+          const offset = parseFloat(style.outlineOffset);
+          return style.outlineStyle !== "none" && width > 0 && offset < 0 && -offset >= width;
+        }, null, { timeout: 5_000 });
+      },
     },
     {
       id: "mobile-document-panel",

@@ -13,10 +13,57 @@
 
 :root[data-client-shell="mobile"] button,
 :root[data-client-shell="mobile"] [role="button"],
-:root[data-client-shell="mobile"] input[type="checkbox"],
+:root[data-client-shell="mobile"] input[type="checkbox"]:not([role="switch"]),
 :root[data-client-shell="mobile"] input[type="radio"] {
   min-width: 44px;
   min-height: 44px;
+}
+
+/* ── I 44 px del tocco, senza deformare ────────────────────────────────────
+   La regola qui sopra non prende l'interruttore,
+   `input[type="checkbox"][role="switch"]`: il binario di 32 × 18 della pelle
+   (`skin/controls.css`) diventerebbe un cerchio di 44 px. L'interruttore resta
+   com'è sul computer, e il tocco resta di 44 px con un `::after` trasparente:
+   non disegna niente, quindi non è un secondo pomello. In colori forzati
+   l'interruttore torna nativo, 16 × 16, e la regola non lo ingrandisce. */
+:root[data-client-shell="mobile"] input[role="switch"] {
+  position: relative;
+}
+:root[data-client-shell="mobile"] input[role="switch"]::after {
+  content: "";
+  position: absolute;
+  inset: -13px -6px;
+}
+
+/* ── Le schede delle impostazioni scorrono, non si troncano ────────────────
+   Il minimo di 44 px prende il posto di `min-width: auto` dei bottoni: in una
+   fila flessibile le schede si stringerebbero fino a 44 px e il nome finirebbe
+   in «…» («Co…», «C…»). Senza stringersi, la fila scorre di lato, come
+   `skin/settings.css` già prevede sotto i 760 px. */
+:root[data-client-shell="mobile"] .settings-tab {
+  flex: none;
+}
+
+/* ── Le righe di un elenco coi bottoni da 44 px non si toccano ─────────────
+   Sul computer una riga del cestino o delle versioni è alta quanto le sue due
+   righe di testo, e il bottone di 28 px ci sta dentro con aria sopra e sotto.
+   Al telefono il bottone sale a 44 px, la riga diventa alta quanto lui e fra
+   un bottone e l'altro resterebbe 1 px: tre «Ripristina» pieni sembrerebbero
+   un bottone solo, e l'anello del fuoco cadrebbe sul vicino. Fra una riga e
+   l'altra, 8 px. Le righe dei menu e degli alberi hanno già il loro passo. */
+:root[data-client-shell="mobile"] .ui-list > .ui-stack[data-dir="row"] + .ui-stack[data-dir="row"] {
+  margin-top: var(--space-4);
+}
+
+/* ── Il tondo della modalità ha l'anello dentro ────────────────────────────
+   Dove galleggia (in piedi, e sdraiato quando l'altezza manca) il tondo sta
+   sulla carta del documento, che è bianca anche al buio: l'anello fuori dal
+   tondo, verde chiaro al buio, ci starebbe a 2,2:1. Dentro il tondo l'anello
+   sta sul suo fondo, `--bg-elev`, in tutte e due le luci. */
+@media (max-width: 599px), (max-height: 500px) {
+  :root[data-client-shell="mobile"] .pane > .pane-mode-current:focus-visible {
+    outline-offset: calc(-1 * var(--focus-ring-width) - var(--space-2));
+  }
 }
 
 :root[data-client-shell="mobile"] .mobile-incoming {
