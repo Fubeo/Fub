@@ -2040,6 +2040,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "fub-canvas-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+]
+
+[[package]]
+name = "fub-canvas-wasm"
+version = "0.1.0"
+dependencies = [
+ "fub-canvas-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "fub-cli"
 version = "0.1.0"
 dependencies = [
@@ -2069,8 +2087,10 @@ dependencies = [
  "camino",
  "flate2",
  "fub-abi",
+ "fub-canvas-core",
  "fub-componenti",
  "fub-format-base",
+ "fub-format-canvas",
  "fub-format-markdown",
  "fub-format-svg",
  "fub-kernel",
@@ -2118,10 +2138,25 @@ name = "fub-format-canvas"
 version = "0.1.0"
 dependencies = [
  "fub-abi",
+ "fub-canvas-core",
  "fub-format-markdown",
  "serde",
  "serde_json",
  "thiserror 2.0.19",
+]
+
+[[package]]
+name = "fub-format-craft"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "flate2",
+ "fub-abi",
+ "fub-sdk",
+ "quick-xml",
+ "serde",
+ "serde_json",
+ "zip",
 ]
 
 [[package]]
@@ -2213,6 +2248,7 @@ dependencies = [
  "fub-features",
  "fub-format-base",
  "fub-format-canvas",
+ "fub-format-craft",
  "fub-format-markdown",
  "fub-format-rich",
  "fub-format-svg",

@@ -1,0 +1,6 @@
+/* Lo strato d'avvio col JS spento: lo carica il <noscript> delle tre pagine.
+   Il marchio è fermo e visibile, la frase per chi ha il JS spento prende il
+   posto della riga e del guasto (public/avvio/avvio.css dice perché è un file). */
+.avvio-marchio { opacity: 1; transform: none; }
+.avvio-senza-js { display: block; }
+.avvio-info { display: none; }

@@ -64,6 +64,21 @@ describe("l'elenco delle scene", () => {
     for (const s of scene) {
       expect(s.title, `${s.id} non ha title`).toBeTruthy();
       expect(typeof s.prepare, `${s.id} non dichiara come si prepara`).toBe("function");
+      // La condizione d'arrivo, quando c'è, la valuta `waitForFunction`: una
+      // stringa o un selettore la farebbero valutare come un'altra cosa.
+      if (s.ready !== undefined) expect(typeof s.ready, `${s.id}: ready non è una funzione`).toBe("function");
+      if (s.readyTimeout !== undefined) expect(s.readyTimeout, s.id).toBeGreaterThan(0);
+    }
+  });
+
+  it("fotografa lo strato d'avvio nei suoi stati, ciascuno con la sua condizione d'arrivo", () => {
+    // L'avvio fermo non finisce mai, quindi `data-bench` non arriva: senza
+    // `ready` la scena aspetterebbe 30 s e cadrebbe.
+    const avvio = scene.filter((s) => s.id.startsWith("avvio-"));
+    expect(avvio.map((s) => s.id).sort()).toEqual(["avvio-attesa", "avvio-guasto", "avvio-lento", "avvio-telefono"]);
+    for (const s of avvio) {
+      expect(s.ready, s.id).toBeTypeOf("function");
+      expect(s.query, s.id).toMatch(/(^|&)avvio=(attesa|guasto)(&|$)/);
     }
   });
 
@@ -79,7 +94,7 @@ describe("l'elenco delle scene", () => {
     const pageOf = (id: string): RegExp => {
       if (/^kit(-|$)/.test(id)) return kit;
       if (/^catalog(-|$)/.test(id)) return catalog;
-      if (/^mobile(-|$)/.test(id)) return mobile;
+      if (/^mobile(-|$)|-telefono$/.test(id)) return mobile;
       if (/^window(-|$)/.test(id)) return documentWindow;
       return shell;
     };

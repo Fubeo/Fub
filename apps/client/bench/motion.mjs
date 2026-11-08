@@ -41,7 +41,9 @@
 //    ciò che il motore di resa ha ridipinto o tenuto da prima.
 // 2. **Nessun residuo.** A riposo non c'è un'animazione viva che il gesto abbia
 //    fatto partire, e nessun elemento tiene in linea `transform`, `opacity`,
-//    `translate`, `scale` o `rotate` che il moto ridotto non lascia.
+//    `translate`, `scale` o `rotate` che il moto ridotto non lascia. Non conta
+//    la `transform: scale(1, 1)` che CodeMirror scrive da sé sui suoi strati
+//    (`.cm-layer`) dopo aver misurato l'editor dentro un riquadro scalato.
 // 3. **Solo proprietà ammesse.** Ogni corsa di `moto`, ogni animazione o
 //    transizione CSS partita col gesto, ogni proprietà in linea riscritta a
 //    ogni fotogramma tocca soltanto quelle cinque. Il referto dice di ogni

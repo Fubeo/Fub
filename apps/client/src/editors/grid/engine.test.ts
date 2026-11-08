@@ -22,7 +22,7 @@ import {
 import { resolvedLanguage, t } from "../../i18n/strings";
 import { HOVER_OPEN_DELAY_MS } from "../../kit";
 import { gridJournalText, parseGridJournal, recordGridJournal, type GridJournal } from "../../state/grid-journal";
-import { fillTarget, GridEngine, typingOpens, type GridChange, type GridEngineOptions, type GridHost } from "./engine";
+import { fillTarget, GridEngine, typingOpens, type GridChange, type GridCommandEffect, type GridEngineOptions, type GridHost } from "./engine";
 import { cellA1, parseCellA1 } from "./merges";
 import { DEFAULT_SHEET_VIEW, decimalSeparator, localInput } from "./workbook";
 import xlsx from "../../__fixtures__/xlsx-grid.json";
@@ -2320,6 +2320,71 @@ describe("GridEngine con una cartella di Excel", () => {
     await settle();
     await settle();
     expect(engine.selectedObject()).toBeNull();
+    engine.destroy();
+  });
+
+  it("in sola lettura dà soltanto i comandi che leggono o mostrano, e scarta un esito con modifiche", async () => {
+    const plain = workbookHost();
+    // Come il provider: un comando che legge rende il risultato e non tocca
+    // il giornale; `selection.set` qui finge di cambiarlo.
+    const grid = {
+      ...plain,
+      host: {
+        ...plain.host,
+        gridBytesCommand: async (...args: Parameters<GridHost["gridBytesCommand"]>) => {
+          const [, , request] = args;
+          if (request.command.id !== "selection.stats") return plain.host.gridBytesCommand(...args);
+          plain.given.push(structuredClone(request));
+          return {
+            commit: { revision: request.revision, edit: { from: 0, to: 0, deleted: "", inserted: "" }, invalidation: { kind: "cells", cells: [] } },
+            sheets: structuredClone(xlsx.session.sheets),
+            hidden: structuredClone(xlsx.session.hidden),
+            selection: { sheet: request.command.sheet, selection: request.command.selection, active: request.command.active },
+            result: JSON.stringify({ count: 4 }),
+            dialog: null,
+            commands: structuredClone(xlsx.session.commands),
+            book: structuredClone(xlsx.session.book),
+          } as GridCommandOutcome;
+        },
+      },
+    };
+    const { engine, changes } = await workbookMounted(grid);
+    engine.setReadOnly(true);
+    // Senza sapere gli effetti, in sola lettura non passa niente.
+    expect(engine.command("selection.stats")).toBe(false);
+    const effects: Record<string, GridCommandEffect> = { "selection.stats": "legge", "selection.set": "mostra", "home.bold": "cambia" };
+    engine.setCommandEffects((id) => effects[id], ["goTo"]);
+    expect(engine.servesCommands()).toBe(true);
+    expect(engine.commandable()).toBe(false);
+
+    expect(engine.command("home.bold")).toBe(false);
+    await expect(engine.run("home.bold")).resolves.toEqual({ ok: false, error: null });
+    await expect(engine.run("selection.stats")).resolves.toEqual({ ok: true, result: JSON.stringify({ count: 4 }) });
+
+    const before = changes.length;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const opened = plain.calls.filter((call) => call.startsWith("open")).length;
+    await expect(engine.run("selection.set", JSON.stringify({ range: "B2" }))).resolves.toEqual({ ok: false, error: null });
+    await settle();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("selection.set"));
+    // Il giornale confermato non cambia, e il provider riparte da quello.
+    expect(changes.length).toBe(before);
+    expect(engine.getDoc()).toBe("");
+    expect(plain.calls.filter((call) => call.startsWith("open")).length).toBe(opened + 1);
+    expect(plain.given.map((request) => request.command.id)).toEqual(["selection.stats", "selection.set"]);
+    engine.destroy();
+  });
+
+  it("in sola lettura apre soltanto le finestre dei comandi che non cambiano", async () => {
+    const dialogs: string[] = [];
+    const { engine } = await workbookMounted(workbookHost(), "", undefined, { onDialog: (asked) => dialogs.push(asked.id) });
+    engine.setReadOnly(true);
+    engine.setCommandEffects(() => undefined, ["goTo"]);
+    expect(engine.openDialog("formatCells")).toBe(false);
+    expect(engine.openDialog("goTo")).toBe(true);
+    engine.setReadOnly(false);
+    expect(engine.openDialog("formatCells")).toBe(true);
+    expect(dialogs).toEqual(["goTo", "formatCells"]);
     engine.destroy();
   });
 

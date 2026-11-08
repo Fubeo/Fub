@@ -3289,7 +3289,11 @@ describe("i riquadri dopo un'attesa", () => {
     await start({ ...VAULT, "lavagna.canvas": "{rotto" });
     const { openDocument } = await import("./panels/document");
     await openDocument("lavagna.canvas");
-    await settle();
+    // Nell'attesa del nucleo il riquadro non mostra una tela da modificare.
+    expect(document.querySelector(".canvas-viewport")).toBeNull();
+    expect(document.querySelectorAll(".canvas-node")).toHaveLength(0);
+    // Senza parser TypeScript il testo rotto lo dice il nucleo, appena è caricato.
+    await waitFor("la superficie d'errore al posto della lavagna rotta", () => errorSurfaces().length === 1);
 
     expect(errorSurfaces()).toHaveLength(1);
     expect(errorSurfaces()[0]!.textContent).not.toBe("");
@@ -3343,6 +3347,110 @@ const BOARD = JSON.stringify({
     { id: "seconda", type: "text", text: "seconda", x: 900, y: 700, width: 10, height: 10 },
   ],
   edges: [],
+});
+
+describe("la carta in corso sulla tela", () => {
+  /// Il testo di una carta aperta resta nel campo finché non si lascia o non
+  /// passa la pausa: non è ancora nel buffer della sessione. Questi banchi
+  /// guardano che la chiusura e il cambio da fuori non lo perdano lì.
+  const CANVAS_VAULT = { ...VAULT, "lavagna.canvas": BOARD };
+
+  async function openBoard(): Promise<void> {
+    const { openDocument } = await import("./panels/document");
+    await openDocument("lavagna.canvas");
+    await waitFor("la tela mostra le carte", () => document.querySelector('.canvas-node[data-node="prima"]') !== null);
+    await settle();
+  }
+
+  function typeInCard(id: string, value: string): void {
+    document.querySelector<HTMLElement>(`.canvas-node[data-node="${id}"]`)!
+      .dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    const input = document.querySelector<HTMLTextAreaElement>(".canvas-text-editor");
+    if (!input) throw new Error("la carta non ha aperto il campo");
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  it("chiudere la finestra nella pausa porta il testo della carta sul disco", async () => {
+    const host = await start(CANVAS_VAULT);
+    await openBoard();
+    typeInCard("prima", "la carta prima di chiudere");
+
+    await host.close();
+
+    const arrived = [
+      ...host.atGate("writeDocument").filter((c) => c.args[0] === "lavagna.canvas"),
+      ...host.atGate("saveDraft").filter((c) => c.args[0] === "lavagna.canvas"),
+    ].map((c) => String(c.args[1]));
+    expect(
+      arrived.join("\n--- e poi ---\n"),
+      "la finestra si è chiusa con la carta aperta: il testo non è arrivato né al disco né alla bozza",
+    ).toContain("la carta prima di chiudere");
+  });
+
+  it("un cambio da fuori nella pausa dà il conflitto e tiene il testo della carta", async () => {
+    const host = await start(CANVAS_VAULT);
+    const { documentSessions } = await import("./state/document-session");
+    await openBoard();
+    typeInCard("prima", "la carta che nessuno deve perdere");
+
+    host.writeFromOutside("lavagna.canvas", BOARD.replace('"text":"seconda"', '"text":"cambiata da fuori"'));
+
+    await waitFor("la tela è in conflitto", () => document.getElementById("save-state")?.dataset.state === "conflitto");
+    const snapshot = documentSessions.inspect("lavagna.canvas");
+    expect(snapshot?.dirty).toBe(true);
+    expect(snapshot?.text, "il cambio da fuori ha sostituito il testo della carta").toContain("la carta che nessuno deve perdere");
+    expect(host.files()["lavagna.canvas"]).toContain("cambiata da fuori");
+  });
+
+  it("nessun motore della tela muore col testo di una carta ancora in sospeso", async () => {
+    const host = await start(CANVAS_VAULT);
+    const { CanvasEngine } = await import("./editors/canvas/engine");
+    const { documentSessions } = await import("./state/document-session");
+    const pendingAtDestroy: boolean[] = [];
+    const destroy = CanvasEngine.prototype.destroy;
+    const spy = vi.spyOn(CanvasEngine.prototype, "destroy").mockImplementation(function (this: InstanceType<typeof CanvasEngine>) {
+      pendingAtDestroy.push(this.hasPending);
+      destroy.call(this);
+    });
+    const registry = await import("./ui/commands");
+    const run = async (id: string) => {
+      await registry.allCommands().find((entry) => entry.id === id)?.run?.();
+      await settle();
+    };
+
+    try {
+      // Cambio di linguetta nello stesso riquadro.
+      await openBoard();
+      typeInCard("prima", "via per il cambio di linguetta");
+      row("Benvenuto").click();
+      await waitFor("Benvenuto torna davanti", () => editorTexts()[0]?.includes("Il primo documento") === true);
+      expect(documentSessions.text("lavagna.canvas")).toContain("via per il cambio di linguetta");
+
+      // Chiusura della linguetta.
+      await openBoard();
+      typeInCard("seconda", "via per la linguetta chiusa");
+      const isBoard = (t: Element) => (t as HTMLElement).dataset.key?.includes("lavagna.canvas") === true;
+      const tab = [...document.querySelectorAll<HTMLElement>(".pane .tab")].find(isBoard);
+      tab?.parentElement?.querySelector<HTMLElement>(".tab-close")?.click();
+      await waitFor("la linguetta della tela si chiude", () => ![...document.querySelectorAll(".pane .tab")].some(isBoard));
+      await waitFor("la carta arriva sul disco", () => host.files()["lavagna.canvas"]?.includes("via per la linguetta chiusa") === true);
+
+      // Chiusura del riquadro.
+      await splitRight();
+      await waitFor("il secondo riquadro si apre", () => document.querySelectorAll(".pane").length === 2);
+      await openBoard();
+      typeInCard("prima", "via per il riquadro chiuso");
+      await run("shell.pane.close");
+      await waitFor("il riquadro si chiude", () => document.querySelectorAll(".pane").length === 1);
+      await waitFor("la carta arriva sul disco", () => host.files()["lavagna.canvas"]?.includes("via per il riquadro chiuso") === true);
+
+      expect(pendingAtDestroy.length, "ogni via ha distrutto un motore").toBeGreaterThanOrEqual(3);
+      expect(pendingAtDestroy, "un motore è morto col testo di una carta in sospeso").not.toContain(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 describe("portare a schermo un punto", () => {

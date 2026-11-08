@@ -63,6 +63,22 @@ describe("stage lifecycle", () => {
     });
   });
 
+  it("moves the server only when a port is given", async () => {
+    const configs: Array<Record<string, unknown>> = [];
+    const server = { config: { server: { port: 1448 } }, listen: async () => {}, close: async () => {} };
+    const options = {
+      createServer: async (config: Record<string, unknown>) => {
+        configs.push(config);
+        return server;
+      },
+      chromium: { launch: async () => ({ close: async () => {} }) },
+    };
+    await (await openStage(options)).close();
+    await (await openStage({ ...options, port: 1448, strictPort: true })).close();
+    expect(configs[0]).not.toHaveProperty("server");
+    expect(configs[1]?.server).toEqual({ port: 1448, strictPort: true });
+  });
+
   it("preserves launch failure while exposing a failed rollback", async () => {
     const rollbackError = new Error("server rollback failed");
     const launchError = new Error("browser launch failed");

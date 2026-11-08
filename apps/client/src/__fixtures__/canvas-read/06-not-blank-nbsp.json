@@ -1,0 +1,9 @@
+{
+  "name": "not-blank-nbsp",
+  "description": "R1: uno spazio non JSON (U+00A0) non è vuoto, e non è JSON",
+  "source": "\u00a0",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

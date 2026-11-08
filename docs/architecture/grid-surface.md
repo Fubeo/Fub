@@ -215,11 +215,59 @@ e dal libro della cartella; la scheda della tabella compare con la selezione
 dentro una tabella. La tavolozza disegna i colori del tema con le sfumature
 di ECMA-376 (`palette.ts`), le gallerie gli stili di tabella e di cella.
 
+Nello stile di Fub le schede stanno in un pozzetto nella testata, e i
+comandi su un vassoio stondato, un tono sotto la carta, in foglietti
+sollevati col nome del gruppo in grigio sotto i controlli; la pelle è nei
+blocchi `.grid-ribbon-…` di `structure.css` e `skin/editors.css`, e sotto i
+900 px del foglio (`@container sheet`) testata e vassoio si stringono di un
+passo.
+
 La barra si percorre con le frecce (un solo controllo per scheda sta nel
 Tab), Esc torna alla griglia, Alt o F10 mostrano le lettere di Excel. Quando
 la barra è stretta i pulsanti piccoli perdono il nome, poi i gruppi si
-raccolgono da destra in un pulsante che li apre in un riquadro. Il testo
-della barra è in un catalogo suo (`strings.ts`), in italiano e in inglese.
+raccolgono da destra in un pulsante col disegno e il nome: due raccolti di
+fila stanno a pila, uno rimasto solo è alto quanto un foglietto aperto. Nei
+fogli il gruppo raccolto si apre sul posto, nella barra (l'opzione
+`openInPlace` del kit): clic, Invio, Spazio, ↓ o la sua lettera di Alt lo
+aprono col fuoco sul primo comando, gli altri si raccolgono per fargli
+posto, e se nemmeno così la fila ci sta i pulsanti perdono il nome
+(`data-dense`). Ne è aperto uno alla volta; Esc lo richiude e torna al suo
+pulsante, un secondo Esc torna alla griglia, e una scheda cambiata o una
+larghezza che basta a tutti lo richiudono. Il testo della barra è in un
+catalogo suo (`strings.ts`), in italiano e in inglese.
+
+Nei fogli la barra si muove (l'opzione `motion` del kit, che soltanto la
+griglia accende; il padrone è `kit/ribbon/ribbon-motion.ts`, con `moto/`):
+i foglietti di una sezione nuova entrano uno dopo l'altro dal suo verso,
+Ctrl+F1 ritira il vassoio, che svanisce mentre la formula e la griglia gli
+salgono sopra come una tenda (e ridiscendono riaprendolo; durante la corsa
+la griglia tiene la sua altezza e passa sotto la barra dei fogli, così il
+bordo di sotto non salta, e la rende a corsa finita), il foglietto che
+si apre sul posto si alza di un gradino e gli altri scivolano, e la scheda
+della tabella compare e svanisce con la selezione. Un gesto nuovo a metà
+corsa riparte da posa e velocità correnti; ciò che cambia forma o se ne va
+mentre era ancora in corsa lascia un'immagine che svanisce da dove si
+vedeva. Con «ridotto» resta soltanto la dissolvenza del vassoio che torna.
+
+Il primo pulsante della fila dell'accesso rapido, prima delle schede, è
+«Comandi» (`editors/grid/menu-comandi.ts`): un gettone pieno, con
+`aria-haspopup="menu"` e `aria-expanded`, che clic, Invio, Spazio, ↓ o Alt e
+poi C aprono, ed Esc richiude rendendogli il fuoco. Apre un menu di Fub
+(`ui/menu.ts`) con tutti i comandi della cartella, nell'ordine delle schede
+del catalogo: in ogni gruppo prima i controlli della barra, con le loro voci,
+spunte e scelte, poi «Altri comandi del gruppo», quelli del catalogo che la
+barra non mostra, dati come li dà la tavolozza. Le schede contestuali
+(tabella, grafico, oggetto, tabella pivot) stanno sotto «Per ciò che hai
+selezionato»: accese col nome di ciò che è selezionato («Tabella «Vendite»»),
+altrimenti coi controlli della barra spenti e il perché
+(`fogli.motivo.context.*`). Una voce spenta dice il suo motivo: la sola
+lettura per i comandi che cambiano, il contesto che manca, o quello del
+motore. Lo stato si legge all'apertura e, a menu aperto, ogni rilettura della
+barra aggiorna le voci; la cartella che non dà più comandi chiude il menu.
+Scrivendo si cerca in tutte le voci, anche nei sottomenu chiusi, col
+percorso, senza tetto (l'opzione `fullSearch` del menu): prima le accese,
+poi le spente col perché, e il piede conta le voci. Sotto i 560 px del foglio
+il gettone perde il nome, che resta nel suggerimento e nel nome accessibile.
 
 Il tasto destro sceglie come Excel: fuori dalla selezione sceglie la cella,
 la riga o la colonna sotto il puntatore, dentro la lascia. `ribbon/context.ts`
@@ -250,7 +298,7 @@ lanciatore dello Scrittoio) mostra ogni comando del catalogo che il motore
 serve, nel gruppo «Foglio», col titolo tradotto e la scheda della barra in cui
 lo si trova (`editors/grid/palette/`). La superficie li dà con
 `paletteCommands()` di `EditorSurface`. Un comando che il motore dice spento
-resta in elenco col suo motivo e non parte; in sola lettura lo sono tutti.
+resta in elenco col suo motivo e non parte.
 
 Scelto, un comando si dà come lo darebbe la barra: con la finestra scritta a
 mano se ne ha una (`OWN_DIALOGS` in `palette/commands.ts`, controllata dai
@@ -260,6 +308,60 @@ cella o un intervallo partono dalla selezione e un rifiuto del motore resta
 scritto dentro; altrimenti subito sulla selezione. I titoli e i nomi dei campi
 stanno in un catalogo dei testi a parte (`palette/strings.ts`), caricato con
 la superficie e non con la shell.
+
+Gli stessi comandi stanno nel menu «Comandi» della barra. Barra, menu e
+tavolozza danno un comando da un solo punto (`GridPalette.give`), che sceglie
+fra la finestra scritta a mano, quella costruita e il risultato.
+
+Il test di copertura (`palette/palette.test.ts`) vuole che ogni comando del
+catalogo si trovi nel suo albero e che ogni scheda e gruppo che il menu
+mostra abbia un nome, nella barra o fra quelli del solo menu
+(`fogli.menu.tab.*`, `fogli.menu.group.*`).
+
+### La sola lettura per effetto
+
+Ogni comando del catalogo ha un effetto: `cambia`, `legge` o `mostra`. In
+sola lettura si spengono soltanto quelli che cambiano, col perché
+`fogli.palette.read_only`; quelli che leggono o mostrano restano accesi nella
+barra, nel menu «Comandi» e nella tavolozza. La barra resta visibile
+(`servesCommands()` del motore), coi controlli che cambiano spenti. Il motore
+ne è il presidio: la palette gli dice l'effetto di ogni comando
+(`setCommandEffects`), e in sola lettura lascia partire soltanto quelli che
+leggono o mostrano, e soltanto le finestre scritte a mano dei comandi che non
+cambiano (trova, vai a, vai a formato, anteprima di stampa, gestione nomi).
+Un esito che porta comunque delle modifiche non si applica: il motore lo
+scrive nel registro e riapre la cartella del provider dal testo confermato.
+Le scorciatoie, i gesti sulla griglia e il menu del tasto destro restano
+quelli della sola lettura.
+
+### Il risultato dei comandi che leggono
+
+Un comando che legge e non ha una finestra scritta a mano apre la finestra del
+risultato (`editors/grid/risultato.ts`, sulla finestra del kit): una sola alla
+volta, e lo stesso comando dato di nuovo ritrova quella aperta. Se il comando
+chiede un parametro obbligatorio, prima la finestra costruita, poi il
+risultato. Mentre legge dice «Sto leggendo il risultato…» sopra delle righe
+segnaposto; poi una tabella, con la testata che resta ferma mentre il corpo
+scorre, i numeri allineati a destra nella lingua dell'interfaccia e i
+riferimenti a una cella come pulsanti che chiudono la finestra e scelgono la
+cella (un foglio che non c'è più lo dice nella nota). La tabella scorre in una
+scatola alta al più 14rem, e un valore lungo va a capo. «Copia» mette negli
+appunti il risultato in TSV, e un rifiuto degli appunti lo dice nella nota; un
+rifiuto del provider dice il suo perché, con «Riprova». Esc chiude e rende il
+fuoco a chi l'aveva; la finestra si chiude anche con la cartella. Le forme che
+il provider restituisce e le parole da tradurre sono in
+`risultati.generated.json`, scritto da
+`crates/fub-format-xlsx/tests/ts_risultati.rs`.
+
+### I perché
+
+Il motore e l'adattatore spengono o rifiutano un comando con una frase
+inglese. `editors/grid/motivi.ts` dà a ogni frase che possono dire
+(`motivi.generated.json`, dallo stesso test) la sua chiave `fogli.motivo.*`:
+i parametri passano nella traduzione, il nome di un comando diventa il suo
+titolo, un perché dentro un perché si traduce a sua volta, e una frase che
+non si conosce resta citata in una frase generica. La barra, il menu, la
+tavolozza, la finestra costruita e il risultato passano tutti di qui.
 
 ## Gli oggetti dei fogli
 
@@ -330,7 +432,9 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 - `apps/client/src/editors/grid/comment-card.ts`
 - `apps/client/src/editors/grid/ribbon/ribbon.ts`
 - `apps/client/src/kit/ribbon/ribbon.ts`
+- `apps/client/src/kit/ribbon/ribbon-motion.ts`
 - `apps/client/src/editors/grid/ribbon/tabs.ts`
+- `apps/client/src/editors/grid/menu-comandi.ts`
 - `apps/client/src/editors/grid/dialogs/host.ts`
 - `apps/client/src/editors/grid/dialogs/catalog.ts`
 - `apps/client/src/editors/grid/dialogs/page.ts`
@@ -338,6 +442,8 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 - `apps/client/src/editors/grid/dialogs/protect.ts`
 - `apps/client/src/editors/grid/palette/commands.ts`
 - `apps/client/src/editors/grid/palette/form.ts`
+- `apps/client/src/editors/grid/risultato.ts`
+- `apps/client/src/editors/grid/motivi.ts`
 - `crates/fub-format-xlsx/src/grid.rs`
 - `crates/fub-format-xlsx/src/export.rs`
 - `crates/fub-format-xlsx/src/objects.rs`

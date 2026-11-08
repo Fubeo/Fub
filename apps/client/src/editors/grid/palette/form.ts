@@ -40,7 +40,10 @@ export interface CatalogCommand {
   readonly id: string;
   readonly titolo: string;
   readonly etichetta: string;
-  readonly posto: { readonly scheda: string; readonly gruppo: string | null } | null;
+  /// La scheda e il gruppo del menu (`schede` del catalogo).
+  readonly posto: { readonly scheda: string; readonly gruppo: string };
+  /// Se cambia la cartella, la legge o cambia soltanto ciò che si vede.
+  readonly effetto: "cambia" | "legge" | "mostra";
   readonly campi: readonly CatalogField[];
   readonly aperto?: boolean;
   readonly altreForme?: readonly (readonly CatalogField[])[];

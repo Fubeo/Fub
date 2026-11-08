@@ -4,20 +4,23 @@
 //! inglese, il posto nel suo menu (`["Home", "Font"]`) e i parametri come
 //! schema a parole. [`importa`] ne fa dei [`ComandoFub`]: l'id con lo spazio
 //! del motore davanti, la chiave del titolo nei cataloghi delle lingue, il
-//! posto nella barra di Fub, il [`Modulo`] dei parametri e chi dice se il
+//! posto nel menu di Fub (una scheda e un gruppo, sempre tutti e due),
+//! l'[`Effetto`] sulla cartella, il [`Modulo`] dei parametri e chi dice se il
 //! comando si può usare (il motore, [`Delega`]).
 //!
-//! Il crate non nomina nessun motore: la tabella che porta un percorso del
-//! menu del motore a una scheda di Fub, e il lessico dei nomi dei parametri,
-//! li dà l'adattatore ([`Adattamento`]). Un percorso che la tabella non
-//! conosce è un errore, non un comando senza posto: un comando nuovo del
-//! motore si fa vedere nel test dell'adattatore.
+//! Il crate non nomina nessun motore: l'elenco delle schede e dei gruppi del
+//! menu, la tabella che porta un percorso del menu del motore (o un comando
+//! preciso) a un posto, il lessico dei nomi dei parametri e l'effetto di ogni
+//! comando li dà l'adattatore ([`Adattamento`], [`SpecMotore::effetto`]). Un
+//! comando servito senza posto è un errore, non un comando che si trova
+//! soltanto cercandolo: un comando nuovo del motore si fa vedere nel test
+//! dell'adattatore.
 //!
 //! [`verifica_copertura`] è il controllo che nessun comando si perde: ogni
 //! comando del motore è nel catalogo, oppure l'adattatore dice perché non lo
-//! serve.
+//! serve; e ogni gruppo del menu ha almeno un comando.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use crate::modulo::{ErroreSchema, Modulo, Tipo};
@@ -34,30 +37,91 @@ pub struct SpecMotore {
     pub menu: Vec<String>,
     /// Lo schema a parole dei parametri; vuoto se non ne ha.
     pub parametri: String,
+    /// Che cosa fa il comando alla cartella: lo decide l'adattatore da ciò
+    /// che il motore dice del comando (se si annulla, se va nel giornale).
+    pub effetto: Effetto,
 }
 
-/// Dove un comando compare nella shell.
+/// Che cosa fa un comando al documento. La sola lettura spegne i comandi
+/// che cambiano; nel dubbio un comando è [`Effetto::Cambia`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Effetto {
+    /// Cambia il documento (anche annulla e ripeti).
+    Cambia,
+    /// Legge il documento e ne dà un risultato, senza cambiarlo.
+    Legge,
+    /// Cambia soltanto ciò che si vede: la selezione, il foglio attivo, la
+    /// vista.
+    Mostra,
+}
+
+impl Effetto {
+    /// Il nome nei file generati per la shell.
+    pub fn nome(self) -> &'static str {
+        match self {
+            Effetto::Cambia => "cambia",
+            Effetto::Legge => "legge",
+            Effetto::Mostra => "mostra",
+        }
+    }
+}
+
+/// Dove un comando compare nel menu di Fub: una scheda e un gruppo
+/// dell'elenco dell'adattatore ([`Adattamento::schede`]), tutti e due
+/// sempre pieni.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Posto {
+    /// L'id della scheda: `home`.
+    pub scheda: &'static str,
+    /// L'id del gruppo nella scheda: `font`.
+    pub gruppo: &'static str,
+}
+
+/// Una scheda del menu dei comandi, con i suoi gruppi nell'ordine del menu.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Posto {
-    /// In una scheda della barra, nel gruppo dato o nella scheda senza un
-    /// gruppo preciso.
-    Barra {
-        /// L'id della scheda: `home`.
-        scheda: &'static str,
-        /// L'id del gruppo nella scheda: `font`.
-        gruppo: Option<&'static str>,
-    },
-    /// Soltanto nella tavolozza dei comandi.
-    Tavolozza,
+pub struct Scheda {
+    /// L'id della scheda: `home`.
+    pub id: &'static str,
+    /// La scheda c'è soltanto nel menu, non nella barra.
+    pub solo: bool,
+    /// Il contesto della selezione che la fa comparire (`table`, `chart`):
+    /// `None` per una scheda che c'è sempre.
+    pub contesto: Option<&'static str>,
+    /// I gruppi, nell'ordine del menu.
+    pub gruppi: &'static [Gruppo],
+}
+
+/// Un gruppo di una [`Scheda`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Gruppo {
+    /// L'id del gruppo nella scheda: `font`.
+    pub id: &'static str,
+    /// Il gruppo c'è soltanto nel menu, non nella barra.
+    pub solo: bool,
+}
+
+impl Scheda {
+    /// Se l'elenco `schede` ha la scheda e il gruppo del `posto`.
+    pub fn ha(schede: &[Scheda], posto: Posto) -> bool {
+        schede.iter().any(|scheda| {
+            scheda.id == posto.scheda && scheda.gruppi.iter().any(|g| g.id == posto.gruppo)
+        })
+    }
 }
 
 /// Ciò che l'adattatore sa del suo motore e il crate non può sapere.
 #[derive(Debug, Clone, Copy)]
 pub struct Adattamento<'a> {
+    /// Le schede e i gruppi del menu dei comandi, nell'ordine del menu: ogni
+    /// posto ne nomina una scheda e un gruppo.
+    pub schede: &'a [Scheda],
     /// Ogni percorso del menu del motore con il suo posto in Fub. Il
-    /// percorso si confronta per intero. Un comando con il menu vuoto va
-    /// nella tavolozza senza bisogno di una riga.
+    /// percorso si confronta per intero.
     pub posti: &'a [(&'a [&'a str], Posto)],
+    /// Il posto di un comando preciso, che vale prima del suo percorso: un
+    /// comando con il menu del motore vuoto, o uno che Fub mostra in un
+    /// altro gruppo da quello del suo percorso.
+    pub posti_del_comando: &'a [(&'a str, Posto)],
     /// Il tipo dei nomi di parametro che lo schema del motore usa senza
     /// valore (`{cell, word}`): si veda [`Modulo::da_schema`].
     pub nomi: &'a [(&'a str, Tipo)],
@@ -68,6 +132,26 @@ pub struct Adattamento<'a> {
 }
 
 impl Adattamento<'_> {
+    /// Il posto del comando `spec`: la riga del suo id, poi quella del suo
+    /// percorso.
+    fn posto(&self, spec: &SpecMotore) -> Option<Posto> {
+        if let Some((_, posto)) = self.posti_del_comando.iter().find(|(id, _)| *id == spec.id) {
+            return Some(*posto);
+        }
+        if spec.menu.is_empty() {
+            return None;
+        }
+        self.posti
+            .iter()
+            .find(|(percorso, _)| {
+                percorso
+                    .iter()
+                    .copied()
+                    .eq(spec.menu.iter().map(String::as_str))
+            })
+            .map(|(_, posto)| *posto)
+    }
+
     /// Il lessico per il comando `id`: i suoi nomi, poi quelli di tutti.
     fn lessico(&self, id: &str) -> Vec<(&str, Tipo)> {
         self.nomi_del_comando
@@ -101,8 +185,11 @@ pub struct ComandoFub {
     pub etichetta: String,
     /// Il percorso nel menu del motore, com'era.
     pub menu_motore: Vec<String>,
-    /// Dove il comando compare.
+    /// Dove il comando compare nel menu (se la barra lo mostra in più posti,
+    /// il primo nell'ordine della barra).
     pub posto: Posto,
+    /// Che cosa fa alla cartella.
+    pub effetto: Effetto,
     /// La scorciatoia: nessuna per ora, la danno le scorciatoie della shell.
     pub tasti: Option<String>,
     /// I parametri.
@@ -136,6 +223,41 @@ pub enum Mancanza {
         /// Il suo percorso nel menu del motore.
         menu: Vec<String>,
     },
+    /// Un comando senza menu nel motore non ha una riga col suo id.
+    #[error("il comando «{0}» non ha un menu nel motore, né una riga col suo id fra i posti")]
+    SenzaPosto(String),
+    /// Il posto di un comando nomina una scheda o un gruppo fuori elenco.
+    #[error("il comando «{id}» va in «{scheda} › {gruppo}», che l'elenco delle schede non ha")]
+    PostoFuoriElenco {
+        /// Il comando.
+        id: String,
+        /// La scheda del posto.
+        scheda: String,
+        /// Il gruppo del posto.
+        gruppo: String,
+    },
+    /// L'elenco delle schede ha due volte la stessa scheda.
+    #[error("l'elenco delle schede ha due volte la scheda «{0}»")]
+    SchedaDoppia(String),
+    /// Una scheda dell'elenco ha due volte lo stesso gruppo.
+    #[error("la scheda «{scheda}» ha due volte il gruppo «{gruppo}»")]
+    GruppoDoppio {
+        /// La scheda.
+        scheda: String,
+        /// Il gruppo.
+        gruppo: String,
+    },
+    /// Una scheda dell'elenco non ha gruppi.
+    #[error("la scheda «{0}» non ha gruppi")]
+    SchedaVuota(String),
+    /// Un gruppo dell'elenco non ha nessun comando del catalogo.
+    #[error("il gruppo «{scheda} › {gruppo}» non ha nessun comando")]
+    GruppoVuoto {
+        /// La scheda.
+        scheda: String,
+        /// Il gruppo.
+        gruppo: String,
+    },
     /// Lo schema dei parametri non si legge.
     #[error("i parametri del comando «{id}» non si leggono: {errore}")]
     SchemaIlleggibile {
@@ -161,25 +283,29 @@ pub enum Mancanza {
 }
 
 /// Il conto della copertura di un catalogo.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Copertura {
     /// I comandi del motore nel catalogo.
     pub importati: usize,
     /// I comandi che l'adattatore non serve, ciascuno con il suo perché.
     pub non_serviti: usize,
-    /// I comandi del catalogo che stanno soltanto nella tavolozza.
-    pub solo_tavolozza: usize,
-    /// Fra questi, quelli che già nel motore non avevano un menu.
-    pub senza_menu: usize,
+    /// I comandi del catalogo per scheda, nell'ordine dell'elenco delle
+    /// schede.
+    pub per_scheda: Vec<(&'static str, usize)>,
 }
 
 impl fmt::Display for Copertura {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} comandi nel catalogo, {} non serviti; {} soltanto nella tavolozza, di cui {} senza menu nel motore",
-            self.importati, self.non_serviti, self.solo_tavolozza, self.senza_menu
-        )
+            "{} comandi nel catalogo, {} non serviti",
+            self.importati, self.non_serviti
+        )?;
+        for (indice, (scheda, quanti)) in self.per_scheda.iter().enumerate() {
+            let prima = if indice == 0 { "; per scheda: " } else { ", " };
+            write!(f, "{prima}{scheda} {quanti}")?;
+        }
+        Ok(())
     }
 }
 
@@ -214,7 +340,7 @@ pub fn importa(
     if !spazio_valido(spazio) {
         return Err(vec![Mancanza::SpazioNonValido(spazio.to_owned())]);
     }
-    let mut mancanze = Vec::new();
+    let mut mancanze = controlla_schede(adattamento.schede);
     let mut visti = BTreeSet::new();
     let mut comandi = Vec::with_capacity(specifiche.len());
     for spec in specifiche {
@@ -229,27 +355,25 @@ pub fn importa(
         if spec.etichetta.trim().is_empty() {
             mancanze.push(Mancanza::EtichettaVuota(spec.id.clone()));
         }
-        let posto = if spec.menu.is_empty() {
-            Some(Posto::Tavolozza)
-        } else {
-            adattamento
-                .posti
-                .iter()
-                .find(|(percorso, _)| {
-                    percorso
-                        .iter()
-                        .copied()
-                        .eq(spec.menu.iter().map(String::as_str))
-                })
-                .map(|(_, posto)| *posto)
-        };
-        let Some(posto) = posto else {
-            mancanze.push(Mancanza::PostoSconosciuto {
-                id: spec.id.clone(),
-                menu: spec.menu.clone(),
+        let Some(posto) = adattamento.posto(spec) else {
+            mancanze.push(if spec.menu.is_empty() {
+                Mancanza::SenzaPosto(spec.id.clone())
+            } else {
+                Mancanza::PostoSconosciuto {
+                    id: spec.id.clone(),
+                    menu: spec.menu.clone(),
+                }
             });
             continue;
         };
+        if !Scheda::ha(adattamento.schede, posto) {
+            mancanze.push(Mancanza::PostoFuoriElenco {
+                id: spec.id.clone(),
+                scheda: posto.scheda.to_owned(),
+                gruppo: posto.gruppo.to_owned(),
+            });
+            continue;
+        }
         let parametri = match Modulo::da_schema(&spec.parametri, &adattamento.lessico(&spec.id)) {
             Ok(modulo) => modulo,
             Err(errore) => {
@@ -267,6 +391,7 @@ pub fn importa(
             etichetta: spec.etichetta.clone(),
             menu_motore: spec.menu.clone(),
             posto,
+            effetto: spec.effetto,
             tasti: None,
             parametri,
             abilitato: Delega::Motore(spec.id.clone()),
@@ -279,13 +404,40 @@ pub fn importa(
     }
 }
 
+/// Le mancanze dell'elenco delle schede: una scheda o un gruppo due volte,
+/// una scheda senza gruppi.
+fn controlla_schede(schede: &[Scheda]) -> Vec<Mancanza> {
+    let mut mancanze = Vec::new();
+    let mut viste = BTreeSet::new();
+    for scheda in schede {
+        if !viste.insert(scheda.id) {
+            mancanze.push(Mancanza::SchedaDoppia(scheda.id.to_owned()));
+        }
+        if scheda.gruppi.is_empty() {
+            mancanze.push(Mancanza::SchedaVuota(scheda.id.to_owned()));
+        }
+        let mut visti = BTreeSet::new();
+        for gruppo in scheda.gruppi {
+            if !visti.insert(gruppo.id) {
+                mancanze.push(Mancanza::GruppoDoppio {
+                    scheda: scheda.id.to_owned(),
+                    gruppo: gruppo.id.to_owned(),
+                });
+            }
+        }
+    }
+    mancanze
+}
+
 /// Controlla che ogni comando del `motore` si raggiunga: è nel `catalogo`,
 /// oppure `non_servito` ne dà il perché (non vuoto). Un comando non può
 /// essere tutte e due le cose, e il catalogo non può avere comandi che il
-/// motore non ha.
+/// motore non ha. Ogni gruppo delle `schede` deve avere almeno un comando
+/// del catalogo: un gruppo vuoto nel menu è un errore.
 pub fn verifica_copertura(
     motore: &[SpecMotore],
     catalogo: &[ComandoFub],
+    schede: &[Scheda],
     non_servito: &dyn Fn(&str) -> Option<&'static str>,
 ) -> Result<Copertura, Vec<Mancanza>> {
     let mut mancanze = Vec::new();
@@ -312,12 +464,36 @@ pub fn verifica_copertura(
             (false, Some(_)) => copertura.non_serviti += 1,
         }
     }
+    let mut per_posto: BTreeMap<Posto, usize> = BTreeMap::new();
     for comando in catalogo {
         copertura.importati += 1;
-        if comando.posto == Posto::Tavolozza {
-            copertura.solo_tavolozza += 1;
-            if comando.menu_motore.is_empty() {
-                copertura.senza_menu += 1;
+        *per_posto.entry(comando.posto).or_default() += 1;
+    }
+    for scheda in schede {
+        let mut nella_scheda = 0;
+        for gruppo in scheda.gruppi {
+            let posto = Posto {
+                scheda: scheda.id,
+                gruppo: gruppo.id,
+            };
+            match per_posto.remove(&posto) {
+                Some(quanti) => nella_scheda += quanti,
+                None => mancanze.push(Mancanza::GruppoVuoto {
+                    scheda: scheda.id.to_owned(),
+                    gruppo: gruppo.id.to_owned(),
+                }),
+            }
+        }
+        copertura.per_scheda.push((scheda.id, nella_scheda));
+    }
+    if !per_posto.is_empty() {
+        for comando in catalogo {
+            if per_posto.contains_key(&comando.posto) {
+                mancanze.push(Mancanza::PostoFuoriElenco {
+                    id: comando.motore.clone(),
+                    scheda: comando.posto.scheda.to_owned(),
+                    gruppo: comando.posto.gruppo.to_owned(),
+                });
             }
         }
     }

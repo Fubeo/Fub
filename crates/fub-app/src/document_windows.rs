@@ -288,6 +288,11 @@ pub async fn open_document_window(
         .title("Documento · Fub")
         .inner_size(1024.0, 760.0)
         .min_inner_size(480.0, 320.0)
+        // Lo stesso fondo della `main` prima del primo disegno (`avvio.rs`).
+        .background_color(crate::avvio::fondo_di_macchina(
+            &host.machine_settings(),
+            &window,
+        ))
         .on_navigation(move |url| url == &expected)
         .on_new_window(|_, _| NewWindowResponse::Deny)
         .on_download(|_, _| false)

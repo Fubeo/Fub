@@ -1,0 +1,10 @@
+{
+  "name": "edges-absent-card-removed",
+  "description": "R11: edges è assente e una scheda si toglie: vanno via solo i suoi byte e la virgola che la segue; edges, vuoto, non si aggiunge. L'annulla rimette la scheda in testa",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"a\"},{\"id\":\"c\",\"type\":\"text\",\"x\":0,\"y\":100,\"width\":100,\"height\":50,\"text\":\"c\"}]}",
+  "patches": [{"kind":"remove-node","before":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"a"},"after":null,"at":0}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"c\",\"type\":\"text\",\"x\":0,\"y\":100,\"width\":100,\"height\":50,\"text\":\"c\"}]}"
+  }
+}

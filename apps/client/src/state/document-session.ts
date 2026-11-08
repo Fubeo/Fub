@@ -22,7 +22,8 @@ import { lineFeeds, tryApplyOperation, type TextOperation } from "../editors/cor
 import { rebaseGridJournalText } from "./grid-journal";
 
 const SAVE_MS = 400;
-const DRAFT_MS = 1_000;
+/** La cadenza delle bozze: al più una ogni `DRAFT_MS` mentre si scrive. */
+export const DRAFT_MS = 1_000;
 
 
 /// La porta con cui una superficie si sottoscrive a una sessione. Soltanto
@@ -38,6 +39,16 @@ export interface DocumentSurface {
   /// La sessione si è chiusa per sempre e la superficie è già staccata: per
   /// chi vive oltre un riquadro, come una sessione live.
   closed?(): void;
+  /// Il testo intero con dentro ciò che la superficie tiene ancora per sé (una
+  /// scheda della lavagna prima della sua pausa); `null` se non tiene niente.
+  /// Lo legge soltanto la bozza.
+  pendingText?(): string | null;
+  /// Registra adesso il testo tenuto per sé: diventa una modifica della
+  /// sessione, come alla fine della pausa.
+  commitPending?(): void;
+  /// Avvisa a ogni cambio del testo tenuto per sé, con `true` se ne resta.
+  /// L'avviso non chiama il nucleo; il disposer lo ferma.
+  watchPending?(listener: (pending: boolean) => void): () => void;
 }
 
 /// Ciò che la sessione diffonde alle superfici: o l'operazione tipizzata
@@ -266,6 +277,10 @@ export class DocumentSession implements DraftBuffer {
   /// ciclo di vita, non un registro di famiglie: chi si toglie chiude, la
   /// chiusura della sessione chiude tutti.
   readonly #surfaces = new Map<string, DocumentSurface>();
+  /// Le superfici che tengono testo non ancora registrato, per identità.
+  readonly #pendingSurfaces = new Set<string>();
+  /// Lo stop dell'avviso di ogni registrazione.
+  readonly #pendingWatches = new Map<DocumentSurface, () => void>();
 
   constructor(
     token: OwnerToken,
@@ -386,10 +401,69 @@ export class DocumentSession implements DraftBuffer {
    */
   attachSurface(surface: DocumentSurface): () => void {
     if (!this.#isOpen()) return () => {};
+    const replaced = this.#surfaces.get(surface.id);
+    if (replaced && replaced !== surface) this.#unwatch(replaced);
     this.#surfaces.set(surface.id, surface);
+    if (surface.watchPending && !this.#pendingWatches.has(surface)) {
+      this.#pendingWatches.set(surface, surface.watchPending((pending) => this.#pendingChanged(surface, pending)));
+    }
     return () => {
       if (this.#surfaces.get(surface.id) === surface) this.#surfaces.delete(surface.id);
+      this.#unwatch(surface);
     };
+  }
+
+  #unwatch(surface: DocumentSurface): void {
+    const stop = this.#pendingWatches.get(surface);
+    this.#pendingWatches.delete(surface);
+    // Una registrazione nuova con la stessa identità tiene il suo stato.
+    const current = this.#surfaces.get(surface.id);
+    if (current === undefined || current === surface) this.#pendingSurfaces.delete(surface.id);
+    try {
+      stop?.();
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  /**
+   * Il testo tenuto da una superficie è cambiato. Nessuna chiamata al nucleo
+   * né al disco: la bozza si arma con la sua cadenza e, quando parte, chiede il
+   * testo intero alla superficie.
+   */
+  #pendingChanged(surface: DocumentSurface, pending: boolean): void {
+    if (this.#surfaces.get(surface.id) !== surface) return;
+    if (!pending) {
+      this.#pendingSurfaces.delete(surface.id);
+      return;
+    }
+    this.#pendingSurfaces.add(surface.id);
+    if (!this.#isOpen() || this.#state.pendingDeletion) return;
+    this.#draftGeneration++;
+    this.scheduleDraft();
+  }
+
+  /// Se una superficie tiene testo che la sessione non ha ancora.
+  hasPending(): boolean {
+    return this.#isOpen() && this.#pendingSurfaces.size > 0;
+  }
+
+  /**
+   * Registra il testo che le superfici tengono ancora per sé, prima di ogni
+   * passo che legge o sostituisce il buffer: dopo, la sessione ha tutto ciò che
+   * è stato scritto (un cambio esterno trova il buffer sporco e diventa un
+   * conflitto). Una superficie che fallisce non ferma le altre.
+   */
+  settlePending(): void {
+    if (!this.#isOpen() || this.#pendingSurfaces.size === 0) return;
+    for (const surface of [...this.#surfaces.values()]) {
+      if (!this.#pendingSurfaces.has(surface.id)) continue;
+      try {
+        surface.commitPending?.();
+      } catch (error) {
+        console.error(error);
+      }
+    }
   }
 
   /**
@@ -400,6 +474,7 @@ export class DocumentSession implements DraftBuffer {
    */
   restoreDraft(text: string, base: WriteBase | null): void {
     if (!this.#isOpen()) return;
+    this.settlePending();
     this.#activityGeneration++;
     this.#externalGeneration++;
     this.#draftGeneration++;
@@ -432,6 +507,7 @@ export class DocumentSession implements DraftBuffer {
 
   /** Consume an external event before applying the clean/dirty policy. */
   async handleExternalChange(source: Origin): Promise<ExternalChangeResult> {
+    this.settlePending();
     const generation = ++this.#externalGeneration;
     const underChange = consumeUnderChange(this.#state, source);
     if (underChange === "eco") return { kind: "echo" };
@@ -444,6 +520,7 @@ export class DocumentSession implements DraftBuffer {
   /** Reread a clean document during event reconciliation. */
   async reloadIfClean(): Promise<ReloadResult> {
     if (!this.#isOpen()) return { kind: "missing" };
+    this.settlePending();
     if (this.#state.dirty) return { kind: "dirty" };
     return this.#reloadFromDisk(++this.#externalGeneration);
   }
@@ -457,6 +534,7 @@ export class DocumentSession implements DraftBuffer {
    */
   async forceReload(): Promise<ReloadResult> {
     if (!this.#isOpen()) return { kind: "missing" };
+    this.settlePending();
     this.#activityGeneration++;
     const generation = ++this.#externalGeneration;
     this.#clearSaveTimer();
@@ -482,6 +560,7 @@ export class DocumentSession implements DraftBuffer {
    * dell'utente e la sua bozza, e la scelta si può ripetere.
    */
   async resolveConflict(choice: ConflictChoice): Promise<ConflictResolutionResult> {
+    this.settlePending();
     if (!this.#isOpen() || this.#state.result !== "conflitto") return { kind: "none" };
     if (choice === "mine") {
       await this.saveKeepingMine();
@@ -543,6 +622,7 @@ export class DocumentSession implements DraftBuffer {
 
   discardChanges(): void {
     if (!this.#isOpen()) return;
+    this.settlePending();
     this.#activityGeneration++;
     this.#externalGeneration++;
     this.#draftGeneration++;
@@ -563,9 +643,13 @@ export class DocumentSession implements DraftBuffer {
     }, SAVE_MS);
   }
 
+  /**
+   * Una cadenza, non un rinvio: un timer già armato resta com'è, così chi
+   * scrive senza fermarsi ha una bozza al secondo invece di nessuna.
+   */
   scheduleDraft(): void {
     if (!this.#isOpen() || this.#state.suspended || this.#state.pendingDeletion) return;
-    this.#clearDraftTimer();
+    if (this.#draftTimer !== undefined) return;
     const id = this.#id;
     this.#draftTimer = globalThis.setTimeout(() => {
       this.#draftTimer = undefined;
@@ -574,6 +658,7 @@ export class DocumentSession implements DraftBuffer {
   }
 
   async flush(): Promise<boolean> {
+    this.settlePending();
     if (!this.#isOpen() || !this.#state.dirty) return false;
     this.#clearSaveTimer();
     const id = this.#id;
@@ -586,6 +671,7 @@ export class DocumentSession implements DraftBuffer {
    * chiusura della finestra decide su questo esito, non sulla notifica.
    */
   async flushDraft(): Promise<boolean> {
+    this.settlePending();
     this.#clearDraftTimer();
     await this.#writeDraft(this.#id);
     return this.#bufferProtected();
@@ -597,7 +683,7 @@ export class DocumentSession implements DraftBuffer {
    * proteggere.
    */
   #bufferProtected(): boolean {
-    if (!this.#isOpen() || !this.#state.dirty) return true;
+    if (!this.#isOpen() || (!this.#state.dirty && this.#pendingSurfaces.size === 0)) return true;
     const outcome = this.#draftOutcome;
     return outcome?.generation === this.#draftGeneration && outcome.succeeded;
   }
@@ -612,6 +698,7 @@ export class DocumentSession implements DraftBuffer {
 
   beginDeletion(): boolean {
     if (!this.#isOpen() || this.#state.pendingDeletion) return false;
+    this.settlePending();
     this.#activityGeneration++;
     this.#state.pendingDeletion = true;
     this.#state.suspended = true;
@@ -635,6 +722,7 @@ export class DocumentSession implements DraftBuffer {
 
   suspend(): boolean {
     if (!this.#isOpen()) return false;
+    this.settlePending();
     this.#activityGeneration++;
     this.#state.suspended = true;
     const dirty = this.#state.dirty;
@@ -666,6 +754,7 @@ export class DocumentSession implements DraftBuffer {
    */
   async delete(run: (id: string) => Promise<void>): Promise<boolean> {
     if (!this.#isOpen()) return false;
+    this.settlePending();
     if (!this.#state.pendingDeletion) {
       if (!this.beginDeletion()) return false;
     }
@@ -695,6 +784,7 @@ export class DocumentSession implements DraftBuffer {
   }
 
   async saveKeepingMine(): Promise<void> {
+    this.settlePending();
     if (!this.#isOpen() || this.#state.result !== "conflitto") return;
     this.#activityGeneration++;
     this.#clearSaveTimer();
@@ -706,6 +796,7 @@ export class DocumentSession implements DraftBuffer {
   }
   rename(id: string): void {
     if (!this.#isOpen() || id === this.#id) return;
+    this.settlePending();
     this.#activityGeneration++;
     this.#externalGeneration++;
     this.#draftGeneration++;
@@ -722,6 +813,7 @@ export class DocumentSession implements DraftBuffer {
   close(force = false): boolean {
     if (!this.#isOpen()) return false;
     if (!force && this.#state.pendingDeletion) return false;
+    this.settlePending();
     if (!this.#closeState(force)) return false;
     // La chiusura è definitiva: nessuna superficie deve restare sottoscritta
     // a una sessione che non esiste più.
@@ -732,6 +824,8 @@ export class DocumentSession implements DraftBuffer {
   #detachSurfaces(): void {
     const surfaces = [...this.#surfaces.values()];
     this.#surfaces.clear();
+    this.#pendingSurfaces.clear();
+    for (const surface of surfaces) this.#unwatch(surface);
     for (const surface of surfaces) {
       try {
         surface.closed?.();
@@ -845,9 +939,22 @@ export class DocumentSession implements DraftBuffer {
       this.#draftGeneration++;
     } else {
       this.#state.dirty = false;
-      void this.#dropDraft(this.#id);
+      this.#afterCleanSave();
     }
     this.#emit({ kind: "saved", id: this.#id });
+  }
+
+  /**
+   * Il buffer è sul disco. La bozza se ne va, a meno che una superficie tenga
+   * ancora testo: allora resta, e la prossima si scrive sulla base nuova.
+   */
+  #afterCleanSave(): void {
+    if (this.#pendingSurfaces.size === 0) {
+      void this.#dropDraft(this.#id);
+      return;
+    }
+    this.#draftGeneration++;
+    this.scheduleDraft();
   }
 
   /// Il giornale `written` è nei byte di `#state.base`: il testo pulito è
@@ -869,7 +976,7 @@ export class DocumentSession implements DraftBuffer {
     this.#state.text = next;
     if (next === "") {
       this.#state.dirty = false;
-      void this.#dropDraft(this.#id);
+      this.#afterCleanSave();
     }
     this.#emit({ kind: "saved", id: this.#id });
     this.#fanOut({ kind: "text", text: next });
@@ -881,10 +988,12 @@ export class DocumentSession implements DraftBuffer {
       this.#state.suspended ||
       this.#state.pendingDeletion ||
       this.#id !== id ||
-      !this.#state.dirty
+      (!this.#state.dirty && this.#pendingSurfaces.size === 0)
     ) {
       return Promise.resolve();
     }
+    // Più superfici col loro testo: si registra tutto prima, e la bozza è il buffer.
+    if (this.#holders().length > 1) this.settlePending();
     const generation = this.#draftGeneration;
     const pending = this.#draftWork;
     if (pending?.id === id && pending.generation === generation) return pending.promise;
@@ -898,12 +1007,19 @@ export class DocumentSession implements DraftBuffer {
         this.#state.suspended ||
         this.#state.pendingDeletion ||
         this.#id !== id ||
-        !this.#state.dirty ||
         this.#draftGeneration !== generation
       ) {
         return;
       }
-      const text = this.#state.text;
+      const text = this.#draftText();
+      if (text === null || this.#draftGeneration !== generation) {
+        // Niente da proteggere oltre al file: il buffer è pulito e il testo
+        // tenuto non è entrato. Il prossimo avviso riarma la bozza.
+        if (text === null && this.#draftGeneration === generation) {
+          this.#draftOutcome = { generation, succeeded: true };
+        }
+        return;
+      }
       const base = this.#state.base.kind === "descends_from" ? this.#state.base.value : null;
       try {
         await this.#api.saveDraft(id, text, base);
@@ -939,6 +1055,36 @@ export class DocumentSession implements DraftBuffer {
       },
     );
     return promise;
+  }
+
+  /**
+   * Il testo della bozza: quello che una superficie tiene ancora, dentro il
+   * documento intero, se ce n'è una sola; altrimenti il buffer (più schede in
+   * sospeso si registrano prima che la bozza parta, e lei le trova insieme nel
+   * buffer). `null` se non c'è niente da scrivere adesso.
+   */
+  #draftText(): string | null {
+    const holders = this.#holders();
+    if (holders.length === 1) {
+      let text: string | null = null;
+      try {
+        text = holders[0]!.pendingText?.() ?? null;
+      } catch (error) {
+        console.error(error);
+      }
+      if (text !== null) return text;
+      // Il nucleo non ha preso il testo tenuto: vale l'ultimo testo accettato.
+      console.warn(`Fub: la bozza di «${this.#id}» tiene l'ultimo testo accettato`);
+    } else if (holders.length > 1) {
+      // Arrivate dopo la partenza: si registrano, e la modifica riarma la bozza.
+      this.settlePending();
+      return null;
+    }
+    return this.#state.dirty ? this.#state.text : null;
+  }
+
+  #holders(): DocumentSurface[] {
+    return [...this.#surfaces.values()].filter((surface) => this.#pendingSurfaces.has(surface.id));
   }
 
   #dropDraft(id: string): Promise<void> {
@@ -1230,7 +1376,8 @@ export class DocumentSessionCollection implements DraftBufferStore {
     const sessions = [...new Set(this.#sessions.values())];
     const outcomes = await Promise.all(
       sessions.map(async (session) => {
-        if (!session.dirty) return null;
+        // `flush` registra prima il testo che le superfici tengono ancora.
+        if (!session.dirty && !session.hasPending()) return null;
         const dirty = await session.flush();
         return dirty && this.#owns(session) ? session : null;
       }),
@@ -1251,7 +1398,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
 
   async flushDraft(id: string): Promise<void> {
     const session = this.#sessions.get(id);
-    if (!session?.dirty) return;
+    if (!session?.dirty && !session?.hasPending()) return;
     await session.flushDraft();
   }
 
@@ -1277,6 +1424,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
     const dirty: string[] = [];
     for (const [id, session] of [...this.#sessions]) {
       this.#invalidate(id);
+      session.settlePending();
       if (session.dirty) dirty.push(id);
       session.close(true);
       this.#release(session);
@@ -1347,6 +1495,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
         return outcome;
       }
 
+      session.settlePending();
       const dirty = session.dirty;
       const deletion = session.delete(run);
       this.#sessions.delete(session.id);
@@ -1380,6 +1529,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
     const session = this.#sessions.get(id) ?? this.#pendingDeletionOwners.get(id);
     if (!session) return { kind: "removed", dirty: false };
     this.#invalidate(session.id);
+    session.settlePending();
     const dirty = session.dirty;
     const text = session.text();
     // La cancellazione chiesta da qui (il cestino) butta anche la bozza: è
@@ -1434,6 +1584,8 @@ export class DocumentSessionCollection implements DraftBufferStore {
       return { kind: "missing" };
     }
 
+    // Il testo tenuto dalle superfici entra prima: non è un'attività nuova.
+    session.settlePending();
     const activity = session.activityGeneration();
     await session.flush();
     if (session.dirty) await session.flushDraft();
@@ -1540,6 +1692,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
     }
     if (session.isDeletionPending()) return { kind: "active" };
     this.#invalidate(id);
+    session.settlePending();
     const dirty = session.dirty;
     if (!session.close()) return { kind: "active" };
     if (this.#sessions.get(session.id) === session) this.#sessions.delete(session.id);

@@ -1,0 +1,10 @@
+{
+  "name": "invalid-color",
+  "description": "Un colore che non è né preset né esadecimale: invalid",
+  "before": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\"}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"text":"uno"},"after":{"id":"a","type":"text","x":0,"y":0,"width":100,"height":50,"color":"#12","text":"uno"}}],
+  "expect": {
+    "outcome": "rejected",
+    "reason": "invalid"
+  }
+}

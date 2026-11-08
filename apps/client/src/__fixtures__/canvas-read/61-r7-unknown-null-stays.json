@@ -1,0 +1,21 @@
+{
+  "name": "r7-unknown-null-stays",
+  "description": "R7: null su un campo sconosciuto resta com'è",
+  "source": "{\"nodes\":[{\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"text\":\"t\",\"fub\":null}]}",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [
+      {
+        "id": "a",
+        "type": "text",
+        "x": 0,
+        "y": 0,
+        "width": 10,
+        "height": 10,
+        "text": "t",
+        "fub": null
+      }
+    ],
+    "edges": []
+  }
+}

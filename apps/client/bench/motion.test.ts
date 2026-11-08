@@ -178,6 +178,31 @@ describe("la regola 2: nessun residuo", () => {
   it("chiama residuo anche un valore diverso: è un altro stato finale", () => {
     expect(residue([notch], [{ ...notch, value: "0px 14px" }])).toEqual([{ ...notch, still: "0px 14px" }]);
   });
+
+  // La cascata d'avvio scala il riquadro; CodeMirror compensa sui suoi strati
+  // e, a scala finita, ci lascia la scala neutra (CI di #308).
+  const layer = "#pane-main-tabpanel > div.pane-editor.look-tema:nth-child(2) > div.cm-editor.ͼ1:nth-child(1) > div.cm-scroller:nth-child(2)";
+  const selection = { path: `${layer} > div.cm-layer.cm-selectionLayer:nth-child(4)`, property: "transform", value: "scale(1, 1)" };
+  const above = { path: `${layer} > div.cm-layer.cm-layer-above:nth-child(3)`, property: "transform", value: " scale(1) " };
+
+  it("non chiama residuo la scala neutra che CodeMirror lascia sui suoi strati", () => {
+    expect(residue([selection, above], [])).toEqual([]);
+  });
+
+  it("chiama residuo una scala non neutra sugli strati, e la neutra fuori da loro", () => {
+    const scaled = { ...selection, value: "scale(0.98, 0.98)" };
+    const moved = { ...selection, value: "translate(4px, 0px)" };
+    const scroller = { path: layer, property: "transform", value: "scale(1, 1)" };
+    const inside = { path: `${selection.path} > div.cm-selectionBackground`, property: "transform", value: "scale(1, 1)" };
+    const named = { ...selection, property: "scale", value: "1" };
+    expect(residue([scaled, moved, scroller, inside, named], []).map((entry) => entry.value)).toEqual([
+      "scale(0.98, 0.98)",
+      "translate(4px, 0px)",
+      "scale(1, 1)",
+      "scale(1, 1)",
+      "1",
+    ]);
+  });
 });
 
 describe("la regola 4: l'inversione non riparte da zero", () => {
@@ -195,11 +220,22 @@ describe("la regola 4: l'inversione non riparte da zero", () => {
 
   it("chiama salto una corsa ripartita dalla posa di partenza", () => {
     const restarted = { ...flying, left: 112, opacity: 0 };
-    expect(jumps([flying], [restarted])).toEqual([{ key: "pannello", px: 12, opacity: 0.5, nearest: "pannello" }]);
+    expect(jumps([flying], [restarted])).toEqual([
+      {
+        key: "pannello",
+        px: 12,
+        opacity: 0.5,
+        nearest: "pannello",
+        was: { left: 100, top: 50, width: 200, height: 80, opacity: 0.5 },
+        is: { left: 112, top: 50, width: 200, height: 80, opacity: 0 },
+      },
+    ]);
   });
 
   it("chiama salto ciò che sparisce senza lasciare un'immagine", () => {
-    expect(jumps([flying], [])).toEqual([{ key: "pannello", px: null, opacity: null, nearest: null }]);
+    expect(jumps([flying], [])).toEqual([
+      { key: "pannello", px: null, opacity: null, nearest: null, was: { left: 100, top: 50, width: 200, height: 80, opacity: 0.5 }, is: null },
+    ]);
   });
 });
 

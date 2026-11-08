@@ -123,7 +123,7 @@ import type {
 } from "./contract";
 import type {
   ConfigFileKind, ConfigReport, ConfigStatus, DemoClosed, DemoOpened, DiagnosticSummary,
-  ExportConsent, RecoverAction, RecoverOutcome, SupportPreview,
+  ExportConsent, ExternalEditor, OpenedWith, OpenHow, RecoverAction, RecoverOutcome, SupportPreview,
 } from "./ipc";
 // Le fixture sono generate dai tipi Rust (serde) — vedi
 // `crates/fub-features/tests/ts_mirror.rs` (tipi del contratto) e
@@ -963,6 +963,11 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     accepted: true, refused: true, admitted: true, rejected: true, commits: true, answered: true,
   }),
   StopReport: keysOf<LiveStopReport>({ pending: true }),
+  // «Apri con» un'app Craft (`fub_host::open_with`).
+  ExternalEditor: keysOf<ExternalEditor>({
+    id: true, name: true, opens: true, installed: true, running: true,
+  }),
+  OpenedWith: keysOf<OpenedWith>({ editor: true, how: true }),
 };
 const APP_OPTIONAL_KEYS = {
   InstalledPluginInfo: {
@@ -1162,6 +1167,13 @@ function touchConfigStatus(status: ConfigStatus): void {
       expect(status.supported).toBeTypeOf("number");
       return;
     default: return assertNever(status);
+  }
+}
+
+function touchOpenHow(how: OpenHow): void {
+  switch (how) {
+    case "forwarded": case "in_running": case "new_process": return;
+    default: return assertNever(how);
   }
 }
 
@@ -1575,6 +1587,23 @@ describe("mirror TS↔Rust", () => {
         for (const key of required) expect(keys, `${type}.${key} missing`).toContain(key);
       }
     }
+  });
+
+  it("«Apri con» porta i tre modi di consegna e le tre righe del menu", () => {
+    const opened = appFixture.OpenedWith as OpenedWith[];
+    for (const { how } of opened) touchOpenHow(how);
+    expect(new Set(opened.map(({ how }) => how))).toEqual(
+      new Set<OpenHow>(["forwarded", "in_running", "new_process"]),
+    );
+    const editors = appFixture.ExternalEditor as ExternalEditor[];
+    for (const editor of editors) {
+      expect(typeof editor.installed).toBe("boolean");
+      expect(typeof editor.running).toBe("boolean");
+      for (const extension of editor.opens) expect(extension).toMatch(/^[a-z0-9]+$/);
+    }
+    expect(editors.map(({ installed, running }) => [installed, running])).toEqual(
+      expect.arrayContaining([[true, false], [false, false], [true, true]]),
+    );
   });
 
   it("il supporto serializzato conserva azioni, versioni future e campi sensibili tipizzati", () => {

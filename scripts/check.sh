@@ -170,7 +170,7 @@ vendor_guards() {
 
 benches() {
   client_ready
-  for b in "bench:verify" "bench:a11y -- --light=dark" "bench:a11y -- --light=light" "bench:motion" "bench:fidelity" \
+  for b in "bench:verify" "bench:a11y -- --light=dark" "bench:a11y -- --light=light" "bench:motion" "bench:lampo" "bench:fidelity" \
            "bench:grid" "bench:large" \
            "bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3" \
            "bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8" \
@@ -222,6 +222,15 @@ if [ "$MODE" = rapido ]; then
   fi
 
   if [ "$(val client)" = 1 ] || [ "$WANT_CLIENT" = 1 ]; then client_checks rapido; fi
+  # Il client compila il nucleo della lavagna in `.wasm` (`apps/client/build/canvas-wasm.mjs`):
+  # un cambio ai due crate si prova anche dalla parte di TypeScript.
+  if [ "$(val canvaswasm)" = 1 ]; then
+    if has_target wasm32-unknown-unknown; then
+      run "la lavagna attraverso il .wasm" bash -c 'cd apps/client && npx vitest run src/editors/canvas build'
+    else
+      skip "la lavagna attraverso il .wasm" "target mancante: rustup target add wasm32-unknown-unknown"
+    fi
+  fi
   if [ "$(val docs)" = 1 ]; then doc_guards; fi
   # I test di fub-abi leggono i sorgenti di tutti i crate (il censimento delle
   # regole dei nomi, la tabella degli escape, le forme normalizzate) e i
@@ -285,6 +294,12 @@ else
     run "fub-scene e fub-ink per wasm32-wasip2" bash -c '
       cargo check -p fub-scene --target wasm32-wasip2 --all-targets --locked &&
       cargo check -p fub-ink --target wasm32-wasip2 --all-targets --locked'
+  fi
+  # Il nucleo della lavagna lo carica la WebView come modulo WebAssembly.
+  if has_target wasm32-unknown-unknown; then
+    run "fub-canvas-core per wasm32-unknown-unknown" cargo check -p fub-canvas-core --target wasm32-unknown-unknown --locked
+  else
+    skip "fub-canvas-core per wasm32-unknown-unknown" "target mancante: rustup target add wasm32-unknown-unknown"
   fi
   if [ "$NEXTEST" = 1 ]; then
     run "cargo nextest run --workspace --no-fail-fast" cargo nextest run --workspace $EXCLUDE --no-fail-fast --profile ci

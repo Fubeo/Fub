@@ -683,6 +683,140 @@ fn the_ink_core_stands_alone() {
 /// Chi può dipendere dal nucleo dell'inchiostro. Elenco chiuso.
 const INK_ALLOWED_DEPENDENTS: &[&str] = &["fub-scene", "fub-format-rich"];
 
+/// Il nucleo della lavagna sta da solo.
+///
+/// `fub-canvas-core` è il modello di una `.canvas` e la sua lettura, e ha tre
+/// clienti: il provider del formato accanto al kernel, i comandi della
+/// lavagna e la facciata WebAssembly che la WebView carica. Il terzo è quello
+/// che detta la forma: un modulo `wasm32-unknown-unknown` non può portarsi
+/// dietro il contratto, il Markdown, il kernel o un toolkit, e ogni byte in più
+/// lo paga chi apre una lavagna. Per questo le dirette sono un elenco chiuso
+/// (`serde`, `serde_json`, `thiserror`) e la chiusura non contiene nessun
+/// membro del workspace né una famiglia proibita. Il giro completo di
+/// `scripts/check.sh` lo compila per quel bersaglio; questa rete dice il
+/// perché prima del linker.
+///
+/// Le dipendenze di sviluppo sono fuori: non finiscono nel modulo.
+#[test]
+fn the_canvas_core_stands_alone() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
+
+    let allowed: BTreeSet<&str> = CANVAS_CORE_ALLOWED_DIRECT.iter().copied().collect();
+    let extra: Vec<&str> = graph
+        .direct("fub-canvas-core")
+        .into_iter()
+        .filter(|d| !allowed.contains(d))
+        .collect();
+    assert!(
+        extra.is_empty(),
+        "`fub-canvas-core` dichiara {extra:?} fra le dipendenze normali, che non\n\
+         sono nell'elenco delle sue dirette ({CANVAS_CORE_ALLOWED_DIRECT:?}). Il\n\
+         nucleo della lavagna compila per `wasm32-unknown-unknown` e finisce nella\n\
+         WebView: se serve un tipo, va nel nucleo; se serve un prodotto, è il\n\
+         prodotto che dipende dal nucleo."
+    );
+
+    let members = graph.members();
+    let trespassers: Vec<&str> = graph
+        .closure("fub-canvas-core")
+        .into_iter()
+        .filter(|n| members.contains(n) || forbidden(n))
+        .collect();
+    assert!(
+        trespassers.is_empty(),
+        "`fub-canvas-core` raggiunge {trespassers:?} fra le dipendenze normali.\n\
+         Il nucleo della lavagna non vede il contratto, il Markdown, il kernel,\n\
+         il toolkit dell'app né un altro membro del workspace."
+    );
+
+    let dependents: Vec<&str> = members
+        .iter()
+        .copied()
+        .filter(|m| *m != "fub-canvas-core" && graph.direct(m).contains("fub-canvas-core"))
+        .collect();
+    assert!(
+        dependents
+            .iter()
+            .all(|m| CANVAS_CORE_ALLOWED_DEPENDENTS.contains(m)),
+        "{dependents:?} dipendono da `fub-canvas-core`, ma solo\n\
+         {CANVAS_CORE_ALLOWED_DEPENDENTS:?} possono. Aggiungere un cliente del\n\
+         nucleo della lavagna è una decisione: scrivila in\n\
+         docs/reference/canvas-format.md e poi qui."
+    );
+}
+
+/// Le sole dipendenze normali dirette del nucleo della lavagna. Elenco chiuso.
+const CANVAS_CORE_ALLOWED_DIRECT: &[&str] = &["serde", "serde_json", "thiserror"];
+
+/// Chi può dipendere dal nucleo della lavagna. Elenco chiuso: il formato, i
+/// comandi della lavagna e la facciata WebAssembly.
+const CANVAS_CORE_ALLOWED_DEPENDENTS: &[&str] =
+    &["fub-format-canvas", "fub-features", "fub-canvas-wasm"];
+
+/// La facciata WebAssembly della lavagna è sottile e sta in fondo.
+///
+/// `fub-canvas-wasm` mette il nucleo della lavagna dietro un'interfaccia C
+/// scritta a mano, e il suo `.wasm` finisce nella WebView: ogni dipendenza in
+/// più è peso che paga chi apre una lavagna, e una libreria di collegamento
+/// (`wasm-bindgen` e simili) è proprio ciò che la decisione D-1 (a) del piano
+/// N3 ha escluso. Per questo le dirette sono un elenco chiuso (il nucleo,
+/// `serde`, `serde_json`), la chiusura non contiene altri membri del
+/// workspace che il nucleo né una famiglia proibita, e nessun membro dipende
+/// dalla facciata: la caricano la shell e i suoi test, non un crate.
+#[test]
+fn the_canvas_wasm_facade_stays_thin() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
+
+    let allowed: BTreeSet<&str> = CANVAS_WASM_ALLOWED_DIRECT.iter().copied().collect();
+    let extra: Vec<&str> = graph
+        .direct("fub-canvas-wasm")
+        .into_iter()
+        .filter(|d| !allowed.contains(d))
+        .collect();
+    assert!(
+        extra.is_empty(),
+        "`fub-canvas-wasm` dichiara {extra:?} fra le dipendenze normali, che non\n\
+         sono nell'elenco delle sue dirette ({CANVAS_WASM_ALLOWED_DIRECT:?}). La\n\
+         facciata della lavagna finisce nella WebView come `.wasm` e la sua\n\
+         interfaccia è scritta a mano: vedi docs/reference/canvas-operations.md\n\
+         § «WebAssembly» prima di allungare l'elenco."
+    );
+
+    let members = graph.members();
+    let trespassers: Vec<&str> = graph
+        .closure("fub-canvas-wasm")
+        .into_iter()
+        .filter(|n| {
+            (members.contains(n) && !matches!(*n, "fub-canvas-wasm" | "fub-canvas-core"))
+                || forbidden(n)
+        })
+        .collect();
+    assert!(
+        trespassers.is_empty(),
+        "`fub-canvas-wasm` raggiunge {trespassers:?} fra le dipendenze normali.\n\
+         La facciata vede solo il nucleo della lavagna\n\
+         (docs/reference/canvas-operations.md § «WebAssembly»)."
+    );
+
+    let dependents: Vec<&str> = members
+        .iter()
+        .copied()
+        .filter(|m| graph.direct(m).contains("fub-canvas-wasm"))
+        .collect();
+    assert!(
+        dependents.is_empty(),
+        "{dependents:?} dipendono da `fub-canvas-wasm`, che è la facciata della\n\
+         WebView e non una libreria: chi vuole il nucleo dipende da\n\
+         `fub-canvas-core` (docs/reference/canvas-operations.md § «WebAssembly»)."
+    );
+}
+
+/// Le sole dipendenze normali dirette della facciata WebAssembly. Elenco
+/// chiuso.
+const CANVAS_WASM_ALLOWED_DIRECT: &[&str] = &["fub-canvas-core", "serde", "serde_json"];
+
 /// La sessione live sta **fuori dal core**: `fub-live` non vede il contratto,
 /// il kernel, il montaggio né il toolkit (ADR 0205).
 ///

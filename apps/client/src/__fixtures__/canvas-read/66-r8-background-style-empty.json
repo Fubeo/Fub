@@ -1,0 +1,20 @@
+{
+  "name": "r8-background-style-empty",
+  "description": "R8: backgroundStyle \"\" si conserva",
+  "source": "{\"nodes\":[{\"id\":\"g\",\"type\":\"group\",\"x\":0,\"y\":0,\"width\":10,\"height\":10,\"backgroundStyle\":\"\"}]}",
+  "expect": {
+    "outcome": "opened",
+    "nodes": [
+      {
+        "id": "g",
+        "type": "group",
+        "x": 0,
+        "y": 0,
+        "width": 10,
+        "height": 10,
+        "backgroundStyle": ""
+      }
+    ],
+    "edges": []
+  }
+}

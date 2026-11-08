@@ -1,0 +1,10 @@
+{
+  "name": "bom-add-edge",
+  "description": "Su un file bom aggiunge un arco: il testo tiene terminatori e BOM, e l'annulla torna alla lavagna di prima",
+  "before": "\ufeff{\n  \"nodes\": [\n    {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":100,\"text\":\"uno\"},\n    {\"id\":\"b\",\"type\":\"text\",\"x\":300,\"y\":0,\"width\":200,\"height\":100,\"text\":\"due\"}\n  ],\n  \"edges\": [\n    {\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"b\"}\n  ]\n}\n",
+  "patches": [{"kind":"upsert-edge","before":null,"after":{"id":"f","fromNode":"b","toNode":"a"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "\ufeff{\n  \"nodes\": [\n    {\"id\":\"a\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":100,\"text\":\"uno\"},\n    {\"id\":\"b\",\"type\":\"text\",\"x\":300,\"y\":0,\"width\":200,\"height\":100,\"text\":\"due\"}\n  ],\n  \"edges\": [\n    {\"id\":\"e\",\"fromNode\":\"a\",\"toNode\":\"b\"},{\"id\":\"f\",\"fromNode\":\"b\",\"toNode\":\"a\"}\n  ]\n}\n"
+  }
+}

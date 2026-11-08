@@ -402,6 +402,19 @@ di un gesto (frecce, `Spazio`, `Invio`, `?`, `Tab` con una selezione) e
 `Mod-0`, il suo 100%; gli accordi che non usa, come `Mod-E`, arrivano alla
 shell (`apps/client/src/editors/spatial/tools/editor/vault-images.ts`).
 
+### La lavagna
+
+`CanvasEngine` (`editors/canvas/engine.ts`) disegna il modello che il nucleo
+della tela (`canvas/wasm/core.ts`) dà a ogni `reset` e `commit`. Un gesto passa
+le sue toppe al nucleo e il testo nuovo è il tratto cambiato. Annulla e ripeti
+rimettono il tratto di prima byte per byte con un `reset` se la versione del
+testo (un contatore del motore) è quella lasciata dal passo, se no le toppe
+inverse. Il nucleo si carica alla prima lavagna e poi resta; una trappola la
+riapre su un'istanza nuova dal testo della sessione. Il testo di una scheda si
+registra a 250 ms di pausa, all'uscita, con Invio o Esc e prima di ogni gesto;
+se il nucleo lo rifiuta resta nel campo con un avviso. È già nella [bozza](frontend-and-ipc.md#il-testo-in-sospeso);
+le toppe sono nelle [operazioni della lavagna](../reference/canvas-operations.md).
+
 ### La griglia
 
 La famiglia `grid` apre le cartelle di Excel sulla versione 2 del protocollo:
@@ -426,24 +439,11 @@ mantiene CodeMirror un servizio della shell testuale.
 
 - `apps/client/src/editors/text/engine.ts`
 - `apps/client/src/editors/text/history-footprints.ts`
-- `apps/client/src/editors/text/profiles/markdown/profile.ts`
-- `apps/client/src/editors/text/profiles/markdown/commands.ts`
-- `apps/client/src/editors/text/profiles/markdown/actions.ts`
-- `apps/client/src/editors/text/profiles/markdown/table-model.ts`
-- `apps/client/src/editors/text/profiles/markdown/table-grid.ts`
-- `apps/client/src/editors/text/profiles/markdown/table-widget.ts`
-- `apps/client/src/editors/core/editor-actions.ts`
+- `apps/client/src/editors/text/profiles/`
+- `apps/client/src/editors/core/`
 - `apps/client/src/panels/format-bar.ts`
-- `apps/client/src/editors/text/profiles/markdown/completions.ts`
-- `apps/client/src/editors/text/profiles/markdown/livepreview.ts`
-- `apps/client/src/editors/text/profiles/plain-text.ts`
-- `apps/client/src/editors/text/profiles/formula.ts`
-- `apps/client/src/editors/text/profiles/markdown/surface.ts`
-- `apps/client/src/editors/core/registry.ts`
-- `apps/client/src/editors/core/surface-modes.ts`
-- `apps/client/src/editors/core/bootstrap.ts`
 - `apps/client/src/editors/spatial/lazy.ts`
 - `apps/client/src/state/layout.ts`
 - `apps/client/src/editors/grid/`
-- `apps/client/src/editors/core/text-operation.ts`
+- `apps/client/src/editors/canvas/`
 - `apps/client/src/state/document-session.ts`

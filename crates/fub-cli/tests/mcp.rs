@@ -19,7 +19,18 @@ struct Server {
 
 impl Server {
     fn start(vault: &Path, config: &Path, roots: &[(&str, &Path)]) -> Server {
+        Server::start_with(vault, config, roots, &[])
+    }
+
+    /// Come [`Server::start`], con queste variabili d'ambiente in più.
+    fn start_with(
+        vault: &Path,
+        config: &Path,
+        roots: &[(&str, &Path)],
+        envs: &[(&str, &Path)],
+    ) -> Server {
         let mut command = Command::new(env!("CARGO_BIN_EXE_fub-cli"));
+        command.envs(envs.iter().copied());
         command
             .env_remove("FUB_CONFIG_DIR")
             .env_remove("FUB_VAULT")
@@ -245,10 +256,15 @@ fn inizializzazione_elenco_e_errori_del_protocollo() {
             "fub_query",
             "fub_read",
             "fub_read_model",
+            "fub_preview",
             "fub_write",
             "fub_create",
+            "fub_canvas_create",
+            "fub_canvas_apply",
             "fub_commands",
             "fub_invoke",
+            "fub_external_editors",
+            "fub_open_with",
             "fub_components",
             "fub_components_why",
             "fub_components_enable",
@@ -437,6 +453,11 @@ fn senza_radice_di_scrittura_ogni_strumento_che_scrive_e_rifiutato() {
             json!({ "doc": "Agente/bozza.md", "text": "x", "base": base }),
         ),
         ("fub_create", json!({ "name": "Agente/nuova.md" })),
+        ("fub_canvas_create", json!({ "name": "Agente/tela" })),
+        (
+            "fub_canvas_apply",
+            json!({ "doc": "Agente/tela.canvas", "ops": [{ "op": "remove", "ids": ["a"] }], "base": base, "apply": true }),
+        ),
         (
             "fub_invoke",
             json!({ "command": "note.create", "args": { "name": "Agente/nuova.md" }, "apply": true }),
@@ -463,6 +484,7 @@ fn senza_radice_di_scrittura_ogni_strumento_che_scrive_e_rifiutato() {
     );
     assert_eq!(plan["dry_run"], true);
     assert!(!f.vault.join("Agente/nuova.md").exists());
+    assert!(!f.vault.join("Agente/tela.canvas").exists());
     assert_eq!(
         std::fs::read_to_string(f.vault.join("Agente/bozza.md")).unwrap(),
         "# Bozza\n"
@@ -808,4 +830,767 @@ fn con_l_app_aperta_l_mcp_passa_da_lei() {
         host.read_document(None, &id).unwrap().0,
         "# Bozza\n\ndall'agente\n"
     );
+}
+
+/// Il vettore del cancello di N3, letto dove lo leggono il nucleo e la tela:
+/// `apps/client/src/__fixtures__/canvas-ops/agent-board.json`.
+fn agent_board() -> Value {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/client/src/__fixtures__/canvas-ops/agent-board.json");
+    serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap()
+}
+
+/// Il sorgente di una lavagna vuota, come la scrive Fub (R6 di
+/// `canvas-format.md`): rientrato di due spazi e chiuso da `"\n"`.
+const EMPTY_CANVAS: &str = "{\n  \"nodes\": [],\n  \"edges\": []\n}\n";
+
+/// Il cancello: un agente crea una lavagna, ci mette le schede e gli archi di
+/// `agent-board.json` e, riletta, la lavagna è il testo atteso del vettore.
+#[test]
+fn il_cancello_della_lavagna() {
+    let f = fixture();
+    let mut server = writer(&f);
+    let board = agent_board();
+    assert_eq!(
+        board["before"],
+        json!({}),
+        "il cancello parte da una lavagna vuota"
+    );
+
+    let made = server.ok(
+        "fub_canvas_create",
+        json!({ "name": "piano", "folder": "Agente" }),
+    );
+    assert_eq!(made["doc"], "Agente/piano.canvas");
+    let path = f.vault.join("Agente/piano.canvas");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), EMPTY_CANVAS);
+    let read = server.ok("fub_read", json!({ "doc": "Agente/piano.canvas" }));
+    assert_eq!(read["revision"], made["revision"]);
+
+    // Senza apply è una prova: il piano, e il file non cambia.
+    let ops = board["ops"].clone();
+    let dry = server.ok(
+        "fub_canvas_apply",
+        json!({ "doc": "Agente/piano.canvas", "ops": ops, "base": made["revision"] }),
+    );
+    assert_eq!(dry["dry_run"], true);
+    assert!(dry["outcome"].to_string().contains("Agente/piano.canvas"));
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), EMPTY_CANVAS);
+
+    let done = server.ok(
+        "fub_canvas_apply",
+        json!({ "doc": "Agente/piano.canvas", "ops": ops, "base": made["revision"], "apply": true }),
+    );
+    assert_eq!(done["dry_run"], false);
+    assert_eq!(done["doc"], "Agente/piano.canvas");
+    // Le schede tengono i loro id; gli archi ricevono id nuovi, di 16 cifre
+    // esadecimali. Il seme del vettore non passa dall'MCP: gli id degli
+    // archi vengono dalla revisione, e il testo si confronta con quelli.
+    let created: Vec<String> = done["created"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|id| id.as_str().unwrap().to_string())
+        .collect();
+    let expected_created = board["expect"]["created"].as_array().unwrap();
+    assert_eq!(created.len(), expected_created.len());
+    assert_eq!(created[..3], ["obiettivo", "passo-1", "passo-2"]);
+    for id in &created[3..] {
+        assert!(
+            id.len() == 16 && id.bytes().all(|b| b.is_ascii_hexdigit()),
+            "{id}"
+        );
+    }
+    let mut after = board["expect"]["after"].clone();
+    for (edge, id) in after["edges"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .zip(&created[3..])
+    {
+        edge["id"] = json!(id);
+    }
+    // Il sorgente si ritocca, non si riscrive (A2 del piano N3): la forma
+    // della lavagna vuota resta, e schede e archi entrano nelle sue liste
+    // come li scrive `JSON.stringify`, uno dopo l'altro.
+    let compact = |list: &Value| {
+        list.as_array()
+            .unwrap()
+            .iter()
+            .map(|item| serde_json::to_string(item).unwrap())
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    let expected = format!(
+        "{{\n  \"nodes\": [{}],\n  \"edges\": [{}]\n}}\n",
+        compact(&after["nodes"]),
+        compact(&after["edges"])
+    );
+
+    let reread = server.ok("fub_read", json!({ "doc": "Agente/piano.canvas" }));
+    assert_eq!(reread["text"], expected.as_str());
+    let model: Value = serde_json::from_str(reread["text"].as_str().unwrap()).unwrap();
+    assert_eq!(model, after);
+    assert_eq!(reread["revision"], done["revision"]);
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), expected);
+
+    // Le operazioni anche come testo JSON, sulla revisione nuova.
+    let moved = server.ok(
+        "fub_canvas_apply",
+        json!({
+            "doc": "Agente/piano.canvas",
+            "ops": r#"[{"op": "move", "ids": ["passo-1"], "dx": 10, "dy": 0}]"#,
+            "base": done["revision"],
+            "apply": true
+        }),
+    );
+    assert_eq!(moved["created"], json!([]));
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert_eq!(text, expected.replacen("\"x\":360", "\"x\":370", 1));
+}
+
+/// I rifiuti di `fub_canvas_create` e `fub_canvas_apply`: radici che non
+/// coprono la cartella, una base vecchia, operazioni sbagliate, un documento
+/// che non è una lavagna. Nessuno scrive un byte.
+#[test]
+fn le_lavagne_rifiutano_senza_scrivere() {
+    let f = fixture();
+    std::fs::write(f.vault.join("Note/tela.canvas"), EMPTY_CANVAS).unwrap();
+    let mut server = writer(&f);
+
+    // Le radici di scrittura non coprono Note.
+    let denied = server.refused(
+        "fub_canvas_create",
+        json!({ "name": "piano", "folder": "Note" }),
+    );
+    assert!(denied.starts_with("denied:"), "{denied}");
+    assert!(!f.vault.join("Note/piano.canvas").exists());
+    let denied = server.refused("fub_canvas_create", json!({ "name": "Note/piano.canvas" }));
+    assert!(denied.starts_with("denied:"), "{denied}");
+    let note = server.ok("fub_read", json!({ "doc": "Note/tela.canvas" }));
+    let denied = server.refused(
+        "fub_canvas_apply",
+        json!({ "doc": "Note/tela.canvas", "ops": [{ "op": "add_card", "node": { "type": "text", "x": 0, "y": 0, "width": 10, "height": 10, "text": "x" } }], "base": note["revision"], "apply": true }),
+    );
+    assert!(denied.starts_with("denied:"), "{denied}");
+    assert_eq!(
+        std::fs::read_to_string(f.vault.join("Note/tela.canvas")).unwrap(),
+        EMPTY_CANVAS
+    );
+
+    // Un nome preso è un conflitto, non una sovrascrittura.
+    let made = server.ok("fub_canvas_create", json!({ "name": "Agente/tela" }));
+    assert_eq!(made["doc"], "Agente/tela.canvas");
+    let taken = server.refused("fub_canvas_create", json!({ "name": "Agente/tela" }));
+    assert!(taken.starts_with("conflict"), "{taken}");
+    // Senza nome, il primo libero.
+    let free = server.ok("fub_canvas_create", json!({ "folder": "Agente" }));
+    assert!(
+        free["doc"]
+            .as_str()
+            .is_some_and(|doc| doc.starts_with("Agente/") && doc.ends_with(".canvas")),
+        "{free}"
+    );
+
+    let path = f.vault.join("Agente/tela.canvas");
+    let card = json!([{ "op": "add_card", "node": { "id": "uno", "type": "text", "x": 0, "y": 0, "width": 10, "height": 10, "text": "x" } }]);
+    let first = server.ok(
+        "fub_canvas_apply",
+        json!({ "doc": "Agente/tela.canvas", "ops": card, "base": made["revision"], "apply": true }),
+    );
+    let written = std::fs::read_to_string(&path).unwrap();
+    // Una base vecchia è un conflitto, e la lavagna resta com'è.
+    let stale = server.refused(
+        "fub_canvas_apply",
+        json!({ "doc": "Agente/tela.canvas", "ops": [{ "op": "remove", "ids": ["uno"] }], "base": made["revision"], "apply": true }),
+    );
+    assert!(stale.starts_with("conflict:"), "{stale}");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), written);
+
+    // Operazioni sbagliate: argomenti sbagliati.
+    let base = first["revision"].clone();
+    for ops in [
+        json!("non json"),
+        json!([]),
+        json!([{ "op": "vola" }]),
+        json!(3),
+        json!({ "op": "remove", "ids": ["uno"] }),
+        json!([{ "op": "remove", "ids": ["nessuno"] }]),
+    ] {
+        let bad = server.refused(
+            "fub_canvas_apply",
+            json!({ "doc": "Agente/tela.canvas", "ops": ops, "base": base, "apply": true }),
+        );
+        assert!(bad.starts_with("bad_args:"), "{ops}: {bad}");
+    }
+    assert!(server
+        .refused(
+            "fub_canvas_apply",
+            json!({ "doc": "Agente/tela.canvas", "base": base })
+        )
+        .contains("manca `ops`"));
+    assert!(server
+        .refused(
+            "fub_canvas_apply",
+            json!({ "doc": "Agente/tela.canvas", "ops": card })
+        )
+        .contains("manca `base`"));
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), written);
+
+    // Una nota non è una lavagna.
+    let bozza = server.ok("fub_read", json!({ "doc": "Agente/bozza.md" }));
+    let not_canvas = server.refused(
+        "fub_canvas_apply",
+        json!({ "doc": "Agente/bozza.md", "ops": card, "base": bozza["revision"], "apply": true }),
+    );
+    assert!(not_canvas.starts_with("bad_args:"), "{not_canvas}");
+    assert_eq!(
+        std::fs::read_to_string(f.vault.join("Agente/bozza.md")).unwrap(),
+        "# Bozza\n"
+    );
+}
+
+// --- I file Craft (N7) ---
+
+// Le app finte sono script `/bin/sh`: come i test Craft di `fub-host`, la
+// sezione gira solo su unix.
+#[cfg(unix)]
+mod craft {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    /// Un PNG minimo: firma, `IHDR` e `IEND`.
+    fn png(width: u32, height: u32) -> Vec<u8> {
+        let mut out = vec![0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'];
+        out.extend_from_slice(&13u32.to_be_bytes());
+        out.extend_from_slice(b"IHDR");
+        out.extend_from_slice(&width.to_be_bytes());
+        out.extend_from_slice(&height.to_be_bytes());
+        out.extend_from_slice(&[8, 6, 0, 0, 0, 0, 0, 0, 0]);
+        out.extend_from_slice(&0u32.to_be_bytes());
+        out.extend_from_slice(b"IEND");
+        out.extend_from_slice(&[0, 0, 0, 0]);
+        out
+    }
+
+    fn base64(bytes: &[u8]) -> String {
+        const ALPHABET: &[u8; 64] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+        for chunk in bytes.chunks(3) {
+            let b = [
+                chunk[0],
+                *chunk.get(1).unwrap_or(&0),
+                *chunk.get(2).unwrap_or(&0),
+            ];
+            let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+            for (i, shift) in [18, 12, 6, 0].into_iter().enumerate() {
+                if i <= chunk.len() {
+                    out.push(ALPHABET[((n >> shift) & 63) as usize] as char);
+                } else {
+                    out.push('=');
+                }
+            }
+        }
+        out
+    }
+
+    fn crc32(bytes: &[u8]) -> u32 {
+        let mut crc = !0u32;
+        for byte in bytes {
+            crc ^= u32::from(*byte);
+            for _ in 0..8 {
+                crc = if crc & 1 == 1 {
+                    (crc >> 1) ^ 0xEDB8_8320
+                } else {
+                    crc >> 1
+                };
+            }
+        }
+        !crc
+    }
+
+    /// Uno ZIP senza compressione, scritto a mano: la CLI non ha `zip`.
+    fn stored_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut out = Vec::new();
+        let mut central = Vec::new();
+        for (name, data) in entries {
+            let offset = out.len() as u32;
+            let crc = crc32(data);
+            let size = data.len() as u32;
+            let common = |head: &mut Vec<u8>| {
+                head.extend_from_slice(&0u16.to_le_bytes()); // flag
+                head.extend_from_slice(&0u16.to_le_bytes()); // stored
+                head.extend_from_slice(&0u16.to_le_bytes()); // ora
+                head.extend_from_slice(&0x21u16.to_le_bytes()); // data
+                head.extend_from_slice(&crc.to_le_bytes());
+                head.extend_from_slice(&size.to_le_bytes());
+                head.extend_from_slice(&size.to_le_bytes());
+                head.extend_from_slice(&(name.len() as u16).to_le_bytes());
+                head.extend_from_slice(&0u16.to_le_bytes()); // extra
+            };
+            out.extend_from_slice(&0x0403_4b50u32.to_le_bytes());
+            out.extend_from_slice(&20u16.to_le_bytes());
+            common(&mut out);
+            out.extend_from_slice(name.as_bytes());
+            out.extend_from_slice(data);
+            central.extend_from_slice(&0x0201_4b50u32.to_le_bytes());
+            central.extend_from_slice(&20u16.to_le_bytes());
+            central.extend_from_slice(&20u16.to_le_bytes());
+            common(&mut central);
+            central.extend_from_slice(&0u16.to_le_bytes()); // commento
+            central.extend_from_slice(&0u16.to_le_bytes()); // disco
+            central.extend_from_slice(&0u16.to_le_bytes()); // attributi interni
+            central.extend_from_slice(&0u32.to_le_bytes()); // attributi esterni
+            central.extend_from_slice(&offset.to_le_bytes());
+            central.extend_from_slice(name.as_bytes());
+        }
+        let start = out.len() as u32;
+        let count = entries.len() as u16;
+        out.extend_from_slice(&central);
+        out.extend_from_slice(&0x0605_4b50u32.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out.extend_from_slice(&count.to_le_bytes());
+        out.extend_from_slice(&count.to_le_bytes());
+        out.extend_from_slice(&(central.len() as u32).to_le_bytes());
+        out.extend_from_slice(&start.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out
+    }
+
+    /// Un `.vectorcraft`, con l'anteprima PNG in `/preview/data` se c'è.
+    fn vectorcraft(title: &str, preview: Option<&[u8]>) -> Vec<u8> {
+        let mut doc = json!({ "format_version": 4, "title": title, "layers": [] });
+        if let Some(png) = preview {
+            doc["preview"] = json!({ "data": base64(png) });
+        }
+        serde_json::to_vec(&doc).unwrap()
+    }
+
+    /// Un PNG di esattamente `len` byte: l'intestazione e poi zeri.
+    fn png_of(len: usize) -> Vec<u8> {
+        let mut out = png(64, 64);
+        out.resize(len, 0);
+        out
+    }
+
+    const MIB8: usize = 8 * 1024 * 1024;
+
+    /// Uno script `/bin/sh` che conta le sue chiamate (`calls`) e scrive il suo
+    /// pid (`pids`), nella sua cartella; poi esce. Fa le veci della CLI e
+    /// dell'app di VectorCraft: nessun test avvia un'app vera.
+    struct Script {
+        dir: tempfile::TempDir,
+        path: PathBuf,
+    }
+
+    impl Script {
+        fn new(name: &str) -> Script {
+            let dir = tempfile::Builder::new()
+                .prefix("fub-craft-test-")
+                .tempdir_in(env!("CARGO_TARGET_TMPDIR"))
+                .unwrap();
+            let path = dir.path().join(name);
+            std::fs::write(
+                &path,
+                "#!/bin/sh\nd=$(dirname \"$0\")\necho $$ >> \"$d/pids\"\necho x >> \"$d/calls\"\n",
+            )
+            .unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            Script { dir, path }
+        }
+
+        fn calls(&self) -> usize {
+            std::fs::read_to_string(self.dir.path().join("calls"))
+                .map(|text| text.lines().count())
+                .unwrap_or(0)
+        }
+
+        /// Nessun pid scritto è ancora vivo: `kill -0` non lo trova, o è uno
+        /// zombie.
+        fn all_gone(&self) {
+            let pids = std::fs::read_to_string(self.dir.path().join("pids")).unwrap_or_default();
+            for pid in pids.lines().map(str::trim).filter(|pid| !pid.is_empty()) {
+                wait_for("lo script esce", || {
+                    let alive = Command::new("kill")
+                        .args(["-0", pid])
+                        .stderr(Stdio::null())
+                        .status()
+                        .is_ok_and(|status| status.success());
+                    let zombie = std::fs::read_to_string(format!("/proc/{pid}/stat"))
+                        .map(|stat| {
+                            stat.rsplit(')')
+                                .next()
+                                .is_some_and(|rest| rest.trim_start().starts_with('Z'))
+                        })
+                        .unwrap_or(true);
+                    !alive || zombie
+                });
+            }
+        }
+    }
+
+    fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
+        let start = std::time::Instant::now();
+        while !done() {
+            assert!(start.elapsed() < Duration::from_secs(10), "{what}");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// Il vault di prova con i file Craft, le due app finte in
+    /// `craft.editor-paths` (la finestra e la riga di comando di VectorCraft) e
+    /// il consenso alle anteprime con la CLI acceso: se uno strumento la facesse
+    /// partire, `cli.calls()` lo direbbe.
+    struct Craft {
+        f: Fixture,
+        gui: Script,
+        cli: Script,
+        home: PathBuf,
+    }
+
+    fn craft(craft_on: bool) -> Craft {
+        use fub_abi::settings::SettingValue;
+        use fub_host::settings::{CRAFT_CLI_PREVIEWS, CRAFT_EDITOR_PATHS};
+        let f = fixture();
+        let disegni = f.vault.join("Disegni");
+        std::fs::create_dir_all(&disegni).unwrap();
+        std::fs::write(disegni.join("logo.vectorcraft"), vectorcraft("logo", None)).unwrap();
+        std::fs::write(
+            disegni.join("grande.vectorcraft"),
+            vectorcraft("grande", Some(&png_of(MIB8))),
+        )
+        .unwrap();
+        std::fs::write(
+            disegni.join("troppo.vectorcraft"),
+            vectorcraft("troppo", Some(&png_of(MIB8 + 1))),
+        )
+        .unwrap();
+        let document = br#"{"format_version":1,"title":"Scheda"}"#;
+        std::fs::write(
+            disegni.join("scheda.figcraft"),
+            stored_zip(&[("document.json", document), ("thumbnail.png", &png(40, 20))]),
+        )
+        .unwrap();
+        std::fs::write(
+            f.vault.join("Agente/bozza.vectorcraft"),
+            vectorcraft("bozza", None),
+        )
+        .unwrap();
+        std::fs::write(
+            f.vault.join("Diario/segreto.vectorcraft"),
+            vectorcraft("segreto", None),
+        )
+        .unwrap();
+        let gui = Script::new("fub-craft-test-gui.sh");
+        let cli = Script::new("fub-craft-test-cli.sh");
+        // Le impostazioni di macchina si scrivono prima, con un Host nel test che
+        // poi si chiude: il server MCP le legge dalla stessa `--config-dir`.
+        {
+            let config = camino::Utf8Path::from_path(&f.config).unwrap();
+            let host = fub_host::Host::without_watcher().with_config_dir(config);
+            let root = camino::Utf8Path::from_path(&f.vault).unwrap();
+            host.open(root).unwrap();
+            host.set_setting_for_user(
+                Some(root.as_str()),
+                CRAFT_EDITOR_PATHS,
+                SettingValue::List(vec![
+                    format!("vectorcraft={}", gui.path.display()),
+                    format!("vectorcraft-cli={}", cli.path.display()),
+                ]),
+            )
+            .unwrap();
+            host.set_setting_for_user(
+                Some(root.as_str()),
+                CRAFT_CLI_PREVIEWS,
+                SettingValue::Text("on".into()),
+            )
+            .unwrap();
+            if !craft_on {
+                host.set_plugin_enabled(Some(root.as_str()), "fub.craft", false)
+                    .unwrap();
+            }
+        }
+        let home = f.vault.parent().unwrap().join("casa");
+        std::fs::create_dir_all(&home).unwrap();
+        Craft { f, gui, cli, home }
+    }
+
+    impl Craft {
+        /// Legge `Disegni` e `Agente`, scrive in `Agente`. `HOME`, i dati e il
+        /// `PATH` del server sono del test: un'app Craft installata sulla macchina
+        /// non entra.
+        fn server(&self) -> Server {
+            self.server_reading(&self.f.vault.join("Disegni"))
+        }
+
+        /// Come [`Craft::server`], con `read` come radice di lettura.
+        fn server_reading(&self, read: &Path) -> Server {
+            let agente = self.f.vault.join("Agente");
+            Server::start_with(
+                &self.f.vault,
+                &self.f.config,
+                &[
+                    ("--automation-read-root", read),
+                    ("--automation-write-root", &agente),
+                ],
+                &[
+                    ("HOME", &self.home),
+                    ("XDG_DATA_HOME", &self.home),
+                    ("PATH", Path::new("/usr/bin:/bin")),
+                ],
+            )
+            .initialized()
+        }
+    }
+
+    /// La risposta intera di uno strumento che riesce: i contenuti e i dati.
+    fn call_full(server: &mut Server, name: &str, arguments: Value) -> Value {
+        let reply = server.request(
+            "tools/call",
+            json!({ "name": name, "arguments": arguments }),
+        );
+        let result = reply["result"].clone();
+        assert_ne!(
+            result["isError"], true,
+            "{name}: {}",
+            result["content"][0]["text"]
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(result["content"][0]["text"].as_str().unwrap()).unwrap(),
+            result["structuredContent"]
+        );
+        result
+    }
+
+    #[test]
+    fn nessuno_strumento_chiede_un_anteprima_a_un_app() {
+        let f = fixture();
+        let mut server = Server::start(&f.vault, &f.config, &[]).initialized();
+        let tools = server.request("tools/list", json!({}));
+        for tool in tools["result"]["tools"].as_array().unwrap() {
+            let text = tool.to_string();
+            // Né `craft_render` né `craft.cli-previews`, né un argomento che li
+            // chieda.
+            assert!(!text.contains("render"), "{}", tool["name"]);
+            assert!(!text.contains("cli-previews"), "{}", tool["name"]);
+        }
+        let preview = tools["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|tool| tool["name"] == "fub_preview")
+            .unwrap();
+        assert_eq!(preview["annotations"]["readOnlyHint"], true);
+        let props: Vec<&String> = preview["inputSchema"]["properties"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .collect();
+        assert_eq!(props, ["doc", "size"]);
+    }
+
+    #[test]
+    fn le_app_craft_si_vedono_si_provano_e_si_aprono_solo_con_apply() {
+        let k = craft(true);
+        let mut server = k.server();
+        let listed = server.ok(
+            "fub_external_editors",
+            json!({ "doc": "Disegni/logo.vectorcraft" }),
+        );
+        let items = listed["items"].as_array().unwrap();
+        assert_eq!(items.len(), 1, "{listed}");
+        assert_eq!(items[0]["id"], "vectorcraft");
+        assert_eq!(items[0]["installed"], true);
+        // Senza l'app aperta la CLI non vede niente in esecuzione.
+        assert_eq!(items[0]["running"], false);
+
+        // La prova dice che cosa farebbe, e non avvia niente.
+        let dry = server.ok(
+            "fub_open_with",
+            json!({ "doc": "Disegni/logo.vectorcraft", "editor": "vectorcraft" }),
+        );
+        assert_eq!(dry["dry_run"], true);
+        assert_eq!(dry["editor"], "vectorcraft");
+        assert_eq!(dry["installed"], true);
+        assert_eq!(dry["running"], false);
+        assert_eq!(dry["how"], "new_process");
+        // Un'app che Fub non conosce, o che non apre quel file.
+        assert!(server
+            .refused(
+                "fub_open_with",
+                json!({ "doc": "Disegni/logo.vectorcraft", "editor": "paintcraft" })
+            )
+            .starts_with("bad_args"));
+        assert!(server
+            .refused(
+                "fub_open_with",
+                json!({ "doc": "Disegni/logo.vectorcraft", "editor": "figcraft" })
+            )
+            .starts_with("bad_args"));
+        assert!(server
+            .refused(
+                "fub_open_with",
+                json!({ "doc": "Disegni/manca.vectorcraft", "editor": "vectorcraft" })
+            )
+            .starts_with("not_found"));
+        assert!(server
+            .refused(
+                "fub_open_with",
+                json!({ "doc": "Disegni/logo.vectorcraft", "editor": "vectorcraft", "page": 0 })
+            )
+            .contains("`page`"));
+        // `apply` fuori dalle radici di scrittura: rifiutato, prima dell'app.
+        let refused = server.refused(
+            "fub_open_with",
+            json!({ "doc": "Disegni/logo.vectorcraft", "editor": "vectorcraft", "apply": true }),
+        );
+        assert!(refused.starts_with("denied"), "{refused}");
+        assert_eq!(k.gui.calls(), 0);
+
+        // Fuori dalle radici di lettura non si vede neanche quali app ci sono.
+        for (tool, args) in [
+            (
+                "fub_external_editors",
+                json!({ "doc": "Diario/segreto.vectorcraft" }),
+            ),
+            (
+                "fub_open_with",
+                json!({ "doc": "Diario/segreto.vectorcraft", "editor": "vectorcraft" }),
+            ),
+            (
+                "fub_preview",
+                json!({ "doc": "Diario/segreto.vectorcraft" }),
+            ),
+        ] {
+            let refused = server.refused(tool, args);
+            assert!(refused.starts_with("denied"), "{tool}: {refused}");
+        }
+
+        // Dentro le radici di scrittura `apply` passa il file all'app.
+        let opened = server.ok(
+            "fub_open_with",
+            json!({ "doc": "Agente/bozza.vectorcraft", "editor": "vectorcraft", "apply": true }),
+        );
+        assert_eq!(opened["dry_run"], false);
+        assert_eq!(opened["how"], "new_process");
+        wait_for("l'app finta parte", || k.gui.calls() == 1);
+        k.gui.all_gone();
+        assert_eq!(k.cli.calls(), 0);
+    }
+
+    #[test]
+    fn fub_preview_porta_l_immagine_del_file_e_non_avvia_mai_un_app() {
+        let k = craft(true);
+        let mut server = k.server();
+
+        // FigCraft con la miniatura: un contenuto immagine dopo il testo.
+        let fig = call_full(
+            &mut server,
+            "fub_preview",
+            json!({ "doc": "Disegni/scheda.figcraft" }),
+        );
+        let content = fig["content"].as_array().unwrap();
+        assert_eq!(content.len(), 2, "{fig}");
+        assert_eq!(content[1]["type"], "image");
+        assert_eq!(content[1]["mimeType"], "image/png");
+        assert_eq!(content[1]["data"], base64(&png(40, 20)));
+        let data = &fig["structuredContent"];
+        assert_eq!(data["origin"], "file");
+        assert_eq!(data["image"]["width"], 40);
+        assert_eq!(data["image"]["height"], 20);
+        // I byte stanno solo nel contenuto immagine.
+        assert!(data["image"].get("data").is_none(), "{data}");
+        assert!(data["info"].is_object());
+
+        // VectorCraft senza anteprima: solo testo, `origin: "none"`.
+        let bare = call_full(
+            &mut server,
+            "fub_preview",
+            json!({ "doc": "Disegni/logo.vectorcraft", "size": "large" }),
+        );
+        assert_eq!(bare["content"].as_array().unwrap().len(), 1, "{bare}");
+        let data = &bare["structuredContent"];
+        assert_eq!(data["origin"], "none");
+        assert_eq!(data["missing"], "absent");
+        assert_eq!(data["image"], Value::Null);
+        assert_eq!(data["size"], "large");
+
+        // 8 MiB passano, e sono il tetto.
+        let big = call_full(
+            &mut server,
+            "fub_preview",
+            json!({ "doc": "Disegni/grande.vectorcraft" }),
+        );
+        let content = big["content"].as_array().unwrap();
+        assert_eq!(content.len(), 2);
+        assert_eq!(
+            content[1]["data"].as_str().unwrap().len(),
+            MIB8.div_ceil(3) * 4
+        );
+        assert_eq!(big["structuredContent"]["origin"], "file");
+        let over = call_full(
+            &mut server,
+            "fub_preview",
+            json!({ "doc": "Disegni/troppo.vectorcraft" }),
+        );
+        assert_eq!(over["content"].as_array().unwrap().len(), 1);
+        // Un byte in più e l'anteprima non passa: il file resta senza immagine.
+        assert_eq!(over["structuredContent"]["image"], Value::Null);
+
+        assert!(server
+            .refused(
+                "fub_preview",
+                json!({ "doc": "Disegni/logo.vectorcraft", "size": "huge" })
+            )
+            .starts_with("bad_args"));
+
+        // Nessuna strada fa partire la CLI, neanche chiedendolo: il consenso è
+        // acceso e il disegno non ha anteprima.
+        server.ok(
+            "fub_preview",
+            json!({ "doc": "Disegni/logo.vectorcraft", "render": true }),
+        );
+        // `fub_invoke` vuole tutto il vault fra le radici di lettura.
+        drop(server);
+        let mut server = k.server_reading(&k.f.vault);
+        for apply in [false, true] {
+            let out = server.ok(
+                "fub_invoke",
+                json!({
+                    "command": "craft.preview",
+                    "args": { "doc": "Disegni/logo.vectorcraft", "render": true },
+                    "apply": apply
+                }),
+            );
+            assert!(!out.to_string().contains(r#""queued":true"#), "{out}");
+        }
+        std::thread::sleep(Duration::from_millis(300));
+        assert_eq!(k.cli.calls(), 0);
+        assert_eq!(k.gui.calls(), 0);
+        k.cli.all_gone();
+    }
+
+    #[test]
+    fn con_fub_craft_spento_niente_app_e_niente_anteprima() {
+        let k = craft(false);
+        let mut server = k.server();
+        let listed = server.ok(
+            "fub_external_editors",
+            json!({ "doc": "Disegni/logo.vectorcraft" }),
+        );
+        assert_eq!(listed["items"], json!([]));
+        let refused = server.refused(
+            "fub_open_with",
+            json!({ "doc": "Disegni/logo.vectorcraft", "editor": "vectorcraft" }),
+        );
+        assert!(refused.starts_with("unavailable"), "{refused}");
+        let refused = server.refused("fub_preview", json!({ "doc": "Disegni/logo.vectorcraft" }));
+        assert!(
+            refused.starts_with("unavailable: craft.preview non c'è"),
+            "{refused}"
+        );
+        assert_eq!(k.gui.calls() + k.cli.calls(), 0);
+    }
 }

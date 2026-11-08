@@ -1,0 +1,15 @@
+[package]
+name = "fub-canvas-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "La facciata WebAssembly del nucleo della lavagna: un'interfaccia C scritta a mano, testo e JSON dentro e fuori, per la WebView."
+
+# Solo `rlib`: il modulo `.wasm` si fa con `cargo rustc --crate-type cdylib`
+# (docs/reference/canvas-operations.md § «WebAssembly»), così il manifesto
+# non porta un `cdylib` che il workspace non consuma (check-crate-type.mjs).
+[dependencies]
+fub-canvas-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

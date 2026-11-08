@@ -1,0 +1,11 @@
+{
+  "name": "align-validation-fields",
+  "description": "Da T3: subpath, url e label si controllano solo sul loro tipo di scheda, come in Rust",
+  "before": "{\"nodes\":[{\"id\":\"t\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\",\"subpath\":\"senza-cancelletto\",\"url\":\"\",\"label\":\"L\"}],\"edges\":[]}",
+  "patches": [{"kind":"upsert-node","before":{"id":"t","type":"text","x":0,"y":0,"width":100,"height":50,"text":"uno","subpath":"senza-cancelletto","url":"","label":"L"},"after":{"id":"t","type":"text","x":7,"y":0,"width":100,"height":50,"text":"uno","subpath":"senza-cancelletto","url":"","label":"L"}}],
+  "expect": {
+    "outcome": "applied",
+    "text": "{\"nodes\":[{\"id\":\"t\",\"type\":\"text\",\"x\":7,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\",\"subpath\":\"senza-cancelletto\",\"url\":\"\",\"label\":\"L\"}],\"edges\":[]}",
+    "undo": "{\"nodes\":[{\"id\":\"t\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":100,\"height\":50,\"text\":\"uno\",\"subpath\":\"senza-cancelletto\",\"url\":\"\",\"label\":\"L\"}],\"edges\":[]}"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "r3-id-twice-deep",
+  "description": "R3: id due volte in una scheda, anche con chiavi doppie sconosciute più in fondo",
+  "source": "{\"a\":1,\"nodes\":[{\"id\":\"x\",\"k\":{\"q\":1,\"q\":2},\"id\":\"y\"}],\"a\":2}",
+  "expect": {
+    "outcome": "rejected",
+    "reason": "source"
+  }
+}

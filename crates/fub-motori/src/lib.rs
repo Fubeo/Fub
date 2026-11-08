@@ -37,8 +37,8 @@ mod registro;
 mod servizi;
 
 pub use catalogo::{
-    importa, verifica_copertura, Adattamento, ComandoFub, Copertura, Delega, Mancanza, Posto,
-    SpecMotore,
+    importa, verifica_copertura, Adattamento, ComandoFub, Copertura, Delega, Effetto, Gruppo,
+    Mancanza, Posto, Scheda, SpecMotore,
 };
 pub use lavori::Lavori;
 pub use memoria::{rilascia_al_sistema, Budget, Cache, Resoconto};

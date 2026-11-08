@@ -19,6 +19,13 @@ export interface FlipOptions {
   /// al posto di ciò che esce finisce entro il tempo dell'uscita.
   duration?: number;
   easing?: string;
+  /// Da dove si misura lo spostamento: dal centro (di serie) o dal bordo di
+  /// sopra, per ciò che cambia altezza mentre si sposta (una griglia che sale
+  /// al posto di una barra): così il bordo che si vede viaggia dritto.
+  edge?: "center" | "top";
+  /// Un elemento che parte anche `travel` px più su, e si posa: chi si alza
+  /// di un gradino nella stessa corsa degli altri.
+  lift?: { readonly element: Element; readonly travel: number };
   lifetime?: Lifetime;
 }
 
@@ -63,8 +70,17 @@ export function flip(
     // La scala agisce attorno all'origine dell'elemento: se non è il centro,
     // la traslazione la compensa, e i centri viaggiano comunque in linea retta.
     const [originX, originY] = resize ? originOf(el, b) : [b.width / 2, b.height / 2];
-    const x = a.left + a.width / 2 - (b.left + b.width / 2) + (b.width / 2 - originX) * (1 - scaleX);
-    const y = a.top + a.height / 2 - (b.top + b.height / 2) + (b.height / 2 - originY) * (1 - scaleY);
+    // Dal bordo di sopra, l'angolo in alto a sinistra torna dov'era; dal
+    // centro, il centro.
+    const fromTop = options.edge === "top";
+    const x = fromTop
+      ? a.left - b.left - originX * (1 - scaleX)
+      : a.left + a.width / 2 - (b.left + b.width / 2) + (b.width / 2 - originX) * (1 - scaleX);
+    const rise = options.lift?.element === el ? options.lift.travel : 0;
+    const y =
+      (fromTop
+        ? a.top - b.top - originY * (1 - scaleY)
+        : a.top + a.height / 2 - (b.top + b.height / 2) + (b.height / 2 - originY) * (1 - scaleY)) - rise;
     const resized =
       resize &&
       (Math.abs(a.width - b.width) >= NEGLIGIBLE_PX || Math.abs(a.height - b.height) >= NEGLIGIBLE_PX);
