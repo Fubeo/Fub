@@ -328,12 +328,12 @@ Se una di queste cade, la stima si allunga.
 | PA T1 · il finto del banco con le impostazioni dell'host | PA | da fare | #295 in `main` (d90a09d0 di K3 cambia `bench/fake-ipc.ts`) | basso | S | `bench/fake-ipc.test.ts` |
 | PA T3 · i comandi in sola lettura non tengono il turno | PA | fatto (5432f8b4) | nessuno | medio: tocca il custode | M | test d'integrazione di `fub-host` |
 | PA T4, T5 · #237 R01–R03 | PA | T4 e T5 fatti (baseline di `conflitto-lettura` dal runner) | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione; R01 si chiude col test se non si riproduce |
-| PA T6, T7 · #289 | PA | T6 fatto, T7 in corso (coder, base 5b6c3c26) | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
+| PA T6, T7 · #289 | PA | T6 e T7 fatti; la regola stretta per enum, variant e funzioni esportate aspetta l'utente | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
 | PA T8 · la pagina della cornice del telefono | PA | da fare | nessuno | basso | S | guardie dei documenti |
 | PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | da fare (D7 A) | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
 | PA T10 · i due punti sciolti da ritrovare | PA | da fare (D10 B) | nessuno | basso | S | la causa trovata o la riga che chiude |
 | PA T13 · il corpus senza perdite | PA | da fare, dopo #295 (registro 2026-11-08) | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
-| PA T19 · i test instabili del Rust | PA | da fare | nessuno | medio | M | 200 giri verdi o causa trovata |
+| PA T19 · i test instabili del Rust | PA | in corso (coder, base b28d5886) | nessuno | medio | M | 200 giri verdi o causa trovata |
 | PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | fatto | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
 | PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | in corso (coder, base fa55d793) | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
 | PA T33 · il nome FubDraw dove le persone lo vedono | PA | da fare (D14 A) | nessuno | basso | M | test dei descrittori, di `fub-scene` e del catalogo |
@@ -3723,7 +3723,12 @@ passa e prova i due casi; «Compatibilità» in `abi-and-wit.md` li dice; le
 voci di #289 sono spuntate nel resoconto.
 Prova: scripts/check.sh --rapido; cargo test -p fub-wasm-host (col `PATH` di
 `CLAUDE_DEVICE.md`: costruisce i componenti con cargo)
-Stato: [~] in corso · coder · base 5b6c3c26
+Stato: [x] fatto · d51efa75..b28d5886 · la risposta è «no»: un caso nuovo in un
+`enum`/`variant` o una funzione nuova in un'interfaccia esportata rompono il
+plugin già compilato (voci 3, 4 e 5 di #289); `cargo test -p fub-wasm-host`
+verde dal worktree dell'orchestratore; aperta per l'utente la regola della
+guardia e dell'ADR 0235 (stringere enum, variant e funzioni esportate come i
+record?)
 
 ## T8 · La pagina della cornice del telefono
 
@@ -4176,7 +4181,7 @@ Casi limite: un test che fallisce solo sotto carico (prova con
 dice, e si guarda la CI).
 Fatto quando: ogni issue ha la causa corretta o le 200 corse scritte.
 Prova: scripts/check.sh --rapido; i comandi delle corse nel resoconto
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base b28d5886
 
 ## T20 · I test instabili del client e del banco visivo
 
