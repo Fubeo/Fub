@@ -61,6 +61,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · fub-pre-alpha (orchestratore) · PA T1: il finto del banco
+  porta tutto il gruppo Aspetto dell'host (18 voci, nell'ordine di
+  `appearance_settings`), non solo «Animazioni»; lo stato `aspetto` del
+  simulatore ne mostra meno, ed è una differenza del simulatore · il task
+  chiede «le voci che mancano», e ne mancavano nove: il finto deve dire
+  quello che fa l'host, i testi vengono dai cataloghi Rust.
+
 - 2026-11-08 · fub-pre-alpha · da 0.2.0 in poi un `enum` o un `variant`
   che attraversa il confine non prende casi nuovi, e un'interfaccia
   esportata dal plugin non prende funzioni nuove: le novità arrivano con
