@@ -28,7 +28,7 @@
 //!
 //! | costrutto | additivo | rotto |
 //! |---|---|---|
-//! | `record` | un campo **in fondo** | rinominare, ritipare, riordinare, togliere |
+//! | `record` | un campo **in fondo**, solo contro 0.1.x (vedi sotto) | rinominare, ritipare, riordinare, togliere |
 //! | `variant` / `enum` / `flags` | un caso **in fondo** | idem — l'ordine è il discriminante |
 //! | `type x = …` (alias) | — | qualunque cambio di destinazione |
 //! | funzione | una funzione **nuova** | cambiare parametri o risultato di una esistente |
@@ -39,6 +39,28 @@
 //! un `variant` non è nemmeno additivo davvero; la regola che questo progetto ha
 //! scelto (`abi_compatible`) dice che lo è, e allora il minimo è che il
 //! *discriminante di ciò che c'era* non si muova.
+//!
+//! # Il record che attraversa il confine non cresce (da 0.2.0)
+//!
+//! Il campo in coda era ammesso perché si credeva additivo. Non lo è: nel
+//! component model l'host controlla un record campo per campo, e un plugin
+//! compilato contro il record più corto non si istanzia (ADR 0235, prova in
+//! `crates/fub-wasm-host/tests/published_record_does_not_grow.rs`). Per questo
+//! la regola dei record dipende dallo **snapshot** contro cui si confronta
+//! ([`RecordRule::for_snapshot`]):
+//!
+//! - contro `0.1.0` e `0.1.1` resta il prefisso di allora (il campo in coda
+//!   passa): sono le regole con cui quelle versioni sono state congelate, e
+//!   non si riscrivono a posteriori;
+//! - contro `0.2.0` e ogni versione dopo, un record che **attraversa il
+//!   confine** ha gli stessi campi, nello stesso ordine: niente prefisso.
+//!
+//! «Attraversa il confine» non è un'etichetta scritta a mano: è un record
+//! raggiungibile, nello snapshot, da una funzione o da un tipo di un `world`
+//! (import o export), seguendo campi, casi, `option`, `list`, `result`,
+//! `tuple` e alias. Un record dichiarato ma che nessuna firma del world
+//! raggiunge non viaggia fra host e plugin, e resta sotto la regola del
+//! prefisso.
 //!
 //! # Il ciclo di vita di `wit/frozen/`
 //!
@@ -51,7 +73,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use wit_parser::{Resolve, Type, TypeDefKind, WorldItem, WorldKey};
+use wit_parser::{
+    Function, Handle, Resolve, Type, TypeDefKind, TypeId, TypeOwner, WorldItem, WorldKey,
+};
 
 const CURRENT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/wit/fub/abi.wit");
 const FROZEN_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/wit/frozen");
@@ -114,6 +138,9 @@ struct Contract {
     functions: BTreeMap<String, Sig>,
     /// world → (import, export).
     worlds: BTreeMap<String, (BTreeSet<String>, BTreeSet<String>)>,
+    /// I tipi dichiarati (`interfaccia::tipo`) che una firma di un world
+    /// raggiunge: quelli che viaggiano davvero fra host e plugin.
+    crossing: BTreeSet<String>,
     /// Da dove viene (per i messaggi d'errore).
     origin: String,
 }
@@ -308,14 +335,89 @@ fn load(source: &str, origin: &str) -> Contract {
         })
         .collect();
 
+    let crossing = crossing_types(&resolve);
+
     Contract {
         package,
         version,
         types,
         functions,
         worlds,
+        crossing,
         origin: origin.to_string(),
     }
+}
+
+/// Il nome qualificato (`interfaccia::tipo`) di un tipo dichiarato in
+/// un'interfaccia, la stessa chiave di [`Contract::types`].
+fn qualified(resolve: &Resolve, id: TypeId) -> Option<String> {
+    let td = &resolve.types[id];
+    let name = td.name.as_ref()?;
+    match td.owner {
+        TypeOwner::Interface(iface) => {
+            let iface = resolve.interfaces[iface]
+                .name
+                .clone()
+                .unwrap_or_else(|| "<inline>".into());
+            Some(format!("{iface}::{name}"))
+        }
+        _ => None,
+    }
+}
+
+/// Ogni tipo dichiarato che una firma di un `world` raggiunge.
+///
+/// Si parte dalle funzioni delle interfacce importate ed esportate (e dalle
+/// funzioni e dai tipi messi direttamente nel world) e si scende per campi,
+/// casi, contenitori e alias. Un `use` è un alias omonimo: seguirlo porta al
+/// tipo dichiarato nell'interfaccia d'origine, cioè alla chiave giusta.
+fn crossing_types(resolve: &Resolve) -> BTreeSet<String> {
+    let mut stack: Vec<Type> = Vec::new();
+    let push_fn = |f: &Function, stack: &mut Vec<Type>| {
+        stack.extend(f.params.iter().map(|p| p.ty));
+        stack.extend(f.result);
+    };
+    for (_, world) in resolve.worlds.iter() {
+        for item in world.imports.values().chain(world.exports.values()) {
+            match item {
+                WorldItem::Interface { id, .. } => {
+                    for f in resolve.interfaces[*id].functions.values() {
+                        push_fn(f, &mut stack);
+                    }
+                }
+                WorldItem::Function(f) => push_fn(f, &mut stack),
+                WorldItem::Type { id, .. } => stack.push(Type::Id(*id)),
+            }
+        }
+    }
+
+    let mut seen: BTreeSet<TypeId> = BTreeSet::new();
+    let mut out = BTreeSet::new();
+    while let Some(ty) = stack.pop() {
+        let Type::Id(id) = ty else { continue };
+        if !seen.insert(id) {
+            continue;
+        }
+        out.extend(qualified(resolve, id));
+        match &resolve.types[id].kind {
+            TypeDefKind::Record(r) => stack.extend(r.fields.iter().map(|f| f.ty)),
+            TypeDefKind::Variant(v) => stack.extend(v.cases.iter().filter_map(|c| c.ty)),
+            TypeDefKind::Tuple(t) => stack.extend(t.types.iter().copied()),
+            TypeDefKind::Result(r) => stack.extend(r.ok.into_iter().chain(r.err)),
+            TypeDefKind::Map(k, v) => stack.extend([*k, *v]),
+            TypeDefKind::Option(t)
+            | TypeDefKind::List(t)
+            | TypeDefKind::FixedLengthList(t, _)
+            | TypeDefKind::Type(t) => stack.push(*t),
+            TypeDefKind::Future(t) | TypeDefKind::Stream(t) => stack.extend(*t),
+            TypeDefKind::Handle(Handle::Own(t) | Handle::Borrow(t)) => stack.push(Type::Id(*t)),
+            TypeDefKind::Resource
+            | TypeDefKind::Flags(_)
+            | TypeDefKind::Enum(_)
+            | TypeDefKind::Unknown => {}
+        }
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -344,6 +446,54 @@ fn prefix<T: PartialEq + std::fmt::Debug>(base: &[T], now: &[T], what: &str) -> 
         }
     }
     None
+}
+
+/// Come si confronta un record pubblicato col record di oggi.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum RecordRule {
+    /// Il record di allora è un prefisso di quello di oggi: un campo in coda
+    /// passa. È la regola con cui sono state congelate le 0.1.x.
+    Prefix,
+    /// Un record che attraversa il confine ha gli stessi campi, nello stesso
+    /// ordine (ADR 0235). Un record che nessuna firma del world raggiunge
+    /// resta sotto [`RecordRule::Prefix`].
+    ExactAtBoundary,
+}
+
+/// La prima versione congelata con la regola stretta dei record.
+const EXACT_RECORDS_FROM: Version = Version {
+    major: 0,
+    minor: 2,
+    patch: 0,
+};
+
+impl RecordRule {
+    /// La regola vale per **snapshot**: quella di una versione è la regola con
+    /// cui la versione è stata congelata, e non cambia dopo.
+    fn for_snapshot(version: Version) -> Self {
+        if version >= EXACT_RECORDS_FROM {
+            RecordRule::ExactAtBoundary
+        } else {
+            RecordRule::Prefix
+        }
+    }
+}
+
+/// `base` e `now` hanno gli stessi campi, nello stesso ordine?
+fn exact<T: PartialEq + std::fmt::Debug>(base: &[T], now: &[T], what: &str) -> Option<String> {
+    if let Some(why) = prefix(base, now, what) {
+        return Some(why);
+    }
+    (now.len() > base.len()).then(|| {
+        format!(
+            "{what}: erano {} e ora sono {} ({:?} in coda) — un record che attraversa il \
+             confine non cresce, nemmeno in coda: un plugin compilato contro il record più \
+             corto non si istanzia più (ADR 0235). La novità va in un'interfaccia nuova",
+            base.len(),
+            now.len(),
+            &now[base.len()..]
+        )
+    })
 }
 
 /// Le interfacce che il **plugin esporta**, cioè quelle che deve implementare.
@@ -421,8 +571,16 @@ const KNOWN_OBLIGATIONS: &[(&str, &str)] = &[
     ),
 ];
 
-/// Tutte le rotture di additività di `now` rispetto a `base`. Vuoto = additivo.
+/// Tutte le rotture di additività di `now` rispetto a `base`, con la regola dei
+/// record dello snapshot `base`. Vuoto = additivo.
 fn breaks(base: &Contract, now: &Contract) -> Vec<String> {
+    breaks_with(base, now, RecordRule::for_snapshot(base.version))
+}
+
+/// [`breaks`] con la regola dei record scelta da chi chiama: i test del
+/// presidio la fissano per esercitare tutte e due le regole sullo stesso
+/// contratto.
+fn breaks_with(base: &Contract, now: &Contract, records: RecordRule) -> Vec<String> {
     let mut errors = Vec::new();
 
     if base.package != now.package {
@@ -451,7 +609,12 @@ fn breaks(base: &Contract, now: &Contract) -> Vec<String> {
         }
         let broken = match (was, is) {
             (Shape::Record(b), Shape::Record(n)) => {
-                prefix(b, n, &format!("record `{name}`, campi"))
+                let what = format!("record `{name}`, campi");
+                if records == RecordRule::ExactAtBoundary && base.crossing.contains(name) {
+                    exact(b, n, &what)
+                } else {
+                    prefix(b, n, &what)
+                }
             }
             (Shape::Variant(b), Shape::Variant(n)) => {
                 prefix(b, n, &format!("variant `{name}`, casi"))
@@ -722,6 +885,17 @@ fn every_form_of_breakage_turns_red() {
             }),
         ),
         (
+            // La regola di 0.2.0 (ADR 0235): `base` qui è il contratto di oggi,
+            // cioè uno snapshot ≥ 0.2.0, e `view-spec` viaggia nel world.
+            "un campo in coda a un record che attraversa il confine",
+            Box::new(|c: &mut Contract| {
+                let Some(Shape::Record(fields)) = c.types.get_mut("view::view-spec") else {
+                    panic!("view::view-spec è un record");
+                };
+                fields.push(("icon".into(), "option<string>".into()));
+            }),
+        ),
+        (
             "un caso di variant rimosso",
             Box::new(|c: &mut Contract| {
                 let Some(Shape::Variant(cases)) = c.types.get_mut("model::link-target") else {
@@ -885,15 +1059,6 @@ fn additions_at_the_end_pass() {
 
     let additions: Vec<Change> = vec![
         (
-            "un campo in fondo a un record",
-            Box::new(|c: &mut Contract| {
-                let Some(Shape::Record(fields)) = c.types.get_mut("view::view-spec") else {
-                    panic!("view::view-spec è un record");
-                };
-                fields.push(("icon".into(), "option<string>".into()));
-            }),
-        ),
-        (
             "un caso in fondo a un enum (§2.2: una superficie di UI in più)",
             Box::new(|c: &mut Contract| {
                 let Some(Shape::Enum(cases)) = c.types.get_mut("view::view-surface") else {
@@ -979,6 +1144,190 @@ fn additions_at_the_end_pass() {
         let mut grown = base.clone();
         apply_change(&mut grown);
         let errors = breaks(&base, &grown);
+        assert!(
+            errors.is_empty(),
+            "«{name}» è un'aggiunta e il presidio la rifiuta:\n  - {}",
+            errors.join("\n  - ")
+        );
+    }
+}
+
+/// Le due regole dei record sullo stesso cambiamento: il campo in coda passa
+/// contro le 0.1.x, congelate con il prefisso, e fallisce contro 0.2.0 e dopo.
+#[test]
+fn a_field_at_the_end_passes_only_under_the_0_1_rule() {
+    assert_eq!(
+        RecordRule::for_snapshot("0.1.1".parse().unwrap()),
+        RecordRule::Prefix
+    );
+    assert_eq!(
+        RecordRule::for_snapshot("0.2.0".parse().unwrap()),
+        RecordRule::ExactAtBoundary
+    );
+    assert_eq!(
+        RecordRule::for_snapshot("0.3.0".parse().unwrap()),
+        RecordRule::ExactAtBoundary
+    );
+
+    let base = current();
+    let mut grown = base.clone();
+    let Some(Shape::Record(fields)) = grown.types.get_mut("view::view-spec") else {
+        panic!("view::view-spec è un record");
+    };
+    fields.push(("icon".into(), "option<string>".into()));
+
+    let legacy = breaks_with(&base, &grown, RecordRule::Prefix);
+    assert!(
+        legacy.is_empty(),
+        "contro una 0.1.x il campo in coda resta ammesso:\n  - {}",
+        legacy.join("\n  - ")
+    );
+    let strict = breaks_with(&base, &grown, RecordRule::ExactAtBoundary);
+    assert!(
+        strict
+            .iter()
+            .any(|e| e.contains("view::view-spec") && e.contains("in coda")),
+        "contro 0.2.0 il campo in coda deve far fallire il presidio, invece: {strict:?}"
+    );
+}
+
+/// Il contratto vero: i record che il world raggiunge sono quelli del confine.
+///
+/// Senza questo, un errore nella visita (un tipo di nodo dimenticato) farebbe
+/// sembrare «interni» tutti i record, e la regola stretta non scatterebbe mai.
+#[test]
+fn the_records_of_the_boundary_are_found() {
+    let now = current();
+    for name in ["view::view-spec", "model::span", "plugin::plugin-manifest"] {
+        assert!(
+            matches!(now.types.get(name), Some(Shape::Record(_))),
+            "`{name}` non è più un record di abi.wit: scegline un altro per questo test"
+        );
+        assert!(
+            now.crossing.contains(name),
+            "`{name}` viaggia in una firma del world e la visita non lo trova"
+        );
+    }
+    let records: Vec<&String> = now
+        .types
+        .iter()
+        .filter(|(_, s)| matches!(s, Shape::Record(_)))
+        .map(|(n, _)| n)
+        .collect();
+    let crossing = records
+        .iter()
+        .filter(|n| now.crossing.contains(n.as_str()))
+        .count();
+    assert!(
+        crossing * 2 > records.len(),
+        "solo {crossing} record su {} attraversano il confine: la visita del world ne \
+         perde qualcuno",
+        records.len()
+    );
+}
+
+/// Il presidio su testi WIT finti, scritti apposta: ogni caso è una riga di
+/// differenza, e il test non dipende da come cambierà `abi.wit`.
+const FAKE_BASE: &str = r#"
+package fub:finto@0.2.0;
+
+interface model {
+    /// Attraversa il confine: `plugin.describe` lo restituisce.
+    record span {
+        start: u32,
+        end: u32,
+    }
+
+    /// Dichiarato e mai usato da una firma del world: resta dell'host.
+    record host-only {
+        a: u32,
+    }
+}
+
+interface plugin {
+    use model.{span};
+    describe: func() -> span;
+}
+
+interface host-env {
+    log: func(message: string);
+}
+
+world plugin-world {
+    import host-env;
+    export plugin;
+}
+"#;
+
+fn fake(source: &str) -> Contract {
+    load(source, "finto.wit")
+}
+
+#[test]
+fn the_strict_rule_on_fake_wit() {
+    let base = fake(FAKE_BASE);
+    assert_eq!(
+        RecordRule::for_snapshot(base.version),
+        RecordRule::ExactAtBoundary
+    );
+    assert!(base.crossing.contains("model::span"));
+    assert!(!base.crossing.contains("model::host-only"));
+
+    let edit = |from: &str, to: &str| -> Contract {
+        assert!(FAKE_BASE.contains(from), "il caso finto non trova `{from}`");
+        fake(&FAKE_BASE.replacen(from, to, 1))
+    };
+
+    // Rosso: un campo in coda a un record congelato che attraversa il confine.
+    let grown = edit(
+        "        end: u32,\n",
+        "        end: u32,\n        len: u32,\n",
+    );
+    let errors = breaks(&base, &grown);
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.contains("record `model::span`") && e.contains("in coda")),
+        "un campo in coda a `span` deve far fallire il presidio, invece: {errors:?}"
+    );
+
+    let green: Vec<(&str, Contract)> = vec![
+        (
+            "una funzione nuova su un'interfaccia che il plugin importa",
+            edit(
+                "    log: func(message: string);\n",
+                "    log: func(message: string);\n    notify: func(message: string);\n",
+            ),
+        ),
+        (
+            "un'interfaccia nuova, importata dal world",
+            edit(
+                "world plugin-world {\n",
+                "interface clock {\n    now: func() -> u64;\n}\n\n\
+                 world plugin-world {\n    import clock;\n",
+            ),
+        ),
+        (
+            "un tipo nuovo",
+            edit(
+                "    record host-only {",
+                "    record stamp {\n        at: u64,\n    }\n\n    record host-only {",
+            ),
+        ),
+        (
+            "un campo in coda a un record che nessuna firma del world raggiunge",
+            edit("        a: u32,\n", "        a: u32,\n        b: u32,\n"),
+        ),
+        (
+            "commenti e spazi diversi",
+            edit(
+                "    record span {\n        start: u32,\n        end: u32,\n    }",
+                "    // un commento nuovo\n    record span {\n\n  start:   u32,\n end: u32\n    }",
+            ),
+        ),
+    ];
+    for (name, now) in green {
+        let errors = breaks(&base, &now);
         assert!(
             errors.is_empty(),
             "«{name}» è un'aggiunta e il presidio la rifiuta:\n  - {}",
