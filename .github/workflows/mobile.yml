@@ -15,9 +15,15 @@ on:
   push:
     branches: [main]
   pull_request:
+    # Ciò che soltanto il telefono costruisce o importa: il binario e i suoi
+    # template nativi, le due cartelle del telefono (la shell e la cornice di
+    # Scrittoio, con il suo foglio mobile.css), l'ingresso e la sua pagina. Il
+    # resto del client è comune: lo costruiscono già i job del desktop, che
+    # fanno il build Vite anche di mobile.html.
     paths:
       - "crates/fub-app/**"
       - "apps/client/src/shells/mobile/**"
+      - "apps/client/src/shells/scrittoio/mobile/**"
       - "apps/client/src/entrypoints/mobile*"
       - "apps/client/mobile.html"
       - ".github/workflows/mobile.yml"

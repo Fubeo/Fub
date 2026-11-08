@@ -202,9 +202,13 @@ di CI non costruisce:
   (`cargo check --target aarch64-apple-ios`); nessun `.ipa` esce da qui.
 
 Il workflow non è un controllo richiesto. Gira su `main`, a richiesta e
-sulle PR che toccano `crates/fub-app/`, `shells/mobile/`, gli ingressi
-`entrypoints/mobile*`, `mobile.html` o il workflow stesso. Una PR che cambia
-soltanto `shells/scrittoio/mobile/` o la struttura comune non lo fa partire.
+sulle PR che toccano ciò che soltanto il telefono importa: `crates/fub-app/`,
+le due cartelle `shells/mobile/` e `shells/scrittoio/mobile/` (la cornice, con
+il suo `mobile.css`), gli ingressi `entrypoints/mobile*`, `mobile.html` o il
+workflow stesso. Una PR che cambia soltanto il codice comune, per esempio la
+struttura o la pelle di `theme/scrittoio/`, non lo fa partire: il build Vite
+dei job del desktop costruisce anche `mobile.html`, e il workflow non guarda
+l'aspetto del telefono.
 L'APK non è firmato per la distribuzione.
 
 ## Il banco
