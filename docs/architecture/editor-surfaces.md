@@ -62,14 +62,7 @@ finché `import()` non risolve tiene testo, modalità, sola lettura, fuoco e un
 rimando, e li consegna nell'ordine in cui la shell li avrebbe dati. Un `reveal`
 in attesa risponde di sì; se poi la scena non ci arriva, l'avviso è quello della
 shell. Un caricamento fallito lascia il testo alla sessione. Il campo di testo del disegno è un altro pezzo pigro ([ADR 0224](../decisions/0224-scrittura-il-nucleo-del-testo-ricco.md)).
-
-Un'apertura può chiedere una pagina, da 1: un link a `x.pdf#page=3` in una
-nota la porta come `OpenOptions.page` di `openDocument`. Il montaggio che
-l'apertura fa nascere, o che riporta la sua scheda in primo piano, la riceve
-in `SurfaceMountContext.page`, e il visore del PDF ne fa la sua
-`initialPage`; se la scheda era già quella attiva, la shell chiama
-`EditorSurface.showPage`. Le superfici senza pagine non la leggono. Il numero
-resta del client: non attraversa l'IPC.
+Un'apertura può chiedere una pagina (un link a `x.pdf#page=3`, `OpenOptions.page`): la riceve il montaggio che l'apertura fa nascere o riporta in primo piano (`SurfaceMountContext.page`, l'`initialPage` del visore del PDF), o `EditorSurface.showPage` se la scheda era già attiva; resta del client, senza IPC.
 
 I comandi `shell.doc.source.open` («Apri come sorgente») e
 `shell.doc.source.close` («Chiudi la vista sorgente») impostano e tolgono la
