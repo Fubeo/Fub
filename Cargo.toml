@@ -126,21 +126,14 @@ quick-xml = "0.41.0"
 # l'intero gruppo di una CLI scaduta (`kill_process_group`): la accendeva già
 # cap-primitives, quindi non entra codice nuovo nell'albero.
 rustix = { version = "1", default-features = false, features = ["fs", "process"] }
-# Il job object di Windows in cui nasce una CLI Craft (`craft/launch.rs`): il
-# tempo scaduto e l'annullamento chiudono il job, e con lui i figli della CLI
-# (D7 del piano pre-alpha). **Era già nell'albero** alla stessa versione,
-# portato da tauri, cap-primitives e tokio, e `fub-kernel` lo nomina già con
-# feature sue: la dipendenza diretta aggiunge un nome, non un crate. Solo le feature che servono: i job, l'avvio sospeso e la ripresa
-# del thread (`Threading`, `Diagnostics_ToolHelp`), gli handle (`Foundation`)
-# e `Security`, che `CreateJobObjectW` nomina nella firma. La usa solo
-# `cfg(windows)` (`[target.'cfg(windows)'.dependencies]` di `fub-host`).
-windows-sys = { version = "0.61.2", features = [
-    "Win32_Foundation",
-    "Win32_Security",
-    "Win32_System_Diagnostics_ToolHelp",
-    "Win32_System_JobObjects",
-    "Win32_System_Threading",
-] }
+# Le chiamate di Windows, solo sotto `cfg(windows)`: in `fub-kernel` il
+# conteggio dei nomi di un file e il rename relativo, in `fub-host` il job
+# object in cui nasce una CLI Craft (`craft/launch.rs`, D7 del piano
+# pre-alpha). **Era già nell'albero** alla stessa versione, portato da tauri,
+# cap-primitives e tokio: le dipendenze dirette aggiungono un nome, non un
+# crate. Qui solo la versione: le feature le sceglie ogni crate accanto al suo
+# uso, così nessuno accende quelle di un altro.
+windows-sys = { version = "0.61.2", default-features = false }
 # Il vocabolario del log (§17.3, decisione 0062). **Era già nell'albero** —
 # 0.1.44, tirato da tauri — e prenderlo come dipendenza diretta non aggiunge un
 # crate: aggiunge un nome che descrive una cosa che c'era. Il collettore invece
