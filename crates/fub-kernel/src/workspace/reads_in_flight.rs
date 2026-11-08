@@ -12,45 +12,36 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::sync::Arc;
+
+use crate::poison::Condition;
 
 /// Il registro delle letture in volo di un workspace. Si clona come un `Arc`:
 /// l'host ne tiene una copia per aspettare **senza** il lucchetto del
 /// workspace.
+///
+/// Sta dietro una [`Condition`]: la tabella è fatta di iscrizioni
+/// indipendenti, che un panico a metà non rende incredibili, e chi aspetta
+/// riguarda lo stato con la sua condizione.
 #[derive(Clone, Default)]
-pub struct ReadsInFlight(Arc<Shared>);
+pub struct ReadsInFlight(Arc<Condition<State>>);
 
-#[derive(Default)]
-struct Shared {
-    state: Mutex<State>,
-    idle: Condvar,
-}
-
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct State {
     next: u64,
     live: HashMap<u64, Entry>,
 }
 
+#[derive(Debug)]
 struct Entry {
     owner: String,
     cancel: Arc<AtomicBool>,
 }
 
-impl Shared {
-    /// Il dato protetto è una tabella di iscrizioni indipendenti: un panico a
-    /// metà non lascia invarianti rotti, quindi il veleno non conta.
-    fn lock(&self) -> MutexGuard<'_, State> {
-        self.state
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
-}
-
 impl ReadsInFlight {
     /// Iscrive una lettura di `owner`; la guardia la cancella quando muore.
     pub(crate) fn enter(&self, owner: &str, cancel: Arc<AtomicBool>) -> ReadInFlight {
-        let mut state = self.0.lock();
+        let mut state = self.0.acquire();
         let id = state.next;
         state.next = state.next.wrapping_add(1);
         state.live.insert(
@@ -69,7 +60,7 @@ impl ReadsInFlight {
     /// `owner` ha letture in volo? Allora i suoi provider sono in uso.
     pub fn busy(&self, owner: &str) -> bool {
         self.0
-            .lock()
+            .acquire()
             .live
             .values()
             .any(|entry| entry.owner == owner)
@@ -77,13 +68,13 @@ impl ReadsInFlight {
 
     /// Quante letture sono in volo adesso.
     pub fn count(&self) -> usize {
-        self.0.lock().live.len()
+        self.0.acquire().live.len()
     }
 
     /// Alza la bandiera di ogni lettura in volo: il loro host smette di
     /// servirle alla prossima chiamata, e l'esito torna `Cancelled`.
     pub fn cancel_all(&self) {
-        for entry in self.0.lock().live.values() {
+        for entry in self.0.acquire().live.values() {
             entry.cancel.store(true, Ordering::Relaxed);
         }
     }
@@ -91,55 +82,48 @@ impl ReadsInFlight {
     /// Alza la bandiera delle sole letture di `owner`, prima di smontarne i
     /// provider.
     pub fn cancel_owner(&self, owner: &str) {
-        for entry in self.0.lock().live.values() {
+        for entry in self.0.acquire().live.values() {
             if entry.owner == owner {
                 entry.cancel.store(true, Ordering::Relaxed);
             }
         }
     }
 
-    /// Torna quando nessuna lettura è più in volo. Va chiamata **senza** il
-    /// lucchetto del workspace: una lettura, per finire, ne prende un prestito
-    /// condiviso.
+    /// Torna quando nessuna lettura è più in volo.
+    ///
+    /// Va chiamata **senza** il lucchetto del workspace: una lettura, per
+    /// finire, ne prende un prestito condiviso. Chi tiene il turno alza prima
+    /// le bandiere ([`cancel_all`](Self::cancel_all)): una lettura che chiede
+    /// il turno lo chiede cedendo, e cede appena vede la sua.
     pub fn wait_idle(&self) {
-        let state = self.0.lock();
-        let _idle = self
-            .0
-            .idle
-            .wait_while(state, |state| !state.live.is_empty())
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let state = self.0.acquire();
+        let _idle = self.0.wait(state, |state| !state.live.is_empty());
     }
-}
 
-impl ReadsInFlight {
-    /// Torna quando `owner` non ha più letture in volo. Come
-    /// [`wait_idle`](Self::wait_idle), senza il lucchetto del workspace e
-    /// senza il turno: una lettura che chiede il turno lo deve poter avere.
+    /// Torna quando `owner` non ha più letture in volo, con le stesse regole
+    /// di [`wait_idle`](Self::wait_idle) (e [`cancel_owner`](Self::cancel_owner)
+    /// prima, se si tiene il turno).
     pub fn wait_owner_idle(&self, owner: &str) {
-        let state = self.0.lock();
-        let _idle = self
-            .0
-            .idle
-            .wait_while(state, |state| {
-                state.live.values().any(|entry| entry.owner == owner)
-            })
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let state = self.0.acquire();
+        let _idle = self.0.wait(state, |state| {
+            state.live.values().any(|entry| entry.owner == owner)
+        });
     }
 }
 
 /// L'iscrizione di una lettura in volo: vive dentro il token e lo segue.
 pub(crate) struct ReadInFlight {
-    shared: Arc<Shared>,
+    shared: Arc<Condition<State>>,
     id: u64,
 }
 
 impl Drop for ReadInFlight {
     fn drop(&mut self) {
-        let mut state = self.shared.lock();
-        state.live.remove(&self.id);
-        // Chi aspetta un proprietario solo si sveglia anche se altre letture
-        // restano in volo.
-        self.shared.idle.notify_all();
+        // `change` sveglia tutti: anche chi aspetta un proprietario solo
+        // mentre altre letture restano in volo.
+        self.shared.change(|state| {
+            state.live.remove(&self.id);
+        });
     }
 }
 
