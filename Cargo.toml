@@ -75,6 +75,9 @@ exclude = [
     "esempi/index-provider-wasm",
     "esempi/legacy-format-0_1",
     "esempi/manifest-prima-di-k1",
+    "esempi/plugin-prima-del-caso",
+    "esempi/plugin-prima-della-funzione",
+    "esempi/servizio-prima",
     # La copia di WordCraft ha un workspace suo (vendor/wordcraft/UPSTREAM.md):
     # è codice di terzi, con i manifest dell'upstream, e i lint e i guard di
     # Fub non lo leggono. Fub ne prende i crate come dipendenze a percorso.
