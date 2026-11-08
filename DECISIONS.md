@@ -99,6 +99,11 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · fub-pre-alpha (orchestratore) · in PA T61 anche
+  `Cargo.lock` fa partire la CI Mobile; le righe `cfg` del telefono nei
+  crate comuni no · un aggiornamento delle dipendenze Tauri può rompere
+  solo Android o iOS ed è raro; i crate comuni cambiano spesso, e quelle
+  righe si provano sul push in `main`.
 - 2026-11-08 · fub-pre-alpha (orchestratore) · PA T47 si allarga al
   pallino dello stato della testata dei documenti (`pane-standing-chip`),
   che la regola dei 44 px faceva diventare un cerchio · è lo stesso difetto
