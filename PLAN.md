@@ -325,7 +325,7 @@ Se una di queste cade, la stima si allunga.
 | K3 T17 · il sì dell'utente | K3 | aspetta solo il sì (T1–T16, T18 e T19 fatti; CI completa verde, run 42049126094) | nessuno | medio: un crate nuovo (`fub-motori`), patch nel `vendor/`, tre sistemi | — | il sì dell'utente |
 | Unire #295 (K3, con K3-IPC T8) | K3 | PR pronta, testa 165b8fa8 | il sì dell'utente | medio | S | `main` ha `crates/fub-motori` e i comandi `open_key`, `warm_engine` e `document_closed` |
 | Riallineare #290 a `main` e unirla | K2 | 7 di 7; la prova con una persona non è fatta | la prova dell'utente col protocollo di K2, prima di segnarla pronta (D13 A) | basso | S | CI completa verde, OK dell'utente |
-| PA T1 · il finto del banco con le impostazioni dell'host | PA | in corso (coder, base 651615a9) | #295 in `main` (d90a09d0 di K3 cambia `bench/fake-ipc.ts`) | basso | S | `bench/fake-ipc.test.ts` |
+| PA T1 · il finto del banco con le impostazioni dell'host | PA | fatto (baseline delle impostazioni dal runner) | #295 in `main` (d90a09d0 di K3 cambia `bench/fake-ipc.ts`) | basso | S | `bench/fake-ipc.test.ts` |
 | PA T3 · i comandi in sola lettura non tengono il turno | PA | fatto (5432f8b4) | nessuno | medio: tocca il custode | M | test d'integrazione di `fub-host` |
 | PA T4, T5 · #237 R01–R03 | PA | T4 e T5 fatti (baseline di `conflitto-lettura` dal runner) | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione; R01 si chiude col test se non si riproduce |
 | PA T6, T7 · #289 | PA | T6 e T7 fatti | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
@@ -334,9 +334,9 @@ Se una di queste cade, la stima si allunga.
 | PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | da fare (D7 A) | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
 | PA T10 · i due punti sciolti da ritrovare | PA | da fare (D10 B) | nessuno | basso | S | la causa trovata o la riga che chiude |
 | PA T13 · il corpus senza perdite | PA | da fare, dopo #295 (registro 2026-11-08) | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
-| PA T19 · i test instabili del Rust | PA | in corso (coder, base b28d5886) | nessuno | medio | M | 200 giri verdi o causa trovata |
+| PA T19 · i test instabili del Rust | PA | fatto | nessuno | medio | M | 200 giri verdi o causa trovata |
 | PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | fatto | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
-| PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | in corso (coder, base fa55d793) | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
+| PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | fatto | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
 | PA T33 · il nome FubDraw dove le persone lo vedono | PA | da fare (D14 A) | nessuno | basso | M | test dei descrittori, di `fub-scene` e del catalogo |
 | PA T34 · il manifest dice da quale tema parte | PA | da fare (D15 A, `extends`) | nessuno | medio: la forma del manifest sul filo | M | `crates/fub-host/tests/themes.rs`, mirror |
 | PA T35 · la pelle del tema sopra quella di serie | PA | da fare | T34 | medio: tocca il montaggio di ogni tema | M | `theme/inherit.test.ts`, `gate.test.ts` |
@@ -3464,7 +3464,10 @@ Fatto quando: `npx vitest run bench/fake-ipc.test.ts bench/fake-english.test.ts`
 passa; la foto della scena delle impostazioni mostra «Animazioni» come lo
 stato `aspetto` del simulatore.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run bench/
-Stato: [~] in corso · coder · base 651615a9
+Stato: [x] fatto · c9d458e6 · il finto ha tutto il gruppo Aspetto dell'host
+(18 voci, non solo Animazioni; registro 2026-11-08); cambiano le scene
+`settings` e `prefs-appearance`, forse `prefs-theme-settings` e
+`confirm-danger`: baseline dal runner
 
 ## T2 · N4 e K5 allineati a `main`, e i sei errori di tipo
 
@@ -4182,7 +4185,10 @@ Casi limite: un test che fallisce solo sotto carico (prova con
 dice, e si guarda la CI).
 Fatto quando: ogni issue ha la causa corretta o le 200 corse scritte.
 Prova: scripts/check.sh --rapido; i comandi delle corse nel resoconto
-Stato: [~] in corso · coder · base b28d5886
+Stato: [x] fatto · d9de814f..156cb2aa · le sei cause corrette, 200 corse verdi
+dopo per ognuna; commenti nelle issue, che si chiudono quando il codice è in
+`main`; restano: la grana del timbro (4 ms) e altri test con un solo
+`try_read` che cadono sotto carico, da due issue nuove
 
 ## T20 · I test instabili del client e del banco visivo
 
@@ -4604,7 +4610,10 @@ Fatto quando: un test di Vitest prova che il clic su
 `![[x.pdf#page=3]]` apre la superficie con `initialPage` 3, e i casi
 limite.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base fa55d793
+Stato: [x] fatto · f2fb4f79..092de966 · la pagina viaggia in `OpenOptions.page`
+fino a `initialPage`, e `showPage` per la scheda già aperta; resta: i link a
+percorso `[a](x.pdf#page=3)` non sono coperti, e una pagina chiesta mentre il
+PDF della scheda attiva carica si perde
 
 ## T33 · Il nome FubDraw dove le persone lo vedono
 
