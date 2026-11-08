@@ -348,7 +348,7 @@ Se una di queste cade, la stima si allunga.
 | PA T44 · un documento e un foglio vuoti | PA | fatto (in main, #319) | nessuno | basso: due comandi che creano file, dietro le loro feature | M | test d'integrazione di `fub-host`, anche con `--no-default-features` |
 | PA T46 · le parole della scheda di un componente | PA | da fare (D18 A) | K2 in `main` | basso: solo testi del catalogo | S | `i18n/lexicon-settings.test.ts` |
 | PA T47 · i 44 px del tocco sul telefono, senza deformare | PA | fatto (in main, #319, con le baseline del runner) | nessuno | basso: solo CSS del telefono | S | la scena `mobile-settings` di `bench/scene.mjs` (`bench:verify`, `bench:a11y`) |
-| PA T48 · il verde di serie | PA | da fare (D25 C) | niente (il logo definitivo conferma 160); mai con un task che rifà baseline | medio: cambia ogni schermata, le baseline vengono dal runner | M | `recipe.test.ts`, `colori.test.ts`, `theme:verify`, `cargo test -p fub-host` |
+| PA T48 · il verde di serie | PA | integrato (D25 C); baseline dal runner con la consegna 3 | niente (il logo definitivo conferma 160); mai con un task che rifà baseline | medio: cambia ogni schermata, le baseline vengono dal runner | M | `recipe.test.ts`, `colori.test.ts`, `theme:verify`, `cargo test -p fub-host` |
 | PA T53 · #237 R05–R08 e A03 | PA | R05–R08 fatte; A03 dopo S2 T10 (D21 A) | S2 T10 per A03 | basso | M | un test per voce nel proprietario |
 | PA T54 · l'editor di testo vestito dal tema | PA | da fare (D22 A) | T35; prima di T41; mai con S2 T20 o la griglia T2–T3 | medio: tocca la pelle di ogni tema | M | Vitest di `theme.ts`, `check-inline-theme.mjs` |
 
@@ -5525,7 +5525,12 @@ Fatto quando: la serie è verde nelle due luci e nel contrasto alto; il
 per ogni campione e per dieci tinte libere); `colori.test.ts` è verde; le
 baseline nuove vengono dal runner.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run theme:generate && npm run theme:verify && npx vitest run src/theme src/avvio; cargo test -p fub-host
-Stato: [ ] da fare
+Stato: [~] integrato · 6dc284af..b0d938cf (cherry-pick fino a b0d938cf) ·
+smeraldo 160 di serie, `statusHue` coi 30°, l'avvio legato alla ricetta da
+`colori.test.ts`; in più i ripieghi `--paper-*` di `structure.css` e il
+fondo nativo delle finestre (`fub-app/src/avvio.rs`), legati dai loro test;
+chi aveva salvato 265 lo ritrova · mancano tutte le baseline, dal runner con
+la consegna 3
 
 ## T49 · Il logo
 
