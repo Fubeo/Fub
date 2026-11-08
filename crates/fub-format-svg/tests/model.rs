@@ -41,7 +41,10 @@ fn inside(model: &DocumentModel) -> &[Block] {
 fn the_descriptors_speak_of_fub_not_of_fubdraw() {
     // FubDraw è il nome tecnico del formato (ADR 0203), non un prodotto che
     // chi usa Fub conosce: nella lista dei formati non compare (PA T33).
-    for name in [SvgProvider.descriptor().name, FubannProvider.descriptor().name] {
+    for name in [
+        SvgProvider.descriptor().name,
+        FubannProvider.descriptor().name,
+    ] {
         assert!(!name.contains("FubDraw"), "{name}");
     }
 }
