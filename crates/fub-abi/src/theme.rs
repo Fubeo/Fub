@@ -21,6 +21,15 @@ pub const MAX_THEME_FONT_TOTAL_BYTES: u64 = 6 * 1024 * 1024;
 /// Quanto può essere lungo il nome di una famiglia di caratteri del tema.
 pub const MAX_THEME_FONT_FAMILY: usize = 64;
 
+/// Quante icone (nomi) il set di un tema può ridisegnare al massimo.
+pub const MAX_THEME_ICONS: usize = 512;
+/// Quanti tracciati (`d`) può avere un'icona del tema.
+pub const MAX_THEME_ICON_PATHS: usize = 8;
+/// Quanto possono pesare, insieme, i tracciati di un'icona del tema.
+pub const MAX_THEME_ICON_BYTES: usize = 4 * 1024;
+/// Quanto può pesare il file del set di icone di un tema.
+pub const MAX_THEME_ICONS_BYTES: u64 = 256 * 1024;
+
 /// La versione del contratto che un tema dichiara di implementare.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -147,6 +156,13 @@ pub struct ThemeManifest {
     /// la forma sul filo dei temi esistenti non cambia.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fonts: Vec<ThemeFont>,
+    /// Il set di icone del tema, da `theme-2`: il nome di un asset JSON
+    /// (`icons.json`) che ridisegna, per nome, le icone della shell. Un
+    /// manifest che non ne porta non scrive il campo: la forma sul filo dei
+    /// temi esistenti non cambia. La regola del file e delle voci sta in
+    /// [`rules::theme_icons`](crate::rules::theme_icons).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icons: Option<String>,
 }
 
 fn default_theme_motion() -> Vec<ThemeMotion> {
@@ -180,6 +196,7 @@ mod tests {
         assert!(manifest.settings.is_empty());
         assert_eq!(manifest.extends, None);
         assert!(manifest.fonts.is_empty());
+        assert_eq!(manifest.icons, None);
         assert_eq!(serde_json::to_string(&manifest).expect("wire"), raw);
     }
 
@@ -198,6 +215,14 @@ mod tests {
         assert_eq!(manifest.fonts.len(), 2);
         assert_eq!(manifest.fonts[0].family, "Carta Serif");
         assert_eq!(manifest.fonts[1].style, ThemeFontStyle::Italic);
+        assert_eq!(serde_json::to_string(&manifest).expect("wire"), raw);
+    }
+
+    #[test]
+    fn a_manifest_with_icons_names_the_set_on_the_wire() {
+        let raw = r#"{"id":"com.acme.carta","name":"Carta","version":"1.0.0","engine":"theme-2","lights":["light"],"asset_namespace":"theme://com.acme.carta/","motion":["opacity","transform"],"extends":"fub.serie","icons":"icons.json"}"#;
+        let manifest: ThemeManifest = serde_json::from_str(raw).expect("manifest");
+        assert_eq!(manifest.icons.as_deref(), Some("icons.json"));
         assert_eq!(serde_json::to_string(&manifest).expect("wire"), raw);
     }
 
@@ -254,6 +279,7 @@ mod tests {
             settings: Vec::new(),
             extends: None,
             fonts: Vec::new(),
+            icons: None,
         };
 
         assert_eq!(manifest.engine.as_str(), THEME_ENGINE);
