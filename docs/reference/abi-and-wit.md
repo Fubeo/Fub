@@ -237,9 +237,35 @@ Sono compatibili:
 - nuova interfaccia.
 
 Un nuovo caso o una nuova funzione in un'interfaccia **esportata** dal plugin
-vanno trattati come un campo nuovo finché un test non dice il contrario:
-l'host controlla con `GuestIndices` il tipo di ogni funzione dell'interfaccia
-esportata, e non c'è una prova che un caso o una funzione in più passino.
+rompono i plugin già compilati, come un campo nuovo, anche quando stanno in
+coda. Quando l'host lega un'interfaccia esportata (`GuestIndices`) wasmtime
+ne controlla il tipo per intero: un `enum` o un `variant` deve avere
+esattamente i casi attesi, nello stesso ordine, e ogni funzione che l'host
+conosce deve esserci. Lo prova
+`crates/fub-wasm-host/tests/new_case_and_function.rs`, con componenti veri
+compilati contro la WIT di prima:
+
+- un plugin compilato senza `data`, l'ultimo caso dell'`enum component-kind`
+  di `plugin`, non si istanzia («expected enum of 4 names, found 3 names»);
+- un plugin compilato senza `run-job`, l'ultima funzione di `plugin`, non si
+  istanzia: l'host non trova la funzione;
+- lo stesso vale per un `variant` con un caso in coda («expected variant of 3
+  cases, found 2 cases»), provato su un'interfaccia di prova più piccola,
+  davanti alla quale lo stesso guest con l'host uguale funziona.
+
+Il caso nuovo non arriva mai a un guest vecchio. L'host di Fub è tipizzato e
+lo rifiuta al caricamento; per la via dinamica di wasmtime (`Func::call` con
+un `Val`) il valore si abbassa secondo il tipo del guest, e un caso che il
+guest non conosce è un errore restituito all'host, non una trap. Quell'errore
+però chiude l'istanza: la chiamata dopo, anche con un caso noto, è una trap
+«cannot enter component instance».
+
+Contro `0.2.0` e dopo, quindi, un `enum` o un `variant` raggiunto da
+un'interfaccia esportata non prende casi nuovi, e un'interfaccia esportata
+non prende funzioni nuove: le novità arrivano con interfacce nuove, come per
+i record. `wit_additivity.rs` per ora applica la regola stretta solo ai
+record; varianti, enum e funzioni esportate restano con la regola di prima,
+che li ammette in coda, finché la regola non è decisa.
 
 La patch non cambia la superficie.
 
