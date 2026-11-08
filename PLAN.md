@@ -333,7 +333,7 @@ Se una di queste cade, la stima si allunga.
 | PA T8 · la pagina della cornice del telefono | PA | da fare | nessuno | basso | S | guardie dei documenti |
 | PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | da fare (D7 A) | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
 | PA T10 · i due punti sciolti da ritrovare | PA | da fare (D10 B) | nessuno | basso | S | la causa trovata o la riga che chiude |
-| PA T13 · il corpus senza perdite | PA | in corso (coder, base c2a6521c) | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
+| PA T13 · il corpus senza perdite | PA | integrato in parte; il file in sola lettura sovrascritto aspetta l'utente | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
 | PA T19 · i test instabili del Rust | PA | fatto | nessuno | medio | M | 200 giri verdi o causa trovata |
 | PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | fatto | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
 | PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | fatto | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
@@ -3947,7 +3947,11 @@ Casi limite: il file che sparisce durante la prova; un file molto grande
 Fatto quando: `cargo test -p fub-host --test prealpha_corpus` passa sui
 tre sistemi nella CI completa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test prealpha_corpus
-Stato: [~] in corso · coder · base c2a6521c
+Stato: [~] integrato in parte · 2c9c9523 · 8 test verdi su Linux (aprire e
+chiudere, conflitto, file sparito, modifiche piccole; sola lettura coi motivi
+dell'host: docx protetto e cartella xlsx); manca la sola lettura per
+permesso del file: su Linux un file 0444 viene sovrascritto (rename in
+`storage/rooted.rs`), domanda all'utente; Windows e macOS dalla CI completa
 
 ## T14 · Il giro della pre-alpha sul banco: lo scheletro e il primo avvio
 
