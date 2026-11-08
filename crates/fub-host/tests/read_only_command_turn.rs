@@ -36,6 +36,10 @@ const FAILS: &str = "test.turn.fails";
 /// Di sola lettura, e invoca sé stesso.
 const SELF: &str = "test.turn.self";
 
+/// Un altro plugin, con un job che legge per [`READ`] e poi va avanti.
+const JOB_OWNER: &str = "test.turn.job";
+const JOB: &str = "reads-then-goes-on";
+
 const NOTE: &str = "nota.md";
 /// Quanto può metterci un salvataggio mentre una lettura è ferma: largo.
 const SAVE_LIMIT: Duration = Duration::from_secs(1);
@@ -487,5 +491,141 @@ fn the_vault_closed_while_a_read_runs_waits_for_it_and_takes_no_outcome() {
         *bench.gate.order.lock().unwrap(),
         vec!["read out", "deactivate"],
         "the plugin is deactivated only after its read is out"
+    );
+}
+
+/// Il plugin del job: invoca [`READ`] (del plugin [`OWNER`]) e, comunque vada,
+/// prova a leggere ancora. Annota l'esito della lettura annidata e se ha
+/// potuto continuare.
+struct JobPlugin {
+    gate: Arc<Gate>,
+}
+
+impl Plugin for JobPlugin {
+    fn manifest(&self) -> PluginManifest {
+        PluginManifest::core(JOB_OWNER, "Job that reads")
+    }
+
+    fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn deactivate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn run_job(
+        &self,
+        job: &str,
+        _payload: serde_json::Value,
+        host: &mut dyn HostApi,
+    ) -> Result<serde_json::Value, PluginError> {
+        if job != JOB {
+            return Err(PluginError::BadArgs("unknown job".into()));
+        }
+        let nested = host.run_command(READ, serde_json::Value::Null);
+        let order = &self.gate.order;
+        order.lock().unwrap().push(match nested {
+            Err(PluginError::Cancelled(_)) => "nested read cancelled",
+            Err(_) => "nested read failed otherwise",
+            Ok(_) => "nested read applied",
+        });
+        host.read_document(&DocId::new(NOTE))?;
+        order.lock().unwrap().push("job went on");
+        Ok(serde_json::json!({ "finished": true }))
+    }
+}
+
+struct JobBundle {
+    gate: Arc<Gate>,
+}
+
+impl Bundle for JobBundle {
+    fn manifest(&self) -> PluginManifest {
+        PluginManifest::core(JOB_OWNER, "Job that reads")
+    }
+
+    fn trust(&self) -> Trust {
+        Trust::Core
+    }
+
+    fn plugin(&self) -> Box<dyn Plugin> {
+        Box::new(JobPlugin {
+            gate: Arc::clone(&self.gate),
+        })
+    }
+
+    fn register(&self, _registrar: &mut Registrar<'_>) -> Vec<String> {
+        Vec::new()
+    }
+}
+
+/// Spegnere il plugin di una lettura annidata ferma **la lettura**, non il
+/// job che l'ha chiamata: il job riceve `Cancelled` da `invoke_command`, come
+/// da un comando che fallisce, e va avanti da sé. Il `deactivate` del plugin
+/// arriva solo dopo che la lettura è uscita.
+#[test]
+fn a_plugin_turned_off_stops_the_nested_read_and_not_the_job() {
+    let bench = bench();
+    bench
+        .host
+        .mount_bundle(
+            None,
+            Arc::new(JobBundle {
+                gate: Arc::clone(&bench.gate),
+            }),
+        )
+        .expect("the job bundle mounts");
+    std::thread::scope(|scope| {
+        let job = scope.spawn(|| {
+            bench
+                .host
+                .invoke_job(None, JOB_OWNER, JOB, serde_json::Value::Null)
+        });
+        arrived(&bench, READ);
+
+        let (off_tx, off_rx) = mpsc::channel();
+        let host = &bench.host;
+        scope.spawn(move || {
+            let _ = off_tx.send(host.unmount_bundle(None, OWNER));
+        });
+        // Come per la chiusura: uno spegnimento che non aspetta la lettura
+        // risponde subito.
+        let early = off_rx.recv_timeout(Duration::from_millis(200));
+        let order_meanwhile = bench.gate.order.lock().unwrap().clone();
+        bench.gate.release();
+        let finished = job.join().expect("the job thread");
+        let waited = early.is_err();
+        let off = match early {
+            Ok(off) => Ok(off),
+            Err(_) => off_rx.recv_timeout(WATCHDOG),
+        };
+
+        assert!(
+            order_meanwhile.is_empty(),
+            "nothing was torn down while the read was in flight: {order_meanwhile:?}"
+        );
+        assert!(waited, "turning the plugin off waited for its read");
+        let errors = off
+            .expect("turning off finishes once the read is out")
+            .expect("turn off");
+        assert!(errors.is_empty(), "{errors:?}");
+        let finished = finished.expect("the job is not cancelled: it finishes by itself");
+        assert_eq!(finished["finished"], true);
+    });
+    let order = bench.gate.order.lock().unwrap().clone();
+    let at = |what: &str| {
+        order
+            .iter()
+            .position(|seen| *seen == what)
+            .unwrap_or_else(|| panic!("`{what}` happened: {order:?}"))
+    };
+    assert!(
+        at("read out") < at("deactivate"),
+        "the plugin is deactivated only after its read is out: {order:?}"
+    );
+    assert!(
+        at("nested read cancelled") < at("job went on"),
+        "the job got `Cancelled` and went on: {order:?}"
     );
 }

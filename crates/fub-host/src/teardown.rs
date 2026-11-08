@@ -1,7 +1,7 @@
 //! Teardown della sessione e del toggle utente, senza callback sotto guard.
 
 use fub_abi::PluginError;
-use fub_kernel::{RegistryError, Workspace};
+use fub_kernel::{Barred, RegistryError, Workspace};
 
 use crate::custody::Custody;
 use crate::jobs::{drain_events, JobHost};
@@ -26,28 +26,31 @@ pub(crate) fn flush_indexes(
     Ok(errors)
 }
 
+/// Ferma le letture in volo di `id` e le aspetta, e sbarra le nuove finché la
+/// guardia vive: chi smonta la tiene fino al ritiro dei provider.
+///
+/// Le letture non tengono il turno, quindi non basta prenderlo per escluderle.
+/// Fermarle è ciò che rende l'attesa sicura col turno in mano (chi lo tiene può
+/// essere anche chi chiama): una lettura che chiede il turno lo chiede cedendo,
+/// e cede appena vede la bandiera. Si alza solo la bandiera della lettura: il
+/// job che l'ha invocata riceve `Cancelled` e non è annullato. Si aspetta
+/// senza il lucchetto del workspace, che una lettura prende per finire.
+pub(crate) fn stop_reads(workspace: &Custody<Workspace>, id: &str) -> Result<Barred, PluginError> {
+    let reads = workspace.read()?.reads_in_flight();
+    let barred = reads.bar(id);
+    reads.cancel_owner(id);
+    reads.wait_owner_idle(id);
+    Ok(barred)
+}
+
 pub(crate) fn unmount(
     workspace: &Custody<Workspace>,
     registry: &Custody<BundleRegistry>,
     id: &str,
 ) -> Result<Vec<PluginError>, PluginError> {
     let _turn = workspace.write_turn();
-    // Le letture in volo del plugin non tengono il turno, quindi non lo si
-    // aspetta più: le si ferma e le si aspetta qui, prima di smontarne i
-    // provider. Fermarle è ciò che rende l'attesa sicura col turno in mano
-    // (chi lo tiene può essere anche chi chiama): una lettura che chiede il
-    // turno lo chiede cedendo, e cede appena vede la bandiera. Se una nuova
-    // lettura entra fra l'attesa e la preparazione, si ricomincia.
-    let prepared = loop {
-        let reads = workspace.read()?.reads_in_flight();
-        reads.cancel_owner(id);
-        reads.wait_owner_idle(id);
-        let mut ws = workspace.write()?;
-        match ws.prepare_plugin_teardown(id) {
-            Err(RegistryError::Busy(_)) if ws.reads_in_flight().busy(id) => continue,
-            prepared => break prepared,
-        }
-    };
+    let _barred = stop_reads(workspace, id)?;
+    let prepared = workspace.write()?.prepare_plugin_teardown(id);
     let mut prepared = match prepared {
         Ok(prepared) => prepared,
         Err(error) => {
