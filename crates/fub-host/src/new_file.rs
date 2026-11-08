@@ -37,6 +37,7 @@ use fub_abi::command::{
 use fub_abi::error::PluginError;
 use fub_abi::model::DocId;
 use fub_abi::rules::folders;
+use fub_abi::rules::path::resolution_key;
 use fub_abi::rules::path_policy::{self, NameFault, Naming, MAX_SEGMENT_BYTES};
 use fub_abi::text::{Arg, StringCatalog, Strings, Text};
 use fub_abi::traits::{CommandProvider, HostApi};
@@ -64,6 +65,8 @@ pub(crate) struct Words {
     pub(crate) untitled: &'static str,
     /// «il documento», con l'articolo.
     pub(crate) the: &'static str,
+    /// «Il documento», come comincia una frase.
+    pub(crate) the_start: &'static str,
     /// «del documento».
     pub(crate) of_the: &'static str,
     /// «un documento».
@@ -222,7 +225,7 @@ impl NewFile {
     /// Un template con le parole del formato.
     fn fill(&self, template: &str, words: &Words) -> String {
         template
-            .replace("%The%", &capitalized(words.the))
+            .replace("%The%", words.the_start)
             .replace("%the%", words.the)
             .replace("%of_the%", words.of_the)
             .replace("%a_new%", words.a_new)
@@ -295,7 +298,7 @@ impl NewFile {
             host.format_of(doc)
                 .is_some_and(|format| format.descriptor.id == self.format)
                 && extension(doc.as_str())
-                    .is_some_and(|ext| ext.eq_ignore_ascii_case(self.extension))
+                    .is_some_and(|ext| resolution_key(ext) == resolution_key(self.extension))
         };
         // Prima il vault, poi il nome: senza il formato nessun nome ne fa
         // nascere uno.
@@ -420,14 +423,6 @@ fn extension(path: &str) -> Option<&str> {
     last.rsplit_once('.').map(|(_, ext)| ext)
 }
 
-fn capitalized(text: &str) -> String {
-    let mut chars = text.chars();
-    match chars.next() {
-        Some(first) => first.to_uppercase().chain(chars).collect(),
-        None => String::new(),
-    }
-}
-
 /// Il comando di un [`NewFile`] come provider di comandi del suo bundle.
 pub(crate) struct NewFileCommands(pub(crate) &'static NewFile);
 
@@ -472,6 +467,7 @@ mod tests {
                 desc: "Crea una prova vuota.",
                 untitled: "Prova senza titolo",
                 the: "la prova",
+                the_start: "La prova",
                 of_the: "della prova",
                 a: "una prova",
                 a_new: "una prova nuova",
@@ -484,6 +480,7 @@ mod tests {
                 desc: "Creates an empty test.",
                 untitled: "Untitled test",
                 the: "the test",
+                the_start: "The test",
                 of_the: "the test",
                 a: "a test",
                 a_new: "a new test",
