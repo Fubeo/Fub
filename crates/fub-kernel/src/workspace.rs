@@ -2235,6 +2235,40 @@ pub type BeforeWriteHook =
 /// It can only undo that write while it is still the latest write to the key.
 pub struct PermissionInitialization(crate::settings::MachineSettingRevision);
 
+/// Il rifiuto di un comando che invoca sé stesso, con la catena che lo mostra.
+///
+/// Una frase sola per i quattro posti che lo controllano: la pila condivisa
+/// (sincrona, staccata, rebuild) e la catena di una lettura col suo frame.
+fn self_invocation(stack: &[String], command: &str) -> PluginError {
+    let mut round = stack.to_vec();
+    round.push(command.to_string());
+    PluginError::BadArgs(
+        format!(
+            "un comando non può invocare sé stesso: {}",
+            round.join(" → ")
+        )
+        .into(),
+    )
+}
+
+/// Esegue il codice di un provider preparato, una volta sola: la porta comune
+/// di [`PreparedCommand::invoke`] e [`PreparedReadOnlyCommand::invoke`].
+fn invoke_prepared(
+    owner: &str,
+    command: &str,
+    args: &mut Option<serde_json::Value>,
+    mode: InvokeMode,
+    provider: &dyn CommandProvider,
+    host: &mut dyn HostApi,
+) -> std::result::Result<CommandOutcome, PluginError> {
+    let args = args.take().ok_or_else(|| {
+        PluginError::Internal("una chiamata preparata è stata invocata due volte".into())
+    })?;
+    crate::safety::calling(owner, Gate::Command, command, || {
+        provider.invoke(command, args, mode, host)
+    })
+}
+
 /// Una chiamata a `CommandProvider` preparata sotto lock e invocabile fuori.
 ///
 /// Contiene anche il frame da ripristinare al rientro: attore, batch, pila e
@@ -2277,12 +2311,14 @@ impl PreparedCommand {
         &mut self,
         host: &mut dyn HostApi,
     ) -> std::result::Result<CommandOutcome, PluginError> {
-        let args = self.args.take().ok_or_else(|| {
-            PluginError::Internal("una chiamata preparata è stata invocata due volte".into())
-        })?;
-        crate::safety::calling(&self.owner, Gate::Command, &self.command, || {
-            self.provider.invoke(&self.command, args, self.mode, host)
-        })
+        invoke_prepared(
+            &self.owner,
+            &self.command,
+            &mut self.args,
+            self.mode,
+            self.provider.as_ref(),
+            host,
+        )
     }
 }
 
@@ -2347,12 +2383,14 @@ impl PreparedReadOnlyCommand {
         &mut self,
         host: &mut dyn HostApi,
     ) -> std::result::Result<CommandOutcome, PluginError> {
-        let args = self.args.take().ok_or_else(|| {
-            PluginError::Internal("una chiamata preparata è stata invocata due volte".into())
-        })?;
-        crate::safety::calling(&self.owner, Gate::Command, &self.command, || {
-            self.provider.invoke(&self.command, args, self.mode, host)
-        })
+        invoke_prepared(
+            &self.owner,
+            &self.command,
+            &mut self.args,
+            self.mode,
+            self.provider.as_ref(),
+            host,
+        )
     }
 }
 
@@ -11619,15 +11657,7 @@ impl Workspace {
         spec.validate_args(&args)?;
 
         if outer.iter().any(|c| c == command) {
-            let mut round = outer.to_vec();
-            round.push(command.to_string());
-            return Err(PluginError::BadArgs(
-                format!(
-                    "un comando non può invocare sé stesso: {}",
-                    round.join(" → ")
-                )
-                .into(),
-            ));
+            return Err(self_invocation(outer, command));
         }
         let why = if mode.is_dry_run() {
             "una simulazione non scrive"
@@ -11706,15 +11736,7 @@ impl Workspace {
         spec.validate_args(&args)?;
 
         if self.providers.command_stack.iter().any(|c| c == command) {
-            let mut round = self.providers.command_stack.clone();
-            round.push(command.to_string());
-            return Err(PluginError::BadArgs(
-                format!(
-                    "un comando non può invocare sé stesso: {}",
-                    round.join(" → ")
-                )
-                .into(),
-            ));
+            return Err(self_invocation(&self.providers.command_stack, command));
         }
 
         if self.providers.commands[at].id == crate::maintenance::MAINTENANCE_ID {
@@ -11775,15 +11797,7 @@ impl Workspace {
         spec.validate_args(&args)?;
 
         if self.providers.command_stack.iter().any(|id| id == command) {
-            let mut round = self.providers.command_stack.clone();
-            round.push(command.to_string());
-            return Err(PluginError::BadArgs(
-                format!(
-                    "un comando non può invocare sé stesso: {}",
-                    round.join(" → ")
-                )
-                .into(),
-            ));
+            return Err(self_invocation(&self.providers.command_stack, command));
         }
 
         let owner = self.providers.commands[at].id.clone();
@@ -11985,15 +11999,7 @@ impl Workspace {
         // profondità da limitare con un numero: è un errore di chi lo ha
         // scritto, e l'unica risposta utile lo nomina.
         if self.providers.command_stack.iter().any(|c| c == command) {
-            let mut round = self.providers.command_stack.clone();
-            round.push(command.to_string());
-            return Err(PluginError::BadArgs(
-                format!(
-                    "un comando non può invocare sé stesso: {}",
-                    round.join(" → ")
-                )
-                .into(),
-            ));
+            return Err(self_invocation(&self.providers.command_stack, command));
         }
 
         // **La manutenzione la esegue il kernel** (§15.2). L'id è passato dalla
