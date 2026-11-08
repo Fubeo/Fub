@@ -219,6 +219,12 @@ record of 16 fields, found 11 fields»). Lo prova
 della regola è nell'[ADR 0235](../decisions/0235-un-record-pubblicato-non-cresce.md).
 
 Dal primo rilascio di una versione, quindi, un record pubblicato non cresce.
+`fub:abi@0.2.0`, la versione della pre-alpha, è congelata in
+`wit/frozen/0.2.0.wit`, e `wit_additivity.rs` applica la regola per
+snapshot: contro `0.2.0` e ogni versione dopo un record che attraversa il
+confine (raggiunto da una firma del `world`) ha gli stessi campi, nello stesso
+ordine; contro `0.1.0` e `0.1.1` resta la regola di allora, che ammetteva il
+campo in coda.
 Le novità arrivano con interfacce nuove: l'host cerca gli export una
 interfaccia alla volta, e un plugin vecchio quell'interfaccia semplicemente
 non ce l'ha, per cui l'host prende il default.
