@@ -330,7 +330,7 @@ Se una di queste cade, la stima si allunga.
 | PA T4, T5 · #237 R01–R03 | PA | T4 e T5 fatti (baseline di `conflitto-lettura` dal runner) | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione; R01 si chiude col test se non si riproduce |
 | PA T6, T7 · #289 | PA | T6 e T7 fatti | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
 | PA T58 · la guardia stretta anche per enum, variant e funzioni esportate | PA | fatto (ADR 0238) | T7 | medio: confine WASM, ADR 0235 | M | `wit_additivity`, componente vero anche per gli import |
-| PA T8 · la pagina della cornice del telefono | PA | da fare | nessuno | basso | S | guardie dei documenti |
+| PA T8 · la pagina della cornice del telefono | PA | fatto | nessuno | basso | S | guardie dei documenti |
 | PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | da fare (D7 A) | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
 | PA T10 · i due punti sciolti da ritrovare | PA | da fare (D10 B) | nessuno | basso | S | la causa trovata o la riga che chiude |
 | PA T13 · il corpus senza perdite | PA | integrato in parte; la sola lettura per permesso del file con T59 | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
@@ -3764,7 +3764,13 @@ Fatto quando: le guardie dei documenti passano (`check-doc-links`,
 `check-doc-orphans`, `check-doc-size`, `check-markdown-style`,
 `check-prose`, `check-tables`).
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · 774e24d2 · la soglia del telefono non è
+800 px (quello è il `minWidth` della finestra desktop): il telefono è un
+altro ingresso (`mobile.html`), con la sola soglia dei 600 px; le cartelle
+sono due (`shells/mobile/` e `shells/scrittoio/mobile/`). Trovato:
+i filtri `paths` di `mobile.yml` non coprono `shells/scrittoio/mobile/**`
+né `theme/scrittoio/`, quindi una PR che cambia solo la cornice del
+telefono non costruisce l'APK (da correggere fuori da T8)
 
 ## T9 · Su Windows il tempo scaduto ferma anche i figli della CLI Craft
 
