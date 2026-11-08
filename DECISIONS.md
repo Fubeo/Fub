@@ -61,6 +61,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · fub-pre-alpha (orchestratore) · ogni componente
+  d'esempio (`esempi/*/Cargo.toml`) e `tools/varco-wasm` ha un
+  `[workspace]` suo, vuoto (844c5f5b) · i coder lavorano in worktree
+  annidati sotto `~/Progetti/Fub/.claude/worktrees/`: lì cargo risaliva al
+  `Cargo.toml` del checkout esterno, che non li elenca, e i passi WASM di
+  `check.sh` cadevano. Il comportamento fuori dai worktree annidati non
+  cambia (erano già esclusi dalla radice). Serve prima di PA T7, che prova
+  un componente vero.
+
 - 2026-11-08 · fub-pre-alpha (orchestratore) · PA T3 si divide in due
   parti fatte dallo stesso coder: prima `fub-kernel` dà ai comandi in sola
   lettura (`!spec.scope.writes`) un frame tutto loro (niente batch, nessun
