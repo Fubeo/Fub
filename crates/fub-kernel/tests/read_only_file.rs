@@ -169,10 +169,12 @@ fn il_rifiuto_arriva_al_contratto_come_permesso_negato() {
         source,
     }
     .into();
-    assert!(
-        matches!(&plugin, PluginError::PermissionDenied(text)
-            if text.to_string() == format!("il file è in sola lettura: {locked}")),
-        "{plugin:?}"
+    let PluginError::PermissionDenied(text) = &plugin else {
+        panic!("a typed refusal, not {plugin:?}");
+    };
+    assert_eq!(
+        text.to_string(),
+        format!("il file è in sola lettura: {locked}")
     );
 
     // Gli altri permessi negati del sistema restano `Io`.
