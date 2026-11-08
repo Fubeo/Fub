@@ -270,7 +270,7 @@ fn run_blocked<T: Send + 'static>(
     let observation = entered
         .recv_timeout(TIMEOUT)
         .expect("callback re-entry completes before the timeout");
-    let foreign_read_progressed = super::read_comes_free(&workspace);
+    let foreign_read_progressed = super::read_comes_free(workspace);
 
     // Si rilascia prima di ogni assert: anche una regressione non lascia il
     // thread del provider sospeso dietro al banco.
