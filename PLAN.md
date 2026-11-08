@@ -336,7 +336,7 @@ Se una di queste cade, la stima si allunga.
 | PA T13 · il corpus senza perdite | PA | fatto (in main, #317) | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
 | PA T59 · un file in sola lettura non si sovrascrive | PA | fatto (in main, #317) | T13 | medio: la scrittura del kernel, tre sistemi | S | test del kernel e `prealpha_corpus` sui tre sistemi |
 | PA T60 · le altre prove del lucchetto a un colpo solo | PA | fatto | T19 | basso: solo test | M | 200 corse verdi delle due cadute |
-| PA T61 · la CI Mobile per la cornice del telefono | PA | da fare | nessuno | basso: solo il filtro di un workflow | S | una PR che tocca solo la cornice fa partire `mobile.yml` |
+| PA T61 · la CI Mobile per la cornice del telefono | PA | integrato; si vede partire con la consegna 2 | nessuno | basso: solo il filtro di un workflow | S | una PR che tocca solo la cornice fa partire `mobile.yml` |
 | PA T19 · i test instabili del Rust | PA | fatto | nessuno | medio | M | 200 giri verdi o causa trovata |
 | PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | fatto | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
 | PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | fatto | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
@@ -6199,4 +6199,10 @@ allineamento).
 Fatto quando: i `paths` coprono la cornice del telefono; la PR di consegna
 che porta T61 fa partire `mobile.yml` (la si vede nella lista dei check).
 Prova: scripts/check.sh --rapido; `actionlint` se c'è, altrimenti la CI
-Stato: [ ] da fare
+Stato: [~] integrato · 9cbd4be1..b8b30682 · entra `shells/scrittoio/mobile/**`
+(solo il telefono la importa) e, per scelta dell'orchestratore,
+`Cargo.lock`; restano fuori `theme/scrittoio/` e il resto del client
+(comuni, il build Vite del desktop fa anche `mobile.html`) e le righe `cfg`
+del telefono nei crate comuni (provate sul push in main). Manca: vedere
+partire `mobile.yml` nella PR della consegna 2. Se Scrittoio 2 rinomina
+`shells/scrittoio/mobile/`, il filtro va spostato
