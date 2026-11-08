@@ -275,16 +275,10 @@ TypeScript interni e iniettati dal chiamante; non attraversano IPC, WIT o ABI.
 
 ### Markdown: Source, Live e Reading
 
-Source, Live e Reading sono tre viste sullo stesso `TextEngine` e sullo stesso
-buffer della `DocumentSession`: il cambio modo riusa la vista di scrittura e
-Reading ridisegna dal buffer corrente, senza salvataggio imposto.
-
-Con un conflitto aperto la Lettura mostra quindi il testo di chi scrive, non la
-versione sul disco, in ogni riquadro sulla nota. La fascia del conflitto
-(`drawConflict` in `apps/client/src/panels/document.ts`) resta con le sue
-azioni, e nel riquadro in una modalità di lettura aggiunge la riga «Stai
-leggendo la tua versione, non ancora salvata». Il cambio di modo ridisegna la
-fascia; risolto il conflitto, la fascia e la riga spariscono.
+Source, Live e Reading sono tre viste sullo stesso `TextEngine` e buffer della
+`DocumentSession`: il cambio modo riusa la vista di scrittura; Reading ridisegna
+dal buffer corrente, senza salvataggio imposto, e in conflitto mostra il testo
+non salvato, che la fascia del conflitto (`drawConflict`) dice in una riga.
 
 I blocchi Live inattivi e Reading condividono lo stesso renderer locale in
 `apps/client/src/editors/text/profiles/markdown/render*.ts` e lo stesso
