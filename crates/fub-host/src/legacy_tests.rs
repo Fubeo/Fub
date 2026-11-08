@@ -40,3 +40,52 @@ mod the_watcher_window;
 mod unlinked_mentions;
 mod view_provider_stale;
 mod watcher_factory_lock;
+
+use std::sync::RwLockReadGuard;
+use std::time::{Duration, Instant};
+
+use crate::custody::Hold;
+use crate::Custody;
+
+/// Quanto si aspetta che una custodia torni libera prima di dire che qualcuno
+/// la trattiene.
+pub(crate) const FREE_WITHIN: Duration = Duration::from_secs(5);
+
+/// Il prestito condiviso, riprovato fino a `within`.
+///
+/// `try_read` è una fotografia di un istante. Un host aperto ha i suoi thread
+/// `fub-job-*`, che prendono il workspace per un attimo quando vogliono: un
+/// `None` singolo confonde «trattenuto da chi si sta provando» con «preso un
+/// istante da un lavoro indipendente» (#98, #70, #270, #292). Il primo resta
+/// preso fino alla scadenza, e la prova cade lo stesso; il secondo si libera.
+pub(crate) fn try_read_within<T>(
+    custody: &Custody<T>,
+    within: Duration,
+) -> Option<RwLockReadGuard<'_, T>> {
+    retry_within(within, || custody.try_read())
+}
+
+/// Il prestito esclusivo, riprovato fino a `within`: vedi [`try_read_within`].
+pub(crate) fn try_write_within<T>(custody: &Custody<T>, within: Duration) -> Option<Hold<'_, T>> {
+    retry_within(within, || custody.try_write())
+}
+
+/// Lettura e scrittura si possono avere entro `within`, ognuna per conto suo.
+pub(crate) fn comes_free<T>(custody: &Custody<T>, within: Duration) -> bool {
+    let deadline = Instant::now() + within;
+    try_read_within(custody, within).is_some()
+        && try_write_within(custody, deadline.saturating_duration_since(Instant::now())).is_some()
+}
+
+fn retry_within<G>(within: Duration, mut attempt: impl FnMut() -> Option<G>) -> Option<G> {
+    let deadline = Instant::now() + within;
+    loop {
+        if let Some(guard) = attempt() {
+            return Some(guard);
+        }
+        if Instant::now() >= deadline {
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(1));
+    }
+}
