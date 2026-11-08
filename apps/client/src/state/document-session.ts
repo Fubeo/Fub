@@ -531,10 +531,21 @@ export class DocumentSession implements DraftBuffer {
    * lascia testo, stato sporco ed esito com'erano, invece di spacciare per
    * salvato un testo che il disco non contiene più. Nel frattempo niente parte
    * da solo: i timer si fermano subito e si riarmano se la lettura manca.
+   *
+   * Un buffer sporco va prima in bozza: è la copia che il recupero ritrova
+   * dopo che il disco lo ha sostituito. Se la bozza non si scrive la ricarica
+   * non parte, e dà `unavailable` con testo e stato com'erano (#237 R02).
    */
   async forceReload(): Promise<ReloadResult> {
     if (!this.#isOpen()) return { kind: "missing" };
     this.settlePending();
+    if (this.#state.dirty && !(await this.flushDraft())) {
+      // `flushDraft` ha fermato la cadenza della bozza: si riarma, così il
+      // buffer torna protetto appena il disco lo permette.
+      if (this.#isOpen() && this.#state.dirty) this.scheduleDraft();
+      return this.#isOpen() ? { kind: "unavailable" } : { kind: "missing" };
+    }
+    if (!this.#isOpen()) return { kind: "missing" };
     this.#activityGeneration++;
     const generation = ++this.#externalGeneration;
     this.#clearSaveTimer();

@@ -129,11 +129,11 @@ pub use syntax::{SyntaxConflict, SyntaxRegistry, SyntaxSnapshot};
 pub use vault::{data_root, PreparedIgnoreCheck, TrashEntry, Vault, FUB_DIR, TRASH_DIR};
 pub use viewstate::ViewStates;
 pub use workspace::{
-    new_doc_id, valid_doc_id, CatchUpSnapshot, CompletedExternalAssetRename, CompletedSyncChange,
-    ExternalRenamePlan, GraphUpdate, IndexBatchStep, Indexing, Opening, ParsedBatch, ParsedChange,
-    ParsedExplicitRename, ParsedExternalAssetRename, ParsedExternalRename,
-    PendingExternalAssetRename, PendingSyncChange, PreparedCatchUp, PreparedDocumentBytesWrite,
-    PreparedExplicitRename, PreparedExternalAssetRename, PreparedResourceOpen,
-    PreparedResourceRead, PreparedTimerCursors, Rejected, SyncPlan, Trust, Workspace, INDEX_JOB,
-    INDEX_WRITE_BUDGET, MAIN_PANE,
+    new_doc_id, valid_doc_id, Barred, CatchUpSnapshot, CompletedExternalAssetRename,
+    CompletedSyncChange, ExternalRenamePlan, GraphUpdate, IndexBatchStep, Indexing, Opening,
+    ParsedBatch, ParsedChange, ParsedExplicitRename, ParsedExternalAssetRename,
+    ParsedExternalRename, PendingExternalAssetRename, PendingSyncChange, PreparedCatchUp,
+    PreparedDocumentBytesWrite, PreparedExplicitRename, PreparedExternalAssetRename,
+    PreparedReadOnlyCommand, PreparedResourceOpen, PreparedResourceRead, PreparedTimerCursors,
+    ReadsInFlight, Rejected, SyncPlan, Trust, Workspace, INDEX_JOB, INDEX_WRITE_BUDGET, MAIN_PANE,
 };

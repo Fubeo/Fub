@@ -657,6 +657,21 @@ fn close_session_resources(
     if let Err(error) = drain_events(workspace) {
         errors.push(error);
     }
+    // I comandi di sola lettura non tengono il turno: chi era in volo quando
+    // la chiusura è cominciata si ferma alla prossima chiamata all'host e si
+    // aspetta qui, prima che i provider vengano smontati. Si aspetta senza
+    // il lucchetto del workspace (una lettura, per finire, ne prende un
+    // prestito condiviso); le letture lanciate dalla chiusura stessa non sono
+    // in volo e non fanno aspettare.
+    match workspace.read() {
+        Ok(ws) => {
+            let reads = ws.reads_in_flight();
+            drop(ws);
+            reads.cancel_all();
+            reads.wait_idle();
+        }
+        Err(error) => errors.push(error),
+    }
 
     // Flush globale, corpi plugin e indici sono callback distinte. Ogni
     // errore viene raccolto, senza saltare il resto del teardown.
@@ -4591,6 +4606,26 @@ impl Host {
         if command == FOLDER_CREATE {
             let result = invoke_folder_create(&workspace, args, mode);
             return self.localized_host_result(vault, result);
+        }
+        // Un comando che si è dichiarato di sola lettura ha il suo frame e
+        // **non** prende il turno: una lettura lunga (un'anteprima, uno
+        // strumento dell'AI) non ferma i salvataggi di chi scrive.
+        // La bandiera è quella che la chiusura del vault o lo spegnimento del
+        // suo plugin alzano per fermarlo; fuori non c'è nessuno da fermare.
+        let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let read_only = workspace.read()?.prepare_read_only_provider_command(
+            command,
+            args.clone(),
+            mode,
+            &[],
+            &cancel,
+            &[],
+        )?;
+        if let Some(prepared) = read_only {
+            let host = JobHost::new(workspace.clone(), prepared.owner().to_string())
+                .in_mode(prepared.host_mode())
+                .cancelled_by(cancel);
+            return crate::jobs::run_read_only_command(&workspace, host, prepared);
         }
         // Il turno serializza gli altri writer ma **non** è il RwLock del
         // workspace: fra prepare e finalize i reader possono entrare, e il

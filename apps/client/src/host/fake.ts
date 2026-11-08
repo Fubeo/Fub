@@ -336,7 +336,10 @@ export interface FakeHost {
   /// Ciò che la porta avrebbe fatto **non lo fa**: una scrittura guasta non
   /// lascia i byte, o un banco che chiede «il disco rifiuta» leggerebbe il file
   /// nuovo e crederebbe di aver provato il contrario.
-  fault(gate: string, reason?: string): () => void;
+  ///
+  /// Un `PluginError` al posto della frase rifiuta con l'errore tipizzato,
+  /// come il backend vero: un permesso negato, un conflitto.
+  fault(gate: string, reason?: string | PluginError): () => void;
 
   /// Chiede di chiudere la finestra, e **aspetta** ciò che la shell fa prima.
   ///
@@ -556,7 +559,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const throttles = new Map<string, Promise<void>>();
 
   /// Le porte guaste, col motivo che rispondono.
-  const faults = new Map<string, string>();
+  const faults = new Map<string, string | PluginError>();
+  const faultError = (fault: string | PluginError): Error | PluginError =>
+    typeof fault === "string" ? new Error(fault) : fault;
 
   /// Gli argomenti di una porta con il **vault nominato** in coda, ma solo se la
   /// chiamata lo nomina: le asserzioni sulle chiamate senza vault restano quelle
@@ -589,7 +594,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       // **guardandola**: una promessa rifiutata che nessuno ascolta è un
       // avviso di runtime in mezzo all'output del banco.
       void (result as Promise<unknown>).catch(() => {});
-      return Promise.reject(new Error(fault)) as T;
+      return Promise.reject(faultError(fault)) as T;
     }
     const throttle = throttles.get(name);
     // La chiamata è **già registrata**: un banco che aspetta «la scrittura è
@@ -608,7 +613,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   ): Promise<T> {
     calls.push({ gate: name, args });
     const fault = faults.get(name);
-    if (fault !== undefined) return Promise.reject(new Error(fault));
+    if (fault !== undefined) return Promise.reject(faultError(fault));
     const run = () => Promise.resolve().then(effect);
     const throttle = throttles.get(name);
     return throttle ? throttle.then(run) : run();
@@ -1638,7 +1643,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         // passasse dentro risponderebbe «no» avendo già scritto.
         const fault = faults.get("writeDocument");
         if (fault !== undefined) {
-          return gate("writeDocument", named([id, source, base], vault), Promise.reject(new Error(fault)));
+          return gate("writeDocument", named([id, source, base], vault), Promise.reject(faultError(fault)));
         }
         // Nessun provider serve un file senza formato: il kernel rifiuta la
         // scrittura (`NoProvider`), e lo fa anche il finto — chi salva un
@@ -1709,7 +1714,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         calls.push({ gate: "invokeCommand", args: callArgs });
         const execute = () => {
           const fault = faults.get("invokeCommand");
-          if (fault !== undefined) return Promise.reject(new Error(fault));
+          if (fault !== undefined) return Promise.reject(faultError(fault));
           // Un comando che rifiuta **rifiuta la promessa**, come attraverso l'IPC:
           // un'eccezione sincrona qui sfuggirebbe a chi aspetta con `.catch`.
           try {

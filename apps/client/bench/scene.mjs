@@ -356,6 +356,26 @@ export const SCENE = onPage("shell", [
     },
   },
   {
+    id: "conflitto-lettura",
+    title: "Il conflitto in Lettura: la fascia resta, e dice quale testo si legge",
+    prepare: async (page) => {
+      // Una battuta non salvata, poi il file cambia da fuori: la nota va in
+      // conflitto. In Lettura il reso è il buffer, e la fascia lo dice (R03).
+      // È la nota che il banco apre per prima, come nello stato S33.
+      await page.click('.pane.focus .cm-content .cm-line:has-text("Questa è la nota")', { position: { x: 4, y: 8 } });
+      await page.keyboard.press("Home");
+      await page.keyboard.type("Scritto qui e non ancora salvato. ");
+      await page.evaluate(async () => {
+        const { api } = await import("/bench/fake-ipc.ts");
+        await api.writeDocument("Benvenuto.md", "# Benvenuto in Fub\n\nCambiata da un'altra app.\n", { kind: "dictated" });
+      });
+      await page.waitForSelector(".pane.focus [data-banner='document.conflict.body']:not([hidden]) .conflict-actions");
+      await page.click('.pane.focus .pane-toolbar button[data-mode="reading"]');
+      await page.waitForSelector(".pane.focus [data-banner='document.conflict.body'] [data-conflict-reading]");
+      await page.focus(".pane.focus .conflict-actions button >> nth=0");
+    },
+  },
+  {
     id: "source",
     title: "Modalità Sorgente: la tavolozza della sintassi",
     prepare: async (page) => {

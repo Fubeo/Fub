@@ -63,7 +63,8 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [Modello del documento](architecture/document-model.md) e
   [Storage e identità](architecture/storage-and-identity.md)
 - [Runtime, eventi e job](architecture/runtime-events-and-jobs.md)
-- [Frontend e IPC](architecture/frontend-and-ipc.md)
+- [Frontend e IPC](architecture/frontend-and-ipc.md) e
+  [la cornice del telefono](architecture/phone-frame.md)
 - [Superfici dell'editor](architecture/editor-surfaces.md), la
   [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md)
   e la [superficie dei fogli](architecture/grid-surface.md)

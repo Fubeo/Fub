@@ -215,4 +215,5 @@ indipendenti.
 | seam frontend | `apps/client/src/host/` |
 | shell | `apps/client/src/main.ts`, `desktop-shell.ts`, `panels/`, `state/`, `ui/` |
 | finestra | `apps/client/src/shells/scrittoio/`, `kit/`, `moto/`, `theme/scrittoio/` |
+| telefono | `apps/client/mobile.html`, `apps/client/src/shells/mobile/`, `apps/client/src/shells/scrittoio/mobile/` ([la cornice del telefono](phone-frame.md)) |
 | test | `crates/*/tests/`, `apps/client/src/**/*.test.ts` |

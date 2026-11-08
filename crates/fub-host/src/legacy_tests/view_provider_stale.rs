@@ -208,12 +208,15 @@ fn a_render_from_a_replaced_view_provider_is_rejected_as_stale() {
     entered_rx
         .recv_timeout(TIMEOUT)
         .expect("old provider is rendering");
+    // Il render vecchio è fermo fuori dal lucchetto: se lo tenesse, resterebbe
+    // preso fino alla scadenza. Un `fub-job-*` dell'host lo può prendere per
+    // un istante proprio adesso, e una sola fotografia lo scambiava per il
+    // render (#270).
     assert!(
-        workspace.try_read().is_some(),
+        super::try_read_within(&workspace, super::FREE_WITHIN).is_some(),
         "no workspace read lock remains during render"
     );
-    workspace
-        .try_write()
+    super::try_write_within(&workspace, super::FREE_WITHIN)
         .expect("no workspace write lock remains during render")
         .replace_view_provider(
             PLUGIN,
