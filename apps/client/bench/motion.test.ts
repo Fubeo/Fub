@@ -220,11 +220,22 @@ describe("la regola 4: l'inversione non riparte da zero", () => {
 
   it("chiama salto una corsa ripartita dalla posa di partenza", () => {
     const restarted = { ...flying, left: 112, opacity: 0 };
-    expect(jumps([flying], [restarted])).toEqual([{ key: "pannello", px: 12, opacity: 0.5, nearest: "pannello" }]);
+    expect(jumps([flying], [restarted])).toEqual([
+      {
+        key: "pannello",
+        px: 12,
+        opacity: 0.5,
+        nearest: "pannello",
+        was: { left: 100, top: 50, width: 200, height: 80, opacity: 0.5 },
+        is: { left: 112, top: 50, width: 200, height: 80, opacity: 0 },
+      },
+    ]);
   });
 
   it("chiama salto ciò che sparisce senza lasciare un'immagine", () => {
-    expect(jumps([flying], [])).toEqual([{ key: "pannello", px: null, opacity: null, nearest: null }]);
+    expect(jumps([flying], [])).toEqual([
+      { key: "pannello", px: null, opacity: null, nearest: null, was: { left: 100, top: 50, width: 200, height: 80, opacity: 0.5 }, is: null },
+    ]);
   });
 });
 

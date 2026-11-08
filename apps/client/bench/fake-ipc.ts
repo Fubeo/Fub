@@ -259,6 +259,80 @@ globalThis.__fubLiveBench = Object.freeze({
 /// `fub-format-xlsx` produce davvero (`tests/ts_grid.rs`).
 const WORKBOOK_DOC = params.get("workbook") === "1" ? "Dati/Conti.xlsx" : null;
 
+/// Gli stati della barra dei fogli che la cartella generata non ha
+/// (`?grid=table|readonly`, insieme a `?workbook=1`): una copia delle sue
+/// finestre con una tabella dal nome lunghissimo sulla cella scelta, che
+/// accende la sezione della tabella, oppure una copia della sessione coi
+/// comandi che cambiano la cartella spenti, con il perché. Il JSON resta
+/// quello che `fub-format-xlsx` produce.
+const GRID_CASE = params.get("grid");
+const BENCH_TABLE = {
+  name: "Riepilogo_trimestrale_delle_spese_di_rappresentanza_2026",
+  row: 0,
+  column: 0,
+  rows: 6,
+  columns: 4,
+  header_row: true,
+  totals_row: false,
+  banded_rows: true,
+  banded_columns: false,
+  first_column: false,
+  last_column: false,
+  filter_button: true,
+  style: "TableStyleMedium2",
+};
+/// In sola lettura restano accesi soltanto i comandi che guardano.
+const LOOKING = /^(file|selection|view)\.|^edit\.(selectAll|goTo|goToSpecial|find)$/;
+function benchWindow<W extends { readonly sheet: string; readonly tables: readonly unknown[] }>(window: W): W {
+  return GRID_CASE === "table" && window.sheet === XLSX_GRID.session.active
+    ? { ...window, tables: [...window.tables, BENCH_TABLE] }
+    : window;
+}
+const BENCH_SESSION = GRID_CASE === "readonly"
+  ? {
+    ...XLSX_GRID.session,
+    commands: XLSX_GRID.session.commands.map((command) =>
+      LOOKING.test(command.id) ? command : { ...command, enabled: false, reason: "La cartella è aperta in sola lettura." }),
+  }
+  : XLSX_GRID.session;
+
+/// Il risultato dei comandi che leggono (`?result=stats|errors|empty`,
+/// insieme a `?workbook=1`): la risposta del provider alla prima esecuzione,
+/// senza modifiche alla cartella. Le statistiche di una selezione, cinquecento
+/// errori su un foglio dal nome lungo, nessun errore. Senza `result` il
+/// comando non è servito, e la finestra del risultato dice il perché.
+const RESULT_CASE = params.get("result");
+const RESULT_SHEET = "Movimenti del conto corrente cointestato 2026";
+const BENCH_RESULTS: Readonly<Record<string, unknown>> = {
+  stats: { count: 24, numeric: 24, sum: 16437.9, average: 684.9125, min: 88.6, max: 1403.15 },
+  errors: {
+    errors: Array.from({ length: 500 }, (_, i) => ({
+      sheet: RESULT_SHEET,
+      cell: `F${i + 2}`,
+      error: i % 7 === 3 ? "#VALUE!" : "#DIV/0!",
+      formula: `=D${i + 2}/E${i + 2}`,
+    })),
+    circular: [],
+  },
+  empty: { errors: [], circular: [] },
+};
+const BENCH_OUTCOMES = RESULT_CASE !== null && RESULT_CASE in BENCH_RESULTS
+  ? [{
+    commit: {
+      revision: BENCH_SESSION.revision,
+      edit: { from: 0, to: 0, deleted: "", inserted: "" },
+      invalidation: { kind: "cells", cells: [] },
+    },
+    sheets: BENCH_SESSION.sheets,
+    hidden: BENCH_SESSION.hidden,
+    selection: { sheet: BENCH_SESSION.active, selection: "B2:E7", active: "B2" },
+    result: JSON.stringify(BENCH_RESULTS[RESULT_CASE]),
+    dialog: null,
+    commands: BENCH_SESSION.commands,
+    book: BENCH_SESSION.book,
+  }]
+  : undefined;
+
 /// Il documento di videoscrittura delle scene `document-*` (`?rich=…`), con
 /// la proiezione che `fub-format-rich` dà davvero del file: quella con un po'
 /// di tutto (`tests/ts_projection.rs`), oppure un `.odt`, uno pieno di
@@ -822,6 +896,29 @@ const CRAFT_SETTINGS: readonly SettingEntry[] = params.get("craft") === "1" || T
   })
   : [];
 
+/// I due pannelli ai lati, come li dichiara l'host vero (`fub-host`,
+/// `chrome.sidebar.visible` e `chrome.inspector.visible`). Le scene della barra
+/// dei fogli li chiudono per dare al foglio tutta la larghezza: senza la
+/// dichiarazione la scrittura fallirebbe, e la foto terrebbe l'avviso «Non ho
+/// potuto ricordare come hai lasciato i pannelli». Solo con `workbook=1`, così
+/// le scene delle Impostazioni non cambiano.
+const WORKBOOK_CHROME: readonly SettingEntry[] = WORKBOOK_DOC === null ? [] : [
+  ["chrome.sidebar.visible", "Mostra il pannello a sinistra"],
+  ["chrome.inspector.visible", "Mostra il pannello a destra"],
+].map(([key, label]): SettingEntry => ({
+  spec: {
+    key,
+    label,
+    description: "Lo affianca ai riquadri quando la finestra è larga abbastanza; altrimenti si apre a richiesta.",
+    group: "Aspetto",
+    scope: "machine",
+    kind: { kind: "toggle", default: true },
+    program_writable: false,
+  },
+  value: true,
+  source: "default",
+}));
+
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
 ///
 /// `satisfies` è deliberato: queste fixture attraversano lo stesso confine
@@ -1163,15 +1260,16 @@ const options: Options = {
   root: ROOT,
   view: VIEWS,
   commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS],
-  settings: [...SETTINGS, ...(DRAWING === null ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS],
+  settings: [...SETTINGS, ...(DRAWING === null ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(WORKBOOK_DOC === null ? {} : {
     // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.
     gridBytes: {
       surface: XLSX_GRID.surface,
-      session: XLSX_GRID.session,
-      windows: [...XLSX_GRID.windows, XLSX_GRID.edit.window],
+      session: BENCH_SESSION,
+      windows: [...XLSX_GRID.windows, XLSX_GRID.edit.window].map(benchWindow),
       commits: [XLSX_GRID.edit.commit],
+      ...(BENCH_OUTCOMES === undefined ? {} : { outcomes: BENCH_OUTCOMES }),
     } as GridBytesFake,
   }),
   ...(DRAWING === null ? {} : { draw: true }),

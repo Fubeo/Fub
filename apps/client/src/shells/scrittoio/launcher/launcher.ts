@@ -253,6 +253,7 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     const drawRow = (row: Row, cell: HTMLElement): void => {
       cell.classList.add("launcher-row");
       cell.style.removeProperty("--launcher-indent");
+      cell.removeAttribute("aria-disabled");
       const main = el("span", "launcher-row-main");
       const title = el("span", "launcher-row-title");
       const meta = el("span", "launcher-row-meta");
@@ -289,13 +290,16 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
           break;
         case "command": {
           title.textContent = row.entry.title;
-          if (row.entry.description) {
-            const description = row.entry.description;
+          // Un comando spento dice il suo motivo al posto della descrizione.
+          if (row.entry.unavailable) cell.setAttribute("aria-disabled", "true");
+          if (row.entry.unavailable || row.entry.description) {
+            const description = row.entry.unavailable || row.entry.description;
             detail((into) => {
               into.textContent = description;
             });
           }
           if (row.entry.spec) meta.append(scopeLabel(row.entry.spec));
+          else if (row.entry.group) meta.append(row.entry.group);
           const chord = displayBinding(row.entry.binding);
           if (chord) {
             const key = el("kbd", "launcher-key");

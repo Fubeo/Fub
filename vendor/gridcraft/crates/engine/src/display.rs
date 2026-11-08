@@ -7,10 +7,27 @@ use gridcraft_core::{CellRef, RangeRef, Value};
 use gridcraft_model::{Sheet, Workbook};
 use gridcraft_numfmt::{Formatted, NumberFormat, format_value};
 
+/// Parsed number formats, by code.
+static CACHE: std::sync::LazyLock<Mutex<HashMap<String, NumberFormat>>> = std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn cache() -> std::sync::MutexGuard<'static, HashMap<String, NumberFormat>> {
+    CACHE.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// How many parsed number formats are cached (at most 4097: the cache empties itself past 4096).
+pub fn number_format_cache_len() -> usize {
+    cache().len()
+}
+
+/// Empty the cache of parsed number formats, returning how many it held. Formats are parsed again as they are used.
+pub fn clear_number_format_cache() -> usize {
+    let held = std::mem::take(&mut *cache());
+    held.len()
+}
+
 /// Parsed number formats are cached by code.
 fn parsed(code: &str) -> NumberFormat {
-    static CACHE: std::sync::LazyLock<Mutex<HashMap<String, NumberFormat>>> = std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
-    let lock = || CACHE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let lock = cache;
     if let Some(f) = lock().get(code) {
         return f.clone();
     }
@@ -225,4 +242,22 @@ pub fn stats(sheet: &Sheet, ranges: &[RangeRef]) -> Stats {
         s.max = 0.0;
     }
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_number_format_cache_empties_and_fills_again() {
+        let wb = Workbook::new();
+        let code = "0.000\" cache test\"";
+        assert_eq!(format(&Value::Number(1.5), code, &wb).text, "1.500 cache test");
+        assert!(number_format_cache_len() >= 1);
+        // Other tests use the cache meanwhile, so only this test's own entry is certain.
+        assert!(clear_number_format_cache() >= 1);
+        clear_number_format_cache();
+        assert_eq!(format(&Value::Number(2.0), code, &wb).text, "2.000 cache test");
+        assert!(cache().contains_key(code));
+    }
 }

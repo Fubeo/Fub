@@ -1862,35 +1862,27 @@ body {
    schede, poi i gruppi di una scheda in una striscia d'altezza fissa. Un
    gruppo che non ci sta si raccoglie nel suo pulsante (`data-collapsed`); le
    lettere di Excel sono distintivi posati sopra i controlli. */
-.grid-ribbon-host,
 .rich-ribbon-host { flex: none; min-width: 0; }
-.grid-ribbon,
 .rich-ribbon {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
-.grid-ribbon-head,
 .rich-ribbon-head {
   display: flex;
   align-items: center;
   min-width: 0;
 }
-.grid-ribbon-tabs,
 .rich-ribbon-tabs {
   flex: 1;
   min-width: 0;
   overflow-x: auto;
 }
-.grid-ribbon-tabs .kit-tab,
-.grid-ribbon-item,
-.grid-ribbon-group,
 .rich-ribbon-tabs .kit-tab,
 .rich-ribbon-item,
 .rich-ribbon-group {
   position: relative;
 }
-.grid-ribbon-toggle,
 .rich-ribbon-toggle {
   display: inline-flex;
   flex: none;
@@ -1900,11 +1892,8 @@ body {
   height: 28px;
   padding: 0;
 }
-.grid-ribbon-toggle svg,
 .rich-ribbon-toggle svg { width: 16px; height: 16px; }
-.grid-ribbon-panel,
 .rich-ribbon-panel { min-width: 0; }
-.grid-ribbon-toolbar,
 .rich-ribbon-toolbar {
   display: flex;
   align-items: stretch;
@@ -1912,40 +1901,29 @@ body {
   min-width: 0;
   overflow: hidden;
 }
-.grid-ribbon-group,
 .rich-ribbon-group {
   display: flex;
   flex: none;
   flex-direction: column;
 }
-.grid-ribbon-group-body,
 .rich-ribbon-group-body {
   display: flex;
   flex: 1;
   align-items: flex-start;
 }
-.grid-ribbon-group[data-collapsed="true"] > .grid-ribbon-group-body,
-.grid-ribbon-group[data-collapsed="true"] > .grid-ribbon-group-label,
 .rich-ribbon-group[data-collapsed="true"] > .rich-ribbon-group-body,
 .rich-ribbon-group[data-collapsed="true"] > .rich-ribbon-group-label {
   display: none;
 }
-.grid-ribbon-group-label,
 .rich-ribbon-group-label {
   flex: none;
   white-space: nowrap;
   text-align: center;
 }
-.grid-ribbon-stack,
 .rich-ribbon-stack {
   display: flex;
   flex-direction: column;
 }
-.grid-ribbon-row,
-.grid-ribbon-item,
-.grid-ribbon-field,
-.grid-ribbon-check,
-.grid-ribbon-chevron,
 .rich-ribbon-row,
 .rich-ribbon-item,
 .rich-ribbon-field,
@@ -1954,9 +1932,7 @@ body {
   display: inline-flex;
   align-items: center;
 }
-.grid-ribbon-row,
 .rich-ribbon-row { display: flex; }
-.grid-ribbon-button,
 .rich-ribbon-button {
   position: relative;
   display: inline-flex;
@@ -1964,14 +1940,11 @@ body {
   justify-content: center;
   white-space: nowrap;
 }
-.grid-ribbon-small,
 .rich-ribbon-small {
   min-width: 24px;
   height: 24px;
 }
-.grid-ribbon-small svg,
 .rich-ribbon-small svg { flex: none; width: 16px; height: 16px; }
-.grid-ribbon-large,
 .rich-ribbon-large {
   flex-direction: column;
   justify-content: flex-start;
@@ -1979,37 +1952,27 @@ body {
   max-width: 96px;
   height: 76px;
 }
-.grid-ribbon-large svg,
 .rich-ribbon-large svg { flex: none; width: 26px; height: 26px; }
 /* Il nome di un pulsante grande sta in due righe al più, sopra il nome del
    gruppo. */
-.grid-ribbon-large .grid-ribbon-label,
 .rich-ribbon-large .rich-ribbon-label {
   max-height: 2.5em;
   overflow: hidden;
   white-space: normal;
   text-align: center;
 }
-.grid-ribbon-large .grid-ribbon-chevron svg,
-.grid-ribbon-chevron svg,
 .rich-ribbon-large .rich-ribbon-chevron svg,
 .rich-ribbon-chevron svg { width: 10px; height: 10px; }
-.grid-ribbon-split-large,
 .rich-ribbon-split-large { flex-direction: column; }
-.grid-ribbon-split-large > .grid-ribbon-large,
 .rich-ribbon-split-large > .rich-ribbon-large { height: 58px; }
-.grid-ribbon-split-large > .grid-ribbon-arrow,
 .rich-ribbon-split-large > .rich-ribbon-arrow { align-self: stretch; height: 18px; }
-.grid-ribbon-arrow,
 .rich-ribbon-arrow { min-width: 14px; }
-.grid-ribbon-glyph,
 .rich-ribbon-glyph {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 16px;
 }
-.grid-ribbon-color-bar,
 .rich-ribbon-color-bar {
   position: absolute;
   left: 4px;
@@ -2017,9 +1980,7 @@ body {
   bottom: 2px;
   height: 3px;
 }
-.grid-ribbon-panel[data-compact="true"] .grid-ribbon-small .grid-ribbon-label,
 .rich-ribbon-panel[data-compact="true"] .rich-ribbon-small .rich-ribbon-label { display: none; }
-.grid-ribbon-keytip,
 .rich-ribbon-keytip {
   position: absolute;
   left: 50%;
@@ -2031,17 +1992,11 @@ body {
 }
 .grid-ribbon-popup-group,
 .rich-ribbon-popup-group { display: flex; }
-.grid-ribbon-palette,
 .grid-ribbon-gallery {
   display: flex;
   flex-direction: column;
 }
 .grid-ribbon-gallery { max-height: 60vh; overflow-y: auto; }
-.grid-ribbon-palette-grid {
-  display: grid;
-  grid-template-columns: repeat(10, 18px);
-}
-.grid-ribbon-swatch { width: 18px; height: 18px; padding: 0; }
 .grid-ribbon-gallery-grid { display: grid; }
 .grid-ribbon-gallery-table .grid-ribbon-gallery-grid { grid-template-columns: repeat(7, 64px); }
 .grid-ribbon-gallery-cell .grid-ribbon-gallery-grid { grid-template-columns: repeat(4, 108px); }
@@ -2058,6 +2013,280 @@ body {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+/* La barra dei fogli: una testata con le sezioni in un pozzetto e un vassoio
+   di foglietti. Ha regole sue, separate da quelle dei documenti qui sopra,
+   che restano com'erano. */
+.grid-ribbon-host { flex: none; min-width: 0; }
+.grid-ribbon {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.grid-ribbon-head {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+/* Le sezioni stanno in un pozzetto che abbraccia i loro nomi; se non ci
+   stanno, il pozzetto scorre. L'evidenza della scelta corre dietro i nomi: la
+   fila è un piano a sé, e il segno ci sta sotto. */
+.grid-ribbon-tabs {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  isolation: isolate;
+  scrollbar-width: none;
+}
+.grid-ribbon-tabs > .kit-tab-indicator {
+  z-index: -1;
+}
+.grid-ribbon-tabs .kit-tab,
+.grid-ribbon-item,
+.grid-ribbon-group {
+  position: relative;
+}
+/* Il nome lungo di una sezione per la selezione finisce coi puntini: quello
+   intero resta nel nome accessibile e nel suggerimento. */
+.grid-ribbon-contextual .kit-tab-label {
+  max-width: 12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.grid-ribbon-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-inline-start: auto;
+  padding: 0;
+}
+.grid-ribbon-toggle svg { width: 16px; height: 16px; }
+.grid-ribbon-panel { min-width: 0; }
+/* Il vassoio abbraccia i suoi foglietti: nessuna altezza fissa. */
+.grid-ribbon-toolbar {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+}
+/* Un foglietto: il nome in alto, sotto due file di comandi alte 28. */
+.grid-ribbon-group {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-width: 0;
+}
+.grid-ribbon-group-label {
+  display: block;
+  order: -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.grid-ribbon-group-body,
+.grid-ribbon-stack {
+  display: grid;
+  grid-template-rows: repeat(2, 28px);
+  grid-auto-columns: max-content;
+  grid-auto-flow: column;
+  align-items: center;
+}
+/* Una pila prende le due file; se ne ha tre, la terza va in una colonna
+   accanto. */
+.grid-ribbon-group-body > .grid-ribbon-stack {
+  grid-row: 1 / -1;
+}
+.grid-ribbon-group[data-collapsed="true"] > .grid-ribbon-group-body {
+  display: none;
+}
+.grid-ribbon-row,
+.grid-ribbon-item,
+.grid-ribbon-field,
+.grid-ribbon-check,
+.grid-ribbon-chevron {
+  display: inline-flex;
+  align-items: center;
+}
+.grid-ribbon-row { display: flex; }
+.grid-ribbon-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+/* Alti 28 come nella barra di formato; larghi 24 quando portano solo
+   l'icona, perché una fila di Home ne tiene dieci. */
+.grid-ribbon-small {
+  min-width: 24px;
+  height: 28px;
+}
+/* Il pulsante grande di una volta è un gettone su una riga: icona, nome e la
+   freccina, se apre qualcosa. Una taglia sola in tutta la barra. */
+.grid-ribbon-large {
+  justify-content: flex-start;
+  min-width: 28px;
+  height: 28px;
+}
+.grid-ribbon-small svg,
+.grid-ribbon-large svg { flex: none; width: 16px; height: 16px; }
+.grid-ribbon-chevron svg { width: 10px; height: 10px; }
+.grid-ribbon-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+}
+/* Un pulsante diviso grande è un gettone diviso, come quelli piccoli. */
+.grid-ribbon-split-large { flex-direction: row; }
+.grid-ribbon-arrow {
+  align-self: stretch;
+  min-width: 14px;
+}
+.grid-ribbon-color-bar {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 3px;
+  height: 3px;
+}
+/* Un foglietto chiuso: resta il suo nome e, sotto, un gettone alto quanto le
+   due file, col disegno del gruppo e la freccina che dice «si apre qui». */
+.grid-ribbon-group-toggle {
+  justify-content: center;
+  height: calc(28px * 2 + var(--space-1, 2px));
+}
+.grid-ribbon-group-toggle .grid-ribbon-label { display: none; }
+.grid-ribbon-group-toggle .grid-ribbon-chevron { transform: rotate(-90deg); }
+/* Quando lo spazio manca, prima i pulsanti piccoli perdono il nome; se non
+   basta, lo perdono anche i gettoni del foglietto aperto (quelli del suo
+   contenuto: il pulsante di un foglietto chiuso tiene il suo nome). */
+.grid-ribbon-panel[data-compact="true"] .grid-ribbon-small .grid-ribbon-label,
+.grid-ribbon-panel[data-dense="true"] .grid-ribbon-group-body .grid-ribbon-large .grid-ribbon-label { display: none; }
+.grid-ribbon-keytip {
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  z-index: var(--z-menu);
+  transform: translateX(-50%);
+  pointer-events: none;
+  white-space: nowrap;
+}
+/* Nella testata la lettera scende fino al bordo della fila, sotto il nome:
+   il nome resta leggibile e la lettera non esce dalla fila, che scorre. */
+.grid-ribbon-head .grid-ribbon-keytip { bottom: -6px; }
+.grid-ribbon-palette {
+  display: flex;
+  flex-direction: column;
+}
+.grid-ribbon-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 18px);
+}
+.grid-ribbon-swatch { width: 18px; height: 18px; padding: 0; }
+/* La formula e la griglia stanno sopra la barra: quando la barra si ritira
+   o si riapre le salgono sopra e la scoprono, e un'immagine del vassoio
+   che svanisce resta sotto di loro. La formula e le schede dei fogli stanno
+   sopra la griglia: i suggerimenti della formula restano sopra le celle, e la
+   griglia che sale non copre mai le schede dei fogli. */
+.grid-formula-bar,
+.grid-sheets { position: relative; z-index: 2; }
+.grid-viewport { z-index: 1; }
+/* Gli avvisi fra la barra e la formula salgono e scendono con lei, sullo
+   stesso piano. */
+.grid-notice,
+.grid-draft-notice { position: relative; z-index: 2; }
+
+/* Il foglietto chiuso non ha il nome sopra e un pulsante vuoto sotto: il
+   pulsante è il foglietto, e il nome ci sta dentro. Come sta dentro lo dicono
+   le regole della pila e della tessera, qui sotto. */
+.grid-ribbon-group[data-collapsed="true"] > .grid-ribbon-group-label {
+  display: none;
+}
+.grid-ribbon-group-toggle {
+  flex: 1 1 auto;
+  height: auto;
+}
+.grid-ribbon-group-toggle .grid-ribbon-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Al telefono nemmeno coi foglietti tutti chiusi la sezione ci sta sempre:
+   allora il vassoio scorre sotto il dito, senza barra di scorrimento, e il
+   foglietto che si apre si porta in vista. */
+.grid-ribbon-toolbar {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+/* I foglietti chiusi: due per colonna «a pila», ognuno su una riga; quello
+   che resta solo nella sua colonna è alto quanto un foglietto aperto, «a
+   tessera». */
+/* Il vassoio è una griglia di due file che si riempie per colonne: un
+   foglietto aperto le prende tutte e due, uno chiuso una sola, e due chiusi
+   di fila stanno uno sopra l'altro, larghi uguali. L'ordine resta quello della
+   sezione: niente `dense`. */
+.grid-ribbon-toolbar {
+  display: grid;
+  grid-auto-columns: max-content;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, auto);
+}
+.grid-ribbon-group {
+  grid-row: span 2;
+}
+.grid-ribbon-group[data-collapsed="true"] {
+  grid-row: span 1;
+}
+/* L'ultimo chiuso di una fila dispari resta solo nella sua colonna (il kit
+   lo segna con `data-alone`): prende tutte e due le file. */
+.grid-ribbon-group[data-collapsed="true"][data-alone="true"] {
+  grid-row: span 2;
+}
+/* Due a pila: il disegno, il nome accanto e la freccina. */
+.grid-ribbon-group-toggle {
+  justify-content: flex-start;
+}
+/* Un nome lunghissimo («Visualizzazioni cartella di lavoro») finisce coi
+   puntini: quello intero è il nome del pulsante e il suo suggerimento. */
+.grid-ribbon-group-toggle .grid-ribbon-label {
+  max-width: 10em;
+}
+.grid-ribbon-group-toggle .grid-ribbon-chevron {
+  margin-inline-start: auto;
+}
+/* Uno solo: il disegno in un tondo e il nome sotto, in mezzo al foglietto;
+   il nome va a capo una volta, in due righe pari, e uno più lungo finisce
+   coi puntini. */
+.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle {
+  flex-direction: column;
+  justify-content: center;
+  white-space: normal;
+}
+.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle > svg {
+  box-sizing: content-box;
+  padding: 6px;
+}
+.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle .grid-ribbon-label {
+  display: -webkit-box;
+  max-width: 7em;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  text-align: center;
+  text-wrap: balance;
+}
+.grid-ribbon-group[data-alone="true"] > .grid-ribbon-group-toggle .grid-ribbon-chevron {
+  display: none;
+}
+/* La fila dell'accesso rapido, prima delle sezioni: il gettone «Comandi». */
+.grid-ribbon-quick { display: flex; flex: none; align-items: center; }
 
 /* Le finestre del foglio (`editors/grid/dialogs/`): una colonna di campi, il
    nome a sinistra e il controllo a destra. Le finestre larghe (Formato celle,
@@ -2125,6 +2354,13 @@ body {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+/* La finestra del risultato: la tabella scorre sotto la sua testata, e un
+   valore lungo va a capo invece di allargare la finestra. */
+.grid-result-table { width: 100%; border-collapse: collapse; }
+.grid-result-table thead th { position: sticky; top: 0; z-index: 1; }
+.grid-result-table td,
+.grid-result-table th { overflow-wrap: anywhere; }
+.grid-result-ref { display: inline; padding: 0; }
 .grid-dialog-names-head,
 .grid-dialog-names-row {
   display: grid;

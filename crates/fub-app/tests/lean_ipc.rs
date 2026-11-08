@@ -292,6 +292,12 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("list_themes", Why::AppSurface),
     ("read_theme", Why::AppSurface),
     ("set_plugin_enabled", Why::AppSurface),
+    // Il ciclo di vita dei motori, che sono del processo e non di un vault:
+    // scaldare quello di un'estensione prima della prima apertura, e lasciare
+    // andare le cache dei documenti quando la shell chiude l'ultimo. Nessun
+    // registro di un vault li possiede, come per i job (K3, T8).
+    ("warm_engine", Why::AppSurface),
+    ("document_closed", Why::AppSurface),
     // Inventario macchina e decisioni persistenti non appartengono al registro
     // di un vault. Queste porte restano sottili e delegano al manager installato.
     ("list_installed_plugins", Why::AppSurface),

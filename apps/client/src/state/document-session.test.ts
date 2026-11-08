@@ -11,15 +11,21 @@ import {
 import { operationFromText } from "../editors/core/text-operation";
 import type { DocumentSource } from "../host/contract";
 import { gridJournalText } from "./grid-journal";
+import { createFakeHost, type FakeHost } from "../host/fake";
 
 function fakeApi(): DocumentSessionApi {
-  return {
+  const api: DocumentSessionApi = {
     readDocument: vi.fn(async (id): Promise<DocumentSource> => ({ text: `${id}: disco`, revision: "rev-1", format_id: "markdown", source_kind: "text", text_kind: "source" })),
+    // L'apertura con chiave legge come la lettura semplice del test corrente,
+    // anche quando il test sostituisce `readDocument`.
+    openDocument: vi.fn((id: string, _open: string, ...vault: [string?]) => api.readDocument(id, ...vault)),
     writeDocument: vi.fn(async () => "rev-2"),
     resourceWrite: vi.fn(async () => ({ revision: "rev-byte" })),
     saveDraft: vi.fn(async () => {}),
     discardDraft: vi.fn(async () => {}),
+    documentClosed: vi.fn(async () => {}),
   };
+  return api;
 }
 function acceptText(
   sessions: DocumentSessionCollection,
@@ -362,7 +368,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
 
     // «Mantieni il mio» è la scelta esplicita che detta.
     await sessions.resolveConflict("nota.md", "mine");
-    expect(api.writeDocument).toHaveBeenCalledWith("nota.md", "testo vecchio", { kind: "dictated" });
+    expect(api.writeDocument).toHaveBeenCalledWith("nota.md", "testo vecchio", { kind: "dictated" }, null, expect.any(String));
   });
 
   it("un ascoltatore asincrono che fallisce non fa fallire il salvataggio", async () => {
@@ -1386,6 +1392,8 @@ describe("la chiusura della finestra protegge ogni buffer sporco", () => {
       "DopoFlush.md",
       "ULTIMA BATTUTA",
       { kind: "descends_from", value: "rev-1" },
+      null,
+      expect.any(String),
     );
   });
 });
@@ -1412,14 +1420,14 @@ describe("il vault delle sessioni (FUB-001)", () => {
 
   it("legge e scrive nel vault in cui il documento è stato aperto, anche se il corrente cambia", async () => {
     await sessions.read("nota.md");
-    expect(api.readDocument).toHaveBeenCalledWith("nota.md", A);
+    expect(api.openDocument).toHaveBeenCalledWith("nota.md", expect.any(String), A);
     acceptText(sessions, "nota.md", "testo mio");
 
     current = B; // l'host ha aperto il vault nuovo e la shell non lo sa ancora
     await sessions.flush("nota.md");
 
-    expect(api.writeDocument).toHaveBeenCalledWith("nota.md", "testo mio", base, A);
-    expect(api.writeDocument).not.toHaveBeenCalledWith("nota.md", "testo mio", base, B);
+    expect(api.writeDocument).toHaveBeenCalledWith("nota.md", "testo mio", base, A, expect.any(String));
+    expect(api.writeDocument).not.toHaveBeenCalledWith("nota.md", "testo mio", base, B, expect.any(String));
   });
 
   it("la bozza e il suo scarto nominano lo stesso vault della sessione", async () => {
@@ -1435,14 +1443,14 @@ describe("il vault delle sessioni (FUB-001)", () => {
     await vi.waitFor(() => expect(api.discardDraft).toHaveBeenCalledWith("nota.md", A));
   });
 
-  it("senza un vault noto le chiamate restano quelle di sempre", async () => {
+  it("senza un vault noto le chiamate non nominano un vault", async () => {
     current = null;
     await sessions.read("nota.md");
     acceptText(sessions, "nota.md", "testo mio");
     await sessions.flush("nota.md");
 
-    expect(api.readDocument).toHaveBeenCalledWith("nota.md");
-    expect(api.writeDocument).toHaveBeenCalledWith("nota.md", "testo mio", base);
+    expect(api.openDocument).toHaveBeenCalledWith("nota.md", expect.any(String));
+    expect(api.writeDocument).toHaveBeenCalledWith("nota.md", "testo mio", base, null, expect.any(String));
   });
 
   it("una lettura in volo che finisce dopo il cambio di vault non crea una sessione", async () => {
@@ -1471,7 +1479,7 @@ describe("il vault delle sessioni (FUB-001)", () => {
     acceptText(sessions, "nota.md", "testo del vault B");
     await sessions.flush("nota.md");
 
-    expect(api.writeDocument).toHaveBeenLastCalledWith("nota.md", "testo del vault B", base, B);
+    expect(api.writeDocument).toHaveBeenLastCalledWith("nota.md", "testo del vault B", base, B, expect.any(String));
   });
 
   it("un file senza formato si salva a byte nel vault della sua sessione", async () => {
@@ -1560,7 +1568,7 @@ describe("il giornale di una cartella di Excel", () => {
     acceptText(sessions, "conti.xlsx", written, "altra");
     await sessions.flush("conti.xlsx");
 
-    expect(api.writeDocument).toHaveBeenCalledWith("conti.xlsx", written, { kind: "descends_from", value: "sha256:uno" });
+    expect(api.writeDocument).toHaveBeenCalledWith("conti.xlsx", written, { kind: "descends_from", value: "sha256:uno" }, null, expect.any(String));
     expect(sessions.inspect("conti.xlsx")).toMatchObject({
       text: "",
       dirty: false,
@@ -1625,6 +1633,284 @@ describe("il giornale di una cartella di Excel", () => {
     });
     expect(await sessions.reloadIfClean("nota.md")).toMatchObject({ kind: "reloaded", changed: false });
     expect(log).toEqual([]);
+  });
+});
+
+describe("chiusura della chiave di apertura", () => {
+  function keyedApi(): DocumentSessionApi & { documentClosed: ReturnType<typeof vi.fn> } {
+    const api = fakeApi() as DocumentSessionApi & { documentClosed: ReturnType<typeof vi.fn> };
+    api.readDocument = vi.fn(async (id): Promise<DocumentSource> => ({
+      text: `${id}: proiezione`,
+      revision: "rev-1",
+      format_id: id.endsWith(".docx") ? "docx" : "markdown",
+      source_kind: "text",
+      text_kind: "source",
+    }));
+    return api;
+  }
+
+  it("la chiude quando la sessione esce davvero, e non prima", async () => {
+    const api = keyedApi();
+    const sessions = new DocumentSessionCollection(api, () => "/vault");
+    await sessions.read("Lettera.docx");
+    const key = vi.mocked(api.openDocument).mock.calls[0]?.[1];
+    const intent = sessions.retain("Lettera.docx");
+
+    expect(await sessions.release("Lettera.docx")).toEqual({ kind: "active" });
+    expect(api.documentClosed).not.toHaveBeenCalled();
+
+    intent();
+    expect(await sessions.release("Lettera.docx")).toEqual({ kind: "closed", dirty: false });
+    expect(api.documentClosed).toHaveBeenCalledTimes(1);
+    expect(api.documentClosed).toHaveBeenCalledWith(key, "/vault");
+  });
+
+  it("la chiude anche per una nota, e un errore dell'host non cambia la chiusura", async () => {
+    const api = keyedApi();
+    api.documentClosed.mockRejectedValue(new Error("host spento"));
+    const sessions = new DocumentSessionCollection(api, () => null);
+    await sessions.read("nota.md");
+    await sessions.read("Lettera.docx");
+    const [noteKey, letterKey] = vi.mocked(api.openDocument).mock.calls.map((call) => call[1]);
+
+    expect(await sessions.release("nota.md")).toEqual({ kind: "closed", dirty: false });
+    expect(api.documentClosed).toHaveBeenCalledWith(noteKey);
+    expect(await sessions.release("Lettera.docx")).toEqual({ kind: "closed", dirty: false });
+    expect(api.documentClosed).toHaveBeenCalledWith(letterKey);
+    expect(api.documentClosed).toHaveBeenCalledTimes(2);
+    expect(sessions.get("Lettera.docx")).toBeUndefined();
+  });
+});
+
+describe("ogni documento che la shell apre si chiude (chiavi di apertura)", () => {
+  const VAULT = "/vault";
+  let host: FakeHost;
+  let api: DocumentSessionApi;
+  let sessions: DocumentSessionCollection;
+
+  function lettere(n: number): Record<string, string> {
+    return Object.fromEntries(Array.from({ length: n }, (_, i) => [`Lettera-${i}.docx`, `lettera ${i}`]));
+  }
+  function setup(file: Record<string, string> = lettere(1)): void {
+    host = createFakeHost({ root: VAULT, file });
+    // Una copia delle porte: i banchi che costruiscono l'ordine dell'host
+    // sostituiscono una porta senza toccare il modulo del finto.
+    api = { ...host.module.api };
+    sessions = new DocumentSessionCollection(api, () => VAULT);
+  }
+  /// Le chiavi che la shell ha passato a `openDocument`, in ordine.
+  const openedKeys = (): string[] => host.atGate("openDocument").map((call) => call.args[1] as string);
+  const closedKeys = (): string[] => host.atGate("documentClosed").map((call) => call.args[0] as string);
+  /// Una porta la cui chiamata arriva all'host solo quando il banco lo dice:
+  /// l'host segna la chiave **dopo** che la shell ha già chiuso la sessione.
+  function late<K extends "openDocument" | "writeDocument">(name: K): () => void {
+    const real = api[name] as (...args: unknown[]) => Promise<unknown>;
+    let arrive!: () => void;
+    const arrived = new Promise<void>((resolve) => {
+      arrive = resolve;
+    });
+    let armed = true;
+    (api as unknown as Record<string, unknown>)[name] = vi.fn((...args: unknown[]) => {
+      if (!armed) return real(...args);
+      armed = false;
+      return arrived.then(() => real(...args));
+    });
+    return arrive;
+  }
+  const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+  beforeEach(() => setup());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("due riquadri sullo stesso documento: una sessione, una chiave", async () => {
+    await Promise.all([sessions.read("Lettera-0.docx"), sessions.read("Lettera-0.docx")]);
+    await sessions.read("Lettera-0.docx");
+    await settle();
+    expect(host.openKeys(VAULT)).toBe(1);
+
+    sessions.close("Lettera-0.docx");
+    await settle();
+    expect(host.openKeys(VAULT)).toBe(0);
+  });
+
+  it("chiusa e riaperta subito: due chiavi, la vecchia chiusa", async () => {
+    await sessions.read("Lettera-0.docx");
+    sessions.close("Lettera-0.docx");
+    await sessions.read("Lettera-0.docx");
+    await settle();
+
+    const [first, second] = openedKeys();
+    expect(first).not.toBe(second);
+    expect(closedKeys()).toEqual([first]);
+    expect(host.openKeys(VAULT)).toBe(1);
+  });
+
+  it("closeAll con dieci documenti aperti chiude dieci chiavi", async () => {
+    setup(lettere(10));
+    for (let i = 0; i < 10; i++) await sessions.read(`Lettera-${i}.docx`);
+    expect(host.openKeys(VAULT)).toBe(10);
+
+    sessions.closeAll();
+    await settle();
+    expect(host.openKeys(VAULT)).toBe(0);
+    expect(new Set(closedKeys()).size).toBe(10);
+  });
+
+  it("una cancellazione confermata chiude la chiave", async () => {
+    await sessions.read("Lettera-0.docx");
+    await expect(sessions.delete("Lettera-0.docx", async () => {})).resolves.toMatchObject({ kind: "deleted" });
+    await settle();
+    expect(host.openKeys(VAULT)).toBe(0);
+  });
+
+  it("una cancellazione fallita lascia la sessione e la sua chiave", async () => {
+    await sessions.read("Lettera-0.docx");
+    await expect(
+      sessions.delete("Lettera-0.docx", async () => {
+        throw new Error("cestino pieno");
+      }),
+    ).rejects.toThrow("cestino pieno");
+    await settle();
+    expect(sessions.get("Lettera-0.docx")).toBeDefined();
+    expect(host.openKeys(VAULT)).toBe(1);
+    expect(closedKeys()).toEqual([]);
+  });
+
+  it("un file tolto da fuori chiude la chiave", async () => {
+    await sessions.read("Lettera-0.docx");
+    sessions.handleExternalRemoval("Lettera-0.docx");
+    await settle();
+    expect(host.openKeys(VAULT)).toBe(0);
+  });
+
+  it("un file rinominato da fuori tiene la chiave, e il salvataggio la passa", async () => {
+    await sessions.read("Lettera-0.docx");
+    const [key] = openedKeys();
+    host.renameFromOutside("Lettera-0.docx", "Spostata.docx");
+    expect(sessions.rename("Lettera-0.docx", "Spostata.docx")).toMatchObject({ kind: "renamed" });
+    const write = vi.spyOn(api, "writeDocument");
+    acceptText(sessions, "Spostata.docx", "lettera riscritta");
+    await sessions.flush("Spostata.docx");
+
+    expect(write).toHaveBeenCalledWith("Spostata.docx", "lettera riscritta", expect.anything(), VAULT, key);
+    expect(closedKeys()).toEqual([]);
+    expect(host.openKeys(VAULT)).toBe(1);
+    sessions.close("Spostata.docx");
+    await settle();
+    expect(closedKeys()).toEqual([key]);
+    expect(host.openKeys(VAULT)).toBe(0);
+  });
+
+  it("una lettura che fallisce chiude subito la sua chiave", async () => {
+    host.fault("openDocument", "disco staccato");
+    await expect(sessions.read("Lettera-0.docx")).rejects.toThrow("disco staccato");
+    await settle();
+    expect(openedKeys()).toHaveLength(1);
+    expect(closedKeys()).toEqual(openedKeys());
+    expect(host.openKeys(VAULT)).toBe(0);
+  });
+
+  it("una lettura scartata (il vault è cambiato) chiude subito la sua chiave", async () => {
+    let vault = VAULT;
+    sessions = new DocumentSessionCollection(api, () => vault);
+    const arrive = late("openDocument");
+    const reading = sessions.read("Lettera-0.docx");
+    vault = "/altro";
+    arrive();
+    await reading;
+    await settle();
+    expect(sessions.get("Lettera-0.docx")).toBeUndefined();
+    expect(closedKeys()).toEqual(openedKeys());
+    expect(host.openKeys(VAULT)).toBe(0);
+  });
+
+  it("una rilettura che arriva all'host dopo la chiusura richiude la chiave", async () => {
+    await sessions.read("Lettera-0.docx");
+    const arrive = late("openDocument");
+    const reloading = sessions.reloadIfClean("Lettera-0.docx");
+    await vi.waitFor(() => expect(api.openDocument).toHaveBeenCalledTimes(1));
+    sessions.closeAll();
+    await settle();
+    expect(host.openKeys(VAULT)).toBe(0);
+
+    arrive();
+    await reloading.catch(() => {});
+    await settle();
+    expect(host.openKeys(VAULT)).toBe(0);
+  });
+
+  it("un salvataggio che arriva all'host dopo la chiusura richiude la chiave", async () => {
+    await sessions.read("Lettera-0.docx");
+    acceptText(sessions, "Lettera-0.docx", "ultima riga");
+    const arrive = late("writeDocument");
+    const saving = sessions.flush("Lettera-0.docx");
+    await vi.waitFor(() => expect(api.writeDocument).toHaveBeenCalledTimes(1));
+    sessions.closeAll();
+    await settle();
+    expect(host.openKeys(VAULT)).toBe(0);
+
+    arrive();
+    await saving.catch(() => {});
+    await settle();
+    // La scrittura è arrivata davvero all'host, sotto la chiave chiusa.
+    expect(host.atGate("writeDocument")).toHaveLength(1);
+    expect(host.openKeys(VAULT)).toBe(0);
+  });
+
+  it("una nota e una cartella di Excel passano la chiave, e l'host la ignora", async () => {
+    setup({ "nota.md": "testo", "conti.xlsx": "" });
+    const write = vi.spyOn(api, "writeDocument");
+    await sessions.read("nota.md");
+    await sessions.read("conti.xlsx");
+    const [noteKey, gridKey] = openedKeys();
+    expect(noteKey).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+    expect(gridKey).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+    expect(noteKey).not.toBe(gridKey);
+
+    acceptText(sessions, "nota.md", "testo nuovo");
+    await sessions.flush("nota.md");
+    acceptText(sessions, "conti.xlsx", gridJournalText({ entries: [{ sheet: "s1", row: "r1", column: "c1", before: "", after: "1" }], commands: [] }));
+    await sessions.flush("conti.xlsx");
+    expect(write).toHaveBeenCalledWith("nota.md", "testo nuovo", expect.anything(), VAULT, noteKey);
+    expect(write).toHaveBeenCalledWith("conti.xlsx", expect.any(String), expect.anything(), VAULT, gridKey);
+    expect(host.openKeys(VAULT)).toBe(0);
+
+    sessions.closeAll();
+    await settle();
+    expect(closedKeys().sort()).toEqual([noteKey, gridKey].sort());
+  });
+
+  it("un documento di videoscrittura passa la chiave anche quando salva", async () => {
+    const write = vi.spyOn(api, "writeDocument");
+    await sessions.read("Lettera-0.docx");
+    const [key] = openedKeys();
+    acceptText(sessions, "Lettera-0.docx", "lettera riscritta");
+    await sessions.flush("Lettera-0.docx");
+    expect(write).toHaveBeenCalledWith("Lettera-0.docx", "lettera riscritta", expect.anything(), VAULT, key);
+    expect(host.openKeys(VAULT)).toBe(1);
+  });
+
+  it("una bozza ripristinata senza lettura ha la sua chiave, e la chiude", async () => {
+    sessions.restore("Lettera-0.docx", "dalla bozza", null);
+    sessions.closeAll();
+    await settle();
+    expect(openedKeys()).toEqual([]);
+    expect(closedKeys()).toHaveLength(1);
+    expect(closedKeys()[0]).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+  });
+
+  it("senza randomUUID la chiave viene da getRandomValues", async () => {
+    const real = globalThis.crypto;
+    vi.stubGlobal("crypto", { getRandomValues: (bytes: Uint8Array) => real.getRandomValues(bytes) });
+    await sessions.read("Lettera-0.docx");
+    const [key] = openedKeys();
+    expect(key).toMatch(/^[0-9a-f]{32}$/);
+    expect(host.openKeys(VAULT)).toBe(1);
+    sessions.close("Lettera-0.docx");
+    await settle();
+    expect(host.openKeys(VAULT)).toBe(0);
   });
 });
 

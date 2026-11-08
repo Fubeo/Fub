@@ -36,8 +36,21 @@
 //! decide chi monta: [`ProofIndex::with_machine_dictionaries`] lo concede,
 //! [`ProofIndex::bundled_only`] no. Senza dizionario la lingua conserva le
 //! regole grammaticali e la risposta nomina il dizionario che manca.
+//!
+//! # I dizionari letti stanno nel budget dei motori
+//!
+//! Un dizionario Hunspell letto dal disco resta in memoria per il processo
+//! intero, decine di megabyte per lingua. È una cache del budget comune dei
+//! motori (`fub-motori`, ADR 0236): il correttore con i dizionari della
+//! macchina la iscrive nel budget del processo, e il budget la svuota quando
+//! supera il tetto e lei è la meno usata di recente. Svuotata non perde
+//! niente: la parola dopo rilegge il dizionario dallo stesso posto, e il
+//! risultato non cambia. Chi chiude l'ultimo vault la svuota del tutto
+//! ([`empty_dictionaries`]).
 
 use std::collections::HashSet;
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::time::Instant;
 
 use fub_abi::command::{
     Args, CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode, ParamKind, ParamSpec,
@@ -51,6 +64,7 @@ use fub_abi::traits::{
 };
 use fub_abi::ui::UiOption;
 use fub_abi::{DocId, DocumentModel};
+use fub_motori::{Cache, Servizi};
 use serde::{Deserialize, Serialize};
 use wordcraft_proof::{IssueKind, Options, ProofLang};
 
@@ -121,7 +135,11 @@ impl ProofIndex {
     /// Il correttore con i dizionari Hunspell installati sulla macchina. Lo
     /// costruisce chi monta, che è il solo a poter concedere una lettura fuori
     /// dal vault.
+    ///
+    /// Iscrive i dizionari letti nel budget dei motori del processo.
     pub fn with_machine_dictionaries() -> Self {
+        let cache: Arc<dyn Cache> = dictionaries();
+        Servizi::processo().memoria().registra(&cache);
         ProofIndex {
             dictionaries: Dictionaries::Machine,
         }
@@ -134,6 +152,73 @@ impl ProofIndex {
             dictionaries: Dictionaries::Bundled,
         }
     }
+}
+
+/// I dizionari Hunspell letti dal disco, come li vede il budget dei motori.
+/// Sono del motore, per il processo intero: questa è soltanto la loro misura,
+/// con l'ultimo uso e il modo di lasciarli cadere.
+struct MachineDictionaries {
+    last_use: Mutex<Instant>,
+}
+
+impl MachineDictionaries {
+    fn used(&self) {
+        *self.last_use.lock().unwrap_or_else(PoisonError::into_inner) = Instant::now();
+    }
+}
+
+impl Cache for MachineDictionaries {
+    fn nome(&self) -> &str {
+        "correttore.dizionari"
+    }
+
+    /// La stima del motore: la capacità delle tabelle e delle stringhe,
+    /// misurata quando legge ogni dizionario, più la sillabazione decodificata.
+    fn byte(&self) -> u64 {
+        (wordcraft_proof::loaded_dictionaries_bytes() + wordcraft_proof::loaded_hyphenation_bytes())
+            as u64
+    }
+
+    /// Lascia cadere i dizionari di tutte le lingue, e la sillabazione se non
+    /// basta: il motore non sa toglierne uno solo.
+    fn libera(&self, quanto: u64) -> u64 {
+        let mut freed = wordcraft_proof::release_dictionaries() as u64;
+        if freed < quanto {
+            freed += wordcraft_proof::release_hyphenation() as u64;
+        }
+        freed
+    }
+
+    fn ultimo_uso(&self) -> Instant {
+        *self.last_use.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+fn dictionaries() -> Arc<MachineDictionaries> {
+    static DICTIONARIES: OnceLock<Arc<MachineDictionaries>> = OnceLock::new();
+    Arc::clone(DICTIONARIES.get_or_init(|| {
+        Arc::new(MachineDictionaries {
+            last_use: Mutex::new(Instant::now()),
+        })
+    }))
+}
+
+/// I dizionari letti dal disco come cache del budget dei motori: la stessa
+/// che il correttore con i dizionari della macchina iscrive nel budget del
+/// processo.
+pub fn dictionaries_cache() -> Arc<dyn Cache> {
+    dictionaries()
+}
+
+/// I byte stimati dei dizionari letti dal disco, e della sillabazione.
+pub fn dictionary_bytes() -> u64 {
+    dictionaries().byte()
+}
+
+/// Lascia cadere i dizionari letti dal disco e la sillabazione: la parola
+/// dopo li rilegge. Dà i byte stimati liberati.
+pub fn empty_dictionaries() -> u64 {
+    dictionaries().libera(u64::MAX)
 }
 
 /// La domanda, con versione e campi chiusi.
@@ -340,6 +425,12 @@ impl ProofIndex {
                 });
             }
             out.push(kept);
+        }
+        if support.spelling {
+            // L'ortografia può aver letto un dizionario: il budget guarda se
+            // la memoria sta ancora sotto il tetto.
+            dictionaries().used();
+            Servizi::processo().memoria().rispetta();
         }
         Ok(CheckResult {
             language: support,
