@@ -23,6 +23,10 @@ members = [
     "crates/fub-ink",
     # Il risolutore dei componenti (K1): puro, non dipende da nessun membro.
     "crates/fub-componenti",
+    # Lo strato dei motori (K3, ADR 0236): la costruzione alla prima richiesta,
+    # il gruppo di thread e il budget delle cache. Non nomina nessun motore e
+    # non dipende dagli adattatori: sono loro a iscriversi da lui.
+    "crates/fub-motori",
     "crates/fub-scene",
     "crates/fub-format-svg",
     "crates/fub-format-rich",
@@ -71,6 +75,10 @@ exclude = [
     "esempi/index-provider-wasm",
     "esempi/legacy-format-0_1",
     "esempi/manifest-prima-di-k1",
+    "esempi/plugin-prima-del-caso",
+    "esempi/plugin-prima-della-funzione",
+    "esempi/servizio-prima",
+    "esempi/cliente-prima",
     # La copia di WordCraft ha un workspace suo (vendor/wordcraft/UPSTREAM.md):
     # è codice di terzi, con i manifest dell'upstream, e i lint e i guard di
     # Fub non lo leggono. Fub ne prende i crate come dipendenze a percorso.
@@ -118,6 +126,14 @@ quick-xml = "0.41.0"
 # l'intero gruppo di una CLI scaduta (`kill_process_group`): la accendeva già
 # cap-primitives, quindi non entra codice nuovo nell'albero.
 rustix = { version = "1", default-features = false, features = ["fs", "process"] }
+# Le chiamate di Windows, solo sotto `cfg(windows)`: in `fub-kernel` il
+# conteggio dei nomi di un file e il rename relativo, in `fub-host` il job
+# object in cui nasce una CLI Craft (`craft/launch.rs`, D7 del piano
+# pre-alpha). **Era già nell'albero** alla stessa versione, portato da tauri,
+# cap-primitives e tokio: le dipendenze dirette aggiungono un nome, non un
+# crate. Qui solo la versione: le feature le sceglie ogni crate accanto al suo
+# uso, così nessuno accende quelle di un altro.
+windows-sys = { version = "0.61.2", default-features = false }
 # Il vocabolario del log (§17.3, decisione 0062). **Era già nell'albero** —
 # 0.1.44, tirato da tauri — e prenderlo come dipendenza diretta non aggiunge un
 # crate: aggiunge un nome che descrive una cosa che c'era. Il collettore invece
@@ -171,6 +187,7 @@ fub-canvas-core = { path = "crates/fub-canvas-core", version = "0.1.0" }
 fub-format-base = { path = "crates/fub-format-base", version = "0.1.0" }
 fub-ink = { path = "crates/fub-ink", version = "0.1.0" }
 fub-componenti = { path = "crates/fub-componenti", version = "0.1.0" }
+fub-motori = { path = "crates/fub-motori", version = "0.1.0" }
 fub-scene = { path = "crates/fub-scene", version = "0.1.0" }
 fub-format-svg = { path = "crates/fub-format-svg", version = "0.1.0" }
 fub-format-craft = { path = "crates/fub-format-craft", version = "0.1.0" }
@@ -217,6 +234,14 @@ image = { version = "0.25.10", default-features = false }
 # la prende, la versione è di qui.
 serde_yaml_ng = "0.10.0"
 ring = "0.17.14"
+# Il gruppo di thread dei motori (`fub-motori`, ADR 0236). Era già nell'albero,
+# 1.12.0, tirato da tantivy: prenderlo come dipendenza diretta non aggiunge un
+# crate. Il gruppo è uno suo, con un nome, e non quello globale, che usa tantivy.
+rayon = "1.12.0"
+# `access(2)` in `fub-kernel` e `malloc_trim(3)` in `fub-motori`. Già
+# nell'albero (0.2.189, da notify e da glib), e dipende dal solo `libc`
+# stesso: ogni crate lo prende dietro il proprio `cfg` di piattaforma.
+libc = "0.2"
 base64 = "0.22.1"
 uuid = { version = "1.24.0", features = ["v4"] }
 parking_lot = "0.12.5"

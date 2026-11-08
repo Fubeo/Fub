@@ -39,7 +39,7 @@ linea, col suo nome, e apre un menu:
 
 - **le forme**, ciascuna con la sua figura, e «Nessuna» per toglierla;
 - **«Un’altra punta»**, scelta e spenta, quando quel capo ha un marcatore che
-  FubDraw non ha scritto: si vede com'è, e una forma della raccolta lo
+  Fub non ha scritto: si vede com'è, e una forma della raccolta lo
   sostituisce;
 - **le misure**, per una punta della raccolta;
 - **«Scambia inizio e fine»**, che porta ogni punta al capo opposto.
@@ -88,7 +88,7 @@ usa più se ne va, nello stesso passo.
   stroke-width="3" marker-end="url(#p1)"/>
 ```
 
-`fub:marker` dice la forma, la misura e il capo; FubDraw riconosce come sua
+`fub:marker` dice la forma, la misura e il capo; Fub riconosce come sua
 soltanto la punta che scriverebbe identica, e ogni altro marcatore è
 «Un’altra punta». Come lo scrive il file è in [Formato della scena,
 risorse](../reference/scene-format-resources.md#le-punte-delle-linee).

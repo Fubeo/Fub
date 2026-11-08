@@ -64,6 +64,13 @@ export interface SurfaceMountContext {
    * carries it.
    */
   readonly gesture?: boolean;
+  /**
+   * The page the opening asks for, 1-based: a link to `x.pdf#page=3` in a
+   * note. Only a paged viewer reads it; beyond the last page it shows the
+   * last one. Like `gesture`, only the mount the opening gives birth to (or
+   * brings back on its tab) carries it.
+   */
+  readonly page?: number;
 }
 
 /** A selected range, in UTF-8 bytes of the document source, with its text. */
@@ -398,6 +405,12 @@ export interface EditorSurface {
    * cannot get there, so that the shell says it instead of doing nothing.
    */
   reveal?(location: SurfaceLocation): boolean;
+  /**
+   * Goes to page `page` (1-based) of a paged document already shown: a link
+   * to `x.pdf#page=3` followed while its tab is the active one. A surface
+   * without pages leaves it out.
+   */
+  showPage?(page: number): void;
   selections?(): EditorSelections | undefined;
   /**
    * A surface without text ranges says what it has selected here instead of
@@ -465,7 +478,25 @@ export interface EditorSurface {
    * a sheet); without it the shell narrows the formatting bar.
    */
   miniBar?(): SurfaceMiniBar | null;
+  /**
+   * The commands this surface adds to the command palette while its pane has
+   * the focus (a sheet's catalog commands). Read each time the palette opens;
+   * an entry with `unavailable` is shown with that reason and not run.
+   */
+  paletteCommands?(): readonly SurfacePaletteCommand[];
   destroy(): void;
+}
+
+/** A command a surface offers to the command palette. */
+export interface SurfacePaletteCommand {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  /** The group the palette shows beside the title («Foglio»). */
+  readonly group: string;
+  /** Why it cannot run now, or `null` when it can. */
+  readonly unavailable: string | null;
+  run(): void;
 }
 
 /**

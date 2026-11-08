@@ -4,12 +4,15 @@ import { vaultEntries } from "../host/query";
 import { applyIntent } from "../ui/intents";
 import { notify } from "../ui/notify";
 import { flushPendingSave } from "./document-session";
+import { focusedSurfaceCommands } from "./document-controller";
 
 /// Ciò che la palette chiede alla shell.
 export const paletteHost = {
   onEffect: applyIntent,
   notify,
   flushPendingSave,
+  // I comandi della superficie col fuoco: quelli del foglio, con «Foglio».
+  editorCommands: focusedSurfaceCommands,
   // Dal canale dati (§14.4), **con una finestra** (§2.9). Questi path
   // riempiono un `<datalist>`, cioè dei suggerimenti sopra un campo che resta
   // libero: chiedere l'anagrafe intera per proporne una manciata mandava

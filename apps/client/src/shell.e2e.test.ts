@@ -42,7 +42,7 @@ import {
   mountedTextEditors as editorViews,
   undoDepth,
 } from "./editors/text/test-support";
-import type { FakeHost } from "./host/fake";
+import type { Call, FakeHost } from "./host/fake";
 import type { KernelNotice, SettingEntry, CommandSpec, KnownVault } from "./host/contract";
 import { SHELL_KEYS } from "./ui/shell-keys.generated";
 
@@ -238,6 +238,12 @@ async function waitFor(thing: string, cond: () => boolean, within = 2000): Promi
     await new Promise((r) => setTimeout(r, 10));
   }
   throw new Error(`non è mai successo: ${thing}`);
+}
+
+/// Le letture di un documento, in ordine: quelle semplici e quelle di una
+/// sessione sotto la sua chiave di apertura. Tutte e due hanno l'id per primo.
+function documentReads(host: FakeHost): Call[] {
+  return host.calls.filter((call) => call.gate === "readDocument" || call.gate === "openDocument");
 }
 
 function rowsOfNote(): HTMLElement[] {
@@ -1120,13 +1126,13 @@ describe("apri un vault", () => {
 
     fileRows()[0]!.click();
     await settle();
-    expect(host.atGate("readDocument").map((call) => call.args[0])).not.toContain("note/dati.zip");
+    expect(documentReads(host).map((call) => call.args[0])).not.toContain("note/dati.zip");
     expect(host.atGate("resourceOpen")).toHaveLength(0);
 
     fileRows()[1]!.click();
     await waitFor("il visualizzatore chiede la risorsa", () => host.atGate("resourceOpen").length > 0);
     expect(host.atGate("resourceOpen")[0]!.args[0]).toBe("note/foto.png");
-    expect(host.atGate("readDocument").map((call) => call.args[0])).not.toContain("note/foto.png");
+    expect(documentReads(host).map((call) => call.args[0])).not.toContain("note/foto.png");
   });
 
   it("un allegato si cestina dal suo menu contestuale, come una nota", async () => {
@@ -1244,7 +1250,7 @@ describe("apri un vault", () => {
 describe("scrivi", () => {
   it("ciò che si batte arriva al disco, e discende dalla revisione che si era letta", async () => {
     const host = await start(VAULT);
-    const reads = host.atGate("readDocument");
+    const reads = documentReads(host);
     const read = reads[reads.length - 1];
     expect(read?.args[0]).toBe("Benvenuto.md");
 
@@ -1315,9 +1321,53 @@ describe("i confini del buffer", () => {
     );
   });
 
+  it("dice che il file è in sola lettura, tiene la bozza e non lo ripete a ogni battuta", async () => {
+    const host = await start(VAULT);
+    const repair = host.fault("writeDocument", {
+      kind: "permission_denied",
+      message: "il file è in sola lettura: Benvenuto.md",
+    });
+    const { recentNotices } = await import("./ui/notify");
+    const readOnly = () =>
+      recentNotices().filter((notice) => notice.text.includes("è in sola lettura: Fub non lo sovrascrive"));
+
+    typeInEditor("testo su un file in sola lettura");
+    await waitFor("la scrittura rifiutata parte", () => host.atGate("writeDocument").length === 1);
+    await waitFor(
+      "lo stato diventa fallito",
+      () => document.getElementById("save-state")?.dataset.state === "fallito",
+    );
+    expect(host.files()["Benvenuto.md"]).not.toContain("testo su un file in sola lettura");
+    expect(readOnly(), "l'avviso dice sola lettura, non un errore di I/O").toHaveLength(1);
+    expect(readOnly()[0]!.times).toBe(1);
+    expect(
+      recentNotices().some((notice) => notice.text.includes("non è stato salvato")),
+      "non è il messaggio del guasto generico",
+    ).toBe(false);
+
+    // Un'altra battuta: il salvataggio automatico ci riprova, l'avviso no.
+    typeInEditor(" ancora");
+    await waitFor("la seconda scrittura rifiutata parte", () => host.atGate("writeDocument").length === 2);
+    await waitFor(
+      "lo stato torna fallito",
+      () => document.getElementById("save-state")?.dataset.state === "fallito",
+    );
+    await settle();
+    expect(readOnly()[0]!.times, "l'avviso non si ripete a ogni battuta").toBe(1);
+    expect(host.files()["Benvenuto.md"]).not.toContain("testo su un file in sola lettura");
+
+    // Il file torna scrivibile: «Riprova» salva quello che era rimasto.
+    repair();
+    document.querySelector<HTMLButtonElement>('.sheet-notice[data-notice="save_failed"] button')!.click();
+    await waitFor(
+      "il testo rimasto arriva sul disco",
+      () => host.files()["Benvenuto.md"]?.includes("testo su un file in sola lettura ancora") === true,
+    );
+  });
+
   it("ricarica un cambio watcher quando il buffer è pulito", async () => {
     const host = await start(VAULT);
-    const readsBefore = host.atGate("readDocument").length;
+    const readsBefore = documentReads(host).length;
 
     await host.module.api.writeDocument(
       "Benvenuto.md",
@@ -1328,7 +1378,7 @@ describe("i confini del buffer", () => {
 
     await waitFor(
       "il documento viene riletto dopo il cambio watcher",
-      () => host.atGate("readDocument").length > readsBefore,
+      () => documentReads(host).length > readsBefore,
     );
     await waitFor(
       "il testo watcher arriva all'editor",
@@ -1344,7 +1394,7 @@ describe("i confini del buffer", () => {
   it("non sovrascrive il buffer sporco quando il watcher cambia il file", async () => {
     const host = await start(VAULT);
     typeInEditor("testo locale non salvato");
-    const readsBefore = host.atGate("readDocument").length;
+    const readsBefore = documentReads(host).length;
 
     await host.module.api.writeDocument(
       "Benvenuto.md",
@@ -1354,7 +1404,7 @@ describe("i confini del buffer", () => {
     expect(host.emit({ type: "document_changed", id: "Benvenuto.md" })).toBe(true);
 
     await settle();
-    expect(host.atGate("readDocument").length).toBe(readsBefore);
+    expect(documentReads(host).length).toBe(readsBefore);
     expect(textToVideo()).toContain("testo locale non salvato");
     expect(textToVideo()).not.toContain("testo arrivato dal watcher");
     expect(document.querySelector('.sheet-notice[data-notice]')?.getAttribute("data-notice")).toMatch(/changed_on_disk|overwritten/);
@@ -1404,7 +1454,7 @@ describe("i confini del buffer", () => {
 describe("undo locale tra riquadri", () => {
   it("condivide il testo ma non la cronologia, senza rileggere o lasciare timer", async () => {
     const host = await start(VAULT);
-    const readsAtSplit = host.atGate("readDocument").length;
+    const readsAtSplit = documentReads(host).length;
     const initial = editorTexts();
     expect(initial).toHaveLength(1);
 
@@ -1413,7 +1463,7 @@ describe("undo locale tra riquadri", () => {
     );
     await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
     await settle();
-    expect(host.atGate("readDocument").length).toBe(readsAtSplit);
+    expect(documentReads(host).length).toBe(readsAtSplit);
     expect(editorTexts()).toEqual([initial[0], initial[0]]);
 
     const views = editorViews();
@@ -1645,7 +1695,7 @@ describe("due salvataggi della stessa nota", () => {
     expect(host.atGate("writeDocument").length).toBe(1);
 
     unlock();
-    await waitFor("la nota si apre", () => host.atGate("readDocument").length > 1);
+    await waitFor("la nota si apre", () => documentReads(host).length > 1);
     await settle();
 
     // Una scrittura sola, e nessun conflitto: il flush ha aspettato quella in
@@ -2792,7 +2842,7 @@ describe("cerca", () => {
 
     results[0].click();
     await waitFor("il documento cercato si apre", () =>
-      host.atGate("readDocument").some((c) => c.args[0] === "note/Spesa.md"),
+      documentReads(host).some((c) => c.args[0] === "note/Spesa.md"),
     );
     await settle();
     expect(textToVideo()).toContain("pane, latte, arance");
@@ -3242,13 +3292,61 @@ describe("i riquadri dopo un'attesa", () => {
     expect(host.files()["note/Riunione.md"]).toBe("disco B\n");
   });
 
+  it("in Lettura il conflitto mostra il testo di chi scrive e lo dice nella fascia (R03)", async () => {
+    const host = await start(VAULT);
+    const { setMode } = await import("./panels/document");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banner = () => document.querySelector<HTMLElement>(".pane [data-banner='document.conflict.body']");
+    const readingLine = () => banner()?.querySelector<HTMLElement>("[data-conflict-reading]") ?? null;
+    await waitFor("la nota va in conflitto", () => banner()?.hidden === false);
+    expect(readingLine(), "in Live la riga della Lettura non c'è").toBeNull();
+
+    await setMode("reading");
+    await settle();
+    const rendered = document.querySelector<HTMLElement>(".pane-preview.markdown-rendered");
+    expect(rendered?.textContent, "la Lettura mostra il buffer").toContain("mio A");
+    expect(rendered?.textContent).not.toContain("disco A");
+    expect(banner()?.hidden, "la fascia resta in Lettura").toBe(false);
+    expect(banner()?.querySelectorAll(".conflict-actions button[data-choice]")).toHaveLength(2);
+    expect(readingLine()?.textContent).toBe("Stai leggendo la tua versione, non ancora salvata");
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='mine']")!.click();
+    await waitFor("il conflitto si chiude", () => banner()?.hidden !== false);
+    expect(readingLine(), "risolto il conflitto, la riga sparisce").toBeNull();
+    expect(document.querySelector(".pane-preview.markdown-rendered")?.textContent).toContain("mio A");
+  });
+
+  it("due riquadri sulla stessa nota in conflitto: la riga solo in quello in Lettura", async () => {
+    const host = await start(VAULT);
+    await splitRight();
+    await waitFor("il secondo riquadro si apre", () => document.querySelectorAll(".pane").length === 2);
+    await settle();
+    const { setMode } = await import("./panels/document");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banners = () => [...document.querySelectorAll<HTMLElement>(".pane")]
+      .map((pane) => pane.querySelector<HTMLElement>("[data-banner='document.conflict.body']"));
+    await waitFor("la nota va in conflitto in entrambi", () => banners().every((b) => b && !b.hidden));
+
+    // Il fuoco è sul secondo riquadro, appena aperto: passa in Lettura.
+    await setMode("reading");
+    await settle();
+    const panes = [...document.querySelectorAll<HTMLElement>(".pane")];
+    expect(panes[1]!.querySelector(".pane-preview.markdown-rendered")?.textContent).toContain("mio A");
+    expect(editorTexts()[0]).toContain("mio A");
+    expect(banners()[0]!.querySelector("[data-conflict-reading]"), "il riquadro in Live non la mostra").toBeNull();
+    expect(banners()[1]!.querySelector("[data-conflict-reading]")?.textContent)
+      .toBe("Stai leggendo la tua versione, non ancora salvata");
+  });
+
   it("una lettura fallita non lascia la linguetta mostrata senza editor", async () => {
     const host = await start(VAULT);
     const { openDocument, synchronize } = await import("./panels/document");
-    const restore = host.fault("readDocument");
+    const restore = [host.fault("readDocument"), host.fault("openDocument")];
     await openDocument("note/Spesa.md").catch(() => {});
     expect(textToVideo()).not.toContain("pane, latte");
-    restore();
+    for (const undo of restore) undo();
 
     await synchronize();
     await settle();

@@ -190,6 +190,8 @@ export type TextTolerance = "exact" | "typos";
 
 export type ThemeEngine = "theme-1" | "theme-2";
 
+export type ThemeFontStyle = "normal" | "italic";
+
 export type ThemeLight = "dark" | "light";
 
 export type ThemeMotion = "opacity" | "transform";

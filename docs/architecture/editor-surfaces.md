@@ -61,7 +61,7 @@ contratto della superficie vera (`apps/client/src/editors/spatial/lazy.ts`):
 finché `import()` non risolve tiene testo, modalità, sola lettura, fuoco e un
 rimando, e li consegna nell'ordine in cui la shell li avrebbe dati. Un `reveal`
 in attesa risponde di sì; se poi la scena non ci arriva, l'avviso è quello della
-shell. Un caricamento fallito lascia il testo alla sessione. Il campo di testo del disegno è un altro pezzo pigro ([ADR 0224](../decisions/0224-scrittura-il-nucleo-del-testo-ricco.md)).
+shell. Un caricamento fallito lascia il testo alla sessione. Il campo di testo del disegno è un altro pezzo pigro ([ADR 0224](../decisions/0224-scrittura-il-nucleo-del-testo-ricco.md)). Un'apertura può chiedere una pagina (un link a `x.pdf#page=3`, `OpenOptions.page`): la riceve il montaggio che l'apertura fa nascere o riporta in primo piano (`SurfaceMountContext.page`, l'`initialPage` del visore del PDF), o `EditorSurface.showPage` se la scheda era già attiva; resta del client, senza IPC.
 
 I comandi `shell.doc.source.open` («Apri come sorgente») e
 `shell.doc.source.close` («Chiudi la vista sorgente») impostano e tolgono la
@@ -275,9 +275,9 @@ TypeScript interni e iniettati dal chiamante; non attraversano IPC, WIT o ABI.
 
 ### Markdown: Source, Live e Reading
 
-Source, Live e Reading sono tre viste sullo stesso `TextEngine` e sullo stesso
-buffer della `DocumentSession`: il cambio modo riusa la vista di scrittura e
-Reading ridisegna dal buffer corrente, senza salvataggio imposto.
+Source, Live e Reading sono tre viste sullo stesso `TextEngine` e buffer della
+`DocumentSession`. Il cambio modo riusa la vista di scrittura; Reading ridisegna
+dal buffer senza salvare, e in conflitto la fascia (`drawConflict`) lo dice.
 
 I blocchi Live inattivi e Reading condividono lo stesso renderer locale in
 `apps/client/src/editors/text/profiles/markdown/render*.ts` e lo stesso

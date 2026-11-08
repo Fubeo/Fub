@@ -24,7 +24,8 @@ Usa `npm ci`, non sostituire npm con un altro package manager.
 
 Lo stesso ciclo sta in un comando solo, `scripts/check.sh`: fa quello che la
 CI fa su Linux, banchi esclusi, e stampa una riga per passo. Con `--rapido`
-controlla soltanto ciò che il diff tocca e i crate che lo usano; con `--banchi`
+controlla soltanto ciò che il diff tocca e i crate che lo usano, più i test di
+`fub-abi`, che leggono i sorgenti di ogni crate e i documenti; con `--banchi`
 aggiunge i banchi del client. `check-locale-loop.mjs` verifica che contenga
 ogni comando del blocco `ci-required` qui sotto.
 
@@ -86,6 +87,7 @@ npm run typecheck
 npm test
 npm run build
 npm run bench:grid
+npm run bench:lampo
 node .github/scripts/check-host-workspace-boundary.mjs
 node .github/scripts/check-error-literals.mjs
 node .github/scripts/check-rust-comments.mjs

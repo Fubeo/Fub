@@ -61,6 +61,9 @@ export interface PaletteHost {
   // pannello, perché il pannello trascina il DOM e la palette deve restare
   // testabile come funzioni pure.
   flushPendingSave(): Promise<string[]>;
+  // I comandi che la superficie del riquadro col fuoco aggiunge (il foglio):
+  // si rileggono a ogni apertura, perché cambiano col riquadro e la selezione.
+  editorCommands?(): CommandEntry[];
 }
 
 // --- le decisioni, separate dal DOM ----------------------------------------
@@ -417,7 +420,7 @@ export function closeCommandPalette() {
 /// argomenti obbligatori la apre chi glieli dà. Dopo di loro le view della
 /// barra sinistra, che non si aprono in un riquadro ma si mostrano al loro
 /// posto: la sincronizzazione, il cestino, le collezioni.
-export function viewEntries(host: Pick<PaletteHost, "onEffect">): CommandEntry[] {
+export function viewEntries(host: Pick<PaletteHost, "onEffect" | "editorCommands">): CommandEntry[] {
   const mains = primaryViews().filter(opensWithoutParams).map((spec): CommandEntry => ({
     id: `view:${spec.id}`,
     title: t("palette.open_view", { title: spec.title }),
@@ -438,7 +441,7 @@ export function viewEntries(host: Pick<PaletteHost, "onEffect">): CommandEntry[]
     spec: null,
     run: () => openSidePanelView(spec.id),
   }));
-  return [...mains, ...panels];
+  return [...mains, ...panels, ...(host.editorCommands?.() ?? [])];
 }
 
 /// Apre la palette. Tre passi al più: scegli, compila, approva.
@@ -786,6 +789,10 @@ export function closeSlashPalette(owner: HTMLElement): void {
 /// (la cartella dove si crea, per esempio): lo riceve il modulo proprio del
 /// comando, se ne ha uno, e altrimenti riempie i campi del modulo generico.
 export function startCommand(entry: CommandEntry, host: PaletteHost, prefill: Readonly<Record<string, string>> = {}) {
+  if (entry.unavailable) {
+    host.notify(entry.unavailable, "info");
+    return;
+  }
   if (entry.run) {
     runShellCommand(entry, host);
     return;
@@ -918,6 +925,11 @@ function chooseSpecs(
         radius.className = "palette-scope";
         radius.textContent = scopeLabel(spec.spec);
         row.append(radius);
+      } else if (spec.group) {
+        const group = document.createElement("span");
+        group.className = "palette-scope";
+        group.textContent = spec.group;
+        row.append(group);
       }
       // L'accordo **efficace**, non quello dichiarato: se l'utente l'ha
       // cambiato, la palette è il posto in cui lo scopre.
@@ -939,6 +951,13 @@ function chooseSpecs(
       const desc = document.createElement("div");
       desc.className = "palette-desc";
       desc.textContent = spec.description;
+      // Un comando spento resta nell'elenco col suo motivo al posto della
+      // descrizione: si trova, e si sa perché adesso non va.
+      if (spec.unavailable) {
+        li.setAttribute("aria-disabled", "true");
+        li.classList.add("palette-off");
+        desc.textContent = spec.unavailable;
+      }
 
       li.append(row, desc);
       li.addEventListener("click", (click) => {
@@ -1022,6 +1041,12 @@ function chooseSpecs(
 function start(entry: CommandEntry, box: HTMLElement, host: PaletteHost, prefill: Readonly<Record<string, string>> = {}) {
   // Un comando di shell si fa e basta: non ha parametri da chiedere né un piano
   // da mostrare, perché non tocca il vault.
+  // Uno spento si dice e non si fa: la palette si chiude col suo motivo.
+  if (entry.unavailable) {
+    closeCommandPalette();
+    host.notify(entry.unavailable, "info");
+    return;
+  }
   if (entry.run) {
     closeCommandPalette();
     rememberCommand(entry.id);

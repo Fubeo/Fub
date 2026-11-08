@@ -211,6 +211,38 @@ La conversione vive in `fub_abi::arena` e viene riusata dal proxy WASM. Limiti
 di profondità e indici fuori range producono un errore; non si ricostruisce un
 albero malformato.
 
+## Il testo non salvato
+
+Nella shell il testo battuto e non ancora sul disco vive nella
+`DocumentSession` del documento (`apps/client/src/state/document-session.ts`),
+una per documento, condivisa da tutti i riquadri e dalle finestre che lo
+mostrano. Ciò che succede a quel testo quando un gesto tocca la sessione:
+
+- **Il rilascio.** Quando nessuno guarda più il documento, `release()` prova
+  il salvataggio e, se il buffer resta sporco, la bozza. Se il buffer è ancora
+  sporco (il salvataggio è fallito o c'è un conflitto, anche con la bozza
+  scritta) restituisce `unsaved` e **la sessione resta aperta**: è l'unica
+  copia del lavoro, e nessun chiamante la chiude da sé.
+- **Una linguetta o un riquadro che si chiude.** Il controller passa da
+  `dismissIfUnwatched`: davanti a `unsaved` chiede con il dialogo
+  `document.close_unsaved` se scartare le modifiche o tenere la nota, e senza
+  una risposta esplicita la nota torna aperta dov'era.
+- **Uno spazio di lavoro che toglie la nota, una finestra del documento che si
+  chiude, un'apertura che finisce con la linguetta già chiusa.** Questi
+  rilasci (`state/shell-layout.ts`, `state/document-bridge.ts`, il `finally`
+  di `openDocument`) non chiedono niente: davanti a `unsaved` la sessione resta
+  viva e sporca nella finestra principale, la nota riaperta mostra il testo e
+  la bozza riparte alla prossima occasione. La chiusura dell'app la salva o
+  la mette in bozza come ogni altra sessione, e si rifiuta se non ci riesce.
+- **Un ripristino di versione.** `version.restore` riscrive il file sotto al
+  buffer: per la sessione è un cambio da fuori come un altro. Il testo della
+  persona resta, la nota dice che il file è cambiato sul disco, e il
+  salvataggio successivo va in conflitto invece di coprire la versione
+  ripristinata.
+- **La ricarica forzata.** `forceReload()` scarta il buffer per il disco solo
+  dopo averlo messo in bozza: se la bozza non si scrive restituisce
+  `unavailable` e lascia testo e stato com'erano. Nessun gesto la usa.
+
 ## Invarianti
 
 - il modello non importa Markdown;
@@ -237,4 +269,6 @@ albero malformato.
 - `crates/fub-format-xlsx/src/inventory.rs`
 - `crates/fub-format-xlsx/tests/corpus.rs`
 - `apps/client/src/editors/grid/workbook.ts`
+- `apps/client/src/state/document-session.ts`
+- `apps/client/src/state/document-controller.ts`
 - `crates/fub-format-svg/src/parse.rs`

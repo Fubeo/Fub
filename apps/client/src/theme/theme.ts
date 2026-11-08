@@ -13,6 +13,7 @@ import {
   mountThemeBundle,
   validateThemeBundle,
   declareThemeProfile,
+  type ThemeBundle,
   type ThemeBundleManifest,
   type ThemeMountResult,
   type ThemeProfile,
@@ -157,6 +158,35 @@ let warn: (theme: Theme) => void = () => {};
 let settingEntries: readonly SettingEntry[] = [];
 let mountedOptions: ThemeOptions = { themeId: SERIES_THEME_ID, themeName: "", options: [] };
 
+/// La prima lettura delle impostazioni di questo montaggio è stata applicata:
+/// da qui il tema montato è quello scelto (anche dal catalogo, se c'è), non più
+/// quello della cache del primo fotogramma. Lo aspetta la consegna dello strato
+/// d'avvio (`avvio/consegna.ts`), che ne legge i colori.
+let themeSettled = false;
+let settledWaiters: (() => void)[] = [];
+
+function settleTheme(): void {
+  themeSettled = true;
+  const waiting = settledWaiters;
+  settledWaiters = [];
+  for (const resolve of waiting) resolve();
+}
+
+/// Si risolve quando il tema è quello definitivo dell'avvio: la prima lettura
+/// delle impostazioni e del catalogo è applicata, comunque sia andata. Chi non
+/// può aspettare a lungo la mette in gara con un tempo suo.
+export function whenThemeSettled(): Promise<void> {
+  if (themeSettled) return Promise.resolve();
+  return new Promise((resolve) => settledWaiters.push(resolve));
+}
+
+/// Le scelte di luce e di contrasto, non il loro risultato: `""` è «come il
+/// sistema». Le salva lo strato d'avvio, che le risolve da sé al prossimo
+/// avvio con le regole di `effectiveTheme` ed `effectiveContrast`.
+export function themeChoices(): { readonly light: Theme | ""; readonly contrast: string } {
+  return { light: themeChoice, contrast: contrastChoice };
+}
+
 /** Le scelte del tema montato, col valore che vale adesso. */
 export interface ThemeOptions {
   readonly themeId: string;
@@ -241,17 +271,22 @@ export function preferenceTokens(
   return tokens;
 }
 
-function themeBundle(payload: ThemePayload): {
-  manifest: ThemeBundleManifest;
-  sheet: string;
-  skin?: string;
-  assets: Readonly<Record<string, unknown>>;
-} {
+/**
+ * Il fascio da montare per una luce di un tema installato. Un tema che eredita
+ * dalla serie (`extends: "fub.serie"`) e non porta il foglio di questa luce
+ * prende quello di serie della stessa luce e dello stesso contrasto, e porta
+ * con sé la pelle di serie, che resta montata sotto la sua (ADR 0240).
+ * Ereditare da altro che la serie non si sa fare: il fascio parte senza
+ * eredità e il cancello lo rifiuta dicendo da chi voleva ereditare.
+ */
+function themeBundle(payload: ThemePayload, light: Theme, contrast: ContrastLevel): ThemeBundle {
+  const inherits = payload.manifest.extends === SERIES_THEME_ID;
   return {
     manifest: payload.manifest,
-    sheet: payload.sheet,
+    sheet: payload.sheet ?? (inherits ? series.sheet(light, contrast) : ""),
     skin: payload.skin ?? undefined,
     assets: payload.assets,
+    ...(inherits ? { inherited: { skin: series.skin } } : {}),
   };
 }
 
@@ -311,7 +346,7 @@ async function apply(): Promise<void> {
         if (payload.manifest.id !== requestedId || payload.light !== light) {
           reportLoadFailure(requestedId, "risposta del canale non coerente");
         } else {
-          mounted = mountThemeBundle(themeBundle(payload), light);
+          mounted = mountThemeBundle(themeBundle(payload, light, contrast), light);
           if (mounted.mounted) actualId = requestedId;
         }
       } catch (error) {
@@ -459,7 +494,10 @@ async function readCatalog(): Promise<ThemeInfo[]> {
                 // Un fascio che il cancello rifiuta resta installato ma fuori
                 // dal catalogo, e la persona sa perché: è anche il caso di un
                 // tema `theme-1`, scritto per la shell di prima.
-                const reasons = validateThemeBundle(themeBundle(payload), light);
+                // Il foglio ereditato si misura col contrasto di adesso: è
+                // quello che `apply` monterà.
+                const contrast = effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
+                const reasons = validateThemeBundle(themeBundle(payload, light, contrast), light);
                 if (reasons.length > 0) {
                   reportThemeTrouble({ type: "theme", theme: info.manifest.name, reasons });
                   return null;
@@ -654,5 +692,9 @@ export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void)
   }
   lifetime.add(onEvent("setting_changed", () => void reread()));
   lifetime.add(on("vault", () => void reread()));
-  void reread();
+  themeSettled = false;
+  const epoch = catalogEpoch;
+  void reread().finally(() => {
+    if (epoch === catalogEpoch) settleTheme();
+  });
 }

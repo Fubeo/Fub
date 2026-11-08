@@ -941,11 +941,11 @@ describe("disporre, nel Completo", () => {
     editor.select([A, B]);
     key("g", { ctrlKey: true });
     expect(editor.engine.text).toBe(source);
-    expect(spoken()).toBe("Non raggruppato: un elemento cambierebbe «fill», e FubDraw non sa riscriverlo com’era.");
+    expect(spoken()).toBe("Non raggruppato: un elemento cambierebbe «fill», e Fub non sa riscriverlo com’era.");
     editor.select([A]);
     key("]", { ctrlKey: true, shiftKey: true });
     expect(editor.engine.text).toBe(source);
-    expect(spoken()).toBe("Ordine invariato: un elemento cambierebbe «stroke», e FubDraw non sa riscriverlo com’era.");
+    expect(spoken()).toBe("Ordine invariato: un elemento cambierebbe «stroke», e Fub non sa riscriverlo com’era.");
   });
 
   it("un foglio di stile che dipende da dove si guarda il disegno ferma il comando, e si dice quale", () => {
@@ -3223,7 +3223,7 @@ describe("spostare dall'albero, nel Completo", () => {
     inTree("End");
     expect(activeKey()).toBe("oe5e5e5e5");
     inTree("ArrowUp", { altKey: true });
-    expect(spoken()).toBe("Lì non va: un elemento cambierebbe «fill», e FubDraw non sa riscriverlo com’era.");
+    expect(spoken()).toBe("Lì non va: un elemento cambierebbe «fill», e Fub non sa riscriverlo com’era.");
     expect(editor.engine.text).toBe(source);
   });
 

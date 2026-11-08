@@ -2167,7 +2167,7 @@ mod tests {
         entered_rx
             .recv_timeout(Duration::from_secs(10))
             .expect("IndexProvider::on_documents_indexed entra durante l'apertura");
-        let reader_progressed = shared.workspace.try_read().is_some();
+        let reader_progressed = crate::legacy_tests::read_comes_free(&shared.workspace);
         release_tx.send(()).expect("il feed può terminare");
         let outcome = slice.join().expect("il thread dell'apertura non panica");
 
@@ -2194,7 +2194,8 @@ mod tests {
     ///
     /// `try_read` e non `read`: un `read` che aspettasse sarebbe verde anche col
     /// prestito esclusivo, perché aspetterebbe la fine del parse e poi
-    /// passerebbe.
+    /// passerebbe. La si riprova entro una scadenza, sempre con la fetta ferma
+    /// al cancello: chi passa per un istante si libera, la fetta no.
     #[test]
     fn who_reads_enters_while_the_opening_slice_reads_the_disk() {
         let gate: Arc<Gate> = Arc::default();
@@ -2214,7 +2215,10 @@ mod tests {
 
         // Il parse è cominciato: da qui in poi la fetta sta facendo I/O.
         within.recv().expect("la fetta entra nel parse");
-        let read_value = shared.workspace.try_read();
+        let read_value = crate::legacy_tests::try_read_within(
+            &shared.workspace,
+            crate::legacy_tests::FREE_WITHIN,
+        );
         assert!(
             read_value.is_some(),
             "il workspace non si presta mentre la fetta dell'apertura legge il \
@@ -2330,17 +2334,14 @@ mod tests {
 
     /// Avvelena una custodia come la avvelena la vita: un thread che pania
     /// tenendo il prestito **esclusivo**. Il panico è di proposito e non deve
-    /// sporcare l'output del banco.
+    /// sporcare l'output del banco: tace solo il suo thread
+    /// ([`crate::quiet_panic`]), non quelli degli altri test.
     fn poison<T: Send + Sync + 'static>(c: &Custody<T>) {
         let copy = c.clone();
-        let hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
-        let _ = std::thread::spawn(move || {
+        crate::quiet_panic::quietly(move || {
             let _g = copy.write().expect("viva prima del misfatto");
             panic!("a metà");
-        })
-        .join();
-        std::panic::set_hook(hook);
+        });
     }
 
     /// Un vault seminato, scansionato e con la sua identità di job: il punto in

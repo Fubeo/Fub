@@ -9,14 +9,14 @@ mod suggest;
 #[cfg(test)]
 pub(crate) mod test_dict;
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use crate::affix::AffixDict;
 
 pub use suggest::suggest;
 
 /// The Indonesian dictionary: `None` until first use, then the installed one (or an empty one).
-static DICT: RwLock<Option<Arc<AffixDict>>> = RwLock::new(None);
+static DICT: crate::slot::Slot<AffixDict> = crate::slot::Slot::new();
 
 /// File names of an Indonesian Hunspell dictionary (`in` is the old ISO 639 code, still used by
 /// Java locales).
@@ -30,13 +30,7 @@ const CLITICS: &[&str] = &["se", "nya", "ku", "mu", "lah", "kah", "pun"];
 /// [`install_dictionary`], or an empty one when none is available (Indonesian spelling is off
 /// then; see [`has_dictionary`]).
 pub fn dictionary() -> Arc<AffixDict> {
-    if let Some(d) = DICT.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
-        return d.clone();
-    }
-    let loaded = Arc::new(load_installed());
-    let mut slot = DICT.write().unwrap_or_else(|e| e.into_inner());
-    // Another thread (or an install) may have filled it meanwhile: that one wins.
-    slot.get_or_insert(loaded).clone()
+    DICT.get(load_installed)
 }
 
 fn load_installed() -> AffixDict {
@@ -55,14 +49,27 @@ fn load_installed() -> AffixDict {
 /// UTF-8), for example one the user picked. On error the current dictionary stays.
 pub fn install_dictionary(aff: &str, dic: &str) -> Result<(), String> {
     let d = AffixDict::from_hunspell(aff, dic, &[])?;
-    *DICT.write().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(d));
+    DICT.install(d);
     Ok(())
 }
 
 /// Forget the loaded dictionary, so the next check looks for an installed one again (after
 /// [`crate::hunspell::set_dictionary_dir`] or a dictionary was installed).
 pub fn reload_dictionary() {
-    *DICT.write().unwrap_or_else(|e| e.into_inner()) = None;
+    DICT.forget();
+}
+
+/// Drop the dictionary read from disk (one given with [`install_dictionary`] stays), so it is read
+/// again on next use; a check running meanwhile finishes with the one it has. Returns its
+/// estimated bytes ([`loaded_dictionary_bytes`]), 0 when none was loaded.
+pub fn release_dictionary() -> usize {
+    DICT.release()
+}
+
+/// Estimated heap bytes of the dictionary read from disk (0 when none is loaded, or it was given
+/// with [`install_dictionary`]): the capacity of its tables and strings.
+pub fn loaded_dictionary_bytes() -> usize {
+    DICT.loaded_bytes()
 }
 
 /// The `.dic` file of the Hunspell `id_ID` dictionary found in the dictionaries folder or the

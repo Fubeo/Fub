@@ -425,6 +425,11 @@ async function inspectKeyboard(page) {
   const failures = [];
 
   try {
+    // Le lettere di Alt di una barra tengono i tasti, come in Office: il
+    // primo Tab le chiude e non sposta il fuoco. axe ha già esaminato la
+    // scena con le lettere; il percorso del Tab parte dalla barra a riposo,
+    // e Esc ce la riporta.
+    if (await page.locator("[data-keytips=\"true\"]").count() > 0) await page.keyboard.press("Escape");
     await page.evaluate(() => {
       const active = document.activeElement;
       if (active instanceof HTMLElement) active.blur();

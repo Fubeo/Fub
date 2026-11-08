@@ -254,6 +254,16 @@ describe("il cancello trasporta davvero gli asset e legge il moto dichiarato", (
   });
 
 
+  it("la pelle vuota rifiuta chi non eredita, non chi eredita dalla serie", () => {
+    // Per un tema con `extends` la pelle assente è il caso normale: lo veste
+    // la serie, che resta montata sotto di lui (ADR 0240).
+    expect(validateThemeBundle(bundle(sheetLight, " "), "light")).toContain("fascio: pelle vuota");
+    const inheriting = { ...SERIES_MANIFEST, id: "acme.carta", asset_namespace: "theme://acme.carta/", extends: "fub.serie" };
+    expect(
+      validateThemeBundle({ ...bundle(sheetLight, " "), manifest: inheriting, inherited: { skin } }, "light"),
+    ).toEqual([]);
+  });
+
   it("rifiuta un moto malformato invece di inventarlo", () => {
     const manifest = { ...SERIES_MANIFEST, motion: ["opacity", "filter"] };
     const reasons = validateThemeBundle(

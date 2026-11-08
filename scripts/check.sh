@@ -141,6 +141,7 @@ client_checks() { # client_checks completo|rapido
 rust_guards() {
   run "confine host/workspace" node .github/scripts/check-host-workspace-boundary.mjs
   run "confine dei motori" node .github/scripts/check-engine-boundary.mjs
+  run "interfaccia e doppioni di fub-app" bash -c 'node .github/scripts/check-motori.mjs --self-test && node .github/scripts/check-motori.mjs'
   run "errori letterali" node .github/scripts/check-error-literals.mjs
   run "commenti di Rust" bash -c 'node .github/scripts/check-rust-comments.mjs --self-test && node .github/scripts/check-rust-comments.mjs'
   run "versioni in un posto solo" node .github/scripts/check-cargo-versions.mjs
@@ -169,7 +170,7 @@ vendor_guards() {
 
 benches() {
   client_ready
-  for b in "bench:verify" "bench:a11y -- --light=dark" "bench:a11y -- --light=light" "bench:motion" "bench:fidelity" \
+  for b in "bench:verify" "bench:a11y -- --light=dark" "bench:a11y -- --light=light" "bench:motion" "bench:lampo" "bench:fidelity" \
            "bench:grid" "bench:large" \
            "bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3" \
            "bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8" \
@@ -231,6 +232,19 @@ if [ "$MODE" = rapido ]; then
     fi
   fi
   if [ "$(val docs)" = 1 ]; then doc_guards; fi
+  # I test di fub-abi leggono i sorgenti di tutti i crate (il censimento delle
+  # regole dei nomi, la tabella degli escape, le forme normalizzate) e i
+  # documenti (il grafo delle dipendenze di overview.md): un diff che tocca un
+  # altro crate o soli documenti li fa girare, se non sono già fra i crate
+  # toccati. Nessuno usa fub-abi come dev-dependency per questi test, quindi
+  # «chi li usa» non li raggiunge.
+  if [ "$(val docs)" = 1 ] || [ -n "$CRATES" ]; then
+    case " $CRATES " in
+      *" fub-abi "*) ;;
+      *) [ -n "$CRATES_ARG" ] || [ "$(val all)" = 1 ] \
+           || run "test di fub-abi (leggono sorgenti e documenti)" tests -p fub-abi ;;
+    esac
+  fi
   if [ "$(val github)" = 1 ]; then
     run "action pin a commit" node .github/scripts/check-actions-pinned.mjs
     [ "$(val docs)" = 1 ] || run "ciclo locale = CI" bash -c 'node .github/scripts/check-locale-loop.mjs --self-test && node .github/scripts/check-locale-loop.mjs'

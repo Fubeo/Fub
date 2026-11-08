@@ -259,6 +259,80 @@ globalThis.__fubLiveBench = Object.freeze({
 /// `fub-format-xlsx` produce davvero (`tests/ts_grid.rs`).
 const WORKBOOK_DOC = params.get("workbook") === "1" ? "Dati/Conti.xlsx" : null;
 
+/// Gli stati della barra dei fogli che la cartella generata non ha
+/// (`?grid=table|readonly`, insieme a `?workbook=1`): una copia delle sue
+/// finestre con una tabella dal nome lunghissimo sulla cella scelta, che
+/// accende la sezione della tabella, oppure una copia della sessione coi
+/// comandi che cambiano la cartella spenti, con il perché. Il JSON resta
+/// quello che `fub-format-xlsx` produce.
+const GRID_CASE = params.get("grid");
+const BENCH_TABLE = {
+  name: "Riepilogo_trimestrale_delle_spese_di_rappresentanza_2026",
+  row: 0,
+  column: 0,
+  rows: 6,
+  columns: 4,
+  header_row: true,
+  totals_row: false,
+  banded_rows: true,
+  banded_columns: false,
+  first_column: false,
+  last_column: false,
+  filter_button: true,
+  style: "TableStyleMedium2",
+};
+/// In sola lettura restano accesi soltanto i comandi che guardano.
+const LOOKING = /^(file|selection|view)\.|^edit\.(selectAll|goTo|goToSpecial|find)$/;
+function benchWindow<W extends { readonly sheet: string; readonly tables: readonly unknown[] }>(window: W): W {
+  return GRID_CASE === "table" && window.sheet === XLSX_GRID.session.active
+    ? { ...window, tables: [...window.tables, BENCH_TABLE] }
+    : window;
+}
+const BENCH_SESSION = GRID_CASE === "readonly"
+  ? {
+    ...XLSX_GRID.session,
+    commands: XLSX_GRID.session.commands.map((command) =>
+      LOOKING.test(command.id) ? command : { ...command, enabled: false, reason: "La cartella è aperta in sola lettura." }),
+  }
+  : XLSX_GRID.session;
+
+/// Il risultato dei comandi che leggono (`?result=stats|errors|empty`,
+/// insieme a `?workbook=1`): la risposta del provider alla prima esecuzione,
+/// senza modifiche alla cartella. Le statistiche di una selezione, cinquecento
+/// errori su un foglio dal nome lungo, nessun errore. Senza `result` il
+/// comando non è servito, e la finestra del risultato dice il perché.
+const RESULT_CASE = params.get("result");
+const RESULT_SHEET = "Movimenti del conto corrente cointestato 2026";
+const BENCH_RESULTS: Readonly<Record<string, unknown>> = {
+  stats: { count: 24, numeric: 24, sum: 16437.9, average: 684.9125, min: 88.6, max: 1403.15 },
+  errors: {
+    errors: Array.from({ length: 500 }, (_, i) => ({
+      sheet: RESULT_SHEET,
+      cell: `F${i + 2}`,
+      error: i % 7 === 3 ? "#VALUE!" : "#DIV/0!",
+      formula: `=D${i + 2}/E${i + 2}`,
+    })),
+    circular: [],
+  },
+  empty: { errors: [], circular: [] },
+};
+const BENCH_OUTCOMES = RESULT_CASE !== null && RESULT_CASE in BENCH_RESULTS
+  ? [{
+    commit: {
+      revision: BENCH_SESSION.revision,
+      edit: { from: 0, to: 0, deleted: "", inserted: "" },
+      invalidation: { kind: "cells", cells: [] },
+    },
+    sheets: BENCH_SESSION.sheets,
+    hidden: BENCH_SESSION.hidden,
+    selection: { sheet: BENCH_SESSION.active, selection: "B2:E7", active: "B2" },
+    result: JSON.stringify(BENCH_RESULTS[RESULT_CASE]),
+    dialog: null,
+    commands: BENCH_SESSION.commands,
+    book: BENCH_SESSION.book,
+  }]
+  : undefined;
+
 /// Il documento di videoscrittura delle scene `document-*` (`?rich=…`), con
 /// la proiezione che `fub-format-rich` dà davvero del file: quella con un po'
 /// di tutto (`tests/ts_projection.rs`), oppure un `.odt`, uno pieno di
@@ -303,6 +377,42 @@ if (PDF_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null || RAW_SCENE !
 const TREE_SCENE = treeSceneCase(params.get("albero"));
 if (TREE_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null || RAW_SCENE !== null || PDF_SCENE !== null)) {
   throw new RangeError("albero is a vault of its own");
+}
+
+/// Il cestino con tre file (`?cestino=3`): la scena del telefono che guarda
+/// i bottoni «Ripristina» di righe vicine. Le altre scene lo hanno vuoto.
+const TRASH_FULL = params.get("cestino") === "3";
+
+/// Il cestino pieno nella forma del provider `trash` (fub-features,
+/// `trash.rs`): una colonna con l'elenco, ogni voce una riga col nome, quando
+/// è stata cestinata e «Ripristina», e sotto «Svuota il cestino».
+function trashWithThree(): UiNode {
+  const row = (id: string, original: string, when: string): UiNode => ({
+    node: "stack",
+    key: id,
+    dir: "row",
+    gap: 1,
+    children: [
+      { node: "list_item", title: original, subtitle: `Cestinata il ${when}`, action: null, selected: false },
+      { node: "button", label: "Ripristina", intent: "primary", action: { action: "restore", payload: { entry: id, original } } },
+    ],
+  });
+  return {
+    node: "stack",
+    dir: "column",
+    gap: 1,
+    children: [
+      {
+        node: "list",
+        items: [
+          row("1-Bozza.md", "Bozza", "19 agosto 2026, 09:02"),
+          row("2-Lista della spesa.md", "Lista della spesa", "18 agosto 2026, 17:40"),
+          row("3-Prima idea.md", "Prima idea", "12 agosto 2026, 11:05"),
+        ],
+      },
+      { node: "button", label: "Svuota il cestino", intent: "danger", action: { action: "empty", payload: null } },
+    ],
+  };
 }
 
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
@@ -448,6 +558,11 @@ const SLASH_COMMANDS: readonly CommandSpec[] = params.get("slash") === "1" ? SLA
 /// Le settings: una per **ogni** specie di `SettingKind`, perché il pannello
 /// disegna un controllo diverso per ciascuna e una scena che ne mostrasse solo
 /// due fotograferebbe metà del form.
+/// Il gruppo Aspetto invece è **intero**, con le voci, i testi e l'ordine di
+/// `appearance_settings` (`fub-host/src/settings.rs`): la foto delle
+/// impostazioni è quella della shell vera, e `fake-ipc.test.ts` lo tiene.
+/// `appearance.theme-id` il form non lo mostra (ha il suo gesto nel catalogo
+/// dei temi), ma c'è, come nell'host.
 /// Lo spazio dell'interfaccia lo mostra solo la finestra principale
 /// (`index.html`): il telefono e la finestra documento non hanno la riga.
 const ON_SHELL = globalThis.window.location.pathname.endsWith("/index.html");
@@ -489,6 +604,19 @@ const SETTINGS: SettingEntry[] = [
   },
   {
     spec: {
+      key: "appearance.theme-id",
+      label: "Tema installato",
+      description: "L'id del tema montato; si sceglie dal catalogo dei temi.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: { kind: "text", default: "fub.serie" },
+      program_writable: false,
+    },
+    value: "fub.serie",
+    source: "default",
+  },
+  {
+    spec: {
       key: "appearance.contrast",
       label: "Contrasto",
       description: "Segue il sistema oppure usa sempre il contrasto normale o alto.",
@@ -510,6 +638,19 @@ const SETTINGS: SettingEntry[] = [
   },
   {
     spec: {
+      key: "appearance.accent",
+      label: "Tinta dell'accento",
+      description: "Il colore di collegamenti, fuoco e selezione. Chiarezza e intensità si adattano da sole per restare leggibili.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: { kind: "number", default: 265, min: 0, max: 360 },
+      program_writable: false,
+    },
+    value: 265,
+    source: "default",
+  },
+  {
+    spec: {
       key: "appearance.density",
       label: "Densità",
       description: "Compatta o allarga la spaziatura dei controlli senza cambiare la disposizione dei pannelli.",
@@ -527,6 +668,176 @@ const SETTINGS: SettingEntry[] = [
       program_writable: false,
     },
     value: "comfortable",
+    source: "default",
+  },
+  ...(ON_SHELL ? [CHROME_COMPACTNESS] : []),
+  {
+    spec: {
+      key: "appearance.zoom",
+      label: "Zoom interfaccia",
+      description: "Quanto è grande tutta l'interfaccia, dal 50% al 200%.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: { kind: "number", default: 1, min: 0.5, max: 2 },
+      program_writable: false,
+    },
+    value: 1,
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.motion",
+      label: "Animazioni",
+      description: "Segue la preferenza del sistema, oppure toglie rimbalzi e scene, oppure riduce sempre le animazioni dell'interfaccia.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "",
+        options: [
+          { value: "", label: "Come il sistema" },
+          { value: "calm", label: "Calme" },
+          { value: "reduced", label: "Ridotte" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.frame-rate",
+      label: "Fotogrammi al secondo",
+      description: "Tetto delle animazioni disegnate dall'interfaccia. Il massimo segue il refresh dello schermo, qualunque sia.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "",
+        options: [
+          { value: "", label: "Massimo dello schermo" },
+          { value: "240", label: "240 fps" },
+          { value: "165", label: "165 fps" },
+          { value: "144", label: "144 fps" },
+          { value: "120", label: "120 fps" },
+          { value: "90", label: "90 fps" },
+          { value: "60", label: "60 fps" },
+          { value: "30", label: "30 fps" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.diagram-style",
+      label: "Stile dei diagrammi",
+      description: "Colori e tratto dei diagrammi Mermaid; «%% stile: nome» lo cambia per uno solo.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "armonia",
+        options: [
+          { value: "armonia", label: "Armonia — segue il tema" },
+          { value: "acquerello", label: "Acquerello — tinte pastello" },
+          { value: "aurora", label: "Aurora — colori vivi e profondi" },
+          { value: "blueprint", label: "Blueprint — tavola tecnica" },
+          { value: "inchiostro", label: "Inchiostro — editoriale" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "armonia",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.content-look",
+      label: "Aspetto dei documenti",
+      description: "Come si mostra un file che ha un aspetto suo, come un documento: la sua pagina, o la pagina adattata alla luce del tema. Automatico sceglie la pagina, e quella adattata con il contrasto alto.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "auto",
+        options: [
+          { value: "auto", label: "Automatico" },
+          { value: "file", label: "Pagina" },
+          { value: "adattato", label: "Pagina adattata" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "auto",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.font",
+      label: "Carattere di lettura",
+      description: "Famiglia usata per la prosa lunga.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "newsreader",
+        options: [
+          { value: "newsreader", label: "Newsreader" },
+          { value: "hanken", label: "Hanken Grotesk" },
+          { value: "literata", label: "Literata" },
+          { value: "inter", label: "Inter" },
+          { value: "system", label: "Del sistema" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "newsreader",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.font-ui",
+      label: "Carattere dell'interfaccia",
+      description: "Famiglia di barre, cassetti, menu e finestre.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "hanken",
+        options: [
+          { value: "hanken", label: "Hanken Grotesk" },
+          { value: "inter", label: "Inter" },
+          { value: "system", label: "Del sistema" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "hanken",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.font-mono",
+      label: "Carattere del codice",
+      description: "Famiglia a spaziatura fissa del codice e del sorgente.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "plex",
+        options: [
+          { value: "plex", label: "IBM Plex Mono" },
+          { value: "jetbrains", label: "JetBrains Mono" },
+          { value: "system", label: "Del sistema" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "plex",
     source: "default",
   },
   {
@@ -570,52 +881,15 @@ const SETTINGS: SettingEntry[] = [
   },
   {
     spec: {
-      key: "appearance.font",
-      label: "Carattere di lettura",
-      description: "Famiglia usata per la prosa lunga.",
+      key: "appearance.css-snippets",
+      label: "Frammenti CSS locali",
+      description: "Frammenti attivabili, locali e limitati agli hook visivi; nessuna rete o importazione CSS.",
       group: "Aspetto",
       scope: "machine",
-      kind: {
-        kind: "choice",
-        default: "newsreader",
-        options: [
-          { value: "newsreader", label: "Newsreader" },
-          { value: "hanken", label: "Hanken Grotesk" },
-          { value: "literata", label: "Literata" },
-          { value: "inter", label: "Inter" },
-          { value: "system", label: "Del sistema" },
-        ],
-      },
+      kind: { kind: "text", default: '{"version":1,"snippets":[]}' },
       program_writable: false,
     },
-    value: "newsreader",
-    source: "default",
-  },
-  {
-    spec: {
-      key: "appearance.accent",
-      label: "Tinta dell'accento",
-      description: "Il colore di collegamenti, fuoco e selezione. Chiarezza e intensità si adattano da sole per restare leggibili.",
-      group: "Aspetto",
-      scope: "machine",
-      kind: { kind: "number", default: 265, min: 0, max: 360 },
-      program_writable: false,
-    },
-    value: 265,
-    source: "default",
-  },
-  ...(ON_SHELL ? [CHROME_COMPACTNESS] : []),
-  {
-    spec: {
-      key: "appearance.zoom",
-      label: "Zoom interfaccia",
-      description: "Quanto è grande tutta l'interfaccia, dal 50% al 200%.",
-      group: "Aspetto",
-      scope: "machine",
-      kind: { kind: "number", default: 1, min: 0.5, max: 2 },
-      program_writable: false,
-    },
-    value: 1,
+    value: '{"version":1,"snippets":[]}',
     source: "default",
   },
   {
@@ -821,6 +1095,29 @@ const CRAFT_SETTINGS: readonly SettingEntry[] = params.get("craft") === "1" || T
     return value === null ? entry : { ...entry, value, source: "machine" as const };
   })
   : [];
+
+/// I due pannelli ai lati, come li dichiara l'host vero (`fub-host`,
+/// `chrome.sidebar.visible` e `chrome.inspector.visible`). Le scene della barra
+/// dei fogli li chiudono per dare al foglio tutta la larghezza: senza la
+/// dichiarazione la scrittura fallirebbe, e la foto terrebbe l'avviso «Non ho
+/// potuto ricordare come hai lasciato i pannelli». Solo con `workbook=1`, così
+/// le scene delle Impostazioni non cambiano.
+const WORKBOOK_CHROME: readonly SettingEntry[] = WORKBOOK_DOC === null ? [] : [
+  ["chrome.sidebar.visible", "Mostra il pannello a sinistra"],
+  ["chrome.inspector.visible", "Mostra il pannello a destra"],
+].map(([key, label]): SettingEntry => ({
+  spec: {
+    key,
+    label,
+    description: "Lo affianca ai riquadri quando la finestra è larga abbastanza; altrimenti si apre a richiesta.",
+    group: "Aspetto",
+    scope: "machine",
+    kind: { kind: "toggle", default: true },
+    program_writable: false,
+  },
+  value: true,
+  source: "default",
+}));
 
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
 ///
@@ -1105,7 +1402,7 @@ const TREES: Record<string, UiNode> = {
       selected: t.name === "tema",
     })),
   },
-  trash: {
+  trash: TRASH_FULL ? trashWithThree() : {
     node: "empty_state",
     title: "Il cestino è vuoto",
     detail: "Ciò che si cestina resta qui finché non lo si svuota.",
@@ -1163,15 +1460,16 @@ const options: Options = {
   root: ROOT,
   view: VIEWS,
   commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS],
-  settings: [...SETTINGS, ...(DRAWING === null ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS],
+  settings: [...SETTINGS, ...(DRAWING === null ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(WORKBOOK_DOC === null ? {} : {
     // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.
     gridBytes: {
       surface: XLSX_GRID.surface,
-      session: XLSX_GRID.session,
-      windows: [...XLSX_GRID.windows, XLSX_GRID.edit.window],
+      session: BENCH_SESSION,
+      windows: [...XLSX_GRID.windows, XLSX_GRID.edit.window].map(benchWindow),
       commits: [XLSX_GRID.edit.commit],
+      ...(BENCH_OUTCOMES === undefined ? {} : { outcomes: BENCH_OUTCOMES }),
     } as GridBytesFake,
   }),
   ...(DRAWING === null ? {} : { draw: true }),
@@ -1193,6 +1491,20 @@ const options: Options = {
 };
 
 const host = createFakeHost(options);
+
+/// **Lo strato d'avvio fermo a uno stato**, per le scene che lo fotografano
+/// (`avvio-*` in `scene.mjs`). Si decide qui, alla nascita del fake, perché
+/// `window.bench` arriva quando l'avvio è già partito: con le porte che il fake
+/// ha già, senza un meccanismo nuovo.
+///
+/// - `avvio=attesa`: `openVault` resta in volo per sempre. La shell è in piedi
+///   (`data-pronta`), la fase è «vault», e lo strato resta sopra l'app.
+/// - `avvio=guasto`: `initialVault` rifiuta, `init()` lancia e
+///   `mountDesktopShell` finisce nel guasto dello strato. Non `openVault`:
+///   `openInitialVault` ne cattura l'errore e lo dice nell'app.
+const AVVIO = params.get("avvio");
+if (AVVIO === "attesa") host.throttle("openVault");
+else if (AVVIO === "guasto") host.fault("initialVault", "il ponte non risponde");
 
 /// L'host del banco, esposto sulla finestra perché il **fotografo** possa
 /// guidarlo da fuori: emettere un evento del kernel, guastare una porta,

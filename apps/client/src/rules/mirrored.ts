@@ -491,3 +491,87 @@ export function subjectHolds(subject: Subject, doc: string): boolean {
     ? subject.id === doc
     : folderContains(subject.path, doc);
 }
+
+/// Perché una voce di `fonts` di un tema non regge: la prima cosa che non va,
+/// nell'ordine famiglia, file, peso, stile. Gemella di
+/// `fub_abi::rules::theme_font::ThemeFontFault` (l'etichetta, non la frase).
+export type ThemeFontFault =
+  | "family"
+  | "series_family"
+  | "reserved_family"
+  | "file"
+  | "weight"
+  | "style";
+
+/// I limiti e gli elenchi di nomi della regola dei caratteri. La fixture porta
+/// i valori di Rust (`theme_font_limit`), e il mirror pretende che siano questi.
+export const THEME_FONT_LIMITS = {
+  fonts: 8,
+  font_bytes: 2 * 1024 * 1024,
+  font_total_bytes: 6 * 1024 * 1024,
+  family_chars: 64,
+  file_name_chars: 64,
+  weights: [100, 900] as readonly [number, number],
+  series_families: [
+    "Newsreader Variable",
+    "Hanken Grotesk Variable",
+    "IBM Plex Mono",
+    "Inter Variable",
+    "Literata Variable",
+    "JetBrains Mono Variable",
+  ] as readonly string[],
+  reserved_families: [
+    "serif",
+    "sans-serif",
+    "monospace",
+    "cursive",
+    "fantasy",
+    "system-ui",
+    "ui-serif",
+    "ui-sans-serif",
+    "ui-monospace",
+    "ui-rounded",
+    "math",
+    "emoji",
+    "fangsong",
+    "inherit",
+    "initial",
+    "unset",
+    "revert",
+    "revert-layer",
+    "default",
+  ] as readonly string[],
+} as const;
+
+const FONT_FAMILY = /^[A-Za-z0-9-]+(?: [A-Za-z0-9-]+)*$/;
+const FONT_FILE_NAME = /^[A-Za-z0-9_-]+$/;
+
+/// Una voce di `fonts` regge? `null` se sì, altrimenti la prima cosa che non
+/// va. Gemella di `fub_abi::rules::theme_font::theme_font_fault`: gli argomenti
+/// arrivano da un fascio non fidato, quindi possono essere qualunque valore.
+export function themeFontFault(
+  family: unknown,
+  file: unknown,
+  weight: unknown,
+  style: unknown,
+): ThemeFontFault | null {
+  const limits = THEME_FONT_LIMITS;
+  if (typeof family !== "string" || family.length > limits.family_chars || !FONT_FAMILY.test(family)) {
+    return "family";
+  }
+  const folded = family.toLowerCase();
+  if (limits.series_families.some((series) => series.toLowerCase() === folded)) return "series_family";
+  if (limits.reserved_families.includes(folded)) return "reserved_family";
+  const name = typeof file === "string" && file.startsWith("fonts/") && file.endsWith(".woff2")
+    ? file.slice("fonts/".length, -".woff2".length)
+    : null;
+  if (name === null || name.length === 0 || name.length > limits.file_name_chars || !FONT_FILE_NAME.test(name)) {
+    return "file";
+  }
+  const [lightest, heaviest] = limits.weights;
+  if (typeof weight !== "number" || !Number.isInteger(weight) || weight < lightest || weight > heaviest) {
+    return "weight";
+  }
+  if (style !== "normal" && style !== "italic") return "style";
+  return null;
+}

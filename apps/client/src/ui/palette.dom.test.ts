@@ -308,3 +308,46 @@ describe("consegnare l'esito di un comando", () => {
     expect(host.notify).toHaveBeenCalledWith("Creato a metà", "guasto", undefined);
   });
 });
+
+describe("i comandi della superficie col fuoco", () => {
+  function surfaceEntry(id: string, title: string, unavailable: string | null, run: () => void): CommandEntry {
+    return { id, title, description: "Scheda Home della barra", layer: "surface", binding: null, declared: null, spec: null, run, group: "Foglio", unavailable };
+  }
+
+  it("li mostra col gruppo, e uno spento col suo motivo, che non si esegue", async () => {
+    const bold = vi.fn();
+    const undo = vi.fn();
+    const editorCommands = () => [surfaceEntry("fogli.home.bold", "Grassetto", null, bold), surfaceEntry("fogli.edit.undo", "Annulla", "nothing to undo", undo)];
+    fake.listCommands.mockResolvedValue([]);
+    fake.settings.mockResolvedValue([]);
+    await openCommandPalette({ ...host, editorCommands });
+    const overlay = document.getElementById("command-palette")!;
+    const input = overlay.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+    const list = overlay.querySelector<HTMLUListElement>('ul[role="listbox"]')!;
+    input.value = "annulla";
+    input.dispatchEvent(new Event("input"));
+    const [off] = options(list);
+    expect(off!.querySelector(".palette-title")!.textContent).toBe("Annulla");
+    expect(off!.querySelector(".palette-scope")!.textContent).toBe("Foglio");
+    expect(off!.getAttribute("aria-disabled")).toBe("true");
+    expect(off!.querySelector(".palette-desc")!.textContent).toBe("nothing to undo");
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(undo).not.toHaveBeenCalled();
+    expect(host.notify).toHaveBeenCalledWith("nothing to undo", "info");
+    expect(document.getElementById("command-palette")).toBeNull();
+
+    await openCommandPalette({ ...host, editorCommands });
+    const again = document.getElementById("command-palette")!.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+    again.value = "grassetto";
+    again.dispatchEvent(new Event("input"));
+    again.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(bold).toHaveBeenCalledTimes(1);
+  });
+
+  it("startCommand non esegue un comando spento", () => {
+    const run = vi.fn();
+    startCommand(surfaceEntry("fogli.edit.undo", "Annulla", "nothing to undo", run), host);
+    expect(run).not.toHaveBeenCalled();
+    expect(host.notify).toHaveBeenCalledWith("nothing to undo", "info");
+  });
+});

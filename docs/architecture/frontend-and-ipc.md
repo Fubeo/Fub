@@ -216,6 +216,27 @@ strumenti stanno in due cassetti. Le pagine `index.html`, `mobile.html` e
 `document.html` ne portano il markup, e `main.ts` avvia
 `shells/scrittoio/bootstrap.ts`. Non esiste una seconda shell da selezionare.
 
+Le tre pagine si aprono sotto lo **strato d'avvio** (`.avvio`), nel `<head>`
+prima dei moduli perché dipinga subito: il foglio `public/avvio/avvio.css`
+(un file e non un `<style>`, per la CSP: vedi
+[Permessi e sicurezza](../reference/permissions-and-security.md)),
+`luce.js` sceglie luce, contrasto, moto e colori, `stati.js` i tempi. Il fondo c'è dal primo
+fotogramma, il marchio entra a 120 ms (1 s al più), la fase (`data-fase`) a
+2 s, l'avvio è lento a 10 s e un guasto con Riprova a 30 s; sotto, l'app è
+`inert` e `aria-busy`. Lo consegna `avvio/consegna.ts` a fine avvio
+(`bootstrap.ts`, `mobile/compose.ts` col tema definitivo, 1,5 s al più;
+`document/window.ts`); `desktop-shell.ts` segna le fasi e chiama `fallito()`
+se l'avvio cade, e lo strato resta. La consegna rende viva l'app e dà il fuoco,
+poi lo strato sfuma in 90 ms e le regioni entrano ogni 30 ms con la molla
+`elastic` di `moto` (la cascata; con meno movimento la sola dissolvenza, senza
+marchio niente passaggio). Lo stile dello strato e i suoi segni su `<html>` se
+ne vanno a cascata finita, quando ricalcolare lo stile della pagina non ferma
+niente che si muove. Prima salva `fub.avvio` in `localStorage`: scelte, colori
+della luce in vigore e testi dello strato, ciò che i due script leggono al
+prossimo avvio; persa, si rifà alla consegna dopo. Il `@keyframes` della scia
+sta fuori dalla regola della pelle senza fotogrammi chiave: non è pelle, gira
+prima di `moto` e se ne va alla consegna.
+
 Sopra la shell comune (`desktop-shell.ts`: sessioni, riquadri, comandi,
 pannelli) lo Scrittoio compone:
 
@@ -228,7 +249,8 @@ pannelli) lo Scrittoio compone:
   primitiva ha un owner e un disposer per ciò che registra. `kit/ribbon/` è
   la barra multifunzione comune (schede e schede contestuali, gruppi raccolti
   da destra, lettere con Alt e F10, mini-barra), generica sulla vista e sulle
-  etichette di chi la monta; non sta nell'indice del kit, perché arriva con
+  etichette di chi la monta (i fogli accendono `openInPlace` e `motion`);
+  non sta nell'indice del kit, perché arriva con
   l'editor che la carica a parte. Le barre degli editor hanno tre forme,
   scritte una volta nel tema e non in ogni editor: la barra a schede
   (`kit/ribbon/`), la barra in una fila e la colonna degli strumenti. La
@@ -257,11 +279,11 @@ pannelli) lo Scrittoio compone:
   ([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)).
 
 I predefiniti dell'aspetto (accento, i tre caratteri, corpo, interlinea,
-giustezza)
-li dichiara l'host e coincidono con quelli della serie; un test Rust lo
-verifica. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
-400 px, ispettore da 248 a 440 px. Un tema `theme-1` installato non si monta, e
-la diagnosi del catalogo nomina il motore.
+giustezza) li dichiara l'host e coincidono con quelli della serie; un test Rust
+lo verifica. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
+400 px, ispettore da 248 a 440 px. Un tema `theme-1` non si monta; uno con
+`extends` lascia la pelle di serie in `pelle` e aggiunge la sua in `pelle-tema`,
+dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
 
 ### Comportamenti della shell
 

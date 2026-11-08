@@ -47,6 +47,29 @@
 //! che l'autore non decide lo mette l'host — la chiave è `<id>:<nome>`, il
 //! livello è la macchina (come il tema scelto), il gruppo è il nome del tema.
 //!
+//! # Un tema che eredita
+//!
+//! Da `theme-2` un manifest può dire da quale tema parte: `extends`, e l'unico
+//! valore accettato è la serie ([`SERIES_ID`]). Un tema così porta solo ciò
+//! che cambia: i fogli diventano facoltativi ([`read_theme`] dà `sheet: None`
+//! per una luce senza foglio, e la shell usa quello di serie), ma `lights`
+//! resta obbligatorio, perché dice quali luci il tema offre. Un tema che
+//! eredita e non porta niente — né fogli, né pelle, né asset — è rifiutato.
+//! Senza `extends` tutto resta com'era: un foglio per ogni luce offerta.
+//!
+//! # I caratteri di un tema
+//!
+//! Da `theme-2` un manifest può portare dei caratteri
+//! ([`ThemeFont`](fub_abi::theme::ThemeFont)): una
+//! famiglia, un file WOFF2 fra i suoi asset (`fonts/<nome>.woff2`), un peso e
+//! uno stile. Il CSS di un tema resta senza `@font-face`: la regola la scrive
+//! la shell, coi valori del manifest e l'URL `data:` del file, così nessun
+//! `src:` scritto a mano può chiamare la rete. Qui (`check_fonts` e
+//! `check_font_files`) si decide ciò che si decide senza renderer: la forma
+//! di ogni voce, che la famiglia non sia una di serie, che il file ci sia e
+//! cominci con la firma `wOF2`, e i limiti ([`MAX_THEME_FONTS`],
+//! [`MAX_THEME_FONT_BYTES`], [`MAX_THEME_FONT_TOTAL_BYTES`]).
+//!
 //! # L'installazione è una cartella, e atomica
 //!
 //! Un tema installato è `<config>/themes/<id>/` (vedi
@@ -64,9 +87,14 @@
 //! niente).
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fub_abi::rules::theme_font::{
+    theme_font_fault, ThemeFontFault, MAX_THEME_FONT_FILE_NAME, THEME_FONT_WEIGHTS,
+};
 use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::theme::{
-    ThemeEngine, ThemeLight, ThemeManifest, ThemeSetting, MAX_THEME_SETTINGS, THEME_ENGINE,
+    ThemeEngine, ThemeFontStyle, ThemeLight, ThemeManifest, ThemeSetting, MAX_THEME_FONTS,
+    MAX_THEME_FONT_BYTES, MAX_THEME_FONT_FAMILY, MAX_THEME_FONT_TOTAL_BYTES, MAX_THEME_SETTINGS,
+    THEME_ENGINE,
 };
 use fub_abi::traits::{Plugin, PluginManifest};
 use fub_abi::{PluginError, Text};
@@ -102,6 +130,9 @@ pub const MAX_THEME_SETTING_NAME: usize = 48;
 /// Quante opzioni può offrire una scelta di un tema.
 pub const MAX_THEME_SETTING_OPTIONS: usize = 16;
 
+/// La firma con cui comincia ogni file WOFF2.
+const WOFF2_SIGNATURE: &[u8; 4] = b"wOF2";
+
 /// Il manifest del tema di serie: la costante che il §29.4 chiede, identica al
 /// campione pinato dal banco di `fub_abi::theme` (id, nome, versione, motore,
 /// luci e namespace fissati lì).
@@ -124,6 +155,8 @@ pub fn series_manifest() -> ThemeManifest {
             fub_abi::theme::ThemeMotion::Transform,
         ],
         settings: Vec::new(),
+        extends: None,
+        fonts: Vec::new(),
     }
 }
 
@@ -239,7 +272,8 @@ impl ThemeBundle {
     /// prima di deserializzare, così un motore sconosciuto produce l'errore
     /// nominato e non un «unknown variant» di serde), i permessi (rifiutati per
     /// nome), la forma (deserializzazione piena + id sicuro + luci non vuote +
-    /// namespace sotto `theme://` + impostazioni dichiarabili).
+    /// namespace sotto `theme://` + impostazioni dichiarabili + la base di
+    /// `extends`, e un tema che eredita deve portare almeno un file).
     pub fn load(dir: &Utf8Path) -> Result<Self, ThemeError> {
         let id_hint = dir.file_name().unwrap_or_default().to_string();
         let root = canonical_theme_root(dir, &id_hint)?;
@@ -300,19 +334,37 @@ impl ThemeBundle {
         }
         check_id(&manifest.id)?;
         check_settings(&manifest)?;
+        check_extends(&manifest)?;
+        check_fonts(&manifest)?;
         // Check every well-known bundle file before any later copy/read. Missing
         // sheets and skin remain allowed here; read_theme/list_themes decide
         // whether a requested light is actually loadable.
+        let mut brings = 0_u64;
         for name in ["sheet-dark.css", "sheet-light.css", "skin.css"] {
-            let _ = open_regular(
+            if open_regular(
                 &root.join(name),
                 &root,
                 &manifest.id,
                 MAX_THEME_CSS_BYTES,
                 false,
-            )?;
+            )?
+            .is_some()
+            {
+                brings += 1;
+            }
         }
-        validate_asset_limits(&root, &manifest.id)?;
+        brings += validate_asset_limits(&root, &manifest.id)?;
+        check_font_files(&root, &manifest)?;
+        // Un tema che eredita e non porta niente — né fogli, né pelle, né un
+        // asset (caratteri, icone) — è la serie con un altro nome: si dice
+        // all'autore, invece di installare un doppione.
+        if manifest.extends.is_some() && brings == 0 {
+            return Err(ThemeError::Malformed(format!(
+                "theme `{}` extends `{SERIES_ID}` but changes nothing: \
+                 it brings no sheet, no skin and no asset",
+                manifest.id
+            )));
+        }
         Ok(ThemeBundle {
             manifest,
             trust: fub_kernel::Trust::default(),
@@ -341,7 +393,10 @@ pub struct ThemeInfo {
 pub struct ThemePayload {
     pub manifest: ThemeManifest,
     pub light: ThemeLight,
-    pub sheet: String,
+    /// Il foglio di questa luce. È `None` solo per un tema che eredita
+    /// (`extends`) e non porta il foglio di questa luce: la shell usa allora
+    /// quello di serie, della stessa luce e dello stesso contrasto.
+    pub sheet: Option<String>,
     pub skin: Option<String>,
     pub assets: std::collections::BTreeMap<String, Vec<u8>>,
 }
@@ -445,6 +500,156 @@ fn check_settings(manifest: &ThemeManifest) -> Result<(), ThemeError> {
         if let Some(why) = setting.kind.rejects(&setting.kind.default_value()) {
             return Err(bad(format!(
                 "setting `{name}` has an invalid default: {why}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Il tema da cui un manifest dichiara di partire regge?
+///
+/// L'unica base è la serie, e solo col motore `theme-2`: `theme-1` è congelato
+/// (ADR 0206) e non impara a ereditare. Il valore si confronta così com'è,
+/// senza togliere spazi: un id con uno spazio è un altro id.
+fn check_extends(manifest: &ThemeManifest) -> Result<(), ThemeError> {
+    let Some(base) = manifest.extends.as_deref() else {
+        return Ok(());
+    };
+    if base != SERIES_ID {
+        return Err(ThemeError::Malformed(format!(
+            "`extends` must be `{SERIES_ID}`, the only theme a theme can start from, not `{base}`"
+        )));
+    }
+    if manifest.engine == ThemeEngine::Theme1 {
+        return Err(ThemeError::Malformed(format!(
+            "`extends` needs `{}`: `{THEME_ENGINE}` cannot inherit",
+            ThemeEngine::Theme2.as_str()
+        )));
+    }
+    Ok(())
+}
+
+/// I caratteri del manifest reggono? Si decide sulla sola forma, prima di
+/// toccare il disco: motore, quanti sono, ogni voce secondo la regola del
+/// contratto ([`theme_font_fault`], la stessa che la shell rispecchia), e che
+/// la stessa faccia non sia dichiarata due volte. I file li guarda
+/// [`check_font_files`].
+fn check_fonts(manifest: &ThemeManifest) -> Result<(), ThemeError> {
+    let bad = |why: String| ThemeError::Malformed(why);
+    if manifest.fonts.is_empty() {
+        return Ok(());
+    }
+    if manifest.engine == ThemeEngine::Theme1 {
+        return Err(bad(format!(
+            "fonts need `{}`: `{THEME_ENGINE}` has none",
+            ThemeEngine::Theme2.as_str()
+        )));
+    }
+    if manifest.fonts.len() > MAX_THEME_FONTS {
+        return Err(bad(format!(
+            "{} fonts declared, at most {MAX_THEME_FONTS} are allowed",
+            manifest.fonts.len()
+        )));
+    }
+    let mut faces = std::collections::BTreeSet::new();
+    for font in &manifest.fonts {
+        let family = font.family.as_str();
+        let style = match font.style {
+            ThemeFontStyle::Normal => "normal",
+            ThemeFontStyle::Italic => "italic",
+        };
+        if let Some(fault) = theme_font_fault(family, &font.file, f64::from(font.weight), style) {
+            return Err(bad(font_fault_message(
+                fault,
+                family,
+                &font.file,
+                font.weight,
+            )));
+        }
+        // La famiglia ha già l'alfabeto ASCII della regola, e il motore
+        // confronta i nomi di `font-family` senza maiuscole: `Carta` e `carta`
+        // sono la stessa faccia.
+        if !faces.insert((family.to_ascii_lowercase(), font.weight, font.style)) {
+            return Err(bad(format!(
+                "font `{family}` declares weight {} and style {style} twice",
+                font.weight
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// La frase per l'autore di un guasto della regola dei caratteri.
+fn font_fault_message(fault: ThemeFontFault, family: &str, file: &str, weight: u16) -> String {
+    let (lightest, heaviest) = THEME_FONT_WEIGHTS;
+    match fault {
+        ThemeFontFault::Family => format!(
+            "font family `{family}` must be 1 to {MAX_THEME_FONT_FAMILY} characters \
+             of letters, digits, `-` and single spaces between words"
+        ),
+        ThemeFontFault::SeriesFamily => {
+            format!("font family `{family}` is a series family: a theme names its own")
+        }
+        ThemeFontFault::ReservedFamily => {
+            format!("font family `{family}` is a CSS keyword, not a family name")
+        }
+        ThemeFontFault::File => format!(
+            "font file `{file}` is not a theme asset: it must be `fonts/<name>.woff2`, \
+             with a name of 1 to {MAX_THEME_FONT_FILE_NAME} characters of \
+             a-z, A-Z, 0-9, `-` or `_`"
+        ),
+        ThemeFontFault::Weight => format!(
+            "font `{family}` declares weight {weight}, which is not between \
+             {lightest} and {heaviest}"
+        ),
+        // Lo stile arriva già tipato da serde: un valore sconosciuto non
+        // diventa mai un `ThemeFont`.
+        ThemeFontFault::Style => format!("font `{family}` declares an unknown style"),
+    }
+}
+
+/// I file dei caratteri ci sono, sono WOFF2 e stanno nei limiti? Un file
+/// nominato da due voci si conta una volta.
+fn check_font_files(root: &Utf8Path, manifest: &ThemeManifest) -> Result<(), ThemeError> {
+    let files: std::collections::BTreeSet<&str> = manifest
+        .fonts
+        .iter()
+        .map(|font| font.file.as_str())
+        .collect();
+    let mut total = 0_u64;
+    for file in files {
+        let path = root.join(file);
+        // Il limite degli asset qui, quello dei caratteri subito sotto: così
+        // l'autore legge che è il carattere a pesare troppo.
+        let Some(handle) = open_regular(&path, root, &manifest.id, MAX_THEME_ASSET_BYTES, false)?
+        else {
+            return Err(ThemeError::Malformed(format!(
+                "font file `{file}` is not among the theme assets"
+            )));
+        };
+        let size = handle
+            .metadata()
+            .map_err(|error| ThemeError::Io(format!("{path}: {error}")))?
+            .len();
+        if size > MAX_THEME_FONT_BYTES {
+            return Err(ThemeError::Malformed(format!(
+                "font file `{file}` exceeds {MAX_THEME_FONT_BYTES} bytes"
+            )));
+        }
+        let mut signature = Vec::with_capacity(WOFF2_SIGNATURE.len());
+        handle
+            .take(WOFF2_SIGNATURE.len() as u64)
+            .read_to_end(&mut signature)
+            .map_err(|error| ThemeError::Io(format!("{path}: {error}")))?;
+        if signature.as_slice() != WOFF2_SIGNATURE {
+            return Err(ThemeError::Malformed(format!(
+                "font file `{file}` is not WOFF2: it does not start with `wOF2`"
+            )));
+        }
+        total = total.saturating_add(size);
+        if total > MAX_THEME_FONT_TOTAL_BYTES {
+            return Err(ThemeError::Malformed(format!(
+                "the theme fonts exceed {MAX_THEME_FONT_TOTAL_BYTES} bytes together"
             )));
         }
     }
@@ -611,6 +816,9 @@ pub fn discover_themes(config_dir: &Utf8Path) -> (Vec<ThemeBundle>, Vec<ThemeErr
 }
 /// Elenca soltanto i temi installati per cui ogni luce dichiarata ha un foglio
 /// leggibile. Il catalogo legge solo i metadati dei file, mai i loro byte.
+///
+/// Per un tema che eredita (`extends`) il foglio di una luce può mancare (lo
+/// dà la serie); se c'è, deve essere leggibile come per ogni altro tema.
 pub fn list_themes(config_dir: &Utf8Path) -> Vec<ThemeInfo> {
     let (themes, _) = discover_themes(config_dir);
     themes
@@ -618,16 +826,19 @@ pub fn list_themes(config_dir: &Utf8Path) -> Vec<ThemeInfo> {
         .filter_map(|theme| {
             let manifest = theme.manifest.clone();
             let dir = installed_theme_dir(config_dir, &manifest.id).ok()?;
+            let required = manifest.extends.is_none();
             let loadable = manifest.lights.iter().all(|light| {
-                open_regular(
+                match open_regular(
                     &sheet_path(&dir, *light),
                     &dir,
                     &manifest.id,
                     MAX_THEME_CSS_BYTES,
-                    true,
-                )
-                .map(|file| file.is_some())
-                .unwrap_or(false)
+                    required,
+                ) {
+                    Ok(Some(_)) => true,
+                    Ok(None) => !required,
+                    Err(_) => false,
+                }
             });
             loadable.then_some(ThemeInfo {
                 manifest,
@@ -700,12 +911,32 @@ pub fn read_theme(
             "theme `{id}` does not offer requested light"
         )));
     }
+    // Senza `extends` il foglio di ogni luce offerta è d'obbligo; con
+    // `extends` può mancare, e la shell userà quello di serie.
+    let required = theme.manifest.extends.is_none();
     let sheet_path = sheet_path(&dir, light);
-    let sheet = read_theme_text(&sheet_path, &dir, id, MAX_THEME_CSS_BYTES, true)?
-        .ok_or_else(|| ThemeError::Malformed(format!("missing sheet `{sheet_path}`")))?;
+    let sheet = read_theme_text(&sheet_path, &dir, id, MAX_THEME_CSS_BYTES, required)?;
+    if required && sheet.is_none() {
+        return Err(ThemeError::Malformed(format!(
+            "missing sheet `{sheet_path}`"
+        )));
+    }
     let skin_path = dir.join("skin.css");
     let skin = read_theme_text(&skin_path, &dir, id, MAX_THEME_CSS_BYTES, false)?;
-    let needed = referenced_assets(&sheet, skin.as_deref(), &theme.manifest.asset_namespace);
+    let mut needed = referenced_assets(
+        sheet.as_deref(),
+        skin.as_deref(),
+        &theme.manifest.asset_namespace,
+    );
+    // I file dei caratteri viaggiano col fascio anche se nessun CSS li nomina:
+    // la regola `@font-face` la scrive la shell.
+    needed.extend(
+        theme
+            .manifest
+            .fonts
+            .iter()
+            .map(|font| format!("{}{}", theme.manifest.asset_namespace, font.file)),
+    );
     let assets = asset_inventory(&dir, &theme.manifest.asset_namespace, &needed)?;
     Ok(ThemePayload {
         manifest: theme.manifest,
@@ -724,12 +955,12 @@ fn sheet_path(dir: &Utf8Path, light: ThemeLight) -> Utf8PathBuf {
     dir.join(name)
 }
 fn referenced_assets(
-    sheet: &str,
+    sheet: Option<&str>,
     skin: Option<&str>,
     namespace: &str,
 ) -> std::collections::BTreeSet<String> {
     let mut urls = std::collections::BTreeSet::new();
-    for css in [Some(sheet), skin] {
+    for css in [sheet, skin] {
         let Some(css) = css else { continue };
         let chars: Vec<char> = css.chars().collect();
         let mut index = 0;
@@ -1124,11 +1355,17 @@ const MAX_THEME_ASSETS: u64 = 1024;
 const MAX_THEME_ASSET_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_THEME_ASSET_TOTAL_BYTES: u64 = 256 * 1024 * 1024;
 
-fn validate_asset_limits(root: &Utf8Path, id: &str) -> Result<(), ThemeError> {
+/// Controlla i limiti degli asset e dice quanti ne porta davvero il tema.
+///
+/// Il conto restituito lascia fuori ciò che scrive l'host e non l'autore: il
+/// puntatore della versione installata ([`POINTER_FILE`]) e le versioni
+/// conservate (`.generations/`). I limiti restano contati come prima.
+fn validate_asset_limits(root: &Utf8Path, id: &str) -> Result<u64, ThemeError> {
     let mut count = 0_u64;
     let mut total = 0_u64;
-    validate_asset_limits_in(root, root, id, &mut count, &mut total)?;
-    Ok(())
+    let mut authored = 0_u64;
+    validate_asset_limits_in(root, root, id, &mut count, &mut total, &mut authored)?;
+    Ok(authored)
 }
 
 fn validate_asset_limits_in(
@@ -1137,6 +1374,7 @@ fn validate_asset_limits_in(
     id: &str,
     count: &mut u64,
     total: &mut u64,
+    authored: &mut u64,
 ) -> Result<(), ThemeError> {
     let entries =
         std::fs::read_dir(dir).map_err(|error| ThemeError::Io(format!("{}: {error}", dir)))?;
@@ -1159,7 +1397,7 @@ fn validate_asset_limits_in(
         let path = Utf8PathBuf::from_path_buf(entry.path())
             .map_err(|path| ThemeError::Io(format!("non-UTF-8 path: {}", path.display())))?;
         if metadata.is_dir() {
-            validate_asset_limits_in(root, &path, id, count, total)?;
+            validate_asset_limits_in(root, &path, id, count, total, authored)?;
             continue;
         }
         let relative = path
@@ -1172,6 +1410,9 @@ fn validate_asset_limits_in(
             "manifest.json" | "skin.css" | "sheet-dark.css" | "sheet-light.css"
         ) {
             continue;
+        }
+        if relative != POINTER_FILE && !relative.starts_with(".generations/") {
+            *authored += 1;
         }
         *count += 1;
         if *count > MAX_THEME_ASSETS {
@@ -2341,7 +2582,7 @@ mod escape_tests {
             for (css, expected) in cases {
                 let expected: std::collections::BTreeSet<String> =
                     expected.into_iter().map(String::from).collect();
-                assert_eq!(referenced_assets(&css, None, "x/"), expected, "{css}");
+                assert_eq!(referenced_assets(Some(&css), None, "x/"), expected, "{css}");
             }
         }
     }

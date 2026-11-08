@@ -23,9 +23,9 @@ describe("mobile.html", () => {
     expect(ids(mobile)).toEqual(ids(desktop).filter((id) => !DESKTOP_ONLY.includes(id)));
   });
 
-  it("carica l'ingresso mobile, e nessun altro", () => {
+  it("carica i due script dello strato d'avvio e l'ingresso mobile, e nessun altro", () => {
     const scripts = [...mobile.matchAll(/<script[^>]*\ssrc="([^"]+)"/g)].map((match) => match[1]);
-    expect(scripts).toEqual(["/src/entrypoints/mobile-main.ts"]);
+    expect(scripts).toEqual(["/avvio/luce.js", "/avvio/stati.js", "/src/entrypoints/mobile-main.ts"]);
   });
 
   it("chiede lo schermo intero: le aree sicure le dà la struttura", () => {

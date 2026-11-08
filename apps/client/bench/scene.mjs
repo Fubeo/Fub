@@ -74,6 +74,12 @@ const FAILURES = {
 const PHONE = { width: 390, height: 844 };
 /// Il catalogo del kit intero, fino alla barra in una fila e alla colonna.
 const KIT_WINDOW = { width: 1280, height: 960 };
+/// La finestra in cui, con l'albero aperto e l'ispettore chiuso, il foglio è
+/// largo 700 px: la misura «700 px» del prototipo della barra dei fogli.
+const SHEET_700 = { width: 1016, height: 800 };
+/// La finestra in cui, senza l'albero e l'ispettore, il foglio è largo
+/// 1248 px: la misura «piena» del prototipo.
+const SHEET_FULL = { width: 1308, height: 800 };
 /// Una finestra documento appena aperta.
 const DOCUMENT_WINDOW = { width: 900, height: 700 };
 
@@ -352,6 +358,26 @@ export const SCENE = onPage("shell", [
     },
   },
   {
+    id: "conflitto-lettura",
+    title: "Il conflitto in Lettura: la fascia resta, e dice quale testo si legge",
+    prepare: async (page) => {
+      // Una battuta non salvata, poi il file cambia da fuori: la nota va in
+      // conflitto. In Lettura il reso è il buffer, e la fascia lo dice (R03).
+      // È la nota che il banco apre per prima, come nello stato S33.
+      await page.click('.pane.focus .cm-content .cm-line:has-text("Questa è la nota")', { position: { x: 4, y: 8 } });
+      await page.keyboard.press("Home");
+      await page.keyboard.type("Scritto qui e non ancora salvato. ");
+      await page.evaluate(async () => {
+        const { api } = await import("/bench/fake-ipc.ts");
+        await api.writeDocument("Benvenuto.md", "# Benvenuto in Fub\n\nCambiata da un'altra app.\n", { kind: "dictated" });
+      });
+      await page.waitForSelector(".pane.focus [data-banner='document.conflict.body']:not([hidden]) .conflict-actions");
+      await page.click('.pane.focus .pane-toolbar button[data-mode="reading"]');
+      await page.waitForSelector(".pane.focus [data-banner='document.conflict.body'] [data-conflict-reading]");
+      await page.focus(".pane.focus .conflict-actions button >> nth=0");
+    },
+  },
+  {
     id: "source",
     title: "Modalità Sorgente: la tavolozza della sintassi",
     prepare: async (page) => {
@@ -469,6 +495,213 @@ export const SCENE = onPage("shell", [
       });
       if (!header) throw new Error("l'intestazione B non c'è");
       await page.mouse.move(header.x, header.y);
+    },
+  },
+  // **I comandi dei fogli nella tavolozza**: un comando senza una finestra
+  // scritta a mano e con dei parametri obbligatori apre quella costruita dal
+  // catalogo (`editors/grid/palette/form.ts`), con l'intervallo che parte
+  // dalla selezione, una scelta e una casella.
+  {
+    id: "grid-command-form",
+    title: "Grid v2: la finestra costruita per «Grafici sparkline», aperta dalla tavolozza",
+    query: "workbook=1",
+    prepare: async (page) => {
+      await openWorkbook(page);
+      await runScrittoioCommand(page, "Grafici sparkline");
+      await page.waitForSelector(".grid-command-dialog .grid-command-form");
+    },
+  },
+  // **La barra dei fogli**, sulla stessa cartella: a riposo nel foglio pieno
+  // (l'albero e l'ispettore chiusi), stretta a 700 px con la sezione di una
+  // tabella dal nome lunghissimo (`?grid=table`, vedi `fake-ipc.ts`), le
+  // lettere di Alt, un foglietto raccolto aperto sul posto, la tavolozza dei
+  // colori, la barra ritirata e la sola lettura (`?grid=readonly`). Il
+  // telefono ha le sue due scene, fra quelle di `mobile.html`.
+  {
+    id: "grid-ribbon",
+    title: "La barra dei fogli a riposo, nel foglio pieno",
+    query: "workbook=1",
+    viewport: SHEET_FULL,
+    prepare: (page) => openRibbon(page, "full"),
+  },
+  {
+    id: "grid-ribbon-table",
+    title: "La barra dei fogli a 700 px, nella sezione di una tabella dal nome lunghissimo",
+    query: "workbook=1&grid=table",
+    viewport: SHEET_700,
+    prepare: async (page) => {
+      await openRibbon(page, 700);
+      await page.click('.pane.focus .grid-ribbon .kit-tab[data-tab="table"]');
+      await page.waitForSelector('.pane.focus .grid-ribbon-panel[data-tab="table"]:not([hidden])');
+    },
+  },
+  {
+    id: "grid-ribbon-keytips",
+    title: "La barra dei fogli con le lettere di Alt",
+    query: "workbook=1",
+    viewport: SHEET_FULL,
+    prepare: async (page) => {
+      await openRibbon(page, "full");
+      await page.keyboard.press("Alt");
+      await page.waitForSelector(".pane.focus .grid-ribbon-keytip");
+    },
+  },
+  {
+    id: "grid-ribbon-open",
+    title: "La barra dei fogli a 700 px, col foglietto «Numeri» aperto sul posto",
+    query: "workbook=1",
+    viewport: SHEET_700,
+    prepare: async (page) => {
+      await openRibbon(page, 700);
+      await page.click('.pane.focus .grid-ribbon [data-group="number"] .grid-ribbon-group-toggle');
+      await page.waitForSelector('.pane.focus .grid-ribbon [data-group="number"][data-open="true"]');
+    },
+  },
+  {
+    id: "grid-ribbon-palette",
+    title: "La barra dei fogli con la tavolozza del colore di riempimento",
+    query: "workbook=1",
+    viewport: SHEET_FULL,
+    prepare: async (page) => {
+      await openRibbon(page, "full");
+      await page.click('.pane.focus .grid-ribbon [aria-label="Altri colori: Colore riempimento"]');
+      await page.waitForSelector(".grid-ribbon-palette");
+    },
+  },
+  {
+    id: "grid-ribbon-collapsed",
+    title: "La barra dei fogli ritirata, con le sole sezioni",
+    query: "workbook=1",
+    viewport: SHEET_FULL,
+    prepare: async (page) => {
+      await openRibbon(page, "full");
+      await page.click('.pane.focus .grid-ribbon [aria-label="Comprimi la barra multifunzione"]');
+      await page.waitForSelector('.pane.focus .grid-ribbon[data-collapsed="true"]');
+    },
+  },
+  {
+    id: "grid-ribbon-readonly",
+    title: "La barra dei fogli in sola lettura: i comandi che cambiano la cartella spenti",
+    query: "workbook=1&grid=readonly",
+    viewport: SHEET_FULL,
+    prepare: (page) => openRibbon(page, "full"),
+  },
+  // **Il menu «Comandi» dei fogli**, sulle cartelle delle scene della barra:
+  // aperto, con una ricerca che non trova niente, la scheda della tabella
+  // spenta senza tabella e accesa dentro quella dal nome lunghissimo, la sola
+  // lettura, e il gettone senza il nome in un foglio sotto i 560 px.
+  {
+    id: "grid-commands",
+    title: "Il menu «Comandi» dei fogli aperto",
+    query: "workbook=1",
+    viewport: SHEET_FULL,
+    prepare: async (page) => {
+      await openRibbon(page, "full");
+      await openCommands(page, ["Home", "Carattere"]);
+    },
+  },
+  // La ricerca senza risultati: con delle voci trovate lo Spazio scrive nella
+  // ricerca (la regola dei menu che cercano), e il banco dell'accessibilità
+  // vuole che lo Spazio sulla voce col fuoco la scelga.
+  {
+    id: "grid-commands-search",
+    title: "Il menu «Comandi» dei fogli con una ricerca che non trova niente",
+    query: "workbook=1",
+    viewport: SHEET_FULL,
+    prepare: async (page) => {
+      await openRibbon(page, "full");
+      await openCommands(page);
+      await page.keyboard.type("zzqx");
+      await page.waitForSelector("#context-menu .menu-empty");
+    },
+  },
+  {
+    id: "grid-commands-context-off",
+    title: "Il menu «Comandi» dei fogli: la scheda della tabella spenta, senza una tabella",
+    query: "workbook=1",
+    viewport: SHEET_FULL,
+    prepare: async (page) => {
+      await openRibbon(page, "full");
+      await openCommands(page, ["Struttura tabella"]);
+    },
+  },
+  {
+    id: "grid-commands-table",
+    title: "Il menu «Comandi» dei fogli a 700 px, dentro una tabella dal nome lunghissimo",
+    query: "workbook=1&grid=table",
+    viewport: SHEET_700,
+    prepare: async (page) => {
+      await openRibbon(page, 700);
+      await openCommands(page, ["Struttura tabella", "Stili tabella"]);
+    },
+  },
+  {
+    id: "grid-commands-readonly",
+    title: "Il menu «Comandi» dei fogli in sola lettura",
+    query: "workbook=1&grid=readonly",
+    viewport: SHEET_FULL,
+    prepare: async (page) => {
+      await openRibbon(page, "full");
+      await openCommands(page, ["Home"]);
+    },
+  },
+  // **Il risultato dei comandi che leggono** (`editors/grid/risultato.ts`),
+  // aperto dalla tavolozza: mentre legge (il provider frenato), le
+  // statistiche della selezione, il rifiuto del provider (il finto non serve
+  // il comando) con «Riprova», nessun errore, e cinquecento errori su un
+  // foglio dal nome lungo a 700 px (`?result=…`, vedi `fake-ipc.ts`).
+  {
+    id: "grid-result-loading",
+    title: "Il risultato dei fogli mentre legge",
+    query: "workbook=1&result=stats",
+    prepare: async (page) => {
+      await openWorkbook(page);
+      await page.evaluate(() => {
+        window.bench.throttle("gridBytesCommand");
+      });
+      await runScrittoioCommand(page, "Statistiche della selezione");
+      await page.waitForSelector('.grid-result-dialog .grid-result[aria-busy="true"] .skeleton-rows');
+    },
+  },
+  {
+    id: "grid-result-table",
+    title: "Il risultato dei fogli: le statistiche della selezione",
+    query: "workbook=1&result=stats",
+    prepare: async (page) => {
+      await openWorkbook(page);
+      await runScrittoioCommand(page, "Statistiche della selezione");
+      await page.waitForSelector(".grid-result-dialog .grid-result-table");
+    },
+  },
+  {
+    id: "grid-result-error",
+    title: "Il risultato dei fogli: il provider rifiuta, con «Riprova»",
+    query: "workbook=1",
+    prepare: async (page) => {
+      await openWorkbook(page);
+      await runScrittoioCommand(page, "Statistiche della selezione");
+      await page.waitForSelector(".grid-result-dialog .grid-dialog-error");
+    },
+  },
+  {
+    id: "grid-result-empty",
+    title: "Il risultato dei fogli: nessun errore",
+    query: "workbook=1&result=empty",
+    prepare: async (page) => {
+      await openWorkbook(page);
+      await runScrittoioCommand(page, "Controllo errori");
+      await page.waitForSelector('.grid-result-dialog .grid-result:not([aria-busy]) .grid-dialog-note:not([hidden])');
+    },
+  },
+  {
+    id: "grid-result-many",
+    title: "Il risultato dei fogli a 700 px: cinquecento errori su un foglio dal nome lungo",
+    query: "workbook=1&result=errors",
+    viewport: SHEET_700,
+    prepare: async (page) => {
+      await openWorkbook(page);
+      await runScrittoioCommand(page, "Controllo errori");
+      await page.waitForSelector(".grid-result-dialog .grid-result-table tbody tr:nth-child(500)");
     },
   },
   // **Il disegno**: il disegno dei connettori (`?connectors=6`, vedi
@@ -865,6 +1098,36 @@ export const SCENE = onPage("shell", [
       await page.waitForSelector(".pane.focus .sheet-thread-item:focus-visible");
     },
   },
+  // **Lo strato d'avvio** (`.avvio`, nelle tre pagine): ciò che si vede prima
+  // dell'app. Il fake lo ferma a uno stato dalla query (`avvio=…` in
+  // `fake-ipc.ts`), e la scena dichiara la sua condizione d'arrivo perché
+  // l'avvio non finisce mai (attesa) o finisce nel guasto: `data-bench` non
+  // dice niente su di loro. La scia la ferma il palco (`QUIET`).
+  {
+    id: "avvio-attesa",
+    title: "L'avvio: il marchio, la riga del vault che si apre, la scia",
+    query: "avvio=attesa",
+    ready: () => document.querySelector('.avvio[data-stato="attesa"][data-fase="vault"]') !== null,
+    prepare: async () => {},
+  },
+  {
+    id: "avvio-lento",
+    title: "L'avvio che si allunga: «Ci vuole più del solito.»",
+    query: "avvio=attesa",
+    // Lo dice `stati.js` a 10 s: una condizione, non un tempo.
+    ready: () => document.querySelector('.avvio[data-stato="lento"]') !== null,
+    readyTimeout: 15_000,
+    prepare: async () => {},
+  },
+  {
+    id: "avvio-guasto",
+    title: "L'avvio caduto: il motivo, Riprova col fuoco, Copia i dettagli",
+    query: "avvio=guasto",
+    ready: () =>
+      document.querySelector('.avvio[data-stato="guasto"]') !== null &&
+      document.activeElement?.id === "avvio-riprova",
+    prepare: async () => {},
+  },
 ]).concat(
   // **Il kit** (`bench/kit.html`): le primitive di `src/kit/` vestite dalla
   // stessa serie. Stanno in questo elenco perché sono la stessa pelle e le
@@ -938,6 +1201,12 @@ export const SCENE = onPage("shell", [
         await page.waitForSelector("#sidebar-scrim:not([hidden])");
         // Il fuoco va alla maniglia, non al campo di ricerca: niente tastiera.
         await page.waitForSelector("#sidebar > .sheet-grip:focus");
+        // La maniglia resta alta 28 px: la regola dei 44 px del tocco non la
+        // prende, perché le sue esclusioni non pesano (`shells/mobile/mobile.css`).
+        await page.waitForFunction(() => {
+          const grip = document.querySelector("#sidebar > .sheet-grip");
+          return grip instanceof HTMLElement && Math.abs(grip.getBoundingClientRect().height - 28) < 0.5;
+        }, null, { timeout: 5_000 });
       },
     },
     {
@@ -950,6 +1219,60 @@ export const SCENE = onPage("shell", [
         await page.waitForSelector("#inspector-scrim:not([hidden])");
       },
     },
+    // Le impostazioni in piedi, scheda «Componenti»: gli interruttori sono il
+    // binario della pelle con un tocco di 44 px attorno, e le schede scorrono
+    // di lato coi nomi interi (`shells/mobile/mobile.css`, PA T47).
+    {
+      id: "mobile-settings",
+      title: "Il telefono: le impostazioni sui componenti, gli interruttori e le schede intere",
+      viewport: PHONE,
+      prepare: async (page) => {
+        await page.click("#open-settings");
+        await page.click('#settings-tabs button[data-tab="components"]');
+        await page.waitForSelector('#settings-body input[role="switch"]');
+        await page.$eval('#settings-body input[role="switch"]', (first) => first.scrollIntoView({ block: "center" }));
+        await page.waitForFunction(() => {
+          const scroll = document.querySelector("#settings-scroll") ?? document.querySelector("#settings-body");
+          if (!scroll) return false;
+          const box = scroll.getBoundingClientRect();
+          // Visibile: per intero dentro la parte che scorre.
+          const switches = [...document.querySelectorAll('#settings-body input[role="switch"]')].filter((input) => {
+            const r = input.getBoundingClientRect();
+            return r.width > 0 && r.top >= box.top && r.bottom <= box.bottom && r.left >= box.left && r.right <= box.right;
+          });
+          if (switches.length === 0) return false;
+          const touchable = switches.every((input) => {
+            const r = input.getBoundingClientRect();
+            if (Math.round(r.width) !== 32 || Math.round(r.height) !== 18) return false;
+            const x = r.left + r.width / 2;
+            const y = r.top + r.height / 2;
+            return document.elementFromPoint(x, y - 10) === input
+              && document.elementFromPoint(x, y + 10) === input
+              && document.elementFromPoint(r.left - 5, y) === input;
+          });
+          const whole = [...document.querySelectorAll(".settings-tab")].every((tab) => tab.scrollWidth <= tab.clientWidth);
+          return touchable && whole;
+        }, null, { timeout: 5_000 });
+      },
+    },
+    // Il cestino con tre file, in piedi: i bottoni «Ripristina» di due righe
+    // vicine non si toccano (`shells/mobile/mobile.css`, PA T47).
+    {
+      id: "mobile-trash",
+      title: "Il telefono: il cestino con tre file, i bottoni staccati",
+      query: "cestino=3",
+      viewport: PHONE,
+      prepare: async (page) => {
+        await page.click('#views-ribbon .rail-btn[data-panel="trash"]');
+        await page.waitForFunction(() => {
+          const buttons = [...document.querySelectorAll(".ui-list > .ui-stack > .ui-button")]
+            .filter((button) => button.getClientRects().length > 0);
+          if (buttons.length !== 3) return false;
+          const boxes = buttons.map((button) => button.getBoundingClientRect());
+          return boxes.slice(1).every((box, index) => box.top - boxes[index].bottom >= 8);
+        }, null, { timeout: 5_000 });
+      },
+    },
     // Il documento in piedi: la carta sta nella vista, e il pannello del
     // documento sale dal basso, aperto dal pulsante col numero dei commenti.
     {
@@ -957,7 +1280,43 @@ export const SCENE = onPage("shell", [
       title: "Il telefono: un .docx con la carta larga quanto la vista e il pulsante dei commenti",
       query: "rich=docx",
       viewport: PHONE,
-      prepare: (page) => openRichDocument(page, "Documenti/Prova.docx"),
+      prepare: async (page) => {
+        await openRichDocument(page, "Documenti/Prova.docx");
+        // Il pallino dello stato nella testata resta il chip di 24 px del
+        // computer, non un cerchio di 44, e si tocca lo stesso 10 px sopra e
+        // sotto il suo centro (`shells/mobile/mobile.css`, PA T47).
+        await page.waitForFunction(() => {
+          const chip = document.querySelector(".pane.focus .pane-toolbar .pane-standing-chip");
+          if (!(chip instanceof HTMLElement) || chip.getClientRects().length === 0) return false;
+          const r = chip.getBoundingClientRect();
+          if (r.height > 24.5 || r.width >= 44) return false;
+          const x = r.left + r.width / 2;
+          const y = r.top + r.height / 2;
+          // Il suo tocco non copre il bottone della modalità accanto.
+          const mode = document.querySelector(".pane.focus .pane-toolbar > .pane-mode-current");
+          const m = mode?.getBoundingClientRect();
+          const modeFree = !m || m.width === 0
+            || document.elementFromPoint(m.left + 1, m.top + m.height / 2)?.closest(".pane-mode-current") === mode;
+          return modeFree
+            && document.elementFromPoint(x, y - 10)?.closest(".pane-standing-chip") === chip
+            && document.elementFromPoint(x, y + 10)?.closest(".pane-standing-chip") === chip;
+        }, null, { timeout: 5_000 });
+        // Il fuoco della tastiera sul bottone della modalità: dal menu «…»
+        // un passo indietro, così l'anello è quello di `:focus-visible`. Il
+        // bottone sta sulla carta o accanto: l'anello sta dentro il suo
+        // rettangolo, cioè lo scarto è negativo e largo almeno quanto la linea
+        // (`shells/mobile/mobile.css`, PA T47).
+        await page.focus(".pane.focus [data-pane-menu]");
+        await page.keyboard.press("Shift+Tab");
+        await page.waitForFunction(() => {
+          const mode = document.activeElement;
+          if (!(mode instanceof HTMLElement) || !mode.matches(".pane.focus .pane-mode-current:focus-visible")) return false;
+          const style = getComputedStyle(mode);
+          const width = parseFloat(style.outlineWidth);
+          const offset = parseFloat(style.outlineOffset);
+          return style.outlineStyle !== "none" && width > 0 && offset < 0 && -offset >= width;
+        }, null, { timeout: 5_000 });
+      },
     },
     {
       id: "mobile-document-panel",
@@ -969,6 +1328,26 @@ export const SCENE = onPage("shell", [
         await page.click(".pane.focus .rich-side-open");
         await page.waitForSelector("#inspector-scrim:not([hidden])");
         await page.waitForSelector(".rich-side-comments .rich-side-comment");
+      },
+    },
+    // La barra dei fogli in piedi: la Home in tre colonne di due foglietti
+    // chiusi, e uno di loro aperto sul posto.
+    {
+      id: "mobile-grid-ribbon",
+      title: "Il telefono: la barra dei fogli a riposo",
+      query: "workbook=1",
+      viewport: PHONE,
+      prepare: (page) => openRibbon(page, "phone"),
+    },
+    {
+      id: "mobile-grid-ribbon-open",
+      title: "Il telefono: la barra dei fogli col foglietto «Allineamento» aperto sul posto",
+      query: "workbook=1",
+      viewport: PHONE,
+      prepare: async (page) => {
+        await openRibbon(page, "phone");
+        await page.click('.pane.focus .grid-ribbon [data-group="alignment"] .grid-ribbon-group-toggle');
+        await page.waitForSelector('.pane.focus .grid-ribbon [data-group="alignment"][data-open="true"]');
       },
     },
     {
@@ -1015,6 +1394,14 @@ export const SCENE = onPage("shell", [
         await page.click('#views-ribbon .rail-btn[data-panel="files"]');
         await page.waitForSelector("#sidebar-scrim:not([hidden])");
       },
+    },
+    {
+      id: "avvio-telefono",
+      title: "L'avvio sul telefono: il marchio e la riga del vault",
+      query: "avvio=attesa",
+      viewport: PHONE,
+      ready: () => document.querySelector('.avvio[data-stato="attesa"][data-fase="vault"]') !== null,
+      prepare: async () => {},
     },
   ]),
   // **La finestra documento** (`document.html`): un foglio solo, in
@@ -1090,7 +1477,14 @@ async function openDocumentWindow(page) {
     )
   ).jsonValue();
   await page.goto(`${here.origin}${here.pathname}${here.search}&${new URLSearchParams(request)}`, { waitUntil: "load" });
-  await page.waitForFunction(() => document.documentElement.dataset.bench === "ready", null, { timeout: 30_000 });
+  // La pagina rinasce qui, dopo l'attesa di `prepareScene`: si aspetta di
+  // nuovo anche che lo strato d'avvio se ne sia andato, o la foto prende il
+  // marchio fermo nei suoi ms minimi (il runner l'ha preso una volta).
+  await page.waitForFunction(
+    () => document.documentElement.dataset.bench === "ready" && !document.querySelector(".avvio"),
+    null,
+    { timeout: 30_000 },
+  );
   // Collegata: la principale ha risposto, il testo c'è e si può scrivere.
   await page.waitForSelector('#document-window-link[data-state="salvato"]');
   await page.waitForSelector('#document-window-panel .cm-content[contenteditable="true"]');
@@ -1226,6 +1620,12 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
 /// In una finestra stretta l'albero sta nel cassetto: lo si apre, e dopo la
 /// scelta lo si richiude, perché la foto è del documento.
 async function openRichDocument(page, path) {
+  await openFromTree(page, path, ".pane.focus .rich-surface .ProseMirror");
+}
+
+/// Apre `path` dall'albero e aspetta `ready`. In una finestra stretta l'albero
+/// è un cassetto: lo apre prima e lo richiude dopo.
+async function openFromTree(page, path, ready) {
   const compact = await page.evaluate(() => document.querySelector("#layout")?.classList.contains("layout-compact") ?? false);
   if (compact) {
     await page.click('#views-ribbon .rail-btn[data-panel="files"]');
@@ -1233,7 +1633,7 @@ async function openRichDocument(page, path) {
   }
   await openFolder(page, path.slice(0, path.lastIndexOf("/")));
   await page.click(`#file-list .tree-row[data-path="${path}"]`);
-  await page.waitForSelector(".pane.focus .rich-surface .ProseMirror");
+  await page.waitForSelector(ready);
   if (compact && await page.isVisible("#sidebar-scrim")) {
     // In alto a destra: in una finestra stretta il cassetto copre il centro,
     // e su un telefono sale dal basso.
@@ -1409,6 +1809,46 @@ async function openWorkbook(page) {
     return grid?.getAttribute("data-grid-protocol") === "v2"
       && (grid?.querySelectorAll('[role="gridcell"]').length ?? 0) > 0;
   });
+}
+
+/// Apre la cartella per le scene della barra dei fogli, col foglio largo
+/// `width` px, oppure senza l'albero e l'ispettore (`"full"`, 1248 px nella
+/// finestra `SHEET_FULL`) o quanto lascia il telefono (`"phone"`), e aspetta che la barra abbia raccolto i suoi foglietti.
+async function openRibbon(page, width) {
+  await openFromTree(page, "Dati/Conti.xlsx", '.pane.focus .grid-surface[data-grid-protocol="v2"] [role="gridcell"]');
+  if (await page.isVisible('#toggle-inspector[aria-pressed="true"]')) {
+    await page.click("#toggle-inspector");
+    await page.waitForSelector('#toggle-inspector[aria-pressed="false"]');
+  }
+  const tree = '#rail .rail-btn[aria-label="L\'albero del vault"]';
+  if (width === "full" && await page.isVisible(`${tree}[aria-pressed="true"]`)) {
+    const before = await page.evaluate(() => document.querySelector(".pane.focus .pane-editor").getBoundingClientRect().width);
+    await page.click(tree);
+    await page.waitForFunction(
+      (narrow) => document.querySelector(".pane.focus .pane-editor").getBoundingClientRect().width > narrow,
+      before,
+    );
+  }
+  await page.waitForSelector(".pane.focus .grid-ribbon .grid-ribbon-panel:not([hidden])");
+  const sheet = await page.evaluate(() => document.querySelector(".pane.focus .pane-editor")?.getBoundingClientRect().width ?? 0);
+  const expected = width === "full" ? 1248 : width;
+  if (typeof expected === "number" && Math.round(sheet) !== expected) throw new Error(`il foglio è largo ${sheet} px, non ${expected}`);
+  // La barra si raccoglie al fotogramma dopo la misura del foglio.
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await page.focus('.pane.focus .grid-surface [role="gridcell"][aria-selected="true"], .pane.focus .grid-surface [role="grid"]');
+}
+
+/// Apre il menu «Comandi» della barra dei fogli e, se c'è, la strada di
+/// sottomenu `path`, una voce dopo l'altra.
+async function openCommands(page, path = []) {
+  await page.click(".pane.focus .grid-ribbon-quick .grid-ribbon-button");
+  await page.waitForSelector("#context-menu .menu-items [role^=menuitem]");
+  for (const label of path) {
+    const row = page.locator(".context-menu .menu-items [role^=menuitem]", { has: page.locator(".menu-label", { hasText: new RegExp(`^${label}$`) }) }).last();
+    await row.click();
+    await page.waitForSelector(`.context-submenu[aria-label="${label}"]`);
+  }
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 }
 
 /// Il centro di una cella della griglia, per riga e colonna da zero, quando

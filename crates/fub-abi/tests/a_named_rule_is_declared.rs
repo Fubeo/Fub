@@ -296,6 +296,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-motori/src/registro.rs::normale",
+            (
+                Family::ContextualCase,
+                "è la chiave delle estensioni nel registro dei motori: piega in minuscolo \
+                 full-Unicode come `checked_extensions`, perché `scalda_per` deve accendere il \
+                 motore del provider che il registro dei formati sceglie per la stessa \
+                 estensione. Toglie in più il punto davanti, perché chi chiama passa anche \
+                 l'estensione scritta come nel nome di un file.",
+            ),
+        ),
+        (
             "crates/fub-kernel/src/registry.rs::provider_for_ext",
             (
                 Family::ContextualCase,
@@ -554,6 +565,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                 Family::AsciiCase,
                 "legge i nomi degli attributi di un tag HTML (`property`, `content`, `rel`, `href`) \
                  senza badare al maiuscolo, come il browser: sono ASCII. Non è un nome di Fub.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/engines.rs::extension",
+            (
+                Family::AsciiCase,
+                "piega l'estensione che la shell manda per scaldare un motore (K3) solo dopo averla \
+                 ridotta a lettere e cifre ASCII: su quell'alfabeto la piega ASCII e quella \
+                 full-Unicode del registro (`checked_extensions`) danno gli stessi byte, e la \
+                 sonda passa comunque da `format_of`, che piega di nuovo. Non decide un'identità \
+                 sua: sceglie solo se e quale motore scaldare.",
             ),
         ),
         (
@@ -974,6 +996,27 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  può arrivare con qualunque combinazione di maiuscole e minuscole. Non piega \
                  l'URL dell'asset: mantiene il namespace e il path byte-per-byte, e usa la \
                  corsia ASCII solo per il token che la RFC CSS rende case-insensitive.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/theme.rs::check_fonts",
+            (
+                Family::AsciiCase,
+                "confronta la famiglia di un carattere con le altre facce dello stesso \
+                 manifest, dopo che `theme_font_fault` ne ha fissato l'alfabeto ASCII. Il \
+                 motore confronta i nomi di `font-family` senza badare a maiuscole e \
+                 minuscole ASCII: `Carta` e `carta` sono la stessa faccia.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/rules/theme_font.rs::theme_font_fault",
+            (
+                Family::AsciiCase,
+                "confronta la famiglia di un carattere del tema con quelle di serie e con le \
+                 parole chiave del CSS. Il motore confronta i nomi di `font-family` senza \
+                 badare a maiuscole e minuscole ASCII, e la famiglia ammette solo lettere e \
+                 cifre ASCII, `-` e spazi: piegare di più o di meno lascerebbe passare un \
+                 nome che si mescola a un altro. La gemella TS la rispecchia per fixture.",
             ),
         ),
         (

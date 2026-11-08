@@ -73,6 +73,7 @@ import { mountSplitter } from "./kit";
 import { mountActivity } from "./panels/activity";
 import { mountSettings, openSettingsAt } from "./panels/settings";
 import { currentTheme, mountTheme } from "./theme/theme";
+import { fallito, fase, pronta } from "./avvio/consegna";
 import { onContentLookChange } from "./theme/content-look";
 import { focusedContextMode, focusedModeId } from "./state/document-controller";
 import { reducedMotion } from "./theme/reduced-motion";
@@ -759,6 +760,7 @@ async function init(): Promise<Teardown> {
   const alive = (): boolean => !lifetime.closed && pageEpoch === epoch;
   const clock = startupClock(() => performance.now());
   clock.mark("page");
+  fase("finestra");
   // Il tema **per primo**, e prima di qualunque cosa disegni (§12.4): applica
   // subito l'ultima scelta nota, così il primo fotogramma è già nella luce
   // giusta invece di correggersi mezzo secondo dopo. La preferenza di moto si
@@ -1167,6 +1169,8 @@ async function init(): Promise<Teardown> {
   if (!alive()) return teardown;
   refreshTitlebarShortcuts();
   clock.mark("shell");
+  // La shell è in piedi: da qui un'attesa lunga è il vault, non un guasto.
+  pronta();
 
   const initial = await api.initialVault();
   if (!alive()) return teardown;
@@ -1178,7 +1182,11 @@ async function init(): Promise<Teardown> {
   // l'onboarding a vault vuoto e applica i breakpoint, senza toccare l'ordine
   // di apertura qui sotto.
   mountAdaptiveShell();
-  if (initial) await openInitialVault(initial, alive);
+  if (initial) {
+    // Il nome che la barra mostrerà per primo: la cartella.
+    fase("vault", folderName(initial));
+    await openInitialVault(initial, alive);
+  }
   else await synchronize();
   if (!alive()) return teardown;
   // Senza un vault iniziale l'avvio finisce nella scelta, che aspetta chi
@@ -1357,7 +1365,9 @@ export function mountDesktopShell(): Promise<Teardown> {
     if (!alreadyClosed) {
       pageEpoch++;
       lifetime.close();
-      notify(t("app.start_failed", { reason }), "guasto");
+      // Sotto lo strato d'avvio un avviso non si vedrebbe: il guasto lo dice
+      // lo strato, con Riprova. Senza strato resta l'avviso.
+      if (!fallito(reason)) notify(t("app.start_failed", { reason }), "guasto");
       vaultPathEl.textContent = t("app.start_failed", { reason });
     }
     return () => lifetime.close();

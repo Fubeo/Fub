@@ -391,11 +391,18 @@ fn second_process_cannot_take_writer_and_sigint_exits_repl() {
         let result = stdout.read_exact(&mut prompt).map(|_| prompt);
         let _ = sender.send(result);
     });
-    let prompt = receiver.recv_timeout(Duration::from_secs(10));
+    // Il prompt esce quando il vault è aperto, e l'apertura scrive su disco con
+    // fsync: a macchina ferma ci vogliono 20–70 ms, ma con il disco occupato da
+    // altri scrittori (due `dd ... conv=fsync` bastano) si sono misurati più di
+    // 20 s (#301). L'attesa è un cane da guardia, non una misura: costa solo
+    // quando la REPL non risponde davvero.
+    let prompt = receiver.recv_timeout(Duration::from_secs(60));
     if prompt.is_err() {
         let _ = holder.kill();
         let _ = holder.wait();
-        panic!("REPL prompt timeout");
+        let mut stderr = String::new();
+        let _ = holder.stderr.take().unwrap().read_to_string(&mut stderr);
+        panic!("REPL prompt timeout; stderr: {stderr}");
     }
     assert_eq!(prompt.unwrap().unwrap(), *b"fub> ");
     let contender = cli(&[

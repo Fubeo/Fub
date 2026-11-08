@@ -13,6 +13,9 @@ fub-abi = { workspace = true }
 # decide quali feature ufficiali esistono, e la scelta si propaga a un posto
 # solo (§16.3).
 fub-features = { workspace = true }
+# Lo strato dei motori: la chiusura dell'ultimo vault svuota le cache e
+# restituisce la memoria al sistema (`rich::empty_engine_caches`).
+fub-motori = { workspace = true }
 fub-format-markdown = { workspace = true }
 fub-format-canvas = { workspace = true }
 fub-format-base = { workspace = true }
@@ -140,6 +143,20 @@ ureq = { version = "3", default-features = false, features = [
 # Unix descriptor opens use rustix's portable O_NOFOLLOW/O_NONBLOCK flags.
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true }
+
+# Il job object di una CLI Craft su Windows (`craft/launch.rs`): il tempo
+# scaduto la ferma con tutti i suoi figli. Solo le feature che servono: i job,
+# l'avvio sospeso e la ripresa del thread (`Threading`,
+# `Diagnostics_ToolHelp`), gli handle (`Foundation`) e `Security`, che
+# `CreateJobObjectW` nomina nella firma.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }
 
 [features]
 default = ["notify-watcher", "http-client", "official-features", "rich", "xlsx", "draw", "craft"]

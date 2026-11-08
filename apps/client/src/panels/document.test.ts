@@ -5,6 +5,7 @@ import type { DraftInfo, SettingEntry, WriteBase } from "../host/contract";
 import type { CraftPreview, CraftPreviewSize, CraftRenderConsent } from "../host/craft";
 import type { FakeHost } from "../host/fake";
 import { rejoinDrafts, type DraftBufferStore } from "../state/drafts";
+import { appendToTextEditor, mountedTextEditors } from "../editors/text/test-support";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -17,6 +18,14 @@ const box = vi.hoisted(() => ({
   /// L'app che farebbe l'anteprima, `null` se non è installata.
   app: "PdfCraft" as string | null,
   asks: [] as string[],
+  /// Il testo della versione che il ripristino della cronologia riscrive,
+  /// per nota (#237 R02): `version.restore` sul finto.
+  versions: new Map<string, string>(),
+  restoring: false,
+  /// Le pagine del PDF che il pdf.js finto apre.
+  pages: 1,
+  /// Il pdf.js finto non sa aprire il PDF.
+  broken: false,
 }));
 
 vi.mock("../host/ipc", () => {
@@ -42,11 +51,32 @@ vi.mock("../host/ipc", () => {
               });
             }
           }
+          // La cronologia sul finto: «Ripristina» chiede, «Sì» riscrive la
+          // nota con la versione scelta, come `version.restore` fa sul disco.
+          if (name === "viewAction" && args[0] === "history") {
+            box.host!.calls.push({ gate: "viewAction", args });
+            const [, , , action, payload] = args as [string, string, unknown, string, { doc: string }];
+            if (action === "restore_confirm") {
+              const text = box.versions.get(payload.doc);
+              if (text === undefined) return Promise.reject(new Error(`nessuna versione di ${payload.doc}`));
+              // Il kernel firma la riscrittura come il comando dell'utente
+              // in un lotto, non come il watcher: il finto la consegna così.
+              box.restoring = true;
+              try {
+                box.host!.writeFromOutside(payload.doc, text);
+              } finally {
+                box.restoring = false;
+              }
+            }
+            return Promise.resolve({ kind: "none" as const });
+          }
           return (now().api as unknown as Record<string, (...a: unknown[]) => unknown>)[name](...args);
         },
       },
     ),
-    onKernelEvent: (handler: (n: unknown) => void) => now().onKernelEvent(handler as never),
+    onKernelEvent: (handler: (n: { origin: unknown }) => void) =>
+      now().onKernelEvent(((notice: { origin: unknown }) =>
+        handler(box.restoring ? { ...notice, origin: { actor: { kind: "user" }, batch: "version.restore" } } : notice)) as never),
     onClose: (first: () => Promise<boolean>, onFailure: (reason: unknown) => void) => now().onClose(first, onFailure),
     window: {
       minimize: async () => {},
@@ -94,7 +124,7 @@ vi.mock("pdfjs-dist/build/pdf.min.mjs", () => {
     version: "6.3.289",
     GlobalWorkerOptions: { workerSrc: "" },
     getDocument: () => ({
-      promise: Promise.resolve({ numPages: 1, getPage: async () => page, destroy: async () => {} }),
+      promise: box.broken ? Promise.reject(new Error("PDF rotto")) : Promise.resolve({ numPages: box.pages, getPage: async () => page, destroy: async () => {} }),
       destroy: async () => {},
     }),
   };
@@ -290,11 +320,7 @@ async function waitFor(thing: string, cond: () => boolean, within = 3000): Promi
 
 /// La shell vera col PDF e un Word nel vault, il consenso `consent`, e
 /// `craft_render` che risponde «in coda» come il backend.
-async function start(
-  consent: CraftRenderConsent,
-  app: string | null = "PdfCraft",
-  more: Record<string, string> = {},
-): Promise<FakeHost> {
+async function start(consent: CraftRenderConsent, app: string | null = "PdfCraft", notes: Record<string, string> = {}): Promise<FakeHost> {
   vi.resetModules();
   box.consent = consent;
   box.app = app;
@@ -313,7 +339,7 @@ async function start(
     render: { app: "PdfCraft", consent: box.consent },
   });
   const host = createFakeHost({
-    file: { "Benvenuto.md": "# Benvenuto\n", "Lettera.docx": rich("ciao"), ...more },
+    file: { "Benvenuto.md": "# Benvenuto\n", "Altra.md": "# Altra\n", "Lettera.docx": rich("ciao"), ...notes },
     resources: {
       [GUIDA]: { bytes: new TextEncoder().encode("test"), mime: "application/pdf" },
       [FOTO]: { bytes: PNG, mime: "image/png" },
@@ -502,6 +528,239 @@ describe("il gesto che apre un PDF fa fare l'anteprima (T31)", () => {
     await open(GUIDA, true);
     await waitFor("la riga della domanda", () => consentRows().length === 1);
     expect(renders(host)).toEqual([]);
+  });
+});
+
+// T32: `![[guida.pdf#page=3]]` in una nota è un collegamento che apre il PDF
+// a quella pagina, sulla shell vera contro l'host finto.
+describe("il collegamento a una pagina di un PDF (T32)", () => {
+  beforeEach(() => {
+    activeStop?.();
+    activeStop = null;
+    document.body.innerHTML = "";
+    localStorage.clear();
+    box.pages = 5;
+  });
+
+  afterEach(() => {
+    box.pages = 1;
+  });
+
+  const NOTE = "Rimandi.md";
+  const TEXT = [
+    "# Rimandi",
+    "",
+    "![[guida.pdf#page=3]]",
+    "",
+    "![[guida.pdf#page=9]]",
+    "",
+    "![[guida.pdf#page=0]]",
+    "",
+    "![[guida.pdf#page=abc]]",
+    "",
+    "![[guida.pdf#page=]]",
+    "",
+  ].join("\n");
+
+  /// Il collegamento che la nota fa dell'embed con quel punto.
+  const linkTo = (heading: string) => visible("a.wikilink[data-wikilink-page='guida.pdf']")
+    .find((a) => a.dataset.wikilinkHeading === heading);
+  /// La pagina che il visore del PDF dice di mostrare.
+  const shownPage = () => visible(".media-pdf-page")[0]?.getAttribute("aria-label") ?? null;
+  /// Le schede del PDF nel riquadro col fuoco.
+  const pdfTabs = async () => {
+    const { layout } = await import("../state/layout");
+    return layout.panes[layout.focus]!.tabs.filter((tab) => tab.k === "doc" && tab.doc === GUIDA);
+  };
+
+  async function clickLink(heading: string): Promise<void> {
+    await waitFor(`il collegamento #${heading}`, () => linkTo(heading) !== undefined);
+    linkTo(heading)!.click();
+    await settle();
+  }
+
+  it("il clic su ![[guida.pdf#page=3]] apre il visore alla pagina 3", async () => {
+    await start("off", "PdfCraft", { [NOTE]: TEXT });
+    await open(NOTE);
+    await clickLink("page=3");
+    await waitFor("la pagina 3", () => shownPage() === "Pagina 3 di 5");
+    expect(await pdfTabs()).toHaveLength(1);
+  });
+
+  it("una pagina oltre l'ultima apre l'ultima", async () => {
+    await start("off", "PdfCraft", { [NOTE]: TEXT });
+    await open(NOTE);
+    await clickLink("page=9");
+    await waitFor("l'ultima pagina", () => shownPage() === "Pagina 5 di 5");
+  });
+
+  it.each(["page=0", "page=abc", "page="])("#%s apre la prima pagina, senza errori", async (heading) => {
+    await start("off", "PdfCraft", { [NOTE]: TEXT });
+    await open(NOTE);
+    await clickLink(heading);
+    await waitFor("la prima pagina", () => shownPage() === "Pagina 1 di 5");
+  });
+
+  it("il PDF già aperto in un'altra scheda torna attivo a quella pagina", async () => {
+    await start("off", "PdfCraft", { [NOTE]: TEXT });
+    await open(GUIDA);
+    await waitFor("la prima pagina", () => shownPage() === "Pagina 1 di 5");
+    await open(NOTE);
+    await clickLink("page=3");
+    await waitFor("la pagina 3", () => shownPage() === "Pagina 3 di 5");
+    expect(await pdfTabs()).toHaveLength(1);
+  });
+
+  it("[[guida.pdf#page=4]] col PDF già nella scheda attiva lo porta a quella pagina", async () => {
+    await start("off", "PdfCraft", { [NOTE]: TEXT });
+    await open(GUIDA);
+    await waitFor("la prima pagina", () => shownPage() === "Pagina 1 di 5");
+    const { openWikilink } = await import("./document");
+    await openWikilink("guida.pdf", "page=4", undefined, NOTE, { gesture: true });
+    await waitFor("la pagina 4", () => shownPage() === "Pagina 4 di 5");
+    expect(await pdfTabs()).toHaveLength(1);
+  });
+
+  it("un PDF rotto resta l'errore di sempre", async () => {
+    box.broken = true;
+    try {
+      await start("off", "PdfCraft", { [NOTE]: TEXT });
+      await open(NOTE);
+      await clickLink("page=3");
+      await waitFor("l'errore del PDF", () => (visible(".media-pdf [role=status]")[0]?.textContent ?? "").includes("could not be opened"));
+    } finally {
+      box.broken = false;
+    }
+  });
+});
+
+// #237 R01 e R02: il testo non salvato davanti ai gesti che toccano la sua
+// sessione senza passare dalla chiusura di una linguetta. Salvataggio e bozza
+// falliscono; dopo il gesto la sessione è viva e sporca, la nota riaperta
+// mostra il testo e la bozza parte appena il finto la lascia scrivere.
+describe("il testo non salvato resta (#237)", () => {
+  type Sessions = typeof import("../state/document-session").documentSessions;
+  const BENVENUTO = "Benvenuto.md";
+  const TYPED = "testo non salvato";
+  let repairWrite: (() => void) | null = null;
+  let repairDraft: (() => void) | null = null;
+
+  beforeEach(() => {
+    activeStop?.();
+    activeStop = null;
+    document.body.innerHTML = "";
+    localStorage.clear();
+    box.versions.clear();
+  });
+
+  afterEach(async () => {
+    repairWrite?.();
+    repairDraft?.();
+    repairWrite = repairDraft = null;
+    // Le sessioni sopravvivono alla shell smontata: nessun salvataggio del
+    // giro resta a scrivere sull'host della prova dopo.
+    (await import("../state/document-session")).documentSessions.closeAll();
+  });
+
+  const shows = (text: string) => mountedTextEditors().some((view) => view.state.doc.toString().includes(text));
+
+  /// La shell con «Benvenuto.md» aperta, il testo battuto, e salvataggio e
+  /// bozza guasti.
+  async function unsavedNote(): Promise<{ host: FakeHost; sessions: Sessions }> {
+    const host = await start("off");
+    await open(BENVENUTO);
+    const { documentSessions: sessions } = await import("../state/document-session");
+    await waitFor("l'editor della nota", () => mountedTextEditors().length > 0);
+    repairWrite = host.fault("writeDocument", "disco pieno");
+    repairDraft = host.fault("saveDraft", "disco pieno");
+    appendToTextEditor(`\n${TYPED}`);
+    await waitFor("il testo nella sessione", () => sessions.isDirty(BENVENUTO));
+    return { host, sessions };
+  }
+
+  /// La sessione è ancora l'unica copia: viva, sporca, col testo battuto.
+  function expectAlive(sessions: Sessions): void {
+    expect(sessions.inspect(BENVENUTO)).toMatchObject({ dirty: true });
+    expect(sessions.text(BENVENUTO)).toContain(TYPED);
+  }
+
+  /// Riaperta, la nota mostra il testo; tolto il guasto, la bozza c'è.
+  async function expectRecoverable(host: FakeHost, sessions: Sessions): Promise<void> {
+    await open(BENVENUTO);
+    await waitFor("l'editor della nota riaperta col testo", () => shows(TYPED));
+    const before = host.atGate("saveDraft").length;
+    repairDraft?.();
+    repairDraft = null;
+    await sessions.flushDraft(BENVENUTO);
+    const drafts = host.atGate("saveDraft").slice(before).map((call) => call.args);
+    expect(drafts.some(([doc, text]) => doc === BENVENUTO && String(text).includes(TYPED))).toBe(true);
+  }
+
+  it("R01 · un layout che toglie la nota (uno spazio di lavoro) lascia viva la sessione sporca", async () => {
+    const { host, sessions } = await unsavedNote();
+    const layouts = await import("../state/layout");
+    const next = structuredClone(layouts.layout);
+    layouts.openIn(next.focus, "Altra.md", next);
+    layouts.removeEverywhere(BENVENUTO, next);
+    const { applyShellLayout } = await import("../state/shell-layout");
+
+    await applyShellLayout(next);
+    await settle();
+
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+    expectAlive(sessions);
+    await expectRecoverable(host, sessions);
+  });
+
+  it("R01 · un'apertura che finisce con la linguetta già chiusa lascia viva la sessione sporca", async () => {
+    const { host, sessions } = await unsavedNote();
+    await open("Altra.md");
+    const layouts = await import("../state/layout");
+    const controller = await import("../state/document-controller");
+    const contexts = host.atGate("setActiveContext").length;
+    const unlock = host.throttle("setActiveContext");
+
+    // L'apertura si ferma nel pubblicare il contesto, dentro il suo `try`, e
+    // intanto la persona chiude la linguetta: il rilascio della linguetta
+    // trova l'apertura in corso, e chi decide è il `finally` dell'apertura.
+    const opening = controller.openDocument(BENVENUTO);
+    await waitFor("l'apertura pubblica il contesto", () => host.atGate("setActiveContext").length > contexts);
+    const paneId = layouts.layout.focus;
+    const index = layouts.pane(paneId)!.tabs.findIndex((tab) => tab.k === "doc" && tab.doc === BENVENUTO);
+    expect(index).toBeGreaterThanOrEqual(0);
+    const closing = controller.closeTabAt(paneId, index);
+    await settle();
+    unlock();
+    await Promise.all([opening, closing]);
+    await settle();
+
+    expect(layouts.panesWithDoc(BENVENUTO)).toEqual([]);
+    expectAlive(sessions);
+    await expectRecoverable(host, sessions);
+  });
+
+  it("R02 · un ripristino dalla cronologia tiene il testo e dice che il file è cambiato", async () => {
+    const { host, sessions } = await unsavedNote();
+    const restored = "# Benvenuto\nla versione di ieri\n";
+    box.versions.set(BENVENUTO, restored);
+    const { api } = await import("../host/ipc");
+
+    await api.viewAction("history", "history-1", null, "restore", { doc: BENVENUTO, ts: 1 }, []);
+    await api.viewAction("history", "history-1", null, "restore_confirm", { doc: BENVENUTO, ts: 1 }, []);
+    await settle();
+
+    expect(host.files()[BENVENUTO]).toBe(restored);
+    expectAlive(sessions);
+    await waitFor("l'avviso del file cambiato", () => visible('.sheet-notice[data-notice="changed_on_disk"]').length === 1);
+    expect(shows(TYPED)).toBe(true);
+    // Il salvataggio che segue non scrive alla cieca sopra la versione
+    // ripristinata: la base è quella di prima, e il finto risponde conflitto.
+    repairWrite?.();
+    repairWrite = null;
+    await sessions.flush(BENVENUTO);
+    expect(sessions.inspect(BENVENUTO)).toMatchObject({ dirty: true, result: "conflitto" });
+    expect(sessions.text(BENVENUTO)).toContain(TYPED);
+    expect(host.files()[BENVENUTO]).toBe(restored);
   });
 });
 
