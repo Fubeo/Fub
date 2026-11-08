@@ -325,11 +325,11 @@ Se una di queste cade, la stima si allunga.
 | K3 T17 · il sì dell'utente | K3 | aspetta solo il sì (T1–T16, T18 e T19 fatti; CI completa verde, run 42049126094) | nessuno | medio: un crate nuovo (`fub-motori`), patch nel `vendor/`, tre sistemi | — | il sì dell'utente |
 | Unire #295 (K3, con K3-IPC T8) | K3 | PR pronta, testa 165b8fa8 | il sì dell'utente | medio | S | `main` ha `crates/fub-motori` e i comandi `open_key`, `warm_engine` e `document_closed` |
 | Riallineare #290 a `main` e unirla | K2 | 7 di 7; la prova con una persona non è fatta | la prova dell'utente col protocollo di K2, prima di segnarla pronta (D13 A) | basso | S | CI completa verde, OK dell'utente |
-| PA T1 · il finto del banco con le impostazioni dell'host | PA | da fare | #295 in `main` (d90a09d0 di K3 cambia `bench/fake-ipc.ts`) | basso | S | `bench/fake-ipc.test.ts` |
+| PA T1 · il finto del banco con le impostazioni dell'host | PA | in corso (coder, base 651615a9) | #295 in `main` (d90a09d0 di K3 cambia `bench/fake-ipc.ts`) | basso | S | `bench/fake-ipc.test.ts` |
 | PA T3 · i comandi in sola lettura non tengono il turno | PA | fatto (5432f8b4) | nessuno | medio: tocca il custode | M | test d'integrazione di `fub-host` |
 | PA T4, T5 · #237 R01–R03 | PA | T4 e T5 fatti (baseline di `conflitto-lettura` dal runner) | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione; R01 si chiude col test se non si riproduce |
 | PA T6, T7 · #289 | PA | T6 e T7 fatti | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
-| PA T58 · la guardia stretta anche per enum, variant e funzioni esportate | PA | da fare (scelta dell'utente, registro 2026-11-08) | T7 | medio: confine WASM, ADR 0235 | M | `wit_additivity`, componente vero anche per gli import |
+| PA T58 · la guardia stretta anche per enum, variant e funzioni esportate | PA | in corso (coder, base 651615a9) | T7 | medio: confine WASM, ADR 0235 | M | `wit_additivity`, componente vero anche per gli import |
 | PA T8 · la pagina della cornice del telefono | PA | da fare | nessuno | basso | S | guardie dei documenti |
 | PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | da fare (D7 A) | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
 | PA T10 · i due punti sciolti da ritrovare | PA | da fare (D10 B) | nessuno | basso | S | la causa trovata o la riga che chiude |
@@ -3464,7 +3464,7 @@ Fatto quando: `npx vitest run bench/fake-ipc.test.ts bench/fake-english.test.ts`
 passa; la foto della scena delle impostazioni mostra «Animazioni» come lo
 stato `aspetto` del simulatore.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run bench/
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 651615a9
 
 ## T2 · N4 e K5 allineati a `main`, e i sei errori di tipo
 
@@ -5996,4 +5996,4 @@ casi finti nuovi che falliscono come atteso; `cargo test -p fub-wasm-host
 la regola.
 Prova: scripts/check.sh --rapido; cargo test -p fub-abi; cargo test -p
 fub-wasm-host
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 651615a9
