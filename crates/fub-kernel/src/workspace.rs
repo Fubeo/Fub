@@ -62,6 +62,9 @@ pub use removal::{
     CommittedDocumentDeletion, CompletedDocumentDeletion, CompletedDocumentRemoval,
     FinalizedDocumentDeletion, PreparedDocumentDeletion, PreparedDocumentRemoval,
 };
+mod reads_in_flight;
+use reads_in_flight::ReadInFlight;
+pub use reads_in_flight::ReadsInFlight;
 mod restore;
 pub use restore::{CompletedDocumentRestore, PendingDocumentRestore, PreparedDocumentRestore};
 
@@ -2348,6 +2351,10 @@ pub struct PreparedReadOnlyCommand {
     /// lettura della chiusura stessa (un `deactivate` o un handler di
     /// `VaultClosed` che invoca un comando), e la chiusura non la invalida.
     closed_at_prepare: bool,
+    /// L'iscrizione fra le letture in volo, che cade col token. `None` per una
+    /// lettura della chiusura stessa: la chiusura che l'ha lanciata non la
+    /// deve aspettare.
+    _in_flight: Option<ReadInFlight>,
 }
 
 impl PreparedReadOnlyCommand {
@@ -3705,6 +3712,10 @@ pub struct Workspace {
     /// esattamente la frase che li riguarda tutti insieme. Serve a una cosa
     /// sola: chiudere due volte non è chiudere due volte.
     closed: bool,
+    /// I comandi di sola lettura in volo, che il turno non vede: lo
+    /// smontaggio di un loro proprietario risponde `Busy`, la chiusura li
+    /// ferma e li aspetta ([`ReadsInFlight`]).
+    reads_in_flight: ReadsInFlight,
     /// Il vault che leggono i [`ResourceReader`] dati fuori, che non hanno il
     /// workspace e devono smettere quando si chiude. Lo svuota
     /// [`prepare_close`](Workspace::prepare_close), insieme a `closed`: così
@@ -4261,6 +4272,7 @@ impl Workspace {
             clock: Arc::new(crate::time::SystemClock),
             sources: Shelter::new(OpenSources::default()),
             closed: false,
+            reads_in_flight: ReadsInFlight::default(),
             resource_readers_vault,
             settings,
             view_states: ViewStates::in_memory(),
@@ -4740,7 +4752,7 @@ impl Workspace {
         if self.providers.plugins.get(plugin).is_none() {
             return Err(RegistryError::UnknownPlugin(plugin.to_string()));
         }
-        if self.dispatch.in_provider_call() {
+        if self.dispatch.in_provider_call() || self.reads_in_flight.busy(plugin) {
             return Err(RegistryError::Busy(plugin.to_string()));
         }
 
@@ -11626,6 +11638,13 @@ impl Workspace {
     /// un ingresso dall'utente): il rifiuto della ricorsione si calcola su di
     /// lei e non sulla pila condivisa, che appartiene a chi tiene il turno.
     ///
+    /// La lettura si iscrive fra quelle in volo ([`reads_in_flight`]) finché
+    /// il token vive, con `cancel`: la bandiera dell'host che la serve, che la
+    /// chiusura alza per fermarla. Finché è in volo, lo smontaggio del suo
+    /// proprietario risponde `Busy`.
+    ///
+    /// [`reads_in_flight`]: Self::reads_in_flight
+    ///
     /// `None` vuol dire «non è per questa porta»: il comando scrive, oppure è
     /// manutenzione del kernel. Il chiamante passa allora dal percorso di
     /// sempre ([`prepare_provider_command`], col turno). Vale anche per un
@@ -11640,6 +11659,7 @@ impl Workspace {
         args: serde_json::Value,
         mode: InvokeMode,
         outer: &[String],
+        cancel: &Arc<AtomicBool>,
     ) -> std::result::Result<Option<PreparedReadOnlyCommand>, PluginError> {
         let at = self.command_owner(command)?;
         let entry = &self.providers.commands[at];
@@ -11676,6 +11696,8 @@ impl Workspace {
             chain,
             workspace_id: self.workspace_id,
             closed_at_prepare: self.closed,
+            _in_flight: (!self.closed)
+                .then(|| self.reads_in_flight.enter(&entry.id, Arc::clone(cancel))),
         }))
     }
 
@@ -11717,6 +11739,12 @@ impl Workspace {
                 Ok(outcome)
             }
         }
+    }
+
+    /// Il registro delle letture in volo, da tenere **fuori** dal lucchetto:
+    /// chi chiude il vault lo usa per fermarle e aspettarle.
+    pub fn reads_in_flight(&self) -> ReadsInFlight {
+        self.reads_in_flight.clone()
     }
 
     fn prepare_provider_command_here(
