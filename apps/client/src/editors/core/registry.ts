@@ -58,6 +58,13 @@ export interface SurfaceMountContext {
    * carries it.
    */
   readonly gesture?: boolean;
+  /**
+   * The page the opening asks for, 1-based: a link to `x.pdf#page=3` in a
+   * note. Only a paged viewer reads it; beyond the last page it shows the
+   * last one. Like `gesture`, only the mount the opening gives birth to (or
+   * brings back on its tab) carries it.
+   */
+  readonly page?: number;
 }
 
 /** A selected range, in UTF-8 bytes of the document source, with its text. */
@@ -392,6 +399,12 @@ export interface EditorSurface {
    * cannot get there, so that the shell says it instead of doing nothing.
    */
   reveal?(location: SurfaceLocation): boolean;
+  /**
+   * Goes to page `page` (1-based) of a paged document already shown: a link
+   * to `x.pdf#page=3` followed while its tab is the active one. A surface
+   * without pages leaves it out.
+   */
+  showPage?(page: number): void;
   selections?(): EditorSelections | undefined;
   /**
    * A surface without text ranges says what it has selected here instead of

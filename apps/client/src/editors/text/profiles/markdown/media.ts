@@ -401,11 +401,15 @@ export async function hydrateVaultMedia(
         // alla sua superficie, che lo apre nel visualizzatore dedicato. Con
         // l'anteprima piccola che un'app ne ha fatto (T31) è la figura della
         // prima pagina, col nome sotto, e il clic lo apre con il gesto; una
-        // pagina scelta (`#page=3`) resta il collegamento.
+        // pagina scelta (`#page=3`) resta il collegamento, e tiene il punto:
+        // il clic lo porta come un `[[x.pdf#page=3]]`, e il visore parte da
+        // quella pagina.
         const link = (): HTMLElement => {
           const anchor = Object.assign(document.createElement("a"), { href: "#", textContent: page });
           anchor.className = "wikilink";
           anchor.dataset.wikilinkPage = page;
+          if (slot.dataset.embedHeading) anchor.dataset.wikilinkHeading = slot.dataset.embedHeading;
+          if (slot.dataset.embedBlock) anchor.dataset.wikilinkBlock = slot.dataset.embedBlock;
           return anchor;
         };
         slot.dataset.vaultMedia = "loaded";
