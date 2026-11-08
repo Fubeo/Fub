@@ -16,7 +16,9 @@ dubbio su una scelta tecnica si decide, non si chiede.
 
 ## L'orchestratore decide da solo
 
-- l'ordine dei task pronti e quanti coder far lavorare insieme (al massimo tre);
+- l'ordine dei task pronti. Lavorano due coder alla volta (Opus,
+  ragionamento medio) e nessun altro agente: è la regola dell'utente dal
+  2026-11-07 (dal 2026-11-04 era un coder solo), e la cambia solo l'utente;
 - il come che il piano approvato lascia aperto: nomi, tipi, dove sta una
   funzione, la forma di un messaggio d'errore, la forma dei test;
 - un piccolo refactor dentro i file del task;
@@ -59,11 +61,520 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · fub-pre-alpha · dove le persone leggono, «FubDraw» diventa
+  «Fub» o «il disegno» (frasi della shell, dei disegni, dei descrittori dei
+  formati e degli errori che arrivano alla shell, in italiano e in inglese);
+  resta solo come nome tecnico del formato, una riga nell'«Ambito» di
+  `docs/reference/scene-format.md` e una nota in coda all'ADR 0203, che non
+  si riscrive; una guardia in Vitest e due test Rust lo tengono fuori (PA
+  T33) · D14 A dell'utente (2026-11-07): FubDraw vive dentro Fub e la sua
+  app è archiviata (ADR 0231)
+
+- 2026-11-08 · fub-pre-alpha · un file senza permesso di scrittura (0444
+  su Unix, l'attributo di sola lettura su Windows) non si sovrascrive: il
+  kernel rifiuta con `PermissionDenied` tipizzato e i byte restano (nuovo
+  task PA T59) · T13 ha trovato che oggi su Linux il rename del salvataggio
+  atomico lo sovrascrive; alla domanda fra rifiutare e scrivere lo stesso
+  l'utente: «Rifiutare (Consigliato)»
+
 - 2026-11-08 · k3-motori · il piano è concluso: #295 è in `main`
   (fb722164) col sì dell'utente, e `PLAN.md` e
   `PLAN-ui/menu-comandi-fogli.html` escono da `main` come per gli altri
   piani conclusi · erano entrati con l'unione, e ogni ramo di piano aperto
   andava in conflitto su `PLAN.md` a ogni allineamento con `main`.
+
+- 2026-11-08 · fub-pre-alpha (orchestratore) · PA T1: il finto del banco
+  porta tutto il gruppo Aspetto dell'host (18 voci, nell'ordine di
+  `appearance_settings`), non solo «Animazioni»; lo stato `aspetto` del
+  simulatore ne mostra meno, ed è una differenza del simulatore · il task
+  chiede «le voci che mancano», e ne mancavano nove: il finto deve dire
+  quello che fa l'host, i testi vengono dai cataloghi Rust.
+
+- 2026-11-08 · fub-pre-alpha · da 0.2.0 in poi un `enum` o un `variant`
+  che attraversa il confine non prende casi nuovi, e un'interfaccia
+  esportata dal plugin non prende funzioni nuove: le novità arrivano con
+  interfacce nuove, come per i record; la guardia, l'ADR 0235 e i commenti
+  di `abi.wit` lo dicono (nuovo task PA T58, che prova prima anche gli
+  import) · T7 ha provato con componenti veri che l'una e l'altra cosa
+  impediscono di caricare un plugin già compilato; alla domanda fra
+  stringere la guardia e scriverlo solo nella pagina l'utente: «non importa
+  quanto tempo ci vorrà, meglio la qualità»
+
+- 2026-11-08 · fub-pre-alpha (orchestratore) · #295 unita in `main` col sì
+  dell'utente (fb722164); i file del piano K3 entrati con lei escono da
+  `main` con #316 (PLAN.md e PLAN-ui erano in conflitto con ogni ramo di
+  piano); gli altri rami si allineano a `main` dopo #316 · l'utente: «Sì,
+  unisci #295»
+
+- 2026-11-08 · fub-pre-alpha (orchestratore) · ogni componente
+  d'esempio (`esempi/*/Cargo.toml`) e `tools/varco-wasm` ha un
+  `[workspace]` suo, vuoto (844c5f5b) · i coder lavorano in worktree
+  annidati sotto `~/Progetti/Fub/.claude/worktrees/`: lì cargo risaliva al
+  `Cargo.toml` del checkout esterno, che non li elenca, e i passi WASM di
+  `check.sh` cadevano. Il comportamento fuori dai worktree annidati non
+  cambia (erano già esclusi dalla radice). Serve prima di PA T7, che prova
+  un componente vero.
+
+- 2026-11-08 · fub-pre-alpha (orchestratore) · PA T3 si divide in due
+  parti fatte dallo stesso coder: prima `fub-kernel` dà ai comandi in sola
+  lettura (`!spec.scope.writes`) un frame tutto loro (niente batch, nessun
+  cambio dell'attore condiviso, `in_provider_call` giù, la ricorsione
+  controllata nel prepared, mai undo), poi `fub-host` toglie loro il turno;
+  il perimetro si allarga a `workspace.rs` (e `jobs.rs` se è lo stesso
+  schema); il «Fatto quando» non cambia; un comando che scrive in DryRun
+  tiene il turno · il coder ha trovato che il frame di `prepare` vive nello
+  stato condiviso fino a `finish` ed è il turno a isolarlo: senza turno gli
+  eventi di una scrittura parallela restavano chiusi nel batch della
+  lettura, e due letture MCP insieme si rifiutavano a vicenda. Il «Non
+  toccare `fub-kernel`» del piano partiva da un'ipotesi sbagliata.
+
+- 2026-11-08 · fub-pre-alpha (orchestratore) · la prima coppia è PA T3 e
+  PA T4, non T3 e T13 come dice l'ondata; PA T13 parte quando #295 è in
+  `main` · T13 chiede di aprire fogli e documenti come la shell, con
+  `open_key` e `document_closed` dei motori, che arrivano con #295: fatto
+  prima, il corpus coprirebbe metà del percorso e andrebbe rifatto. T4
+  invece non aspetta niente, sta in un altro strato (il client) e sblocca
+  T5 e T30.
+
+- 2026-11-07 · fub-pre-alpha · il piano è approvato, coi 130 stati
+  composti e nuovi del simulatore; resta da confermare solo la licenza del
+  logo, prima di PA T49 · l'utente: «Per il resto il piano è approvato»
+- 2026-11-07 · fub-pre-alpha · lavorano due coder alla volta, Opus con
+  ragionamento medio, e nessun altro agente; il pianificatore del telefono
+  (D1 B) lo avvia l'utente · l'utente: «il prompt per l'orchestratore che
+  si occuperà di avviare 2 sub-agent per volta, Opus con effort medio che
+  saranno i coder»
+- 2026-11-07 · fub-pre-alpha (pianificatore) · i task PA si integrano sul
+  ramo del piano ed entrano in `main` con rami di consegna
+  `pre-alpha/consegna-<n>` (i commit di codice portati da `origin/main`
+  con `cherry-pick -x`, la PR pronta con la CI completa, l'OK dell'utente);
+  il ramo del piano non si unisce · porta `PLAN-ui/` (13 MB), e la Fase B
+  ha bisogno di T48 e della skin facile già in `main`; regole in «Come si
+  implementa», «Il ramo, le consegne e i due coder»
+- 2026-11-07 · fub-pre-alpha (D20) · la firma di Apple per ora non si fa:
+  PA T50 firma solo Windows (SignPath Foundation, o un certificato OV), il
+  dmg esce con la firma ad hoc e senza notarizzazione, e «Prova la
+  pre-alpha» spiega «Apri comunque» · l'utente: «Quello di Apple per ora ce
+  ne freghiamo assolutamente»
+- 2026-11-07 · fub-pre-alpha (D28) · Marcuzzo è un disegno dell'utente,
+  ritoccato con l'AI in ArtCraft e poi passato in VectorCraft; prima di PA
+  T49 l'orchestratore chiede la licenza (consiglio: CC BY-SA 4.0 con la
+  nota per i fork) e il modello usato in ArtCraft, e ne legge le
+  condizioni · l'utente: «Ho fatto il logo di Marcuzzo. Con l'intelligenza
+  artificiale l'ho ritoccato dopo con Artcraft. Vectorcraft.»
+- 2026-11-07 · fub-pre-alpha (il logo) · le forme piccole di Marcuzzo
+  (minima 24, minima 16 e la simbolica che ne viene) tolgono solo i
+  dettagli minuti e non ingrandiscono niente: l'occhio, la pupilla,
+  l'occhiolino e il becco restano quelli del disegno · l'utente: «non mi
+  piace l'icona con l'occhio strizzato ingrandito»; la prima minima aveva
+  l'occhiolino più spesso e la pupilla più grande per leggersi a 16 px
+- 2026-11-07 · fub-pre-alpha (il logo) · Marcuzzo, il gufo nella cartella
+  dell'utente, è il logo (D26); il gufo ha colori fissi, la cartella e i
+  fogli seguono la tinta, il tema e il contrasto con `logoColors()` della
+  ricetta, e la cartella e il retro reggono la soglia dei controlli (3, o
+  4,5 col contrasto alto) contro `--bg` e `--bg-elev` · l'utente: «la
+  cartella dovrà avere il colore del tema scelto […] in modo tale che non si
+  vada a sovrapporre il colore attuale con quello di sfondo»; i fondi sono
+  quelli dove sta il logo (la barra e l'avvio su `--bg`, le Informazioni su
+  `--bg-elev`), e le 42 varianti misurate reggono tutte
+  (`logo/misure.json`).
+- 2026-11-07 · fub-pre-alpha (il logo) · un tema installato che non
+  dichiara `--logo-*` li riceve dalla serie al montaggio (un campo
+  facoltativo nuovo di `ThemeSeries`, chiamato da `theme.ts` prima di
+  `mountThemeBundle`), non dal caricatore dei temi né da un file del tema ·
+  il bundle è già per luce e il contrasto si legge lì; il caricatore non
+  conosce la ricetta, e chiedere i colori del logo a chi scrive un tema
+  sarebbe un obbligo nuovo nel contratto. I gettoni restano facoltativi.
+- 2026-11-07 · fub-pre-alpha (il logo) · l'icona del sistema è Smeraldo
+  (scelta del pianificatore, l'utente la può cambiare); Menta è la scala di
+  notte della ricetta, Kraft resta fra gli originali · Smeraldo è il verde di
+  serie (160) e regge sia su una barra delle applicazioni chiara sia su una
+  scura; Menta su una barra chiara si perde.
+- 2026-11-07 · fub-pre-alpha (il logo) · la forma simbolica si fa dalla
+  forma a 24 px con un filo vuoto di 45 unità dentro la cartella davanti,
+  tagliato nell'ordine del disegno (`logo-simbolico.mjs`, valori di
+  partenza) · un filo fuori dalla cartella o tagliato dopo tutto il disegno
+  mangiava la faccia e l'ala; un filo limitato a una distanza lasciava gli
+  angoli seghettati. La cartella davanti si stringe un poco ai lati e sotto,
+  e a 16–24 px non si vede.
+- 2026-11-07 · fub-pre-alpha (il logo) · D28 resta aperta e PA T49 aspetta
+  lei; il consiglio è CC BY-SA 4.0 per i file del logo, con una nota che
+  chiede ai fork di cambiare nome e logo · la risposta «A, AI» di prima
+  riguardava il primo logo; per Marcuzzo servono lo strumento (le sue
+  condizioni d'uso) e la licenza, che sono dell'utente.
+
+- 2026-11-07 · fub-pre-alpha (D19) · i difetti veri del controllo di tutte
+  le viste vanno in due task nuovi, PA T56 (la carta del file e il fuoco) e
+  PA T57 (i bersagli e i nomi interi), più due punti in PA T47 (le righe
+  che si toccano, il tondo della modalità); il simulatore li mostra già
+  corretti (`92-prealpha-viste.css`) · un difetto che il coder copia dal
+  simulatore torna nel prodotto: si corregge prima, e la guardia di PA T55
+  lo tiene lontano.
+- 2026-11-07 · fub-pre-alpha (D19) · la carta del file al buio prende
+  l'anello, la sintassi e i segni della griglia dai `--paper-*` che ci sono,
+  senza ruoli nuovi nel contratto del tema; la formula nella cella in
+  modifica è d'inchiostro, come in Excel, e solo i riferimenti hanno colore ·
+  un ruolo nuovo è un contratto pubblico (temi di terzi), e la carta ne ha
+  già abbastanza; l'utente può chiedere la formula colorata, ma allora
+  servono colori pensati per il bianco.
+- 2026-11-07 · fub-pre-alpha (D19) · la freccia di un pulsante diviso
+  della barra a schede è larga 24 px (prima 14): la fila si allunga di 10 px
+  per pulsante diviso, e a piena larghezza ci sta ancora · WCAG 2.5.8 vuole
+  24 px o la distanza dai vicini, e la freccia è attaccata al pulsante; è
+  il cambio che si vede di più (27 stati dei fogli), quindi l'utente lo
+  guarda nel simulatore.
+- 2026-11-07 · fub-pre-alpha (D19) · i riscontri della sonda al telefono,
+  tranne ciò che deforma la regola dei 44 px, vanno al piano del telefono
+  (`prompt-piano-telefono.md`); quelli dentro le pagine dei piani (gli
+  strati) vanno ai piani che le possiedono · il telefono si ridisegna (D1
+  B) e una correzione di adesso sarebbe buttata; una pagina di un altro
+  piano si cambia nel suo piano.
+
+- 2026-11-07 · fub-pre-alpha (il verde) · la tinta di serie è 160
+  «Smeraldo», non 159 come ha detto l'utente guardando il logo · le tinte
+  della «f» del logo vanno da 157,6 a 164 e il suo foglio scuro è 160,6; i
+  campioni dell'accento vanno a passi di 5°, e fra 159 e 160 l'occhio non
+  vede differenza. Prima di PA T48 si chiede il sì su 160 col logo
+  definitivo. (Superata lo stesso giorno: la cartella di Marcuzzo sta a
+  160,1 in Smeraldo e in Menta, quindi il logo conferma 160 e PA T48 non
+  aspetta altro.)
+- 2026-11-07 · fub-pre-alpha (il verde) · il vassoio delle barre di S2 T16
+  segue la tinta da solo (col verde #f8faf8 di giorno, #18211c di notte):
+  né PA T11 né PA T48 toccano la ricetta per il vassoio · è la formula di
+  S2 (`paper` = tinta − 10 di giorno, − 3 di notte); i valori a metà strada
+  scritti prima erano sbagliati.
+- 2026-11-07 · fub-pre-alpha (il verde) · le catture si rifanno verdi con
+  due toppe sopra quelle del finto (`verde.patch`, `verde-avvio.patch`), le
+  pagine dei piani con la mappa dei colori (`verde-mappa.json`); la lavagna
+  (`s2/lavagna*`) resta una foto blu col DOM verde, unica eccezione ai pixel
+  · il simulatore resta il client che PA T48 scriverà, e si rifà da
+  un'altra macchina; la lavagna non ha una definizione per rifarla.
+- 2026-11-07 · fub-pre-alpha (il logo) · il logo resta quello provvisorio
+  (il nastro «f» con la pagina davanti) finché l'utente porta i file; PA T49
+  aspetta i file e D28 · l'utente: «intanto lascia il logo che avevi fatto
+  prima, poi ci penso io al logo, te pensa a finire il progetto».
+  (Superata lo stesso giorno: l'utente ha portato Marcuzzo, D26.)
+- 2026-11-07 · fub-pre-alpha (le scelte) · i consigli delle domande si
+  pesano solo sulla qualità del risultato (aperto, personalizzabile, senza
+  problemi), e il tempo non conta. Cambiano sei consigli (D1 B, D6 C, D8 B,
+  D9 B, D11 B, D17 C), e arrivano D19–D24 dalle voci di «Fuori scope» che
+  urtano col criterio (il controllo di tutte le viste, la firma, #237
+  R05–R08 e A03, #242, le parti della finestra, K6). D23 e D24 consigliano
+  comunque di aspettare, per una ragione di qualità. Le risposte e i 118
+  stati, in 14 gruppi, si danno nella pagina «Le scelte di Fub pre-alpha»
+  (https://claude.ai/artifact/Q5Lydynyn4DV8xwFDLZt18, `scelte.html`). Le
+  risposte stanno nel db dell'artifact (`risposte/<D>`, `stati/<gruppo>`):
+  solo il proprietario scrive, e il pianificatore le legge con
+  ArtifactData. · L'utente l'ha chiesto il 2026-11-07: «voglio la qualità
+  massima… open, personalizzabile… che funzioni da Dio».
+- 2026-11-07 · fub-pre-alpha (simulatore v2) · il simulatore mostra il
+  telefono corretto da PA T47 (`92-prealpha-telefono.css`): l'interruttore
+  resta il binario di 32 × 18 della pelle, con un tocco di 44 px dato da un
+  `::after` trasparente, e le schede delle impostazioni scorrono intere. Il
+  confronto dei pixel toglie interruttori e schede e misura le righe che si
+  accorciano · il cerchio di 44 px e i nomi in «…» sono un difetto di
+  `shells/mobile/mobile.css` (differenza 47), non una forma da approvare;
+  l'aspetto dell'interruttore è già approvato con Scrittoio 2. Un
+  interruttore più grande solo sul telefono sarebbe stato una forma nuova
+  da approvare, e non serve: il tocco di 44 px non deve per forza vedersi.
+- 2026-11-07 · fub-pre-alpha (simulatore v2) · la scheda di un componente
+  fermato porta `data-state="stopped"` nelle toppe, e il rosso del
+  pericolo vale solo per la sua riga dello stato (`.setting-source[role=
+  "status"]`) · la riscrittura delle toppe dal codice l'aveva perso, e la
+  riga «Fermato…» usciva grigia come le altre; «Rimuovi» e le altre righe
+  della scheda restano col loro colore.
+
+- 2026-11-07 · fub-pre-alpha (simulatore v2) · nel confronto dei pixel lo
+  spazio che il DOM nuovo prende si misura: il simulatore si riprova scorso
+  di quanto il DOM nuovo spinge giù il resto, e un quadretto di 16 px che
+  differisce conta come spiegato solo se si ritrova uguale nella foto del
+  client spostato (in verticale o di lato, al massimo l'altezza del DOM
+  nuovo più 64 px, mai oltre 480). Si tolgono anche gli elementi a cui una
+  toppa cambia testo, attributi o classi · prima «spazio che il DOM nuovo
+  prende» era una frase senza misura, e 37 righe restavano sopra la soglia
+  con quella sola spiegazione; il quadretto deve ritrovarsi uguale, quindi
+  un colore, un carattere o un CSS sbagliato resta una differenza.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · le toppe dei componenti
+  (S204–S208) copiano `renderInstalledComponent` e la richiesta del
+  consenso com'è oggi («Abilitato», «Consenso all'esecuzione», «Rimuovi»,
+  «Concedere i permessi»); le righe nuove (lo stato «Fermato…», «Riavvia»,
+  «Copia il motivo») hanno il loro commento · il codice vince sul piano
+  finché l'utente non risponde a D18; il primo giro aveva inventato
+  «Disinstalla» e un dialogo «Installare …?» che il codice non ha. D18
+  consiglia A perché la regola del 2026-10-30 («Accendi, Spegni… Togli»)
+  e il commento di `i18n/lexicon.ts` dicono «dappertutto».
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · nei livelli senza script
+  (le pagine dei piani dentro la cornice) ogni `canvas` è sostituito da
+  un'`img` con le sue misure · in un documento senza script il canvas non
+  ha misura propria, e la pagina del PDF della lavagna usciva bianca.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · nel confronto dei pixel
+  una differenza sopra lo 0,5 % è spiegata solo se togliendo la sua zona
+  (il bottone della modalità spostato di S2 T3, l'anello del fuoco) il resto
+  scende sotto la soglia; `script/foto-sim.mjs` scrive nella riga quanto
+  resta. Il tema d'esempio e l'ispettore compatto di S2 T9 sono spiegati
+  per stato, senza zona · una spiegazione che non si misura copre anche gli
+  errori veri; così ogni riga dice se basta.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · con la finestra compatta il
+  simulatore mostra l'ispettore di S2 T9 (264 → 216 px in cinque passi,
+  `measures.ts`), non quello della foto: nella foto i blocchi, montati dopo
+  le preferenze, lo tengono a 264 · nell'app `structure.css` viene prima
+  delle preferenze e il passo compatto vince; il simulatore deve far vedere
+  il prodotto dopo T9, non l'ordine dei fogli del banco.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · nelle pagine dei piani i
+  caratteri di Google (Hanken Grotesk, Newsreader, IBM Plex Mono) si
+  prendono dai file `@fontsource` del client · il simulatore gira senza rete
+  (dentro l'artifact e da `file://`), e senza quei caratteri lo strato si
+  disegnava con quelli di riserva e andava a capo altrove.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · `cattura.mjs` aspetta che
+  menu, dialoghi e finestrelle di CodeMirror restino fermi due fotogrammi
+  prima della foto; le tre catture del menu «/» sono rifatte così · la foto
+  vecchia era presa mentre il menu si sistemava, e non coincideva col DOM
+  copiato subito dopo.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · la pagina dell'artifact
+  (`script/costruisci-hub.mjs`) non tiene più numeri scritti a mano: stati,
+  scenari e quanti aspettano un sì vengono da `sim-stati.js`; la fase di
+  ogni task dalle tabelle di «L'ordine» (con «aspetta Dn» quando la riga lo
+  dice); una domanda è decisa quando il suo corpo comincia con «**Decisa
+  dall'utente…**», e allora la tabella riassuntiva mostra la decisione al
+  posto del consiglio · nel primo giro le fasi e i conti erano copiati
+  nello script, e al secondo giro erano già sbagliati (T1–T24 contro
+  T1–T45, D5 data per decisa).
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · gli script del ramo trovano
+  Playwright, pngjs, pixelmatch, happy-dom e i caratteri in `FUB_CLIENT`
+  (`script/client.mjs`), di serie `apps/client` del repository che li
+  contiene; nessun percorso della macchina resta negli script del ramo
+  (`script/ricattura-tutto.sh` prende i due client come argomenti) · uno
+  script che punta a `~/.cache/…` non gira su un'altra macchina, e la
+  richiesta del secondo giro vuole il simulatore rifacibile dal repository.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · D12 B è fatta come la
+  pagina Aspetto dell'app: densità, contrasto e accento si scelgono in S234
+  e restano negli altri stati finché «Aspetto di serie» non li toglie; non
+  c'è una riga apposta sopra lo schermo · è il gesto del prodotto, e una
+  seconda via nel simulatore sarebbe un comando che l'app non ha.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · tutte le catture si sono
+  rifatte in un colpo (`script/ricattura.mjs`, 632 foto del client più 248
+  delle pagine dei piani), e le vecchie stanno in `prove/catture-vecchie/`
+  sulla macchina; restano le sole `s2/lavagna*`, senza definizione · metà
+  delle foto vecchie aveva il CSS di prima dei blocchi o un cassetto aperto
+  per sbaglio, e il confronto dei pixel non diceva più niente. Una foto
+  vecchia superata da una cartella più in alto (`aspetto`, `toast`, le note
+  in Blocchi, Sorgente e Lettura, «Comandi» del foglio) non si rifà: non la
+  usa nessuno.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · le pagine dei piani si
+  fotografano con gli argomenti di Chromium del banco anche quando la foto
+  vecchia era diversa: le schede della lavagna (`p-lav-*`) vanno a capo in
+  un altro punto (2–3 % dei pixel) perché le foto vecchie avevano il
+  «hinting» dei caratteri acceso · la pagina è la stessa byte per byte, e
+  la foto nuova si rifà uguale (0 pixel diversi) con lo script del ramo.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · `piani/ricette.html` si
+  fotografa dalla copia avvolta del simulatore (con `<!doctype html>`), non
+  dal file grezzo · grezzo il browser lo apre in «quirks mode» e le misure
+  cambiano; nel simulatore e nell'artifact la pagina è sempre avvolta.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · i due temi d'esempio
+  (`blocchi/93-tema-*`) non entrano nelle catture (`cattura.mjs` li salta) e
+  il simulatore li monta solo sugli stati che li vestono · non sono CSS del
+  prodotto; montati sempre, avrebbero vestito ogni foto.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · «il DOM» nel piano vuol dire
+  una cosa sola per provenienza: per una cattura il DOM del client di oggi
+  (uguale o cambiato da un task di Scrittoio 2), per una composta quello
+  della pagina del piano, per una nuova quello di `toppe/*.html` · la
+  richiesta del secondo giro diceva che la frase «si copia il DOM» non
+  diceva quale.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · il file nuovo col tipo
+  diventa tre task: PA T43 (il menu «Nuovo» chiede il tipo, S34), PA T44
+  (il documento e il foglio vuoti, in `fub-host`) e PA T45 (la misura con
+  5.000 file, S253) · un task che tocca client, host e banco non sta nella
+  misura di un coder medio; il menu mostra solo i tipi che hanno un comando
+  dichiarato, così T43 non aspetta T44.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · `t-foglio-errore` diventa uno
+  stato suo (S286, «Telefono: l'errore di un comando») e non è più il
+  telefono di «Foglio: una formula sbagliata» · la cattura è l'errore di un
+  comando della griglia, non un #DIV/0! in una cella: mostrarla come la
+  stessa cosa al telefono era sbagliato.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · nel menu «Nuovo» la voce
+  «Cartella» non ha scorciatoia · Ctrl+Shift+N l'avevo scritta io, e il
+  client non la ha: una scorciatoia inventata nel prototipo finirebbe nel
+  codice.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · ogni stato ha una
+  provenienza (cattura, composta, nuova) e un numero S che non cambia più
+  (`script/numeri-sim.json` cresce soltanto); da approvare sono le composte
+  e le nuove, 118 su 286 · l'utente approva per numero («approvo tutto
+  tranne S23»), e un numero che cambiasse farebbe approvare la cosa
+  sbagliata.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · il CSS nuovo ha una fonte
+  sola. Per Scrittoio 2 vince il prototipo approvato del suo piano
+  (`PLAN-ui/scrittoio-2.html` di `piano/scrittoio-2`), e
+  `script/prova-css-fonte.mjs` controlla che i 18 blocchi del simulatore
+  che vengono da lì coincidano con i suoi, tolte le varianti «com'era», i
+  commenti e gli spazi. Per i pezzi di questo giro la fonte è il blocco del
+  simulatore (`blocchi/92-*` e `93-*`), con destinazione e task. La
+  cattura monta i blocchi per la foto ma non li copia (`cattura.mjs`), e il
+  simulatore li rimonta sopra ogni cattura · due copie dello stesso CSS
+  prima o poi divergono, e il coder copierebbe quella vecchia.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · le catture (560 MB) restano
+  fuori dal repository; nel repository la fonte delle catture sono i dati
+  già impacchettati (`sim-dati-*.js`), e `DATI=<cartella> node
+  script/costruisci-sim.mjs <uscita>` rifà la pagina uguale byte per byte ·
+  così blocchi, toppe, scenari e vista si cambiano dal repository senza il
+  server, e la prova dice se la ricostruzione è fedele.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · una cattura presa prima di
+  un cambio dei blocchi si rifà (`script/ricattura.mjs`, coi blocchi e coi
+  mod di oggi) · il simulatore monta i blocchi di oggi: una foto col CSS di
+  allora non confronta più niente.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · le foto del confronto, anche
+  quelle delle pagine dei piani (`script/cattura-piani.mjs`), usano gli
+  argomenti di Chromium del banco (`bench/stage.mjs`) · senza, il testo si
+  disegna diverso e ogni parola conta come differenza.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · nel confronto dei pixel si
+  nasconde la riga dei dati della nota (il mod `datiNota` la mette nel DOM
+  da copiare, la foto del client non ce l'ha), si coprono le toppe e i
+  pezzi composti, e gli strati si confrontano solo a tutta larghezza · la
+  pagina approvata è fotografata alla sua misura; a 700 px e al telefono lo
+  strato è la stessa pagina che si adatta, e la differenza è attesa.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · i gesti del telefono sono
+  provvisori come il telaio A (D1): una strisciata orizzontale di almeno
+  60 px apre e chiude i cassetti, dal bordo (24 px) torna indietro, la
+  pressione lunga (500 ms) apre il menu del tocco; vale anche sul testo, e
+  il documento ha `touch-action: pan-y pinch-zoom` · senza `pan-y` il
+  browser prende la strisciata per sé (`pointercancel`); il guscio mobile
+  vero li decide nel piano del telefono.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · i tempi del simulatore
+  (`setTimeout`) stanno sulla finestra del simulatore, non nello schermo ·
+  lo schermo è un iframe senza `allow-scripts`, e lì un timer non scatta mai.
+  Solo simulatore.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · Indietro salta lo stato di
+  adesso nella storia e, senza storia, torna alla «casa» dello stato (il
+  foglio per un dialogo del foglio) · Indietro deve portare sempre altrove.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · il clic sul velo di un
+  dialogo del kit annulla (`kit/dialog.ts`); il velo delle impostazioni le
+  chiude come × (`preferences/scrim.ts`); l'icona del binario del pannello
+  già davanti chiude e riapre la colonna (`panels/rail.ts`, `railClick`);
+  l'indice delle impostazioni scorre, dà il fuoco al titolo e segna la voce
+  con `aria-current` (`jumpTo` di `panels/settings.ts`) · il simulatore fa
+  ciò che fa il prodotto, anche dove la foto non c'è.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · la colonna della lavagna
+  (toppa `lav-colonna`) scrive `data-tool` e `data-tools` come
+  `kit/tool-rail.ts:126` e `:244` · è lo stesso kit del disegno, e il coder
+  copia il DOM che il kit produce davvero.
+- 2026-11-06 · fub-pre-alpha (simulatore v2) · `prova-sim.mjs` conta come
+  «coperto» solo un controllo sotto qualcosa che non è un controllo; non
+  conta chi è tagliato da un antenato che scorre o ritaglia, né chi sta
+  sotto un velo, uno strato, un pannello o un menu aperto, o sotto la
+  striscia del bordo del cassetto (`frame/peek.ts`); dopo ogni montaggio
+  aspetta le animazioni finite (al più 1,5 s) · senza, l'elenco dei
+  controlli cambia fra il movimento calmo e il ridotto, e i falsi allarmi
+  nascondono quelli veri.
+- 2026-11-05 · fub-pre-alpha (skin facile) · la richiesta del manutentore
+  («se non è facile creare una skin non andiamo da nessuna parte») entra nel
+  piano come PA T34–T42 e «Fatto quando» 9, con tre domande (D15 il nome del
+  campo, D16 le icone, D17 l'aspetto dei due temi) · è una scelta di
+  prodotto già presa dal manutentore; il pianificatore ha deciso solo il
+  come, qui sotto.
+- 2026-11-05 · fub-pre-alpha (skin facile) · l'ordine: la pelle che eredita
+  e i caratteri in Fase A (T34, T35, T39, T40); gli strumenti dell'autore in
+  Fase B dopo le Impostazioni di S2 (T36–T38); gli hook congelati per
+  ultimi, dopo tutta la Fase C (T41); i temi d'esempio dopo il congelamento
+  (T42) · si congela solo ciò che la pre-alpha mostra, quando non cambia
+  più; i temi d'esempio provano lo snapshot, non un contratto che si muove.
+- 2026-11-05 · fub-pre-alpha (skin facile) · i canali del loader diventano
+  `caratteri`, `caratteri-tema`, `foglio`, `pelle`, `pelle-tema`,
+  `preferenze`, `snippets`; senza `extends` tutto resta come oggi, byte per
+  byte · un canale separato, e non una fusione dei testi, tiene le
+  preferenze dell'utente sopra ogni pelle e lascia smontare il tema senza
+  toccare la serie.
+- 2026-11-05 · fub-pre-alpha (skin facile) · `extends` accetta solo
+  `fub.serie`; ereditare da un altro tema è fuori · una catena di temi
+  vorrebbe un ordine, i cicli e le versioni; nessun caso lo chiede adesso.
+- 2026-11-05 · fub-pre-alpha (skin facile) · una «Modalità sviluppatore»
+  (`developer.mode`, gruppo «Sviluppo», livello macchina, spenta) apre
+  installare e collegare da cartella; la regola sta nell'host, non solo nel
+  bottone; un tema collegato alla volta, con fiducia «In sviluppo» · è la
+  stessa idea dei temi in sviluppo che `TRUST_LABELS` sa già dire, e un
+  programma non può accenderla da sé.
+- 2026-11-05 · fub-pre-alpha (skin facile) · i caratteri del tema: le regole
+  `@font-face` le scrive il loader dai campi del manifest (woff2 fra gli
+  asset, firma `wOF2`, 8 file, 2 MiB l'uno, 6 MiB in tutto); `@font-face`
+  resta vietato nel CSS · un `src:` scritto a mano potrebbe chiamare la
+  rete; la CSP non cambia (ha già `font-src data:`).
+- 2026-11-05 · fub-pre-alpha (skin facile) · le icone del tema (se D16 è A o
+  C) passano `PATH_DATA` come il registro di oggi; un nome che nessuno
+  disegna è un avviso nella diagnosi, non un rifiuto · i moduli registrano
+  le loro icone quando si caricano, quindi al montaggio del tema non tutti i
+  nomi ci sono ancora.
+- 2026-11-05 · fub-pre-alpha (skin facile) · al ricaricamento di un tema
+  collegato, un fascio rifiutato lascia montato l'ultimo buono (non la
+  serie) e mostra la diagnosi con l'ora · chi scrive il tema salva spesso
+  file a metà; cadere sulla serie a ogni errore farebbe lampeggiare l'app.
+- 2026-11-05 · fub-pre-alpha (skin facile) · il codice vince sulla
+  richiesta: `contract.json` è cambiato in 12 commit (non 11); `install_theme`
+  c'è già nell'host senza IPC; la fiducia `development` c'è già · scritto in
+  «Differenze fra piani e codice», 28–36.
+- 2026-11-05 · fub-pre-alpha (secondo giro) · un coder alla volta, più al
+  massimo un pianificatore, anche in questo file (prima diceva «al massimo
+  tre») · è la regola dell'utente dal 2026-11-04; le «ondate» del piano sono
+  file, una dopo l'altra. Stima scritta in «L'ordine»: 7–9 settimane.
+- 2026-11-05 · fub-pre-alpha (secondo giro) · task nuovi decisi dal
+  pianificatore: PA T25 (il controllo degli aggiornamenti vede le
+  pre-release: `/releases/latest` non le dà), T26–T30 (T14 diviso in sei
+  task, 27 compiti), T31 (l'APK di debug x86_64 parte in un emulatore della
+  CI, senza action di terzi), T32 (`![[x.pdf#page=3]]`) · ognuno chiude un
+  buco fra «Fatto quando» e il codice; le ragioni sono nelle loro sezioni.
+- 2026-11-05 · fub-pre-alpha (secondo giro) · PA T4: R01 si prova con un
+  test sui tre chiamanti di `release()` prima di correggere, e si chiude se
+  non si riproduce; niente `demo.unsaved` · `release()` ritorna già
+  `CloseResult` e `dismissIfUnwatched` tiene il testo non salvato.
+- 2026-11-05 · fub-pre-alpha (secondo giro) · l'MSI usa
+  `bundle.windows.wix.version = 0.2.0.N` (N di `prealpha.N`), con la
+  guardia; se l'aggiornamento su Windows lascia due voci, le note dicono di
+  disinstallare prima (PA T22, T23) · il `MajorUpgrade` di Tauri sostituisce
+  la voce di prima, ma va visto su Windows.
+- 2026-11-05 · fub-pre-alpha (secondo giro) · la proposta MCP «vista e
+  accettata in Fub» esce dalla pre-alpha e va in A1 F5 («L'assistente
+  dentro Fub»); PA T23 prova i flussi MCP che ci sono (`fub_write` con la
+  base, `fub_canvas_apply` in prova e davvero, la ricetta proposta) ·
+  nessun task la costruiva.
+- 2026-11-05 · fub-pre-alpha (secondo giro) · due domande nuove per
+  l'utente: D13 (la prova di K2 prima del merge di #290, come dice K2 D-2;
+  consiglio A) e D14 (il nome «FubDraw» nelle frasi che le persone leggono;
+  consiglio A). PA T33 aspetta D14 · cambiano ciò che si vede o una regola
+  che l'utente aveva scritto.
+- 2026-11-05 · fub-pre-alpha (secondo giro) · scelte dell'utente: D3 = A
+  (disegnare ora N6 T26–T28 nel simulatore), D4 = A (le pagine dei piani
+  composte nella cornice di Scrittoio 2, con le barre nel kit), D5 composte
+  tutte e due, D12 = B (densità, contrasto e accento cambiano davvero il
+  simulatore).
+- 2026-11-05 · fub-pre-alpha (pianificatore) · definizione confermata
+  dall'utente: gli otto punti di «Fatto quando» del piano; dentro tutti i
+  piani aperti tranne K6; computer più un APK Android di prova segnato
+  «sperimentale»; pre-release pubblica `v0.2.0-prealpha.1`, con #289 · scelte
+  dell'utente, date con le domande della pianificazione.
+- 2026-11-05 · fub-pre-alpha · «il blocco di scrittura in sola lettura» entra
+  come PA T3: i comandi in sola lettura non prendono `write_turn()` in
+  `FubSession::invoke_command` · nella pre-alpha l'AI legge (MCP,
+  `canvas.read`) mentre la persona scrive; l'issue che N7 (2026-11-04)
+  prometteva non è mai stata aperta, e il task la sostituisce.
+- 2026-11-05 · fub-pre-alpha · N6 «v1 senza T79» vuol dire senza T79–T85 e
+  T88 · T80–T84 dipendono da T79 e da PdfCraft P1, P2 e P4, T85 da T82, T88
+  da D-20 (il piano dei CSV, che non c'è): sono le dipendenze scritte nel
+  piano di N6.
+- 2026-11-05 · fub-pre-alpha · `fub:abi@0.2.0` si congela nella fase A (PA
+  T6, T7), non alla fine · nessun piano dentro tocca `wit/fub/abi.wit`
+  (verificato su tutti i rami): la guardia stretta protegge da subito il
+  lavoro delle fasi B e C.
+- 2026-11-05 · fub-pre-alpha · il corpus senza perdite (PA T13) entra nella
+  fase A e si allarga quando K5 e N4 entrano · ogni piano unito dopo lo deve
+  tenere verde, e un difetto si trova presto.
+- 2026-11-05 · fub-pre-alpha · Scrittoio 2 T23 contro N6 sulla lavagna: vince
+  N6, e S2 T23 aggiunge solo l'icona · N6 ha il prototipo approvato
+  `lavagna-schede` (T25, 2026-11-04). S2 T22 contro K5 (la testa del
+  disegno) resta una domanda (D5), perché cambia ciò che si vede.
+- 2026-11-05 · fub-pre-alpha · il simulatore scrive il corpo del testo a 18,
+  il valore di S2 T11, anche dove il prototipo approvato di S2 mostra il 17
+  del finto del banco · il simulatore mostra il prodotto dopo S2; è la sola
+  differenza col prototipo approvato (stato `impostazioni`).
+- 2026-11-05 · fub-pre-alpha · i sedici test instabili aperti entrano come tre
+  task (PA T19–T21): 200 corse o la causa; la quarantena la decide l'utente ·
+  la pre-alpha chiede la CI completa verde sul commit del tag.
 
 - 2026-11-05 · k3-motori · T17, la scena `window-document` aspetta di nuovo
   che lo strato d'avvio se ne sia andato dopo aver ricaricato la pagina, come
