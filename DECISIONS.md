@@ -99,6 +99,12 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · fub-pre-alpha (orchestratore) · la correzione del difetto
+  di PA T47 trovato dalle baseline del runner (la maniglia del cassetto a
+  44 px) la faccio io, e le esclusioni della regola dei 44 px stanno in
+  `:not(:where(…))` · è una riga, il difetto è di peso dei selettori, e un
+  `:not(.classe)` avrebbe tolto a ogni classe del telefono il diritto di
+  smentire la regola.
 - 2026-11-08 · fub-pre-alpha (orchestratore) · in PA T61 anche
   `Cargo.lock` fa partire la CI Mobile; le righe `cfg` del telefono nei
   crate comuni no · un aggiornamento delle dipendenze Tauri può rompere
