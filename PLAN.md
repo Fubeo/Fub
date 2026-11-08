@@ -327,7 +327,7 @@ Se una di queste cade, la stima si allunga.
 | Riallineare #290 a `main` e unirla | K2 | 7 di 7; la prova con una persona non è fatta | la prova dell'utente col protocollo di K2, prima di segnarla pronta (D13 A) | basso | S | CI completa verde, OK dell'utente |
 | PA T1 · il finto del banco con le impostazioni dell'host | PA | da fare | #295 in `main` (d90a09d0 di K3 cambia `bench/fake-ipc.ts`) | basso | S | `bench/fake-ipc.test.ts` |
 | PA T3 · i comandi in sola lettura non tengono il turno | PA | in corso (coder, base 0cc94bde) | nessuno | medio: tocca il custode | M | test d'integrazione di `fub-host` |
-| PA T4, T5 · #237 R01–R03 | PA | T4 fatto; T5 da fare | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione; R01 si chiude col test se non si riproduce |
+| PA T4, T5 · #237 R01–R03 | PA | T4 e T5 fatti (baseline di `conflitto-lettura` dal runner) | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione; R01 si chiude col test se non si riproduce |
 | PA T6, T7 · #289 | PA | da fare | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
 | PA T8 · la pagina della cornice del telefono | PA | da fare | nessuno | basso | S | guardie dei documenti |
 | PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | da fare (D7 A) | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
@@ -3649,7 +3649,7 @@ Fatto quando: il test prova il testo mostrato e la riga, in conflitto e
 dopo la risoluzione; la foto della scena del conflitto in Lettura sta
 accanto allo stato `conflitto` del simulatore.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/panels src/state
-Stato: [~] in corso · coder · base 63a9528d
+Stato: [x] fatto · 6fb1c4de..8d1f6614 · la Lettura mostrava già il buffer e teneva la fascia: si aggiunge solo la riga «Stai leggendo la tua versione, non ancora salvata» (anche in inglese), scena del banco `conflitto-lettura`, foto confrontate con S33 · check --rapido 18/19: rosso solo scene.test «ci sono tutte», le 2 baseline della scena nuova vengono dal runner (con la consegna 1, o prima se si lancia ci.yml sul ramo); i tempi scaduti sotto carico verdi da soli
 
 ## T6 · #289: `fub:abi@0.2.0` congelata, e la guardia stretta
 
