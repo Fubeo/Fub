@@ -202,7 +202,8 @@ di CI non costruisce:
   (`cargo check --target aarch64-apple-ios`); nessun `.ipa` esce da qui.
 
 Il workflow non è un controllo richiesto. Gira su `main`, a richiesta e
-sulle PR che toccano ciò che soltanto il telefono importa: `crates/fub-app/`,
+sulle PR che toccano `Cargo.lock` (un aggiornamento delle dipendenze può
+rompere solo il build mobile) e ciò che soltanto il telefono importa: `crates/fub-app/`,
 le due cartelle `shells/mobile/` e `shells/scrittoio/mobile/` (la cornice, con
 il suo `mobile.css`), gli ingressi `entrypoints/mobile*`, `mobile.html` o il
 workflow stesso. Una PR che cambia soltanto il codice comune, per esempio la
