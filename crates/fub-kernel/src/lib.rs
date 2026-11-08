@@ -134,6 +134,6 @@ pub use workspace::{
     ParsedExplicitRename, ParsedExternalAssetRename, ParsedExternalRename,
     PendingExternalAssetRename, PendingSyncChange, PreparedCatchUp, PreparedDocumentBytesWrite,
     PreparedExplicitRename, PreparedExternalAssetRename, PreparedReadOnlyCommand,
-    PreparedResourceOpen, PreparedResourceRead, PreparedTimerCursors, Rejected, SyncPlan, Trust,
-    Workspace, INDEX_JOB, INDEX_WRITE_BUDGET, MAIN_PANE,
+    PreparedResourceOpen, PreparedResourceRead, PreparedTimerCursors, ReadsInFlight, Rejected,
+    SyncPlan, Trust, Workspace, INDEX_JOB, INDEX_WRITE_BUDGET, MAIN_PANE,
 };

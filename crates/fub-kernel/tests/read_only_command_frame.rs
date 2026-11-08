@@ -8,6 +8,7 @@
 //! frattempo vede i propri eventi consegnati subito, due letture convivono, e
 //! la fine non lascia niente dietro di sé.
 
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
@@ -92,12 +93,17 @@ impl EventHandler for Recorder {
     }
 }
 
+fn flag() -> Arc<AtomicBool> {
+    Arc::new(AtomicBool::new(false))
+}
+
 fn read(ws: &Workspace, outer: &[String]) -> fub_kernel::PreparedReadOnlyCommand {
     ws.prepare_read_only_provider_command(
         "test.read",
         serde_json::Value::Null,
         InvokeMode::Apply,
         outer,
+        &flag(),
     )
     .expect("prepares")
     .expect("a read-only command takes this door")
@@ -214,6 +220,7 @@ fn a_command_that_invokes_itself_is_still_refused() {
         serde_json::Value::Null,
         InvokeMode::Apply,
         outer.chain(),
+        &flag(),
     );
     match again {
         Err(PluginError::BadArgs(why)) => {
@@ -230,7 +237,13 @@ fn writing_commands_and_unknown_commands_do_not_take_this_door() {
     let (_dir, ws) = vault();
     for mode in [InvokeMode::Apply, InvokeMode::DryRun] {
         let prepared = ws
-            .prepare_read_only_provider_command("test.write", serde_json::Value::Null, mode, &[])
+            .prepare_read_only_provider_command(
+                "test.write",
+                serde_json::Value::Null,
+                mode,
+                &[],
+                &flag(),
+            )
             .expect("no error");
         assert!(
             prepared.is_none(),
@@ -242,7 +255,8 @@ fn writing_commands_and_unknown_commands_do_not_take_this_door() {
             "test.nobody",
             serde_json::Value::Null,
             InvokeMode::Apply,
-            &[]
+            &[],
+            &flag(),
         )
         .is_err());
 }
@@ -282,21 +296,15 @@ fn the_outcome_of_a_read_does_not_land_on_a_closed_vault() {
     let (_dir, mut ws) = vault();
     let mut prepared = read(&ws, &[]);
     let outcome = ws.with_host("test", |host| prepared.invoke(host));
-    let errors = ws.close();
-    assert!(errors.is_empty(), "{errors:?}");
+    // La chiusura comincia mentre la lettura è in volo: chi chiude la aspetta
+    // prima di smontare i provider, e la sua fine arriva qui in mezzo.
+    let reads = ws.reads_in_flight();
+    let _closing = ws.prepare_close().expect("the close starts");
+    assert_eq!(reads.count(), 1, "the read is still in flight");
 
     let late = ws.finish_read_only_provider_command(prepared, outcome);
     assert!(matches!(late, Err(PluginError::Cancelled(_))), "{late:?}");
-    assert!(
-        ws.prepare_read_only_provider_command(
-            "test.read",
-            serde_json::Value::Null,
-            InvokeMode::Apply,
-            &[]
-        )
-        .is_err(),
-        "the commands of a closed vault are gone"
-    );
+    assert_eq!(reads.count(), 0, "its end leaves the flight");
 }
 
 /// Chi si spegne durante la chiusura può ancora invocare una lettura (lo fa
@@ -309,4 +317,61 @@ fn a_read_started_during_the_close_finishes_normally() {
     let outcome = ws.with_host("test", |host| prepared.invoke(host));
     ws.finish_read_only_provider_command(prepared, outcome)
         .expect("a read of the close itself finishes");
+}
+
+/// Una lettura in volo tiene in uso i provider del suo proprietario, come il
+/// frame condiviso con `in_provider_call`: lo smontaggio risponde `Busy`.
+#[test]
+fn a_plugin_with_a_read_in_flight_cannot_be_deactivated() {
+    let (_dir, mut ws) = vault();
+    let mut prepared = read(&ws, &[]);
+    assert!(ws.reads_in_flight().busy("test"));
+    assert!(matches!(
+        ws.deactivate_plugin("test"),
+        Err(fub_kernel::RegistryError::Busy(_))
+    ));
+    assert!(matches!(
+        ws.prepare_plugin_teardown("test"),
+        Err(fub_kernel::RegistryError::Busy(_))
+    ));
+
+    let outcome = ws.with_host("test", |host| prepared.invoke(host));
+    ws.finish_read_only_provider_command(prepared, outcome)
+        .expect("finishes");
+    assert!(!ws.reads_in_flight().busy("test"));
+    let errors = ws.deactivate_plugin("test").expect("now it deactivates");
+    assert!(errors.is_empty(), "{errors:?}");
+}
+
+#[test]
+fn a_read_dropped_without_its_end_leaves_the_flight() {
+    let (_dir, mut ws) = vault();
+    let reads = ws.reads_in_flight();
+    let cancel = flag();
+    let prepared = ws
+        .prepare_read_only_provider_command(
+            "test.read",
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+            &[],
+            &cancel,
+        )
+        .expect("prepares")
+        .expect("read-only");
+    assert_eq!(reads.count(), 1);
+    reads.cancel_all();
+    assert!(cancel.load(std::sync::atomic::Ordering::Relaxed));
+    drop(prepared);
+    assert_eq!(reads.count(), 0);
+    reads.wait_idle();
+    ws.deactivate_plugin("test")
+        .expect("nothing holds the plugin");
+}
+
+#[test]
+fn a_read_of_the_close_itself_is_not_in_flight() {
+    let (_dir, mut ws) = vault();
+    let _closing = ws.prepare_close().expect("the close starts");
+    let _prepared = read(&ws, &[]);
+    assert_eq!(ws.reads_in_flight().count(), 0);
 }
