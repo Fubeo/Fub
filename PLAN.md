@@ -333,8 +333,8 @@ Se una di queste cade, la stima si allunga.
 | PA T8 · la pagina della cornice del telefono | PA | fatto | nessuno | basso | S | guardie dei documenti |
 | PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | integrato; aspetta la CI Windows completa | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
 | PA T10 · i due punti sciolti da ritrovare | PA | da fare (D10 B) | nessuno | basso | S | la causa trovata o la riga che chiude |
-| PA T13 · il corpus senza perdite | PA | integrato in parte; la sola lettura per permesso del file con T59 | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
-| PA T59 · un file in sola lettura non si sovrascrive | PA | da fare (l'utente: rifiutare) | T13 | medio: la scrittura del kernel, tre sistemi | S | test del kernel e `prealpha_corpus` sui tre sistemi |
+| PA T13 · il corpus senza perdite | PA | integrato; la sola lettura per permesso del file c'è (T59), aspetta Windows e macOS | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
+| PA T59 · un file in sola lettura non si sovrascrive | PA | integrato; aspetta Windows e macOS dalla CI completa | T13 | medio: la scrittura del kernel, tre sistemi | S | test del kernel e `prealpha_corpus` sui tre sistemi |
 | PA T19 · i test instabili del Rust | PA | fatto | nessuno | medio | M | 200 giri verdi o causa trovata |
 | PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | fatto | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
 | PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | fatto | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
@@ -3965,7 +3965,8 @@ chiudere, conflitto, file sparito, modifiche piccole; sola lettura coi motivi
 dell'host: docx protetto e cartella xlsx); manca la sola lettura per
 permesso del file: su Linux un file 0444 viene sovrascritto (rename in
 `storage/rooted.rs`); l'utente ha scelto di rifiutare, lo fa PA T59, che
-aggiunge il caso al corpus; Windows e macOS dalla CI completa
+aggiunge il caso al corpus (integrato, b14b488c); Windows e macOS dalla CI
+completa
 
 ## T14 · Il giro della pre-alpha sul banco: lo scheletro e il primo avvio
 
@@ -6080,4 +6081,10 @@ sistemi nella CI completa; il test della shell prova il messaggio e la
 bozza che resta.
 Prova: scripts/check.sh --rapido; cargo test -p fub-kernel; cargo test -p
 fub-host --test prealpha_corpus
-Stato: [ ] da fare
+Stato: [~] integrato · 7c585e1f..b14b488c · Linux verde; Windows e macOS
+dalla CI completa · su Unix conta la classe che si applica al processo
+(per root, nessun bit di scrittura); solo questo rifiuto diventa
+`PermissionDenied` (un `ReadOnlyFile` dentro l'`io::Error`), gli altri
+permessi negati restano `Io`; l'avviso esce una volta per documento e il
+salvataggio automatico riprova a ogni pausa; resta generico
+`notice.save_failed` in `panels/document.ts` (fuori dal «Tocca»)
