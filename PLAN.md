@@ -338,7 +338,7 @@ Se una di queste cade, la stima si allunga.
 | PA T19 · i test instabili del Rust | PA | fatto | nessuno | medio | M | 200 giri verdi o causa trovata |
 | PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | fatto | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
 | PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | fatto | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
-| PA T33 · il nome FubDraw dove le persone lo vedono | PA | in corso (coder, base 664083b6) | nessuno | basso | M | test dei descrittori, di `fub-scene` e del catalogo |
+| PA T33 · il nome FubDraw dove le persone lo vedono | PA | fatto | nessuno | basso | M | test dei descrittori, di `fub-scene` e del catalogo |
 | PA T34 · il manifest dice da quale tema parte | PA | da fare (D15 A, `extends`) | nessuno | medio: la forma del manifest sul filo | M | `crates/fub-host/tests/themes.rs`, mirror |
 | PA T35 · la pelle del tema sopra quella di serie | PA | da fare | T34 | medio: tocca il montaggio di ogni tema | M | `theme/inherit.test.ts`, `gate.test.ts` |
 | PA T39 · i caratteri del tema | PA | da fare | T34, T35 | basso | M | test dell'host e del loader |
@@ -4664,7 +4664,11 @@ confrontano il testo esatto (si aggiornano con la frase nuova).
 Fatto quando: la guardia passa; i test dei descrittori, di `fub-scene` e
 del catalogo sono verdi.
 Prova: scripts/check.sh --rapido
-Stato: [~] in corso · coder · base 664083b6
+Stato: [x] fatto · 407fd22f..42360fd8 · guardia `i18n/fubdraw.test.ts` e due
+test Rust (descrittori, diagnostica di `fub-scene`); fuori dal «Tocca» i
+due errori di `retitle` in `fub-format-svg/src/serialize.rs`, che arrivano
+alla shell, e una riga di `fub-host/tests/draw_feature.rs`; il nome
+tecnico resta in `scene-format.md` e in una nota dell'ADR 0203
 
 ## T34 · Il manifest dice da quale tema parte
 
