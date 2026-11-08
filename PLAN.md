@@ -333,7 +333,8 @@ Se una di queste cade, la stima si allunga.
 | PA T8 · la pagina della cornice del telefono | PA | da fare | nessuno | basso | S | guardie dei documenti |
 | PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | da fare (D7 A) | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
 | PA T10 · i due punti sciolti da ritrovare | PA | da fare (D10 B) | nessuno | basso | S | la causa trovata o la riga che chiude |
-| PA T13 · il corpus senza perdite | PA | integrato in parte; il file in sola lettura sovrascritto aspetta l'utente | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
+| PA T13 · il corpus senza perdite | PA | integrato in parte; la sola lettura per permesso del file con T59 | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
+| PA T59 · un file in sola lettura non si sovrascrive | PA | da fare (l'utente: rifiutare) | T13 | medio: la scrittura del kernel, tre sistemi | S | test del kernel e `prealpha_corpus` sui tre sistemi |
 | PA T19 · i test instabili del Rust | PA | fatto | nessuno | medio | M | 200 giri verdi o causa trovata |
 | PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | fatto | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
 | PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | fatto | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
@@ -3951,7 +3952,8 @@ Stato: [~] integrato in parte · 2c9c9523 · 8 test verdi su Linux (aprire e
 chiudere, conflitto, file sparito, modifiche piccole; sola lettura coi motivi
 dell'host: docx protetto e cartella xlsx); manca la sola lettura per
 permesso del file: su Linux un file 0444 viene sovrascritto (rename in
-`storage/rooted.rs`), domanda all'utente; Windows e macOS dalla CI completa
+`storage/rooted.rs`); l'utente ha scelto di rifiutare, lo fa PA T59, che
+aggiunge il caso al corpus; Windows e macOS dalla CI completa
 
 ## T14 · Il giro della pre-alpha sul banco: lo scheletro e il primo avvio
 
@@ -6013,3 +6015,53 @@ Stato: [x] fatto · 99fd7e22..7d2b157e · ADR 0238 (estende la 0235); contro
 0.2.0 enum, variant e flags del confine (import compresi) non prendono casi,
 le interfacce esportate non prendono funzioni; una funzione nuova in
 un'interfaccia importata resta additiva; `check.sh --rapido` del coder verde
+
+## T59 · Un file in sola lettura non si sovrascrive
+
+Perché: T13 ha trovato che su Linux un file coi permessi 0444 viene
+sovrascritto: `write_inner` in `crates/fub-kernel/src/storage/rooted.rs`
+scrive un temporaneo accanto, gli copia i permessi del file e lo rinomina
+sopra, e il rename non guarda i permessi del file. Su Windows il rename
+sopra un file con l'attributo di sola lettura probabilmente fallisce, ma
+come errore di I/O generico. L'utente ha scelto che Fub rifiuti (registro
+2026-11-08): il «Fatto quando» 4 dice che la sola lettura non tocca il
+file.
+Ramo: piano/fub-pre-alpha.
+Tocca: `crates/fub-kernel/src/storage/rooted.rs` (e `storage.rs` se un
+altro percorso sostituisce i byte di un file che c'è già); un test di
+`crates/fub-kernel/tests/` (nuovo o accanto a `guarded_write.rs`);
+`crates/fub-host/tests/prealpha_corpus.rs` (il caso del permesso del
+file); `apps/client/src/state/document-controller.ts`, il suo test e
+`apps/client/src/i18n/catalog.ts`, solo se il messaggio del salvataggio
+fallito non dice già che il file è in sola lettura;
+`docs/reference/` o `docs/architecture/` dove si descrive la scrittura
+atomica (la pagina che ne parla oggi).
+Non toccare: la forma di `PluginError` (c'è già `PermissionDenied`, e
+`kernel/src/error.rs` ci porta `io::ErrorKind::PermissionDenied`); i
+provider; la cancellazione e il cestino.
+Dipende da: T13.
+Cosa fare:
+- Prima di creare il temporaneo, se il file c'è e non è scrivibile, la
+  scrittura si ferma con `io::ErrorKind::PermissionDenied` e un messaggio
+  che nomina il file; il file e la cartella restano come erano (nessun
+  temporaneo lasciato).
+- «Non scrivibile»: su Windows l'attributo di sola lettura; su Unix
+  nessun permesso di scrittura per chi fa girare Fub (il bit del
+  proprietario, del gruppo o degli altri che si applica al processo, non
+  solo `readonly()` che guarda tutti e tre). Scrivi nel codice perché.
+- Il rifiuto arriva alla shell come `PermissionDenied` tipizzato: la bozza
+  resta sporca, nessun byte perso; il messaggio dice che il file è in sola
+  lettura (non un errore di I/O), e il salvataggio automatico non lo
+  ripete a ogni battuta.
+- Un file nuovo e un file scrivibile si scrivono come prima.
+Casi limite: il permesso tolto fra l'apertura e il salvataggio; un file
+scrivibile in una cartella senza permesso di scrittura (già un errore del
+sistema: resta tipizzato); un symlink (già rifiutato prima); Fub che gira
+come root su Unix (il controllo è esplicito, non dipende dal sistema).
+Fatto quando: il test del kernel e il caso nuovo di `prealpha_corpus`
+(file in sola lettura: rifiuto tipizzato e byte uguali) passano sui tre
+sistemi nella CI completa; il test della shell prova il messaggio e la
+bozza che resta.
+Prova: scripts/check.sh --rapido; cargo test -p fub-kernel; cargo test -p
+fub-host --test prealpha_corpus
+Stato: [ ] da fare
