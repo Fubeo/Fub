@@ -1197,6 +1197,12 @@ export const SCENE = onPage("shell", [
         await page.waitForSelector("#sidebar-scrim:not([hidden])");
         // Il fuoco va alla maniglia, non al campo di ricerca: niente tastiera.
         await page.waitForSelector("#sidebar > .sheet-grip:focus");
+        // La maniglia resta alta 28 px: la regola dei 44 px del tocco non la
+        // prende, perché le sue esclusioni non pesano (`shells/mobile/mobile.css`).
+        await page.waitForFunction(() => {
+          const grip = document.querySelector("#sidebar > .sheet-grip");
+          return grip instanceof HTMLElement && Math.abs(grip.getBoundingClientRect().height - 28) < 0.5;
+        }, null, { timeout: 5_000 });
       },
     },
     {

@@ -11,9 +11,13 @@
   padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--mobile-keyboard-inset));
 }
 
-:root[data-client-shell="mobile"] button:not(.pane-standing-chip),
+/* Le esclusioni stanno in `:not(:where(…))`, che non pesa: la regola tiene il
+   peso di `button` e di `input[type="checkbox"]`, e chi la smentisce con una
+   classe (la maniglia di un foglio, `.sheet-grip`, alta 28 px) vince ancora.
+   Un `:not(.classe)` le darebbe il peso di una classe in più. */
+:root[data-client-shell="mobile"] button:not(:where(.pane-standing-chip)),
 :root[data-client-shell="mobile"] [role="button"],
-:root[data-client-shell="mobile"] input[type="checkbox"]:not([role="switch"]),
+:root[data-client-shell="mobile"] input[type="checkbox"]:not(:where([role="switch"])),
 :root[data-client-shell="mobile"] input[type="radio"] {
   min-width: 44px;
   min-height: 44px;
