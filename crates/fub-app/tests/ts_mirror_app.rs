@@ -50,7 +50,8 @@ fn to_value<T: serde::Serialize>(v: T) -> Value {
     serde_json::to_value(v).expect("serializza")
 }
 
-/// Il manifest di un tema `theme-2` che parte dalla serie.
+/// Il manifest di un tema `theme-2` che parte dalla serie e porta un
+/// carattere: i campi `extends` e `fonts` sul filo.
 fn extending_manifest() -> fub_abi::theme::ThemeManifest {
     fub_abi::theme::ThemeManifest {
         id: "acme.carta".into(),
@@ -65,6 +66,12 @@ fn extending_manifest() -> fub_abi::theme::ThemeManifest {
         ],
         settings: Vec::new(),
         extends: Some(fub_host::theme::SERIES_ID.into()),
+        fonts: vec![fub_abi::theme::ThemeFont {
+            family: "Carta Serif".into(),
+            file: "fonts/carta.woff2".into(),
+            weight: 400,
+            style: fub_abi::theme::ThemeFontStyle::Italic,
+        }],
     }
 }
 
@@ -263,6 +270,7 @@ fn expected() -> Value {
                 ],
                 settings: Vec::new(),
                 extends: None,
+                fonts: Vec::new(),
             },
             trust: "community",
         }), to_value(ThemeInfo {
@@ -284,6 +292,7 @@ fn expected() -> Value {
                 ],
                 settings: Vec::new(),
                 extends: None,
+                fonts: Vec::new(),
             },
             light: ThemeLight::Light,
             sheet: Some(":root { --paper: #fff; }".into()),
