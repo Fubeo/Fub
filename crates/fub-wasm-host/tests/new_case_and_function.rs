@@ -177,10 +177,9 @@ fn the_old_guest_works_with_a_host_that_sees_the_same_interface() {
 fn a_new_enum_case_refuses_the_old_guest() {
     let (engine, component, linker) = guest_di_prima();
     let mut store = Store::new(&engine, ());
-    let error =
-        enum_cresciuto::EnumCresciuto::instantiate(&mut store, &component, &linker)
-            .err()
-            .expect("un colore in più nell'host e il guest di prima non si istanzia");
+    let error = enum_cresciuto::EnumCresciuto::instantiate(&mut store, &component, &linker)
+        .err()
+        .expect("un colore in più nell'host e il guest di prima non si istanzia");
     let message = format!("{error:#}");
     assert!(
         message.contains("expected enum of 3 names, found 2 names"),
@@ -192,11 +191,9 @@ fn a_new_enum_case_refuses_the_old_guest() {
 fn a_new_variant_case_refuses_the_old_guest() {
     let (engine, component, linker) = guest_di_prima();
     let mut store = Store::new(&engine, ());
-    let error = variante_cresciuta::VarianteCresciuta::instantiate(
-        &mut store, &component, &linker,
-    )
-    .err()
-    .expect("una forma in più nell'host e il guest di prima non si istanzia");
+    let error = variante_cresciuta::VarianteCresciuta::instantiate(&mut store, &component, &linker)
+        .err()
+        .expect("una forma in più nell'host e il guest di prima non si istanzia");
     let message = format!("{error:#}");
     assert!(
         message.contains("expected variant of 3 cases, found 2 cases"),
@@ -208,10 +205,9 @@ fn a_new_variant_case_refuses_the_old_guest() {
 fn a_new_function_refuses_the_old_guest() {
     let (engine, component, linker) = guest_di_prima();
     let mut store = Store::new(&engine, ());
-    let error =
-        funzione_nuova::FunzioneNuova::instantiate(&mut store, &component, &linker)
-            .err()
-            .expect("una funzione in più nell'host e il guest di prima non si istanzia");
+    let error = funzione_nuova::FunzioneNuova::instantiate(&mut store, &component, &linker)
+        .err()
+        .expect("una funzione in più nell'host e il guest di prima non si istanzia");
     let message = format!("{error:#}");
     assert!(
         message.contains("conta"),
