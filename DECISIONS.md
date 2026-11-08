@@ -61,6 +61,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · fub-pre-alpha · un file senza permesso di scrittura (0444
+  su Unix, l'attributo di sola lettura su Windows) non si sovrascrive: il
+  kernel rifiuta con `PermissionDenied` tipizzato e i byte restano (nuovo
+  task PA T59) · T13 ha trovato che oggi su Linux il rename del salvataggio
+  atomico lo sovrascrive; alla domanda fra rifiutare e scrivere lo stesso
+  l'utente: «Rifiutare (Consigliato)»
+
 - 2026-11-08 · k3-motori · il piano è concluso: #295 è in `main`
   (fb722164) col sì dell'utente, e `PLAN.md` e
   `PLAN-ui/menu-comandi-fogli.html` escono da `main` come per gli altri
