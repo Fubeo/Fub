@@ -40,26 +40,104 @@ dubbio su una scelta tecnica si decide, non si chiede.
 Ogni decisione presa da solo che un altro piano dovrebbe conoscere va nel
 registro.
 
-## Chiede sempre
+## Decide da solo, con più cura
 
-- ciò che chi usa Fub vede o fa in modo diverso da come dice il piano
-  approvato;
-- il contratto pubblico: ABI e WIT dei plugin, i comandi IPC del client che il
-  piano non nomina, un formato su disco che leggono altri programmi o versioni
-  già pubblicate;
-- sicurezza e permessi;
-- una dipendenza esterna nuova o una licenza;
-- cambiare «Fatto quando» o «Fuori scope», saltare o rinviare un task;
-- disattivare, saltare o mettere in quarantena un test;
-- il merge.
+Dal 2026-11-08 l'utente lascia all'orchestratore anche le scelte che prima
+chiedeva, merge compresi: «fai sempre la scelta più adatta per ottenere il
+massimo risultato, anche mettendoci un po' di più. E ti lascio libero anche
+di fondere le branch con il main quando vuoi tu, quindi non aspettare le mie
+risposte. Basta che ottieni il massimo risultato e la massima
+personalizzazione e libertà dell'utente. E ovviamente mantenendo un certo
+grado di sicurezza e affidabilità del progetto.»
+
+Queste scelte l'orchestratore le prende da solo, ma con una soglia più alta,
+le scrive nel registro e le dice nel resoconto:
+
+- **il merge in `main`** di una consegna o di un ramo di piano: solo con la
+  PR pronta (non bozza), la CI completa verde sull'ultima testa (Linux,
+  Windows e macOS, banchi compresi quando tocca `apps/client/`), la
+  revisione del diff fatta, le baseline prese dal runner e guardate, e
+  nessun rosso tranne un instabile noto con la sua issue, rilanciato una
+  volta e passato. Mai `--admin`, mai saltare un controllo richiesto, mai
+  forzare. Dopo il merge, `origin/main` entra nei rami di piano puliti;
+- ciò che chi usa Fub vede o fa in modo diverso dal piano approvato: si
+  sceglie la strada che dà più qualità, più personalizzazione e più libertà
+  a chi usa Fub, e si fotografa;
+- il contratto pubblico (ABI, WIT, IPC, formati su disco letti da altri):
+  solo additivo, con le guardie di compatibilità verdi; mai rompere un
+  formato già pubblicato;
+- sicurezza e permessi: si sceglie sempre la strada più stretta; mai
+  allargare un permesso, una CSP o una capacità WASM per comodità;
+- una dipendenza esterna nuova: solo se il piano la implica, con licenza
+  compatibile e `cargo deny check` verde; mai cambiare la politica delle
+  licenze o della catena di fornitura;
+- cambiare «Fatto quando» o «Fuori scope», rinviare o dividere un task:
+  solo per un risultato migliore, mai per chiudere prima;
+- un test: si corregge la causa. Disattivarlo o metterlo in quarantena solo
+  se è instabile per una causa fuori da Fub, con una issue aperta, e mai un
+  test che prova sicurezza o dati.
+
+## Resta all'utente
+
+Solo ciò che l'orchestratore non può fare o che esce dal repository:
+
+- ciò che si fa con le mani o con persone: la prova di K2 con una persona,
+  la prova con cinque persone, il giro su un Mac, avviare il piano del
+  telefono;
+- licenze di opere altrui (il logo e ArtCraft), account e segreti
+  (SignPath, chiavi di firma);
+- la pubblicazione della pre-release (il tag `v0.2.0-prealpha.1` e la
+  release su GitHub): l'orchestratore la prepara e la dice pronta, l'utente
+  la pubblica o dice di pubblicarla.
 
 Quando chiede: le domande di un momento tutte insieme, solo quelle la cui
 risposta cambia davvero il risultato, con la conseguenza pratica di ogni
-scelta e la raccomandazione per prima.
+scelta e la raccomandazione per prima. Non si ferma ad aspettare: lavora su
+ciò che non dipende dalla risposta.
 
 ## Registro
 
 La più recente in cima: data · piano · decisione · perché.
+
+- 2026-11-08 · fub-pre-alpha (orchestratore) · in PA T61 anche
+  `Cargo.lock` fa partire la CI Mobile; le righe `cfg` del telefono nei
+  crate comuni no · un aggiornamento delle dipendenze Tauri può rompere
+  solo Android o iOS ed è raro; i crate comuni cambiano spesso, e quelle
+  righe si provano sul push in `main`.
+- 2026-11-08 · fub-pre-alpha (orchestratore) · PA T47 si allarga al
+  pallino dello stato della testata dei documenti (`pane-standing-chip`),
+  che la regola dei 44 px faceva diventare un cerchio · è lo stesso difetto
+  della stessa regola, e il task nasce per toglierlo.
+- 2026-11-08 · fub-pre-alpha (orchestratore) · PA T39 non si integra finché
+  la regola dei caratteri, scritta in Rust e in TS, non è legata dal mirror
+  delle regole (`rules_mirror.rs`) · due copie senza legame divergono, e il
+  repo ha già il posto per legarle.
+- 2026-11-08 · fub-pre-alpha (utente) · l'orchestratore decide da solo
+  anche il merge in `main` e le scelte che prima chiedeva, con la soglia
+  più alta di «Decide da solo, con più cura»; restano all'utente solo le
+  prove con persone, licenze e segreti, e la pubblicazione della
+  pre-release · l'utente vuole il risultato migliore senza aspettare le sue
+  risposte, tenendo sicurezza e affidabilità.
+- 2026-11-08 · fub-pre-alpha (utente) · nuovo task PA T61: i `paths` di
+  `mobile.yml` coprono anche la cornice del telefono · una PR che cambia
+  solo `shells/scrittoio/mobile/` non costruiva l'APK (trovato da PA T8).
+- 2026-11-08 · fub-pre-alpha (orchestratore) · PA T35 accolto con le sue
+  differenze: il fascio porta `inherited: { skin }` e un `extends` senza di
+  esso è rifiutato; la pelle di serie ereditata non ripassa dal
+  sanificatore; `replaceTheme` inserisce prima del primo canale dopo
+  `pelle-tema`, quindi senza preferenze i frammenti restano ultimi (prima
+  la pelle finiva dopo di loro) · la serie è codice nostro, e l'ordine
+  dichiarato dei canali deve valere anche quando un canale manca.
+- 2026-11-08 · fub-pre-alpha (orchestratore) · PA T60 si allarga alle 4
+  sonde di test di `crates/fub-host/src/session.rs`, fuori dal suo `Tocca`
+  · hanno lo stesso schema a un colpo solo delle cadute, e nessun altro
+  task toccava il file; il codice vero di `session.rs` non cambia.
+- 2026-11-08 · fub-pre-alpha (orchestratore) · nuovo task PA T60: tutte
+  le prove che aspettano libero il lucchetto del workspace lo chiedono con
+  una scadenza, come quelle corrette da PA T19; quelle che lo aspettano
+  preso restano a un colpo solo · due prove dello stesso schema sono cadute
+  dopo T19 (in locale e su macOS nella CI della consegna 1), e la
+  pre-alpha chiede la CI completa verde sul commit del tag.
 
 - 2026-11-08 · fub-pre-alpha · dove le persone leggono, «FubDraw» diventa
   «Fub» o «il disegno» (frasi della shell, dei disegni, dei descrittori dei
