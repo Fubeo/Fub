@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { GRID_THEME_COLORS, MAIN_PANE } from "./contract";
+import { themeIconsFileHolds } from "../rules/mirrored";
 import type {
   BacklinkRef,
   BundleInfo,
@@ -1602,6 +1603,19 @@ describe("mirror TS↔Rust", () => {
       expect(Object.keys(font).sort()).toEqual(keys);
       expect(["normal", "italic"]).toContain(font.style);
       expect(typeof font.weight).toBe("number");
+    }
+  });
+
+  it("il set di icone del manifest di un tema è il nome di un file, come nel mirror", () => {
+    const manifests = [
+      ...(appFixture.ThemeInfo as ThemeInfo[]),
+      ...(appFixture.ThemePayload as ThemePayload[]),
+    ].map((sample) => sample.manifest);
+    const sets = manifests.flatMap((manifest) => (manifest.icons === undefined ? [] : [manifest.icons]));
+    expect(sets.length, "il campione porta un set di icone").toBeGreaterThan(0);
+    for (const file of sets) {
+      expect(typeof file).toBe("string");
+      expect(themeIconsFileHolds(file), file).toBe(true);
     }
   });
 

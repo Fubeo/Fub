@@ -161,6 +161,7 @@ pub use text::{Arg, ArgValue, Localize, Message, StringCatalog, Strings, Text};
 pub use theme::{
     ThemeEngine, ThemeFont, ThemeFontStyle, ThemeLight, ThemeManifest, ThemeMotion, ThemeSetting,
     MAX_THEME_FONTS, MAX_THEME_FONT_BYTES, MAX_THEME_FONT_FAMILY, MAX_THEME_FONT_TOTAL_BYTES,
+    MAX_THEME_ICONS, MAX_THEME_ICONS_BYTES, MAX_THEME_ICON_BYTES, MAX_THEME_ICON_PATHS,
     MAX_THEME_SETTINGS, THEME_ENGINE, THEME_ENGINE_2,
 };
 pub use traits::{
