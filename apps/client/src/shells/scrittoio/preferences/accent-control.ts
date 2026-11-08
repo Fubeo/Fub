@@ -1,9 +1,9 @@
-// L'accento, come controllo: sette campioni e una tinta su misura.
+// L'accento, come controllo: otto campioni e una tinta su misura.
 //
 // Il valore (`appearance.accent`) è una tinta da 0 a 360, e nel form generico è
-// un numero: chi non sa che 265 è un blu deve provare. Qui i sette accenti che
+// un numero: chi non sa che 160 è un verde deve provare. Qui gli otto accenti che
 // la serie ha già misurato (`ACCENT_SWATCHES`) sono campioni da premere, e la
-// tinta libera resta dietro l'ottavo. Il contratto non cambia: si scrive lo
+// tinta libera resta dietro il nono. Il contratto non cambia: si scrive lo
 // stesso numero nella stessa chiave.
 //
 // Ogni campione ha il colore che l'accento avrebbe davvero in questa luce e a
@@ -24,6 +24,7 @@ type SwatchId = (typeof ACCENT_SWATCHES)[number]["id"];
 const CUSTOM = "custom";
 
 const NAMES: Readonly<Record<SwatchId, Key>> = {
+  smeraldo: "prefs.accent.smeraldo",
   "matita-blu": "prefs.accent.matita-blu",
   viola: "prefs.accent.viola",
   prugna: "prefs.accent.prugna",

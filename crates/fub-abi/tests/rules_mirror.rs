@@ -49,6 +49,10 @@ use fub_abi::rules::theme_font::{
     MAX_THEME_FONT_FILE_NAME, MAX_THEME_FONT_TOTAL_BYTES, RESERVED_FONT_FAMILIES,
     SERIES_FONT_FAMILIES, THEME_FONT_WEIGHTS,
 };
+use fub_abi::rules::theme_icons::{
+    theme_icon_fault, theme_icons_file_holds, MAX_THEME_ICONS, MAX_THEME_ICONS_BYTES,
+    MAX_THEME_ICONS_FILE_NAME, MAX_THEME_ICON_BYTES, MAX_THEME_ICON_NAME, MAX_THEME_ICON_PATHS,
+};
 use fub_abi::text::{ArgValue, Message, StringCatalog, Strings, Text};
 use fub_abi::Span;
 use serde_json::{json, Value};
@@ -992,10 +996,121 @@ fn theme_font_limit_cases() -> Vec<Value> {
     .collect()
 }
 
+/// Le voci del set di icone di un tema (PA T40): i nomi ai bordi, i
+/// tracciati che non sono tracciati (markup, virgolette, spazi non ASCII, un
+/// `url(`), il numero di tracciati e il peso ai bordi.
+fn theme_icon_fault_cases() -> Vec<Value> {
+    let ok = "M10 17a7 7 0 1 0 0-14 7 7 0 0 0 0 14z";
+    let longest = "a".repeat(64);
+    let too_long = "a".repeat(65);
+    let full = "M".repeat(4096);
+    let over = "M".repeat(4097);
+    let half = "M".repeat(2048);
+    let mut entries: Vec<(String, Vec<String>)> = Vec::new();
+    let mut push = |name: &str, paths: &[&str]| {
+        entries.push((name.into(), paths.iter().map(|d| d.to_string()).collect()));
+    };
+    for name in [
+        "search",
+        "format-word",
+        "0-day",
+        "a",
+        longest.as_str(),
+        too_long.as_str(),
+        "",
+        "-search",
+        "Search",
+        "search_2",
+        "cerca\u{300}",
+        "search icon",
+        "__proto__",
+        "constructor",
+    ] {
+        push(name, &[ok]);
+    }
+    let path_cases: &[&[&str]] = &[
+        &[],
+        &[ok, ok, ok, ok, ok, ok, ok, ok],
+        &[ok, ok, ok, ok, ok, ok, ok, ok, ok],
+        &[""],
+        &["M0 0\"/><script>alert(1)</script><path d=\""],
+        &["M0 0<"],
+        &["M0 0 url(#x)"],
+        &["M0,0 L1e-3 2E+2z"],
+        &["M0\t0\n1\r2\x0c3"],
+        &["M0\x0b0"],
+        &["M0\u{a0}0"],
+        &["M0\u{2028}0"],
+        &["M0 0&#x3c;"],
+        &[full.as_str()],
+        &[over.as_str()],
+        &[half.as_str(), half.as_str()],
+        &[half.as_str(), half.as_str(), "M"],
+    ];
+    for paths in path_cases {
+        push("search", paths);
+    }
+    entries
+        .into_iter()
+        .map(|(name, paths)| {
+            json!({
+                "name": name,
+                "paths": paths,
+                "out": theme_icon_fault(&name, &paths),
+            })
+        })
+        .collect()
+}
+
+/// Il file del set nel manifest: il nome giusto, il manifest, le maiuscole,
+/// una cartella, un path che esce, un'altra estensione.
+fn theme_icons_file_cases() -> Vec<Value> {
+    let longest = format!("{}.json", "i".repeat(64));
+    let too_long = format!("{}.json", "i".repeat(65));
+    [
+        "icons.json",
+        "icone_2-fini.json",
+        longest.as_str(),
+        too_long.as_str(),
+        "manifest.json",
+        "Manifest.json",
+        "Icons.json",
+        "icons/set.json",
+        "../icons.json",
+        "theme://acme/icons.json",
+        "icons.JSON",
+        "icons.json5",
+        ".json",
+        "icons",
+        "",
+    ]
+    .into_iter()
+    .map(|file| json!({"file": file, "out": theme_icons_file_holds(file)}))
+    .collect()
+}
+
+/// I limiti della regola delle icone, come valori.
+fn theme_icon_limit_cases() -> Vec<Value> {
+    [
+        ("icons", json!(MAX_THEME_ICONS)),
+        ("paths", json!(MAX_THEME_ICON_PATHS)),
+        ("icon_bytes", json!(MAX_THEME_ICON_BYTES)),
+        ("set_bytes", json!(MAX_THEME_ICONS_BYTES)),
+        ("name_chars", json!(MAX_THEME_ICON_NAME)),
+        ("file_name_chars", json!(MAX_THEME_ICONS_FILE_NAME)),
+    ]
+    .into_iter()
+    .map(|(name, out)| json!({"name": name, "out": out}))
+    .collect()
+}
+
 fn expected() -> Value {
     json!({
         "theme_font_fault": theme_font_fault_cases(),
         "theme_font_limit": theme_font_limit_cases(),
+        "theme_icon_fault": theme_icon_fault_cases(),
+        "theme_icons_file": theme_icons_file_cases(),
+        "theme_icon_limit": theme_icon_limit_cases(),
         "search_syntax": search_syntax_cases(),
         "page_name": page_name_cases(),
         "name_fault": name_fault_cases(),

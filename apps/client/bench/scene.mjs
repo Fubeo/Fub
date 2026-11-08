@@ -1607,6 +1607,40 @@ async function openLive(page, keys, scroll, mode = "live_preview") {
     if (key.startsWith("@")) await page.keyboard.press(key.slice(1));
     else await page.keyboard.type(key);
   }
+  await settleLive(page, scroll === "bottom");
+}
+
+/// La Live a riposo, prima della foto: due cose arrivavano dopo i due
+/// fotogrammi che bastavano prima, e secondo il carico finivano nella foto o no.
+///
+/// - Ciò che si è scritto si salva 400 ms dopo l'ultimo tasto: la foto
+///   prendeva «Non salvato» o «Salvato», nella barra del riquadro, sulla
+///   linguetta e in fondo (#273). Si fotografa a salvataggio finito, lo stato
+///   in cui la scena resta.
+/// - Le formule arrivano dopo (KaTeX si carica alla prima, e i suoi caratteri
+///   dopo ancora) e cambiano di un pixel o due l'altezza delle righe. Lo
+///   scorrimento verso il cursore chiesto prima resta dov'era, e la foto
+///   veniva spostata di 1-2 px (#279). Si aspetta che ogni formula sia
+///   disegnata e ogni carattere caricato, poi si chiede di nuovo lo stesso
+///   scorrimento, da capo, sull'impaginazione finale. La nota portata in
+///   fondo (`bottom`) resta dove l'ha messa l'apertura: lì non c'è un cursore
+///   da tenere in vista.
+async function settleLive(page, bottom) {
+  await page.waitForFunction(() => !["non_salvato", "in_corso"].includes(document.querySelector("#save-state")?.dataset.state ?? ""));
+  await page.waitForFunction(() => !document.querySelector('.pane.focus .cm-content [data-state="loading"]'));
+  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  if (!bottom) {
+    await page.evaluate(async () => {
+      if (globalThis.__fubLiveBench.cursor === null) return;
+      const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+      const view = findTextEditorOrThrow(document.querySelector(".pane.focus .cm-editor").parentElement);
+      // Da capo: col cursore già in vista CodeMirror non scorrerebbe, e
+      // resterebbe lo scorrimento calcolato sull'impaginazione di prima.
+      view.scrollDOM.scrollTop = 0;
+      view.dispatch({ scrollIntoView: true });
+    });
+  }
   // Due fotogrammi: la misura di CodeMirror dopo l'ultima transazione.
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }

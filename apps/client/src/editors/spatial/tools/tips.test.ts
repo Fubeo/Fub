@@ -1459,9 +1459,12 @@ describe("a caso", () => {
   }
 
 
-  it("le punte restano del colore della linea, il motore non rifiuta il seguito, e un annulla torna al byte", () => {
+  // Sessanta semi in sei prove da dieci: lo stesso caso, ma nessuna prova
+  // da sola porta tutto il lavoro (1500 operazioni, ognuna fatta, annullata e
+  // rifatta), che nella corsa intera con molti worker passava i 5 s (#286).
+  it.each([1, 11, 21, 31, 41, 51])("le punte restano del colore della linea, il motore non rifiuta il seguito, e un annulla torna al byte (semi da %i)", (first) => {
     let applied = 0;
-    for (let seed = 1; seed <= 60; seed++) {
+    for (let seed = first; seed < first + 10; seed++) {
       const rng = new Mulberry32(seed);
       const pick = <T,>(list: readonly T[]): T => list[rng.below(list.length)]!;
       const { source, lines, above } = drawing(rng);
@@ -1525,7 +1528,7 @@ describe("a caso", () => {
       }
     }
     // Il caso deve arrivare a operazioni vere, non soltanto rifiutate.
-    expect(applied).toBeGreaterThan(600);
+    expect(applied, `applicate ${applied}`).toBeGreaterThan(100);
   });
 });
 

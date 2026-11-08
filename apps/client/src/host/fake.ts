@@ -2277,6 +2277,49 @@ export function fontTheme(id = "acme.caratteri"): {
   };
 }
 
+/// I byte UTF-8 di un set di icone del tema, come li consegna l'host vero fra
+/// gli asset del fascio.
+export function iconSetBytes(set: Readonly<Record<string, readonly string[]>>): number[] {
+  return [...new TextEncoder().encode(JSON.stringify(set))];
+}
+
+/// Un tema che parte dalla serie e ridisegna qualche icona (`icons`): il
+/// manifest nomina il set, il fascio lo porta fra gli asset anche se nessun
+/// CSS lo nomina. Ridisegna una icona di serie (`search`), un alias
+/// (`folder`, che vale per `vault`) e un nome che oggi nessuno disegna.
+export function iconTheme(id = "acme.icone"): {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+  set: Record<string, string[]>;
+} {
+  const manifest: ThemeInfo["manifest"] = {
+    id,
+    name: "Icone",
+    version: "1.0.0",
+    engine: "theme-2",
+    lights: ["light", "dark"],
+    asset_namespace: `theme://${id}/`,
+    motion: ["opacity", "transform"],
+    extends: "fub.serie",
+    icons: "icons.json",
+  };
+  const set = {
+    search: ["M4 4h16v16H4z", "M8 12h8"],
+    folder: ["M3 6h18v12H3z"],
+    "modulo-spento": ["M12 3v18"],
+  };
+  const skin = ".shell-tooltip { white-space: nowrap; }\n";
+  const assets = { [`theme://${id}/icons.json`]: iconSetBytes(set) };
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets },
+    },
+    set,
+  };
+}
+
 /// L'id della view cestino del finto: la stessa che `fub-features` registra,
 /// perché ciò che si prova è che la shell la monti senza saperne nulla.
 export const TRASH_VIEW = "fub.trash";
