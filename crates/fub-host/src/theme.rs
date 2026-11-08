@@ -2422,7 +2422,7 @@ mod escape_tests {
             for (css, expected) in cases {
                 let expected: std::collections::BTreeSet<String> =
                     expected.into_iter().map(String::from).collect();
-                assert_eq!(referenced_assets(&css, None, "x/"), expected, "{css}");
+                assert_eq!(referenced_assets(Some(&css), None, "x/"), expected, "{css}");
             }
         }
     }
