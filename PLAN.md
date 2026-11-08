@@ -344,7 +344,7 @@ Se una di queste cade, la stima si allunga.
 | PA T35 · la pelle del tema sopra quella di serie | PA | da fare | T34 | medio: tocca il montaggio di ogni tema | M | `theme/inherit.test.ts`, `gate.test.ts` |
 | PA T39 · i caratteri del tema | PA | da fare | T34, T35 | basso | M | test dell'host e del loader |
 | PA T40 · le icone del tema | PA | da fare (D16 A) | T34, T35; mai nella stessa ondata di S2 T14 | basso | M | Vitest di `ui/icons` e di `theme/` |
-| PA T44 · un documento e un foglio vuoti | PA | da fare | nessuno | basso: due comandi che creano file, dietro le loro feature | M | test d'integrazione di `fub-host`, anche con `--no-default-features` |
+| PA T44 · un documento e un foglio vuoti | PA | fatto | nessuno | basso: due comandi che creano file, dietro le loro feature | M | test d'integrazione di `fub-host`, anche con `--no-default-features` |
 | PA T46 · le parole della scheda di un componente | PA | da fare (D18 A) | K2 in `main` | basso: solo testi del catalogo | S | `i18n/lexicon-settings.test.ts` |
 | PA T47 · i 44 px del tocco sul telefono, senza deformare | PA | da fare | nessuno | basso: solo CSS del telefono | S | la scena `mobile-settings` di `bench/scene.mjs` (`bench:verify`, `bench:a11y`) |
 | PA T48 · il verde di serie | PA | da fare (D25 C) | niente (il logo definitivo conferma 160); mai con un task che rifà baseline | medio: cambia ogni schermata, le baseline vengono dal runner | M | `recipe.test.ts`, `colori.test.ts`, `theme:verify`, `cargo test -p fub-host` |
@@ -5231,7 +5231,16 @@ Fatto quando: i due comandi creano file che i loro editor aprono e salvano
 (un test scrive, rilegge con il codec e salva una modifica); spenta la
 feature il comando non c'è.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test rich_documents; cargo test -p fub-host --no-default-features --lib
-Stato: [ ] da fare
+Stato: [x] fatto · 12a8dedd..a3d55da9 · i due comandi sono provider dei
+bundle `fub.rich` e `fub.xlsx` (come `canvas.create`): stesso `Guard`,
+scrittura solo se il nome è libero, cestino, `Navigate`, e spariscono col
+bundle spento; nomi da `free_name` nella lingua di chi crea («Documento
+senza titolo», poi « 1», « 2»; il foglio «Foglio1» o «Sheet1»);
+`fub_format_xlsx::blank` sopra `Workbook::new()`; una cartella in sola
+lettura arriva come `Io` tipizzato (da T59 solo il file in sola lettura è
+`PermissionDenied`); pagina nuova `docs/product/new-documents.md`.
+Trovato: `cargo test -p fub-host --no-default-features --lib` non compila
+nemmeno alla base (errori in `legacy_tests/` e `fub-features`)
 
 ## T45 · Cinquemila file: la misura
 
