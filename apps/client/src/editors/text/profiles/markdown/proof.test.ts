@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import { ensureSyntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree, syntaxTree, syntaxTreeAvailable } from "@codemirror/language";
 import { forEachDiagnostic, type Diagnostic } from "@codemirror/lint";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
@@ -12,10 +12,17 @@ import { createMarkdownProfile } from "./profile";
 import { markdownGrammar } from "./grammar";
 import { extractProse, frontmatterLanguage, locate, markdownProof, proofTheme } from "./proof";
 
+/// Uno stato con l'albero completo. Il parser di CodeMirror lavora a tempo
+/// (20 ms per transazione): sotto carico lo stato appena creato ha un albero
+/// a metà, e `ensureSyntaxTree` completa l'analisi senza consegnarla a
+/// `syntaxTree(state)`; la transazione vuota la consegna, come fa l'editor
+/// quando il parser in sottofondo avanza.
 function state(doc: string): EditorState {
   const created = EditorState.create({ doc, extensions: markdown({ base: markdownGrammar }) });
   ensureSyntaxTree(created, created.doc.length, 5000);
-  return created;
+  const next = created.update({}).state;
+  expect(syntaxTreeAvailable(next), "l'albero deve coprire tutto il documento").toBe(true);
+  return next;
 }
 
 function prose(doc: string): string[] {
@@ -164,7 +171,10 @@ function ports(overrides: Partial<ProofPorts> = {}): ProofPorts {
   };
 }
 
-function mount(text: string, client: ProofClient) {
+/// `slowParser`: durante l'apertura ogni lettura dell'orologio salta 25 ms,
+/// così il budget di 20 ms del parser finisce dopo un solo passo, come su una
+/// macchina carica, e l'albero consegnato copre solo l'inizio.
+function mount(text: string, client: ProofClient, options: { slowParser?: boolean } = {}) {
   vi.useFakeTimers();
   const parent = document.createElement("div");
   document.body.appendChild(parent);
@@ -179,9 +189,12 @@ function mount(text: string, client: ProofClient) {
     onSelectionChange: () => {},
     extensions: () => profile.extensions(),
   });
+  let clock = Date.now();
+  const slow = options.slowParser ? vi.spyOn(Date, "now").mockImplementation(() => (clock += 25)) : null;
   engine.setDoc(text);
+  slow?.mockRestore();
   const view = EditorView.findFromDOM(parent)!;
-  ensureSyntaxTree(view.state, view.state.doc.length, 5000);
+  if (!options.slowParser) ensureSyntaxTree(view.state, view.state.doc.length, 5000);
   return { engine, view, changes, parent };
 }
 
@@ -270,6 +283,22 @@ describe("markdownProof", () => {
     view.dispatch({ changes: { from: 0, insert: "Ancora " }, userEvent: "input" });
     expect(engine.getDoc()).toBe("Ancora Uno speling.");
     expect(changes).toHaveBeenCalled();
+    engine.destroy();
+    client.dispose();
+    vi.useRealTimers();
+  });
+
+  it("controlla anche la prosa che il parser raggiunge dopo l'apertura", async () => {
+    // Su una macchina carica il parser si ferma presto: all'apertura l'albero
+    // copre solo l'inizio, e il resto arriva dal parser in sottofondo.
+    const client = new ProofClient(ports());
+    const paragraphs = Array.from({ length: 40 }, (_, i) => `Paragrafo ${i} corretto.`);
+    const text = ["Uno speling.", ...paragraphs, "Ultimo speling."].join("\n\n");
+    const { engine, view } = mount(text, client, { slowParser: true });
+    expect(syntaxTree(view.state).length, "l'albero consegnato all'apertura deve essere a metà").toBeLessThan(text.length);
+    await settle();
+    expect(syntaxTree(view.state).length).toBe(text.length);
+    expect(diagnostics(view).map((found) => found.from)).toEqual([text.indexOf("speling"), text.lastIndexOf("speling")]);
     engine.destroy();
     client.dispose();
     vi.useRealTimers();
