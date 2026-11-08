@@ -83,7 +83,7 @@ Gli oggetti copiati in Excalidraw, che vanno negli appunti come JSON
 codificato come un URL, entrano come oggetti del disegno. Lo stesso vale per
 un file `.excalidraw` o `.drawio` lasciato sul foglio. Passano dallo stesso
 lettore di [«Importa disegno»](drawing-import.md): forme, testi, connettori e
-immagini diventano quelli di FubDraw, e dopo l'incolla una frase dice che cosa
+immagini diventano quelli di Fub, e dopo l'incolla una frase dice che cosa
 non è entrato o è entrato cambiato, come il rapporto dell'importazione. Un
 disegno che non si legge, o che non sta in un disegno, resta fuori e lo si
 dice. Un SVG di draw.io entra come gli altri SVG.
@@ -100,10 +100,10 @@ spostamenti in «Oggetti», ed è lo stesso passo di annulla. Si confrontano il
 colore, il contorno, il carattere, l'opacità e la trasformazione che si
 vedono, con l'eredità, `currentColor`, le variabili, `@layer` e le misure in
 `em`; chi entra in un altro livello o in un altro gruppo ne prende l'opacità e
-la visibilità, come gli oggetti di FubDraw, e tiene il resto.
+la visibilità, come gli oggetti di Fub, e tiene il resto.
 
 Il comando non si fa, e dice perché, quando non si può sapere o non si può
-rifare l'aspetto di prima: un selettore che FubDraw non legge; una regola che
+rifare l'aspetto di prima: un selettore che Fub non legge; una regola che
 dipende da dove si guarda il disegno, come `@media (min-width: …)` o la stampa
 (`:hover` invece non vale mai, perché il disegno è fermo); un gruppo che dà a
 ciò che contiene un effetto d'insieme, come un filtro o una maschera, che

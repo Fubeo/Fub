@@ -65,7 +65,7 @@ I sedici modi, coi nomi e nei gruppi di Illustrator e di Photoshop:
   dentro di lui: si fondono fra loro, e il gruppo si posa intero su ciò che
   sta sotto.
 - **Un filtro scritto da un altro programma** si vede e si conserva come gli
-  effetti di FubDraw.
+  effetti di Fub.
 
 ## L'opacità nella barra
 
@@ -126,7 +126,7 @@ fusione sta in `style`, perché i browser leggono soltanto lì
   style="mix-blend-mode: multiply"/>
 ```
 
-La grammatica, il filtro e quando un filtro è di FubDraw sono in [Formato
+La grammatica, il filtro e quando un filtro è di Fub sono in [Formato
 della scena, effetti e fusione](../reference/scene-format-effects.md).
 
 ## Spazi e parti

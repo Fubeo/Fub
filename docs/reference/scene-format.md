@@ -14,6 +14,11 @@ cambia un disegno sta nelle [operazioni](scene-operations.md). I `§` dei
 commenti nel codice sono le sezioni di questa pagina, tranne nel motore delle
 operazioni, che cita quelle dell'altra.
 
+FubDraw è il nome tecnico del formato: lo portano il codice, queste pagine
+e lo stato `fubdraw`. Chi usa Fub non lo legge mai: l'interfaccia, gli avvisi
+e i messaggi che arrivano a MCP dicono «Fub» o «il disegno», e i formati si
+chiamano «Disegno SVG» e «Annotazioni PDF».
+
 ## 1. Principi
 
 1. **Un SVG valido.** Un disegno si apre in un browser o in un altro editor; i

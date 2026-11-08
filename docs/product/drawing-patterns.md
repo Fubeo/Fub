@@ -74,7 +74,7 @@ propone più una correzione: dare una campitura alle aree era della sezione
 
 In Lettura, in PNG, in JPEG e nell'SVG pulito le campiture e i motivi sono
 quelli del foglio; l'SVG pulito li scrive come motivi di SVG, senza ciò che
-serve soltanto a FubDraw. Nel PDF restano vettoriali, ripetuti dal lettore
+serve soltanto a Fub. Nel PDF restano vettoriali, ripetuti dal lettore
 come sul foglio ([Disegni, esportare](drawing-export.md)).
 
 ## Nel file
@@ -94,5 +94,5 @@ suo nome in `fub:name`, come un campione.
 ```
 
 Un motivo scritto da un altro programma si vede e si conserva. La grammatica, il ripiego e quando un motivo è una
-campitura di FubDraw sono in [Formato della scena,
+campitura di Fub sono in [Formato della scena,
 risorse](../reference/scene-format-resources.md#le-campiture-e-i-motivi).

@@ -85,7 +85,7 @@ la linea quando la linea si ricalcola.
   → Verifica: sì». Il lettore di schermo non legge la freccia, e dice «da
   Ingresso a Verifica, sì».
 - **Nell'export** un altro programma vede un tracciato qualunque e lo disegna
-  uguale. L'SVG pulito toglie gli attributi di FubDraw. Nel PDF la linea è
+  uguale. L'SVG pulito toglie gli attributi di Fub. Nel PDF la linea è
   vettoriale ([Disegni, esportare](drawing-export.md)).
 
 ## Nel file
