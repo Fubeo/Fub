@@ -4218,7 +4218,7 @@ Prova: scripts/check.sh --rapido; i comandi delle corse nel resoconto
 Stato: [x] fatto · d9de814f..156cb2aa · le sei cause corrette, 200 corse verdi
 dopo per ognuna; commenti nelle issue, che si chiudono quando il codice è in
 `main`; restano: la grana del timbro (4 ms) e altri test con un solo
-`try_read` che cadono sotto carico, da due issue nuove
+`try_read` che cadono sotto carico, da due issue nuove (#318; la seconda è PA T60)
 
 ## T20 · I test instabili del client e del banco visivo
 
