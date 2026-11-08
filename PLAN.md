@@ -328,7 +328,7 @@ Se una di queste cade, la stima si allunga.
 | PA T1 · il finto del banco con le impostazioni dell'host | PA | da fare | #295 in `main` (d90a09d0 di K3 cambia `bench/fake-ipc.ts`) | basso | S | `bench/fake-ipc.test.ts` |
 | PA T3 · i comandi in sola lettura non tengono il turno | PA | in corso (coder, base 0cc94bde) | nessuno | medio: tocca il custode | M | test d'integrazione di `fub-host` |
 | PA T4, T5 · #237 R01–R03 | PA | T4 e T5 fatti (baseline di `conflitto-lettura` dal runner) | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione; R01 si chiude col test se non si riproduce |
-| PA T6, T7 · #289 | PA | da fare | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
+| PA T6, T7 · #289 | PA | T6 fatto, T7 in corso (coder, base 5b6c3c26) | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
 | PA T8 · la pagina della cornice del telefono | PA | da fare | nessuno | basso | S | guardie dei documenti |
 | PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | da fare (D7 A) | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
 | PA T10 · i due punti sciolti da ritrovare | PA | da fare (D10 B) | nessuno | basso | S | la causa trovata o la riga che chiude |
@@ -3682,7 +3682,10 @@ lo sa?); i commenti e gli spazi in `abi.wit` (non contano).
 Fatto quando: `cargo test -p fub-abi --test wit_additivity` passa, e il caso
 finto del campo in coda fallisce come atteso.
 Prova: scripts/check.sh --rapido; cargo test -p fub-abi
-Stato: [~] in corso · coder · base 88612da0
+Stato: [x] fatto · 9faa3dbb · `check.sh --rapido` verde tranne tre test di
+`fub-host` a tempo (craft open_with, launch, craft_ranged #310) caduti col
+carico a 37 e verdi da soli; varianti, enum e funzioni esportate restano
+con la regola di prima (li prova T7)
 
 ## T7 · #289: «nuovo caso» e «nuova funzione», con un componente vero
 
@@ -3716,7 +3719,7 @@ passa e prova i due casi; «Compatibilità» in `abi-and-wit.md` li dice; le
 voci di #289 sono spuntate nel resoconto.
 Prova: scripts/check.sh --rapido; cargo test -p fub-wasm-host (col `PATH` di
 `CLAUDE_DEVICE.md`: costruisce i componenti con cargo)
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 5b6c3c26
 
 ## T8 · La pagina della cornice del telefono
 
