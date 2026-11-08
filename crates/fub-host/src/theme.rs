@@ -47,6 +47,16 @@
 //! che l'autore non decide lo mette l'host — la chiave è `<id>:<nome>`, il
 //! livello è la macchina (come il tema scelto), il gruppo è il nome del tema.
 //!
+//! # Un tema che eredita
+//!
+//! Da `theme-2` un manifest può dire da quale tema parte: `extends`, e l'unico
+//! valore accettato è la serie ([`SERIES_ID`]). Un tema così porta solo ciò
+//! che cambia: i fogli diventano facoltativi ([`read_theme`] dà `sheet: None`
+//! per una luce senza foglio, e la shell usa quello di serie), ma `lights`
+//! resta obbligatorio, perché dice quali luci il tema offre. Un tema che
+//! eredita e non porta niente — né fogli, né pelle, né asset — è rifiutato.
+//! Senza `extends` tutto resta com'era: un foglio per ogni luce offerta.
+//!
 //! # L'installazione è una cartella, e atomica
 //!
 //! Un tema installato è `<config>/themes/<id>/` (vedi
@@ -124,6 +134,7 @@ pub fn series_manifest() -> ThemeManifest {
             fub_abi::theme::ThemeMotion::Transform,
         ],
         settings: Vec::new(),
+        extends: None,
     }
 }
 
@@ -239,7 +250,8 @@ impl ThemeBundle {
     /// prima di deserializzare, così un motore sconosciuto produce l'errore
     /// nominato e non un «unknown variant» di serde), i permessi (rifiutati per
     /// nome), la forma (deserializzazione piena + id sicuro + luci non vuote +
-    /// namespace sotto `theme://` + impostazioni dichiarabili).
+    /// namespace sotto `theme://` + impostazioni dichiarabili + la base di
+    /// `extends`, e un tema che eredita deve portare almeno un file).
     pub fn load(dir: &Utf8Path) -> Result<Self, ThemeError> {
         let id_hint = dir.file_name().unwrap_or_default().to_string();
         let root = canonical_theme_root(dir, &id_hint)?;
@@ -300,19 +312,35 @@ impl ThemeBundle {
         }
         check_id(&manifest.id)?;
         check_settings(&manifest)?;
+        check_extends(&manifest)?;
         // Check every well-known bundle file before any later copy/read. Missing
         // sheets and skin remain allowed here; read_theme/list_themes decide
         // whether a requested light is actually loadable.
+        let mut brings = 0_u64;
         for name in ["sheet-dark.css", "sheet-light.css", "skin.css"] {
-            let _ = open_regular(
+            if open_regular(
                 &root.join(name),
                 &root,
                 &manifest.id,
                 MAX_THEME_CSS_BYTES,
                 false,
-            )?;
+            )?
+            .is_some()
+            {
+                brings += 1;
+            }
         }
-        validate_asset_limits(&root, &manifest.id)?;
+        brings += validate_asset_limits(&root, &manifest.id)?;
+        // Un tema che eredita e non porta niente — né fogli, né pelle, né un
+        // asset (caratteri, icone) — è la serie con un altro nome: si dice
+        // all'autore, invece di installare un doppione.
+        if manifest.extends.is_some() && brings == 0 {
+            return Err(ThemeError::Malformed(format!(
+                "theme `{}` extends `{SERIES_ID}` but changes nothing: \
+                 it brings no sheet, no skin and no asset",
+                manifest.id
+            )));
+        }
         Ok(ThemeBundle {
             manifest,
             trust: fub_kernel::Trust::default(),
@@ -341,7 +369,10 @@ pub struct ThemeInfo {
 pub struct ThemePayload {
     pub manifest: ThemeManifest,
     pub light: ThemeLight,
-    pub sheet: String,
+    /// Il foglio di questa luce. È `None` solo per un tema che eredita
+    /// (`extends`) e non porta il foglio di questa luce: la shell usa allora
+    /// quello di serie, della stessa luce e dello stesso contrasto.
+    pub sheet: Option<String>,
     pub skin: Option<String>,
     pub assets: std::collections::BTreeMap<String, Vec<u8>>,
 }
@@ -447,6 +478,29 @@ fn check_settings(manifest: &ThemeManifest) -> Result<(), ThemeError> {
                 "setting `{name}` has an invalid default: {why}"
             )));
         }
+    }
+    Ok(())
+}
+
+/// Il tema da cui un manifest dichiara di partire regge?
+///
+/// L'unica base è la serie, e solo col motore `theme-2`: `theme-1` è congelato
+/// (ADR 0206) e non impara a ereditare. Il valore si confronta così com'è,
+/// senza togliere spazi: un id con uno spazio è un altro id.
+fn check_extends(manifest: &ThemeManifest) -> Result<(), ThemeError> {
+    let Some(base) = manifest.extends.as_deref() else {
+        return Ok(());
+    };
+    if base != SERIES_ID {
+        return Err(ThemeError::Malformed(format!(
+            "`extends` must be `{SERIES_ID}`, the only theme a theme can start from, not `{base}`"
+        )));
+    }
+    if manifest.engine == ThemeEngine::Theme1 {
+        return Err(ThemeError::Malformed(format!(
+            "`extends` needs `{}`: `{THEME_ENGINE}` cannot inherit",
+            ThemeEngine::Theme2.as_str()
+        )));
     }
     Ok(())
 }
@@ -611,6 +665,9 @@ pub fn discover_themes(config_dir: &Utf8Path) -> (Vec<ThemeBundle>, Vec<ThemeErr
 }
 /// Elenca soltanto i temi installati per cui ogni luce dichiarata ha un foglio
 /// leggibile. Il catalogo legge solo i metadati dei file, mai i loro byte.
+///
+/// Per un tema che eredita (`extends`) il foglio di una luce può mancare (lo
+/// dà la serie); se c'è, deve essere leggibile come per ogni altro tema.
 pub fn list_themes(config_dir: &Utf8Path) -> Vec<ThemeInfo> {
     let (themes, _) = discover_themes(config_dir);
     themes
@@ -618,16 +675,19 @@ pub fn list_themes(config_dir: &Utf8Path) -> Vec<ThemeInfo> {
         .filter_map(|theme| {
             let manifest = theme.manifest.clone();
             let dir = installed_theme_dir(config_dir, &manifest.id).ok()?;
+            let required = manifest.extends.is_none();
             let loadable = manifest.lights.iter().all(|light| {
-                open_regular(
+                match open_regular(
                     &sheet_path(&dir, *light),
                     &dir,
                     &manifest.id,
                     MAX_THEME_CSS_BYTES,
-                    true,
-                )
-                .map(|file| file.is_some())
-                .unwrap_or(false)
+                    required,
+                ) {
+                    Ok(Some(_)) => true,
+                    Ok(None) => !required,
+                    Err(_) => false,
+                }
             });
             loadable.then_some(ThemeInfo {
                 manifest,
@@ -700,12 +760,23 @@ pub fn read_theme(
             "theme `{id}` does not offer requested light"
         )));
     }
+    // Senza `extends` il foglio di ogni luce offerta è d'obbligo; con
+    // `extends` può mancare, e la shell userà quello di serie.
+    let required = theme.manifest.extends.is_none();
     let sheet_path = sheet_path(&dir, light);
-    let sheet = read_theme_text(&sheet_path, &dir, id, MAX_THEME_CSS_BYTES, true)?
-        .ok_or_else(|| ThemeError::Malformed(format!("missing sheet `{sheet_path}`")))?;
+    let sheet = read_theme_text(&sheet_path, &dir, id, MAX_THEME_CSS_BYTES, required)?;
+    if required && sheet.is_none() {
+        return Err(ThemeError::Malformed(format!(
+            "missing sheet `{sheet_path}`"
+        )));
+    }
     let skin_path = dir.join("skin.css");
     let skin = read_theme_text(&skin_path, &dir, id, MAX_THEME_CSS_BYTES, false)?;
-    let needed = referenced_assets(&sheet, skin.as_deref(), &theme.manifest.asset_namespace);
+    let needed = referenced_assets(
+        sheet.as_deref(),
+        skin.as_deref(),
+        &theme.manifest.asset_namespace,
+    );
     let assets = asset_inventory(&dir, &theme.manifest.asset_namespace, &needed)?;
     Ok(ThemePayload {
         manifest: theme.manifest,
@@ -724,12 +795,12 @@ fn sheet_path(dir: &Utf8Path, light: ThemeLight) -> Utf8PathBuf {
     dir.join(name)
 }
 fn referenced_assets(
-    sheet: &str,
+    sheet: Option<&str>,
     skin: Option<&str>,
     namespace: &str,
 ) -> std::collections::BTreeSet<String> {
     let mut urls = std::collections::BTreeSet::new();
-    for css in [Some(sheet), skin] {
+    for css in [sheet, skin] {
         let Some(css) = css else { continue };
         let chars: Vec<char> = css.chars().collect();
         let mut index = 0;
@@ -1124,11 +1195,17 @@ const MAX_THEME_ASSETS: u64 = 1024;
 const MAX_THEME_ASSET_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_THEME_ASSET_TOTAL_BYTES: u64 = 256 * 1024 * 1024;
 
-fn validate_asset_limits(root: &Utf8Path, id: &str) -> Result<(), ThemeError> {
+/// Controlla i limiti degli asset e dice quanti ne porta davvero il tema.
+///
+/// Il conto restituito lascia fuori ciò che scrive l'host e non l'autore: il
+/// puntatore della versione installata ([`POINTER_FILE`]) e le versioni
+/// conservate (`.generations/`). I limiti restano contati come prima.
+fn validate_asset_limits(root: &Utf8Path, id: &str) -> Result<u64, ThemeError> {
     let mut count = 0_u64;
     let mut total = 0_u64;
-    validate_asset_limits_in(root, root, id, &mut count, &mut total)?;
-    Ok(())
+    let mut authored = 0_u64;
+    validate_asset_limits_in(root, root, id, &mut count, &mut total, &mut authored)?;
+    Ok(authored)
 }
 
 fn validate_asset_limits_in(
@@ -1137,6 +1214,7 @@ fn validate_asset_limits_in(
     id: &str,
     count: &mut u64,
     total: &mut u64,
+    authored: &mut u64,
 ) -> Result<(), ThemeError> {
     let entries =
         std::fs::read_dir(dir).map_err(|error| ThemeError::Io(format!("{}: {error}", dir)))?;
@@ -1159,7 +1237,7 @@ fn validate_asset_limits_in(
         let path = Utf8PathBuf::from_path_buf(entry.path())
             .map_err(|path| ThemeError::Io(format!("non-UTF-8 path: {}", path.display())))?;
         if metadata.is_dir() {
-            validate_asset_limits_in(root, &path, id, count, total)?;
+            validate_asset_limits_in(root, &path, id, count, total, authored)?;
             continue;
         }
         let relative = path
@@ -1172,6 +1250,9 @@ fn validate_asset_limits_in(
             "manifest.json" | "skin.css" | "sheet-dark.css" | "sheet-light.css"
         ) {
             continue;
+        }
+        if relative != POINTER_FILE && !relative.starts_with(".generations/") {
+            *authored += 1;
         }
         *count += 1;
         if *count > MAX_THEME_ASSETS {

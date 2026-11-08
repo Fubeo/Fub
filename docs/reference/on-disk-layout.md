@@ -28,8 +28,8 @@ La cartella viene scelta in ordine:
 | `settings.json` | autorevole | 1 | impostazioni della macchina |
 | `vaults.json` | autorevole | 1 | vault recenti, preferiti, nome e icona |
 | `view-state.json` | autorevole locale | 1 | stato delle view di questa macchina |
-| `themes/<id>/manifest.json` | installato | manifest | identità e compatibilità del tema |
-| `themes/<id>/` | installato | per tema | fogli, skin e asset |
+| `themes/<id>/manifest.json` | installato | manifest | identità e compatibilità del tema; `extends` facoltativo |
+| `themes/<id>/` | installato | per tema | fogli (`sheet-light.css`, `sheet-dark.css`), `skin.css` e asset |
 | `logs/fub.log` | diagnostica | n/a | log del processo |
 | `wasm-plugins/inventory.json` | autorevole | 1 | componenti installati e scelte della macchina |
 | `wasm-plugins/components/<installation>-<sha256>.wasm` | installato | componente | eseguibile verificato |
@@ -42,6 +42,11 @@ La cartella viene scelta in ordine:
 
 Se la cartella di configurazione non è disponibile, l'host può lavorare in
 memoria. Un file illeggibile non viene riscritto da uno stato vuoto.
+
+Un tema porta un foglio per ogni luce che il manifest offre. Un tema `theme-2`
+con `"extends": "fub.serie"` parte dalla serie e porta solo ciò che cambia: i
+fogli diventano facoltativi, ma la cartella deve contenere almeno un foglio, la
+skin o un asset. Un manifest senza `extends` si legge e si riscrive come prima.
 
 Lo stato di sync è di un vault, non della macchina. La chiave viene dallo
 SHA-256 della radice canonica del vault. La cartella tiene replica,

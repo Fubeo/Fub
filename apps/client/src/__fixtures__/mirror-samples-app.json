@@ -215,6 +215,25 @@
         ]
       },
       "trust": "community"
+    },
+    {
+      "manifest": {
+        "id": "acme.carta",
+        "name": "Carta",
+        "version": "1.0.0",
+        "engine": "theme-2",
+        "lights": [
+          "light",
+          "dark"
+        ],
+        "asset_namespace": "theme://acme.carta/",
+        "motion": [
+          "opacity",
+          "transform"
+        ],
+        "extends": "fub.serie"
+      },
+      "trust": "community"
     }
   ],
   "ThemePayload": [
@@ -244,6 +263,28 @@
           3
         ]
       }
+    },
+    {
+      "manifest": {
+        "id": "acme.carta",
+        "name": "Carta",
+        "version": "1.0.0",
+        "engine": "theme-2",
+        "lights": [
+          "light",
+          "dark"
+        ],
+        "asset_namespace": "theme://acme.carta/",
+        "motion": [
+          "opacity",
+          "transform"
+        ],
+        "extends": "fub.serie"
+      },
+      "light": "dark",
+      "sheet": null,
+      "skin": ".carta { color: inherit; }",
+      "assets": {}
     }
   ],
   "InstalledPluginInfo": [

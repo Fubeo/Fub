@@ -69,6 +69,15 @@ non regolari. Una voce del catalogo deve dichiarare lo stesso motore del
 manifest che consegna. Quale motore si possa montare lo decide la shell: un
 tema di un altro motore è rifiutato dal loader con una diagnosi.
 
+Un manifest `theme-2` può dichiarare `extends`, il tema da cui parte. L'unico
+valore accettato è `fub.serie`, scritto esatto; un altro valore, o `extends`
+con `theme-1`, rende il manifest malformato. Con `extends` i fogli sono
+facoltativi: `read_theme` consegna `sheet: null` per una luce senza foglio, e
+`lights` resta obbligatorio. Un tema che eredita e non porta né fogli, né skin,
+né asset è rifiutato. Il catalogo firmato passa dalla stessa validazione. Il
+client non monta ancora un fascio con `sheet: null`: resta sulla serie e lo
+dice nella diagnosi.
+
 Da `theme-2` un tema può dichiarare impostazioni: al massimo 32, con nome
 `a-z`, `0-9`, `-`, etichetta in prosa e specie fra interruttore, numero (con
 minimo e massimo) e scelta. L'host le dichiara al registro delle impostazioni con chiave

@@ -97,6 +97,12 @@ pub struct ThemeManifest {
     /// scrive il campo: la forma sul filo dei temi esistenti non cambia.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub settings: Vec<ThemeSetting>,
+    /// Il tema da cui questo parte, da `theme-2`: porta solo ciò che cambia, e
+    /// il resto (i fogli che mancano, la pelle) viene da lì. L'host accetta un
+    /// solo valore, il tema di serie (`fub.serie`). Un manifest che non eredita
+    /// non scrive il campo: la forma sul filo dei temi esistenti non cambia.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extends: Option<String>,
 }
 
 fn default_theme_motion() -> Vec<ThemeMotion> {
@@ -128,6 +134,15 @@ mod tests {
         let raw = r#"{"id":"fub.serie","name":"Fub di serie","version":"1.0.0","engine":"theme-1","lights":["dark","light"],"asset_namespace":"theme://fub.serie/","motion":["opacity","transform"]}"#;
         let manifest: ThemeManifest = serde_json::from_str(raw).expect("manifest");
         assert!(manifest.settings.is_empty());
+        assert_eq!(manifest.extends, None);
+        assert_eq!(serde_json::to_string(&manifest).expect("wire"), raw);
+    }
+
+    #[test]
+    fn a_manifest_that_extends_names_its_base_on_the_wire() {
+        let raw = r#"{"id":"com.acme.carta","name":"Carta","version":"1.0.0","engine":"theme-2","lights":["light"],"asset_namespace":"theme://com.acme.carta/","motion":["opacity","transform"],"extends":"fub.serie"}"#;
+        let manifest: ThemeManifest = serde_json::from_str(raw).expect("manifest");
+        assert_eq!(manifest.extends.as_deref(), Some("fub.serie"));
         assert_eq!(serde_json::to_string(&manifest).expect("wire"), raw);
     }
 
@@ -182,6 +197,7 @@ mod tests {
             asset_namespace: "theme://fub.serie/".into(),
             motion: vec![ThemeMotion::Opacity, ThemeMotion::Transform],
             settings: Vec::new(),
+            extends: None,
         };
 
         assert_eq!(manifest.engine.as_str(), THEME_ENGINE);
