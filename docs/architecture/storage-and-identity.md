@@ -136,8 +136,10 @@ supplementare, altri). Root non scavalca il controllo: per lui un file è in
 sola lettura quando nessuna classe ha il bit di scrittura. Un file nuovo e un
 file scrivibile si scrivono come prima.
 
-Il kernel porta ogni `PermissionDenied` del supporto al contratto come
-`PluginError::PermissionDenied`, non come `Io`. La shell lo dice una volta per
+Il kernel porta questo rifiuto al contratto come
+`PluginError::PermissionDenied`, non come `Io`; lo riconosce dal tipo che lo
+storage mette dentro l'errore, quindi gli altri permessi negati del sistema
+(una cartella che non si elenca o non si scrive) restano `Io`. La shell lo dice una volta per
 documento («è in sola lettura: Fub non lo sovrascrive»), tiene la bozza
 sporca e lascia che il salvataggio automatico riprovi in silenzio finché il
 file non torna scrivibile o l'utente preme «Riprova».

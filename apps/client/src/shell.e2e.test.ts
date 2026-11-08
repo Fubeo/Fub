@@ -1325,7 +1325,7 @@ describe("i confini del buffer", () => {
     const host = await start(VAULT);
     const repair = host.fault("writeDocument", {
       kind: "permission_denied",
-      message: "I/O su Benvenuto.md: il file è in sola lettura: Benvenuto.md",
+      message: "il file è in sola lettura: Benvenuto.md",
     });
     const { recentNotices } = await import("./ui/notify");
     const readOnly = () =>

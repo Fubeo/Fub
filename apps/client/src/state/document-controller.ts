@@ -1978,8 +1978,9 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
     if (event.outcome === "conflitto") {
       notify(t("document.save_conflict", { doc: event.id }), "guasto");
     } else if (isErrorKind(event.error, "permission_denied")) {
-      // Il file è in sola lettura (o la sua cartella non si scrive): la bozza
-      // resta sporca e nessun byte è perso, ma non è un guasto del disco.
+      // Il file è in sola lettura (PA T59), o l'host lo tiene tale per un
+      // suo motivo: la bozza resta sporca e nessun byte è perso, ma non è un
+      // guasto del disco.
       const doc = event.id;
       if (!deniedSaves.has(doc)) {
         deniedSaves.add(doc);

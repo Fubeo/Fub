@@ -837,9 +837,28 @@ pub(crate) fn refuse_read_only(path: &Utf8Path, bits: WriteBits) -> io::Result<(
     }
     Err(io::Error::new(
         io::ErrorKind::PermissionDenied,
-        format!("il file è in sola lettura: {path}"),
+        ReadOnlyFile(path.to_owned()),
     ))
 }
+
+/// L'errore dentro l'`io::Error` di [`refuse_read_only`]: dice **quale**
+/// permesso negato è, senza leggere la prosa.
+///
+/// Un `PermissionDenied` del sistema può voler dire molte cose — una cartella
+/// che non si elenca all'apertura, una che non si scrive — e ognuna ha già la
+/// sua faccia nel contratto. Questo è il solo che il kernel porta a
+/// [`PluginError::PermissionDenied`](fub_abi::PluginError::PermissionDenied):
+/// il file c'è, e chi lo ha messo in sola lettura ha detto di non toccarlo.
+#[derive(Debug)]
+pub(crate) struct ReadOnlyFile(pub(crate) Utf8PathBuf);
+
+impl std::fmt::Display for ReadOnlyFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "il file è in sola lettura: {}", self.0)
+    }
+}
+
+impl std::error::Error for ReadOnlyFile {}
 
 /// Quanto vecchio dev'essere un temporaneo di scrittura perché nessuno lo stia
 /// più scrivendo: **un giorno**.
