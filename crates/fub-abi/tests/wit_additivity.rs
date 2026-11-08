@@ -687,20 +687,12 @@ fn breaks_with(base: &Contract, now: &Contract, rule: BoundaryRule) -> Vec<Strin
                 at_boundary,
                 WHY_CASES,
             ),
-            (Shape::Enum(b), Shape::Enum(n)) => listed(
-                b,
-                n,
-                format!("enum `{name}`, casi"),
-                at_boundary,
-                WHY_CASES,
-            ),
-            (Shape::Flags(b), Shape::Flags(n)) => listed(
-                b,
-                n,
-                format!("flags `{name}`, bit"),
-                at_boundary,
-                WHY_CASES,
-            ),
+            (Shape::Enum(b), Shape::Enum(n)) => {
+                listed(b, n, format!("enum `{name}`, casi"), at_boundary, WHY_CASES)
+            }
+            (Shape::Flags(b), Shape::Flags(n)) => {
+                listed(b, n, format!("flags `{name}`, bit"), at_boundary, WHY_CASES)
+            }
             (Shape::Alias(b), Shape::Alias(n)) => (b != n).then(|| {
                 format!("alias `{name}`: puntava a `{b}` e ora punta a `{n}` (non è un'aggiunta)")
             }),
@@ -1516,7 +1508,12 @@ fn fake_edit(from: &str, to: &str) -> Contract {
 #[test]
 fn the_strict_rule_for_cases_and_exported_functions_on_fake_wit() {
     let base = fake(FAKE_BASE);
-    for name in ["model::color", "model::shape", "model::style", "model::event"] {
+    for name in [
+        "model::color",
+        "model::shape",
+        "model::style",
+        "model::event",
+    ] {
         assert!(
             base.crossing.contains(name),
             "`{name}` attraversa il confine nel world finto e la visita non lo trova"
@@ -1527,7 +1524,10 @@ fn the_strict_rule_for_cases_and_exported_functions_on_fake_wit() {
     let red: Vec<(&str, Contract, &[&str])> = vec![
         (
             "un caso nuovo in fondo a un enum raggiunto da un export",
-            fake_edit("enum color { red, green }", "enum color { red, green, blue }"),
+            fake_edit(
+                "enum color { red, green }",
+                "enum color { red, green, blue }",
+            ),
             &["enum `model::color`", "\"blue\"", "in coda"],
         ),
         (
@@ -1648,9 +1648,15 @@ fn the_strict_rule_for_cases_and_exported_functions_on_fake_wit() {
 fn a_0_1_snapshot_still_takes_a_case_at_the_end() {
     let old = FAKE_BASE.replacen("package fub:finto@0.2.0;", "package fub:finto@0.1.1;", 1);
     let base = fake(&old);
-    assert_eq!(BoundaryRule::for_snapshot(base.version), BoundaryRule::Prefix);
+    assert_eq!(
+        BoundaryRule::for_snapshot(base.version),
+        BoundaryRule::Prefix
+    );
     for (from, to) in [
-        ("enum color { red, green }", "enum color { red, green, blue }"),
+        (
+            "enum color { red, green }",
+            "enum color { red, green, blue }",
+        ),
         (
             "variant event { none, text(string) }",
             "variant event { none, text(string), error(u32) }",
