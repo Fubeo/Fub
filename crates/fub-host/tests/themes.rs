@@ -1425,34 +1425,3 @@ fn fonts_need_theme_2() {
     let error = fub_host::theme::install_theme(&config, &root).expect_err("theme-1 has no fonts");
     malformed_because(error, "fonts need `theme-2`");
 }
-
-/// L'elenco delle famiglie di serie dell'host è quello del foglio dei caratteri
-/// di serie: una famiglia aggiunta là senza aggiungerla qui lascerebbe a un
-/// tema un nome che si mescola a quello di serie.
-#[test]
-fn the_series_families_match_the_series_font_sheet() {
-    let sheet = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../apps/client/src/theme/scrittoio/fonts.css"
-    ))
-    .expect("the series font sheet");
-    let mut in_sheet: Vec<String> = sheet
-        .lines()
-        .filter_map(|line| line.trim().strip_prefix("font-family:"))
-        .map(|value| {
-            value
-                .trim()
-                .trim_end_matches(';')
-                .trim_matches('"')
-                .to_string()
-        })
-        .collect();
-    in_sheet.sort();
-    in_sheet.dedup();
-    let mut in_host: Vec<String> = fub_host::theme::SERIES_FONT_FAMILIES
-        .iter()
-        .map(|family| family.to_string())
-        .collect();
-    in_host.sort();
-    assert_eq!(in_host, in_sheet);
-}

@@ -1002,11 +1002,21 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             "crates/fub-host/src/theme.rs::check_fonts",
             (
                 Family::AsciiCase,
-                "confronta la famiglia di un carattere del tema con quelle di serie, con le \
-                 parole chiave del CSS e con le altre facce dello stesso manifest. Il motore \
-                 confronta i nomi di `font-family` senza badare a maiuscole e minuscole ASCII, \
-                 e la famiglia ammette solo lettere e cifre ASCII, `-` e spazi: piegare di \
-                 più o di meno lascerebbe passare un nome che si mescola a un altro.",
+                "confronta la famiglia di un carattere con le altre facce dello stesso \
+                 manifest, dopo che `theme_font_fault` ne ha fissato l'alfabeto ASCII. Il \
+                 motore confronta i nomi di `font-family` senza badare a maiuscole e \
+                 minuscole ASCII: `Carta` e `carta` sono la stessa faccia.",
+            ),
+        ),
+        (
+            "crates/fub-abi/src/rules/theme_font.rs::theme_font_fault",
+            (
+                Family::AsciiCase,
+                "confronta la famiglia di un carattere del tema con quelle di serie e con le \
+                 parole chiave del CSS. Il motore confronta i nomi di `font-family` senza \
+                 badare a maiuscole e minuscole ASCII, e la famiglia ammette solo lettere e \
+                 cifre ASCII, `-` e spazi: piegare di più o di meno lascerebbe passare un \
+                 nome che si mescola a un altro. La gemella TS la rispecchia per fixture.",
             ),
         ),
         (

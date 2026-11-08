@@ -16,14 +16,13 @@ import seriesFonts from "./scrittoio/fonts.css?raw";
 import {
   count,
   mountThemeBundle,
-  MAX_THEME_FONT_BYTES,
-  SERIES_FONT_FAMILIES,
   themeFontFaces,
   validateThemeBundle,
   type ThemeBundle,
   type ThemeBundleManifest,
 } from "./loader";
 import { SCRITTOIO_SERIES } from "./scrittoio/series";
+import { THEME_FONT_LIMITS } from "../rules/mirrored";
 
 const box = vi.hoisted(() => ({ api: null as unknown }));
 
@@ -200,7 +199,7 @@ describe("il loader scrive le regole dei caratteri del tema", () => {
     expect(reasons(one({}), { "theme://acme.caratteri/fonts/carta.woff2": [0, 1, 0, 0, 9] }).join()).toContain("non è WOFF2");
     expect(reasons(one({ family: "Inter Variable" })).join()).toContain("famiglia di serie");
     expect(reasons(one({ family: "monospace" })).join()).toContain("parola chiave");
-    expect(reasons(one({ family: 'Carta"; src: url(x)' })).join()).toContain("lettere, cifre");
+    expect(reasons(one({ family: 'Carta"; src: url(x)' })).join()).toContain("lettere e cifre");
     expect(reasons(one({ weight: 950 })).join()).toContain("fra 100 e 900");
     expect(reasons(one({ style: "oblique" })).join()).toContain("normal o italic");
     expect(reasons([...one({}), ...one({})]).join()).toContain("due volte");
@@ -209,13 +208,15 @@ describe("il loader scrive le regole dei caratteri del tema", () => {
     const nine = Array.from({ length: 9 }, (_, n) => ({ family: `Carta ${n}`, file: "fonts/carta.woff2", weight: 400, style: "normal" }));
     expect(reasons(nine).join()).toContain("9 dichiarati, al massimo 8");
 
-    const big = { "theme://acme.caratteri/fonts/carta.woff2": fakeWoff2(MAX_THEME_FONT_BYTES + 1) };
-    expect(reasons(one({}), big).join()).toContain(`supera ${MAX_THEME_FONT_BYTES} byte`);
+    const big = { "theme://acme.caratteri/fonts/carta.woff2": fakeWoff2(THEME_FONT_LIMITS.font_bytes + 1) };
+    expect(reasons(one({}), big).join()).toContain(`supera ${THEME_FONT_LIMITS.font_bytes} byte`);
   });
 
+  // Il mirror delle regole lega l'elenco a quello di Rust; qui lo si lega al
+  // foglio che dichiara davvero quelle famiglie.
   it("l'elenco delle famiglie di serie è quello del foglio dei caratteri di serie", () => {
     const inSheet = [...new Set([...seriesFonts.matchAll(/font-family:\s*"([^"]+)"/g)].map((match) => match[1]))];
-    expect([...SERIES_FONT_FAMILIES].sort()).toEqual(inSheet.sort());
+    expect([...THEME_FONT_LIMITS.series_families].sort()).toEqual(inSheet.sort());
   });
 });
 
