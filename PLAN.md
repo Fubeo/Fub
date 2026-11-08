@@ -326,7 +326,7 @@ Se una di queste cade, la stima si allunga.
 | Unire #295 (K3, con K3-IPC T8) | K3 | PR pronta, testa 165b8fa8 | il sì dell'utente | medio | S | `main` ha `crates/fub-motori` e i comandi `open_key`, `warm_engine` e `document_closed` |
 | Riallineare #290 a `main` e unirla | K2 | 7 di 7; la prova con una persona non è fatta | la prova dell'utente col protocollo di K2, prima di segnarla pronta (D13 A) | basso | S | CI completa verde, OK dell'utente |
 | PA T1 · il finto del banco con le impostazioni dell'host | PA | da fare | #295 in `main` (d90a09d0 di K3 cambia `bench/fake-ipc.ts`) | basso | S | `bench/fake-ipc.test.ts` |
-| PA T3 · i comandi in sola lettura non tengono il turno | PA | in corso (coder, base 0cc94bde) | nessuno | medio: tocca il custode | M | test d'integrazione di `fub-host` |
+| PA T3 · i comandi in sola lettura non tengono il turno | PA | fatto (5432f8b4) | nessuno | medio: tocca il custode | M | test d'integrazione di `fub-host` |
 | PA T4, T5 · #237 R01–R03 | PA | T4 e T5 fatti (baseline di `conflitto-lettura` dal runner) | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione; R01 si chiude col test se non si riproduce |
 | PA T6, T7 · #289 | PA | T6 fatto, T7 in corso (coder, base 5b6c3c26) | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
 | PA T8 · la pagina della cornice del telefono | PA | da fare | nessuno | basso | S | guardie dei documenti |
@@ -3540,7 +3540,11 @@ Fatto quando: `cargo test -p fub-host --test read_only_command_turn` passa,
 e senza la modifica il primo test va oltre il tempo; i test di `fub-host`
 restano verdi.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host
-Stato: [~] in corso · coder · base 0cc94bde · diviso in due (kernel, poi host), registro 2026-11-08
+Stato: [x] fatto · 9369b042..5432f8b4 · frame della sola lettura nel kernel,
+niente turno nell'host, una bandiera per lettura (spegnere il plugin ferma la
+lettura, non il job), la sbarra allo smontaggio; `check.sh --rapido` verde
+tranne craft_ranged (#310, noto, va in T19); resta: una richiesta di rete
+dentro una lettura guarda solo la bandiera della lettura
 
 ## T4 · #237 R01 e R02: chiudere e ripristinare non perdono il testo
 
