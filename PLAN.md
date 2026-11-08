@@ -746,7 +746,7 @@ Fatto quando:
 - `npm run theme:verify` rigenera i fogli uguali al byte;
 - la foto di `live-01-panoramica`, `reading` e `nota-tre-modi`, in giorno e notte, a 1280 e a 700, sta accanto a `?stato=nota`: gli a capo del primo paragrafo sono quelli del prototipo.
 Prova: scripts/check.sh --rapido, e `cargo test -p fub-host`
-Stato: [ ] da fare
+Stato: [x] fatto · 51900945 2564acb0 · differenze: le tinte per tipo dei richiami e dei loro titoli sono tolte (il colore resta sulla pastiglia `.cm-fub-callout-type` in Live); il richiamo ripiegabile tiene il triangolo; `ul > li.task` a −1.25em; gancio `document-list` nuovo; «Comportamenti della shell» spostati in `docs/architecture/shell-behaviours.md` perché `frontend-and-ipc.md` superava le 450 righe dopo l'unione con main; in Live gli a capo del primo paragrafo differiscono dal prototipo solo perché il testo del banco ha un a capo vero dopo «stato»; baseline dal runner (T25)
 
 ## T12 · La riga dei dati sotto il titolo
 
