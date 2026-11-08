@@ -48,6 +48,8 @@ import {
   themeAssetUrls,
   themeCssViolations,
   type ContentGate,
+  type ThemeCssPolicy,
+  type ThemeCssViolation,
   type ThemeCssVocabulary,
 } from "../ui/sanitize-css";
 import { contrast } from "./contrast";
@@ -469,6 +471,36 @@ function contrastReasons(sheet: string): string[] {
   return reasons;
 }
 
+/**
+ * Le ultime pelli controllate, con il profilo e lo spazio degli asset con cui
+ * si sono controllate. La pelle di serie è lunga (circa 18 mila righe) e ogni
+ * cambio di luce, contrasto o tema la ripassava da capo, un centinaio di
+ * millisecondi ogni volta. Il controllo è una funzione pura del testo e della
+ * politica: a parità dei tre il risultato è lo stesso. Due voci bastano alla
+ * serie e al tema installato; un profilo nuovo le fa rifare.
+ */
+const SKIN_CHECKS_KEPT = 2;
+const skinChecks: {
+  readonly css: string;
+  readonly profile: ThemeProfile;
+  readonly assetNamespace: string;
+  readonly violations: readonly ThemeCssViolation[];
+}[] = [];
+
+function skinViolations(css: string, policy: ThemeCssPolicy): readonly ThemeCssViolation[] {
+  const at = skinChecks.findIndex((entry) =>
+    entry.profile === profile && entry.assetNamespace === policy.assetNamespace && entry.css === css);
+  if (at >= 0) {
+    const [entry] = skinChecks.splice(at, 1);
+    skinChecks.unshift(entry!);
+    return entry!.violations;
+  }
+  const violations = themeCssViolations(css, { ...policy, kind: "skin" });
+  skinChecks.unshift({ css, profile, assetNamespace: policy.assetNamespace, violations });
+  skinChecks.length = Math.min(skinChecks.length, SKIN_CHECKS_KEPT);
+  return violations;
+}
+
 /** Tutti i motivi di rifiuto; nessun cancello accorcia il report del successivo. */
 export function validateThemeBundle(bundle: ThemeBundle, light: ThemeLight): string[] {
   const reasons = manifestReasons(bundle.manifest, light);
@@ -488,7 +520,7 @@ export function validateThemeBundle(bundle: ThemeBundle, light: ThemeLight): str
     reasons.push("fascio: porta una pelle ereditata ma non dichiara extends");
   }
 
-  const policy = {
+  const policy: ThemeCssPolicy = {
     assetNamespace: bundle.manifest.asset_namespace,
     allowedHooks: profile.hooks,
     requiredRoles: profile.requiredRoles,
@@ -504,7 +536,7 @@ export function validateThemeBundle(bundle: ThemeBundle, light: ThemeLight): str
     reasons.push(...contrastReasons(bundle.sheet));
   }
   if (bundle.skin !== undefined) {
-    for (const violation of themeCssViolations(bundle.skin, { ...policy, kind: "skin" })) {
+    for (const violation of skinViolations(bundle.skin, policy)) {
       reasons.push(
         `pelle: ${violation.code} (${violation.line}:${violation.column}): ${violation.detail}`,
       );
