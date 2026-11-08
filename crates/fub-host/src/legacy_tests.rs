@@ -77,6 +77,22 @@ pub(crate) fn comes_free<T>(custody: &Custody<T>, within: Duration) -> bool {
         && try_write_within(custody, deadline.saturating_duration_since(Instant::now())).is_some()
 }
 
+/// Il prestito condiviso si può avere entro [`FREE_WITHIN`]: la domanda delle
+/// sonde che aspettano il lucchetto **libero**.
+///
+/// Chi aspetta il lucchetto **preso** resta invece a `try_read`/`try_write`
+/// di un colpo solo: un lucchetto preso non si libera da sé, e una scadenza
+/// nasconderebbe il difetto che la prova cerca.
+pub(crate) fn read_comes_free<T>(custody: &Custody<T>) -> bool {
+    try_read_within(custody, FREE_WITHIN).is_some()
+}
+
+/// Il prestito esclusivo si può avere entro [`FREE_WITHIN`]: vedi
+/// [`read_comes_free`].
+pub(crate) fn write_comes_free<T>(custody: &Custody<T>) -> bool {
+    try_write_within(custody, FREE_WITHIN).is_some()
+}
+
 fn retry_within<G>(within: Duration, mut attempt: impl FnMut() -> Option<G>) -> Option<G> {
     let deadline = Instant::now() + within;
     loop {
