@@ -360,7 +360,7 @@ Se una di queste cade, la stima si allunga.
 | PA T2 · N4 e K5 allineati a `main` | PA | da fare | #295 in `main` | basso | S | `tsc --noEmit` pulito sui due rami |
 | PA T11 · il vassoio delle barre | PA | da fare (D6 C: chiaro di serie, «marcate» in Aspetto) | S2 T20 | basso | S | Vitest delle preferenze, foto del banco |
 | Il piano del telefono | telefono | da pianificare (D1 B) | S2 in `main`; un pianificatore alla volta | medio: rifà la cornice del telefono prima dell'APK | L | il piano approvato e i suoi task in `main` |
-| PA T20, T21 · i test instabili del client e del banco | PA | T20 integrato (baseline live-07…11 dal runner); T21 in corso | nessuno | medio | M + M | 50 giri verdi o causa trovata |
+| PA T20, T21 · i test instabili del client e del banco | PA | T20 integrato (baseline live-07…11 dal runner); T21 integrato (#284 in parte) | nessuno | medio | M + M | 50 giri verdi o causa trovata |
 | PA T36 · installare da cartella, e la diagnosi | PA | da fare | T34; S2 T10 | medio: un'IPC nuova che scrive nella configurazione | M | test di `fub-host`, Vitest delle Impostazioni |
 | PA T37 · collegare una cartella, il tema cambia al salvataggio | PA | da fare | T36 | medio: un osservatore nuovo | M | test di `fub-host` con l'evento, Vitest |
 | PA T38 · la pagina «Tutti i componenti» | PA | da fare | T35, T36; S2 T10 | basso | M | foto del banco uguali, bundle iniziale uguale |
@@ -4262,7 +4262,7 @@ Cosa fare:
 Casi limite: la WebView di Windows o di macOS che qui non c'è (lo si dice).
 Fatto quando: ogni issue ha la causa corretta o le corse scritte.
 Prova: scripts/check.sh --rapido; il banco WebView qui
-Stato: [ ] da fare
+Stato: [x] fatto · 6af52ae4 078148f1 831446ab · #287: il banco tiene un client X aperto (142/500 → 0/500 in prova); #293: la barra del formato non costruisce transazioni per i colori (keyToPaint p95 55–85 ms contro 124–176); #284 solo in parte (minimo a 60 s; serve una raccolta forzata da un gancio in fub-app, task a parte); #271 e #272 già risolti da #269; resta da aggiungere `-noreset` a Xvfb in `ci.yml`
 
 ## T22 · La versione, e la corsa a secco del rilascio
 
