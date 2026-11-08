@@ -2208,6 +2208,33 @@ function titled(source: string, title: string): string {
   return source.replace(root, (_, head: string, old: string | undefined) => (old === undefined ? `${head}\n  <title>${text}</title>` : `${head}${old.replace(/<title>[\s\S]*<\/title>/, () => `<title>${text}</title>`)}`));
 }
 
+/// Un tema installato che parte dalla serie (`extends`), pronto per le opzioni
+/// `themes` e `themePayloads` del finto: porta il foglio chiaro e una pelle, e
+/// la luce scura arriva con `sheet: null`, come la consegna l'host vero.
+export function extendingTheme(id = "acme.carta"): {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+} {
+  const manifest: ThemeInfo["manifest"] = {
+    id,
+    name: "Carta",
+    version: "1.0.0",
+    engine: "theme-2",
+    lights: ["light", "dark"],
+    asset_namespace: `theme://${id}/`,
+    motion: ["opacity", "transform"],
+    extends: "fub.serie",
+  };
+  const skin = ".carta { color: inherit; }";
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: ":root { --carta: #fbf7ee; }", skin, assets: {} },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets: {} },
+    },
+  };
+}
+
 /// L'id della view cestino del finto: la stessa che `fub-features` registra,
 /// perché ciò che si prova è che la shell la monti senza saperne nulla.
 export const TRASH_VIEW = "fub.trash";

@@ -270,12 +270,21 @@ export function preferenceTokens(
   return tokens;
 }
 
+/**
+ * Perché un fascio senza foglio non si monta ancora: un tema con `extends`
+ * può lasciare il foglio di una luce alla serie, ma il loader non sa ancora
+ * comporre il foglio di serie con la pelle del tema. Finché non lo sa, il
+ * tema resta fuori e la persona vede la serie, con questo motivo.
+ */
+const INHERITED_SHEET_REASON = "il foglio di questa luce viene dal tema di serie, che questa versione non sa ancora comporre";
+
 function themeBundle(payload: ThemePayload): {
   manifest: ThemeBundleManifest;
   sheet: string;
   skin?: string;
   assets: Readonly<Record<string, unknown>>;
-} {
+} | null {
+  if (payload.sheet === null) return null;
   return {
     manifest: payload.manifest,
     sheet: payload.sheet,
@@ -340,8 +349,13 @@ async function apply(): Promise<void> {
         if (payload.manifest.id !== requestedId || payload.light !== light) {
           reportLoadFailure(requestedId, "risposta del canale non coerente");
         } else {
-          mounted = mountThemeBundle(themeBundle(payload), light);
-          if (mounted.mounted) actualId = requestedId;
+          const bundle = themeBundle(payload);
+          if (bundle === null) {
+            reportLoadFailure(requestedId, INHERITED_SHEET_REASON);
+          } else {
+            mounted = mountThemeBundle(bundle, light);
+            if (mounted.mounted) actualId = requestedId;
+          }
         }
       } catch (error) {
         if (generation !== applyGeneration) return;
@@ -488,7 +502,8 @@ async function readCatalog(): Promise<ThemeInfo[]> {
                 // Un fascio che il cancello rifiuta resta installato ma fuori
                 // dal catalogo, e la persona sa perché: è anche il caso di un
                 // tema `theme-1`, scritto per la shell di prima.
-                const reasons = validateThemeBundle(themeBundle(payload), light);
+                const bundle = themeBundle(payload);
+                const reasons = bundle === null ? [INHERITED_SHEET_REASON] : validateThemeBundle(bundle, light);
                 if (reasons.length > 0) {
                   reportThemeTrouble({ type: "theme", theme: info.manifest.name, reasons });
                   return null;

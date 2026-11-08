@@ -90,6 +90,11 @@ export interface ThemeManifest {
   motion: ThemeMotion[];
   /** Assente quando il tema non ne dichiara. */
   settings?: ThemeSetting[];
+  /**
+   * Il tema da cui questo parte, da `theme-2`: oggi solo la serie
+   * (`fub.serie`). Assente quando il tema porta tutto da sé.
+   */
+  extends?: string;
 }
 
 /** Un tema installato che il backend può consegnare alla shell. */
@@ -103,7 +108,11 @@ export interface ThemeInfo {
 export interface ThemePayload {
   manifest: ThemeManifest;
   light: ThemeLight;
-  sheet: string;
+  /**
+   * `null` solo per un tema con `extends` che non porta il foglio di questa
+   * luce: vale quello di serie, della stessa luce e dello stesso contrasto.
+   */
+  sheet: string | null;
   skin: string | null;
   assets: Record<string, readonly number[]>;
 }

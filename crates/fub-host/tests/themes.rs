@@ -149,7 +149,10 @@ fn theme_inventory_and_read_are_typed_and_path_free() {
         .assets
         .contains_key("theme://test.paper/icons/ignored.svg"));
     assert_eq!(payload.light, fub_abi::theme::ThemeLight::Light);
-    assert!(payload.sheet.contains("#333"));
+    assert!(payload
+        .sheet
+        .as_deref()
+        .is_some_and(|sheet| sheet.contains("#333")));
     assert!(payload.skin.is_some());
     assert_eq!(
         payload.assets["theme://test.paper/icons/quoted.svg"],
@@ -243,6 +246,270 @@ fn a_theme_2_theme_is_installed_listed_and_read() {
             .expect("reads theme-2");
     assert_eq!(payload.manifest.engine, fub_abi::theme::ThemeEngine::Theme2);
     assert!(payload.manifest.settings.is_empty());
+}
+
+// --- extends: un tema che parte dalla serie ---------------------------------
+
+/// Un tema `theme-2` che parte dalla serie con i soli file dati: il manifest
+/// dichiara le due luci, i fogli e la pelle li sceglie chi chiama.
+fn write_extending_theme(root: &Utf8Path, id: &str, engine: &str, extends: &str, files: &[&str]) {
+    std::fs::create_dir_all(root).unwrap();
+    let manifest = format!(
+        r#"{{"id": "{id}", "name": "Eredita", "version": "1.0.0", "engine": "{engine}", "lights": ["light", "dark"], "asset_namespace": "theme://{id}/", "motion": ["opacity", "transform"], "extends": {extends}}}"#
+    );
+    std::fs::write(root.join("manifest.json"), manifest).unwrap();
+    for name in files {
+        let parent = root.join(name);
+        std::fs::create_dir_all(parent.parent().unwrap()).unwrap();
+        std::fs::write(parent, "body { color: #444; }\n").unwrap();
+    }
+}
+
+fn malformed_because(error: fub_host::theme::ThemeError, why: &str) {
+    match error {
+        fub_host::theme::ThemeError::Malformed(message) => assert!(
+            message.contains(why),
+            "the refusal says why (`{why}`): {message}"
+        ),
+        other => panic!("not a malformed manifest: {other}"),
+    }
+}
+
+/// Un manifest scritto prima di `extends` si legge e si riscrive come prima,
+/// byte per byte: il campo assente non compare sul filo.
+#[test]
+fn a_manifest_without_extends_keeps_its_bytes() {
+    let (_config_dir, config) = folders();
+    let (_dir, root) = folders();
+    write_theme(&root, "test.main", "theme-2", "");
+    let raw = r#"{"id":"test.main","name":"Prova","version":"1.0.0","engine":"theme-2","lights":["light","dark"],"asset_namespace":"theme://test.main/","motion":["opacity","transform"]}"#;
+    std::fs::write(root.join("manifest.json"), raw).unwrap();
+    fub_host::theme::install_theme(&config, &root).expect("installs");
+
+    let themes = fub_host::theme::list_themes(&config);
+    assert_eq!(themes.len(), 1);
+    assert_eq!(themes[0].manifest.extends, None);
+    assert_eq!(serde_json::to_string(&themes[0].manifest).unwrap(), raw);
+    let payload =
+        fub_host::theme::read_theme(&config, "test.main", fub_abi::theme::ThemeLight::Dark)
+            .expect("reads");
+    assert_eq!(serde_json::to_string(&payload.manifest).unwrap(), raw);
+    assert!(payload.sheet.is_some());
+}
+
+/// Senza `extends` il foglio di ogni luce offerta resta d'obbligo: un tema
+/// che ne perde uno non è nel catalogo e la sua luce non si legge.
+#[test]
+fn without_extends_every_offered_light_needs_its_sheet() {
+    let (_config_dir, config) = folders();
+    let (_dir, root) = folders();
+    write_theme(&root, "test.monco", "theme-2", "");
+    std::fs::remove_file(root.join("sheet-dark.css")).unwrap();
+    fub_host::theme::install_theme(&config, &root).expect("installs");
+
+    assert!(fub_host::theme::list_themes(&config).is_empty());
+    let error =
+        fub_host::theme::read_theme(&config, "test.monco", fub_abi::theme::ThemeLight::Dark)
+            .expect_err("the dark sheet is missing");
+    assert!(
+        error.to_string().contains("sheet-dark.css"),
+        "the refusal names the missing sheet: {error}"
+    );
+}
+
+/// Un tema che parte dalla serie e porta il solo foglio chiaro: si installa,
+/// si elenca con entrambe le luci, e la luce scura arriva senza foglio (la
+/// shell userà quello di serie).
+#[test]
+fn an_extending_theme_with_only_the_light_sheet_offers_both_lights() {
+    let (_config_dir, config) = folders();
+    let (_dir, root) = folders();
+    write_extending_theme(
+        &root,
+        "test.chiaro",
+        "theme-2",
+        r#""fub.serie""#,
+        &["sheet-light.css"],
+    );
+    fub_host::theme::install_theme(&config, &root).expect("installs");
+
+    let themes = fub_host::theme::list_themes(&config);
+    assert_eq!(themes.len(), 1);
+    assert_eq!(themes[0].manifest.extends.as_deref(), Some("fub.serie"));
+    assert_eq!(
+        themes[0].manifest.lights,
+        [
+            fub_abi::theme::ThemeLight::Light,
+            fub_abi::theme::ThemeLight::Dark
+        ]
+    );
+
+    let light =
+        fub_host::theme::read_theme(&config, "test.chiaro", fub_abi::theme::ThemeLight::Light)
+            .expect("reads the light sheet");
+    assert!(light.sheet.as_deref().is_some_and(|s| s.contains("#444")));
+    assert_eq!(light.skin, None);
+    let dark =
+        fub_host::theme::read_theme(&config, "test.chiaro", fub_abi::theme::ThemeLight::Dark)
+            .expect("the dark light comes from the series");
+    assert_eq!(dark.sheet, None);
+    assert_eq!(dark.manifest.extends.as_deref(), Some("fub.serie"));
+    let wire = serde_json::to_value(&dark).unwrap();
+    assert_eq!(wire["sheet"], serde_json::Value::Null);
+    assert_eq!(wire["manifest"]["extends"], "fub.serie");
+}
+
+/// Anche la sola pelle, o un solo asset, è «portare qualcosa».
+#[test]
+fn an_extending_theme_may_bring_only_a_skin_or_an_asset() {
+    let (_config_dir, config) = folders();
+    let (_skin_dir, skin) = folders();
+    write_extending_theme(
+        &skin,
+        "test.pelle",
+        "theme-2",
+        r#""fub.serie""#,
+        &["skin.css"],
+    );
+    fub_host::theme::install_theme(&config, &skin).expect("a skin alone installs");
+    let payload =
+        fub_host::theme::read_theme(&config, "test.pelle", fub_abi::theme::ThemeLight::Light)
+            .expect("reads");
+    assert_eq!(payload.sheet, None);
+    assert!(payload.skin.is_some());
+
+    let (_asset_dir, asset) = folders();
+    write_extending_theme(
+        &asset,
+        "test.icona",
+        "theme-2",
+        r#""fub.serie""#,
+        &["icons/foglia.svg"],
+    );
+    fub_host::theme::install_theme(&config, &asset).expect("an asset alone installs");
+
+    let ids: Vec<_> = fub_host::theme::list_themes(&config)
+        .into_iter()
+        .map(|info| info.manifest.id)
+        .collect();
+    assert_eq!(ids, ["test.icona", "test.pelle"]);
+}
+
+/// Un tema che eredita e non porta niente è la serie con un altro nome.
+#[test]
+fn an_extending_theme_that_changes_nothing_is_rejected() {
+    let (_config_dir, config) = folders();
+    let (_dir, root) = folders();
+    write_extending_theme(&root, "test.vuoto", "theme-2", r#""fub.serie""#, &[]);
+
+    let error = fub_host::theme::install_theme(&config, &root).expect_err("changes nothing");
+    malformed_because(error, "changes nothing");
+    assert!(!fub_host::config::themes_dir(&config)
+        .join("test.vuoto")
+        .exists());
+}
+
+/// L'unica base è la serie, scritta esatta: niente vuoto, niente spazi, niente
+/// altri temi.
+#[test]
+fn extends_accepts_only_the_series_id() {
+    for (case, extends) in [
+        ("empty", r#""""#),
+        ("trailing space", r#""fub.serie ""#),
+        ("another theme", r#""com.acme.carta""#),
+    ] {
+        let (_config_dir, config) = folders();
+        let (_dir, root) = folders();
+        write_extending_theme(
+            &root,
+            "test.base",
+            "theme-2",
+            extends,
+            &["sheet-light.css", "sheet-dark.css"],
+        );
+        let error =
+            fub_host::theme::install_theme(&config, &root).expect_err(&format!("{case}: refused"));
+        malformed_because(error, "`extends` must be `fub.serie`");
+        assert!(
+            !fub_host::config::themes_dir(&config)
+                .join("test.base")
+                .exists(),
+            "{case}: nothing installed"
+        );
+    }
+
+    let (_config_dir, config) = folders();
+    let (_dir, root) = folders();
+    write_extending_theme(&root, "test.base", "theme-2", "42", &["skin.css"]);
+    let error = fub_host::theme::install_theme(&config, &root).expect_err("not a string");
+    assert!(matches!(error, fub_host::theme::ThemeError::Malformed(_)));
+}
+
+/// `theme-1` è congelato e non impara a ereditare.
+#[test]
+fn extends_needs_theme_2() {
+    let (_config_dir, config) = folders();
+    let (_dir, root) = folders();
+    write_extending_theme(
+        &root,
+        "test.vecchio",
+        "theme-1",
+        r#""fub.serie""#,
+        &["sheet-light.css", "sheet-dark.css", "skin.css"],
+    );
+    let error = fub_host::theme::install_theme(&config, &root).expect_err("theme-1 cannot inherit");
+    malformed_because(error, "`extends` needs `theme-2`");
+}
+
+/// Il catalogo firmato passa dalla stessa porta: una voce che eredita si
+/// installa, e il puntatore che l'host scrive accanto non conta come «portare
+/// qualcosa».
+#[test]
+fn a_signed_catalog_entry_that_extends_installs_like_the_others() {
+    let (_config_dir, config) = folders();
+    let (_dir, root) = folders();
+    write_extending_theme(
+        &root,
+        "test.firmato",
+        "theme-2",
+        r#""fub.serie""#,
+        &["sheet-dark.css"],
+    );
+    let digest = fub_host::theme::theme_tree_digest(&root).expect("digest");
+    fub_host::theme::install_theme_checked(
+        &config,
+        &root,
+        "test.firmato",
+        "1.0.0",
+        &digest,
+        serde_json::json!({ "generation": "1" }),
+    )
+    .expect("the signed entry installs");
+
+    let themes = fub_host::theme::list_themes(&config);
+    assert_eq!(themes.len(), 1);
+    let light =
+        fub_host::theme::read_theme(&config, "test.firmato", fub_abi::theme::ThemeLight::Light)
+            .expect("the light sheet comes from the series");
+    assert_eq!(light.sheet, None);
+    let dark =
+        fub_host::theme::read_theme(&config, "test.firmato", fub_abi::theme::ThemeLight::Dark)
+            .expect("reads the dark sheet");
+    assert!(dark.sheet.is_some());
+
+    let (_empty_dir, empty) = folders();
+    write_extending_theme(&empty, "test.nulla", "theme-2", r#""fub.serie""#, &[]);
+    let digest = fub_host::theme::theme_tree_digest(&empty).expect("digest");
+    let error = fub_host::theme::install_theme_checked(
+        &config,
+        &empty,
+        "test.nulla",
+        "1.0.0",
+        &digest,
+        serde_json::json!({ "generation": "1" }),
+    )
+    .expect_err("an empty signed entry is refused too");
+    malformed_because(error, "changes nothing");
 }
 
 /// Le impostazioni di un tema non hanno una porta loro: montato il tema sono

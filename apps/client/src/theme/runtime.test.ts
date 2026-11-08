@@ -183,6 +183,22 @@ describe("tema runtime installato", () => {
     expect(reasons.some((reason) => reason.includes("engine") && reason.includes("theme-2"))).toBe(true);
   });
 
+  // Un tema che lascia il foglio alla serie (`sheet: null`) non si monta
+  // finché il loader non sa comporre la serie con la sua pelle: la shell resta
+  // sulla serie e dice perché, invece di montare un fascio senza foglio.
+  it("un tema con extends senza il foglio della luce resta fuori, e la serie resta", async () => {
+    const extending: ThemeManifest = { ...manifest, extends: "fub.serie" };
+    box.listThemes.mockResolvedValue([{ manifest: extending, trust: "community" }]);
+    box.readTheme.mockResolvedValue({ ...payload, manifest: extending, sheet: null });
+    await mountFromCache(info.manifest.id);
+    await vi.waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("fub.appearance.theme")!).id).toBe("fub.serie"),
+    );
+    expect(document.querySelector('style[data-fub="foglio"]')?.textContent).toBe(sheetLight);
+    const reasons = box.report.mock.calls.flatMap(([trouble]) => (trouble as { reasons: string[] }).reasons);
+    expect(reasons.some((reason) => reason.includes("tema di serie"))).toBe(true);
+  });
+
   it("does not reactivate a removed theme after a restart", async () => {
     box.listThemes.mockResolvedValue([info]);
     box.readTheme.mockResolvedValue(payload);
