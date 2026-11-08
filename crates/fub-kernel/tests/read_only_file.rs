@@ -159,16 +159,27 @@ fn il_supporto_ambientale_rifiuta_il_file_in_sola_lettura() {
 /// file è in sola lettura» e non riprovare a ogni battuta.
 #[test]
 fn il_rifiuto_arriva_al_contratto_come_permesso_negato() {
-    let error = fub_kernel::KernelError::Io {
-        path: "Nota.md".into(),
-        source: io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "il file è in sola lettura: Nota.md",
-        ),
-    };
-    let plugin: PluginError = error.into();
+    let mut dir = Dir::new();
+    let storage = RootedFsStorage::open(&dir.root).expect("opens the root");
+    let locked = dir.file("Nota.md", b"prima\n");
+    dir.lock(&locked);
+    let source = storage.write(&locked, b"dopo\n").expect_err("refused");
+    let plugin: PluginError = fub_kernel::KernelError::Io {
+        path: locked.clone(),
+        source,
+    }
+    .into();
     assert!(
-        matches!(&plugin, PluginError::PermissionDenied(text) if text.to_string().contains("sola lettura")),
+        matches!(&plugin, PluginError::PermissionDenied(text)
+            if text.to_string() == format!("il file è in sola lettura: {locked}")),
         "{plugin:?}"
     );
+
+    // Gli altri permessi negati del sistema restano `Io`.
+    let other: PluginError = fub_kernel::KernelError::Io {
+        path: "Cartella".into(),
+        source: io::Error::from(io::ErrorKind::PermissionDenied),
+    }
+    .into();
+    assert!(matches!(other, PluginError::Io(_)), "{other:?}");
 }

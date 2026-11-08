@@ -261,18 +261,17 @@ impl From<KernelError> for PluginError {
                 ref path,
                 ref source,
             } if source.is_missing() => PluginError::NotFound(path.to_string().into()),
-            // Un permesso negato dal supporto — un file in sola lettura che la
-            // scrittura rifiuta (PA T59), una cartella in cui non si può
-            // creare — è «c'è, ma non puoi», non un guasto da riprovare: chi
-            // riprova a ogni battuta riceverebbe sempre la stessa risposta.
-            and @ KernelError::Io { .. }
-                if matches!(
-                    &and,
-                    KernelError::Io { source, .. }
-                        if source.kind() == std::io::ErrorKind::PermissionDenied
-                ) =>
+            // Il file in sola lettura che la scrittura rifiuta (PA T59) è «c'è,
+            // ma non puoi», non un guasto da riprovare. Si riconosce dal tipo
+            // che lo storage ci mette dentro, non dalla specie I/O: gli altri
+            // permessi negati del sistema (una cartella che non si elenca
+            // all'apertura) restano `Io`, come prima.
+            KernelError::Io { ref source, .. }
+                if source
+                    .get_ref()
+                    .is_some_and(|inner| inner.is::<crate::storage::ReadOnlyFile>()) =>
             {
-                PluginError::PermissionDenied(and.to_string().into())
+                PluginError::PermissionDenied(source.to_string().into())
             }
             and @ (KernelError::Io { .. }
             | KernelError::NonUtf8Path(_)
