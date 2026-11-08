@@ -276,9 +276,8 @@ TypeScript interni e iniettati dal chiamante; non attraversano IPC, WIT o ABI.
 ### Markdown: Source, Live e Reading
 
 Source, Live e Reading sono tre viste sullo stesso `TextEngine` e buffer della
-`DocumentSession`: il cambio modo riusa la vista di scrittura; Reading ridisegna
-dal buffer corrente, senza salvataggio imposto, e in conflitto mostra il testo
-non salvato, che la fascia del conflitto (`drawConflict`) dice in una riga.
+`DocumentSession`. Il cambio modo riusa la vista di scrittura; Reading ridisegna
+dal buffer senza salvare, e in conflitto la fascia (`drawConflict`) lo dice.
 
 I blocchi Live inattivi e Reading condividono lo stesso renderer locale in
 `apps/client/src/editors/text/profiles/markdown/render*.ts` e lo stesso
