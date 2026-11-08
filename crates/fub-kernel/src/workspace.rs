@@ -64,7 +64,7 @@ pub use removal::{
 };
 mod reads_in_flight;
 use reads_in_flight::ReadInFlight;
-pub use reads_in_flight::ReadsInFlight;
+pub use reads_in_flight::{Barred, ReadsInFlight};
 mod restore;
 pub use restore::{CompletedDocumentRestore, PendingDocumentRestore, PreparedDocumentRestore};
 
@@ -2242,6 +2242,16 @@ pub struct PermissionInitialization(crate::settings::MachineSettingRevision);
 ///
 /// Una frase sola per i quattro posti che lo controllano: la pila condivisa
 /// (sincrona, staccata, rebuild) e la catena di una lettura col suo frame.
+/// Il rifiuto di una lettura fermata: dal suo inizio, se chi smonta il
+/// proprietario l'ha sbarrata, o dalla sua fine, se il vault si è chiuso o il
+/// suo plugin si è spento mentre leggeva.
+fn read_stopped(command: &str) -> PluginError {
+    PluginError::Cancelled(
+        format!("il comando `{command}` è stato fermato: il vault si è chiuso o il suo plugin si sta spegnendo")
+            .into(),
+    )
+}
+
 fn self_invocation(stack: &[String], command: &str) -> PluginError {
     let mut round = stack.to_vec();
     round.push(command.to_string());
@@ -2351,6 +2361,9 @@ pub struct PreparedReadOnlyCommand {
     /// lettura della chiusura stessa (un `deactivate` o un handler di
     /// `VaultClosed` che invoca un comando), e la chiusura non la invalida.
     closed_at_prepare: bool,
+    /// La bandiera **propria** della lettura: alzata da uno smontaggio o dalla
+    /// chiusura, l'esito non si applica.
+    cancel: Arc<AtomicBool>,
     /// L'iscrizione fra le letture in volo, che cade col token. `None` per una
     /// lettura della chiusura stessa: la chiusura che l'ha lanciata non la
     /// deve aspettare.
@@ -11639,9 +11652,15 @@ impl Workspace {
     /// lei e non sulla pila condivisa, che appartiene a chi tiene il turno.
     ///
     /// La lettura si iscrive fra quelle in volo ([`reads_in_flight`]) finché
-    /// il token vive, con `cancel`: la bandiera dell'host che la serve, che la
-    /// chiusura alza per fermarla. Finché è in volo, lo smontaggio del suo
-    /// proprietario risponde `Busy`.
+    /// il token vive, con `cancel`: la bandiera **sua**, che l'host che la
+    /// serve guarda insieme a quelle di chi la contiene (`outer_stops`, la
+    /// bandiera del job e delle letture fuori). Lo smontaggio del proprietario
+    /// alza solo `cancel`: il job che l'ha chiamata riceve un `Cancelled` da
+    /// `invoke_command` e decide lui. La chiusura del vault alza anche
+    /// `outer_stops`, perché lì si ferma tutto. Finché la lettura è in volo,
+    /// lo smontaggio del suo proprietario risponde `Busy`; mentre chi smonta
+    /// il proprietario ne tiene la sbarra ([`ReadsInFlight::bar`]), una nuova
+    /// lettura è rifiutata con `Cancelled`.
     ///
     /// [`reads_in_flight`]: Self::reads_in_flight
     ///
@@ -11660,6 +11679,7 @@ impl Workspace {
         mode: InvokeMode,
         outer: &[String],
         cancel: &Arc<AtomicBool>,
+        outer_stops: &[Arc<AtomicBool>],
     ) -> std::result::Result<Option<PreparedReadOnlyCommand>, PluginError> {
         let at = self.command_owner(command)?;
         let entry = &self.providers.commands[at];
@@ -11679,6 +11699,18 @@ impl Workspace {
         if outer.iter().any(|c| c == command) {
             return Err(self_invocation(outer, command));
         }
+        // Alla chiusura la lettura non si iscrive: chi si spegne può ancora
+        // invocare i comandi di chi resta, e la chiusura non aspetta le
+        // letture lanciate da sé. Altrimenti l'iscrizione è rifiutata se chi
+        // smonta il proprietario ne ha sbarrato le nuove letture.
+        let in_flight = if self.closed {
+            None
+        } else {
+            let entered =
+                self.reads_in_flight
+                    .enter(&entry.id, Arc::clone(cancel), outer_stops.to_vec());
+            Some(entered.ok_or_else(|| read_stopped(command))?)
+        };
         let why = if mode.is_dry_run() {
             "una simulazione non scrive"
         } else {
@@ -11696,8 +11728,8 @@ impl Workspace {
             chain,
             workspace_id: self.workspace_id,
             closed_at_prepare: self.closed,
-            _in_flight: (!self.closed)
-                .then(|| self.reads_in_flight.enter(&entry.id, Arc::clone(cancel))),
+            cancel: Arc::clone(cancel),
+            _in_flight: in_flight,
         }))
     }
 
@@ -11706,8 +11738,10 @@ impl Workspace {
     /// undo (una lettura non ha niente da annullare, anche se il provider ne
     /// dichiara uno), niente batch, niente eventi.
     ///
-    /// Se il vault si è chiuso dopo la preparazione l'esito non si applica: la
-    /// chiamata risponde con [`PluginError::Cancelled`]. Una lettura preparata
+    /// Se il vault si è chiuso dopo la preparazione, o la lettura è stata
+    /// fermata (la sua bandiera, alzata da uno smontaggio), l'esito non si
+    /// applica: la chiamata risponde con [`PluginError::Cancelled`], anche se
+    /// il provider ha ingoiato il rifiuto dell'host. Una lettura preparata
     /// quando la chiusura era già cominciata (chi si spegne può ancora
     /// invocare comandi, come sul percorso condiviso) finisce normalmente.
     pub fn finish_read_only_provider_command(
@@ -11716,14 +11750,9 @@ impl Workspace {
         outcome: std::result::Result<CommandOutcome, PluginError>,
     ) -> std::result::Result<CommandOutcome, PluginError> {
         let closed_meanwhile = self.closed && !prepared.closed_at_prepare;
-        if prepared.workspace_id != self.workspace_id || closed_meanwhile {
-            return Err(PluginError::Cancelled(
-                format!(
-                    "il vault si è chiuso mentre il comando `{}` leggeva",
-                    prepared.command
-                )
-                .into(),
-            ));
+        let stopped = prepared.cancel.load(Ordering::Relaxed);
+        if prepared.workspace_id != self.workspace_id || closed_meanwhile || stopped {
+            return Err(read_stopped(&prepared.command));
         }
         let outcome = outcome.and_then(|outcome| {
             self.guard_command_intent(&prepared.owner, &outcome)
