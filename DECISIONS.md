@@ -61,6 +61,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · fub-pre-alpha (orchestratore) · nuovo task PA T60: tutte
+  le prove che aspettano libero il lucchetto del workspace lo chiedono con
+  una scadenza, come quelle corrette da PA T19; quelle che lo aspettano
+  preso restano a un colpo solo · due prove dello stesso schema sono cadute
+  dopo T19 (in locale e su macOS nella CI della consegna 1), e la
+  pre-alpha chiede la CI completa verde sul commit del tag.
+
 - 2026-11-08 · fub-pre-alpha · dove le persone leggono, «FubDraw» diventa
   «Fub» o «il disegno» (frasi della shell, dei disegni, dei descrittori dei
   formati e degli errori che arrivano alla shell, in italiano e in inglese);
