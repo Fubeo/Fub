@@ -72,7 +72,15 @@ scrive lo stato su `<html>`:
 - `data-mobile-orientation`, `landscape` o `portrait`.
 
 `shells/mobile/mobile.css` dà a `#app` i margini delle aree sicure e della
-tastiera, e porta a 44 px il bersaglio minimo di bottoni e caselle.
+tastiera, e porta a 44 px il bersaglio minimo di bottoni e caselle senza
+deformarli: l'interruttore (`input[role="switch"]`) resta il binario di
+32 × 18 della pelle e prende il tocco di 44 px da un `::after` trasparente
+(in colori forzati torna nativo, 16 × 16); le schede delle impostazioni non si
+stringono e la loro fila scorre di lato coi nomi interi; fra due righe di un
+elenco dichiarato (il cestino, le versioni) restano 8 px, perché i bottoni da
+44 px non si tocchino; il bottone della modalità che galleggia sulla carta ha
+l'anello del fuoco dentro di sé. Le scene `mobile-settings`, `mobile-trash` e
+`mobile-document` lo controllano: se una misura cade, la scena non si prepara.
 
 `shells/scrittoio/mobile/compose.ts` fa ciò che `shells/scrittoio/bootstrap.ts`
 fa sul desktop, senza le sue dichiarazioni: moto, conferma, comandi,
