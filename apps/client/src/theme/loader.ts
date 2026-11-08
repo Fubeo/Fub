@@ -55,6 +55,7 @@ import { mountMirroredOptions, mountedThemeOptions, type MirroredOptions } from 
 import type { ContrastPair } from "./contrast-fixture";
 import { THEME_2_PROFILE } from "./scrittoio/profile";
 import { t } from "../i18n/strings";
+import { THEME_FONT_LIMITS, themeFontFault, type ThemeFontFault } from "../rules/mirrored";
 
 export type Layer =
   | "caratteri"
@@ -235,51 +236,18 @@ function replaceTheme(
   for (const element of previous) element.remove();
 }
 
-/**
- * Le famiglie dei caratteri di serie (`scrittoio/fonts.css`, canale
- * `caratteri`). Un tema non le ridichiara: la sua regola si mescolerebbe a
- * quella di serie. L'host le rifiuta già all'installazione; qui il cancello lo
- * ripete, perché il fascio resta una forma non fidata.
- */
-export const SERIES_FONT_FAMILIES: readonly string[] = [
-  "Newsreader Variable",
-  "Hanken Grotesk Variable",
-  "IBM Plex Mono",
-  "Inter Variable",
-  "Literata Variable",
-  "JetBrains Mono Variable",
-];
-
-/** Le parole chiave che in `font-family` non sono una famiglia. */
-const RESERVED_FONT_FAMILIES: ReadonlySet<string> = new Set([
-  "serif",
-  "sans-serif",
-  "monospace",
-  "cursive",
-  "fantasy",
-  "system-ui",
-  "ui-serif",
-  "ui-sans-serif",
-  "ui-monospace",
-  "ui-rounded",
-  "math",
-  "emoji",
-  "fangsong",
-  "inherit",
-  "initial",
-  "unset",
-  "revert",
-  "revert-layer",
-  "default",
-]);
-
-/** Gli stessi limiti dell'host (`fub_abi::theme`). */
-export const MAX_THEME_FONTS = 8;
-export const MAX_THEME_FONT_BYTES = 2 * 1024 * 1024;
-export const MAX_THEME_FONT_TOTAL_BYTES = 6 * 1024 * 1024;
-const FONT_FAMILY = /^[A-Za-z0-9-]+(?: [A-Za-z0-9-]+)*$/;
-const FONT_FILE = /^fonts\/[A-Za-z0-9_-]{1,64}\.woff2$/;
+/** La firma con cui comincia ogni file WOFF2: un controllo sui byte, locale. */
 const WOFF2_SIGNATURE = [0x77, 0x4f, 0x46, 0x32];
+
+/** La frase del cancello per un guasto della regola dei caratteri. */
+const FONT_FAULT_REASON: Readonly<Record<ThemeFontFault, string>> = {
+  family: `la famiglia vuole lettere e cifre ASCII, - e spazi singoli, al massimo ${THEME_FONT_LIMITS.family_chars}`,
+  series_family: "è una famiglia di serie",
+  reserved_family: "è una parola chiave del CSS, non una famiglia",
+  file: "il file non è fonts/<nome>.woff2 fra gli asset",
+  weight: `il peso dev'essere un intero fra ${THEME_FONT_LIMITS.weights[0]} e ${THEME_FONT_LIMITS.weights[1]}`,
+  style: "lo stile dev'essere normal o italic",
+};
 
 /** Una voce di `fonts` come arriva dal fascio: ogni campo va controllato. */
 interface UntrustedFont {
@@ -295,46 +263,36 @@ function declaredFonts(manifest: ThemeBundleManifest): readonly UntrustedFont[] 
   return Array.isArray(fonts) ? fonts as UntrustedFont[] : null;
 }
 
-/** Tutti i motivi per cui i caratteri del fascio non si possono montare. */
+/**
+ * Tutti i motivi per cui i caratteri del fascio non si possono montare. La
+ * forma di ogni voce la decide la regola rispecchiata (`themeFontFault`, la
+ * stessa dell'host per fixture); qui restano la faccia ripetuta e i byte.
+ */
 function fontReasons(
   manifest: ThemeBundleManifest,
   assets: Readonly<Record<string, unknown>>,
 ): string[] {
   const fonts = declaredFonts(manifest);
   if (fonts === null) return ["caratteri: l'elenco non è una lista"];
+  const limits = THEME_FONT_LIMITS;
   const reasons: string[] = [];
-  if (fonts.length > MAX_THEME_FONTS) {
-    reasons.push(`caratteri: ${fonts.length} dichiarati, al massimo ${MAX_THEME_FONTS}`);
+  if (fonts.length > limits.fonts) {
+    reasons.push(`caratteri: ${fonts.length} dichiarati, al massimo ${limits.fonts}`);
   }
-  const series = new Set(SERIES_FONT_FAMILIES.map((family) => family.toLowerCase()));
   const faces = new Set<string>();
   const sizes = new Map<string, number>();
   for (const font of fonts) {
     const family = typeof font?.family === "string" ? font.family : "";
     const where = `caratteri: ${family || "<senza famiglia>"}`;
-    if (family.length > 64 || !FONT_FAMILY.test(family)) {
-      reasons.push(`${where}: la famiglia vuole lettere, cifre, - e spazi singoli, al massimo 64`);
-    } else if (series.has(family.toLowerCase())) {
-      reasons.push(`${where}: è una famiglia di serie`);
-    } else if (RESERVED_FONT_FAMILIES.has(family.toLowerCase())) {
-      reasons.push(`${where}: è una parola chiave del CSS, non una famiglia`);
-    }
-    const weight = font?.weight;
-    if (typeof weight !== "number" || !Number.isInteger(weight) || weight < 100 || weight > 900) {
-      reasons.push(`${where}: il peso dev'essere un intero fra 100 e 900`);
-    }
-    const style = font?.style;
-    if (style !== "normal" && style !== "italic") {
-      reasons.push(`${where}: lo stile dev'essere normal o italic`);
-    }
-    const face = `${family.toLowerCase()}|${String(weight)}|${String(style)}`;
-    if (faces.has(face)) reasons.push(`${where}: la stessa faccia è dichiarata due volte`);
-    faces.add(face);
-    const file = typeof font?.file === "string" ? font.file : "";
-    if (!FONT_FILE.test(file)) {
-      reasons.push(`${where}: il file ${file || "<vuoto>"} non è fonts/<nome>.woff2 fra gli asset`);
+    const fault = themeFontFault(font?.family, font?.file, font?.weight, font?.style);
+    if (fault !== null) {
+      reasons.push(`${where}: ${FONT_FAULT_REASON[fault]}`);
       continue;
     }
+    const face = `${family.toLowerCase()}|${String(font.weight)}|${String(font.style)}`;
+    if (faces.has(face)) reasons.push(`${where}: la stessa faccia è dichiarata due volte`);
+    faces.add(face);
+    const file = String(font.file);
     const asset = `${manifest.asset_namespace}${file}`;
     const bytes = Object.prototype.hasOwnProperty.call(assets, asset) ? bytesOf(assets[asset]) : null;
     if (bytes === null) {
@@ -344,14 +302,14 @@ function fontReasons(
     if (!WOFF2_SIGNATURE.every((byte, index) => bytes[index] === byte)) {
       reasons.push(`${where}: il file ${file} non è WOFF2`);
     }
-    if (bytes.length > MAX_THEME_FONT_BYTES) {
-      reasons.push(`${where}: il file ${file} supera ${MAX_THEME_FONT_BYTES} byte`);
+    if (bytes.length > limits.font_bytes) {
+      reasons.push(`${where}: il file ${file} supera ${limits.font_bytes} byte`);
     }
     sizes.set(file, bytes.length);
   }
   const total = [...sizes.values()].reduce((sum, size) => sum + size, 0);
-  if (total > MAX_THEME_FONT_TOTAL_BYTES) {
-    reasons.push(`caratteri: insieme superano ${MAX_THEME_FONT_TOTAL_BYTES} byte`);
+  if (total > limits.font_total_bytes) {
+    reasons.push(`caratteri: insieme superano ${limits.font_total_bytes} byte`);
   }
   return reasons;
 }

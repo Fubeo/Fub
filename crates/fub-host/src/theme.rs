@@ -87,10 +87,14 @@
 //! niente).
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fub_abi::rules::theme_font::{
+    theme_font_fault, ThemeFontFault, MAX_THEME_FONT_FILE_NAME, THEME_FONT_WEIGHTS,
+};
 use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::theme::{
-    ThemeEngine, ThemeLight, ThemeManifest, ThemeSetting, MAX_THEME_FONTS, MAX_THEME_FONT_BYTES,
-    MAX_THEME_FONT_FAMILY, MAX_THEME_FONT_TOTAL_BYTES, MAX_THEME_SETTINGS, THEME_ENGINE,
+    ThemeEngine, ThemeFontStyle, ThemeLight, ThemeManifest, ThemeSetting, MAX_THEME_FONTS,
+    MAX_THEME_FONT_BYTES, MAX_THEME_FONT_FAMILY, MAX_THEME_FONT_TOTAL_BYTES, MAX_THEME_SETTINGS,
+    THEME_ENGINE,
 };
 use fub_abi::traits::{Plugin, PluginManifest};
 use fub_abi::{PluginError, Text};
@@ -125,46 +129,6 @@ pub const MAX_THEME_CSS_BYTES: u64 = 4 * 1024 * 1024;
 pub const MAX_THEME_SETTING_NAME: usize = 48;
 /// Quante opzioni può offrire una scelta di un tema.
 pub const MAX_THEME_SETTING_OPTIONS: usize = 16;
-/// Quanto può essere lungo il `<nome>` di `fonts/<nome>.woff2`.
-pub const MAX_THEME_FONT_FILE_NAME: usize = 64;
-
-/// Le famiglie dei caratteri di serie (`apps/client/src/theme/scrittoio/fonts.css`,
-/// canale `caratteri`). Un tema non può dichiarare una famiglia con uno di
-/// questi nomi: la sua regola `@font-face` si mescolerebbe a quella di serie, e
-/// ciò che la persona vede dipenderebbe da quale delle due il motore sceglie.
-/// Un test tiene l'elenco allineato al foglio.
-pub const SERIES_FONT_FAMILIES: &[&str] = &[
-    "Newsreader Variable",
-    "Hanken Grotesk Variable",
-    "IBM Plex Mono",
-    "Inter Variable",
-    "Literata Variable",
-    "JetBrains Mono Variable",
-];
-
-/// I nomi che in `font-family` non sono una famiglia ma una parola chiave del
-/// CSS: famiglie generiche e valori globali. Una famiglia del tema non li usa.
-const RESERVED_FONT_FAMILIES: &[&str] = &[
-    "serif",
-    "sans-serif",
-    "monospace",
-    "cursive",
-    "fantasy",
-    "system-ui",
-    "ui-serif",
-    "ui-sans-serif",
-    "ui-monospace",
-    "ui-rounded",
-    "math",
-    "emoji",
-    "fangsong",
-    "inherit",
-    "initial",
-    "unset",
-    "revert",
-    "revert-layer",
-    "default",
-];
 
 /// La firma con cui comincia ogni file WOFF2.
 const WOFF2_SIGNATURE: &[u8; 4] = b"wOF2";
@@ -566,7 +530,8 @@ fn check_extends(manifest: &ThemeManifest) -> Result<(), ThemeError> {
 }
 
 /// I caratteri del manifest reggono? Si decide sulla sola forma, prima di
-/// toccare il disco: motore, quanti sono, la famiglia, il file, il peso e che
+/// toccare il disco: motore, quanti sono, ogni voce secondo la regola del
+/// contratto ([`theme_font_fault`], la stessa che la shell rispecchia), e che
 /// la stessa faccia non sia dichiarata due volte. I file li guarda
 /// [`check_font_files`].
 fn check_fonts(manifest: &ThemeManifest) -> Result<(), ThemeError> {
@@ -589,48 +554,58 @@ fn check_fonts(manifest: &ThemeManifest) -> Result<(), ThemeError> {
     let mut faces = std::collections::BTreeSet::new();
     for font in &manifest.fonts {
         let family = font.family.as_str();
-        if !is_font_family(family) {
-            return Err(bad(format!(
-                "font family `{family}` must be 1 to {MAX_THEME_FONT_FAMILY} characters \
-                 of letters, digits, `-` and single spaces between words"
+        let style = match font.style {
+            ThemeFontStyle::Normal => "normal",
+            ThemeFontStyle::Italic => "italic",
+        };
+        if let Some(fault) = theme_font_fault(family, &font.file, f64::from(font.weight), style) {
+            return Err(bad(font_fault_message(
+                fault,
+                family,
+                &font.file,
+                font.weight,
             )));
         }
-        let folded = family.to_ascii_lowercase();
-        if SERIES_FONT_FAMILIES
-            .iter()
-            .any(|series| series.to_ascii_lowercase() == folded)
-        {
+        // La famiglia ha già l'alfabeto ASCII della regola, e il motore
+        // confronta i nomi di `font-family` senza maiuscole: `Carta` e `carta`
+        // sono la stessa faccia.
+        if !faces.insert((family.to_ascii_lowercase(), font.weight, font.style)) {
             return Err(bad(format!(
-                "font family `{family}` is a series family: a theme names its own"
-            )));
-        }
-        if RESERVED_FONT_FAMILIES.contains(&folded.as_str()) {
-            return Err(bad(format!(
-                "font family `{family}` is a CSS keyword, not a family name"
-            )));
-        }
-        if !is_font_file(&font.file) {
-            return Err(bad(format!(
-                "font file `{}` is not a theme asset: it must be `fonts/<name>.woff2`, \
-                 with a name of 1 to {MAX_THEME_FONT_FILE_NAME} characters of \
-                 a-z, A-Z, 0-9, `-` or `_`",
-                font.file
-            )));
-        }
-        if !(100..=900).contains(&font.weight) {
-            return Err(bad(format!(
-                "font `{family}` declares weight {}, which is not between 100 and 900",
+                "font `{family}` declares weight {} and style {style} twice",
                 font.weight
-            )));
-        }
-        if !faces.insert((folded, font.weight, font.style)) {
-            return Err(bad(format!(
-                "font `{family}` declares weight {} and style {:?} twice",
-                font.weight, font.style
             )));
         }
     }
     Ok(())
+}
+
+/// La frase per l'autore di un guasto della regola dei caratteri.
+fn font_fault_message(fault: ThemeFontFault, family: &str, file: &str, weight: u16) -> String {
+    let (lightest, heaviest) = THEME_FONT_WEIGHTS;
+    match fault {
+        ThemeFontFault::Family => format!(
+            "font family `{family}` must be 1 to {MAX_THEME_FONT_FAMILY} characters \
+             of letters, digits, `-` and single spaces between words"
+        ),
+        ThemeFontFault::SeriesFamily => {
+            format!("font family `{family}` is a series family: a theme names its own")
+        }
+        ThemeFontFault::ReservedFamily => {
+            format!("font family `{family}` is a CSS keyword, not a family name")
+        }
+        ThemeFontFault::File => format!(
+            "font file `{file}` is not a theme asset: it must be `fonts/<name>.woff2`, \
+             with a name of 1 to {MAX_THEME_FONT_FILE_NAME} characters of \
+             a-z, A-Z, 0-9, `-` or `_`"
+        ),
+        ThemeFontFault::Weight => format!(
+            "font `{family}` declares weight {weight}, which is not between \
+             {lightest} and {heaviest}"
+        ),
+        // Lo stile arriva già tipato da serde: un valore sconosciuto non
+        // diventa mai un `ThemeFont`.
+        ThemeFontFault::Style => format!("font `{family}` declares an unknown style"),
+    }
 }
 
 /// I file dei caratteri ci sono, sono WOFF2 e stanno nei limiti? Un file
@@ -679,34 +654,6 @@ fn check_font_files(root: &Utf8Path, manifest: &ThemeManifest) -> Result<(), The
         }
     }
     Ok(())
-}
-
-/// Una famiglia che la shell può scrivere fra virgolette senza fughe: lettere
-/// e cifre ASCII, `-` e spazi singoli fra le parole.
-fn is_font_family(family: &str) -> bool {
-    !family.is_empty()
-        && family.len() <= MAX_THEME_FONT_FAMILY
-        && !family.starts_with(' ')
-        && !family.ends_with(' ')
-        && !family.contains("  ")
-        && family
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == ' ' || c == '-')
-}
-
-/// `fonts/<nome>.woff2`, con un nome che non esce dalla cartella.
-fn is_font_file(file: &str) -> bool {
-    let Some(name) = file
-        .strip_prefix("fonts/")
-        .and_then(|rest| rest.strip_suffix(".woff2"))
-    else {
-        return false;
-    };
-    !name.is_empty()
-        && name.len() <= MAX_THEME_FONT_FILE_NAME
-        && name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 /// Un nome che può stare in un attributo della radice senza essere citato.
