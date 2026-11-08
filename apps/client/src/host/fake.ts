@@ -2235,6 +2235,48 @@ export function extendingTheme(id = "acme.carta"): {
   };
 }
 
+/// I byte di un WOFF2 finto: la firma `wOF2` e qualche byte dopo. Il finto non
+/// disegna caratteri: conta che la forma arrivi come la consegna l'host vero.
+export function fakeWoff2(size = 12): number[] {
+  return [0x77, 0x4f, 0x46, 0x32, ...Array.from({ length: Math.max(0, size - 4) }, (_, i) => i & 0xff)];
+}
+
+/// Un tema che parte dalla serie e porta due caratteri (`fonts`): il manifest
+/// li dichiara, il fascio porta i file fra gli asset anche se nessun CSS li
+/// nomina, e la pelle usa la famiglia per nome. Come per `extendingTheme`, la
+/// luce scura arriva con `sheet: null`.
+export function fontTheme(id = "acme.caratteri"): {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+} {
+  const manifest: ThemeInfo["manifest"] = {
+    id,
+    name: "Caratteri",
+    version: "1.0.0",
+    engine: "theme-2",
+    lights: ["light", "dark"],
+    asset_namespace: `theme://${id}/`,
+    motion: ["opacity", "transform"],
+    extends: "fub.serie",
+    fonts: [
+      { family: "Carta Serif", file: "fonts/carta.woff2", weight: 400, style: "normal" },
+      { family: "Carta Serif", file: "fonts/carta-italic.woff2", weight: 400, style: "italic" },
+    ],
+  };
+  const skin = '.shell-tooltip { font-family: "Carta Serif", var(--font-ui); }';
+  const assets = {
+    [`theme://${id}/fonts/carta.woff2`]: fakeWoff2(12),
+    [`theme://${id}/fonts/carta-italic.woff2`]: fakeWoff2(9),
+  };
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets },
+    },
+  };
+}
+
 /// L'id della view cestino del finto: la stessa che `fub-features` registra,
 /// perché ciò che si prova è che la shell la monti senza saperne nulla.
 export const TRASH_VIEW = "fub.trash";

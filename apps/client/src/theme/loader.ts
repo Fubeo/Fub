@@ -16,8 +16,14 @@
 //
 // Un tema che eredita dalla serie (`extends`, ADR 0240) non sostituisce la
 // pelle di serie: la lascia in `pelle` e mette la sua in un canale proprio,
-// `pelle-tema`, subito dopo. Il posto `caratteri-tema` aspetta i caratteri di
-// un tema allo stesso modo.
+// `pelle-tema`, subito dopo.
+//
+// I caratteri di un tema (`fonts` nel manifest) vanno in `caratteri-tema`,
+// subito dopo quelli di serie. Il CSS di un tema non può scrivere
+// `@font-face` (un `src:` scritto a mano potrebbe chiamare la rete): le regole
+// le scrive questo file, coi valori del manifest e l'URL `data:` del file, e la
+// pelle usa la famiglia per nome. Si sostituiscono nello stesso giro del
+// foglio e delle pelli, e un tema che non ne porta svuota il canale.
 //
 // **L'ordine è dichiarato, non una conseguenza di quando si monta.** Finché i
 // canali erano due, appendere in coda bastava — l'ordine di montaggio era
@@ -174,7 +180,7 @@ function replace(text: string, layer: Layer): void {
   else head.append(el);
 }
 
-function style(text: string, layer: "foglio" | "pelle" | "pelle-tema"): HTMLStyleElement {
+function style(text: string, layer: (typeof THEME_LAYERS)[number]): HTMLStyleElement {
   const element = document.createElement("style");
   element.dataset.fub = layer;
   element.textContent = text;
@@ -182,35 +188,199 @@ function style(text: string, layer: "foglio" | "pelle" | "pelle-tema"): HTMLStyl
 }
 
 /** I canali che un fascio di tema possiede: si sostituiscono tutti insieme. */
-const THEME_LAYERS = ["foglio", "pelle", "pelle-tema"] as const;
+const THEME_LAYERS = ["caratteri-tema", "foglio", "pelle", "pelle-tema"] as const;
+
+/** Il primo elemento montato che nella cascata viene dopo `layer`, o `null`. */
+function mountedAfter(layer: Layer): HTMLStyleElement | null {
+  const position = ORDER.indexOf(layer);
+  return [...document.head.querySelectorAll<HTMLStyleElement>("style[data-fub]")].find(
+    (existing) => ORDER.indexOf(existing.dataset.fub as Layer) > position,
+  ) ?? null;
+}
 
 /**
- * Sostituisce foglio e pelli in una sola commit, dopo che ogni cancello è
- * verde. Senza eredità monta foglio e pelle come sempre, e `pelle-tema` si
- * toglie; con l'eredità la pelle di serie va in `pelle` e quella del tema, se
- * c'è, in `pelle-tema`.
+ * Sostituisce caratteri, foglio e pelli del tema in una sola commit, dopo che
+ * ogni cancello è verde. Senza eredità monta foglio e pelle come sempre, e
+ * `pelle-tema` si toglie; con l'eredità la pelle di serie va in `pelle` e
+ * quella del tema, se c'è, in `pelle-tema`. Le regole `@font-face` del tema
+ * vanno in `caratteri-tema`; un tema senza caratteri lo lascia vuoto.
  */
-function replaceTheme(sheet: string, skin: string | undefined, inherited: string | undefined): void {
+function replaceTheme(
+  fonts: string | undefined,
+  sheet: string,
+  skin: string | undefined,
+  inherited: string | undefined,
+): void {
   const head = document.head;
   const previous = [...head.querySelectorAll<HTMLStyleElement>(
     THEME_LAYERS.map((layer) => `style[data-fub="${layer}"]`).join(", "),
   )];
+  const faces = fonts === undefined ? [] : [style(fonts, "caratteri-tema")];
   const next = inherited === undefined
     ? [style(sheet, "foglio"), ...(skin === undefined ? [] : [style(skin, "pelle")])]
     : [style(sheet, "foglio"), style(inherited, "pelle"), ...(skin === undefined ? [] : [style(skin, "pelle-tema")])];
-  // Il primo canale montato che viene dopo i canali del tema: di solito le
-  // preferenze, ma anche i frammenti quando le preferenze non ci sono ancora.
-  const last = ORDER.indexOf("pelle-tema");
-  const anchor = [...head.querySelectorAll<HTMLStyleElement>("style[data-fub]")].find(
-    (existing) => ORDER.indexOf(existing.dataset.fub as Layer) > last,
-  ) ?? null;
+  // I caratteri prima del primo canale che viene dopo di loro (di solito il
+  // foglio di prima, che se ne va subito sotto); foglio e pelli prima del primo
+  // canale che viene dopo i canali del tema: di solito le preferenze, ma anche
+  // i frammenti quando le preferenze non ci sono ancora.
+  const facesAnchor = mountedAfter("caratteri-tema");
+  const anchor = mountedAfter("pelle-tema");
   try {
+    for (const element of faces) head.insertBefore(element, facesAnchor);
     for (const element of next) head.insertBefore(element, anchor);
   } catch (error) {
-    for (const element of next) element.remove();
+    for (const element of [...faces, ...next]) element.remove();
     throw error;
   }
   for (const element of previous) element.remove();
+}
+
+/**
+ * Le famiglie dei caratteri di serie (`scrittoio/fonts.css`, canale
+ * `caratteri`). Un tema non le ridichiara: la sua regola si mescolerebbe a
+ * quella di serie. L'host le rifiuta già all'installazione; qui il cancello lo
+ * ripete, perché il fascio resta una forma non fidata.
+ */
+export const SERIES_FONT_FAMILIES: readonly string[] = [
+  "Newsreader Variable",
+  "Hanken Grotesk Variable",
+  "IBM Plex Mono",
+  "Inter Variable",
+  "Literata Variable",
+  "JetBrains Mono Variable",
+];
+
+/** Le parole chiave che in `font-family` non sono una famiglia. */
+const RESERVED_FONT_FAMILIES: ReadonlySet<string> = new Set([
+  "serif",
+  "sans-serif",
+  "monospace",
+  "cursive",
+  "fantasy",
+  "system-ui",
+  "ui-serif",
+  "ui-sans-serif",
+  "ui-monospace",
+  "ui-rounded",
+  "math",
+  "emoji",
+  "fangsong",
+  "inherit",
+  "initial",
+  "unset",
+  "revert",
+  "revert-layer",
+  "default",
+]);
+
+/** Gli stessi limiti dell'host (`fub_abi::theme`). */
+export const MAX_THEME_FONTS = 8;
+export const MAX_THEME_FONT_BYTES = 2 * 1024 * 1024;
+export const MAX_THEME_FONT_TOTAL_BYTES = 6 * 1024 * 1024;
+const FONT_FAMILY = /^[A-Za-z0-9-]+(?: [A-Za-z0-9-]+)*$/;
+const FONT_FILE = /^fonts\/[A-Za-z0-9_-]{1,64}\.woff2$/;
+const WOFF2_SIGNATURE = [0x77, 0x4f, 0x46, 0x32];
+
+/** Una voce di `fonts` come arriva dal fascio: ogni campo va controllato. */
+interface UntrustedFont {
+  readonly family?: unknown;
+  readonly file?: unknown;
+  readonly weight?: unknown;
+  readonly style?: unknown;
+}
+
+function declaredFonts(manifest: ThemeBundleManifest): readonly UntrustedFont[] | null {
+  const fonts: unknown = (manifest as { fonts?: unknown }).fonts;
+  if (fonts === undefined) return [];
+  return Array.isArray(fonts) ? fonts as UntrustedFont[] : null;
+}
+
+/** Tutti i motivi per cui i caratteri del fascio non si possono montare. */
+function fontReasons(
+  manifest: ThemeBundleManifest,
+  assets: Readonly<Record<string, unknown>>,
+): string[] {
+  const fonts = declaredFonts(manifest);
+  if (fonts === null) return ["caratteri: l'elenco non è una lista"];
+  const reasons: string[] = [];
+  if (fonts.length > MAX_THEME_FONTS) {
+    reasons.push(`caratteri: ${fonts.length} dichiarati, al massimo ${MAX_THEME_FONTS}`);
+  }
+  const series = new Set(SERIES_FONT_FAMILIES.map((family) => family.toLowerCase()));
+  const faces = new Set<string>();
+  const sizes = new Map<string, number>();
+  for (const font of fonts) {
+    const family = typeof font?.family === "string" ? font.family : "";
+    const where = `caratteri: ${family || "<senza famiglia>"}`;
+    if (family.length > 64 || !FONT_FAMILY.test(family)) {
+      reasons.push(`${where}: la famiglia vuole lettere, cifre, - e spazi singoli, al massimo 64`);
+    } else if (series.has(family.toLowerCase())) {
+      reasons.push(`${where}: è una famiglia di serie`);
+    } else if (RESERVED_FONT_FAMILIES.has(family.toLowerCase())) {
+      reasons.push(`${where}: è una parola chiave del CSS, non una famiglia`);
+    }
+    const weight = font?.weight;
+    if (typeof weight !== "number" || !Number.isInteger(weight) || weight < 100 || weight > 900) {
+      reasons.push(`${where}: il peso dev'essere un intero fra 100 e 900`);
+    }
+    const style = font?.style;
+    if (style !== "normal" && style !== "italic") {
+      reasons.push(`${where}: lo stile dev'essere normal o italic`);
+    }
+    const face = `${family.toLowerCase()}|${String(weight)}|${String(style)}`;
+    if (faces.has(face)) reasons.push(`${where}: la stessa faccia è dichiarata due volte`);
+    faces.add(face);
+    const file = typeof font?.file === "string" ? font.file : "";
+    if (!FONT_FILE.test(file)) {
+      reasons.push(`${where}: il file ${file || "<vuoto>"} non è fonts/<nome>.woff2 fra gli asset`);
+      continue;
+    }
+    const asset = `${manifest.asset_namespace}${file}`;
+    const bytes = Object.prototype.hasOwnProperty.call(assets, asset) ? bytesOf(assets[asset]) : null;
+    if (bytes === null) {
+      reasons.push(`${where}: il file ${file} manca dal fascio`);
+      continue;
+    }
+    if (!WOFF2_SIGNATURE.every((byte, index) => bytes[index] === byte)) {
+      reasons.push(`${where}: il file ${file} non è WOFF2`);
+    }
+    if (bytes.length > MAX_THEME_FONT_BYTES) {
+      reasons.push(`${where}: il file ${file} supera ${MAX_THEME_FONT_BYTES} byte`);
+    }
+    sizes.set(file, bytes.length);
+  }
+  const total = [...sizes.values()].reduce((sum, size) => sum + size, 0);
+  if (total > MAX_THEME_FONT_TOTAL_BYTES) {
+    reasons.push(`caratteri: insieme superano ${MAX_THEME_FONT_TOTAL_BYTES} byte`);
+  }
+  return reasons;
+}
+
+/**
+ * Le regole `@font-face` dei caratteri del tema, o `undefined` se non ne
+ * porta. Si chiama solo su un fascio che ha passato il cancello: la famiglia
+ * sta fra virgolette senza fughe perché il cancello ne ha già fissato
+ * l'alfabeto, e l'unico `src` è l'URL `data:` dei byte del file.
+ */
+export function themeFontFaces(
+  manifest: ThemeBundleManifest,
+  assets: Readonly<Record<string, unknown>>,
+): string | undefined {
+  const fonts = declaredFonts(manifest);
+  if (fonts === null || fonts.length === 0) return undefined;
+  return fonts.map((font) => {
+    const bytes = bytesOf(assets[`${manifest.asset_namespace}${String(font.file)}`]) ?? [];
+    return [
+      "@font-face {",
+      `  font-family: "${String(font.family)}";`,
+      `  font-style: ${String(font.style)};`,
+      `  font-weight: ${String(font.weight)};`,
+      "  font-display: swap;",
+      `  src: url("data:font/woff2;base64,${base64(bytes)}") format("woff2");`,
+      "}",
+      "",
+    ].join("\n");
+  }).join("\n");
 }
 
 function mimeType(asset: string): string {
@@ -391,6 +561,7 @@ export function validateThemeBundle(bundle: ThemeBundle, light: ThemeLight): str
     }
     if (bytesOf(value) === null) reasons.push(`asset: ${asset} non contiene byte validi`);
   }
+  reasons.push(...fontReasons(bundle.manifest, assets));
   const referenced = themeAssetUrls(`${bundle.sheet}\n${bundle.skin ?? ""}`);
   for (const asset of referenced) {
     if (asset.startsWith(bundle.manifest.asset_namespace) &&
@@ -424,6 +595,7 @@ export function mountThemeBundle(
       ? undefined
       : materializeAssets(bundle.skin, bundle.assets, bundle.manifest.asset_namespace);
     replaceTheme(
+      themeFontFaces(bundle.manifest, bundle.assets),
       materializeAssets(bundle.sheet, bundle.assets, bundle.manifest.asset_namespace),
       skin,
       bundle.inherited?.skin,

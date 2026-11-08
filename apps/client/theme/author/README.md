@@ -28,11 +28,29 @@ Con `"extends": "fub.serie"` nel manifest un tema parte dal tema di serie e port
 
 Il manifest usa `engine: theme-2`; l'id deve essere un singolo componente di path sicuro e `asset_namespace` deve essere esattamente `theme://<id>/`. Il tema non dichiara permessi; può dichiarare impostazioni sue (`settings`), che la shell mostra nelle Preferenze. Un engine sconosciuto, un id insicuro, un namespace diverso, un manifest malformato o una luce non dichiarata vengono rifiutati. Un tema `theme-1` resta installato ma la shell non lo monta: lo segnala con una diagnosi e ricade sul tema di serie.
 
+## I caratteri del tema
+
+Un tema `theme-2` porta i suoi caratteri dichiarandoli nel manifest, non nel CSS: `@font-face` resta vietato nei fogli e nella pelle, perché un `src:` scritto a mano potrebbe chiamare la rete. Ogni voce di `fonts` ha `family`, `file`, `weight` e `style`:
+
+```json
+"fonts": [
+  { "family": "Carta Serif", "file": "fonts/carta.woff2", "weight": 400, "style": "normal" },
+  { "family": "Carta Serif", "file": "fonts/carta-italic.woff2", "weight": 400, "style": "italic" }
+]
+```
+
+- `family`: lettere e cifre ASCII, `-` e spazi singoli, al massimo 64 caratteri; non può essere una famiglia di serie né una parola chiave del CSS (`serif`, `monospace`, …).
+- `file`: un asset del tema, `fonts/<nome>.woff2`, cioè `theme://<id>/fonts/<nome>.woff2`. Solo WOFF2: il file deve cominciare con la firma `wOF2`.
+- `weight`: da 100 a 900. `style`: `normal` o `italic`. La stessa faccia non si dichiara due volte.
+
+La shell scrive da sé le regole `@font-face`, coi valori del manifest e il file in un URL `data:`, e la pelle usa la famiglia per nome: `font-family: "Carta Serif", var(--font-ui);`. Cambiato tema, i caratteri del tema precedente se ne vanno.
+
 ## Limiti e pubblicazione
 
 - `manifest.json`: massimo 64 KiB.
 - Ogni foglio CSS e `skin.css`: massimo 4 MiB.
 - Asset: massimo 1.024 file, 64 MiB per file e 256 MiB complessivi.
+- Caratteri: massimo 8 voci in `fonts`, 2 MiB per file e 6 MiB complessivi.
 - Link simbolici, traversal e file non regolari sono rifiutati.
 - L'installazione copia in `<config>/themes/.tmp-…` e pubblica con rename atomico; un id già presente è una collisione e non viene sovrascritto.
 
