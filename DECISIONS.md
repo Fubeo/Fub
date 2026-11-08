@@ -59,6 +59,12 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · k3-motori · il piano è concluso: #295 è in `main`
+  (fb722164) col sì dell'utente, e `PLAN.md` e
+  `PLAN-ui/menu-comandi-fogli.html` escono da `main` come per gli altri
+  piani conclusi · erano entrati con l'unione, e ogni ramo di piano aperto
+  andava in conflitto su `PLAN.md` a ogni allineamento con `main`.
+
 - 2026-11-05 · k3-motori · T17, la scena `window-document` aspetta di nuovo
   che lo strato d'avvio se ne sia andato dopo aver ricaricato la pagina, come
   fa `prepareScene` · perché: la corsa 42045342312 l'ha fotografata col
