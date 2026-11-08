@@ -332,22 +332,22 @@ Se una di queste cade, la stima si allunga.
 | PA T58 · la guardia stretta anche per enum, variant e funzioni esportate | PA | fatto (ADR 0238) | T7 | medio: confine WASM, ADR 0235 | M | `wit_additivity`, componente vero anche per gli import |
 | PA T8 · la pagina della cornice del telefono | PA | fatto | nessuno | basso | S | guardie dei documenti |
 | PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | fatto (in main, #317) | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
-| PA T10 · i due punti sciolti da ritrovare | PA | fatto | nessuno | basso | S | la causa trovata o la riga che chiude |
+| PA T10 · i due punti sciolti da ritrovare | PA | fatto (in main, #319) | nessuno | basso | S | la causa trovata o la riga che chiude |
 | PA T13 · il corpus senza perdite | PA | fatto (in main, #317) | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
 | PA T59 · un file in sola lettura non si sovrascrive | PA | fatto (in main, #317) | T13 | medio: la scrittura del kernel, tre sistemi | S | test del kernel e `prealpha_corpus` sui tre sistemi |
-| PA T60 · le altre prove del lucchetto a un colpo solo | PA | fatto | T19 | basso: solo test | M | 200 corse verdi delle due cadute |
-| PA T61 · la CI Mobile per la cornice del telefono | PA | integrato; si vede partire con la consegna 2 | nessuno | basso: solo il filtro di un workflow | S | una PR che tocca solo la cornice fa partire `mobile.yml` |
+| PA T60 · le altre prove del lucchetto a un colpo solo | PA | fatto (in main, #319) | T19 | basso: solo test | M | 200 corse verdi delle due cadute |
+| PA T61 · la CI Mobile per la cornice del telefono | PA | fatto (in main, #319; la CI Mobile è partita e passata) | nessuno | basso: solo il filtro di un workflow | S | una PR che tocca solo la cornice fa partire `mobile.yml` |
 | PA T19 · i test instabili del Rust | PA | fatto | nessuno | medio | M | 200 giri verdi o causa trovata |
 | PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | fatto | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
 | PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | fatto | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
 | PA T33 · il nome FubDraw dove le persone lo vedono | PA | fatto | nessuno | basso | M | test dei descrittori, di `fub-scene` e del catalogo |
-| PA T34 · il manifest dice da quale tema parte | PA | fatto | nessuno | medio: la forma del manifest sul filo | M | `crates/fub-host/tests/themes.rs`, mirror |
-| PA T35 · la pelle del tema sopra quella di serie | PA | fatto (ADR 0240) | T34 | medio: tocca il montaggio di ogni tema | M | `theme/inherit.test.ts`, `gate.test.ts` |
-| PA T39 · i caratteri del tema | PA | fatto | T34, T35 | basso | M | test dell'host e del loader |
+| PA T34 · il manifest dice da quale tema parte | PA | fatto (in main, #319) | nessuno | medio: la forma del manifest sul filo | M | `crates/fub-host/tests/themes.rs`, mirror |
+| PA T35 · la pelle del tema sopra quella di serie | PA | fatto (ADR 0240; in main, #319) | T34 | medio: tocca il montaggio di ogni tema | M | `theme/inherit.test.ts`, `gate.test.ts` |
+| PA T39 · i caratteri del tema | PA | fatto (in main, #319) | T34, T35 | basso | M | test dell'host e del loader |
 | PA T40 · le icone del tema | PA | da fare (D16 A) | T34, T35; mai nella stessa ondata di S2 T14 | basso | M | Vitest di `ui/icons` e di `theme/` |
-| PA T44 · un documento e un foglio vuoti | PA | fatto | nessuno | basso: due comandi che creano file, dietro le loro feature | M | test d'integrazione di `fub-host`, anche con `--no-default-features` |
+| PA T44 · un documento e un foglio vuoti | PA | fatto (in main, #319) | nessuno | basso: due comandi che creano file, dietro le loro feature | M | test d'integrazione di `fub-host`, anche con `--no-default-features` |
 | PA T46 · le parole della scheda di un componente | PA | da fare (D18 A) | K2 in `main` | basso: solo testi del catalogo | S | `i18n/lexicon-settings.test.ts` |
-| PA T47 · i 44 px del tocco sul telefono, senza deformare | PA | integrato; baseline dal runner con la consegna 2 | nessuno | basso: solo CSS del telefono | S | la scena `mobile-settings` di `bench/scene.mjs` (`bench:verify`, `bench:a11y`) |
+| PA T47 · i 44 px del tocco sul telefono, senza deformare | PA | fatto (in main, #319, con le baseline del runner) | nessuno | basso: solo CSS del telefono | S | la scena `mobile-settings` di `bench/scene.mjs` (`bench:verify`, `bench:a11y`) |
 | PA T48 · il verde di serie | PA | da fare (D25 C) | niente (il logo definitivo conferma 160); mai con un task che rifà baseline | medio: cambia ogni schermata, le baseline vengono dal runner | M | `recipe.test.ts`, `colori.test.ts`, `theme:verify`, `cargo test -p fub-host` |
 | PA T53 · #237 R05–R08 e A03 | PA | da fare (D21 A) | S2 T10 per A03 | basso | M | un test per voce nel proprietario |
 | PA T54 · l'editor di testo vestito dal tema | PA | da fare (D22 A) | T35; prima di T41; mai con S2 T20 o la griglia T2–T3 | medio: tocca la pelle di ogni tema | M | Vitest di `theme.ts`, `check-inline-theme.mjs` |
@@ -5428,9 +5428,10 @@ tocco di 44 px, le schede delle impostazioni scorrono intere, i bottoni di
 un elenco non si toccano e il tondo della modalità ha l'anello dentro; le
 scene lo controllano; le baseline nuove vengono dal runner.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run bench:verify && npm run bench:a11y
-Stato: [~] integrato · dc573a6e..d75d5b95 · mancano le baseline di
-`mobile-settings`, `mobile-trash` (nuove) e `mobile-document` (cambiata) dal
-runner, con la consegna 2 · il tondo galleggiante non c'è ancora (viene da
+Stato: [x] fatto · dc573a6e..d75d5b95, 448e871a, f0da5712 · in main con
+#319, con le baseline del runner; le baseline mostravano la maniglia del
+cassetto a 44 px (le esclusioni `:not(.classe)` pesavano), corretta con
+`:not(:where(…))` e un controllo nella scena `mobile-sheet` · il tondo galleggiante non c'è ancora (viene da
 S2 T3): la regola dell'anello dentro è scritta e non agisce, da riguardare
 con S2 T3; il cestino del banco prende tre file con `?cestino=3`; allargato
 dall'orchestratore al pallino dello stato (`button.pane-standing-chip`,
@@ -6212,10 +6213,9 @@ allineamento).
 Fatto quando: i `paths` coprono la cornice del telefono; la PR di consegna
 che porta T61 fa partire `mobile.yml` (la si vede nella lista dei check).
 Prova: scripts/check.sh --rapido; `actionlint` se c'è, altrimenti la CI
-Stato: [~] integrato · 9cbd4be1..b8b30682 · entra `shells/scrittoio/mobile/**`
+Stato: [x] fatto · 9cbd4be1..b8b30682 · in main con #319, dove `mobile.yml` è partito ed è passato · entra `shells/scrittoio/mobile/**`
 (solo il telefono la importa) e, per scelta dell'orchestratore,
 `Cargo.lock`; restano fuori `theme/scrittoio/` e il resto del client
 (comuni, il build Vite del desktop fa anche `mobile.html`) e le righe `cfg`
-del telefono nei crate comuni (provate sul push in main). Manca: vedere
-partire `mobile.yml` nella PR della consegna 2. Se Scrittoio 2 rinomina
+del telefono nei crate comuni (provate sul push in main). Se Scrittoio 2 rinomina
 `shells/scrittoio/mobile/`, il filtro va spostato
