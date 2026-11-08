@@ -1,7 +1,8 @@
 # Formato della scena
 
-> **Ambito:** i disegni di FubDraw, cioè i file SVG che Fub indicizza con il
-> formato `svg` e modifica con la superficie spaziale. Versione 1.
+> **Ambito:** i disegni di Fub, cioè i file SVG che Fub indicizza con il
+> formato `svg` e modifica con la superficie spaziale. Versione 1. FubDraw è
+> il nome tecnico del formato: l'interfaccia dice «Fub» o «il disegno».
 > **Fonti autorevoli:** `crates/fub-scene/`, `crates/fub-format-svg/` e le
 > fixture generate in `apps/client/src/__fixtures__/scene/`.
 
@@ -13,11 +14,6 @@ nell'[ADR 0203](../decisions/0203-superfici-spaziali.md). Come la superficie
 cambia un disegno sta nelle [operazioni](scene-operations.md). I `§` dei
 commenti nel codice sono le sezioni di questa pagina, tranne nel motore delle
 operazioni, che cita quelle dell'altra.
-
-FubDraw è il nome tecnico del formato: lo portano il codice, queste pagine
-e lo stato `fubdraw`. Chi usa Fub non lo legge mai: l'interfaccia, gli avvisi
-e i messaggi che arrivano a MCP dicono «Fub» o «il disegno», e i formati si
-chiamano «Disegno SVG» e «Annotazioni PDF».
 
 ## 1. Principi
 
