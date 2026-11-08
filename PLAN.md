@@ -347,7 +347,7 @@ Se una di queste cade, la stima si allunga.
 | PA T40 · le icone del tema | PA | da fare (D16 A) | T34, T35; mai nella stessa ondata di S2 T14 | basso | M | Vitest di `ui/icons` e di `theme/` |
 | PA T44 · un documento e un foglio vuoti | PA | fatto | nessuno | basso: due comandi che creano file, dietro le loro feature | M | test d'integrazione di `fub-host`, anche con `--no-default-features` |
 | PA T46 · le parole della scheda di un componente | PA | da fare (D18 A) | K2 in `main` | basso: solo testi del catalogo | S | `i18n/lexicon-settings.test.ts` |
-| PA T47 · i 44 px del tocco sul telefono, senza deformare | PA | da fare | nessuno | basso: solo CSS del telefono | S | la scena `mobile-settings` di `bench/scene.mjs` (`bench:verify`, `bench:a11y`) |
+| PA T47 · i 44 px del tocco sul telefono, senza deformare | PA | integrato; baseline dal runner con la consegna 2 | nessuno | basso: solo CSS del telefono | S | la scena `mobile-settings` di `bench/scene.mjs` (`bench:verify`, `bench:a11y`) |
 | PA T48 · il verde di serie | PA | da fare (D25 C) | niente (il logo definitivo conferma 160); mai con un task che rifà baseline | medio: cambia ogni schermata, le baseline vengono dal runner | M | `recipe.test.ts`, `colori.test.ts`, `theme:verify`, `cargo test -p fub-host` |
 | PA T53 · #237 R05–R08 e A03 | PA | da fare (D21 A) | S2 T10 per A03 | basso | M | un test per voce nel proprietario |
 | PA T54 · l'editor di testo vestito dal tema | PA | da fare (D22 A) | T35; prima di T41; mai con S2 T20 o la griglia T2–T3 | medio: tocca la pelle di ogni tema | M | Vitest di `theme.ts`, `check-inline-theme.mjs` |
@@ -5415,7 +5415,15 @@ tocco di 44 px, le schede delle impostazioni scorrono intere, i bottoni di
 un elenco non si toccano e il tondo della modalità ha l'anello dentro; le
 scene lo controllano; le baseline nuove vengono dal runner.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run bench:verify && npm run bench:a11y
-Stato: [ ] da fare
+Stato: [~] integrato · dc573a6e..d75d5b95 · mancano le baseline di
+`mobile-settings`, `mobile-trash` (nuove) e `mobile-document` (cambiata) dal
+runner, con la consegna 2 · il tondo galleggiante non c'è ancora (viene da
+S2 T3): la regola dell'anello dentro è scritta e non agisce, da riguardare
+con S2 T3; il cestino del banco prende tre file con `?cestino=3`; allargato
+dall'orchestratore al pallino dello stato (`button.pane-standing-chip`,
+21 × 24 come sul computer, tocco 44 × 37 per non rubare quello della
+modalità accanto). Gonfiati senza vedersi, lasciati a PA T55: la pillola H1
+nel margine della nota, ‹ › della barra PDF, le icone 16 × 16 del disegno
 
 ## T48 · Il verde di serie
 
