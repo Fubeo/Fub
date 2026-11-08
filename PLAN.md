@@ -335,6 +335,7 @@ Se una di queste cade, la stima si allunga.
 | PA T10 · i due punti sciolti da ritrovare | PA | fatto | nessuno | basso | S | la causa trovata o la riga che chiude |
 | PA T13 · il corpus senza perdite | PA | integrato; la sola lettura per permesso del file c'è (T59), aspetta Windows e macOS | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
 | PA T59 · un file in sola lettura non si sovrascrive | PA | integrato; aspetta Windows e macOS dalla CI completa | T13 | medio: la scrittura del kernel, tre sistemi | S | test del kernel e `prealpha_corpus` sui tre sistemi |
+| PA T60 · le altre prove del lucchetto a un colpo solo | PA | da fare (cadute in CI su macOS) | T19 | basso: solo test | M | 200 corse verdi delle due cadute |
 | PA T19 · i test instabili del Rust | PA | fatto | nessuno | medio | M | 200 giri verdi o causa trovata |
 | PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | fatto | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
 | PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | fatto | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
@@ -6095,3 +6096,38 @@ dalla CI completa · su Unix conta la classe che si applica al processo
 permessi negati restano `Io`; l'avviso esce una volta per documento e il
 salvataggio automatico riprova a ogni pausa; resta generico
 `notice.save_failed` in `panels/document.ts` (fuori dal «Tocca»)
+
+## T60 · Le altre prove del lucchetto a un colpo solo
+
+Perché: T19 ha trovato la causa di #292, #270, #98 e #70: una prova che
+chiede il lucchetto del workspace una volta sola (`try_read`/`try_write`)
+e si aspetta di averlo libero, mentre un `fub-job-*` del runner lo può
+prendere per un istante. T19 ha corretto quei test con
+`try_read_within`/`try_write_within`/`comes_free` (`legacy_tests.rs`), ma
+nel repo ci sono ancora 95 chiamate a un colpo solo. Due sono già cadute:
+`a_nested_command_provider_runs_without_holding_the_workspace_lock` (1 su
+8 in locale, PA T9) e `a_command_provider_runs_without_holding_the_workspace_lock`
+(`concurrency.rs:501`, macOS, corsa 42481723853 della consegna 1).
+Ramo: piano/fub-pre-alpha.
+Tocca: i test di `crates/fub-host/src/legacy_tests/` e i test in
+`crates/fub-host/src/runner.rs` che aspettano un lucchetto libero; gli
+aiuti di `legacy_tests.rs` se ne serve uno in più.
+Non toccare: il codice che non è di test; le prove che si aspettano il
+lucchetto **preso** (lì un colpo solo è giusto: un lucchetto preso non si
+libera da sé, e una scadenza nasconderebbe il difetto).
+Dipende da: T19.
+Cosa fare:
+- Per ogni chiamata a un colpo solo, decidi se la prova aspetta il
+  lucchetto libero o preso. Libero: l'aiuto con la scadenza, come T19.
+  Preso: resta, con un commento di una riga che dice perché.
+- Se una sonda guarda il lucchetto da dentro un `Drop` o un provider (il
+  caso di #98), segui lo schema di T19 (`Probe::drop_resource`).
+- Le due prove cadute girano 200 volte da sole, verdi.
+Casi limite: una prova che oggi passa solo perché il colpo solo cade
+sempre nello stesso verso (la si riscrive perché dica ciò che vuole);
+`the_watcher_batch.rs`, dove alcune prove aspettano il lucchetto preso.
+Fatto quando: nessuna prova che aspetta un lucchetto libero lo chiede una
+volta sola (`grep` nel resoconto); 200 corse verdi delle due cadute.
+Prova: scripts/check.sh --rapido; cargo nextest run --retries 0 -p
+fub-host --lib legacy_tests::concurrency (200 volte)
+Stato: [ ] da fare
