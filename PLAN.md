@@ -3682,7 +3682,7 @@ lo sa?); i commenti e gli spazi in `abi.wit` (non contano).
 Fatto quando: `cargo test -p fub-abi --test wit_additivity` passa, e il caso
 finto del campo in coda fallisce come atteso.
 Prova: scripts/check.sh --rapido; cargo test -p fub-abi
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 88612da0
 
 ## T7 · #289: «nuovo caso» e «nuova funzione», con un componente vero
 
