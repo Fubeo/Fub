@@ -1015,7 +1015,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
                 UiOption::new("system", Text::key(C_FONT_SYSTEM)),
             ],
         ),
-        number(APPEARANCE_BODY, C_BODY, C_BODY_DESC, 17.0, 12.0, 28.0),
+        number(APPEARANCE_BODY, C_BODY, C_BODY_DESC, 18.0, 12.0, 28.0),
         number(
             APPEARANCE_LINE_HEIGHT,
             C_LINE_HEIGHT,
@@ -1028,7 +1028,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
             APPEARANCE_MEASURE,
             C_MEASURE,
             C_MEASURE_DESC,
-            68.0,
+            58.0,
             40.0,
             100.0,
         ),

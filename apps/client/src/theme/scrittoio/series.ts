@@ -62,9 +62,9 @@ export const SCRITTOIO_SERIES: ThemeSeries = {
   skin,
   defaults: {
     density: "comfortable",
-    body: 17,
+    body: 18,
     lineHeight: 1.65,
-    measure: 68,
+    measure: 58,
     font: "newsreader",
     uiFont: "hanken",
     monoFont: "plex",

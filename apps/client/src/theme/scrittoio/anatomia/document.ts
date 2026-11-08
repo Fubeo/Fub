@@ -19,6 +19,7 @@ export const DOCUMENT: PartAnatomy = {
     { name: "document-tag", states: [S("rest"), S("hover"), S("focused")], hooks: ["tag", "cm-fub-tag"] },
     { name: "document-quote", states: REST, hooks: ["cm-fub-quote", "cm-fub-quote-mark"] },
     { name: "document-callout", states: [S("rest"), S("focused")], hooks: ["callout", "callout-title", "cm-fub-callout-line", "cm-fub-callout-type", "cm-fub-callout-title", "cm-fub-callout-fold"] },
+    { name: "document-list", states: REST, hooks: ["cm-fub-bullet", "cm-fub-bullet-task"] },
     { name: "document-task", states: [S("rest"), S("hover"), S("selected"), S("focused"), S("disabled")], hooks: ["task", "cm-fub-checkbox", "cm-fub-done"] },
     { name: "document-code", layers: { "markdown-code-copy": "cornice" }, states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["cm-fub-code-line", "cm-fub-codeblock", "markdown-code-copy", "cm-fub-code-header", "cm-fub-code-lang", "cm-fub-code-wrap", "cm-fub-diagram-notice", "cm-fub-math-field", "cm-fub-math-popover-preview"] },
     { name: "document-figure", states: REST, hooks: ["cm-fub-hr", "math-block", "katex-display", "image-missing", "image-remote", "image-remote-load", "cm-fub-image", "cm-fub-image-selected", "cm-fub-image-handle", "cm-fub-image-size", "cm-fub-image-dialog", "cm-fub-image-shares", "craft-figure", "craft-figure-page"] },

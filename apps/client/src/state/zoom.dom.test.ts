@@ -32,18 +32,24 @@ describe("la dimensione del testo", () => {
   });
 
   it("sale e scende di un punto, e si ferma ai limiti", async () => {
-    fake.settings.mockResolvedValueOnce(body(17));
+    fake.settings.mockResolvedValueOnce(body(18));
     await textSizeBy(1);
     fake.settings.mockResolvedValueOnce(body(12));
     await textSizeBy(-1);
     fake.settings.mockResolvedValueOnce(body(28));
     await textSizeBy(1);
-    expect(fake.setSetting.mock.calls).toEqual([["appearance.body", 18]]);
+    expect(fake.setSetting.mock.calls).toEqual([["appearance.body", 19]]);
     expect(fake.notify).toHaveBeenCalledWith("shell.text_size_now", "info");
   });
 
+  it("senza un valore parte dal predefinito di serie, 18", async () => {
+    fake.settings.mockResolvedValueOnce([]);
+    await textSizeBy(1);
+    expect(fake.setSetting.mock.calls).toEqual([["appearance.body", 19]]);
+  });
+
   it("un errore della porta si dice", async () => {
-    fake.settings.mockResolvedValueOnce(body(17));
+    fake.settings.mockResolvedValueOnce(body(18));
     fake.setSetting.mockRejectedValueOnce(new Error("no"));
     await textSizeBy(-1);
     expect(fake.notify).toHaveBeenCalledWith("shell.text_size_failed", "guasto");

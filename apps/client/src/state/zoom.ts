@@ -30,7 +30,7 @@ export async function zoomBy(step: -1 | 0 | 1): Promise<void> {
 
 /// La dimensione del testo delle note, in punti di `appearance.body`: gli
 /// stessi limiti che l'impostazione ammette.
-export const TEXT_SIZE = { min: 12, max: 28, fallback: 17 } as const;
+export const TEXT_SIZE = { min: 12, max: 28, fallback: 18 } as const;
 
 export async function textSizeBy(step: -1 | 1): Promise<void> {
   try {

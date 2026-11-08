@@ -28,7 +28,7 @@ describe("le preferenze restano sopra il tema", () => {
 });
 
 describe("tre caratteri distinti", () => {
-  const base = { density: "comfortable" as const, body: 17, lineHeight: 1.65, measure: 68, font: "newsreader", accent: 210 };
+  const base = { density: "comfortable" as const, body: 18, lineHeight: 1.65, measure: 58, font: "newsreader", accent: 210 };
 
   it("lettura, interfaccia e codice si scelgono ognuno per conto suo", () => {
     const tokens = preferenceTokens({ ...base, font: "literata", uiFont: "inter", monoFont: "jetbrains" }, "light", "normal");

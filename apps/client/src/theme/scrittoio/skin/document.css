@@ -145,8 +145,8 @@
 
 /* Misura e interlinea stanno sulla riga in Live e sull'elemento in Lettura: la
    stessa scatola, quindi la stessa altezza. La gerarchia la fanno misura e
-   stacco; il peso resta leggero finché il corpo è grande (l'asse ottico del
-   carattere fa il resto) e sale a 600 quando il titolo scende verso il testo. */
+   stacco; il titolo della nota (2,22 em, 40 px su 18) e i capitoli (1,39 em,
+   25 px) sono pieni, a 600, come i titoli minori. */
 .markdown-rendered h1,
 .markdown-rendered h2,
 .markdown-rendered h3,
@@ -189,19 +189,19 @@
 }
 .markdown-rendered h1,
 .cm-editor .cm-content .cm-fub-h1-line {
-  padding-top: calc(var(--text-reading) * 0.9);
-  font-size: 2em;
-  font-weight: var(--weight-medium);
-  letter-spacing: -0.018em;
+  padding-top: calc(var(--text-reading) * 0.5);
+  font-size: 2.22em;
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.02em;
   line-height: 1.15;
 }
 .markdown-rendered h2,
 .cm-editor .cm-content .cm-fub-h2-line {
-  padding-top: calc(var(--text-reading) * 0.7);
-  font-size: 1.5em;
-  font-weight: var(--weight-medium);
+  padding-top: calc(var(--text-reading) * 0.6);
+  font-size: 1.39em;
+  font-weight: var(--weight-bold);
   letter-spacing: -0.012em;
-  line-height: 1.2;
+  line-height: 1.28;
 }
 .markdown-rendered h3,
 .cm-editor .cm-content .cm-fub-h3-line {
@@ -249,7 +249,8 @@
 /* ── Collegamenti, etichette, evidenziati ────────────────────────────────── */
 
 /* Un `[testo](url)` e un `[[Nota]]` sono lo stesso gesto: lo stesso inchiostro
-   e lo stesso filo sottile. La regola copre ogni `<a>` reso, così il viola
+   blu e lo stesso filo sottile, a metà forza; sotto il puntatore il filo
+   prende l'inchiostro pieno. La regola copre ogni `<a>` reso, così il viola
    dello user-agent non compare mai. */
 .markdown-rendered a,
 .cm-editor .cm-content .cm-fub-link,
@@ -257,13 +258,15 @@
   color: var(--doc-link);
   cursor: pointer;
   text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--doc-link) 42%, transparent);
   text-decoration-thickness: 1px;
-  text-underline-offset: 0.2em;
+  text-underline-offset: 0.22em;
 }
 .markdown-rendered a:hover,
 .cm-editor .cm-content .cm-fub-link:hover,
 .cm-editor .cm-content .cm-fub-wikilink:hover {
   color: var(--accent-soft);
+  text-decoration-color: currentColor;
 }
 /* In Live la sintassi colora per conto suo lo span interno: qui eredita, o il
    filo sarebbero due e il passaggio non cambierebbe niente. */
@@ -747,11 +750,12 @@
 
 /* ── Citazioni e richiami ────────────────────────────────────────────────── */
 
-/* La citazione è un filo e un corsivo: nessun fondo. */
+/* La citazione è un filo e un corsivo in grafite: nessun fondo. */
 .markdown-rendered blockquote,
 .cm-editor .cm-content .cm-line.cm-fub-quote {
-  padding-left: 1.1em;
-  border-left: 2px solid var(--doc-rule);
+  padding-left: 1em;
+  border-left: 2px solid var(--border-strong);
+  color: var(--muted);
   font-style: italic;
 }
 /* Dentro un corsivo l'enfasi torna dritta, o non si vedrebbe. */
@@ -764,191 +768,133 @@
   color: var(--doc-gutter-fg);
   font-style: normal;
 }
-/* Il richiamo è un velo del suo colore: niente bordo, il titolo lo nomina. Un
-   tipo che la pelle non conosce resta neutro — colorarlo a caso lo farebbe
-   leggere come un avviso. */
+/* Il richiamo è una scheda neutra: ogni tipo ha la stessa carta e lo stesso
+   filo, nel carattere dell'interfaccia. Il colore del tipo resta solo sul
+   cerchietto davanti al titolo (in Lettura) e sulla pastiglia del tipo (in
+   Live); il titolo in grassetto apre la riga e il testo lo segue. Un tipo che
+   la pelle non conosce ha il cerchietto dell'informazione. */
 .markdown-rendered .callout {
-  padding: var(--space-5) var(--space-6);
+  position: relative;
+  padding: var(--space-5) var(--space-7) var(--space-5) 44px;
+  border: 1px solid var(--border);
   border-radius: var(--radius-control);
   background: var(--sheet-2);
-}
-.markdown-rendered .callout-title {
-  margin-bottom: var(--space-2);
-  color: var(--doc-heading);
+  color: var(--doc-fg);
   font-family: var(--font-ui);
-  font-size: 0.82em;
+  font-size: var(--text-md);
+  line-height: 1.55;
+}
+.markdown-rendered .callout > .callout-title {
+  display: inline;
+  margin: 0 var(--space-2) 0 0;
+  color: var(--doc-heading);
+  font-size: 1em;
   font-weight: var(--weight-bold);
 }
-.markdown-rendered .callout > .callout-title:last-child {
-  margin-bottom: 0;
+.markdown-rendered .callout > .callout-title + p {
+  display: inline;
 }
-.markdown-rendered summary.callout-title {
+/* Il richiamo ripiegabile tiene il suo triangolo: il sommario resta una riga
+   a sé, e il testo comincia sotto. */
+.markdown-rendered .callout > summary.callout-title {
+  display: list-item;
   cursor: pointer;
 }
-.markdown-rendered details.callout:not([open]) > summary.callout-title {
-  margin-bottom: 0;
+.markdown-rendered .callout > summary.callout-title + p {
+  display: block;
 }
 .markdown-rendered summary.callout-title:focus-visible {
   border-radius: var(--radius-xs);
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
 }
-.markdown-rendered .callout[data-callout="note"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="note"],
-.markdown-rendered .callout[data-callout="info"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="info"],
-.markdown-rendered .callout[data-callout="abstract"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="abstract"],
-.markdown-rendered .callout[data-callout="summary"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="summary"],
-.markdown-rendered .callout[data-callout="todo"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="todo"],
-.markdown-rendered .callout[data-callout="tldr"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="tldr"] {
-  background: var(--info-wash);
+.markdown-rendered .callout > .callout-title::before {
+  content: "i";
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-pill);
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: var(--weight-bold);
+  line-height: 1;
 }
-.markdown-rendered .callout[data-callout="note"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="note"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="note"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="info"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="info"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="info"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="abstract"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="abstract"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="abstract"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="summary"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="summary"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="summary"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="todo"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="todo"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="todo"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="tldr"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="tldr"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="tldr"] .cm-fub-callout-title {
-  color: var(--info);
-}
-.markdown-rendered .callout[data-callout="tip"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="tip"],
-.markdown-rendered .callout[data-callout="hint"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="hint"],
-.markdown-rendered .callout[data-callout="success"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="success"],
-.markdown-rendered .callout[data-callout="check"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="check"],
-.markdown-rendered .callout[data-callout="done"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="done"] {
-  background: var(--success-wash);
-}
-.markdown-rendered .callout[data-callout="tip"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="tip"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="tip"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="hint"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="hint"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="hint"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="success"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="success"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="success"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="check"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="check"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="check"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="done"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="done"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="done"] .cm-fub-callout-title {
-  color: var(--success);
-}
-.markdown-rendered .callout[data-callout="warning"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="warning"],
-.markdown-rendered .callout[data-callout="caution"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="caution"],
-.markdown-rendered .callout[data-callout="attention"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="attention"],
-.markdown-rendered .callout[data-callout="important"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="important"],
-.markdown-rendered .callout[data-callout="question"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="question"],
-.markdown-rendered .callout[data-callout="help"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="help"],
-.markdown-rendered .callout[data-callout="faq"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="faq"] {
-  background: var(--warning-wash);
-}
-.markdown-rendered .callout[data-callout="warning"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="warning"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="warning"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="caution"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="caution"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="caution"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="attention"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="attention"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="attention"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="important"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="important"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="important"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="question"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="question"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="question"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="help"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="help"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="help"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="faq"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="faq"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="faq"] .cm-fub-callout-title {
+.markdown-rendered .callout[data-callout="warning"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="caution"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="important"] > .callout-title::before {
+  content: "!";
+  border-color: var(--warning);
   color: var(--warning);
 }
-.markdown-rendered .callout[data-callout="danger"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="danger"],
-.markdown-rendered .callout[data-callout="error"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="error"],
-.markdown-rendered .callout[data-callout="failure"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="failure"],
-.markdown-rendered .callout[data-callout="fail"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="fail"],
-.markdown-rendered .callout[data-callout="bug"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="bug"],
-.markdown-rendered .callout[data-callout="missing"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="missing"] {
-  background: var(--danger-wash);
-}
-.markdown-rendered .callout[data-callout="danger"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="danger"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="danger"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="error"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="error"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="error"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="failure"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="failure"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="failure"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="fail"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="fail"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="fail"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="bug"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="bug"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="bug"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="missing"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="missing"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="missing"] .cm-fub-callout-title {
+.markdown-rendered .callout[data-callout="danger"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="error"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="bug"] > .callout-title::before {
+  content: "!";
+  border-color: var(--danger);
   color: var(--danger);
 }
-.markdown-rendered .callout[data-callout="example"],
-.cm-editor .cm-content .cm-line.cm-fub-callout-line[data-callout="example"] {
-  background: var(--accent-wash);
+.markdown-rendered .callout[data-callout="tip"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="success"] > .callout-title::before,
+.markdown-rendered .callout[data-callout="done"] > .callout-title::before {
+  content: "✓";
+  border-color: var(--success);
+  color: var(--success);
 }
-.markdown-rendered .callout[data-callout="example"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="example"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="example"] .cm-fub-callout-title {
+.markdown-rendered .callout kbd {
+  font-size: var(--text-sm);
+}
+/* In Live il colore del tipo sta solo sulla sua pastiglia: il titolo resta
+   neutro, come in Lettura. */
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="note"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="info"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="abstract"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="summary"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="todo"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="tldr"] .cm-fub-callout-type {
+  color: var(--info);
+}
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="tip"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="hint"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="success"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="check"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="done"] .cm-fub-callout-type {
+  color: var(--success);
+}
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="warning"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="caution"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="attention"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="important"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="question"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="help"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="faq"] .cm-fub-callout-type {
+  color: var(--warning);
+}
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="danger"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="error"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="failure"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="fail"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="bug"] .cm-fub-callout-type,
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="missing"] .cm-fub-callout-type {
+  color: var(--danger);
+}
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="example"] .cm-fub-callout-type {
   color: var(--accent);
 }
-.markdown-rendered .callout[data-callout="quote"] > .callout-title,
 .cm-editor .cm-content .cm-fub-callout-line[data-callout="quote"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="quote"] .cm-fub-callout-title,
-.markdown-rendered .callout[data-callout="cite"] > .callout-title,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="cite"] .cm-fub-callout-type,
-.cm-editor .cm-content .cm-fub-callout-line[data-callout="cite"] .cm-fub-callout-title {
+.cm-editor .cm-content .cm-fub-callout-line[data-callout="cite"] .cm-fub-callout-type {
   color: var(--doc-gutter-fg);
 }
 
 /* In Live, col cursore dentro, il callout resta un riquadro (D1): le righe
-   hanno il velo del tipo, gli angoli la prima e l'ultima; la testata è la
+   hanno la stessa carta neutra per ogni tipo, gli angoli la prima e l'ultima; la testata è la
    pastiglia del tipo e il titolo. */
 .cm-editor .cm-content .cm-line.cm-fub-callout-line {
   padding-inline: var(--space-6);
@@ -1122,9 +1068,16 @@
 
 /* Un elenco in Live è una riga per voce, senza aria in mezzo: in Lettura le
    voci (e i paragrafi che il renderer ci mette dentro) stanno a margine zero. */
-.markdown-rendered ul,
 .markdown-rendered ol {
   padding-left: 1.4em;
+}
+/* Il punto è grafite e staccato dal testo: in Lettura il rientro dell'elenco
+   puntato, in Live il margine attorno al segno che il pallino copre. */
+.markdown-rendered ul {
+  padding-left: 1.25em;
+}
+.cm-editor .cm-content .cm-fub-bullet:not(.cm-fub-bullet-task) {
+  margin-inline: 0.3em 0.35em;
 }
 .markdown-rendered li,
 .markdown-rendered li > p,
@@ -1146,6 +1099,9 @@
 .markdown-rendered li.task {
   margin-left: -1.4em;
   list-style: none;
+}
+.markdown-rendered ul > li.task {
+  margin-left: -1.25em;
 }
 /* La casella è quella dei controlli generici — una sola in tutta l'app, alta
    quanto il corpo del testo. Qui c'è solo dove sta rispetto alla riga:

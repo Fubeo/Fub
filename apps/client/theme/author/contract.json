@@ -548,6 +548,8 @@
     "cm-fub-callout-type",
     "cm-fub-callout-title",
     "cm-fub-callout-fold",
+    "cm-fub-bullet",
+    "cm-fub-bullet-task",
     "task",
     "cm-fub-checkbox",
     "cm-fub-done",
@@ -2063,6 +2065,8 @@
     "cm-fub-callout-type": "contenuto",
     "cm-fub-callout-title": "contenuto",
     "cm-fub-callout-fold": "contenuto",
+    "cm-fub-bullet": "contenuto",
+    "cm-fub-bullet-task": "contenuto",
     "task": "contenuto",
     "cm-fub-checkbox": "contenuto",
     "cm-fub-done": "contenuto",
@@ -4612,6 +4616,17 @@
       "states": [
         "rest",
         "focused"
+      ]
+    },
+    {
+      "name": "document-list",
+      "part": "document",
+      "hooks": [
+        "cm-fub-bullet",
+        "cm-fub-bullet-task"
+      ],
+      "states": [
+        "rest"
       ]
     },
     {
@@ -8490,10 +8505,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 64,
-    "hooks": 1513,
+    "hooks": 1515,
     "state_names": 7,
-    "assigned_states": 736,
-    "components": 218,
+    "assigned_states": 737,
+    "components": 219,
     "preference_tokens": 187
   }
 }

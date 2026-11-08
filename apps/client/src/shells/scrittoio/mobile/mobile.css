@@ -170,6 +170,14 @@
   }
 }
 
+/* Il segno del livello («H1») vive nel margine sinistro, che al telefono è
+   più stretto di lui: si vedrebbe tagliato contro il bordo. Il livello si
+   legge e si cambia nella barra in basso («Titolo 1»). Nascosto e non tolto:
+   la riga del titolo tiene le stesse misure e CodeMirror non rimisura. */
+:root[data-client-shell="mobile"] .cm-editor .cm-content .cm-fub-heading-pill {
+  visibility: hidden;
+}
+
 /* ── Sotto i 600 px: una colonna ─────────────────────────────────────────── */
 
 @media (max-width: 599px) {

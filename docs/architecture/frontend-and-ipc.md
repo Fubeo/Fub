@@ -278,9 +278,10 @@ pannelli) lo Scrittoio compone:
   contratto del tema lo esporta in `layers`
   ([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)).
 
-I predefiniti dell'aspetto (accento, i tre caratteri, corpo, interlinea,
-giustezza) li dichiara l'host e coincidono con quelli della serie; un test Rust
-lo verifica. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
+I predefiniti dell'aspetto (accento, i tre caratteri, corpo di 18 px,
+interlinea, giustezza di 58 caratteri) li dichiara l'host e coincidono con
+quelli della serie; un test Rust lo verifica. Un valore scelto in Aspetto resta
+quello scelto. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
 400 px, ispettore da 248 a 440 px. Un tema `theme-1` non si monta; uno con
 `extends` lascia la pelle di serie in `pelle` e aggiunge la sua in `pelle-tema`,
 dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).

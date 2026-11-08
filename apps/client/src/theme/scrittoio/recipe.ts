@@ -539,7 +539,7 @@ const CONSTANTS: readonly (readonly [string, string])[] = [
   ["text-xl", "16px"],
   ["text-2xl", "19px"],
   ["text-3xl", "23px"],
-  ["text-reading", "17px"],
+  ["text-reading", "18px"],
   ["text-source", "14px"],
   ["weight-regular", "400"],
   ["weight-medium", "500"],
@@ -547,7 +547,7 @@ const CONSTANTS: readonly (readonly [string, string])[] = [
   ["leading-tight", "1.3"],
   ["leading-normal", "1.45"],
   ["leading-relaxed", "1.65"],
-  ["content-width", "68ch"],
+  ["content-width", "58ch"],
   ["tracking-caps", "0.06em"],
 
   // I tempi: stato, scambio, breve, ampio; la scena è dei momenti rari.
