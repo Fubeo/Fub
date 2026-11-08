@@ -11,7 +11,7 @@
   padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--mobile-keyboard-inset));
 }
 
-:root[data-client-shell="mobile"] button,
+:root[data-client-shell="mobile"] button:not(.pane-standing-chip),
 :root[data-client-shell="mobile"] [role="button"],
 :root[data-client-shell="mobile"] input[type="checkbox"]:not([role="switch"]),
 :root[data-client-shell="mobile"] input[type="radio"] {
@@ -33,6 +33,27 @@
   content: "";
   position: absolute;
   inset: -13px -6px;
+}
+
+/* ── Il pallino dello stato nella testata, della sua misura ────────────────
+   Nella testata stretta di un documento (Word, OpenDocument) lo stato è un
+   chip a pillola alto 24 px col solo pallino (`skin/sheets.css`). La regola
+   dei 44 px lo farebbe un cerchio di 44 px attorno a un punto di 7. Resta
+   della sua misura, come sul computer, e il tocco lo dà un `::after`
+   trasparente, che non disegna niente: alto 44 px, e di lato largo quanto lo
+   spazio fra gli elementi della testata (`--space-4`), così non copre il
+   bottone della modalità accanto e non gli ruba il tocco. */
+:root[data-client-shell="mobile"] .pane-standing-chip {
+  position: relative;
+}
+:root[data-client-shell="mobile"] .pane-standing-chip::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: calc(-1 * var(--space-4));
+  left: calc(-1 * var(--space-4));
+  height: max(100%, 44px);
+  transform: translateY(-50%);
 }
 
 /* ── Le schede delle impostazioni scorrono, non si troncano ────────────────

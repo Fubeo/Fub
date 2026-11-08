@@ -75,7 +75,9 @@ scrive lo stato su `<html>`:
 tastiera, e porta a 44 px il bersaglio minimo di bottoni e caselle senza
 deformarli: l'interruttore (`input[role="switch"]`) resta il binario di
 32 × 18 della pelle e prende il tocco di 44 px da un `::after` trasparente
-(in colori forzati torna nativo, 16 × 16); le schede delle impostazioni non si
+(in colori forzati torna nativo, 16 × 16); il chip dello stato nella testata
+dei documenti resta la pillola di 24 px col pallino, con un `::after`
+trasparente alto 44 px che non copre il bottone della modalità; le schede delle impostazioni non si
 stringono e la loro fila scorre di lato coi nomi interi; fra due righe di un
 elenco dichiarato (il cestino, le versioni) restano 8 px, perché i bottoni da
 44 px non si tocchino; il bottone della modalità che galleggia sulla carta ha
