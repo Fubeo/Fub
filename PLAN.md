@@ -344,7 +344,7 @@ Se una di queste cade, la stima si allunga.
 | PA T34 · il manifest dice da quale tema parte | PA | fatto (in main, #319) | nessuno | medio: la forma del manifest sul filo | M | `crates/fub-host/tests/themes.rs`, mirror |
 | PA T35 · la pelle del tema sopra quella di serie | PA | fatto (ADR 0240; in main, #319) | T34 | medio: tocca il montaggio di ogni tema | M | `theme/inherit.test.ts`, `gate.test.ts` |
 | PA T39 · i caratteri del tema | PA | fatto (in main, #319) | T34, T35 | basso | M | test dell'host e del loader |
-| PA T40 · le icone del tema | PA | da fare (D16 A) | T34, T35; mai nella stessa ondata di S2 T14 | basso | M | Vitest di `ui/icons` e di `theme/` |
+| PA T40 · le icone del tema | PA | fatto (D16 A) | T34, T35; mai nella stessa ondata di S2 T14 | basso | M | Vitest di `ui/icons` e di `theme/` |
 | PA T44 · un documento e un foglio vuoti | PA | fatto (in main, #319) | nessuno | basso: due comandi che creano file, dietro le loro feature | M | test d'integrazione di `fub-host`, anche con `--no-default-features` |
 | PA T46 · le parole della scheda di un componente | PA | da fare (D18 A) | K2 in `main` | basso: solo testi del catalogo | S | `i18n/lexicon-settings.test.ts` |
 | PA T47 · i 44 px del tocco sul telefono, senza deformare | PA | fatto (in main, #319, con le baseline del runner) | nessuno | basso: solo CSS del telefono | S | la scena `mobile-settings` di `bench/scene.mjs` (`bench:verify`, `bench:a11y`) |
@@ -5069,7 +5069,14 @@ passaggio solo, sotto i 16 ms).
 Fatto quando: Vitest prova la precedenza, la validazione, il ridisegno e
 «Annulla anteprima»; i test dell'host provano i limiti.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/ui/ src/theme/
-Stato: [ ] da fare
+Stato: [x] fatto · 164571d3..e6419d62 · la regola sta in
+`fub_abi::rules::theme_icons`, legata al TS dal mirror delle regole, e
+l'host applica anche `PATH_DATA`; il set lo monta `mountThemeBundle` nella
+stessa transazione dei canali (rifiutato il fascio, resta il set di prima),
+e la finestra documento lo rispecchia; `undrawnThemeIcons()` aspetta la
+diagnosi di T36; i nomi ridisegnabili sono 440 su 512 (S2 T14 guardi il
+margine); 10.000 icone cambiate si ridisegnano in un passaggio solo, in
+18–35 ms headless sotto carico, non sotto i 16 ms del piano
 
 ## T41 · Gli hook congelati
 
