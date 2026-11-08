@@ -350,7 +350,7 @@ Se una di queste cade, la stima si allunga.
 | PA T47 · i 44 px del tocco sul telefono, senza deformare | PA | fatto (in main, #319, con le baseline del runner) | nessuno | basso: solo CSS del telefono | S | la scena `mobile-settings` di `bench/scene.mjs` (`bench:verify`, `bench:a11y`) |
 | PA T48 · il verde di serie | PA | fatto (D25 C; in main, #320, con le baseline dal runner) | niente (il logo definitivo conferma 160); mai con un task che rifà baseline | medio: cambia ogni schermata, le baseline vengono dal runner | M | `recipe.test.ts`, `colori.test.ts`, `theme:verify`, `cargo test -p fub-host` |
 | PA T53 · #237 R05–R08 e A03 | PA | R05–R08 fatte (in main, #320); A03 dopo S2 T10 (D21 A) | S2 T10 per A03 | basso | M | un test per voce nel proprietario |
-| PA T54 · l'editor di testo vestito dal tema | PA | da fare (D22 A) | T35; prima di T41; mai con S2 T20 o la griglia T2–T3 | medio: tocca la pelle di ogni tema | M | Vitest di `theme.ts`, `check-inline-theme.mjs` |
+| PA T54 · l'editor di testo vestito dal tema | PA | fatto | T35; prima di T41; mai con S2 T20 o la griglia T2–T3 | medio: tocca la pelle di ogni tema | M | Vitest di `theme.ts`, `check-inline-theme.mjs` |
 
 ### Fase B · la cornice
 
@@ -5842,7 +5842,7 @@ Fatto quando: un tema veste l'editor di testo con gli stessi cancelli del
 resto; le foto del banco dell'editor di testo sono uguali a prima; la
 guardia del tema in linea passa senza il caso a parte.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/editors/text src/theme && npm run bench:verify; node ../../.github/scripts/check-inline-theme.mjs
-Stato: [ ] da fare
+Stato: [x] fatto · c17a6742..ed920bf4 · i colori dell'editor di testo stanno nella pelle (`skin/editors.css`), il tema di CodeMirror dà solo le classi `fub-syn-*` (non `cm-fub-*`: `profile.test` le conterebbe come decorazioni Live) e la luce; tolto il caso a parte da `check-inline-theme`; pixelmatch a soglia 0 su 821 foto, 53 diverse tutte instabili (almeno un giro nuovo uguale byte per byte a un giro base) · resta: ruoli in linea in profile.ts, properties.ts, table-widget.ts (nell'elenco della guardia); bench:verify sulle baseline del runner alla consegna
 
 ## T55 · Il controllo di tutte le viste nel banco
 
