@@ -61,6 +61,15 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · fub-pre-alpha · dove le persone leggono, «FubDraw» diventa
+  «Fub» o «il disegno» (frasi della shell, dei disegni, dei descrittori dei
+  formati e degli errori che arrivano alla shell, in italiano e in inglese);
+  resta solo come nome tecnico del formato, una riga nell'«Ambito» di
+  `docs/reference/scene-format.md` e una nota in coda all'ADR 0203, che non
+  si riscrive; una guardia in Vitest e due test Rust lo tengono fuori (PA
+  T33) · D14 A dell'utente (2026-11-07): FubDraw vive dentro Fub e la sua
+  app è archiviata (ADR 0231)
+
 - 2026-11-08 · fub-pre-alpha · un file senza permesso di scrittura (0444
   su Unix, l'attributo di sola lettura su Windows) non si sovrascrive: il
   kernel rifiuta con `PermissionDenied` tipizzato e i byte restano (nuovo
