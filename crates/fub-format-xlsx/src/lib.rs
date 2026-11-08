@@ -110,6 +110,37 @@ pub fn read(bytes: &[u8]) -> Result<Read, XlsxError> {
     })
 }
 
+/// I byte di una cartella nuova e vuota: un foglio solo, `first_sheet`, nel
+/// pacchetto `.xlsx` che il codec di GridCraft scrive per `Workbook::new()`.
+///
+/// È l'unico caso in cui il codec scrive un file intero: una cartella che non
+/// c'è ancora non ha niente che il suo modello possa perdere. `file_name` è il
+/// nome del file che nascerà, quello che il pacchetto ricorda come proprio. I
+/// byte si rileggono prima di tornare, e una rilettura con avvisi è un errore:
+/// non si promette una cartella che la griglia aprirebbe a metà.
+pub fn blank(file_name: &str, first_sheet: &str) -> Result<Vec<u8>, XlsxError> {
+    let bytes = guarded(|| {
+        let mut workbook = Workbook::new();
+        workbook
+            .check_sheet_name(first_sheet, Some(0))
+            .map_err(XlsxError::Codec)?;
+        if let Some(sheet) = workbook.sheet_mut(0) {
+            sheet.name = first_sheet.to_string();
+        }
+        gridcraft_engine::io::save_bytes_as(
+            &workbook,
+            file_name,
+            gridcraft_engine::io::FileKind::Xlsx,
+        )
+        .map_err(|error| XlsxError::Codec(error.to_string()))
+    })?;
+    let read = read(&bytes)?;
+    if let Some(warning) = read.report.warnings.first() {
+        return Err(XlsxError::Codec(warning.clone()));
+    }
+    Ok(bytes)
+}
+
 /// Il contenuto prima del codec: le dimensioni e la firma. Non legge il
 /// pacchetto: dice soltanto se il codec ha qualcosa da leggere.
 pub fn check(bytes: &[u8]) -> Result<(), XlsxError> {
@@ -223,5 +254,41 @@ impl FormatProvider for XlsxProvider {
         _rewrites: &[LinkRewrite],
     ) -> Result<Option<Vec<TextEdit>>, FormatError> {
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod blank_tests {
+    use super::*;
+
+    #[test]
+    fn una_cartella_vuota_ha_un_foglio_col_suo_nome_e_si_rilegge_senza_avvisi() {
+        let bytes = blank("Foglio senza titolo.xlsx", "Foglio1").unwrap();
+        check(&bytes).unwrap();
+        let read = read(&bytes).unwrap();
+        assert!(
+            read.report.warnings.is_empty(),
+            "{:?}",
+            read.report.warnings
+        );
+        let names: Vec<_> = read
+            .workbook
+            .sheets
+            .iter()
+            .map(|sheet| sheet.name.as_str())
+            .collect();
+        assert_eq!(names, ["Foglio1"]);
+        assert!(read.workbook.sheets[0].cells.is_empty());
+    }
+
+    #[test]
+    fn un_nome_di_foglio_che_excel_rifiuta_non_scrive_niente() {
+        let long = "x".repeat(32);
+        for name in ["", "a/b", "History", long.as_str()] {
+            assert!(
+                matches!(blank("Conti.xlsx", name), Err(XlsxError::Codec(_))),
+                "{name:?}"
+            );
+        }
     }
 }
