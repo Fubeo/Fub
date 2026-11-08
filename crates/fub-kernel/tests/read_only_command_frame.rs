@@ -104,6 +104,7 @@ fn read(ws: &Workspace, outer: &[String]) -> fub_kernel::PreparedReadOnlyCommand
         InvokeMode::Apply,
         outer,
         &flag(),
+        &[],
     )
     .expect("prepares")
     .expect("a read-only command takes this door")
@@ -221,6 +222,7 @@ fn a_command_that_invokes_itself_is_still_refused() {
         InvokeMode::Apply,
         outer.chain(),
         &flag(),
+        &[],
     );
     match again {
         Err(PluginError::BadArgs(why)) => {
@@ -243,6 +245,7 @@ fn writing_commands_and_unknown_commands_do_not_take_this_door() {
                 mode,
                 &[],
                 &flag(),
+                &[],
             )
             .expect("no error");
         assert!(
@@ -257,6 +260,7 @@ fn writing_commands_and_unknown_commands_do_not_take_this_door() {
             InvokeMode::Apply,
             &[],
             &flag(),
+            &[],
         )
         .is_err());
 }
@@ -355,6 +359,7 @@ fn a_read_dropped_without_its_end_leaves_the_flight() {
             InvokeMode::Apply,
             &[],
             &cancel,
+            &[],
         )
         .expect("prepares")
         .expect("read-only");
@@ -374,4 +379,33 @@ fn a_read_of_the_close_itself_is_not_in_flight() {
     let _closing = ws.prepare_close().expect("the close starts");
     let _prepared = read(&ws, &[]);
     assert_eq!(ws.reads_in_flight().count(), 0);
+}
+
+/// Uno smontaggio ferma la lettura e non chi la contiene: l'esito torna
+/// `Cancelled` anche se il provider ha risposto bene, e la bandiera del job
+/// resta giù.
+#[test]
+fn a_read_stopped_by_an_unmount_does_not_apply_and_does_not_stop_its_job() {
+    let (_dir, ws) = vault();
+    let cancel = flag();
+    let job = flag();
+    let prepared = ws
+        .prepare_read_only_provider_command(
+            "test.read",
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+            &[],
+            &cancel,
+            std::slice::from_ref(&job),
+        )
+        .expect("prepares")
+        .expect("read-only");
+    ws.reads_in_flight().cancel_owner("test");
+    let outcome = Ok(CommandOutcome::notify("letto"));
+    let finished = ws.finish_read_only_provider_command(prepared, outcome);
+    assert!(
+        matches!(finished, Err(PluginError::Cancelled(_))),
+        "{finished:?}"
+    );
+    assert!(!job.load(std::sync::atomic::Ordering::Relaxed));
 }
