@@ -99,6 +99,11 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · fub-pre-alpha · nuovo PA T62: un gancio di fub-app, spento
+  di serie e acceso solo dal banco, fa raccogliere la WebView prima di ogni
+  lettura di R1 (#284) · T21 ha mostrato che il minimo in 60 s non basta, e
+  ogni rosso a caso allunga una consegna di mezz'ora; le soglie non si
+  alzano, perché nasconderebbero una perdita vera.
 - 2026-11-08 · fub-pre-alpha (utente) · le consegne diventano più grandi e
   più rare: una ogni 12–15 task integrati, o una per traguardo (per esempio
   «Scrittoio 2 completo»); la CI completa (Windows, macOS, banchi e baseline
