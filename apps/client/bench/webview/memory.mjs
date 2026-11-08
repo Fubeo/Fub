@@ -82,6 +82,19 @@ export function sample(root) {
   };
 }
 
+/// Aspetta che sotto `root` non resti nessun processo dell'app (al più
+/// `timeoutMs`): l'app di uno scenario chiuso non deve ancora girare quando
+/// parte quella dopo. Torna quanti ne restano; 0 anche fuori da Linux, dove
+/// non si può guardare.
+export async function appGone(root, pause, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const left = sample(root)?.processes.length ?? 0;
+    if (left === 0 || Date.now() > deadline) return left;
+    await pause(100);
+  }
+}
+
 /// Tre letture a mezzo secondo l'una dall'altra; vale quella di mezzo per
 /// PSS, perché un'allocazione di passaggio non sposti il numero.
 export async function settled(root, pause) {

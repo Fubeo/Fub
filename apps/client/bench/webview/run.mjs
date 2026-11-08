@@ -22,9 +22,10 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { cpus, hostname, release, tmpdir, totalmem, type as osType } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { holdDisplay } from "./display.mjs";
 import { openSession, waitForDriver } from "./driver.mjs";
 import { noteName, writeFixtures } from "./fixtures.mjs";
-import { settled } from "./memory.mjs";
+import { appGone, settled } from "./memory.mjs";
 import { CANVAS_SCRIPT, COMMITS, OPENS, SIZES, builtModule } from "./canvas.mjs";
 import { INDEXING_SCRIPT } from "./indexing.mjs";
 import { TILES_SCRIPT } from "./tiles.mjs";
@@ -62,6 +63,9 @@ const R1_SETTLE_MS = 10_000;
 const R1_LATE_MS = 60_000;
 /// I giri di apri tutto e chiudi tutto dopo la prima chiusura.
 const R1_ROUNDS = 10;
+/// Ogni quanto si rilegge la memoria di un giro, fra `R1_SETTLE_MS` e
+/// `R1_LATE_MS` dalla chiusura.
+const R1_POLL_MS = 5_000;
 
 /// Un file per modalità, nell'ordine in cui R1 li apre: il nome che si cerca
 /// col selettore rapido e la modalità che il referto nomina.
@@ -327,9 +331,10 @@ const SCENARIOS = {
   ///    precedenti; una lettura dopo ognuno;
   /// 3. **chiuse**: chiuse tutte le schede, una lettura dopo `R1_SETTLE_MS` e
   ///    una dopo `R1_LATE_MS`, per vedere se la memoria torna col tempo;
-  /// 4. **giri**: `R1_ROUNDS` volte tutti i file aperti e poi chiusi, una
-  ///    lettura `R1_SETTLE_MS` dopo ogni chiusura, e alla fine una dopo
-  ///    `R1_LATE_MS`.
+  /// 4. **giri**: `R1_ROUNDS` volte tutti i file aperti e poi chiusi; dopo
+  ///    ogni chiusura una lettura a `R1_SETTLE_MS` e poi una ogni
+  ///    `R1_POLL_MS` fino a `R1_LATE_MS`, e il giro vale la più bassa; alla
+  ///    fine la lettura «tardi», `R1_LATE_MS` dopo l'ultima chiusura.
   ///
   /// Ogni lettura è PSS in MiB, per processo: l'app (l'host Rust e la
   /// finestra), i processi della WebView, la rete, la GPU se c'è.
@@ -372,10 +377,29 @@ const SCENARIOS = {
       await pause(MEMORY_QUIET_MS);
       const open = await settled(driverPid, pause);
       const remained = await closeAll(session);
+      const roundClosedAt = Date.now();
       await pause(R1_SETTLE_MS);
-      rounds.push({ round, open, left: remained, closed: await settled(driverPid, pause) });
+      // La WebView raccoglie quando vuole ciò che la lavagna lascia aprendosi
+      // (sul runner 300–400 MiB): una lettura sola a 10 s lo trova raccolto o
+      // no a caso, e la retta dei giri misurava questo invece di ciò che resta
+      // (#284). Si rilegge fino a un minuto dalla chiusura, come «tardi», e
+      // vale la lettura più bassa: ciò che ogni giro lascia davvero non scende,
+      // e la pendenza lo vede ancora.
+      const soon = await settled(driverPid, pause);
+      let closed = soon;
+      let lowestAt = Date.now() - roundClosedAt;
+      while (Date.now() - roundClosedAt < R1_LATE_MS) {
+        await pause(Math.min(R1_POLL_MS, Math.max(0, R1_LATE_MS - (Date.now() - roundClosedAt))));
+        const read = await settled(driverPid, pause);
+        if (read && closed && read.pss < closed.pss) {
+          closed = read;
+          lowestAt = Date.now() - roundClosedAt;
+        }
+      }
+      rounds.push({ round, open, left: remained, soon, closed, lowestAtMs: lowestAt });
     }
-    await pause(R1_LATE_MS);
+    // «Tardi» resta un minuto dopo l'ultima chiusura: l'ultimo giro lo ha già
+    // aspettato.
     const roundsLate = rounds.length > 0 ? await settled(driverPid, pause) : null;
     const opened = steps.at(-1)?.memory ?? null;
     const values = {};
@@ -415,7 +439,7 @@ const SCENARIOS = {
       values[`${key}.tardi.MiB`] = residue(roundsLate, group);
     }
     return {
-      procedure: { settleMs: R1_SETTLE_MS, lateMs: R1_LATE_MS, quietMs: MEMORY_QUIET_MS, rounds: R1_ROUNDS },
+      procedure: { settleMs: R1_SETTLE_MS, lateMs: R1_LATE_MS, pollMs: R1_POLL_MS, quietMs: MEMORY_QUIET_MS, rounds: R1_ROUNDS },
       restored,
       empty,
       steps,
@@ -518,6 +542,15 @@ async function keep(session, id) {
   }
 }
 
+/// Chiude la sessione e aspetta che l'app sia uscita del tutto, con i
+/// processi della WebView: lo scenario dopo parte su un'app sola, e la sua
+/// memoria non conta quella di prima.
+async function closeSession(session) {
+  await session.close();
+  const left = await appGone(driverPid, pause);
+  if (left > 0) console.log(`· ${left} processi dell'app chiusa girano ancora dopo 10 s`);
+}
+
 /// Ferma `tauri-driver` e ciò che ha avviato, e aspetta che esca (al più 10 s).
 async function stopDriver(driver) {
   const exited = new Promise((done) => {
@@ -548,6 +581,10 @@ async function main() {
   mkdirSync(out, { recursive: true });
   const root = mkdtempSync(join(tmpdir(), "fub-webview-"));
   const { vault, config } = writeFixtures(root);
+  // Un client X collegato per tutta la corsa: senza, Xvfb si azzera a ogni
+  // app chiusa e l'app dello scenario dopo può non partire (#287).
+  const display = await holdDisplay();
+  console.log(display.skipped ? `· display non tenuto: ${display.skipped}` : "· display X tenuto aperto per tutta la corsa");
   const driver = spawn(args.driver ?? "tauri-driver", [
     "--port", String(port),
     ...(args["native-driver"] ? ["--native-driver", args["native-driver"]] : []),
@@ -576,7 +613,7 @@ async function main() {
       await keep(warm, "riscaldamento");
       console.log(`✗ riscaldamento: ${String(error?.message ?? error)}`);
     } finally {
-      await warm.close();
+      await closeSession(warm);
     }
     // R1 subito dopo il riscaldamento: l'avvio riapre soltanto la nota del
     // riscaldamento, non le schede degli altri scenari. I1 subito dopo, con
@@ -618,11 +655,12 @@ async function main() {
         results[id] = { error: String(error?.message ?? error) };
         console.log(`✗ ${id}: ${results[id].error}`);
       } finally {
-        await session.close();
+        await closeSession(session);
       }
     }
   } finally {
     await stopDriver(driver);
+    display.close();
     // L'app che si chiude può scrivere nel vault ancora un attimo: la
     // rimozione riprova, e una cartella temporanea che resta non cancella le
     // misure già prese.
