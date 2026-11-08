@@ -331,17 +331,18 @@ Se una di queste cade, la stima si allunga.
 | PA T6, T7 · #289 | PA | T6 e T7 fatti | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
 | PA T58 · la guardia stretta anche per enum, variant e funzioni esportate | PA | fatto (ADR 0238) | T7 | medio: confine WASM, ADR 0235 | M | `wit_additivity`, componente vero anche per gli import |
 | PA T8 · la pagina della cornice del telefono | PA | fatto | nessuno | basso | S | guardie dei documenti |
-| PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | integrato; aspetta la CI Windows completa | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
+| PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | fatto (in main, #317) | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
 | PA T10 · i due punti sciolti da ritrovare | PA | fatto | nessuno | basso | S | la causa trovata o la riga che chiude |
-| PA T13 · il corpus senza perdite | PA | integrato; la sola lettura per permesso del file c'è (T59), aspetta Windows e macOS | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
-| PA T59 · un file in sola lettura non si sovrascrive | PA | integrato; aspetta Windows e macOS dalla CI completa | T13 | medio: la scrittura del kernel, tre sistemi | S | test del kernel e `prealpha_corpus` sui tre sistemi |
-| PA T60 · le altre prove del lucchetto a un colpo solo | PA | da fare (cadute in CI su macOS) | T19 | basso: solo test | M | 200 corse verdi delle due cadute |
+| PA T13 · il corpus senza perdite | PA | fatto (in main, #317) | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
+| PA T59 · un file in sola lettura non si sovrascrive | PA | fatto (in main, #317) | T13 | medio: la scrittura del kernel, tre sistemi | S | test del kernel e `prealpha_corpus` sui tre sistemi |
+| PA T60 · le altre prove del lucchetto a un colpo solo | PA | fatto | T19 | basso: solo test | M | 200 corse verdi delle due cadute |
+| PA T61 · la CI Mobile per la cornice del telefono | PA | da fare | nessuno | basso: solo il filtro di un workflow | S | una PR che tocca solo la cornice fa partire `mobile.yml` |
 | PA T19 · i test instabili del Rust | PA | fatto | nessuno | medio | M | 200 giri verdi o causa trovata |
 | PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | fatto | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
 | PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | fatto | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
 | PA T33 · il nome FubDraw dove le persone lo vedono | PA | fatto | nessuno | basso | M | test dei descrittori, di `fub-scene` e del catalogo |
 | PA T34 · il manifest dice da quale tema parte | PA | fatto | nessuno | medio: la forma del manifest sul filo | M | `crates/fub-host/tests/themes.rs`, mirror |
-| PA T35 · la pelle del tema sopra quella di serie | PA | da fare | T34 | medio: tocca il montaggio di ogni tema | M | `theme/inherit.test.ts`, `gate.test.ts` |
+| PA T35 · la pelle del tema sopra quella di serie | PA | fatto (ADR 0240) | T34 | medio: tocca il montaggio di ogni tema | M | `theme/inherit.test.ts`, `gate.test.ts` |
 | PA T39 · i caratteri del tema | PA | da fare | T34, T35 | basso | M | test dell'host e del loader |
 | PA T40 · le icone del tema | PA | da fare (D16 A) | T34, T35; mai nella stessa ondata di S2 T14 | basso | M | Vitest di `ui/icons` e di `theme/` |
 | PA T44 · un documento e un foglio vuoti | PA | fatto | nessuno | basso: due comandi che creano file, dietro le loro feature | M | test d'integrazione di `fub-host`, anche con `--no-default-features` |
@@ -3804,8 +3805,9 @@ Fatto quando: il test Windows è verde nella CI completa; la pagina non dice
 più il limite.
 Prova: scripts/check.sh --rapido (qui il test Windows non gira: lo dice
 il resoconto); CI completa
-Stato: [~] integrato · c3b6f304..44ecd93a · manca la CI Windows completa (il
-codice Windows qui solo con clippy su `x86_64-pc-windows-msvc` in un crate
+Stato: [x] fatto · c3b6f304..44ecd93a · in main con la consegna 1 (#317,
+c1ad9eaa), «build + test (windows-latest)» verde nella CI completa (corsa
+42484380329); prima il codice Windows qui solo con clippy su `x86_64-pc-windows-msvc` in un crate
 di prova): la CLI parte sospesa, entra nel job con
 `KILL_ON_JOB_CLOSE`, poi riparte; il job si chiude dopo la raccolta, come
 il gruppo su unix; un job che non si crea è `LaunchError::Io` e la CLI non
@@ -3968,7 +3970,8 @@ Casi limite: il file che sparisce durante la prova; un file molto grande
 Fatto quando: `cargo test -p fub-host --test prealpha_corpus` passa sui
 tre sistemi nella CI completa.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test prealpha_corpus
-Stato: [~] integrato in parte · 2c9c9523 · 8 test verdi su Linux (aprire e
+Stato: [x] fatto · 2c9c9523 · in main con la consegna 1 (#317, c1ad9eaa),
+verde anche su Windows e macOS (corsa 42484380329) · 8 test verdi su Linux (aprire e
 chiudere, conflitto, file sparito, modifiche piccole; sola lettura coi motivi
 dell'host: docx protetto e cartella xlsx); manca la sola lettura per
 permesso del file: su Linux un file 0444 viene sovrascritto (rename in
@@ -4800,7 +4803,14 @@ Fatto quando: `theme/inherit.test.ts` prova che:
 - un componente che il tema non nomina ha lo stile di serie;
 - «Annulla anteprima» non lascia resti.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/theme/
-Stato: [ ] da fare
+Stato: [x] fatto · b8aac8dc..fb734855 · ADR 0240; il fascio porta
+`inherited: { skin }` (lo riempie `theme.ts` per `extends: "fub.serie"`), e
+un fascio con `extends` senza di esso è rifiutato; la pelle di serie
+ereditata non ripassa dal sanificatore (è di serie); `replaceTheme`
+inserisce davanti al primo canale dopo `pelle-tema`, così i frammenti
+restano ultimi anche senza preferenze; via `INHERITED_SHEET_REASON` e il
+filtro del catalogo; toccati anche `runtime.test.ts`, `generate.mjs` e
+`permissions-and-security.md`, che descrivevano il rifiuto di prima
 
 ## T36 · Installare un tema da una cartella, e leggere perché è rifiutato
 
@@ -6103,8 +6113,8 @@ sistemi nella CI completa; il test della shell prova il messaggio e la
 bozza che resta.
 Prova: scripts/check.sh --rapido; cargo test -p fub-kernel; cargo test -p
 fub-host --test prealpha_corpus
-Stato: [~] integrato · 7c585e1f..b14b488c · Linux verde; Windows e macOS
-dalla CI completa · su Unix conta la classe che si applica al processo
+Stato: [x] fatto · 7c585e1f..b14b488c · in main con la consegna 1 (#317,
+c1ad9eaa), verde su Linux, Windows e macOS (corsa 42484380329) · su Unix conta la classe che si applica al processo
 (per root, nessun bit di scrittura); solo questo rifiuto diventa
 `PermissionDenied` (un `ReadOnlyFile` dentro l'`io::Error`), gli altri
 permessi negati restano `Io`; l'avviso esce una volta per documento e il
@@ -6144,4 +6154,41 @@ Fatto quando: nessuna prova che aspetta un lucchetto libero lo chiede una
 volta sola (`grep` nel resoconto); 200 corse verdi delle due cadute.
 Prova: scripts/check.sh --rapido; cargo nextest run --retries 0 -p
 fub-host --lib legacy_tests::concurrency (200 volte)
+Stato: [x] fatto · 8fc9e15a..cb1e66c4 · aiuti `read_comes_free` e
+`write_comes_free` in `legacy_tests.rs`; le due cadute 200/200 da sole;
+622 prove della lib di `fub-host` verdi. Restano a un colpo solo, con un
+commento: le 4 sonde che aspettano il lucchetto preso (`long_running.rs`,
+`read_model_lock.rs`, `watcher_factory_lock.rs`). Allargato dall'orchestratore
+alle 4 sonde di test di `session.rs` (DECISIONS); il codice vero di
+`session.rs` e `custody.rs` non cambia
+
+## T61 · La CI Mobile parte anche per la cornice del telefono
+
+Perché: T8 ha trovato che i filtri `paths` di `mobile.yml` non coprono
+`apps/client/src/shells/scrittoio/mobile/**` né `apps/client/src/theme/scrittoio/`:
+una PR che cambia solo la cornice del telefono o i suoi stili non
+costruisce l'APK, e un guasto del telefono arriva in `main` senza che la CI
+lo veda. L'utente ha detto sì al task (2026-11-08).
+Ramo: piano/fub-pre-alpha.
+Tocca: `.github/workflows/mobile.yml` (solo `on.pull_request.paths`), la
+pagina dove `mobile.yml` è descritto (`docs/development/` o
+`docs/architecture/phone-frame.md`) se nomina i percorsi.
+Non toccare: i job di `mobile.yml`; `ci.yml`; i nomi dei job
+(`check-release-gate.mjs`).
+Dipende da: niente.
+Cosa fare:
+- Elenca i percorsi che l'ingresso del telefono (`mobile.html`,
+  `entrypoints/mobile*`) importa davvero: segui gli import, non i nomi delle
+  cartelle. Aggiungi ai `paths` ciò che è solo del telefono (almeno
+  `shells/scrittoio/mobile/**`) e gli stili che solo il telefono monta.
+- Non allargare a tutto `apps/client/**`: la CI Mobile è lenta, e i
+  cambi comuni passano già dai job del desktop. Se un percorso è comune
+  (per esempio `theme/scrittoio/`), mettilo solo se una sua rottura si vede
+  solo sul telefono; la scelta va scritta nel resoconto.
+Casi limite: un percorso rinominato da Scrittoio 2 (il filtro lo deve
+seguire quando Scrittoio 2 entra: una riga nel resoconto per il prossimo
+allineamento).
+Fatto quando: i `paths` coprono la cornice del telefono; la PR di consegna
+che porta T61 fa partire `mobile.yml` (la si vede nella lista dei check).
+Prova: scripts/check.sh --rapido; `actionlint` se c'è, altrimenti la CI
 Stato: [ ] da fare
