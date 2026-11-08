@@ -25,7 +25,7 @@ import {
   mountedTextEditors as editorViews,
 } from "../editors/text/test-support";
 import type { FakeHost } from "../host/fake";
-import type { DraftInfo } from "../host/contract";
+import type { DraftInfo, ViewSpec } from "../host/contract";
 
 vi.setConfig({ testTimeout: 20_000 });
 
@@ -170,12 +170,10 @@ interface Mounted extends Shell {
 async function mount(
   file: Record<string, string>,
   watch: (shell: Shell) => void = () => {},
+  view: ViewSpec[] = [testViewSpec(TRASH_VIEW, "left_sidebar")],
 ): Promise<Mounted> {
   vi.resetModules();
-  const host = createFakeHost({
-    file,
-    view: [testViewSpec(TRASH_VIEW, "left_sidebar")],
-  });
+  const host = createFakeHost({ file, view });
   box.host = host;
   box.trace = [];
   const store = await import("./store");
@@ -220,8 +218,9 @@ async function mount(
 async function start(
   file: Record<string, string>,
   watch?: (shell: Shell) => void,
+  view?: ViewSpec[],
 ): Promise<Mounted> {
-  const mounted = await mount(file, watch);
+  const mounted = await mount(file, watch, view);
   await mounted.startup;
   await settle();
   return mounted;
@@ -595,6 +594,88 @@ describe("aprire un vault: i passi e il loro ordine", () => {
 
     expect(shell.notices()).toContain(shell.t("demo.unsaved", { files: "Benvenuto.md" }));
     expect(shell.store.state.vaultRoot).toBe("/altro");
+  });
+});
+
+describe("la scheda di una view principale quando il vault cambia (#237 R08)", () => {
+  /// Una view che si apre in un riquadro, come il grafo: l'host finto sa
+  /// disegnare soltanto il cestino, e qui basta che sia una view principale.
+  const mainViews = (): ViewSpec[] => [testViewSpec(TRASH_VIEW, "main")];
+  /// Il vault che ha nominato l'ultimo disegno della view, o `null` se non
+  /// l'ha disegnata nessuno.
+  const lastRenderVault = (shell: Shell): unknown => {
+    const calls = shell.host.atGate("renderView");
+    return calls[calls.length - 1]?.args[3] ?? null;
+  };
+  const renders = (shell: Shell): number => shell.host.atGate("renderView").length;
+  /// La view si vede nel riquadro: la sua superficie è accesa e ha un albero.
+  const paneShowsView = (): boolean => {
+    const surface = document.querySelector<HTMLElement>(".pane .pane-view");
+    return !!surface && !surface.hidden && surface.childElementCount > 0;
+  };
+
+  async function openTab(shell: Shell): Promise<void> {
+    const { openPrimaryView } = await import("../ui/primary-views");
+    openPrimaryView(TRASH_VIEW);
+    await waitFor("la view si disegna nel riquadro", () => lastRenderVault(shell) === "/vault" && paneShowsView());
+  }
+
+  it("dopo due cambi di fila la scheda si ridisegna nel vault aperto, e riaprendolo pure", async () => {
+    const shell = await start(VAULT, undefined, mainViews());
+    await openTab(shell);
+    const { openVault } = await import("../desktop-shell");
+
+    await openVault("/altro");
+    await openVault("/terzo");
+    await settle();
+    expect(lastRenderVault(shell)).toBe("/terzo");
+    expect(paneShowsView()).toBe(true);
+    // Nessun disegno, dopo l'apertura, nomina un vault lasciato.
+    const before = renders(shell);
+    await openVault("/terzo");
+    await settle();
+    expect(renders(shell)).toBeGreaterThan(before);
+    expect(shell.host.atGate("renderView").slice(before).map((call) => call.args[3])).toEqual(
+      Array(renders(shell) - before).fill("/terzo"),
+    );
+    expect(paneShowsView()).toBe(true);
+  });
+
+  /// La seconda `synchronize()` dell'apertura sembra in più: la prima ha già
+  /// rimesso le schede. Ma la prima gira con le view **del vault di prima**, e
+  /// una scheda la cui view quel vault non dichiarava resta vuota finché le
+  /// view del vault nuovo non sono montate e non si rifà il giro.
+  it("una view che il vault di prima non dichiarava torna nella sua scheda", async () => {
+    const views = mainViews();
+    const shell = await start(VAULT, undefined, views);
+    await openTab(shell);
+    const { openVault } = await import("../desktop-shell");
+
+    const declared = views.splice(0);
+    await openVault("/senza");
+    await settle();
+    expect(paneShowsView()).toBe(false);
+    // Il vault che non la dichiara non si sente chiedere di disegnarla: con
+    // l'host vero sarebbe un errore, e un avviso, per una view che non c'è.
+    expect(shell.host.atGate("renderView").filter((call) => call.args[3] === "/senza")).toEqual([]);
+
+    views.push(...declared);
+    await openVault("/con");
+    await settle();
+    expect(lastRenderVault(shell)).toBe("/con");
+    expect(paneShowsView()).toBe(true);
+  });
+
+  it("smontata la shell, la scheda non si ridisegna più", async () => {
+    const shell = await start(VAULT, undefined, mainViews());
+    await openTab(shell);
+    const stop = await shell.startup;
+
+    stop();
+    const before = renders(shell);
+    shell.host.writeFromOutside("Benvenuto.md", "cambiato da fuori\n");
+    await settle();
+    expect(renders(shell)).toBe(before);
   });
 });
 
