@@ -16,6 +16,10 @@
 // `getPropertyValue("--accent")` resta ammesso: è il modo del canvas, che il
 // colore lo legge e non lo scrive.
 //
+// Vale anche per il tema di CodeMirror (`editors/text/theme.ts`): i colori
+// dell'editor di testo stanno nella pelle, sotto le classi `.cm-*`, e il tema
+// dell'editor dà solo le classi della sintassi e la luce (issue #242).
+//
 // Parte con le righe di oggi, in `EXCEPTIONS`, contate per file: il conto può
 // solo scendere. Una riga nuova lo fa salire e la guardia fallisce; una riga
 // tolta dal codice va tolta anche dall'elenco, o fallisce lo stesso.
@@ -27,13 +31,6 @@ import { createRequire } from "node:module";
 const EDITORS = "apps/client/src/editors/";
 const CONTRACT = "apps/client/theme/author/contract.json";
 
-/// Il tema di CodeMirror è fatto di stili scritti da CodeMirror sull'elemento,
-/// e i suoi colori sono ruoli: non è un'eccezione da contare, è un altro modo
-/// di vestire l'editor di testo. Resta fuori finché non passa alla pelle.
-const SEPARATE = new Map([
-  [`${EDITORS}text/theme.ts`, "il tema di CodeMirror (EditorView.theme) è un caso a parte: issue #242"],
-]);
-
 /// Le occorrenze di oggi, per file. Possono solo scendere.
 const EXCEPTIONS = new Map([
   // La Lavagna dipinge le sue carte con stili in linea.
@@ -42,10 +39,10 @@ const EXCEPTIONS = new Map([
   // La stampa compone una pagina sua, fuori dalla pelle.
   [`${EDITORS}media/print-view.ts`, 2],
   [`${EDITORS}spatial/tools/accessibility-panel.ts`, 1],
-  // I profili Markdown passano ruoli a `EditorView.theme`: issue #242.
-  [`${EDITORS}text/profiles/markdown/livepreview.ts`, 20],
+  // I profili Markdown passano ancora ruoli a `EditorView.theme`: in
+  // `livepreview.ts` la tipografia, negli altri anche dei colori (issue #242).
+  [`${EDITORS}text/profiles/markdown/livepreview.ts`, 7],
   [`${EDITORS}text/profiles/markdown/profile.ts`, 9],
-  [`${EDITORS}text/profiles/markdown/proof.ts`, 2],
   [`${EDITORS}text/profiles/markdown/properties.ts`, 5],
   [`${EDITORS}text/profiles/markdown/table-widget.ts`, 9],
 ]);
@@ -120,11 +117,11 @@ function findings(typescript, roles, fileName, text) {
 }
 
 /// Il giudizio su un insieme di sorgenti: `{ relative → testo }`.
-function judge(typescript, roles, sources, exceptions = EXCEPTIONS, separate = SEPARATE) {
+function judge(typescript, roles, sources, exceptions = EXCEPTIONS) {
   const errors = [];
   const counted = new Map();
   for (const [relative, text] of Object.entries(sources)) {
-    if (!relative.startsWith(EDITORS) || separate.has(relative)) continue;
+    if (!relative.startsWith(EDITORS)) continue;
     const found = findings(typescript, roles, relative, text);
     if (found.length > 0) counted.set(relative, found);
   }
@@ -143,9 +140,6 @@ function judge(typescript, roles, sources, exceptions = EXCEPTIONS, separate = S
       errors.push(`${relative}: ${now} ruoli in linea, l'elenco ne ammette ${allowed}: accorcia EXCEPTIONS a ${now}`);
     }
   }
-  for (const relative of separate.keys()) {
-    if (!(relative in sources)) errors.push(`${relative}: il caso a parte non c'è più, toglilo da SEPARATE`);
-  }
   return errors;
 }
 
@@ -160,12 +154,14 @@ function selfTest(typescript) {
   `;
   const dirty = `el.style.color = "var(--accent)"; el.style.border = \`1px solid var(--doc-fg, \${x})\`;`;
   const cases = [
-    ["una variabile di dato e getPropertyValue passano", judge(typescript, roles, { [file]: clean }, new Map(), new Map()), 0],
-    ["un ruolo nuovo in una stringa e in un modello fa fallire", judge(typescript, roles, { [file]: dirty }, new Map(), new Map()), 1],
-    ["un'eccezione che li conta passa", judge(typescript, roles, { [file]: dirty }, new Map([[file, 2]]), new Map()), 0],
-    ["un'eccezione tolta dal codice va tolta dall'elenco", judge(typescript, roles, { [file]: clean }, new Map([[file, 2]]), new Map()), 1],
-    ["fuori dagli editor non si guarda", judge(typescript, roles, { "apps/client/src/ui/prova.ts": dirty }, new Map(), new Map()), 0],
-    ["un caso a parte sparito si toglie", judge(typescript, roles, { [file]: clean }, new Map(), new Map([[`${EDITORS}via.ts`, "x"]])), 1],
+    ["una variabile di dato e getPropertyValue passano", judge(typescript, roles, { [file]: clean }, new Map()), 0],
+    ["un ruolo nuovo in una stringa e in un modello fa fallire", judge(typescript, roles, { [file]: dirty }, new Map()), 1],
+    ["un'eccezione che li conta passa", judge(typescript, roles, { [file]: dirty }, new Map([[file, 2]])), 0],
+    ["un'eccezione tolta dal codice va tolta dall'elenco", judge(typescript, roles, { [file]: clean }, new Map([[file, 2]])), 1],
+    ["fuori dagli editor non si guarda", judge(typescript, roles, { "apps/client/src/ui/prova.ts": dirty }, new Map()), 0],
+    // Il tema di CodeMirror non è un caso a parte: un suo ruolo conta come
+    // ogni altro (issue #242).
+    ["il tema dell'editor di testo si conta", judge(typescript, roles, { [`${EDITORS}text/theme.ts`]: dirty }, new Map()), 1],
   ];
   const wrong = cases.filter(([, errors, expected]) => errors.length !== expected).map(([name]) => name);
   if (wrong.length > 0) throw new Error(wrong.join("; "));

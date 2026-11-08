@@ -1536,12 +1536,11 @@ function handleClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks):
   return false;
 }
 
-// Il tema del modulo: solo classi cm-fub-*, dentro l'estensione. I **valori**
-// dei colori vengono però dalle variabili della superficie del documento
-// (`--doc-*` in `theme/scrittoio/sheet-dark.css`): sono gli stessi che usa la modalità Lettura, e
-// tenerne due copie significherebbe che passare da Live a Lettura cambia i
-// colori della stessa nota. Le variabili hanno un fallback, così l'estensione
-// resta montabile anche senza il CSS della shell.
+// Il tema del modulo: solo classi cm-fub-*, dentro l'estensione, e solo la
+// forma. I colori sono della pelle (`theme/scrittoio/skin/document.css` ed
+// `editors.css`), con gli stessi ruoli della Lettura: una copia qui vorrebbe
+// dire che passare da Live a Lettura cambia i colori della stessa nota, e che
+// un tema non può vestire la Live (issue #242).
 const theme = EditorView.baseTheme({
   ".cm-markdown-gap": { height: "0", lineHeight: "0", fontSize: "0", padding: "0" },
   // La stessa scala della Lettura (`preview.css`): relativa al corpo, e
@@ -1553,11 +1552,11 @@ const theme = EditorView.baseTheme({
   ".cm-fub-h5": { fontSize: "0.85em", fontWeight: "700", letterSpacing: "var(--tracking-caps, 0.06em)", textTransform: "uppercase" },
   ".cm-fub-h6": { fontSize: "0.85em", fontWeight: "500", letterSpacing: "var(--tracking-caps, 0.06em)", textTransform: "uppercase" },
   ".cm-fub-heading-line": { paddingTop: "0.9em", paddingBottom: "0.2em" },
-  ".cm-fub-h1-line": { paddingTop: "1.2em", borderBottom: "1px solid var(--doc-rule-soft, rgba(135, 135, 135, 0.3))", paddingBottom: "0.3em", marginBottom: "0.4em" },
+  ".cm-fub-h1-line": { paddingTop: "1.2em", paddingBottom: "0.3em", marginBottom: "0.4em" },
   ".cm-fub-h2-line": { paddingTop: "1.1em" },
   ".cm-line:first-child.cm-fub-heading-line": { paddingTop: "0" },
   ".cm-fub-h1, .cm-fub-h2, .cm-fub-h3, .cm-fub-h4, .cm-fub-h5, .cm-fub-h6": {
-    color: "var(--doc-heading, var(--doc-fg))", lineHeight: "var(--leading-tight, 1.2)",
+    lineHeight: "var(--leading-tight, 1.2)",
   },
   ".cm-fub-h1 > span, .cm-fub-h2 > span, .cm-fub-h3 > span, .cm-fub-h4 > span, .cm-fub-h5 > span, .cm-fub-h6 > span": {
     color: "inherit",
@@ -1580,20 +1579,14 @@ const theme = EditorView.baseTheme({
     position: "absolute",
     left: "50%",
     transform: "translateX(-50%)",
-    color: "var(--muted, rgba(135, 135, 135, 0.9))",
   },
   ".cm-fub-bullet-task::before": { content: "none" },
   ".cm-fub-code": {
-    background: "var(--doc-fill, rgba(135, 135, 135, 0.16))",
     fontFamily: "var(--font-mono, monospace)",
     borderRadius: "3px",
     padding: "0 0.15em",
   },
-  ".cm-fub-codeblock": { background: "var(--doc-fill-soft, rgba(135, 135, 135, 0.10))" },
-  ".cm-fub-quote": {
-    borderLeft: "3px solid var(--doc-rule, rgba(135, 135, 135, 0.45))",
-    paddingLeft: "0.6em",
-  },
+  ".cm-fub-quote": { paddingLeft: "0.6em" },
   ".cm-fub-quote-mark": { color: "rgba(135, 135, 135, 0.8)" },
   // La pastiglia di un collegamento: piccola, dopo il testo, non è testo.
   ".cm-fub-link-pill": {
@@ -1613,13 +1606,11 @@ const theme = EditorView.baseTheme({
     display: "inline-block",
     width: "100%",
     verticalAlign: "middle",
-    borderTop: "1px solid var(--doc-rule, rgba(135, 135, 135, 0.55))",
   },
   ".cm-fub-link, .cm-fub-wikilink": {
     cursor: "pointer",
     textDecoration: "underline",
     textUnderlineOffset: "2px",
-    color: "var(--doc-link)",
   },
   // L'icona della pagina nominata, fuori dal testo: il cursore non la vede.
   ".cm-fub-wikilink[data-page-icon]::before": {
@@ -1628,20 +1619,11 @@ const theme = EditorView.baseTheme({
     display: "inline-block",
     textDecoration: "none",
   },
-  ".cm-fub-highlight": { background: "var(--doc-highlight, rgba(255, 205, 0, 0.35))" },
-  "&dark .cm-fub-highlight": { background: "var(--doc-highlight, rgba(255, 205, 0, 0.28))" },
   ".cm-fub-tag": {
-    background: "var(--doc-fill, rgba(135, 135, 135, 0.18))",
     borderRadius: "1em",
     padding: "0 0.45em",
     fontSize: "0.95em",
     cursor: "pointer",
-    // Un solo colore per entrambe le luci: il valore vive nei token del
-    // foglio (`--doc-link`) e cambia con la luce. Prima c'erano due regole
-    // `&light`/`&dark` con fallback cablati (#2f6bd8, #82aaff) che non
-    // coincidevano coi token — una terza copia della stessa coppia, e una
-    // divergenza che si vedeva solo a tema non caricato.
-    color: "var(--doc-link)",
   },
   ".cm-fub-done": { textDecoration: "line-through", opacity: "0.55" },
   ".cm-fub-checkbox": {
