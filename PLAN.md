@@ -332,7 +332,7 @@ Se una di queste cade, la stima si allunga.
 | PA T58 · la guardia stretta anche per enum, variant e funzioni esportate | PA | fatto (ADR 0238) | T7 | medio: confine WASM, ADR 0235 | M | `wit_additivity`, componente vero anche per gli import |
 | PA T8 · la pagina della cornice del telefono | PA | fatto | nessuno | basso | S | guardie dei documenti |
 | PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | integrato; aspetta la CI Windows completa | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
-| PA T10 · i due punti sciolti da ritrovare | PA | da fare (D10 B) | nessuno | basso | S | la causa trovata o la riga che chiude |
+| PA T10 · i due punti sciolti da ritrovare | PA | fatto | nessuno | basso | S | la causa trovata o la riga che chiude |
 | PA T13 · il corpus senza perdite | PA | integrato; la sola lettura per permesso del file c'è (T59), aspetta Windows e macOS | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
 | PA T59 · un file in sola lettura non si sovrascrive | PA | integrato; aspetta Windows e macOS dalla CI completa | T13 | medio: la scrittura del kernel, tre sistemi | S | test del kernel e `prealpha_corpus` sui tre sistemi |
 | PA T19 · i test instabili del Rust | PA | fatto | nessuno | medio | M | 200 giri verdi o causa trovata |
@@ -3839,7 +3839,14 @@ difetto).
 Fatto quando: un test che falliva passa, oppure il registro dice «non
 riprodotto» con le prove fatte.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · ea3c4fa9..17a7a4fa · la stringa: in tutte le 183 scene in
+italiano l'unico inglese dal finto è in `grid-result-error`; tradotti
+quello e gli altri errori del finto rivolti alla shell, test
+`host/fake-lingua.test.ts` (3 rossi prima, verdi dopo); le baseline
+`grid-result-error-*` dal runner. I diagrammi: 43 contati e 43 resi, ma il
+README (fuori dal controllo) dichiarava l'id `ENTRY` due volte e disegnava
+un ingresso solo; corretto, e `check-mermaid.mjs` ora guarda anche il
+README e trova un id con due etichette (44 blocchi)
 
 ## T11 · Il vassoio delle barre
 
