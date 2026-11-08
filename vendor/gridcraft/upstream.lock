@@ -43,6 +43,10 @@ sha256 = "sha256:b544dc3a95400ca0f8e02f77cc16c81e1f8771cfc5fb399bf6c36c0099a5d6e
 path = "patches/0010-modifica-di-note-e-commenti.patch"
 sha256 = "sha256:5228ac08563618dc7bc58500d3ee64da5ba4d3d46c4246162d2ec56787010b79"
 
+[[patch]]
+path = "patches/0011-cache-liberabili.patch"
+sha256 = "sha256:da2282f8c4a0d2300809d4ab56b2c48262df450bf6aa711e1983c1d1a5be995f"
+
 [[file]]
 path = "LICENSE-APACHE"
 upstream = "sha256:0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
@@ -254,6 +258,7 @@ result = "sha256:8e72ab6c85d3b6b9c1077fe31f6ba25ca108d0e44c4b2df216219783e178903
 [[file]]
 path = "crates/engine/src/cmd/spelling.rs"
 upstream = "sha256:184ff0474b6185a36beeaa9156507d888a11b4e3cb112d64a32f0117a88087ee"
+result = "sha256:5caef14a7eb35498c16137c57969c55456dee3f1d98a8a00e634dd2e24f84cfb"
 
 [[file]]
 path = "crates/engine/src/cmd/view.rs"
@@ -267,6 +272,7 @@ result = "sha256:a950ffab3d40a0cbd88d0449d5bac805d0c3b904e1eea785d31f61c438a89be
 [[file]]
 path = "crates/engine/src/display.rs"
 upstream = "sha256:ac463b4140cc8df5e33c9ec1d0bed9d25267b7914b48d38b69bb08793f73ca59"
+result = "sha256:47202b54cb233b66cdcddcfc77a797bc69c651265c153de2335693ef20beb700"
 
 [[file]]
 path = "crates/engine/src/fill.rs"

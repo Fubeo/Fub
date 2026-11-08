@@ -23,6 +23,10 @@ sha256 = "sha256:774ac0f351ec7b560932a3090830b668fd9059f535bca80c2024a6944a7bdc4
 path = "patches/0004-inchiostro-e-svg.patch"
 sha256 = "sha256:9fde206cc9b05bb7d969bcd252e571cde17b6bd3afa190129816b5005e7f8f1e"
 
+[[patch]]
+path = "patches/0005-dizionari-liberabili.patch"
+sha256 = "sha256:c1a91bc85a569e964dfaacbb0af3055203f98d4815c28acdec06ab269c0253f6"
+
 [[file]]
 path = "LICENSE-APACHE"
 upstream = "sha256:0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
@@ -695,6 +699,7 @@ upstream = "sha256:8dce5ad4aa4ffe4db325a3d38bd2761423823dbf501dbb09f0181d5e5bfd8
 [[file]]
 path = "crates/proof/src/affix.rs"
 upstream = "sha256:9af8535340e16b5a2b4ba99836474940f3e81ebcfc033b29ff4661412d0dc928"
+result = "sha256:1e3a7adc86639b7a9a5d10ddc0a27dba163beee47eb42616541f8a25f44eb6f5"
 
 [[file]]
 path = "crates/proof/src/bg.rs"
@@ -707,6 +712,7 @@ upstream = "sha256:7cf9e0781de769795a7591d7b54d8e829716b186d32a796f4ab4289635bd6
 [[file]]
 path = "crates/proof/src/cs/mod.rs"
 upstream = "sha256:9bd8696aa4d58264240e210f9dd0cc310792e90442b16583257a8f7be12f518c"
+result = "sha256:75cbe59f4faf012870e1dcc00fefe86f2bf44d7db7905acbe5d927670c6b4c2e"
 
 [[file]]
 path = "crates/proof/src/cs/suggest.rs"
@@ -719,6 +725,7 @@ upstream = "sha256:3076f4b900b8de0d2a18622a9fda9db01d738a218ca43709d83c03480cd38
 [[file]]
 path = "crates/proof/src/dict.rs"
 upstream = "sha256:dc1622df067291b862991e004f4a23649c912411faa357015e7e40ae15b5b3d7"
+result = "sha256:4f3057dd201d8a527734f54ceddd7629019c36b88f2529ad9a73121f0b793ae2"
 
 [[file]]
 path = "crates/proof/src/en_variants.rs"
@@ -731,6 +738,7 @@ upstream = "sha256:34d7cb7ca838e6257da2d0dcf3388735fc1fd01586f918954fe2bd89bfd94
 [[file]]
 path = "crates/proof/src/hr/mod.rs"
 upstream = "sha256:d930653b1ca7e102ae91b59f98185062268353c13dd590c77188b6f89a9396a4"
+result = "sha256:b1f4d7b0bff3d3e09a73e2d86da67095fd81b40ce1545723e743501d24917dee"
 
 [[file]]
 path = "crates/proof/src/hr/suggest.rs"
@@ -747,6 +755,7 @@ upstream = "sha256:092ef1c2c9195f991147121278945590ac151afa6cb30200f7b55947d3573
 [[file]]
 path = "crates/proof/src/hyphen.rs"
 upstream = "sha256:998f47fbe2030cf7415180d0836b631bd59de9c4a678d825d4d323baf1907c92"
+result = "sha256:24bd6a0179b4cc79901c4c06227413001f83d49064d0cdceed7144a00c505e2b"
 
 [[file]]
 path = "crates/proof/src/id/grammar.rs"
@@ -755,6 +764,7 @@ upstream = "sha256:b75a2375971c38335911294c0d445cf77e8ebef402177eecd70c09bdf1878
 [[file]]
 path = "crates/proof/src/id/mod.rs"
 upstream = "sha256:0f46527dc55e645f3da9fc6dda1697fa88a5556a74bdd9d29dbe449ed10e79f7"
+result = "sha256:fb2d9588e6f74c33da5fc8b2bf45fa685a506aa4dd44dc379b064fbd23aaa259"
 
 [[file]]
 path = "crates/proof/src/id/suggest.rs"
@@ -771,6 +781,7 @@ upstream = "sha256:91900c3c4a91320d9966581d7e684e477e863cda07f7a7c5c22ee698ce1f7
 [[file]]
 path = "crates/proof/src/it/mod.rs"
 upstream = "sha256:946b75aaab9bc516ed75794831784c6d458378eb23503c3e9a6985b84136e661"
+result = "sha256:4053b2b053179f792cd4bb357f98899e130ce951c3817692f280a79c8f56c008"
 
 [[file]]
 path = "crates/proof/src/it/suggest.rs"
@@ -787,10 +798,12 @@ upstream = "sha256:c02f159eb582de03cfeb061523dd16fab495f43979191eb6b32c8746a6897
 [[file]]
 path = "crates/proof/src/lib.rs"
 upstream = "sha256:4f7ddccb5a8ed42f7183e7e5786a70c1c779a0ef248197702f824d46aab30478"
+result = "sha256:741000efe3e2d2daee386b9d159322aa9e8115627930dbe04c1743d1195a154e"
 
 [[file]]
 path = "crates/proof/src/patterns.rs"
 upstream = "sha256:6af123137e49aa505be1d9652bc328af9985a9c14ebf9a0f8d344f1f2e028616"
+result = "sha256:c755b9f228758a1505b64e7ae16d6aa1880316e8a6c9c986f0c4be65caed66f1"
 
 [[file]]
 path = "crates/proof/src/pl/grammar.rs"
@@ -799,6 +812,7 @@ upstream = "sha256:d46d6d731f85d5ae348cdcc966cb1819ff8a195887fb80a503afdd70eb0e3
 [[file]]
 path = "crates/proof/src/pl/mod.rs"
 upstream = "sha256:fb35211fd240b9a8bc117bde56f8737727726bd5081ead6fc62ba377d83e6180"
+result = "sha256:084c6a0b4ef8562acf2f85e4ea421dc33dda388da7f62248e7e8051964d8e0cb"
 
 [[file]]
 path = "crates/proof/src/pl/suggest.rs"
@@ -815,6 +829,7 @@ upstream = "sha256:414f3d7eb2c2b76d437976d3c345eee31f35cad3a2178e89eae247bf1e5ff
 [[file]]
 path = "crates/proof/src/pt/mod.rs"
 upstream = "sha256:9c4017a7fb3c701a6d0ba6beaf0bb8e17c849afc769b9b5b7021319c78fb587d"
+result = "sha256:4efe66ca8961ffb889558e4745b9e39dceee04d8c29cdb837c57a62635b4eb01"
 
 [[file]]
 path = "crates/proof/src/pt/suggest.rs"
@@ -839,6 +854,7 @@ upstream = "sha256:4175cf7cb67ea6e41bb5ca2d990b7a00ab5de286dd5da26b1b2d58f32267c
 [[file]]
 path = "crates/proof/src/ru/mod.rs"
 upstream = "sha256:686a0be2d881721c4d7c47695404467c7b4d513d2bec908322661321c86e70ab"
+result = "sha256:5dbb8105e9ffb7f4c5d6dbc0aa907edff584ee2e9a47fd0a0ef8a4037b067041"
 
 [[file]]
 path = "crates/proof/src/ru/suggest.rs"
@@ -849,8 +865,14 @@ path = "crates/proof/src/ru/test_dict.rs"
 upstream = "sha256:433ad239cf018dda38beb8b741530bb5ffe1208b0be87ceca802e8182e361ce5"
 
 [[file]]
+path = "crates/proof/src/slot.rs"
+upstream = "none"
+result = "sha256:c404cc5a78e9962088ed38eac21a022e540970bd32603beb120955c594d13444"
+
+[[file]]
 path = "crates/proof/src/tr/dict.rs"
 upstream = "sha256:c99dc65b5009096bdca6b60a8158a8b6f281f0a148205689ed9cbbbcba1c361e"
+result = "sha256:bf365ea08e0822446a0059984aaa8e4c844b4261838394b0926e91005dd096f3"
 
 [[file]]
 path = "crates/proof/src/tr/grammar.rs"
@@ -863,6 +885,7 @@ upstream = "sha256:2cc71ad1262373cc15f2c01e6cb0b91ca410e771f74325f429aae0d7ae445
 [[file]]
 path = "crates/proof/src/tr/mod.rs"
 upstream = "sha256:597e5fcd06fa39e26e178269ad7d1f767ebf06999e68fa8ea7609cf91654cb5e"
+result = "sha256:9c3ff2fcd7c2c8bca23798f4002bb4956d5c97a0078103a25f443286bbe580b3"
 
 [[file]]
 path = "crates/proof/src/tr/suggest.rs"

@@ -99,6 +99,7 @@ pub mod craft;
 /// L'anteprima di un file Craft fatta dalla CLI dell'app, dopo un gesto.
 pub mod craft_render;
 mod custody;
+mod engines;
 mod export_folder;
 pub mod format_source;
 pub mod jobs;
@@ -146,6 +147,7 @@ pub mod web_clip;
 mod workbook;
 extern crate self as fub_host;
 pub use custody::Custody;
+pub use engines::OpenKey;
 /// La mappa dei componenti (K1): le righe e il risolutore stanno in
 /// `fub-features`, da cui `mount` costruisce i manifest.
 pub use fub_features::componenti;

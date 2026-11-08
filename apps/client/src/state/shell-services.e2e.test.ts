@@ -278,12 +278,12 @@ function firstEditor(): ReturnType<typeof editorViews>[number] {
 /// così non resta un canale aperto dopo la prova.
 async function holdWindowOpening(shell: Shell): Promise<{ abandon(): Promise<void> }> {
   const { openCurrentInNewWindow } = await import("./document-windows");
-  const reads = shell.host.atGate("readDocument").length;
-  const unlock = shell.host.throttle("readDocument");
+  const reads = shell.host.atGate("openDocument").length;
+  const unlock = shell.host.throttle("openDocument");
   const opening = openCurrentInNewWindow("note/Spesa.md");
   await waitFor(
     "la finestra comincia ad aprirsi",
-    () => shell.host.atGate("readDocument").length === reads + 1,
+    () => shell.host.atGate("openDocument").length === reads + 1,
   );
   return {
     abandon: async () => {
@@ -347,7 +347,7 @@ describe("aprire un vault: i passi e il loro ordine", () => {
       "pendingKeybindings",
       "queryIndex:vault_status",
       // La prima nota: il layout era vuoto, quindi nessuno aveva letto niente.
-      "readDocument",
+      "openDocument",
     ];
     expect(firstOccurrences(box.trace, steps)).toEqual(steps);
   });
@@ -371,7 +371,7 @@ describe("aprire un vault: i passi e il loro ordine", () => {
       "viewState:layout",
       "viewState:expanded",
       "viewState:activeSpace",
-      "readDocument",
+      "openDocument",
       "queryIndex:drafts",
       "signal:vault:/altro",
       "signal:documents",
@@ -623,9 +623,11 @@ describe("i gesti nominano il vault in cui nascono (FUB-001)", () => {
   it("la lettura di un documento aperto nomina il vault aperto", async () => {
     const shell = await start(VAULT);
 
-    const reads = shell.host.atGate("readDocument").map((call) => call.args);
-    expect(reads.length).toBeGreaterThan(0);
-    for (const args of reads) expect(args[1]).toBe("/vault");
+    // Una sessione legge sotto la sua chiave: `[id, chiave, vault]`.
+    const opens = shell.host.atGate("openDocument").map((call) => call.args);
+    expect(opens.length).toBeGreaterThan(0);
+    for (const args of opens) expect(args[2]).toBe("/vault");
+    for (const args of shell.host.atGate("readDocument").map((call) => call.args)) expect(args[1]).toBe("/vault");
   });
 
   /// Le letture che compongono la shell — l'elenco delle view, il disegno delle
