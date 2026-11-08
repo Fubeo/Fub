@@ -22,6 +22,10 @@ const box = vi.hoisted(() => ({
   /// per nota (#237 R02): `version.restore` sul finto.
   versions: new Map<string, string>(),
   restoring: false,
+  /// Le pagine del PDF che il pdf.js finto apre.
+  pages: 1,
+  /// Il pdf.js finto non sa aprire il PDF.
+  broken: false,
 }));
 
 vi.mock("../host/ipc", () => {
@@ -120,7 +124,7 @@ vi.mock("pdfjs-dist/build/pdf.min.mjs", () => {
     version: "6.3.289",
     GlobalWorkerOptions: { workerSrc: "" },
     getDocument: () => ({
-      promise: Promise.resolve({ numPages: 1, getPage: async () => page, destroy: async () => {} }),
+      promise: box.broken ? Promise.reject(new Error("PDF rotto")) : Promise.resolve({ numPages: box.pages, getPage: async () => page, destroy: async () => {} }),
       destroy: async () => {},
     }),
   };
@@ -310,7 +314,7 @@ async function waitFor(thing: string, cond: () => boolean, within = 3000): Promi
 
 /// La shell vera col PDF e un Word nel vault, il consenso `consent`, e
 /// `craft_render` che risponde «in coda» come il backend.
-async function start(consent: CraftRenderConsent, app: string | null = "PdfCraft"): Promise<FakeHost> {
+async function start(consent: CraftRenderConsent, app: string | null = "PdfCraft", notes: Record<string, string> = {}): Promise<FakeHost> {
   vi.resetModules();
   box.consent = consent;
   box.app = app;
@@ -329,7 +333,7 @@ async function start(consent: CraftRenderConsent, app: string | null = "PdfCraft
     render: { app: "PdfCraft", consent: box.consent },
   });
   const host = createFakeHost({
-    file: { "Benvenuto.md": "# Benvenuto\n", "Altra.md": "# Altra\n", "Lettera.docx": rich("ciao") },
+    file: { "Benvenuto.md": "# Benvenuto\n", "Altra.md": "# Altra\n", "Lettera.docx": rich("ciao"), ...notes },
     resources: { [GUIDA]: { bytes: new TextEncoder().encode("test"), mime: "application/pdf" } },
     craft: { docs: {} },
     craftRender,
@@ -515,6 +519,109 @@ describe("il gesto che apre un PDF fa fare l'anteprima (T31)", () => {
     await open(GUIDA, true);
     await waitFor("la riga della domanda", () => consentRows().length === 1);
     expect(renders(host)).toEqual([]);
+  });
+});
+
+// T32: `![[guida.pdf#page=3]]` in una nota è un collegamento che apre il PDF
+// a quella pagina, sulla shell vera contro l'host finto.
+describe("il collegamento a una pagina di un PDF (T32)", () => {
+  beforeEach(() => {
+    activeStop?.();
+    activeStop = null;
+    document.body.innerHTML = "";
+    localStorage.clear();
+    box.pages = 5;
+  });
+
+  afterEach(() => {
+    box.pages = 1;
+  });
+
+  const NOTE = "Rimandi.md";
+  const TEXT = [
+    "# Rimandi",
+    "",
+    "![[guida.pdf#page=3]]",
+    "",
+    "![[guida.pdf#page=9]]",
+    "",
+    "![[guida.pdf#page=0]]",
+    "",
+    "![[guida.pdf#page=abc]]",
+    "",
+    "![[guida.pdf#page=]]",
+    "",
+  ].join("\n");
+
+  /// Il collegamento che la nota fa dell'embed con quel punto.
+  const linkTo = (heading: string) => visible("a.wikilink[data-wikilink-page='guida.pdf']")
+    .find((a) => a.dataset.wikilinkHeading === heading);
+  /// La pagina che il visore del PDF dice di mostrare.
+  const shownPage = () => visible(".media-pdf-page")[0]?.getAttribute("aria-label") ?? null;
+  /// Le schede del PDF nel riquadro col fuoco.
+  const pdfTabs = async () => {
+    const { layout } = await import("../state/layout");
+    return layout.panes[layout.focus]!.tabs.filter((tab) => tab.k === "doc" && tab.doc === GUIDA);
+  };
+
+  async function clickLink(heading: string): Promise<void> {
+    await waitFor(`il collegamento #${heading}`, () => linkTo(heading) !== undefined);
+    linkTo(heading)!.click();
+    await settle();
+  }
+
+  it("il clic su ![[guida.pdf#page=3]] apre il visore alla pagina 3", async () => {
+    await start("off", "PdfCraft", { [NOTE]: TEXT });
+    await open(NOTE);
+    await clickLink("page=3");
+    await waitFor("la pagina 3", () => shownPage() === "Pagina 3 di 5");
+    expect(await pdfTabs()).toHaveLength(1);
+  });
+
+  it("una pagina oltre l'ultima apre l'ultima", async () => {
+    await start("off", "PdfCraft", { [NOTE]: TEXT });
+    await open(NOTE);
+    await clickLink("page=9");
+    await waitFor("l'ultima pagina", () => shownPage() === "Pagina 5 di 5");
+  });
+
+  it.each(["page=0", "page=abc", "page="])("#%s apre la prima pagina, senza errori", async (heading) => {
+    await start("off", "PdfCraft", { [NOTE]: TEXT });
+    await open(NOTE);
+    await clickLink(heading);
+    await waitFor("la prima pagina", () => shownPage() === "Pagina 1 di 5");
+  });
+
+  it("il PDF già aperto in un'altra scheda torna attivo a quella pagina", async () => {
+    await start("off", "PdfCraft", { [NOTE]: TEXT });
+    await open(GUIDA);
+    await waitFor("la prima pagina", () => shownPage() === "Pagina 1 di 5");
+    await open(NOTE);
+    await clickLink("page=3");
+    await waitFor("la pagina 3", () => shownPage() === "Pagina 3 di 5");
+    expect(await pdfTabs()).toHaveLength(1);
+  });
+
+  it("[[guida.pdf#page=4]] col PDF già nella scheda attiva lo porta a quella pagina", async () => {
+    await start("off", "PdfCraft", { [NOTE]: TEXT });
+    await open(GUIDA);
+    await waitFor("la prima pagina", () => shownPage() === "Pagina 1 di 5");
+    const { openWikilink } = await import("./document");
+    await openWikilink("guida.pdf", "page=4", undefined, NOTE, { gesture: true });
+    await waitFor("la pagina 4", () => shownPage() === "Pagina 4 di 5");
+    expect(await pdfTabs()).toHaveLength(1);
+  });
+
+  it("un PDF rotto resta l'errore di sempre", async () => {
+    box.broken = true;
+    try {
+      await start("off", "PdfCraft", { [NOTE]: TEXT });
+      await open(NOTE);
+      await clickLink("page=3");
+      await waitFor("l'errore del PDF", () => (visible(".media-pdf [role=status]")[0]?.textContent ?? "").includes("could not be opened"));
+    } finally {
+      box.broken = false;
+    }
   });
 });
 
