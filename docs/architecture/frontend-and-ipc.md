@@ -267,26 +267,12 @@ pannelli) lo Scrittoio compone:
   contratto del tema lo esporta in `layers`
   ([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)).
 
-I predefiniti dell'aspetto (accento, i tre caratteri, corpo, interlinea,
-giustezza) li dichiara l'host e coincidono con quelli della serie; un test Rust
-lo verifica.
-
-L'accento è una tinta sola (`appearance.accent`, da 0 a 360) da cui la ricetta
-(`theme/scrittoio/recipe.ts`) ricava ogni colore: anche i neutri ne prendono un
-filo. La tinta di serie è lo smeraldo, 160, il verde del logo
-(`DEFAULT_ACCENT_HUE`); le preferenze offrono otto campioni (smeraldo, matita
-blu, viola, prugna, terracotta, ocra, salvia, petrolio) e una tinta su misura.
-Chi ha scritto una tinta la tiene: cambia solo il valore di serie. I quattro
-colori di stato (pericolo, avvertenza, salvato, informazione) restano ad
-almeno 30° dall'accento (`STATUS_HUE_GAP`, `statusHue`): una tinta più vicina
-si sposta a 30°, dal lato dove stava. Con lo smeraldo il «salvato» va da 155 a
-130; con la matita blu l'informazione va da 240 a 235. I colori di serie dello
-strato d'avvio (`public/avvio/avvio.css`) sono scritti a mano, perché valgono
-prima di ogni JS, e `src/avvio/colori.test.ts` li tiene uguali ai ruoli della
-ricetta nelle due luci e col contrasto alto. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
-400 px, ispettore da 248 a 440 px. Un tema `theme-1` non si monta; uno con
-`extends` lascia la pelle di serie in `pelle` e aggiunge la sua in `pelle-tema`,
-dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
+I predefiniti dell'aspetto li dichiara l'host, uguali alla serie (test Rust).
+L'accento di serie è lo smeraldo, 160; i colori di stato ne restano a 30°
+(`statusHue`), e `avvio/colori.test.ts` lega l'avvio alla ricetta. Cassetti:
+sidebar da 208 a 400 px, ispettore da 248 a 440 px, col divisore del kit. Un
+tema `theme-1` non si monta; uno con `extends` lascia la pelle di serie in
+`pelle` e aggiunge la sua in `pelle-tema`, dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
 
 ### Comportamenti della shell
 
