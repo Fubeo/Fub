@@ -335,7 +335,7 @@ Se una di queste cade, la stima si allunga.
 | PA T13 · il corpus senza perdite | PA | da fare, dopo #295 (registro 2026-11-08) | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
 | PA T19 · i test instabili del Rust | PA | da fare | nessuno | medio | M | 200 giri verdi o causa trovata |
 | PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | fatto | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
-| PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | da fare | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
+| PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | in corso (coder, base fa55d793) | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
 | PA T33 · il nome FubDraw dove le persone lo vedono | PA | da fare (D14 A) | nessuno | basso | M | test dei descrittori, di `fub-scene` e del catalogo |
 | PA T34 · il manifest dice da quale tema parte | PA | da fare (D15 A, `extends`) | nessuno | medio: la forma del manifest sul filo | M | `crates/fub-host/tests/themes.rs`, mirror |
 | PA T35 · la pelle del tema sopra quella di serie | PA | da fare | T34 | medio: tocca il montaggio di ogni tema | M | `theme/inherit.test.ts`, `gate.test.ts` |
@@ -4598,7 +4598,7 @@ Fatto quando: un test di Vitest prova che il clic su
 `![[x.pdf#page=3]]` apre la superficie con `initialPage` 3, e i casi
 limite.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base fa55d793
 
 ## T33 · Il nome FubDraw dove le persone lo vedono
 
