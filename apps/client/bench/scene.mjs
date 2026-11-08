@@ -1272,6 +1272,25 @@ export const SCENE = onPage("shell", [
       viewport: PHONE,
       prepare: async (page) => {
         await openRichDocument(page, "Documenti/Prova.docx");
+        // Il pallino dello stato nella testata resta il chip di 24 px del
+        // computer, non un cerchio di 44, e si tocca lo stesso 10 px sopra e
+        // sotto il suo centro (`shells/mobile/mobile.css`, PA T47).
+        await page.waitForFunction(() => {
+          const chip = document.querySelector(".pane.focus .pane-toolbar .pane-standing-chip");
+          if (!(chip instanceof HTMLElement) || chip.getClientRects().length === 0) return false;
+          const r = chip.getBoundingClientRect();
+          if (r.height > 24.5 || r.width >= 44) return false;
+          const x = r.left + r.width / 2;
+          const y = r.top + r.height / 2;
+          // Il suo tocco non copre il bottone della modalità accanto.
+          const mode = document.querySelector(".pane.focus .pane-toolbar > .pane-mode-current");
+          const m = mode?.getBoundingClientRect();
+          const modeFree = !m || m.width === 0
+            || document.elementFromPoint(m.left + 1, m.top + m.height / 2)?.closest(".pane-mode-current") === mode;
+          return modeFree
+            && document.elementFromPoint(x, y - 10)?.closest(".pane-standing-chip") === chip
+            && document.elementFromPoint(x, y + 10)?.closest(".pane-standing-chip") === chip;
+        }, null, { timeout: 5_000 });
         // Il fuoco della tastiera sul bottone della modalità: dal menu «…»
         // un passo indietro, così l'anello è quello di `:focus-visible`. Il
         // bottone sta sulla carta o accanto: l'anello sta dentro il suo
