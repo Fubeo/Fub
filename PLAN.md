@@ -180,7 +180,7 @@ codice, nei rami e nelle issue il 2026-11-05.
 | K0 · misure dei motori | In `main` (`docs/misure/*-k0.md`) | fatto | — | — |
 | K1 · i componenti | In `main` (#285, `crates/fub-componenti`) | fatto | — | — |
 | K2 · la pagina «Componenti» | Ramo: 7 di 7; la prova con una persona di K2 D-2 non è fatta | dentro | I componenti accesi e spenti | `piano/k2-pagina-componenti`, #290; la prova dell'utente prima del merge (D13 A) |
-| K3 · lo strato dei motori | Ramo: 18 di 19 (T18 fatto); T17 aspetta solo il sì dell'utente per unire #295 (CI completa verde, run 42049126094) | dentro | Word ed Excel | `piano/k3-motori`, #295 |
+| K3 · lo strato dei motori | Fatto: in `main` con #295 (fb722164, 2026-11-08, unita dall'utente) | dentro | Word ed Excel | `piano/k3-motori`, #295 |
 | K4, K7–K10 | Senza piano | fuori | Vedi sopra | «Piani di Fub» |
 | K5 · il disegno | Ramo: 10 di 30 | dentro | Il disegno SVG | `piano/k5-disegno`, #300 |
 | K6 · il disegno completo | Ramo: 0 di 30 | fuori | Scelta dell'utente (D24 B) | #313 |
@@ -322,8 +322,8 @@ Se una di queste cade, la stima si allunga.
 
 | Passo | Fonte | Stato | Dipende da | Rischio | Taglia | Prova di chiusura |
 |---|---|---|---|---|---|---|
-| K3 T17 · il sì dell'utente | K3 | aspetta solo il sì (T1–T16, T18 e T19 fatti; CI completa verde, run 42049126094) | nessuno | medio: un crate nuovo (`fub-motori`), patch nel `vendor/`, tre sistemi | — | il sì dell'utente |
-| Unire #295 (K3, con K3-IPC T8) | K3 | PR pronta, testa 165b8fa8 | il sì dell'utente | medio | S | `main` ha `crates/fub-motori` e i comandi `open_key`, `warm_engine` e `document_closed` |
+| K3 T17 · il sì dell'utente | K3 | fatto: il sì è arrivato, #295 in `main` (fb722164) | nessuno | medio: un crate nuovo (`fub-motori`), patch nel `vendor/`, tre sistemi | — | il sì dell'utente |
+| Unire #295 (K3, con K3-IPC T8) | K3 | fatto: in `main` (fb722164, 2026-11-08) | il sì dell'utente | medio | S | `main` ha `crates/fub-motori` e i comandi `open_key`, `warm_engine` e `document_closed` |
 | Riallineare #290 a `main` e unirla | K2 | 7 di 7; la prova con una persona non è fatta | la prova dell'utente col protocollo di K2, prima di segnarla pronta (D13 A) | basso | S | CI completa verde, OK dell'utente |
 | PA T1 · il finto del banco con le impostazioni dell'host | PA | fatto (baseline delle impostazioni dal runner) | #295 in `main` (d90a09d0 di K3 cambia `bench/fake-ipc.ts`) | basso | S | `bench/fake-ipc.test.ts` |
 | PA T3 · i comandi in sola lettura non tengono il turno | PA | fatto (5432f8b4) | nessuno | medio: tocca il custode | M | test d'integrazione di `fub-host` |
