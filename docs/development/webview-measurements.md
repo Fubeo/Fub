@@ -59,8 +59,9 @@ La procedura è fissa:
    3 s dopo ognuno;
 3. **chiuse**: chiuse tutte le schede, una lettura dopo 10 s e una dopo 60 s
    (**chiuse.tardi**);
-4. **giri**: dieci volte tutti i file aperti e poi tutto chiuso, una lettura
-   10 s dopo ogni chiusura, e alla fine una dopo 60 s.
+4. **giri**: dieci volte tutti i file aperti e poi tutto chiuso; dopo ogni
+   chiusura una lettura a 10 s e poi una ogni 5 s fino a 60 s, e il giro vale
+   la più bassa; alla fine la lettura **tardi**, 60 s dopo l'ultima chiusura.
 
 Ogni momento si legge in tutto e per gruppo di processi
 (`R1.vuota.app.MiB`, `R1.vuota.webview.MiB` e così via), e il referto tiene
@@ -77,6 +78,14 @@ ha restituito al sistema. I giri dicono se cresce: `R1.giri.primo.MiB` e
 per giro, e `R1.giri.tardi.MiB` il residuo un minuto dopo l'ultimo giro; gli
 stessi valori ci sono per ogni gruppo. Una pendenza vicina a zero è memoria
 che torna o si riusa; una pendenza positiva è memoria che ogni giro lascia.
+Il giro vale la lettura più bassa del suo minuto perché la WebView raccoglie
+quando vuole ciò che la lavagna lascia aprendosi: sul runner 300–400 MiB, che
+una lettura sola a 10 s trovava raccolti o no a caso, e la pendenza saltava
+fra −20 e +56 MiB per giro sullo stesso albero
+([#284](https://github.com/Fubeo/Fub/issues/284)). Ciò che un giro lascia
+davvero non scende, e la lettura più bassa lo tiene. Il referto tiene per ogni
+giro anche la lettura a 10 s (`soon`) e quando è arrivata la più bassa
+(`lowestAtMs`).
 La tolleranza, fissata in K0, sta in `budgets.json`: come obiettivo (il
 cancello di K3) residuo entro 50 MiB e pendenza entro 1 MiB per giro, sul
 runner una volta e mezza il peggiore visto.
@@ -159,6 +168,14 @@ esce con 1 se un valore supera la soglia scelta.
 
 Il job `webview` della CI fa lo stesso con S1–S3, S7, R1, T1, I1 e L1, sotto Xvfb e
 senza scheda grafica, e carica il referto come artifact `webview-<sha>`.
+
+Sotto Xvfb il banco tiene un client X collegato dall'inizio alla fine
+(`display.mjs`). Un server X avviato senza `-noreset` si azzera quando si
+stacca il suo ultimo client, e l'app dello scenario dopo, che parte meno di
+100 ms più tardi, poteva collegarsi proprio allora: GTK non si inizializzava e
+lo scenario era rosso senza aver misurato niente
+([#287](https://github.com/Fubeo/Fub/issues/287)). Dopo ogni scenario il banco
+aspetta anche che i processi dell'app chiusa siano usciti.
 
 ## macOS
 
