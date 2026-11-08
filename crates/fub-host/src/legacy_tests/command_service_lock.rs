@@ -105,12 +105,8 @@ impl BlockingBoundary {
         // l'esito misura quindi il vero RwLock e non la serializzazione fra
         // writer. Con una read-guard residua fallisce `write`; con una
         // write-guard residua falliscono entrambi.
-        let read = workspace.try_read();
-        let read_progressed = read.is_some();
-        drop(read);
-        let write = workspace.try_write();
-        let write_progressed = write.is_some();
-        drop(write);
+        let read_progressed = super::read_comes_free(&workspace);
+        let write_progressed = super::write_comes_free(&workspace);
 
         self.entered
             .send(LockObservation {
@@ -274,9 +270,7 @@ fn run_blocked<T: Send + 'static>(
     let observation = entered
         .recv_timeout(TIMEOUT)
         .expect("callback re-entry completes before the timeout");
-    let foreign_reader = workspace.try_read();
-    let foreign_read_progressed = foreign_reader.is_some();
-    drop(foreign_reader);
+    let foreign_read_progressed = super::read_comes_free(&workspace);
 
     // Si rilascia prima di ogni assert: anche una regressione non lascia il
     // thread del provider sospeso dietro al banco.

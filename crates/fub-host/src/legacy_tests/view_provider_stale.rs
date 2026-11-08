@@ -138,7 +138,7 @@ impl ViewProvider for BlockingAction {
         _: UiAction,
         _: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
-        if self.workspace.try_read().is_none() {
+        if !super::read_comes_free(&self.workspace) {
             return Err(PluginError::Internal(
                 "a workspace read lock remained during the action".into(),
             ));
@@ -294,7 +294,7 @@ fn an_action_from_a_replaced_view_provider_is_rejected_as_stale() {
         .recv_timeout(TIMEOUT)
         .expect("old provider is handling the action");
     assert!(
-        workspace.try_read().is_some(),
+        super::read_comes_free(&workspace),
         "no workspace read lock remains during the action"
     );
     release_tx.send(()).expect("old provider returns");

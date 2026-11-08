@@ -27,25 +27,12 @@ struct Probe {
 impl CommandProvider for Probe {
     fn commands(&self) -> Vec<CommandSpec> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        assert!(
-            self.workspace
-                .lock()
-                .unwrap()
-                .as_ref()
-                .unwrap()
-                .try_write()
-                .is_some(),
-            "declaration re-entry"
-        );
+        let workspace = self.workspace.lock().unwrap().as_ref().unwrap().clone();
+        assert!(super::write_comes_free(&workspace), "declaration re-entry");
         if let Some(registry) = &self.registry {
+            let registry = registry.lock().unwrap().as_ref().unwrap().clone();
             assert!(
-                registry
-                    .lock()
-                    .unwrap()
-                    .as_ref()
-                    .unwrap()
-                    .try_write()
-                    .is_some(),
+                super::write_comes_free(&registry),
                 "registry declaration re-entry"
             );
         }
@@ -70,19 +57,17 @@ impl CommandProvider for Probe {
 
 impl Drop for Probe {
     fn drop(&mut self) {
-        let available = self
-            .workspace
-            .lock()
-            .unwrap()
+        let workspace = self.workspace.lock().unwrap().clone();
+        let available = workspace
             .as_ref()
-            .is_none_or(|workspace| workspace.try_write().is_some());
-        let registry_available = self.registry.as_ref().is_none_or(|registry| {
-            registry
-                .lock()
-                .unwrap()
-                .as_ref()
-                .is_none_or(|registry| registry.try_write().is_some())
-        });
+            .is_none_or(|workspace| super::write_comes_free(workspace));
+        let registry = self
+            .registry
+            .as_ref()
+            .and_then(|registry| registry.lock().unwrap().clone());
+        let registry_available = registry
+            .as_ref()
+            .is_none_or(|registry| super::write_comes_free(registry));
         self.dropped_without_guard
             .store(available && registry_available, Ordering::SeqCst);
         assert!(!self.panic_in_drop, "provider drop failed");
@@ -167,7 +152,7 @@ fn declaration_allows_reentry_and_concurrent_progress_then_commits_without_callb
     let worker = std::thread::spawn(move || PreparedRegistration::commands(Box::new(provider)));
     entered_rx.recv().unwrap();
     // The blocked declaration is real external code; a second writer progresses.
-    assert!(workspace.try_write().is_some());
+    assert!(super::write_comes_free(&workspace));
     release_tx.send(()).unwrap();
     let mut prepared = worker.join().unwrap().unwrap();
     workspace
@@ -310,14 +295,14 @@ struct IndexProbe {
 
 impl fub_abi::traits::IndexProvider for IndexProbe {
     fn routes(&self) -> Vec<fub_abi::traits::QueryRoute> {
-        assert!(self.workspace.try_write().is_some());
+        assert!(super::write_comes_free(&self.workspace));
         self.routes_calls.fetch_add(1, Ordering::SeqCst);
         vec![fub_abi::traits::QueryRoute::Query(
             fub_abi::traits::QueryKind::Custom(OWNER.into()),
         )]
     }
     fn activate(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
-        assert!(self.workspace.try_write().is_some());
+        assert!(super::write_comes_free(&self.workspace));
         if self.fail_activation {
             Err(PluginError::Internal("lost derived state".into()))
         } else {
@@ -337,11 +322,11 @@ impl fub_abi::traits::IndexProvider for IndexProbe {
         Vec::new()
     }
     fn flush(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
-        assert!(self.workspace.try_write().is_some());
+        assert!(super::write_comes_free(&self.workspace));
         Ok(())
     }
     fn close(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
-        assert!(self.workspace.try_write().is_some());
+        assert!(super::write_comes_free(&self.workspace));
         self.closed.store(true, Ordering::SeqCst);
         Ok(())
     }
