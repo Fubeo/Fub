@@ -142,7 +142,9 @@ impl Ranged {
     /// identità, lo stesso `stat` e lo stesso timbro di cambiamento: la
     /// formula con cui il kernel dice che una lease vale ancora. Un file
     /// riscritto con lo stesso peso e la stessa data ha un timbro nuovo, e la
-    /// revisione si rifà.
+    /// revisione si rifà; il timbro però ha la grana dell'orologio del
+    /// filesystem (su Linux un tick del kernel), e una riscrittura dello
+    /// stesso peso nello stesso tick non la distingue nemmeno il kernel.
     pub fn revision(&self, doc: &DocId, max: u64) -> Result<Revision, RangedError> {
         let mut file = self.open(doc)?;
         if let Some(revision) = remembered(&file.lease) {
