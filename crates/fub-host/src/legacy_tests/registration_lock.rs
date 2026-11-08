@@ -58,16 +58,12 @@ impl CommandProvider for Probe {
 impl Drop for Probe {
     fn drop(&mut self) {
         let workspace = self.workspace.lock().unwrap().clone();
-        let available = workspace
-            .as_ref()
-            .is_none_or(|workspace| super::write_comes_free(workspace));
+        let available = workspace.as_ref().is_none_or(super::write_comes_free);
         let registry = self
             .registry
             .as_ref()
             .and_then(|registry| registry.lock().unwrap().clone());
-        let registry_available = registry
-            .as_ref()
-            .is_none_or(|registry| super::write_comes_free(registry));
+        let registry_available = registry.as_ref().is_none_or(super::write_comes_free);
         self.dropped_without_guard
             .store(available && registry_available, Ordering::SeqCst);
         assert!(!self.panic_in_drop, "provider drop failed");
