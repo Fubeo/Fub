@@ -28,8 +28,8 @@ La cartella viene scelta in ordine:
 | `settings.json` | autorevole | 1 | impostazioni della macchina |
 | `vaults.json` | autorevole | 1 | vault recenti, preferiti, nome e icona |
 | `view-state.json` | autorevole locale | 1 | stato delle view di questa macchina |
-| `themes/<id>/manifest.json` | installato | manifest | identità e compatibilità del tema |
-| `themes/<id>/` | installato | per tema | fogli, skin e asset |
+| `themes/<id>/manifest.json` | installato | manifest | identità e compatibilità del tema; `extends` e `fonts` facoltativi |
+| `themes/<id>/` | installato | per tema | fogli (`sheet-light.css`, `sheet-dark.css`), `skin.css` e asset; con `extends` i fogli sono facoltativi (vedi [Temi installati](permissions-and-security.md#temi-installati)) |
 | `logs/fub.log` | diagnostica | n/a | log del processo |
 | `wasm-plugins/inventory.json` | autorevole | 1 | componenti installati e scelte della macchina |
 | `wasm-plugins/components/<installation>-<sha256>.wasm` | installato | componente | eseguibile verificato |

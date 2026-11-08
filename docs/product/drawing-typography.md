@@ -124,7 +124,7 @@ e sei i file di Fub insieme stanno sotto i 384 KB, e quelli del
 Lettura e il PNG anche su righe con pezzi, corsivi, spaziatura e
 decorazioni, su testi in area e su tracciato, e prova di vedere un corsivo
 che manca. Prova anche gli a capo, in italiano e in inglese, in ogni
-carattere dell'app, con pezzi e spaziatura: ogni riga che FubDraw scrive sta
+carattere dell'app, con pezzi e spaziatura: ogni riga che Fub scrive sta
 nel riquadro come la disegna il browser, ed è la più lunga che ci sta. Con la
 spaziatura il browser non fa le legature, e la misura nemmeno: il banco
 prova anche la strada di dove il canvas non sa mettere la spaziatura, come
@@ -157,7 +157,7 @@ righe.
 
 Un testo in area scrive la larghezza del riquadro, `fub:wrap`, e su ogni
 riga che continua un paragrafo come continua, `fub:join`: le righe sono già
-spezzate, e un programma che non conosce FubDraw le disegna uguali, senza
+spezzate, e un programma che non conosce Fub le disegna uguali, senza
 il riquadro. Un testo su tracciato ha un `textPath` che rimanda al suo
 tracciato, fra le [risorse](drawing-resources.md) del disegno, e da dove
 comincia, qui a metà; un browser lo disegna come il foglio.

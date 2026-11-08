@@ -161,7 +161,7 @@ comando è un passo di annulla, e la selezione segue ciò che ha fatto.
   fermi il primo e l'ultimo e mette spazi uguali fra tre o più oggetti.
 
 Ordine, gruppi e separazione spostano gli elementi come sono scritti, e
-riscrivono solo ciò che cambia davvero. Una parte che FubDraw non sa scrivere,
+riscrivono solo ciò che cambia davvero. Una parte che Fub non sa scrivere,
 come un `<use>` estraneo, si sposta com'è e riceve ciò che il gruppo le dava;
 se un foglio del disegno sceglierebbe altri elementi, a chi cambierebbe
 aspetto si scrive lo stile di prima ([Disegni, appunti](drawing-clipboard.md)).
@@ -259,7 +259,7 @@ scelte restano, e tornano con lo spazio Completo.
 
 ## Testo
 
-Un testo che il disegno porta, scritto da FubDraw o da un altro programma, si
+Un testo che il disegno porta, scritto da Fub o da un altro programma, si
 vede col suo carattere, il suo corpo, il suo colore e la sua trasformazione, e
 si sceglie, si sposta, si trasforma e si elimina come gli altri oggetti; i
 campi della sezione «Testo» delle proprietà ne cambiano il carattere, il corpo
@@ -289,7 +289,7 @@ Nello spazio Completo, nella barra «Disponi»:
   scelta riscrive soltanto l'`href`, insieme a un `xlink:href` accanto.
 - **Togli il collegamento** (`Ctrl+Maiusc+K`) porta gli oggetti al posto del
   collegamento, dove si vedevano e con lo stile che ne ereditavano, e la
-  selezione passa a loro. Come per Separa, le parti che FubDraw non sa
+  selezione passa a loro. Come per Separa, le parti che Fub non sa
   scrivere si spostano come sono, con ciò che il collegamento dava loro.
 
 Ognuno è un passo di annulla. L'`href` è relativo alla cartella del disegno e si

@@ -112,6 +112,8 @@ pub mod mount;
 /// ce l'hanno.
 #[cfg(feature = "http-client")]
 pub mod net;
+#[cfg(any(feature = "rich", feature = "xlsx"))]
+mod new_file;
 pub mod obsidian_import;
 /// «Apri con»: quali app Craft aprono un file del vault, e aprirlo con una.
 pub mod open_with;
@@ -161,6 +163,8 @@ pub(crate) use watcher::{ExternalChange, ExternalSync};
 pub use watcher::{NoWatcher, VaultWatcher, WatcherFactory};
 #[cfg(test)]
 mod legacy_tests;
+#[cfg(test)]
+mod quiet_panic;
 
 pub use config::{config_dir, install_logging, log_path};
 pub use format_source::{FormatSource, PreparedFormatSource};

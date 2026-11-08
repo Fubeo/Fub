@@ -183,6 +183,24 @@ describe("tema runtime installato", () => {
     expect(reasons.some((reason) => reason.includes("engine") && reason.includes("theme-2"))).toBe(true);
   });
 
+  // Un tema che lascia il foglio alla serie (`sheet: null`) si monta col
+  // foglio di serie della sua luce: la pelle di serie resta in `pelle` e la
+  // sua si aggiunge in `pelle-tema` (ADR 0240).
+  it("un tema con extends senza il foglio della luce si monta sopra la serie", async () => {
+    const extending: ThemeManifest = { ...manifest, extends: "fub.serie" };
+    const themeSkin = ".shell-tooltip { white-space: nowrap; }";
+    box.listThemes.mockResolvedValue([{ manifest: extending, trust: "community" }]);
+    box.readTheme.mockResolvedValue({ ...payload, manifest: extending, sheet: null, skin: themeSkin });
+    const theme = await mountFromCache(info.manifest.id);
+    await vi.waitFor(() =>
+      expect(document.querySelector('style[data-fub="pelle-tema"]')?.textContent).toBe(themeSkin),
+    );
+    expect(theme.currentThemeId()).toBe(info.manifest.id);
+    expect(document.querySelector('style[data-fub="foglio"]')?.textContent).toBe(sheetLight);
+    expect(document.querySelector('style[data-fub="pelle"]')?.textContent).toBe(skin);
+    expect(box.report).not.toHaveBeenCalled();
+  });
+
   it("does not reactivate a removed theme after a restart", async () => {
     box.listThemes.mockResolvedValue([info]);
     box.readTheme.mockResolvedValue(payload);

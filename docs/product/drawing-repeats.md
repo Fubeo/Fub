@@ -57,7 +57,7 @@ un'istanza di un [simbolo](drawing-symbols.md), e il contrasto non si misura.
 ## Esportare e altri programmi
 
 L'SVG pulito tiene le copie come `use` e lascia `fub:repeat` con gli altri
-attributi di FubDraw; il PNG, il JPEG e il PDF disegnano ogni copia
+attributi di Fub; il PNG, il JPEG e il PDF disegnano ogni copia
 ([Disegni, esportare](drawing-export.md)).
 
 ## Spazi e parti

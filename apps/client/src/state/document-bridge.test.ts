@@ -8,6 +8,13 @@ import { attachChildBridge, attachRemoteSurface, DocumentWindowUnsupported, isRe
 import { mount } from "../theme/loader";
 import { emit } from "./store";
 
+/// Le porte che una prova pu\u00f2 guastare, e le bozze arrivate al disco.
+const disk = vi.hoisted(() => ({
+  writeFails: false,
+  draftFails: false,
+  drafts: [] as Array<{ id: string; text: string }>,
+}));
+
 vi.mock("./document-session", async (importOriginal) => {
   const real = await importOriginal<typeof SessionModule>();
   return {
@@ -22,9 +29,15 @@ vi.mock("./document-session", async (importOriginal) => {
         revision: "disk-1", format_id: "plain", source_kind: "text", text_kind: "source",
       }),
       documentClosed: async () => {},
-      writeDocument: async () => "disk-2",
+      writeDocument: async () => {
+        if (disk.writeFails) throw new Error("disco pieno");
+        return "disk-2";
+      },
       resourceWrite: async () => ({ revision: "disk-2" }),
-      saveDraft: async () => {},
+      saveDraft: async (id, text) => {
+        if (disk.draftFails) throw new Error("disco pieno");
+        disk.drafts.push({ id, text });
+      },
       discardDraft: async () => {},
     }),
   };
@@ -81,6 +94,9 @@ describe("document-window protocol", () => {
     for (const handle of handles) await handle.dispose();
     expect(MemoryChannel.peers.size).toBe(0);
     state.vaultRoot = "";
+    disk.writeFails = false;
+    disk.draftFails = false;
+    disk.drafts = [];
     vi.unstubAllGlobals();
   });
 
@@ -280,5 +296,68 @@ describe("document-window protocol", () => {
     await settle();
     expect(themes).toHaveLength(2);
     for (const el of document.head.querySelectorAll("style[data-fub]")) el.remove();
+  });
+
+  // #237 R01: la finestra di un documento che si chiude rilascia la sessione
+  // senza guardarne l'esito. Con salvataggio e bozza guasti la sessione deve
+  // restare viva e sporca nella finestra principale: è l'unica copia.
+  it("chiudere la finestra con salvataggio e bozza guasti tiene viva la sessione sporca", async () => {
+    const doc = `${number}-non-salvata.md`;
+    const { request, handle } = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(handle);
+    let text = "";
+    children.push(attachChildBridge(request, (next) => { text = next; }, () => text, observeState));
+    await settle();
+    disk.writeFails = true;
+    disk.draftFails = true;
+    const edit = operationFromText(text, "abc testo non salvato");
+    text = "abc testo non salvato";
+    children[0].sendEdit(text, edit);
+    await handle.freeze();
+
+    expect(children.pop()!.dispose()).toBe(true);
+    await handle.dispose();
+    handles.pop();
+
+    expect(disk.drafts).toEqual([]);
+    expect(documentSessions.inspect(doc)).toMatchObject({ text: "abc testo non salvato", dirty: true });
+    // Riaperta, la finestra mostra il testo della persona, non il disco.
+    const again = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(again.handle);
+    let reopened = "";
+    children.push(attachChildBridge(again.request, (next) => { reopened = next; }, () => reopened, observeState));
+    await settle();
+    expect(reopened).toBe("abc testo non salvato");
+    // Appena il disco lascia scrivere la bozza, la bozza c'è.
+    disk.draftFails = false;
+    await documentSessions.flushDraft(doc);
+    expect(disk.drafts).toContainEqual({ id: doc, text: "abc testo non salvato" });
+    disk.writeFails = false;
+    expect(await documentSessions.flush(doc)).toBe(false);
+  });
+
+  it("con la bozza scritta e il salvataggio guasto due chiusure di fila lasciano il testo in bozza e nella sessione", async () => {
+    const doc = `${number}-in-bozza.md`;
+    const { request, handle } = await attachRemoteSurface(doc, state.vaultRoot, PLAIN);
+    handles.push(handle);
+    let text = "";
+    children.push(attachChildBridge(request, (next) => { text = next; }, () => text, observeState));
+    await settle();
+    disk.writeFails = true;
+    const edit = operationFromText(text, "abc in bozza");
+    text = "abc in bozza";
+    children[0].sendEdit(text, edit);
+    await handle.freeze();
+
+    expect(children.pop()!.dispose()).toBe(true);
+    // La seconda chiusura aspetta la prima invece di farne un'altra.
+    await Promise.all([handle.dispose(), handle.dispose()]);
+    handles.pop();
+
+    expect(disk.drafts).toContainEqual({ id: doc, text: "abc in bozza" });
+    expect(documentSessions.inspect(doc)).toMatchObject({ text: "abc in bozza", dirty: true });
+    disk.writeFails = false;
+    expect(await documentSessions.flush(doc)).toBe(false);
+    expect((await documentSessions.release(doc)).kind).toBe("closed");
   });
 });

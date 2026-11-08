@@ -3,6 +3,7 @@ import { GRID_THEME_COLORS, MAIN_PANE } from "./contract";
 import type {
   BacklinkRef,
   BundleInfo,
+  ThemeFont,
   ThemeInfo,
   ThemePayload,
   InstalledPluginInfo,
@@ -1586,6 +1587,21 @@ describe("mirror TS↔Rust", () => {
         for (const key of keys) expect(all, `${type}.${key} not in TS mirror`).toContain(key);
         for (const key of required) expect(keys, `${type}.${key} missing`).toContain(key);
       }
+    }
+  });
+
+  it("i caratteri del manifest di un tema hanno la forma del mirror", () => {
+    const manifests = [
+      ...(appFixture.ThemeInfo as ThemeInfo[]),
+      ...(appFixture.ThemePayload as ThemePayload[]),
+    ].map((sample) => sample.manifest);
+    const fonts = manifests.flatMap((manifest) => manifest.fonts ?? []);
+    expect(fonts.length, "il campione porta un carattere").toBeGreaterThan(0);
+    const keys = keysOf<ThemeFont>({ family: true, file: true, weight: true, style: true }).sort();
+    for (const font of fonts) {
+      expect(Object.keys(font).sort()).toEqual(keys);
+      expect(["normal", "italic"]).toContain(font.style);
+      expect(typeof font.weight).toBe("number");
     }
   });
 

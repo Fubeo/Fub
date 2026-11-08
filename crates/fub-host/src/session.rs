@@ -657,6 +657,21 @@ fn close_session_resources(
     if let Err(error) = drain_events(workspace) {
         errors.push(error);
     }
+    // I comandi di sola lettura non tengono il turno: chi era in volo quando
+    // la chiusura è cominciata si ferma alla prossima chiamata all'host e si
+    // aspetta qui, prima che i provider vengano smontati. Si aspetta senza
+    // il lucchetto del workspace (una lettura, per finire, ne prende un
+    // prestito condiviso); le letture lanciate dalla chiusura stessa non sono
+    // in volo e non fanno aspettare.
+    match workspace.read() {
+        Ok(ws) => {
+            let reads = ws.reads_in_flight();
+            drop(ws);
+            reads.cancel_all();
+            reads.wait_idle();
+        }
+        Err(error) => errors.push(error),
+    }
 
     // Flush globale, corpi plugin e indici sono callback distinte. Ogni
     // errore viene raccolto, senza saltare il resto del teardown.
@@ -4592,6 +4607,26 @@ impl Host {
             let result = invoke_folder_create(&workspace, args, mode);
             return self.localized_host_result(vault, result);
         }
+        // Un comando che si è dichiarato di sola lettura ha il suo frame e
+        // **non** prende il turno: una lettura lunga (un'anteprima, uno
+        // strumento dell'AI) non ferma i salvataggi di chi scrive.
+        // La bandiera è quella che la chiusura del vault o lo spegnimento del
+        // suo plugin alzano per fermarlo; fuori non c'è nessuno da fermare.
+        let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let read_only = workspace.read()?.prepare_read_only_provider_command(
+            command,
+            args.clone(),
+            mode,
+            &[],
+            &cancel,
+            &[],
+        )?;
+        if let Some(prepared) = read_only {
+            let host = JobHost::new(workspace.clone(), prepared.owner().to_string())
+                .in_mode(prepared.host_mode())
+                .cancelled_by(cancel);
+            return crate::jobs::run_read_only_command(&workspace, host, prepared);
+        }
         // Il turno serializza gli altri writer ma **non** è il RwLock del
         // workspace: fra prepare e finalize i reader possono entrare, e il
         // callback può rientrare sullo stesso thread per singola capacità.
@@ -4683,7 +4718,7 @@ impl Host {
 
     #[cfg(test)]
     pub(crate) fn debug_sessions_write_available(&self) -> bool {
-        self.sessions.try_write().is_some()
+        crate::legacy_tests::write_comes_free(&self.sessions)
     }
     pub fn root(&self, vault: Option<&str>) -> Result<Utf8PathBuf, PluginError> {
         self.with_session(vault, |s| s.root.clone())
@@ -5246,12 +5281,10 @@ mod side_data_lock_tests {
         entered_rx
             .recv_timeout(Duration::from_secs(2))
             .expect("the organization update reaches storage");
-        let read = workspace.try_read();
-        let read_progressed = read.is_some();
-        drop(read);
-        let write = workspace.try_write();
-        let write_progressed = write.is_some();
-        drop(write);
+        // Entro una scadenza e prima di liberare lo storage: un prestito
+        // trattenuto dall'aggiornamento resterebbe preso fino in fondo.
+        let read_progressed = crate::legacy_tests::read_comes_free(&workspace);
+        let write_progressed = crate::legacy_tests::write_comes_free(&workspace);
         release_tx.send(()).expect("the storage update resumes");
 
         worker
@@ -5357,7 +5390,12 @@ mod tests {
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .clone();
-                if workspace.is_some_and(|workspace| workspace.try_write().is_some()) {
+                // Basta una lettura con il lucchetto libero: chi l'ha già vista
+                // non riprova, e chi no la cerca entro una scadenza.
+                if !self.write_progressed.load(Ordering::Acquire)
+                    && workspace
+                        .is_some_and(|workspace| crate::legacy_tests::write_comes_free(&workspace))
+                {
                     self.write_progressed.store(true, Ordering::Release);
                 }
             }
@@ -5629,11 +5667,9 @@ mod os_trash_command_tests {
     impl OsTrashBackend for FakeTrash {
         fn move_file_to_os_trash(&self, from: &Utf8Path) -> std::io::Result<Utf8PathBuf> {
             assert!(
-                self.workspace
-                    .get()
-                    .expect("workspace aperto")
-                    .try_read()
-                    .is_some(),
+                crate::legacy_tests::read_comes_free(
+                    self.workspace.get().expect("workspace aperto")
+                ),
                 "nessun prestito workspace attraversa il backend OS"
             );
             if self.unsupported {

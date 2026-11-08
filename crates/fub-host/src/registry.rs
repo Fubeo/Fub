@@ -929,6 +929,13 @@ impl BundleRegistry {
     ) -> Vec<PluginError> {
         let _workspace_turn = workspace.write_turn();
         let _registry_turn = registry.write_turn();
+        // Le letture in volo del plugin non tengono il turno: le si ferma e le
+        // si aspetta prima del `deactivate`, e la sbarra tiene fuori le nuove
+        // fino al ritiro dei provider (vedi `teardown::stop_reads`).
+        let _barred = match crate::teardown::stop_reads(workspace, id) {
+            Ok(barred) => barred,
+            Err(error) => return vec![error],
+        };
         let mut mounted = match registry.write() {
             Ok(mut registry) => {
                 let Some(at) = registry.mounted.iter().position(|bundle| bundle.id == id) else {

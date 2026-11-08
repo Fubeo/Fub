@@ -6,7 +6,7 @@ collegato a un proiettore. Il protocollo, la sicurezza e i limiti sono in
 `apps/client/src/editors/spatial/live/`.
 
 «Avvia la sessione live», nella palette, c'è solo nell'app desktop e su un
-disegno di FubDraw che si modifica. In un browser le porte `live_*` non ci
+disegno di Fub che si modifica. In un browser le porte `live_*` non ci
 sono e il comando non compare; nella shell mobile nemmeno, perché lì il
 dispositivo è semmai lo scrittore. Il codice della sessione arriva con un
 `import()` al primo avvio.

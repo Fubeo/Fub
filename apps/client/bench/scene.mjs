@@ -356,6 +356,26 @@ export const SCENE = onPage("shell", [
     },
   },
   {
+    id: "conflitto-lettura",
+    title: "Il conflitto in Lettura: la fascia resta, e dice quale testo si legge",
+    prepare: async (page) => {
+      // Una battuta non salvata, poi il file cambia da fuori: la nota va in
+      // conflitto. In Lettura il reso è il buffer, e la fascia lo dice (R03).
+      // È la nota che il banco apre per prima, come nello stato S33.
+      await page.click('.pane.focus .cm-content .cm-line:has-text("Questa è la nota")', { position: { x: 4, y: 8 } });
+      await page.keyboard.press("Home");
+      await page.keyboard.type("Scritto qui e non ancora salvato. ");
+      await page.evaluate(async () => {
+        const { api } = await import("/bench/fake-ipc.ts");
+        await api.writeDocument("Benvenuto.md", "# Benvenuto in Fub\n\nCambiata da un'altra app.\n", { kind: "dictated" });
+      });
+      await page.waitForSelector(".pane.focus [data-banner='document.conflict.body']:not([hidden]) .conflict-actions");
+      await page.click('.pane.focus .pane-toolbar button[data-mode="reading"]');
+      await page.waitForSelector(".pane.focus [data-banner='document.conflict.body'] [data-conflict-reading]");
+      await page.focus(".pane.focus .conflict-actions button >> nth=0");
+    },
+  },
+  {
     id: "source",
     title: "Modalità Sorgente: la tavolozza della sintassi",
     prepare: async (page) => {
@@ -1177,6 +1197,12 @@ export const SCENE = onPage("shell", [
         await page.waitForSelector("#sidebar-scrim:not([hidden])");
         // Il fuoco va alla maniglia, non al campo di ricerca: niente tastiera.
         await page.waitForSelector("#sidebar > .sheet-grip:focus");
+        // La maniglia resta alta 28 px: la regola dei 44 px del tocco non la
+        // prende, perché le sue esclusioni non pesano (`shells/mobile/mobile.css`).
+        await page.waitForFunction(() => {
+          const grip = document.querySelector("#sidebar > .sheet-grip");
+          return grip instanceof HTMLElement && Math.abs(grip.getBoundingClientRect().height - 28) < 0.5;
+        }, null, { timeout: 5_000 });
       },
     },
     {
@@ -1189,6 +1215,60 @@ export const SCENE = onPage("shell", [
         await page.waitForSelector("#inspector-scrim:not([hidden])");
       },
     },
+    // Le impostazioni in piedi, scheda «Componenti»: gli interruttori sono il
+    // binario della pelle con un tocco di 44 px attorno, e le schede scorrono
+    // di lato coi nomi interi (`shells/mobile/mobile.css`, PA T47).
+    {
+      id: "mobile-settings",
+      title: "Il telefono: le impostazioni sui componenti, gli interruttori e le schede intere",
+      viewport: PHONE,
+      prepare: async (page) => {
+        await page.click("#open-settings");
+        await page.click('#settings-tabs button[data-tab="components"]');
+        await page.waitForSelector('#settings-body input[role="switch"]');
+        await page.$eval('#settings-body input[role="switch"]', (first) => first.scrollIntoView({ block: "center" }));
+        await page.waitForFunction(() => {
+          const scroll = document.querySelector("#settings-scroll") ?? document.querySelector("#settings-body");
+          if (!scroll) return false;
+          const box = scroll.getBoundingClientRect();
+          // Visibile: per intero dentro la parte che scorre.
+          const switches = [...document.querySelectorAll('#settings-body input[role="switch"]')].filter((input) => {
+            const r = input.getBoundingClientRect();
+            return r.width > 0 && r.top >= box.top && r.bottom <= box.bottom && r.left >= box.left && r.right <= box.right;
+          });
+          if (switches.length === 0) return false;
+          const touchable = switches.every((input) => {
+            const r = input.getBoundingClientRect();
+            if (Math.round(r.width) !== 32 || Math.round(r.height) !== 18) return false;
+            const x = r.left + r.width / 2;
+            const y = r.top + r.height / 2;
+            return document.elementFromPoint(x, y - 10) === input
+              && document.elementFromPoint(x, y + 10) === input
+              && document.elementFromPoint(r.left - 5, y) === input;
+          });
+          const whole = [...document.querySelectorAll(".settings-tab")].every((tab) => tab.scrollWidth <= tab.clientWidth);
+          return touchable && whole;
+        }, null, { timeout: 5_000 });
+      },
+    },
+    // Il cestino con tre file, in piedi: i bottoni «Ripristina» di due righe
+    // vicine non si toccano (`shells/mobile/mobile.css`, PA T47).
+    {
+      id: "mobile-trash",
+      title: "Il telefono: il cestino con tre file, i bottoni staccati",
+      query: "cestino=3",
+      viewport: PHONE,
+      prepare: async (page) => {
+        await page.click('#views-ribbon .rail-btn[data-panel="trash"]');
+        await page.waitForFunction(() => {
+          const buttons = [...document.querySelectorAll(".ui-list > .ui-stack > .ui-button")]
+            .filter((button) => button.getClientRects().length > 0);
+          if (buttons.length !== 3) return false;
+          const boxes = buttons.map((button) => button.getBoundingClientRect());
+          return boxes.slice(1).every((box, index) => box.top - boxes[index].bottom >= 8);
+        }, null, { timeout: 5_000 });
+      },
+    },
     // Il documento in piedi: la carta sta nella vista, e il pannello del
     // documento sale dal basso, aperto dal pulsante col numero dei commenti.
     {
@@ -1196,7 +1276,43 @@ export const SCENE = onPage("shell", [
       title: "Il telefono: un .docx con la carta larga quanto la vista e il pulsante dei commenti",
       query: "rich=docx",
       viewport: PHONE,
-      prepare: (page) => openRichDocument(page, "Documenti/Prova.docx"),
+      prepare: async (page) => {
+        await openRichDocument(page, "Documenti/Prova.docx");
+        // Il pallino dello stato nella testata resta il chip di 24 px del
+        // computer, non un cerchio di 44, e si tocca lo stesso 10 px sopra e
+        // sotto il suo centro (`shells/mobile/mobile.css`, PA T47).
+        await page.waitForFunction(() => {
+          const chip = document.querySelector(".pane.focus .pane-toolbar .pane-standing-chip");
+          if (!(chip instanceof HTMLElement) || chip.getClientRects().length === 0) return false;
+          const r = chip.getBoundingClientRect();
+          if (r.height > 24.5 || r.width >= 44) return false;
+          const x = r.left + r.width / 2;
+          const y = r.top + r.height / 2;
+          // Il suo tocco non copre il bottone della modalità accanto.
+          const mode = document.querySelector(".pane.focus .pane-toolbar > .pane-mode-current");
+          const m = mode?.getBoundingClientRect();
+          const modeFree = !m || m.width === 0
+            || document.elementFromPoint(m.left + 1, m.top + m.height / 2)?.closest(".pane-mode-current") === mode;
+          return modeFree
+            && document.elementFromPoint(x, y - 10)?.closest(".pane-standing-chip") === chip
+            && document.elementFromPoint(x, y + 10)?.closest(".pane-standing-chip") === chip;
+        }, null, { timeout: 5_000 });
+        // Il fuoco della tastiera sul bottone della modalità: dal menu «…»
+        // un passo indietro, così l'anello è quello di `:focus-visible`. Il
+        // bottone sta sulla carta o accanto: l'anello sta dentro il suo
+        // rettangolo, cioè lo scarto è negativo e largo almeno quanto la linea
+        // (`shells/mobile/mobile.css`, PA T47).
+        await page.focus(".pane.focus [data-pane-menu]");
+        await page.keyboard.press("Shift+Tab");
+        await page.waitForFunction(() => {
+          const mode = document.activeElement;
+          if (!(mode instanceof HTMLElement) || !mode.matches(".pane.focus .pane-mode-current:focus-visible")) return false;
+          const style = getComputedStyle(mode);
+          const width = parseFloat(style.outlineWidth);
+          const offset = parseFloat(style.outlineOffset);
+          return style.outlineStyle !== "none" && width > 0 && offset < 0 && -offset >= width;
+        }, null, { timeout: 5_000 });
+      },
     },
     {
       id: "mobile-document-panel",

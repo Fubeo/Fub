@@ -249,12 +249,10 @@ fn install_replacing_index(workspace: &Custody<Workspace>, index: Box<dyn IndexP
 }
 
 fn assert_workspace_is_free(workspace: &Custody<Workspace>) {
-    let read = workspace.try_read();
     assert!(
-        read.is_some(),
+        super::read_comes_free(workspace),
         "IndexProvider::query held a write guard on Custody<Workspace>"
     );
-    drop(read);
 
     // A non-blocking write also observes the independent writer-turn queue,
     // so it can report contention even when no Workspace guard is alive.
