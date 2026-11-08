@@ -175,7 +175,9 @@ stacca il suo ultimo client, e l'app dello scenario dopo, che parte meno di
 100 ms più tardi, poteva collegarsi proprio allora: GTK non si inizializzava e
 lo scenario era rosso senza aver misurato niente
 ([#287](https://github.com/Fubeo/Fub/issues/287)). Dopo ogni scenario il banco
-aspetta anche che i processi dell'app chiusa siano usciti.
+aspetta anche che i processi dell'app chiusa siano usciti. La CI e
+`misura.sh` avviano Xvfb anche con `-noreset`: le due difese si coprono, e il
+client tenuto aperto vale pure per chi chiama `xvfb-run` a mano.
 
 ## macOS
 
