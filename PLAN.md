@@ -343,7 +343,7 @@ Se una di queste cade, la stima si allunga.
 | PA T33 · il nome FubDraw dove le persone lo vedono | PA | fatto | nessuno | basso | M | test dei descrittori, di `fub-scene` e del catalogo |
 | PA T34 · il manifest dice da quale tema parte | PA | fatto | nessuno | medio: la forma del manifest sul filo | M | `crates/fub-host/tests/themes.rs`, mirror |
 | PA T35 · la pelle del tema sopra quella di serie | PA | fatto (ADR 0240) | T34 | medio: tocca il montaggio di ogni tema | M | `theme/inherit.test.ts`, `gate.test.ts` |
-| PA T39 · i caratteri del tema | PA | da fare | T34, T35 | basso | M | test dell'host e del loader |
+| PA T39 · i caratteri del tema | PA | fatto | T34, T35 | basso | M | test dell'host e del loader |
 | PA T40 · le icone del tema | PA | da fare (D16 A) | T34, T35; mai nella stessa ondata di S2 T14 | basso | M | Vitest di `ui/icons` e di `theme/` |
 | PA T44 · un documento e un foglio vuoti | PA | fatto | nessuno | basso: due comandi che creano file, dietro le loro feature | M | test d'integrazione di `fub-host`, anche con `--no-default-features` |
 | PA T46 · le parole della scheda di un componente | PA | da fare (D18 A) | K2 in `main` | basso: solo testi del catalogo | S | `i18n/lexicon-settings.test.ts` |
@@ -5010,7 +5010,14 @@ prova le regole generate, e che un `@font-face` scritto nella pelle è ancora
 rifiutato.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test themes;
 cd apps/client && npx vitest run src/theme/
-Stato: [ ] da fare
+Stato: [x] fatto · 35183cb4..a0898d46 · la regola di una voce è
+`fub_abi::rules::theme_font::theme_font_fault`, legata al TS dal mirror
+delle regole (43 casi e 8 limiti); `fonts` solo con `theme-2`; `file`
+relativo, `fonts/<nome>.woff2`; famiglia ASCII senza maiuscole, niente
+parole chiave CSS; la stessa faccia due volte è rifiutata; il loader ripete
+i controlli sul fascio; `ThemeManifest` non passa da WIT. Rischio: con
+6 MiB di caratteri il canale porta circa 8 MB di base64, rifatti a ogni
+cambio di tema o di luce
 
 ## T40 · Le icone del tema
 
