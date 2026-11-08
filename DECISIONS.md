@@ -99,6 +99,14 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · fub-pre-alpha (orchestratore) · PA T47 si allarga al
+  pallino dello stato della testata dei documenti (`pane-standing-chip`),
+  che la regola dei 44 px faceva diventare un cerchio · è lo stesso difetto
+  della stessa regola, e il task nasce per toglierlo.
+- 2026-11-08 · fub-pre-alpha (orchestratore) · PA T39 non si integra finché
+  la regola dei caratteri, scritta in Rust e in TS, non è legata dal mirror
+  delle regole (`rules_mirror.rs`) · due copie senza legame divergono, e il
+  repo ha già il posto per legarle.
 - 2026-11-08 · fub-pre-alpha (utente) · l'orchestratore decide da solo
   anche il merge in `main` e le scelte che prima chiedeva, con la soglia
   più alta di «Decide da solo, con più cura»; restano all'utente solo le
