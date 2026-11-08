@@ -328,7 +328,8 @@ Se una di queste cade, la stima si allunga.
 | PA T1 · il finto del banco con le impostazioni dell'host | PA | da fare | #295 in `main` (d90a09d0 di K3 cambia `bench/fake-ipc.ts`) | basso | S | `bench/fake-ipc.test.ts` |
 | PA T3 · i comandi in sola lettura non tengono il turno | PA | fatto (5432f8b4) | nessuno | medio: tocca il custode | M | test d'integrazione di `fub-host` |
 | PA T4, T5 · #237 R01–R03 | PA | T4 e T5 fatti (baseline di `conflitto-lettura` dal runner) | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione; R01 si chiude col test se non si riproduce |
-| PA T6, T7 · #289 | PA | T6 e T7 fatti; la regola stretta per enum, variant e funzioni esportate aspetta l'utente | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
+| PA T6, T7 · #289 | PA | T6 e T7 fatti | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
+| PA T58 · la guardia stretta anche per enum, variant e funzioni esportate | PA | da fare (scelta dell'utente, registro 2026-11-08) | T7 | medio: confine WASM, ADR 0235 | M | `wit_additivity`, componente vero anche per gli import |
 | PA T8 · la pagina della cornice del telefono | PA | da fare | nessuno | basso | S | guardie dei documenti |
 | PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | da fare (D7 A) | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
 | PA T10 · i due punti sciolti da ritrovare | PA | da fare (D10 B) | nessuno | basso | S | la causa trovata o la riga che chiude |
@@ -5946,4 +5947,53 @@ Fatto quando: le viste dette sopra passano `bench:viste` senza le righe di
 Differenze 53 e 54; i test dei suggerimenti sono verdi; le baseline nuove
 vengono dal runner.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/editors src/ui src/shells/scrittoio/launcher src/panels && npm run typecheck && npm run bench:verify && npm run bench:a11y
+Stato: [ ] da fare
+
+## T58 · La guardia stretta anche per enum, variant e funzioni esportate
+
+Perché: T7 ha provato con componenti veri che un caso nuovo in un `enum` o
+in un `variant` raggiunto da un'interfaccia esportata, e una funzione nuova
+in un'interfaccia esportata, impediscono di caricare un plugin già
+compilato. `wit_additivity.rs` contro 0.2.0 li ammette ancora in coda, e
+l'ADR 0235 e alcuni commenti di `abi.wit` dicono il contrario dei test.
+L'utente ha scelto la regola stretta (registro 2026-11-08).
+Ramo: piano/fub-pre-alpha.
+Tocca: `crates/fub-abi/tests/wit_additivity.rs`;
+`crates/fub-wasm-host/tests/new_case_and_function.rs` e i suoi componenti
+(`esempi/plugin-prima-*`, `esempi/servizio-prima`), se serve il caso degli
+import; i commenti di `crates/fub-abi/wit/fub/abi.wit` che dicono «un caso
+nuovo va in coda» (solo commenti: la forma non cambia);
+`docs/decisions/0235-un-record-pubblicato-non-cresce.md` (allargata, o una
+decisione nuova che la estende, secondo `documentation-style.md`);
+`docs/reference/abi-and-wit.md` («Compatibilità»);
+`crates/fub-abi/wit/frozen/README.md`.
+Non toccare: `wit/frozen/*.wit`; la forma di `abi.wit`; le regole per
+0.1.0 e 0.1.1.
+Dipende da: T6, T7.
+Cosa fare:
+- Prima la prova degli import, col giro di T7: un guest compilato contro
+  la WIT di prima e un host con un caso in più in un `enum`/`variant` che
+  il guest riceve da un'interfaccia importata, e un host che dà una
+  funzione in più in un'interfaccia importata. I test dicono il risultato
+  com'è.
+- Contro 0.2.0 e dopo, la guardia rifiuta: un caso nuovo, tolto o
+  spostato in un `enum` o `variant` che attraversa il confine (stessa
+  raggiungibilità dei record di T6); una funzione nuova, tolta o cambiata
+  in un'interfaccia esportata dal plugin. Per le interfacce importate
+  segue quello che dice la prova degli import.
+- Passano ancora: interfacce nuove, tipi nuovi, funzioni nuove dove la
+  prova dice che non rompono.
+- Test della guardia su testi WIT finti, uno per regola, col messaggio
+  che nomina tipo e caso o funzione.
+- I commenti di `abi.wit`, l'ADR e la pagina dicono la regola nuova;
+  nessun testo dice più «un caso nuovo va in coda» per il confine.
+Casi limite: un `enum` usato solo dentro l'host (non attraversa: passa);
+un `variant` raggiunto solo da un import; un `flags` (trattalo come un
+`enum`, e scrivi perché).
+Fatto quando: `cargo test -p fub-abi --test wit_additivity` passa coi
+casi finti nuovi che falliscono come atteso; `cargo test -p fub-wasm-host
+--test new_case_and_function` prova anche gli import; ADR e pagina dicono
+la regola.
+Prova: scripts/check.sh --rapido; cargo test -p fub-abi; cargo test -p
+fub-wasm-host
 Stato: [ ] da fare
