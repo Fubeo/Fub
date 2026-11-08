@@ -480,11 +480,7 @@ fn una_revisione_vecchia_dà_il_conflitto_e_il_file_resta() {
 /// La sola lettura per un motivo che l'host conosce, lo stesso sui tre
 /// sistemi: un `.docx` protetto dal suo autore, e una cartella di Excel che
 /// la shell vorrebbe coprire con dei byte suoi invece di innestare il
-/// giornale. Il permesso del file non è un motivo che l'host conosca: su
-/// Linux e macOS la scrittura atomica sostituisce anche un file senza il
-/// permesso di scrittura, e su Windows il rifiuto arriva come `Io`, non come
-/// `PermissionDenied`. Per questo qui non si prova (PA T13, la domanda è
-/// nel resoconto del task).
+/// giornale. Il permesso del file ha il suo test qui sotto.
 #[test]
 fn un_file_in_sola_lettura_rifiuta_la_scrittura_e_resta() {
     let vault = Vault::open();
@@ -523,6 +519,47 @@ fn un_file_in_sola_lettura_rifiuta_la_scrittura_e_resta() {
         original(name),
         "{name}: the file stays"
     );
+}
+
+/// La sola lettura del file stesso (PA T59): 0444 su Unix, l'attributo su
+/// Windows. Per ogni file del corpus la scrittura come la fa la shell si
+/// ferma con `PermissionDenied` tipizzato, e i byte restano. Il `.docx`
+/// protetto si rifiuta prima, col suo motivo: qui conta solo che resti.
+#[test]
+fn un_file_senza_permesso_di_scrittura_rifiuta_e_resta() {
+    let vault = Vault::open();
+    for &(name, kind) in CORPUS {
+        let opened = open_as_shell(&vault, name, kind);
+        // Il permesso si toglie dopo l'apertura, come chi lo toglie mentre il
+        // file è aperto in Fub.
+        set_read_only(&vault.path(name), true);
+        let written = write_as_shell(&vault, name, kind, &opened, opened.revision.clone());
+        close_as_shell(&vault, name, kind);
+        let on_disk = vault.on_disk(name);
+        // Prima delle asserzioni: su Windows la cartella temporanea non si
+        // cancella con dentro un file in sola lettura.
+        set_read_only(&vault.path(name), false);
+        if name == "Documenti/Protetto.docx" {
+            assert!(written.is_err(), "{name}: refused");
+        } else {
+            assert!(
+                matches!(&written, Err(PluginError::PermissionDenied(_))),
+                "{name}: the typed refusal, not {written:?}"
+            );
+        }
+        assert_eq!(on_disk, original(name), "{name}: the file stays");
+    }
+}
+
+fn set_read_only(path: &camino::Utf8Path, read_only: bool) {
+    let mut permissions = std::fs::metadata(path)
+        .expect("the file is there")
+        .permissions();
+    // Su Unix `set_readonly(false)` dà la scrittura a tutti: va bene in una
+    // cartella temporanea che sta per essere cancellata.
+    #[allow(clippy::permissions_set_readonly_false)]
+    permissions.set_readonly(read_only);
+    std::fs::set_permissions(path, permissions).expect("changes the permission");
 }
 
 #[test]
