@@ -59,6 +59,277 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · k3-motori · il piano è concluso: #295 è in `main`
+  (fb722164) col sì dell'utente, e `PLAN.md` e
+  `PLAN-ui/menu-comandi-fogli.html` escono da `main` come per gli altri
+  piani conclusi · erano entrati con l'unione, e ogni ramo di piano aperto
+  andava in conflitto su `PLAN.md` a ogni allineamento con `main`.
+
+- 2026-11-05 · k3-motori · T17, la scena `window-document` aspetta di nuovo
+  che lo strato d'avvio se ne sia andato dopo aver ricaricato la pagina, come
+  fa `prepareScene` · perché: la corsa 42045342312 l'ha fotografata col
+  marchio fermo (93% di pixel diversi, nelle due luci). È una gara del banco
+  arrivata con il piano del caricamento (#308), uguale su `main`: la scena
+  ricarica la pagina dopo l'attesa comune, e quell'attesa non la copriva più.
+  Correzione piccola del banco, la baseline non cambia; in prova locale 0 su
+  24 foto con lo strato.
+- 2026-11-05 · k3-motori · T17, il finto host del banco dichiara
+  `chrome.sidebar.visible` e `chrome.inspector.visible` quando la scena apre
+  una cartella di Excel (`workbook=1`), come l'host vero (`fub-host`) · perché:
+  le scene della barra dei fogli chiudono i due pannelli e senza la
+  dichiarazione la scrittura falliva, così le foto del runner tenevano
+  l'avviso «Non ho potuto ricordare come hai lasciato i pannelli» e il 2 sulla
+  campanella. Correzione piccola del banco, nessun cambio di ciò che l'utente
+  vede nel prodotto; le scene delle Impostazioni non cambiano (d90a09d0).
+- 2026-11-05 · k3-motori · T19, risposta dell'utente alla scelta aperta qui
+  sotto: D, la griglia non cambia altezza durante la tenda, senza salti né
+  bande scure. Fatto così: per la durata della corsa la griglia e chi le sta
+  sotto tengono l'altezza che avevano prima del gesto, con un margine
+  negativo in fondo che li fa passare sotto la barra dei fogli; a corsa
+  finita (e allo smontaggio) il margine se ne va e la griglia è alta quanto
+  la parte che si vede · perché: la D alla lettera, la griglia sempre alta
+  come a nastro chiuso, nasconderebbe sotto la barra dei fogli la barra di
+  scorrimento orizzontale e le ultime righe, e il motore usa `clientHeight`
+  in più di dieci posti. Così si vede la D durante la corsa e a riposo non si
+  nasconde niente. Il margine è uno stile fermo, non animato: la regola 3 del
+  banco resta verde. Un'inversione a metà corsa riparte dalle altezze di
+  prima del primo gesto.
+- 2026-11-05 · k3-motori · T19, ciò che cambia forma o se ne va mentre era
+  ancora in corsa (un foglietto che si richiude a metà apertura, i foglietti
+  di una sezione lasciata a metà entrata, la scheda della tabella che
+  scompare mentre compariva) lascia un'immagine (`moto/prepareExit`) che
+  svanisce da dove si vedeva; chi tiene la forma prosegue dalla sua posa ·
+  perché: con solo `transform` e `opacity` un riquadro che cambia misura non
+  può proseguire, e la regola 4 del banco vuole che niente salti. Il banco
+  dice ora com'era e com'è il riquadro che salta (`was`, `is`). Provato e
+  tolto: misurare soltanto la parte visibile dei riquadri, che faceva saltare
+  concentration e rich-reading senza aiutare il ritiro. Aperto: nel ritiro a
+  metà riapertura la griglia cambia altezza (92 px) e il suo bordo di sotto
+  non può proseguire; la scelta è dell'utente.
+- 2026-11-04 · k3-motori · T18, al telefono i bottoni della barra dei fogli
+  restano a 44 px, la regola della shell mobile, e non 38/88 come nel
+  prototipo; la risposta dell'utente: «i tasti ok a 44px» · perché: la
+  misura del tocco vale per tutta la shell mobile, e un'eccezione solo per
+  la barra la romperebbe.
+- K3 T15, le differenze accettate: in sola lettura un esito con modifiche si
+  scarta e il provider riparte dal giornale confermato
+  (`#openWorkbook(#confirmedJournal)`), invece di applicarlo;
+  `setCommandEffects` e `servesCommands` nel motore, perché sia lui a sapere
+  quali comandi passano in sola lettura; `READ_ONLY_DIALOGS` lascia aprire
+  in sola lettura le finestre scritte a mano che non cambiano niente (find,
+  goTo, goToSpecial, printPreview, nameManager); un comando `legge` con un
+  parametro obbligatorio apre prima il modulo. Nella finestra del risultato
+  i valori lunghi vanno a capo (`overflow-wrap: anywhere`), i numeri restano
+  a precisione piena (il prototipo arrotondava a due decimali, che per un
+  risultato da copiare perde dati), e `.grid-dialog-error` usa il colore del
+  testo perché il rosso scuro del prototipo stava a 4.01:1. Le foto strette
+  del banco sono a 1016 px (foglio 700 px), perché sotto 800 px parte la
+  shell del telefono. Restano note per T17: in sola lettura «trova e
+  sostituisci» rifiuta le sostituzioni dal motore, le voci di menu che
+  cambiano non fanno niente, «1 celle» viene dal prototipo.
+- K3 T14 (e3b8afc0): il menu «Comandi» è `editors/grid/menu-comandi.ts`
+  (`openCommandMenu`) agganciato alla fila `quick` della barra; i comandi
+  che la barra non ha passano da una seconda istanza della tavolozza
+  (`mountGridPalette` dentro `ribbon/ribbon.ts`, vive quanto la barra).
+  `ui/menu.ts` ha tre opzioni nuove (`label`, `fullSearch`,
+  `reachDisabled`); la ricerca piena tiene l'altezza del posto e scorre.
+  Scarti dal prototipo: il tooltip del gettone è «Comandi» e «Tutti i
+  comandi del foglio» è l'aria-label del menu; l'icona è `outline` perché
+  `ribbon/icons.ts` era fuori dai Tocca (da rivedere in T17 col prototipo);
+  la scena `grid-commands-search` usa una ricerca senza risultati perché con
+  testo lo Spazio scrive nella ricerca e la regola tastiera dell'a11y la
+  boccerebbe; nessuna scena sotto 560 px (scene.test vuole finestre ≥ 800
+  px; il gettone senza nome lo mostra `mobile-grid-ribbon`). Restano: il
+  piede del menu non resta fisso in fondo nelle ricerche lunghe; le baseline
+  delle scene nuove e di `mobile-grid-ribbon` dal runner (T17).
+- K3 T13, dopo la CI di 8493f177: effetto.rs cadeva sul runner perché
+  review.spelling chiede l'elenco di parole del sistema
+  (/usr/share/dict/words), che il runner non ha, e GridCraft rifiuta il
+  controllo prima di toccare la cartella. L'orchestratore accetta quel solo
+  rifiuto, per i comandi review.*, come «non provato» (lo stampa); con
+  l'elenco il comando gira e la prova vale. Provato in locale nei due modi
+  (con l'elenco, e con l'elenco coperto in uno spazio dei nomi).
+- K3 T13 integrata (4f244e0d). Gli effetti sono 250 cambia, 31 legge, 22
+  mostra (il prototipo ne dice 250/29/24, il piano 249/29/24).
+  L'orchestratore tiene la regola del piano, provata da effetto.rs, al posto
+  dei conti: view.normal, view.split, view.customViews e
+  formulas.watchWindow scrivono nel giornale e passano fra i Cambia (il
+  prototipo li dice mostra o legge); insert.chartRecommendations,
+  data.scenarioManager e file.printPreview (legge) e file.exportPdf (mostra)
+  lasciano commit.edit vuoto e restano accesi in sola lettura (il prototipo
+  li dice cambia). La tavolozza scrive «Scheda X della barra» solo se la
+  barra mostra la scheda e il gruppo del posto, altrimenti «Comando del
+  foglio di calcolo»: file, draw e pivot non hanno testi della barra, e i
+  testi del menu sono di T14. Toccati in più palette/form.ts e form.test.ts,
+  dove sta il tipo CatalogCommand. Rischio: l'effetto vale per comando, non
+  per parametri.
+- 2026-11-04 · K3 · T18 integrato con i bottoni a 44 px al telefono. La
+  shell mobile impone ai bottoni almeno 44×44 (`mobile.css`), e il prototipo
+  non ne teneva conto: al telefono i gruppi chiusi impilati sono alti 44
+  invece di 38, il vassoio 100 invece di 88, Dati ha 0 gruppi aperti su 4
+  invece di 1, Inserisci scorre di 61 invece di 54. Perché: abbassare un
+  bersaglio del dito sotto il minimo della shell è una scelta di
+  accessibilità e cambia il «Fatto quando», quindi è dell'utente; finché non
+  risponde resta la regola della shell, che non tocca il resto del lavoro
+  (un'eccezione sarebbe solo CSS dentro `.grid-ribbon`). Le baseline delle 9
+  scene nuove arrivano dal runner con T17; fino ad allora `bench/scene.test`
+  «ci sono tutte» resta rosso.
+- K3 · D-7 (il foglietto chiuso della variante C): l'utente ha scelto
+  l'ibrida il 2026-11-03, due o più chiusi a pila alti 38 px, uno rimasto
+  solo a tessera alta quanto la barra (80 px). Il pianificatore l'ha scritta
+  in T18, nella tabella «Dal prototipo» e nel Cancello; pila, tessera e
+  dorso restano nel prototipo solo per confronto. Le varianti A e B non
+  cambiano. Il piano delle celle della griglia (16 difetti misurati) è un
+  piano a parte, piano/griglia-celle, perché tocca gli stessi file di T14,
+  T15, T18 e T19.
+- 2026-11-03 · K3 · risposta dell'utente al terzo prototipo della barra: la
+  variante C (i riquadri sollevati) e le animazioni piacciono («stupenda»,
+  l'apertura sul posto di Allineamento e Carattere «bellissima e comoda»,
+  anche pensando al telefono). D-6 = C; A e B non piacciono e restano come sono, senza altro lavoro. Un solo difetto di C, che blocca
+  l'approvazione del gruppo chiuso: il gruppo ripiegato (nome sopra, icona e
+  freccia sotto, tanto spazio vuoto, proporzioni sbilanciate) è «grezzo» e
+  va ridisegnato dal pianificatore prima di T18. Chiesto anche di
+  pianificare le celle della griglia (oggi sulla 1432 ci sono difetti di
+  disegno e animazioni povere) allo stesso livello della barra.
+- 2026-11-03 · K3 · T11 integrato (95cd097e..1cfcca49): ogni DocumentSession
+  ha una chiave di apertura, fatta prima della lettura e chiusa da un'uscita
+  sola (#release), e tutte le letture e scritture della sessione la passano;
+  RICH_FORMAT_IDS è tolto; un presidio sull'AST di TypeScript vieta
+  openDocument, documentClosed e la scrittura con chiave fuori dalle
+  sessioni; fuori da «Tocca» il coder ha aggiornato sei helper dei banchi e
+  tre e2e, perché documentClosed è ora obbligatorio nell'API, senza
+  indebolire asserzioni · dopo un ricaricamento della finestra le chiavi
+  vecchie restano nell'host fino alla chiusura del vault o al tetto di 1024:
+  è scritto in motori.md, e non serve codice perché il tetto LRU le
+  richiude.
+- 2026-11-03 · K3 · T10 integrato (d94cd18f..ed10cc56): le letture semplici
+  non aprono un documento nel motore, solo una chiave di apertura (OpenKey)
+  lo tiene aperto; quando le chiavi sono troppe si chiude quella usata meno
+  di recente (LRU) e non la più vecchia, perché un documento appena
+  riguardato non deve perdere la sua prova; Host::open_keys esiste per i
+  test e per l'host finto; la pagina motori.md la aggiorna T11 · il piano
+  diceva «la più vecchia», ma con l'LRU un documento in uso non si richiude
+  sotto le mani.
+- 2026-11-03 · K3 · D-5 (b): i nomi dei gruppi sulla barra dei fogli
+  restano, ma discreti (grigi, poco evidenti, eleganti); il prototipo
+  rifatto non è approvato e si rifà una terza volta, con un'organizzazione
+  della barra nuova invece di quella di Excel, più identità di Fub, meno
+  spazio vuoto sotto e le animazioni predisposte · parole dell'utente («mi
+  piace la variante B con i nomi … un po' più discreti … in un grigio»,
+  «l'organizzazione della barra mi sembra proprio una copia rispetto a
+  Excel. vorrei qualcosa di nuovo, qualcosa di più bello … predisposte anche
+  le animazioni»).
+- 2026-11-03 · K3 · T10: l'utente dà l'OK al cambio dell'IPC (read_document
+  e write_document con open?, document_closed con {open}, al più 1024 chiavi
+  per vault) · parole dell'utente («ok»): le letture semplici non tengono
+  più aperti i documenti; la riga nel piano la scrive l'orchestratore quando
+  il pianificatore della barra ha finito.
+- 2026-11-03 · K3 · il prototipo di T12 non è approvato: la barra
+  multifunzione dei fogli va ridisegnata nello stile di Fub (moderno,
+  minimale, stondato) invece che come Excel; si comincia dai fogli, e i
+  documenti e le altre modalità la riprenderanno più avanti, quindi in K3 la
+  barra degli altri editor non cambia · parole dell'utente; il menu
+  «Comandi» resta, con la barra nuova.
+- 2026-11-02 · K3 · Le risposte dell'utente a D-1…D-4 (e merge-k3,
+  ci-soglia): D-2 (c), T8 unito e una lettura conta come apertura solo con
+  la chiave di una sessione della shell, che la chiude in ogni uscita
+  (contratto IPC cambiato: T10, T11); D-3 (c), un menu «Comandi» vero per i
+  fogli, con il prototipo T12 da approvare prima di T13–T15, un posto e un
+  effetto per ogni comando; D-4 (a), K3 si chiude e la memoria della WebView
+  va in un piano a parte; il merge solo dopo la CI completa e la revisione
+  (T17); il limite di R1 non si alza · ogni cosa che apre un documento lo
+  deve chiudere, un comando che si trova solo con una scorciatoia è
+  nascosto, e un numero rosso non si nasconde alzando la soglia.
+- 2026-11-02 · K3 · T9: la misura del cancello prima (cb4213ec, codice di
+  620f0acd) e dopo (c5851334) sulla stessa macchina, tre giri R1/S1/S6
+  alternati per lato sotto Xvfb e i banchi; T8 non misurato. L'avvio e i
+  banchi passano; gli obiettivi di R1 no, per la WebView: lo segno come
+  fatto perché il «Fatto quando» di T9 è la pagina col giudizio, e il
+  cancello va all'utente come D-4. In tempi.rs la lettura dopo un'altra
+  cartella chiusa costa 6–15% in più (malloc_trim di T5): annotato, non
+  abbassato nessun tetto.
+- 2026-11-02 · K3 · T7: i titoli dei 303 comandi e i nomi dei campi stanno
+  in un catalogo dei testi a parte (`editors/grid/palette/strings.ts`),
+  caricato col foglio, e non in `i18n/catalog.ts`, per non gonfiare i testi
+  della shell; i valori delle scelte restano come li scrive il catalogo. La
+  finestra costruita dai campi serve ai 106 comandi con parametri
+  obbligatori e chiede solo la forma principale; i 197 senza partono subito
+  sulla selezione, come il pulsante della barra; quelli con una finestra
+  scritta a mano aprono quella. Un comando spento resta in elenco col motivo.
+  I comandi compaiono anche nel lanciatore dello Scrittoio. Limiti noti: i
+  comandi che leggono soltanto non mostrano il risultato; due comandi hanno
+  lo stesso titolo «Riempimento rapido» e si distinguono dalla scheda.
+
+- 2026-11-02 · K3 · T8 (branch `piano/k3-ipc-motori`, in attesa di D-2):
+  `Host::warm_engine` e `Host::document_closed` hanno nomi inglesi come il
+  resto di `fub-host`; l'host sa quali documenti ricchi sono aperti dalle
+  revisioni che ha dato alla shell (al più otto per documento) e dimentica la
+  prova a vuoto per revisione (`MotoreDocumenti::dimentica`, pubblica); il
+  client scalda dopo 300 ms di puntatore fermo e solo i tipi con un motore,
+  e avvisa la chiusura da `DocumentSessionCollection.close`. · La revisione è
+  già l'impronta dei byte con cui il motore ricorda la prova: niente disco da
+  rileggere. Limite noto: le letture fuori da una sessione (l'anteprima della
+  ricerca) contano come aperture senza chiusura, e allora la cache resta fino
+  alla chiusura del vault.
+- 2026-11-02 · K3 · `scripts/check.sh --rapido` fa girare i test di
+  `fub-abi` anche quando il diff tocca soltanto documenti. · Un riquadro
+  doppio nel grafo di `overview.md` è passato verde in locale e rosso in CI:
+  `dependency_invariant` legge i documenti ma girava solo se cambiava un
+  crate.
+- 2026-11-02 · K3 · T4: `importa` e `verifica_copertura` ricevono un
+  `Adattamento` dell'adattatore (posti dei menu, lessico dei nomi nudi dei
+  parametri, correzioni per comando) e restituiscono tutte le mancanze, non la
+  prima; `Modulo::da_schema` prende il lessico, differenza dal piano che lo
+  voleva dal solo schema. Il catalogo dei fogli ha 303 comandi, 43 non serviti
+  con il loro perché e 75 solo nella tavolozza. · Lo schema del motore scrive
+  spesso nomi nudi (`range`, `at`) senza tipo: senza lessico i campi
+  sarebbero tutti testo libero. I tipi del lessico vengono dal codice di
+  GridCraft; alcune scelte portano nomi del motore (il tema «Craft») che la
+  shell non deve mostrare così come sono.
+- 2026-11-02 · K3 · T5 e T6: il motore dei fogli conta le istanze aperte con
+  una `Presa` (cade l'ultima, si svuotano le sue cache); le cache dei documenti
+  (le prove a vuoto, `documenti.prove`, con la stima dei byte misurata sul
+  corpus) e i dizionari del correttore (`correttore.dizionari`) si svuotano
+  alla chiusura dell'ultimo vault, passando da `fub-host/src/rich.rs` e da
+  `fub_features::proof` senza nominare WordCraft · perché: chi chiude non deve
+  sapere quali motori ci sono. Rischi annotati: lo svuotamento dei fogli gira
+  sotto il lucchetto della superficie della griglia del kernel (toglierlo vuol
+  dire toccare `fub-kernel`/`fub-host`); svuotare i dizionari toglie anche la
+  sillabazione, che si ricostruisce alla prima richiesta.
+- 2026-11-02 · K3 · Il test di copertura dei comandi (T4): la regola sta in
+  `fub-motori` (`catalogo`, provata con specifiche finte in
+  `crates/fub-motori/tests/copertura.rs`), il test vero sul motore dei fogli
+  in `crates/fub-format-xlsx/tests/copertura.rs`; `fub-motori` non dipende
+  da nessun adattatore, nemmeno nei test (differenza dal piano, che diceva
+  una dev-dipendenza da `fub-format-xlsx`) · perché: ADR 0236, e ogni motore
+  che verrà usa la stessa regola dal suo adattatore.
+- 2026-11-02 · K3 · `check-motori.mjs` ammette `rfd` solo se lo porta
+  `tauri-plugin-dialog` (i dialoghi di sistema della shell di Fub, non
+  l'interfaccia di un motore); «librerie doppie» sono i nomi in due o più
+  versioni (45 con tutte le feature e tutte le piattaforme), non i 61 nomi di
+  `cargo tree -d`, che conta anche la stessa versione ripetuta · fonte:
+  report del coder di T2, accettato dall'orchestratore.
+- 2026-11-02 · K3 · Lavoro di notte senza l'utente: le domande del «Chiede
+  sempre» si raccolgono in `PLAN.md` (D-1…D-3) e intanto vale la scelta più
+  sicura e reversibile; i due IPC nuovi (scaldare, «documento chiuso») si
+  scrivono su un branch a parte, `piano/k3-ipc-motori`, e non entrano nel
+  branch del piano senza un sì; nessun merge · fonte: l'utente («voglio che
+  tu implementi più parti possibili durante la notte … segui il piano»).
+- 2026-11-02 · K3 · `fub-motori` non nomina nessun motore: dà `Pigro<T>`,
+  `Servizi`, `Budget`, `Cache`, il catalogo e un registro `Motori` dinamico in
+  cui ogni adattatore iscrive il suo motore («fogli», «documenti»); servizi e
+  registro unici nel processo · perché: solo gli adattatori nominano i motori
+  (`check-engine-boundary.mjs`, `GRIDCRAFT_OWNERS`, `WORDCRAFT_OWNERS`) e un
+  campo per motore farebbe un ciclo fra `fub-motori` e gli adattatori; ADR
+  0236.
+- 2026-11-02 · K3 · `rayon` (gruppo di thread dei motori, suo e con un nome)
+  e `libc` (`malloc_trim` su glibc) diretti in `fub-motori`: erano già
+  nell'albero, nessun crate nuovo · fonte: `Cargo.lock` (rayon 1.12 da
+  tantivy; libc 0.2 come in `fub-kernel`).
+- 2026-11-02 · K3 · Scheda grafica e archivio dei caratteri non entrano in K3:
+  nessun motore acceso li usa e `wgpu` sarebbe una dipendenza nuova; arrivano
+  col primo motore che li chiede · domanda D-1 per l'utente.
+
 - 2026-11-05 · lavagna-in-codice · le risposte dell'utente: D1 (a), D2
   (a), D3 (a), D4 (a), D5 (b), D6 (a). Con D5 (b) l'anteprima scrive il
   testo vero delle schede con i caratteri che `draw` incorpora già

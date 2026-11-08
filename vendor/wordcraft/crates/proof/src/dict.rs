@@ -13,6 +13,12 @@ pub struct Dictionary {
     masks: Vec<u64>,
 }
 
+impl crate::slot::HeapBytes for Dictionary {
+    fn heap_bytes(&self) -> usize {
+        self.words.capacity() + self.offs.capacity() * 4 + self.masks.capacity() * 8
+    }
+}
+
 const MAGIC: &[u8] = b"DCHYPH1\n";
 
 impl Dictionary {

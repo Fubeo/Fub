@@ -43,6 +43,15 @@ e librerie.
 |---|---|---|---|
 | 2026-10-31 | Debian 13, kernel 6.12 | AMD Ryzen 7 7730U, senza scheda grafica | [I sei motori da soli](motori-2026-10-31-linux-ryzen.md) |
 
+## I cancelli
+
+Le misure prima e dopo di un piano, sulla stessa macchina, con il giudizio
+sul suo cancello.
+
+| Data | Piano | Macchina | Pagina |
+|---|---|---|---|
+| 2026-11-02 | K3, lo strato dei motori | `server-di-fub`, AMD Ryzen 7 7730U, WebKitGTK 2.54 sotto Xvfb | [Il cancello di K3](k3-motori-2026-11-02-server-di-fub.md) |
+
 ## Gli inventari
 
 Gli inventari di K0 sul codice dei motori: che cosa vive dove, con righe
