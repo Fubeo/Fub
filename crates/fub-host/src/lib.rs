@@ -161,6 +161,8 @@ pub(crate) use watcher::{ExternalChange, ExternalSync};
 pub use watcher::{NoWatcher, VaultWatcher, WatcherFactory};
 #[cfg(test)]
 mod legacy_tests;
+#[cfg(test)]
+mod quiet_panic;
 
 pub use config::{config_dir, install_logging, log_path};
 pub use format_source::{FormatSource, PreparedFormatSource};
