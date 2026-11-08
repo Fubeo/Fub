@@ -272,11 +272,7 @@ giustezza) li dichiara l'host e coincidono con quelli della serie; un test Rust
 lo verifica. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
 400 px, ispettore da 248 a 440 px. Un tema `theme-1` non si monta; uno con
 `extends` lascia la pelle di serie in `pelle` e aggiunge la sua in `pelle-tema`,
-dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)). Un tema che
-porta caratteri (`fonts` nel manifest) li riceve in `caratteri-tema`, subito
-dopo i caratteri di serie: le regole `@font-face` le scrive il loader, con gli
-URL `data:` degli asset, nello stesso giro del foglio e delle pelli
-([Temi installati](../reference/permissions-and-security.md#temi-installati)).
+dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
 
 ### Comportamenti della shell
 
