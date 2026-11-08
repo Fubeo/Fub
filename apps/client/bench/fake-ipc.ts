@@ -522,6 +522,11 @@ const SLASH_COMMANDS: readonly CommandSpec[] = params.get("slash") === "1" ? SLA
 /// Le settings: una per **ogni** specie di `SettingKind`, perché il pannello
 /// disegna un controllo diverso per ciascuna e una scena che ne mostrasse solo
 /// due fotograferebbe metà del form.
+/// Il gruppo Aspetto invece è **intero**, con le voci, i testi e l'ordine di
+/// `appearance_settings` (`fub-host/src/settings.rs`): la foto delle
+/// impostazioni è quella della shell vera, e `fake-ipc.test.ts` lo tiene.
+/// `appearance.theme-id` il form non lo mostra (ha il suo gesto nel catalogo
+/// dei temi), ma c'è, come nell'host.
 /// Lo spazio dell'interfaccia lo mostra solo la finestra principale
 /// (`index.html`): il telefono e la finestra documento non hanno la riga.
 const ON_SHELL = globalThis.window.location.pathname.endsWith("/index.html");
@@ -563,6 +568,19 @@ const SETTINGS: SettingEntry[] = [
   },
   {
     spec: {
+      key: "appearance.theme-id",
+      label: "Tema installato",
+      description: "L'id del tema montato; si sceglie dal catalogo dei temi.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: { kind: "text", default: "fub.serie" },
+      program_writable: false,
+    },
+    value: "fub.serie",
+    source: "default",
+  },
+  {
+    spec: {
       key: "appearance.contrast",
       label: "Contrasto",
       description: "Segue il sistema oppure usa sempre il contrasto normale o alto.",
@@ -584,6 +602,19 @@ const SETTINGS: SettingEntry[] = [
   },
   {
     spec: {
+      key: "appearance.accent",
+      label: "Tinta dell'accento",
+      description: "Il colore di collegamenti, fuoco e selezione. Chiarezza e intensità si adattano da sole per restare leggibili.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: { kind: "number", default: 265, min: 0, max: 360 },
+      program_writable: false,
+    },
+    value: 265,
+    source: "default",
+  },
+  {
+    spec: {
       key: "appearance.density",
       label: "Densità",
       description: "Compatta o allarga la spaziatura dei controlli senza cambiare la disposizione dei pannelli.",
@@ -601,6 +632,176 @@ const SETTINGS: SettingEntry[] = [
       program_writable: false,
     },
     value: "comfortable",
+    source: "default",
+  },
+  ...(ON_SHELL ? [CHROME_COMPACTNESS] : []),
+  {
+    spec: {
+      key: "appearance.zoom",
+      label: "Zoom interfaccia",
+      description: "Quanto è grande tutta l'interfaccia, dal 50% al 200%.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: { kind: "number", default: 1, min: 0.5, max: 2 },
+      program_writable: false,
+    },
+    value: 1,
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.motion",
+      label: "Animazioni",
+      description: "Segue la preferenza del sistema, oppure toglie rimbalzi e scene, oppure riduce sempre le animazioni dell'interfaccia.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "",
+        options: [
+          { value: "", label: "Come il sistema" },
+          { value: "calm", label: "Calme" },
+          { value: "reduced", label: "Ridotte" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.frame-rate",
+      label: "Fotogrammi al secondo",
+      description: "Tetto delle animazioni disegnate dall'interfaccia. Il massimo segue il refresh dello schermo, qualunque sia.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "",
+        options: [
+          { value: "", label: "Massimo dello schermo" },
+          { value: "240", label: "240 fps" },
+          { value: "165", label: "165 fps" },
+          { value: "144", label: "144 fps" },
+          { value: "120", label: "120 fps" },
+          { value: "90", label: "90 fps" },
+          { value: "60", label: "60 fps" },
+          { value: "30", label: "30 fps" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.diagram-style",
+      label: "Stile dei diagrammi",
+      description: "Colori e tratto dei diagrammi Mermaid; «%% stile: nome» lo cambia per uno solo.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "armonia",
+        options: [
+          { value: "armonia", label: "Armonia — segue il tema" },
+          { value: "acquerello", label: "Acquerello — tinte pastello" },
+          { value: "aurora", label: "Aurora — colori vivi e profondi" },
+          { value: "blueprint", label: "Blueprint — tavola tecnica" },
+          { value: "inchiostro", label: "Inchiostro — editoriale" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "armonia",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.content-look",
+      label: "Aspetto dei documenti",
+      description: "Come si mostra un file che ha un aspetto suo, come un documento: la sua pagina, o la pagina adattata alla luce del tema. Automatico sceglie la pagina, e quella adattata con il contrasto alto.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "auto",
+        options: [
+          { value: "auto", label: "Automatico" },
+          { value: "file", label: "Pagina" },
+          { value: "adattato", label: "Pagina adattata" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "auto",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.font",
+      label: "Carattere di lettura",
+      description: "Famiglia usata per la prosa lunga.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "newsreader",
+        options: [
+          { value: "newsreader", label: "Newsreader" },
+          { value: "hanken", label: "Hanken Grotesk" },
+          { value: "literata", label: "Literata" },
+          { value: "inter", label: "Inter" },
+          { value: "system", label: "Del sistema" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "newsreader",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.font-ui",
+      label: "Carattere dell'interfaccia",
+      description: "Famiglia di barre, cassetti, menu e finestre.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "hanken",
+        options: [
+          { value: "hanken", label: "Hanken Grotesk" },
+          { value: "inter", label: "Inter" },
+          { value: "system", label: "Del sistema" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "hanken",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.font-mono",
+      label: "Carattere del codice",
+      description: "Famiglia a spaziatura fissa del codice e del sorgente.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "plex",
+        options: [
+          { value: "plex", label: "IBM Plex Mono" },
+          { value: "jetbrains", label: "JetBrains Mono" },
+          { value: "system", label: "Del sistema" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "plex",
     source: "default",
   },
   {
@@ -644,52 +845,15 @@ const SETTINGS: SettingEntry[] = [
   },
   {
     spec: {
-      key: "appearance.font",
-      label: "Carattere di lettura",
-      description: "Famiglia usata per la prosa lunga.",
+      key: "appearance.css-snippets",
+      label: "Frammenti CSS locali",
+      description: "Frammenti attivabili, locali e limitati agli hook visivi; nessuna rete o importazione CSS.",
       group: "Aspetto",
       scope: "machine",
-      kind: {
-        kind: "choice",
-        default: "newsreader",
-        options: [
-          { value: "newsreader", label: "Newsreader" },
-          { value: "hanken", label: "Hanken Grotesk" },
-          { value: "literata", label: "Literata" },
-          { value: "inter", label: "Inter" },
-          { value: "system", label: "Del sistema" },
-        ],
-      },
+      kind: { kind: "text", default: '{"version":1,"snippets":[]}' },
       program_writable: false,
     },
-    value: "newsreader",
-    source: "default",
-  },
-  {
-    spec: {
-      key: "appearance.accent",
-      label: "Tinta dell'accento",
-      description: "Il colore di collegamenti, fuoco e selezione. Chiarezza e intensità si adattano da sole per restare leggibili.",
-      group: "Aspetto",
-      scope: "machine",
-      kind: { kind: "number", default: 265, min: 0, max: 360 },
-      program_writable: false,
-    },
-    value: 265,
-    source: "default",
-  },
-  ...(ON_SHELL ? [CHROME_COMPACTNESS] : []),
-  {
-    spec: {
-      key: "appearance.zoom",
-      label: "Zoom interfaccia",
-      description: "Quanto è grande tutta l'interfaccia, dal 50% al 200%.",
-      group: "Aspetto",
-      scope: "machine",
-      kind: { kind: "number", default: 1, min: 0.5, max: 2 },
-      program_writable: false,
-    },
-    value: 1,
+    value: '{"version":1,"snippets":[]}',
     source: "default",
   },
   {
