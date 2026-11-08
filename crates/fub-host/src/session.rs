@@ -4351,7 +4351,8 @@ impl Host {
         // Un comando che si è dichiarato di sola lettura ha il suo frame e
         // **non** prende il turno: una lettura lunga (un'anteprima, uno
         // strumento dell'AI) non ferma i salvataggi di chi scrive.
-        // La bandiera è quella che la chiusura del vault alza per fermarlo.
+        // La bandiera è quella che la chiusura del vault o lo spegnimento del
+        // suo plugin alzano per fermarlo; fuori non c'è nessuno da fermare.
         let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let read_only = workspace.read()?.prepare_read_only_provider_command(
             command,
@@ -4359,6 +4360,7 @@ impl Host {
             mode,
             &[],
             &cancel,
+            &[],
         )?;
         if let Some(prepared) = read_only {
             let host = JobHost::new(workspace.clone(), prepared.owner().to_string())

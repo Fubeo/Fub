@@ -138,6 +138,13 @@ pub struct JobHost {
     /// sapere che la cancellazione esiste si ferma comunque, alla prima cosa
     /// che prova a fare.
     cancelled: Arc<AtomicBool>,
+    /// Le bandiere di **chi contiene** questo host, quando è l'host di una
+    /// lettura col suo frame: il job e le letture più fuori. L'host è fermo se
+    /// è alzata la sua bandiera o una di queste, così annullare il job ferma
+    /// anche le sue letture; spegnere il plugin di una lettura alza invece
+    /// solo la bandiera della lettura, e il job riceve un `Cancelled` da
+    /// `invoke_command` senza essere annullato. Vuota per tutti gli altri.
+    outer_stops: Vec<Arc<AtomicBool>>,
     /// **I comandi di sola lettura che stanno girando sopra questo host**, dal
     /// più esterno: ciò su cui si rifiuta la ricorsione di un comando che non
     /// passa dalla pila condivisa del workspace
@@ -164,6 +171,7 @@ impl JobHost {
             instance: None,
             job: None,
             cancelled: Arc::new(AtomicBool::new(false)),
+            outer_stops: Vec::new(),
             chain: Vec::new(),
         }
     }
@@ -214,7 +222,21 @@ impl JobHost {
             instance: None,
             job: None,
             cancelled: Arc::clone(&self.cancelled),
+            outer_stops: self.outer_stops.clone(),
             chain: self.chain.clone(),
+        }
+    }
+
+    /// Host figlio per una **lettura** col suo frame: ha la bandiera `own`,
+    /// figlia di quelle di questo host. Le sue bandiere sono quelle che
+    /// guarda, e le stesse che la lettura iscrive fra quelle in volo.
+    fn for_read(&self, plugin: impl Into<String>, mode: InvokeMode, own: Arc<AtomicBool>) -> Self {
+        let mut outer_stops = self.outer_stops.clone();
+        outer_stops.push(Arc::clone(&self.cancelled));
+        JobHost {
+            cancelled: own,
+            outer_stops,
+            ..self.for_provider(plugin, mode)
         }
     }
 
@@ -224,7 +246,11 @@ impl JobHost {
     /// anche di mettersi in fila per il lock, che è metà del motivo per cui lo
     /// si annulla.
     fn stopped(&self) -> Result<(), PluginError> {
-        if self.cancelled.load(Ordering::Relaxed) {
+        let outer = self.outer_stops.iter();
+        if std::iter::once(&self.cancelled)
+            .chain(outer)
+            .any(|flag| flag.load(Ordering::Relaxed))
+        {
             return Err(PluginError::Cancelled(
                 format!("the job of `{}` has been cancelled", self.plugin).into(),
             ));
@@ -1542,16 +1568,21 @@ impl HostCommands for JobHost {
         self.authorize_caller(Capability::Commands, || format!("invoking `{command}`"))?;
         let workspace = self.workspace.clone();
         // Un comando di sola lettura ha il suo frame e non prende il turno:
-        // annidato o no, non ferma chi scrive.
+        // annidato o no, non ferma chi scrive. Ha una bandiera sua: chi spegne
+        // il suo plugin ferma la lettura, non questo host.
+        let own = Arc::new(AtomicBool::new(false));
+        let mut outer_stops = self.outer_stops.clone();
+        outer_stops.push(Arc::clone(&self.cancelled));
         let read_only = workspace.read()?.prepare_read_only_provider_command(
             command,
             args.clone(),
             self.mode,
             &self.chain,
-            &self.cancelled,
+            &own,
+            &outer_stops,
         )?;
         if let Some(prepared) = read_only {
-            let host = self.for_provider(prepared.owner().to_string(), prepared.host_mode());
+            let host = self.for_read(prepared.owner().to_string(), prepared.host_mode(), own);
             return run_read_only_command(&workspace, host, prepared);
         }
         let _turn = self.turn(&workspace)?;

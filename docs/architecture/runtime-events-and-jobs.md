@@ -174,7 +174,9 @@ mai una voce nella pila dell'annullamento, anche se il suo esito ne porta una.
 Una lettura senza turno si iscrive fra le **letture in volo** del workspace
 (`ReadsInFlight`) dal prepare finché il token vive: la guardia cade anche se il
 provider va in panico o la fine non viene chiamata. L'iscrizione porta il
-proprietario e la bandiera di cancellazione dell'host che serve la lettura.
+proprietario, la bandiera propria della lettura e quelle di chi la contiene
+(il job, le letture più fuori): l'host della lettura è fermo se è alzata una
+qualunque di queste.
 
 - Nel kernel, `deactivate_plugin`, `prepare_plugin_teardown` e
   `prepare_plugin_deactivation` rispondono `Busy` se il proprietario ha
@@ -185,9 +187,15 @@ proprietario e la bandiera di cancellazione dell'host che serve la lettura.
   prossima chiamata all'host e finiscono con `Cancelled`. Una lettura che sta
   solo calcolando si aspetta fino alla sua uscita, come prima si aspettava il
   turno del comando.
-- Lo smontaggio di un singolo plugin (`teardown::unmount`, per la
-  disattivazione o lo spegnimento di un bundle) ferma e aspetta le letture di
-  quel proprietario prima di preparare il teardown.
+- Lo smontaggio di un singolo plugin (`teardown::unmount` per la
+  disattivazione e lo spegnimento di un bundle, `unmount_guarded` per
+  `Host::unmount_bundle`) passa da `teardown::stop_reads`: sbarra le nuove
+  letture di quel proprietario (una nuova lettura riceve `Cancelled`), ferma e
+  aspetta quelle in volo, e tiene la sbarra fino al ritiro dei provider, così
+  nessuna lettura gira accanto al `deactivate`. Alza solo la bandiera
+  della lettura: il job che l'ha invocata riceve `Cancelled` da
+  `invoke_command`, come da un comando che fallisce, e non è annullato. Alla
+  chiusura invece si alzano anche le bandiere di chi la contiene.
 - Si aspetta senza il lucchetto del workspace: una lettura, per finire, ne
   prende solo un prestito condiviso. Chi aspetta può tenere il turno, perché
   una lettura che chiede il turno (un comando annidato in simulazione) lo
