@@ -1,10 +1,13 @@
 // Ciò che la palette dei comandi chiede a chi la ospita, costruito una volta
 // per tutte le shell: nessuna delle quattro voci disegna.
-import { vaultEntries } from "../host/query";
+import { notesByName, vaultEntries } from "../host/query";
 import { applyIntent } from "../ui/intents";
 import { notify } from "../ui/notify";
 import { flushPendingSave } from "./document-session";
 import { focusedSurfaceCommands } from "./document-controller";
+
+/// Quanti documenti la palette suggerisce a campo vuoto.
+export const DOCUMENT_WINDOW = 200;
 
 /// Ciò che la palette chiede alla shell.
 export const paletteHost = {
@@ -20,12 +23,12 @@ export const paletteHost = {
   // ogni apertura del pannello. Un suggerimento troncato non toglie niente a
   // chi scrive il path per intero.
   //
-  // La forma giusta a regime è un'altra, ed è già scritto altrove: chiedere per
-  // prefisso mentre si scrive, cioè `noteDalNome` (0082, 0083 — «le superfici
-  // che propongono dei nomi fanno *la stessa* domanda»). Cablarla qui vuol dire
-  // dare alla palette un campo che ascolta, che è la casella residua.
-  listDocuments: () =>
-    vaultEntries({ offset: 0, limit: 200 }, "document")
-      .then((page) => page.items.map((e) => e.id))
+  // Mentre si scrive la domanda è per nome, `notesByName` (0082, 0083 — «le
+  // superfici che propongono dei nomi fanno *la stessa* domanda»): trova anche
+  // la nota che la finestra taglia, e ne porta indietro una ventina (#237 R06).
+  listDocuments: (text = "") =>
+    (text.trim()
+      ? notesByName(text)
+      : vaultEntries({ offset: 0, limit: DOCUMENT_WINDOW }, "document").then((page) => page.items.map((e) => e.id)))
       .catch(() => []),
 };

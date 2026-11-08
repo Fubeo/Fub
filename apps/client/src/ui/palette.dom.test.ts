@@ -351,3 +351,55 @@ describe("i comandi della superficie col fuoco", () => {
     expect(host.notify).toHaveBeenCalledWith("nothing to undo", "info");
   });
 });
+
+describe("i suggerimenti dei campi documento (#237 R06)", () => {
+  function moveEntry(): CommandEntry {
+    const spec: CommandSpec = {
+      ...command("doc.move", "Sposta"),
+      params: [{ name: "doc", title: "Documento", description: "", kind: { kind: "document" }, required: true }],
+    };
+    return { id: spec.id, title: spec.title, description: spec.description, layer: "global", binding: null, declared: null, spec, run: null };
+  }
+  const suggestions = () =>
+    [...document.querySelectorAll<HTMLOptionElement>("#palette-docs option")].map((option) => option.value);
+  const documentField = () => document.querySelector<HTMLInputElement>('#command-palette input[list="palette-docs"]')!;
+  const type = (text: string) => {
+    documentField().value = text;
+    documentField().dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  const settle = async () => {
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+  };
+
+  it("scrivendo, chiede per nome e trova la nota fuori dalla finestra", async () => {
+    const window = Array.from({ length: 200 }, (_, i) => `nota-${i}.md`);
+    const listDocuments = vi.fn(async (text = "") => (text ? ["Archivio/lontana.md"] : window));
+    startCommand(moveEntry(), { ...host, listDocuments });
+    await settle();
+    expect(suggestions()).toHaveLength(200);
+    expect(suggestions()).not.toContain("Archivio/lontana.md");
+
+    type("lont");
+    await settle();
+    expect(suggestions()).toEqual(["Archivio/lontana.md"]);
+    expect(listDocuments).toHaveBeenLastCalledWith("lont");
+  });
+
+  it("vince l'ultima battuta: una risposta lenta non riscrive quella nuova", async () => {
+    const pending: Record<string, (docs: string[]) => void> = {};
+    const listDocuments = vi.fn((text = "") =>
+      text ? new Promise<string[]>((resolve) => { pending[text] = resolve; }) : Promise.resolve(["prima.md"]));
+    startCommand(moveEntry(), { ...host, listDocuments });
+    await settle();
+    expect(suggestions()).toEqual(["prima.md"]);
+
+    type("l");
+    type("lo");
+    pending["lo"]!(["lontana.md"]);
+    await settle();
+    expect(suggestions()).toEqual(["lontana.md"]);
+    pending["l"]!(["lago.md", "lontana.md"]);
+    await settle();
+    expect(suggestions()).toEqual(["lontana.md"]);
+  });
+});
