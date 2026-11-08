@@ -340,7 +340,7 @@ Se una di queste cade, la stima si allunga.
 | PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | fatto | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
 | PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | fatto | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
 | PA T33 · il nome FubDraw dove le persone lo vedono | PA | fatto | nessuno | basso | M | test dei descrittori, di `fub-scene` e del catalogo |
-| PA T34 · il manifest dice da quale tema parte | PA | da fare (D15 A, `extends`) | nessuno | medio: la forma del manifest sul filo | M | `crates/fub-host/tests/themes.rs`, mirror |
+| PA T34 · il manifest dice da quale tema parte | PA | fatto | nessuno | medio: la forma del manifest sul filo | M | `crates/fub-host/tests/themes.rs`, mirror |
 | PA T35 · la pelle del tema sopra quella di serie | PA | da fare | T34 | medio: tocca il montaggio di ogni tema | M | `theme/inherit.test.ts`, `gate.test.ts` |
 | PA T39 · i caratteri del tema | PA | da fare | T34, T35 | basso | M | test dell'host e del loader |
 | PA T40 · le icone del tema | PA | da fare (D16 A) | T34, T35; mai nella stessa ondata di S2 T14 | basso | M | Vitest di `ui/icons` e di `theme/` |
@@ -4736,7 +4736,12 @@ mirror è quello scritto da `UPDATE_MIRROR=1`; il finto host dà un tema con
 `extends`.
 Prova: scripts/check.sh --rapido; cargo test -p fub-host --test themes;
 cargo test -p fub-app --test ts_mirror_app
-Stato: [ ] da fare
+Stato: [x] fatto · bde0c064..1df5f926 · 9 test nuovi in `themes.rs`; mirror da
+`UPDATE_MIRROR=1`; il finto espone `extendingTheme()` (non è fra i temi di
+serie del finto, per non cambiare banco e pannelli); finché non c'è T35 un
+fascio con `sheet: null` non si monta: il catalogo lo tiene fuori e lo dice
+nella diagnosi, `apply()` ripiega sulla serie; senza `extends` un foglio
+mancante resta l'errore `Io` di prima
 
 ## T35 · La pelle del tema si monta sopra quella di serie
 
