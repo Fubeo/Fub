@@ -384,6 +384,26 @@ Un editor non scrive un ruolo del tema sull'elemento: sull'elemento vanno i
 valori del file. `.github/scripts/check-inline-theme.mjs` lo controlla in
 `apps/client/src/editors/`, con l'elenco delle righe che lo fanno ancora.
 
+L'editor di testo si veste come gli altri componenti. Il tema di CodeMirror
+(`apps/client/src/editors/text/theme.ts`) non porta colori né caratteri: dà a
+ogni gruppo di sintassi la sua classe (`fub-syn-keyword`, …,
+`fub-syn-invalid`, nell'ordine di One Dark) e dichiara la luce con il flag
+`dark`. I colori stanno nella pelle, sotto le classi `.cm-*` e `fub-syn-*`
+(`apps/client/src/theme/scrittoio/skin/editors.css`): il fondo e l'inchiostro
+di ogni editor, il carattere di serie, la riga attiva, la selezione, il
+cursore, il margine, i suggerimenti, la sintassi e i segni della Live che non
+hanno una regola nel documento. Gli hook sono nell'anatomia del pezzo
+`editors` e quindi nel contratto del tema (`apps/client/theme/author/contract.json`),
+così una pelle di terzi li veste con gli stessi cancelli del resto.
+
+CodeMirror monta i suoi stili (`style-mod`) in testa al documento, prima della
+pelle: a parità di specificità vince la pelle, senza `!important`. Le regole di
+serie dell'editor di testo pesano quindi quanto quelle che sostituiscono: il
+carattere di serie sta su `.cm-content`, una classe sola, e cede al tema
+dell'editor con cui un profilo che scrive prosa mette il suo; la riga attiva
+spenta sotto una selezione pesa quanto la riga attiva, e cede al fondo di un
+blocco.
+
 La finestra documento a parte (`apps/client/src/shells/document/`) non ha IPC:
 riceve dalla finestra principale il profilo di testo che il registro ha risolto
 per il documento (`DocumentWindowRequest.profile`) e lo monta su un
