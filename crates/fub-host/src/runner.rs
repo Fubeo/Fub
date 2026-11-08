@@ -2330,17 +2330,14 @@ mod tests {
 
     /// Avvelena una custodia come la avvelena la vita: un thread che pania
     /// tenendo il prestito **esclusivo**. Il panico è di proposito e non deve
-    /// sporcare l'output del banco.
+    /// sporcare l'output del banco: tace solo il suo thread
+    /// ([`crate::quiet_panic`]), non quelli degli altri test.
     fn poison<T: Send + Sync + 'static>(c: &Custody<T>) {
         let copy = c.clone();
-        let hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
-        let _ = std::thread::spawn(move || {
+        crate::quiet_panic::quietly(move || {
             let _g = copy.write().expect("viva prima del misfatto");
             panic!("a metà");
-        })
-        .join();
-        std::panic::set_hook(hook);
+        });
     }
 
     /// Un vault seminato, scansionato e con la sua identità di job: il punto in
