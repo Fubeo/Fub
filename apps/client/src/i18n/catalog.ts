@@ -2266,7 +2266,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "palette.writes": "scrive · {dove}",
 "palette.irreversible": "{cosa} · non reversibile",
 "palette.plan_edits": "{doc} — Modifiche: {count}",
-"palette.docs_limited": "Suggerimenti limitati ai primi {count}: scrivi il nome per intero o usa Vai alla nota",
+"palette.docs_limited": "Sono i primi {count} documenti: scrivi il nome per cercarne altri nel vault",
 // --- ciò che si dice quando un pezzo non risponde ----------------------
 "panel.render_failed": "Il pannello «{panel}» non si è ridisegnato: {reason}",
 "notice.save_failed": "Non riesco a salvare «{doc}»: quello che hai scritto è ancora qui, ma non è su disco.",
@@ -5301,7 +5301,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "palette.writes": "writes · {dove}",
 "palette.irreversible": "{cosa} · not reversible",
 "palette.plan_edits": "{doc} — Edits: {count}",
-"palette.docs_limited": "Suggestions limited to the first {count}: type the full name or use Go to note",
+"palette.docs_limited": "These are the first {count} documents: type a name to search the vault for others",
 "panel.render_failed": "The panel «{panel}» did not redraw: {reason}",
 "notice.save_failed": "Can't save “{doc}”: what you wrote is still here, but it is not on disk.",
 "notice.read_only": "“{doc}” is read-only until you answer the delete question.",
