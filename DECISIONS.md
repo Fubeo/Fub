@@ -99,6 +99,12 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · fub-pre-alpha (orchestratore) · PA T40 si integra anche se
+  10.000 icone cambiate si ridisegnano in 18–35 ms (headless, macchina
+  carica) e non sotto i 16 ms del piano · il ridisegno è già un passaggio
+  solo con un modello per nome, il costo resta nel DOM, e la shell vera ha
+  qualche centinaio di icone; il limite di 512 nomi resta, e S2 T14, che ne
+  aggiunge, guarda il margine (oggi 440).
 - 2026-11-08 · fub-pre-alpha (orchestratore) · la correzione del difetto
   di PA T47 trovato dalle baseline del runner (la maniglia del cassetto a
   44 px) la faccio io, e le esclusioni della regola dei 44 px stanno in
