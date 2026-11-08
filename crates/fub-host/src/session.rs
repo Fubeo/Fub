@@ -4718,7 +4718,7 @@ impl Host {
 
     #[cfg(test)]
     pub(crate) fn debug_sessions_write_available(&self) -> bool {
-        self.sessions.try_write().is_some()
+        crate::legacy_tests::write_comes_free(&self.sessions)
     }
     pub fn root(&self, vault: Option<&str>) -> Result<Utf8PathBuf, PluginError> {
         self.with_session(vault, |s| s.root.clone())
@@ -5281,12 +5281,10 @@ mod side_data_lock_tests {
         entered_rx
             .recv_timeout(Duration::from_secs(2))
             .expect("the organization update reaches storage");
-        let read = workspace.try_read();
-        let read_progressed = read.is_some();
-        drop(read);
-        let write = workspace.try_write();
-        let write_progressed = write.is_some();
-        drop(write);
+        // Entro una scadenza e prima di liberare lo storage: un prestito
+        // trattenuto dall'aggiornamento resterebbe preso fino in fondo.
+        let read_progressed = crate::legacy_tests::read_comes_free(&workspace);
+        let write_progressed = crate::legacy_tests::write_comes_free(&workspace);
         release_tx.send(()).expect("the storage update resumes");
 
         worker
@@ -5392,7 +5390,12 @@ mod tests {
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
                     .clone();
-                if workspace.is_some_and(|workspace| workspace.try_write().is_some()) {
+                // Basta una lettura con il lucchetto libero: chi l'ha già vista
+                // non riprova, e chi no la cerca entro una scadenza.
+                if !self.write_progressed.load(Ordering::Acquire)
+                    && workspace
+                        .is_some_and(|workspace| crate::legacy_tests::write_comes_free(&workspace))
+                {
                     self.write_progressed.store(true, Ordering::Release);
                 }
             }
@@ -5664,11 +5667,9 @@ mod os_trash_command_tests {
     impl OsTrashBackend for FakeTrash {
         fn move_file_to_os_trash(&self, from: &Utf8Path) -> std::io::Result<Utf8PathBuf> {
             assert!(
-                self.workspace
-                    .get()
-                    .expect("workspace aperto")
-                    .try_read()
-                    .is_some(),
+                crate::legacy_tests::read_comes_free(
+                    self.workspace.get().expect("workspace aperto")
+                ),
                 "nessun prestito workspace attraversa il backend OS"
             );
             if self.unsupported {
