@@ -61,6 +61,20 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · fub-pre-alpha (utente) · nuovo task PA T61: i `paths` di
+  `mobile.yml` coprono anche la cornice del telefono · una PR che cambia
+  solo `shells/scrittoio/mobile/` non costruiva l'APK (trovato da PA T8).
+- 2026-11-08 · fub-pre-alpha (orchestratore) · PA T35 accolto con le sue
+  differenze: il fascio porta `inherited: { skin }` e un `extends` senza di
+  esso è rifiutato; la pelle di serie ereditata non ripassa dal
+  sanificatore; `replaceTheme` inserisce prima del primo canale dopo
+  `pelle-tema`, quindi senza preferenze i frammenti restano ultimi (prima
+  la pelle finiva dopo di loro) · la serie è codice nostro, e l'ordine
+  dichiarato dei canali deve valere anche quando un canale manca.
+- 2026-11-08 · fub-pre-alpha (orchestratore) · PA T60 si allarga alle 4
+  sonde di test di `crates/fub-host/src/session.rs`, fuori dal suo `Tocca`
+  · hanno lo stesso schema a un colpo solo delle cadute, e nessun altro
+  task toccava il file; il codice vero di `session.rs` non cambia.
 - 2026-11-08 · fub-pre-alpha (orchestratore) · nuovo task PA T60: tutte
   le prove che aspettano libero il lucchetto del workspace lo chiedono con
   una scadenza, come quelle corrette da PA T19; quelle che lo aspettano
