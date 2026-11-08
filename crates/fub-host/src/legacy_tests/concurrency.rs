@@ -820,8 +820,10 @@ fn a_before_write_error_aborts_the_write_and_the_next_write_still_works() {
         "# Note 0\nshould not be written\n",
         WriteBase::Dictated,
     );
-    let read_after_error = ws.try_read().is_some();
-    let write_after_error = ws.try_write().is_some();
+    // I `fub-job-*` dell'host possono prendere il workspace per un istante
+    // proprio adesso (#292): la guardia lasciata dalla scrittura rifiutata
+    // resterebbe presa fino alla scadenza, la loro no.
+    let free_after_error = super::comes_free(&ws, super::FREE_WITHIN);
     let source_after_error = host
         .read_document(None, &DocId::new("Note 0.md"))
         .expect("the document remains readable")
@@ -833,8 +835,7 @@ fn a_before_write_error_aborts_the_write_and_the_next_write_still_works() {
         "# Note 0\nwritten after the hook error\n",
         WriteBase::Dictated,
     );
-    let read_after_recovery = ws.try_read().is_some();
-    let write_after_recovery = ws.try_write().is_some();
+    let free_after_recovery = super::comes_free(&ws, super::FREE_WITHIN);
 
     assert!(
         matches!(&failed, Err(PluginError::BadArgs(_))),
@@ -845,12 +846,12 @@ fn a_before_write_error_aborts_the_write_and_the_next_write_still_works() {
         "a rejected before-write partially finalized the document"
     );
     assert!(
-        read_after_error && write_after_error,
+        free_after_error,
         "a before-write error left a workspace guard held"
     );
     recovered.expect("the next write succeeds after the hook recovers");
     assert!(
-        read_after_recovery && write_after_recovery,
+        free_after_recovery,
         "the recovered before-write left the workspace unusable"
     );
 }
