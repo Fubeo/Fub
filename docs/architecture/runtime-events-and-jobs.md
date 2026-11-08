@@ -166,7 +166,35 @@ porta con sé la catena dei comandi per rifiutare la ricorsione (`JobHost` la
 passa alle invocazioni annidate), e la sua fine (`finish_read_only_provider_command`,
 un prestito condiviso) non spinge undo, non chiude batch e non accoda eventi.
 Se il vault si chiude mentre il comando legge, la fine risponde `Cancelled` e
-l'esito non si applica.
+l'esito non si applica. Un comando che si dichiara di sola lettura non lascia
+mai una voce nella pila dell'annullamento, anche se il suo esito ne porta una.
+
+### Chi aspetta chi allo smontaggio
+
+Una lettura senza turno si iscrive fra le **letture in volo** del workspace
+(`ReadsInFlight`) dal prepare finché il token vive: la guardia cade anche se il
+provider va in panico o la fine non viene chiamata. L'iscrizione porta il
+proprietario e la bandiera di cancellazione dell'host che serve la lettura.
+
+- Nel kernel, `deactivate_plugin`, `prepare_plugin_teardown` e
+  `prepare_plugin_deactivation` rispondono `Busy` se il proprietario ha
+  letture in volo, come con `in_provider_call` per il frame condiviso.
+- La chiusura del vault (`close_session_resources`), dopo `prepare_close` e la
+  consegna di `VaultClosed`, alza la bandiera di tutte le letture in volo e le
+  aspetta, prima di smontare qualunque provider. Le letture si fermano alla
+  prossima chiamata all'host e finiscono con `Cancelled`. Una lettura che sta
+  solo calcolando si aspetta fino alla sua uscita, come prima si aspettava il
+  turno del comando.
+- Lo smontaggio di un singolo plugin (`teardown::unmount`, per la
+  disattivazione o lo spegnimento di un bundle) ferma e aspetta le letture di
+  quel proprietario prima di preparare il teardown.
+- Si aspetta senza il lucchetto del workspace: una lettura, per finire, ne
+  prende solo un prestito condiviso. Chi aspetta può tenere il turno, perché
+  una lettura che chiede il turno (un comando annidato in simulazione) lo
+  chiede cedendo e rinuncia appena vede la bandiera.
+- Le letture preparate quando la chiusura era già cominciata (un handler di
+  `VaultClosed` o un `deactivate` che invoca un comando) non si iscrivono:
+  la chiusura che le ha lanciate non aspetta sé stessa.
 
 ## Turno di scrittura e istanza
 

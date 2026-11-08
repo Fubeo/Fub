@@ -32,7 +32,22 @@ pub(crate) fn unmount(
     id: &str,
 ) -> Result<Vec<PluginError>, PluginError> {
     let _turn = workspace.write_turn();
-    let prepared = { workspace.write()?.prepare_plugin_teardown(id) };
+    // Le letture in volo del plugin non tengono il turno, quindi non lo si
+    // aspetta più: le si ferma e le si aspetta qui, prima di smontarne i
+    // provider. Fermarle è ciò che rende l'attesa sicura col turno in mano
+    // (chi lo tiene può essere anche chi chiama): una lettura che chiede il
+    // turno lo chiede cedendo, e cede appena vede la bandiera. Se una nuova
+    // lettura entra fra l'attesa e la preparazione, si ricomincia.
+    let prepared = loop {
+        let reads = workspace.read()?.reads_in_flight();
+        reads.cancel_owner(id);
+        reads.wait_owner_idle(id);
+        let mut ws = workspace.write()?;
+        match ws.prepare_plugin_teardown(id) {
+            Err(RegistryError::Busy(_)) if ws.reads_in_flight().busy(id) => continue,
+            prepared => break prepared,
+        }
+    };
     let mut prepared = match prepared {
         Ok(prepared) => prepared,
         Err(error) => {
