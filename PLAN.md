@@ -344,12 +344,12 @@ Se una di queste cade, la stima si allunga.
 | PA T34 · il manifest dice da quale tema parte | PA | fatto (in main, #319) | nessuno | medio: la forma del manifest sul filo | M | `crates/fub-host/tests/themes.rs`, mirror |
 | PA T35 · la pelle del tema sopra quella di serie | PA | fatto (ADR 0240; in main, #319) | T34 | medio: tocca il montaggio di ogni tema | M | `theme/inherit.test.ts`, `gate.test.ts` |
 | PA T39 · i caratteri del tema | PA | fatto (in main, #319) | T34, T35 | basso | M | test dell'host e del loader |
-| PA T40 · le icone del tema | PA | fatto (D16 A) | T34, T35; mai nella stessa ondata di S2 T14 | basso | M | Vitest di `ui/icons` e di `theme/` |
+| PA T40 · le icone del tema | PA | fatto (D16 A; in main, #320) | T34, T35; mai nella stessa ondata di S2 T14 | basso | M | Vitest di `ui/icons` e di `theme/` |
 | PA T44 · un documento e un foglio vuoti | PA | fatto (in main, #319) | nessuno | basso: due comandi che creano file, dietro le loro feature | M | test d'integrazione di `fub-host`, anche con `--no-default-features` |
 | PA T46 · le parole della scheda di un componente | PA | da fare (D18 A) | K2 in `main` | basso: solo testi del catalogo | S | `i18n/lexicon-settings.test.ts` |
 | PA T47 · i 44 px del tocco sul telefono, senza deformare | PA | fatto (in main, #319, con le baseline del runner) | nessuno | basso: solo CSS del telefono | S | la scena `mobile-settings` di `bench/scene.mjs` (`bench:verify`, `bench:a11y`) |
-| PA T48 · il verde di serie | PA | integrato (D25 C); baseline dal runner con la consegna 3 | niente (il logo definitivo conferma 160); mai con un task che rifà baseline | medio: cambia ogni schermata, le baseline vengono dal runner | M | `recipe.test.ts`, `colori.test.ts`, `theme:verify`, `cargo test -p fub-host` |
-| PA T53 · #237 R05–R08 e A03 | PA | R05–R08 fatte; A03 dopo S2 T10 (D21 A) | S2 T10 per A03 | basso | M | un test per voce nel proprietario |
+| PA T48 · il verde di serie | PA | fatto (D25 C; in main, #320, con le baseline dal runner) | niente (il logo definitivo conferma 160); mai con un task che rifà baseline | medio: cambia ogni schermata, le baseline vengono dal runner | M | `recipe.test.ts`, `colori.test.ts`, `theme:verify`, `cargo test -p fub-host` |
+| PA T53 · #237 R05–R08 e A03 | PA | R05–R08 fatte (in main, #320); A03 dopo S2 T10 (D21 A) | S2 T10 per A03 | basso | M | un test per voce nel proprietario |
 | PA T54 · l'editor di testo vestito dal tema | PA | da fare (D22 A) | T35; prima di T41; mai con S2 T20 o la griglia T2–T3 | medio: tocca la pelle di ogni tema | M | Vitest di `theme.ts`, `check-inline-theme.mjs` |
 
 ### Fase B · la cornice
@@ -360,7 +360,7 @@ Se una di queste cade, la stima si allunga.
 | PA T2 · N4 e K5 allineati a `main` | PA | da fare | #295 in `main` | basso | S | `tsc --noEmit` pulito sui due rami |
 | PA T11 · il vassoio delle barre | PA | da fare (D6 C: chiaro di serie, «marcate» in Aspetto) | S2 T20 | basso | S | Vitest delle preferenze, foto del banco |
 | Il piano del telefono | telefono | da pianificare (D1 B) | S2 in `main`; un pianificatore alla volta | medio: rifà la cornice del telefono prima dell'APK | L | il piano approvato e i suoi task in `main` |
-| PA T20, T21 · i test instabili del client e del banco | PA | T20 integrato (baseline live-07…11 dal runner); T21 integrato (#284 in parte) | nessuno | medio | M + M | 50 giri verdi o causa trovata |
+| PA T20, T21 · i test instabili del client e del banco | PA | T20 fatto (in main, #320); T21 integrato (#284 in parte) | nessuno | medio | M + M | 50 giri verdi o causa trovata |
 | PA T36 · installare da cartella, e la diagnosi | PA | da fare | T34; S2 T10 | medio: un'IPC nuova che scrive nella configurazione | M | test di `fub-host`, Vitest delle Impostazioni |
 | PA T37 · collegare una cartella, il tema cambia al salvataggio | PA | da fare | T36 | medio: un osservatore nuovo | M | test di `fub-host` con l'evento, Vitest |
 | PA T38 · la pagina «Tutti i componenti» | PA | da fare | T35, T36; S2 T10 | basso | M | foto del banco uguali, bundle iniziale uguale |
