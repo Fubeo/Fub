@@ -144,6 +144,11 @@ ureq = { version = "3", default-features = false, features = [
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true }
 
+# Il job object di una CLI Craft su Windows (`craft/launch.rs`): il tempo
+# scaduto la ferma con tutti i suoi figli.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true }
+
 [features]
 default = ["notify-watcher", "http-client", "official-features", "rich", "xlsx", "draw", "craft"]
 notify-watcher = ["dep:notify", "dep:notify-debouncer-full"]
