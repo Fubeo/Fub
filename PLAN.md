@@ -349,7 +349,7 @@ Se una di queste cade, la stima si allunga.
 | PA T46 · le parole della scheda di un componente | PA | da fare (D18 A) | K2 in `main` | basso: solo testi del catalogo | S | `i18n/lexicon-settings.test.ts` |
 | PA T47 · i 44 px del tocco sul telefono, senza deformare | PA | fatto (in main, #319, con le baseline del runner) | nessuno | basso: solo CSS del telefono | S | la scena `mobile-settings` di `bench/scene.mjs` (`bench:verify`, `bench:a11y`) |
 | PA T48 · il verde di serie | PA | da fare (D25 C) | niente (il logo definitivo conferma 160); mai con un task che rifà baseline | medio: cambia ogni schermata, le baseline vengono dal runner | M | `recipe.test.ts`, `colori.test.ts`, `theme:verify`, `cargo test -p fub-host` |
-| PA T53 · #237 R05–R08 e A03 | PA | da fare (D21 A) | S2 T10 per A03 | basso | M | un test per voce nel proprietario |
+| PA T53 · #237 R05–R08 e A03 | PA | R05–R08 fatte; A03 dopo S2 T10 (D21 A) | S2 T10 per A03 | basso | M | un test per voce nel proprietario |
 | PA T54 · l'editor di testo vestito dal tema | PA | da fare (D22 A) | T35; prima di T41; mai con S2 T20 o la griglia T2–T3 | medio: tocca la pelle di ogni tema | M | Vitest di `theme.ts`, `check-inline-theme.mjs` |
 
 ### Fase B · la cornice
@@ -5788,7 +5788,14 @@ Casi limite: il vault da 5.000 file (R06); due cambi di vault di fila
 Fatto quando: ogni voce ha un test che falliva e passa, o un test che
 prova che non si riproduce; le caselle di #237 si spuntano dopo il merge.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/panels src/shells
-Stato: [ ] da fare
+Stato: [~] R05–R08 fatte · dcd06be8..46bee689 · ogni voce col suo test rosso
+alla base; R05: sotto «Elenco non aggiornato» non si dice più «nessun
+lavoro»; R06 (in `state/palette-host.ts` e `ui/palette.ts`): scrivendo, la
+domanda per nome (`notesByName`) 120 ms dopo l'ultima battuta, come il
+lanciatore; R07: vista e ricerca per vault in RAM (`state/per-vault.ts`, al
+più 32); R08: la scheda della view resta davanti, e la seconda
+`synchronize()` resta perché toglierla fa fallire la prova · resta A03, dopo
+S2 T10; le caselle di #237 dopo il merge
 
 ## T54 · L'editor di testo vestito dal tema
 
