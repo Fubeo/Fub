@@ -61,6 +61,12 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-08 · k3-motori · il piano è concluso: #295 è in `main`
+  (fb722164) col sì dell'utente, e `PLAN.md` e
+  `PLAN-ui/menu-comandi-fogli.html` escono da `main` come per gli altri
+  piani conclusi · erano entrati con l'unione, e ogni ramo di piano aperto
+  andava in conflitto su `PLAN.md` a ogni allineamento con `main`.
+
 - 2026-11-08 · fub-pre-alpha (orchestratore) · PA T1: il finto del banco
   porta tutto il gruppo Aspetto dell'host (18 voci, nell'ordine di
   `appearance_settings`), non solo «Animazioni»; lo stato `aspetto` del
