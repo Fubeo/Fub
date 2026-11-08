@@ -643,10 +643,10 @@ const SETTINGS: SettingEntry[] = [
       description: "Il colore di collegamenti, fuoco e selezione. Chiarezza e intensità si adattano da sole per restare leggibili.",
       group: "Aspetto",
       scope: "machine",
-      kind: { kind: "number", default: 265, min: 0, max: 360 },
+      kind: { kind: "number", default: 160, min: 0, max: 360 },
       program_writable: false,
     },
-    value: 265,
+    value: 160,
     source: "default",
   },
   {
