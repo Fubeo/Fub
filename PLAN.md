@@ -337,6 +337,7 @@ Se una di queste cade, la stima si allunga.
 | PA T59 · un file in sola lettura non si sovrascrive | PA | fatto (in main, #317) | T13 | medio: la scrittura del kernel, tre sistemi | S | test del kernel e `prealpha_corpus` sui tre sistemi |
 | PA T60 · le altre prove del lucchetto a un colpo solo | PA | fatto (in main, #319) | T19 | basso: solo test | M | 200 corse verdi delle due cadute |
 | PA T61 · la CI Mobile per la cornice del telefono | PA | fatto (in main, #319; la CI Mobile è partita e passata) | nessuno | basso: solo il filtro di un workflow | S | una PR che tocca solo la cornice fa partire `mobile.yml` |
+| PA T62 · la WebView fa pulizia prima di leggere la memoria | PA | in corso | T21 | basso: un gancio spento di serie, acceso solo dal banco | M | 5 corse di R1 sotto soglia, confrontate con 5 senza |
 | PA T19 · i test instabili del Rust | PA | fatto | nessuno | medio | M | 200 giri verdi o causa trovata |
 | PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | fatto | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
 | PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | fatto | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
@@ -6238,3 +6239,44 @@ Stato: [x] fatto · 9cbd4be1..b8b30682 · in main con #319, dove `mobile.yml` è
 (comuni, il build Vite del desktop fa anche `mobile.html`) e le righe `cfg`
 del telefono nei crate comuni (provate sul push in main). Se Scrittoio 2 rinomina
 `shells/scrittoio/mobile/`, il filtro va spostato
+
+## T62 · La WebView fa pulizia prima di ogni lettura della memoria
+
+Perché: #284. `R1.giri.pendenza` sullo stesso albero è uscita 10 e 56 MiB
+(soglia 20): la WebView restituisce la memoria quando vuole, e la retta dei
+giri misura quando lo fa più che quanto resta. T21 ha già preso la lettura
+più bassa in 60 s a ogni giro e ha concluso che serve una raccolta forzata
+da un gancio in fub-app. Ogni rosso a caso costa alla consegna una mezz'ora
+di CI completa in più (consegna 3, #320). Task chiesto dall'orchestratore il
+2026-11-09.
+Ramo: piano/fub-pre-alpha.
+Tocca: `crates/fub-app/src/` (il gancio, solo Linux), `apps/client/bench/webview/`
+(`run.mjs`, `memory.mjs` e i loro test), `docs/development/webview-measurements.md`.
+Non toccare: le soglie di R1 (né `docs/misure/`); l'IPC pubblica e il suo
+mirror TS; `ci.yml` oltre a una variabile d'ambiente del job `webview`, se
+serve; i nomi dei job (`check-release-gate.mjs`).
+Dipende da: T21 (integrato).
+Cosa fare:
+- Prima la prova: misura in locale quanto la raccolta cambia R1
+  (WebKitGTK 4.1: `WebContextExt::garbage_collect_javascript_objects` sul
+  contesto della WebView, via `with_webview`; guarda se basta o se serve
+  altro della WebView per restituire memoria al sistema).
+- Il gancio è spento di serie e acceso solo dal banco (una variabile
+  d'ambiente letta all'avvio, per esempio `FUB_BENCH_GC=1`). La via più
+  stretta: niente comando IPC nuovo nella build normale; se un comando serve,
+  esiste solo col gancio acceso e non entra nel contratto. Il gancio non
+  legge né scrive file del vault e non apre porte.
+- Il banco chiede la raccolta prima di ogni lettura di R1 (vuota, chiuse,
+  giri, tardi) e aspetta che sia finita prima di leggere; il resto delle
+  misure non cambia.
+Casi limite: il gancio chiesto con la variabile spenta non fa niente e il
+banco lo dice nel referto; Windows e macOS non lo hanno (R1 è solo Linux);
+la raccolta con un documento aperto non deve toccarne lo stato.
+Fatto quando: in locale R1 per 5 corse di fila (mai due banchi WebView
+insieme: l'app è una sola sul bus di sessione) dà `R1.giri.pendenza` sotto
+soglia in tutte e 5, con lo scarto fra la più alta e la più bassa scritto
+nel resoconto e confrontato con 5 corse senza il gancio; un test prova che
+senza la variabile il gancio non c'è.
+Prova: scripts/check.sh --rapido; i test di `fub-app` del gancio; i test del
+banco; le 10 corse di R1 (5 con, 5 senza)
+Stato: [ ] da fare
