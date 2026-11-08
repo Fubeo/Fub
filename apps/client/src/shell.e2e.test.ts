@@ -3242,6 +3242,54 @@ describe("i riquadri dopo un'attesa", () => {
     expect(host.files()["note/Riunione.md"]).toBe("disco B\n");
   });
 
+  it("in Lettura il conflitto mostra il testo di chi scrive e lo dice nella fascia (R03)", async () => {
+    const host = await start(VAULT);
+    const { setMode } = await import("./panels/document");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banner = () => document.querySelector<HTMLElement>(".pane [data-banner='document.conflict.body']");
+    const readingLine = () => banner()?.querySelector<HTMLElement>("[data-conflict-reading]") ?? null;
+    await waitFor("la nota va in conflitto", () => banner()?.hidden === false);
+    expect(readingLine(), "in Live la riga della Lettura non c'è").toBeNull();
+
+    await setMode("reading");
+    await settle();
+    const rendered = document.querySelector<HTMLElement>(".pane-preview.markdown-rendered");
+    expect(rendered?.textContent, "la Lettura mostra il buffer").toContain("mio A");
+    expect(rendered?.textContent).not.toContain("disco A");
+    expect(banner()?.hidden, "la fascia resta in Lettura").toBe(false);
+    expect(banner()?.querySelectorAll(".conflict-actions button[data-choice]")).toHaveLength(2);
+    expect(readingLine()?.textContent).toBe("Stai leggendo la tua versione, non ancora salvata");
+
+    banner()!.querySelector<HTMLButtonElement>("button[data-choice='mine']")!.click();
+    await waitFor("il conflitto si chiude", () => banner()?.hidden !== false);
+    expect(readingLine(), "risolto il conflitto, la riga sparisce").toBeNull();
+    expect(document.querySelector(".pane-preview.markdown-rendered")?.textContent).toContain("mio A");
+  });
+
+  it("due riquadri sulla stessa nota in conflitto: la riga solo in quello in Lettura", async () => {
+    const host = await start(VAULT);
+    await splitRight();
+    await waitFor("il secondo riquadro si apre", () => document.querySelectorAll(".pane").length === 2);
+    await settle();
+    const { setMode } = await import("./panels/document");
+    editorViews()[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    const banners = () => [...document.querySelectorAll<HTMLElement>(".pane")]
+      .map((pane) => pane.querySelector<HTMLElement>("[data-banner='document.conflict.body']"));
+    await waitFor("la nota va in conflitto in entrambi", () => banners().every((b) => b && !b.hidden));
+
+    // Il fuoco è sul secondo riquadro, appena aperto: passa in Lettura.
+    await setMode("reading");
+    await settle();
+    const panes = [...document.querySelectorAll<HTMLElement>(".pane")];
+    expect(panes[1]!.querySelector(".pane-preview.markdown-rendered")?.textContent).toContain("mio A");
+    expect(editorTexts()[0]).toContain("mio A");
+    expect(banners()[0]!.querySelector("[data-conflict-reading]"), "il riquadro in Live non la mostra").toBeNull();
+    expect(banners()[1]!.querySelector("[data-conflict-reading]")?.textContent)
+      .toBe("Stai leggendo la tua versione, non ancora salvata");
+  });
+
   it("una lettura fallita non lascia la linguetta mostrata senza editor", async () => {
     const host = await start(VAULT);
     const { openDocument, synchronize } = await import("./panels/document");
