@@ -331,7 +331,7 @@ Se una di queste cade, la stima si allunga.
 | PA T6, T7 · #289 | PA | T6 e T7 fatti | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
 | PA T58 · la guardia stretta anche per enum, variant e funzioni esportate | PA | fatto (ADR 0238) | T7 | medio: confine WASM, ADR 0235 | M | `wit_additivity`, componente vero anche per gli import |
 | PA T8 · la pagina della cornice del telefono | PA | fatto | nessuno | basso | S | guardie dei documenti |
-| PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | da fare (D7 A) | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
+| PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | integrato; aspetta la CI Windows completa | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
 | PA T10 · i due punti sciolti da ritrovare | PA | da fare (D10 B) | nessuno | basso | S | la causa trovata o la riga che chiude |
 | PA T13 · il corpus senza perdite | PA | integrato in parte; la sola lettura per permesso del file con T59 | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
 | PA T59 · un file in sola lettura non si sovrascrive | PA | da fare (l'utente: rifiutare) | T13 | medio: la scrittura del kernel, tre sistemi | S | test del kernel e `prealpha_corpus` sui tre sistemi |
@@ -3803,7 +3803,13 @@ Fatto quando: il test Windows è verde nella CI completa; la pagina non dice
 più il limite.
 Prova: scripts/check.sh --rapido (qui il test Windows non gira: lo dice
 il resoconto); CI completa
-Stato: [ ] da fare
+Stato: [~] integrato · c3b6f304..44ecd93a · manca la CI Windows completa (il
+codice Windows qui solo con clippy su `x86_64-pc-windows-msvc` in un crate
+di prova): la CLI parte sospesa, entra nel job con
+`KILL_ON_JOB_CLOSE`, poi riparte; il job si chiude dopo la raccolta, come
+il gruppo su unix; un job che non si crea è `LaunchError::Io` e la CLI non
+parte; `windows-sys` era già diretta in `fub-kernel`: la versione va alla
+radice, le feature in ogni crate (guardia `check-cargo-versions`)
 
 ## T10 · I due punti sciolti da ritrovare
 
