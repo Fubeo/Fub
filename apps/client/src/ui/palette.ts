@@ -54,7 +54,11 @@ export interface PaletteHost {
   // Il terzo argomento sono i gesti accanto al messaggio: l'«Annulla» di un
   // esito che il kernel sa disfare.
   notify(message: string, tone?: Tone, action?: NoticeAction | readonly NoticeAction[]): void;
-  listDocuments(): Promise<string[]>;
+  // I documenti da suggerire: a mani vuote una finestra del vault, con del
+  // testo le note il cui nome combacia (la domanda del quick switcher). Mai
+  // l'anagrafe intera: in un vault da migliaia di file è il ponte che si
+  // riempie a ogni apertura del modulo (#237 R06).
+  listDocuments(text?: string): Promise<string[]>;
   // **Flush-before-patch** (M3): salva i documenti ancora sporchi e dice
   // quali non ce l'hanno fatta. È la stessa porta che l'esploratore usa per
   // `ensureSaved` — la palette la chiede alla shell invece di importare il
@@ -332,6 +336,13 @@ let releasePalette: (() => void) | null = null;
 let slashOwner: HTMLElement | null = null;
 let slashLife: Lifetime | null = null;
 let paletteGeneration = 0;
+/// Quanto si aspetta dopo l'ultima battuta di un campo documento prima di
+/// chiedere le note per nome (ms): la stessa attesa del lanciatore di
+/// Scrittoio (`ASK_DELAY_MS`), che fa la stessa domanda.
+export const DOCUMENT_ASK_DELAY_MS = 120;
+/// Spegne la domanda per nome in attesa del modulo aperto: la chiamano la
+/// chiusura della palette e il modulo che ne prende il posto.
+let stopDocumentAsk: (() => void) | null = null;
 /// I recenti e i preferiti di questa macchina, come letti l'ultima volta.
 /// Partono vuoti: `loadPaletteHistory` li rilegge all'apertura del vault.
 let paletteHistory: PaletteHistory = { recent: [], favorites: [] };
@@ -408,6 +419,8 @@ export function closeCommandPalette() {
   slashLife = null;
   slashOwner = null;
   paletteGeneration += 1;
+  stopDocumentAsk?.();
+  stopDocumentAsk = null;
   const overlay = document.getElementById(OVERLAY_ID);
   releasePalette?.();
   releasePalette = null;
@@ -1078,25 +1091,52 @@ function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost, pref
   // ce l'ha già la shell, e un campo `document` senza di essa costringerebbe a
   // ricordarsi un path a memoria.
   //
-  // R06: la finestra da 200 non si allarga — resta un suggerimento, e il limite
-  // è esplicito. Chi cerca un documento fuori finestra lo scrive per intero o
-  // lo trova con "Vai alla nota" (query per nome esistente, nessuna anagrafe
-  // intera in memoria).
+  // R06: a campo vuoto una finestra del vault, non l'anagrafe intera; mentre si
+  // scrive la domanda diventa «le note il cui nome combacia», la stessa del
+  // quick switcher, che trova anche la nota fuori finestra. Vince l'ultima
+  // battuta: una risposta vecchia non riscrive i suggerimenti di una nuova.
+  // La domanda per nome parte `DOCUMENT_ASK_DELAY_MS` dopo l'ultima battuta,
+  // come nel lanciatore: chi scrive un nome non manda una domanda per lettera.
   const datalist = document.createElement("datalist");
   datalist.id = "palette-docs";
-  if (spec.params.some((p) => p.kind.kind === "document" || p.kind.kind === "documents")) {
-    void host.listDocuments().then((docs) => {
-      for (const doc of docs) {
+  const opened = paletteGeneration;
+  let asked = 0;
+  let askTimer: number | undefined;
+  stopDocumentAsk?.();
+  stopDocumentAsk = () => {
+    window.clearTimeout(askTimer);
+    askTimer = undefined;
+    // Una risposta già in volo non trova più il suo giro.
+    asked += 1;
+  };
+  const suggestLater = (text: string) => {
+    window.clearTimeout(askTimer);
+    askTimer = window.setTimeout(() => {
+      askTimer = undefined;
+      if (opened !== paletteGeneration || !datalist.isConnected) return;
+      suggest(text);
+    }, DOCUMENT_ASK_DELAY_MS);
+  };
+  const suggest = (text: string, first = false) => {
+    const mine = ++asked;
+    void host.listDocuments(text).then((docs) => {
+      if (mine !== asked || opened !== paletteGeneration || !datalist.isConnected) return;
+      datalist.replaceChildren(...docs.map((doc) => {
         const opt = document.createElement("option");
         opt.value = doc;
-        datalist.appendChild(opt);
+        return opt;
+      }));
+      if (first) {
+        const hint = document.createElement("p");
+        hint.className = "palette-desc";
+        hint.textContent = t("palette.docs_limited", { count: docs.length });
+        form.appendChild(hint);
       }
-      const hint = document.createElement("p");
-      hint.className = "palette-desc";
-      hint.textContent = t("palette.docs_limited", { count: docs.length });
-      form.appendChild(hint);
     });
+  };
+  if (spec.params.some((p) => p.kind.kind === "document" || p.kind.kind === "documents")) {
     form.appendChild(datalist);
+    suggest("", true);
   }
 
   const fields = new Map<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>();
@@ -1107,6 +1147,8 @@ function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost, pref
     name.textContent = param.required ? t("palette.required", { title: param.title }) : param.title;
     label.appendChild(name);
     const field = fieldFor(param, datalist.id);
+    // Il listener vive col campo, che se ne va con la palette.
+    if (param.kind.kind === "document") field.addEventListener("input", () => suggestLater(field.value));
     // Ciò che chi ha aperto il modulo sa già: i campi di testo e le scelte lo
     // prendono se è un loro valore.
     const known = prefill[param.name];

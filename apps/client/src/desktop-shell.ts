@@ -48,7 +48,7 @@ import { mountKeyboard } from "./ui/keyboard";
 import { openVaultExport, VAULT_EXPORT } from "./ui/vault-export";
 import { IMPORT_PREPARE, openNoteImport } from "./ui/note-import";
 import { openLifetime, type Lifetime, type Teardown } from "./ui/lifetime";
-import { mountSidebarCommands, showPanel } from "./panels/sidebar";
+import { enterVaultPanel, mountSidebarCommands, showPanel } from "./panels/sidebar";
 import { revealSidePanel, setSidePanelController, toggleSidePanel, type SidePanel } from "./ui/side-panels";
 import { mountPanelHost, refreshAllPanels } from "./ui/panel-host";
 import { mountDeclaredViews, mountViewInvalidation } from "./ui/views";
@@ -99,7 +99,7 @@ import { mountCraftPhotos } from "./state/craft-photos";
 import { closeInDocumentSearch, mountDocSearch } from "./panels/doc-search";
 import { mountGraph } from "./panels/graph";
 import { mountQuickSwitcher } from "./panels/quick-switcher";
-import { clearSearch, mountSearch, searchFor } from "./panels/search";
+import { mountSearch, searchFor } from "./panels/search";
 import { errorText } from "./host/errors";
 import { pageName } from "./rules/mirrored";
 import { SHELL_WIDTH_LIMITS, type ShellGeometry } from "./state/shell-geometry";
@@ -575,6 +575,8 @@ function mountAdaptiveShell(): void {
     if (life.closed) return;
     state.vaultRoot = "";
     showVaultName("");
+    // La barra del vault lasciato resta sua, per quando ci si torna (R07).
+    enterVaultPanel("");
     await loadLayout(preferredPaneMode());
     if (life.closed) return;
     await synchronize();
@@ -1325,14 +1327,14 @@ export function openVault(dir: string): Promise<void> {
 }
 
 /// La sequenza vive in `state/vault-session.ts`; qui stanno le porte di resa
-/// di questa shell: il nome nella barra del titolo, la ricerca, le view
+/// di questa shell: il nome nella barra del titolo, la barra laterale, le view
 /// dichiarate, la rail e gli avvisi.
 const vaultSession = createVaultSession({
   alive: () => !pageWindowLifetime.closed,
   notify,
   setWatcherOff,
   showVaultName,
-  clearSearch,
+  enterSidebar: enterVaultPanel,
   mountDeclaredViews: () => mountDeclaredViews(pageWindowLifetime),
   syncRail,
 });

@@ -22,6 +22,7 @@ import { Race } from "../ui/race";
 import { applyOptions, queryText, replaceableText } from "../rules/search-options";
 import { mountSearchTools, type Replacement, type SearchTools } from "./search-tools";
 import { on } from "../state/store";
+import { PerVault } from "../state/per-vault";
 import type { Lifetime } from "../ui/lifetime";
 import { ClipboardUnavailable, writeClipboardText } from "../platform/clipboard";
 import { offerNote } from "../ui/drag-types";
@@ -56,8 +57,8 @@ const race = new Race();
 /// Le opzioni e la sostituzione, create da `mountSearch` e sciolte con lei.
 let searchTools: SearchTools | null = null;
 /// La query del vault **di questa sessione**: aprire un risultato non la azzera
-/// (U17) e cambiarla non tocca quella di un altro vault (R07: il cambio vault
-/// passa da `clearSearch`, non da una memoria condivisa).
+/// (U17) e cambiarla non tocca quella di un altro vault (R07: ogni vault ha la
+/// sua, in `queryByVault`).
 export function mountSearch(lifetime: Lifetime): void {
   // Le esclusioni restano mentre si affina la query: si vedono come etichette
   // sopra i risultati e si tolgono una per una (o tutte con Esc).
@@ -113,9 +114,10 @@ export function mountSearch(lifetime: Lifetime): void {
     visible: () => isPanelVisible("search"),
     render: scheduleSearch,
   });
-  // Cambio vault (R07): la query non si eredita — si azzera input e risultati,
-  // senza forzare i file se l'utente stava guardando una view dichiarata.
-  lifetime.add(on("vault", clearSearchState));
+  // Cambio vault (R07): la query non si eredita — il vault che entra ritrova la
+  // sua, se ci si era già stati, e parte vuoto altrimenti. Il pannello mostrato
+  // lo decide `enterVaultPanel`, non questa casella.
+  lifetime.add(on("vault", enterVaultSearch));
   lifetime.add(() => {
     window.clearTimeout(searchTimer);
     race.cancel();
@@ -133,9 +135,22 @@ function scheduleSearch(): void {
   }, 180);
 }
 
-/// Azzera input e risultati senza toccare il pannello mostrato: il cambio
-/// vault non eredita la query del vault precedente (R07), ma non chiude
-/// arbitrariamente una view ancora valida — `syncRail` decide cosa mostrare.
+/// La ricerca scritta di ogni vault visto in questa sessione (R07).
+const queryByVault = new PerVault<string>("");
+
+/// Si entra in un vault: la casella prende la query che quel vault aveva, o
+/// resta vuota. I risultati, le esclusioni e la risposta in volo erano del
+/// vault di prima e se ne vanno comunque: la query ritrovata si rifà sul vault
+/// che c'è adesso.
+function enterVaultSearch(root: string): void {
+  const written = queryByVault.enter(root, searchInputEl.value);
+  clearSearchState();
+  if (written === "") return;
+  searchInputEl.value = written;
+  scheduleSearch();
+}
+
+/// Azzera input e risultati senza toccare il pannello mostrato.
 function clearSearchState(): void {
   window.clearTimeout(searchTimer);
   searchTools?.reset();
@@ -146,11 +161,6 @@ function clearSearchState(): void {
   race.cancel();
   searchResultsEl.innerHTML = "";
   searchSummaryEl.textContent = "";
-}
-
-export function clearSearch(): void {
-  clearSearchState();
-  showPanel("files");
 }
 
 /// Avvia una ricerca da fuori (il click su un tag, `ViewUpdate::RunSearch`, un

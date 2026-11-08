@@ -2167,9 +2167,13 @@ describe("GridEngine con una cartella di Excel", () => {
     });
   });
 
+  // Quanto basta perché i tre oggetti (colonna J, righe 2-10) si vedano. Ogni
+  // disegno rifà tutte le celle visibili, e in happy-dom una cella costa: con
+  // 3000×1200 un test di nove gesti passava il secondo da solo e i 5 s nella
+  // corsa intera (#286).
   async function widened(viewport: HTMLElement) {
-    Object.defineProperty(viewport, "clientWidth", { configurable: true, value: 3_000 });
-    Object.defineProperty(viewport, "clientHeight", { configurable: true, value: 1_200 });
+    Object.defineProperty(viewport, "clientWidth", { configurable: true, value: 1_200 });
+    Object.defineProperty(viewport, "clientHeight", { configurable: true, value: 480 });
     viewport.dispatchEvent(new Event("scroll"));
     await settle();
   }

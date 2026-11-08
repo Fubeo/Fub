@@ -239,7 +239,8 @@
             "weight": 400,
             "style": "italic"
           }
-        ]
+        ],
+        "icons": "icons.json"
       },
       "trust": "community"
     }
@@ -295,7 +296,8 @@
             "weight": 400,
             "style": "italic"
           }
-        ]
+        ],
+        "icons": "icons.json"
       },
       "light": "dark",
       "sheet": null,

@@ -113,6 +113,12 @@ export interface ThemeManifest {
   extends?: string;
   /** I caratteri del tema, da `theme-2`. Assente quando non ne porta. */
   fonts?: ThemeFont[];
+  /**
+   * Il set di icone del tema, da `theme-2`: il nome di un asset JSON accanto
+   * al manifest (`icons.json`), `{ "<nome>": ["<d>", …] }`. Assente quando non
+   * ne porta.
+   */
+  icons?: string;
 }
 
 /** Un tema installato che il backend può consegnare alla shell. */
