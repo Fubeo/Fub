@@ -524,7 +524,10 @@ fn the_old_client_works_with_a_host_that_offers_the_same_interface() {
         .expect("l'host uguale istanzia il cliente di prima");
     let cliente = host.esempio_fornitore_cliente();
     assert_eq!(cliente.call_leggi_stato(&mut store).unwrap(), "occupato");
-    assert_eq!(cliente.call_leggi_evento(&mut store).unwrap(), "testo: ciao");
+    assert_eq!(
+        cliente.call_leggi_evento(&mut store).unwrap(),
+        "testo: ciao"
+    );
 }
 
 /// Un caso in più nell'`enum` che il guest **riceve** da un import.
@@ -590,7 +593,10 @@ fn a_new_function_in_an_import_does_not_disturb_the_old_client() {
         .expect("una funzione in più offerta dall'host non disturba il cliente di prima");
     let cliente = host.esempio_fornitore_cliente();
     assert_eq!(cliente.call_leggi_stato(&mut store).unwrap(), "occupato");
-    assert_eq!(cliente.call_leggi_evento(&mut store).unwrap(), "testo: ciao");
+    assert_eq!(
+        cliente.call_leggi_evento(&mut store).unwrap(),
+        "testo: ciao"
+    );
 }
 
 /// Il contratto vero: un `enum` di `fub:abi/plugin@0.2.0` con un caso in più
