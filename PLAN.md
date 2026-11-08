@@ -329,7 +329,7 @@ Se una di queste cade, la stima si allunga.
 | PA T3 · i comandi in sola lettura non tengono il turno | PA | fatto (5432f8b4) | nessuno | medio: tocca il custode | M | test d'integrazione di `fub-host` |
 | PA T4, T5 · #237 R01–R03 | PA | T4 e T5 fatti (baseline di `conflitto-lettura` dal runner) | nessuno | medio: sessioni e conflitto | M + M | test di Vitest sulla sessione; R01 si chiude col test se non si riproduce |
 | PA T6, T7 · #289 | PA | T6 e T7 fatti | T7 dopo T6 | medio: confine WASM | S + M | `wit_additivity`, componente vero |
-| PA T58 · la guardia stretta anche per enum, variant e funzioni esportate | PA | in corso (coder, base 651615a9) | T7 | medio: confine WASM, ADR 0235 | M | `wit_additivity`, componente vero anche per gli import |
+| PA T58 · la guardia stretta anche per enum, variant e funzioni esportate | PA | fatto (ADR 0238) | T7 | medio: confine WASM, ADR 0235 | M | `wit_additivity`, componente vero anche per gli import |
 | PA T8 · la pagina della cornice del telefono | PA | da fare | nessuno | basso | S | guardie dei documenti |
 | PA T9 · su Windows il tempo scaduto ferma anche i figli | PA | da fare (D7 A) | nessuno | medio: `windows-sys` diretta, solo Windows | M | test di `fub-motori` su Windows nella CI completa |
 | PA T10 · i due punti sciolti da ritrovare | PA | da fare (D10 B) | nessuno | basso | S | la causa trovata o la riga che chiude |
@@ -6005,4 +6005,7 @@ casi finti nuovi che falliscono come atteso; `cargo test -p fub-wasm-host
 la regola.
 Prova: scripts/check.sh --rapido; cargo test -p fub-abi; cargo test -p
 fub-wasm-host
-Stato: [~] in corso · coder · base 651615a9
+Stato: [x] fatto · 99fd7e22..7d2b157e · ADR 0238 (estende la 0235); contro
+0.2.0 enum, variant e flags del confine (import compresi) non prendono casi,
+le interfacce esportate non prendono funzioni; una funzione nuova in
+un'interfaccia importata resta additiva; `check.sh --rapido` del coder verde
