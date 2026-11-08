@@ -8,8 +8,8 @@ use cap_std::fs::{Dir, Metadata, OpenOptions};
 use cap_std::{ambient_authority, AmbientAuthority};
 
 use super::{
-    refuse_read_only, same_parent_resolution_name, temp_name, ConditionalWrite, DirEntry, EntryKind, FileIdentity,
-    Merge, Stat, VaultStorage, WriteBits,
+    refuse_read_only, same_parent_resolution_name, temp_name, ConditionalWrite, DirEntry,
+    EntryKind, FileIdentity, Merge, Stat, VaultStorage, WriteBits,
 };
 
 /// Filesystem di produzione ancorato alla directory aperta al mount.
