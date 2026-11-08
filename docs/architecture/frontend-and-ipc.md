@@ -268,11 +268,11 @@ pannelli) lo Scrittoio compone:
   ([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)).
 
 I predefiniti dell'aspetto (accento, i tre caratteri, corpo, interlinea,
-giustezza)
-li dichiara l'host e coincidono con quelli della serie; un test Rust lo
-verifica. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
-400 px, ispettore da 248 a 440 px. Un tema `theme-1` installato non si monta, e
-la diagnosi del catalogo nomina il motore.
+giustezza) li dichiara l'host e coincidono con quelli della serie; un test Rust
+lo verifica. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
+400 px, ispettore da 248 a 440 px. Un tema `theme-1` non si monta; uno con
+`extends` lascia la pelle di serie in `pelle` e aggiunge la sua in `pelle-tema`,
+dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
 
 ### Comportamenti della shell
 

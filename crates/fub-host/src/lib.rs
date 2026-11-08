@@ -112,6 +112,8 @@ pub mod mount;
 /// ce l'hanno.
 #[cfg(feature = "http-client")]
 pub mod net;
+#[cfg(any(feature = "rich", feature = "xlsx"))]
+mod new_file;
 pub mod obsidian_import;
 /// «Apri con»: quali app Craft aprono un file del vault, e aprirlo con una.
 pub mod open_with;

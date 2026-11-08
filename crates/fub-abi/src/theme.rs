@@ -12,6 +12,15 @@ pub const THEME_ENGINE_2: &str = "theme-2";
 /// Quante impostazioni un tema può dichiarare al massimo.
 pub const MAX_THEME_SETTINGS: usize = 32;
 
+/// Quanti caratteri (voci di `fonts`) un tema può portare al massimo.
+pub const MAX_THEME_FONTS: usize = 8;
+/// Quanto può pesare il file di un carattere del tema.
+pub const MAX_THEME_FONT_BYTES: u64 = 2 * 1024 * 1024;
+/// Quanto possono pesare, insieme, i file dei caratteri di un tema.
+pub const MAX_THEME_FONT_TOTAL_BYTES: u64 = 6 * 1024 * 1024;
+/// Quanto può essere lungo il nome di una famiglia di caratteri del tema.
+pub const MAX_THEME_FONT_FAMILY: usize = 64;
+
 /// La versione del contratto che un tema dichiara di implementare.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -77,6 +86,36 @@ pub struct ThemeSetting {
     pub kind: SettingKind,
 }
 
+/// Lo stile di un carattere del tema: il valore di `font-style` nella sua
+/// regola `@font-face`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ThemeFontStyle {
+    Normal,
+    Italic,
+}
+
+/// Un carattere che un tema porta con sé, da `theme-2`.
+///
+/// Il tema non scrive `@font-face` (il CSS di un tema non può: un `src:`
+/// scritto a mano potrebbe chiamare la rete). Dichiara qui la famiglia, il
+/// file e i due assi, e la regola la scrive la shell, con l'URL `data:` del
+/// file e nient'altro. La pelle usa poi la famiglia per nome.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ThemeFont {
+    /// Il nome con cui la pelle la chiama: lettere, cifre, spazi e `-`, al
+    /// massimo [`MAX_THEME_FONT_FAMILY`] caratteri, diverso da ogni famiglia
+    /// di serie.
+    pub family: String,
+    /// Il file, relativo alla cartella del tema: `fonts/<nome>.woff2`, cioè
+    /// l'asset `theme://<id>/fonts/<nome>.woff2`. Solo WOFF2.
+    pub file: String,
+    /// Il peso, da 100 a 900.
+    pub weight: u16,
+    /// Lo stile: `normal` o `italic`.
+    pub style: ThemeFontStyle,
+}
+
 /// Manifest versionato di un tema installabile.
 ///
 /// `asset_namespace` è il prefisso esclusivo da cui il foglio può caricare
@@ -97,6 +136,17 @@ pub struct ThemeManifest {
     /// scrive il campo: la forma sul filo dei temi esistenti non cambia.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub settings: Vec<ThemeSetting>,
+    /// Il tema da cui questo parte, da `theme-2`: porta solo ciò che cambia, e
+    /// il resto (i fogli che mancano, la pelle) viene da lì. L'host accetta un
+    /// solo valore, il tema di serie (`fub.serie`). Un manifest che non eredita
+    /// non scrive il campo: la forma sul filo dei temi esistenti non cambia.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extends: Option<String>,
+    /// I caratteri che il tema porta, da `theme-2`: la shell ne scrive le
+    /// regole `@font-face`. Un manifest che non ne porta non scrive il campo:
+    /// la forma sul filo dei temi esistenti non cambia.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fonts: Vec<ThemeFont>,
 }
 
 fn default_theme_motion() -> Vec<ThemeMotion> {
@@ -128,6 +178,26 @@ mod tests {
         let raw = r#"{"id":"fub.serie","name":"Fub di serie","version":"1.0.0","engine":"theme-1","lights":["dark","light"],"asset_namespace":"theme://fub.serie/","motion":["opacity","transform"]}"#;
         let manifest: ThemeManifest = serde_json::from_str(raw).expect("manifest");
         assert!(manifest.settings.is_empty());
+        assert_eq!(manifest.extends, None);
+        assert!(manifest.fonts.is_empty());
+        assert_eq!(serde_json::to_string(&manifest).expect("wire"), raw);
+    }
+
+    #[test]
+    fn a_manifest_that_extends_names_its_base_on_the_wire() {
+        let raw = r#"{"id":"com.acme.carta","name":"Carta","version":"1.0.0","engine":"theme-2","lights":["light"],"asset_namespace":"theme://com.acme.carta/","motion":["opacity","transform"],"extends":"fub.serie"}"#;
+        let manifest: ThemeManifest = serde_json::from_str(raw).expect("manifest");
+        assert_eq!(manifest.extends.as_deref(), Some("fub.serie"));
+        assert_eq!(serde_json::to_string(&manifest).expect("wire"), raw);
+    }
+
+    #[test]
+    fn a_manifest_with_fonts_names_them_on_the_wire() {
+        let raw = r#"{"id":"com.acme.carta","name":"Carta","version":"1.0.0","engine":"theme-2","lights":["light"],"asset_namespace":"theme://com.acme.carta/","motion":["opacity","transform"],"extends":"fub.serie","fonts":[{"family":"Carta Serif","file":"fonts/carta.woff2","weight":400,"style":"normal"},{"family":"Carta Serif","file":"fonts/carta-italic.woff2","weight":400,"style":"italic"}]}"#;
+        let manifest: ThemeManifest = serde_json::from_str(raw).expect("manifest");
+        assert_eq!(manifest.fonts.len(), 2);
+        assert_eq!(manifest.fonts[0].family, "Carta Serif");
+        assert_eq!(manifest.fonts[1].style, ThemeFontStyle::Italic);
         assert_eq!(serde_json::to_string(&manifest).expect("wire"), raw);
     }
 
@@ -182,6 +252,8 @@ mod tests {
             asset_namespace: "theme://fub.serie/".into(),
             motion: vec![ThemeMotion::Opacity, ThemeMotion::Transform],
             settings: Vec::new(),
+            extends: None,
+            fonts: Vec::new(),
         };
 
         assert_eq!(manifest.engine.as_str(), THEME_ENGINE);

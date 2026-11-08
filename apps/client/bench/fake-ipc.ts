@@ -379,6 +379,42 @@ if (TREE_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null || RAW_SCENE 
   throw new RangeError("albero is a vault of its own");
 }
 
+/// Il cestino con tre file (`?cestino=3`): la scena del telefono che guarda
+/// i bottoni «Ripristina» di righe vicine. Le altre scene lo hanno vuoto.
+const TRASH_FULL = params.get("cestino") === "3";
+
+/// Il cestino pieno nella forma del provider `trash` (fub-features,
+/// `trash.rs`): una colonna con l'elenco, ogni voce una riga col nome, quando
+/// è stata cestinata e «Ripristina», e sotto «Svuota il cestino».
+function trashWithThree(): UiNode {
+  const row = (id: string, original: string, when: string): UiNode => ({
+    node: "stack",
+    key: id,
+    dir: "row",
+    gap: 1,
+    children: [
+      { node: "list_item", title: original, subtitle: `Cestinata il ${when}`, action: null, selected: false },
+      { node: "button", label: "Ripristina", intent: "primary", action: { action: "restore", payload: { entry: id, original } } },
+    ],
+  });
+  return {
+    node: "stack",
+    dir: "column",
+    gap: 1,
+    children: [
+      {
+        node: "list",
+        items: [
+          row("1-Bozza.md", "Bozza", "19 agosto 2026, 09:02"),
+          row("2-Lista della spesa.md", "Lista della spesa", "18 agosto 2026, 17:40"),
+          row("3-Prima idea.md", "Prima idea", "12 agosto 2026, 11:05"),
+        ],
+      },
+      { node: "button", label: "Svuota il cestino", intent: "danger", action: { action: "empty", payload: null } },
+    ],
+  };
+}
+
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
 const DRAWING = CONNECTORS !== null
   ? { doc: CONNECTORS_DOC, text: CONNECTORS.text }
@@ -1366,7 +1402,7 @@ const TREES: Record<string, UiNode> = {
       selected: t.name === "tema",
     })),
   },
-  trash: {
+  trash: TRASH_FULL ? trashWithThree() : {
     node: "empty_state",
     title: "Il cestino è vuoto",
     detail: "Ciò che si cestina resta qui finché non lo si svuota.",
