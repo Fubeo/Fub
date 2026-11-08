@@ -336,6 +336,13 @@ let releasePalette: (() => void) | null = null;
 let slashOwner: HTMLElement | null = null;
 let slashLife: Lifetime | null = null;
 let paletteGeneration = 0;
+/// Quanto si aspetta dopo l'ultima battuta di un campo documento prima di
+/// chiedere le note per nome (ms): la stessa attesa del lanciatore di
+/// Scrittoio (`ASK_DELAY_MS`), che fa la stessa domanda.
+export const DOCUMENT_ASK_DELAY_MS = 120;
+/// Spegne la domanda per nome in attesa del modulo aperto: la chiamano la
+/// chiusura della palette e il modulo che ne prende il posto.
+let stopDocumentAsk: (() => void) | null = null;
 /// I recenti e i preferiti di questa macchina, come letti l'ultima volta.
 /// Partono vuoti: `loadPaletteHistory` li rilegge all'apertura del vault.
 let paletteHistory: PaletteHistory = { recent: [], favorites: [] };
@@ -412,6 +419,8 @@ export function closeCommandPalette() {
   slashLife = null;
   slashOwner = null;
   paletteGeneration += 1;
+  stopDocumentAsk?.();
+  stopDocumentAsk = null;
   const overlay = document.getElementById(OVERLAY_ID);
   releasePalette?.();
   releasePalette = null;
@@ -1086,10 +1095,28 @@ function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost, pref
   // scrive la domanda diventa «le note il cui nome combacia», la stessa del
   // quick switcher, che trova anche la nota fuori finestra. Vince l'ultima
   // battuta: una risposta vecchia non riscrive i suggerimenti di una nuova.
+  // La domanda per nome parte `DOCUMENT_ASK_DELAY_MS` dopo l'ultima battuta,
+  // come nel lanciatore: chi scrive un nome non manda una domanda per lettera.
   const datalist = document.createElement("datalist");
   datalist.id = "palette-docs";
   const opened = paletteGeneration;
   let asked = 0;
+  let askTimer: number | undefined;
+  stopDocumentAsk?.();
+  stopDocumentAsk = () => {
+    window.clearTimeout(askTimer);
+    askTimer = undefined;
+    // Una risposta già in volo non trova più il suo giro.
+    asked += 1;
+  };
+  const suggestLater = (text: string) => {
+    window.clearTimeout(askTimer);
+    askTimer = window.setTimeout(() => {
+      askTimer = undefined;
+      if (opened !== paletteGeneration || !datalist.isConnected) return;
+      suggest(text);
+    }, DOCUMENT_ASK_DELAY_MS);
+  };
   const suggest = (text: string, first = false) => {
     const mine = ++asked;
     void host.listDocuments(text).then((docs) => {
@@ -1121,7 +1148,7 @@ function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost, pref
     label.appendChild(name);
     const field = fieldFor(param, datalist.id);
     // Il listener vive col campo, che se ne va con la palette.
-    if (param.kind.kind === "document") field.addEventListener("input", () => suggest(field.value));
+    if (param.kind.kind === "document") field.addEventListener("input", () => suggestLater(field.value));
     // Ciò che chi ha aperto il modulo sa già: i campi di testo e le scelte lo
     // prendono se è un loro valore.
     const known = prefill[param.name];

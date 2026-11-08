@@ -14,7 +14,7 @@ vi.mock("../host/query", () => ({ settings: fake.settings }));
 import { drawingCreateSpec } from "../host/fake";
 import { allCommands, registerCommandForm, resetCommandForms, type CommandEntry } from "./commands";
 import { state } from "../state/store";
-import { closeCommandPalette, deliverOutcome, openCommandPalette, startCommand } from "./palette";
+import { closeCommandPalette, deliverOutcome, DOCUMENT_ASK_DELAY_MS, openCommandPalette, startCommand } from "./palette";
 
 function command(id: string, title: string): CommandSpec {
   return {
@@ -371,18 +371,51 @@ describe("i suggerimenti dei campi documento (#237 R06)", () => {
     for (let i = 0; i < 5; i += 1) await Promise.resolve();
   };
 
-  it("scrivendo, chiede per nome e trova la nota fuori dalla finestra", async () => {
+  it("scrivendo, chiede per nome dopo l'attesa e trova la nota fuori dalla finestra", async () => {
     const window = Array.from({ length: 200 }, (_, i) => `nota-${i}.md`);
     const listDocuments = vi.fn(async (text = "") => (text ? ["Archivio/lontana.md"] : window));
     startCommand(moveEntry(), { ...host, listDocuments });
     await settle();
+    // La domanda a campo vuoto parte subito, all'apertura.
+    expect(listDocuments).toHaveBeenCalledTimes(1);
     expect(suggestions()).toHaveLength(200);
     expect(suggestions()).not.toContain("Archivio/lontana.md");
 
     type("lont");
+    vi.advanceTimersByTime(DOCUMENT_ASK_DELAY_MS);
     await settle();
     expect(suggestions()).toEqual(["Archivio/lontana.md"]);
     expect(listDocuments).toHaveBeenLastCalledWith("lont");
+  });
+
+  it("più battute di fila fanno una domanda sola, per il testo dell'ultima", async () => {
+    const listDocuments = vi.fn(async (text = "") => (text ? [`${text}.md`] : []));
+    startCommand(moveEntry(), { ...host, listDocuments });
+    await settle();
+    listDocuments.mockClear();
+
+    for (const text of ["l", "lo", "lon", "lont"]) {
+      type(text);
+      vi.advanceTimersByTime(DOCUMENT_ASK_DELAY_MS - 1);
+    }
+    expect(listDocuments).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    await settle();
+    expect(listDocuments.mock.calls).toEqual([["lont"]]);
+    expect(suggestions()).toEqual(["lont.md"]);
+  });
+
+  it("chiusa la palette, la domanda in attesa non parte", async () => {
+    const listDocuments = vi.fn(async () => [] as string[]);
+    startCommand(moveEntry(), { ...host, listDocuments });
+    await settle();
+    listDocuments.mockClear();
+
+    type("lont");
+    closeCommandPalette();
+    vi.advanceTimersByTime(DOCUMENT_ASK_DELAY_MS * 2);
+    await settle();
+    expect(listDocuments).not.toHaveBeenCalled();
   });
 
   it("vince l'ultima battuta: una risposta lenta non riscrive quella nuova", async () => {
@@ -394,7 +427,9 @@ describe("i suggerimenti dei campi documento (#237 R06)", () => {
     expect(suggestions()).toEqual(["prima.md"]);
 
     type("l");
+    vi.advanceTimersByTime(DOCUMENT_ASK_DELAY_MS);
     type("lo");
+    vi.advanceTimersByTime(DOCUMENT_ASK_DELAY_MS);
     pending["lo"]!(["lontana.md"]);
     await settle();
     expect(suggestions()).toEqual(["lontana.md"]);
