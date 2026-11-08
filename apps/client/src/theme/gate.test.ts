@@ -28,7 +28,9 @@ import benchSheet from "../../theme/author/sample/sheet-light.css?raw";
 import benchSkin from "../../theme/author/sample/skin.css?raw";
 import {
   count,
+  declareThemeProfile,
   mountThemeBundle,
+  themeProfile,
   validateThemeBundle,
   type ThemeBundleManifest,
   type ThemeMountResult,
@@ -92,6 +94,22 @@ describe("il cancello monta solo ciò che è valido", () => {
       const reasons = validateThemeBundle(bundle(sheet, skin), light);
       expect(reasons, `${light} deve passare il cancello senza motivi`).toEqual([]);
     }
+  });
+
+  it("la stessa pelle ricontrollata vale per il profilo in vigore, non per quello di prima", () => {
+    // Il controllo di una pelle si ricorda (la serie è lunga), ma soltanto a
+    // parità di testo, profilo e spazio degli asset.
+    expect(validateThemeBundle(bundle(sheetLight, skin), "light")).toEqual([]);
+    const restore = declareThemeProfile({ ...themeProfile(), hooks: themeProfile().hooks.filter((hook) => hook !== "context-menu") });
+    try {
+      const reasons = validateThemeBundle(bundle(sheetLight, skin), "light");
+      expect(reasons.some((reason) => reason.startsWith("pelle:") && reason.includes(".context-menu")), reasons.join("\n")).toBe(true);
+    } finally {
+      restore();
+    }
+    expect(validateThemeBundle(bundle(sheetLight, skin), "light")).toEqual([]);
+    // Un'altra stringa con lo stesso testo prende lo stesso esito.
+    expect(validateThemeBundle(bundle(sheetLight, `${skin} `.trimEnd()), "light")).toEqual([]);
   });
 });
 

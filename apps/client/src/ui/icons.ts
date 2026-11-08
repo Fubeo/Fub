@@ -15,7 +15,16 @@
 // `registerIcon`, e da quel momento la disegnano tutti — la rail, l'ispettore,
 // il nodo `icon` delle view dichiarate — con lo stesso costrutto. Il teardown
 // la ritira.
+//
+// Un tema (`theme-2`, campo `icons` del manifest) può ridisegnare per nome le
+// icone che ci sono: porta soltanto i `d` dei tracciati, validati con la stessa
+// regola delle registrazioni (`fub_abi::rules::theme_icons`, rispecchiata in
+// `rules/mirrored.ts`), e il costrutto resta questo. Il set del tema si guarda
+// per primo, poi la serie, poi le registrazioni; non aggiunge nomi. Ogni
+// `<svg>` porta `data-icon="<nome>"`, così un cambio di tema ridisegna in un
+// passaggio solo le icone già nella pagina.
 import type { Teardown } from "./lifetime";
+import { isPathData, THEME_ICON_LIMITS, themeIconFault } from "../rules/mirrored";
 
 /// Un SVG inline 16×16, stroke 1.6, `currentColor`, pronto da inserire in un
 /// bottone. Restituisce una stringa, non un elemento: così chi la usa può
@@ -119,31 +128,177 @@ const ALIASES: Record<string, string> = {
 /// Le icone registrate dai moduli della shell, sopra il set di serie.
 const REGISTERED = new Map<string, string>();
 
-/// Solo i comandi e i numeri di un tracciato SVG: niente markup, attributi o
-/// riferimenti, quindi niente che una registrazione possa iniettare.
-const PATH_DATA = /^[MmLlHhVvCcSsQqTtAaZz0-9eE.,+\s-]+$/;
+/// Il set del tema in vigore, per nome canonico (un alias vale per il nome a
+/// cui punta): il corpo, costruito soltanto da tracciati che hanno passato la
+/// regola. Vuoto quando il tema montato non porta icone.
+let THEMED = new Map<string, string>();
+/// Lo stesso set com'è arrivato, già validato: lo rispecchia la finestra di un
+/// documento e lo legge la diagnosi del tema.
+let THEMED_SOURCE: Readonly<Record<string, readonly string[]>> = {};
+
+function own(record: Readonly<Record<string, string>>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+/// Il nome a cui punta un alias, o il nome stesso.
+function canonical(name: string): string {
+  return own(ALIASES, name) ? ALIASES[name]! : name;
+}
+
+/// Il corpo di un'icona: un `<path>` per tracciato. Chi lo chiama ha già
+/// passato ogni `d` dalla regola (`isPathData`), quindi fra le virgolette non
+/// può finire altro che comandi e numeri.
+function pathsBody(paths: readonly string[]): string {
+  return paths.map((d) => `<path d="${d}"/>`).join("");
+}
+
+/// Il corpo di un'icona in vigore: il tema, poi la serie, poi le registrazioni.
+/// Il tema ridisegna soltanto un nome che la serie o un modulo disegna già: un
+/// suo nome che nessuno disegna (un modulo spento) non si vede.
+function drawnBody(name: string): string | undefined {
+  const key = canonical(name);
+  const drawn = (own(SVG, key) ? SVG[key] : undefined) ?? REGISTERED.get(name);
+  return drawn === undefined ? undefined : THEMED.get(key) ?? drawn;
+}
 
 /// Registra un'icona col costrutto del set: soltanto tracciati (i `d` dei suoi
 /// `<path>`), perché griglia, tratto e colore sono quelli di tutte le altre. Un
 /// nome già disegnato (di serie, alias o registrato) non si ridefinisce: due
 /// moduli che volessero la stessa figura se la contenderebbero in silenzio.
+/// Il set del tema non conta: ridisegna un nome, non lo occupa.
 export function registerIcon(name: string, paths: readonly string[]): Teardown {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) throw new Error(`icon name «${name}» is not a lowercase id`);
-  if (SVG[name] || ALIASES[name] || REGISTERED.has(name)) throw new Error(`icon «${name}» is already drawn`);
-  if (paths.length === 0 || paths.some((d) => !PATH_DATA.test(d))) {
+  if (own(SVG, name) || own(ALIASES, name) || REGISTERED.has(name)) throw new Error(`icon «${name}» is already drawn`);
+  if (paths.length === 0 || !paths.every(isPathData)) {
     throw new Error(`icon «${name}» accepts only SVG path data`);
   }
-  const body = paths.map((d) => `<path d="${d}"/>`).join("");
+  const body = pathsBody(paths);
   REGISTERED.set(name, body);
   return () => {
     if (REGISTERED.get(name) === body) REGISTERED.delete(name);
   };
 }
 
+/// L'SVG di un'icona, come stringa HTML: il set del tema, poi la serie, poi le
+/// registrazioni. Un nome sconosciuto restituisce stringa vuota.
+///
+/// Il nome finisce in `data-icon`: è il nome chiesto, e un nome che ha un corpo
+/// è sempre un id minuscolo (una chiave della serie o degli alias, o un nome
+/// registrato), quindi sta fra virgolette senza fughe.
 export function icon(name: string): string {
-  const body = SVG[ALIASES[name] ?? name] ?? REGISTERED.get(name);
+  const body = drawnBody(name);
   if (!body) return "";
-  return `<svg viewBox="0 0 ${ICON_GRID} ${ICON_GRID}" width="${ICON_SIZE}" height="${ICON_SIZE}" fill="${ICON_FILL}" stroke="${ICON_STROKE}" stroke-width="${ICON_STROKE_WIDTH}" stroke-linecap="${ICON_LINECAP}" stroke-linejoin="${ICON_LINEJOIN}" aria-hidden="true" focusable="false">${body}</svg>`;
+  return `<svg viewBox="0 0 ${ICON_GRID} ${ICON_GRID}" width="${ICON_SIZE}" height="${ICON_SIZE}" fill="${ICON_FILL}" stroke="${ICON_STROKE}" stroke-width="${ICON_STROKE_WIDTH}" stroke-linecap="${ICON_LINECAP}" stroke-linejoin="${ICON_LINEJOIN}" aria-hidden="true" focusable="false" data-icon="${name}">${body}</svg>`;
+}
+
+/**
+ * Sostituisce il set del tema e ridisegna, in un passaggio solo, le icone già
+ * nella pagina che cambiano figura. `null` (o un set vuoto) torna alla serie.
+ *
+ * Ogni voce ripassa dalla regola (`themeIconFault`) anche se il cancello del
+ * tema l'ha già chiesta: questo modulo non costruisce un `<svg>` da dati che
+ * non ha visto passare. Una voce che non regge lancia prima di toccare
+ * qualunque cosa, e il set di prima resta. Un nome che oggi nessuno disegna
+ * resta nel set (un modulo può registrarlo più tardi) e non si vede.
+ */
+export function replaceThemeIcons(set: Readonly<Record<string, readonly string[]>> | null): void {
+  const entries = set === null ? [] : Object.entries(set);
+  if (entries.length > THEME_ICON_LIMITS.icons) {
+    throw new Error(`theme icon set redraws ${entries.length} icons, at most ${THEME_ICON_LIMITS.icons}`);
+  }
+  for (const [name, paths] of entries) {
+    const fault = themeIconFault(name, paths);
+    if (fault !== null) throw new Error(`theme icon «${name}» does not hold: ${fault}`);
+  }
+  // Un nome scritto per sé vince sull'alias che punta a lui.
+  const next = new Map<string, string>();
+  for (const [name, paths] of entries) if (!own(ALIASES, name)) next.set(name, pathsBody(paths));
+  for (const [name, paths] of entries) {
+    if (own(ALIASES, name) && !next.has(ALIASES[name]!)) next.set(ALIASES[name]!, pathsBody(paths));
+  }
+  const changed = new Set<string>();
+  for (const key of new Set([...THEMED.keys(), ...next.keys()])) {
+    if (THEMED.get(key) !== next.get(key)) changed.add(key);
+  }
+  THEMED = next;
+  THEMED_SOURCE = Object.fromEntries(entries.map(([name, paths]) => [name, [...paths]]));
+  redrawIcons(changed);
+}
+
+/** Il set del tema in vigore, com'è arrivato: una copia. Vuoto senza tema. */
+export function themeIcons(): Record<string, string[]> {
+  return Object.fromEntries(Object.entries(THEMED_SOURCE).map(([name, paths]) => [name, [...paths]]));
+}
+
+/**
+ * I nomi del set del tema che oggi nessuno disegna: né la serie né un modulo
+ * registrato. Non rifiutano il tema (un modulo può registrarli caricandosi):
+ * sono un avviso per chi scrive il tema.
+ */
+export function undrawnThemeIcons(): string[] {
+  return Object.keys(THEMED_SOURCE).filter((name) => {
+    const key = canonical(name);
+    return !own(SVG, key) && !REGISTERED.has(key);
+  });
+}
+
+/** La figura nuova di un nome: i figli da clonare, e i `d` se sono tutti tracciati. */
+interface IconModel {
+  readonly children: DocumentFragment;
+  readonly paths: readonly string[] | null;
+}
+
+function iconModel(name: string): IconModel | null {
+  const svg = iconEl(name);
+  if (!svg) return null;
+  const children = document.createDocumentFragment();
+  children.append(...svg.childNodes);
+  const nodes = [...children.children];
+  const paths = nodes.every((node) => node.localName === "path")
+    ? nodes.map((node) => node.getAttribute("d") ?? "")
+    : null;
+  return { children, paths };
+}
+
+/**
+ * Ridisegna gli `<svg data-icon>` della pagina il cui nome (canonico) è fra
+ * quelli cambiati: una sola ricerca e un modello per nome. Un elemento che ha
+ * già tanti tracciati quanti il modello cambia solo i loro `d`; gli altri
+ * ricevono una copia dei figli del modello. Gli attributi dell'elemento
+ * (classi, `aria-*`) restano.
+ */
+function redrawIcons(changed: ReadonlySet<string>): void {
+  if (changed.size === 0 || typeof document === "undefined") return;
+  const models = new Map<string, IconModel | null>();
+  for (const svg of document.querySelectorAll<SVGElement>("svg[data-icon]")) {
+    const name = svg.getAttribute("data-icon") ?? "";
+    if (!changed.has(canonical(name))) continue;
+    let model = models.get(name);
+    if (model === undefined) {
+      model = iconModel(name);
+      models.set(name, model);
+    }
+    if (!model) continue;
+    const paths = model.paths;
+    if (paths !== null && onlyPaths(svg, paths.length)) {
+      const current = svg.children;
+      for (let i = 0; i < paths.length; i++) current[i]!.setAttribute("d", paths[i]!);
+    } else {
+      svg.replaceChildren(model.children.cloneNode(true));
+    }
+  }
+}
+
+/** L'elemento ha esattamente `count` figli, tutti `<path>` col solo `d`? */
+function onlyPaths(svg: SVGElement, count: number): boolean {
+  if (svg.childNodes.length !== count) return false;
+  const children = svg.children;
+  if (children.length !== count) return false;
+  for (let i = 0; i < count; i++) {
+    const child = children[i]!;
+    if (child.localName !== "path" || child.attributes.length !== 1 || !child.hasAttribute("d")) return false;
+  }
+  return true;
 }
 
 /// L'elemento SVG di un'icona, per chi vuole attaccarci un ascoltore o

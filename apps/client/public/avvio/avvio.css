@@ -35,71 +35,73 @@
    --muted, --accent, --accent-contrast, --border, --danger, --focus-ring,
    --overlay-hover, --overlay-active, --shadow-2). Senza attributo la luce è
    scura, come il ripiego di theme.ts; senza JS decide il sistema. Un tema
-   installato o un accento scelto arrivano da luce.js, in linea su <html>. */
+   installato o un accento scelto arrivano da luce.js, in linea su <html>.
+   src/avvio/colori.test.ts li tiene uguali alla ricetta: cambiata la ricetta,
+   si ricopiano qui i colori dei fogli rigenerati. */
 :root,
 :root[data-avvio-luce="dark"] {
   color-scheme: dark;
-  --avvio-sfondo: #0a0e16;
-  --avvio-testo: #e5e8ed;
-  --avvio-tenue: #a0a5ae;
-  --avvio-accento: #82a8fd;
-  --avvio-inchiostro: #070d1a;
-  --avvio-bordo: #2b303a;
+  --avvio-sfondo: #08110b;
+  --avvio-testo: #e4e9e6;
+  --avvio-tenue: #9ea7a1;
+  --avvio-accento: #53c48e;
+  --avvio-inchiostro: #021109;
+  --avvio-bordo: #29332d;
   --avvio-guasto: #f66d67;
-  --avvio-fuoco: #82a8fd;
-  --avvio-velo: rgb(229 232 237 / 7%);
-  --avvio-velo-forte: rgb(229 232 237 / 12%);
+  --avvio-fuoco: #53c48e;
+  --avvio-velo: rgb(228 233 230 / 7%);
+  --avvio-velo-forte: rgb(228 233 230 / 12%);
   --avvio-ombra: 0 1px 2px rgb(0 0 0 / 28%), 0 10px 28px rgb(0 0 0 / 28%);
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-avvio-luce]) {
     color-scheme: light;
-    --avvio-sfondo: #e8edf5;
-    --avvio-testo: #1a1f29;
-    --avvio-tenue: #5a5f6a;
-    --avvio-accento: #2b56cc;
-    --avvio-inchiostro: #fafcff;
-    --avvio-bordo: #d3d8e0;
+    --avvio-sfondo: #e7efe9;
+    --avvio-testo: #17221b;
+    --avvio-tenue: #57625b;
+    --avvio-accento: #006e46;
+    --avvio-inchiostro: #f9fdfb;
+    --avvio-bordo: #d1dad4;
     --avvio-guasto: #ca131b;
-    --avvio-fuoco: #2b56cc;
-    --avvio-velo: rgb(26 31 41 / 5%);
-    --avvio-velo-forte: rgb(26 31 41 / 9%);
+    --avvio-fuoco: #006e46;
+    --avvio-velo: rgb(23 34 27 / 5%);
+    --avvio-velo-forte: rgb(23 34 27 / 9%);
     --avvio-ombra: 0 1px 2px rgb(24 28 44 / 6%), 0 10px 28px rgb(24 28 44 / 10%);
   }
 }
 :root[data-avvio-luce="light"] {
   color-scheme: light;
-  --avvio-sfondo: #e8edf5;
-  --avvio-testo: #1a1f29;
-  --avvio-tenue: #5a5f6a;
-  --avvio-accento: #2b56cc;
-  --avvio-inchiostro: #fafcff;
-  --avvio-bordo: #d3d8e0;
+  --avvio-sfondo: #e7efe9;
+  --avvio-testo: #17221b;
+  --avvio-tenue: #57625b;
+  --avvio-accento: #006e46;
+  --avvio-inchiostro: #f9fdfb;
+  --avvio-bordo: #d1dad4;
   --avvio-guasto: #ca131b;
-  --avvio-fuoco: #2b56cc;
-  --avvio-velo: rgb(26 31 41 / 5%);
-  --avvio-velo-forte: rgb(26 31 41 / 9%);
+  --avvio-fuoco: #006e46;
+  --avvio-velo: rgb(23 34 27 / 5%);
+  --avvio-velo-forte: rgb(23 34 27 / 9%);
   --avvio-ombra: 0 1px 2px rgb(24 28 44 / 6%), 0 10px 28px rgb(24 28 44 / 10%);
 }
 :root[data-avvio-luce="dark"][data-avvio-contrasto="high"] {
-  --avvio-testo: #f2f5fb;
-  --avvio-tenue: #bac0c9;
-  --avvio-accento: #a2c0ff;
-  --avvio-bordo: #868d9a;
+  --avvio-testo: #f1f7f3;
+  --avvio-tenue: #bcc6bf;
+  --avvio-accento: #68d8a1;
+  --avvio-bordo: #829087;
   --avvio-guasto: #ff938b;
-  --avvio-fuoco: #a2c0ff;
-  --avvio-velo: rgb(242 245 251 / 7%);
-  --avvio-velo-forte: rgb(242 245 251 / 12%);
+  --avvio-fuoco: #68d8a1;
+  --avvio-velo: rgb(241 247 243 / 7%);
+  --avvio-velo-forte: rgb(241 247 243 / 12%);
 }
 :root[data-avvio-luce="light"][data-avvio-contrasto="high"] {
-  --avvio-testo: #090d16;
-  --avvio-tenue: #3e434d;
-  --avvio-accento: #1235ab;
-  --avvio-bordo: #666b76;
+  --avvio-testo: #06100a;
+  --avvio-tenue: #3b463f;
+  --avvio-accento: #004e30;
+  --avvio-bordo: #636e67;
   --avvio-guasto: #980009;
-  --avvio-fuoco: #1235ab;
-  --avvio-velo: rgb(9 13 22 / 5%);
-  --avvio-velo-forte: rgb(9 13 22 / 9%);
+  --avvio-fuoco: #004e30;
+  --avvio-velo: rgb(6 16 10 / 5%);
+  --avvio-velo-forte: rgb(6 16 10 / 9%);
 }
 
 /* Il fondo del documento è già quello dell'app: niente bianco fra un disegno

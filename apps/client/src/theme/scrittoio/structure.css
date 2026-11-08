@@ -90,22 +90,22 @@
  * ha un ripiego qui: dichiararlo su una classe vincerebbe sul foglio del tema.
  * Chi lo legge porta il suo, `var(--doc-ins, var(--doc-link))`. */
 .look-file {
-  --doc-caret: var(--paper-caret, #2c57cd);
-  --doc-selection: var(--paper-selection, #d0defd);
-  --doc-active-line: var(--paper-active-line, #f4f7fb);
-  --doc-ins: var(--paper-ins, #2c57cd);
-  --doc-del: var(--paper-del, #c60817);
+  --doc-caret: var(--paper-caret, #007249);
+  --doc-selection: var(--paper-selection, #c5e8d4);
+  --doc-active-line: var(--paper-active-line, #f4f8f5);
+  --doc-ins: var(--paper-ins, #007249);
+  --doc-del: var(--paper-del, #c80c19);
   --doc-proof-spell: var(--paper-proof-spell, #d01d21);
   --doc-proof-gram: var(--paper-proof-gram, #a16500);
   --doc-find: var(--paper-find, #f6e697);
   --doc-find-now: var(--paper-find-now, #fac053);
-  --doc-comment: var(--paper-comment, #b16f00);
-  --doc-author-1: var(--paper-author-1, #0060bf);
+  --doc-comment: var(--paper-comment, #b37100);
+  --doc-author-1: var(--paper-author-1, #0061c0);
   --doc-author-2: var(--paper-author-2, #b02a2d);
-  --doc-author-3: var(--paper-author-3, #007219);
+  --doc-author-3: var(--paper-author-3, #00741a);
   --doc-author-4: var(--paper-author-4, #813faa);
   --doc-author-5: var(--paper-author-5, #934f00);
-  --doc-author-6: var(--paper-author-6, #006d72);
+  --doc-author-6: var(--paper-author-6, #006f74);
 }
 
 /* ── Le garanzie ─────────────────────────────────────────────────────────── */
@@ -2630,18 +2630,18 @@ body {
 .look-file .rich-desk,
 .look-file .grid-viewport {
   --doc-bg: var(--paper-bg, #ffffff);
-  --doc-fg: var(--paper-ink, #14161a);
-  --doc-heading: var(--paper-ink, #14161a);
-  --doc-link: var(--paper-link, #2c57cd);
-  --doc-danger: var(--paper-danger, #c60817);
-  --doc-rule: var(--paper-rule, rgb(20 22 26 / 30%));
-  --doc-rule-soft: var(--paper-rule-soft, rgb(20 22 26 / 16%));
-  --doc-fill: var(--paper-fill, rgb(20 22 26 / 8%));
-  --doc-fill-soft: var(--paper-fill-soft, rgb(20 22 26 / 5%));
+  --doc-fg: var(--paper-ink, #131715);
+  --doc-heading: var(--paper-ink, #131715);
+  --doc-link: var(--paper-link, #007249);
+  --doc-danger: var(--paper-danger, #c80c19);
+  --doc-rule: var(--paper-rule, rgb(19 23 21 / 30%));
+  --doc-rule-soft: var(--paper-rule-soft, rgb(19 23 21 / 16%));
+  --doc-fill: var(--paper-fill, rgb(19 23 21 / 8%));
+  --doc-fill-soft: var(--paper-fill-soft, rgb(19 23 21 / 5%));
   --doc-highlight: var(--paper-highlight, rgb(250 222 78 / 55%));
   /* Il testo dei segni di Fub (il nome di un'interruzione, un segnaposto):
      l'inchiostro verso la carta, a 5,5:1 sul bianco. */
-  --doc-gutter-fg: color-mix(in oklab, var(--paper-ink, #14161a) 60%, var(--paper-bg, #ffffff));
+  --doc-gutter-fg: color-mix(in oklab, var(--paper-ink, #131715) 60%, var(--paper-bg, #ffffff));
 }
 /* Il testo del file: carattere, misura, colore, spazi e interlinea risolti
    dal formato, come variabili di dato sull'elemento (`--file-*`,
