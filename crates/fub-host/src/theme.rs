@@ -59,12 +59,13 @@
 //!
 //! # I caratteri di un tema
 //!
-//! Da `theme-2` un manifest può portare dei caratteri ([`ThemeFont`]): una
+//! Da `theme-2` un manifest può portare dei caratteri
+//! ([`ThemeFont`](fub_abi::theme::ThemeFont)): una
 //! famiglia, un file WOFF2 fra i suoi asset (`fonts/<nome>.woff2`), un peso e
 //! uno stile. Il CSS di un tema resta senza `@font-face`: la regola la scrive
 //! la shell, coi valori del manifest e l'URL `data:` del file, così nessun
-//! `src:` scritto a mano può chiamare la rete. Qui ([`check_fonts`] e
-//! [`check_font_files`]) si decide ciò che si decide senza renderer: la forma
+//! `src:` scritto a mano può chiamare la rete. Qui (`check_fonts` e
+//! `check_font_files`) si decide ciò che si decide senza renderer: la forma
 //! di ogni voce, che la famiglia non sia una di serie, che il file ci sia e
 //! cominci con la firma `wOF2`, e i limiti ([`MAX_THEME_FONTS`],
 //! [`MAX_THEME_FONT_BYTES`], [`MAX_THEME_FONT_TOTAL_BYTES`]).

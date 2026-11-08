@@ -999,6 +999,17 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-host/src/theme.rs::check_fonts",
+            (
+                Family::AsciiCase,
+                "confronta la famiglia di un carattere del tema con quelle di serie, con le \
+                 parole chiave del CSS e con le altre facce dello stesso manifest. Il motore \
+                 confronta i nomi di `font-family` senza badare a maiuscole e minuscole ASCII, \
+                 e la famiglia ammette solo lettere e cifre ASCII, `-` e spazi: piegare di \
+                 più o di meno lascerebbe passare un nome che si mescola a un altro.",
+            ),
+        ),
+        (
             "crates/fub-host/src/theme.rs::css_collect_image_set",
             (
                 Family::AsciiCase,
