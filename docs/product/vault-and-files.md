@@ -142,6 +142,24 @@ offre i modelli è in [Disegni, modelli e suggerimenti](drawing-new.md). La prov
 a vuoto fa gli stessi controlli e non scrive; l'annullamento manda il disegno nel
 cestino.
 
+«Nuovo documento» (`document.create`, con la feature `rich`) e «Nuovo foglio»
+(`sheet.create`, con la feature `xlsx`) fanno nascere un documento di Word o una
+cartella di Excel vuoti e li aprono. Hanno gli argomenti `name` e `folder` e le
+regole dei nomi di «Nuovo disegno»: senza nome si chiamano «Documento senza
+titolo» e «Foglio senza titolo» («Untitled document», «Untitled spreadsheet» in
+inglese), poi « 1», « 2», …; un nome senza estensione riceve `.docx` o `.xlsx`,
+e un nome con un'altra estensione, anche di un formato vicino come `.odt` o
+`.xlsm`, è un errore. Il `.docx` lo scrive il codec dei documenti da un
+documento senza paragrafi; il `.xlsx` lo scrive GridCraft, con un foglio solo
+che si chiama come lo chiama Excel nella lingua di chi lo crea («Foglio1»,
+«Sheet1»). Tutti e due i file si rileggono col loro codec prima di entrare nel
+vault, e si scrivono soltanto se il nome è ancora libero. Una cartella in cui
+il sistema non lascia creare file risponde con l'errore di I/O del kernel, e
+non nasce niente. La prova a vuoto nomina il file senza scriverlo;
+l'annullamento lo manda nel cestino. I comandi appartengono ai bundle
+`fub.rich` e `fub.xlsx`: spento il bundle, o compilato l'host senza la
+feature, non sono dichiarati.
+
 «Annota il PDF» (`pdf.annotate`, con la feature `draw`) apre le annotazioni di
 un PDF del vault: il file `X.pdf.fubann` accanto a `X.pdf`, con il nome intero
 del PDF più `.fubann`, perché è il nome a legarle al PDF. Se il file c'è, il

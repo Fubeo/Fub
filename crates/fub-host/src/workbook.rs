@@ -56,8 +56,71 @@ pub(crate) fn register(registrar: &mut crate::registry::Registrar<'_>) -> Vec<St
     {
         failures.push(format!("workbook commands not registered: {error}"));
     }
+    if let Err(error) =
+        registrar.register_command_provider(Box::new(crate::new_file::NewFileCommands(&NEW_SHEET)))
+    {
+        failures.push(format!("{SHEET_CREATE} not registered: {error}"));
+    }
     failures
 }
+
+/// Le frasi del bundle: quelle della stampa e quelle di «Nuovo foglio»,
+/// sommate per lingua.
+#[cfg(feature = "xlsx")]
+pub(crate) fn catalog() -> Vec<fub_abi::text::StringCatalog> {
+    let mut catalogs = fub_format_xlsx::export::catalog();
+    catalogs.extend(NEW_SHEET.catalog());
+    catalogs
+}
+
+/// «Nuovo foglio»: una cartella di Excel vuota, che si apre.
+#[cfg(feature = "xlsx")]
+pub const SHEET_CREATE: &str = "sheet.create";
+
+/// La cartella di Excel che nasce vuota: un foglio solo, col nome che Excel
+/// gli dà nella lingua di chi la crea («Foglio1», «Sheet1»), e i byte scritti
+/// da GridCraft attraverso `fub-format-xlsx`, lo stesso padrone che innesta il
+/// giornale, che li rilegge prima di darli.
+#[cfg(feature = "xlsx")]
+static NEW_SHEET: crate::new_file::NewFile = crate::new_file::NewFile {
+    command: SHEET_CREATE,
+    format: fub_format_xlsx::FORMAT_ID,
+    extension: "xlsx",
+    words: &[
+        crate::new_file::Words {
+            locale: "it",
+            title: "Nuovo foglio",
+            desc: "Crea una cartella di Excel vuota, con un foglio solo, e la apre. Senza nome \
+                   nasce «Foglio senza titolo», e se quel nome è preso «Foglio senza titolo 1», \
+                   «2», …",
+            untitled: "Foglio senza titolo",
+            the: "il foglio",
+            of_the: "del foglio",
+            a: "un foglio",
+            a_new: "un foglio nuovo",
+            all: "i fogli di Excel",
+            extra: &[("first_sheet", "Foglio1")],
+        },
+        crate::new_file::Words {
+            locale: "en",
+            title: "New spreadsheet",
+            desc: "Creates an empty Excel workbook with one sheet and opens it. Without a name \
+                   it is called «Untitled spreadsheet», and if that name is taken «Untitled \
+                   spreadsheet 1», «2», …",
+            untitled: "Untitled spreadsheet",
+            the: "the spreadsheet",
+            of_the: "the spreadsheet",
+            a: "a spreadsheet",
+            a_new: "a new spreadsheet",
+            all: "Excel spreadsheets",
+            extra: &[("first_sheet", "Sheet1")],
+        },
+    ],
+    blank: |doc, say| {
+        let file_name = doc.as_str().rsplit('/').next().unwrap_or(doc.as_str());
+        fub_format_xlsx::blank(file_name, &say("first_sheet")).map_err(|error| error.to_string())
+    },
+};
 
 /// Se il documento è una cartella di Excel.
 pub(crate) fn is_workbook(format: Option<&DocumentFormat>) -> bool {
@@ -152,5 +215,38 @@ fn plugin_error(doc: &DocId, error: fub_format_xlsx::XlsxError) -> PluginError {
             "host.xlsx.codec",
             vec![doc_arg(), Arg::text("why", why)],
         )),
+    }
+}
+
+/// I comandi che fanno nascere un file vuoto seguono la feature del loro
+/// formato: spenta la feature, il comando non è dichiarato. Gira anche con
+/// `--no-default-features`, che è la metà che conta.
+#[cfg(test)]
+mod new_file_commands_follow_their_features {
+    use camino::Utf8PathBuf;
+
+    #[test]
+    fn document_create_e_sheet_create_ci_sono_solo_con_la_loro_feature() {
+        let vault = tempfile::tempdir().unwrap();
+        let config = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(vault.path().to_path_buf()).unwrap();
+        let config = Utf8PathBuf::from_path_buf(config.path().to_path_buf()).unwrap();
+        std::fs::write(root.join("Nota.md"), "# Nota\n").unwrap();
+        let host = crate::session::Host::without_watcher().with_config_dir(&config);
+        host.open(&root).unwrap();
+        host.wait_indexed(None).unwrap();
+        let ids: Vec<String> = host
+            .commands(None)
+            .unwrap()
+            .into_iter()
+            .map(|spec| spec.id)
+            .collect();
+        let declared = |id: &str| ids.iter().any(|own| own == id);
+        assert_eq!(
+            declared("document.create"),
+            cfg!(feature = "rich"),
+            "{ids:?}"
+        );
+        assert_eq!(declared("sheet.create"), cfg!(feature = "xlsx"), "{ids:?}");
     }
 }

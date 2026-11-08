@@ -530,3 +530,173 @@ fn spento_il_bundle_l_export_in_pdf_sparisce() {
     assert!(errors.is_empty(), "{errors:?}");
     assert!(listed(&vault));
 }
+
+// --- «Nuovo foglio» (`sheet.create`) ----------------------------------------
+
+fn create_sheet(
+    vault: &Vault,
+    args: serde_json::Value,
+    mode: fub_abi::command::InvokeMode,
+) -> Result<fub_abi::command::CommandOutcome, PluginError> {
+    vault
+        .host
+        .invoke_user_command(None, "sheet.create", args, mode)
+}
+
+fn navigated(outcome: &fub_abi::command::CommandOutcome) -> DocId {
+    match &outcome.effect {
+        fub_abi::command::CommandEffect::Navigate { doc } => doc.clone(),
+        other => panic!("un foglio creato si apre, non {other:?}"),
+    }
+}
+
+#[test]
+fn un_foglio_nuovo_nasce_vuoto_si_apre_e_si_salva() {
+    use fub_abi::command::{CommandEffect, InvokeMode};
+    use serde_json::json;
+
+    let vault = Vault::with(&[]);
+    let specs = vault.host.commands(None).unwrap();
+    let spec = specs
+        .iter()
+        .find(|spec| spec.id == "sheet.create")
+        .expect("il comando c'è con la feature `xlsx`");
+    assert_eq!(spec.title.as_literal(), Some("Nuovo foglio"));
+
+    // La prova a secco dice il nome e non scrive.
+    let plan = create_sheet(&vault, json!({}), InvokeMode::DryRun).unwrap();
+    let CommandEffect::Plan(plan) = &plan.effect else {
+        panic!("una prova a secco risponde con un piano: {:?}", plan.effect)
+    };
+    assert_eq!(plan.docs, [DocId::new("Foglio senza titolo.xlsx")]);
+    assert!(!vault.root.join("Foglio senza titolo.xlsx").exists());
+
+    let outcome = create_sheet(&vault, json!({}), InvokeMode::Apply).unwrap();
+    let id = navigated(&outcome);
+    assert_eq!(id, DocId::new("Foglio senza titolo.xlsx"));
+    assert_eq!(
+        outcome.notify.as_ref().and_then(|text| text.as_literal()),
+        Some("Creato il foglio «Foglio senza titolo.xlsx»")
+    );
+
+    // Il motore lo legge senza avvisi: un foglio, «Foglio1», nessuna cella.
+    let bytes = vault.on_disk(id.as_str());
+    let read = fub_format_xlsx::read(&bytes).unwrap();
+    assert!(
+        read.report.warnings.is_empty(),
+        "{:?}",
+        read.report.warnings
+    );
+    let names: Vec<_> = read
+        .workbook
+        .sheets
+        .iter()
+        .map(|sheet| sheet.name.as_str())
+        .collect();
+    assert_eq!(names, ["Foglio1"]);
+
+    // La griglia lo apre e un giornale si salva sul file nato dal comando.
+    let (journal, revision, format) = vault.host.read_document_with_format(None, &id).unwrap();
+    assert_eq!(format.unwrap().descriptor.id, "xlsx");
+    assert_eq!(
+        (journal.as_str(), &revision),
+        ("", &Revision::of_bytes(&bytes))
+    );
+    let session = vault
+        .host
+        .grid_bytes_open(None, XLSX_GRID_SURFACE, &id, "", revision.clone())
+        .unwrap();
+    let commit = vault
+        .host
+        .grid_bytes_apply(
+            None,
+            XLSX_GRID_SURFACE,
+            &session.instance,
+            GridApplyRequest {
+                revision: session.revision.clone(),
+                patches: vec![GridCellPatch {
+                    cell: key(0, 0),
+                    before: Some(String::new()),
+                    after: "42".into(),
+                }],
+            },
+        )
+        .unwrap();
+    vault
+        .host
+        .grid_bytes_close(None, XLSX_GRID_SURFACE, &session.instance)
+        .unwrap();
+    let saved = vault
+        .host
+        .write_document(
+            None,
+            &id,
+            &commit.edit.inserted,
+            WriteBase::DescendsFrom(revision),
+        )
+        .unwrap();
+    assert_eq!(saved, Revision::of_bytes(&vault.on_disk(id.as_str())));
+    let cells = on_disk_cells(&vault, &id);
+    assert_eq!(cell(&cells, 0, 0).value, GridValue::Number(42.0));
+
+    // Il nome successivo è il primo libero, e un nome dato va nella cartella.
+    let next = navigated(&create_sheet(&vault, json!({}), InvokeMode::Apply).unwrap());
+    assert_eq!(next, DocId::new("Foglio senza titolo 1.xlsx"));
+    let placed = navigated(
+        &create_sheet(
+            &vault,
+            json!({ "name": "Spese", "folder": "Casa" }),
+            InvokeMode::Apply,
+        )
+        .unwrap(),
+    );
+    assert_eq!(placed, DocId::new("Casa/Spese.xlsx"));
+}
+
+#[test]
+fn un_foglio_nuovo_non_prende_il_posto_di_un_file() {
+    use fub_abi::command::InvokeMode;
+    use serde_json::json;
+
+    let vault = Vault::with(&[("Conti.xlsx", &conti())]);
+    let before = vault.on_disk("Conti.xlsx");
+    for mode in [InvokeMode::DryRun, InvokeMode::Apply] {
+        let error = create_sheet(&vault, json!({ "name": "Conti" }), mode).unwrap_err();
+        assert!(matches!(error, PluginError::AlreadyExists(_)), "{error:?}");
+    }
+    assert_eq!(vault.on_disk("Conti.xlsx"), before);
+    // Una cartella con le macro non nasce vuota da qui.
+    let error =
+        create_sheet(&vault, json!({ "name": "Macro.xlsm" }), InvokeMode::Apply).unwrap_err();
+    assert!(matches!(error, PluginError::BadArgs(_)), "{error:?}");
+    assert!(!vault.root.join("Macro.xlsm").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn un_foglio_nuovo_in_una_cartella_in_sola_lettura_e_un_errore_tipato() {
+    use fub_abi::command::InvokeMode;
+    use std::os::unix::fs::PermissionsExt;
+
+    let vault = Vault::with(&[]);
+    let closed = vault.root.join("Chiusa");
+    std::fs::create_dir(&closed).unwrap();
+    std::fs::set_permissions(&closed, std::fs::Permissions::from_mode(0o555)).unwrap();
+    // Chi gira come root scrive anche lì: la prova non dice niente.
+    if std::fs::write(closed.join("sonda"), b"").is_ok() {
+        std::fs::remove_file(closed.join("sonda")).unwrap();
+        std::fs::set_permissions(&closed, std::fs::Permissions::from_mode(0o755)).unwrap();
+        return;
+    }
+    let result = create_sheet(
+        &vault,
+        serde_json::json!({ "name": "Bozza", "folder": "Chiusa" }),
+        InvokeMode::Apply,
+    );
+    std::fs::set_permissions(&closed, std::fs::Permissions::from_mode(0o755)).unwrap();
+    // Il kernel porta a `PermissionDenied` soltanto il file in sola lettura
+    // (PA T59); una cartella in cui non si crea resta la specie `Io` del
+    // contratto, e il comando la passa com'è, senza leggerne la prosa.
+    assert!(matches!(result, Err(PluginError::Io(_))), "{result:?}");
+    assert!(!closed.join("Bozza.xlsx").exists());
+}
