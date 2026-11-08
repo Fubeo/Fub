@@ -40,9 +40,9 @@ si spostano con le frecce e tornano a parti uguali con un doppio clic; le
 proporzioni restano nel layout finché la fila non cambia. **Affianca la
 Lettura** apre la Lettura in un riquadro collegato che scorre con la sorgente.
 
-Il tema di serie è quieto: neutri caldi, una carta antracite al buio e avorio in
-luce (mai il nero o il bianco puri), e un accento salvia desaturato per focus e
-azioni primarie. La selezione del testo usa un fondo neutro; nella scocca la
+Il tema di serie è quieto: neutri con un filo della tinta dell'accento, una
+carta scura al buio e chiara in luce (mai il nero o il bianco puri), e un
+accento smeraldo, il verde del logo, per focus e azioni primarie. La selezione del testo usa un fondo neutro; nella scocca la
 voce scelta si legge dal fondo, senza tacche d'accento. Le superfici che si
 aprono si posano con un moto lento e morbido; con il moto ridotto compaiono
 subito. I titoli usano l'inchiostro del documento in tutte e tre le modalità —
