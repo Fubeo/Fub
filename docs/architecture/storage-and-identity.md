@@ -123,6 +123,25 @@ distingue lo stadio del lock dall'operazione protetta.
 La CAS è esatta fra writer che rispettano questo protocollo. Con writer
 esterni che ignorano il lock la protezione resta best-effort.
 
+### File in sola lettura
+
+La scrittura atomica rinomina un temporaneo sopra il file, e la rename chiede
+il permesso della cartella, non quello del file. Per questo `RootedFsStorage` e
+`FsStorage` guardano il file che c'è già **prima** di creare il temporaneo: se
+non è scrivibile la scrittura si ferma con `io::ErrorKind::PermissionDenied` e
+un messaggio che nomina il file, e file e cartella restano come erano. Su
+Windows conta l'attributo di sola lettura; su Unix il bit di scrittura della
+classe che si applica al processo (proprietario, gruppo effettivo o
+supplementare, altri). Root non scavalca il controllo: per lui un file è in
+sola lettura quando nessuna classe ha il bit di scrittura. Un file nuovo e un
+file scrivibile si scrivono come prima.
+
+Il kernel porta ogni `PermissionDenied` del supporto al contratto come
+`PluginError::PermissionDenied`, non come `Io`. La shell lo dice una volta per
+documento («è in sola lettura: Fub non lo sovrascrive»), tiene la bozza
+sporca e lascia che il salvataggio automatico riprovi in silenzio finché il
+file non torna scrivibile o l'utente preme «Riprova».
+
 ## Snapshot globale
 
 Lo snapshot globale è una responsabilità del kernel, non del provider di
@@ -222,6 +241,7 @@ Il catalogo preciso è in
 
 - nessun path esterno alla radice viene accettato per errore;
 - ogni scrittura autorevole è atomica o lascia intatto il valore precedente;
+- un file senza permesso di scrittura non si sovrascrive;
 - la revisione impedisce overwrite silenziosi;
 - cache e autorità sono classificate per formato;
 - rename, watcher e indice convergono sullo stesso `DocId`;

@@ -261,6 +261,19 @@ impl From<KernelError> for PluginError {
                 ref path,
                 ref source,
             } if source.is_missing() => PluginError::NotFound(path.to_string().into()),
+            // Un permesso negato dal supporto — un file in sola lettura che la
+            // scrittura rifiuta (PA T59), una cartella in cui non si può
+            // creare — è «c'è, ma non puoi», non un guasto da riprovare: chi
+            // riprova a ogni battuta riceverebbe sempre la stessa risposta.
+            and @ KernelError::Io { .. }
+                if matches!(
+                    &and,
+                    KernelError::Io { source, .. }
+                        if source.kind() == std::io::ErrorKind::PermissionDenied
+                ) =>
+            {
+                PluginError::PermissionDenied(and.to_string().into())
+            }
             and @ (KernelError::Io { .. }
             | KernelError::NonUtf8Path(_)
             | KernelError::LinkRewrite(_)) => PluginError::Io(and.to_string().into()),

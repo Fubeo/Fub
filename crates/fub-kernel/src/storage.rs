@@ -690,6 +690,150 @@ pub(crate) fn temp_name(name: &str) -> String {
     )
 }
 
+/// Ciò che serve sapere di un file che c'è già per dire se Fub lo può
+/// **sovrascrivere** (PA T59).
+///
+/// La scrittura atomica crea un temporaneo accanto e lo rinomina sopra il
+/// file: la rename chiede il permesso della **cartella**, non quello del file,
+/// quindi su Linux e macOS un file senza il permesso di scrittura veniva
+/// sostituito lo stesso, e su Windows il rifiuto arrivava come un errore di
+/// I/O qualunque. Chi ha tolto il permesso di scrittura a un file ha detto
+/// «questo non si tocca»: il controllo va fatto qui, prima del temporaneo,
+/// ed è esplicito perché il sistema non lo fa per noi.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct WriteBits {
+    /// I bit `rwx` del file (le tre classi) e il suo proprietario.
+    #[cfg(unix)]
+    mode: u32,
+    #[cfg(unix)]
+    uid: u32,
+    #[cfg(unix)]
+    gid: u32,
+    /// L'attributo di sola lettura (Windows) o `readonly()` dove non c'è altro.
+    #[cfg(not(unix))]
+    read_only: bool,
+}
+
+impl WriteBits {
+    pub(crate) fn of_std(metadata: &std::fs::Metadata) -> Self {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt as _;
+            WriteBits {
+                mode: metadata.mode(),
+                uid: metadata.uid(),
+                gid: metadata.gid(),
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            WriteBits {
+                read_only: metadata.permissions().readonly(),
+            }
+        }
+    }
+
+    pub(crate) fn of_cap(metadata: &cap_std::fs::Metadata) -> Self {
+        #[cfg(unix)]
+        {
+            use cap_std::fs::MetadataExt as _;
+            WriteBits {
+                mode: metadata.mode(),
+                uid: metadata.uid(),
+                gid: metadata.gid(),
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            WriteBits {
+                read_only: metadata.permissions().readonly(),
+            }
+        }
+    }
+
+    /// Se il processo che fa girare Fub può scrivere il file.
+    ///
+    /// Su Unix non basta `Permissions::readonly()`, che è vero solo quando
+    /// **nessuna** delle tre classi ha il bit di scrittura: un file `0644`
+    /// di un altro utente è «scrivibile» per `readonly()` e non lo è per noi.
+    /// Si sceglie quindi la classe che il sistema applicherebbe al processo —
+    /// il proprietario se l'utente effettivo è il suo, il gruppo se il
+    /// gruppo del file è il gruppo effettivo o uno dei supplementari, gli
+    /// altri altrimenti — e si guarda il suo bit, come fa `access(2)`.
+    ///
+    /// **Root**: il sistema gli lascia scrivere tutto, e `access(2)` gli
+    /// risponderebbe sempre sì. Qui no, perché la domanda non è «il sistema
+    /// lo permette» ma «qualcuno ha segnato il file come da non toccare»: per
+    /// root un file è in sola lettura quando nessuna delle tre classi ha il
+    /// bit di scrittura. Le ACL restano fuori: sono rare nei vault, e un
+    /// file che le usa per *dare* la scrittura ha comunque un bit di classe.
+    ///
+    /// Su Windows è l'attributo di sola lettura, che vale per tutti.
+    pub(crate) fn writable(self) -> bool {
+        #[cfg(unix)]
+        {
+            // SAFETY: `geteuid` e `getegid` non prendono argomenti e non
+            // possono fallire.
+            let euid = unsafe { libc::geteuid() };
+            let egid = unsafe { libc::getegid() };
+            unix_writable(self.mode, self.uid, self.gid, euid, egid, &supplementary_groups())
+        }
+        #[cfg(not(unix))]
+        {
+            !self.read_only
+        }
+    }
+}
+
+/// La regola di [`WriteBits::writable`] su Unix, senza chiedere niente al
+/// sistema: così si prova anche il caso di root e quello del gruppo.
+#[cfg(unix)]
+fn unix_writable(mode: u32, uid: u32, gid: u32, euid: u32, egid: u32, groups: &[u32]) -> bool {
+    if euid == 0 {
+        return mode & 0o222 != 0;
+    }
+    let bit = if euid == uid {
+        0o200
+    } else if egid == gid || groups.contains(&gid) {
+        0o020
+    } else {
+        0o002
+    };
+    mode & bit != 0
+}
+
+/// I gruppi supplementari del processo; vuoto se il sistema non risponde
+/// (allora vale il gruppo effettivo, e al più si rifiuta un file che si
+/// sarebbe potuto scrivere: il verso sicuro).
+#[cfg(unix)]
+fn supplementary_groups() -> Vec<u32> {
+    // SAFETY: con 0 `getgroups` non scrive niente e dice quanti sono.
+    let count = unsafe { libc::getgroups(0, std::ptr::null_mut()) };
+    if count <= 0 {
+        return Vec::new();
+    }
+    let mut groups: Vec<libc::gid_t> = vec![0; count as usize];
+    // SAFETY: il buffer ha `count` elementi, e `getgroups` non ne scrive di più.
+    let filled = unsafe { libc::getgroups(count, groups.as_mut_ptr()) };
+    if filled < 0 {
+        return Vec::new();
+    }
+    groups.truncate(filled as usize);
+    groups.into_iter().map(|gid| gid as u32).collect()
+}
+
+/// Il rifiuto di sovrascrivere un file in sola lettura: `PermissionDenied`,
+/// col nome del file, prima di creare qualunque temporaneo.
+pub(crate) fn refuse_read_only(path: &Utf8Path, bits: WriteBits) -> io::Result<()> {
+    if bits.writable() {
+        return Ok(());
+    }
+    Err(io::Error::new(
+        io::ErrorKind::PermissionDenied,
+        format!("il file è in sola lettura: {path}"),
+    ))
+}
+
 /// Quanto vecchio dev'essere un temporaneo di scrittura perché nessuno lo stia
 /// più scrivendo: **un giorno**.
 ///
@@ -1159,6 +1303,13 @@ impl FsStorage {
             (Some(_), true) => FileNames::Unknown,
             (Some(metadata), false) => names(path, metadata),
         };
+        // Un file in sola lettura non si sovrascrive, né sul posto né con la
+        // rename (PA T59). Su un collegamento i bit sono quelli del link, che
+        // non dicono niente: lì la scrittura sul posto apre il file vero, e il
+        // permesso lo controlla il sistema.
+        if let (Some(metadata), false) = (&existing, link) {
+            refuse_read_only(path, WriteBits::of_std(metadata))?;
+        }
         let how = how_to_write(link, count);
         if how == WriteMode::InPlace {
             let mut file = std::fs::File::create(path)?;
@@ -2908,6 +3059,28 @@ impl VaultStorage for MemStorage {
 mod tests {
     use super::*;
     use std::sync::{Arc, Barrier};
+
+    /// La classe che si applica al processo, e root che non scavalca un file
+    /// senza nessun bit di scrittura (PA T59).
+    #[cfg(unix)]
+    #[test]
+    fn the_write_bit_is_the_one_of_the_class_that_applies() {
+        // Proprietario: conta solo il suo bit.
+        assert!(unix_writable(0o644, 1000, 100, 1000, 100, &[]));
+        assert!(!unix_writable(0o444, 1000, 100, 1000, 100, &[]));
+        assert!(!unix_writable(0o466, 1000, 100, 1000, 100, &[]));
+        // Gruppo effettivo o supplementare.
+        assert!(unix_writable(0o464, 1000, 100, 2000, 100, &[]));
+        assert!(unix_writable(0o464, 1000, 100, 2000, 200, &[300, 100]));
+        assert!(!unix_writable(0o646, 1000, 100, 2000, 100, &[]));
+        // Gli altri: un `0644` di un altro utente non è nostro.
+        assert!(!unix_writable(0o644, 1000, 100, 2000, 200, &[]));
+        assert!(unix_writable(0o446, 1000, 100, 2000, 200, &[]));
+        // Root: rifiuta solo ciò che nessuno può scrivere.
+        assert!(!unix_writable(0o444, 1000, 100, 0, 0, &[]));
+        assert!(unix_writable(0o644, 1000, 100, 0, 0, &[]));
+        assert!(unix_writable(0o440 | 0o002, 1000, 100, 0, 0, &[]));
+    }
 
     #[test]
     fn bounded_reads_check_eof_before_seeking_or_allocating() {
