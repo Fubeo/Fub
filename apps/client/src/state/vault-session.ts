@@ -8,7 +8,7 @@
 // shell compone.
 //
 // Non disegna. I pochi passi che toccano la resa — il nome del vault, la
-// ricerca, le view dichiarate, la rail, gli avvisi — sono **porte**: la shell
+// barra laterale, le view dichiarate, la rail, gli avvisi — sono **porte**: la shell
 // le dichiara quando crea la sessione, nella forma di `setSidePanelController`
 // (`ui/side-panels.ts`).
 import { api } from "../host/ipc";
@@ -44,9 +44,11 @@ export interface VaultSessionPorts {
   /// Mostra il nome del vault appena aperto. Arriva **prima** che
   /// `state.vaultRoot` cambi.
   showVaultName(root: string): void;
-  /// Svuota la ricerca: i risultati erano del vault di prima. Arriva fra il
-  /// segnale `vault` e il segnale `documents`.
-  clearSearch(): void;
+  /// La barra laterale del vault che entra: la vista che aveva se ci si era
+  /// già stati (anche riaprendolo), i file altrimenti — mai quella del vault
+  /// di prima (#237 R07). Arriva fra il segnale `vault` e il segnale
+  /// `documents`; la ricerca scritta la ritrova il suo pannello sul segnale.
+  enterSidebar(root: string): void;
   /// Scopre e monta le view che il vault dichiara. La sequenza l'attende
   /// insieme all'elenco dei comandi e agli accordi; se rifiuta, l'apertura
   /// rifiuta.
@@ -180,7 +182,7 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
     // Da qui in poi lo stato del vault è coerente: chi ne dipende può ripartire.
     emit("vault", info.root);
 
-    ports.clearSearch();
+    ports.enterSidebar(info.root);
     emit("documents");
 
     // Le view dichiarative si scoprono dal backend, non da id cablati. E come le
