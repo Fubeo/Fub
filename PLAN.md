@@ -334,7 +334,7 @@ Se una di queste cade, la stima si allunga.
 | PA T10 · i due punti sciolti da ritrovare | PA | da fare (D10 B) | nessuno | basso | S | la causa trovata o la riga che chiude |
 | PA T13 · il corpus senza perdite | PA | da fare, dopo #295 (registro 2026-11-08) | nessuno; si allarga quando K5 e N4 entrano | medio | M | test d'integrazione di `fub-host` |
 | PA T19 · i test instabili del Rust | PA | da fare | nessuno | medio | M | 200 giri verdi o causa trovata |
-| PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | da fare | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
+| PA T25 · il controllo degli aggiornamenti vede le pre-release | PA | in corso (coder, base 5432f8b4) | nessuno | basso | S | test di `fub-host` (`updates.rs`) |
 | PA T32 · `![[x.pdf#page=3]]` apre il PDF a quella pagina | PA | da fare | nessuno | basso | S | Vitest di `media.ts` e dell'apertura |
 | PA T33 · il nome FubDraw dove le persone lo vedono | PA | da fare (D14 A) | nessuno | basso | M | test dei descrittori, di `fub-scene` e del catalogo |
 | PA T34 · il manifest dice da quale tema parte | PA | da fare (D15 A, `extends`) | nessuno | medio: la forma del manifest sul filo | M | `crates/fub-host/tests/themes.rs`, mirror |
@@ -4395,7 +4395,7 @@ pre-release più vecchia della release vera che c'è (vince la più alta);
 chi ha una release vera non vede le pre-release.
 Fatto quando: i test nuovi passano e quelli che c'erano restano verdi.
 Prova: cargo test -p fub-host --lib updates::
-Stato: [ ] da fare
+Stato: [~] in corso · coder · base 5432f8b4
 
 ## T26 · Il giro sul banco: scrivere e muoversi
 
