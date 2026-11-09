@@ -83,6 +83,17 @@ scenario L1).
 |---|---|---|---|
 | 2026-11-03 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb | AMD Ryzen 7 7730U, condivisa | [Il nucleo della lavagna in WebAssembly](lavagna-wasm-2026-11-03.md) |
 
+## L'inchiostro sulla lavagna
+
+Le due misure del cancello di N4 (S8 di
+[`bench/webview/run.mjs`](../../apps/client/bench/webview/run.mjs)): la
+prima sul caso simile, una tabella di testo sotto la penna; la seconda sul
+foglio vero dentro la lavagna, che chiude la voce.
+
+| Data | Sistema | Macchina | Pagina |
+|---|---|---|---|
+| 2026-11-09 | Debian 13, kernel 6.12, WebKitGTK 2.54 sotto Xvfb | AMD Ryzen 7 7730U, condivisa | [La penna sulla lavagna, la prima misura](lavagna-inchiostro-2026-11-09.md) |
+
 ## Le librerie a runtime
 
 La prova del livello 3 del piano dei componenti

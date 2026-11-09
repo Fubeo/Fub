@@ -123,9 +123,15 @@ Markdown), la scheda `voti` (il file `S8/voti.xlsx`) e i 2.000 tratti
 `fub:ink`, metà sulla tabella, un quarto sul foglio e un quarto liberi,
 scritti dal codificatore della §5 di [scene-format](../reference/scene-format.md#5-tratti-a-mano-libera)
 dentro `fixtures.mjs`. Aspetta che i tratti asciutti siano disegnati (al più
-30 s), poi manda dieci tratti di penna sopra la tabella. Se la sonda non
-vede nessun evento `pen` (il driver non manda `pointerType` `pen`), rifà i
-dieci tratti col mouse e D tenuto, e il referto lo dice (`input`). Lo
+30 s), poi manda dieci tratti di penna sopra la tabella. Se la penna non
+scrive (la sonda non vede eventi `pen`, o i path asciutti non crescono),
+rifà i dieci tratti col mouse e D tenuto, e il referto lo dice (`input`).
+WebKitWebDriver sotto Xvfb manda il `pointerdown` della penna e poi niente:
+il tratto rimasto giù terrebbe la lavagna («un tratto alla volta»), quindi
+prima del mouse lo scenario manda alla finestra un `blur`, che lo annulla,
+fuori dalla misura. Per ogni tratto il referto dà i path asciutti
+(`written`) e, per i fotogrammi oltre 33 ms, l'ultimo evento del puntatore
+prima di ognuno (`phases`): il movimento, il rilascio o nessuno. Lo
 spostamento parte dalla testata della scheda, va avanti e indietro e la
 posa 60 px più in basso. Il referto dà `S8.penFrameGap.max` (l'obiettivo
 di N4, 33 ms, solo fra i `targets`), `S8.moveFrameGap.max` senza tetto, i
