@@ -1522,7 +1522,7 @@ e che dopo 10 000 giri la memoria viva torna quella del primo;
 `npm run typecheck` è verde.
 Prova: scripts/check.sh --rapido; cargo test -p fub-canvas-wasm; cd
 apps/client && npm run typecheck && npx vitest run src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto
 
 ## T18 · La misura della scheda e l'inchiostro
 
