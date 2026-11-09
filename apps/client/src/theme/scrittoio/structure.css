@@ -1513,19 +1513,22 @@ body {
    non scorre. Ognuno taglia ciò che esce dalla sua zona; le fasce opache
    coprono ciò che le scorre sotto. Il livello «lift» di una zona porta i
    segni d'angolo (il quadratino) e gli oggetti, interi; per il corpo è il
-   suo livello. */
+   suo livello. I livelli non hanno misura: un riquadro grande quanto la zona
+   starebbe davanti alle celle, e chi misura il contrasto (axe) non saprebbe
+   più su che fondo sta il testo. Il taglio lo fa `clip-path`, che va oltre
+   il riquadro vuoto fin dove arriva la zona. */
 .grid-marks-body {
   position: relative;
   z-index: 1;
-  width: var(--grid-w, 0px);
-  height: var(--grid-h, 0px);
+  width: 0;
+  height: 0;
 }
 .grid-marks-top {
   position: relative;
   z-index: 1;
-  width: var(--grid-w, 0px);
-  height: var(--grid-top-h, 0px);
-  overflow: clip;
+  width: 0;
+  height: 0;
+  clip-path: inset(0 calc(0px - var(--grid-w, 0px)) calc(0px - var(--grid-top-h, 0px)) 0);
 }
 .grid-lift-top {
   position: relative;
@@ -1537,9 +1540,9 @@ body {
   position: sticky;
   left: 0;
   z-index: 4;
-  width: var(--grid-left-w, 0px);
-  height: var(--grid-top-h, 0px);
-  overflow: clip;
+  width: 0;
+  height: 0;
+  clip-path: inset(0 calc(0px - var(--grid-left-w, 0px)) calc(0px - var(--grid-top-h, 0px)) 0);
 }
 .grid-lift-corner {
   position: sticky;
@@ -1552,10 +1555,10 @@ body {
   position: sticky;
   left: 0;
   z-index: 4;
-  width: var(--grid-left-w, 0px);
-  height: calc(var(--grid-h, 0px) - var(--grid-top-h, 0px));
+  width: 0;
+  height: 0;
   margin-top: var(--grid-top-h, 0px);
-  overflow: clip;
+  clip-path: inset(0 calc(0px - var(--grid-left-w, 0px)) calc(var(--grid-top-h, 0px) - var(--grid-h, 0px)) 0);
 }
 .grid-lift-left {
   position: sticky;
