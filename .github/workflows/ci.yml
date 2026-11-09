@@ -95,6 +95,10 @@ jobs:
         run: node tools/vendor-craft/vendor.mjs wordcraft check
       - name: la copia di GridCraft è l'upstream del lock più le patch di vendor/gridcraft/patches
         run: node tools/vendor-craft/vendor.mjs gridcraft check
+      - name: la copia di VectorCraft è l'upstream del lock più le patch di vendor/vectorcraft/patches
+        run: node tools/vendor-craft/vendor.mjs vectorcraft check
+      - name: le copie di craft-docpath e craft-vectorcraft-format sono l'upstream del loro lock
+        run: node tools/vendor-craft/vendor.mjs craft-docpath check && node tools/vendor-craft/vendor.mjs craft-vectorcraft-format check
       - name: le patch dei motori si portano a tre vie (upstream finto, senza rete)
         run: node tools/vendor-craft/vendor.mjs self-test
       - name: gli errori letterali non crescono
@@ -281,6 +285,10 @@ jobs:
         env:
           CARGO_TARGET_DIR: target/gridcraft
         run: cargo test --manifest-path vendor/gridcraft/Cargo.toml --workspace --locked --no-fail-fast
+      - name: i test dei motori di VectorCraft, nel workspace loro e con il loro lock
+        env:
+          CARGO_TARGET_DIR: target/vectorcraft
+        run: cargo test --manifest-path vendor/vectorcraft/Cargo.toml --workspace --locked --no-fail-fast
 
   libreoffice:
     name: i docx innestati, riletti da LibreOffice
