@@ -12,6 +12,13 @@ poi «Salvato» con la spunta e «…». Il formato lo dice la figura della ling
 per il lettore di schermo. Sul telefono resta il nome; in piedi il foglio è largo quanto lo
 schermo e «Salvato» è la spunta (il punto se in sospeso; errore e conflitto restano parole rosse).
 
+Lo stato di un documento che chiede attenzione («2 parti chiuse», «Solo il testo», «Sola
+lettura») è un chip nella testata, accanto al percorso. «Si scrive», lo stato normale, non sta
+lì: lo dice la banda di stato a voce bassa, subito prima della modalità, e segue il riquadro a
+fuoco; premuto apre la stessa spiegazione del chip. Sul telefono, dove la banda non c'è, è la
+prima voce di «…». Sotto gli 800 px la banda lascia andare la lingua del documento, che dice già
+il correttore: «Si scrive» e la modalità restano.
+
 ## Modalità
 
 Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre:

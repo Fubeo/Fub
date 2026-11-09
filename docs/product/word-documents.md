@@ -182,9 +182,12 @@ Ciò che si perderebbe non chiude per forza tutto il documento:
   il modello non si rilegge uguale, o il corpo del file non si legge blocco
   per blocco come lo legge il codec.
 
-Il chip dice anche «Si scrive», quando il file si riscrive tutto, e «Sola
-lettura», con il perché nella lingua di chi scrive; il suo riquadro offre di
-cercare. Accanto al chip, «Registra» dice che le modifiche si registrano.
+Il chip dice anche «Sola lettura», con il perché nella lingua di chi scrive;
+il suo riquadro offre di cercare. Quando il file si riscrive tutto lo stato è
+normale, e lo dice la banda di stato, accanto alla modalità: «Si scrive», che
+apre la stessa spiegazione del chip (sul telefono è la prima voce di «…»).
+Accanto al chip, «Registra» dice che le modifiche si registrano; quando si
+scrive tutto, e il chip non c'è, lo dice la voce «Registra» della banda.
 
 Un salvataggio che tocca soltanto il testo è un **innesto**: il file resta
 com'era, byte per byte, tranne i paragrafi e le tabelle toccati, che arrivano
