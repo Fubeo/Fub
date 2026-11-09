@@ -347,7 +347,7 @@ Se una di queste cade, la stima si allunga.
 | PA T39 · i caratteri del tema | PA | fatto (in main, #319) | T34, T35 | basso | M | test dell'host e del loader |
 | PA T40 · le icone del tema | PA | fatto (D16 A; in main, #320) | T34, T35; mai nella stessa ondata di S2 T14 | basso | M | Vitest di `ui/icons` e di `theme/` |
 | PA T44 · un documento e un foglio vuoti | PA | fatto (in main, #319) | nessuno | basso: due comandi che creano file, dietro le loro feature | M | test d'integrazione di `fub-host`, anche con `--no-default-features` |
-| PA T46 · le parole della scheda di un componente | PA | da fare (D18 A), sbloccato | K2 in `main` (fatto) | basso: solo testi del catalogo | S | `i18n/lexicon-settings.test.ts` |
+| PA T46 · le parole della scheda di un componente | PA | fatto sul ramo del piano (2026-11-09) | K2 in `main` (fatto) | basso: solo testi del catalogo | S | `i18n/lexicon-settings.test.ts` |
 | PA T47 · i 44 px del tocco sul telefono, senza deformare | PA | fatto (in main, #319, con le baseline del runner) | nessuno | basso: solo CSS del telefono | S | la scena `mobile-settings` di `bench/scene.mjs` (`bench:verify`, `bench:a11y`) |
 | PA T48 · il verde di serie | PA | fatto (D25 C; in main, #320, con le baseline dal runner) | niente (il logo definitivo conferma 160); mai con un task che rifà baseline | medio: cambia ogni schermata, le baseline vengono dal runner | M | `recipe.test.ts`, `colori.test.ts`, `theme:verify`, `cargo test -p fub-host` |
 | PA T53 · #237 R05–R08 e A03 | PA | R05–R08 fatte (in main, #320); A03 dopo S2 T10 (D21 A) | S2 T10 per A03 | basso | M | un test per voce nel proprietario |
@@ -5361,7 +5361,7 @@ interruttore che non cambia.
 Fatto quando: la scheda dice le parole del lessico; il test nuovo fallisce
 se una variante vietata torna in un testo `settings.components.*`.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/i18n src/panels/settings.components.test.ts
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-09) · in più: `settings.components.install.hint` («non lo accende») e l'inglese di `enabled_failed`; la guardia confronta senza maiuscole e fissa le frasi intere della scheda («Rimuovi» non è in `FORBIDDEN`); resta il motivo inglese/italiano che arriva dall'host (`fub-wasm-host/src/managed.rs`, «disabilitare il componente prima di rimuoverlo») dentro «Componente non tolto: {reason}»
 
 ## T47 · I 44 px del tocco sul telefono, senza deformare
 
