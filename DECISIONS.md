@@ -99,6 +99,13 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · N4 T15 · Nessun task prima di T23 per i 205 ms a penna e
+  gli 879 ms alla posa della scheda (S8, caso simile, Xvfb in software).
+  Perché: la posa costa perché `#render` rifà tutte le schede, e N6 T11 la
+  rende a chiavi prima di tutto il resto; una correzione qui andrebbe
+  buttata. Il ridisegno sotto la scia pesa per la tabella di testo, che T23
+  sostituisce col foglio vivo. T23 rimisura dopo N6 T11 e, se resta oltre
+  33 ms, si chiede al pianificatore un task prima di T25, come dice T23.
 - 2026-11-09 · N4 (PA T2, fusione di `main`) · `operation.ts` è quello di
   `main` (le toppe le applica il nucleo in WebAssembly) con i tipi della
   toppa `ink` e i costruttori `addStrokePatch`, `eraseStrokePatch`,

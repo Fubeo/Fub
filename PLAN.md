@@ -1402,7 +1402,7 @@ Prova: scripts/check.sh --rapido; cd apps/client && npm run build && cd
 ../.. && cargo build --release --locked -p fub-app --features
 tauri/custom-protocol && cd apps/client && xvfb-run -a npm run bench:webview
 -- --only=S8 --budgets=targets --native-driver=/usr/bin/WebKitWebDriver
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-09: `docs/misure/lavagna-inchiostro-2026-11-09.md`; peggiore dei tre giri 205 ms a penna, 879 ms alla posa della scheda, hash del `.xlsx` uguale; il driver non manda la penna che scrive, misurato col mouse e D; la meta di 33 ms non è presa, nessun task prima di T23: lo dice DECISIONS.md)
 
 ## T16 · L'interruttore e il cursore
 
