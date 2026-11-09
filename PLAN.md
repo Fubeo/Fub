@@ -179,7 +179,7 @@ codice, nei rami e nelle issue il 2026-11-05.
 | N13 · i Blocchi | In `main`, coreografie comprese (`motion-rules.mjs`, regole `blocchi-*`); #281 aperta | fatto; dentro: la prova con persone, i 33 ms su 2.000 righe, la pagina del PDF nella nota | Fatto quando 6 e 7 | PA T16, T17 (chiude #281), T32 |
 | K0 · misure dei motori | In `main` (`docs/misure/*-k0.md`) | fatto | — | — |
 | K1 · i componenti | In `main` (#285, `crates/fub-componenti`) | fatto | — | — |
-| K2 · la pagina «Componenti» | Ramo: 7 di 7; la prova con una persona di K2 D-2 non è fatta | dentro | I componenti accesi e spenti | `piano/k2-pagina-componenti`, #290; la prova dell'utente prima del merge (D13 A) |
+| K2 · la pagina «Componenti» | Ramo: 7 di 7; la prova D-2 fatta dall'utente il 2026-11-09, #290 pronta | dentro | I componenti accesi e spenti | `piano/k2-pagina-componenti`, #290; la prova dell'utente prima del merge (D13 A) |
 | K3 · lo strato dei motori | Fatto: in `main` con #295 (fb722164, 2026-11-08, unita dall'utente) | dentro | Word ed Excel | `piano/k3-motori`, #295 |
 | K4, K7–K10 | Senza piano | fuori | Vedi sopra | «Piani di Fub» |
 | K5 · il disegno | Ramo: 12 di 30; T6 fatto, la licenza IJG di `jpeg-encoder` chiede l'utente prima di T9 | dentro | Il disegno SVG | `piano/k5-disegno`, #300 |

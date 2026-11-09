@@ -99,6 +99,15 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · K2 · la prova di D-2 è fatta dall'utente da solo sulla 1432
+  (i cinque compiti: «mi sembrava che funzionasse»), dopo tre correzioni
+  della sola 1432 (componenti, «Annota il PDF» e il `.fubann` dal ponte;
+  SHA-256 in JavaScript fuori da https): #290 si allinea a `main` e si segna
+  pronta. Dalla prova tre difetti del programma, da mettere in un task: la
+  «Struttura» ferma sulla nota di prima quando si apre un PDF, la nota
+  d'errore delle annotazioni alta un riquadro, i tratti fuori pagina dopo il
+  ripiego A4 · D-2 chiede il resoconto prima di segnarla pronta, e l'utente
+  ha detto che le prove con altre persone si rinviano.
 - 2026-11-09 · K5 T6 · integrato senza aspettare la licenza IJG di
   `jpeg-encoder` (lo usa `render` per il JPEG): oggi `cargo deny` di Fub è
   verde perché nessun crate di Fub dipende dal motore, diventa rosso a T9; la
