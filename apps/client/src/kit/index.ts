@@ -64,5 +64,8 @@ export type { OptionItem, OptionsBar, OptionsBarOptions } from "./options-bar";
 export { createTabs } from "./tabs";
 export type { TabSpec, TabsHandle, TabsOptions } from "./tabs";
 
+export { rovingToolbar } from "./toolbar-keys";
+export type { RovingToolbar, RovingToolbarOptions } from "./toolbar-keys";
+
 export { FLYOUT_HOLD_MS, createToolRail, toolTip } from "./tool-rail";
 export type { RailGroup, RailSlot, RailTool, ToolRail, ToolRailOptions, ToolRailText } from "./tool-rail";

@@ -300,6 +300,56 @@ describe("la barra di un riquadro", () => {
     expect(names).toEqual(["Colore e sfondo", "Altri collegamenti", "Operazioni sulla tabella"]);
   });
 
+  it("veste la barra in una fila del kit, e la bolla resta senza vassoio", () => {
+    const fake = fakeActions(["markdown.bold", "markdown.paragraph", "markdown.heading.1"]);
+    const { bar } = mount(surfaceWith(fake.actions));
+    bar.update(SPECS);
+    expect(bar.element.classList.contains("format-bar")).toBe(true);
+    expect(bar.element.classList.contains("kit-bar")).toBe(true);
+    const groups = [...bar.element.querySelectorAll<HTMLElement>(".format-bar-group")];
+    expect(groups.length).toBeGreaterThan(0);
+    for (const group of groups) expect(group.classList.contains("kit-bar-group"), group.dataset.group).toBe(true);
+    // Ogni pulsante, il selettore dello stile e «…» compresi.
+    for (const button of buttons(bar)) {
+      expect(button.classList.contains("kit-bar-button"), button.className).toBe(true);
+    }
+    expect(bar.element.querySelector(".format-bar-style.kit-bar-button")).not.toBeNull();
+    expect(bar.element.querySelector(".format-bar-overflow.kit-bar-button")).not.toBeNull();
+    const bubble = createFormatBar({ surface: () => surfaceWith(fake.actions), writing: () => true, focusPane: () => {}, runCommand: () => {}, only: ["inline"] });
+    bars.push(bubble);
+    bubble.update(SPECS);
+    expect(bubble.element.classList.contains("format-bar")).toBe(true);
+    expect(bubble.element.classList.contains("kit-bar"), "la bolla non sta nel vassoio").toBe(false);
+    expect(bubble.element.querySelector('[data-command="markdown.bold"]')!.classList.contains("kit-bar-button")).toBe(true);
+  });
+
+  it("Escape riporta il fuoco al testo", () => {
+    const fake = fakeActions(["markdown.bold"]);
+    let focused = 0;
+    const surface: EditorSurface = { ...surfaceWith(fake.actions), focus: () => { focused += 1; } };
+    const { bar } = mount(surface);
+    bar.update(SPECS);
+    const bold = bar.element.querySelector<HTMLButtonElement>('[data-command="markdown.bold"]')!;
+    bold.focus();
+    const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    bold.dispatchEvent(escape);
+    expect(escape.defaultPrevented).toBe(true);
+    expect(focused).toBe(1);
+  });
+
+  it("il menu di un pulsante, chiuso, rende il fuoco al pulsante", () => {
+    const fake = fakeActions(["markdown.paragraph", "markdown.heading.1"]);
+    const { bar } = mount(surfaceWith(fake.actions));
+    bar.update(SPECS);
+    const style = bar.element.querySelector<HTMLButtonElement>(".format-bar-style")!;
+    style.focus();
+    style.click();
+    expect(document.querySelector("#context-menu")).not.toBeNull();
+    closeContextMenu();
+    expect(document.activeElement).toBe(style);
+    expect(style.tabIndex).toBe(0);
+  });
+
   it("smontata, non segue più la superficie", () => {
     const fake = fakeActions(["markdown.bold"]);
     const { bar } = mount(surfaceWith(fake.actions));

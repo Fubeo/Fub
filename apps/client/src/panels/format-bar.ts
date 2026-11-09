@@ -23,8 +23,16 @@
 //
 // Il modello è quello della barra degli strumenti WAI-ARIA: un solo punto di
 // tabulazione, le frecce si spostano fra i pulsanti, Home ed End ai capi,
-// Escape torna al testo. Il puntatore non toglie il fuoco all'editor: la
+// Escape torna al testo: sono le frecce di ogni barra in una fila
+// (`kit/toolbar-keys.ts`). Il puntatore non toglie il fuoco all'editor: la
 // selezione su cui il pulsante agisce resta dov'era.
+//
+// # Aspetto
+//
+// La barra di un riquadro veste la barra in una fila del kit: `kit-bar` sulla
+// radice (il vassoio), `kit-bar-group` sui gruppi, `kit-bar-button` sui
+// pulsanti. Le classi `format-bar*` restano per i test, la bolla della
+// selezione e `data-formatbar-off`. La bolla (`only`) non sta nel vassoio.
 import type { CommandSpec } from "../host/contract";
 import type { EditorSurface } from "../editors/core/registry";
 import {
@@ -34,6 +42,7 @@ import {
 } from "../editors/core/editor-actions";
 import { t, type Key } from "../i18n/strings";
 import { ariaBinding, displayBinding } from "../ui/commands";
+import { rovingToolbar } from "../kit/toolbar-keys";
 import { iconEl, registerIcon } from "../ui/icons";
 import { openLifetime, type Teardown } from "../ui/lifetime";
 import { showContextMenu, type MenuItem } from "../ui/menu";
@@ -330,7 +339,10 @@ function hintOf(actions: SurfaceEditorActions | undefined, entry: Entry): string
 /// stessa barra ristretta ai gesti che si fanno su un testo scelto.
 export function createFormatBar(host: FormatBarHost): FormatBar {
   const element = document.createElement("div");
-  element.className = "format-bar";
+  // La barra di un riquadro sta nel vassoio di serie (`kit-bar`); la bolla
+  // della selezione e la mini-barra (`only`) sono bolle: gli stessi gruppi e
+  // gli stessi pulsanti, senza vassoio.
+  element.className = host.only ? "format-bar" : "format-bar kit-bar";
   element.setAttribute("role", "toolbar");
   element.setAttribute("aria-orientation", "horizontal");
   element.setAttribute("aria-label", t("format_bar.label"));
@@ -346,8 +358,6 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
   let refreshers: (() => void)[] = [];
   let groupEls: HTMLElement[] = [];
   let overflowButton: HTMLButtonElement | null = null;
-  /// Il controllo che riceve il Tab: l'ultimo toccato, o il primo.
-  let current: HTMLButtonElement | null = null;
   let frame: number | null = null;
 
   const actions = (): SurfaceEditorActions | undefined => host.surface()?.editorActions;
@@ -372,52 +382,18 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
   life.listen(element, "mousedown", (event) => {
     if ((event.target as Element | null)?.closest("button")) event.preventDefault();
   });
-  life.listen(element, "keydown", (event) => {
-    const controls = focusable();
-    const at = controls.indexOf(document.activeElement as HTMLButtonElement);
-    if (at < 0) return;
-    let next: number | null = null;
-    if (event.key === "ArrowRight") next = (at + 1) % controls.length;
-    else if (event.key === "ArrowLeft") next = (at - 1 + controls.length) % controls.length;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = controls.length - 1;
-    else if (event.key === "Escape") {
-      event.preventDefault();
-      host.surface()?.focus?.();
-      return;
-    }
-    if (next === null) return;
-    event.preventDefault();
-    focusControl(controls[next]!);
-  });
-  life.listen(element, "focusin", (event) => {
-    const target = event.target;
-    if (target instanceof HTMLButtonElement && element.contains(target)) roving(target);
-  });
-
-  /// I controlli raggiungibili adesso: visibili e non spenti.
-  function focusable(): HTMLButtonElement[] {
-    return [...element.querySelectorAll<HTMLButtonElement>("button")]
-      .filter((button) => !button.disabled && !button.closest("[hidden]"));
-  }
-
-  function roving(target: HTMLButtonElement | null): void {
-    const controls = focusable();
-    current = target && controls.includes(target) ? target : controls[0] ?? null;
-    for (const button of element.querySelectorAll<HTMLButtonElement>("button")) {
-      button.tabIndex = button === current ? 0 : -1;
-    }
-  }
-
-  function focusControl(button: HTMLButtonElement): void {
-    roving(button);
-    button.focus();
-  }
+  // Le frecce sono quelle di ogni barra in una fila (`kit/toolbar-keys.ts`):
+  // contano i pulsanti visibili e accesi, «…» compreso quando c'è, ed Escape
+  // torna al testo.
+  const keys = rovingToolbar(element, {
+    controls: () => [...element.querySelectorAll<HTMLButtonElement>("button")],
+    onEscape: () => host.surface()?.focus?.(),
+  }, life);
 
   function button(className: string, label: string, hint: string | null): HTMLButtonElement {
     const control = document.createElement("button");
     control.type = "button";
-    control.className = className;
+    control.className = `${className} kit-bar-button`;
     control.tabIndex = -1;
     control.setAttribute("aria-label", label);
     const shown = displayBinding(hint);
@@ -523,7 +499,7 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
       if (element.scrollWidth <= element.clientWidth) break;
       groupEls[index]!.hidden = true;
     }
-    roving(current);
+    keys.refresh();
   }
 
   // Senza `ResizeObserver` (un banco senza layout) la barra resta intera.
@@ -539,7 +515,7 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     }
     const focused = element.contains(document.activeElement) ? document.activeElement : null;
     for (const update of refreshers) update();
-    roving(current);
+    const current = keys.refresh();
     // Il pulsante a fuoco si è spento (annulla senza più niente da annullare):
     // il fuoco resta nella barra invece di cadere sulla pagina.
     if (focused instanceof HTMLButtonElement && focused.disabled) current?.focus();
@@ -564,12 +540,11 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     groups = next;
     refreshers = [];
     groupEls = [];
-    current = null;
     element.replaceChildren();
     element.setAttribute("aria-label", t("format_bar.label"));
     for (const group of groups) {
       const box = document.createElement("div");
-      box.className = "format-bar-group";
+      box.className = "format-bar-group kit-bar-group";
       box.dataset.group = group.id;
       box.setAttribute("role", "group");
       box.setAttribute("aria-label", t(GROUP_LABELS[group.id]));
