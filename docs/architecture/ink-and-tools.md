@@ -266,6 +266,12 @@ FubDraw è il primo consumatore e non il proprietario.
   alla prima domanda, e dà gli oggetti che il confronto dei riquadri darebbe:
   il risultato è quello della scansione.
 - `tools/edit.ts` (`strokeElem`) scrive nel file l'opacità dello strumento.
+- `tools/editor/toolbar.ts` monta la testa del disegno, dove si sceglie
+  l'inchiostro (colore, spessore, penna, modo della gomma): veste la barra in
+  una fila del kit (`kit-bar`, `kit-bar-group`, `kit-bar-button`), e
+  `tools/editor/input.ts` le dà le frecce di `kit/toolbar-keys.ts`, con un
+  solo punto di Tab dal menu a «Esporta». La colonna degli strumenti veste
+  `kit-rail`.
 
 Restano del prodotto il livello di destinazione, gli id, gli annunci per lo screen reader, il passo di annulla e il formato della scena.
 

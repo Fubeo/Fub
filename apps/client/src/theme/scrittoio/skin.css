@@ -9607,15 +9607,6 @@ kbd,
    barra in tutti e due i temi: il nero al buio, il giallo alla luce. La carta
    è bianca in ogni tema, perché è il fondo su cui il disegno si legge fuori
    dall'editor; il tavolo attorno segue il tema. */
-.draw-header {
-  gap: var(--space-2) var(--space-5);
-  padding: var(--space-2);
-  background: var(--bg-elev);
-  border-bottom: 1px solid var(--border);
-}
-.draw-toolbar {
-  gap: var(--space-2) var(--space-5);
-}
 /* La colonna degli strumenti: lo stesso fondo della barra, un filo verso il
    foglio. */
 .draw-rail {
@@ -9625,10 +9616,14 @@ kbd,
   border-style: solid;
   border-color: var(--border);
 }
+/* La testa (`.draw-header`) è una barra in una fila del kit: il vassoio, i
+   foglietti e i pulsanti li veste `skin/kit.css`. Le regole dei gruppi e dei
+   pulsanti qui sotto sono per quelli fuori dalla testa: la colonna, la barra
+   della selezione, i pannelli. */
 .draw-group {
   gap: var(--space-1);
 }
-.draw-button {
+.draw-button:not(.kit-bar-button) {
   color: var(--muted);
   border-radius: var(--radius-sm);
   transition:
@@ -9636,7 +9631,7 @@ kbd,
     color var(--duration-fast) var(--ease),
     box-shadow var(--duration-fast) var(--ease);
 }
-.draw-button:hover:not(:disabled, [aria-disabled="true"]) {
+.draw-button:not(.kit-bar-button):hover:not(:disabled, [aria-disabled="true"]) {
   background: var(--overlay-hover);
   color: var(--text);
 }
@@ -9644,8 +9639,8 @@ kbd,
    l'opzione premuta: il fondo tenue dell'accento e l'icona nell'accento,
    come nella colonna degli strumenti; non un bordo. Lo dicono due segni, il
    fondo e il colore del segno, non uno solo. */
-.draw-button[aria-checked="true"],
-.draw-button[aria-pressed="true"] {
+.draw-button:not(.kit-bar-button)[aria-checked="true"],
+.draw-button:not(.kit-bar-button)[aria-pressed="true"] {
   background: var(--accent-wash);
   color: var(--accent);
 }
@@ -9660,8 +9655,8 @@ kbd,
 }
 /* Un comando che adesso non si usa: sbiadito. Nelle proprietà resta
    raggiungibile (`aria-disabled`), e dice perché. */
-.draw-button:disabled,
-.draw-button[aria-disabled="true"] {
+.draw-button:not(.kit-bar-button):disabled,
+.draw-button:not(.kit-bar-button)[aria-disabled="true"] {
   opacity: 0.4;
 }
 .draw-zoom-level {

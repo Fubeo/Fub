@@ -3165,29 +3165,28 @@ body {
   min-height: 0;
   container-type: inline-size;
 }
-/* La barra in alto (B4) è una riga sola: menu, Annulla e Ripeti, la riga
-   delle opzioni, che manda in «…» ciò che non ci sta, ed «Esporta». */
+/* La barra in alto (B4) è una barra in una fila del kit (`kit-bar`, che dà
+   la fila, i foglietti e i pulsanti): menu, Annulla e Ripeti, la riga delle
+   opzioni, che manda in «…» ciò che non ci sta, ed «Esporta». Qui resta ciò
+   che è suo: la testa non si stringe, la riga prende lo spazio che avanza e
+   «Esporta» va in fondo. */
 .draw-header {
-  display: flex;
   flex: none;
-  align-items: center;
-  min-width: 0;
 }
 .draw-toolbar {
   flex: 1 1 auto;
 }
-.draw-top {
-  flex: none;
-}
 .draw-top:last-child {
   margin-inline-start: auto;
 }
+/* I gruppi e i pulsanti fuori dalla testa: la colonna, la barra della
+   selezione, i pannelli. Quelli della testa sono del kit. */
 .draw-group {
   display: inline-flex;
   flex: none;
   align-items: center;
 }
-.draw-button {
+.draw-button:not(.kit-bar-button) {
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -3197,7 +3196,7 @@ body {
   padding: 0;
 }
 @media (pointer: coarse) {
-  .draw-button {
+  .draw-button:not(.kit-bar-button) {
     min-width: 44px;
     min-height: 44px;
   }
