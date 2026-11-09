@@ -1639,6 +1639,10 @@ body {
    passano dietro. */
 .look-file .grid-cell.frozen { background-color: var(--file-fill, var(--doc-bg, #ffffff)); }
 .look-adattato .grid-cell.frozen { background-color: var(--file-fill-a, var(--doc-bg, #ffffff)); }
+/* Anche la testa ha la carta sotto: le righe bloccate hanno celle vuote, e
+   ciò che scorre sotto di lei (un testo che deborda) non deve trasparire. */
+.look-file .grid-head,
+.look-adattato .grid-head { background-color: var(--doc-bg, #ffffff); }
 
 .grid-cell-text {
   position: relative;
