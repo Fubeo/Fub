@@ -883,7 +883,7 @@ body {
   white-space: nowrap;
 }
 .pane-toolbar:has(> .pane-format:not([hidden])) > .muted,
-.pane-toolbar:has(> .pane-standing:not([hidden])) > .muted {
+.pane-toolbar:has(> .pane-standing:not([hidden]):not([data-standing="writes"])) > .muted {
   margin-right: 0;
 }
 
@@ -899,8 +899,16 @@ body {
 .pane-toolbar > .pane-standing[hidden] {
   display: none;
 }
-.pane-toolbar:has(> .pane-standing:not([hidden])) > .pane-format {
+.pane-toolbar:has(> .pane-standing:not([hidden]):not([data-standing="writes"])) > .pane-format {
   margin-inline-end: 0;
+}
+
+/* «Si scrive» è lo stato normale di un documento: non lo dice la testata ma
+   la banda, a voce bassa, accanto alla modalità (`status-band.ts`); sul
+   telefono, che non ha la banda, la prima voce di «…». Gli altri stati (parti
+   chiuse, solo il testo, sola lettura) restano qui, dove si vedono. */
+.pane-toolbar > .pane-standing[data-standing="writes"] {
+  display: none;
 }
 
 /* Se lo spazio non basta cede prima lo stato, che la banda ripete; mai il
@@ -1156,6 +1164,19 @@ body {
 #status-band > .status-side--end {
   margin-left: auto;
   flex: none;
+}
+
+/* La banda stretta. Con «Si scrive» e la modalità a destra, sotto gli 800 px
+   la lingua del documento si fa da parte (la dice già il correttore), e ciò
+   che sta a sinistra si taglia invece di passare sotto la parte destra. */
+#status-band > #status-start,
+#status-band > #views-status {
+  overflow: hidden;
+}
+@media (max-width: 800px) {
+  #status-band [data-surface-item="language"] {
+    display: none;
+  }
 }
 
 #key-pending {

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { emit, state } from "../../../state/store";
+import { emit, on, state } from "../../../state/store";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { activeMotions, createManualDriver, setMotionDriver } from "../../../moto";
 
@@ -613,7 +613,9 @@ describe("le voci della superficie", () => {
     };
     return { pane, said, changed, listeners };
   }
-  const items = () => [...document.querySelectorAll<HTMLElement>("[data-surface-item]")];
+  // «Si scrive» porta anche lui `data-surface-item`, ma non è una voce della
+  // superficie: ha la sua parte, più sotto.
+  const items = () => [...document.querySelectorAll<HTMLElement>("[data-surface-item]:not(#status-standing)")];
 
   it("stanno prima della modalità, un clic apre, e il conteggio dichiarato si fa da parte", async () => {
     const { pane, said, changed } = statusPane();
@@ -630,7 +632,9 @@ describe("le voci della superficie", () => {
       ["SPAN", "Pagina 1 di 2"],
       ["BUTTON", "418 parole"],
     ]);
-    expect(items()[1]!.nextElementSibling).toBe(el("status-mode"));
+    // Prima di «Si scrive», che sta subito prima della modalità.
+    expect(items()[1]!.nextElementSibling).toBe(el("status-standing"));
+    expect(el("status-standing").nextElementSibling).toBe(el("status-mode"));
     expect(world.tooltips.get(items()[1]!)).toBe("Apri il conteggio");
     expect(el("status-band").hasAttribute("data-surface-counts")).toBe(true);
     items()[1]!.click();
@@ -668,6 +672,116 @@ describe("le voci della superficie", () => {
     life.close();
     expect(listeners.size).toBe(0);
     expect(items()).toHaveLength(0);
+  });
+});
+
+describe("«Si scrive»", () => {
+  type Kind = "writes" | "closed" | "body" | "readonly";
+  const TEXT: Record<Kind, string> = { writes: "Si scrive", closed: "2 parti chiuse", body: "Solo il testo", readonly: "Sola lettura" };
+  /// Una superficie con lo stato del documento, che si può cambiare.
+  function standingPane(first: Kind | null) {
+    let kind = first;
+    const listeners = new Set<() => void>();
+    const pane = {
+      surface: {
+        modes: [{ id: "a" }, { id: "b" }],
+        standing: {
+          current: () => (kind ? { kind, text: TEXT[kind], title: `${TEXT[kind]}, per esteso`, body: "", recording: false } : null),
+          subscribe(listener: () => void) {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+          },
+        },
+      },
+      mode: { label: () => "Pagina" },
+    };
+    return {
+      pane,
+      listeners,
+      set(next: Kind | null) {
+        kind = next;
+        for (const listener of [...listeners]) listener();
+      },
+    };
+  }
+  const button = () => el("status-standing") as HTMLButtonElement;
+
+  it("nasce in JS prima della modalità, e si vede solo quando il documento si scrive tutto", () => {
+    const doc = standingPane("writes");
+    world.tab = { k: "doc" };
+    world.pane = doc.pane;
+    mountStatusBand(life);
+    const standing = button();
+    expect(standing.tagName).toBe("BUTTON");
+    expect([...standing.classList]).toEqual(["status-item", "status-item--button", "status-standing"]);
+    expect(standing.dataset.surfaceItem).toBe("standing");
+    expect(standing.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(standing.nextElementSibling).toBe(el("status-mode"));
+    expect(standing.hidden).toBe(false);
+    expect(standing.textContent).toBe("Si scrive");
+    expect(standing.querySelector(".status-standing-mark")!.getAttribute("aria-hidden")).toBe("true");
+    expect(standing.getAttribute("aria-label")).toBe('document.standing.label {"state":"Si scrive"}');
+    expect(world.tooltips.get(standing)).toBe("Si scrive, per esteso");
+    // Gli altri stati restano nel chip della testata: la banda si spegne.
+    for (const kind of ["closed", "body", "readonly"] as const) {
+      doc.set(kind);
+      expect(standing.hidden, kind).toBe(true);
+    }
+    doc.set("writes");
+    expect(standing.hidden).toBe(false);
+    doc.set(null);
+    expect(standing.hidden).toBe(true);
+  });
+
+  it("premuto, chiede la spiegazione con sé come ancora", () => {
+    world.tab = { k: "doc" };
+    world.pane = standingPane("writes").pane;
+    mountStatusBand(life);
+    const anchors: HTMLElement[] = [];
+    life.add(on("standing-open", (anchor) => anchors.push(anchor)));
+    button().click();
+    expect(anchors).toEqual([button()]);
+  });
+
+  it("segue il riquadro a fuoco, e un riquadro vuoto o una vista non lo accendono", () => {
+    const writes = standingPane("writes");
+    const readonly = standingPane("readonly");
+    world.tab = { k: "doc" };
+    world.panes = new Map<string, unknown>([
+      ["p1", writes.pane],
+      ["p2", readonly.pane],
+      ["p3", {}],
+    ]);
+    mountStatusBand(life);
+    expect(button().hidden).toBe(false);
+    world.layout.focus = "p2";
+    emit("layout");
+    expect(button().hidden).toBe(true);
+    // Ascolta solo il riquadro a fuoco.
+    expect(writes.listeners.size).toBe(0);
+    expect(readonly.listeners.size).toBe(1);
+    world.layout.focus = "p3";
+    emit("layout");
+    expect(button().hidden).toBe(true);
+    expect(readonly.listeners.size).toBe(0);
+    world.layout.focus = "p1";
+    emit("layout");
+    expect(button().hidden).toBe(false);
+    world.tab = { k: "view" };
+    emit("active-doc", null);
+    expect(button().hidden).toBe(true);
+    expect(writes.listeners.size).toBe(0);
+  });
+
+  it("smontata, il bottone se ne va e lo stato non è più ascoltato", () => {
+    const doc = standingPane("writes");
+    world.tab = { k: "doc" };
+    world.pane = doc.pane;
+    mountStatusBand(life);
+    expect(doc.listeners.size).toBe(1);
+    life.close();
+    expect(document.getElementById("status-standing")).toBeNull();
+    expect(doc.listeners.size).toBe(0);
   });
 });
 

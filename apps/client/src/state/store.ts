@@ -80,6 +80,11 @@ export interface Signals {
   /// Una scheda di collegamento (K8) è arrivata o cambiata: la Live
   /// ridisegna i segnalibri web (`state/link-cards.ts`).
   "link-cards": [];
+  /// «Si scrive» della banda è stato premuto (payload: il bottone, ancora
+  /// della spiegazione): il pannello del documento apre la spiegazione dello
+  /// stato del riquadro a fuoco, la stessa del chip. Il verso è questo perché
+  /// la banda è della cornice e il chip del pannello, che non si conoscono.
+  "standing-open": [anchor: HTMLElement];
 }
 
 type Listener = (...args: never[]) => unknown;

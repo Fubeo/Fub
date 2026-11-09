@@ -9,7 +9,11 @@
 // Il documento a fuoco può portare le sue voci (`EditorSurface.status`: il
 // foglio, le parole, la lingua). Se conta lui le parole, il conteggio della
 // view dichiarata si fa da parte: lo stesso numero da due fonti non si dice.
-import type { SurfaceMode, SurfacePaperFit, SurfaceStatus } from "../../../editors/core/registry";
+//
+// «Si scrive», lo stato normale del documento a fuoco, lo dice la banda a voce
+// bassa, subito prima della modalità; premuto apre la spiegazione del chip
+// della testata (`panels/standing.ts`). Gli altri stati restano nel chip.
+import type { SurfaceMode, SurfacePaperFit, SurfaceStanding, SurfaceStatus } from "../../../editors/core/registry";
 import { settings, vaultStatus } from "../../../host/query";
 import { onLanguage, t } from "../../../i18n/strings";
 import { paneOf, selectedMode } from "../../../state/document-controller";
@@ -17,7 +21,7 @@ import { documentSessions } from "../../../state/document-session";
 import { onEvent } from "../../../state/kernel";
 import { activeTab, layout } from "../../../state/layout";
 import { modeIcon, openModeMenu } from "../../../state/mode-menu";
-import { on, state } from "../../../state/store";
+import { emit, on, state } from "../../../state/store";
 import { zoomBy } from "../../../state/zoom";
 import { iconEl } from "../../../ui/icons";
 import type { Lifetime } from "../../../ui/lifetime";
@@ -68,6 +72,28 @@ function drawModeButton(button: HTMLElement, active: SurfaceMode | undefined): v
   if (name.textContent !== label) name.textContent = label;
   button.setAttribute("aria-label", t("document.toolbar.mode_current", { mode: label }));
   button.hidden = false;
+}
+
+/// Il bottone di «Si scrive», subito prima di `mode`: il pallino e la parola.
+/// Nasce nascosto; lo accende `drawStanding`.
+function createStandingItem(mode: HTMLElement): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.id = "status-standing";
+  button.className = "status-item status-item--button status-standing";
+  button.dataset.surfaceItem = "standing";
+  button.setAttribute("aria-haspopup", "dialog");
+  button.setAttribute("aria-expanded", "false");
+  button.setAttribute("aria-label", t("document.standing.name"));
+  button.hidden = true;
+  const mark = document.createElement("span");
+  mark.className = "status-standing-mark";
+  mark.setAttribute("aria-hidden", "true");
+  const word = document.createElement("span");
+  word.className = "status-standing-text";
+  button.append(mark, word);
+  mode.before(button);
+  return button;
 }
 
 export function mountStatusBand(lifetime: Lifetime): void {
@@ -133,8 +159,36 @@ export function mountStatusBand(lifetime: Lifetime): void {
     const several = (pane?.surface?.modes.length ?? 0) > 1;
     drawModeButton(mode, several ? selectedMode(pane) : undefined);
   }
+  // «Si scrive»: nasce qui, prima della modalità, e si vede solo quando il
+  // documento a fuoco si scrive tutto. Il testo è quello del chip.
+  const standing = mode?.parentElement ? createStandingItem(mode) : null;
+  if (standing) {
+    lifetime.listen(standing, "click", () => emit("standing-open", standing));
+    lifetime.add(() => standing.remove());
+  }
+  let heard: SurfaceStanding | null = null;
+  let stopHearing: (() => void) | null = null;
+  lifetime.add(() => stopHearing?.());
+  function drawStanding(): void {
+    if (!standing) return;
+    const tab = state.vaultRoot ? activeTab() : null;
+    const source = tab?.k === "doc" ? paneOf(layout.focus)?.surface?.standing ?? null : null;
+    if (source !== heard) {
+      stopHearing?.();
+      heard = source;
+      stopHearing = source?.subscribe(drawStanding) ?? null;
+    }
+    const now = source?.current() ?? null;
+    standing.hidden = now?.kind !== "writes";
+    if (!now || standing.hidden) return;
+    const word = standing.querySelector<HTMLElement>(":scope > .status-standing-text")!;
+    if (word.textContent !== now.text) word.textContent = now.text;
+    standing.setAttribute("aria-label", t("document.standing.label", { state: now.text }));
+    setTooltip(standing, now.title);
+  }
   const drawMode = (): void => {
     drawModeItem();
+    drawStanding();
     // Il riquadro si è chiuso col suo menu aperto: il menu non sceglie più
     // niente, e si chiude con lui.
     if (menuFor !== null && !paneOf(menuFor)) closeContextMenu();
@@ -236,9 +290,9 @@ export function mountStatusBand(lifetime: Lifetime): void {
       if (el.textContent !== item.text) el.textContent = item.text;
       if (item.hint) setTooltip(el, item.hint);
     }
-    // Al loro posto, prima della modalità; un elemento che c'è già non si
-    // sposta, che perderebbe il fuoco.
-    let next: Element | null = mode;
+    // Al loro posto, prima di «Si scrive» e della modalità; un elemento che
+    // c'è già non si sposta, che perderebbe il fuoco.
+    let next: Element | null = standing ?? mode;
     for (const item of [...list].reverse()) {
       const el = items.get(item.id)!;
       if (end && el.nextElementSibling !== next) end.insertBefore(el, next);

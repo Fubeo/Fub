@@ -2414,6 +2414,25 @@ kbd,
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -1px;
 }
+/* «Si scrive» è lo stato normale di un documento: lo dice la banda, a voce
+   bassa, accanto alla modalità. Premuto apre lo stesso riquadro del chip. Gli
+   altri stati (sola lettura, parti chiuse, motore spento) restano nella
+   testata, dove si vedono. */
+.status-standing {
+  color: var(--muted);
+}
+.status-standing > .status-standing-mark {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--success);
+}
+.status-standing[aria-expanded="true"] {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+}
 
 /* ── La concentrazione ───────────────────────────────────────────────────── */
 

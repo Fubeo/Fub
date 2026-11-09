@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SurfaceStanding, SurfaceStandingState } from "../editors/core/registry";
 import { t } from "../i18n/strings";
 import { createStandingChip } from "./standing";
+import structure from "../theme/scrittoio/structure.css?raw";
+import phone from "../shells/scrittoio/mobile/mobile.css?raw";
 
 afterEach(() => document.body.replaceChildren());
 
@@ -180,6 +182,97 @@ describe("il chip dello stato", () => {
     chip.follow(null);
     expect(chip.element.hidden).toBe(true);
     expect(from.listeners.size).toBe(0);
+    chip.destroy();
+  });
+});
+
+describe("«Si scrive» nella banda, gli altri stati nella testata", () => {
+  const WRITES: SurfaceStandingState = { kind: "writes", text: "Si scrive", title: "Si scrive tutto", body: "Fub scrive il file com'è.", recording: false };
+
+  /// Le regole del CSS che nominano `selector`, intere: a happy-dom si dà la
+  /// regola sola, non tutto il foglio.
+  function rulesNaming(css: string, selector: string): string {
+    const found = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, head]) => head!.includes(selector));
+    return found.map(([rule]) => rule).join("\n");
+  }
+
+  it("la testata nasconde il chip di «Si scrive», sul computer e sul telefono, e tiene gli altri", () => {
+    const sheet = document.createElement("style");
+    sheet.textContent = rulesNaming(structure, '.pane-standing[data-standing="writes"]');
+    expect(sheet.textContent).toContain("display: none");
+    expect(rulesNaming(phone, '.pane-standing[data-standing="writes"]')).toContain("display: none");
+    document.head.append(sheet);
+    const bar = document.createElement("div");
+    bar.className = "pane-toolbar";
+    document.body.append(bar);
+    const chip = createStandingChip();
+    bar.append(chip.element);
+    const from = source(WRITES);
+    chip.follow(from.standing);
+    expect(getComputedStyle(chip.element).display).toBe("none");
+    for (const kind of ["closed", "body", "readonly"] as const) {
+      from.set({ ...WRITES, kind, text: kind });
+      expect(getComputedStyle(chip.element).display, kind).not.toBe("none");
+    }
+    chip.destroy();
+    sheet.remove();
+  });
+
+  it("la stessa spiegazione si apre dal chip e da fuori, accanto a chi la chiede", () => {
+    const chip = createStandingChip();
+    document.body.append(chip.element);
+    const band = document.createElement("button");
+    band.type = "button";
+    document.body.append(band);
+    const from = source(CLOSED);
+    chip.follow(from.standing);
+    const button = chip.element.querySelector<HTMLButtonElement>(".pane-standing-chip")!;
+    button.click();
+    const same = (html: string) => html.replace(/-\d+"/g, '"');
+    const fromChip = same(document.querySelector<HTMLElement>(".pane-standing-panel")!.innerHTML);
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    // Da fuori: la spiegazione si sposta, ed è la stessa.
+    chip.openFrom(band);
+    expect(document.querySelectorAll(".pane-standing-panel")).toHaveLength(1);
+    expect(same(document.querySelector<HTMLElement>(".pane-standing-panel")!.innerHTML)).toBe(fromChip);
+    expect(band.getAttribute("aria-expanded")).toBe("true");
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    // Di nuovo dallo stesso posto: si chiude.
+    chip.openFrom(band);
+    expect(document.querySelector(".pane-standing-panel")).toBeNull();
+    expect(band.getAttribute("aria-expanded")).toBe("false");
+    chip.destroy();
+  });
+
+  it("aperta dalla banda, si chiude quando il tipo cambia; aperta dal chip, si ridisegna", () => {
+    const chip = createStandingChip();
+    document.body.append(chip.element);
+    const band = document.createElement("button");
+    document.body.append(band);
+    const from = source(WRITES);
+    chip.follow(from.standing);
+    chip.openFrom(band);
+    expect(document.querySelector(".pane-standing-title")!.textContent).toBe(WRITES.title);
+    // Il file diventa di sola lettura: la banda si spegne, la spiegazione se ne va.
+    from.set({ ...WRITES, kind: "readonly", text: "Sola lettura", title: "Sola lettura, per non rovinare il file" });
+    expect(document.querySelector(".pane-standing-panel")).toBeNull();
+    expect(band.getAttribute("aria-expanded")).toBe("false");
+    expect(chip.element.dataset.standing).toBe("readonly");
+    // Dal chip, che resta dov'è, la spiegazione segue lo stato nuovo.
+    chip.element.querySelector<HTMLButtonElement>(".pane-standing-chip")!.click();
+    from.set(CLOSED);
+    expect(document.querySelector(".pane-standing-title")!.textContent).toBe(CLOSED.title);
+    chip.destroy();
+  });
+
+  it("senza stato `openFrom` non apre niente", () => {
+    const chip = createStandingChip();
+    document.body.append(chip.element);
+    const band = document.createElement("button");
+    document.body.append(band);
+    chip.follow(null);
+    chip.openFrom(band);
+    expect(document.querySelector(".pane-standing-panel")).toBeNull();
     chip.destroy();
   });
 });

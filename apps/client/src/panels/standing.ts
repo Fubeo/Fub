@@ -6,6 +6,11 @@
 // Le parole e le azioni le dà la superficie (`EditorSurface.standing`): qui
 // si disegnano soltanto. Il chip si annuncia una volta, quando il documento
 // arriva; cambiare stato dopo non parla, ma la parola nuova sale di 4 px.
+//
+// «Si scrive» è lo stato normale: la testata non lo mostra (`structure.css`),
+// lo dice la banda (`status-band.ts`), e sul telefono la voce in cima a «…».
+// Da lì la spiegazione è la stessa: `openFrom` la apre accanto a chi l'ha
+// chiesta.
 import type { SurfaceStanding, SurfaceStandingAction, SurfaceStandingState } from "../editors/core/registry";
 import { t } from "../i18n/strings";
 import { textButton } from "../kit/button";
@@ -26,6 +31,10 @@ export interface StandingChip {
   readonly element: HTMLElement;
   /// Segue lo stato di `standing`; `null` toglie il chip.
   follow(standing: SurfaceStanding | null): void;
+  /// Apre la spiegazione dello stato accanto ad `anchor` (il chip, la voce
+  /// della banda, il «…» del telefono), o la chiude se è già aperta da lì.
+  /// Aperta da un altro posto, si sposta. Senza stato non fa niente.
+  openFrom(anchor: HTMLElement): void;
   destroy(): void;
 }
 
@@ -62,7 +71,7 @@ export function createStandingChip(): StandingChip {
   let stop: (() => void) | null = null;
   let shown: SurfaceStandingState | null = null;
   let announced = false;
-  let opened: { popover: PopoverHandle; drawn: Lifetime; body: HTMLElement } | null = null;
+  let opened: { popover: PopoverHandle; drawn: Lifetime; body: HTMLElement; anchor: HTMLElement } | null = null;
 
   function close(): void {
     opened?.popover.close();
@@ -152,12 +161,14 @@ export function createStandingChip(): StandingChip {
     opened.popover.reposition();
   }
 
-  function open(): void {
+  /// Il popover segna `aria-expanded` sull'ancora che è un bottone, e lo
+  /// toglie quando si chiude: il chip, la voce della banda, il «…».
+  function open(anchor: HTMLElement): void {
     if (!shown) return;
     const body = document.createElement("div");
     body.className = "pane-standing-panel";
     const popover = openPopover({
-      anchor: chip,
+      anchor,
       content: body,
       placement: "bottom",
       align: "start",
@@ -167,19 +178,19 @@ export function createStandingChip(): StandingChip {
       onClose: () => {
         opened?.drawn.close();
         opened = null;
-        chip.setAttribute("aria-expanded", "false");
       },
     });
     if (popover.closed) return;
-    opened = { popover, drawn: openLifetime(), body };
-    chip.setAttribute("aria-expanded", "true");
+    opened = { popover, drawn: openLifetime(), body, anchor };
     drawBody();
     (focusableElements(popover.element)[0] ?? popover.element).focus({ preventScroll: true });
   }
-  life.listen(chip, "click", () => {
-    if (opened) close();
-    else open();
-  });
+  function openFrom(anchor: HTMLElement): void {
+    const from = opened?.anchor ?? null;
+    close();
+    if (from !== anchor) open(anchor);
+  }
+  life.listen(chip, "click", () => openFrom(chip));
 
   function draw(): void {
     const next = followed?.current() ?? null;
@@ -190,6 +201,10 @@ export function createStandingChip(): StandingChip {
       close();
       return;
     }
+    // Aperta da fuori (la banda, il «…»), la spiegazione era per lo stato di
+    // allora: se il tipo cambia — il file diventa di sola lettura — si chiude,
+    // la banda si spegne e il chip compare in testata.
+    if (opened && opened.anchor !== chip && before !== null && before.kind !== next.kind) close();
     element.dataset.standing = next.kind;
     if (word.textContent !== next.text) {
       word.textContent = next.text;
@@ -235,6 +250,7 @@ export function createStandingChip(): StandingChip {
       stop = standing?.subscribe(draw) ?? null;
       draw();
     },
+    openFrom,
     destroy() {
       stop?.();
       stop = null;

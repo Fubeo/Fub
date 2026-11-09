@@ -537,6 +537,12 @@
 :root[data-client-shell="mobile"] .sheet-title {
   gap: 0;
 }
+/* «Si scrive» è lo stato normale: sul telefono sta in «…» (la prima voce, che
+   apre la stessa spiegazione del chip). Gli altri stati restano nella testata,
+   dove si vedono, col chip dei 44 px del tocco (`shells/mobile/mobile.css`). */
+:root[data-client-shell="mobile"] .pane-toolbar > .pane-standing[data-standing="writes"] {
+  display: none;
+}
 
 @media (max-width: 599px) {
   /* ── In piedi il foglio è lo schermo ──────────────────────────────────────

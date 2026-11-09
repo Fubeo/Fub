@@ -62,7 +62,7 @@ import { createSelectionBubble, type SelectionBubble } from "./selection-bubble"
 import { bubbleWanted, miniBarMode, mountMiniBar } from "./mini-bar";
 import { openEditorMenu, type EditorMenuHost } from "./editor-menu";
 import { createStandingChip, type StandingChip } from "./standing";
-import { platformSupports } from "../platform/capabilities";
+import { activeShell, platformSupports } from "../platform/capabilities";
 import { writeClipboardText } from "../platform/clipboard";
 import {
   chooseExport,
@@ -206,6 +206,12 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
   }));
   // Il nome del vault apre il percorso di ogni testata: arriva dopo
   // l'apertura (il nome scelto dalla persona lo dice il registro dei vault).
+  // «Si scrive» della banda: la spiegazione è quella del chip del riquadro a
+  // fuoco, accanto al bottone della banda.
+  lifetime.add(on("standing-open", (anchor) => {
+    const pane = paneOf(layout.focus);
+    if (pane && activeTab(pane.id)?.k === "doc") frameOf(pane).standing.openFrom(anchor);
+  }));
   lifetime.add(on("vault-name", () => {
     for (const id of frames.keys()) {
       const pane = paneOf(id);
@@ -1228,6 +1234,15 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
     command(id) ? [{ label, hint: chord(id), run: () => runCommand(id) }] : [];
   const doc = activeDoc(r.id);
   const surface = r.surface;
+  // Sul telefono la testata non mostra «Si scrive» (`mobile.css`) e la banda
+  // non c'è: lo dice la prima voce di «…», che apre la stessa spiegazione del
+  // chip, accanto a «…». Gli altri stati restano nel chip, dove si vedono. La
+  // condizione è la stessa della regola, la shell del telefono.
+  const standing = doc ? surface?.standing?.current() ?? null : null;
+  const menuButton = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+  const writes: MenuItem[] = standing?.kind === "writes" && menuButton && activeShell().id === "mobile"
+    ? [{ label: standing.text, run: () => frameOf(r).standing.openFrom(menuButton) }]
+    : [];
   // La vista sorgente si chiede a **questo** riquadro, non a quello col fuoco
   // come farebbe `available`: il menu si apre anche su un riquadro accanto.
   const sourceView = offeredSourceView(r);
@@ -1248,7 +1263,7 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
       },
     }] : []),
   ];
-  showContextMenu(event, [
+  const items: MenuItem[] = [
     ...offered("shell.pane.split.right", t("pane.menu.split_right")),
     ...offered("shell.pane.split.down", t("pane.menu.split_down")),
     ...(sourceView ? [{
@@ -1267,7 +1282,10 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
     }] : []),
     ...offered("shell.tab.close", t("pane.menu.close_tab")).map((item) => ({ ...item, separator: true })),
     ...offered("shell.pane.close", t("pane.menu.close_pane")),
-  ], {
+  ];
+  // «Si scrive» sta da sé, in cima: una riga lo separa dai gesti del riquadro.
+  if (writes.length > 0 && items[0]) items[0] = { ...items[0], separator: true };
+  showContextMenu(event, [...writes, ...items], {
     header: { icon: "layout-dashboard", kind: t("pane.menu.head") },
     search: true,
     searchable: sourceView || sourceShown ? [{
