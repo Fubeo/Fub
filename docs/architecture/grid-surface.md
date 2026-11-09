@@ -92,14 +92,13 @@ le rifà tutte, la cella aperta resta anche fuori. Le disegna il gestore
 dello scorrimento, con le misure lette prima di scrivere (anche per una
 finestra arrivata): un giro mette il riquadro, una fascia di un decimo e al
 più tre righe nuove del margine (`GRID_FRAME_NEW_ROWS`), rifà al più 48 celle
-(`GRID_FRAME_REFILLS`); il resto, coi segni, gli oggetti e la misura delle
-celle, sta nei fotogrammi. Sotto c'è la carta (`.grid-paper`, copiata nelle
-fasce ferme), grande quanto il riquadro e ferma in esso: fili delle righe
-sull'altezza di serie (`--grid-row`), un filo per colonna, celle opache; se
-lo scorrimento veloce precede il disegno si vede la griglia vuota. In G2
-(quattro giri): fascia uniforme più alta 1 px (prima 424); gestore p90 6–9
-ms, peggiore 17–20; fotogramma p90 11–13, peggiore 15–17 (prima 0,4 e 28–40
-ms il gestore, 16–20 e 23–26 il fotogramma, che rifaceva le righe).
+(`GRID_FRAME_REFILLS`); il resto, segni, oggetti e misura delle celle, va
+nei fotogrammi. Sotto c'è la carta (`.grid-paper`, copiata nelle fasce
+ferme), grande e ferma quanto il riquadro: fili delle righe sull'altezza di
+serie (`--grid-row`), un filo per colonna, celle opache, e la griglia vuota
+dove lo scorrimento precede il disegno. In G2 (quattro giri) la fascia
+uniforme più alta è 1 px (prima 424); gestore p90 6–9 ms, peggiore 17–20,
+fotogramma p90 11–13, peggiore 15–17 (prima 0,4 e 28–40, 16–20 e 23–26).
 
 ## Scrivere nelle celle
 
