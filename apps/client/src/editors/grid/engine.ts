@@ -69,6 +69,7 @@ import {
   type GridRange,
 } from "./merges";
 import { attachCommentCards, commentDescription } from "./comment-card";
+import { cornerPiece, rectPieces, wholeRect, type Bands, type Rect, type Zone } from "./marks";
 import { drawObject, GridMediaCache, objectLabel } from "./objects";
 import { hasBorders, horizontalOf, iconOf, paintBorders, paintCell, spills } from "./paint";
 import { currencyFormat, shortcutCommand, shortcutDialog } from "./shortcuts";
@@ -539,8 +540,16 @@ export function uniformRowRange(total: number, scrollTop: number, viewportHeight
 function clamp(value: number, maximum: number): number {
   return Math.max(0, Math.min(maximum, value));
 }
-/// Gli elementi che `#render` disegna direttamente nella griglia.
-const DRAWN = ".grid-row, .grid-freeze, .grid-object, .grid-selection, .grid-fill-handle, .grid-fill-preview, .grid-cut-mark, .grid-resize-guide, .grid-resize-label, .grid-move-preview, .grid-formula-ref";
+/// La zona del piano di ciò che sta su una colonna e una riga, bloccate o no.
+function zoneOf(frozenColumn: boolean, frozenRow: boolean): Zone {
+  return frozenColumn && frozenRow ? "corner" : frozenRow ? "top" : frozenColumn ? "left" : "body";
+}
+/// Di quanto il lato di un segno tagliato dal bordo della sua zona passa
+/// oltre il taglio: il livello lo taglia, e il bordo del segno non si vede
+/// dove la zona finisce (`marks.ts`, `bleed`). Più dei 2 px del bordo.
+const MARK_BLEED = 3;
+/// Ciò che un disegno mette in ogni livello del piano, nell'ordine.
+type Drawing = Map<HTMLElement, HTMLElement[]>;
 
 /// Dà a `target` gli attributi di `source`, e toglie quelli che lui non ha.
 function syncAttributes(target: Element, source: Element): void {
@@ -617,7 +626,21 @@ export class GridEngine {
   readonly #root: HTMLElement;
   readonly #formulaHost: HTMLElement;
   readonly #viewport: HTMLElement;
-  readonly #canvas: HTMLElement;
+  /// Il piano: grande quanto il foglio, con gli strati uno sopra l'altro
+  /// (le righe del corpo, i livelli dei segni, la testa). Le fasce ferme ci
+  /// stanno col solo `sticky`: nessuno script le rimette a posto.
+  readonly #plane: HTMLElement;
+  /// La testa, ferma in alto: la riga delle intestazioni e le righe bloccate.
+  readonly #head: HTMLElement;
+  /// Le righe del corpo, che scorrono.
+  readonly #body: HTMLElement;
+  /// Un livello dei segni per zona: ognuno taglia ciò che esce dalla zona.
+  readonly #layers: Readonly<Record<Zone, HTMLElement>>;
+  /// Il livello «lift» di ogni zona: i segni d'angolo e gli oggetti, interi.
+  /// Per il corpo è il suo livello dei segni.
+  readonly #lifts: Readonly<Record<Zone, HTMLElement>>;
+  /// Fermo nell'angolo del riquadro: la guida e la misura di un bordo tirato.
+  readonly #fixed: HTMLElement;
   readonly #corner: HTMLElement;
   readonly #cellEditorHost: HTMLElement;
   readonly #notice: HTMLElement;
@@ -730,7 +753,7 @@ export class GridEngine {
   #objectGesture: ObjectGesture | null = null;
   /// Dove un oggetto spostato si mostra finché la finestra riletta non lo
   /// porta lì: vale finché l'oggetto è ancora quello di prima.
-  #placed: { readonly key: string; readonly before: GridObject; readonly rect: ObjectRect } | null = null;
+  #placed: { readonly key: string; readonly before: GridObject; readonly rect: ObjectRect; readonly zone: Zone } | null = null;
   /// Il testo di una casella di testo che si scrive.
   #objectText: { readonly key: string; readonly field: HTMLTextAreaElement; readonly original: string } | null = null;
   /// Ciò che si dice a chi non vede quando un oggetto si seleziona.
@@ -781,17 +804,31 @@ export class GridEngine {
     this.#viewport.tabIndex = 0;
     this.#viewport.setAttribute("role", "grid");
     this.#viewport.setAttribute("aria-label", t("grid.surface"));
-    this.#canvas = document.createElement("div");
-    this.#canvas.className = "grid-canvas";
-    this.#canvas.setAttribute("role", "presentation");
+    const part = (className: string, hidden = true): HTMLElement => {
+      const element = document.createElement("div");
+      element.className = className;
+      if (hidden) element.setAttribute("aria-hidden", "true");
+      return element;
+    };
+    this.#plane = part("grid-plane", false);
+    this.#plane.setAttribute("role", "presentation");
+    this.#head = part("grid-head", false);
+    this.#body = part("grid-rows", false);
+    const body = part("grid-marks-body");
+    this.#layers = { body, top: part("grid-marks-top"), left: part("grid-marks-left"), corner: part("grid-marks-corner") };
+    this.#lifts = { body, top: part("grid-lift-top"), left: part("grid-lift-left"), corner: part("grid-lift-corner") };
+    this.#fixed = part("grid-fixed");
+    // La testa prima del corpo, per chi legge: `sticky` e `z-index` la tengono
+    // sopra comunque. I livelli della testa stanno dopo le sue righe.
+    this.#head.append(this.#layers.top, this.#lifts.top, this.#layers.corner, this.#lifts.corner);
     this.#corner = document.createElement("div");
     this.#corner.className = "grid-corner";
     this.#cellEditorHost = document.createElement("div");
     this.#cellEditorHost.className = "grid-cell-editor";
     this.#cellEditorHost.hidden = true;
     this.#cellEditorHost.setAttribute("aria-hidden", "true");
-    this.#canvas.append(this.#cellEditorHost);
-    this.#viewport.append(this.#canvas);
+    this.#plane.append(this.#head, this.#body, body, this.#layers.left, this.#lifts.left, this.#fixed, this.#cellEditorHost);
+    this.#viewport.append(this.#plane);
     this.#objectsSummary = document.createElement("p");
     this.#objectsSummary.className = "grid-objects-summary sr-only";
     this.#objectsSummary.id = `grid-${options.surfaceId}-objects`;
@@ -2190,9 +2227,14 @@ export class GridEngine {
       frozenHeight: this.#rows.offsets[frozenRows] ?? 0,
       frozenWidth: this.#columns.offsets[frozenColumns] ?? 0,
     };
-    this.#canvas.style.width = `${this.#frame.rowHeader + this.#columns.total}px`;
-    this.#canvas.style.height = `${this.#frame.columnHeader + this.#rows.total}px`;
-    this.#canvas.style.fontSize = zoom === 1 ? "" : `${(zoom * 100).toFixed(1)}%`;
+    // La misura del piano e delle fasce ferme, per gli strati di `structure.css`.
+    const plane = this.#plane.style;
+    const bands = this.#bands();
+    plane.setProperty("--grid-w", `${this.#frame.rowHeader + this.#columns.total}px`);
+    plane.setProperty("--grid-h", `${this.#frame.columnHeader + this.#rows.total}px`);
+    plane.setProperty("--grid-top-h", `${bands.top}px`);
+    plane.setProperty("--grid-left-w", `${bands.left}px`);
+    plane.fontSize = zoom === 1 ? "" : `${(zoom * 100).toFixed(1)}%`;
     this.#viewport.classList.toggle("no-gridlines", !view.gridlines);
     this.#viewport.setAttribute("aria-rowcount", String(sheet.rows.length + 1));
     this.#viewport.setAttribute("aria-colcount", String(sheet.columns.length + 1));
@@ -2218,10 +2260,42 @@ export class GridEngine {
     return out;
   }
 
-  /// La sinistra di una colonna nel canvas: una colonna bloccata resta ferma.
+  /// La sinistra di una colonna nel piano. Una colonna bloccata la tiene
+  /// ferma `sticky`, non lo scorrimento sommato qui.
   #columnLeft(column: number): number {
-    const left = this.#frame.rowHeader + this.#columns.offsets[column];
-    return column < this.#frame.frozenColumns ? left + this.#viewport.scrollLeft : left;
+    return this.#frame.rowHeader + this.#columns.offsets[column];
+  }
+
+  /// La misura delle fasce ferme nel piano: l'altezza della testa e la
+  /// larghezza della colonna ferma, ognuna col suo filo sull'ultimo pixel.
+  #bands(): Bands {
+    const frame = this.#frame;
+    return { top: frame.columnHeader + frame.frozenHeight, left: frame.rowHeader + frame.frozenWidth };
+  }
+
+  /// Quanto una zona è scorsa: le fasce ferme non scorrono nel loro verso.
+  #zoneScroll(frozenColumn: boolean, frozenRow: boolean): { left: number; top: number } {
+    return { left: frozenColumn ? 0 : this.#viewport.scrollLeft, top: frozenRow ? 0 : this.#viewport.scrollTop };
+  }
+
+  /// Mette `element` nel disegno di `container`.
+  #draw(drawing: Drawing, container: HTMLElement, element: HTMLElement): void {
+    const list = drawing.get(container);
+    if (list) list.push(element);
+    else drawing.set(container, [element]);
+  }
+
+  /// Un segno a rettangolo (`box` nel piano): un pezzo per zona che tocca,
+  /// tagliato da `marks.ts`, nel livello della sua zona.
+  #rectMark(drawing: Drawing, className: string, box: { left: number; top: number; width: number; height: number }): void {
+    const rect: Rect = { x: box.left, y: box.top, w: box.width, h: box.height };
+    for (const piece of rectPieces(rect, this.#bands(), { bleed: MARK_BLEED })) {
+      const element = document.createElement("div");
+      element.className = className;
+      element.setAttribute("aria-hidden", "true");
+      this.#place(element, piece.rect.x, piece.rect.y, piece.rect.w, piece.rect.h);
+      this.#draw(drawing, this.#layers[piece.zone], element);
+    }
   }
 
   #render(): void {
@@ -2260,10 +2334,11 @@ export class GridEngine {
         anchorsByRow.set(host, [...(anchorsByRow.get(host) ?? []), merge]);
       }
     }
-    const rows: HTMLElement[] = [];
+    const headRows: HTMLElement[] = [];
+    const bodyRows: HTMLElement[] = [];
     const measures: HTMLElement[] = [];
 
-    if (frame.columnHeader > 0) rows.push(this.#columnHeaders(renderedColumns, range));
+    if (frame.columnHeader > 0) headRows.push(this.#columnHeaders(renderedColumns, range));
     for (const row of renderedRows) {
       if (this.#rows.sizes[row] === 0) continue;
       const frozen = row < frame.frozenRows;
@@ -2272,12 +2347,9 @@ export class GridEngine {
       rowElement.dataset.row = String(row);
       rowElement.setAttribute("role", "row");
       rowElement.setAttribute("aria-rowindex", String(row + 2));
-      // Una riga bloccata sta ferma da sé (`#stick`), le altre scorrono.
-      if (frozen) {
-        this.#stick(rowElement, frame.columnHeader + this.#rows.offsets[row], frame.rowHeader + this.#columns.total, this.#rows.sizes[row]);
-      } else {
-        this.#place(rowElement, 0, frame.columnHeader + this.#rows.offsets[row], frame.rowHeader + this.#columns.total, this.#rows.sizes[row]);
-      }
+      // Una riga bloccata sta nella testa, che è ferma da sé; le altre nel
+      // corpo, che scorre. Tutte e due al loro posto nel piano.
+      this.#place(rowElement, 0, frame.columnHeader + this.#rows.offsets[row], frame.rowHeader + this.#columns.total, this.#rows.sizes[row]);
       if (frame.rowHeader > 0) {
         const header = document.createElement("div");
         header.className = "grid-header grid-row-header";
@@ -2289,7 +2361,7 @@ export class GridEngine {
         header.textContent = String(row + 1);
         header.style.pointerEvents = "none";
         if (frame.zoom !== 1) header.style.fontSize = `calc(var(--text-sm) * ${frame.zoom})`;
-        this.#stickLeft(header, frame.rowHeader, this.#rows.sizes[row]);
+        this.#stickLeft(header, 0, 0, frame.rowHeader, this.#rows.sizes[row]);
         rowElement.append(header);
       }
       const borders: HTMLElement[] = [];
@@ -2308,16 +2380,18 @@ export class GridEngine {
         if (element.border) borders.push(element.border);
       }
       rowElement.append(...borders);
-      rows.push(rowElement);
+      (frozen ? headRows : bodyRows).push(rowElement);
     }
-    rows.push(...this.#objectElements());
-    rows.push(...this.#freezeLines());
-    rows.push(...this.#selectionMarks(range));
-    rows.push(...this.#fillMarks(range));
-    rows.push(...this.#cutMarks());
-    rows.push(...this.#resizeMarks());
-    rows.push(...this.#moveMarks());
-    rows.push(...this.#referenceMarks());
+    // I segni, ognuno nel livello della zona dove cade.
+    const drawing: Drawing = new Map();
+    this.#objectElements(drawing);
+    this.#freezeLines(drawing);
+    this.#selectionMarks(drawing, range);
+    this.#fillMarks(drawing, range);
+    this.#cutMarks(drawing);
+    this.#resizeMarks(drawing);
+    this.#moveMarks(drawing);
+    this.#referenceMarks(drawing);
     this.#viewport.classList.toggle("filling", this.#drag?.kind === "fill");
     this.#viewport.classList.toggle("moving", this.#drag?.kind === "move");
     this.#viewport.classList.toggle("ranged", !this.#lone(range) || this.#others.length > 0);
@@ -2325,12 +2399,19 @@ export class GridEngine {
     // Ciò che non cambia resta: la cella sotto il puntatore riceve il clic e
     // il doppio clic, e l'editor aperto non perde il fuoco.
     const focused = this.#cellEditorHost.contains(document.activeElement);
-    const drawn = [...this.#viewport.children].filter((element): element is HTMLElement =>
-      element instanceof HTMLElement && element.matches(DRAWN));
-    // Tutto va prima del canvas: ciò che sta fermo da sé è nel flusso, e
-    // davanti al canvas la sua posizione naturale è in cima, dove `sticky`
-    // lo tiene.
-    this.#reconcile(this.#viewport, drawn, rows, this.#canvas);
+    const rowsOf = (parent: HTMLElement) => [...parent.children].filter((element): element is HTMLElement =>
+      element instanceof HTMLElement && element.classList.contains("grid-row"));
+    // Le righe della testa stanno prima dei suoi livelli.
+    this.#reconcile(this.#head, rowsOf(this.#head), headRows, this.#layers.top);
+    this.#reconcile(this.#body, rowsOf(this.#body), bodyRows);
+    // Un gruppo di righe vuoto non è un gruppo, per chi legge.
+    for (const [group, rows] of [[this.#head, headRows], [this.#body, bodyRows]] as const) {
+      if (rows.length) group.setAttribute("role", "rowgroup");
+      else group.removeAttribute("role");
+    }
+    for (const container of new Set([...Object.values(this.#layers), ...Object.values(this.#lifts), this.#fixed])) {
+      this.#reconcile(container, [...container.children] as HTMLElement[], drawing.get(container) ?? []);
+    }
     this.#fitCells(measures.filter((cell) => cell.isConnected));
     const editing = this.#editing?.owner === "cell" ? this.#editing : null;
     if (editing) {
@@ -2347,7 +2428,7 @@ export class GridEngine {
         this.#editing = null;
         this.#cellEditorHost.hidden = true;
         this.#cellEditorHost.setAttribute("aria-hidden", "true");
-        this.#canvas.append(this.#cellEditorHost);
+        this.#plane.append(this.#cellEditorHost);
       }
     }
     const active = this.#active();
@@ -2420,59 +2501,53 @@ export class GridEngine {
   /// Il rettangolo dell'intervallo scelto, uno solo e non cella per cella:
   /// con una cella sola il bordo è quello della cella attiva, su un taglio
   /// sono le formiche.
-  #selectionMarks(range: GridRange): HTMLElement[] {
-    const marks = this.#others.flatMap((area) => this.#rangeMark(area));
-    if (this.#lone(range) && !marks.length) return [];
+  #selectionMarks(drawing: Drawing, range: GridRange): void {
+    for (const area of this.#others) this.#rangeMark(drawing, area);
+    if (this.#lone(range) && !this.#others.length) return;
     // Sulle formiche di un taglio il bordo pieno le coprirebbe.
     const cut = this.#cutMark;
-    if (cut && cut.sheet === this.#sheet().id && sameRange(cut.range, range)) return marks;
-    return [...marks, ...this.#rangeMark(range)];
+    if (cut && cut.sheet === this.#sheet().id && sameRange(cut.range, range)) return;
+    this.#rangeMark(drawing, range);
   }
 
-  #rangeMark(range: GridRange): HTMLElement[] {
+  #rangeMark(drawing: Drawing, range: GridRange): void {
     const box = this.#rangeBox(range);
-    if (!box) return [];
-    const element = document.createElement("div");
-    element.className = "grid-selection";
-    element.setAttribute("aria-hidden", "true");
-    this.#place(element, box.left, box.top, box.width, box.height);
-    return [element];
+    if (box) this.#rectMark(drawing, "grid-selection", box);
   }
 
   /// Il quadratino di riempimento all'angolo della selezione e, mentre lo si
   /// tira, il contorno di ciò che riempirà. Sono gesti del puntatore: dalla
   /// tastiera gli stessi riempimenti sono Ctrl+D, Ctrl+R e Serie.
-  #fillMarks(range: GridRange): HTMLElement[] {
-    if (!this.#fillServed()) return [];
+  #fillMarks(drawing: Drawing, range: GridRange): void {
+    if (!this.#fillServed()) return;
     const drag = this.#drag?.kind === "fill" ? this.#drag : null;
-    const marks: HTMLElement[] = [];
     if (drag && !sameRange(drag.source, drag.target)) {
       const box = this.#rangeBox(drag.target);
-      if (box) {
-        const preview = document.createElement("div");
-        preview.className = "grid-fill-preview";
-        preview.setAttribute("aria-hidden", "true");
-        this.#place(preview, box.left, box.top, box.width, box.height);
-        marks.push(preview);
-      }
+      if (box) this.#rectMark(drawing, "grid-fill-preview", box);
     }
     const box = this.#rangeBox(drag?.target ?? range);
     if (box) {
+      // Un segno d'angolo: un pezzo solo, intero, nel livello «lift» della
+      // zona del suo angolo; sul filo del blocco la fascia ne copre ciò che
+      // le passa sotto, come copre le celle.
       const handle = document.createElement("div");
       handle.className = "grid-fill-handle";
       handle.setAttribute("aria-hidden", "true");
       handle.title = t("grid.fill.handle");
-      this.#place(handle, box.left + box.width - 4, box.top + box.height - 4, 8, 8);
-      marks.push(handle);
+      const right = box.left + box.width;
+      const bottom = box.top + box.height;
+      const piece = cornerPiece({ x: right - 4, y: bottom - 4, w: 8, h: 8 }, { x: right, y: bottom, start: false }, this.#bands());
+      this.#place(handle, piece.rect.x, piece.rect.y, piece.rect.w, piece.rect.h);
+      this.#draw(drawing, this.#lifts[piece.zone], handle);
     }
-    return marks;
   }
 
   /// Mentre si tira il bordo di un'intestazione: la guida dove cadrà e la
-  /// misura, nelle unità di Excel e in pixel del file.
-  #resizeMarks(): HTMLElement[] {
+  /// misura, nelle unità di Excel e in pixel del file. Stanno nel livello
+  /// fermo nell'angolo del riquadro, nelle sue coordinate.
+  #resizeMarks(drawing: Drawing): void {
     const resize = this.#resize;
-    if (!resize) return [];
+    if (!resize) return;
     const frame = this.#frame;
     const guide = document.createElement("div");
     guide.className = "grid-resize-guide";
@@ -2482,25 +2557,24 @@ export class GridEngine {
     label.setAttribute("aria-hidden", "true");
     const pixels = Math.round(resize.now / (WORKBOOK_SCALE * frame.zoom));
     const number = (value: number) => new Intl.NumberFormat(resolvedLanguage(), { maximumFractionDigits: 2 }).format(value);
-    const left = this.#viewport.scrollLeft;
-    const top = this.#viewport.scrollTop;
+    // Nel riquadro: una colonna o una riga bloccata non è scorsa.
     if (resize.axis === "column") {
-      const x = this.#columnLeft(resize.index) + resize.now;
-      this.#place(guide, x - 1, top, 2, this.#viewport.clientHeight);
+      const x = this.#columnLeft(resize.index) + resize.now - this.#zoneScroll(resize.index < frame.frozenColumns, true).left;
+      this.#place(guide, x - 1, 0, 2, this.#viewport.clientHeight);
       label.textContent = t("grid.resize.width", { chars: number(pixelsToChars(pixels)), px: String(pixels) });
       label.style.position = "absolute";
       label.style.left = `${x + 6}px`;
-      label.style.top = `${top + frame.columnHeader + 4}px`;
+      label.style.top = `${frame.columnHeader + 4}px`;
     } else {
-      const offset = frame.columnHeader + this.#rows.offsets[resize.index] + (resize.index < frame.frozenRows ? top : 0);
-      const y = offset + resize.now;
-      this.#place(guide, left, y - 1, this.#viewport.clientWidth, 2);
+      const y = frame.columnHeader + this.#rows.offsets[resize.index] + resize.now - this.#zoneScroll(true, resize.index < frame.frozenRows).top;
+      this.#place(guide, 0, y - 1, this.#viewport.clientWidth, 2);
       label.textContent = t("grid.resize.height", { points: number(pixels * 0.75), px: String(pixels) });
       label.style.position = "absolute";
-      label.style.left = `${left + frame.rowHeader + 4}px`;
+      label.style.left = `${frame.rowHeader + 4}px`;
       label.style.top = `${y + 6}px`;
     }
-    return [guide, label];
+    this.#draw(drawing, this.#fixed, guide);
+    this.#draw(drawing, this.#fixed, label);
   }
 
   /// Il bordo fra due intestazioni sotto il punto, se si può misurare: un
@@ -2572,16 +2646,11 @@ export class GridEngine {
   }
 
   /// Mentre si tira il bordo della selezione: il contorno di dove andrà.
-  #moveMarks(): HTMLElement[] {
+  #moveMarks(drawing: Drawing): void {
     const drag = this.#drag?.kind === "move" ? this.#drag : null;
-    if (!drag || sameRange(drag.source, drag.target)) return [];
+    if (!drag || sameRange(drag.source, drag.target)) return;
     const box = this.#rangeBox(drag.target);
-    if (!box) return [];
-    const element = document.createElement("div");
-    element.className = "grid-move-preview";
-    element.setAttribute("aria-hidden", "true");
-    this.#place(element, box.left, box.top, box.width, box.height);
-    return [element];
+    if (box) this.#rectMark(drawing, "grid-move-preview", box);
   }
 
   /// Se il punto sta sul bordo della selezione, a `MOVE_SLOP` pixel, e la
@@ -2595,11 +2664,18 @@ export class GridEngine {
       || (range.columnStart === 0 && range.columnEnd >= sheet.columns.length - 1);
     const box = whole ? null : this.#rangeBox(range);
     if (!box) return false;
+    // Ogni lato nel riquadro: un lato su una colonna o una riga bloccata non
+    // è scorso.
+    const frame = this.#frame;
     const rect = this.#viewport.getBoundingClientRect();
-    const left = rect.left + this.#viewport.clientLeft + box.left - this.#viewport.scrollLeft;
-    const top = rect.top + this.#viewport.clientTop + box.top - this.#viewport.scrollTop;
-    const right = left + box.width;
-    const bottom = top + box.height;
+    const originX = rect.left + this.#viewport.clientLeft;
+    const originY = rect.top + this.#viewport.clientTop;
+    const scrollStart = this.#zoneScroll(range.columnStart < frame.frozenColumns, range.rowStart < frame.frozenRows);
+    const scrollEnd = this.#zoneScroll(range.columnEnd < frame.frozenColumns, range.rowEnd < frame.frozenRows);
+    const left = originX + box.left - scrollStart.left;
+    const top = originY + box.top - scrollStart.top;
+    const right = originX + box.left + box.width - scrollEnd.left;
+    const bottom = originY + box.top + box.height - scrollEnd.top;
     const outside = x < left - MOVE_SLOP || x > right + MOVE_SLOP || y < top - MOVE_SLOP || y > bottom + MOVE_SLOP;
     const inside = x > left + MOVE_SLOP && x < right - MOVE_SLOP && y > top + MOVE_SLOP && y < bottom - MOVE_SLOP;
     const handle = this.#fillServed() && x >= right - 6 && y >= bottom - 6;
@@ -2622,26 +2698,21 @@ export class GridEngine {
   }
 
   /// Le formiche attorno a ciò che si è tagliato, sul suo foglio.
-  #cutMarks(): HTMLElement[] {
+  #cutMarks(drawing: Drawing): void {
     const mark = this.#cutMark;
-    if (!mark || mark.sheet !== this.#sheet().id) return [];
+    if (!mark || mark.sheet !== this.#sheet().id) return;
     const box = this.#rangeBox(mark.range);
-    if (!box) return [];
-    const element = document.createElement("div");
-    element.className = "grid-cut-mark";
-    element.setAttribute("aria-hidden", "true");
-    this.#place(element, box.left, box.top, box.width, box.height);
-    return [element];
+    if (box) this.#rectMark(drawing, "grid-cut-mark", box);
   }
 
-  /// Il rettangolo di `range` nella griglia, come lo disegnano le celle.
+  /// Il rettangolo di `range` nel piano, come lo disegnano le celle: senza lo
+  /// scorrimento, anche sulle righe e le colonne bloccate.
   #rangeBox(range: GridRange): { left: number; top: number; width: number; height: number } | null {
     const frame = this.#frame;
     const width = (this.#columns.offsets[range.columnEnd + 1] ?? 0) - (this.#columns.offsets[range.columnStart] ?? 0);
     const height = (this.#rows.offsets[range.rowEnd + 1] ?? 0) - (this.#rows.offsets[range.rowStart] ?? 0);
     if (!(width > 0 && height > 0)) return null;
-    const top = frame.columnHeader + this.#rows.offsets[range.rowStart] + (range.rowStart < frame.frozenRows ? this.#viewport.scrollTop : 0);
-    return { left: this.#columnLeft(range.columnStart), top, width, height };
+    return { left: this.#columnLeft(range.columnStart), top: frame.columnHeader + this.#rows.offsets[range.rowStart], width, height };
   }
 
   /// La riga delle intestazioni di colonna, con l'angolo.
@@ -2651,12 +2722,12 @@ export class GridEngine {
     row.className = "grid-row grid-column-header-row";
     row.setAttribute("role", "row");
     row.setAttribute("aria-rowindex", "1");
-    this.#stick(row, 0, frame.rowHeader + this.#columns.total, frame.columnHeader);
+    this.#place(row, 0, 0, frame.rowHeader + this.#columns.total, frame.columnHeader);
     this.#corner.className = "grid-corner";
     this.#corner.setAttribute("role", "presentation");
     this.#corner.textContent = "";
     this.#corner.style.pointerEvents = "none";
-    this.#stickLeft(this.#corner, frame.rowHeader, frame.columnHeader);
+    this.#stickLeft(this.#corner, 0, 0, frame.rowHeader, frame.columnHeader);
     row.append(this.#corner);
     for (const column of columns) {
       if (this.#columns.sizes[column] === 0) continue;
@@ -2670,31 +2741,38 @@ export class GridEngine {
       header.textContent = columnLabel(column);
       header.style.pointerEvents = "none";
       if (frame.zoom !== 1) header.style.fontSize = `calc(var(--text-sm) * ${frame.zoom})`;
-      this.#place(header, this.#columnLeft(column), 0, this.#columns.sizes[column], frame.columnHeader);
+      if (column < frame.frozenColumns) this.#stickLeft(header, this.#columnLeft(column), 0, this.#columns.sizes[column], frame.columnHeader);
+      else this.#place(header, this.#columnLeft(column), 0, this.#columns.sizes[column], frame.columnHeader);
       row.append(header);
     }
     return row;
   }
 
-  /// I fili sotto le righe bloccate e a destra delle colonne bloccate.
-  #freezeLines(): HTMLElement[] {
+  /// I fili sotto le righe bloccate e a destra delle colonne bloccate: segni
+  /// fermi nei livelli della testa, della colonna ferma e dell'angolo, che
+  /// stanno fermi con loro.
+  #freezeLines(drawing: Drawing): void {
     const frame = this.#frame;
-    const lines: HTMLElement[] = [];
+    const bands = this.#bands();
+    const width = frame.rowHeader + this.#columns.total;
+    const height = frame.columnHeader + this.#rows.total;
+    const line = (zone: Zone, className: string, rect: Rect) => {
+      if (!(rect.w > 0 && rect.h > 0)) return;
+      const element = document.createElement("div");
+      element.className = `grid-freeze ${className}`;
+      element.setAttribute("aria-hidden", "true");
+      const at = wholeRect(zone, rect, bands);
+      this.#place(element, at.x, at.y, at.w, at.h);
+      this.#draw(drawing, this.#layers[zone], element);
+    };
     if (frame.frozenRows > 0) {
-      const line = document.createElement("div");
-      line.className = "grid-freeze grid-freeze-rows";
-      line.setAttribute("aria-hidden", "true");
-      this.#place(line, this.#viewport.scrollLeft, this.#viewport.scrollTop + frame.columnHeader + frame.frozenHeight - 1, this.#viewport.clientWidth, 1);
-      lines.push(line);
+      line("top", "grid-freeze-rows", { x: 0, y: bands.top - 1, w: width, h: 1 });
+      line("corner", "grid-freeze-rows", { x: 0, y: bands.top - 1, w: bands.left, h: 1 });
     }
     if (frame.frozenColumns > 0) {
-      const line = document.createElement("div");
-      line.className = "grid-freeze grid-freeze-columns";
-      line.setAttribute("aria-hidden", "true");
-      this.#place(line, this.#viewport.scrollLeft + frame.rowHeader + frame.frozenWidth - 1, this.#viewport.scrollTop, 1, this.#viewport.clientHeight);
-      lines.push(line);
+      line("left", "grid-freeze-columns", { x: bands.left - 1, y: bands.top, w: 1, h: height - bands.top });
+      line("corner", "grid-freeze-columns", { x: bands.left - 1, y: frame.columnHeader, w: 1, h: frame.frozenHeight });
     }
-    return lines;
   }
 
   /// Gli oggetti letti del foglio mostrato, nell'ordine in cui si disegnano.
@@ -2706,7 +2784,15 @@ export class GridEngine {
     return key === null ? undefined : this.#objects().find((object) => objectKey(object) === key);
   }
 
-  /// Dove l'oggetto sta sul canvas: la sua cella e lo scarto da lei, nei
+  /// La zona dell'oggetto: quella della cella dove è ancorato, o di dove lo
+  /// si è appena messo. Ci sta intero, nel livello «lift» di quella zona.
+  #objectZone(object: GridObject): Zone {
+    const placed = this.#placed;
+    if (placed && placed.key === objectKey(object) && sameObjectPlace(placed.before, object)) return placed.zone;
+    return zoneOf(object.column < this.#frame.frozenColumns, object.row < this.#frame.frozenRows);
+  }
+
+  /// Dove l'oggetto sta nel piano: la sua cella e lo scarto da lei, nei
   /// pixel del file portati a quelli dello schermo. Un grafico sparkline e
   /// un'immagine nella cella prendono la misura della cella di Fub.
   #objectRect(object: GridObject): ObjectRect | null {
@@ -2721,7 +2807,7 @@ export class GridEngine {
     const frame = this.#frame;
     const scale = WORKBOOK_SCALE * frame.zoom;
     const left = this.#columnLeft(object.column);
-    const top = frame.columnHeader + rows.offsets[object.row] + (object.row < frame.frozenRows ? this.#viewport.scrollTop : 0);
+    const top = frame.columnHeader + rows.offsets[object.row];
     if (object.kind === "sparkline" || object.kind === "cell_picture") {
       const merge = mergeAt(this.#merges(), { row: object.row, column: object.column });
       const lastRow = merge ? merge.row + merge.rows - 1 : object.row;
@@ -2736,35 +2822,41 @@ export class GridEngine {
     return { left: left + object.dx * scale, top: top + object.dy * scale, width: object.width * scale, height: object.height * scale };
   }
 
-  /// Gli oggetti che si vedono, sopra le celle.
-  #objectElements(): HTMLElement[] {
+  /// Gli oggetti che si vedono, sopra le celle: ognuno intero nel livello
+  /// «lift» della sua zona, che scorre con le celle dove è ancorato.
+  #objectElements(drawing: Drawing): void {
     const objects = this.#objects();
     this.#showObjectsSummary(objects);
     if (this.#selectedObject !== null && !this.#objectByKey(this.#selectedObject)) {
       this.#selectedObject = null;
       this.#finishObjectText(false);
     }
-    const left = this.#viewport.scrollLeft;
-    const top = this.#viewport.scrollTop;
-    const right = left + this.#viewport.clientWidth;
-    const bottom = top + this.#viewport.clientHeight;
-    const out: HTMLElement[] = [];
     for (const object of objects) {
       const key = objectKey(object);
+      const zone = this.#objectZone(object);
       const rect = this.#objectGesture?.key === key ? this.#objectGesture.to : this.#objectRect(object);
-      if (!rect || rect.left > right || rect.left + rect.width < left || rect.top > bottom || rect.top + rect.height < top) continue;
+      if (!rect) continue;
+      const scroll = this.#zoneScroll(zone === "left" || zone === "corner", zone === "top" || zone === "corner");
+      const right = scroll.left + this.#viewport.clientWidth;
+      const bottom = scroll.top + this.#viewport.clientHeight;
+      if (rect.left > right || rect.left + rect.width < scroll.left || rect.top > bottom || rect.top + rect.height < scroll.top) continue;
       const element = document.createElement("div");
       element.className = MOVABLE[object.kind] ? "grid-object movable" : "grid-object in-cell";
       element.dataset.object = key;
       element.setAttribute("aria-hidden", "true");
       element.title = objectLabel(object);
       if (key === this.#selectedObject) element.classList.add("selected");
-      if (object.row < this.#frame.frozenRows || object.column < this.#frame.frozenColumns) element.classList.add("frozen");
-      this.#place(element, rect.left, rect.top, Math.max(rect.width, 1), Math.max(rect.height, 1));
+      if (zone !== "body") element.classList.add("frozen");
+      this.#placeObjectElement(element, zone, rect);
       this.#drawObjectInto(element, object, rect);
-      out.push(element);
+      this.#draw(drawing, this.#lifts[zone], element);
     }
-    return out;
+  }
+
+  /// L'oggetto `rect` (nel piano) nelle coordinate del livello di `zone`.
+  #placeObjectElement(element: HTMLElement, zone: Zone, rect: ObjectRect): void {
+    const at = wholeRect(zone, { x: rect.left, y: rect.top, w: Math.max(rect.width, 1), h: Math.max(rect.height, 1) }, this.#bands());
+    this.#place(element, at.x, at.y, at.w, at.h);
   }
 
   /// Il contenuto dell'oggetto a misura di `rect`, con le maniglie se è
@@ -2806,21 +2898,23 @@ export class GridEngine {
     this.#objectsAnnounce.textContent = object ? t("grid.object.selected", { name: objectLabel(object) }) : "";
     if (object) {
       const rect = this.#objectRect(object);
-      if (rect) this.#revealRect(rect);
+      if (rect) this.#revealRect(rect, this.#objectZone(object));
     }
     this.#render();
     this.#options.onSelectionChange();
   }
 
-  /// Scorre perché l'angolo dell'oggetto si veda.
-  #revealRect(rect: ObjectRect): void {
+  /// Scorre perché l'angolo dell'oggetto si veda. In una fascia ferma si vede
+  /// già, nel verso in cui la fascia non scorre.
+  #revealRect(rect: ObjectRect, zone: Zone): void {
     const frame = this.#frame;
     const viewport = this.#viewport;
     const before = { x: frame.rowHeader + frame.frozenWidth, y: frame.columnHeader + frame.frozenHeight };
-    if (rect.left < viewport.scrollLeft + before.x || rect.left > viewport.scrollLeft + viewport.clientWidth) {
+    const still = { x: zone === "left" || zone === "corner", y: zone === "top" || zone === "corner" };
+    if (!still.x && (rect.left < viewport.scrollLeft + before.x || rect.left > viewport.scrollLeft + viewport.clientWidth)) {
       viewport.scrollLeft = Math.max(0, rect.left - before.x);
     }
-    if (rect.top < viewport.scrollTop + before.y || rect.top > viewport.scrollTop + viewport.clientHeight) {
+    if (!still.y && (rect.top < viewport.scrollTop + before.y || rect.top > viewport.scrollTop + viewport.clientHeight)) {
       viewport.scrollTop = Math.max(0, rect.top - before.y);
     }
   }
@@ -2906,7 +3000,7 @@ export class GridEngine {
     const element = [...this.#viewport.querySelectorAll<HTMLElement>(".grid-object")].find((candidate) => candidate.dataset.object === gesture.key);
     if (!object || !element) return;
     const rect = gesture.to;
-    this.#place(element, rect.left, rect.top, Math.max(rect.width, 1), Math.max(rect.height, 1));
+    this.#placeObjectElement(element, this.#objectZone(object), rect);
     this.#drawObjectInto(element, object, rect);
   }
 
@@ -2927,12 +3021,18 @@ export class GridEngine {
     if (!object || !kind) return;
     const frame = this.#frame;
     const scale = WORKBOOK_SCALE * frame.zoom;
-    // Sopra le righe o le colonne bloccate un punto del canvas sta fermo con
-    // lo scorrimento.
-    const screenX = rect.left - this.#viewport.scrollLeft - frame.rowHeader;
-    const screenY = rect.top - this.#viewport.scrollTop - frame.columnHeader;
-    const x = Math.max(0, frame.frozenColumns > 0 && screenX < frame.frozenWidth ? screenX : rect.left - frame.rowHeader);
-    const y = Math.max(0, frame.frozenRows > 0 && screenY < frame.frozenHeight ? screenY : rect.top - frame.columnHeader);
+    // `rect` sta nel piano della zona da cui l'oggetto è partito: nel
+    // riquadro una fascia ferma non è scorsa. Dove l'angolo cade sopra le
+    // righe o le colonne bloccate l'ancora è loro, e lì un punto sta fermo
+    // con lo scorrimento; altrove è del corpo.
+    const from = this.#objectZone(object);
+    const scroll = this.#zoneScroll(from === "left" || from === "corner", from === "top" || from === "corner");
+    const screenX = rect.left - scroll.left - frame.rowHeader;
+    const screenY = rect.top - scroll.top - frame.columnHeader;
+    const frozenX = frame.frozenColumns > 0 && screenX < frame.frozenWidth;
+    const frozenY = frame.frozenRows > 0 && screenY < frame.frozenHeight;
+    const x = Math.max(0, frozenX ? screenX : screenX + this.#viewport.scrollLeft);
+    const y = Math.max(0, frozenY ? screenY : screenY + this.#viewport.scrollTop);
     // Sulla stessa linea di una riga o di una colonna nascosta l'ancora resta
     // quella del file.
     const near = (sizes: AxisLayout, at: number, own: number) => {
@@ -2952,7 +3052,7 @@ export class GridEngine {
       width: round(rect.width / scale),
       height: round(rect.height / scale),
     };
-    const placed = { key, before: object, rect: { ...rect, left: frame.rowHeader + x, top: frame.columnHeader + y } };
+    const placed = { key, before: object, rect: { ...rect, left: frame.rowHeader + x, top: frame.columnHeader + y }, zone: zoneOf(frozenX, frozenY) };
     this.#placed = placed;
     this.#render();
     void this.run("object.move", JSON.stringify(params)).then((run) => {
@@ -3109,8 +3209,13 @@ export class GridEngine {
         measure = false;
       }
     }
+    // Una cella di una colonna bloccata sta ferma a sinistra da sé
+    // (`#stickLeft`); le altre scorrono con la riga.
     const top = this.#rows.offsets[row] - this.#rows.offsets[hostRow];
-    this.#place(element, this.#columnLeft(column), top, width, height);
+    const put = frozenColumn
+      ? (target: HTMLElement, left: number, y: number, w: number, h: number) => this.#stickLeft(target, left, y, w, h)
+      : (target: HTMLElement, left: number, y: number, w: number, h: number) => this.#place(target, left, y, w, h);
+    put(element, this.#columnLeft(column), top, width, height);
     let border: HTMLElement | null = null;
     const borders = this.#cellBorders(position, lastRow, lastColumn);
     if (borders) {
@@ -3118,7 +3223,7 @@ export class GridEngine {
       border.className = frozenColumn ? "grid-border frozen" : "grid-border";
       border.setAttribute("aria-hidden", "true");
       paintBorders(border, borders);
-      this.#place(border, this.#columnLeft(column) - 1, top - 1, width + 1, height + 1);
+      put(border, this.#columnLeft(column) - 1, top - 1, width + 1, height + 1);
     }
     // Ciò che la cella è senza la selezione: `#reconcile` tiene quella
     // disegnata se è uguale.
@@ -3193,27 +3298,23 @@ export class GridEngine {
     }
   }
 
-  /// Un elemento che sta fermo in alto mentre la griglia scorre: è nel
-  /// flusso, con la posizione naturale in cima (il margine negativo non gli
-  /// fa occupare posto), e `sticky` lo tiene a `top` dal bordo del riquadro.
-  /// Lo fa il compositore, nello stesso fotogramma dello scorrimento.
-  #stick(element: HTMLElement, top: number, width: number, height: number): void {
+  /// Un elemento che sta fermo a sinistra dentro la sua riga, a `left` dal
+  /// bordo del riquadro: un'intestazione di riga, l'angolo, una cella o
+  /// un'intestazione di una colonna bloccata. È nel flusso della riga senza
+  /// occuparvi posto (i margini ne annullano la larghezza), con la posizione
+  /// naturale all'inizio della riga, e `sticky` lo tiene a `left`: lo fa il
+  /// compositore, nello stesso fotogramma dello scorrimento. `top` è dalla
+  /// cima della riga (un'unione può cominciare sopra di lei).
+  #stickLeft(element: HTMLElement, left: number, top: number, width: number, height: number): void {
+    const before = Math.min(0, left);
     element.style.position = "sticky";
-    element.style.left = "";
-    element.style.top = `${top}px`;
-    element.style.width = `${width}px`;
-    element.style.height = `${height}px`;
-    element.style.marginBottom = `${-height}px`;
-  }
-
-  /// Un elemento che sta fermo a sinistra dentro la sua riga: il primo figlio
-  /// nel flusso, `sticky` al bordo sinistro del riquadro.
-  #stickLeft(element: HTMLElement, width: number, height: number): void {
-    element.style.position = "sticky";
-    element.style.left = "0px";
+    element.style.left = `${left}px`;
     element.style.top = "";
     element.style.width = `${width}px`;
     element.style.height = `${height}px`;
+    element.style.marginTop = top ? `${top}px` : "";
+    element.style.marginLeft = before ? `${before}px` : "";
+    element.style.marginRight = `${-(width + before)}px`;
   }
 
   #place(element: HTMLElement, left: number, top: number, width: number, height: number): void {
@@ -3231,7 +3332,7 @@ export class GridEngine {
   }
 
   #detachCellEditor(): void {
-    if (this.#cellEditorHost.parentElement !== this.#canvas) this.#canvas.append(this.#cellEditorHost);
+    if (this.#cellEditorHost.parentElement !== this.#plane) this.#plane.append(this.#cellEditorHost);
   }
 
   /// La cella che l'elemento disegna, dai suoi `data-row`/`data-column`.
@@ -3863,25 +3964,20 @@ export class GridEngine {
 
   /// Il contorno di ogni riferimento della formula aperta che sta sul foglio
   /// mostrato, del colore che ha nel testo.
-  #referenceMarks(): HTMLElement[] {
+  #referenceMarks(drawing: Drawing): void {
     const draft = this.#editing?.draft ?? "";
-    if (!draft.startsWith("=")) return [];
+    if (!draft.startsWith("=")) return;
     const name = this.#sheet().name.toLowerCase();
-    return formulaReferences(draft).flatMap((reference) => {
+    for (const reference of formulaReferences(draft)) {
       const bang = reference.text.lastIndexOf("!");
       if (bang >= 0) {
         const sheet = reference.text.slice(0, bang).replace(/^'(.*)'$/, "$1").replace(/''/g, "'");
-        if (sheet.toLowerCase() !== name) return [];
+        if (sheet.toLowerCase() !== name) continue;
       }
       const range = parseRangeA1(reference.text.slice(bang + 1).toUpperCase());
       const box = range ? this.#rangeBox(range) : null;
-      if (!box) return [];
-      const element = document.createElement("div");
-      element.className = `grid-formula-ref grid-formula-ref-${reference.color + 1}`;
-      element.setAttribute("aria-hidden", "true");
-      this.#place(element, box.left, box.top, box.width, box.height);
-      return [element];
-    });
+      if (box) this.#rectMark(drawing, `grid-formula-ref grid-formula-ref-${reference.color + 1}`, box);
+    }
   }
 
   #commitAfterBlur(owner: "cell" | "formula"): void {

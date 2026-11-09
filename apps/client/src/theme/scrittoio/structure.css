@@ -1456,13 +1456,119 @@ body {
   overflow: auto;
 }
 
-/* Il canvas dà la misura dello scorrimento e viene dopo le righe: non prende
-   il puntatore, che va alle celle sotto. */
-.grid-canvas {
+/* Il piano: grande quanto il foglio, a strati nella stessa cella di una
+   griglia CSS (le righe del corpo, i livelli dei segni, la testa). Le fasce
+   ferme (la testa in alto, la colonna a sinistra) restano al loro posto col
+   solo `sticky`, nello stesso fotogramma dello scorrimento, senza che lo
+   script le rimetta. Le misure le scrive la griglia (`--grid-w`, `--grid-h`,
+   `--grid-top-h`, `--grid-left-w`). Il piano non prende il puntatore: lo
+   prendono le righe, e dove non c'è niente va al riquadro. */
+.grid-plane {
   position: relative;
-  min-width: 100%;
-  min-height: 100%;
+  display: grid;
+  grid-template: var(--grid-h, 0px) / var(--grid-w, 0px);
+  isolation: isolate;
   pointer-events: none;
+}
+.grid-plane > *,
+.grid-head > * {
+  grid-area: 1 / 1;
+  align-self: start;
+  justify-self: start;
+}
+/* La testa: la riga delle intestazioni e le righe bloccate. */
+.grid-head {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: grid;
+  grid-template: var(--grid-top-h, 0px) / var(--grid-w, 0px);
+  width: var(--grid-w, 0px);
+  height: var(--grid-top-h, 0px);
+}
+.grid-rows {
+  position: relative;
+  width: var(--grid-w, 0px);
+  height: var(--grid-h, 0px);
+}
+/* Nella riga, ciò che sta fermo a sinistra (l'intestazione, le celle delle
+   colonne bloccate) è nel flusso senza occuparvi posto; il resto è
+   posato dove la colonna dice. */
+.grid-plane .grid-row {
+  display: flex;
+  pointer-events: auto;
+}
+.grid-plane .grid-row > * {
+  flex: none;
+  align-self: flex-start;
+}
+
+/* I livelli dei segni, uno per zona: il corpo che scorre, la testa che
+   scorre solo di lato, la colonna ferma che scorre solo in giù, l'angolo che
+   non scorre. Ognuno taglia ciò che esce dalla sua zona; le fasce opache
+   coprono ciò che le scorre sotto. Il livello «lift» di una zona porta i
+   segni d'angolo (il quadratino) e gli oggetti, interi; per il corpo è il
+   suo livello. */
+.grid-marks-body {
+  position: relative;
+  z-index: 1;
+  width: var(--grid-w, 0px);
+  height: var(--grid-h, 0px);
+}
+.grid-marks-top {
+  position: relative;
+  z-index: 1;
+  width: var(--grid-w, 0px);
+  height: var(--grid-top-h, 0px);
+  overflow: clip;
+}
+.grid-lift-top {
+  position: relative;
+  z-index: 1;
+  width: 0;
+  height: 0;
+}
+.grid-marks-corner {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  width: var(--grid-left-w, 0px);
+  height: var(--grid-top-h, 0px);
+  overflow: clip;
+}
+.grid-lift-corner {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  width: 0;
+  height: 0;
+}
+.grid-marks-left {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  width: var(--grid-left-w, 0px);
+  height: calc(var(--grid-h, 0px) - var(--grid-top-h, 0px));
+  margin-top: var(--grid-top-h, 0px);
+  overflow: clip;
+}
+.grid-lift-left {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  width: 0;
+  height: 0;
+  margin-top: var(--grid-top-h, 0px);
+}
+/* Ciò che sta fermo nell'angolo in alto a sinistra del riquadro: la guida e
+   la misura di un bordo tirato. */
+.grid-fixed {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 8;
+  width: 0;
+  height: 0;
 }
 
 .grid-cells,
@@ -1544,37 +1650,25 @@ body {
   width: max-content;
 }
 
-/* Righe e colonne bloccate restano ferme sopra quelle che scorrono; i fili
-   del blocco stanno sopra tutte. Ogni riga sta sopra il canvas, che viene
-   dopo nel DOM: senza puntatore non copre nulla, ma chi misura il contrasto
-   lo crederebbe davanti al testo delle celle. */
-.grid-row {
-  z-index: 1;
+/* Le righe non fanno da contesto di sovrapposizione: le celle, i segni e le
+   fasce ferme si ordinano tutti nel piano. Ciò che sta fermo a sinistra
+   (l'angolo, le intestazioni delle righe, le colonne bloccate) sta sopra le
+   celle che gli scorrono sotto e sopra il livello dei segni del corpo; la
+   testa sta sopra tutto il corpo, anche sopra la cella aperta di una riga
+   scorsa sotto di lei. */
+.grid-plane .grid-corner,
+.grid-plane .grid-row-header,
+.grid-plane .grid-column-header.frozen,
+.grid-plane .grid-cell.frozen,
+.grid-plane .grid-border.frozen {
+  z-index: 3;
 }
 
-.grid-row.frozen {
-  z-index: 6;
-}
-
-.grid-cell.frozen,
-.grid-border.frozen {
-  z-index: 2;
-}
-
-.grid-column-header.frozen {
-  z-index: 4;
-}
-
+/* I fili del blocco stanno sopra i segni del loro livello. */
 .grid-freeze {
   position: absolute;
   z-index: 7;
   pointer-events: none;
-}
-
-/* La riga delle intestazioni sta sopra tutto: anche sopra la cella aperta
-   di una riga scorsa sotto di lei, che il disegno tiene per l'editor. */
-.grid-column-header-row {
-  z-index: 8;
 }
 
 /* I bordi del file stanno sui fili della griglia, in un riquadro sopra la
@@ -1660,17 +1754,16 @@ body {
 }
 .grid-comment-error[hidden] { display: none; }
 
-/* Gli oggetti del foglio galleggiano sopra le celle e passano sotto le
-   intestazioni e le righe bloccate, come in Excel. Quelli nella cella (un
-   grafico sparkline, un'immagine nella cella) lasciano il clic alla cella. */
+/* Gli oggetti del foglio galleggiano sopra le celle, nel livello della zona
+   dove sono ancorati, sotto i segni: passano sotto le intestazioni e le
+   fasce ferme, come in Excel. Il livello non prende il puntatore, l'oggetto
+   sì; quelli nella cella (un grafico sparkline, un'immagine nella cella)
+   lasciano il clic alla cella. */
 .grid-object {
   position: absolute;
   z-index: 2;
   box-sizing: border-box;
-}
-
-.grid-object.frozen {
-  z-index: 6;
+  pointer-events: auto;
 }
 
 .grid-object.in-cell {
@@ -1734,9 +1827,10 @@ body {
   pointer-events: none;
 }
 
-/* Il quadratino di riempimento sta sopra le celle che scorrono e sotto le
-   righe bloccate; il contorno del riempimento tirato e le formiche di un
-   taglio non prendono il puntatore. */
+/* I segni stanno nel livello della loro zona, sopra gli oggetti. Il
+   quadratino di riempimento è un pezzo solo, intero, nel livello «lift» della
+   zona del suo angolo, e prende il puntatore; il contorno del riempimento
+   tirato e le formiche di un taglio no. */
 .grid-selection,
 .grid-fill-handle,
 .grid-fill-preview,
@@ -1746,6 +1840,10 @@ body {
   position: absolute;
   z-index: 3;
   box-sizing: border-box;
+}
+
+.grid-fill-handle {
+  pointer-events: auto;
 }
 
 .grid-fill-handle,
@@ -1834,15 +1932,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.grid-column-header,
-.grid-row-header {
-  z-index: 3;
-}
-
-.grid-corner {
-  z-index: 4;
 }
 
 .grid-cell-editor {

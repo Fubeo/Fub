@@ -272,7 +272,10 @@ describe("GridEngine", () => {
     const { engine, viewport } = await mounted();
     const rows = [...viewport.querySelectorAll<HTMLElement>('[role="row"]')];
     expect(rows.length).toBeGreaterThan(1);
-    expect(rows.every((row) => row.parentElement === viewport)).toBe(true);
+    // Le righe stanno nei loro gruppi: la testa (le intestazioni e le righe
+    // bloccate) e il corpo, nel piano della griglia.
+    expect(rows.every((row) => row.parentElement?.getAttribute("role") === "rowgroup")).toBe(true);
+    expect(rows[0]?.parentElement?.classList.contains("grid-head")).toBe(true);
     expect(rows[0]?.getAttribute("aria-rowindex")).toBe("1");
 
     for (const row of rows) {
@@ -1454,12 +1457,19 @@ describe("GridEngine con una cartella di Excel", () => {
       },
     });
     const { engine, host, viewport, cell } = await workbookMounted(grid);
-    const canvas = host.querySelector<HTMLElement>(".grid-canvas")!;
+    const canvas = host.querySelector<HTMLElement>(".grid-plane")!;
     expect(canvas.style.fontSize).toBe("150.0%");
     expect(viewport.classList.contains("no-gridlines")).toBe(true);
     expect(host.querySelector(".grid-row-header")).toBeNull();
     expect(host.querySelector(".grid-column-header")).toBeNull();
-    expect(host.querySelectorAll(".grid-freeze")).toHaveLength(2);
+    // I fili del blocco: fermi, nei livelli della testa, della colonna ferma
+    // e dell'angolo.
+    expect([...host.querySelectorAll(".grid-freeze")].map((line) => `${line.parentElement!.className} ${line.className}`).sort()).toEqual([
+      "grid-marks-corner grid-freeze grid-freeze-columns",
+      "grid-marks-corner grid-freeze grid-freeze-rows",
+      "grid-marks-left grid-freeze grid-freeze-columns",
+      "grid-marks-top grid-freeze grid-freeze-rows",
+    ]);
     expect(cell(1, 0)!.classList.contains("frozen")).toBe(true);
     expect(cell(1, 1)!.classList.contains("frozen")).toBe(false);
     // Lo zoom allarga le colonne nella stessa misura.
@@ -1473,6 +1483,80 @@ describe("GridEngine con una cartella di Excel", () => {
     expect(cell(0, 0)).not.toBeNull();
     expect(cell(0, 1)).toBeNull();
     expect(cell(1, 0)).toBeNull();
+    engine.destroy();
+  });
+
+  it("il piano a strati: le fasce ferme stanno ferme da sé, e i segni si tagliano per zona", async () => {
+    const grid = workbookHost({
+      window: (window) => {
+        if (window.sheet !== "s1") return;
+        window.view = { ...DEFAULT_SHEET_VIEW, frozen_rows: 1, frozen_columns: 1 };
+      },
+    });
+    const { engine, host, viewport, cell } = await workbookMounted(grid);
+    const key = (name: string, init: KeyboardEventInit = {}) =>
+      viewport.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true, ...init }));
+    const style = (element: Element | null) => {
+      const s = (element as HTMLElement).style;
+      return { position: s.position, left: s.left, top: s.top, width: s.width, height: s.height };
+    };
+    const scrollTo = async (left: number, top: number) => {
+      viewport.scrollLeft = left;
+      viewport.scrollTop = top;
+      viewport.dispatchEvent(new Event("scroll"));
+      await settle();
+    };
+    // La riga bloccata sta nella testa, le altre nel corpo; ognuna nel suo
+    // gruppo di righe.
+    expect(cell(0, 1)!.closest(".grid-row")!.parentElement!.className).toBe("grid-head");
+    expect(cell(2, 1)!.closest(".grid-row")!.parentElement!.className).toBe("grid-rows");
+    // Una cella della colonna bloccata, l'intestazione della sua riga e
+    // quella della colonna stanno ferme a sinistra con `sticky`.
+    expect(cell(6, 0)!.style.position).toBe("sticky");
+    expect(cell(2, 1)!.style.position).toBe("absolute");
+    const header = () => host.querySelector(".grid-row[data-row='6'] .grid-row-header");
+    const before = {
+      frozen: style(cell(6, 0)),
+      corner: style(cell(0, 0)),
+      header: style(header()),
+      lines: [...host.querySelectorAll(".grid-freeze")].map(style),
+    };
+    // Scorrendo, niente di tutto questo si sposta per mano dello script.
+    await scrollTo(260, 40);
+    expect(style(cell(6, 0))).toEqual(before.frozen);
+    expect(style(cell(0, 0))).toEqual(before.corner);
+    expect(style(header())).toEqual(before.header);
+    expect([...host.querySelectorAll(".grid-freeze")].map(style)).toEqual(before.lines);
+    await scrollTo(0, 0);
+
+    // A1:C3 passa la riga e la colonna bloccate: un pezzo per zona, ognuno
+    // nel livello della sua zona.
+    key("ArrowDown", { shiftKey: true });
+    key("ArrowDown", { shiftKey: true });
+    key("ArrowRight", { shiftKey: true });
+    key("ArrowRight", { shiftKey: true });
+    const layers = () => [...host.querySelectorAll(".grid-selection")].map((mark) => mark.parentElement!.className).sort();
+    expect(layers()).toEqual(["grid-marks-body", "grid-marks-corner", "grid-marks-left", "grid-marks-top"]);
+    const pieces = () => [...host.querySelectorAll(".grid-selection")].map(style);
+    const drawn = pieces();
+    await scrollTo(0, 140);
+    expect(pieces()).toEqual(drawn);
+
+    // Il quadratino è un pezzo solo, intero, nel livello «lift» della zona
+    // del suo angolo: per A3, sul filo della colonna bloccata, la colonna.
+    key("Escape");
+    await scrollTo(0, 0);
+    key("ArrowDown");
+    key("ArrowDown");
+    const handles = [...host.querySelectorAll<HTMLElement>(".grid-fill-handle")];
+    expect(handles).toHaveLength(1);
+    expect(handles[0]!.parentElement!.className).toBe("grid-lift-left");
+    expect([handles[0]!.style.width, handles[0]!.style.height]).toEqual(["8px", "8px"]);
+    // Su B1, sul filo della riga bloccata, la testa.
+    key("ArrowUp");
+    key("ArrowUp");
+    key("ArrowRight");
+    expect(host.querySelector(".grid-fill-handle")!.parentElement!.className).toBe("grid-lift-top");
     engine.destroy();
   });
 
