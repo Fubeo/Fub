@@ -1075,7 +1075,7 @@ Fatto quando:
 - la foto di `grid-workbook`, `grid-result-loading`, `grid-result-error`, `grid-result-many` e `mobile-grid-ribbon`, in giorno e notte, a 1280 e a 700, sta accanto agli stati `foglio`, `caricamento`, `errore`, `molti` e `tel-foglio`, e la barra dei fogli non perde niente rispetto a oggi: il vassoio è quello più chiaro e la sezione scelta è il foglietto, come nel prototipo;
 - la foto di `document-docx` e `document-docx-narrow` si guarda: le differenze che restano sul vassoio e sulle sezioni del documento sono di T21.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · 2d0e89f7..2b6f06e3 · la barra a schede è del kit (`kit-ribbon-*` accanto ai prefissi `grid-ribbon-*` e `rich-ribbon-*`, che restano nel DOM); vassoio chiaro, sezione scelta a foglietto, nome al 600 senza spostare le vicine; nel contratto dei temi escono 22 hook `grid-ribbon-*` ed entrano 25 `kit-ribbon-*`; il documento resta a metà fino a T21
 
 ## T21 · La barra a schede del documento
 
