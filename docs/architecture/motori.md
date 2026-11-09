@@ -174,9 +174,8 @@ ovunque. L'host dà i suoi, una volta sola, con
 `fornisci_caratteri(Caratteri::nuovi(facce, generiche))`; la seconda chiamata
 restituisce in `Err` ciò che ha ricevuto. Le facce sono byte `'static`, senza
 copie; `Generiche` nomina le famiglie di `serif`, `sans-serif` e `monospace`.
-`caratteri()` dà a tutti la stessa `Arc`, o `None` finché l'host non li ha
-dati (il motore non è pronto). Zero facce sono ammesse: i testi usano il
-ripiego del motore. Ogni motore ne costruisce il suo archivio (una `fontdb`).
+`caratteri()` dà a tutti la stessa `Arc`, o `None` prima (il motore non è
+pronto). Zero facce vanno bene (i testi usano il ripiego del motore).
 
 ## Come un adattatore iscrive il suo motore
 
