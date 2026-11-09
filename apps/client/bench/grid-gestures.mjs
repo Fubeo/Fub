@@ -45,7 +45,7 @@ import { mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { PNG } from "pngjs";
 import pixelmatch from "pixelmatch";
-import { SCENE, sceneUrl } from "./scene.mjs";
+import { GESTURE_SCENE, SCENE, sceneUrl } from "./scene.mjs";
 import { openStage, openPage, prepareScene, OUTPUT } from "./stage.mjs";
 
 /// I cantieri chiusi: i loro controlli decidono l'esito del banco.
@@ -1138,7 +1138,7 @@ async function runControl(stage, scene, control) {
 async function main() {
   const sceneOf = (control) => {
     const id = control.scene ?? SCENE_ID;
-    const scene = SCENE.find((s) => s.id === id);
+    const scene = [...SCENE, ...GESTURE_SCENE].find((s) => s.id === id);
     if (!scene) throw new Error(`la scena ${id} non c'è in scene.mjs`);
     return scene;
   };

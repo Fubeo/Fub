@@ -442,16 +442,6 @@ export const SCENE = onPage("shell", [
     query: "workbook=1",
     prepare: openWorkbook,
   },
-  // **La cartella grande** (griglia T1): 3000 righe per 20 colonne con la
-  // riga 1 e la colonna A bloccate, fatta in codice dal finto
-  // (`?workbook=large`). I controlli G1 di `bench/grid-gestures.mjs` ci
-  // scorrono sopra.
-  {
-    id: "grid-large",
-    title: "Grid v2: una cartella grande, con la riga e la colonna bloccate",
-    query: "workbook=large",
-    prepare: (page) => openWorkbook(page, "Dati/Grande.xlsx"),
-  },
   // **I gesti della griglia**, sulla stessa cartella: gli stati che i
   // cantieri dei gesti (Q1–Q8) cambiano, e che `bench/grid-gestures.mjs`
   // controlla con input veri.
@@ -1497,6 +1487,22 @@ async function openDocumentWindow(page) {
 }
 
 /// Mette ogni scena sulla sua pagina: è dell'elenco, non di ciascuna voce.
+/// Le scene che soltanto il banco dei gesti apre (`bench/grid-gestures.mjs`):
+/// non hanno una foto di riferimento né un passaggio del banco
+/// dell'accessibilità, e le baseline restano tutte quelle di `SCENE`.
+///
+/// **La cartella grande** (griglia T1): 3000 righe per 20 colonne con la riga
+/// 1 e la colonna A bloccate, fatta in codice dal finto (`?workbook=large`).
+/// I controlli G1 ci scorrono sopra.
+export const GESTURE_SCENE = onPage("shell", [
+  {
+    id: "grid-large",
+    title: "Grid v2: una cartella grande, con la riga e la colonna bloccate",
+    query: "workbook=large",
+    prepare: (page) => openWorkbook(page, "Dati/Grande.xlsx"),
+  },
+]);
+
 function onPage(page, scenes) {
   return scenes.map((scene) => ({ query: "", ...scene, page }));
 }
