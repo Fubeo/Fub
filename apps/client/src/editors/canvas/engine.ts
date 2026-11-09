@@ -13,6 +13,7 @@ import { EraseSweep, type Spot } from "../../ink/tools/sweep";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { mediaKindOfId } from "../media/media-types";
 import { anchorAt, strokeBounds } from "./anchor";
+import { cardKindOf, type CardContext, type CardKind, type CardRegistry, type CardRenderer, type CardSnapshots, type CardView } from "./cards";
 import {
   cutInk,
   cutPath,
@@ -290,6 +291,41 @@ export interface CanvasEngineOptions {
    * computer.
    */
   readonly penMemory?: CanvasPenMemory;
+  /**
+   * Le schede di file e di link: chi le disegna per specie e le immagini
+   * ferme. Assente (un'altra finestra, le prove vecchie): il corpo di sempre,
+   * col percorso e il segnaposto.
+   */
+  readonly cards?: CanvasCards;
+}
+
+/** Le schede della tela: il registro dei renderer e la cache delle immagini ferme. */
+export interface CanvasCards {
+  readonly registry: CardRegistry;
+  readonly snapshots: CardSnapshots;
+}
+
+/**
+ * Una scheda sulla scena, tenuta per id da una resa all'altra: l'elemento, il
+ * corpo e ciò che lo tiene vivo (il Markdown montato, la vista del renderer).
+ */
+interface CardEntry {
+  readonly id: string;
+  readonly article: HTMLElement;
+  readonly title: HTMLElement;
+  readonly connect: HTMLButtonElement;
+  /** La scheda com'è nel documento di adesso. */
+  node: CanvasNode;
+  type: CanvasNode["type"];
+  body: HTMLElement;
+  /** La chiave del corpo (`cardBodyKey`): se cambia, il corpo si rifà; `null`, da rifare. */
+  bodyKey: string | null;
+  resize: HTMLElement | null;
+  /** Lo smontaggio del Markdown di una scheda di testo. */
+  teardown: (() => void) | null;
+  /** La vista del renderer e la sua vita; `null` col corpo di sempre. */
+  view: CardView | null;
+  viewLife: Lifetime | null;
 }
 
 interface Viewport {
@@ -379,7 +415,15 @@ export class CanvasEngine {
    */
   #version = 0;
   #versions = 0;
-  #markdownTeardowns = new Map<string, () => void>();
+  /** Le schede sulla scena, per id: sopravvivono a una resa che non le riguarda. */
+  readonly #cards = new Map<string, CardEntry>();
+  /**
+   * Crescono quando cambia ciò che i corpi di sempre leggono oltre alla
+   * scheda: la lingua (tutti) e le sintassi del Markdown (le schede di
+   * testo). Quei corpi si rifanno alla resa dopo; le viste dei renderer no.
+   */
+  #languageRound = 0;
+  #formsRound = 0;
   #destroyed = false;
   #intakeError = "";
   #drag: { pointerId: number; startX: number; startY: number; origin: Map<string, { x: number; y: number }>; moved: boolean } | null = null;
@@ -488,6 +532,8 @@ export class CanvasEngine {
     this.#inkMouseButton = inkMouse;
     parent.replaceChildren(this.#root);
     this.#stopLanguage = onLanguage(() => {
+      // I corpi di sempre hanno parole: alla prossima resa si rifanno.
+      this.#languageRound++;
       this.#viewport.setAttribute("aria-label", t("canvas.surface"));
       this.#toolbar.setAttribute("aria-label", t("canvas.surface"));
       this.#drawToolbar();
@@ -698,6 +744,7 @@ export class CanvasEngine {
    */
   setSyntaxForms(forms: readonly SyntaxForm[]): void {
     this.#forms = forms;
+    this.#formsRound++;
     if (!this.#editor) this.#render();
   }
 
@@ -749,8 +796,8 @@ export class CanvasEngine {
     this.#syncInkLayer();
     this.#life.close();
     this.#dropCore();
-    for (const teardown of this.#markdownTeardowns.values()) teardown();
-    this.#markdownTeardowns.clear();
+    // Ogni vista si distrugge qui, una volta: `#releaseBody` la dimentica.
+    this.#dropCards();
     this.#stopLanguage();
     this.#abort.abort();
     this.#root.remove();
@@ -2910,15 +2957,15 @@ export class CanvasEngine {
   }
 
   #render(): void {
-    if (!this.#doc) return;
+    // Dopo `destroy` niente rinasce: una vista montata qui non avrebbe padrone.
+    if (!this.#doc || this.#destroyed) return;
     this.#syncInkLayer();
-    for (const teardown of this.#markdownTeardowns.values()) teardown();
-    this.#markdownTeardowns.clear();
     this.#applyCamera();
     this.#drawToolbar();
     this.#viewport.dataset.canvasNodes = String(this.#doc.nodes.length);
     this.#viewport.dataset.canvasEdges = String(this.#doc.edges.length);
     if (this.#isSceneOversized()) {
+      this.#dropCards();
       this.#edgeLayer.replaceChildren();
       this.#stage.replaceChildren();
       const fallback = document.createElement("p");
@@ -2933,22 +2980,7 @@ export class CanvasEngine {
       return;
     }
     this.#drawEdges();
-    // La scheda col campo aperto resta quella: spostarla toglierebbe il fuoco
-    // al campo. Le altre le si mettono attorno.
-    const kept = this.#editor && this.#editor.article.parentElement === this.#stage ? this.#editor : null;
-    for (const child of [...this.#stage.children]) if (child !== kept?.article) child.remove();
-    let after = false;
-    // Z-order = ordine array: primo sotto, ultimo sopra (come da spec).
-    for (const node of this.#doc.nodes) {
-      if (kept && node.id === kept.id) {
-        after = true;
-        refreshCard(kept.article, node, this.#selection.includes(node.id));
-      } else if (kept && !after) {
-        this.#stage.insertBefore(this.#nodeEl(node), kept.article);
-      } else {
-        this.#stage.append(this.#nodeEl(node));
-      }
-    }
+    this.#placeCards(this.#doc.nodes);
     this.#paintInk();
     this.#viewport.dataset.canvasProtocol = "source";
   }
@@ -3032,45 +3064,85 @@ export class CanvasEngine {
     return { w, h };
   }
 
-  #nodeEl(node: CanvasNode): HTMLElement {
+  /**
+   * Mette sulla scena le schede di `nodes`, tenute per id: chi c'è già si
+   * aggiorna (posto, misura, colore, titolo, scelta), chi è nuovo nasce, chi
+   * non c'è più si distrugge. Il corpo si rifà solo se cambia la sua chiave
+   * (`cardBodyKey`): una vista viva sopravvive a ciò che non la riguarda.
+   * L'ordine sulla scena è quello del file: la prima sotto, l'ultima sopra.
+   */
+  #placeCards(nodes: readonly CanvasNode[]): void {
+    // La scheda col campo aperto non si sposta e non rifà il corpo: muoverla
+    // toglierebbe il fuoco al campo. Le altre le si mettono attorno; se il
+    // documento non l'ha più, resta finché il campo non si chiude.
+    const editor = this.#editor;
+    const keptEntry = editor ? this.#cards.get(editor.id) : undefined;
+    const kept = keptEntry && keptEntry.article === editor?.article && keptEntry.article.parentElement === this.#stage
+      ? keptEntry
+      : undefined;
+    const present = new Set(nodes.map((node) => node.id));
+    for (const [id, entry] of this.#cards) {
+      if (present.has(id) || entry === kept) continue;
+      this.#cards.delete(id);
+      this.#releaseBody(entry);
+      entry.article.remove();
+    }
+    // Ciò che sulla scena non è una scheda (il messaggio della scena troppo
+    // grande) va via; l'inchiostro libero resta, `#paintInk` lo rimette in cima.
+    const ours = new Set<Element>([...this.#cards.values()].map((entry) => entry.article));
+    for (const child of [...this.#stage.children]) {
+      if (!ours.has(child) && !child.classList.contains("canvas-ink-board")) child.remove();
+    }
+    const children = this.#stage.children;
+    let index = 0;
+    for (const node of nodes) {
+      let entry = this.#cards.get(node.id);
+      if (!entry) {
+        entry = this.#createCard(node);
+        this.#cards.set(node.id, entry);
+      }
+      if (entry === kept) {
+        while (children[index] && children[index] !== entry.article) {
+          this.#stage.insertBefore(children[index]!, entry.article.nextSibling);
+        }
+      } else if (children[index] !== entry.article) {
+        this.#stage.insertBefore(entry.article, children[index] ?? null);
+      }
+      index++;
+      this.#refreshCard(entry, node, entry !== kept);
+    }
+  }
+
+  /** L'involucro di una scheda nuova, col corpo ancora vuoto: lo riempie `#refreshCard`. */
+  #createCard(node: CanvasNode): CardEntry {
+    const id = node.id;
     const el = document.createElement("article");
     el.className = `canvas-node canvas-node-${node.type}`;
-    el.dataset.node = node.id;
-    el.style.transform = `translate(${node.x}px, ${node.y}px)`;
-    el.style.width = `${node.width}px`;
-    el.style.height = `${node.height}px`;
-    el.style.background = nodeFill(node.color);
-    if (node.type === "group" && node.backgroundStyle) el.dataset.backgroundStyle = node.backgroundStyle;
+    el.dataset.node = id;
     el.tabIndex = 0;
     el.setAttribute("role", "group");
-    el.setAttribute("aria-label", `${node.type} ${node.id}`);
-    if (this.#selection.includes(node.id)) el.classList.add("selected");
     const header = document.createElement("div");
     header.className = "canvas-node-handle";
-    header.dataset.drag = node.id;
+    header.dataset.drag = id;
     const title = document.createElement("span");
     title.className = "canvas-node-title";
-    title.textContent = nodeTitle(node);
     const connect = document.createElement("button");
     connect.type = "button";
     connect.className = "canvas-connect";
-    connect.dataset.connect = node.id;
-    connect.setAttribute("aria-label", t("canvas.connect", { id: node.id }));
+    connect.dataset.connect = id;
     connect.textContent = "→";
     connect.addEventListener("click", (e) => e.stopPropagation());
     header.append(title, connect);
-    el.append(header);
-    el.append(this.#cardBody(node));
-    if (!this.#readOnly) {
-      const resize = document.createElement("div");
-      resize.className = "canvas-resize";
-      resize.dataset.resize = node.id;
-      resize.setAttribute("aria-hidden", "true");
-      el.append(resize);
-    }
+    const body = document.createElement("div");
+    body.className = "canvas-card-body";
+    el.append(header, body);
+    const entry: CardEntry = {
+      id, article: el, title, connect, node, type: node.type, body,
+      bodyKey: null, resize: null, teardown: null, view: null, viewLife: null,
+    };
     el.addEventListener("focus", () => {
-      if (!this.#selection.includes(node.id)) {
-        this.#selection = [node.id];
+      if (!this.#selection.includes(id)) {
+        this.#selection = [id];
         this.#edgeSelection = [];
         this.#options.onSelectionChange();
         this.#displaySelection();
@@ -3078,13 +3150,152 @@ export class CanvasEngine {
     });
     el.addEventListener("dblclick", (e) => {
       e.stopPropagation();
-      this.#beginCardEdit(node);
+      this.#beginCardEdit(entry.node);
     });
-    return el;
+    return entry;
   }
-  #cardBody(node: CanvasNode): HTMLElement {
+
+  /**
+   * Aggiorna la scheda `entry` a `node`: l'involucro sempre, il corpo
+   * (`withBody`) solo se la sua chiave è cambiata.
+   */
+  #refreshCard(entry: CardEntry, node: CanvasNode, withBody: boolean): void {
+    entry.node = node;
+    const el = entry.article;
+    if (entry.type !== node.type) {
+      el.classList.replace(`canvas-node-${entry.type}`, `canvas-node-${node.type}`);
+      entry.type = node.type;
+    }
+    el.style.transform = `translate(${node.x}px, ${node.y}px)`;
+    el.style.width = `${node.width}px`;
+    el.style.height = `${node.height}px`;
+    el.style.background = nodeFill(node.color);
+    if (node.type === "group" && node.backgroundStyle) el.dataset.backgroundStyle = node.backgroundStyle;
+    else delete el.dataset.backgroundStyle;
+    el.setAttribute("aria-label", `${node.type} ${node.id}`);
+    el.classList.toggle("selected", this.#selection.includes(node.id));
+    const title = nodeTitle(node);
+    if (entry.title.textContent !== title) entry.title.textContent = title;
+    entry.connect.setAttribute("aria-label", t("canvas.connect", { id: node.id }));
+    if (this.#readOnly) {
+      entry.resize?.remove();
+      entry.resize = null;
+    } else if (!entry.resize) {
+      const resize = document.createElement("div");
+      resize.className = "canvas-resize";
+      resize.dataset.resize = node.id;
+      resize.setAttribute("aria-hidden", "true");
+      // Dopo il corpo, prima dell'inchiostro della scheda: come quando nasce.
+      entry.body.after(resize);
+      entry.resize = resize;
+    }
+    if (!withBody) return;
+    const kind = cardKindOf(node);
+    const cards = this.#options.cards;
+    const renderer = kind && cards ? cards.registry.rendererFor(kind) : null;
+    // Una vista dipende solo dalla scheda; il corpo di sempre anche dalla
+    // lingua, e quello di testo dalle sintassi e dalla sola lettura (il
+    // pulsante che ne fa una nota).
+    const key = cardBodyKey(node, renderer ? "view"
+      : node.type === "text" ? `${this.#languageRound}:${this.#formsRound}:${this.#readOnly}`
+      : `${this.#languageRound}`);
+    if (key === entry.bodyKey) return;
+    this.#releaseBody(entry);
     const body = document.createElement("div");
     body.className = "canvas-card-body";
+    entry.body.replaceWith(body);
+    entry.body = body;
+    entry.bodyKey = key;
+    if (renderer && kind && cards) this.#mountView(entry, node, kind, renderer, cards.snapshots);
+    else this.#fillBody(entry, body, node);
+  }
+
+  /**
+   * Monta la vista del renderer nel corpo, ferma: chi è vivo lo decide la
+   * tela più tardi. Un renderer che lancia lascia il corpo di sempre, e la
+   * tela va avanti.
+   */
+  #mountView(entry: CardEntry, node: CanvasNode, kind: CardKind, renderer: CardRenderer, snapshots: CardSnapshots): void {
+    const body = entry.body;
+    const life = openLifetime();
+    const target = cardTarget(node);
+    const context: CardContext = {
+      path: target.path,
+      subpath: target.subpath,
+      documentId: this.#options.documentId ?? "",
+      lifetime: life,
+      snapshots,
+      size: () => ({ width: entry.node.width, height: entry.node.height }),
+      zoom: () => this.#camera.zoom,
+      missing: () => {
+        // Una vista già distrutta non parla più per questa scheda.
+        if (life.closed || entry.body !== body) return;
+        // Per ora il segnaposto di sempre (T16 lo cambia).
+        body.replaceChildren();
+        this.#fillBody(entry, body, entry.node);
+        entry.article.dataset.cardMissing = "true";
+      },
+    };
+    let view: CardView;
+    try {
+      view = renderer.mount(node, body, "snapshot", context);
+    } catch (error) {
+      life.close();
+      console.warn(`canvas: la scheda ${node.id} non si mostra (${kind})`, error);
+      if (entry.body === body) {
+        body.replaceChildren();
+        this.#fillBody(entry, body, node);
+      }
+      return;
+    }
+    entry.view = view;
+    entry.viewLife = life;
+    entry.article.dataset.cardKind = kind;
+    entry.article.dataset.cardMode = "snapshot";
+  }
+
+  /** Smonta ciò che tiene vivo il corpo di `entry` (Markdown, vista) e lo segna da rifare. */
+  #releaseBody(entry: CardEntry): void {
+    const teardown = entry.teardown;
+    const view = entry.view;
+    const life = entry.viewLife;
+    entry.teardown = null;
+    entry.view = null;
+    entry.viewLife = null;
+    entry.bodyKey = null;
+    delete entry.article.dataset.cardKind;
+    delete entry.article.dataset.cardMode;
+    delete entry.article.dataset.cardMissing;
+    // Una vista che lancia nel distruggersi non tiene vive le altre.
+    if (teardown) {
+      try {
+        teardown();
+      } catch (error) {
+        console.warn(`canvas: la scheda ${entry.id} non si smonta`, error);
+      }
+    }
+    if (view) {
+      try {
+        view.destroy();
+      } catch (error) {
+        console.warn(`canvas: la scheda ${entry.id} non si smonta`, error);
+      }
+    }
+    life?.close();
+  }
+
+  /** Tutte le schede giù dalla scena: ogni vista si distrugge una volta. */
+  #dropCards(): void {
+    const entries = [...this.#cards.values()];
+    this.#cards.clear();
+    for (const entry of entries) {
+      this.#releaseBody(entry);
+      entry.article.remove();
+    }
+  }
+
+  /** Il corpo di sempre di `node`, in `body`: testo, file, link o gruppo. */
+  #fillBody(entry: CardEntry, body: HTMLElement, node: CanvasNode): void {
     switch (node.type) {
       case "text": {
         const text = node.text ?? "";
@@ -3092,11 +3303,8 @@ export class CanvasEngine {
         if (render) {
           const host = document.createElement("div");
           host.className = "canvas-markdown";
-          const key = `${node.id}`;
-          this.#markdownTeardowns.get(key)?.();
-          this.#markdownTeardowns.delete(key);
           const teardown = render(node.id, text, host, this.#forms);
-          if (typeof teardown === "function") this.#markdownTeardowns.set(key, teardown);
+          if (typeof teardown === "function") entry.teardown = teardown;
           body.append(host);
         } else {
           // Senza hook: testo non interattivo. Nessuno scanner locale: un
@@ -3114,7 +3322,8 @@ export class CanvasEngine {
           convert.textContent = t("canvas.convert_note");
           convert.addEventListener("click", (event) => {
             event.stopPropagation();
-            void this.#convertTextToNote(node).catch((error: unknown) => this.#showIntakeError(error));
+            // La scheda di adesso: il corpo resta anche se la si sposta.
+            void this.#convertTextToNote(entry.node).catch((error: unknown) => this.#showIntakeError(error));
           });
           body.append(convert);
         }
@@ -3181,7 +3390,6 @@ export class CanvasEngine {
         break;
       }
     }
-    return body;
   }
 
   #beginCardEdit(target: CanvasNode): void {
@@ -3194,9 +3402,12 @@ export class CanvasEngine {
       if (!this.#closeField(false)) return;
       this.#render();
     }
-    const article = this.#stage.querySelector<HTMLElement>(`[data-node="${CSS.escape(node.id)}"]`);
-    const body = article?.querySelector<HTMLElement>(".canvas-card-body");
-    if (!article || !body) return;
+    const entry = this.#cards.get(node.id);
+    if (!entry || entry.article.parentElement !== this.#stage) return;
+    const { article, body } = entry;
+    // Il campo prende il posto del corpo: la vista o il Markdown si smontano,
+    // e il corpo si rifà alla prima resa dopo che il campo si chiude.
+    this.#releaseBody(entry);
     const field: CardField = node.type === "text" ? "text" : node.type === "group" ? "label" : node.type === "link" ? "url" : "file";
     const input = node.type === "text" ? document.createElement("textarea") : document.createElement("input");
     input.className = node.type === "text" ? "canvas-text-editor" : "canvas-field-editor";
@@ -3327,13 +3538,31 @@ function sourceOperation(before: string, after: string, edit: CanvasSourceEdit):
   };
 }
 
-/** Aggiorna la scheda col campo aperto senza toglierla dalla scena. */
-function refreshCard(article: HTMLElement, node: CanvasNode, selected: boolean): void {
-  article.style.transform = `translate(${node.x}px, ${node.y}px)`;
-  article.style.width = `${node.width}px`;
-  article.style.height = `${node.height}px`;
-  article.style.background = nodeFill(node.color);
-  article.classList.toggle("selected", selected);
+/**
+ * La chiave del corpo di una scheda: ciò che il corpo mostra (`type`, `file`,
+ * `subpath`, `url`, `text`, `label`, lo sfondo di un gruppo) più `extra`, ciò
+ * che il corpo legge da fuori. Posto, misura, colore e scelta non ci sono:
+ * cambiarli non rifà il corpo.
+ */
+function cardBodyKey(node: CanvasNode, extra: string): string {
+  return JSON.stringify([
+    node.type, node.file ?? null, node.subpath ?? null, node.url ?? null,
+    node.text ?? null, node.label ?? null, node.background ?? null, extra,
+  ]);
+}
+
+/**
+ * Il file di una scheda per il suo renderer: il percorso senza `#…` e il
+ * `subpath`, da `subpath` o, se manca, dal `#` nel percorso. Una scheda di
+ * link non ha file: il percorso è vuoto e l'indirizzo è in `node.url`.
+ */
+function cardTarget(node: CanvasNode): { path: string; subpath: string | null } {
+  if (node.type !== "file") return { path: "", subpath: null };
+  const file = typeof node.file === "string" ? node.file : "";
+  const hash = file.indexOf("#");
+  const path = hash < 0 ? file : file.slice(0, hash);
+  const subpath = typeof node.subpath === "string" && node.subpath ? node.subpath : hash < 0 ? null : file.slice(hash);
+  return { path, subpath };
 }
 
 function nodeTitle(node: CanvasNode): string {
