@@ -947,7 +947,7 @@ i test che falliscono sono elencati in `UPSTREAM.md` con il perché);
 `UPSTREAM.md` dice revisione, patch, peso dei sorgenti e tempo di
 compilazione misurati.
 Prova: scripts/check.sh --rapido; node tools/vendor-craft/vendor.mjs self-test; node tools/vendor-craft/vendor.mjs vectorcraft check
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-09) · 37cf84d7..4a75895d, CI dell'orchestratore in coda · 7.722 test di VectorCraft verdi, 0 rossi, 13 `#[ignore]` dell'upstream; differenze: patch 0001 (metafile, affinity, plugins spenti) e 0002 (PDF ed EPS fuori dal grafo di `engine`, la feature `pdf` non dichiarata perché il lock vorrebbe `craft-pdf` da Git); `cad` e `scriptcheck` restano obbligatori; salvare verso `.pdf`/`.ai`/`.eps` senza `format` ora è rifiutato con un suggerimento; `vendor.mjs` ammette chiavi booleane fra percorso e versione; aperta la licenza IJG di `jpeg-encoder` (rossa in `cargo deny` da T9, domanda all'utente)
 
 ## T7 · I caratteri per i motori
 
