@@ -257,7 +257,11 @@ globalThis.__fubLiveBench = Object.freeze({
 /// file che soltanto quella scena ha: l'albero e i conteggi delle altre
 /// restano quelli delle loro baseline. Sessione e finestre sono quelle che
 /// `fub-format-xlsx` produce davvero (`tests/ts_grid.rs`).
-const WORKBOOK_DOC = params.get("workbook") === "1" ? "Dati/Conti.xlsx" : null;
+///
+/// `?workbook=large` apre invece una cartella grande, fatta qui in codice
+/// con la forma di `xlsx-grid.json`: la scena `grid-large` dei controlli G1.
+const WORKBOOK = params.get("workbook");
+const WORKBOOK_DOC = WORKBOOK === "1" ? "Dati/Conti.xlsx" : WORKBOOK === "large" ? "Dati/Grande.xlsx" : null;
 
 /// Gli stati della barra dei fogli che la cartella generata non ha
 /// (`?grid=table|readonly`, insieme a `?workbook=1`): una copia delle sue
@@ -295,6 +299,96 @@ const BENCH_SESSION = GRID_CASE === "readonly"
       LOOKING.test(command.id) ? command : { ...command, enabled: false, reason: "La cartella è aperta in sola lettura." }),
   }
   : XLSX_GRID.session;
+
+/// La cartella grande della scena `grid-large` (`?workbook=large`): 3000
+/// righe per 20 colonne, la riga 1 e la colonna A bloccate, numeri, date e
+/// testi lunghi che debordano nelle celle vuote dopo di loro. Le finestre
+/// sono blocchi di 256 righe con tutte le colonne, come le chiede il motore.
+const LARGE_ROWS = 3000;
+const LARGE_COLUMNS = 20;
+const LARGE_BLOCK = 256;
+const LARGE_STYLE = { ...XLSX_GRID.windows[0]!.styles[0]!, bold: false, italic: false, text_color: null, horizontal: null };
+const LARGE_SESSION = {
+  ...XLSX_GRID.session,
+  instance: "xlsx-large",
+  revision: "sha256:grande",
+  sheets: [{ id: "s1", name: "Grande", row_count: LARGE_ROWS, column_count: LARGE_COLUMNS }],
+  active: "s1",
+  hidden: [],
+  notices: [],
+  conflicts: [],
+};
+const LARGE_MONTHS = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
+type LargeValue = { value: { kind: "text"; value: string } | { kind: "number"; value: number }; display: string };
+/// Il valore della cella (riga, colonna) da zero, o `null` se è vuota. La
+/// colonna D porta un testo lungo, e la E e la F restano vuote per lasciarlo
+/// debordare.
+function largeValue(row: number, column: number): LargeValue | null {
+  const text = (value: string): LargeValue => ({ value: { kind: "text", value }, display: value });
+  const number = (value: number, display = String(value)): LargeValue => ({ value: { kind: "number", value }, display });
+  if (row === 0) {
+    const heads = ["Voce", "Importo", "Data", "Descrizione", "", "", "Quantità"];
+    if (column >= heads.length) return text(`Colonna ${column + 1}`);
+    return heads[column] ? text(heads[column]!) : null;
+  }
+  switch (column) {
+    case 0: return text(`Voce ${row}`);
+    case 1: {
+      const amount = Math.round(((row * 37) % 1000) * 150) / 100;
+      return number(amount, amount.toFixed(2));
+    }
+    case 2: return number(45658 + row, `${1 + (row % 28)} ${LARGE_MONTHS[row % 12]} 2026`);
+    case 3: return text(`Una descrizione lunga della voce ${row}, che deborda nelle celle vuote a destra`);
+    case 4: case 5: return null;
+    default: return number((row * (column + 3)) % 997);
+  }
+}
+function largeWindow(start: number) {
+  const count = Math.min(LARGE_BLOCK, LARGE_ROWS - start);
+  const rows = Array.from({ length: count }, (_, at) => ({ id: `r${start + at}`, index: start + at, height: 20.0, hidden: false }));
+  const columns = Array.from({ length: LARGE_COLUMNS }, (_, index) =>
+    ({ id: `c${index}`, index, width: index === 0 ? 140.0 : index === 3 ? 96.0 : 64.0, hidden: false }));
+  const cells = [];
+  for (const row of rows) {
+    for (const column of columns) {
+      const cell = largeValue(row.index, column.index);
+      if (!cell) continue;
+      cells.push({
+        key: { sheet: "s1", row: row.id, column: column.id },
+        input: cell.display,
+        style: 0,
+        ...cell,
+        lock: null,
+        stale: false,
+        conflict: false,
+        data_bar: null,
+        icon: null,
+        comment: null,
+        link: null,
+      });
+    }
+  }
+  return {
+    revision: LARGE_SESSION.revision,
+    sheet: "s1",
+    row_start: start,
+    column_start: 0,
+    total_rows: LARGE_ROWS,
+    total_columns: LARGE_COLUMNS,
+    rows,
+    columns,
+    cells,
+    styles: [LARGE_STYLE],
+    merges: [],
+    view: { ...XLSX_GRID.windows[0]!.view, frozen_rows: 1, frozen_columns: 1 },
+    tables: [],
+    objects: [],
+  };
+}
+/// Le finestre si fanno solo se la scena le chiede.
+const LARGE_WINDOWS = WORKBOOK === "large"
+  ? Array.from({ length: Math.ceil(LARGE_ROWS / LARGE_BLOCK) }, (_, block) => largeWindow(block * LARGE_BLOCK))
+  : [];
 
 /// Il risultato dei comandi che leggono (`?result=stats|errors|empty`,
 /// insieme a `?workbook=1`): la risposta del provider alla prima esecuzione,
@@ -1464,7 +1558,11 @@ const options: Options = {
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(WORKBOOK_DOC === null ? {} : {
     // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.
-    gridBytes: {
+    gridBytes: WORKBOOK === "large" ? {
+      surface: XLSX_GRID.surface,
+      session: LARGE_SESSION,
+      windows: LARGE_WINDOWS,
+    } as GridBytesFake : {
       surface: XLSX_GRID.surface,
       session: BENCH_SESSION,
       windows: [...XLSX_GRID.windows, XLSX_GRID.edit.window].map(benchWindow),

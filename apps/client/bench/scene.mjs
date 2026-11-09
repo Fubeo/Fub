@@ -442,6 +442,16 @@ export const SCENE = onPage("shell", [
     query: "workbook=1",
     prepare: openWorkbook,
   },
+  // **La cartella grande** (griglia T1): 3000 righe per 20 colonne con la
+  // riga 1 e la colonna A bloccate, fatta in codice dal finto
+  // (`?workbook=large`). I controlli G1 di `bench/grid-gestures.mjs` ci
+  // scorrono sopra.
+  {
+    id: "grid-large",
+    title: "Grid v2: una cartella grande, con la riga e la colonna bloccate",
+    query: "workbook=large",
+    prepare: (page) => openWorkbook(page, "Dati/Grande.xlsx"),
+  },
   // **I gesti della griglia**, sulla stessa cartella: gli stati che i
   // cantieri dei gesti (Q1–Q8) cambiano, e che `bench/grid-gestures.mjs`
   // controlla con input veri.
@@ -1831,9 +1841,9 @@ async function openLentDocx(page) {
 
 /// Apre la cartella di Excel della scena `grid-workbook` e aspetta che la
 /// griglia v2 abbia disegnato le sue celle.
-async function openWorkbook(page) {
+async function openWorkbook(page, path = "Dati/Conti.xlsx") {
   await openFolder(page, "Dati");
-  await page.click('#file-list .tree-row[data-path="Dati/Conti.xlsx"]');
+  await page.click(`#file-list .tree-row[data-path="${path}"]`);
   await page.waitForFunction(() => {
     const grid = document.querySelector(".grid-surface");
     return grid?.getAttribute("data-grid-protocol") === "v2"

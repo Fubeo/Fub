@@ -17,7 +17,8 @@
 // parte da un timer della pagina, e con l'orologio fermo non partirebbe mai.
 //
 // Ogni controllo parte da una pagina nuova sulla scena `grid-workbook`
-// (`Dati/Conti.xlsx`), fa il gesto con il mouse e la tastiera di Playwright, e
+// (`Dati/Conti.xlsx`), o su quella che dice il suo campo `scene` (i controlli
+// G1 sulla cartella grande, `grid-large`), fa il gesto con il mouse e la tastiera di Playwright, e
 // legge quattro cose: la bozza nel campo della cella, dove sta il fuoco, la
 // cella attiva (`.grid-cell.active` e il nome `.grid-cell-name`) e se l'editor
 // della cella è aperto. **Non** legge i valori riletti: l'host del banco non
@@ -48,11 +49,14 @@ import { SCENE, sceneUrl } from "./scene.mjs";
 import { openStage, openPage, prepareScene, OUTPUT } from "./stage.mjs";
 
 /// I cantieri chiusi: i loro controlli decidono l'esito del banco.
-const ACCESI = new Set(["Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8", "Q9", "Q10", "Q11", "Q12", "Q13", "Q14", "Q15"]);
+const ACCESI = new Set(["Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8", "Q9", "Q10", "Q11", "Q12", "Q13", "Q14", "Q15", "G1"]);
 
 const REPORT = join(OUTPUT, "grid-gestures.json");
 const SHOTS = join(OUTPUT, "grid-gestures");
+/// La scena di serie dei controlli; un controllo con `scene` usa la sua.
 const SCENE_ID = "grid-workbook";
+/// La cartella grande, con la riga 1 e la colonna A bloccate (griglia T1).
+const LARGE_SCENE_ID = "grid-large";
 
 /// La pausa fra le battute «lente» di d34: abbastanza da lasciar partire
 /// l'autosalvataggio a metà parola (~400 ms dopo l'ultima modifica).
@@ -730,6 +734,155 @@ const CONTROLS = [
     expected: "la riga delle intestazioni A B C in ogni fotogramma",
     run: (page, { shotPath }) => scrollFilm(page, shotPath),
   },
+  // **Il piano a strati** (griglia T1), sulla cartella grande con la riga 1
+  // e la colonna A bloccate: le fasce ferme stanno ferme da sé, e i segni si
+  // tagliano per zona.
+  {
+    id: "g1-colonna-ferma",
+    cantiere: "G1",
+    scene: LARGE_SCENE_ID,
+    title: "scorrimento filmato (Input.synthesizeScrollGesture) di 1200 px a destra e di nuovo indietro",
+    expected: "la colonna A e le intestazioni delle righe, ritagliate, uguali al primo fotogramma in ogni fotogramma",
+    run: (page, { shotPath }) => frozenColumnFilm(page, shotPath),
+  },
+  {
+    id: "g1-intervallo-oltre-il-blocco",
+    cantiere: "G1",
+    scene: LARGE_SCENE_ID,
+    title: "C1:E9 scelto col mouse, poi 100 px a destra e 300 px in giù con la rotella",
+    expected: "il rettangolo, sommato sulle zone, alto quanto le righe 1–9 meno ciò che sta sotto la riga bloccata; nessun pezzo sopra una cella della colonna A o un'intestazione di riga",
+    run: async (page) => {
+      await pick(page, "C1");
+      const { x, y } = await centerOf(page, cellSelector("E9"));
+      await page.keyboard.down("Shift");
+      await page.mouse.click(x, y);
+      await page.keyboard.up("Shift");
+      await settle(page);
+      const viewport = await centerOf(page, ".pane.focus .grid-viewport");
+      await page.mouse.move(viewport.x, viewport.y);
+      await page.mouse.wheel(100, 0);
+      await settle(page);
+      await page.mouse.wheel(0, 300);
+      await settle(page, 500);
+      const look = await page.evaluate(({ c1, c9 }) => {
+        const viewport = document.querySelector(".pane.focus .grid-viewport");
+        const plane = viewport.querySelector(".grid-plane");
+        const v = viewport.getBoundingClientRect();
+        const bands = {
+          top: parseFloat(plane.style.getPropertyValue("--grid-top-h")),
+          left: parseFloat(plane.style.getPropertyValue("--grid-left-w")),
+        };
+        // I segni non si toccano col puntatore: per leggerli con
+        // `elementsFromPoint` lo si accende un momento.
+        const probe = document.createElement("style");
+        probe.textContent = ".grid-selection { pointer-events: auto !important; }";
+        document.head.append(probe);
+        const covers = (element) => element.matches(".grid-cell, .grid-row-header, .grid-column-header, .grid-corner, .grid-freeze");
+        // In (x, y) si vede un pezzo del rettangolo se sta sopra a ogni cella
+        // e intestazione che ci passa.
+        const markOnTop = (x, y) => {
+          for (const element of document.elementsFromPoint(x, y)) {
+            if (element.classList.contains("grid-selection")) return true;
+            if (covers(element)) return false;
+          }
+          return false;
+        };
+        // L'altezza vista, su una verticale dentro la colonna D.
+        const d = document.querySelector('.pane.focus .grid-cell[data-row="1"][data-column="3"]')?.getBoundingClientRect();
+        const column = d ? d.left + d.width / 2 : v.left + bands.left + 40;
+        let seenHeight = 0;
+        for (let y = Math.floor(v.top); y < v.top + viewport.clientHeight; y += 1) if (markOnTop(column, y + 0.5)) seenHeight += 1;
+        // L'altezza attesa: la riga 1 fino al filo del blocco, più le righe
+        // 2–9 per la parte sotto la testa.
+        const first = document.querySelector(c1).getBoundingClientRect();
+        const last = document.querySelector(c9)?.getBoundingClientRect();
+        const headEnd = v.top + bands.top;
+        const top = Math.max(0, Math.min(first.bottom, headEnd - 1) - first.top);
+        // La riga 2 comincia nel piano dove finisce la testa; C9 può non
+        // essere più disegnata.
+        const bodyStart = v.top + bands.top - viewport.scrollTop;
+        const bodyEnd = last ? last.bottom : bodyStart + 8 * first.height;
+        const body = Math.max(0, Math.min(bodyEnd, v.top + viewport.clientHeight) - Math.max(bodyStart, headEnd));
+        // Sopra la colonna A e le intestazioni delle righe, lungo tutta la
+        // finestra, nessun pezzo.
+        const over = [];
+        const xs = [v.left + 4, v.left + bands.left / 2, v.left + bands.left - 4];
+        for (const x of xs) {
+          for (let y = Math.floor(v.top); y < v.top + viewport.clientHeight; y += 2) {
+            if (markOnTop(x, y + 0.5)) over.push(`${Math.round(x - v.left)},${Math.round(y - v.top)}`);
+          }
+        }
+        probe.remove();
+        return {
+          marks: document.querySelectorAll(".pane.focus .grid-selection").length,
+          seenHeight,
+          expected: Math.round(top + body),
+          over: over.slice(0, 6),
+          overCount: over.length,
+          scroll: { left: viewport.scrollLeft, top: viewport.scrollTop },
+        };
+      }, { c1: cellSelector("C1"), c9: cellSelector("C9") });
+      return {
+        ok: look.scroll.left > 0 && look.scroll.top > 0 && look.expected > 0
+          && Math.abs(look.seenHeight - look.expected) <= 2 && look.overCount === 0,
+        seen: `scorso ${look.scroll.left}, ${look.scroll.top}: ${look.marks} pezzi, alto ${look.seenHeight} px su ${look.expected} attesi; sopra la colonna ferma in ${look.overCount} punti${look.over.length ? ` (${look.over.join(" ")})` : ""}`,
+        look,
+      };
+    },
+  },
+  {
+    id: "g1-quadratino-intero",
+    cantiere: "G1",
+    scene: LARGE_SCENE_ID,
+    title: "il quadratino su A5 (sul filo della colonna bloccata) e su B1 (sul filo della riga bloccata), prima e dopo 40 px di scorrimento",
+    expected: "un elemento solo, 8 × 8, intero e col centro sul filo; così anche dopo 40 px a destra (A5) e in giù (B1)",
+    run: async (page) => {
+      const handle = () => page.evaluate(() => {
+        const viewport = document.querySelector(".pane.focus .grid-viewport");
+        const plane = viewport.querySelector(".grid-plane");
+        const v = viewport.getBoundingClientRect();
+        const bands = {
+          top: parseFloat(plane.style.getPropertyValue("--grid-top-h")),
+          left: parseFloat(plane.style.getPropertyValue("--grid-left-w")),
+        };
+        const handles = [...document.querySelectorAll(".pane.focus .grid-fill-handle")];
+        const box = handles[0]?.getBoundingClientRect();
+        // Intero: ai quattro angoli, appena dentro, il quadratino sta sopra
+        // a tutto.
+        const whole = Boolean(box) && [[1, 1], [box.width - 1, 1], [1, box.height - 1], [box.width - 1, box.height - 1]]
+          .every(([dx, dy]) => document.elementsFromPoint(box.left + dx, box.top + dy)[0] === handles[0]);
+        return {
+          count: handles.length,
+          size: box ? `${Math.round(box.width)}×${Math.round(box.height)}` : "niente",
+          whole,
+          // Il centro, rispetto all'inizio dei fili del blocco.
+          x: box ? Math.round((box.left + box.width / 2 - v.left - bands.left) * 2) / 2 : null,
+          y: box ? Math.round((box.top + box.height / 2 - v.top - bands.top) * 2) / 2 : null,
+        };
+      });
+      const viewport = await centerOf(page, ".pane.focus .grid-viewport");
+      const report = [];
+      let ok = true;
+      for (const [a1, line, dx, dy] of [["A5", "x", 40, 0], ["B1", "y", 0, 40]]) {
+        await page.evaluate(() => {
+          const v = document.querySelector(".pane.focus .grid-viewport");
+          v.scrollLeft = 0;
+          v.scrollTop = 0;
+        });
+        await settle(page);
+        await pick(page, a1);
+        const still = await handle();
+        await page.mouse.move(viewport.x, viewport.y);
+        await page.mouse.wheel(dx, dy);
+        await settle(page, 500);
+        const moved = await handle();
+        const good = (h) => h.count === 1 && h.size === "8×8" && h.whole && Math.abs(h[line]) <= 1;
+        ok = ok && good(still) && good(moved);
+        report.push(`${a1}: ${still.count} elementi ${still.size}${still.whole ? " intero" : " tagliato"}, centro dal filo ${still[line]} px; dopo ${dx || dy} px ${moved.count} elementi ${moved.size}${moved.whole ? " intero" : " tagliato"}, centro dal filo ${moved[line]} px`);
+      }
+      return { ok, seen: report.join("; ") };
+    },
+  },
 ];
 
 /// d42: filma uno scorrimento vero e confronta, fotogramma per fotogramma, il
@@ -855,6 +1008,101 @@ async function scrollFilm(page, shotPath) {
   };
 }
 
+/// G1: filma uno scorrimento vero a destra e indietro, e confronta,
+/// fotogramma per fotogramma, la colonna ferma (le intestazioni delle righe e
+/// la colonna A bloccata, fino al filo) con quella del primo fotogramma, a
+/// riposo. Deve restare uguale al pixel: è ferma da sé, senza script che la
+/// rincorra. Il riferimento è un fotogramma e non una foto della pagina: la
+/// foto smussa gli angoli tondi del riquadro in un altro modo. Il ritaglio
+/// lascia fuori l'angolo tondo in basso del riquadro: Chromium lo smussa in
+/// un modo da fermo e in un altro quando scorre, e non è la colonna ferma.
+async function frozenColumnFilm(page, shotPath) {
+  const band = await page.evaluate(() => {
+    const viewport = document.querySelector(".pane.focus .grid-viewport");
+    const plane = viewport.querySelector(".grid-plane");
+    const v = viewport.getBoundingClientRect();
+    let corner = 0;
+    for (let el = viewport; el && el !== document.body; el = el.parentElement) {
+      if (Math.abs(el.getBoundingClientRect().bottom - v.bottom) > 2) continue;
+      corner = Math.max(corner, parseFloat(getComputedStyle(el).borderBottomLeftRadius) || 0);
+    }
+    return {
+      x: Math.round(v.left),
+      y: Math.round(v.top),
+      width: Math.round(parseFloat(plane.style.getPropertyValue("--grid-left-w"))),
+      height: Math.round(viewport.clientHeight - Math.max(0, corner - (v.height - viewport.clientHeight))),
+      centerX: Math.round(v.left + v.width / 2),
+      centerY: Math.round(v.top + v.height / 2),
+    };
+  });
+  const crop = (png, dx = 0) => {
+    const out = new PNG({ width: band.width, height: band.height });
+    PNG.bitblt(png, out, band.x + dx, band.y, band.width, band.height, 0, 0);
+    return out;
+  };
+  // Un secondo ritaglio, accanto alla colonna ferma: deve cambiare, o il
+  // filmato non ha visto lo scorrimento e non prova niente.
+  const BODY_DX = band.width + 8;
+  // Il puntatore sta già dove parte il gesto: col passaggio sul riquadro
+  // compaiono le sue barre di scorrimento, e non devono comparire a metà.
+  await page.mouse.move(band.centerX, band.centerY);
+  await settle(page, 400);
+
+  const cdp = await page.context().newCDPSession(page);
+  const frames = [];
+  cdp.on("Page.screencastFrame", (frame) => {
+    frames.push(frame.data);
+    cdp.send("Page.screencastFrameAck", { sessionId: frame.sessionId }).catch(() => {});
+  });
+  await cdp.send("Page.startScreencast", { format: "png", everyNthFrame: 1 });
+  // Il primo fotogramma arriva prima del gesto.
+  for (let wait = 0; frames.length === 0 && wait < 20; wait += 1) await settle(page, 50);
+  let scrolled = 0;
+  for (const xDistance of [-1200, 1200]) {
+    await cdp.send("Input.synthesizeScrollGesture", {
+      x: band.centerX,
+      y: band.centerY,
+      xDistance,
+      yDistance: 0,
+      speed: 1600,
+      gestureSourceType: "mouse",
+    });
+    await settle(page, 300);
+    scrolled = Math.max(scrolled, await page.evaluate(() => document.querySelector(".pane.focus .grid-viewport").scrollLeft));
+  }
+  await cdp.send("Page.stopScreencast");
+  await cdp.detach();
+
+  const pngs = frames
+    .map((data) => PNG.sync.read(Buffer.from(data, "base64")))
+    .filter((png) => png.width >= band.x + BODY_DX + band.width && png.height >= band.y + band.height);
+  if (pngs.length < 3) {
+    return { skip: `lo screencast ha dato ${pngs.length} fotogrammi utili: troppo pochi per dire qualcosa`, frames: frames.length };
+  }
+  const reference = crop(pngs[0]);
+  const bodyReference = crop(pngs[0], BODY_DX);
+  let different = 0;
+  let bodyMoved = 0;
+  let worst = { index: -1, pixels: 0, png: null };
+  for (const [index, png] of pngs.entries()) {
+    const pixels = pixelmatch(reference.data, crop(png).data, null, band.width, band.height, { threshold: 0.1 });
+    if (pixels > 0) different += 1;
+    if (pixels > worst.pixels) worst = { index, pixels, png };
+    if (pixelmatch(bodyReference.data, crop(png, BODY_DX).data, null, band.width, band.height, { threshold: 0.1 }) > 0) bodyMoved += 1;
+  }
+  await writeFile(shotPath, PNG.sync.write(worst.png ?? pngs.at(-1)));
+  if (bodyMoved === 0) {
+    return { skip: `nessuno dei ${pngs.length} fotogrammi mostra le celle in movimento: il filmato non ha visto lo scorrimento`, frames: pngs.length };
+  }
+  return {
+    ok: different === 0 && scrolled > 0,
+    seen: `${pngs.length} fotogrammi, scorso fino a ${scrolled} px e ritorno: celle in movimento in ${bodyMoved}, colonna ferma diversa dal primo fotogramma in ${different}${worst.png ? ` (peggiore n. ${worst.index}, ${worst.pixels} pixel)` : ""}`,
+    frames: pngs.length,
+    different,
+    worstPixels: worst.pixels,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // La corsa.
 // ---------------------------------------------------------------------------
@@ -872,7 +1120,7 @@ async function runControl(stage, scene, control) {
     await prepareScene(page, scene, "dark", stage.base, sceneUrl);
     const result = await control.run(page, { shotPath });
     Object.assign(row, result);
-    if (!result.skip && control.id !== "d42-intestazioni-durante-scorrimento") {
+    if (!result.skip && control.id !== "d42-intestazioni-durante-scorrimento" && control.id !== "g1-colonna-ferma") {
       await page.screenshot({ path: shotPath });
     }
   } catch (error) {
@@ -888,19 +1136,24 @@ async function runControl(stage, scene, control) {
 }
 
 async function main() {
-  const scene = SCENE.find((s) => s.id === SCENE_ID);
-  if (!scene) throw new Error(`la scena ${SCENE_ID} non c'è in scene.mjs`);
+  const sceneOf = (control) => {
+    const id = control.scene ?? SCENE_ID;
+    const scene = SCENE.find((s) => s.id === id);
+    if (!scene) throw new Error(`la scena ${id} non c'è in scene.mjs`);
+    return scene;
+  };
   const controls = CONTROLS.filter((c) => !only || only.some((prefix) => c.id.startsWith(prefix)));
   if (controls.length === 0) throw new Error(`nessun controllo per --only=${only?.join(",")}`);
+  for (const control of controls) sceneOf(control);
   await rm(SHOTS, { recursive: true, force: true });
   await mkdir(SHOTS, { recursive: true });
 
   const started = Date.now();
-  const report = { scene: SCENE_ID, accesi: [...ACCESI], controls: [] };
+  const report = { scenes: [...new Set(controls.map((control) => control.scene ?? SCENE_ID))], accesi: [...ACCESI], controls: [] };
   const stage = await openStage();
   try {
     for (const control of controls) {
-      const row = await runControl(stage, scene, control);
+      const row = await runControl(stage, sceneOf(control), control);
       report.controls.push(row);
       const mark = row.outcome === "passa" ? "✓" : row.outcome === "FALLISCE" ? "✗" : "·";
       console.log(`${mark} [${row.cantiere}] ${row.id}: ${row.outcome}`);
