@@ -1016,7 +1016,7 @@ Fatto quando:
 - `media-surface.test.ts` vede la voce della banda e il suo cambio di pagina;
 - la foto di `pdf-domanda`, in giorno e notte, a 1280 e a 700, sta accanto a `?stato=pdf`.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · 55ef8b03..cad99ac5 · (barra in fila con le figure, «…», un solo punto di Tab, «Pagina N di M» nella banda; a 700 px la fila scorre di lato invece di mandare il resto in «…»; `media-pdf-group` fuori dall'anatomia perché la pelle non lo veste)
 
 ## T19 · I file Craft senza anteprima
 
