@@ -717,6 +717,10 @@ export class GridEngine {
   #paperPeriod = DEFAULT_ROW_HEIGHT;
   /// Le celle disegnate che aspettano di essere misurate (`#fitPending`).
   #pendingFits: HTMLElement[] = [];
+  /// Le misure del riquadro lette dal gestore dello scorrimento prima di
+  /// scrivere, buone fino al fotogramma chiesto: chi disegna in mezzo (una
+  /// finestra arrivata) non obbliga il browser a impaginare per rileggerle.
+  #scrollView: PaperView | null = null;
   readonly #corner: HTMLElement;
   readonly #cellEditorHost: HTMLElement;
   readonly #notice: HTMLElement;
@@ -984,7 +988,9 @@ export class GridEngine {
     // obbligherebbe il browser a impaginare dentro il gestore.
     this.#viewport.addEventListener("scroll", () => {
       void this.#loadViewport();
-      if (this.#workbook) this.#renderRows(this.#selectedRange(), true);
+      const view = this.#readView();
+      this.#scrollView = view;
+      if (this.#workbook) this.#renderRows(this.#selectedRange(), true, view);
       this.#scheduleRender();
     }, { signal });
     // L'editor della cella sta dentro la griglia, e i suoi eventi salgono fin
@@ -1888,7 +1894,11 @@ export class GridEngine {
   }
 
   /// Ridisegna la cartella dalla sessione mostrata e dalle finestre lette.
-  #showView(sheetId: string, top: boolean): void {
+  /// `loaded`: una finestra arrivata mentre si scorre. Si mostra subito, ma
+  /// con le misure che il gestore dello scorrimento ha già letto, e le celle
+  /// da misurare le misura il fotogramma chiesto: arriva fra uno scorrimento
+  /// e il suo fotogramma, e non deve allungare quel giro.
+  #showView(sheetId: string, top: boolean, loaded = false): void {
     const session = this.#shownSession;
     if (!session) return;
     const view = workbookView(session, this.#windows, this.#view);
@@ -1902,7 +1912,7 @@ export class GridEngine {
     }
     this.#showNotice();
     this.#showSheetTabs();
-    this.#showSheet(top);
+    this.#showSheet(top, loaded);
     this.#options.onView?.();
   }
 
@@ -1923,7 +1933,7 @@ export class GridEngine {
         // Una modifica confermata nel frattempo rilegge lo schermo da sé.
         if (!current() || !fresh.length) return;
         this.#windows = keptWindows(this.#windows, fresh, revision);
-        this.#showView(this.#sheet().id, false);
+        this.#showView(this.#sheet().id, false, true);
         this.#followMedia();
       } catch (error) {
         if (!current()) return;
@@ -2231,8 +2241,9 @@ export class GridEngine {
     this.#notice.hidden = lines.length === 0;
   }
 
-  /// Ridisegna il foglio `#sheetIndex`; `top` lo riporta in cima.
-  #showSheet(top: boolean): void {
+  /// Ridisegna il foglio `#sheetIndex`; `top` lo riporta in cima. `loaded`
+  /// come in `#showView`.
+  #showSheet(top: boolean, loaded = false): void {
     this.#selection = this.#clampedSelection(this.#selection);
     this.#rebuildLayout();
     this.#selection = this.#visibleSelection(this.#selection);
@@ -2241,7 +2252,7 @@ export class GridEngine {
       this.#viewport.scrollLeft = 0;
     }
     if (!this.#editing) this.#syncFormulaBar();
-    this.#render();
+    this.#render(true, loaded && !top);
   }
 
   /// Le schede dei fogli, quando ce n'è più di uno da mostrare. Si rifanno
@@ -2416,11 +2427,16 @@ export class GridEngine {
   /// Il disegno intero: le righe (`rows`), poi i segni, la cella aperta e
   /// ciò che chi legge sente. Il fotogramma chiesto dallo scorrimento, che
   /// le righe le ha già disegnate nel suo gestore, non le rifà.
-  #render(rows = true): void {
+  ///
+  /// `loaded` (una finestra arrivata, `#showView`): le righe con le misure
+  /// lette dal gestore dello scorrimento, e la misura delle celle al
+  /// fotogramma chiesto.
+  #render(rows = true, loaded = false): void {
     if (!this.#workbook) return;
     const range = this.#selectedRange();
-    if (rows) this.#renderRows(range);
-    this.#fitPending();
+    if (rows) this.#renderRows(range, loaded, loaded ? this.#scrollView : null);
+    if (loaded) this.#scheduleRender();
+    else this.#fitPending();
     // I segni, ognuno nel livello della zona dove cade.
     const drawing: Drawing = new Map();
     this.#objectElements(drawing);
@@ -2483,14 +2499,9 @@ export class GridEngine {
   /// Le celle da misurare (i numeri, quelle che si stringono) le misura
   /// `#fitPending`: subito, o con `deferFit` nel fotogramma chiesto, prima
   /// che il fotogramma si dipinga.
-  #renderRows(range: GridRange, deferFit = false): void {
+  #renderRows(range: GridRange, deferFit = false, known: PaperView | null = null): void {
     const frame = this.#frame;
-    const view: PaperView = {
-      scrollTop: this.#viewport.scrollTop,
-      scrollLeft: this.#viewport.scrollLeft,
-      width: this.#viewport.clientWidth,
-      height: this.#viewport.clientHeight,
-    };
+    const view = known ?? this.#readView();
     const sheet = this.#sheet().id;
     if (sheet !== this.#drawnSheet) {
       this.#drawnSheet = sheet;
@@ -2576,6 +2587,16 @@ export class GridEngine {
     this.#paperColumns(renderedColumns);
     this.#pendingFits.push(...measures);
     if (!deferFit) this.#fitPending();
+  }
+
+  /// Le misure del riquadro, lette tutte insieme.
+  #readView(): PaperView {
+    return {
+      scrollTop: this.#viewport.scrollTop,
+      scrollLeft: this.#viewport.scrollLeft,
+      width: this.#viewport.clientWidth,
+      height: this.#viewport.clientHeight,
+    };
   }
 
   /// Misura le celle disegnate che aspettano (`#renderRows`): leggere la loro
@@ -4144,6 +4165,7 @@ export class GridEngine {
     if (this.#renderFrame !== null) return;
     this.#renderFrame = requestAnimationFrame(() => {
       this.#renderFrame = null;
+      this.#scrollView = null;
       if (!this.#destroyed) this.#render(false);
     });
   }
