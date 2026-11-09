@@ -8,9 +8,10 @@
 
 import type { CardKind, CardSize, Rect } from "./cards";
 
-/// Il passo a cui la tela aggancia posizioni e misure. È `CANVAS_SNAP` di
-/// `engine.ts`, ripetuto qui perché `engine.ts` tira dentro il DOM e i testi;
-/// `drop-layout.test.ts` controlla che i due valori restino uguali.
+/// Il passo a cui la tela aggancia le posizioni e le misure ridimensionate a
+/// mano. È `CANVAS_SNAP` di `engine.ts`, ripetuto qui perché `engine.ts` tira
+/// dentro il DOM e i testi; `drop-layout.test.ts` controlla che i due valori
+/// restino uguali. Le misure di nascita non si agganciano (A-16).
 export const DROP_SNAP = 8;
 
 /// La misura più piccola di una scheda: `CANVAS_MIN_SIZE` di `engine.ts`,
@@ -23,13 +24,13 @@ export const DROP_GAP = 24;
 /// Oltre questo numero di elementi, le schede nate stanno in un gruppo.
 export const DROP_GROUP_THRESHOLD = 12;
 
-/// Le misure di nascita (D-11, prima opzione), già sulla griglia di 8 px. Le specie con le proporzioni
-/// del contenuto (immagine, PDF) usano queste quando la misura non si sa.
+/// Le misure di nascita (D-11, prima opzione). Non si agganciano alla griglia
+/// di 8 px (A-16): solo le posizioni sì. Le specie con le proporzioni del
+/// contenuto (immagine, PDF) usano queste quando la misura non si sa.
 const BORN_SIZE: Readonly<Record<CardKind, CardSize>> = {
   note: { width: 320, height: 240 },
   document: { width: 320, height: 240 },
-  // D-11 dice 480×300; 300 non sta sulla griglia di 8 px, che vince.
-  sheet: { width: 480, height: 304 },
+  sheet: { width: 480, height: 300 },
   // 360 di larghezza; 360×480 finché la prima pagina non si sa.
   pdf: { width: 360, height: 480 },
   // Il lato lungo è 480; senza misura, una 4:3 orizzontale.
@@ -45,13 +46,16 @@ const IMAGE_LONG_SIDE = 480;
 /// La larghezza di una scheda PDF appena nata.
 const PDF_WIDTH = 360;
 
-/// La misura di una scheda appena nata, agganciata alla griglia della tela.
+/// La misura di una scheda appena nata. Non si aggancia alla griglia: si
+/// arrotonda all'intero più vicino (A-16), così un'immagine tiene le sue
+/// proporzioni esatte.
 ///
 /// `image` è la misura del contenuto: dell'immagine per `image` (il lato
 /// lungo diventa 480, l'altro segue le proporzioni), della prima pagina per
 /// `pdf` (larghezza 360, l'altezza segue). Per le altre specie non conta.
 /// Una misura mancante, nulla o non finita vale come non data. Nessun lato
-/// scende sotto la misura minima della tela.
+/// scende sotto la misura minima della tela: se il lato corto ci finisce, la
+/// proporzione non si tiene (un'immagine 1×4000 nasce 40×480).
 export function bornSize(
   kind: CardKind,
   image?: { readonly width: number; readonly height: number },
@@ -63,13 +67,16 @@ export function bornSize(
       : null;
   if (known === null || (kind !== "image" && kind !== "pdf")) return fallback;
   if (kind === "pdf") {
-    return snapSize({
+    return roundSize({
       width: PDF_WIDTH,
       height: (PDF_WIDTH * known.height) / known.width,
     });
   }
   const scale = IMAGE_LONG_SIDE / Math.max(known.width, known.height);
-  return snapSize({ width: known.width * scale, height: known.height * scale });
+  return roundSize({
+    width: known.width * scale,
+    height: known.height * scale,
+  });
 }
 
 /// Un elemento lasciato cadere: il file, la sua specie, la sua misura.
@@ -102,11 +109,12 @@ const NAME_ORDER = new Intl.Collator(undefined, { numeric: true });
 /// Ordine per nome del file (con i numeri in ordine di valore: «foto 2»
 /// prima di «foto 10»); a parità di nome, per percorso intero. Le colonne
 /// sono `ceil(sqrt(n))` e si riempiono per righe; ogni colonna è larga
-/// quanto la sua scheda più larga, ogni riga alta quanto la più alta, con
-/// 24 px fra l'una e l'altra. L'angolo in alto a sinistra della prima
-/// scheda è il punto, e tutto (punto e misure) si aggancia a 8 px come la
-/// tela. Oltre 12 elementi, `group` è il rettangolo che contiene le schede
-/// con 24 px di margine per lato.
+/// quanto la sua scheda più larga, ogni riga alta quanto la più alta. La
+/// colonna o la riga dopo parte al primo multiplo di 8 che lascia almeno 24
+/// px dopo la precedente (`nextStart`). L'angolo in alto a sinistra della
+/// prima scheda è il punto, agganciato a 8 px come la tela; le misure
+/// restano intere (A-16). Oltre 12 elementi, `group` è il rettangolo che
+/// contiene le schede con 24 px di margine per lato.
 export function dropLayout(
   items: readonly DropItem[],
   at: { readonly x: number; readonly y: number },
@@ -115,7 +123,7 @@ export function dropLayout(
   if (n === 0) return { cards: [], group: null };
 
   const ordered = [...items]
-    .map((item) => ({ path: item.path, size: snapSize(item.size) }))
+    .map((item) => ({ path: item.path, size: roundSize(item.size) }))
     .sort(byName);
   const columns = Math.ceil(Math.sqrt(n));
   const rows = Math.ceil(n / columns);
@@ -202,24 +210,32 @@ function fileName(path: string): string {
   return file.slice(file.lastIndexOf("/") + 1);
 }
 
-/// Le posizioni di partenza di colonne (o righe) di misure date, con lo
-/// spazio fra l'una e l'altra.
+/// Le posizioni di partenza di colonne (o righe) di misure date: ognuna parte
+/// dove finisce la precedente, con lo spazio dovuto.
 function offsets(origin: number, sizes: readonly number[]): number[] {
   const starts: number[] = [];
   let at = origin;
   for (const size of sizes) {
     starts.push(at);
-    at += size + DROP_GAP;
+    at = nextStart(at + size);
   }
   return starts;
 }
 
-function snapSize(size: CardSize): CardSize {
-  return { width: snapSide(size.width), height: snapSide(size.height) };
+/// Il primo multiplo di 8 che lascia almeno `DROP_GAP` dopo `end`, il bordo
+/// della colonna o della riga che precede.
+function nextStart(end: number): number {
+  // `+ 0` toglie lo zero negativo, come in `snap`.
+  return Math.ceil((end + DROP_GAP) / DROP_SNAP) * DROP_SNAP + 0;
 }
 
-function snapSide(value: number): number {
-  return Math.max(DROP_MIN_SIZE, validSide(value) ? snap(value) : 0);
+/// Le misure intere, mai sotto la misura minima della tela.
+function roundSize(size: CardSize): CardSize {
+  return { width: roundSide(size.width), height: roundSide(size.height) };
+}
+
+function roundSide(value: number): number {
+  return Math.max(DROP_MIN_SIZE, validSide(value) ? Math.round(value) : 0);
 }
 
 function snap(value: number): number {

@@ -9,6 +9,7 @@ import {
   bornSize,
   dropLayout,
   markdownTable,
+  type DropCard,
   type DropItem,
 } from "./drop-layout";
 
@@ -27,6 +28,40 @@ function files(count: number): DropItem[] {
   );
 }
 
+/// Elementi di misure diverse, a turno: nota, foglio, immagine 16:9 (480×270)
+/// e PDF di A4 (360×509), con le misure di nascita vere.
+function mixedItems(count: number): DropItem[] {
+  const kinds: readonly CardKind[] = ["note", "sheet", "image", "pdf"];
+  return Array.from({ length: count }, (_, index) => {
+    const kind = kinds[index % kinds.length]!;
+    const content =
+      kind === "image"
+        ? { width: 1920, height: 1080 }
+        : kind === "pdf"
+          ? { width: 595, height: 842 }
+          : undefined;
+    return { path: `m${index}.bin`, kind, size: bornSize(kind, content) };
+  });
+}
+
+/// Ogni colonna (asse `x`) o riga (asse `y`) parte al primo multiplo di 8 che
+/// lascia almeno `DROP_GAP` dopo il bordo più lontano della precedente.
+function expectFirstFit(cards: readonly DropCard[], axis: "x" | "y"): void {
+  const size = axis === "x" ? "width" : "height";
+  const starts = [...new Set(cards.map((card) => card[axis]))].sort(
+    (a, b) => a - b,
+  );
+  for (let index = 1; index < starts.length; index++) {
+    const previousEnd = Math.max(
+      ...cards
+        .filter((card) => card[axis] === starts[index - 1])
+        .map((card) => card[axis] + card[size]),
+    );
+    expect(starts[index]! - previousEnd).toBeGreaterThanOrEqual(DROP_GAP);
+    expect(starts[index]! - DROP_SNAP - previousEnd).toBeLessThan(DROP_GAP);
+  }
+}
+
 describe("le costanti della tela", () => {
   it("sono le stesse di engine.ts", () => {
     expect(DROP_SNAP).toBe(CANVAS_SNAP);
@@ -38,7 +73,7 @@ describe("bornSize", () => {
   it("dà le misure di nascita di ogni specie", () => {
     expect(bornSize("note")).toEqual({ width: 320, height: 240 });
     expect(bornSize("document")).toEqual({ width: 320, height: 240 });
-    expect(bornSize("sheet")).toEqual({ width: 480, height: 304 });
+    expect(bornSize("sheet")).toEqual({ width: 480, height: 300 });
     expect(bornSize("pdf")).toEqual({ width: 360, height: 480 });
     expect(bornSize("web")).toEqual({ width: 320, height: 120 });
     expect(bornSize("file")).toEqual({ width: 320, height: 160 });
@@ -60,12 +95,35 @@ describe("bornSize", () => {
     });
   });
 
-  it("aggancia a 8 px e non scende sotto la misura minima", () => {
+  it("arrotonda a interi e non scende sotto la misura minima", () => {
+    // 333 × 0,48 fa 159,84: l'intero più vicino è 160.
     const odd = bornSize("image", { width: 1000, height: 333 });
     expect(odd).toEqual({ width: 480, height: 160 });
     expect(bornSize("image", { width: 10_000, height: 10 })).toEqual({
       width: 480,
       height: DROP_MIN_SIZE,
+    });
+  });
+
+  it("un'immagine 16:9 nasce 480×270, esatta", () => {
+    expect(bornSize("image", { width: 1920, height: 1080 })).toEqual({
+      width: 480,
+      height: 270,
+    });
+  });
+
+  it("un'immagine 1×4000 ha il lato corto a 40 px: lì la proporzione non si tiene", () => {
+    expect(bornSize("image", { width: 1, height: 4000 })).toEqual({
+      width: 40,
+      height: 480,
+    });
+  });
+
+  it("senza la misura del contenuto un PDF nasce 360×480", () => {
+    expect(bornSize("pdf")).toEqual({ width: 360, height: 480 });
+    expect(bornSize("pdf", { width: 0, height: 0 })).toEqual({
+      width: 360,
+      height: 480,
     });
   });
 
@@ -86,13 +144,15 @@ describe("bornSize", () => {
   });
 
   it("dà al PDF 360 di larghezza con le proporzioni della prima pagina", () => {
+    // 360 × 842 / 595 è 509,4: l'intero più vicino è 509, senza aggancio.
     expect(bornSize("pdf", { width: 595, height: 842 })).toEqual({
       width: 360,
-      height: 512,
+      height: 509,
     });
+    // 360 × 595 / 842 è 254,4.
     expect(bornSize("pdf", { width: 842, height: 595 })).toEqual({
       width: 360,
-      height: 256,
+      height: 254,
     });
   });
 
@@ -103,7 +163,7 @@ describe("bornSize", () => {
     });
     expect(bornSize("sheet", { width: 10, height: 10 })).toEqual({
       width: 480,
-      height: 304,
+      height: 300,
     });
   });
 });
@@ -136,22 +196,73 @@ describe("dropLayout", () => {
     ).toBe(true);
   });
 
-  it("aggancia il punto e le misure a 8 px", () => {
+  it("aggancia il punto a 8 px e lascia le misure intere", () => {
     const { cards } = dropLayout(
       [item("a.md", 321, 243), item("b.md", 100, 100)],
       { x: 13, y: 21 },
     );
-    expect(cards[0]).toEqual({
-      path: "a.md",
-      x: 16,
-      y: 24,
-      width: 320,
-      height: 240,
-    });
+    // Il punto 13, 21 va a 16, 24. La colonna dopo parte dove finisce la
+    // prima più 24, cioè 361, e il primo multiplo di 8 da lì è 368.
+    expect(cards).toEqual([
+      { path: "a.md", x: 16, y: 24, width: 321, height: 243 },
+      { path: "b.md", x: 368, y: 24, width: 100, height: 100 },
+    ]);
     for (const card of cards) {
-      for (const value of [card.x, card.y, card.width, card.height])
+      for (const value of [card.x, card.y])
         expect(Math.abs(value % DROP_SNAP)).toBe(0);
     }
+  });
+
+  it("un rilascio a una posizione con decimali si aggancia, e le misure si arrotondano", () => {
+    const { cards } = dropLayout([item("a.md", 320.4, 239.6)], {
+      x: 13.5,
+      y: 20.7,
+    });
+    expect(cards).toEqual([
+      { path: "a.md", x: 16, y: 24, width: 320, height: 240 },
+    ]);
+  });
+
+  it("la colonna dopo un punto negativo parte a 0, non a zero negativo", () => {
+    // Da -72 con 42 di larghezza si arriva a -30; più 24 fa -6, e il primo
+    // multiplo di 8 da lì è 0 (con `Math.ceil` verrebbe -0).
+    const { cards } = dropLayout(
+      [item("a.md", 42, 100), item("b.md", 100, 100)],
+      { x: -72, y: 0 },
+    );
+    expect(cards[1]!.x).toBe(0);
+  });
+
+  it("un foglio alto 300 mette la riga sotto 328 px più in basso, con 28 px di spazio", () => {
+    const sheets = ["a", "b", "c"].map((name): DropItem => ({
+      path: `${name}.xlsx`,
+      kind: "sheet",
+      size: bornSize("sheet"),
+    }));
+    const { cards } = dropLayout(sheets, { x: 0, y: 0 });
+    // 3 elementi: 2 colonne, 2 righe. 300 più 24 fa 324, che non è multiplo
+    // di 8: la riga parte a 328.
+    expect(
+      cards.map((card) => [card.path, card.x, card.y, card.height]),
+    ).toEqual([
+      ["a.xlsx", 0, 0, 300],
+      ["b.xlsx", 480 + DROP_GAP, 0, 300],
+      ["c.xlsx", 0, 328, 300],
+    ]);
+  });
+
+  it("con 47 elementi di misure diverse le posizioni sono multipli di 8, e ogni spazio è il primo che lascia 24 px", () => {
+    const { cards, group } = dropLayout(mixedItems(47), { x: 13.5, y: 20.7 });
+    expect(cards).toHaveLength(47);
+    expect(group).not.toBeNull();
+    // Il punto 13,5 e 20,7 si aggancia a 16 e 24.
+    expect(cards[0]).toMatchObject({ x: 16, y: 24 });
+    for (const card of cards) {
+      for (const value of [card.x, card.y])
+        expect(Math.abs(value % DROP_SNAP)).toBe(0);
+    }
+    expectFirstFit(cards, "x");
+    expectFirstFit(cards, "y");
   });
 
   it("ordina per nome, con i numeri in ordine di valore", () => {
@@ -307,7 +418,7 @@ describe("dropLayout", () => {
     ];
     expect(dropLayout(items, { x: 0, y: 0 }).cards).toEqual([
       { path: "a.png", x: 0, y: 0, width: 480, height: 120 },
-      { path: "b.xlsx", x: 480 + DROP_GAP, y: 0, width: 480, height: 304 },
+      { path: "b.xlsx", x: 480 + DROP_GAP, y: 0, width: 480, height: 300 },
     ]);
   });
 });
