@@ -1880,14 +1880,21 @@ mod tests {
                 .iter()
                 .position(|child| child.key.as_deref() == Some(INCOMING_SECTION))
                 .unwrap();
-            assert_eq!(section_at, tree_at + 1, "la sezione sta subito sotto l'albero");
+            assert_eq!(
+                section_at,
+                tree_at + 1,
+                "la sezione sta subito sotto l'albero"
+            );
             let (title, rows) = read(&children[section_at]);
             assert_eq!(title, "In entrata · 3");
             assert_eq!(
                 rows,
                 [
                     ("Sintassi di Fub".to_string(), Some("Guida".to_string())),
-                    ("Il banco che vede".to_string(), Some("Progetti".to_string())),
+                    (
+                        "Il banco che vede".to_string(),
+                        Some("Progetti".to_string())
+                    ),
                     // Nella radice non c'è una cartella da dire.
                     ("Benvenuto".to_string(), None),
                 ]
@@ -2024,7 +2031,10 @@ mod tests {
 
         #[test]
         fn the_folder_of_a_folder_page_is_the_one_above() {
-            assert_eq!(folder_of(&DocId::new("Progetti/Fub/_index.md")).as_deref(), Some("Progetti"));
+            assert_eq!(
+                folder_of(&DocId::new("Progetti/Fub/_index.md")).as_deref(),
+                Some("Progetti")
+            );
             assert_eq!(folder_of(&DocId::new("Fub/_index.md")), None);
             assert_eq!(folder_of(&DocId::new("a/b/c.md")).as_deref(), Some("b"));
         }

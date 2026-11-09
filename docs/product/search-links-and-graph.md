@@ -72,11 +72,9 @@ Un risultato del pannello si trascina come una nota dell'albero: in una nota
 diventa un collegamento, sulla striscia delle schede si apre, nei segnalibri
 resta, e fuori dall'app arriva il file. Lo stesso vale per un risultato del
 cambio rapido: la modale lascia passare il rilascio e si chiude a gesto finito.
-Anche le righe del pannello dei collegamenti (in entrata, in uscita e menzioni
-non collegate) e quelle di «In entrata» sotto la Struttura si trascinano come
-la nota che nominano, ma fuori dall'app non portano il file. Una riga che
-nomina una nota ne porta in testa l'icona, come nell'albero: quella della
-pagina, o la figura del formato. Così anche un wikilink in Lettura, quando la nota esiste; in
+Anche le righe dei collegamenti (in entrata, in uscita, menzioni non collegate)
+portano l'icona della nota e si trascinano come lei, ma fuori dall'app non
+portano il file. Così anche un wikilink in Lettura, quando la nota esiste; in
 Live il collegamento è testo e trascinarlo sposta il testo.
 
 Un nome seguito da `:` che non è un operatore resta testo, così un orario o un
@@ -147,18 +145,10 @@ propongono gli id dei blocchi della nota, ciascuno con l'inizio del suo testo,
 letti dalla sessione aperta se c'è, altrimenti dal file. La ricerca dei blocchi
 di tutto il vault (`[[^^`) non c'è.
 
-Il pannello Struttura mostra i titoli della nota aperta come un albero. Il
-campo in cima lo filtra: restano i titoli che contengono il testo, con i
-titoli sopra di loro. «Comprimi tutto» chiude l'albero; un filtro lo riapre
-su quello che trova.
-
-Sotto l'albero, «In entrata · N» elenca chi punta alla nota aperta, senza
-cambiare scheda: al più cinque righe, una per collegamento come nel pannello
-Collegamenti, col nome della nota e la sua cartella; oltre le cinque, «e altri
-N» porta alla scheda Collegamenti. Una nota che nessuno cita non ha la
-sezione, e se la lettura dell'indice non riesce la Struttura resta com'è. La
-sezione legge l'indice del kernel, non il pannello Collegamenti: c'è anche con
-quello spento fra le funzioni, e allora «e altri N» dice che la scheda non c'è.
+Il pannello Struttura mostra i titoli della nota aperta come un albero. Il campo
+in cima lo filtra: restano i titoli che contengono il testo, con i titoli sopra
+di loro. «Comprimi tutto» chiude l'albero; un filtro lo riapre su quello che
+trova. Sotto, «In entrata · N» elenca chi la cita, cinque righe e «e altri N».
 
 `heading.rename`, dalla palette, rinomina un titolo della nota aperta e
 aggiorna i `[[nota#titolo]]` che lo nominano, nella nota stessa
