@@ -19,10 +19,18 @@ import { icon, iconEl } from "./icons";
 /// Il prefisso di una figura nel valore d'icona.
 export const FIGURE_PREFIX = "fub:";
 
-/// Le figure che si possono scegliere, nell'ordine del selettore.
+/// Le figure che si possono scegliere, nell'ordine del selettore. Le prime
+/// della riga sono figure che la shell disegna già (la cartella, la nota, la
+/// casa, e la stella che registra la cornice); le altre undici sono del set
+/// (`ui/icons.ts`). Una figura che al momento nessuno disegna (la stella senza
+/// la cornice) non si offre e non si mostra.
 export const PAGE_FIGURES = [
+  "vault",
+  "notes",
   "book",
   "calendar",
+  "home",
+  "star",
   "flag",
   "bulb",
   "inbox",
@@ -68,8 +76,10 @@ export function pageMarkValue(value: unknown): string | null {
   return icon;
 }
 
+/// Una figura nota è una di `PAGE_FIGURES` che qualcuno disegna adesso.
 function knownFigure(name: string): PageFigure | null {
-  return (PAGE_FIGURES as readonly string[]).includes(name) ? (name as PageFigure) : null;
+  if (!(PAGE_FIGURES as readonly string[]).includes(name)) return null;
+  return icon(name) === "" ? null : (name as PageFigure);
 }
 
 /// Il valore letto: una figura nota, un testo da mostrare, o `null` (nessun
@@ -87,8 +97,12 @@ export function readPageMark(value: string | null | undefined): PageMark | null 
 /// La voce del catalogo col nome di ogni figura: una figura nuova senza il
 /// suo nome non compila.
 const FIGURE_NAMES: Record<PageFigure, Key> = {
+  vault: "icons.figure.vault",
+  notes: "icons.figure.notes",
   book: "icons.figure.book",
   calendar: "icons.figure.calendar",
+  home: "icons.figure.home",
+  star: "icons.figure.star",
   flag: "icons.figure.flag",
   bulb: "icons.figure.bulb",
   inbox: "icons.figure.inbox",

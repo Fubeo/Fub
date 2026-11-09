@@ -28,6 +28,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setMotionDriver, setMotionPreference } from "../moto";
 import { createManualDriver } from "../moto/driver";
 import { closeContextMenu, menuPointFor, pickIcon, registerMenuSearch, showContextMenu } from "./menu";
+import { openLifetime } from "./lifetime";
+import { mountFrameIcons } from "../shells/scrittoio/icons";
 
 /** Un evento di mouse verosimile, che è tutto ciò che le due funzioni leggono. */
 function clickEvent(): MouseEvent {
@@ -377,20 +379,36 @@ describe("il selettore di icona", () => {
     // Ogni gruppo prende il nome dal suo titolo.
     expect(figures!.getAttribute("role")).toBe("group");
     expect(document.getElementById(figures!.getAttribute("aria-labelledby")!)).toBe(titles[0]);
-    // Le undici figure, disegnate, con il valore e il nome per chi ascolta.
+    // Le figure, disegnate, con il valore e il nome per chi ascolta. Senza la
+    // cornice nessuno disegna la stella, e la stella non si offre.
     const drawn = [...figures!.querySelectorAll<HTMLButtonElement>("button")];
     expect(drawn.map((button) => button.dataset.icon)).toEqual([
-      "fub:book", "fub:calendar", "fub:flag", "fub:bulb", "fub:inbox", "fub:archive",
-      "fub:image", "fub:heart", "fub:briefcase", "fub:people", "fub:music",
+      "fub:vault", "fub:notes", "fub:book", "fub:calendar", "fub:home", "fub:flag", "fub:bulb",
+      "fub:inbox", "fub:archive", "fub:image", "fub:heart", "fub:briefcase", "fub:people", "fub:music",
     ]);
     expect(drawn.every((button) => button.querySelector("svg") !== null)).toBe(true);
-    expect(drawn[0]!.getAttribute("aria-label")).toBe("Libro");
+    expect(drawn[2]!.getAttribute("aria-label")).toBe("Libro");
     // Anche un'emoji dice il suo valore.
     expect(emoji!.querySelector<HTMLButtonElement>("button")!.dataset.icon).toBe("📝");
     // Il campo per incollarne una resta, e ha il fuoco.
     expect(document.activeElement).toBe(pop.querySelector("input"));
     pop.querySelector<HTMLButtonElement>(".icon-none")!.click();
     vi.runAllTimers();
+  });
+
+  it("con la cornice c'è anche la stella, dopo la casa", () => {
+    const life = openLifetime();
+    mountFrameIcons(life);
+    try {
+      pickIcon(clickEvent(), () => {});
+      const values = [...document.querySelectorAll<HTMLButtonElement>("#icon-picker .icon-grid--figures button")].map((button) => button.dataset.icon);
+      expect(values).toHaveLength(15);
+      expect(values.slice(4, 6)).toEqual(["fub:home", "fub:star"]);
+      document.querySelector<HTMLButtonElement>("#icon-picker .icon-none")!.click();
+      vi.runAllTimers();
+    } finally {
+      life.close();
+    }
   });
 
   it("scegliere una figura riporta `fub:<nome>`", () => {

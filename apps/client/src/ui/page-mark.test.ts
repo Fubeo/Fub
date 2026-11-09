@@ -16,12 +16,17 @@ import {
   pageMarkValue,
   readPageMark,
 } from "./page-mark";
+import { openLifetime } from "./lifetime";
+import { mountFrameIcons } from "../shells/scrittoio/icons";
+
+/// Le figure che si disegnano senza la cornice: tutte tranne la stella.
+const DRAWN = PAGE_FIGURES.filter((name) => name !== "star");
 
 describe("che cosa vuol dire un valore d'icona", () => {
   it("`fub:<nome>` con un nome noto è una figura", () => {
     expect(readPageMark("fub:book")).toEqual({ kind: "figure", name: "book" });
     expect(readPageMark(" fub:music ")).toEqual({ kind: "figure", name: "music" });
-    for (const name of PAGE_FIGURES) expect(readPageMark(figureValue(name))).toEqual({ kind: "figure", name });
+    for (const name of DRAWN) expect(readPageMark(figureValue(name))).toEqual({ kind: "figure", name });
   });
 
   it("un'emoji, anche composta, o una lettera è un testo, com'era", () => {
@@ -34,11 +39,25 @@ describe("che cosa vuol dire un valore d'icona", () => {
   it("un `fub:` con un nome sconosciuto non si disegna, e non è un errore", () => {
     expect(readPageMark("fub:astronave")).toBeNull();
     expect(readPageMark("fub:")).toBeNull();
-    // `star` è della cornice, non delle figure che si scelgono.
-    expect(readPageMark("fub:star")).toBeNull();
+    // Un nome della serie che non è una figura da scegliere.
+    expect(readPageMark("fub:trash")).toBeNull();
     expect(pageMarkContent("fub:astronave")).toBeNull();
     expect(pageMarkText("fub:astronave")).toBeNull();
     expect(pageMarkLabel("fub:astronave")).toBeNull();
+  });
+
+  it("la stella è una figura solo se la cornice la disegna", () => {
+    expect(readPageMark("fub:star")).toBeNull();
+    expect(figureMask("star")).toBe("");
+    const life = openLifetime();
+    mountFrameIcons(life);
+    try {
+      expect(readPageMark("fub:star")).toEqual({ kind: "figure", name: "star" });
+      expect(figureMask("star")).not.toBe("");
+    } finally {
+      life.close();
+    }
+    expect(readPageMark("fub:star")).toBeNull();
   });
 
   it("niente valore, niente segno", () => {
@@ -97,7 +116,7 @@ describe("dove si mette", () => {
   });
 
   it("ogni figura ha la sua maschera, un svg completo", () => {
-    for (const name of PAGE_FIGURES) {
+    for (const name of DRAWN) {
       const mask = figureMask(name);
       expect(mask.startsWith('url("data:image/svg+xml,')).toBe(true);
       expect(decodeURIComponent(mask)).toContain('xmlns="http://www.w3.org/2000/svg"');

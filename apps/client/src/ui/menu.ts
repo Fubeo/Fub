@@ -1121,7 +1121,9 @@ export function pickIcon(
     b.dataset.icon = value;
     b.append(content);
     b.setAttribute("aria-label", label);
-    b.setAttribute("aria-pressed", String(value === current));
+    // Solo l'icona di oggi si dice premuta: le altre sono scelte, non
+    // interruttori spenti.
+    if (value === current) b.setAttribute("aria-pressed", "true");
     lifetime.listen(b, "click", () => apply(value));
     grid.appendChild(b);
   };

@@ -50,10 +50,10 @@ una cartella vuota non ha numero, e il numero non entra nel nome della riga
 letto da un lettore di schermo. I numeri vengono dall'anagrafe del kernel, non
 da ciò che l'albero disegna o dal filtro.
 «Icona…», dal menu di una nota, di una cartella o di uno spazio, apre un
-selettore con due gruppi col loro titolo: «Figure», undici figure monocrome
-(libro, calendario, bandierina, lampadina, vassoio, archivio, immagine, cuore,
-valigetta, persone, musica) che prendono il colore del testo come le figure
-dell'albero, ed «Emoji». Sotto, un campo accetta un'emoji qualsiasi e «Senza
+selettore con due gruppi col loro titolo: «Figure», quindici figure monocrome
+(cartella, nota, libro, calendario, casa, stella, bandiera, idea, in arrivo,
+archivio, immagine, cuore, lavoro, persone, musica) che prendono il colore del
+testo come le figure dell'albero, ed «Emoji». Sotto, un campo accetta un'emoji qualsiasi e «Senza
 icona» la toglie; l'icona di oggi ha il velo d'accento, Esc chiude e il fuoco
 torna dov'era. Una figura si salva come `fub:<nome>` nella stessa stringa
 dell'emoji (`.fub/workspace.json`, vedi [Disposizione su
