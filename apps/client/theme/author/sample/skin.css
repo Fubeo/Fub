@@ -11308,17 +11308,20 @@ button.draw-isolation-crumb:hover {
   cursor: default;
 }
 
-/* ── I file delle app Craft ──────────────────────────────────────────────── */
+/* ── I file delle app Craft: un foglietto sollevato ───────────────────────── */
 
 /* La scheda di un disegno, di un'immagine o di un progetto: l'anteprima con
-   lo zoom delle foto e, sotto, la riga dei dati in grafite. Senza anteprima,
-   un riquadro sobrio come ciò che non si apre, senza il segno d'allarme: il
-   nome, i dati, ciò che succede e un'azione sola nel colore d'accento. */
+   lo zoom delle foto e, sotto, la riga dei dati in grafite. Senza anteprima la
+   scheda non è un riquadro tratteggiato: è un foglietto di carta posato sul
+   piano, come la nota aperta nel cassetto, col nome in inchiostro e i dati in
+   grafite. Le risposte sono quelle dei pulsanti del kit (`kit-button`): un
+   fondo anche a riposo, uguali fra loro, perché è una scelta e non un invito. */
 .craft-card {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  background: var(--sheet-2);
 }
 .craft-info {
   flex: none;
@@ -11333,18 +11336,25 @@ button.draw-isolation-crumb:hover {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   box-sizing: border-box;
-  max-width: 36rem;
+  max-width: 30rem;
   margin: auto;
-  padding: var(--space-9);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-control);
+  padding: var(--space-9) var(--space-9) var(--space-8);
+  border: 0;
+  border-radius: var(--radius-sheet);
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 1px var(--overlay-hover), var(--shadow-1);
   color: var(--muted);
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   line-height: var(--leading-normal);
   overflow-wrap: anywhere;
   text-align: center;
+}
+/* Nel contrasto alto il filo attorno al foglietto è quello dei bordi; nei
+   colori forzati l'ombra sparisce e il bordo torna. */
+:root[data-contrast="high"] .craft-empty {
+  box-shadow: 0 0 0 1px var(--border);
 }
 .craft-empty > .craft-info {
   padding: 0;
@@ -11352,51 +11362,73 @@ button.draw-isolation-crumb:hover {
 .craft-empty-name {
   margin: 0;
   color: var(--text);
+  font-size: var(--text-lg);
   font-weight: var(--weight-medium);
 }
 .craft-empty-state {
   margin: 0;
 }
+.craft-ask-answer,
 .craft-render {
-  margin-top: var(--space-3);
-  padding: var(--space-3) var(--space-5);
+  min-height: var(--control-h);
+  padding: 0 var(--space-6);
   border: 0;
   border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--accent);
+  background: var(--overlay-hover);
+  color: var(--text);
   font: inherit;
   font-family: var(--font-ui);
   font-size: var(--text-base);
   font-weight: var(--weight-medium);
   cursor: pointer;
 }
+.craft-render {
+  margin-top: var(--space-3);
+}
+.craft-ask-answer:hover,
 .craft-render:hover,
-.craft-render:focus-visible {
-  background: var(--accent-wash);
-  color: var(--accent-soft);
-}
+.craft-ask-answer:active,
 .craft-render:active {
-  background: var(--accent-veil);
-  color: var(--accent-soft);
+  background: var(--overlay-active);
+  color: var(--text);
 }
-.craft-render:disabled {
-  background: transparent;
-  color: var(--muted);
+.craft-ask-answer:focus-visible,
+.craft-render:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* Spente come quelle del kit: lo stesso fondo, a un terzo dell'inchiostro. */
+.craft-ask-answer:disabled,
+.craft-ask-answer:disabled:hover,
+.craft-render:disabled,
+.craft-render:disabled:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
   opacity: 0.4;
   cursor: default;
 }
+@media (forced-colors: active) {
+  .craft-empty {
+    border: 1px solid CanvasText;
+  }
+  .craft-ask-answer,
+  .craft-render {
+    border: 1px solid ButtonText;
+  }
+}
 
-/* La domanda sulle anteprime fatte dalle app (T23), nel riquadro al posto del
-   pulsante: un filo la stacca da ciò che dice il file. Le due risposte pesano
-   uguale, perché è una scelta e non un invito. */
+/* La domanda sulle anteprime fatte dalle app (T23), nel foglietto al posto del
+   pulsante: un filo la stacca da ciò che dice il file. */
 .craft-ask {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-4);
-  margin-top: var(--space-3);
+  gap: var(--space-5);
+  margin-top: var(--space-4);
   padding-top: var(--space-6);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--overlay-active);
 }
 .craft-ask-text {
   max-width: 30rem;
@@ -11409,33 +11441,6 @@ button.draw-isolation-crumb:hover {
   flex-wrap: wrap;
   justify-content: center;
   gap: var(--space-3) var(--space-4);
-}
-.craft-ask-answer {
-  padding: var(--space-3) var(--space-6);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--accent);
-  font: inherit;
-  font-family: var(--font-ui);
-  font-size: var(--text-base);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-}
-.craft-ask-answer:hover,
-.craft-ask-answer:focus-visible {
-  background: var(--accent-wash);
-  color: var(--accent-soft);
-}
-.craft-ask-answer:active {
-  background: var(--accent-veil);
-  color: var(--accent-soft);
-}
-.craft-ask-answer:disabled {
-  background: transparent;
-  color: var(--muted);
-  opacity: 0.4;
-  cursor: default;
 }
 .craft-ask-hint {
   margin: 0;
