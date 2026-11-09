@@ -39,6 +39,7 @@ ascolta niente e non chiede fotogrammi.
 | S5 | tratto di penna di 3 s su un disegno di 2.000 tracciati | massimo fra fotogrammi |
 | S6 | avvio a freddo fino alla prima nota | ms |
 | S7 | Blocchi su una nota di 2.000 righe: un blocco trascinato su e giù per 3 s, poi dieci trasformazioni da paragrafo a titolo e ritorno | p95 e massimo fra fotogrammi |
+| S8 | la penna sulla lavagna: dieci tratti da 300 ms sopra una scheda con una tabella di 100 × 100 celle, su una lavagna con un foglio `.xlsx` di 100 × 100 celle e 2.000 tratti già scritti; poi la scheda della tabella spostata coi suoi tratti per 2 s | massimo fra fotogrammi a penna (obiettivo 33 ms) e allo spostamento; path asciutti; sha256 del `.xlsx` prima e dopo |
 | R1 | la memoria: l'app vuota, aprendo un file per modalità (nota, lavagna, disegno, documento Word, foglio Excel, PDF, immagine), dopo «chiudi tutto» e un minuto dopo | PSS in MiB, in tutto e per processo (app, WebView), soltanto Linux |
 | T1 | le tessere: un fotogramma di 2880 × 1800 RGBA letto a tessere di 256 × 256 dalla IPC (`resource_read_chunk`) e da `fub-asset:` con `Range`, poi disegnato su una tela, una tessera e un fotogramma intero per fotogramma | p95 per tessera, mediana per fotogramma, ms |
 | I1 | il vault durante l'indicizzazione dell'avvio (10.000 note): una nota aperta con `read_document` e una tessera letta dalla IPC, una dopo l'altra, finché `vault_status` non dice che l'indice è pronto | p95 per nota e per tessera, ms |
@@ -116,6 +117,25 @@ si tocca. Gli obiettivi e le soglie stanno in
 
 S5 chiede la feature `draw` dell'app: senza, un `.svg` si apre come immagine
 e il referto scrive lo scenario come saltato, senza numero.
+
+S8 apre `S8/Lezione.canvas`: la scheda `tabella` (testo con la tabella
+Markdown), la scheda `voti` (il file `S8/voti.xlsx`) e i 2.000 tratti
+`fub:ink`, metà sulla tabella, un quarto sul foglio e un quarto liberi,
+scritti dal codificatore della §5 di [scene-format](../reference/scene-format.md#5-tratti-a-mano-libera)
+dentro `fixtures.mjs`. Aspetta che i tratti asciutti siano disegnati (al più
+30 s), poi manda dieci tratti di penna sopra la tabella. Se la sonda non
+vede nessun evento `pen` (il driver non manda `pointerType` `pen`), rifà i
+dieci tratti col mouse e D tenuto, e il referto lo dice (`input`). Lo
+spostamento parte dalla testata della scheda, va avanti e indietro e la
+posa 60 px più in basso. Il referto dà `S8.penFrameGap.max` (l'obiettivo
+di N4, 33 ms, solo fra i `targets`), `S8.moveFrameGap.max` senza tetto, i
+path asciutti prima e dopo (`S8.dryPaths.*`) e lo sha256 di `voti.xlsx`
+letto dal disco prima della penna e 3 s dopo lo spostamento: il foglio non
+deve cambiare. Dice anche se la scheda del foglio è viva
+(`[data-card-kind=sheet][data-card-mode=live]`) o un segnaposto: finché è un
+segnaposto la misura è sul caso simile, la tabella di testo (D-7 (c) del
+piano N4); quando la scheda sarà viva, lo stesso scenario sugli stessi dati
+misura il foglio vero.
 
 L1 vive in `canvas.mjs` e segue il patto del
 [modulo](../reference/canvas-operations.md#webassembly) come il caricatore
