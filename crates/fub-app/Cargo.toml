@@ -80,8 +80,19 @@ objc2 = "0.6"
 
 # Il gancio della raccolta forzata del banco della memoria (`bench_gc.rs`)
 # dice a WebKitGTK dove sta l'estensione; è la stessa versione che wry porta.
+# Solo con la feature `bench-gc`.
 [target.'cfg(target_os = "linux")'.dependencies]
-webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
+webkit2gtk = { version = "=2.0.2", features = ["v2_38"], optional = true }
+
+[features]
+# Vuoto: le feature di `fub-app` servono al banco, non all'app che si usa.
+default = []
+# Il gancio della raccolta forzata per il banco della memoria (R1, #284):
+# l'app carica l'estensione web che `FUB_BENCH_GC` nomina. **Spento di serie**:
+# l'app che si distribuisce non sa caricare un'estensione da una cartella che
+# sceglie l'ambiente. Lo accende soltanto la build del banco WebView (job
+# `webview` di `ci.yml`, `misura.sh`).
+bench-gc = ["dep:webkit2gtk"]
 
 [dev-dependencies]
 # Le prove del registro delle sessioni live, con il tempo in pausa.

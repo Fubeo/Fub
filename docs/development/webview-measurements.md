@@ -97,18 +97,29 @@ sé, non quanto restava. Le letture a schede aperte non la chiedono. WebKitGTK
 una raccolta a comando né un evento di memoria scarsa): la fa un'estensione
 web, `apps/client/bench/webview/raccolta.rs`, che
 il banco costruisce con `rustc` in una cartella della corsa e che dà alla
-pagina `window.__fubBenchGc`. L'app la carica soltanto se trova nell'ambiente
-all'avvio `FUB_BENCH_GC` con la cartella assoluta dell'estensione
-(`crates/fub-app/src/bench_gc.rs`): allora la finestra principale riparte in
-un processo nuovo, che carica l'estensione. Senza la variabile non succede
-niente, e l'app che si distribuisce non ha l'estensione. Niente comando IPC,
+pagina `window.__fubBenchGc`. Il gancio che la carica sta nell'app soltanto
+con la feature `bench-gc` di `fub-app`, spenta di serie: l'app che si
+distribuisce non sa caricare un'estensione, e con `FUB_BENCH_GC` nell'ambiente
+scrive soltanto un avviso nel log. La build del banco è
+
+```bash
+cargo build --release --locked -p fub-app --features tauri/custom-protocol,bench-gc
+```
+
+e la fanno così `misura.sh` e il job `webview` della CI. In quella build l'app
+carica l'estensione soltanto se trova nell'ambiente all'avvio `FUB_BENCH_GC`
+con la cartella assoluta dell'estensione (`crates/fub-app/src/bench_gc.rs`):
+allora la finestra principale riparte in un processo nuovo, che carica
+l'estensione. Senza la variabile non succede niente. Niente comando IPC,
 niente porte, niente file del vault; soltanto Linux. R1 gira su un driver
 suo, con la variabile accesa, e gli altri scenari tornano su un driver
 senza, così l'avvio misurato da S6 non cambia. Con l'app aperta sui sette
 file il banco chiede una raccolta in più e controlla che schede e scheda
 attiva restino quelle. Il referto di R1 dice in `gc` se la raccolta c'era, e
-quante ce ne sono state: chiesta a un'app senza gancio, le letture vanno
-avanti senza e il banco lo scrive. `--gc=no` misura come prima. Ogni lettura
+quante ce ne sono state. Chiesta a un'app costruita senza `bench-gc`, o se
+l'estensione non si costruisce, R1 misura lo stesso ma è rossa, e il referto
+dice «gancio assente: l'app non è costruita con bench-gc». `--gc=no` misura
+senza raccolta, come prima. Ogni lettura
 porta anche la PSS finita nello swap (`swap`): su una macchina sotto carico
 la PSS può scendere perché il sistema ha spostato pagine, non perché la
 memoria è tornata.
@@ -174,9 +185,12 @@ in più vanno a `run.mjs`, per esempio `--only=R1,T1`.
 
    ```bash
    cd apps/client && npm ci && npm run build && cd ../..
-   cargo build --release --locked -p fub-app --features tauri/custom-protocol
+   cargo build --release --locked -p fub-app --features tauri/custom-protocol,bench-gc
    cargo install tauri-driver --version "=2.1.0" --locked
    ```
+
+   `bench-gc` serve a R1 su Linux (la raccolta forzata qui sopra); su Windows
+   non cambia niente.
 
 2. Su Linux serve WebKitWebDriver (pacchetto `webkit2gtk-driver`); su Windows
    msedgedriver della stessa versione di WebView2, nel `PATH`.

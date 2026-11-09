@@ -640,8 +640,10 @@ jobs:
         working-directory: apps/client
       - run: npm run build
         working-directory: apps/client
-      - name: l'app come la si distribuisce, con la shell dentro
-        run: cargo build --release --locked -p fub-app --features tauri/custom-protocol
+      # `bench-gc` dà all'app il gancio della raccolta forzata che R1 chiede
+      # prima di ogni lettura (#284); il rilascio non lo accende.
+      - name: l'app di release con la shell dentro e il gancio della raccolta (bench-gc)
+        run: cargo build --release --locked -p fub-app --features tauri/custom-protocol,bench-gc
       - name: tauri-driver, alla versione fissata
         run: cargo install tauri-driver --version "=2.1.0" --locked
       - name: S1–S3, S7, la memoria (R1), le tessere (T1) e il nucleo della lavagna (L1) nella WebKitGTK

@@ -10,8 +10,10 @@
 //! il banco (`apps/client/bench/webview/raccolta.rs`) e dà alla pagina
 //! `window.__fubBenchGc`; qui l'app si limita a caricarla.
 //!
-//! Il gancio è **spento di serie**. Si accende soltanto con [`ENV`] nell'ambiente
-//! all'avvio, che nomina la cartella assoluta dell'estensione. Niente comando
+//! Il modulo esiste soltanto con la feature `bench-gc`, spenta di serie: l'app
+//! che si distribuisce non sa caricare un'estensione. Anche nella build del
+//! banco il gancio è **spento di serie**: si accende soltanto con [`ENV`]
+//! nell'ambiente all'avvio, che nomina la cartella assoluta dell'estensione. Niente comando
 //! IPC, niente porte, niente file del vault: l'app legge la variabile, dice a
 //! WebKit dove sta l'estensione e ricarica la finestra principale in un
 //! processo nuovo, perché WebKit carica le estensioni soltanto quando il

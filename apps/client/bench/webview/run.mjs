@@ -365,11 +365,12 @@ const SCENARIOS = {
   /// avanti senza.
   async R1(session) {
     if (process.platform !== "linux") return { skipped: "la memoria si legge da /proc: soltanto Linux" };
-    const gc = { asked: gcAsked, on: null, did: null, calls: 0, ms: 0, skipped: collector.skipped ?? null, openDocument: null };
+    const gc = { asked: gcAsked, on: null, absent: null, did: null, calls: 0, ms: 0, skipped: collector.skipped ?? null, openDocument: null };
     const read = async () => {
       if (gc.asked && !gc.skipped && gc.on !== false) {
         const done = await collect(session);
         gc.on = done.on;
+        if (!done.on) gc.absent = "gancio assente: l'app non è costruita con bench-gc";
         if (done.on) {
           gc.did = done.did;
           gc.calls++;
@@ -447,9 +448,9 @@ const SCENARIOS = {
     // aspettato.
     const roundsLate = rounds.length > 0 ? await read() : null;
     if (!gc.asked) console.log("· R1: raccolta forzata spenta (--gc=no)");
-    else if (gc.skipped) console.log(`· R1: raccolta forzata non disponibile, ${gc.skipped}`);
+    else if (gc.skipped) console.log(`✗ R1: raccolta forzata non disponibile, ${gc.skipped} (--gc=no per misurare senza)`);
     else if (gc.on) console.log(`· R1: raccolta forzata prima di ogni lettura a schede chiuse (${gc.calls}, ${gc.ms} ms in tutto)`);
-    else console.log(`· R1: raccolta forzata chiesta, ma l'app non ha il gancio (${GC_ENV} spenta): letture senza raccolta`);
+    else console.log(`✗ R1: gancio assente, l'app non è costruita con bench-gc: letture senza raccolta`);
     const opened = steps.at(-1)?.memory ?? null;
     const values = {};
     // Tutti i gruppi che la partenza o una lettura dopo hanno visto: la
@@ -724,6 +725,9 @@ async function main() {
           if (over) failed++;
           console.log(`${over ? "✗" : "✓"} ${key} = ${value ?? "—"} ${key.endsWith("MiB") ? "MiB" : "ms"}${limit !== undefined ? ` (soglia ${limit})` : ""} · ${result.samples} campioni`);
         }
+        // R1 chiesta con la raccolta e misurata senza non passa in silenzio:
+        // i numeri restano nel referto, ma lo scenario è rosso.
+        if (result.gc?.asked && result.gc.on !== true) failed++;
       } catch (error) {
         failed++;
         await keep(session, id);
