@@ -178,7 +178,7 @@ export const INK_BOARD = {
 
 /// I tratti per livello: metà sulla tabella, un quarto sul foglio, un quarto
 /// liberi.
-const INK_SHARE = { tabella: 1_000, voti: 500, free: 500 };
+const INK_SHARE = { tabella: INK_STROKES / 2, voti: INK_STROKES / 4, free: INK_STROKES / 4 };
 
 /// Il pennello e il colore della penna di serie della lavagna (D-5).
 const INK_BRUSH = "pf1 size=3 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0 pen=ballpoint";
