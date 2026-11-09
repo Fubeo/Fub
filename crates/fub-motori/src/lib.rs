@@ -7,7 +7,8 @@
 //!
 //! - [`Pigro`], il motore costruito alla prima richiesta e una volta sola;
 //! - [`Servizi`], ciò che i motori hanno in comune: il gruppo di thread
-//!   ([`Lavori`]) e il budget della memoria ([`Budget`]);
+//!   ([`Lavori`]), il budget della memoria ([`Budget`]) e i [`Caratteri`]
+//!   che l'host dà una volta per processo;
 //! - [`Cache`], la forma con cui una cache di un motore si fa contare e
 //!   svuotare dal budget;
 //! - [`Motori`], il registro dove ogni adattatore iscrive il suo motore
@@ -27,6 +28,7 @@
 //! - **chiudere libera**: le cache si svuotano e la memoria torna al sistema
 //!   ([`rilascia_al_sistema`]).
 
+mod caratteri;
 pub mod catalogo;
 mod lavori;
 mod memoria;
@@ -40,6 +42,7 @@ pub use catalogo::{
     importa, verifica_copertura, Adattamento, ComandoFub, Copertura, Delega, Effetto, Gruppo,
     Mancanza, Posto, Scheda, SpecMotore,
 };
+pub use caratteri::{Caratteri, Generiche};
 pub use lavori::Lavori;
 pub use memoria::{rilascia_al_sistema, Budget, Cache, Resoconto};
 pub use modulo::{Campo, ErroreSchema, Modulo, Tipo};

@@ -39,7 +39,8 @@ e a iscrivervi il loro motore.
 | `Lavori` | `src/lavori.rs` | il gruppo di thread dei motori, costruito al primo lavoro |
 | `Cache`, `Budget` | `src/memoria.rs` | le cache dei motori come le vede il budget, e il budget |
 | `Tetto` | `src/pressione.rs` | il tetto della memoria e la pressione che lo abbassa |
-| `Servizi` | `src/servizi.rs` | ciò che i motori hanno in comune: `lavori()` e `memoria()` |
+| `Servizi` | `src/servizi.rs` | ciò che i motori hanno in comune: `lavori()`, `memoria()` e `caratteri()` |
+| `Caratteri`, `Generiche` | `src/caratteri.rs` | le facce dei caratteri date dall'host e le famiglie generiche |
 | `Motori`, `Voce` | `src/registro.rs` | il registro dove ogni adattatore iscrive il suo motore |
 | `importa`, `verifica_copertura` | `src/catalogo.rs` | i comandi di un motore come comandi di Fub, e la prova che nessuno resta fuori |
 | `Modulo`, `Campo`, `Tipo` | `src/modulo.rs` | il modulo dei parametri di un comando, letto dallo schema del motore |
@@ -164,9 +165,27 @@ separati, con il numero di thread e il tetto che la prova sceglie
 (`Tetto::fisso`), e `Motori::nuovi(servizi)` un registro separato.
 
 `Servizi` ha i campi privati e un metodo per servizio (`lavori()`,
-`memoria()`): un servizio nuovo, come la scheda grafica o l'archivio comune
-dei caratteri, si aggiunge con il primo motore che lo usa senza cambiare chi
-usa quelli che ci sono.
+`memoria()`, `caratteri()`): un servizio nuovo si aggiunge senza cambiare chi
+usa quelli che ci sono. I caratteri sono arrivati così con il disegno (K5); la
+scheda grafica arriverà con il primo motore che la usa.
+
+## I caratteri
+
+Un motore non legge i caratteri del sistema: lo stesso documento deve uscire
+uguale su ogni macchina. L'host gli dà quelli che porta nel binario con
+`Servizi::fornisci_caratteri(Caratteri::nuovi(facce, generiche))`: le facce
+sono i byte `'static` dei file dei caratteri, senza copie, e `Generiche`
+dice quale famiglia risponde a `serif`, `sans-serif` e `monospace`.
+
+- Si danno **una volta sola** per servizi: i primi restano, e una seconda
+  chiamata restituisce in `Err` ciò che ha ricevuto, senza cambiare niente.
+- `Servizi::caratteri()` dà la stessa `Arc<Caratteri>` a tutti i thread, o
+  `None` finché l'host non li ha dati: il motore che li vuole risponde allora
+  che non è pronto, non cerca un ripiego nel sistema.
+- **Zero facce** sono ammesse: i testi si disegnano con il ripiego del motore.
+- Ogni motore costruisce dalle facce il suo archivio (per esempio una
+  `fontdb`): `fub-motori` non dipende da nessuno, e non costruisce niente se
+  nessuno chiede.
 
 ## Come un adattatore iscrive il suo motore
 
@@ -399,6 +418,10 @@ mano: si rigenera con
   sotto il tetto; cache che liberano meno o niente; tetto zero; `Weak` morte;
   due `rispetta()` insieme senza lucchetti tenuti; i lettori di `meminfo` e di
   PSI sui campioni; `/proc/pressure` assente; letture non ripetute.
+- `crates/fub-motori/tests/caratteri.rs`: `None` prima che l'host li dia; le
+  stesse facce dopo, senza copie; il secondo `fornisci_caratteri` rifiutato e
+  restituito; zero facce; servizi separati; dieci thread che leggono insieme
+  vedono la stessa `Arc`, e su dieci che li danno insieme uno solo vince.
 - `crates/fub-motori/tests/registro.rs`: iscrizione, `scalda_per`, iscrizioni
   doppie; servizi e registro del processo; nome e numero dei thread; un panico
   in un lavoro.
