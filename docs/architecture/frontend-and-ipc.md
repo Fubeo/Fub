@@ -254,7 +254,10 @@ pannelli) lo Scrittoio compone:
   l'editor che la carica a parte. Le barre degli editor hanno tre forme,
   scritte una volta nel tema e non in ogni editor: la barra a schede
   (`kit/ribbon/`), la barra in una fila e la colonna degli strumenti. La
-  fila non ha un costruttore: chi costruisce la barra mette sul suo DOM
+  barra a schede mette su ogni pezzo due classi, quella col prefisso di chi
+  la monta (`grid-ribbon-…`, `rich-ribbon-…`) e `kit-ribbon-…`, che porta la
+  forma e la pelle comuni; le regole col prefisso restano alle parti solo di
+  quell'editor. La fila non ha un costruttore: chi costruisce la barra mette sul suo DOM
   `kit-bar` (il vassoio), `kit-bar-group` (un foglietto), `kit-bar-button`
   e `kit-bar-field`, e per ciò che non ci sta usa `kit/options-bar.ts`
   (`kit-options`, «…»). Le frecce della fila sono `kit/toolbar-keys.ts`
