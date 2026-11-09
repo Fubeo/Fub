@@ -99,6 +99,20 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · PA T49 (D28) · il logo Marcuzzo e il nome «Fub» non sono
+  open: «tutti i diritti riservati» per i file del logo (`assets/logo/`,
+  le icone dell'app) e una regola scritta sul marchio (per esempio
+  `TRADEMARKS.md` alla radice, come Firefox e Rust): un fork deve togliere
+  Marcuzzo e cambiare nome, e non può presentarsi come Fub; il codice resta
+  `MIT OR Apache-2.0`. Sostituisce il consiglio CC BY-SA di D28 · l'utente:
+  «io voglio che nessuno possa forcare mettendo il logo di Marcuzzo, però il
+  resto del codice è chill», e alla domanda sul nome: «Logo e nome». La
+  catena del logo: immagine da Google Flow (i termini di Google: Google non
+  rivendica la proprietà dei contenuti generati), vettoriale con Recraft,
+  ritocchi in ArtCraft. Resta da sapere il piano di Recraft usato: col
+  piano gratuito i termini di Recraft dicono che l'immagine resta di
+  Recraft, senza uso commerciale; coi piani a pagamento è dell'utente.
+  T49 parte quando l'utente lo dice.
 - 2026-11-09 · K5 T9 · la licenza IJG di `jpeg-encoder` entra con
   un'eccezione stretta in `deny.toml` (solo quel crate) e la frase di
   ringraziamento in `THIRD_PARTY_NOTICES.md`; l'IJG non entra nell'elenco

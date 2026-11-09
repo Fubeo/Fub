@@ -387,7 +387,7 @@ Se una di queste cade, la stima si allunga.
 |---|---|---|---|---|---|---|
 | PA T41 · gli hook congelati | PA | da fare | Fase C in `main`; T34–T40 | basso per il codice, alto se si sbaglia il momento | S | `contract-frozen.test.ts` |
 | PA T42 · tre temi d'esempio | PA | da fare (D17 C: Carta, Officina, Mare) | T41, T54 | basso | M | `examples.test.ts`, scene del banco |
-| PA T49 · il logo | PA | aspetta la licenza e il modello usato in ArtCraft (D28) | T48 | medio: icone, la ricetta e la serie dei temi; gli hook restano | M | le icone generate, le scene del banco |
+| PA T49 · il logo | PA | licenza decisa (logo e nome riservati, codice libero); aspetta solo il piano di Recraft usato per il vettoriale (D28) | T48 | medio: icone, la ricetta e la serie dei temi; gli hook restano | M | le icone generate, le scene del banco |
 | PA T55 · il controllo di tutte le viste nel banco | PA | da fare (D19 A) | S2 in `main`; T47, T56 e T57; prima di T15 | basso | M | `bench:viste` verde, rosso sulla scena di prova |
 | PA T14 · il giro nel banco: lo scheletro e il primo avvio | PA | da fare | Fase B in `main` | medio | M | `npm run bench:giro` verde sui compiti 1–5 |
 | PA T26 · il giro: le note | PA | da fare | T14 | basso | M | compiti 6–11 verdi |
