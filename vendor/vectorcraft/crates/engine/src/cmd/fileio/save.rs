@@ -212,7 +212,10 @@ fn save_format_of(f: &str) -> std::result::Result<&'static Format, String> {
             Err(format!("Save writes {}, not {}: use file.saveAsTemplate to write it", SAVE_FORMATS.join(", "), f.label))
         }
         Some(f) => Err(format!("Save writes {}, not {}: use document.export for other formats", SAVE_FORMATS.join(", "), f.label)),
-        None => Err(super::unsupported(f).map_or_else(|| format!("unknown format `{f}` (Save writes {})", SAVE_FORMATS.join(", ")), |u| u.hint.to_string())),
+        None => {
+            Err(super::unsupported(f)
+                .map_or_else(|| format!("unknown format `{f}` (Save writes {})", SAVE_FORMATS.join(", ")), |u| u.hint.to_string()))
+        }
     }
 }
 

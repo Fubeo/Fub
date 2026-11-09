@@ -24,6 +24,7 @@ lì e `verify-upstream` lo prova dopo l'upstream.
 |---|---|---|
 | `crates/docpath/` | `crates/docpath/` | nessuna |
 | `LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE` | gli stessi | nessuna |
+| `rustfmt.toml` | lo stesso (lo stile dell'upstream, per `cargo fmt --all` di Fub) | nessuna |
 
 Nessuna patch. Il manifest del crate è quello dell'upstream ed eredita
 versione, edizione, licenza e lint da `Cargo.toml` di questa cartella, che è

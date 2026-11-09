@@ -24,6 +24,7 @@ lì e `verify-upstream` lo prova dopo l'upstream.
 |---|---|---|
 | `crates/vectorcraft-format/` | `crates/vectorcraft-format/` | nessuna |
 | `LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE` | gli stessi | nessuna |
+| `rustfmt.toml` | lo stesso (lo stile dell'upstream, per `cargo fmt --all` di Fub) | nessuna |
 
 Nessuna patch. Il manifest del crate è quello dell'upstream ed eredita
 versione, edizione, licenza, lint e le dipendenze `serde`, `serde_json` e

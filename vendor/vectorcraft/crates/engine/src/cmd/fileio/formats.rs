@@ -1,6 +1,6 @@
-use super::{Result, Session, TEMPLATE_FORMATS, UNSUPPORTED, Unsupported, Value, bad, dxf, json, native, svg, text, unsupported};
 #[cfg(feature = "metafile")]
 use super::metafile;
+use super::{Result, Session, TEMPLATE_FORMATS, UNSUPPORTED, Unsupported, Value, bad, dxf, json, native, svg, text, unsupported};
 #[cfg(feature = "pdf")]
 use super::{eps, pdf};
 

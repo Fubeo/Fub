@@ -38,10 +38,14 @@ sono copiati: l'interfaccia (`ui-egui`), il server MCP (`mcp`), le app
 | `xtask/src/sha256.rs`, `xtask/affinity-corpus.sha256` | gli stessi | nessuna |
 | `assets/fonts/` | `assets/fonts/` | nessuna |
 | `LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE`, `ASSETS.md` | gli stessi | nessuna |
+| `rustfmt.toml` | lo stesso | nessuna |
 
 Di `xtask` ci sono soltanto i due file che i test di `affinity` ed `engine`
 includono con `#[path]` (la SHA-256 con cui il test del corpus Affinity
 controlla i file, e il loro elenco): `xtask` non si copia e non gira.
+`rustfmt.toml` è lo stile dell'upstream: `cargo fmt --all` di Fub segue le
+dipendenze a percorso e controlla anche questi crate, con il `rustfmt.toml`
+più vicino. Le righe delle patch sono formattate con lo stesso stile.
 L'elenco esatto dei file di ogni patch è nelle sue intestazioni `diff --git`,
 e `vendor.mjs vectorcraft report` lo incrocia con ciò che l'upstream cambia.
 

@@ -336,19 +336,14 @@ diff --git a/crates/engine/src/cmd/fileio/commands.rs b/crates/engine/src/cmd/fi
 diff --git a/crates/engine/src/cmd/fileio/dxf.rs b/crates/engine/src/cmd/fileio/dxf.rs
 --- a/crates/engine/src/cmd/fileio/dxf.rs
 +++ b/crates/engine/src/cmd/fileio/dxf.rs
-@@ -100,6 +100,29 @@ pub const UNSUPPORTED: &[Unsupported] = &[
+@@ -100,6 +100,24 @@ pub const UNSUPPORTED: &[Unsupported] = &[
          extensions: &["pmd"],
          hint: "PageMaker (.pmd) is not supported: open the layout in PageMaker and export PDF or EPS, or place a PDF export here",
      },
 +    // Without the PDF reader and writer (and the PostScript one that shares them), their
 +    // files are neither opened nor written, nor saved as a native file under their name.
 +    #[cfg(not(feature = "pdf"))]
-+    Unsupported {
-+        id: "pdf",
-+        label: "PDF",
-+        extensions: &["pdf"],
-+        hint: "PDF files are not available in this build: export SVG or PNG instead",
-+    },
++    Unsupported { id: "pdf", label: "PDF", extensions: &["pdf"], hint: "PDF files are not available in this build: export SVG or PNG instead" },
 +    #[cfg(not(feature = "pdf"))]
 +    Unsupported {
 +        id: "ai",
@@ -408,10 +403,10 @@ diff --git a/crates/engine/src/cmd/fileio/formats.rs b/crates/engine/src/cmd/fil
 --- a/crates/engine/src/cmd/fileio/formats.rs
 +++ b/crates/engine/src/cmd/fileio/formats.rs
 @@ -1,6 +1,8 @@
--use super::{Result, Session, TEMPLATE_FORMATS, UNSUPPORTED, Unsupported, Value, bad, dxf, eps, json, native, pdf, svg, text, unsupported};
-+use super::{Result, Session, TEMPLATE_FORMATS, UNSUPPORTED, Unsupported, Value, bad, dxf, json, native, svg, text, unsupported};
  #[cfg(feature = "metafile")]
  use super::metafile;
+-use super::{Result, Session, TEMPLATE_FORMATS, UNSUPPORTED, Unsupported, Value, bad, dxf, eps, json, native, pdf, svg, text, unsupported};
++use super::{Result, Session, TEMPLATE_FORMATS, UNSUPPORTED, Unsupported, Value, bad, dxf, json, native, svg, text, unsupported};
 +#[cfg(feature = "pdf")]
 +use super::{eps, pdf};
  
@@ -827,16 +822,19 @@ diff --git a/crates/engine/src/cmd/fileio/save.rs b/crates/engine/src/cmd/fileio
  
  /// The formats Save as Template writes, the default first: a native template, or a
  /// PDF-compatible `.ait` (written as a `.ai` file is).
-@@ -201,7 +212,7 @@ fn save_format_of(f: &str) -> std::result::Result<&'static Format, String> {
+@@ -201,7 +212,10 @@ fn save_format_of(f: &str) -> std::result::Result<&'static Format, String> {
              Err(format!("Save writes {}, not {}: use file.saveAsTemplate to write it", SAVE_FORMATS.join(", "), f.label))
          }
          Some(f) => Err(format!("Save writes {}, not {}: use document.export for other formats", SAVE_FORMATS.join(", "), f.label)),
 -        None => Err(format!("unknown format `{f}` (Save writes {})", SAVE_FORMATS.join(", "))),
-+        None => Err(super::unsupported(f).map_or_else(|| format!("unknown format `{f}` (Save writes {})", SAVE_FORMATS.join(", ")), |u| u.hint.to_string())),
++        None => {
++            Err(super::unsupported(f)
++                .map_or_else(|| format!("unknown format `{f}` (Save writes {})", SAVE_FORMATS.join(", ")), |u| u.hint.to_string()))
++        }
      }
  }
  
-@@ -234,6 +245,13 @@ pub fn save_plan(s: &Session, mode: SaveMode, p: &Value) -> Result<SavePlan> {
+@@ -234,6 +248,13 @@ pub fn save_plan(s: &Session, mode: SaveMode, p: &Value) -> Result<SavePlan> {
      let cmd = mode.command();
      let st = s.doc()?;
      let path = str_param(p, "path").map(str::to_string);
@@ -850,7 +848,7 @@ diff --git a/crates/engine/src/cmd/fileio/save.rs b/crates/engine/src/cmd/fileio
      let format = match (mode, str_param(p, "format"), path.as_deref().and_then(format_for_name)) {
          // `.ait` when the format or else the path's extension names it; else a native template.
          (SaveMode::Template, f, by_name) => match f.map_or(by_name, format).filter(|f| TEMPLATE_FORMATS.contains(&f.id)) {
-@@ -427,7 +445,22 @@ fn range_text(picked: &[usize]) -> String {
+@@ -427,7 +448,22 @@ fn range_text(picked: &[usize]) -> String {
  /// Does a save in `f` read option `key`? PDF (and a .ai file, a PDF) also reads its General
  /// settings (`createLayers`…) and presets. A save drops each option its format doesn't read.
  pub fn reads_option(f: &Format, key: &str) -> bool {
@@ -874,7 +872,7 @@ diff --git a/crates/engine/src/cmd/fileio/save.rs b/crates/engine/src/cmd/fileio
  }
  
  /// Formats that carry the whole native document: they lose nothing, and record links relative to
-@@ -520,7 +553,7 @@ impl<W: std::io::Write> std::io::Write for Counted<W> {
+@@ -520,7 +556,7 @@ impl<W: std::io::Write> std::io::Write for Counted<W> {
  /// `separateArtboards`, those `range` names (default all).
  fn separate_boards(cmd: &str, f: &Format, doc: &Document, p: &Value) -> Result<Vec<usize>> {
      // A legacy .ai file is a file per artboard already.
@@ -883,7 +881,7 @@ diff --git a/crates/engine/src/cmd/fileio/save.rs b/crates/engine/src/cmd/fileio
          return Ok(vec![]);
      }
      let range = str_param(p, "range").filter(|r| !r.trim().is_empty()).map(str::to_string);
-@@ -586,6 +619,7 @@ fn named_for_save(cmd: &str, e: crate::EngineError) -> crate::EngineError {
+@@ -586,6 +622,7 @@ fn named_for_save(cmd: &str, e: crate::EngineError) -> crate::EngineError {
  
  /// The shared Save and Export encoder for PDF-compatible `.ai` files (and `.ait` templates, the
  /// same file).
@@ -891,7 +889,7 @@ diff --git a/crates/engine/src/cmd/fileio/save.rs b/crates/engine/src/cmd/fileio
  pub(super) fn encode_ai(cmd: &str, f: &Format, doc: &Document, p: &Value) -> Result<Encoded> {
      if super::legacy_ai::wanted(cmd, f, p)? {
          return super::legacy_ai::encode(cmd, f, doc, p);
-@@ -670,8 +704,9 @@ fn job_for_stamped(s: &Session, st: &DocState, plan: SavePlan, stamped: Option<i
+@@ -670,8 +707,9 @@ fn job_for_stamped(s: &Session, st: &DocState, plan: SavePlan, stamped: Option<i
          super::native::save_options(cmd, plan.format, &doc, &params).map_err(|e| named_for_save(cmd, e))?;
      }
      let boards = separate_boards(cmd, plan.format, &doc, &params)?;
@@ -902,7 +900,7 @@ diff --git a/crates/engine/src/cmd/fileio/save.rs b/crates/engine/src/cmd/fileio
      if let (Some(o), "ai" | "ait") = (params.as_object_mut(), plan.format.id) {
          // Save keeps every artboard; exports may choose a subset instead. A legacy .ai file per
          // artboard keeps a range given: the artboards to save.
-@@ -736,13 +771,15 @@ impl SaveJob {
+@@ -736,13 +774,15 @@ impl SaveJob {
      fn encode_one(&self, doc: &Document) -> Result<Encoded> {
          let (cmd, f) = (self.plan.mode.command(), self.plan.format);
          let enc = match f.id {

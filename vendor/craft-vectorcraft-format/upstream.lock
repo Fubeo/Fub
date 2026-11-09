@@ -38,3 +38,7 @@ upstream = "sha256:c6c7ef8d1360d77e091a6013fbe000c2136ea1a5288376af74500404d7c94
 [[file]]
 path = "crates/vectorcraft-format/tests/envelope.rs"
 upstream = "sha256:4d7b766d978fd3ea3c06eddf70c261aa1a318cf7ffe348d78618ed55067f8396"
+
+[[file]]
+path = "rustfmt.toml"
+upstream = "sha256:1b51e53edb3571229e84540b9b08514fb23d8c8d3225e8b984773f5c36eaa906"

@@ -289,9 +289,9 @@ diff --git a/crates/engine/src/cmd/fileio/formats.rs b/crates/engine/src/cmd/fil
 +++ b/crates/engine/src/cmd/fileio/formats.rs
 @@ -1,4 +1,6 @@
 -use super::{Result, Session, TEMPLATE_FORMATS, UNSUPPORTED, Unsupported, Value, bad, dxf, eps, json, metafile, native, pdf, svg, text, unsupported};
-+use super::{Result, Session, TEMPLATE_FORMATS, UNSUPPORTED, Unsupported, Value, bad, dxf, eps, json, native, pdf, svg, text, unsupported};
 +#[cfg(feature = "metafile")]
 +use super::metafile;
++use super::{Result, Session, TEMPLATE_FORMATS, UNSUPPORTED, Unsupported, Value, bad, dxf, eps, json, native, pdf, svg, text, unsupported};
  
  /// One option a format's encoder reads from the export params.
  #[derive(Clone, Copy, Debug)]

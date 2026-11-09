@@ -103,12 +103,7 @@ pub const UNSUPPORTED: &[Unsupported] = &[
     // Without the PDF reader and writer (and the PostScript one that shares them), their
     // files are neither opened nor written, nor saved as a native file under their name.
     #[cfg(not(feature = "pdf"))]
-    Unsupported {
-        id: "pdf",
-        label: "PDF",
-        extensions: &["pdf"],
-        hint: "PDF files are not available in this build: export SVG or PNG instead",
-    },
+    Unsupported { id: "pdf", label: "PDF", extensions: &["pdf"], hint: "PDF files are not available in this build: export SVG or PNG instead" },
     #[cfg(not(feature = "pdf"))]
     Unsupported {
         id: "ai",

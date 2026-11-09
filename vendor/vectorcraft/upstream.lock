@@ -9,11 +9,11 @@ version = "0.20.0"
 
 [[patch]]
 path = "patches/0001-importatori-opzionali.patch"
-sha256 = "sha256:f1badfb09da496000e32809de1bb5a504c29f20ac1093fa96500e7fc52504d3d"
+sha256 = "sha256:458214fa20739d58b58f703c0ef17cbc43f572945f255bc6f284635ff729324a"
 
 [[patch]]
 path = "patches/0002-pdf-opzionale.patch"
-sha256 = "sha256:10386703d345b33eb180b71ef3e4839b0605dc49450dd5c4c0530ae646e2a44b"
+sha256 = "sha256:0de78ca32607995e006165f7a990755cd1507a50dcf6406ce6623ae3f08af85f"
 
 [[file]]
 path = "ASSETS.md"
@@ -1364,7 +1364,7 @@ result = "sha256:3ebb1258322f5b4defc047e340642b06172792447049ff2ba6e5aa6cfe23475
 [[file]]
 path = "crates/engine/src/cmd/fileio/dxf.rs"
 upstream = "sha256:a1e030a0d533960046302a331032f37baceec27dd093d46df74e6993eb285969"
-result = "sha256:a66c6e4da31090001681d577dbc43317ed7373b1b7e0dae08f29b40b40ff1e80"
+result = "sha256:76b9bd993c3a0f3fad5e2214bab2a54d1b92cd6c391dee0ce6769ab87e8344af"
 
 [[file]]
 path = "crates/engine/src/cmd/fileio/dxfimport.rs"
@@ -1391,7 +1391,7 @@ upstream = "sha256:571ec0edc5f95a50de3df36768019aeb5fc7b306e9788fdb7e4740d0b8929
 [[file]]
 path = "crates/engine/src/cmd/fileio/formats.rs"
 upstream = "sha256:4abb8941054454617548e949e9b3683f3b2398c6cc41d112038dab0e48e2e9a3"
-result = "sha256:1a458552ac16968c4305dc2308c1636d9cf11306d6332f325347ecda86200258"
+result = "sha256:be3ad5e626881fea72cc60dafa53c95dcda256eacacd06f77e87cd338770081c"
 
 [[file]]
 path = "crates/engine/src/cmd/fileio/imagemap.rs"
@@ -1455,7 +1455,7 @@ upstream = "sha256:17a7865bfe8ba373d744263daa67060496a2b6b75e84b96ec9d7b7ed173fa
 [[file]]
 path = "crates/engine/src/cmd/fileio/save.rs"
 upstream = "sha256:5d429707fb2a2b3f012a1525106637b2db447c9209468c2afa9622f4a101d441"
-result = "sha256:2be249b2d8f78cd10dbf4bf10e1f99173642c9f9f29b330235c4f8e6c7757cd8"
+result = "sha256:d6071ac5c05c091b7804f4f944d51a926f20e7eee28e6164fdca5d3684eb2b26"
 
 [[file]]
 path = "crates/engine/src/cmd/fileio/screens.rs"
@@ -5156,6 +5156,10 @@ upstream = "sha256:4dfc1680e7f05ab94a1822d16948ebf9876efa791cecbe78421b3084d6156
 [[file]]
 path = "crates/trace/tests/shared_boundaries.rs"
 upstream = "sha256:be4167bdafbb6c73bbd93c2432cfeac5c43ae8f91a4e80323a059255d4cd6991"
+
+[[file]]
+path = "rustfmt.toml"
+upstream = "sha256:1b51e53edb3571229e84540b9b08514fb23d8c8d3225e8b984773f5c36eaa906"
 
 [[file]]
 path = "xtask/affinity-corpus.sha256"

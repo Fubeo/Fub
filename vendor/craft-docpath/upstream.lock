@@ -30,3 +30,7 @@ upstream = "sha256:88c58c4e1e8447805913d190315cb152c6c7853ca64e3b7c573df157c7a77
 [[file]]
 path = "crates/docpath/tests/docpath.rs"
 upstream = "sha256:bc4bd7324b2bfb4d500ee1362991ebdba81b337a736f53d5071927b434f24d0b"
+
+[[file]]
+path = "rustfmt.toml"
+upstream = "sha256:1b51e53edb3571229e84540b9b08514fb23d8c8d3225e8b984773f5c36eaa906"

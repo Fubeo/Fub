@@ -126,6 +126,9 @@ export const MOTORI = {
       "LICENSE-APACHE",
       "NOTICE",
       "ASSETS.md",
+      // Lo stile dell'upstream: `cargo fmt --all` di Fub segue le dipendenze a
+      // percorso e formatta i crate copiati con il `rustfmt.toml` più vicino.
+      "rustfmt.toml",
     ],
     gate: [
       ["la copia è l'upstream più le patch", "node", "tools/vendor-craft/vendor.mjs", "vectorcraft", "check"],
@@ -142,14 +145,14 @@ export const MOTORI = {
     nome: "craft-docpath",
     repository: "https://github.com/storytold/craft-libs",
     mirror: "https://github.com/Fubeo/craft-libs",
-    gestiti: ["crates/docpath", "LICENSE-MIT", "LICENSE-APACHE", "NOTICE"],
+    gestiti: ["crates/docpath", "LICENSE-MIT", "LICENSE-APACHE", "NOTICE", "rustfmt.toml"],
     gate: [["la copia è l'upstream più le patch", "node", "tools/vendor-craft/vendor.mjs", "craft-docpath", "check"]],
   },
   "craft-vectorcraft-format": {
     nome: "craft-vectorcraft-format",
     repository: "https://github.com/storytold/craft-libs",
     mirror: "https://github.com/Fubeo/craft-libs",
-    gestiti: ["crates/vectorcraft-format", "LICENSE-MIT", "LICENSE-APACHE", "NOTICE"],
+    gestiti: ["crates/vectorcraft-format", "LICENSE-MIT", "LICENSE-APACHE", "NOTICE", "rustfmt.toml"],
     gate: [["la copia è l'upstream più le patch", "node", "tools/vendor-craft/vendor.mjs", "craft-vectorcraft-format", "check"]],
   },
 };
