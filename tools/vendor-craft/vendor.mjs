@@ -437,9 +437,11 @@ function checkManifests(dir) {
 /// `[file, espressione, obbligatoria]`.
 function versionRules(id = ID) {
   const name = `${id}(?:-[a-z0-9-]+)?`;
+  // Fra il percorso e la versione, le chiavi booleane (`default-features = false`).
+  const flags = "(?: [a-z-]+ = (?:true|false),)*";
   return [
-    ["Cargo.toml", new RegExp(`^(${name} = \\{ path = "vendor\\/${id}\\/crates\\/[a-z0-9-]+", version = ")([^"]+)(" \\})$`, "gm"), false],
-    [`vendor/${id}/Cargo.toml`, new RegExp(`^(${name} = \\{ path = "crates\\/[a-z0-9-]+", version = ")([^"]+)(" \\})$`, "gm"), false],
+    ["Cargo.toml", new RegExp(`^(${name} = \\{ path = "vendor\\/${id}\\/crates\\/[a-z0-9-]+",${flags} version = ")([^"]+)(" \\})$`, "gm"), false],
+    [`vendor/${id}/Cargo.toml`, new RegExp(`^(${name} = \\{ path = "crates\\/[a-z0-9-]+",${flags} version = ")([^"]+)(" \\})$`, "gm"), false],
     [`vendor/${id}/Cargo.toml`, /^(\[workspace\.package\][^[]*?\nversion = ")([^"]+)(")$/gm, true],
   ];
 }
@@ -907,8 +909,8 @@ function versionCases() {
   const libFub = (v) => `craft-docpath = { path = "vendor/craft-docpath/crates/docpath", version = "${v}" }\n`;
   expect("crate come la voce", versionProblems("craft-docpath", files(libFub("0.1.0"), pkg("0.1.0") + lib("0.1.0")), "0.1.0"), 0);
   expect("crate come la voce, versione vecchia", versionProblems("craft-docpath", files(libFub("0.0.9"), pkg("0.1.0") + lib("0.0.9")), "0.1.0"), 2);
-  // 3. Il percorso con il trattino (`three-d`).
-  const dash = (v) => `motore-three-d = { path = "crates/three-d", version = "${v}" }\n`;
+  // 3. Il percorso con il trattino (`three-d`), con una chiave in mezzo.
+  const dash = (v) => `motore-three-d = { path = "crates/three-d", default-features = false, version = "${v}" }\n`;
   expect("percorso con il trattino", versionProblems("motore", files("", pkg("2.0.0") + dash("2.0.0")), "2.0.0"), 0);
   expect("percorso con il trattino, versione vecchia", versionProblems("motore", files("", pkg("2.0.0") + dash("1.0.0")), "2.0.0"), 1);
   return problems;
