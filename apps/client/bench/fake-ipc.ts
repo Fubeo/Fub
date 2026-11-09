@@ -36,7 +36,7 @@
 // poi rilegge l'impostazione dal canale dati, quindi il banco scrive tutte e
 // due — la cache qui sotto, prima che `main.ts` giri, e il valore di
 // `appearance.theme` fra le impostazioni che serve.
-import { createFakeHost, type GridBytesFake, type Options } from "../src/host/fake";
+import { COMPONENT_SCENARIO, createFakeHost, type GridBytesFake, type Options } from "../src/host/fake";
 import { MARKDOWN_SYNTAX } from "../src/rules/syntax.generated";
 import XLSX_GRID from "../src/__fixtures__/xlsx-grid.json";
 import RICH_PROJECTION from "../src/__fixtures__/rich-projection.json";
@@ -530,6 +530,13 @@ export const LIGHT: "dark" | "light" = params.get("light") === "light" ? "light"
 /// finestra senza vault — l'unica in cui metà delle superfici non esiste, e
 /// l'unica che si fotografa per vedere cosa resta.
 const ROOT = params.get("vault") === "vuoto" ? null : "/Bench vault";
+/// `?vault=nuovo`: la finestra parte senza vault e «Crea un vault nuovo…»
+/// apre una cartella vuota, coi componenti come li trova un vault appena
+/// creato (`partenze.nuovo`) — la scena che chiede il profilo.
+const NEW_VAULT = params.get("vault") === "nuovo";
+/// Lo stato da cui parte la pagina «Componenti»: un nome delle `partenze`
+/// dello scenario (`solo-note`, `tutto`). Senza, «Studio».
+const COMPONENTS_START = params.get("componenti");
 
 // `theme.ts` legge questa chiave prima di chiedere qualunque cosa al canale
 // dati. Scriverla qui — cioè all'`import` di questo module, che Vite mette
@@ -1531,7 +1538,7 @@ const TREES: Record<string, UiNode> = {
 // ---------------------------------------------------------------------------
 
 const options: Options = {
-  file: {
+  file: NEW_VAULT ? {} : {
     ...CORPUS,
     ...(DRAWING === null ? {} : { [DRAWING.doc]: DRAWING.text }),
     // Il testo di una cartella è il suo giornale, vuoto sul disco.
@@ -1543,7 +1550,7 @@ const options: Options = {
     ...(PDF_SCENE === null ? {} : pdfSceneFiles(PDF_SCENE)),
     ...(TREE_SCENE === null ? {} : treeSceneFiles()),
   },
-  resources: {
+  resources: NEW_VAULT ? {} : {
     ...RESOURCES,
     ...(PHOTO === null ? {} : photoResources(PHOTO)),
     ...(CRAFT_SCENE === null ? {} : craftSceneResources()),
@@ -1586,6 +1593,13 @@ const options: Options = {
   }),
   // Il bundle `fub.craft` acceso: le miniature le dice `treeScenePreview`.
   ...(TREE_SCENE === null ? {} : { craft: { docs: {} } }),
+  // La pagina «Componenti» non è scenografia: sono le risposte registrate
+  // dall'host vero (vault di prova con «Studio»), le stesse dei test. Una
+  // scelta che lo scenario non ha la porta la rifiuta, come nei test.
+  // `?componenti=solo-note` parte da un altro stato registrato.
+  components: COMPONENT_SCENARIO,
+  ...(COMPONENTS_START === null ? {} : { componentsStart: COMPONENTS_START }),
+  ...(NEW_VAULT ? { initialVault: null, componentsStart: "nuovo" } : {}),
 };
 
 const host = createFakeHost(options);

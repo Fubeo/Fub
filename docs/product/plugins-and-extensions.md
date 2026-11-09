@@ -47,6 +47,53 @@ Il contratto comprende famiglie per:
 Un bundle dichiara manifest, versione ABI, fiducia, permessi e registrazioni.
 L'host possiede mount, attivazione, disattivazione e smontaggio.
 
+## La pagina «Componenti»
+
+Nelle impostazioni, la scheda «Componenti» si apre sulla pagina che dice che
+cosa è acceso e perché. In alto i profili (un clic: «Solo note», «Studio»,
+«Tutto»…; un profilo che spegne qualcosa lo dice prima, coi nomi; uno «più
+avanti» resta grigio e dice perché, al passaggio e al fuoco; una scelta a mano
+lo fa diventare «personalizzato»), poi i componenti per gruppo, con la
+ricerca. Ogni riga ha l'interruttore e, se serve, «Serve a …» o «Non serve
+più»; il nucleo è «sempre acceso». Il gruppo «Di supporto» sta chiuso dietro
+«Mostra»: si aggiunge e si toglie da sé.
+
+Accendere un componente accende anche ciò che gli serve, e la pagina lo dice
+(«Attivati anche …»). Spegnere ciò che serve ad altri chiede prima, con
+l'elenco di chi si spegne insieme. Chi resta senza nessuno che lo usi compare
+in un avviso, «Togli» o «Tienili», finché non si risponde. La regola è
+dell'host (`components_map`, `components_apply`): la pagina chiede una prova e
+applica; la mappa la legge lo stato dei componenti di tutta l'app
+(`state/components.ts`), una volta per evento, anche quando la scelta arriva
+dalla CLI o da MCP. I permessi dei componenti inclusi restano sotto, in
+«Permessi dei componenti inclusi».
+
+Accanto all'elenco (sopra, con la finestra stretta) il riquadro «Fub con questi
+componenti» dice che cosa cambia prima di uscire dalla pagina: le voci del menu
+«Nuovo» (le stesse dell'esploratore: «Nota», e «Disegno» se i disegni sono
+accesi), che cosa si apre dentro Fub (le estensioni di ogni editor che si può
+spegnere, con il componente che le apre o «solo come file») e che cosa pesa
+(i componenti attivi, quanti di supporto, quanti spenti: Fub non li avvia e
+non ne carica il codice; un editor acceso carica il suo codice solo quando si
+apre un suo file).
+
+## Il profilo di un vault nuovo
+
+«Crea un vault nuovo…» su una cartella senza file visibili e senza chiavi
+`components.*` apre il vault dietro il benvenuto e chiede, in una schermata
+sola, «Come userai questo vault?». Ci sono i sei profili della stessa riga
+della pagina «Componenti» (tre «più avanti», grigi e col perché), «Studio» già
+scelto e «Continua» come tasto principale; sotto, «Si cambia quando vuoi, da
+Impostazioni › Componenti». Scegliere un profilo non applica niente: applica
+«Continua», ed Esc vale «Studio». Poi il vault si mostra coi suoi componenti;
+se il profilo spegne la lavagna, la schermata aspetta che il vault si rimonti.
+
+Un errore nell'applicare, o un rifiuto dell'host, si dice con le parole della
+shell e il vault si apre come prima, senza profilo. «Apri vault…», o «Crea» su
+una cartella che ha già dei file, non chiede niente. Se l'app si chiude con la
+schermata aperta, il vault resta senza `components.*` e vale come un vault di
+prima dei componenti: tutto acceso.
+
 ## Permessi
 
 I permessi sono capability con namespace e, quando serve, parametri. Il kernel
