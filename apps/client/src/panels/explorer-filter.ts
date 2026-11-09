@@ -1,7 +1,7 @@
 // Filtrare l'esplora per percorso.
 //
-// Il campo sta sopra l'albero, sempre: è l'unico campo del pannello File, e
-// il comando `shell.explorer.filter` gli dà il fuoco. Con del testo scritto l'albero cede il posto a un elenco piatto: ogni voce
+// Il campo sta sopra l'albero, sempre: è l'unico campo del pannello File, con
+// la lente dentro, e il comando `shell.explorer.filter` gli dà il fuoco. Con del testo scritto l'albero cede il posto a un elenco piatto: ogni voce
 // e cartella dello spazio il cui percorso intero contiene tutte le parole.
 // Una parola col meno davanti (`-bozze`) toglie le voci che hanno un pezzo di
 // percorso che la contiene: una cartella che corrisponde sparisce con tutto il
@@ -65,6 +65,8 @@ export function mountExplorerFilter(options: ExplorerFilterOptions): ExplorerFil
     label: t("explorer.filter"),
     labelHidden: true,
     placeholder: t("explorer.filter"),
+    // La lente dentro il campo: dice che cosa fa prima che ci si scriva.
+    icon: "search",
     lifetime,
   });
   field.input.type = "search";

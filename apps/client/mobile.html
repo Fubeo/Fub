@@ -219,19 +219,35 @@
             <div id="space-strip" class="space-strip"></div>
             <div class="panel-title" id="files-title" role="heading" aria-level="2">
               <span id="space-title" class="space-title">Note</span>
-              <button
-                id="new-note"
-                class="link-button"
-                data-i18n="explorer.new"
-                data-i18n-title="explorer.new.hint"
-              >
-                + Nuova
-              </button>
+              <span class="panel-title-actions">
+                <button
+                  id="explorer-sort"
+                  type="button"
+                  class="icon-button"
+                  aria-haspopup="menu"
+                  aria-expanded="false"
+                  data-i18n-label="explorer.sort"
+                  data-i18n-title="explorer.sort"
+                  aria-label="Ordina"
+                ></button>
+                <button
+                  id="new-note"
+                  type="button"
+                  class="icon-button"
+                  data-i18n-label="explorer.new.hint"
+                  data-i18n-title="explorer.new.hint"
+                  aria-label="Crea una nota nuova"
+                ></button>
+              </span>
             </div>
             <div class="panel-title" id="pinned-title" role="heading" aria-level="2" hidden>
               <span data-i18n="explorer.pinned">Appuntate</span>
             </div>
             <ul id="pinned-list" class="plain-list" role="list" hidden></ul>
+            <div class="panel-title" id="all-title" role="heading" aria-level="2" hidden>
+              <span data-i18n="explorer.all">Tutte le note</span>
+              <span id="all-count" class="panel-count" hidden></span>
+            </div>
             <ul
               id="file-list"
               class="plain-list"

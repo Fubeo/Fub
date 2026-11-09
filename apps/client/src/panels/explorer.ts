@@ -97,6 +97,10 @@ const spaceStripEl = $("#space-strip");
 const spaceTitleEl = $("#space-title");
 const pinnedTitleEl = $("#pinned-title");
 const pinnedListEl = $("#pinned-list");
+const allTitleEl = $("#all-title");
+const allCountEl = $("#all-count");
+const sortButtonEl = $("#explorer-sort");
+const newNoteEl = $("#new-note");
 
 /// Il drag in corso nella sidebar, se c'è.
 /// Il trascinamento in corso dentro l'albero: la voce presa e, se era nella
@@ -147,9 +151,13 @@ interface View {
   /// cartelle disegnate, e le note appuntate. Una domanda sola per entrambe —
   /// sono la stessa domanda, «quali di questi path ci sono».
   existing: Set<string>;
+  /// Quante voci ha ciò che si vede (il vault o lo spazio attivo), a ogni
+  /// profondità: il numero accanto a «Tutte le note». `null` se la domanda è
+  /// fallita: allora il numero non si scrive, e l'albero si disegna lo stesso.
+  total: number | null;
 }
 
-let view: View = { folders: new Map(), existing: new Set() };
+let view: View = { folders: new Map(), existing: new Set(), total: null };
 /// Chi scalda i motori dei formati al passaggio del puntatore e all'apertura
 /// di una cartella: vive finché il pannello è montato (`mountExplorer`).
 let warmup: EngineWarmup | null = null;
@@ -181,7 +189,18 @@ export function mountExplorer(lifetime: Lifetime): void {
     showXmp = true;
     treeThumbs = false;
   });
-  lifetime.listen($("#new-note"), "click", () => void newNote());
+  // Le due azioni del titolo sono figure: il nome e il suggerimento li danno
+  // gli attributi di `index.html`, che seguono la lingua.
+  newNoteEl.replaceChildren(iconEl("compose") ?? "");
+  sortButtonEl.replaceChildren(iconEl("sort") ?? "");
+  lifetime.listen(newNoteEl, "click", () => void newNote());
+  lifetime.listen(sortButtonEl, "click", () => {
+    sortButtonEl.setAttribute("aria-expanded", "true");
+    showContextMenu(sortButtonEl, sortItems(), {
+      label: t("explorer.sort"),
+      onClose: () => sortButtonEl.setAttribute("aria-expanded", "false"),
+    });
+  });
   // Il titolo del pannello è la radice di ciò che si vede (il vault o lo
   // spazio attivo), e così lo spazio vuoto sotto l'ultima riga: il loro
   // contestuale crea lì, importa e ordina l'albero.
@@ -327,6 +346,9 @@ export function mountExplorer(lifetime: Lifetime): void {
   lifetime.add(() => {
     selection = null;
   });
+  // «Tutte le note» sta subito sopra l'albero, sotto la barra della scelta
+  // multipla, che si è appena messa davanti all'albero.
+  fileListEl.before(allTitleEl);
   // Il titolo del pannello è **di qui** e non del testo fermo di `index.html`:
   // a casa dice «Note», dentro uno spazio dice il nome dello spazio. Un
   // `data-i18n` sopra glielo riscriverebbe a «Note» a ogni cambio di lingua,
@@ -451,7 +473,7 @@ export function mountExplorer(lifetime: Lifetime): void {
     drag = null;
     levelWindows.clear();
     lastSignature = "";
-    view = { folders: new Map(), existing: new Set() };
+    view = { folders: new Map(), existing: new Set(), total: null };
     fileListEl.replaceChildren();
   });
 }
@@ -482,14 +504,14 @@ const race = new Race();
 
 async function refreshFromKernel(force = false): Promise<void> {
   await race.last(async (expected) => {
-    const folders = await expected(loadVisible());
+    const [folders, total] = await expected(Promise.all([loadVisible(), visibleTotal()]));
     const expectedItems = [
       ...[...folders.values()].flatMap((c) =>
         c.folders.flatMap((f) => folderNoteCandidates(f.path, state.handledExtensions, legacyPages)),
       ),
       ...state.meta.pinned,
     ];
-    const newItem: View = { folders, existing: await expected(existingDocuments(expectedItems)) };
+    const newItem: View = { folders, existing: await expected(existingDocuments(expectedItems)), total };
     const signature = signatureOf(newItem);
     if (!force && signature === lastSignature) return;
     lastSignature = signature;
@@ -529,6 +551,18 @@ async function loadVisible(): Promise<Map<string, FolderContent>> {
   return out;
 }
 
+/// Quante voci ha ciò che si vede, a ogni profondità: una domanda sola, con
+/// una finestra di una riga, perché serve il conto e non le voci.
+async function visibleTotal(): Promise<number | null> {
+  const space = state.activeSpace;
+  const scope = space ? { path: space, descendants: true } : undefined;
+  try {
+    return (await vaultEntries({ offset: 0, limit: 1 }, undefined, scope)).total;
+  } catch {
+    return null;
+  }
+}
+
 /// Cosa il kernel ha risposto, in una stringa: due viste con la stessa impronta
 /// disegnano lo stesso albero.
 function signatureOf(v: View): string {
@@ -541,7 +575,7 @@ function signatureOf(v: View): string {
   const dated = state.explorerSort.startsWith("modified")
     ? [...v.folders.values()].map((c) => JSON.stringify(c.mtimes ?? {})).join(";")
     : "";
-  return `${folders.join(";")}|${[...v.existing].sort().join(",")}|${state.explorerSort}|${dated}`;
+  return `${folders.join(";")}|${[...v.existing].sort().join(",")}|${state.explorerSort}|${dated}|${v.total}`;
 }
 
 /// Il contenuto di una cartella nell'ordine in cui si vede, se è caricata.
@@ -560,6 +594,7 @@ function renderFileList(): void {
   renderSpaceStrip();
   renderSpaceTitle();
   renderPinned();
+  renderAllTitle();
   // Chi stava navigando da tastiera non deve perdere il posto: aprire una
   // cartella ridisegna **tutto** l'albero, e senza questa riga il fuoco
   // tornerebbe in cima al documento a ogni freccia destra — cioè la
@@ -1311,6 +1346,15 @@ function folderRow(folder: VaultFolder): HTMLElement {
   name.className = "row-name";
   name.textContent = childName(folder.path);
   row.appendChild(name);
+  // Quante voci dirette ha: fuori dal nome accessibile (lo dà `.row-name`), e
+  // lo zero non si scrive.
+  if (folder.entries > 0) {
+    const count = document.createElement("span");
+    count.className = "row-count";
+    count.setAttribute("aria-hidden", "true");
+    count.textContent = String(folder.entries);
+    row.appendChild(count);
+  }
   if (folderNoteId) row.classList.add("has-note");
   row.addEventListener("click", () => {
     if (folderNoteId) {
@@ -1407,22 +1451,24 @@ function rootMenu(at: MouseEvent): void {
     { label: t("explorer.new_note"), hint: chordOf("shell.note.new"), run: () => void newNote(state.activeSpace) },
     { label: t("explorer.new_folder"), run: () => startNewFolder(root) },
     ...(canCreateDrawing() ? [{ label: t("explorer.new_drawing_menu"), run: () => void newDrawing(root) }] : []),
-    {
-      separator: true,
-      label: t("explorer.sort"),
-      items: EXPLORER_SORTS.map((mode) => ({
-        label: t(SORT_LABELS[mode]),
-        choice: "radio" as const,
-        checked: state.explorerSort === mode,
-        run: () => setSort(mode),
-      })),
-    },
+    { separator: true, label: t("explorer.sort"), items: sortItems() },
     { label: t("explorer.collapse_all"), run: () => collapseAll() },
     { separator: true, ...importItems(root) },
   ], {
     header: { icon: "folder", kind: spaceTitleEl.textContent?.trim() || t("explorer.menu.folder") },
     searchable: [{ label: t("explorer.expand_all"), run: () => void expandAll() }],
   });
+}
+
+/// Gli ordini dell'albero, a scelta singola: li apre il bottone del titolo e
+/// il sottomenu «Ordina» del contestuale della radice.
+function sortItems(): MenuItem[] {
+  return EXPLORER_SORTS.map((mode) => ({
+    label: t(SORT_LABELS[mode]),
+    choice: "radio" as const,
+    checked: state.explorerSort === mode,
+    run: () => setSort(mode),
+  }));
 }
 
 /// L'icona di una riga: quella scelta da chi scrive, che resta com'è, o
@@ -1659,10 +1705,29 @@ function renderPinned(): void {
   for (const id of pinned) {
     const li = document.createElement("li");
     const row = noteRow(id, { draggable: false });
+    // Fra le appuntate la colonna dell'icona la tiene la puntina: dice perché
+    // la riga sta lì. L'icona della nota resta nella sua riga dell'albero.
+    row.querySelector(":scope > .row-icon")?.remove();
+    row.classList.remove("no-icon");
+    const pin = rowIcon(null, "pin");
+    pin.classList.add("row-pin");
+    row.prepend(pin);
     if (id === state.currentDoc) row.setAttribute("aria-current", "true");
     li.appendChild(row);
     pinnedListEl.appendChild(li);
   }
+}
+
+/// «Tutte le note» e il conto di ciò che si vede, sopra l'albero. Col filtro
+/// aperto l'elenco filtrato prende il posto dell'albero, e il titolo va con
+/// lui; senza un vault (o prima della prima risposta) non c'è niente da
+/// contare. Zero voci: il titolo resta, il numero no.
+function renderAllTitle(): void {
+  const loaded = state.vaultRoot !== "" && view.folders.has(state.activeSpace ?? "");
+  allTitleEl.hidden = !loaded || filter?.active() === true;
+  const total = view.total ?? 0;
+  allCountEl.hidden = total === 0;
+  allCountEl.textContent = total === 0 ? "" : String(total);
 }
 
 function togglePin(id: string): void {
@@ -1687,22 +1752,37 @@ function renderSpaceStrip(): void {
   spaceStripEl.setAttribute("role", "toolbar");
   spaceStripEl.setAttribute("aria-label", t("explorer.notes"));
 
+  // Gli spazi stanno in un pozzetto: l'acceso mostra anche il nome, gli altri
+  // soltanto la figura (il nome resta la loro etichetta). «+» sta fuori.
+  const well = document.createElement("span");
+  well.className = "space-well";
+  const chipName = (text: string): HTMLElement => {
+    const name = document.createElement("span");
+    name.className = "space-chip-name";
+    name.setAttribute("aria-hidden", "true");
+    name.textContent = text;
+    return name;
+  };
+
   const home = document.createElement("button");
   home.className = "space-chip";
   home.setAttribute("aria-pressed", String(state.activeSpace === null));
-  home.append(iconEl("home") ?? "");
+  home.append(iconEl("home") ?? "", chipName(t("explorer.whole_vault.short")));
   home.setAttribute("aria-label", t("explorer.whole_vault"));
   setTooltip(home, t("explorer.whole_vault"));
   home.addEventListener("click", () => selectSpace(null));
-  spaceStripEl.appendChild(home);
+  well.appendChild(home);
 
   for (const path of state.meta.spaces) {
     const chip = document.createElement("button");
     chip.className = "space-chip";
     chip.setAttribute("aria-pressed", String(state.activeSpace === path));
     const chosen = state.meta.icons[path];
-    if (chosen) chip.textContent = chosen;
-    else chip.append(iconEl("folder") ?? "");
+    const icon = document.createElement("span");
+    icon.className = "space-chip-icon";
+    if (chosen) icon.textContent = chosen;
+    else icon.append(iconEl("folder") ?? "");
+    chip.append(icon, chipName(childName(path)));
     // Nome annunciato (V15): l'emoji scelta e il nome dello spazio, non solo
     // il simbolo.
     chip.setAttribute("aria-label", namedFolder(path));
@@ -1715,8 +1795,9 @@ function renderSpaceStrip(): void {
         { label: t("explorer.not_a_space"), run: () => removeSpace(path) },
       ]);
     });
-    spaceStripEl.appendChild(chip);
+    well.appendChild(chip);
   }
+  spaceStripEl.appendChild(well);
 
   const add = document.createElement("button");
   add.className = "space-chip add";

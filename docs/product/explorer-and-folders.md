@@ -36,9 +36,22 @@ con `./` una nota nuova nasce accanto a quella aperta, e vince sullo spazio
 attivo; una cartella scelta da chi crea (il menu di una cartella) vince su
 tutto, e senza una nota aperta si parte dalla radice. La regola è
 `fub_abi::rules::folders::for_note`, con la gemella `folderForNote` nella shell.
-«Filtra l'esplora per percorso» (`shell.explorer.filter`, dalla palette) apre
-un campo sopra l'albero. Con del testo l'albero cede il posto a un elenco
-piatto delle voci e cartelle dello spazio il cui percorso intero contiene ogni
+Il titolo del cassetto dice «Note», o il nome dello spazio attivo, e porta due
+azioni a icona: «Ordina» apre un menu con gli stessi ordini a scelta singola
+del sottomenu «Ordina» del contestuale della radice (a mano, per nome, per
+data), e «Crea una nota nuova» crea una nota nello spazio attivo; senza un
+vault aperto è spenta. Gli spazi stanno in un pozzetto: quello acceso mostra
+figura e nome, gli altri solo la figura, col nome per chi usa un lettore di
+schermo. Sopra l'albero, «Tutte le note» porta il numero delle voci di ciò che
+si vede, il vault o lo spazio attivo, a ogni profondità e di ogni specie; con
+zero voci il numero non si scrive. Ogni cartella dice a destra quante voci
+dirette contiene, file compresi e sottocartelle escluse, anche quando è chiusa;
+una cartella vuota non ha numero, e il numero non entra nel nome della riga
+letto da un lettore di schermo. I numeri vengono dall'anagrafe del kernel, non
+da ciò che l'albero disegna o dal filtro.
+«Filtra l'esplora per percorso» (`shell.explorer.filter`, dalla palette) dà il
+fuoco al campo con la lente sopra l'albero. Con del testo l'albero, con le
+appuntate e «Tutte le note», cede il posto a un elenco piatto delle voci e cartelle dello spazio il cui percorso intero contiene ogni
 parola, senza badare alle maiuscole. `-parola` toglie ogni voce con un pezzo di
 percorso che la contiene, quindi una cartella sparisce con tutto il contenuto;
 fra virgolette una frase vale una parola. Invio apre la prima voce, una
