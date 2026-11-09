@@ -357,7 +357,7 @@ Se una di queste cade, la stima si allunga.
 
 | Passo | Fonte | Stato | Dipende da | Rischio | Taglia | Prova di chiusura |
 |---|---|---|---|---|---|---|
-| Scrittoio 2 T3–T27 | S2 | 15 di 27 (T1–T8, T11, T14, T16–T20); T10 aspetta K2 in `main` | K3 in `main` per T20 e T21, che rifanno la barra a schede dalle regole di K3 T18; T22 costruisce la forma A (D5 A); T23 aggiunge solo l'icona (N6 vince sulla lavagna) | medio: tocca quasi ogni pelle; le baseline vengono dal runner (T25) | L | S2 T26 e la CI completa |
+| Scrittoio 2 T3–T27 | S2 | 15 di 28 (T1–T8, T11, T14, T16–T20); T10 aspetta K2 in `main` | K3 in `main` per T20 e T21, che rifanno la barra a schede dalle regole di K3 T18; T22 costruisce la forma A (D5 A); T23 aggiunge solo l'icona (N6 vince sulla lavagna) | medio: tocca quasi ogni pelle; le baseline vengono dal runner (T25) | L | S2 T26 e la CI completa |
 | PA T2 · N4 e K5 allineati a `main` | PA | fatto | #295 in `main` | basso | S | `tsc --noEmit` pulito sui due rami |
 | PA T11 · il vassoio delle barre | PA | da fare (D6 C: chiaro di serie, «marcate» in Aspetto) | S2 T20 | basso | S | Vitest delle preferenze, foto del banco |
 | Il piano del telefono | telefono | da pianificare (D1 B) | S2 in `main`; un pianificatore alla volta | medio: rifà la cornice del telefono prima dell'APK | L | il piano approvato e i suoi task in `main` |
