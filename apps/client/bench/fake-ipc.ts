@@ -347,7 +347,7 @@ function largeWindow(start: number) {
   const count = Math.min(LARGE_BLOCK, LARGE_ROWS - start);
   const rows = Array.from({ length: count }, (_, at) => ({ id: `r${start + at}`, index: start + at, height: 20.0, hidden: false }));
   const columns = Array.from({ length: LARGE_COLUMNS }, (_, index) =>
-    ({ id: `c${index}`, index, width: index === 0 ? 140.0 : index === 3 ? 96.0 : 64.0, hidden: false }));
+    ({ id: `c${index}`, index, width: index === 0 ? 140.0 : index === 2 || index === 3 ? 96.0 : 64.0, hidden: false }));
   const cells = [];
   for (const row of rows) {
     for (const column of columns) {
