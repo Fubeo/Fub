@@ -661,7 +661,7 @@ Fatto quando:
 - la foto di `live-01-panoramica`, `explore` e `search`, in giorno e notte, sta accanto a `?stato=nota` e `?stato=ricerca`;
 - quella di `mobile-sheet` (il cassetto sul telefono, che il prototipo non ha) prende le stesse regole e non perde niente rispetto a oggi.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · 6664b0dd..5ec82492 · «Note» con «ordina» e «nuova nota» a icona, filtro pieno con la lente, sezioni in tondo, «Tutte le note» col totale (una domanda di una riga al kernel per refresh), i conti delle cartelle, il gallone sottile · differenze: il totale conta ogni specie di voce, come il prototipo; col filtro aperto «Tutte le note» si nasconde; fatti anche il pozzetto degli spazi (`explorer.whole_vault.short`), la puntina fra le appuntate e `#all-title` sotto la barra della scelta multipla, come nel prototipo; tolta la chiave `explorer.new` · resta: `bench:tree` non esiste ancora (PA T45); baseline dal runner; commenti con «+ Nuova» in `shells/mobile/creation.ts`
 
 ## T9 · L'ispettore
 
