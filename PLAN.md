@@ -587,7 +587,7 @@ Dal prototipo: `skin/sheets.css` 1649–1674; gli stati `nota` e `documento`.
 Casi limite: molte linguette (la scena `tabs`); un nome lunghissimo; una linguetta senza figura di formato; la linguetta trascinata; il fuoco da tastiera; il contrasto alto.
 Fatto quando: la foto di `live-01-panoramica`, `tabs` e `desk`, in giorno e notte, sta accanto a `?stato=nota` e `?stato=documento` (le linguette e l'etichetta della scrivania), e `npx vitest run src/theme/scrittoio` passa.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · 2b026c13 · linguette con la figura del formato di 14 px, tenue a riposo e piena sull'attiva, nome dell'attiva in medio; etichette della scrivania in tondo in `--text-sm` · differenze: le righe del prototipo fuse nelle regole che c'erano (niente doppioni); `anatomia/sheets.ts` invariato, `.tab-format` l'aveva già messo T5 · resta: il contrasto alto fotografato solo emulando `prefers-contrast: more`; manca una scena col nome lunghissimo
 
 ## T7 · La pillola e i pulsanti premuti
 
