@@ -1035,7 +1035,7 @@ Fatto quando:
 - la foto di `craft-domanda`, in giorno e notte, a 1280 e a 700, sta accanto a `?stato=craft`;
 - quelle di `craft-prepara`, `craft-fallita`, `craft-spente`, `craft-peso` e `craft-rotto` hanno lo stesso foglietto e non perdono niente rispetto a N7.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · e9a87102 · la scheda Craft è un foglietto sollevato con i pulsanti del kit, fuso nelle regole di N7 (niente tratteggio né accento); i pulsanti spenti come quelli del kit; le baseline craft-* cambiano e vengono dal runner
 
 ## T20 · La barra a schede nel kit
 
