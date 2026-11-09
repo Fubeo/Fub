@@ -1332,7 +1332,7 @@ Fatto quando:
 - le foto dal banco, chiaro e scuro, 1280 e 700, di un PDF annotato appena aperto (le annotazioni sopra le pagine) e con l'interruttore spento, accanto alla stessa pagina aperta con «Annota»;
 - `npm run bench:a11y` resta verde.
 Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/editors/media && npm run theme:verify
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-09: `pdf-annotations.ts` pigro, un `<img>` da blob per pagina, interruttore `media-show-annotations`; la scena del banco solo come `?pdf-scena=annotato`, fuori da `scene.mjs`; le immagini del vault dentro le annotazioni restano un segnaposto nel visore; un `.fubann` di un altro PDF si ignora)
 
 ## Non verificato da qui
 
