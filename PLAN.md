@@ -39,13 +39,15 @@ nate dalle risposte e dai consigli di `lavagna.md` per le sue domande
 aperte. N6 va avanti sopra il ramo di N4, non sopra `main` (A-15). Restano
 tre domande nuove, D-20, D-21 e D-22: i task che le aspettano lo dicono.
 Ondate: T1 T2 T3 | T4 T5 T6 | T7 T8 T9 | T10 | T11 T25 | T26 T29 | T27 T12 | T28 T13 | T30 T14 | T24 T31 | T15 T20 | T33 T16 | T32 T19 | T48 T73 | T34 T37 | T17 | T40 T47 | T39 T21 | T38 | T41 | T42 | T43 | T44 | T35 T46 | T53 | T36 | T54 | T49 | T50 | T45 | T51 | T52 | T55 | T56 T65 | T57 | T58 T68 | T59 | T60 | T61 | T62 | T63 | T64 | T66 | T67 | T69 | T70 | T71 | T72 | T74 | T75 | T76 | T77 | T78 | T22 | T86 | T87 | T89 | T23 | T18 | T79 | T80 T88 | T81 | T82 | T83 | T84 | T85 | T90
-Prototipo: quattro pagine; approvate la prima (T25) e la seconda (T26).
+Prototipo: quattro pagine, tutte approvate.
 `PLAN-ui/lavagna-schede.html` (T25): fatta il 2026-11-04, Approvato: 2026-11-04,
 con le varianti consigliate.
 `PLAN-ui/lavagna-impianto.html` (T26): fatta il 2026-11-09, Approvato: 2026-11-10,
 con le varianti consigliate.
-`PLAN-ui/lavagna-modifica.html` (T27), `PLAN-ui/lavagna-estratti.html`
-(T28): da fare. Ognuna la
+`PLAN-ui/lavagna-modifica.html` (T27): fatta il 2026-11-10, Approvato: 2026-11-10,
+con le varianti consigliate.
+`PLAN-ui/lavagna-estratti.html` (T28): fatta il 2026-11-10, Approvato: 2026-11-10,
+con le varianti consigliate. Ognuna la
 costruisce un coder con `.claude/skills/pianifica/prototipo.md` e la fa
 vedere l'orchestratore all'utente, finché non dice sì; nessun task
 grafico che ne dipende parte prima della riga «Approvato» (A-26).
