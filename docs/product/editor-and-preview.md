@@ -6,12 +6,11 @@
 
 ## La testata del foglio
 
-Dice dove sei e se è salvato: la cartella disegnata, il vault (il nome scelto o
-la cartella) e le cartelle, che si aprono nell'esplora, il nome, che si rinomina
-col doppio clic o F2, poi «Salvato» con la spunta e «…». Il formato lo dice la
-figura della linguetta, col nome per il lettore di schermo. Sul telefono resta il
-nome; in piedi il foglio è largo quanto lo schermo e «Salvato» è la spunta (il
-punto se in sospeso; errore e conflitto restano parole rosse); sdraiato è parola.
+Dice dove sei e se è salvato: la cartella disegnata, il vault (il nome scelto o la cartella)
+e le cartelle, che si aprono nell'esplora, il nome, che si rinomina col doppio clic o F2,
+poi «Salvato» con la spunta e «…». Il formato lo dice la figura della linguetta, col nome
+per il lettore di schermo. Sul telefono resta il nome; in piedi il foglio è largo quanto lo
+schermo e «Salvato» è la spunta (il punto se in sospeso; errore e conflitto restano parole rosse).
 
 ## Modalità
 
