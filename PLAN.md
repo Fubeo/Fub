@@ -184,7 +184,7 @@ codice, nei rami e nelle issue il 2026-11-05.
 | K4, K7–K10 | Senza piano | fuori | Vedi sopra | «Piani di Fub» |
 | K5 · il disegno | Ramo: 12 di 30; T6 fatto, la licenza IJG di `jpeg-encoder` chiede l'utente prima di T9 | dentro | Il disegno SVG | `piano/k5-disegno`, #300 |
 | K6 · il disegno completo | Ramo: 0 di 30 | fuori | Scelta dell'utente (D24 B) | #313 |
-| Griglia · le celle | Ramo: 0 di 9; il prototipo approvato dall'utente il 2026-11-07 (D2 A) | dentro | Il foglio che risponde subito | `piano/griglia-celle`, senza PR |
+| Griglia · le celle | Ramo: 1 di 9 (T1 il piano a strati); il prototipo approvato dall'utente il 2026-11-07 (D2 A) | dentro | Il foglio che risponde subito | `piano/griglia-celle`, senza PR |
 | Scrittoio 2 | Ramo: 24 di 28 (T1–T9, T11–T23, T27, T28; main unito, 8febfe3e) | dentro | La cornice | `piano/scrittoio-2`, #309 |
 | La lavagna in codice | Ramo: 0 di 26 | dentro | L'AI che disegna e dispone | `piano/lavagna-in-codice`, #311 |
 | A1 · la base per l'AI | Ramo: 5 di 13 | dentro (F1) | Le ricette | `piano/a1-base-per-ai`, #305 |
@@ -373,7 +373,7 @@ Se una di queste cade, la stima si allunga.
 
 | Passo | Fonte | Stato | Dipende da | Rischio | Taglia | Prova di chiusura |
 |---|---|---|---|---|---|---|
-| Griglia T1–T9 | griglia | 0 di 9 | #295 in `main` (il ramo nasce da K3); T2 e T3 mai insieme a S2 T20 (tutti e tre toccano `skin/editors.css`) | medio: il motore della griglia | L | griglia T8 (foto contro `celle-griglia`) |
+| Griglia T1–T9 | griglia | 1 di 9 | #295 in `main` (il ramo nasce da K3); T2 e T3 mai insieme a S2 T20 (tutti e tre toccano `skin/editors.css`) | medio: il motore della griglia | L | griglia T8 (foto contro `celle-griglia`) |
 | PA T12 · #237 R04 | PA | da fare | griglia T4 | medio | M | test di Vitest sulla griglia |
 | N4 T12–T17, T21–T25 | N4 | 14 di 25 | PA T2; T24 aspetta l'esito della prova con Obsidian, che incolla l'utente | medio: penna e latenza | L | N4 T25 |
 | N6 v1, senza T79–T85 e T88 | N6 | 11 di 90 | N4 in `main` (il ramo nasce da N4, e T90 lo chiede); i task grafici dopo l'approvazione dei prototipi T26–T28 (D3) | alto: 79 task | XL | N6 T90 |

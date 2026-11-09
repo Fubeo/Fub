@@ -99,6 +99,17 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · griglia T1 · integrato con le differenze del coder: la
+  cartella grande sta fra le scene dei soli gesti (niente baseline né a11y),
+  i livelli dei segni sono a misura zero e li taglia `clip-path` (con livelli
+  grandi quanto la zona axe non misurava più il contrasto delle celle), il
+  piano è largo e alto quanto il foglio (era la causa della colonna ferma che
+  scivolava dopo ~430 px) · i tre controlli G1 sono verdi (0 fotogrammi
+  diversi, altezza 29 px contro 27 ±2, quadratino intero 8×8) e le foto
+  combaciano col prototipo; `clip-path` è provato solo in Chromium, la prova
+  in WebKit resta per T8. Il coder ha usato per sbaglio la porta 1431 nelle
+  prime prove del banco (nessun servizio lì, ora spenta): nei brief va scritto
+  `FUB_BENCH_PORT` esplicito.
 - 2026-11-09 · K2 · la prova di D-2 è fatta dall'utente da solo sulla 1432
   (i cinque compiti: «mi sembrava che funzionasse»), dopo tre correzioni
   della sola 1432 (componenti, «Annota il PDF» e il `.fubann` dal ponte;
