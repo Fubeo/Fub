@@ -99,6 +99,16 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · griglia T2 · la soglia del gestore dello scorrimento, che il
+  piano lascia all'orchestratore dopo la prima misura: nel banco G2 (14
+  rotelle da 900 px), sui quattro giri, gestore p90 ≤ 12 ms e peggiore
+  ≤ 30 ms, fotogramma chiesto peggiore ≤ 20 ms; T2 rimandato al coder prima
+  dell'integrazione · la prima versione toglie il bianco (1 px contro 424) ma
+  porta il peggiore del gestore a 53–59 ms (base 28–40) quando arriva una
+  finestra di celle: un compito lungo mentre si scorre è peggio di prima, e
+  nessun task dopo T2 tocca `#showView`. Il coder misura dove va il tempo e
+  controlla se il tab-order rosso al buio (grid-editing, grid-formula) c'era
+  già sulla base.
 - 2026-11-09 · K2 · dopo il merge di main `docs/reference/ipc-contract.md`
   passava la soglia (589 righe contro 550): la sezione «Componenti» è
   diventata `docs/reference/components-contract.md`, con un riassunto e il
