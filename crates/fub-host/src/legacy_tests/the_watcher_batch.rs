@@ -231,11 +231,11 @@ impl IndexProvider for PartialBatchIndex {
 
     fn flush(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
         assert!(
-            self.workspace.try_read().is_some(),
+            super::read_comes_free(&self.workspace),
             "il flush ha conservato il prestito esclusivo del workspace"
         );
         assert!(
-            self.workspace.try_write().is_some(),
+            super::write_comes_free(&self.workspace),
             "il flush non è interamente fuori da Custody"
         );
         self.flushes.fetch_add(1, Ordering::SeqCst);
@@ -398,6 +398,8 @@ fn entry(ws: &Workspace, id: &DocId) -> VaultEntry {
 /// anche col prestito esclusivo — aspetterebbe la fine del parse e poi
 /// passerebbe. Ciò che si vuole sapere è se in *quel momento* il vault è
 /// prendibile, e a quella domanda risponde solo la forma che non aspetta.
+/// La si riprova entro una scadenza, sempre col lotto fermo al cancello: un
+/// `fub-job-*` passa in un istante, il prestito esclusivo del lotto no.
 #[test]
 fn who_reads_enters_while_the_batch_reads_the_disk() {
     let bench = bench();
@@ -413,7 +415,7 @@ fn who_reads_enters_while_the_batch_reads_the_disk() {
 
     // Il parse è cominciato: da qui in poi il lotto sta facendo I/O.
     inside.recv().expect("the batch enters the parse");
-    let read_result = bench.ws.try_read();
+    let read_result = super::try_read_within(&bench.ws, super::FREE_WITHIN);
     assert!(
         read_result.is_some(),
         "the workspace is not borrowable while the batch reads the disk: the \
@@ -476,7 +478,7 @@ fn who_reads_enters_while_catch_up_scans_the_vault() {
     };
 
     inside.recv().expect("catch-up enters VaultStorage::list");
-    let read_result = ws.try_read();
+    let read_result = super::try_read_within(&ws, super::FREE_WITHIN);
     assert!(
         read_result.is_some(),
         "the workspace is not borrowable while catch-up scans the vault"
@@ -787,13 +789,13 @@ fn watcher_ignore_preflight_releases_custody_before_folder_stat() {
         inside
             .recv()
             .expect("the ignore preflight enters VaultStorage::stat");
-        let read = ws.try_read();
+        let read = super::try_read_within(&ws, super::FREE_WITHIN);
         assert!(
             read.is_some(),
             "the {kind} ignore preflight kept the workspace read-locked"
         );
         drop(read);
-        let write = ws.try_write();
+        let write = super::try_write_within(&ws, super::FREE_WITHIN);
         assert!(
             write.is_some(),
             "the {kind} ignore preflight kept the workspace locked"

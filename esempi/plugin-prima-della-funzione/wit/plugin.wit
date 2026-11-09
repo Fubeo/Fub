@@ -1,0 +1,9 @@
+// Il mondo minimo di un plugin compilato contro `fub:abi@0.2.0` prima che
+// l'interfaccia `plugin` avesse `run-job`: esporta soltanto `plugin`, con la
+// copia ferma in `deps/fub-abi/`. Nessun import: all'host basta trovare
+// l'export e controllarne il tipo (#289).
+package esempio:plugin-prima-della-funzione@0.1.0;
+
+world plugin-prima-della-funzione {
+    export fub:abi/plugin@0.2.0;
+}

@@ -16,6 +16,7 @@ import { revealSidePanel } from "../ui/side-panels";
 import { $ } from "../ui/dom";
 import { registerShellCommand } from "../ui/commands";
 import { setSidePanelOpener } from "../ui/primary-views";
+import { PerVault } from "../state/per-vault";
 
 /// Quale pannello della sidebar è attivo: i due della shell, o l'id di una
 /// view dichiarata con `left_sidebar`. L'unione è `string` e non un enum
@@ -105,6 +106,22 @@ export function showPanel(panel: SidebarPanel): void {
 /// ciò che si rivuole se esiste ancora.
 export function lastShownPanel(): SidebarPanel {
   return lastPanel;
+}
+
+/// La vista della barra di ogni vault visto in questa sessione (R07).
+const panelByVault = new PerVault<SidebarPanel>("files");
+
+/// Si entra in un vault: la barra mostra la vista che quel vault aveva, o i
+/// file se non ci si era mai stati — mai quella del vault di prima.
+///
+/// Una view della barra si rivuole e basta: le view del vault nuovo non sono
+/// ancora montate, e mostrarla adesso vorrebbe dire mostrare quella del vault
+/// lasciato. Intanto si vedono i file; `syncRail`, a view montate, la rimostra
+/// se esiste ancora (e altrimenti resta sui file).
+export function enterVaultPanel(root: string): void {
+  const wanted = panelByVault.enter(root, lastPanel);
+  showPanel(wanted === "search" ? "search" : "files");
+  lastPanel = wanted;
 }
 
 /// Il pannello nativo è visibile? Le view dichiarate non si chiedono qui.

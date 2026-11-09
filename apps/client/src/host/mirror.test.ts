@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { GRID_THEME_COLORS, MAIN_PANE } from "./contract";
+import { themeIconsFileHolds } from "../rules/mirrored";
 import type {
   BacklinkRef,
   BundleInfo,
@@ -17,6 +18,7 @@ import type {
   ComponentWrite,
   ComponentsApplied,
   ComponentsMap,
+  ThemeFont,
   ThemeInfo,
   ThemePayload,
   InstalledPluginInfo,
@@ -1693,6 +1695,34 @@ describe("mirror TS↔Rust", () => {
     }
     for (const start of Object.values(COMPONENT_SCENARIO.partenze)) {
       expect(COMPONENT_SCENARIO.mappe[start]).toBeDefined();
+    }
+  });
+
+  it("i caratteri del manifest di un tema hanno la forma del mirror", () => {
+    const manifests = [
+      ...(appFixture.ThemeInfo as ThemeInfo[]),
+      ...(appFixture.ThemePayload as ThemePayload[]),
+    ].map((sample) => sample.manifest);
+    const fonts = manifests.flatMap((manifest) => manifest.fonts ?? []);
+    expect(fonts.length, "il campione porta un carattere").toBeGreaterThan(0);
+    const keys = keysOf<ThemeFont>({ family: true, file: true, weight: true, style: true }).sort();
+    for (const font of fonts) {
+      expect(Object.keys(font).sort()).toEqual(keys);
+      expect(["normal", "italic"]).toContain(font.style);
+      expect(typeof font.weight).toBe("number");
+    }
+  });
+
+  it("il set di icone del manifest di un tema è il nome di un file, come nel mirror", () => {
+    const manifests = [
+      ...(appFixture.ThemeInfo as ThemeInfo[]),
+      ...(appFixture.ThemePayload as ThemePayload[]),
+    ].map((sample) => sample.manifest);
+    const sets = manifests.flatMap((manifest) => (manifest.icons === undefined ? [] : [manifest.icons]));
+    expect(sets.length, "il campione porta un set di icone").toBeGreaterThan(0);
+    for (const file of sets) {
+      expect(typeof file).toBe("string");
+      expect(themeIconsFileHolds(file), file).toBe(true);
     }
   });
 

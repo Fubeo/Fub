@@ -2093,6 +2093,7 @@ dependencies = [
  "fub-format-markdown",
  "fub-format-svg",
  "fub-kernel",
+ "fub-motori",
  "fub-scene",
  "fub-sdk",
  "fub-testkit",
@@ -2182,6 +2183,7 @@ dependencies = [
  "fub-abi",
  "fub-format-markdown",
  "fub-ink",
+ "fub-motori",
  "fub-sdk",
  "quick-xml",
  "quote",
@@ -2190,6 +2192,7 @@ dependencies = [
  "sha2 0.11.0",
  "syn 2.0.119",
  "thiserror 2.0.19",
+ "tracing",
  "wordcraft-doc",
  "wordcraft-docbin",
  "wordcraft-docx",
@@ -2216,6 +2219,7 @@ dependencies = [
  "cfb 0.15.0",
  "fub-abi",
  "fub-format-markdown",
+ "fub-motori",
  "fub-sdk",
  "gridcraft-calc",
  "gridcraft-chart",
@@ -2228,6 +2232,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "thiserror 2.0.19",
+ "tracing",
  "zip",
 ]
 
@@ -2250,6 +2255,7 @@ dependencies = [
  "fub-format-xlsx",
  "fub-importers",
  "fub-kernel",
+ "fub-motori",
  "fub-sdk",
  "fub-testkit",
  "jiff",
@@ -2263,6 +2269,7 @@ dependencies = [
  "tracing",
  "ureq",
  "uuid",
+ "windows-sys 0.61.2",
  "wordcraft-formats",
  "zip",
 ]
@@ -2325,6 +2332,16 @@ dependencies = [
  "tokio-rustls",
  "tokio-tungstenite",
  "zeroize",
+]
+
+[[package]]
+name = "fub-motori"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "rayon",
+ "thiserror 2.0.19",
+ "tracing",
 ]
 
 [[package]]

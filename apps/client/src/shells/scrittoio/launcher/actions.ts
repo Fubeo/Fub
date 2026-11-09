@@ -109,7 +109,7 @@ export function step(row: Row, way: OpenWay, asked: Reading): Step {
           // Un comando di shell si fa e basta, e si ricorda qui; uno del kernel
           // prosegue col modulo e col piano della palette, che lo ricorda lei
           // quando riesce.
-          if (row.entry.run) rememberCommand(row.entry.id);
+          if (row.entry.run && !row.entry.unavailable) rememberCommand(row.entry.id);
           startCommand(row.entry, paletteHost);
         },
       };

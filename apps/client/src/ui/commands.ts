@@ -114,6 +114,11 @@ export interface CommandEntry {
   spec: CommandSpec | null;
   /// Cosa fare per eseguirlo di qua. `null` per un comando del kernel.
   run: (() => void | Promise<void>) | null;
+  /// Il gruppo che la palette scrive accanto al titolo: i comandi che una
+  /// superficie aggiunge (i fogli, «Foglio»).
+  group?: string;
+  /// Perché adesso non si può dare: la palette lo mostra e non lo esegue.
+  unavailable?: string | null;
 }
 
 /// I comandi di shell dichiarati finora. Una mappa e non un array perché

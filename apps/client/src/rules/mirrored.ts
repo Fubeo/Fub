@@ -491,3 +491,143 @@ export function subjectHolds(subject: Subject, doc: string): boolean {
     ? subject.id === doc
     : folderContains(subject.path, doc);
 }
+
+/// Perché una voce di `fonts` di un tema non regge: la prima cosa che non va,
+/// nell'ordine famiglia, file, peso, stile. Gemella di
+/// `fub_abi::rules::theme_font::ThemeFontFault` (l'etichetta, non la frase).
+export type ThemeFontFault =
+  | "family"
+  | "series_family"
+  | "reserved_family"
+  | "file"
+  | "weight"
+  | "style";
+
+/// I limiti e gli elenchi di nomi della regola dei caratteri. La fixture porta
+/// i valori di Rust (`theme_font_limit`), e il mirror pretende che siano questi.
+export const THEME_FONT_LIMITS = {
+  fonts: 8,
+  font_bytes: 2 * 1024 * 1024,
+  font_total_bytes: 6 * 1024 * 1024,
+  family_chars: 64,
+  file_name_chars: 64,
+  weights: [100, 900] as readonly [number, number],
+  series_families: [
+    "Newsreader Variable",
+    "Hanken Grotesk Variable",
+    "IBM Plex Mono",
+    "Inter Variable",
+    "Literata Variable",
+    "JetBrains Mono Variable",
+  ] as readonly string[],
+  reserved_families: [
+    "serif",
+    "sans-serif",
+    "monospace",
+    "cursive",
+    "fantasy",
+    "system-ui",
+    "ui-serif",
+    "ui-sans-serif",
+    "ui-monospace",
+    "ui-rounded",
+    "math",
+    "emoji",
+    "fangsong",
+    "inherit",
+    "initial",
+    "unset",
+    "revert",
+    "revert-layer",
+    "default",
+  ] as readonly string[],
+} as const;
+
+const FONT_FAMILY = /^[A-Za-z0-9-]+(?: [A-Za-z0-9-]+)*$/;
+const FONT_FILE_NAME = /^[A-Za-z0-9_-]+$/;
+
+/// Una voce di `fonts` regge? `null` se sì, altrimenti la prima cosa che non
+/// va. Gemella di `fub_abi::rules::theme_font::theme_font_fault`: gli argomenti
+/// arrivano da un fascio non fidato, quindi possono essere qualunque valore.
+export function themeFontFault(
+  family: unknown,
+  file: unknown,
+  weight: unknown,
+  style: unknown,
+): ThemeFontFault | null {
+  const limits = THEME_FONT_LIMITS;
+  if (typeof family !== "string" || family.length > limits.family_chars || !FONT_FAMILY.test(family)) {
+    return "family";
+  }
+  const folded = family.toLowerCase();
+  if (limits.series_families.some((series) => series.toLowerCase() === folded)) return "series_family";
+  if (limits.reserved_families.includes(folded)) return "reserved_family";
+  const name = typeof file === "string" && file.startsWith("fonts/") && file.endsWith(".woff2")
+    ? file.slice("fonts/".length, -".woff2".length)
+    : null;
+  if (name === null || name.length === 0 || name.length > limits.file_name_chars || !FONT_FILE_NAME.test(name)) {
+    return "file";
+  }
+  const [lightest, heaviest] = limits.weights;
+  if (typeof weight !== "number" || !Number.isInteger(weight) || weight < lightest || weight > heaviest) {
+    return "weight";
+  }
+  if (style !== "normal" && style !== "italic") return "style";
+  return null;
+}
+
+/// Perché una voce del set di icone di un tema non regge: la prima cosa che non
+/// va, nell'ordine nome, numero di tracciati, forma di un tracciato, peso.
+/// Gemella di `fub_abi::rules::theme_icons::ThemeIconFault`.
+export type ThemeIconFault = "name" | "paths" | "path_data" | "bytes";
+
+/// I limiti della regola delle icone. La fixture porta i valori di Rust
+/// (`theme_icon_limit`), e il mirror pretende che siano questi.
+export const THEME_ICON_LIMITS = {
+  icons: 512,
+  paths: 8,
+  icon_bytes: 4 * 1024,
+  set_bytes: 256 * 1024,
+  name_chars: 64,
+  file_name_chars: 64,
+} as const;
+
+/// Solo i comandi e i numeri di un tracciato SVG, e gli spazi ASCII: niente
+/// markup, virgolette, attributi o riferimenti. È ciò che può stare fra le
+/// virgolette di `d="…"` senza fughe. Gemella di
+/// `fub_abi::rules::theme_icons::is_path_data`.
+const PATH_DATA = /^[MmLlHhVvCcSsQqTtAaZz0-9eE.,+\- \t\n\r\f]+$/;
+const ICON_NAME = /^[a-z0-9][a-z0-9-]*$/;
+const ICONS_FILE_NAME = /^[a-z0-9_-]+$/;
+
+/// Un `d` di un tracciato SVG regge? La regola con cui la shell accetta le
+/// icone registrate dai moduli e quelle di un tema.
+export function isPathData(d: unknown): d is string {
+  return typeof d === "string" && PATH_DATA.test(d);
+}
+
+/// Una voce del set di icone regge? `null` se sì, altrimenti la prima cosa che
+/// non va. Gemella di `fub_abi::rules::theme_icons::theme_icon_fault`: i
+/// tracciati arrivano da un fascio non fidato, quindi possono essere qualunque
+/// valore (un elenco che non è un elenco di testi è `paths` o `path_data`).
+export function themeIconFault(name: unknown, paths: unknown): ThemeIconFault | null {
+  const limits = THEME_ICON_LIMITS;
+  if (typeof name !== "string" || name.length > limits.name_chars || !ICON_NAME.test(name)) return "name";
+  if (!Array.isArray(paths) || paths.length === 0 || paths.length > limits.paths) return "paths";
+  if (!paths.every(isPathData)) return "path_data";
+  // I tracciati sono ASCII: la lunghezza in unità UTF-16 è quella in byte.
+  const bytes = (paths as string[]).reduce((sum, d) => sum + d.length, 0);
+  if (bytes > limits.icon_bytes) return "bytes";
+  return null;
+}
+
+/// Il file del set regge? `<nome>.json` accanto al manifest, minuscolo, e mai
+/// `manifest`. Gemella di `fub_abi::rules::theme_icons::theme_icons_file_holds`.
+export function themeIconsFileHolds(file: unknown): boolean {
+  if (typeof file !== "string" || !file.endsWith(".json")) return false;
+  const name = file.slice(0, -".json".length);
+  return name.length > 0 &&
+    name.length <= THEME_ICON_LIMITS.file_name_chars &&
+    name !== "manifest" &&
+    ICONS_FILE_NAME.test(name);
+}

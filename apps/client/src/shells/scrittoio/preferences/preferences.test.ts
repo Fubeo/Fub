@@ -79,7 +79,7 @@ function entry(
 function entries(): SettingEntry[] {
   return [
     entry("appearance.theme", { kind: "choice", default: "", options: [{ value: "", label: "Sistema" }, { value: "light", label: "Chiaro" }] }, ""),
-    entry(ACCENT, { kind: "number", default: 265, min: 0, max: 360 }, 265),
+    entry(ACCENT, { kind: "number", default: 160, min: 0, max: 360 }, 160),
     entry(SPACE, { kind: "number", default: 0, min: 0, max: 4 }, 0),
     entry("appearance.body", { kind: "number", default: 16, min: 12, max: 28 }, 16),
   ];
@@ -308,12 +308,12 @@ describe("lo spazio dell'interfaccia", () => {
 });
 
 describe("l'accento", () => {
-  it("sette campioni e la tinta su misura, in un gruppo di scelta", async () => {
+  it("otto campioni e la tinta su misura, in un gruppo di scelta", async () => {
     await openPanel();
     const group = row(ACCENT).querySelector<HTMLElement>(".prefs-accent-swatches")!;
     expect(group.getAttribute("role")).toBe("radiogroup");
     expect([...group.querySelectorAll<HTMLElement>('[role="radio"]')].map((radio) => radio.dataset.accent)).toEqual([
-      "matita-blu", "viola", "prugna", "terracotta", "ocra", "salvia", "petrolio", "custom",
+      "smeraldo", "matita-blu", "viola", "prugna", "terracotta", "ocra", "salvia", "petrolio", "custom",
     ]);
     expect(swatch("ocra").getAttribute("aria-label")).toBe("Ocra");
     expect(swatch("custom").getAttribute("aria-label")).toBe("Su misura");
@@ -326,16 +326,24 @@ describe("l'accento", () => {
 
   it("mai scelto: vale il predefinito, che l'host e la serie dichiarano uguale", async () => {
     await openPanel();
-    expect(native(ACCENT).value).toBe("265");
-    expect(checkedIn(".prefs-accent")).toEqual(["prefs-accent-matita-blu"]);
+    expect(native(ACCENT).value).toBe("160");
+    expect(checkedIn(".prefs-accent")).toEqual(["prefs-accent-smeraldo"]);
   });
 
   it("scelto: il campione con quella tinta", async () => {
     const list = entries();
-    list[1] = entry(ACCENT, { kind: "number", default: 265, min: 0, max: 360 }, 130, "machine");
+    list[1] = entry(ACCENT, { kind: "number", default: 160, min: 0, max: 360 }, 130, "machine");
     await openPanel(list);
     expect(checkedIn(".prefs-accent")).toEqual(["prefs-accent-salvia"]);
-    expect(row(ACCENT).querySelector(".setting-default")?.textContent).toBe("Predefinito: Matita blu");
+    expect(row(ACCENT).querySelector(".setting-default")?.textContent).toBe("Predefinito: Smeraldo");
+  });
+
+  it("chi aveva scelto la matita blu, la serie di prima, la ritrova scelta", async () => {
+    const list = entries();
+    list[1] = entry(ACCENT, { kind: "number", default: 160, min: 0, max: 360 }, 265, "machine");
+    await openPanel(list);
+    expect(native(ACCENT).value).toBe("265");
+    expect(checkedIn(".prefs-accent")).toEqual(["prefs-accent-matita-blu"]);
   });
 
   it("un campione scrive la sua tinta nella stessa chiave, come numero", async () => {
@@ -360,7 +368,7 @@ describe("l'accento", () => {
 
   it("una tinta che non è di nessun campione è «su misura», col cursore sulla tinta", async () => {
     const list = entries();
-    list[1] = entry(ACCENT, { kind: "number", default: 265, min: 0, max: 360 }, 172, "machine");
+    list[1] = entry(ACCENT, { kind: "number", default: 160, min: 0, max: 360 }, 172, "machine");
     await openPanel(list);
     expect(checkedIn(".prefs-accent")).toEqual(["prefs-accent-custom"]);
     const custom = row(ACCENT).querySelector<HTMLElement>(".prefs-accent-custom")!;
@@ -379,7 +387,7 @@ describe("l'accento", () => {
     expect(checkedIn(".prefs-accent")).toEqual(["prefs-accent-custom"]);
     const slider = document.getElementById("prefs-accent-hue") as HTMLInputElement;
     expect(row(ACCENT).querySelector<HTMLElement>(".prefs-accent-custom")!.hidden).toBe(false);
-    expect(slider.value).toBe("265");
+    expect(slider.value).toBe("160");
 
     // Trascinare non è scrivere, e il cursore resta dove lo porta la mano.
     slider.focus();
@@ -423,7 +431,7 @@ describe("l'accento", () => {
 
   it("una scrittura rifiutata riporta il cursore sulla tinta vera", async () => {
     const list = entries();
-    list[1] = entry(ACCENT, { kind: "number", default: 265, min: 0, max: 360 }, 172, "machine");
+    list[1] = entry(ACCENT, { kind: "number", default: 160, min: 0, max: 360 }, 172, "machine");
     await openPanel(list);
     fake.setSetting.mockRejectedValueOnce(new Error("no"));
     const slider = document.getElementById("prefs-accent-hue") as HTMLInputElement;

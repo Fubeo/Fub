@@ -249,7 +249,7 @@ describe("la vita della sessione", () => {
   it("parte solo su un disegno di FubDraw che si modifica", async () => {
     await begin({ [DOC]: FOREIGN });
     expect(host.atGate("liveStart")).toEqual([]);
-    expect(box.notify).toHaveBeenCalledWith(expect.stringContaining("disegno di FubDraw"), "guasto");
+    expect(box.notify).toHaveBeenCalledWith(expect.stringContaining("disegno di Fub "), "guasto");
   });
 
   it("finisce quando il documento si chiude, o quando l'host chiude", async () => {

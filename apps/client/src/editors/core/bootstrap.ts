@@ -2,10 +2,11 @@ import { mountMarkdownSurface, type EditorSlashHost, type PageIcons, type System
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
 import { api } from "../../host/ipc";
-import { openVaultRoot, state, vaultArg } from "../../state/store";
+import { openVaultRoot, state as shellState, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
 import type { GridDialogs, GridRibbon } from "../grid/ribbon/ribbon";
 import type { GridMenuHost } from "../grid/menu";
+import type { GridPalette } from "../grid/palette/commands";
 import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
 import { onEvent } from "../../state/kernel";
 import { PROOF_NS, type ProofPorts } from "./proof-ports";
@@ -46,11 +47,11 @@ import {
   RICH_PROFILE,
   SVG_FORMAT,
   UI_CANVAS,
+  UI_CRAFT,
   UI_GRID,
   UI_MEDIA,
   UI_RICH,
   UI_SPATIAL,
-  UI_CRAFT,
   UI_TEXT,
   VECTOR_PROFILE,
   VIEWER_OWNER,
@@ -400,16 +401,14 @@ export function createDocumentSurfaceRegistry(
     // shell sceglie la vista, e ciò che nessuna vista sa mostrare non è di
     // questa famiglia. Un SVG è testo: lo prende la famiglia `text`, che lo
     // scrive con l'anteprima accanto invece di mostrarlo e basta.
-    //
-    // Una foto RAW non ha un formato del vault e il registro ha un solo
-    // legame per i byte, questo: la prende il profilo `media-raw`, che monta
-    // la scheda di `editors/craft` col profilo `raw`, solo se il componente
-    // «File delle app Craft» risponde a `craft.preview`. Spento, il RAW resta
-    // un file senza vista.
     selectSourceProfile: (request, fallback) => {
       if (!request.documentId) return fallback;
+      // Una foto RAW non ha un formato del vault: la prende il profilo
+      // `media-raw`, che monta la scheda di `editors/craft` col profilo `raw`,
+      // solo se il componente «File delle app Craft» risponde a
+      // `craft.preview`. Spento, il RAW resta un file senza vista.
       if (isRawPhoto(request.documentId)) {
-        return state.commandSpecs.some((spec) => spec.id === CRAFT_PREVIEW_COMMAND) ? MEDIA_RAW_PROFILE : null;
+        return shellState.commandSpecs.some((spec) => spec.id === CRAFT_PREVIEW_COMMAND) ? MEDIA_RAW_PROFILE : null;
       }
       if (mimeOfId(request.documentId) === "image/svg+xml") return null;
       const kind = mediaKindOfId(pdfIdWithoutFragment(request.documentId));
@@ -514,6 +513,14 @@ function mountGrid(
     const looks = new MutationObserver(() => engine.setPaper(adaptedPaper(context.parent)));
     looks.observe(context.parent, { attributes: true, attributeFilter: ["class"] });
     engine.setPaper(adaptedPaper(context.parent));
+    // I comandi del catalogo nella tavolozza arrivano allo stesso modo.
+    let palette: GridPalette | null = null;
+    void import("../grid/palette/commands").then(
+      ({ mountGridPalette }) => {
+        if (!destroyed) palette = mountGridPalette(engine);
+      },
+      () => {},
+    );
     void import("../grid/ribbon/ribbon").then(
       ({ mountRibbon, mountGridDialogs }) => {
         if (destroyed) return;
@@ -553,6 +560,7 @@ function mountGrid(
       },
       contextMenu: (at) => menu.gridContextMenu(menuHost, at),
       miniBar: () => menu.gridMiniBar(menuHost),
+      paletteCommands: () => palette?.commands() ?? [],
       status: {
         counts: false,
         items: () => [{
@@ -571,6 +579,8 @@ function mountGrid(
         looks.disconnect();
         ribbon?.destroy();
         ribbon = null;
+        palette?.destroy();
+        palette = null;
         dialogs?.destroy();
         dialogs = null;
         waiting = null;
@@ -668,6 +678,21 @@ export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> 
       },
     }),
   }],
+  // I file delle app Craft e gli XMP (`fub.craft`), in sola lettura: la
+  // superficie arriva con un `import()` alla prima scheda (`editors/craft/`).
+  [UI_CRAFT]: [{
+    id: "craft",
+    registration: (options) => ({
+      owner: CRAFT_OWNER,
+      family: CRAFT_FAMILY,
+      defaultProfile: CRAFT_PROFILE,
+      profiles: [XMP_PROFILE],
+      formats: CRAFT_FORMATS,
+      factory: {
+        mount: (profile, context) => mountCraftSurface(profile, context, craftDeps(options)),
+      },
+    }),
+  }],
   // La lavagna (`fub.lavagna`): la tela e il suo sorgente.
   [UI_CANVAS]: [{
     id: "canvas.board",
@@ -726,21 +751,6 @@ export const COMPONENT_EDITORS: Readonly<Record<string, readonly EditorPart[]>> 
       formats: { [FUBANN_FORMAT]: PDF_PROFILE },
       sourceViews: { [PDF_PROFILE]: { family: "text", profile: SVG_PROFILE } },
       factory: { load: () => drawingFactory(options) },
-    }),
-  }],
-  // I file delle app Craft e gli XMP (`fub.craft`), in sola lettura: la
-  // superficie arriva con un `import()` alla prima scheda (`editors/craft/`).
-  [UI_CRAFT]: [{
-    id: "craft",
-    registration: (options) => ({
-      owner: CRAFT_OWNER,
-      family: CRAFT_FAMILY,
-      defaultProfile: CRAFT_PROFILE,
-      profiles: [XMP_PROFILE],
-      formats: CRAFT_FORMATS,
-      factory: {
-        mount: (profile, context) => mountCraftSurface(profile, context, craftDeps(options)),
-      },
     }),
   }],
   // Il lettore PDF (`fub.pdf`): soltanto il profilo PDF del visore, con

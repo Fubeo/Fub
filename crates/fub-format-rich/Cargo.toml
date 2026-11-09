@@ -10,6 +10,7 @@ description = "Documenti di videoscrittura (.docx, .odt, .rtf, .doc) con il mode
 fub-abi = { workspace = true }
 fub-format-markdown = { workspace = true }
 fub-ink = { workspace = true }
+fub-motori = { workspace = true }
 wordcraft-doc = { workspace = true }
 wordcraft-docx = { workspace = true }
 wordcraft-formats = { workspace = true }
@@ -21,6 +22,7 @@ base64 = { workspace = true }
 quick-xml = { workspace = true }
 sha2 = { workspace = true }
 zip = { workspace = true }
+tracing = { workspace = true }
 
 
 [dev-dependencies]

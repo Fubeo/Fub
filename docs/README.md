@@ -63,13 +63,15 @@ all'export, dalla sessione dal tablet ai disegni grandi.
 - [Modello del documento](architecture/document-model.md) e
   [Storage e identità](architecture/storage-and-identity.md)
 - [Runtime, eventi e job](architecture/runtime-events-and-jobs.md)
-- [Frontend e IPC](architecture/frontend-and-ipc.md)
+- [Frontend e IPC](architecture/frontend-and-ipc.md) e
+  [la cornice del telefono](architecture/phone-frame.md)
 - [Superfici dell'editor](architecture/editor-surfaces.md), la
   [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md)
   e la [superficie dei fogli](architecture/grid-surface.md), con gli
   [editor dei componenti](architecture/component-editors.md)
 - [Inchiostro e strumenti](architecture/ink-and-tools.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md)
+- [Lo strato dei motori](architecture/motori.md)
 
 ## Sviluppare
 
@@ -118,7 +120,6 @@ fase passa il cancello (l'ordine sta in [Stato](project/status.md)).
 |---|---|
 | `misure/motori-*.md` | K0, le misure dei motori |
 | `architecture/componenti.md` | K1 e K2, il modello a componenti |
-| `reference/fub-motori.md` | K3, lo strato dei motori |
 | `product/lavagna.md` | la lavagna, prima versione |
 | `product/pdf-lettore.md` | P2, il visore PDF |
 | `product/pdf-completo.md` | P5, la modifica completa |

@@ -55,6 +55,7 @@ import type {
   TextScope,
   TextTolerance,
   ThemeEngine,
+  ThemeFontStyle,
   ThemeLight,
   ThemeMotion,
   ViewSurface,
@@ -64,7 +65,22 @@ import type {
 // Manifest congelato della pelle: non passa dal WIT, ma resta parte del confine.
 export const THEME_ENGINE = "theme-1" as const;
 
-export type { ThemeEngine, ThemeLight, ThemeMotion } from "./enums.generated";
+export type { ThemeEngine, ThemeFontStyle, ThemeLight, ThemeMotion } from "./enums.generated";
+
+/**
+ * Un carattere che un tema porta (da `theme-2`). Il CSS del tema non scrive
+ * `@font-face`: la regola la scrive il loader, coi valori di qui e l'URL
+ * `data:` del file, e la pelle usa la famiglia per nome.
+ */
+export interface ThemeFont {
+  /** Lettere e cifre ASCII, `-` e spazi singoli; al massimo 64; non di serie. */
+  family: string;
+  /** `fonts/<nome>.woff2`, cioè l'asset `theme://<id>/fonts/<nome>.woff2`. */
+  file: string;
+  /** Da 100 a 900. */
+  weight: number;
+  style: ThemeFontStyle;
+}
 
 /**
  * Un'impostazione che un tema dichiara per sé (da `theme-2`). L'host la
@@ -91,6 +107,19 @@ export interface ThemeManifest {
   motion: ThemeMotion[];
   /** Assente quando il tema non ne dichiara. */
   settings?: ThemeSetting[];
+  /**
+   * Il tema da cui questo parte, da `theme-2`: oggi solo la serie
+   * (`fub.serie`). Assente quando il tema porta tutto da sé.
+   */
+  extends?: string;
+  /** I caratteri del tema, da `theme-2`. Assente quando non ne porta. */
+  fonts?: ThemeFont[];
+  /**
+   * Il set di icone del tema, da `theme-2`: il nome di un asset JSON accanto
+   * al manifest (`icons.json`), `{ "<nome>": ["<d>", …] }`. Assente quando non
+   * ne porta.
+   */
+  icons?: string;
 }
 
 /** Un tema installato che il backend può consegnare alla shell. */
@@ -104,7 +133,11 @@ export interface ThemeInfo {
 export interface ThemePayload {
   manifest: ThemeManifest;
   light: ThemeLight;
-  sheet: string;
+  /**
+   * `null` solo per un tema con `extends` che non porta il foglio di questa
+   * luce: vale quello di serie, della stessa luce e dello stesso contrasto.
+   */
+  sheet: string | null;
   skin: string | null;
   assets: Record<string, readonly number[]>;
 }

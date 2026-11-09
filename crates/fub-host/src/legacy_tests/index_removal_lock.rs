@@ -102,7 +102,7 @@ impl IndexProvider for Probe {
         }
         self.first = false;
         let workspace = self.workspace.lock().unwrap().as_ref().unwrap().clone();
-        let guard_free = workspace.try_read().is_some() && workspace.try_write().is_some();
+        let guard_free = super::comes_free(&workspace, super::FREE_WITHIN);
         // La baseline rossa viene rilasciata senza tentare un deadlock.
         let observation = if guard_free {
             let events = workspace.read().unwrap().bus().subscribe();

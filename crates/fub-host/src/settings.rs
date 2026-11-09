@@ -924,7 +924,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
             APPEARANCE_ACCENT,
             C_ACCENT,
             C_ACCENT_DESC,
-            265.0,
+            160.0,
             0.0,
             360.0,
         ),
@@ -1780,6 +1780,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.capture.template_mode", "Un template vale solo per una cattura che crea una nota.")
         .with("host.capture.moved", "«{doc}» è cambiata durante la cattura: riprova.")
         .with("host.vault.moved", "«{doc}» è cambiata dopo aver letto la sua revisione: riprova.")
+        .with("host.open_key.malformed", "La chiave di apertura del documento non è valida: da 1 a 64 lettere, cifre, «-» o «_».")
         .with("host.rich.encrypted", "«{doc}» è protetto da una password: Fub non lo apre.")
         .with("host.rich.readonly.revisions", "«{doc}» ha revisioni tracciate: si legge, ma non si scrive da qui.")
         .with("host.rich.readonly.track_changes", "«{doc}» registra le modifiche: si legge, ma non si scrive da qui.")
@@ -2405,6 +2406,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.capture.template_mode", "A template only applies to a capture that creates a note.")
         .with("host.capture.moved", "“{doc}” changed during the capture: try again.")
         .with("host.vault.moved", "“{doc}” changed after its revision was read: try again.")
+        .with("host.open_key.malformed", "The document's open key is not valid: 1 to 64 letters, digits, “-” or “_”.")
         .with("host.rich.encrypted", "“{doc}” is protected by a password: Fub does not open it.")
         .with("host.rich.readonly.revisions", "“{doc}” has tracked changes: it can be read, but not written from here.")
         .with("host.rich.readonly.track_changes", "“{doc}” tracks changes: it can be read, but not written from here.")

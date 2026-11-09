@@ -78,9 +78,11 @@ fn assert_workspace_is_free(workspace: &Custody<Workspace>, callback: &str) {
 
 fn assert_restore_detached_with_writer_turn(workspace: &Custody<Workspace>, callback: &str) {
     assert!(
-        workspace.try_read().is_some(),
+        super::read_comes_free(workspace),
         "{callback} held a write guard on Custody<Workspace>"
     );
+    // Preso: il turno del restore è di un altro thread e non si libera da
+    // sé, quindi un colpo solo basta.
     assert!(
         workspace.try_write().is_none(),
         "{callback} did not preserve the restore writer turn"
@@ -409,8 +411,7 @@ impl FormatProvider for BlockingFormat {
         if let Some(workspace) = workspace {
             assert_workspace_is_free(&workspace, "FormatProvider::parse during rename");
             if self.stale_during_parse.swap(false, Ordering::SeqCst) {
-                workspace
-                    .try_write()
+                super::try_write_within(&workspace, super::FREE_WITHIN)
                     .expect("the parser callback can re-enter the workspace")
                     .register_syntax_rule(PLUGIN, Box::new(LaterSyntax))
                     .expect("the parser callback changes the syntax generation");

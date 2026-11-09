@@ -16,8 +16,8 @@ incorporato nel kernel.
 
 ```mermaid
 flowchart LR
-    ENTRY["apps/client/src/main.ts"] --> DESKTOP["shell desktop"]
-    ENTRY["entrypoints/mobile-main.ts"] --> MOBILE["shell mobile"]
+    DESKTOP_ENTRY["apps/client/src/main.ts"] --> DESKTOP["shell desktop"]
+    MOBILE_ENTRY["apps/client/src/entrypoints/mobile-main.ts"] --> MOBILE["shell mobile"]
     DESKTOP --> SHARED["editor · stato · feature condivise"]
     MOBILE --> SHARED
     SHARED --> APP["fub-app<br/>Tauri e IPC"]

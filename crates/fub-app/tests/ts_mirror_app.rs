@@ -54,6 +54,32 @@ fn to_value<T: serde::Serialize>(v: T) -> Value {
     serde_json::to_value(v).expect("serializza")
 }
 
+/// Il manifest di un tema `theme-2` che parte dalla serie e porta un
+/// carattere e un set di icone: i campi `extends`, `fonts` e `icons` sul filo.
+fn extending_manifest() -> fub_abi::theme::ThemeManifest {
+    fub_abi::theme::ThemeManifest {
+        id: "acme.carta".into(),
+        name: "Carta".into(),
+        version: "1.0.0".into(),
+        engine: fub_abi::theme::ThemeEngine::Theme2,
+        lights: vec![ThemeLight::Light, ThemeLight::Dark],
+        asset_namespace: "theme://acme.carta/".into(),
+        motion: vec![
+            fub_abi::theme::ThemeMotion::Opacity,
+            fub_abi::theme::ThemeMotion::Transform,
+        ],
+        settings: Vec::new(),
+        extends: Some(fub_host::theme::SERIES_ID.into()),
+        fonts: vec![fub_abi::theme::ThemeFont {
+            family: "Carta Serif".into(),
+            file: "fonts/carta.woff2".into(),
+            weight: 400,
+            style: fub_abi::theme::ThemeFontStyle::Italic,
+        }],
+        icons: Some("icons.json".into()),
+    }
+}
+
 fn expected() -> Value {
     // La costruzione con TUTTI i campi è la guardia di esaustività: un campo
     // aggiunto a una struct non compila finché non è anche qui.
@@ -248,7 +274,14 @@ fn expected() -> Value {
                     fub_abi::theme::ThemeMotion::Transform,
                 ],
                 settings: Vec::new(),
+                extends: None,
+                fonts: Vec::new(),
+                icons: None,
             },
+            trust: "community",
+        }), to_value(ThemeInfo {
+            // Un tema che parte dalla serie: il campo `extends` sul filo.
+            manifest: extending_manifest(),
             trust: "community",
         })],
         "ThemePayload": [to_value(ThemePayload {
@@ -264,13 +297,24 @@ fn expected() -> Value {
                     fub_abi::theme::ThemeMotion::Transform,
                 ],
                 settings: Vec::new(),
+                extends: None,
+                fonts: Vec::new(),
+                icons: None,
             },
             light: ThemeLight::Light,
-            sheet: ":root { --paper: #fff; }".into(),
+            sheet: Some(":root { --paper: #fff; }".into()),
             skin: Some(".paper { color: var(--paper); }".into()),
             assets: [("theme://acme.paper/fonts/paper.woff2".into(), vec![1_u8, 2, 3])]
                 .into_iter()
                 .collect(),
+        }), to_value(ThemePayload {
+            // La luce di un tema che eredita e non porta il suo foglio:
+            // `sheet` è `null`, e la shell usa quello di serie.
+            manifest: extending_manifest(),
+            light: ThemeLight::Dark,
+            sheet: None,
+            skin: Some(".carta { color: inherit; }".into()),
+            assets: Default::default(),
         })],
         "InstalledPluginInfo": [to_value(InstalledPluginInfo {
             bundle: BundleInfo {

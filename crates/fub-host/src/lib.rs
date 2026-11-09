@@ -103,6 +103,7 @@ pub mod craft;
 /// L'anteprima di un file Craft fatta dalla CLI dell'app, dopo un gesto.
 pub mod craft_render;
 mod custody;
+mod engines;
 mod export_folder;
 pub mod format_source;
 pub mod jobs;
@@ -115,6 +116,8 @@ pub mod mount;
 /// ce l'hanno.
 #[cfg(feature = "http-client")]
 pub mod net;
+#[cfg(any(feature = "rich", feature = "xlsx"))]
+mod new_file;
 pub mod obsidian_import;
 /// «Apri con»: quali app Craft aprono un file del vault, e aprirlo con una.
 pub mod open_with;
@@ -150,6 +153,7 @@ pub mod web_clip;
 mod workbook;
 extern crate self as fub_host;
 pub use custody::Custody;
+pub use engines::OpenKey;
 #[cfg(feature = "notify-watcher")]
 pub use watcher::NotifyWatcher;
 #[cfg(test)]
@@ -160,6 +164,8 @@ pub(crate) use watcher::{ExternalChange, ExternalSync};
 pub use watcher::{NoWatcher, VaultWatcher, WatcherFactory};
 #[cfg(test)]
 mod legacy_tests;
+#[cfg(test)]
+mod quiet_panic;
 
 pub use config::{config_dir, install_logging, log_path};
 pub use format_source::{FormatSource, PreparedFormatSource};

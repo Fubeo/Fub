@@ -55,6 +55,24 @@ function nodeCount(source, kind) {
   return ids.size;
 }
 
+// Le etichette di ogni nodo di un flowchart, per id. Mermaid tiene l'ultima
+// etichetta di un id dichiarato più volte e disegna un nodo solo: due nodi
+// scritti con la stessa id diventano uno, e il primo sparisce senza errore.
+function relabeled(source) {
+  const labels = new Map();
+  const declaration = /\b([A-Za-z][A-Za-z0-9_]*)\s*(?:\[|\(|\{)+\s*("([^"]*)"|[^\]\)\}\n]*)/g;
+  for (const line of source.split(/\r?\n/)) {
+    if (/^\s*(%%|subgraph\b)/.test(line)) continue;
+    for (const match of line.matchAll(declaration)) {
+      const label = (match[3] ?? match[2]).trim();
+      const seen = labels.get(match[1]) ?? new Set();
+      seen.add(label);
+      labels.set(match[1], seen);
+    }
+  }
+  return [...labels].filter(([, seen]) => seen.size > 1).map(([id, seen]) => ({ id, labels: [...seen] }));
+}
+
 function structural(block) {
   const errors = [];
   const first = block.source.split(/\r?\n/).find((line) => line.trim())?.trim() ?? "";
@@ -81,10 +99,39 @@ function structural(block) {
   const count = nodeCount(block.source, first);
   if (count > 20) errors.push(`${count} nodi o partecipanti, massimo 20`);
 
+  if (first.startsWith("flowchart")) {
+    for (const { id, labels } of relabeled(block.source)) {
+      errors.push(`il nodo ${id} ha due etichette (${labels.map((label) => `«${label}»`).join(", ")}): Mermaid ne disegna uno solo, con l'ultima`);
+    }
+  }
+
   return errors;
 }
 
-const files = walk(path.join(root, "docs")).filter((file) => file.endsWith(".md"));
+// L'autoprova gira a ogni corsa, prima dei documenti: costa niente, e così la
+// regola delle etichette è provata dagli stessi passi che la applicano
+// (`scripts/check.sh` e la CI). `--self-test` si ferma dopo di lei.
+{
+  const check = (source) => structural({ source });
+  const doubled = check("flowchart LR\n    A[\"uno\"] --> C[\"tre\"]\n    A[\"due\"] --> C");
+  const repeated = check("flowchart LR\n    A[\"uno\"] --> B[\"due\"]\n    A --> C[\"tre\"]\n    B[\"due\"] --> C");
+  const shapes = check("flowchart TD\n    A((cerchio)) --> B{scelta}\n    B --> C[(disco)]\n    %% A[commento]");
+  if (doubled.length !== 1 || !doubled[0].includes("il nodo A") || repeated.length || shapes.length) {
+    console.error("autoprova Mermaid fallita:", JSON.stringify({ doubled, repeated, shapes }));
+    process.exit(1);
+  }
+  if (process.argv.includes("--self-test")) {
+    console.log("autoprova Mermaid: ok.");
+    process.exit(0);
+  }
+}
+
+// Le pagine di `docs/` e la pagina d'ingresso del repository: il README apre
+// con il diagramma dell'architettura, ed è il primo che si legge.
+const files = [
+  ...walk(path.join(root, "docs")).filter((file) => file.endsWith(".md")),
+  path.join(root, "README.md"),
+];
 let allBlocks = [];
 try {
   allBlocks = files.flatMap(blocks);

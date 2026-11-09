@@ -211,8 +211,26 @@ export const api = {
   // revisione arrivi da qui invece di essere ricalcolata di qua è la stessa
   // regola per cui è opaca — due implementazioni della stessa impronta sono due
   // verità, e la seconda mente in silenzio.
+  //
+  // `readDocument` è una **lettura semplice**: l'anteprima, una ricerca, un
+  // confronto. Il documento non conta come aperto e l'host non tiene niente.
+  // `openDocument` è la stessa lettura sotto la chiave di apertura `open` di
+  // una sessione (da 1 a 64 fra lettere, cifre, `-` e `_`): la revisione resta
+  // segnata sotto la chiave finché `documentClosed(open)` non la chiude.
   readDocument: (id: string, vault?: string | null) =>
     invoke<DocumentSource>("read_document", toVault({ id }, vault)),
+  openDocument: (id: string, open: string, vault?: string | null) =>
+    invoke<DocumentSource>("read_document", toVault({ id, open }, vault)),
+  // I motori dei formati (fogli, documenti) si costruiscono alla prima
+  // apertura. Scaldare quello di un'estensione lo prepara prima, in
+  // sottofondo: un'estensione senza motore non fa niente e non è un errore.
+  warmEngine: (extension: string) => invoke<void>("warm_engine", { extension }),
+  // La shell ha chiuso la sessione con la chiave di apertura `open`: l'host
+  // dimentica le prove a vuoto che nessun'altra chiave tiene, e le cache dei
+  // documenti se non resta aperta nessuna chiave. Una chiave sconosciuta o già
+  // chiusa non è un errore.
+  documentClosed: (open: string, vault?: string | null) =>
+    invoke<void>("document_closed", toVault({ open }, vault)),
   resourceOpen: (id: string, vault: string | null = null) =>
     invoke<ResourceDescriptor>("resource_open", { id, vault }),
   resourceReadChunk: (handle: string, offset: number, len: number) =>
@@ -284,9 +302,14 @@ export const api = {
   // stato scritto niente**; `dictated` = «copri, è voluto». Prima era
   // `base: string | null = null`, cioè la guardia si perdeva non passandola —
   // e chi la perdeva non lo scriveva da nessuna parte. Torna la revisione
-  // prodotta, cioè la base della scrittura dopo.
-  writeDocument: (id: string, source: string, base: WriteBase, vault?: string | null) =>
-    invoke<string>("write_document", toVault({ id, source, base }, vault)),
+  // prodotta, cioè la base della scrittura dopo. Con `open`, la chiave della
+  // sessione che scrive, la revisione sovrascritta e quella nuova restano
+  // segnate sotto la chiave; senza, l'host non tiene niente.
+  writeDocument: (id: string, source: string, base: WriteBase, vault?: string | null, open?: string) =>
+    invoke<string>(
+      "write_document",
+      toVault(open === undefined ? { id, source, base } : { id, source, base, open }, vault),
+    ),
   // Il **buffer di crash** (§15.2): ciò che è nell'editor e non è ancora sul
   // disco. Due porte e non due comandi del registro, ed è l'unica coppia di
   // questo file la cui capacità mancante è voluta per sempre: il testo non

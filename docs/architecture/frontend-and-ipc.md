@@ -249,8 +249,8 @@ pannelli) lo Scrittoio compone:
   primitiva ha un owner e un disposer per ciò che registra. `kit/ribbon/` è
   la barra multifunzione comune (schede e schede contestuali, gruppi raccolti
   da destra, lettere con Alt e F10, mini-barra), generica sulla vista e sulle
-  etichette di chi la monta; non sta nell'indice del kit, perché arriva con
-  l'editor che la carica a parte;
+  etichette di chi la monta (i fogli accendono `openInPlace` e `motion`);
+  non sta nell'indice del kit: arriva con l'editor che la carica a parte;
 - `moto/`: molle, FLIP, presenza e gesti. Le animazioni sono fotogrammi
   chiave WAAPI di sola `transform` e `opacity`; il livello `appearance.motion`
   e la preferenza del sistema decidono quanto movimento esiste, e lo stato
@@ -267,12 +267,12 @@ pannelli) lo Scrittoio compone:
   contratto del tema lo esporta in `layers`
   ([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)).
 
-I predefiniti dell'aspetto (accento, i tre caratteri, corpo, interlinea,
-giustezza)
-li dichiara l'host e coincidono con quelli della serie; un test Rust lo
-verifica. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
-400 px, ispettore da 248 a 440 px. Un tema `theme-1` installato non si monta, e
-la diagnosi del catalogo nomina il motore.
+I predefiniti dell'aspetto li dichiara l'host, uguali alla serie (test Rust).
+L'accento di serie è lo smeraldo, 160; i colori di stato ne restano a 30°
+(`statusHue`), e `avvio/colori.test.ts` lega l'avvio alla ricetta. Cassetti:
+sidebar da 208 a 400 px, ispettore da 248 a 440 px, col divisore del kit. Un
+tema `theme-1` non si monta; uno con `extends` lascia la pelle di serie in
+`pelle` e aggiunge la sua in `pelle-tema`, dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
 
 ### Comportamenti della shell
 

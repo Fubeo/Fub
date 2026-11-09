@@ -465,10 +465,7 @@ pub(crate) fn mount_with_formats(
             "Word processing",
             crate::rich::register,
         )
-        .speaking(
-            crate::settings::CORE_DEFAULT_LOCALE,
-            fub_format_rich::export::catalog(),
-        )
+        .speaking(crate::settings::CORE_DEFAULT_LOCALE, crate::rich::catalog())
         .described_by(componenti::riga(crate::rich::RICH_ID).as_ref()),
     ));
 
@@ -483,7 +480,7 @@ pub(crate) fn mount_with_formats(
         )
         .speaking(
             crate::settings::CORE_DEFAULT_LOCALE,
-            fub_format_xlsx::export::catalog(),
+            crate::workbook::catalog(),
         )
         .described_by(componenti::riga(crate::workbook::WORKBOOK_ID).as_ref()),
     ));

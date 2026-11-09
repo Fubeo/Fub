@@ -170,11 +170,14 @@ async function start(file: Record<string, string> = VAULT): Promise<FakeHost> {
   box.draws = [];
   const host = createFakeHost({ file });
   const api = host.module.api as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
-  const read = api.readDocument!;
-  api.readDocument = async (id: unknown) => {
-    const source = (await read(id)) as Record<string, unknown>;
-    return String(id).endsWith(".draw") ? { ...source, format_id: "test.draw" } : source;
-  };
+  // La lettura semplice e quella sotto la chiave di una sessione.
+  for (const port of ["readDocument", "openDocument"] as const) {
+    const read = api[port]!;
+    api[port] = async (...args: unknown[]) => {
+      const source = (await read(...args)) as Record<string, unknown>;
+      return String(args[0]).endsWith(".draw") ? { ...source, format_id: "test.draw" } : source;
+    };
+  }
   box.host = host;
   const body = /<body[^>]*>([\s\S]*)<\/body>/.exec(rawHtml);
   if (!body) throw new Error("index.html non ha un body");
@@ -408,7 +411,7 @@ describe("la vista sorgente di una scheda", () => {
   it("apre il testo sulla stessa sessione, col fuoco, e torna senza perdere niente", async () => {
     const host = await start();
     await open("schizzo.draw");
-    const reads = host.atGate("readDocument").filter((call) => call.args[0] === "schizzo.draw").length;
+    const reads = host.atGate("openDocument").filter((call) => call.args[0] === "schizzo.draw").length;
     expect(reads).toBe(1);
 
     await run("shell.doc.source.open");
@@ -433,7 +436,7 @@ describe("la vista sorgente di una scheda", () => {
     expect(draw?.text).toBe(`<!-- a mano -->${DRAWING}`);
     expect(document.activeElement).toBe(draw?.root);
     expect(
-      host.atGate("readDocument").filter((call) => call.args[0] === "schizzo.draw"),
+      host.atGate("openDocument").filter((call) => call.args[0] === "schizzo.draw"),
       "nessuna rilettura dal disco",
     ).toHaveLength(reads);
     await waitFor("la modifica arriva al disco", () =>
@@ -511,7 +514,7 @@ describe("la vista sorgente di una scheda", () => {
     const layout = await import("./state/layout");
     await open("schizzo.draw");
     const origin = layout.layout.focus;
-    const reads = host.atGate("readDocument").filter((call) => call.args[0] === "schizzo.draw").length;
+    const reads = host.atGate("openDocument").filter((call) => call.args[0] === "schizzo.draw").length;
 
     await run("shell.doc.source.side");
     const [left, right] = layout.panes();
@@ -531,7 +534,7 @@ describe("la vista sorgente di una scheda", () => {
     await settle();
     expect(liveDraws()[0]!.text).toBe(`<!-- accanto -->${DRAWING}`);
     expect(
-      host.atGate("readDocument").filter((call) => call.args[0] === "schizzo.draw"),
+      host.atGate("openDocument").filter((call) => call.args[0] === "schizzo.draw"),
       "nessuna rilettura dal disco",
     ).toHaveLength(reads);
   });
@@ -608,7 +611,7 @@ describe("la vista sorgente di una scheda", () => {
     expect(await activeTab()).toEqual({ k: "doc", doc: "schizzo.draw" });
     expect(paneMode()).toBe("draw");
     expect(liveDraws()).toHaveLength(1);
-    expect(host.atGate("readDocument").filter((call) => call.args[0] === "schizzo.draw")).toHaveLength(1);
+    expect(host.atGate("openDocument").filter((call) => call.args[0] === "schizzo.draw")).toHaveLength(1);
 
     // Un'immagine si mostra dai byte: niente testo, niente vista sorgente.
     await open("foto.png");

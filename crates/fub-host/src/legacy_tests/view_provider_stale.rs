@@ -138,7 +138,7 @@ impl ViewProvider for BlockingAction {
         _: UiAction,
         _: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
-        if self.workspace.try_read().is_none() {
+        if !super::read_comes_free(&self.workspace) {
             return Err(PluginError::Internal(
                 "a workspace read lock remained during the action".into(),
             ));
@@ -208,12 +208,15 @@ fn a_render_from_a_replaced_view_provider_is_rejected_as_stale() {
     entered_rx
         .recv_timeout(TIMEOUT)
         .expect("old provider is rendering");
+    // Il render vecchio è fermo fuori dal lucchetto: se lo tenesse, resterebbe
+    // preso fino alla scadenza. Un `fub-job-*` dell'host lo può prendere per
+    // un istante proprio adesso, e una sola fotografia lo scambiava per il
+    // render (#270).
     assert!(
-        workspace.try_read().is_some(),
+        super::try_read_within(&workspace, super::FREE_WITHIN).is_some(),
         "no workspace read lock remains during render"
     );
-    workspace
-        .try_write()
+    super::try_write_within(&workspace, super::FREE_WITHIN)
         .expect("no workspace write lock remains during render")
         .replace_view_provider(
             PLUGIN,
@@ -291,7 +294,7 @@ fn an_action_from_a_replaced_view_provider_is_rejected_as_stale() {
         .recv_timeout(TIMEOUT)
         .expect("old provider is handling the action");
     assert!(
-        workspace.try_read().is_some(),
+        super::read_comes_free(&workspace),
         "no workspace read lock remains during the action"
     );
     release_tx.send(()).expect("old provider returns");

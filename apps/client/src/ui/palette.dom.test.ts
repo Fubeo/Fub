@@ -14,7 +14,7 @@ vi.mock("../host/query", () => ({ settings: fake.settings }));
 import { drawingCreateSpec } from "../host/fake";
 import { allCommands, registerCommandForm, resetCommandForms, type CommandEntry } from "./commands";
 import { state } from "../state/store";
-import { closeCommandPalette, deliverOutcome, openCommandPalette, startCommand } from "./palette";
+import { closeCommandPalette, deliverOutcome, DOCUMENT_ASK_DELAY_MS, openCommandPalette, startCommand } from "./palette";
 
 function command(id: string, title: string): CommandSpec {
   return {
@@ -306,5 +306,135 @@ describe("consegnare l'esito di un comando", () => {
       host,
     );
     expect(host.notify).toHaveBeenCalledWith("Creato a metà", "guasto", undefined);
+  });
+});
+
+describe("i comandi della superficie col fuoco", () => {
+  function surfaceEntry(id: string, title: string, unavailable: string | null, run: () => void): CommandEntry {
+    return { id, title, description: "Scheda Home della barra", layer: "surface", binding: null, declared: null, spec: null, run, group: "Foglio", unavailable };
+  }
+
+  it("li mostra col gruppo, e uno spento col suo motivo, che non si esegue", async () => {
+    const bold = vi.fn();
+    const undo = vi.fn();
+    const editorCommands = () => [surfaceEntry("fogli.home.bold", "Grassetto", null, bold), surfaceEntry("fogli.edit.undo", "Annulla", "nothing to undo", undo)];
+    fake.listCommands.mockResolvedValue([]);
+    fake.settings.mockResolvedValue([]);
+    await openCommandPalette({ ...host, editorCommands });
+    const overlay = document.getElementById("command-palette")!;
+    const input = overlay.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+    const list = overlay.querySelector<HTMLUListElement>('ul[role="listbox"]')!;
+    input.value = "annulla";
+    input.dispatchEvent(new Event("input"));
+    const [off] = options(list);
+    expect(off!.querySelector(".palette-title")!.textContent).toBe("Annulla");
+    expect(off!.querySelector(".palette-scope")!.textContent).toBe("Foglio");
+    expect(off!.getAttribute("aria-disabled")).toBe("true");
+    expect(off!.querySelector(".palette-desc")!.textContent).toBe("nothing to undo");
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(undo).not.toHaveBeenCalled();
+    expect(host.notify).toHaveBeenCalledWith("nothing to undo", "info");
+    expect(document.getElementById("command-palette")).toBeNull();
+
+    await openCommandPalette({ ...host, editorCommands });
+    const again = document.getElementById("command-palette")!.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+    again.value = "grassetto";
+    again.dispatchEvent(new Event("input"));
+    again.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(bold).toHaveBeenCalledTimes(1);
+  });
+
+  it("startCommand non esegue un comando spento", () => {
+    const run = vi.fn();
+    startCommand(surfaceEntry("fogli.edit.undo", "Annulla", "nothing to undo", run), host);
+    expect(run).not.toHaveBeenCalled();
+    expect(host.notify).toHaveBeenCalledWith("nothing to undo", "info");
+  });
+});
+
+describe("i suggerimenti dei campi documento (#237 R06)", () => {
+  function moveEntry(): CommandEntry {
+    const spec: CommandSpec = {
+      ...command("doc.move", "Sposta"),
+      params: [{ name: "doc", title: "Documento", description: "", kind: { kind: "document" }, required: true }],
+    };
+    return { id: spec.id, title: spec.title, description: spec.description, layer: "global", binding: null, declared: null, spec, run: null };
+  }
+  const suggestions = () =>
+    [...document.querySelectorAll<HTMLOptionElement>("#palette-docs option")].map((option) => option.value);
+  const documentField = () => document.querySelector<HTMLInputElement>('#command-palette input[list="palette-docs"]')!;
+  const type = (text: string) => {
+    documentField().value = text;
+    documentField().dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  const settle = async () => {
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+  };
+
+  it("scrivendo, chiede per nome dopo l'attesa e trova la nota fuori dalla finestra", async () => {
+    const window = Array.from({ length: 200 }, (_, i) => `nota-${i}.md`);
+    const listDocuments = vi.fn(async (text = "") => (text ? ["Archivio/lontana.md"] : window));
+    startCommand(moveEntry(), { ...host, listDocuments });
+    await settle();
+    // La domanda a campo vuoto parte subito, all'apertura.
+    expect(listDocuments).toHaveBeenCalledTimes(1);
+    expect(suggestions()).toHaveLength(200);
+    expect(suggestions()).not.toContain("Archivio/lontana.md");
+
+    type("lont");
+    vi.advanceTimersByTime(DOCUMENT_ASK_DELAY_MS);
+    await settle();
+    expect(suggestions()).toEqual(["Archivio/lontana.md"]);
+    expect(listDocuments).toHaveBeenLastCalledWith("lont");
+  });
+
+  it("più battute di fila fanno una domanda sola, per il testo dell'ultima", async () => {
+    const listDocuments = vi.fn(async (text = "") => (text ? [`${text}.md`] : []));
+    startCommand(moveEntry(), { ...host, listDocuments });
+    await settle();
+    listDocuments.mockClear();
+
+    for (const text of ["l", "lo", "lon", "lont"]) {
+      type(text);
+      vi.advanceTimersByTime(DOCUMENT_ASK_DELAY_MS - 1);
+    }
+    expect(listDocuments).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    await settle();
+    expect(listDocuments.mock.calls).toEqual([["lont"]]);
+    expect(suggestions()).toEqual(["lont.md"]);
+  });
+
+  it("chiusa la palette, la domanda in attesa non parte", async () => {
+    const listDocuments = vi.fn(async () => [] as string[]);
+    startCommand(moveEntry(), { ...host, listDocuments });
+    await settle();
+    listDocuments.mockClear();
+
+    type("lont");
+    closeCommandPalette();
+    vi.advanceTimersByTime(DOCUMENT_ASK_DELAY_MS * 2);
+    await settle();
+    expect(listDocuments).not.toHaveBeenCalled();
+  });
+
+  it("vince l'ultima battuta: una risposta lenta non riscrive quella nuova", async () => {
+    const pending: Record<string, (docs: string[]) => void> = {};
+    const listDocuments = vi.fn((text = "") =>
+      text ? new Promise<string[]>((resolve) => { pending[text] = resolve; }) : Promise.resolve(["prima.md"]));
+    startCommand(moveEntry(), { ...host, listDocuments });
+    await settle();
+    expect(suggestions()).toEqual(["prima.md"]);
+
+    type("l");
+    vi.advanceTimersByTime(DOCUMENT_ASK_DELAY_MS);
+    type("lo");
+    vi.advanceTimersByTime(DOCUMENT_ASK_DELAY_MS);
+    pending["lo"]!(["lontana.md"]);
+    await settle();
+    expect(suggestions()).toEqual(["lontana.md"]);
+    pending["l"]!(["lago.md", "lontana.md"]);
+    await settle();
+    expect(suggestions()).toEqual(["lontana.md"]);
   });
 });

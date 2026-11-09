@@ -49,6 +49,7 @@ import type {
   CommandSpec,
   ParamSpec,
   DraftInfo,
+  DocumentSource,
   DocumentWindowEvent,
   DocumentWindowRequest,
   GridBytesSession,
@@ -383,6 +384,10 @@ export interface FakeHost {
   calls: Call[];
   /// Le chiamate a **quella** porta, in ordine.
   atGate(gate: string): Call[];
+  /// Le chiavi di apertura che tengono un documento di videoscrittura in
+  /// questo vault (`openDocument`, `writeDocument` con `open`), finché
+  /// `documentClosed` non le chiude.
+  openKeys(vault?: string | null): number;
   /// Rinomina un file **senza che la shell l'abbia chiesto**: è il `mv` da
   /// terminale, l'altra applicazione, il sync. Il file si muove e l'evento
   /// arriva, che è l'ordine in cui le due cose succedono davvero.
@@ -410,7 +415,10 @@ export interface FakeHost {
   /// Ciò che la porta avrebbe fatto **non lo fa**: una scrittura guasta non
   /// lascia i byte, o un banco che chiede «il disco rifiuta» leggerebbe il file
   /// nuovo e crederebbe di aver provato il contrario.
-  fault(gate: string, reason?: string): () => void;
+  ///
+  /// Un `PluginError` al posto della frase rifiuta con l'errore tipizzato,
+  /// come il backend vero: un permesso negato, un conflitto.
+  fault(gate: string, reason?: string | PluginError): () => void;
   /// Fa rispondere a `componentsApply` l'errore tipato `error`, finché non si
   /// chiama ciò che torna: è l'host che non riesce a scrivere la scelta. Lo
   /// stato non cambia e nessun evento arriva.
@@ -644,6 +652,18 @@ export function createFakeHost(options: Options = {}): FakeHost {
     return null;
   }
 
+  /// Ciò che `readDocument` e `openDocument` rispondono.
+  function sourceOf(id: string, doc: Document): DocumentSource {
+    return {
+      // Una cartella si apre col giornale vuoto: i byte sono suoi.
+      text: formatOf(id) === "xlsx" ? "" : doc.text,
+      revision: doc.revision,
+      format_id: formatOf(id),
+      source_kind: sourceKindOf(id),
+      text_kind: formatOf(id) === "xlsx" ? "grid_journal" : "source",
+    };
+  }
+
   /// Come il registro dei formati dell'host: un documento di videoscrittura il
   /// provider lo vuole a byte, e la shell ne riceve la proiezione
   /// (`fub-format-rich`).
@@ -658,13 +678,32 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const throttles = new Map<string, Promise<void>>();
 
   /// Le porte guaste, col motivo che rispondono.
-  const faults = new Map<string, string>();
+  const faults = new Map<string, string | PluginError>();
+  const faultError = (fault: string | PluginError): Error | PluginError =>
+    typeof fault === "string" ? new Error(fault) : fault;
 
   /// Gli argomenti di una porta con il **vault nominato** in coda, ma solo se la
   /// chiamata lo nomina: le asserzioni sulle chiamate senza vault restano quelle
   /// di sempre, e un banco che vuole provare «questa scrittura ha nominato il
   /// suo vault» lo legge dall'ultimo argomento (FUB-001).
   const named = (args: unknown[], vault?: string | null): unknown[] => (vault ? [...args, vault] : args);
+
+  // Le chiavi di apertura, per vault, come le tiene l'host: una chiave conta
+  // quando apre o scrive un documento di videoscrittura, e cade con
+  // `documentClosed`. Una nota o una cartella aperte sotto la chiave non
+  // segnano niente. Una chiave malformata è `bad_args`, come nell'host.
+  const openKeys = new Map<string, Set<string>>();
+  const OPEN_KEY = /^[A-Za-z0-9_-]{1,64}$/;
+  const badKey = (open: string): PluginError => ({
+    kind: "bad_args",
+    message: `host fake: la chiave di apertura «${open}» non è valida`,
+  });
+  const holdKey = (id: string, open: string, vault?: string | null) => {
+    if (!RICH_FAKE_FORMATS.has(formatOf(id) ?? "")) return;
+    const keys = openKeys.get(vault ?? "") ?? new Set<string>();
+    keys.add(open);
+    openKeys.set(vault ?? "", keys);
+  };
 
   function gate<T>(name: string, args: unknown[], result: T): T {
     calls.push({ gate: name, args });
@@ -674,7 +713,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       // **guardandola**: una promessa rifiutata che nessuno ascolta è un
       // avviso di runtime in mezzo all'output del banco.
       void (result as Promise<unknown>).catch(() => {});
-      return Promise.reject(new Error(fault)) as T;
+      return Promise.reject(faultError(fault)) as T;
     }
     const throttle = throttles.get(name);
     // La chiamata è **già registrata**: un banco che aspetta «la scrittura è
@@ -693,7 +732,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   ): Promise<T> {
     calls.push({ gate: name, args });
     const fault = faults.get(name);
-    if (fault !== undefined) return Promise.reject(new Error(fault));
+    if (fault !== undefined) return Promise.reject(faultError(fault));
     const run = () => Promise.resolve().then(effect);
     const throttle = throttles.get(name);
     return throttle ? throttle.then(run) : run();
@@ -711,7 +750,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   function liveSession(session: string): LiveSession {
     const live = liveSessions.get(session);
     if (live) return live;
-    throw { kind: "not_found", message: `no live session ${JSON.stringify(session)} in this window` } satisfies PluginError;
+    throw { kind: "not_found", message: `Questa finestra non ha la sessione live ${session}.` } satisfies PluginError;
   }
 
   /// Un contatore nella sua grafia unica, o un errore della shell: l'app
@@ -1559,14 +1598,20 @@ export function createFakeHost(options: Options = {}): FakeHost {
       readDocument: (id, vault) => {
         const doc = docs.get(id);
         if (!doc) return gate("readDocument", named([id], vault), Promise.reject(new Error(`«${id}» non c'è`)));
-        return gate("readDocument", named([id], vault), Promise.resolve({
-          // Una cartella si apre col giornale vuoto: i byte sono suoi.
-          text: formatOf(id) === "xlsx" ? "" : doc.text,
-          revision: doc.revision,
-          format_id: formatOf(id),
-          source_kind: sourceKindOf(id),
-          text_kind: formatOf(id) === "xlsx" ? "grid_journal" : "source",
-        }));
+        return gate("readDocument", named([id], vault), Promise.resolve(sourceOf(id, doc)));
+      },
+      openDocument: (id, open, vault) => {
+        if (!OPEN_KEY.test(open)) return gate("openDocument", named([id, open], vault), Promise.reject(badKey(open)));
+        const doc = docs.get(id);
+        if (!doc) return gate("openDocument", named([id, open], vault), Promise.reject(new Error(`«${id}» non c'è`)));
+        holdKey(id, open, vault);
+        return gate("openDocument", named([id, open], vault), Promise.resolve(sourceOf(id, doc)));
+      },
+      warmEngine: (extension) => gate("warmEngine", [extension], Promise.resolve()),
+      documentClosed: (open, vault) => {
+        if (!OPEN_KEY.test(open)) return gate("documentClosed", named([open], vault), Promise.reject(badKey(open)));
+        openKeys.get(vault ?? "")?.delete(open);
+        return gate("documentClosed", named([open], vault), Promise.resolve());
       },
       resourceOpen: (id, vault) => gate("resourceOpen", [id, vault], Promise.resolve().then((): ResourceDescriptor => {
         const doc = docs.get(id);
@@ -1692,7 +1737,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         if (!session) throw new Error("host fake: grid session closed");
         const outcome = gridBytes?.outcomes?.[gridBytesOutcome++];
         if (!outcome) {
-          throw { kind: "bad_args", message: `host fake: grid command \`${request.command.id}\` is not served` } satisfies PluginError;
+          throw { kind: "bad_args", message: `host fake: il comando della griglia \`${request.command.id}\` non è servito` } satisfies PluginError;
         }
         gridBytesInstances.set(instance, {
           ...session,
@@ -1705,16 +1750,19 @@ export function createFakeHost(options: Options = {}): FakeHost {
       })),
       closeGridBytes: (_surface, instance) => gate("closeGridBytes", [instance], Promise.resolve().then(() => {
         if (!gridBytesInstances.delete(instance)) {
-          throw { kind: "not_found", message: "host fake: grid session closed" } satisfies PluginError;
+          throw { kind: "not_found", message: "host fake: la sessione della griglia è chiusa" } satisfies PluginError;
         }
       })),
-      writeDocument: (id, source, base, vault) => {
+      writeDocument: (id, source, base, vault, open) => {
+        if (open !== undefined && !OPEN_KEY.test(open)) {
+          return gate("writeDocument", named([id, source, base], vault), Promise.reject(badKey(open)));
+        }
         // Il guasto si chiede **prima** di posare i byte: `write` gira mentre
         // si compone l'argomento di `gate`, quindi una porta guasta che ci
         // passasse dentro risponderebbe «no» avendo già scritto.
         const fault = faults.get("writeDocument");
         if (fault !== undefined) {
-          return gate("writeDocument", named([id, source, base], vault), Promise.reject(new Error(fault)));
+          return gate("writeDocument", named([id, source, base], vault), Promise.reject(faultError(fault)));
         }
         // Nessun provider serve un file senza formato: il kernel rifiuta la
         // scrittura (`NoProvider`), e lo fa anche il finto — chi salva un
@@ -1749,7 +1797,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
             Promise.reject(conflict),
           );
         }
-        return gate("writeDocument", named([id, source, base], vault), Promise.resolve(write(id, source)));
+        const written = write(id, source);
+        if (open !== undefined) holdKey(id, open, vault);
+        return gate("writeDocument", named([id, source, base], vault), Promise.resolve(written));
       },
       // La rete di sicurezza del §15.2: il testo che non si è salvato. Il
       // finto non ha un crash buffer — registra e basta — perché ciò che i
@@ -1783,7 +1833,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         calls.push({ gate: "invokeCommand", args: callArgs });
         const execute = () => {
           const fault = faults.get("invokeCommand");
-          if (fault !== undefined) return Promise.reject(new Error(fault));
+          if (fault !== undefined) return Promise.reject(faultError(fault));
           // Un comando che rifiuta **rifiuta la promessa**, come attraverso l'IPC:
           // un'eccezione sincrona qui sfuggirebbe a chi aspetta con `.catch`.
           try {
@@ -1910,7 +1960,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         installedOperation("setInstalledPluginEnabled", [installation, enabled], () => {
           const plugin = installed(installation);
           if (enabled && plugin.revoked) throw {
-            kind: "permission_denied", message: "revoked catalog release cannot mount",
+            kind: "permission_denied", message: "Questa versione del catalogo è stata ritirata: non si monta.",
           } satisfies PluginError;
           plugin.enabled = enabled;
           reconcile(plugin);
@@ -2017,7 +2067,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
           if ([...liveSessions.values()].some((live) => live.document === document)) {
             throw {
               kind: "already_exists",
-              message: `document ${JSON.stringify(document)} already has a live session`,
+              message: `«${document}» ha già una sessione live.`,
             } satisfies PluginError;
           }
           const chosen = request.address === undefined
@@ -2027,11 +2077,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
             throw (request.address === undefined
               ? {
                   kind: "unserved",
-                  message: "the PC is not on a local network: no active interface has a private IPv4 address",
+                  message: "Il PC non è su una rete locale: nessuna interfaccia attiva ha un indirizzo IPv4 privato.",
                 }
               : {
                   kind: "not_found",
-                  message: `${request.address} is not a private address of an active interface`,
+                  message: `${request.address} non è l'indirizzo privato di un'interfaccia attiva.`,
                 }) satisfies PluginError;
           }
           const session = `live-${String(++nextLive).padStart(6, "0")}`;
@@ -2060,9 +2110,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
         installedOperation("livePairing", [session, renew], () => {
           const live = liveSession(session);
           if (!renew) return live.pairing && liveCopy(live.pairing);
-          if (live.ended) throw { kind: "cancelled", message: "the live session has ended" } satisfies PluginError;
+          if (live.ended) throw { kind: "cancelled", message: "La sessione live è finita." } satisfies PluginError;
           if (live.writer?.connected) {
-            throw { kind: "already_exists", message: "a writer is connected to the session" } satisfies PluginError;
+            throw { kind: "already_exists", message: "Il tablet è collegato: un QR nuovo si chiede quando esce." } satisfies PluginError;
           }
           live.pairing = livePairing(session, live);
           // Lo scrittore che aspettava la ripresa la perde.
@@ -2074,10 +2124,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
       liveSend: (session, message) =>
         installedOperation("liveSend", [session, message], () => {
           const live = liveSession(session);
-          if (live.ended) throw { kind: "cancelled", message: "the live session has ended" } satisfies PluginError;
+          if (live.ended) throw { kind: "cancelled", message: "La sessione live è finita." } satisfies PluginError;
           const regression = (seq: string): PluginError => ({
             kind: "conflict",
-            message: `seq ${seq} is behind the session seq ${live.seq}`,
+            message: `La sessione live ha rifiutato il messaggio: il seq ${seq} è indietro rispetto al ${live.seq} della sessione.`,
           });
           if (message.t === "ack" || message.t === "nack") {
             liveCounter(message.writer, "writer");
@@ -2086,7 +2136,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
             if (at < 0) {
               throw {
                 kind: "not_found",
-                message: `commit ${message.c} of writer ${message.writer} is not awaiting an answer`,
+                message: `La sessione live ha rifiutato il messaggio: il commit ${message.c} dello scrittore ${message.writer} non aspetta una risposta.`,
               } satisfies PluginError;
             }
             // Un `ack` di un duplicato non porta operazioni nuove: il suo
@@ -2169,6 +2219,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
 
   return {
     module,
+    openKeys: (vault) => openKeys.get(vault ?? "")?.size ?? 0,
     renameFromOutside: (from, to) => {
       const before = docs.get(from);
       if (!before) throw new Error(`host fake: «${from}» non esiste`);
@@ -2314,6 +2365,118 @@ function titled(source: string, title: string): string {
   const text = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const root = new RegExp(`(<${"svg"}\\b[^>]*>)(\\s*<title>[\\s\\S]*?</title>)?`);
   return source.replace(root, (_, head: string, old: string | undefined) => (old === undefined ? `${head}\n  <title>${text}</title>` : `${head}${old.replace(/<title>[\s\S]*<\/title>/, () => `<title>${text}</title>`)}`));
+}
+
+/// Un tema installato che parte dalla serie (`extends`), pronto per le opzioni
+/// `themes` e `themePayloads` del finto: porta il foglio chiaro e una pelle, e
+/// la luce scura arriva con `sheet: null`, come la consegna l'host vero.
+export function extendingTheme(id = "acme.carta"): {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+} {
+  const manifest: ThemeInfo["manifest"] = {
+    id,
+    name: "Carta",
+    version: "1.0.0",
+    engine: "theme-2",
+    lights: ["light", "dark"],
+    asset_namespace: `theme://${id}/`,
+    motion: ["opacity", "transform"],
+    extends: "fub.serie",
+  };
+  const skin = ".carta { color: inherit; }";
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: ":root { --carta: #fbf7ee; }", skin, assets: {} },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets: {} },
+    },
+  };
+}
+
+/// I byte di un WOFF2 finto: la firma `wOF2` e qualche byte dopo. Il finto non
+/// disegna caratteri: conta che la forma arrivi come la consegna l'host vero.
+export function fakeWoff2(size = 12): number[] {
+  return [0x77, 0x4f, 0x46, 0x32, ...Array.from({ length: Math.max(0, size - 4) }, (_, i) => i & 0xff)];
+}
+
+/// Un tema che parte dalla serie e porta due caratteri (`fonts`): il manifest
+/// li dichiara, il fascio porta i file fra gli asset anche se nessun CSS li
+/// nomina, e la pelle usa la famiglia per nome. Come per `extendingTheme`, la
+/// luce scura arriva con `sheet: null`.
+export function fontTheme(id = "acme.caratteri"): {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+} {
+  const manifest: ThemeInfo["manifest"] = {
+    id,
+    name: "Caratteri",
+    version: "1.0.0",
+    engine: "theme-2",
+    lights: ["light", "dark"],
+    asset_namespace: `theme://${id}/`,
+    motion: ["opacity", "transform"],
+    extends: "fub.serie",
+    fonts: [
+      { family: "Carta Serif", file: "fonts/carta.woff2", weight: 400, style: "normal" },
+      { family: "Carta Serif", file: "fonts/carta-italic.woff2", weight: 400, style: "italic" },
+    ],
+  };
+  const skin = '.shell-tooltip { font-family: "Carta Serif", var(--font-ui); }';
+  const assets = {
+    [`theme://${id}/fonts/carta.woff2`]: fakeWoff2(12),
+    [`theme://${id}/fonts/carta-italic.woff2`]: fakeWoff2(9),
+  };
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets },
+    },
+  };
+}
+
+/// I byte UTF-8 di un set di icone del tema, come li consegna l'host vero fra
+/// gli asset del fascio.
+export function iconSetBytes(set: Readonly<Record<string, readonly string[]>>): number[] {
+  return [...new TextEncoder().encode(JSON.stringify(set))];
+}
+
+/// Un tema che parte dalla serie e ridisegna qualche icona (`icons`): il
+/// manifest nomina il set, il fascio lo porta fra gli asset anche se nessun
+/// CSS lo nomina. Ridisegna una icona di serie (`search`), un alias
+/// (`folder`, che vale per `vault`) e un nome che oggi nessuno disegna.
+export function iconTheme(id = "acme.icone"): {
+  info: ThemeInfo;
+  payloads: Record<string, ThemePayload>;
+  set: Record<string, string[]>;
+} {
+  const manifest: ThemeInfo["manifest"] = {
+    id,
+    name: "Icone",
+    version: "1.0.0",
+    engine: "theme-2",
+    lights: ["light", "dark"],
+    asset_namespace: `theme://${id}/`,
+    motion: ["opacity", "transform"],
+    extends: "fub.serie",
+    icons: "icons.json",
+  };
+  const set = {
+    search: ["M4 4h16v16H4z", "M8 12h8"],
+    folder: ["M3 6h18v12H3z"],
+    "modulo-spento": ["M12 3v18"],
+  };
+  const skin = ".shell-tooltip { white-space: nowrap; }\n";
+  const assets = { [`theme://${id}/icons.json`]: iconSetBytes(set) };
+  return {
+    info: { manifest, trust: "community" },
+    payloads: {
+      [`${id}:light`]: { manifest, light: "light", sheet: null, skin, assets },
+      [`${id}:dark`]: { manifest, light: "dark", sheet: null, skin, assets },
+    },
+    set,
+  };
 }
 
 /// L'id della view cestino del finto: la stessa che `fub-features` registra,
