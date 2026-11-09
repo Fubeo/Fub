@@ -84,6 +84,7 @@ import { setTooltip } from "../ui/tooltip";
 import { mountComponentsPage, type ComponentsPage } from "./components-page";
 import { enterSurface, exitSurface } from "../ui/motion";
 import { icon } from "../ui/icons";
+import { marcuzzoElement } from "../ui/marcuzzo";
 import { SOURCE_URL, checkMessage, mountUpdateCheck, type UpdateChecker } from "./about";
 import { vaultNameEditor } from "./vault-rename";
 import { reducedMotion } from "../theme/reduced-motion";
@@ -2921,7 +2922,9 @@ async function renderAbout(): Promise<HTMLElement[]> {
   source.target = "_blank";
   source.rel = "noopener noreferrer";
   source.textContent = t("about.source");
-  versionRow.append(versionText, source);
+  // Marcuzzo, il logo (D26), accanto alla versione.
+  versionRow.classList.add("about-version");
+  versionRow.append(marcuzzoElement("about-logo marcuzzo"), versionText, source);
   about.body.append(versionRow);
 
   const check = updateChecker?.state() ?? { kind: "idle" as const };

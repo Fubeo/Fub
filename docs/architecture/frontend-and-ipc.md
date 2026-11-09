@@ -269,10 +269,10 @@ pannelli) lo Scrittoio compone:
 
 I predefiniti dell'aspetto li dichiara l'host, uguali alla serie (test Rust).
 L'accento di serie è lo smeraldo, 160; i colori di stato ne restano a 30°
-(`statusHue`), e `avvio/colori.test.ts` lega l'avvio alla ricetta. Cassetti:
-sidebar da 208 a 400 px, ispettore da 248 a 440 px, col divisore del kit. Un
-tema `theme-1` non si monta; uno con `extends` lascia la pelle di serie in
-`pelle` e aggiunge la sua in `pelle-tema`, dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
+(`statusHue`); `avvio/colori.test.ts` lega l'avvio alla ricetta, logo compreso
+([`--logo-*`](../reference/permissions-and-security.md)). Cassetti: sidebar da
+208 a 400 px, ispettore da 248 a 440 px, col divisore del kit. Un tema `theme-1`
+non si monta; uno con `extends` lascia la pelle di serie in `pelle` e aggiunge la sua in `pelle-tema`, dopo ([ADR 0240](../decisions/0240-la-pelle-che-eredita.md)).
 
 ### Comportamenti della shell
 
