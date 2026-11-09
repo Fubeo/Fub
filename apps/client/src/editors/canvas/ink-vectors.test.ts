@@ -1,9 +1,10 @@
 // I vettori dell'inchiostro della lavagna (`src/__fixtures__/canvas-ink/`)
-// contro `readInkLayers`: gli stessi che legge il nucleo Rust. Un vettore che
+// contro `readInkLayers`, sul modello che dà il nucleo (`wasm/core.ts`): gli
+// stessi che legge il nucleo Rust. Un vettore che
 // non passa si corregge nel lettore, non nel vettore.
 import { describe, expect, it } from "vitest";
 import { readInkLayers, type InkLayerState } from "./ink-record";
-import { parseCanvas } from "./model";
+import { openCore } from "./wasm/core";
 
 interface Vector {
   readonly name: string;
@@ -36,9 +37,15 @@ describe("vettori dell'inchiostro della lavagna", () => {
     expect(VECTORS.length).toBe(28);
   });
 
-  it.each(VECTORS)("%s", (file, vector) => {
+  it.each(VECTORS)("%s", async (file, vector) => {
     expect(vector.name).toBe(file);
-    const layers = readInkLayers(parseCanvas(vector.source));
+    const core = await openCore(vector.source);
+    let layers: InkLayerState[];
+    try {
+      layers = readInkLayers(core.model());
+    } finally {
+      core.close();
+    }
     expect(layers.map(asVector)).toEqual(vector.expect.layers);
     for (const layer of layers) {
       // I tratti disegnabili sono quelli `drawn`, nello stesso ordine.

@@ -99,6 +99,21 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · N4 (PA T2, fusione di `main`) · `operation.ts` è quello di
+  `main` (le toppe le applica il nucleo in WebAssembly) con i tipi della
+  toppa `ink` e i costruttori `addStrokePatch`, `eraseStrokePatch`,
+  `eraseStrokePatches`; `inkStep` e la copia TS se ne vanno, come diceva
+  T17. Le prove dei costruttori, di `ink-record` e dei 28 vettori
+  dell'inchiostro leggono e scrivono col nucleo (`openCore`,
+  `openCoreNow`); una toppa illeggibile il nucleo la rifiuta come
+  `request`, non `invalid` come la copia TS. L'ADR dell'inchiostro diventa
+  la 0241 (la 0238 è di `main`, la 0239 di K5, la 0240 di `main`); i
+  vettori `ink-*` delle toppe vanno da 87 a 103, dopo gli 86 di `main`, e i
+  test dei vettori li ordinano per numero; `fub-canvas-wasm` dà `kind` ai
+  due errori nuovi (`UnknownStroke` con `id`, `ForeignLayer`) · è la
+  fusione più piccola che lascia verdi i due lati; `ink_layers` nel
+  `.wasm` e la fine di `readInkLayers` restano a T17.
+
 - 2026-11-08 · fub-pre-alpha (orchestratore) · PA T40 si integra anche se
   10.000 icone cambiate si ridisegnano in 18–35 ms (headless, macchina
   carica) e non sotto i 16 ms del piano · il ridisegno è già un passaggio

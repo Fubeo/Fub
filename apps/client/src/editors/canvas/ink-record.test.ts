@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { parseInkBrush, type Pf1Brush } from "../../ink/brush";
 import type { InkSample } from "../../ink/sample";
 import { decodeInk } from "../spatial/ink/codec";
@@ -15,7 +15,23 @@ import {
   type InkStrokeInput,
   type InkStrokeRecord,
 } from "./ink-record";
-import { parseCanvas, serializeCanvas, type CanvasDocument, type CanvasNode } from "./model";
+import type { CanvasDocument, CanvasNode } from "./model";
+import { canvasCoreReady, openCoreNow } from "./wasm/core";
+
+beforeAll(async () => {
+  await canvasCoreReady();
+});
+
+/// La lavagna di `doc` scritta nel file e riletta dal nucleo, come la apre la tela.
+function throughFile(doc: CanvasDocument): CanvasDocument {
+  const core = openCoreNow(JSON.stringify(doc, null, "\t"));
+  if (!core) throw new Error("il nucleo non è carico");
+  try {
+    return core.model();
+  } finally {
+    core.close();
+  }
+}
 
 /// L'errore di `s100` (§5): mezzo centesimo di unità.
 const S100_ERROR = 0.005;
@@ -48,7 +64,7 @@ function reread(record: InkStrokeRecord, holder: CanvasNode | null): DrawableStr
   const doc: CanvasDocument = holder === null
     ? { nodes: [], edges: [], "fub:ink": layer }
     : { nodes: [{ ...holder, "fub:ink": layer }], edges: [] };
-  const layers = readInkLayers(parseCanvas(serializeCanvas(doc)));
+  const layers = readInkLayers(throughFile(doc));
   expect(layers).toHaveLength(1);
   expect(layers[0]!.state).toBe("ok");
   const entry = layers[0]!.strokes[0]!;
