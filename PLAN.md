@@ -24,7 +24,7 @@ Assunzioni:
   - (d) `#status-standing` nasce in JS dentro `status-band.ts`, non in `index.html`;
   - (e) il titolo della nota pesa 600 e non 500. Risposta (2026-11-04): 600;
   - (f) le scorciatoie del menu si leggono da `allCommands()` e `displayBinding`, che rispettano le scorciatoie cambiate dalla persona, e non da `ui/shell-keys.generated.ts`.
-Ondate: T1 T16 | T2 T11 | T5 T10 | T3 T6 | T7 T17 | T4 T8 | T18 T20 | T9 T19 | T14 T21 | T12 T22 | T13 T23 | T15 T27 | T28 | T24 | T25 | T26
+Ondate: T1 T16 | T2 T11 | T5 T10 | T3 T6 | T7 T17 | T4 T8 | T18 T20 | T9 T19 | T14 T21 | T12 T22 | T13 T23 | T15 T27 | T28 T29 | T24 | T25 | T26
 Prototipo: `PLAN-ui/scrittoio-2.html`. Il computer è approvato (2026-11-04); il telefono è approvato per ora (2026-11-04), con la A, e la variante B è uscita. Le caselle «Rimetti com'era» (o `?prima=ombra,vassoio,sezioni`) rimettono l'ombra del foglio, il vassoio e le sezioni di oggi, per il confronto.
 
 ## Modifiche
@@ -1299,6 +1299,40 @@ Fatto quando:
 - `npm run bench:a11y` resta verde.
 Prova: scripts/check.sh --rapido
 Stato: [x] fatto · 753d2f0d, b876ddaf · differenze: `rich-motion.ts` non segue più la barra che si ritira (la carta restava ferma mentre il testo scendeva); `.rich-notice` sta sopra la barra, fuori dalla tenda; ricerca e pagina senza `z-index`. Prima, b22a6650: «3 collegamenti» e le etichette premute da tastiera fanno un clic vero (rosso di `bench:a11y` da T12)
+
+## T29 · Le annotazioni nel visore del PDF
+
+Perché: l'utente, 2026-11-09, provando i PDF sull'anteprima: «nella modalità che si vede appena viene aperto il PDF, non si vedono le annotazioni direttamente, ma si vedono soltanto quando si apre l'editor». Oggi il visore (`editors/media/pdf-view.ts`) disegna solo il PDF; le annotazioni (`X.pdf.fubann`, accanto al PDF) si vedono solo aprendo «Annota». Scelta dell'utente (2026-11-09, fra tre strade): il visore le disegna sopra le pagine, in sola lettura, con un interruttore «Mostra le annotazioni»; «Annota» resta per modificarle. Sta in questo piano perché la barra del PDF e la sua pagina sono di T18.
+Tocca: `apps/client/src/editors/media/pdf-view.ts`, `pdf-view.test.ts`, `media-surface.ts`, `media-surface.test.ts`, `apps/client/src/editors/media/icons.ts` (una figura nuova), un modulo nuovo per il disegno delle annotazioni nel visore (per esempio `editors/media/pdf-annotations.ts` col suo test, caricato solo quando servono), `apps/client/src/editors/core/bootstrap.ts` (l'aggancio, come `photoData`), `apps/client/src/i18n/catalog.ts`, `apps/client/src/theme/scrittoio/skin/media.css`, `apps/client/src/theme/scrittoio/structure.css`, `anatomia/media.ts` e i derivati (con `npm run theme:generate`), `docs/product/pdf-annotations.md`, `apps/client/bench/` (lo scenario e il fake, se il banco non ha già un PDF annotato).
+Non toccare: il formato `.fubann` e i suoi lettori (`spatial/scene/annotations.ts`, `fub-scene`); la superficie delle annotazioni (`spatial/pdf/`), che si legge e si imita; il comando `pdf.annotate` e il kernel; l'IPC e il suo mirror (nessuna porta nuova: il visore legge il `.fubann` con le porte che ci sono); pdf.js e il suo caricamento; i token del tema.
+Dipende da: T18
+Cosa fare:
+- Il legame: le annotazioni di `Bando.pdf` sono `Bando.pdf.fubann` nella stessa cartella (è il nome a legarle, `crates/fub-features/src/draw/annotate.rs`). Il visore chiede se c'è e lo legge con le porte di lettura dell'host che già esistono, attraverso una dipendenza facoltativa di `MediaSurfaceDeps` (per esempio `annotations?: { … }`), agganciata in `bootstrap.ts` come `photoData`: senza la feature `draw` o senza l'aggancio, il visore è quello di oggi.
+- Il disegno: per ogni pagina che si vede, il gruppo di quella pagina del `.fubann` si disegna sopra il canvas del PDF, nella stessa scala e allineato alla pagina, come lo mette la superficie delle annotazioni (`spatial/pdf/pages.ts`: `pageGroups`, `groupsOf`, `writtenSize`; il ripiego A4). In sola lettura: niente maniglie, niente selezione, i clic passano al visore. Il modo sicuro di disegnare un SVG del vault è quello del painter (`spatial/painter/paint.ts`, gli strati immagine): un `<img>` da blob, dove script e risorse esterne non partono. Vale con due pagine affiancate, con «Adatta alla larghezza», con lo zoom e con la pagina ridisegnata alla risoluzione dello zoom. Le annotazioni non prendono il filtro dei «Colori scuri»: restano dei loro colori, come nella superficie delle annotazioni.
+- Il codice del disegno si carica solo se il `.fubann` c'è: un PDF senza annotazioni non scarica niente di più (`lazy.ts` del disegno; il budget del bundle iniziale non cresce).
+- L'interruttore: nel foglietto di «Annota», prima di lui, un pulsante figura `media-show-annotations` (`kit-bar-button`, `aria-pressed`, nome e suggerimento «Mostra le annotazioni»), come «Colori scuri»: acceso di serie, non si ricorda fra un'apertura e l'altra (come «Colori scuri»). C'è solo quando il `.fubann` c'è e si legge. Spento, le pagine sono il PDF e basta. Entra nelle frecce della barra (`rovingToolbar`).
+- Il file che cambia: quando il `.fubann` si salva (da un altro riquadro con «Annota» aperto, o da fuori), il visore lo rilegge e ridisegna, con gli eventi dei documenti che la shell ha già; mai una lettura per tasto né un giro di polling. Un `.fubann` che nasce dopo l'apertura (il primo «Annota») fa comparire l'interruttore; uno che sparisce lo toglie.
+- Gli stati: se il PDF è cambiato dopo le annotazioni (l'impronta non torna, `verdict` di `pages.ts`), le annotazioni si disegnano lo stesso e la riga di stato del visore lo dice con le parole di oggi (`pdf.changed`). Un `.fubann` che non si legge, o di un altro programma, non si disegna: niente interruttore, e la riga di stato lo dice in una riga.
+- Il catalogo, in italiano e in inglese: `media.pdf.annotations` («Mostra le annotazioni» / «Show annotations») e le righe di stato che servono.
+- `docs/product/pdf-annotations.md`: «Il visore dei PDF» dice che le annotazioni si vedono sopra le pagine, l'interruttore, e che si modificano con «Annota».
+Casi limite:
+- un PDF senza `.fubann`: niente interruttore, niente codice del disegno caricato;
+- un `.fubann` con pagine annotate oltre l'ultima del PDF: il visore mostra solo le pagine del PDF;
+- una pagina del PDF più piccola o più grande di quella scritta nel `.fubann`;
+- il `.fubann` salvato da un altro riquadro mentre il visore è aperto, anche a raffica (vale l'ultimo: una lettura vecchia non copre una nuova);
+- il PDF chiuso o il riquadro smontato a metà lettura: niente resta vivo (`check-listeners`);
+- un `.fubann` grande (centinaia di tratti su una pagina): lo scorrimento delle pagine non scatta;
+- un `.fubann` ostile (script, `href` esterni, immagini remote): non parte niente;
+- la stampa del PDF resta quella di oggi, senza annotazioni (si dice nella pagina);
+- 700 px, tema chiaro e scuro, contrasto alto, in inglese, il lettore di schermo (nome e stato dell'interruttore).
+Fatto quando:
+- `pdf-view.test.ts` e il test del modulo nuovo: col `.fubann` le pagine portano il loro strato d'annotazioni allineato, con due pagine affiancate anche; l'interruttore lo spegne e lo riaccende; senza `.fubann` niente interruttore e il modulo del disegno non si carica;
+- `media-surface.test.ts`: un salvataggio del `.fubann` ridisegna, e una lettura vecchia arrivata dopo una nuova non vince;
+- un test prova che uno script o una risorsa esterna del `.fubann` non parte;
+- le foto dal banco, chiaro e scuro, 1280 e 700, di un PDF annotato appena aperto (le annotazioni sopra le pagine) e con l'interruttore spento, accanto alla stessa pagina aperta con «Annota»;
+- `npm run bench:a11y` resta verde.
+Prova: scripts/check.sh --rapido; cd apps/client && npx vitest run src/editors/media && npm run theme:verify
+Stato: [ ] da fare
 
 ## Non verificato da qui
 
