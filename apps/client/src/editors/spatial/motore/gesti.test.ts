@@ -75,6 +75,8 @@ async function settle(ms = 16, rounds = 4): Promise<void> {
 async function documentOn(text: string) {
   const api: DocumentSessionApi = {
     readDocument: async () => ({ text, revision: "rev-1", format_id: "svg", source_kind: "text", text_kind: "source" }),
+    openDocument: async () => ({ text, revision: "rev-1", format_id: "svg", source_kind: "text", text_kind: "source" }),
+    documentClosed: async () => {},
     writeDocument: async () => "rev-2",
     resourceWrite: async () => ({ revision: "rev-2" }) as never,
     saveDraft: async () => {},
