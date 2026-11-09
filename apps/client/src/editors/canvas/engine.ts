@@ -4,7 +4,26 @@ import { t, onLanguage, type Key } from "../../i18n/strings";
 import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem } from "../core/editor-menu";
 import { writeClipboardText } from "../../platform/clipboard";
 import { lineFeeds, operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
+import { idleSchedule } from "../../ink/dom/idle";
+import { PenQuiet } from "../../ink/quiet";
+import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { mediaKindOfId } from "../media/media-types";
+import { anchorAt, strokeBounds } from "./anchor";
+import { inkFitMode } from "./ink-fit";
+import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
+import { InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
 import {
+  defaultInkLook,
+  dryStroke,
+  foreignInkLayer,
+  inkLayerStates,
+  strokeRecord,
+  toDry,
+  type InkLayerRef,
+  type InkLayerState,
+} from "./ink-record";
+import {
+  addStrokePatch,
   newNodeId,
   removeEdgePatch,
   removeNodePatch,
@@ -20,6 +39,7 @@ import {
   openCoreNow,
   type CanvasCore,
   type CanvasCoreErrorCode,
+  type CanvasInkLayer,
   type CanvasSourceEdit,
 } from "./wasm/core";
 
@@ -103,6 +123,23 @@ interface CanvasStep {
   readonly version: number;
   /** La versione del testo che il passo rimette. */
   readonly restores: number;
+}
+
+/**
+ * Un tratto spezzato al limite dei campioni (`split`) che continua nel pezzo
+ * dopo: il passo che tiene i pezzi già scritti e il testo di prima del primo
+ * pezzo. Il pezzo dopo si fonde in quel passo (A4).
+ */
+interface InkChain {
+  readonly step: CanvasStep;
+  readonly before: string;
+}
+
+/** Gli stati dei livelli d'inchiostro, per il modello e i livelli del nucleo da cui vengono. */
+interface InkStates {
+  readonly doc: CanvasDocument;
+  readonly layers: readonly CanvasInkLayer[];
+  readonly states: readonly InkLayerState[];
 }
 
 /** Il testo del campo non ancora registrato: la scheda com'era, il campo, il testo. */
@@ -251,9 +288,24 @@ export class CanvasEngine {
   /** L'unico posto del testo di una scheda non ancora registrato. */
   #pending: PendingText | null = null;
   #pauseTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+  /** Chi possiede l'inchiostro: lo scheduler del silenzio della penna e lo strato. Si chiude in `destroy`. */
+  readonly #life: Lifetime = openLifetime();
+  /** Il lavoro pesante (il ridisegno dopo una modifica da fuori) aspetta che la penna si alzi. */
+  readonly #quiet: PenQuiet;
+  /** Lo strato della penna; `null` in sola lettura, con la scena troppo grande o senza lavagna (A8). */
+  #inkLayer: InkLayer | null = null;
+  #inkLife: Lifetime | null = null;
+  readonly #inkPaths = new InkPathCache();
+  #inkStates: InkStates | null = null;
+  /** L'asciutto disegnato adesso: per scheda e sulla radice. */
+  #inkCards = new Map<string, readonly DryStroke[]>();
+  #inkBoard: readonly DryStroke[] = [];
+  #inkChain: InkChain | null = null;
 
   constructor(parent: HTMLElement, options: CanvasEngineOptions) {
     this.#options = options;
+    this.#quiet = new PenQuiet(idleSchedule(this.#life));
+    this.#life.add(() => this.#quiet.dispose());
     this.#port = options.core ?? SHARED_CORE;
     this.#root = document.createElement("div");
     this.#root.className = "canvas-surface";
@@ -316,6 +368,9 @@ export class CanvasEngine {
     }
     this.#epoch++;
     this.#cancelGestures();
+    // Un documento nuovo: il tratto in corso era dell'altro.
+    this.#inkLayer?.cancel();
+    this.#inkChain = null;
     this.#source = source;
     this.#version = ++this.#versions;
     this.#doc = document;
@@ -357,12 +412,15 @@ export class CanvasEngine {
     // Lo stesso testo si riscrive come prima: la domanda serve solo a un testo nuovo.
     if (changed) this.#checkWritable();
     this.#pruneSelection();
-    this.#render();
+    // Modello e sorgente sono già quelli nuovi; il ridisegno, con una penna
+    // giù, aspetta che si alzi (A9). Il tratto in corso non si perde: la
+    // scheda si sceglie sul documento del momento in cui la penna si alza.
+    this.#quiet.defer("render", () => {
+      if (!this.#destroyed) this.#render();
+    });
     // Fuori dalla consegna che ci ha portato il testo: la sessione la sta
     // ancora facendo agli altri riquadri.
-    if (this.#pending) queueMicrotask(() => {
-      if (!this.#destroyed) this.#recordPending();
-    });
+    if (this.#pending) queueMicrotask(() => this.#deferPending());
   }
 
   getDoc(): string {
@@ -448,6 +506,10 @@ export class CanvasEngine {
       this.#unwritable = false;
     }
     this.#root.dataset.readOnly = String(this.#readOnly);
+    // Subito, anche con una penna giù e il ridisegno rimandato: lo strato se
+    // ne va (il tratto in corso si annulla) o torna, e la barra dice perché.
+    this.#syncInkLayer();
+    this.#drawToolbar();
   }
 
   setTheme(theme: Theme): void {
@@ -470,8 +532,11 @@ export class CanvasEngine {
    * suo commit.
    */
   undo(): boolean {
+    // Con una penna giù annulla e ripeti non fanno niente (A5).
+    if (this.#penDown) return false;
+    const editing = this.#editor !== null;
     if (!this.#closeField(false)) return false;
-    this.#render();
+    if (editing) this.#render();
     const step = this.#undo.pop();
     if (!step || !this.#doc) return false;
     if (this.#replay(step, "undo", (again) => this.#redo.push(again)) !== true) {
@@ -483,8 +548,10 @@ export class CanvasEngine {
 
   /** Rifà il passo annullato, con le stesse due vie dell'annulla. */
   redo(): boolean {
+    if (this.#penDown) return false;
+    const editing = this.#editor !== null;
     if (!this.#closeField(false)) return false;
-    this.#render();
+    if (editing) this.#render();
     const step = this.#redo.pop();
     if (!step || !this.#doc) return false;
     if (this.#replay(step, "redo", (again) => this.#pushUndo(again, false)) !== true) {
@@ -502,6 +569,10 @@ export class CanvasEngine {
     clearTimeout(this.#pauseTimer);
     this.#pauseTimer = undefined;
     this.#revival++;
+    // Un tratto in corso si perde senza errori: lo strato lo annulla, e la
+    // vita chiude lo scheduler e ciò che il silenzio della penna teneva.
+    this.#syncInkLayer();
+    this.#life.close();
     this.#dropCore();
     for (const teardown of this.#markdownTeardowns.values()) teardown();
     this.#markdownTeardowns.clear();
@@ -676,8 +747,13 @@ export class CanvasEngine {
   #replay(step: CanvasStep, origin: "undo" | "redo", record: (step: CanvasStep) => void): true | CanvasCoreErrorCode {
     const before = this.#source;
     const end = step.start + step.inserted.length;
+    // Un passo fatto solo di tratti cambia solo l'inchiostro: si ridisegna lo
+    // strato, non le schede.
+    const inkOnly = step.patches.length > 0 && step.patches.every((patch) => patch.kind === "ink");
     if (step.version !== this.#version || before.slice(step.start, end) !== step.inserted) {
-      return this.#commitLocal(step.patches, origin, record);
+      const code = this.#commitLocal(step.patches, origin, record, !inkOnly);
+      if (code === true && inkOnly) this.#paintInk();
+      return code;
     }
     if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return "rejected";
     const core = this.#core;
@@ -692,7 +768,11 @@ export class CanvasEngine {
         return "trap";
       }
       // Il nucleo non riapre il testo di prima (non dovrebbe mai): restano le toppe.
-      if (error instanceof CanvasCoreError) return this.#commitLocal(step.patches, origin, record);
+      if (error instanceof CanvasCoreError) {
+        const code = this.#commitLocal(step.patches, origin, record, !inkOnly);
+        if (code === true && inkOnly) this.#paintInk();
+        return code;
+      }
       throw error;
     }
     this.#traps = 0;
@@ -715,7 +795,8 @@ export class CanvasEngine {
       restores: step.version,
     });
     this.#pruneSelection();
-    this.#render();
+    if (inkOnly) this.#paintInk();
+    else this.#render();
     this.#options.onChange({ text: after, operation, origin });
     return true;
   }
@@ -862,8 +943,20 @@ export class CanvasEngine {
     clearTimeout(this.#pauseTimer);
     this.#pauseTimer = setTimeout(() => {
       this.#pauseTimer = undefined;
-      this.#recordPending();
+      this.#deferPending();
     }, CARD_PAUSE_MS);
+  }
+
+  /**
+   * Registra il testo in sospeso adesso o, con una penna giù, quando si alza:
+   * il commit ridisegna le schede. Il tratto, quando finisce, lo registra da sé
+   * prima di scriversi.
+   */
+  #deferPending(): void {
+    if (this.#destroyed) return;
+    this.#quiet.defer("pending", () => {
+      if (!this.#destroyed) this.#recordPending();
+    });
   }
 
   #showNotice(text: string): void {
@@ -901,12 +994,200 @@ export class CanvasEngine {
     return this.#selection.map((id) => byId.get(id)!).filter(Boolean);
   }
 
+  // --- l'inchiostro -------------------------------------------------------------
+
+  /** Una penna è giù: un tratto della punta o della gomma è in corso. */
+  get #penDown(): boolean {
+    return this.#quiet.active || (this.#inkLayer?.drawing ?? false);
+  }
+
+  /**
+   * Monta lo strato della penna quando la lavagna si può cambiare e smontarlo
+   * quando no (sola lettura del pannello o della tela, scena troppo grande,
+   * lavagna chiusa: A8). Smontarlo annulla il tratto in corso: la scia sparisce.
+   */
+  #syncInkLayer(): void {
+    const wanted = !this.#destroyed && this.#doc !== null && !this.#readOnly && !this.#isSceneOversized();
+    if (wanted === (this.#inkLayer !== null)) return;
+    if (!wanted) {
+      const life = this.#inkLife;
+      this.#inkLayer = null;
+      this.#inkLife = null;
+      this.#inkChain = null;
+      life?.close();
+      return;
+    }
+    const life = openLifetime();
+    this.#inkLife = life;
+    this.#inkLayer = mountInkLayer({
+      viewport: this.#viewport,
+      toWorld: (clientX, clientY) => this.#screenToWorld(clientX, clientY),
+      // La penna di serie (A11) allo zoom di quando il tratto comincia.
+      look: (input) => defaultInkLook(this.#camera.zoom, input.pressure),
+      quiet: this.#quiet,
+      onStroke: (stroke) => this.#inkStroke(stroke),
+      // Gomma e tasto laterale, fino a T13: niente scia e niente gesto.
+    }, life);
+    this.#inkLayer.setCamera(this.#camera.x, this.#camera.y, this.#camera.zoom);
+  }
+
+  /**
+   * I livelli d'inchiostro del testo di adesso: lo stato lo dice il nucleo, una
+   * volta per testo (`inkLayers()` li tiene fino al prossimo `reset` o
+   * `commit`), e qui si decodificano una volta per modello.
+   */
+  #inkStateList(): readonly InkLayerState[] {
+    const doc = this.#doc;
+    const layers = this.#inkLayersNow();
+    if (!doc || !layers) return [];
+    const cached = this.#inkStates;
+    if (cached && cached.doc === doc && cached.layers === layers) return cached.states;
+    const states = inkLayerStates(doc, layers);
+    this.#inkStates = { doc, layers, states };
+    return states;
+  }
+
+  /** I livelli del nucleo per il testo di adesso; `null` senza nucleo o se è appena morto. */
+  #inkLayersNow(): readonly CanvasInkLayer[] | null {
+    const core = this.#core;
+    if (!core) return null;
+    try {
+      return core.inkLayers();
+    } catch (error) {
+      if (lostCore(error)) {
+        this.#lose();
+        return null;
+      }
+      if (error instanceof CanvasCoreError) return null;
+      throw error;
+    }
+  }
+
+  /**
+   * Ridisegna l'asciutto di tutte le schede sulla scena e della radice, senza
+   * rifare le schede: dopo `#render`, o dopo un annulla fatto solo di tratti.
+   */
+  #paintInk(): void {
+    if (!this.#doc || this.#isSceneOversized()) return;
+    const cards = new Map<string, readonly DryStroke[]>();
+    let board: DryStroke[] = [];
+    for (const state of this.#inkStateList()) {
+      const drys: DryStroke[] = [];
+      for (const stroke of state.drawable) {
+        const dry = dryStroke(stroke, this.#inkPaths);
+        if (dry) drys.push(dry);
+      }
+      if (state.node) cards.set(state.node.id, drys);
+      else board = drys;
+    }
+    const nodes = new Map(this.#doc.nodes.map((node) => [node.id, node]));
+    for (const element of this.#stage.children) {
+      if (!(element instanceof HTMLElement) || !element.classList.contains("canvas-node")) continue;
+      const node = nodes.get(element.dataset.node ?? "");
+      if (node) paintCard(element, cards.get(node.id) ?? [], inkFitMode(node));
+    }
+    paintBoard(this.#stage, board);
+    this.#inkCards = cards;
+    this.#inkBoard = board;
+    this.#inkPaths.sweep();
+  }
+
+  /** Un tratto della penna è finito: si scrive, e la sua scia va via nello stesso giro. */
+  #inkStroke(stroke: InkLayerStroke): void {
+    const layer = this.#inkLayer;
+    try {
+      this.#writeStroke(stroke);
+    } finally {
+      layer?.settle(stroke.id);
+    }
+  }
+
+  /**
+   * Scrive il tratto `stroke`: prima il testo in sospeso (un passo suo, A1),
+   * poi la scheda che lo tiene sul documento di adesso (A3, A9), il record,
+   * la toppa e un commit solo, senza ridisegnare le schede; l'asciutto del
+   * solo livello toccato si aggiunge qui. Un pezzo che continua un tratto
+   * spezzato si fonde nel passo del pezzo di prima (A4). Ciò che non si
+   * scrive lo dice l'avviso della barra.
+   */
+  #writeStroke(stroke: InkLayerStroke): void {
+    const chain = stroke.continued ? this.#inkChain : null;
+    this.#inkChain = null;
+    if (this.#destroyed || !this.#doc || this.#readOnly || this.#isSceneOversized()) return;
+    // Come prima di ogni gesto: il testo e poi il tratto, due passi. Il campo
+    // resta aperto col suo testo.
+    this.#recordPending();
+    const doc = this.#doc;
+    const layers = this.#inkLayersNow();
+    if (!layers) return;
+    const holder = anchorAt(doc.nodes, strokeBounds(stroke.samples, stroke.brush.size),
+      (node) => !foreignInkLayer(layers, { node: node.id }));
+    const ref: InkLayerRef = holder ? { node: holder.id } : "board";
+    if (foreignInkLayer(layers, ref)) {
+      this.#showNotice(t("canvas.ink.foreign"));
+      return;
+    }
+    const made = strokeRecord(stroke, holder, { brush: stroke.brush, color: stroke.color, tool: stroke.tool }, Date.now());
+    if (!made.ok) {
+      // Un tocco che non fa contorno non è niente da dire.
+      if (made.reason !== "empty") this.#showNotice(t(made.reason === "full" ? "canvas.ink.full" : "canvas.ink.refused"));
+      return;
+    }
+    const patch = addStrokePatch(doc, layers, ref, made.record);
+    if (!patch) {
+      this.#showNotice(t("canvas.ink.refused"));
+      return;
+    }
+    const before = this.#source;
+    const code = this.#commitLocal([patch], "input", (step) => this.#pushInkStep(step, chain), false);
+    if (code !== true) {
+      // Una trappola la dice il nucleo che si riapre.
+      if (code !== "trap") this.#showNotice(t(code === "limit" ? "canvas.ink.full" : "canvas.ink.refused"));
+      return;
+    }
+    const top = this.#undo[this.#undo.length - 1];
+    if (stroke.split && top) this.#inkChain = { step: top, before: chain?.before ?? before };
+    const dry = toDry(made.record, this.#inkPaths);
+    if (dry) this.#paintStroke(holder, dry);
+    if (this.#intakeError) this.#showNotice("");
+  }
+
+  /** Aggiunge l'asciutto di un tratto appena scritto al solo livello che lo tiene. */
+  #paintStroke(holder: CanvasNode | null, dry: DryStroke): void {
+    if (!holder) {
+      this.#inkBoard = [...this.#inkBoard, dry];
+      paintBoard(this.#stage, this.#inkBoard);
+      return;
+    }
+    const drys = [...(this.#inkCards.get(holder.id) ?? []), dry];
+    this.#inkCards.set(holder.id, drys);
+    const element = this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(holder.id)}"]`);
+    // Una scheda arrivata da fuori a penna giù non è ancora sulla scena: la
+    // disegna il ridisegno rimandato.
+    if (element) paintCard(element, drys, inkFitMode(holder));
+  }
+
+  /**
+   * Il passo d'annulla di un tratto: nuovo, o fuso col pezzo di prima dello
+   * stesso tratto se nel frattempo il testo non è cambiato.
+   */
+  #pushInkStep(step: CanvasStep, chain: InkChain | null): void {
+    const top = this.#undo[this.#undo.length - 1];
+    if (chain && top === chain.step && top.version === step.restores) {
+      this.#undo[this.#undo.length - 1] = mergeSteps(chain.before, top, step, this.#source);
+      this.#redo = [];
+      return;
+    }
+    this.#pushUndo(step, true);
+  }
+
   // --- camera ---------------------------------------------------------------
 
   #applyCamera(): void {
     // Camera transforms are immediate for both motion preferences.
     this.#stage.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
     this.#edgeLayer.style.transform = `translate(${this.#camera.x}px, ${this.#camera.y}px) scale(${this.#camera.zoom})`;
+    this.#inkLayer?.setCamera(this.#camera.x, this.#camera.y, this.#camera.zoom);
   }
 
   #screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
@@ -1914,6 +2195,7 @@ export class CanvasEngine {
 
   #render(): void {
     if (!this.#doc) return;
+    this.#syncInkLayer();
     for (const teardown of this.#markdownTeardowns.values()) teardown();
     this.#markdownTeardowns.clear();
     this.#applyCamera();
@@ -1928,6 +2210,10 @@ export class CanvasEngine {
       fallback.textContent = t("canvas.too_large");
       this.#stage.append(fallback);
       this.#viewport.dataset.canvasProtocol = "source-fallback";
+      // L'inchiostro si vede dove si vedono le schede (A8).
+      this.#inkCards = new Map();
+      this.#inkBoard = [];
+      this.#inkPaths.clear();
       return;
     }
     this.#drawEdges();
@@ -1947,6 +2233,7 @@ export class CanvasEngine {
         this.#stage.append(this.#nodeEl(node));
       }
     }
+    this.#paintInk();
     this.#viewport.dataset.canvasProtocol = "source";
   }
 
@@ -2119,11 +2406,10 @@ export class CanvasEngine {
       }
       case "file": {
         const path = node.file ?? "";
-        const extension = path.split(".").pop()?.toLowerCase();
-        const kind = extension && ["png", "jpg", "jpeg", "gif", "webp", "svg", "avif"].includes(extension) ? "image"
-          : extension && ["mp3", "wav", "ogg", "m4a", "flac"].includes(extension) ? "audio"
-            : extension && ["mp4", "webm", "mov", "mkv"].includes(extension) ? "video"
-              : extension === "pdf" ? "pdf" : "file";
+        // Lo stesso tipo che decide come l'inchiostro segue la scheda
+        // (`inkFitMode`): resa e segnaposto non si contraddicono.
+        const media = mediaKindOfId(path);
+        const kind = media === "other" ? "file" : media;
         body.dataset.mediaKind = kind;
         if (kind !== "file") {
           const placeholder = document.createElement("span");
@@ -2260,6 +2546,47 @@ export class CanvasEngine {
 /** Una copia delle toppe, che chi le ha date può ancora cambiare. */
 function copyPatches(patches: readonly CanvasPatch[]): CanvasPatch[] {
   return JSON.parse(JSON.stringify(patches)) as CanvasPatch[];
+}
+
+/**
+ * Due passi di fila in uno: `first` ha portato il testo da `before` a un
+ * testo di mezzo, `second` da quello ad `after`. Le toppe si fanno in fila
+ * (le inverse al contrario); il tratto del testo è la parte che cambia fra
+ * `before` e `after`, senza spezzare una coppia surrogata.
+ */
+function mergeSteps(before: string, first: CanvasStep, second: CanvasStep, after: string): CanvasStep {
+  const shorter = Math.min(before.length, after.length);
+  let start = 0;
+  while (start < shorter && before.charCodeAt(start) === after.charCodeAt(start)) start++;
+  let endBefore = before.length;
+  let endAfter = after.length;
+  while (endBefore > start && endAfter > start && before.charCodeAt(endBefore - 1) === after.charCodeAt(endAfter - 1)) {
+    endBefore--;
+    endAfter--;
+  }
+  if (start > 0 && isHighSurrogate(before.charCodeAt(start - 1))) start--;
+  // Il tratto finale si allarga di un'unità in tutti e due i testi, che lì sono uguali.
+  if (endBefore < before.length && isLowSurrogate(before.charCodeAt(endBefore))) {
+    endBefore++;
+    endAfter++;
+  }
+  return {
+    patches: [...second.patches, ...first.patches],
+    back: [...first.back, ...second.back],
+    start,
+    inserted: after.slice(start, endAfter),
+    removed: before.slice(start, endBefore),
+    version: second.version,
+    restores: first.restores,
+  };
+}
+
+function isHighSurrogate(unit: number): boolean {
+  return unit >= 0xd800 && unit <= 0xdbff;
+}
+
+function isLowSurrogate(unit: number): boolean {
+  return unit >= 0xdc00 && unit <= 0xdfff;
 }
 
 /** Una trappola o un'istanza persa: il nucleo va riaperto. */

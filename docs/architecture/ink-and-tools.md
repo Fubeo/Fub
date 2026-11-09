@@ -328,6 +328,38 @@ mouse `ignore`: i loro eventi restano alla lavagna, che li usa come prima.
   cambio, `readInkMouse` lo ridà solo con «Ricorda» acceso, altrimenti
   spento.
 
+## Come lo usa la lavagna
+
+`editors/canvas/engine.ts` (`CanvasEngine`) apre una `Lifetime` quando nasce
+e la chiude in `destroy`: dentro ci sono `PenQuiet` con `idleSchedule` e lo
+strato, che si monta solo se la lavagna si può cambiare. Sola lettura del
+pannello, sola lettura della tela (un testo che il nucleo non sa riscrivere)
+o scena troppo grande smontano lo strato, e il tratto in corso si annulla;
+quando se ne vanno lo strato torna. L'asciutto si vede dove si vedono le
+schede.
+
+- **Chi decide la scheda.** Il tratto finito sceglie la scheda sul documento
+  del momento in cui la penna si alza: `anchorAt` col riquadro di
+  `strokeBounds`, e un livello che il nucleo dice estraneo non tiene il
+  tratto (`foreignInkLayer`). Fuori da ogni scheda il tratto è libero, nel
+  livello della radice; se anche quello è estraneo non si scrive e la barra
+  lo dice. Lo stato dei livelli viene dal nucleo (`CanvasCore.inkLayers()`),
+  una volta per testo; il tipo della scheda (`mediaKindOfId`) decide insieme
+  `data-media-kind` e il modo dell'inchiostro (`inkFitMode`).
+- **Il passo di annulla.** Un tratto è `strokeRecord`, `addStrokePatch` e un
+  commit solo, senza ridisegnare le schede: nello stesso giro si aggiunge
+  l'asciutto del livello toccato e la scia va via (`settle`). Prima si
+  registra il testo in sospeso di una scheda, che resta aperta: sono due
+  passi. I pezzi di un tratto spezzato al limite dei campioni si salvano uno
+  alla volta e si fondono in un passo solo. Annulla e ripeti seguono le due
+  vie della tela (il testo esatto o le toppe inverse); un passo fatto solo di
+  tratti ridisegna soltanto l'inchiostro. Con una penna giù non fanno niente.
+- **La modifica da fuori a penna giù.** `syncDoc` aggiorna subito modello,
+  sorgente e nucleo; il ridisegno passa da `quiet.defer("render", …)` e
+  aspetta che la penna si alzi. Anche il testo in sospeso aspetta, perché
+  il suo commit ridisegna le schede. Il tratto in corso non si perde; se la
+  sua scheda non c'è più diventa libero.
+
 ## Confini e verifica
 
 | Regola | Chi la verifica |
@@ -344,6 +376,7 @@ mouse `ignore`: i loro eventi restano alla lavagna, che li usa come prima.
 | un ridisegno per evento | `ink/dom/pointer-adapter.test.ts` |
 | la penna della lavagna non arriva alla lavagna; il mouse sì | `editors/canvas/ink-layer.test.ts` |
 | l'inchiostro di una scheda la segue senza ridisegnare | `editors/canvas/ink-paint.test.ts` |
+| un tratto è una toppa, un commit e un passo; il ridisegno aspetta la penna | `editors/canvas/engine-ink.test.ts` |
 | Rust e client nominano uguale le impostazioni della lavagna | `editors/canvas/settings-mirror.test.ts`, `fub-host/tests/lavagna_feature.rs` |
 | un puntatore fermo resta fermo nella scena se la vista si muove | `ink/dom/pointer-adapter.test.ts`, `tools/editor.test.ts` |
 
