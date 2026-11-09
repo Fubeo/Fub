@@ -1,0 +1,124 @@
+# Il workspace dei crate di VectorCraft copiati (vedi UPSTREAM.md). È di Fub,
+# non dell'upstream: i manifest dei crate restano quelli dell'upstream (più le
+# patch di `patches/`) ed ereditano da qui versione, edizione, licenza, lint e
+# dipendenze. Le scelte di Fub stanno in questo file solo.
+#
+# Sta fuori dal workspace di Fub (`exclude` nel Cargo.toml radice): Fub prende
+# i crate come dipendenze a percorso, con il proprio Cargo.lock; i test
+# dell'upstream girano qui, con il Cargo.lock accanto:
+#
+#   CARGO_TARGET_DIR=target/vectorcraft cargo test --manifest-path vendor/vectorcraft/Cargo.toml --workspace --locked
+[workspace]
+resolver = "3"
+members = [
+    "crates/geom",
+    "crates/color",
+    "crates/doc",
+    "crates/pathops",
+    "crates/brush",
+    "crates/trace",
+    "crates/text",
+    "crates/effects",
+    "crates/plugins",
+    "crates/three-d",
+    "crates/render",
+    "crates/svg",
+    "crates/format",
+    "crates/cad",
+    "crates/metafile",
+    "crates/affinity",
+    "crates/scriptcheck",
+    "crates/tools",
+    "crates/engine",
+    "crates/testkit",
+]
+
+[workspace.package]
+# La versione dell'upstream: `tools/vendor-craft/vendor.mjs` la riporta qui,
+# nelle righe `vectorcraft-*` qui sotto e in quelle del Cargo.toml di Fub.
+version = "0.20.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.95"
+repository = "https://github.com/storytold/vectorcraft"
+
+# Codice di terzi: gli avvisi li corregge l'upstream, non una copia. I lint di
+# Fub non lo guardano, perché non è un membro del suo workspace. `unsafe_code`
+# resta `deny` come nell'upstream (ogni crate dichiara già `forbid`).
+[workspace.lints.rust]
+unsafe_code = "deny"
+warnings = "allow"
+
+[workspace.lints.clippy]
+all = "allow"
+
+# Come nel workspace dell'upstream, senza ciò che non è copiato: l'interfaccia
+# (egui, eframe, rfd e gli altri), il server MCP, il PDF (`craft-pdf`,
+# `krilla`, i `hayro-*` di craft-libs da Git, e le loro `[patch.crates-io]`) e
+# l'EPS. Le due librerie di craft-libs vengono da `vendor/` per percorso, non
+# da Git. Le versioni di quelle in comune con Fub sono le stesse del
+# Cargo.toml radice (lo controlla `vendor.mjs check`); rispetto all'upstream:
+# - `flate2` 1.1.9 al posto di 1, `image` 0.25.10 al posto di 0.25 e `rustix`
+#   1 al posto di 1.1, le richieste di Fub (il Cargo.lock dice le versioni
+#   vere, le stesse dell'upstream).
+[workspace.dependencies]
+craft-docpath = { path = "../craft-docpath/crates/docpath", version = "0.1.0" }
+craft-vectorcraft-format = { path = "../craft-vectorcraft-format/crates/vectorcraft-format", version = "0.1.0" }
+
+vectorcraft-geom = { path = "crates/geom", version = "0.20.0" }
+vectorcraft-color = { path = "crates/color", version = "0.20.0" }
+vectorcraft-doc = { path = "crates/doc", version = "0.20.0" }
+vectorcraft-pathops = { path = "crates/pathops", version = "0.20.0" }
+vectorcraft-brush = { path = "crates/brush", version = "0.20.0" }
+vectorcraft-trace = { path = "crates/trace", version = "0.20.0" }
+# Senza i caratteri di serie, come nell'upstream: chi li vuole li chiede.
+vectorcraft-text = { path = "crates/text", default-features = false, version = "0.20.0" }
+vectorcraft-effects = { path = "crates/effects", version = "0.20.0" }
+vectorcraft-three-d = { path = "crates/three-d", version = "0.20.0" }
+vectorcraft-render = { path = "crates/render", version = "0.20.0" }
+vectorcraft-svg = { path = "crates/svg", version = "0.20.0" }
+vectorcraft-format = { path = "crates/format", version = "0.20.0" }
+vectorcraft-tools = { path = "crates/tools", version = "0.20.0" }
+vectorcraft-engine = { path = "crates/engine", default-features = false, version = "0.20.0" }
+vectorcraft-testkit = { path = "crates/testkit", version = "0.20.0" }
+vectorcraft-cad = { path = "crates/cad", version = "0.20.0" }
+vectorcraft-metafile = { path = "crates/metafile", version = "0.20.0" }
+vectorcraft-plugins = { path = "crates/plugins", version = "0.20.0" }
+vectorcraft-affinity = { path = "crates/affinity", version = "0.20.0" }
+vectorcraft-scriptcheck = { path = "crates/scriptcheck", version = "0.20.0" }
+
+kurbo = { version = "0.13", features = ["serde"] }
+thiserror = "2"
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+log = "0.4"
+chrono = { version = "0.4.45", default-features = false, features = ["std"] }
+proptest = "1"
+crc32fast = "1.5"
+wasmi = { version = "2.0.0", default-features = false, features = ["std", "validate", "stable", "portable-dispatch"] }
+wat = "1.228"
+vello_cpu = { version = "0.2", default-features = false, features = ["std", "png", "u8_pipeline", "f32_pipeline"] }
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "gif", "tiff", "bmp", "tga"] }
+usvg = { version = "0.48", default-features = false, features = ["svgz"] }
+skrifa = "0.47"
+harfrust = "0.13"
+linesweeper = "0.5"
+flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
+rustix = { version = "1", default-features = false }
+ruzstd = { version = "0.9.1", default-features = false, features = ["std"] }
+hayro-ccitt = "0.3"
+jpeg-encoder = { version = "0.6", default-features = false, features = ["std"] }
+gif = { version = "0.14", default-features = false, features = ["std", "raii_no_panic"] }
+tiff = "0.11"
+zune-jpeg = "0.5"
+
+# Come nel workspace dell'upstream: i crate del workspace con le tabelle delle
+# righe, le dipendenze ottimizzate. Alcuni test (il motore, gli importatori)
+# sono lenti senza.
+[profile.dev.package."*"]
+opt-level = 2
+debug = false
+
+[profile.dev]
+opt-level = 1
+debug = "line-tables-only"

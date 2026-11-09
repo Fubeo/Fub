@@ -1,0 +1,3319 @@
+diff --git a/crates/engine/Cargo.toml b/crates/engine/Cargo.toml
+--- a/crates/engine/Cargo.toml
++++ b/crates/engine/Cargo.toml
+@@ -38,9 +38,7 @@ vectorcraft-trace = { workspace = true }
+ vectorcraft-effects = { workspace = true }
+ vectorcraft-svg = { workspace = true }
+ vectorcraft-format = { workspace = true }
+-vectorcraft-pdf = { workspace = true }
+ vectorcraft-cad = { workspace = true }
+-vectorcraft-eps = { workspace = true }
+ vectorcraft-metafile = { workspace = true, optional = true }
+ vectorcraft-plugins = { workspace = true, optional = true }
+ vectorcraft-affinity = { workspace = true, optional = true }
+diff --git a/crates/engine/src/cmd.rs b/crates/engine/src/cmd.rs
+--- a/crates/engine/src/cmd.rs
++++ b/crates/engine/src/cmd.rs
+@@ -63,15 +63,20 @@ mod path;
+ pub(crate) mod pathops;
+ mod patterncmds;
+ pub mod patternlib;
++#[cfg(feature = "pdf")]
+ pub mod pdfcmds;
+ pub mod perspgrid;
+ pub mod place;
+ #[cfg(feature = "plugins")]
+ pub mod plugin;
+ pub mod prefscmds;
++#[cfg(feature = "pdf")]
+ pub mod print;
++#[cfg(feature = "pdf")]
+ pub(crate) mod printadvanced;
++#[cfg(feature = "pdf")]
+ pub mod printpresets;
++#[cfg(feature = "pdf")]
+ pub mod printtiling;
+ pub mod rasterfx;
+ mod recolor;
+@@ -309,24 +314,30 @@ pub fn command_specs() -> &'static [CommandSpec] {
+         v.extend(interactivity::specs());
+         v.extend(newart::specs());
+         v.extend(colortheme::specs());
++        #[cfg(feature = "pdf")]
+         v.extend(fileio::pdf::specs());
+         v.extend(docsetup::specs());
+         v.extend(newdoc::specs());
+         v.extend(place::specs());
+         v.extend(links::specs());
+         v.extend(linkfiles::specs());
++        #[cfg(feature = "pdf")]
+         v.extend(pdfcmds::specs());
+         v.extend(fileio::dxf::specs());
++        #[cfg(feature = "pdf")]
+         v.extend(fileio::eps::specs());
+         v.extend(package::specs());
+         v.extend(slices::specs());
++        #[cfg(feature = "pdf")]
+         v.extend(print::specs());
+         v.extend(recovery::specs());
+         v.extend(fileio::dxfimport::specs());
+         v.extend(webexport::specs());
+         v.extend(assets::specs());
+         v.extend(css::specs());
++        #[cfg(feature = "pdf")]
+         v.extend(printpresets::specs());
++        #[cfg(feature = "pdf")]
+         v.extend(printtiling::specs());
+         #[cfg(feature = "plugins")]
+         v.extend(plugin::specs());
+diff --git a/crates/engine/src/cmd/addons/color/tests.rs b/crates/engine/src/cmd/addons/color/tests.rs
+--- a/crates/engine/src/cmd/addons/color/tests.rs
++++ b/crates/engine/src/cmd/addons/color/tests.rs
+@@ -201,6 +201,7 @@ fn expand_appearance_gives_the_dots_object_vector_halftone_makes() {
+     }
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn exports_write_the_dots_as_paths() {
+     let (mut s, _) = red_rect();
+diff --git a/crates/engine/src/cmd/addons/document/tests.rs b/crates/engine/src/cmd/addons/document/tests.rs
+--- a/crates/engine/src/cmd/addons/document/tests.rs
++++ b/crates/engine/src/cmd/addons/document/tests.rs
+@@ -243,6 +243,7 @@ fn export_all_open_documents_writes_one_file_each() {
+ 
+ /// A PDF document last saved with a page range exports with every page, and an SVG document with
+ /// two artboards exports as one SVG holding the art of both (#4920 review).
++#[cfg(feature = "pdf")]
+ #[test]
+ fn export_all_open_documents_keeps_every_page_and_artboard() {
+     let dir = std::env::temp_dir().join(format!("vc-export-all-pages-{}", std::process::id()));
+diff --git a/crates/engine/src/cmd/clipboard/flavours.rs b/crates/engine/src/cmd/clipboard/flavours.rs
+--- a/crates/engine/src/cmd/clipboard/flavours.rs
++++ b/crates/engine/src/cmd/clipboard/flavours.rs
+@@ -89,6 +89,7 @@ pub fn file_flavour(name: &str, head: &[u8], mimes: &[&str]) -> Option<&'static
+         "ps" => (EPS, EPS),
+         "eps" => (EPS, EPS),
+         "ai" | "ait" if head.starts_with(b"%PDF") => (PDF, AI),
++        #[cfg(feature = "pdf")]
+         "ai" | "ait" if vectorcraft_pdf::is_postscript(head) => (EPS, EPS),
+         "emf" | "wmf" => (EMF, EMF),
+         _ if f.raster => (BITMAP, f.mime),
+@@ -146,6 +147,7 @@ pub fn specs() -> Vec<CommandSpec> {
+             always,
+             export_png
+         ),
++        #[cfg(feature = "pdf")]
+         cmd!(
+             query "clipboard.exportPdf",
+             "Clipboard as PDF",
+@@ -191,6 +193,7 @@ pub fn specs() -> Vec<CommandSpec> {
+             has_doc,
+             import_text
+         ),
++        #[cfg(feature = "pdf")]
+         cmd!(
+             query "clipboard.importPdf",
+             "Load PDF into Clipboard",
+@@ -210,6 +213,7 @@ pub fn specs() -> Vec<CommandSpec> {
+             has_doc,
+             import_emf
+         ),
++        #[cfg(feature = "pdf")]
+         cmd!(
+             query "clipboard.importEps",
+             "Load EPS into Clipboard",
+@@ -287,6 +291,8 @@ impl Clipboard {
+             return vec![];
+         }
+         let text = (svg && self.image_bytes() <= COPY_TEXT_IMAGE_BYTES) || self.nodes.iter().all(type_only);
++        // Without the PDF writer there is no PDF to offer.
++        let pdf = pdf && cfg!(feature = "pdf");
+         // Art without an area (a lone guide-like line) has no page or picture.
+         let area = self.bounds().is_some_and(|b| b.width() > 0.0 && b.height() > 0.0);
+         [(TEXT, text), (SVG, svg), (PDF, pdf && area), (PNG, area)].into_iter().filter_map(|(m, on)| on.then_some(m)).collect()
+@@ -399,6 +405,7 @@ fn export_png(s: &mut Session, p: &Value) -> Result<Value> {
+     })
+ }
+ 
++#[cfg(feature = "pdf")]
+ fn export_pdf(s: &mut Session, _: &Value) -> Result<Value> {
+     Ok(match s.clipboard_pdf()? {
+         Some((pdf, warnings)) => json!({ "dataBase64": vectorcraft_format::base64_encode(&pdf), "warnings": warnings }),
+@@ -468,6 +475,7 @@ fn import_emf(s: &mut Session, p: &Value) -> Result<Value> {
+     import_picture(s, p, C, "Clipboard.emf", &bytes)
+ }
+ 
++#[cfg(feature = "pdf")]
+ fn import_eps(s: &mut Session, p: &Value) -> Result<Value> {
+     const C: &str = "clipboard.importEps";
+     let bytes = data_param(p, C)?;
+@@ -502,6 +510,7 @@ fn import_loaded(s: &mut Session, p: &Value, cmd: &str, mut loaded: fileio::Load
+     Ok(json!({ "count": count, "warnings": loaded.warnings }))
+ }
+ 
++#[cfg(feature = "pdf")]
+ fn import_pdf(s: &mut Session, p: &Value) -> Result<Value> {
+     const C: &str = "clipboard.importPdf";
+     let bytes = data_param(p, C)?;
+diff --git a/crates/engine/src/cmd/effectcmd/tests.rs b/crates/engine/src/cmd/effectcmd/tests.rs
+--- a/crates/engine/src/cmd/effectcmd/tests.rs
++++ b/crates/engine/src/cmd/effectcmd/tests.rs
+@@ -15,6 +15,7 @@ fn node(s: &Session, id: NodeId) -> vectorcraft_doc::Node {
+     s.doc().unwrap().doc.node(id).cloned().unwrap()
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn revolve_commands_keep_profile_live_edit_options_expand_and_undo() {
+     let mut s = Session::new();
+@@ -199,6 +200,7 @@ fn smooth_revolve_commands_validate_save_expand_and_undo() {
+     assert_eq!(node(&s, id), initial);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn revolve_caps_save_export_expand_and_undo_without_changing_the_source() {
+     let mut s = Session::new();
+diff --git a/crates/engine/src/cmd/fileinfo.rs b/crates/engine/src/cmd/fileinfo.rs
+--- a/crates/engine/src/cmd/fileinfo.rs
++++ b/crates/engine/src/cmd/fileinfo.rs
+@@ -66,6 +66,7 @@ pub(crate) fn file_info(s: &mut Session, p: &Value) -> Result<Value> {
+ /// The File Info a PDF or PDF-compatible `.ai` gives ([`vectorcraft_pdf::file_info`]) into `m`: each
+ /// field that `file.info` would take (a value it refuses is left out), and the created and
+ /// modified dates.
++#[cfg(feature = "pdf")]
+ pub(crate) fn read_pdf(m: &mut DocMetadata, f: vectorcraft_pdf::FileInfo) {
+     let status = f.copyrighted.map(|c| if c { CopyrightStatus::Copyrighted } else { CopyrightStatus::PublicDomain });
+     let fields = [
+diff --git a/crates/engine/src/cmd/fileio.rs b/crates/engine/src/cmd/fileio.rs
+--- a/crates/engine/src/cmd/fileio.rs
++++ b/crates/engine/src/cmd/fileio.rs
+@@ -28,9 +28,11 @@ mod batch;
+ pub mod dxf;
+ pub mod dxfimport;
+ mod encode;
++#[cfg(feature = "pdf")]
+ pub mod eps;
+ mod export;
+ pub(crate) mod imagemap;
++#[cfg(feature = "pdf")]
+ mod legacy_ai;
+ mod load;
+ pub(crate) use load::{MAX_RASTER_ALLOC, size_note};
+@@ -40,6 +42,7 @@ mod metafile;
+ mod naming;
+ mod native;
+ mod pcxread;
++#[cfg(feature = "pdf")]
+ pub mod pdf;
+ mod pdfimport;
+ pub mod pngtext;
+@@ -64,8 +67,10 @@ pub(crate) use export::{export_crop, isolated};
+ pub(crate) use load::check_not_lossy_overwrite;
+ use load::err;
+ pub(crate) use load::import_svg;
++#[cfg(feature = "pdf")]
+ pub(crate) use load::is_placeholder;
+ pub(crate) use load::native_file;
++#[cfg(feature = "pdf")]
+ pub(crate) use load::page_or_editing_data;
+ pub(crate) use load::source;
+ pub use load::{
+@@ -76,7 +81,9 @@ pub use load::{losses_summary, overwrite_losses};
+ pub use naming::{NameParts as FileNameParts, parse_date as parse_file_date, render as render_file_name};
+ pub(crate) use native::preview_png;
+ pub use native::with_compression_pref;
+-pub use pdfimport::{LoadOptions, page_document};
++pub use pdfimport::LoadOptions;
++#[cfg(feature = "pdf")]
++pub use pdfimport::page_document;
+ pub(crate) use save::job_for;
+ pub(crate) use save::save as save_document;
+ pub use save::{
+@@ -139,14 +146,19 @@ mod tests_affinity;
+ #[cfg(test)]
+ mod tests_artboard_fill;
+ #[cfg(test)]
++#[cfg(feature = "pdf")]
+ mod tests_pdf;
+ #[cfg(test)]
++#[cfg(feature = "pdf")]
+ mod tests_pdfcolor;
+ #[cfg(test)]
++#[cfg(feature = "pdf")]
+ mod tests_pdfedit;
+ #[cfg(test)]
++#[cfg(feature = "pdf")]
+ mod tests_pdffidelity;
+ #[cfg(test)]
++#[cfg(feature = "pdf")]
+ mod tests_pdfimport;
+ #[cfg(test)]
+ mod tests_svg;
+@@ -176,6 +188,7 @@ mod tests_text;
+ mod tests_dxf;
+ 
+ #[cfg(test)]
++#[cfg(feature = "pdf")]
+ mod tests_pdfsecurity;
+ #[cfg(test)]
+ mod tests_svgenc;
+@@ -183,6 +196,7 @@ mod tests_svgenc;
+ mod tests_svgimport;
+ 
+ #[cfg(test)]
++#[cfg(feature = "pdf")]
+ mod tests_eps;
+ 
+ #[cfg(test)]
+@@ -192,11 +206,13 @@ mod tests_dxfimport;
+ mod tests_metafile;
+ 
+ #[cfg(test)]
++#[cfg(feature = "pdf")]
+ mod tests_pdfoutput;
+ #[cfg(test)]
+ mod tests_tiffbmp;
+ 
+ #[cfg(test)]
++#[cfg(feature = "pdf")]
+ mod tests_pdfx;
+ #[cfg(test)]
+ mod tests_psd;
+@@ -209,16 +225,21 @@ mod tests_jp2read;
+ mod tests_pcxread;
+ 
+ #[cfg(test)]
++#[cfg(feature = "pdf")]
+ mod tests_epsimport;
+ 
+ #[cfg(test)]
++#[cfg(feature = "pdf")]
+ mod tests_aiimport;
+ 
+ #[cfg(test)]
++#[cfg(feature = "pdf")]
+ mod tests_pdflayers;
+ 
+ #[cfg(test)]
++#[cfg(feature = "pdf")]
+ mod tests_pdfwebview;
+ 
+ #[cfg(test)]
++#[cfg(feature = "pdf")]
+ mod tests_pdf13;
+diff --git a/crates/engine/src/cmd/fileio/action_batch.rs b/crates/engine/src/cmd/fileio/action_batch.rs
+--- a/crates/engine/src/cmd/fileio/action_batch.rs
++++ b/crates/engine/src/cmd/fileio/action_batch.rs
+@@ -714,6 +714,7 @@ mod tests {
+ 
+     /// Override Save names each file with the extension of the format the step names, also over
+     /// data sets.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn batch_override_save_names_files_with_the_format_s_extension() {
+         for (i, format) in [".svg", "SVG", ".PDF"].into_iter().enumerate() {
+@@ -987,6 +988,7 @@ mod tests {
+         assert_eq!(file_names(&dest), ["Alpha-2-Artboard-1.vectorcraft", "Alpha-2.vectorcraft", "Alpha-Artboard-1.vectorcraft"]);
+     }
+ 
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn batch_pdf_export_ignores_artboard_named_file() {
+         let dest = tmp("choice-pdf-artboard-name");
+diff --git a/crates/engine/src/cmd/fileio/commands.rs b/crates/engine/src/cmd/fileio/commands.rs
+--- a/crates/engine/src/cmd/fileio/commands.rs
++++ b/crates/engine/src/cmd/fileio/commands.rs
+@@ -112,6 +112,7 @@ pub fn specs() -> Vec<CommandSpec> {
+             always,
+             formats
+         ),
++        #[cfg(feature = "pdf")]
+         cmd!(
+             query "document.pdfInfo",
+             "PDF Info",
+diff --git a/crates/engine/src/cmd/fileio/dxf.rs b/crates/engine/src/cmd/fileio/dxf.rs
+--- a/crates/engine/src/cmd/fileio/dxf.rs
++++ b/crates/engine/src/cmd/fileio/dxf.rs
+@@ -100,6 +100,29 @@ pub const UNSUPPORTED: &[Unsupported] = &[
+         extensions: &["pmd"],
+         hint: "PageMaker (.pmd) is not supported: open the layout in PageMaker and export PDF or EPS, or place a PDF export here",
+     },
++    // Without the PDF reader and writer (and the PostScript one that shares them), their
++    // files are neither opened nor written, nor saved as a native file under their name.
++    #[cfg(not(feature = "pdf"))]
++    Unsupported {
++        id: "pdf",
++        label: "PDF",
++        extensions: &["pdf"],
++        hint: "PDF files are not available in this build: export SVG or PNG instead",
++    },
++    #[cfg(not(feature = "pdf"))]
++    Unsupported {
++        id: "ai",
++        label: "Illustrator",
++        extensions: &["ai", "ait"],
++        hint: "Illustrator (.ai, .ait) files are not available in this build: export SVG or PNG instead",
++    },
++    #[cfg(not(feature = "pdf"))]
++    Unsupported {
++        id: "eps",
++        label: "EPS",
++        extensions: &["eps", "epsf", "ps"],
++        hint: "EPS and PostScript files are not available in this build: export SVG or PNG instead",
++    },
+ ];
+ 
+ /// The unsupported format an id or extension (any case, leading dot allowed) names.
+diff --git a/crates/engine/src/cmd/fileio/encode.rs b/crates/engine/src/cmd/fileio/encode.rs
+--- a/crates/engine/src/cmd/fileio/encode.rs
++++ b/crates/engine/src/cmd/fileio/encode.rs
+@@ -530,12 +530,15 @@ fn encode_files(doc: &Document, f: &Format, p: &Value) -> Result<Encoded> {
+         "svg" | "svgz" => return super::svg::encode(doc, p, f.id == "svgz").map_err(|e| bad(C, e)),
+         "dxf" => return super::dxf::encode(doc, p, use_artboards),
+         // EPS reads its own `useArtboards` (the art's bounds unless asked).
++        #[cfg(feature = "pdf")]
+         "eps" => return super::eps::encode(doc, p),
+         #[cfg(feature = "metafile")]
+         "emf" => return super::metafile::encode(doc, p, use_artboards, vectorcraft_metafile::Kind::Emf),
+         #[cfg(feature = "metafile")]
+         "wmf" => return super::metafile::encode(doc, p, use_artboards, vectorcraft_metafile::Kind::Wmf),
++        #[cfg(feature = "pdf")]
+         "ai" => return super::save::encode_ai(C, f, doc, p),
++        #[cfg(feature = "pdf")]
+         "pdf" => {
+             let (bytes, warnings) = super::pdf::encode(C, doc, p)?;
+             return Ok(Encoded { warnings, ..Encoded::one(bytes) });
+diff --git a/crates/engine/src/cmd/fileio/export.rs b/crates/engine/src/cmd/fileio/export.rs
+--- a/crates/engine/src/cmd/fileio/export.rs
++++ b/crates/engine/src/cmd/fileio/export.rs
+@@ -178,7 +178,14 @@ pub(super) fn without_artboards(p: &Value) -> Value {
+ /// `p` with the saved presets it names (PDF, flattener) written out as options, for the encoders,
+ /// which know only the built-in ones.
+ fn expand_presets<'a>(s: &Session, cmd: &str, p: &'a Value) -> Result<Cow<'a, Value>> {
+-    super::pdf::expand_preset(s, cmd, p)
++    #[cfg(feature = "pdf")]
++    return super::pdf::expand_preset(s, cmd, p);
++    // Without the PDF writer there are no PDF or flattener presets to expand.
++    #[cfg(not(feature = "pdf"))]
++    {
++        let _ = (s, cmd);
++        Ok(Cow::Borrowed(p))
++    }
+ }
+ 
+ /// The document an export of `f` writes: the active one (see [`export_source`]), or for text
+diff --git a/crates/engine/src/cmd/fileio/formats.rs b/crates/engine/src/cmd/fileio/formats.rs
+--- a/crates/engine/src/cmd/fileio/formats.rs
++++ b/crates/engine/src/cmd/fileio/formats.rs
+@@ -1,6 +1,8 @@
+-use super::{Result, Session, TEMPLATE_FORMATS, UNSUPPORTED, Unsupported, Value, bad, dxf, eps, json, native, pdf, svg, text, unsupported};
++use super::{Result, Session, TEMPLATE_FORMATS, UNSUPPORTED, Unsupported, Value, bad, dxf, json, native, svg, text, unsupported};
+ #[cfg(feature = "metafile")]
+ use super::metafile;
++#[cfg(feature = "pdf")]
++use super::{eps, pdf};
+ 
+ /// One option a format's encoder reads from the export params.
+ #[derive(Clone, Copy, Debug)]
+@@ -365,7 +367,9 @@ pub const FORMATS: &[Format] = &[
+         raster: false,
+         options: svg::OPTIONS,
+     },
++    #[cfg(feature = "pdf")]
+     Format { id: "pdf", label: "PDF", extensions: &["pdf"], mime: "application/pdf", read: true, write: true, raster: false, options: pdf::OPTIONS },
++    #[cfg(feature = "pdf")]
+     Format {
+         id: "ai",
+         label: "PDF-compatible .ai",
+@@ -377,6 +381,7 @@ pub const FORMATS: &[Format] = &[
+         raster: false,
+         options: native::AI_OPTIONS,
+     },
++    #[cfg(feature = "pdf")]
+     Format {
+         id: "ait",
+         label: "PDF-compatible .ait template",
+@@ -461,6 +466,7 @@ pub const FORMATS: &[Format] = &[
+     Format { id: "png8", label: "PNG-8", extensions: &["png"], mime: "image/png", read: false, write: true, raster: true, options: PALETTE_OPTIONS },
+     Format { id: "txt", label: "Text", extensions: TEXT_EXTS, mime: "text/plain", read: false, write: true, raster: false, options: text::OPTIONS },
+     Format { id: "dxf", label: "DXF", extensions: &["dxf"], mime: "image/vnd.dxf", read: true, write: true, raster: false, options: dxf::OPTIONS },
++    #[cfg(feature = "pdf")]
+     Format {
+         id: "eps",
+         label: "EPS",
+@@ -506,8 +512,11 @@ pub const OPEN_EXTS: &[&str] = &[
+     "drawcraft",
+     "svg",
+     "svgz",
++    #[cfg(feature = "pdf")]
+     "pdf",
++    #[cfg(feature = "pdf")]
+     "ai",
++    #[cfg(feature = "pdf")]
+     "ait",
+     "png",
+     "jpg",
+@@ -536,8 +545,11 @@ pub const OPEN_EXTS: &[&str] = &[
+     "emf",
+     #[cfg(feature = "metafile")]
+     "wmf",
++    #[cfg(feature = "pdf")]
+     "eps",
++    #[cfg(feature = "pdf")]
+     "epsf",
++    #[cfg(feature = "pdf")]
+     "ps",
+     #[cfg(feature = "affinity")]
+     "af",
+@@ -589,8 +601,11 @@ pub const PLACE_EXTS: &[&str] = &[
+     "drawcraft",
+     "svg",
+     "svgz",
++    #[cfg(feature = "pdf")]
+     "pdf",
++    #[cfg(feature = "pdf")]
+     "ai",
++    #[cfg(feature = "pdf")]
+     "ait",
+     "png",
+     "jpg",
+@@ -619,8 +634,11 @@ pub const PLACE_EXTS: &[&str] = &[
+     "emf",
+     #[cfg(feature = "metafile")]
+     "wmf",
++    #[cfg(feature = "pdf")]
+     "eps",
++    #[cfg(feature = "pdf")]
+     "epsf",
++    #[cfg(feature = "pdf")]
+     "ps",
+     #[cfg(feature = "affinity")]
+     "af",
+@@ -642,14 +660,22 @@ fn format_filters() -> impl Iterator<Item = (&'static str, &'static [&'static st
+ /// Open-dialog filters: "All readable files" first, then one per readable format, then swatch
+ /// libraries (which open in the library panel), Libraries panel libraries, flattener, PDF and print
+ /// presets (imported), scripts (checked without running them) and plug-ins (installed).
++/// The PDF and print preset files, which only the PDF writer reads.
++fn pdf_preset_filters() -> impl Iterator<Item = (&'static str, &'static [&'static str])> {
++    #[cfg(feature = "pdf")]
++    let filters = vec![("PDF presets", crate::cmd::pdfcmds::PRESET_EXTS), ("Print presets", crate::cmd::printpresets::PRESET_EXTS)];
++    #[cfg(not(feature = "pdf"))]
++    let filters: Vec<(&'static str, &'static [&'static str])> = vec![];
++    filters.into_iter()
++}
++
+ pub fn open_filters() -> impl Iterator<Item = (&'static str, &'static [&'static str])> {
+     std::iter::once(("All readable files", OPEN_EXTS))
+         .chain(format_filters())
+         .chain(std::iter::once(("Swatch libraries", crate::cmd::swatchlib::LIBRARY_EXTS)))
+         .chain(std::iter::once(("Libraries", crate::cmd::library::LIBRARY_EXTS)))
+         .chain(std::iter::once(("Flattener presets", crate::cmd::flatten::PRESET_EXTS)))
+-        .chain(std::iter::once(("PDF presets", crate::cmd::pdfcmds::PRESET_EXTS)))
+-        .chain(std::iter::once(("Print presets", crate::cmd::printpresets::PRESET_EXTS)))
++        .chain(pdf_preset_filters())
+         .chain(std::iter::once(("Shortcut sets", crate::cmd::shortcutset::EXTS)))
+         .chain(std::iter::once(("Scripts", crate::cmd::scripts::EXTS)))
+         .chain(plugin_filters())
+diff --git a/crates/engine/src/cmd/fileio/load.rs b/crates/engine/src/cmd/fileio/load.rs
+--- a/crates/engine/src/cmd/fileio/load.rs
++++ b/crates/engine/src/cmd/fileio/load.rs
+@@ -79,6 +79,7 @@ pub fn detect(name: &str, bytes: &[u8]) -> Option<&'static Format> {
+     if vectorcraft_svg::is_svgz(bytes) {
+         return format("svgz");
+     }
++    #[cfg(feature = "pdf")]
+     if vectorcraft_pdf::is_postscript(bytes) {
+         // PostScript (.eps, .ps, and .ai saved without PDF compatibility) by any name; .ai, .ait
+         // and .ps keep their meaning (a template, a PostScript file), read as PostScript all the
+@@ -165,6 +166,7 @@ pub fn load(name: &str, bytes: &[u8]) -> Result<Loaded> {
+ /// its artboard (its PDF part has only what is on the artboards), as an EPS of the editor is read.
+ /// Anything else as it was. `unit`: the size in points of a unit of the PDF part's user space (its
+ /// first page's `UserUnit`) → (document, warnings, whether its layers were read).
++#[cfg(feature = "pdf")]
+ fn through_editing_data(bytes: &[u8], opts: &LoadOptions, doc: Document, warnings: Vec<String>, unit: f64) -> (Document, Vec<String>, bool) {
+     if opts.pages.is_some() || !opts.layers || !opts.editing_data {
+         return (doc, warnings, false);
+@@ -191,6 +193,7 @@ fn through_editing_data(bytes: &[u8], opts: &LoadOptions, doc: Document, warning
+ /// A `.ai` saved without PDF compatibility (its PDF part is a placeholder page) from the editor's
+ /// own copy of its art alone: `None` when the file has none (or pages are picked, or layers or the
+ /// editing data are off), an error when it can't be read.
++#[cfg(feature = "pdf")]
+ fn from_editing_data_alone(bytes: &[u8], opts: &LoadOptions) -> Option<Result<(Document, Vec<String>)>> {
+     if opts.pages.is_some() || !opts.layers || !opts.editing_data {
+         return None;
+@@ -206,6 +209,7 @@ fn from_editing_data_alone(bytes: &[u8], opts: &LoadOptions) -> Option<Result<(D
+ /// error) from the editor's own copy of its art alone, as a file saved without PDF compatibility
+ /// is read, its first note saying why: `None` when pages are picked, layers or the editing data
+ /// are off, or the file has no editing data that reads. Its type is outlines when `opts` asks.
++#[cfg(feature = "pdf")]
+ fn without_pdf_part(bytes: &[u8], opts: &LoadOptions, e: &EngineError) -> Option<(Document, Vec<String>)> {
+     if opts.pages.is_some() || !opts.layers || !opts.editing_data {
+         return None;
+@@ -218,6 +222,7 @@ fn without_pdf_part(bytes: &[u8], opts: &LoadOptions, e: &EngineError) -> Option
+ 
+ /// Is `w` a note on the PDF part as a page, which says nothing was skipped: that the art off the
+ /// artboards is in the editing data alone, or that art past the page was clipped to it?
++#[cfg(feature = "pdf")]
+ fn is_page_note(w: &str) -> bool {
+     w == vectorcraft_pdf::OFF_ARTBOARD_NOTE || w == vectorcraft_pdf::PAST_PAGE_NOTE
+ }
+@@ -227,6 +232,7 @@ fn is_page_note(w: &str) -> bool {
+ /// flows through its frames (the editing data gives a story in its first frame), and the outlined
+ /// frames leave their threads. Each outline group keeps its type's transparency, opacity mask and
+ /// effects.
++#[cfg(feature = "pdf")]
+ pub(super) fn outlined_if_asked(mut doc: Document, warnings: Vec<String>, opts: &LoadOptions) -> (Document, Vec<String>) {
+     if opts.text_as != vectorcraft_pdf::TextAs::Outlines {
+         return (doc, warnings);
+@@ -253,6 +259,7 @@ pub(super) fn outlined_if_asked(mut doc: Document, warnings: Vec<String>, opts:
+ }
+ 
+ /// Does `doc` hold no art: only layers, with nothing in them?
++#[cfg(feature = "pdf")]
+ fn draws_nothing(doc: &Document) -> bool {
+     let mut art = false;
+     doc.walk(|n| art |= !n.is_layer());
+@@ -261,11 +268,13 @@ fn draws_nothing(doc: &Document) -> bool {
+ 
+ /// Is `e` the error of a file whose pages are only a placeholder
+ /// ([`vectorcraft_pdf::PdfError::PlaceholderOnly`])?
++#[cfg(feature = "pdf")]
+ pub(crate) fn is_placeholder(e: &EngineError) -> bool {
+     e.to_string() == vectorcraft_pdf::PdfError::PlaceholderOnly.to_string()
+ }
+ 
+ /// Do `opts` read every page of the PDF `bytes`: no `pages`, or a range that names each one?
++#[cfg(feature = "pdf")]
+ fn every_page(bytes: &[u8], opts: &LoadOptions) -> bool {
+     let Some(range) = &opts.pages else { return true };
+     vectorcraft_pdf::info(bytes, opts.password.as_deref()).is_ok_and(|i| parse_range(range, i.pages.len()).is_ok_and(|p| p.len() == i.pages.len()))
+@@ -277,6 +286,7 @@ fn every_page(bytes: &[u8], opts: &LoadOptions) -> bool {
+ /// editing copy alone → (document, notes, true). So too, read with `opts` but every page, for the
+ /// first page of a `.ai` or PDF whose PDF part can't be read and whose editing copy reads; the
+ /// error of any other page stays.
++#[cfg(feature = "pdf")]
+ pub(crate) fn page_or_editing_data(
+     name: &str,
+     bytes: &[u8],
+@@ -310,6 +320,7 @@ pub fn load_with(name: &str, bytes: &[u8], opts: &LoadOptions) -> Result<Loaded>
+     let mut editing_data = false;
+     let (mut doc, mut warnings, restored) = match format.id {
+         // EPS, .ps and PostScript .ai: the document our EPS files carry, else the PostScript read.
++        #[cfg(feature = "pdf")]
+         _ if matches!(format.id, "eps" | "ps") || vectorcraft_pdf::is_postscript(bytes) => {
+             let editing = vectorcraft_eps::has_native(bytes).then_some((true, || vectorcraft_eps::native(bytes)));
+             restore_or_import(editing, || {
+@@ -330,6 +341,7 @@ pub fn load_with(name: &str, bytes: &[u8], opts: &LoadOptions) -> Result<Loaded>
+             let folder = std::path::Path::new(name).parent().map(|f| f.to_string_lossy()).filter(|f| !f.is_empty()).map(|f| absolute_path(&f));
+             restore_or_import(editing, || import_svg(&text, folder.as_deref()))?
+         }
++        #[cfg(feature = "pdf")]
+         "pdf" | "ai" | "ait" => {
+             // Saved with Preserve Editing: the document it carries, unless some pages are picked.
+             let editing = opts
+@@ -393,6 +405,7 @@ pub fn load_with(name: &str, bytes: &[u8], opts: &LoadOptions) -> Result<Loaded>
+     };
+     // A PDF, `.ai` or `.ait` read from its pages or its editing copy, not restored from the document
+     // it carries, opens with the File Info it gives (a PostScript `.ai` gives none).
++    #[cfg(feature = "pdf")]
+     if matches!(format.id, "pdf" | "ai" | "ait")
+         && !restored
+         && let Some(info) = vectorcraft_pdf::file_info(bytes, opts.password.as_deref())
+@@ -804,10 +817,17 @@ pub(super) fn raster_doc(name: &str, bytes: &[u8]) -> Result<Document> {
+ }
+ 
+ /// Does this import note say that the file has something the document doesn't?
++#[cfg(feature = "pdf")]
+ fn is_loss(note: &str) -> bool {
+     note == vectorcraft_pdf::OFF_ARTBOARD_NOTE || vectorcraft_eps::is_loss(note)
+ }
+ 
++/// Without the PDF and PostScript readers no import note says so.
++#[cfg(not(feature = "pdf"))]
++fn is_loss(_note: &str) -> bool {
++    false
++}
++
+ /// Writing the file `target` for document `st`: not over the file `st` was read from when reading
+ /// it left something out (hidden text, art or layers), unless `p` has `acknowledgeLoss: true`.
+ /// Another name keeps the original file, with all it has.
+diff --git a/crates/engine/src/cmd/fileio/native.rs b/crates/engine/src/cmd/fileio/native.rs
+--- a/crates/engine/src/cmd/fileio/native.rs
++++ b/crates/engine/src/cmd/fileio/native.rs
+@@ -180,6 +180,7 @@ pub(super) fn encode_to(cmd: &str, f: &Format, doc: &Document, p: &Value, w: imp
+     if extras.preview {
+         so.preview = preview_png(&full)?;
+     }
++    #[cfg(feature = "pdf")]
+     if extras.pdf {
+         // Every artboard as PDF pages (no editing data: the file is the native document).
+         so.pdf = Some(super::pdf::encode(cmd, &full, &json!({ "range": "all", "preserveEditing": false }))?.0);
+diff --git a/crates/engine/src/cmd/fileio/pdfimport.rs b/crates/engine/src/cmd/fileio/pdfimport.rs
+--- a/crates/engine/src/cmd/fileio/pdfimport.rs
++++ b/crates/engine/src/cmd/fileio/pdfimport.rs
+@@ -4,6 +4,7 @@
+ 
+ use serde_json::{Value, json};
+ use vectorcraft_doc::{ColorMode, Document};
++#[cfg(feature = "pdf")]
+ use vectorcraft_pdf::{Choice, CropTo, ImportOptions, PdfError, TextAs};
+ 
+ use super::super::colormgmt::Grays;
+@@ -17,6 +18,7 @@ pub struct LoadOptions {
+     /// 1-based pages to import, such as `"2-3, 5"`; `None` = every page.
+     pub pages: Option<String>,
+     /// The box each page's artboard (or placed frame) gets.
++    #[cfg(feature = "pdf")]
+     pub crop: CropTo,
+     /// The password of an encrypted PDF.
+     pub password: Option<String>,
+@@ -26,6 +28,7 @@ pub struct LoadOptions {
+     /// How that conversion separates RGB greys (`grays`).
+     pub grays: Grays,
+     /// What a PDF's text becomes.
++    #[cfg(feature = "pdf")]
+     pub text_as: TextAs,
+     /// A PDF's optional content groups become layers (else one layer per page, without the art
+     /// that is off).
+@@ -45,10 +48,12 @@ impl Default for LoadOptions {
+     fn default() -> Self {
+         Self {
+             pages: None,
++            #[cfg(feature = "pdf")]
+             crop: CropTo::default(),
+             password: None,
+             color_mode: None,
+             grays: Grays::default(),
++            #[cfg(feature = "pdf")]
+             text_as: TextAs::default(),
+             layers: true,
+             dxf: Default::default(),
+@@ -71,6 +76,7 @@ impl LoadOptions {
+             Some(Value::Number(n)) => Some(n.to_string()),
+             Some(v) => return Err(bad(cmd, format!("pages must be a range such as \"2-3\" or a page number, not {v}"))),
+         };
++        #[cfg(feature = "pdf")]
+         let crop = choice(cmd, "cropTo", str_param(p, "cropTo").or_else(|| str_param(p, "crop")))?;
+         let password = str_param(p, "password").filter(|s| !s.is_empty()).map(str::to_string);
+         let color_mode = match str_param(p, "colorMode").map(str::to_ascii_lowercase).as_deref() {
+@@ -80,6 +86,7 @@ impl LoadOptions {
+             Some(m) => return Err(bad(cmd, format!("colorMode must be rgb or cmyk, not `{m}`"))),
+         };
+         let grays = Grays::param(cmd, p)?;
++        #[cfg(feature = "pdf")]
+         let text_as = choice(cmd, "textAs", str_param(p, "textAs"))?;
+         let layers = match p.get("layers").filter(|v| !v.is_null()) {
+             None => true,
+@@ -91,19 +98,36 @@ impl LoadOptions {
+             Some(v) => (v.as_bool().ok_or_else(|| bad(cmd, "editingData must be true, false or \"always\""))?, false),
+         };
+         let dxf = super::dxfimport::options(cmd, p.get("dxf"))?;
+-        Ok(Self { pages, crop, password, color_mode, grays, text_as, layers, dxf, editing_data, trust_editing_data })
++        Ok(Self {
++            pages,
++            #[cfg(feature = "pdf")]
++            crop,
++            password,
++            color_mode,
++            grays,
++            #[cfg(feature = "pdf")]
++            text_as,
++            layers,
++            dxf,
++            editing_data,
++            trust_editing_data,
++        })
+     }
+ 
+     /// Does the document read only part of the file, or read it differently (a page range, another
+     /// box, a password, without its hidden layers)? Writing it back would lose the rest, so Save
+     /// doesn't (it asks for a name).
+     pub fn is_partial(&self) -> bool {
+-        self.pages.is_some() || self.crop != CropTo::default() || self.password.is_some() || !self.layers
++        let partial = self.pages.is_some() || self.password.is_some() || !self.layers;
++        #[cfg(feature = "pdf")]
++        let partial = partial || self.crop != CropTo::default();
++        partial
+     }
+ 
+     /// The PDF import options: `pages` resolved against the file's page count. A PDF-compatible
+     /// `.ai`, or a PDF saved with its editing data, asked for its crop box opens on its trim boxes,
+     /// its editor's artboards, with the bleed round them (its crop box takes the bleed in).
++    #[cfg(feature = "pdf")]
+     fn import_options(&self, bytes: &[u8], editor_document: bool) -> Result<ImportOptions> {
+         let pages = match &self.pages {
+             None => None,
+@@ -126,6 +150,7 @@ impl LoadOptions {
+ }
+ 
+ /// The option of `T` named `id` (any case), for param `key`; not given: the default.
++#[cfg(feature = "pdf")]
+ fn choice<T: Choice + Default>(cmd: &str, key: &str, id: Option<&str>) -> Result<T> {
+     let Some(id) = id else { return Ok(T::default()) };
+     T::ALL
+@@ -138,12 +163,14 @@ fn choice<T: Choice + Default>(cmd: &str, key: &str, id: Option<&str>) -> Result
+ 
+ /// Import the pages `o` pick → the document, import notes and what else the import tells.
+ /// `editor_document`: a `.ai` file.
++#[cfg(feature = "pdf")]
+ pub(super) fn import(bytes: &[u8], o: &LoadOptions, editor_document: bool) -> Result<vectorcraft_pdf::ImportReport> {
+     vectorcraft_pdf::import_with_report(bytes, &o.import_options(bytes, editor_document)?).map_err(err)
+ }
+ 
+ /// Page `page` (0-based) of a PDF as a document of one artboard (its `o.crop` box) and one
+ /// layer of what it shows, with the same text choice as Open, and the import notes.
++#[cfg(feature = "pdf")]
+ pub fn page_document(bytes: &[u8], page: usize, o: &LoadOptions) -> Result<(Document, Vec<String>)> {
+     let opts = ImportOptions {
+         pages: Some(vec![page]),
+@@ -156,9 +183,11 @@ pub fn page_document(bytes: &[u8], page: usize, o: &LoadOptions) -> Result<(Docu
+     vectorcraft_pdf::import_with_report(bytes, &opts).map(|r| (r.document, r.warnings)).map_err(err)
+ }
+ 
++#[cfg(feature = "pdf")]
+ const INFO: &str = "document.pdfInfo";
+ 
+ /// `document.pdfInfo`.
++#[cfg(feature = "pdf")]
+ pub(super) fn pdf_info(_: &mut Session, p: &Value) -> Result<Value> {
+     let bytes = source(p, INFO)?.bytes;
+     let o = LoadOptions::from_params(INFO, p)?;
+@@ -193,6 +222,7 @@ pub(super) fn pdf_info(_: &mut Session, p: &Value) -> Result<Value> {
+ /// The page (0-based) `document.pdfInfo`'s `thumbnail` names, from 1 to `count`; `None` when it is
+ /// absent or null. Any other value (0, a negative or fractional number, a string) is an error that
+ /// names the pages the `what` has.
++#[cfg(feature = "pdf")]
+ fn thumbnail_page(p: &Value, count: usize, what: &str) -> Result<Option<usize>> {
+     let Some(v) = p.get("thumbnail").filter(|v| !v.is_null()) else { return Ok(None) };
+     let page = v.as_u64().and_then(|n| usize::try_from(n).ok()).and_then(|n| n.checked_sub(1)).filter(|i| *i < count);
+@@ -203,6 +233,7 @@ fn thumbnail_page(p: &Value, count: usize, what: &str) -> Result<Option<usize>>
+ /// page, the page [`vectorcraft_eps::page`] reads, with no PDF boxes. Its thumbnail is the file as
+ /// the EPS reader reads it without any editing data it carries: what the page prints, or the
+ /// file's preview when its PostScript can't be read.
++#[cfg(feature = "pdf")]
+ fn postscript_info(bytes: &[u8], p: &Value) -> Result<Value> {
+     let page = vectorcraft_eps::page(bytes).map_err(err)?;
+     let info = json!({"width": page.width(), "height": page.height(), "rotation": 0, "boxes": {}});
+@@ -216,6 +247,7 @@ fn postscript_info(bytes: &[u8], p: &Value) -> Result<Value> {
+ 
+ /// A PNG of `doc`'s first artboard, `thumbnailSize` px (default 160, from 16 to 1024) on its longer
+ /// side, base64.
++#[cfg(feature = "pdf")]
+ fn thumbnail(doc: &Document, p: &Value) -> Result<String> {
+     let size = f64_or(p, "thumbnailSize", 160.0).clamp(16.0, 1024.0);
+     let r = doc.artboards.first().map(|a| a.rect).ok_or_else(|| err("the page has no area"))?;
+diff --git a/crates/engine/src/cmd/fileio/save.rs b/crates/engine/src/cmd/fileio/save.rs
+--- a/crates/engine/src/cmd/fileio/save.rs
++++ b/crates/engine/src/cmd/fileio/save.rs
+@@ -21,7 +21,18 @@ use crate::{DocState, Prefs};
+ 
+ /// The formats Save As offers, in menu order (append-only). The other writable formats are exports:
+ /// they never become the document's own file.
+-pub const SAVE_FORMATS: &[&str] = &["vectorcraft", "template", "pdf", "svg", "svgz", "ai", "eps"];
++pub const SAVE_FORMATS: &[&str] = &[
++    "vectorcraft",
++    "template",
++    #[cfg(feature = "pdf")]
++    "pdf",
++    "svg",
++    "svgz",
++    #[cfg(feature = "pdf")]
++    "ai",
++    #[cfg(feature = "pdf")]
++    "eps",
++];
+ 
+ /// The formats Save as Template writes, the default first: a native template, or a
+ /// PDF-compatible `.ait` (written as a `.ai` file is).
+@@ -201,7 +212,7 @@ fn save_format_of(f: &str) -> std::result::Result<&'static Format, String> {
+             Err(format!("Save writes {}, not {}: use file.saveAsTemplate to write it", SAVE_FORMATS.join(", "), f.label))
+         }
+         Some(f) => Err(format!("Save writes {}, not {}: use document.export for other formats", SAVE_FORMATS.join(", "), f.label)),
+-        None => Err(format!("unknown format `{f}` (Save writes {})", SAVE_FORMATS.join(", "))),
++        None => Err(super::unsupported(f).map_or_else(|| format!("unknown format `{f}` (Save writes {})", SAVE_FORMATS.join(", ")), |u| u.hint.to_string())),
+     }
+ }
+ 
+@@ -234,6 +245,13 @@ pub fn save_plan(s: &Session, mode: SaveMode, p: &Value) -> Result<SavePlan> {
+     let cmd = mode.command();
+     let st = s.doc()?;
+     let path = str_param(p, "path").map(str::to_string);
++    // A path whose extension names a format that can't be written (DWG; PDF, .ai and EPS in a
++    // build without them) is not saved under that name in the document's format.
++    if str_param(p, "format").is_none()
++        && let Some(u) = path.as_deref().map(super::extension).and_then(|e| super::unsupported(&e))
++    {
++        return Err(bad(cmd, u.hint));
++    }
+     let format = match (mode, str_param(p, "format"), path.as_deref().and_then(format_for_name)) {
+         // `.ait` when the format or else the path's extension names it; else a native template.
+         (SaveMode::Template, f, by_name) => match f.map_or(by_name, format).filter(|f| TEMPLATE_FORMATS.contains(&f.id)) {
+@@ -427,7 +445,22 @@ fn range_text(picked: &[usize]) -> String {
+ /// Does a save in `f` read option `key`? PDF (and a .ai file, a PDF) also reads its General
+ /// settings (`createLayers`…) and presets. A save drops each option its format doesn't read.
+ pub fn reads_option(f: &Format, key: &str) -> bool {
+-    f.options.iter().any(|o| o.name == key) || (is_pdf(f) && (super::pdf::OPTIONS.iter().any(|o| o.name == key) || super::pdf::is_setting(key)))
++    #[cfg(feature = "pdf")]
++    if is_pdf(f) && (super::pdf::OPTIONS.iter().any(|o| o.name == key) || super::pdf::is_setting(key)) {
++        return true;
++    }
++    f.options.iter().any(|o| o.name == key)
++}
++
++/// A legacy `.ai` file (one per artboard) asked for? Without the PDF writer there is no `.ai`.
++fn legacy_ai_wanted(cmd: &str, f: &Format, p: &Value) -> Result<bool> {
++    #[cfg(feature = "pdf")]
++    return super::legacy_ai::wanted(cmd, f, p);
++    #[cfg(not(feature = "pdf"))]
++    {
++        let _ = (cmd, f, p);
++        Ok(false)
++    }
+ }
+ 
+ /// Formats that carry the whole native document: they lose nothing, and record links relative to
+@@ -520,7 +553,7 @@ impl<W: std::io::Write> std::io::Write for Counted<W> {
+ /// `separateArtboards`, those `range` names (default all).
+ fn separate_boards(cmd: &str, f: &Format, doc: &Document, p: &Value) -> Result<Vec<usize>> {
+     // A legacy .ai file is a file per artboard already.
+-    if !is_native(f) || f.id == "eps" || !bool_or(p, "separateArtboards", false) || super::legacy_ai::wanted(cmd, f, p)? {
++    if !is_native(f) || f.id == "eps" || !bool_or(p, "separateArtboards", false) || legacy_ai_wanted(cmd, f, p)? {
+         return Ok(vec![]);
+     }
+     let range = str_param(p, "range").filter(|r| !r.trim().is_empty()).map(str::to_string);
+@@ -586,6 +619,7 @@ fn named_for_save(cmd: &str, e: crate::EngineError) -> crate::EngineError {
+ 
+ /// The shared Save and Export encoder for PDF-compatible `.ai` files (and `.ait` templates, the
+ /// same file).
++#[cfg(feature = "pdf")]
+ pub(super) fn encode_ai(cmd: &str, f: &Format, doc: &Document, p: &Value) -> Result<Encoded> {
+     if super::legacy_ai::wanted(cmd, f, p)? {
+         return super::legacy_ai::encode(cmd, f, doc, p);
+@@ -670,8 +704,9 @@ fn job_for_stamped(s: &Session, st: &DocState, plan: SavePlan, stamped: Option<i
+         super::native::save_options(cmd, plan.format, &doc, &params).map_err(|e| named_for_save(cmd, e))?;
+     }
+     let boards = separate_boards(cmd, plan.format, &doc, &params)?;
++    #[cfg(feature = "pdf")]
+     let mut params = super::pdf::expand_preset(s, cmd, &params)?.into_owned();
+-    let legacy = super::legacy_ai::wanted(cmd, plan.format, &params)?;
++    let legacy = legacy_ai_wanted(cmd, plan.format, &params)?;
+     if let (Some(o), "ai" | "ait") = (params.as_object_mut(), plan.format.id) {
+         // Save keeps every artboard; exports may choose a subset instead. A legacy .ai file per
+         // artboard keeps a range given: the artboards to save.
+@@ -736,13 +771,15 @@ impl SaveJob {
+     fn encode_one(&self, doc: &Document) -> Result<Encoded> {
+         let (cmd, f) = (self.plan.mode.command(), self.plan.format);
+         let enc = match f.id {
++            #[cfg(feature = "pdf")]
+             "ai" | "ait" => encode_ai(cmd, f, doc, &self.params),
++            #[cfg(feature = "pdf")]
+             "eps" => super::eps::encode_save(doc, &self.params),
+             _ => encode_all(doc, f.id, &self.params),
+         }
+         .map_err(|e| named_for_save(cmd, e))?;
+         // A legacy .ai file per artboard.
+-        let per_artboard = f.id == "ai" && super::legacy_ai::wanted(cmd, f, &self.params)?;
++        let per_artboard = f.id == "ai" && legacy_ai_wanted(cmd, f, &self.params)?;
+         if enc.files.len() != 1 && !per_artboard {
+             return Err(bad(cmd, "Save writes one artboard: name one, or export several with document.export"));
+         }
+diff --git a/crates/engine/src/cmd/fileio/screens.rs b/crates/engine/src/cmd/fileio/screens.rs
+--- a/crates/engine/src/cmd/fileio/screens.rs
++++ b/crates/engine/src/cmd/fileio/screens.rs
+@@ -241,6 +241,7 @@ impl Row {
+         options.entry("preserveEditing").or_insert(json!(false));
+         let options = Value::Object(options);
+         // A PDF preset (built-in or saved) becomes its settings.
++        #[cfg(feature = "pdf")]
+         let options = if format.id == "pdf" { super::pdf::expand_preset(s, C, &options)?.into_owned() } else { options };
+         // Two rows that would write the same bytes under the same name are one file.
+         let key = format!("{}|{}|{suffix}|{options}", format.id, size.label());
+diff --git a/crates/engine/src/cmd/fileio/tests.rs b/crates/engine/src/cmd/fileio/tests.rs
+--- a/crates/engine/src/cmd/fileio/tests.rs
++++ b/crates/engine/src/cmd/fileio/tests.rs
+@@ -48,6 +48,7 @@ fn image_of(s: &Session) -> vectorcraft_doc::ImageObject {
+     }
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn opens_every_readable_format() {
+     let mut s = session(200.0, 100.0, 1);
+@@ -331,6 +332,7 @@ fn ccitt_group3_tiffs_too_large_or_cut_short_are_refused() {
+     assert!(e.to_string().contains("could not decode image: arithmetic overflow"), "{e}");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn content_beats_a_wrong_extension() {
+     let png = image_bytes(2, 2, image::ImageFormat::Png);
+@@ -341,6 +343,7 @@ fn content_beats_a_wrong_extension() {
+     assert!(detect("x.bin", b"nothing").is_none());
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn templates_open_untitled() {
+     let mut s = session(100.0, 100.0, 1);
+@@ -363,6 +366,7 @@ fn templates_open_untitled() {
+     let _ = std::fs::remove_dir_all(dir);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn open_exts_cover_every_readable_format() {
+     for f in FORMATS.iter().filter(|f| f.read) {
+@@ -394,6 +398,7 @@ fn library_open_filters_list_library_formats_first() {
+ 
+ /// The extensions usage texts list for export: one per writable format, each picking that format
+ /// (`.png` picks PNG; PNG-8 is asked for by `format`).
++#[cfg(feature = "pdf")]
+ #[test]
+ fn export_extensions_name_every_writable_format() {
+     let exts = export_extensions();
+@@ -426,6 +431,7 @@ fn export_extensions_name_every_writable_format() {
+     }
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn formats_query_lists_readers_writers_and_options() {
+     let mut s = Session::new();
+@@ -475,6 +481,7 @@ fn listed_formats(command: &str) -> Vec<String> {
+ 
+ /// The params texts of the commands that take any writable format list exactly the formats each
+ /// command writes (.ai among them).
++#[cfg(feature = "pdf")]
+ #[test]
+ fn export_params_list_every_format_the_command_writes() {
+     let mut s = session(100.0, 80.0, 1);
+@@ -504,10 +511,12 @@ fn ranges_parse_one_based() {
+ }
+ 
+ /// Pages in a PDF, counted by importing it (one artboard per page).
++#[cfg(feature = "pdf")]
+ fn pdf_pages(bytes: &[u8]) -> usize {
+     vectorcraft_pdf::import(bytes).unwrap().artboards.len()
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_export_honours_artboard_and_range() {
+     let mut s = session(100.0, 80.0, 3);
+@@ -578,6 +587,7 @@ fn raster_exports_leave_template_layers_out() {
+     assert!(r["bounds"][0].as_f64().unwrap() > 40.0, "only the blue square (and its stroke) is exported: {}", r["bounds"]);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn export_for_screens_one_page_per_pdf_unique_names() {
+     let mut s = session(100.0, 80.0, 3);
+@@ -625,6 +635,7 @@ fn template_sublayers_are_left_out_too() {
+     assert!(s.execute("document.exportSelection", &json!({"format": "png"})).is_err(), "nothing but template art is selected");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn export_for_screens_vector_rows_drop_scale_suffixes_and_names_ignore_case() {
+     let mut s = session(100.0, 80.0, 3);
+@@ -705,6 +716,7 @@ fn a_native_save_streams_the_bytes_the_encoder_makes() {
+ /// An option given beside the path (an SVG option flat or in `svg`) and in `options` with different
+ /// values is refused before anything is written; `compress`, `version` or `preview` beside the path of a format that doesn't
+ /// read it is named in the warnings.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_save_refuses_disagreeing_options_and_names_unread_native_ones() {
+     let d = tmp_dir("save-options");
+diff --git a/crates/engine/src/cmd/fileio/tests_affinity.rs b/crates/engine/src/cmd/fileio/tests_affinity.rs
+--- a/crates/engine/src/cmd/fileio/tests_affinity.rs
++++ b/crates/engine/src/cmd/fileio/tests_affinity.rs
+@@ -470,6 +470,7 @@ mod native {
+         assert!(r.warnings.iter().any(|w| w.contains("pressure points one document may hold")), "{:?}", r.warnings);
+     }
+ 
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn native_documents_save_reopen_export_place_and_template() {
+         let bytes = document(Method::Zstd);
+diff --git a/crates/engine/src/cmd/fileio/tests_artboard_fill.rs b/crates/engine/src/cmd/fileio/tests_artboard_fill.rs
+--- a/crates/engine/src/cmd/fileio/tests_artboard_fill.rs
++++ b/crates/engine/src/cmd/fileio/tests_artboard_fill.rs
+@@ -83,6 +83,7 @@ fn the_color_fills_its_artboard_alone_behind_the_art() {
+     assert_eq!(px(30, 30), [255, 255, 255, 255], "the art over it");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_and_svg_show_the_color_and_their_editing_data_keeps_it_as_the_artboards() {
+     let mut s = session();
+@@ -97,6 +98,7 @@ fn pdf_and_svg_show_the_color_and_their_editing_data_keeps_it_as_the_artboards()
+     assert_eq!(back.layers.len(), doc.layers.len(), "no art made of it");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn eps_and_postscript_print_draw_the_color() {
+     let mut s = session();
+diff --git a/crates/engine/src/cmd/fileio/tests_batch.rs b/crates/engine/src/cmd/fileio/tests_batch.rs
+--- a/crates/engine/src/cmd/fileio/tests_batch.rs
++++ b/crates/engine/src/cmd/fileio/tests_batch.rs
+@@ -32,6 +32,7 @@ fn names(r: &Value) -> Vec<String> {
+ 
+ /// The request in #1935: SVG, PNG, PDF and PDF with printer's marks for artboards 1–3, named
+ /// `COMPANY-Logo-<filename>-####-YYYYMMDD`, sorted into a folder per extension.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn the_logo_package_of_the_request() {
+     let mut s = session(4);
+@@ -136,6 +137,7 @@ fn layers_and_the_selection_are_exported_by_name() {
+ 
+ /// Document formats write each artboard as a document of its own: one artboard, its art and
+ /// not the other artboards' (#3868).
++#[cfg(feature = "pdf")]
+ #[test]
+ fn document_formats_write_one_artboard_each() {
+     let mut s = session(2);
+@@ -173,6 +175,7 @@ fn bad_batch_params_are_refused() {
+ 
+ /// Export presets: the built-in ones, saving (only what a preset keeps), using one under other
+ /// params, replacing, deleting, and keeping them with the preferences.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn export_presets_save_use_and_delete() {
+     let mut s = session(2);
+diff --git a/crates/engine/src/cmd/fileio/tests_dxf.rs b/crates/engine/src/cmd/fileio/tests_dxf.rs
+--- a/crates/engine/src/cmd/fileio/tests_dxf.rs
++++ b/crates/engine/src/cmd/fileio/tests_dxf.rs
+@@ -187,7 +187,7 @@ fn formats_list_dxf_and_what_can_not_be_written() {
+     }
+     assert!(r["writable"].as_array().unwrap().contains(&json!("dxf")));
+     let unsupported: Vec<&str> = r["unsupported"].as_array().unwrap().iter().map(|u| u["id"].as_str().unwrap()).collect();
+-    assert_eq!(unsupported, ["dwg", "pict", "pmd"]);
++    assert_eq!(unsupported[..3], ["dwg", "pict", "pmd"]);
+ }
+ 
+ #[test]
+diff --git a/crates/engine/src/cmd/fileio/tests_exportas.rs b/crates/engine/src/cmd/fileio/tests_exportas.rs
+--- a/crates/engine/src/cmd/fileio/tests_exportas.rs
++++ b/crates/engine/src/cmd/fileio/tests_exportas.rs
+@@ -25,6 +25,7 @@ fn tmp_dir(tag: &str) -> std::path::PathBuf {
+     d
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn use_artboards_writes_one_file_per_artboard_in_the_range() {
+     let mut s = session(60.0, 40.0, 5);
+@@ -79,6 +80,7 @@ fn bad_artboard_choices_error() {
+     }
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn without_artboards_the_export_covers_the_visible_art() {
+     let mut s = session(200.0, 100.0, 1);
+@@ -106,6 +108,7 @@ fn without_artboards_the_export_covers_the_visible_art() {
+     assert!(e.contains("no visible art"), "{e}");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn formats_list_use_artboards() {
+     let mut s = Session::new();
+diff --git a/crates/engine/src/cmd/fileio/tests_screens.rs b/crates/engine/src/cmd/fileio/tests_screens.rs
+--- a/crates/engine/src/cmd/fileio/tests_screens.rs
++++ b/crates/engine/src/cmd/fileio/tests_screens.rs
+@@ -77,6 +77,7 @@ fn a_width_or_height_row_gives_that_many_pixels() {
+     assert_eq!(names(&r), ["Artboard-1.svg"]);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn density_buckets_go_into_sub_folders() {
+     let mut s = session(2);
+@@ -125,6 +126,7 @@ fn a_prefix_or_suffix_writes_the_characters_windows_does_not_allow_as_dashes() {
+ /// A file or folder named after a Windows device (`CON`, `NUL`, `COM1`…, alone or before an
+ /// extension) gets a `-` after the device name, and a folder loses a trailing period, on every
+ /// platform.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn device_names_and_trailing_periods_follow_windows_naming_rules() {
+     let mut s = session(3);
+@@ -153,6 +155,7 @@ fn device_names_and_trailing_periods_follow_windows_naming_rules() {
+ /// every kind of folder, presets, size suffixes, a name pattern with its counter and date, an
+ /// export preset, a ZIP, Full Document, Include Bleed, assets, layers and the selection; and it
+ /// refuses what the export refuses.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn the_first_file_is_the_file_the_export_writes_first() {
+     let mut s = session(3);
+@@ -484,6 +487,7 @@ fn every_reply_says_once_when_an_image_could_not_be_decoded() {
+     let _ = std::fs::remove_dir_all(dir);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn type_in_a_missing_family_is_named_once_for_every_format() {
+     let mut s = session(2);
+@@ -494,6 +498,7 @@ fn type_in_a_missing_family_is_named_once_for_every_format() {
+     assert!(fallback[0].contains("Nonexistent Sans Probe"), "{fallback:?}");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn full_document_gives_one_file_per_format() {
+     let mut s = session(3);
+@@ -665,6 +670,7 @@ fn listed(text: &str, start: &str, end: char) -> Vec<String> {
+ 
+ /// The params text (a row's `format` and the keys of `settings`) and the refusal of a format a row
+ /// can't have list exactly the formats a row writes.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn the_params_and_the_refusal_list_every_format_a_row_writes() {
+     let mut s = session(1);
+@@ -692,6 +698,7 @@ fn the_params_and_the_refusal_list_every_format_a_row_writes() {
+     }
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn zip_downloads_round_trip() {
+     let mut s = session(2);
+@@ -915,6 +922,7 @@ fn the_document_remembers_its_export_settings() {
+ /// Export PDFs As › Single file: with several artboards, a PDF row writes them as the pages of one
+ /// file named after the document (raster rows still write a file per artboard); with one artboard
+ /// the PDF is that artboard's, as Multiple files writes it.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn single_file_pdfs_hold_every_chosen_artboard() {
+     let mut s = session(3);
+diff --git a/crates/engine/src/cmd/fonts.rs b/crates/engine/src/cmd/fonts.rs
+--- a/crates/engine/src/cmd/fonts.rs
++++ b/crates/engine/src/cmd/fonts.rs
+@@ -767,6 +767,7 @@ mod open_tests {
+         assert_eq!(inter["missingGlyphs"], 2, "雅 and 楽 come from a fallback font: {inter}");
+     }
+ 
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn export_warns_when_a_style_is_drawn_in_another_style() {
+         let mut s = Session::new();
+diff --git a/crates/engine/src/cmd/place.rs b/crates/engine/src/cmd/place.rs
+--- a/crates/engine/src/cmd/place.rs
++++ b/crates/engine/src/cmd/place.rs
+@@ -44,6 +44,7 @@ use serde_json::{Value, json};
+ use vectorcraft_color::Paint;
+ use vectorcraft_doc::{Appearance, Document, ImageObject, LinkInfo, Node, NodeId, NodeKind, PageBox, Scaling, SymbolBoxes};
+ use vectorcraft_geom::{Affine, Point, Rect, shapes};
++#[cfg(feature = "pdf")]
+ use vectorcraft_pdf::CropTo;
+ 
+ use super::fileio::{self, Format, RasterImage};
+@@ -141,6 +142,18 @@ pub(crate) fn pt_per_px(ppi: Option<(f64, f64)>) -> (f64, f64) {
+     (72.0 / x, 72.0 / y)
+ }
+ 
++/// Without the PDF reader, the box art is placed with: `crop` (the default, its artboard) or
++/// `bounding` (its bounds), from `cropTo` (or `crop`) → whether it is `bounding`.
++#[cfg(not(feature = "pdf"))]
++fn bounding(cmd: &str, p: &Value) -> Result<bool> {
++    match str_param(p, "cropTo").or_else(|| str_param(p, "crop")) {
++        None => Ok(false),
++        Some(c) if c.eq_ignore_ascii_case("crop") => Ok(false),
++        Some(c) if c.eq_ignore_ascii_case("bounding") => Ok(true),
++        Some(c) => Err(bad(cmd, format!("crop `{c}`: only PDF pages have art, trim, bleed and media boxes; use \"crop\" or \"bounding\""))),
++    }
++}
++
+ /// Is `bytes` an Affinity file? Never without the Affinity reader.
+ fn is_affinity(bytes: &[u8]) -> bool {
+     #[cfg(feature = "affinity")]
+@@ -205,14 +218,19 @@ fn load(p: &Value, cmd: &str, board: Option<Rect>, link_pdf: bool) -> Result<Loa
+         opts.dxf.fit_to = (b.width(), b.height());
+     }
+     // PostScript .ai files are read like EPS.
++    #[cfg(feature = "pdf")]
+     let pdf = matches!(format.id, "pdf" | "ai" | "ait") && !vectorcraft_pdf::is_postscript(&src.bytes);
++    #[cfg(feature = "pdf")]
+     if !pdf && !matches!(opts.crop, CropTo::Crop | CropTo::Bounding) {
+         return Err(bad(
+             cmd,
+             format!("crop `{}`: only PDF pages have art, trim, bleed and media boxes; use \"crop\" or \"bounding\"", opts.crop.id()),
+         ));
+     }
++    #[cfg(feature = "pdf")]
+     let crop = opts.crop != CropTo::Bounding;
++    #[cfg(not(feature = "pdf"))]
++    let crop = !bounding(cmd, p)?;
+     // A VectorCraft document: placed linked from its file, else as an editable copy.
+     if matches!(format.id, "vectorcraft" | "template") {
+         let page = page as u32;
+@@ -234,6 +252,7 @@ fn load(p: &Value, cmd: &str, board: Option<Rect>, link_pdf: bool) -> Result<Loa
+         let warnings = fileio::size_note(&img.blob.bytes).into_iter().collect();
+         return Ok(Loaded { name, format, art: Art::Image(img), natural, warnings, link, board: None });
+     }
++    #[cfg(feature = "pdf")]
+     if pdf {
+         // Linked: placed like a VectorCraft document, read again with the page's box only. A page
+         // asked for with a password or with its text as outlines is embedded.
+@@ -297,6 +316,7 @@ fn load(p: &Value, cmd: &str, board: Option<Rect>, link_pdf: bool) -> Result<Loa
+ /// compatibility is read from its editing data, as it opens, and placed as an EPS is: the art on
+ /// artboard `page`, its linked images found from its folder. So is page 1 of a .ai or PDF whose
+ /// PDF part can't be read.
++#[cfg(feature = "pdf")]
+ pub(crate) fn pdf_art(
+     src: &str,
+     bytes: &[u8],
+diff --git a/crates/engine/src/cmd/place/document.rs b/crates/engine/src/cmd/place/document.rs
+--- a/crates/engine/src/cmd/place/document.rs
++++ b/crates/engine/src/cmd/place/document.rs
+@@ -22,6 +22,7 @@ use vectorcraft_doc::links::hash_bytes;
+ use vectorcraft_doc::placed_document::{PREVIEW_MAX, PREVIEW_PX_PER_PT, key_for};
+ use vectorcraft_doc::{Document, ImageBlob, LinkInfo, Node, NodeKind, PageBox, PlacedDocument, PlacementOptions};
+ use vectorcraft_geom::{Affine, Rect};
++#[cfg(feature = "pdf")]
+ use vectorcraft_pdf::CropTo;
+ 
+ use super::super::fileio;
+@@ -40,14 +41,22 @@ pub(crate) fn is_native(name: &str, bytes: &[u8]) -> bool {
+ }
+ 
+ /// Is `name` with `bytes` a PDF, or a `.ai` or `.ait` file read as PDF pages (not PostScript)?
++#[cfg(feature = "pdf")]
+ pub(crate) fn is_pdf(name: &str, bytes: &[u8]) -> bool {
+     fileio::detect(name, bytes).is_some_and(|f| matches!(f.id, "pdf" | "ai" | "ait")) && !vectorcraft_pdf::is_postscript(bytes)
+ }
+ 
++/// Without the PDF reader no file is placed as PDF pages.
++#[cfg(not(feature = "pdf"))]
++pub(crate) fn is_pdf(_name: &str, _bytes: &[u8]) -> bool {
++    false
++}
++
+ /// The editing data of the `.ai` file `name` (`bytes`) when its PDF part is only a placeholder, or
+ /// can't be read:
+ /// the document its pages are read from ([`super::pdf_art`]), with the files it links. `None` for
+ /// other files.
++#[cfg(feature = "pdf")]
+ pub(crate) fn editing_data(name: &str, bytes: &[u8]) -> Option<Document> {
+     if !is_pdf(name, bytes) {
+         return None;
+@@ -60,6 +69,11 @@ pub(crate) fn editing_data(name: &str, bytes: &[u8]) -> Option<Document> {
+     }
+ }
+ 
++#[cfg(not(feature = "pdf"))]
++pub(crate) fn editing_data(_name: &str, _bytes: &[u8]) -> Option<Document> {
++    None
++}
++
+ /// The type the bytes of placed file `name` (`bytes`) are stored with: a PDF's format's, else
+ /// [`MIME`].
+ fn mime(name: &str, bytes: &[u8]) -> &'static str {
+@@ -68,6 +82,7 @@ fn mime(name: &str, bytes: &[u8]) -> &'static str {
+ 
+ /// The box of a PDF page placed linked for File › Place's `crop` (Bounding Box: the crop box,
+ /// the art's bounds being [`PlacedDocument::bounding`]).
++#[cfg(feature = "pdf")]
+ pub(crate) fn page_box(crop: CropTo) -> PageBox {
+     match crop {
+         CropTo::Art => PageBox::Art,
+@@ -79,6 +94,7 @@ pub(crate) fn page_box(crop: CropTo) -> PageBox {
+ }
+ 
+ /// The `crop` a PDF page placed linked showing `b` is read with.
++#[cfg(feature = "pdf")]
+ fn crop_to(b: PageBox) -> CropTo {
+     match b {
+         PageBox::Crop => CropTo::Crop,
+@@ -123,6 +139,7 @@ pub(crate) fn document_art(
+     if bytes.len() > MAX_FILE {
+         return Err(bad(cmd, format!("`{file}` is over {} MB", MAX_FILE >> 20)));
+     }
++    #[cfg(feature = "pdf")]
+     if pdf {
+         let o = fileio::LoadOptions { crop: crop_to(page_box), ..Default::default() };
+         return super::pdf_art(name, bytes, path, page as usize, o, bounding, cmd);
+diff --git a/crates/engine/src/cmd/rasterfx.rs b/crates/engine/src/cmd/rasterfx.rs
+--- a/crates/engine/src/cmd/rasterfx.rs
++++ b/crates/engine/src/cmd/rasterfx.rs
+@@ -626,12 +626,14 @@ fn flatten(doc: &Document, report: &mut FlattenReport) -> Option<Document> {
+ }
+ 
+ /// PDF bytes for `doc`, with raster effects rendered as images.
++#[cfg(feature = "pdf")]
+ pub fn export_pdf(doc: &Document, opts: &vectorcraft_pdf::PdfOptions) -> std::result::Result<Vec<u8>, vectorcraft_pdf::PdfError> {
+     export_pdf_with_report(doc, opts).map(|r| r.bytes)
+ }
+ 
+ /// Like [`export_pdf`], also returning the writer's warnings (options not applied yet, features
+ /// approximated or left out).
++#[cfg(feature = "pdf")]
+ pub fn export_pdf_with_report(
+     doc: &Document,
+     opts: &vectorcraft_pdf::PdfOptions,
+@@ -652,6 +654,7 @@ mod tests {
+ 
+     use crate::Session;
+ 
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn settings_and_pdf_flattening() {
+         let mut s = Session::new();
+diff --git a/crates/engine/src/cmd/threads/tests.rs b/crates/engine/src/cmd/threads/tests.rs
+--- a/crates/engine/src/cmd/threads/tests.rs
++++ b/crates/engine/src/cmd/threads/tests.rs
+@@ -692,6 +692,7 @@ fn first_line(s: &Session, id: u64) -> (bool, f64, usize) {
+ /// in: the frame it continues into starts at its left indent, without the bullet. Re-flowing,
+ /// saving and opening keep it. In a frame that is no longer threaded and in a copy of a frame,
+ /// the first paragraph has its first-line indent and bullet.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_paragraph_continued_into_the_next_frame_starts_it_without_its_first_line_indent_or_bullet() {
+     let (mut s, a, b) = setup();
+@@ -987,6 +988,7 @@ fn a_thread_takes_its_first_frames_optical_margin_alignment() {
+ 
+ /// A file saved with the frames of one thread set differently opens with the first frame's
+ /// setting in every frame: a native file, and an EPS file restored from the document it carries.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_thread_saved_with_differing_frames_opens_with_the_first_frames_setting() {
+     let (mut s, a, b) = quoted_thread();
+diff --git a/crates/engine/src/cmd/typecmd.rs b/crates/engine/src/cmd/typecmd.rs
+--- a/crates/engine/src/cmd/typecmd.rs
++++ b/crates/engine/src/cmd/typecmd.rs
+@@ -1410,6 +1410,7 @@ mod ruby_tests {
+ 
+     /// Ruby is written to SVG and PDF with its text: SVG outlines the type where ruby is present
+     /// (a reader's `<text>` can't place the reading), PDF differs when the ruby is there.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn ruby_reaches_svg_and_pdf_exports() {
+         let (mut s, _) = session_with_text();
+diff --git a/crates/engine/src/lib.rs b/crates/engine/src/lib.rs
+--- a/crates/engine/src/lib.rs
++++ b/crates/engine/src/lib.rs
+@@ -30,7 +30,9 @@ pub use cmd::create::constrain_click;
+ pub use cmd::distortcmds::perspective_click;
+ pub use cmd::params::{check_keys, check_params};
+ pub use cmd::pathops::auto_simplify_level;
+-pub use cmd::rasterfx::{export_pdf, flatten_raster_effects};
++#[cfg(feature = "pdf")]
++pub use cmd::rasterfx::export_pdf;
++pub use cmd::rasterfx::flatten_raster_effects;
+ pub use cmd::{CommandInfo, CommandSpec, command_specs, find_command};
+ pub use cmd::{EyedropperOptions, PathfinderOptions};
+ pub use journal::Journal;
+diff --git a/crates/engine/src/prefs.rs b/crates/engine/src/prefs.rs
+--- a/crates/engine/src/prefs.rs
++++ b/crates/engine/src/prefs.rs
+@@ -244,6 +244,7 @@ pub struct Prefs {
+     pub recent_new_docs: Vec<cmd::newdoc::DocSettings>,
+     /// Edit → PDF Presets: the user's presets (the built-in ones aren't stored). A local library,
+     /// not a Preferences dialog field: resetting the preferences keeps it; `pdf.preset.*` edit it.
++    #[cfg(feature = "pdf")]
+     #[serde(skip_serializing_if = "Vec::is_empty")]
+     pub pdf_presets: Vec<vectorcraft_pdf::PdfPreset>,
+     /// File → Export for Screens: the user's batch export presets (`document.exportPresets.*`;
+@@ -273,6 +274,7 @@ pub struct Prefs {
+     pub web_export_settings: Option<cmd::webexport::WebSettings>,
+     /// Edit → Print Presets: the user's presets ([Default] isn't stored). A local library, not a
+     /// Preferences dialog field: resetting the preferences keeps it; `print.presets.*` edit it.
++    #[cfg(feature = "pdf")]
+     #[serde(skip_serializing_if = "Vec::is_empty")]
+     pub print_presets: Vec<cmd::printpresets::PrintPreset>,
+     /// Constrain Width and Height Proportions: the link between W and H in the Transform panel,
+@@ -461,6 +463,7 @@ impl Default for Prefs {
+             color_themes: vec![],
+             new_doc_presets: vec![],
+             recent_new_docs: vec![],
++            #[cfg(feature = "pdf")]
+             pdf_presets: vec![],
+             screen_export_presets: vec![],
+             templates_folder: String::new(),
+@@ -469,6 +472,7 @@ impl Default for Prefs {
+             web_export_presets: vec![],
+             native_save_options: serde_json::Map::new(),
+             web_export_settings: None,
++            #[cfg(feature = "pdf")]
+             print_presets: vec![],
+             constrain_proportions: false,
+             single_corner_radius: true,
+diff --git a/crates/engine/src/store.rs b/crates/engine/src/store.rs
+--- a/crates/engine/src/store.rs
++++ b/crates/engine/src/store.rs
+@@ -22,9 +22,11 @@
+ use std::io::Read;
+ use std::path::{Path, PathBuf};
+ 
++#[cfg(feature = "pdf")]
+ use vectorcraft_pdf::{PdfPreset, builtin_preset};
+ 
+ use crate::Session;
++#[cfg(feature = "pdf")]
+ use crate::cmd::pdfcmds::{PRESET_FORMAT, PresetFile};
+ 
+ /// Files read from one store folder, at most (the rest are ignored).
+@@ -120,6 +122,7 @@ fn take(dir: &Path, file: &str) {
+ impl Session {
+     /// Keep the PDF presets this session saves in `dir`, and take the ones already there as the
+     /// saved presets (see the module docs). Call it once, after the preferences were restored.
++    #[cfg(feature = "pdf")]
+     pub fn attach_pdf_preset_store(&mut self, dir: PathBuf) {
+         if dir.is_dir() {
+             self.prefs.pdf_presets = load_presets(&dir);
+@@ -137,6 +140,7 @@ impl Session {
+     /// succeeded: after a failed write the store still holds the preset under its old name. When
+     /// the two names differ only in case, the old file is written and then renamed to the new name;
+     /// when that rename fails, the old file gets its content back. Without a store, nothing happens.
++    #[cfg(feature = "pdf")]
+     pub(crate) fn store_pdf_preset(&self, old_name: Option<&str>, preset: &PdfPreset) {
+         let Some(dir) = &self.pdf_preset_dir else { return };
+         let mut clean = preset.clone();
+@@ -177,6 +181,7 @@ impl Session {
+     }
+ 
+     /// Remove the preset `name` from the store.
++    #[cfg(feature = "pdf")]
+     pub(crate) fn unstore_pdf_preset(&self, name: &str) {
+         if let Some(dir) = &self.pdf_preset_dir {
+             take(dir, &format!("{}.{PRESET_FORMAT}", file_stem(name)));
+@@ -260,6 +265,7 @@ impl Session {
+ 
+ /// The presets of the files in `dir`: valid ones only, no name twice (any case), none called like a
+ /// built-in preset, at most [`MAX_STORE_FILES`].
++#[cfg(feature = "pdf")]
+ fn load_presets(dir: &Path) -> Vec<PdfPreset> {
+     let mut presets: Vec<PdfPreset> = vec![];
+     for path in list_files(dir, PRESET_FORMAT) {
+diff --git a/crates/engine/src/tests.rs b/crates/engine/src/tests.rs
+--- a/crates/engine/src/tests.rs
++++ b/crates/engine/src/tests.rs
+@@ -78,6 +78,7 @@ mod labspots;
+ pub(super) mod large_edits;
+ mod layerclip;
+ mod layers;
++#[cfg(feature = "pdf")]
+ mod legacy_ai;
+ mod library;
+ mod link_paths;
+@@ -108,9 +109,13 @@ mod params;
+ mod pathops;
+ mod pathtype;
+ mod pattern;
++#[cfg(feature = "pdf")]
+ mod pdffidelity;
++#[cfg(feature = "pdf")]
+ mod pdfmarks;
++#[cfg(feature = "pdf")]
+ mod pdfpresets;
++#[cfg(feature = "pdf")]
+ mod pdfraster;
+ mod persp_planes;
+ pub(super) mod persp_select;
+@@ -122,11 +127,17 @@ mod placed_document;
+ mod plugins;
+ mod prefs;
+ mod previewbounds;
++#[cfg(feature = "pdf")]
+ mod print;
++#[cfg(feature = "pdf")]
+ mod printadvanced;
++#[cfg(feature = "pdf")]
+ mod printpresets;
++#[cfg(feature = "pdf")]
+ mod printpreview;
++#[cfg(feature = "pdf")]
+ mod printps;
++#[cfg(feature = "pdf")]
+ mod printtiling;
+ mod proxyitems;
+ mod puppetwarp;
+diff --git a/crates/engine/src/tests/areafit.rs b/crates/engine/src/tests/areafit.rs
+--- a/crates/engine/src/tests/areafit.rs
++++ b/crates/engine/src/tests/areafit.rs
+@@ -498,6 +498,7 @@ fn export_overflow(s: &mut Session, format: &str, options: Value) -> Vec<String>
+     v["warnings"].as_array().unwrap().iter().filter_map(Value::as_str).filter(over).map(str::to_string).collect()
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn exports_that_draw_type_name_the_type_that_does_not_fit() {
+     let mut s = session();
+@@ -523,6 +524,7 @@ fn exports_that_draw_type_name_the_type_that_does_not_fit() {
+     }
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn exports_name_only_the_type_on_the_artboards_and_layers_they_draw() {
+     let mut s = Session::new();
+diff --git a/crates/engine/src/tests/assets.rs b/crates/engine/src/tests/assets.rs
+--- a/crates/engine/src/tests/assets.rs
++++ b/crates/engine/src/tests/assets.rs
+@@ -292,6 +292,7 @@ fn export_for_screens_writes_chosen_assets_and_keeps_its_rules() {
+     assert!(s.execute("assets.export", &json!({})).is_err());
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[cfg(not(target_arch = "wasm32"))]
+ #[test]
+ fn assets_export_into_a_folder() {
+diff --git a/crates/engine/src/tests/brushsym.rs b/crates/engine/src/tests/brushsym.rs
+--- a/crates/engine/src/tests/brushsym.rs
++++ b/crates/engine/src/tests/brushsym.rs
+@@ -606,6 +606,7 @@ fn pressure_of(s: &Session, id: NodeId) -> Option<vectorcraft_doc::PressureProfi
+ 
+ /// #852: the Paintbrush records the pen pressure on the stroke, the brush draws it, and it lasts
+ /// through saving and every export; a mouse stroke records none.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn paintbrush_records_pen_pressure_on_the_stroke() {
+     let mut s = session();
+diff --git a/crates/engine/src/tests/build.rs b/crates/engine/src/tests/build.rs
+--- a/crates/engine/src/tests/build.rs
++++ b/crates/engine/src/tests/build.rs
+@@ -661,6 +661,7 @@ fn gradient_ends(p: &Paint) -> Option<([f32; 3], [f32; 3])> {
+     Some((g.gradient.stops.first()?.color.to_rgb(), g.gradient.stops.last()?.color.to_rgb()))
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn shape_builder_cuts_gradient_shapes_from_a_pdf_along_their_outlines() {
+     // Two overlapping diamonds (x 100–300 and 200–400, y 40–160), each written as gradient-filled
+diff --git a/crates/engine/src/tests/cancel.rs b/crates/engine/src/tests/cancel.rs
+--- a/crates/engine/src/tests/cancel.rs
++++ b/crates/engine/src/tests/cancel.rs
+@@ -20,6 +20,7 @@ fn revision(s: &Session) -> u64 {
+     s.doc().unwrap().revision
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_pdf_export_cancelled_between_pages_stops_writes_nothing_and_changes_nothing() {
+     let path = vectorcraft_testkit::temp_dir("cancel-pdf").join("out.pdf");
+@@ -53,6 +54,7 @@ fn a_pdf_export_cancelled_between_pages_stops_writes_nothing_and_changes_nothing
+     assert!(path.exists());
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_cancelled_flattening_export_stops_before_the_pages() {
+     let mut s = session(2);
+@@ -64,6 +66,7 @@ fn a_cancelled_flattening_export_stops_before_the_pages() {
+     assert!(s.execute("document.exportPdf", &json!({"standard": "pdfX1a"})).is_ok());
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn raster_exports_and_svg_stop_when_cancelled_too() {
+     let dir = vectorcraft_testkit::temp_dir("cancel-formats");
+@@ -80,6 +83,7 @@ fn raster_exports_and_svg_stop_when_cancelled_too() {
+     }
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn nothing_is_cancelled_outside_a_scope() {
+     let token = CancelToken::new();
+diff --git a/crates/engine/src/tests/clip.rs b/crates/engine/src/tests/clip.rs
+--- a/crates/engine/src/tests/clip.rs
++++ b/crates/engine/src/tests/clip.rs
+@@ -70,6 +70,7 @@ fn art_and_donut(s: &mut Session) -> (NodeId, NodeId) {
+     (art, donut)
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn compound_clip_keeps_its_hole_and_release_gives_the_compound_back() {
+     let mut s = session();
+@@ -97,6 +98,7 @@ fn compound_clip_keeps_its_hole_and_release_gives_the_compound_back() {
+     assert!(opaque(&render(&s), 50, 50), "nothing clips any more");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn text_on_top_clips_by_its_glyphs() {
+     let mut s = session();
+@@ -149,6 +151,7 @@ const SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height
+ <g clip-path="url(#star)"><rect x="40" y="45" width="60" height="55" fill="#000"/></g>
+ </svg>"##;
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn imported_multi_shape_and_even_odd_clip_paths_clip() {
+     let mut s = Session::new();
+diff --git a/crates/engine/src/tests/clipflavours.rs b/crates/engine/src/tests/clipflavours.rs
+--- a/crates/engine/src/tests/clipflavours.rs
++++ b/crates/engine/src/tests/clipflavours.rs
+@@ -68,6 +68,7 @@ fn exported_png_of_a_red_square_is_red() {
+     }
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn exported_pdf_pastes_back_as_vectors() {
+     let mut s = session();
+@@ -97,6 +98,7 @@ fn exported_pdf_pastes_back_as_vectors() {
+     assert!(t.execute("clipboard.importPdf", &json!({})).is_err());
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn the_png_and_pdf_say_when_an_image_or_a_font_is_missing() {
+     const NOTE: &str = "an image couldn't be decoded and is missing from the picture";
+@@ -246,6 +248,7 @@ fn copied_svgz_files_paste_as_svg() {
+     assert!((b.width() - 40.0).abs() < 1e-6 && (b.height() - 40.0).abs() < 1e-6, "{b:?}");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn copied_files_paste_by_their_content() {
+     let mut s = session();
+@@ -269,6 +272,7 @@ fn copied_files_paste_by_their_content() {
+     assert_eq!(file_flavour("art.svg", svg, &[BITMAP]), None);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn copied_ai_files_paste_as_the_pdf_or_postscript_inside() {
+     let mut s = session();
+@@ -325,6 +329,7 @@ fn type_only_copies_offer_their_text() {
+     assert!(run(&mut s, "clipboard.exportText", json!({}))["text"].is_null());
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn copy_offers_flavours_by_the_preferences() {
+     let mut s = session();
+diff --git a/crates/engine/src/tests/clippaint.rs b/crates/engine/src/tests/clippaint.rs
+--- a/crates/engine/src/tests/clippaint.rs
++++ b/crates/engine/src/tests/clippaint.rs
+@@ -47,6 +47,7 @@ fn assert_painted(doc: &Document, what: &str) {
+     assert_eq!(rgb(doc, 30), [255, 255, 255], "{what}: outside the clip and its stroke");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_clipping_paths_fill_and_stroke_show_in_render_svg_and_pdf() {
+     let (s, group, clip) = painted_clip();
+diff --git a/crates/engine/src/tests/colorize.rs b/crates/engine/src/tests/colorize.rs
+--- a/crates/engine/src/tests/colorize.rs
++++ b/crates/engine/src/tests/colorize.rs
+@@ -335,6 +335,7 @@ fn proxy_invert_recolors_a_colorized_image_and_another_fill_in_one_undo_step() {
+     assert_eq!(s.doc().unwrap().doc.node(shape).unwrap().appearance.fill().unwrap().paint.color(), Some(Color::rgb8(0, 0, 255)));
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn colorized_gray_image_is_flattened_for_pdf_13() {
+     let mut s = session();
+@@ -359,6 +360,7 @@ fn colorized_gray_image_is_flattened_for_pdf_13() {
+     assert!(!String::from_utf8_lossy(&bytes).contains("/SMask"), "PDF 1.3 has no soft mask");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn colorized_gray_image_is_flattened_for_pdf_x_1a() {
+     let mut s = session();
+@@ -370,6 +372,7 @@ fn colorized_gray_image_is_flattened_for_pdf_x_1a() {
+     assert!(!String::from_utf8_lossy(&bytes).contains("/SMask"), "PDF/X-1a has no soft mask");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn colorized_gray_image_is_omitted_from_legacy_ai_when_requested() {
+     let mut s = session();
+@@ -379,6 +382,7 @@ fn colorized_gray_image_is_omitted_from_legacy_ai_when_requested() {
+     assert!(out["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("are left out")), "{}", out["warnings"]);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn eps_export_writes_a_colorized_image_in_its_spot_ink_without_flattening() {
+     let mut s = session();
+@@ -397,6 +401,7 @@ fn eps_export_writes_a_colorized_image_in_its_spot_ink_without_flattening() {
+     assert!(out["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("transparency is flattened")), "{}", out["warnings"]);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn eps_export_still_flattens_a_colorize_paint_on_a_color_image() {
+     let mut s = session();
+diff --git a/crates/engine/src/tests/colormgmt.rs b/crates/engine/src/tests/colormgmt.rs
+--- a/crates/engine/src/tests/colormgmt.rs
++++ b/crates/engine/src/tests/colormgmt.rs
+@@ -333,12 +333,14 @@ fn has_cmyk_op(pdf: &str) -> bool {
+     toks.windows(5).any(|w| (w[4] == "k" || w[4] == "K") && w[..4].iter().all(|t| t.parse::<f32>().is_ok()))
+ }
+ 
++#[cfg(feature = "pdf")]
+ fn pdf_text(doc: &Document) -> String {
+     let bytes =
+         vectorcraft_pdf::export(doc, &vectorcraft_pdf::PdfOptions { created: Some(0), ..vectorcraft_pdf::PdfOptions::uncompressed() }).unwrap();
+     String::from_utf8_lossy(&bytes).into_owned()
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_cmyk_document_writes_device_cmyk() {
+     let _g = GLOBAL.lock().unwrap_or_else(|e| e.into_inner());
+@@ -357,6 +359,7 @@ fn pdf_cmyk_document_writes_device_cmyk() {
+     assert!(has_cmyk_op(&pdf_text(&d)));
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_spot_colour_is_a_separation() {
+     let _g = GLOBAL.lock().unwrap_or_else(|e| e.into_inner());
+diff --git a/crates/engine/src/tests/colourfonts.rs b/crates/engine/src/tests/colourfonts.rs
+--- a/crates/engine/src/tests/colourfonts.rs
++++ b/crates/engine/src/tests/colourfonts.rs
+@@ -31,6 +31,7 @@ fn not_embeddable(mut font: Vec<u8>) -> Vec<u8> {
+ }
+ 
+ /// The fills of `pdf`'s art read back, and where each is.
++#[cfg(feature = "pdf")]
+ fn fills_of(pdf: &[u8]) -> Vec<(vectorcraft_color::Paint, vectorcraft_geom::Rect)> {
+     let back = vectorcraft_pdf::import_with_report(pdf, &vectorcraft_pdf::ImportOptions::default()).unwrap().document;
+     let mut fills = vec![];
+@@ -80,6 +81,7 @@ fn create_outlines_turns_svg_glyphs_into_groups() {
+ 
+ /// In a PDF with real text, an SVG glyph is text like any other (selectable, searchable), which
+ /// draws nothing itself, and its art is drawn where it sits: no outline of the font's covers it.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_real_text_draws_svg_glyphs_as_art_and_keeps_their_characters() {
+     let _fonts = crate::adding_fonts();
+@@ -114,6 +116,7 @@ fn pdf_real_text_draws_svg_glyphs_as_art_and_keeps_their_characters() {
+ 
+ /// An SVG glyph whose document holds no art for it keeps its outline in PDF real text too (its
+ /// text draws nothing, as SVG glyphs' do).
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_real_text_draws_the_outline_of_an_svg_glyph_without_art() {
+     let _fonts = crate::adding_fonts();
+@@ -127,6 +130,7 @@ fn pdf_real_text_draws_the_outline_of_an_svg_glyph_without_art() {
+ }
+ 
+ /// In a font that may not be embedded, an SVG glyph's art is drawn once.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_draws_an_svg_glyphs_art_once_when_its_font_cant_be_embedded() {
+     let _fonts = crate::adding_fonts();
+@@ -181,6 +185,7 @@ fn the_canvas_draws_svg_glyphs_as_their_art() {
+ 
+ /// Expand Appearance of type with an effect keeps its emoji as images, their pixels taken into
+ /// the document; the PDF of the type before expanding draws them too.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn expand_appearance_keeps_the_emoji_of_type_with_effects() {
+     let _fonts = crate::adding_fonts();
+diff --git a/crates/engine/src/tests/containers.rs b/crates/engine/src/tests/containers.rs
+--- a/crates/engine/src/tests/containers.rs
++++ b/crates/engine/src/tests/containers.rs
+@@ -211,6 +211,7 @@ fn new_image_fills_and_strokes_go_below_the_image() {
+     assert!(node(&s, im).appearance.items[2].is_fill());
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn an_images_stroke_with_outline_object_draws_exports_and_expands_along_its_frame() {
+     let mut s = session();
+diff --git a/crates/engine/src/tests/envelope.rs b/crates/engine/src/tests/envelope.rs
+--- a/crates/engine/src/tests/envelope.rs
++++ b/crates/engine/src/tests/envelope.rs
+@@ -223,6 +223,7 @@ fn envelope_options_round_trip_natively_and_old_files_load() {
+ 
+ /// Regression: every exporter wrote type inside an envelope undistorted (no text outliner), so a
+ /// warped line of type exported the same whatever its bend.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn enveloped_type_exports_distorted_in_every_format() {
+     let mut s = session();
+diff --git a/crates/engine/src/tests/file.rs b/crates/engine/src/tests/file.rs
+--- a/crates/engine/src/tests/file.rs
++++ b/crates/engine/src/tests/file.rs
+@@ -79,6 +79,7 @@ fn save_and_open_path() {
+     let _ = std::fs::remove_dir_all(dir);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_roundtrip_through_engine() {
+     let mut s = session();
+@@ -512,6 +513,7 @@ fn export_selection_crops_a_brushed_path_to_its_visual_bounds() {
+ 
+ /// A selection export reports the encoder's warnings like a whole-document export, and an empty
+ /// list when nothing was approximated.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn export_selection_reports_the_encoders_warnings() {
+     let mut s = session();
+@@ -579,6 +581,7 @@ fn raster_export_too_large_is_an_error_not_a_crash() {
+ 
+ /// Japanese file and folder names save, open, export and title documents as typed: the native
+ /// format, SVG, PNG and PDF, in a folder with a Japanese name too.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn japanese_file_names_save_open_and_export() {
+     let mut s = session();
+diff --git a/crates/engine/src/tests/fileinfo.rs b/crates/engine/src/tests/fileinfo.rs
+--- a/crates/engine/src/tests/fileinfo.rs
++++ b/crates/engine/src/tests/fileinfo.rs
+@@ -135,6 +135,7 @@ fn inspect_and_open_report_the_file_info_title_beside_the_file_name() {
+     let _ = std::fs::remove_dir_all(dir);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_info_carries_author_subject_and_keywords() {
+     let mut s = session();
+@@ -149,6 +150,7 @@ fn pdf_info_carries_author_subject_and_keywords() {
+     assert!(text.contains("<dc:creator>") && text.contains("Ada Lovelace"));
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn an_exported_pdf_opens_with_its_file_info() {
+     let mut s = session();
+@@ -167,6 +169,7 @@ fn an_exported_pdf_opens_with_its_file_info() {
+     assert_eq!(back["copyrightUrl"], "https://example.com/rights");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_pdf_compatible_ai_carries_the_copyright() {
+     let mut s = session();
+@@ -202,6 +205,7 @@ fn pdf_date(t: i64) -> String {
+ /// Check that a PDF or PDF-compatible `.ai` was created at a time in `created` and modified at a
+ /// time in `modified`: in the XMP packet (`vectorcraft_pdf::file_info`) and in the document
+ /// information dictionary.
++#[cfg(feature = "pdf")]
+ fn assert_dated(bytes: &[u8], created: std::ops::RangeInclusive<i64>, modified: std::ops::RangeInclusive<i64>) {
+     let xmp = vectorcraft_pdf::file_info(bytes, None).expect("a PDF");
+     assert!(xmp.created.is_some_and(|t| created.contains(&t)), "xmp:CreateDate {:?} in {created:?}", xmp.created);
+@@ -222,6 +226,7 @@ fn written<T>(f: impl FnOnce() -> T) -> (T, std::ops::RangeInclusive<i64>) {
+     (out, before..=vectorcraft_doc::metadata::output_time().unwrap())
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn an_exported_pdf_is_created_with_the_document_and_modified_when_it_is_written() {
+     let mut s = created_at(json!(CREATED));
+@@ -233,6 +238,7 @@ fn an_exported_pdf_is_created_with_the_document_and_modified_when_it_is_written(
+     assert_dated(&pdf, CREATED..=CREATED, now);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_pdf_compatible_ai_is_created_with_the_document_and_modified_when_it_is_written() {
+     let mut s = created_at(json!(CREATED));
+@@ -245,6 +251,7 @@ fn a_pdf_compatible_ai_is_created_with_the_document_and_modified_when_it_is_writ
+     assert_eq!(s.doc().unwrap().doc.metadata.created, Some(CREATED), "the save keeps the creation date");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_pdf_of_a_document_without_a_creation_date_is_dated_when_it_is_written() {
+     let mut s = created_at(Value::Null);
+@@ -255,6 +262,7 @@ fn a_pdf_of_a_document_without_a_creation_date_is_dated_when_it_is_written() {
+     assert_eq!(xmp.created, xmp.modified, "created and modified at the same time of writing");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_pdf_compatible_ai_opens_with_the_file_info_of_its_xmp_packet() {
+     use vectorcraft_testkit::pdf::{PdfPage, first_extra, pdf_with_catalog};
+@@ -328,6 +336,7 @@ fn xmp_title(pdf: &str) -> &str {
+     &pdf[from..from + pdf[from..].find("</dc:title>").unwrap()]
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn an_untitled_document_saved_to_a_file_exports_titled_after_it() {
+     let dir = std::env::temp_dir().join(format!("vc-pdftitle-{}", std::process::id()));
+diff --git a/crates/engine/src/tests/inline.rs b/crates/engine/src/tests/inline.rs
+--- a/crates/engine/src/tests/inline.rs
++++ b/crates/engine/src/tests/inline.rs
+@@ -142,6 +142,7 @@ fn type_tool_inserts_at_its_caret_and_deletes_the_graphic_whole() {
+     assert_eq!(inline_count(&obj(&s, id)), 1);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn inline_graphics_follow_their_symbol() {
+     let mut s = session();
+diff --git a/crates/engine/src/tests/intertwine.rs b/crates/engine/src/tests/intertwine.rs
+--- a/crates/engine/src/tests/intertwine.rs
++++ b/crates/engine/src/tests/intertwine.rs
+@@ -350,6 +350,7 @@ fn the_arranged_areas_move_with_the_group() {
+     assert!(red(&r, 50, 40) && blue(&r, 50, 80));
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn the_woven_rings_survive_save_and_export() {
+     let mut s = session();
+diff --git a/crates/engine/src/tests/knockout.rs b/crates/engine/src/tests/knockout.rs
+--- a/crates/engine/src/tests/knockout.rs
++++ b/crates/engine/src/tests/knockout.rs
+@@ -137,6 +137,7 @@ fn knockout_settings_round_trip_and_old_bools_load() {
+     assert_eq!((old.node(NodeId(g)).unwrap().knockout, old.node(NodeId(child)).unwrap().knockout), (Knockout::Neutral, Knockout::On));
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_and_svg_write_knockout_groups_as_masks() {
+     let mut s = session();
+diff --git a/crates/engine/src/tests/labspots.rs b/crates/engine/src/tests/labspots.rs
+--- a/crates/engine/src/tests/labspots.rs
++++ b/crates/engine/src/tests/labspots.rs
+@@ -148,6 +148,7 @@ fn spot_options_and_lab_colours_round_trip() {
+     assert!(serde_json::from_value::<vectorcraft_doc::Document>(v).unwrap().spot_use_lab);
+ }
+ 
++#[cfg(feature = "pdf")]
+ fn pdf_bytes(s: &Session) -> Vec<u8> {
+     let opts = vectorcraft_pdf::PdfOptions { created: Some(0), ..vectorcraft_pdf::PdfOptions::uncompressed() };
+     vectorcraft_pdf::export(doc(s), &opts).unwrap()
+@@ -169,6 +170,7 @@ fn assert_xref_valid(pdf: &[u8]) {
+     }
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn lab_spots_export_with_a_lab_alternate() {
+     let _g = GLOBAL.lock().unwrap_or_else(|e| e.into_inner());
+@@ -203,6 +205,7 @@ fn lab_spots_export_with_a_lab_alternate() {
+     assert_xref_valid(&pdf);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn lab_spots_in_device_n_gradients_keep_one_alternate() {
+     let _g = GLOBAL.lock().unwrap_or_else(|e| e.into_inner());
+diff --git a/crates/engine/src/tests/layerclip.rs b/crates/engine/src/tests/layerclip.rs
+--- a/crates/engine/src/tests/layerclip.rs
++++ b/crates/engine/src/tests/layerclip.rs
+@@ -69,6 +69,7 @@ fn making_a_layer_clipping_mask_is_one_undo_step() {
+     assert_eq!(layer(&s).children().unwrap()[0].id, clip);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn layer_clipping_masks_save_and_export() {
+     let mut s = session();
+diff --git a/crates/engine/src/tests/linked_stops.rs b/crates/engine/src/tests/linked_stops.rs
+--- a/crates/engine/src/tests/linked_stops.rs
++++ b/crates/engine/src/tests/linked_stops.rs
+@@ -119,12 +119,14 @@ fn spot_stops_separate_on_their_plate() {
+     assert_eq!((ink.cmyk, ink.spot), ([0.0; 4], Some(("Ink".to_string(), 0.6))));
+ }
+ 
++#[cfg(feature = "pdf")]
+ fn pdf_of(s: &Session) -> (String, Vec<String>) {
+     let opts = vectorcraft_pdf::PdfOptions { created: Some(0), ..vectorcraft_pdf::PdfOptions::uncompressed() };
+     let r = vectorcraft_pdf::export_with_report(doc(s), &opts).unwrap();
+     (String::from_utf8_lossy(&r.bytes).into_owned(), r.warnings)
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn spot_gradients_export_as_separation_shadings() {
+     let (mut s, _) = setup();
+@@ -140,6 +142,7 @@ fn spot_gradients_export_as_separation_shadings() {
+     assert!(warnings.iter().any(|w| w.contains("spot")), "{warnings:?}");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn white_stops_linked_to_process_swatches_are_paper_in_spot_gradients() {
+     let (mut s, _) = setup();
+@@ -169,6 +172,7 @@ fn white_stops_linked_to_process_swatches_are_paper_in_spot_gradients() {
+     assert!(pdf.contains("/DeviceN[/Ink/Opaque]/DeviceCMYK"), "a white spot ink keeps its plate");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn spot_gradients_mixed_with_other_inks_export_as_device_n_shadings() {
+     let (mut s, _) = setup();
+@@ -195,6 +199,7 @@ fn spot_gradients_mixed_with_other_inks_export_as_device_n_shadings() {
+     assert!(!warnings.iter().any(|w| w.contains("spot")), "{warnings:?}");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn radial_spot_gradients_mixed_with_other_inks_export_as_device_n_shadings() {
+     let (mut s, _) = setup();
+@@ -230,6 +235,7 @@ fn with(mut stops: Value, extra: Value) -> Value {
+     stops
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn perceptual_spot_gradients_export_as_separation_shadings() {
+     let (mut s, _) = setup();
+@@ -265,6 +271,7 @@ fn perceptual_spot_gradients_export_as_separation_shadings() {
+     assert!(pdf.contains("/C0[1]") && pdf.contains("/C1[0.4"), "white ink at 100% to 40%: {}", &pdf[at..(at + 200).min(pdf.len())]);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn perceptual_spot_gradients_mixed_with_other_inks_export_as_device_n_shadings() {
+     let (mut s, _) = setup();
+@@ -293,6 +300,7 @@ fn perceptual_spot_gradients_mixed_with_other_inks_export_as_device_n_shadings()
+     assert!(!pdf.contains("/Subtype/Image") && pdf.contains("/ShadingType 3") && pdf.contains("/DeviceN[/Cyan/Ink]/DeviceCMYK"), "radial");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn spot_gradients_drawn_as_images_warn() {
+     let (mut s, _) = setup();
+diff --git a/crates/engine/src/tests/links.rs b/crates/engine/src/tests/links.rs
+--- a/crates/engine/src/tests/links.rs
++++ b/crates/engine/src/tests/links.rs
+@@ -335,6 +335,7 @@ fn a_modified_link_follows_the_update_links_preference() {
+ /// Preferences › File Handling › Use Low Resolution Proxy for Linked EPS (#394): an unchanged linked
+ /// `.eps` keeps its saved preview on open; Update Links still reads a modified file when set to
+ /// Automatically.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn low_res_proxy_eps_keeps_unchanged_preview_and_automatic_update_reads_modified_eps() {
+     let dir = Folder::new("eps-proxy");
+@@ -359,6 +360,7 @@ fn low_res_proxy_eps_keeps_unchanged_preview_and_automatic_update_reads_modified
+ }
+ 
+ /// With Low Resolution Proxy on, export reads the linked EPS file's full pixels, not the preview.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn low_res_proxy_eps_export_uses_full_resolution_from_the_linked_file() {
+     let dir = Folder::new("eps-proxy-export");
+@@ -543,6 +545,7 @@ fn a_placed_document_brings_its_links_with_the_files_pixels() {
+ /// The placed (linked) files of a `.ai` file come in with the preview the file keeps of them: one
+ /// not found shows it, one found is read at once into the same bounds, which isn't a change. A copy
+ /// saved without PDF compatibility, placed without Link, reads the found file too.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn links_of_an_imported_file_are_read_where_they_are_found() {
+     use vectorcraft_testkit::ai;
+diff --git a/crates/engine/src/tests/live.rs b/crates/engine/src/tests/live.rs
+--- a/crates/engine/src/tests/live.rs
++++ b/crates/engine/src/tests/live.rs
+@@ -1167,6 +1167,7 @@ fn svg_export_expands_live_objects() {
+     assert!(vectorcraft_svg::import(&svg).is_ok());
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_export_expands_live_objects() {
+     let s = live_doc();
+@@ -1295,6 +1296,7 @@ fn cmyk_mesh(create: Value) -> (Session, NodeId) {
+ /// The fill colours `document.exportPdf {standard: pdfX4}` writes (`… scn` operands, and the
+ /// corner colours of its gradient meshes, which are patch shadings, as PDF import reads them
+ /// back), and its warnings.
++#[cfg(feature = "pdf")]
+ fn pdf_fill_colours(s: &mut Session) -> (Vec<Vec<f32>>, Vec<String>) {
+     let v = s.execute("document.exportPdf", &json!({"standard": "pdfX4", "compression": {"compressText": false}})).unwrap();
+     let bytes = vectorcraft_format::base64_decode(v["dataBase64"].as_str().unwrap()).unwrap();
+@@ -1325,6 +1327,7 @@ fn pdf_fill_colours(s: &mut Session) -> (Vec<Vec<f32>>, Vec<String>) {
+ 
+ /// #3232: a mesh made from a CMYK fill in a CMYK document keeps its points in CMYK, and the PDF
+ /// writes them with their K, not separated again from RGB (C/M/Y with K = 0).
++#[cfg(feature = "pdf")]
+ #[test]
+ fn cmyk_mesh_keeps_its_inks_in_pdf() {
+     for app in ["flat", "center", "edge"] {
+@@ -1343,6 +1346,7 @@ fn cmyk_mesh_keeps_its_inks_in_pdf() {
+ 
+ /// #3232: lightening to the centre or the edges lightens CMYK points towards paper white in CMYK,
+ /// so K shrinks with the other inks instead of being dropped.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn cmyk_mesh_highlight_lightens_in_cmyk() {
+     for app in ["center", "edge"] {
+@@ -1367,6 +1371,7 @@ fn cmyk_mesh_highlight_lightens_in_cmyk() {
+ }
+ 
+ /// #3232: a CMYK colour given to a mesh point stays CMYK, and the PDF keeps its K.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn cmyk_mesh_point_colour_keeps_k() {
+     let (mut s, a) = cmyk_mesh(json!({"appearance": "flat"}));
+diff --git a/crates/engine/src/tests/objects_on_path.rs b/crates/engine/src/tests/objects_on_path.rs
+--- a/crates/engine/src/tests/objects_on_path.rs
++++ b/crates/engine/src/tests/objects_on_path.rs
+@@ -309,6 +309,7 @@ fn a_shaper_group_stays_on_the_path_when_a_source_changes() {
+     assert_eq!(center(&s, shaper), Point::new(50.0, 300.0));
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn the_group_saves_and_reopens_live_and_exports_as_plain_art() {
+     let mut s = session();
+diff --git a/crates/engine/src/tests/opacitymask.rs b/crates/engine/src/tests/opacitymask.rs
+--- a/crates/engine/src/tests/opacitymask.rs
++++ b/crates/engine/src/tests/opacitymask.rs
+@@ -557,6 +557,7 @@ fn saving_while_editing_writes_no_editing_layer() {
+     assert!(old.mask_edit.is_none() && !has_edit_layer(&old) && old.layers.len() == 1);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn exports_while_editing_leave_the_editing_layer_out() {
+     let mut s = session();
+diff --git a/crates/engine/src/tests/package.rs b/crates/engine/src/tests/package.rs
+--- a/crates/engine/src/tests/package.rs
++++ b/crates/engine/src/tests/package.rs
+@@ -402,6 +402,7 @@ fn zipped_package_recursively_relinks_without_absolute_creator_paths() {
+     verify_portable_nested_package(&dir.0.join("extracted/poster Folder"));
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn package_copies_a_linked_pdf_page_as_it_is() {
+     let dir = Folder::new("package-placed-pdf");
+@@ -429,6 +430,7 @@ fn package_copies_a_linked_pdf_page_as_it_is() {
+     assert!(s.doc().unwrap().doc.has_placed());
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn package_copies_the_fonts_of_the_type_on_a_linked_pdf_page() {
+     let dir = Folder::new("package-placed-pdf-type");
+@@ -448,6 +450,7 @@ fn package_copies_the_fonts_of_the_type_on_a_linked_pdf_page() {
+     }
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn package_copies_the_fonts_of_each_page_of_a_pdf_that_two_documents_place() {
+     let dir = Folder::new("package-placed-pdf-pages");
+@@ -473,6 +476,7 @@ fn package_copies_the_fonts_of_each_page_of_a_pdf_that_two_documents_place() {
+ 
+ /// With Copy Fonts off, Package reads no placed PDF page for its type: neither a page of a PDF it
+ /// copies nor a page of one another document placed and it copied already.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn package_reads_no_placed_pdf_page_without_copy_fonts() {
+     use cmd::package::PAGES_READ;
+@@ -516,6 +520,7 @@ fn ai_placing(dir: &Folder, pics: &[&str]) -> String {
+     src
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn package_copies_the_files_a_linked_ai_files_editing_data_places_beside_it() {
+     let dir = Folder::new("package-placed-ai");
+@@ -543,6 +548,7 @@ fn package_copies_the_files_a_linked_ai_files_editing_data_places_beside_it() {
+     assert!(!shows_the_file(), "the preview only");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn package_warns_when_a_file_a_linked_ai_file_places_is_copied_under_another_name() {
+     let dir = Folder::new("package-placed-ai-names");
+diff --git a/crates/engine/src/tests/panelcmds.rs b/crates/engine/src/tests/panelcmds.rs
+--- a/crates/engine/src/tests/panelcmds.rs
++++ b/crates/engine/src/tests/panelcmds.rs
+@@ -959,6 +959,7 @@ fn artboard_display_marks_round_trip_through_the_native_format() {
+ /// Show Center Mark, Show Cross Hairs, Show Video Safe Areas and the Video Ruler Pixel Aspect Ratio
+ /// are screen-only: SVG and PDF exports (and print, which prints the PDF) come out the same with
+ /// them on as with them off.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn artboard_display_marks_stay_out_of_exports() {
+     let mut s = session();
+diff --git a/crates/engine/src/tests/params.rs b/crates/engine/src/tests/params.rs
+--- a/crates/engine/src/tests/params.rs
++++ b/crates/engine/src/tests/params.rs
+@@ -34,6 +34,7 @@ fn a_description_names_its_keys() {
+ }
+ 
+ /// Every command's description reads as a params object, so none is left unchecked by accident.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn every_description_parses() {
+     let bad: Vec<String> = command_specs().iter().filter_map(|c| doc_keys(c.params).err().map(|e| format!("{}: {e}", c.id))).collect();
+diff --git a/crates/engine/src/tests/pattern.rs b/crates/engine/src/tests/pattern.rs
+--- a/crates/engine/src/tests/pattern.rs
++++ b/crates/engine/src/tests/pattern.rs
+@@ -552,6 +552,7 @@ fn svg_export_writes_pattern_def() {
+ /// A pattern fill is written as a PDF tiling pattern, which PDF import reads back as a pattern
+ /// swatch: a rotated hatch over a long bar (#3849) stays one object with one pattern fill, in a few
+ /// kilobytes, instead of hundreds of tiles.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_export_writes_pattern_fills_as_tiling_patterns() {
+     let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="2812" height="300" viewBox="0 0 2812 300">
+@@ -583,6 +584,7 @@ fn pdf_export_writes_pattern_fills_as_tiling_patterns() {
+ }
+ 
+ /// A pattern fill nested more than four patterns deep is written as its tiles, and the export says so.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_export_writes_patterns_nested_too_deep_as_tiles_with_a_warning() {
+     use std::sync::Arc;
+diff --git a/crates/engine/src/tests/place.rs b/crates/engine/src/tests/place.rs
+--- a/crates/engine/src/tests/place.rs
++++ b/crates/engine/src/tests/place.rs
+@@ -233,6 +233,7 @@ fn with(mut p: Value, extra: Value) -> Value {
+ /// on another thread and [`Session::place_read`]), as File › Place reads one off the UI thread, is
+ /// placed as `file.place` places it: the same reply, document, selection and undo step, and the
+ /// same journal entry.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_file_read_apart_from_the_session_places_as_file_place_does() {
+     let mut src = Session::new();
+@@ -479,6 +480,7 @@ fn template_puts_the_art_on_a_locked_template_layer_below_the_current_one() {
+     assert_eq!(st.history.undo.len(), 2, "layer.new, then Place as one step");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_pages_and_native_artboards_place_as_clipped_groups() {
+     let mut src = Session::new();
+@@ -503,6 +505,7 @@ fn pdf_pages_and_native_artboards_place_as_clipped_groups() {
+ 
+ /// With crop "bounding", the art's box is the box of what shows, as an export measures it: a hidden
+ /// member of a group does not count, and is still placed, hidden.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn bounding_box_placement_measures_only_the_art_that_shows() {
+     let (mut src, shown) = group_with_a_hidden_member();
+@@ -531,6 +534,7 @@ fn bounding_box_placement_measures_only_the_art_that_shows() {
+ }
+ 
+ /// With crop "bounding", an effect's reach counts in the art's box, as in an export of the art.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn bounding_box_placement_counts_a_drop_shadow() {
+     let mut src = session();
+@@ -572,6 +576,7 @@ fn a_placed_symbol_instance_is_measured_by_its_art() {
+ }
+ 
+ /// Crop "crop" still frames the art by its artboard (an SVG by its viewBox), hidden members or not.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn crop_placement_keeps_the_artboard_with_a_hidden_member() {
+     let (mut src, _) = group_with_a_hidden_member();
+@@ -589,6 +594,7 @@ fn crop_placement_keeps_the_artboard_with_a_hidden_member() {
+ 
+ /// A page's or artboard's art is the objects whose visible art lies on it: a group whose only part
+ /// on the artboard is hidden stays out, and a hidden object on the artboard is still placed, hidden.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_group_whose_only_part_on_the_artboard_is_hidden_is_left_out() {
+     let mut src = session();
+diff --git a/crates/engine/src/tests/placed_document.rs b/crates/engine/src/tests/placed_document.rs
+--- a/crates/engine/src/tests/placed_document.rs
++++ b/crates/engine/src/tests/placed_document.rs
+@@ -75,6 +75,7 @@ fn decode(v: &Value) -> Vec<u8> {
+ }
+ 
+ /// Images and paths in `bytes`, a PDF, read back.
++#[cfg(feature = "pdf")]
+ fn pdf_contents(bytes: &[u8]) -> (usize, usize) {
+     // The page as drawn (not the VectorCraft document the PDF carries).
+     let (doc, _) = crate::cmd::fileio::page_document(bytes, 0, &Default::default()).unwrap();
+@@ -138,6 +139,7 @@ fn without_link_or_a_file_a_document_places_as_an_editable_copy() {
+     assert!(!s.doc().unwrap().doc.has_placed());
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_placed_document_is_vectors_in_every_output() {
+     let dir = Folder::new("placed-outputs");
+@@ -201,6 +203,7 @@ fn the_preview_is_saved_so_the_document_shows_it_without_its_file() {
+     assert!(old.contains("\"image\"") && !old.contains("placeddocument"), "{old}");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn ai_export_preserves_placed_links_while_drawing_full_art_or_previews() {
+     for missing in [false, true] {
+@@ -259,6 +262,7 @@ fn ai_export_preserves_placed_links_while_drawing_full_art_or_previews() {
+     }
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn ai_export_public_aliases_preserve_missing_placed_links() {
+     let dir = Folder::new("placed-ai-public-aliases-latest");
+@@ -463,6 +467,7 @@ fn pdf_source(path: &str, format: &str, pages: &[[u8; 3]], extra: usize) {
+     write(path, &cmd::fileio::encode_all(&d, format, &p).unwrap().files[0].1);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_pdf_page_placed_without_link_is_embedded() {
+     let dir = Folder::new("placed-pdf-embedded");
+@@ -480,6 +485,7 @@ fn a_pdf_page_placed_without_link_is_embedded() {
+     assert!(!s.doc().unwrap().doc.has_placed());
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn with_link_a_pdf_page_places_linked() {
+     let dir = Folder::new("placed-pdf-linked");
+@@ -502,6 +508,7 @@ fn with_link_a_pdf_page_places_linked() {
+     assert!(near(centre_colour(&s.doc().unwrap().doc), RED));
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_changed_pdf_is_modified_and_update_links_reads_it_again() {
+     let dir = Folder::new("placed-pdf-update");
+@@ -530,6 +537,7 @@ fn a_changed_pdf_is_modified_and_update_links_reads_it_again() {
+     assert_eq!(placed(&s, id).link.path, other);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_linked_pdf_page_outputs_as_vectors_after_the_document_reopens() {
+     let dir = Folder::new("placed-pdf-outputs");
+@@ -555,6 +563,7 @@ fn a_linked_pdf_page_outputs_as_vectors_after_the_document_reopens() {
+     assert_eq!((full["images"][&key]["proxy"].clone(), full["images"][&key]["mime"].as_str()), (Value::Null, Some("application/pdf")));
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn saving_and_reopening_keeps_a_linked_pdf_pages_number_and_box() {
+     let dir = Folder::new("placed-pdf-reopen");
+@@ -586,6 +595,7 @@ fn saving_and_reopening_keeps_a_linked_pdf_pages_number_and_box() {
+     assert!(near(centre_colour(&s.doc().unwrap().doc), RED));
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_pdf_compatible_ai_file_places_linked_like_a_pdf() {
+     let dir = Folder::new("placed-ai-linked");
+@@ -605,6 +615,7 @@ fn a_pdf_compatible_ai_file_places_linked_like_a_pdf() {
+     assert_eq!(images, 0);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_placed_document_inside_a_placed_document_outputs_from_its_own_file() {
+     let dir = Folder::new("placed-nested");
+@@ -624,6 +635,7 @@ fn a_placed_document_inside_a_placed_document_outputs_from_its_own_file() {
+     assert_eq!(pdf_contents(&decode(&s.execute("document.serialize", &json!({"format": "pdf"})).unwrap())).0, 0);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn documents_that_place_each_other_dont_loop() {
+     let dir = Folder::new("placed-loop");
+@@ -829,6 +841,7 @@ fn native_save_catalog_defaults_keep_placed_documents_editable() {
+ }
+ 
+ /// Generic and dedicated PDF exports share editable links and prepared drawn pages.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_editing_keeps_placed_links_separate_from_drawn_previews() {
+     for missing in [true, false] {
+@@ -894,6 +907,7 @@ fn pdf_editing_keeps_placed_links_separate_from_drawn_previews() {
+ }
+ 
+ /// EPS draws hydrated artwork but carries the original link metadata with requested source bytes.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn eps_editing_keeps_placed_links_and_requested_source_bytes() {
+     for missing in [true, false] {
+diff --git a/crates/engine/src/tests/prefs.rs b/crates/engine/src/tests/prefs.rs
+--- a/crates/engine/src/tests/prefs.rs
++++ b/crates/engine/src/tests/prefs.rs
+@@ -100,6 +100,7 @@ const GRIDLESS_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="100
+ /// Gridline every and Subdivisions (#394): an SVG or a plain PDF opens with their grid, while a
+ /// native file, and the native document a PDF saved with Preserve Editing carries, keep the grid
+ /// they were saved with.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn grid_prefs_apply_to_opened_files_without_a_grid() {
+     let mut s = Session::new();
+diff --git a/crates/engine/src/tests/rasterfilters.rs b/crates/engine/src/tests/rasterfilters.rs
+--- a/crates/engine/src/tests/rasterfilters.rs
++++ b/crates/engine/src/tests/rasterfilters.rs
+@@ -392,6 +392,7 @@ fn spin_blur_reaches_past_the_corners() {
+     assert!(img.pixel(100, 20)[1] > 250, "but not beyond the corners' circle");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_and_svg_write_the_effected_object_as_an_image() {
+     for (id, params) in
+diff --git a/crates/engine/src/tests/registration.rs b/crates/engine/src/tests/registration.rs
+--- a/crates/engine/src/tests/registration.rs
++++ b/crates/engine/src/tests/registration.rs
+@@ -97,6 +97,7 @@ fn trim_marks_print_on_every_plate() {
+     assert!(!dark(render(&doc, Some(&["Spot Ink"])).pixel(48, 120)));
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_writes_registration_as_separation_all() {
+     let _g = GLOBAL.lock().unwrap_or_else(|e| e.into_inner());
+diff --git a/crates/engine/src/tests/save.rs b/crates/engine/src/tests/save.rs
+--- a/crates/engine/src/tests/save.rs
++++ b/crates/engine/src/tests/save.rs
+@@ -67,6 +67,7 @@ fn an_svg_path_writes_svg_and_save_writes_it_back() {
+     let _ = std::fs::remove_dir_all(d);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn save_as_takes_on_path_format_and_options() {
+     let d = dir("saveas");
+@@ -310,6 +311,7 @@ fn open_layers_rows_round_trip_without_dirtying() {
+     let _ = std::fs::remove_dir_all(d);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn save_plans_suggest_names_and_folders() {
+     let mut s = session();
+@@ -361,6 +363,7 @@ fn choosing_the_current_color_mode_is_not_an_edit() {
+     assert_eq!(st.history.undo.len(), undo, "no empty undo step");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_pdf_opened_in_part_is_not_saved_back_over_the_whole_file() {
+     let d = dir("pdfpart");
+@@ -425,6 +428,7 @@ fn transparency_grid_round_trips_without_dirtying() {
+     let _ = std::fs::remove_dir_all(d);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn opened_eps_saves_to_its_own_file_with_editable_data_and_page_margins() {
+     let d = dir("eps-original-format");
+@@ -459,6 +463,7 @@ fn opened_eps_saves_to_its_own_file_with_editable_data_and_page_margins() {
+     std::fs::remove_dir_all(d).unwrap();
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn eps_save_keeps_all_editing_artboards_while_printing_one_page() {
+     let mut s = Session::new();
+@@ -475,6 +480,7 @@ fn eps_save_keeps_all_editing_artboards_while_printing_one_page() {
+     }
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn eps_save_retains_lossy_import_overwrite_protection_and_transparency_warning() {
+     let d = dir("eps-import-warning");
+@@ -496,6 +502,7 @@ fn eps_save_retains_lossy_import_overwrite_protection_and_transparency_warning()
+     std::fs::remove_dir_all(d).unwrap();
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn eps_save_supports_an_empty_artboard_without_cropping_its_page() {
+     let mut s = session();
+@@ -507,6 +514,7 @@ fn eps_save_supports_an_empty_artboard_without_cropping_its_page() {
+     assert!(std::str::from_utf8(vectorcraft_eps::sections(&bytes).unwrap().0).unwrap().contains("%%BoundingBox: 0 0 200 100"));
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn partially_read_eps_requires_confirmation_before_save_back() {
+     let d = dir("eps-partial-import");
+@@ -524,6 +532,7 @@ fn partially_read_eps_requires_confirmation_before_save_back() {
+     std::fs::remove_dir_all(d).unwrap();
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn eps_with_damaged_editing_data_requires_confirmation_before_save_back() {
+     let d = dir("eps-damaged-editing");
+@@ -544,6 +553,7 @@ fn eps_with_damaged_editing_data_requires_confirmation_before_save_back() {
+     std::fs::remove_dir_all(d).unwrap();
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn eps_save_bounds_large_page_preview_without_cropping_vector_or_editing_data() {
+     let mut s = Session::new();
+@@ -565,6 +575,7 @@ fn eps_save_bounds_large_page_preview_without_cropping_vector_or_editing_data()
+ 
+ /// #4646: a new document's units and ruler guides survive Save, Close and Open in every format
+ /// that carries the whole document (an SVG keeps them only with Preserve Editing).
++#[cfg(feature = "pdf")]
+ #[test]
+ fn units_and_ruler_guides_survive_save_and_reopen() {
+     let d = dir("units-guides");
+@@ -584,3 +595,32 @@ fn units_and_ruler_guides_survive_save_and_reopen() {
+     }
+     let _ = std::fs::remove_dir_all(d);
+ }
++
++/// Without the PDF reader and writer a `.pdf`, `.ai` or `.eps` path is refused with the reason,
++/// never saved as a native file under that name, and opening such a file says why too.
++#[cfg(not(feature = "pdf"))]
++#[test]
++fn without_the_pdf_writer_its_files_are_refused_by_name() {
++    let d = dir("no-pdf");
++    let mut s = session();
++    rect(&mut s);
++    for name in ["doc.pdf", "doc.ai", "doc.ait", "doc.eps", "doc.ps"] {
++        let p = path(&d, name);
++        for cmd in ["file.saveAs", "file.saveCopy"] {
++            let e = s.execute(cmd, &json!({"path": p})).unwrap_err().to_string();
++            assert!(e.contains("not available in this build"), "{cmd} {name}: {e}");
++            assert!(!std::path::Path::new(&p).exists(), "{cmd} {name}: nothing is written");
++        }
++    }
++    for format in ["pdf", "ai", "eps"] {
++        let e = s.execute("document.export", &json!({"format": format})).unwrap_err().to_string();
++        assert!(e.contains("not available in this build"), "export {format}: {e}");
++        let e = s.execute("file.saveCopy", &json!({"path": path(&d, "doc.vectorcraft"), "format": format})).unwrap_err().to_string();
++        assert!(e.contains("not available in this build"), "save {format}: {e}");
++    }
++    let pdf = path(&d, "art.pdf");
++    std::fs::write(&pdf, b"%PDF-1.7\n%%EOF\n").unwrap();
++    let e = s.execute("document.open", &json!({"path": pdf})).unwrap_err().to_string();
++    assert!(e.contains("not available in this build"), "open: {e}");
++    let _ = std::fs::remove_dir_all(d);
++}
+diff --git a/crates/engine/src/tests/saveoptions.rs b/crates/engine/src/tests/saveoptions.rs
+--- a/crates/engine/src/tests/saveoptions.rs
++++ b/crates/engine/src/tests/saveoptions.rs
+@@ -62,6 +62,7 @@ fn three_artboards_give_four_files() {
+     assert!(vectorcraft_format::sniff(&bytes_of(&r["files"][3]["dataBase64"])));
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn ai_files_save_each_artboard_too_and_reopen_editable() {
+     let dir = Folder::new("separate-ai");
+@@ -149,6 +150,7 @@ fn an_embedded_profile_is_restored() {
+     assert!(r["warnings"][0].as_str().unwrap().contains(&broken), "{r}");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_compatible_files_carry_a_pdf() {
+     let mut s = three_boards();
+@@ -185,6 +187,7 @@ fn save_option_errors_name_the_save_command() {
+     }
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn ai_without_pdf_content_and_compression() {
+     let mut s = three_boards();
+@@ -213,6 +216,7 @@ fn ai_without_pdf_content_and_compression() {
+     assert!(loose.len() > packed.len(), "{} vs {}", loose.len(), packed.len());
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_remembered_artboard_the_document_no_longer_has_is_dropped() {
+     let dir = Folder::new("remembered-artboards");
+@@ -247,6 +251,7 @@ fn a_remembered_artboard_the_document_no_longer_has_is_dropped() {
+     assert!(r["path"].as_str().is_some_and(|p| p.ends_with("kept.ai")), "{r}");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_remembered_artboard_pick_follows_the_artboards_it_named() {
+     let dir = Folder::new("remembered-pick");
+@@ -337,6 +342,7 @@ fn a_remembered_artboard_pick_follows_the_artboards_it_named() {
+     assert_eq!(s.execute("file.formatOptions", &json!({})).unwrap()["options"]["range"]["value"], json!("1, 3"));
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn format_options_list_the_save_options() {
+     let mut s = three_boards();
+diff --git a/crates/engine/src/tests/store.rs b/crates/engine/src/tests/store.rs
+--- a/crates/engine/src/tests/store.rs
++++ b/crates/engine/src/tests/store.rs
+@@ -18,6 +18,7 @@ fn saved_names(s: &mut Session) -> Vec<String> {
+     v["presets"].as_array().unwrap().iter().filter(|p| p["builtIn"] == false).map(|p| p["name"].as_str().unwrap().to_string()).collect()
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn saved_presets_come_back_in_the_next_session_and_renames_and_deletes_follow() {
+     let dir = fresh_dir("presets").join("PDF Presets");
+@@ -40,6 +41,7 @@ fn saved_presets_come_back_in_the_next_session_and_renames_and_deletes_follow()
+     assert!(!dir.join(format!("{}.vcpdfpresets", file_stem("Old"))).exists());
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_rename_that_cannot_be_written_keeps_the_preset_under_its_old_name() {
+     let dir = fresh_dir("rename-fails").join("PDF Presets");
+@@ -57,6 +59,7 @@ fn a_rename_that_cannot_be_written_keeps_the_preset_under_its_old_name() {
+     assert!(dir.join(format!("{}.vcpdfpresets", file_stem("Web"))).is_file());
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_rename_that_only_changes_case_keeps_one_file() {
+     let dir = fresh_dir("rename-case").join("PDF Presets");
+@@ -100,6 +103,7 @@ fn a_rename_that_only_changes_case_and_cannot_be_written_keeps_the_old_file() {
+ }
+ 
+ /// Where file names keep case apart, a folder named like the new file makes the rename fail.
++#[cfg(feature = "pdf")]
+ #[cfg(not(any(windows, target_vendor = "apple")))]
+ #[test]
+ fn a_rename_that_only_changes_case_and_cannot_be_moved_keeps_the_old_preset() {
+@@ -116,6 +120,7 @@ fn a_rename_that_only_changes_case_and_cannot_be_moved_keeps_the_old_preset() {
+     assert_eq!(b.prefs.pdf_presets[0].description, "for screens");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_folder_that_does_not_exist_yet_takes_the_presets_the_preferences_held() {
+     let dir = fresh_dir("seed").join("PDF Presets");
+@@ -128,6 +133,7 @@ fn a_folder_that_does_not_exist_yet_takes_the_presets_the_preferences_held() {
+     assert_eq!(saved_names(&mut b), ["From Preferences"]);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn damaged_unsafe_and_oversized_preset_files_are_skipped() {
+     let dir = fresh_dir("damaged").join("PDF Presets");
+diff --git a/crates/engine/src/tests/strokegradient.rs b/crates/engine/src/tests/strokegradient.rs
+--- a/crates/engine/src/tests/strokegradient.rs
++++ b/crates/engine/src/tests/strokegradient.rs
+@@ -135,6 +135,7 @@ fn outline_stroke_keeps_the_effect_of_a_stroke_with_a_gradient_along_it() {
+     assert!(shadowed, "the stroke's drop shadow is on its outline's clip group");
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn svg_and_pdf_write_the_same_gradient_as_slices_with_a_warning() {
+     for mode in ["along", "across"] {
+diff --git a/crates/engine/src/tests/swatches.rs b/crates/engine/src/tests/swatches.rs
+--- a/crates/engine/src/tests/swatches.rs
++++ b/crates/engine/src/tests/swatches.rs
+@@ -192,6 +192,7 @@ fn document_color_mode_converts_the_tile_that_pattern_cancel_puts_back() {
+     assert_eq!(tile, [red]);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn grouped_spot_swatches_print_on_their_own_plate() {
+     let mut s = session();
+diff --git a/crates/engine/src/tests/symbolbounds.rs b/crates/engine/src/tests/symbolbounds.rs
+--- a/crates/engine/src/tests/symbolbounds.rs
++++ b/crates/engine/src/tests/symbolbounds.rs
+@@ -402,6 +402,7 @@ fn lock_and_hide_all_artwork_above_measure_the_instances_art() {
+     assert!(!node(&s, far).visible);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn eps_of_the_art_bounds_and_writes_an_instances_art() {
+     let (mut s, _) = open(FAR);
+diff --git a/crates/engine/src/tests/tints.rs b/crates/engine/src/tests/tints.rs
+--- a/crates/engine/src/tests/tints.rs
++++ b/crates/engine/src/tests/tints.rs
+@@ -107,6 +107,7 @@ fn new_swatch_saves_a_tint_swatch_linked_to_its_base() {
+     assert!(doc(&s).swatch(r["name"].as_str().unwrap()).unwrap().tint_of().is_none());
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn spot_tints_print_their_percentage_of_the_plate() {
+     let mut s = inks();
+diff --git a/crates/engine/tests/affinity_corpus.rs b/crates/engine/tests/affinity_corpus.rs
+--- a/crates/engine/tests/affinity_corpus.rs
++++ b/crates/engine/tests/affinity_corpus.rs
+@@ -112,6 +112,7 @@ fn public_affinity_documents_render_like_their_affinity_thumbnails() {
+ /// Every actual .af fixture must open as editable art, retain its complete native document,
+ /// and export every artboard. Reimporting our SVG/PDF and comparing our PSD merged pixels
+ /// checks our export paths; it is not an independent Affinity-versus-PSD fidelity oracle.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn affinity3_all_artboards_survive_native_save_and_export() {
+     let Some(dir) = corpus() else { return };
+diff --git a/crates/engine/tests/import_fuzz.rs b/crates/engine/tests/import_fuzz.rs
+--- a/crates/engine/tests/import_fuzz.rs
++++ b/crates/engine/tests/import_fuzz.rs
+@@ -409,6 +409,7 @@ fn survive(what: &str, import: impl FnOnce() -> Option<Document>) -> Result<(),
+                 }
+             }
+             let _ = vectorcraft_svg::export(&d, &vectorcraft_svg::ExportOptions::default());
++            #[cfg(feature = "pdf")]
+             let _ = vectorcraft_engine::export_pdf(&d, &vectorcraft_pdf::PdfOptions::default());
+             let _ = vectorcraft_format::save_file(&d);
+         }
+@@ -424,6 +425,7 @@ fn rich_svg() -> String {
+     vectorcraft_svg::export(&rich_doc(), &vectorcraft_svg::ExportOptions::default())
+ }
+ 
++#[cfg(feature = "pdf")]
+ fn rich_pdf() -> Vec<u8> {
+     vectorcraft_engine::export_pdf(&rich_doc(), &vectorcraft_pdf::PdfOptions::uncompressed()).unwrap()
+ }
+@@ -626,6 +628,7 @@ fn mutate_text(src: &str, cut: usize, edits: &[(usize, char)]) -> String {
+ 
+ /// Type shifted two billion points down exports to PDF: an input of
+ /// `svg_hostile_markup_never_panics`, cut down to its type.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn svg_type_shifted_two_billion_points_exports_to_pdf() {
+     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg"><text baseline-shift="-2147483649">f</text></svg>"#;
+@@ -712,6 +715,7 @@ fn pdf_of(objs: &[Vec<u8>]) -> Vec<u8> {
+ /// A file filling thousands of paths with function-based shadings, each a long PostScript
+ /// calculator function of fine stripes, opens in bounded time: each shading is read once, and all
+ /// of them within one budget of function evaluations per import (#3621 review).
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_many_paths_filled_with_long_function_shadings_open_in_bounded_time() {
+     let shadings = 20;
+@@ -786,6 +790,7 @@ fn arb_resources() -> impl Strategy<Value = String> {
+ proptest! {
+     #![proptest_config(config())]
+ 
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn pdf_garbage_never_panics(bytes in prop::collection::vec(any::<u8>(), 0..600)) {
+         let mut b = b"%PDF-1.7\n".to_vec();
+@@ -793,6 +798,7 @@ proptest! {
+         survive("pdf garbage", || vectorcraft_pdf::import(&b).ok())?;
+     }
+ 
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn pdf_hostile_content_never_panics(
+         ops in prop::collection::vec(arb_pdf_op(), 0..40),
+@@ -803,6 +809,7 @@ proptest! {
+         survive(&ops.join(" "), || vectorcraft_pdf::import(&pdf).ok())?;
+     }
+ 
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn pdf_mutated_export_never_panics(
+         cut in 0usize..40_000,
+@@ -858,6 +865,7 @@ proptest! {
+     /// A page that paints with each of [`unreadable_resources`] is imported without a panic. The
+     /// file opens with its art, or is refused when its calculator function decodes past the cap or
+     /// has decode parameters the reader can't apply.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn pdf_resources_the_reader_cannot_parse_never_panic(
+         space in arb_dict_value(),
+@@ -970,6 +978,7 @@ fn file_info_pdf(info: &str, xmp: &str) -> Vec<u8> {
+ }
+ 
+ /// The sample `pdf_file_info_never_panics` mutates opens with the File Info of its packet.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn the_file_info_sample_reaches_the_reader() {
+     let pdf = file_info_pdf("/Author (Info author) /Subject (Info subject)", RICH_XMP);
+@@ -986,6 +995,7 @@ proptest! {
+ 
+     /// File Info read on open: mutated XMP packets, some with elements nested deeply, and junk
+     /// information dictionaries, opened as a PDF and as a `.ai`.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn pdf_file_info_never_panics(
+         cut in 0usize..2_000,
+@@ -1091,6 +1101,7 @@ fn arb_rich_op() -> impl Strategy<Value = String> {
+ proptest! {
+     #![proptest_config(config())]
+ 
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn pdf_layers_masks_patterns_and_text_never_panic(
+         ops in prop::collection::vec(arb_rich_op(), 0..40),
+@@ -1846,6 +1857,7 @@ fn saved_ai() -> Vec<u8> {
+ proptest! {
+     #![proptest_config(config())]
+ 
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn ai_mutated_save_never_panics(
+         cut in 0usize..200_000,
+@@ -1881,6 +1893,7 @@ proptest! {
+         pdf_presets("pdf presets garbage", &format!("{head}{s}"))?;
+     }
+ 
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn mutated_pdf_presets_never_panic(cut in 0usize..20_000, edits in prop::collection::vec(arb_edit(), 0..10)) {
+         let text = saved("pdf.preset.export", json!({"names": ["VectorCraft Default", "Smallest File Size", "PDF/X-4:2010"]}));
+@@ -1906,6 +1919,7 @@ fn paste_from_elsewhere(cmd: &str, p: Value) -> Result<(), TestCaseError> {
+ }
+ 
+ /// [`rich_pdf`], made once.
++#[cfg(feature = "pdf")]
+ fn rich_pdf_once() -> Vec<u8> {
+     static PDF: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+     PDF.get_or_init(rich_pdf).clone()
+@@ -1932,6 +1946,7 @@ proptest! {
+         paste_from_elsewhere("clipboard.importImage", json!({"dataBase64": mutated_b64(image, cut, &edits), "mime": "image/png"}))?;
+     }
+ 
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn pasted_pdf_never_panics(cut in 0usize..40_000, edits in prop::collection::vec((0usize..40_000, any::<u8>()), 0..12)) {
+         paste_from_elsewhere("clipboard.importPdf", json!({"dataBase64": mutated_b64(rich_pdf_once(), cut, &edits)}))?;
+@@ -2034,6 +2049,7 @@ proptest! {
+ 
+     /// Damaged EPS files: their sections, embedded document and thumbnail read as nothing, or as
+     /// a document that renders and exports.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn eps_mutated_files_never_panic(cut in 0usize..400_000, edits in prop::collection::vec((0usize..400_000, any::<u8>()), 0..12)) {
+         static SAMPLE: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+@@ -2050,6 +2066,7 @@ proptest! {
+ 
+     /// Damaged EPS files without the document: the PostScript interpreter (or the preview
+     /// fallback) reads them as an error or a document.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn eps_mutated_postscript_never_panics(cut in 0usize..400_000, edits in prop::collection::vec((0usize..400_000, any::<u8>()), 0..12)) {
+         static SAMPLE: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+@@ -2063,6 +2080,7 @@ proptest! {
+     }
+ 
+     /// A damaged EPS another app copied: Paste reads it as an error or as objects.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn pasted_eps_never_panics(cut in 0usize..400_000, edits in prop::collection::vec((0usize..400_000, any::<u8>()), 0..12)) {
+         static SAMPLE: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+@@ -2106,6 +2124,7 @@ proptest! {
+ 
+     /// Damaged or hostile CMYK images (a CMYK JPEG, an image with a key color): read as images,
+     /// or as an error.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn eps_cmyk_images_never_panic(cut in 0usize..2_500, edits in prop::collection::vec((0usize..2_500, prop::sample::select(vec!['0', '9', 'f', 'a', ' ', '\n', '<', '>', '/', '[', ']', '(', ')', '-'])), 0..12)) {
+         let text = mutate_text(&cmyk_images_eps(), cut, &edits);
+@@ -2114,6 +2133,7 @@ proptest! {
+ 
+     /// Damaged or hostile CCITT fax images (Group 4 and Group 3 data, their parameters): read as
+     /// images, or as an error.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn eps_ccitt_images_never_panic(cut in 0usize..800, edits in prop::collection::vec((0usize..800, prop::sample::select(vec!['0', '1', '9', 'f', '8', ' ', '\n', '<', '>', '/', '-', 't', 'e'])), 0..12)) {
+         let text = mutate_text(&ccitt_images_eps(), cut, &edits);
+@@ -2123,6 +2143,7 @@ proptest! {
+     /// TIFF-predicted Flate data (Predictor 2) at every depth the filter accepts, with any bytes, 1 to 5
+     /// colors and 1 to 39 columns, read by images of up to 23 × 7 pixels at 1, 2, 4, 8, 12 or 16 bits:
+     /// read as an image, or as an error.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn eps_tiff_predicted_images_never_panic(
+         data in prop::collection::vec(any::<u8>(), 0..300),
+@@ -2157,6 +2178,7 @@ fn ccitt_images_eps() -> String {
+ 
+ /// [`ccitt_images_eps`] as it is: both images draw their rows (`B` black, `w` white, `.` left
+ /// clear by the mask), without a warning.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn the_ccitt_images_fixture_reads_both_images() {
+     let r = vectorcraft_eps::import(ccitt_images_eps().as_bytes()).unwrap();
+@@ -2194,6 +2216,7 @@ fn cmyk_images_eps() -> String {
+ }
+ 
+ /// [`cmyk_images_eps`] as it is: both images keep their ink amounts, the keyed one with its mask.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn the_cmyk_images_fixture_reads_its_inks_and_mask() {
+     let r = vectorcraft_eps::import(cmyk_images_eps().as_bytes()).unwrap();
+@@ -2562,6 +2585,7 @@ proptest! {
+         print_presets("print presets garbage", &format!("{head}{s}"))?;
+     }
+ 
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn mutated_print_presets_never_panic(cut in 0usize..20_000, edits in prop::collection::vec(arb_edit(), 0..10)) {
+         let mut s = rich_session();
+@@ -2730,6 +2754,7 @@ fn editing_eps(editing: &str) -> Vec<u8> {
+ 
+ /// The fuzzed editing data, as it is, opens with its palette's swatches in its order and groups,
+ /// the spot colour the art doesn't use included (the gradient isn't defined: left out).
++#[cfg(feature = "pdf")]
+ #[test]
+ fn the_editing_fixture_reads_its_palette() {
+     let private = [b"%AI24_ZStandard_Data".as_slice(), &zstd(&editing_text())].concat();
+@@ -2745,6 +2770,7 @@ fn the_editing_fixture_reads_its_palette() {
+ 
+ /// The fuzzed editing data, as it is, reads its CMYK image with its ink amounts and its alpha
+ /// channel as an opacity mask.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn the_editing_fixture_reads_its_cmyk_image_with_its_mask() {
+     let private = [b"%AI24_ZStandard_Data".as_slice(), &zstd(&editing_text())].concat();
+@@ -2822,6 +2848,7 @@ const VERTICAL_OBJECTS: &str = "/AI11Text :\n0 /FrameIndex ,\n0 /StoryIndex ,\n;
+ 
+ /// The fuzzed vertical fixture, as it is, reads as vertical point, area and path type, with the
+ /// Tate-chu-yoko run marked.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn the_vertical_fixture_reads_as_vertical_type() {
+     let l = vectorcraft_engine::cmd::fileio::load("x.eps", &text_eps_of(&vertical_document_text(), VERTICAL_OBJECTS)).unwrap();
+@@ -2841,6 +2868,7 @@ fn the_vertical_fixture_reads_as_vertical_type() {
+ const FRAME_OBJECTS: &str = "/AI11Text :\n0 /FrameIndex ,\n0 /StoryIndex ,\n;\n/AI11Text :\n1 /FrameIndex ,\n0 /StoryIndex ,\n;\n/AI11Text :\n0 /FrameIndex ,\n1 /StoryIndex ,\n;\n";
+ 
+ /// The fuzzed fixture, as it is, reads as area type in two threaded frames and type on a path.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn the_frames_fixture_reads_as_threaded_area_type_and_type_on_a_path() {
+     let l = vectorcraft_engine::cmd::fileio::load("x.eps", &text_eps_of(&frames_document_text(), FRAME_OBJECTS)).unwrap();
+@@ -2861,6 +2889,7 @@ fn the_frames_fixture_reads_as_threaded_area_type_and_type_on_a_path() {
+ /// The smallest failing input `eps_text_frames_never_panic` found: the first frame's bottom edge
+ /// has a control point at x = 8e115 (`8e0115`). That frame holds no text, and the story flows on
+ /// into the second frame.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_text_frame_with_a_control_point_at_8e115_opens_with_its_story_in_the_next_frame() {
+     let text = mutate_text(&frames_document_text(), 1397, &[(191, '1'), (1586, 'e')]);
+@@ -3010,6 +3039,7 @@ fn story_objects(pairs: &[(u32, u32)]) -> String {
+ 
+ /// The fixture, as it is (point type, area type and type on a path, a line break inside each
+ /// paragraph), opens with its layers and every story's type from its text document.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn the_shown_stories_fixture_opens_with_its_layers() {
+     let doc = stories_document_text(&[0, 1, 2], &[4], &[]);
+@@ -3048,6 +3078,7 @@ proptest! {
+     }
+ 
+     /// An Illustrator EPS whose text document is damaged or hostile: read as its type, or without it.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn eps_text_document_never_panics(cut in 0usize..1_500, edits in prop::collection::vec((0usize..1_500, prop::sample::select(vec!['0', '9', '-', '.', ' ', '\n', '(', ')', '/', '[', ']', '<', '>', '\\', 'e', '1'])), 0..12)) {
+         let text = mutate_text(&text_document_text(), cut, &edits);
+@@ -3066,6 +3097,7 @@ proptest! {
+ 
+     /// The threaded area type of the same text document with hostile Area Type Options in each of its
+     /// frames, opened as an EPS document and as a `.ai`'s editing data.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn text_frames_with_hostile_area_options_never_panic(first in arb_area_options(), second in arb_area_options()) {
+         let text = frames_document_text().replacen("/0 1 /7 18", &format!("/0 1 {first}"), 1).replacen("/0 1 /7 18", &format!("/0 1 {second}"), 1);
+@@ -3086,6 +3118,7 @@ proptest! {
+     }
+ 
+     /// An Illustrator EPS whose editing data is damaged or hostile: read as its layers, or as its page.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn eps_editing_data_never_panics(cut in 0usize..3_000, edits in prop::collection::vec((0usize..3_000, prop::sample::select(vec!['0', '9', '-', '.', ' ', '\n', '(', ')', '/', ':', ';', '[', ']', '%', 'q', 'Q', 'W', 'u', 'U', 'L', 'l', 'c', 'C', 'v', 'V', 'y', 'Y', 'k', 'x'])), 0..12)) {
+         let text = mutate_text(&editing_text(), cut, &edits);
+@@ -3095,6 +3128,7 @@ proptest! {
+ 
+     /// A `.ai` whose envelopes are damaged or hostile: any kind, warp style, options word,
+     /// Fidelity and grid size, corners out of range or repeated, the contents block cut short.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn ai_envelope_never_panics(
+         kind in prop::sample::select(vec![0i64, 1, 2, 3, 4, -1, 1 << 40]),
+@@ -3128,6 +3162,7 @@ proptest! {
+     }
+ 
+     /// A `.ai` whose editing data is damaged or hostile.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn ai_editing_data_never_panics(cut in 0usize..3_000, edits in prop::collection::vec((0usize..3_000, prop::sample::select(vec!['0', '9', '-', '.', ' ', '\n', '(', ')', '/', ':', ';', '[', ']', '%', 'q', 'Q', 'W', 'u', 'U', 'L', 'l', 'c', 'C', 'v', 'V', 'y', 'Y', 'k', 'x'])), 0..12), damage in prop::collection::vec((0usize..4_000, any::<u8>()), 0..4)) {
+         let text = mutate_text(&editing_text(), cut, &edits);
+@@ -3143,6 +3178,7 @@ proptest! {
+ 
+     /// A `.ai` whose PDF part can't be read (#4366), its private data damaged or hostile, under
+     /// any key and filter: it opens from its editing data, or with the error of its PDF part.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn ai_whose_pdf_part_cant_be_read_never_panics(
+         cut in 0usize..3_000,
+@@ -3173,6 +3209,7 @@ proptest! {
+ 
+     /// The same file with a damaged table of objects and an object stream the reader would fail
+     /// on: refused, as before.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn ai_with_a_hostile_object_stream_is_refused(damage in prop::collection::vec((0usize..200, any::<u8>()), 0..6)) {
+         let private = [&b"%AI12_CompressedData"[..], &deflated(&vectorcraft_testkit::ai::sample_data())].concat();
+@@ -3193,6 +3230,7 @@ proptest! {
+     /// A `.ai` whose variable library is damaged or hostile: the library is counted for the warning
+     /// whether the layers are read or not (an inserted `Z` can make an operator the reader doesn't
+     /// handle, and then the layers aren't read).
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn ai_variable_library_never_panics(cut in 0usize..12_000, edits in prop::collection::vec((0usize..12_000, prop::sample::select(vec!['0', '9', ' ', '\n', '(', ')', '/', ':', ';', ',', '%', '_', 'Z'])), 0..12)) {
+         use vectorcraft_testkit::ai;
+@@ -3204,6 +3242,7 @@ proptest! {
+     }
+ 
+     /// A `.ai` whose Objects on Path record and group are damaged or hostile.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn ai_objects_on_path_never_panics(cut in 0usize..4_000, edits in prop::collection::vec((0usize..4_000, prop::sample::select(vec!['0', '1', '9', '-', '.', 'e', ' ', '\n', '(', ')', '/', ':', ';', ',', '%', '_', 'u', 'U'])), 0..12)) {
+         let text = mutate_text(&on_path_data(&ON_PATH_IDS, &ON_PATH_IDS, 4, "4", "0.5", "", ["0", "1", "2"], true, 0), cut, &edits);
+@@ -3215,6 +3254,7 @@ proptest! {
+     /// Objects on Path records of any shape: ids in any order, repeated or missing, any number of
+     /// objects, pivots and angles out of range or not finite, spacings, order tags that disagree,
+     /// groups nested or cut short, and versioned content left open.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn ai_objects_on_path_records_never_panic(
+         listed in prop::collection::vec(prop::sample::select(ON_PATH_IDS.to_vec()), 0..7),
+@@ -3239,6 +3279,7 @@ proptest! {
+ }
+ 
+ /// The data [`ai_objects_on_path_never_panics`] damages, as it is, opens with its Objects on Path group.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn the_objects_on_path_fuzz_data_opens_live() {
+     let text = on_path_data(&ON_PATH_IDS, &ON_PATH_IDS, 4, "4", "0.5", "", ["0", "1", "2"], true, 0);
+@@ -3308,6 +3349,7 @@ const NAMED_PROLOG_AI: &str = "%!PS-Adobe-3.0\n%%BoundingBox: 0 0 200 100\n%%Doc
+     %%PageTrailer\ngsave annotatepage grestore showpage\n%%Trailer\n%%EOF\n";
+ 
+ /// The fixture, as it is, opens with its layer and sublayer.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn the_named_prolog_fixture_opens_with_its_layers() {
+     let l = vectorcraft_engine::cmd::fileio::load("x.ai", NAMED_PROLOG_AI.as_bytes()).unwrap();
+@@ -3330,6 +3372,7 @@ proptest! {
+     /// Multi-layer masks (`Mb` <path> `W n` `Md` … `MB`) over any number of layers, with tokens
+     /// dropped or put anywhere (the mask operators, layer ends, groups, clipping paths) and the
+     /// data cut short.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn ai_multi_layer_masks_never_panic(
+         layers in 1usize..5,
+@@ -3762,6 +3805,7 @@ proptest! {
+     /// Art styles with Convert to Shape whose dictionary holds any of its entries, and unknown ones,
+     /// as any kind, with any value (huge, tiny, not a number, a string), repeated or left out, shown
+     /// or hidden, on a path, a group and type, on the whole object or on its fill.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn ai_convert_to_shape_never_panics(
+         entries in prop::collection::vec((
+@@ -3805,6 +3849,7 @@ proptest! {
+ 
+     /// Hostile editing data in Illustrator EPS and `.ai` files: operators in any order with any
+     /// operands, sections and dictionaries left open, images of any size.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn ai_hostile_editing_data_never_panics(tokens in prop::collection::vec(prop_oneof![8 => arb_ai_token(), 1 => arb_ai_wrap_entry()], 0..80)) {
+         use vectorcraft_testkit::ai;
+@@ -3826,6 +3871,7 @@ proptest! {
+     /// Layer options (`Lb`) of any number of operands with any values, and guide paths (`(N) *`,
+     /// `(S) *`) of any points, among them ones across the whole canvas or from edge to edge of
+     /// artboards that overlap or are the same, on layers and sublayers.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn ai_layer_options_and_ruler_guides_never_panic(
+         options in prop::collection::vec(arb_layer_operand(), 0..17),
+@@ -3862,6 +3908,7 @@ proptest! {
+     /// Artboard display options and Document Raster Effects Settings of any type and value, and
+     /// header comments (`%%For`, custom colors and their `%%+` lines, `%%TemplateBox`) with any
+     /// operands.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn ai_document_settings_never_panic(
+         boards in prop::collection::vec(prop::collection::vec((prop::sample::select(vec!["DisplayMark", "PAR"]), arb_ai_setting()), 0..4), 0..4),
+@@ -4428,6 +4475,7 @@ fn pdf_nesting_inside_compressed_page_content() {
+     open_each("content", files);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_nesting_inside_an_object_stream() {
+     let (n, d) = (100_000, 50_000);
+@@ -4560,6 +4608,7 @@ fn calculator(z: &[u8], dp: &str) -> String {
+ // parameters (`Columns 0` divides by zero, a huge `Columns` allocates a row that large), and
+ // inflates without a ceiling.
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_streams_the_reader_would_fail_on_are_refused() {
+     let zero = "/DecodeParms << /Predictor 2 /Columns 0 >>";
+@@ -4637,6 +4686,7 @@ fn pdf_streams_the_reader_would_fail_on_are_refused() {
+ /// A page drawing a thousand times one form that decodes to 64 MiB (of spaces, then a square):
+ /// each drawing reads the form again, so the import stops at the page's form content instead of
+ /// decoding 64 GB (#3569, which hung).
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_a_huge_form_drawn_over_and_over_is_refused_in_bounded_time() {
+     use std::io::Write as _;
+@@ -4656,6 +4706,7 @@ fn pdf_a_huge_form_drawn_over_and_over_is_refused_in_bounded_time() {
+ 
+ // A large file the reader would fail on says which stream (#4366): an image with its size in
+ // pixels, a page's content, or the editing data an `.ai` keeps in its first page's `PieceInfo`.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_stream_past_the_cap_is_named() {
+     let image = "/Type /XObject /Subtype /Image /Width 10 /Height 10 /ColorSpace /DeviceRGB /BitsPerComponent 8";
+@@ -4709,6 +4760,7 @@ fn a_stream_past_the_cap_is_named() {
+ 
+ // Pages that share one `Contents` array, the array an object of its own: its stream is named as
+ // a page's content, and a refused stream elsewhere is still found past the pages (#4612 review).
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pages_sharing_a_contents_array_name_its_stream() {
+     let image = "/Type /XObject /Subtype /Image /Width 10 /Height 10 /ColorSpace /DeviceRGB /BitsPerComponent 8";
+@@ -5023,6 +5075,7 @@ fn nested_document(levels: usize) -> Document {
+     b.build()
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_document_at_the_cap_saves_opens_and_exports() {
+     on_a_small_stack(|| {
+@@ -5202,6 +5255,7 @@ fn a_pattern_painting_its_own_tile_opens_without_the_paint() {
+ /// A .ai cut short inside an array or dictionary of its PDF part (found by
+ /// `ai_mutated_save_never_panics`): a value can't be read whole, and hayro's iterators over the
+ /// array's items or the dictionary's entries would panic on it.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn ai_cut_inside_an_array_or_dictionary_opens_without_panicking() {
+     for flip in [None, Some((12262, b'/'))] {
+@@ -5273,6 +5327,7 @@ fn ai_private(layer_art: &str) -> Vec<u8> {
+ /// A blend of many steps doesn't stall the import: one within the limits (a thousand steps between
+ /// two keys) is checked and made live quickly, one past them keeps its drawn steps without being
+ /// laid out.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn large_ai_blends_import_in_bounded_time() {
+     for (steps, live) in [(3, true), (998, true), (1_500, false)] {
+@@ -5293,6 +5348,7 @@ proptest! {
+ 
+     /// A `.ai` blend whose record, parts or drawn steps are damaged or hostile: read live, as its
+     /// drawn steps, or not at all, never panicking.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn ai_blend_never_panics(steps in 1usize..6, cut in 0usize..2_500, edits in prop::collection::vec((0usize..2_500, prop::sample::select(vec!['0', '9', '-', '.', ' ', '\n', '(', ')', '/', ':', ';', '%', '_', 'K', 'S', 'A', 'B', 'u', 'U', 'F', 'X'])), 0..12)) {
+         let text = mutate_text(&blend_text(steps), cut, &edits);
+@@ -5320,6 +5376,7 @@ proptest! {
+ 
+     /// A `.ai` graph whose records are damaged, cut or hostile never panics. With only the numbers
+     /// in its records changed, the records keep their shape, and the bar still comes in.
++    #[cfg(feature = "pdf")]
+     #[test]
+     fn ai_graph_never_panics(cut in 0usize..700, edits in prop::collection::vec((0usize..700, prop::sample::select(vec!['0', '9', '-', '.', ' ', '\n', '(', ')', '[', ']', '/', '%', '_', 'G', 's', 'S', 't', 'T', 'u', 'U'])), 0..12), digits in prop::collection::vec((0usize..600, 0u8..10), 0..12)) {
+         let text = mutate_text(&graph_text(), cut, &edits);
+diff --git a/crates/engine/tests/it/dimensions.rs b/crates/engine/tests/it/dimensions.rs
+--- a/crates/engine/tests/it/dimensions.rs
++++ b/crates/engine/tests/it/dimensions.rs
+@@ -505,6 +505,7 @@ fn pdf_content(v: &Value) -> String {
+ /// #3233: in a CMYK document a dimension's black lines and label print on the black plate only
+ /// (`0 0 0 1 K`), not as a four-ink rich black; other colours convert to CMYK; RGB documents keep
+ /// RGB.
++#[cfg(feature = "pdf")]
+ #[test]
+ fn dimension_colours_follow_the_document_colour_model() {
+     let mut s = Session::new();
+diff --git a/crates/engine/tests/it/inline_text.rs b/crates/engine/tests/it/inline_text.rs
+--- a/crates/engine/tests/it/inline_text.rs
++++ b/crates/engine/tests/it/inline_text.rs
+@@ -118,6 +118,7 @@ fn svg_keeps_live_text_and_draws_the_symbol() {
+     }
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn pdf_draws_the_symbol_art() {
+     let (mut s, id) = setup(true);
+diff --git a/crates/engine/tests/it/lossy_overwrite.rs b/crates/engine/tests/it/lossy_overwrite.rs
+--- a/crates/engine/tests/it/lossy_overwrite.rs
++++ b/crates/engine/tests/it/lossy_overwrite.rs
+@@ -45,6 +45,7 @@ fn dir(name: &str) -> std::path::PathBuf {
+     d
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_file_the_import_left_things_out_of_is_not_written_over_unasked() {
+     let d = dir("a");
+@@ -72,6 +73,7 @@ fn a_file_the_import_left_things_out_of_is_not_written_over_unasked() {
+     std::fs::remove_dir_all(d).ok();
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn a_file_the_import_read_whole_is_written_over_as_before() {
+     let d = dir("b");
+@@ -83,6 +85,7 @@ fn a_file_the_import_read_whole_is_written_over_as_before() {
+     std::fs::remove_dir_all(d).ok();
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn the_other_ways_of_writing_a_file_ask_too() {
+     let d = dir("c");
+diff --git a/crates/engine/tests/it/model_based.rs b/crates/engine/tests/it/model_based.rs
+--- a/crates/engine/tests/it/model_based.rs
++++ b/crates/engine/tests/it/model_based.rs
+@@ -182,6 +182,7 @@ fn save_open_via_commands_roundtrips() {
+     check_all(&mut s).unwrap();
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn serialize_all_formats_on_rich_doc() {
+     let mut s = fixtures::rich_session();
+diff --git a/crates/engine/tests/it/three_d_light_color.rs b/crates/engine/tests/it/three_d_light_color.rs
+--- a/crates/engine/tests/it/three_d_light_color.rs
++++ b/crates/engine/tests/it/three_d_light_color.rs
+@@ -28,6 +28,7 @@ fn contains_color(n: &Node, hex: &str) -> bool {
+         || n.children().is_some_and(|ch| ch.iter().any(|n| contains_color(n, hex)))
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn all_four_light_colors_save_reopen_undo_and_expand_without_editing_source() {
+     for effect in EFFECTS {
+@@ -120,6 +121,7 @@ fn vector_exports(s: &mut Session) -> String {
+     svg
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn colored_revolve_smooth_shading_and_default_caps_work_together_and_expand() {
+     let (mut s, id) = capped_profile();
+@@ -152,6 +154,7 @@ fn colored_revolve_smooth_shading_and_default_caps_work_together_and_expand() {
+     vector_exports(&mut s);
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn colored_smooth_source_gradients_keep_alpha_and_vector_output() {
+     for opacity in [1.0, 0.45] {
+@@ -237,6 +240,7 @@ fn colored_smooth_source_gradients_keep_alpha_and_vector_output() {
+     }
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn multiple_lights_survive_commands_history_native_save_and_vector_expansion() {
+     let lights = json!([
+@@ -313,6 +317,7 @@ fn malformed_light_lists_are_rejected_atomically_and_null_restores_legacy_contro
+     }
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn smooth_multi_light_color_varies_in_two_directions_and_stays_vector_with_source_gradients() {
+     let (mut s, id) = capped_profile();
+@@ -375,6 +380,7 @@ fn smooth_multi_light_color_varies_in_two_directions_and_stays_vector_with_sourc
+     }
+ }
+ 
++#[cfg(feature = "pdf")]
+ #[test]
+ fn inflate_lighting_has_no_polygon_steps_and_stays_vector_after_expansion() {
+     // Check the export pipeline's continuous shading. The 8-bit canvas is also reviewed
+diff --git a/crates/engine/tests/plugin_fuzz.rs b/crates/engine/tests/plugin_fuzz.rs
+--- a/crates/engine/tests/plugin_fuzz.rs
++++ b/crates/engine/tests/plugin_fuzz.rs
+@@ -41,6 +41,7 @@ fn renders(s: &Session, what: &str) -> Result<(), TestCaseError> {
+             let _ = r.render_region(d, ab.rect, 0.25, true).to_png();
+         }
+         let _ = vectorcraft_svg::export(d, &vectorcraft_svg::ExportOptions::default());
++        #[cfg(feature = "pdf")]
+         let _ = vectorcraft_engine::export_pdf(d, &vectorcraft_pdf::PdfOptions::default());
+         let _ = vectorcraft_format::save_file(d);
+     });

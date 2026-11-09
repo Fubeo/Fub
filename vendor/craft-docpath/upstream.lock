@@ -1,0 +1,32 @@
+# La provenienza della copia di craft-docpath, per `tools/vendor-craft/vendor.mjs`.
+# Non si modifica a mano: la scrive `update`. Un tag è informativo, lo SHA no.
+repository = "https://github.com/storytold/craft-libs"
+mirror = "https://github.com/Fubeo/craft-libs"
+rev = "92d392cff132eaf53e13afff77f38b5c11b73aa0"
+tag = ""
+date = "2026-10-27"
+version = "0.1.0"
+
+[[file]]
+path = "LICENSE-APACHE"
+upstream = "sha256:0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+
+[[file]]
+path = "LICENSE-MIT"
+upstream = "sha256:2f42c0cafc8ad394d91373fe1f342aee5453850b151a51405c68cae9ada86d26"
+
+[[file]]
+path = "NOTICE"
+upstream = "sha256:35c64da07565fe858d6988d5561695f5cb1364583119b4d9f7ca876b916e9338"
+
+[[file]]
+path = "crates/docpath/Cargo.toml"
+upstream = "sha256:6928b72b2f95d51c52869d1834b844321f0a6ab8b7e4db1d7eecbe60a867e598"
+
+[[file]]
+path = "crates/docpath/src/lib.rs"
+upstream = "sha256:88c58c4e1e8447805913d190315cb152c6c7853ca64e3b7c573df157c7a773a1"
+
+[[file]]
+path = "crates/docpath/tests/docpath.rs"
+upstream = "sha256:bc4bd7324b2bfb4d500ee1362991ebdba81b337a736f53d5071927b434f24d0b"

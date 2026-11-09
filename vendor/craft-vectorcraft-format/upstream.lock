@@ -1,0 +1,40 @@
+# La provenienza della copia di craft-vectorcraft-format, per `tools/vendor-craft/vendor.mjs`.
+# Non si modifica a mano: la scrive `update`. Un tag è informativo, lo SHA no.
+repository = "https://github.com/storytold/craft-libs"
+mirror = "https://github.com/Fubeo/craft-libs"
+rev = "14d5dbb50c317b8747a9cf9eb35ab8a22515f137"
+tag = ""
+date = "2026-11-01"
+version = "0.1.0"
+
+[[file]]
+path = "LICENSE-APACHE"
+upstream = "sha256:0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+
+[[file]]
+path = "LICENSE-MIT"
+upstream = "sha256:2f42c0cafc8ad394d91373fe1f342aee5453850b151a51405c68cae9ada86d26"
+
+[[file]]
+path = "NOTICE"
+upstream = "sha256:b0a52617abba6f559c79cc18f4deafc6c8463b4ed92bfd235db4f2b56044e73e"
+
+[[file]]
+path = "crates/vectorcraft-format/Cargo.toml"
+upstream = "sha256:3fe04bb005b584b99f68ccf7be2150adca03050ee9f25d4223eff1f659035657"
+
+[[file]]
+path = "crates/vectorcraft-format/README.md"
+upstream = "sha256:8a00281bdd976804525685de86927e2f194a3763312a1d40482da069e8035c76"
+
+[[file]]
+path = "crates/vectorcraft-format/src/base64.rs"
+upstream = "sha256:b63e8d07263d69b5bbd40622911666bac5c7de4962402315c6f36a8f4050cf11"
+
+[[file]]
+path = "crates/vectorcraft-format/src/lib.rs"
+upstream = "sha256:c6c7ef8d1360d77e091a6013fbe000c2136ea1a5288376af74500404d7c941ee"
+
+[[file]]
+path = "crates/vectorcraft-format/tests/envelope.rs"
+upstream = "sha256:4d7b766d978fd3ea3c06eddf70c261aa1a318cf7ffe348d78618ed55067f8396"

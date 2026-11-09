@@ -1,0 +1,696 @@
+diff --git a/crates/effects/Cargo.toml b/crates/effects/Cargo.toml
+--- a/crates/effects/Cargo.toml
++++ b/crates/effects/Cargo.toml
+@@ -14,10 +14,15 @@ vectorcraft-three-d = { workspace = true }
+ vectorcraft-doc = { workspace = true }
+ vectorcraft-pathops = { workspace = true }
+ vectorcraft-text = { workspace = true }
+-vectorcraft-plugins = { workspace = true }
++vectorcraft-plugins = { workspace = true, optional = true }
+ image = { workspace = true }
+ kurbo = { workspace = true }
+ serde_json = { workspace = true }
+ 
++[features]
++# Plug-in effects (`plugin.<id>`), run by an installed WebAssembly plug-in. Off, the catalogue has
++# only the built-in effects and the build carries no WebAssembly interpreter.
++plugins = ["dep:vectorcraft-plugins"]
++
+ [dev-dependencies]
+ vectorcraft-color = { workspace = true }
+diff --git a/crates/effects/src/catalog.rs b/crates/effects/src/catalog.rs
+--- a/crates/effects/src/catalog.rs
++++ b/crates/effects/src/catalog.rs
+@@ -824,6 +824,7 @@ pub fn effect_info(id: &str) -> Option<EffectInfo> {
+ }
+ 
+ /// The catalogue entry of the installed effect plug-in with effect id `id` (`plugin.<id>`).
++#[cfg(feature = "plugins")]
+ pub(crate) fn plugin_info(id: &str) -> Option<EffectInfo> {
+     use vectorcraft_plugins::registry::intern;
+     let p = vectorcraft_plugins::effect::installed(id)?;
+@@ -840,7 +841,20 @@ pub(crate) fn plugin_info(id: &str) -> Option<EffectInfo> {
+     })
+ }
+ 
++/// Without plug-ins no effect plug-in is installed.
++#[cfg(not(feature = "plugins"))]
++pub(crate) fn plugin_info(_id: &str) -> Option<EffectInfo> {
++    None
++}
++
+ /// The installed effect plug-ins as catalogue entries (Effect › Plug-ins), by plug-in id.
++#[cfg(feature = "plugins")]
+ pub fn plugin_effects() -> Vec<EffectInfo> {
+     vectorcraft_plugins::registry::list().iter().filter_map(|p| plugin_info(&vectorcraft_plugins::effect::effect_id(p.id()))).collect()
+ }
++
++/// Without plug-ins, none.
++#[cfg(not(feature = "plugins"))]
++pub fn plugin_effects() -> Vec<EffectInfo> {
++    vec![]
++}
+diff --git a/crates/effects/src/geometry.rs b/crates/effects/src/geometry.rs
+--- a/crates/effects/src/geometry.rs
++++ b/crates/effects/src/geometry.rs
+@@ -222,6 +222,7 @@ fn builds_within(id: &str) -> bool {
+ /// [`apply_one`] whose result may pass `max` when the effect doesn't build within it.
+ fn apply_unchecked(id: &str, p: &Value, path: &PathData, b: Rect, ctx: &GeomContext, max: usize) -> PathData {
+     use util::{join, num};
++    #[cfg(feature = "plugins")]
+     if let Some(plugin) = vectorcraft_plugins::effect::plugin_id(id) {
+         let paints = vectorcraft_plugins::effect::Paints { appearance: ctx.appearance, item: ctx.item };
+         return vectorcraft_plugins::effect::apply(plugin, p, path, b, ctx.rule, paints).unwrap_or_else(|| path.clone());
+diff --git a/crates/effects/src/params.rs b/crates/effects/src/params.rs
+--- a/crates/effects/src/params.rs
++++ b/crates/effects/src/params.rs
+@@ -16,7 +16,7 @@ pub fn merged_params(id: &str, params: &Value) -> Value {
+     let mut out = match catalog_index().get(id).map(|e| &e.defaults) {
+         Some(Value::Object(m)) => m.clone(),
+         Some(_) => Map::new(),
+-        None => vectorcraft_plugins::effect::installed(id).map(|p| p.manifest().defaults()).unwrap_or_default(),
++        None => plugin_defaults(id),
+     };
+     // Upgraded before the defaults are under it: a default angle is no angle given.
+     if let Value::Object(p) = upgrade_params(id, params) {
+@@ -88,8 +88,8 @@ fn upgrade_scribble(id: &str, m: &mut Map<String, Value>) {
+ 
+ /// A new effect record with default parameters (overridden by `params`).
+ pub fn new_effect(id: &str, params: &Value) -> Option<Effect> {
+-    if !catalog_index().contains_key(id) {
+-        vectorcraft_plugins::effect::installed(id)?;
++    if !catalog_index().contains_key(id) && !plugin_installed(id) {
++        return None;
+     }
+     Some(Effect { id: id.to_string(), params: merged_params(id, params), visible: true })
+ }
+@@ -129,7 +129,7 @@ pub fn is_geometry(id: &str) -> bool {
+         && id != CROP_MARKS
+         && id != crate::addons::halftone::HALFTONE
+         && !is_three_d(id)
+-        && (catalog_index().contains_key(id) || vectorcraft_plugins::effect::plugin_id(id).is_some())
++        && (catalog_index().contains_key(id) || is_plugin_effect(id))
+ }
+ 
+ /// Any visible geometry effect in the list?
+@@ -140,11 +140,48 @@ pub fn has_geometry(effects: &[Effect]) -> bool {
+ /// Does `n` have a visible plug-in effect, its own or a fill's or stroke's? Such an effect draws
+ /// what the plug-in installed under its id draws ([`plugin_revision`]).
+ pub fn has_plugin_effect(n: &Node) -> bool {
+-    let plugin = |e: &Effect| e.visible && vectorcraft_plugins::effect::plugin_id(&e.id).is_some();
++    let plugin = |e: &Effect| e.visible && is_plugin_effect(&e.id);
+     n.appearance.effects.iter().any(plugin) || n.appearance.items.iter().any(|i| i.effects().iter().any(plugin))
+ }
+ 
+ /// The plug-in registry's revision, which changes whenever a plug-in is installed or removed.
+ pub fn plugin_revision() -> u64 {
+-    vectorcraft_plugins::registry::revision()
++    #[cfg(feature = "plugins")]
++    return vectorcraft_plugins::registry::revision();
++    // Without plug-ins nothing is ever installed.
++    #[cfg(not(feature = "plugins"))]
++    0
++}
++
++/// Is `id` a plug-in effect's id (`plugin.<id>`), installed or not? Never without plug-ins.
++fn is_plugin_effect(id: &str) -> bool {
++    #[cfg(feature = "plugins")]
++    return vectorcraft_plugins::effect::plugin_id(id).is_some();
++    #[cfg(not(feature = "plugins"))]
++    {
++        let _ = id;
++        false
++    }
++}
++
++/// Is the effect plug-in `id` installed?
++fn plugin_installed(id: &str) -> bool {
++    #[cfg(feature = "plugins")]
++    return vectorcraft_plugins::effect::installed(id).is_some();
++    #[cfg(not(feature = "plugins"))]
++    {
++        let _ = id;
++        false
++    }
++}
++
++/// The defaults of the installed effect plug-in `id` (none when it isn't installed).
++fn plugin_defaults(id: &str) -> Map<String, Value> {
++    #[cfg(feature = "plugins")]
++    return vectorcraft_plugins::effect::installed(id).map(|p| p.manifest().defaults()).unwrap_or_default();
++    #[cfg(not(feature = "plugins"))]
++    {
++        let _ = id;
++        Map::new()
++    }
+ }
+diff --git a/crates/engine/Cargo.toml b/crates/engine/Cargo.toml
+--- a/crates/engine/Cargo.toml
++++ b/crates/engine/Cargo.toml
+@@ -13,6 +13,14 @@ default = ["bundled-fonts"]
+ # The fonts vectorcraft-text bundles (see its `bundled-fonts`). Embedders that supply every font at
+ # run time (`vectorcraft_text::FontDb::add_font`) build with `default-features = false`.
+ bundled-fonts = ["vectorcraft-text/bundled-fonts"]
++# The readers and writers of other apps' files, and the WebAssembly plug-ins: each optional and
++# off by default, for an embedder that reads and writes only the native, SVG, DXF and image files.
++# EMF and WMF (vectorcraft-metafile).
++metafile = ["dep:vectorcraft-metafile"]
++# Affinity Designer files (vectorcraft-affinity).
++affinity = ["dep:vectorcraft-affinity"]
++# Effects, exporters and object filters run by an installed WebAssembly plug-in (vectorcraft-plugins).
++plugins = ["dep:vectorcraft-plugins", "vectorcraft-effects/plugins"]
+ 
+ [dependencies]
+ # Which paths stored in documents may be opened.
+@@ -26,14 +34,16 @@ vectorcraft-render = { workspace = true }
+ vectorcraft-pathops = { workspace = true }
+ vectorcraft-brush = { workspace = true }
+ vectorcraft-trace = { workspace = true }
++# For its `plugins` feature; already in the build (vectorcraft-render, vectorcraft-tools).
++vectorcraft-effects = { workspace = true }
+ vectorcraft-svg = { workspace = true }
+ vectorcraft-format = { workspace = true }
+ vectorcraft-pdf = { workspace = true }
+ vectorcraft-cad = { workspace = true }
+ vectorcraft-eps = { workspace = true }
+-vectorcraft-metafile = { workspace = true }
+-vectorcraft-plugins = { workspace = true }
+-vectorcraft-affinity = { workspace = true }
++vectorcraft-metafile = { workspace = true, optional = true }
++vectorcraft-plugins = { workspace = true, optional = true }
++vectorcraft-affinity = { workspace = true, optional = true }
+ vectorcraft-scriptcheck = { workspace = true }
+ image = { workspace = true }
+ hayro-jpeg2000 = { version = "=0.3.5", default-features = false, features = ["std", "simd"] }
+diff --git a/crates/engine/src/cmd.rs b/crates/engine/src/cmd.rs
+--- a/crates/engine/src/cmd.rs
++++ b/crates/engine/src/cmd.rs
+@@ -66,6 +66,7 @@ pub mod patternlib;
+ pub mod pdfcmds;
+ pub mod perspgrid;
+ pub mod place;
++#[cfg(feature = "plugins")]
+ pub mod plugin;
+ pub mod prefscmds;
+ pub mod print;
+@@ -327,6 +328,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
+         v.extend(css::specs());
+         v.extend(printpresets::specs());
+         v.extend(printtiling::specs());
++        #[cfg(feature = "plugins")]
+         v.extend(plugin::specs());
+         v.extend(scripts::specs());
+         v.extend(cut::specs());
+diff --git a/crates/engine/src/cmd/clipboard/flavours.rs b/crates/engine/src/cmd/clipboard/flavours.rs
+--- a/crates/engine/src/cmd/clipboard/flavours.rs
++++ b/crates/engine/src/cmd/clipboard/flavours.rs
+@@ -200,6 +200,7 @@ pub fn specs() -> Vec<CommandSpec> {
+             has_doc,
+             import_pdf
+         ),
++        #[cfg(feature = "metafile")]
+         cmd!(
+             query "clipboard.importEmf",
+             "Load Metafile into Clipboard",
+@@ -457,6 +458,7 @@ fn import_text(s: &mut Session, p: &Value) -> Result<Value> {
+     Ok(json!({ "count": count }))
+ }
+ 
++#[cfg(feature = "metafile")]
+ fn import_emf(s: &mut Session, p: &Value) -> Result<Value> {
+     const C: &str = "clipboard.importEmf";
+     let bytes = data_param(p, C)?;
+diff --git a/crates/engine/src/cmd/fileio.rs b/crates/engine/src/cmd/fileio.rs
+--- a/crates/engine/src/cmd/fileio.rs
++++ b/crates/engine/src/cmd/fileio.rs
+@@ -22,6 +22,7 @@
+ //! agents query `document.formats`.
+ 
+ mod action_batch;
++#[cfg(feature = "affinity")]
+ mod affinity;
+ mod batch;
+ pub mod dxf;
+@@ -34,6 +35,7 @@ mod legacy_ai;
+ mod load;
+ pub(crate) use load::{MAX_RASTER_ALLOC, size_note};
+ mod jp2read;
++#[cfg(feature = "metafile")]
+ mod metafile;
+ mod naming;
+ mod native;
+@@ -132,6 +134,7 @@ pub use formats::{
+ #[cfg(test)]
+ mod tests;
+ #[cfg(test)]
++#[cfg(feature = "affinity")]
+ mod tests_affinity;
+ #[cfg(test)]
+ mod tests_artboard_fill;
+@@ -185,6 +188,7 @@ mod tests_eps;
+ #[cfg(test)]
+ mod tests_dxfimport;
+ #[cfg(test)]
++#[cfg(feature = "metafile")]
+ mod tests_metafile;
+ 
+ #[cfg(test)]
+diff --git a/crates/engine/src/cmd/fileio/encode.rs b/crates/engine/src/cmd/fileio/encode.rs
+--- a/crates/engine/src/cmd/fileio/encode.rs
++++ b/crates/engine/src/cmd/fileio/encode.rs
+@@ -443,6 +443,7 @@ pub fn encode_all(doc: &Document, format: &str, p: &Value) -> Result<Encoded> {
+ /// [`encode_all`] of `doc` as it is.
+ fn encode_all_of(doc: &Document, format: &str, p: &Value) -> Result<Encoded> {
+     let f = super::writable(C, Some(format), None)?;
++    #[cfg(feature = "plugins")]
+     if let Some(plugin) = vectorcraft_plugins::export::by_format(f.id) {
+         return plugin_file(doc, &plugin, f, p);
+     }
+@@ -472,6 +473,7 @@ fn encode_all_of(doc: &Document, format: &str, p: &Value) -> Result<Encoded> {
+ /// ([`vectorcraft_format::json_part`]) and `p`'s `params`, for the file `p`'s `path` names (else
+ /// one named after the document) with that path's extension when the plug-in lists it, else its
+ /// first. Its warnings come back with the file.
++#[cfg(feature = "plugins")]
+ fn plugin_file(doc: &Document, plugin: &vectorcraft_plugins::Plugin, f: &Format, p: &Value) -> Result<Encoded> {
+     use vectorcraft_plugins::{Error, export};
+     let doc = &*doc.without_edit_modes();
+@@ -529,7 +531,9 @@ fn encode_files(doc: &Document, f: &Format, p: &Value) -> Result<Encoded> {
+         "dxf" => return super::dxf::encode(doc, p, use_artboards),
+         // EPS reads its own `useArtboards` (the art's bounds unless asked).
+         "eps" => return super::eps::encode(doc, p),
++        #[cfg(feature = "metafile")]
+         "emf" => return super::metafile::encode(doc, p, use_artboards, vectorcraft_metafile::Kind::Emf),
++        #[cfg(feature = "metafile")]
+         "wmf" => return super::metafile::encode(doc, p, use_artboards, vectorcraft_metafile::Kind::Wmf),
+         "ai" => return super::save::encode_ai(C, f, doc, p),
+         "pdf" => {
+diff --git a/crates/engine/src/cmd/fileio/formats.rs b/crates/engine/src/cmd/fileio/formats.rs
+--- a/crates/engine/src/cmd/fileio/formats.rs
++++ b/crates/engine/src/cmd/fileio/formats.rs
+@@ -1,4 +1,6 @@
+-use super::{Result, Session, TEMPLATE_FORMATS, UNSUPPORTED, Unsupported, Value, bad, dxf, eps, json, metafile, native, pdf, svg, text, unsupported};
++use super::{Result, Session, TEMPLATE_FORMATS, UNSUPPORTED, Unsupported, Value, bad, dxf, eps, json, native, pdf, svg, text, unsupported};
++#[cfg(feature = "metafile")]
++use super::metafile;
+ 
+ /// One option a format's encoder reads from the export params.
+ #[derive(Clone, Copy, Debug)]
+@@ -469,7 +471,9 @@ pub const FORMATS: &[Format] = &[
+         raster: false,
+         options: eps::OPTIONS,
+     },
++    #[cfg(feature = "metafile")]
+     Format { id: "emf", label: "EMF", extensions: &["emf"], mime: "image/emf", read: true, write: true, raster: false, options: metafile::OPTIONS },
++    #[cfg(feature = "metafile")]
+     Format { id: "wmf", label: "WMF", extensions: &["wmf"], mime: "image/wmf", read: true, write: true, raster: false, options: metafile::OPTIONS },
+     Format {
+         id: "tga",
+@@ -484,6 +488,7 @@ pub const FORMATS: &[Format] = &[
+     Format { id: "psd", label: "PSD", extensions: &["psd"], mime: "image/x-psd", read: true, write: true, raster: true, options: PSD_OPTIONS },
+     // Affinity Photo's `.afphoto` opens by its content but isn't listed: Finder shouldn't offer a
+     // vector app for a raster editor's documents.
++    #[cfg(feature = "affinity")]
+     reader("affinity", "Affinity", &["af", "afdesign", "afpub"], "application/x-affinity", false),
+     // Photoshop's large document format: read like a PSD (its merged image), never written.
+     reader("psb", "PSB", &["psb"], "image/x-psb", true),
+@@ -527,13 +532,18 @@ pub const OPEN_EXTS: &[&str] = &[
+     "psb",
+     "vctemplate",
+     "dxf",
++    #[cfg(feature = "metafile")]
+     "emf",
++    #[cfg(feature = "metafile")]
+     "wmf",
+     "eps",
+     "epsf",
+     "ps",
++    #[cfg(feature = "affinity")]
+     "af",
++    #[cfg(feature = "affinity")]
+     "afdesign",
++    #[cfg(feature = "affinity")]
+     "afpub",
+ ];
+ 
+@@ -605,13 +615,18 @@ pub const PLACE_EXTS: &[&str] = &[
+     "psb",
+     "vctemplate",
+     "dxf",
++    #[cfg(feature = "metafile")]
+     "emf",
++    #[cfg(feature = "metafile")]
+     "wmf",
+     "eps",
+     "epsf",
+     "ps",
++    #[cfg(feature = "affinity")]
+     "af",
++    #[cfg(feature = "affinity")]
+     "afdesign",
++    #[cfg(feature = "affinity")]
+     "afpub",
+     "txt",
+     "rtf",
+@@ -637,7 +652,16 @@ pub fn open_filters() -> impl Iterator<Item = (&'static str, &'static [&'static
+         .chain(std::iter::once(("Print presets", crate::cmd::printpresets::PRESET_EXTS)))
+         .chain(std::iter::once(("Shortcut sets", crate::cmd::shortcutset::EXTS)))
+         .chain(std::iter::once(("Scripts", crate::cmd::scripts::EXTS)))
+-        .chain(std::iter::once(("Plug-ins", crate::cmd::plugin::EXTS)))
++        .chain(plugin_filters())
++}
++
++/// The plug-in modules, which only the plug-in host installs.
++fn plugin_filters() -> impl Iterator<Item = (&'static str, &'static [&'static str])> {
++    #[cfg(feature = "plugins")]
++    let filters = vec![("Plug-ins", crate::cmd::plugin::EXTS)];
++    #[cfg(not(feature = "plugins"))]
++    let filters: Vec<(&'static str, &'static [&'static str])> = vec![];
++    filters.into_iter()
+ }
+ 
+ /// Open-dialog filters for Swatch Libraries and Graphic Style Libraries Other Library… and Locate
+@@ -677,6 +701,18 @@ pub fn format(id_or_ext: &str) -> Option<&'static Format> {
+ /// each installation of its plug-in, its strings interned, so formats live as long as the catalogues
+ /// that hold them.
+ pub fn plugin_formats() -> Vec<&'static Format> {
++    #[cfg(feature = "plugins")]
++    return plugin_formats_installed();
++    // Without the plug-in host no exporter is installed.
++    #[cfg(not(feature = "plugins"))]
++    {
++        vec![]
++    }
++}
++
++/// [`plugin_formats`] with the plug-in host.
++#[cfg(feature = "plugins")]
++fn plugin_formats_installed() -> Vec<&'static Format> {
+     use vectorcraft_plugins::{export, registry};
+     static MADE: std::sync::Mutex<Vec<(u64, &'static Format)>> = std::sync::Mutex::new(Vec::new());
+     let mut made = MADE.lock().unwrap_or_else(|e| e.into_inner());
+@@ -764,6 +800,7 @@ pub(super) fn formats(_: &mut Session, _: &Value) -> Result<Value> {
+     let ids = |pick: fn(&Format) -> bool| all().filter(|f| pick(f)).map(|f| f.id).collect::<Vec<_>>();
+     let listed = |f: &Format| {
+         let mut v = f.to_json();
++        #[cfg(feature = "plugins")]
+         if let Some(id) = vectorcraft_plugins::export::plugin_id(f.id) {
+             v["plugin"] = json!(id);
+         }
+diff --git a/crates/engine/src/cmd/fileio/load.rs b/crates/engine/src/cmd/fileio/load.rs
+--- a/crates/engine/src/cmd/fileio/load.rs
++++ b/crates/engine/src/cmd/fileio/load.rs
+@@ -68,6 +68,7 @@ pub fn file_name(name: &str) -> String {
+ /// extension of `name`.
+ pub fn detect(name: &str, bytes: &[u8]) -> Option<&'static Format> {
+     let by_name = format_for_name(name).filter(|f| f.read);
++    #[cfg(feature = "affinity")]
+     if vectorcraft_affinity::is_affinity(bytes) {
+         return format("affinity");
+     }
+@@ -91,6 +92,7 @@ pub fn detect(name: &str, bytes: &[u8]) -> Option<&'static Format> {
+     if vectorcraft_cad::is_dxf(bytes) {
+         return format("dxf");
+     }
++    #[cfg(feature = "metafile")]
+     if let Some(kind) = vectorcraft_metafile::sniff(bytes) {
+         return format(kind.id());
+     }
+@@ -375,10 +377,12 @@ pub fn load_with(name: &str, bytes: &[u8], opts: &LoadOptions) -> Result<Loaded>
+             let (doc, warnings) = super::dxfimport::import(bytes, &opts.dxf)?;
+             (doc, warnings, false)
+         }
++        #[cfg(feature = "metafile")]
+         "emf" | "wmf" => {
+             let (doc, warnings) = super::metafile::import(bytes)?;
+             (doc, warnings, false)
+         }
++        #[cfg(feature = "affinity")]
+         "affinity" => {
+             let i = super::affinity::import(&title, bytes)?;
+             preview_only = i.preview_only;
+diff --git a/crates/engine/src/cmd/params.rs b/crates/engine/src/cmd/params.rs
+--- a/crates/engine/src/cmd/params.rs
++++ b/crates/engine/src/cmd/params.rs
+@@ -251,6 +251,7 @@ pub(crate) fn unknown(id: &str, key: &str, keys: &[&str]) -> crate::EngineError
+ /// unknown effect is the command's to report.
+ pub fn check_effect_params(id: &str, effect: &str, params: &Value) -> Result<()> {
+     let Value::Object(given) = params else { return Ok(()) };
++    #[cfg(feature = "plugins")]
+     if effect.starts_with(vectorcraft_plugins::effect::PREFIX) {
+         return Ok(());
+     }
+@@ -303,6 +304,7 @@ fn is_effect_color(v: &Value) -> bool {
+ pub(crate) fn check_effect_color(id: &str, effect: &str, params: &Value) -> Result<()> {
+     let key = "color";
+     let Some(v) = params.get(key) else { return Ok(()) };
++    #[cfg(feature = "plugins")]
+     if effect.starts_with(vectorcraft_plugins::effect::PREFIX) {
+         return Ok(());
+     }
+diff --git a/crates/engine/src/cmd/place.rs b/crates/engine/src/cmd/place.rs
+--- a/crates/engine/src/cmd/place.rs
++++ b/crates/engine/src/cmd/place.rs
+@@ -141,6 +141,17 @@ pub(crate) fn pt_per_px(ppi: Option<(f64, f64)>) -> (f64, f64) {
+     (72.0 / x, 72.0 / y)
+ }
+ 
++/// Is `bytes` an Affinity file? Never without the Affinity reader.
++fn is_affinity(bytes: &[u8]) -> bool {
++    #[cfg(feature = "affinity")]
++    return vectorcraft_affinity::is_affinity(bytes);
++    #[cfg(not(feature = "affinity"))]
++    {
++        let _ = bytes;
++        false
++    }
++}
++
+ /// The file `p` names, read into placeable art; a DXF drawing's Fit to Artboard fills `board`
+ /// (unless the params name their own box). A PDF/.ai page read from a path is placed linked with
+ /// Link when `link_pdf` (false for the queries, which read it embedded).
+@@ -148,7 +159,7 @@ fn load(p: &Value, cmd: &str, board: Option<Rect>, link_pdf: bool) -> Result<Loa
+     let src = fileio::source(p, cmd)?;
+     let name = fileio::file_name(src.name);
+     // An Affinity file is recognised by its signature, whatever its name says.
+-    if fileio::TEXT_EXTS.contains(&fileio::extension(src.name).as_str()) && !vectorcraft_affinity::is_affinity(&src.bytes) {
++    if fileio::TEXT_EXTS.contains(&fileio::extension(src.name).as_str()) && !is_affinity(&src.bytes) {
+         let text = text::import(&src.bytes, text::TextOptions::parse(p, cmd)?, cmd)?;
+         if text.trim().is_empty() {
+             return Err(bad(cmd, format!("`{name}` has no text to place")));
+diff --git a/crates/engine/src/cmd/prefscmds.rs b/crates/engine/src/cmd/prefscmds.rs
+--- a/crates/engine/src/cmd/prefscmds.rs
++++ b/crates/engine/src/cmd/prefscmds.rs
+@@ -616,6 +616,7 @@ impl Session {
+             }
+         }
+         // Plug-ins in a newly set Additional Plug-ins Folder are installed.
++        #[cfg(feature = "plugins")]
+         super::plugin::sync_prefs(self);
+     }
+ }
+diff --git a/crates/engine/src/lib.rs b/crates/engine/src/lib.rs
+--- a/crates/engine/src/lib.rs
++++ b/crates/engine/src/lib.rs
+@@ -128,6 +128,7 @@ pub struct Session {
+     plugin_dir: Option<std::path::PathBuf>,
+     /// A filter's output that a run made in the background handed in for `plugin.run` to apply
+     /// ([`cmd::plugin::FilterRun::hand_in`]); the next `plugin.run` takes it.
++    #[cfg(feature = "plugins")]
+     plugin_output: Option<cmd::plugin::HandedIn>,
+     /// URLs recently given in the Attributes panel (`attributes.set {url}`), newest first; not saved.
+     pub recent_urls: Vec<String>,
+diff --git a/crates/engine/src/session/documents.rs b/crates/engine/src/session/documents.rs
+--- a/crates/engine/src/session/documents.rs
++++ b/crates/engine/src/session/documents.rs
+@@ -67,6 +67,7 @@ impl Session {
+             pdf_preset_dir: None,
+             profile_dir: None,
+             plugin_dir: None,
++            #[cfg(feature = "plugins")]
+             plugin_output: None,
+             recent_urls: vec![],
+             trace_preset_changes: Default::default(),
+diff --git a/crates/engine/src/store.rs b/crates/engine/src/store.rs
+--- a/crates/engine/src/store.rs
++++ b/crates/engine/src/store.rs
+@@ -218,6 +218,7 @@ impl Session {
+ 
+     /// Keep the plug-ins this session installs in `dir`, and install the ones already there (a
+     /// module that doesn't load is skipped with a log record).
++    #[cfg(feature = "plugins")]
+     pub fn attach_plugin_store(&mut self, dir: PathBuf) {
+         let limits = vectorcraft_plugins::Limits::default();
+         let mut left = MAX_PLUGIN_STORE;
+@@ -241,6 +242,7 @@ impl Session {
+     }
+ 
+     /// Write the module `bytes` of the plug-in `id` to the store.
++    #[cfg(feature = "plugins")]
+     pub(crate) fn store_plugin(&self, id: &str, bytes: &[u8]) {
+         if let Some(dir) = &self.plugin_dir {
+             put(dir, &format!("{}.{PLUGIN_EXT}", file_stem(id)), bytes);
+@@ -248,6 +250,7 @@ impl Session {
+     }
+ 
+     /// Remove the plug-in `id` from the store.
++    #[cfg(feature = "plugins")]
+     pub(crate) fn unstore_plugin(&self, id: &str) {
+         if let Some(dir) = &self.plugin_dir {
+             take(dir, &format!("{}.{PLUGIN_EXT}", file_stem(id)));
+diff --git a/crates/engine/src/tests.rs b/crates/engine/src/tests.rs
+--- a/crates/engine/src/tests.rs
++++ b/crates/engine/src/tests.rs
+@@ -118,6 +118,7 @@ mod persp_text;
+ mod perspgrid;
+ mod place;
+ mod placed_document;
++#[cfg(feature = "plugins")]
+ mod plugins;
+ mod prefs;
+ mod previewbounds;
+diff --git a/crates/engine/src/tests/rastersettings.rs b/crates/engine/src/tests/rastersettings.rs
+--- a/crates/engine/src/tests/rastersettings.rs
++++ b/crates/engine/src/tests/rastersettings.rs
+@@ -390,6 +390,7 @@ fn a_file_with_the_resolution_out_of_range_opens_with_it_in_range() {
+     }
+ }
+ 
++#[cfg(feature = "metafile")]
+ #[test]
+ fn a_gradient_exports_at_the_resolution_the_file_opens_with() {
+     for saved in [0.0, -5.0] {
+diff --git a/crates/engine/tests/affinity_artboards.rs b/crates/engine/tests/affinity_artboards.rs
+--- a/crates/engine/tests/affinity_artboards.rs
++++ b/crates/engine/tests/affinity_artboards.rs
+@@ -1,5 +1,6 @@
+ //! Synthetic version-12 regression documents exercise placement and clipping, independently of
+ //! the pinned real-file corpus. These are reader fixtures, never claimed as Affinity-authored.
++#![cfg(feature = "affinity")]
+ #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+ 
+ use kurbo::Rect;
+diff --git a/crates/engine/tests/affinity_corpus.rs b/crates/engine/tests/affinity_corpus.rs
+--- a/crates/engine/tests/affinity_corpus.rs
++++ b/crates/engine/tests/affinity_corpus.rs
+@@ -6,6 +6,7 @@
+ //!
+ //! Each artboard is checked. Local runs may skip an absent corpus; CI requires the complete
+ //! pinned corpus with `AFFINITY_CORPUS_REQUIRED=1`. Tests recheck hashes before using inputs.
++#![cfg(feature = "affinity")]
+ // Integration tests: unwrapping and panicking on failure is fine here, unlike in shipped code (AGENTS.md › Robustness).
+ #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+ 
+diff --git a/crates/engine/tests/affinity_text.rs b/crates/engine/tests/affinity_text.rs
+--- a/crates/engine/tests/affinity_text.rs
++++ b/crates/engine/tests/affinity_text.rs
+@@ -1,6 +1,7 @@
+ //! Editable text import regressions on original synthetic version-12 `.af` streams and pinned
+ //! public Affinity 3 files. Font rendering depends on installed fonts; these are structure and
+ //! conversion oracles, not claims of pixel-identical typography.
++#![cfg(feature = "affinity")]
+ #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+ 
+ #[path = "../../affinity/tests/support/corpus.rs"]
+diff --git a/crates/engine/tests/import_fuzz.rs b/crates/engine/tests/import_fuzz.rs
+--- a/crates/engine/tests/import_fuzz.rs
++++ b/crates/engine/tests/import_fuzz.rs
+@@ -190,6 +190,7 @@ fn affinity_native(stream: &[u8], method: vectorcraft_affinity::synth::Method) -
+     vectorcraft_affinity::synth::container(&[("doc.dat", stream, method)], None)
+ }
+ 
++#[cfg(feature = "affinity")]
+ #[test]
+ fn the_native_affinity_sample_reaches_every_reader_path() {
+     let bytes = affinity_native(&affinity_native_stream(), vectorcraft_affinity::synth::Method::Zstd);
+@@ -320,6 +321,7 @@ fn affinity_sample_file(stream: &[u8], embedded: Option<&[u8]>) -> Vec<u8> {
+     affinity_docs::packed(stream, inner.as_deref(), Method::Stored)
+ }
+ 
++#[cfg(feature = "affinity")]
+ #[test]
+ fn the_affinity_feature_samples_reach_what_they_are_for() {
+     use vectorcraft_doc::NodeKind;
+@@ -2503,6 +2505,7 @@ const WMF_FUNCTIONS: [u16; 33] = [
+ proptest! {
+     #![proptest_config(config())]
+ 
++    #[cfg(feature = "metafile")]
+     #[test]
+     fn mutated_metafiles_never_panic(which in 0usize..2, cut in 0usize..200_000, edits in prop::collection::vec((0usize..200_000, any::<u8>()), 0..16)) {
+         let mut bytes = metafile_samples()[which].clone();
+@@ -2524,6 +2527,7 @@ proptest! {
+         survive_metafile("WMF records", "x.wmf", &wmf_of(&records))?;
+     }
+ 
++    #[cfg(feature = "metafile")]
+     #[test]
+     fn pasted_metafiles_never_panic(which in 0usize..2, cut in 0usize..200_000, edits in prop::collection::vec((0usize..200_000, any::<u8>()), 0..12)) {
+         paste_from_elsewhere("clipboard.importEmf", json!({"dataBase64": mutated_b64(metafile_samples()[which].clone(), cut, &edits)}))?;
+@@ -4874,6 +4878,7 @@ fn metafiles_saving_states_without_end_are_read_within_the_cap() {
+     });
+ }
+ 
++#[cfg(feature = "plugins")]
+ #[test]
+ fn deeply_nested_plugin_manifests_and_output_are_errors() {
+     on_a_small_stack(|| {
+@@ -5212,6 +5217,7 @@ fn ai_cut_inside_an_array_or_dictionary_opens_without_panicking() {
+ /// Found by the fuzzer above: a shape 3.3 million points long and 50 high, with a drop shadow,
+ /// made the PDF export rasterise its shadow wider than the renderer can address (within the
+ /// effect image's area limit, past any side), which panicked.
++#[cfg(feature = "affinity")]
+ #[test]
+ fn a_long_thin_shape_with_a_shadow_renders_and_exports() {
+     use affinity_docs::*;
+diff --git a/crates/engine/tests/it/main.rs b/crates/engine/tests/it/main.rs
+--- a/crates/engine/tests/it/main.rs
++++ b/crates/engine/tests/it/main.rs
+@@ -3,11 +3,15 @@
+ #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+ 
+ #[path = "../support/affinity_docs.rs"]
++#[cfg(feature = "affinity")]
+ mod affinity_docs;
+ #[path = "../../../affinity/tests/support/text_fixture.rs"]
++#[cfg(feature = "affinity")]
+ mod text_fixture;
+ 
++#[cfg(feature = "affinity")]
+ mod affinity_features;
++#[cfg(feature = "affinity")]
+ mod affinity_local;
+ mod artboard_click;
+ mod beyond_canvas;
+diff --git a/crates/engine/tests/plugin_export.rs b/crates/engine/tests/plugin_export.rs
+--- a/crates/engine/tests/plugin_export.rs
++++ b/crates/engine/tests/plugin_export.rs
+@@ -4,6 +4,7 @@
+ //!
+ //! A test binary of its own: installed plug-ins are process-wide, and the unit tests that check the
+ //! exact list of formats would see these ones.
++#![cfg(feature = "plugins")]
+ // Integration tests: unwrapping and panicking on failure is fine here, unlike in shipped code (AGENTS.md › Robustness).
+ #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+ 
+diff --git a/crates/engine/tests/plugin_fuzz.rs b/crates/engine/tests/plugin_fuzz.rs
+--- a/crates/engine/tests/plugin_fuzz.rs
++++ b/crates/engine/tests/plugin_fuzz.rs
+@@ -6,6 +6,7 @@
+ //! panic.
+ //!
+ //! `PROPTEST_CASES=2000 cargo test -p vectorcraft-engine --test plugin_fuzz` runs a deeper search.
++#![cfg(feature = "plugins")]
+ // Integration tests: unwrapping and panicking on failure is fine here, unlike in shipped code (AGENTS.md › Robustness).
+ #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+ 
+diff --git a/crates/render/Cargo.toml b/crates/render/Cargo.toml
+--- a/crates/render/Cargo.toml
++++ b/crates/render/Cargo.toml
+@@ -44,6 +44,7 @@ vectorcraft-testkit = { workspace = true }
+ vectorcraft-text = { workspace = true, features = ["test-fonts"] }
+ # Live-effect plug-ins the cache tests install, written in WebAssembly text.
+ vectorcraft-plugins = { workspace = true }
++vectorcraft-effects = { workspace = true, features = ["plugins"] }
+ wat = { workspace = true }
+ # Decoders the export tests read their files back with.
+ image = { workspace = true, features = ["tga"] }

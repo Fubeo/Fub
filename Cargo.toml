@@ -85,6 +85,11 @@ exclude = [
     "vendor/wordcraft",
     # La copia di GridCraft, con la stessa forma (vendor/gridcraft/UPSTREAM.md).
     "vendor/gridcraft",
+    # La copia di VectorCraft, con la stessa forma (vendor/vectorcraft/UPSTREAM.md),
+    # e le due librerie di craft-libs che prende per percorso.
+    "vendor/vectorcraft",
+    "vendor/craft-docpath",
+    "vendor/craft-vectorcraft-format",
 ]
 
 [workspace.package]

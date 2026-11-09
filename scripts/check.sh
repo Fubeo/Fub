@@ -165,6 +165,9 @@ doc_guards() {
 vendor_guards() {
   run "WordCraft = upstream + patch" node tools/vendor-craft/vendor.mjs wordcraft check
   run "GridCraft = upstream + patch" node tools/vendor-craft/vendor.mjs gridcraft check
+  run "VectorCraft = upstream + patch" node tools/vendor-craft/vendor.mjs vectorcraft check
+  run "craft-docpath = upstream" node tools/vendor-craft/vendor.mjs craft-docpath check
+  run "craft-vectorcraft-format = upstream" node tools/vendor-craft/vendor.mjs craft-vectorcraft-format check
   run "patch dei motori a tre vie" node tools/vendor-craft/vendor.mjs self-test
 }
 
@@ -320,6 +323,7 @@ else
   run "fub-testkit con pixel (test)" tests -p fub-testkit --features pixel
   run "motori di WordCraft (workspace loro)" env CARGO_TARGET_DIR=target/wordcraft cargo test --manifest-path vendor/wordcraft/Cargo.toml --workspace --locked --no-fail-fast
   run "motori di GridCraft (workspace loro)" env CARGO_TARGET_DIR=target/gridcraft cargo test --manifest-path vendor/gridcraft/Cargo.toml --workspace --locked --no-fail-fast
+  run "motori di VectorCraft (workspace loro)" env CARGO_TARGET_DIR=target/vectorcraft cargo test --manifest-path vendor/vectorcraft/Cargo.toml --workspace --locked --no-fail-fast
 
   # supply chain
   if have cargo-deny; then
