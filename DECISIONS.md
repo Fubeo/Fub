@@ -99,6 +99,13 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · S2 T29 · il visore del PDF disegna le annotazioni del
+  `.fubann` sopra le pagine, in sola lettura, con l'interruttore «Mostra le
+  annotazioni»; «Annota» resta per modificarle · l'utente, fra tre strade
+  (il visore le mostra, aprire già annotato, solo un avviso): «Visore le
+  mostra». Il task va in S2 e non in PA perché la barra del PDF e la sua
+  pagina sono di S2 T18, che non è ancora in `main`: un task PA sulla barra
+  di `main` farebbe conflitto alla fusione di #309.
 - 2026-11-09 · K2 · #290 unita in `main` (cd080044) dopo la prova D-2
   dell'utente e la CI completa verde; le sei baseline nuove
   (`settings-components-*`, `new-vault-profile-*`, `mobile-settings-*`)
