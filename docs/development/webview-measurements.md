@@ -43,6 +43,7 @@ ascolta niente e non chiede fotogrammi.
 | T1 | le tessere: un fotogramma di 2880 × 1800 RGBA letto a tessere di 256 × 256 dalla IPC (`resource_read_chunk`) e da `fub-asset:` con `Range`, poi disegnato su una tela, una tessera e un fotogramma intero per fotogramma | p95 per tessera, mediana per fotogramma, ms |
 | I1 | il vault durante l'indicizzazione dell'avvio (10.000 note): una nota aperta con `read_document` e una tessera letta dalla IPC, una dopo l'altra, finché `vault_status` non dice che l'indice è pronto | p95 per nota e per tessera, ms |
 | L1 | il nucleo della lavagna in WebAssembly: il modulo degli asset compilato con la CSP dell'app, poi venti aperture e duecento spostamenti di una scheda su una lavagna di 50 e una di 2.000 schede | istanza; prima apertura, primo commit e p95, ms |
+| C1 | i profili dei componenti: «Solo note» e poi «Tutto» applicati con `components_apply`, l'app riavviata sulla nota lunga, poi un'altra nota aperta | avvio a freddo in ms, chunk scaricati all'avvio, chunk dei componenti spegnibili arrivati (zero in tutti e due i profili) |
 
 R1 legge `/proc/<pid>/smaps_rollup` dei processi che discendono dal driver,
 tolti i driver (`memory.mjs`): la PSS divide le pagine condivise fra chi le
@@ -91,6 +92,17 @@ I1 controlla che l'indicizzazione non fermi il vault (`indexing.mjs`): ogni
 avvio sul vault del banco indicizza le diecimila note, e i comandi che passano
 dal workspace non devono aspettare la fine di una fetta. Lo scenario fallisce
 se l'indice era già pronto all'avvio, perché allora non ha misurato niente.
+
+C1 controlla che il codice dei componenti spegnibili non arrivi nella WebView
+prima che serva. Il build scrive in `dist/switchable-chunks.json` i chunk che
+contengono un pezzo del PDF, della lavagna, dei disegni, dei documenti o dei
+fogli, con i moduli che ce lo portano; con «Solo note» e con «Tutto» nessuno
+di questi deve comparire fra gli script scaricati, all'avvio o aprendo una
+nota (`C1.<profilo>.spegnibili`, soglia 0): arrivano quando si apre un loro
+file, e soltanto se il componente è acceso. Senza quel file, cioè senza
+`npm run build` prima dell'app, lo scenario fallisce. Il referto elenca i
+chunk di ogni profilo e, per uno spegnibile arrivato, i moduli che lo hanno
+portato. C1 gira per ultimo e lascia il vault del banco a «Tutto».
 
 Ogni scenario è un avvio dell'app. L'avvio indicizza il vault da capo, e la
 shell risponde prima che abbia finito: tranne S6, gli scenari partono quando
@@ -157,7 +169,7 @@ in più vanno a `run.mjs`, per esempio `--only=R1,T1`.
 Il referto va in `apps/client/bench/.output/webview/referto.json`. Il comando
 esce con 1 se un valore supera la soglia scelta.
 
-Il job `webview` della CI fa lo stesso con S1–S3, S7, R1, T1, I1 e L1, sotto Xvfb e
+Il job `webview` della CI fa lo stesso con S1–S3, S7, R1, T1, I1, L1 e C1, sotto Xvfb e
 senza scheda grafica, e carica il referto come artifact `webview-<sha>`.
 
 ## macOS

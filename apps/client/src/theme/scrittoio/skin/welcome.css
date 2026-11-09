@@ -14,7 +14,8 @@
   scrollbar-color: var(--border-strong) transparent;
 }
 
-.onboarding > h2 {
+.onboarding > h2,
+.onboarding-profile > h2 {
   align-self: center;
   margin: 0;
   font-family: var(--font-reading);
@@ -27,7 +28,8 @@
   text-wrap: balance;
 }
 
-.onboarding > p {
+.onboarding > p,
+.onboarding-profile > p {
   align-self: center;
   max-width: 46ch;
   margin: var(--space-4) 0 0;
@@ -432,4 +434,36 @@
 }
 .onboarding-trouble > section {
   margin-top: var(--space-5);
+}
+
+/* --- il profilo di un vault nuovo --------------------------------------------- */
+/* La stessa voce del benvenuto: il titolo nel carattere della lettura, la
+   frase in grafite; sotto, la riga dei profili delle impostazioni, e
+   «Continua» come il foglio pieno della scrivania. La riga in fondo è un
+   promemoria, più piccola. */
+.onboarding-profile > .components-profiles {
+  margin-top: var(--space-8);
+}
+.onboarding-profile > .onboarding-profile-status {
+  min-height: 0;
+  margin-top: var(--space-5);
+  color: var(--text);
+  font-size: var(--text-base);
+}
+.onboarding-profile > .onboarding-actions {
+  padding: var(--space-7) 0 var(--space-5);
+}
+.onboarding-profile > .onboarding-actions > button {
+  min-height: calc(var(--control-h) + var(--space-5));
+  padding: 0 var(--space-8);
+  border-radius: var(--radius-sheet);
+  box-shadow: var(--shadow-1);
+  font-size: var(--text-md);
+}
+.onboarding-profile > .onboarding-actions > button[aria-busy="true"] {
+  cursor: progress;
+}
+.onboarding-profile > .onboarding-profile-note {
+  margin-top: 0;
+  font-size: var(--text-sm);
 }
