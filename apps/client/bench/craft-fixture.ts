@@ -60,9 +60,14 @@ export function craftSceneRender(
 // o di un Word (la dice il bundle vero): `pdfScenePreview` risponde al suo
 // posto a `craft.preview`, senza toccare `src/host/fake.ts`.
 
-export type PdfSceneCase = "nota" | "nota-senza" | "domanda" | "due-righe";
+//
+// `?pdf-scena=annotato` (S2 T29) è il contratto con le sue annotazioni,
+// `contratto-affitto.pdf.fubann`, e la feature `draw` accesa: il visore le
+// disegna sopra la pagina, «Annota» le apre. Il file è vero, e un po' ostile
+// (uno script, un'immagine remota): nel visore non deve partire niente.
+export type PdfSceneCase = "nota" | "nota-senza" | "domanda" | "due-righe" | "annotato";
 
-const PDF_CASES: readonly PdfSceneCase[] = ["nota", "nota-senza", "domanda", "due-righe"];
+const PDF_CASES: readonly PdfSceneCase[] = ["nota", "nota-senza", "domanda", "due-righe", "annotato"];
 
 export function pdfSceneCase(value: string | null): PdfSceneCase | null {
   return PDF_CASES.find((name) => name === value) ?? null;
@@ -102,9 +107,37 @@ function relazione(): string {
   });
 }
 
-/// I testi della scena: la nota col PDF, o il Word.
+/// Le annotazioni del contratto, nelle coordinate della pagina (595 × 842
+/// punti, origine in alto a sinistra): l'evidenziatore sul titolo, un tratto
+/// di penna sotto la riga della data, una nota, una copertura su una riga,
+/// un'ellisse attorno alla prima firma con la sua freccia. In più, per la
+/// prova, uno script e un'immagine remota che non devono partire.
+function contractAnnotations(): string {
+  // Il nome della radice in una costante, come in `src/host/fake.ts`: è un
+  // documento del vault, non un'icona.
+  const root = "svg";
+  return [
+    `<${root} xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" fub:annotates="contratto-affitto.pdf">`,
+    `  <title>contratto-affitto.pdf</title>`,
+    `  <script>globalThis.__fubann_pwned = true</script>`,
+    `  <g id="p0001" fub:page="1" fub:page-size="595 842">`,
+    `    <path id="evidenziato" fub:tool="highlighter" d="M60 88 L332 88 L332 118 L60 118 Z" fill="#f0e442" fill-opacity="0.4"/>`,
+    `    <path id="sottolineato" d="M64 146 C150 151 250 141 364 147" fill="none" stroke="#d62828" stroke-width="2" stroke-linecap="round"/>`,
+    `    <text id="nota-data" x="380" y="144" fill="#d62828" font-family="sans-serif" font-size="12" fub:note="La data è quella della firma, non dell'ingresso.">Controllare la data</text>`,
+    `    <rect id="coperto" x="64" y="258" width="467" height="8" fill="#ffffff"/>`,
+    `    <ellipse id="firma" cx="154" cy="752" rx="104" ry="26" fill="none" stroke="#1d4ed8" stroke-width="2"/>`,
+    `    <path id="freccia" d="M300 700 L232 736 M232 736 L246 724 M232 736 L249 738" fill="none" stroke="#1d4ed8" stroke-width="2" stroke-linecap="round"/>`,
+    `    <image href="https://example.invalid/spia.png" x="0" y="0" width="10" height="10"/>`,
+    `  </g>`,
+    `</${root}>`,
+    ``,
+  ].join("\n");
+}
+
+/// I testi della scena: la nota col PDF, il Word, o le annotazioni del PDF.
 export function pdfSceneFiles(kind: PdfSceneCase): Record<string, string> {
   if (kind === "due-righe") return { [DOCX_SCENE_DOC]: relazione() };
+  if (kind === "annotato") return { [`${PDF_SCENE_DOC}.fubann`]: contractAnnotations() };
   return kind === "domanda" ? {} : { [PDF_SCENE_NOTE]: NOTE };
 }
 

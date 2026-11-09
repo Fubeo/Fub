@@ -367,7 +367,9 @@ if (RAW_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null)) throw new Ra
 
 /// Il PDF e il Word delle scene T31 (`?pdf-scena=nota|nota-senza|domanda|due-righe`,
 /// vedi `craft-fixture.ts`): la nota che incorpora il PDF, la scheda del PDF
-/// con la domanda sulle anteprime, il Word prestato con la domanda.
+/// con la domanda sulle anteprime, il Word prestato con la domanda. Con
+/// `?pdf-scena=annotato` (S2 T29) il PDF ha le sue annotazioni e la feature
+/// `draw` è accesa.
 const PDF_SCENE = pdfSceneCase(params.get("pdf-scena"));
 if (PDF_SCENE !== null && (PHOTO !== null || CRAFT_SCENE !== null || RAW_SCENE !== null)) throw new RangeError("pdf-scena is a vault of its own");
 
@@ -1525,8 +1527,12 @@ const options: Options = {
   },
   root: ROOT,
   view: VIEWS,
-  commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS],
-  settings: [...SETTINGS, ...(DRAWING === null ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME],
+  commands: [
+    ...(ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS]),
+    // Il PDF annotato ha «Annota», il comando della feature `draw`.
+    ...(PDF_SCENE === "annotato" ? [command("pdf.annotate", "Annota il PDF", "Crea o apre le annotazioni del PDF", null, true)] : []),
+  ],
+  settings: [...SETTINGS, ...(DRAWING === null && PDF_SCENE !== "annotato" ? [] : DRAW_WORKSPACE), ...CRAFT_SETTINGS, ...WORKBOOK_CHROME],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(WORKBOOK_DOC === null ? {} : {
     // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.
@@ -1538,7 +1544,7 @@ const options: Options = {
       ...(BENCH_OUTCOMES === undefined ? {} : { outcomes: BENCH_OUTCOMES }),
     } as GridBytesFake,
   }),
-  ...(DRAWING === null ? {} : { draw: true }),
+  ...(DRAWING === null && PDF_SCENE !== "annotato" ? {} : { draw: true }),
   ...(PHOTO === null ? {} : { craft: PHOTO_CRAFT }),
   ...(CRAFT_SCENE === null ? {} : {
     craft: craftSceneCraft(CRAFT_SCENE),
