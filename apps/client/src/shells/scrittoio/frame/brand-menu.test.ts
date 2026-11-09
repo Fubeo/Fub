@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
-import { mountBrandMenu } from "./brand-menu";
+import { BRAND_HIDDEN_QUERY, mountBrandMenu } from "./brand-menu";
 
 /// Gli osservatori consegnano a fine giro.
 const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
@@ -50,6 +50,7 @@ beforeEach(() => {
 afterEach(() => {
   lifetime.close();
   witness.close();
+  vi.restoreAllMocks();
   document.body.replaceChildren();
 });
 
@@ -290,5 +291,152 @@ describe("il marchio smontato", () => {
     expect(event.defaultPrevented).toBe(false);
     el("elsewhere").click();
     expect(isOpen()).toBe(true);
+  });
+});
+
+describe("sul telefono in piedi, dove il marchio non si vede", () => {
+  /// Il `matchMedia` della finestra, mosso a mano: happy-dom non ruota.
+  class Orientation extends EventTarget {
+    matches = false;
+    readonly media = BRAND_HIDDEN_QUERY;
+    turn(portrait: boolean): void {
+      this.matches = portrait;
+      this.dispatchEvent(new Event("change"));
+    }
+  }
+
+  let orientation: Orientation;
+  let asked: string[];
+
+  beforeEach(() => {
+    orientation = new Orientation();
+    asked = [];
+    vi.spyOn(window, "matchMedia").mockImplementation((query: string) => {
+      asked.push(query);
+      return orientation as unknown as MediaQueryList;
+    });
+    // La pillola sta nella stessa barra, dopo il marchio.
+    const pill = document.createElement("button");
+    pill.id = "pill";
+    pill.type = "button";
+    el("topbar").append(pill);
+  });
+
+  /// Ciò che fa `mobile.css` in piedi: il marchio resta nel DOM e non si vede.
+  const hideBrand = (): void => {
+    brand().style.display = "none";
+  };
+
+  it("ascolta la stessa soglia di `mobile.css`", () => {
+    mountBrandMenu(lifetime);
+    expect(asked).toEqual([BRAND_HIDDEN_QUERY]);
+  });
+
+  it("il menu aperto da sdraiato si chiude quando il telefono si raddrizza, e il fuoco va alla pillola", async () => {
+    mountBrandMenu(lifetime);
+    brand().focus();
+    brand().click();
+    expect(document.activeElement).toBe(el("menu-file"));
+    hideBrand();
+    orientation.turn(true);
+    expect(isOpen()).toBe(false);
+    expect(document.activeElement).toBe(el("pill"));
+    await settled();
+    expect(expanded()).toBe("false");
+    expect(document.activeElement).toBe(el("pill"));
+  });
+
+  it("aperto col puntatore, il fuoco va alla pillola e non dov'era prima", async () => {
+    mountBrandMenu(lifetime);
+    el("elsewhere").focus();
+    brand().dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    brand().click();
+    el("menu-file").focus();
+    hideBrand();
+    orientation.turn(true);
+    await settled();
+    expect(document.activeElement).toBe(el("pill"));
+  });
+
+  it("se il fuoco era già altrove, chiude il menu e lo lascia dov'è", async () => {
+    mountBrandMenu(lifetime);
+    brand().click();
+    el("elsewhere").focus();
+    hideBrand();
+    orientation.turn(true);
+    expect(isOpen()).toBe(false);
+    await settled();
+    expect(document.activeElement).toBe(el("elsewhere"));
+  });
+
+  it("dove il marchio resta (il computer stretto) il menu resta aperto", () => {
+    mountBrandMenu(lifetime);
+    brand().click();
+    orientation.turn(true);
+    expect(isOpen()).toBe(true);
+    expect(document.activeElement).toBe(el("menu-file"));
+  });
+
+  it("sdraiandosi non chiude niente", () => {
+    mountBrandMenu(lifetime);
+    brand().click();
+    hideBrand();
+    orientation.turn(false);
+    expect(isOpen()).toBe(true);
+  });
+
+  it("Escape riporta il fuoco alla pillola, non al marchio nascosto", () => {
+    mountBrandMenu(lifetime);
+    brand().click();
+    hideBrand();
+    press(el("menu-file"), "Escape");
+    expect(isOpen()).toBe(false);
+    expect(document.activeElement).toBe(el("pill"));
+  });
+
+  it("il menu chiuso da fuori riporta il fuoco alla pillola", async () => {
+    hideBrand();
+    mountBrandMenu(lifetime);
+    menu().classList.add("open");
+    await settled();
+    el("menu-file").focus();
+    menu().classList.remove("open");
+    await settled();
+    expect(document.activeElement).toBe(el("pill"));
+  });
+
+  it("senza una pillola che si veda il fuoco resta al marchio, come prima", async () => {
+    el("pill").remove();
+    hideBrand();
+    mountBrandMenu(lifetime);
+    menu().classList.add("open");
+    await settled();
+    el("menu-file").focus();
+    expect(() => press(el("menu-file"), "Escape")).not.toThrow();
+    expect(isOpen()).toBe(false);
+    expect(document.activeElement).not.toBe(el("menu-file"));
+  });
+
+  it("smontato, il telefono che si raddrizza non chiude più niente", () => {
+    mountBrandMenu(lifetime);
+    brand().click();
+    lifetime.close();
+    hideBrand();
+    orientation.turn(true);
+    expect(isOpen()).toBe(true);
+  });
+});
+
+describe("senza `matchMedia`", () => {
+  it("il marchio monta lo stesso, e si apre", () => {
+    const original = window.matchMedia;
+    Object.defineProperty(window, "matchMedia", { value: undefined, configurable: true, writable: true });
+    try {
+      expect(() => mountBrandMenu(lifetime)).not.toThrow();
+      brand().click();
+      expect(isOpen()).toBe(true);
+    } finally {
+      Object.defineProperty(window, "matchMedia", { value: original, configurable: true, writable: true });
+    }
   });
 });

@@ -163,9 +163,13 @@
   color: var(--text);
 }
 
+/* Il pulsante premuto: un foglietto sollevato, non una macchia blu. Chi è
+   acceso è carta col suo rilievo, e l'icona torna inchiostro. Lo stesso nel
+   binario, più sotto. */
 .titlebar-btn[aria-pressed="true"] {
-  background: var(--accent-wash);
-  color: var(--accent);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
 }
 
 .titlebar-btn:disabled {
@@ -213,19 +217,20 @@
   pointer-events: none;
 }
 
-/* La pillola: a riposo dice dove sei. La cartella in grafite, il titolo in
-   inchiostro, i tasti del lanciatore su un tassello di foglio. */
+/* La pillola è il campo dei comandi: un pozzetto con la lente, l'invito in
+   grafite e i tasti del lanciatore su un tassello di carta. Sul telefono, a
+   riposo, dice dove sei: la cartella in grafite, il titolo in inchiostro. */
 .pill {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-4);
   padding: 0 var(--space-2) 0 var(--space-5);
   border: none;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-control);
   background: var(--bg-hover);
   color: var(--muted);
   font-family: var(--font-ui);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   text-align: left;
   cursor: pointer;
   transition: transform var(--duration-state) var(--ease);
@@ -242,11 +247,12 @@
 .pill-icon {
   display: inline-flex;
   flex: none;
+  color: var(--muted);
 }
 
 .pill-icon svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .pill-path {
@@ -273,11 +279,12 @@
 }
 
 .pill .titlebar-shortcut {
-  padding: 0 var(--space-4);
-  border-color: transparent;
-  border-radius: var(--radius-pill);
-  background: var(--sheet);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-elev);
   color: var(--muted);
+  font-size: var(--text-xs);
 }
 
 /* I controlli della finestra: larghi quanto la struttura dice, alti quanto la
@@ -460,25 +467,26 @@
   transform: scale(0.96);
 }
 
+/* Il pannello scelto è un foglietto sollevato, come il pulsante premuto della
+   barra del titolo: carta col suo rilievo, l'icona in inchiostro e senza velo. */
 .rail-btn[aria-pressed="true"],
 .rail-btn[aria-expanded="true"] {
-  background: var(--accent-wash);
-  color: var(--accent);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
 }
 
-/* L'icona scelta si «inchiostra»: a riposo è solo contorno, da attiva le forme
-   chiuse prendono un velo del colore d'accento. I tratti aperti non si
-   riempiono (un segmento non ha area), quindi non serve distinguerli. */
 .rail-btn[aria-pressed="true"] svg,
 .rail-btn[aria-expanded="true"] svg,
 .inspector-tab[aria-selected="true"] svg {
-  fill: color-mix(in oklab, var(--accent) 22%, transparent);
+  fill: none;
 }
 
-/* A cassetto chiuso il pannello resta scelto ma non si vede: l'icona torna a
-   riposo, e si riaccende quando il cassetto si apre. */
+/* A cassetto chiuso il pannello resta scelto ma non si vede: il bottone torna
+   a riposo, e si risolleva quando il cassetto si apre. */
 .rail[data-drawer="closed"] .rail-btn[aria-pressed="true"] {
   background: transparent;
+  box-shadow: none;
   color: var(--muted);
 }
 
@@ -504,13 +512,28 @@
   line-height: 1;
 }
 
-/* La tacca del pannello aperto: un tratto di matita blu sul bordo del
-   binario, che scivola da un'icona all'altra. */
+/* La tacca del pannello aperto scivola ancora da un'icona all'altra, ma non
+   si vede: il pannello scelto lo dice il foglietto sollevato. */
 .rail-notch {
   width: 3px;
   height: 16px;
   border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
-  background: var(--accent);
+  background: transparent;
+}
+
+/* Senza colori propri il rilievo del foglietto sparisce: il pulsante premuto
+   tiene un filo del colore del testo. L'anello del fuoco gli passa sopra. */
+@media (forced-colors: active) {
+  .titlebar-btn[aria-pressed="true"],
+  .rail-btn[aria-pressed="true"],
+  .rail-btn[aria-expanded="true"] {
+    outline: 1px solid CanvasText;
+    outline-offset: -1px;
+  }
+
+  .rail[data-drawer="closed"] .rail-btn[aria-pressed="true"] {
+    outline: none;
+  }
 }
 
 /* ── L'ispettore: titolo e schede ────────────────────────────────────────── */

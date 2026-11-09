@@ -181,10 +181,10 @@
 /* ── Sotto i 600 px: una colonna ─────────────────────────────────────────── */
 
 @media (max-width: 599px) {
-  /* La barra del titolo: marchio, pillola, campanella. Il vault, indietro e
-     avanti, i lavori in corso e l'ispettore stanno nel menu del marchio, nel
-     lanciatore e nella barra inferiore. I lavori tornano a vista finché ce n'è
-     uno in corso. */
+  /* La barra del titolo: pillola e campanella (il marchio qui non si vede,
+     più sotto). Il vault, indietro e avanti, i lavori in corso e l'ispettore
+     stanno nel lanciatore, nella barra inferiore e nel gesto indietro del
+     telefono. I lavori tornano a vista finché ce n'è uno in corso. */
   :root[data-client-shell="mobile"] #topbar {
     grid-template-columns: auto minmax(0, 1fr) auto;
   }
@@ -272,8 +272,8 @@
     display: none;
   }
 
-  /* Aiuto e luce stanno nel menu del marchio e nel lanciatore: nella barra
-     restano finché non c'è un vault, quando le icone dei pannelli non ci sono. */
+  /* Aiuto e luce stanno nel lanciatore: nella barra restano finché non c'è un
+     vault, quando le icone dei pannelli non ci sono. */
   :root[data-client-shell="mobile"] #app:not([data-welcome]) #open-help,
   :root[data-client-shell="mobile"] #app:not([data-welcome]) #toggle-light {
     display: none;
@@ -524,6 +524,20 @@
   :root[data-client-shell="mobile"] .pane::before,
   :root[data-client-shell="mobile"] .pane > [role="tabpanel"] {
     border-radius: 0;
+  }
+
+  /* ── La barra del titolo senza il marchio ─────────────────────────────────
+     In piedi la barra del titolo tiene la pillola e la campanella: il marchio
+     se ne va, e la pillola parte da dove stava lui. Il menu dell'applicazione
+     qui non ha più una porta, e non perde niente: ogni sua voce è un comando,
+     e la pillola apre il lanciatore che li esegue tutti; le impostazioni sono
+     anche nella barra inferiore, e indietro è il gesto del telefono. Il bottone
+     resta nel DOM (lo cercano `frame/brand-menu.ts` e i test): non si vede, e
+     il fuoco che tornerebbe a lui va alla pillola. Sdraiato, da 600 px, la
+     barra del titolo è quella stretta del computer, e il marchio torna con il
+     menu. */
+  :root[data-client-shell="mobile"] #brand-menu {
+    display: none;
   }
 
   /* ── Lo stato in figura ───────────────────────────────────────────────────

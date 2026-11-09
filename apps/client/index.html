@@ -103,20 +103,21 @@
           <!-- Le view che dichiarano ViewSurface::Menu. -->
           <div id="app-menu-extra" data-tauri-drag-region="deep"></div>
         </div>
-        <!-- Al centro: la pillola. A riposo dice dove sei; premuta, diventa
-             il lanciatore. -->
+        <!-- Al centro: la pillola, il campo dei comandi. Il nome della nota sta
+             nella testata del foglio; premuta, la pillola diventa il lanciatore. -->
         <div id="titlebar-center" class="titlebar-center" data-tauri-drag-region="deep">
           <button
             id="pill"
             type="button"
             class="pill"
+            data-pill="command"
             data-i18n-label="frame.pill"
-            aria-label="Apri, cerca, comanda"
+            aria-label="Cerca o esegui un comando"
             aria-haspopup="dialog"
           >
             <span id="pill-icon" class="pill-icon" aria-hidden="true"></span>
             <span id="pill-path" class="pill-path"></span>
-            <span id="pill-title" class="pill-title">Apri, cerca, comanda…</span>
+            <span id="pill-title" class="pill-title">Cerca o esegui un comando…</span>
             <kbd id="pill-key" class="titlebar-shortcut" aria-hidden="true"></kbd>
           </button>
           <!-- Il manico del vecchio trigger di ricerca: la shell comune lo
