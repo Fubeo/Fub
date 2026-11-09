@@ -320,6 +320,7 @@
     "status-standing",
     "status-standing-mark",
     "files-panel",
+    "plain-list",
     "drawer-sidebar-open",
     "drawer-inspector-open",
     "peek-sidebar",
@@ -334,8 +335,14 @@
     "search-results",
     "search-exclusions",
     "drop-into",
+    "panel-title-actions",
+    "icon-button",
+    "panel-count",
     "space-strip",
+    "space-well",
     "space-chip",
+    "space-chip-icon",
+    "space-chip-name",
     "add",
     "space-title",
     "bookmarks-panel",
@@ -353,11 +360,12 @@
     "ui-stack",
     "ui-text",
     "views-modal",
-    "plain-list",
     "tree-children",
     "tree-row",
     "row-name",
     "row-icon",
+    "row-pin",
+    "row-count",
     "tree-thumb",
     "no-icon",
     "leaf",
@@ -1840,6 +1848,7 @@
     "status-standing": "cornice",
     "status-standing-mark": "cornice",
     "files-panel": "cornice",
+    "plain-list": "cornice",
     "drawer-sidebar-open": "cornice",
     "drawer-inspector-open": "cornice",
     "peek-sidebar": "cornice",
@@ -1854,8 +1863,14 @@
     "search-results": "cornice",
     "search-exclusions": "cornice",
     "drop-into": "cornice",
+    "panel-title-actions": "cornice",
+    "icon-button": "cornice",
+    "panel-count": "cornice",
     "space-strip": "cornice",
+    "space-well": "cornice",
     "space-chip": "cornice",
+    "space-chip-icon": "cornice",
+    "space-chip-name": "cornice",
     "add": "cornice",
     "space-title": "cornice",
     "bookmarks-panel": "cornice",
@@ -1873,11 +1888,12 @@
     "ui-stack": "cornice",
     "ui-text": "cornice",
     "views-modal": "cornice",
-    "plain-list": "cornice",
     "tree-children": "cornice",
     "tree-row": "cornice",
     "row-name": "cornice",
     "row-icon": "cornice",
+    "row-pin": "cornice",
+    "row-count": "cornice",
     "tree-thumb": "cornice",
     "no-icon": "cornice",
     "leaf": "cornice",
@@ -3900,6 +3916,7 @@
         "sidebar",
         "inspector-pane",
         "files-panel",
+        "plain-list",
         "drawer-sidebar-open",
         "drawer-inspector-open",
         "peek-sidebar",
@@ -3945,11 +3962,30 @@
       ]
     },
     {
+      "name": "panel-actions",
+      "part": "drawers",
+      "hooks": [
+        "panel-title-actions",
+        "icon-button",
+        "panel-count"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
       "name": "space-strip",
       "part": "drawers",
       "hooks": [
         "space-strip",
+        "space-well",
         "space-chip",
+        "space-chip-icon",
+        "space-chip-name",
         "add",
         "space-title",
         "clickable"
@@ -4023,6 +4059,8 @@
         "tree-row",
         "row-name",
         "row-icon",
+        "row-pin",
+        "row-count",
         "tree-thumb",
         "no-icon",
         "leaf",
@@ -4094,7 +4132,9 @@
       "name": "tree-filter",
       "part": "tree",
       "hooks": [
-        "explorer-filter"
+        "explorer-filter",
+        "kit-field-box",
+        "kit-field-input"
       ],
       "states": [
         "rest",
@@ -8516,10 +8556,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 64,
-    "hooks": 1518,
+    "hooks": 1526,
     "state_names": 7,
-    "assigned_states": 737,
-    "components": 219,
+    "assigned_states": 742,
+    "components": 220,
     "preference_tokens": 187
   }
 }

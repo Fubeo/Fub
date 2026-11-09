@@ -8,7 +8,8 @@ export const DRAWERS: PartAnatomy = {
     // I due contenitori. `drawer-*-open` è lo stato «in sovrapposizione» che
     // la shell scrive su `#layout`, `peek-*` quello del cassetto chiuso che si
     // affaccia dal bordo; `files-panel` è il pannello dei file, che
-    // qui serve a riconoscere l'etichetta delle appuntate.
+    // qui serve a riconoscere le etichette di sezione, e `plain-list` (del
+    // pezzo dell'albero) la lista che ne segue una.
     {
       name: "panel",
       states: REST,
@@ -16,6 +17,7 @@ export const DRAWERS: PartAnatomy = {
         "sidebar",
         "inspector-pane",
         "files-panel",
+        "plain-list",
         "drawer-sidebar-open",
         "drawer-inspector-open",
         "peek-sidebar",
@@ -33,10 +35,18 @@ export const DRAWERS: PartAnatomy = {
       states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("dragging")],
       hooks: ["panel-title", "link-button", "danger", "clickable", "search-results", "search-exclusions", "drop-into"],
     },
+    // Le azioni a icona del titolo del cassetto («ordina», «nuova nota») e il
+    // conto di un'etichetta di sezione («Tutte le note 18»).
+    {
+      name: "panel-actions",
+      states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("disabled")],
+      hooks: ["panel-title-actions", "icon-button", "panel-count"],
+    },
+    // Il pozzetto degli spazi: l'acceso mostra figura e nome, gli altri la figura.
     {
       name: "space-strip",
       states: [S("rest"), S("hover"), S("selected"), S("focused")],
-      hooks: ["space-strip", "space-chip", "add", "space-title", "clickable"],
+      hooks: ["space-strip", "space-well", "space-chip", "space-chip-icon", "space-chip-name", "add", "space-title", "clickable"],
     },
     // Segnalibri e workspace: pannelli del cassetto con le righe della palette.
     {

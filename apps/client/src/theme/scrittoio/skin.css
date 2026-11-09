@@ -2543,25 +2543,90 @@ kbd,
   white-space: nowrap;
 }
 /* Il rientro a sinistra è quello del contenuto delle righe: nome del
-   pannello, etichette, icone e triangoli cadono sulla stessa verticale. */
+   pannello, etichette, icone e triangoli cadono sulla stessa verticale. A
+   destra poco margine: le azioni a icona hanno già l'aria del loro bottone. */
 .sidebar .panel-title {
   min-height: var(--drawer-head-h);
-  padding: 0 0 0 var(--space-4);
+  padding: 0 var(--space-1) 0 var(--space-4);
   font-size: var(--text-lg);
   line-height: var(--leading-tight);
 }
-/* Un titolo che ne segue un altro è un'**etichetta di sezione** («Appuntate»):
-   maiuscoletto piccolo in grafite, che nomina senza pesare. Fra i due può
-   stare il campo che filtra le note: conta l'ordine, non la vicinanza. */
+/* Fra la striscia degli spazi e il titolo un respiro, come nel mockup. */
+.space-strip + .panel-title {
+  margin-top: var(--space-4);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+}
+/* **Le azioni a icona del titolo** («ordina», «nuova nota»): figure in
+   grafite, senza fondo finché il puntatore non le cerca. */
+.panel-title-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.icon-button > svg {
+  width: 16px;
+  height: 16px;
+}
+.icon-button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.icon-button:active {
+  background: var(--overlay-active);
+}
+.icon-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+/* Spenta (nessun vault aperto) la figura resta, più chiara, e non risponde. */
+.icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.icon-button:disabled:hover {
+  background: transparent;
+  color: var(--muted);
+}
+
+/* Un titolo che ne segue un altro è un'**etichetta di sezione**
+   («Appuntate», «Tutte le note 18»): una parola in tondo, in grafite, che
+   nomina senza pesare; a destra, se c'è, il conto. Fra i due può stare il
+   campo che filtra le note: conta l'ordine, non la vicinanza. */
 .files-panel .panel-title ~ .panel-title,
 .bookmarks-panel .palette-row {
-  min-height: var(--space-8);
-  padding: var(--space-3) var(--space-4) 0;
+  min-height: var(--row-h);
+  padding: var(--space-5) var(--space-4) 0;
   color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* Dopo le appuntate un po' d'aria in più: «Tutte le note» apre un'altra parte. */
+.files-panel .panel-title + .plain-list {
+  padding-bottom: var(--space-4);
+}
+/* Il conto di una sezione, in cifre della stessa larghezza. */
+.panel-count {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  font-variant-numeric: tabular-nums;
 }
 /* L'esito della ricerca («Risultati: 4», «Nessun risultato», «Indicizzazione
    in corso…») è una riga di stato, non un titolo: grafite, corpo piccolo. È
@@ -2623,56 +2688,92 @@ kbd,
   color: var(--danger);
 }
 
-/* **La striscia degli spazi**: tutto il vault, una pillola per spazio, «+».
-   Sta sulla verticale del contenuto, come il titolo che la segue. */
+/* **La striscia degli spazi**: un pozzetto come le schede dell'ispettore.
+   L'acceso è un foglietto con figura e nome, gli altri soltanto la figura (il
+   nome è l'etichetta accessibile). «+» resta fuori, il più discreto. Non va
+   a capo: se gli spazi sono tanti il pozzetto taglia. */
 .space-strip {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) 0 0 var(--space-4);
+  gap: var(--space-3);
+  min-height: var(--tab-h);
+  padding: 0 0 0 var(--space-2);
+}
+.space-well {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-1);
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  background: var(--bg-hover);
 }
 .space-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: var(--space-9);
-  height: var(--space-8);
-  padding: 0 var(--space-4);
+  flex: none;
+  gap: var(--space-3);
+  min-width: 32px;
+  height: 26px;
+  padding: 0 var(--space-3);
   border: none;
-  border-radius: var(--radius-pill);
-  background: var(--bg-hover);
+  border-radius: var(--radius-chip);
+  background: transparent;
   color: var(--muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   line-height: 1;
   cursor: pointer;
 }
-/* La casa e gli spazi senza un'emoji scelta portano la figura a linea. */
-.space-chip > svg {
-  width: var(--space-6);
-  height: var(--space-6);
-}
 .space-chip:hover,
 .space-chip:active {
-  background: var(--bg-active);
+  background: var(--overlay-hover);
   color: var(--text);
 }
-/* Lo spazio acceso. Le pillole portano un'emoji, che non prende il colore:
-   il blu lo dice allora anche un filo sul contorno, non il solo fondo. */
+/* La casa e gli spazi senza un'emoji scelta portano la figura a linea;
+   l'emoji scelta sta nella stessa misura. */
+.space-chip > svg,
+.space-chip-icon > svg {
+  width: 16px;
+  height: 16px;
+}
+.space-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 14px;
+  line-height: 1;
+}
+.space-chip-name {
+  display: none;
+}
+/* Lo spazio acceso: un foglietto sollevato dal pozzetto, col suo nome. */
 .space-chip[aria-pressed="true"] {
-  background: var(--accent-wash);
-  box-shadow: inset 0 0 0 1px var(--accent);
-  color: var(--accent);
-  font-weight: var(--weight-bold);
+  padding: 0 var(--space-5) 0 var(--space-4);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.space-chip[aria-pressed="true"] > .space-chip-name {
+  display: inline;
 }
 /* «+» è l'ultimo della fila e il più discreto: senza fondo finché non lo si
    cerca. */
 .space-chip.add {
-  min-width: var(--space-8);
+  min-width: 28px;
+  height: 28px;
   padding: 0;
+  border-radius: var(--radius-chip);
   background: transparent;
   color: var(--muted);
-  font-size: var(--text-lg);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-regular);
 }
 .space-chip.add:hover {
   background: var(--bg-hover);
@@ -2958,9 +3059,23 @@ kbd,
   margin-top: var(--space-4);
 }
 /* Il filtro per percorso sta sopra l'albero (`shell.explorer.filter`): un
-   campo largo quanto le righe, staccato da ciò che filtra. */
+   pozzetto pieno con la lente, largo quanto le righe. È il campo del kit con
+   la sua figura (`icon: "search"`), senza bordo: il pozzetto lo fa il fondo.
+   Al fuoco torna carta, con l'anello del kit. */
 .explorer-filter {
-  padding: 0 var(--space-2) var(--space-3);
+  padding: var(--space-2) 0 var(--space-3);
+}
+.explorer-filter .kit-field-box {
+  height: 32px;
+  border-color: transparent;
+  background: var(--bg-hover);
+}
+.explorer-filter .kit-field-box:has(> .kit-field-input:focus-visible) {
+  border-color: var(--focus-ring);
+  background: var(--sheet);
+}
+.explorer-filter .kit-field-input {
+  font-size: var(--text-md);
 }
 
 /* **Una riga del cassetto**: nota o cartella, nell'albero o tra le appuntate.
@@ -2976,7 +3091,7 @@ kbd,
   padding: 0 var(--space-4);
   border-radius: var(--radius-control);
   color: var(--text);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   line-height: var(--leading-tight);
   white-space: nowrap;
   overflow: hidden;
@@ -3033,29 +3148,18 @@ kbd,
 }
 
 /* **La nota aperta.** Lo stato si legge da dove è annunciato: nell'albero è il
-   `treeitem` a essere selezionato, fra le appuntate è la riga a essere
-   «quella corrente». La dice la matita blu — fondo tenue, inchiostro blu,
-   peso da titolo — e non un grigio: è l'unica riga del cassetto che parla del
-   foglio aperto. */
+   `treeitem` a essere selezionato. È un foglietto sollevato dal cassetto:
+   l'icona prende il blu, il nome resta inchiostro e sale di peso. È l'unica
+   riga del cassetto che parla del foglio aperto: fra le appuntate la puntina
+   tiene la colonna dell'icona, e la stessa nota non ha un segno suo. */
 [role="treeitem"][aria-selected="true"] > .tree-row {
-  background: var(--accent-wash);
-  color: var(--accent);
-  font-weight: var(--weight-bold);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  font-weight: var(--weight-medium);
 }
-/* Fra le appuntate la stessa nota ha soltanto un punto blu sul bordo: la riga
-   accesa è una, nell'albero. Sta su pixel interi: a mezzo pixel il suo
-   bordo si sfuma in modo diverso secondo gli strati della pagina, e le foto
-   di un'andata e ritorno non tornano uguali. */
-.tree-row[aria-current="true"]::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: var(--space-2);
-  width: 6px;
-  height: 6px;
-  margin-top: -3px;
-  border-radius: 50%;
-  background: var(--accent);
+[role="treeitem"][aria-selected="true"] > .tree-row:hover {
+  background: var(--bg-elev);
 }
 
 /* Il fuoco da tastiera sta sul `treeitem`, che contiene anche il sottoalbero:
@@ -3099,6 +3203,19 @@ kbd,
 [role="treeitem"][aria-selected="true"] > .tree-row > .row-icon > svg {
   color: var(--accent);
 }
+/* La puntina delle appuntate, un poco più piccola delle figure dell'albero. */
+.row-icon.row-pin > svg {
+  width: 14px;
+  height: 14px;
+}
+/* Il conto di una cartella, a destra, in grafite: le sue voci dirette. */
+.row-count {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
 /* La miniatura (T26): l'anteprima che il file ha già, nella colonna
    dell'icona e alla sua misura, ritagliata al quadrato; il filo la stacca dal
    fondo della riga accesa. L'orientamento di un RAW non sta qui: lo scrive il
@@ -3132,9 +3249,9 @@ kbd,
   background-image: linear-gradient(to bottom left, transparent 50%, var(--accent) 50%);
 }
 
-/* **Il triangolino di apertura.** Nel markup è un carattere (▸ o ▾): qui il
-   carattere si spegne e il triangolo si disegna, uno solo, che ruota quando
-   la cartella è aperta. */
+/* **Il gallone di apertura.** Nel markup è un carattere (▸ o ▾): qui il
+   carattere si spegne e si disegna una «›» sottile, due lati di un quadratino,
+   che ruota verso il basso quando la cartella è aperta. */
 .chevron {
   position: relative;
   display: inline-flex;
@@ -3154,16 +3271,21 @@ kbd,
 }
 .chevron::before {
   content: "";
-  width: 8px;
-  height: 8px;
-  background: currentColor;
-  clip-path: polygon(25% 8%, 85% 50%, 25% 92%);
+  box-sizing: border-box;
+  width: 6px;
+  height: 6px;
+  margin-left: -2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
   transition: transform var(--duration-fast) var(--ease);
 }
 .chevron[aria-expanded="true"]::before {
-  transform: rotate(90deg);
+  margin-top: -3px;
+  margin-left: 0;
+  transform: rotate(45deg);
 }
-/* Il bersaglio è più largo del disegno: 24 px attorno a un triangolo di 8. */
+/* Il bersaglio è più largo del disegno: 24 px attorno a un gallone di 6. */
 .chevron::after {
   content: "";
   position: absolute;
@@ -3174,7 +3296,7 @@ kbd,
   background: transparent;
   color: var(--text);
 }
-/* Una cartella vuota non ha niente da aprire: il triangolo non c'è, il suo
+/* Una cartella vuota non ha niente da aprire: il gallone non c'è, il suo
    posto resta. */
 .chevron:disabled {
   opacity: 0;
@@ -3183,7 +3305,7 @@ kbd,
 [role="treeitem"][aria-selected="true"] > .tree-row .chevron {
   color: var(--accent);
 }
-/* Una foglia tiene il posto del triangolo delle cartelle sorelle: cartelle e
+/* Una foglia tiene il posto del gallone delle cartelle sorelle: cartelle e
    note dello stesso livello hanno l'icona sulla stessa colonna. Lo tiene
    anche «…e altre N», che comincia dove cominciano le icone delle righe che
    continua. */
@@ -3196,7 +3318,7 @@ kbd,
   margin-right: calc(var(--space-2) * -1);
 }
 /* Dove in cima non c'è nessuna cartella (uno spazio di sole note, un vault
-   piatto) non c'è un triangolo a cui fare posto: le note partono dalla
+   piatto) non c'è un gallone a cui fare posto: le note partono dalla
    verticale delle appuntate e del titolo. */
 .plain-list:not(:has(> li > .tree-row > .chevron)) > li > .tree-row.leaf::before,
 .plain-list:not(:has(> li > .tree-row > .chevron)) > li > .tree-row.troncata::before {
@@ -3300,8 +3422,8 @@ kbd,
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }
-  /* Il triangolo disegnato è un fondo, e non c'è più: torna il carattere del
-     markup (▸ o ▾), che dice da sé se la cartella è aperta. */
+  /* Il gallone disegnato coi bordi non direbbe da sé il verso in ogni tema
+     del sistema: torna il carattere del markup (▸ o ▾), che lo dice. */
   .chevron {
     font-size: var(--text-xs);
   }

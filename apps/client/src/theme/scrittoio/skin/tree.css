@@ -15,9 +15,23 @@
   margin-top: var(--space-4);
 }
 /* Il filtro per percorso sta sopra l'albero (`shell.explorer.filter`): un
-   campo largo quanto le righe, staccato da ciò che filtra. */
+   pozzetto pieno con la lente, largo quanto le righe. È il campo del kit con
+   la sua figura (`icon: "search"`), senza bordo: il pozzetto lo fa il fondo.
+   Al fuoco torna carta, con l'anello del kit. */
 .explorer-filter {
-  padding: 0 var(--space-2) var(--space-3);
+  padding: var(--space-2) 0 var(--space-3);
+}
+.explorer-filter .kit-field-box {
+  height: 32px;
+  border-color: transparent;
+  background: var(--bg-hover);
+}
+.explorer-filter .kit-field-box:has(> .kit-field-input:focus-visible) {
+  border-color: var(--focus-ring);
+  background: var(--sheet);
+}
+.explorer-filter .kit-field-input {
+  font-size: var(--text-md);
 }
 
 /* **Una riga del cassetto**: nota o cartella, nell'albero o tra le appuntate.
@@ -33,7 +47,7 @@
   padding: 0 var(--space-4);
   border-radius: var(--radius-control);
   color: var(--text);
-  font-size: var(--text-base);
+  font-size: var(--text-md);
   line-height: var(--leading-tight);
   white-space: nowrap;
   overflow: hidden;
@@ -90,29 +104,18 @@
 }
 
 /* **La nota aperta.** Lo stato si legge da dove è annunciato: nell'albero è il
-   `treeitem` a essere selezionato, fra le appuntate è la riga a essere
-   «quella corrente». La dice la matita blu — fondo tenue, inchiostro blu,
-   peso da titolo — e non un grigio: è l'unica riga del cassetto che parla del
-   foglio aperto. */
+   `treeitem` a essere selezionato. È un foglietto sollevato dal cassetto:
+   l'icona prende il blu, il nome resta inchiostro e sale di peso. È l'unica
+   riga del cassetto che parla del foglio aperto: fra le appuntate la puntina
+   tiene la colonna dell'icona, e la stessa nota non ha un segno suo. */
 [role="treeitem"][aria-selected="true"] > .tree-row {
-  background: var(--accent-wash);
-  color: var(--accent);
-  font-weight: var(--weight-bold);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text);
+  font-weight: var(--weight-medium);
 }
-/* Fra le appuntate la stessa nota ha soltanto un punto blu sul bordo: la riga
-   accesa è una, nell'albero. Sta su pixel interi: a mezzo pixel il suo
-   bordo si sfuma in modo diverso secondo gli strati della pagina, e le foto
-   di un'andata e ritorno non tornano uguali. */
-.tree-row[aria-current="true"]::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: var(--space-2);
-  width: 6px;
-  height: 6px;
-  margin-top: -3px;
-  border-radius: 50%;
-  background: var(--accent);
+[role="treeitem"][aria-selected="true"] > .tree-row:hover {
+  background: var(--bg-elev);
 }
 
 /* Il fuoco da tastiera sta sul `treeitem`, che contiene anche il sottoalbero:
@@ -156,6 +159,19 @@
 [role="treeitem"][aria-selected="true"] > .tree-row > .row-icon > svg {
   color: var(--accent);
 }
+/* La puntina delle appuntate, un poco più piccola delle figure dell'albero. */
+.row-icon.row-pin > svg {
+  width: 14px;
+  height: 14px;
+}
+/* Il conto di una cartella, a destra, in grafite: le sue voci dirette. */
+.row-count {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
 /* La miniatura (T26): l'anteprima che il file ha già, nella colonna
    dell'icona e alla sua misura, ritagliata al quadrato; il filo la stacca dal
    fondo della riga accesa. L'orientamento di un RAW non sta qui: lo scrive il
@@ -189,9 +205,9 @@
   background-image: linear-gradient(to bottom left, transparent 50%, var(--accent) 50%);
 }
 
-/* **Il triangolino di apertura.** Nel markup è un carattere (▸ o ▾): qui il
-   carattere si spegne e il triangolo si disegna, uno solo, che ruota quando
-   la cartella è aperta. */
+/* **Il gallone di apertura.** Nel markup è un carattere (▸ o ▾): qui il
+   carattere si spegne e si disegna una «›» sottile, due lati di un quadratino,
+   che ruota verso il basso quando la cartella è aperta. */
 .chevron {
   position: relative;
   display: inline-flex;
@@ -211,16 +227,21 @@
 }
 .chevron::before {
   content: "";
-  width: 8px;
-  height: 8px;
-  background: currentColor;
-  clip-path: polygon(25% 8%, 85% 50%, 25% 92%);
+  box-sizing: border-box;
+  width: 6px;
+  height: 6px;
+  margin-left: -2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
   transition: transform var(--duration-fast) var(--ease);
 }
 .chevron[aria-expanded="true"]::before {
-  transform: rotate(90deg);
+  margin-top: -3px;
+  margin-left: 0;
+  transform: rotate(45deg);
 }
-/* Il bersaglio è più largo del disegno: 24 px attorno a un triangolo di 8. */
+/* Il bersaglio è più largo del disegno: 24 px attorno a un gallone di 6. */
 .chevron::after {
   content: "";
   position: absolute;
@@ -231,7 +252,7 @@
   background: transparent;
   color: var(--text);
 }
-/* Una cartella vuota non ha niente da aprire: il triangolo non c'è, il suo
+/* Una cartella vuota non ha niente da aprire: il gallone non c'è, il suo
    posto resta. */
 .chevron:disabled {
   opacity: 0;
@@ -240,7 +261,7 @@
 [role="treeitem"][aria-selected="true"] > .tree-row .chevron {
   color: var(--accent);
 }
-/* Una foglia tiene il posto del triangolo delle cartelle sorelle: cartelle e
+/* Una foglia tiene il posto del gallone delle cartelle sorelle: cartelle e
    note dello stesso livello hanno l'icona sulla stessa colonna. Lo tiene
    anche «…e altre N», che comincia dove cominciano le icone delle righe che
    continua. */
@@ -253,7 +274,7 @@
   margin-right: calc(var(--space-2) * -1);
 }
 /* Dove in cima non c'è nessuna cartella (uno spazio di sole note, un vault
-   piatto) non c'è un triangolo a cui fare posto: le note partono dalla
+   piatto) non c'è un gallone a cui fare posto: le note partono dalla
    verticale delle appuntate e del titolo. */
 .plain-list:not(:has(> li > .tree-row > .chevron)) > li > .tree-row.leaf::before,
 .plain-list:not(:has(> li > .tree-row > .chevron)) > li > .tree-row.troncata::before {
@@ -357,8 +378,8 @@
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }
-  /* Il triangolo disegnato è un fondo, e non c'è più: torna il carattere del
-     markup (▸ o ▾), che dice da sé se la cartella è aperta. */
+  /* Il gallone disegnato coi bordi non direbbe da sé il verso in ogni tema
+     del sistema: torna il carattere del markup (▸ o ▾), che lo dice. */
   .chevron {
     font-size: var(--text-xs);
   }

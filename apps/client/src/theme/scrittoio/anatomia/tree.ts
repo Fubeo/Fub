@@ -17,6 +17,8 @@ export const TREE: PartAnatomy = {
         "tree-row",
         "row-name",
         "row-icon",
+        "row-pin",
+        "row-count",
         "tree-thumb",
         "no-icon",
         "leaf",
@@ -34,7 +36,9 @@ export const TREE: PartAnatomy = {
       hooks: ["tree-selection", "tree-selection-count", "tree-selection-action", "tree-selection-trash"],
     },
     { name: "tree-empty", states: [S("rest")], hooks: ["tree-empty", "link-button"] },
-    // Il campo che filtra l'albero per percorso; i risultati sono righe della ricerca.
-    { name: "tree-filter", states: [S("rest"), S("focused")], hooks: ["explorer-filter"] },
+    // Il campo che filtra l'albero per percorso: il pozzetto con la lente veste
+    // il campo del kit (`kit-field-*` è del kit). I risultati sono righe della
+    // ricerca.
+    { name: "tree-filter", states: [S("rest"), S("focused")], hooks: ["explorer-filter", "kit-field-box", "kit-field-input"] },
   ],
 };
