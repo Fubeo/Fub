@@ -59,6 +59,13 @@ scelta e la raccomandazione per prima.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · N6 (A-15) · Riallineato a `piano/n4-inchiostro` @ bd38a567
+  (N4 fino a T22 e T15, N3 dentro) prima di T11, con un merge. Conflitti:
+  `PLAN.md` e `DECISIONS.md` restano quelli di N6; `i18n/catalog.ts` e
+  `docs/README.md` prendono le due parti. Perché: A-15, T11 lavora sopra
+  l'`engine.ts` di N4. Prove sul merge: `check.sh --rapido` verde (un
+  rosso noto e instabile, `new-drawing.e2e`, verde da solo), vitest intero
+  660 file / 11 620 test verdi.
 - 2026-11-04 · N6 · prototipo T25 (`PLAN-ui/lavagna-schede.html`)
   approvato con le varianti consigliate: titolo sopra la scheda (D-21 (a)
   confermata), gemelle con la luce calda, «Esc per uscire» nella testata,
