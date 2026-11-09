@@ -2913,6 +2913,11 @@ body {
   touch-action: none;
   overscroll-behavior: none;
 }
+/* Il mouse che scrive (D tenuto o «Scrivi col mouse»): la croce, come
+   l'inchiostro delle note. */
+.canvas-viewport[data-ink="pen"] {
+  cursor: crosshair;
+}
 
 .canvas-stage,
 .canvas-edges {

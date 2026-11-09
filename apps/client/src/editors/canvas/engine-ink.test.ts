@@ -2,6 +2,7 @@
 // La penna sulla lavagna (N4 T12): il tratto si scrive nel `.canvas` con un
 // passo d'annulla, segue la scheda, e il ridisegno aspetta la penna. La gomma
 // (T13, T22) toglie i tratti interi o ne taglia il pezzo, in un passo.
+// L'interruttore «Scrivi col mouse» (T16) si ricorda nello stato di vista.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { t } from "../../i18n/strings";
 import { quantizeInk, type InkSample } from "../../ink/sample";
@@ -19,6 +20,41 @@ vi.mock("../../ink/sample", async (importOriginal) => ({
   INK_MAX_SAMPLES: 16,
 }));
 
+// Questo computer, finto: «Ricorda se scrivi col mouse» e gli stati di vista,
+// dietro le vere `readInkMouse` e `saveInkMouse` di `preferences.ts`.
+const machine = vi.hoisted(() => ({ remember: false, views: new Map<string, unknown>() }));
+
+vi.mock("../../host/query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../host/query")>()),
+  settings: async () => [{
+    spec: {
+      key: "canvas.ink_mouse_remember",
+      label: "",
+      description: "",
+      group: "Lavagna",
+      scope: "machine",
+      kind: { kind: "toggle", default: false },
+      program_writable: false,
+    },
+    value: machine.remember,
+    source: "machine",
+  }],
+}));
+
+vi.mock("../../host/ipc", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../host/ipc")>();
+  return {
+    ...original,
+    api: {
+      ...original.api,
+      viewState: async (key: string) => machine.views.get(key) ?? null,
+      setViewState: async (key: string, value: unknown) => {
+        machine.views.set(key, value);
+      },
+    },
+  };
+});
+
 beforeAll(async () => {
   await canvasCoreReady();
 });
@@ -29,6 +65,8 @@ let refuseCommits = false;
 afterEach(() => {
   document.body.replaceChildren();
   refuseCommits = false;
+  machine.remember = false;
+  machine.views.clear();
 });
 
 type Init = PointerEventInit & { readonly timeStamp?: number };
@@ -760,5 +798,127 @@ describe("la gomma «Solo il pezzo»", () => {
     document.dispatchEvent(pointerEvent("pointercancel", { ...ERASER_PEN, buttons: 0 }));
     expect(opacities(host, ".canvas-ink-board path")).toEqual([null]);
     expect(changes).toEqual([]);
+  });
+});
+
+/// Lascia finire ciò che è in coda (la lettura dello stato ricordato).
+const settle = async (): Promise<void> => {
+  for (let i = 0; i < 4; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+};
+const inkMouseButton = (host: HTMLElement) => host.querySelector<HTMLButtonElement>('[data-canvas-action="ink-mouse"]')!;
+
+describe("l'interruttore «Scrivi col mouse»", () => {
+  it("sta in testa alla barra, col nome, il suggerimento e lo stato per il lettore di schermo", () => {
+    const { host } = mounted();
+    const button = inkMouseButton(host);
+    expect(host.querySelector(".canvas-toolbar")!.firstElementChild).toBe(button);
+    expect(button.textContent).toBe(t("canvas.ink.mouse"));
+    expect(button.title).toBe(t("canvas.ink.mouse_hint"));
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    expect(button.disabled).toBe(false);
+  });
+
+  it("il pulsante accende e spegne la scrittura col mouse, e il fuoco gli resta", () => {
+    const { host, changes } = mounted();
+    const viewport = viewportOf(host);
+    mouse(host, viewport, [[100, 300], [140, 320], [180, 330]]);
+    expect(inkChanges(changes)).toEqual([]);
+
+    const button = inkMouseButton(host);
+    button.focus();
+    button.click();
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(viewport.dataset.ink).toBe("pen");
+    expect(document.activeElement).toBe(button);
+    mouse(host, viewport, [[100, 300], [140, 320], [180, 330]]);
+    expect(inkChanges(changes)).toHaveLength(1);
+    // La barra ridisegnata dopo il tratto tiene lo stato.
+    expect(inkMouseButton(host).getAttribute("aria-pressed")).toBe("true");
+
+    inkMouseButton(host).click();
+    expect(inkMouseButton(host).getAttribute("aria-pressed")).toBe("false");
+    expect(viewport.dataset.ink).toBeUndefined();
+    mouse(host, viewport, [[100, 400], [140, 420], [180, 430]]);
+    expect(inkChanges(changes)).toHaveLength(1);
+  });
+
+  it("acceso, D tenuto e lasciato non lo spegne", () => {
+    const { host, changes } = mounted();
+    const viewport = viewportOf(host);
+    inkMouseButton(host).click();
+    keyD(viewport, "keydown");
+    keyD(window, "keyup");
+    window.dispatchEvent(new Event("blur"));
+    expect(viewport.dataset.ink).toBe("pen");
+    expect(inkMouseButton(host).getAttribute("aria-pressed")).toBe("true");
+    mouse(host, viewport, [[100, 300], [140, 320], [180, 330]]);
+    expect(inkChanges(changes)).toHaveLength(1);
+  });
+
+  it("in sola lettura è disabilitato e il mouse non scrive; tornando scrivibile scrive di nuovo", () => {
+    const { engine, host, changes } = mounted();
+    const viewport = viewportOf(host);
+    inkMouseButton(host).click();
+    engine.setReadOnly(true);
+    expect(inkMouseButton(host).disabled).toBe(true);
+    expect(inkMouseButton(host).getAttribute("aria-pressed")).toBe("true");
+    expect(viewport.dataset.ink).toBeUndefined();
+    mouse(host, viewport, [[100, 300], [140, 320], [180, 330]]);
+    expect(inkChanges(changes)).toEqual([]);
+    engine.setReadOnly(false);
+    expect(inkMouseButton(host).disabled).toBe(false);
+    expect(viewport.dataset.ink).toBe("pen");
+  });
+
+  it("con «Ricorda» spento, riaprendo la lavagna torna spento", async () => {
+    const first = mounted();
+    await settle();
+    inkMouseButton(first.host).click();
+    await settle();
+    expect(machine.views.get("canvas.ink_mouse")).toEqual({ on: true });
+    first.engine.destroy();
+
+    const again = mounted();
+    await settle();
+    expect(inkMouseButton(again.host).getAttribute("aria-pressed")).toBe("false");
+    expect(viewportOf(again.host).dataset.ink).toBeUndefined();
+  });
+
+  it("con «Ricorda» acceso, ogni lavagna si apre com'era l'ultima scelta", async () => {
+    machine.remember = true;
+    const first = mounted();
+    await settle();
+    expect(inkMouseButton(first.host).getAttribute("aria-pressed")).toBe("false");
+    inkMouseButton(first.host).click();
+    await settle();
+    first.engine.destroy();
+
+    const again = mounted();
+    const other = mounted();
+    await settle();
+    for (const { host } of [again, other]) {
+      expect(inkMouseButton(host).getAttribute("aria-pressed")).toBe("true");
+      expect(viewportOf(host).dataset.ink).toBe("pen");
+    }
+    // Spento in una, l'altra resta com'è e la prossima che si apre parte spenta.
+    inkMouseButton(again.host).click();
+    await settle();
+    expect(inkMouseButton(other.host).getAttribute("aria-pressed")).toBe("true");
+    const third = mounted();
+    await settle();
+    expect(inkMouseButton(third.host).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("l'impostazione cambiata a lavagna aperta vale dalla prossima apertura", async () => {
+    machine.views.set("canvas.ink_mouse", { on: true });
+    const open = mounted();
+    await settle();
+    expect(inkMouseButton(open.host).getAttribute("aria-pressed")).toBe("false");
+    machine.remember = true;
+    await settle();
+    expect(inkMouseButton(open.host).getAttribute("aria-pressed")).toBe("false");
+    const next = mounted();
+    await settle();
+    expect(inkMouseButton(next.host).getAttribute("aria-pressed")).toBe("true");
   });
 });

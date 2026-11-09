@@ -29,7 +29,7 @@ import {
 import { inkFitMode } from "./ink-fit";
 import { mountInkLayer, type InkLayer, type InkLayerStroke } from "./ink-layer";
 import { cutInkStroke, fadeInkStroke, InkPathCache, paintBoard, paintCard, type DryStroke } from "./ink-paint";
-import { watchPreferences } from "./preferences";
+import { readInkMouse, saveInkMouse, watchPreferences } from "./preferences";
 import { isTap, pinchCamera, type TouchCamera, type TouchPoint, type ZoomLimits } from "./touch";
 import {
   defaultInkLook,
@@ -107,6 +107,19 @@ export interface CanvasCorePort {
 }
 
 const SHARED_CORE: CanvasCorePort = { openNow: openCoreNow, ready: canvasCoreReady };
+
+/**
+ * Dove la lavagna ricorda l'interruttore «Scrivi col mouse»: `read` dà lo
+ * stato con cui una lavagna che si apre comincia (spento, salvo «Ricorda se
+ * scrivi col mouse» acceso); `save` ricorda una scelta fatta col pulsante.
+ * Per difetto lo stato di vista di questo computer (`preferences.ts`).
+ */
+export interface CanvasInkMouseMemory {
+  readonly read: () => Promise<boolean>;
+  readonly save: (on: boolean) => void;
+}
+
+const SHARED_INK_MOUSE: CanvasInkMouseMemory = { read: readInkMouse, save: saveInkMouse };
 
 type CardField = "text" | "label" | "url" | "file";
 
@@ -250,6 +263,12 @@ export interface CanvasEngineOptions {
    * Impostazioni di questo computer (`watchPreferences`).
    */
   readonly fingerMovesCard?: () => boolean;
+  /**
+   * Dove si ricorda «Scrivi col mouse»: letto una volta all'apertura, scritto
+   * a ogni clic sul pulsante. I test lo passano; assente, lo stato di vista
+   * di questo computer.
+   */
+  readonly inkMouseMemory?: CanvasInkMouseMemory;
 }
 
 interface Viewport {
@@ -384,6 +403,10 @@ export class CanvasEngine {
   #inkKeyDown = false;
   /** L'interruttore «Scrivi col mouse» (`setInkMouse`). */
   #inkMouse = false;
+  /** Quante volte l'interruttore è cambiato: lo stato ricordato arriva solo se nessuno l'ha toccato prima. */
+  #inkMouseTurns = 0;
+  /** Il pulsante «Scrivi col mouse» della barra di adesso. */
+  #inkMouseButton: HTMLButtonElement | null = null;
   /** Che cosa fa la gomma (`setInkEraser`): di serie il tratto intero (A20). */
   #inkEraser: InkEraserMode = "stroke";
 
@@ -450,6 +473,7 @@ export class CanvasEngine {
       void this.#intake(event).catch((error: unknown) => this.#showIntakeError(error));
     }, { signal });
     this.#drawToolbar();
+    this.#restoreInkMouse(options.inkMouseMemory ?? SHARED_INK_MOUSE);
   }
 
   /**
@@ -1150,8 +1174,30 @@ export class CanvasEngine {
    */
   setInkMouse(on: boolean): void {
     if (this.#destroyed) return;
+    this.#inkMouseTurns += 1;
     this.#inkMouse = on;
+    this.#inkMouseButton?.setAttribute("aria-pressed", String(on));
     this.#applyInkMouse();
+  }
+
+  /**
+   * L'interruttore con cui la lavagna si apre: lo stato ricordato (spento con
+   * «Ricorda se scrivi col mouse» spento), letto una volta sola, così un
+   * cambio dell'impostazione a lavagna aperta vale dalla prossima apertura.
+   * Arriva solo se nel frattempo nessuno ha toccato l'interruttore; una
+   * lettura che non riesce lo lascia spento.
+   */
+  #restoreInkMouse(memory: CanvasInkMouseMemory): void {
+    const turns = this.#inkMouseTurns;
+    void memory.read().then((on) => {
+      if (on && !this.#destroyed && turns === this.#inkMouseTurns) this.setInkMouse(true);
+    }, () => undefined);
+  }
+
+  /** Il clic sul pulsante: cambia l'interruttore e lo ricorda. */
+  #toggleInkMouse(): void {
+    this.setInkMouse(!this.#inkMouse);
+    (this.#options.inkMouseMemory ?? SHARED_INK_MOUSE).save(this.#inkMouse);
   }
 
   /** D lasciato, la finestra senza fuoco o nascosta: il mouse torna com'era. */
@@ -1639,7 +1685,14 @@ export class CanvasEngine {
   #drawToolbar(): void {
     const bar = this.#toolbar;
     bar.replaceChildren();
-    const mk = (action: string, label: string, run: () => void, disabled = false, mutates = true): HTMLButtonElement => {
+    const mk = (
+      action: string,
+      label: string,
+      run: () => void,
+      disabled = false,
+      mutates = true,
+      focusViewport = true,
+    ): HTMLButtonElement => {
       const button = document.createElement("button");
       button.type = "button";
       button.dataset.canvasAction = action;
@@ -1649,11 +1702,18 @@ export class CanvasEngine {
         e.preventDefault();
         this.#recordPending();
         run();
-        this.#viewport.focus();
+        if (focusViewport) this.#viewport.focus();
       });
       bar.append(button);
       return button;
     };
+    // L'interruttore «Scrivi col mouse», in testa alla barra (il menu della
+    // penna gli andrà davanti). Il fuoco resta sul pulsante, così chi usa la
+    // tastiera o un lettore di schermo sente lo stato nuovo.
+    const inkMouse = mk("ink-mouse", t("canvas.ink.mouse"), () => this.#toggleInkMouse(), false, true, false);
+    inkMouse.setAttribute("aria-pressed", String(this.#inkMouse));
+    inkMouse.title = t("canvas.ink.mouse_hint");
+    this.#inkMouseButton = inkMouse;
     mk("add-text", t("canvas.add_text"), () => this.#addNode("text"));
     if (this.#options.onPickFile) {
       mk("add-file", t("canvas.add_file"), () => {

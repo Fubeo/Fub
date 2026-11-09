@@ -1633,6 +1633,14 @@
   background: transparent;
   color: var(--muted);
 }
+/* L'interruttore «Scrivi col mouse» acceso: il fondo tenue dell'accento e
+   la scritta nell'accento, come i pulsanti premuti dei disegni. Due segni,
+   non uno solo. */
+.canvas-toolbar > button[aria-pressed="true"],
+.canvas-toolbar > button[aria-pressed="true"]:hover {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
 .canvas-toolbar > select,
 .canvas-toolbar > input {
   flex: none;
