@@ -32,6 +32,9 @@ export interface Signals {
   /// Un vault è stato aperto (payload: la sua radice). Chi tiene stato legato
   /// al vault — cartelle aperte, spazio attivo, pannelli — riparte da qui.
   vault: [root: string];
+  /// Il nome con cui si riconosce il vault aperto è cambiato
+  /// (`state.vaultName`): la testata dei fogli lo porta in testa al percorso.
+  "vault-name": [name: string];
   /// La lista dei documenti del vault è cambiata. **Senza payload** (§14.4):
   /// portava l'intero elenco, e chi lo riceveva ne disegnava venti righe. Dice
   /// quando, non cosa: la parte che serve la chiede chi disegna.
@@ -156,6 +159,14 @@ export function emit<K extends keyof Signals>(
   }
 }
 
+/// Scrive il nome del vault aperto e lo annuncia, solo se cambia: è la sola
+/// scrittura di `state.vaultName`.
+export function setVaultName(name: string): void {
+  if (state.vaultName === name) return;
+  state.vaultName = name;
+  emit("vault-name", name);
+}
+
 /// Sostituisce l'elenco dei comandi del kernel e lo annuncia: è la sola
 /// scrittura di `state.commandSpecs`, così nessuno lo cambia senza dirlo.
 export function setCommandSpecs(specs: CommandSpec[]): void {
@@ -168,6 +179,10 @@ export function setCommandSpecs(specs: CommandSpec[]): void {
 export interface ShellState {
   /// La radice del vault aperto ("" se nessuno).
   vaultRoot: string;
+  /// Il nome con cui si riconosce il vault aperto: quello scelto dalla persona
+  /// nel registro dei vault, altrimenti la cartella ("" se nessuno). Lo scrive
+  /// soltanto `setVaultName`.
+  vaultName: string;
   /// Il documento attivo nel riquadro **col fuoco**, se c'è.
   ///
   /// È uno specchio, non la verità: la verità è `state/layout.ts`, dove ogni
@@ -207,6 +222,7 @@ export function emptyMeta(): Organization {
 
 export const state: ShellState = {
   vaultRoot: "",
+  vaultName: "",
   currentDoc: null,
   handledExtensions: ["md"],
   meta: emptyMeta(),
