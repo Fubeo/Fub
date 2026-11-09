@@ -18,6 +18,7 @@
 | gli eventi e i lotti | `crates/fub-abi/src/event.rs` |
 | la famiglia `grid` a byte e il giornale | `crates/fub-abi/src/grid_bytes.rs` |
 | il confine IPC e i suoi tipi | `docs/reference/ipc-contract.md` e `apps/client/src/host/contract.ts` |
+| le porte della pagina Componenti | `docs/reference/components-contract.md` |
 | il contratto WASM | `crates/fub-abi/wit/fub/abi.wit` (`fub:abi@0.2.0`) |
 | il formato scena dei disegni | `docs/reference/scene-format.md` |
 | le annotazioni PDF (`.fubann`) | `docs/reference/annotation-format.md` |

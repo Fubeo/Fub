@@ -31,6 +31,7 @@ import {
   launchCommand,
   resetCommandForms,
   canCreateDrawing,
+  newKinds,
   newDrawing,
   loadKeyOverrides,
   validateKeybinding,
@@ -43,6 +44,12 @@ import {
 /// una funzione, non un host finto, perché di superficie ce n'è una.
 const fromBackend = vi.fn(async (): Promise<SettingEntry[]> => []);
 vi.mock("../host/query", () => ({ settings: () => fromBackend() }));
+
+/// I componenti accesi: `null` (la mappa non è arrivata) vale tutto acceso.
+const spatial = vi.hoisted(() => ({ on: null as boolean | null }));
+vi.mock("../state/components", () => ({
+  components: () => (spatial.on === null ? null : { uiOn: (ui: string) => ui !== "editors/spatial" || spatial.on }),
+}));
 
 /// Una riga di impostazione che è un accordo, come la manda il backend.
 function settingEntry(key: string, value: string): SettingEntry {
@@ -398,6 +405,17 @@ describe("le porte di «Nuovo disegno…»", () => {
     // Un altro comando con un nome simile non basta.
     state.commandSpecs = [spec({ id: "note.create" }), spec({ id: "drawing.delete" })];
     expect(canCreateDrawing()).toBe(false);
+  });
+
+  it("«Nuovo» dice la nota sempre, e il disegno se il kernel li fa e i disegni sono accesi", () => {
+    expect(newKinds()).toEqual(["note"]);
+    state.commandSpecs = [spec({ id: "drawing.create" })];
+    expect(newKinds()).toEqual(["note", "drawing"]);
+    spatial.on = false;
+    expect(newKinds()).toEqual(["note"]);
+    spatial.on = true;
+    expect(newKinds()).toEqual(["note", "drawing"]);
+    spatial.on = null;
   });
 
   it("aprono il modulo proprio con la cartella, e la radice non la passano", () => {

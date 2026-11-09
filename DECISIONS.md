@@ -114,6 +114,24 @@ La più recente in cima: data · piano · decisione · perché.
   fusione più piccola che lascia verdi i due lati; `ink_layers` nel
   `.wasm` e la fine di `readInkLayers` restano a T17.
 
+- 2026-11-05 · K2 · Il componente «File delle app Craft» (`fub.craft`, N7,
+  arrivato da main) entra nella tabella degli editor dei componenti come
+  `editors/craft`: la sua scheda si registra solo col componente acceso, e
+  un `.vectorcraft`, `.pcraft`, `.figcraft` o `.xmp` a componente spento si
+  apre «solo come file» invece di «Nessuna superficie disponibile», come i
+  file degli altri componenti. Una foto RAW resta com'era in main (senza il
+  componente non ha vista), perché non ha un formato del vault. I profili non
+  toccano il gruppo «Disegnare», quindi `fub.craft` resta acceso anche con
+  «Solo note». Aggiunta la descrizione che mancava · fonte: l'orchestratore
+  durante l'allineamento a main.
+- 2026-11-05 · K2 · Allineato a main, dove la lavagna è diventata il bundle
+  `fub.lavagna` (feature cargo `lavagna`): il suo stato sta in
+  `plugins.disabled` come per ogni bundle, e `components.off` resta solo per
+  il PDF. Spenta, l'host non registra nemmeno il formato `.canvas` (letto da
+  `plugins.disabled` prima del montaggio) e riaccenderla rimonta il vault.
+  Niente migrazione: K2 non è mai uscito. Riaccesa, `plugins.disabled` resta
+  scritto vuoto come per ogni bundle, e il cancello lo conta come assente ·
+  fonte: l'orchestratore durante l'allineamento a main.
 - 2026-11-08 · fub-pre-alpha (orchestratore) · PA T40 si integra anche se
   10.000 icone cambiate si ridisegnano in 18–35 ms (headless, macchina
   carica) e non sotto i 16 ms del piano · il ridisegno è già un passaggio
@@ -1854,6 +1872,59 @@ La più recente in cima: data · piano · decisione · perché.
   T2–T4; nel grafo di `overview.md` il crate ha un blocco suo, perché il
   primo superava 20 nodi · i provider non sono ancora registrati: chi usa
   Fub non vede niente finché non arriva il task che li monta.
+- 2026-11-02 · K2 · I comandi della sessione live dei disegni arrivano col
+  codice dei disegni, la prima volta che un disegno si apre, e non più
+  all'avvio quando `editors/spatial` è acceso: la prima misura di C1 li ha
+  trovati con «Solo note», perché per A4 nessun profilo tranne «Tutto» tocca
+  `fub.draw`, che quindi resta acceso, mentre la riga di «Fatto quando» vuole
+  «Solo note» senza `editors/spatial`. Servono solo con un disegno a
+  fuoco o una sessione aperta, quindi chi usa Fub non vede differenze; il
+  disegno si monta quando sono arrivati (`withDrawings` delle opzioni del
+  registro). C1 vale per «Solo note» e per «Tutto» · fonte: l'orchestratore,
+  dalla misura di C1 (D-1, A4).
+- 2026-11-01 · K2 · C1 entra nel job `webview` con un controllo vero, non
+  solo con l'elenco: il build scrive `dist/switchable-chunks.json` (i chunk di
+  ogni pezzo di `NOT_AT_STARTUP`) e C1 fallisce se con «Solo note» uno di
+  questi arriva nella WebView (`C1.solo-note.spegnibili`, soglia 0). L'avvio
+  a freddo e il numero dei chunk di C1 restano senza soglia `ci` finché non
+  c'è una misura del runner; il nome del job resta quello del cancello di
+  rilascio · fonte: l'orchestratore, sezione «Fine» del piano (D-1, A8).
+- 2026-11-01 · K2 · T3b: la riga «0 motori avviati» dell'anteprima non era
+  vera (l'host monta i provider dei bundle accesi) ed è diventata una frase
+  vera; `VAULT_REMOUNT_GRACE_MS` resta, perché serve alla chiusura del
+  pannello a un rimontaggio; icone `fub.proof` = `footnote` e `fub.rich` =
+  `format-word`; una sola lettura della mappa in `state/components.ts`
+  (`onComponentsRead`, al più una lettura in volo e un giro `again`,
+  `queueMicrotask` solo come risparmio); le voci di «Nuovo» in `newKinds()` di
+  `ui/commands.ts`, chiamata da esploratore e riquadro; `editorFiles` in
+  `component-surfaces.ts`; A12 verificato senza correzioni · fonte: report e
+  revisione di T3b.
+- 2026-11-01 · K2 · T5: «Non toccare i fake» allargato in modo additivo
+  (`initialVault` nel fake, `?vault=nuovo` nel banco, la partenza `nuovo` e
+  il rifiuto di «Grafica» nello scenario registrato); la riga dei profili
+  spostata in `panels/component-profiles.ts`, condivisa da pagina e
+  schermata; `reloadProvider` estratto in `init` di `desktop-shell.ts`; la
+  schermata è un `role=dialog`; dopo «Solo note» la shell aspetta il
+  rimontaggio al più `PROFILE_REMOUNT_WAIT_MS` = 2000 ms. Chiudere l'app con
+  la schermata aperta lascia il vault senza `components.*`, cioè come prima
+  di K2 · fonte: report e revisione di T5.
+- 2026-11-01 · K2 · Spegnere il componente di un file aperto salva il file
+  prima di mostrarlo «solo come file», senza chiedere; la conferma del
+  profilo compare solo quando spegne qualcosa · fonte: l'orchestratore su T3
+  e T4, da sottoporre all'utente con la prova delle persone (D-2).
+- 2026-11-01 · K2 · L'alias di profilo «note» è tolto e l'host manda i
+  profili nell'ordine dell'anteprima (Solo note, Solo PDF, Studio, Grafica,
+  Fotografia, Tutto); `fub.draw` dichiara la ui `editors/spatial` · fonte:
+  revisione dell'orchestratore su T1 e T2.
+- 2026-11-01 · K2 · Fuori dal Tocca, per far passare i controlli: la guardia
+  della griglia (7c1793ff) e `check-scope` (9617077d); la parte del client
+  sui componenti documentata in `docs/architecture/frontend-and-ipc.md` ·
+  fonte: l'orchestratore durante l'integrazione.
+- 2026-11-01 · K2 · T2b e T3b aggiunti dall'orchestratore: T2 mandava alla
+  shell le chiavi del catalogo invece di nomi e descrizioni tradotti, con uno
+  scenario del fake di pochi gesti (T2b); T3 aveva consegnato la pagina senza
+  il riquadro laterale dell'anteprima, con una lettura della mappa sua accanto
+  a quella di T4 (T3b) · fonte: revisione dell'orchestratore.
 - 2026-11-01 · regole · L'orchestratore e i coder decidono da soli il come
   tecnico, i formati interni, le dipendenze fra crate del workspace e i file
   legati al task; «Chiede sempre» resta per ciò che si vede, il contratto
