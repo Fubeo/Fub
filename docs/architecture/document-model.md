@@ -75,6 +75,12 @@ La sorgente è la stringa decodificata integralmente:
 `Span` usa intervalli `[start, end)` in byte UTF-8. Nel codice nativo gli offset
 sono `usize`; nel WIT sono `u64` per avere larghezza fissa.
 
+Il contratto Rust usa span in byte UTF-8. CodeMirror usa offset JavaScript. Il
+ponte di conversione è una responsabilità esplicita e coperta da test.
+
+La sorgente conserva i terminatori di riga. Caricare o sincronizzare un
+documento non deve normalizzare CRLF involontariamente.
+
 Un edit calcolato su un modello vale per la revisione da cui quel modello
 proviene. Il kernel non applica la posizione a un testo diverso senza rilevare
 il conflitto.

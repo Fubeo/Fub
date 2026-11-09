@@ -4,6 +4,15 @@
 > **Risultato:** capire la sessione documento, il buffer condiviso, il
 > salvataggio e le responsabilità locali.
 
+## La testata del foglio
+
+Dice dove sei e se è salvato: la cartella disegnata, il vault (il nome scelto o
+la cartella) e le cartelle, che si aprono nell'esplora, il nome, che si rinomina
+col doppio clic o F2, poi «Salvato» con la spunta e «…». Il formato lo dice la
+figura della linguetta, col nome per il lettore di schermo. Sul telefono resta il
+nome; in piedi il foglio è largo quanto lo schermo e «Salvato» è la spunta (il
+punto se in sospeso; errore e conflitto restano parole rosse); sdraiato è parola.
+
 ## Modalità
 
 Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre:
@@ -223,14 +232,6 @@ Questa distinzione impedisce di creare due copie concorrenti dello stesso
 buffer e, allo stesso tempo, evita che il cursore di un riquadro muova quello
 dell'altro. Il pannello collega e scollega le superfici visibili, ma non
 coordina il buffer, il salvataggio o il fan-out delle modifiche.
-
-## Offset e terminatori
-
-Il contratto Rust usa span in byte UTF-8. CodeMirror usa offset JavaScript. Il
-ponte di conversione è una responsabilità esplicita e coperta da test.
-
-La sorgente conserva i terminatori di riga. Caricare o sincronizzare un
-documento non deve normalizzare CRLF involontariamente.
 
 ## Undo, redo e selezione
 
