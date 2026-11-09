@@ -58,7 +58,6 @@ export const FRAME: PartAnatomy = {
         "status-mode-arrow",
         "status-standing",
         "status-standing-mark",
-        "status-standing-text",
       ],
     },
   ],

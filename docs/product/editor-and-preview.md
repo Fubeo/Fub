@@ -6,18 +6,12 @@
 
 ## La testata del foglio
 
-Dice dove sei e se è salvato: la cartella disegnata, il vault (il nome scelto o la cartella)
-e le cartelle, che si aprono nell'esplora, il nome, che si rinomina col doppio clic o F2,
-poi «Salvato» con la spunta e «…». Il formato lo dice la figura della linguetta, col nome
-per il lettore di schermo. Sul telefono resta il nome; in piedi il foglio è largo quanto lo
-schermo e «Salvato» è la spunta (il punto se in sospeso; errore e conflitto restano parole rosse).
-
-Lo stato di un documento che chiede attenzione («2 parti chiuse», «Solo il testo», «Sola
-lettura») è un chip nella testata, accanto al percorso. «Si scrive», lo stato normale, non sta
-lì: lo dice la banda di stato a voce bassa, subito prima della modalità, e segue il riquadro a
-fuoco; premuto apre la stessa spiegazione del chip. Sul telefono, dove la banda non c'è, è la
-prima voce di «…». Sotto gli 800 px la banda lascia andare la lingua del documento, che dice già
-il correttore: «Si scrive» e la modalità restano.
+Dice dove sei e se è salvato: la cartella disegnata, il vault (il nome scelto o la cartella) e le
+cartelle, che si aprono nell'esplora, il nome, che si rinomina col doppio clic o F2, poi «Salvato» con la
+spunta e «…». Il formato lo dice la figura della linguetta, col nome per il lettore di schermo. Uno stato
+da notare («Sola lettura») è un chip accanto al percorso; «Si scrive», lo stato normale, lo dice la
+banda, sul telefono «…». Sul telefono resta il nome; in piedi il foglio è largo quanto lo schermo e
+«Salvato» è la spunta (il punto se in sospeso; errore e conflitto restano parole rosse).
 
 ## Modalità
 
@@ -31,8 +25,7 @@ Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre:
 La superficie plain text offre soltanto **sorgente**. Un file `.svg` si apre
 come testo in **Sorgente**, **Diviso** (predefinita, con l'anteprima accanto
 o sotto) e **Anteprima**, o come [disegno](drawing.md) con la feature `draw`
-dell'host. L'anteprima si ridisegna
-dopo una pausa di scrittura, come immagine inerte; una versione rotta lascia
+dell'host. L'anteprima si ridisegna dopo una pausa di scrittura, come immagine inerte; una versione rotta lascia
 l'ultima buona, attenuata, sotto il motivo con riga e colonna. I documenti
 `.xlsx` usano invece la famiglia Grid. Il commutatore è la voce in fondo alla
 banda di stato, [sul telefono un tondo](../architecture/shell-behaviours.md);

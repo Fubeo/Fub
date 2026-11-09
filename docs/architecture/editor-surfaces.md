@@ -122,17 +122,11 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
   argomenti; `null` lascia il menu del sistema. Lo dichiarano il Markdown
   (scrittura e Lettura), i documenti di Word, i fogli, la tela, le basi e il
   visualizzatore dei media;
-- `miniBar()` monta la mini-barra di chi ha controlli suoi (i documenti di
-  Word, i fogli) sopra il menu; il Markdown usa i gruppi della barra di
-  formattazione;
-- `standing`: fin dove si scrive, perché, i posti («Vai» se hanno `run`,
-  dietro `placesAsk`) e le azioni, per il chip di `panels/standing.ts` (rich).
-  Il tipo `writes` («Si scrive») non si vede nella testata: lo dice la banda
-  (`#status-standing`, `shells/scrittoio/frame/status-band.ts`) per il
-  riquadro a fuoco, e sul telefono la prima voce di «…». La banda emette
-  `standing-open` con sé come ancora, e `panels/document.ts` apre la
-  spiegazione del chip lì accanto (`StandingChip.openFrom`); aperta da fuori,
-  si chiude se il tipo cambia. `closed`, `body` e `readonly` restano nel chip;
+- `miniBar()` monta la mini-barra di chi ha controlli suoi (i documenti di Word,
+  i fogli) sopra il menu; il Markdown usa i gruppi della barra di formattazione;
+- `standing`: fin dove si scrive, perché, i posti («Vai» se hanno `run`, dietro
+  `placesAsk`) e le azioni, per il chip di `panels/standing.ts` (rich). `writes`
+  («Si scrive») lo dice la banda (`standing-open`, `StandingChip.openFrom`);
 - `ownBar` dice che la superficie disegna la sua barra dei comandi (i
   documenti di Word, con la barra multifunzione del kit): la barra di
   formattazione della shell allora non si mostra, mentre la bolla della

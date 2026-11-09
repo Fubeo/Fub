@@ -259,8 +259,9 @@ Un documento si guarda in tre modi, dal selettore accanto al percorso:
 
 Mentre il documento ha il fuoco, la banda di stato dice il foglio del cursore
 («Pagina 2 di 5», in Pagina e in Lettura), le parole («12 di 418 parole» con
-una selezione), la lingua che il file dice per il testo e **Registra** quando
-le modifiche si registrano. Le parole sono quelle di Proprietà › Conteggio, e
+una selezione), la lingua che il file dice per il testo (in una finestra sotto
+gli 800 px si fa da parte: la dice già il correttore), **Si scrive** quando il
+file si riscrive tutto e **Registra** quando le modifiche si registrano. Le parole sono quelle di Proprietà › Conteggio, e
 un clic ci porta; il conteggio della nota, che la banda mostra per le altre
 note, si fa da parte.
 

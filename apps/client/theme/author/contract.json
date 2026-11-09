@@ -319,7 +319,6 @@
     "status-mode-arrow",
     "status-standing",
     "status-standing-mark",
-    "status-standing-text",
     "files-panel",
     "drawer-sidebar-open",
     "drawer-inspector-open",
@@ -1840,7 +1839,6 @@
     "status-mode-arrow": "cornice",
     "status-standing": "cornice",
     "status-standing-mark": "cornice",
-    "status-standing-text": "cornice",
     "files-panel": "cornice",
     "drawer-sidebar-open": "cornice",
     "drawer-inspector-open": "cornice",
@@ -3885,8 +3883,7 @@
         "status-mode",
         "status-mode-arrow",
         "status-standing",
-        "status-standing-mark",
-        "status-standing-text"
+        "status-standing-mark"
       ],
       "states": [
         "rest",
@@ -8519,7 +8516,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 64,
-    "hooks": 1519,
+    "hooks": 1518,
     "state_names": 7,
     "assigned_states": 737,
     "components": 219,
