@@ -103,6 +103,13 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-10 · fub-pre-alpha (utente) · a Haiku vanno anche task medi,
+  non solo i ritocchi: restano a Opus solo quelli molto complessi (scelte
+  di disegno aperte, contratti pubblici e formati su disco, sicurezza,
+  movimento e resa delicati, prototipi, molte aree insieme) · parole
+  dell'utente: «Haiku non è affatto scarso come coder, quindi semplici sì,
+  ma non proprio rinominare i file e basta […] non parliamo di cose
+  estremamente complesse, ma nemmeno solo quelle due bischerate».
 - 2026-11-10 · fub-pre-alpha (utente) · i task semplici li può fare un
   coder Haiku 5.5, senza un numero massimo; tutti gli altri restano a Opus
   medio, due alla volta. Sostituisce «mai Sonnet né Haiku» del 2026-11-08.
