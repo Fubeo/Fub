@@ -978,7 +978,7 @@ Fatto quando:
 - con `?formatbar=1` la foto della nota, in giorno e notte, a 1280 e a 700, sta accanto a `?stato=barra`;
 - quella di `mobile-keyboard`, in giorno e notte, sta accanto a `?stato=tel-tastiera` e non perde niente rispetto a oggi.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · 8c359b05..8d61676a · `kit/toolbar-keys.ts` (frecce, giro ai capi, Home/Fine, spenti e gruppi nascosti saltati, campi di testo, un solo punto di Tab, Escape a chi usa la barra); la barra di formato del riquadro veste `kit-bar`, la bolla e la mini-barra hanno gruppi e pulsanti del kit senza vassoio · differenze: sul telefono la fila resta piatta (`mobile.css`, fuori da Tocca) e col dito la barra ha `height: auto` per i pulsanti da 44; `kit-bar` entra nei ganci; tolti i ganci `format-bar-button` e `format-bar-menu` (il contratto non è ancora congelato, PA T41) · resta: «…» della barra sul computer provato solo dai test (a 700 px ci sta tutta)
 
 ## T18 · La barra del PDF
 
