@@ -362,20 +362,21 @@ schede.
   aspetta che la penna si alzi. Anche il testo in sospeso aspetta, perché
   il suo commit ridisegna le schede. Il tratto in corso non si perde; se la
   sua scheda non c'è più diventa libero.
-- **La gomma.** Il retro della penna e il tasto laterale tolgono il tratto
-  intero (A20). `EraseSweep` cerca nei tratti disegnati portati in
-  coordinate della lavagna da `editors/canvas/ink-erase.ts`, con la
-  trasformazione di `ink-fit.ts`: prende il tratto dove si vede. Un tratto
-  non disegnato o di un livello estraneo non si prende. I tratti presi si
-  attenuano (`fadeInkStroke`, opacità 0,25) senza ridisegnare il resto; alla
-  fine un commit con una `eraseStrokePatches` per livello, un passo solo.
-  Niente preso, niente commit; una passata annullata li rimette.
-  `setInkEraser("piece")` taglia invece solo il pezzo strofinato: `cutInk`
-  riporta il cammino nelle unità del tratto e usa `splitInk` e `cutBrush`;
-  durante la passata il tratto si attenua e sopra restano pieni i pezzi
-  (`cutInkStroke`). Alla fine `cutStrokePatches` mette i pezzi al posto del
-  tratto, nel suo ordine, in un commit; un rifiuto del nucleo non cambia
-  niente e lo dice l'avviso.
+- **Il menu della penna.** `pen-menu.ts` sceglie strumento, penna, colore,
+  spessore in pixel dello schermo e modo della gomma, dal tratto dopo
+  (`inkLook`; `penLook` dà la copertura, `fill-opacity`). Lo stato di vista
+  `canvas.pen` (versione 1; un campo rotto vale il suo di serie) lo ricorda.
+- **La gomma.** Il retro della penna, il tasto laterale e la punta con la
+  Gomma del menu (`tipErases`) tolgono il tratto intero (A20). `EraseSweep`
+  cerca nei tratti disegnati portati in coordinate della lavagna
+  (`ink-erase.ts`, con `ink-fit.ts`): prende il tratto dove si vede, non uno
+  non disegnato o di un livello estraneo. I presi si attenuano
+  (`fadeInkStroke`, 0,25); alla fine un commit con una `eraseStrokePatches`
+  per livello, un passo solo; niente preso, niente commit. «Solo il pezzo»
+  taglia ciò che si strofina: `cutInk` usa `splitInk` e `cutBrush` nelle
+  unità del tratto, sopra il tratto attenuato restano pieni i pezzi
+  (`cutInkStroke`) e alla fine `cutStrokePatches` li mette al suo posto in
+  un commit; un rifiuto del nucleo non cambia niente e lo dice l'avviso.
 - **Il tasto D.** D da solo sul viewport, fuori dai campi di testo, fa
   scrivere il mouse (`data-ink="pen"` sul viewport) finché non si alza; lo
   lasciano anche la finestra che perde il fuoco e `visibilitychange`. Un
@@ -407,7 +408,7 @@ schede.
 | la penna della lavagna non arriva alla lavagna; il mouse sì | `editors/canvas/ink-layer.test.ts` |
 | l'inchiostro di una scheda la segue senza ridisegnare | `editors/canvas/ink-paint.test.ts` |
 | un tratto è una toppa, un commit e un passo; il ridisegno aspetta la penna | `editors/canvas/engine-ink.test.ts` |
-| la gomma prende il tratto dove si vede, cancella o taglia in un passo; D fa scrivere il mouse | `editors/canvas/ink-erase.test.ts`, `editors/canvas/engine-ink.test.ts` |
+| la gomma prende il tratto dove si vede, cancella o taglia in un passo; D fa scrivere il mouse; il menu vale dal tratto dopo | `editors/canvas/ink-erase.test.ts`, `editors/canvas/engine-ink.test.ts`, `editors/canvas/pen-menu.test.ts` |
 | il dito sposta e pizzica la lavagna; la penna, anche sospesa, lo ferma | `editors/canvas/touch.test.ts`, `editors/canvas/engine-touch.test.ts` |
 | Rust e client nominano uguale le impostazioni della lavagna | `editors/canvas/settings-mirror.test.ts`, `fub-host/tests/lavagna_feature.rs` |
 | un puntatore fermo resta fermo nella scena se la vista si muove | `ink/dom/pointer-adapter.test.ts`, `tools/editor.test.ts` |

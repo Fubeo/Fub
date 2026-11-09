@@ -100,8 +100,8 @@ un segno prima che la penna tocchi, il ruolo è stato deciso troppo tardi.
 ## La lavagna
 
 Apri un file `.canvas` con una scheda di testo. Strumenti: la penna, la gomma
-(il retro della penna), il tasto D e il pulsante «Scrivi col mouse», in testa
-alla barra.
+(il retro della penna), il tasto D, il menu della penna e, subito dopo, il
+pulsante «Scrivi col mouse», in testa alla barra.
 
 | N. | Gesto | Atteso |
 |---|---|---|
@@ -112,6 +112,11 @@ alla barra.
 | 5 | Chiudi e riapri la lavagna | l'interruttore è spento; con «Ricorda se scrivi col mouse» acceso in Impostazioni, com'era |
 | 6 | Un dito, poi due | uno sposta la lavagna, due la ingrandiscono; il palmo mentre scrivi non fa niente |
 | 7 | `Ctrl+Z` dopo ciascuno | torna un tratto o una passata di gomma per volta |
+| 8 | Menu della penna: Stilografica, Vermiglio, 8 px; poi un tratto | il pulsante dice «Penna: Stilografica, Vermiglio, 8 px» e il tratto dopo è così; un tratto già giù resta com'era |
+| 9 | Evidenziatore, tratto sopra il testo di una scheda | giallo a metà, il testo si legge sotto |
+| 10 | Gomma, «Solo il pezzo»; punta o mouse sopra un tratto | cursore a cella; si toglie solo il pezzo strofinato |
+| 11 | Il menu con la tastiera: Tab, frecce, Esc | Tab salta fra i gruppi, le frecce scelgono, Esc chiude e torna al pulsante |
+| 12 | Chiudi e riapri la lavagna | la penna scelta è ancora quella |
 
 ## Tratti molto lunghi e cambi di dispositivo
 
