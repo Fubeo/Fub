@@ -1629,8 +1629,9 @@ kbd,
   gap: var(--space-4);
 }
 
-/* Il marchio: un quadrato di matita blu con la effe in corsivo. È anche il
-   bottone del menu dell'applicazione. */
+/* Il marchio: Marcuzzo, il logo dell'utente (D26), un gufo che spunta da una
+   cartella. È anche il bottone del menu dell'applicazione: resta trasparente
+   e prende il velo del passaggio come le icone accanto. */
 .brand-mark {
   display: inline-flex;
   align-items: center;
@@ -1638,8 +1639,8 @@ kbd,
   padding: 0;
   border: none;
   border-radius: var(--radius-control);
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: transparent;
+  color: inherit;
   cursor: pointer;
   transition: transform var(--duration-state) var(--ease);
 }
@@ -1653,14 +1654,48 @@ kbd,
   transform: scale(0.96);
 }
 
+/* Il glifo del marchio è il disegno: la forma minima (`marcuzzo-24.svg`) a
+   24 px nel bottone di 28. */
 .brand-glyph {
-  font-family: var(--font-reading);
-  font-size: var(--text-2xl);
-  font-style: italic;
-  font-weight: var(--weight-medium);
-  line-height: 1;
-  transform: translateY(-1px);
+  display: block;
+  flex: none;
 }
+
+.brand-logo {
+  width: 24px;
+  height: 24px;
+}
+
+/* ── Il logo ────────────────────────────────────────────────────────────────
+   Il gufo ha i colori scritti nel disegno e non cambia mai. La cartella, il
+   suo retro, l'ombra sotto le zampe e i due fogli prendono la tinta del tema
+   dai ruoli `--logo-*`: la ricetta li calcola per la serie e per ogni tinta
+   scelta, la serie per un tema installato che non li dichiara. Sono già
+   lontani dal fondo quanto basta (3:1, 4,5:1 nel contrasto alto); senza ruoli
+   ripiegano sull'accento. Vale per ogni Marcuzzo della finestra: il marchio e
+   le Informazioni. */
+.marcuzzo .logo-cartella {
+  fill: var(--logo-cartella, var(--accent));
+}
+
+.marcuzzo .logo-cartella-retro {
+  fill: var(--logo-cartella-retro, var(--accent));
+}
+
+.marcuzzo .logo-cartella-ombra {
+  fill: var(--logo-cartella-ombra, var(--accent));
+}
+
+.marcuzzo .logo-foglio-1 {
+  fill: var(--logo-foglio-1, var(--sheet-2));
+}
+
+.marcuzzo .logo-foglio-2 {
+  fill: var(--logo-foglio-2, var(--sheet-2));
+}
+
+/* Coi colori forzati il logo diventa una sagoma nei colori del sistema: è
+   una garanzia, e sta nella struttura (`structure.css`). */
 
 /* Il chip del vault: il nome in inchiostro, un quadratino d'ambra davanti. */
 .vault-chip {
@@ -18281,6 +18316,21 @@ h6.ui-heading {
   .setting-field-error {
     text-align: left;
   }
+}
+
+/* Informazioni: Marcuzzo intero (`marcuzzo.svg`, D26) a 48 px, accanto alla
+ * versione; i suoi colori sono quelli del marchio (skin/frame.css). La riga
+ * tiene le tre colonne anche stretta: il logo è piccolo e il nome resta
+ * accanto. */
+.about-version {
+  grid-template-columns: auto minmax(40%, 1fr) auto;
+  align-items: center;
+}
+
+.about-logo {
+  flex: none;
+  width: 48px;
+  height: 48px;
 }
 
 /* Chi ha chiesto meno movimento: niente freccia che ruota, niente pressione. */

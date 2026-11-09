@@ -1500,6 +1500,21 @@
   }
 }
 
+/* Informazioni: Marcuzzo intero (`marcuzzo.svg`, D26) a 48 px, accanto alla
+ * versione; i suoi colori sono quelli del marchio (skin/frame.css). La riga
+ * tiene le tre colonne anche stretta: il logo è piccolo e il nome resta
+ * accanto. */
+.about-version {
+  grid-template-columns: auto minmax(40%, 1fr) auto;
+  align-items: center;
+}
+
+.about-logo {
+  flex: none;
+  width: 48px;
+  height: 48px;
+}
+
 /* Chi ha chiesto meno movimento: niente freccia che ruota, niente pressione. */
 @media (prefers-reduced-motion: reduce) {
   .settings-details > summary::before {

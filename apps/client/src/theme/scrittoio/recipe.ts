@@ -106,11 +106,16 @@ const lch = (l: number, c: number, h: number): Oklch => ({ l, c, h: ((h % 360) +
 /// perché l'arrotondamento a otto bit e la riduzione del croma al gamut possono
 /// togliere il centesimo che la bisezione aveva trovato.
 function hold(start: Oklch, backgrounds: readonly string[], target: number, light: Light): string {
+  return toHex({ ...start, l: holdLightness(start, backgrounds, target, light) });
+}
+
+/// La luminosità che `hold` trova: serve a chi sposta altri colori insieme.
+function holdLightness(start: Oklch, backgrounds: readonly string[], target: number, light: Light): number {
   const passes = (color: Oklch): boolean => {
     const hex = toHex(color);
     return backgrounds.every((background) => contrast(hex, background) >= target);
   };
-  if (passes(start)) return toHex(start);
+  if (passes(start)) return start.l;
 
   const limit = light === "light" ? 0 : 1;
   let near = start.l;
@@ -125,7 +130,52 @@ function hold(start: Oklch, backgrounds: readonly string[], target: number, ligh
   for (let guard = 0; guard < 600 && !passes({ ...start, l }); guard += 1) {
     l = Math.min(1, Math.max(0, l + step));
   }
-  return toHex({ ...start, l });
+  return l;
+}
+
+/** I colori del logo che seguono il tema: la cartella e i suoi fogli (D26). */
+export const LOGO_ROLES = [
+  "logo-cartella",
+  "logo-cartella-retro",
+  "logo-cartella-ombra",
+  "logo-foglio-1",
+  "logo-foglio-2",
+] as const;
+export type LogoRole = (typeof LOGO_ROLES)[number];
+
+/// La cartella del logo nella tinta del tema (D26). Il gufo ha i suoi colori e
+/// non cambia; la cartella, il suo retro, l'ombra sotto le zampe e i due fogli
+/// prendono la tinta. Luminosità e crome sono quelle dei due file dell'utente,
+/// «Smeraldo» di giorno e «Menta» di notte, tutti e due a 160. La cartella e
+/// il retro stanno sul fondo, quindi si allontanano dai fondi finché reggono
+/// la soglia dei confini (`ui`): la cartella non sparisce mai nella barra.
+/// L'ombra segue la cartella; i fogli stanno dentro e restano dove sono.
+/// `chroma` scala le crome (1 = quelle dei file): un tema fatto a mano con un
+/// accento quasi grigio ha una cartella quasi grigia.
+export function logoColors(
+  light: Light,
+  level: ContrastLevel,
+  accentHue: number,
+  backgrounds: readonly string[],
+  chroma = 1,
+): Record<LogoRole, string> {
+  const day = light === "light";
+  const target = THRESHOLDS[level].ui;
+  const k = Math.min(1, Math.max(0, chroma));
+  const at = (l: number): number => Math.min(1, Math.max(0, l));
+  const folder = day ? lch(0.62, 0.115 * k, accentHue) : lch(0.79, 0.086 * k, accentHue);
+  const l = holdLightness(folder, backgrounds, target, light);
+  const shift = l - folder.l;
+  const back = day ? lch(at(0.519 + shift), 0.099 * k, accentHue) : lch(at(0.691 + shift), 0.09 * k, accentHue);
+  return {
+    "logo-cartella": toHex({ ...folder, l }),
+    "logo-cartella-retro": hold(back, backgrounds, target, light),
+    "logo-cartella-ombra": toHex(
+      day ? lch(at(0.549 + shift), 0.094 * k, accentHue) : lch(at(0.719 + shift), 0.08 * k, accentHue),
+    ),
+    "logo-foglio-1": toHex(day ? lch(0.78, 0.055 * k, accentHue + 35) : lch(0.475, 0.108 * k, accentHue)),
+    "logo-foglio-2": toHex(day ? lch(0.709, 0.059 * k, accentHue - 30) : lch(0.581, 0.09 * k, accentHue + 35)),
+  };
 }
 
 /// Il colore che si legge sopra un pieno: quasi bianco o quasi nero, quello dei
@@ -488,6 +538,10 @@ export function palette(
     "paper-find-now": hold(lch(0.84, 0.14, 80), [paperInk], T.text, "dark"),
     "paper-comment": hold(lch(0.68, 0.15, 70), paperPapers, T.ui, "light"),
     ...paperAuthors,
+
+    // Il logo: la cartella nella tinta, sui fondi dove sta il marchio (la
+    // barra) e le Informazioni (il rialzo). Facoltativi anche questi.
+    ...logoColors(light, level, hue, [bg, raise]),
   };
 }
 
@@ -593,13 +647,13 @@ export const COLOR_TOKENS: readonly string[] = Object.keys(palette("light", "nor
 /**
  * I ruoli che la serie dichiara e che un tema può non dichiarare: i segni
  * sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un
- * file (`--paper-*`), e la scrivania del disegno (`--draw-desk`). Facoltativi perché un ruolo obbligatorio nuovo farebbe
+ * file (`--paper-*`), i colori del logo (`--logo-*`), e la scrivania del disegno (`--draw-desk`). Facoltativi perché un ruolo obbligatorio nuovo farebbe
  * rifiutare ogni tema `theme-2` di oggi; chi non li dichiara ha il ripiego di
  * `structure.css`, e le loro coppie si contano solo quando ci sono
  * (`THEME_2_OPTIONAL_PAIRS`).
  */
 export const OPTIONAL_ROLES: readonly string[] = COLOR_TOKENS.filter(
-  (name) => name.startsWith("paper-") || name.startsWith("doc-author-") || name.startsWith("doc-color-") || name.startsWith("doc-tint-") ||
+  (name) => name.startsWith("paper-") || name.startsWith("logo-") || name.startsWith("doc-author-") || name.startsWith("doc-color-") || name.startsWith("doc-tint-") ||
     ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment", "draw-desk",
       "doc-syntax-near", "doc-ghost", "doc-wavy", "doc-block-hover", "doc-block-selected", "doc-drop-line"].includes(name),
 );

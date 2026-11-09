@@ -270,6 +270,13 @@
     "window-controls",
     "brand-mark",
     "brand-glyph",
+    "brand-logo",
+    "marcuzzo",
+    "logo-cartella",
+    "logo-cartella-retro",
+    "logo-cartella-ombra",
+    "logo-foglio-1",
+    "logo-foglio-2",
     "vault-chip",
     "vault-chip-icon",
     "vault-chip-name",
@@ -1609,6 +1616,8 @@
     "settings-section-hint",
     "settings-section-body",
     "settings-card",
+    "about-version",
+    "about-logo",
     "setting-row",
     "setting-block",
     "setting-features",
@@ -1870,6 +1879,13 @@
     "window-controls": "cornice",
     "brand-mark": "cornice",
     "brand-glyph": "cornice",
+    "brand-logo": "cornice",
+    "marcuzzo": "cornice",
+    "logo-cartella": "cornice",
+    "logo-cartella-retro": "cornice",
+    "logo-cartella-ombra": "cornice",
+    "logo-foglio-1": "cornice",
+    "logo-foglio-2": "cornice",
     "vault-chip": "cornice",
     "vault-chip-icon": "cornice",
     "vault-chip-name": "cornice",
@@ -3209,6 +3225,8 @@
     "settings-section-hint": "cornice",
     "settings-section-body": "cornice",
     "settings-card": "cornice",
+    "about-version": "cornice",
+    "about-logo": "cornice",
     "setting-row": "cornice",
     "setting-block": "cornice",
     "setting-features": "cornice",
@@ -3848,6 +3866,22 @@
         "pressed",
         "focused",
         "disabled"
+      ]
+    },
+    {
+      "name": "logo",
+      "part": "frame",
+      "hooks": [
+        "brand-logo",
+        "marcuzzo",
+        "logo-cartella",
+        "logo-cartella-retro",
+        "logo-cartella-ombra",
+        "logo-foglio-1",
+        "logo-foglio-2"
+      ],
+      "states": [
+        "rest"
       ]
     },
     {
@@ -7228,6 +7262,17 @@
       ]
     },
     {
+      "name": "about-version",
+      "part": "settings",
+      "hooks": [
+        "about-version",
+        "about-logo"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
       "name": "setting-row",
       "part": "settings",
       "hooks": [
@@ -8193,7 +8238,12 @@
     "paper-author-3",
     "paper-author-4",
     "paper-author-5",
-    "paper-author-6"
+    "paper-author-6",
+    "logo-cartella",
+    "logo-cartella-retro",
+    "logo-cartella-ombra",
+    "logo-foglio-1",
+    "logo-foglio-2"
   ],
   "optional_pairs": [
     [
@@ -8707,7 +8757,12 @@
     "paper-author-3",
     "paper-author-4",
     "paper-author-5",
-    "paper-author-6"
+    "paper-author-6",
+    "logo-cartella",
+    "logo-cartella-retro",
+    "logo-cartella-ombra",
+    "logo-foglio-1",
+    "logo-foglio-2"
   ],
   "vocabulary": {
     "properties": [
@@ -8761,11 +8816,11 @@
   },
   "counts": {
     "required_roles": 154,
-    "optional_roles": 63,
-    "hooks": 1598,
+    "optional_roles": 68,
+    "hooks": 1607,
     "state_names": 7,
-    "assigned_states": 740,
-    "components": 222,
-    "preference_tokens": 186
+    "assigned_states": 742,
+    "components": 224,
+    "preference_tokens": 191
   }
 }

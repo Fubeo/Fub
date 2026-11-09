@@ -24,6 +24,8 @@
 // perfettamente legale che rompe ogni tema di terzi già scritto.
 import { describe, expect, it } from "vitest";
 
+import misureLogo from "../../../../assets/logo/misure.json?raw";
+
 import { contrast } from "./contrast";
 import { fromHex } from "./oklch";
 import { THEME_2_OPTIONAL_PAIRS } from "./scrittoio/profile";
@@ -32,11 +34,13 @@ import {
   CONTRASTS,
   DEFAULT_ACCENT_HUE,
   LIGHTS,
+  LOGO_ROLES,
   OPTIONAL_ROLES,
   SHEETS,
   STATUS_HUE_GAP,
   VARIANTS,
   accentPalette,
+  logoColors,
   palette,
   roles,
   sheet,
@@ -122,8 +126,8 @@ describe("i ruoli facoltativi: i segni sulle due carte", () => {
   it("non sono fra i ruoli obbligatori, e i ruoli obbligatori restano 154", () => {
     // 26 segni e carte, più i sei colori degli autori su ognuna delle due, la
     // scrivania del disegno, i sei segni della Live e dei Blocchi e i nove
-    // colori del contenuto col loro fondo.
-    expect(OPTIONAL_ROLES.length).toBe(39 + 6 + 18);
+    // colori del contenuto col loro fondo, e i cinque colori del logo.
+    expect(OPTIONAL_ROLES.length).toBe(39 + 6 + 18 + 5);
     expect(roles().filter((role) => OPTIONAL_ROLES.includes(role))).toEqual([]);
     expect(roles()).toHaveLength(154);
   });
@@ -271,5 +275,76 @@ describe("i colori di stato restano lontani dall'accento (D25)", () => {
 
   it("l'accento di serie non aggiunge un foglio di preferenze", () => {
     for (const { light, contrast } of VARIANTS) expect(accentPalette(light, contrast, DEFAULT_ACCENT_HUE)).toEqual({});
+  });
+});
+
+describe("la cartella del logo segue la tinta e resta staccata dal fondo (D26)", () => {
+  /// I valori attesi, misurati sul prototipo del piano (`script/logo-misure.mjs`).
+  const MISURE = JSON.parse(misureLogo) as {
+    tinte: { id: string; tinta: number; varianti: Record<string, { colori: Record<string, string> }> }[];
+  };
+  const FREE_HUES = [0, 20, 40, 60, 95, 150, 180, 230, 290, 320] as const;
+  const UI: Readonly<Record<string, number>> = { normal: 3, high: 4.5 };
+  const logoOf = (colors: Record<string, string>): Record<string, string> =>
+    Object.fromEntries(LOGO_ROLES.map((role) => [role.replace(/^logo-/, ""), colors[role]!]));
+
+  it("i ruoli sono cinque, facoltativi, e ogni foglio della serie li dichiara", () => {
+    expect(LOGO_ROLES).toEqual([
+      "logo-cartella",
+      "logo-cartella-retro",
+      "logo-cartella-ombra",
+      "logo-foglio-1",
+      "logo-foglio-2",
+    ]);
+    for (const role of LOGO_ROLES) expect(OPTIONAL_ROLES).toContain(role);
+    for (const { light, contrast: level } of VARIANTS) {
+      for (const role of LOGO_ROLES) expect(ON_DISK[light][level]).toContain(`--${role}: `);
+    }
+  });
+
+  it("con 160 è il disegno dell'utente: Menta di notte, Smeraldo di giorno appena più scuro", () => {
+    expect(logoOf(palette("dark", "normal"))).toEqual({
+      cartella: "#89cca8",
+      "cartella-retro": "#67ad88",
+      "cartella-ombra": "#77b493",
+      "foglio-1": "#006e46",
+      "foglio-2": "#238b8b",
+    });
+    expect(palette("light", "normal")["logo-cartella"]).toBe("#37996c");
+    expect(palette("light", "high")["logo-cartella"]).toBe("#077b50");
+  });
+
+  it.each(ACCENT_SWATCHES.map((swatch) => [swatch.id, swatch.hue] as const))(
+    "%s: i colori sono quelli misurati nel piano",
+    (id, hue) => {
+      const expected = MISURE.tinte.find((tinta) => tinta.id === id);
+      expect(expected?.tinta).toBe(hue);
+      for (const { light, contrast: level } of VARIANTS) {
+        expect(logoOf(palette(light, level, hue)), `${light} × ${level}`).toEqual(
+          expected!.varianti[`${light}-${level}`]!.colori,
+        );
+      }
+    },
+  );
+
+  it.each([...ACCENT_SWATCHES.map((s) => s.hue), ...FREE_HUES])(
+    "tinta %i: la cartella e il retro reggono la soglia dei confini sui due fondi del logo",
+    (hue) => {
+      for (const { light, contrast: level } of VARIANTS) {
+        const colors = palette(light, level, hue);
+        for (const role of ["logo-cartella", "logo-cartella-retro"]) {
+          for (const background of ["bg", "bg-elev"]) {
+            const ratio = contrast(colors[role]!, colors[background]!);
+            expect(ratio, `--${role} su --${background}, ${light} × ${level}`).toBeGreaterThanOrEqual(UI[level]!);
+          }
+        }
+      }
+    },
+  );
+
+  it("un accento quasi grigio fa una cartella quasi grigia, non verde", () => {
+    const grey = logoColors("light", "normal", 160, ["#eeeeee", "#ffffff"], 0.01 / 0.08);
+    for (const role of LOGO_ROLES) expect(fromHex(grey[role]).c, role).toBeLessThan(0.02);
+    expect(contrast(grey["logo-cartella"], "#eeeeee")).toBeGreaterThanOrEqual(3);
   });
 });

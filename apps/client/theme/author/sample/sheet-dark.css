@@ -226,6 +226,11 @@
   --paper-author-4: #813faa;
   --paper-author-5: #934f00;
   --paper-author-6: #006f74;
+  --logo-cartella: #89cca8;
+  --logo-cartella-retro: #67ad88;
+  --logo-cartella-ombra: #77b493;
+  --logo-foglio-1: #006e46;
+  --logo-foglio-2: #238b8b;
   color-scheme: dark;
   font-family: var(--font-ui);
   font-size: var(--text-base);

@@ -103,6 +103,13 @@ export interface ThemeSeries {
   sheet(light: Theme, contrast: ContrastLevel): string;
   /** I token di densità, accento e cornice: ciò che è proprio della serie. */
   tokens(preferences: AppearancePreferences, light: Theme, contrast: ContrastLevel): Record<string, string>;
+  /**
+   * Completa il foglio di un tema installato con i ruoli facoltativi che la
+   * serie sa ricavare dai suoi colori (la cartella del logo, D26). Rende il
+   * foglio com'è quando non c'è niente da aggiungere. Una serie che non lo dà
+   * lascia i fogli dei temi come sono.
+   */
+  completeSheet?(sheet: string, light: Theme, contrast: ContrastLevel): string;
 }
 
 let series: ThemeSeries = SCRITTOIO_SERIES;
@@ -278,12 +285,19 @@ export function preferenceTokens(
  * con sé la pelle di serie, che resta montata sotto la sua (ADR 0240).
  * Ereditare da altro che la serie non si sa fare: il fascio parte senza
  * eredità e il cancello lo rifiuta dicendo da chi voleva ereditare.
+ *
+ * Il foglio portato dal tema passa dalla serie (`completeSheet`) prima del
+ * cancello: aggiunge i ruoli facoltativi che la serie sa ricavare dai colori
+ * del tema, come la cartella del logo (D26).
  */
 function themeBundle(payload: ThemePayload, light: Theme, contrast: ContrastLevel): ThemeBundle {
   const inherits = payload.manifest.extends === SERIES_THEME_ID;
+  const own = payload.sheet;
   return {
     manifest: payload.manifest,
-    sheet: payload.sheet ?? (inherits ? series.sheet(light, contrast) : ""),
+    sheet: own !== null && own !== undefined
+      ? series.completeSheet?.(own, light, contrast) ?? own
+      : inherits ? series.sheet(light, contrast) : "",
     skin: payload.skin ?? undefined,
     assets: payload.assets,
     ...(inherits ? { inherited: { skin: series.skin } } : {}),

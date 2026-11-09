@@ -320,6 +320,43 @@ body {
   flex: none;
 }
 
+/* Marcuzzo coi colori forzati (D26): il logo diventa una sagoma nei colori
+   del sistema, nel marchio e nelle Informazioni. Sta qui e non nella pelle
+   perché è una garanzia: `forced-color-adjust` a una pelle è negato, e un
+   tema non deve poterla togliere. La cartella e le pupille nel colore del
+   testo, il gufo nel grigio del sistema, le facce, gli occhi e i fogli nel
+   colore del fondo. */
+@media (forced-colors: active) {
+  .marcuzzo {
+    forced-color-adjust: none;
+  }
+
+  .marcuzzo path[class] {
+    fill: CanvasText;
+    stroke: none;
+  }
+
+  .marcuzzo path.logo-piumaggio,
+  .marcuzzo path.logo-pancia,
+  .marcuzzo path.logo-ali,
+  .marcuzzo path.logo-ombra,
+  .marcuzzo path.logo-zampe {
+    fill: GrayText;
+  }
+
+  .marcuzzo path.logo-bianco,
+  .marcuzzo path.logo-occhi,
+  .marcuzzo path.logo-becco-luce,
+  .marcuzzo path.logo-foglio-1,
+  .marcuzzo path.logo-foglio-2 {
+    fill: Canvas;
+  }
+
+  .marcuzzo path.logo-pupille {
+    stroke: CanvasText;
+  }
+}
+
 .titlebar .vault-chip {
   height: var(--chrome-btn);
   min-width: 0;
