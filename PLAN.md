@@ -1739,7 +1739,7 @@ scelta torna e che una ridisegnata non chiude il menu; `npm run
 theme:verify` passa; le foto somigliano al prototipo.
 Prova: scripts/check.sh --rapido; cd apps/client && npm run theme:generate
 && npm run theme:verify && npx vitest run src/editors/canvas
-Stato: [ ] da fare
+Stato: [x] fatto (2026-11-09: il pulsante della penna in testa, il rialzo con strumento, tipo, colore, spessore e gomma; `canvas.pen` ricordata; l'opacità di `penLook` per ogni penna come nel prototipo; `tipErases` per la gomma scelta; axe del menu da sonda, il banco a11y non ha la lavagna)
 
 ## T22 · La gomma che taglia
 
