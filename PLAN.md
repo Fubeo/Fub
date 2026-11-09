@@ -693,7 +693,7 @@ Fatto quando:
 - la foto di `inspector` e `live-01-panoramica`, in giorno e notte, a 1280 e a 700, sta accanto a `?stato=nota`;
 - quella di `mobile-inspector` non perde niente rispetto a oggi.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · 733d065b · differenze: per «e altri N» serve un intento non privilegiato nuovo, `fub.inspector.tab` (`fub_abi::ui::INSPECTOR_TAB_NS`, additivo, in `docs/reference/ipc-contract.md`); «Segue la nota» dice il nome nel suggerimento
 
 ## T10 · Impostazioni, componenti, avvio rapido, grafo, benvenuto e menu
 
@@ -832,7 +832,7 @@ Fatto quando:
 - `node.test.ts` vede l'icona sulle righe con `drag`;
 - la foto di `inspector` e `live-01-panoramica`, in giorno e notte, sta accanto a `?stato=nota`.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · 0a3d9162, 9f45588c · differenze: anche i Collegamenti dicono «In entrata/In uscita» al posto di «Entranti/Uscenti»; la Struttura legge la porta `Backlinks` del nucleo, non la funzione dei collegamenti
 
 ## T14 · Le figure per cartelle e note
 
@@ -1272,7 +1272,7 @@ Fatto quando:
 - le foto delle scene della scrivania, `live-01-panoramica`, `tabs`, `desk`, `empty`, `nota-tre-modi`, `concentration`, `mobile-startup` e `mobile-landscape`, in giorno e notte, stanno accanto a `?stato=nota`, `?stato=documento`, `?stato=vuoto`, `?stato=tel-nota` e `?stato=tel-sdraiato`: l'ombra si vede ai fianchi e sfuma sotto, e i `getBoundingClientRect()` dei `.pane` sono quelli di prima del task; le baseline di queste scene le rifà T25 dal runner;
 - una sonda del banco clicca nei 20 px accanto al foglio e arriva al cassetto, all'ispettore e alla banda, e trascina il divisore del cassetto.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · eec76470, d093ef97 · differenze: l'ombra della linguetta accesa è nel codice con `clip-path`, ed è tolta al telefono in piedi; `scrollHeight` di `#layout` cresce di 20 px come nel prototipo
 
 ## T28 · Il movimento della barra a schede del documento
 
@@ -1298,7 +1298,7 @@ Fatto quando:
 - una sonda del banco con il moto non ridotto e l'ora vera, sullo stesso schema di quella dei fogli, conta le animazioni nel documento e nei fogli dopo un cambio di sezione, dopo `Ctrl+F1` (ritiro e riapertura) e dopo l'apertura sul posto a 700 px: sono le stesse corse, con le stesse molle; una serie di fotogrammi (0, 40, 80, 140, 260 ms) del documento e dei fogli sta nel resoconto;
 - `npm run bench:a11y` resta verde.
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · 753d2f0d, b876ddaf · differenze: `rich-motion.ts` non segue più la barra che si ritira (la carta restava ferma mentre il testo scendeva); `.rich-notice` sta sopra la barra, fuori dalla tenda; ricerca e pagina senza `z-index`. Prima, b22a6650: «3 collegamenti» e le etichette premute da tastiera fanno un clic vero (rosso di `bench:a11y` da T12)
 
 ## Non verificato da qui
 
