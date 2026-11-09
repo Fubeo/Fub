@@ -105,6 +105,14 @@ export { GRID_OVERSCAN, uniformRowRange } from "../core/row-window";
 /// aspettano il fotogramma seguente, così un giro non si allunga oltre un
 /// fotogramma. Le celle nuove e quelle che cambiano posto si fanno sempre.
 const GRID_FRAME_REFILLS = 48;
+/// Quante righe nuove del margine aggiunge al più un disegno nel mezzo dello
+/// scorrimento (il gestore, il fotogramma dopo), oltre a quelle del riquadro
+/// e della fascia attorno a lui (`GRID_FRAME_BAND`, una frazione del
+/// riquadro): il resto del margine lo finiscono i fotogrammi seguenti. Così
+/// uno scorrimento lungo non mette nel documento tutte insieme le righe di
+/// un riquadro intero di margine, che il browser deve poi impaginare.
+const GRID_FRAME_NEW_ROWS = 3;
+const GRID_FRAME_BAND = 0.1;
 export const GRID_WINDOW_ROWS = 256;
 export const GRID_WINDOW_COLUMNS = 128;
 export const MAX_GRID_SESSION_WINDOWS = 256;
@@ -1049,7 +1057,7 @@ export class GridEngine {
       void this.#loadViewport();
       const view = this.#readView();
       this.#scrollView = view;
-      if (this.#workbook) this.#renderRows(this.#selectedRange(), true, view);
+      if (this.#workbook) this.#renderRows(this.#selectedRange(), true, view, Infinity, GRID_FRAME_NEW_ROWS);
       this.#scheduleRender();
     }, { signal });
     // L'editor della cella sta dentro la griglia, e i suoi eventi salgono fin
@@ -2493,8 +2501,9 @@ export class GridEngine {
   #render(rows = true, loaded = false): void {
     if (!this.#workbook) return;
     const range = this.#selectedRange();
-    if (rows) this.#renderRows(range, loaded, loaded ? this.#scrollView : null, loaded ? GRID_FRAME_REFILLS : Infinity);
-    else if (this.#rowsBehind) this.#renderRows(range, true, this.#scrollView, GRID_FRAME_REFILLS);
+    if (rows && loaded) this.#renderRows(range, true, this.#scrollView, GRID_FRAME_REFILLS, GRID_FRAME_NEW_ROWS);
+    else if (rows) this.#renderRows(range);
+    else if (this.#rowsBehind) this.#renderRows(range, true, this.#scrollView, GRID_FRAME_REFILLS, GRID_FRAME_NEW_ROWS);
     if (loaded) this.#scheduleRender();
     else this.#fitPending();
     // I segni, ognuno nel livello della zona dove cade.
@@ -2559,7 +2568,7 @@ export class GridEngine {
   /// Le celle da misurare (i numeri, quelle che si stringono) le misura
   /// `#fitPending`: subito, o con `deferFit` nel fotogramma chiesto, prima
   /// che il fotogramma si dipinga.
-  #renderRows(range: GridRange, deferFit = false, known: PaperView | null = null, refills = Infinity): void {
+  #renderRows(range: GridRange, deferFit = false, known: PaperView | null = null, refills = Infinity, newRows = Infinity): void {
     const frame = this.#frame;
     this.#refills = refills;
     this.#rowsBehind = false;
@@ -2572,9 +2581,21 @@ export class GridEngine {
       }
     }
     const editingPosition = this.#editing?.owner === "cell" ? this.#editing.position : null;
-    const renderedRows = this.#renderedIndices(
-      this.#rows, frame.frozenRows, frame.frozenHeight, view.scrollTop,
-      view.height - frame.columnHeader, editingPosition?.row ?? null,
+    const drawnIn = (parent: HTMLElement) => {
+      const rows = new Map<number, HTMLElement>();
+      for (const element of parent.children) if (isDataRow(element)) rows.set(Number(element.dataset.row), element);
+      return rows;
+    };
+    const drawnHead = drawnIn(this.#head);
+    const drawnBody = drawnIn(this.#body);
+    const renderedRows = this.#drawableRows(
+      this.#renderedIndices(
+        this.#rows, frame.frozenRows, frame.frozenHeight, view.scrollTop,
+        view.height - frame.columnHeader, editingPosition?.row ?? null,
+      ),
+      view,
+      (row) => drawnHead.has(row) || drawnBody.has(row) || row === editingPosition?.row,
+      newRows,
     );
     const renderedColumns = this.#renderedIndices(
       this.#columns, frame.frozenColumns, frame.frozenWidth, view.scrollLeft,
@@ -2601,13 +2622,6 @@ export class GridEngine {
         anchorsByRow.set(host, [...(anchorsByRow.get(host) ?? []), merge]);
       }
     }
-    const drawnIn = (parent: HTMLElement) => {
-      const rows = new Map<number, HTMLElement>();
-      for (const element of parent.children) if (isDataRow(element)) rows.set(Number(element.dataset.row), element);
-      return rows;
-    };
-    const drawnHead = drawnIn(this.#head);
-    const drawnBody = drawnIn(this.#body);
     const measures: HTMLElement[] = [];
     const headRows: HTMLElement[] = [];
     const bodyRows: HTMLElement[] = [];
@@ -2650,6 +2664,26 @@ export class GridEngine {
     this.#pendingFits.push(...measures);
     if (!deferFit) this.#fitPending();
     if (this.#rowsBehind) this.#scheduleRender();
+  }
+
+  /// Delle righe del margine (`rows`), quelle da disegnare in questo giro:
+  /// le bloccate, quelle del riquadro e della fascia attorno a lui, quelle
+  /// già disegnate (`kept`) e al più `budget` altre, le più vicine al
+  /// riquadro prima. Se ne restano fuori, il disegno resta indietro
+  /// (`#rowsBehind`) e le aggiunge il fotogramma dopo.
+  #drawableRows(rows: readonly number[], view: PaperView, kept: (row: number) => boolean, budget: number): number[] {
+    if (budget === Infinity) return [...rows];
+    const frame = this.#frame;
+    const extent = Math.max(0, view.height - frame.columnHeader - frame.frozenHeight);
+    const band = Math.round(extent * GRID_FRAME_BAND);
+    const top = view.scrollTop + frame.frozenHeight;
+    const first = indexAt(this.#rows, Math.max(0, top - band));
+    const last = indexAt(this.#rows, top + extent + band);
+    const distance = (row: number) => (row < first ? first - row : row - last);
+    const waiting = rows.filter((row) => row >= frame.frozenRows && (row < first || row > last) && !kept(row));
+    const chosen = new Set(waiting.sort((left, right) => distance(left) - distance(right)).slice(0, Math.max(0, budget)));
+    if (chosen.size < waiting.length) this.#rowsBehind = true;
+    return rows.filter((row) => row < frame.frozenRows || (row >= first && row <= last) || kept(row) || chosen.has(row));
   }
 
   /// Le misure del riquadro, lette tutte insieme.

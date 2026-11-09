@@ -246,6 +246,11 @@ function typeInActiveCell(host: HTMLElement, viewport: HTMLElement, text: string
   viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
 }
 
+/** Lascia passare `count` fotogrammi: il margine che uno scorrimento lascia indietro lo finiscono loro. */
+async function frames(count = 12): Promise<void> {
+  for (let index = 0; index < count; index += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
 const cellAt = (host: HTMLElement, row: number, column: number) =>
   host.querySelector<HTMLElement>(`.grid-cell[data-row="${row}"][data-column="${column}"]`);
 
@@ -270,6 +275,7 @@ describe("GridEngine", () => {
     viewport.scrollTop = 1_400;
     viewport.dispatchEvent(new Event("scroll"));
     await settle();
+    await frames();
     expect(drawn().minRow).toBe(Math.floor((1_400 - span.rows) / 28));
     expect(drawn().maxRow).toBe(Math.floor((1_400 + 2 * span.rows) / 28));
     engine.destroy();
@@ -281,10 +287,14 @@ describe("GridEngine", () => {
     const before = rows();
     const cell = cellAt(host, 10, 1)!;
     expect(cell.textContent).toBe("x");
-    // Il gestore dello scorrimento disegna le righe subito, senza aspettare
-    // un fotogramma.
+    // Il gestore dello scorrimento disegna subito, senza aspettare un
+    // fotogramma, le righe del riquadro e di una fascia di un decimo di
+    // riquadro attorno a lui, più qualcuna del margine; il resto del margine
+    // lo finiscono i fotogrammi dopo.
     viewport.scrollTop = 280;
     viewport.dispatchEvent(new Event("scroll"));
+    expect(Math.max(...rows().keys())).toBeGreaterThanOrEqual(Math.floor((280 + 272 + 27) / 28));
+    await frames();
     const after = rows();
     expect(Math.max(...after.keys())).toBe(Math.floor((280 + 2 * 272) / 28));
     // Le righe che c'erano e ci sono ancora sono gli stessi elementi, con le
@@ -296,6 +306,7 @@ describe("GridEngine", () => {
     // Uno scorrimento lontano è un salto: nessuna riga resta, tutte nuove.
     viewport.scrollTop = 300 * 28;
     viewport.dispatchEvent(new Event("scroll"));
+    await frames();
     const far = rows();
     expect([...far.values()].some((row) => [...after.values()].includes(row))).toBe(false);
     expect(Math.min(...far.keys())).toBe(Math.floor((300 * 28 - 272) / 28));
