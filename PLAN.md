@@ -628,7 +628,7 @@ Fatto quando:
 - la foto di `live-01-panoramica` ed `empty`, in giorno e notte, a 1280 e a 700, sta accanto a `?stato=nota` e `?stato=vuoto`: la pillola dice «Cerca o esegui un comando» e il pulsante del binario premuto è un foglietto;
 - sul telefono, in giorno e notte, `mobile-startup` sta accanto a `?stato=tel-nota` (senza marchio, la pillola dal bordo) e `mobile-startup` a 844×390 accanto a `?stato=tel-sdraiato` (il marchio c'è).
 Prova: scripts/check.sh --rapido
-Stato: [ ] da fare
+Stato: [x] fatto · acfeab0f · sul computer la pillola è sempre «Cerca o esegui un comando…» (`data-pill="command"`), il kbd segue la scorciatoia; il pulsante premuto è un foglietto sollevato (filo `CanvasText` nei colori forzati); al telefono in piedi il marchio non si vede e il fuoco del suo menu ripiega sulla pillola, il telefono che si raddrizza a menu aperto lo chiude · l'orchestratore ha allineato anche `frame.pill.at` («{title}: cerca o esegui un comando», f8c3f11d) · differenze: l'aria-label statico di `mobile.html` segue il catalogo; a cassetto chiuso il pulsante perde anche l'ombra; il prototipo scrive la pillola senza «…», si è seguito il piano · resta: nessuna pagina di `docs/` descrive la barra del titolo del telefono
 
 ## T8 · Il cassetto
 
