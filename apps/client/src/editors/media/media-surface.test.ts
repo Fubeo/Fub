@@ -240,6 +240,10 @@ describe("i dati della foto", () => {
 });
 
 describe("le annotazioni nel visore del PDF", () => {
+  // Il primo disegno carica il modulo delle annotazioni con un `import()`:
+  // sotto carico supera il secondo di serie di `vi.waitFor`.
+  const waitFor = <T>(check: () => T | Promise<T>) => vi.waitFor(check, { timeout: 5000 });
+
   const PAGE = (id: string) =>
     `<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1"><g fub:page="1" fub:page-size="600 800"><path id="${id}" d="M10 10L50 50"/></g></svg>`;
 
@@ -323,7 +327,7 @@ describe("le annotazioni nel visore del PDF", () => {
   // Va per prima: il modulo del disegno, una volta caricato, resta.
   it("senza .fubann niente interruttore e il codice del disegno non si scarica", async () => {
     const { parent, surface, fake } = mount({});
-    await vi.waitFor(() => expect(parent.querySelector(".media-pdf-sheet")).not.toBeNull());
+    await waitFor(() => expect(parent.querySelector(".media-pdf-sheet")).not.toBeNull());
     expect(fake.reads).toEqual(["doc/bando.pdf.fubann"]);
     await pause();
     expect(toggle(parent).closest("[hidden]")).not.toBeNull();
@@ -335,7 +339,7 @@ describe("le annotazioni nel visore del PDF", () => {
 
   it("senza la feature il visore non chiede niente", async () => {
     const { parent, surface, fake } = mount({ "doc/bando.pdf.fubann": PAGE("a") }, false);
-    await vi.waitFor(() => expect(parent.querySelector(".media-pdf-sheet")).not.toBeNull());
+    await waitFor(() => expect(parent.querySelector(".media-pdf-sheet")).not.toBeNull());
     await pause();
     expect(fake.reads).toEqual([]);
     expect(fake.listeners.size).toBe(0);
@@ -345,22 +349,22 @@ describe("le annotazioni nel visore del PDF", () => {
 
   it("col .fubann le annotazioni stanno sopra la pagina, e un salvataggio le ridisegna", async () => {
     const { parent, surface, fake } = mount({ "doc/bando.pdf.fubann": PAGE("primo") });
-    await vi.waitFor(async () => expect(await drawn(parent)).toContain(`id="primo"`));
+    await waitFor(async () => expect(await drawn(parent)).toContain(`id="primo"`));
     expect(annotationLoads.count).toBe(1);
     expect(toggle(parent).closest("[hidden]")).toBeNull();
     expect(toggle(parent).getAttribute("aria-pressed")).toBe("true");
     fake.files["doc/bando.pdf.fubann"] = PAGE("secondo");
     fake.save();
-    await vi.waitFor(async () => expect(await drawn(parent)).toContain(`id="secondo"`));
+    await waitFor(async () => expect(await drawn(parent)).toContain(`id="secondo"`));
     // Il file che sparisce toglie strato e interruttore.
     delete fake.files["doc/bando.pdf.fubann"];
     fake.save();
-    await vi.waitFor(() => expect(parent.querySelector("img.media-pdf-annotations")).toBeNull());
+    await waitFor(() => expect(parent.querySelector("img.media-pdf-annotations")).toBeNull());
     expect(toggle(parent).closest("[hidden]")).not.toBeNull();
     // E uno che nasce dopo l'apertura (il primo «Annota») lo fa comparire.
     fake.files["doc/bando.pdf.fubann"] = PAGE("nuovo");
     fake.save();
-    await vi.waitFor(async () => expect(await drawn(parent)).toContain(`id="nuovo"`));
+    await waitFor(async () => expect(await drawn(parent)).toContain(`id="nuovo"`));
     expect(toggle(parent).closest("[hidden]")).toBeNull();
     surface.destroy();
     expect(fake.listeners.size).toBe(0);
@@ -368,13 +372,13 @@ describe("le annotazioni nel visore del PDF", () => {
 
   it("a raffica vale l'ultimo salvataggio: una lettura vecchia arrivata dopo non lo copre", async () => {
     const { parent, surface, fake } = mount({ "doc/bando.pdf.fubann": PAGE("primo") });
-    await vi.waitFor(async () => expect(await drawn(parent)).toContain(`id="primo"`));
+    await waitFor(async () => expect(await drawn(parent)).toContain(`id="primo"`));
     let releaseOld: (text: string) => void = () => {};
     fake.holdWith(() => new Promise((resolve) => (releaseOld = resolve)));
     fake.save();
     fake.holdWith(async () => PAGE("nuovo"));
     fake.save();
-    await vi.waitFor(async () => expect(await drawn(parent)).toContain(`id="nuovo"`));
+    await waitFor(async () => expect(await drawn(parent)).toContain(`id="nuovo"`));
     releaseOld(PAGE("vecchio"));
     await pause();
     expect(await drawn(parent)).toContain(`id="nuovo"`);
@@ -384,7 +388,7 @@ describe("le annotazioni nel visore del PDF", () => {
   it("smontato a metà lettura, niente resta vivo e niente si disegna", async () => {
     let release: (text: string) => void = () => {};
     const { parent, surface, fake } = mount({});
-    await vi.waitFor(() => expect(parent.querySelector(".media-pdf-sheet")).not.toBeNull());
+    await waitFor(() => expect(parent.querySelector(".media-pdf-sheet")).not.toBeNull());
     fake.holdWith(() => new Promise((resolve) => (release = resolve)));
     fake.save();
     surface.destroy();
@@ -407,7 +411,7 @@ describe("le annotazioni nel visore del PDF", () => {
   </g>
 </svg>`;
     const { parent, surface } = mount({ "doc/bando.pdf.fubann": hostile });
-    await vi.waitFor(async () => expect(await drawn(parent)).toContain(`id="tratto"`));
+    await waitFor(async () => expect(await drawn(parent)).toContain(`id="tratto"`));
     const viewer = parent.querySelector(".media-pdf-page")!;
     // Nel DOM della shell entra solo l'immagine: il testo del file resta nel blob.
     expect(viewer.querySelectorAll("script, iframe, svg, image, foreignObject, a")).toHaveLength(0);
@@ -423,7 +427,7 @@ describe("le annotazioni nel visore del PDF", () => {
   it("il PDF cambiato dopo le annotazioni: si disegnano lo stesso, e la riga lo dice", async () => {
     const changed = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" fub:digest="sha256:${"0".repeat(64)}" fub:pages="5"><g fub:page="1"><path id="t" d="M0 0L1 1"/></g></svg>`;
     const { parent, surface } = mount({ "doc/bando.pdf.fubann": changed });
-    await vi.waitFor(async () => expect(await drawn(parent)).toContain(`id="t"`));
+    await waitFor(async () => expect(await drawn(parent)).toContain(`id="t"`));
     const line = parent.querySelector<HTMLElement>(".media-pdf-note")!;
     expect(line.hidden).toBe(false);
     expect(line.textContent).toContain(t("pdf.changed"));
@@ -437,7 +441,7 @@ describe("le annotazioni nel visore del PDF", () => {
     const hash = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
     const same = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" fub:digest="sha256:${hash}" fub:pages="2"><g fub:page="1"><path id="t" d="M0 0L1 1"/></g></svg>`;
     const { parent, surface } = mount({ "doc/bando.pdf.fubann": same });
-    await vi.waitFor(async () => expect(await drawn(parent)).toContain(`id="t"`));
+    await waitFor(async () => expect(await drawn(parent)).toContain(`id="t"`));
     await pause();
     expect(parent.querySelector<HTMLElement>(".media-pdf-note")!.hidden).toBe(true);
     surface.destroy();
@@ -445,12 +449,12 @@ describe("le annotazioni nel visore del PDF", () => {
 
   it("un .fubann d'un altro programma, o che non si legge, non si disegna: niente interruttore, una riga", async () => {
     const foreign = mount({ "doc/bando.pdf.fubann": `<svg xmlns="http://www.w3.org/2000/svg"><g/></svg>` });
-    await vi.waitFor(() => expect(foreign.parent.querySelector(".media-pdf-note")!.textContent).toBe(t("media.pdf.annotations_foreign")));
+    await waitFor(() => expect(foreign.parent.querySelector(".media-pdf-note")!.textContent).toBe(t("media.pdf.annotations_foreign")));
     expect(toggle(foreign.parent).closest("[hidden]")).not.toBeNull();
     expect(foreign.parent.querySelector("img")).toBeNull();
     foreign.surface.destroy();
     const broken = mount({ "doc/bando.pdf.fubann": "<svg" });
-    await vi.waitFor(() => expect(broken.parent.querySelector(".media-pdf-note")!.textContent).toBe(t("media.pdf.annotations_unreadable")));
+    await waitFor(() => expect(broken.parent.querySelector(".media-pdf-note")!.textContent).toBe(t("media.pdf.annotations_unreadable")));
     expect(toggle(broken.parent).closest("[hidden]")).not.toBeNull();
     broken.surface.destroy();
   });
