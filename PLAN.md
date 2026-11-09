@@ -1071,6 +1071,7 @@ Cosa fare:
   misura di T5: il conto dopo, e per ogni libreria doppia nuova chi la porta
   (`cargo tree -e normal --all-features --target all -d -p fub-app -i
   <crate>`) e il perché.
+- La licenza IJG di `jpeg-encoder` (scelta dell'utente del 2026-11-09, A): in `deny.toml` un'eccezione stretta, `exceptions = [{ crate = "jpeg-encoder", allow = ["IJG"] }]` col commento del perché, e non l'IJG nell'elenco generale; in `THIRD_PARTY_NOTICES.md` una sezione «Avvisi richiesti dalle dipendenze» con la frase che l'IJG chiede per chi distribuisce solo l'eseguibile: «this software is based in part on the work of the Independent JPEG Group», e quali file di `jpeg-encoder` ne derivano (`src/fdct.rs`, `src/avx2/fdct.rs`). `cargo deny check` torna verde.
 Casi limite: una dipendenza che riaccende `bundled-fonts` o il PDF per
 unione di feature (`cargo tree -e features -i vectorcraft-text` lo mostra:
 si toglie); `cargo deny` rosso su un avviso di sicurezza (si ferma e si

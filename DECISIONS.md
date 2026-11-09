@@ -99,6 +99,13 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · K5 T9 · la licenza IJG di `jpeg-encoder` entra con
+  un'eccezione stretta in `deny.toml` (solo quel crate) e la frase di
+  ringraziamento in `THIRD_PARTY_NOTICES.md`; l'IJG non entra nell'elenco
+  generale · l'utente, fra A (eccezione stretta), B (IJG sempre ammessa) e
+  C (l'encoder di `image`): «A». L'utente vuole che le immagini restino di
+  chi le crea e nessuna responsabilità per i file rovinati: l'IJG non tocca
+  né l'una né l'altra (esclude anche lei ogni garanzia).
 - 2026-11-05 · K2 · Il componente «File delle app Craft» (`fub.craft`, N7,
   arrivato da main) entra nella tabella degli editor dei componenti come
   `editors/craft`: la sua scheda si registra solo col componente acceso, e
