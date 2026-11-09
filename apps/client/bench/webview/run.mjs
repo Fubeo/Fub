@@ -475,7 +475,6 @@ const SCENARIOS = {
     /// I path asciutti dopo ogni tratto, e i fotogrammi lunghi per fase.
     const written = [];
     let penPhases = null;
-    let warmStrokes = 0;
     await start(session);
     await session.execute(PHASES_SCRIPT);
     try {
@@ -498,7 +497,6 @@ const SCENARIOS = {
       // tasto che fa scrivere il mouse sulla lavagna. Il tasto va al viewport.
       if (report) notes.push(`la penna del driver non scrive (${report.input.pen.count} campioni \`pen\` visti dalla sonda, path asciutti ${dryBefore} → ${dryAfterPenTry}): i tratti misurati sono del mouse con D tenuto`);
       input = "mouse con D";
-      await session.execute("document.querySelector('.pane.focus .canvas-viewport')?.focus(); return true;");
       const mouseStroke = async (stroke) => {
         await session.actions([{ type: "key", id: "tastiera", actions: [{ type: "keyDown", value: "d" }] }]);
         await session.actions(drag(stroke));
@@ -506,21 +504,11 @@ const SCENARIOS = {
         await session.releaseActions();
       };
       // Il tratto della penna che il driver ha lasciato giù tiene la lavagna
-      // finché non si annulla: tratti di avvio col mouse, fuori dalla misura,
-      // finché uno non scrive (al più cinque), così i dieci misurati scrivono.
-      let warm = 0;
-      for (let seen = await dryPaths(); warm < 5; warm++) {
-        await mouseStroke({ x: Math.round(area.left + 20), y: Math.round(area.top + area.height - 30), dx: 20, dy: 10, ms: 300 });
-        await pause(300);
-        const now = await dryPaths();
-        if (now > seen) {
-          warm++;
-          break;
-        }
-        seen = now;
-      }
-      notes.push(`tratti di avvio col mouse, fuori dalla misura: ${warm}`);
-      warmStrokes = warm;
+      // («un tratto alla volta»): la finestra che perde il fuoco lo annulla,
+      // come quando chi scrive passa a un'altra finestra. Fuori dalla misura.
+      await session.execute("window.dispatchEvent(new Event('blur')); return true;");
+      await pause(300);
+      await session.execute("document.querySelector('.pane.focus .canvas-viewport')?.focus(); return true;");
       await start(session);
       await session.execute(PHASES_SCRIPT);
       for (const stroke of strokes) {
@@ -558,7 +546,6 @@ const SCENARIOS = {
       sheetLive,
       sheetSha256: { before, after, same: before === after },
       written,
-      warmStrokes,
       phases: { pen: penPhases, move: movePhases },
       notes,
       values: {
