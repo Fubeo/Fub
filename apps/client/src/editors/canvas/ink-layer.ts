@@ -30,7 +30,7 @@
 import { attachInkInput, type InkInput, type ScenePoint } from "../../ink/dom/pointer-adapter";
 import type { InkBrush } from "../../ink/brush";
 import type { InkPointerType } from "../../ink/input/pointer";
-import { strokes, type MousePolicy } from "../../ink/input/roles";
+import { strokes, type MousePolicy, type PointerRole } from "../../ink/input/roles";
 import type { CancelReason, FinishedStroke } from "../../ink/input/session";
 import { outlinePath } from "../../ink/pf1";
 import type { PenQuiet } from "../../ink/quiet";
@@ -93,6 +93,10 @@ export interface InkLayer {
   settle(id: number): void;
   /// Un tratto è in corso.
   readonly drawing: boolean;
+  /// Il ruolo che la sessione dà adesso al puntatore giù `pointerId`, `null`
+  /// se non lo conosce: un dito `ignore` è il palmo (`ink/input/roles.ts`).
+  /// Solo lettura: la lavagna lo usa per non muoversi col palmo.
+  roleOf(pointerId: number): PointerRole | null;
   /// Che cosa fa il tasto principale del mouse dal prossimo appoggio: `ink`
   /// scrive, `ignore` lo lascia alla lavagna. Un tratto già giù finisce com'è.
   setMouse(policy: MousePolicy): void;
@@ -283,6 +287,9 @@ export function mountInkLayer(options: InkLayerOptions, owner: Lifetime): InkLay
     },
     get drawing() {
       return input.drawing;
+    },
+    roleOf(pointerId) {
+      return destroyed ? null : input.roleOf(pointerId);
     },
     setMouse(policy) {
       if (!destroyed) input.setMousePolicy(policy);

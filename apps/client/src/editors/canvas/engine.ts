@@ -2198,10 +2198,10 @@ export class CanvasEngine {
    * collega) e i controlli (pulsanti, collegamenti, campi) fanno come col
    * mouse; in sola lettura le maniglie spostano la lavagna. Il secondo dito
    * comincia il pizzico, salvo durante un gesto su una scheda, che tiene il
-   * dito suo. Con una penna giù il dito non fa niente.
+   * dito suo. Con una penna giù il dito non fa niente, e il palmo nemmeno.
    */
   #touchDown(event: PointerEvent): void {
-    if (this.#penDown || this.#drag || this.#resize || this.#connect || this.#pinch) return;
+    if (this.#penDown || this.#palm(event.pointerId) || this.#drag || this.#resize || this.#connect || this.#pinch) return;
     this.#fingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (this.#fingers.size >= 2) {
       this.#beginPinch();
@@ -2221,6 +2221,16 @@ export class CanvasEngine {
     }
     this.#tap = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, at: event.timeStamp, target, shift: event.shiftKey };
     this.#beginPan(event.pointerId, event.clientX, event.clientY);
+  }
+
+  /**
+   * Il dito `pointerId` è il palmo: lo decide la sessione della penna
+   * (`ink/input/roles.ts`), che fa palmo ogni dito con una penna giù o
+   * sospesa, e le dita già giù quando la penna arriva. Senza lo strato (sola
+   * lettura) non c'è penna che scriva, e nessun dito è palmo.
+   */
+  #palm(pointerId: number): boolean {
+    return this.#inkLayer?.roleOf(pointerId) === "ignore";
   }
 
   /** Le prime due dita giù diventano un pizzico: il pan e il tocco breve finiscono. */
@@ -2243,8 +2253,9 @@ export class CanvasEngine {
   #touchMove(event: PointerEvent): boolean {
     if (!this.#fingers.has(event.pointerId)) return true;
     this.#fingers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    // La penna vince: il dito si ferma, e una scheda che spostava torna dov'era.
-    if (this.#penDown) {
+    // La penna vince, giù o sospesa: il dito si ferma, e una scheda che
+    // spostava torna dov'era.
+    if (this.#penDown || this.#palm(event.pointerId)) {
       this.#cancelGestures();
       return true;
     }

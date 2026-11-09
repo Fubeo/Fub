@@ -202,7 +202,13 @@ describe("il dito sposta e ingrandisce la lavagna", () => {
         one.up(x + 80, y + 40);
         expect(camera(host)).toEqual(moved);
         document.dispatchEvent(pointerEvent("pointerup", { ...pen, clientX: x - 100, clientY: y, button: 0, buttons: 0, pressure: 0, timeStamp: clock + 4 }));
-        // Alzata la penna, un dito nuovo sposta di nuovo.
+        // Alzata la penna resta sospesa, e il dito è ancora palmo; uscita dal
+        // raggio, un dito nuovo sposta di nuovo.
+        const palm = finger(host, 2, viewportOf(host), x, y);
+        palm.move(x + 10, y);
+        palm.up(x + 10, y);
+        expect(camera(host)).toEqual(moved);
+        viewportOf(host).dispatchEvent(new PointerEvent("pointerleave", { ...pen, bubbles: false }));
         const two = finger(host, 3, viewportOf(host), x, y);
         two.move(x + 10, y);
         two.up(x + 10, y);
@@ -283,6 +289,84 @@ describe("il dito sposta e ingrandisce la lavagna", () => {
     drag.up(x + 80 * zoom, y);
     expect(changes).toHaveLength(1);
     expect(nodeX(engine, "b")).toBeGreaterThan(440);
+  });
+
+  describe("il palmo, con la penna sospesa", () => {
+    const PEN = { pointerId: 7, pointerType: "pen", isPrimary: true } as const;
+    /** La penna sospesa sopra il viewport: si muove senza tasti né pressione. */
+    const hover = (host: HTMLElement, x: number, y: number) => {
+      viewportOf(host).dispatchEvent(pointerEvent("pointerover", { ...PEN, clientX: x, clientY: y, button: -1, buttons: 0, pressure: 0, timeStamp: clock }));
+      viewportOf(host).dispatchEvent(pointerEvent("pointermove", { ...PEN, clientX: x, clientY: y, button: -1, buttons: 0, pressure: 0, timeStamp: clock }));
+    };
+    const leave = (host: HTMLElement) => {
+      viewportOf(host).dispatchEvent(new PointerEvent("pointerleave", { ...PEN, bubbles: false }));
+    };
+
+    for (const moves of [false, true]) {
+      it(`un dito con la penna sospesa non sposta, non pizzica, non tocca schede e non sceglie (impostazione ${moves ? "accesa" : "spenta"})`, () => {
+        const { engine, host, changes } = mounted({ moves: () => moves });
+        const before = camera(host);
+        const [x, y] = screen(host, 300, 300);
+        hover(host, x - 200, y);
+        // Sul vuoto: niente pan.
+        const palm = finger(host, 1, viewportOf(host), x, y);
+        palm.move(x + 40, y + 30);
+        // Un secondo contatto del palmo: niente pizzico.
+        const heel = finger(host, 2, viewportOf(host), x + 60, y);
+        heel.move(x + 160, y + 20);
+        palm.move(x + 80, y + 40);
+        palm.up(x + 80, y + 40);
+        heel.up(x + 160, y + 20);
+        expect(camera(host)).toEqual(before);
+        // Sulla scheda e sulla testata: non si sposta e non si sceglie.
+        const [bx, by] = screen(host, 450, 50);
+        const onCard = finger(host, 3, body(host, "b"), bx, by);
+        onCard.move(bx + 60, by);
+        onCard.up(bx + 60, by);
+        const [hx, hy] = screen(host, 20, 5);
+        const onHandle = finger(host, 4, handle(host, "a"), hx, hy);
+        onHandle.move(hx + 60, hy);
+        onHandle.up(hx + 60, hy);
+        const tap = finger(host, 5, body(host, "b"), bx, by);
+        tap.up(bx, by);
+        expect(camera(host)).toEqual(before);
+        expect(changes).toEqual([]);
+        expect(nodeX(engine, "a")).toBe(0);
+        expect(nodeX(engine, "b")).toBe(400);
+        expect(selected(host)).toEqual([]);
+        // La penna se ne va: il dito sposta di nuovo.
+        leave(host);
+        const free = finger(host, 6, viewportOf(host), x, y);
+        free.move(x + 25, y);
+        free.up(x + 25, y);
+        expect(camera(host).x).toBeCloseTo(before.x + 25);
+      });
+    }
+
+    it("il dito già giù si ferma quando la penna arriva sospesa", () => {
+      const { host } = mounted();
+      const [x, y] = screen(host, 300, 300);
+      const one = finger(host, 1, viewportOf(host), x, y);
+      one.move(x + 20, y);
+      const moved = camera(host);
+      hover(host, x - 200, y);
+      one.move(x + 90, y + 50);
+      one.up(x + 90, y + 50);
+      expect(camera(host)).toEqual(moved);
+    });
+
+    it("il pizzico già cominciato si ferma quando la penna arriva sospesa", () => {
+      const { host } = mounted();
+      const [x, y] = screen(host, 300, 300);
+      const one = finger(host, 1, viewportOf(host), x - 20, y);
+      const two = finger(host, 2, viewportOf(host), x + 20, y);
+      one.move(x - 40, y);
+      const pinched = camera(host);
+      hover(host, x - 200, y);
+      two.move(x + 120, y);
+      one.move(x - 120, y);
+      expect(camera(host)).toEqual(pinched);
+    });
   });
 
   it("durante uno spostamento di scheda il secondo dito non pizzica", () => {
