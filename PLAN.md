@@ -182,7 +182,7 @@ codice, nei rami e nelle issue il 2026-11-05.
 | K2 · la pagina «Componenti» | Ramo: 7 di 7; la prova con una persona di K2 D-2 non è fatta | dentro | I componenti accesi e spenti | `piano/k2-pagina-componenti`, #290; la prova dell'utente prima del merge (D13 A) |
 | K3 · lo strato dei motori | Fatto: in `main` con #295 (fb722164, 2026-11-08, unita dall'utente) | dentro | Word ed Excel | `piano/k3-motori`, #295 |
 | K4, K7–K10 | Senza piano | fuori | Vedi sopra | «Piani di Fub» |
-| K5 · il disegno | Ramo: 11 di 30; T6 fatto, la licenza IJG di `jpeg-encoder` chiede l'utente prima di T9 | dentro | Il disegno SVG | `piano/k5-disegno`, #300 |
+| K5 · il disegno | Ramo: 12 di 30; T6 fatto, la licenza IJG di `jpeg-encoder` chiede l'utente prima di T9 | dentro | Il disegno SVG | `piano/k5-disegno`, #300 |
 | K6 · il disegno completo | Ramo: 0 di 30 | fuori | Scelta dell'utente (D24 B) | #313 |
 | Griglia · le celle | Ramo: 0 di 9; il prototipo approvato dall'utente il 2026-11-07 (D2 A) | dentro | Il foglio che risponde subito | `piano/griglia-celle`, senza PR |
 | Scrittoio 2 | Ramo: 24 di 28 (T1–T9, T11–T23, T27, T28; main unito, 8febfe3e) | dentro | La cornice | `piano/scrittoio-2`, #309 |
@@ -377,7 +377,7 @@ Se una di queste cade, la stima si allunga.
 | PA T12 · #237 R04 | PA | da fare | griglia T4 | medio | M | test di Vitest sulla griglia |
 | N4 T12–T17, T21–T25 | N4 | 14 di 25 | PA T2; T24 aspetta l'esito della prova con Obsidian, che incolla l'utente | medio: penna e latenza | L | N4 T25 |
 | N6 v1, senza T79–T85 e T88 | N6 | 11 di 90 | N4 in `main` (il ramo nasce da N4, e T90 lo chiede); i task grafici dopo l'approvazione dei prototipi T26–T28 (D3) | alto: 79 task | XL | N6 T90 |
-| K5 T6, T7, T9, T11, T13–T24, T27–T30 | K5 | 11 di 30 | PA T2; T6 copia `Fubeo/vectorcraft` (c'è, pubblico, 2026-11-02); T22 dopo D5; T24 dopo K2 in `main` | alto: motore vettoriale nuovo | XL | K5 T30 |
+| K5 T6, T7, T9, T11, T13–T24, T27–T30 | K5 | 12 di 30 | PA T2; T6 copia `Fubeo/vectorcraft` (c'è, pubblico, 2026-11-02); T22 dopo D5; T24 dopo K2 in `main` | alto: motore vettoriale nuovo | XL | K5 T30 |
 | La lavagna in codice T1–T26 | lavagna in codice | 0 di 26 | T15–T18 dopo N4 in `main`; T14, T19, T23 e T24 dopo N6 in `main` (T72, T73, T19, T37, T48) | medio | L | lavagna in codice T26 |
 | A1 T4, T5, T7, T9–T13 | A1 | 5 di 13 | T12 dopo S2 T10 (le impostazioni) | basso | M | A1 T13 |
 
