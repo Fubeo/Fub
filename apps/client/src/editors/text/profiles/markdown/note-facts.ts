@@ -62,11 +62,14 @@ function pressable(element: HTMLElement, role: "button" | "link", run: () => voi
     event.stopPropagation();
     run();
   });
+  // Il tasto fa un clic vero, come un pulsante nativo: chi ascolta i clic
+  // (le tecnologie assistive, la prova da tastiera del banco) lo vede, e
+  // l'azione parte una volta sola, dal ramo del clic.
   life.listen(element, "keydown", (event) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     event.stopPropagation();
-    run();
+    element.click();
   });
 }
 

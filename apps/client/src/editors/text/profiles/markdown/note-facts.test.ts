@@ -87,8 +87,11 @@ describe("la riga disegnata", () => {
     const tag = row.querySelector<HTMLElement>(".note-tag")!;
     expect(links.getAttribute("role")).toBe("button");
     expect(links.tabIndex).toBe(0);
+    let clicks = 0;
+    links.addEventListener("click", () => { clicks += 1; });
     links.click();
     links.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(clicks).toBe(2);
     tag.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
     tag.click();
     expect(seen.links).toBe(2);
