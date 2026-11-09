@@ -1191,10 +1191,18 @@ const KNOWN_VAULTS = [
 // La scenografia: le risposte del canale dati che `finto.ts` non dà.
 // ---------------------------------------------------------------------------
 
-/// L'organizzazione del vault: due note appuntate, tre icone, uno spazio. Il
+/// Le icone del vault: le figure monocrome `fub:<nome>`, come il mockup. Con
+/// `?icone=emoji` tornano le emoji di prima, perché una scena le possa ancora
+/// fotografare; ogni altro valore del parametro vale le figure.
+const ICONS: Record<string, string> =
+  params.get("icone") === "emoji"
+    ? { "Benvenuto.md": "👋", Guida: "📘", Diario: "📅" }
+    : { Guida: "fub:book", Diario: "fub:calendar" };
+
+/// L'organizzazione del vault: due note appuntate, le icone, uno spazio. Il
 /// finto risponde tutto vuoto — che è onesto e invisibile.
 const ORGANIZATION: Organization = {
-  icons: { "Benvenuto.md": "👋", Guida: "📘", Diario: "📅" },
+  icons: ICONS,
   pinned: ["Benvenuto.md", "Guida/Sintassi di Fub.md"],
   order: {},
   spaces: ["Guida", "Diario", "Progetti"],
