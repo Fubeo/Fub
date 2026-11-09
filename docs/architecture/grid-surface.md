@@ -76,6 +76,29 @@ segni (selezione, cella attiva, valore non ricalcolato, conflitto) si scrivono
 dalla riga, `.grid-row .selected`. Gli oggetti del foglio non sono ancora sotto
 il gate.
 
+Il piano (`.grid-plane`) è grande quanto il foglio: testa (intestazioni,
+righe bloccate) e colonna ferma (numeri delle righe, colonne bloccate) restano
+a posto col solo `sticky`, nello stesso fotogramma dello scorrimento. Le
+quattro zone hanno un livello di segni ciascuna: `editors/grid/marks.ts`
+taglia un rettangolo per zona; il quadratino e gli oggetti stanno interi.
+
+Le righe restano (`#drawRow`): ognuna ricorda per indice la sua misura e le
+sue celle, e una cella si rifà solo quando cambia ciò che mostra; se l'HTML è
+lo stesso resta lo stesso nodo e cambiano le sole classi della selezione,
+così il doppio clic arriva e l'editor aperto non perde il fuoco. Si disegna
+un riquadro intero di margine per lato (`GRID_OVERSCAN` è solo il margine
+del caricamento): lo scorrimento aggiunge e toglie righe ai bordi, un salto
+le rifà tutte, la cella aperta resta anche fuori. Le disegna il gestore
+dello scorrimento, che legge le misure prima di scrivere; segni, oggetti e
+misura delle celle stanno nel fotogramma. Sotto c'è la carta (`.grid-paper`,
+con una copia nelle fasce ferme), grande quanto il riquadro e ferma in esso:
+fili delle righe sull'altezza di serie (`--grid-row`), un filo per colonna,
+celle opache. Dove lo scorrimento veloce arriva prima del disegno si vede la
+griglia vuota: nel banco G2 la fascia uniforme più alta è 1 px (prima 424).
+Il gestore costa p90 10–14 ms, peggiore 53–58 ms quando vi arriva una
+finestra caricata; prima 0,4 e 28–40 ms, ma le righe si rifacevano nel
+fotogramma (p90 16–20 ms).
+
 ## Scrivere nelle celle
 
 Come in Excel e LibreOffice, una battuta apre la cella in «Inserisci»:
@@ -114,17 +137,6 @@ uno di sei colori (`--doc-author-1…6`), lo stesso nel testo e nel contorno
 del suo intervallo sulla griglia; un riferimento a un altro foglio si
 contorna solo su quel foglio. Puntare celle di un altro foglio non c'è
 ancora: il riferimento si scrive a mano.
-
-Il disegno riusa gli elementi che non cambiano (`#reconcile`): una cella
-uguale a quella di prima resta lo stesso nodo e cambia soltanto le classi
-della selezione, così il doppio clic arriva e l'editor aperto non perde il
-fuoco. Lo scorrimento disegna al più una volta per fotogramma.
-
-Il piano (`.grid-plane`) è grande quanto il foglio: testa (intestazioni,
-righe bloccate) e colonna ferma (numeri delle righe, colonne bloccate) restano
-a posto col solo `sticky`, nello stesso fotogramma dello scorrimento. Le
-quattro zone hanno un livello di segni ciascuna: `editors/grid/marks.ts`
-taglia un rettangolo per zona; il quadratino e gli oggetti stanno interi.
 
 ## La selezione e il riempimento
 
@@ -426,24 +438,11 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 
 ## Dove si trova
 
-- `apps/client/src/editors/grid/engine.ts`
-- `apps/client/src/editors/grid/workbook.ts`
-- `apps/client/src/editors/grid/objects.ts`
-- `apps/client/src/editors/grid/comment-card.ts`
-- `apps/client/src/editors/grid/ribbon/ribbon.ts`
-- `apps/client/src/kit/ribbon/ribbon.ts`
-- `apps/client/src/kit/ribbon/ribbon-motion.ts`
-- `apps/client/src/editors/grid/ribbon/tabs.ts`
-- `apps/client/src/editors/grid/menu-comandi.ts`
-- `apps/client/src/editors/grid/dialogs/host.ts`
-- `apps/client/src/editors/grid/dialogs/catalog.ts`
-- `apps/client/src/editors/grid/dialogs/page.ts`
-- `apps/client/src/editors/grid/dialogs/notes.ts`
-- `apps/client/src/editors/grid/dialogs/protect.ts`
-- `apps/client/src/editors/grid/palette/commands.ts`
-- `apps/client/src/editors/grid/palette/form.ts`
-- `apps/client/src/editors/grid/risultato.ts`
-- `apps/client/src/editors/grid/motivi.ts`
-- `crates/fub-format-xlsx/src/grid.rs`
-- `crates/fub-format-xlsx/src/export.rs`
-- `crates/fub-format-xlsx/src/objects.rs`
+- `apps/client/src/editors/grid/`: `engine.ts`, `workbook.ts`, `objects.ts`,
+  `comment-card.ts`, `menu-comandi.ts`, `risultato.ts`, `motivi.ts`
+- `apps/client/src/editors/grid/ribbon/`: `ribbon.ts`, `tabs.ts`
+- `apps/client/src/editors/grid/dialogs/`: `host.ts`, `catalog.ts`, `page.ts`,
+  `notes.ts`, `protect.ts`
+- `apps/client/src/editors/grid/palette/`: `commands.ts`, `form.ts`
+- `apps/client/src/kit/ribbon/`: `ribbon.ts`, `ribbon-motion.ts`
+- `crates/fub-format-xlsx/src/`: `grid.rs`, `export.rs`, `objects.rs`
