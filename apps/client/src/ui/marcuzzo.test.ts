@@ -11,6 +11,7 @@ import documento from "../../document.html?raw";
 import intera from "../../../../assets/logo/marcuzzo.svg?raw";
 import minima24 from "../../../../assets/logo/marcuzzo-24.svg?raw";
 import minima16 from "../../../../assets/logo/marcuzzo-16.svg?raw";
+import favicon from "../../public/favicon.svg?raw";
 import { MARCUZZO_SVG, marcuzzoElement } from "./marcuzzo";
 
 const FORME: Readonly<Record<string, string>> = {
@@ -54,6 +55,18 @@ describe("Marcuzzo, ovunque sia, è la sua forma", () => {
       const attesa = svgDi(forma("marcuzzo-24.svg"));
       expect(svg.getAttribute("viewBox")).toBe(attesa.getAttribute("viewBox"));
       expect(tracciati(svg)).toEqual(tracciati(attesa));
+    },
+  );
+
+  it("l'icona della scheda è la forma minima 24 byte per byte", () => {
+    expect(favicon).toBe(forma("marcuzzo-24.svg"));
+  });
+
+  it.each([["index.html", desktop], ["mobile.html", mobile], ["document.html", documento]])(
+    "%s: la scheda del browser mostra Marcuzzo",
+    (_, html) => {
+      const icone = [...pagina(html).querySelectorAll('link[rel="icon"]')].map((link) => link.getAttribute("href"));
+      expect(icone).toEqual(["/favicon.svg", "/favicon-32.png"]);
     },
   );
 

@@ -47,3 +47,9 @@ Le icone di `crates/fub-app/icons/` nascono da queste forme:
    mettere al posto delle misure 16, 24 e 32 di `icon.ico` e `icon.icns` (e
    di `32x32.png`) quelle rese dalle forme minime, che `cargo tauri icon`
    ricaverebbe rimpicciolendo la grande.
+
+L'icona della scheda nel browser (le pagine del client, l'anteprima e il
+banco) sono due copie in `apps/client/public/`: `favicon.svg` è
+`marcuzzo-24.svg` byte per byte (lo guarda `ui/marcuzzo.test.ts`) e
+`favicon-32.png` è `crates/fub-app/icons/32x32.png`. Si ricopiano quando
+cambiano le forme o le icone.
