@@ -3576,9 +3576,13 @@ kbd,
    con app.css e structure.css). Le posizioni che la tela e il kit scrivono in
    linea (schede, rialzi, barra della selezione, menu radiale) le mette lo
    script in un foglio costruito, perché la pagina non ha stili in linea. */
-html, body { margin: 0; }
+/* La pagina scorre: la shell blocca lo scorrimento di body (structure.css,
+   copiata sopra), ma qui la barra, le note e lo schermo finto stanno uno
+   sotto l'altro e devono vedersi tutti, anche in una finestra bassa. */
+html, body { margin: 0; height: auto; min-height: 100%; }
+body { overflow: auto; }
 body { background: var(--bg); color: var(--text); font-family: var(--font-ui); font-size: var(--text-base); }
-.proto-bar { position: sticky; top: 0; z-index: 40; display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); align-items: center; padding: var(--space-5) var(--space-6); border-bottom: 1px dashed var(--border-strong); background: var(--sheet-2); }
+.proto-bar { position: relative; z-index: 40; display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); align-items: center; padding: var(--space-5) var(--space-6); border-bottom: 1px dashed var(--border-strong); background: var(--sheet-2); }
 .proto-bar fieldset { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin: 0; padding: 0; border: none; }
 .proto-bar fieldset[hidden] { display: none; }
 .proto-bar legend { float: left; margin-right: var(--space-3); color: var(--muted); font-size: var(--text-xs); font-weight: var(--weight-bold); }
