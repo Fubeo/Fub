@@ -59,6 +59,7 @@ pub use fub_host::{
 };
 pub use fub_wasm_host::managed::InstalledPluginInfo;
 mod avvio;
+mod bench_gc;
 mod document_windows;
 mod frame_rate;
 mod live;
@@ -2804,6 +2805,9 @@ pub fn run() {
             }
             #[cfg(not(mobile))]
             start_control(app);
+            // Il banco della memoria (R1) può chiedere la raccolta forzata
+            // della WebView; senza `FUB_BENCH_GC` non succede niente.
+            bench_gc::install(app);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

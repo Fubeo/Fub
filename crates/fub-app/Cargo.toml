@@ -78,6 +78,11 @@ tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 
+# Il gancio della raccolta forzata del banco della memoria (`bench_gc.rs`)
+# dice a WebKitGTK dove sta l'estensione; è la stessa versione che wry porta.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
+
 [dev-dependencies]
 # Le prove del registro delle sessioni live, con il tempo in pausa.
 tokio = { workspace = true, features = ["macros", "rt", "sync", "test-util", "time"] }
