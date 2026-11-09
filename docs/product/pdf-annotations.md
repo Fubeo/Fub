@@ -4,6 +4,34 @@
 > **Risultato:** sapere come si annota un PDF, dove stanno le annotazioni e
 > che cosa succede quando il PDF cambia o manca.
 
+## Il visore dei PDF
+
+Il visore (`apps/client/src/editors/media/pdf-view.ts`) ha in cima la barra
+in una fila del kit, «Strumenti del PDF», che non va mai a capo: in una
+finestra stretta scorre di lato. I suoi foglietti, in ordine:
+
+- pagina precedente e successiva, spente ai capi del PDF (tutte e due in un
+  PDF di una pagina);
+- le miniature, quando il motore le sa disegnare;
+- il sommario, un elenco a tendina, soltanto se il PDF ne ha uno;
+- la ricerca, il campo con la lente: il numero dei risultati, o «Nessun
+  risultato», si legge nella riga sotto la barra;
+- adatta alla larghezza, due pagine affiancate e colori scuri;
+- «Annota», quando c'è (vedi sotto), in un foglietto suo.
+
+I pulsanti sono figure; il nome si legge nel suggerimento e lo dice il
+lettore di schermo. Tab entra nella barra e ne esce con un passo solo, le
+frecce passano da un controllo all'altro, Home e Fine vanno ai capi. In fondo
+alla barra «…» («Altre azioni del PDF») apre il menu con «Apri con un'altra
+app» e «Copia il link alla pagina», ciascuna soltanto se l'host la offre;
+senza nessuna delle due «…» non c'è.
+
+La pagina che si legge sta nella banda di stato, «Pagina 3 di 12», o «Pagine
+3–4 di 12» con due pagine affiancate, e cambia con la pagina. Un PDF che non
+si apre mostra la sua nota d'errore e nella banda non dice nessuna pagina. La
+riga di stato del visore resta per il caricamento, gli errori e la ricerca, e
+per il lettore di schermo.
+
 ## Annotare un PDF
 
 Con la feature `draw` dell'host il visore dei PDF ha il pulsante «Annota»,
