@@ -204,14 +204,14 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
       if (frame && current) drawEmptyPane(frame, current.tabs.length === 0);
     }
   }));
-  // Il nome del vault apre il percorso di ogni testata: arriva dopo
-  // l'apertura (il nome scelto dalla persona lo dice il registro dei vault).
   // «Si scrive» della banda: la spiegazione è quella del chip del riquadro a
   // fuoco, accanto al bottone della banda.
   lifetime.add(on("standing-open", (anchor) => {
     const pane = paneOf(layout.focus);
     if (pane && activeTab(pane.id)?.k === "doc") frameOf(pane).standing.openFrom(anchor);
   }));
+  // Il nome del vault apre il percorso di ogni testata: arriva dopo
+  // l'apertura (il nome scelto dalla persona lo dice il registro dei vault).
   lifetime.add(on("vault-name", () => {
     for (const id of frames.keys()) {
       const pane = paneOf(id);
