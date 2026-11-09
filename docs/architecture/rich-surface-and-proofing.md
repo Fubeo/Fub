@@ -175,7 +175,14 @@ l'IPC.
   col motore: la barra del kit (`kit/ribbon/ribbon.ts`, la stessa del
   foglio) con le schede Home, Inserisci, Layout, Revisione, Visualizza e la
   contestuale Tabella, Annulla e Ripeti accanto alle schede, le lettere con
-  Alt o F10 e Ctrl+F1 per ritirarla. Ogni controllo è un'azione del motore
+  Alt o F10 e Ctrl+F1 per ritirarla. Come nei fogli, un gruppo raccolto si
+  apre sul posto, nella barra (`openInPlace`), ed Esc lo richiude col fuoco
+  sul suo pulsante. La forma e la pelle sono del kit: ogni pezzo porta
+  `kit-ribbon-<pezzo>` accanto a `rich-ribbon-<pezzo>`, vestito da
+  `structure.css` e da «Barra a schede» in `skin/kit.css`; ai
+  `.rich-ribbon-…` restano l'accesso rapido, i segni del formato, i campi e
+  la galleria degli stili, che sta nelle due file del suo foglietto. Ogni
+  controllo è un'azione del motore
   (`RICH_ACTION_IDS`, con i suoi accordi), un valore che il motore scrive
   (tipo, dimensione, stile del paragrafo, con la galleria che scrive ogni
   nome nel carattere del documento), un riquadro di

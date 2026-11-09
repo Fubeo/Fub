@@ -16,8 +16,13 @@ schede **Home**, **Inserisci**, **Layout**, **Revisione** e **Visualizza**, e
 accanto alle schede. Alt o F10 mostrano le lettere di ogni scheda e di ogni
 comando, `Ctrl+F1` ritira la barra e la riapre; ritirata, una scheda scelta
 si apre per un gesto. Stretta, la barra raccoglie prima Modifica, Stili e
-Paragrafo in un pulsante ciascuno. Un comando che adesso non si dà resta al
-suo posto, spento, e il suggerimento dice perché.
+Paragrafo in un pulsante ciascuno; un gruppo raccolto si apre sul posto,
+nella barra, e gli altri si raccolgono per fargli posto: Esc lo richiude e
+torna al suo pulsante. Un comando che adesso non si dà resta al suo posto,
+spento, e il suggerimento dice perché. La barra è quella dei fogli: le
+schede sono segmenti come le schede dell'ispettore, con la scelta su un
+foglietto, e i comandi stanno in foglietti su un vassoio un tono sotto la
+carta.
 
 Si modificano:
 

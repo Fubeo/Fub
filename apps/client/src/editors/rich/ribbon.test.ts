@@ -211,6 +211,50 @@ describe("la barra del documento", () => {
     ribbon.destroy();
   });
 
+  it("a 700 px apre sul posto un gruppo raccolto, ed Esc lo richiude col fuoco sul suo bottone", async () => {
+    const e = engine([para("testo")]);
+    const ribbon = mountRichRibbon(e, () => null);
+    document.body.append(ribbon.element);
+    const panel = ribbon.element.querySelector<HTMLElement>('.rich-ribbon-panel[data-tab="home"]')!;
+    const toolbar = panel.querySelector<HTMLElement>(".rich-ribbon-toolbar")!;
+    // happy-dom non misura: un foglietto aperto è largo 200 (140 se il
+    // pannello è fitto), uno raccolto 60, e la barra è larga 700 meno i
+    // margini del foglio.
+    Object.defineProperty(toolbar, "clientWidth", { configurable: true, get: () => 660 });
+    Object.defineProperty(toolbar, "scrollWidth", {
+      configurable: true,
+      get: () =>
+        [...toolbar.children]
+          .filter((group) => !(group as HTMLElement).hidden)
+          .reduce((sum, group) => sum + ((group as HTMLElement).dataset.collapsed === "true" ? 60 : panel.dataset.dense === "true" ? 140 : 200), 0),
+    });
+    const scroll = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = () => {};
+    try {
+      ribbon.refresh();
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const groups = [...toolbar.querySelectorAll<HTMLElement>(":scope > .rich-ribbon-group")];
+      const folded = groups.find((group) => group.dataset.collapsed === "true")!;
+      expect(folded, "a 700 px almeno un gruppo si raccoglie").toBeDefined();
+      const toggle = folded.querySelector<HTMLButtonElement>(".rich-ribbon-group-toggle")!;
+      expect(toggle.hasAttribute("aria-haspopup")).toBe(false);
+      toggle.click();
+      expect(folded.dataset.open).toBe("true");
+      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+      // Il corpo resta nel gruppo: nessun riquadro sospeso.
+      expect(document.querySelector(".rich-ribbon-popup-group")).toBeNull();
+      const inside = document.activeElement as HTMLElement;
+      expect(folded.contains(inside)).toBe(true);
+      inside.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      expect(folded.hasAttribute("data-open")).toBe(false);
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+      expect(document.activeElement).toBe(toggle);
+    } finally {
+      HTMLElement.prototype.scrollIntoView = scroll;
+      ribbon.destroy();
+    }
+  });
+
   it("senza chi le dia, la barra non mostra modalità né carta", () => {
     const ribbon = mountRichRibbon(engine([para("testo")]), () => null);
     expect(ribbon.element.querySelector<HTMLElement>('[data-command="rich.mode.document"]')!.hidden).toBe(true);

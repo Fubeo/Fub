@@ -2205,140 +2205,10 @@ body {
   align-items: center;
 }
 
-/* La barra multifunzione del foglio (`editors/grid/ribbon/`): la fila delle
-   schede, poi i gruppi di una scheda in una striscia d'altezza fissa. Un
-   gruppo che non ci sta si raccoglie nel suo pulsante (`data-collapsed`); le
-   lettere di Excel sono distintivi posati sopra i controlli. */
+/* L'ospite della barra del documento (`editors/rich/ribbon.ts`): la forma
+   della barra è quella del kit (`.kit-ribbon-*`, più su). */
 .rich-ribbon-host { flex: none; min-width: 0; }
-.rich-ribbon {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.rich-ribbon-head {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-.rich-ribbon-tabs {
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-}
-.rich-ribbon-tabs .kit-tab,
-.rich-ribbon-item,
-.rich-ribbon-group {
-  position: relative;
-}
-.rich-ribbon-toggle {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-}
-.rich-ribbon-toggle svg { width: 16px; height: 16px; }
-.rich-ribbon-panel { min-width: 0; }
-.rich-ribbon-toolbar {
-  display: flex;
-  align-items: stretch;
-  height: 102px;
-  min-width: 0;
-  overflow: hidden;
-}
-.rich-ribbon-group {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-}
-.rich-ribbon-group-body {
-  display: flex;
-  flex: 1;
-  align-items: flex-start;
-}
-.rich-ribbon-group[data-collapsed="true"] > .rich-ribbon-group-body,
-.rich-ribbon-group[data-collapsed="true"] > .rich-ribbon-group-label {
-  display: none;
-}
-.rich-ribbon-group-label {
-  flex: none;
-  white-space: nowrap;
-  text-align: center;
-}
-.rich-ribbon-stack {
-  display: flex;
-  flex-direction: column;
-}
-.rich-ribbon-row,
-.rich-ribbon-item,
-.rich-ribbon-field,
-.rich-ribbon-check,
-.rich-ribbon-chevron {
-  display: inline-flex;
-  align-items: center;
-}
-.rich-ribbon-row { display: flex; }
-.rich-ribbon-button {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  white-space: nowrap;
-}
-.rich-ribbon-small {
-  min-width: 24px;
-  height: 24px;
-}
-.rich-ribbon-small svg { flex: none; width: 16px; height: 16px; }
-.rich-ribbon-large {
-  flex-direction: column;
-  justify-content: flex-start;
-  min-width: 44px;
-  max-width: 96px;
-  height: 76px;
-}
-.rich-ribbon-large svg { flex: none; width: 26px; height: 26px; }
-/* Il nome di un pulsante grande sta in due righe al più, sopra il nome del
-   gruppo. */
-.rich-ribbon-large .rich-ribbon-label {
-  max-height: 2.5em;
-  overflow: hidden;
-  white-space: normal;
-  text-align: center;
-}
-.rich-ribbon-large .rich-ribbon-chevron svg,
-.rich-ribbon-chevron svg { width: 10px; height: 10px; }
-.rich-ribbon-split-large { flex-direction: column; }
-.rich-ribbon-split-large > .rich-ribbon-large { height: 58px; }
-.rich-ribbon-split-large > .rich-ribbon-arrow { align-self: stretch; height: 18px; }
-.rich-ribbon-arrow { min-width: 14px; }
-.rich-ribbon-glyph {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-}
-.rich-ribbon-color-bar {
-  position: absolute;
-  left: 4px;
-  right: 4px;
-  bottom: 2px;
-  height: 3px;
-}
-.rich-ribbon-panel[data-compact="true"] .rich-ribbon-small .rich-ribbon-label { display: none; }
-.rich-ribbon-keytip {
-  position: absolute;
-  left: 50%;
-  bottom: -4px;
-  z-index: var(--z-menu);
-  transform: translateX(-50%);
-  pointer-events: none;
-  white-space: nowrap;
-}
-.grid-ribbon-popup-group,
-.rich-ribbon-popup-group { display: flex; }
+.grid-ribbon-popup-group { display: flex; }
 .grid-ribbon-gallery {
   display: flex;
   flex-direction: column;
@@ -2573,17 +2443,22 @@ body {
   align-items: center;
   gap: 4px;
 }
-/* La barra del documento (`editors/rich/ribbon.ts`) è quella del kit, con le
-   regole della barra del foglio; qui soltanto ciò che il foglio non ha:
-   l'accesso rapido accanto alle schede e la galleria degli stili. */
-.rich-ribbon-quick { display: flex; flex: none; align-items: center; }
-.rich-ribbon-styles { display: flex; align-items: stretch; height: 64px; }
+/* La barra del documento (`editors/rich/ribbon.ts`) è la barra a schede del
+   kit (`.kit-ribbon-*`); qui soltanto ciò che è suo: la galleria degli stili,
+   che sta nelle due file del suo foglietto. L'accesso rapido accanto alle
+   schede prende la forma di `.kit-ribbon-quick`. */
+.rich-ribbon-styles {
+  display: flex;
+  grid-row: 1 / -1;
+  align-items: stretch;
+  height: calc(28px * 2 + var(--space-1, 2px));
+}
 .rich-ribbon-styles-cells { display: flex; align-items: stretch; min-width: 0; }
 .rich-ribbon-style {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 76px;
+  width: 64px;
   min-width: 0;
   overflow: hidden;
 }

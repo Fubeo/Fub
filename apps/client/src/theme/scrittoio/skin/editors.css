@@ -667,41 +667,11 @@
   background: var(--sheet-2);
   padding: 0 var(--space-4);
 }
-/* La barra multifunzione: le schede su un filetto, i gruppi divisi da un
-   filo e col nome sotto, a voce bassa. I controlli sono quieti come quelli
-   della striscia dei documenti; lo stato acceso prende il velo d'accento. */
-.rich-ribbon {
-  border-bottom: 1px solid var(--border);
-  background: var(--sheet);
-  color: var(--text);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
-}
-.rich-ribbon-head {
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-4) 0;
-  box-shadow: inset 0 -1px 0 var(--border);
-}
-.rich-ribbon-tabs.kit-tabs {
-  gap: var(--space-1);
-  padding-bottom: 0;
-  box-shadow: none;
-}
-.rich-ribbon-tabs .kit-tab {
-  min-height: 30px;
-  padding: 0 var(--space-4);
-  font-size: var(--text-sm);
-}
-.rich-ribbon-tabs .rich-ribbon-contextual {
-  background: var(--accent-wash);
-  color: var(--accent);
-}
-.rich-ribbon[data-collapsed="true"] .rich-ribbon-head {
-  box-shadow: none;
-}
-.grid-ribbon-gallery-item,
-.rich-ribbon-toggle,
-.rich-ribbon-button {
+/* La barra del documento veste la barra a schede del kit (`.kit-ribbon-*`,
+   in `skin/kit.css`). Qui restano le parti che il kit non ha: i pulsanti della
+   galleria dei fogli, i glifi del formato, la mini-barra del menu e le
+   etichette dei campi. */
+.grid-ribbon-gallery-item {
   border: none;
   border-radius: var(--radius-chip);
   background: transparent;
@@ -709,79 +679,13 @@
   font: inherit;
   cursor: pointer;
 }
-.rich-ribbon-toggle {
-  color: var(--muted);
-}
-.rich-ribbon-toolbar {
-  padding: var(--space-2) var(--space-3) var(--space-1);
-}
-.rich-ribbon-group {
-  padding: 0 var(--space-3);
-  border-right: 1px solid var(--border);
-}
-.rich-ribbon-group:last-child {
-  border-right: none;
-}
-.rich-ribbon-group-body {
-  gap: var(--space-1);
-}
-.rich-ribbon-group-label {
-  padding-top: var(--space-1);
-  color: var(--muted);
-  font-size: var(--text-xs);
-}
-.rich-ribbon-stack {
-  gap: 1px;
-}
-.rich-ribbon-row {
-  gap: 1px;
-}
-.rich-ribbon-button {
-  gap: var(--space-1);
-  padding: 0 var(--space-2);
-  line-height: var(--leading-tight);
-}
-.rich-ribbon-large {
-  padding: var(--space-2) var(--space-2) 0;
-  font-size: var(--text-xs);
-}
-.rich-ribbon-arrow {
-  padding: 0 2px;
-  color: var(--muted);
-}
-.grid-ribbon-gallery-item:hover,
-.rich-ribbon-toggle:hover,
-.rich-ribbon-button:hover:not([aria-disabled="true"]),
-.rich-ribbon-button[aria-expanded="true"] {
+.grid-ribbon-gallery-item:hover {
   background: var(--overlay-hover);
   color: var(--text);
 }
-.rich-ribbon-button:active:not([aria-disabled="true"]) {
-  background: var(--overlay-active);
-}
-.rich-ribbon-split:hover > .rich-ribbon-button {
-  box-shadow: inset 0 0 0 1px var(--border);
-}
-.rich-ribbon-button[aria-pressed="true"] {
-  background: var(--accent-wash);
-  color: var(--accent);
-}
-.rich-ribbon-button[aria-disabled="true"],
-.rich-ribbon-check:has(> input:disabled) {
-  opacity: 0.4;
-  cursor: default;
-}
-.grid-ribbon-gallery-item:focus-visible,
-.rich-ribbon-toggle:focus-visible,
-.rich-ribbon-button:focus-visible,
-.rich-ribbon-select:focus-visible,
-.rich-ribbon-input:focus-visible {
+.grid-ribbon-gallery-item:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
-}
-.rich-ribbon-glyph {
-  font-family: var(--font-ui);
-  font-size: var(--text-base);
 }
 .grid-ribbon-bold,
 .rich-ribbon-bold { font-weight: var(--weight-bold); }
@@ -798,47 +702,12 @@
 .rich-ribbon-underline { text-decoration: underline; }
 .grid-ribbon-strike,
 .rich-ribbon-strike { text-decoration: line-through; }
-.rich-ribbon-color-bar {
-  border-radius: 1px;
-  box-shadow: inset 0 0 0 1px var(--border);
-}
-.rich-ribbon-select,
-.rich-ribbon-input {
-  height: 24px;
-  padding: 0 var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-chip);
-  background: var(--sheet);
-  color: var(--text);
-  font: inherit;
-}
-.rich-ribbon-check {
-  gap: var(--space-2);
-  min-height: 24px;
-  padding: 0 var(--space-2);
-  cursor: pointer;
-}
-.rich-ribbon-check input {
-  margin: 0;
-  accent-color: var(--accent);
-}
 .grid-ribbon-field-label,
 .rich-ribbon-field-label {
   margin-inline-end: var(--space-2);
   color: var(--muted);
 }
-.rich-ribbon-keytip {
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-xs);
-  background: var(--text);
-  box-shadow: var(--shadow-2);
-  color: var(--sheet);
-  font-size: 10px;
-  font-weight: var(--weight-bold);
-  line-height: 14px;
-}
-.grid-ribbon-popup-group,
-.rich-ribbon-popup-group {
+.grid-ribbon-popup-group {
   padding: var(--space-3);
 }
 .grid-ribbon-gallery {
@@ -1788,7 +1657,6 @@
    soltanto sua. Meno inchiostro del foglio: le cifre dei campi sono
    tabulari, la galleria degli stili scrive ogni nome nel suo carattere. */
 .rich-ribbon-quick {
-  gap: 1px;
   margin-inline-end: var(--space-2);
   padding-inline-end: var(--space-2);
   border-right: 1px solid var(--border);

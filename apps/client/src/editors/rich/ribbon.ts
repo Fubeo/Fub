@@ -1129,6 +1129,8 @@ export function mountRichRibbon(
     host,
     prefix: "rich-ribbon",
     menuPrefix: "rich.menu.",
+    // Come nei fogli, il gruppo raccolto si apre sul posto, nella barra.
+    openInPlace: true,
     tabs: RICH_TABS,
     quick: RICH_QUICK,
     mini: RICH_MINI,
