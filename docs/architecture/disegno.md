@@ -211,8 +211,8 @@ fuori dal suo grafo (patch 0002). Le librerie che il motore porta in una
 seconda versione, e perché, sono in
 [le versioni del disegno](../misure/disegno-versioni-2026-11.md).
 
-Il blocco qui sotto è il seguito del [grafo dei crate](overview.md): l'adattatore,
-i crate di Fub da cui dipende e i crate di VectorCraft che porta. Lo confronta
+I due blocchi qui sotto sono il seguito del [grafo dei crate](overview.md): l'adattatore,
+i crate di Fub da cui dipende e i crate di VectorCraft che porta. Li confronta
 con `cargo metadata` lo stesso test della panoramica
 (`the_diagram_declares_the_real_dependencies`): gli archi pieni sono le
 dipendenze normali, quelli tratteggiati le sole dipendenze di prova.
@@ -220,13 +220,39 @@ dipendenze normali, quelli tratteggiati le sole dipendenze di prova.
 ```mermaid
 flowchart LR
     %% @grafo-dipendenze
-    %% Il seguito del grafo: fub-disegno e i crate di VectorCraft.
+    %% Il seguito del grafo: fub-disegno, i crate di Fub da cui dipende e
+    %% quelli di VectorCraft che nomina.
 
     disegno["fub-disegno"]
     abi["fub-abi"]
     motori["fub-motori"]
     scene["fub-scene"]
     testkit["fub-testkit"]
+    vdoc["vectorcraft-doc"]
+    vengine["vectorcraft-engine"]
+    vgeom["vectorcraft-geom"]
+    vsvg["vectorcraft-svg"]
+    vtools["vectorcraft-tools"]
+
+    disegno --> abi
+    disegno --> motori
+    disegno --> scene
+    disegno --> vdoc
+    disegno --> vengine
+    disegno --> vgeom
+    disegno --> vsvg
+    disegno --> vtools
+    disegno -.-> testkit
+```
+
+Il secondo blocco sono i crate di VectorCraft fra loro, con le due librerie di
+craft-libs che il motore prende per percorso.
+
+```mermaid
+flowchart LR
+    %% @grafo-dipendenze
+    %% Il seguito del grafo: i crate di VectorCraft fra loro.
+
     cdocpath["craft-docpath"]
     cformat["craft-vectorcraft-format"]
     vbrush["vectorcraft-brush"]
@@ -246,15 +272,6 @@ flowchart LR
     vtools["vectorcraft-tools"]
     vtrace["vectorcraft-trace"]
 
-    disegno --> abi
-    disegno --> motori
-    disegno --> scene
-    disegno --> vdoc
-    disegno --> vengine
-    disegno --> vgeom
-    disegno --> vsvg
-    disegno --> vtools
-    disegno -.-> testkit
     vbrush --> vcolor
     vbrush --> vdoc
     vbrush --> vgeom

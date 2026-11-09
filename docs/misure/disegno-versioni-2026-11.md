@@ -121,7 +121,7 @@ node .github/scripts/check-motori.mjs --albero albero.txt
 
 | Albero | Nomi in più versioni |
 |---|---|
-| `fub-app` (quello che `check-motori.mjs` misura oggi) | 45 |
+| `fub-app`, l'albero che `check-motori.mjs` misura | 45 |
 | `fub-app` più `fub-disegno` | 60 |
 
 Il tetto `librerie_doppie` di `docs/reference/budgets.json` passa da 45 a 60,
