@@ -8,7 +8,7 @@ export const CENTRES: PartAnatomy = {
     // Il toast: il solo che interrompe. Le sue azioni sono parole.
     { name: "toast", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["toast", "toast-stack", "toast-text", "toast-action", "toast-more", "toast-close"] },
     // Lo stato del documento nella testata del foglio, e l'attesa di un tasto.
-    { name: "document-state", states: REST, hooks: ["pane-status", "save-state", "key-pending"] },
+    { name: "document-state", states: REST, hooks: ["pane-status", "save-state", "sheet-save", "key-pending"] },
     // I due centri che scendono dalla barra del titolo. `panel-title`,
     // `link-button` e `muted` sono hook condivisi con altri pezzi: qui si
     // vestono solo dentro un centro.

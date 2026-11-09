@@ -7,8 +7,8 @@ export const SHEETS: PartAnatomy = {
   components: [
     { name: "sheet", states: [S("rest"), S("focused")], hooks: ["pane", "focus", "pane-editor", "pane-split", "row", "col", "pane-divider"] },
     { name: "tabs", states: SELECTABLE, hooks: ["tab-drop-preview", "pane-tabs", "tab-entry", "tab", "tab-name", "tab-pin", "tab-format", "tab-page-icon", "tab-pinned", "dirty", "tab-close", "tab-new"] },
-    { name: "sheet-header", states: REST, hooks: ["pane-toolbar", "muted", "pane-format", "pane-mode-current"] },
-    { name: "sheet-title", states: INTERACTIVE, hooks: ["sheet-title", "sheet-title-edit", "sheet-title-error", "sheet-title-proposal", "kit-field-box"] },
+    { name: "sheet-header", states: REST, hooks: ["pane-toolbar", "muted", "pane-mode-current"] },
+    { name: "sheet-title", states: INTERACTIVE, hooks: ["sheet-title", "crumb-sep", "crumb-name", "sheet-title-edit", "sheet-title-error", "sheet-title-proposal", "kit-field-box"] },
     // Il chip dello stato del documento e il suo riquadro.
     { name: "standing", states: INTERACTIVE, hooks: ["pane-standing", "pane-standing-chip", "pane-standing-mark", "pane-standing-text", "pane-standing-rec", "pane-standing-panel", "pane-standing-title", "pane-standing-body", "pane-standing-places", "pane-standing-ask", "pane-standing-source", "pane-standing-actions"] },
     { name: "save-state", states: INTERACTIVE, hooks: ["sheet-save", "sheet-save-panel", "sheet-save-headline", "sheet-save-detail", "sheet-save-facts", "sheet-save-mono", "sheet-save-actions"] },

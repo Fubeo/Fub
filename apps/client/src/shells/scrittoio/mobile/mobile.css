@@ -421,3 +421,44 @@
     min-height: var(--touch);
   }
 }
+
+/* ── La testata del telefono: il nome, lo stato, «…» ───────────────────────
+   La testata è stretta e, in piedi, la banda non c'è: resta il nome del file
+   (con l'estensione, che sul telefono dice il formato), lo stato e «…». Le
+   cartelle si leggono nel cassetto. */
+:root[data-client-shell="mobile"] .sheet-title > svg,
+:root[data-client-shell="mobile"] .sheet-title > [data-folder],
+:root[data-client-shell="mobile"] .sheet-title > .crumb-sep {
+  display: none;
+}
+:root[data-client-shell="mobile"] .sheet-title {
+  gap: 0;
+}
+
+@media (max-width: 599px) {
+  /* ── In piedi il foglio è lo schermo ──────────────────────────────────────
+     Niente scrivania ai fianchi: la carta va da un bordo all'altro, con gli
+     angoli vivi. `--sheet-gap` a zero vince anche la regola della struttura
+     che rimette il margine a sinistra quando il cassetto è chiuso. */
+  :root[data-client-shell="mobile"] #panes {
+    --sheet-gap: 0px;
+  }
+  :root[data-client-shell="mobile"] .pane::before,
+  :root[data-client-shell="mobile"] .pane > [role="tabpanel"] {
+    border-radius: 0;
+  }
+
+  /* ── Lo stato in figura ───────────────────────────────────────────────────
+     «Salvato» è la spunta, ciò che è in sospeso il punto: la parola resta al
+     nome del bottone e al suggerimento. Ciò che è andato storto tiene la
+     parola rossa, perché è la sola che deve farsi leggere. Alto e largo un
+     dito. */
+  :root[data-client-shell="mobile"] .pane-toolbar .sheet-save:not([data-state="fallito"]):not([data-state="conflitto"]) {
+    justify-content: center;
+    min-width: var(--touch);
+    min-height: var(--touch);
+    padding: 0;
+    gap: 0;
+    font-size: 0;
+  }
+}

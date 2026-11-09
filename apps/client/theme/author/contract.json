@@ -410,9 +410,10 @@
     "tab-close",
     "tab-new",
     "pane-toolbar",
-    "pane-format",
     "pane-mode-current",
     "sheet-title",
+    "crumb-sep",
+    "crumb-name",
     "sheet-title-edit",
     "sheet-title-error",
     "sheet-title-proposal",
@@ -1927,9 +1928,10 @@
     "tab-close": "cornice",
     "tab-new": "cornice",
     "pane-toolbar": "cornice",
-    "pane-format": "cornice",
     "pane-mode-current": "cornice",
     "sheet-title": "cornice",
+    "crumb-sep": "cornice",
+    "crumb-name": "cornice",
     "sheet-title-edit": "cornice",
     "sheet-title-error": "cornice",
     "sheet-title-proposal": "cornice",
@@ -4227,7 +4229,6 @@
       "hooks": [
         "pane-toolbar",
         "muted",
-        "pane-format",
         "pane-mode-current"
       ],
       "states": [
@@ -4239,6 +4240,8 @@
       "part": "sheets",
       "hooks": [
         "sheet-title",
+        "crumb-sep",
+        "crumb-name",
         "sheet-title-edit",
         "sheet-title-error",
         "sheet-title-proposal",
@@ -6692,6 +6695,7 @@
       "hooks": [
         "pane-status",
         "save-state",
+        "sheet-save",
         "key-pending"
       ],
       "states": [
@@ -8505,7 +8509,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 64,
-    "hooks": 1515,
+    "hooks": 1516,
     "state_names": 7,
     "assigned_states": 737,
     "components": 219,
