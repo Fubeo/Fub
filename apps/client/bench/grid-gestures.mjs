@@ -180,6 +180,30 @@ async function centerOf(page, selector) {
   return center.jsonValue();
 }
 
+/// Aspetta che la griglia stia ferma: la barra multifunzione e l'avviso sopra
+/// la griglia arrivano dopo le celle e la spingono in giù, e sotto carico
+/// possono arrivare dopo che un controllo ha già preso le sue misure (il
+/// bordo di d43, la prima foto di d42). Ferma vuol dire uguale per mezzo
+/// secondo di fila.
+async function gridSteady(page) {
+  await page.waitForFunction(
+    () => {
+      const viewport = document.querySelector(".pane.focus .grid-viewport");
+      if (!viewport) return false;
+      const box = viewport.getBoundingClientRect();
+      const now = `${box.x},${box.y},${box.width},${box.height}`;
+      const seen = window.__gridSteady;
+      if (seen?.box === now) seen.count += 1;
+      else window.__gridSteady = { box: now, count: 0 };
+      return window.__gridSteady.count >= 5;
+    },
+    null,
+    { polling: 100, timeout: 10_000 },
+  ).catch(() => {
+    throw new Error("la griglia non sta ferma");
+  });
+}
+
 /// Sceglie una cella con un clic vero, e aspetta che sia la cella attiva.
 async function pick(page, a1) {
   const { x, y } = await centerOf(page, cellSelector(a1));
@@ -1118,6 +1142,7 @@ async function runControl(stage, scene, control) {
   const row = { id: control.id, cantiere: cantieri(control).join("+"), acceso: isOn(control), title: control.title, expected: control.expected };
   try {
     await prepareScene(page, scene, "dark", stage.base, sceneUrl);
+    await gridSteady(page);
     const result = await control.run(page, { shotPath });
     Object.assign(row, result);
     if (!result.skip && control.id !== "d42-intestazioni-durante-scorrimento" && control.id !== "g1-colonna-ferma") {
