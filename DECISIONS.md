@@ -112,7 +112,9 @@ La più recente in cima: data · piano · decisione · perché.
   ritocchi in ArtCraft. Resta da sapere il piano di Recraft usato: col
   piano gratuito i termini di Recraft dicono che l'immagine resta di
   Recraft, senza uso commerciale; coi piani a pagamento è dell'utente.
-  T49 parte quando l'utente lo dice.
+  L'utente ha usato Recraft con una chiave API di OpenRouter, cioè a
+  pagamento: Recraft dice che chi genera con l'API possiede l'immagine, e
+  OpenRouter rimanda ai termini del modello. D28 è chiusa, T49 può partire.
 - 2026-11-09 · K5 T9 · la licenza IJG di `jpeg-encoder` entra con
   un'eccezione stretta in `deny.toml` (solo quel crate) e la frase di
   ringraziamento in `THIRD_PARTY_NOTICES.md`; l'IJG non entra nell'elenco
