@@ -99,6 +99,16 @@ ciò che non dipende dalla risposta.
 
 La più recente in cima: data · piano · decisione · perché.
 
+- 2026-11-09 · k5 (orchestratore) · K5 T6: il PDF del motore si spegne
+  togliendo `vectorcraft-pdf` ed `eps` dal grafo di `engine` (patch 0002,
+  codice dietro `cfg`), non con una feature spenta; `vendor.mjs check` si
+  allarga in T6 (righe radice facoltative fino a T9, nomi come
+  `craft-docpath`, percorsi con il trattino) e le due librerie hanno un
+  `Cargo.toml` di workspace di Fub · Cargo risolve nel lock anche le
+  dipendenze facoltative dei membri, e `craft-pdf` non è su crates.io né si
+  copia (D-2 (a) dell'utente: il PDF resta spento); copiarlo (D-2 (b)) o
+  prenderlo da Git cambierebbe la risposta dell'utente o la politica delle
+  fonti. La patch è grande (circa 56 file): si propone a monte.
 - 2026-11-09 · scrittoio-2 (orchestratore) · S2 T9 aggiunge l'intento
   non privilegiato `fub.inspector.tab` (`fub_abi::ui::INSPECTOR_TAB_NS`,
   payload `{ view }`): «e altri N» sotto la Struttura porta ai Collegamenti;
