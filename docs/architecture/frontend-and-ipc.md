@@ -257,7 +257,12 @@ pannelli) lo Scrittoio compone:
   fila non ha un costruttore: chi costruisce la barra mette sul suo DOM
   `kit-bar` (il vassoio), `kit-bar-group` (un foglietto), `kit-bar-button`
   e `kit-bar-field`, e per ciò che non ci sta usa `kit/options-bar.ts`
-  (`kit-options`, «…»). La colonna è `kit/tool-rail.ts` (`kit-rail`). Fila
+  (`kit-options`, «…»). Le frecce della fila sono `kit/toolbar-keys.ts`
+  (`rovingToolbar`): un solo punto di tabulazione, destra e sinistra che
+  girano ai capi, Home ed End, soltanto fra i controlli visibili e accesi;
+  in un campo di testo le frecce passano oltre solo ai capi del testo, ed
+  Escape resta a chi monta la barra. La prima ad adottarla è la barra di
+  formato delle note. La colonna è `kit/tool-rail.ts` (`kit-rail`). Fila
   e colonna hanno la forma in `theme/scrittoio/structure.css` e la pelle in
   `theme/scrittoio/skin/kit.css`; il vassoio è il ruolo facoltativo
   `--bar-tray` della ricetta, col ripiego su `--sheet-2` per un tema che

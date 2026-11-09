@@ -12,7 +12,7 @@ export const SHEETS: PartAnatomy = {
     // Il chip dello stato del documento e il suo riquadro.
     { name: "standing", states: INTERACTIVE, hooks: ["pane-standing", "pane-standing-chip", "pane-standing-mark", "pane-standing-text", "pane-standing-rec", "pane-standing-panel", "pane-standing-title", "pane-standing-body", "pane-standing-places", "pane-standing-ask", "pane-standing-source", "pane-standing-actions"] },
     { name: "save-state", states: INTERACTIVE, hooks: ["sheet-save", "sheet-save-panel", "sheet-save-headline", "sheet-save-detail", "sheet-save-facts", "sheet-save-mono", "sheet-save-actions"] },
-    { name: "format-bar", states: SELECTABLE, hooks: ["format-bar", "format-bar-group", "format-bar-button", "format-bar-menu", "format-bar-style", "format-bar-menu-label"] },
+    { name: "format-bar", states: SELECTABLE, hooks: ["format-bar", "kit-bar", "format-bar-group", "format-bar-style", "format-bar-menu-label"] },
     { name: "selection-bubble", states: REST, hooks: ["selection-bubble"] },
     { name: "reading", layers: { "markdown-preview": "contenuto" }, states: REST, hooks: ["pane-preview", "markdown-preview"] },
     { name: "empty-pane", states: REST, hooks: ["pane-empty", "pane-empty-title", "pane-empty-actions"] },

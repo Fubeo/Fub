@@ -530,10 +530,10 @@ const BENCH_COMMANDS: CommandSpec[] = [
   command("stats.open", "Statistiche del documento", "Parole, caratteri, collegamenti", null),
 ];
 
-/// La barra di formattazione la fotografa solo il telefono (`mobile.html`),
-/// dove sta sopra la tastiera. Nelle altre pagine i comandi sono quelli del
-/// banco, e le loro foto con loro.
-const ON_MOBILE = globalThis.window.location.pathname.endsWith("/mobile.html");
+/// La barra di formattazione la fotografa il telefono (`mobile.html`), dove
+/// sta sopra la tastiera, e la finestra principale con `?formatbar=1`. Nelle
+/// altre pagine i comandi sono quelli del banco, e le loro foto con loro.
+const ON_MOBILE = globalThis.window.location.pathname.endsWith("/mobile.html") || params.get("formatbar") === "1";
 const FORMAT_COMMANDS: CommandSpec[] = (
   [
     ["text.undo", "Annulla"],

@@ -440,8 +440,6 @@
     "sheet-save-actions",
     "format-bar",
     "format-bar-group",
-    "format-bar-button",
-    "format-bar-menu",
     "format-bar-style",
     "format-bar-menu-label",
     "selection-bubble",
@@ -1960,8 +1958,6 @@
     "sheet-save-actions": "cornice",
     "format-bar": "cornice",
     "format-bar-group": "cornice",
-    "format-bar-button": "cornice",
-    "format-bar-menu": "cornice",
     "format-bar-style": "cornice",
     "format-bar-menu-label": "cornice",
     "selection-bubble": "cornice",
@@ -4311,9 +4307,8 @@
       "part": "sheets",
       "hooks": [
         "format-bar",
+        "kit-bar",
         "format-bar-group",
-        "format-bar-button",
-        "format-bar-menu",
         "format-bar-style",
         "format-bar-menu-label"
       ],
@@ -8515,7 +8510,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 64,
-    "hooks": 1518,
+    "hooks": 1516,
     "state_names": 7,
     "assigned_states": 737,
     "components": 219,

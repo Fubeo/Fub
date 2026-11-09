@@ -978,14 +978,29 @@ body {
   display: none;
 }
 
+/* La barra di formato di un riquadro è una barra in una fila (`kit-bar`, più
+   sotto): la fila la dà il kit, qui restano l'altezza e il taglio, perché ciò
+   che non ci sta va in «…». */
 .format-bar {
-  display: flex;
-  align-items: center;
   flex: 0 0 var(--format-bar-h);
   height: var(--format-bar-h);
-  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
+}
+/* Col dito i pulsanti della fila sono alti 44 (la regola `pointer: coarse` di
+   `kit-bar-button`): la barra li segue invece di tagliarli. */
+@media (pointer: coarse) {
+  .format-bar.kit-bar {
+    flex-basis: auto;
+    height: auto;
+    min-height: var(--format-bar-h);
+  }
+}
+/* Fuori dal vassoio (la bolla della selezione, la mini-barra) la fila è sua. */
+.format-bar:not(.kit-bar) {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 
 /* La bolla di selezione: la barra, ristretta, accanto al testo scelto. Sta sopra
@@ -1000,12 +1015,6 @@ body {
 .selection-bubble .format-bar {
   flex: 0 0 auto;
   overflow: visible;
-}
-
-.format-bar-group {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
 }
 
 /* Barra spenta: i suoi gesti restano alla bolla di selezione, alla tastiera e al
