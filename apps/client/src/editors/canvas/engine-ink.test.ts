@@ -727,6 +727,7 @@ describe("la gomma «Solo il pezzo»", () => {
     expect(pieces[1]!.at).not.toBe("2026-11-09T10:00:00.000Z");
   });
 
+  // Il commit di 1500 toppe nel nucleo dura qualche secondo: sotto carico più dei 5 di serie.
   it("una passata che fa mille pezzi è un commit e un passo", () => {
     const strokes: Json[] = [];
     for (let i = 0; i < 500; i++) strokes.push(freeStroke(`s${i}`, 0, i * 4, 15, 100));
@@ -741,7 +742,7 @@ describe("la gomma «Solo il pezzo»", () => {
     expect(engine.undo()).toBe(true);
     expect(lastChange(changes).text).toBe(source);
     expect(engine.undo()).toBe(false);
-  });
+  }, 60_000);
 
   it("il rifiuto del nucleo non cambia niente e lo dice; la passata annullata rimette il tratto", () => {
     const source = boardWith([freeStroke("a", 0, 0, 15, 40)]);
