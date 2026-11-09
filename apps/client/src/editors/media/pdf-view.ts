@@ -623,7 +623,8 @@ export function mountPdfView(
     prev.disabled = !where || where.first <= 1;
     next.disabled = !where || last >= where.count;
     const current = keys.refresh(entered ? undefined : [prev, next].find((step) => !step.disabled) ?? null);
-    if ((focused === prev || focused === next) && focused.disabled && current) keys.focus(current);
+    const lost = focused === prev ? prev.disabled : focused === next ? next.disabled : false;
+    if (lost && current) keys.focus(current);
   }
 
   let observer: IntersectionObserver | null = null;
